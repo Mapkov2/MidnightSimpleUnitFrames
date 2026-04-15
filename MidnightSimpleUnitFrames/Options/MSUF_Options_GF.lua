@@ -420,6 +420,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
           tables = { "auras" } },
         { key = "highlight",  label = "Highlight & Aggro",
           prefix = { "hl", "dispel" } },
+        { key = "dstripe",   label = "Debuff Stripe",
+          prefix = { "debuffStripe" } },
         { key = "features",   label = "Corner/Raid/Spell/Private",
           tables = { "raidDebuffs", "spellIndicators", "privateAuras" },
           keys = { "ciEnabled", "ciAlpha" },
@@ -716,7 +718,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
     local _TAB_DEFS = {
         { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
-        { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "cutaway", "dispel", "range" } },
+        { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "cutaway", "dispel", "dstripe", "range" } },
         { key = "auras",      keys = { "buffs", "debuffs", "ext", "rdebuffs", "priv", "masque", "autil" } },
         { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
     }
@@ -3165,6 +3167,75 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
+    -- Section: Debuff Stripe
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(280, "Debuff Stripe", false, "dstripe")
+
+        local dsChk = SCheck({
+            name = "MSUF_GF_DebuffStripeCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Enable Debuff Stripe"),
+            get = function(k) return GF.Val(k, "debuffStripeEnabled") end,
+            set = function(k, v)
+                GF.GetConf(k).debuffStripeEnabled = v
+                GF.RefreshVisuals()
+                local fn = _G.MSUF_GF_RefreshDebuffStripe
+                if type(fn) == "function" then fn() end
+            end,
+        })
+
+        local dsHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        dsHint:SetPoint("TOPLEFT", dsChk, "BOTTOMLEFT", 0, -4)
+        dsHint:SetWidth(550)
+        dsHint:SetJustifyH("LEFT")
+        dsHint:SetText(TR("Shows a thin colored stripe when any debuff is active — including non-dispellable ones.\nWorks independently from the Dispel Overlay."))
+        dsHint:SetTextColor(0.55, 0.60, 0.70)
+
+        local dsEdgeDd = SDropdown({
+            name = "MSUF_GF_DebuffStripeEdgeDropdown", parent = body,
+            anchor = dsHint, anchorPoint = "BOTTOMLEFT", x = -4, y = -10, width = 200,
+            items = {
+                { key = "BOTTOM", label = TR("Bottom Edge") },
+                { key = "TOP",    label = TR("Top Edge") },
+            },
+            get = function(k) return GF.Val(k, "debuffStripeEdge") end,
+            set = function(k, v)
+                GF.GetConf(k).debuffStripeEdge = v
+                GF.RefreshVisuals()
+                local fn = _G.MSUF_GF_RefreshDebuffStripe
+                if type(fn) == "function" then fn() end
+            end,
+        })
+
+        local dsHeightSl = SSlider({
+            name = "MSUF_GF_DebuffStripeHeightSlider", parent = body, compact = true,
+            anchor = dsEdgeDd, x = 0, y = -8,
+            min = 1, max = 8, step = 1, width = 270, default = 3,
+            get = function(k) return GF.Val(k, "debuffStripeHeight") end,
+            set = function(k, v)
+                GF.GetConf(k).debuffStripeHeight = v
+                local fn = _G.MSUF_GF_RefreshDebuffStripe
+                if type(fn) == "function" then fn() end
+            end,
+            formatText = function(v) return string.format("Height: %dpx", v) end,
+        })
+
+        SSlider({
+            name = "MSUF_GF_DebuffStripeAlphaSlider", parent = body, compact = true,
+            anchor = dsHeightSl, x = 0, y = -8,
+            min = 0.10, max = 1, step = 0.05, width = 270, default = 0.60,
+            get = function(k) return GF.Val(k, "debuffStripeAlpha") end,
+            set = function(k, v)
+                GF.GetConf(k).debuffStripeAlpha = v
+                local fn = _G.MSUF_GF_RefreshDebuffStripe
+                if type(fn) == "function" then fn() end
+            end,
+            formatText = function(v) return string.format("Opacity: %.0f%%", v * 100) end,
+        })
+    end
+
+    ----------------------------------------------------------------
     -- Section 12: Tooltip
     ----------------------------------------------------------------
     do
@@ -3218,7 +3289,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         -- Desired order within each tab
         local ORDER = {
             { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
-            { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "cutaway", "dispel", "range" } },
+            { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "cutaway", "dispel", "dstripe", "range" } },
             { key = "auras",      keys = { "buffs", "debuffs", "ext", "rdebuffs", "priv", "masque", "autil" } },
             { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
         }

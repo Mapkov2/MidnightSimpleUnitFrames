@@ -244,6 +244,15 @@ local PARTY_DEFAULTS = {
     dispelOverlayStyle    = "FULL",   -- FULL / BOTTOM / TOP / LEFT / RIGHT
     dispelOverlayOnHealth = true,     -- true = clip to current health fill
     dispelOverlayAlpha    = 0.35,
+
+    -- Debuff stripe (thin edge indicator for any debuff)
+    debuffStripeEnabled   = false,
+    debuffStripeEdge      = "BOTTOM", -- BOTTOM / TOP
+    debuffStripeHeight    = 3,        -- pixels
+    debuffStripeAlpha     = 0.60,
+    debuffStripeColorR    = 0.80,
+    debuffStripeColorG    = 0.20,
+    debuffStripeColorB    = 0.20,
     -- Health fade (dim frames above HP threshold — healer focus)
     healthFadeEnabled     = false,
     healthFadeThreshold   = 95,    -- % HP above which frame is dimmed

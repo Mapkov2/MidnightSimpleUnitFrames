@@ -472,6 +472,15 @@ local DISPEL_COLORS = {
 }
 
 local function GetDispelColor(dispelName)
+    -- DB per-type color takes priority (Colors > Dispel panel)
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen and type(dispelName) == "string" then
+        local r = gen["dispelType" .. dispelName .. "R"]
+        if type(r) == "number" then
+            return r, gen["dispelType" .. dispelName .. "G"], gen["dispelType" .. dispelName .. "B"]
+        end
+    end
+    -- Hardcoded fallback
     local c = DISPEL_COLORS[dispelName]
     if c then return c[1], c[2], c[3] end
     -- Blizzard color objects
@@ -594,8 +603,19 @@ local ROLE_COORDS = {
 }
 
 ------------------------------------------------------------------------
--- Forward declaration (defined later in file)
+-- Debuff stripe: presence callback (must be before dispatchAura)
+------------------------------------------------------------------------
+local _dsPresenceResult = false
+local function _dsPresenceCallback()
+    _dsPresenceResult = true
+    return true  -- stop iteration
+end
+
+------------------------------------------------------------------------
+-- Forward declarations (defined later in file)
 local _GF_RefreshBorder
+local _GF_ApplyDispelOverlay
+local _GF_ApplyDebuffStripe
 
 ------------------------------------------------------------------------
 -- UNIT_AURA: per-frame dispatch with burst-dedup (A2 P2 pattern)
@@ -853,9 +873,24 @@ local function dispatchAura(f, unit, updateInfo)
             f._msufGFDispelType = mergedDispel
             f._msufGFPrevDispelAuraID = dispelAid
             _GF_RefreshBorder(f, unit)
+            _GF_ApplyDispelOverlay(f)
         end
     else
         GF._UpdateDispel(f, unit)
+    end
+
+    -- Debuff stripe: detect ANY harmful aura (zero-cost when disabled)
+    if c.dsEn then
+        local hadDebuff = f._msufGFHasAnyDebuff or false
+        _dsPresenceResult = false
+        if AuraUtil and AuraUtil.ForEachAura then
+            AuraUtil.ForEachAura(unit, "HARMFUL", nil, _dsPresenceCallback, true)
+        end
+        local hasDebuff = _dsPresenceResult
+        f._msufGFHasAnyDebuff = hasDebuff
+        if hasDebuff ~= hadDebuff then
+            _GF_ApplyDebuffStripe(f)
+        end
     end
 
     -- Corner Indicators (only when enabled)
@@ -1094,6 +1129,15 @@ function GF.BuildFrameCache(f)
     c.doOnHP  = conf.dispelOverlayOnHealth ~= false
     c.doAlpha = conf.dispelOverlayAlpha or 0.35
 
+    -- Debuff stripe (thin edge for any debuff)
+    c.dsEn    = conf.debuffStripeEnabled == true
+    c.dsEdge  = conf.debuffStripeEdge or "BOTTOM"
+    c.dsH     = conf.debuffStripeHeight or 3
+    c.dsAlpha = conf.debuffStripeAlpha or 0.60
+    c.dsR     = conf.debuffStripeColorR or 0.80
+    c.dsG     = conf.debuffStripeColorG or 0.20
+    c.dsB     = conf.debuffStripeColorB or 0.20
+
     -- Highlight border (pre-resolve HLVal)
     c.aggroEn   = HLVal(kind, "hlAggroEnabled") ~= false
     c.aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
@@ -1256,7 +1300,7 @@ end
 -- Secret-safe: SetValue/SetMinMaxValues accept secrets natively.
 ------------------------------------------------------------------------
 local _doCC = _G.CreateColor   -- WoW 10.0+ CreateColor (nil pre-10.0)
-local function _GF_ApplyDispelOverlay(f)
+_GF_ApplyDispelOverlay = function(f)
     local dov = f._msufGFDispelOverlay
     if not dov then return end
     local c = f._c
@@ -1331,9 +1375,58 @@ local function _GF_ApplyDispelOverlay(f)
     if not dov:IsShown() then dov:Show() end
 end
 
+------------------------------------------------------------------------
+-- Debuff stripe (thin edge indicator for any active debuff).
+-- Independent from dispel overlay — shows for ALL harmful auras,
+-- not just dispellable ones. Secret-safe: no comparisons on aura data.
+------------------------------------------------------------------------
+_GF_ApplyDebuffStripe = function(f)
+    local stripe = f._msufGFDebuffStripe
+    if not stripe then return end
+    local c = f._c
+    if not c then return end
+
+    if not c.dsEn or not f._msufGFHasAnyDebuff then
+        if stripe:IsShown() then stripe:Hide() end
+        return
+    end
+
+    -- Anchor based on edge setting
+    local edge = c.dsEdge
+    local h = math_max(1, c.dsH or 3)
+    if stripe._msufDSEdge ~= edge or stripe._msufDSH ~= h then
+        stripe._msufDSEdge = edge
+        stripe._msufDSH = h
+        stripe:ClearAllPoints()
+        stripe:SetHeight(h)
+        local anchor = f.health or f
+        if edge == "TOP" then
+            stripe:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, 0)
+            stripe:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", 0, 0)
+        else -- BOTTOM (default)
+            stripe:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
+            stripe:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+        end
+    end
+
+    -- Color + alpha (diff-gated)
+    local r, g, b, a = c.dsR, c.dsG, c.dsB, c.dsAlpha
+    if stripe._msufDSR ~= r or stripe._msufDSG ~= g or stripe._msufDSB ~= b or stripe._msufDSA ~= a then
+        stripe._msufDSR, stripe._msufDSG, stripe._msufDSB, stripe._msufDSA = r, g, b, a
+        stripe:SetStatusBarColor(r, g, b, a)
+    end
+
+    -- Fill full width
+    stripe:SetMinMaxValues(0, 1)
+    stripe:SetValue(1)
+
+    if not stripe:IsShown() then stripe:Show() end
+end
+
 _GF_RefreshBorder = function(f, unit)
-    -- Dispel overlay (independent from border — always sync on border refresh)
-    _GF_ApplyDispelOverlay(f)
+    -- NOTE: Dispel overlay is fully decoupled from border highlight.
+    -- Overlay lives in _GF_ApplyDispelOverlay and is called separately
+    -- from dispel-change sites only — never from aggro/target/test paths.
 
     local border = f._msufGFHighlightBorder
     if not border then return end
@@ -1554,6 +1647,7 @@ function GF._UpdateDispel(f, unit)
             f._msufGFDispelType = nil
             f._msufGFDispelAuraID = nil
             _GF_RefreshBorder(f, unit)
+            _GF_ApplyDispelOverlay(f)
         end
         return
     end
@@ -1566,6 +1660,7 @@ function GF._UpdateDispel(f, unit)
                 f._msufGFDispelType = nil
                 f._msufGFDispelAuraID = nil
                 _GF_RefreshBorder(f, unit)
+                _GF_ApplyDispelOverlay(f)
             end
             return
         end
@@ -1592,6 +1687,10 @@ function GF._UpdateDispel(f, unit)
     if topDispel == prevDispel and topAid == prevAid and not testMode then return end
 
     _GF_RefreshBorder(f, unit)
+    -- Overlay only for real dispels — border test mode is border-only
+    if not testMode then
+        _GF_ApplyDispelOverlay(f)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -2136,10 +2235,20 @@ local function UpdateAll(f, unit)
         if mergedDispel ~= prevDispel then
             f._msufGFDispelType = mergedDispel
             _GF_RefreshBorder(f, unit)
+            _GF_ApplyDispelOverlay(f)
         end
     else
         if GF.UpdateFrameAuras then GF.UpdateFrameAuras(f, unit) end
         if c.dispelScan and GF._playerCanDispel then GF._UpdateDispel(f, unit) end
+    end
+    -- Debuff stripe (UpdateAll always does full refresh)
+    if c.dsEn then
+        _dsPresenceResult = false
+        if AuraUtil and AuraUtil.ForEachAura then
+            AuraUtil.ForEachAura(unit, "HARMFUL", nil, _dsPresenceCallback, true)
+        end
+        f._msufGFHasAnyDebuff = _dsPresenceResult
+        _GF_ApplyDebuffStripe(f)
     end
     UpdateTargetIndicator(f, unit)
     UpdateStatusText(f, unit)
@@ -3355,6 +3464,20 @@ _G.MSUF_GF_RefreshDispelOverlay = function()
         end
     end
 end
+-- Single-frame overlay apply (for Borders.lua test-mode cleanup)
+_G.MSUF_GF_ApplyDispelOverlay = _GF_ApplyDispelOverlay
+
+-- Debuff stripe: refresh all frames (called from Options when settings change)
+_G.MSUF_GF_RefreshDebuffStripe = function()
+    if not GF.frames then return end
+    for f in pairs(GF.frames) do
+        if f._msufIsGroupFrame then
+            GF.BuildFrameCache(f)
+            _GF_ApplyDebuffStripe(f)
+        end
+    end
+end
+_G.MSUF_GF_ApplyDebuffStripe = _GF_ApplyDebuffStripe
 
 -- Exports for Perfy profiling (target-click spike diagnosis)
 _G.MSUF_GF_QuickBorderUpdate   = _GF_QuickBorderUpdate

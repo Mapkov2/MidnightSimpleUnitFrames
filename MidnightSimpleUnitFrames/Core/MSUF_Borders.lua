@@ -512,6 +512,9 @@ _G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(ac
                     border._msufHLActivePrio = nil; border:Hide()
                 end
                 GF._UpdateDispel(gf, gf.unit)
+                -- Overlay is decoupled from border; force-sync after test clears state
+                local _applyDO = _G.MSUF_GF_ApplyDispelOverlay
+                if type(_applyDO) == "function" then _applyDO(gf) end
             elseif matchScope then
                 GF._UpdateDispel(gf, gf.unit)
             end

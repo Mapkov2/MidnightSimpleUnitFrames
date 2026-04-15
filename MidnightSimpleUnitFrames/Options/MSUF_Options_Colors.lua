@@ -1323,8 +1323,6 @@ end
         end
     end
 
-    local GetDispelBorderColor = MkDBColorGetter("dispelBorderColorR","dispelBorderColorG","dispelBorderColorB", 0.25, 0.75, 1.00)
-    local SetDispelBorderColor = MkDBColorSetter("dispelBorderColorR","dispelBorderColorG","dispelBorderColorB")
     local GetPurgeBorderColor = MkDBColorGetter("purgeBorderColorR","purgeBorderColorG","purgeBorderColorB", 1.00, 0.85, 0.00)
     local SetPurgeBorderColor = MkDBColorSetter("purgeBorderColorR","purgeBorderColorG","purgeBorderColorB")
 
@@ -1334,7 +1332,6 @@ end
         { label = "Heal-Absorb Bar Color",      name = "HealAbsorbOverlaySwatch",get = GetHealAbsorbOverlayColor,   set = SetHealAbsorbOverlayColor,   pkey = "__MSUF_ExtraColorHealAbsorbTex" },
         { label = "Power Bar Background Color", name = "PowerBarBackgroundSwatch",get = GetPowerBarBackgroundColor,  set = SetPowerBarBackgroundColor,  pkey = "__MSUF_ExtraColorPowerBgTex" },
         { label = "Aggro Border Color",         name = "AggroBorderSwatch",      get = GetAggroBorderColor,         set = SetAggroBorderColor,         pkey = "__MSUF_ExtraColorAggroBorderTex" },
-        { label = "Dispel Border Color",        name = "DispelBorderSwatch",     get = GetDispelBorderColor,        set = SetDispelBorderColor,        pkey = "__MSUF_ExtraColorDispelBorderTex" },
         { label = "Purge Border Color",         name = "PurgeBorderSwatch",      get = GetPurgeBorderColor,         set = SetPurgeBorderColor,         pkey = "__MSUF_ExtraColorPurgeBorderTex" },
     }
     for i, def in ipairs(BAR_COLOR_ROWS) do
@@ -1376,7 +1373,6 @@ end
                     {"healAbsorbBarColorR","healAbsorbBarColorG","healAbsorbBarColorB"},
                     {"powerBarBgColorR","powerBarBgColorG","powerBarBgColorB"},
                     {"aggroBorderColorR","aggroBorderColorG","aggroBorderColorB"},
-                    {"dispelBorderColorR","dispelBorderColorG","dispelBorderColorB"},
                     {"purgeBorderColorR","purgeBorderColorG","purgeBorderColorB"},
                 }) do gen[keys[1]], gen[keys[2]], gen[keys[3]] = nil, nil, nil end
                 gen.powerBarBgMatchHPColor = nil
@@ -1396,10 +1392,204 @@ end
     end -- section 5b (Bar Colors)
 
     --------------------------------------------------
+    -- Section 5d: Dispel Colors
+    --------------------------------------------------
+    S.sec5dBox, S.sec5dBody = F.MakeCollapsibleSection(content, 300, "Dispel", false)
+    S.sec5dBox:SetPoint("TOPLEFT", S.sec5bBox, "BOTTOMLEFT", 0, -6)
+    do local content = S.sec5dBody
+
+    local dispelHint = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    dispelHint:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
+    dispelHint:SetWidth(420)
+    dispelHint:SetJustifyH("LEFT")
+    dispelHint:SetText("Dispel color shared by Highlight Border and Group Frame Dispel Overlay.")
+    dispelHint:SetTextColor(0.55, 0.60, 0.70)
+
+    -- Color mode dropdown (moved from Bars > Highlight Borders)
+    local dispelModeLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    dispelModeLabel:SetPoint("TOPLEFT", dispelHint, "BOTTOMLEFT", 0, -10)
+    dispelModeLabel:SetText("Color mode")
+
+    local dispelModeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Colors_DispelModeDropdown", content) or CreateFrame("Frame", "MSUF_Colors_DispelModeDropdown", content, "UIDropDownMenuTemplate"))
+    dispelModeDrop:SetPoint("TOPLEFT", dispelModeLabel, "BOTTOMLEFT", -16, -2)
+    UIDropDownMenu_SetWidth(dispelModeDrop, 180)
+    MSUF_ExpandDropdownClickArea(dispelModeDrop)
+
+    local function GetDispelColorMode()
+        if EnsureDB and MSUF_DB then
+            EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+            return MSUF_DB.general.hlDispelColorMode or "SINGLE"
+        end
+        return "SINGLE"
+    end
+
+    local _DISPEL_MODE_ITEMS = {
+        { key = "SINGLE", label = "Single color" },
+        { key = "TYPE",   label = "Per debuff type" },
+    }
+
+    UIDropDownMenu_Initialize(dispelModeDrop, function(self, level)
+        local current = GetDispelColorMode()
+        for _, opt in ipairs(_DISPEL_MODE_ITEMS) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = opt.label; info.value = opt.key
+            info.checked = (current == opt.key)
+            info.func = function()
+                if EnsureDB and MSUF_DB then
+                    EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+                    MSUF_DB.general.hlDispelColorMode = opt.key
+                    PushVisualUpdates()
+                    UIDropDownMenu_SetSelectedValue(dispelModeDrop, opt.key)
+                    UIDropDownMenu_SetText(dispelModeDrop, opt.label)
+                    if _G.MSUF_RefreshDispelTypeColorVisibility then _G.MSUF_RefreshDispelTypeColorVisibility() end
+                    if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
+                    if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+                        _G.MSUF_SetDispelBorderTestMode(true, "shared")
+                    end
+                end
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    do
+        local m = GetDispelColorMode()
+        UIDropDownMenu_SetSelectedValue(dispelModeDrop, m)
+        for _, opt in ipairs(_DISPEL_MODE_ITEMS) do
+            if opt.key == m then UIDropDownMenu_SetText(dispelModeDrop, opt.label); break end
+        end
+    end
+
+    -- Single color swatch (all dispel types share this color)
+    local singleLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    singleLabel:SetPoint("TOPLEFT", dispelModeDrop, "BOTTOMLEFT", 20, -6)
+    singleLabel:SetJustifyH("LEFT"); singleLabel:SetText("Dispel Color (all types)")
+
+    local singleSwatch = CreateFrame("Button", "MSUF_Colors_DispelSingleSwatch", content)
+    singleSwatch:SetSize(120, 16)
+    singleSwatch:SetPoint("LEFT", singleLabel, "LEFT", 210, 0)
+    local singleTex = singleSwatch:CreateTexture(nil, "ARTWORK"); singleTex:SetAllPoints()
+    local function GetSingleDispelColor()
+        if EnsureDB and MSUF_DB then
+            EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+            local g = MSUF_DB.general
+            local r, gg, b = g.dispelBorderColorR, g.dispelBorderColorG, g.dispelBorderColorB
+            if type(r) == "number" and type(gg) == "number" and type(b) == "number" then return r, gg, b end
+        end
+        return 0.25, 0.75, 1.00
+    end
+    do local r, g, b = GetSingleDispelColor(); singleTex:SetColorTexture(r, g, b) end
+    singleSwatch:SetScript("OnClick", function()
+        local cr, cg, cb = GetSingleDispelColor()
+        OpenColorPicker(cr, cg, cb, function(nr, ng, nb)
+            if EnsureDB and MSUF_DB then
+                EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+                MSUF_DB.general.dispelBorderColorR = nr
+                MSUF_DB.general.dispelBorderColorG = ng
+                MSUF_DB.general.dispelBorderColorB = nb
+                PushVisualUpdates()
+            end
+            singleTex:SetColorTexture(nr, ng, nb)
+        end)
+    end)
+
+    -- Per-type color swatches (Magic, Curse, Disease, Poison, Bleed)
+    local DISPEL_TYPE_DEFS = {
+        { key = "Magic",   label = "Magic",   defR = 0.20, defG = 0.60, defB = 1.00 },
+        { key = "Curse",   label = "Curse",   defR = 0.60, defG = 0.00, defB = 1.00 },
+        { key = "Disease", label = "Disease", defR = 0.60, defG = 0.40, defB = 0.00 },
+        { key = "Poison",  label = "Poison",  defR = 0.00, defG = 0.60, defB = 0.00 },
+        { key = "Bleed",   label = "Bleed",   defR = 0.80, defG = 0.10, defB = 0.10 },
+    }
+    local typeSwatches = {}
+    local prevAnchor = singleLabel
+    for i, def in ipairs(DISPEL_TYPE_DEFS) do
+        local keyR = "dispelType" .. def.key .. "R"
+        local keyG = "dispelType" .. def.key .. "G"
+        local keyB = "dispelType" .. def.key .. "B"
+        local lbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        lbl:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -6)
+        lbl:SetJustifyH("LEFT"); lbl:SetText(def.label)
+        local btn = CreateFrame("Button", "MSUF_Colors_DispelType" .. def.key .. "Swatch", content)
+        btn:SetSize(120, 16)
+        btn:SetPoint("LEFT", lbl, "LEFT", 210, 0)
+        local tex = btn:CreateTexture(nil, "ARTWORK"); tex:SetAllPoints()
+        local function getter()
+            if EnsureDB and MSUF_DB then
+                EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+                local g = MSUF_DB.general
+                local r, gg, b = g[keyR], g[keyG], g[keyB]
+                if type(r) == "number" and type(gg) == "number" and type(b) == "number" then return r, gg, b end
+            end
+            return def.defR, def.defG, def.defB
+        end
+        do local r, g, b = getter(); tex:SetColorTexture(r, g, b) end
+        btn:SetScript("OnClick", function()
+            local cr, cg, cb = getter()
+            OpenColorPicker(cr, cg, cb, function(nr, ng, nb)
+                if EnsureDB and MSUF_DB then
+                    EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+                    MSUF_DB.general[keyR] = nr; MSUF_DB.general[keyG] = ng; MSUF_DB.general[keyB] = nb
+                    PushVisualUpdates()
+                end
+                tex:SetColorTexture(nr, ng, nb)
+            end)
+        end)
+        typeSwatches[i] = { btn = btn, tex = tex, lbl = lbl, getter = getter }
+        prevAnchor = lbl
+    end
+
+    -- Visibility: dim unused mode swatches
+    local function UpdateDispelVisibility()
+        local isSingle = (GetDispelColorMode() ~= "TYPE")
+        singleLabel:SetAlpha(isSingle and 1 or 0.35)
+        singleSwatch:SetAlpha(isSingle and 1 or 0.35)
+        singleSwatch:EnableMouse(isSingle)
+        for _, info in ipairs(typeSwatches) do
+            info.lbl:SetAlpha(isSingle and 0.35 or 1)
+            info.btn:SetAlpha(isSingle and 0.35 or 1)
+            info.btn:EnableMouse(not isSingle)
+        end
+    end
+    _G.MSUF_RefreshDispelTypeColorVisibility = UpdateDispelVisibility
+    UpdateDispelVisibility()
+
+    -- Reset
+    local dispelResetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    dispelResetBtn:SetSize(180, 22)
+    dispelResetBtn:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -12)
+    dispelResetBtn:SetText("Reset Dispel Colors")
+    dispelResetBtn:SetScript("OnClick", function()
+        MSUF_ConfirmColorReset("dispel colors", function()
+            if EnsureDB and MSUF_DB then
+                EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
+                local gen = MSUF_DB.general
+                gen.dispelBorderColorR = nil; gen.dispelBorderColorG = nil; gen.dispelBorderColorB = nil
+                gen.hlDispelColorMode = nil
+                for _, def in ipairs(DISPEL_TYPE_DEFS) do
+                    gen["dispelType" .. def.key .. "R"] = nil
+                    gen["dispelType" .. def.key .. "G"] = nil
+                    gen["dispelType" .. def.key .. "B"] = nil
+                end
+                PushVisualUpdates()
+            end
+            do local r, g, b = GetSingleDispelColor(); singleTex:SetColorTexture(r, g, b) end
+            for _, info in ipairs(typeSwatches) do
+                local r, g, b = info.getter(); info.tex:SetColorTexture(r, g, b)
+            end
+            UIDropDownMenu_SetSelectedValue(dispelModeDrop, "SINGLE")
+            UIDropDownMenu_SetText(dispelModeDrop, "Single color")
+            UpdateDispelVisibility()
+            if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
+        end)
+    end)
+
+    end -- section 5d (Dispel Colors)
+
+    --------------------------------------------------
     -- Section 6: Castbar Colors
     --------------------------------------------------
     S.sec6Box, S.sec6Body = F.MakeCollapsibleSection(content, 460, "Castbar Colors", false)
-    S.sec6Box:SetPoint("TOPLEFT", S.sec5bBox, "BOTTOMLEFT", 0, -6)
+    S.sec6Box:SetPoint("TOPLEFT", S.sec5dBox, "BOTTOMLEFT", 0, -6)
     do local content = S.sec6Body
 
     local castbarSub = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")

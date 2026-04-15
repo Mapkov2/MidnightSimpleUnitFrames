@@ -825,7 +825,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             "hlAggroEnabled", "hlAggroSize", "hlAggroOffset", "hlAggroLayer", "hlAggroMode",
             "hlAggroColorR", "hlAggroColorG", "hlAggroColorB",
             "hlDispelEnabled", "hlDispelColorR", "hlDispelColorG", "hlDispelColorB",
-            "hlDispelColorMode",
             "hlDispelGlowEnabled", "hlDispelGlowStyle", "hlDispelGlowLines",
             "hlDispelGlowFrequency", "hlDispelGlowThickness",
             "hlPurgeEnabled", "hlPurgeColorR", "hlPurgeColorG", "hlPurgeColorB",
@@ -1007,41 +1006,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end,
     })
     UI.AttachTooltip(_G["MSUF_DispelTestTypeDropdown"], TR("Preview type"),
-        TR("Which dispel type to preview when Test is checked.\nVisible difference only with 'Per debuff type' color mode."))
-
-    -- Dispel color mode: Single Color vs Per Debuff Type
-    local dispelColorModeDrop = UI.Dropdown({
-        name = "MSUF_DispelColorModeDropdown", parent = box3bBody,
-        anchor = dispelOutlineDrop, anchorPoint = "TOPLEFT", x = 0, y = -28, width = 170,
-        items = {
-            { key = "SINGLE", label = TR("Single color") },
-            { key = "TYPE",   label = TR("Per debuff type") },
-        },
-        get = function() return HlGet("hlDispelColorMode", "SINGLE") end,
-        set = function(v)
-            local db = HlDB()
-            db.hlDispelColorMode = v
-            -- Always write to general: _ResolveDispelColor reads from general only
-            local gen = G()
-            gen.hlDispelColorMode = v
-            -- Reset prio order to defaults for new mode (row count changes)
-            local defs = (v == "TYPE") and _PRIO_6 or _PRIO_3
-            local order = {}; for i = 1, #defs do order[i] = defs[i] end
-            db.hlPrioOrder = order
-            if not IsCurrentScopeNonShared() then db.highlightPrioOrder = (v ~= "TYPE") and order or nil end
-            HlApply()
-            if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
-            if _G.MSUF_RefreshDispelTypeColorVisibility then _G.MSUF_RefreshDispelTypeColorVisibility() end
-            -- Re-trigger dispel test mode if active so preview updates to new color mode
-            if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
-                local scope = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
-                _G.MSUF_SetDispelBorderTestMode(true, scope)
-            end
-            MSUF_BarsMenu_QueueScrollUpdate()
-        end,
-    })
-    UI.AttachTooltip(_G["MSUF_DispelColorModeDropdown"], TR("Dispel color mode"),
-        TR("Single color: one color for all dispels (set in Colors menu).\nPer debuff type: Magic / Curse / Disease / Poison each get their own color (set in Colors menu)."))
+        TR("Which dispel type to preview when Test is checked.\nVisible difference only with 'Per debuff type' color mode (set in Colors > Dispel)."))
 
     -- Helper: apply glow change + re-trigger test mode if active
     local function GlowApply()
@@ -1054,7 +1019,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     -- Dispel glow toggle
     local dispelGlowCheck = CreateFrame("CheckButton", "MSUF_DispelGlowCheck", box3bBody, "ChatConfigCheckButtonTemplate")
-    dispelGlowCheck:SetPoint("TOPLEFT", dispelColorModeDrop, "BOTTOMLEFT", 14, -8)
+    dispelGlowCheck:SetPoint("TOPLEFT", dispelOutlineDrop, "BOTTOMLEFT", 14, -28)
     dispelGlowCheck.Text:SetText(TR("Dispel glow effect"))
     dispelGlowCheck:SetChecked(HlGet("hlDispelGlowEnabled", false) and true or false)
     UI.AttachTooltip(dispelGlowCheck, TR("Dispel glow"),
@@ -1667,7 +1632,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         absorbOpacitySlider = absorbOpacitySlider, healAbsorbOpacitySlider = healAbsorbOpacitySlider,
         selfHealPredCB = selfHealPredCB,
         aggroOutlineDrop = aggroOutlineDrop, dispelOutlineDrop = dispelOutlineDrop,
-        dispelColorModeDrop = dispelColorModeDrop, dispelGlowStyleDrop = dispelGlowStyleDrop,
+        dispelGlowStyleDrop = dispelGlowStyleDrop,
         dispelGlowCheck = dispelGlowCheck,
         dispelGlowLinesSlider = dispelGlowLinesSlider, dispelGlowFreqSlider = dispelGlowFreqSlider,
         dispelGlowThickSlider = dispelGlowThickSlider,
@@ -1861,7 +1826,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         -- Box 3
         if _C.aggroOutlineDrop and _C.aggroOutlineDrop.Refresh then _C.aggroOutlineDrop:Refresh() end
         if _C.dispelOutlineDrop and _C.dispelOutlineDrop.Refresh then _C.dispelOutlineDrop:Refresh() end
-        if _C.dispelColorModeDrop and _C.dispelColorModeDrop.Refresh then _C.dispelColorModeDrop:Refresh() end
         if _C.dispelGlowStyleDrop and _C.dispelGlowStyleDrop.Refresh then _C.dispelGlowStyleDrop:Refresh() end
         if _C.purgeOutlineDrop and _C.purgeOutlineDrop.Refresh then _C.purgeOutlineDrop:Refresh() end
         if _G.MSUF_PrioRows_Reinit then _G.MSUF_PrioRows_Reinit() end
@@ -2005,7 +1969,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     panel.highlightBorderThicknessSlider = highlightBorderThicknessSlider
     panel.aggroOutlineDrop = aggroOutlineDrop; panel.aggroTestCheck = aggroTestCheck
     panel.dispelOutlineDrop = dispelOutlineDrop; panel.dispelTestCheck = dispelTestCheck
-    panel.dispelColorModeDrop = dispelColorModeDrop; panel.dispelTestTypeDrop = dispelTestTypeDrop
+    panel.dispelTestTypeDrop = dispelTestTypeDrop
     panel.purgeOutlineDrop = purgeOutlineDrop; panel.purgeTestCheck = purgeTestCheck
     panel.bossTargetOutlineDrop = bossTargetOutlineDrop; panel.bossTargetTestCheck = bossTargetTestCheck
     panel.prioCheck = prioCheck

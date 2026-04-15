@@ -242,10 +242,23 @@ local function BuildFrameHierarchy(f, kind)
     dispelOv:Hide()
     f._msufGFDispelOverlay = dispelOv
 
+    -- Debuff stripe (thin edge indicator for any debuff — above dispel overlay, below text)
+    local debuffStripe = CreateFrame("StatusBar", nil, barGroup)
+    debuffStripe:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+    debuffStripe:SetMinMaxValues(0, 1)
+    debuffStripe:SetValue(1)
+    debuffStripe:SetPoint("BOTTOMLEFT", health, "BOTTOMLEFT", 0, 0)
+    debuffStripe:SetPoint("BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
+    debuffStripe:SetHeight(3)
+    debuffStripe:SetFrameLevel(hLvl + 5)
+    debuffStripe:SetStatusBarColor(0.8, 0.2, 0.2, 0.6)
+    debuffStripe:Hide()
+    f._msufGFDebuffStripe = debuffStripe
+
     -- Health text layer (above all overlays)
     local healthTextLayer = CreateFrame("Frame", nil, health)
     healthTextLayer:SetAllPoints(health)
-    healthTextLayer:SetFrameLevel(hLvl + 5)
+    healthTextLayer:SetFrameLevel(hLvl + 6)
     f.healthTextLayer = healthTextLayer
 
     -- Name text
