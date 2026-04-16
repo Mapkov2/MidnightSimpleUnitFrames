@@ -40,10 +40,19 @@ local HP_SAMPLES = {
 }
 
 ------------------------------------------------------------------------
--- Visibility toggles state (cold-path, UI only)
+-- Visibility toggles state (cold-path, UI only).
+-- "text" controls name/HP/power FontStrings on the mock frame.  Default
+-- OFF because the text overlays obscure the aura icons underneath — the
+-- primary subject of the Buffs & Debuffs preview.  User enables it on
+-- demand via the sidebar button to verify name/HP/power text placement.
+-- "auraText" controls cooldown + stack count FontStrings on the mock
+-- aura icons.  Default ON because cooldown/stack positioning is the
+-- primary setting this tab configures — users need live feedback on
+-- every icon while dragging the offset sliders.
 ------------------------------------------------------------------------
 local _visToggles = { buff = true, debuff = true, externals = true,
-    status = true, si = true, private = true, rdebuffs = true }
+    status = true, si = true, private = true, rdebuffs = true,
+    text = false, auraText = true }
 
 -- Solo-highlight: when non-nil, only this layer group is rendered at full
 -- alpha; all other layers fade to _SOLO_DIM. Activated via Shift+Click on
@@ -758,6 +767,19 @@ function GF.RefreshPreviewBox()
         local nr, ng, nb = GF.ResolveNameColor(kind, cls)
         local sc = m._previewScale or 1.6
 
+        -- Text toggle gate: when off (default), hide name/HP/power text
+        -- so aura icons underneath read cleanly.  Users enable it on
+        -- demand via the "Text" sidebar button to verify text placement.
+        -- Shift+Click on "Text" (solo mode) also forces it on so the
+        -- soloed layer is actually visible.  Early return skips all the
+        -- per-element position math — zero cost when the toggle is off.
+        local showText = (_visToggles.text == true) or (_soloKey == "text")
+        if not showText then
+            if m._nameFS  then m._nameFS:Hide()  end
+            if m._hpFS    then m._hpFS:Hide()    end
+            if m._powerFS then m._powerFS:Hide() end
+        else
+
         -- Update text layer level from config
         if m._textLayer and m._health then
             local tl2 = conf.textLayer or 5
@@ -786,42 +808,56 @@ function GF.RefreshPreviewBox()
                 m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
                 m._nameFS:SetJustifyH("LEFT")
             end
-            m._nameFS:SetShown(conf.showName ~= false)
+            -- Preview toggle override: when the user enables "Text", all
+            -- three text elements are forced on so they can dial in
+            -- positioning regardless of current conf.showName / textSlot
+            -- / showPower flags.  The Text toggle's semantic is "show me
+            -- the text so I can tune it" — not "respect the conf hide".
+            m._nameFS:Show()
         end
         if m._hpFS then
-            -- Show HP text only when at least one slot is active
+            -- Pick sample text: prefer active slot for meaningful sample,
+            -- else fall back to a generic "72%" so the user sees something
+            -- to position while the Text toggle is on.
             local tl = conf.textLeft or "NONE"
             local tc = conf.textCenter or "NONE"
             local tr = conf.textRight or "NONE"
-            local hpActive = (tl ~= "NONE" or tc ~= "NONE" or tr ~= "NONE")
-            if hpActive then
-                -- Pick sample text from the first active slot
-                local activeMode = tc ~= "NONE" and tc or (tr ~= "NONE" and tr or tl)
-                m._hpFS:SetText(HP_SAMPLES[activeMode] or "72%")
-                m._hpFS:SetFont(fp, floor((conf.hpFontSize or 10) * sc + 0.5), ff)
-                m._hpFS:SetTextColor(fr, fg, fb, 0.9)
-                m._hpFS:SetShadowColor(0, 0, 0, 1); m._hpFS:SetShadowOffset(1, -1)
-                m._hpFS:ClearAllPoints()
-                local hox = floor((conf.hpOffsetX or 0) * sc + 0.5)
-                local hoy = floor((conf.hpOffsetY or 0) * sc + 0.5)
-                local hPad = floor(6 * sc + 0.5)
-                -- Position based on which slot is active (prefer center, then right, then left)
-                if tc ~= "NONE" then
-                    m._hpFS:SetPoint("CENTER", m._health, "CENTER", hox, hoy)
-                    m._hpFS:SetJustifyH("CENTER")
-                elseif tr ~= "NONE" then
-                    m._hpFS:SetPoint("RIGHT", m._health, "RIGHT", -hPad + hox, hoy)
-                    m._hpFS:SetJustifyH("RIGHT")
-                else
-                    m._hpFS:SetPoint("LEFT", m._health, "LEFT", hPad + hox, hoy)
-                    m._hpFS:SetJustifyH("LEFT")
-                end
-                m._hpFS:Show()
+            local activeMode = tc ~= "NONE" and tc
+                            or tr ~= "NONE" and tr
+                            or tl ~= "NONE" and tl
+                            or "PERCENT"
+            m._hpFS:SetText(HP_SAMPLES[activeMode] or "72%")
+            m._hpFS:SetFont(fp, floor((conf.hpFontSize or 10) * sc + 0.5), ff)
+            m._hpFS:SetTextColor(fr, fg, fb, 0.9)
+            m._hpFS:SetShadowColor(0, 0, 0, 1); m._hpFS:SetShadowOffset(1, -1)
+            m._hpFS:ClearAllPoints()
+            local hox = floor((conf.hpOffsetX or 0) * sc + 0.5)
+            local hoy = floor((conf.hpOffsetY or 0) * sc + 0.5)
+            local hPad = floor(6 * sc + 0.5)
+            -- Position based on first active slot; default CENTER if all
+            -- slots are NONE (so the preview still shows something useful).
+            if tc ~= "NONE" then
+                m._hpFS:SetPoint("CENTER", m._health, "CENTER", hox, hoy)
+                m._hpFS:SetJustifyH("CENTER")
+            elseif tr ~= "NONE" then
+                m._hpFS:SetPoint("RIGHT", m._health, "RIGHT", -hPad + hox, hoy)
+                m._hpFS:SetJustifyH("RIGHT")
+            elseif tl ~= "NONE" then
+                m._hpFS:SetPoint("LEFT", m._health, "LEFT", hPad + hox, hoy)
+                m._hpFS:SetJustifyH("LEFT")
             else
-                m._hpFS:Hide()
+                -- All slots off — show sample at CENTER so user still
+                -- sees preview text for positioning.
+                m._hpFS:SetPoint("CENTER", m._health, "CENTER", hox, hoy)
+                m._hpFS:SetJustifyH("CENTER")
             end
+            m._hpFS:Show()
         end
-        -- Power text: create on demand if power bar appeared
+        -- Power text: lazy-create on demand.  In the Text-toggle-on path
+        -- we always show the sample, even if conf.showPower is false or
+        -- there's no power bar — the user enabled "Text" to see where
+        -- power text would sit, so we render it at the mock frame's
+        -- bottom-center if no power bar exists.
         if m._power and powerH > 0 then
             if not m._powerTextLayer then
                 local ptl = CreateFrame("Frame", nil, m)
@@ -830,21 +866,48 @@ function GF.RefreshPreviewBox()
                 m._powerTextLayer = ptl
             end
             if not m._powerFS then
-                m._powerFS = m._powerTextLayer:CreateFontString(nil, "OVERLAY")
-                m._powerFS:SetText("3,240")
+                -- Inherit GameFontNormal so a font is always present
+                -- (bare CreateFontString has no font → SetText throws
+                -- "Font not set").  The explicit SetFont below overrides
+                -- to the configured MSUF font.
+                m._powerFS = m._powerTextLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             end
             local ptl2 = conf.powerTextLayer or 2
             m._powerTextLayer:SetFrameLevel(m._power:GetFrameLevel() + ptl2)
-            m._powerFS:SetFont(fp, floor((conf.powerFontSize or 9) * sc + 0.5), ff)
+            if fp then
+                m._powerFS:SetFont(fp, floor((conf.powerFontSize or 9) * sc + 0.5), ff or "")
+            end
+            m._powerFS:SetText("3,240")
             m._powerFS:SetTextColor(fr, fg, fb, 0.9)
             m._powerFS:ClearAllPoints()
             local pox = floor((conf.powerOffsetX or 0) * sc + 0.5)
             local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
             m._powerFS:SetPoint("CENTER", m._power, "CENTER", pox, poy)
-            m._powerFS:SetShown(conf.showPower and true or false)
-        elseif m._powerFS then
-            m._powerFS:Hide()
+            m._powerFS:Show()
+        else
+            -- No power bar in the current config: lazy-create a power
+            -- FontString anchored to the mock frame's bottom so the user
+            -- can still see where power text sits while the Text toggle
+            -- is on.  Will be hidden again on the next refresh if the
+            -- toggle is off.
+            if not m._powerFS then
+                -- Inherit GameFontNormal so a font is always present
+                -- (bare CreateFontString has no font → SetText throws
+                -- "Font not set").
+                m._powerFS = m:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            end
+            if fp then
+                m._powerFS:SetFont(fp, floor((conf.powerFontSize or 9) * sc + 0.5), ff or "")
+            end
+            m._powerFS:SetText("3,240")
+            m._powerFS:SetTextColor(fr, fg, fb, 0.9)
+            m._powerFS:ClearAllPoints()
+            local pox = floor((conf.powerOffsetX or 0) * sc + 0.5)
+            local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
+            m._powerFS:SetPoint("BOTTOM", m, "BOTTOM", pox, 2 + poy)
+            m._powerFS:Show()
         end
+        end  -- end of _visToggles.text else-branch
     end
 
     -- Corner indicators are refreshed in RefreshPreviewHandles (lazy-created BackdropTemplate frames)
@@ -1458,10 +1521,12 @@ function GF.RefreshPreviewHandles()
                 ic._border:SetPoint("TOPLEFT", ic, "TOPLEFT", -bw, bw)
                 ic._border:SetPoint("BOTTOMRIGHT", ic, "BOTTOMRIGHT", bw, -bw)
 
-                -- Mock countdown/stack text only on the representative
-                -- first icon.  Showing it on all icons creates visual noise
-                -- and makes the group layout unreadable.
-                ApplyMockIconText(ic, gcfg, sz, kind, i == 1)
+                -- Mock countdown/stack text rendered on every icon so the
+                -- user gets live feedback on every drag of the offset
+                -- sliders.  Gated by the "CD/Stack" sidebar toggle (+
+                -- solo-on-auraText override).  Default ON.
+                local showAuraText = (_visToggles.auraText ~= false) or (_soloKey == "auraText")
+                ApplyMockIconText(ic, gcfg, sz, kind, showAuraText)
 
                 ic:Show()
             end
@@ -1763,7 +1828,14 @@ function GF.RefreshPreviewHandles()
 
     -- Section-aware focus: dim/hide elements not relevant to the active Options section
     local focus = GF._previewFocus
-    local showText   = not focus or focus == "text" or focus == "overlay"
+    -- The user-controlled "Text" sidebar toggle always wins over section
+    -- focus: if the user has explicitly enabled Text preview, it stays
+    -- visible in every Options tab (Layout, Health & Text, Buffs, etc.)
+    -- The focus-based auto-dim is just a convenience for when the toggle
+    -- is off — it shows text during the Text accordion section and hides
+    -- it elsewhere so aura layouts read cleanly.
+    local userTextOn = (_visToggles.text == true) or (_soloKey == "text")
+    local showText   = userTextOn or (not focus) or focus == "text" or focus == "overlay"
     local showAuras  = not focus or focus == "indicators" or focus == "sicons"
     local showSIcons = not focus or focus == "sicons"
     local showSI     = not focus or focus == "indicators"
@@ -1827,6 +1899,11 @@ end
 ------------------------------------------------------------------------
 function GF.SetPreviewFocus(focus)
     GF._previewFocus = focus
+    -- Refresh both the preview box (frame + text) and handles so the
+    -- focus change takes effect across all layers. RefreshPreviewBox
+    -- is needed for the text-toggle override to apply when the user
+    -- switches Options tabs while the Text toggle is on.
+    if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
     if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
 end
 
@@ -1978,6 +2055,12 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
             { key="si",        label="Spells",  color={0.72,0.52,0.90} },
             { key="private",   label="Private", color={0.55,0.55,0.60} },
             { key="rdebuffs",  label="RaidDB",  color={0.95,0.35,0.20} },
+            -- Aura Text: cooldown + stack count FontStrings on mock
+            -- aura icons.  Default on (primary purpose of this tab).
+            { key="auraText",  label="CD/Stack",color={0.95,0.82,0.35} },
+            -- Text: name + HP + power FontStrings on the frame itself
+            -- (off by default so the aura layout reads clearly).
+            { key="text",      label="Text",    color={0.55,0.78,0.95} },
         }
         -- Collect buttons so solo transitions can refresh their visuals.
         local _layerBtns = {}
@@ -2068,6 +2151,14 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                     end
                     ApplyLayerVisibility()
                     RefreshAllLayerBtns()
+                    -- Text gate depends on _soloKey ("text" solos force
+                    -- text on) — re-run the preview-box refresh so the
+                    -- FontStrings update in the same frame.
+                    if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+                    -- Aura-text gate also depends on _soloKey — re-run
+                    -- handles so per-icon cooldown/stack FontStrings
+                    -- reflect the new solo state on this frame.
+                    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
                     return
                 end
                 -- Right-click without shift: no-op (reserved for future use).
@@ -2096,6 +2187,17 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                 elseif spec.key == "rdebuffs" then
                     local h = _handles.rdebuffs
                     if h then h:SetShown(on) end
+                elseif spec.key == "text" then
+                    -- Text visibility is gated inside RefreshPreviewBox via
+                    -- the _visToggles.text check.  Re-run it so name/HP/power
+                    -- FontStrings show or hide immediately.
+                    if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+                elseif spec.key == "auraText" then
+                    -- Aura-icon cooldown/stack text is applied inside
+                    -- RefreshPreviewHandles → ApplyMockIconText.  Re-run
+                    -- handles so the toggle change takes effect on all
+                    -- mock icons immediately.
+                    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
                 end
                 -- Sync alpha (solo transitions set above may need applying)
                 ApplyLayerVisibility()
@@ -2111,6 +2213,12 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
             end)
             btn:SetScript("OnLeave", function() RefreshBtn() end)
         end
+
+        -- Store required sidebar height so ResizePreviewContainer can
+        -- enlarge the preview box when more layer buttons are added.
+        -- Previously this was hardcoded to 7*24 — adding buttons would
+        -- silently clip the last ones (Text, CD/Stack) off the bottom.
+        container._sidebarReqH = topPad + #VIS_BTNS * btnH + (#VIS_BTNS - 1) * gap + 4
     end
 
     -- Bottom status bar
@@ -2190,7 +2298,11 @@ end
 function GF.ResizePreviewContainer()
     if not _box or not _mockFrame then return end
     local mH = _mockFrame:GetHeight() or 130
-    local sideMinH = 7 * 24   -- 7 toggle buttons
+    -- Sidebar minimum height is driven by the actual button count stored
+    -- on _box when the buttons were built.  Falls back to a safe value
+    -- that covers 9 buttons if the computed value isn't set yet (e.g.
+    -- before the sidebar finishes its first build).
+    local sideMinH = _box._sidebarReqH or (9 * 21 + 16)
     local areaH = max(mH + 50, sideMinH)
     local totalH = areaH + 44  -- header(24) + coord(20)
     totalH = max(200, totalH)
