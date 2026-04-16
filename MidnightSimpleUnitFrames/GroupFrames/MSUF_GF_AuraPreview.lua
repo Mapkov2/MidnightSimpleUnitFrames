@@ -14,6 +14,7 @@ if not GF then return end
 local CreateFrame   = _G.CreateFrame
 local GetCursorPosition = _G.GetCursorPosition
 local UnitExists    = _G.UnitExists
+local IsShiftKeyDown = _G.IsShiftKeyDown
 local pairs         = pairs
 local ipairs        = ipairs
 local type          = type
@@ -43,6 +44,12 @@ local HP_SAMPLES = {
 ------------------------------------------------------------------------
 local _visToggles = { buff = true, debuff = true, externals = true,
     status = true, si = true, private = true, rdebuffs = true }
+
+-- Solo-highlight: when non-nil, only this layer group is rendered at full
+-- alpha; all other layers fade to _SOLO_DIM. Activated via Shift+Click on
+-- a layer button. nil = normal multi-layer mode.
+local _soloKey = nil
+local _SOLO_DIM = 0.15
 
 ------------------------------------------------------------------------
 -- Anchor fraction table: x from left (0-1), y from bottom (0-1)
@@ -148,6 +155,52 @@ local function UpdateCoordDisplay(key, anchor, offX, offY)
     end
 end
 
+------------------------------------------------------------------------
+-- Layer visibility helpers.
+-- Encapsulates the per-key → handle mapping so OnClick, solo-apply, and
+-- post-rebuild refresh all share one implementation. Declared here
+-- (after _handles/_statusHandles/_siHandles are defined above) so the
+-- closures resolve to the correct file-scope locals.
+-- Cold-path UI only; no protected API reads, no secret values.
+------------------------------------------------------------------------
+local function ForEachLayerHandle(key, fn)
+    if key == "buff" or key == "debuff" or key == "externals" then
+        local h = _handles[key]
+        if h then fn(h) end
+    elseif key == "status" then
+        for _, sh in pairs(_statusHandles) do fn(sh) end
+    elseif key == "si" then
+        for _, sh in pairs(_siHandles) do fn(sh) end
+    elseif key == "private" then
+        local h = _handles.private
+        if h then fn(h) end
+    elseif key == "rdebuffs" then
+        local h = _handles.rdebuffs
+        if h then fn(h) end
+    end
+end
+
+-- Apply current _soloKey state to every managed handle's alpha.
+-- Does NOT touch :SetShown — that is owned by RefreshPreviewHandles' inline
+-- logic which respects per-group config.enabled. Solo mode is a pure
+-- alpha concern: soloed layer at full alpha, others at _SOLO_DIM.
+-- When _soloKey is nil, every handle is restored to alpha 1 (unless the
+-- handle-selection dim-cascade in SelectHandle is active, which composes
+-- with this by early-returning in solo mode).
+local function ApplyLayerVisibility()
+    local KEYS = { "buff", "debuff", "externals", "status", "si", "private", "rdebuffs" }
+    for i = 1, #KEYS do
+        local k = KEYS[i]
+        local alpha = 1
+        if _soloKey ~= nil and _soloKey ~= k then
+            alpha = _SOLO_DIM
+        end
+        ForEachLayerHandle(k, function(h)
+            if h.SetAlpha then h:SetAlpha(alpha) end
+        end)
+    end
+end
+
 local function SelectHandle(handle)
     if _selected and _selected ~= handle and _selected._selBorder then
         _selected._selBorder:Hide()
@@ -159,6 +212,10 @@ local function SelectHandle(handle)
             _onSectionOpen(handle._sectionKey)
         end
     end
+    -- While solo-highlight is active, solo owns alpha — don't fight it
+    -- from the selection dim-cascade. ApplyLayerVisibility has already
+    -- set each handle's alpha based on its layer's solo state.
+    if _soloKey ~= nil then return end
     -- Dim non-selected handles
     local dimAlpha = handle and 0.35 or 1
     for _, h in pairs(_handles) do
@@ -349,9 +406,16 @@ local function BuildMockFrame(parent)
     local conf = GF.GetConf(kind)
     local rawW = conf.width or 120
     local rawH = conf.height or 40
-    local scale = max(1.4, min(2.8, PREVIEW_MIN_W / max(1, rawW)))
-    local w = max(PREVIEW_MIN_W, floor(rawW * scale + 0.5))
-    local h = max(PREVIEW_MIN_H, floor(rawH * scale + 0.5))
+    -- Aspect-faithful scaling: pick a uniform scale such that the mock
+    -- frame fits inside (PREVIEW_MIN_W × PREVIEW_MIN_H) while preserving
+    -- the live w/h ratio exactly.  Previously a max(PREVIEW_MIN_W, ...)
+    -- floor stretched narrow frames horizontally so the preview no longer
+    -- matched what the user saw in-game.
+    local scaleW = PREVIEW_MIN_W / max(1, rawW)
+    local scaleH = PREVIEW_MIN_H / max(1, rawH)
+    local scale = max(1.4, min(2.8, min(scaleW, scaleH)))
+    local w = floor(rawW * scale + 0.5)
+    local h = floor(rawH * scale + 0.5)
     local powerH = floor((conf.powerHeight or 6) * scale + 0.5)
     local insetBase = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 1
     local inset = max(0, floor(insetBase * scale + 0.5))
@@ -529,12 +593,17 @@ function GF.RefreshPreviewBox()
     local conf = GF.GetConf(kind)
     local m    = _mockFrame
 
-    -- Size (scaled for preview visibility)
+    -- Size (aspect-faithful scaling — mirrors BuildMockFrame exactly).
+    -- Pick a uniform scale so the mock fits inside PREVIEW_MIN_W ×
+    -- PREVIEW_MIN_H while preserving the live w/h ratio. The previous
+    -- max(PREVIEW_MIN_W, ...) floor stretched narrow frames horizontally.
     local rawW = conf.width or 120
     local rawH = conf.height or 40
-    local scale = max(1.4, min(2.8, PREVIEW_MIN_W / max(1, rawW)))
-    local w = max(PREVIEW_MIN_W, floor(rawW * scale + 0.5))
-    local h = max(PREVIEW_MIN_H, floor(rawH * scale + 0.5))
+    local scaleW = PREVIEW_MIN_W / max(1, rawW)
+    local scaleH = PREVIEW_MIN_H / max(1, rawH)
+    local scale = max(1.4, min(2.8, min(scaleW, scaleH)))
+    local w = floor(rawW * scale + 0.5)
+    local h = floor(rawH * scale + 0.5)
     m:SetSize(w, h)
     m._previewScale = scale
 
@@ -857,6 +926,173 @@ local AURA_GRP_COLORS = {
     externals = { {0.10,0.35,0.23}, {0.17,0.42,0.29}, {0.12,0.38,0.25}, {0.15,0.40,0.27} },
 }
 
+------------------------------------------------------------------------
+-- Growth vector table (mirrors MSUF_GF_Auras.lua GROWTH_TABLE).
+-- Kept identical to the renderer so preview positioning matches live.
+-- px/py = primary axis vector (within a row), sx/sy = secondary axis
+-- vector (row wrap direction). `centered` groups grow symmetrically
+-- from the anchor center.
+------------------------------------------------------------------------
+local PREVIEW_GROWTH = {
+    RIGHTDOWN = { px =  1, py =  0, sx =  0, sy = -1 },
+    RIGHTUP   = { px =  1, py =  0, sx =  0, sy =  1 },
+    LEFTDOWN  = { px = -1, py =  0, sx =  0, sy = -1 },
+    LEFTUP    = { px = -1, py =  0, sx =  0, sy =  1 },
+    DOWNRIGHT = { px =  0, py = -1, sx =  1, sy =  0 },
+    DOWNLEFT  = { px =  0, py = -1, sx = -1, sy =  0 },
+    UPRIGHT   = { px =  0, py =  1, sx =  1, sy =  0 },
+    UPLEFT    = { px =  0, py =  1, sx = -1, sy =  0 },
+    CENTER_H  = { px =  1, py =  0, sx =  0, sy = -1, centered = true },
+    CENTER_V  = { px =  0, py = -1, sx =  1, sy =  0, centered = true },
+}
+
+-- Resolve a growth key to its vector table. Unknown / nil keys fall back
+-- to RIGHTDOWN (matches renderer default in GetGrowthVectors).  Legacy
+-- aliases "RIGHT"/"LEFT"/"UP"/"DOWN" used in some old presets map to a
+-- sensible compound default.
+local GROWTH_ALIAS = {
+    RIGHT = "RIGHTDOWN",
+    LEFT  = "LEFTDOWN",
+    UP    = "UPRIGHT",
+    DOWN  = "DOWNRIGHT",
+}
+local function ResolvePreviewGrowth(growth)
+    if not growth then return PREVIEW_GROWTH.RIGHTDOWN end
+    local g = PREVIEW_GROWTH[growth]
+    if g then return g end
+    local alias = GROWTH_ALIAS[growth]
+    if alias then return PREVIEW_GROWTH[alias] end
+    return PREVIEW_GROWTH.RIGHTDOWN
+end
+
+------------------------------------------------------------------------
+-- Mock spell IDs per group (Platynator-style real-texture preview).
+-- These are real spell IDs, resolved at render time through
+-- C_Spell.GetSpellTexture with a process-lifetime cache.  Using file IDs
+-- directly in SetTexture() fails in Midnight 12.0 — the retail-safe path
+-- is to resolve spell → icon path via the C_Spell API (same pattern MSUF
+-- uses in HealerBuffs and A2_Reminder).
+------------------------------------------------------------------------
+local AURA_GRP_ICON_IDS = {
+    buff = {
+        774,    -- Rejuvenation
+        17,     -- Power Word: Shield
+        139,    -- Renew
+        33076,  -- Prayer of Mending
+        33763,  -- Lifebloom
+        81749,  -- Atonement
+    },
+    debuff = {
+        589,     -- Shadow Word: Pain (Priest)
+        980,     -- Agony (Warlock)
+        172,     -- Corruption (Warlock)
+        12294,   -- Mortal Strike (Warrior)
+        1943,    -- Rupture (Rogue)
+        5782,    -- Fear (Warlock)
+    },
+    externals = {
+        6940,    -- Blessing of Sacrifice
+        102342,  -- Ironbark
+        1022,    -- Blessing of Protection
+        116849,  -- Life Cocoon
+    },
+}
+
+-- Shared spell-texture cache. One lookup per unique spell ID per session.
+local _mockSpellTexCache = {}
+local function GetMockSpellTexture(spellId)
+    local cached = _mockSpellTexCache[spellId]
+    if cached then return cached end
+    if C_Spell and C_Spell.GetSpellTexture then
+        local tex = C_Spell.GetSpellTexture(spellId)
+        if tex then _mockSpellTexCache[spellId] = tex; return tex end
+    end
+    if GetSpellInfo then
+        local _, _, icon = GetSpellInfo(spellId)
+        if icon then _mockSpellTexCache[spellId] = icon; return icon end
+    end
+    -- Fallback: generic question-mark icon so "never black" is guaranteed
+    return "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+
+-- Mock text values (countdown / stacks) — rendered ONLY on icon[1] of each
+-- group so the preview doesn't become "a wall of 3s and 2s".  Single
+-- representative icon communicates the position/anchor/offset settings;
+-- the remaining icons stay clean so the group's layout + spacing reads.
+local AURA_MOCK_CD_TEXT     = "3"
+local AURA_MOCK_STACK_TEXT  = "2"
+
+------------------------------------------------------------------------
+-- Resolve font for mock aura text. Cold-path: re-read each refresh so
+-- live LSM font changes propagate without a rebuild.
+------------------------------------------------------------------------
+local function GetAuraMockFont(kind)
+    local path = (GF.ResolveFontPath and GF.ResolveFontPath(kind)) or "Fonts\\FRIZQT__.TTF"
+    local flags = (GF.ResolveFontFlags and GF.ResolveFontFlags(kind)) or "OUTLINE"
+    return path, flags
+end
+
+------------------------------------------------------------------------
+-- Apply cooldown + stack text to a single mock icon. Reads the same
+-- gcfg keys the real aura pipeline uses so the options sliders provide
+-- live visual feedback on the mock frame.
+-- `showText` gates whether the text is actually rendered — callers pass
+-- true only for the representative first icon of each group to avoid a
+-- visual wall of "3"s and "2"s on every icon.
+------------------------------------------------------------------------
+local function ApplyMockIconText(ic, gcfg, size, kind, showText)
+    if not ic or not gcfg then return end
+
+    -- Hide path: if caller doesn't want text on this icon, hide any
+    -- FontStrings that may have been created on a previous pass.  Never
+    -- destroy them — they're pooled with the icon and reused.
+    if not showText then
+        if ic._cdText  then ic._cdText:Hide()  end
+        if ic._stkText then ic._stkText:Hide() end
+        return
+    end
+
+    local fontPath, fontFlags = GetAuraMockFont(kind)
+
+    -- Cooldown text — sized conservatively so it fits inside the icon.
+    -- Real cooldown text at live sizes is ~45% of the icon dimension;
+    -- the preview runs at 1.4-2.8× so we scale down slightly to keep
+    -- the "3" readable but not dominant.
+    local cd = ic._cdText
+    if not cd then
+        cd = ic:CreateFontString(nil, "OVERLAY")
+        ic._cdText = cd
+    end
+    local cdSize = max(6, floor(size * 0.38 + 0.5))
+    if cd.SetFont then cd:SetFont(fontPath, cdSize, fontFlags) end
+    cd:SetText(AURA_MOCK_CD_TEXT)
+    cd:SetTextColor(1, 0.82, 0, 1)
+    cd:ClearAllPoints()
+    local cdAnchor = gcfg.cooldownAnchor or "CENTER"
+    local cdOX = (gcfg.cooldownOffsetX or 0)
+    local cdOY = (gcfg.cooldownOffsetY or 0)
+    cd:SetPoint(cdAnchor, ic, cdAnchor, cdOX, cdOY)
+    cd:Show()
+
+    -- Stack count text — smaller than cooldown (matches real WoW layout).
+    local st = ic._stkText
+    if not st then
+        st = ic:CreateFontString(nil, "OVERLAY")
+        ic._stkText = st
+    end
+    local stBase = (gcfg.stackSize or 10)
+    local stSize = max(6, floor((stBase / 10) * (size * 0.34) + 0.5))
+    if st.SetFont then st:SetFont(fontPath, stSize, fontFlags) end
+    st:SetText(AURA_MOCK_STACK_TEXT)
+    st:SetTextColor(1, 1, 1, 1)
+    st:ClearAllPoints()
+    local stAnchor = gcfg.stackAnchor or "BOTTOMRIGHT"
+    local stOX = (gcfg.stackOffsetX or -1)
+    local stOY = (gcfg.stackOffsetY or 1)
+    st:SetPoint(stAnchor, ic, stAnchor, stOX, stOY)
+    st:Show()
+end
+
 local function BuildAuraGroupHandles(mockFrame)
     local GROUPS = {
         { key = "buff",      section = "buffs",   defAnchor = "BOTTOMLEFT", defSize = 16 },
@@ -1136,6 +1372,15 @@ function GF.RefreshPreviewHandles()
     local dynScale = GF.GetPreviewDynamicScale and GF.GetPreviewDynamicScale(conf, kind) or 1
 
     -- Aura groups (dynamic icon count from config max)
+    -- Compute frame-height-relative icon size clamp once: a live aura icon
+    -- must physically fit inside the frame.  Preview scale multiplies raw
+    -- sizes, but a raw ac.size=22 on a 40px frame is already larger than
+    -- the frame in live play — so we clamp the raw size to 80% of frame
+    -- height before applying the preview scale. This matches what the
+    -- user actually sees in-game much more closely.
+    local frameRawH = conf.height or 40
+    local maxRawIconSize = max(6, floor(frameRawH * 0.80 + 0.5))
+
     for _, grpKey in ipairs({"buff", "debuff", "externals"}) do
         local h = _handles[grpKey]
         if h then
@@ -1143,49 +1388,157 @@ function GF.RefreshPreviewHandles()
             local anchor  = (ac and ac.anchor) or h._defAnchor or "BOTTOMLEFT"
             local offX    = floor(((ac and ac.x) or 0) * sc + 0.5)
             local offY    = floor(((ac and ac.y) or 0) * sc + 0.5)
-            local rawSz   = (ac and ac.size) or (grpKey == "externals" and 22 or 16)
+
+            -- Icon size: user value if set, else conservative default.
+            -- Clamped to frame-relative max so externals default=22 on a
+            -- 40px frame doesn't paint giant icons the user would never see.
+            local rawSz   = (ac and ac.size) or (grpKey == "externals" and 18 or 14)
+            if rawSz > maxRawIconSize then rawSz = maxRawIconSize end
             if dynScale ~= 1 then rawSz = max(8, floor(rawSz * dynScale + 0.5)) end
             local sz      = floor(rawSz * sc + 0.5)
-            local perRow  = (ac and ac.perRow) or (grpKey == "externals" and 6 or 4)
+
+            -- Realistic defaults: 3 icons per row (not 6) so a live preview
+            -- with config-less defaults matches typical user setups.
+            local perRow  = (ac and ac.perRow) or (grpKey == "externals" and 2 or 3)
             local rawSpc  = (ac and ac.spacing) or 1
             local spacing = floor(rawSpc * sc + 0.5)
-            local maxIcons = (ac and ac.max) or (grpKey == "externals" and 2 or 6)
+            local maxIcons = (ac and ac.max) or (grpKey == "externals" and 2 or 3)
             local en = not ac or ac.enabled ~= false
 
-            -- Ensure icon pool
+            -- Growth direction drives where icons flow from the anchor.
+            -- Must match the canonical renderer (MSUF_GF_Auras.lua
+            -- PositionIcon) exactly so preview = live.
+            local gv = ResolvePreviewGrowth(ac and ac.growth)
+            local isCentered = gv.centered == true
+
+            -- Ensure icon pool (Platynator-style: real spell icon + soft border + mock text on icon[1])
             local pool = h._grpIcons or {}
             h._grpIcons = pool
-            local colors = AURA_GRP_COLORS[grpKey] or AURA_GRP_COLORS.buff
+            local iconIDs = AURA_GRP_ICON_IDS[grpKey] or AURA_GRP_ICON_IDS.buff
+
+            -- Resolve per-group config used for mock text (live-feedback for
+            -- Beta 4 cooldown/stack sliders). Fallback to empty table so the
+            -- ApplyMockIconText defaults take effect.
+            local gcfg = (ac and ac) or {}
 
             for i = 1, maxIcons do
                 local ic = pool[i]
                 if not ic then
-                    ic = h:CreateTexture(nil, "ARTWORK")
+                    -- Use a Frame so we can parent a border + FontStrings
+                    ic = CreateFrame("Frame", nil, h)
+                    ic:SetFrameLevel(h:GetFrameLevel() + 1)
+
+                    local tex = ic:CreateTexture(nil, "ARTWORK")
+                    tex:SetAllPoints(ic)
+                    tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- Blizzard-style edge trim
+                    ic._tex = tex
+
+                    -- Soft charcoal edge (not pure black) so a mock icon
+                    -- never reads as a solid black block even if the spell
+                    -- texture fails to resolve.  Drawn at BORDER layer so
+                    -- the icon texture in ARTWORK covers the center.
+                    local bd = ic:CreateTexture(nil, "BORDER")
+                    bd:SetTexture(W8)
+                    bd:SetVertexColor(0.10, 0.10, 0.12, 0.8)
+                    ic._border = bd
+
                     pool[i] = ic
                 end
-                local c = colors[((i - 1) % #colors) + 1]
-                ic:SetColorTexture(c[1], c[2], c[3], 1)
+
+                -- Resolve real spell icon path from spell ID (cached)
+                local spellId = iconIDs[((i - 1) % #iconIDs) + 1]
+                local path = GetMockSpellTexture(spellId)
+                ic._tex:SetTexture(path)
+                ic._tex:SetVertexColor(1, 1, 1, 1)
+
                 ic:SetSize(sz, sz)
+                -- 1px border at preview scale (resolves to exactly 1 screen px)
+                local bw = max(1, floor(sc * 0.5 + 0.5))
+                ic._border:ClearAllPoints()
+                ic._border:SetPoint("TOPLEFT", ic, "TOPLEFT", -bw, bw)
+                ic._border:SetPoint("BOTTOMRIGHT", ic, "BOTTOMRIGHT", bw, -bw)
+
+                -- Mock countdown/stack text only on the representative
+                -- first icon.  Showing it on all icons creates visual noise
+                -- and makes the group layout unreadable.
+                ApplyMockIconText(ic, gcfg, sz, kind, i == 1)
+
                 ic:Show()
             end
             for i = maxIcons + 1, #pool do
                 pool[i]:Hide()
             end
 
-            -- Layout grid
-            local cols = min(perRow, maxIcons)
-            local rows = max(1, floor((maxIcons - 1) / cols) + 1)
-            local totalW = cols * sz + max(0, cols - 1) * spacing
-            local totalH = rows * sz + max(0, rows - 1) * spacing
-            h:SetSize(max(6, totalW), max(6, totalH))
-            for i = 1, maxIcons do
-                local ic = pool[i]
-                local col = (i - 1) % cols
-                local row = floor((i - 1) / cols)
-                ic:ClearAllPoints()
-                ic:SetPoint("TOPLEFT", h, "TOPLEFT",
-                    col * (sz + spacing), -(row * (sz + spacing)))
+            -- Canonical positioning (mirrors MSUF_GF_Auras.lua PositionIcon):
+            -- Each icon is anchored at `anchor` of the container, offset by
+            -- the growth vector × step.  Icon[1] sits exactly on the
+            -- container's anchor corner (zero offset), subsequent icons
+            -- flow along the primary axis, wrapping to the secondary axis
+            -- every perRow.  This matches live exactly.
+            local step = sz + spacing
+            if isCentered and maxIcons > 0 then
+                -- Centered growth: icons spread outward from the anchor
+                -- point along the primary axis (mirrors renderer line
+                -- 831-845).  Always single-row since centered groups don't
+                -- wrap.
+                local isH = (gv.px ~= 0)
+                local totalPrimary = maxIcons * sz + (maxIcons - 1) * spacing
+                local halfOfs = totalPrimary * 0.5
+                for i = 1, maxIcons do
+                    local ic = pool[i]
+                    if ic then
+                        ic:ClearAllPoints()
+                        local col = i - 1
+                        if isH then
+                            local ox = col * step - halfOfs + sz * 0.5
+                            ic:SetPoint("CENTER", h, "CENTER", ox, 0)
+                        else
+                            local oy = -(col * step - halfOfs) - sz * 0.5
+                            ic:SetPoint("CENTER", h, "CENTER", 0, oy)
+                        end
+                    end
+                end
+            else
+                for i = 1, maxIcons do
+                    local ic = pool[i]
+                    if ic then
+                        ic:ClearAllPoints()
+                        local col = (i - 1) % perRow
+                        local row = floor((i - 1) / perRow)
+                        local ox = col * step * gv.px + row * step * gv.sx
+                        local oy = col * step * gv.py + row * step * gv.sy
+                        ic:SetPoint(anchor, h, anchor, ox, oy)
+                    end
+                end
             end
+
+            -- Handle bounding box: just large enough to cover all positioned
+            -- icons in every direction.  Used only as drag-hit area — actual
+            -- icon placement is driven by the canonical positioning above.
+            -- We size it to the primary × secondary extent plus the icon
+            -- diameter so edge icons aren't clipped from the handle rect.
+            local cols = min(perRow, maxIcons)
+            local rows = max(1, floor((maxIcons - 1) / max(1, cols)) + 1)
+            local extentP = cols * sz + max(0, cols - 1) * spacing
+            local extentS = rows * sz + max(0, rows - 1) * spacing
+            local handleW, handleH
+            if gv.px ~= 0 then
+                handleW, handleH = extentP, extentS
+            else
+                handleW, handleH = extentS, extentP
+            end
+            if isCentered then
+                -- Centered handles need to span the full primary extent
+                -- (icons spread both directions from anchor center).
+                if gv.px ~= 0 then
+                    handleW = extentP
+                    handleH = sz
+                else
+                    handleW = sz
+                    handleH = extentP
+                end
+            end
+            h:SetSize(max(sz, handleW), max(sz, handleH))
 
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
@@ -1460,6 +1813,11 @@ function GF.RefreshPreviewHandles()
             end
         end
     end
+
+    -- Solo + visibility pass (last-write wins): overrides any alpha set by
+    -- the section-focus logic above so solo-highlight mode behaves
+    -- consistently after a rebuild.
+    ApplyLayerVisibility()
 end
 
 ------------------------------------------------------------------------
@@ -1621,12 +1979,28 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
             { key="private",   label="Private", color={0.55,0.55,0.60} },
             { key="rdebuffs",  label="RaidDB",  color={0.95,0.35,0.20} },
         }
+        -- Collect buttons so solo transitions can refresh their visuals.
+        local _layerBtns = {}
+
+        -- Refresh every layer button (after solo state change).
+        local function RefreshAllLayerBtns()
+            for i = 1, #_layerBtns do
+                local rb = _layerBtns[i]._refresh
+                if rb then rb() end
+            end
+        end
+
         local btnH, gap, topPad = 20, 1, 16
         for i, spec in ipairs(VIS_BTNS) do
             local btn = CreateFrame("Button", nil, sidebar)
             btn:SetSize(sideW - 6, btnH)
             btn:SetPoint("TOP", sidebar, "TOP", 0, -(topPad + (i-1) * (btnH + gap)))
             btn:EnableMouse(true)
+            -- Accept right-click so Shift+RightClick can also exit solo mode
+            -- without triggering the normal toggle branch.
+            if btn.RegisterForClicks then
+                btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            end
             local c = spec.color
 
             local bg = btn:CreateTexture(nil, "BACKGROUND")
@@ -1638,6 +2012,17 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
             bar:SetPoint("LEFT", btn, "LEFT", 2, 0)
             btn._bar = bar
 
+            -- Solo indicator: thin gold edge when this button owns the solo.
+            -- Hidden by default; toggled in RefreshBtn based on _soloKey.
+            local soloEdge = btn:CreateTexture(nil, "OVERLAY")
+            soloEdge:SetTexture(W8)
+            soloEdge:SetVertexColor(1, 0.82, 0, 0.9)
+            soloEdge:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
+            soloEdge:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
+            soloEdge:SetWidth(2)
+            soloEdge:Hide()
+            btn._soloEdge = soloEdge
+
             local fs = btn:CreateFontString(nil, "OVERLAY")
             fs:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
             fs:SetPoint("LEFT", bar, "RIGHT", 5, 0)
@@ -1646,6 +2031,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
 
             local function RefreshBtn()
                 local on = _visToggles[spec.key]
+                local isSolo = (_soloKey == spec.key)
                 if on then
                     bg:SetColorTexture(c[1]*0.12, c[2]*0.12, c[3]*0.12, 0.6)
                     bar:SetColorTexture(c[1], c[2], c[3], 0.85)
@@ -1655,14 +2041,48 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                     bar:SetColorTexture(0.18, 0.18, 0.22, 0.3)
                     fs:SetTextColor(0.30, 0.30, 0.35, 0.45)
                 end
+                -- Solo indicator: shown on the single soloed button. Also
+                -- brighten its label so it reads clearly when solo-dimming
+                -- its siblings visually in the preview area.
+                if isSolo then
+                    soloEdge:Show()
+                    fs:SetTextColor(1, 0.90, 0.50, 1)
+                else
+                    soloEdge:Hide()
+                end
             end
             btn._refresh = RefreshBtn
+            _layerBtns[#_layerBtns + 1] = btn
             RefreshBtn()
 
-            btn:SetScript("OnClick", function()
+            btn:SetScript("OnClick", function(self, mouseBtn)
+                -- Shift+Click (either button) → toggle solo mode for this key.
+                -- Shift+Click on the already-soloed key → exit solo mode.
+                -- This does not touch _visToggles — solo is orthogonal to
+                -- the plain visibility toggle and restores on exit.
+                if IsShiftKeyDown and IsShiftKeyDown() then
+                    if _soloKey == spec.key then
+                        _soloKey = nil
+                    else
+                        _soloKey = spec.key
+                    end
+                    ApplyLayerVisibility()
+                    RefreshAllLayerBtns()
+                    return
+                end
+                -- Right-click without shift: no-op (reserved for future use).
+                if mouseBtn == "RightButton" then return end
+
+                -- Normal left-click: toggle visibility for this layer.
+                -- If solo is active, a normal click on a non-soloed layer
+                -- exits solo first so the user's toggle intent is visible.
+                if _soloKey ~= nil and _soloKey ~= spec.key then
+                    _soloKey = nil
+                end
                 _visToggles[spec.key] = not _visToggles[spec.key]
-                RefreshBtn()
                 local on = _visToggles[spec.key]
+                -- Show/hide handles via the same branches as RefreshPreviewHandles
+                -- inline logic (which is the source of truth for visibility).
                 if spec.key == "buff" or spec.key == "debuff" or spec.key == "externals" then
                     local h = _handles[spec.key]
                     if h then h:SetShown(on) end
@@ -1677,6 +2097,9 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                     local h = _handles.rdebuffs
                     if h then h:SetShown(on) end
                 end
+                -- Sync alpha (solo transitions set above may need applying)
+                ApplyLayerVisibility()
+                RefreshAllLayerBtns()
             end)
             btn:SetScript("OnEnter", function(self)
                 if _visToggles[spec.key] then
