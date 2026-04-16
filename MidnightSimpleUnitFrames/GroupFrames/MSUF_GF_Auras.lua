@@ -487,6 +487,51 @@ local function ApplyCooldownFont(ic, gcfg)
         cd._msufGFCdTextSize = size
         cd._msufGFCdFontPath = gFont
     end
+
+    -- Anchor + offset (live-apply via diff-gate on anchor+x+y)
+    local anchor = gcfg.cooldownAnchor or "CENTER"
+    local ox = gcfg.cooldownOffsetX or 0
+    local oy = gcfg.cooldownOffsetY or 0
+    if cd._msufGFCdAnchor ~= anchor or cd._msufGFCdOX ~= ox or cd._msufGFCdOY ~= oy then
+        cd._msufGFCdAnchor = anchor
+        cd._msufGFCdOX = ox
+        cd._msufGFCdOY = oy
+        fs:ClearAllPoints()
+        fs:SetPoint(anchor, ic, anchor, ox, oy)
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply stack count layout (font size, anchor, offset)
+-- Diff-gated per icon for live-apply.
+------------------------------------------------------------------------
+local function ApplyStackLayout(ic, gcfg)
+    local fs = ic and ic.count
+    if not fs then return end
+
+    local size = gcfg.stackSize or 10
+    local anchor = gcfg.stackAnchor or "BOTTOMRIGHT"
+    local ox = gcfg.stackOffsetX or -1
+    local oy = gcfg.stackOffsetY or 1
+
+    local gFont, gFlags = ResolveGlobalFont()
+    local wantFlags = gcfg.stackOutline or gFlags or "OUTLINE"
+
+    if ic._msufGFStkSize ~= size or ic._msufGFStkFont ~= gFont then
+        if gFont and fs.SetFont then
+            fs:SetFont(gFont, size, wantFlags)
+        end
+        ic._msufGFStkSize = size
+        ic._msufGFStkFont = gFont
+    end
+
+    if ic._msufGFStkAnchor ~= anchor or ic._msufGFStkOX ~= ox or ic._msufGFStkOY ~= oy then
+        ic._msufGFStkAnchor = anchor
+        ic._msufGFStkOX = ox
+        ic._msufGFStkOY = oy
+        fs:ClearAllPoints()
+        fs:SetPoint(anchor, ic, anchor, ox, oy)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -714,8 +759,10 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                     if ic then
                         local prevAid = ic._msufAuraID
                         if prevAid == aid then
-                            -- ══ SAME AURA ══ cheap refresh (cooldown sweep + stacks)
+                            -- ══ SAME AURA ══ cheap refresh (cooldown sweep + stacks + layout)
                             if showCd then ApplyCooldown(ic, unit, aid, true) end
+                            ApplyCooldownFont(ic, gcfg)
+                            ApplyStackLayout(ic, gcfg)
                             if showStk then ApplyStacks(ic, unit, aid, aura.applications, true, gcfg) end
                         else
                             -- ══ DIFFERENT AURA OR FIRST SHOW ══
@@ -737,6 +784,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                                 end
                             end
                             ApplyCooldownFont(ic, gcfg)
+                            ApplyStackLayout(ic, gcfg)
                             ApplyStacks(ic, unit, aid, aura.applications, showStk, gcfg)
 
                             if isHarmful then
@@ -747,8 +795,12 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                             end
 
                             -- Position: deferred for centered growth, immediate otherwise
-                            if not isCentered and ic._msufPosIdx ~= shown then
+                            -- Diff-gate: index + step (size+spacing) + perRow — ensures
+                            -- repositioning when size/spacing/perRow sliders change.
+                            if not isCentered and (ic._msufPosIdx ~= shown or ic._msufPosStep ~= step or ic._msufPosPR ~= perRow) then
                                 ic._msufPosIdx = shown
+                                ic._msufPosStep = step
+                                ic._msufPosPR = perRow
                                 ic:ClearAllPoints()
                                 local col = (shown - 1) % perRow
                                 local row = math_floor((shown - 1) / perRow)
@@ -769,11 +821,13 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
         end
     end
 
-    -- Centered growth: reposition only when shown count changes (diff-gated)
+    -- Centered growth: reposition when shown count OR step (size+spacing) changes
     if isCentered and shown > 0 then
         local prevCenterN = container._msufCenterN
-        if prevCenterN ~= shown then
+        local prevCenterStep = container._msufCenterStep
+        if prevCenterN ~= shown or prevCenterStep ~= step then
             container._msufCenterN = shown
+            container._msufCenterStep = step
             local isH = (gv.px ~= 0)  -- horizontal primary axis
             local totalPrimary = shown * iconSize + (shown - 1) * spacing
             local halfOfs = totalPrimary * 0.5
@@ -795,6 +849,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
         end
     elseif isCentered then
         container._msufCenterN = 0
+        container._msufCenterStep = nil
     end
 
     -- Clear diff-gate flags on hidden icons
@@ -803,6 +858,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
         if ic then
             if ic:IsShown() then ic:Hide() end
             ic._msufPosIdx = nil
+            ic._msufPosStep = nil
+            ic._msufPosPR = nil
             ic._msufBorderBlack = nil
             ic._msufAuraID = nil
             ic._msufUnit = nil

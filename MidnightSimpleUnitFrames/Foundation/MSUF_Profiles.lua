@@ -267,6 +267,11 @@ function MSUF_InitProfiles()
     char.activeProfile = active
     MSUF_ActiveProfile = active
     MSUF_DB = MSUF_GlobalDB.profiles[active]
+    -- After DB swap: seed missing defaults so per-unit conf tables exist.
+    -- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
+    -- when the profile was saved from an older version missing those keys,
+    -- and UpdateSimpleUnitFrame defaults showPowerText=true since conf.showPower is nil.
+    if type(EnsureDB) == "function" then EnsureDB() end
  end
 function MSUF_CreateProfile(name)
     if not name or name == "" then  return end

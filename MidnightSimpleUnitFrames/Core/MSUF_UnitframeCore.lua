@@ -412,7 +412,7 @@ local MASK_ALL = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_PORTRAIT,
     DIRTY_THREAT, DIRTY_INIT)
 
 local MASK_UNIT_EVENT_FALLBACK = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_STATUS, DIRTY_PORTRAIT, DIRTY_INDICATOR, DIRTY_TOTINLINE)
-local MASK_UNIT_SWAP = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_STATUS, DIRTY_INDICATOR, DIRTY_TOTINLINE)
+local MASK_UNIT_SWAP = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_STATUS, DIRTY_PORTRAIT, DIRTY_INDICATOR, DIRTY_TOTINLINE)
 
 -- When a frame becomes visible again, refresh only dynamic values (no layout).
 -- This matches the "no layout in runtime" goal while preventing stale displays after being hidden.
@@ -1134,7 +1134,7 @@ Elements.Portrait = {
         -- as "static" or only update once per unit swap.
         -- Player + Boss: static portraits (only touch when explicitly dirty or settings/layout changed).
         -- Target/Focus: update portrait texture only once per swap (handled via GUID change in the main UF update path).
-        if (unit == "player" or unit == "target" or unit == "focus" or f.isBoss) and (not f._msufPortraitDirty) then
+        if (unit == "player" or unit == "target" or unit == "focus" or unit == "pet" or unit == "targettarget" or f.isBoss) and (not f._msufPortraitDirty) then
             local mode = conf.portraitMode or "OFF"
             local render = conf.portraitRender
             if render ~= "3D" and render ~= "CLASS" then
@@ -2370,11 +2370,12 @@ local function RunUpdate(f)
     -- ── DIRTY_INIT: first in dispatch (sets flags for subsequent elements) ──
     if band(mask, DIRTY_INIT) ~= 0 then
         conf = conf or GetFrameConf(f)
-        if conf then
-            f.showName      = (conf.showName  ~= false)
-            f.showHPText    = (conf.showHP    ~= false)
-            f.showPowerText = (conf.showPower ~= false)
-        end
+        -- NOTE: showName/showHP/showPower are NOT set here.
+        -- They are owned by _MSUF_ApplyToUnitFrame (cold-path apply) and
+        -- UpdateSimpleUnitFrame (hot-path per-frame). Setting them here caused
+        -- stale-conf regressions where cachedConfig was invalidated between
+        -- ApplyToUnitFrame and DIRTY_INIT flush, re-resolving to an incomplete
+        -- conf table that defaulted showPower=true for pet/targettarget.
         f._msufHealthColorDirty = true
         f._msufVisualQueuedUFCore = true
         local fnBg = _G.MSUF_ApplyBarBackgroundVisual

@@ -3816,6 +3816,16 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     PositionUnitFrame(f, unit)
     if f.portrait then
         MSUF_UpdateBossPortraitLayout(f, conf)
+        -- Force full portrait render — layout alone only positions the widget
+        -- but doesn't set the texture. MaybeUpdatePortrait → global UpdatePortraitIfNeeded
+        -- → hooksecurefunc fires PortraitDecoration (offsets, borders, size override).
+        f._msufPortraitDirty = true
+        f._msufPortraitNextAt = 0
+        local fnP = _G.MSUF_MaybeUpdatePortrait
+        if type(fnP) == "function" then
+            local exists = (F.UnitExists and F.UnitExists(unit)) and true or false
+            fnP(f, unit, conf, exists)
+        end
     end
     ApplyTextLayout(f, conf)
     MSUF_ClampNameWidth(f, conf)

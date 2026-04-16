@@ -297,7 +297,15 @@ local function MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
     if f._msufPortraitDirty then need = true end
     if not need then return end
 
-    UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
+    -- Call via GLOBAL so hooksecurefunc from PortraitDecoration.lua fires.
+    -- The local call bypassed the hook, preventing decoration (offsets, borders,
+    -- size override) from ever being applied on normal portrait renders.
+    local fnGlobal = _G.MSUF_UpdatePortraitIfNeeded
+    if fnGlobal then
+        fnGlobal(f, unit, conf, existsForPortrait)
+    else
+        UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
+    end
     f._msufPortraitModeStamp = mode
     f._msufPortraitRenderStamp = render
 end

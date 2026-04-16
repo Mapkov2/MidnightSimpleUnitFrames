@@ -456,14 +456,20 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
 
         r = RowDivider(body, r)
-        r = RowSubLabel(body, r, L["Cooldown Text"])
-        r = RowCheck(body, r, L["Show Cooldown Text"], gk, "showCooldown", 0)
-        r = RowSlider(body, r, L["Font size"], gk, "cooldownSize", 6, 24, 1, 8)
-        r = RowDropdown(body, r, L["Anchor"], gk, "cooldownAnchor", ANCHOR9, "CENTER")
+        r = RowSubLabel(body, r, L["Cooldown Text"] or "Cooldown Text")
+        r = RowCheck(body, r, L["Show Cooldown Text"] or "Show Cooldown Text", gk, "showCooldown", 0)
+        r = RowSlider(body, r, L["Font size"] or "Font size", gk, "cooldownSize", 6, 24, 1, 8)
+        r = RowDropdown(body, r, L["Anchor"] or "Anchor", gk, "cooldownAnchor", ANCHOR9, "CENTER")
+        r = RowSlider(body, r, L["Offset X"] or "Offset X", gk, "cooldownOffsetX", -20, 20, 1, 0)
+        r = RowSlider(body, r, L["Offset Y"] or "Offset Y", gk, "cooldownOffsetY", -20, 20, 1, 0)
 
         r = RowDivider(body, r)
-        r = RowSubLabel(body, r, L["Stack Count"])
-        r = RowCheck(body, r, L["Show Stack Count"], gk, "showStacks", 0)
+        r = RowSubLabel(body, r, L["Stack Count"] or "Stack Count")
+        r = RowCheck(body, r, L["Show Stack Count"] or "Show Stack Count", gk, "showStacks", 0)
+        r = RowSlider(body, r, L["Font size"] or "Font size", gk, "stackSize", 6, 24, 1, 10)
+        r = RowDropdown(body, r, L["Anchor"] or "Anchor", gk, "stackAnchor", ANCHOR9, "BOTTOMRIGHT")
+        r = RowSlider(body, r, L["Offset X"] or "Offset X", gk, "stackOffsetX", -20, 20, 1, -1)
+        r = RowSlider(body, r, L["Offset Y"] or "Offset Y", gk, "stackOffsetY", -20, 20, 1, 1)
 
         return box, body
     end
