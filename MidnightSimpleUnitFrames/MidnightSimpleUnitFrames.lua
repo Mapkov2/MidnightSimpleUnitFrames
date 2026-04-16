@@ -1900,10 +1900,23 @@ local function PositionUnitFrame(f, unit)
     end
     if key == "boss" then
         local index = (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit)) or 1
-        local x = conf.offsetX
+        local step = index - 1
         local spacing = conf.spacing or -36
-        if conf.invertBossOrder then spacing = -spacing end
-        local y = conf.offsetY + (index - 1) * spacing
+        local mode = conf.bossLayoutMode
+        local baseX = conf.offsetX or 0
+        local baseY = conf.offsetY or 0
+        local x, y = baseX, baseY
+        if mode == "HORIZONTAL_RIGHT" then
+            -- boss1 at anchor, subsequent to the right. spacing is negative by default → invert for rightward travel.
+            x = baseX + step * -spacing
+        elseif mode == "HORIZONTAL_LEFT" then
+            x = baseX + step * spacing
+        elseif mode == "VERTICAL_UP" then
+            y = baseY + step * -spacing
+        else
+            -- VERTICAL_DOWN (default) and any legacy/unknown value (including pre-migration invertBossOrder==false)
+            y = baseY + step * spacing
+        end
         MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", x, y)
     else
         MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)

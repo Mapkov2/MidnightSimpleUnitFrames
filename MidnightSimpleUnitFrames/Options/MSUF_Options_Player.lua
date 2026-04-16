@@ -259,6 +259,34 @@ local function GetPortraitVal(conf)
 end
 
 --------------------------------------------------------------------
+-- Boss layout mode (vertical/horizontal ordering of boss1..8)
+--------------------------------------------------------------------
+local BOSS_LAYOUT_OPTIONS = {
+    { value = "VERTICAL_DOWN",    text = "Vertical (top -> bottom)" },
+    { value = "VERTICAL_UP",      text = "Vertical (bottom -> top)" },
+    { value = "HORIZONTAL_RIGHT", text = "Horizontal (left -> right)" },
+    { value = "HORIZONTAL_LEFT",  text = "Horizontal (right -> left)" },
+}
+local BOSS_LAYOUT_VALID = {
+    VERTICAL_DOWN    = true,
+    VERTICAL_UP      = true,
+    HORIZONTAL_RIGHT = true,
+    HORIZONTAL_LEFT  = true,
+}
+local function BossLayoutMode_Text(m)
+    if m == "VERTICAL_UP"      then return "Vertical (bottom -> top)" end
+    if m == "HORIZONTAL_RIGHT" then return "Horizontal (left -> right)" end
+    if m == "HORIZONTAL_LEFT"  then return "Horizontal (right -> left)" end
+    return "Vertical (top -> bottom)"
+end
+-- Normalize: accept new string values; fall back to legacy invertBossOrder; default VERTICAL_DOWN.
+local function BossLayoutMode_Normalize(v, legacyInvert)
+    if type(v) == "string" and BOSS_LAYOUT_VALID[v] then return v end
+    if legacyInvert == true then return "VERTICAL_UP" end
+    return "VERTICAL_DOWN"
+end
+
+--------------------------------------------------------------------
 -- ToT inline separator
 --------------------------------------------------------------------
 local TOTSEP_OPTIONS = {
@@ -908,11 +936,22 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     panel._msufIndicatorLayout = { colX = IND_COL_X, leaderToggleY = IND_BASE_TOGGLE_Y, leaderCtrlY = IND_BASE_CTRL_Y, rowStep = IND_ROW_STEP, dividerOffset = 0 }
 
     -- Boss-only controls
-    panel.playerBossSpacingSlider = CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", bossLayoutBody, -200, 0, 1, 12, -14)
+    panel.playerBossSpacingSlider = CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", bossLayoutBody, -400, 0, 1, 12, -14)
     FinalizeCompactSlider(panel.playerBossSpacingSlider, fullW - 24)
     panel.playerBossSpacingSlider:Hide()
-    panel.playerInvertBossOrderCB = MkCheck(bossLayoutBody, "MSUF_UF_InvertBossOrderCB", "Invert boss order", 12, -52); panel.playerInvertBossOrderCB:Hide()
-    panel.playerBossTargetHLCB = MkCheck(bossLayoutBody, "MSUF_UF_BossTargetHLCB", "Highlight targeted boss frame", 12, -86); panel.playerBossTargetHLCB:Hide()
+
+    -- Layout mode dropdown (replaces the old "Invert boss order" checkbox).
+    -- Four orderings: vertical down/up, horizontal left->right / right->left.
+    panel.playerBossLayoutModeLabel = bossLayoutBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    panel.playerBossLayoutModeLabel:SetJustifyH("LEFT")
+    panel.playerBossLayoutModeLabel:SetText(TR("Boss frame layout"))
+    panel.playerBossLayoutModeLabel:Hide()
+
+    panel.playerBossLayoutModeDD = MkStyledDD("MSUF_UF_BossLayoutModeDropDown", bossLayoutBody, 220)
+    panel.playerBossLayoutModeDD:Hide()
+
+    -- Target highlight moved 10px lower to make room for the dropdown (label + DD = 2 rows).
+    panel.playerBossTargetHLCB = MkCheck(bossLayoutBody, "MSUF_UF_BossTargetHLCB", "Highlight targeted boss frame", 12, -96); panel.playerBossTargetHLCB:Hide()
 
     -- Per-unit anchoring controls
     do
@@ -1240,7 +1279,8 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         end
         for _, w in ipairs({ "statusIconsTestModeCB","statusIconsStyleCB","statusIconsHeader" }) do SW(w, false) end
         if panel.playerBossSpacingSlider then panel.playerBossSpacingSlider:Hide() end
-        if panel.playerInvertBossOrderCB then panel.playerInvertBossOrderCB:Hide() end
+        if panel.playerBossLayoutModeLabel then panel.playerBossLayoutModeLabel:Hide() end
+        if panel.playerBossLayoutModeDD then panel.playerBossLayoutModeDD:Hide() end
         if panel.playerBossTargetHLCB then panel.playerBossTargetHLCB:Hide() end
         if panel.playerBossLayoutBox then panel.playerBossLayoutBox:Hide() end
         for _, w in ipairs({ "unitAnchorToLabel","unitAnchorToDD","unitCustomAnchorLabel","unitCustomAnchorPickButton","unitCustomAnchorClearButton","unitCustomAnchorValueText","unitGlobalAnchorWarn" }) do
@@ -1386,10 +1426,22 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
             if n then for _, sfx in ipairs({"Low","High","Text"}) do local w = _G[n..sfx]; if w then w:SetShown(isBoss) end end end
         end
     end
-    if panel.playerInvertBossOrderCB then panel.playerInvertBossOrderCB:SetShown(isBoss)
-        if isBoss and bossBody then panel.playerInvertBossOrderCB:ClearAllPoints(); panel.playerInvertBossOrderCB:SetPoint("TOPLEFT", bossBody, "TOPLEFT", 12, -52) end end
+    if panel.playerBossLayoutModeLabel then
+        panel.playerBossLayoutModeLabel:SetShown(isBoss)
+        if isBoss and bossBody then
+            panel.playerBossLayoutModeLabel:ClearAllPoints()
+            panel.playerBossLayoutModeLabel:SetPoint("TOPLEFT", bossBody, "TOPLEFT", 14, -50)
+        end
+    end
+    if panel.playerBossLayoutModeDD then
+        panel.playerBossLayoutModeDD:SetShown(isBoss)
+        if isBoss and bossBody then
+            panel.playerBossLayoutModeDD:ClearAllPoints()
+            panel.playerBossLayoutModeDD:SetPoint("TOPLEFT", bossBody, "TOPLEFT", -6, -64)
+        end
+    end
     if panel.playerBossTargetHLCB then panel.playerBossTargetHLCB:SetShown(isBoss)
-        if isBoss and bossBody then panel.playerBossTargetHLCB:ClearAllPoints(); panel.playerBossTargetHLCB:SetPoint("TOPLEFT", bossBody, "TOPLEFT", 12, -86) end end
+        if isBoss and bossBody then panel.playerBossTargetHLCB:ClearAllPoints(); panel.playerBossTargetHLCB:SetPoint("TOPLEFT", bossBody, "TOPLEFT", 12, -96) end end
 
     if panel._msufFramesScrollUpdate then panel._msufFramesScrollUpdate() end
 end
@@ -1556,7 +1608,15 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             ForceSliderEB(panel.playerBossSpacingSlider)
         end
     end
-    if panel.playerInvertBossOrderCB then panel.playerInvertBossOrderCB:SetShown(isBoss); if isBoss then panel.playerInvertBossOrderCB:SetChecked(conf.invertBossOrder == true) end end
+    if panel.playerBossLayoutModeLabel then panel.playerBossLayoutModeLabel:SetShown(isBoss) end
+    if panel.playerBossLayoutModeDD and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
+        panel.playerBossLayoutModeDD:SetShown(isBoss)
+        if isBoss then
+            local mode = BossLayoutMode_Normalize(conf.bossLayoutMode, conf.invertBossOrder)
+            UIDropDownMenu_SetSelectedValue(panel.playerBossLayoutModeDD, mode)
+            UIDropDownMenu_SetText(panel.playerBossLayoutModeDD, BossLayoutMode_Text(mode))
+        end
+    end
     if panel.playerBossTargetHLCB then panel.playerBossTargetHLCB:SetShown(isBoss); if isBoss then panel.playerBossTargetHLCB:SetChecked(g.bossTargetHighlightEnabled ~= false) end end
 
     -- Portrait
@@ -1890,10 +1950,33 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         end
         if bs.HookScript then bs:HookScript("OnShow", function() ForceSliderEB(bs) end) end
     end
-    if panel.playerInvertBossOrderCB then panel.playerInvertBossOrderCB:SetScript("OnClick", function(self)
-        if not IsFramesTab() or CurrentKey() ~= "boss" then return end
-        EnsureKeyDB().invertBossOrder = self:GetChecked() and true or false; ApplyCurrent()
-    end) end
+    if panel.playerBossLayoutModeDD and UIDropDownMenu_Initialize then
+        UIDropDownMenu_Initialize(panel.playerBossLayoutModeDD, function(_, level)
+            if not IsFramesTab() or CurrentKey() ~= "boss" then return end
+            local c = EnsureKeyDB()
+            local cur = BossLayoutMode_Normalize(c.bossLayoutMode, c.invertBossOrder)
+            UIDropDownMenu_SetSelectedValue(panel.playerBossLayoutModeDD, cur)
+            UIDropDownMenu_SetText(panel.playerBossLayoutModeDD, BossLayoutMode_Text(cur))
+            for i = 1, #BOSS_LAYOUT_OPTIONS do
+                local opt = BOSS_LAYOUT_OPTIONS[i]
+                local info = UIDropDownMenu_CreateInfo()
+                info.text, info.value = TR(opt.text), opt.value
+                info.checked = (cur == opt.value)
+                info.func = function()
+                    if not IsFramesTab() or CurrentKey() ~= "boss" then return end
+                    local c2 = EnsureKeyDB()
+                    c2.bossLayoutMode = opt.value
+                    -- Keep legacy field roughly in sync for any third-party code that may still read it.
+                    c2.invertBossOrder = (opt.value == "VERTICAL_UP")
+                    UIDropDownMenu_SetSelectedValue(panel.playerBossLayoutModeDD, opt.value)
+                    UIDropDownMenu_SetText(panel.playerBossLayoutModeDD, BossLayoutMode_Text(opt.value))
+                    if CloseDropDownMenus then CloseDropDownMenus() end
+                    ApplyCurrent()
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end)
+    end
     if panel.playerBossTargetHLCB then panel.playerBossTargetHLCB:SetScript("OnClick", function(self)
         EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
         local on = self:GetChecked() and true or false
@@ -2054,7 +2137,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         }
         -- Register global refresh function (coalesced — no direct frame updates)
         _G[def.refreshGlobal] = _G[def.refreshGlobal] or function()
-            ApplyCurrent()  -- goes through ScheduleApplyCommit → single batched apply
+            ApplyCurrent()  -- goes through ScheduleApplyCommit -> single batched apply
         end
         BindIndicatorRow(spec)
     end

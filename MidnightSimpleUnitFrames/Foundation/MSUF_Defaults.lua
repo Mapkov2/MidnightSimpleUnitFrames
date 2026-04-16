@@ -1506,6 +1506,9 @@ local function fill(key, defaults)
         offsetX      = 507,
         offsetY      = 309,
         spacing      = -96,
+        -- Layout mode: "VERTICAL_DOWN" | "VERTICAL_UP" | "HORIZONTAL_RIGHT" | "HORIZONTAL_LEFT"
+        -- Kept invertBossOrder for one-shot migration (see below).
+        bossLayoutMode = "VERTICAL_DOWN",
         invertBossOrder = false,
         showName     = true,
         showLevelIndicator = false,
@@ -1518,6 +1521,14 @@ local function fill(key, defaults)
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
+    end
+    -- One-shot migration: old invertBossOrder checkbox → new bossLayoutMode dropdown.
+    -- Runs once on first login with v4.0 Beta 5+; converts legacy saved setting.
+    if MSUF_DB.boss._bossLayoutMigrated ~= true then
+        if MSUF_DB.boss.invertBossOrder == true then
+            MSUF_DB.boss.bossLayoutMode = "VERTICAL_UP"
+        end
+        MSUF_DB.boss._bossLayoutMigrated = true
     end
     -- Range fade: also fade castbar / auras when boss is out of range (off by default).
     if MSUF_DB.boss.rangeFadeCastbar == nil then MSUF_DB.boss.rangeFadeCastbar = false end
