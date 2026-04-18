@@ -805,12 +805,16 @@ local function ApplyOverlayColors(f)
             f.healAbsorbBar:SetStatusBarColor(r, g, b, a)
         end
     end
-    -- Absorb anchoring (per-GF override → general)
+    -- Absorb anchoring (per-GF override → general).
+    -- NOTE: no caller-side stamp check — the internal diff-gate in
+    -- _GF_ApplyAbsorbAnchor already covers stamp + FollowActive + RF + W, and
+    -- a stamp-only caller gate would strand mode 4 overflow bars at stale w
+    -- when hpBar width changes without a mode change (fresh frame layout, size
+    -- change, power-row toggle). ApplyOverlayColors fires on DIRTY_COLOR; width
+    -- updates from DIRTY_GEOMETRY/DIRTY_LAYOUT are caught by the unconditional
+    -- call added in ApplyVisuals below.
     if GF._ApplyAbsorbAnchor then
-        local mode = tonumber(_GF_ResolveOverlaySetting(kind, "absorbAnchorMode")) or 2
-        if f._msufGFAbsorbAnchorStamp ~= mode then
-            GF._ApplyAbsorbAnchor(f)
-        end
+        GF._ApplyAbsorbAnchor(f)
     end
 end
 
@@ -845,6 +849,12 @@ local function ApplyVisuals(f, bits)
     if band(bits, DIRTY_LAYOUT) ~= 0 then
         ApplyTextLayout(f, kind)
         ApplyIconLayout(f, kind)
+    end
+    -- Absorb anchor: ensure mode 4 overflow and mode 3 clipping track hpBar
+    -- width changes from DIRTY_GEOMETRY / DIRTY_LAYOUT (not just DIRTY_COLOR
+    -- via ApplyOverlayColors). Internal diff-gate short-circuits no-ops at ~2μs.
+    if GF._ApplyAbsorbAnchor then
+        GF._ApplyAbsorbAnchor(f)
     end
     -- Rebuild hot-path settings cache (eliminates GF.GetConf from combat events)
     if GF.BuildFrameCache then GF.BuildFrameCache(f) end

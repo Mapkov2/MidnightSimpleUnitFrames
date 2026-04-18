@@ -209,20 +209,24 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
         hpBar:SetMinMaxValues(0, maxHP)
         hpBar:SetValue(hp)
 
-        -- PERF: Single config-dirty stamp replaces 3 separate cache checks.
-        -- AbsorbAnchorMode + OverlayColors + AbsorbEnabled all only change
-        -- on config change (SETTINGS_SERIAL increment). One number compare
-        -- gates all three instead of 3 separate conditionals per update.
+        -- Anchor mode: MUST run every update. hpBar:GetWidth() changes on layout/
+        -- resize/first-show, but SETTINGS_SERIAL only bumps on config change, so
+        -- gating this behind _msufBarConfigGen would strand mode 4 overflow bars
+        -- at the w=0 (pre-layout) width they got on frame creation. The function
+        -- has a secret-safe internal stamp+FollowActive+RF+W diff-gate that makes
+        -- no-op re-entry cost ~2μs (4 field reads + 4 equality checks).
+        if frame.absorbBar or frame.healAbsorbBar then
+            if not _cachedApplyAbsorbAnchorMode then
+                _cachedApplyAbsorbAnchorMode = _G.MSUF_ApplyAbsorbAnchorMode
+            end
+            if _cachedApplyAbsorbAnchorMode then _cachedApplyAbsorbAnchorMode(frame) end
+        end
+
+        -- PERF: remaining per-frame caches (colors, absorb-enabled) only change
+        -- on config events, so keep them behind the SETTINGS_SERIAL gate.
         local gen = _G.MSUF_UFCORE_SETTINGS_SERIAL or 0
         if frame._msufBarConfigGen ~= gen then
             frame._msufBarConfigGen = gen
-            -- Anchor mode (has internal diff-gate via stamp)
-            if frame.absorbBar or frame.healAbsorbBar then
-                if not _cachedApplyAbsorbAnchorMode then
-                    _cachedApplyAbsorbAnchorMode = _G.MSUF_ApplyAbsorbAnchorMode
-                end
-                if _cachedApplyAbsorbAnchorMode then _cachedApplyAbsorbAnchorMode(frame) end
-            end
             -- Overlay colors
             if frame.absorbBar then
                 MSUF_ApplyAbsorbOverlayColor(frame.absorbBar, unit)

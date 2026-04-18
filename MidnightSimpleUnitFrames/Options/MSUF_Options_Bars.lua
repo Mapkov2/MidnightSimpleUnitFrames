@@ -395,6 +395,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     local HlSeedFromGeneral  -- forward decl (defined in highlight section below)
+    local _BumpBorderSerial  -- forward decl (defined in highlight section below; captured as upvalue by closures above)
 
     -- Override checkbox handler
     hpPowerOverrideCheck:SetScript("OnClick", function(self)
@@ -734,7 +735,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     MSUF_RefreshAbsorbBarUIEnabled()
 
     -- BOX 3: Outline & Highlight Border (default open)
-    local function _BumpBorderSerial()
+    -- Assign (not re-declare) so closures defined earlier capture the upvalue
+    -- from the forward-decl above.
+    _BumpBorderSerial = function()
         if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("BAR_OPTION") end
     end
 
