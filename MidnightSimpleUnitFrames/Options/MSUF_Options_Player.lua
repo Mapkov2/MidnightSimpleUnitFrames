@@ -1592,7 +1592,7 @@ end
 		panel._msufIndicatorLayout.rowStep       = IND_ROW_STEP
 		panel._msufIndicatorLayout.dividerOffset = IND_DIVIDER_OFFSET
 		-- Boss-only: own collapsible layout section instead of living inside Indicators
-		panel.playerBossSpacingSlider = panel.playerBossSpacingSlider or CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", bossLayoutBody, -200, 0, 1, 12, -14)
+		panel.playerBossSpacingSlider = panel.playerBossSpacingSlider or CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", bossLayoutBody, -400, 0, 1, 12, -14)
 		FinalizeCompactSlider(panel.playerBossSpacingSlider, (fullW - 24))
 		panel.playerBossSpacingSlider:Hide()
 		-- Boss-only: 4-way layout direction dropdown (replaces the old "Invert boss order" checkbox).
