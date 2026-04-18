@@ -411,6 +411,35 @@ local function MSUF_PortraitModeText(mode)
     if mode == "RIGHT" then  return "Portrait Right" end
      return "Portrait Off"
 end
+
+--------------------------------------------------------------------
+-- Boss layout mode (vertical/horizontal ordering of boss1..8)
+--------------------------------------------------------------------
+local MSUF_BOSS_LAYOUT_OPTIONS = {
+    { value = "VERTICAL_DOWN",    text = "Vertical (top -> bottom)" },
+    { value = "VERTICAL_UP",      text = "Vertical (bottom -> top)" },
+    { value = "HORIZONTAL_RIGHT", text = "Horizontal (left -> right)" },
+    { value = "HORIZONTAL_LEFT",  text = "Horizontal (right -> left)" },
+}
+local MSUF_BOSS_LAYOUT_VALID = {
+    VERTICAL_DOWN    = true,
+    VERTICAL_UP      = true,
+    HORIZONTAL_RIGHT = true,
+    HORIZONTAL_LEFT  = true,
+}
+local function MSUF_BossLayoutMode_Text(m)
+    if m == "VERTICAL_UP"      then return "Vertical (bottom -> top)" end
+    if m == "HORIZONTAL_RIGHT" then return "Horizontal (left -> right)" end
+    if m == "HORIZONTAL_LEFT"  then return "Horizontal (right -> left)" end
+    return "Vertical (top -> bottom)"
+end
+-- Normalize: accept new string values; fall back to legacy invertBossOrder; default VERTICAL_DOWN.
+local function MSUF_BossLayoutMode_Normalize(v, legacyInvert)
+    if type(v) == "string" and MSUF_BOSS_LAYOUT_VALID[v] then return v end
+    if legacyInvert == true then return "VERTICAL_UP" end
+    return "VERTICAL_DOWN"
+end
+
 -- Class portrait style helpers removed — managed by MSUF_Options_Portraits.lua
 local function MSUF_GetPortraitDropdownValue(conf)
     if not conf then  return "OFF" end
@@ -1566,11 +1595,27 @@ end
 		panel.playerBossSpacingSlider = panel.playerBossSpacingSlider or CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", bossLayoutBody, -200, 0, 1, 12, -14)
 		FinalizeCompactSlider(panel.playerBossSpacingSlider, (fullW - 24))
 		panel.playerBossSpacingSlider:Hide()
-		-- Boss-only: invert boss order toggle (boss 1 at bottom instead of top)
-		panel.playerInvertBossOrderCB = panel.playerInvertBossOrderCB or CreateCheck(bossLayoutBody, "MSUF_UF_InvertBossOrderCB", "Invert boss order", 12, -52)
-		panel.playerInvertBossOrderCB:Hide()
+		-- Boss-only: 4-way layout direction dropdown (replaces the old "Invert boss order" checkbox).
+		-- Options: VERTICAL_DOWN (default), VERTICAL_UP, HORIZONTAL_RIGHT, HORIZONTAL_LEFT.
+		if not panel.playerBossLayoutModeLabel then
+			panel.playerBossLayoutModeLabel = bossLayoutBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			panel.playerBossLayoutModeLabel:SetJustifyH("LEFT")
+		end
+		panel.playerBossLayoutModeLabel:SetText(TR("Boss frame layout"))
+		panel.playerBossLayoutModeLabel:Hide()
+		if not panel.playerBossLayoutModeDD then
+			local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_UF_BossLayoutModeDropDown", bossLayoutBody))
+				or CreateFrame("Frame", "MSUF_UF_BossLayoutModeDropDown", bossLayoutBody, "UIDropDownMenuTemplate")
+			panel.playerBossLayoutModeDD = dd
+			if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(dd, 220) end
+			dd._msufDropWidth = 220
+			if type(_G.MSUF_ExpandDropdownClickArea) == "function" then
+				_G.MSUF_ExpandDropdownClickArea(dd)
+			end
+		end
+		panel.playerBossLayoutModeDD:Hide()
 		-- Boss target highlight: show colored border on the boss frame you currently target
-		panel.playerBossTargetHLCB = panel.playerBossTargetHLCB or CreateCheck(bossLayoutBody, "MSUF_UF_BossTargetHLCB", "Highlight targeted boss frame", 12, -86)
+		panel.playerBossTargetHLCB = panel.playerBossTargetHLCB or CreateCheck(bossLayoutBody, "MSUF_UF_BossTargetHLCB", "Highlight targeted boss frame", 12, -96)
 		panel.playerBossTargetHLCB:Hide()
 		-- Shared per-unit anchoring controls (player / target / ToT / focus / pet / boss).
 		if not panel.unitAnchorToLabel then
@@ -2371,7 +2416,8 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
             SetShownByName(spec.resetBtn, false)
         end
         if panel.playerBossSpacingSlider then panel.playerBossSpacingSlider:Hide() end
-        if panel.playerInvertBossOrderCB then panel.playerInvertBossOrderCB:Hide() end
+        if panel.playerBossLayoutModeLabel then panel.playerBossLayoutModeLabel:Hide() end
+        if panel.playerBossLayoutModeDD then panel.playerBossLayoutModeDD:Hide() end
         if panel.playerBossTargetHLCB then panel.playerBossTargetHLCB:Hide() end
         if panel.playerBossLayoutBox then panel.playerBossLayoutBox:Hide() end
         -- Status icons (and Step-1 Combat row controls) must also be hard-hidden outside Frames tab
@@ -2687,22 +2733,31 @@ local isBossKey = false
             panel.playerBossSpacingSlider:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 12, -14)
         end
     end
-    -- Invert boss order toggle (boss only, placed inside the Boss Layout section)
-    if panel.playerInvertBossOrderCB then
+    -- Boss layout mode dropdown (boss only, placed inside the Boss Layout section).
+    -- Replaces the old "Invert boss order" checkbox with a 4-direction selector.
+    if panel.playerBossLayoutModeLabel then
         local show = isBossKey and true or false
-        panel.playerInvertBossOrderCB:SetShown(show)
+        panel.playerBossLayoutModeLabel:SetShown(show)
         if show and bossLayoutBody then
-            panel.playerInvertBossOrderCB:ClearAllPoints()
-            panel.playerInvertBossOrderCB:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 12, -52)
+            panel.playerBossLayoutModeLabel:ClearAllPoints()
+            panel.playerBossLayoutModeLabel:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 14, -50)
         end
     end
-    -- Boss target highlight toggle (boss only)
+    if panel.playerBossLayoutModeDD then
+        local show = isBossKey and true or false
+        panel.playerBossLayoutModeDD:SetShown(show)
+        if show and bossLayoutBody then
+            panel.playerBossLayoutModeDD:ClearAllPoints()
+            panel.playerBossLayoutModeDD:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", -6, -64)
+        end
+    end
+    -- Boss target highlight toggle (boss only) — moved down to make room for the dropdown.
     if panel.playerBossTargetHLCB then
         local show = isBossKey and true or false
         panel.playerBossTargetHLCB:SetShown(show)
         if show and bossLayoutBody then
             panel.playerBossTargetHLCB:ClearAllPoints()
-            panel.playerBossTargetHLCB:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 12, -86)
+            panel.playerBossTargetHLCB:SetPoint("TOPLEFT", bossLayoutBody, "TOPLEFT", 12, -96)
         end
     end
     -- Notify scroll container that content height may have changed.
@@ -3064,12 +3119,17 @@ end
             ForceSliderEditBox(panel.playerBossSpacingSlider)
         end
     end
-    -- Invert Boss Order (boss only)
-    if panel.playerInvertBossOrderCB then
+    -- Boss layout mode dropdown (boss only) — state sync
+    if panel.playerBossLayoutModeLabel then
+        panel.playerBossLayoutModeLabel:SetShown(currentKey == "boss")
+    end
+    if panel.playerBossLayoutModeDD then
         local show = (currentKey == "boss")
-        panel.playerInvertBossOrderCB:SetShown(show)
-        if show then
-            panel.playerInvertBossOrderCB:SetChecked((conf.invertBossOrder == true) and true or false)
+        panel.playerBossLayoutModeDD:SetShown(show)
+        if show and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
+            local mode = MSUF_BossLayoutMode_Normalize(conf.bossLayoutMode, conf.invertBossOrder)
+            UIDropDownMenu_SetSelectedValue(panel.playerBossLayoutModeDD, mode)
+            UIDropDownMenu_SetText(panel.playerBossLayoutModeDD, TR(MSUF_BossLayoutMode_Text(mode)))
         end
     end
     -- Boss Target Highlight (boss only, reads from general)
@@ -4509,14 +4569,33 @@ if bs then
      end
     if bs.HookScript then bs:HookScript("OnShow", function()  ForceSliderEditBox(bs)  end) end
 end
--- Invert boss order toggle (boss key only)
-if panel.playerInvertBossOrderCB then
-    panel.playerInvertBossOrderCB:SetScript("OnClick", function(self)
-        if not IsFramesTab() or CurrentKey() ~= "boss" then  return end
-        local conf = EnsureKeyDB()
-        conf.invertBossOrder = self:GetChecked() and true or false
-        ApplyCurrent()
-     end)
+-- Boss layout mode dropdown (boss key only) — replaces the old invert checkbox.
+if panel.playerBossLayoutModeDD and UIDropDownMenu_Initialize then
+    UIDropDownMenu_Initialize(panel.playerBossLayoutModeDD, function(_, level)
+        if not IsFramesTab() or CurrentKey() ~= "boss" then return end
+        local c = EnsureKeyDB()
+        local cur = MSUF_BossLayoutMode_Normalize(c.bossLayoutMode, c.invertBossOrder)
+        UIDropDownMenu_SetSelectedValue(panel.playerBossLayoutModeDD, cur)
+        UIDropDownMenu_SetText(panel.playerBossLayoutModeDD, TR(MSUF_BossLayoutMode_Text(cur)))
+        for i = 1, #MSUF_BOSS_LAYOUT_OPTIONS do
+            local opt  = MSUF_BOSS_LAYOUT_OPTIONS[i]
+            local info = UIDropDownMenu_CreateInfo()
+            info.text, info.value = TR(opt.text), opt.value
+            info.checked = (cur == opt.value)
+            info.func = function()
+                if not IsFramesTab() or CurrentKey() ~= "boss" then return end
+                local c2 = EnsureKeyDB()
+                c2.bossLayoutMode = opt.value
+                -- Keep legacy field roughly in sync for any code paths still reading it.
+                c2.invertBossOrder = (opt.value == "VERTICAL_UP")
+                UIDropDownMenu_SetSelectedValue(panel.playerBossLayoutModeDD, opt.value)
+                UIDropDownMenu_SetText(panel.playerBossLayoutModeDD, TR(MSUF_BossLayoutMode_Text(opt.value)))
+                if CloseDropDownMenus then CloseDropDownMenus() end
+                ApplyCurrent()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
 end
 -- Boss target highlight toggle (boss key only, writes to general)
 if panel.playerBossTargetHLCB then

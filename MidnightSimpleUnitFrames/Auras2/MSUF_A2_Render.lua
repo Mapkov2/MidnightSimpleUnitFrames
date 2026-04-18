@@ -777,6 +777,11 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
             parent = nil,
             showCountdownFrame = false,
             showCountdownNumbers = false,
+            -- 12.0.5 REQUIRED FIELD: isContainer
+            -- Without this, AddPrivateAuraAnchor throws:
+            --   bad argument #2 to '?' (Current Field: [isContainer])
+            -- false = one anchor per aura index (our model, same as Plater).
+            isContainer = false,
             iconInfo = {
                 iconWidth = privateIconSize,
                 iconHeight = privateIconSize,
