@@ -788,6 +788,16 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
             parent = nil,
             showCountdownFrame = false,
             showCountdownNumbers = false,
+            -- 12.0.5 REQUIRED FIELD: isContainer
+            -- Without this, AddPrivateAuraAnchor throws:
+            --   bad argument #2 to '?' (Current Field: [isContainer])
+            -- We use false (same as Plater) → one anchor = one aura index.
+            -- isContainer=true is a future path where Blizzard manages the
+            -- entire aura list within a single parent frame and (per R41z0r)
+            -- displays dispel-type colors natively — but the args shape for
+            -- that mode is not yet publicly documented, so we stay with
+            -- the slot-per-aura model for now.
+            isContainer = false,
             iconInfo = {
                 iconWidth = privateIconSize,
                 iconHeight = privateIconSize,
