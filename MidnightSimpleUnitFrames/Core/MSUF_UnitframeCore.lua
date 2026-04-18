@@ -526,6 +526,8 @@ function Core.InvalidateAllFrameConfigs()
             f._msufRawPwrC = nil
             f._msufRawPwrM = nil
             f._msufRawPwrP = nil
+            -- Invalidate raw-HP diff guard (_HealthValueFast short-circuit).
+            f._msufLastHpRaw = nil
         end
     end
 end
@@ -1974,6 +1976,8 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
     f._msufAbsorbTextDirty = true
     f._msufAbsorbInit = nil
     f._msufHealAbsorbInit = nil
+    -- Invalidate raw-HP diff guard: new unit could coincidentally share HP value.
+    f._msufLastHpRaw = nil
 
     local sd = Core._swapDeferCoalesce
     if not sd then return end
@@ -1998,22 +2002,40 @@ end
 
 -- UNIT_HEALTH → value-only (most frequent: 10-50/sec per unit).
 -- Secret-safe: SetValue handles secrets C-side natively.
+--
+-- SHOWSTOPPER fix: the previous impl throttled text via Core._frameNowSerial.
+-- That counter is only incremented by UFCore_FlushTask, and FlushTask calls
+-- _DeactivateFlushIfIdle() the moment the queue is empty. UNIT_HEALTH runs on
+-- the DIRECT_APPLY path which never enqueues → queue stays empty → FlushTask
+-- idles → _frameNowSerial FREEZES. After the first event the serial never
+-- changes again, so f._msufHpTxtSerial == serial forever and hpText stops
+-- updating entirely. This is the exact failure-mode documented in MSUF's
+-- "key learnings" ("Core._frameNow freezes when FlushTask OnUpdate idles").
+--
+-- Fix: drop the serial throttle. Use a secret-safe raw-HP diff to skip the
+-- (already cheap) text pass when the HP value genuinely did not change.
+-- _UFCORE_issecret is checked BEFORE any == compare so secret values never
+-- hit Lua-side equality. Downstream ns.Text.Set / RenderHpMode have their
+-- own secret-safe FontString diff so redundant calls remain ~free.
 local function _HealthValueFast(f)
     local bar = f.hpBar
     if not bar then return end
     local hp = UnitHealth(f.unit)
-    bar:SetValue(hp)
-    -- PHASE 2: Text throttle via frame serial instead of GetTime()
-    -- Core._frameNowSerial increments once per OnUpdate frame (~60/s).
-    -- Costs 0μs vs GetTime()'s ~0.5μs. Equivalent to ~16ms throttle.
+    bar:SetValue(hp)                          -- C-side, secret-safe
     local fnTxt = FN_UpdateHpTextFast
-    if fnTxt then
-        local serial = Core._frameNowSerial or 0
-        if f._msufHpTxtSerial ~= serial then
-            f._msufHpTxtSerial = serial
-            fnTxt(f, hp)
-        end
+    if not fnTxt then return end
+
+    -- Secret-safe raw-HP short-circuit (order matters: issecret check FIRST).
+    local prev = f._msufLastHpRaw
+    local isv = _UFCORE_issecret
+    if isv and (isv(hp) or (prev ~= nil and isv(prev))) then
+        f._msufLastHpRaw = hp
+        fnTxt(f, hp)
+        return
     end
+    if hp == prev then return end
+    f._msufLastHpRaw = hp
+    fnTxt(f, hp)
 end
 
 -- UNIT_MAXHEALTH / absorb / heal-prediction → full health chain via Elements.Health.Update
@@ -2102,16 +2124,16 @@ do
     local _PwrScale = (CurveConstants and CurveConstants.ScaleTo100) or true
 
     local _pwrInterp = nil
-    local _pwrTxtBudget = 0.10
 
-    local function _MaybeUpdatePowerText(f, unit, pType, budget)
+    -- No leading-edge budget: without a trailing-edge flush the last event in
+    -- a burst gets dropped, leaving powerText at a stale sample once the
+    -- value stops changing. The downstream ns.Text.Set FontString diff cache
+    -- is secret-safe and makes redundant passes ~free, so the budget gate is
+    -- both unnecessary and incorrect. Cost on a no-change event is 1
+    -- UnitPowerPercent C-API call + SetText-skipped-by-diff ≈ ~2μs.
+    local function _MaybeUpdatePowerText(f, unit, pType)
         local fnTxt = FN_UpdatePowerTextFast
         if not fnTxt then return end
-        if budget then
-            local now = GetTime()
-            if (now - (f._msufPwrTxtAt or 0)) < budget then return end
-            f._msufPwrTxtAt = now
-        end
         if _PwrPctFn then f._msufCachedPPct = _PwrPctFn(unit, pType, false, _PwrScale) end
         fnTxt(f)
     end
@@ -2140,7 +2162,7 @@ do
             bar:SetMinMaxValues(0, mx)
             bar:SetValue(cur)
         end
-        _MaybeUpdatePowerText(f, unit, pType, _pwrTxtBudget)
+        _MaybeUpdatePowerText(f, unit, pType)
     end
 
     local function _PowerNonPlayer(f)
@@ -2155,12 +2177,11 @@ do
         if mx  == nil then mx  = 100 end
         bar:SetMinMaxValues(0, mx)
         bar:SetValue(cur)
-        _MaybeUpdatePowerText(f, unit, pType, 0.10)
+        _MaybeUpdatePowerText(f, unit, pType)
     end
 
     local function _PowerSwapHandler()
         _pwrInterp = (_smoothPowerBar and _Interp) and _Interp or nil
-        _pwrTxtBudget = _realtimePowerText and nil or 0.03
     end
     _PowerSwapHandler()
     Core._PowerSwapHandler = _PowerSwapHandler
@@ -2530,14 +2551,16 @@ function Core.AttachFrame(f)
     f._msufQueuedUFCore = nil
     f._msufWarmupQueuedUFCore = nil
     f._msufVisualQueuedUFCore = nil
-    -- PERF: Stagger text rate-limiter seeds so boss1-5 + player + target + focus
-    -- don't all hit their 10Hz interval in the same render frame.
-    -- After first text update, each frame's next fire is offset by 12.5ms.
+    -- Retain legacy fields for any external reader; the rate limiter they
+    -- drove was replaced by the raw-HP diff in _HealthValueFast + the
+    -- FontString diff cache downstream.
     Core._textStaggerIdx = (Core._textStaggerIdx or 0) + 1
-    local stagger = (Core._textStaggerIdx % 8) * 0.0125  -- 0, 12.5ms, 25ms, ...
+    local stagger = (Core._textStaggerIdx % 8) * 0.0125
     f._msufTextStagger = stagger
     f._msufHpTxtAt = 0
     f._msufPwrTxtAt = 0
+    -- Secret-safe raw-HP diff guard used by _HealthValueFast. nil = no prior sample.
+    f._msufLastHpRaw = nil
     -- Mark absorb text dirty so first health update initializes it.
     f._msufAbsorbTextDirty = true
 
@@ -2561,6 +2584,8 @@ function Core.AttachFrame(f)
         f._msufUFCoreShowHooked = true
         f:HookScript("OnShow", function(self)
             self._msufAbsorbTextDirty = true
+            -- Invalidate raw-HP diff guard: may have missed UNIT_HEALTH while hidden.
+            self._msufLastHpRaw = nil
             Core.MarkDirty(self, MASK_SHOW_REFRESH, false, "OnShow")
         end)
     end
@@ -2629,6 +2654,8 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     f._msufRawPwrC = nil
     f._msufRawPwrM = nil
     f._msufRawPwrP = nil
+    -- Invalidate raw-HP diff guard (_HealthValueFast short-circuit).
+    f._msufLastHpRaw = nil
     RefreshUnitEvents(f, true)
 
     if alsoUpdate then
