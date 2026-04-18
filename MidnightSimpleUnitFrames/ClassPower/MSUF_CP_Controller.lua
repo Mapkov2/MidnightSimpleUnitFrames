@@ -102,6 +102,169 @@ local CP_MODE_EVENT_PROFILE = _G.MSUF_CP_MODE_EVENT_PROFILE or {}
 
 -- Cached split registries (load-time only; avoids repeated global table lookups
 -- and keeps the post-split core wiring easier to follow).
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ALT_MANA builder — registered EARLY so the consumer ~line 1134
+-- (CP_CallBuilder(CPCoreBuilders.ALT_MANA, ...)) sees it at file-parse
+-- time. Previous layout had this block at file bottom → builder was
+-- nil when consumer ran → AM_Create/AM_Layout/AM_ApplyColor/AM_UpdateValue
+-- stayed nil → FullRefresh crashed for every spec with a mana pool
+-- (Shadow Priest, Druid, Monk WW, Ret Pala, Shaman Ele/Enh, Aug Evoker)
+-- whenever needsAlt==true. Wrapped in do…end to scope the 'builders'
+-- local (avoids shadowing the 'builders' locals at later file sections).
+-- ═══════════════════════════════════════════════════════════════════
+do
+-- MSUF_CP_AltMana.lua
+-- MSUF_CP_AltMana.lua
+-- Phase 7B: move AltMana helpers out of MSUF_ClassPower.lua with minimal risk.
+-- No CP value/layout/build flow moved here beyond the isolated AltMana block.
+
+local builders = _G.MSUF_CP_CORE_BUILDERS
+if type(builders) ~= "table" then
+    builders = {}
+    _G.MSUF_CP_CORE_BUILDERS = builders
+end
+
+builders.ALT_MANA = function(E)
+    local AM = E.AM
+    local _cpDB = E._cpDB
+    local PT = E.PT
+    local PLAYER_CLASS = E.PLAYER_CLASS
+    local GetSpec = E.GetSpec
+    local NotSecret = E.NotSecret
+    local UnitPowerType = E.UnitPowerType
+    local UnitPower = E.UnitPower
+    local UnitPowerMax = E.UnitPowerMax
+    local Enum = E.Enum
+    local tonumber = E.tonumber or tonumber
+    local CreateFrame = E.CreateFrame
+    local ResolveClassPowerColor = E.ResolveClassPowerColor
+    local GetBarTexture = E.GetBarTexture
+
+    local function NeedsAltManaBar()
+        if _G.MSUF_EleMaelstromActive then return false end
+        if _G.MSUF_AugEvokerActive then return true end
+        if _G.MSUF_ShadowManaActive then return false end
+        local pType = UnitPowerType("player")
+        if NotSecret(pType) then
+            if pType == nil or pType == PT.Mana then return false end
+        end
+        local maxMana = UnitPowerMax("player", PT.Mana)
+        if NotSecret(maxMana) and maxMana ~= nil and maxMana <= 0 then
+            return false
+        end
+        if not NotSecret(pType) then
+            local SPECS_NEED_ALT = {
+                PRIEST  = { [3] = true },
+                SHAMAN  = { [1] = true, [2] = true },
+                DRUID   = { [1] = true, [2] = true, [3] = true },
+                PALADIN = { [3] = true },
+                MONK    = { [3] = true },
+            }
+            local specs = SPECS_NEED_ALT[PLAYER_CLASS]
+            if not specs then return false end
+            local si = GetSpec and GetSpec()
+            return si and specs[si] or false
+        end
+        return true
+    end
+
+    local function AM_Create(playerFrame)
+        if AM.container then return end
+
+        local c = CreateFrame("Frame", "MSUF_AltManaContainer", playerFrame)
+        c:SetFrameLevel(playerFrame:GetFrameLevel() + 2)
+        c:Hide()
+        AM.container = c
+
+        local bg = c:CreateTexture(nil, "BACKGROUND")
+        bg:SetTexture("Interface\Buttons\WHITE8x8")
+        bg:SetAllPoints(c)
+        bg:SetVertexColor(0, 0, 0, 0.4)
+        AM.bgTex = bg
+
+        local border = CreateFrame("Frame", nil, c, "BackdropTemplate")
+        border:SetPoint("TOPLEFT", c, "TOPLEFT", -1, 1)
+        border:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 1, -1)
+        border:SetBackdrop({ edgeFile = "Interface\Buttons\WHITE8x8", edgeSize = 1 })
+        border:SetBackdropColor(0, 0, 0, 0)
+        border:SetBackdropBorderColor(0, 0, 0, 1)
+        border:SetFrameLevel(c:GetFrameLevel() + 1)
+        AM._border = border
+
+        local bar = CreateFrame("StatusBar", nil, c)
+        bar:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
+        bar:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, 0)
+        bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\Buttons\WHITE8x8")
+        bar:SetMinMaxValues(0, 100)
+        bar:SetValue(0)
+        bar:SetFrameLevel(c:GetFrameLevel() + 1)
+        AM.bar = bar
+    end
+
+    local function AM_Layout(playerFrame)
+        if not AM.container then return end
+        local b = _cpDB.bars or {}
+
+        local h = tonumber(b.altManaHeight) or 4
+        if h < 2 then h = 2 elseif h > 30 then h = 30 end
+        local oY = tonumber(b.altManaOffsetY) or -2
+
+        AM.container:ClearAllPoints()
+        AM.container:SetPoint("TOPLEFT",  playerFrame, "BOTTOMLEFT",   2, oY)
+        AM.container:SetPoint("TOPRIGHT", playerFrame, "BOTTOMRIGHT", -2, oY)
+        AM.container:SetHeight(h)
+    end
+
+    local function AM_ApplyColor()
+        if not AM.bar then return end
+        local b = _cpDB.bars or {}
+        local r = tonumber(b.altManaColorR) or 0.0
+        local g = tonumber(b.altManaColorG) or 0.0
+        local bl = tonumber(b.altManaColorB) or 0.8
+
+        local mr, mg, mb = ResolveClassPowerColor(PT.Mana)
+        if mr then r, g, bl = mr, mg, mb end
+
+        AM.bar:SetStatusBarColor(r, g, bl, 1)
+    end
+
+    local function AM_UpdateValue()
+        if not AM.bar then return end
+
+        local cur = UnitPower("player", PT.Mana)
+        local mx  = UnitPowerMax("player", PT.Mana)
+        if cur == nil then cur = 0 end
+        if mx  == nil then mx  = 100 end
+
+        local smoothOn = _cpDB.smooth
+        local interp = smoothOn and Enum and Enum.StatusBarInterpolation
+            and Enum.StatusBarInterpolation.ExponentialEaseOut or nil
+        if interp then
+            AM.bar:SetMinMaxValues(0, mx, interp)
+            AM.bar:SetValue(cur, interp)
+        else
+            AM.bar:SetMinMaxValues(0, mx)
+            AM.bar:SetValue(cur)
+        end
+    end
+
+    local function AM_RefreshTexture()
+        if not AM.bar then return end
+        AM.bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\Buttons\WHITE8x8")
+    end
+
+    return {
+        NeedsAltManaBar = NeedsAltManaBar,
+        AM_Create = AM_Create,
+        AM_Layout = AM_Layout,
+        AM_ApplyColor = AM_ApplyColor,
+        AM_UpdateValue = AM_UpdateValue,
+        AM_RefreshTexture = AM_RefreshTexture,
+    }
+end
+end
+
 local CPCoreBuilders = (type(_G.MSUF_CP_CORE_BUILDERS) == "table") and _G.MSUF_CP_CORE_BUILDERS or {}
 local CPModeBuilders = (type(_G.MSUF_CP_MODE_BUILDERS) == "table") and _G.MSUF_CP_MODE_BUILDERS or {}
 local CPFeatureBuilders = (type(_G.MSUF_CP_FEATURE_BUILDERS) == "table") and _G.MSUF_CP_FEATURE_BUILDERS or {}
@@ -1941,32 +2104,49 @@ do
     end
 end
 
--- MSUF_CP_Balance.lua
 -- MSUF_CP_Balance.lua — Balance Druid Astral Power prediction + eclipse colors
--- Self-contained feature module loaded before the CP core.
-local builders = _G.MSUF_CP_FEATURE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    _G.MSUF_CP_FEATURE_BUILDERS = builders
-end
+-- Self-contained feature module. Wrapped in do…end so the Druid-class-gate
+-- below uses a scoped 'do return end' that skips only this block, not the
+-- whole file. Previous layout used two file-scope 'return' statements which
+-- aborted parsing of the rest of the file on non-Druid characters (meaning
+-- any trailing code added after this block would silently vanish).
+do
+    local balanceBuilders = _G.MSUF_CP_FEATURE_BUILDERS
+    if type(balanceBuilders) ~= "table" then
+        balanceBuilders = {}
+        _G.MSUF_CP_FEATURE_BUILDERS = balanceBuilders
+    end
 
-if _G.__MSUF_CP_Balance_Loaded then return end
-_G.__MSUF_CP_Balance_Loaded = true
+    -- Class gate: Balance-specific runtime setup only applies to Druids.
+    -- Everything inside this do-block is cold-dead code for other classes
+    -- (the mode/feature builders in MSUF_CP_Modes.lua are class-neutral
+    -- registrations and remain registered for all classes — consumer-side
+    -- spec checks gate which mode is actually rendered).
+    local _, _playerClass = UnitClass("player")
+    if _playerClass ~= "DRUID" then
+        -- Scoped return: exits this do-block only, NOT the file.
+        do return end
+    end
 
-local UnitClass = UnitClass
-local UnitPowerType = UnitPowerType
-local UnitPowerMax = UnitPowerMax
-local GetTime = GetTime
-local CreateFrame = CreateFrame
-local C_UnitAuras = C_UnitAuras
-local C_Spell = C_Spell
-local C_SpellBook = C_SpellBook
-local type = type
-local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
-local _, PLAYER_CLASS = UnitClass("player")
-if PLAYER_CLASS ~= "DRUID" then return end
+    -- One-time load guard (scoped — only relevant once we know we're Druid).
+    if _G.__MSUF_CP_Balance_Loaded then
+        do return end
+    end
+    _G.__MSUF_CP_Balance_Loaded = true
 
-local CPConst = _G.MSUF_CP_CONST or {}
+    local UnitClass = UnitClass
+    local UnitPowerType = UnitPowerType
+    local UnitPowerMax = UnitPowerMax
+    local GetTime = GetTime
+    local CreateFrame = CreateFrame
+    local C_UnitAuras = C_UnitAuras
+    local C_Spell = C_Spell
+    local C_SpellBook = C_SpellBook
+    local type = type
+    local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
+    local PLAYER_CLASS = _playerClass
+
+    local CPConst = _G.MSUF_CP_CONST or {}
 local CPK = CPConst.CPK or { BAL = {}, SPELL = {} }
 local _issecretvalue = _G.issecretvalue
 local function NotSecret(v)
@@ -2201,152 +2381,4 @@ _G.MSUF_BAL_InvalidateColors = function()
     if _castSpell then _updateOverlay() end
 end
 
--- MSUF_CP_AltMana.lua
--- MSUF_CP_AltMana.lua
--- Phase 7B: move AltMana helpers out of MSUF_ClassPower.lua with minimal risk.
--- No CP value/layout/build flow moved here beyond the isolated AltMana block.
-
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    _G.MSUF_CP_CORE_BUILDERS = builders
-end
-
-builders.ALT_MANA = function(E)
-    local AM = E.AM
-    local _cpDB = E._cpDB
-    local PT = E.PT
-    local PLAYER_CLASS = E.PLAYER_CLASS
-    local GetSpec = E.GetSpec
-    local NotSecret = E.NotSecret
-    local UnitPowerType = E.UnitPowerType
-    local UnitPower = E.UnitPower
-    local UnitPowerMax = E.UnitPowerMax
-    local Enum = E.Enum
-    local tonumber = E.tonumber or tonumber
-    local CreateFrame = E.CreateFrame
-    local ResolveClassPowerColor = E.ResolveClassPowerColor
-    local GetBarTexture = E.GetBarTexture
-
-    local function NeedsAltManaBar()
-        if _G.MSUF_EleMaelstromActive then return false end
-        if _G.MSUF_AugEvokerActive then return true end
-        if _G.MSUF_ShadowManaActive then return false end
-        local pType = UnitPowerType("player")
-        if NotSecret(pType) then
-            if pType == nil or pType == PT.Mana then return false end
-        end
-        local maxMana = UnitPowerMax("player", PT.Mana)
-        if NotSecret(maxMana) and maxMana ~= nil and maxMana <= 0 then
-            return false
-        end
-        if not NotSecret(pType) then
-            local SPECS_NEED_ALT = {
-                PRIEST  = { [3] = true },
-                SHAMAN  = { [1] = true, [2] = true },
-                DRUID   = { [1] = true, [2] = true, [3] = true },
-                PALADIN = { [3] = true },
-                MONK    = { [3] = true },
-            }
-            local specs = SPECS_NEED_ALT[PLAYER_CLASS]
-            if not specs then return false end
-            local si = GetSpec and GetSpec()
-            return si and specs[si] or false
-        end
-        return true
-    end
-
-    local function AM_Create(playerFrame)
-        if AM.container then return end
-
-        local c = CreateFrame("Frame", "MSUF_AltManaContainer", playerFrame)
-        c:SetFrameLevel(playerFrame:GetFrameLevel() + 2)
-        c:Hide()
-        AM.container = c
-
-        local bg = c:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture("Interface\Buttons\WHITE8x8")
-        bg:SetAllPoints(c)
-        bg:SetVertexColor(0, 0, 0, 0.4)
-        AM.bgTex = bg
-
-        local border = CreateFrame("Frame", nil, c, "BackdropTemplate")
-        border:SetPoint("TOPLEFT", c, "TOPLEFT", -1, 1)
-        border:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 1, -1)
-        border:SetBackdrop({ edgeFile = "Interface\Buttons\WHITE8x8", edgeSize = 1 })
-        border:SetBackdropColor(0, 0, 0, 0)
-        border:SetBackdropBorderColor(0, 0, 0, 1)
-        border:SetFrameLevel(c:GetFrameLevel() + 1)
-        AM._border = border
-
-        local bar = CreateFrame("StatusBar", nil, c)
-        bar:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
-        bar:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, 0)
-        bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\Buttons\WHITE8x8")
-        bar:SetMinMaxValues(0, 100)
-        bar:SetValue(0)
-        bar:SetFrameLevel(c:GetFrameLevel() + 1)
-        AM.bar = bar
-    end
-
-    local function AM_Layout(playerFrame)
-        if not AM.container then return end
-        local b = _cpDB.bars or {}
-
-        local h = tonumber(b.altManaHeight) or 4
-        if h < 2 then h = 2 elseif h > 30 then h = 30 end
-        local oY = tonumber(b.altManaOffsetY) or -2
-
-        AM.container:ClearAllPoints()
-        AM.container:SetPoint("TOPLEFT",  playerFrame, "BOTTOMLEFT",   2, oY)
-        AM.container:SetPoint("TOPRIGHT", playerFrame, "BOTTOMRIGHT", -2, oY)
-        AM.container:SetHeight(h)
-    end
-
-    local function AM_ApplyColor()
-        if not AM.bar then return end
-        local b = _cpDB.bars or {}
-        local r = tonumber(b.altManaColorR) or 0.0
-        local g = tonumber(b.altManaColorG) or 0.0
-        local bl = tonumber(b.altManaColorB) or 0.8
-
-        local mr, mg, mb = ResolveClassPowerColor(PT.Mana)
-        if mr then r, g, bl = mr, mg, mb end
-
-        AM.bar:SetStatusBarColor(r, g, bl, 1)
-    end
-
-    local function AM_UpdateValue()
-        if not AM.bar then return end
-
-        local cur = UnitPower("player", PT.Mana)
-        local mx  = UnitPowerMax("player", PT.Mana)
-        if cur == nil then cur = 0 end
-        if mx  == nil then mx  = 100 end
-
-        local smoothOn = _cpDB.smooth
-        local interp = smoothOn and Enum and Enum.StatusBarInterpolation
-            and Enum.StatusBarInterpolation.ExponentialEaseOut or nil
-        if interp then
-            AM.bar:SetMinMaxValues(0, mx, interp)
-            AM.bar:SetValue(cur, interp)
-        else
-            AM.bar:SetMinMaxValues(0, mx)
-            AM.bar:SetValue(cur)
-        end
-    end
-
-    local function AM_RefreshTexture()
-        if not AM.bar then return end
-        AM.bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\Buttons\WHITE8x8")
-    end
-
-    return {
-        NeedsAltManaBar = NeedsAltManaBar,
-        AM_Create = AM_Create,
-        AM_Layout = AM_Layout,
-        AM_ApplyColor = AM_ApplyColor,
-        AM_UpdateValue = AM_UpdateValue,
-        AM_RefreshTexture = AM_RefreshTexture,
-    }
-end
+end -- close do-block started at Balance module header (Druid class gate)
