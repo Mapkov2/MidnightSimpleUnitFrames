@@ -406,13 +406,36 @@ local idx=1 if general then idx=(tonumber(general.tipCycleIndex)
 or 0)+1 if idx>#tips then idx=1 end
 general.tipCycleIndex=idx end
 return tips[idx],idx,#tips end
-_G.MSUF_GetNextTip=MSUF_GetNextTip local function MSUF_ForceItalicFont(fs) if not fs or not fs.GetFont or not fs.SetFont then return end
+_G.MSUF_GetNextTip=MSUF_GetNextTip
+-- MSUF_SafeSetFont: WoW 12.0 Midnight introduced strict validation on the SetFont
+-- `flags` argument. Empty string "" is valid, but strings like "," / "OUTLINE," /
+-- " ,ITALIC" now throw "bad argument #4 to '?'" and propagate, breaking whatever
+-- UI is being built. This helper sanitizes the flags string and pcall-wraps the
+-- call so no broken font argument can ever cascade through the skin pipeline.
+-- Zero overhead on happy path (string:find is C-side, pcall is <50ns).
+local function MSUF_NormalizeFontFlags(flags)
+if type(flags)~="string"then return""end
+flags=flags:gsub("^[%s,]+",""):gsub("[%s,]+$","")
+if flags:find(",,",1,true)then flags=flags:gsub(",+",",") end
+return flags
+end
+local function MSUF_SafeSetFont(fs,path,size,flags)
+if not(fs and fs.SetFont and path and size)then return false end
+local ok=pcall(fs.SetFont,fs,path,size,MSUF_NormalizeFontFlags(flags))
+if ok then return true end
+-- Fallback 1: retry with empty flags (path+size always valid)
+if pcall(fs.SetFont,fs,path,size,"")then return true end
+-- Fallback 2: retry via FontObject (last-resort, no throw)
+if fs.SetFontObject then pcall(fs.SetFontObject,fs,"GameFontHighlightSmall") end
+return false
+end
+local function MSUF_ForceItalicFont(fs) if not fs or not fs.GetFont or not fs.SetFont then return end
 local font,size,flags=fs:GetFont()
 if not font or not size then return end
 flags=flags or""if flags:find("ITALIC")
 then return end
 if flags~=""then flags=flags..",ITALIC"else flags="ITALIC"end
-fs:SetFont(font,size,flags) end
+MSUF_SafeSetFont(fs,font,size,flags) end
 local MSUF_PRESETS=(ns and ns.MSUF_PRESETS)
 or _G.MSUF_PRESETS if type(MSUF_PRESETS)~="table"then MSUF_PRESETS={}
 end
@@ -999,7 +1022,7 @@ btn._msufNavAccentStripe=accentStripe
 local fs=btn.GetFontString and btn:GetFontString()
 if fs and fs.SetTextColor then if isHeader then fs:SetTextColor(0.55,0.62,0.78,0.88)
 if fs.GetFont and fs.SetFont then local fPath,fSize,fFlags=fs:GetFont()
-if fPath and fSize then fs:SetFont(fPath,math.max(8,fSize-1),(fFlags or "")..",") end
+if fPath and fSize then MSUF_SafeSetFont(fs,fPath,math.max(8,fSize-1),fFlags or"") end
 end
 else if isIndented then fs:SetTextColor(0.80,0.88,1.00,0.92)
 else fs:SetTextColor(0.82,0.90,1.00,1.00)
@@ -1334,7 +1357,7 @@ local ok,font,size,flags=pcall(obj.GetFont,obj)
 if not ok or not font or not size then return end
 if not obj.__MSUF_FontOrig then obj.__MSUF_FontOrig={font=font,size=size,flags=flags}
 end
-local orig=obj.__MSUF_FontOrig pcall(obj.SetFont,obj,orig.font,(orig.size or size)+bump,orig.flags) end
+local orig=obj.__MSUF_FontOrig MSUF_SafeSetFont(obj,orig.font,(orig.size or size)+bump,orig.flags) end
 local function enqueue(child) if not child or visited[child]
 then return end
 visited[child]=true queue[#queue+1]=child end
@@ -2827,7 +2850,7 @@ homeAccent:SetPoint("TOPLEFT",12,-10)
 homeAccent:SetText("MSUF CONTROL CENTER")
 homeAccent:SetTextColor(MSUF_THEME.accentR,MSUF_THEME.accentG,MSUF_THEME.accentB,0.55)
 do local ok,fPath,fSize,fFlags=pcall(homeAccent.GetFont,homeAccent)
-if ok and fPath and fSize then pcall(homeAccent.SetFont,homeAccent,fPath,math.max(8,fSize-2),fFlags or"") end
+if ok and fPath and fSize then MSUF_SafeSetFont(homeAccent,fPath,math.max(8,fSize-2),fFlags or"") end
 end
 local homeTitle=home:CreateFontString(nil,"OVERLAY","GameFontNormalLarge")
 homeTitle:SetPoint("TOPLEFT",homeAccent,"BOTTOMLEFT",0,-3)
