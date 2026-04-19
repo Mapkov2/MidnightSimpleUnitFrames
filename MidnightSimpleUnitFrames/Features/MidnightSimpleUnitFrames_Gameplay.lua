@@ -27,6 +27,8 @@ local math_max     = math.max
 local IsAltKeyDown  = IsAltKeyDown
 local GetSpecialization    = GetSpecialization
 local GetSpecializationInfo = GetSpecializationInfo
+local tonumber            = tonumber
+local math_floor          = math.floor
 
 -- Per-spec helper: returns the current specialization ID (globally unique)
 -- or nil if unavailable.  Used as key in nameplateMeleeSpellIDBySpec.
@@ -2469,8 +2471,8 @@ do
         if v == nil then
             return nil
         end
-        local ok, n = pcall(tonumber, v)
-        if ok and type(n) == "number" then
+        local n = tonumber(v)
+        if type(n) == "number" then
             return n
         end
         return nil
@@ -2818,79 +2820,37 @@ totemsFrame:Hide()
 end
 
 local function _FormatTotemTime(left)
-    -- Midnight/Beta secret-safe:
-    -- - Never directly compare/arithmetic on values that may be "secret".
-    -- - Always have a simple fallback: 1 decimal seconds.
-    if left == nil then
+    if type(left) ~= "number" or left <= 0 then
         return ""
     end
 
-    local okSimple, simple = pcall(function()
-        return string.format("%.1fs", left)
-    end)
-    if not okSimple then
-        return ""
+    if left < 10 then
+        return string_format("%.1fs", left)
     end
 
-    -- Apply nicer rules ONLY if comparisons/math are safe.
-    local okNum, n = pcall(function() return tonumber(left) end)
-    if not okNum or type(n) ~= "number" then
-        return simple
+    if left < 60 then
+        return string_format("%ds", math_floor(left + 0.5))
     end
 
-    local okLT10, isLT10 = pcall(function() return n < 10 end)
-    if not okLT10 then
-        return simple
+    local m = math_floor(left / 60)
+    local s = math_floor((left - (m * 60)) + 0.5)
+    if s >= 60 then
+        m = m + 1
+        s = 0
     end
-    if isLT10 then
-        return simple
-    end
-
-    local okLT60, isLT60 = pcall(function() return n < 60 end)
-    if not okLT60 then
-        return simple
-    end
-    if isLT60 then
-        local okRound, secs = pcall(function() return math.floor(n + 0.5) end)
-        if okRound and type(secs) == "number" then
-            return string.format("%ds", secs)
-        end
-        return simple
-    end
-
-    local okMS, out = pcall(function()
-        local m = math.floor(n / 60)
-        local s = math.floor((n - (m * 60)) + 0.5)
-        if s >= 60 then
-            m = m + 1
-            s = 0
-        end
-        return string.format("%d:%02d", m, s)
-    end)
-    if okMS and type(out) == "string" then
-        return out
-    end
-
-    return simple
+    return string_format("%d:%02d", m, s)
 end
 
 local function _PickTotemTickInterval(minLeft)
-    -- Secret-safe tick selection: only branch on numeric thresholds when safe.
-    local okNum, n = pcall(function() return tonumber(minLeft) end)
-    if not okNum or type(n) ~= "number" then
+    if type(minLeft) ~= "number" then
         return 0.50
     end
-
-    local okLT10, isLT10 = pcall(function() return n < 10 end)
-    if okLT10 and isLT10 then
+    if minLeft < 10 then
         return 0.10
     end
-
-    local okLT60, isLT60 = pcall(function() return n < 60 end)
-    if okLT60 and isLT60 then
+    if minLeft < 60 then
         return 0.50
     end
-
     return 1.00
 end
 

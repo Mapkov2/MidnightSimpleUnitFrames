@@ -655,6 +655,115 @@ local _GF_ApplyDebuffStripe
 local _After0 = C_Timer and C_Timer.After
 
 ------------------------------------------------------------------------
+-- Shared GF aura batch cache (per UNIT_AURA dispatch, zero steady-state GC)
+-- One batch can serve multiple GF consumers for the same unit:
+-- SpellIndicators, Aura groups, dispel scan, raid debuffs, debuff-stripe.
+-- Secret-safe: this is only a memoization layer around C_UnitAuras pass-through.
+------------------------------------------------------------------------
+local _gfAuraBatch = GF._gfAuraBatch or { active = false, unit = nil, queries = {}, order = {}, dataBySlot = {} }
+GF._gfAuraBatch = _gfAuraBatch
+
+local _gfAuraQueries = _gfAuraBatch.queries
+local _gfAuraOrder   = _gfAuraBatch.order
+local _gfAuraData    = _gfAuraBatch.dataBySlot
+local _gfAuraOrderN  = 0
+local _gfAuraDirectSlots = {}
+local _gfAuraDirectCount = 0
+
+local function _GF_AuraCaptureInto(buf, oldCount, ...)
+    local count = select('#', ...)
+    for i = 1, count do buf[i] = select(i, ...) end
+    for i = count + 1, oldCount do buf[i] = nil end
+    return count
+end
+
+local function _GF_ResetAuraBatch()
+    for i = 1, _gfAuraOrderN do
+        local key = _gfAuraOrder[i]
+        local q = key and _gfAuraQueries[key]
+        if q then
+            local prev = q.count or 0
+            local slots = q.slots
+            if slots then
+                for si = 1, prev do slots[si] = nil end
+            end
+            q.count = 0
+            q.limit = nil
+            q.unbounded = nil
+            q.unit = nil
+        end
+        _gfAuraOrder[i] = nil
+    end
+    for slot in pairs(_gfAuraData) do _gfAuraData[slot] = nil end
+    _gfAuraOrderN = 0
+    _gfAuraBatch.active = false
+    _gfAuraBatch.unit = nil
+end
+
+function GF.BeginAuraBatch(unit)
+    _GF_ResetAuraBatch()
+    if unit then
+        _gfAuraBatch.active = true
+        _gfAuraBatch.unit = unit
+    end
+end
+
+function GF.EndAuraBatch()
+    _GF_ResetAuraBatch()
+end
+
+function GF.QueryAuraSlots(unit, filter, maxCount)
+    local GetSlots = (C_UnitAuras and C_UnitAuras.GetAuraSlots) or (_G.C_UnitAuras and _G.C_UnitAuras.GetAuraSlots)
+    if not (unit and filter and GetSlots) then return _gfAuraDirectSlots, 0 end
+
+    if not (_gfAuraBatch.active and _gfAuraBatch.unit == unit) then
+        _gfAuraDirectCount = _GF_AuraCaptureInto(_gfAuraDirectSlots, _gfAuraDirectCount, GetSlots(unit, filter, maxCount))
+        return _gfAuraDirectSlots, _gfAuraDirectCount
+    end
+
+    local q = _gfAuraQueries[filter]
+    if not q then
+        q = { slots = {}, count = 0, limit = nil, unbounded = nil, unit = nil }
+        _gfAuraQueries[filter] = q
+        _gfAuraOrderN = _gfAuraOrderN + 1
+        _gfAuraOrder[_gfAuraOrderN] = filter
+    end
+
+    local needQuery = (q.unit ~= unit)
+    if not needQuery then
+        if maxCount == nil then
+            needQuery = not q.unbounded
+        else
+            local prevLimit = q.limit
+            needQuery = (q.unbounded ~= true) and ((prevLimit == nil) or (prevLimit < maxCount))
+        end
+    end
+
+    if needQuery then
+        q.count = _GF_AuraCaptureInto(q.slots, q.count or 0, GetSlots(unit, filter, maxCount))
+        q.limit = maxCount
+        q.unbounded = (maxCount == nil) and true or false
+        q.unit = unit
+    end
+    return q.slots, q.count or 0
+end
+
+function GF.GetAuraDataBySlot(unit, slot)
+    local GetData = (C_UnitAuras and C_UnitAuras.GetAuraDataBySlot) or (_G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataBySlot)
+    if not (unit and slot and GetData) then return nil end
+    if _gfAuraBatch.active and _gfAuraBatch.unit == unit then
+        local cached = _gfAuraData[slot]
+        if cached ~= nil then
+            return cached ~= false and cached or nil
+        end
+        local data = GetData(unit, slot)
+        _gfAuraData[slot] = data or false
+        return data
+    end
+    return GetData(unit, slot)
+end
+
+------------------------------------------------------------------------
 -- PERF: Global per-frame budget for full aura scans.
 -- AoE heal/damage → 20 UNIT_AURA events in same frame → 20 × 138µs = 2.8ms spike.
 -- Budget limits full scans to 8 per frame. Excess deferred to next frame via C_Timer.After(0).
@@ -693,7 +802,7 @@ local function SpellIndicatorsNeedRefresh(f, updateInfo)
     return false
 end
 
-local function dispatchAura(f, unit, updateInfo)
+local function dispatchAuraBody(f, unit, updateInfo)
     local c = f._c
     if not c then return end
     local kind = f._msufGFKind or "party"
@@ -914,10 +1023,14 @@ local function dispatchAura(f, unit, updateInfo)
     if c.dsEn then
         local hadDebuff = f._msufGFHasAnyDebuff or false
         _dsPresenceResult = false
-        if AuraUtil and AuraUtil.ForEachAura then
+        local hasDebuff = false
+        if GF.QueryAuraSlots then
+            local slots, sc = GF.QueryAuraSlots(unit, "HARMFUL", 2)
+            hasDebuff = (sc or 0) >= 2
+        elseif AuraUtil and AuraUtil.ForEachAura then
             AuraUtil.ForEachAura(unit, "HARMFUL", nil, _dsPresenceCallback, true)
+            hasDebuff = _dsPresenceResult
         end
-        local hasDebuff = _dsPresenceResult
         f._msufGFHasAnyDebuff = hasDebuff
         if hasDebuff ~= hadDebuff then
             _GF_ApplyDebuffStripe(f)
@@ -933,6 +1046,12 @@ local function dispatchAura(f, unit, updateInfo)
     if GF.UpdateRaidDebuff and c.rdEn then
         GF.UpdateRaidDebuff(f, unit)
     end
+end
+
+local function dispatchAura(f, unit, updateInfo)
+    if GF.BeginAuraBatch then GF.BeginAuraBatch(unit) end
+    dispatchAuraBody(f, unit, updateInfo)
+    if GF.EndAuraBatch then GF.EndAuraBatch() end
 end
 
 ------------------------------------------------------------------------
@@ -1698,7 +1817,16 @@ function GF._UpdateDispel(f, unit)
             return
         end
         -- C-side: query dispellable debuffs directly (secret-safe)
-        if C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
+        if GF.QueryAuraSlots and GF.GetAuraDataBySlot then
+            local slots, sc = GF.QueryAuraSlots(unit, _DISPEL_SCAN_FILTER, 4)
+            if sc and sc >= 2 then
+                local aura = GF.GetAuraDataBySlot(unit, slots[2])
+                if aura and aura.auraInstanceID then
+                    topDispel = "DISPELLABLE"
+                    topAid = aura.auraInstanceID
+                end
+            end
+        elseif C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
             _dispelScanUnit = unit
             topDispel, topAid = _DispelScanSlots(C_UnitAuras_GetAuraSlots(unit, _DISPEL_SCAN_FILTER))
             _dispelScanUnit = nil

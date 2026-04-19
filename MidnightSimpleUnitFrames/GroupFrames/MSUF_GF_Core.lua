@@ -134,7 +134,7 @@ local function BuildFrameHierarchy(f, kind)
     f._msufGFBuilt = true
 
     -- Clear any inherited backdrop from SecureUnitButtonTemplate
-    if f.SetBackdrop then pcall(f.SetBackdrop, f, nil) end
+    if f.SetBackdrop then f:SetBackdrop(nil) end
 
     local conf = GF.GetConf(kind)
     local w = conf.width  or 120
@@ -1034,7 +1034,7 @@ local function ScanHeaderChildren(header, kind)
                 -- Clear any backdrop on child frame itself
                 -- (SecureUnitButtonTemplate may inherit BackdropTemplate in WoW 12.0)
                 if child.SetBackdrop then
-                    pcall(child.SetBackdrop, child, nil)
+                    child:SetBackdrop(nil)
                 end
 
                 -- Re-anchor barGroup + force backdrop re-render
@@ -1579,13 +1579,17 @@ local function HideFrameLocked(frame)
     if frame._msufGFHidden then return end
     frame._msufGFHidden = true
     local hp = GetHiddenParent()
-    if frame.SetParent then pcall(frame.SetParent, frame, hp) end
+    if frame.SetParent then frame:SetParent(hp) end
     if not frame._msufGFHideHooked then
         frame._msufGFHideHooked = true
         if frame.Show then
             hooksecurefunc(frame, "Show", function(f)
                 if f._msufGFHidden then
-                    pcall(f.SetParent, f, hp)
+                    if InCombatLockdown() then
+                        GF._pendingBlizzardDisable = true
+                        return
+                    end
+                    if f.SetParent then f:SetParent(hp) end
                 end
             end)
         end
@@ -1607,7 +1611,7 @@ function GF.DisableBlizzardFrames()
     if raidConf.enabled then
         HideFrameLocked(_G.CompactRaidFrameContainer)
         if _G.CompactRaidFrameManager_SetSetting then
-            pcall(_G.CompactRaidFrameManager_SetSetting, "IsShown", "0")
+            _G.CompactRaidFrameManager_SetSetting("IsShown", "0")
         end
     end
 end
@@ -1618,7 +1622,7 @@ function GF.RestoreBlizzardFrames()
         local f = _G[name]
         if f and f._msufGFHidden then
             f._msufGFHidden = nil
-            if f.SetParent then pcall(f.SetParent, f, UIParent) end
+            if f.SetParent and not InCombatLockdown() then f:SetParent(UIParent) end
         end
     end
 end

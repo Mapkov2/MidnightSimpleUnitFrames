@@ -179,6 +179,24 @@ local function CaptureSlots(...)
     return _slotBuf, count
 end
 
+local function SIQuerySlots(unit, filter, maxCount)
+    if GF and GF.QueryAuraSlots then
+        return GF.QueryAuraSlots(unit, filter, maxCount)
+    end
+    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots) then return _slotBuf, 0 end
+    if maxCount then
+        return CaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter, maxCount))
+    end
+    return CaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter))
+end
+
+local function SIQueryAuraData(unit, slot)
+    if GF and GF.GetAuraDataBySlot then
+        return GF.GetAuraDataBySlot(unit, slot)
+    end
+    return C_UnitAuras and C_UnitAuras.GetAuraDataBySlot and C_UnitAuras.GetAuraDataBySlot(unit, slot)
+end
+
 local _scanResults = {}
 
 local function ScanUnit(unit, kind)
@@ -187,9 +205,9 @@ local function ScanUnit(unit, kind)
     if not _reverseLookup then return end
     if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot) then return end
 
-    local slots, count = CaptureSlots(C_UnitAuras.GetAuraSlots(unit, "HELPFUL"))
+    local slots, count = SIQuerySlots(unit, "HELPFUL")
     for i = 2, count do
-        local aura = C_UnitAuras.GetAuraDataBySlot(unit, _slotBuf[i])
+        local aura = SIQueryAuraData(unit, slots[i])
         if aura and not (AuraFilter and AuraFilter.ShouldHideBuffAura and AuraFilter.ShouldHideBuffAura(kind, aura)) then
             local sid = aura.spellId
             local matched

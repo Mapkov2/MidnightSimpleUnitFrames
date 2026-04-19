@@ -29,6 +29,27 @@ local function _rdCaptureSlots(...)
     return n
 end
 
+local function RDQuerySlots(unit, filter, maxCount)
+    if GF and GF.QueryAuraSlots then
+        return GF.QueryAuraSlots(unit, filter, maxCount)
+    end
+    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots) then return _rdSlotBuf, 0 end
+    local count
+    if maxCount then
+        count = _rdCaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter, maxCount))
+    else
+        count = _rdCaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter))
+    end
+    return _rdSlotBuf, count
+end
+
+local function RDQueryAuraData(unit, slot)
+    if GF and GF.GetAuraDataBySlot then
+        return GF.GetAuraDataBySlot(unit, slot)
+    end
+    return C_UnitAuras and C_UnitAuras.GetAuraDataBySlot and C_UnitAuras.GetAuraDataBySlot(unit, slot)
+end
+
 ------------------------------------------------------------------------
 -- Priority scoring (higher = more important)
 -- Returns a plain number — never touches secret fields unsafely
@@ -208,10 +229,10 @@ function GF.UpdateRaidDebuff(f, unit)
     local filter = rdConf.onlyDispellable and "HARMFUL|RAID" or "HARMFUL"
 
     -- Pre-allocated slot buffer (zero GC per call)
-    local slotCount = _rdCaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter))
+    local slots, slotCount = RDQuerySlots(unit, filter)
     for i = 2, slotCount do
-        local slot = _rdSlotBuf[i]
-        local aura = C_UnitAuras.GetAuraDataBySlot(unit, slot)
+        local slot = slots[i]
+        local aura = RDQueryAuraData(unit, slot)
         if aura and not (AuraFilter and AuraFilter.ShouldHideDebuffAura and AuraFilter.ShouldHideDebuffAura(kind, aura)) then
             local aid = aura.auraInstanceID
             local score = ScoreAura(aura)

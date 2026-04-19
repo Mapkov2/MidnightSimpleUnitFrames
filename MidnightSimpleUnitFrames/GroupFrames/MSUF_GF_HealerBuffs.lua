@@ -320,6 +320,24 @@ local function CaptureSlots2(...)
     return _slotBuf2, count
 end
 
+local function QueryAuraSlots(unit, filter, maxCount)
+    if GF and GF.QueryAuraSlots then
+        return GF.QueryAuraSlots(unit, filter, maxCount)
+    end
+    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots) then return _slotBuf2, 0 end
+    if maxCount then
+        return CaptureSlots2(C_UnitAuras.GetAuraSlots(unit, filter, maxCount))
+    end
+    return CaptureSlots2(C_UnitAuras.GetAuraSlots(unit, filter))
+end
+
+local function QueryAuraData(unit, slot)
+    if GF and GF.GetAuraDataBySlot then
+        return GF.GetAuraDataBySlot(unit, slot)
+    end
+    return C_UnitAuras and C_UnitAuras.GetAuraDataBySlot and C_UnitAuras.GetAuraDataBySlot(unit, slot)
+end
+
 -- Returns: activeFamilies[familyId] = { aura=auraData, auraInstanceID=id }
 local _wantedPlayerSpells = {}
 local _wantedAllSpells = {}
@@ -328,7 +346,7 @@ local function ScanFamiliesForUnit(unit, compiledSlots, kind)
     AuraFilter = AuraFilter or GF.AuraFilter or _G.MSUF_GF_AuraFilter
     local result = {}
     if not (unit and UnitExists(unit)) then return result end
-    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot) then return result end
+    if not ((GF and GF.QueryAuraSlots and GF.GetAuraDataBySlot) or (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot)) then return result end
 
     for k in pairs(_wantedPlayerSpells) do _wantedPlayerSpells[k] = nil end
     for k in pairs(_wantedAllSpells) do _wantedAllSpells[k] = nil end
@@ -343,9 +361,9 @@ local function ScanFamiliesForUnit(unit, compiledSlots, kind)
         end
     end
 
-    local slots, slotCount = CaptureSlots2(C_UnitAuras.GetAuraSlots(unit, "HELPFUL|PLAYER"))
+    local slots, slotCount = QueryAuraSlots(unit, "HELPFUL|PLAYER")
     for i = 2, slotCount do
-        local aura = C_UnitAuras.GetAuraDataBySlot(unit, _slotBuf2[i])
+        local aura = QueryAuraData(unit, slots[i])
         if aura then
             local sid = aura.spellId
             if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
@@ -359,9 +377,9 @@ local function ScanFamiliesForUnit(unit, compiledSlots, kind)
     end
 
     if wantsAllCasters then
-        local allSlots, allCount = CaptureSlots2(C_UnitAuras.GetAuraSlots(unit, "HELPFUL"))
+        local allSlots, allCount = QueryAuraSlots(unit, "HELPFUL")
         for i = 2, allCount do
-            local aura = C_UnitAuras.GetAuraDataBySlot(unit, _slotBuf2[i])
+            local aura = QueryAuraData(unit, allSlots[i])
             if aura and not (AuraFilter and AuraFilter.ShouldHideBuffAura and AuraFilter.ShouldHideBuffAura(kind, aura)) then
                 local sid = aura.spellId
                 if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
