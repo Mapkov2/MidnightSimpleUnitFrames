@@ -906,8 +906,16 @@ function GF.UpdateFrameAuras(f, unit)
     local extCfg = auras.externals
     if extCfg and extCfg.enabled then
         for k in pairs(_externalsIDs) do _externalsIDs[k] = nil end
-        local afr = AF()
-        local extFilter = afr and afr.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
+        -- PERF: Cache resolved filter per-cfg. Self-invalidates when the
+        -- user changes filterToken in the Options UI. Avoids AF() + wrapper
+        -- overhead on every RefreshAuras call.
+        local extFilter = extCfg._msufRFilter
+        if extFilter == nil or extCfg._msufRFilterTok ~= "__EXTERNALS__" then
+            local afr = AF()
+            extFilter = (afr and afr.EXTERNALS_TOKEN) or "HELPFUL|BIG_DEFENSIVE"
+            extCfg._msufRFilter    = extFilter
+            extCfg._msufRFilterTok = "__EXTERNALS__"
+        end
         local n = RenderGroup(f, unit, "externals", extCfg, extFilter, false, parent, nil, scale)
         if n > 0 then anyShown = true end
     elseif not f._msufGFExtHidden then
@@ -923,8 +931,15 @@ function GF.UpdateFrameAuras(f, unit)
     local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false
 
     if debOn then
-        local afr = AF()
-        local debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
+        -- PERF: Cache resolved filter per-cfg. Self-invalidates when
+        -- the user changes filterToken.
+        local debFilter = debCfg._msufRFilter
+        if debFilter == nil or debCfg._msufRFilterTok ~= debCfg.filterToken then
+            local afr = AF()
+            debFilter = (afr and afr.ResolveDebuffFilter(debCfg.filterToken)) or "HARMFUL"
+            debCfg._msufRFilter    = debFilter
+            debCfg._msufRFilterTok = debCfg.filterToken
+        end
         local n, md = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale)
         mergedDispel = md
         if n > 0 then anyShown = true end
@@ -967,8 +982,15 @@ function GF.UpdateFrameAuras(f, unit)
     -- 3) Buffs
     local buffCfg = auras.buff
     if buffCfg and buffCfg.enabled ~= false then
-        local afr = AF()
-        local buffFilter = afr and afr.ResolveBuffFilter(buffCfg.filterToken) or "HELPFUL|RAID"
+        -- PERF: Cache resolved filter per-cfg. Self-invalidates when
+        -- the user changes filterToken.
+        local buffFilter = buffCfg._msufRFilter
+        if buffFilter == nil or buffCfg._msufRFilterTok ~= buffCfg.filterToken then
+            local afr = AF()
+            buffFilter = (afr and afr.ResolveBuffFilter(buffCfg.filterToken)) or "HELPFUL|RAID"
+            buffCfg._msufRFilter    = buffFilter
+            buffCfg._msufRFilterTok = buffCfg.filterToken
+        end
         local n = RenderGroup(f, unit, "buff", buffCfg, buffFilter, false, parent, f._msufSIDedupIDs, scale)
         if n > 0 then anyShown = true end
         f._msufGFBufHidden = nil

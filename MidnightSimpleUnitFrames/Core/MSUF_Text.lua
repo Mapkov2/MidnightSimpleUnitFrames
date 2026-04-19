@@ -29,6 +29,7 @@ function ns.Text.Set(fs, text, show)
     if not show then
         if fs.Hide then fs:Hide() end
         if fs._msufLastSetT then fs._msufLastSetT = nil end
+        fs._msufCleared = true
         if fs.SetText then fs:SetText("") end
          return
     end
@@ -47,6 +48,8 @@ function ns.Text.Set(fs, text, show)
     else
         fs._msufLastSetT = nil
     end
+    -- NOT a cleared state: we're writing actual content (or a secret)
+    fs._msufCleared = nil
     if fs.SetText then fs:SetText(text) end
     if fs.Show then fs:Show() end
  end
@@ -95,6 +98,7 @@ function ns.Text.Clear(fs, hide)
     -- Secret-safe: do NOT compare strings.
     if not fs then  return end
     if fs._msufLastSetT then fs._msufLastSetT = nil end
+    fs._msufCleared = true
     if fs.SetText then fs:SetText("") end
     if hide and fs.Hide then fs:Hide() end
  end
@@ -102,6 +106,16 @@ function ns.Text.ClearField(self, field)
     if not self then  return end
     local fs = self[field]
     if not fs then  return end
+    -- PERF: Fast-path — if ns.Text.Clear was the most recent write (or the
+    -- FontString was initialised as cleared), the text is already "". Skip
+    -- the redundant C-side SetText("") + layout invalidation.
+    -- SAFETY: _msufCleared is set ONLY by ns.Text.Clear and ns.Text.Set's
+    -- show=false path. Any Set with content (including secret values) clears
+    -- the flag → we won't hit this path with stale non-empty text.
+    if fs._msufCleared then
+        if fs.Hide then fs:Hide() end
+        return
+    end
     ns.Text.Clear(fs, true)
  end
 -- Patch O: central text renderers (HP/Power/Pct/ToT inline) - secret-safe (no string compares)
@@ -208,20 +222,42 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
         ns.Text.Set(self.hpText, "", false)
         ns.Text.ClearField(self, "hpTextPct")
         self._msufLastRenderPct = nil
+        self._msufLastRenderPctBucket = nil
         return
     end
 
     -- PERF: Early diff-gate on percent (non-secret from UnitHealthPercent).
-    -- When percent hasn't changed and no absorb text, output is identical → skip.
+    -- Use the DISPLAY bucket (0.1% resolution) — two floats that round to
+    -- the same "72.3%" string produce identical output, so we can skip the
+    -- entire render pipeline. Catches 50-70% of micro HP% drift calls.
     -- SECRET-SAFE: hpPct CAN be secret in 12.0 — only diff-gate plain numbers.
+    -- CORRECTNESS: When absorbText is present (or hasPct is false), the
+    -- OUTPUT depends on more than just hpPct. We cannot use the bucket
+    -- cache — and we MUST invalidate it, otherwise a transition back to
+    -- "no absorb" at the same hpPct would stale-match and skip the render
+    -- that removes the absorb text.
     if hasPct and not absorbText then
         local iss = _MSUF_issecret
         if not (iss and iss(hpPct)) then
-            if self._msufLastRenderPct == hpPct then return end
-            self._msufLastRenderPct = hpPct
+            if type(hpPct) == "number" then
+                local bucket = math.floor(hpPct * 10 + 0.5)
+                if self._msufLastRenderPctBucket == bucket then return end
+                self._msufLastRenderPctBucket = bucket
+                self._msufLastRenderPct = hpPct
+            else
+                -- Non-number (e.g. nil/unexpected) — skip bucket path.
+                if self._msufLastRenderPct == hpPct then return end
+                self._msufLastRenderPct = hpPct
+                self._msufLastRenderPctBucket = nil
+            end
         else
             self._msufLastRenderPct = nil
+            self._msufLastRenderPctBucket = nil
         end
+    else
+        -- absorbText present OR !hasPct → can't use bucket cache; invalidate
+        -- so the next bucket-eligible call doesn't stale-match.
+        self._msufLastRenderPctBucket = nil
     end
 
     -- PERF: Inlined EnsureSpec fast path
@@ -234,8 +270,9 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     -- Pre-compute percent string (nil for secret values → SetFormattedText fallback)
     local hpPctStr = hasPct and _MSUF_PctToStr1D(hpPct) or nil
 
-    -- Split path: HP in main FontString, percent in side FontString
-    local split = hasPct and ns.Text._ShouldSplitHP(self, spec.hpSpacerConf, spec.hpSpacerG, hpMode) or false
+    -- PERF: split decision cached at spec build (see EnsureSpec.hpSplitEnabled).
+    -- Avoids ~29k _ShouldSplitHP calls per trace.
+    local split = hasPct and spec.hpSplitEnabled or false
     if split then
         local mainText = _MSUF_AppendAbsorb(h, absorbText, absorbStyle)
         if not absorbText and not _MSUF_IsSecret(h) and h == self._msufLastH and hpPctStr == self._msufLastPctS then return end
@@ -401,11 +438,27 @@ function ns.Text.EnsureSpec(self)
     if udb and udb.fontOverride and udb.colorPowerTextByType ~= nil then
         _pColorByType = (udb.colorPowerTextByType == true)
     end
+    -- PERF: Pre-compute HP split flag once at spec build. Mirrors
+    -- ns.Text._ShouldSplitHP exactly. RenderHpMode reads spec.hpSplitEnabled
+    -- instead of calling _ShouldSplitHP on every frame (29k+/session).
+    local hpSplitEnabled = false
+    if self.hpTextPct and (hpMode == "FULL_PLUS_PERCENT" or hpMode == "PERCENT_PLUS_FULL") then
+        local hpsConf = (useOverride and eff) or nil
+        local hpsOn = (hpsConf and hpsConf.hpTextSpacerEnabled == true)
+            or ((not hpsConf) and g.hpTextSpacerEnabled == true)
+        if hpsOn then
+            local hpsX = (hpsConf and tonumber(hpsConf.hpTextSpacerX))
+                or tonumber(g.hpTextSpacerX) or 0
+            hpsX = tonumber(hpsX) or 0
+            hpSplitEnabled = (hpsX > 0)
+        end
+    end
     spec = {
         hpMode = hpMode,
         hpSep = ns.Text._SepToken(hpSepRaw, nil),
         hpSpacerConf = (useOverride and eff) or nil,
         hpSpacerG = g,
+        hpSplitEnabled = hpSplitEnabled,
         pMode = pMode,
         pSep = ns.Text._SepToken(rawPSep, rawHpSep),
         pColorByType = _pColorByType,

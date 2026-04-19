@@ -1200,8 +1200,29 @@ local function PositionHeaderFromGridCenter(kind, header, countOverride)
     end
     local anchorFrame = GF.ResolveAnchorFrame(kind)
     local pt = conf.anchorPoint or conf.point or "CENTER"
+    local fx = cx - dx
+    local fy = cy - dy
+    -- PERF: diff-gate — skip ClearAllPoints + SetPoint when the resolved
+    -- position hasn't changed. Saves two C-side frame ops + SecureGroup
+    -- layout invalidation per call.
+    -- SAFETY: header position is written ONLY through this function
+    --         (verified: A2_EditMode / Reminder / Options all use
+    --         different header instances). Cache fields stored on the
+    --         header itself — when the header is retired/recreated on
+    --         zone change, the cache goes with it and a fresh build
+    --         always applies.
+    if header._msufLastPt == pt
+       and header._msufLastAF == anchorFrame
+       and header._msufLastFX == fx
+       and header._msufLastFY == fy then
+        return
+    end
+    header._msufLastPt = pt
+    header._msufLastAF = anchorFrame
+    header._msufLastFX = fx
+    header._msufLastFY = fy
     header:ClearAllPoints()
-    header:SetPoint(pt, anchorFrame, pt, cx - dx, cy - dy)
+    header:SetPoint(pt, anchorFrame, pt, fx, fy)
 end
 
 function GF.SyncHeaderPosition(kind, countOverride)

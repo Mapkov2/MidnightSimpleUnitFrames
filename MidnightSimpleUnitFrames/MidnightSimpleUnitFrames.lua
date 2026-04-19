@@ -1242,6 +1242,12 @@ local function MSUF_GetFontPreviewObject(key)
 end
 ns.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
 _G.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
+-- PERF: Per-key RGB cache for MSUF_GetColorFromKey. Avoids string.lower()
+-- + MSUF_FONT_COLORS lookup on repeat calls (4.5k+ calls/session in raid).
+-- We cache only the RGB triple, not the Color object — callers can mutate
+-- Color via :SetRGB() so we always return a fresh instance. `false` is a
+-- negative-cache sentinel for unknown keys.
+local _colorKeyRgbCache = {}
 local function MSUF_GetColorFromKey(key, fallbackColor)
     if type(key) ~= "string" then
         if fallbackColor then
@@ -1249,11 +1255,19 @@ local function MSUF_GetColorFromKey(key, fallbackColor)
     end
         return CreateColor(1, 1, 1, 1)
     end
-    local normalized = string.lower(key)
-    local rgb = MSUF_FONT_COLORS[normalized]
+    local rgb = _colorKeyRgbCache[key]
+    if rgb == nil then
+        local normalized = string.lower(key)
+        local src = MSUF_FONT_COLORS[normalized]
+        if src then
+            rgb = { src[1] or 1, src[2] or 1, src[3] or 1 }
+        else
+            rgb = false
+        end
+        _colorKeyRgbCache[key] = rgb
+    end
     if rgb then
-        local r, g, b = rgb[1], rgb[2], rgb[3]
-        return CreateColor(r or 1, g or 1, b or 1, 1)
+        return CreateColor(rgb[1], rgb[2], rgb[3], 1)
     end
     if fallbackColor then
          return fallbackColor

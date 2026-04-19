@@ -2154,6 +2154,30 @@ do
         local mx  = _UnitPowerMax(unit, pType)
         if cur == nil then cur = 0 end
         if mx  == nil then mx  = 100 end
+        -- PERF: Diff-gate on power value. Skip SetValue + UnitPowerPercent
+        -- C call + text refresh when nothing actually changed.
+        -- SAFETY: _PowerCore is only invoked from UNIT_POWER_FREQUENT /
+        --         UNIT_POWER_UPDATE event handlers. Bar layout/color/
+        --         interpolation are updated by separate paths, so a same-
+        --         value event is strictly redundant here.
+        -- SECRET-SAFE: UnitPower may return secret values in 12.0.
+        --         Must issecretvalue-check BEFORE comparing — type() or
+        --         == on a secret would taint.
+        local _iss = issecretvalue
+        if not (_iss and (_iss(cur) or _iss(mx))) then
+            if f._msufPCur == cur and f._msufPMax == mx and f._msufPType == pType then
+                return
+            end
+            f._msufPCur  = cur
+            f._msufPMax  = mx
+            f._msufPType = pType
+        else
+            -- Secret: clear cache so the non-secret branch rebuilds after
+            --         a later non-secret value arrives.
+            f._msufPCur  = nil
+            f._msufPMax  = nil
+            f._msufPType = nil
+        end
         local interp = _pwrInterp
         if interp then
             bar:SetMinMaxValues(0, mx, interp)
@@ -2175,6 +2199,20 @@ do
         local mx  = _UnitPowerMax(unit, pType)
         if cur == nil then cur = 0 end
         if mx  == nil then mx  = 100 end
+        -- PERF: same diff-gate as _PowerCore (see _PowerCore for safety notes).
+        local _iss = issecretvalue
+        if not (_iss and (_iss(cur) or _iss(mx))) then
+            if f._msufPCur == cur and f._msufPMax == mx and f._msufPType == pType then
+                return
+            end
+            f._msufPCur  = cur
+            f._msufPMax  = mx
+            f._msufPType = pType
+        else
+            f._msufPCur  = nil
+            f._msufPMax  = nil
+            f._msufPType = nil
+        end
         bar:SetMinMaxValues(0, mx)
         bar:SetValue(cur)
         _MaybeUpdatePowerText(f, unit, pType)
