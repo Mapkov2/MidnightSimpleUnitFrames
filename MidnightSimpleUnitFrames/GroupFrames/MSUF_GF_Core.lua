@@ -2136,6 +2136,7 @@ function GF.ShowPreview(kind, count)
             f:SetSize(w, h)
             f._msufGFKind = kind
             f._msufIsGroupFrame = true
+            f._msufGFIsPreviewFrame = true
             f.msufConfigKey = (kind == "raid") and "gf_raid" or "gf_party"
             BuildFrameHierarchy(f, kind)
             ApplyFonts(f, kind)
@@ -2188,6 +2189,31 @@ function GF.HidePreview(kind)
     end
     local container = GF._previewContainer and GF._previewContainer[kind]
     if container then container:Hide() end
+end
+
+local function GF_PreviewsAllowed()
+    if _G.MSUF_UnitEditModeActive == true then
+        return true
+    end
+    local panel = _G.MSUF_GFOptionsPanel
+    if panel and panel.IsShown and panel:IsShown() then
+        return true
+    end
+    return false
+end
+
+function GF.HideOrphanedPreviews()
+    if GF_PreviewsAllowed() then return false end
+    local hidden = false
+    for _, kind in ipairs({ "party", "raid" }) do
+        local active = GF._previewActive and GF._previewActive[kind]
+        local container = GF._previewContainer and GF._previewContainer[kind]
+        if active or (container and container.IsShown and container:IsShown()) then
+            GF.HidePreview(kind)
+            hidden = true
+        end
+    end
+    return hidden
 end
 
 ------------------------------------------------------------------------
@@ -2261,6 +2287,7 @@ function GF.RebuildAll()
         GF._pendingRebuild = true
         return
     end
+    GF.HideOrphanedPreviews()
     local partyConf = GF.GetConf("party")
     local raidConf  = GF.GetConf("raid")
 

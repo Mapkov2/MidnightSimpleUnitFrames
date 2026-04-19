@@ -824,6 +824,9 @@ end
 local _cachedUpdateAll -- cached reference to MSUF_GF_UpdateAll
 
 function GF._FlushDirty()
+    if type(GF.HideOrphanedPreviews) == "function" then
+        GF.HideOrphanedPreviews()
+    end
     if not _cachedUpdateAll then
         local fn = _G.MSUF_GF_UpdateAll
         if type(fn) == "function" then _cachedUpdateAll = fn end
@@ -833,7 +836,7 @@ function GF._FlushDirty()
         _dirtyFrames[f] = nil
         anyFlushed = true
         ApplyVisuals(f, bits)
-        if f._msufGFPreviewActive then
+        if f._msufGFPreviewActive and f._msufGFIsPreviewFrame then
             -- Re-apply preview data (ApplyVisuals stomps colors/text)
             local idx = f._msufGFPreviewIndex
             local kind = f._msufGFKind
@@ -888,6 +891,9 @@ end
 -- Use for Options "Apply" when user expects instant feedback.
 ------------------------------------------------------------------------
 function GF.RefreshVisuals()
+    if type(GF.HideOrphanedPreviews) == "function" then
+        GF.HideOrphanedPreviews()
+    end
     if not _cachedUpdateAll then
         local fn = _G.MSUF_GF_UpdateAll
         if type(fn) == "function" then _cachedUpdateAll = fn end
@@ -905,7 +911,7 @@ function GF.RefreshVisuals()
                 local f = list[i]
                 if f then
                     ApplyVisuals(f, DIRTY_ALL)
-                    if f._msufGFPreviewActive then
+                    if f._msufGFPreviewActive and f._msufGFIsPreviewFrame then
                         GF.ApplyPreviewData(f, i, kind)
                     end
                 end
@@ -952,7 +958,7 @@ do
                     local f = list[i]
                     if f and f:IsShown() then
                         ApplyVisuals(f, DIRTY_ALL)
-                        if f._msufGFPreviewActive then
+                        if f._msufGFPreviewActive and f._msufGFIsPreviewFrame then
                             GF.ApplyPreviewData(f, i, k)
                         end
                     end
