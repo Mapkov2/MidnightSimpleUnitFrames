@@ -556,7 +556,7 @@ end
 --     addon   = "MSUF",
 --     fmt     = 2,
 --     schema  = 1,
---     kind    = "unitframe" | "castbar" | "colors" | "gameplay" | "all",
+--     kind    = "unitframe" | "castbar" | "colors" | "gameplay" | "groupframe" | "all",
 --     profile = "<active profile name>",
 --     payload = { ...selected settings... },
 --   }
@@ -574,6 +574,9 @@ local function MSUF_WipeTable(t)
  end
 local function MSUF_DeepCopy(v)
     if not v then  return v end
+    if type(v) ~= "table" then
+        return v
+    end
     if type(CopyTable) == "function" then
         return CopyTable(v)
     end
@@ -722,8 +725,35 @@ local function MSUF_ApplyGeneralSubset(tbl)
         g[k] = MSUF_DeepCopy(v)
     end
  end
+local function MSUF_ProfileIO_EnsureGroupFramesDB()
+    local ensureGF = _G.MSUF_GF_EnsureDB
+    if type(ensureGF) == "function" then
+        ensureGF()
+        return
+    end
+    local gf = _G.MSUF_NS and _G.MSUF_NS.GF
+    if gf and type(gf.EnsureDB) == "function" then
+        gf.EnsureDB()
+    end
+end
+local function MSUF_CopyGroupFramePayload()
+    local payload = {}
+    if type(MSUF_DB) ~= "table" then
+        return payload
+    end
+    if type(MSUF_DB.gf_party) == "table" then
+        payload.gf_party = MSUF_DeepCopy(MSUF_DB.gf_party)
+    end
+    if type(MSUF_DB.gf_raid) == "table" then
+        payload.gf_raid = MSUF_DeepCopy(MSUF_DB.gf_raid)
+    end
+    return payload
+end
 local function MSUF_SnapshotForKind(kind)
     EnsureDB()
+    if kind == "unitframe" or kind == "groupframe" or kind == "groupframes" or kind == "all" then
+        MSUF_ProfileIO_EnsureGroupFramesDB()
+    end
     local payload = {}
     if kind == "unitframe" then
         -- Everything EXCEPT: gameplay, colors, castbars
@@ -750,6 +780,8 @@ local function MSUF_SnapshotForKind(kind)
         payload.npcColors   = MSUF_DeepCopy((MSUF_DB and MSUF_DB.npcColors) or {})
     elseif kind == "gameplay" then
         payload.gameplay = MSUF_DeepCopy((MSUF_DB and MSUF_DB.gameplay) or {})
+    elseif kind == "groupframe" or kind == "groupframes" then
+        payload = MSUF_CopyGroupFramePayload()
     elseif kind == "all" then
         payload = MSUF_DeepCopy(MSUF_DB or {})
     else
@@ -794,9 +826,31 @@ local function MSUF_ProfileIO_PostImportApply_Auras(kind, payload)
         _G.MSUF_UpdateTargetAuras()
     end
  end
+local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
+    if type(payload) ~= "table" then  return end
+    local touched = (kind == "groupframe") or (kind == "groupframes")
+    if not touched then
+        touched = (type(payload.gf_party) == "table") or (type(payload.gf_raid) == "table")
+    end
+    if not touched then  return end
+    MSUF_ProfileIO_EnsureGroupFramesDB()
+    if type(_G.MSUF_GF_InvalidateConfCache) == "function" then
+        _G.MSUF_GF_InvalidateConfCache()
+    end
+    if type(_G.MSUF_GF_RebuildAll) == "function" then
+        _G.MSUF_GF_RebuildAll()
+    elseif type(_G.MSUF_GF_Refresh) == "function" then
+        _G.MSUF_GF_Refresh()
+    elseif type(_G.MSUF_GF_RefreshVisuals) == "function" then
+        _G.MSUF_GF_RefreshVisuals()
+    end
+end
 local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if not snapshot then  return false, "not a table" end
     local kind = snapshot.kind
+    if kind == "groupframes" then
+        kind = "groupframe"
+    end
     local payload = snapshot.payload
     if type(kind) ~= "string" or type(payload) ~= "table" then
          return false, "invalid snapshot"
@@ -823,6 +877,29 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
                 else
                     MSUF_DB[k] = v
                 end
+            end
+        end
+    elseif kind == "groupframe" then
+        if payload.gf_party ~= nil then
+            if type(payload.gf_party) == "table" then
+                MSUF_DB.gf_party = MSUF_DB.gf_party or {}
+                MSUF_WipeTable(MSUF_DB.gf_party)
+                for kk, vv in pairs(payload.gf_party) do
+                    MSUF_DB.gf_party[kk] = MSUF_DeepCopy(vv)
+                end
+            else
+                MSUF_DB.gf_party = MSUF_DeepCopy(payload.gf_party)
+            end
+        end
+        if payload.gf_raid ~= nil then
+            if type(payload.gf_raid) == "table" then
+                MSUF_DB.gf_raid = MSUF_DB.gf_raid or {}
+                MSUF_WipeTable(MSUF_DB.gf_raid)
+                for kk, vv in pairs(payload.gf_raid) do
+                    MSUF_DB.gf_raid[kk] = MSUF_DeepCopy(vv)
+                end
+            else
+                MSUF_DB.gf_raid = MSUF_DeepCopy(payload.gf_raid)
             end
         end
     elseif kind == "castbar" then
@@ -869,6 +946,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     end
     EnsureDB()
     MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
+    MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
      return true
 end
 function MSUF_ExportSelectionToString(kind)
@@ -902,6 +980,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
     EnsureDB()
+    MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
      return true
 end
