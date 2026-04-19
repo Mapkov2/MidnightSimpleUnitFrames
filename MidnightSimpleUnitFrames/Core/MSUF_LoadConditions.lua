@@ -17,6 +17,14 @@ local UnitInVehicle = UnitInVehicle
 local GetNumGroupMembers = GetNumGroupMembers
 local InCombatLockdown   = InCombatLockdown
 local pairs = pairs
+local RunNextFrame = _G.MSUF_Core_RunNextFrame or function(fn)
+    if type(fn) ~= "function" then return end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, fn)
+    else
+        fn()
+    end
+end
 
 -- DB field names (per-unit, all false by default → never hide)
 -- These are simple booleans stored directly in MSUF_DB[key].
@@ -142,20 +150,16 @@ _G.MSUF_LoadCond_RecomputeActive = MSUF_LoadCond_RecomputeActive
 -- Integrates with the existing alpha refresh cycle (MSUF_RefreshAllUnitAlphas).
 -- The actual hide/show is handled by the hook in MSUF_ApplyUnitAlpha.
 local _pendingRefresh = false
+local function _FlushScheduledRefresh()
+    _pendingRefresh = false
+    local fn = _G.MSUF_RefreshAllUnitAlphas
+    if type(fn) == "function" then fn() end
+end
+
 local function _ScheduleRefresh()
     if _pendingRefresh then return end
     _pendingRefresh = true
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
-            _pendingRefresh = false
-            local fn = _G.MSUF_RefreshAllUnitAlphas
-            if type(fn) == "function" then fn() end
-        end)
-    else
-        _pendingRefresh = false
-        local fn = _G.MSUF_RefreshAllUnitAlphas
-        if type(fn) == "function" then fn() end
-    end
+    RunNextFrame(_FlushScheduledRefresh)
 end
 
 -- Event handler — maps events to minimal state refreshes, then triggers apply.

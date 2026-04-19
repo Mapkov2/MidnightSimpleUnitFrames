@@ -629,7 +629,7 @@ do
     ef:RegisterEvent("PLAYER_TALENT_UPDATE")
     ef:SetScript("OnEvent", function()
         _cachedSpecId = nil
-        for f, kind in pairs(GF.frames) do
+        GF.ForEachFrame(function(f, kind)
             if f.unit and UnitExists(f.unit) then
                 local conf = GF.GetConf(kind)
                 local si = conf and conf.spellIndicators
@@ -637,7 +637,7 @@ do
                     HB.UpdateFrame(f, f.unit)
                 end
             end
-        end
+        end)
     end)
 end
 

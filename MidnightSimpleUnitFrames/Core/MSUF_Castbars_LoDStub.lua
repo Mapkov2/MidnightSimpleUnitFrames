@@ -39,6 +39,23 @@ local function _GetGeneral()
     _cachedGeneral = (db and db.general) or {}
     return _cachedGeneral
 end
+
+-- Shared castbar next-frame deferral.
+-- Scope intentionally stays narrow: only true next-frame castbar/runtime deferrals
+-- that are already equivalent to C_Timer.After(0, fn).
+local _CastbarsRunNextFrame = _G.MSUF_Castbars_RunNextFrame
+if type(_CastbarsRunNextFrame) ~= "function" then
+    _CastbarsRunNextFrame = function(fn)
+        if type(fn) ~= "function" then return end
+        local timer = _G.C_Timer
+        if timer and timer.After then
+            timer.After(0, fn)
+        else
+            fn()
+        end
+    end
+    _G.MSUF_Castbars_RunNextFrame = _CastbarsRunNextFrame
+end
 ---------------------------------------------------------------------
 -- Blizzard castbar ownership handshake (stub-level)
 -- Why here:
@@ -331,9 +348,17 @@ end
 -- The real implementations in the LoD addon re-define these globals
 -- unconditionally, so these wrappers will be replaced automatically after load.
 
+local _BossPreviewStubWrapper
+local function _BossPreviewStubCallReal()
+    local fn = rawget(_G, "MSUF_UpdateBossCastbarPreview")
+    if type(fn) == "function" and fn ~= _BossPreviewStubWrapper then
+        fn()
+    end
+    _G.MSUF__BossPreviewStubGuard = false
+end
+
 if type(_G.MSUF_ReanchorTargetCastBar) ~= "function" then
-    local wrapper
-    wrapper = function()
+    _BossPreviewStubWrapper = function()
         _EnsureDB()
         local g = _GetGeneral()
 
@@ -345,7 +370,7 @@ if type(_G.MSUF_ReanchorTargetCastBar) ~= "function" then
         if g.enableBossCastbar == false then
             if _IsLoaded(CASTBARS_ADDON) then
                 local fn = rawget(_G, "MSUF_UpdateBossCastbarPreview")
-                if type(fn) == "function" and fn ~= wrapper then
+                if type(fn) == "function" and fn ~= _BossPreviewStubWrapper then
                     return fn()
                 end
             end
@@ -366,22 +391,10 @@ if type(_G.MSUF_ReanchorTargetCastBar) ~= "function" then
             return
         end
 
-        local function _CallReal()
-            local fn = rawget(_G, "MSUF_UpdateBossCastbarPreview")
-            if type(fn) == "function" and fn ~= wrapper then
-                fn()
-            end
-            _G.MSUF__BossPreviewStubGuard = false
-        end
-
         -- Defer one frame to guarantee the LoD addon finished loading & replaced the global.
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, _CallReal)
-        else
-            _CallReal()
-        end
+        _CastbarsRunNextFrame(_BossPreviewStubCallReal)
     end
-    _G.MSUF_UpdateBossCastbarPreview = wrapper
+    _G.MSUF_UpdateBossCastbarPreview = _BossPreviewStubWrapper
 end
 
 if type(_G.MSUF_SetBossCastbarTestMode) ~= "function" then
@@ -569,9 +582,7 @@ do
         local h = bar:GetHeight() or 0
         if w <= 1 or h <= 1 then
             -- Defer until layout.
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, _RenderTicks)
-            end
+            _CastbarsRunNextFrame(_RenderTicks)
             return
         end
 

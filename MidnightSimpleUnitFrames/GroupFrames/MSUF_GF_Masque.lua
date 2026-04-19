@@ -129,7 +129,7 @@ end
 function GF.Masque.ReskinAllIcons()
     if not GF.frames then return end
     local POOLS = { "_msufGFBuff", "_msufGFDebuff", "_msufGFExt" }
-    for f in pairs(GF.frames) do
+    GF.ForEachFrame(function(f)
         for _, pk in ipairs(POOLS) do
             local pool = f[pk]
             if pool then
@@ -138,6 +138,6 @@ function GF.Masque.ReskinAllIcons()
                 end
             end
         end
-    end
+    end)
     GF.Masque.ForceReskin()
 end

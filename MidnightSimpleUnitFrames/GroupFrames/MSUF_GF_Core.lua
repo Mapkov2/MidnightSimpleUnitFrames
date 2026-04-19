@@ -49,6 +49,7 @@ local GetTime = _G.GetTime
 -- Hidden parent for Blizzard frame hiding
 ------------------------------------------------------------------------
 local _hiddenParent
+local RegisterTrackedFrame, UnregisterTrackedFrame
 local function GetHiddenParent()
     if not _hiddenParent then
         _hiddenParent = CreateFrame("Frame", nil, UIParent)
@@ -72,7 +73,7 @@ local function RetireHeader(header)
         local ch = kids[i]
         if ch then
             -- Deregister from GF tracking
-            if GF.frames then GF.frames[ch] = nil end
+            UnregisterTrackedFrame(ch)
             if ch.unit and _G.MSUF_UnitFrames then
                 _G.MSUF_UnitFrames[ch.unit] = nil
             end
@@ -99,6 +100,7 @@ local function RetireHeader(header)
             ch._c = nil
             ch._msufGFBuilt = nil
             ch._msufGFRegisteredUnit = nil
+            ch._msufGFKind = nil
         end
     end
     -- Reparent header itself to hidden frame
@@ -113,11 +115,53 @@ end
 GF.headers     = GF.headers or {}     -- party/raid SecureGroupHeaders
 GF.anchors     = GF.anchors or {}     -- anchor frames
 GF.frames      = GF.frames or {}      -- all built unit buttons
+GF.frameList   = GF.frameList or {}   -- compact live-frame iteration order
 
 -- Cross-system frame registry (A2, EM2, etc. resolve unit→frame via this table)
 if type(_G.MSUF_UnitFrames) ~= "table" then _G.MSUF_UnitFrames = {} end
 GF._eventFrame = GF._eventFrame or nil
 GF._previewActive = GF._previewActive or {}
+
+RegisterTrackedFrame = function(f, kind)
+    if not f then return end
+    GF.frames[f] = kind
+    if f._msufGFFrameListIndex then return end
+    local list = GF.frameList
+    local idx = #list + 1
+    list[idx] = f
+    f._msufGFFrameListIndex = idx
+end
+
+UnregisterTrackedFrame = function(f)
+    if not f then return end
+    GF.frames[f] = nil
+
+    local idx = f._msufGFFrameListIndex
+    if not idx then return end
+
+    local list = GF.frameList
+    local lastIndex = #list
+    local last = list[lastIndex]
+
+    list[lastIndex] = nil
+    if idx < lastIndex and last then
+        list[idx] = last
+        last._msufGFFrameListIndex = idx
+    end
+
+    f._msufGFFrameListIndex = nil
+end
+
+function GF.ForEachFrame(fn)
+    if type(fn) ~= "function" then return end
+    local list = GF.frameList
+    for i = 1, #list do
+        local f = list[i]
+        if f then
+            fn(f, f._msufGFKind or GF.frames[f])
+        end
+    end
+end
 
 ------------------------------------------------------------------------
 -- Forward declarations (Phase 2+ stubs)
@@ -734,8 +778,8 @@ local function GF_InitButton(f, kind)
 
     f:SetClampedToScreen(true)
 
-    -- Track in frames list
-    GF.frames[f] = kind
+    -- Track in the live-frame registry used by refresh/effect sweeps.
+    RegisterTrackedFrame(f, kind)
 end
 
 ------------------------------------------------------------------------
@@ -2204,12 +2248,12 @@ end
 -- Refresh all GF frames
 ------------------------------------------------------------------------
 function GF.RefreshAll()
-    for f, kind in pairs(GF.frames) do
+    GF.ForEachFrame(function(f)
         local unit = f.unit
         if unit and UnitExists(unit) then
             GF.UpdateButton(f, unit)
         end
-    end
+    end)
 end
 
 function GF.RebuildAll()
@@ -2391,11 +2435,11 @@ local function OnEvent(self, event, ...)
         C_Timer.After(0.1, function()
             local updateRange = _G.MSUF_GF_UpdateRange
             if not updateRange then return end
-            for f, kind in pairs(GF.frames) do
+            GF.ForEachFrame(function(f)
                 if f.unit and f:IsVisible() then
                     updateRange(f, f.unit)
                 end
-            end
+            end)
         end)
 
     elseif event == "PLAYER_ENTERING_WORLD" then

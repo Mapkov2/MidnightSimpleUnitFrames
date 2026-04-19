@@ -18,6 +18,14 @@ local hooksecurefunc        = hooksecurefunc
 local _G                    = _G
 local type                  = type
 local tonumber              = tonumber
+local RunNextFrame          = _G.MSUF_Core_RunNextFrame or function(fn)
+    if type(fn) ~= "function" then return end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, fn)
+    else
+        fn()
+    end
+end
 
 ------------------------------------------------------
 -- P0 perf: Cached DB resolver.
@@ -102,11 +110,7 @@ end
 local function PushVisualUpdates()
     if _pushPending then return end
     _pushPending = true
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, _PushVisualUpdates_Flush)
-    else
-        _PushVisualUpdates_Flush()
-    end
+    RunNextFrame(_PushVisualUpdates_Flush)
 end
 
 ------------------------------------------------------
@@ -251,27 +255,22 @@ end
 -- P1 perf: after one successful scan, never scan again until /reload (session-only).
 do
     local scheduled = false
+    local function _MouseoverHighlightFixFlush()
+        scheduled = false
+        if not (ns and ns.MSUF_FixMouseoverHighlightBindings) then return end
+
+        ns.MSUF_FixMouseoverHighlightBindings()
+
+        -- Mark done for this session. This scan is expensive (EnumerateFrames),
+        -- and should not run again from PushVisualUpdates.
+        ns._msufHoverFixDone = true
+    end
+
     function ns.MSUF_ScheduleMouseoverHighlightFix()
         if ns and ns._msufHoverFixDone then return end
         if scheduled then return end
         scheduled = true
-
-        local function run()
-            scheduled = false
-            if not (ns and ns.MSUF_FixMouseoverHighlightBindings) then return end
-
-            ns.MSUF_FixMouseoverHighlightBindings()
-
-            -- Mark done for this session. This scan is expensive (EnumerateFrames),
-            -- and should not run again from PushVisualUpdates.
-            ns._msufHoverFixDone = true
-        end
-
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0, run)
-        else
-            run()
-        end
+        RunNextFrame(_MouseoverHighlightFixFlush)
     end
 end
 

@@ -7,6 +7,24 @@ local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local string_format = string.format
 local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 local FONT_LIST = _G.MSUF_FONT_LIST
+local CastbarsRunNextFrame = _G.MSUF_Castbars_RunNextFrame or function(fn)
+    if type(fn) ~= "function" then return end
+    local timer = _G.C_Timer
+    if timer and timer.After then
+        timer.After(0, fn)
+    else
+        fn()
+    end
+end
+
+local function _MSUF_DeferredBossPreviewEditModeRefresh()
+    if _G.MSUF_UpdateBossCastbarPreview then
+        _G.MSUF_UpdateBossCastbarPreview()
+    end
+    if _G.MSUF_SetupBossCastbarPreviewEditMode then
+        _G.MSUF_SetupBossCastbarPreviewEditMode()
+    end
+end
 
 -- ══════════════════════════════════════════════════════════════
 -- Castbar unit info, textures, style cache, font helpers
@@ -643,14 +661,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             if _G.MSUF_SetupBossCastbarPreviewEditMode then
                 _G.MSUF_SetupBossCastbarPreviewEditMode()
             end
-            C_Timer.After(0, function()
-                    if _G.MSUF_UpdateBossCastbarPreview then
-                        _G.MSUF_UpdateBossCastbarPreview()
-                    end
-                    if _G.MSUF_SetupBossCastbarPreviewEditMode then
-                        _G.MSUF_SetupBossCastbarPreviewEditMode()
-                    end
-                 end)
+            CastbarsRunNextFrame(_MSUF_DeferredBossPreviewEditModeRefresh)
     end
         UpdateButtonLabel()
      end)

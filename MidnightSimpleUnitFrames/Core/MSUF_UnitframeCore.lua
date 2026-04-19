@@ -1919,6 +1919,15 @@ end
 
 -- ── Swap defer coalescing (unit swap visual refresh) ──
 local After0 = (_G.C_Timer and _G.C_Timer.After) and function(fn) _G.C_Timer.After(0, fn) end or nil
+Core.RunNextFrame = Core.RunNextFrame or function(fn)
+    if type(fn) ~= "function" then return end
+    if After0 then
+        After0(fn)
+    else
+        fn()
+    end
+end
+_G.MSUF_Core_RunNextFrame = _G.MSUF_Core_RunNextFrame or Core.RunNextFrame
 
 Core._swapDeferCoalesce = Core._swapDeferCoalesce or {
     frames = {},

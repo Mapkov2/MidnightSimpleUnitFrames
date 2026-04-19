@@ -64,6 +64,7 @@ end
 ------------------------------------------------------------------------
 local ApplyGradient   -- forward decl (defined after ApplyBarTexture)
 local function ApplyBarTexture(f, kind)
+    local c = f._c
     local tex   = GF.ResolveBarTexture(kind)
     local bgTex = GF.ResolveBarBgTexture(kind)
 
@@ -92,24 +93,10 @@ local function ApplyBarTexture(f, kind)
         end
     end
     -- Overlay bars use global absorb textures when available, else health texture
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local absorbTex = tex
     local healAbsorbTex = tex
-    if gen then
-        local resolve = _G.MSUF_ResolveStatusbarTextureKey
-        if type(resolve) == "function" then
-            local aKey = gen.absorbBarTexture
-            if aKey and aKey ~= "" then
-                local p = resolve(aKey)
-                if p then absorbTex = p end
-            end
-            local haKey = gen.healAbsorbBarTexture
-            if haKey and haKey ~= "" then
-                local p = resolve(haKey)
-                if p then healAbsorbTex = p end
-            end
-        end
-    end
+    if c and c.absorbTexPath then absorbTex = c.absorbTexPath end
+    if c and c.healAbsorbTexPath then healAbsorbTex = c.healAbsorbTexPath end
     if f.incomingHealBar and f.incomingHealBar.SetStatusBarTexture then
         f.incomingHealBar:SetStatusBarTexture(tex)
     end
@@ -163,32 +150,23 @@ local function _GF_SetGrad(tex, orientation, a1, a2, strength)
     if strength > 0 then tex:Show() else tex:Hide() end
 end
 
-local function _GF_ApplyGradientToBar(bar, gen, isPower)
+local function _GF_ApplyGradientToBar(bar, c, isPower)
     if not bar then return end
-    local strength = gen.gradientStrength or 0.45
+    local strength = c and c.gradStrength or 0.45
     if isPower then
-        if gen.enablePowerGradient == false then strength = 0 end
+        if c and not c.gradEnablePower then strength = 0 end
     else
-        if gen.enableGradient == false then strength = 0 end
+        if c and not c.gradEnable then strength = 0 end
     end
     local grads = _GF_EnsureGradients(bar)
     if strength <= 0 then
         for _, k in ipairs({"left","right","up","down"}) do if grads[k] then grads[k]:Hide() end end
         return
     end
-    -- Read per-edge toggles (same keys as main UF)
-    local left  = (gen.gradientDirLeft == true)
-    local right = (gen.gradientDirRight == true)
-    local up    = (gen.gradientDirUp == true)
-    local down  = (gen.gradientDirDown == true)
-    -- Legacy: migrate single gradientDirection
-    if not left and not right and not up and not down then
-        local dir = gen.gradientDirection
-        if dir == "LEFT" then left = true
-        elseif dir == "UP" then up = true
-        elseif dir == "DOWN" then down = true
-        else right = true end
-    end
+    local left  = c and c.gradLeft
+    local right = c and c.gradRight
+    local up    = c and c.gradUp
+    local down  = c and c.gradDown
     -- Left
     if left then
         local t = grads.left; t:ClearAllPoints()
@@ -220,10 +198,10 @@ local function _GF_ApplyGradientToBar(bar, gen, isPower)
 end
 
 ApplyGradient = function(f)
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if not gen then return end
-    if f.health then _GF_ApplyGradientToBar(f.health, gen, false) end
-    if f.power  then _GF_ApplyGradientToBar(f.power,  gen, true)  end
+    local c = f._c
+    if not c then return end
+    if f.health then _GF_ApplyGradientToBar(f.health, c, false) end
+    if f.power  then _GF_ApplyGradientToBar(f.power,  c, true)  end
 end
 
 ------------------------------------------------------------------------
@@ -243,22 +221,13 @@ end
 --   health fill         (N+1, ART)    → HP bar covers icons where HP present
 ------------------------------------------------------------------------
 local function ApplyBackgroundTint(f, kind)
-    local conf = GF.GetConf(kind)
-    local r = conf.bgR or 0.1
-    local g = conf.bgG or 0.1
-    local b = conf.bgB or 0.1
-    local a = conf.bgA or 0.85
-    local hpBgA = conf.hpBgAlpha or a
-
-    -- Detect if any aura group uses behind-bar
-    local auras = conf.auras
-    local anyBehindBar = false
-    if auras then
-        local bu, de, ex = auras.buff, auras.debuff, auras.externals
-        if (bu and bu.behindBar) or (de and de.behindBar) or (ex and ex.behindBar) then
-            anyBehindBar = true
-        end
-    end
+    local c = f._c
+    local r = c and c.bgR or 0.1
+    local g = c and c.bgG or 0.1
+    local b = c and c.bgB or 0.1
+    local a = c and c.bgA or 0.85
+    local hpBgA = c and c.hpBgA or a
+    local anyBehindBar = c and c.anyBehindBar
 
     if anyBehindBar and f.health and f.barGroup then
         -- Hide original healthBg (stuck at health's level, covers icons)
@@ -309,18 +278,18 @@ local _bgOnlyBd = { bgFile = "Interface\\Buttons\\WHITE8x8" }
 local _borderBd = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
 
 local function ApplyFrameBorder(f, kind)
-    local conf = GF.GetConf(kind)
+    local c = f._c
     local bg = f.barGroup
     if not bg then return end
 
     bg:SetBackdrop(_bgOnlyBd)
     bg:SetBackdropColor(
-        conf.bgR or 0.1, conf.bgG or 0.1,
-        conf.bgB or 0.1, conf.bgA or 0.85)
+        c and c.bgR or 0.1, c and c.bgG or 0.1,
+        c and c.bgB or 0.1, c and c.bgA or 0.85)
 
     local bf = f._msufGFBorderFrame
     if bf then
-        local borderSize = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2
+        local borderSize = c and c.outlineThickness or 2
         if borderSize > 0 then
             _borderBd.edgeSize = borderSize
             bf:SetBackdrop(_borderBd)
@@ -551,8 +520,8 @@ end
 ------------------------------------------------------------------------
 local function ApplyHealthBarAlpha(f, kind)
     if not f.health then return end
-    local conf = GF.GetConf(kind)
-    local fgA = conf.hpBarAlpha or 1
+    local c = f._c
+    local fgA = c and c.hpBarAlpha or 1
     if f._msufCachedHpBarAlpha ~= fgA then
         f._msufCachedHpBarAlpha = fgA
         f.health:SetAlpha(fgA)
@@ -560,7 +529,7 @@ local function ApplyHealthBarAlpha(f, kind)
     -- Text layer: escape alpha inheritance when toggle is on
     local txtLayer = f.healthTextLayer
     if not txtLayer then return end
-    local wantEscape = (conf.hpTextIgnoreAlpha ~= false) and (fgA < 1)
+    local wantEscape = (c and c.hpTextIgnoreAlpha or false) and (fgA < 1)
     local escaped = txtLayer._msufAlphaEscaped
     if wantEscape and not escaped then
         -- Re-parent to statusIconLayer (above everything, unaffected by health alpha)
@@ -761,16 +730,12 @@ local function _GF_ResolveOverlaySetting(kind, key)
 end
 
 local function ApplyOverlayColors(f)
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    local kind = f._msufGFKind or "party"
+    local c = f._c
     -- Incoming heal (heal prediction) — colors from general (shared)
     if f.incomingHealBar then
-        local r, g, b = 0.0, 1.0, 0.4
-        if gen then
-            if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
-            if type(gen.healPredColorG) == "number" then g = gen.healPredColorG end
-            if type(gen.healPredColorB) == "number" then b = gen.healPredColorB end
-        end
+        local r = c and c.healPredR or 0.0
+        local g = c and c.healPredG or 1.0
+        local b = c and c.healPredB or 0.4
         local a = 0.45
         if f._gfCIHR ~= r or f._gfCIHG ~= g or f._gfCIHB ~= b then
             f._gfCIHR, f._gfCIHG, f._gfCIHB = r, g, b
@@ -779,13 +744,10 @@ local function ApplyOverlayColors(f)
     end
     -- Absorb (color from general, opacity per-GF override → general)
     if f.absorbBar then
-        local r, g, b = 0.8, 0.9, 1.0
-        if gen then
-            if type(gen.absorbBarColorR) == "number" then r = gen.absorbBarColorR end
-            if type(gen.absorbBarColorG) == "number" then g = gen.absorbBarColorG end
-            if type(gen.absorbBarColorB) == "number" then b = gen.absorbBarColorB end
-        end
-        local a = tonumber(_GF_ResolveOverlaySetting(kind, "absorbBarOpacity")) or 0.6
+        local r = c and c.absorbR or 0.8
+        local g = c and c.absorbG or 0.9
+        local b = c and c.absorbB or 1.0
+        local a = c and c.absorbAlpha or 0.6
         if f._gfCAbR ~= r or f._gfCAbG ~= g or f._gfCAbB ~= b or f._gfCAbA ~= a then
             f._gfCAbR, f._gfCAbG, f._gfCAbB, f._gfCAbA = r, g, b, a
             f.absorbBar:SetStatusBarColor(r, g, b, a)
@@ -793,13 +755,10 @@ local function ApplyOverlayColors(f)
     end
     -- Heal absorb (color from general, opacity per-GF override → general)
     if f.healAbsorbBar then
-        local r, g, b = 1.0, 0.4, 0.4
-        if gen then
-            if type(gen.healAbsorbBarColorR) == "number" then r = gen.healAbsorbBarColorR end
-            if type(gen.healAbsorbBarColorG) == "number" then g = gen.healAbsorbBarColorG end
-            if type(gen.healAbsorbBarColorB) == "number" then b = gen.healAbsorbBarColorB end
-        end
-        local a = tonumber(_GF_ResolveOverlaySetting(kind, "healAbsorbBarOpacity")) or 0.7
+        local r = c and c.healAbsorbR or 1.0
+        local g = c and c.healAbsorbG or 0.4
+        local b = c and c.healAbsorbB or 0.4
+        local a = c and c.healAbsorbAlpha or 0.7
         if f._gfCHAbR ~= r or f._gfCHAbG ~= g or f._gfCHAbB ~= b or f._gfCHAbA ~= a then
             f._gfCHAbR, f._gfCHAbG, f._gfCHAbB, f._gfCHAbA = r, g, b, a
             f.healAbsorbBar:SetStatusBarColor(r, g, b, a)
@@ -824,6 +783,7 @@ end
 local function ApplyVisuals(f, bits)
     if not f then return end
     local kind = f._msufGFKind or "party"
+    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
     local needGeometry = (band(bits, DIRTY_GEOMETRY) ~= 0) or (band(bits, DIRTY_BORDER) ~= 0)
 
     if needGeometry then
@@ -856,8 +816,6 @@ local function ApplyVisuals(f, bits)
     if GF._ApplyAbsorbAnchor then
         GF._ApplyAbsorbAnchor(f)
     end
-    -- Rebuild hot-path settings cache (eliminates GF.GetConf from combat events)
-    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
 end
 
 ------------------------------------------------------------------------
@@ -906,10 +864,10 @@ end
 ------------------------------------------------------------------------
 function GF.MarkAllDirty(bits)
     bits = bits or DIRTY_ALL
-    for f in pairs(GF.frames) do
+    GF.ForEachFrame(function(f)
         local prev = _dirtyFrames[f] or 0
         _dirtyFrames[f] = bor(prev, bits)
-    end
+    end)
     -- Also mark preview frames
     if GF._previewFrames then
         for _, list in pairs(GF._previewFrames) do
@@ -934,12 +892,12 @@ function GF.RefreshVisuals()
         local fn = _G.MSUF_GF_UpdateAll
         if type(fn) == "function" then _cachedUpdateAll = fn end
     end
-    for f in pairs(GF.frames) do
+    GF.ForEachFrame(function(f)
         ApplyVisuals(f, DIRTY_ALL)
         if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
             if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
         end
-    end
+    end)
     -- Preview frames
     if GF._previewFrames then
         for kind, list in pairs(GF._previewFrames) do
