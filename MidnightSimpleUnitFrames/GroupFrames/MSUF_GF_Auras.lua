@@ -933,6 +933,9 @@ function GF.UpdateFrameAuras(f, unit)
     -- 2) Debuffs + merged dispel
     local debCfg = auras.debuff
     local mergedDispel
+    -- Clear the tracked dispel aura up front so each refresh resolves the current live aura.
+    -- This mirrors EQoL's approach of treating the dispel aura id as frame-local volatile state.
+    f._msufGFDispelAuraID = nil
     local debOn = debCfg and debCfg.enabled ~= false
     local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false
 

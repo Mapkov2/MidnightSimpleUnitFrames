@@ -24,6 +24,7 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 local math_floor = math.floor
+local AuraFilter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
 
 local HB = {}
 GF.HealerBuffs = HB
@@ -320,34 +321,55 @@ local function CaptureSlots2(...)
 end
 
 -- Returns: activeFamilies[familyId] = { aura=auraData, auraInstanceID=id }
-local function ScanFamiliesForUnit(unit, compiledSlots)
+local _wantedPlayerSpells = {}
+local _wantedAllSpells = {}
+
+local function ScanFamiliesForUnit(unit, compiledSlots, kind)
+    AuraFilter = AuraFilter or GF.AuraFilter or _G.MSUF_GF_AuraFilter
     local result = {}
     if not (unit and UnitExists(unit)) then return result end
     if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot) then return result end
 
-    -- Build spellId lookup from compiled slots
-    local wantedSpells = {}
+    for k in pairs(_wantedPlayerSpells) do _wantedPlayerSpells[k] = nil end
+    for k in pairs(_wantedAllSpells) do _wantedAllSpells[k] = nil end
+
+    local wantsAllCasters = false
     for _, slot in ipairs(compiledSlots) do
+        local fam = slot.familyId and FAMILY_BY_ID[slot.familyId]
+        local dst = (fam and fam.scanAll == true) and _wantedAllSpells or _wantedPlayerSpells
+        if dst == _wantedAllSpells then wantsAllCasters = true end
         for _, sid in ipairs(slot.spellIds) do
-            wantedSpells[sid] = slot.familyId
+            dst[sid] = slot.familyId
         end
     end
 
-    -- Scan HELPFUL|PLAYER auras (only player-cast → spellId is readable)
     local slots, slotCount = CaptureSlots2(C_UnitAuras.GetAuraSlots(unit, "HELPFUL|PLAYER"))
     for i = 2, slotCount do
         local aura = C_UnitAuras.GetAuraDataBySlot(unit, _slotBuf2[i])
         if aura then
             local sid = aura.spellId
-            -- Secret-safety guard + tag-strip: secret-tagged integers need
-            -- tonumber() before use as hash key (Midnight 12.0 semantics).
-            -- An accessible secret-tagged sid does NOT equate to a plain
-            -- lua number — hash[sid] silently misses without this cast.
             if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
                 sid = tonumber(sid)
-                local famId = sid and wantedSpells[sid]
+                local famId = sid and (_wantedPlayerSpells[sid] or _wantedAllSpells[sid])
                 if famId and not result[famId] then
                     result[famId] = { aura = aura, auraInstanceID = aura.auraInstanceID }
+                end
+            end
+        end
+    end
+
+    if wantsAllCasters then
+        local allSlots, allCount = CaptureSlots2(C_UnitAuras.GetAuraSlots(unit, "HELPFUL"))
+        for i = 2, allCount do
+            local aura = C_UnitAuras.GetAuraDataBySlot(unit, _slotBuf2[i])
+            if aura and not (AuraFilter and AuraFilter.ShouldHideBuffAura and AuraFilter.ShouldHideBuffAura(kind, aura)) then
+                local sid = aura.spellId
+                if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
+                    sid = tonumber(sid)
+                    local famId = sid and _wantedAllSpells[sid]
+                    if famId and not result[famId] then
+                        result[famId] = { aura = aura, auraInstanceID = aura.auraInstanceID }
+                    end
                 end
             end
         end
@@ -403,6 +425,29 @@ local function ApplyHBStackCount(icon, unit, auraInstanceID)
     fs:SetText(""); fs:Hide()
 end
 
+local _visibleCompiledSlots = {}
+
+local function RebuildVisibleCompiledSlots(kind, compiledSlots)
+    AuraFilter = AuraFilter or GF.AuraFilter or _G.MSUF_GF_AuraFilter
+    for i = 1, #_visibleCompiledSlots do _visibleCompiledSlots[i] = nil end
+    local shown = 0
+    if AuraFilter and AuraFilter.ShouldSuppressFamily then
+        for i = 1, #compiledSlots do
+            local slot = compiledSlots[i]
+            if not AuraFilter.ShouldSuppressFamily(kind, slot.spellIds, "buff") then
+                shown = shown + 1
+                _visibleCompiledSlots[shown] = slot
+            end
+        end
+    else
+        for i = 1, #compiledSlots do
+            shown = shown + 1
+            _visibleCompiledSlots[shown] = compiledSlots[i]
+        end
+    end
+    return _visibleCompiledSlots, shown
+end
+
 ------------------------------------------------------------------------
 -- Render healer buff indicators for one frame
 ------------------------------------------------------------------------
@@ -445,6 +490,14 @@ function HB.UpdateFrame(f, unit)
         return
     end
 
+    local visibleSlots, visibleCount = RebuildVisibleCompiledSlots(kind, compiledSlots)
+    if visibleCount == 0 then
+        if f._msufGFHBIcons then
+            for i = 1, #f._msufGFHBIcons do f._msufGFHBIcons[i]:Hide() end
+        end
+        return
+    end
+
     local iconSize = hbConf.iconSize or 20
     local spacing  = hbConf.spacing or 1
     local anchor   = hbConf.anchor or "CENTER"
@@ -457,9 +510,10 @@ function HB.UpdateFrame(f, unit)
     local pool = EnsureHBIconPool(f, #compiledSlots, iconSize, parent)
 
     -- Scan which families are active
-    local active = ScanFamiliesForUnit(unit, compiledSlots)
+    local active = ScanFamiliesForUnit(unit, visibleSlots, kind)
 
-    for i, slot in ipairs(compiledSlots) do
+    for i = 1, visibleCount do
+        local slot = visibleSlots[i]
         local ic = pool[i]
         if ic then
             -- Set texture (spell icon)
@@ -490,7 +544,7 @@ function HB.UpdateFrame(f, unit)
 
             -- Position
             ic:ClearAllPoints()
-            local col = (i - 1) % (#compiledSlots)
+            local col = (i - 1) % (visibleCount)
             local xMul = (growthX == "LEFT") and -1 or 1
             local yMul = (growthY == "UP") and 1 or -1
             local ox = col * (iconSize + spacing) * xMul
@@ -501,7 +555,7 @@ function HB.UpdateFrame(f, unit)
     end
 
     -- Hide excess
-    for i = #compiledSlots + 1, #pool do
+    for i = visibleCount + 1, #pool do
         pool[i]:Hide()
     end
 end

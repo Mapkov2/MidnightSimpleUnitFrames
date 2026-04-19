@@ -410,6 +410,62 @@ local function IsBlacklisted(decodedSid, hash, aura)
     return false
 end
 
+local function GetAuraGroupConfig(kind, groupKey)
+    if type(groupKey) ~= "string" or groupKey == "" then return nil end
+    if type(kind) == "table" then return kind end
+    local conf = GF.GetConf and GF.GetConf(kind)
+    local auras = conf and conf.auras
+    return auras and auras[groupKey] or nil
+end
+
+local function GetBlacklistHashForGroup(kind, groupKey)
+    local gcfg = GetAuraGroupConfig(kind, groupKey)
+    return gcfg and BuildBlacklistHash(gcfg) or nil
+end
+
+local function IsSpellOrNameBlacklisted(spellId, spellName, hash)
+    if not hash then return false end
+    local sid = tonumber(spellId) or 0
+    if sid ~= 0 and hash[sid] == true then
+        return true
+    end
+    if type(spellName) == "string" and spellName ~= "" and hash[spellName] == true then
+        return true
+    end
+    if sid ~= 0 then
+        local resolvedName = GetBlackListableSpellName(sid)
+        if resolvedName and hash[resolvedName] == true then
+            return true
+        end
+    end
+    return false
+end
+
+local function ShouldHideAura(kind, groupKey, aura)
+    local hash = GetBlacklistHashForGroup(kind, groupKey)
+    if not hash then return false end
+    return IsBlacklisted(DecodeSpellId(aura), hash, aura)
+end
+
+local function ShouldHideBuffAura(kind, aura)
+    return ShouldHideAura(kind, "buff", aura)
+end
+
+local function ShouldHideDebuffAura(kind, aura)
+    return ShouldHideAura(kind, "debuff", aura)
+end
+
+local function ShouldSuppressFamily(kind, spellIds, groupKey)
+    local hash = GetBlacklistHashForGroup(kind, groupKey or "buff")
+    if not hash or type(spellIds) ~= "table" then return false end
+    for i = 1, #spellIds do
+        if IsSpellOrNameBlacklisted(spellIds[i], nil, hash) then
+            return true
+        end
+    end
+    return false
+end
+
 ------------------------------------------------------------------------
 -- Export to GF namespace
 ------------------------------------------------------------------------
@@ -435,6 +491,13 @@ AuraFilter.InvalidateBlacklistHash     = InvalidateBlacklistHash
 AuraFilter.InvalidateAllBlacklistHashes = InvalidateAllBlacklistHashes
 AuraFilter.DecodeSpellId        = DecodeSpellId
 AuraFilter.IsBlacklisted        = IsBlacklisted
+AuraFilter.GetAuraGroupConfig   = GetAuraGroupConfig
+AuraFilter.GetBlacklistHashForGroup = GetBlacklistHashForGroup
+AuraFilter.IsSpellOrNameBlacklisted = IsSpellOrNameBlacklisted
+AuraFilter.ShouldHideAura       = ShouldHideAura
+AuraFilter.ShouldHideBuffAura   = ShouldHideBuffAura
+AuraFilter.ShouldHideDebuffAura = ShouldHideDebuffAura
+AuraFilter.ShouldSuppressFamily = ShouldSuppressFamily
 
 -- Global export for other modules
 _G.MSUF_GF_AuraFilter = AuraFilter

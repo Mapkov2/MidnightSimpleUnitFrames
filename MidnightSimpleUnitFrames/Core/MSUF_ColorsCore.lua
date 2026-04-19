@@ -55,6 +55,7 @@ end
 local _pushPending = false
 local function _PushVisualUpdates_Flush()
     _pushPending = false
+    _G.MSUF_ColorStyleRevision = (_G.MSUF_ColorStyleRevision or 0) + 1
     -- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
     -- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
     if _G.MSUF_UFCore_RefreshSettingsCache then

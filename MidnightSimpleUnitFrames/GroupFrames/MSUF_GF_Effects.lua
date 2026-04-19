@@ -509,26 +509,54 @@ local function ResolveDispelColor(dispelName, f)
         end
         return 0.25, 0.75, 1.00
     end
-    -- TYPE mode: per-debuff-type color
-    -- "DISPELLABLE" from C-side detection → resolve via GetAuraDispelTypeColor
-    if dispelName == "DISPELLABLE" and f then
-        local CUA = _G.C_UnitAuras
-        local unit = f.unit
-        local aid = f._msufGFDispelAuraID
-        if CUA and unit and aid and CUA.GetAuraDispelTypeColor then
-            local curve = GF._sharedDispelColorCurve
-            if curve then
-                local color = CUA.GetAuraDispelTypeColor(unit, aid, curve)
-                if color then
-                    if color.GetRGB then return color:GetRGB() end
-                    if color.r then return color.r, color.g, color.b end
+
+    -- TYPE mode: prefer the exact live aura instance like EQoL does.
+    -- This avoids falling back to the shared single color when the merged state is only
+    -- "DISPELLABLE" and ensures Magic/Curse/Poison/Disease/Bleed resolve from the
+    -- currently active aura, not from stale cached state.
+    local CUA = _G.C_UnitAuras
+    local unit = f and f.unit
+    local curve = GF and GF._sharedDispelColorCurve
+
+    local function ColorFromAid(aid)
+        if not (CUA and unit and aid and curve and CUA.GetAuraDispelTypeColor) then return nil end
+        local color = CUA.GetAuraDispelTypeColor(unit, aid, curve)
+        if not color then return nil end
+        if color.GetRGB then return color:GetRGB() end
+        if color.r then return color.r, color.g, color.b end
+        return nil
+    end
+
+    if unit and CUA then
+        local aid = f and f._msufGFDispelAuraID
+        local r, g, b = ColorFromAid(aid)
+        if r then return r, g, b end
+
+        -- Recovery path: re-scan the top dispellable aura on demand.
+        -- Cold-path only (visual apply), so the tiny rescan is worth the correctness.
+        if CUA.GetAuraSlots and CUA.GetAuraDataBySlot then
+            local slots = { CUA.GetAuraSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE") }
+            for i = 2, #slots do
+                local slot = slots[i]
+                local aura = slot and CUA.GetAuraDataBySlot(unit, slot)
+                if aura and aura.auraInstanceID then
+                    aid = aura.auraInstanceID
+                    if f then f._msufGFDispelAuraID = aid end
+                    r, g, b = ColorFromAid(aid)
+                    if r then return r, g, b end
+
+                    local dn = aura.dispelName
+                    if not (issecretvalue and issecretvalue(dn)) and dn and dn ~= "" then
+                        return GetDispelColor(dn)
+                    end
+                    break
                 end
             end
         end
-        return 0.25, 0.75, 1.00  -- fallback magic blue
     end
-    -- String dispel name — legacy lookup
-    if type(dispelName) == "string" then
+
+    -- Legacy fallback: non-secret dispel name.
+    if type(dispelName) == "string" and dispelName ~= "DISPELLABLE" then
         return GetDispelColor(dispelName)
     end
     return 0.25, 0.75, 1.00
@@ -869,9 +897,12 @@ local function dispatchAura(f, unit, updateInfo)
         local prevDispel = f._msufGFDispelType
         local dispelAid = f._msufGFDispelAuraID
         local prevAid = f._msufGFPrevDispelAuraID
-        if mergedDispel ~= prevDispel or dispelAid ~= prevAid then
+        local colorRev = _G.MSUF_ColorStyleRevision or 0
+        local prevColorRev = f._msufGFColorStyleRevision or 0
+        if mergedDispel ~= prevDispel or dispelAid ~= prevAid or colorRev ~= prevColorRev then
             f._msufGFDispelType = mergedDispel
             f._msufGFPrevDispelAuraID = dispelAid
+            f._msufGFColorStyleRevision = colorRev
             _GF_RefreshBorder(f, unit)
             _GF_ApplyDispelOverlay(f)
         end
@@ -2234,8 +2265,14 @@ local function UpdateAll(f, unit)
         GF.UpdateFrameAuras(f, unit)
         local mergedDispel = f._msufGFMergedDispel
         local prevDispel = f._msufGFDispelType
-        if mergedDispel ~= prevDispel then
+        local dispelAid = f._msufGFDispelAuraID
+        local prevAid = f._msufGFPrevDispelAuraID
+        local colorRev = _G.MSUF_ColorStyleRevision or 0
+        local prevColorRev = f._msufGFColorStyleRevision or 0
+        if mergedDispel ~= prevDispel or dispelAid ~= prevAid or colorRev ~= prevColorRev then
             f._msufGFDispelType = mergedDispel
+            f._msufGFPrevDispelAuraID = dispelAid
+            f._msufGFColorStyleRevision = colorRev
             _GF_RefreshBorder(f, unit)
             _GF_ApplyDispelOverlay(f)
         end

@@ -12,6 +12,7 @@ _G.MSUF_NS = ns
 local GF = ns.GF
 if not GF then return end
 local SI = GF.SpellIndicators
+local AuraFilter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
 if not SI then return end
 
 local C_UnitAuras   = _G.C_UnitAuras
@@ -180,7 +181,8 @@ end
 
 local _scanResults = {}
 
-local function ScanUnit(unit)
+local function ScanUnit(unit, kind)
+    AuraFilter = AuraFilter or GF.AuraFilter or _G.MSUF_GF_AuraFilter
     for k in pairs(_scanResults) do _scanResults[k] = nil end
     if not _reverseLookup then return end
     if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot) then return end
@@ -188,7 +190,7 @@ local function ScanUnit(unit)
     local slots, count = CaptureSlots(C_UnitAuras.GetAuraSlots(unit, "HELPFUL"))
     for i = 2, count do
         local aura = C_UnitAuras.GetAuraDataBySlot(unit, _slotBuf[i])
-        if aura then
+        if aura and not (AuraFilter and AuraFilter.ShouldHideBuffAura and AuraFilter.ShouldHideBuffAura(kind, aura)) then
             local sid = aura.spellId
             local matched
             -- Secret-safety guard + tag-strip: secret-tagged integers need
@@ -737,7 +739,7 @@ function GF.UpdateSpellIndicators(f, unit)
     local parent = f.barGroup or f
     local scale = GF.GetDynamicScale and GF.GetDynamicScale(GF.GetConf(kind)) or 1
 
-    ScanUnit(unit)
+    ScanUnit(unit, kind)
     ResetFrameEffects(f)
 
     if not f._msufSIDedupIDs then f._msufSIDedupIDs = {} end

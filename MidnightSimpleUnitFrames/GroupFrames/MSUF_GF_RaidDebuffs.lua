@@ -18,6 +18,7 @@ local math_floor      = math.floor
 local math_max        = math.max
 
 local GameTooltip     = _G.GameTooltip
+local AuraFilter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
 
 -- Pre-allocated slot buffer for GetAuraSlots (zero table alloc per scan)
 local _rdSlotBuf = {}
@@ -184,6 +185,7 @@ end
 -- Called from UNIT_AURA dispatch in GF_Effects
 ------------------------------------------------------------------------
 function GF.UpdateRaidDebuff(f, unit)
+    AuraFilter = AuraFilter or GF.AuraFilter or _G.MSUF_GF_AuraFilter
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     local rdConf = conf.raidDebuffs
@@ -210,7 +212,7 @@ function GF.UpdateRaidDebuff(f, unit)
     for i = 2, slotCount do
         local slot = _rdSlotBuf[i]
         local aura = C_UnitAuras.GetAuraDataBySlot(unit, slot)
-        if aura then
+        if aura and not (AuraFilter and AuraFilter.ShouldHideDebuffAura and AuraFilter.ShouldHideDebuffAura(kind, aura)) then
             local aid = aura.auraInstanceID
             local score = ScoreAura(aura)
             if score > bestScore then
