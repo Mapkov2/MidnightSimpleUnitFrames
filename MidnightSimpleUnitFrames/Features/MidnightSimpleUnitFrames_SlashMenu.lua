@@ -239,6 +239,25 @@ local function MSUF_EnsureGeneral() MSUF_SafeCall(EnsureDB)
 if type(MSUF_DB)~="table"then return nil end
 MSUF_DB.general=MSUF_DB.general or{}
 return MSUF_DB.general end
+local function MSUF_EnsureGlobalSlashMenuState()
+_G.MSUF_GlobalDB=_G.MSUF_GlobalDB or{}
+local gdb=_G.MSUF_GlobalDB
+gdb.global=gdb.global or{}
+gdb.global.slashMenu=gdb.global.slashMenu or{}
+gdb.global.slashMenu.navHeaders=gdb.global.slashMenu.navHeaders or{}
+return gdb.global.slashMenu end
+local function MSUF_GetSavedNavHeaderState(headerId,defaultOpen)
+if type(headerId)~="string"or headerId==""then return defaultOpen and true or false end
+local sm=MSUF_EnsureGlobalSlashMenuState()
+local headers=sm and sm.navHeaders
+local v=headers and headers[headerId]
+if v==nil then return defaultOpen and true or false end
+return v and true or false end
+local function MSUF_SetSavedNavHeaderState(headerId,isOpen)
+if type(headerId)~="string"or headerId==""then return end
+local sm=MSUF_EnsureGlobalSlashMenuState()
+if not(sm and sm.navHeaders)then return end
+sm.navHeaders[headerId]=isOpen and true or false end
 local function MSUF_GetGeomPrefix(which) return"flashFull"end
 MSUF_RegisterEscClose=function(frame) if not frame or not frame.GetName then return end
 local name=frame:GetName()
@@ -2594,7 +2613,8 @@ MSUF_AttachNavIcon(b,node.key,false)
 out[node.key]=b table.insert(created,{kind="leaf",btn=b})
 elseif node.type=="header"then headers[node.id]=(headers[node.id]~=nil)
 and headers[node.id]
-or node.defaultOpen local b=MakeButton(string.upper(node.label),btnW,function() headers[node.id]=not headers[node.id]
+or MSUF_GetSavedNavHeaderState(node.id,node.defaultOpen) local b=MakeButton(string.upper(node.label),btnW,function() headers[node.id]=not headers[node.id]
+MSUF_SetSavedNavHeaderState(node.id,headers[node.id])
 if navParent._msufTreeReflow then navParent._msufTreeReflow()
 end
 end
@@ -3139,11 +3159,7 @@ navBgWash:SetPoint("TOPLEFT",navRail,"TOPLEFT",3,-3)
 navBgWash:SetPoint("BOTTOMRIGHT",navRail,"BOTTOMRIGHT",-3,3)
 navBgWash:SetTexCoord(0,0,1,0,0,1,1,1)
 navBgWash:SetVertexColor(0.10,0.06,0.24,0.20)
-f._msufTint=bgWash f._msufTintLogo=bgLogo f:SetScript("OnShow",function() S.mirror.host=f._msufMirrorClipHost or f._msufMirrorHost or content do local nav=f._msufNavRail if nav and nav._msufTreeHeaders then nav._msufTreeHeaders.unitframes=true;
-nav._msufTreeHeaders.options=true if nav._msufTreeReflow then nav._msufTreeReflow()
-end
-end
-end
+f._msufTint=bgWash f._msufTintLogo=bgLogo f:SetScript("OnShow",function() S.mirror.host=f._msufMirrorClipHost or f._msufMirrorHost or content if f._msufNavStack and f._msufNavStack._msufTreeReflow then f._msufNavStack._msufTreeReflow() end
 if MSUF_PickSessionTip then MSUF_PickSessionTip()
 end
 if f._msufRefreshStatusBar then pcall(f._msufRefreshStatusBar) end
