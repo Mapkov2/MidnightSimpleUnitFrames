@@ -22,6 +22,7 @@ local pairs         = pairs
 local type          = type
 local ipairs        = ipairs
 local select        = select
+local tonumber      = tonumber
 local table_sort    = table.sort
 local table_concat  = table.concat
 
@@ -190,8 +191,11 @@ local function ScanUnit(unit)
         if aura then
             local sid = aura.spellId
             local matched
+            -- Secret-safety guard + tag-strip: secret-tagged integers need
+            -- tonumber() before use as hash key (Midnight 12.0 semantics).
             if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
-                matched = _reverseLookup[sid]
+                sid = tonumber(sid)
+                if sid then matched = _reverseLookup[sid] end
             end
             if not matched and _nameLookup then
                 local aName = aura.name

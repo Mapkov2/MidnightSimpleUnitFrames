@@ -339,10 +339,14 @@ local function ScanFamiliesForUnit(unit, compiledSlots)
         local aura = C_UnitAuras.GetAuraDataBySlot(unit, _slotBuf2[i])
         if aura then
             local sid = aura.spellId
-            -- Guard: secret spellId cannot be used as table key
-            if sid ~= nil and not (issecretvalue and issecretvalue(sid)) and wantedSpells[sid] then
-                local famId = wantedSpells[sid]
-                if not result[famId] then
+            -- Secret-safety guard + tag-strip: secret-tagged integers need
+            -- tonumber() before use as hash key (Midnight 12.0 semantics).
+            -- An accessible secret-tagged sid does NOT equate to a plain
+            -- lua number — hash[sid] silently misses without this cast.
+            if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
+                sid = tonumber(sid)
+                local famId = sid and wantedSpells[sid]
+                if famId and not result[famId] then
                     result[famId] = { aura = aura, auraInstanceID = aura.auraInstanceID }
                 end
             end

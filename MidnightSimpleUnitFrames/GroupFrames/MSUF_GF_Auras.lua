@@ -304,7 +304,21 @@ end
 local function HidePool(pool, startIdx)
     if not pool then return end
     for i = startIdx, #pool do
-        if pool[i] then pool[i]:Hide() end
+        local ic = pool[i]
+        if ic then
+            ic:Hide()
+            -- Invalidate diff-cache so the next render takes the full-setup
+            -- branch in RenderGroup (which ends with ic:Show()) instead of
+            -- the cheap "same aura" refresh path that assumes visibility.
+            -- Fixes: toggle Buffs/Debuffs off → on leaves icons hidden when
+            -- the same auras are still present (MotW, Fortitude, etc.).
+            -- Mirrors the end-of-render cleanup in RenderGroup.
+            ic._msufAuraID = nil
+            ic._msufPosIdx = nil
+            ic._msufPosStep = nil
+            ic._msufPosPR = nil
+            ic._msufBorderBlack = nil
+        end
     end
 end
 
@@ -744,7 +758,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                 local _skip = false
                 if blHash and af then
                     local sid = af.DecodeSpellId(aura)
-                    if af.IsBlacklisted(sid, blHash) then
+                    if af.IsBlacklisted(sid, blHash, aura) then
                         _skip = true
                     end
                 end

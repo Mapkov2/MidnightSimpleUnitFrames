@@ -19,6 +19,7 @@ local UnitClass     = _G.UnitClass
 local GetTime       = _G.GetTime
 local type          = type
 local next          = next
+local tonumber      = tonumber
 
 -- C API (resolved once at load)
 local _getSlots  = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraSlots
@@ -275,10 +276,15 @@ function GF.UpdateCornerIndicators(f, unit)
             if slot then
                 local data = _getBySlot(unit, slot)
                 if data then
+                    -- Secret-safety + tag-strip: secret-tagged integers need
+                    -- tonumber() before use as hash key (Midnight 12.0 semantics)
                     local sid = data.spellId
-                    if not (issecretvalue and issecretvalue(sid)) and _classBufSet[sid] then
-                        found = true
-                        break
+                    if not (issecretvalue and issecretvalue(sid)) then
+                        sid = tonumber(sid)
+                        if sid and _classBufSet[sid] then
+                            found = true
+                            break
+                        end
                     end
                 end
             end

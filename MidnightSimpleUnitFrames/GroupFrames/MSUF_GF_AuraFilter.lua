@@ -19,7 +19,10 @@ local issecretvalue = _G.issecretvalue
 local canaccessvalue = _G.canaccessvalue
 local type   = type
 local pairs  = pairs
+local tonumber = tonumber
 local wipe   = wipe or function(t) for k in pairs(t) do t[k] = nil end end
+local C_Spell = _G.C_Spell
+local GetSpellInfo = _G.GetSpellInfo
 
 -- Forward: secret-safe check helper
 local _hasCanaccessvalue = (type(canaccessvalue) == "function")
@@ -271,6 +274,30 @@ local DEFAULT_BLACKLIST_DEBUFF = {
 ------------------------------------------------------------------------
 local _hashPools = {}  -- per-gcfg cached hash tables
 local _hashValid = {}  -- per-gcfg validity flags
+local _spellNameCache = {}
+
+local function GetBlackListableSpellName(sid)
+    local cached = _spellNameCache[sid]
+    if cached ~= nil then
+        return cached ~= false and cached or nil
+    end
+
+    local name
+    if C_Spell and type(C_Spell.GetSpellName) == "function" then
+        name = C_Spell.GetSpellName(sid)
+    end
+    if not name and type(GetSpellInfo) == "function" then
+        name = GetSpellInfo(sid)
+    end
+
+    if type(name) == "string" and name ~= "" then
+        _spellNameCache[sid] = name
+        return name
+    end
+
+    _spellNameCache[sid] = false
+    return nil
+end
 
 local function BuildBlacklistHash(gcfg)
     if not gcfg then return nil end
@@ -294,6 +321,13 @@ local function BuildBlacklistHash(gcfg)
                 for sid in pairs(spells) do
                     hash[sid] = true
                     hash._any = true
+
+                    -- Fallback path for API variants where declassified auras expose
+                    -- a readable name but not a stable spellId field on Group Frames.
+                    local spellName = GetBlackListableSpellName(sid)
+                    if spellName then
+                        hash[spellName] = true
+                    end
                 end
             end
         end
@@ -321,28 +355,59 @@ end
 
 ------------------------------------------------------------------------
 -- Secret-safe spellId decoder (called once per aura in RenderGroup)
--- Returns plain number or 0 (secret/nil → passes through blacklist)
+-- Returns plain lua number or 0 (secret/nil → passes through blacklist).
+--
+-- CRITICAL (Midnight 12.0): on non-self units, aura.spellId for
+-- declassified spells comes back as an *accessible* secret-tagged integer.
+-- canaccessvalue() returns true, but the value still carries the secret
+-- tag — using it directly as a hash key (hash[sid]) silently misses every
+-- lookup because the tagged value does not equate to a plain lua number.
+--
+-- The tonumber() pass strips the tag and yields a plain number that works
+-- as a hash key. For plain numbers, tonumber() is a no-op C call (cheap).
+-- For nil / truly-secret values, tonumber() returns nil → coerced to 0.
 ------------------------------------------------------------------------
 local function DecodeSpellId(aura)
-    local sid = aura.spellId
-    if sid == nil then return 0 end
+    local sid = aura and (aura.spellId or aura.spellID or aura.spellid)
+    -- Secret-safety guard BEFORE any nil / equality check on the field
     if _hasCanaccessvalue then
         if canaccessvalue(sid) ~= true then return 0 end
     elseif issecretvalue and issecretvalue(sid) == true then
         return 0
     end
-    return sid
+    -- Normalize: strips secret tag (if any), handles nil, coerces to number
+    return tonumber(sid) or 0
+end
+
+local function DecodeAuraName(aura)
+    local name = aura and (aura.name or aura.spellName)
+    if _hasCanaccessvalue then
+        if canaccessvalue(name) ~= true then return nil end
+    elseif issecretvalue and issecretvalue(name) == true then
+        return nil
+    end
+    if type(name) == "string" and name ~= "" then
+        return name
+    end
+    return nil
 end
 
 ------------------------------------------------------------------------
 -- Tier 2 filter: check decoded spellId against blacklist hash
 -- Returns true if aura should be SKIPPED (hidden)
--- Secret spellIds (decoded as 0) always pass through (not filterable)
+-- Secret spellIds fall back to readable aura names when Blizzard exposes
+-- them for declassified spells on this client branch.
 ------------------------------------------------------------------------
-local function IsBlacklisted(decodedSid, hash)
-    if decodedSid == 0 then return false end  -- secret → can't filter
-    if not hash then return false end          -- no blacklist active
-    return hash[decodedSid] == true
+local function IsBlacklisted(decodedSid, hash, aura)
+    if not hash then return false end
+    if decodedSid ~= 0 and hash[decodedSid] == true then
+        return true
+    end
+    local auraName = DecodeAuraName(aura)
+    if auraName and hash[auraName] == true then
+        return true
+    end
+    return false
 end
 
 ------------------------------------------------------------------------

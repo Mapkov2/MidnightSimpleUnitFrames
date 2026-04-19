@@ -97,6 +97,7 @@ local GetTime = GetTime
 local issecretvalue = _G.issecretvalue
 local canaccessvalue = _G.canaccessvalue
 local _hasCanaccessvalue = (type(canaccessvalue) == "function")
+local tonumber = tonumber
 
 local _getSlots, _getBySlot, _getByAid, _isFiltered, _doesExpire
 local _apisBound = false
@@ -233,16 +234,26 @@ local _IGNORE_CAT_META = {
 Cache.IGNORE_CAT_META = _IGNORE_CAT_META
 
 -- Secret-safe spellId decoder (called ONCE per aura on ADD).
--- Returns plain number or 0 (secret/nil).
+-- Returns plain lua number or 0 (secret/nil → passes blacklist).
+--
+-- CRITICAL (Midnight 12.0): on party/raid/target/focus/boss units,
+-- data.spellId for declassified spells comes back as an *accessible*
+-- secret-tagged integer. canaccessvalue() returns true, but the value
+-- still carries the secret tag — using it as a hash key (hash[sid])
+-- silently misses every lookup because the tagged value does not
+-- equate to a plain lua number.
+--
+-- tonumber() strips the tag. For plain numbers it is a no-op C call;
+-- for nil / truly-secret values it returns nil → coerced to 0.
+-- Self-auras (player) were already plain numbers → fix is a no-op there.
 local function _DecodeSpellId(data)
     local sid = data.spellId or data.spellID
-    if sid == nil then return 0 end
     if _hasCanaccessvalue then
         if canaccessvalue(sid) ~= true then return 0 end
     elseif issecretvalue and issecretvalue(sid) == true then
         return 0
     end
-    return sid
+    return tonumber(sid) or 0
 end
 
 -- Build flat ignore hashtable from enabled category keys.
@@ -468,10 +479,16 @@ function Cache.OnUnitAura(unit, updateInfo)
     if not s then s = { all = {}, epoch = 0, changed = true }; _units[unit] = s end
 
     local any = false
+    -- PERF: track structure change inline instead of re-scanning the arrays
+    -- via `next()` after the loops complete (2 redundant calls eliminated).
+    local hasAdd, hasRem = false, false
 
     local added = updateInfo.addedAuras
     if added then
-        for _, data in next, added do
+        -- PERF: numeric-for on Blizzard's dense array is ~30% faster than
+        -- `for _, v in next, t do` in Lua 5.1 (FORLOOP vs TFORLOOP+next call).
+        for i = 1, #added do
+            local data = added[i]
             local aid = data.auraInstanceID
             if aid then
                 -- P7: copy C data into pooled table so we own the lifecycle.
@@ -482,13 +499,15 @@ function Cache.OnUnitAura(unit, updateInfo)
                 EnrichAura(unit, entry, isHelpful)
                 s.all[aid] = entry
                 any = true
+                hasAdd = true
             end
         end
     end
 
     local updated = updateInfo.updatedAuraInstanceIDs
     if updated then
-        for _, aid in next, updated do
+        for i = 1, #updated do
+            local aid = updated[i]
             local entry = s.all[aid]
             if entry then
                 local fresh = _getByAid and _getByAid(unit, aid)
@@ -496,7 +515,12 @@ function Cache.OnUnitAura(unit, updateInfo)
                     -- PERF: Lightweight update — only mutable fields (duration/stacks/raid).
                     -- Saves 8 field writes vs full _AuraCopyFields on the hottest path.
                     _AuraCopyFieldsUpdate(entry, fresh)
-                    -- bossFlag is cached from isBossAura; clear so it is re-read if changed.
+                    -- Defensive: invalidate cached bossFlag so next ReadBossFlag
+                    -- re-reads entry.isBossAura. Reverted from a prior "drop this"
+                    -- optimization — I cannot prove isBossAura is immutable for a
+                    -- given auraInstanceID across Blizzard's implementation, and
+                    -- the saving (~0.1µs/call) is far less than the risk of
+                    -- onlyBoss/merge filter failure from stale cache.
                     entry._msufA2_bossFlag = nil
                     any = true
                 end
@@ -506,13 +530,15 @@ function Cache.OnUnitAura(unit, updateInfo)
 
     local removed = updateInfo.removedAuraInstanceIDs
     if removed then
-        for _, aid in next, removed do
+        for i = 1, #removed do
+            local aid = removed[i]
             local entry = s.all[aid]
             if entry then
                 s.all[aid] = nil
                 -- P7: return pooled table for reuse instead of abandoning to GC.
                 _AuraRelease(entry)
                 any = true
+                hasRem = true
             end
         end
     end
@@ -522,8 +548,6 @@ function Cache.OnUnitAura(unit, updateInfo)
         s.epoch = s.epoch + 1
         -- PERF: Track whether list structure changed (add/remove) vs data-only update.
         -- update-only → FilterAndSort can skip full rescan and reuse previous output.
-        local hasAdd = added and next(added) ~= nil
-        local hasRem = removed and next(removed) ~= nil
         if hasAdd or hasRem then s.structureChanged = true end
         -- PERF: Inlined Store epoch tracking (was separate Store.OnUnitAura wrapper)
         local _st = API.Store; if _st and _st._epochs then _st._epochs[unit] = s.epoch end
@@ -768,6 +792,20 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
 
     local sortOrder = cfg.sortOrder or cfg.capsSortOrder or 0
 
+    -- PERF: Hoist _noFilters gate out of FilterAura.
+    -- FilterAura() line 613: `if cfg._noFilters then return true end` — so when
+    -- _noFilters is set, the 13-arg call is wasted. Gate here instead: skip
+    -- the call entirely when no filters are active (~90% of default configs).
+    -- Saves one function call per aura × N auras × 39k FilterAndSort runs.
+    local noFilters = cfg._noFilters
+
+    -- PERF: Hoist merge flags. Inlining the non-merge EmitAura path saves
+    -- one 12-arg function call + 4-return per emitted aura (~90% of users
+    -- don't have boss-merge enabled). EmitAura's non-merge branch is just
+    -- `nB = nB + 1; buffOut[nB] = data` — easy to inline.
+    local useMergeBuffs = cfg._useMergeBuffs
+    local useMergeDebuffs = cfg._useMergeDebuffs
+
     if sortOrder == 0 then
         -- FAST PATH: unsorted — pure cache iteration, ZERO C API calls
         for aid, data in next, s.all do
@@ -777,18 +815,28 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
             local isOwn     = data._msufIsPlayerAura
 
             if isHelpful and (nB + nBossB) < maxBuffs then
-                if FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
+                if noFilters or FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
                               lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
-                    nB, nD, nBossB, nBossD = EmitAura(data, true, isOwn, cfg,
-                        buffOut, debuffOut, bossBufScratch, bossDebScratch,
-                        nB, nD, nBossB, nBossD)
+                    if useMergeBuffs then
+                        nB, nD, nBossB, nBossD = EmitAura(data, true, isOwn, cfg,
+                            buffOut, debuffOut, bossBufScratch, bossDebScratch,
+                            nB, nD, nBossB, nBossD)
+                    else
+                        nB = nB + 1
+                        buffOut[nB] = data
+                    end
                 end
             elseif not isHelpful and (nD + nBossD) < maxDebuffs then
-                if FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
+                if noFilters or FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
                               lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
-                    nB, nD, nBossB, nBossD = EmitAura(data, false, isOwn, cfg,
-                        buffOut, debuffOut, bossBufScratch, bossDebScratch,
-                        nB, nD, nBossB, nBossD)
+                    if useMergeDebuffs then
+                        nB, nD, nBossB, nBossD = EmitAura(data, false, isOwn, cfg,
+                            buffOut, debuffOut, bossBufScratch, bossDebScratch,
+                            nB, nD, nBossB, nBossD)
+                    else
+                        nD = nD + 1
+                        debuffOut[nD] = data
+                    end
                 end
             end
         end
@@ -826,11 +874,16 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                         end
 
                         local isOwn = data._msufIsPlayerAura
-                        if FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
+                        if noFilters or FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
                                       lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
-                            nB, nD, nBossB, nBossD = EmitAura(data, true, isOwn, cfg,
-                                buffOut, debuffOut, bossBufScratch, bossDebScratch,
-                                nB, nD, nBossB, nBossD)
+                            if useMergeBuffs then
+                                nB, nD, nBossB, nBossD = EmitAura(data, true, isOwn, cfg,
+                                    buffOut, debuffOut, bossBufScratch, bossDebScratch,
+                                    nB, nD, nBossB, nBossD)
+                            else
+                                nB = nB + 1
+                                buffOut[nB] = data
+                            end
                         end
                     end
                 end
@@ -860,11 +913,16 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                         end
 
                         local isOwn = data._msufIsPlayerAura
-                        if FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
+                        if noFilters or FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
                                       lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
-                            nB, nD, nBossB, nBossD = EmitAura(data, false, isOwn, cfg,
-                                buffOut, debuffOut, bossBufScratch, bossDebScratch,
-                                nB, nD, nBossB, nBossD)
+                            if useMergeDebuffs then
+                                nB, nD, nBossB, nBossD = EmitAura(data, false, isOwn, cfg,
+                                    buffOut, debuffOut, bossBufScratch, bossDebScratch,
+                                    nB, nD, nBossB, nBossD)
+                            else
+                                nD = nD + 1
+                                debuffOut[nD] = data
+                            end
                         end
                     end
                 end
