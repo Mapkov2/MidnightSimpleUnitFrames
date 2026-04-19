@@ -420,6 +420,127 @@ end
 BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
 BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
 BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
+local MSUF_BINDING_COMMANDS = {
+    "MSUF_TOGGLE_OPTIONS",
+    "MSUF_TOGGLE_EDITMODE",
+}
+
+local function MSUF_EnsureGlobalBindingState()
+    _G.MSUF_GlobalDB = _G.MSUF_GlobalDB or {}
+    local gdb = _G.MSUF_GlobalDB
+    gdb.global = gdb.global or {}
+    gdb.global.bindings = gdb.global.bindings or {}
+    gdb.global.bindings.commands = gdb.global.bindings.commands or {}
+    return gdb.global.bindings.commands
+end
+
+local function MSUF_GetBindingKeysForCommand(command)
+    local keys = {}
+    if type(command) ~= "string" or command == "" or type(_G.GetBindingKey) ~= "function" then
+        return keys
+    end
+
+    local seen = {}
+    local count = select("#", _G.GetBindingKey(command))
+    for i = 1, count do
+        local key = select(i, _G.GetBindingKey(command))
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            keys[#keys + 1] = key
+        end
+    end
+
+    table.sort(keys)
+    return keys
+end
+
+local function MSUF_CopyBindingKeys(keys)
+    local out = {}
+    if type(keys) ~= "table" then return out end
+
+    local seen = {}
+    for i = 1, #keys do
+        local key = keys[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            out[#out + 1] = key
+        end
+    end
+
+    table.sort(out)
+    return out
+end
+
+local function MSUF_BindingListsEqual(a, b)
+    a = MSUF_CopyBindingKeys(a)
+    b = MSUF_CopyBindingKeys(b)
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
+local function MSUF_GetStoredBindingKeys(command)
+    local commands = MSUF_EnsureGlobalBindingState()
+    return MSUF_CopyBindingKeys(commands[command])
+end
+
+local function MSUF_SetStoredBindingKeys(command, keys)
+    if type(command) ~= "string" or command == "" then return end
+    local commands = MSUF_EnsureGlobalBindingState()
+    commands[command] = MSUF_CopyBindingKeys(keys)
+end
+
+local _msufBindingSyncInFlight = false
+local _msufBindingApplyPending = false
+
+local function MSUF_ApplyStoredBindingsToCurrentSet()
+    if _msufBindingSyncInFlight then return end
+    if type(_G.SetBinding) ~= "function" then return end
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+        _msufBindingApplyPending = true
+        return
+    end
+
+    _msufBindingApplyPending = false
+    _msufBindingSyncInFlight = true
+
+    for i = 1, #MSUF_BINDING_COMMANDS do
+        local command = MSUF_BINDING_COMMANDS[i]
+        local liveKeys = MSUF_GetBindingKeysForCommand(command)
+        for j = 1, #liveKeys do
+            _G.SetBinding(liveKeys[j])
+        end
+
+        local storedKeys = MSUF_GetStoredBindingKeys(command)
+        for j = 1, #storedKeys do
+            _G.SetBinding(storedKeys[j], command)
+        end
+    end
+
+    _msufBindingSyncInFlight = false
+end
+
+local function MSUF_SyncCurrentBindingsIntoGlobalStore()
+    if _msufBindingSyncInFlight then return end
+    for i = 1, #MSUF_BINDING_COMMANDS do
+        local command = MSUF_BINDING_COMMANDS[i]
+        local liveKeys = MSUF_GetBindingKeysForCommand(command)
+        if not MSUF_BindingListsEqual(liveKeys, MSUF_GetStoredBindingKeys(command)) then
+            MSUF_SetStoredBindingKeys(command, liveKeys)
+        end
+    end
+end
+
+local function MSUF_HasAnyStoredGlobalBindings()
+    for i = 1, #MSUF_BINDING_COMMANDS do
+        if #MSUF_GetStoredBindingKeys(MSUF_BINDING_COMMANDS[i]) > 0 then
+            return true
+        end
+    end
+    return false
+end
 
 function MSUF_Keybind_ToggleOptions()
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
@@ -472,3 +593,27 @@ function MSUF_ClampCheckboxText(cb, maxWidth)
 end
 _G.MSUF_ClampCheckboxText = MSUF_ClampCheckboxText
 
+do
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_LOGIN")
+    f:RegisterEvent("UPDATE_BINDINGS")
+    f:RegisterEvent("PLAYER_REGEN_ENABLED")
+    f:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_LOGIN" then
+            if not MSUF_HasAnyStoredGlobalBindings() then
+                MSUF_SyncCurrentBindingsIntoGlobalStore()
+            end
+            MSUF_ApplyStoredBindingsToCurrentSet()
+            return
+        end
+
+        if event == "UPDATE_BINDINGS" then
+            MSUF_SyncCurrentBindingsIntoGlobalStore()
+            return
+        end
+
+        if event == "PLAYER_REGEN_ENABLED" and _msufBindingApplyPending then
+            MSUF_ApplyStoredBindingsToCurrentSet()
+        end
+    end)
+end
