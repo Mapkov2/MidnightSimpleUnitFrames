@@ -1565,15 +1565,18 @@ local function EnsureCombatCrosshair()
             combatCrosshairFrame.MSUF_RangeElapsed = 0
             combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed)
                 if not self:IsShown() then return end
+                -- PERF: Throttle FIRST, before any work. Cheap elapsed accum.
+                -- Old code called EnsureGameplayDefaults() at ~171 Hz; now it
+                -- only runs at ~6.7 Hz (every 0.15s).
+                self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
+                if self.MSUF_RangeElapsed < 0.15 then return end
+                self.MSUF_RangeElapsed = 0
                 local g3 = EnsureGameplayDefaults()
                 if not g3.enableCombatCrosshair or not g3.enableCombatCrosshairMeleeRangeColor then
                     self:SetScript("OnUpdate", nil)
                     self.MSUF_RangeOnUpdate = nil
                     return
                 end
-                self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
-                if self.MSUF_RangeElapsed < 0.15 then return end
-                self.MSUF_RangeElapsed = 0
                 MSUF_UpdateCombatCrosshairRangeColor()
             end)
         end

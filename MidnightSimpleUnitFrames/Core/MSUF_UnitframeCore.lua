@@ -2025,6 +2025,17 @@ local function _HealthValueFast(f)
     local fnTxt = FN_UpdateHpTextFast
     if not fnTxt then return end
 
+    -- PERF: Lazy HP text. When HP text is disabled, fnTxt → RenderHpMode still
+    -- runs every UNIT_HEALTH event, clearing an already-empty FontString.
+    -- Track cleared state: clear once on disable, then skip until re-enabled.
+    if f.showHPText == false then
+        if f._msufHpTextCleared then return end
+        f._msufHpTextCleared = true
+        fnTxt(f, hp)  -- will call RenderHpMode(self, false) to clear text
+        return
+    end
+    f._msufHpTextCleared = nil
+
     -- Secret-safe raw-HP short-circuit (order matters: issecret check FIRST).
     local prev = f._msufLastHpRaw
     local isv = _UFCORE_issecret
@@ -2134,6 +2145,15 @@ do
     local function _MaybeUpdatePowerText(f, unit, pType)
         local fnTxt = FN_UpdatePowerTextFast
         if not fnTxt then return end
+        -- PERF: Lazy power text. Clear-once pattern, like _HealthValueFast.
+        if f.showPowerText == false then
+            if f._msufPowerTextCleared then return end
+            f._msufPowerTextCleared = true
+            if _PwrPctFn then f._msufCachedPPct = _PwrPctFn(unit, pType, false, _PwrScale) end
+            fnTxt(f)  -- will call RenderPowerText which clears text on showPower=false
+            return
+        end
+        f._msufPowerTextCleared = nil
         if _PwrPctFn then f._msufCachedPPct = _PwrPctFn(unit, pType, false, _PwrScale) end
         fnTxt(f)
     end
@@ -2154,30 +2174,6 @@ do
         local mx  = _UnitPowerMax(unit, pType)
         if cur == nil then cur = 0 end
         if mx  == nil then mx  = 100 end
-        -- PERF: Diff-gate on power value. Skip SetValue + UnitPowerPercent
-        -- C call + text refresh when nothing actually changed.
-        -- SAFETY: _PowerCore is only invoked from UNIT_POWER_FREQUENT /
-        --         UNIT_POWER_UPDATE event handlers. Bar layout/color/
-        --         interpolation are updated by separate paths, so a same-
-        --         value event is strictly redundant here.
-        -- SECRET-SAFE: UnitPower may return secret values in 12.0.
-        --         Must issecretvalue-check BEFORE comparing — type() or
-        --         == on a secret would taint.
-        local _iss = issecretvalue
-        if not (_iss and (_iss(cur) or _iss(mx))) then
-            if f._msufPCur == cur and f._msufPMax == mx and f._msufPType == pType then
-                return
-            end
-            f._msufPCur  = cur
-            f._msufPMax  = mx
-            f._msufPType = pType
-        else
-            -- Secret: clear cache so the non-secret branch rebuilds after
-            --         a later non-secret value arrives.
-            f._msufPCur  = nil
-            f._msufPMax  = nil
-            f._msufPType = nil
-        end
         local interp = _pwrInterp
         if interp then
             bar:SetMinMaxValues(0, mx, interp)
@@ -2199,20 +2195,6 @@ do
         local mx  = _UnitPowerMax(unit, pType)
         if cur == nil then cur = 0 end
         if mx  == nil then mx  = 100 end
-        -- PERF: same diff-gate as _PowerCore (see _PowerCore for safety notes).
-        local _iss = issecretvalue
-        if not (_iss and (_iss(cur) or _iss(mx))) then
-            if f._msufPCur == cur and f._msufPMax == mx and f._msufPType == pType then
-                return
-            end
-            f._msufPCur  = cur
-            f._msufPMax  = mx
-            f._msufPType = pType
-        else
-            f._msufPCur  = nil
-            f._msufPMax  = nil
-            f._msufPType = nil
-        end
         bar:SetMinMaxValues(0, mx)
         bar:SetValue(cur)
         _MaybeUpdatePowerText(f, unit, pType)
@@ -2292,109 +2274,100 @@ end
 
 local BYTE_U = string.byte("U")
 
-local function FrameOnEvent(self, event, arg1, ...)
-    if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then return end
+-- ═══════════════════════════════════════════════════════════════════════
+-- PERF: Event dispatch table (oUF-style).
+-- Replaces the if-elseif chain in FrameOnEvent with O(1) hash lookup.
+-- Each handler preserves the exact same side-effects as the original
+-- inline branch (dirty-flag sets, function calls, MarkDirty event strings).
+-- Built AFTER all local handlers are defined; references to Core.* are
+-- late-bound inside closures (same as original).
+-- ═══════════════════════════════════════════════════════════════════════
+local _UF_DISPATCH = {
+    -- Hot path (10-50/sec)
+    UNIT_HEALTH          = function(self) _HealthValueFast(self) end,
+    UNIT_POWER_UPDATE    = function(self) Core._PowerUpdate(self) end,
+    UNIT_POWER_FREQUENT  = function(self) Core._PowerFrequent(self) end,
 
-    -- ── Hot path: Health (10-50/sec per unit) ──
-    -- PERF: RegisterUnitEvent guarantees arg1==self.unit for UNIT_ events.
-    -- Skip redundant string comparison on the hottest events.
-    if event == "UNIT_HEALTH" then
-        _HealthValueFast(self)
-        return
-    end
-
-    -- ── Hot path: Power (10-50/sec player) ──
-    if event == "UNIT_POWER_UPDATE" then
-        Core._PowerUpdate(self)
-        return
-    end
-    if event == "UNIT_POWER_FREQUENT" then
-        Core._PowerFrequent(self)
-        return
-    end
-
-    -- ── Health full chain: UNIT_MAXHEALTH (rare: ~0.5/s) ──
-    if event == "UNIT_MAXHEALTH" or event == "UNIT_MAXHEALTHMODIFIER" then
+    -- Health full chain (rare)
+    UNIT_MAXHEALTH = function(self)
         self._msufAbsorbTextDirty = true
         if _HealthFullFast then _HealthFullFast(self) end
-        return
-    end
+    end,
+    UNIT_MAXHEALTHMODIFIER = function(self)
+        self._msufAbsorbTextDirty = true
+        if _HealthFullFast then _HealthFullFast(self) end
+    end,
 
-    -- ── Phase 3: Lean sub-paths for overlay events (1-5/s each) ──
-    if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+    -- Overlay events
+    UNIT_ABSORB_AMOUNT_CHANGED = function(self)
         self._msufAbsorbTextDirty = true
         _AbsorbValueFast(self)
-        return
-    end
-    if event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
+    end,
+    UNIT_HEAL_ABSORB_AMOUNT_CHANGED = function(self)
         self._msufAbsorbTextDirty = true
         _HealAbsorbValueFast(self)
-        return
-    end
-    if event == "UNIT_HEAL_PREDICTION" then
-        _HealPredValueFast(self)
-        return
-    end
+    end,
+    UNIT_HEAL_PREDICTION = function(self) _HealPredValueFast(self) end,
 
-    -- ── Power rare events ──
-    if event == "UNIT_MAXPOWER" then
+    -- Power rare events
+    UNIT_MAXPOWER = function(self)
         if Core._PowerMaxPower then Core._PowerMaxPower(self) end
-        return
-    end
-    if event == "UNIT_DISPLAYPOWER" or event == "UNIT_POWER_BAR_SHOW" or event == "UNIT_POWER_BAR_HIDE" then
-        Core._PowerVisEvent(self)
-        return
-    end
+    end,
+    UNIT_DISPLAYPOWER    = function(self) Core._PowerVisEvent(self) end,
+    UNIT_POWER_BAR_SHOW  = function(self) Core._PowerVisEvent(self) end,
+    UNIT_POWER_BAR_HIDE  = function(self) Core._PowerVisEvent(self) end,
 
-    -- ── Identity (1/sec: name, level, faction) ──
-    if event == "UNIT_NAME_UPDATE" or event == "UNIT_LEVEL" then
-        _RunIdentityDirect(self)
-        return
-    end
-    if event == "UNIT_FACTION" then
+    -- Identity (1/sec)
+    UNIT_NAME_UPDATE = function(self) _RunIdentityDirect(self) end,
+    UNIT_LEVEL       = function(self) _RunIdentityDirect(self) end,
+    UNIT_FACTION     = function(self)
         self._msufAbsorbTextDirty = true
         if not self._msufStaticHealthColor then self._msufHealthColorDirty = true end
         _RunFactionDirect(self)
-        return
-    end
+    end,
 
-    -- ── Status (queued — UNIT_FLAGS can flood at boss pull) ──
-    if event == "UNIT_FLAGS" then
+    -- Status
+    UNIT_FLAGS = function(self)
         if not self._msufStaticHealthColor then self._msufHealthColorDirty = true end
-        Core.MarkDirty(self, DIRTY_STATUS, false, event)
-        return
-    end
-    if event == "UNIT_CONNECTION" then
-        _RunStatusDirect(self)
-        return
-    end
-    if event == "INCOMING_RESURRECT_CHANGED" then
-        Core.MarkDirty(self, DIRTY_STATUS, nil, event)
-        return
-    end
+        Core.MarkDirty(self, DIRTY_STATUS, false, "UNIT_FLAGS")
+    end,
+    UNIT_CONNECTION = function(self) _RunStatusDirect(self) end,
+    INCOMING_RESURRECT_CHANGED = function(self)
+        Core.MarkDirty(self, DIRTY_STATUS, nil, "INCOMING_RESURRECT_CHANGED")
+    end,
 
-    -- ── Portrait (rare, expensive) ──
-    if event == "UNIT_PORTRAIT_UPDATE" or event == "UNIT_MODEL_CHANGED" then
+    -- Portrait (rare, expensive)
+    UNIT_PORTRAIT_UPDATE = function(self)
         self._msufPortraitDirty = true
         self._msufPortraitNextAt = 0
-        Core.MarkDirty(self, DIRTY_PORTRAIT, false, event)
-        return
-    end
+        Core.MarkDirty(self, DIRTY_PORTRAIT, false, "UNIT_PORTRAIT_UPDATE")
+    end,
+    UNIT_MODEL_CHANGED = function(self)
+        self._msufPortraitDirty = true
+        self._msufPortraitNextAt = 0
+        Core.MarkDirty(self, DIRTY_PORTRAIT, false, "UNIT_MODEL_CHANGED")
+    end,
 
-    -- ── Threat ──
-    if event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE" then
-        Core.MarkDirty(self, DIRTY_THREAT, nil, event)
-        return
-    end
+    -- Threat
+    UNIT_THREAT_SITUATION_UPDATE = function(self)
+        Core.MarkDirty(self, DIRTY_THREAT, nil, "UNIT_THREAT_SITUATION_UPDATE")
+    end,
+    UNIT_THREAT_LIST_UPDATE = function(self)
+        Core.MarkDirty(self, DIRTY_THREAT, nil, "UNIT_THREAT_LIST_UPDATE")
+    end,
 
-    -- ── Classification change (NPC type color) ──
-    if event == "UNIT_CLASSIFICATION_CHANGED" then
+    -- Classification
+    UNIT_CLASSIFICATION_CHANGED = function(self)
         if not self._msufStaticHealthColor then self._msufHealthColorDirty = true end
-        Core.MarkDirty(self, DIRTY_IDENTITY, nil, event)
-        return
-    end
+        Core.MarkDirty(self, DIRTY_IDENTITY, nil, "UNIT_CLASSIFICATION_CHANGED")
+    end,
+}
 
-    -- ── Fallback: any other UNIT_* event ──
+local function FrameOnEvent(self, event, arg1, ...)
+    if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then return end
+    local fn = _UF_DISPATCH[event]
+    if fn then return fn(self) end
+    -- Fallback: any UNIT_* event not in dispatch table
     Core.MarkDirty(self, MASK_UNIT_EVENT_FALLBACK, nil, event)
 end
 _G._MSUF_UFCore_FrameOnEvent = FrameOnEvent

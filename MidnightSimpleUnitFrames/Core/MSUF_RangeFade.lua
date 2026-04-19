@@ -587,7 +587,7 @@ do
     local _burstSerial = 0
     local C_Timer_NewTicker = _G.C_Timer and _G.C_Timer.NewTicker
     local HasActiveEnemyFocusRangeUnit, HasActiveBossRangeUnit, NeedsPoll, RequestBurst
-    local _pollUnits, _pollConfKey, _pollCount = {}, {}, 0
+    local _pollUnits, _pollConfKey, _pollFrames, _pollCount = {}, {}, {}, 0
 
     local function OnFocusFriendlyRange(_, event, arg1)
         if arg1 and arg1 ~= "focus" then return end
@@ -622,6 +622,7 @@ do
                 _pollCount = _pollCount + 1
                 _pollUnits[_pollCount] = "focus"
                 _pollConfKey[_pollCount] = "focus"
+                _pollFrames[_pollCount] = f
             end
         end
 
@@ -635,6 +636,7 @@ do
                     _pollCount = _pollCount + 1
                     _pollUnits[_pollCount] = unit
                     _pollConfKey[_pollCount] = "boss"
+                    _pollFrames[_pollCount] = f
                 end
             end
         end
@@ -658,7 +660,10 @@ do
             local unit = _pollUnits[i]
             local confKey = _pollConfKey[i]
             local conf = (confKey == "focus") and focusConf or bossConf
-            local f = GetFrame(unit)
+            -- PERF: cached frame ref (populated in RebuildPollList). Eliminates
+            -- GetFrame(unit) hash lookup per poll tick. During burst (20/s × up
+            -- to 6 units = 120 lookups/s) this is meaningful.
+            local f = _pollFrames[i]
             if conf and f and (not f.IsShown or f:IsShown()) and UnitExists(unit) then
                 if ApplyMul(f, unit, confKey, conf, CheckEnemy(unit)) then
                     changedAny = true

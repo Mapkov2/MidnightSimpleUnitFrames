@@ -96,21 +96,6 @@ end
 -- Pre-allocated slot buffer (zero GC in scan)
 local _slotBuf = {}
 
--- PERF: Separate pre-allocated buffer for MISSING-scan varargs repacking.
--- Was: `local results = { _getSlots(...) }` — allocated a fresh table every
--- scan (~160 allocs/sec across raid). Now: pack into _scanSlotBuf in place.
-local _scanSlotBuf = {}
-local _scanSlotBufPrevN = 0
-local function _PackScanSlots(...)
-    local n = select("#", ...)
-    local buf = _scanSlotBuf
-    for i = 1, n do buf[i] = select(i, ...) end
-    -- Nil-terminate trailing entries from a previous longer pack so #buf is accurate
-    for i = n + 1, _scanSlotBufPrevN do buf[i] = nil end
-    _scanSlotBufPrevN = n
-    return n
-end
-
 ------------------------------------------------------------------------
 -- Texture pool (lazy per frame per slot — created once, never GC'd)
 ------------------------------------------------------------------------
@@ -282,12 +267,11 @@ function GF.UpdateCornerIndicators(f, unit)
     -- MISSING scan (inlined ScanMissingClassBuff + ResolveMissing)
     if needScan >= 4 and _hasClassBuff and _hasSlotAPI and _hasDataAPI then
         local found = false
-        -- PERF: Repack varargs into pre-allocated _scanSlotBuf (zero alloc).
-        -- Was `{ _getSlots(...) }` which allocated a fresh table on every scan.
-        local slotsN = _PackScanSlots(_getSlots(unit, "HELPFUL|PLAYER", 20, nil))
+        -- Single C API call; iterate results via select (5Hz rate-limited, alloc is fine)
+        local results = { _getSlots(unit, "HELPFUL|PLAYER", 20, nil) }
         -- index 1 = continuation token, slots start at 2
-        for i = 2, slotsN do
-            local slot = _scanSlotBuf[i]
+        for i = 2, #results do
+            local slot = results[i]
             if slot then
                 local data = _getBySlot(unit, slot)
                 if data then

@@ -1311,6 +1311,15 @@ if r>=0.88 and g>=0.68 and b<=0.35 and(g>=(b+0.25))
 then return true end
 return false end
 local function MSUF_ApplyWhiteTextToFrame(root) if not root then return end
+-- PERF: Throttle per-root. Burst calls (OnShow hooks firing multiple times
+-- during a single panel attach) coalesce into 1 walk. 100ms is much shorter
+-- than any user-perceivable UI change, and longer-interval calls (real updates
+-- or font changes) still run normally. Idempotency: if FontStrings are already
+-- white, re-walk just re-verifies cheaply; skipping is safe for the burst case.
+local now=GetTime and GetTime()or 0
+local lastT=root.__MSUF_WhiteTextLastT or 0
+if lastT>0 and(now-lastT)<0.1 then return end
+root.__MSUF_WhiteTextLastT=now
 local token=(root.__MSUF_WhiteTextToken or 0)+1 root.__MSUF_WhiteTextToken=token local useTimer=(C_Timer and C_Timer.After)
 and true or false;
 local maxNodes=useTimer and 4500 or 800;

@@ -1398,8 +1398,20 @@ do
 
   local function UpdatePeelDropdownText(drop, explicitText)
     if not drop or not drop._msufPeelText then return end
+    -- PERF: Diff-gate by resolved text. Hot path: UIDropDownMenu_SetText hook
+    -- fires this 2400+ times per options session even when the text is identical
+    -- (refresh cascades across dropdowns on each user click). Skip the
+    -- ApplyReadableDropdownFont + SetText pipeline if text unchanged.
+    -- SyncPeelDropdownState still runs because enabled/hover/visibility can
+    -- change independently of text content.
+    local newText = explicitText or GetDropdownDisplayText(drop)
+    if newText == drop._msufPeelLastText then
+      SyncPeelDropdownState(drop)
+      return
+    end
+    drop._msufPeelLastText = newText
     ApplyReadableDropdownFont(drop._msufPeelText, GetNativeDropText(drop), drop._msufPeelSpec)
-    drop._msufPeelText:SetText(explicitText or GetDropdownDisplayText(drop))
+    drop._msufPeelText:SetText(newText)
     SyncPeelDropdownState(drop)
   end
 

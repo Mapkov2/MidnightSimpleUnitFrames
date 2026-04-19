@@ -1533,6 +1533,8 @@ end
 local function UpdateAggro(f, unit)
     local kind = f._msufGFKind or "party"
     local prevLevel = f._msufGFAggroLevel
+    -- PERF: pre-resolved flags on _c cache (populated in BuildFrameCache).
+    local c = f._c
 
     local testMode = _G.MSUF_AggroBorderTestMode
     -- Scope filtering
@@ -1544,7 +1546,7 @@ local function UpdateAggro(f, unit)
             if scopeKind ~= kind then testMode = false end
         end
     end
-    if (HLVal(kind, "hlAggroEnabled") == false or not unit) and not testMode then
+    if (((c and c.aggroEn) == false) or not unit) and not testMode then
         if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
         return
     end
@@ -1554,7 +1556,7 @@ local function UpdateAggro(f, unit)
             if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
             return
         end
-        local aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
+        local aggroMode = (c and c.aggroMode) or "ALL"
         if aggroMode ~= "ALL" then
             local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
             if aggroMode == "HEALER_ONLY" and role ~= "HEALER" then
@@ -2554,6 +2556,16 @@ end
 local function dispatchOverlaysOnly(f, unit)
     if not f.health then return end
 
+    -- PERF: Same-frame dedup. UNIT_HEAL_PREDICTION + UNIT_ABSORB_AMOUNT_CHANGED
+    -- + UNIT_HEAL_ABSORB_AMOUNT_CHANGED frequently fire in the same WoW frame
+    -- (e.g. heal lands with absorb bubble). This function reads calc and
+    -- renders ALL THREE overlay bars regardless of which event triggered it,
+    -- so back-to-back calls in the same frame re-do identical work.
+    -- GetTime() is frame-stable (constant within a frame, advances between).
+    local nowT = GetTime()
+    if f._msufGFOverlayT == nowT then return end
+    f._msufGFOverlayT = nowT
+
     local c = f._c
     if not c then return end
 
@@ -3024,24 +3036,11 @@ local UNIT_DISPATCH = {
 local function GF_OnEvent(self, event, unit, ...)
     local u = self.unit
     if not u then return end
-
-    if event == "UNIT_HEALTH" then
-        dispatchHealthLean(self, u)
-    elseif event == "UNIT_AURA" then
-        dispatchAura(self, u, ...)
-    elseif event == "UNIT_POWER_UPDATE" then
-        dispatchPower(self, u)
-    elseif event == "UNIT_MAXPOWER" then
-        dispatchPowerFull(self, u)
-    elseif event == "UNIT_MAXHEALTH" then
-        dispatchHealthFull(self, u)
-    elseif event == "UNIT_HEAL_PREDICTION" or event == "UNIT_ABSORB_AMOUNT_CHANGED"
-        or event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
-        dispatchOverlaysOnly(self, u)
-    else
-        local fn = UNIT_DISPATCH[event]
-        if fn then fn(self, u, ...) end
-    end
+    -- PERF: unified hash-table dispatch. The prior hot-path if-elseif chain
+    -- did 6-7 string compares (~1µs) before falling through to UNIT_DISPATCH.
+    -- A direct table lookup is O(1) (~0.05µs). Net win: ~1µs per event.
+    local fn = UNIT_DISPATCH[event]
+    if fn then return fn(self, u, ...) end
 end
 
 ------------------------------------------------------------------------

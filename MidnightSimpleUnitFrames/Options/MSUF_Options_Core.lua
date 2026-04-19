@@ -688,6 +688,7 @@ panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
     profileGroup:SetAllPoints()
     local currentKey = "player"
     local currentTabKey = "frames"
+    local _msufKeyInitialized = false
     local UNIT_FRAME_KEYS = { player=true, target=true, targettarget=true, focus=true, pet=true, boss=true }
     local buttons = {}
     local editModeButton
@@ -813,6 +814,22 @@ panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
         return k == "bars" or k == "classpower" or k == "fonts" or k == "auras" or k == "castbar" or k == "misc" or k == "profiles"
     end
     local function SetCurrentKey(newKey)
+        -- PERF: Same-key early-exit. Hot path sees this called repeatedly with
+        -- identical newKey during options mirror page-select cascades. The heavy
+        -- UpdateGroupVisibility→_TFadeIn pipeline below doesn't need to run when
+        -- nothing actually changed.
+        -- Initialization guard: the first call MUST run through to set up
+        -- panel visibility, even if newKey matches the initial state
+        -- ("player"/"frames"). Without this, first-open-after-reload leaves
+        -- all panel groups in undefined visibility state.
+        if _msufKeyInitialized then
+            if IsTabKey(newKey) then
+                if currentTabKey == newKey then return end
+            else
+                if currentKey == newKey and currentTabKey == "frames" then return end
+            end
+        end
+        _msufKeyInitialized = true
         if IsTabKey(newKey) then
             currentTabKey = newKey
         else
