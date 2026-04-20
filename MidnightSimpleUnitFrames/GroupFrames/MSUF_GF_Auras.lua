@@ -11,6 +11,7 @@ local GF = ns.GF
 if not GF then return end
 
 local issecretvalue = _G.issecretvalue
+local canaccessvalue = _G.canaccessvalue
 local C_UnitAuras   = _G.C_UnitAuras
 local CreateFrame   = _G.CreateFrame
 local UnitExists    = _G.UnitExists
@@ -24,6 +25,9 @@ local math_max      = math.max
 local math_ceil     = math.ceil
 local math_floor    = math.floor
 local GameTooltip   = _G.GameTooltip
+local _hasCanaccessvalue = (type(canaccessvalue) == "function")
+local _QUESTION_MARK_ICON = 136243
+local _PADLOCK_ICON = 134400
 
 ------------------------------------------------------------------------
 -- Class-based dispel detection (set once at load)
@@ -86,6 +90,15 @@ local function AF()
     if _AF then return _AF end
     _AF = GF.AuraFilter or (_G.MSUF_GF_AuraFilter)
     return _AF
+end
+
+local function DecodeAuraIconFileID(icon)
+    if _hasCanaccessvalue then
+        if canaccessvalue(icon) ~= true then return 0 end
+    elseif issecretvalue and issecretvalue(icon) == true then
+        return 0
+    end
+    return tonumber(icon) or 0
 end
 
 ------------------------------------------------------------------------
@@ -759,6 +772,14 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                 if blHash and af then
                     local sid = af.DecodeSpellId(aura)
                     if af.IsBlacklisted(sid, blHash, aura) then
+                        _skip = true
+                    end
+                end
+                -- Skip auras with placeholder icons. Decode only accessible values so Lua
+                -- never compares a secret-tagged icon against constants.
+                if not _skip then
+                    local iconFileID = DecodeAuraIconFileID(aura.icon)
+                    if iconFileID == _QUESTION_MARK_ICON or iconFileID == _PADLOCK_ICON then
                         _skip = true
                     end
                 end
