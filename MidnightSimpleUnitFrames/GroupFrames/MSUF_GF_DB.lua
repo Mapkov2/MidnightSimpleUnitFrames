@@ -72,8 +72,8 @@ local PARTY_DEFAULTS = {
     growth            = "DOWN",    -- DOWN / UP / RIGHT / LEFT
     showPlayer        = true,
     showSolo          = false,
-    -- Pet frames (compact health bar below owner)
-    showPets          = true,
+    -- Pet frames are not shipped yet; keep default disabled until backend exists.
+    showPets          = false,
     -- Masque skin for aura icons (requires Masque addon)
     masqueEnabled     = false,
     powerHeight       = 6,
@@ -133,6 +133,7 @@ local PARTY_DEFAULTS = {
     rangeFadeEnabled  = true,
     rangeFadeAlpha    = 0.4,
     offlineAlpha      = 0.5,
+    hideOfflineDelay  = 0,
     -- Aggro border
     aggroEnabled      = true,
     aggroR            = 1,

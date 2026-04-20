@@ -139,7 +139,7 @@ local function FocusKick_UpdateAppearance()
 
     -- Apply global font to time text (if present)
     if FocusKickFrame.timeText then
-        local fontPath = (type(MSUF_GetFontPath) == "function") and MSUF_GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\FRIZQT__.TTF")
+        local fontPath = (type(MSUF_GetFontPath) == "function") and MSUF_GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
         local flags    = (type(MSUF_GetFontFlags) == "function") and MSUF_GetFontFlags() or "OUTLINE"
         local size = FocusKick_GetDesiredTextSize(g)
         FocusKickFrame.timeText:SetFont(fontPath, size, flags)
@@ -1031,4 +1031,3 @@ function _G.MSUF_FocusKick_PlayInterruptFeedback()
     FocusKick_EnsureInitialized(true)
     FocusKick_PlayInterruptFeedback()
 end
-

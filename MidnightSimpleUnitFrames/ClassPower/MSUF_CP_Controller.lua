@@ -178,7 +178,7 @@ builders.ALT_MANA = function(E)
         AM.container = c
 
         local bg = c:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture("Interface\Buttons\WHITE8x8")
+        bg:SetTexture("Interface\\Buttons\\WHITE8x8")
         bg:SetAllPoints(c)
         bg:SetVertexColor(0, 0, 0, 0.4)
         AM.bgTex = bg
@@ -186,7 +186,7 @@ builders.ALT_MANA = function(E)
         local border = CreateFrame("Frame", nil, c, "BackdropTemplate")
         border:SetPoint("TOPLEFT", c, "TOPLEFT", -1, 1)
         border:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 1, -1)
-        border:SetBackdrop({ edgeFile = "Interface\Buttons\WHITE8x8", edgeSize = 1 })
+        border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
         border:SetBackdropColor(0, 0, 0, 0)
         border:SetBackdropBorderColor(0, 0, 0, 1)
         border:SetFrameLevel(c:GetFrameLevel() + 1)
@@ -195,7 +195,7 @@ builders.ALT_MANA = function(E)
         local bar = CreateFrame("StatusBar", nil, c)
         bar:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
         bar:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, 0)
-        bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\Buttons\WHITE8x8")
+        bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\\Buttons\\WHITE8x8")
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(0)
         bar:SetFrameLevel(c:GetFrameLevel() + 1)
@@ -251,7 +251,7 @@ builders.ALT_MANA = function(E)
 
     local function AM_RefreshTexture()
         if not AM.bar then return end
-        AM.bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\Buttons\WHITE8x8")
+        AM.bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\\Buttons\\WHITE8x8")
     end
 
     return {

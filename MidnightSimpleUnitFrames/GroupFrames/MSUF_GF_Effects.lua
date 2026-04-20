@@ -1115,10 +1115,20 @@ local function ApplyRangeFade(f, unit, inRange)
     local connected = unit and UnitIsConnected and _UnsecretBool(UnitIsConnected(unit)) or nil
     if connected == false then
         f._msufGFLastRange = false
+        local now = GetTime and GetTime() or 0
+        local since = f._msufGFOfflineSince or now
+        if not f._msufGFOfflineSince then
+            f._msufGFOfflineSince = since
+        end
         local offA = conf.offlineAlpha or fadeAlpha
+        local hideDelay = tonumber(conf.hideOfflineDelay) or 0
+        if hideDelay > 0 and (now - since) >= hideDelay then
+            offA = 0
+        end
         if f.SetAlpha then f:SetAlpha(offA) end
         return
     end
+    f._msufGFOfflineSince = nil
 
     -- EQoL exact pattern (line 8424)
     if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end

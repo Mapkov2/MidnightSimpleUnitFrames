@@ -376,20 +376,21 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Category groups: key → list of config keys to copy
     local _COPY_CATEGORIES = {
         { key = "general",    label = "General (size, spacing, growth)",
-          keys = { "enabled", "showPlayer", "showSolo", "showPets", "width", "height", "spacing",
-                   "growthDirection", "headerSpacing", "groupBy", "groupingOrder",
-                   "groupFilter", "raidSortMode", "sortByRole", "roleOrder",
+          keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing",
+                   "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder",
                    "separateMeleeRanged", "playerFirstInRole",
                    "unitsPerColumn", "maxColumns",
                    "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineDelay",
                    "tooltipMode", "tooltipModifier",
-                   "frameScaleMode", "frameScaleManual", "scaleAt", "scaleOver" } },
+                   "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20",
+                   "scaleAt25", "scaleOver25" } },
         { key = "health",     label = "Health & Bars",
           keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB",
                    "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
                    "barTexture", "barBgTexture",
-                   "powerBarEnabled", "powerHeight", "showPower",
-                   "powerTextCenter", "powerFontSize", "powerOffsetX", "powerOffsetY",
+                   "powerHeight", "showPower",
+                   "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter",
+                   "powerFontSize", "powerOffsetX", "powerOffsetY",
                    "powerTextLayer", "powerSmoothFill",
                    "powerShowTank", "powerShowHealer", "powerShowDamager",
                    "cutawayEnabled", "cutawayColorR", "cutawayColorG",
@@ -1153,17 +1154,45 @@ function _G.MSUF_EnsureGFPanelBuilt()
             name = "MSUF_GF_ShowPetsCheck", parent = body,
             anchor = showSoloChk, x = 0, y = -4,
             label = TR("Show Pet Frames"),
-            get = function(k) return GF.Val(k, "showPets") end,
+            get = function(k)
+                if type(GF.AttachPetFrame) ~= "function"
+                    or type(GF.DetachPetFrame) ~= "function"
+                    or type(GF.RefreshAllPets) ~= "function"
+                then
+                    return false
+                end
+                return GF.Val(k, "showPets")
+            end,
             set = function(k, v)
+                if type(GF.AttachPetFrame) ~= "function"
+                    or type(GF.DetachPetFrame) ~= "function"
+                    or type(GF.RefreshAllPets) ~= "function"
+                then
+                    GF.GetConf(k).showPets = false
+                    return
+                end
                 GF.GetConf(k).showPets = v
-                if GF.RefreshAllPets then GF.RefreshAllPets() end
+                GF.RefreshAllPets()
             end,
         })
+        if type(GF.AttachPetFrame) ~= "function"
+            or type(GF.DetachPetFrame) ~= "function"
+            or type(GF.RefreshAllPets) ~= "function"
+        then
+            GF.GetConf(K()).showPets = false
+            if showPetsChk.SetEnabled then showPetsChk:SetEnabled(false) end
+        end
+        do
+            local petHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            petHint:SetPoint("TOPLEFT", showPetsChk, "BOTTOMLEFT", 24, -2)
+            petHint:SetText(TR("Pet frames are temporarily unavailable in this build."))
+            petHint:SetTextColor(0.55, 0.60, 0.70)
+        end
 
         -- Misc options (anchored directly after Show Pets)
         local reverseFillChk = SCheck({
             name = "MSUF_GF_ReverseFillCheck", parent = body,
-            anchor = showPetsChk, x = 0, y = -8,
+            anchor = showPetsChk, x = 0, y = -20,
             label = TR("Reverse Fill"),
             get = function(k) return GF.Val(k, "reverseFill") end,
             set = function(k, v) GF.GetConf(k).reverseFill = v; GF.RefreshVisuals() end,
@@ -1493,7 +1522,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 if info.key == cur then return end
                 GF.GetConf(K()).growth = info.key
                 RefreshGrowthButtons()
-                StaticPopup_Show("MSUF_GF_GROWTH_RELOAD")
+                GF.RebuildAll()
+                if GF.RefreshPreviewLayout then GF.RefreshPreviewLayout(K()) end
             end)
 
             growthBtns[info.key] = btn
