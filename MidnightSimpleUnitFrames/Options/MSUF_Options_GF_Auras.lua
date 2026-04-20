@@ -1579,7 +1579,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             formatText = function(v) return string.format(L["Layer: %d"], v) end,
         })
 
-        SCheck({
+        local paCdChk = SCheck({
             name = "MSUF_GF_PACd", parent = body,
             anchor = paLayerSl, x = 0, y = -12,
             label = L["Show Countdown Frame"],
@@ -1587,9 +1587,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             set = function(k, v) PA().showCountdown = v; GF.RefreshVisuals() end,
         })
 
-        SCheck({
+        local paNumChk = SCheck({
             name = "MSUF_GF_PANumbers", parent = body,
-            anchor = paYSl, x = 0, y = -36,
+            anchor = paCdChk, x = 0, y = -4,
             label = L["Show Countdown Numbers"],
             get = function(k) return PA().showNumbers == true end,
             set = function(k, v) PA().showNumbers = v; GF.RefreshVisuals() end,
@@ -1597,7 +1597,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         SCheck({
             name = "MSUF_GF_PADispelType", parent = body,
-            anchor = paYSl, x = 0, y = -60,
+            anchor = paNumChk, x = 0, y = -4,
             label = L["Show Dispel Type"],
             get = function(k) return PA().showDispelType == true end,
             set = function(k, v) PA().showDispelType = v; GF.RefreshVisuals() end,
