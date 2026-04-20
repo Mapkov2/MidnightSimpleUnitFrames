@@ -744,21 +744,39 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 end
             end)
 
-            -- Apply button
-            local applyBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
-            applyBtn:SetSize(80, 18)
-            applyBtn:SetPoint("BOTTOMRIGHT", pop, "BOTTOMRIGHT", -10, 8)
-            applyBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-            applyBtn:SetBackdropColor(0.15, 0.30, 0.18, 1)
-            applyBtn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
-            local applyFs = applyBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            applyFs:SetPoint("CENTER"); applyFs:SetText("|cff44ee55Apply|r")
-            applyBtn:SetScript("OnClick", function()
-                _GFDoApplyPresetSelective(K(), _selectedPresetKey)
-                pop:Hide()
+            -- Apply scope buttons: Raid / Party / Both
+            local function _DoApplyAndClose(scope)
                 local p = GF.PRESETS and GF.PRESETS[_selectedPresetKey]
-                print("|cff00ff00MSUF:|r Applied preset: " .. (p and p.label or _selectedPresetKey))
-            end)
+                local label = p and p.label or _selectedPresetKey
+                if scope == "raid" or scope == "both" then
+                    _GFDoApplyPresetSelective("raid", _selectedPresetKey)
+                end
+                if scope == "party" or scope == "both" then
+                    _GFDoApplyPresetSelective("party", _selectedPresetKey)
+                end
+                pop:Hide()
+                local scopeLabel = scope == "both" and "Raid+Party" or (scope == "raid" and "Raid" or "Party")
+                print("|cff00ff00MSUF:|r Applied preset " .. label .. " → " .. scopeLabel)
+            end
+
+            local function _MakeScopeBtn(label, w, anchorTo, anchorPt, ox)
+                local btn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+                btn:SetSize(w, 18)
+                btn:SetPoint("BOTTOMLEFT", anchorTo, anchorPt, ox, 8)
+                btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+                btn:SetBackdropColor(0.15, 0.30, 0.18, 1)
+                btn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
+                local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                fs:SetPoint("CENTER"); fs:SetText(label)
+                return btn
+            end
+
+            local raidBtn  = _MakeScopeBtn("|cff44ee55Raid|r",      58, pop, "BOTTOMLEFT",  10)
+            local partyBtn = _MakeScopeBtn("|cff44ee55Party|r",      58, raidBtn, "BOTTOMRIGHT", 4)
+            local bothBtn  = _MakeScopeBtn("|cff44ee55Both|r",       58, partyBtn, "BOTTOMRIGHT", 4)
+            raidBtn:SetScript("OnClick",  function() _DoApplyAndClose("raid")  end)
+            partyBtn:SetScript("OnClick", function() _DoApplyAndClose("party") end)
+            bothBtn:SetScript("OnClick",  function() _DoApplyAndClose("both")  end)
 
             pop._refreshHighlights = RefreshPresetHighlights
             _presetPopup = pop

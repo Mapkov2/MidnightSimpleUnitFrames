@@ -506,8 +506,10 @@ end
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
-    if type(db.gf_party) ~= "table" then db.gf_party = {} end
-    if type(db.gf_raid)  ~= "table" then db.gf_raid  = {} end
+    local _partyFresh = type(db.gf_party) ~= "table"
+    local _raidFresh  = type(db.gf_raid)  ~= "table"
+    if _partyFresh then db.gf_party = {} end
+    if _raidFresh  then db.gf_raid  = {} end
     MigrateShowHPTo3Slot(db.gf_party)
     MigrateShowHPTo3Slot(db.gf_raid)
     MigrateHighlightToUnified(db.gf_party)
@@ -612,6 +614,10 @@ function GF.EnsureDB()
                 ext.enabled = true
             end
         end
+    end
+    -- Schedule default preset apply on first-ever setup
+    if (_partyFresh or _raidFresh) and not db._gfDefaultPresetApplied then
+        GF._pendingDefaultPreset = true
     end
     -- Update cached conf references
     GF.InvalidateConfCache()
@@ -1370,50 +1376,65 @@ _G.MSUF_GF_InvalidateConfCache = GF.InvalidateConfCache
 ------------------------------------------------------------------------
 GF.PRESETS = {}
 
+-- Deep copy utility (exported for presets + copy system)
+function GF._DeepCopyTable(src)
+    if type(src) ~= "table" then return src end
+    local dst = {}
+    for k, v in pairs(src) do dst[k] = GF._DeepCopyTable(v) end
+    return dst
+end
+
+local function _MergePreset(base, override)
+    local merged = {}
+    for k, v in pairs(base) do
+        merged[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
+    end
+    for k, v in pairs(override) do
+        if type(v) == "table" and type(merged[k]) == "table" then
+            for sk, sv in pairs(v) do merged[k][sk] = (type(sv) == "table") and GF._DeepCopyTable(sv) or sv end
+        else
+            merged[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
+        end
+    end
+    return merged
+end
+
 -- ══════════════════════════════════════════════════════════════════════
--- DPS: Minimal, zero clutter. You need to see: who's alive, who's in
--- range, dispellable debuffs (if you can). Nothing else.
+-- DPS: Minimal, zero clutter. Debuffs, private auras, social icons.
 -- ══════════════════════════════════════════════════════════════════════
 GF.PRESETS.DPS = {
     label = "|cffff4444DPS|r",
-    desc  = "Compact: debuffs, private auras, ready check, role icon, leaders. No HP text.",
+    desc  = "Compact: debuffs, private auras, social icons. No HP text, no power bar.",
     conf  = {
         width = 80, height = 28, spacing = 1,
-        -- Name (left-aligned, slight upward offset to clear bottom icons)
         showName = true, nameFontSize = 9, nameAnchor = "LEFT",
         nameOffsetX = 2, nameOffsetY = 2,
         nameMaxChars = 7, nameNoEllipsis = true,
-        -- HP / power text
         textLeft = "NONE", textCenter = "NONE", textRight = "NONE",
         hpFontSize = 10,
-        showPower = false, powerBarEnabled = false, powerHeight = 0,
-        -- Behaviour
+        showPower = false, powerHeight = 0,
+        healthFadeEnabled = false,
+        debuffStripeEnabled = false,
         rangeFadeEnabled = true, rangeFadeAlpha = 0.35,
         aggroEnabled = true, dispelEnabled = true, targetIndicator = true,
-        -- Role icon (Blizzard standard, bottom-left, clear of name)
         roleIcon = true, roleIconSize = 8,
         roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 0,
-        -- Raid marker (top-left)
         raidMarker = true, raidMarkerSize = 12,
         raidMarkerAnchor = "TOPLEFT", raidMarkerX = 0, raidMarkerY = 0,
-        -- Leader / assist icons (top-right)
         leaderIcon = true, leaderIconSize = 10,
         leaderIconAnchor = "TOPRIGHT", leaderIconX = 0, leaderIconY = 0,
         assistIcon = true, assistIconSize = 10,
         assistIconAnchor = "TOPRIGHT", assistIconX = 12, assistIconY = 0,
-        -- Ready check / Dead / Ress / Summon — all share CENTER spot (shown one at a time)
         readyCheckIcon = true, readyCheckSize = 20,
         readyCheckAnchor = "CENTER", readyCheckX = 0, readyCheckY = 0,
         resurrectIcon = true, resurrectIconSize = 18,
         resurrectAnchor = "CENTER", resurrectX = 0, resurrectY = 0,
         summonIcon = true, summonIconSize = 18,
         summonAnchor = "CENTER", summonX = 0, summonY = 0,
-        -- Phase icon (top-left, below raid marker)
         phaseIcon = true, phaseIconSize = 12,
         phaseAnchor = "TOPLEFT", phaseX = 0, phaseY = -14,
-        -- Corner indicators
         ciEnabled = true, ciAlpha = 0.9,
-        -- Auras: debuffs grow outside frame to the right, no buffs/externals
+        ciSlotTL = "dispel", ciSlotTR = "boss", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
         auras = {
             enabled = true,
             buff = { enabled = false },
@@ -1442,29 +1463,72 @@ GF.PRESETS.DPS = {
         raidDebuffs = { enabled = true, size = 22, anchor = "CENTER", x = 0, y = 0 },
     },
 }
+GF.PRESETS.DPS.party = {
+    width = 110, height = 36, spacing = 2,
+    nameFontSize = 12, nameMaxChars = 10,
+    raidMarkerSize = 14, readyCheckSize = 22,
+    auras = {
+        enabled = true,
+        buff = { enabled = false },
+        debuff = {
+            enabled = true, maxIcons = 3, iconSize = 14, spacing = 1,
+            anchor = "RIGHT", x = 2, y = 0, growth = "RIGHT",
+            showCooldown = true, showStacks = true,
+            filterToken = "ALL",
+            blacklistCats = {
+                SATED = true, DESERTER = true, SKYRIDING = true,
+                COOLDOWNS = true, ROGUE_POISONS = true,
+                SHAMAN_IMBUE = true, SELF_BUFFS = true,
+            },
+        },
+        externals = { enabled = false },
+    },
+    privateAuras = {
+        enabled = true, max = 2, size = 15,
+        anchor = "BOTTOMRIGHT", direction = "LEFT",
+        x = 0, y = 0, showCountdown = true, showNumbers = false, layer = 8,
+    },
+}
 
 -- ══════════════════════════════════════════════════════════════════════
--- Tank: Aware of everything. See healer mana, aggro, all debuffs,
--- defensives on co-tank, raid markers.
+-- TANK: Full situational awareness. Deficit HP, power bar, debuffs,
+-- externals (survival CDs from others), private defensives.
+-- healthFade OFF — tanks always need full visibility of all frames.
 -- ══════════════════════════════════════════════════════════════════════
 GF.PRESETS.TANK = {
     label = "|cff5599ffTank|r",
-    desc  = "Full awareness: power bars, aggro highlight, debuffs, externals, deficit HP.",
+    desc  = "Deficit HP, power bar, 4 debuffs, 3 externals, private auras. Full aggro awareness.",
     conf  = {
         width = 110, height = 40, spacing = 2,
-        showName = true, nameFontSize = 11, nameAnchor = "LEFT",
+        showName = true, nameFontSize = 10, nameAnchor = "LEFT",
+        nameOffsetX = 2, nameOffsetY = 4,
         nameMaxChars = 8, nameNoEllipsis = true,
         textLeft = "NONE", textCenter = "DEFICIT", textRight = "NONE",
         hpFontSize = 10,
-        showPower = false,
-        powerBarEnabled = true, powerHeight = 4,
+        showPower = true, powerHeight = 4,
         rangeFadeEnabled = true, rangeFadeAlpha = 0.30,
-        aggroEnabled = true,
-        dispelEnabled = true,
-        targetIndicator = true,
-        roleIcon = true, roleIconSize = 10, roleIconAnchor = "BOTTOMLEFT",
+        aggroEnabled = true, dispelEnabled = true, targetIndicator = true,
+        healthFadeEnabled = false,
+        debuffStripeEnabled = true, debuffStripeHeight = 3, debuffStripeEdge = "BOTTOM",
+        debuffStripeAlpha = 0.70, debuffStripeColorR = 0.90, debuffStripeColorG = 0.20, debuffStripeColorB = 0.20,
+        roleIcon = true, roleIconSize = 10,
+        roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 0,
         raidMarker = true, raidMarkerSize = 14,
+        raidMarkerAnchor = "TOPLEFT", raidMarkerX = 0, raidMarkerY = 0,
+        leaderIcon = true, leaderIconSize = 10,
+        leaderIconAnchor = "TOPRIGHT", leaderIconX = 0, leaderIconY = 0,
+        assistIcon = true, assistIconSize = 10,
+        assistIconAnchor = "TOPRIGHT", assistIconX = 12, assistIconY = 0,
+        readyCheckIcon = true, readyCheckSize = 20,
+        readyCheckAnchor = "CENTER", readyCheckX = 0, readyCheckY = 0,
+        resurrectIcon = true, resurrectIconSize = 18,
+        resurrectAnchor = "CENTER", resurrectX = 0, resurrectY = 0,
+        summonIcon = true, summonIconSize = 18,
+        summonAnchor = "CENTER", summonX = 0, summonY = 0,
+        phaseIcon = true, phaseIconSize = 12,
+        phaseAnchor = "TOPLEFT", phaseX = 0, phaseY = -14,
         ciEnabled = true, ciAlpha = 0.9,
+        ciSlotTL = "dispel", ciSlotTR = "boss", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
         auras = {
             enabled = true,
             buff = { enabled = false },
@@ -1473,177 +1537,354 @@ GF.PRESETS.TANK = {
                 anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
                 showCooldown = true, showStacks = true,
                 filterToken = "ALL",
-                blacklistCats = {
-                    SATED = true, SKYRIDING = true, COOLDOWNS = true,
-                    DESERTER = true,
-                },
+                blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
             },
             externals = {
-                enabled = true, maxIcons = 2, iconSize = 20, spacing = 1,
-                anchor = "LEFT", x = -2, y = 0, growth = "LEFT",
+                enabled = true, maxIcons = 3, iconSize = 20, spacing = 1,
+                anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
             },
+        },
+        privateAuras = {
+            enabled = true, max = 3, size = 14,
+            anchor = "BOTTOMRIGHT", direction = "LEFT",
+            x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
         },
         spellIndicators = { enabled = false },
         raidDebuffs = { enabled = true, size = 26, anchor = "CENTER", x = 0, y = 0 },
     },
 }
+GF.PRESETS.TANK.party = {
+    width = 140, height = 48, spacing = 3,
+    nameFontSize = 12, nameMaxChars = 10, nameOffsetY = 5,
+    hpFontSize = 11, powerHeight = 5,
+    auras = {
+        enabled = true,
+        buff = { enabled = false },
+        debuff = {
+            enabled = true, maxIcons = 4, iconSize = 20, spacing = 1,
+            anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+            showCooldown = true, showStacks = true,
+            filterToken = "ALL",
+            blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
+        },
+        externals = {
+            enabled = true, maxIcons = 3, iconSize = 22, spacing = 1,
+            anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
+        },
+    },
+    privateAuras = {
+        enabled = true, max = 3, size = 16,
+        anchor = "BOTTOMRIGHT", direction = "LEFT",
+        x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
+    },
+}
 
 -- ══════════════════════════════════════════════════════════════════════
--- Healer Base: Shared foundation for all healer presets.
--- Large frames, deficit HP, power bar, full debuff + externals.
+-- HEALER BASE: Foundation for all healer presets.
+-- • healthFade dims full-HP targets (≥90%) → low HP frames pop visually
+-- • debuffStripe: thin red bottom line for any active debuff
+-- • Deficit HP text: triage at a glance
+-- • Power bar on: mana/resource awareness is critical
+-- • Debuffs outside top-right, externals outside top-left (no clipping)
+-- • Private auras: personal defensive tracking bottom-right
+-- • SI icons (per spec defaults): HoTs/shields placed on each frame
 -- ══════════════════════════════════════════════════════════════════════
 local _HEALER_BASE = {
     width = 120, height = 44, spacing = 2,
     showName = true, nameFontSize = 11, nameAnchor = "LEFT",
+    nameOffsetX = 2, nameOffsetY = 2,
     nameMaxChars = 8, nameNoEllipsis = true,
     textLeft = "NONE", textCenter = "DEFICIT", textRight = "NONE",
     hpFontSize = 11,
-    showPower = false,
-    powerBarEnabled = true, powerHeight = 4,
+    showPower = true, powerHeight = 4,
     rangeFadeEnabled = true, rangeFadeAlpha = 0.30,
-    aggroEnabled = true,
-    dispelEnabled = true,
-    targetIndicator = true,
-    roleIcon = true, roleIconSize = 10, roleIconAnchor = "BOTTOMLEFT",
+    aggroEnabled = true, dispelEnabled = true, targetIndicator = true,
+    healthFadeEnabled = true, healthFadeThreshold = 90, healthFadeAlpha = 0.35,
+    debuffStripeEnabled = true, debuffStripeHeight = 3, debuffStripeEdge = "BOTTOM",
+    debuffStripeAlpha = 0.70, debuffStripeColorR = 0.90, debuffStripeColorG = 0.20, debuffStripeColorB = 0.20,
+    roleIcon = true, roleIconSize = 10,
+    roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 0,
     raidMarker = true, raidMarkerSize = 14,
+    raidMarkerAnchor = "TOPLEFT", raidMarkerX = 0, raidMarkerY = 0,
+    leaderIcon = true, leaderIconSize = 10,
+    leaderIconAnchor = "TOPRIGHT", leaderIconX = 0, leaderIconY = 0,
+    assistIcon = true, assistIconSize = 10,
+    assistIconAnchor = "TOPRIGHT", assistIconX = 12, assistIconY = 0,
+    readyCheckIcon = true, readyCheckSize = 20,
+    readyCheckAnchor = "CENTER", readyCheckX = 0, readyCheckY = 0,
+    resurrectIcon = true, resurrectIconSize = 18,
+    resurrectAnchor = "CENTER", resurrectX = 0, resurrectY = 0,
+    summonIcon = true, summonIconSize = 18,
+    summonAnchor = "CENTER", summonX = 0, summonY = 0,
+    phaseIcon = true, phaseIconSize = 12,
+    phaseAnchor = "TOPLEFT", phaseX = 0, phaseY = -14,
     ciEnabled = true, ciAlpha = 0.9,
+    ciSlotTL = "dispel", ciSlotTR = "boss", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
     auras = {
         enabled = true,
+        buff = { enabled = false },
         debuff = {
             enabled = true, maxIcons = 3, iconSize = 18, spacing = 1,
             anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
             showCooldown = true, showStacks = true,
             filterToken = "ALL",
-            blacklistCats = {
-                SATED = true, SKYRIDING = true, COOLDOWNS = true,
-                DESERTER = true,
-            },
+            blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
         },
         externals = {
             enabled = true, maxIcons = 2, iconSize = 20, spacing = 1,
-            anchor = "BOTTOMRIGHT", x = 2, y = -2, growth = "RIGHT",
+            anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
         },
-        buff = { enabled = false },
+    },
+    privateAuras = {
+        enabled = true, max = 2, size = 14,
+        anchor = "BOTTOMRIGHT", direction = "LEFT",
+        x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
     },
     raidDebuffs = { enabled = true, size = 26, anchor = "CENTER", x = 0, y = 0 },
 }
 
-local function _MergePreset(base, override)
-    local merged = {}
-    for k, v in pairs(base) do
-        merged[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
+-- Party override builder — scales healer frames for 5-player content.
+-- auraExtra can override any aura sub-key (buff/debuff/externals).
+local function _MakeHealerParty(auraExtra)
+    local auras = {
+        enabled = true,
+        buff = { enabled = false },
+        debuff = {
+            enabled = true, maxIcons = 3, iconSize = 20, spacing = 1,
+            anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+            showCooldown = true, showStacks = true,
+            filterToken = "ALL",
+            blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
+        },
+        externals = {
+            enabled = true, maxIcons = 2, iconSize = 22, spacing = 1,
+            anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
+        },
+    }
+    if auraExtra then
+        for k, v in pairs(auraExtra) do auras[k] = v end
     end
-    for k, v in pairs(override) do
-        if type(v) == "table" and type(merged[k]) == "table" then
-            for sk, sv in pairs(v) do merged[k][sk] = (type(sv) == "table") and GF._DeepCopyTable(sv) or sv end
-        else
-            merged[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
-        end
-    end
-    return merged
-end
-
--- Deep copy utility (exported for presets + copy system)
-function GF._DeepCopyTable(src)
-    if type(src) ~= "table" then return src end
-    local dst = {}
-    for k, v in pairs(src) do dst[k] = GF._DeepCopyTable(v) end
-    return dst
+    return {
+        width = 150, height = 52, spacing = 3,
+        nameFontSize = 13, nameMaxChars = 12, hpFontSize = 12,
+        powerHeight = 5,
+        auras = auras,
+        privateAuras = {
+            enabled = true, max = 2, size = 16,
+            anchor = "BOTTOMRIGHT", direction = "LEFT",
+            x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
+        },
+    }
 end
 
 -- ── Holy Priest ──────────────────────────────────────────────────────
+-- Renew (TL icon) + PoM (TR icon) + Guardian Spirit (border glow) via SI.
+-- Magic + Disease dispel corner.
 GF.PRESETS.HOLY_PRIEST = {
     label = "|cffffffffHoly Priest|r",
-    desc  = "Renew + PoM tracking, Magic/Disease dispel corner, deficit HP, Fortitude missing.",
+    desc  = "Renew+PoM SI icons, Guardian Spirit glow. Health fade. Magic/Disease dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
         spellIndicators = { enabled = true },
     }),
 }
+GF.PRESETS.HOLY_PRIEST.party = _MakeHealerParty()
 
 -- ── Discipline Priest ────────────────────────────────────────────────
+-- Atonement (TL square tint) + PW:S (TR icon) + PoM (BL icon) via SI.
+-- Pain Suppression border glow. Buff group shows 1 own-cast absorb.
+-- Magic + Disease dispel corner.
 GF.PRESETS.DISC_PRIEST = {
     label = "|cffffffffDisc Priest|r",
-    desc  = "Atonement + PW:S tracking, absorb overlay, Magic/Disease dispel.",
+    desc  = "Atonement tint, PW:S+PoM SI icons, Pain Suppression glow. Magic/Disease dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
         spellIndicators = { enabled = true },
         auras = {
             enabled = true,
-            buff = { enabled = true, maxIcons = 1, iconSize = 14, anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
-                     filterMode = "RAID_PLAYER" },
+            buff = {
+                enabled = true, maxIcons = 1, iconSize = 14, spacing = 1,
+                anchor = "BOTTOMLEFT", x = 0, y = 2, growth = "RIGHT",
+                showCooldown = false, showStacks = false,
+                filterToken = "PLAYER", blacklistCats = {},
+            },
+            debuff = {
+                enabled = true, maxIcons = 3, iconSize = 18, spacing = 1,
+                anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+                showCooldown = true, showStacks = true,
+                filterToken = "ALL",
+                blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
+            },
+            externals = {
+                enabled = true, maxIcons = 2, iconSize = 20, spacing = 1,
+                anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
+            },
         },
     }),
 }
+GF.PRESETS.DISC_PRIEST.party = _MakeHealerParty({
+    buff = {
+        enabled = true, maxIcons = 1, iconSize = 16, spacing = 1,
+        anchor = "BOTTOMLEFT", x = 0, y = 2, growth = "RIGHT",
+        showCooldown = false, showStacks = false,
+        filterToken = "PLAYER", blacklistCats = {},
+    },
+})
 
 -- ── Restoration Druid ────────────────────────────────────────────────
+-- Rejuv (TL) + Regrowth (TR) + Lifebloom (BL) + WG square + Germination
+-- square + Ironbark border glow — all via SI. Buff row for HoT tracking.
+-- Nature/Poison dispel corner (no Curse in DF+).
 GF.PRESETS.RESTO_DRUID = {
     label = "|cffff7d0aResto Druid|r",
-    desc  = "HoT tracking (Rejuv, Lifebloom, WG, Regrowth). Mark of the Wild missing corner.",
+    desc  = "All 5 HoT SI icons + Ironbark glow. Buff row for HoT tracking. Dispel corner.",
     conf  = _MergePreset(_HEALER_BASE, {
         spellIndicators = { enabled = true },
         auras = {
             enabled = true,
-            buff = { enabled = true, maxIcons = 3, iconSize = 14, anchor = "BOTTOMLEFT", x = 0, y = -2, growth = "RIGHT",
-                     filterMode = "RAID_PLAYER" },
+            buff = {
+                enabled = true, maxIcons = 3, iconSize = 14, spacing = 1,
+                anchor = "BOTTOMLEFT", x = 0, y = 2, growth = "RIGHT",
+                showCooldown = true, showStacks = false,
+                filterToken = "PLAYER", blacklistCats = {},
+            },
+            debuff = {
+                enabled = true, maxIcons = 3, iconSize = 18, spacing = 1,
+                anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+                showCooldown = true, showStacks = true,
+                filterToken = "ALL",
+                blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
+            },
+            externals = {
+                enabled = true, maxIcons = 2, iconSize = 20, spacing = 1,
+                anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
+            },
         },
     }),
 }
+GF.PRESETS.RESTO_DRUID.party = _MakeHealerParty({
+    buff = {
+        enabled = true, maxIcons = 3, iconSize = 14, spacing = 1,
+        anchor = "BOTTOMLEFT", x = 0, y = 2, growth = "RIGHT",
+        showCooldown = true, showStacks = false,
+        filterToken = "PLAYER", blacklistCats = {},
+    },
+})
 
 -- ── Restoration Shaman ───────────────────────────────────────────────
+-- Riptide (TL icon) + Earth Shield (TR icon) + EarthlivingWeapon (BL
+-- square) via SI. Magic + Curse dispel corner.
 GF.PRESETS.RESTO_SHAMAN = {
     label = "|cff0070deResto Shaman|r",
-    desc  = "Riptide + Earth Shield tracking, Magic/Curse dispel corner.",
+    desc  = "Riptide+Earth Shield+Earthliving SI icons. Magic/Curse dispel corner.",
     conf  = _MergePreset(_HEALER_BASE, {
         spellIndicators = { enabled = true },
     }),
 }
+GF.PRESETS.RESTO_SHAMAN.party = _MakeHealerParty()
 
 -- ── Holy Paladin ─────────────────────────────────────────────────────
+-- Beacon of Light (TL) + Beacon of Faith/Eternal Flame (TR) + Dawnlight
+-- (bottom square) + BoP/BoSac border glows via SI. 3 external slots for
+-- BoP/BoSac tracking. Magic+Disease+Poison dispel corner.
 GF.PRESETS.HOLY_PALADIN = {
     label = "|cfff58cbaHoly Paladin|r",
-    desc  = "Beacon tracking, Magic/Disease/Poison dispel. BoP + Sac externals.",
+    desc  = "Beacon SI icons, BoP/BoSac glows, 3 external slots. Magic/Disease/Poison dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
         spellIndicators = { enabled = true },
         auras = {
             enabled = true,
-            externals = { enabled = true, maxIcons = 3, iconSize = 20 },
+            buff = { enabled = false },
+            debuff = {
+                enabled = true, maxIcons = 3, iconSize = 18, spacing = 1,
+                anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+                showCooldown = true, showStacks = true,
+                filterToken = "ALL",
+                blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
+            },
+            externals = {
+                enabled = true, maxIcons = 3, iconSize = 20, spacing = 1,
+                anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
+            },
         },
     }),
 }
+GF.PRESETS.HOLY_PALADIN.party = _MakeHealerParty({
+    externals = {
+        enabled = true, maxIcons = 3, iconSize = 22, spacing = 1,
+        anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
+    },
+})
 
 -- ── Mistweaver Monk ──────────────────────────────────────────────────
+-- Renewing Mist (TL) + Enveloping Mist (TR) + Soothing Mist (BL) +
+-- Life Cocoon border glow via SI. Magic + Disease dispel corner.
 GF.PRESETS.MISTWEAVER = {
     label = "|cff00ff96Mistweaver|r",
-    desc  = "Renewing Mist + Enveloping Mist tracking. Magic/Disease dispel.",
+    desc  = "RenewingMist+EnvelopingMist+LifeCocoon glow SI icons. Magic/Disease dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
         spellIndicators = { enabled = true },
     }),
 }
+GF.PRESETS.MISTWEAVER.party = _MakeHealerParty()
 
 -- ── Preservation Evoker ──────────────────────────────────────────────
+-- Echo (TL + namecolor tint) + Reversion (TR) + Dream Breath (BL) +
+-- Lifebind (center square) via SI. Magic + Poison dispel corner.
 GF.PRESETS.PRES_EVOKER = {
     label = "|cff33937fPres Evoker|r",
-    desc  = "Echo + Reversion tracking. Magic/Poison dispel.",
+    desc  = "Echo namecolor tint + Reversion/DreamBreath/Lifebind SI icons. Magic/Poison dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
         spellIndicators = { enabled = true },
     }),
 }
+GF.PRESETS.PRES_EVOKER.party = _MakeHealerParty()
 
 -- ── Augmentation Evoker ──────────────────────────────────────────────
+-- Ebon Might (TL healthtint) + Prescience (TR namecolor) + Blistering
+-- Scales (BR square) via SI. Percent HP (not deficit — Aug isn't healing).
+-- Less aggressive fade threshold. Buff row shows own-cast buffs.
+-- No externals (Aug doesn't track survival CDs).
 GF.PRESETS.AUG_EVOKER = {
     label = "|cff33937fAug Evoker|r",
-    desc  = "Prescience + Ebon Might tracking. Buff focus, minimal debuffs.",
+    desc  = "EbonMight+Prescience SI icons+tints. Percent HP. Buff row. No externals.",
     conf  = _MergePreset(_HEALER_BASE, {
-        width = 100, height = 36,
         textCenter = "PERCENT",
+        healthFadeEnabled = true, healthFadeThreshold = 80, healthFadeAlpha = 0.40,
         spellIndicators = { enabled = true },
         auras = {
             enabled = true,
-            buff = { enabled = true, maxIcons = 2, iconSize = 16, anchor = "TOPLEFT", x = -2, y = 2, growth = "LEFT",
-                     filterMode = "RAID_PLAYER" },
+            buff = {
+                enabled = true, maxIcons = 2, iconSize = 14, spacing = 1,
+                anchor = "BOTTOMLEFT", x = 0, y = 2, growth = "RIGHT",
+                showCooldown = true, showStacks = false,
+                filterToken = "PLAYER", blacklistCats = {},
+            },
+            debuff = {
+                enabled = true, maxIcons = 2, iconSize = 16, spacing = 1,
+                anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+                showCooldown = true, showStacks = true,
+                filterToken = "ALL",
+                blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
+            },
             externals = { enabled = false },
         },
     }),
 }
+GF.PRESETS.AUG_EVOKER.party = _MakeHealerParty({
+    buff = {
+        enabled = true, maxIcons = 2, iconSize = 14, spacing = 1,
+        anchor = "BOTTOMLEFT", x = 0, y = 2, growth = "RIGHT",
+        showCooldown = true, showStacks = false,
+        filterToken = "PLAYER", blacklistCats = {},
+    },
+    debuff = {
+        enabled = true, maxIcons = 2, iconSize = 18, spacing = 1,
+        anchor = "TOPRIGHT", x = 2, y = 2, growth = "RIGHT",
+        showCooldown = true, showStacks = true,
+        filterToken = "ALL",
+        blacklistCats = { SATED = true, SKYRIDING = true, COOLDOWNS = true, DESERTER = true },
+    },
+    externals = { enabled = false },
+})
 
 -- Ordered preset list for UI
 GF.PRESET_ORDER = {
@@ -1655,56 +1896,8 @@ GF.PRESET_ORDER = {
 }
 
 ------------------------------------------------------------------------
--- Scope overrides: Party = spacious (5 players), Raid = compact (10-40).
--- Base conf targets raid. Party overrides make frames larger.
-------------------------------------------------------------------------
-GF.PRESETS.DPS.party = {
-    width = 110, height = 36, spacing = 2,
-    nameFontSize = 12, nameMaxChars = 10, nameAnchor = "LEFT",
-    nameOffsetX = 2, nameOffsetY = 2,
-    textLeft = "NONE", textCenter = "NONE", textRight = "NONE",
-    showPower = false, powerBarEnabled = false, powerHeight = 0,
-    roleIcon = true, roleIconSize = 10,
-    roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 0,
-    raidMarkerSize = 14,
-    readyCheckSize = 22,
-    privateAuras = {
-        enabled = true, max = 2, size = 15,
-        anchor = "BOTTOMRIGHT", direction = "LEFT",
-        x = 0, y = 0,
-        showCountdown = true, showNumbers = false,
-        layer = 8,
-    },
-}
-
-GF.PRESETS.TANK.party = {
-    width = 140, height = 48, spacing = 3,
-    nameFontSize = 12, nameMaxChars = 12, hpFontSize = 11,
-    powerHeight = 5,
-}
-
--- Healer party overrides (shared)
-local _HEALER_PARTY = {
-    width = 150, height = 52, spacing = 3,
-    nameFontSize = 13, nameMaxChars = 12, hpFontSize = 12,
-    powerHeight = 5,
-}
-GF.PRESETS.HOLY_PRIEST.party   = _HEALER_PARTY
-GF.PRESETS.DISC_PRIEST.party   = _HEALER_PARTY
-GF.PRESETS.RESTO_DRUID.party   = _HEALER_PARTY
-GF.PRESETS.RESTO_SHAMAN.party  = _HEALER_PARTY
-GF.PRESETS.HOLY_PALADIN.party  = _HEALER_PARTY
-GF.PRESETS.MISTWEAVER.party    = _HEALER_PARTY
-GF.PRESETS.PRES_EVOKER.party   = _HEALER_PARTY
-
-GF.PRESETS.AUG_EVOKER.party = {
-    width = 130, height = 42, spacing = 3,
-    nameFontSize = 12, nameMaxChars = 10, hpFontSize = 11,
-}
-
-------------------------------------------------------------------------
--- Apply preset to a scope (party/raid)
--- Applies base conf, then scope-specific overrides (raid = smaller).
+-- Apply preset to a scope (party/raid).
+-- Base conf applied first, then scope-specific override (party = larger).
 ------------------------------------------------------------------------
 function GF.ApplyPreset(kind, presetKey)
     local preset = GF.PRESETS[presetKey]
@@ -1712,34 +1905,75 @@ function GF.ApplyPreset(kind, presetKey)
     local conf = GF.GetConf(kind)
     if not conf then return false end
 
-    -- Position is preserved (never overwritten by presets)
     local px, py, pp = conf.offsetX, conf.offsetY, conf.point
 
-    -- Apply base config
     for k, v in pairs(preset.conf) do
-        if type(v) == "table" then
-            conf[k] = GF._DeepCopyTable(v)
-        else
-            conf[k] = v
-        end
+        conf[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
     end
 
-    -- Apply scope-specific overrides (raid = compact, party = spacious)
     local scopeOvr = (kind == "raid") and preset.raid or preset.party
     if scopeOvr then
         for k, v in pairs(scopeOvr) do
-            if type(v) == "table" then
-                conf[k] = GF._DeepCopyTable(v)
-            else
-                conf[k] = v
-            end
+            conf[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
         end
     end
 
-    -- Restore position
     conf.offsetX, conf.offsetY, conf.point = px, py, pp
 
     if GF.RebuildAll then GF.RebuildAll() end
     GF.RefreshVisuals()
     return true
+end
+
+------------------------------------------------------------------------
+-- Class/Spec → Preset: auto-applied on first addon setup.
+-- Healers and tanks get specialized presets; everything else gets DPS.
+------------------------------------------------------------------------
+local _CLASS_PRESET_MAP = {
+    DRUID_4       = "RESTO_DRUID",
+    SHAMAN_3      = "RESTO_SHAMAN",
+    PRIEST_1      = "DISC_PRIEST",
+    PRIEST_2      = "HOLY_PRIEST",
+    PALADIN_1     = "HOLY_PALADIN",
+    EVOKER_2      = "PRES_EVOKER",
+    EVOKER_3      = "AUG_EVOKER",
+    MONK_2        = "MISTWEAVER",
+    WARRIOR_3     = "TANK",
+    PALADIN_2     = "TANK",
+    MONK_1        = "TANK",
+    DRUID_3       = "TANK",
+    DEMONHUNTER_2 = "TANK",
+    DEATHKNIGHT_1 = "TANK",
+}
+
+function GF.MaybeApplyDefaultPreset()
+    if not GF._pendingDefaultPreset then return end
+    GF._pendingDefaultPreset = nil
+    local db = _G.MSUF_DB
+    if not db then return end
+
+    local _, classToken
+    if UnitClass then _, classToken = UnitClass("player") end
+    local specIdx = GetSpecialization and GetSpecialization() or nil
+    if not (classToken and specIdx) then return end
+
+    local key = classToken .. "_" .. specIdx
+    local presetKey = _CLASS_PRESET_MAP[key] or "DPS"
+
+    db._gfDefaultPresetApplied = true
+    GF.ApplyPreset("party", presetKey)
+    GF.ApplyPreset("raid",  presetKey)
+    print("|cff00ff00MSUF:|r Default group frame preset applied: " .. (GF.PRESETS[presetKey] and GF.PRESETS[presetKey].label or presetKey))
+end
+
+-- Register PLAYER_ENTERING_WORLD to fire MaybeApplyDefaultPreset once.
+do
+    local _f = CreateFrame("Frame")
+    _f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    _f:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_ENTERING_WORLD" then
+            _f:UnregisterEvent("PLAYER_ENTERING_WORLD")
+            GF.MaybeApplyDefaultPreset()
+        end
+    end)
 end
