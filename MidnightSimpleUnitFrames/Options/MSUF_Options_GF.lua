@@ -642,7 +642,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             local qpKeys = GF.PRESET_ORDER or {}
             local numPresets = #qpKeys
             local presetRows = math.ceil(numPresets / 2)
-            local popH = 30 + presetRows * 20 + 12 + #_COPY_CATEGORIES * 22 + 36
+            local popH = 30 + presetRows * 20 + 12 + #_COPY_CATEGORIES * 22 + 60
             local pop = CreateFrame("Frame", nil, anchorFrame, "BackdropTemplate")
             pop:SetSize(320, popH)
             pop:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
@@ -715,10 +715,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 catY = catY - 22
             end
 
-            -- All / None buttons
+            -- Row 2 (upper): All / None category toggles
             local allBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
             allBtn:SetSize(50, 18)
-            allBtn:SetPoint("BOTTOMLEFT", pop, "BOTTOMLEFT", 10, 8)
+            allBtn:SetPoint("BOTTOMLEFT", pop, "BOTTOMLEFT", 10, 32)
             allBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
             allBtn:SetBackdropColor(0.10, 0.16, 0.28, 1)
             allBtn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
@@ -744,7 +744,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 end
             end)
 
-            -- Apply scope buttons: Raid / Party / Both
+            -- Row 1 (lower): Raid / Party / Both apply buttons
             local function _DoApplyAndClose(scope)
                 local p = GF.PRESETS and GF.PRESETS[_selectedPresetKey]
                 local label = p and p.label or _selectedPresetKey
@@ -759,10 +759,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 print("|cff00ff00MSUF:|r Applied preset " .. label .. " → " .. scopeLabel)
             end
 
-            local function _MakeScopeBtn(label, w, anchorTo, anchorPt, ox)
+            local function _MakeScopeBtn(label, w, x)
                 local btn = CreateFrame("Button", nil, pop, "BackdropTemplate")
                 btn:SetSize(w, 18)
-                btn:SetPoint("BOTTOMLEFT", anchorTo, anchorPt, ox, 8)
+                btn:SetPoint("BOTTOMLEFT", pop, "BOTTOMLEFT", x, 8)
                 btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
                 btn:SetBackdropColor(0.15, 0.30, 0.18, 1)
                 btn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
@@ -771,9 +771,9 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 return btn
             end
 
-            local raidBtn  = _MakeScopeBtn("|cff44ee55Raid|r",      58, pop, "BOTTOMLEFT",  10)
-            local partyBtn = _MakeScopeBtn("|cff44ee55Party|r",      58, raidBtn, "BOTTOMRIGHT", 4)
-            local bothBtn  = _MakeScopeBtn("|cff44ee55Both|r",       58, partyBtn, "BOTTOMRIGHT", 4)
+            local raidBtn  = _MakeScopeBtn("|cff44ee55Raid|r",  88, 10)
+            local partyBtn = _MakeScopeBtn("|cff44ee55Party|r",  88, 102)
+            local bothBtn  = _MakeScopeBtn("|cff44ee55Both|r",   88, 194)
             raidBtn:SetScript("OnClick",  function() _DoApplyAndClose("raid")  end)
             partyBtn:SetScript("OnClick", function() _DoApplyAndClose("party") end)
             bothBtn:SetScript("OnClick",  function() _DoApplyAndClose("both")  end)
