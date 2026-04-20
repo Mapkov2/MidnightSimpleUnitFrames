@@ -578,6 +578,202 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
+    -- Preset popup (selective apply)
+    ----------------------------------------------------------------
+    local _presetToggles = {}
+    for _, cat in ipairs(_COPY_CATEGORIES) do _presetToggles[cat.key] = true end
+    local _selectedPresetKey = (GF.PRESET_ORDER and GF.PRESET_ORDER[1]) or "DPS"
+
+    local function _GFDoApplyPresetSelective(kind, presetKey)
+        local preset = GF.PRESETS and GF.PRESETS[presetKey]
+        if not preset or not preset.conf then return end
+        local conf = GF.GetConf(kind)
+        if not conf then return end
+
+        -- Merge base conf + scope override into a temporary table
+        local merged = {}
+        for k, v in pairs(preset.conf) do
+            merged[k] = (type(v) == "table") and _GFDeepCopy(v) or v
+        end
+        local scopeOvr = (kind == "raid") and preset.raid or preset.party
+        if scopeOvr then
+            for k, v in pairs(scopeOvr) do
+                merged[k] = (type(v) == "table") and _GFDeepCopy(v) or v
+            end
+        end
+
+        -- Build allowlists from checked categories (same logic as copy)
+        local allowKeys, allowPrefixes, allowTables = {}, {}, {}
+        for _, cat in ipairs(_COPY_CATEGORIES) do
+            if _presetToggles[cat.key] then
+                if cat.keys then for _, k in ipairs(cat.keys) do allowKeys[k] = true end end
+                if cat.prefix then for _, p in ipairs(cat.prefix) do allowPrefixes[#allowPrefixes + 1] = p end end
+                if cat.tables then for _, t in ipairs(cat.tables) do allowTables[t] = true end end
+            end
+        end
+
+        local px, py, pp = conf.offsetX, conf.offsetY, conf.point
+        for k, v in pairs(merged) do
+            if _COPY_EXCLUDE[k] then
+            elseif allowKeys[k] or allowTables[k] then
+                conf[k] = (type(v) == "table") and _GFDeepCopy(v) or v
+            else
+                for _, p in ipairs(allowPrefixes) do
+                    if k:sub(1, #p) == p then
+                        conf[k] = (type(v) == "table") and _GFDeepCopy(v) or v
+                        break
+                    end
+                end
+            end
+        end
+        conf.offsetX, conf.offsetY, conf.point = px, py, pp
+
+        if GF.RebuildAll then GF.RebuildAll() end
+        GF.RefreshVisuals()
+        RefreshAllWidgets()
+        if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+        if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+    end
+
+    local _presetPopup
+    local function ShowPresetPopup(anchorFrame)
+        if _presetPopup and _presetPopup:IsShown() then _presetPopup:Hide(); return end
+        if not _presetPopup then
+            local qpKeys = GF.PRESET_ORDER or {}
+            local numPresets = #qpKeys
+            local presetRows = math.ceil(numPresets / 2)
+            local popH = 30 + presetRows * 20 + 12 + #_COPY_CATEGORIES * 22 + 36
+            local pop = CreateFrame("Frame", nil, anchorFrame, "BackdropTemplate")
+            pop:SetSize(320, popH)
+            pop:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
+                insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+            pop:SetBackdropColor(0.06, 0.10, 0.20, 0.97)
+            pop:SetBackdropBorderColor(0.30, 0.45, 0.70, 0.9)
+            pop:SetFrameStrata("DIALOG")
+            pop:SetFrameLevel(100)
+            pop:EnableMouse(true)
+
+            local title = pop:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            title:SetPoint("TOP", pop, "TOP", 0, -8)
+            title:SetText("Apply Preset")
+
+            -- Preset selector (2 columns)
+            pop._presetBtns = {}
+            local function RefreshPresetHighlights()
+                for pk, btn in pairs(pop._presetBtns) do
+                    if pk == _selectedPresetKey then
+                        btn:SetBackdropColor(0.15, 0.30, 0.18, 1)
+                        btn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
+                    else
+                        btn:SetBackdropColor(0.10, 0.16, 0.28, 1)
+                        btn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+                    end
+                end
+            end
+            for i, pk in ipairs(qpKeys) do
+                local preset = GF.PRESETS and GF.PRESETS[pk]
+                local col = ((i - 1) % 2 == 0) and 10 or 166
+                local row = math.floor((i - 1) / 2)
+                local btn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+                btn:SetSize(148, 18)
+                btn:SetPoint("TOPLEFT", pop, "TOPLEFT", col, -26 - row * 20)
+                btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+                btn:SetBackdropColor(0.10, 0.16, 0.28, 1)
+                btn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+                local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                fs:SetPoint("LEFT", btn, "LEFT", 4, 0)
+                fs:SetText(preset and preset.label or pk)
+                btn:SetScript("OnClick", function()
+                    _selectedPresetKey = pk
+                    RefreshPresetHighlights()
+                end)
+                pop._presetBtns[pk] = btn
+            end
+
+            -- Divider between presets and categories
+            local divY = -26 - presetRows * 20 - 4
+            local div = pop:CreateTexture(nil, "ARTWORK")
+            div:SetHeight(1); div:SetColorTexture(0.30, 0.45, 0.70, 0.4)
+            div:SetPoint("TOPLEFT", pop, "TOPLEFT", 6, divY)
+            div:SetPoint("TOPRIGHT", pop, "TOPRIGHT", -6, divY)
+
+            -- Category checkboxes
+            pop._checks = {}
+            local catY = divY - 20
+            for i, cat in ipairs(_COPY_CATEGORIES) do
+                local cb = CreateFrame("CheckButton", nil, pop, "UICheckButtonTemplate")
+                cb:SetSize(20, 20)
+                cb:SetPoint("TOPLEFT", pop, "TOPLEFT", 10, catY)
+                cb:SetChecked(_presetToggles[cat.key])
+                cb:SetScript("OnClick", function(self)
+                    _presetToggles[cat.key] = self:GetChecked() and true or false
+                end)
+                if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+                local fs = cb.text or cb.Text
+                if fs then fs:SetText(cat.label); fs:SetFontObject("GameFontHighlightSmall") end
+                pop._checks[i] = cb
+                catY = catY - 22
+            end
+
+            -- All / None buttons
+            local allBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+            allBtn:SetSize(50, 18)
+            allBtn:SetPoint("BOTTOMLEFT", pop, "BOTTOMLEFT", 10, 8)
+            allBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            allBtn:SetBackdropColor(0.10, 0.16, 0.28, 1)
+            allBtn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+            local allFs = allBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            allFs:SetPoint("CENTER"); allFs:SetText("All")
+            allBtn:SetScript("OnClick", function()
+                for j, cat in ipairs(_COPY_CATEGORIES) do
+                    _presetToggles[cat.key] = true; pop._checks[j]:SetChecked(true)
+                end
+            end)
+
+            local noneBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+            noneBtn:SetSize(50, 18)
+            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 4, 0)
+            noneBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            noneBtn:SetBackdropColor(0.10, 0.16, 0.28, 1)
+            noneBtn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+            local noneFs = noneBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            noneFs:SetPoint("CENTER"); noneFs:SetText("None")
+            noneBtn:SetScript("OnClick", function()
+                for j, cat in ipairs(_COPY_CATEGORIES) do
+                    _presetToggles[cat.key] = false; pop._checks[j]:SetChecked(false)
+                end
+            end)
+
+            -- Apply button
+            local applyBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+            applyBtn:SetSize(80, 18)
+            applyBtn:SetPoint("BOTTOMRIGHT", pop, "BOTTOMRIGHT", -10, 8)
+            applyBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            applyBtn:SetBackdropColor(0.15, 0.30, 0.18, 1)
+            applyBtn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
+            local applyFs = applyBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            applyFs:SetPoint("CENTER"); applyFs:SetText("|cff44ee55Apply|r")
+            applyBtn:SetScript("OnClick", function()
+                _GFDoApplyPresetSelective(K(), _selectedPresetKey)
+                pop:Hide()
+                local p = GF.PRESETS and GF.PRESETS[_selectedPresetKey]
+                print("|cff00ff00MSUF:|r Applied preset: " .. (p and p.label or _selectedPresetKey))
+            end)
+
+            pop._refreshHighlights = RefreshPresetHighlights
+            _presetPopup = pop
+        end
+
+        for i, cat in ipairs(_COPY_CATEGORIES) do
+            _presetPopup._checks[i]:SetChecked(_presetToggles[cat.key])
+        end
+        if _presetPopup._refreshHighlights then _presetPopup._refreshHighlights() end
+        _presetPopup:ClearAllPoints()
+        _presetPopup:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -2)
+        _presetPopup:Show()
+    end
+
+    ----------------------------------------------------------------
     -- Scope tabs (Party / Raid) + Copy button
     ----------------------------------------------------------------
     local scopeBar = CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
@@ -842,27 +1038,15 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local qpFS = qpBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         qpFS:SetPoint("CENTER"); qpFS:SetText("Presets")
         qpFS:SetTextColor(0.75, 0.65, 0.95)
-        qpBtn:SetScript("OnClick", function()
-            -- Cycle and apply
-            _qpIdx = (_qpIdx % #_qpKeys) + 1
-            local pk = _qpKeys[_qpIdx]
-            if pk and GF.ApplyPreset then
-                GF.ApplyPreset(K(), pk)
-                RefreshAllWidgets()
-                if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
-                if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
-                local p = GF.PRESETS and GF.PRESETS[pk]
-                print("|cff00ff00MSUF:|r Applied preset: " .. (p and p.label or pk))
-            end
+        qpBtn:SetScript("OnClick", function(self)
+            ShowPresetPopup(self)
         end)
         qpBtn:SetScript("OnEnter", function(self)
             self:SetBackdropColor(0.25, 0.20, 0.38, 1)
             self:SetBackdropBorderColor(0.45, 0.38, 0.70, 1)
             GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-            GameTooltip:SetText("Quick Presets", 1, 1, 1)
-            local pk = _qpKeys[(_qpIdx % #_qpKeys) + 1]
-            local p = pk and GF.PRESETS and GF.PRESETS[pk]
-            GameTooltip:AddLine("Click to cycle & apply role presets.\nNext: " .. (p and p.label or "?"), 0.7, 0.7, 0.8, true)
+            GameTooltip:SetText("Presets", 1, 1, 1)
+            GameTooltip:AddLine("Select a preset and choose which\ncategories to apply.", 0.7, 0.7, 0.8, true)
             GameTooltip:Show()
         end)
         qpBtn:SetScript("OnLeave", function(self)
