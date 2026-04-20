@@ -1652,18 +1652,19 @@ GF.PRESET_ORDER = {
 -- Base conf targets raid. Party overrides make frames larger.
 ------------------------------------------------------------------------
 GF.PRESETS.DPS.party = {
-    width = 110, height = 36, spacing = 2,
+    width = 110, height = 40, spacing = 2,
     nameFontSize = 12, nameMaxChars = 10, nameAnchor = "LEFT",
     nameOffsetX = 2, nameOffsetY = 2,
     textCenter = "PERCENT", hpFontSize = 11,
+    showPower = true, powerBarEnabled = true, powerHeight = 4,
     roleIcon = true, roleIconSize = 10,
-    roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 0,
+    roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 4,
     raidMarkerSize = 14,
     readyCheckSize = 22,
     privateAuras = {
         enabled = true, max = 2, size = 15,
         anchor = "BOTTOMRIGHT", direction = "LEFT",
-        x = 0, y = 0,
+        x = 0, y = 4,
         showCountdown = true, showNumbers = false,
         layer = 8,
     },

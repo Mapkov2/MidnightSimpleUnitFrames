@@ -929,7 +929,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local _tabLastSection = {}
 
     -- (#3) Preview relevance per tab
-    local _tabWantsPreview = { frame = true, health = true, auras = false, indicators = false }
+    local _tabWantsPreview = { frame = true, health = true, auras = true, indicators = false }
 
     local function SwitchTab(tabKey)
         -- Save current open section before switching
