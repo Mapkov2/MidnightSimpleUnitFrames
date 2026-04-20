@@ -131,7 +131,6 @@ GroupFrames\MSUF_GF_PrivateAuras.lua
 GroupFrames\MSUF_GF_AuraFilter.lua
 GroupFrames\MSUF_GF_Auras.lua
 GroupFrames\MSUF_GF_CornerIndicators.lua
-GroupFrames\MSUF_GF_RaidDebuffs.lua
 GroupFrames\MSUF_GF_HealerBuffs.lua
 GroupFrames\MSUF_GF_HealerBuffs_Editor.lua
 GroupFrames\MSUF_GF_EM2.lua
@@ -164,4 +163,3 @@ Options\MSUF_Options_GF_Auras.lua
 Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
 Modules\MSUF_RoundedUnitframes.lua
 Modules\MSUF_PortraitDecoration.lua
-

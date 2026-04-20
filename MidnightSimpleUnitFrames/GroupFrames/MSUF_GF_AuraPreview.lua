@@ -51,7 +51,7 @@ local HP_SAMPLES = {
 -- every icon while dragging the offset sliders.
 ------------------------------------------------------------------------
 local _visToggles = { buff = true, debuff = true, externals = true,
-    status = true, si = true, private = true, rdebuffs = true,
+    status = true, si = true, private = true,
     text = false, auraText = true }
 
 -- Solo-highlight: when non-nil, only this layer group is rendered at full
@@ -138,7 +138,6 @@ local HANDLE_COLORS = {
     si        = { 0.69, 0.50, 0.88 },
     status    = { 0.80, 0.67, 0.20 },
     private   = { 0.50, 0.50, 0.50 },
-    rdebuffs  = { 0.95, 0.35, 0.20 },
 }
 
 local STATUS_ICON_SPECS = {
@@ -183,9 +182,6 @@ local function ForEachLayerHandle(key, fn)
     elseif key == "private" then
         local h = _handles.private
         if h then fn(h) end
-    elseif key == "rdebuffs" then
-        local h = _handles.rdebuffs
-        if h then fn(h) end
     end
 end
 
@@ -197,7 +193,7 @@ end
 -- handle-selection dim-cascade in SelectHandle is active, which composes
 -- with this by early-returning in solo mode).
 local function ApplyLayerVisibility()
-    local KEYS = { "buff", "debuff", "externals", "status", "si", "private", "rdebuffs" }
+    local KEYS = { "buff", "debuff", "externals", "status", "si", "private" }
     for i = 1, #KEYS do
         local k = KEYS[i]
         local alpha = 1
@@ -1376,54 +1372,6 @@ local function BuildPrivateAuraHandle(mockFrame)
     _handles.private = handle
 end
 
-------------------------------------------------------------------------
--- Build raid debuff preview handle (single large icon)
-------------------------------------------------------------------------
-local function BuildRaidDebuffHandle(mockFrame)
-    local handle = CreateHandle(mockFrame, "rdebuffs", "rdebuffs", 28, 28, "rdebuffs")
-    handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
-    handle._label:SetText("RaidDB")
-
-    -- Mock icon texture (skull-like preview)
-    local tex = handle:CreateTexture(nil, "ARTWORK")
-    tex:SetAllPoints(handle)
-    tex:SetColorTexture(0.55, 0.12, 0.12, 1)
-    handle._rdTex = tex
-
-    -- Border overlay
-    local border = handle:CreateTexture(nil, "OVERLAY")
-    border:SetPoint("TOPLEFT", handle, "TOPLEFT", -1, 1)
-    border:SetPoint("BOTTOMRIGHT", handle, "BOTTOMRIGHT", 1, -1)
-    border:SetColorTexture(0.8, 0, 0, 0.6)
-    handle._rdBorder = border
-
-    -- "!" label to indicate priority debuff
-    local icon = handle:CreateFontString(nil, "OVERLAY")
-    icon:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
-    icon:SetPoint("CENTER")
-    icon:SetText("!")
-    icon:SetTextColor(1, 0.9, 0.2, 1)
-
-    handle._onDragFinish = function(anchor, offX, offY)
-        local sc = _mockFrame and _mockFrame._previewScale or 1
-        local kind = _getKind and _getKind() or "party"
-        local conf = GF.GetConf(kind)
-        if not conf.raidDebuffs then conf.raidDebuffs = {} end
-        conf.raidDebuffs.anchor = anchor
-        conf.raidDebuffs.x = floor(offX / sc + 0.5)
-        conf.raidDebuffs.y = floor(offY / sc + 0.5)
-        GF.RefreshVisuals()
-    end
-    handle._getCurrentAnchor = function()
-        local kind = _getKind and _getKind() or "party"
-        local conf = GF.GetConf(kind)
-        local rd = conf.raidDebuffs
-        return rd and rd.anchor or "CENTER"
-    end
-    _handles.rdebuffs = handle
-end
-
-------------------------------------------------------------------------
 -- Refresh all handle positions from config
 ------------------------------------------------------------------------
 function GF.RefreshPreviewHandles()
@@ -1697,24 +1645,6 @@ function GF.RefreshPreviewHandles()
                 h._paIcons[pi]:Hide()
             end
             h:SetShown(pa.enabled ~= false and _visToggles.private ~= false)
-        end
-    end
-
-    -- Raid Debuffs handle
-    do
-        local h = _handles.rdebuffs
-        if h then
-            local rd = conf.raidDebuffs or {}
-            local anchor = rd.anchor or "CENTER"
-            local offX = floor(((rd.x) or 0) * sc + 0.5)
-            local offY = floor(((rd.y) or 0) * sc + 0.5)
-            local sz = floor(((rd.size) or 28) * sc + 0.5)
-            h:SetSize(max(6, sz), max(6, sz))
-            if h._rdTex then h._rdTex:SetPoint("TOPLEFT", h, "TOPLEFT", 1, -1); h._rdTex:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", -1, 1) end
-            h:ClearAllPoints()
-            h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
-            h:SetFrameLevel(_mockFrame:GetFrameLevel() + (rd.layer or 12))
-            h:SetShown(rd.enabled == true and _visToggles.rdebuffs ~= false)
         end
     end
 
@@ -2054,7 +1984,6 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
             { key="status",    label="Status",  color={0.85,0.70,0.25} },
             { key="si",        label="Spells",  color={0.72,0.52,0.90} },
             { key="private",   label="Private", color={0.55,0.55,0.60} },
-            { key="rdebuffs",  label="RaidDB",  color={0.95,0.35,0.20} },
             -- Aura Text: cooldown + stack count FontStrings on mock
             -- aura icons.  Default on (primary purpose of this tab).
             { key="auraText",  label="CD/Stack",color={0.95,0.82,0.35} },
@@ -2184,9 +2113,6 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                 elseif spec.key == "private" then
                     local h = _handles.private
                     if h then h:SetShown(on) end
-                elseif spec.key == "rdebuffs" then
-                    local h = _handles.rdebuffs
-                    if h then h:SetShown(on) end
                 elseif spec.key == "text" then
                     -- Text visibility is gated inside RefreshPreviewBox via
                     -- the _visToggles.text check.  Re-run it so name/HP/power
@@ -2251,7 +2177,6 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     BuildAuraGroupHandles(_mockFrame)
     BuildStatusIconHandles(_mockFrame)
     BuildPrivateAuraHandle(_mockFrame)
-    BuildRaidDebuffHandle(_mockFrame)
 
     -- Coord display (in status bar)
     local coord = statusBar:CreateFontString(nil, "OVERLAY")

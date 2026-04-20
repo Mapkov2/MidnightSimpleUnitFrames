@@ -265,19 +265,6 @@ local PARTY_DEFAULTS = {
     hlFocusColorB         = 1.00,
     hlFocusSize           = 2,
     hlFocusOffset         = 0,
-    -- Raid Debuffs (single large priority debuff icon)
-    raidDebuffs           = {
-        enabled           = false,
-        size              = 28,
-        anchor            = "CENTER",
-        x                 = 0,
-        y                 = 0,
-        layer             = 12,
-        showTimer         = true,
-        timerSize         = 10,
-        onlyDispellable   = false,
-        colorBorderByType = true,
-    },
     -- Hide in client scene (barber/dressing room)
     hideInClientScene     = true,
     -- Power per-role visibility
@@ -1460,7 +1447,6 @@ GF.PRESETS.DPS = {
             layer = 8,
         },
         spellIndicators = { enabled = false },
-        raidDebuffs = { enabled = true, size = 22, anchor = "CENTER", x = 0, y = 0 },
     },
 }
 GF.PRESETS.DPS.party = {
@@ -1550,7 +1536,6 @@ GF.PRESETS.TANK = {
             x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
         },
         spellIndicators = { enabled = false },
-        raidDebuffs = { enabled = true, size = 26, anchor = "CENTER", x = 0, y = 0 },
     },
 }
 GF.PRESETS.TANK.party = {
@@ -1640,7 +1625,6 @@ local _HEALER_BASE = {
         anchor = "BOTTOMRIGHT", direction = "LEFT",
         x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
     },
-    raidDebuffs = { enabled = true, size = 26, anchor = "CENTER", x = 0, y = 0 },
 }
 
 -- Party override builder — scales healer frames for 5-player content.
@@ -1684,7 +1668,7 @@ GF.PRESETS.HOLY_PRIEST = {
     label = "|cffffffffHoly Priest|r",
     desc  = "Renew+PoM SI icons, Guardian Spirit glow. Health fade. Magic/Disease dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
-        spellIndicators = { enabled = true },
+        spellIndicators = { enabled = true, spec = "auto", specs = {} },
     }),
 }
 GF.PRESETS.HOLY_PRIEST.party = _MakeHealerParty()
@@ -1697,7 +1681,7 @@ GF.PRESETS.DISC_PRIEST = {
     label = "|cffffffffDisc Priest|r",
     desc  = "Atonement tint, PW:S+PoM SI icons, Pain Suppression glow. Magic/Disease dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
-        spellIndicators = { enabled = true },
+        spellIndicators = { enabled = true, spec = "auto", specs = {} },
         auras = {
             enabled = true,
             buff = {
@@ -1737,7 +1721,7 @@ GF.PRESETS.RESTO_DRUID = {
     label = "|cffff7d0aResto Druid|r",
     desc  = "All 5 HoT SI icons + Ironbark glow. Buff row for HoT tracking. Dispel corner.",
     conf  = _MergePreset(_HEALER_BASE, {
-        spellIndicators = { enabled = true },
+        spellIndicators = { enabled = true, spec = "auto", specs = {} },
         auras = {
             enabled = true,
             buff = {
@@ -1776,7 +1760,7 @@ GF.PRESETS.RESTO_SHAMAN = {
     label = "|cff0070deResto Shaman|r",
     desc  = "Riptide+Earth Shield+Earthliving SI icons. Magic/Curse dispel corner.",
     conf  = _MergePreset(_HEALER_BASE, {
-        spellIndicators = { enabled = true },
+        spellIndicators = { enabled = true, spec = "auto", specs = {} },
     }),
 }
 GF.PRESETS.RESTO_SHAMAN.party = _MakeHealerParty()
@@ -1789,7 +1773,7 @@ GF.PRESETS.HOLY_PALADIN = {
     label = "|cfff58cbaHoly Paladin|r",
     desc  = "Beacon SI icons, BoP/BoSac glows, 3 external slots. Magic/Disease/Poison dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
-        spellIndicators = { enabled = true },
+        spellIndicators = { enabled = true, spec = "auto", specs = {} },
         auras = {
             enabled = true,
             buff = { enabled = false },
@@ -1821,7 +1805,7 @@ GF.PRESETS.MISTWEAVER = {
     label = "|cff00ff96Mistweaver|r",
     desc  = "RenewingMist+EnvelopingMist+LifeCocoon glow SI icons. Magic/Disease dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
-        spellIndicators = { enabled = true },
+        spellIndicators = { enabled = true, spec = "auto", specs = {} },
     }),
 }
 GF.PRESETS.MISTWEAVER.party = _MakeHealerParty()
@@ -1833,7 +1817,7 @@ GF.PRESETS.PRES_EVOKER = {
     label = "|cff33937fPres Evoker|r",
     desc  = "Echo namecolor tint + Reversion/DreamBreath/Lifebind SI icons. Magic/Poison dispel.",
     conf  = _MergePreset(_HEALER_BASE, {
-        spellIndicators = { enabled = true },
+        spellIndicators = { enabled = true, spec = "auto", specs = {} },
     }),
 }
 GF.PRESETS.PRES_EVOKER.party = _MakeHealerParty()
@@ -1849,7 +1833,7 @@ GF.PRESETS.AUG_EVOKER = {
     conf  = _MergePreset(_HEALER_BASE, {
         textCenter = "PERCENT",
         healthFadeEnabled = true, healthFadeThreshold = 80, healthFadeAlpha = 0.40,
-        spellIndicators = { enabled = true },
+        spellIndicators = { enabled = true, spec = "auto", specs = {} },
         auras = {
             enabled = true,
             buff = {

@@ -744,9 +744,6 @@ local function dispatchAura(f, unit, updateInfo)
         if ciRelevant and GF.UpdateCornerIndicators and c.ciEn then
             GF.UpdateCornerIndicators(f, unit)
         end
-        if GF.UpdateRaidDebuff and c.rdEn then
-            GF.UpdateRaidDebuff(f, unit)
-        end
         return
     end
 
@@ -929,10 +926,6 @@ local function dispatchAura(f, unit, updateInfo)
         GF.UpdateCornerIndicators(f, unit)
     end
 
-    -- Raid Debuffs (only when enabled)
-    if GF.UpdateRaidDebuff and c.rdEn then
-        GF.UpdateRaidDebuff(f, unit)
-    end
 end
 
 ------------------------------------------------------------------------
@@ -1206,8 +1199,6 @@ function GF.BuildFrameCache(f)
     c.ciSlotC  = (conf.ciSlotC  or "none")
 
     -- Raid debuffs
-    local rd = conf.raidDebuffs
-    c.rdEn = rd and rd.enabled == true
 
     -- Heal prediction (resolve full fallthrough: conf → general → default true)
     local hpEn = conf.healPredEnabled
@@ -1230,7 +1221,7 @@ function GF.BuildFrameCache(f)
     c.phaseEn  = conf.phaseIcon ~= false
 
     -- Composite: does anything need UNIT_AURA?
-    c.needAura = c.anyAuraGrp or c.ciEn or c.rdEn
+    c.needAura = c.anyAuraGrp or c.ciEn
                  or (c.dispelScan and GF._playerCanDispel)
                  or c.siEn
 
@@ -2300,7 +2291,6 @@ local function UpdateAll(f, unit)
     if c.phaseEn then UpdatePhaseIcon(f, unit) end
     UpdateGroupNumber(f, unit)
     if c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
-    if c.rdEn and GF.UpdateRaidDebuff then GF.UpdateRaidDebuff(f, unit) end
     if c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
 end
 
