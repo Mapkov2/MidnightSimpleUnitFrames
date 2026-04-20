@@ -1401,9 +1401,16 @@ GF.PRESETS.DPS = {
         leaderIconAnchor = "TOPRIGHT", leaderIconX = 0, leaderIconY = 0,
         assistIcon = true, assistIconSize = 10,
         assistIconAnchor = "TOPRIGHT", assistIconX = 12, assistIconY = 0,
-        -- Ready check (large, centered — shown only during ready checks)
+        -- Ready check / Dead / Ress / Summon — all share CENTER spot (shown one at a time)
         readyCheckIcon = true, readyCheckSize = 20,
         readyCheckAnchor = "CENTER", readyCheckX = 0, readyCheckY = 0,
+        resurrectIcon = true, resurrectIconSize = 18,
+        resurrectAnchor = "CENTER", resurrectX = 0, resurrectY = 0,
+        summonIcon = true, summonIconSize = 18,
+        summonAnchor = "CENTER", summonX = 0, summonY = 0,
+        -- Phase icon (top-left, below raid marker)
+        phaseIcon = true, phaseIconSize = 12,
+        phaseAnchor = "TOPLEFT", phaseX = 0, phaseY = -14,
         -- Corner indicators
         ciEnabled = true, ciAlpha = 0.9,
         -- Auras: debuffs grow outside frame to the right, no buffs/externals
@@ -1652,19 +1659,19 @@ GF.PRESET_ORDER = {
 -- Base conf targets raid. Party overrides make frames larger.
 ------------------------------------------------------------------------
 GF.PRESETS.DPS.party = {
-    width = 110, height = 40, spacing = 2,
+    width = 110, height = 36, spacing = 2,
     nameFontSize = 12, nameMaxChars = 10, nameAnchor = "LEFT",
     nameOffsetX = 2, nameOffsetY = 2,
-    textCenter = "PERCENT", hpFontSize = 11,
-    showPower = true, powerBarEnabled = true, powerHeight = 4,
+    textLeft = "NONE", textCenter = "NONE", textRight = "NONE",
+    showPower = false, powerBarEnabled = false, powerHeight = 0,
     roleIcon = true, roleIconSize = 10,
-    roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 4,
+    roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 0,
     raidMarkerSize = 14,
     readyCheckSize = 22,
     privateAuras = {
         enabled = true, max = 2, size = 15,
         anchor = "BOTTOMRIGHT", direction = "LEFT",
-        x = 0, y = 4,
+        x = 0, y = 0,
         showCountdown = true, showNumbers = false,
         layer = 8,
     },
