@@ -138,6 +138,77 @@ local function _ReadRGB(g, rKey, gKey, bKey, dr, dg, db)
     end
     return dr, dg, db
 end
+local _UF_DISPEL_INDEX_BY_NAME = { Magic = 1, Curse = 2, Disease = 3, Poison = 4, Bleed = 5, None = 0 }
+
+local function _GetUFDispelColor(dispelName, unit, auraID)
+    local g = MSUF_DB and MSUF_DB.general
+    local mode = g and g.hlDispelColorMode or "SINGLE"
+    if mode ~= "TYPE" then
+        local r = (g and (g.hlDispelColorR or g.dispelBorderColorR)) or 0.25
+        local gg = (g and (g.hlDispelColorG or g.dispelBorderColorG)) or 0.75
+        local b = (g and (g.hlDispelColorB or g.dispelBorderColorB)) or 1.00
+        return r, gg, b
+    end
+
+    local CUA = _G.C_UnitAuras
+    local curve = _G.MSUF_A2_GetDebuffColorCurve and _G.MSUF_A2_GetDebuffColorCurve()
+    if CUA and curve and unit and auraID and type(CUA.GetAuraDispelTypeColor) == "function" then
+        local color = CUA.GetAuraDispelTypeColor(unit, auraID, curve)
+        if color then
+            if color.GetRGBA then
+                local r, gg, b = color:GetRGBA()
+                return r, gg, b
+            elseif color.GetRGB then
+                local r, gg, b = color:GetRGB()
+                return r, gg, b
+            elseif color.r then
+                return color.r, color.g, color.b
+            end
+        end
+    end
+
+    if dispelName == "DISPELLABLE" then dispelName = nil end
+    if type(dispelName) == "string" then
+        local r = g and g["dispelType" .. dispelName .. "R"]
+        if type(r) == "number" then
+            return r, g["dispelType" .. dispelName .. "G"], g["dispelType" .. dispelName .. "B"]
+        end
+        local idx = _UF_DISPEL_INDEX_BY_NAME[dispelName or "None"] or 0
+        local obj = ({
+            [1] = _G.DEBUFF_TYPE_MAGIC_COLOR,
+            [2] = _G.DEBUFF_TYPE_CURSE_COLOR,
+            [3] = _G.DEBUFF_TYPE_DISEASE_COLOR,
+            [4] = _G.DEBUFF_TYPE_POISON_COLOR,
+            [5] = _G.DEBUFF_TYPE_BLEED_COLOR,
+            [0] = _G.DEBUFF_TYPE_NONE_COLOR,
+        })[idx]
+        if obj then
+            if obj.GetRGBA then
+                local r2, g2, b2 = obj:GetRGBA()
+                return r2, g2, b2
+            elseif obj.GetRGB then
+                local r2, g2, b2 = obj:GetRGB()
+                return r2, g2, b2
+            elseif obj.r then
+                return obj.r, obj.g, obj.b
+            end
+        end
+    end
+
+    return (g and g.dispelBorderColorR) or 0.25, (g and g.dispelBorderColorG) or 0.75, (g and g.dispelBorderColorB) or 1.00
+end
+
+local function _ApplyUFBarBorderTint(self, showTint, r, g, b)
+    local o = self and self._msufBarOutline
+    local f = o and o.frame
+    if not f then return end
+    if showTint then
+        f:SetBackdropBorderColor(r or 0, g or 0, b or 0, 1)
+    else
+        f:SetBackdropBorderColor(0, 0, 0, 1)
+    end
+end
+
 
 -- Sub-function: apply the normal black bar outline.
 local function MSUF_ApplyBarOutline(self, thickness, o)
@@ -198,6 +269,11 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
         self._msufBarOutlineBottomIsPower = bottomIsPower and true or false
     end
     f:Show()
+    if self._msufBarBorderTintActive then
+        f:SetBackdropBorderColor(self._msufBarBorderTintR or 0, self._msufBarBorderTintG or 0, self._msufBarBorderTintB or 0, 1)
+    else
+        f:SetBackdropBorderColor(0, 0, 0, 1)
+    end
 
     -- Detached power bar: apply its own outline frame.
     -- Uses its own thickness setting (detachedPowerBarOutline) so the user
@@ -337,7 +413,7 @@ MSUF_ApplyRareVisuals = function(self)
     end
 
     local aggroR, aggroG, aggroB = cfg.aggroR, cfg.aggroG, cfg.aggroB
-    local dispelR, dispelG, dispelB = cfg.dispelR, cfg.dispelG, cfg.dispelB
+    local dispelR, dispelG, dispelB = _GetUFDispelColor(self._msufDispelType, self.unit, self._msufDispelAuraID)
     local purgeR, purgeG, purgeB = cfg.purgeR, cfg.purgeG, cfg.purgeB
 
     -- Dispel state detection.
@@ -403,6 +479,13 @@ MSUF_ApplyRareVisuals = function(self)
 
     -- Apply (or hide) the highlight overlay.
     MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
+
+    local tintBarBorder = (hlKey == 2)
+    self._msufBarBorderTintActive = tintBarBorder and true or nil
+    self._msufBarBorderTintR = tintBarBorder and hlR or nil
+    self._msufBarBorderTintG = tintBarBorder and hlG or nil
+    self._msufBarBorderTintB = tintBarBorder and hlB or nil
+    _ApplyUFBarBorderTint(self, tintBarBorder, hlR, hlG, hlB)
  end
 -- Export with RoundedUF notification (replaces former hooksecurefunc in RoundedUnitframes).
 _G.MSUF_RefreshRareBarVisuals = function(frame)
@@ -657,10 +740,31 @@ do
     local f = F.CreateFrame("Frame")
 
     local function HasDispellableDebuff(unit)
-        local getSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
+        local CUA = C_UnitAuras
+        local getSlots = CUA and CUA.GetAuraSlots
+        local getBySlot = CUA and CUA.GetAuraDataBySlot
         if type(getSlots) ~= "function" then return false end
-        local _, slot1 = getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil)
-        return slot1 ~= nil
+        local slots = { getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil) }
+        local has = false
+        local aid, dispelType
+        for i = 2, #slots do
+            local slot = slots[i]
+            if slot ~= nil then
+                has = true
+                if type(getBySlot) == "function" then
+                    local aura = getBySlot(unit, slot)
+                    if aura then
+                        aid = aura.auraInstanceID or aid
+                        local dn = aura.dispelName
+                        if type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
+                            dispelType = dn
+                        end
+                    end
+                end
+                break
+            end
+        end
+        return has, aid, dispelType
     end
 
     -- Purge/Spellsteal detection (combat-safe for 12.0).
@@ -805,8 +909,9 @@ do
         -- returns true for same-faction duel opponents, which breaks purge detection).
         local canAssist = UnitCanAssist and UnitCanAssist("player", unit)
         local canAttack = UnitCanAttack and UnitCanAttack("player", unit)
+        local dispelAid, dispelType
         if dispelEnabled and canAssist then
-            dispelOn = HasDispellableDebuff(unit)
+            dispelOn, dispelAid, dispelType = HasDispellableDebuff(unit)
         end
 
         -- Purge: sentinel frames handle rendering via SetAlpha with secret values.
@@ -819,8 +924,10 @@ do
         end
 
         local changed = false
-        if forceRefresh or uf._msufDispelOutlineOn ~= dispelOn then
+        if forceRefresh or uf._msufDispelOutlineOn ~= dispelOn or uf._msufDispelAuraID ~= dispelAid or uf._msufDispelType ~= dispelType then
             uf._msufDispelOutlineOn = dispelOn
+            uf._msufDispelAuraID = dispelAid
+            uf._msufDispelType = dispelType
             changed = true
         end
 

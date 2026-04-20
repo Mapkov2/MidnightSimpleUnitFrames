@@ -69,21 +69,11 @@ local function CaptureSlots(...)
 end
 
 local function QuerySlots(unit, filter, maxCount)
-    if GF and GF.QueryAuraSlots then
-        return GF.QueryAuraSlots(unit, filter, maxCount)
-    end
     if not (C_UnitAuras and C_UnitAuras.GetAuraSlots) then return _slotBuf, 0 end
     if maxCount then
         return CaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter, maxCount))
     end
     return CaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter))
-end
-
-local function QueryAuraData(unit, slot)
-    if GF and GF.GetAuraDataBySlot then
-        return GF.GetAuraDataBySlot(unit, slot)
-    end
-    return C_UnitAuras and C_UnitAuras.GetAuraDataBySlot and C_UnitAuras.GetAuraDataBySlot(unit, slot)
 end
 
 ------------------------------------------------------------------------
@@ -738,7 +728,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
 
     for i = 2, slotCount do
         if shown >= maxIcons and (not isHarmful or topDispel) then break end
-        local aura = QueryAuraData(unit, slots[i])
+        local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
         if aura then
             local aid = aura.auraInstanceID
             if (isBuff and aid and _externalsIDs[aid])
@@ -967,7 +957,7 @@ function GF.UpdateFrameAuras(f, unit)
             if _isFilteredOut then
                 local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
                 if sc >= 2 then
-                    local aura = QueryAuraData(unit, slots[2])
+                    local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[2])
                     if aura and aura.auraInstanceID then
                         mergedDispel = "DISPELLABLE"
                         f._msufGFDispelAuraID = aura.auraInstanceID
@@ -976,7 +966,7 @@ function GF.UpdateFrameAuras(f, unit)
             else
                 local slots, sc = QuerySlots(unit, "HARMFUL", 12)
                 for i = 2, sc do
-                    local aura = QueryAuraData(unit, slots[i])
+                    local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
                     if aura then
                         local dn = aura.dispelName
                         if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
