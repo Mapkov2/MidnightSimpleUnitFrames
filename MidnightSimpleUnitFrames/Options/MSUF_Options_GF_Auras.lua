@@ -653,7 +653,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             if spellPanels[auraName] then return spellPanels[auraName] end
 
             local panel = CreateFrame("Frame", nil, body)
-            panel:SetSize(580, 300)
+            panel:SetSize(580, 320)
             panel:EnableMouse(true)
 
             -- Subtle top divider instead of floating box
@@ -774,6 +774,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 set = function(k, v)
                     PlacedCfg().type = v
                     if panel._refreshBarW then panel._refreshBarW() end
+                    if panel._refreshCDControls then panel._refreshCDControls() end
                     GF.RefreshVisuals()
                 end,
             })
@@ -838,22 +839,38 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 set = function(k, v) PlacedCfg().missing = v and true or false; GF.RefreshVisuals() end,
             })
 
-            SCheck({
+            local showCDChk = SCheck({
                 name = "MSUF_GF_SI_" .. auraName .. "_ShowCD", parent = panel,
                 anchor = missingChk, x = 0, y = -4,
                 label = L["Show Cooldown Text"],
                 get = function(k) return PlacedCfg().showCooldown ~= false end,
-                set = function(k, v) PlacedCfg().showCooldown = v and true or false; GF.RefreshVisuals() end,
+                set = function(k, v)
+                    PlacedCfg().showCooldown = v and true or false
+                    GF.RefreshVisuals()
+                    if panel._refreshCDControls then panel._refreshCDControls() end
+                end,
             })
 
-            SSlider({
+            local cdSizeSl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_CDSize", parent = panel, compact = true,
-                anchor = missingChk, x = 140, y = -4,
+                anchor = showCDChk, x = 20, y = -6,
                 min = 6, max = 24, step = 1, width = 120, default = 8,
                 get = function(k) return PlacedCfg().cooldownSize or 8 end,
                 set = function(k, v) PlacedCfg().cooldownSize = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format(L["CD Size: %d"], v) end,
             })
+
+            local function RefreshCDControls()
+                local t = PlacedCfg().type or "icon"
+                if t == "bar" then
+                    showCDChk:Hide(); cdSizeSl:Hide()
+                else
+                    showCDChk:Show()
+                    if PlacedCfg().showCooldown ~= false then cdSizeSl:Show() else cdSizeSl:Hide() end
+                end
+            end
+            panel._refreshCDControls = RefreshCDControls
+            RefreshCDControls()
 
             -- Right column: Frame Effect
             local fxLbl = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
