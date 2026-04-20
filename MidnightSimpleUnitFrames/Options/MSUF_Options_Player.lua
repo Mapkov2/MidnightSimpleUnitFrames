@@ -1107,6 +1107,12 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
 
     -- Copy-To UI (all 6 units)
+    if not _G._MSUF_CopyDestLabel then
+        _G._MSUF_CopyDestLabel = function(k)
+            return ({ player="Player", target="Target", focus="Focus", boss="Boss frames",
+                      pet="Pet", targettarget="Target of Target", all="All" })[k] or tostring(k)
+        end
+    end
     local COPY_UI_DEFS = {
         { "player","MSUF_PlayerCopyToDropdown","_msufCopyDestKey","target",
           { {"Target","target"},{"Focus","focus"},{"Boss frames","boss"},{"Pet","pet"},{"Target of Target","targettarget"} } },
