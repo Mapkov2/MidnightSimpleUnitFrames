@@ -1376,27 +1376,42 @@ GF.PRESETS = {}
 -- ══════════════════════════════════════════════════════════════════════
 GF.PRESETS.DPS = {
     label = "|cffff4444DPS|r",
-    desc  = "Ultra-compact, name only. No HP text, no power bar. Boss/dispel debuffs only.",
+    desc  = "Compact: debuffs, private auras, ready check, role icon, leaders. No HP text.",
     conf  = {
         width = 80, height = 28, spacing = 1,
-        showName = true, nameFontSize = 10, nameAnchor = "CENTER",
-        nameMaxChars = 6, nameNoEllipsis = true,
+        -- Name (left-aligned, slight upward offset to clear bottom icons)
+        showName = true, nameFontSize = 9, nameAnchor = "LEFT",
+        nameOffsetX = 2, nameOffsetY = 2,
+        nameMaxChars = 7, nameNoEllipsis = true,
+        -- HP / power text
         textLeft = "NONE", textCenter = "NONE", textRight = "NONE",
         hpFontSize = 10,
-        showPower = false,
-        powerBarEnabled = false, powerHeight = 0,
+        showPower = false, powerBarEnabled = false, powerHeight = 0,
+        -- Behaviour
         rangeFadeEnabled = true, rangeFadeAlpha = 0.35,
-        aggroEnabled = true,
-        dispelEnabled = true,
-        targetIndicator = true,
-        roleIcon = false,
+        aggroEnabled = true, dispelEnabled = true, targetIndicator = true,
+        -- Role icon (Blizzard standard, bottom-left, clear of name)
+        roleIcon = true, roleIconSize = 8,
+        roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 0,
+        -- Raid marker (top-left)
         raidMarker = true, raidMarkerSize = 12,
+        raidMarkerAnchor = "TOPLEFT", raidMarkerX = 0, raidMarkerY = 0,
+        -- Leader / assist icons (top-right)
+        leaderIcon = true, leaderIconSize = 10,
+        leaderIconAnchor = "TOPRIGHT", leaderIconX = 0, leaderIconY = 0,
+        assistIcon = true, assistIconSize = 10,
+        assistIconAnchor = "TOPRIGHT", assistIconX = 12, assistIconY = 0,
+        -- Ready check (large, centered — shown only during ready checks)
+        readyCheckIcon = true, readyCheckSize = 20,
+        readyCheckAnchor = "CENTER", readyCheckX = 0, readyCheckY = 0,
+        -- Corner indicators
         ciEnabled = true, ciAlpha = 0.9,
+        -- Auras: debuffs grow outside frame to the right, no buffs/externals
         auras = {
             enabled = true,
-            buff   = { enabled = false },
+            buff = { enabled = false },
             debuff = {
-                enabled = true, maxIcons = 3, iconSize = 16, spacing = 1,
+                enabled = true, maxIcons = 3, iconSize = 13, spacing = 1,
                 anchor = "RIGHT", x = 2, y = 0, growth = "RIGHT",
                 showCooldown = true, showStacks = true,
                 filterToken = "ALL",
@@ -1408,8 +1423,16 @@ GF.PRESETS.DPS = {
             },
             externals = { enabled = false },
         },
+        -- Private auras (bottom-right inside frame, max 2, growing left)
+        privateAuras = {
+            enabled = true, max = 2, size = 13,
+            anchor = "BOTTOMRIGHT", direction = "LEFT",
+            x = 0, y = 0,
+            showCountdown = true, showNumbers = false,
+            layer = 8,
+        },
         spellIndicators = { enabled = false },
-        raidDebuffs = { enabled = true, size = 24, anchor = "CENTER", x = 0, y = 0 },
+        raidDebuffs = { enabled = true, size = 22, anchor = "CENTER", x = 0, y = 0 },
     },
 }
 
@@ -1631,8 +1654,19 @@ GF.PRESET_ORDER = {
 GF.PRESETS.DPS.party = {
     width = 110, height = 36, spacing = 2,
     nameFontSize = 12, nameMaxChars = 10, nameAnchor = "LEFT",
+    nameOffsetX = 2, nameOffsetY = 2,
     textCenter = "PERCENT", hpFontSize = 11,
     roleIcon = true, roleIconSize = 10,
+    roleIconAnchor = "BOTTOMLEFT", roleIconX = 0, roleIconY = 0,
+    raidMarkerSize = 14,
+    readyCheckSize = 22,
+    privateAuras = {
+        enabled = true, max = 2, size = 15,
+        anchor = "BOTTOMRIGHT", direction = "LEFT",
+        x = 0, y = 0,
+        showCountdown = true, showNumbers = false,
+        layer = 8,
+    },
 }
 
 GF.PRESETS.TANK.party = {
