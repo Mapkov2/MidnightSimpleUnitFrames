@@ -492,6 +492,47 @@ local function GetDispelColor(dispelName)
     return nil
 end
 
+local function GetReadableDispelTypeName(dispelName)
+    if dispelName == nil then return nil end
+    if issecretvalue and issecretvalue(dispelName) then return nil end
+    if type(dispelName) ~= "string" or dispelName == "" or dispelName == "None" or dispelName == "DISPELLABLE" then
+        return nil
+    end
+    return dispelName
+end
+
+local function ExtractColorRGB(colorObj)
+    if not colorObj then return nil end
+    if colorObj.r ~= nil then
+        return colorObj.r, colorObj.g, colorObj.b
+    end
+    if colorObj.GetRGBA then
+        local rr, gg, bb = colorObj:GetRGBA()
+        if rr ~= nil then return rr, gg, bb end
+    end
+    if colorObj.GetRGB then
+        local rr, gg, bb = colorObj:GetRGB()
+        if rr ~= nil then return rr, gg, bb end
+    end
+    return nil
+end
+
+local function ExtractColorRGBA(colorObj)
+    if not colorObj then return nil end
+    if colorObj.r ~= nil then
+        return colorObj.r, colorObj.g, colorObj.b, colorObj.a or 1
+    end
+    if colorObj.GetRGBA then
+        local rr, gg, bb, aa = colorObj:GetRGBA()
+        if rr ~= nil then return rr, gg, bb, aa end
+    end
+    if colorObj.GetRGB then
+        local rr, gg, bb = colorObj:GetRGB()
+        if rr ~= nil then return rr, gg, bb, 1 end
+    end
+    return nil
+end
+
 ------------------------------------------------------------------------
 -- Secret-safe dispel color resolution.
 --
@@ -509,9 +550,10 @@ end
 --                      tex:SetVertexColor(colorObj:GetRGBA())
 --   colorObj == nil  → SINGLE/fallback. Use (r, g, b) directly.
 ------------------------------------------------------------------------
-local function ResolveDispelColorObj(f)
+local function ResolveDispelColorObj(f, dispelName)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local mode = gen and gen.hlDispelColorMode or "SINGLE"
+    local fallbackType = GetReadableDispelTypeName(dispelName)
 
     if mode ~= "TYPE" then
         local r, g, b
@@ -529,30 +571,68 @@ local function ResolveDispelColorObj(f)
     local curve = GF and GF._sharedDispelColorCurve
 
     if CUA and CUA.GetAuraDispelTypeColor and unit and curve then
+        local cached = f and f._msufGFDispelColorObj
+        local colorRev = _G.MSUF_ColorStyleRevision or 0
+        if cached and (f._msufGFDispelColorRev or 0) == colorRev then
+            return cached
+        end
+
         local aid = f and f._msufGFDispelAuraID
         if aid then
             local color = CUA.GetAuraDispelTypeColor(unit, aid, curve)
-            if color then return color end
+            if color then
+                if f then
+                    f._msufGFDispelColorObj = color
+                    f._msufGFDispelColorRev = colorRev
+                end
+                return color
+            end
         end
 
-        -- Recovery: top dispellable aura isn't cached on the frame.
-        -- Cold-path only (visual apply) — tiny rescan worth the correctness.
+        -- Grid2 path: query the top dispellable aura directly via GetAuraDataByIndex.
+        local aura = CUA.GetAuraDataByIndex and CUA.GetAuraDataByIndex(unit, 1, "HARMFUL|RAID_PLAYER_DISPELLABLE")
+        if aura and aura.auraInstanceID then
+            if f then f._msufGFDispelAuraID = aura.auraInstanceID end
+            fallbackType = fallbackType or GetReadableDispelTypeName(aura.dispelName)
+            local color = CUA.GetAuraDispelTypeColor(unit, aura.auraInstanceID, curve)
+            if color then
+                if f then
+                    f._msufGFDispelColorObj = color
+                    f._msufGFDispelColorRev = colorRev
+                end
+                return color
+            end
+        end
+
+        -- Recovery fallback for clients where GetAuraDataByIndex on this filter misbehaves.
         if CUA.GetAuraSlots and CUA.GetAuraDataBySlot then
             local slots = { CUA.GetAuraSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE") }
             for i = 2, #slots do
                 local slot = slots[i]
-                local aura = slot and CUA.GetAuraDataBySlot(unit, slot)
-                if aura and aura.auraInstanceID then
-                    if f then f._msufGFDispelAuraID = aura.auraInstanceID end
-                    local color = CUA.GetAuraDispelTypeColor(unit, aura.auraInstanceID, curve)
-                    if color then return color end
+                local auraBySlot = slot and CUA.GetAuraDataBySlot(unit, slot)
+                if auraBySlot and auraBySlot.auraInstanceID then
+                    if f then f._msufGFDispelAuraID = auraBySlot.auraInstanceID end
+                    fallbackType = fallbackType or GetReadableDispelTypeName(auraBySlot.dispelName)
+                    local color = CUA.GetAuraDispelTypeColor(unit, auraBySlot.auraInstanceID, curve)
+                    if color then
+                        if f then
+                            f._msufGFDispelColorObj = color
+                            f._msufGFDispelColorRev = colorRev
+                        end
+                        return color
+                    end
                     break
                 end
             end
         end
     end
 
-    -- TYPE fallback: neutral palette (never extract from secret color here).
+    -- TYPE fallback: use the known dispel school if we have it, otherwise
+    -- fall back to the neutral palette.
+    if fallbackType then
+        local fr, fg, fb = GetDispelColor(fallbackType)
+        if fr then return nil, fr, fg, fb end
+    end
     return nil, 0.25, 0.75, 1.00
 end
 
@@ -564,17 +644,10 @@ end
 -- in practice.
 ------------------------------------------------------------------------
 local function ResolveDispelColor(dispelName, f)
-    local colorObj, r, g, b = ResolveDispelColorObj(f)
+    local colorObj, r, g, b = ResolveDispelColorObj(f, dispelName)
     if colorObj then
-        -- Prefer GetRGBA (works on secret Color); GetRGB can return nil.
-        if colorObj.GetRGBA then
-            local rr, gg, bb = colorObj:GetRGBA()
-            if rr ~= nil then return rr, gg, bb end
-        end
-        if colorObj.GetRGB then
-            local rr, gg, bb = colorObj:GetRGB()
-            if rr ~= nil then return rr, gg, bb end
-        end
+        local rr, gg, bb = ExtractColorRGB(colorObj)
+        if rr ~= nil then return rr, gg, bb end
     end
     if r then return r, g, b end
     if type(dispelName) == "string" and dispelName ~= "DISPELLABLE" then
@@ -1412,14 +1485,10 @@ _GF_ApplyDispelOverlay = function(f)
     end
 
     -- Resolve and apply tint (secret-safe path).
-    local colorObj, r, g, b = ResolveDispelColorObj(f)
+    local colorObj, r, g, b = ResolveDispelColorObj(f, dispelType)
     if tex then
-        if colorObj and colorObj.GetRGBA then
-            -- Secret-safe varargs passthrough: never assigns RGBA to Lua locals.
-            tex:SetVertexColor(colorObj:GetRGBA())
-        else
-            tex:SetVertexColor(r or 0.25, g or 0.75, b or 1.00, 1)
-        end
+        local rr, gg, bb, aa = ExtractColorRGBA(colorObj)
+        tex:SetVertexColor(rr or r or 0.25, gg or g or 0.75, bb or b or 1.00, aa or 1)
     end
     -- User's alpha slider lives on the StatusBar frame, independent of tint.
     local userAlpha = c.doAlpha or 1
@@ -1661,6 +1730,7 @@ GF._UpdateAggro = UpdateAggro
 local _dispelScanUnit  -- module-level state for vararg scanner
 local C_UnitAuras_GetAuraSlots    = C_UnitAuras and C_UnitAuras.GetAuraSlots
 local C_UnitAuras_GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
+local C_UnitAuras_GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local C_UnitAuras_IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
 local _DISPEL_SCAN_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
 
@@ -1674,6 +1744,10 @@ local function _DispelScanSlots(cont, ...)
         local slot = select(i, ...)
         local data = GetData(u, slot)
         if data and data.auraInstanceID then
+            local dn = data.dispelName
+            if not (iss and iss(dn)) and type(dn) == "string" and dn ~= "" and dn ~= "None" then
+                return dn, data.auraInstanceID
+            end
             return "DISPELLABLE", data.auraInstanceID
         end
     end
@@ -1711,6 +1785,8 @@ function GF._UpdateDispel(f, unit)
         if f._msufGFDispelType then
             f._msufGFDispelType = nil
             f._msufGFDispelAuraID = nil
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
             _GF_RefreshBorder(f, unit)
             _GF_ApplyDispelOverlay(f)
         end
@@ -1719,38 +1795,69 @@ function GF._UpdateDispel(f, unit)
 
     local topDispel = nil
     local topAid = nil
+    f._msufGFDispelColorObj = nil
+    f._msufGFDispelColorRev = nil
     if not testMode then
         if not UnitExists(unit) then
             if f._msufGFDispelType then
                 f._msufGFDispelType = nil
                 f._msufGFDispelAuraID = nil
+                f._msufGFDispelColorObj = nil
+                f._msufGFDispelColorRev = nil
                 _GF_RefreshBorder(f, unit)
                 _GF_ApplyDispelOverlay(f)
             end
             return
         end
         -- C-side: query dispellable debuffs directly (secret-safe)
-        if C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
+        if C_UnitAuras_GetAuraDataByIndex then
+            local aura = C_UnitAuras_GetAuraDataByIndex(unit, 1, _DISPEL_SCAN_FILTER)
+            if aura and aura.auraInstanceID then
+                local dn = aura.dispelName
+                if not (issecretvalue and issecretvalue(dn)) and type(dn) == "string" and dn ~= "" and dn ~= "None" then
+                    topDispel = dn
+                else
+                    topDispel = "DISPELLABLE"
+                end
+                topAid = aura.auraInstanceID
+                if C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor and GF and GF._sharedDispelColorCurve then
+                    f._msufGFDispelColorObj = C_UnitAuras.GetAuraDispelTypeColor(unit, topAid, GF._sharedDispelColorCurve)
+                    f._msufGFDispelColorRev = _G.MSUF_ColorStyleRevision or 0
+                else
+                    f._msufGFDispelColorObj = nil
+                    f._msufGFDispelColorRev = nil
+                end
+            end
+        elseif C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
             _dispelScanUnit = unit
             topDispel, topAid = _DispelScanSlots(C_UnitAuras_GetAuraSlots(unit, _DISPEL_SCAN_FILTER))
             _dispelScanUnit = nil
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
         elseif AuraUtil and AuraUtil.ForEachAura then
             _scanTopDispel = nil
             AuraUtil.ForEachAura(unit, "HARMFUL|RAID", nil, _DispelScanCallback, true)
             topDispel = _scanTopDispel
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
         end
     else
         topDispel = _G.MSUF_DispelBorderTestType or "Magic"
+        f._msufGFDispelColorObj = nil
+        f._msufGFDispelColorRev = nil
     end
 
     local prevDispel = f._msufGFDispelType
     local prevAid = f._msufGFPrevDispelAuraID
+    local colorRev = _G.MSUF_ColorStyleRevision or 0
+    local prevColorRev = f._msufGFColorStyleRevision or 0
     f._msufGFDispelType = topDispel
     f._msufGFDispelAuraID = topAid
     f._msufGFPrevDispelAuraID = topAid
 
-    if topDispel == prevDispel and topAid == prevAid and not testMode then return end
+    if topDispel == prevDispel and topAid == prevAid and colorRev == prevColorRev and not testMode then return end
 
+    f._msufGFColorStyleRevision = colorRev
     _GF_RefreshBorder(f, unit)
     -- Overlay only for real dispels — border test mode is border-only
     if not testMode then

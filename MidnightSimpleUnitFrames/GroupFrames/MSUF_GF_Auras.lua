@@ -152,6 +152,28 @@ local function _ReadDBColor(gen, typeName, dr, dg, db)
     return r, g or dg, b or db
 end
 
+local function _GetReadableDispelName(dispelName)
+    if dispelName == nil then return nil end
+    if issecretvalue and issecretvalue(dispelName) then return nil end
+    if type(dispelName) ~= "string" or dispelName == "" or dispelName == "None" then
+        return nil
+    end
+    return dispelName
+end
+
+-- Grid2-compatible dispel type ids for GetAuraDispelTypeColor():
+-- None=0, Magic=1, Curse=2, Disease=3, Poison=4, Enrage=9, Bleed=11.
+-- Using the hardcoded ids is more reliable than Enum.DispelType here.
+local _DISPEL_CURVE_POINTS = {
+    { id = 0,  typeName = nil,       defR = 0.25, defG = 0.75, defB = 1.00 },
+    { id = 1,  typeName = "Magic",   defR = 0.25, defG = 0.75, defB = 1.00 },
+    { id = 2,  typeName = "Curse",   defR = 0.60, defG = 0.00, defB = 1.00 },
+    { id = 3,  typeName = "Disease", defR = 0.60, defG = 0.40, defB = 0.00 },
+    { id = 4,  typeName = "Poison",  defR = 0.00, defG = 0.60, defB = 0.00 },
+    { id = 9,  typeName = "Bleed",   defR = 0.80, defG = 0.00, defB = 0.00 },
+    { id = 11, typeName = "Bleed",   defR = 0.80, defG = 0.00, defB = 0.00 },
+}
+
 local function _BuildDispelColorCurve()
     local CUA = _G.C_UnitAuras
     local CCU = _G.C_CurveUtil
@@ -166,39 +188,16 @@ local function _BuildDispelColorCurve()
     end
     if not curve.AddPoint then return curve end
 
-    local DT  = _G.Enum and _G.Enum.DispelType
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local C   = _G.CreateColor
 
-    -- None (enum 0): neutral default; used by icon-curve pattern elsewhere.
-    curve:AddPoint(0, C(0.25, 0.75, 1.00, 1))
-
-    if DT then
-        local r, g, b
-        if DT.Magic then
-            r, g, b = _ReadDBColor(gen, "Magic",   0.25, 0.75, 1.00)
-            curve:AddPoint(DT.Magic,   C(r, g, b, 1))
+    for i = 1, #_DISPEL_CURVE_POINTS do
+        local p = _DISPEL_CURVE_POINTS[i]
+        local r, g, b = p.defR, p.defG, p.defB
+        if p.typeName then
+            r, g, b = _ReadDBColor(gen, p.typeName, r, g, b)
         end
-        if DT.Curse then
-            r, g, b = _ReadDBColor(gen, "Curse",   0.60, 0.00, 1.00)
-            curve:AddPoint(DT.Curse,   C(r, g, b, 1))
-        end
-        if DT.Poison then
-            r, g, b = _ReadDBColor(gen, "Poison",  0.00, 0.60, 0.00)
-            curve:AddPoint(DT.Poison,  C(r, g, b, 1))
-        end
-        if DT.Disease then
-            r, g, b = _ReadDBColor(gen, "Disease", 0.60, 0.40, 0.00)
-            curve:AddPoint(DT.Disease, C(r, g, b, 1))
-        end
-        if DT.Bleed then
-            r, g, b = _ReadDBColor(gen, "Bleed",   0.80, 0.00, 0.00)
-            curve:AddPoint(DT.Bleed,   C(r, g, b, 1))
-        end
-        if DT.Enrage then
-            r, g, b = _ReadDBColor(gen, "Bleed",   0.80, 0.00, 0.00)
-            curve:AddPoint(DT.Enrage,  C(r, g, b, 1))
-        end
+        curve:AddPoint(p.id, C(r, g, b, 1))
     end
     return curve
 end
@@ -802,6 +801,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local showStk = (gcfg.showStacks ~= false)
     local step = iconSize + spacing
     local topDispel = nil
+    local topDispelColor = nil
 
     -- Pre-resolve Tier 2 blacklist hash (zero-alloc cached)
     local af = AF()
@@ -818,19 +818,25 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
             else
                 -- Merged dispel: C-side check (secret-safe, BEFORE spell filter)
                 if isHarmful and not topDispel and aid then
+                    local dn = _GetReadableDispelName(aura.dispelName)
                     if _isFilteredOut then
                         local filtered = _isFilteredOut(unit, aid, _DISPEL_FILTER)
                         if filtered == false then
-                            -- Store "DISPELLABLE" + auraID for border system
-                            topDispel = "DISPELLABLE"
+                            -- Prefer the real dispel school when the aura exposes it.
+                            topDispel = dn or "DISPELLABLE"
                             f._msufGFDispelAuraID = aid
+                            if _getDispelColor and _dispelColorCurve then
+                                topDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
+                            end
                         end
                     else
                         -- Legacy fallback: plain dispelName
-                        local dn = aura.dispelName
-                        if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
+                        if dn then
                             topDispel = dn
                             f._msufGFDispelAuraID = aid
+                            if _getDispelColor and _dispelColorCurve then
+                                topDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
+                            end
                         end
                     end
                 end
@@ -969,7 +975,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
             ic._msufFilter = nil
         end
     end
-    return shown, topDispel
+    return shown, topDispel, topDispelColor
 end
 
 ------------------------------------------------------------------------
@@ -989,6 +995,9 @@ function GF.UpdateFrameAuras(f, unit)
             HidePool(f[POOL_KEYS.debuff], 1)
             HidePool(f[POOL_KEYS.externals], 1)
         end
+        f._msufGFDispelAuraID = nil
+        f._msufGFDispelColorObj = nil
+        f._msufGFDispelColorRev = nil
         return
     end
     f._msufGFAurasHidden = nil
@@ -997,6 +1006,9 @@ function GF.UpdateFrameAuras(f, unit)
         HidePool(f[POOL_KEYS.buff], 1)
         HidePool(f[POOL_KEYS.debuff], 1)
         HidePool(f[POOL_KEYS.externals], 1)
+        f._msufGFDispelAuraID = nil
+        f._msufGFDispelColorObj = nil
+        f._msufGFDispelColorRev = nil
         return
     end
     if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not C_UnitAuras.GetAuraDataBySlot then return end
@@ -1022,17 +1034,21 @@ function GF.UpdateFrameAuras(f, unit)
     -- 2) Debuffs + merged dispel
     local debCfg = auras.debuff
     local mergedDispel
+    local mergedDispelColor
     -- Clear the tracked dispel aura up front so each refresh resolves the current live aura.
     -- This mirrors EQoL's approach of treating the dispel aura id as frame-local volatile state.
     f._msufGFDispelAuraID = nil
+    f._msufGFDispelColorObj = nil
+    f._msufGFDispelColorRev = nil
     local debOn = debCfg and debCfg.enabled ~= false
     local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false
 
     if debOn then
         local afr = AF()
         local debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
-        local n, md = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale)
+        local n, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale)
         mergedDispel = md
+        mergedDispelColor = mdColor
         if n > 0 then anyShown = true end
         f._msufGFDebHidden = nil
     else
@@ -1043,13 +1059,25 @@ function GF.UpdateFrameAuras(f, unit)
         -- Lightweight dispel scan ONLY when class can dispel AND dispel enabled
         -- Uses C-side RAID_PLAYER_DISPELLABLE filter (secret-safe)
         if dispelNeeded then
-            if _isFilteredOut then
+            if C_UnitAuras.GetAuraDataByIndex then
+                local aura = C_UnitAuras.GetAuraDataByIndex(unit, 1, _DISPEL_FILTER)
+                if aura and aura.auraInstanceID then
+                    mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
+                    f._msufGFDispelAuraID = aura.auraInstanceID
+                    if _getDispelColor and _dispelColorCurve then
+                        mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
+                    end
+                end
+            elseif _isFilteredOut then
                 local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
                 if sc >= 2 then
                     local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[2])
                     if aura and aura.auraInstanceID then
-                        mergedDispel = "DISPELLABLE"
+                        mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
                         f._msufGFDispelAuraID = aura.auraInstanceID
+                        if _getDispelColor and _dispelColorCurve then
+                            mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
+                        end
                     end
                 end
             else
@@ -1057,10 +1085,13 @@ function GF.UpdateFrameAuras(f, unit)
                 for i = 2, sc do
                     local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
                     if aura then
-                        local dn = aura.dispelName
-                        if not (issecretvalue and issecretvalue(dn)) and dn ~= nil and dn ~= "" then
+                        local dn = _GetReadableDispelName(aura.dispelName)
+                        if dn then
                             mergedDispel = dn
                             f._msufGFDispelAuraID = aura.auraInstanceID
+                            if _getDispelColor and _dispelColorCurve then
+                                mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
+                            end
                             break
                         end
                     end
@@ -1069,6 +1100,8 @@ function GF.UpdateFrameAuras(f, unit)
         end
     end
     f._msufGFMergedDispel = mergedDispel
+    f._msufGFDispelColorObj = mergedDispelColor
+    f._msufGFDispelColorRev = mergedDispelColor and (_G.MSUF_ColorStyleRevision or 0) or nil
 
     -- 3) Buffs
     local buffCfg = auras.buff

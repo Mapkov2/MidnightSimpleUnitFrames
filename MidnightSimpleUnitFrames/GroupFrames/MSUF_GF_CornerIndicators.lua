@@ -39,6 +39,15 @@ local CONF_KEYS     = { TL = "ciSlotTL", TR = "ciSlotTR", BL = "ciSlotBL", BR = 
 local DISPEL_R = { Magic = 0.25, Curse = 0.60, Poison = 0.00, Disease = 0.60, Bleed = 0.80 }
 local DISPEL_G = { Magic = 0.75, Curse = 0.00, Poison = 0.60, Disease = 0.40, Bleed = 0.00 }
 local DISPEL_B = { Magic = 1.00, Curse = 1.00, Poison = 0.00, Disease = 0.00, Bleed = 0.00 }
+local DISPEL_CURVE_POINTS = {
+    { id = 0,  r = 0.25, g = 0.75, b = 1.00 },
+    { id = 1,  r = 0.25, g = 0.75, b = 1.00 },
+    { id = 2,  r = 0.60, g = 0.00, b = 1.00 },
+    { id = 3,  r = 0.60, g = 0.40, b = 0.00 },
+    { id = 4,  r = 0.00, g = 0.60, b = 0.00 },
+    { id = 9,  r = 0.80, g = 0.00, b = 0.00 },
+    { id = 11, r = 0.80, g = 0.00, b = 0.00 },
+}
 
 -- PERF C++ DELEGATION: Dispel color resolved entirely in C++ via ColorCurve.
 -- Eliminates Lua table lookups + issecretvalue guard on dispelName.
@@ -53,14 +62,11 @@ if _hasDispelColorAPI then
         _dispelColorCurve:SetType(_G.Enum and _G.Enum.LuaCurveType and _G.Enum.LuaCurveType.Step or 0)
     end
     -- Map DispelType enum → colors (same as DISPEL_R/G/B tables)
-    local DT = _G.oUF and _G.oUF.Enum and _G.oUF.Enum.DispelType
-        or (_G.Enum and _G.Enum.DispelType)
-    if DT and _dispelColorCurve.AddPoint then
-        if DT.Magic   then _dispelColorCurve:AddPoint(DT.Magic,   CreateColor(0.25, 0.75, 1.00, 1)) end
-        if DT.Curse   then _dispelColorCurve:AddPoint(DT.Curse,   CreateColor(0.60, 0.00, 1.00, 1)) end
-        if DT.Poison  then _dispelColorCurve:AddPoint(DT.Poison,  CreateColor(0.00, 0.60, 0.00, 1)) end
-        if DT.Disease  then _dispelColorCurve:AddPoint(DT.Disease, CreateColor(0.60, 0.40, 0.00, 1)) end
-        if DT.Bleed   then _dispelColorCurve:AddPoint(DT.Bleed,   CreateColor(0.80, 0.00, 0.00, 1)) end
+    if _dispelColorCurve.AddPoint then
+        for i = 1, #DISPEL_CURVE_POINTS do
+            local p = DISPEL_CURVE_POINTS[i]
+            _dispelColorCurve:AddPoint(p.id, CreateColor(p.r, p.g, p.b, 1))
+        end
     else
         _hasDispelColorAPI = false
         _dispelColorCurve = nil
@@ -204,14 +210,19 @@ function GF.UpdateCornerIndicators(f, unit)
 
     -- DISPEL scan — C++ path when available (1 API call vs 3 + Lua tables)
     if needScan % 2 >= 1 then
-        if _getDispelColor and _dispelColorCurve then
+        local colorCurve = (GF and GF._sharedDispelColorCurve) or _dispelColorCurve
+        if _getDispelColor and colorCurve then
             -- C++ DELEGATION: GetAuraDataByIndex → GetAuraDispelTypeColor
             local bestAura = _getAuraByIndex and _getAuraByIndex(unit, 1, "HARMFUL|RAID_PLAYER_DISPELLABLE")
             if bestAura and bestAura.auraInstanceID then
-                local color = _getDispelColor(unit, bestAura.auraInstanceID, _dispelColorCurve)
+                local color = _getDispelColor(unit, bestAura.auraInstanceID, colorCurve)
                 if color then
                     dispelShow = true
-                    dispelR, dispelG, dispelB = color:GetRGB()
+                    if color.r ~= nil then
+                        dispelR, dispelG, dispelB = color.r, color.g, color.b
+                    else
+                        dispelR, dispelG, dispelB = color:GetRGB()
+                    end
                 end
             end
         elseif _hasSlotAPI then
@@ -299,7 +310,9 @@ function GF.UpdateCornerIndicators(f, unit)
         end
     end
 
-    -- Apply results to all 5 slots with per-slot diff-gate (zero table allocation)
+    -- Apply results to all 5 slots.
+    -- Do not compare cached RGB values here: Blizzard can return secret-tainted
+    -- numbers for dispel colors, and equality checks on those explode in Lua.
     local alpha = c.ciAlpha or 1.0
     local cache = f._msufCICache
     if not cache then cache = {}; f._msufCICache = cache end
@@ -327,13 +340,10 @@ function GF.UpdateCornerIndicators(f, unit)
 
             local prev = cache[sk]
             if show then
-                if not (prev and prev[1] == r and prev[2] == g and prev[3] == b) then
-                    local dot = EnsureDot(f, sk)
-                    dot:SetColorTexture(r, g, b, alpha)
-                    if not dot:IsShown() then dot:Show() end
-                    if not prev then prev = {}; cache[sk] = prev end
-                    prev[1], prev[2], prev[3] = r, g, b
-                end
+                local dot = EnsureDot(f, sk)
+                dot:SetColorTexture(r, g, b, alpha)
+                if not dot:IsShown() then dot:Show() end
+                cache[sk] = true
             else
                 if prev then
                     cache[sk] = nil
