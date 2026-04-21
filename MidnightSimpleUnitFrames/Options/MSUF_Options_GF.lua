@@ -849,6 +849,33 @@ function _G.MSUF_EnsureGFPanelBuilt()
         end
     end
 
+    local function RefreshAfterFullReset()
+        RefreshAllWidgets()
+        HideAllPreviews()
+        ShowPreviewIfNeeded(_activeKind)
+        if GF.PreviewScopeChanged then GF.PreviewScopeChanged() end
+        if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+        if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+    end
+
+    if not StaticPopupDialogs["MSUF_GF_RESET_ALL_CONFIRM"] then
+        StaticPopupDialogs["MSUF_GF_RESET_ALL_CONFIRM"] = {
+            text = "Reset all Group Frame settings to defaults?\n\nThis resets Party and Raid Group Frames for the active profile.",
+            button1 = YES,
+            button2 = NO,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+    StaticPopupDialogs["MSUF_GF_RESET_ALL_CONFIRM"].OnAccept = function()
+        if GF.ResetAllToDefaults and GF.ResetAllToDefaults() then
+            RefreshAfterFullReset()
+            print("|cffffd700MSUF:|r Group Frames reset to defaults.")
+        end
+    end
+
     local function SwitchScope(kind)
         _activeKind = kind
         RefreshScopeBtns()
@@ -912,6 +939,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
         copyFS:SetText("Copy > " .. dst)
     end
     RefreshCopyBtn()
+
+    local rightAnchor = copyBtn
 
     -- Patch RefreshScopeBtns to also refresh copy button
     local _origRefreshScope = RefreshScopeBtns
@@ -1072,7 +1101,36 @@ function _G.MSUF_EnsureGFPanelBuilt()
             self:SetBackdropBorderColor(0.35, 0.28, 0.55, 0.7)
             GameTooltip:Hide()
         end)
+        rightAnchor = qpBtn
     end
+
+    local resetBtn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
+    resetBtn:SetSize(84, 20)
+    resetBtn:SetPoint("RIGHT", rightAnchor, "LEFT", -6, 0)
+    resetBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    resetBtn:SetBackdropColor(0.34, 0.14, 0.14, 0.92)
+    resetBtn:SetBackdropBorderColor(0.70, 0.28, 0.28, 0.8)
+    local resetFS = resetBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    resetFS:SetPoint("CENTER")
+    resetFS:SetText(TR("Reset All"))
+    resetFS:SetTextColor(1, 0.82, 0.82)
+    resetBtn:SetScript("OnClick", function()
+        StaticPopup_Show("MSUF_GF_RESET_ALL_CONFIRM")
+    end)
+    resetBtn:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(0.42, 0.18, 0.18, 1)
+        self:SetBackdropBorderColor(0.85, 0.35, 0.35, 1)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(TR("Reset All"), 1, 1, 1)
+        GameTooltip:AddLine("Resets Party and Raid Group Frame settings to defaults for the active profile.", 0.8, 0.8, 0.85, true)
+        GameTooltip:Show()
+    end)
+    resetBtn:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(0.34, 0.14, 0.14, 0.92)
+        self:SetBackdropBorderColor(0.70, 0.28, 0.28, 0.8)
+        GameTooltip:Hide()
+    end)
 
     ----------------------------------------------------------------
     -- Preview collapse toggle

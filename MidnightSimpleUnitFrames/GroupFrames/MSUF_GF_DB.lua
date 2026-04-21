@@ -636,6 +636,34 @@ function GF.GetDefault(kind, key)
     return PARTY_DEFAULTS[key]
 end
 
+local function ResetConfToDefaults(conf, defaults)
+    if type(conf) ~= "table" or type(defaults) ~= "table" then return end
+    for k in pairs(conf) do
+        conf[k] = nil
+    end
+    for k, v in pairs(defaults) do
+        conf[k] = (type(v) == "table" and GF._DeepCopyTable) and GF._DeepCopyTable(v) or v
+    end
+end
+
+function GF.ResetAllToDefaults()
+    local db = _G.MSUF_DB
+    if type(db) ~= "table" then return false end
+
+    db.gf_party = db.gf_party or {}
+    db.gf_raid  = db.gf_raid or {}
+
+    ResetConfToDefaults(db.gf_party, PARTY_DEFAULTS)
+    ResetConfToDefaults(db.gf_raid, RAID_DEFAULTS)
+
+    GF.EnsureDB()
+
+    if GF.RebuildAll then GF.RebuildAll() end
+    if GF.RefreshVisuals then GF.RefreshVisuals() end
+
+    return true
+end
+
 ------------------------------------------------------------------------
 -- Raid Layout Situations
 -- Stores per-situation geometry overrides (Mythic / Normal-HC / Open World).
@@ -1355,6 +1383,7 @@ _G.MSUF_GF_GetConf     = GF.GetConf
 _G.MSUF_GF_Val         = GF.Val
 _G.MSUF_GF_GetHighlightVal = GF.GetHighlightVal
 _G.MSUF_GF_InvalidateConfCache = GF.InvalidateConfCache
+_G.MSUF_GF_ResetAllToDefaults = GF.ResetAllToDefaults
 
 ------------------------------------------------------------------------
 -- Role Presets: cutting-edge configs per role/healer spec.
