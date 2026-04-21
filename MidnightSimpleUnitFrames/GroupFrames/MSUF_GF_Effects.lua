@@ -728,8 +728,36 @@ local ROLE_COORDS = {
 ------------------------------------------------------------------------
 -- Debuff stripe: presence callback (must be before dispatchAura)
 ------------------------------------------------------------------------
+local _QUESTION_MARK_ICON = 136243
+local _PADLOCK_ICON = 134400
 local _dsPresenceResult = false
-local function _dsPresenceCallback()
+local _dsPresenceAF = nil
+local _dsPresenceBLHash = nil
+local _FrameHasStripeDebuff
+
+local function _DecodeStripeAuraIconFileID(icon)
+    if icon == nil then return 0 end
+    if issecretvalue and issecretvalue(icon) == true then return 0 end
+    return tonumber(icon) or 0
+end
+
+local function _dsPresenceCallback(aura)
+    if not aura then return false end
+
+    local af = _dsPresenceAF
+    local blHash = _dsPresenceBLHash
+    if blHash and af then
+        local sid = af.DecodeSpellId(aura)
+        if af.IsBlacklisted(sid, blHash, aura) then
+            return false
+        end
+    end
+
+    local iconFileID = _DecodeStripeAuraIconFileID(aura.icon)
+    if iconFileID == _QUESTION_MARK_ICON or iconFileID == _PADLOCK_ICON then
+        return false
+    end
+
     _dsPresenceResult = true
     return true  -- stop iteration
 end
@@ -1002,14 +1030,10 @@ local function dispatchAura(f, unit, updateInfo)
         GF._UpdateDispel(f, unit)
     end
 
-    -- Debuff stripe: detect ANY harmful aura (zero-cost when disabled)
+    -- Debuff stripe: detect a debuff that passes the Debuffs filter/list.
     if c.dsEn then
         local hadDebuff = f._msufGFHasAnyDebuff or false
-        _dsPresenceResult = false
-        if AuraUtil and AuraUtil.ForEachAura then
-            AuraUtil.ForEachAura(unit, "HARMFUL", nil, _dsPresenceCallback, true)
-        end
-        local hasDebuff = _dsPresenceResult
+        local hasDebuff = (_FrameHasStripeDebuff and _FrameHasStripeDebuff(f, unit)) or false
         f._msufGFHasAnyDebuff = hasDebuff
         if hasDebuff ~= hadDebuff then
             _GF_ApplyDebuffStripe(f)
@@ -1508,9 +1532,9 @@ _GF_ApplyDispelOverlay = function(f)
 end
 
 ------------------------------------------------------------------------
--- Debuff stripe (thin edge indicator for any active debuff).
--- Independent from dispel overlay — shows for ALL harmful auras,
--- not just dispellable ones. Secret-safe: no comparisons on aura data.
+-- Debuff stripe (thin edge indicator for a configured debuff match).
+-- Independent from dispel overlay — honors the Debuffs filter/list and
+-- still works for non-dispellable debuffs when that filter allows them.
 ------------------------------------------------------------------------
 _GF_ApplyDebuffStripe = function(f)
     local stripe = f._msufGFDebuffStripe
@@ -1733,6 +1757,53 @@ local C_UnitAuras_GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataByS
 local C_UnitAuras_GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local C_UnitAuras_IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
 local _DISPEL_SCAN_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
+local _debuffStripeScanUnit
+
+local function _DebuffStripeScanSlots(_, ...)
+    local scanUnit = _debuffStripeScanUnit
+    for i = 1, select("#", ...) do
+        local slot = select(i, ...)
+        local aura = scanUnit and C_UnitAuras_GetAuraDataBySlot and C_UnitAuras_GetAuraDataBySlot(scanUnit, slot)
+        if _dsPresenceCallback(aura) then
+            return true
+        end
+    end
+    return false
+end
+
+_FrameHasStripeDebuff = function(f, unit)
+    if not unit or not UnitExists(unit) then return false end
+
+    local kind = (f and f._msufGFKind) or "party"
+    local conf = GF.GetConf(kind)
+    local debCfg = conf and conf.auras and conf.auras.debuff or nil
+    local af = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+    local filter = af and af.ResolveDebuffFilter(debCfg and debCfg.filterToken) or "HARMFUL"
+
+    _dsPresenceResult = false
+    _dsPresenceAF = af
+    _dsPresenceBLHash = (debCfg and af and af.BuildBlacklistHash(debCfg)) or nil
+
+    if C_UnitAuras_GetAuraDataByIndex then
+        local index = 1
+        while true do
+            local aura = C_UnitAuras_GetAuraDataByIndex(unit, index, filter)
+            if not aura then break end
+            if _dsPresenceCallback(aura) then break end
+            index = index + 1
+        end
+    elseif C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
+        _debuffStripeScanUnit = unit
+        _DebuffStripeScanSlots(C_UnitAuras_GetAuraSlots(unit, filter))
+        _debuffStripeScanUnit = nil
+    elseif AuraUtil and AuraUtil.ForEachAura then
+        AuraUtil.ForEachAura(unit, filter, nil, _dsPresenceCallback, true)
+    end
+
+    _dsPresenceAF = nil
+    _dsPresenceBLHash = nil
+    return _dsPresenceResult
+end
 
 local function _DispelScanSlots(cont, ...)
     local GetData = C_UnitAuras_GetAuraDataBySlot
@@ -2421,11 +2492,7 @@ local function UpdateAll(f, unit)
     end
     -- Debuff stripe (UpdateAll always does full refresh)
     if c.dsEn then
-        _dsPresenceResult = false
-        if AuraUtil and AuraUtil.ForEachAura then
-            AuraUtil.ForEachAura(unit, "HARMFUL", nil, _dsPresenceCallback, true)
-        end
-        f._msufGFHasAnyDebuff = _dsPresenceResult
+        f._msufGFHasAnyDebuff = (_FrameHasStripeDebuff and _FrameHasStripeDebuff(f, unit)) or false
         _GF_ApplyDebuffStripe(f)
     end
     UpdateTargetIndicator(f, unit)

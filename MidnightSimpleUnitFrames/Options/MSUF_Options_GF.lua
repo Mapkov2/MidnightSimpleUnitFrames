@@ -3421,7 +3421,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         dsHint:SetPoint("TOPLEFT", dsChk, "BOTTOMLEFT", 0, -4)
         dsHint:SetWidth(550)
         dsHint:SetJustifyH("LEFT")
-        dsHint:SetText(TR("Shows a thin colored stripe when any debuff is active — including non-dispellable ones.\nWorks independently from the Dispel Overlay."))
+        dsHint:SetText(TR("Shows a thin colored stripe when a debuff matching your Debuffs filter/list is active — including non-dispellable ones when allowed there.\nWorks independently from the Dispel Overlay."))
         dsHint:SetTextColor(0.55, 0.60, 0.70)
 
         local dsEdgeDd = SDropdown({
