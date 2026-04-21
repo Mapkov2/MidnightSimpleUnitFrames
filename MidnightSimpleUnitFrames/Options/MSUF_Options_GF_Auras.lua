@@ -1847,21 +1847,33 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         copyLbl:SetText(L["Copy All Aura Settings"])
         copyLbl:SetTextColor(1, 0.82, 0)
 
-        local btnP2R = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
-        btnP2R:SetSize(180, 24)
-        btnP2R:SetPoint("TOPLEFT", copyLbl, "BOTTOMLEFT", 0, -6)
-        btnP2R:SetText(L["Party -> Raid"])
-        btnP2R:SetScript("OnClick", function() DoCopy("party", "raid") end)
-
-        local btnR2P = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
-        btnR2P:SetSize(180, 24)
-        btnR2P:SetPoint("LEFT", btnP2R, "RIGHT", 12, 0)
-        btnR2P:SetText(L["Raid -> Party"])
-        btnR2P:SetScript("OnClick", function() DoCopy("raid", "party") end)
+        local copyButtons = {
+            { src = "party",      dst = "raid",       label = L["Party -> Raid"] },
+            { src = "party",      dst = "mythicraid", label = L["Party -> Mythic Raid"] or "Party -> Mythic Raid" },
+            { src = "raid",       dst = "party",      label = L["Raid -> Party"] },
+            { src = "raid",       dst = "mythicraid", label = L["Raid -> Mythic Raid"] or "Raid -> Mythic Raid" },
+            { src = "mythicraid", dst = "party",      label = L["Mythic Raid -> Party"] or "Mythic Raid -> Party" },
+            { src = "mythicraid", dst = "raid",       label = L["Mythic Raid -> Raid"] or "Mythic Raid -> Raid" },
+        }
+        local copyBtnRefs = {}
+        for idx, spec in ipairs(copyButtons) do
+            local btn = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
+            btn:SetSize(180, 24)
+            local row = math.floor((idx - 1) / 2)
+            local col = (idx - 1) % 2
+            if idx == 1 then
+                btn:SetPoint("TOPLEFT", copyLbl, "BOTTOMLEFT", 0, -6)
+            else
+                btn:SetPoint("TOPLEFT", copyLbl, "BOTTOMLEFT", col * 192, -6 - row * 28)
+            end
+            btn:SetText(spec.label)
+            btn:SetScript("OnClick", function() DoCopy(spec.src, spec.dst) end)
+            copyBtnRefs[#copyBtnRefs + 1] = btn
+        end
 
         -- Import/Export section
         local ioLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ioLbl:SetPoint("TOPLEFT", btnP2R, "BOTTOMLEFT", 0, -16)
+        ioLbl:SetPoint("TOPLEFT", copyBtnRefs[5] or copyBtnRefs[#copyBtnRefs], "BOTTOMLEFT", 0, -16)
         ioLbl:SetText(L["Import / Export Spell Config"])
         ioLbl:SetTextColor(1, 0.82, 0)
 

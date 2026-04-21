@@ -166,7 +166,7 @@ local DEFAULT_HB_CONF = {
 function HB.EnsureConf(kind)
     local db = _G.MSUF_DB
     if not db then return DEFAULT_HB_CONF end
-    local key = (kind == "raid") and "gf_raid" or "gf_party"
+    local key = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
     local gfConf = db[key]
     if not gfConf then return DEFAULT_HB_CONF end
     if type(gfConf.healerBuffs) ~= "table" then

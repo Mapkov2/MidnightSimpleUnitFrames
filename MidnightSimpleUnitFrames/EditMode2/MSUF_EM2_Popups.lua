@@ -665,6 +665,7 @@ function Popups.CloseAll()
     if _G.MSUF_EM2_HideGFPopup then
         _G.MSUF_EM2_HideGFPopup("party")
         _G.MSUF_EM2_HideGFPopup("raid")
+        _G.MSUF_EM2_HideGFPopup("mythicraid")
     end
     if EM2.State then EM2.State.SetPopupOpen(false) end
 end
@@ -703,10 +704,10 @@ function Popups.Open(key, anchorFrame)
         if key:sub(1, 5) == "aura_" then unit = key:sub(6) end
         local frame = cfg and cfg.getFrame and cfg.getFrame()
         if EM2.AuraPopup then EM2.AuraPopup.Open(unit, frame or anchorFrame) end
-    elseif pType == "gf_party" or pType == "gf_raid" then
+    elseif pType == "gf_party" or pType == "gf_raid" or pType == "gf_mythicraid" then
         _G.MSUF_EM2_ActiveAuraGroup = nil
         _G.MSUF_EM2_ActiveAuraUnit  = nil
-        local mode = (pType == "gf_raid") and "raid" or "party"
+        local mode = (pType == "gf_raid") and "raid" or ((pType == "gf_mythicraid") and "mythicraid" or "party")
         if _G.MSUF_EM2_ShowGFPopup then
             _G.MSUF_EM2_ShowGFPopup(mode)
             if EM2.State then EM2.State.SetPopupOpen(true) end

@@ -702,7 +702,7 @@ function GF.RefreshPreviewBox()
     -- Overlay colors + visibility from config (mirrors _GF_IsAbsorbEnabled)
     do
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
-        local gfDbKey = (kind == "raid") and "gf_raid" or "gf_party"
+        local gfDbKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
         local gfDb = _G.MSUF_DB and _G.MSUF_DB[gfDbKey]
         local function resolve(key)
             if gfDb and gfDb.hlOverride and gfDb[key] ~= nil then return gfDb[key] end
@@ -911,7 +911,7 @@ function GF.RefreshPreviewBox()
     -- Target/aggro highlight border
     if m._hlBorder then
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
-        local gfDbKey = (kind == "raid") and "gf_raid" or "gf_party"
+        local gfDbKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
         local gfDb = _G.MSUF_DB and _G.MSUF_DB[gfDbKey]
         local function resolveHL(key, fallback)
             if gfDb and gfDb.hlOverride and gfDb[key] ~= nil then return gfDb[key] end

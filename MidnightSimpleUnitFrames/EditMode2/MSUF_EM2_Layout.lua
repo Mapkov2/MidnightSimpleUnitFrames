@@ -1013,7 +1013,7 @@ function Ticker.BeginDrag(mover, key, cfg)
         screenH      = UIParent:GetHeight(),
         bossAdjX     = bossAdjX,
         bossAdjY     = bossAdjY,
-        isGroupFrame = (key == "gf_party" or key == "gf_raid") or (bar and bar._msufIsGroupFrame == true) or false,
+        isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid") or (bar and bar._msufIsGroupFrame == true) or false,
     }
 end
 

@@ -32,11 +32,21 @@ end
 local function GetRaidConf()
     local db = _G.MSUF_DB; return db and db.gf_raid
 end
+local function GetMythicRaidConf()
+    local db = _G.MSUF_DB; return db and db.gf_mythicraid
+end
 local function PartyEnabled()
     local c = GetPartyConf(); return c and c.enabled == true
 end
 local function RaidEnabled()
     local c = GetRaidConf(); return c and c.enabled == true
+end
+local function MythicRaidEnabled()
+    local c = GetMythicRaidConf(); return c and c.enabled == true
+end
+
+local function IsRaidLikeKind(kind)
+    return kind == "raid" or kind == "mythicraid"
 end
 
 ------------------------------------------------------------------------
@@ -47,7 +57,7 @@ local _em2Active = false
 local _previewShownByEM2 = true
 
 local function GetDefaultCenter(kind)
-    return (kind == "raid") and -500 or -400, 0
+    return IsRaidLikeKind(kind) and -500 or -400, 0
 end
 
 local function GetPreviewCount(kind)
@@ -61,7 +71,7 @@ local function GetPreviewCount(kind)
         end
         if n > 0 then return n end
     end
-    return (kind == "raid") and 10 or 5
+    return IsRaidLikeKind(kind) and 10 or 5
 end
 
 ------------------------------------------------------------------------
@@ -111,6 +121,7 @@ end
 local function SyncAllContainers()
     SyncContainer("party")
     SyncContainer("raid")
+    SyncContainer("mythicraid")
 end
 
 ------------------------------------------------------------------------
@@ -128,7 +139,7 @@ end
 ------------------------------------------------------------------------
 local function DisablePreviewMouse(disabled)
     local gf = ns.GF; if not gf then return end
-    for _, kind in ipairs({ "party", "raid" }) do
+    for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
         local frames = gf._previewFrames and gf._previewFrames[kind]
         if frames then
             for i = 1, #frames do
@@ -151,11 +162,16 @@ local function ShowPreviewOnly()
         gf.SetPreviewAnchor("raid", EnsureContainer("raid"))
         gf.ShowPreview("raid", 10)
     end
+    if MythicRaidEnabled() then
+        gf.SetPreviewAnchor("mythicraid", EnsureContainer("mythicraid"))
+        gf.ShowPreview("mythicraid", 10)
+    end
 
     DisablePreviewMouse(true)
     SyncAllContainers()
     gf.RefreshPreviewLayout("party")
     gf.RefreshPreviewLayout("raid")
+    gf.RefreshPreviewLayout("mythicraid")
     HideHeaders()
 end
 
@@ -166,8 +182,10 @@ local function HidePreviewOnly()
     DisablePreviewMouse(false)
     gf.SetPreviewAnchor("party", nil)
     gf.SetPreviewAnchor("raid", nil)
+    gf.SetPreviewAnchor("mythicraid", nil)
     gf.HidePreview("party")
     gf.HidePreview("raid")
+    gf.HidePreview("mythicraid")
 end
 
 local function EnterEditMode()
@@ -190,17 +208,21 @@ local function ExitEditMode()
     DisablePreviewMouse(false)
     gf.SetPreviewAnchor("party", nil)
     gf.SetPreviewAnchor("raid", nil)
+    gf.SetPreviewAnchor("mythicraid", nil)
     gf.HidePreview("party")
     gf.HidePreview("raid")
+    gf.HidePreview("mythicraid")
 
     -- Hide EM2 containers
     if _containers.party then _containers.party:Hide() end
     if _containers.raid  then _containers.raid:Hide()  end
+    if _containers.mythicraid then _containers.mythicraid:Hide() end
 
     -- Close GF popups
     if _G.MSUF_EM2_HideGFPopup then
         _G.MSUF_EM2_HideGFPopup("party")
         _G.MSUF_EM2_HideGFPopup("raid")
+        _G.MSUF_EM2_HideGFPopup("mythicraid")
     end
 
     -- Restore real headers
@@ -208,6 +230,7 @@ local function ExitEditMode()
         if type(gf.SyncHeaderPosition) == "function" then
             gf.SyncHeaderPosition("party")
             gf.SyncHeaderPosition("raid")
+            gf.SyncHeaderPosition("mythicraid")
         end
         local fn = gf._origUpdateGroupVisibility or gf.UpdateGroupVisibility
         if type(fn) == "function" then fn() end
@@ -218,7 +241,7 @@ local function ExitEditMode()
     C_Timer.After(0.15, function()
         if _em2Active then return end -- re-entered edit mode already
         -- Belt-and-suspenders: kill preview frames
-        for _, kind in ipairs({ "party", "raid" }) do
+        for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
             local frames = gf._previewFrames and gf._previewFrames[kind]
             if frames then
                 for i = 1, #frames do
@@ -241,8 +264,13 @@ end
 local function HookPostDrag()
     if type(_G.ApplySettingsForKey) ~= "function" then return end
     hooksecurefunc("ApplySettingsForKey", function(key)
-        if key ~= "gf_party" and key ~= "gf_raid" then return end
-        local kind = (key == "gf_raid") and "raid" or "party"
+        local keyToKind = {
+            gf_party = "party",
+            gf_raid = "raid",
+            gf_mythicraid = "mythicraid",
+        }
+        local kind = keyToKind[key]
+        if not kind then return end
         local gf = ns.GF; if not gf then return end
 
         if type(gf.SyncHeaderPosition) == "function" and not InCombatLockdown() then
@@ -295,6 +323,23 @@ local function RegisterGF()
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("raid") or GetRaidConf() end,
         isEnabled = RaidEnabled,
+        onEnter   = function() EnterEditMode() end,
+        onExit    = function() ExitEditMode() end,
+    })
+
+    Reg.Register({
+        key       = "gf_mythicraid",
+        label     = "Group: Mythic Raid",
+        order     = 72,
+        popupType = "gf_mythicraid",
+        canResize = false,
+        canNudge  = true,
+        getFrame  = function()
+            SyncContainer("mythicraid")
+            return EnsureContainer("mythicraid")
+        end,
+        getConf   = function() local gf = ns.GF; return gf and gf.GetConf("mythicraid") or GetMythicRaidConf() end,
+        isEnabled = MythicRaidEnabled,
         onEnter   = function() EnterEditMode() end,
         onExit    = function() ExitEditMode() end,
     })
@@ -776,5 +821,6 @@ _G.MSUF_EM2_ShowGFPopup = ShowGFPopup
 _G.MSUF_EM2_HideGFPopup = HideGFPopup
 _G.MSUF_EM2_GFPopupIsOpen = function()
     return (_popups.party and _popups.party:IsShown())
-        or (_popups.raid and _popups.raid:IsShown()) or false
+        or (_popups.raid and _popups.raid:IsShown())
+        or (_popups.mythicraid and _popups.mythicraid:IsShown()) or false
 end

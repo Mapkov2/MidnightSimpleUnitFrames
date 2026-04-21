@@ -753,7 +753,7 @@ end
 -- Resolve an absorb/overlay setting: GF conf (if hlOverride) → general
 ------------------------------------------------------------------------
 local function _GF_ResolveOverlaySetting(kind, key)
-    local dbKey = (kind == "raid") and "gf_raid" or "gf_party"
+    local dbKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
     local db = _G.MSUF_DB and _G.MSUF_DB[dbKey]
     if db and db.hlOverride and db[key] ~= nil then return db[key] end
     local gen = _G.MSUF_DB and _G.MSUF_DB.general

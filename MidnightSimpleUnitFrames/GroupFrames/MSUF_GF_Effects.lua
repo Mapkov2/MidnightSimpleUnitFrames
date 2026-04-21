@@ -1698,7 +1698,8 @@ local function UpdateAggro(f, unit)
         local testScope = _G.MSUF_AggroBorderTestScope or "shared"
         if testScope ~= "shared" then
             local scopeKind = (testScope == "party" or testScope == "gf_party") and "party"
-                or (testScope == "raid" or testScope == "gf_raid") and "raid" or nil
+                or (testScope == "raid" or testScope == "gf_raid") and "raid"
+                or (testScope == "mythicraid" or testScope == "gf_mythicraid") and "mythicraid" or nil
             if scopeKind ~= kind then testMode = false end
         end
     end
@@ -1847,7 +1848,8 @@ function GF._UpdateDispel(f, unit)
         local testScope = _G.MSUF_DispelBorderTestScope or "shared"
         if testScope ~= "shared" then
             local scopeKind = (testScope == "party" or testScope == "gf_party") and "party"
-                or (testScope == "raid" or testScope == "gf_raid") and "raid" or nil
+                or (testScope == "raid" or testScope == "gf_raid") and "raid"
+                or (testScope == "mythicraid" or testScope == "gf_mythicraid") and "mythicraid" or nil
             if scopeKind ~= kind then testMode = false end
         end
     end
@@ -2867,7 +2869,7 @@ end
 -- falls through to MSUF_DB.general (tied to Bars menu).
 ------------------------------------------------------------------------
 local function _GF_GetAbsorbSetting(kind, key)
-    local dbKey = (kind == "raid") and "gf_raid" or "gf_party"
+    local dbKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
     local db = _G.MSUF_DB and _G.MSUF_DB[dbKey]
     if db and db.hlOverride and db[key] ~= nil then return db[key] end
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
@@ -3523,10 +3525,11 @@ local function OnGlobalEvent(self, event, ...)
         end
     elseif event == "BARBER_SHOP_OPEN" then
         -- hideInClientScene: hide all GF headers when entering barber/dressing room
-        for _, scope in ipairs({"party", "raid"}) do
-            local conf = GF.GetConf(scope)
+        for _, headerKind in ipairs({"party", "raid"}) do
+            local confKind = (headerKind == "raid" and GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or headerKind
+            local conf = GF.GetConf(confKind)
             if conf.hideInClientScene ~= false then
-                local header = GF.headers and GF.headers[scope]
+                local header = GF.headers and GF.headers[headerKind]
                 if header and not InCombatLockdown() then
                     header._msufGF_clientSceneHidden = true
                     header:SetAlpha(0)

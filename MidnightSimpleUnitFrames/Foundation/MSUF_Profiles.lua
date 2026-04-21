@@ -747,6 +747,9 @@ local function MSUF_CopyGroupFramePayload()
     if type(MSUF_DB.gf_raid) == "table" then
         payload.gf_raid = MSUF_DeepCopy(MSUF_DB.gf_raid)
     end
+    if type(MSUF_DB.gf_mythicraid) == "table" then
+        payload.gf_mythicraid = MSUF_DeepCopy(MSUF_DB.gf_mythicraid)
+    end
     return payload
 end
 local function MSUF_SnapshotForKind(kind)
@@ -830,7 +833,7 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
     if type(payload) ~= "table" then  return end
     local touched = (kind == "groupframe") or (kind == "groupframes")
     if not touched then
-        touched = (type(payload.gf_party) == "table") or (type(payload.gf_raid) == "table")
+        touched = (type(payload.gf_party) == "table") or (type(payload.gf_raid) == "table") or (type(payload.gf_mythicraid) == "table")
     end
     if not touched then  return end
     MSUF_ProfileIO_EnsureGroupFramesDB()
@@ -900,6 +903,17 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
                 end
             else
                 MSUF_DB.gf_raid = MSUF_DeepCopy(payload.gf_raid)
+            end
+        end
+        if payload.gf_mythicraid ~= nil then
+            if type(payload.gf_mythicraid) == "table" then
+                MSUF_DB.gf_mythicraid = MSUF_DB.gf_mythicraid or {}
+                MSUF_WipeTable(MSUF_DB.gf_mythicraid)
+                for kk, vv in pairs(payload.gf_mythicraid) do
+                    MSUF_DB.gf_mythicraid[kk] = MSUF_DeepCopy(vv)
+                end
+            else
+                MSUF_DB.gf_mythicraid = MSUF_DeepCopy(payload.gf_mythicraid)
             end
         end
     elseif kind == "castbar" then

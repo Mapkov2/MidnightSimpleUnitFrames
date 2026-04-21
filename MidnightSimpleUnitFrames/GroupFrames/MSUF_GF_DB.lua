@@ -345,8 +345,16 @@ do
     RAID_DEFAULTS.powerShowDamager = false
 end
 
+local MYTHIC_RAID_DEFAULTS = {}
+do
+    for k, v in pairs(RAID_DEFAULTS) do
+        MYTHIC_RAID_DEFAULTS[k] = v
+    end
+end
+
 GF.PARTY_DEFAULTS = PARTY_DEFAULTS
 GF.RAID_DEFAULTS  = RAID_DEFAULTS
+GF.MYTHIC_RAID_DEFAULTS = MYTHIC_RAID_DEFAULTS
 
 ------------------------------------------------------------------------
 -- Grid metrics (stored position = GRID CENTER)
@@ -361,16 +369,20 @@ function GF.GetHeaderOriginToFirstCenter(kind, w, h)
     return (w or 0) * 0.5, -(h or 0) * 0.5
 end
 
+local function IsRaidLikeKind(kind)
+    return kind == "raid" or kind == "mythicraid"
+end
+
 function GF.GetGridMetrics(kind, count)
     local conf = GF.GetConf(kind)
-    local w   = conf.width  or (kind == "raid" and 80 or 120)
-    local h   = conf.height or (kind == "raid" and 32 or 40)
+    local w   = conf.width  or (IsRaidLikeKind(kind) and 80 or 120)
+    local h   = conf.height or (IsRaidLikeKind(kind) and 32 or 40)
     local sp  = conf.spacing or 1
     local growth = conf.growth or "DOWN"
     local upc = conf.unitsPerColumn or 5
 
     count = tonumber(count) or 0
-    if count < 1 then count = (kind == "raid" and 10 or 5) end
+    if count < 1 then count = (IsRaidLikeKind(kind) and 10 or 5) end
 
     local numCols = math_ceil(count / upc)
     if numCols < 1 then numCols = 1 end
@@ -405,7 +417,7 @@ function GF.GetGridMetrics(kind, count)
 end
 
 local function GetMigrationCount(kind, conf)
-    if kind == "raid" then
+    if IsRaidLikeKind(kind) then
         local isInRaid = _G.IsInRaid
         local getNum = _G.GetNumGroupMembers
         local n = (type(getNum) == "function") and (getNum() or 0) or 0
@@ -431,7 +443,7 @@ local function MigrateGroupPositionToGridCenter(conf, kind)
     if not conf then return end
     if conf.positionMode == "GRID_CENTER_V1" then return end
     local dx, dy = GF.GetGridMetrics(kind, GetMigrationCount(kind, conf))
-    conf.offsetX = (conf.offsetX or (kind == "raid" and -500 or -400)) + dx
+    conf.offsetX = (conf.offsetX or (IsRaidLikeKind(kind) and -500 or -400)) + dx
     conf.offsetY = (conf.offsetY or 0) + dy
     conf.positionMode = "GRID_CENTER_V1"
 end
@@ -499,23 +511,30 @@ function GF.EnsureDB()
     if not db then return end
     local _partyFresh = type(db.gf_party) ~= "table"
     local _raidFresh  = type(db.gf_raid)  ~= "table"
+    local _mythicFresh = type(db.gf_mythicraid) ~= "table"
     if _partyFresh then db.gf_party = {} end
     if _raidFresh  then db.gf_raid  = {} end
+    if _mythicFresh then db.gf_mythicraid = {} end
     MigrateShowHPTo3Slot(db.gf_party)
     MigrateShowHPTo3Slot(db.gf_raid)
+    MigrateShowHPTo3Slot(db.gf_mythicraid)
     MigrateHighlightToUnified(db.gf_party)
     MigrateHighlightToUnified(db.gf_raid)
+    MigrateHighlightToUnified(db.gf_mythicraid)
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
+    applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
     MigrateGroupPositionToGridCenter(db.gf_party, "party")
     MigrateGroupPositionToGridCenter(db.gf_raid, "raid")
+    MigrateGroupPositionToGridCenter(db.gf_mythicraid, "mythicraid")
     -- Migrate flat aura/private-aura keys → nested tables
     if GF.MigrateAuraConfig then
         GF.MigrateAuraConfig(db.gf_party, false)
         GF.MigrateAuraConfig(db.gf_raid, true)
+        GF.MigrateAuraConfig(db.gf_mythicraid, true)
     end
     -- Ensure spell filter fields exist on each aura sub-group
-    for _, conf in pairs({db.gf_party, db.gf_raid}) do
+    for _, conf in pairs({db.gf_party, db.gf_raid, db.gf_mythicraid}) do
         -- Migrate: remove legacy absorb/heal defaults that blocked global override
         if conf.absorbEnabled == true and not conf._absorbMigrated then
             conf.absorbEnabled = nil
@@ -594,7 +613,7 @@ function GF.EnsureDB()
         end
     end
     -- Migration v2: force-enable auras + defensives (showstopper fix)
-    for _, conf in pairs({db.gf_party, db.gf_raid}) do
+    for _, conf in pairs({db.gf_party, db.gf_raid, db.gf_mythicraid}) do
         if type(conf.auras) == "table" and not conf._auraMigV2 then
             conf._auraMigV2 = true
             if conf.auras.enabled == false or conf.auras.enabled == nil then
@@ -607,7 +626,7 @@ function GF.EnsureDB()
         end
     end
     -- Schedule default preset apply on first-ever setup
-    if (_partyFresh or _raidFresh) and not db._gfDefaultPresetApplied then
+    if (_partyFresh or _raidFresh or _mythicFresh) and not db._gfDefaultPresetApplied then
         GF._pendingDefaultPreset = true
     end
     -- Update cached conf references
@@ -617,10 +636,47 @@ end
 ------------------------------------------------------------------------
 -- Config resolution (cached — eliminates _G.MSUF_DB + type() per call)
 ------------------------------------------------------------------------
-local _confParty, _confRaid
+local _confParty, _confRaid, _confMythicRaid
+
+function GF.IsMythicRaidContext()
+    local inGroup = (IsInGroup and IsInGroup()) or false
+    local inRaid = (IsInRaid and IsInRaid()) or false
+    if not inGroup and not inRaid then return false end
+
+    local raidDifficultyID = GetRaidDifficultyID and GetRaidDifficultyID() or nil
+    if raidDifficultyID == 16 then return true end
+
+    local _, instanceType, difficultyID = GetInstanceInfo()
+    if instanceType == "raid" and difficultyID == 16 then
+        return true
+    end
+
+    return false
+end
+
+function GF.GetLiveRaidKind()
+    if GF.IsMythicRaidContext and GF.IsMythicRaidContext() then
+        return "mythicraid"
+    end
+    return "raid"
+end
+
+function GF.GetConfigDBKey(kind)
+    if kind == "raid" then return "gf_raid" end
+    if kind == "mythicraid" then return "gf_mythicraid" end
+    return "gf_party"
+end
+
+local function GetDefaultsTable(kind)
+    if kind == "raid" then return RAID_DEFAULTS end
+    if kind == "mythicraid" then return MYTHIC_RAID_DEFAULTS end
+    return PARTY_DEFAULTS
+end
 
 function GF.GetConf(kind)
-    if kind == "raid" then return _confRaid or RAID_DEFAULTS end
+    local dbKey = GF.GetConfigDBKey(kind)
+    if dbKey == "gf_mythicraid" then return _confMythicRaid or MYTHIC_RAID_DEFAULTS end
+    if dbKey == "gf_raid" then return _confRaid or RAID_DEFAULTS end
     return _confParty or PARTY_DEFAULTS
 end
 
@@ -628,16 +684,16 @@ end
 function GF.InvalidateConfCache()
     local db = _G.MSUF_DB
     if not db then
-        _confParty, _confRaid = nil, nil
+        _confParty, _confRaid, _confMythicRaid = nil, nil, nil
         return
     end
     _confParty = (type(db.gf_party) == "table" and db.gf_party) or nil
     _confRaid  = (type(db.gf_raid)  == "table" and db.gf_raid)  or nil
+    _confMythicRaid = (type(db.gf_mythicraid) == "table" and db.gf_mythicraid) or nil
 end
 
 function GF.GetDefault(kind, key)
-    if kind == "raid" then return RAID_DEFAULTS[key] end
-    return PARTY_DEFAULTS[key]
+    return GetDefaultsTable(kind)[key]
 end
 
 local function ResetConfToDefaults(conf, defaults)
@@ -656,9 +712,11 @@ function GF.ResetAllToDefaults()
 
     db.gf_party = db.gf_party or {}
     db.gf_raid  = db.gf_raid or {}
+    db.gf_mythicraid = db.gf_mythicraid or {}
 
     ResetConfToDefaults(db.gf_party, PARTY_DEFAULTS)
     ResetConfToDefaults(db.gf_raid, RAID_DEFAULTS)
+    ResetConfToDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
 
     GF.EnsureDB()
 
@@ -712,8 +770,9 @@ function GF.LoadRaidLayout(conf, situationKey)
 end
 
 --- Switch active situation: save current → load new → rebuild
-function GF.SwitchRaidLayout(situationKey)
-    local conf = GF.GetConf("raid")
+function GF.SwitchRaidLayout(situationKey, kind)
+    kind = kind or (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
+    local conf = GF.GetConf(kind)
     if not conf then return end
     local prev = conf._activeRaidLayout
     if prev and prev ~= situationKey then
@@ -745,14 +804,15 @@ function GF.DetectRaidSituation()
 end
 
 --- Auto-switch handler (called on PLAYER_ENTERING_WORLD)
-function GF.AutoSwitchRaidLayout()
-    local conf = GF.GetConf("raid")
+function GF.AutoSwitchRaidLayout(kind)
+    kind = kind or (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
+    local conf = GF.GetConf(kind)
     if not conf then return end
     local mode = conf.raidLayoutMode or "manual"
     if mode ~= "auto" then return end
     local situation = GF.DetectRaidSituation()
     if situation ~= conf._activeRaidLayout then
-        GF.SwitchRaidLayout(situation)
+        GF.SwitchRaidLayout(situation, kind)
     end
 end
 
@@ -804,8 +864,7 @@ function GF.Val(kind, key)
     local conf = GF.GetConf(kind)
     local v = conf[key]
     if v ~= nil then return v end
-    if kind == "raid" then return RAID_DEFAULTS[key] end
-    return PARTY_DEFAULTS[key]
+    return GetDefaultsTable(kind)[key]
 end
 
 --- Resolve a unified highlight value with scope override support.
@@ -1976,7 +2035,7 @@ function GF.ApplyPreset(kind, presetKey)
         conf[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
     end
 
-    local scopeOvr = (kind == "raid") and preset.raid or preset.party
+    local scopeOvr = (kind == "party") and preset.party or (preset.mythicraid or preset.raid)
     if scopeOvr then
         for k, v in pairs(scopeOvr) do
             conf[k] = (type(v) == "table") and GF._DeepCopyTable(v) or v
@@ -2028,6 +2087,7 @@ function GF.MaybeApplyDefaultPreset()
     db._gfDefaultPresetApplied = true
     GF.ApplyPreset("party", presetKey)
     GF.ApplyPreset("raid",  presetKey)
+    GF.ApplyPreset("mythicraid", presetKey)
     print("|cff00ff00MSUF:|r Default group frame preset applied: " .. (GF.PRESETS[presetKey] and GF.PRESETS[presetKey].label or presetKey))
 end
 

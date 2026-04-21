@@ -442,7 +442,7 @@ MSUF_ApplyRareVisuals = function(self)
             local testScope = _G.MSUF_DispelBorderTestScope or "shared"
             if testScope ~= "shared" then
                 local u = self.unit
-                if testScope == "party" or testScope == "raid" or testScope == "gf_party" or testScope == "gf_raid" then
+                if testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid" then
                     test = false  -- GF scope: don't show on UF
                 elseif u ~= testScope then
                     test = false  -- Different UF: don't show
@@ -534,7 +534,7 @@ _G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(acti
     _G.MSUF_AggroBorderTestScope = scope or "shared"
     local testScope = _G.MSUF_AggroBorderTestScope
     local isShared = (testScope == "shared")
-    local isGF = (testScope == "party" or testScope == "raid" or testScope == "gf_party" or testScope == "gf_raid")
+    local isGF = (testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid")
 
     local fn = _G.MSUF_RefreshRareBarVisuals
     local frames = _G.MSUF_UnitFrames
@@ -571,7 +571,7 @@ _G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(ac
     _G.MSUF_DispelBorderTestScope = scope or "shared"
     local testScope = _G.MSUF_DispelBorderTestScope
     local isShared = (testScope == "shared")
-    local isGF = (testScope == "party" or testScope == "raid" or testScope == "gf_party" or testScope == "gf_raid")
+    local isGF = (testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid")
 
     -- UF frames: only refresh if shared or matching UF scope
     local fn = _G.MSUF_RefreshRareBarVisuals

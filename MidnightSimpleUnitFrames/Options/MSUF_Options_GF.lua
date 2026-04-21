@@ -123,6 +123,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local function K() return _activeKind end
     local function C() return GF.GetConf(K()) end
     local function V(key) return GF.Val(K(), key) end
+    local function IsRaidLike(kind) return kind == "raid" or kind == "mythicraid" end
+    local function ScopeLabel(kind)
+        if kind == "mythicraid" then return "Mythic Raid" end
+        return (kind == "raid") and "Raid" or "Party"
+    end
     local function W(key, val, refreshFn)
         local conf = GF.GetConf(K())
         conf[key] = val
@@ -485,7 +490,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         if _copyPopup and _copyPopup:IsShown() then _copyPopup:Hide(); return end
         if not _copyPopup then
             local pop = CreateFrame("Frame", nil, anchorFrame, "BackdropTemplate")
-            pop:SetSize(280, 30 + #_COPY_CATEGORIES * 22 + 36)
+            pop:SetSize(350, 30 + #_COPY_CATEGORIES * 22 + 36)
             pop:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
                 insets = { left = 1, right = 1, top = 1, bottom = 1 } })
             pop:SetBackdropColor(0.06, 0.10, 0.20, 0.97)
@@ -544,34 +549,58 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 end
             end)
 
-            -- Copy button
-            local goBtn = CreateFrame("Button", nil, pop, "BackdropTemplate")
-            goBtn:SetSize(80, 18)
-            goBtn:SetPoint("BOTTOMRIGHT", pop, "BOTTOMRIGHT", -10, 8)
-            goBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-            goBtn:SetBackdropColor(0.15, 0.30, 0.18, 1)
-            goBtn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
-            local goFs = goBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            goFs:SetPoint("CENTER"); goFs:SetText("|cff44ee55Copy|r")
-            goBtn:SetScript("OnClick", function()
-                local src = _activeKind
-                local dst = (src == "party") and "raid" or "party"
-                _GFDoCopySelective(src, dst)
-                pop:Hide()
-                local srcL = (src == "party") and "Party" or "Raid"
-                local dstL = (dst == "party") and "Party" or "Raid"
-                print("|cff00ff00MSUF:|r Copied selected settings from " .. srcL .. " to " .. dstL .. ".")
-            end)
+            pop._targetBtns = {}
+            local function MakeTargetBtn(kind, x)
+                local btn = CreateFrame("Button", nil, pop, "BackdropTemplate")
+                btn:SetSize(76, 18)
+                btn:SetPoint("BOTTOMLEFT", pop, "BOTTOMLEFT", x, 8)
+                btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+                btn:SetBackdropColor(0.15, 0.30, 0.18, 1)
+                btn:SetBackdropBorderColor(0.30, 0.60, 0.35, 0.9)
+                local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                fs:SetPoint("CENTER")
+                fs:SetText("|cff44ee55" .. ((kind == "mythicraid") and "Mythic" or ScopeLabel(kind)) .. "|r")
+                btn:SetFontString(fs)
+                btn:SetScript("OnClick", function()
+                    local src = _activeKind
+                    _GFDoCopySelective(src, kind)
+                    pop:Hide()
+                    print("|cff00ff00MSUF:|r Copied selected settings from " .. ScopeLabel(src) .. " to " .. ScopeLabel(kind) .. ".")
+                end)
+                pop._targetBtns[kind] = btn
+                return btn
+            end
+
+            MakeTargetBtn("party", 104)
+            MakeTargetBtn("raid", 184)
+            MakeTargetBtn("mythicraid", 264)
+
+            local targetOrder = { "party", "raid", "mythicraid" }
+            local function LayoutTargetBtns()
+                local nextX = 104
+                for _, kind in ipairs(targetOrder) do
+                    local btn = pop._targetBtns[kind]
+                    if btn and btn:IsShown() then
+                        btn:ClearAllPoints()
+                        btn:SetPoint("BOTTOMLEFT", pop, "BOTTOMLEFT", nextX, 8)
+                        nextX = nextX + 80
+                    end
+                end
+            end
+            pop._layoutTargetBtns = LayoutTargetBtns
 
             _copyPopup = pop
         end
 
         local src = _activeKind
-        local dst = (src == "party") and "Raid" or "Party"
-        _copyPopup._titleFS:SetText("Copy to " .. dst)
+        _copyPopup._titleFS:SetText("Copy from " .. ScopeLabel(src))
         for i, cat in ipairs(_COPY_CATEGORIES) do
             _copyPopup._checks[i]:SetChecked(_copyToggles[cat.key])
         end
+        for kind, btn in pairs(_copyPopup._targetBtns or {}) do
+            btn:SetShown(kind ~= src)
+        end
+        if _copyPopup._layoutTargetBtns then _copyPopup._layoutTargetBtns() end
         _copyPopup:ClearAllPoints()
         _copyPopup:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -2)
         _copyPopup:Show()
@@ -595,7 +624,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         for k, v in pairs(preset.conf) do
             merged[k] = (type(v) == "table") and _GFDeepCopy(v) or v
         end
-        local scopeOvr = (kind == "raid") and preset.raid or preset.party
+        local scopeOvr = (kind == "party") and preset.party or (preset.mythicraid or preset.raid)
         if scopeOvr then
             for k, v in pairs(scopeOvr) do
                 merged[k] = (type(v) == "table") and _GFDeepCopy(v) or v
@@ -744,18 +773,21 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 end
             end)
 
-            -- Row 1 (lower): Raid / Party / Both apply buttons
+            -- Row 1 (lower): Party / Raid / Mythic / All apply buttons
             local function _DoApplyAndClose(scope)
                 local p = GF.PRESETS and GF.PRESETS[_selectedPresetKey]
                 local label = p and p.label or _selectedPresetKey
-                if scope == "raid" or scope == "both" then
+                if scope == "raid" or scope == "all" then
                     _GFDoApplyPresetSelective("raid", _selectedPresetKey)
                 end
-                if scope == "party" or scope == "both" then
+                if scope == "party" or scope == "all" then
                     _GFDoApplyPresetSelective("party", _selectedPresetKey)
                 end
+                if scope == "mythicraid" or scope == "all" then
+                    _GFDoApplyPresetSelective("mythicraid", _selectedPresetKey)
+                end
                 pop:Hide()
-                local scopeLabel = scope == "both" and "Raid+Party" or (scope == "raid" and "Raid" or "Party")
+                local scopeLabel = (scope == "all") and "Party+Raid+Mythic Raid" or ScopeLabel(scope)
                 print("|cff00ff00MSUF:|r Applied preset " .. label .. " → " .. scopeLabel)
             end
 
@@ -771,12 +803,15 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 return btn
             end
 
-            local raidBtn  = _MakeScopeBtn("|cff44ee55Raid|r",  88, 10)
-            local partyBtn = _MakeScopeBtn("|cff44ee55Party|r",  88, 102)
-            local bothBtn  = _MakeScopeBtn("|cff44ee55Both|r",   88, 194)
-            raidBtn:SetScript("OnClick",  function() _DoApplyAndClose("raid")  end)
-            partyBtn:SetScript("OnClick", function() _DoApplyAndClose("party") end)
-            bothBtn:SetScript("OnClick",  function() _DoApplyAndClose("both")  end)
+            local partyBtn  = _MakeScopeBtn("|cff44ee55Party|r",  72, 10)
+            local raidBtn   = _MakeScopeBtn("|cff44ee55Raid|r",   72, 86)
+            local mythicBtn = _MakeScopeBtn("|cff44ee55Mythic|r", 72, 162)
+            local allBtn2   = _MakeScopeBtn("|cff44ee55All|r",    72, 238)
+            partyBtn:SetScript("OnClick",  function() _DoApplyAndClose("party") end)
+            raidBtn:SetScript("OnClick",   function() _DoApplyAndClose("raid") end)
+            mythicBtn:SetScript("OnClick", function() _DoApplyAndClose("mythicraid") end)
+            allBtn2:SetScript("OnClick",   function() _DoApplyAndClose("all") end)
+            pop._mythicPresetBtn = mythicBtn
 
             pop._refreshHighlights = RefreshPresetHighlights
             _presetPopup = pop
@@ -822,11 +857,14 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
     -- Preview only when no real group exists for the active scope
     local function NeedsPreview(kind)
-        if kind == "raid" then
-            return not (IsInRaid and IsInRaid())
+        local inRaid = (IsInRaid and IsInRaid()) or false
+        if kind == "mythicraid" then
+            return not (inRaid and GF.IsMythicRaidContext and GF.IsMythicRaidContext())
         end
-        -- party: preview only when solo (no real party members)
-        return not (IsInGroup and IsInGroup())
+        if kind == "raid" then
+            return not (inRaid and not (GF.IsMythicRaidContext and GF.IsMythicRaidContext()))
+        end
+        return not (((IsInGroup and IsInGroup()) or false) and not inRaid)
     end
 
     local function ShowPreviewIfNeeded(kind)
@@ -836,13 +874,14 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 if GF.headers.party then GF.headers.party:Hide() end
                 if GF.headers.raid  then GF.headers.raid:Hide()  end
             end
-            GF.ShowPreview(kind, kind == "raid" and 10 or 5)
+            GF.ShowPreview(kind, IsRaidLike(kind) and 10 or 5)
         end
     end
 
     local function HideAllPreviews()
         GF.HidePreview("party")
         GF.HidePreview("raid")
+        GF.HidePreview("mythicraid")
         -- Restore headers
         if not InCombatLockdown() and GF.UpdateGroupVisibility then
             GF.UpdateGroupVisibility()
@@ -860,7 +899,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
     if not StaticPopupDialogs["MSUF_GF_RESET_ALL_CONFIRM"] then
         StaticPopupDialogs["MSUF_GF_RESET_ALL_CONFIRM"] = {
-            text = "Reset all Group Frame settings to defaults?\n\nThis resets Party and Raid Group Frames for the active profile.",
+            text = "Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile.",
             button1 = YES,
             button2 = NO,
             timeout = 0,
@@ -887,10 +926,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
     do
         local prevBtn
-        for _, info in ipairs({ { "party", "Party" }, { "raid", "Raid" } }) do
+        for _, info in ipairs({ { "party", "Party" }, { "raid", "Raid" }, { "mythicraid", "Mythic" } }) do
             local kind, label = info[1], info[2]
             local btn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
-            btn:SetSize(56, 20)
+            btn:SetSize((kind == "mythicraid") and 68 or 56, 20)
             btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
             btn:SetBackdropBorderColor(0.2, 0.35, 0.55, 0.5)
             local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -905,6 +944,23 @@ function _G.MSUF_EnsureGFPanelBuilt()
             scopeBtns[kind] = btn
             prevBtn = btn
         end
+    end
+
+    do
+        local scopeEventFrame = CreateFrame("Frame")
+        local function RefreshMythicScopeState()
+            RefreshScopeBtns()
+            local panel = _G.MSUF_GFOptionsPanel
+            if panel and panel.IsShown and panel:IsShown() then
+                HideAllPreviews()
+                ShowPreviewIfNeeded(_activeKind)
+            end
+        end
+        scopeEventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+        scopeEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        scopeEventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
+        scopeEventFrame:SetScript("OnEvent", RefreshMythicScopeState)
+        _allRefreshFns[#_allRefreshFns + 1] = RefreshMythicScopeState
     end
     -- Copy button (right side of scope bar, label changes with scope)
     local copyBtn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
@@ -925,7 +981,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         self:SetBackdropBorderColor(0.35, 0.55, 0.80, 1)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
         GameTooltip:SetText("Copy Settings", 1, 1, 1)
-        GameTooltip:AddLine("Select which categories to copy\nbetween Party and Raid settings.", 0.7, 0.7, 0.8, true)
+        GameTooltip:AddLine("Select which categories to copy\nbetween Party, Raid, and Mythic Raid settings.", 0.7, 0.7, 0.8, true)
         GameTooltip:Show()
     end)
     copyBtn:SetScript("OnLeave", function(self)
@@ -935,8 +991,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end)
 
     local function RefreshCopyBtn()
-        local dst = (_activeKind == "party") and "Raid" or "Party"
-        copyFS:SetText("Copy > " .. dst)
+        copyFS:SetText("Copy To")
     end
     RefreshCopyBtn()
 
@@ -1043,7 +1098,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         -- (#5) Update scope context hint
         if _scopeHintFS then
             local TAB_LABELS = { frame = "layout", health = "health & text", auras = "buffs & debuffs", indicators = "indicators" }
-            local scopeLabel = (_activeKind == "party") and "Party" or "Raid"
+            local scopeLabel = ScopeLabel(_activeKind)
             _scopeHintFS:SetText("|cff666680Editing " .. scopeLabel .. " " .. (TAB_LABELS[tabKey] or tabKey) .. "|r")
         end
 
@@ -1056,7 +1111,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     ----------------------------------------------------------------
     _scopeHintFS = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     _scopeHintFS:SetPoint("TOPLEFT", scopeBar, "BOTTOMLEFT", 4, -4)
-    _scopeHintFS:SetText("|cff666680Editing Party layout|r")
+    _scopeHintFS:SetText("|cff666680Editing " .. ScopeLabel(_activeKind) .. " layout|r")
 
     -- Patch SwitchScope to also update hint
     local _origSwitchScope = SwitchScope
@@ -1064,7 +1119,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         _origSwitchScope(kind)
         if _scopeHintFS then
             local TAB_LABELS = { frame = "layout", health = "health & text", auras = "buffs & debuffs", indicators = "indicators" }
-            local scopeLabel = (kind == "party") and "Party" or "Raid"
+            local scopeLabel = ScopeLabel(_activeKind)
             _scopeHintFS:SetText("|cff666680Editing " .. scopeLabel .. " " .. (TAB_LABELS[_activeTab] or _activeTab) .. "|r")
         end
     end
@@ -1123,7 +1178,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         self:SetBackdropBorderColor(0.85, 0.35, 0.35, 1)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
         GameTooltip:SetText(TR("Reset All"), 1, 1, 1)
-        GameTooltip:AddLine("Resets Party and Raid Group Frame settings to defaults for the active profile.", 0.8, 0.8, 0.85, true)
+        GameTooltip:AddLine("Resets Party, Raid, and Mythic Raid Group Frame settings to defaults for the active profile.", 0.8, 0.8, 0.85, true)
         GameTooltip:Show()
     end)
     resetBtn:SetScript("OnLeave", function(self)
@@ -1476,7 +1531,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 if conf then
                     conf.raidLayoutMode = v and "auto" or "manual"
                     if v and GF.AutoSwitchRaidLayout then
-                        GF.AutoSwitchRaidLayout()
+                        GF.AutoSwitchRaidLayout(k)
                     end
                 end
             end,
@@ -1493,7 +1548,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                     return conf and conf._activeRaidLayout or "manual"
                 end,
                 set = function(k, v)
-                    if GF.SwitchRaidLayout then GF.SwitchRaidLayout(v) end
+                    if GF.SwitchRaidLayout then GF.SwitchRaidLayout(v, k) end
                 end,
             })
         end
@@ -1682,7 +1737,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local function RefreshGrowthButtons()
             local cur = GF.Val(K(), "growth") or "DOWN"
-            local isRaid = (K() == "raid")
+            local isRaid = IsRaidLike(K())
             for _, info in ipairs(GROW_DIRS) do
                 local btn = growthBtns[info.key]
                 if btn then
@@ -1839,7 +1894,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         end
         -- Sync raid layout container: hide for party, re-anchor width slider
         local function SyncRaidLayout()
-            local isRaid = (K() == "raid")
+            local isRaid = IsRaidLike(K())
             _raidLayoutContainer:SetShown(isRaid)
             widthSl:ClearAllPoints()
             if isRaid then
@@ -1854,7 +1909,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         -- Sync group filter toggles on scope change
         local function SyncGroupFilter()
             local k = K()
-            local isRaid = (k == "raid")
+            local isRaid = IsRaidLike(k)
             _gfRow:SetShown(isRaid)
             if isRaid then
                 local conf = GF.GetConf(k)
