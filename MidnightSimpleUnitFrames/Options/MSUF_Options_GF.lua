@@ -1135,6 +1135,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local origSet = spec.set
         spec.get = function() return origGet(K()) end
         spec.set = function(v) origSet(K(), v) end
+        if spec.compact and spec.compactInput == nil then
+            spec.compactInput = true
+            spec.compactInputWidth = 42
+            spec.compactInputGap = 6
+        end
         local sl = UI.Slider(spec)
         if sl then
             function sl:Refresh()
@@ -1145,52 +1150,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end
             _allRefreshFns[#_allRefreshFns + 1] = function()
                 if sl:IsShown() then sl:Refresh() end
-            end
-            -- Compact sliders: add inline EditBox for direct number input
-            if spec.compact and not sl.editBox then
-                local eb = CreateFrame("EditBox", nil, sl, "InputBoxTemplate")
-                eb:SetSize(42, 18)
-                eb:SetPoint("LEFT", sl, "RIGHT", 6, 0)
-                eb:SetAutoFocus(false)
-                eb:SetJustifyH("CENTER")
-                eb:SetFontObject(GameFontHighlightSmall)
-                eb:SetTextColor(1, 1, 1, 1)
-                local minV = spec.min or 0
-                local maxV = spec.max or 100
-                local step = spec.step or 1
-                local function SyncEB()
-                    if not eb:HasFocus() then
-                        local v = sl:GetValue()
-                        eb:SetText(step >= 1 and tostring(math.floor(v + 0.5)) or string.format("%.2f", v))
-                    end
-                end
-                eb:SetScript("OnEnterPressed", function(self)
-                    local v = tonumber(self:GetText())
-                    if v then
-                        if v < minV then v = minV elseif v > maxV then v = maxV end
-                        sl:SetValue(v)
-                    end
-                    self:ClearFocus()
-                    SyncEB()
-                end)
-                eb:SetScript("OnEscapePressed", function(self) self:ClearFocus(); SyncEB() end)
-                eb:SetScript("OnEditFocusLost", function(self)
-                    local v = tonumber(self:GetText())
-                    if v then
-                        if v < minV then v = minV elseif v > maxV then v = maxV end
-                        sl:SetValue(v)
-                    end
-                    SyncEB()
-                end)
-                sl.editBox = eb
-                local origSetValueClean = sl.SetValueClean
-                sl.SetValueClean = function(self, v)
-                    origSetValueClean(self, v)
-                    SyncEB()
-                end
-                hooksecurefunc(sl, "SetValue", function() SyncEB() end)
-                sl:HookScript("OnShow", function() SyncEB() end)
-                SyncEB()
             end
         end
         return sl

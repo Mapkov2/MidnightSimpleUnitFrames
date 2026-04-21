@@ -1554,7 +1554,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             end,
         })
 
-        SDropdown({
+        local coDispelModeDD = SDropdown({
             name = "MSUF_GF_PAContainerOverlayDispelMode", parent = body, compact = true,
             anchor = coShowIconsChk, x = 0, y = -28,
             width = DD_W,
@@ -1578,7 +1578,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         SDropdown({
             name = "MSUF_GF_PAContainerOverlayGradient", parent = body, compact = true,
-            anchor = coShowIconsChk, x = 260, y = -28,
+            anchor = coDispelModeDD, anchorPoint = "TOPRIGHT", x = 12, y = 0,
             width = DD_W,
             label = L["Gradient Direction"] or "Gradient Direction",
             items = {
