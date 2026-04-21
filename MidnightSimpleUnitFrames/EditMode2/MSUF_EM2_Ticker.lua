@@ -133,8 +133,9 @@ local function OnUpdate(self, elapsed)
                 local offX = (barScreenCX - ancScreenCX) / as
                 local offY = (barScreenCY - ancScreenCY) / as
 
-                -- Boss spacing adjustment
-                if d.bossAdj then offY = offY - d.bossAdj end
+                -- Boss spacing adjustment (4-way: vertical up/down + horizontal left/right)
+                if d.bossAdjX then offX = offX - d.bossAdjX end
+                if d.bossAdjY then offY = offY - d.bossAdjY end
 
                 conf.offsetX = round(offX)
                 conf.offsetY = round(offY)
@@ -215,13 +216,23 @@ function Ticker.BeginDrag(mover, key, cfg)
 
     local anchor = ResolveAnchor(key, conf)
 
-    local bossAdj
+    local bossAdjX, bossAdjY
     if bar and conf and key and key:sub(1,4) == "boss" and bar.unit then
         local gbi = _G.MSUF_GetBossIndexFromToken
         local idx = (type(gbi) == "function" and gbi(bar.unit)) or 1
+        local step = idx - 1
         local spacing = conf.spacing or -36
-        if conf.invertBossOrder then spacing = -spacing end
-        bossAdj = (idx - 1) * spacing
+        local mode = conf.bossLayoutMode
+        if mode == "HORIZONTAL_RIGHT" then
+            bossAdjX = step * -spacing
+        elseif mode == "HORIZONTAL_LEFT" then
+            bossAdjX = step * spacing
+        elseif mode == "VERTICAL_UP" then
+            bossAdjY = step * -spacing
+        else
+            -- VERTICAL_DOWN (default) + any legacy/unknown value
+            bossAdjY = step * spacing
+        end
     end
 
     activeDrag = {
@@ -240,7 +251,8 @@ function Ticker.BeginDrag(mover, key, cfg)
         halfH   = (mT - mB) * 0.5,
         screenW = UIParent:GetWidth(),
         screenH = UIParent:GetHeight(),
-        bossAdj = bossAdj,
+        bossAdjX = bossAdjX,
+        bossAdjY = bossAdjY,
     }
 end
 

@@ -1508,6 +1508,9 @@ local function fill(key, defaults)
         offsetX      = 507,
         offsetY      = 309,
         spacing      = -96,
+        -- Layout mode: "VERTICAL_DOWN" | "VERTICAL_UP" | "HORIZONTAL_RIGHT" | "HORIZONTAL_LEFT"
+        -- Replaces the legacy invertBossOrder checkbox. invertBossOrder kept for migration only.
+        bossLayoutMode = "VERTICAL_DOWN",
         invertBossOrder = false,
         showName     = true,
         showLevelIndicator = false,
@@ -1518,6 +1521,15 @@ local function fill(key, defaults)
         -- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
     })
+    -- One-shot migration: old invertBossOrder checkbox → new bossLayoutMode dropdown.
+    -- Runs once per install; converts legacy saved setting into the new mode value.
+    if MSUF_DB.boss and MSUF_DB.boss._bossLayoutMigrated ~= true then
+        if MSUF_DB.boss.invertBossOrder == true and
+           (MSUF_DB.boss.bossLayoutMode == nil or MSUF_DB.boss.bossLayoutMode == "VERTICAL_DOWN") then
+            MSUF_DB.boss.bossLayoutMode = "VERTICAL_UP"
+        end
+        MSUF_DB.boss._bossLayoutMigrated = true
+    end
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
     end
