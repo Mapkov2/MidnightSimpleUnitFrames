@@ -2359,13 +2359,12 @@ local function ApplyHealthColor(f, kind, unit)
             local color = calc:EvaluateCurrentHealthPercent(_gfGradientCurve)
             if color then
                 local r, g, b = color:GetRGB()
-                local rQ = math_floor(r * 255 + 0.5)
-                local gQ = math_floor(g * 255 + 0.5)
-                if f._msufGFGradRQ ~= rQ or f._msufGFGradGQ ~= gQ then
-                    f._msufGFGradRQ = rQ
-                    f._msufGFGradGQ = gQ
-                    f.health:SetStatusBarColor(r, g, 0, 1)
-                end
+                -- Secret-safe path: the curve result can carry secret values.
+                -- Feed them straight into the C-side setter; do not quantize or
+                -- otherwise touch them in Lua.
+                f._msufGFGradRQ = nil
+                f._msufGFGradGQ = nil
+                f.health:SetStatusBarColor(r, g, b, 1)
                 f._msufGFHCStamp = "gradient"
                 return
             end
