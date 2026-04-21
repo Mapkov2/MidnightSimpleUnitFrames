@@ -1270,37 +1270,60 @@ function GF.RebuildSIHandles()
             h._label:SetText(spellName:sub(1, 8))
             h._cfgKey = spellName
 
-            -- Visual: icon texture or colored square
+            local itype = cfg.type or "icon"
             if not h._siTex then
                 h._siTex = h:CreateTexture(nil, "ARTWORK")
             end
-            h._siTex:SetSize(sz, sz)
             h._siTex:ClearAllPoints()
             h._siTex:SetPoint("CENTER", h, "CENTER", 0, 0)
 
-            local itype = cfg.type or "icon"
-            if itype == "icon" and SI.GetAuraIcon then
-                h._siTex:SetTexture(SI.GetAuraIcon(specKey, spellName))
-                h._siTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-            elseif itype == "square" or itype == "bar" then
-                local clr = (defCfg.placed and defCfg.placed.color)
-                    or (defCfg.frame and defCfg.frame.color) or {0.5, 0.8, 0.5}
-                h._siTex:SetColorTexture(clr[1] or 0.5, clr[2] or 0.8, clr[3] or 0.5, 1)
-                h._siTex:SetTexCoord(0, 1, 0, 1)
+            if itype == "number" then
+                if not h._siValue then
+                    h._siValue = h:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+                    h._siValue:SetPoint("CENTER", h, "CENTER", 0, 0)
+                end
+                local fontSz = max(8, cfg.cooldownSize or sz)
+                h._siValue:SetFont("Fonts\\FRIZQT__.TTF", fontSz, "OUTLINE")
+                h._siValue:SetText("12")
+                h._siValue:Show()
+                h._siTex:Hide()
             else
-                h._siTex:SetColorTexture(0.35, 0.55, 0.35, 1)
-                h._siTex:SetTexCoord(0, 1, 0, 1)
+                if h._siValue then h._siValue:Hide() end
+                h._siTex:SetSize(sz, sz)
+                if itype == "icon" and SI.GetAuraIcon then
+                    h._siTex:SetTexture(SI.GetAuraIcon(specKey, spellName))
+                    h._siTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                elseif itype == "square" or itype == "bar" then
+                    local clr = (defCfg.placed and defCfg.placed.color)
+                        or (defCfg.frame and defCfg.frame.color) or {0.5, 0.8, 0.5}
+                    h._siTex:SetColorTexture(clr[1] or 0.5, clr[2] or 0.8, clr[3] or 0.5, 1)
+                    h._siTex:SetTexCoord(0, 1, 0, 1)
+                else
+                    h._siTex:SetColorTexture(0.35, 0.55, 0.35, 1)
+                    h._siTex:SetTexCoord(0, 1, 0, 1)
+                end
+                h._siTex:Show()
             end
-            h._siTex:Show()
 
             -- Position from config (scaled for preview)
             local psc = _mockFrame._previewScale or 1.6
             local anchor = cfg.anchor or "TOPLEFT"
             local offX   = floor(((cfg.x) or 0) * psc + 0.5)
             local offY   = floor(((cfg.y) or 0) * psc + 0.5)
-            local ssz    = floor(sz * psc + 0.5)
-            h:SetSize(max(6, ssz), max(6, ssz))
-            h._siTex:SetSize(ssz, ssz)
+            if itype == "number" then
+                local fontSz = max(8, cfg.cooldownSize or sz)
+                local pfs = max(8, floor(fontSz * psc + 0.5))
+                local pw = max(18, floor(fontSz * psc * 2.2 + 0.5))
+                local ph = max(10, floor(fontSz * psc * 1.4 + 0.5))
+                h:SetSize(pw, ph)
+                if h._siValue then
+                    h._siValue:SetFont("Fonts\\FRIZQT__.TTF", pfs, "OUTLINE")
+                end
+            else
+                local ssz = floor(sz * psc + 0.5)
+                h:SetSize(max(6, ssz), max(6, ssz))
+                h._siTex:SetSize(ssz, ssz)
+            end
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (siCfg.layer or 9))

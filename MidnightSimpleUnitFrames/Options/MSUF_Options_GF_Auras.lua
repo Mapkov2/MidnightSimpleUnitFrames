@@ -88,6 +88,7 @@ local INDICATOR_TYPES = {
     { key = "icon",   label = L["Icon"]   },
     { key = "square", label = L["Square"] },
     { key = "bar",    label = L["Bar"]    },
+    { key = "number", label = L["Number Only"] or "Number Only" },
 }
 local FRAME_EFFECT_TYPES = {
     { key = "none",       label = L["None"]               },
@@ -864,6 +865,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 local t = PlacedCfg().type or "icon"
                 if t == "bar" then
                     showCDChk:Hide(); cdSizeSl:Hide()
+                elseif t == "number" then
+                    showCDChk:Hide(); cdSizeSl:Show()
                 else
                     showCDChk:Show()
                     if PlacedCfg().showCooldown ~= false then cdSizeSl:Show() else cdSizeSl:Hide() end

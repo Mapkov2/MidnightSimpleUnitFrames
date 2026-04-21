@@ -66,6 +66,7 @@ SI.SpellIDs = {
         PowerWordShield = 17,
         Atonement       = 194384,
         PrayerOfMending = 41635,
+        VoidShield      = 1253593,
     },
     HolyPriest = {
         Renew           = 139,
@@ -221,6 +222,7 @@ SI.TrackableAuras = {
         { name = "Atonement",       display = "Atonement",        color = {0.94, 0.50, 0.50} },
         { name = "PowerWordShield", display = "PW: Shield",       color = {1.00, 0.84, 0.28} },
         { name = "PrayerOfMending", display = "Prayer of Mending",color = {0.56, 0.93, 0.56} },
+        { name = "VoidShield",      display = "Void Shield",      color = {0.49, 0.77, 1.00} },
         { name = "PainSuppression", display = "Pain Suppression", color = {0.81, 0.58, 0.93}, secret = true },
         { name = "PowerInfusion",   display = "Power Infusion",   color = {0.94, 0.82, 0.31}, secret = true },
     },
@@ -268,6 +270,7 @@ SI.SpecDefaults = {
                             frame = { type = "healthtint", color = {0.94, 0.82, 0.31, 0.20}, priority = 5 } },
         PowerWordShield = { placed = { type = "icon",   anchor = "TOPRIGHT", x = -1, y = -1, size = 22 } },
         PrayerOfMending = { placed = { type = "icon",   anchor = "BOTTOMLEFT", x = 1, y = 1, size = 20 } },
+        VoidShield      = { placed = { type = "square", anchor = "BOTTOMRIGHT", x = -3, y = 3, size = 9 } },
         PainSuppression = { frame = { type = "border",  color = {0.81, 0.58, 0.93, 1}, priority = 1 } },
     },
     HolyPriest = {

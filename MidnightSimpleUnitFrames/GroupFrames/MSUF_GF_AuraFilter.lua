@@ -231,8 +231,6 @@ local DECLASSIFIED_META = {
       tooltip = "Mark of the Wild, Arcane Intellect, Fortitude, Battle Shout, Skyfury, etc." },
     { key = "BLESSING_BRONZE", label = "Blessing of the Bronze",
       tooltip = "All class-specific Blessing of the Bronze variants." },
-    { key = "HEALER_HOTS",     label = "Healer HoTs & Shields",
-      tooltip = "All healer HoTs: Rejuv, Renew, Riptide, Atonement, Echo, Reversion, etc." },
     { key = "ROGUE_POISONS",   label = "Rogue Poisons",
       tooltip = "Deadly, Wound, Crippling, Numbing, Instant, Atrophic, Amplifying." },
     { key = "SHAMAN_IMBUE",    label = "Shaman Imbuements",
@@ -315,7 +313,7 @@ local function BuildBlacklistHash(gcfg)
     hash._any = false
 
     for catKey, enabled in pairs(cats) do
-        if enabled == true then
+        if enabled == true and catKey ~= "HEALER_HOTS" then
             local spells = DECLASSIFIED_SPELLS[catKey]
             if spells then
                 for sid in pairs(spells) do

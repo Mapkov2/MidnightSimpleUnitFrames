@@ -313,7 +313,7 @@ local function CreateAuraIcon(parent, size)
     cd:SetAllPoints(icon)
     cd:SetDrawEdge(false)
     cd:SetDrawSwipe(true)
-    cd:SetReverse(true)
+    cd:SetReverse(false)
     cd:SetHideCountdownNumbers(true)
     -- Prevent end-of-cooldown bling/flash (common source of unwanted blinking)
     if cd.SetDrawBling then cd:SetDrawBling(false) end
@@ -537,9 +537,67 @@ function GF.InvalidateCdFont()
     _gfCdFontFlags = nil
 end
 
+local function ResolveCooldownFontString(cd)
+    if not cd then return nil end
+    local cached = cd._msufCooldownFontString
+    if cached and cached ~= false then return cached end
+
+    local retryAt = cd._msufCooldownFontStringRetryAt
+    local now = GetTime()
+    if type(retryAt) == "number" and now < retryAt then
+        return nil
+    end
+
+    if cd.EnumerateRegions then
+        for region in cd:EnumerateRegions() do
+            if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+                cd._msufCooldownFontString = region
+                cd._msufCooldownFontStringRetryAt = nil
+                return region
+            end
+        end
+    end
+
+    cd._msufCooldownFontStringRetryAt = now + 0.50
+    cd._msufCooldownFontString = false
+    return nil
+end
+
+local function ResolveCooldownBaseColor()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    if g and g.useCustomFontColor == true then
+        local r = g.fontColorCustomR
+        local gg = g.fontColorCustomG
+        local b = g.fontColorCustomB
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            return r, gg, b, 1
+        end
+    end
+    return 1, 1, 1, 1
+end
+
+local function ApplyCooldownVisualStyle(cd, ownerFrame)
+    if not cd then return end
+    local kind = (ownerFrame and ownerFrame._msufGFKind) or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    local reverse = conf and conf.cooldownSwipeDarkenOnLoss == true or false
+
+    if cd._msufGFDrawEdge ~= false then
+        cd._msufGFDrawEdge = false
+        cd:SetDrawEdge(false)
+    end
+    if cd.SetDrawBling and cd._msufGFDrawBling ~= false then
+        cd._msufGFDrawBling = false
+        cd:SetDrawBling(false)
+    end
+    if cd._msufGFReverse ~= reverse then
+        cd._msufGFReverse = reverse
+        cd:SetReverse(reverse)
+    end
+end
+
 ------------------------------------------------------------------------
--- Apply cooldown text font (A2 proven pattern: diff-gated, global font,
--- configurable size, lazy FontString discovery via CT module)
+-- Apply cooldown text font (diff-gated, global font, lazy FontString discovery)
 ------------------------------------------------------------------------
 local function ApplyCooldownFont(ic, gcfg)
     local cd = ic and ic.cooldown
@@ -548,25 +606,7 @@ local function ApplyCooldownFont(ic, gcfg)
     cd:SetHideCountdownNumbers(not showCd)
     if not showCd then return end
 
-    -- Discover FontString (A2 pattern: use CT module if available, else EnumerateRegions)
-    local fs = cd._msufCooldownFontString
-    if fs == false then fs = nil end
-    if not fs then
-        local A2 = ns.MSUF_Auras2
-        local CT = A2 and A2.CooldownText
-        local getfs = CT and CT.GetCooldownFontString
-        if type(getfs) == "function" then
-            fs = getfs(ic, GetTime())
-        end
-        if not fs and cd.EnumerateRegions then
-            for region in cd:EnumerateRegions() do
-                if region and region.GetObjectType and region:GetObjectType() == "FontString" then
-                    fs = region; break
-                end
-            end
-        end
-        if fs then cd._msufCooldownFontString = fs end
-    end
+    local fs = ResolveCooldownFontString(cd)
     if not fs then return end
 
     local size = gcfg.cooldownSize or 8
@@ -592,6 +632,21 @@ local function ApplyCooldownFont(ic, gcfg)
         cd._msufGFCdOY = oy
         fs:ClearAllPoints()
         fs:SetPoint(anchor, ic, anchor, ox, oy)
+    end
+
+    local r, g, b, a = ResolveCooldownBaseColor()
+    if cd._msufGFCdColorR ~= r or cd._msufGFCdColorG ~= g
+        or cd._msufGFCdColorB ~= b or cd._msufGFCdColorA ~= a
+    then
+        cd._msufGFCdColorR = r
+        cd._msufGFCdColorG = g
+        cd._msufGFCdColorB = b
+        cd._msufGFCdColorA = a
+        if fs.SetTextColor then
+            fs:SetTextColor(r, g, b, a)
+        elseif fs.SetVertexColor then
+            fs:SetVertexColor(r, g, b, a)
+        end
     end
 end
 
@@ -866,6 +921,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                     shown = shown + 1
                     local ic = pool[shown]
                     if ic then
+                        ApplyCooldownVisualStyle(ic.cooldown, f)
                         local prevAid = ic._msufAuraID
                         if prevAid == aid then
                             -- ══ SAME AURA ══ cheap refresh (cooldown sweep + stacks + layout)
@@ -1147,6 +1203,10 @@ end
 ------------------------------------------------------------------------
 function GF.RefreshAuraIcon(icon, unit, aid)
     if not icon or not unit or not aid then return end
+    local owner = icon._msufGFOwner
+    if owner then
+        ApplyCooldownVisualStyle(icon.cooldown, owner)
+    end
     ApplyCooldown(icon, unit, aid, true)
     ApplyStacks(icon, unit, aid, nil, true, nil)
 end

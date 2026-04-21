@@ -1447,7 +1447,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 1a: Layout (Raid Layout Situation + geometry)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(680, "Layout", false, "layout")
+        local box, body = AddSection(760, "Layout", false, "layout")
 
         -- ── Raid Layout Situation (raid scope only) ──
         local _raidLayoutContainer = CreateFrame("Frame", nil, body)
@@ -1868,6 +1868,24 @@ function _G.MSUF_EnsureGFPanelBuilt()
         end
         _allRefreshFns[#_allRefreshFns + 1] = SyncGroupFilter
         SyncGroupFilter()
+
+        local cdSwipeChk = SCheck({
+            name = "MSUF_GF_CooldownSwipeStyleCheck", parent = body,
+            anchor = _gfRow, anchorPoint = "BOTTOMLEFT", x = 0, y = -18,
+            label = TR("Swipe darkens on loss"),
+            get = function(k) return GF.Val(k, "cooldownSwipeDarkenOnLoss") == true end,
+            set = function(k, v)
+                GF.GetConf(k).cooldownSwipeDarkenOnLoss = v and true or false
+                GF.RefreshVisuals()
+            end,
+        })
+
+        local cdSwipeHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        cdSwipeHint:SetPoint("TOPLEFT", cdSwipeChk, "BOTTOMLEFT", 24, -2)
+        cdSwipeHint:SetWidth(420)
+        cdSwipeHint:SetJustifyH("LEFT")
+        cdSwipeHint:SetText(TR("Off = default Blizzard cooldown swipe. On = elapsed-time swipe that darkens as time is lost."))
+        cdSwipeHint:SetTextColor(0.5, 0.55, 0.65)
     end
 
     ----------------------------------------------------------------

@@ -76,6 +76,10 @@ local PARTY_DEFAULTS = {
     showPets          = false,
     -- Masque skin for aura icons (requires Masque addon)
     masqueEnabled     = false,
+    -- Group-frame aura/spell-indicator cooldowns default to the standard
+    -- Blizzard-style remaining-time swipe. Enabling the layout option flips
+    -- them into the elapsed-time "darkens on loss" style.
+    cooldownSwipeDarkenOnLoss = false,
     powerHeight       = 6,
     -- Position (CENTER-native, same as EM2 movers)
     point             = "CENTER",

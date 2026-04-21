@@ -1,6 +1,6 @@
 -- MSUF_GF_SpellIndicators.lua — Group Frames: Per-Spell Indicator Engine
 -- Tracks player-cast healer HoTs on party/raid members.
--- 2-tier: placed indicators (icon/square/bar) + frame effects (healthtint/border/glow/pulse/namecolor/framealpha).
+-- 2-tier: placed indicators (icon/square/bar/number) + frame effects (healthtint/border/glow/pulse/namecolor/framealpha).
 -- Uses proven HealerBuffs scan pattern (HELPFUL filter, spellId lookup).
 -- Called directly from Effects.lua FlushAuraDirty + UpdateAll (no hook wrapping).
 -- Multi-spec tracking, zero combat overhead.
@@ -12,18 +12,20 @@ _G.MSUF_NS = ns
 local GF = ns.GF
 if not GF then return end
 local SI = GF.SpellIndicators
-local AuraFilter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
 if not SI then return end
 
 local C_UnitAuras   = _G.C_UnitAuras
 local CreateFrame   = _G.CreateFrame
 local UnitExists    = _G.UnitExists
+local GetTime       = _G.GetTime
 local issecretvalue = _G.issecretvalue
 local pairs         = pairs
 local type          = type
 local ipairs        = ipairs
 local select        = select
 local tonumber      = tonumber
+local math_floor    = math.floor
+local math_max      = math.max
 local table_sort    = table.sort
 local table_concat  = table.concat
 
@@ -135,33 +137,38 @@ end
 local function EnsureSpecConfig(siCfg, specKey)
     if not siCfg or not specKey then return nil end
     siCfg.specs = siCfg.specs or {}
-    if siCfg.specs[specKey] then return siCfg.specs[specKey] end
     local defaults = SI.SpecDefaults[specKey]
-    if not defaults then
-        siCfg.specs[specKey] = {}
-        return siCfg.specs[specKey]
+
+    local function DeepCopy(src)
+        if type(src) ~= "table" then return src end
+        local dst = {}
+        for k, v in pairs(src) do
+            dst[k] = DeepCopy(v)
+        end
+        return dst
     end
-    local specCfg = {}
+
+    local specCfg = siCfg.specs[specKey]
+    if not specCfg then
+        specCfg = {}
+        siCfg.specs[specKey] = specCfg
+    end
+    if not defaults then return specCfg end
+
     for auraName, def in pairs(defaults) do
-        specCfg[auraName] = {}
-        if def.placed then
-            local p = {}
-            for k, v in pairs(def.placed) do p[k] = v end
-            specCfg[auraName].placed = p
-        end
-        if def.frame then
-            local fr = {}
-            for k, v in pairs(def.frame) do
-                if k == "color" then
-                    fr[k] = { v[1], v[2], v[3], v[4] }
-                else
-                    fr[k] = v
-                end
+        local entry = specCfg[auraName]
+        if not entry then
+            specCfg[auraName] = DeepCopy(def)
+        else
+            if entry.placed == nil and def.placed ~= nil then
+                entry.placed = DeepCopy(def.placed)
             end
-            specCfg[auraName].frame = fr
+            if entry.frame == nil and def.frame ~= nil then
+                entry.frame = DeepCopy(def.frame)
+            end
         end
     end
-    siCfg.specs[specKey] = specCfg
+
     return specCfg
 end
 
@@ -200,7 +207,6 @@ end
 local _scanResults = {}
 
 local function ScanUnit(unit, kind)
-    AuraFilter = AuraFilter or GF.AuraFilter or _G.MSUF_GF_AuraFilter
     for k in pairs(_scanResults) do _scanResults[k] = nil end
     if not _reverseLookup then return end
     if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot) then return end
@@ -208,7 +214,7 @@ local function ScanUnit(unit, kind)
     local slots, count = SIQuerySlots(unit, "HELPFUL")
     for i = 2, count do
         local aura = SIQueryAuraData(unit, slots[i])
-        if aura and not (AuraFilter and AuraFilter.ShouldHideBuffAura and AuraFilter.ShouldHideBuffAura(kind, aura)) then
+        if aura then
             local sid = aura.spellId
             local matched
             -- Secret-safety guard + tag-strip: secret-tagged integers need
@@ -230,6 +236,151 @@ local function ScanUnit(unit, kind)
     end
 end
 
+local function ResolveCooldownFontString(cd)
+    if not cd then return nil end
+    local cached = cd._msufCooldownFontString
+    if cached and cached ~= false then return cached end
+
+    local retryAt = cd._msufCooldownFontStringRetryAt
+    local now = GetTime()
+    if type(retryAt) == "number" and now < retryAt then
+        return nil
+    end
+
+    if cd.EnumerateRegions then
+        for region in cd:EnumerateRegions() do
+            if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+                cd._msufCooldownFontString = region
+                cd._msufCooldownFontStringRetryAt = nil
+                return region
+            end
+        end
+    end
+
+    cd._msufCooldownFontStringRetryAt = now + 0.50
+    cd._msufCooldownFontString = false
+    return nil
+end
+
+local function ResolveCooldownBaseColor()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    if g and g.useCustomFontColor == true then
+        local r = g.fontColorCustomR
+        local gg = g.fontColorCustomG
+        local b = g.fontColorCustomB
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            return r, gg, b, 1
+        end
+    end
+    return 1, 1, 1, 1
+end
+
+local function ApplyPlacedCooldownStyle(cd, ownerFrame, numberOnly)
+    if not cd then return end
+    local kind = (ownerFrame and ownerFrame._msufGFKind) or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    local reverse = (not numberOnly) and conf and conf.cooldownSwipeDarkenOnLoss == true or false
+
+    if cd._msufGFSIDrawEdge ~= false then
+        cd._msufGFSIDrawEdge = false
+        cd:SetDrawEdge(false)
+    end
+    if cd.SetDrawBling and cd._msufGFSIDrawBling ~= false then
+        cd._msufGFSIDrawBling = false
+        cd:SetDrawBling(false)
+    end
+    local wantSwipe = not numberOnly
+    if cd._msufGFSIDrawSwipe ~= wantSwipe then
+        cd._msufGFSIDrawSwipe = wantSwipe
+        cd:SetDrawSwipe(wantSwipe)
+    end
+    if cd._msufGFSIReverse ~= reverse then
+        cd._msufGFSIReverse = reverse
+        cd:SetReverse(reverse)
+    end
+end
+
+local function ClearA2CooldownScope(ind)
+    if not ind then return end
+    ind._msufA2_cdDurationObj = nil
+    ind._msufA2_durationObj = nil
+    ind._msufA2_cdMgrRegistered = nil
+    ind._msufA2_cdPending = nil
+    ind._msufA2_hideCDNumbers = nil
+    local cd = ind.cooldown
+    if cd then
+        cd._msufA2_durationObj = nil
+    end
+end
+
+local function ApplyPlacedCooldownFont(ind, cfg, fontSizeOverride)
+    local cd = ind and ind.cooldown
+    if not cd then return nil end
+
+    local fs = ResolveCooldownFontString(cd)
+    if not fs then return nil end
+
+    local cdSize = fontSizeOverride or cfg.cooldownSize or 8
+    local gfs = _G.MSUF_GetGlobalFontSettings
+    local fp, ff
+    if type(gfs) == "function" then fp, ff = gfs() end
+    if not fp then
+        fp = GF and GF.ResolveFontPath and GF.ResolveFontPath() or "Fonts\\FRIZQT__.TTF"
+        ff = GF and GF.ResolveFontFlags and GF.ResolveFontFlags() or "OUTLINE"
+    end
+    local wantFlags = cfg.cooldownOutline or ff or "OUTLINE"
+    if cd._msufGFCdTextSize ~= cdSize or cd._msufGFCdFontPath ~= fp then
+        fs:SetFont(fp, cdSize, wantFlags)
+        cd._msufGFCdTextSize = cdSize
+        cd._msufGFCdFontPath = fp
+    end
+    if cd._msufGFCdAnchor ~= "CENTER" or cd._msufGFCdOX ~= 0 or cd._msufGFCdOY ~= 0 then
+        cd._msufGFCdAnchor = "CENTER"
+        cd._msufGFCdOX = 0
+        cd._msufGFCdOY = 0
+        fs:ClearAllPoints()
+        fs:SetPoint("CENTER", ind, "CENTER", 0, 0)
+    end
+
+    local r, g, b, a = ResolveCooldownBaseColor()
+    if cd._msufGFCdColorR ~= r or cd._msufGFCdColorG ~= g
+        or cd._msufGFCdColorB ~= b or cd._msufGFCdColorA ~= a
+    then
+        cd._msufGFCdColorR = r
+        cd._msufGFCdColorG = g
+        cd._msufGFCdColorB = b
+        cd._msufGFCdColorA = a
+        if fs.SetTextColor then
+            fs:SetTextColor(r, g, b, a)
+        elseif fs.SetVertexColor then
+            fs:SetVertexColor(r, g, b, a)
+        end
+    end
+
+    return fs
+end
+
+local function ApplyPreviewTextStyle(fs, cfg, fallbackSize)
+    if not fs then return end
+    local gfs = _G.MSUF_GetGlobalFontSettings
+    local fp, ff
+    if type(gfs) == "function" then fp, ff = gfs() end
+    if not fp then
+        fp = GF and GF.ResolveFontPath and GF.ResolveFontPath() or "Fonts\\FRIZQT__.TTF"
+        ff = GF and GF.ResolveFontFlags and GF.ResolveFontFlags() or "OUTLINE"
+    end
+    fs:SetFont(fp, cfg.cooldownSize or fallbackSize or 8, cfg.cooldownOutline or ff or "OUTLINE")
+    local r, g, b, a = ResolveCooldownBaseColor()
+    fs:SetTextColor(r, g, b, a)
+end
+
+local function GetPlacedNumberSize(size)
+    local fontSize = tonumber(size) or 12
+    local width = math_max(18, math_floor(fontSize * 2.2 + 0.5))
+    local height = math_max(10, math_floor(fontSize * 1.4 + 0.5))
+    return width, height
+end
+
 ------------------------------------------------------------------------
 -- Placed indicator creation
 ------------------------------------------------------------------------
@@ -243,10 +394,11 @@ local function CreatePlacedIcon(parent, size)
 
     local cd = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
     cd:SetAllPoints()
-    cd:SetDrawEdge(true)
+    cd:SetDrawEdge(false)
     cd:SetDrawSwipe(true)
-    cd:SetReverse(true)
+    cd:SetReverse(false)
     cd:SetHideCountdownNumbers(false)
+    if cd.SetDrawBling then cd:SetDrawBling(false) end
     f.cooldown = cd
 
     local overlay = CreateFrame("Frame", nil, f)
@@ -263,6 +415,31 @@ local function CreatePlacedIcon(parent, size)
     f:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
     f:SetBackdropColor(0, 0, 0, 0)
     f:SetBackdropBorderColor(0, 0, 0, 0.8)
+    f:Hide()
+    return f
+end
+
+local function CreatePlacedNumber(parent, size)
+    local w, h = GetPlacedNumberSize(size)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetSize(w, h)
+    f:EnableMouse(false)
+
+    local cd = CreateFrame("Cooldown", nil, f, "CooldownFrameTemplate")
+    cd:SetAllPoints()
+    cd:SetDrawEdge(false)
+    cd:SetDrawSwipe(false)
+    cd:SetReverse(false)
+    cd:SetHideCountdownNumbers(false)
+    if cd.SetDrawBling then cd:SetDrawBling(false) end
+    f.cooldown = cd
+
+    local txt = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    txt:SetPoint("CENTER", f, "CENTER", 0, 0)
+    txt:SetText("")
+    txt:Hide()
+    f.previewText = txt
+
     f:Hide()
     return f
 end
@@ -301,6 +478,8 @@ local function GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth, lay
         if ind then ind:Hide() end
         if itype == "bar" then
             ind = CreatePlacedBar(parent, barWidth or (size * 3), size)
+        elseif itype == "number" then
+            ind = CreatePlacedNumber(parent, size)
         elseif itype == "square" then
             ind = CreatePlacedSquare(parent, size)
         else
@@ -311,6 +490,9 @@ local function GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth, lay
     end
     if itype == "bar" then
         ind:SetSize(barWidth or (size * 3), size)
+    elseif itype == "number" then
+        local w, h = GetPlacedNumberSize(size)
+        ind:SetSize(w, h)
     else
         ind:SetSize(size, size)
     end
@@ -357,96 +539,75 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
         barWidth = barWidth * scale
         if barWidth < 8 then barWidth = 8 end
     end
-    local ind = GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth, layer)
+    local displaySize = (itype == "number") and (cfg.cooldownSize or size) or size
+    local ind = GetOrCreatePlaced(f, auraName, itype, displaySize, parent, barWidth, layer)
 
     ind:ClearAllPoints()
     ind:SetPoint(anchor, parent, anchor, cfg.x or 0, cfg.y or 0)
 
     if auraData then
-        if itype == "icon" then
+        if ind.previewText then
+            ind.previewText:SetText("")
+            ind.previewText:Hide()
+        end
+
+        if itype == "icon" or itype == "number" then
             local sk = _isMultiMode and (_auraSpecMap[auraName] or specKey) or specKey
-            ind.texture:SetTexture(SI.GetAuraIcon(sk, auraName))
-            ind.texture:SetDesaturated(false)
-            ind.texture:SetAlpha(1)
-            ind.texture:Show()
+            local isNumber = (itype == "number")
+
+            if ind.texture then
+                if isNumber then
+                    ind.texture:Hide()
+                else
+                    ind.texture:SetTexture(SI.GetAuraIcon(sk, auraName))
+                    ind.texture:SetDesaturated(false)
+                    ind.texture:SetAlpha(1)
+                    ind.texture:Show()
+                end
+            end
+
             if ind.cooldown then
                 local aid = auraData.auraInstanceID
-                local showCdText = cfg.showCooldown ~= false
+                local showCdText = isNumber or cfg.showCooldown ~= false
+                ApplyPlacedCooldownStyle(ind.cooldown, f, isNumber)
                 ind.cooldown:SetHideCountdownNumbers(not showCdText)
                 if aid and unit and C_UnitAuras and C_UnitAuras.GetAuraDuration then
                     local obj = C_UnitAuras.GetAuraDuration(unit, aid)
                     if obj and ind.cooldown.SetCooldownFromDurationObject then
                         ind.cooldown:SetCooldownFromDurationObject(obj)
-                        ind._msufA2_cdDurationObj = obj
-                        -- Apply global font + configured size (A2 pattern, only when text shown)
+                        ClearA2CooldownScope(ind)
                         if showCdText then
-                            local cdFS = ind.cooldown._msufCooldownFontString
-                            if cdFS == false then cdFS = nil end
-                            if not cdFS then
-                                local A2 = ns.MSUF_Auras2
-                                local CT = A2 and A2.CooldownText
-                                local getfs = CT and CT.GetCooldownFontString
-                                if type(getfs) == "function" then
-                                    cdFS = getfs(ind, GetTime())
-                                end
-                                if not cdFS and ind.cooldown.EnumerateRegions then
-                                    for region in ind.cooldown:EnumerateRegions() do
-                                        if region and region.GetObjectType and region:GetObjectType() == "FontString" then
-                                            cdFS = region; break
-                                        end
-                                    end
-                                end
-                                if cdFS then ind.cooldown._msufCooldownFontString = cdFS end
-                            end
-                            if cdFS and cdFS.SetFont then
-                                local cdSize = cfg.cooldownSize or 8
-                                local gfs = _G.MSUF_GetGlobalFontSettings
-                                local fp, ff
-                                if type(gfs) == "function" then fp, ff = gfs() end
-                                if not fp then
-                                    local GF = ns.GF
-                                    fp = GF and GF.ResolveFontPath and GF.ResolveFontPath() or "Fonts\\FRIZQT__.TTF"
-                                    ff = GF and GF.ResolveFontFlags and GF.ResolveFontFlags() or "OUTLINE"
-                                end
-                                local wantFlags = cfg.cooldownOutline or ff or "OUTLINE"
-                                if ind.cooldown._msufGFCdTextSize ~= cdSize or ind.cooldown._msufGFCdFontPath ~= fp then
-                                    cdFS:SetFont(fp, cdSize, wantFlags)
-                                    ind.cooldown._msufGFCdTextSize = cdSize
-                                    ind.cooldown._msufGFCdFontPath = fp
-                                end
-                            end
-                        end
-                        local A2 = ns.MSUF_Auras2
-                        local CT = A2 and A2.CooldownText
-                        if CT then
-                            if CT.RegisterIcon then
-                                if ind._msufA2_cdMgrRegistered ~= true then
-                                    CT.RegisterIcon(ind)
-                                elseif CT.TouchIcon then
-                                    CT.TouchIcon(ind)
-                                end
-                            end
+                            ApplyPlacedCooldownFont(ind, cfg, isNumber and (cfg.cooldownSize or displaySize) or nil)
                         end
                     else
                         ind.cooldown:Clear()
-                        ind._msufA2_cdDurationObj = nil
+                        ClearA2CooldownScope(ind)
                     end
                 else
                     ind.cooldown:Clear()
-                    ind._msufA2_cdDurationObj = nil
+                    ClearA2CooldownScope(ind)
                 end
             end
+
             if ind.count then
-                local aid = auraData.auraInstanceID
-                if aid and unit and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
-                    local display = C_UnitAuras.GetAuraApplicationDisplayCount(unit, aid, 2, 99)
-                    if display ~= nil then
-                        ind.count:SetText(display); ind.count:Show()
-                    else
-                        ind.count:SetText(""); ind.count:Hide()
-                    end
+                if isNumber then
+                    ind.count:SetText("")
+                    ind.count:Hide()
                 else
-                    ind.count:SetText(""); ind.count:Hide()
+                    local aid = auraData.auraInstanceID
+                    if aid and unit and C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount then
+                        local display = C_UnitAuras.GetAuraApplicationDisplayCount(unit, aid, 2, 99)
+                        if display ~= nil then
+                            ind.count:SetText(display)
+                            ind.count:Show()
+                        else
+                            ind.count:SetText("")
+                            ind.count:Hide()
+                        end
+                    else
+                        ind.count:SetText("")
+                        ind.count:Hide()
+                    end
                 end
             end
         elseif itype == "square" or itype == "bar" then
@@ -464,11 +625,36 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
             ind.texture:Show()
             if ind.cooldown then ind.cooldown:Clear() end
             if ind.count then ind.count:SetText(""); ind.count:Hide() end
+            if ind.previewText then ind.previewText:SetText(""); ind.previewText:Hide() end
+        elseif itype == "number" then
+            if ind.cooldown then
+                ApplyPlacedCooldownStyle(ind.cooldown, f, true)
+                ind.cooldown:Clear()
+                ind.cooldown:SetHideCountdownNumbers(false)
+            end
+            ClearA2CooldownScope(ind)
+            if ind.previewText then
+                ApplyPreviewTextStyle(ind.previewText, cfg, displaySize)
+                ind.previewText:SetText("9")
+                ind.previewText:Show()
+            end
         elseif itype == "square" or itype == "bar" then
             ind.texture:SetColorTexture(0.3, 0.3, 0.3, 0.5)
         end
         ind:Show()
     else
+        if ind.cooldown then
+            ind.cooldown:Clear()
+            ClearA2CooldownScope(ind)
+        end
+        if ind.count then
+            ind.count:SetText("")
+            ind.count:Hide()
+        end
+        if ind.previewText then
+            ind.previewText:SetText("")
+            ind.previewText:Hide()
+        end
         ind:Hide()
     end
 
