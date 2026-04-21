@@ -136,6 +136,7 @@ GroupFrames\MSUF_GF_HealerBuffs_Editor.lua
 GroupFrames\MSUF_GF_EM2.lua
 GroupFrames\MSUF_GF_AuraPreview.lua
 GroupFrames\MSUF_GF_Masque.lua
+GroupFrames\MSUF_BossFrameBridge.lua
 
 # ═══════════════════════════════════════════════════════════════
 # OPTIONS

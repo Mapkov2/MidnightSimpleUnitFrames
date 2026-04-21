@@ -1387,7 +1387,23 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Private Auras
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(520, L["Private Auras"], false, "priv")
+        -- Height extended to accommodate the 12.0.5 Private Aura Dispel
+        -- Overlay controls at the bottom of the section.
+        local box, body = AddSection(700, L["Private Auras"], false, "priv")
+
+        -- Helper for container-overlay sub-table (created lazily).
+        local function PAC()
+            local pa = PA()
+            if not pa.containerOverlay then
+                pa.containerOverlay = {
+                    enabled     = false,
+                    showIcons   = true,
+                    dispelMode  = "dispellableByMe",
+                    gradientDir = "default",
+                }
+            end
+            return pa.containerOverlay
+        end
 
         SCheck({
             name = "MSUF_GF_PAEnable", parent = body,
@@ -1474,12 +1490,115 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             set = function(k, v) PA().showNumbers = v; GF.RefreshVisuals() end,
         })
 
-        SCheck({
+        local paDispelChk = SCheck({
             name = "MSUF_GF_PADispelType", parent = body,
             anchor = paNumChk, x = 0, y = -24,
             label = L["Show Dispel Type"],
             get = function(k) return PA().showDispelType == true end,
             set = function(k, v) PA().showDispelType = v; GF.RefreshVisuals() end,
+        })
+
+        ----------------------------------------------------------------
+        -- Sub-section: Private Aura Dispel Overlay (12.0.5+)
+        --
+        -- Blizzard-rendered overlay driven by container-anchor attributes.
+        -- Requires client 12.0.5 or later. Gracefully disabled on older
+        -- builds — GF._privateAuraContainerSupported is false.
+        ----------------------------------------------------------------
+        local coHeader = body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        coHeader:SetPoint("TOPLEFT", paDispelChk, "BOTTOMLEFT", 0, -18)
+        coHeader:SetText(L["Dispel Overlay (12.0.5+)"] or "Dispel Overlay (12.0.5+)")
+        coHeader:SetTextColor(1.00, 0.82, 0.00)
+
+        local coNote
+        if not (GF and GF._privateAuraContainerSupported) then
+            coNote = body:CreateFontString(nil, "ARTWORK", "GameFontDisable")
+            coNote:SetPoint("TOPLEFT", coHeader, "BOTTOMLEFT", 0, -4)
+            coNote:SetText(L["Requires client 12.0.5 or later."]
+                or "Requires client 12.0.5 or later.")
+        end
+
+        local coEnableChk = SCheck({
+            name = "MSUF_GF_PAContainerOverlayEnable", parent = body,
+            anchor = coNote or coHeader, x = 0, y = -22,
+            label = L["Enable Dispel Overlay"] or "Enable Dispel Overlay",
+            get = function() return PAC().enabled == true end,
+            set = function(_, v)
+                PAC().enabled = v and true or false
+                GF.RefreshVisuals()
+                -- Live-apply on every visible GF frame.
+                if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
+                    for fr in pairs(GF.frames) do
+                        if fr.unit and fr:IsShown() then
+                            GF.UpdatePrivateAuraContainerOverlay(fr)
+                        end
+                    end
+                end
+            end,
+        })
+
+        local coShowIconsChk = SCheck({
+            name = "MSUF_GF_PAContainerOverlayShowIcons", parent = body,
+            anchor = coEnableChk, x = 0, y = -24,
+            label = L["Show Dispel Icon"] or "Show Dispel Icon",
+            get = function() return PAC().showIcons ~= false end,
+            set = function(_, v)
+                PAC().showIcons = v and true or false
+                if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
+                    for fr in pairs(GF.frames) do
+                        if fr.unit and fr:IsShown() then
+                            GF.UpdatePrivateAuraContainerOverlay(fr)
+                        end
+                    end
+                end
+            end,
+        })
+
+        SDropdown({
+            name = "MSUF_GF_PAContainerOverlayDispelMode", parent = body, compact = true,
+            anchor = coShowIconsChk, x = 0, y = -28,
+            width = DD_W,
+            label = L["Dispel Filter"] or "Dispel Filter",
+            items = {
+                { value = "dispellableByMe", text = L["Dispellable By Me"] or "Dispellable By Me" },
+                { value = "allDispellable",  text = L["All Dispellable"]   or "All Dispellable"   },
+            },
+            get = function() return PAC().dispelMode or "dispellableByMe" end,
+            set = function(_, v)
+                PAC().dispelMode = v
+                if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
+                    for fr in pairs(GF.frames) do
+                        if fr.unit and fr:IsShown() then
+                            GF.UpdatePrivateAuraContainerOverlay(fr)
+                        end
+                    end
+                end
+            end,
+        })
+
+        SDropdown({
+            name = "MSUF_GF_PAContainerOverlayGradient", parent = body, compact = true,
+            anchor = coShowIconsChk, x = 260, y = -28,
+            width = DD_W,
+            label = L["Gradient Direction"] or "Gradient Direction",
+            items = {
+                { value = "default", text = L["Default"] or "Default" },
+                { value = "TOP",     text = L["Top"]     or "Top"     },
+                { value = "BOTTOM",  text = L["Bottom"]  or "Bottom"  },
+                { value = "LEFT",    text = L["Left"]    or "Left"    },
+                { value = "RIGHT",   text = L["Right"]   or "Right"   },
+            },
+            get = function() return PAC().gradientDir or "default" end,
+            set = function(_, v)
+                PAC().gradientDir = v
+                if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
+                    for fr in pairs(GF.frames) do
+                        if fr.unit and fr:IsShown() then
+                            GF.UpdatePrivateAuraContainerOverlay(fr)
+                        end
+                    end
+                end
+            end,
         })
     end
 

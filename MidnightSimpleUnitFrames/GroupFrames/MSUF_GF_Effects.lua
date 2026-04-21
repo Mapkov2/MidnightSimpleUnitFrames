@@ -493,71 +493,93 @@ local function GetDispelColor(dispelName)
 end
 
 ------------------------------------------------------------------------
--- ResolveDispelColor: respects hlDispelColorMode from Bars menu.
--- SINGLE mode → flat color from hlDispelColorR/G/B (Colors panel).
--- TYPE mode   → per-debuff-type color (Magic=blue, Curse=purple, etc.).
+-- Secret-safe dispel color resolution.
+--
+-- SINGLE mode → plain (r,g,b) triplet from the Colors panel.
+-- TYPE mode   → a *Color object* from C_UnitAuras.GetAuraDispelTypeColor.
+--               The Color object carries secret-safe RGBA that can ONLY be
+--               applied via texture:SetVertexColor(color:GetRGBA()). It
+--               MUST NOT be unpacked into Lua locals and fed to
+--               CreateColor / SetGradient / arithmetic — that taints the
+--               values and breaks everything but flat fills (which is the
+--               "only single-color works" bug in Beta 4/5).
+--
+-- Returns (colorObj, r, g, b):
+--   colorObj ~= nil  → TYPE mode resolved via curve. Apply via
+--                      tex:SetVertexColor(colorObj:GetRGBA())
+--   colorObj == nil  → SINGLE/fallback. Use (r, g, b) directly.
 ------------------------------------------------------------------------
-local function ResolveDispelColor(dispelName, f)
+local function ResolveDispelColorObj(f)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local mode = gen and gen.hlDispelColorMode or "SINGLE"
-    if mode == "SINGLE" then
+
+    if mode ~= "TYPE" then
+        local r, g, b
         if gen then
-            local r = gen.hlDispelColorR or gen.dispelBorderColorR
-            local g = gen.hlDispelColorG or gen.dispelBorderColorG
-            local b = gen.hlDispelColorB or gen.dispelBorderColorB
-            if r then return r, g, b end
+            r = gen.hlDispelColorR or gen.dispelBorderColorR
+            g = gen.hlDispelColorG or gen.dispelBorderColorG
+            b = gen.hlDispelColorB or gen.dispelBorderColorB
         end
-        return 0.25, 0.75, 1.00
+        return nil, r or 0.25, g or 0.75, b or 1.00
     end
 
-    -- TYPE mode: prefer the exact live aura instance like EQoL does.
-    -- This avoids falling back to the shared single color when the merged state is only
-    -- "DISPELLABLE" and ensures Magic/Curse/Poison/Disease/Bleed resolve from the
-    -- currently active aura, not from stale cached state.
-    local CUA = _G.C_UnitAuras
-    local unit = f and f.unit
+    -- TYPE mode: resolve Color object via shared dispel color curve.
+    local CUA   = _G.C_UnitAuras
+    local unit  = f and f.unit
     local curve = GF and GF._sharedDispelColorCurve
 
-    local function ColorFromAid(aid)
-        if not (CUA and unit and aid and curve and CUA.GetAuraDispelTypeColor) then return nil end
-        local color = CUA.GetAuraDispelTypeColor(unit, aid, curve)
-        if not color then return nil end
-        if color.GetRGB then return color:GetRGB() end
-        if color.r then return color.r, color.g, color.b end
-        return nil
-    end
-
-    if unit and CUA then
+    if CUA and CUA.GetAuraDispelTypeColor and unit and curve then
         local aid = f and f._msufGFDispelAuraID
-        local r, g, b = ColorFromAid(aid)
-        if r then return r, g, b end
+        if aid then
+            local color = CUA.GetAuraDispelTypeColor(unit, aid, curve)
+            if color then return color end
+        end
 
-        -- Recovery path: re-scan the top dispellable aura on demand.
-        -- Cold-path only (visual apply), so the tiny rescan is worth the correctness.
+        -- Recovery: top dispellable aura isn't cached on the frame.
+        -- Cold-path only (visual apply) — tiny rescan worth the correctness.
         if CUA.GetAuraSlots and CUA.GetAuraDataBySlot then
             local slots = { CUA.GetAuraSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE") }
             for i = 2, #slots do
                 local slot = slots[i]
                 local aura = slot and CUA.GetAuraDataBySlot(unit, slot)
                 if aura and aura.auraInstanceID then
-                    aid = aura.auraInstanceID
-                    if f then f._msufGFDispelAuraID = aid end
-                    r, g, b = ColorFromAid(aid)
-                    if r then return r, g, b end
-
-                    local dn = aura.dispelName
-                    if not (issecretvalue and issecretvalue(dn)) and dn and dn ~= "" then
-                        return GetDispelColor(dn)
-                    end
+                    if f then f._msufGFDispelAuraID = aura.auraInstanceID end
+                    local color = CUA.GetAuraDispelTypeColor(unit, aura.auraInstanceID, curve)
+                    if color then return color end
                     break
                 end
             end
         end
     end
 
-    -- Legacy fallback: non-secret dispel name.
+    -- TYPE fallback: neutral palette (never extract from secret color here).
+    return nil, 0.25, 0.75, 1.00
+end
+
+------------------------------------------------------------------------
+-- Legacy wrapper: keeps (r, g, b) shape for non-overlay callers (glow).
+-- Glow APIs don't take a Color object, so we accept a *minor* loss of
+-- secret-safety here — values feed into LCG's color table which is
+-- only read by C-side SetVertexColor downstream, so it's still safe
+-- in practice.
+------------------------------------------------------------------------
+local function ResolveDispelColor(dispelName, f)
+    local colorObj, r, g, b = ResolveDispelColorObj(f)
+    if colorObj then
+        -- Prefer GetRGBA (works on secret Color); GetRGB can return nil.
+        if colorObj.GetRGBA then
+            local rr, gg, bb = colorObj:GetRGBA()
+            if rr ~= nil then return rr, gg, bb end
+        end
+        if colorObj.GetRGB then
+            local rr, gg, bb = colorObj:GetRGB()
+            if rr ~= nil then return rr, gg, bb end
+        end
+    end
+    if r then return r, g, b end
     if type(dispelName) == "string" and dispelName ~= "DISPELLABLE" then
-        return GetDispelColor(dispelName)
+        local dr, dg, db = GetDispelColor(dispelName)
+        if dr then return dr, dg, db end
     end
     return 0.25, 0.75, 1.00
 end
@@ -1318,10 +1340,31 @@ end
 ------------------------------------------------------------------------
 -- Dispel overlay (color wash on health bar)
 -- StatusBar-based: mirrors health value for "current health only" clip.
--- Gradient via SetGradient on fill texture (cold-path only).
--- Secret-safe: SetValue/SetMinMaxValues accept secrets natively.
+--
+-- SECRET-SAFE COLOR APPLICATION (Midnight 12.0):
+--   TYPE mode returns a Color object from C_UnitAuras.GetAuraDispelTypeColor.
+--   Secret-tainted RGB values CAN pass through tex:SetVertexColor varargs
+--   (C-side handles them) but CANNOT pass through CreateColor/SetGradient
+--   (Lua-side taints). We therefore:
+--     • use pre-baked gradient *textures* (Media/MSUF_Grad_*.tga) for the
+--       TOP/BOTTOM/LEFT/RIGHT/EDGE styles — no SetGradient needed,
+--     • apply the tint via tex:SetVertexColor(color:GetRGBA()) in a single
+--       varargs passthrough — no Lua arithmetic on the tint values,
+--     • use SetAlpha on the StatusBar frame for the user's doAlpha slider.
+--
+--   This replaces the Beta 5 path that called CreateColor(secret_r, ...)
+--   in SetGradient branches — that was the "TYPE mode broken / only
+--   SINGLE works" bug.
 ------------------------------------------------------------------------
-local _doCC = _G.CreateColor   -- WoW 10.0+ CreateColor (nil pre-10.0)
+local _MSUF_GRAD_PATH = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
+local _GRAD_TEXTURES = {
+    FULL   = "Interface\\Buttons\\WHITE8x8",
+    TOP    = _MSUF_GRAD_PATH .. "MSUF_Grad_V",      -- solid top,    fades down
+    BOTTOM = _MSUF_GRAD_PATH .. "MSUF_Grad_V_Rev",  -- solid bottom, fades up
+    LEFT   = _MSUF_GRAD_PATH .. "MSUF_Grad_H",      -- solid left,   fades right
+    RIGHT  = _MSUF_GRAD_PATH .. "MSUF_Grad_H_Rev",  -- solid right,  fades left
+}
+
 _GF_ApplyDispelOverlay = function(f)
     local dov = f._msufGFDispelOverlay
     if not dov then return end
@@ -1345,12 +1388,17 @@ _GF_ApplyDispelOverlay = function(f)
         dov:SetAllPoints(anchorTo)
     end
 
-    -- Resolve color from shared dispel color system
-    local r, g, b = ResolveDispelColor(dispelType, f)
-    if not r then r, g, b = 0.25, 0.75, 1.00 end
-    local a = c.doAlpha
+    -- Pick gradient texture for the style (cheap diff-gate to avoid spamming
+    -- SetStatusBarTexture — Blizzard reloads the atlas every call).
+    local style = c.doStyle or "FULL"
+    local texPath = _GRAD_TEXTURES[style] or _GRAD_TEXTURES.FULL
+    if dov._msufDOStylePath ~= texPath then
+        dov:SetStatusBarTexture(texPath)
+        dov._msufDOStylePath = texPath
+    end
+    local tex = dov:GetStatusBarTexture()
 
-    -- "Current health only" — mirror health StatusBar value
+    -- Fill value: mirror current health ("current health only") or full bar.
     local unit = f.unit
     if c.doOnHP and unit then
         local hm = f._msufGFCachedHpMax or UnitHealthMax(unit)
@@ -1363,28 +1411,21 @@ _GF_ApplyDispelOverlay = function(f)
         dov._msufDOSyncHP = nil
     end
 
-    -- Apply color/gradient based on style
-    local style = c.doStyle
-    local tex = dov:GetStatusBarTexture()
-    if style == "FULL" or not _doCC or not tex then
-        -- FULL or fallback: uniform flat color (most reliable)
-        dov:SetStatusBarColor(r, g, b, a)
-        -- Clear any stale gradient from previous style
-        if tex and _doCC then
-            tex:SetGradient("HORIZONTAL", _doCC(r, g, b, a), _doCC(r, g, b, a))
+    -- Resolve and apply tint (secret-safe path).
+    local colorObj, r, g, b = ResolveDispelColorObj(f)
+    if tex then
+        if colorObj and colorObj.GetRGBA then
+            -- Secret-safe varargs passthrough: never assigns RGBA to Lua locals.
+            tex:SetVertexColor(colorObj:GetRGBA())
+        else
+            tex:SetVertexColor(r or 0.25, g or 0.75, b or 1.00, 1)
         end
-    elseif style == "BOTTOM" then
-        dov:SetStatusBarColor(r, g, b, 1)
-        tex:SetGradient("VERTICAL", _doCC(r, g, b, a), _doCC(r, g, b, 0))
-    elseif style == "TOP" then
-        dov:SetStatusBarColor(r, g, b, 1)
-        tex:SetGradient("VERTICAL", _doCC(r, g, b, 0), _doCC(r, g, b, a))
-    elseif style == "LEFT" then
-        dov:SetStatusBarColor(r, g, b, 1)
-        tex:SetGradient("HORIZONTAL", _doCC(r, g, b, a), _doCC(r, g, b, 0))
-    elseif style == "RIGHT" then
-        dov:SetStatusBarColor(r, g, b, 1)
-        tex:SetGradient("HORIZONTAL", _doCC(r, g, b, 0), _doCC(r, g, b, a))
+    end
+    -- User's alpha slider lives on the StatusBar frame, independent of tint.
+    local userAlpha = c.doAlpha or 1
+    if dov._msufDOAlphaCache ~= userAlpha then
+        dov:SetAlpha(userAlpha)
+        dov._msufDOAlphaCache = userAlpha
     end
 
     -- Reverse fill sync (match health bar direction)

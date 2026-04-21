@@ -140,6 +140,20 @@ local function _ReadRGB(g, rKey, gKey, bKey, dr, dg, db)
 end
 local _UF_DISPEL_INDEX_BY_NAME = { Magic = 1, Curse = 2, Disease = 3, Poison = 4, Bleed = 5, None = 0 }
 
+-- UF dispel color resolve.
+--
+-- TYPE mode queries the shared GF dispel color curve
+-- (ns.GF._sharedDispelColorCurve, built from DB per-type colors in
+-- MSUF_GF_Auras.lua). The returned Color object exposes RGBA via
+-- GetRGBA(); those values may be secret but C-side consumers
+-- (SetBackdropBorderColor, LibCustomGlow → SetVertexColor) pass them
+-- through safely — NO Lua arithmetic, NO CreateColor.
+--
+-- Prior Beta 5 bug: this function called a non-existent
+-- `_G.MSUF_A2_GetDebuffColorCurve()` factory, so TYPE mode's curve was
+-- always nil and colour resolution silently fell through to the single-
+-- color default. Only TYPE colours in SINGLE mode worked — exactly the
+-- "multi-color dispel broken" symptom users reported.
 local function _GetUFDispelColor(dispelName, unit, auraID)
     local g = MSUF_DB and MSUF_DB.general
     local mode = g and g.hlDispelColorMode or "SINGLE"
@@ -151,22 +165,25 @@ local function _GetUFDispelColor(dispelName, unit, auraID)
     end
 
     local CUA = _G.C_UnitAuras
-    local curve = _G.MSUF_A2_GetDebuffColorCurve and _G.MSUF_A2_GetDebuffColorCurve()
+    local curve = ns and ns.GF and ns.GF._sharedDispelColorCurve
     if CUA and curve and unit and auraID and type(CUA.GetAuraDispelTypeColor) == "function" then
         local color = CUA.GetAuraDispelTypeColor(unit, auraID, curve)
         if color then
+            -- GetRGBA is the only secret-safe accessor — GetRGB can return nil
+            -- on secret-tainted Color objects. Returned values may still be
+            -- secret; callers only pass them to C-side color sinks.
             if color.GetRGBA then
                 local r, gg, b = color:GetRGBA()
-                return r, gg, b
-            elseif color.GetRGB then
+                if r ~= nil then return r, gg, b end
+            end
+            if color.GetRGB then
                 local r, gg, b = color:GetRGB()
-                return r, gg, b
-            elseif color.r then
-                return color.r, color.g, color.b
+                if r ~= nil then return r, gg, b end
             end
         end
     end
 
+    -- Non-curve fallbacks: dispel name lookup from DB and Blizzard color globals.
     if dispelName == "DISPELLABLE" then dispelName = nil end
     if type(dispelName) == "string" then
         local r = g and g["dispelType" .. dispelName .. "R"]

@@ -1445,7 +1445,15 @@ GF.PRESETS.DPS = {
             x = 0, y = 0,
             showCountdown = true, showNumbers = false,
             layer = 8,
-        },
+                    -- Private Aura Dispel Overlay (12.0.5+ Blizzard-rendered).
+            -- Replaces the old DF-drawn frame-border overlay.
+            containerOverlay = {
+                enabled = false,
+                showIcons = true,
+                dispelMode = "dispellableByMe",  -- "dispellableByMe" | "allDispellable"
+                gradientDir = "default",         -- sweep direction
+            },
+},
         spellIndicators = { enabled = false },
     },
 }
@@ -1473,7 +1481,15 @@ GF.PRESETS.DPS.party = {
         enabled = true, max = 2, size = 15,
         anchor = "BOTTOMRIGHT", direction = "LEFT",
         x = 0, y = 0, showCountdown = true, showNumbers = false, layer = 8,
-    },
+            -- Private Aura Dispel Overlay (12.0.5+ Blizzard-rendered).
+        -- Replaces the old DF-drawn frame-border overlay.
+        containerOverlay = {
+            enabled = false,
+            showIcons = true,
+            dispelMode = "dispellableByMe",  -- "dispellableByMe" | "allDispellable"
+            gradientDir = "default",         -- sweep direction
+        },
+},
 }
 
 -- ══════════════════════════════════════════════════════════════════════
@@ -1534,7 +1550,15 @@ GF.PRESETS.TANK = {
             enabled = true, max = 3, size = 14,
             anchor = "BOTTOMRIGHT", direction = "LEFT",
             x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
-        },
+                    -- Private Aura Dispel Overlay (12.0.5+ Blizzard-rendered).
+            -- Replaces the old DF-drawn frame-border overlay.
+            containerOverlay = {
+                enabled = false,
+                showIcons = true,
+                dispelMode = "dispellableByMe",  -- "dispellableByMe" | "allDispellable"
+                gradientDir = "default",         -- sweep direction
+            },
+},
         spellIndicators = { enabled = false },
     },
 }
@@ -1561,7 +1585,15 @@ GF.PRESETS.TANK.party = {
         enabled = true, max = 3, size = 16,
         anchor = "BOTTOMRIGHT", direction = "LEFT",
         x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
-    },
+            -- Private Aura Dispel Overlay (12.0.5+ Blizzard-rendered).
+        -- Replaces the old DF-drawn frame-border overlay.
+        containerOverlay = {
+            enabled = false,
+            showIcons = true,
+            dispelMode = "dispellableByMe",  -- "dispellableByMe" | "allDispellable"
+            gradientDir = "default",         -- sweep direction
+        },
+},
 }
 
 -- ══════════════════════════════════════════════════════════════════════
@@ -1624,7 +1656,15 @@ local _HEALER_BASE = {
         enabled = true, max = 2, size = 14,
         anchor = "BOTTOMRIGHT", direction = "LEFT",
         x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
-    },
+            -- Private Aura Dispel Overlay (12.0.5+ Blizzard-rendered).
+        -- Replaces the old DF-drawn frame-border overlay.
+        containerOverlay = {
+            enabled = false,
+            showIcons = true,
+            dispelMode = "dispellableByMe",  -- "dispellableByMe" | "allDispellable"
+            gradientDir = "default",         -- sweep direction
+        },
+},
 }
 
 -- Party override builder — scales healer frames for 5-player content.
@@ -1657,7 +1697,15 @@ local function _MakeHealerParty(auraExtra)
             enabled = true, max = 2, size = 16,
             anchor = "BOTTOMRIGHT", direction = "LEFT",
             x = 0, y = 0, showCountdown = true, showNumbers = true, layer = 8,
-        },
+                    -- Private Aura Dispel Overlay (12.0.5+ Blizzard-rendered).
+            -- Replaces the old DF-drawn frame-border overlay.
+            containerOverlay = {
+                enabled = false,
+                showIcons = true,
+                dispelMode = "dispellableByMe",  -- "dispellableByMe" | "allDispellable"
+                gradientDir = "default",         -- sweep direction
+            },
+},
     }
 end
 

@@ -130,23 +130,83 @@ end
 local _dispelColorCurve
 local _getDispelColor
 local _isFilteredOut
-do
+
+------------------------------------------------------------------------
+-- Shared dispel color curve — reads per-type colors from Colors panel DB.
+-- Evaluated via C_UnitAuras.GetAuraDispelTypeColor(unit, aid, curve) →
+-- returns a Color object whose RGBA can be applied to textures via
+-- tex:SetVertexColor(color:GetRGBA()) in a secret-safe varargs passthrough.
+--
+-- The curve MUST cover every dispel enum the API can return — Magic,
+-- Curse, Poison, Disease, Bleed AND Enrage (9). Without a point for an
+-- enum, GetAuraDispelTypeColor returns nil and callers fall back to the
+-- static 0.25/0.75/1.00 neutral palette, which is indistinguishable from
+-- the "only single color works" bug users saw in Beta 4/5.
+------------------------------------------------------------------------
+local function _ReadDBColor(gen, typeName, dr, dg, db)
+    if not gen then return dr, dg, db end
+    local r = gen["dispelType" .. typeName .. "R"]
+    if type(r) ~= "number" then return dr, dg, db end
+    local g = gen["dispelType" .. typeName .. "G"]
+    local b = gen["dispelType" .. typeName .. "B"]
+    return r, g or dg, b or db
+end
+
+local function _BuildDispelColorCurve()
     local CUA = _G.C_UnitAuras
     local CCU = _G.C_CurveUtil
-    if CUA and type(CUA.GetAuraDispelTypeColor) == "function"
-       and CCU and type(CCU.CreateColorCurve) == "function" then
-        _dispelColorCurve = CCU.CreateColorCurve()
-        if _dispelColorCurve.SetType then
-            _dispelColorCurve:SetType(_G.Enum and _G.Enum.LuaCurveType and _G.Enum.LuaCurveType.Step or 0)
+    if not (CUA and type(CUA.GetAuraDispelTypeColor) == "function"
+            and CCU and type(CCU.CreateColorCurve) == "function") then
+        return nil
+    end
+
+    local curve = CCU.CreateColorCurve()
+    if curve.SetType then
+        curve:SetType(_G.Enum and _G.Enum.LuaCurveType and _G.Enum.LuaCurveType.Step or 0)
+    end
+    if not curve.AddPoint then return curve end
+
+    local DT  = _G.Enum and _G.Enum.DispelType
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local C   = _G.CreateColor
+
+    -- None (enum 0): neutral default; used by icon-curve pattern elsewhere.
+    curve:AddPoint(0, C(0.25, 0.75, 1.00, 1))
+
+    if DT then
+        local r, g, b
+        if DT.Magic then
+            r, g, b = _ReadDBColor(gen, "Magic",   0.25, 0.75, 1.00)
+            curve:AddPoint(DT.Magic,   C(r, g, b, 1))
         end
-        local DT = _G.Enum and _G.Enum.DispelType
-        if DT and _dispelColorCurve.AddPoint then
-            if DT.Magic   then _dispelColorCurve:AddPoint(DT.Magic,   CreateColor(0.25, 0.75, 1.00, 1)) end
-            if DT.Curse   then _dispelColorCurve:AddPoint(DT.Curse,   CreateColor(0.60, 0.00, 1.00, 1)) end
-            if DT.Poison  then _dispelColorCurve:AddPoint(DT.Poison,  CreateColor(0.00, 0.60, 0.00, 1)) end
-            if DT.Disease then _dispelColorCurve:AddPoint(DT.Disease, CreateColor(0.60, 0.40, 0.00, 1)) end
-            if DT.Bleed   then _dispelColorCurve:AddPoint(DT.Bleed,   CreateColor(0.80, 0.00, 0.00, 1)) end
+        if DT.Curse then
+            r, g, b = _ReadDBColor(gen, "Curse",   0.60, 0.00, 1.00)
+            curve:AddPoint(DT.Curse,   C(r, g, b, 1))
         end
+        if DT.Poison then
+            r, g, b = _ReadDBColor(gen, "Poison",  0.00, 0.60, 0.00)
+            curve:AddPoint(DT.Poison,  C(r, g, b, 1))
+        end
+        if DT.Disease then
+            r, g, b = _ReadDBColor(gen, "Disease", 0.60, 0.40, 0.00)
+            curve:AddPoint(DT.Disease, C(r, g, b, 1))
+        end
+        if DT.Bleed then
+            r, g, b = _ReadDBColor(gen, "Bleed",   0.80, 0.00, 0.00)
+            curve:AddPoint(DT.Bleed,   C(r, g, b, 1))
+        end
+        if DT.Enrage then
+            r, g, b = _ReadDBColor(gen, "Bleed",   0.80, 0.00, 0.00)
+            curve:AddPoint(DT.Enrage,  C(r, g, b, 1))
+        end
+    end
+    return curve
+end
+
+do
+    local CUA = _G.C_UnitAuras
+    _dispelColorCurve = _BuildDispelColorCurve()
+    if CUA and type(CUA.GetAuraDispelTypeColor) == "function" then
         _getDispelColor = CUA.GetAuraDispelTypeColor
     end
     if CUA and type(CUA.IsAuraFilteredOutByInstanceID) == "function" then
@@ -155,8 +215,16 @@ do
 end
 local _DISPEL_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
 
--- Export shared ColorCurve for Effects.lua ResolveDispelColor
+-- Export shared ColorCurve + rebuild entry for Options live-apply.
 GF._sharedDispelColorCurve = _dispelColorCurve
+GF.RebuildDispelColorCurve = function()
+    local new = _BuildDispelColorCurve()
+    if not new then return GF._sharedDispelColorCurve end
+    _dispelColorCurve          = new
+    _getDispelColor            = (_G.C_UnitAuras or {}).GetAuraDispelTypeColor
+    GF._sharedDispelColorCurve = new
+    return new
+end
 
 -- Legacy fallback colors (used only when C-side API unavailable)
 local DISPEL_COLORS = {

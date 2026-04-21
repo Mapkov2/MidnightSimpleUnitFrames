@@ -70,6 +70,14 @@ local function _PushVisualUpdates_Flush()
         _G.MSUF_UFCore_RefreshSettingsCache("COLOR_CHANGE")
     end
 
+    -- Rebuild the shared dispel color curve from the DB (per-type Magic /
+    -- Curse / Disease / Poison / Bleed swatches from the Colors panel).
+    -- Consumed by GF overlay, UF border highlight, and corner indicators —
+    -- all of which pass curve output straight to C-side texture sinks.
+    if ns and ns.GF and type(ns.GF.RebuildDispelColorCurve) == "function" then
+        ns.GF.RebuildDispelColorCurve()
+    end
+
     local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts
     if type(fnFonts) == "function" then
         fnFonts()

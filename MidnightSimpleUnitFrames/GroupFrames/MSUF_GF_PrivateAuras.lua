@@ -1,6 +1,14 @@
 -- MSUF_GF_PrivateAuras.lua — Private aura anchoring for Group Frames
 -- Midnight 12.0 secret-safe. Combat-safe: defers Add/Remove calls.
 -- Uses same C_UnitAuras.AddPrivateAuraAnchor API as A2_Render.
+--
+-- 12.0.5+ adds a Blizzard-rendered "Private Aura Dispel Overlay": a second
+-- anchor with `isContainer = true` + container attributes that paints a
+-- dispel-type-coloured wash + optional icon across the frame. Addons have
+-- no colour/art control — Blizzard draws it — but we choose the filter
+-- ("Dispellable By Me" / "All Dispellable"), the sweep direction, and
+-- whether dispel-type icons are suppressed. This is separate from the
+-- existing icon anchors above; it does NOT replace them.
 local _, ns = ...
 ns.GF = ns.GF or {}
 local GF = ns.GF
@@ -9,6 +17,7 @@ local C_UnitAuras = _G.C_UnitAuras
 local C_Timer     = _G.C_Timer
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
+local GetBuildInfo = _G.GetBuildInfo
 local math_floor  = math.floor
 local math_max    = math.max
 local math_min    = math.min
@@ -23,6 +32,15 @@ local function Supported()
         and type(C_UnitAuras.AddPrivateAuraAnchor) == "function"
         and type(C_UnitAuras.RemovePrivateAuraAnchor) == "function"
 end
+
+-- 12.0.5+ required for `isContainer = true` container anchors (dispel overlay).
+-- We probe GetBuildInfo once at load; later LoD reloads re-run this file.
+local IS_CONTAINER_SUPPORTED = (function()
+    if not GetBuildInfo then return false end
+    local v = select(4, GetBuildInfo())
+    return type(v) == "number" and v >= 120005
+end)()
+GF._privateAuraContainerSupported = IS_CONTAINER_SUPPORTED
 
 ------------------------------------------------------------------------
 -- Combat-deferred removal queue
@@ -41,35 +59,44 @@ local function FlushPendingRemoves()
 end
 
 ------------------------------------------------------------------------
--- Clear anchors for a frame
+-- Clear anchors for a frame (icon anchors + optional container overlay)
 ------------------------------------------------------------------------
+local function QueueOrRemove(removeFn, id)
+    if not removeFn or not id then return end
+    if InCombatLockdown and InCombatLockdown() then
+        if not _pendingRemoveIDs then _pendingRemoveIDs = {} end
+        _pendingRemoveIDs[#_pendingRemoveIDs + 1] = id
+    else
+        removeFn(id)
+    end
+end
+
 local function ClearAnchors(f)
+    local removeFn = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
+
+    -- Icon anchor IDs
     local ids = f._gfPrivAnchorIDs
-    if type(ids) == "table" and C_UnitAuras then
-        local removeFn = C_UnitAuras.RemovePrivateAuraAnchor
-        if removeFn then
-            if InCombatLockdown and InCombatLockdown() then
-                if not _pendingRemoveIDs then _pendingRemoveIDs = {} end
-                for i = 1, #ids do
-                    if ids[i] then _pendingRemoveIDs[#_pendingRemoveIDs + 1] = ids[i] end
-                end
-            else
-                for i = 1, #ids do
-                    if ids[i] then removeFn(ids[i]) end
-                end
-            end
-        end
+    if type(ids) == "table" and removeFn then
+        for i = 1, #ids do QueueOrRemove(removeFn, ids[i]) end
     end
     f._gfPrivAnchorIDs = nil
     f._gfPrivUnit = nil
     f._gfPrivSize = nil
     f._gfPrivMax = nil
     f._gfPrivAnchor = nil
+
+    -- Container overlay anchor
+    local coID = f._gfPrivContainerOverlayID
+    if coID and removeFn then QueueOrRemove(removeFn, coID) end
+    f._gfPrivContainerOverlayID  = nil
+    f._gfPrivContainerOverlayUnit = nil
+
     local slots = f._gfPrivSlots
     if type(slots) == "table" then
         for i = 1, #slots do if slots[i] then slots[i]:Hide() end end
     end
     if f._gfPrivContainer then f._gfPrivContainer:Hide() end
+    if f._gfPrivOverlayFrame then f._gfPrivOverlayFrame:Hide() end
 end
 
 ------------------------------------------------------------------------
@@ -115,13 +142,29 @@ end
 ------------------------------------------------------------------------
 -- Apply private auras for a GF frame
 ------------------------------------------------------------------------
-function GF.ApplyPrivateAuras(f, unit)
+-- Reusable across GF and boss frames.
+--
+-- Signature: GF.ApplyPrivateAuras(f, unit [, paOverride])
+--   paOverride: optional privateAuras config table. If supplied, all
+--   settings are read from it and the GF config lookup is skipped
+--   entirely. Used by the boss-frame bridge so boss frames can opt into
+--   the same private-aura icons + 12.0.5 container overlay without being
+--   registered as GF children (which would interfere with GF layout,
+--   range fade, aggro tracking, etc.).
+function GF.ApplyPrivateAuras(f, unit, paOverride)
     if not f then return end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
+
+    local pa, conf
+    if type(paOverride) == "table" then
+        pa   = paOverride
+        conf = paOverride   -- satisfies the `conf.privateAura*` fallback reads below
+    else
+        local kind = f._msufGFKind or "party"
+        conf = GF.GetConf(kind)
+        pa   = conf.privateAuras
+    end
 
     -- Read from nested privateAuras table (migrated) or flat keys (legacy)
-    local pa = conf.privateAuras
     local paEnabled, paMax, paSize, paAnchor, paX, paY, paCountdown, paDirection, paNumbers, paLayer
     if pa and pa.enabled ~= nil then
         paEnabled   = pa.enabled
@@ -303,6 +346,156 @@ function GF.ApplyPrivateAuras(f, unit)
             end
         end)
     end
+
+    -- 12.0.5+ native Private Aura Dispel Overlay (separate container anchor).
+    GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
+end
+
+------------------------------------------------------------------------
+-- Private Aura Dispel Overlay (12.0.5+ Blizzard-rendered)
+--
+-- A SECOND anchor with isContainer=true. Blizzard paints the overlay
+-- inside the wrapper frame using attributes set BEFORE AddPrivateAuraAnchor
+-- (OnAnchorAdded reads ReadContainerSettings immediately).
+--
+-- Customisation is deliberately limited by Blizzard:
+--   dispel-indicator-option         : "dispellableByMe" | "allDispellable"
+--   aura-organization-type          : sweep direction ("default", etc.)
+--   suppress-dispel-border-icons    : hide the small Magic/Curse/Poison/Disease icon
+--   group-type                      : 4 for party slots, 5 for raid — required for
+--                                     Blizzard's internal hooks even on a GF frame.
+--
+-- This is additive: the icon anchors set up above (which show the actual
+-- private aura textures + countdown) remain unchanged. The container
+-- overlay only replaces the old DF-drawn frame-border overlay.
+------------------------------------------------------------------------
+local function _GetContainerOverlayConf(pa)
+    -- Nested table (new) or flat-key legacy — both supported.
+    if type(pa) == "table" and pa.containerOverlay then
+        local co = pa.containerOverlay
+        return {
+            enabled     = co.enabled and true or false,
+            showIcons   = co.showIcons ~= false,                 -- default true
+            dispelMode  = co.dispelMode or "dispellableByMe",
+            gradientDir = co.gradientDir or "default",
+        }
+    end
+    return {
+        enabled     = false,
+        showIcons   = true,
+        dispelMode  = "dispellableByMe",
+        gradientDir = "default",
+    }
+end
+
+local function _GroupTypeForUnit(unit)
+    if type(unit) == "string" and unit:find("^party") then
+        return 4
+    end
+    return 5
+end
+
+function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
+    if not f or not unit then return end
+    if not IS_CONTAINER_SUPPORTED then return end
+    if not Supported() then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+
+    local co = _GetContainerOverlayConf(pa)
+
+    -- Disabled or teardown: clear existing anchor and bail.
+    if not co.enabled then
+        local removeFn = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
+        if f._gfPrivContainerOverlayID and removeFn then
+            QueueOrRemove(removeFn, f._gfPrivContainerOverlayID)
+        end
+        f._gfPrivContainerOverlayID   = nil
+        f._gfPrivContainerOverlayUnit = nil
+        if f._gfPrivOverlayFrame then f._gfPrivOverlayFrame:Hide() end
+        return
+    end
+
+    -- Diff: same unit + same attrs → just re-show + update-settings attribute.
+    local cached = f._gfPrivCOCached
+    local wrapper = f._gfPrivOverlayFrame
+    local samePayload = wrapper
+        and f._gfPrivContainerOverlayID
+        and f._gfPrivContainerOverlayUnit == unit
+        and cached
+        and cached.showIcons   == co.showIcons
+        and cached.dispelMode  == co.dispelMode
+        and cached.gradientDir == co.gradientDir
+
+    -- Lazy-init wrapper. Parent to the unitframe itself (not a sub-region)
+    -- so Blizzard can size/centre the overlay across the whole frame.
+    if not wrapper then
+        wrapper = CreateFrame("Frame", nil, f)
+        wrapper:EnableMouse(false)
+        if wrapper.SetMouseClickEnabled then wrapper:SetMouseClickEnabled(false) end
+        f._gfPrivOverlayFrame = wrapper
+    end
+    wrapper:SetParent(f)
+    wrapper:ClearAllPoints()
+    wrapper:SetAllPoints(f)
+    wrapper:Show()
+
+    -- Update attributes BEFORE AddPrivateAuraAnchor — OnAnchorAdded reads them
+    -- via ReadContainerSettings immediately on registration.
+    wrapper:SetAttribute("max-buffs", 0)
+    wrapper:SetAttribute("max-debuffs", 0)
+    wrapper:SetAttribute("max-dispel-debuffs", 1)
+    wrapper:SetAttribute("ignore-buffs", true)
+    wrapper:SetAttribute("ignore-debuffs", true)
+    wrapper:SetAttribute("show-dispel-indicator-overlay", true)
+    wrapper:SetAttribute("suppress-dispel-border-icons", not co.showIcons)
+    wrapper:SetAttribute("dispel-indicator-option", co.dispelMode)
+    wrapper:SetAttribute("aura-organization-type", co.gradientDir)
+    wrapper:SetAttribute("group-type", _GroupTypeForUnit(unit))
+    wrapper:SetAttribute("power-bar-used-height", 0)
+    wrapper:SetAttribute("icon-size", 10)
+    wrapper:SetAttribute("set-aura-size-to-icon-size", false)
+
+    if samePayload then
+        -- Live-update path: signal Blizzard to re-read attributes.
+        wrapper:SetAttribute("update-settings", true)
+        return
+    end
+
+    -- Full (re)registration: remove old ID if any, add new anchor.
+    local removeFn = C_UnitAuras.RemovePrivateAuraAnchor
+    if f._gfPrivContainerOverlayID and removeFn then
+        QueueOrRemove(removeFn, f._gfPrivContainerOverlayID)
+        f._gfPrivContainerOverlayID = nil
+    end
+
+    local addFn = C_UnitAuras.AddPrivateAuraAnchor
+    local newID = addFn({
+        unitToken            = unit,
+        parent               = wrapper,
+        isContainer          = true,
+        auraIndex            = 1,
+        showCountdownFrame   = false,
+        showCountdownNumbers = false,
+    })
+    if newID then
+        f._gfPrivContainerOverlayID   = newID
+        f._gfPrivContainerOverlayUnit = unit
+        f._gfPrivCOCached = {
+            showIcons   = co.showIcons,
+            dispelMode  = co.dispelMode,
+            gradientDir = co.gradientDir,
+        }
+    end
+end
+
+-- Cheap live-update path used by Options live-apply. Diff-gate inside
+-- ApplyPrivateAuraContainerOverlay short-circuits when nothing changed.
+function GF.UpdatePrivateAuraContainerOverlay(f)
+    if not f or not f.unit then return end
+    local kind = f._msufGFKind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    if not conf then return end
+    GF.ApplyPrivateAuraContainerOverlay(f, f.unit, conf.privateAuras)
 end
 
 ------------------------------------------------------------------------
