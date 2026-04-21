@@ -2681,6 +2681,16 @@ local function dispatchHealthLean(f, unit)
 
     -- GRADIENT color only (all other modes stamp-gated elsewhere)
     if c and (c.hcGradient or f._msufSIHealthColorR) then
+        if c.hcGradient then
+            local calc = f._msufHPCalc
+            if not calc and not _calcUnsupported then calc = _GF_EnsureCalc(f) end
+            if calc then
+                -- Keep the calculator in sync with the lean UNIT_HEALTH path so
+                -- the gradient reflects the current bar value instead of a stale
+                -- snapshot from the last full refresh.
+                UnitGetDetailedHealPrediction(unit, "player", calc)
+            end
+        end
         ApplyHealthColor(f, f._msufGFKind or "party", unit)
     end
 end
