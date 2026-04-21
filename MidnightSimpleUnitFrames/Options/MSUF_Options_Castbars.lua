@@ -21,6 +21,14 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         end
     end
 
+    local function CastbarSlider(spec)
+        if spec and spec.compact and spec.compactInput == nil then
+            spec.compactInput = true
+            spec.compactInputWidth = 46
+        end
+        return UI.Slider(spec)
+    end
+
     local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
     local CreateFrame = CreateFrame
     local math_pi = math.pi
@@ -175,7 +183,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().castbarInterruptShake = v end,
     })
 
-    local shakeSlider = UI.Slider({
+    local shakeSlider = CastbarSlider({
         name = "MSUF_CastbarShakeIntensitySlider", parent = s1Body,
         anchor = shakeCheck, x = 18, y = -14, width = 240, compact = true,
         label = TR("Shake intensity"), min = 0, max = 30, step = 1, default = 8,
@@ -309,7 +317,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().castbarBackgroundTexture = v; ApplyTextures() end,
     })
 
-    local outlineSlider = UI.Slider({
+    local outlineSlider = CastbarSlider({
         name = "MSUF_CastbarOutlineThicknessSlider", parent = s3Body,
         anchor = s3Body, anchorPoint = "TOPLEFT", x = 370, y = -6, width = 260, compact = true,
         label = TR("Outline thickness"), min = 0, max = 6, step = 1, default = 1,
@@ -401,7 +409,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().empowerStageBlink = v; Apply("castbarVisuals") end,
     })
 
-    local empBlinkSlider = UI.Slider({
+    local empBlinkSlider = CastbarSlider({
         name = "MSUF_EmpowerStageBlinkTimeSlider", parent = s4Body,
         compact = true,
         anchor = s4Body, anchorPoint = "TOPLEFT", x = 370, y = -8, width = 260,
@@ -429,7 +437,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     local oldDrop = _G["MSUF_CastbarSpellNameShortenDropdown"]
     if oldDrop then oldDrop:Hide(); oldDrop:SetAlpha(0); oldDrop:EnableMouse(false) end
 
-    local maxSlider = UI.Slider({
+    local maxSlider = CastbarSlider({
         name = "MSUF_CastbarSpellNameMaxLenSlider", parent = s5Body,
         anchor = s5Body, anchorPoint = "TOPLEFT", x = 370, y = -6, width = 260, compact = true,
         label = TR("Max name length"), min = 6, max = 30, step = 1, default = 30,
@@ -437,7 +445,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().castbarSpellNameMaxLen = v; ApplyVisualRefresh() end,
     })
 
-    local resSlider = UI.Slider({
+    local resSlider = CastbarSlider({
         name = "MSUF_CastbarSpellNameReservedSlider", parent = s5Body,
         anchor = maxSlider, x = 0, y = -44, width = 260, compact = true,
         label = TR("Reserved space"), min = 0, max = 30, step = 1, default = 8,
@@ -554,7 +562,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     fkSizeLabel:SetPoint("TOPLEFT", s6Body, "TOPLEFT", FK_RIGHT, -6)
     fkSizeLabel:SetText(TR("Size"))
 
-    local fkWidthSlider = UI.Slider({
+    local fkWidthSlider = CastbarSlider({
         name = "MSUF_FocusKickIconWidthSlider", parent = s6Body,
         anchor = fkSizeLabel, x = 0, y = -8, width = 260, compact = true,
         label = TR("Width"), min = 16, max = 128, step = 1, default = 40,
@@ -562,7 +570,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconWidth = v; FKApply() end,
     })
 
-    local fkHeightSlider = UI.Slider({
+    local fkHeightSlider = CastbarSlider({
         name = "MSUF_FocusKickIconHeightSlider", parent = s6Body,
         anchor = fkWidthSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Height"), min = 16, max = 128, step = 1, default = 40,
@@ -570,7 +578,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconHeight = v; FKApply() end,
     })
 
-    local fkTextSlider = UI.Slider({
+    local fkTextSlider = CastbarSlider({
         name = "MSUF_FocusKickTextSizeSlider", parent = s6Body,
         anchor = fkHeightSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Text size"), min = 8, max = 24, step = 1, default = 12,
@@ -598,7 +606,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     fkPosLabel:SetPoint("TOPLEFT", fkPosDivider, "BOTTOMLEFT", 0, -8)
     fkPosLabel:SetText(TR("Position"))
 
-    local fkOffXSlider = UI.Slider({
+    local fkOffXSlider = CastbarSlider({
         name = "MSUF_FocusKickIconOffsetXSlider", parent = s6Body,
         anchor = fkPosLabel, x = 0, y = -8, width = 280, compact = true,
         label = TR("X offset"), min = -500, max = 500, step = 1, default = 300,
@@ -606,7 +614,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconOffsetX = v; FKApply() end,
     })
 
-    local fkOffYSlider = UI.Slider({
+    local fkOffYSlider = CastbarSlider({
         name = "MSUF_FocusKickIconOffsetYSlider", parent = s6Body,
         anchor = fkPosLabel, x = FK_RIGHT - 12, y = -8, width = 280, compact = true,
         label = TR("Y offset"), min = -500, max = 500, step = 1, default = 0,
@@ -669,7 +677,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyShowBoss = v; KickApply() end,
     })
 
-    local kickSizeSlider = UI.Slider({
+    local kickSizeSlider = CastbarSlider({
         name = "MSUF_KickReadySizeSlider", parent = s7Body,
         anchor = s7Body, anchorPoint = "TOPLEFT", x = 370, y = -30, width = 260, compact = true,
         label = TR("Indicator size"), min = 4, max = 24, step = 1, default = 8,
@@ -690,7 +698,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyAnchor = v; KickApply() end,
     })
 
-    local kickOffXSlider = UI.Slider({
+    local kickOffXSlider = CastbarSlider({
         name = "MSUF_KickReadyOffsetXSlider", parent = s7Body,
         anchor = kickAnchorDrop, x = 0, y = -12, width = 260, compact = true,
         label = TR("X offset"), min = -50, max = 50, step = 1, default = 4,
@@ -698,7 +706,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyOffsetX = v; KickApply() end,
     })
 
-    local kickOffYSlider = UI.Slider({
+    local kickOffYSlider = CastbarSlider({
         name = "MSUF_KickReadyOffsetYSlider", parent = s7Body,
         anchor = kickOffXSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Y offset"), min = -50, max = 50, step = 1, default = 0,

@@ -394,17 +394,26 @@ function UI.Check(spec)
     return cb
 end
 
--- ---- 4f. Slider (self-syncing; compact=true skips editbox/±) ----
+-- ---- 4f. Slider (self-syncing; compact sliders can opt into inline numeric input) ----
 function UI.Slider(spec)
     local name = spec.name
     local parent = spec.parent
     local minV, maxV, step = spec.min or 0, spec.max or 100, spec.step or 1
     local compact = spec.compact
+    local compactInput = compact and spec.compactInput
+    local compactInputWidth = spec.compactInputWidth or 46
+    local compactInputGap = spec.compactInputGap or 8
+    local sliderWidth = spec.width or 270
+    local trackWidth = sliderWidth
+    if compactInput then
+        trackWidth = sliderWidth - compactInputWidth - compactInputGap
+        if trackWidth < 80 then trackWidth = 80 end
+    end
     local sl = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
     sl:SetMinMaxValues(minV, maxV)
     sl:SetValueStep(step)
     sl:SetObeyStepOnDrag(true)
-    sl:SetWidth(spec.width or 270)
+    sl:SetWidth(trackWidth)
     if spec.anchor then
         sl:SetPoint("TOPLEFT", spec.anchor, spec.anchorPoint or "BOTTOMLEFT", spec.x or 0, spec.y or -18)
     end
@@ -417,20 +426,27 @@ function UI.Slider(spec)
     if high then high:SetText(spec.highText or tostring(maxV)) end
     -- EditBox + ± (only for non-compact sliders)
     local eb, minus, plus
-    if not compact then
+    if (not compact) or compactInput then
         eb = CreateFrame("EditBox", name and (name .. "Input"), parent, "InputBoxTemplate")
-        eb:SetSize(60, 18); eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
-        eb:SetPoint("TOP", sl, "BOTTOM", 0, -6)
+        eb:SetSize(compactInput and compactInputWidth or 60, 18)
+        eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
+        if compactInput then
+            eb:SetPoint("LEFT", sl, "RIGHT", compactInputGap, 0)
+        else
+            eb:SetPoint("TOP", sl, "BOTTOM", 0, -6)
+        end
         eb:SetFontObject(GameFontHighlightSmall); eb:SetTextColor(1, 1, 1, 1)
         sl.editBox = eb
-        minus = CreateFrame("Button", name and (name .. "Minus"), parent)
-        minus:SetPoint("RIGHT", eb, "LEFT", -2, 0)
-        StyleSmallButton(minus, false)
-        sl.minusButton = minus
-        plus = CreateFrame("Button", name and (name .. "Plus"), parent)
-        plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
-        StyleSmallButton(plus, true)
-        sl.plusButton = plus
+        if not compactInput then
+            minus = CreateFrame("Button", name and (name .. "Minus"), parent)
+            minus:SetPoint("RIGHT", eb, "LEFT", -2, 0)
+            StyleSmallButton(minus, false)
+            sl.minusButton = minus
+            plus = CreateFrame("Button", name and (name .. "Plus"), parent)
+            plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
+            StyleSmallButton(plus, true)
+            sl.plusButton = plus
+        end
     end
     -- Format helper
     local function FormatValue(v)
@@ -456,7 +472,7 @@ function UI.Slider(spec)
             end
         end
     end
-    if not compact then
+    if (not compact) or compactInput then
         -- Apply editbox value
         local function ApplyEditBox()
             local v = tonumber(eb:GetText())
@@ -469,16 +485,18 @@ function UI.Slider(spec)
         eb:SetScript("OnEscapePressed", function(self)
             SyncEditBox(sl:GetValue()); self:ClearFocus()
         end)
-        minus:SetScript("OnClick", function()
-            local v = sl:GetValue() - step
-            if v < minV then v = minV end
-            sl:SetValue(v)
-        end)
-        plus:SetScript("OnClick", function()
-            local v = sl:GetValue() + step
-            if v > maxV then v = maxV end
-            sl:SetValue(v)
-        end)
+        if minus and plus then
+            minus:SetScript("OnClick", function()
+                local v = sl:GetValue() - step
+                if v < minV then v = minV end
+                sl:SetValue(v)
+            end)
+            plus:SetScript("OnClick", function()
+                local v = sl:GetValue() + step
+                if v > maxV then v = maxV end
+                sl:SetValue(v)
+            end)
+        end
     end
     -- OnValueChanged
     sl._msufSkip = false
@@ -508,6 +526,31 @@ function UI.Slider(spec)
         self:SetValue(v)
         self._msufSkip = false
         SyncEditBox(v)
+    end
+    function sl:SetEnabled(enabled)
+        if enabled then
+            if self.Enable then self:Enable() end
+            if eb then
+                if eb.EnableMouse then eb:EnableMouse(true) end
+                if eb.Enable then eb:Enable() end
+            end
+            if minus and minus.Enable then minus:Enable() end
+            if plus and plus.Enable then plus:Enable() end
+            if text and text.SetTextColor then text:SetTextColor(1, 1, 1) end
+            if eb and eb.SetTextColor then eb:SetTextColor(1, 1, 1, 1) end
+            self:SetAlpha(1)
+        else
+            if self.Disable then self:Disable() end
+            if eb then
+                if eb.EnableMouse then eb:EnableMouse(false) end
+                if eb.Disable then eb:Disable() end
+            end
+            if minus and minus.Disable then minus:Disable() end
+            if plus and plus.Disable then plus:Disable() end
+            if text and text.SetTextColor then text:SetTextColor(0.55, 0.55, 0.55) end
+            if eb and eb.SetTextColor then eb:SetTextColor(0.55, 0.55, 0.55, 1) end
+            self:SetAlpha(0.55)
+        end
     end
     StyleSlider(sl)
     -- Search registration
