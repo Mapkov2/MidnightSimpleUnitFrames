@@ -1,10 +1,10 @@
 -- Castbars/MSUF_CastbarChannelTicks.lua
--- Phase 3 extraction: Channel haste markers (5 white static lines on player channel bar).
+-- Phase 3 extraction: Channel tick markers (5 white static lines on player channel bar).
 -- Self-contained. Only dependency: MSUF_DB (global).
 
--- Player-only: Channeled Cast "Haste Markers" (5 white static lines)
--- Goal: Always visible from channel START (not progress-based), positions shift with current player spell haste.
--- Secret-safe: uses only UnitSpellHaste("player") + StatusBar width. No duration math, no combat log, no secret comparisons.
+-- Player-only: Channeled Cast tick markers (5 white static lines).
+-- Goal: Always visible from channel START (not progress-based), evenly spaced and secret-safe.
+-- Midnight fix: do NOT read/use UnitSpellHaste here because that value can be secret in combat and breaks the player castbar update path.
 -------------------------------------------------------------------------------
 
 -- Master toggle (Options Castbars Behavior "Show channeled cast tick lines")
@@ -57,7 +57,6 @@ local function MSUF_PlayerChannelHasteMarkers_Hide(self)
     end
     if self then
         self._msufPlayerChannelHasteMarkersLastW = nil
-        self._msufPlayerChannelHasteMarkersLastF = nil
     end
 end
 
@@ -91,37 +90,26 @@ local function MSUF_PlayerChannelHasteMarkers_Update(self, force)
         self._msufPlayerChannelHasteMarkersForce = true
     end
 
-    local haste = 0
-    if type(UnitSpellHaste) == "function" then
-        local ok, v = MSUF_FastCall(UnitSpellHaste, "player")
-        if ok and type(v) == "number" then haste = v end
-    end
-    local factor = 1 + (haste / 100)
-    if factor <= 0 then factor = 1 end
-
     if self._msufPlayerChannelHasteMarkersForce then
         force = true
         self._msufPlayerChannelHasteMarkersForce = nil
     end
 
     local lastW = self._msufPlayerChannelHasteMarkersLastW
-    local lastF = self._msufPlayerChannelHasteMarkersLastF
-    if not force and lastW == w and lastF == factor then
+    if not force and lastW == w then
         -- no change, keep
     else
         self._msufPlayerChannelHasteMarkersLastW = w
-        self._msufPlayerChannelHasteMarkersLastF = factor
 
         local rf = (self._msufStripeReverseFill == true)
-        local anchor = rf and "RIGHT" or "LEFT"
 
-        -- Default: 5 markers at 1/6..5/6. With haste, markers compress toward the start.
+        -- Static layout: 5 markers at 1/6..5/6 of the current bar width.
         local div = 6
         for i = 1, 5 do
             local t = stripes[i]
             if t and t.SetPoint then
                 if t.SetAlpha then t:SetAlpha(1) end
-                local pos = (i / div) / factor
+                local pos = (i / div)
                 if pos < 0.02 then pos = 0.02 end
                 if pos > 0.98 then pos = 0.98 end
                 local x = w * pos
