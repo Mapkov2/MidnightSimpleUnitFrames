@@ -388,6 +388,7 @@ end
     if g.npcTypeFocus  == nil then g.npcTypeFocus  = true end
     if g.npcTypeBoss   == nil then g.npcTypeBoss   = true end
     if g.npcTypeToT    == nil then g.npcTypeToT    = true end
+    if g.eliteNamePrefix == nil then g.eliteNamePrefix = false end
         if type(g.unifiedBarR) ~= "number" then g.unifiedBarR = 0.10 end
         if type(g.unifiedBarG) ~= "number" then g.unifiedBarG = 0.60 end
         if type(g.unifiedBarB) ~= "number" then g.unifiedBarB = 0.90 end

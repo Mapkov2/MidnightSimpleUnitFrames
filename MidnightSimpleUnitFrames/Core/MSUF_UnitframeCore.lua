@@ -807,7 +807,16 @@ local function UFCore_UpdateIdentityFast(frame, conf)
 
     if frame.nameText then
         if showName and exists then
-            _SetText(frame.nameText, UnitName(unit) or "")
+            local name = UnitName(unit) or ""
+            local _g = MSUF_DB and MSUF_DB.general
+            if _g and _g.eliteNamePrefix then
+                local cls = UnitClassification and UnitClassification(unit)
+                if cls == "elite" or cls == "rareelite" or cls == "rare"
+                   or cls == "boss" or cls == "worldboss" then
+                    name = "+" .. name
+                end
+            end
+            _SetText(frame.nameText, name)
         else
             _SetText(frame.nameText, "")
         end
