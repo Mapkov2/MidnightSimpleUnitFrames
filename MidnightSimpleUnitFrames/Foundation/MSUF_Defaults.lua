@@ -1065,6 +1065,16 @@ for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
     end
     if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
 end
+-- Elite / Rare icon defaults (per-unit)
+for _, key in ipairs({"target","focus","targettarget","boss"}) do
+    MSUF_DB[key] = MSUF_DB[key] or {}
+    local u = MSUF_DB[key]
+    if u.showEliteIcon    == nil then u.showEliteIcon    = true       end
+    if u.eliteIconSize    == nil then u.eliteIconSize    = 20         end
+    if u.eliteIconAnchor  == nil then u.eliteIconAnchor  = "TOPRIGHT" end
+    if u.eliteIconOffsetX == nil then u.eliteIconOffsetX = 2          end
+    if u.eliteIconOffsetY == nil then u.eliteIconOffsetY = 2          end
+end
 if MSUF_DB.bars == nil then
         MSUF_DB.bars = {}
     end

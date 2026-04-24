@@ -3893,6 +3893,7 @@ local function MSUF_UFStep_NameLevelLeaderRaid(self, unit, conf, g)
         end
     end
     if self.raidMarkerIcon and _UF.RaidMarker then _UF.RaidMarker(self) end
+    if self.eliteIcon and _G.MSUF_UpdateEliteIcon then _G.MSUF_UpdateEliteIcon(self) end
 end
 local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- Secret-safe text gating + per-flush coalesce (no compares on hp/power values)
@@ -5693,6 +5694,16 @@ local function CreateSimpleUnitFrame(unit)
                 if apply then apply(f) end
             end
     end
+        -- Elite / Rare icon (target, focus, targettarget, boss)
+        local _eliteUnitKey = (type(unit) == "string" and unit:sub(1,4) == "boss") and "boss" or unit
+        if _G.VALID_UNITS and _G.VALID_UNITS[_eliteUnitKey] and not f.eliteIcon then
+            local tex = ns.UF.MakeTex(f, "eliteIcon", "textFrame", "OVERLAY", 7)
+            tex:SetSize(20, 20)
+            tex:Hide()
+            if _G.MSUF_ApplyEliteIconLayout then
+                _G.MSUF_ApplyEliteIconLayout(f)
+            end
+        end
         -- Classification indicator text (Target only)
         if unit == "target" then
             _CreateClassificationText(f, textFrame, conf, fontPath, flags, fr, fg, fb)

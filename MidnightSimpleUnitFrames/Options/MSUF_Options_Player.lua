@@ -94,6 +94,13 @@ local function MSUF_LevelAnchorText(v)
     if v == "NAMERIGHT" then  return "Right to player name" end
      return "Right to player name"
 end
+local function MSUF_EliteIconAnchorText(v)
+    if v == "TOPLEFT" then  return "Top left" end
+    if v == "TOPRIGHT" then  return "Top right" end
+    if v == "BOTTOMLEFT" then  return "Bottom left" end
+    if v == "BOTTOMRIGHT" then  return "Bottom right" end
+     return "Top right"
+end
 -- ---------------------------------------------------------------------------
 -- Status icon symbol textures (Classic vs Midnight)
 -- These are used by the Status icon "symbol" dropdowns (Combat/Rested/Incoming Rez).
@@ -334,11 +341,44 @@ local _MSUF_INDICATOR_SPECS = {
         resetBtn = "playerLevelResetBtn",
         refreshFnName = "MSUF_RefreshLevelIndicatorFrames",
     },
+    eliteicon = {
+        id = "eliteicon",
+        order = 4,
+        allowed = function(key)
+            return (key == "target" or key == "focus" or key == "targettarget" or key == "boss")
+        end,
+        showCB = "playerEliteIconCB", showField = "showEliteIcon", showDefault = true,
+        ui = {
+            cbName = "MSUF_PlayerEliteIconCB",
+            cbText = "Show elite / rare icon",
+            xName = "MSUF_PlayerEliteIconOffsetX",
+            yName = "MSUF_PlayerEliteIconOffsetY",
+            anchorName = "MSUF_PlayerEliteIconAnchorDropdown",
+            anchorW = 70,
+            sizeName = "MSUF_PlayerEliteIconSizeEdit",
+        },
+        xStepper = "playerEliteIconOffsetXStepper", xField = "eliteIconOffsetX", xDefault = 2,
+        yStepper = "playerEliteIconOffsetYStepper", yField = "eliteIconOffsetY", yDefault = 2,
+        anchorDrop = "playerEliteIconAnchorDrop", anchorLabel = "playerEliteIconAnchorLabel",
+        anchorField = "eliteIconAnchor", anchorDefault = "TOPRIGHT",
+        anchorText = function(v)  return MSUF_EliteIconAnchorText(v) end,
+        anchorChoices = {
+            { MSUF_EliteIconAnchorText("TOPRIGHT"),    "TOPRIGHT"    },
+            { MSUF_EliteIconAnchorText("TOPLEFT"),     "TOPLEFT"     },
+            { MSUF_EliteIconAnchorText("BOTTOMRIGHT"), "BOTTOMRIGHT" },
+            { MSUF_EliteIconAnchorText("BOTTOMLEFT"),  "BOTTOMLEFT"  },
+        },
+        sizeEdit = "playerEliteIconSizeEdit", sizeLabel = "playerEliteIconSizeLabel",
+        sizeField = "eliteIconSize", sizeDefault = 20,
+        divider = "playerEliteIconGroupDivider",
+        resetBtn = "playerEliteIconResetBtn",
+        refreshFnName = "MSUF_RefreshEliteIconFrames",
+    },
 }
 -- ============================================================
 -- Step 4B: ApplyFromDB refactor helpers (spec-driven apply)
 -- ============================================================
-local MSUF_INDICATOR_ORDER = { "leader", "raidmarker", "level" }
+local MSUF_INDICATOR_ORDER = { "leader", "raidmarker", "level", "eliteicon" }
 local function MSUF_ReadBool(conf, g, field, defaultVal)
     local v = conf and conf[field]
     if v == nil and g then v = g[field] end
@@ -670,6 +710,11 @@ local MSUF_COPY_INDICATOR_FIELDS = {
     "levelIndicatorOffsetY",
     "levelIndicatorAnchor",
     "levelIndicatorSize",
+    "showEliteIcon",
+    "eliteIconSize",
+    "eliteIconAnchor",
+    "eliteIconOffsetX",
+    "eliteIconOffsetY",
 }
 MSUF_COPY_STATUSICON_FIELDS = {
     -- Status Indicators / Icons (per-unitframe)
@@ -1332,7 +1377,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local sizeH = 200
     local bossExtraH = 0
     local sizeBossH = sizeH + bossExtraH
-    local _msufTextBaseH = 136
+    local _msufTextBaseH = 166
     local _msufStatusBoxH = 188
     panel._msufTextBaseH = _msufTextBaseH
     panel._msufStatusBoxH = _msufStatusBoxH
@@ -1933,9 +1978,10 @@ end
 				IND_BASE_CTRL_Y + ((idx - 1) * IND_ROW_STEP)
 			)
 		 end
-		for idx, id in ipairs({ "leader", "raidmarker", "level" }) do
+		for idx, id in ipairs({ "leader", "raidmarker", "level", "eliteicon" }) do
 			_MSUF_BuildIndicatorRow(_MSUF_INDICATOR_SPECS and _MSUF_INDICATOR_SPECS[id], idx)
 		end
+
 		---------------------------------------------------------------------
 		-- Status Icons rows (Combat / Rested / Incoming Rez)  spec-driven
 		---------------------------------------------------------------------
@@ -2466,7 +2512,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         stepper:SetPoint("TOPLEFT", indicatorContainer, "TOPLEFT", indicatorColX, y)
      end
     local row = 0
-    for _, id in ipairs({ "leader", "raidmarker", "level" }) do
+    for _, id in ipairs({ "leader", "raidmarker", "level", "eliteicon" }) do
         local spec = _MSUF_INDICATOR_SPECS[id]
         if spec then
             local show = (spec.allowed and spec.allowed(currentKey)) and true or false
@@ -3086,6 +3132,9 @@ end
         if isToTKey then
             textH = textH + 28
         end
+        -- player and pet never show the elite icon row; shrink back by 30px
+        local _noEliteKey = (currentKey == "player" or currentKey == "pet")
+        if _noEliteKey then textH = textH - 30 end
         panel.playerTextLayoutGroup._msufExpandedH = textH
         if panel.playerTextLayoutGroup._msufCollapsed and panel.playerTextLayoutGroup._msufApplyCollapseState then
             panel.playerTextLayoutGroup._msufApplyCollapseState()

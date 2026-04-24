@@ -132,6 +132,7 @@ Core\MSUF_Portraits.lua
 Core\MSUF_Alpha.lua
 Core\MSUF_LoadConditions.lua
 Core\MSUF_Borders.lua
+Core\MSUF_EliteIcon.lua
 ClassPower\MSUF_CP_Constants.lua
 ClassPower\MSUF_CP_Profiles.lua
 ClassPower\Features\MSUF_CP_Balance.lua
@@ -163,6 +164,7 @@ Options\MSUF_Options_Colors.lua
 Options\MSUF_Options_ClassPower.lua
 Options\MSUF_Options_ClassPower_QuickSetup.lua
 Options\MSUF_Options_Player.lua
+Options\MSUF_Options_EliteIcon.lua
 Options\MSUF_Options_Auras.lua
 Options\MSUF_Options_Fonts.lua
 Options\MSUF_Options_Misc.lua

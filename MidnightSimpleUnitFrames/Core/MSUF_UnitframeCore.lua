@@ -1236,6 +1236,7 @@ Elements.Indicators = {
         if f.leaderIcon then f.leaderIcon:Hide() end
         if f.assistantIcon then f.assistantIcon:Hide() end
         if f.raidMarkerIcon then f.raidMarkerIcon:Hide() end
+        if f.eliteIcon then f.eliteIcon:Hide() end
     end,
     Update = function(f, conf)
         if not f then return false end
@@ -1300,6 +1301,12 @@ Elements.Indicators = {
                     f.raidMarkerIcon:Hide()
                 end
             end
+        end
+
+        -- Elite / Rare icon
+        if f.eliteIcon then
+            local updateFn = _G.MSUF_UpdateEliteIcon
+            if updateFn then updateFn(f) else f.eliteIcon:Hide() end
         end
 
         return true
