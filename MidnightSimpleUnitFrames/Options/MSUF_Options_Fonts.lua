@@ -866,7 +866,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- =====================================================================
     -- SECTION 4: Name Colors (scope-aware, default collapsed)
     -- =====================================================================
-    local colorsBox, colorsBody = MakeCollapsibleBox(content, styleBox, CONTENT_W, 250, TR("Name & Power Colors"), false)
+    local colorsBox, colorsBody = MakeCollapsibleBox(content, styleBox, CONTENT_W, 220, TR("Name & Power Colors"), false)
 
     -- ── UF: Name Color ──
     local ufNameColorLbl = UI.Label({ parent = colorsBody, text = TR("Player Name Color"),
@@ -931,23 +931,6 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
     })
 
-    -- ── UF: Elite/Rare name prefix ──
-    local elitePrefixCheck = UI.Check({
-        name = "MSUF_EliteNamePrefixCB", parent = colorsBody,
-        anchor = powerColorDrop, x = 16, y = -10, maxTextWidth = 400,
-        label = TR("Show + prefix for Elite / Rare unit names"),
-        get = function()
-            local g = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
-            return (g and g.eliteNamePrefix == true) and true or false
-        end,
-        set = function(v)
-            local g = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
-            if g then g.eliteNamePrefix = v end
-            InvalidateTextSpecs()
-            LiveSyncFontVisuals({ refreshPower = false, layout = "NAME_COLORS" })
-        end,
-    })
-
     -- Track UF color widgets
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = ufNameColorLbl
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = nameClassColorDrop
@@ -955,7 +938,6 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = npcNameRedDrop
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = ufPowerColorLbl
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = powerColorDrop
-    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = elitePrefixCheck
 
     -- backward compat refs (panel stores used by Options_Core)
     local nameClassColorCheck = nameClassColorDrop

@@ -750,14 +750,6 @@ function ns.Text.ApplyName(frame, unit, overrideText)
         show = false
         txt = ""
     end
-    local g = MSUF_DB and MSUF_DB.general
-    if g and g.eliteNamePrefix then
-        local cls = _G.UnitClassification and _G.UnitClassification(unit)
-        if cls == "elite" or cls == "rareelite" or cls == "rare"
-           or cls == "boss" or cls == "worldboss" then
-            txt = "+" .. txt
-        end
-    end
     ns.Text.Set(frame.nameText, txt, show)
  end
 function ns.Text.ApplyLevel(frame, unit, conf, overrideText, forceShow)
