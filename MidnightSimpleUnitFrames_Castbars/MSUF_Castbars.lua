@@ -1012,8 +1012,8 @@ do
 
         -- Duration-object path (modern API): we only maintain time text + safety stop.
 
-        -- Player channel haste markers: low-cadence refresh (no per-frame OnUpdate).
-        if frame.unit == "player" and frame.MSUF_isChanneled and frame.MSUF_channelHasteMarkers then
+        -- Player channel tick markers: low-cadence refresh (no per-frame OnUpdate).
+        if frame.unit == "player" and frame.MSUF_isChanneled and frame._msufPlayerChannelHasteMarkers then
             if mc >= (frame._msufHasteMarkersNext or 0) then
                 frame._msufHasteMarkersNext = mc + 0.15
                 MSUF_PlayerChannelHasteMarkers_Update(frame, false)
