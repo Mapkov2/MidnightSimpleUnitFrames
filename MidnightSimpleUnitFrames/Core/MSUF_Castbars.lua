@@ -7,6 +7,9 @@ local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local string_format = string.format
 local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 local FONT_LIST = _G.MSUF_FONT_LIST
+local ResolveFontPath = (ns and ns.Util and ns.Util.ResolveFontPath) or _G.MSUF_ResolveFontPath or function(path)
+    return path or "Fonts\\FRIZQT__.TTF"
+end
 
 -- ══════════════════════════════════════════════════════════════
 -- Castbar unit info, textures, style cache, font helpers
@@ -128,7 +131,8 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
     if type(MSUF_SyncCastbarPositionPopup) == "function" then
         MSUF_SyncCastbarPositionPopup(unitKey)
     end
- end
+end
+local MSUF_GetFontFlags
 local function MSUF_GetFontPath()
     if not MSUF_DB then EnsureDB() end
     MSUF_DB = MSUF_DB or {}
@@ -138,16 +142,16 @@ local function MSUF_GetFontPath()
     if LSM and key and key ~= "" then
         local p = LSM:Fetch("font", key, true)
         if p then
-             return p
+             return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags())
     end
     end
     local internalPath = GetInternalFontPathByKey(key)
     if internalPath then
-         return internalPath
+         return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags())
     end
-    return FONT_LIST[1].path
+    return ResolveFontPath(FONT_LIST[1].path, g.fontSize or 14, MSUF_GetFontFlags())
 end
-local function MSUF_GetFontFlags()
+MSUF_GetFontFlags = function()
     if not MSUF_DB then EnsureDB() end
     MSUF_DB = MSUF_DB or {}
     MSUF_DB.general = MSUF_DB.general or {}

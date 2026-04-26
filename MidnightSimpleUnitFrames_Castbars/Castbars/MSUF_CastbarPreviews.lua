@@ -603,7 +603,7 @@ function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
         -- Icon visibility must be controlled by the normal preview layout (Show Icon toggle).
         -- We only ensure a stable, non-secret texture is present when the icon is shown.
         if f.icon and f.icon.SetTexture then
-            f.icon:SetTexture("Interface\Icons\INV_Misc_QuestionMark")
+            f.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
         end
 
         local showTime = (g.showBossCastTime ~= false)

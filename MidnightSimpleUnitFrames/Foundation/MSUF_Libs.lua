@@ -1,6 +1,104 @@
 local addonName, ns = ...
 ns = ns or {}
 
+-- WoW 12.0.5+ can throw hard errors when SetFont receives a missing asset.
+-- Validate/canonicalize selected font paths once and cache the result, so hot
+-- SetFont paths can stay plain SetFont calls.
+do
+    local FALLBACK_FONT = "Fonts\\FRIZQT__.TTF"
+    local FONT_ALIASES = {
+        ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
+        ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway regular.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
+    }
+    local _probeFrame, _probeFS
+    local _fontPathCache = {}
+
+    local function NormalizeFontFlags(flags)
+        if type(flags) ~= "string" then return "" end
+        flags = flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+        if flags == "NONE" then return "" end
+        if flags:find(",", 1, true) or flags:find("%s") then
+            flags = flags:gsub("%s*,%s*", ","):gsub(",+", ",")
+            flags = flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+        end
+        return flags
+    end
+
+    local function NormalizeFontPath(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        local key = path:gsub("/", "\\"):lower()
+        return FONT_ALIASES[key] or path
+    end
+
+    local function GetProbeFS()
+        if _probeFS then return _probeFS end
+        if type(CreateFrame) ~= "function" then return nil end
+        _probeFrame = _probeFrame or CreateFrame("Frame", "MSUF_FontProbeFrame", UIParent)
+        if _probeFrame and _probeFrame.Hide then _probeFrame:Hide() end
+        if _probeFrame and _probeFrame.CreateFontString then
+            _probeFS = _probeFrame:CreateFontString(nil, "OVERLAY")
+            if _probeFS and _probeFS.Hide then _probeFS:Hide() end
+        end
+        return _probeFS
+    end
+
+    local function TrySetFont(fs, path, size, flags)
+        if not (fs and type(fs.SetFont) == "function" and path and size) then return false end
+        return pcall(fs.SetFont, fs, path, size, flags)
+    end
+
+    function _G.MSUF_NormalizeFontFlags(flags)
+        return NormalizeFontFlags(flags)
+    end
+
+    function _G.MSUF_NormalizeFontPath(path)
+        return NormalizeFontPath(path)
+    end
+
+    function _G.MSUF_ResolveFontPath(path, size, flags)
+        size = tonumber(size) or 12
+        if size <= 0 then size = 12 end
+        flags = NormalizeFontFlags(flags)
+
+        local normalized = NormalizeFontPath(path)
+        local cacheKey = tostring(normalized or "") .. "|" .. tostring(flags)
+        local cached = _fontPathCache[cacheKey]
+        if cached then return cached end
+
+        local candidates = {}
+        local seen = {}
+        local function Add(p)
+            p = NormalizeFontPath(p)
+            if type(p) ~= "string" or p == "" or seen[p] then return end
+            seen[p] = true
+            candidates[#candidates + 1] = p
+        end
+
+        Add(normalized)
+        Add(STANDARD_TEXT_FONT)
+        Add(FALLBACK_FONT)
+        Add("Fonts\\ARIALN.TTF")
+
+        local probe = GetProbeFS()
+        if probe then
+            for i = 1, #candidates do
+                local p = candidates[i]
+                if TrySetFont(probe, p, size, flags) or (flags ~= "" and TrySetFont(probe, p, size, "")) then
+                    _fontPathCache[cacheKey] = p
+                    return p
+                end
+            end
+        end
+
+        local fallback = NormalizeFontPath(STANDARD_TEXT_FONT) or FALLBACK_FONT
+        _fontPathCache[cacheKey] = fallback
+        return fallback
+    end
+
+    ns.Util = ns.Util or {}
+    ns.Util.ResolveFontPath = _G.MSUF_ResolveFontPath
+end
+
 -- Shared Lib initialization (loaded BEFORE Options and Main)
 -- Goal: stable ns.LSM reference regardless of load order / refactors.
 

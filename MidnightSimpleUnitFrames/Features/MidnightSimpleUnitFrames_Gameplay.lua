@@ -138,6 +138,9 @@ local ipairs                = ipairs
 
 local LibStub       = LibStub
 local LSM           = LibStub and LibStub("LibSharedMedia-3.0", true)
+local ResolveFontPath = _G.MSUF_ResolveFontPath or function(path)
+    return path or "Fonts\\FRIZQT__.TTF"
+end
 
 ------------------------------------------------------
 -- UpdateManager accessor (avoid repeating global lookups everywhere)
@@ -434,6 +437,7 @@ local function GetGameplayFontSettings(kind)
     else
         flags = "OUTLINE"
     end
+    fontPath = ResolveFontPath(fontPath, general.fontSize or 14, flags)
 
     -- FONT COLOR (reuse MSUF_FONT_COLORS global)
     local colorKey = (general.fontColor or "white"):lower()

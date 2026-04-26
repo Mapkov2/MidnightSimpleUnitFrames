@@ -1345,6 +1345,9 @@ local function MSUF_GetFontPreviewObject(key)
     if not path then
         path = GetInternalFontPathByKey(key) or FONT_LIST[1].path
     end
+    if type(_G.MSUF_ResolveFontPath) == "function" then
+        path = _G.MSUF_ResolveFontPath(path, 14, "")
+    end
     obj:SetFont(path, 14, "")
      return obj
 end

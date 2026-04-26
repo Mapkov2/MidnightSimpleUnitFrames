@@ -44,6 +44,10 @@ local function SafeCall(fn, ...)
     return nil
 end
 
+local ResolveFontPath = (ns and ns.Util and ns.Util.ResolveFontPath) or _G.MSUF_ResolveFontPath or function(path)
+    return path or "Fonts\\FRIZQT__.TTF"
+end
+
 -- PERF: Resolve time source once at load.
 local _BossNow = _G.GetTimePreciseSec or _G.GetTime or function() return 0 end
 local function MSUF_Now()
@@ -194,6 +198,7 @@ local function MSUF_GetGlobalFontPack_Boss()
     g = (g ~= nil) and g or 1
     b = (b ~= nil) and b or 1
     baseSize = tonumber(baseSize) or 12
+    path = ResolveFontPath(path, baseSize, flags)
     useShadow = useShadow and true or false
     return path, flags, r, g, b, baseSize, useShadow
 end
@@ -509,39 +514,6 @@ if self.statusBar and self.statusBar.SetReverseFill then
         rf = SafeCall(_G.MSUF_GetCastbarReverseFill) or false
     end
     SafeCall(self.statusBar.SetReverseFill, self.statusBar, rf and true or false)
-end
-
--- Spark (leading-edge highlight) — lazy-create if absent
-if self.statusBar then
-    local showSpark = g.castbarShowSpark == true
-    local sparkTex = self.spark
-    if showSpark and not sparkTex then
-        sparkTex = self.statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
-        sparkTex:SetTexture(4417031)
-        sparkTex:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
-        sparkTex:SetDesaturated(true)
-        sparkTex:SetVertexColor(1, 1, 1, 1)
-        sparkTex:SetBlendMode("ADD")
-        self.spark = sparkTex
-    end
-    if sparkTex then
-        sparkTex:SetShown(showSpark)
-        if showSpark then
-            local overflow = (g.castbarSparkOverflow ~= false)
-            local sparkH = overflow and math.max(4, h * 2.1) or h
-            sparkTex:SetSize(16, sparkH)
-            local fillTex = self.statusBar:GetStatusBarTexture()
-            if fillTex then
-                sparkTex:ClearAllPoints()
-                sparkTex:SetPoint("CENTER", fillTex, "RIGHT", 0, 0)
-            end
-        end
-    end
-end
-
--- Kick ready indicator
-if type(_G.MSUF_KickReady_ApplyLayout) == "function" then
-    _G.MSUF_KickReady_ApplyLayout(self)
 end
 
     end

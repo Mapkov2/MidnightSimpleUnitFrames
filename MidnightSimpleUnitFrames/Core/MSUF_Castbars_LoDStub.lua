@@ -34,6 +34,21 @@ local function _GetGeneral()
     _EnsureDB()
     return (MSUF_DB and MSUF_DB.general) or {}
 end
+
+local function _ShouldLoadForBoss()
+    if _IsLoaded(CASTBARS_ADDON) then
+        return true
+    end
+
+    local g = _GetGeneral()
+    if g.enableBossCastbar == false then
+        return false
+    end
+    if MSUF_DB and MSUF_DB.boss and MSUF_DB.boss.enabled == false then
+        return false
+    end
+    return true
+end
 ---------------------------------------------------------------------
 -- Blizzard castbar ownership handshake (stub-level)
 --
