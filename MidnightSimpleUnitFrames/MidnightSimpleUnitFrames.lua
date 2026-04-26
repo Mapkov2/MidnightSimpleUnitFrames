@@ -5696,7 +5696,8 @@ local function CreateSimpleUnitFrame(unit)
     end
         -- Elite / Rare icon (target, focus, targettarget, boss)
         local _eliteUnitKey = (type(unit) == "string" and unit:sub(1,4) == "boss") and "boss" or unit
-        if _G.VALID_UNITS and _G.VALID_UNITS[_eliteUnitKey] and not f.eliteIcon then
+        local _eliteValidUnits = ns.MSUF_EliteValidUnits
+        if _eliteValidUnits and _eliteValidUnits[_eliteUnitKey] and not f.eliteIcon then
             local tex = ns.UF.MakeTex(f, "eliteIcon", "textFrame", "OVERLAY", 7)
             tex:SetSize(20, 20)
             tex:Hide()

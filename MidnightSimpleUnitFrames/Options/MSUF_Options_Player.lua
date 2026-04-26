@@ -4360,6 +4360,10 @@ MSUF_RefreshRaidMarkerFrames = function()
 MSUF_RefreshLevelIndicatorFrames = function()
     MSUF_RefreshFrames(MSUF_ALL_UF_TOKENS, "MSUF_ApplyLevelIndicatorLayout")
  end
+-- Elite / rare icon offset/anchor/size (target, focus, targettarget, boss only): live update
+MSUF_RefreshEliteIconFrames = function()
+    MSUF_RefreshFrames({ "target", "focus", "targettarget", "boss1", "boss2", "boss3", "boss4", "boss5" }, "MSUF_ApplyEliteIconLayout")
+ end
     -- Portrait dropdown (all unitframes) [spec-driven]
     MSUF_BindPortraitDropdown(panel, "playerPortraitDropDown", IsFramesTab, EnsureKeyDB, ApplyCurrent)
     -- portraitClassStyle binding moved to MSUF_Options_Portraits.lua

@@ -164,7 +164,6 @@ Options\MSUF_Options_Colors.lua
 Options\MSUF_Options_ClassPower.lua
 Options\MSUF_Options_ClassPower_QuickSetup.lua
 Options\MSUF_Options_Player.lua
-Options\MSUF_Options_EliteIcon.lua
 Options\MSUF_Options_Auras.lua
 Options\MSUF_Options_Fonts.lua
 Options\MSUF_Options_Misc.lua
