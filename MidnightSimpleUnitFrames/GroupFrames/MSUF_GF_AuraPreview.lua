@@ -1686,13 +1686,13 @@ function GF.RefreshPreviewHandles()
         }
         local CI_CAT_COLORS = {
             dispel  = { 0.25, 0.75, 1.00 },
-            boss    = { 1.00, 0.15, 0.15 },
-            missing = { 0.80, 0.80, 0.80 },
+            aggro   = { 1.00, 0.55, 0.00 },
+            -- custom: per-slot color resolved from conf.ciCustomXX.r/g/b below
         }
         local CI_CAT_LABELS = {
             dispel  = "D",
-            boss    = "B",
-            missing = "M",
+            aggro   = "A",
+            custom  = "C",
         }
 
         if not _mockFrame._ciDots then _mockFrame._ciDots = {} end
@@ -1725,6 +1725,20 @@ function GF.RefreshPreviewHandles()
             local dbKey = "ciSlot" .. spec.key
             local cat = conf[dbKey] or "none"
             local c = CI_CAT_COLORS[cat]
+            -- Custom: pull color from per-slot config (or default green).
+            -- TYPE-GUARD: cc must be a table; fall back to default if not.
+            if cat == "custom" then
+                local cc = conf["ciCustom" .. spec.key]
+                if type(cc) ~= "table" then cc = nil end
+                c = { (cc and cc.r) or 0.40, (cc and cc.g) or 1.00, (cc and cc.b) or 0.40 }
+            elseif cat == "aggro" then
+                -- Override with user-configurable aggro color if set
+                c = {
+                    conf.ciAggroColorR or 1.00,
+                    conf.ciAggroColorG or 0.55,
+                    conf.ciAggroColorB or 0.00,
+                }
+            end
             local isActive = ciEnabled and cat ~= "none" and c
 
             -- Size + position

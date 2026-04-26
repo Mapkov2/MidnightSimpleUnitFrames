@@ -763,7 +763,7 @@ end
         { key = "dark",     label = "Dark Mode (dark black bars)" },
         { key = "class",    label = "Class Color Mode (color HP bars)" },
         { key = "unified",  label = "Unified Color Mode (one color for all frames)" },
-        { key = "gradient", label = "Health Gradient (red → yellow → green by HP%)" },
+        { key = "gradient", label = "Color Gradient" },
     }
 
     S.barModeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Colors_BarModeDropdown", content) or CreateFrame("Frame", "MSUF_Colors_BarModeDropdown", content, "UIDropDownMenuTemplate"))
@@ -3890,7 +3890,7 @@ S.lastControl = S.auraPanSwatch
                 elseif mode == "unified" then
                     label = "Unified Color Mode (one color for all frames)"
                 elseif mode == "gradient" then
-                    label = "Health Gradient (red → yellow → green by HP%)"
+                    label = "Color Gradient"
                 end
                 UIDropDownMenu_SetSelectedValue(S.barModeDrop, mode)
                 UIDropDownMenu_SetText(S.barModeDrop, label)

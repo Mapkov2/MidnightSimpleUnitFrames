@@ -1609,7 +1609,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Corner Indicators
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(320, L["Corner Indicators"] or "Corner Indicators", false, "ci")
+        local box, body = AddSection(560, L["Corner Indicators"] or "Corner Indicators", false, "ci")
 
         -- Helper: read/write directly from conf (not auras sub-table)
         local function CIV(key)
@@ -1631,14 +1631,28 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             set = function(_, v) CIW("ciEnabled", v and true or false) end,
         })
 
-        -- Slot category items
+        -- Slot category items (live source: GF.CI_CATEGORIES, fallback below)
         local CI_CATS = GF.CI_CATEGORIES or {
-            { key = "none",    label = "None"        },
-            { key = "dispel",  label = "Dispellable"  },
-            { key = "boss",    label = "Boss Debuff"   },
-            { key = "missing", label = "Missing Buff"  },
-            { key = "custom",  label = "Custom Spell"  },
+            { key = "none",   label = "None"          },
+            { key = "dispel", label = "Dispellable"   },
+            { key = "aggro",  label = "Aggro/Threat"  },
+            { key = "custom", label = "Custom Spell"  },
         }
+        local CI_FILTERS = GF.CI_CUSTOM_FILTERS or {
+            { key = "HELPFUL|PLAYER", label = "Buff (cast by me)",   secretSafe = true  },
+            { key = "HELPFUL",        label = "Buff (any caster)",   secretSafe = false },
+            { key = "HARMFUL|PLAYER", label = "Debuff (cast by me)", secretSafe = true  },
+            { key = "HARMFUL",        label = "Debuff (any caster)", secretSafe = false },
+        }
+        local CI_MODES = GF.CI_CUSTOM_MODES or {
+            { key = "present", label = "Show when present" },
+            { key = "missing", label = "Show when missing" },
+        }
+
+        -- Forward-decls so slot dropdown OnClick can update tab visuals + editor
+        -- when the user changes a slot's category. These are wired up by the
+        -- Custom Spell Editor block further below.
+        local _ciRefreshTabs, _ciRefreshEditor
 
         -- Slot labels for display
         local SLOT_LABELS = {
@@ -1681,6 +1695,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if nextIdx > #CI_CATS then nextIdx = 1 end
                 CIW(dbKey, CI_CATS[nextIdx].key)
                 RefreshDD()
+                if _ciRefreshTabs then _ciRefreshTabs() end
+                if _ciRefreshEditor then _ciRefreshEditor() end
             end)
             _auraRefreshFns[#_auraRefreshFns + 1] = RefreshDD
             prevRow = row
@@ -1753,16 +1769,277 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             prevRow = row
         end
 
-        -- Class buff info label
+        -- ─────────────────────────────────────────────────────────────
+        -- Custom Spell Editor: tabs for TL/TR/BL/BR/C, shared editor body.
+        -- Active tab edits its slot's ciCustomXX = { spells, mode, filter, r, g, b }.
+        -- Tabs visually highlight when the slot is set to "custom"; clicking a
+        -- non-custom-slot tab is allowed (lets user pre-configure before flipping
+        -- the dropdown). Default config is created lazily on first edit.
+        -- ─────────────────────────────────────────────────────────────
         do
-            local buffName = GF.CI_CLASS_BUFF_NAME
-            local infoFS = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            infoFS:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 6, -8)
-            if buffName then
-                infoFS:SetText("|cff888888" .. (L["Missing Class Buff tracks:"] or "Missing Class Buff tracks:") .. " |cffaaddff" .. buffName)
-            else
-                infoFS:SetText("|cff666666" .. (L["Your class has no raid-wide buff to track."] or "Your class has no raid-wide buff to track."))
+            -- Section divider
+            local hdr = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            hdr:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 6, -10)
+            hdr:SetText("|cffaaaaaaCustom Spell Configuration|r")
+
+            -- Tab strip
+            local tabStrip = CreateFrame("Frame", nil, body)
+            tabStrip:SetPoint("TOPLEFT", hdr, "BOTTOMLEFT", 0, -4)
+            tabStrip:SetSize(300, 22)
+
+            local SLOT_TAB_KEYS = GF.CI_SLOT_KEYS or { "TL", "TR", "BL", "BR", "C" }
+            local activeSlot = SLOT_TAB_KEYS[1] or "TL"
+            local tabBtns = {}
+
+            -- Forward decls (tab refresh + body refresh need each other)
+            local RefreshEditorBody, RefreshTabs
+
+            -- Helper: get/lazy-create the custom config table for a slot.
+            -- TYPE-GUARD: any non-table value (legacy number, corrupt state)
+            -- is treated as nil. createIfMissing replaces it with a default table.
+            local function GetCustomConf(slotKey, createIfMissing)
+                local conf = GF.GetConf(K())
+                if not conf then return nil end
+                local k = "ciCustom" .. slotKey
+                local cc = conf[k]
+                if type(cc) ~= "table" then
+                    cc = nil
+                    if createIfMissing then
+                        cc = {
+                            spells = "",
+                            mode   = "present",
+                            filter = "HELPFUL|PLAYER",
+                            r = 0.40, g = 1.00, b = 0.40,
+                        }
+                        conf[k] = cc
+                    else
+                        -- Stale non-table value present? Wipe so future reads see nil.
+                        if conf[k] ~= nil then conf[k] = nil end
+                    end
+                end
+                return cc
             end
+
+            -- Build 5 tab buttons (TL/TR/BL/BR/C)
+            local TAB_W, TAB_H = 30, 20
+            for i, sk in ipairs(SLOT_TAB_KEYS) do
+                local b = CreateFrame("Button", nil, tabStrip, "BackdropTemplate")
+                b:SetSize(TAB_W, TAB_H)
+                b:SetPoint("LEFT", tabStrip, "LEFT", (i - 1) * (TAB_W + 4), 0)
+                b:SetBackdrop({
+                    bgFile = "Interface\\Buttons\\WHITE8x8",
+                    edgeFile = "Interface\\Buttons\\WHITE8x8",
+                    edgeSize = 1,
+                })
+                local fs = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                fs:SetPoint("CENTER", b, "CENTER", 0, 0)
+                fs:SetText(sk)
+                b._fs = fs
+                b._slotKey = sk
+                b:SetScript("OnClick", function()
+                    activeSlot = sk
+                    if RefreshTabs then RefreshTabs() end
+                    if RefreshEditorBody then RefreshEditorBody() end
+                end)
+                tabBtns[i] = b
+            end
+
+            RefreshTabs = function()
+                for _, b in ipairs(tabBtns) do
+                    local sk = b._slotKey
+                    local cat = CIV("ciSlot" .. sk) or "none"
+                    local isActive = (sk == activeSlot)
+                    local isCustom = (cat == "custom")
+                    if isActive then
+                        b:SetBackdropColor(0.20, 0.40, 0.65, 1)
+                        b:SetBackdropBorderColor(0.45, 0.75, 1.00, 1)
+                    elseif isCustom then
+                        b:SetBackdropColor(0.10, 0.18, 0.28, 1)
+                        b:SetBackdropBorderColor(0.30, 0.55, 0.85, 0.8)
+                    else
+                        b:SetBackdropColor(0.08, 0.10, 0.14, 1)
+                        b:SetBackdropBorderColor(0.20, 0.22, 0.28, 0.6)
+                    end
+                    if b._fs then
+                        if isCustom then
+                            b._fs:SetTextColor(0.80, 0.95, 1.00, 1)
+                        else
+                            b._fs:SetTextColor(0.55, 0.55, 0.60, 1)
+                        end
+                    end
+                end
+            end
+            _auraRefreshFns[#_auraRefreshFns + 1] = RefreshTabs
+
+            -- Editor body (single set of widgets, repointed by RefreshEditorBody)
+            local editorBody = CreateFrame("Frame", nil, body)
+            editorBody:SetPoint("TOPLEFT", tabStrip, "BOTTOMLEFT", 0, -8)
+            editorBody:SetSize(420, 130)
+
+            -- Spell IDs editbox
+            local spLbl = editorBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            spLbl:SetPoint("TOPLEFT", editorBody, "TOPLEFT", 4, -2)
+            spLbl:SetText("Spell IDs (comma-separated):")
+            local spEB = CreateFrame("EditBox", "MSUF_GF_CICustomSpells", editorBody, "InputBoxTemplate")
+            spEB:SetSize(280, 18)
+            spEB:SetPoint("TOPLEFT", spLbl, "BOTTOMLEFT", 6, -2)
+            spEB:SetAutoFocus(false)
+            spEB:SetFontObject(GameFontHighlightSmall)
+            spEB:SetTextColor(1, 1, 1, 1)
+            spEB:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+            spEB:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+            spEB:SetScript("OnEditFocusLost", function(self)
+                local cc = GetCustomConf(activeSlot, true)
+                if cc then
+                    cc.spells = self:GetText() or ""
+                    cc._setStamp = nil
+                    cc._set = nil
+                end
+                GF.RefreshVisuals()
+            end)
+
+            -- Mode toggle button (present / missing)
+            local modeLbl = editorBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            modeLbl:SetPoint("TOPLEFT", spEB, "BOTTOMLEFT", -6, -10)
+            modeLbl:SetText("When:")
+            local modeBtn = CreateFrame("Button", nil, editorBody, "BackdropTemplate")
+            modeBtn:SetSize(160, 20)
+            modeBtn:SetPoint("LEFT", modeLbl, "RIGHT", 8, 0)
+            modeBtn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+            modeBtn:SetBackdropColor(0.10, 0.14, 0.22, 1)
+            modeBtn:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.7)
+            local modeFS = modeBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            modeFS:SetPoint("CENTER", modeBtn, "CENTER", 0, 0)
+            modeFS:SetTextColor(0.40, 0.67, 0.93, 1)
+            modeBtn:SetScript("OnClick", function()
+                local cc = GetCustomConf(activeSlot, true)
+                if not cc then return end
+                local cur = cc.mode or "present"
+                local nextIdx = 1
+                for ci, item in ipairs(CI_MODES) do
+                    if item.key == cur then nextIdx = ci + 1; break end
+                end
+                if nextIdx > #CI_MODES then nextIdx = 1 end
+                cc.mode = CI_MODES[nextIdx].key
+                if RefreshEditorBody then RefreshEditorBody() end
+                GF.RefreshVisuals()
+            end)
+
+            -- Filter dropdown button
+            local filtLbl = editorBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            filtLbl:SetPoint("TOPLEFT", modeLbl, "BOTTOMLEFT", 0, -10)
+            filtLbl:SetText("Filter:")
+            local filtBtn = CreateFrame("Button", nil, editorBody, "BackdropTemplate")
+            filtBtn:SetSize(180, 20)
+            filtBtn:SetPoint("LEFT", filtLbl, "RIGHT", 8, 0)
+            filtBtn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+            filtBtn:SetBackdropColor(0.10, 0.14, 0.22, 1)
+            filtBtn:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.7)
+            local filtFS = filtBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            filtFS:SetPoint("CENTER", filtBtn, "CENTER", 0, 0)
+            filtFS:SetTextColor(0.40, 0.67, 0.93, 1)
+            filtBtn:SetScript("OnClick", function()
+                local cc = GetCustomConf(activeSlot, true)
+                if not cc then return end
+                local cur = cc.filter or "HELPFUL|PLAYER"
+                local nextIdx = 1
+                for ci, item in ipairs(CI_FILTERS) do
+                    if item.key == cur then nextIdx = ci + 1; break end
+                end
+                if nextIdx > #CI_FILTERS then nextIdx = 1 end
+                cc.filter = CI_FILTERS[nextIdx].key
+                if RefreshEditorBody then RefreshEditorBody() end
+                GF.RefreshVisuals()
+            end)
+
+            -- Color swatch
+            local colLbl = editorBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            colLbl:SetPoint("TOPLEFT", filtLbl, "BOTTOMLEFT", 0, -10)
+            colLbl:SetText("Color:")
+            local colSw = CreateFrame("Button", nil, editorBody)
+            colSw:SetSize(40, 14)
+            colSw:SetPoint("LEFT", colLbl, "RIGHT", 8, 0)
+            local colTex = colSw:CreateTexture(nil, "ARTWORK")
+            colTex:SetAllPoints()
+            colSw:SetScript("OnClick", function()
+                local cc = GetCustomConf(activeSlot, true)
+                if not cc then return end
+                if OpenColorPicker then
+                    OpenColorPicker(cc.r or 0.4, cc.g or 1.0, cc.b or 0.4, function(r, g, b)
+                        cc.r, cc.g, cc.b = r, g, b
+                        colTex:SetColorTexture(r, g, b, 1)
+                        GF.RefreshVisuals()
+                    end)
+                end
+            end)
+
+            -- Warning + secret-safety hint (multi-line, dim)
+            local warnFS = editorBody:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            warnFS:SetPoint("TOPLEFT", colLbl, "BOTTOMLEFT", 0, -10)
+            warnFS:SetWidth(420)
+            warnFS:SetJustifyH("LEFT")
+
+            -- Status: shows whether the current slot is actually set to "custom"
+            local statusFS = editorBody:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            statusFS:SetPoint("BOTTOMLEFT", spEB, "TOPLEFT", -6, 22)
+
+            RefreshEditorBody = function()
+                local cc = GetCustomConf(activeSlot, false)
+                local cat = CIV("ciSlot" .. activeSlot) or "none"
+
+                -- Status line above the editor
+                if cat == "custom" then
+                    statusFS:SetText("|cff80e080●|r Editing slot " .. activeSlot .. "  (active)")
+                else
+                    statusFS:SetText("|cff888888○|r Slot " .. activeSlot .. " is set to '" .. cat .. "'. Set to 'Custom Spell' in the dropdown above to activate this configuration.")
+                end
+
+                -- Spells text
+                spEB:SetText((cc and cc.spells) or "")
+
+                -- Mode label
+                local modeKey = (cc and cc.mode) or "present"
+                local modeLabel = modeKey
+                for _, m in ipairs(CI_MODES) do if m.key == modeKey then modeLabel = m.label; break end end
+                modeFS:SetText(modeLabel)
+
+                -- Filter label + secret-safe color
+                local filtKey = (cc and cc.filter) or "HELPFUL|PLAYER"
+                local filtLabel, filtSafe = filtKey, true
+                for _, ff in ipairs(CI_FILTERS) do
+                    if ff.key == filtKey then filtLabel = ff.label; filtSafe = ff.secretSafe; break end
+                end
+                filtFS:SetText(filtLabel)
+                if filtSafe then
+                    filtFS:SetTextColor(0.40, 0.85, 0.50, 1)
+                else
+                    filtFS:SetTextColor(1.00, 0.70, 0.30, 1)
+                end
+
+                -- Color swatch
+                local cr, cg, cb = (cc and cc.r) or 0.4, (cc and cc.g) or 1.0, (cc and cc.b) or 0.4
+                colTex:SetColorTexture(cr, cg, cb, 1)
+
+                -- Warning text — depends on selected filter
+                if filtSafe then
+                    warnFS:SetText("|cff666666The selected filter is reliable in 12.0: only the local player's casts are tracked, and their spell IDs are always visible.|r")
+                else
+                    warnFS:SetText("|cffffaa55⚠ Warning:|r |cff999999This filter scans buffs/debuffs from any caster. Midnight 12.0 marks other players' aura spell IDs as 'secret', so most matches will be silently skipped. Use this filter only for spells you've verified are visible (e.g. permanent raid buffs you cast yourself).|r")
+                end
+            end
+            _auraRefreshFns[#_auraRefreshFns + 1] = RefreshEditorBody
+
+            -- Bind to outer-scope refs so slot dropdown OnClick can trigger us.
+            _ciRefreshTabs   = RefreshTabs
+            _ciRefreshEditor = RefreshEditorBody
+
+            RefreshTabs()
+            RefreshEditorBody()
+
+            -- Refresh on slot dropdown changes (chain into prev RefreshDDs).
+            -- Done by piggy-backing the global _auraRefreshFns trigger; the
+            -- existing dropdown OnClick handlers fire GF.RefreshVisuals which
+            -- ultimately re-runs the refresh fn list.
         end
     end
 
