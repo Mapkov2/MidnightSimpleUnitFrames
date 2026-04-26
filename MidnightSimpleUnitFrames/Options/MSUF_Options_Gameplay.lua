@@ -107,7 +107,7 @@ end
 
 ------------------------------------------------------
 function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
-    local panel = (_G and _G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
+    local panel = (_G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
     panel.name = "Gameplay"
 
     if panel.__MSUF_GameplayBuilt then
@@ -215,9 +215,7 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
 	    local function BindSlider(sl, key, roundFunc, after, applyNow)
         sl:SetScript("OnValueChanged", function(self, value)
             -- UI sync (panel:refresh / drag-sync) should not write DB or trigger apply.
-            if panel and panel._msufSuppressSliderChanges then
-                return
-            end
+            if panel and panel._msufSuppressSliderChanges then return end
 	            local g = EnsureGameplayDefaults()
 	            -- Defensive: only call a real round/transform function.
 	            if type(roundFunc) == "function" then
@@ -793,9 +791,7 @@ end)
                 return
             end
 
-            if not ColorPickerFrame then
-                return
-            end
+            if not ColorPickerFrame then return end
 
             local g = EnsureGameplayDefaults()
             local r, g2, b = _MSUF_NormalizeRGB(g and g[key], 1, 1, 1)
@@ -837,9 +833,7 @@ end)
 
         if field then panel[field] = sl end
         if key then BindSlider(sl, key, roundFunc, after, applyNow) end
-        -- Apply new slider style (blue thumb + fill bar)
-        local styleFn = ns.MSUF_StyleSlider or _G.MSUF_StyleSlider
-        if styleFn then styleFn(sl) end
+        if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(sl) end
         return sl
     end
 
@@ -948,7 +942,6 @@ end
             end
         end
 
-        
         -- Apply anchor immediately (independent of lock state)
         if _GetCombatFrame() then
             MSUF_Gameplay_ApplyCombatTimerAnchor(g)
@@ -1242,7 +1235,6 @@ end
         end)
         _RefreshTotemsPreviewButton()
 
-        
 -- Tip: positioning workflow
 local totemsDragHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsPreviewBtn, "BOTTOMLEFT", 0, -4, "Tip: Move the preview via mousedrag", "playerTotemsDragHint")
 panel.playerTotemsDragHint = totemsDragHint
@@ -1812,6 +1804,12 @@ _totemsLeftBottom = totemsDragHint
     end
 
     RecalcContentHeight()
+
+    -- Upgrade to smart accordion (radio + memory + auto-open)
+    if _G.MSUF_UpgradeAccordion then
+        _G.MSUF_UpgradeAccordion(allSections, RecalcContentHeight, "gameplay", panel)
+    end
+
     ------------------------------------------------------
     -- Panel scripts (refresh/okay/default)
     ------------------------------------------------------
@@ -2101,9 +2099,7 @@ _totemsLeftBottom = totemsDragHint
 
 -- Live-sync: allow the Combat Timer frame to drag-update X/Y without spamming Apply().
 function panel:MSUF_SyncCombatTimerOffsetSliders()
-    if not self.combatTimerOffsetXSlider or not self.combatTimerOffsetYSlider then
-        return
-    end
+    if not self.combatTimerOffsetXSlider or not self.combatTimerOffsetYSlider then return end
     local g = EnsureGameplayDefaults()
     self._msufSuppressSliderChanges = true
     local vx = _MSUF_RoundInt(g.combatOffsetX)
@@ -2120,9 +2116,7 @@ function panel:MSUF_SyncCombatTimerOffsetSliders()
 end
 
 function panel:MSUF_SyncFirstDanceOffsetSliders()
-    if not self.firstDanceOffsetXSlider or not self.firstDanceOffsetYSlider then
-        return
-    end
+    if not self.firstDanceOffsetXSlider or not self.firstDanceOffsetYSlider then return end
     local g = EnsureGameplayDefaults()
     self._msufSuppressSliderChanges = true
     local vx = _MSUF_RoundInt(g.firstDanceOffsetX)
@@ -2140,9 +2134,7 @@ end
 
 -- Live-sync: allow the Totem preview frame to drag-update X/Y without spamming Apply().
 function panel:MSUF_SyncTotemOffsetSliders()
-    if not self.playerTotemsOffsetXSlider or not self.playerTotemsOffsetYSlider then
-        return
-    end
+    if not self.playerTotemsOffsetXSlider or not self.playerTotemsOffsetYSlider then return end
     local g = EnsureGameplayDefaults()
     self._msufSuppressSliderChanges = true
     self.playerTotemsOffsetXSlider:SetValue(tonumber(g.playerTotemsOffsetX) or 0)
@@ -2169,7 +2161,6 @@ end
         ns.MSUF_RequestGameplayApply()
 end
 
-    
     ------------------------------------------------------
     -- Dynamic content height
     ------------------------------------------------------
@@ -2205,6 +2196,15 @@ end
     -- Und aktuelle Visuals anwenden
     ns.MSUF_RequestGameplayApply()
 
+    -- Search registration
+    if _G.MSUF_Search_RegisterRoots then
+        _G.MSUF_Search_RegisterRoots(
+            { "gameplay", "combat timer", "combat state", "crosshair",
+              "melee spell", "class specific", "spec" },
+            { "MSUF_GameplayScrollChild" }, "Gameplay"
+        )
+    end
+
     panel.__MSUF_GameplayBuilt = true
     return panel
 end
@@ -2216,7 +2216,7 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
         return ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
     end
 
-    local panel = (_G and _G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
+    local panel = (_G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
     panel.name = "Gameplay"
 
     -- IMPORTANT: Panels created with UIParent are shown by default.
@@ -2246,33 +2246,21 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 
         panel.__MSUF_LazyBuildHooked = true
 
-    
-
         panel:HookScript("OnShow", function()
 
-            if panel.__MSUF_GameplayBuilt or panel.__MSUF_GameplayBuilding then
-
-                return
-
-            end
+            if panel.__MSUF_GameplayBuilt or panel.__MSUF_GameplayBuilding then return end
 
             panel.__MSUF_GameplayBuilding = true
-
-    
 
             -- Build immediately (no C_Timer.After(0)): avoids "needs second click" issues.
 
             ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
-
-    
 
             panel.__MSUF_GameplayBuilding = nil
 
         end)
 
     end
-
-    
 
     return panel
 

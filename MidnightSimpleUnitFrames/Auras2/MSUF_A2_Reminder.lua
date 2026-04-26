@@ -1,4 +1,3 @@
--- ============================================================================
 -- MSUF_A2_Reminder.lua  Buff Reminder — Ghost icons for missing/expiring buffs
 --
 -- Own container (entry.reminder) with independent X/Y offset + Edit Mode mover.
@@ -6,7 +5,6 @@
 --
 -- Default: all reminders ON (nil = enabled). User sets key = false to disable.
 -- Secret-safe: reads Cache._msufA2_sid, Cache.GetMinRemaining.
--- ============================================================================
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
@@ -19,9 +17,7 @@ ns.__MSUF_A2_REMINDER_LOADED = true
 API.Reminder = (type(API.Reminder) == "table") and API.Reminder or {}
 local Reminder = API.Reminder
 
--- =========================================================================
 -- Hot locals
--- =========================================================================
 local type, next = type, next
 local wipe = table.wipe or function(t) for k in next, t do t[k] = nil end return t end
 local CreateFrame, GetTime = CreateFrame, GetTime
@@ -45,9 +41,7 @@ local function _GetIcon(spellId)
     return 134400
 end
 
--- =========================================================================
 -- BUFF PROVIDERS
--- =========================================================================
 local _PROVIDERS = {
     { key="FORTITUDE",       label="Power Word: Fortitude",  providerClass="PRIEST",     satisfiedBy={[21562]=true},  iconSpell=21562  },
     { key="ARCANE_INTELLECT",label="Arcane Intellect",       providerClass="MAGE",       satisfiedBy={[1459]=true},   iconSpell=1459   },
@@ -64,9 +58,7 @@ local _PROVIDERS = {
 }
 Reminder.PROVIDERS = _PROVIDERS
 
--- =========================================================================
 -- Group roster scan
--- =========================================================================
 local _presentClasses = {}
 local _playerClass = nil
 
@@ -105,7 +97,6 @@ local function _ScanRoster()
     end
 end
 
--- =========================================================================
 -- Missing / expiring computation
 --
 -- PERF STRATEGY (near-zero overhead when ON):
@@ -118,7 +109,6 @@ end
 --      actually changes (different providers missing, or timer bucket shift).
 --   4. Reverse spellId lookup: O(1) per aura instead of O(9) inner loop.
 --   5. All provider spells are whitelisted → direct arithmetic, no secret checks.
--- =========================================================================
 local _results = {}
 local _resultCount = 0
 for i = 1, 9 do _results[i] = { provider = nil, state = nil, remaining = nil } end
@@ -268,9 +258,7 @@ local function _ComputeMissing(reminders, threshold, isPreview)
     return true -- data was rescanned
 end
 
--- =========================================================================
 -- Timer text formatting
--- =========================================================================
 local function _FormatTime(sec)
     if not sec or sec <= 0 then return "" end
     sec = floor(sec)
@@ -281,9 +269,7 @@ local function _FormatTime(sec)
     return m .. "m"
 end
 
--- =========================================================================
 -- Ghost icon pool
--- =========================================================================
 local _ghostPool = {}
 local _ghostActive = 0
 
@@ -369,9 +355,7 @@ local function _HideGhosts(fromIndex)
     end
 end
 
--- =========================================================================
 -- DB helpers — read/write reminder layout fields
--- =========================================================================
 local function _GetCursorScaled()
     local scale = (UIParent and UIParent.GetEffectiveScale) and UIParent:GetEffectiveScale() or 1
     local cx, cy = GetCursorPosition()
@@ -409,10 +393,8 @@ local function _ApplyAndRefresh()
     if API.MarkDirty then API.MarkDirty("player") end
 end
 
--- =========================================================================
 -- Edit Mode Popup — Position/Size/Spacing for reminder container
 -- Matches existing MSUF popup visual style 1:1.
--- =========================================================================
 local _popup = nil
 
 -- Numeric row builder (label + editbox + stepper buttons)
@@ -529,7 +511,7 @@ local function _EnsurePopup()
 
         pcall(function()
             -- Undo
-            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+            if _G.MSUF_EM_UndoBeforeChange then
                 _G.MSUF_EM_UndoBeforeChange("aura", "player")
             end
 
@@ -637,9 +619,7 @@ end
 -- Expose for sync from mover drag
 _G.MSUF_SyncReminderPopup = Reminder.SyncPopup
 
--- =========================================================================
 -- Edit Mode Mover — writes reminderOffsetX/Y, opens popup on click
--- =========================================================================
 function Reminder.EnsureMover(entry, unit, shared)
     if not entry or unit ~= "player" then return end
     if entry.editMoverReminder then return entry.editMoverReminder end
@@ -749,7 +729,6 @@ function Reminder.EnsureMover(entry, unit, shared)
     return mover
 end
 
--- =========================================================================
 -- Render: show ghost icons into entry.reminder container
 --
 -- PERF: Three-layer gating ensures near-zero overhead when ON:
@@ -760,7 +739,6 @@ end
 --            Cost: 1 string compare. No SetSize, SetPoint, SetTexture calls.
 --   Layer 3: Individual ghost dirty checks — only update properties that
 --            actually changed (size, position, texture, state).
--- =========================================================================
 function Reminder.Render(entry, unit, shared, iconSize, spacing, growth, isEditMode)
     if unit ~= "player" then
         if _ghostActive > 0 then _HideGhosts(1); _ghostActive = 0 end
@@ -881,9 +859,7 @@ function Reminder.Render(entry, unit, shared, iconSize, spacing, growth, isEditM
     end
 end
 
--- =========================================================================
 -- Events
--- =========================================================================
 local _eventFrame = CreateFrame("Frame")
 _eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 _eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")

@@ -1,0 +1,1056 @@
+-- MSUF_GF_Render.lua — Group Frames Phase 3: Visual Pipeline
+-- Coalesced dirty-flag refresh: multiple DB writes → 1 visual update per frame per tick.
+-- Bar textures, backgrounds, borders, fonts, text layout, geometry, health colors.
+-- Midnight 12.0 secret-safe, zero combat overhead.
+local _, ns = ...
+ns = ns or (_G.MSUF_NS) or {}
+_G.MSUF_NS = ns
+
+local GF = ns.GF
+if not GF then return end
+
+local issecretvalue = _G.issecretvalue
+local C_Timer = _G.C_Timer
+local UnitExists = _G.UnitExists
+local UnitClass = _G.UnitClass
+local UnitHealth = _G.UnitHealth
+local UnitHealthMax = _G.UnitHealthMax
+local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
+local bor  = (bit and bit.bor)  or function(a, b) return a + b - (a % (b + b) >= b and b or 0) end
+local band = (bit and bit.band) or function(a, b) if a % (b + b) >= b then return b else return 0 end end
+local pairs = pairs
+local type = type
+local tonumber = tonumber
+local math_max = math.max
+local math_floor = math.floor
+
+------------------------------------------------------------------------
+-- Dirty bits (bitmask, combinable via bor)
+------------------------------------------------------------------------
+local DIRTY_GEOMETRY = 0x01   -- size, powerHeight
+local DIRTY_TEXTURE  = 0x02   -- bar texture / background
+local DIRTY_FONT     = 0x04   -- font path / size / outline / color
+local DIRTY_COLOR    = 0x08   -- health color mode, bg, power color
+local DIRTY_BORDER   = 0x10   -- border enable / size / color, aggro/target border style
+local DIRTY_LAYOUT   = 0x20   -- text anchors, icon positions
+local DIRTY_ALL      = 0x3F
+
+GF.DIRTY_GEOMETRY = DIRTY_GEOMETRY
+GF.DIRTY_TEXTURE  = DIRTY_TEXTURE
+GF.DIRTY_FONT     = DIRTY_FONT
+GF.DIRTY_COLOR    = DIRTY_COLOR
+GF.DIRTY_BORDER   = DIRTY_BORDER
+GF.DIRTY_LAYOUT   = DIRTY_LAYOUT
+GF.DIRTY_ALL      = DIRTY_ALL
+
+------------------------------------------------------------------------
+-- Dirty queue + coalesced flush
+------------------------------------------------------------------------
+local _dirtyFrames = {}   -- [frame] = bitfield
+local _flushScheduled = false
+
+local function _DoFlush()
+    _flushScheduled = false
+    GF._FlushDirty()
+end
+local function ScheduleFlush()
+    if _flushScheduled then return end
+    _flushScheduled = true
+    C_Timer.After(0, _DoFlush)
+end
+
+------------------------------------------------------------------------
+-- Apply: bar textures + gradient overlays
+------------------------------------------------------------------------
+local ApplyGradient   -- forward decl (defined after ApplyBarTexture)
+local function ApplyBarTexture(f, kind)
+    local tex   = GF.ResolveBarTexture(kind)
+    local bgTex = GF.ResolveBarBgTexture(kind)
+
+    if f.health and f.health.SetStatusBarTexture then
+        if f._msufGFCachedHTex ~= tex then
+            f.health:SetStatusBarTexture(tex)
+            f._msufGFCachedHTex = tex
+        end
+    end
+    if f.healthBg then
+        if f._msufGFCachedHBgTex ~= bgTex then
+            f.healthBg:SetTexture(bgTex)
+            f._msufGFCachedHBgTex = bgTex
+        end
+    end
+    if f.power and f.power.SetStatusBarTexture then
+        if f._msufGFCachedPTex ~= tex then
+            f.power:SetStatusBarTexture(tex)
+            f._msufGFCachedPTex = tex
+        end
+    end
+    if f.powerBg then
+        if f._msufGFCachedPBgTex ~= bgTex then
+            f.powerBg:SetTexture(bgTex)
+            f._msufGFCachedPBgTex = bgTex
+        end
+    end
+    -- Overlay bars use global absorb textures when available, else health texture
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local absorbTex = tex
+    local healAbsorbTex = tex
+    if gen then
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        if type(resolve) == "function" then
+            local aKey = gen.absorbBarTexture
+            if aKey and aKey ~= "" then
+                local p = resolve(aKey)
+                if p then absorbTex = p end
+            end
+            local haKey = gen.healAbsorbBarTexture
+            if haKey and haKey ~= "" then
+                local p = resolve(haKey)
+                if p then healAbsorbTex = p end
+            end
+        end
+    end
+    if f.incomingHealBar and f.incomingHealBar.SetStatusBarTexture then
+        f.incomingHealBar:SetStatusBarTexture(tex)
+    end
+    if f.absorbBar and f.absorbBar.SetStatusBarTexture then
+        f.absorbBar:SetStatusBarTexture(absorbTex)
+    end
+    if f.healAbsorbBar and f.healAbsorbBar.SetStatusBarTexture then
+        f.healAbsorbBar:SetStatusBarTexture(healAbsorbTex)
+    end
+
+    -- Gradient overlays (reads from MSUF_DB.general — same source as main UF)
+    ApplyGradient(f)
+end
+
+------------------------------------------------------------------------
+-- Gradient overlays: lazy-create + apply from MSUF_DB.general
+-- Mirrors main UF gradient system (4-directional, per-edge toggles)
+------------------------------------------------------------------------
+local function _GF_MakeGradTex(bar)
+    local t = bar:CreateTexture(nil, "OVERLAY")
+    t:SetTexture("Interface\\Buttons\\WHITE8x8")
+    t:SetBlendMode("BLEND")
+    t:Hide()
+    return t
+end
+
+local function _GF_EnsureGradients(bar)
+    if bar._msufGFGrads then return bar._msufGFGrads end
+    local g = {
+        left  = _GF_MakeGradTex(bar),
+        right = _GF_MakeGradTex(bar),
+        up    = _GF_MakeGradTex(bar),
+        down  = _GF_MakeGradTex(bar),
+    }
+    bar._msufGFGrads = g
+    return g
+end
+
+local function _GF_SetGrad(tex, orientation, a1, a2, strength)
+    if not tex then return end
+    if tex.SetGradientAlpha then
+        tex:SetGradientAlpha(orientation, 0, 0, 0, a1, 0, 0, 0, a2)
+    elseif tex.SetGradient then
+        local CreateColor = _G.CreateColor
+        if CreateColor then
+            tex:SetGradient(orientation, CreateColor(0, 0, 0, a1), CreateColor(0, 0, 0, a2))
+        else
+            tex:SetColorTexture(0, 0, 0, (a1 > a2) and a1 or a2)
+        end
+    end
+    if strength > 0 then tex:Show() else tex:Hide() end
+end
+
+local function _GF_ApplyGradientToBar(bar, gen, isPower)
+    if not bar then return end
+    local strength = gen.gradientStrength or 0.45
+    if isPower then
+        if gen.enablePowerGradient == false then strength = 0 end
+    else
+        if gen.enableGradient == false then strength = 0 end
+    end
+    local grads = _GF_EnsureGradients(bar)
+    if strength <= 0 then
+        for _, k in ipairs({"left","right","up","down"}) do if grads[k] then grads[k]:Hide() end end
+        return
+    end
+    -- Read per-edge toggles (same keys as main UF)
+    local left  = (gen.gradientDirLeft == true)
+    local right = (gen.gradientDirRight == true)
+    local up    = (gen.gradientDirUp == true)
+    local down  = (gen.gradientDirDown == true)
+    -- Legacy: migrate single gradientDirection
+    if not left and not right and not up and not down then
+        local dir = gen.gradientDirection
+        if dir == "LEFT" then left = true
+        elseif dir == "UP" then up = true
+        elseif dir == "DOWN" then down = true
+        else right = true end
+    end
+    -- Left
+    if left then
+        local t = grads.left; t:ClearAllPoints()
+        if right then t:SetPoint("TOPLEFT", bar); t:SetPoint("BOTTOMLEFT", bar); t:SetPoint("RIGHT", bar, "CENTER")
+        else t:SetAllPoints(bar) end
+        _GF_SetGrad(t, "HORIZONTAL", strength, 0, strength)
+    elseif grads.left then grads.left:Hide() end
+    -- Right
+    if right then
+        local t = grads.right; t:ClearAllPoints()
+        if left then t:SetPoint("TOPRIGHT", bar); t:SetPoint("BOTTOMRIGHT", bar); t:SetPoint("LEFT", bar, "CENTER")
+        else t:SetAllPoints(bar) end
+        _GF_SetGrad(t, "HORIZONTAL", 0, strength, strength)
+    elseif grads.right then grads.right:Hide() end
+    -- Up
+    if up then
+        local t = grads.up; t:ClearAllPoints()
+        if down then t:SetPoint("TOPLEFT", bar); t:SetPoint("TOPRIGHT", bar); t:SetPoint("BOTTOM", bar, "CENTER")
+        else t:SetAllPoints(bar) end
+        _GF_SetGrad(t, "VERTICAL", 0, strength, strength)
+    elseif grads.up then grads.up:Hide() end
+    -- Down
+    if down then
+        local t = grads.down; t:ClearAllPoints()
+        if up then t:SetPoint("BOTTOMLEFT", bar); t:SetPoint("BOTTOMRIGHT", bar); t:SetPoint("TOP", bar, "CENTER")
+        else t:SetAllPoints(bar) end
+        _GF_SetGrad(t, "VERTICAL", strength, 0, strength)
+    elseif grads.down then grads.down:Hide() end
+end
+
+ApplyGradient = function(f)
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if not gen then return end
+    if f.health then _GF_ApplyGradientToBar(f.health, gen, false) end
+    if f.power  then _GF_ApplyGradientToBar(f.power,  gen, true)  end
+end
+
+------------------------------------------------------------------------
+-- Apply: bar background tint (missing-health / missing-power background)
+--
+-- Behind-Bar Z-Order Fix:
+-- Original healthBg is a texture on health (level N+1). Behind-bar icons
+-- at level N are invisible beneath it. Fix: when ANY aura group uses
+-- behind-bar, hide original healthBg and create a replacement texture
+-- on barGroup at ARTWORK sublevel -7 (below icons but above barGroup bg).
+-- Icons then sit between replacement-bg and health fill.
+--
+-- Z-Order (behind-bar active):
+--   barGroup backdrop   (N, BG)       → dark frame bg
+--   replacement-bg      (N, ART, -7)  → health area tint (configurable alpha)
+--   aura icon frames    (N+1)         → icons visible above tint
+--   health fill         (N+1, ART)    → HP bar covers icons where HP present
+------------------------------------------------------------------------
+local function ApplyBackgroundTint(f, kind)
+    local conf = GF.GetConf(kind)
+    local r = conf.bgR or 0.1
+    local g = conf.bgG or 0.1
+    local b = conf.bgB or 0.1
+    local a = conf.bgA or 0.85
+    local hpBgA = conf.hpBgAlpha or a
+
+    -- Detect if any aura group uses behind-bar
+    local auras = conf.auras
+    local anyBehindBar = false
+    if auras then
+        local bu, de, ex = auras.buff, auras.debuff, auras.externals
+        if (bu and bu.behindBar) or (de and de.behindBar) or (ex and ex.behindBar) then
+            anyBehindBar = true
+        end
+    end
+
+    if anyBehindBar and f.health and f.barGroup then
+        -- Hide original healthBg (stuck at health's level, covers icons)
+        if f.healthBg then f.healthBg:Hide() end
+        -- Lazy-create replacement bg texture on barGroup (lower level)
+        if not f._msufBehindBarBg then
+            f._msufBehindBarBg = f.barGroup:CreateTexture(nil, "ARTWORK", nil, -7)
+        end
+        local bbBg = f._msufBehindBarBg
+        bbBg:SetAllPoints(f.health)
+        bbBg:SetTexture(GF.ResolveBarBgTexture(kind))
+        if f._msufBBgR ~= r or f._msufBBgG ~= g or f._msufBBgB ~= b or f._msufBBgA ~= hpBgA then
+            f._msufBBgR, f._msufBBgG, f._msufBBgB, f._msufBBgA = r, g, b, hpBgA
+            bbBg:SetVertexColor(r, g, b, hpBgA)
+        end
+        bbBg:Show()
+        f._msufBehindBarActive = true
+    else
+        -- Restore original healthBg
+        if f._msufBehindBarActive then
+            if f.healthBg then f.healthBg:Show() end
+            if f._msufBehindBarBg then f._msufBehindBarBg:Hide() end
+            f._msufBehindBarActive = nil
+        end
+        if f.healthBg then
+            if f._msufGFCachedHBgR ~= r or f._msufGFCachedHBgG ~= g
+               or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= hpBgA then
+                f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, hpBgA
+                f.healthBg:SetVertexColor(r, g, b, hpBgA)
+            end
+        end
+    end
+
+    if f.powerBg then
+        if f._msufGFCachedPBgR ~= r or f._msufGFCachedPBgG ~= g
+           or f._msufGFCachedPBgB ~= b or f._msufGFCachedPBgA ~= a then
+            f._msufGFCachedPBgR, f._msufGFCachedPBgG, f._msufGFCachedPBgB, f._msufGFCachedPBgA = r, g, b, a
+            f.powerBg:SetVertexColor(r, g, b, a)
+        end
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply: frame border (backdrop bg + edge)
+-- Reuses shared tables to avoid allocation per-call
+------------------------------------------------------------------------
+local _bgOnlyBd = { bgFile = "Interface\\Buttons\\WHITE8x8" }
+local _borderBd = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
+
+local function ApplyFrameBorder(f, kind)
+    local conf = GF.GetConf(kind)
+    local bg = f.barGroup
+    if not bg then return end
+
+    bg:SetBackdrop(_bgOnlyBd)
+    bg:SetBackdropColor(
+        conf.bgR or 0.1, conf.bgG or 0.1,
+        conf.bgB or 0.1, conf.bgA or 0.85)
+
+    local bf = f._msufGFBorderFrame
+    if bf then
+        local borderSize = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2
+        if borderSize > 0 then
+            _borderBd.edgeSize = borderSize
+            bf:SetBackdrop(_borderBd)
+            bf:SetBackdropColor(0, 0, 0, 0)
+            bf:SetBackdropBorderColor(0, 0, 0, 1)
+            bf:Show()
+        else
+            bf:Hide()
+        end
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply: effect border styles (aggro + target — pre-configure, hidden)
+------------------------------------------------------------------------
+local function ApplyEffectBorderStyles(f, kind)
+    local hlSz  = math_max(1, tonumber(GF.GetHighlightVal(kind, "hlAggroSize")) or 2)
+    local hlOfs = tonumber(GF.GetHighlightVal(kind, "hlAggroOffset")) or 0
+    local hlLay = GF.GetHighlightVal(kind, "hlAggroLayer") or "DEFAULT"
+    local anchor = f.barGroup or f
+    local baseLvl = anchor:GetFrameLevel()
+
+    local hb = f._msufGFHighlightBorder
+    if hb then
+        hb:ClearAllPoints()
+        hb:SetPoint("TOPLEFT", -hlOfs, hlOfs)
+        hb:SetPoint("BOTTOMRIGHT", hlOfs, -hlOfs)
+        hb:SetFrameLevel(hlLay == "ABOVE_BORDER" and baseLvl + 8 or baseLvl + 3)
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply: fonts
+------------------------------------------------------------------------
+local function ApplyFonts(f, kind)
+    local conf      = GF.GetConf(kind)
+    local fontPath   = GF.ResolveFontPath(kind)
+    local fontFlags  = GF.ResolveFontFlags(kind)
+    local fr, fg, fb = GF.ResolveFontColor(kind)
+    local fScale     = conf._resolvedFrameScale or 1
+    local nameSize   = (conf.nameFontSize  or 12) * fScale
+    local hpSize     = (conf.hpFontSize    or 10) * fScale
+    local powSize    = (conf.powerFontSize or 9)  * fScale
+    -- Floor font sizes (min 6px for readability)
+    nameSize = math_max(6, math_floor(nameSize + 0.5))
+    hpSize   = math_max(6, math_floor(hpSize + 0.5))
+    powSize  = math_max(6, math_floor(powSize + 0.5))
+
+    -- Diff-gate: skip SetTextColor when font color unchanged
+    local colorChanged = (f._msufGFCachedFR ~= fr or f._msufGFCachedFG ~= fg or f._msufGFCachedFB ~= fb)
+    if colorChanged then
+        f._msufGFCachedFR, f._msufGFCachedFG, f._msufGFCachedFB = fr, fg, fb
+    end
+
+    -- Skip redundant SetFont (path+size compare) + SetTextColor (color compare)
+    local function set(fs, size, r, g, b, a)
+        if not fs then return end
+        local curP, curS = fs:GetFont()
+        if curP ~= fontPath or curS ~= size then
+            fs:SetFont(fontPath, size, fontFlags)
+        end
+        if r and colorChanged then fs:SetTextColor(r, g, b, a or 1) end
+        fs:SetShadowOffset(0, 0)
+    end
+
+    set(f.nameText,              nameSize,     fr, fg, fb, 1)
+    set(f.textLeftFS,            hpSize,       fr, fg, fb, 0.9)
+    set(f.textCenterFS,          hpSize,       fr, fg, fb, 0.9)
+    set(f.textRightFS,           hpSize,       fr, fg, fb, 0.9)
+    set(f.statusIndicatorText,   nameSize + 2, nil, nil, nil)
+    set(f.powerTextLeftFS,       powSize,      fr, fg, fb, 0.9)
+    set(f.powerTextCenterFS,     powSize,      fr, fg, fb, 0.9)
+    set(f.powerTextRightFS,      powSize,      fr, fg, fb, 0.9)
+    if f.groupNumberText then
+        local gnSize = conf.groupNumberSize or 10
+        if fScale ~= 1 then gnSize = math_max(6, math_floor(gnSize * fScale + 0.5)) end
+        set(f.groupNumberText, gnSize, fr, fg, fb, 0.7)
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply: geometry (bar anchors, power height)
+------------------------------------------------------------------------
+local function ApplyGeometry(f, kind)
+    local conf   = GF.GetConf(kind)
+    local powerH = conf.powerHeight or 6
+    local inset  = math_max(0, (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2)
+
+    if f.health then
+        f.health:ClearAllPoints()
+        f.health:SetPoint("TOPLEFT", f.barGroup, "TOPLEFT", inset, -inset)
+        f.health:SetPoint("BOTTOMRIGHT", f.barGroup, "BOTTOMRIGHT",
+            -inset, powerH > 0 and (powerH + inset) or inset)
+    end
+
+    if f.power then
+        f.power:ClearAllPoints()
+        f.power:SetPoint("BOTTOMLEFT",  f.barGroup, "BOTTOMLEFT",  inset, inset)
+        f.power:SetPoint("BOTTOMRIGHT", f.barGroup, "BOTTOMRIGHT", -inset, inset)
+        if powerH > 0 then
+            f.power:SetHeight(powerH)
+            f.power:Show()
+        else
+            f.power:SetHeight(0.001)
+            f.power:Hide()
+        end
+    end
+
+    -- Reverse fill
+    if f.health and f.health.SetReverseFill then
+        f.health:SetReverseFill(conf.reverseFill and true or false)
+    end
+end
+
+------------------------------------------------------------------------
+-- Resolve bar color for a class token (shared by live + preview)
+-- Respects global Colors menu custom class color overrides.
+------------------------------------------------------------------------
+local function ResolveClassColor(cls)
+    if not cls then return nil end
+    local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
+    if type(fastClass) == "function" then
+        local r, g, b = fastClass(cls)
+        if r then return r, g, b end
+    end
+    local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]
+    if cc then return cc.r, cc.g, cc.b end
+    return nil
+end
+
+------------------------------------------------------------------------
+-- Apply: health color (GF-independent barMode, then global fallback)
+------------------------------------------------------------------------
+local function ApplyHealthColor(f, kind, unit)
+    if not f.health then return end
+
+    -- Spell Indicator health color override takes precedence
+    if f._msufSIHealthColorR then
+        f.health:SetStatusBarColor(f._msufSIHealthColorR, f._msufSIHealthColorG or 0, f._msufSIHealthColorB or 0, 1)
+        return
+    end
+
+    local conf = GF.GetConf(kind)
+    local gfMode = conf.gfBarMode  -- nil/"GLOBAL" = follow UF
+
+    -- Resolve effective mode
+    local mode
+    if gfMode and gfMode ~= "GLOBAL" then
+        mode = gfMode
+    else
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local globalMode = cache and cache.barMode
+        if globalMode == "dark" or globalMode == "unified" then
+            mode = globalMode
+        else
+            mode = conf.healthColorMode or "CLASS"
+        end
+    end
+
+    if mode == "dark" then
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local r = conf.gfDarkR or (cache and cache.darkBarR) or 0
+        local g = conf.gfDarkG or (cache and cache.darkBarG) or 0
+        local b = conf.gfDarkB or (cache and cache.darkBarB) or 0
+        f.health:SetStatusBarColor(r, g, b, 1)
+        return
+    end
+    if mode == "unified" then
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = type(getCache) == "function" and getCache() or nil
+        local r = conf.gfUnifiedR or (cache and cache.unifiedBarR) or 0.10
+        local g = conf.gfUnifiedG or (cache and cache.unifiedBarG) or 0.60
+        local b = conf.gfUnifiedB or (cache and cache.unifiedBarB) or 0.90
+        f.health:SetStatusBarColor(r, g, b, 1)
+        return
+    end
+
+    -- Resolve class token (live unit or preview)
+    local cls
+    if unit then
+        local _
+        _, cls = UnitClass(unit)
+    else
+        cls = f._msufGFPreviewClass
+    end
+
+    if mode == "CLASS" then
+        local r, g, b = ResolveClassColor(cls)
+        if r then
+            f.health:SetStatusBarColor(r, g, b, 1)
+            return
+        end
+    end
+
+    if mode == "GRADIENT" and unit and UnitExists(unit) then
+        local hp    = UnitHealth(unit)
+        local hpMax = UnitHealthMax(unit)
+        if issecretvalue and (issecretvalue(hp) or issecretvalue(hpMax)) then
+            f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+            return
+        end
+        local hpN  = tonumber(hp)
+        local maxN = tonumber(hpMax)
+        if hpN and maxN and maxN > 0 then
+            local pct = hpN / maxN
+            local r = pct > 0.5 and (1 - (pct - 0.5) * 2) or 1
+            local g = pct > 0.5 and 1 or (pct * 2)
+            f.health:SetStatusBarColor(r, g, 0, 1)
+        else
+            f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+        end
+        return
+    end
+
+    f.health:SetStatusBarColor(
+        conf.healthCustomR or 0.2,
+        conf.healthCustomG or 0.8,
+        conf.healthCustomB or 0.2, 1)
+end
+
+------------------------------------------------------------------------
+-- Apply: health bar foreground alpha (for behind-bar icon visibility)
+-- Uses health:SetAlpha for the bar fill.
+-- When textIgnoreAlpha is on, re-parents healthTextLayer to statusIconLayer
+-- so text stays at full opacity (escapes health alpha inheritance).
+------------------------------------------------------------------------
+local function ApplyHealthBarAlpha(f, kind)
+    if not f.health then return end
+    local conf = GF.GetConf(kind)
+    local fgA = conf.hpBarAlpha or 1
+    if f._msufCachedHpBarAlpha ~= fgA then
+        f._msufCachedHpBarAlpha = fgA
+        f.health:SetAlpha(fgA)
+    end
+    -- Text layer: escape alpha inheritance when toggle is on
+    local txtLayer = f.healthTextLayer
+    if not txtLayer then return end
+    local wantEscape = (conf.hpTextIgnoreAlpha ~= false) and (fgA < 1)
+    local escaped = txtLayer._msufAlphaEscaped
+    if wantEscape and not escaped then
+        -- Re-parent to statusIconLayer (above everything, unaffected by health alpha)
+        local safeParent = f.statusIconLayer or f.barGroup or f
+        txtLayer:SetParent(safeParent)
+        txtLayer:SetAllPoints(f.health)
+        txtLayer:SetFrameLevel(f.health:GetFrameLevel() + 5)
+        txtLayer._msufAlphaEscaped = true
+    elseif not wantEscape and escaped then
+        -- Restore: parent back to health
+        txtLayer:SetParent(f.health)
+        txtLayer:SetAllPoints(f.health)
+        txtLayer:SetFrameLevel(f.health:GetFrameLevel() + 5)
+        txtLayer._msufAlphaEscaped = nil
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply: text layout
+------------------------------------------------------------------------
+local function ApplyTextLayout(f, kind)
+    local conf = GF.GetConf(kind)
+    local nox = conf.nameOffsetX or 0
+    local noy = conf.nameOffsetY or 0
+
+    if f.nameText then
+        f.nameText:ClearAllPoints()
+        local anchor = conf.nameAnchor or "LEFT"
+        if anchor == "CENTER" then
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", 3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3 + nox, noy)
+            f.nameText:SetJustifyH("CENTER")
+        elseif anchor == "RIGHT" then
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", 3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3 + nox, noy)
+            f.nameText:SetJustifyH("RIGHT")
+        else
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", 3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3, noy)
+            f.nameText:SetJustifyH("LEFT")
+        end
+        f.nameText:SetWordWrap(false)
+        if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
+    end
+
+    -- 3-slot health text
+    local hox = conf.hpOffsetX or 0
+    local hoy = conf.hpOffsetY or 0
+    local tl = conf.textLeft  or "NONE"
+    local tc = conf.textCenter or "NONE"
+    local tr = conf.textRight or "NONE"
+
+    if f.textLeftFS then
+        f.textLeftFS:ClearAllPoints()
+        f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", 3 + hox, hoy)
+        f.textLeftFS:SetJustifyH("LEFT")
+        if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
+    end
+    if f.textCenterFS then
+        f.textCenterFS:ClearAllPoints()
+        f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", hox, hoy)
+        f.textCenterFS:SetJustifyH("CENTER")
+        if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end
+    end
+    if f.textRightFS then
+        f.textRightFS:ClearAllPoints()
+        f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -3 + hox, hoy)
+        f.textRightFS:SetJustifyH("RIGHT")
+        if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:Hide() end
+    end
+
+    if f.statusIndicatorText then
+        f.statusIndicatorText:ClearAllPoints()
+        f.statusIndicatorText:SetPoint("CENTER", f.health, "CENTER",
+            conf.statusOffsetX or 0, conf.statusOffsetY or 0)
+    end
+
+    -- 3-slot power text
+    local pox = conf.powerOffsetX or 0
+    local poy = conf.powerOffsetY or 0
+    local showPow = conf.showPower and (conf.powerHeight or 6) > 0
+    local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
+    local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
+    local ptr = showPow and (conf.powerTextRight   or "NONE") or "NONE"
+
+    if f.powerTextLeftFS then
+        f.powerTextLeftFS:ClearAllPoints()
+        f.powerTextLeftFS:SetPoint("LEFT", f.power, "LEFT", 2 + pox, poy)
+        f.powerTextLeftFS:SetJustifyH("LEFT")
+        if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
+    end
+    if f.powerTextCenterFS then
+        f.powerTextCenterFS:ClearAllPoints()
+        f.powerTextCenterFS:SetPoint("CENTER", f.power, "CENTER", pox, poy)
+        f.powerTextCenterFS:SetJustifyH("CENTER")
+        if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end
+    end
+    if f.powerTextRightFS then
+        f.powerTextRightFS:ClearAllPoints()
+        f.powerTextRightFS:SetPoint("RIGHT", f.power, "RIGHT", -2 + pox, poy)
+        f.powerTextRightFS:SetJustifyH("RIGHT")
+        if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
+    end
+
+    -- Group number text
+    if f.groupNumberText then
+        if conf.showGroupNumber then
+            f.groupNumberText:ClearAllPoints()
+            local gnAnchor = conf.groupNumberAnchor or "BOTTOMRIGHT"
+            local gnX = conf.groupNumberX
+            local gnY = conf.groupNumberY
+            if gnX == nil then gnX = -2 end
+            if gnY == nil then gnY = 2 end
+            f.groupNumberText:SetPoint(gnAnchor, f.health or f.barGroup, gnAnchor, gnX, gnY)
+            f.groupNumberText:SetJustifyH("RIGHT")
+        else
+            f.groupNumberText:Hide()
+        end
+    end
+
+    -- Text layer (frame level above health bar)
+    if f.healthTextLayer and f.health then
+        local hLvl = f.health:GetFrameLevel()
+        local tl2 = conf.textLayer or 5
+        local want = hLvl + tl2
+        if f._msufGFCachedTxtLvl ~= want then
+            f._msufGFCachedTxtLvl = want
+            f.healthTextLayer:SetFrameLevel(want)
+        end
+    end
+    if f.powerTextLayer and f.power then
+        local pLvl = f.power:GetFrameLevel()
+        local ptl2 = conf.powerTextLayer or 2
+        local want = pLvl + ptl2
+        if f._msufGFCachedPTxtLvl ~= want then
+            f._msufGFCachedPTxtLvl = want
+            f.powerTextLayer:SetFrameLevel(want)
+        end
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply: icon layout (spec-driven)
+------------------------------------------------------------------------
+local ICON_SPECS = {
+    { field="roleIcon",      enKey="roleIcon",      sizeKey="roleIconSize",      anchorKey="roleIconAnchor",    xKey="roleIconX",    yKey="roleIconY",    layerKey="roleIconLayer",    defAnchor="TOPLEFT",    defSize=12, defLayer=1 },
+    { field="leaderIcon",    enKey="leaderIcon",     sizeKey="leaderIconSize",    anchorKey="leaderIconAnchor",  xKey="leaderIconX",  yKey="leaderIconY",  layerKey="leaderIconLayer",  defAnchor="TOPRIGHT",   defSize=12, defLayer=2 },
+    { field="assistIcon",    enKey="assistIcon",     sizeKey="assistIconSize",    anchorKey="assistIconAnchor",  xKey="assistIconX",  yKey="assistIconY",  layerKey="assistIconLayer",  defAnchor="TOPRIGHT",   defSize=12, defLayer=2 },
+    { field="raidIcon",      enKey="raidMarker",     sizeKey="raidMarkerSize",    anchorKey="raidMarkerAnchor",  xKey="raidMarkerX",  yKey="raidMarkerY",  layerKey="raidMarkerLayer",  defAnchor="CENTER",     defSize=14, defLayer=3 },
+    { field="readyCheckIcon",enKey="readyCheckIcon", sizeKey="readyCheckSize",    anchorKey="readyCheckAnchor",  xKey="readyCheckX",  yKey="readyCheckY",  layerKey="readyCheckLayer",  defAnchor="CENTER",     defSize=16, defLayer=4 },
+    { field="summonIcon",    enKey="summonIcon",     sizeKey="summonIconSize",    anchorKey="summonAnchor",      xKey="summonX",      yKey="summonY",      layerKey="summonLayer",      defAnchor="CENTER",     defSize=16, defLayer=4 },
+    { field="resurrectIcon", enKey="resurrectIcon",  sizeKey="resurrectIconSize", anchorKey="resurrectAnchor",   xKey="resurrectX",   yKey="resurrectY",   layerKey="resurrectLayer",   defAnchor="CENTER",     defSize=16, defLayer=4 },
+    { field="phaseIcon",     enKey="phaseIcon",      sizeKey="phaseIconSize",     anchorKey="phaseAnchor",       xKey="phaseX",       yKey="phaseY",       layerKey="phaseLayer",       defAnchor="TOPLEFT",    defSize=14, defLayer=3 },
+}
+GF.ICON_SPECS = ICON_SPECS
+
+local function ApplyIconLayout(f, kind)
+    local conf   = GF.GetConf(kind)
+    local anchor = f.statusIconLayer or f.barGroup or f
+    local baseLvl = anchor:GetFrameLevel()
+    local fScale = conf._resolvedFrameScale or 1
+
+    for i = 1, #ICON_SPECS do
+        local s = ICON_SPECS[i]
+        local icon = f[s.field]
+        if icon then
+            icon:ClearAllPoints()
+            local sz = conf[s.sizeKey] or s.defSize
+            if fScale ~= 1 then sz = math_max(4, math_floor(sz * fScale + 0.5)) end
+            icon:SetSize(sz, sz)
+            local pt = conf[s.anchorKey] or s.defAnchor
+            icon:SetPoint(pt, anchor, pt, conf[s.xKey] or 0, conf[s.yKey] or 0)
+            local layer = conf[s.layerKey] or s.defLayer
+            if icon.SetDrawLayer then
+                local sub = layer
+                if sub > 7 then sub = 7 elseif sub < -8 then sub = -8 end
+                icon:SetDrawLayer("OVERLAY", sub)
+            elseif icon.SetFrameLevel then
+                icon:SetFrameLevel(baseLvl + layer)
+            end
+        end
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply: health prediction overlay colors (from global MSUF_DB.general)
+-- Diff-gated per-bar to avoid redundant SetStatusBarColor calls.
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- Resolve an absorb/overlay setting: GF conf (if hlOverride) → general
+------------------------------------------------------------------------
+local function _GF_ResolveOverlaySetting(kind, key)
+    local dbKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
+    local db = _G.MSUF_DB and _G.MSUF_DB[dbKey]
+    if db and db.hlOverride and db[key] ~= nil then return db[key] end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    return gen and gen[key]
+end
+
+local function ApplyOverlayColors(f)
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local kind = f._msufGFKind or "party"
+    -- Incoming heal (heal prediction) — colors from general (shared)
+    if f.incomingHealBar then
+        local r, g, b = 0.0, 1.0, 0.4
+        if gen then
+            if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
+            if type(gen.healPredColorG) == "number" then g = gen.healPredColorG end
+            if type(gen.healPredColorB) == "number" then b = gen.healPredColorB end
+        end
+        local a = 0.45
+        if f._gfCIHR ~= r or f._gfCIHG ~= g or f._gfCIHB ~= b then
+            f._gfCIHR, f._gfCIHG, f._gfCIHB = r, g, b
+            f.incomingHealBar:SetStatusBarColor(r, g, b, a)
+        end
+    end
+    -- Absorb (color from general, opacity per-GF override → general)
+    if f.absorbBar then
+        local r, g, b = 0.8, 0.9, 1.0
+        if gen then
+            if type(gen.absorbBarColorR) == "number" then r = gen.absorbBarColorR end
+            if type(gen.absorbBarColorG) == "number" then g = gen.absorbBarColorG end
+            if type(gen.absorbBarColorB) == "number" then b = gen.absorbBarColorB end
+        end
+        local a = tonumber(_GF_ResolveOverlaySetting(kind, "absorbBarOpacity")) or 0.6
+        if f._gfCAbR ~= r or f._gfCAbG ~= g or f._gfCAbB ~= b or f._gfCAbA ~= a then
+            f._gfCAbR, f._gfCAbG, f._gfCAbB, f._gfCAbA = r, g, b, a
+            f.absorbBar:SetStatusBarColor(r, g, b, a)
+        end
+    end
+    -- Heal absorb (color from general, opacity per-GF override → general)
+    if f.healAbsorbBar then
+        local r, g, b = 1.0, 0.4, 0.4
+        if gen then
+            if type(gen.healAbsorbBarColorR) == "number" then r = gen.healAbsorbBarColorR end
+            if type(gen.healAbsorbBarColorG) == "number" then g = gen.healAbsorbBarColorG end
+            if type(gen.healAbsorbBarColorB) == "number" then b = gen.healAbsorbBarColorB end
+        end
+        local a = tonumber(_GF_ResolveOverlaySetting(kind, "healAbsorbBarOpacity")) or 0.7
+        if f._gfCHAbR ~= r or f._gfCHAbG ~= g or f._gfCHAbB ~= b or f._gfCHAbA ~= a then
+            f._gfCHAbR, f._gfCHAbG, f._gfCHAbB, f._gfCHAbA = r, g, b, a
+            f.healAbsorbBar:SetStatusBarColor(r, g, b, a)
+        end
+    end
+    -- Absorb anchoring (per-GF override → general).
+    -- NOTE: no caller-side stamp check — the internal diff-gate in
+    -- _GF_ApplyAbsorbAnchor already covers stamp + FollowActive + RF + W, and
+    -- a stamp-only caller gate would strand mode 4 overflow bars at stale w
+    -- when hpBar width changes without a mode change (fresh frame layout, size
+    -- change, power-row toggle). ApplyOverlayColors fires on DIRTY_COLOR; width
+    -- updates from DIRTY_GEOMETRY/DIRTY_LAYOUT are caught by the unconditional
+    -- call added in ApplyVisuals below.
+    if GF._ApplyAbsorbAnchor then
+        GF._ApplyAbsorbAnchor(f)
+    end
+end
+
+------------------------------------------------------------------------
+-- Apply all visuals for one frame (selective via bits)
+------------------------------------------------------------------------
+local function ApplyVisuals(f, bits)
+    if not f then return end
+    local kind = f._msufGFKind or "party"
+    local needGeometry = (band(bits, DIRTY_GEOMETRY) ~= 0) or (band(bits, DIRTY_BORDER) ~= 0)
+
+    if needGeometry then
+        ApplyGeometry(f, kind)
+    end
+    if band(bits, DIRTY_TEXTURE) ~= 0 then
+        ApplyBarTexture(f, kind)
+    end
+    if band(bits, DIRTY_FONT) ~= 0 then
+        ApplyFonts(f, kind)
+    end
+    if band(bits, DIRTY_COLOR) ~= 0 then
+        ApplyHealthColor(f, kind, f.unit)
+        ApplyHealthBarAlpha(f, kind)
+        ApplyOverlayColors(f)
+    end
+    if band(bits, DIRTY_BORDER) ~= 0 then
+        ApplyFrameBorder(f, kind)
+        ApplyBackgroundTint(f, kind)
+        ApplyHealthBarAlpha(f, kind)
+        ApplyEffectBorderStyles(f, kind)
+    end
+    if band(bits, DIRTY_LAYOUT) ~= 0 then
+        ApplyTextLayout(f, kind)
+        ApplyIconLayout(f, kind)
+    end
+    -- Absorb anchor: ensure mode 4 overflow and mode 3 clipping track hpBar
+    -- width changes from DIRTY_GEOMETRY / DIRTY_LAYOUT (not just DIRTY_COLOR
+    -- via ApplyOverlayColors). Internal diff-gate short-circuits no-ops at ~2μs.
+    if GF._ApplyAbsorbAnchor then
+        GF._ApplyAbsorbAnchor(f)
+    end
+    -- Rebuild hot-path settings cache (eliminates GF.GetConf from combat events)
+    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+end
+
+------------------------------------------------------------------------
+-- Flush dirty queue
+------------------------------------------------------------------------
+local _cachedUpdateAll -- cached reference to MSUF_GF_UpdateAll
+
+function GF._FlushDirty()
+    if not _cachedUpdateAll then
+        local fn = _G.MSUF_GF_UpdateAll
+        if type(fn) == "function" then _cachedUpdateAll = fn end
+    end
+    local anyFlushed = false
+    for f, bits in pairs(_dirtyFrames) do
+        _dirtyFrames[f] = nil
+        anyFlushed = true
+        ApplyVisuals(f, bits)
+        if f._msufGFPreviewActive then
+            -- Re-apply preview data (ApplyVisuals stomps colors/text)
+            local idx = f._msufGFPreviewIndex
+            local kind = f._msufGFKind
+            if idx and kind then
+                GF.ApplyPreviewData(f, idx, kind)
+            end
+        elseif f.unit and UnitExists(f.unit) then
+            if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+        end
+    end
+    -- Sync Options panel mock frame (AuraPreview) when any frame was flushed
+    if anyFlushed and GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+end
+
+------------------------------------------------------------------------
+-- Public: mark single frame dirty
+------------------------------------------------------------------------
+function GF.MarkDirty(f, bits)
+    if not f then return end
+    bits = bits or DIRTY_ALL
+    local prev = _dirtyFrames[f] or 0
+    _dirtyFrames[f] = bor(prev, bits)
+    ScheduleFlush()
+end
+
+------------------------------------------------------------------------
+-- Public: mark ALL GF frames dirty (Options "Apply")
+------------------------------------------------------------------------
+function GF.MarkAllDirty(bits)
+    bits = bits or DIRTY_ALL
+    for f in pairs(GF.frames) do
+        local prev = _dirtyFrames[f] or 0
+        _dirtyFrames[f] = bor(prev, bits)
+    end
+    -- Also mark preview frames
+    if GF._previewFrames then
+        for _, list in pairs(GF._previewFrames) do
+            for i = 1, #list do
+                local f = list[i]
+                if f then
+                    local prev = _dirtyFrames[f] or 0
+                    _dirtyFrames[f] = bor(prev, bits)
+                end
+            end
+        end
+    end
+    ScheduleFlush()
+end
+
+------------------------------------------------------------------------
+-- Public: immediate full refresh (no coalescing)
+-- Use for Options "Apply" when user expects instant feedback.
+------------------------------------------------------------------------
+function GF.RefreshVisuals()
+    if not _cachedUpdateAll then
+        local fn = _G.MSUF_GF_UpdateAll
+        if type(fn) == "function" then _cachedUpdateAll = fn end
+    end
+    for f in pairs(GF.frames) do
+        ApplyVisuals(f, DIRTY_ALL)
+        if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
+            if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+        end
+    end
+    -- Preview frames
+    if GF._previewFrames then
+        for kind, list in pairs(GF._previewFrames) do
+            for i = 1, #list do
+                local f = list[i]
+                if f then
+                    ApplyVisuals(f, DIRTY_ALL)
+                    if f._msufGFPreviewActive then
+                        GF.ApplyPreviewData(f, i, kind)
+                    end
+                end
+            end
+        end
+    end
+    -- Options panel preview (drag-to-position mock frame)
+    if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+end
+
+------------------------------------------------------------------------
+-- Public: refresh only specific aspects
+------------------------------------------------------------------------
+function GF.RefreshTextures()
+    GF.MarkAllDirty(DIRTY_TEXTURE)
+end
+
+function GF.RefreshFonts()
+    GF.MarkAllDirty(DIRTY_FONT)
+    if GF.InvalidateCdFont then GF.InvalidateCdFont() end
+end
+
+function GF.RefreshColors()
+    GF.MarkAllDirty(bor(DIRTY_COLOR, DIRTY_BORDER))
+end
+
+function GF.RefreshGeometry()
+    GF.MarkAllDirty(bor(DIRTY_GEOMETRY, DIRTY_LAYOUT))
+end
+
+------------------------------------------------------------------------
+-- Hook: re-apply visuals when preview is shown
+------------------------------------------------------------------------
+do
+    local origShowPreview = GF.ShowPreview
+    if type(origShowPreview) == "function" then
+        GF.ShowPreview = function(kind, count)
+            origShowPreview(kind, count)
+            -- Apply full visuals THEN re-apply preview data (visuals stomps colors)
+            local k = kind or "party"
+            local list = GF._previewFrames and GF._previewFrames[k]
+            if list then
+                for i = 1, #list do
+                    local f = list[i]
+                    if f and f:IsShown() then
+                        ApplyVisuals(f, DIRTY_ALL)
+                        if f._msufGFPreviewActive then
+                            GF.ApplyPreviewData(f, i, k)
+                        end
+                    end
+                end
+            end
+        end
+        _G.MSUF_GF_ShowPreview = GF.ShowPreview
+    end
+end
+
+------------------------------------------------------------------------
+-- Hook: apply visuals after GF_InitButton builds hierarchy
+------------------------------------------------------------------------
+do
+    local origInit = _G.MSUF_GF_InitButton
+    if type(origInit) == "function" then
+        _G.MSUF_GF_InitButton = function(f, kind)
+            origInit(f, kind)
+            ApplyVisuals(f, DIRTY_ALL)
+        end
+    end
+end
+
+------------------------------------------------------------------------
+-- Global exports
+------------------------------------------------------------------------
+_G.MSUF_GF_MarkDirty      = GF.MarkDirty
+_G.MSUF_GF_MarkAllDirty   = GF.MarkAllDirty
+_G.MSUF_GF_RefreshVisuals  = GF.RefreshVisuals
+_G.MSUF_GF_RefreshTextures = GF.RefreshTextures
+_G.MSUF_GF_RefreshFonts    = GF.RefreshFonts
+_G.MSUF_GF_RefreshColors   = GF.RefreshColors
+_G.MSUF_GF_RefreshGeometry = GF.RefreshGeometry
+
+-- Expose ApplyVisuals for direct use by other GF modules
+GF.ApplyVisuals = ApplyVisuals
+
+------------------------------------------------------------------------
+-- Hook: global Colors menu changes → refresh GF frames
+-- ColorsCore.PushVisualUpdates calls MSUF_RefreshAllFrames. We hook it
+-- so GF frames also re-apply class colors, font colors, bar textures.
+------------------------------------------------------------------------
+do
+    local _hooked = false
+    C_Timer.After(0.5, function()
+        if _hooked then return end
+        local orig = _G.MSUF_RefreshAllFrames
+        if type(orig) == "function" then
+            _hooked = true
+            _G.MSUF_RefreshAllFrames = function(...)
+                orig(...)
+                GF.RefreshVisuals()
+            end
+        end
+        -- Re-cache UpdateAll after all hooks have been applied
+        local fn = _G.MSUF_GF_UpdateAll
+        if type(fn) == "function" then _cachedUpdateAll = fn end
+    end)
+end

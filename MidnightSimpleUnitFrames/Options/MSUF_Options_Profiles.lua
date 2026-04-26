@@ -102,7 +102,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
             return type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled()
         end,
         set = function(v)
-            if type(_G.MSUF_SetSpecAutoSwitchEnabled) == "function" then _G.MSUF_SetSpecAutoSwitchEnabled(v) end
+            if _G.MSUF_SetSpecAutoSwitchEnabled then _G.MSUF_SetSpecAutoSwitchEnabled(v) end
         end,
     })
 
@@ -154,7 +154,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                     return cur or "None"
                 end,
                 set = function(v)
-                    if type(_G.MSUF_SetSpecProfile) == "function" then
+                    if _G.MSUF_SetSpecProfile then
                         _G.MSUF_SetSpecProfile(s.id, v ~= "None" and v or nil)
                     end
                 end,
@@ -308,7 +308,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                 if type(Importer) ~= "function" then print("|cffff0000MSUF:|r Import failed: importer missing."); return end
                 Importer(str)
                 if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
-                if type(_G.MSUF_CallUpdateAllFonts) == "function" then _G.MSUF_CallUpdateAllFonts() end
+                if _G.MSUF_CallUpdateAllFonts then _G.MSUF_CallUpdateAllFonts() end
                 if panel.LoadFromDB then panel:LoadFromDB() end
                 if panel.UpdateProfileUI then panel:UpdateProfileUI(MSUF_ActiveProfile) end
                 importPopup:Hide()
@@ -353,11 +353,13 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
             local bCast = makeBtn("Castbars");   bCast:SetPoint("LEFT", bUnit, "RIGHT", 8, 0)
             local bCol  = makeBtn("Colors");     bCol:SetPoint("LEFT", bCast, "RIGHT", 8, 0)
             local bGame = makeBtn("Gameplay");   bGame:SetPoint("TOPLEFT", bUnit, "TOPLEFT", 0, 26)
-            local bAll  = makeBtn("Everything"); bAll:SetPoint("LEFT", bGame, "RIGHT", 8, 0)
+            local bGroup = makeBtn("Group Frames"); bGroup:SetPoint("LEFT", bGame, "RIGHT", 8, 0)
+            local bAll  = makeBtn("Everything"); bAll:SetPoint("LEFT", bGroup, "RIGHT", 8, 0)
             bUnit:SetScript("OnClick", function() doExport("unitframe") end)
             bCast:SetScript("OnClick", function() doExport("castbar") end)
             bCol:SetScript("OnClick",  function() doExport("colors") end)
             bGame:SetScript("OnClick", function() doExport("gameplay") end)
+            bGroup:SetScript("OnClick", function() doExport("groupframe") end)
             bAll:SetScript("OnClick",  function() doExport("all") end)
         end
         exportPickerPopup:Show()

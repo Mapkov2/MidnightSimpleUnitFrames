@@ -1,9 +1,7 @@
 -- Shared “Flash Menu / Dashboard” Midnight styling helpers.
---
 -- Goal
 --   - Centralize the Flash Menu style so Options / Edit Mode / popups reuse the same look.
 --   - Provide backwards-compatible globals so existing UI code can call skin helpers directly.
---
 -- Notes
 --   - Pure visuals (no MSUF_DB dependency) so this file can load early.
 --   - Idempotent: safe to call multiple times on the same widget.
@@ -41,9 +39,7 @@ _G.MSUF_THEME = THEME
 -- Optional public handle
 _G.MSUF_Style = _G.MSUF_Style or Style
 _G.MSUF_STYLE = _G.MSUF_STYLE or Style
--- ---------------------------------------------------------------------------
 -- Enable / Disable gating (controlled via DB; default = enabled)
--- ---------------------------------------------------------------------------
 local function _MSUF_GetDB()
   local db = rawget(_G, "MSUF_DB")
   if type(db) == "table" then  return db end
@@ -202,12 +198,10 @@ local function UpdateButtonEnabled(btn)
 -- opts:
 --   - isNav: bool (uses nav down alpha)
 --   - active: bool (initial selected state)
--- ---------------------------------------------------------------------------
 -- Button skinning
 --  - Handles normal text buttons (UIPanelButtonTemplate)
 --  - Handles icon buttons (close / small icon buttons) without nuking their icon
 --  - Handles dropdown arrow buttons ("DropButton") without breaking SetNormalTexture(nil)
--- ---------------------------------------------------------------------------
 local function _MSUF_GetButtonLabel(btn)
   if not btn then  return nil end
   local fs = btn.GetFontString and btn:GetFontString()
@@ -533,9 +527,7 @@ function Style.ApplyToFrame(root)
    end
   Walk(root)
  end
--- ---------------------------------------------------------------------------
 -- Edit Mode styling (no separate file; uses the same Flash/Dashboard style)
--- ---------------------------------------------------------------------------
 local function _MSUF_IsFontString(obj)
   return obj and obj.GetObjectType and obj:GetObjectType() == "FontString"
 end
@@ -710,9 +702,7 @@ function Style.InstallEditModeAutoSkin()
  end
 -- Auto-enable edit mode styling by default (visual only, safe)
 Style.InstallEditModeAutoSkin()
--- ---------------------------------------------------------------------------
 -- Backwards-compatible globals (so other files can just call these)
--- ---------------------------------------------------------------------------
 _G.MSUF_ApplyMidnightBackdrop = function(frame, alphaOverride, thinBorder)
   return Style.ApplyBackdrop(frame, alphaOverride, thinBorder)
 end
@@ -726,12 +716,10 @@ end
 _G.MSUF_SkinDashboardButton = function(btn)  return Style.SkinDashboardButton(btn) end
 _G.MSUF_ApplyMidnightControlsToFrame = function(root)  return Style.ApplyToFrame(root) end
 -- Marker for gating / debug
--- ---------------------------------------------------------------------------
 -- Options checkmark replacement (MSUF tick)
 --   - Replaces Blizzard yellow checkmarks for MSUF option panels (Gameplay/Colors/etc.)
 --   - Alpha-texture ticks (thin + bold) so they match MSUF theme and can be tinted.
 --   - Idempotent + safe to call multiple times.
--- ---------------------------------------------------------------------------
 do
   local _addon = (type(addonName) == "string" and addonName ~= "" and addonName) or "MidnightSimpleUnitFrames"
   local CHECK_TEX_THIN = "Interface/AddOns/" .. _addon .. "/Media/msuf_check_tick_thin.tga"
@@ -843,10 +831,8 @@ end
 _G.__MSUF_STYLE_VERSION = 5
 _G.__MSUF_STYLE_TAG = "editmode-scanfix-v5-optionCheckmarks"
 
--- ---------------------------------------------------------------------------
 -- UIDropDownMenuTemplate: minimal flat field + tiny 1px "blue bars" accent
 -- Used by Edit Mode popups (Copy settings dropdowns). Keeps full Blizzard behavior.
--- ---------------------------------------------------------------------------
 local function _MSUF_GetDropRegion(drop, suffix)
   if not drop then return nil end
   local name = (drop.GetName and drop:GetName()) or nil
@@ -938,13 +924,10 @@ function Style.SkinUIDDropDownTinyBars(drop)
   end
 end
 
-
--- ---------------------------------------------------------------------------
 -- PeelDamage-inspired options/menu skin.
 -- Behavior-preserving: keeps Blizzard/native widgets alive and only reskins them.
 -- Dropdowns use a shared spec-driven template helper so every dropdown gets the
 -- same field + popup treatment without rewriting each menu's selection logic.
--- ---------------------------------------------------------------------------
 do
   local _addon = (type(addonName) == "string" and addonName ~= "" and addonName) or "MidnightSimpleUnitFrames"
   local _ADDON_PATH = "Interface/AddOns/" .. _addon .. "/"
@@ -1334,9 +1317,7 @@ do
     end
     local visible = IsDropdownEffectivelyShown(drop)
     SetPeelDropdownVisible(drop, visible)
-    if not visible then
-      return
-    end
+    if not visible then return end
     local spec = drop._msufPeelSpec or DD_DEFAULT_SPEC
     local nativeBtn = GetNativeDropButton(drop)
     local enabled = true
@@ -1417,8 +1398,20 @@ do
 
   local function UpdatePeelDropdownText(drop, explicitText)
     if not drop or not drop._msufPeelText then return end
+    -- PERF: Diff-gate by resolved text. Hot path: UIDropDownMenu_SetText hook
+    -- fires this 2400+ times per options session even when the text is identical
+    -- (refresh cascades across dropdowns on each user click). Skip the
+    -- ApplyReadableDropdownFont + SetText pipeline if text unchanged.
+    -- SyncPeelDropdownState still runs because enabled/hover/visibility can
+    -- change independently of text content.
+    local newText = explicitText or GetDropdownDisplayText(drop)
+    if newText == drop._msufPeelLastText then
+      SyncPeelDropdownState(drop)
+      return
+    end
+    drop._msufPeelLastText = newText
     ApplyReadableDropdownFont(drop._msufPeelText, GetNativeDropText(drop), drop._msufPeelSpec)
-    drop._msufPeelText:SetText(explicitText or GetDropdownDisplayText(drop))
+    drop._msufPeelText:SetText(newText)
     SyncPeelDropdownState(drop)
   end
 
@@ -1741,14 +1734,10 @@ do
   end
 
   local function SkinDropDownLists()
-    if not Style.UseModernDropdowns() then
-      return
-    end
+    if not Style.UseModernDropdowns() then return end
 
     local openOwner = _G.UIDROPDOWNMENU_OPEN_MENU
-    if not (openOwner and openOwner.__msufMSUFDropdown and openOwner.__msufPeelDropSkinned) then
-      return
-    end
+    if not (openOwner and openOwner.__msufMSUFDropdown and openOwner.__msufPeelDropSkinned) then return end
 
     for level = 1, (_G.UIDROPDOWNMENU_MAXLEVELS or 2) do
       local list = _G["DropDownList" .. level]
@@ -1892,9 +1881,7 @@ do
     end
     if type(_G.ToggleDropDownMenu) == "function" then
       hooksecurefunc("ToggleDropDownMenu", function(_, _, drop)
-        if not (Style.UseModernDropdowns() and drop and drop.__msufMSUFDropdown and drop.__msufPeelDropSkinned) then
-          return
-        end
+        if not (Style.UseModernDropdowns() and drop and drop.__msufMSUFDropdown and drop.__msufPeelDropSkinned) then return end
         local function Run()
           if Style.UseModernDropdowns() and _G.UIDROPDOWNMENU_OPEN_MENU == drop then
             SkinDropDownLists()
@@ -1930,14 +1917,11 @@ do
   ns.MSUF_RefreshDropdownSkinMode = Style.RefreshDropdownSkinMode
   _G.MSUF_RefreshDropdownSkinMode = Style.RefreshDropdownSkinMode
 
-
-  -- -------------------------------------------------------------------------
   -- Old/native dropdown hardening
   --   Goal: keep Blizzard old-mode behavior, but make MSUF-owned dropdown
   --   selection commits deterministic and isolated from reused global list
   --   frame state. This does not restyle Blizzard lists; it only wraps the
   --   selection pipeline for MSUF-owned old-mode dropdowns.
-  -- -------------------------------------------------------------------------
   local function _MSUF_IsProbablyOwnedDropdown(drop)
     if not drop then return false end
     if drop.__msufMSUFDropdown or drop.__msufDropdownHardening then return true end
@@ -2192,8 +2176,6 @@ do
   _G.MSUF_ApplyPeelOptionsSkin = SkinStandaloneWindow
   Style.InstallStandaloneOptionsAutoSkin()
 end
-
-
 
 local _msufDropdownModeBootstrap = CreateFrame("Frame")
 _msufDropdownModeBootstrap:RegisterEvent("ADDON_LOADED")

@@ -1,13 +1,11 @@
 -- MSUF_Transitions.lua
 -- Centralized UI transition system for Midnight Simple Unit Frames.
---
 -- Design goals:
 --   * AnimationGroup-based (WoW-native, no manual OnUpdate polling)
 --   * Secret-safe: no comparisons or arithmetic on protected values
 --   * Zero-leak: animations only tick while playing, groups are recycled
 --   * Maintainable: one API surface, drop-in for any Show()/Hide() site
 --   * Subtle & fast: professional feel, never delays user interaction
---
 -- Usage:
 --   local T = ns.MSUF_Transitions
 --   T.FadeIn(frame, 0.15)                    -- simple fade in
@@ -16,30 +14,23 @@
 --   T.ScaleReveal(frame, 0.15)               -- scale 0.97→1.0 + fade in
 --   T.SlideIn(frame, "LEFT", 20, 0.18)       -- slide from offset + fade
 --   T.Dismiss(frame, 0.12)                   -- fade out then :Hide()
---
 -- All durations are in seconds. Recommended range: 0.10 – 0.22s
 -- Anything longer feels sluggish in a game UI.
 
 local addonName, ns = ...
 ns = ns or {}
 
--- =========================================================================
 -- Perf locals (safe: function refs only, no secret values)
--- =========================================================================
 local type        = type
 local CreateFrame = CreateFrame
 local GetTime     = GetTime
 
--- =========================================================================
 -- Module table
--- =========================================================================
 local T = {}
 ns.MSUF_Transitions = T
-if _G then _G.MSUF_Transitions = T end
+_G.MSUF_Transitions = T
 
--- =========================================================================
 -- Constants – tweak these for global feel
--- =========================================================================
 T.DURATION_FAST   = 0.10   -- micro-interactions (tooltip, highlight)
 T.DURATION_NORMAL = 0.15   -- standard panel open/close
 T.DURATION_SLOW   = 0.22   -- emphasis (first-open, edit mode overlay)
@@ -48,11 +39,9 @@ T.DURATION_SLOW   = 0.22   -- emphasis (first-open, edit mode overlay)
 local SCALE_REVEAL_FROM = 0.97   -- subtle: almost full size already
 local SCALE_REVEAL_TO   = 1.0
 
--- =========================================================================
 -- Internal: AnimationGroup pool
 -- Each frame gets at most ONE transition group (recycled). This avoids
 -- creating dozens of groups on rapid open/close cycles.
--- =========================================================================
 local ANIM_KEY = "__msufTransitionAG"
 
 --- Get or create the transition AnimationGroup for a frame.
@@ -132,10 +121,7 @@ local function AddTranslation(ag, offsetX, offsetY, duration, order)
     return a
 end
 
-
--- =========================================================================
 -- PUBLIC API
--- =========================================================================
 
 --- FadeIn: Show frame with alpha transition 0 → 1.
 --- Frame is shown immediately (at alpha 0) so layout is instant.
@@ -355,21 +341,15 @@ function T.Flash(frame, depth, duration)
     ag:Play()
 end
 
-
--- =========================================================================
 -- CONVENIENCE: Drop-in replacements for frame:Show() / frame:Hide()
---
 -- These can be used as direct wrappers around existing Show/Hide calls
 -- without restructuring the caller code:
---
 --   -- Before:
 --   panel:Show()
 --   -- After:
 --   MSUF_Transitions.Show(panel)
---
 -- If a frame has ._msufNoTransition = true, transitions are skipped
 -- (useful for frames that must appear instantly, e.g. during combat).
--- =========================================================================
 
 function T.Show(frame, duration)
     if not frame then return end
@@ -390,10 +370,7 @@ function T.Hide(frame, duration)
     T.Dismiss(frame, duration or T.DURATION_FAST)
 end
 
-
--- =========================================================================
 -- INTEGRATION HELPERS
--- =========================================================================
 
 --- Cancel any running transition on a frame and reset to clean state.
 --- Use this before programmatic SetAlpha/Show/Hide calls that shouldn't

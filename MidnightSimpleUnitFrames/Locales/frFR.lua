@@ -15,12 +15,12 @@ if loc ~= "frFR" then return end
 
 ns = ns or {}
 ns.LOCALE = loc
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
 end
-if _G then _G.MSUF_L = L end
+_G.MSUF_L = L
 
 local T = {
     ["Open MSUF Menu"] = "Ouvrir le menu MSUF",
@@ -115,7 +115,11 @@ local T = {
     ["Class Icon Left (players)"] = "Icône de classe gauche (joueurs)",
     ["Class Icon Right (players)"] = "Icône de classe droite (joueurs)",
     ["Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target."] = "Copier ces paramètres sur TOUS les cadres d'unité ?\n\nCela écrasera les paramètres existants sur Joueur/Cible/Focus/Boss/Familier/Cible de la cible.",
-    ["Invert boss order"] = "Inverser l'ordre des boss",
+    ["Boss frame layout"] = "Disposition des cadres de boss",
+    ["Vertical (top -> bottom)"] = "Vertical (haut -> bas)",
+    ["Vertical (bottom -> top)"] = "Vertical (bas -> haut)",
+    ["Horizontal (left -> right)"] = "Horizontal (gauche -> droite)",
+    ["Horizontal (right -> left)"] = "Horizontal (droite -> gauche)",
     ["Player Alpha"] = "Opacité du joueur",
     ["Target Alpha"] = "Opacité de la cible",
     ["Target of Target Alpha"] = "Opacité cible de la cible",

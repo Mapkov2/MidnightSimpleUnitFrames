@@ -122,9 +122,25 @@ function _G.MSUF_GCD_GetDurationForSpellID(spellID)
 
     local baseGCD = gcdMS / 1000
 
-    local hastePct = (GetHaste and GetHaste()) or 0
-    local haste = 1 + (hastePct / 100)
-    local scaled = baseGCD / haste
+    -- Haste scaling skipped on 12.0.5/Midnight.
+    --
+    -- GetHaste() returns a secret-tainted number on this client; any
+    -- arithmetic involving it ("hastePct / 100", "baseGCD / haste", etc.)
+    -- raises:
+    --   "attempt to perform arithmetic on local 'hastePct' (a secret
+    --    number value, while execution tainted by ...)".
+    -- The taint also breaks every subsequent castbar update in the same
+    -- frame, which is why this taint surfaced as a pile of unrelated
+    -- errors. There is no Lua-side way to extract a plain number from a
+    -- secret value without going through a pcall+arithmetic probe — and
+    -- even that propagates the addon-level taint flag in WoW's secret
+    -- system.
+    --
+    -- We therefore use the unscaled base GCD. The indicator marks the
+    -- GCD window slightly longer than the actual scaled GCD on hasted
+    -- specs (e.g. 1.5s shown vs 1.05s actual at 43% haste), but its
+    -- purpose — visualising "we are inside the GCD" — is preserved.
+    local scaled = baseGCD
 
     -- Frogski-style minimum clamps (keeps GCD readable at high haste).
     local minGCD

@@ -1,14 +1,11 @@
 -- Extracted from MidnightSimpleUnitFrames.lua (profiles + active profile state)
 local addonName, ns = ...
 -- Compact codec (backward compatible)
---
 -- New export format (preferred):
 --   MSUF3: base64(CBOR(table)) using Blizzard C_EncodingUtil
---
 -- Legacy import formats supported:
 --   MSUF2: LibDeflate 'print-safe' encoding of deflate-compressed payload (common Wago/WA style)
 --   MSUF2: base64(deflate(CBOR(table))) from earlier internal experiments
---
 -- Design goals:
 --   * Export always uses Blizzard (MSUF3) when available.
 --   * Import accepts MSUF3 + legacy MSUF2 variants automatically.
@@ -18,7 +15,7 @@ local addonName, ns = ...
 do
     local function GetEncodingUtil()
         local E = _G.C_EncodingUtil
-        if type(E) ~= "table" then  return nil end
+        if not E then  return nil end
         if type(E.SerializeCBOR) ~= "function" then  return nil end
         if type(E.DeserializeCBOR) ~= "function" then  return nil end
         if type(E.EncodeBase64) ~= "function" then  return nil end
@@ -270,6 +267,11 @@ function MSUF_InitProfiles()
     char.activeProfile = active
     MSUF_ActiveProfile = active
     MSUF_DB = MSUF_GlobalDB.profiles[active]
+    -- After DB swap: seed missing defaults so per-unit conf tables exist.
+    -- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
+    -- when the profile was saved from an older version missing those keys,
+    -- and UpdateSimpleUnitFrame defaults showPowerText=true since conf.showPower is nil.
+    if type(EnsureDB) == "function" then EnsureDB() end
  end
 function MSUF_CreateProfile(name)
     if not name or name == "" then  return end
@@ -297,7 +299,7 @@ function MSUF_SwitchProfile(name)
     -- Invalidate cached config references (UFCore caches per-frame config table refs).
     do
         local ns = _G.MSUF_NS
-        local core = (type(ns) == "table" and ns.MSUF_UnitframeCore) or nil
+        local core = (ns and ns.MSUF_UnitframeCore) or nil
         if core and type(core.InvalidateAllFrameConfigs) == "function" then
             core.InvalidateAllFrameConfigs()
         end
@@ -315,14 +317,12 @@ function MSUF_SwitchProfile(name)
  end
 function MSUF_ResetProfile(name)
     name = name or MSUF_ActiveProfile
-    if not name or not MSUF_GlobalDB or not MSUF_GlobalDB.profiles or not MSUF_GlobalDB.profiles[name] then
-         return
-    end
+    if not name or not MSUF_GlobalDB or not MSUF_GlobalDB.profiles or not MSUF_GlobalDB.profiles[name] then return end
     MSUF_GlobalDB.profiles[name] = {}
     if name == MSUF_ActiveProfile then
         MSUF_DB = MSUF_GlobalDB.profiles[name]
         -- Phase 3: invalidate settings cache immediately after DB swap
-        if type(_G.MSUF_UFCore_InvalidateSettingsCache) == "function" then
+        if _G.MSUF_UFCore_InvalidateSettingsCache then
             _G.MSUF_UFCore_InvalidateSettingsCache()
         end
         if EnsureDB then
@@ -339,9 +339,7 @@ function MSUF_ResetProfile(name)
  end
 function MSUF_DeleteProfile(name)
     name = name or MSUF_ActiveProfile
-    if not name or not MSUF_GlobalDB or not MSUF_GlobalDB.profiles or not MSUF_GlobalDB.profiles[name] then
-         return
-    end
+    if not name or not MSUF_GlobalDB or not MSUF_GlobalDB.profiles or not MSUF_GlobalDB.profiles[name] then return end
     if name == "Default" then
         print("|cffff0000MSUF:|r You cannot delete the 'Default' profile. Use Reset instead.")
          return
@@ -405,11 +403,9 @@ function MSUF_GetAllProfiles()
 end
 ---------------------------------------------------------------------
 -- Spec-based profile auto-switch (per-character)
---
 -- Stored in:
 --   MSUF_GlobalDB.char[charKey].specAutoSwitch  (boolean)
 --   MSUF_GlobalDB.char[charKey].specProfileMap  (table: specID -> profileName)
---
 -- Design goals:
 --   - Very small, fully optional (off by default).
 --   - Combat-safe: if spec changes in combat, we defer the switch.
@@ -441,7 +437,7 @@ function MSUF_SetSpecAutoSwitchEnabled(enabled)
     local char = MSUF_GetCharMeta()
     char.specAutoSwitch = (enabled == true)
     if char.specAutoSwitch then
-        if type(_G.MSUF_ApplySpecProfileIfEnabled) == "function" then
+        if _G.MSUF_ApplySpecProfileIfEnabled then
             _G.MSUF_ApplySpecProfileIfEnabled("TOGGLE_ON")
         end
     end
@@ -466,7 +462,7 @@ function MSUF_SetSpecProfile(specID, profileName)
     if char.specAutoSwitch == true then
         local cur = _G.MSUF_GetPlayerSpecID and _G.MSUF_GetPlayerSpecID() or nil
         if cur == specID then
-            if type(_G.MSUF_ApplySpecProfileIfEnabled) == "function" then
+            if _G.MSUF_ApplySpecProfileIfEnabled then
                 _G.MSUF_ApplySpecProfileIfEnabled("MAP_CHANGED")
             end
         end
@@ -514,9 +510,7 @@ function MSUF_ApplySpecProfileIfEnabled(reason)
     local profileName = char.specProfileMap[specID]
     if type(profileName) ~= "string" or profileName == "" then  return end
     -- Only switch to existing profiles.
-    if not (_G.MSUF_GlobalDB and _G.MSUF_GlobalDB.profiles and _G.MSUF_GlobalDB.profiles[profileName]) then
-         return
-    end
+    if not (_G.MSUF_GlobalDB and _G.MSUF_GlobalDB.profiles and _G.MSUF_GlobalDB.profiles[profileName]) then return end
     if _G.MSUF_ActiveProfile == profileName then
          return
     end
@@ -528,7 +522,7 @@ function MSUF_ApplySpecProfileIfEnabled(reason)
         local mapped = MSUF_GetSpecProfile(specID)
         if mapped ~= profileName then  return end
         if _G.MSUF_ActiveProfile == profileName then  return end
-        if type(_G.MSUF_SwitchProfile) == "function" then
+        if _G.MSUF_SwitchProfile then
             _G.MSUF_SwitchProfile(profileName)
         end
      end)
@@ -549,9 +543,7 @@ do
             if event == "PLAYER_SPECIALIZATION_CHANGED" and arg1 and arg1 ~= "player" then
                  return
             end
-            if not MSUF_IsSpecAutoSwitchEnabled() then
-                 return
-            end
+            if not MSUF_IsSpecAutoSwitchEnabled() then return end
             MSUF_ApplySpecProfileIfEnabled(event)
          end)
      end
@@ -559,17 +551,15 @@ do
 end
 ---------------------------------------------------------------------
 -- Profile Export / Import (Selection-based, with legacy import button)
---
 -- New snapshot format (Lua table):
 --   return {
 --     addon   = "MSUF",
 --     fmt     = 2,
 --     schema  = 1,
---     kind    = "unitframe" | "castbar" | "colors" | "gameplay" | "all",
+--     kind    = "unitframe" | "castbar" | "colors" | "gameplay" | "groupframe" | "all",
 --     profile = "<active profile name>",
 --     payload = { ...selected settings... },
 --   }
---
 -- Import behavior:
 --   - If the snapshot matches the format above: apply only the selected category into the
 --     CURRENT ACTIVE profile (keeps everything else unchanged).
@@ -577,13 +567,16 @@ end
 --     MSUF_ImportLegacyFromString(str).
 ---------------------------------------------------------------------
 local function MSUF_WipeTable(t)
-    if type(t) ~= "table" then  return end
+    if not t then  return end
     for k in pairs(t) do
         t[k] = nil
     end
  end
 local function MSUF_DeepCopy(v)
-    if type(v) ~= "table" then  return v end
+    if not v then  return v end
+    if type(v) ~= "table" then
+        return v
+    end
     if type(CopyTable) == "function" then
         return CopyTable(v)
     end
@@ -724,7 +717,7 @@ local function MSUF_WipeGeneralSubset(filterFn)
     end
  end
 local function MSUF_ApplyGeneralSubset(tbl)
-    if type(tbl) ~= "table" then  return end
+    if not tbl then  return end
     MSUF_DB = MSUF_DB or {}
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
@@ -732,8 +725,38 @@ local function MSUF_ApplyGeneralSubset(tbl)
         g[k] = MSUF_DeepCopy(v)
     end
  end
+local function MSUF_ProfileIO_EnsureGroupFramesDB()
+    local ensureGF = _G.MSUF_GF_EnsureDB
+    if type(ensureGF) == "function" then
+        ensureGF()
+        return
+    end
+    local gf = _G.MSUF_NS and _G.MSUF_NS.GF
+    if gf and type(gf.EnsureDB) == "function" then
+        gf.EnsureDB()
+    end
+end
+local function MSUF_CopyGroupFramePayload()
+    local payload = {}
+    if type(MSUF_DB) ~= "table" then
+        return payload
+    end
+    if type(MSUF_DB.gf_party) == "table" then
+        payload.gf_party = MSUF_DeepCopy(MSUF_DB.gf_party)
+    end
+    if type(MSUF_DB.gf_raid) == "table" then
+        payload.gf_raid = MSUF_DeepCopy(MSUF_DB.gf_raid)
+    end
+    if type(MSUF_DB.gf_mythicraid) == "table" then
+        payload.gf_mythicraid = MSUF_DeepCopy(MSUF_DB.gf_mythicraid)
+    end
+    return payload
+end
 local function MSUF_SnapshotForKind(kind)
     EnsureDB()
+    if kind == "unitframe" or kind == "groupframe" or kind == "groupframes" or kind == "all" then
+        MSUF_ProfileIO_EnsureGroupFramesDB()
+    end
     local payload = {}
     if kind == "unitframe" then
         -- Everything EXCEPT: gameplay, colors, castbars
@@ -760,6 +783,8 @@ local function MSUF_SnapshotForKind(kind)
         payload.npcColors   = MSUF_DeepCopy((MSUF_DB and MSUF_DB.npcColors) or {})
     elseif kind == "gameplay" then
         payload.gameplay = MSUF_DeepCopy((MSUF_DB and MSUF_DB.gameplay) or {})
+    elseif kind == "groupframe" or kind == "groupframes" then
+        payload = MSUF_CopyGroupFramePayload()
     elseif kind == "all" then
         payload = MSUF_DeepCopy(MSUF_DB or {})
     else
@@ -777,7 +802,7 @@ end
 -- After a profile import we must explicitly refresh Auras/Auras2 so the live UI matches without /reload.
 -- Keep this scoped (Auras only) to avoid unintended regressions in other modules.
 local function MSUF_ProfileIO_PostImportApply_Auras(kind, payload)
-    if type(payload) ~= "table" then  return end
+    if not payload then  return end
     local touched = false
     if type(payload.auras2) == "table" then
         touched = true
@@ -793,20 +818,42 @@ local function MSUF_ProfileIO_PostImportApply_Auras(kind, payload)
         end
     end
     if not touched then  return end
-    if type(_G.MSUF_Auras2_RefreshAll) == "function" then
+    if _G.MSUF_Auras2_RefreshAll then
         _G.MSUF_Auras2_RefreshAll()
     end
-    if type(_G.MSUF_Auras2_ApplyFontsFromGlobal) == "function" then
+    if _G.MSUF_Auras2_ApplyFontsFromGlobal then
         _G.MSUF_Auras2_ApplyFontsFromGlobal()
     end
     -- Legacy auras (if still present in the build / older profiles).
-    if type(_G.MSUF_UpdateTargetAuras) == "function" then
+    if _G.MSUF_UpdateTargetAuras then
         _G.MSUF_UpdateTargetAuras()
     end
  end
+local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
+    if type(payload) ~= "table" then  return end
+    local touched = (kind == "groupframe") or (kind == "groupframes")
+    if not touched then
+        touched = (type(payload.gf_party) == "table") or (type(payload.gf_raid) == "table") or (type(payload.gf_mythicraid) == "table")
+    end
+    if not touched then  return end
+    MSUF_ProfileIO_EnsureGroupFramesDB()
+    if type(_G.MSUF_GF_InvalidateConfCache) == "function" then
+        _G.MSUF_GF_InvalidateConfCache()
+    end
+    if type(_G.MSUF_GF_RebuildAll) == "function" then
+        _G.MSUF_GF_RebuildAll()
+    elseif type(_G.MSUF_GF_Refresh) == "function" then
+        _G.MSUF_GF_Refresh()
+    elseif type(_G.MSUF_GF_RefreshVisuals) == "function" then
+        _G.MSUF_GF_RefreshVisuals()
+    end
+end
 local function MSUF_ApplySnapshotToActiveProfile(snapshot)
-    if type(snapshot) ~= "table" then  return false, "not a table" end
+    if not snapshot then  return false, "not a table" end
     local kind = snapshot.kind
+    if kind == "groupframes" then
+        kind = "groupframe"
+    end
     local payload = snapshot.payload
     if type(kind) ~= "string" or type(payload) ~= "table" then
          return false, "invalid snapshot"
@@ -833,6 +880,40 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
                 else
                     MSUF_DB[k] = v
                 end
+            end
+        end
+    elseif kind == "groupframe" then
+        if payload.gf_party ~= nil then
+            if type(payload.gf_party) == "table" then
+                MSUF_DB.gf_party = MSUF_DB.gf_party or {}
+                MSUF_WipeTable(MSUF_DB.gf_party)
+                for kk, vv in pairs(payload.gf_party) do
+                    MSUF_DB.gf_party[kk] = MSUF_DeepCopy(vv)
+                end
+            else
+                MSUF_DB.gf_party = MSUF_DeepCopy(payload.gf_party)
+            end
+        end
+        if payload.gf_raid ~= nil then
+            if type(payload.gf_raid) == "table" then
+                MSUF_DB.gf_raid = MSUF_DB.gf_raid or {}
+                MSUF_WipeTable(MSUF_DB.gf_raid)
+                for kk, vv in pairs(payload.gf_raid) do
+                    MSUF_DB.gf_raid[kk] = MSUF_DeepCopy(vv)
+                end
+            else
+                MSUF_DB.gf_raid = MSUF_DeepCopy(payload.gf_raid)
+            end
+        end
+        if payload.gf_mythicraid ~= nil then
+            if type(payload.gf_mythicraid) == "table" then
+                MSUF_DB.gf_mythicraid = MSUF_DB.gf_mythicraid or {}
+                MSUF_WipeTable(MSUF_DB.gf_mythicraid)
+                for kk, vv in pairs(payload.gf_mythicraid) do
+                    MSUF_DB.gf_mythicraid[kk] = MSUF_DeepCopy(vv)
+                end
+            else
+                MSUF_DB.gf_mythicraid = MSUF_DeepCopy(payload.gf_mythicraid)
             end
         end
     elseif kind == "castbar" then
@@ -879,6 +960,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     end
     EnsureDB()
     MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
+    MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
      return true
 end
 function MSUF_ExportSelectionToString(kind)
@@ -912,6 +994,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
     EnsureDB()
+    MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
      return true
 end
@@ -1018,12 +1101,10 @@ function MSUF_ImportLegacyFromString(str)
  end
 ---------------------------------------------------------------------
 -- External Wago UI Packs API (stateless by profileKey)
---
 -- Goals:
 --  - Allow tools to export/import a SPECIFIC profile by key without switching MSUF_ActiveProfile.
 --  - Keep DB table references stable (important for runtime caches) when overwriting the ACTIVE profile.
 --  - Zero regression: existing import/export code paths remain unchanged.
---
 -- API:
 --   ok, strOrErr = MSUF_ExportExternal(profileKey)
 --   ok, errOrNil = MSUF_ImportExternal(profileString, profileKey)

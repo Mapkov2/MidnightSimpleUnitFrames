@@ -539,15 +539,128 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local _gfOnlyWidgets = { gfFontDrop }
 
     -- =====================================================================
-    -- SECTION 2: Text Sizes (default open) — NOT scope-affected
+    -- SECTION 2: Text Sizes (default open) — scope-aware
     -- =====================================================================
     local sizeBox, sizeBody = MakeCollapsibleBox(content, fontBox, CONTENT_W, 300, TR("Text Sizes"), true)
 
     local UpdateSizeOverrideInfo
+    local sizeHint, nameSizeSlider, hpSizeSlider, powerSizeSlider, castbarSizeSlider
+    local RefreshSizeScopeUI
 
-    do local sizeHint = sizeBody:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    local function GetScopedCastbarFontSizeKey(scopeKey)
+        if scopeKey == "player" or scopeKey == "target" or scopeKey == "focus" then
+            local fn = _G.MSUF_GetCastbarPrefix
+            local prefix = type(fn) == "function" and fn(scopeKey) or nil
+            if prefix then return prefix .. "SpellNameFontSize" end
+        elseif scopeKey == "boss" then
+            return "bossCastSpellNameFontSize"
+        end
+        return nil
+    end
+
+    local function SizeScopeSupports(dbKey, scopeKey)
+        scopeKey = scopeKey or GetScopeKey()
+        if scopeKey == "gf_party" or scopeKey == "gf_raid" then return false end
+        if dbKey == "castbarSpellNameFontSize" then
+            if scopeKey == "shared" then return true end
+            return GetScopedCastbarFontSizeKey(scopeKey) ~= nil
+        end
+        return true
+    end
+
+    local function GetScopedFontSizeValue(dbKey, default)
+        EnsureDB()
+        local g = G()
+        local scopeKey = GetScopeKey()
+        if scopeKey == "shared" then
+            return tonumber(g[dbKey]) or default or 14
+        end
+        if dbKey == "castbarSpellNameFontSize" then
+            local castKey = GetScopedCastbarFontSizeKey(scopeKey)
+            if castKey then
+                local v = g[castKey]
+                if v ~= nil then return tonumber(v) or default or 14 end
+            end
+            return tonumber(g[dbKey]) or default or 14
+        end
+        local u = MSUF_DB and MSUF_DB[scopeKey]
+        local v = u and u[dbKey]
+        if v ~= nil then return tonumber(v) or default or 14 end
+        return tonumber(g[dbKey]) or default or 14
+    end
+
+    local function SetScopedFontSizeValue(dbKey, value)
+        EnsureDB()
+        local v = floor((tonumber(value) or 0) + 0.5)
+        local scopeKey = GetScopeKey()
+        if scopeKey == "shared" then
+            G()[dbKey] = v
+            return true
+        end
+        if dbKey == "castbarSpellNameFontSize" then
+            local castKey = GetScopedCastbarFontSizeKey(scopeKey)
+            if not castKey then return false end
+            G()[castKey] = v
+            return true
+        end
+        U(scopeKey)[dbKey] = v
+        return true
+    end
+
+    local function SetSizeSliderEnabled(sl, enabled)
+        if not sl then return end
+        if sl.EnableMouse then sl:EnableMouse(enabled) end
+        if sl.editBox then
+            if enabled then
+                if sl.editBox.EnableMouse then sl.editBox:EnableMouse(true) end
+                if sl.editBox.Enable then sl.editBox:Enable() end
+            else
+                if sl.editBox.EnableMouse then sl.editBox:EnableMouse(false) end
+                if sl.editBox.Disable then sl.editBox:Disable() end
+            end
+        end
+        if sl.minusButton then
+            if enabled and sl.minusButton.Enable then sl.minusButton:Enable()
+            elseif (not enabled) and sl.minusButton.Disable then sl.minusButton:Disable() end
+        end
+        if sl.plusButton then
+            if enabled and sl.plusButton.Enable then sl.plusButton:Enable()
+            elseif (not enabled) and sl.plusButton.Disable then sl.plusButton:Disable() end
+        end
+        if sl.SetAlpha then sl:SetAlpha(enabled and 1 or 0.4) end
+    end
+
+    RefreshSizeScopeUI = function()
+        if not sizeBox then return end
+        local scopeKey = GetScopeKey()
+        local gfScope = IsGFScope and IsGFScope() or false
+        sizeBox:SetShown(not gfScope)
+        if gfScope then return end
+
+        if sizeHint and sizeHint.SetText then
+            if scopeKey == "shared" then
+                sizeHint:SetText("Shared defaults. Unitframes inherit these sizes unless that scope stores its own override.")
+            else
+                local label = SCOPE_LABELS[scopeKey] or scopeKey or "Unit"
+                if SizeScopeSupports("castbarSpellNameFontSize", scopeKey) then
+                    sizeHint:SetText("Editing " .. label .. " size overrides. Unchanged values still fall back to Shared.")
+                else
+                    sizeHint:SetText("Editing " .. label .. " text size overrides. Castbar size stays on Shared for this scope.")
+                end
+            end
+        end
+
+        if nameSizeSlider and nameSizeSlider.Refresh then nameSizeSlider:Refresh() end
+        if hpSizeSlider and hpSizeSlider.Refresh then hpSizeSlider:Refresh() end
+        if powerSizeSlider and powerSizeSlider.Refresh then powerSizeSlider:Refresh() end
+        if castbarSizeSlider and castbarSizeSlider.Refresh then castbarSizeSlider:Refresh() end
+        SetSizeSliderEnabled(castbarSizeSlider, SizeScopeSupports("castbarSpellNameFontSize", scopeKey))
+    end
+
+    do
+    sizeHint = sizeBody:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     sizeHint:SetJustifyH("LEFT"); sizeHint:SetWidth(CONTENT_W - 40)
-    sizeHint:SetText("Global defaults. Frames inherit unless overridden in Unitframes > Text.")
+    sizeHint:SetText("Shared defaults. Unitframes inherit these sizes unless that scope stores its own override.")
     sizeHint:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 16, -6)
 
     local function MakeSizeSlider(name, label, dbKey, anchor, ox, oy, min, max, default)
@@ -555,9 +668,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             name = name, parent = sizeBody,
             anchor = anchor, anchorPoint = "TOPLEFT", x = ox, y = oy,
             width = 110, min = min or 8, max = max or 32, step = 1, default = default or 14,
-            get = function() return G()[dbKey] or default or 14 end,
+            get = function() return GetScopedFontSizeValue(dbKey, default or 14) end,
             set = function(v)
-                G()[dbKey] = floor(v + 0.5)
+                if not SetScopedFontSizeValue(dbKey, v) then
+                    if RefreshSizeScopeUI then RefreshSizeScopeUI() end
+                    return
+                end
                 UpdateFonts()
                 if dbKey == "castbarSpellNameFontSize" then
                     EnsureCastbars()
@@ -582,10 +698,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local colGap = 30
     local firstRowY = -28
     local secondRowY = -118
-    local nameSizeSlider    = MakeSizeSlider("MSUF_NameFontSizeSlider",    "Name",    "nameFontSize",              sizeHint, 0,             firstRowY,  8, 32, 14)
-    local hpSizeSlider      = MakeSizeSlider("MSUF_HealthFontSizeSlider",  "HP",      "hpFontSize",                sizeHint, 110 + colGap,  firstRowY,  8, 32, 14)
-    local powerSizeSlider   = MakeSizeSlider("MSUF_PowerFontSizeSlider",   "Power",   "powerFontSize",             nameSizeSlider, 0,        secondRowY, 8, 32, 14)
-    local castbarSizeSlider = MakeSizeSlider("MSUF_CastbarSpellNameFontSizeSlider", "Castbar", "castbarSpellNameFontSize", powerSizeSlider, 110 + colGap, 0, 0, 30, 0)
+    nameSizeSlider    = MakeSizeSlider("MSUF_NameFontSizeSlider",    "Name",    "nameFontSize",              sizeHint, 0,             firstRowY,  8, 32, 14)
+    hpSizeSlider      = MakeSizeSlider("MSUF_HealthFontSizeSlider",  "HP",      "hpFontSize",                sizeHint, 110 + colGap,  firstRowY,  8, 32, 14)
+    powerSizeSlider   = MakeSizeSlider("MSUF_PowerFontSizeSlider",   "Power",   "powerFontSize",             nameSizeSlider, 0,        secondRowY, 8, 32, 14)
+    castbarSizeSlider = MakeSizeSlider("MSUF_CastbarSpellNameFontSizeSlider", "Castbar", "castbarSpellNameFontSize", powerSizeSlider, 110 + colGap, 0, 0, 30, 0)
     castbarSizeSlider:ClearAllPoints()
     castbarSizeSlider:SetPoint("TOPLEFT", powerSizeSlider, "TOPRIGHT", colGap, 0)
 
@@ -653,6 +769,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 gg.bossCastSpellNameFontSize = nil; gg.bossCastTimeFontSize = nil
                 UpdateFonts(); EnsureCastbars()
                 if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
+                if RefreshSizeScopeUI then RefreshSizeScopeUI() end
                 UpdateSizeOverrideInfo()
             end,
         }
@@ -1044,8 +1161,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             elseif w and w.Show then if gfScope then w:Show() else w:Hide() end end
         end
 
-        -- Text Sizes: UF only (GF sizes are in EM2 popup)
-        sizeBox:SetShown(not gfScope)
+        -- Text Sizes: scope-aware for UF, hidden for GF
+        if RefreshSizeScopeUI then
+            RefreshSizeScopeUI()
+        else
+            sizeBox:SetShown(not gfScope)
+        end
 
         -- Override summary + reset: visible only on Shared
         if isShared then

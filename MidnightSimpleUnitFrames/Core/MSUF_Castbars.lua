@@ -7,6 +7,30 @@ local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local string_format = string.format
 local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 local FONT_LIST = _G.MSUF_FONT_LIST
+local ResolveFontPath = _G.MSUF_ResolveFontPath or function(path)
+    if type(_G.MSUF_NormalizeFontPath) == "function" then
+        return _G.MSUF_NormalizeFontPath(path)
+    end
+    return path
+end
+local CastbarsRunNextFrame = _G.MSUF_Castbars_RunNextFrame or function(fn)
+    if type(fn) ~= "function" then return end
+    local timer = _G.C_Timer
+    if timer and timer.After then
+        timer.After(0, fn)
+    else
+        fn()
+    end
+end
+
+local function _MSUF_DeferredBossPreviewEditModeRefresh()
+    if _G.MSUF_UpdateBossCastbarPreview then
+        _G.MSUF_UpdateBossCastbarPreview()
+    end
+    if _G.MSUF_SetupBossCastbarPreviewEditMode then
+        _G.MSUF_SetupBossCastbarPreviewEditMode()
+    end
+end
 
 -- ══════════════════════════════════════════════════════════════
 -- Castbar unit info, textures, style cache, font helpers
@@ -100,13 +124,13 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
     if not unitKey then  return end
     if not MSUF_DB then EnsureDB() end
     if MSUF_IsBossCastbarUnit(unitKey) then
-        if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+        if _G.MSUF_ApplyBossCastbarPositionSetting then
             _G.MSUF_ApplyBossCastbarPositionSetting()
     end
-        if type(_G.MSUF_ApplyBossCastbarTimeSetting) == "function" then
+        if _G.MSUF_ApplyBossCastbarTimeSetting then
             _G.MSUF_ApplyBossCastbarTimeSetting()
     end
-        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        if _G.MSUF_UpdateBossCastbarPreview then
             _G.MSUF_UpdateBossCastbarPreview()
     end
         if type(MSUF_SyncCastbarPositionPopup) == "function" then
@@ -138,14 +162,14 @@ local function MSUF_GetFontPath()
     if LSM and key and key ~= "" then
         local p = LSM:Fetch("font", key, true)
         if p then
-             return p
+             return ResolveFontPath(p, 14, "")
     end
     end
     local internalPath = GetInternalFontPathByKey(key)
     if internalPath then
-         return internalPath
+         return ResolveFontPath(internalPath, 14, "")
     end
-    return FONT_LIST[1].path
+    return ResolveFontPath(FONT_LIST[1].path, 14, "")
 end
 local function MSUF_GetFontFlags()
     if not MSUF_DB then EnsureDB() end
@@ -440,32 +464,39 @@ function MSUF_UpdateCastbarFillDirection()
             end
                 MSUF_RefreshCastbarStyleCache(frame)
             local rf = MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
-            MSUF_FastCall(frame.statusBar.SetReverseFill, frame.statusBar, rf and true or false)
+            if frame.statusBar and frame.statusBar.SetReverseFill then frame.statusBar:SetReverseFill(rf and true or false) end
     end
      end
     MSUF_ForMainCastbars(Apply)
  end
+-- PERF: Result cache — key→texture mapping never changes during runtime.
+local _resolveTexCache = {}
 function MSUF_ResolveStatusbarTextureKey(key)
-    local defaultTex = "Interface\\TargetingFrame\\UI-StatusBar"
+    if type(key) ~= "string" or key == "" then
+        return "Interface\\TargetingFrame\\UI-StatusBar"
+    end
+    local cached = _resolveTexCache[key]
+    if cached then return cached end
+
+    local result
     local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
-    if type(builtins) == "table" and type(key) == "string" then
+    if type(builtins) == "table" then
         local t = builtins[key]
         if type(t) == "string" and t ~= "" then
-             return t
+            result = t
+        end
     end
-    end
-    if type(key) == "string" then
+    if not result then
         if key:find("\\") or key:find("/") then
-             return key
+            result = key
+        elseif LSM and type(LSM.Fetch) == "function" then
+            local tex = LSM:Fetch("statusbar", key, true)
+            if tex then result = tex end
+        end
     end
-    end
-    if LSM and type(LSM.Fetch) == "function" and type(key) == "string" and key ~= "" then
-        local tex = LSM:Fetch("statusbar", key, true)
-        if tex then
-             return tex
-    end
-    end
-     return defaultTex
+    result = result or "Interface\\TargetingFrame\\UI-StatusBar"
+    _resolveTexCache[key] = result
+    return result
 end
 _G.MSUF_ResolveStatusbarTextureKey = MSUF_ResolveStatusbarTextureKey
 _G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {
@@ -517,13 +548,9 @@ end
 -- Castbar preview toggle
 -- ══════════════════════════════════════════════════════════════
 local function MSUF_InitPlayerCastbarPreviewToggle()
-    if not MSUF_DB or not MSUF_DB.general then
-         return
-    end
+    if not MSUF_DB or not MSUF_DB.general then return end
     local playerGroup = _G["MSUF_CastbarPlayerGroup"]
-    if not playerGroup then
-         return
-    end
+    if not playerGroup then return end
     local castbarGroup = playerGroup:GetParent() or playerGroup
     local anchorParent = castbarGroup
     local function MSUF_GetLastCastbarSubTabButton()
@@ -602,7 +629,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
         local g = MSUF_DB.general or {}
         local wasActive = g.castbarPlayerPreviewEnabled and true or false
         if wasActive then
-            local bf = _G and _G.MSUF_BossCastbarPreview
+            local bf = _G.MSUF_BossCastbarPreview
             if bf and bf.GetWidth and bf.GetHeight then
                 g.bossCastbarWidth  = math.floor((bf:GetWidth()  or (tonumber(g.bossCastbarWidth)  or 240)) + 0.5)
                 g.bossCastbarHeight = math.floor((bf:GetHeight() or (tonumber(g.bossCastbarHeight) or 18)) + 0.5)
@@ -614,10 +641,10 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             if type(MSUF_SyncBossCastbarSliders) == "function" then
                 MSUF_SyncBossCastbarSliders()
             end
-            if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+            if _G.MSUF_ApplyBossCastbarPositionSetting then
                 _G.MSUF_ApplyBossCastbarPositionSetting()
             end
-            if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            if _G.MSUF_UpdateBossCastbarPreview then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
     end
@@ -631,23 +658,16 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             MSUF_UpdatePlayerCastbarPreview()
     end
         if g.castbarPlayerPreviewEnabled then
-            if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+            if _G.MSUF_ApplyBossCastbarPositionSetting then
                 _G.MSUF_ApplyBossCastbarPositionSetting()
             end
-            if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            if _G.MSUF_UpdateBossCastbarPreview then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
-            if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
+            if _G.MSUF_SetupBossCastbarPreviewEditMode then
                 _G.MSUF_SetupBossCastbarPreviewEditMode()
             end
-            C_Timer.After(0, function()
-                    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-                        _G.MSUF_UpdateBossCastbarPreview()
-                    end
-                    if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
-                        _G.MSUF_SetupBossCastbarPreviewEditMode()
-                    end
-                 end)
+            CastbarsRunNextFrame(_MSUF_DeferredBossPreviewEditModeRefresh)
     end
         UpdateButtonLabel()
      end)
@@ -821,7 +841,7 @@ MSUF_BumpCastbarStyleRevision()
             end
         end
         -- Kick ready indicator
-        if type(_G.MSUF_KickReady_ApplyLayout) == "function" then
+        if _G.MSUF_KickReady_ApplyLayout then
             _G.MSUF_KickReady_ApplyLayout(frame)
         end
         local cfg2 = cfg or {}
@@ -871,7 +891,7 @@ MSUF_BumpCastbarStyleRevision()
     if type(_G.MSUF_UpdateBossCastbarPreview) == "function" and not _G.MSUF_BossPreviewRefreshLock then
         _G.MSUF_BossPreviewRefreshLock = true
         _G.MSUF_UpdateBossCastbarPreview()
-        if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
+        if _G.MSUF_SetupBossCastbarPreviewEditMode then
             _G.MSUF_SetupBossCastbarPreviewEditMode()
     end
         _G.MSUF_BossPreviewRefreshLock = false

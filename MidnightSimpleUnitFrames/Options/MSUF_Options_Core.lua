@@ -1,37 +1,29 @@
 local addonName, ns = ...
 ns = ns or {}
-if _G then _G.MSUF_NS = ns end
+_G.MSUF_NS = ns
 -- Slash-menu-only: the Slash Menu is the only options UI. Blizzard Settings shows only a lightweight launcher.
-if _G then _G.MSUF_SLASHMENU_ONLY = true end
-
+_G.MSUF_SLASHMENU_ONLY = true
 -- L table setup (canonical location; Toolkit also guards this)
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 if not getmetatable(ns.L) then setmetatable(ns.L, { __index = function(t, k) return k end }) end
 local TR = ns.TR or function(v) if type(v) ~= "string" then return v end; return ns.L[v] or v end
 
--- ---------------------------------------------------------------------------
 -- Deferred Options Init System (Ellesmere-inspired)
---
 -- Options files register heavy initialization via ns.MSUF_Options_DeferInit(fn).
 -- All registered closures execute on the first ns.MSUF_Options_EnsureLoaded()
 -- call, which fires when CreateOptionsPanel() runs for the first time.
---
 -- This means ~18K lines of Options Lua across all files only execute their
 -- heavy widget-building code on first panel open — zero overhead at login
 -- beyond the unavoidable file parse.
---
 -- Usage in split-out Options files (e.g. MSUF_Options_Auras.lua):
---
 --   local addonName, ns = ...
 --   ns = ns or {}
 --   ns.MSUF_Options_DeferInit(function()
 --       -- 2789 lines of heavy aura options UI code
 --       function ns.MSUF_RegisterAurasOptions(rootCat) ... end
 --   end)
---
 -- The closure body is NOT executed at login; it runs only when the user
 -- opens the MSUF options panel for the first time.
--- ---------------------------------------------------------------------------
 do
     -- Guard: another file in the suite may have already installed the system.
     if not ns._optionsDeferredInits then
@@ -81,14 +73,10 @@ local frameGroup, frameGroupHost, fontGroup, auraGroup, castbarGroup, castbarGro
 local barGroup, barGroupHost
 local classPowerGroup, classPowerGroupHost
 local MSUF_BarsApplyGradient -- forward decl; see MSUF_Options_Bars.lua (exports to _G)
--- ---------------------------------------------------------------------------
 -- Gradient changes apply live (no reload required).
 -- Keep a no-op stub so any stale call-sites (older builds) don't nil-error.
--- ---------------------------------------------------------------------------
 local function MSUF_Options_ShowGradientReloadPopup() end -- no-op stub (live apply, backward compat)
--- ---------------------------------------------------------------------------
 -- Transition helpers (optional, graceful fallback to instant Show/Hide)
--- ---------------------------------------------------------------------------
 local function _T() return ns.MSUF_Transitions end
 local function _TFadeIn(f, d)
     local T = _T()
@@ -98,13 +86,11 @@ local TRANS_TAB = 0.10
 local function MSUF_ScheduleReloadRecommend()   end       -- no-op stub (backward compat)
 local castbarEnemyGroup, castbarTargetGroup, castbarFocusGroup, castbarBossGroup, castbarPlayerGroup
 local barGroupHost, barGroup, miscGroup, profileGroup
--- ---------------------------------------------------------------------------
 -- Bars menu: scroll container (same UIPanelScrollFrameTemplate method as Auras/Gameplay/Colors)
--- ---------------------------------------------------------------------------
 local function MSUF_BarsMenu_QueueScrollUpdate()
     local host = barGroupHost
-    local scroll = (_G and _G.MSUF_BarsMenuScrollFrame) or (host and host._msufBarsScroll) or nil
-    local child  = (_G and _G.MSUF_BarsMenuScrollChild) or (host and host._msufBarsScrollChild) or nil
+    local scroll = (_G.MSUF_BarsMenuScrollFrame) or (host and host._msufBarsScroll) or nil
+    local child  = (_G.MSUF_BarsMenuScrollChild) or (host and host._msufBarsScrollChild) or nil
     if not (scroll and child and child.SetHeight and child.GetTop and child.GetBottom) then return end
 
     local anchor = _G and (_G.MSUF_BarsMenuPanelRight or _G.MSUF_BarsMenuPanelLeft) or nil
@@ -131,7 +117,7 @@ local function MSUF_BarsMenu_QueueScrollUpdate()
         if w and w > 1 then child:SetWidth(w) end
 
         if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
-        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+        if _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
     end
 
     if C_Timer and C_Timer.After then
@@ -141,9 +127,7 @@ local function MSUF_BarsMenu_QueueScrollUpdate()
     end
 end
 
--- ---------------------------------------------------------------------------
 -- Frames menu: scroll container (same pattern as Bars menu above)
--- ---------------------------------------------------------------------------
 local function MSUF_FramesMenu_QueueScrollUpdate()
     local host = frameGroupHost
     if not host then return end
@@ -183,7 +167,7 @@ local function MSUF_FramesMenu_QueueScrollUpdate()
         if w and w > 1 then child:SetWidth(w) end
 
         if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
-        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+        if _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
     end
 
     if C_Timer and C_Timer.After then
@@ -193,9 +177,7 @@ local function MSUF_FramesMenu_QueueScrollUpdate()
     end
 end
 
--- ---------------------------------------------------------------------------
 -- Castbar menu: scroll container (same pattern as Frames/Bars menus)
--- ---------------------------------------------------------------------------
 local function MSUF_CastbarMenu_QueueScrollUpdate()
     local host = castbarGroupHost
     if not host then return end
@@ -234,7 +216,7 @@ local function MSUF_CastbarMenu_QueueScrollUpdate()
         if w and w > 1 then child:SetWidth(w) end
 
         if scroll.UpdateScrollChildRect then scroll:UpdateScrollChildRect() end
-        if _G and _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
+        if _G.UIPanelScrollFrame_Update then _G.UIPanelScrollFrame_Update(scroll) end
     end
 
     if C_Timer and C_Timer.After then
@@ -250,7 +232,7 @@ local function MSUF_GetLSM()
 end
 -- Ensure the Castbars LoD addon is loaded before calling castbar functions.
 local function MSUF_EnsureCastbars()
-    if type(_G.MSUF_EnsureAddonLoaded) == "function" then
+    if _G.MSUF_EnsureAddonLoaded then
         _G.MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Castbars")
          return
     end
@@ -261,9 +243,7 @@ local function MSUF_EnsureCastbars()
         pcall(_G.LoadAddOn, "MidnightSimpleUnitFrames_Castbars")
     end
  end
--- ============================================================
 -- Toolkit imports (defined in MSUF_Options_Toolkit.lua, loaded before Core)
--- ============================================================
 local MSUF_AttachTooltip          = ns.MSUF_AttachTooltip
 local UI_Text                     = ns.MSUF_UI_Text
 local UI_Btn                      = ns.MSUF_UI_Btn
@@ -315,42 +295,42 @@ end
 function MSUF_RegisterOptionsCategoryLazy()
     -- Slash-menu-only build: Blizzard Settings shows a lightweight launcher panel only.
     -- The legacy multi-panel Settings UI is intentionally not registered anymore.
-    if _G then _G.MSUF_SLASHMENU_ONLY = true end
+    _G.MSUF_SLASHMENU_ONLY = true
     if not Settings or not Settings.RegisterCanvasLayoutCategory then  return end
     -- Root (AddOns list) panel: lightweight launcher with a single button.
-    local launcher = (_G and _G.MSUF_LauncherPanel) or CreateFrame("Frame")
-    if _G then _G.MSUF_LauncherPanel = launcher end
+    local launcher = (_G.MSUF_LauncherPanel) or CreateFrame("Frame")
+    _G.MSUF_LauncherPanel = launcher
     launcher.name = "Midnight Simple Unit Frames"
     -- Register the main category now (cheap) so users can find MSUF in Blizzard Settings.
-    local rootCat = (_G and _G.MSUF_SettingsCategory) or nil
+    local rootCat = (_G.MSUF_SettingsCategory) or nil
     if not rootCat then
         local cat = Settings.RegisterCanvasLayoutCategory(launcher, launcher.name)
         Settings.RegisterAddOnCategory(cat)
         rootCat = cat
-        if _G then _G.MSUF_SettingsCategory = cat end
+        _G.MSUF_SettingsCategory = cat
     end
     MSUF_SettingsCategory = rootCat
     if ns then ns.MSUF_MainCategory = rootCat end
     -- Combat-safe opener: avoid blocked actions/taint by deferring UI opens until after combat.
     local function MSUF_RunAfterCombat(fn)
         if InCombatLockdown and InCombatLockdown() then
-            if _G then _G.MSUF_PendingOpenAfterCombat = fn end
-            local f = _G and _G.MSUF_CombatDeferFrame
+            _G.MSUF_PendingOpenAfterCombat = fn
+            local f = _G.MSUF_CombatDeferFrame
             if not f then
                 f = CreateFrame("Frame")
-                if _G then _G.MSUF_CombatDeferFrame = f end
+                _G.MSUF_CombatDeferFrame = f
                 f:RegisterEvent("PLAYER_REGEN_ENABLED")
                 f:SetScript("OnEvent", function(self)
-                    local pending = _G and _G.MSUF_PendingOpenAfterCombat
+                    local pending = _G.MSUF_PendingOpenAfterCombat
                     if pending then
                         _G.MSUF_PendingOpenAfterCombat = nil
                         pending()
                     end
                     -- Zero combat overhead: unregister when nothing is pending
-                    if not (_G and _G.MSUF_PendingOpenAfterCombat) then
+                    if not (_G.MSUF_PendingOpenAfterCombat) then
                         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
                         self:SetScript("OnEvent", nil)
-                        if _G then _G.MSUF_CombatDeferFrame = nil end
+                        _G.MSUF_CombatDeferFrame = nil
                     end
                  end)
             end
@@ -433,7 +413,7 @@ function CreateOptionsPanel()
     -- Run all deferred inits from split-out Options files (idempotent; zero cost after first call).
     ns.MSUF_Options_EnsureLoaded()
     -- If the panel was already fully built, just refresh it.
-    if _G and _G.MSUF_OptionsPanel and _G.MSUF_OptionsPanel.__MSUF_FullBuilt then
+    if _G.MSUF_OptionsPanel and _G.MSUF_OptionsPanel.__MSUF_FullBuilt then
         local p = _G.MSUF_OptionsPanel
         if p.LoadFromDB then p:LoadFromDB() end
          return p
@@ -453,7 +433,7 @@ end
 local function MSUF_Options_RequestLayoutForKey(unitKey, reason, urgent)
     unitKey = MSUF_Options_NormalizeUnitKey(unitKey)
     if type(unitKey) ~= "string" then  return false end
-    local fn = _G and _G.MSUF_UFCore_RequestLayoutForUnit
+    local fn = _G.MSUF_UFCore_RequestLayoutForUnit
     if type(fn) == "function" then
         if urgent == nil then urgent = MSUF_Options_IsUrgentUnitKey(unitKey) end
         -- Signature is flexible (extra args are ignored safely).
@@ -513,7 +493,7 @@ local function MSUF_UpdatePowerBarBorderSizeFromEdit(editBox)
         ApplyAllSettings()
     end
  end
-panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
+panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
     _G.MSUF_OptionsPanel = panel
     panel.name = "Midnight Simple Unit Frames"
     title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -535,7 +515,7 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         ns.MSUF_MainSearchBox = searchBox
         ns.MSUF_SearchAnchor  = searchBox
     end
-    if (_G and _G.MSUF_SLASHMENU_ONLY) then
+    if (_G.MSUF_SLASHMENU_ONLY) then
         -- When hosted by the Slash Menu, do not render legacy header/search UI.
         if title and title.Hide then title:Hide() end
         if sub and sub.Hide then sub:Hide() end
@@ -708,10 +688,11 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
     profileGroup:SetAllPoints()
     local currentKey = "player"
     local currentTabKey = "frames"
+    local _msufKeyInitialized = false
     local UNIT_FRAME_KEYS = { player=true, target=true, targettarget=true, focus=true, pet=true, boss=true }
     local buttons = {}
     local editModeButton
-    local __MSUF_SLASH_ONLY = (_G and _G.MSUF_SLASHMENU_ONLY) and true or false
+    local __MSUF_SLASH_ONLY = (_G.MSUF_SLASHMENU_ONLY) and true or false
     local function GetLabelForKey(key)
         if key == "player" then
              return "Player"
@@ -833,6 +814,22 @@ panel = (_G and _G.MSUF_OptionsPanel) or CreateFrame("Frame")
         return k == "bars" or k == "classpower" or k == "fonts" or k == "auras" or k == "castbar" or k == "misc" or k == "profiles"
     end
     local function SetCurrentKey(newKey)
+        -- PERF: Same-key early-exit. Hot path sees this called repeatedly with
+        -- identical newKey during options mirror page-select cascades. The heavy
+        -- UpdateGroupVisibility→_TFadeIn pipeline below doesn't need to run when
+        -- nothing actually changed.
+        -- Initialization guard: the first call MUST run through to set up
+        -- panel visibility, even if newKey matches the initial state
+        -- ("player"/"frames"). Without this, first-open-after-reload leaves
+        -- all panel groups in undefined visibility state.
+        if _msufKeyInitialized then
+            if IsTabKey(newKey) then
+                if currentTabKey == newKey then return end
+            else
+                if currentKey == newKey and currentTabKey == "frames" then return end
+            end
+        end
+        _msufKeyInitialized = true
         if IsTabKey(newKey) then
             currentTabKey = newKey
         else
@@ -1064,7 +1061,7 @@ if emFont then emFont:SetFontObject("GameFontNormalLarge") end
     g.castbarPlayerPreviewEnabled = MSUF_UnitEditModeActive and true or false
     local function RefreshAll()
         if MSUF_UpdatePlayerCastbarPreview then MSUF_UpdatePlayerCastbarPreview() end
-        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then _G.MSUF_UpdateBossCastbarPreview() end
+        if _G.MSUF_UpdateBossCastbarPreview then _G.MSUF_UpdateBossCastbarPreview() end
         if type(MSUF_SetupBossCastbarPreviewEditMode) == "function" then
             MSUF_SetupBossCastbarPreviewEditMode()
         end
@@ -1078,7 +1075,7 @@ function MSUF_SyncBossUnitframePreviewWithUnitEdit()
     -- - Requires Boss unitframe enabled
     -- - Optional user toggle via MSUF_EditModeBossPreviewCheck (if present)
     if type(EnsureDB) == "function" then EnsureDB() end
-    local bossConf = (type(MSUF_DB) == "table" and MSUF_DB.boss) or nil
+    local bossConf = (MSUF_DB and MSUF_DB.boss) or nil
     local bossEnabled = (not bossConf) or (bossConf.enabled ~= false)
     local editActive = (MSUF_UnitEditModeActive and true or false)
     -- Read preview toggle (checkbox created in MSUF_EditMode.lua).
@@ -1090,7 +1087,7 @@ function MSUF_SyncBossUnitframePreviewWithUnitEdit()
         if chk.Show then chk:Show() end
         if chk.Enable then chk:Enable() end
     else
-        if type(MSUF_DB) == "table" then
+        if MSUF_DB then
             MSUF_DB.general = MSUF_DB.general or {}
             if MSUF_DB.general.bossPreviewEnabled == nil then MSUF_DB.general.bossPreviewEnabled = true end
             bossPreviewEnabled = MSUF_DB.general.bossPreviewEnabled and true or false
@@ -1101,7 +1098,7 @@ function MSUF_SyncBossUnitframePreviewWithUnitEdit()
     MSUF_BossTestMode = active
     if InCombatLockdown and InCombatLockdown() then  return end
     -- Refresh secure visibility drivers so a previous "hide" state does not stick.
-    if type(MSUF_RefreshAllUnitVisibilityDrivers) == "function" then MSUF_RefreshAllUnitVisibilityDrivers(editActive) end
+    if MSUF_RefreshAllUnitVisibilityDrivers then MSUF_RefreshAllUnitVisibilityDrivers(editActive) end
     for i = 1, MSUF_MAX_BOSS_FRAMES do
         local f = _G["MSUF_boss" .. i] or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames["boss" .. i])
         if f then
@@ -1131,9 +1128,7 @@ function MSUF_SyncBossUnitframePreviewWithUnitEdit()
 -- The shared Edit Mode button now drives the full flow: enable MSUF Edit Mode + enable castbar previews + start test casts.
 local function MSUF_ToggleCastbarEditModeFromOptions()
     if type(EnsureDB) == "function" then EnsureDB() end
-    if not MSUF_DB or not MSUF_DB.general then
-         return
-    end
+    if not MSUF_DB or not MSUF_DB.general then return end
     local wantActive = not (MSUF_UnitEditModeActive and true or false)
     -- Start/stop MSUF Edit Mode. We intentionally use a known-good unitKey (player) to avoid unknown-key paths.
     if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
@@ -1145,7 +1140,7 @@ local function MSUF_ToggleCastbarEditModeFromOptions()
         if wantActive and type(MSUF_BeginEditModeTransaction) == "function" then MSUF_BeginEditModeTransaction() end
     end
     -- Ensure castbar previews follow Edit Mode.
-    if type(MSUF_SyncCastbarEditModeWithUnitEdit) == "function" then MSUF_SyncCastbarEditModeWithUnitEdit() end
+    if MSUF_SyncCastbarEditModeWithUnitEdit then MSUF_SyncCastbarEditModeWithUnitEdit() end
     -- Start/stop dummy casts on previews so changes are visible.
     local fns = {
         "MSUF_SetPlayerCastbarTestMode",
@@ -1191,7 +1186,7 @@ editModeButton:SetScript("OnClick", function()
     end
     local wantActive = not (MSUF_UnitEditModeActive and true or false)
     -- Always start/stop MSUF Edit Mode directly (even when Blizzard linking is OFF)
-    if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
+    if _G.MSUF_SetMSUFEditModeDirect then
         _G.MSUF_SetMSUFEditModeDirect(wantActive, currentKey)
     else
         -- fallback (shouldn't happen): old toggle behavior
@@ -1201,7 +1196,7 @@ editModeButton:SetScript("OnClick", function()
         if type(MSUF_SyncCastbarEditModeWithUnitEdit) == "function" then
             MSUF_SyncCastbarEditModeWithUnitEdit()
         end
-        if type(MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then MSUF_SyncBossUnitframePreviewWithUnitEdit() end
+        if MSUF_SyncBossUnitframePreviewWithUnitEdit then MSUF_SyncBossUnitframePreviewWithUnitEdit() end
     end
     -- IMPORTANT: Do NOT try to programmatically toggle Blizzard Edit Mode from addon UI.
     -- In Midnight/Beta this can taint the EditMode exit path (ClearTarget) and break Edit Mode until /reload.
@@ -1245,10 +1240,27 @@ editModeButton:SetScript("OnClick", function()
         end
      end)
     local function MSUF_StyleSlider(slider)
-        -- Delegate to the canonical StyleSlider from Options_Toolkit (loaded before Core)
-        local fn = ns.MSUF_StyleSlider or _G.MSUF_StyleSlider
-        if fn then return fn(slider) end
-    end
+        if ns.MSUF_StyleSlider then return ns.MSUF_StyleSlider(slider) end
+        if not slider or slider.MSUFStyled then  return end
+        slider.MSUFStyled = true
+        slider:SetHeight(14)
+        track = slider:CreateTexture(nil, "BACKGROUND")
+        slider.MSUFTrack = track
+        track:SetColorTexture(0.06, 0.06, 0.06, 1)
+        track:SetPoint("TOPLEFT", slider, "TOPLEFT", 0, -3)
+        track:SetPoint("BOTTOMRIGHT", slider, "BOTTOMRIGHT", 0, 3)
+        thumb = slider:GetThumbTexture()
+        if thumb then
+            thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+            thumb:SetSize(10, 18)
+        end
+        slider:HookScript("OnEnter", function(self)
+            if self.MSUFTrack then self.MSUFTrack:SetColorTexture(0.20, 0.20, 0.20, 1) end
+         end)
+        slider:HookScript("OnLeave", function(self)
+            if self.MSUFTrack then self.MSUFTrack:SetColorTexture(0.06, 0.06, 0.06, 1) end
+         end)
+     end
 local function MSUF_StyleSmallButton(button, isPlus)
     if not button or button.MSUFStyled then  return end
     button.MSUFStyled = true
@@ -1364,7 +1376,7 @@ local function MSUF_CreateGradientDirectionPad(parent)
             -- Apply gradient changes live (HP + Power, throttle-safe).
             if type(MSUF_BarsApplyGradient) == "function" then
                 MSUF_BarsApplyGradient()
-            elseif type(_G.MSUF_BarsApplyGradient) == "function" then
+            elseif _G.MSUF_BarsApplyGradient then
                 _G.MSUF_BarsApplyGradient()
             elseif type(ApplyAllSettings) == "function" then
                 ApplyAllSettings()
@@ -1559,7 +1571,7 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
         end
      end)
     MSUF_StyleSlider(slider)
-     
+
     -- Search helper: register slider label for menu search (no overhead outside menu).
     if type(_G.MSUF_Search_RegisterSlider) == "function" and type(name) == "string" and type(label) == "string" then
         _G.MSUF_Search_RegisterSlider(name, label)
@@ -1690,11 +1702,11 @@ if _G and not _G.MSUF_Options_Apply then
     local A = {
         castbars = CastbarVisuals, castbarVisuals = CastbarVisuals,
         castbarFillDirection = function()  Call(_G.MSUF_UpdateCastbarFillDirection)  end,
-        castbarTicks = function()  if type(_G.MSUF_UpdateCastbarChannelTicks) == "function" then _G.MSUF_UpdateCastbarChannelTicks() else CastbarVisuals() end  end,
-        castbarGlow = function()  if type(_G.MSUF_UpdateCastbarGlowEffect) == "function" then _G.MSUF_UpdateCastbarGlowEffect() else CastbarVisuals() end  end,
-        castbarLatency = function()  if type(_G.MSUF_UpdateCastbarLatencyIndicator) == "function" then _G.MSUF_UpdateCastbarLatencyIndicator() else CastbarVisuals() end  end,
+        castbarTicks = function()  if _G.MSUF_UpdateCastbarChannelTicks then _G.MSUF_UpdateCastbarChannelTicks() else CastbarVisuals() end  end,
+        castbarGlow = function()  if _G.MSUF_UpdateCastbarGlowEffect then _G.MSUF_UpdateCastbarGlowEffect() else CastbarVisuals() end  end,
+        castbarLatency = function()  if _G.MSUF_UpdateCastbarLatencyIndicator then _G.MSUF_UpdateCastbarLatencyIndicator() else CastbarVisuals() end  end,
     }
-    A.all = function()  if type(ApplyAllSettings) == "function" then ApplyAllSettings() elseif type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then _G.MSUF_ApplyAllSettings_Immediate() end  end
+    A.all = function()  if type(ApplyAllSettings) == "function" then ApplyAllSettings() elseif _G.MSUF_ApplyAllSettings_Immediate then _G.MSUF_ApplyAllSettings_Immediate() end  end
     function _G.MSUF_Options_Apply(kind, ...)  return Call(A[kind] or A.all, ...) end
     if ns and not ns.MSUF_Options_Apply then ns.MSUF_Options_Apply = _G.MSUF_Options_Apply end
 end
@@ -1703,7 +1715,7 @@ end
 if _G and not _G.MSUF_Options_BindDBBoolCheck then
 -- Nested DB path setter (supports "a.b.c" paths). Kept local to avoid global clutter.
 local function _MSUF_DBSetPath(path, value)
-    if type(MSUF_DB) ~= "table" or type(path) ~= "string" then  return end
+    if not MSUF_DB or type(path) ~= "string" then  return end
     local t = MSUF_DB
     local parts = {}
     for token in string.gmatch(path, "[^%.]+") do
@@ -1721,7 +1733,7 @@ local function _MSUF_DBSetPath(path, value)
         if not cb or type(dbPath) ~= "string" then  return end
         cb:SetScript("OnClick", function(self)
             if type(EnsureDB) == "function" then EnsureDB() end
-            if type(MSUF_DB) ~= "table" then  return end
+            if not MSUF_DB then  return end
             local v = self:GetChecked() and true or false
                         _MSUF_DBSetPath(dbPath, v)
             -- Force the widget's visual state to match the new value.
@@ -1742,7 +1754,7 @@ end
 if _G and not _G.MSUF_Options_BindGeneralBoolCheck then
     function _G.MSUF_Options_BindGeneralBoolCheck(cb, dbKey, applyFn, syncFn, onShow)
         if not cb or type(dbKey) ~= "string" then  return end
-        if _G and _G.MSUF_Options_BindDBBoolCheck then
+        if _G.MSUF_Options_BindDBBoolCheck then
             return _G.MSUF_Options_BindDBBoolCheck(cb, "general." .. dbKey, applyFn, syncFn, onShow)
         end
      end
@@ -1778,7 +1790,7 @@ if _G and not _G.MSUF_Options_BindGeneralNumberSlider then
         slider.onValueChanged = function(self, value)
             if self and self.MSUF_SkipCallback then  return end
             if type(EnsureDB) == "function" then EnsureDB() end
-            if type(MSUF_DB) ~= "table" then  return end
+            if not MSUF_DB then  return end
             MSUF_DB.general = MSUF_DB.general or {}
             local g = MSUF_DB.general
             local v = _MSUF_ClampNum(value, minV, maxV, asInt, def)
@@ -1792,7 +1804,7 @@ if _G and not _G.MSUF_Options_BindGeneralNumberSlider then
          end
         -- Initial clamp + sync to UI (no apply)
         if type(EnsureDB) == "function" then EnsureDB() end
-        if type(MSUF_DB) ~= "table" then  return end
+        if not MSUF_DB then  return end
         MSUF_DB.general = MSUF_DB.general or {}
         local g = MSUF_DB.general
         local v0 = _MSUF_ClampNum(g[dbKey], minV, maxV, asInt, def)
@@ -1833,12 +1845,10 @@ local function MSUF_ExportSplitHelpers()
     if not ns.MSUF_SetLabeledSliderValue and type(MSUF_SetLabeledSliderValue) == "function" then ns.MSUF_SetLabeledSliderValue = MSUF_SetLabeledSliderValue end
  end
 MSUF_ExportSplitHelpers()
--- ---------------------------------------------------------------------------
 -- Step 6: Compatibility layer (keep old function names alive as thin wrappers)
 -- Goal: zero regression for older split modules / external integrations.
 --  - Keep names on `ns.*` and `_G.*`
 --  - Do NOT change behavior; only forward to the new implementations.
--- ---------------------------------------------------------------------------
 local function MSUF_InstallCompatWrappers()
     if not _G then  return end
     -- Also offer a non-prefixed alias for legacy call sites.
@@ -2280,16 +2290,16 @@ end
     if not panel.__MSUF_AggroTestHooked then
         panel.__MSUF_AggroTestHooked = true
         local function _ClearAllTestModes()
-            if type(_G.MSUF_SetAggroBorderTestMode) == "function" then
+            if _G.MSUF_SetAggroBorderTestMode then
                 _G.MSUF_SetAggroBorderTestMode(false)
             end
-            if type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+            if _G.MSUF_SetDispelBorderTestMode then
                 _G.MSUF_SetDispelBorderTestMode(false)
             end
-            if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+            if _G.MSUF_SetPurgeBorderTestMode then
                 _G.MSUF_SetPurgeBorderTestMode(false)
             end
-            if type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then
+            if _G.MSUF_SetBossTargetBorderTestMode then
                 _G.MSUF_SetBossTargetBorderTestMode(false)
             end
             if panel.aggroTestCheck then panel.aggroTestCheck:SetChecked(false) end
@@ -2312,26 +2322,26 @@ end
 SetCurrentKey("player")
 panel:LoadFromDB()
 MSUF_CallUpdateAllFonts()
-    if not (_G and _G.MSUF_SLASHMENU_ONLY) then
+    if not (_G.MSUF_SLASHMENU_ONLY) then
     -- Ensure root category exists (launcher). Never re-register the root against the heavy Legacy panel.
-    local rootCat = (_G and _G.MSUF_SettingsCategory) or MSUF_SettingsCategory
+    local rootCat = (_G.MSUF_SettingsCategory) or MSUF_SettingsCategory
     if not rootCat and Settings and Settings.RegisterCanvasLayoutCategory then
         -- Emergency fallback (should normally be created by MSUF_RegisterOptionsCategoryLazy)
-        local launcher = (_G and _G.MSUF_LauncherPanel) or CreateFrame("Frame")
-        if _G then _G.MSUF_LauncherPanel = launcher end
+        local launcher = (_G.MSUF_LauncherPanel) or CreateFrame("Frame")
+        _G.MSUF_LauncherPanel = launcher
         launcher.name = "Midnight Simple Unit Frames"
         rootCat = Settings.RegisterCanvasLayoutCategory(launcher, launcher.name)
         Settings.RegisterAddOnCategory(rootCat)
-        if _G then _G.MSUF_SettingsCategory = rootCat end
+        _G.MSUF_SettingsCategory = rootCat
     end
     MSUF_SettingsCategory = rootCat
     if ns then ns.MSUF_MainCategory = rootCat end
     -- Ensure Legacy subcategory exists for this heavy panel.
     if Settings and Settings.RegisterCanvasLayoutSubcategory and rootCat then
-        if not (_G and _G.MSUF_LegacyCategory) then
+        if not (_G.MSUF_LegacyCategory) then
             local legacyCat = Settings.RegisterCanvasLayoutSubcategory(rootCat, panel, (panel.name or "Legacy"))
             Settings.RegisterAddOnCategory(legacyCat)
-            if _G then _G.MSUF_LegacyCategory = legacyCat end
+            _G.MSUF_LegacyCategory = legacyCat
         end
     end
     -- Sub-categories are safe to (re)register; patched versions build lazily on first open.
@@ -2352,9 +2362,90 @@ if _G and not _G.__MSUF_LauncherAutoRegistered then
     _G.__MSUF_LauncherAutoRegistered = true
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function()
-            if type(MSUF_RegisterOptionsCategoryLazy) == "function" then MSUF_RegisterOptionsCategoryLazy() end
+            if MSUF_RegisterOptionsCategoryLazy then MSUF_RegisterOptionsCategoryLazy() end
          end)
     else
-        if type(MSUF_RegisterOptionsCategoryLazy) == "function" then MSUF_RegisterOptionsCategoryLazy() end
+        if MSUF_RegisterOptionsCategoryLazy then MSUF_RegisterOptionsCategoryLazy() end
+    end
+end
+
+------------------------------------------------------------------------
+-- Shared Accordion Upgrade Utility
+-- Call after all collapsible sections are built.
+-- Adds: radio behavior, auto-open first, section memory.
+------------------------------------------------------------------------
+do
+    local _panelMemory = {}
+
+    function _G.MSUF_UpgradeAccordion(sections, layoutFn, panelKey, parentFrame)
+        if not sections or #sections == 0 then return end
+
+        local function ApplyBox(box)
+            local fn = box._msufApplyCollapseState or box._msufApplyState
+            if fn then fn() end
+        end
+
+        local function CollapseAllExcept(keepBox)
+            for i = 1, #sections do
+                local b = sections[i]
+                if b and b ~= keepBox and not b._msufCollapsed then
+                    b._msufCollapsed = true
+                    ApplyBox(b)
+                end
+            end
+        end
+
+        local function OpenSection(idx)
+            local box = sections[idx]
+            if not box then return end
+            CollapseAllExcept(box)
+            if box._msufCollapsed then
+                box._msufCollapsed = false
+                ApplyBox(box)
+            end
+            _panelMemory[panelKey] = idx
+        end
+
+        local function RestoreOrOpenFirst()
+            local lastIdx = _panelMemory[panelKey]
+            if lastIdx and sections[lastIdx] then
+                OpenSection(lastIdx)
+            else
+                OpenSection(1)
+            end
+        end
+
+        for i = 1, #sections do
+            local box = sections[i]
+            if box then
+                local hdr
+                local children = { box:GetChildren() }
+                for _, child in ipairs(children) do
+                    if child.SetScript and child:GetObjectType() == "Button" then
+                        hdr = child; break
+                    end
+                end
+                if hdr then
+                    hdr:SetScript("OnClick", function()
+                        if box._msufCollapsed then
+                            OpenSection(i)
+                        else
+                            box._msufCollapsed = true
+                            ApplyBox(box)
+                        end
+                        if type(layoutFn) == "function" then layoutFn() end
+                    end)
+                end
+            end
+        end
+
+        if parentFrame and parentFrame.HookScript then
+            parentFrame:HookScript("OnShow", function()
+                RestoreOrOpenFirst()
+                if type(layoutFn) == "function" then layoutFn() end
+            end)
+        end
+
+        RestoreOrOpenFirst()
     end
 end

@@ -8,6 +8,7 @@ local _, ns = ...
 -- are not visible as bare globals. Castbar visuals depend on MSUF_GetGlobalFontSettings.
 -- Resolve it once (prefer local env -> root global), and provide a safe fallback.
 local ROOT_G = (getfenv and getfenv(0)) or _G
+local ResolveFontPath = (ROOT_G and ROOT_G.MSUF_ResolveFontPath) or _G.MSUF_ResolveFontPath or function(path) return path end
 
 local MSUF_GetGlobalFontSettings_Resolved = MSUF_GetGlobalFontSettings or (ROOT_G and ROOT_G.MSUF_GetGlobalFontSettings)
 if type(MSUF_GetGlobalFontSettings_Resolved) ~= "function" then
@@ -32,9 +33,9 @@ if type(MSUF_GetGlobalFontSettings_Resolved) ~= "function" then
         local lsm = (ns and ns.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
         local fontKey = g and (g.fontKey or g.font)
         if fontKey and fontKey ~= "" and lsm and lsm.Fetch then
-            local p = lsm:Fetch("font", fontKey)
+            local p = lsm:Fetch("font", fontKey, true)
             if p and p ~= "" then
-                fontPath = p
+                fontPath = ResolveFontPath(p, baseSize, fontFlags)
             end
         end
 

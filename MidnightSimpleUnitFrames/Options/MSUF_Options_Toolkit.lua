@@ -1,9 +1,6 @@
--- ---------------------------------------------------------------------------
 -- MSUF_Options_Toolkit.lua  (Phase 1: Complete Rewrite)
---
 -- Widget SDK for all MSUF Options files.
 -- Loads BEFORE MSUF_Options_Core.lua in the TOC.
---
 -- Provides:
 --   ns.TR(v)               Localization (single definition, all files use this)
 --   ns.EnsureDB()          DB guarantee (single definition)
@@ -18,14 +15,11 @@
 --   ns.UI.StatusBarTextureItems(followText)  SharedMedia texture item list
 --   ns.UI.QueueScrollUpdate(host, keys)      Deferred scroll-height calc
 --   ns.UI.AttachTooltip(w, title, body)      GameTooltip helper
--- ---------------------------------------------------------------------------
 local addonName, addonNS = ...
 local ns = (_G.MSUF_NS) or addonNS or {}
-if _G then _G.MSUF_NS = ns end
+_G.MSUF_NS = ns
 
--- ============================================================
 -- 1. Shared Boilerplate (all files use ns.TR / ns.EnsureDB)
--- ============================================================
 ns.L = ns.L or (_G.MSUF_L) or {}
 if not getmetatable(ns.L) then
     setmetatable(ns.L, { __index = function(_, k) return k end })
@@ -41,7 +35,7 @@ function ns.TR(v)
 end
 
 function ns.EnsureDB()
-    if type(MSUF_DB) ~= "table" then MSUF_DB = {} end
+    if not MSUF_DB then MSUF_DB = {} end
     if type(MSUF_DB.general) ~= "table" then MSUF_DB.general = {} end
     if type(MSUF_DB.bars) ~= "table" then MSUF_DB.bars = {} end
 end
@@ -53,9 +47,7 @@ local format = string.format
 local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
 local ADDON = (type(addonName) == "string" and addonName ~= "" and addonName) or "MidnightSimpleUnitFrames"
 
--- ============================================================
 -- 2. Tooltip Helper
--- ============================================================
 local function AttachTooltip(widget, titleText, bodyText)
     if not widget or (not titleText and not bodyText) then return end
     widget:HookScript("OnEnter", function(self)
@@ -67,9 +59,7 @@ local function AttachTooltip(widget, titleText, bodyText)
     widget:HookScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
--- ============================================================
 -- 3. Style Functions
--- ============================================================
 local SLIDER_TRACK_H    = 3
 local SLIDER_THUMB_SIZE = 16
 local SLIDER_BG_R, SLIDER_BG_G, SLIDER_BG_B = 0.10, 0.10, 0.14
@@ -105,7 +95,7 @@ local function StyleSlider(slider)
     if slider.Low  then slider.Low:SetAlpha(0);  slider.Low:Hide()  end
     if slider.High then slider.High:SetAlpha(0); slider.High:Hide() end
 
-    -- Custom track (dark 3px bar)
+    -- Custom track
     local track = slider:CreateTexture(nil, "BACKGROUND", nil, -1)
     track:SetHeight(SLIDER_TRACK_H)
     track:SetPoint("LEFT", slider, "LEFT", 0, 0)
@@ -113,7 +103,7 @@ local function StyleSlider(slider)
     track:SetColorTexture(SLIDER_BG_R, SLIDER_BG_G, SLIDER_BG_B, 1)
     slider._msufTrack = track
 
-    -- Fill bar (blue, left of thumb)
+    -- Fill bar
     local fill = slider:CreateTexture(nil, "BACKGROUND", nil, 0)
     fill:SetHeight(SLIDER_TRACK_H)
     fill:SetPoint("LEFT", track, "LEFT", 0, 0)
@@ -151,7 +141,7 @@ local function StyleSlider(slider)
     slider:HookScript("OnShow",         function(self) UpdateFill(self) end)
     slider:HookScript("OnSizeChanged",  function(self) UpdateFill(self) end)
 
-    -- Hover: brighten track
+    -- Hover
     slider:HookScript("OnEnter", function(self)
         if self._msufTrack then self._msufTrack:SetColorTexture(0.16, 0.16, 0.20, 1) end
     end)
@@ -239,9 +229,7 @@ local function StyleCheckmark(cb)
     end
 end
 
--- ============================================================
 -- 4. Widget SDK (ns.UI)
--- ============================================================
 ns.UI = ns.UI or {}
 local UI = ns.UI
 
@@ -406,17 +394,26 @@ function UI.Check(spec)
     return cb
 end
 
--- ---- 4f. Slider (self-syncing; compact=true skips editbox/±) ----
+-- ---- 4f. Slider (self-syncing; compact sliders can opt into inline numeric input) ----
 function UI.Slider(spec)
     local name = spec.name
     local parent = spec.parent
     local minV, maxV, step = spec.min or 0, spec.max or 100, spec.step or 1
     local compact = spec.compact
+    local compactInput = compact and spec.compactInput
+    local compactInputWidth = spec.compactInputWidth or 46
+    local compactInputGap = spec.compactInputGap or 8
+    local sliderWidth = spec.width or 270
+    local trackWidth = sliderWidth
+    if compactInput then
+        trackWidth = sliderWidth - compactInputWidth - compactInputGap
+        if trackWidth < 80 then trackWidth = 80 end
+    end
     local sl = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
     sl:SetMinMaxValues(minV, maxV)
     sl:SetValueStep(step)
     sl:SetObeyStepOnDrag(true)
-    sl:SetWidth(spec.width or 270)
+    sl:SetWidth(trackWidth)
     if spec.anchor then
         sl:SetPoint("TOPLEFT", spec.anchor, spec.anchorPoint or "BOTTOMLEFT", spec.x or 0, spec.y or -18)
     end
@@ -429,20 +426,27 @@ function UI.Slider(spec)
     if high then high:SetText(spec.highText or tostring(maxV)) end
     -- EditBox + ± (only for non-compact sliders)
     local eb, minus, plus
-    if not compact then
+    if (not compact) or compactInput then
         eb = CreateFrame("EditBox", name and (name .. "Input"), parent, "InputBoxTemplate")
-        eb:SetSize(60, 18); eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
-        eb:SetPoint("TOP", sl, "BOTTOM", 0, -6)
+        eb:SetSize(compactInput and compactInputWidth or 60, 18)
+        eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
+        if compactInput then
+            eb:SetPoint("LEFT", sl, "RIGHT", compactInputGap, 0)
+        else
+            eb:SetPoint("TOP", sl, "BOTTOM", 0, -6)
+        end
         eb:SetFontObject(GameFontHighlightSmall); eb:SetTextColor(1, 1, 1, 1)
         sl.editBox = eb
-        minus = CreateFrame("Button", name and (name .. "Minus"), parent)
-        minus:SetPoint("RIGHT", eb, "LEFT", -2, 0)
-        StyleSmallButton(minus, false)
-        sl.minusButton = minus
-        plus = CreateFrame("Button", name and (name .. "Plus"), parent)
-        plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
-        StyleSmallButton(plus, true)
-        sl.plusButton = plus
+        if not compactInput then
+            minus = CreateFrame("Button", name and (name .. "Minus"), parent)
+            minus:SetPoint("RIGHT", eb, "LEFT", -2, 0)
+            StyleSmallButton(minus, false)
+            sl.minusButton = minus
+            plus = CreateFrame("Button", name and (name .. "Plus"), parent)
+            plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
+            StyleSmallButton(plus, true)
+            sl.plusButton = plus
+        end
     end
     -- Format helper
     local function FormatValue(v)
@@ -468,7 +472,7 @@ function UI.Slider(spec)
             end
         end
     end
-    if not compact then
+    if (not compact) or compactInput then
         -- Apply editbox value
         local function ApplyEditBox()
             local v = tonumber(eb:GetText())
@@ -481,16 +485,18 @@ function UI.Slider(spec)
         eb:SetScript("OnEscapePressed", function(self)
             SyncEditBox(sl:GetValue()); self:ClearFocus()
         end)
-        minus:SetScript("OnClick", function()
-            local v = sl:GetValue() - step
-            if v < minV then v = minV end
-            sl:SetValue(v)
-        end)
-        plus:SetScript("OnClick", function()
-            local v = sl:GetValue() + step
-            if v > maxV then v = maxV end
-            sl:SetValue(v)
-        end)
+        if minus and plus then
+            minus:SetScript("OnClick", function()
+                local v = sl:GetValue() - step
+                if v < minV then v = minV end
+                sl:SetValue(v)
+            end)
+            plus:SetScript("OnClick", function()
+                local v = sl:GetValue() + step
+                if v > maxV then v = maxV end
+                sl:SetValue(v)
+            end)
+        end
     end
     -- OnValueChanged
     sl._msufSkip = false
@@ -521,6 +527,31 @@ function UI.Slider(spec)
         self._msufSkip = false
         SyncEditBox(v)
     end
+    function sl:SetEnabled(enabled)
+        if enabled then
+            if self.Enable then self:Enable() end
+            if eb then
+                if eb.EnableMouse then eb:EnableMouse(true) end
+                if eb.Enable then eb:Enable() end
+            end
+            if minus and minus.Enable then minus:Enable() end
+            if plus and plus.Enable then plus:Enable() end
+            if text and text.SetTextColor then text:SetTextColor(1, 1, 1) end
+            if eb and eb.SetTextColor then eb:SetTextColor(1, 1, 1, 1) end
+            self:SetAlpha(1)
+        else
+            if self.Disable then self:Disable() end
+            if eb then
+                if eb.EnableMouse then eb:EnableMouse(false) end
+                if eb.Disable then eb:Disable() end
+            end
+            if minus and minus.Disable then minus:Disable() end
+            if plus and plus.Disable then plus:Disable() end
+            if text and text.SetTextColor then text:SetTextColor(0.55, 0.55, 0.55) end
+            if eb and eb.SetTextColor then eb:SetTextColor(0.55, 0.55, 0.55, 1) end
+            self:SetAlpha(0.55)
+        end
+    end
     StyleSlider(sl)
     -- Search registration
     if name and spec.label and type(_G.MSUF_Search_RegisterSlider) == "function" then
@@ -529,9 +560,7 @@ function UI.Slider(spec)
     return sl
 end
 
--- ============================================================
 -- 5. Dropdown System (own ListFrame, no DropDownList1)
--- ============================================================
 
 -- Theme
 local DD_BG     = { 0.08, 0.08, 0.10, 0.95 }
@@ -678,7 +707,7 @@ local function DD_Populate(owner)
     if not spec then return end
     local items = spec.items
     if type(items) == "function" then items = items() end
-    if type(items) ~= "table" then return end
+    if not items then return end
     local curKey = spec.get and spec.get() or nil
     local itemH  = spec.itemHeight or DD_ITEM_H
     local maxVis = spec.maxVisible or 12
@@ -843,9 +872,7 @@ function UI.Dropdown(spec)
     return dd
 end
 
--- ============================================================
 -- 6. SharedMedia Texture Items Builder
--- ============================================================
 function UI.StatusBarTextureItems(followText)
     local LSM = (ns and ns.LSM) or _G.MSUF_LSM
     local list
@@ -874,9 +901,7 @@ function UI.StatusBarTextureItems(followText)
     return result
 end
 
--- ============================================================
 -- 7. Scroll Height Helper
--- ============================================================
 local _scrollPending = {}
 local math_ceil = math.ceil
 
@@ -916,9 +941,7 @@ function UI.QueueScrollUpdate(host, scrollKey, childKey, contentKey)
     if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
 end
 
--- ============================================================
 -- 8. Button Row Builder
--- ============================================================
 function UI.ButtonRow(parent, anchor, gap, defs)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(1, 1)
@@ -947,9 +970,7 @@ function UI.ButtonRow(parent, anchor, gap, defs)
     return row, buttons
 end
 
--- ============================================================
 -- 9. Backward-Compat Stubs (for Auras/Colors/EditMode)
--- ============================================================
 
 -- These stay functional for non-migrated consumers:
 local function MSUF_InitSimpleDropdown(dropdown, options, getCurrentKey, setCurrentKey, onSelect, width)
@@ -997,9 +1018,7 @@ end
 local function MSUF_MakeDropdownScrollable() end
 local function MSUF_ExpandDropdownClickArea() end
 
--- ============================================================
 -- 10. Exports
--- ============================================================
 UI.AttachTooltip         = AttachTooltip
 UI.StyleSlider           = StyleSlider
 UI.StyleSmallButton      = StyleSmallButton
@@ -1033,15 +1052,11 @@ ns.MSUF_StyleCheckmark          = StyleCheckmark
 _G.MSUF_StyleToggleText         = _G.MSUF_StyleToggleText or StyleToggleText
 _G.MSUF_StyleCheckmark          = _G.MSUF_StyleCheckmark or StyleCheckmark
 
--- =====================================================================
 -- Auto-Intercept: Styled Dropdowns → Toolkit List
---
 -- Any frame created by MSUF_CreateStyledDropdown (has ._msufPeelButton)
 -- that uses UIDropDownMenu_Initialize will automatically open the
 -- Toolkit's styled list instead of Blizzard's DropDownList1.
---
 -- Zero changes needed in Player, Colors, Auras, Gameplay.
--- =====================================================================
 do
     -- Capture buffer for UIDropDownMenu_AddButton interception
     local _captureActive = false
@@ -1148,4 +1163,193 @@ function UI.BindExistingDropdown(dd, spec)
     dd:HookScript("OnShow", function(self) self:Refresh() end)
     dd:Refresh()
     return dd
+end
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- DB-bound Row Widgets (1 line per widget, auto-sync to MSUF_DB)
+-- Usage: local row = UI.DBCheck(body, prevRow, "Enable X", "general.featureX", {apply=Apply})
+-- ═══════════════════════════════════════════════════════════════════════
+
+local ROW_H = 26
+local SL_W = 160
+local DD_W = 140
+local math_floor = math.floor
+
+-- DB path reader: "general.enableGradient" → MSUF_DB.general.enableGradient
+local function _DBRead(path)
+    if not MSUF_DB or type(path) ~= "string" then return nil end
+    local t = MSUF_DB
+    for token in path:gmatch("[^%.]+") do
+        if not t then return nil end
+        t = t[token]
+    end
+    return t
+end
+
+-- DB path writer
+local function _DBWrite(path, value)
+    if not MSUF_DB or type(path) ~= "string" then return end
+    local t = MSUF_DB
+    local parts = {}
+    for token in path:gmatch("[^%.]+") do parts[#parts + 1] = token end
+    if #parts == 0 then return end
+    for i = 1, #parts - 1 do
+        local k = parts[i]
+        if type(t[k]) ~= "table" then t[k] = {} end
+        t = t[k]
+    end
+    t[parts[#parts]] = value
+end
+
+-- Shared row frame factory
+local function _DBRow(parent, prev, topOfs)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetSize(parent:GetWidth() - 8, ROW_H)
+    if prev then
+        row:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, topOfs or -2)
+    else
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 4, topOfs or -6)
+    end
+    return row
+end
+
+local function _DBRowLabel(row, text)
+    local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    fs:SetPoint("LEFT", row, "LEFT", 4, 0)
+    fs:SetText(TR(text or ""))
+    return fs
+end
+
+-- ── UI.DBCheck ──────────────────────────────────────────────
+-- Returns row frame. opts: {apply, default, tooltip, y}
+function UI.DBCheck(parent, prev, label, dbPath, opts)
+    opts = opts or {}
+    local row = _DBRow(parent, prev, opts.y)
+    local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+    cb:SetSize(22, 22)
+    cb:SetPoint("LEFT", row, "LEFT", 2, 0)
+    local fs = cb.text or cb.Text
+    if fs and fs.SetText then
+        fs:SetText(TR(label or ""))
+        if fs.SetFontObject then fs:SetFontObject("GameFontHighlightSmall") end
+    end
+    local function Sync()
+        local v = _DBRead(dbPath)
+        if v == nil then v = (opts.default ~= false) end
+        cb:SetChecked(v and true or false)
+    end
+    Sync()
+    cb:SetScript("OnClick", function(self)
+        if type(EnsureDB) == "function" then EnsureDB() end
+        _DBWrite(dbPath, self:GetChecked() and true or false)
+        if opts.apply then opts.apply() end
+    end)
+    cb:SetScript("OnShow", function() Sync() end)
+    if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+    if _G.MSUF_StyleToggleText then _G.MSUF_StyleToggleText(cb) end
+    if opts.tooltip then AttachTooltip(cb, opts.tooltip) end
+    row._ctrl = cb
+    row._sync = Sync
+    return row
+end
+
+-- ── UI.DBSlider ─────────────────────────────────────────────
+-- Returns row frame. opts: {apply, default, width, y, format, int}
+function UI.DBSlider(parent, prev, label, dbPath, lo, hi, step, opts)
+    opts = opts or {}
+    local def = opts.default or lo
+    local isInt = (opts.int ~= false) and (step >= 1)
+    local row = _DBRow(parent, prev, opts.y or -2)
+    _DBRowLabel(row, label)
+    local valFS = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    valFS:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+    valFS:SetJustifyH("RIGHT")
+    local sl = CreateFrame("Slider", nil, row, "OptionsSliderTemplate")
+    sl:SetSize(opts.width or SL_W, 14)
+    sl:SetPoint("RIGHT", valFS, "LEFT", -8, 0)
+    sl:SetMinMaxValues(lo, hi)
+    sl:SetValueStep(step)
+    sl:SetObeyStepOnDrag(true)
+    if sl.Text then sl.Text:SetText("") end
+    if sl.Low  then sl.Low:SetText("")  end
+    if sl.High then sl.High:SetText("") end
+    local function Fmt(v)
+        if opts.format then return opts.format(v) end
+        if isInt then return tostring(math_floor(v + 0.5)) end
+        return string.format("%.2f", v)
+    end
+    local function Sync()
+        local v = _DBRead(dbPath)
+        if v == nil then v = def end
+        v = tonumber(v) or def
+        sl:SetValue(v)
+        valFS:SetText(Fmt(v))
+    end
+    Sync()
+    sl:SetScript("OnValueChanged", function(_, v)
+        if isInt then v = math_floor(v + 0.5) end
+        valFS:SetText(Fmt(v))
+        if type(EnsureDB) == "function" then EnsureDB() end
+        _DBWrite(dbPath, v)
+        if opts.apply then opts.apply() end
+    end)
+    sl:SetScript("OnShow", function() Sync() end)
+    if StyleSlider then StyleSlider(sl) end
+    if opts.tooltip then AttachTooltip(sl, opts.tooltip) end
+    row._ctrl = sl
+    row._sync = Sync
+    return row
+end
+
+-- ── UI.DBDropdown ───────────────────────────────────────────
+-- items: {{key="X", label="X Label"}, ...}
+-- Returns row frame. opts: {apply, default, width, y}
+function UI.DBDropdown(parent, prev, label, dbPath, items, opts)
+    opts = opts or {}
+    local def = opts.default
+    local row = _DBRow(parent, prev, opts.y or -2)
+    _DBRowLabel(row, label)
+    local dd = UI.Dropdown({
+        parent = row,
+        anchor = row, anchorPoint = "RIGHT", x = -4, y = 0,
+        point = "RIGHT",
+        width = opts.width or DD_W,
+        items = items,
+        get = function()
+            local v = _DBRead(dbPath)
+            return v ~= nil and v or def
+        end,
+        set = function(key)
+            if type(EnsureDB) == "function" then EnsureDB() end
+            _DBWrite(dbPath, key)
+            if opts.apply then opts.apply() end
+        end,
+    })
+    row._ctrl = dd
+    row._sync = function() if dd.Refresh then dd:Refresh() end end
+    return row
+end
+
+-- ── UI.BuildRows (batch builder) ────────────────────────────
+-- specs: array of {type="check"|"slider"|"dropdown", label=..., db=..., ...}
+-- Returns array of row frames
+function UI.BuildRows(parent, specs, opts)
+    opts = opts or {}
+    local rows = {}
+    local prev = nil
+    for _, s in ipairs(specs) do
+        local row
+        if s.type == "check" then
+            row = UI.DBCheck(parent, prev, s.label, s.db, s)
+        elseif s.type == "slider" then
+            row = UI.DBSlider(parent, prev, s.label, s.db, s.min, s.max, s.step, s)
+        elseif s.type == "dropdown" then
+            row = UI.DBDropdown(parent, prev, s.label, s.db, s.items, s)
+        end
+        if row then
+            rows[#rows + 1] = row
+            prev = row
+        end
+    end
+    return rows
 end

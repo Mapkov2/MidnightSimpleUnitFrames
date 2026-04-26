@@ -1,16 +1,13 @@
 -- MSUF Module: Rounded Unitframes (Superellipse)
---
 -- What it does (when enabled):
 -- - Rounds the *actual visible unitframe content* by masking ALL relevant textures
 --   (frame BG + HP/Power/Absorb fills + HP gradient overlays) with the same
 --   superellipse mask used across MSUF.
 -- - Draws a subtle superellipse border (3-slice) on top, matching the SlashMenu pill style.
---
 -- NOTE (why v1 felt "does nothing"):
 -- Unitframes use additional overlay textures (HP gradients etc.) that were NOT masked.
 -- Those square overlays will visually "re-square" the corners even if the StatusBar fill
 -- is masked. This version masks *everything that can touch the corners*.
---
 -- Hard requirements:
 -- - This file must be loaded by WoW (listed in a .toc, or shipped as its own addon).
 -- - No OnUpdate/tickers; only event/hooks + one-shot C_Timer.After(0) for post-login ordering.
@@ -31,19 +28,16 @@ local DRAW_MODULE_BORDER = false
 local SUPPRESS_NATIVE_OUTLINE = true
 
 local function EnsureDB()
-    if type(_G.EnsureDB) == "function" then
+    if _G.EnsureDB then
         _G.EnsureDB()
     end
 end
-
 local function IsEnabled()
     local db = _G.MSUF_DB
     return (db and db.general and db.general.roundedUnitframes == true) and true or false
 end
 
--- ------------------------------------------------------------
 -- Superellipse shell (3-slice: left cap / stretch / right cap)
--- ------------------------------------------------------------
 
 local function SE_SnapOff(tex)
     if tex and tex.SetSnapToPixelGrid then
@@ -159,7 +153,7 @@ local function SE_ApplyShellVisuals(f, enabled)
     -- Border tint: reuse MSUF theme if present, otherwise a subtle blueish edge.
     local br, bgc, bb, ba = 0.20, 0.40, 0.85, 0.90
     local theme = _G.MSUF_THEME
-    if type(theme) == "table" and theme.edgeR then
+    if theme and theme.edgeR then
         br, bgc, bb, ba = theme.edgeR or br, theme.edgeG or bgc, theme.edgeB or bb, theme.edgeA or ba
         -- Slightly brighter than frame border, like the nav pills
         br = math.min(1, (br or 0) * 1.25)
@@ -185,9 +179,7 @@ local function SE_ApplyShellVisuals(f, enabled)
     end
 end
 
--- ------------------------------------------------------------
 -- Masking helpers
--- ------------------------------------------------------------
 
 local function EnsureFrameMask(f)
     if not (f and type(f.CreateMaskTexture) == "function") then return nil end
@@ -237,9 +229,7 @@ local function MaskTexture(f, tex)
     f._msufRUF_MaskedTextures[tex] = true
 end
 
--- ------------------------------------------------------------
 -- Suppress square outlines/borders while enabled (v3 request)
--- ------------------------------------------------------------
 
 local function SuppressNativeOutlineNow(f)
     if not (SUPPRESS_NATIVE_OUTLINE and f) then return end
@@ -270,9 +260,7 @@ local function SuppressNativeOutlineNow(f)
     end
 end
 
--- ------------------------------------------------------------
 -- Apply/remove
--- ------------------------------------------------------------
 
 local function ApplyToFrame(f)
     if not f then return end
@@ -347,7 +335,7 @@ end
 
 local function ForEachUnitFrame(fn)
     local frames = _G.MSUF_UnitFrames
-    if type(frames) ~= "table" then return end
+    if not frames then return end
     for _, f in pairs(frames) do
         if type(fn) == "function" then
             fn(f)
@@ -360,39 +348,25 @@ local function ApplyAll()
     ForEachUnitFrame(ApplyToFrame)
 end
 
--- ------------------------------------------------------------
 -- Hooks / bootstrap
--- ------------------------------------------------------------
 
 local function HookOnce()
     if ns.__msufRoundedUF_Hooked then return end
     ns.__msufRoundedUF_Hooked = true
 
-    if type(_G.hooksecurefunc) == "function" then
-        if type(_G.MSUF_UpdateAllBarTextures) == "function" then
-            _G.hooksecurefunc("MSUF_UpdateAllBarTextures", function()
-                if IsEnabled() then ApplyAll() end
-            end)
-        end
-        if type(_G.MSUF_UpdateAllUnitframesNow) == "function" then
-            _G.hooksecurefunc("MSUF_UpdateAllUnitframesNow", function()
-                if IsEnabled() then ApplyAll() end
-            end)
-        end
-        if type(_G.MSUF_ApplyModules) == "function" then
-            _G.hooksecurefunc("MSUF_ApplyModules", function()
-                -- Allows this module to work even if it wasn't registered due to load order.
-                ApplyAll()
-            end)
-        end
-
-        -- Keep square unitframe outlines hidden while the module is enabled.
-        if SUPPRESS_NATIVE_OUTLINE and type(_G.MSUF_RefreshRareBarVisuals) == "function" then
-            _G.hooksecurefunc("MSUF_RefreshRareBarVisuals", function(frame)
-                if frame and IsEnabled() then
-                    SuppressNativeOutlineNow(frame)
-                end
-            end)
+    -- Export callbacks for direct notification (replaces hooksecurefunc hooks).
+    -- Source functions call these directly — zero hook overhead.
+    _G.MSUF_RoundedUF_OnApplyAll = function()
+        if IsEnabled() then ApplyAll() end
+    end
+    _G.MSUF_RoundedUF_OnModulesApplied = function()
+        ApplyAll() -- always (load-order safety)
+    end
+    if SUPPRESS_NATIVE_OUTLINE then
+        _G.MSUF_RoundedUF_OnRareVisualsRefreshed = function(frame)
+            if frame and IsEnabled() then
+                SuppressNativeOutlineNow(frame)
+            end
         end
     end
 end

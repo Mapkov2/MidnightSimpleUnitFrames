@@ -15,12 +15,12 @@ if loc ~= "koKR" then return end
 
 ns = ns or {}
 ns.LOCALE = loc
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
 end
-if _G then _G.MSUF_L = L end
+_G.MSUF_L = L
 
 local T = {
     ["Open MSUF Menu"] = "MSUF 메뉴 열기",
@@ -84,7 +84,11 @@ local T = {
     ["2D Portrait Right"] = "2D 초상화 오른쪽",
     ["3D Portrait Left"] = "3D 초상화 왼쪽",
     ["3D Portrait Right"] = "3D 초상화 오른쪽",
-    ["Invert boss order"] = "우두머리 순서 반전",
+    ["Boss frame layout"] = "우두머리 프레임 배치",
+    ["Vertical (top -> bottom)"] = "세로 (위 -> 아래)",
+    ["Vertical (bottom -> top)"] = "세로 (아래 -> 위)",
+    ["Horizontal (left -> right)"] = "가로 (왼쪽 -> 오른쪽)",
+    ["Horizontal (right -> left)"] = "가로 (오른쪽 -> 왼쪽)",
     ["Player Alpha"] = "플레이어 투명도",
     ["Target Alpha"] = "대상 투명도",
     ["Focus Alpha"] = "주시 대상 투명도",

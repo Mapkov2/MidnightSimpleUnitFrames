@@ -1,25 +1,21 @@
 -- MSUF_AddonCompartment.lua
 -- Addon Compartment integration for WoW 12.0 Midnight.
---
 -- The Addon Compartment is a built-in UI element (top-right minimap area)
 -- that lists all addons declaring AddonCompartmentFunc in their TOC.
 -- This is the primary discovery mechanism for addons in 12.0.
---
 -- Secret-safe: no comparisons or arithmetic on protected values.
 -- Zero overhead: no events, no OnUpdate, only fires on user click/hover.
 
 local addonName, ns = ...
 
--- =========================================================================
 -- Click handler: Left = open menu, Right = toggle Edit Mode
--- =========================================================================
 function MSUF_AddonCompartment_OnClick(_, btn)
     if btn == "RightButton" then
         -- Toggle Edit Mode
         if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
             local st = _G.MSUF_EditState
             local nextActive = true
-            if type(st) == "table" and st.active ~= nil then
+            if st and st.active ~= nil then
                 nextActive = not st.active
             end
             pcall(_G.MSUF_SetMSUFEditModeDirect, nextActive, nil)
@@ -36,9 +32,7 @@ function MSUF_AddonCompartment_OnClick(_, btn)
     end
 end
 
--- =========================================================================
 -- Tooltip: show version, profile, edit mode status
--- =========================================================================
 function MSUF_AddonCompartment_OnEnter(_, menuButtonFrame)
     local tt = _G.GameTooltip
     if not tt then return end
@@ -62,7 +56,7 @@ function MSUF_AddonCompartment_OnEnter(_, menuButtonFrame)
     -- Edit Mode status
     local editActive = false
     local st = _G.MSUF_EditState
-    if type(st) == "table" and st.active then
+    if st and st.active then
         editActive = true
     end
     if editActive then

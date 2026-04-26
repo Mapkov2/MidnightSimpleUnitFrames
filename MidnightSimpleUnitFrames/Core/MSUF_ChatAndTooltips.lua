@@ -159,7 +159,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
         if type(EnsureDB) == "function" then
             EnsureDB()
         end
-        if type(MSUF_DB) == "table" then
+        if MSUF_DB then
             for unit, defaults in pairs(MSUF_RESET_DEFAULTS) do
                 MSUF_DB[unit] = MSUF_DB[unit] or {}
                 local t = MSUF_DB[unit]
@@ -445,7 +445,7 @@ function MSUF_HidePlayerInfoTooltip()
         -- instead of hiding the frame (OnLeave from unit frames must not
         -- kill the persistent drag-preview).
         if MSUF_PlayerInfoFrame._msufEditPreviewActive then
-            if type(_G.MSUF_Tooltip_ShowEditPreview) == "function" then
+            if _G.MSUF_Tooltip_ShowEditPreview then
                 _G.MSUF_Tooltip_ShowEditPreview()
             end
             return
@@ -465,9 +465,7 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
              return
         end
         local emf = _G.EditModeManagerFrame
-        if not emf then
-             return
-        end
+        if not emf then return end
         if active then
             if not _G.MSUF_BlizzEditModeStartedByMSUF then
                 _G.MSUF_BlizzEditModeStartedByMSUF = true
@@ -485,9 +483,7 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
                 _G.MSUF_BlizzEditModeStartedByMSUF = nil
             end
         else
-            if not _G.MSUF_BlizzEditModeStartedByMSUF then
-                 return
-            end
+            if not _G.MSUF_BlizzEditModeStartedByMSUF then return end
             _G.MSUF_BlizzEditModeStartedByMSUF = nil
             pcall(function()
                 if type(securecallfunction) == "function" and type(emf.ExitEditMode) == "function" then
@@ -521,8 +517,8 @@ do
     local function MSUF_Tooltip_SavePosition(frame)
         if not frame then return end
         if type(EnsureDB) == "function" then EnsureDB() end
-        local g = type(MSUF_DB) == "table" and MSUF_DB.general
-        if type(g) ~= "table" then return end
+        local g = MSUF_DB and MSUF_DB.general
+        if not g then return end
         local left   = frame.GetLeft   and frame:GetLeft()
         local bottom = frame.GetBottom and frame:GetBottom()
         if type(left) == "number" and type(bottom) == "number" then
@@ -534,8 +530,8 @@ do
     -- ---- reset helper (called from Options / slash) ------------------------
     local function MSUF_Tooltip_ResetPosition()
         if type(EnsureDB) == "function" then EnsureDB() end
-        local g = type(MSUF_DB) == "table" and MSUF_DB.general
-        if type(g) ~= "table" then return end
+        local g = MSUF_DB and MSUF_DB.general
+        if not g then return end
         g.tooltipPosX = nil
         g.tooltipPosY = nil
     end
@@ -638,7 +634,7 @@ do
     _G.MSUF_Tooltip_ShowEditPreview = MSUF_Tooltip_ShowEditPreview
 
     -- Register as AnyEditMode listener (fires on MSUF and/or Blizzard Edit Mode transitions).
-    if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
+    if _G.MSUF_RegisterAnyEditModeListener then
         _G.MSUF_RegisterAnyEditModeListener(function(active)
             if active then
                 MSUF_Tooltip_ShowEditPreview()
