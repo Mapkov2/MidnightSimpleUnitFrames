@@ -981,6 +981,9 @@ do
                 frame._msufHardStopNext = mc + 0.15
 
                 local u = frame.unit
+                if frame.unit == "player" and type(_G.MSUF_PlayerCastbar_GetEffectiveUnit) == "function" then
+                    u = _G.MSUF_PlayerCastbar_GetEffectiveUnit(frame)
+                end
                 if u and u ~= "" then
                     if UnitChannelInfo(u) then
                         frame._msufHardStopNoChannelSince = nil
@@ -1012,7 +1015,7 @@ do
 
         -- Duration-object path (modern API): we only maintain time text + safety stop.
 
-        -- Player channel tick markers: low-cadence refresh (no per-frame OnUpdate).
+        -- Player channel haste markers: low-cadence refresh (no per-frame OnUpdate).
         if frame.unit == "player" and frame.MSUF_isChanneled and frame._msufPlayerChannelHasteMarkers then
             if mc >= (frame._msufHasteMarkersNext or 0) then
                 frame._msufHasteMarkersNext = mc + 0.15
@@ -1175,6 +1178,19 @@ do
             local endT = ToPlain(frame.endTime) or 0
             local remNum = endT - now
             if remNum < 0 then remNum = 0 end
+
+            local totalNum = frame._msufPlainTotal
+            if totalNum and totalNum > 0 and frame.statusBar and frame.statusBar.SetValue then
+                local value
+                if frame._msufStripeReverseFill then
+                    value = remNum
+                else
+                    value = totalNum - remNum
+                end
+                if value < 0 then value = 0 end
+                if value > totalNum then value = totalNum end
+                frame.statusBar:SetValue(value)
+            end
 
             if frame.timeText and castTimeEnabled then
                 MSUF_SetCastTimeText_Dedup(frame, remNum)

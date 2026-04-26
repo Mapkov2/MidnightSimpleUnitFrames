@@ -534,9 +534,9 @@ if g.castbarUnifiedFillDirection ~= nil then
     if g.castbarOpositeDirectionTarget == nil then
         g.castbarOpositeDirectionTarget = false
     end
-    -- GCD/Instant-cast bar (disabled by default; options treat nil as enabled)
+    -- GCD/Instant-cast bar (disabled by default; short flash, no timer text by default)
     if g.showGCDBar == nil then g.showGCDBar = false end
-    if g.showGCDBarTime == nil then g.showGCDBarTime = true end
+    if g.showGCDBarTime == nil then g.showGCDBarTime = false end
     if g.showGCDBarSpell == nil then g.showGCDBarSpell = true end
     if g.empowerColorStages == nil then
         g.empowerColorStages = true

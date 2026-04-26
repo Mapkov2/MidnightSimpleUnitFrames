@@ -8,12 +8,23 @@ if not LSM or not LSM.Register then return end
 local base = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 
 -- Fonts (keys used by MSUF: FRIZQT/ARIALN/MORPHEUS/SKURRI + these)
-LSM:Register("font", "EXPRESSWAY", base .. "Fonts\\Expressway.ttf")
-LSM:Register("font", "Expressway (MSUF)", base .. "Fonts\\Expressway.ttf")
-LSM:Register("font", "INTER", base .. "Fonts\\Inter.ttf")
-LSM:Register("font", "Inter (MSUF)", base .. "Fonts\\Inter.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY",                 base .. "Fonts\\Expressway Regular.ttf")
+pcall(LSM.Register, LSM, "font", "Expressway (MSUF)",          base .. "Fonts\\Expressway Regular.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY_BOLD",            base .. "Fonts\\Expressway Bold.ttf")
+pcall(LSM.Register, LSM, "font", "Expressway Bold (MSUF)",     base .. "Fonts\\Expressway Bold.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY_SEMIBOLD",        base .. "Fonts\\Expressway SemiBold.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY_EXTRABOLD",       base .. "Fonts\\Expressway ExtraBold.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY_CONDENSED_LIGHT", base .. "Fonts\\Expressway Condensed Light.otf")
 
 -- Statusbar textures
-LSM:Register("statusbar", "MSUF Flat",   base .. "Statusbar\\Flat.tga")
-LSM:Register("statusbar", "MSUF Smooth", base .. "Statusbar\\Smooth.tga")
+local baseBars = base .. "Bars\\"
+local function RegStatusbar(name, file)
+    pcall(LSM.Register, LSM, "statusbar", name, baseBars .. file)
+end
 
+RegStatusbar("MSUF Charcoal",   "Charcoal.tga")
+RegStatusbar("MSUF Minimalist", "Minimalist.tga")
+RegStatusbar("MSUF Slickrock",  "Slickrock.tga")
+RegStatusbar("MSUF Smooth",     "MSUF_Smooth.tga")
+RegStatusbar("MSUF Smooth v2",  "Smoothv2.tga")
+RegStatusbar("MSUF Smoother",   "smoother.tga")

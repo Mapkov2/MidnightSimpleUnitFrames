@@ -6,7 +6,6 @@ local C_Spell = C_Spell
 
 local GetTimePreciseSec = GetTimePreciseSec
 local GetTime = GetTime
-local GetHaste = GetHaste
 local GetSpellBaseCooldown = GetSpellBaseCooldown
 local UnitCastingInfo = UnitCastingInfo
 local UnitChannelInfo = UnitChannelInfo
@@ -91,7 +90,7 @@ end
 
 -- PERF FIX #5: Cache spellIDs that are known to be hard-casts (castTime > 0) or have no GCD.
 -- Once a spellID is identified as non-instant or no-GCD, it will never change mid-session,
--- so we can skip 3 API calls (GetSpellInfo + GetSpellBaseCooldown + GetHaste) entirely.
+-- so we can skip 2 API calls (GetSpellInfo + GetSpellBaseCooldown) entirely.
 local _gcdSkipCache = {}  -- spellID -> true for spells that will never produce a GCD bar
 
 -- Returns: durationSec, spellName, spellIcon
@@ -120,27 +119,17 @@ function _G.MSUF_GCD_GetDurationForSpellID(spellID)
         return nil
     end
 
-    local baseGCD = gcdMS / 1000
-
-    local hastePct = (GetHaste and GetHaste()) or 0
-    local haste = 1 + (hastePct / 100)
-    local scaled = baseGCD / haste
-
-    -- Frogski-style minimum clamps (keeps GCD readable at high haste).
-    local minGCD
-    if baseGCD > 1.49 then
-        minGCD = 0.75
-    else
-        minGCD = 1.0
-    end
-    if scaled < minGCD then
-        scaled = minGCD
-    end
-    if scaled <= 0 then
+    -- Midnight / 12.0 secret-safe fix:
+    -- Do NOT read GetHaste() here. On Beta/Midnight it can return a secret number,
+    -- and Lua arithmetic such as hastePct / 100 taints/crashes the GCD path.
+    -- Use the safe spell base GCD instead. This keeps the player GCD bar functional
+    -- for instant casts without touching secret haste values.
+    local durationSec = gcdMS / 1000
+    if durationSec <= 0 then
         return nil
     end
 
-    return scaled, info.name, info.iconID
+    return durationSec, info.name, info.iconID
 end
 
 -- ============================================================

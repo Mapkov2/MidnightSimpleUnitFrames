@@ -468,22 +468,38 @@ local function FocusKick_UpdateFromUnit()
     -- Kick ready coloring (legacy path — mirrors state driver path)
     if FocusKickFrame.icon then
         if type(_G.MSUF_KickReady_Init) == "function" then _G.MSUF_KickReady_Init() end
-        local canKick = false
         local isNI = false
         -- notInterruptible from UnitCastingInfo/UnitChannelInfo is potentially secret —
         -- avoid testing it directly; fall back to castbar frame's event-driven boolean.
         local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
         if bar and bar.isNotInterruptible then isNI = true end
-        if not isNI then
-            canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
-        end
-        if canKick then
-            FocusKickFrame.icon:SetDesaturated(false)
-            FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2)
-        else
-            FocusKickFrame.icon:SetDesaturated(isNI)
+
+        FocusKickFrame.icon:SetDesaturated(isNI)
+
+        if isNI then
+            -- Plain-bool fast path: confirmed non-interruptible.
             FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
+        else
+            -- Secret-safe ready-state coloring:
+            -- MSUF_KickReady_IsReady() returns a secret-tagged bool on 12.0.5/Midnight
+            -- (it comes from C_Spell.GetSpellCooldownDuration():IsZero()). We MUST NOT
+            -- compare it in Lua (taints execution). Instead we feed it to the C-side
+            -- EvaluateColorFromBoolean via MSUF_KickReady_EvaluateColor, which returns
+            -- a ColorMixin; chaining :GetRGBA() into SetVertexColor keeps the secret
+            -- value inside the C-side boundary at all times.
+            local mixin
+            if type(_G.MSUF_KickReady_IsReady) == "function"
+               and type(_G.MSUF_KickReady_EvaluateColor) == "function" then
+                mixin = _G.MSUF_KickReady_EvaluateColor(_G.MSUF_KickReady_IsReady())
+            end
+            if mixin and mixin.GetRGBA then
+                FocusKickFrame.icon:SetVertexColor(mixin:GetRGBA())
+            else
+                -- C_CurveUtil unavailable: stay on the cooldown color (red).
+                FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
+            end
         end
+
         FocusKickFrame._msufLastCastState = { active = true, isNotInterruptible = isNI }
     end
 
@@ -1396,17 +1412,34 @@ function _G.MSUF_FocusKick_ApplyCastState(state)
         -- Ensure kick cooldown monitor is running
         if type(_G.MSUF_KickReady_Init) == "function" then _G.MSUF_KickReady_Init() end
 
-        local canKick = false
-        if not state.isNotInterruptible then
-            canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
+        local isNI = (state.isNotInterruptible == true)
+
+        if FocusKickFrame.icon.SetDesaturated then
+            FocusKickFrame.icon:SetDesaturated(isNI)
         end
 
-        if canKick then
-            if FocusKickFrame.icon.SetDesaturated then FocusKickFrame.icon:SetDesaturated(false) end
-            if FocusKickFrame.icon.SetVertexColor then FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2) end
+        if isNI then
+            -- Plain-bool fast path: confirmed non-interruptible.
+            if FocusKickFrame.icon.SetVertexColor then
+                FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
+            end
         else
-            if FocusKickFrame.icon.SetDesaturated then FocusKickFrame.icon:SetDesaturated(state.isNotInterruptible and true or false) end
-            if FocusKickFrame.icon.SetVertexColor then FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2) end
+            -- Secret-safe ready-state coloring (see MSUF_KickReady_EvaluateColor docstring).
+            -- MSUF_KickReady_IsReady() returns a secret-tagged bool; comparing it in Lua
+            -- ('canKick or false', 'if canKick then') would taint the addon. The C-side
+            -- EvaluateColorFromBoolean accepts secret bools cleanly, returning a ColorMixin.
+            local mixin
+            if type(_G.MSUF_KickReady_IsReady) == "function"
+               and type(_G.MSUF_KickReady_EvaluateColor) == "function" then
+                mixin = _G.MSUF_KickReady_EvaluateColor(_G.MSUF_KickReady_IsReady())
+            end
+            if FocusKickFrame.icon.SetVertexColor then
+                if mixin and mixin.GetRGBA then
+                    FocusKickFrame.icon:SetVertexColor(mixin:GetRGBA())
+                else
+                    FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
+                end
+            end
         end
 
         -- Cache state for cooldown-driven refresh
@@ -1433,16 +1466,24 @@ function _G.MSUF_FocusKick_RefreshKickReady()
     if not state or not state.active then return end
     if not FocusKickFrame.icon then return end
 
-    local canKick = false
-    if not state.isNotInterruptible then
-        canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
+    local isNI = (state.isNotInterruptible == true)
+
+    FocusKickFrame.icon:SetDesaturated(isNI)
+
+    if isNI then
+        FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
+        return
     end
 
-    if canKick then
-        FocusKickFrame.icon:SetDesaturated(false)
-        FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2)
+    -- Secret-safe ready-state coloring (see site 1 for full rationale).
+    local mixin
+    if type(_G.MSUF_KickReady_IsReady) == "function"
+       and type(_G.MSUF_KickReady_EvaluateColor) == "function" then
+        mixin = _G.MSUF_KickReady_EvaluateColor(_G.MSUF_KickReady_IsReady())
+    end
+    if mixin and mixin.GetRGBA then
+        FocusKickFrame.icon:SetVertexColor(mixin:GetRGBA())
     else
-        FocusKickFrame.icon:SetDesaturated(state.isNotInterruptible and true or false)
         FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
     end
 end

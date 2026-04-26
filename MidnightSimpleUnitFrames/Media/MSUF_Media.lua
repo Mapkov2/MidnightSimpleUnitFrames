@@ -10,13 +10,15 @@ local base = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 -- -----------------------------------------------------------------------------
 -- Fonts (if present)
 -- -----------------------------------------------------------------------------
--- These are safe no-ops if the files are missing (LSM will still register, but user won't pick them).
--- Font registration is also done in MSUF_Libs.lua in a load-order-safe way; keeping this here is harmless.
-
-pcall(LSM.Register, LSM, "font", "EXPRESSWAY",        base .. "Fonts\\Expressway.ttf")
-pcall(LSM.Register, LSM, "font", "Expressway (MSUF)", base .. "Fonts\\Expressway.ttf")
-pcall(LSM.Register, LSM, "font", "INTER",             base .. "Fonts\\Inter.ttf")
-pcall(LSM.Register, LSM, "font", "Inter (MSUF)",      base .. "Fonts\\Inter.ttf")
+-- Font registration is also done in MSUF_Libs.lua in a load-order-safe way.
+-- Keep legacy keys, but point them at files that are actually bundled.
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY",                 base .. "Fonts\\Expressway Regular.ttf")
+pcall(LSM.Register, LSM, "font", "Expressway (MSUF)",          base .. "Fonts\\Expressway Regular.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY_BOLD",            base .. "Fonts\\Expressway Bold.ttf")
+pcall(LSM.Register, LSM, "font", "Expressway Bold (MSUF)",     base .. "Fonts\\Expressway Bold.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY_SEMIBOLD",        base .. "Fonts\\Expressway SemiBold.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY_EXTRABOLD",       base .. "Fonts\\Expressway ExtraBold.ttf")
+pcall(LSM.Register, LSM, "font", "EXPRESSWAY_CONDENSED_LIGHT", base .. "Fonts\\Expressway Condensed Light.otf")
 
 -- -----------------------------------------------------------------------------
 -- Bar / Castbar textures (Media/Bars)
