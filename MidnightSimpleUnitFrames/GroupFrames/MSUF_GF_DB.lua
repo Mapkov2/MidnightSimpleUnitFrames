@@ -300,10 +300,22 @@ local PARTY_DEFAULTS = {
     ciSize            = 8,
     ciAlpha           = 1.0,
     ciSlotTL          = "dispel",
-    ciSlotTR          = "boss",
+    ciSlotTR          = "aggro",
     ciSlotBL          = "none",
     ciSlotBR          = "none",
     ciSlotC           = "none",
+    -- Aggro slot color (matches highlight aggro border default = orange)
+    ciAggroColorR     = 1.00,
+    ciAggroColorG     = 0.55,
+    ciAggroColorB     = 0.00,
+    -- Custom-slot configs (per-slot table; nil = unset).
+    -- Each: { spells = "1234,5678", mode = "present"|"missing",
+    --         filter = "HELPFUL|PLAYER", r = 0.4, g = 1, b = 0.4 }
+    ciCustomTL        = nil,
+    ciCustomTR        = nil,
+    ciCustomBL        = nil,
+    ciCustomBR        = nil,
+    ciCustomC         = nil,
     -- Grid layout
     unitsPerColumn    = 5,
     maxColumns        = 1,
@@ -496,6 +508,42 @@ local function MigrateHighlightToUnified(conf)
     conf._hlMigrated = true
 end
 
+-- Corner Indicators: migrate dropped categories ("boss", "missing") → "none".
+-- These categories no longer work in 12.0 due to secret-tagged isRaid/spellId
+-- on debuffs/buffs cast by other players. Replaced with "aggro" + "custom".
+-- One-shot migration (idempotent via _ciMigratedV2 stamp).
+local CI_DROPPED_CATEGORIES = { boss = true, missing = true }
+local CI_CUSTOM_KEYS = { "ciCustomTL", "ciCustomTR", "ciCustomBL", "ciCustomBR", "ciCustomC" }
+
+-- Always-run defensive sweep: ensure ciCustom* slots are either a table or nil.
+-- A previous build may have stamped a non-table value (e.g. number, string)
+-- into one of these keys; the new option UI indexes them as tables and would
+-- crash on a number/string. Cheap to run every login.
+local function CleanupCornerCustomTypes(conf)
+    if not conf then return end
+    for _, k in ipairs(CI_CUSTOM_KEYS) do
+        local v = conf[k]
+        if v ~= nil and type(v) ~= "table" then conf[k] = nil end
+    end
+end
+
+local function MigrateCornerIndicators(conf)
+    if not conf then return end
+    if conf._ciMigratedV2 then return end
+    local slotKeys = { "ciSlotTL", "ciSlotTR", "ciSlotBL", "ciSlotBR", "ciSlotC" }
+    for _, k in ipairs(slotKeys) do
+        if CI_DROPPED_CATEGORIES[conf[k]] then conf[k] = "none" end
+    end
+    -- Drop legacy boss color keys (replaced by aggro color in CI v2 schema)
+    conf.ciBossColorR = nil
+    conf.ciBossColorG = nil
+    conf.ciBossColorB = nil
+    conf.ciMissingColorR = nil
+    conf.ciMissingColorG = nil
+    conf.ciMissingColorB = nil
+    conf._ciMigratedV2 = true
+end
+
 ------------------------------------------------------------------------
 -- DB init
 ------------------------------------------------------------------------
@@ -522,6 +570,14 @@ function GF.EnsureDB()
     MigrateHighlightToUnified(db.gf_party)
     MigrateHighlightToUnified(db.gf_raid)
     MigrateHighlightToUnified(db.gf_mythicraid)
+    -- Defensive: type-guard ciCustom* fields BEFORE the one-shot CI migration
+    -- (which may already be stamped done from a previous build).
+    CleanupCornerCustomTypes(db.gf_party)
+    CleanupCornerCustomTypes(db.gf_raid)
+    CleanupCornerCustomTypes(db.gf_mythicraid)
+    MigrateCornerIndicators(db.gf_party)
+    MigrateCornerIndicators(db.gf_raid)
+    MigrateCornerIndicators(db.gf_mythicraid)
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
     applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
@@ -1514,7 +1570,7 @@ GF.PRESETS.DPS = {
         phaseIcon = true, phaseIconSize = 12,
         phaseAnchor = "TOPLEFT", phaseX = 0, phaseY = -14,
         ciEnabled = true, ciAlpha = 0.9,
-        ciSlotTL = "dispel", ciSlotTR = "boss", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
+        ciSlotTL = "dispel", ciSlotTR = "aggro", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
         auras = {
             enabled = true,
             buff = { enabled = false },
@@ -1623,7 +1679,7 @@ GF.PRESETS.TANK = {
         phaseIcon = true, phaseIconSize = 12,
         phaseAnchor = "TOPLEFT", phaseX = 0, phaseY = -14,
         ciEnabled = true, ciAlpha = 0.9,
-        ciSlotTL = "dispel", ciSlotTR = "boss", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
+        ciSlotTL = "dispel", ciSlotTR = "aggro", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
         auras = {
             enabled = true,
             buff = { enabled = false },
@@ -1729,7 +1785,7 @@ local _HEALER_BASE = {
     phaseIcon = true, phaseIconSize = 12,
     phaseAnchor = "TOPLEFT", phaseX = 0, phaseY = -14,
     ciEnabled = true, ciAlpha = 0.9,
-    ciSlotTL = "dispel", ciSlotTR = "boss", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
+    ciSlotTL = "dispel", ciSlotTR = "aggro", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
     auras = {
         enabled = true,
         buff = { enabled = false },
