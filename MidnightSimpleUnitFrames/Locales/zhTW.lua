@@ -15,12 +15,12 @@ if loc ~= "zhTW" then return end
 
 ns = ns or {}
 ns.LOCALE = loc
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
 end
-if _G then _G.MSUF_L = L end
+_G.MSUF_L = L
 
 local T = {
     ["Open MSUF Menu"] = "開啟 MSUF 選單",
@@ -84,7 +84,11 @@ local T = {
     ["2D Portrait Right"] = "2D頭像右",
     ["3D Portrait Left"] = "3D頭像左",
     ["3D Portrait Right"] = "3D頭像右",
-    ["Invert boss order"] = "反轉首領順序",
+    ["Boss frame layout"] = "首領框架佈局",
+    ["Vertical (top -> bottom)"] = "垂直 (由上至下)",
+    ["Vertical (bottom -> top)"] = "垂直 (由下至上)",
+    ["Horizontal (left -> right)"] = "水平 (由左至右)",
+    ["Horizontal (right -> left)"] = "水平 (由右至左)",
     ["Player Alpha"] = "玩家透明度",
     ["Target Alpha"] = "目標透明度",
     ["Target of Target Alpha"] = "目標的目標透明度",

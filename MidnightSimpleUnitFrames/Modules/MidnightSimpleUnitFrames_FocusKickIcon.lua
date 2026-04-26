@@ -33,7 +33,6 @@ local FocusKickOptionsInitialized = false
 -- Forward-declared here so early helpers (font/apply) can access the same locals.
 ------------------------------------------------------
 
-
 ------------------------------------------------------
 -- DB defaults
 ------------------------------------------------------
@@ -103,14 +102,10 @@ local function FocusKick_ApplyTimeTextFontNow()
     local size     = FocusKick_GetDesiredTextSize(g)
 
     if FocusKickFrame and FocusKickFrame.timeText then
-        MSUF_FastCall(function()
-            FocusKickFrame.timeText:SetFont(fontPath, size, flags)
-        end)
+        FocusKickFrame.timeText:SetFont(fontPath, size, flags)
     end
     if FocusKickPreviewFrame and FocusKickPreviewFrame.timeText then
-        MSUF_FastCall(function()
-            FocusKickPreviewFrame.timeText:SetFont(fontPath, size, flags)
-        end)
+        FocusKickPreviewFrame.timeText:SetFont(fontPath, size, flags)
         FocusKickPreviewFrame.timeText:SetAlpha(1)
     end
 end
@@ -144,18 +139,14 @@ local function FocusKick_UpdateAppearance()
 
     -- Apply global font to time text (if present)
     if FocusKickFrame.timeText then
-        local fontPath = (type(MSUF_GetFontPath) == "function") and MSUF_GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\FRIZQT__.TTF")
+        local fontPath = (type(MSUF_GetFontPath) == "function") and MSUF_GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
         local flags    = (type(MSUF_GetFontFlags) == "function") and MSUF_GetFontFlags() or "OUTLINE"
         local size = FocusKick_GetDesiredTextSize(g)
-        MSUF_FastCall(function()
-            FocusKickFrame.timeText:SetFont(fontPath, size, flags)
-        end)
+        FocusKickFrame.timeText:SetFont(fontPath, size, flags)
 
         -- Apply the same font to on-screen preview text (if present)
         if FocusKickPreviewFrame and FocusKickPreviewFrame.timeText then
-            MSUF_FastCall(function()
-                FocusKickPreviewFrame.timeText:SetFont(fontPath, size, flags)
-            end)
+            FocusKickPreviewFrame.timeText:SetFont(fontPath, size, flags)
             FocusKickPreviewFrame.timeText:SetAlpha(1)
             if type(MSUF_GetConfiguredFontColor) == "function" then
                 local pr,pg,pb = MSUF_GetConfiguredFontColor()
@@ -185,6 +176,16 @@ local function FocusKick_CreateFrame()
     FocusKickFrame:SetFrameLevel(50)
     FocusKickFrame:Hide()
 
+    -- Zero idle cost: stop OnUpdate when frame hides
+    FocusKickFrame:HookScript("OnHide", function(self)
+        self:SetScript("OnUpdate", nil)
+        self.MSUF_timeUpdater = nil
+        self.MSUF_timeAccum = nil
+        if _G.MSUF_UpdateManager and _G.MSUF_UpdateManager.Unregister then
+            _G.MSUF_UpdateManager:Unregister("FocusKick_TimeText")
+        end
+    end)
+
     -- Background
     local bg = FocusKickFrame:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
@@ -198,6 +199,44 @@ local function FocusKick_CreateFrame()
     icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     FocusKickFrame.icon = icon
 
+    -- Real per-edge border (4 textures) — sharp clean color regardless of icon
+    local function _MakeEdge()
+        local t = FocusKickFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+        t:SetTexture("Interface\\Buttons\\WHITE8x8")
+        t:SetVertexColor(1, 0.2, 0.2, 1)
+        return t
+    end
+    local edgeTop    = _MakeEdge()
+    local edgeBottom = _MakeEdge()
+    local edgeLeft   = _MakeEdge()
+    local edgeRight  = _MakeEdge()
+    FocusKickFrame.edges = { edgeTop, edgeBottom, edgeLeft, edgeRight }
+
+    local function _LayoutEdges()
+        if not FocusKickFrame then return end
+        local thickness = 2
+        edgeTop:ClearAllPoints()
+        edgeTop:SetPoint("TOPLEFT", FocusKickFrame, "TOPLEFT", 0, 0)
+        edgeTop:SetPoint("TOPRIGHT", FocusKickFrame, "TOPRIGHT", 0, 0)
+        edgeTop:SetHeight(thickness)
+
+        edgeBottom:ClearAllPoints()
+        edgeBottom:SetPoint("BOTTOMLEFT", FocusKickFrame, "BOTTOMLEFT", 0, 0)
+        edgeBottom:SetPoint("BOTTOMRIGHT", FocusKickFrame, "BOTTOMRIGHT", 0, 0)
+        edgeBottom:SetHeight(thickness)
+
+        edgeLeft:ClearAllPoints()
+        edgeLeft:SetPoint("TOPLEFT", FocusKickFrame, "TOPLEFT", 0, 0)
+        edgeLeft:SetPoint("BOTTOMLEFT", FocusKickFrame, "BOTTOMLEFT", 0, 0)
+        edgeLeft:SetWidth(thickness)
+
+        edgeRight:ClearAllPoints()
+        edgeRight:SetPoint("TOPRIGHT", FocusKickFrame, "TOPRIGHT", 0, 0)
+        edgeRight:SetPoint("BOTTOMRIGHT", FocusKickFrame, "BOTTOMRIGHT", 0, 0)
+        edgeRight:SetWidth(thickness)
+    end
+    _LayoutEdges()
+    FocusKickFrame._LayoutEdges = _LayoutEdges
 
     -- Cast time text (optional)
     local timeText = FocusKickFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -235,16 +274,88 @@ local function FocusKick_CreateFrame()
 end
 
 ------------------------------------------------------
--- Interrupt feedback: red flash + small shake
+-- Helper: tint the 4 edge textures (ready / cooldown / interrupted)
+-- Icon texture stays untouched — multiplicative blending no longer matters.
 ------------------------------------------------------
-local function FocusKick_PlayInterruptFeedback()
-    if not FocusKickFrame or not FocusKickFrame.icon then
+local function FocusKick_SetEdgeColor(r, g, b, a)
+    if not FocusKickFrame or not FocusKickFrame.edges then return end
+    a = a or 1
+    for i = 1, #FocusKickFrame.edges do
+        local t = FocusKickFrame.edges[i]
+        if t and t.SetVertexColor then t:SetVertexColor(r, g, b, a) end
+    end
+end
+
+local function FocusKick_RefreshReadyColor(isNI, rawNI)
+    -- isNI  = plain boolean, event-driven (frame.isNotInterruptible). Always safe.
+    -- rawNI = OPTIONAL secret-tagged boolean from UnitCastingInfo.notInterruptible
+    --         (frame._msufApiNotInterruptibleRaw). Only the C-side helpers may
+    --         observe it. Used to catch casts that are non-interruptible from
+    --         the start with no UNIT_SPELLCAST_NOT_INTERRUPTIBLE event firing,
+    --         which the plain isNI bool can't see.
+    --
+    -- The kick-ready bool from MSUF_KickReady_IsReady() is also SECRET-tainted,
+    -- so we MUST NOT compare it in Lua. We feed it through the C-side
+    -- EvaluateColorFromBoolean in MSUF_KickReady_EvaluateColor, then optionally
+    -- compose AGAIN with rawNI to gray-out non-interruptible casts.
+    if not FocusKickFrame then return end
+
+    if type(_G.MSUF_KickReady_Init) == "function" then _G.MSUF_KickReady_Init() end
+
+    -- Desaturation only has a plain-bool API; gate on isNI for now. (For
+    -- non-event-driven NI casts the icon stays saturated; the edge colour
+    -- below still goes gray, which is the dominant visual signal.)
+    if FocusKickFrame.icon and FocusKickFrame.icon.SetDesaturated then
+        FocusKickFrame.icon:SetDesaturated(isNI == true)
+    end
+
+    -- Step 1: indicator colour (green/red) via C-side ready-bool eval.
+    local indicatorMix
+    if type(_G.MSUF_KickReady_IsReady) == "function"
+       and type(_G.MSUF_KickReady_EvaluateColor) == "function" then
+        indicatorMix = _G.MSUF_KickReady_EvaluateColor(_G.MSUF_KickReady_IsReady())
+    end
+
+    -- Plain-bool fast path: event has confirmed NI, no need for C-side compose.
+    if isNI == true then
+        FocusKick_SetEdgeColor(0.6, 0.6, 0.6, 1)
         return
     end
 
-    -- Flash red
-    FocusKickFrame.icon:SetDesaturated(false)
-    FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
+    -- Step 2 (optional): gate indicator colour with rawNI so casts that are
+    -- non-interruptible from the start (no NI event) also go gray.
+    if rawNI ~= nil
+       and indicatorMix
+       and _G.CreateColor
+       and _G.C_CurveUtil
+       and _G.C_CurveUtil.EvaluateColorFromBoolean then
+        local grayMix = _G.CreateColor(0.6, 0.6, 0.6, 1)
+        local finalMix = _G.C_CurveUtil.EvaluateColorFromBoolean(rawNI, grayMix, indicatorMix)
+        if finalMix and finalMix.GetRGBA then
+            local r, g, b, a = finalMix:GetRGBA()
+            FocusKick_SetEdgeColor(r, g, b, a)
+            return
+        end
+    end
+
+    if indicatorMix and indicatorMix.GetRGBA then
+        local r, g, b, a = indicatorMix:GetRGBA()
+        FocusKick_SetEdgeColor(r, g, b, a)
+    else
+        -- C_CurveUtil unavailable: stay on the cooldown color (red). We
+        -- cannot test the boolean to choose, so this is the safe default.
+        FocusKick_SetEdgeColor(1.0, 0.2, 0.2, 1)
+    end
+end
+
+------------------------------------------------------
+-- Interrupt feedback: red flash + small shake
+------------------------------------------------------
+local function FocusKick_PlayInterruptFeedback()
+    if not FocusKickFrame or not FocusKickFrame.icon then return end
+
+    -- Flash edges red (icon stays clean)
+    FocusKick_SetEdgeColor(1, 0.2, 0.2, 1)
 
     if FocusKickFrame.bg then
         FocusKickFrame.bg:SetColorTexture(0, 0, 0, 0.9)
@@ -252,9 +363,12 @@ local function FocusKick_PlayInterruptFeedback()
 
     if C_Timer_After then
         C_Timer_After(0.18, function()
-            if FocusKickFrame and FocusKickFrame.icon then
-                FocusKickFrame.icon:SetVertexColor(1, 1, 1)
-                FocusKickFrame.icon:SetDesaturated(false)
+            if FocusKickFrame then
+                -- Restore based on current ready state
+                local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
+                local isNI = (bar and bar.isNotInterruptible == true) or false
+                local rawNI = bar and bar._msufApiNotInterruptibleRaw
+                FocusKick_RefreshReadyColor(isNI, rawNI)
                 if FocusKickFrame.bg then
                     FocusKickFrame.bg:SetColorTexture(0, 0, 0, 0.9)
                 end
@@ -264,9 +378,7 @@ local function FocusKick_PlayInterruptFeedback()
 
     -- Small shake
     FocusKick_EnsureDB()
-    if not MSUF_DB or not MSUF_DB.general or not C_Timer_After then
-        return
-    end
+    if not MSUF_DB or not MSUF_DB.general or not C_Timer_After then return end
     local g = MSUF_DB.general
 
     local offset      = 6
@@ -275,9 +387,7 @@ local function FocusKick_PlayInterruptFeedback()
     local i           = 0
 
     local function Step()
-        if not FocusKickFrame or not FocusKickFrame:IsShown() then
-            return
-        end
+        if not FocusKickFrame or not FocusKickFrame:IsShown() then return end
 
         i = i + 1
         local dir = (i % 2 == 0) and -1 or 1
@@ -322,7 +432,6 @@ local function FocusKick_AttachHooks()
     -- when the feature is enabled. No hooks needed.
 end
 
-
 ------------------------------------------------------
 -- Focus cast watcher (works even if FocusCastBar isn't shown / hasn't updated yet)
 ------------------------------------------------------
@@ -353,24 +462,12 @@ local function FocusKick_UpdateTimeText()
         return
     end
 
-    local ok, txt = MSUF_FastCall(function() return src.timeText:GetText() end)
-    if ok then
-        -- IMPORTANT: Never compare or format the returned text (it can be a secret value).
-        -- Just pass it through to our FontString.
-        MSUF_FastCall(FocusKickFrame.timeText.SetText, FocusKickFrame.timeText, txt)
-        local okA, a = MSUF_FastCall(function() return src.timeText:GetAlpha() end)
-        if okA then
-            local okSetAlpha = MSUF_FastCall(FocusKickFrame.timeText.SetAlpha, FocusKickFrame.timeText, a)
-            if not okSetAlpha then
-                FocusKickFrame.timeText:SetAlpha(1)
-            end
-        else
-            FocusKickFrame.timeText:SetAlpha(1)
-        end
-    else
-        FocusKickFrame.timeText:SetText("")
-        FocusKickFrame.timeText:SetAlpha(0)
-    end
+    -- Direct calls: GetText/SetText/GetAlpha/SetAlpha are not secret-restricted.
+    -- No pcall (MSUF_FastCall) overhead needed here.
+    local txt = src.timeText:GetText()
+    FocusKickFrame.timeText:SetText(txt or "")
+    local a = src.timeText:GetAlpha()
+    FocusKickFrame.timeText:SetAlpha(a or 1)
 end
 local function FocusKick_EnsureTimeUpdater()
     if not FocusKickFrame then return end
@@ -386,7 +483,12 @@ local function FocusKick_EnsureTimeUpdater()
     else
         -- Fallback: local OnUpdate if UpdateManager isn't available
         FocusKickFrame:SetScript("OnUpdate", function(self, elapsed)
-            if not self:IsShown() then return end
+            -- Zero idle cost: stop immediately if hidden or no focus unit
+            if not self:IsShown() then
+                self:SetScript("OnUpdate", nil)
+                self.MSUF_timeUpdater = nil
+                return
+            end
             self.MSUF_timeAccum = (self.MSUF_timeAccum or 0) + (elapsed or 0)
             if self.MSUF_timeAccum < 0.05 then return end
             self.MSUF_timeAccum = 0
@@ -417,13 +519,14 @@ local function FocusKick_UpdateFromUnit()
     local isChannel = false
     local name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, spellID
 
-    local ok, a,b,c,d,e,f,g,h,i = MSUF_FastCall(UnitChannelInfo, "focus")
-    if ok and a then
+    local a,b,c,d,e,f,g,h,i
+    if UnitChannelInfo then a,b,c,d,e,f,g,h,i = UnitChannelInfo("focus") end
+    if a then
         isChannel = true
         name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, _, spellID = a,b,c,d,e,f,g,h,i
     else
-        ok, a,b,c,d,e,f,g,h,i = MSUF_FastCall(UnitCastingInfo, "focus")
-        if ok and a then
+        if UnitCastingInfo then a,b,c,d,e,f,g,h,i = UnitCastingInfo("focus") end
+        if a then
             name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, _, spellID = a,b,c,d,e,f,g,h,i
         else
             -- No cast/channel on focus
@@ -439,8 +542,8 @@ local function FocusKick_UpdateFromUnit()
     -- Cache end time (seconds) for cheap updates
     FocusKickFrame.MSUF_castEnd = nil
     if endTimeMS ~= nil then
-        local okEnd, endSec = MSUF_FastCall(function() return (endTimeMS / 1000) end)
-        if okEnd and type(endSec) == "number" then
+        local endSec = endTimeMS / 1000
+        if type(endSec) == "number" then
             FocusKickFrame.MSUF_castEnd = endSec
         end
     end
@@ -448,11 +551,11 @@ local function FocusKick_UpdateFromUnit()
     -- Cache duration object if available (helps with "snappy end" / secret-safe)
     FocusKickFrame.MSUF_durObj = nil
     if isChannel and UnitChannelDuration then
-        local okD, obj = MSUF_FastCall(UnitChannelDuration, "focus")
-        if okD and obj then FocusKickFrame.MSUF_durObj = obj end
+        local obj = UnitChannelDuration("focus")
+        if obj then FocusKickFrame.MSUF_durObj = obj end
     elseif (not isChannel) and UnitCastingDuration then
-        local okD, obj = MSUF_FastCall(UnitCastingDuration, "focus")
-        if okD and obj then FocusKickFrame.MSUF_durObj = obj end
+        local obj = UnitCastingDuration("focus")
+        if obj then FocusKickFrame.MSUF_durObj = obj end
     end
 
     -- Icon texture: prefer UnitCastingInfo/UnitChannelInfo texture, fall back to FocusCastBar icon if needed
@@ -465,25 +568,15 @@ local function FocusKick_UpdateFromUnit()
         FocusKickFrame.icon:SetTexture(texture)
     end
 
-    -- Kick ready coloring (legacy path — mirrors state driver path)
-    if FocusKickFrame.icon then
-        if type(_G.MSUF_KickReady_Init) == "function" then _G.MSUF_KickReady_Init() end
-        local canKick = false
-        local isNI = false
-        -- notInterruptible from UnitCastingInfo/UnitChannelInfo is potentially secret —
-        -- avoid testing it directly; fall back to castbar frame's event-driven boolean.
+    -- Kick ready coloring: tint the 4-edge border (NOT the icon vertex color),
+    -- so the visual is unaffected by the underlying spell texture's hue.
+    if FocusKickFrame then
+        if _G.MSUF_KickReady_Init then _G.MSUF_KickReady_Init() end
+        -- Use cleansed plain boolean from the castbar frame (event-driven).
         local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
-        if bar and bar.isNotInterruptible then isNI = true end
-        if not isNI then
-            canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
-        end
-        if canKick then
-            FocusKickFrame.icon:SetDesaturated(false)
-            FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2)
-        else
-            FocusKickFrame.icon:SetDesaturated(isNI)
-            FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
-        end
+        local isNI = (bar and bar.isNotInterruptible == true) or false
+        local rawNI = bar and bar._msufApiNotInterruptibleRaw
+        FocusKick_RefreshReadyColor(isNI, rawNI)
         FocusKickFrame._msufLastCastState = { active = true, isNotInterruptible = isNI }
     end
 
@@ -502,6 +595,8 @@ local function FocusKick_StartWatcher()
     end
 
     FocusKick_Watcher:RegisterEvent("PLAYER_FOCUS_CHANGED")
+    FocusKick_Watcher:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+    FocusKick_Watcher:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     FocusKick_Watcher:RegisterUnitEvent("UNIT_SPELLCAST_START", "focus")
     FocusKick_Watcher:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "focus")
     FocusKick_Watcher:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "focus")
@@ -510,6 +605,8 @@ local function FocusKick_StartWatcher()
     FocusKick_Watcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "focus")
     FocusKick_Watcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "focus")
     FocusKick_Watcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "focus")
+    FocusKick_Watcher:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "focus")
+    FocusKick_Watcher:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "focus")
 
     FocusKick_Watcher:SetScript("OnEvent", function(self, event, unit)
         -- Interrupt feedback: play animation BEFORE UpdateFromUnit hides the icon.
@@ -517,6 +614,41 @@ local function FocusKick_StartWatcher()
             if FocusKick_IsEnabled() and FocusKickFrame and FocusKickFrame:IsShown() then
                 FocusKick_PlayInterruptFeedback()
             end
+        end
+        if event == "SPELL_UPDATE_COOLDOWN" then
+            -- Cheap path: only repaint edges (no full UpdateFromUnit), only if the icon
+            -- is currently visible during a cast.
+            if FocusKickFrame and FocusKickFrame:IsShown() then
+                local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
+                local isNI = (bar and bar.isNotInterruptible == true) or false
+                local rawNI = bar and bar._msufApiNotInterruptibleRaw
+                FocusKick_RefreshReadyColor(isNI, rawNI)
+            end
+            return
+        end
+        if event == "PLAYER_SPECIALIZATION_CHANGED" then
+            -- Spec change: re-resolve the interrupt spell, then refresh edges.
+            if _G.MSUF_KickReady_Init then _G.MSUF_KickReady_Init() end
+            if FocusKickFrame and FocusKickFrame:IsShown() then
+                local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
+                local isNI = (bar and bar.isNotInterruptible == true) or false
+                local rawNI = bar and bar._msufApiNotInterruptibleRaw
+                FocusKick_RefreshReadyColor(isNI, rawNI)
+            end
+            return
+        end
+        if event == "UNIT_SPELLCAST_INTERRUPTIBLE" or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
+            -- Interruptibility changed mid-cast: just repaint, do not rebuild.
+            if FocusKickFrame and FocusKickFrame:IsShown() then
+                local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
+                local isNI = (event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
+                if bar then bar.isNotInterruptible = isNI end
+                -- Mirror onto the secret-tagged raw flag too so the C-side compose path matches the event.
+                if bar then bar._msufApiNotInterruptibleRaw = isNI end
+                local rawNI = bar and bar._msufApiNotInterruptibleRaw
+                FocusKick_RefreshReadyColor(isNI, rawNI)
+            end
+            return
         end
         if event == "PLAYER_FOCUS_CHANGED" or unit == "focus" then
             FocusKick_UpdateFromUnit()
@@ -547,7 +679,6 @@ local function FocusKick_StopWatcher()
     end
 end
 
-
 ------------------------------------------------------
 -- Enable / disable mode
 ------------------------------------------------------
@@ -557,9 +688,7 @@ local function FocusKick_UpdateMode()
     -- If the Castbar Engine driver is active, keep this module UI-only.
     -- The driver will call MSUF_FocusKick_ApplyCastState().
     if _G.MSUF_FocusKickUseEngineDriver then
-        if not MSUF_DB or not MSUF_DB.general then
-            return
-        end
+        if not MSUF_DB or not MSUF_DB.general then return end
 
         local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
 
@@ -573,7 +702,7 @@ local function FocusKick_UpdateMode()
             end
 
             FocusKick_EnsureTimeUpdater()
-            if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
+            if _G.MSUF_FocusKickDriver_ForceUpdate then
                 _G.MSUF_FocusKickDriver_ForceUpdate()
             end
         else
@@ -596,9 +725,7 @@ local function FocusKick_UpdateMode()
 
     FocusKick_AttachHooks()
 
-    if not MSUF_DB or not MSUF_DB.general then
-        return
-    end
+    if not MSUF_DB or not MSUF_DB.general then return end
     local g = MSUF_DB.general
 
     local bar = FocusKick_FocusCastBar or _G["FocusCastBar"]
@@ -684,7 +811,7 @@ local FocusKickPreviewMinX, FocusKickPreviewMaxX = -500, 500
 local FocusKickPreviewMinY, FocusKickPreviewMaxY = -500, 500
 
 local function FocusKick_PrintSystem(msg)
-    if type(UIErrorsFrame) == "table" and UIErrorsFrame.AddMessage then
+    if UIErrorsFrame and UIErrorsFrame.AddMessage then
         UIErrorsFrame:AddMessage(msg, 1, 0.2, 0.2, 1)
         return
     end
@@ -944,382 +1071,6 @@ MSUF_FocusKick_SyncPreviewFromDB = function(panel)
 end
 
 
-function MSUF_InitFocusKickIconOptions()
-    if FocusKickOptionsInitialized then
-        return
-    end
-    if _G.MSUF_FocusKickOptionsBuiltInCastbar then
-        FocusKickOptionsInitialized = true
-        return
-    end
-
-    local focusGroup = _G["MSUF_CastbarFocusGroup"]
-    if not focusGroup then
-        return -- panel not built yet; will be called again later
-    end
-
-    FocusKick_EnsureDB()
-    local g = MSUF_DB.general
-
-    -- If the old right-side header exists (created by Options Core), hide it so we don't get double headers.
-    local rightHeader = _G["MSUF_FocusKickHeaderRight"]
-    if rightHeader and rightHeader.Hide then
-        rightHeader:Hide()
-    end
-
-    -- Build a clean, boxed 2-column layout (Enable + Description | Size | Position)
-    local panel = CreateFrame("Frame", "MSUF_FocusKickOptionsPanel", focusGroup)
-    -- Move the whole layout further left and give it more usable width.
-    -- This prevents the right "Position" column from pushing outside the box.
-    panel:SetPoint("TOPLEFT", focusGroup, "TOPLEFT", 10, -170)
-    panel:SetPoint("BOTTOMRIGHT", focusGroup, "BOTTOMRIGHT", -10, 70)
-
-    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("TOP", panel, "TOP", 0, -18)
-    title:SetText("Focus Interrupt Tracker")
-
-    local topLine = panel:CreateTexture(nil, "ARTWORK")
-    topLine:SetColorTexture(1, 1, 1, 0.12)
-    topLine:SetHeight(1)
-    topLine:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -42)
-    topLine:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -12, -42)
-
-    -- Column separators
-    local sep1 = panel:CreateTexture(nil, "ARTWORK")
-    sep1:SetColorTexture(1, 1, 1, 0.10)
-    sep1:SetWidth(1)
-    sep1:SetPoint("TOPLEFT", panel, "TOPLEFT", 260, -52)
-    sep1:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 260, 22)
-
-    local sep2 = panel:CreateTexture(nil, "ARTWORK")
-    sep2:SetColorTexture(1, 1, 1, 0.10)
-    sep2:SetWidth(1)
-    sep2:SetPoint("TOPLEFT", panel, "TOPLEFT", 430, -52)
-    sep2:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 430, 22)
-
-    -- LEFT: enable + short explanation
-    local cb = CreateFrame("CheckButton", "MSUF_FocusKickIconCheck", panel, "UICheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", panel, "TOPLEFT", 18, -64)
-    if cb.Text then
-        cb.Text:SetText("Enable Focus Interrupt Tracker")
-    end
-    cb.tooltipText = "Shows an interrupt reminder icon for your Focus."
-    cb.tooltipRequirement = "Use this to track interrupts on your Focus without showing the Focus castbar."
-
-    local desc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    desc:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 2, -6)
-    desc:SetWidth(260)
-    desc:SetJustifyH("LEFT")
-    desc:SetText("Track interrupts on your Focus without showing the Focus castbar.")
-
-    cb:SetScript("OnClick", function(self)
-        if panel._msufSyncing then return end
-        FocusKick_EnsureDB()
-        if not MSUF_DB or not MSUF_DB.general then return end
-        MSUF_DB.general.enableFocusKickIcon = self:GetChecked() and true or false
-        FocusKick_UpdateMode()
-
-        -- If disabled, always hide the on-screen preview (session-only) to avoid confusion.
-        if not (MSUF_DB.general.enableFocusKickIcon and true or false) then
-            FocusKick_SetPreviewEnabled(false)
-        end
-
-        if MSUF_FocusKick_SyncPreviewFromDB then
-            MSUF_FocusKick_SyncPreviewFromDB(panel)
-        end
-    end)
-
-    -- MID: Size
-    local sizeHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    sizeHeader:SetPoint("TOPLEFT", panel, "TOPLEFT", 290, -62)
-    sizeHeader:SetText("Size")
-
-    local sliderWidth = FocusKick_CreateSlider(
-        "MSUF_FocusKickIconWidthSlider",
-        "Width",
-        panel,
-        16, 128, 1,
-        290, -100
-    )
-    sliderWidth:SetWidth(170)
-    sliderWidth.onValueChanged = function(self, value)
-        if panel._msufSyncing then return end
-        FocusKick_EnsureDB()
-        if not MSUF_DB or not MSUF_DB.general then return end
-        MSUF_DB.general.focusKickIconWidth = value
-        FocusKick_UpdateAppearance()
-        if MSUF_FocusKick_SyncPreviewFromDB then
-            MSUF_FocusKick_SyncPreviewFromDB(panel)
-        end
-    end
-
-    local sliderHeight = FocusKick_CreateSlider(
-        "MSUF_FocusKickIconHeightSlider",
-        "Height",
-        panel,
-        16, 128, 1,
-        290, -170
-    )
-    sliderHeight:SetWidth(170)
-    sliderHeight.onValueChanged = function(self, value)
-        if panel._msufSyncing then return end
-        FocusKick_EnsureDB()
-        if not MSUF_DB or not MSUF_DB.general then return end
-        MSUF_DB.general.focusKickIconHeight = value
-        FocusKick_UpdateAppearance()
-        if MSUF_FocusKick_SyncPreviewFromDB then
-            MSUF_FocusKick_SyncPreviewFromDB(panel)
-        end
-    end
-
-    -- Text size (mirrors Focus castbar time text; font size only)
-    local sliderTextSize = FocusKick_CreateSlider(
-        "MSUF_FocusKickTextSizeSlider",
-        "Text Size",
-        panel,
-        8, 24, 1,
-        290, -240
-    )
-    sliderTextSize:SetWidth(170)
-    -- Live value label (shows effective size that the timer will use)
-    local sliderTextSizeValue = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    sliderTextSizeValue:SetPoint("LEFT", sliderTextSize, "RIGHT", 10, 0)
-    sliderTextSizeValue:SetJustifyH("LEFT")
-    sliderTextSizeValue:SetText("")
-    sliderTextSize._msufValueText = sliderTextSizeValue
-    panel._msufFocusKickSliderTextSize = sliderTextSize
-    sliderTextSize.onValueChanged = function(self, value)
-        if panel._msufSyncing then return end
-        FocusKick_EnsureDB()
-        if not MSUF_DB or not MSUF_DB.general then return end
-
-        MSUF_DB.general.focusKickTextSize = value
-
-        -- Live apply: update font immediately (runtime + on-screen preview) without forcing a full UI resync.
-        FocusKick_ApplyTimeTextFontNow()
-        FocusKick_UpdateAppearance()
-
-        -- Update live value label to reflect the effective size the timer will use.
-        if self._msufValueText then
-            local eff = FocusKick_GetDesiredTextSize(MSUF_DB.general)
-            self._msufValueText:SetText(tostring(eff))
-        end
-    end
-
-    -- RIGHT: Position
-    local posHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    posHeader:SetPoint("TOPLEFT", panel, "TOPLEFT", 460, -62)
-    posHeader:SetText("Position")
-
-    local sliderOffsetX = FocusKick_CreateSlider(
-        "MSUF_FocusKickIconOffsetXSlider",
-        "X offset",
-        panel,
-        -500, 500, 1,
-        460, -100
-    )
-    sliderOffsetX:SetWidth(170)
-    sliderOffsetX.onValueChanged = function(self, value)
-        if panel._msufSyncing then return end
-        FocusKick_EnsureDB()
-        if not MSUF_DB or not MSUF_DB.general then return end
-        MSUF_DB.general.focusKickIconOffsetX = value
-        FocusKick_UpdateAppearance()
-        if MSUF_FocusKick_SyncPreviewFromDB then
-            MSUF_FocusKick_SyncPreviewFromDB(panel)
-        end
-    end
-
-    local sliderOffsetY = FocusKick_CreateSlider(
-        "MSUF_FocusKickIconOffsetYSlider",
-        "Y offset",
-        panel,
-        -500, 500, 1,
-        460, -170
-    )
-    sliderOffsetY:SetWidth(170)
-    sliderOffsetY.onValueChanged = function(self, value)
-        if panel._msufSyncing then return end
-        FocusKick_EnsureDB()
-        if not MSUF_DB or not MSUF_DB.general then return end
-        MSUF_DB.general.focusKickIconOffsetY = value
-        FocusKick_UpdateAppearance()
-        if MSUF_FocusKick_SyncPreviewFromDB then
-            MSUF_FocusKick_SyncPreviewFromDB(panel)
-        end
-    end
-
-    -- Store refs for central sync (slider <-> preview <-> DB)
-    panel._msufFocusKickEnableCheck    = cb
-    panel._msufFocusKickSliderWidth    = sliderWidth
-    panel._msufFocusKickSliderHeight   = sliderHeight
-    panel._msufFocusKickSliderTextSize = sliderTextSize
-    panel._msufFocusKickSliderOffsetX  = sliderOffsetX
-    panel._msufFocusKickSliderOffsetY  = sliderOffsetY
-
-    -- On-screen preview (session-only): show a draggable preview icon on the screen.
-    local previewCheck = CreateFrame("CheckButton", "MSUF_FocusKickPreviewCheck", panel, "UICheckButtonTemplate")
-    -- Place this toggle in the left column under the enable description.
-    previewCheck:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", -2, -10)
-    if previewCheck.Text then
-        previewCheck.Text:SetText("Show on Screen Preview")
-    end
-    panel._msufFocusKickPreviewCheck = previewCheck
-
-    previewCheck:SetScript("OnClick", function(self)
-        if panel._msufSyncing then return end
-        if InCombatLockdown and InCombatLockdown() then
-            FocusKick_PrintSystem("In combat - cannot toggle Focus Interrupt Tracker preview.")
-            panel._msufSyncing = true
-            self:SetChecked(FocusKickPreviewEnabled and true or false)
-            panel._msufSyncing = false
-            return
-        end
-
-        FocusKick_SetPreviewEnabled(self:GetChecked() and true or false)
-        if MSUF_FocusKick_SyncPreviewFromDB then
-            MSUF_FocusKick_SyncPreviewFromDB(panel)
-        end
-    end)
-
-local resetBtn = CreateFrame("Button", "MSUF_FocusKickResetPositionButton", panel, "UIPanelButtonTemplate")
-    resetBtn:SetSize(150, 24)
-    resetBtn:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -16, 18)
-    resetBtn:SetText("Reset Position")
-    resetBtn:SetScript("OnClick", function()
-        FocusKick_EnsureDB()
-        if not MSUF_DB or not MSUF_DB.general then return end
-        MSUF_DB.general.focusKickIconOffsetX = 0
-        MSUF_DB.general.focusKickIconOffsetY = 0
-        if sliderOffsetX and sliderOffsetX.SetValue then sliderOffsetX:SetValue(0) end
-        if sliderOffsetY and sliderOffsetY.SetValue then sliderOffsetY:SetValue(0) end
-        FocusKick_UpdateAppearance()
-    end)
-
-    -- Layout: aggressively left-align and keep columns inside the panel, even on narrow UI widths.
-    local function ApplyLayout()
-        local w = panel:GetWidth() or 700
-
-        -- Adaptive column sizes for different option-window widths
-        local leftColW  = 260
-        local rightColW = 240
-        if w < 640 then leftColW = 230; rightColW = 210 end
-        if w < 580 then leftColW = 210; rightColW = 190 end
-
-        local sep1X = leftColW
-        local sep2X = w - rightColW
-
-        -- Ensure there is always a usable middle column
-        if sep2X < (sep1X + 170) then
-            sep2X = sep1X + 170
-        end
-
-        -- Re-anchor separators
-        if sep1 then
-            sep1:ClearAllPoints()
-            sep1:SetPoint("TOPLEFT", panel, "TOPLEFT", sep1X, -52)
-            sep1:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", sep1X, 22)
-        end
-        if sep2 then
-            sep2:ClearAllPoints()
-            sep2:SetPoint("TOPLEFT", panel, "TOPLEFT", sep2X, -52)
-            sep2:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", sep2X, 22)
-        end
-
-        -- Left column sizing
-        if desc then
-            desc:SetWidth(math.max(160, sep1X - 48))
-        end
-
-        -- Middle + right column X starts
-        local sizeX = sep1X + 24
-        local posX  = sep2X + 24
-
-        -- Compute slider widths that fit inside columns
-        local midW = (sep2X - 20) - sizeX
-        if midW < 140 then midW = 140 end
-        if midW > 220 then midW = 220 end
-
-        local rightW = (w - 20) - posX
-        if rightW < 140 then rightW = 140 end
-        if rightW > 240 then rightW = 240 end
-
-        -- Headers
-        if sizeHeader then
-            sizeHeader:ClearAllPoints()
-            sizeHeader:SetPoint("TOPLEFT", panel, "TOPLEFT", sizeX, -62)
-        end
-        if posHeader then
-            posHeader:ClearAllPoints()
-            posHeader:SetPoint("TOPLEFT", panel, "TOPLEFT", posX, -62)
-        end
-
-        -- Sliders
-        if sliderWidth then
-            sliderWidth:ClearAllPoints()
-            sliderWidth:SetPoint("TOPLEFT", panel, "TOPLEFT", sizeX, -100)
-            sliderWidth:SetWidth(midW)
-        end
-        if sliderHeight then
-            sliderHeight:ClearAllPoints()
-            sliderHeight:SetPoint("TOPLEFT", panel, "TOPLEFT", sizeX, -170)
-            sliderHeight:SetWidth(midW)
-        end
-
-        if sliderTextSize then
-            sliderTextSize:ClearAllPoints()
-            sliderTextSize:SetPoint("TOPLEFT", panel, "TOPLEFT", sizeX, -240)
-            sliderTextSize:SetWidth(midW)
-        end
-
-        if sliderOffsetX then
-            sliderOffsetX:ClearAllPoints()
-            sliderOffsetX:SetPoint("TOPLEFT", panel, "TOPLEFT", posX, -100)
-            sliderOffsetX:SetWidth(rightW)
-        end
-        if sliderOffsetY then
-            sliderOffsetY:ClearAllPoints()
-            sliderOffsetY:SetPoint("TOPLEFT", panel, "TOPLEFT", posX, -170)
-            sliderOffsetY:SetWidth(rightW)
-        end
-
-        -- On-screen preview checkbox (left column, below description)
-        if previewCheck and desc then
-            previewCheck:ClearAllPoints()
-            previewCheck:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", -2, -10)
-        end
-    end
-
-
-
-    local function SyncFromDB()
-        if MSUF_FocusKick_SyncPreviewFromDB then
-            MSUF_FocusKick_SyncPreviewFromDB(panel)
-        end
-    end
-
-    panel:SetScript("OnShow", function()
-        ApplyLayout()
-        SyncFromDB()
-    end)
-    panel:SetScript("OnSizeChanged", function()
-        ApplyLayout()
-        SyncFromDB()
-    end)
-
-    panel:SetScript("OnHide", function()
-        if FocusKickPreviewFrame and FocusKickPreviewFrame.StopMovingOrSizing then
-            FocusKickPreviewFrame:StopMovingOrSizing()
-        end
-        panel._msufSyncing = false
-        FocusKickOptionsPanelRef = panel
-    end)
-    ApplyLayout()
-    SyncFromDB()
-
-    FocusKickOptionsInitialized = true
-end
-
 ------------------------------------------------------
 -- Public API for main file
 ------------------------------------------------------
@@ -1391,24 +1142,13 @@ function _G.MSUF_FocusKick_ApplyCastState(state)
         FocusKickFrame.icon:SetTexture(state.icon)
     end
 
-    -- Kick ready coloring: green = interruptible + kick ready, red = can't kick
-    if FocusKickFrame.icon then
-        -- Ensure kick cooldown monitor is running
-        if type(_G.MSUF_KickReady_Init) == "function" then _G.MSUF_KickReady_Init() end
-
-        local canKick = false
-        if not state.isNotInterruptible then
-            canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
-        end
-
-        if canKick then
-            if FocusKickFrame.icon.SetDesaturated then FocusKickFrame.icon:SetDesaturated(false) end
-            if FocusKickFrame.icon.SetVertexColor then FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2) end
-        else
-            if FocusKickFrame.icon.SetDesaturated then FocusKickFrame.icon:SetDesaturated(state.isNotInterruptible and true or false) end
-            if FocusKickFrame.icon.SetVertexColor then FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2) end
-        end
-
+    -- Kick ready coloring: tint the 4-edge border (NOT the icon vertex color),
+    -- so the visual is unaffected by the underlying spell texture's hue.
+    if FocusKickFrame then
+        if _G.MSUF_KickReady_Init then _G.MSUF_KickReady_Init() end
+        local isNI = (state.isNotInterruptible == true)
+        local rawNI = state.apiNotInterruptibleRaw
+        FocusKick_RefreshReadyColor(isNI, rawNI)
         -- Cache state for cooldown-driven refresh
         FocusKickFrame._msufLastCastState = state
     end
@@ -1424,25 +1164,4 @@ function _G.MSUF_FocusKick_PlayInterruptFeedback()
     if not FocusKick_IsEnabled() then return end
     FocusKick_EnsureInitialized(true)
     FocusKick_PlayInterruptFeedback()
-end
-
--- Refresh kick-ready coloring when cooldown state changes mid-cast
-function _G.MSUF_FocusKick_RefreshKickReady()
-    if not FocusKickFrame or not FocusKickFrame:IsShown() then return end
-    local state = FocusKickFrame._msufLastCastState
-    if not state or not state.active then return end
-    if not FocusKickFrame.icon then return end
-
-    local canKick = false
-    if not state.isNotInterruptible then
-        canKick = (type(_G.MSUF_KickReady_IsReady) == "function") and _G.MSUF_KickReady_IsReady() or false
-    end
-
-    if canKick then
-        FocusKickFrame.icon:SetDesaturated(false)
-        FocusKickFrame.icon:SetVertexColor(0.2, 1, 0.2)
-    else
-        FocusKickFrame.icon:SetDesaturated(state.isNotInterruptible and true or false)
-        FocusKickFrame.icon:SetVertexColor(1, 0.2, 0.2)
-    end
 end

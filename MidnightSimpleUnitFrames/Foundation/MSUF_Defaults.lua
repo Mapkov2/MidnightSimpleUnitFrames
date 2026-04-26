@@ -1,6 +1,6 @@
 local addonName, addonNS = ...
-local ns = (_G and _G.MSUF_NS) or addonNS or {}
-if _G then _G.MSUF_NS = ns end
+local ns = (_G.MSUF_NS) or addonNS or {}
+_G.MSUF_NS = ns
 
 -- MSUF default class-resource colors
 -- Keep this tiny and global so:
@@ -8,7 +8,7 @@ if _G then _G.MSUF_NS = ns end
 -- 2) reset-to-default in the Colors menu also lands on these defaults
 -- 3) no runtime overhead in hot paths (one-time table write at load)
 do
-    local pbc = _G and _G.PowerBarColor
+    local pbc = _G.PowerBarColor
     if type(pbc) == "table" then
         pbc.RUNES = pbc.RUNES or {}
         pbc.RUNES.r, pbc.RUNES.g, pbc.RUNES.b = 128/255, 0, 17/255      -- #800011
@@ -40,8 +40,8 @@ end
 
 local function MSUF_Defaults_TryDecodeCompactString(str)
     if type(str) ~= "string" then  return nil end
-    local E = _G and _G.C_EncodingUtil
-    if type(E) ~= "table" then  return nil end
+    local E = _G.C_EncodingUtil
+    if not E then  return nil end
     if type(E.DeserializeCBOR) ~= "function" then  return nil end
     if type(E.DecompressString) ~= "function" then  return nil end
     if type(E.DecodeBase64) ~= "function" then  return nil end
@@ -66,7 +66,7 @@ local function MSUF_Defaults_TryDecodeCompactString(str)
      return tbl
 end
 local function MSUF_Defaults_WipeInPlace(t)
-    if type(t) ~= "table" then  return end
+    if not t then  return end
     for k in pairs(t) do t[k] = nil end
  end
 local function MSUF_Defaults_DeepCopy(dst, src)
@@ -93,9 +93,9 @@ local function MSUF_Defaults_DeepCopy(dst, src)
 -- Fresh-install overrides (applied only when the factory profile payload is seeded).
 -- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
-    if type(db) ~= "table" then  return end
+    if not db then  return end
     local function ForceUnitAlpha100(conf)
-        if type(conf) ~= "table" then  return end
+        if not conf then  return end
         -- Main alpha (used when layered alpha is off)
         conf.alphaInCombat = 1
         conf.alphaOutOfCombat = 1
@@ -133,7 +133,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     end
  end
 local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
-    if type(MSUF_DB) ~= "table" then  return end
+    if not MSUF_DB then  return end
     local g = (type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
     if g and g._msufFactoryProfileApplied then
          return
@@ -141,13 +141,11 @@ local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     -- Only seed when the DB was just created empty.
     -- (Existing installs always already have keys before EnsureDB_Heavy runs.)
     local isEmpty = (next(MSUF_DB) == nil)
-    if not isEmpty then
-         return
-    end
+    if not isEmpty then return end
     local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
-    if type(tbl) ~= "table" then  return end
+    if not tbl then  return end
     local payload = tbl.payload
-    if type(payload) ~= "table" then  return end
+    if not payload then  return end
     -- Replace the empty DB with the decoded payload.
     MSUF_Defaults_DeepCopy(MSUF_DB, payload)
     MSUF_Defaults_ApplyFreshInstallOverrides(MSUF_DB)
@@ -355,8 +353,8 @@ end
             g.useClassColors = false
         end
     end
-    -- Normalize Bar mode (supports: dark / class / unified) and keep legacy flags in sync
-    if g.barMode ~= "dark" and g.barMode ~= "class" and g.barMode ~= "unified" then
+    -- Normalize Bar mode (supports: dark / class / unified / gradient) and keep legacy flags in sync
+    if g.barMode ~= "dark" and g.barMode ~= "class" and g.barMode ~= "unified" and g.barMode ~= "gradient" then
         g.barMode = (g.useClassColors and "class") or (g.darkMode and "dark") or "dark"
     end
     if g.barMode == "dark" then
@@ -365,6 +363,10 @@ end
     elseif g.barMode == "class" then
         g.darkMode = false
         g.useClassColors = true
+    elseif g.barMode == "gradient" then
+        -- Gradient mode is HP-derived; neither legacy flag applies.
+        g.darkMode = false
+        g.useClassColors = false
     else -- unified
         g.darkMode = false
         g.useClassColors = false
@@ -444,7 +446,7 @@ end
         g.highlightColor = "white"
     else
         g.highlightColor = string.lower(g.highlightColor)
-        if not (type(fontColors) == "table" and fontColors[g.highlightColor]) then
+        if not (fontColors and fontColors[g.highlightColor]) then
             g.highlightColor = "white"
         end
     end
@@ -1345,7 +1347,7 @@ filters = {
     if MSUF_DB and MSUF_DB.auras2 then
         local a2 = MSUF_DB.auras2
         local function EnsureImportantSplit(f)
-            if type(f) ~= "table" then return end
+            if not f then return end
             f.buffs = (type(f.buffs) == "table") and f.buffs or {}
             f.debuffs = (type(f.debuffs) == "table") and f.debuffs or {}
             local b, d = f.buffs, f.debuffs
@@ -1508,6 +1510,9 @@ local function fill(key, defaults)
         offsetX      = 507,
         offsetY      = 309,
         spacing      = -96,
+        -- Layout mode: "VERTICAL_DOWN" | "VERTICAL_UP" | "HORIZONTAL_RIGHT" | "HORIZONTAL_LEFT"
+        -- Kept invertBossOrder for one-shot migration (see below).
+        bossLayoutMode = "VERTICAL_DOWN",
         invertBossOrder = false,
         showName     = true,
         showLevelIndicator = false,
@@ -1520,6 +1525,14 @@ local function fill(key, defaults)
     })
     for k, v in pairs(textDefaults) do
         if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
+    end
+    -- One-shot migration: old invertBossOrder checkbox → new bossLayoutMode dropdown.
+    -- Runs once on first login with v4.0 Beta 5+; converts legacy saved setting.
+    if MSUF_DB.boss._bossLayoutMigrated ~= true then
+        if MSUF_DB.boss.invertBossOrder == true then
+            MSUF_DB.boss.bossLayoutMode = "VERTICAL_UP"
+        end
+        MSUF_DB.boss._bossLayoutMigrated = true
     end
     -- Range fade: also fade castbar / auras when boss is out of range (off by default).
     if MSUF_DB.boss.rangeFadeCastbar == nil then MSUF_DB.boss.rangeFadeCastbar = false end

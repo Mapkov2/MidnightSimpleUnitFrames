@@ -588,6 +588,9 @@ end
             self.isNotInterruptible = false
             self._msufApiNotInterruptibleRaw = false -- keep vertex-tint source in sync; plain boolean is safe.
             if self.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(self) end
+            -- Interrupt Ready Indicator: re-evaluate visibility/color now that
+            -- the cast became interruptible. Cheap + idempotent.
+            if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
 
 	        elseif event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
 	            if arg1 ~= self.unit then return end
@@ -595,6 +598,7 @@ end
             self.isNotInterruptible = true
             self._msufApiNotInterruptibleRaw = true
             if self.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(self) end
+            if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
 
 	        elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
 	            if arg1 ~= self.unit then return end
@@ -791,6 +795,30 @@ self.MSUF_timerDriven = okTimer and true or false
             end
 
             self:Show()
+            -- Mark cast as active for kick-indicator state tracking + refresh.
+            self.MSUF_castActive = true
+            -- Defer the first kick-indicator paint by 1 frame.
+            -- Reason: on cast start the driver sets self.isNotInterruptible = false
+            -- (UNIT_SPELLCAST_START always resets the plain bool); for casts that
+            -- are non-interruptible from the start, UNIT_SPELLCAST_NOT_INTERRUPTIBLE
+            -- fires immediately afterward but in a separate event dispatch. If we
+            -- paint NOW we'd briefly tint green/red on a non-interruptible cast,
+            -- then unhide on the next event tick — a visible flash. Deferring by
+            -- one frame lets the NOT_INTERRUPTIBLE handler land first if applicable,
+            -- so the very first paint already reflects the correct state. The
+            -- cooldown/refresh ticker still starts from this point onward.
+            if _G.MSUF_KickReady_RefreshFrame then
+                if _G.C_Timer and _G.C_Timer.After then
+                    local _bar = self
+                    _G.C_Timer.After(0, function()
+                        if _bar and _bar.MSUF_castActive == true and _G.MSUF_KickReady_RefreshFrame then
+                            _G.MSUF_KickReady_RefreshFrame(_bar, nil)
+                        end
+                    end)
+                else
+                    _G.MSUF_KickReady_RefreshFrame(self, state)
+                end
+            end
             -- Safety net: 4Hz existence + remaining=0 check catches stuck bars.
             if self.unit ~= "player" then
                 self._msufZeroCount = nil
@@ -799,6 +827,10 @@ self.MSUF_timerDriven = okTimer and true or false
             end
         else
 self:SetScript("OnUpdate", nil)
+-- Cast no longer active: clear kick indicator state.
+self.MSUF_castActive = false
+if self.kickReadyBox then self.kickReadyBox:Hide() end
+if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
 if self.hideTimer and self.hideTimer.Cancel then
     self.hideTimer:Cancel()
 end
@@ -839,6 +871,10 @@ function frame:SetInterrupted()
     _G.MSUF_CB_ResetStateOnStop(self, "INTERRUPTED")
     self.interrupted = true
     self._msufApiNotInterruptibleRaw = nil
+    -- Cast no longer active: clear kick indicator state + cancel CD timer.
+    self.MSUF_castActive = false
+    if self.kickReadyBox then self.kickReadyBox:Hide() end
+    if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
 
         -- Respect per-unit "Show interrupt" toggle (hide interrupt feedback entirely when disabled).
         -- Phase 1A: Use shared lazy EnsureDB.

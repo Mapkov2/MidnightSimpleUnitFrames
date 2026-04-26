@@ -207,10 +207,25 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     if not show then
         ns.Text.Set(self.hpText, "", false)
         ns.Text.ClearField(self, "hpTextPct")
+        self._msufLastRenderPct = nil
         return
     end
 
-    local spec = ns.Text.EnsureSpec(self)
+    -- PERF: Early diff-gate on percent (non-secret from UnitHealthPercent).
+    -- When percent hasn't changed and no absorb text, output is identical → skip.
+    -- SECRET-SAFE: hpPct CAN be secret in 12.0 — only diff-gate plain numbers.
+    if hasPct and not absorbText then
+        local iss = _MSUF_issecret
+        if not (iss and iss(hpPct)) then
+            if self._msufLastRenderPct == hpPct then return end
+            self._msufLastRenderPct = hpPct
+        else
+            self._msufLastRenderPct = nil
+        end
+    end
+
+    -- PERF: Inlined EnsureSpec fast path
+    local spec = self._msufTextSpec or ns.Text.EnsureSpec(self)
     local hpMode = spec.hpMode
     local sep = spec.hpSep
     local hpText = self.hpText
@@ -220,7 +235,8 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     local hpPctStr = hasPct and _MSUF_PctToStr1D(hpPct) or nil
 
     -- Split path: HP in main FontString, percent in side FontString
-    local split = hasPct and ns.Text._ShouldSplitHP(self, spec.hpSpacerConf, spec.hpSpacerG, hpMode) or false
+    -- PERF: use precomputed spec.hpSplitEnabled (set in EnsureSpec, invalidated on config change).
+    local split = hasPct and spec.hpSplitEnabled or false
     if split then
         local mainText = _MSUF_AppendAbsorb(h, absorbText, absorbStyle)
         if not absorbText and not _MSUF_IsSecret(h) and h == self._msufLastH and hpPctStr == self._msufLastPctS then return end
@@ -381,6 +397,21 @@ function ns.Text.EnsureSpec(self)
             pSplitEnabled = (splitX > 0)
         end
     end
+    -- PERF: HP split — precompute once per spec build to avoid calling
+    -- _ShouldSplitHP on every RenderHpMode (10-50×/s per unit). Config changes
+    -- invalidate the spec via _msufTextSpec = nil, so the cached value stays correct.
+    local hpNeedsPct = (hpMode == "FULL_PLUS_PERCENT") or (hpMode == "PERCENT_ONLY") or (hpMode == "PERCENT_PLUS_FULL")
+    local hpSplitEnabled = false
+    if self.hpTextPct and (hpMode == "FULL_PLUS_PERCENT" or hpMode == "PERCENT_PLUS_FULL") then
+        local splitOn = (useOverride and eff and eff.hpTextSpacerEnabled == true)
+            or ((not useOverride) and g.hpTextSpacerEnabled == true)
+        if splitOn then
+            local hpSplitX = (useOverride and eff and tonumber(eff.hpTextSpacerX))
+                or tonumber(g.hpTextSpacerX) or 0
+            hpSplitX = tonumber(hpSplitX) or 0
+            hpSplitEnabled = (hpSplitX > 0)
+        end
+    end
     -- Per-unit font override: resolve colorPowerTextByType per frame
     local _pColorByType = (g.colorPowerTextByType == true)
     if udb and udb.fontOverride and udb.colorPowerTextByType ~= nil then
@@ -391,6 +422,8 @@ function ns.Text.EnsureSpec(self)
         hpSep = ns.Text._SepToken(hpSepRaw, nil),
         hpSpacerConf = (useOverride and eff) or nil,
         hpSpacerG = g,
+        hpNeedsPct = hpNeedsPct,
+        hpSplitEnabled = hpSplitEnabled,
         pMode = pMode,
         pSep = ns.Text._SepToken(rawPSep, rawHpSep),
         pColorByType = _pColorByType,
@@ -404,29 +437,6 @@ function ns.Text.EnsureSpec(self)
     return spec
 end
 
-function ns.Text._ShouldSplitPower(self, pMode, hasPct)
-    if not self or not hasPct or not self.powerTextPct then  return false end
-    if not _MSUF_PowerModeAllowsSplit(pMode) then  return false end
-    if not MSUF_DB then
-        if type(EnsureDB) == "function" then EnsureDB() end
-    end
-    local key = self.msufConfigKey
-    local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
-    local gen = (MSUF_DB and MSUF_DB.general) or nil
-    -- Spacers inherit Shared unless per-unit override is enabled.
-    local useOverride = (udb and udb.hpPowerTextOverride == true)
-    local on = (useOverride and udb and udb.powerTextSpacerEnabled == true) or ((not useOverride) and gen and gen.powerTextSpacerEnabled == true)
-    if not on then  return false end
-    local x = (useOverride and udb and tonumber(udb.powerTextSpacerX)) or ((gen and tonumber(gen.powerTextSpacerX)) or 0)
-    x = tonumber(x) or 0
-    if x <= 0 then  return false end
-    if key and type(_G.MSUF_GetPowerSpacerMaxForUnitKey) == "function" then
-        local maxP = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(key)) or 0
-        if x < 0 then x = 0 end
-        if x > maxP then x = maxP end
-    end
-    return (x > 0)
-end
 
 local function _MSUF_FormatPowerByMode(mode, curText, maxText, pctText, joinPrimary, joinSecondary, splitAllowed)
     joinPrimary = joinPrimary or " "
@@ -489,7 +499,8 @@ function ns.Text.RenderPowerText(self)
         return
     end
 
-    local spec = ns.Text.EnsureSpec(self)
+    -- PERF: Inlined EnsureSpec fast path
+    local spec = self._msufTextSpec or ns.Text.EnsureSpec(self)
     local pMode = spec.pMode
     local powerSep = spec.pSep
     local colorByType = spec.pColorByType
@@ -542,7 +553,6 @@ function ns.Text.RenderPowerText(self)
         end
     end
 
-
     -- PERF P0: Raw-value diff guard. Skip ALL textification + string work when
     -- raw power values are unchanged (most frequent case: energy/mana hasn't
     -- ticked between events). Saves 3× AbbreviateLargeNumbers + 1× FormatPercent
@@ -580,9 +590,7 @@ function ns.Text.RenderPowerText(self)
     local _secretMax = _MSUF_IsSecret(maxText)
     local _secretPct = _MSUF_IsSecret(pctText)
     if not _secretCur and not _secretMax and not _secretPct then
-        if curText == self._msufLastPwrC and maxText == self._msufLastPwrM and pctText == self._msufLastPwrP then
-            return
-        end
+        if curText == self._msufLastPwrC and maxText == self._msufLastPwrM and pctText == self._msufLastPwrP then return end
         self._msufLastPwrC = curText
         self._msufLastPwrM = maxText
         self._msufLastPwrP = pctText
