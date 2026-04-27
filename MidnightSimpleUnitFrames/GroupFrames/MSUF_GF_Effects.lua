@@ -3314,11 +3314,7 @@ function GF.RegisterUnitEvents(f, unit)
     f._msufGFRegUnit = unit
     f._msufGFRegBits = evBits
 
-    -- O(1) unit→frame map for PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED
-    local umap = GF._unitMap
-    if not umap then umap = {}; GF._unitMap = umap end
-    umap[unit] = f
-    -- GUID→frame map (rebuilt on roster change, used for O(1) target scan)
+    -- GUID→frame map (rebuilt on roster change, used for O(1) target/focus scan)
     local guid = UnitGUID and UnitGUID(unit)
     if guid and not (issecretvalue and issecretvalue(guid)) then
         local gmap = GF._guidMap
@@ -3470,6 +3466,13 @@ end
 -- READY_CHECK / READY_CHECK_FINISHED: update ready check icons
 -- RAID_TARGET_UPDATE: update raid markers
 local function OnGlobalEvent(self, event, ...)
+    -- Fix 3: when GF is fully disabled, do nothing. Saves the per-event
+    -- dispatch + empty-loop cost across PLAYER_FOCUS_CHANGED, READY_CHECK*,
+    -- RAID_TARGET_UPDATE, PARTY_LEADER_CHANGED, GROUP_ROSTER_UPDATE,
+    -- BARBER_SHOP_OPEN/CLOSE, PLAYER_FLAGS_CHANGED. Flag is maintained by
+    -- RebuildAll and the PLAYER_REGEN_ENABLED retire-deferral path.
+    if not GF._anyEnabled then return end
+
     if event == "PLAYER_FOCUS_CHANGED" then
         local oldFocus = _gfFocusFrame
         _gfFocusFrame = nil

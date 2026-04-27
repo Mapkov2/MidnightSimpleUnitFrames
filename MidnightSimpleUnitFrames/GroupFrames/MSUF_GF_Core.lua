@@ -1673,14 +1673,44 @@ function GF.DisableBlizzardFrames()
         HideFrameLocked(_G.CompactRaidFrameContainer)
         if _G.CompactRaidFrameManager_SetSetting then
             _G.CompactRaidFrameManager_SetSetting("IsShown", "0")
+            GF._msufSetCRFMShown = true
         end
     end
 end
 
-function GF.RestoreBlizzardFrames()
-    -- Undo reparenting
-    for _, name in pairs({ "PartyFrame", "CompactPartyFrame", "CompactPartyFrameTitle", "CompactRaidFrameContainer" }) do
-        local f = _G[name]
+------------------------------------------------------------------------
+-- RestoreBlizzardFrames(kind?)
+-- kind = "party"           → restore PartyFrame + CompactPartyFrame*
+-- kind = "raid"|"mythicraid" → restore CompactRaidFrameContainer + CRFM
+-- kind = nil               → restore all (legacy behaviour)
+-- Called from RebuildAll when a kind is toggled off, and from
+-- PLAYER_REGEN_ENABLED retire deferral. No-op when frame's
+-- _msufGFHidden flag is not set (i.e. GF was never enabled for that kind).
+------------------------------------------------------------------------
+local _RESTORE_PARTY = { "PartyFrame", "CompactPartyFrame", "CompactPartyFrameTitle" }
+local _RESTORE_RAID  = { "CompactRaidFrameContainer" }
+local _RESTORE_ALL   = { "PartyFrame", "CompactPartyFrame", "CompactPartyFrameTitle", "CompactRaidFrameContainer" }
+
+function GF.RestoreBlizzardFrames(kind)
+    local names
+    local restoreCRFM
+    if kind == "party" then
+        names = _RESTORE_PARTY
+    elseif kind == "raid" or kind == "mythicraid" then
+        names = _RESTORE_RAID
+        restoreCRFM = true
+    else
+        names = _RESTORE_ALL
+        restoreCRFM = true
+    end
+    -- Restore CompactRaidFrameManager visibility (only if WE flipped it)
+    if restoreCRFM and GF._msufSetCRFMShown and _G.CompactRaidFrameManager_SetSetting then
+        _G.CompactRaidFrameManager_SetSetting("IsShown", "1")
+        GF._msufSetCRFMShown = false
+    end
+    -- Undo reparenting (Show-hook will no longer re-hide once flag is cleared)
+    for i = 1, #names do
+        local f = _G[names[i]]
         if f and f._msufGFHidden then
             f._msufGFHidden = nil
             if f.SetParent and not InCombatLockdown() then f:SetParent(UIParent) end
@@ -2309,6 +2339,9 @@ function GF.RebuildAll()
     local raidKind = GetLiveRaidKind()
     local raidConf  = GF.GetConf(raidKind)
 
+    -- Cache enabled-flag for global event handlers (Fix 3: zero-overhead short-circuit)
+    GF._anyEnabled = (partyConf.enabled or raidConf.enabled) and true or false
+
     local inRaid = IsInRaid and IsInRaid() or false
 
     -- Party: build once, show only outside raid
@@ -2318,7 +2351,14 @@ function GF.RebuildAll()
             GF.headers.party:Hide()
         end
     elseif GF.headers.party then
-        GF.headers.party:Hide()
+        -- Toggle off: retire header (strip all events on children, reparent to hidden frame).
+        -- This is the ONLY place runtime-disabled UNIT_HEALTH/POWER/AURA event leak is plugged.
+        if InCombatLockdown() then
+            GF._pendingPartyRetire = true
+        else
+            RetireHeader(GF.headers.party)
+            GF.headers.party = nil
+        end
     end
 
     -- Raid: build once, show only in raid
@@ -2328,10 +2368,25 @@ function GF.RebuildAll()
             GF.headers.raid:Hide()
         end
     elseif GF.headers.raid then
-        GF.headers.raid:Hide()
+        if InCombatLockdown() then
+            GF._pendingRaidRetire = true
+        else
+            RetireHeader(GF.headers.raid)
+            GF.headers.raid = nil
+        end
     end
 
     GF.DisableBlizzardFrames()
+
+    -- Restore Blizzard frames for kinds that are now disabled.
+    -- No-op when GF was never enabled for that kind (frames not marked).
+    if not partyConf.enabled and GF.RestoreBlizzardFrames then
+        GF.RestoreBlizzardFrames("party")
+    end
+    if not raidConf.enabled and GF.RestoreBlizzardFrames then
+        GF.RestoreBlizzardFrames("raid")
+    end
+
     GF.RefreshPreviewLayout("party")
     GF.RefreshPreviewLayout("raid")
     GF.RefreshPreviewLayout("mythicraid")
@@ -2429,6 +2484,11 @@ local function OnEvent(self, event, ...)
         end
 
     elseif event == "GROUP_ROSTER_UPDATE" then
+        -- Fix 3: when GF is fully disabled, do nothing. Saves ~5µs/event in
+        -- a roster-busy context. The flag is maintained by RebuildAll and the
+        -- PLAYER_REGEN_ENABLED retire-deferral path.
+        if not GF._anyEnabled then return end
+
         -- Switch party/raid visibility + rescan children
         GF.UpdateGroupVisibility()
 
@@ -2475,9 +2535,41 @@ local function OnEvent(self, event, ...)
             GF._pendingBlizzardDisable = nil
             GF.DisableBlizzardFrames()
         end
-        -- Force rebuild if headers don't exist (mid-combat /reload recovery)
+        -- Deferred retires from toggle-off-in-combat (Fix 1)
+        if GF._pendingPartyRetire then
+            GF._pendingPartyRetire = nil
+            if GF.headers.party then
+                RetireHeader(GF.headers.party)
+                GF.headers.party = nil
+            end
+            if GF.RestoreBlizzardFrames then GF.RestoreBlizzardFrames("party") end
+            -- Update anyEnabled flag so global handlers can short-circuit
+            local pE = GF.GetConf("party").enabled
+            local rE = GF.GetConf(GetLiveRaidKind()).enabled
+            GF._anyEnabled = (pE or rE) and true or false
+        end
+        if GF._pendingRaidRetire then
+            GF._pendingRaidRetire = nil
+            if GF.headers.raid then
+                RetireHeader(GF.headers.raid)
+                GF.headers.raid = nil
+            end
+            if GF.RestoreBlizzardFrames then GF.RestoreBlizzardFrames("raid") end
+            local pE = GF.GetConf("party").enabled
+            local rE = GF.GetConf(GetLiveRaidKind()).enabled
+            GF._anyEnabled = (pE or rE) and true or false
+        end
+        -- Force rebuild if headers don't exist (mid-combat /reload recovery).
+        -- Fix 2: only when at least one kind is supposed to be enabled —
+        -- otherwise the disabled-from-login case would call RebuildAll on every combat-end.
         local needRebuild = GF._pendingRebuild
-        if not GF.headers.party and not GF.headers.raid then needRebuild = true end
+        if not needRebuild then
+            local pE = GF.GetConf("party").enabled
+            local rE = GF.GetConf(GetLiveRaidKind()).enabled
+            if (pE or rE) and not GF.headers.party and not GF.headers.raid then
+                needRebuild = true
+            end
+        end
         if needRebuild then
             GF._pendingRebuild = nil
             GF.RebuildAll()
@@ -2490,15 +2582,18 @@ local function OnEvent(self, event, ...)
         -- EQoL pattern: refresh range fade on combat end.
         -- UNIT_IN_RANGE_UPDATE fires less frequently OOC;
         -- sweep all frames to ensure correct alpha after combat.
-        C_Timer.After(0.1, function()
-            local updateRange = _G.MSUF_GF_UpdateRange
-            if not updateRange then return end
-            GF.ForEachFrame(function(f)
-                if f.unit and f:IsVisible() then
-                    updateRange(f, f.unit)
-                end
+        -- Skip entirely when GF is disabled (no frames to sweep).
+        if GF._anyEnabled then
+            C_Timer.After(0.1, function()
+                local updateRange = _G.MSUF_GF_UpdateRange
+                if not updateRange then return end
+                GF.ForEachFrame(function(f)
+                    if f.unit and f:IsVisible() then
+                        updateRange(f, f.unit)
+                    end
+                end)
             end)
-        end)
+        end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local isLogin, isReload = ...
