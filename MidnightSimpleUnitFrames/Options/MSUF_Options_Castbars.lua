@@ -1,9 +1,6 @@
--- ---------------------------------------------------------------------------
 -- MSUF_Options_Castbars.lua  (Phase 5: Accordion UX)
---
 -- Castbar tab: collapsible sections (same pattern as Bars / Player / Auras).
 -- Focus Kick integrated as section 6 (no separate subpage).
--- ---------------------------------------------------------------------------
 local addonName, ns = ...
 local TR = ns.TR
 local UI = ns.UI
@@ -15,13 +12,21 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     castbarEnemyGroup._msufBuilt = true
 
     local function G() EnsureDB(); return MSUF_DB.general end
-    local function Apply(kind) if type(_G.MSUF_Options_Apply) == "function" then _G.MSUF_Options_Apply(kind) end end
+    local function Apply(kind) if _G.MSUF_Options_Apply then _G.MSUF_Options_Apply(kind) end end
     local function EnsureCastbars()
-        if type(_G.MSUF_EnsureAddonLoaded) == "function" then
+        if _G.MSUF_EnsureAddonLoaded then
             _G.MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Castbars")
         elseif _G.C_AddOns and type(_G.C_AddOns.LoadAddOn) == "function" then
             pcall(_G.C_AddOns.LoadAddOn, "MidnightSimpleUnitFrames_Castbars")
         end
+    end
+
+    local function CastbarSlider(spec)
+        if spec and spec.compact and spec.compactInput == nil then
+            spec.compactInput = true
+            spec.compactInputWidth = 46
+        end
+        return UI.Slider(spec)
     end
 
     local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
@@ -76,11 +81,21 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
     end
 
-    -- =====================================================================
     -- Collapsible section helper (matches Player / Auras pattern)
-    -- =====================================================================
     local SECTION_W = 720
     local SECTION_COLLAPSED_H = 28
+
+    -- Section tracking for accordion
+    local _cbSections = {}
+    local function CollapseAllExcept(keepBox)
+        for i = 1, #_cbSections do
+            local b = _cbSections[i]
+            if b and b ~= keepBox and not b._msufCollapsed then
+                b._msufCollapsed = true
+                if b._msufApplyCollapseState then b._msufApplyCollapseState() end
+            end
+        end
+    end
 
     local function MakeCollapsibleSection(parent, expandedH, titleText, defaultOpen)
         local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -137,7 +152,12 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         end
 
         hdr:SetScript("OnClick", function()
-            box._msufCollapsed = not box._msufCollapsed
+            if box._msufCollapsed then
+                CollapseAllExcept(box)
+                box._msufCollapsed = false
+            else
+                box._msufCollapsed = true
+            end
             ApplyState()
         end)
         do
@@ -147,12 +167,11 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         end
 
         box._msufApplyCollapseState = ApplyState
+        _cbSections[#_cbSections + 1] = box
         return box, body
     end
 
-    -- =====================================================================
     -- Section 1: Shake & Fill Direction (default open)
-    -- =====================================================================
     local s1Box, s1Body = MakeCollapsibleSection(castbarEnemyGroup, 200, "Shake & Fill Direction", true)
     s1Box:SetPoint("TOPLEFT", castbarEnemyGroup, "TOPLEFT", 16, -155)
 
@@ -164,7 +183,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().castbarInterruptShake = v end,
     })
 
-    local shakeSlider = UI.Slider({
+    local shakeSlider = CastbarSlider({
         name = "MSUF_CastbarShakeIntensitySlider", parent = s1Body,
         anchor = shakeCheck, x = 18, y = -14, width = 240, compact = true,
         label = TR("Shake intensity"), min = 0, max = 30, step = 1, default = 8,
@@ -209,9 +228,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().castbarShowChannelTicks = v; Apply("castbarTicks") end,
     })
 
-    -- =====================================================================
     -- Section 2: GCD Bar
-    -- =====================================================================
     local castbarGCDTimeCheck, castbarGCDSpellCheck
 
     local s2Box, s2Body = MakeCollapsibleSection(castbarEnemyGroup, 135, "GCD Bar", false)
@@ -231,7 +248,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v)
             G().showGCDBar = v
             EnsureCastbars()
-            if type(_G.MSUF_SetGCDBarEnabled) == "function" then _G.MSUF_SetGCDBarEnabled(v) end
+            if _G.MSUF_SetGCDBarEnabled then _G.MSUF_SetGCDBarEnabled(v) end
             SyncGCDSubs()
         end,
     })
@@ -248,7 +265,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         name = "MSUF_CastbarGCDTimeCheck", parent = s2Body,
         anchor = gcdCheck, x = 18, y = -4,
         label = TR("GCD bar: show time text"),
-        get = function() return G().showGCDBarTime ~= false end,
+        get = function() return G().showGCDBarTime == true end,
         set = function(v) G().showGCDBarTime = v; ApplyGCDVisuals() end,
     })
 
@@ -260,9 +277,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().showGCDBarSpell = v; ApplyGCDVisuals() end,
     })
 
-    -- =====================================================================
     -- Section 3: Textures & Outline
-    -- =====================================================================
     local s3Box, s3Body = MakeCollapsibleSection(castbarEnemyGroup, 310, "Textures & Outline", false)
     s3Box:SetPoint("TOPLEFT", s2Box, "BOTTOMLEFT", 0, -6)
 
@@ -302,7 +317,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().castbarBackgroundTexture = v; ApplyTextures() end,
     })
 
-    local outlineSlider = UI.Slider({
+    local outlineSlider = CastbarSlider({
         name = "MSUF_CastbarOutlineThicknessSlider", parent = s3Body,
         anchor = s3Body, anchorPoint = "TOPLEFT", x = 370, y = -6, width = 260, compact = true,
         label = TR("Outline thickness"), min = 0, max = 6, step = 1, default = 1,
@@ -310,7 +325,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v)
             G().castbarOutlineThickness = v
             Apply("castbarVisuals")
-            if type(_G.MSUF_ApplyCastbarOutlineToAll) == "function" then _G.MSUF_ApplyCastbarOutlineToAll(true) end
+            if _G.MSUF_ApplyCastbarOutlineToAll then _G.MSUF_ApplyCastbarOutlineToAll(true) end
             if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then pcall(_G.MSUF_UpdateBossCastbarPreview) end
         end,
     })
@@ -366,13 +381,11 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
             if v == "manual" then v = nil end
             G().castbarPlayerMatchWidth = v
             ApplyTextures()
-            if type(_G.MSUF_ReanchorPlayerCastBar) == "function" then _G.MSUF_ReanchorPlayerCastBar() end
+            if _G.MSUF_ReanchorPlayerCastBar then _G.MSUF_ReanchorPlayerCastBar() end
         end,
     })
 
-    -- =====================================================================
     -- Section 4: Empowered Casts
-    -- =====================================================================
     local s4Box, s4Body = MakeCollapsibleSection(castbarEnemyGroup, 110, "Empowered Casts", false)
     s4Box:SetPoint("TOPLEFT", s3Box, "BOTTOMLEFT", 0, -6)
 
@@ -396,7 +409,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().empowerStageBlink = v; Apply("castbarVisuals") end,
     })
 
-    local empBlinkSlider = UI.Slider({
+    local empBlinkSlider = CastbarSlider({
         name = "MSUF_EmpowerStageBlinkTimeSlider", parent = s4Body,
         compact = true,
         anchor = s4Body, anchorPoint = "TOPLEFT", x = 370, y = -8, width = 260,
@@ -406,16 +419,14 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().empowerStageBlinkTime = v; Apply("castbarVisuals") end,
     })
 
-    -- =====================================================================
     -- Section 5: Name Shortening
-    -- =====================================================================
     local s5Box, s5Body = MakeCollapsibleSection(castbarEnemyGroup, 140, "Name Shortening", false)
     s5Box:SetPoint("TOPLEFT", s4Box, "BOTTOMLEFT", 0, -6)
 
     local function ApplyVisualRefresh()
         EnsureCastbars()
-        if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
-        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then _G.MSUF_UpdateBossCastbarPreview() end
+        if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+        if _G.MSUF_UpdateBossCastbarPreview then _G.MSUF_UpdateBossCastbarPreview() end
     end
 
     local toggleBtn = CreateFrame("Button", "MSUF_CastbarSpellNameShortenToggle", s5Body, "UIPanelButtonTemplate")
@@ -426,7 +437,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     local oldDrop = _G["MSUF_CastbarSpellNameShortenDropdown"]
     if oldDrop then oldDrop:Hide(); oldDrop:SetAlpha(0); oldDrop:EnableMouse(false) end
 
-    local maxSlider = UI.Slider({
+    local maxSlider = CastbarSlider({
         name = "MSUF_CastbarSpellNameMaxLenSlider", parent = s5Body,
         anchor = s5Body, anchorPoint = "TOPLEFT", x = 370, y = -6, width = 260, compact = true,
         label = TR("Max name length"), min = 6, max = 30, step = 1, default = 30,
@@ -434,7 +445,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().castbarSpellNameMaxLen = v; ApplyVisualRefresh() end,
     })
 
-    local resSlider = UI.Slider({
+    local resSlider = CastbarSlider({
         name = "MSUF_CastbarSpellNameReservedSlider", parent = s5Body,
         anchor = maxSlider, x = 0, y = -44, width = 260, compact = true,
         label = TR("Reserved space"), min = 0, max = 30, step = 1, default = 8,
@@ -480,9 +491,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         ApplyVisualRefresh()
     end)
 
-    -- =====================================================================
     -- Section 6: Focus Kick
-    -- =====================================================================
     local s6Box, s6Body = MakeCollapsibleSection(castbarEnemyGroup, 285, "Focus Kick", false)
     s6Box:SetPoint("TOPLEFT", s5Box, "BOTTOMLEFT", 0, -6)
 
@@ -499,11 +508,11 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     end
 
     local function FKApply()
-        if type(_G.MSUF_UpdateFocusKickIconOptions) == "function" then _G.MSUF_UpdateFocusKickIconOptions() end
+        if _G.MSUF_UpdateFocusKickIconOptions then _G.MSUF_UpdateFocusKickIconOptions() end
     end
 
     local function FKApplyFont()
-        if type(_G.MSUF_FocusKick_ApplyTimeTextFont) == "function" then _G.MSUF_FocusKick_ApplyTimeTextFont() end
+        if _G.MSUF_FocusKick_ApplyTimeTextFont then _G.MSUF_FocusKick_ApplyTimeTextFont() end
         FKApply()
     end
 
@@ -540,7 +549,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         end,
         set = function(v)
             if _fkSyncing then return end
-            if type(_G.MSUF_FocusKick_SetPreviewEnabled) == "function" then
+            if _G.MSUF_FocusKick_SetPreviewEnabled then
                 _G.MSUF_FocusKick_SetPreviewEnabled(v)
             end
         end,
@@ -553,7 +562,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     fkSizeLabel:SetPoint("TOPLEFT", s6Body, "TOPLEFT", FK_RIGHT, -6)
     fkSizeLabel:SetText(TR("Size"))
 
-    local fkWidthSlider = UI.Slider({
+    local fkWidthSlider = CastbarSlider({
         name = "MSUF_FocusKickIconWidthSlider", parent = s6Body,
         anchor = fkSizeLabel, x = 0, y = -8, width = 260, compact = true,
         label = TR("Width"), min = 16, max = 128, step = 1, default = 40,
@@ -561,7 +570,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconWidth = v; FKApply() end,
     })
 
-    local fkHeightSlider = UI.Slider({
+    local fkHeightSlider = CastbarSlider({
         name = "MSUF_FocusKickIconHeightSlider", parent = s6Body,
         anchor = fkWidthSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Height"), min = 16, max = 128, step = 1, default = 40,
@@ -569,7 +578,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconHeight = v; FKApply() end,
     })
 
-    local fkTextSlider = UI.Slider({
+    local fkTextSlider = CastbarSlider({
         name = "MSUF_FocusKickTextSizeSlider", parent = s6Body,
         anchor = fkHeightSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Text size"), min = 8, max = 24, step = 1, default = 12,
@@ -597,7 +606,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     fkPosLabel:SetPoint("TOPLEFT", fkPosDivider, "BOTTOMLEFT", 0, -8)
     fkPosLabel:SetText(TR("Position"))
 
-    local fkOffXSlider = UI.Slider({
+    local fkOffXSlider = CastbarSlider({
         name = "MSUF_FocusKickIconOffsetXSlider", parent = s6Body,
         anchor = fkPosLabel, x = 0, y = -8, width = 280, compact = true,
         label = TR("X offset"), min = -500, max = 500, step = 1, default = 300,
@@ -605,7 +614,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconOffsetX = v; FKApply() end,
     })
 
-    local fkOffYSlider = UI.Slider({
+    local fkOffYSlider = CastbarSlider({
         name = "MSUF_FocusKickIconOffsetYSlider", parent = s6Body,
         anchor = fkPosLabel, x = FK_RIGHT - 12, y = -8, width = 280, compact = true,
         label = TR("Y offset"), min = -500, max = 500, step = 1, default = 0,
@@ -629,10 +638,8 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
 
     _G.MSUF_FocusKickOptionsBuiltInCastbar = true
 
-    -- =====================================================================
     -- Section 7: Interrupt Ready Indicator
-    -- =====================================================================
-    local s7Box, s7Body = MakeCollapsibleSection(castbarEnemyGroup, 240, "Interrupt Ready Indicator", false)
+    local s7Box, s7Body = MakeCollapsibleSection(castbarEnemyGroup, 380, "Interrupt Ready Indicator", false)
     s7Box:SetPoint("TOPLEFT", s6Box, "BOTTOMLEFT", 0, -6)
 
     local function KickApply()
@@ -670,17 +677,50 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyShowBoss = v; KickApply() end,
     })
 
-    local kickSizeSlider = UI.Slider({
+    local kickStyleDrop = UI.Dropdown({
+        name = "MSUF_KickReadyStyleDropdown", parent = s7Body,
+        anchor = s7Body, anchorPoint = "TOPLEFT", x = 370, y = -30, width = 260,
+        items = {
+            { key = "border", label = "Castbar border" },
+            { key = "box",    label = "Color box next to cast" },
+        },
+        get = function() return G().kickReadyStyle or "border" end,
+        set = function(v) G().kickReadyStyle = v; KickApply() end,
+    })
+
+    local kickSizeSlider = CastbarSlider({
         name = "MSUF_KickReadySizeSlider", parent = s7Body,
-        anchor = s7Body, anchorPoint = "TOPLEFT", x = 370, y = -30, width = 260, compact = true,
-        label = TR("Indicator size"), min = 4, max = 24, step = 1, default = 8,
-        get = function() return G().kickReadySize or 8 end,
+        anchor = kickStyleDrop, x = 0, y = -28, width = 260, compact = true,
+        label = TR("Indicator size"), min = 8, max = 32, step = 1, default = 16,
+        get = function() return G().kickReadySize or 16 end,
         set = function(v) G().kickReadySize = v; KickApply() end,
     })
 
+    local kickAutoSizeCheck = UI.Check({
+        name = "MSUF_KickReadyAutoSizeCheck", parent = s7Body,
+        anchor = kickSizeSlider, x = 0, y = -22,
+        label = TR("Auto-size to castbar height"),
+        get = function()
+            local v = G().kickReadyAutoSize
+            if v == nil then return true end
+            return v == true
+        end,
+        set = function(v) G().kickReadyAutoSize = v; KickApply() end,
+    })
+
+    -- Indicator colors (ready / on cooldown) live in the Colors menu under
+    -- "Interrupt Ready Indicator" so the indicator stays visually distinct
+    -- from the castbar fill colors. Defaults: green = ready, red = on CD.
+    local kickColorHint = s7Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    kickColorHint:SetPoint("TOPLEFT", kickAutoSizeCheck, "BOTTOMLEFT", 0, -10)
+    kickColorHint:SetWidth(260)
+    kickColorHint:SetJustifyH("LEFT")
+    kickColorHint:SetTextColor(0.7, 0.7, 0.7, 1)
+    kickColorHint:SetText(TR("Ready / cooldown colors: Colors menu > Interrupt Ready Indicator"))
+
     local kickAnchorDrop = UI.Dropdown({
         name = "MSUF_KickReadyAnchorDropdown", parent = s7Body,
-        anchor = kickSizeSlider, x = 0, y = -12, width = 260,
+        anchor = kickColorHint, x = 0, y = -10, width = 260,
         items = {
             { key = "RIGHT",  label = "Right" },
             { key = "LEFT",   label = "Left" },
@@ -691,15 +731,15 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyAnchor = v; KickApply() end,
     })
 
-    local kickOffXSlider = UI.Slider({
+    local kickOffXSlider = CastbarSlider({
         name = "MSUF_KickReadyOffsetXSlider", parent = s7Body,
-        anchor = kickAnchorDrop, x = 0, y = -12, width = 260, compact = true,
+        anchor = kickAnchorDrop, x = 0, y = -28, width = 260, compact = true,
         label = TR("X offset"), min = -50, max = 50, step = 1, default = 4,
         get = function() return G().kickReadyOffsetX or 4 end,
         set = function(v) G().kickReadyOffsetX = v; KickApply() end,
     })
 
-    local kickOffYSlider = UI.Slider({
+    local kickOffYSlider = CastbarSlider({
         name = "MSUF_KickReadyOffsetYSlider", parent = s7Body,
         anchor = kickOffXSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Y offset"), min = -50, max = 50, step = 1, default = 0,
@@ -707,16 +747,12 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyOffsetY = v; KickApply() end,
     })
 
-    -- =====================================================================
     -- Bottom anchor (for Edit Mode button placement from Options_Core)
-    -- =====================================================================
     local bottomAnchor = CreateFrame("Frame", "MSUF_CastbarMenuPanel", castbarEnemyGroup)
     bottomAnchor:SetSize(SECTION_W, 1)
     bottomAnchor:SetPoint("TOPLEFT", s7Box, "BOTTOMLEFT", 0, -4)
 
-    -- =====================================================================
     -- SyncAll (called on OnShow)
-    -- =====================================================================
     local function SyncAll()
         EnsureDB()
         SyncGCDSubs()
@@ -726,8 +762,14 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     SyncAll()
     if castbarEnemyGroup.HookScript then castbarEnemyGroup:HookScript("OnShow", SyncAll) end
 
-    -- =====================================================================
     -- Panel store for Core LoadFromDB compat
-    -- =====================================================================
     panel.castbarShakeIntensitySlider = shakeSlider
+
+    -- Upgrade to smart accordion
+    if _G.MSUF_UpgradeAccordion then
+        _G.MSUF_UpgradeAccordion(
+            { s1Box, s2Box, s3Box, s4Box, s5Box, s6Box, s7Box },
+            QueueScrollUpdate, "castbar", castbarEnemyGroup
+        )
+    end
 end

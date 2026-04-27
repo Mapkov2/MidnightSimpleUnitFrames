@@ -2,9 +2,9 @@
 -- Phase 3 extraction: Channel tick markers (5 white static lines on player channel bar).
 -- Self-contained. Only dependency: MSUF_DB (global).
 
--- Player-only: Channeled Cast tick markers (5 white static lines).
--- Goal: Always visible from channel START (not progress-based), evenly spaced and secret-safe.
--- Midnight fix: do NOT read/use UnitSpellHaste here because that value can be secret in combat and breaks the player castbar update path.
+-- Player-only: Channeled Cast Tick Markers (5 white static lines)
+-- Goal: Always visible from channel START (not progress-based), with static positions.
+-- Secret-safe: uses only StatusBar width + static fractions. No haste reads, no duration math, no combat log, no secret comparisons.
 -------------------------------------------------------------------------------
 
 -- Master toggle (Options Castbars Behavior "Show channeled cast tick lines")
@@ -57,6 +57,7 @@ local function MSUF_PlayerChannelHasteMarkers_Hide(self)
     end
     if self then
         self._msufPlayerChannelHasteMarkersLastW = nil
+        self._msufPlayerChannelHasteMarkersLastF = nil
     end
 end
 
@@ -100,10 +101,11 @@ local function MSUF_PlayerChannelHasteMarkers_Update(self, force)
         -- no change, keep
     else
         self._msufPlayerChannelHasteMarkersLastW = w
+        self._msufPlayerChannelHasteMarkersLastF = nil
 
         local rf = (self._msufStripeReverseFill == true)
 
-        -- Static layout: 5 markers at 1/6..5/6 of the current bar width.
+        -- Static 5 markers at 1/6..5/6. Decorative only; never depends on haste.
         local div = 6
         for i = 1, 5 do
             local t = stripes[i]
