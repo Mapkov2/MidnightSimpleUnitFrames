@@ -1,83 +1,42 @@
 -- MSUF_GF_PrivateAuras.lua — Private aura anchoring for Group Frames
--- Midnight 12.0 secret-safe. Combat-safe: defers Add/Remove calls.
--- Uses same C_UnitAuras.AddPrivateAuraAnchor API as A2_Render.
+-- 12.0.5+ baseline. No fallback paths.
 --
--- 12.0.5+ adds a Blizzard-rendered "Private Aura Dispel Overlay": a second
--- anchor with `isContainer = true` + container attributes that paints a
--- dispel-type-coloured wash + optional icon across the frame. Addons have
--- no colour/art control — Blizzard draws it — but we choose the filter
--- ("Dispellable By Me" / "All Dispellable"), the sweep direction, and
--- whether dispel-type icons are suppressed. This is separate from the
--- existing icon anchors above; it does NOT replace them.
+-- 12.0.5 lifted combat-lockdown restrictions on AddPrivateAuraAnchor /
+-- RemovePrivateAuraAnchor / SetPrivateWarningTextAnchor / RemovePrivateAura-
+-- AppliedSound. We don't use AddPrivateAuraAppliedSound (still restricted
+-- during encounters/M+/PvP), so this file has zero combat-aware code.
+--
+-- The Blizzard-rendered "Private Aura Dispel Overlay" uses a second anchor
+-- with `isContainer = true` + container attributes (max-buffs / max-debuffs /
+-- max-dispel-debuffs / dispel-indicator-option / aura-organization-type).
+-- Blizzard paints it; addons have no colour/art control. Independent of the
+-- icon anchor stack — does not replace it.
 local _, ns = ...
 ns.GF = ns.GF or {}
 local GF = ns.GF
 
-local C_UnitAuras = _G.C_UnitAuras
 local C_Timer     = _G.C_Timer
 local CreateFrame = _G.CreateFrame
-local InCombatLockdown = _G.InCombatLockdown
-local GetBuildInfo = _G.GetBuildInfo
 local math_floor  = math.floor
 local math_max    = math.max
 local math_min    = math.min
 local type        = type
-local select      = select
 
-------------------------------------------------------------------------
--- API availability
-------------------------------------------------------------------------
-local function Supported()
-    return C_UnitAuras
-        and type(C_UnitAuras.AddPrivateAuraAnchor) == "function"
-        and type(C_UnitAuras.RemovePrivateAuraAnchor) == "function"
-end
-
--- 12.0.5+ required for `isContainer = true` container anchors (dispel overlay).
--- We probe GetBuildInfo once at load; later LoD reloads re-run this file.
-local IS_CONTAINER_SUPPORTED = (function()
-    if not GetBuildInfo then return false end
-    local v = select(4, GetBuildInfo())
-    return type(v) == "number" and v >= 120005
-end)()
-GF._privateAuraContainerSupported = IS_CONTAINER_SUPPORTED
-
-------------------------------------------------------------------------
--- Combat-deferred removal queue
-------------------------------------------------------------------------
-local _pendingRemoveIDs
-
-local function FlushPendingRemoves()
-    local ids = _pendingRemoveIDs
-    if not ids then return end
-    _pendingRemoveIDs = nil
-    local removeFn = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
-    if not removeFn then return end
-    for i = 1, #ids do
-        if ids[i] then removeFn(ids[i]) end
-    end
-end
+-- Direct localizations: 12.0.5+ guarantees these APIs exist.
+local AddPrivateAuraAnchor    = _G.C_UnitAuras.AddPrivateAuraAnchor
+local RemovePrivateAuraAnchor = _G.C_UnitAuras.RemovePrivateAuraAnchor
 
 ------------------------------------------------------------------------
 -- Clear anchors for a frame (icon anchors + optional container overlay)
 ------------------------------------------------------------------------
-local function QueueOrRemove(removeFn, id)
-    if not removeFn or not id then return end
-    if InCombatLockdown and InCombatLockdown() then
-        if not _pendingRemoveIDs then _pendingRemoveIDs = {} end
-        _pendingRemoveIDs[#_pendingRemoveIDs + 1] = id
-    else
-        removeFn(id)
-    end
-end
-
 local function ClearAnchors(f)
-    local removeFn = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
-
     -- Icon anchor IDs
     local ids = f._gfPrivAnchorIDs
-    if type(ids) == "table" and removeFn then
-        for i = 1, #ids do QueueOrRemove(removeFn, ids[i]) end
+    if type(ids) == "table" then
+        for i = 1, #ids do
+            local id = ids[i]
+            if id then RemovePrivateAuraAnchor(id) end
+        end
     end
     f._gfPrivAnchorIDs = nil
     f._gfPrivUnit = nil
@@ -87,7 +46,7 @@ local function ClearAnchors(f)
 
     -- Container overlay anchor
     local coID = f._gfPrivContainerOverlayID
-    if coID and removeFn then QueueOrRemove(removeFn, coID) end
+    if coID then RemovePrivateAuraAnchor(coID) end
     f._gfPrivContainerOverlayID  = nil
     f._gfPrivContainerOverlayUnit = nil
 
@@ -190,17 +149,14 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         paLayer     = 8
     end
 
-    -- Feature disabled or API unavailable → clear
-    if paEnabled == false or not Supported() then
+    -- Feature disabled → clear
+    if paEnabled == false then
         ClearAnchors(f)
         return
     end
 
     -- No unit → clear
     if not unit then ClearAnchors(f); return end
-
-    -- Combat lock: cannot call AddPrivateAuraAnchor in combat
-    if InCombatLockdown and InCombatLockdown() then return end
 
     local maxN = math_max(0, math_floor((tonumber(paMax) or 4) + 0.5))
     if maxN == 0 then ClearAnchors(f); return end
@@ -339,7 +295,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         args.iconInfo.borderScale = borderScale
         args.iconInfo.iconAnchor.relativeTo = slot
 
-        local ok, anchorID = true, C_UnitAuras.AddPrivateAuraAnchor(args)
+        local ok, anchorID = true, AddPrivateAuraAnchor(args)
         if ok and anchorID then
             f._gfPrivAnchorIDs[#f._gfPrivAnchorIDs + 1] = anchorID
         end
@@ -405,17 +361,13 @@ end
 
 function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
     if not f or not unit then return end
-    if not IS_CONTAINER_SUPPORTED then return end
-    if not Supported() then return end
-    if InCombatLockdown and InCombatLockdown() then return end
 
     local co = _GetContainerOverlayConf(pa)
 
     -- Disabled or teardown: clear existing anchor and bail.
     if not co.enabled then
-        local removeFn = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
-        if f._gfPrivContainerOverlayID and removeFn then
-            QueueOrRemove(removeFn, f._gfPrivContainerOverlayID)
+        if f._gfPrivContainerOverlayID then
+            RemovePrivateAuraAnchor(f._gfPrivContainerOverlayID)
         end
         f._gfPrivContainerOverlayID   = nil
         f._gfPrivContainerOverlayUnit = nil
@@ -470,14 +422,12 @@ function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
     end
 
     -- Full (re)registration: remove old ID if any, add new anchor.
-    local removeFn = C_UnitAuras.RemovePrivateAuraAnchor
-    if f._gfPrivContainerOverlayID and removeFn then
-        QueueOrRemove(removeFn, f._gfPrivContainerOverlayID)
+    if f._gfPrivContainerOverlayID then
+        RemovePrivateAuraAnchor(f._gfPrivContainerOverlayID)
         f._gfPrivContainerOverlayID = nil
     end
 
-    local addFn = C_UnitAuras.AddPrivateAuraAnchor
-    local newID = addFn({
+    local newID = AddPrivateAuraAnchor({
         unitToken            = unit,
         parent               = wrapper,
         isContainer          = true,
@@ -510,28 +460,6 @@ end
 -- Clear (exported for unit-change / hide)
 ------------------------------------------------------------------------
 GF.ClearPrivateAuras = ClearAnchors
-
-------------------------------------------------------------------------
--- Combat end flush (registered once)
-------------------------------------------------------------------------
-local _flushFrame
-local function EnsureFlushHook()
-    if _flushFrame then return end
-    _flushFrame = CreateFrame("Frame")
-    _flushFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    _flushFrame:SetScript("OnEvent", function()
-        FlushPendingRemoves()
-        -- Re-apply private auras on all visible frames (were blocked in combat)
-        if GF.frames then
-            for f in pairs(GF.frames) do
-                if f.unit and f:IsShown() then
-                    GF.ApplyPrivateAuras(f, f.unit)
-                end
-            end
-        end
-    end)
-end
-EnsureFlushHook()
 
 ------------------------------------------------------------------------
 -- Preview: mock private aura slots (no real unit, placeholder icons)

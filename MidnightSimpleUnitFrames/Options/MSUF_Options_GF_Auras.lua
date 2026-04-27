@@ -1502,28 +1502,24 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
 
         ----------------------------------------------------------------
-        -- Sub-section: Private Aura Dispel Overlay (12.0.5+)
+        -- Sub-section: Private Aura Dispel Overlay
         --
-        -- Blizzard-rendered overlay driven by container-anchor attributes.
-        -- Requires client 12.0.5 or later. Gracefully disabled on older
-        -- builds — GF._privateAuraContainerSupported is false.
+        -- Blizzard-rendered overlay driven by container-anchor attributes
+        -- (max-buffs / max-debuffs / max-dispel-debuffs / dispel-indicator-
+        -- option / aura-organization-type). 12.0.5+ baseline.
+        --
+        -- LAYOUT: anchor below paLayerSl (left column), NOT paDispelChk
+        -- (right column). The left column ends ~110px lower; anchoring to
+        -- the right column would render this header on top of paYSl/paLayerSl.
         ----------------------------------------------------------------
         local coHeader = body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        coHeader:SetPoint("TOPLEFT", paDispelChk, "BOTTOMLEFT", 0, -18)
-        coHeader:SetText(L["Dispel Overlay (12.0.5+)"] or "Dispel Overlay (12.0.5+)")
+        coHeader:SetPoint("TOPLEFT", paLayerSl, "BOTTOMLEFT", 0, -24)
+        coHeader:SetText(L["Dispel Overlay"] or "Dispel Overlay")
         coHeader:SetTextColor(1.00, 0.82, 0.00)
-
-        local coNote
-        if not (GF and GF._privateAuraContainerSupported) then
-            coNote = body:CreateFontString(nil, "ARTWORK", "GameFontDisable")
-            coNote:SetPoint("TOPLEFT", coHeader, "BOTTOMLEFT", 0, -4)
-            coNote:SetText(L["Requires client 12.0.5 or later."]
-                or "Requires client 12.0.5 or later.")
-        end
 
         local coEnableChk = SCheck({
             name = "MSUF_GF_PAContainerOverlayEnable", parent = body,
-            anchor = coNote or coHeader, x = 0, y = -22,
+            anchor = coHeader, x = 0, y = -22,
             label = L["Enable Dispel Overlay"] or "Enable Dispel Overlay",
             get = function() return PAC().enabled == true end,
             set = function(_, v)
@@ -1609,7 +1605,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Corner Indicators
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(560, L["Corner Indicators"] or "Corner Indicators", false, "ci")
+        local box, body = AddSection(600, L["Corner Indicators"] or "Corner Indicators", false, "ci")
 
         -- Helper: read/write directly from conf (not auras sub-table)
         local function CIV(key)
@@ -1872,17 +1868,41 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             _auraRefreshFns[#_auraRefreshFns + 1] = RefreshTabs
 
             -- Editor body (single set of widgets, repointed by RefreshEditorBody)
+            -- LAYOUT: explicit Frame wrappers with fixed sizes to guarantee
+            -- vertical separation from the tab strip (no Texture-as-anchor
+            -- chain — those can render unreliably in some Blizzard builds).
+
+            -- Subtle horizontal separator below the tab strip (visual polish).
+            local tabSep = body:CreateTexture(nil, "ARTWORK")
+            tabSep:SetColorTexture(0.30, 0.40, 0.55, 0.25)
+            tabSep:SetSize(540, 1)
+            tabSep:SetPoint("TOPLEFT", tabStrip, "BOTTOMLEFT", 0, -6)
+
+            -- Status wrapper Frame: gives statusFS a deterministic geometry
+            -- (width + minimum height) so the layout never collapses onto
+            -- the tab row. Fixed 540×34 covers two wrapped lines comfortably.
+            local statusBox = CreateFrame("Frame", nil, body)
+            statusBox:SetPoint("TOPLEFT", tabStrip, "BOTTOMLEFT", 0, -16)
+            statusBox:SetSize(540, 34)
+
+            local statusFS = statusBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            statusFS:SetAllPoints(statusBox)
+            statusFS:SetJustifyH("LEFT")
+            statusFS:SetJustifyV("TOP")
+            statusFS:SetWordWrap(true)
+            statusFS:SetNonSpaceWrap(true)
+
             local editorBody = CreateFrame("Frame", nil, body)
-            editorBody:SetPoint("TOPLEFT", tabStrip, "BOTTOMLEFT", 0, -8)
-            editorBody:SetSize(420, 130)
+            editorBody:SetPoint("TOPLEFT", statusBox, "BOTTOMLEFT", 0, -10)
+            editorBody:SetSize(540, 130)
 
             -- Spell IDs editbox
             local spLbl = editorBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             spLbl:SetPoint("TOPLEFT", editorBody, "TOPLEFT", 4, -2)
             spLbl:SetText("Spell IDs (comma-separated):")
             local spEB = CreateFrame("EditBox", "MSUF_GF_CICustomSpells", editorBody, "InputBoxTemplate")
-            spEB:SetSize(280, 18)
-            spEB:SetPoint("TOPLEFT", spLbl, "BOTTOMLEFT", 6, -2)
+            spEB:SetSize(380, 18)
+            spEB:SetPoint("TOPLEFT", spLbl, "BOTTOMLEFT", 6, -4)
             spEB:SetAutoFocus(false)
             spEB:SetFontObject(GameFontHighlightSmall)
             spEB:SetTextColor(1, 1, 1, 1)
@@ -1900,7 +1920,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             -- Mode toggle button (present / missing)
             local modeLbl = editorBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            modeLbl:SetPoint("TOPLEFT", spEB, "BOTTOMLEFT", -6, -10)
+            modeLbl:SetPoint("TOPLEFT", spEB, "BOTTOMLEFT", -6, -12)
             modeLbl:SetText("When:")
             local modeBtn = CreateFrame("Button", nil, editorBody, "BackdropTemplate")
             modeBtn:SetSize(160, 20)
@@ -1975,13 +1995,11 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             -- Warning + secret-safety hint (multi-line, dim)
             local warnFS = editorBody:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            warnFS:SetPoint("TOPLEFT", colLbl, "BOTTOMLEFT", 0, -10)
-            warnFS:SetWidth(420)
+            warnFS:SetPoint("TOPLEFT", colLbl, "BOTTOMLEFT", 0, -12)
+            warnFS:SetWidth(530)
             warnFS:SetJustifyH("LEFT")
-
-            -- Status: shows whether the current slot is actually set to "custom"
-            local statusFS = editorBody:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            statusFS:SetPoint("BOTTOMLEFT", spEB, "TOPLEFT", -6, 22)
+            warnFS:SetWordWrap(true)
+            warnFS:SetNonSpaceWrap(true)
 
             RefreshEditorBody = function()
                 local cc = GetCustomConf(activeSlot, false)
