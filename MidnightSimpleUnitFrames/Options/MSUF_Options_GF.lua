@@ -3733,6 +3733,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Initialize: activate default tab + layout
     SwitchTab(_activeTab)
     _G.MSUF_GF_SwitchTab = SwitchTab
+    _G.MSUF_GF_OpenSectionByKey = function(sectionKey)
+        OpenSectionByKey(sectionKey)
+        _UpdatePreviewFocus()
+        if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
+    end
     RefreshScrollLayout()
 
     ----------------------------------------------------------------

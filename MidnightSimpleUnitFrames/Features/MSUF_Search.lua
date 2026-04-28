@@ -68,6 +68,11 @@ local SCROLL_MAP = {
     colors          = { sf="MSUF_ColorsScrollFrame",         sc="MSUF_ColorsScrollChild"         },
     gameplay        = { sf="MSUF_GameplayScrollFrame",       sc="MSUF_GameplayScrollChild"       },
     opt_misc        = { sf="MSUF_MiscScrollFrame",           sc="MSUF_MiscScrollChild"           },
+    groupframes     = { sf="MSUF_GFScrollFrame",             sc="MSUF_GFScrollChild"             },
+    gf_layout       = { sf="MSUF_GFScrollFrame",             sc="MSUF_GFScrollChild"             },
+    gf_bars         = { sf="MSUF_GFScrollFrame",             sc="MSUF_GFScrollChild"             },
+    gf_auras        = { sf="MSUF_GFScrollFrame",             sc="MSUF_GFScrollChild"             },
+    gf_indicators   = { sf="MSUF_GFScrollFrame",             sc="MSUF_GFScrollChild"             },
 }
 
 -- HighlightWidget — removed (v19). Kept as a no-op for 0 regression / 0 overhead.
@@ -1250,7 +1255,48 @@ local function _FindNamedAnchor(obj)
     return nil
 end
 
-local function _RouteFromContext(context, anchorName)
+local GF_SECTION_ROUTES = {
+    general    = { pageKey = "gf_layout",     hint = "Group Frames > Layout" },
+    layout     = { pageKey = "gf_layout",     hint = "Group Frames > Layout" },
+    sorting    = { pageKey = "gf_layout",     hint = "Group Frames > Layout" },
+    scaling    = { pageKey = "gf_layout",     hint = "Group Frames > Layout" },
+    border     = { pageKey = "gf_layout",     hint = "Group Frames > Layout" },
+    anchor     = { pageKey = "gf_layout",     hint = "Group Frames > Layout" },
+    tooltip    = { pageKey = "gf_layout",     hint = "Group Frames > Layout" },
+    hcolor     = { pageKey = "gf_bars",       hint = "Group Frames > Health & Text" },
+    bars       = { pageKey = "gf_bars",       hint = "Group Frames > Health & Text" },
+    power      = { pageKey = "gf_bars",       hint = "Group Frames > Health & Text" },
+    text       = { pageKey = "gf_bars",       hint = "Group Frames > Health & Text" },
+    healpred   = { pageKey = "gf_bars",       hint = "Group Frames > Health & Text" },
+    dispel     = { pageKey = "gf_bars",       hint = "Group Frames > Health & Text" },
+    dstripe    = { pageKey = "gf_bars",       hint = "Group Frames > Health & Text" },
+    range      = { pageKey = "gf_bars",       hint = "Group Frames > Health & Text" },
+    buffs      = { pageKey = "gf_auras",      hint = "Group Frames > Auras" },
+    debuffs    = { pageKey = "gf_auras",      hint = "Group Frames > Auras" },
+    ext        = { pageKey = "gf_auras",      hint = "Group Frames > Auras" },
+    priv       = { pageKey = "gf_auras",      hint = "Group Frames > Auras" },
+    masque     = { pageKey = "gf_auras",      hint = "Group Frames > Auras" },
+    autil      = { pageKey = "gf_auras",      hint = "Group Frames > Auras" },
+    indicators = { pageKey = "gf_indicators", hint = "Group Frames > Indicators" },
+    sicons     = { pageKey = "gf_indicators", hint = "Group Frames > Indicators" },
+    si         = { pageKey = "gf_indicators", hint = "Group Frames > Indicators" },
+    ci         = { pageKey = "gf_indicators", hint = "Group Frames > Indicators" },
+}
+
+local function _FindGroupFrameSectionKey(obj)
+    local p = obj
+    local depth = 0
+    while p and depth < 20 do
+        if type(p._msufSecKey) == "string" and p._msufSecKey ~= "" then
+            return p._msufSecKey
+        end
+        p = p.GetParent and p:GetParent() or nil
+        depth = depth + 1
+    end
+    return nil
+end
+
+local function _RouteFromContext(context, anchorName, label, sectionKey)
     -- Return pageKey, subkey, hint
     if context == "frames" then
         local pk = "uf_player"
@@ -1295,6 +1341,26 @@ local function _RouteFromContext(context, anchorName)
         return "opt_misc", nil, "Miscellaneous"
     elseif context == "profiles" then
         return "profiles", nil, "Profiles"
+    elseif context == "groupframes" then
+        local route = sectionKey and GF_SECTION_ROUTES[sectionKey]
+        if not route and type(anchorName) == "string" then
+            local widget = _G and _G[anchorName]
+            local sk = _FindGroupFrameSectionKey(widget)
+            sectionKey = sk or sectionKey
+            route = sectionKey and GF_SECTION_ROUTES[sectionKey]
+        end
+        if not route and type(label) == "string" then
+            local ll = lower(label)
+            if ll:find("buff", 1, true) or ll:find("debuff", 1, true) or ll:find("aura", 1, true) or ll:find("masque", 1, true) then
+                route = GF_SECTION_ROUTES.buffs
+            elseif ll:find("indicator", 1, true) or ll:find("corner", 1, true) then
+                route = GF_SECTION_ROUTES.indicators
+            elseif ll:find("health", 1, true) or ll:find("power", 1, true) or ll:find("text", 1, true) then
+                route = GF_SECTION_ROUTES.bars
+            end
+        end
+        route = route or GF_SECTION_ROUTES.general
+        return route.pageKey, sectionKey, route.hint
     elseif context == "main" then
         -- Best-effort routing for fallback crawls (avoid dead "Options" results).
         if type(anchorName) == "string" then
@@ -1333,11 +1399,12 @@ local function _EnsureOptionsPanelsBuiltForSearch()
         if type(_G.MSUF_EnsureColorsPanelBuilt) == "function" then pcall(_G.MSUF_EnsureColorsPanelBuilt) end
         if type(_G.MSUF_EnsureGameplayPanelBuilt) == "function" then pcall(_G.MSUF_EnsureGameplayPanelBuilt) end
         if type(_G.MSUF_EnsureModulesPanelBuilt) == "function" then pcall(_G.MSUF_EnsureModulesPanelBuilt) end
+        if type(_G.MSUF_EnsureGFPanelBuilt) == "function" then pcall(_G.MSUF_EnsureGFPanelBuilt) end
     end
     return true
 end
 
-local function _AutoAddEntry(out, seen, label, context, anchorName, routeOverride)
+local function _AutoAddEntry(out, seen, label, context, anchorName, routeOverride, sectionKey)
     label = _Trim(label)
     if not label then return end
 
@@ -1349,12 +1416,22 @@ local function _AutoAddEntry(out, seen, label, context, anchorName, routeOverrid
     end
 
     if not pageKey then
-        pageKey, subkey, hint = _RouteFromContext(context, anchorName)
+        pageKey, subkey, hint = _RouteFromContext(context, anchorName, label, sectionKey)
     end
 
     local k = (pageKey or "") .. "|" .. (subkey or "") .. "|" .. (anchorName or "") .. "|" .. label
     if seen[k] then return end
     seen[k] = true
+
+    local keywords = {}
+    if context == "groupframes" then
+        keywords = {
+            "group frames", "groupframes", "group frame", "party", "raid", "mythic raid",
+            "groups", "gruppen", "gruppen frames", "gruppenframes", "toggle", "toggles",
+            "checkbox", "checkboxes", "setting", "settings", "einstellung", "einstellungen",
+            tostring(sectionKey or ""),
+        }
+    end
 
     out[#out + 1] = {
         label   = label,
@@ -1362,7 +1439,7 @@ local function _AutoAddEntry(out, seen, label, context, anchorName, routeOverrid
         pageKey = pageKey or "main",
         subkey  = subkey,
         anchor  = anchorName,
-        keywords = {}, -- dynamic UI text already covers the real labels
+        keywords = keywords, -- dynamic UI text already covers the real labels
     }
 end
 
@@ -1389,7 +1466,8 @@ local function _ScanRoot(out, seen, rootFrame, context, routeOverride, onlyShown
                         local txt = r:GetText()
                         if txt and txt ~= "" then
                             local anchor = _FindNamedAnchor(r:GetParent() or r) -- prefer parent frame name
-                            _AutoAddEntry(out, seen, txt, context, anchor, routeOverride)
+                            local sectionKey = (context == "groupframes") and _FindGroupFrameSectionKey(r:GetParent() or r) or nil
+                            _AutoAddEntry(out, seen, txt, context, anchor, routeOverride, sectionKey)
                         end
                     end
                 end
@@ -1402,7 +1480,8 @@ local function _ScanRoot(out, seen, rootFrame, context, routeOverride, onlyShown
                 local txt = f.Text:GetText()
                 if txt and txt ~= "" then
                     local anchor = _FindNamedAnchor(f)
-                    _AutoAddEntry(out, seen, txt, context, anchor, routeOverride)
+                    local sectionKey = (context == "groupframes") and _FindGroupFrameSectionKey(f) or nil
+                    _AutoAddEntry(out, seen, txt, context, anchor, routeOverride, sectionKey)
                 end
             end
         elseif f.text and f.text.GetText then
@@ -1410,7 +1489,8 @@ local function _ScanRoot(out, seen, rootFrame, context, routeOverride, onlyShown
                 local txt = f.text:GetText()
                 if txt and txt ~= "" then
                     local anchor = _FindNamedAnchor(f)
-                    _AutoAddEntry(out, seen, txt, context, anchor, routeOverride)
+                    local sectionKey = (context == "groupframes") and _FindGroupFrameSectionKey(f) or nil
+                    _AutoAddEntry(out, seen, txt, context, anchor, routeOverride, sectionKey)
                 end
             end
         end
@@ -1509,6 +1589,7 @@ local function _BuildAutoIndex()
     -- Optional panels (only if present)
     _ScanRoot(out, seen, _G.MSUF_ColorsScrollChild,       "colors")
     _ScanRoot(out, seen, _G.MSUF_GameplayScrollChild,     "gameplay")
+    _ScanRoot(out, seen, _G.MSUF_GFScrollChild,           "groupframes")
 
     -- Extra groups from Options_Core (Fonts/Auras/Misc/Profiles).
 if _searchCtx then
@@ -1853,6 +1934,11 @@ _NavigateAndScroll = function(pageKey, anchor, subkey)
         _G.MSUF_SwitchMirrorPage(pageKey, subkey)
     elseif _G.MSUF_OpenPage then
         _G.MSUF_OpenPage(pageKey, subkey)
+    end
+    if type(subkey) == "string"
+        and (pageKey == "gf_layout" or pageKey == "gf_bars" or pageKey == "gf_auras" or pageKey == "gf_indicators" or pageKey == "groupframes")
+        and type(_G.MSUF_GF_OpenSectionByKey) == "function" then
+        pcall(_G.MSUF_GF_OpenSectionByKey, subkey)
     end
     if not anchor then return end
 
