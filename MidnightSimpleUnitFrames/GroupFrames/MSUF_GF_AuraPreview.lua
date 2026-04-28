@@ -505,29 +505,55 @@ local function BuildMockFrame(parent)
     f._nameFS = nameFS
 
     -- HP text
-    local hpFS = textLayer:CreateFontString(nil, "OVERLAY")
-    hpFS:SetFont(GF.ResolveFontPath(kind), conf.hpFontSize or 10, GF.ResolveFontFlags(kind))
-    hpFS:SetPoint("RIGHT", health, "RIGHT", -6, 0)
-    hpFS:SetText("72%")
-    hpFS:SetShadowColor(0, 0, 0, 1)
-    hpFS:SetShadowOffset(1, -1)
-    f._hpFS = hpFS
+    local hpLeftFS = textLayer:CreateFontString(nil, "OVERLAY")
+    local hpCenterFS = textLayer:CreateFontString(nil, "OVERLAY")
+    local hpRightFS = textLayer:CreateFontString(nil, "OVERLAY")
+    for _, fs in ipairs({ hpLeftFS, hpCenterFS, hpRightFS }) do
+        fs:SetFont(GF.ResolveFontPath(kind), conf.hpFontSize or 10, GF.ResolveFontFlags(kind))
+        fs:SetText("72%")
+        fs:SetShadowColor(0, 0, 0, 1)
+        fs:SetShadowOffset(1, -1)
+        fs:Hide()
+    end
+    hpLeftFS:SetPoint("LEFT", health, "LEFT", 6, 0)
+    hpLeftFS:SetJustifyH("LEFT")
+    hpCenterFS:SetPoint("CENTER", health, "CENTER", 0, 0)
+    hpCenterFS:SetJustifyH("CENTER")
+    hpRightFS:SetPoint("RIGHT", health, "RIGHT", -6, 0)
+    hpRightFS:SetJustifyH("RIGHT")
+    f._hpLeftFS = hpLeftFS
+    f._hpCenterFS = hpCenterFS
+    f._hpRightFS = hpRightFS
+    f._hpFS = hpCenterFS
 
     -- Power text
     local powLayer = CreateFrame("Frame", nil, f)
     powLayer:SetAllPoints(f)
     powLayer:SetFrameLevel((f._power and f._power:GetFrameLevel() or health:GetFrameLevel()) + 2)
     f._powerTextLayer = powLayer
-    local powFS = powLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    powFS:SetFont(GF.ResolveFontPath(kind), conf.powerFontSize or 9, GF.ResolveFontFlags(kind))
-    powFS:SetPoint("CENTER", (powerH > 0 and f._power) or health, "CENTER", 0, 0)
-    powFS:SetText("3,240")
-    powFS:SetShadowColor(0, 0, 0, 1)
-    powFS:SetShadowOffset(1, -1)
     local fr, fg, fb = GF.ResolveFontColor(kind)
-    powFS:SetTextColor(fr, fg, fb, 0.9)
-    powFS:Hide()
-    f._powerFS = powFS
+    local powLeftFS = powLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local powCenterFS = powLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local powRightFS = powLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    for _, fs in ipairs({ powLeftFS, powCenterFS, powRightFS }) do
+        fs:SetFont(GF.ResolveFontPath(kind), conf.powerFontSize or 9, GF.ResolveFontFlags(kind))
+        fs:SetText("70")
+        fs:SetShadowColor(0, 0, 0, 1)
+        fs:SetShadowOffset(1, -1)
+        fs:SetTextColor(fr, fg, fb, 0.9)
+        fs:Hide()
+    end
+    local powerAnchor = (powerH > 0 and f._power) or health
+    powLeftFS:SetPoint("LEFT", powerAnchor, "LEFT", 2, 0)
+    powLeftFS:SetJustifyH("LEFT")
+    powCenterFS:SetPoint("CENTER", powerAnchor, "CENTER", 0, 0)
+    powCenterFS:SetJustifyH("CENTER")
+    powRightFS:SetPoint("RIGHT", powerAnchor, "RIGHT", -2, 0)
+    powRightFS:SetJustifyH("RIGHT")
+    f._powerLeftFS = powLeftFS
+    f._powerCenterFS = powCenterFS
+    f._powerRightFS = powRightFS
+    f._powerFS = powCenterFS
 
     _mockFrame = f
     f._previewScale = scale
@@ -773,7 +799,13 @@ function GF.RefreshPreviewBox()
         if not showText then
             if m._nameFS  then m._nameFS:Hide()  end
             if m._hpFS    then m._hpFS:Hide()    end
+            if m._hpLeftFS then m._hpLeftFS:Hide() end
+            if m._hpCenterFS then m._hpCenterFS:Hide() end
+            if m._hpRightFS then m._hpRightFS:Hide() end
             if m._powerFS then m._powerFS:Hide() end
+            if m._powerLeftFS then m._powerLeftFS:Hide() end
+            if m._powerCenterFS then m._powerCenterFS:Hide() end
+            if m._powerRightFS then m._powerRightFS:Hide() end
         else
 
         -- Update text layer level from config
@@ -806,36 +838,50 @@ function GF.RefreshPreviewBox()
             end
             if conf.showName ~= false then m._nameFS:Show() else m._nameFS:Hide() end
         end
-        if m._hpFS then
+        if m._hpLeftFS or m._hpCenterFS or m._hpRightFS or m._hpFS then
+            local hpParent = m._textLayer or m
+            if not m._hpCenterFS and m._hpFS then m._hpCenterFS = m._hpFS end
+            if not m._hpLeftFS then
+                m._hpLeftFS = hpParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            elseif m._hpLeftFS.SetParent then
+                m._hpLeftFS:SetParent(hpParent)
+            end
+            if not m._hpCenterFS then
+                m._hpCenterFS = hpParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            elseif m._hpCenterFS.SetParent then
+                m._hpCenterFS:SetParent(hpParent)
+            end
+            if not m._hpRightFS then
+                m._hpRightFS = hpParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            elseif m._hpRightFS.SetParent then
+                m._hpRightFS:SetParent(hpParent)
+            end
+            m._hpFS = m._hpCenterFS
             local tl = conf.textLeft or "NONE"
             local tc = conf.textCenter or "NONE"
             local tr = conf.textRight or "NONE"
-            local activeMode = tc ~= "NONE" and tc
-                            or tr ~= "NONE" and tr
-                            or tl ~= "NONE" and tl
-                            or "NONE"
-            m._hpFS:SetText(HP_SAMPLES[activeMode] or "72%")
-            m._hpFS:SetFont(fp, floor((conf.hpFontSize or 10) * sc + 0.5), ff)
-            m._hpFS:SetTextColor(fr, fg, fb, 0.9)
-            m._hpFS:SetShadowColor(0, 0, 0, 1); m._hpFS:SetShadowOffset(1, -1)
-            m._hpFS:ClearAllPoints()
+            local hDelim = conf.textDelimiter or " / "
+            local hRev = conf.hpTextReverse
+            local hSize = floor((conf.hpFontSize or 10) * sc + 0.5)
             local hox = floor((conf.hpOffsetX or 0) * sc + 0.5)
             local hoy = floor((conf.hpOffsetY or 0) * sc + 0.5)
             local hPad = floor(6 * sc + 0.5)
-            if tc ~= "NONE" then
-                m._hpFS:SetPoint("CENTER", m._health, "CENTER", hox, hoy)
-                m._hpFS:SetJustifyH("CENTER")
-            elseif tr ~= "NONE" then
-                m._hpFS:SetPoint("RIGHT", m._health, "RIGHT", -hPad + hox, hoy)
-                m._hpFS:SetJustifyH("RIGHT")
-            elseif tl ~= "NONE" then
-                m._hpFS:SetPoint("LEFT", m._health, "LEFT", hPad + hox, hoy)
-                m._hpFS:SetJustifyH("LEFT")
-            else
-                m._hpFS:SetPoint("CENTER", m._health, "CENTER", hox, hoy)
-                m._hpFS:SetJustifyH("CENTER")
+
+            local function ApplyHPText(fs, mode, point, relPoint, x, justify)
+                if not fs then return end
+                fs:SetFont(fp, hSize, ff)
+                fs:SetTextColor(fr, fg, fb, 0.9)
+                fs:SetShadowColor(0, 0, 0, 1); fs:SetShadowOffset(1, -1)
+                fs:SetText((GF.FormatHealthText and GF.FormatHealthText(mode, 70, 100, hDelim, hRev)) or (HP_SAMPLES[mode] or ""))
+                fs:ClearAllPoints()
+                fs:SetPoint(point, m._health, relPoint, x, hoy)
+                fs:SetJustifyH(justify)
+                if mode ~= "NONE" then fs:Show() else fs:Hide() end
             end
-            if activeMode ~= "NONE" then m._hpFS:Show() else m._hpFS:Hide() end
+
+            ApplyHPText(m._hpLeftFS, tl, "LEFT", "LEFT", hPad + hox, "LEFT")
+            ApplyHPText(m._hpCenterFS, tc, "CENTER", "CENTER", hox, "CENTER")
+            ApplyHPText(m._hpRightFS, tr, "RIGHT", "RIGHT", -hPad + hox, "RIGHT")
         end
         -- Power text follows live group-frame fallback: use the power bar
         -- when visible, otherwise anchor to health/mock frame.
@@ -845,48 +891,53 @@ function GF.RefreshPreviewBox()
                 ptl:SetAllPoints(m)
                 m._powerTextLayer = ptl
             end
-            if not m._powerFS then
-                -- Inherit GameFontNormal so a font is always present.
-                m._powerFS = m._powerTextLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            elseif m._powerFS.SetParent then
-                m._powerFS:SetParent(m._powerTextLayer)
+            if not m._powerCenterFS and m._powerFS then m._powerCenterFS = m._powerFS end
+            if not m._powerLeftFS then
+                m._powerLeftFS = m._powerTextLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            elseif m._powerLeftFS.SetParent then
+                m._powerLeftFS:SetParent(m._powerTextLayer)
             end
+            if not m._powerCenterFS then
+                m._powerCenterFS = m._powerTextLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            elseif m._powerCenterFS.SetParent then
+                m._powerCenterFS:SetParent(m._powerTextLayer)
+            end
+            if not m._powerRightFS then
+                m._powerRightFS = m._powerTextLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            elseif m._powerRightFS.SetParent then
+                m._powerRightFS:SetParent(m._powerTextLayer)
+            end
+            m._powerFS = m._powerCenterFS
             local powerAnchor = (m._power and powerH > 0 and m._power) or m._health or m
             local baseLevel = (powerAnchor.GetFrameLevel and powerAnchor:GetFrameLevel()) or (m.GetFrameLevel and m:GetFrameLevel()) or 0
             local ptl2 = conf.powerTextLayer or 2
             m._powerTextLayer:ClearAllPoints()
             m._powerTextLayer:SetAllPoints(m)
             m._powerTextLayer:SetFrameLevel(baseLevel + ptl2)
-            if fp then
-                m._powerFS:SetFont(fp, floor((conf.powerFontSize or 9) * sc + 0.5), ff or "")
-            end
             local pcm = conf.powerTextCenter or "NONE"
             local prm = conf.powerTextRight or "NONE"
             local plm = conf.powerTextLeft or "NONE"
-            local powerMode = (pcm ~= "NONE" and pcm) or (prm ~= "NONE" and prm) or (plm ~= "NONE" and plm) or "NONE"
             local pDelim = conf.powerTextDelimiter or " / "
-            local sample = (GF.FormatPowerText and GF.FormatPowerText(powerMode, 70, 100, pDelim)) or "70"
-            m._powerFS:SetText(sample)
-            m._powerFS:SetTextColor(fr, fg, fb, 0.9)
-            m._powerFS:SetShadowColor(0, 0, 0, 1); m._powerFS:SetShadowOffset(1, -1)
-            m._powerFS:ClearAllPoints()
+            local pSize = floor((conf.powerFontSize or 9) * sc + 0.5)
             local pox = floor((conf.powerOffsetX or 0) * sc + 0.5)
             local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
             local pPad = floor(2 * sc + 0.5)
-            if pcm ~= "NONE" then
-                m._powerFS:SetPoint("CENTER", powerAnchor, "CENTER", pox, poy)
-                m._powerFS:SetJustifyH("CENTER")
-            elseif prm ~= "NONE" then
-                m._powerFS:SetPoint("RIGHT", powerAnchor, "RIGHT", -pPad + pox, poy)
-                m._powerFS:SetJustifyH("RIGHT")
-            elseif plm ~= "NONE" then
-                m._powerFS:SetPoint("LEFT", powerAnchor, "LEFT", pPad + pox, poy)
-                m._powerFS:SetJustifyH("LEFT")
-            else
-                m._powerFS:SetPoint("CENTER", powerAnchor, "CENTER", pox, poy)
-                m._powerFS:SetJustifyH("CENTER")
+
+            local function ApplyPowerText(fs, mode, point, relPoint, x, justify)
+                if not fs then return end
+                if fp then fs:SetFont(fp, pSize, ff or "") end
+                fs:SetText((GF.FormatPowerText and GF.FormatPowerText(mode, 70, 100, pDelim)) or "")
+                fs:SetTextColor(fr, fg, fb, 0.9)
+                fs:SetShadowColor(0, 0, 0, 1); fs:SetShadowOffset(1, -1)
+                fs:ClearAllPoints()
+                fs:SetPoint(point, powerAnchor, relPoint, x, poy)
+                fs:SetJustifyH(justify)
+                if conf.showPower and mode ~= "NONE" then fs:Show() else fs:Hide() end
             end
-            if conf.showPower and powerMode ~= "NONE" then m._powerFS:Show() else m._powerFS:Hide() end
+
+            ApplyPowerText(m._powerLeftFS, plm, "LEFT", "LEFT", pPad + pox, "LEFT")
+            ApplyPowerText(m._powerCenterFS, pcm, "CENTER", "CENTER", pox, "CENTER")
+            ApplyPowerText(m._powerRightFS, prm, "RIGHT", "RIGHT", -pPad + pox, "RIGHT")
         end
         end  -- end of _visToggles.text else-branch
     end
@@ -1468,7 +1519,15 @@ function GF.RefreshPreviewHandles()
                 local spellId = iconIDs[((i - 1) % #iconIDs) + 1]
                 local path = GetMockSpellTexture(spellId)
                 ic._tex:SetTexture(path)
-                ic._tex:SetVertexColor(1, 1, 1, 1)
+                -- Disabled state: dim icons to grayscale-tint so the user
+                -- sees "this layer is off" while the handle stays clickable
+                -- for navigation to the matching Options section. Live
+                -- (en=true) renders icons at full color.
+                if en then
+                    ic._tex:SetVertexColor(1, 1, 1, 1)
+                else
+                    ic._tex:SetVertexColor(0.40, 0.40, 0.45, 0.55)
+                end
 
                 ic:SetSize(sz, sz)
                 -- 1px border at preview scale (resolves to exactly 1 screen px)
@@ -1564,7 +1623,23 @@ function GF.RefreshPreviewHandles()
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
-            h:SetShown(en and _visToggles[grpKey] ~= false)
+            -- Visibility is the user's sidebar toggle alone. The config
+            -- `en` state no longer hides the handle: clicking on a
+            -- disabled-feature handle must still navigate to the matching
+            -- Options section so the user can re-enable it. The disabled
+            -- state is conveyed via dimmed icon vertex color (above) and
+            -- label tint (below).
+            h:SetShown(_visToggles[grpKey] ~= false)
+            -- Label tint reflects en state: bright = live, dim = disabled.
+            -- Cheap; HANDLE_COLORS is a small file-scope literal table.
+            if h._label then
+                local lc = HANDLE_COLORS[grpKey] or HANDLE_COLORS.status
+                if en then
+                    h._label:SetTextColor(lc[1], lc[2], lc[3], 0.9)
+                else
+                    h._label:SetTextColor(lc[1] * 0.5, lc[2] * 0.5, lc[3] * 0.5, 0.6)
+                end
+            end
             UpdateCoordDisplay(nil)
         end
     end
@@ -1584,7 +1659,9 @@ function GF.RefreshPreviewHandles()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(baseLvl + layer)
             local en = conf[spec.key] ~= false
-            h:SetShown(en and _visToggles.status ~= false)
+            -- Visibility = sidebar toggle only. Disabled-config handles
+            -- still need to be clickable for click-to-navigate.
+            h:SetShown(_visToggles.status ~= false)
 
             -- Apply real texture
             local tex = h._statusTex
@@ -1613,7 +1690,21 @@ function GF.RefreshPreviewHandles()
                 if path then
                     tex:SetTexture(path)
                     tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
-                    tex:SetVertexColor(1, 1, 1, 1)
+                    -- Live = full color, disabled = dim grayscale tint.
+                    if en then
+                        tex:SetVertexColor(1, 1, 1, 1)
+                    else
+                        tex:SetVertexColor(0.40, 0.40, 0.45, 0.55)
+                    end
+                end
+            end
+            -- Label tint to mirror disabled state on status handles.
+            if h._label then
+                local lc = HANDLE_COLORS.status
+                if en then
+                    h._label:SetTextColor(lc[1], lc[2], lc[3], 0.9)
+                else
+                    h._label:SetTextColor(lc[1] * 0.5, lc[2] * 0.5, lc[3] * 0.5, 0.6)
                 end
             end
         end
@@ -1637,6 +1728,13 @@ function GF.RefreshPreviewHandles()
             if not h._paIcons then
                 h._paIcons = {}
             end
+            local paEn = pa.enabled ~= false
+            local paR, paG, paB, paA
+            if paEn then
+                paR, paG, paB, paA = 0.20, 0.20, 0.25, 1
+            else
+                paR, paG, paB, paA = 0.10, 0.10, 0.12, 0.50
+            end
             for pi = 1, paMax do
                 local pic = h._paIcons[pi]
                 if not pic then
@@ -1646,13 +1744,25 @@ function GF.RefreshPreviewHandles()
                 pic:SetSize(paSz, paSz)
                 pic:ClearAllPoints()
                 pic:SetPoint("TOPLEFT", h, "TOPLEFT", (pi - 1) * (paSz + 2), 0)
-                pic:SetColorTexture(0.20, 0.20, 0.25, 1)
+                pic:SetColorTexture(paR, paG, paB, paA)
                 pic:Show()
             end
             for pi = paMax + 1, #h._paIcons do
                 h._paIcons[pi]:Hide()
             end
-            h:SetShown(pa.enabled ~= false and _visToggles.private ~= false)
+            -- Visibility = sidebar toggle only. Disabled-config still
+            -- clickable so the user can navigate to the Private Aura
+            -- options section to re-enable it.
+            h:SetShown(_visToggles.private ~= false)
+            -- Label tint reflects enabled state.
+            if h._label then
+                local lc = HANDLE_COLORS.private
+                if paEn then
+                    h._label:SetTextColor(lc[1], lc[2], lc[3], 0.9)
+                else
+                    h._label:SetTextColor(lc[1] * 0.5, lc[2] * 0.5, lc[3] * 0.5, 0.6)
+                end
+            end
         end
     end
 
