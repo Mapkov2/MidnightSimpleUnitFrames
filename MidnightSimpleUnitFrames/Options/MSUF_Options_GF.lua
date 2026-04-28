@@ -164,6 +164,46 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
     GF._RefreshOptionWidgets = RefreshAllWidgets
 
+    -- ── EM2 live-sync ──
+    -- Both the Group-Frame Options panel and Edit Mode 2 movers write to the
+    -- same per-kind config keys (nameOffsetX/Y, hpOffsetX/Y, powerOffsetX/Y,
+    -- statusOffsetX/Y, etc.) and signal layout changes via GF.MarkAllDirty.
+    -- Hook MarkAllDirty so any external mutation (EM2 drag, slash command,
+    -- profile reload) triggers a coalesced widget refresh — keeping sliders
+    -- and dropdowns in sync with whatever the user just dragged in EM2.
+    --
+    -- Coalesced via OnUpdate: many MarkAllDirty calls per drag (one per axis,
+    -- one per snap, etc.) collapse into a single RefreshAllWidgets per frame.
+    -- Self-loops are harmless: the panel's own slider set-handlers also call
+    -- MarkAllDirty, which schedules a sync, which re-reads the value we just
+    -- wrote and SetValueClean's it back — a no-op on the slider state.
+    do
+        local _syncPending = false
+        local _syncFrame
+        local function ScheduleWidgetSync()
+            if _syncPending then return end
+            if not _panel or not _panel:IsShown() then return end
+            _syncPending = true
+            if not _syncFrame then _syncFrame = CreateFrame("Frame") end
+            _syncFrame:SetScript("OnUpdate", function(self)
+                self:SetScript("OnUpdate", nil)
+                _syncPending = false
+                RefreshAllWidgets()
+            end)
+        end
+        if type(GF.MarkAllDirty) == "function" then
+            local _origMAD = GF.MarkAllDirty
+            GF.MarkAllDirty = function(...)
+                _origMAD(...)
+                ScheduleWidgetSync()
+            end
+        end
+        -- Public hook: EM2 / external code can request a panel resync without
+        -- having to call MarkAllDirty (e.g., after a checkbox toggle that
+        -- doesn't dirty layout). Coalesced like the MarkAllDirty path.
+        GF._RequestOptionsResync = ScheduleWidgetSync
+    end
+
     -- Track widgets that need scope-refresh
     local function TrackRefresh(widget)
         if widget and widget.Refresh then
@@ -2346,7 +2386,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 1c: Frame Scaling
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(340, "Frame Scaling", false, "scaling")
+        local box, body = AddSection(380, "Frame Scaling", false, "scaling")
 
         local _scaleItems = {
             { key = "off",    label = TR("Off (100%)") },
@@ -2367,10 +2407,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
         scaleDdLbl:SetPoint("LEFT", scaleDd, "RIGHT", 8, 0)
         scaleDdLbl:SetText(TR("Scale Mode")); scaleDdLbl:SetTextColor(0.7, 0.7, 0.7)
 
-        -- Manual slider
+        -- Manual slider (y=-22: slider has a 16px label-above region; the
+        -- previous y=-6 made the label clip into the dropdown above)
         local scaleManualSl = SSlider({
             name = "MSUF_GF_FrameScaleManual", parent = body, compact = true,
-            anchor = scaleDd, x = 0, y = -6,
+            anchor = scaleDd, x = 0, y = -22,
             min = 50, max = 150, step = 5, width = 220, default = 100,
             get = function(k) return GF.Val(k, "frameScaleManual") or 100 end,
             set = function(k, v) GF.GetConf(k).frameScaleManual = v; GF.RebuildAll() end,
@@ -2382,9 +2423,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
         autoLbl:SetPoint("TOPLEFT", scaleManualSl, "BOTTOMLEFT", 0, -10)
         autoLbl:SetText(TR("Auto Breakpoints")); autoLbl:SetTextColor(1, 0.82, 0)
 
+        -- y=-22 (was -6): label-above space for the first breakpoint slider so
+        -- "1-10 players" no longer overlaps the "Auto Breakpoints" header.
         local s10Sl = SSlider({
             name = "MSUF_GF_ScaleAt10", parent = body, compact = true,
-            anchor = autoLbl, x = 0, y = -6,
+            anchor = autoLbl, x = 0, y = -22,
             min = 50, max = 100, step = 5, width = 220, default = 100,
             get = function(k) return GF.Val(k, "scaleAt10") or 100 end,
             set = function(k, v) GF.GetConf(k).scaleAt10 = v; GF.RebuildAll() end,
@@ -2620,21 +2663,35 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 4: Text
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(660, "Text", false, "text")
+        local box, body = AddSection(720, "Text", false, "text")
 
         local COL_W = 310
 
         -- Redirect hint (full width)
         local hintFS = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        hintFS:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
+        hintFS:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
         hintFS:SetText(TR("Font, outline and color are controlled globally in |cffffd200Global Style > Fonts|r."))
         hintFS:SetTextColor(0.55, 0.75, 1.0); hintFS:SetJustifyH("LEFT"); hintFS:SetWordWrap(true); hintFS:SetWidth(600)
 
+        -- EM2 bridge hint (full width)
+        local em2HintFS = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        em2HintFS:SetPoint("TOPLEFT", hintFS, "BOTTOMLEFT", 0, -3)
+        em2HintFS:SetText(TR("Tip: positions can also be dragged in |cffffd200Edit Mode|r — changes sync live both ways."))
+        em2HintFS:SetTextColor(0.50, 0.55, 0.65); em2HintFS:SetJustifyH("LEFT"); em2HintFS:SetWordWrap(true); em2HintFS:SetWidth(600)
+
         -- Two column anchors
         local colL = CreateFrame("Frame", nil, body); colL:SetSize(COL_W, 1)
-        colL:SetPoint("TOPLEFT", hintFS, "BOTTOMLEFT", 0, -8)
+        colL:SetPoint("TOPLEFT", em2HintFS, "BOTTOMLEFT", 0, -10)
         local colR = CreateFrame("Frame", nil, body); colR:SetSize(COL_W, 1)
         colR:SetPoint("TOPLEFT", colL, "TOPRIGHT", 20, 0)
+
+        -- Subtle vertical divider between the two columns. Spans most of the
+        -- content area; matches the section's accent palette for visual coherence.
+        local vColDiv = body:CreateTexture(nil, "ARTWORK")
+        vColDiv:SetWidth(1)
+        vColDiv:SetColorTexture(0.20, 0.32, 0.45, 0.35)
+        vColDiv:SetPoint("TOPLEFT",    colL, "TOPLEFT",    COL_W + 10, 4)
+        vColDiv:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", 12 + COL_W + 10, 12)
 
         -- Shared mode items (used by HP + Power dropdowns)
         local TEXT_MODES = function()
@@ -2669,7 +2726,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local nameSizeSl = SSlider({
             name = "MSUF_GF_NameFontSizeSlider", parent = colL, compact = true,
-            anchor = nameShowChk, x = 0, y = -4,
+            anchor = nameShowChk, x = 0, y = -26,
             min = 6, max = 48, step = 1, width = 180, default = 12,
             get = function(k) return GF.Val(k, "nameFontSize") end,
             set = function(k, v) GF.GetConf(k).nameFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals() end,
@@ -2678,7 +2735,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local nameAnchorDd = SDropdown({
             name = "MSUF_GF_NameAnchorDropdown", parent = colL,
-            anchor = nameSizeSl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 180,
+            anchor = nameSizeSl, anchorPoint = "BOTTOMLEFT", x = -16, y = -8, width = 180,
             items = { { key = "LEFT", label = TR("Left") }, { key = "CENTER", label = TR("Center") }, { key = "RIGHT", label = TR("Right") } },
             get = function(k) return GF.Val(k, "nameAnchor") or "LEFT" end,
             set = function(k, v) GF.GetConf(k).nameAnchor = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
@@ -2686,7 +2743,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local nameXSl = SSlider({
             name = "MSUF_GF_NameOffsetXSlider", parent = colL, compact = true,
-            anchor = nameAnchorDd, x = 16, y = -4,
+            anchor = nameAnchorDd, x = 16, y = -26,
             min = -100, max = 100, step = 1, width = 180, default = 0,
             get = function(k) return GF.Val(k, "nameOffsetX") end,
             set = function(k, v) GF.GetConf(k).nameOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
@@ -2701,9 +2758,16 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Y: %d", v) end,
         })
 
+        -- Subtle horizontal divider separating Name and Power Text sub-sections
+        local lcSubDiv = colL:CreateTexture(nil, "ARTWORK")
+        lcSubDiv:SetHeight(1)
+        lcSubDiv:SetColorTexture(0.20, 0.32, 0.45, 0.30)
+        lcSubDiv:SetPoint("TOPLEFT",  nameYSl, "BOTTOMLEFT", -8, -14)
+        lcSubDiv:SetPoint("TOPRIGHT", nameYSl, "BOTTOMRIGHT", 100, -14)
+
         -- ── Power Text ── (left column, below Name)
         local powSep = colL:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        powSep:SetPoint("TOPLEFT", nameYSl, "BOTTOMLEFT", 0, -20)
+        powSep:SetPoint("TOPLEFT", nameYSl, "BOTTOMLEFT", 0, -28)
         powSep:SetText(TR("Power Text")); powSep:SetTextColor(1, 0.82, 0)
 
         local powShowChk = SCheck({
@@ -2716,7 +2780,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local powCenterDd = SDropdown({
             name = "MSUF_GF_PowerTextCenterDropdown", parent = colL,
-            anchor = powShowChk, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 180,
+            anchor = powShowChk, anchorPoint = "BOTTOMLEFT", x = -16, y = -32, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "powerTextCenter") or "NONE" end,
             set = function(k, v) GF.GetConf(k).powerTextCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
@@ -2726,7 +2790,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local powSizeSl = SSlider({
             name = "MSUF_GF_PowerFontSizeSlider", parent = colL, compact = true,
-            anchor = powCenterDd, x = 16, y = -4,
+            anchor = powCenterDd, x = 16, y = -26,
             min = 6, max = 48, step = 1, width = 180, default = 9,
             get = function(k) return GF.Val(k, "powerFontSize") end,
             set = function(k, v) GF.GetConf(k).powerFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals() end,
@@ -2761,7 +2825,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hpLeftDd = SDropdown({
             name = "MSUF_GF_TextLeftDropdown", parent = colR,
-            anchor = hpSep, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 180,
+            anchor = hpSep, anchorPoint = "BOTTOMLEFT", x = -16, y = -32, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "textLeft") or "NONE" end,
             set = function(k, v) GF.GetConf(k).textLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
@@ -2771,7 +2835,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hpCenterDd = SDropdown({
             name = "MSUF_GF_TextCenterDropdown", parent = colR,
-            anchor = hpLeftDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -4, width = 180,
+            anchor = hpLeftDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "textCenter") or "NONE" end,
             set = function(k, v) GF.GetConf(k).textCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
@@ -2781,7 +2845,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hpRightDd = SDropdown({
             name = "MSUF_GF_TextRightDropdown", parent = colR,
-            anchor = hpCenterDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -4, width = 180,
+            anchor = hpCenterDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "textRight") or "NONE" end,
             set = function(k, v) GF.GetConf(k).textRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
@@ -2791,7 +2855,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hpDelimDd = SDropdown({
             name = "MSUF_GF_HPDelimDropdown", parent = colR,
-            anchor = hpRightDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -4, width = 180,
+            anchor = hpRightDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
             items = DELIM_ITEMS,
             get = function(k) return GF.Val(k, "textDelimiter") or " / " end,
             set = function(k, v) GF.GetConf(k).textDelimiter = v; GF.RefreshVisuals() end,
@@ -2801,7 +2865,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hpReverseCB = SCheck({
             name = "MSUF_GF_HPReverseCheck", parent = colR,
-            anchor = hpDelimDd, x = 16, y = -4,
+            anchor = hpDelimDd, x = 16, y = -8,
             label = TR("Reverse Order"),
             get = function(k) return GF.Val(k, "hpTextReverse") end,
             set = function(k, v) GF.GetConf(k).hpTextReverse = v; GF.RefreshVisuals() end,
@@ -2809,7 +2873,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local hpSizeSl = SSlider({
             name = "MSUF_GF_HPFontSizeSlider", parent = colR, compact = true,
-            anchor = hpReverseCB, x = 0, y = -4,
+            anchor = hpReverseCB, x = 0, y = -26,
             min = 6, max = 48, step = 1, width = 180, default = 10,
             get = function(k) return GF.Val(k, "hpFontSize") end,
             set = function(k, v) GF.GetConf(k).hpFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals() end,
@@ -2833,14 +2897,21 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Y: %d", v) end,
         })
 
+        -- Subtle horizontal divider separating HP Text and Status & Layer
+        local rcSubDiv = colR:CreateTexture(nil, "ARTWORK")
+        rcSubDiv:SetHeight(1)
+        rcSubDiv:SetColorTexture(0.20, 0.32, 0.45, 0.30)
+        rcSubDiv:SetPoint("TOPLEFT",  hpYSl, "BOTTOMLEFT", -8, -14)
+        rcSubDiv:SetPoint("TOPRIGHT", hpYSl, "BOTTOMRIGHT", 100, -14)
+
         -- ── Status + Layer ── (right column, below HP)
         local tOffSep = colR:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        tOffSep:SetPoint("TOPLEFT", hpYSl, "BOTTOMLEFT", 0, -20)
+        tOffSep:SetPoint("TOPLEFT", hpYSl, "BOTTOMLEFT", 0, -28)
         tOffSep:SetText(TR("Status & Layer")); tOffSep:SetTextColor(1, 0.82, 0)
 
         local statXSl = SSlider({
             name = "MSUF_GF_StatusOffsetXSlider", parent = colR, compact = true,
-            anchor = tOffSep, x = 0, y = -16,
+            anchor = tOffSep, x = 0, y = -26,
             min = -100, max = 100, step = 1, width = 180, default = 0,
             get = function(k) return GF.Val(k, "statusOffsetX") end,
             set = function(k, v) GF.GetConf(k).statusOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
@@ -2952,7 +3023,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 6: Background
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(280, "Background", false, "border")
+        local box, body = AddSection(310, "Background", false, "border")
 
         -- Hint: outline border is controlled in Bars menu
         local hint = body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -3001,9 +3072,12 @@ function _G.MSUF_EnsureGFPanelBuilt()
         })
 
         -- Health Background Opacity (missing-HP area tint, affects behind-bar icon visibility)
+        -- y=-138 (was -112): the previous offset put this slider's label-above
+        -- region 12px INSIDE the "Text ignores HP opacity" checkbox row. The
+        -- gap accounts for the 16px label band plus an 8px visual breath.
         SSlider({
             name = "MSUF_GF_HpBgAlphaSlider", parent = body, compact = true,
-            anchor = bgLbl, x = 0, y = -112,
+            anchor = bgLbl, x = 0, y = -138,
             min = 0, max = 1, step = 0.05, width = 270, default = 0.85,
             get = function(k) return GF.Val(k, "hpBgAlpha") or GF.Val(k, "bgA") or 0.85 end,
             set = function(k, v) GF.GetConf(k).hpBgAlpha = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
@@ -3469,7 +3543,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section: Debuff Stripe
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(280, "Debuff Stripe", false, "dstripe")
+        local box, body = AddSection(320, "Debuff Stripe", false, "dstripe")
 
         local dsChk = SCheck({
             name = "MSUF_GF_DebuffStripeCheck", parent = body,
@@ -3507,9 +3581,12 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end,
         })
 
+        -- y=-26 (was -8): compact-slider's value label sits ~16px ABOVE the
+        -- slider track via OptionsSliderTemplate, so anything <17 makes the
+        -- next slider's label clip into the previous control.
         local dsHeightSl = SSlider({
             name = "MSUF_GF_DebuffStripeHeightSlider", parent = body, compact = true,
-            anchor = dsEdgeDd, x = 0, y = -8,
+            anchor = dsEdgeDd, x = 0, y = -26,
             min = 1, max = 8, step = 1, width = 270, default = 3,
             get = function(k) return GF.Val(k, "debuffStripeHeight") end,
             set = function(k, v)
@@ -3522,7 +3599,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         SSlider({
             name = "MSUF_GF_DebuffStripeAlphaSlider", parent = body, compact = true,
-            anchor = dsHeightSl, x = 0, y = -8,
+            anchor = dsHeightSl, x = 0, y = -26,
             min = 0.10, max = 1, step = 0.05, width = 270, default = 0.60,
             get = function(k) return GF.Val(k, "debuffStripeAlpha") end,
             set = function(k, v)
