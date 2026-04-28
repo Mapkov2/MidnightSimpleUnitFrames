@@ -507,6 +507,30 @@ function UI.Slider(spec)
         UpdateLabel(value)
         if spec.set then spec.set(value) end
     end)
+    -- Companion-widget visibility: the editbox / ± buttons are parented to
+    -- `parent` (sibling of `sl`) for layout reasons, so sl:Hide()/Show() does
+    -- NOT cascade to them. Hook the slider's OnShow/OnHide so callers can
+    -- treat the slider as the single visibility owner without leftover
+    -- "ghost" input boxes leaking through. Diff-gated to avoid redundant work.
+    if eb or minus or plus then
+        sl:HookScript("OnShow", function()
+            if eb    and not eb:IsShown()    then eb:Show()    end
+            if minus and not minus:IsShown() then minus:Show() end
+            if plus  and not plus:IsShown()  then plus:Show()  end
+        end)
+        sl:HookScript("OnHide", function()
+            if eb    and eb:IsShown()    then eb:Hide()    end
+            if minus and minus:IsShown() then minus:Hide() end
+            if plus  and plus:IsShown()  then plus:Hide()  end
+        end)
+        -- Mirror initial state in case the slider is created already hidden
+        -- (parent hidden at construction time → no OnHide will fire).
+        if not sl:IsShown() then
+            if eb    and eb:IsShown()    then eb:Hide()    end
+            if minus and minus:IsShown() then minus:Hide() end
+            if plus  and plus:IsShown()  then plus:Hide()  end
+        end
+    end
     -- Self-sync on Show
     sl:SetScript("OnShow", function(self)
         if spec.get then

@@ -113,6 +113,27 @@ function _G.MSUF_EnsureGFPanelBuilt()
     TR = ns.TR or TR
     if not GF then return nil end
 
+    -- One-shot migration: Cutaway Health was removed. Clear every saved
+    -- cutaway* key across all GF kinds so the render side (if it still
+    -- watches those flags) stops re-engaging on existing profiles. Runs
+    -- once per session on first GF panel build; idempotent on subsequent
+    -- opens because the keys are already nil after the first pass.
+    do
+        local KINDS = { "party", "raid", "mythicraid" }
+        local CUTAWAY_KEYS = {
+            "cutawayEnabled", "cutawayFadeTime",
+            "cutawayColorR", "cutawayColorG", "cutawayColorB", "cutawayColorA",
+        }
+        for i = 1, #KINDS do
+            local conf = GF.GetConf and GF.GetConf(KINDS[i])
+            if type(conf) == "table" then
+                for j = 1, #CUTAWAY_KEYS do
+                    conf[CUTAWAY_KEYS[j]] = nil
+                end
+            end
+        end
+    end
+
     _panel = CreateFrame("Frame", "MSUF_GFOptionsPanel", UIParent)
     _panel:SetSize(640, 800)
     _panel:Hide()
@@ -398,8 +419,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
                    "powerFontSize", "powerOffsetX", "powerOffsetY",
                    "powerTextLayer", "powerSmoothFill",
                    "powerShowTank", "powerShowHealer", "powerShowDamager",
-                   "cutawayEnabled", "cutawayColorR", "cutawayColorG",
-                   "cutawayColorB", "cutawayColorA", "cutawayFadeTime",
                    "healPredEnabled",
                    "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha" } },
         { key = "text",       label = "Text & Name",
@@ -1017,7 +1036,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
     local _TAB_DEFS = {
         { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
-        { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "cutaway", "dispel", "dstripe", "range" } },
+        { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "dispel", "dstripe", "range" } },
         { key = "auras",      keys = { "buffs", "debuffs", "ext", "priv", "masque", "autil" } },
         { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
     }
@@ -3375,48 +3394,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section: Cutaway Health
-    ----------------------------------------------------------------
-    do
-        local box, body = AddSection(200, "Cutaway Health", false, "cutaway")
-
-        local enChk = SCheck({
-            name = "MSUF_GF_CutawayEnableCheck", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-            label = TR("Enable Cutaway Health"),
-            get = function(k) return GF.Val(k, "cutawayEnabled") end,
-            set = function(k, v) GF.GetConf(k).cutawayEnabled = v; GF.RefreshVisuals() end,
-        })
-
-        local hintCW = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        hintCW:SetPoint("TOPLEFT", enChk, "BOTTOMLEFT", 0, -4)
-        hintCW:SetWidth(500)
-        hintCW:SetJustifyH("LEFT")
-        hintCW:SetText(TR("Shows a red fadeout behind the health bar when health drops, visualizing health loss."))
-        hintCW:SetTextColor(0.55, 0.60, 0.70)
-
-        local fadeSl = SSlider({
-            name = "MSUF_GF_CutawayFadeSlider", parent = body, compact = true,
-            anchor = hintCW, x = 0, y = -12,
-            min = 0.1, max = 1.5, step = 0.05, width = 270, default = 0.4,
-            get = function(k) return GF.Val(k, "cutawayFadeTime") end,
-            set = function(k, v) GF.GetConf(k).cutawayFadeTime = v end,
-            formatText = function(v) return string.format("Fade Time: %.2fs", v) end,
-        })
-
-        MakeColorSwatch(body, fadeSl, "BOTTOMLEFT", 0, -16,
-            "Cutaway Color",
-            function()
-                return V("cutawayColorR") or 0.7, V("cutawayColorG") or 0.1, V("cutawayColorB") or 0.1
-            end,
-            function(r, g, b)
-                local c = C()
-                c.cutawayColorR = r; c.cutawayColorG = g; c.cutawayColorB = b
-                GF.RefreshVisuals()
-            end)
-    end
-
-    ----------------------------------------------------------------
     -- Section: Dispel Overlay
     ----------------------------------------------------------------
     do
@@ -3611,7 +3588,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         -- Desired order within each tab
         local ORDER = {
             { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
-            { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "cutaway", "dispel", "dstripe", "range" } },
+            { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "dispel", "dstripe", "range" } },
             { key = "auras",      keys = { "buffs", "debuffs", "ext", "priv", "masque", "autil" } },
             { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
         }
