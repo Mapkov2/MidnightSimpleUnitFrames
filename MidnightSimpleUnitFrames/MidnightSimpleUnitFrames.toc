@@ -125,6 +125,7 @@ GroupFrames\MSUF_GF_DB.lua
 GroupFrames\MSUF_GF_Core.lua
 GroupFrames\MSUF_GF_Effects.lua
 GroupFrames\MSUF_GF_Render.lua
+GroupFrames\MSUF_GF_GroupNumber.lua
 GroupFrames\MSUF_GF_SpellIndicators_Data.lua
 GroupFrames\MSUF_GF_SpellIndicators.lua
 GroupFrames\MSUF_GF_PrivateAuras.lua

@@ -96,8 +96,14 @@ local FRAME_EFFECT_TYPES = {
     { key = "border",     label = L["Border"]              },
     { key = "glow",       label = L["Glow (Animated)"]     },
     { key = "pulse",      label = L["Pulse (Animated)"]    },
-    { key = "namecolor",  label = L["Name Text Color"]     },
-    { key = "framealpha", label = L["Frame Alpha"]          },
+}
+-- Legacy effect types that have been removed from the dropdown because they
+-- had no proper UI controls and produced "dead" panels. Configs containing
+-- these values are migrated to "none" on first read (defensive get) and via
+-- a one-shot migration when the Spell Indicators section is built.
+local LEGACY_FRAME_EFFECT_TYPES = {
+    framealpha = true,
+    namecolor  = true,
 }
 
 ------------------------------------------------------------------------
@@ -479,6 +485,33 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Spell Indicators (default open)
     ----------------------------------------------------------------
     do
+        -- One-shot migration: clear legacy FRAME_EFFECT_TYPES values that were
+        -- removed from the dropdown ("framealpha", "namecolor"). Walks every
+        -- saved spell config across all GF kinds. O(kinds * specs * spells),
+        -- runs once per options-panel build.
+        do
+            local KINDS = { "party", "raid", "mythicraid" }
+            for i = 1, #KINDS do
+                local conf = GF.GetConf and GF.GetConf(KINDS[i])
+                local sic  = conf and conf.spellIndicators
+                local specs = sic and sic.specs
+                if specs then
+                    for _, specCfg in pairs(specs) do
+                        if type(specCfg) == "table" then
+                            for _, auraCfg in pairs(specCfg) do
+                                if type(auraCfg) == "table" then
+                                    local fc = auraCfg.frame
+                                    if fc and fc.type and LEGACY_FRAME_EFFECT_TYPES[fc.type] then
+                                        auraCfg.frame = nil
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
         local box, body = AddSection(640, L["Spell Indicators"], false, "si")
 
         SCheck({
@@ -654,7 +687,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             if spellPanels[auraName] then return spellPanels[auraName] end
 
             local panel = CreateFrame("Frame", nil, body)
-            panel:SetSize(580, 320)
+            panel:SetSize(640, 400)
             panel:EnableMouse(true)
 
             -- Subtle top divider instead of floating box
@@ -714,12 +747,26 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 end,
             })
 
+            -- Close button: clean Unicode × with hover highlight. Replaces
+            -- the legacy UI-StopButton atlas (small/yellow/pixelated) with a
+            -- text-based glyph that scales cleanly and matches the panel
+            -- palette. 20×20 hit area is generous; the visible glyph sits
+            -- centered with a 1px Y nudge for optical alignment.
             local closeBtn = CreateFrame("Button", nil, panel)
-            closeBtn:SetSize(16, 16)
-            closeBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -6)
-            local closeTex = closeBtn:CreateTexture(nil, "ARTWORK")
-            closeTex:SetAllPoints()
-            closeTex:SetTexture("Interface\\Buttons\\UI-StopButton")
+            closeBtn:SetSize(20, 20)
+            closeBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -6)
+            local closeFs = closeBtn:CreateFontString(nil, "OVERLAY")
+            closeFs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 22, "OUTLINE")
+            closeFs:SetPoint("CENTER", closeBtn, "CENTER", 0, 1)
+            closeFs:SetText("×")
+            closeFs:SetTextColor(0.72, 0.76, 0.82, 1)
+            closeBtn._fs = closeFs
+            closeBtn:SetScript("OnEnter", function(self)
+                self._fs:SetTextColor(1.0, 0.45, 0.45, 1)
+            end)
+            closeBtn:SetScript("OnLeave", function(self)
+                self._fs:SetTextColor(0.72, 0.76, 0.82, 1)
+            end)
             closeBtn:SetScript("OnClick", function() expandedSpell = nil; ClearSIHighlight(); panel:Hide() end)
 
             -- Arrow buttons for tile reorder (kept as keyboard-friendly fallback)
@@ -754,13 +801,21 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             local headerDiv = panel:CreateTexture(nil, "ARTWORK")
             headerDiv:SetHeight(1)
             headerDiv:SetColorTexture(0.25, 0.30, 0.40, 0.5)
-            headerDiv:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -26)
-            headerDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -26)
+            headerDiv:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -32)
+            headerDiv:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -32)
+
+            -- Subtle vertical divider between the two columns. Spans most of
+            -- the content area; matches headerDiv tone for visual coherence.
+            local colDiv = panel:CreateTexture(nil, "ARTWORK")
+            colDiv:SetWidth(1)
+            colDiv:SetColorTexture(0.20, 0.32, 0.45, 0.40)
+            colDiv:SetPoint("TOPLEFT",    panel, "TOPLEFT",    320, -42)
+            colDiv:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 320, 16)
 
             -- Left column: Placed Indicator
-            local COL_L = 10
-            local COL_R = 290
-            local ROW_TOP = -34
+            local COL_L = 20
+            local COL_R = 340
+            local ROW_TOP = -46
 
             local placedLbl = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             placedLbl:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_L, ROW_TOP)
@@ -791,7 +846,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             local sizeSl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_Size", parent = panel, compact = true,
                 anchor = anchorDd, x = 16, y = -6,
-                min = 4, max = 40, step = 1, width = 140, default = 18,
+                min = 4, max = 40, step = 1, width = 170, default = 18,
                 get = function(k) return PlacedCfg().size or 18 end,
                 set = function(k, v) PlacedCfg().size = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format(L["Size: %d"], v) end,
@@ -799,8 +854,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local xSl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_X", parent = panel, compact = true,
-                anchor = sizeSl, x = 0, y = -28,
-                min = -100, max = 100, step = 1, width = 140, default = 0,
+                anchor = sizeSl, x = 0, y = -34,
+                min = -100, max = 100, step = 1, width = 170, default = 0,
                 get = function(k) return PlacedCfg().x or 0 end,
                 set = function(k, v) PlacedCfg().x = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format("X: %d", v) end,
@@ -808,8 +863,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local ySl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_Y", parent = panel, compact = true,
-                anchor = xSl, x = 0, y = -28,
-                min = -100, max = 100, step = 1, width = 140, default = 0,
+                anchor = xSl, x = 0, y = -34,
+                min = -100, max = 100, step = 1, width = 170, default = 0,
                 get = function(k) return PlacedCfg().y or 0 end,
                 set = function(k, v) PlacedCfg().y = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format("Y: %d", v) end,
@@ -817,7 +872,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local barWSlider = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_BarW", parent = panel, compact = true,
-                anchor = sizeSl, x = 160, y = 0,
+                anchor = sizeSl, x = 180, y = 0,
                 min = 10, max = 120, step = 1, width = 120, default = 54,
                 get = function(k) return PlacedCfg().barWidth or ((PlacedCfg().size or 18) * 3) end,
                 set = function(k, v) PlacedCfg().barWidth = v; GF.RefreshVisuals() end,
@@ -834,7 +889,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local missingChk = SCheck({
                 name = "MSUF_GF_SI_" .. auraName .. "_Missing", parent = panel,
-                anchor = ySl, x = 0, y = -12,
+                anchor = ySl, x = 0, y = -18,
                 label = L["Show when missing"],
                 get = function(k) return PlacedCfg().missing == true end,
                 set = function(k, v) PlacedCfg().missing = v and true or false; GF.RefreshVisuals() end,
@@ -842,7 +897,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local showCDChk = SCheck({
                 name = "MSUF_GF_SI_" .. auraName .. "_ShowCD", parent = panel,
-                anchor = missingChk, x = 0, y = -4,
+                anchor = missingChk, x = 0, y = -8,
                 label = L["Show Cooldown Text"],
                 get = function(k) return PlacedCfg().showCooldown ~= false end,
                 set = function(k, v)
@@ -854,8 +909,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local cdSizeSl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_CDSize", parent = panel, compact = true,
-                anchor = showCDChk, x = 20, y = -6,
-                min = 6, max = 24, step = 1, width = 120, default = 8,
+                anchor = showCDChk, x = 24, y = -8,
+                min = 6, max = 24, step = 1, width = 150, default = 8,
                 get = function(k) return PlacedCfg().cooldownSize or 8 end,
                 set = function(k, v) PlacedCfg().cooldownSize = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format(L["CD Size: %d"], v) end,
@@ -888,6 +943,12 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 get = function(k)
                     local fc = SC().frame
                     if not fc or not fc.type then return "none" end
+                    -- Defensive cleanup: any legacy type leaks past the
+                    -- one-shot migration get scrubbed on first read.
+                    if LEGACY_FRAME_EFFECT_TYPES[fc.type] then
+                        SC().frame = nil
+                        return "none"
+                    end
                     return fc.type
                 end,
                 set = function(k, v)
@@ -917,7 +978,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local fxColorRow = CreateFrame("Frame", nil, panel)
             fxColorRow:SetSize(250, 20)
-            fxColorRow:SetPoint("TOPLEFT", fxDd, "BOTTOMLEFT", 16, -6)
+            fxColorRow:SetPoint("TOPLEFT", fxDd, "BOTTOMLEFT", 16, -12)
             panel._fxColorRow = fxColorRow
 
             local fxColorLbl = fxColorRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -950,8 +1011,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local prioSl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_Prio", parent = panel, compact = true,
-                anchor = fxColorRow, x = 0, y = -10,
-                min = 1, max = 10, step = 1, width = 140, default = 5,
+                anchor = fxColorRow, x = 0, y = -16,
+                min = 1, max = 10, step = 1, width = 180, default = 5,
                 get = function(k)
                     local fc = SC().frame
                     return fc and fc.priority or 5
@@ -965,8 +1026,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local alphaSl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_Alpha", parent = panel, compact = true,
-                anchor = prioSl, x = 0, y = -28,
-                min = 5, max = 100, step = 5, width = 140, default = 15,
+                anchor = prioSl, x = 0, y = -34,
+                min = 5, max = 100, step = 5, width = 180, default = 15,
                 get = function(k)
                     local fc = SC().frame
                     local a = fc and fc.alpha
@@ -982,8 +1043,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             local thickSl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_Thick", parent = panel, compact = true,
-                anchor = prioSl, x = 0, y = -28,
-                min = 1, max = 6, step = 1, width = 140, default = 2,
+                anchor = prioSl, x = 0, y = -34,
+                min = 1, max = 6, step = 1, width = 180, default = 2,
                 get = function(k)
                     local fc = SC().frame
                     return fc and fc.thickness or 2
