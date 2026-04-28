@@ -1483,49 +1483,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).showSolo = v; GF.RebuildAll() end,
         })
 
-        local showPetsChk = SCheck({
-            name = "MSUF_GF_ShowPetsCheck", parent = body,
-            anchor = showSoloChk, x = 0, y = -4,
-            label = TR("Show Pet Frames"),
-            get = function(k)
-                if type(GF.AttachPetFrame) ~= "function"
-                    or type(GF.DetachPetFrame) ~= "function"
-                    or type(GF.RefreshAllPets) ~= "function"
-                then
-                    return false
-                end
-                return GF.Val(k, "showPets")
-            end,
-            set = function(k, v)
-                if type(GF.AttachPetFrame) ~= "function"
-                    or type(GF.DetachPetFrame) ~= "function"
-                    or type(GF.RefreshAllPets) ~= "function"
-                then
-                    GF.GetConf(k).showPets = false
-                    return
-                end
-                GF.GetConf(k).showPets = v
-                GF.RefreshAllPets()
-            end,
-        })
-        if type(GF.AttachPetFrame) ~= "function"
-            or type(GF.DetachPetFrame) ~= "function"
-            or type(GF.RefreshAllPets) ~= "function"
-        then
-            GF.GetConf(K()).showPets = false
-            if showPetsChk.SetEnabled then showPetsChk:SetEnabled(false) end
-        end
-        do
-            local petHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            petHint:SetPoint("TOPLEFT", showPetsChk, "BOTTOMLEFT", 24, -2)
-            petHint:SetText(TR("Pet frames are temporarily unavailable in this build."))
-            petHint:SetTextColor(0.55, 0.60, 0.70)
-        end
-
-        -- Misc options (anchored directly after Show Pets)
+        -- Misc options
         local reverseFillChk = SCheck({
             name = "MSUF_GF_ReverseFillCheck", parent = body,
-            anchor = showPetsChk, x = 0, y = -20,
+            anchor = showSoloChk, x = 0, y = -4,
             label = TR("Reverse Fill"),
             get = function(k) return GF.Val(k, "reverseFill") end,
             set = function(k, v) GF.GetConf(k).reverseFill = v; GF.RefreshVisuals() end,
@@ -2253,7 +2214,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
             { key = "target",       label = TR("Target Frame") },
             { key = "targettarget", label = TR("Target of Target") },
             { key = "focus",        label = TR("Focus Frame") },
-            { key = "pet",          label = TR("Pet Frame") },
         }
 
         local GF_ANCHOR_POINTS = {
@@ -2377,7 +2337,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             local conf = GF.GetConf(K())
             local atv = conf.anchorToFrame or ""
             local isStd = (atv == "" or atv == "FREE" or atv == "player" or atv == "target"
-                or atv == "targettarget" or atv == "focus" or atv == "pet")
+                or atv == "targettarget" or atv == "focus")
             customBox:SetText(isStd and "" or atv)
         end
     end
