@@ -767,11 +767,8 @@ function GF.RefreshPreviewBox()
         local sc = m._previewScale or 1.6
 
         -- Text toggle gate: when off (default), hide name/HP/power text
-        -- so aura icons underneath read cleanly.  Users enable it on
-        -- demand via the "Text" sidebar button to verify text placement.
-        -- Shift+Click on "Text" (solo mode) also forces it on so the
-        -- soloed layer is actually visible.  Early return skips all the
-        -- per-element position math — zero cost when the toggle is off.
+        -- so aura icons underneath read cleanly. When on, render only the
+        -- text elements enabled by the active group-frame config.
         local showText = (_visToggles.text == true) or (_soloKey == "text")
         if not showText then
             if m._nameFS  then m._nameFS:Hide()  end
@@ -807,24 +804,16 @@ function GF.RefreshPreviewBox()
                 m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
                 m._nameFS:SetJustifyH("LEFT")
             end
-            -- Preview toggle override: when the user enables "Text", all
-            -- three text elements are forced on so they can dial in
-            -- positioning regardless of current conf.showName / textSlot
-            -- / showPower flags.  The Text toggle's semantic is "show me
-            -- the text so I can tune it" — not "respect the conf hide".
-            m._nameFS:Show()
+            if conf.showName ~= false then m._nameFS:Show() else m._nameFS:Hide() end
         end
         if m._hpFS then
-            -- Pick sample text: prefer active slot for meaningful sample,
-            -- else fall back to a generic "72%" so the user sees something
-            -- to position while the Text toggle is on.
             local tl = conf.textLeft or "NONE"
             local tc = conf.textCenter or "NONE"
             local tr = conf.textRight or "NONE"
             local activeMode = tc ~= "NONE" and tc
                             or tr ~= "NONE" and tr
                             or tl ~= "NONE" and tl
-                            or "PERCENT"
+                            or "NONE"
             m._hpFS:SetText(HP_SAMPLES[activeMode] or "72%")
             m._hpFS:SetFont(fp, floor((conf.hpFontSize or 10) * sc + 0.5), ff)
             m._hpFS:SetTextColor(fr, fg, fb, 0.9)
@@ -833,8 +822,6 @@ function GF.RefreshPreviewBox()
             local hox = floor((conf.hpOffsetX or 0) * sc + 0.5)
             local hoy = floor((conf.hpOffsetY or 0) * sc + 0.5)
             local hPad = floor(6 * sc + 0.5)
-            -- Position based on first active slot; default CENTER if all
-            -- slots are NONE (so the preview still shows something useful).
             if tc ~= "NONE" then
                 m._hpFS:SetPoint("CENTER", m._health, "CENTER", hox, hoy)
                 m._hpFS:SetJustifyH("CENTER")
@@ -845,12 +832,10 @@ function GF.RefreshPreviewBox()
                 m._hpFS:SetPoint("LEFT", m._health, "LEFT", hPad + hox, hoy)
                 m._hpFS:SetJustifyH("LEFT")
             else
-                -- All slots off — show sample at CENTER so user still
-                -- sees preview text for positioning.
                 m._hpFS:SetPoint("CENTER", m._health, "CENTER", hox, hoy)
                 m._hpFS:SetJustifyH("CENTER")
             end
-            m._hpFS:Show()
+            if activeMode ~= "NONE" then m._hpFS:Show() else m._hpFS:Hide() end
         end
         -- Power text follows live group-frame fallback: use the power bar
         -- when visible, otherwise anchor to health/mock frame.
@@ -878,8 +863,9 @@ function GF.RefreshPreviewBox()
             local pcm = conf.powerTextCenter or "NONE"
             local prm = conf.powerTextRight or "NONE"
             local plm = conf.powerTextLeft or "NONE"
-            local powerMode = (pcm ~= "NONE" and pcm) or (prm ~= "NONE" and prm) or (plm ~= "NONE" and plm) or "CURRENT"
-            local sample = (powerMode == "PERCENT" and "100%") or (powerMode == "CURMAX" and "100 / 100") or (powerMode == "CURPERC" and "100 - 100%") or "100"
+            local powerMode = (pcm ~= "NONE" and pcm) or (prm ~= "NONE" and prm) or (plm ~= "NONE" and plm) or "NONE"
+            local pDelim = conf.powerTextDelimiter or " / "
+            local sample = (GF.FormatPowerText and GF.FormatPowerText(powerMode, 70, 100, pDelim)) or "70"
             m._powerFS:SetText(sample)
             m._powerFS:SetTextColor(fr, fg, fb, 0.9)
             m._powerFS:SetShadowColor(0, 0, 0, 1); m._powerFS:SetShadowOffset(1, -1)
@@ -888,7 +874,7 @@ function GF.RefreshPreviewBox()
             local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
             m._powerFS:SetPoint("CENTER", powerAnchor, "CENTER", pox, poy)
             m._powerFS:SetJustifyH("CENTER")
-            m._powerFS:Show()
+            if conf.showPower and powerMode ~= "NONE" then m._powerFS:Show() else m._powerFS:Hide() end
         end
         end  -- end of _visToggles.text else-branch
     end
