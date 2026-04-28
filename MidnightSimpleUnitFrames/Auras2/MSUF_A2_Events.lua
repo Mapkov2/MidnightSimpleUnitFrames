@@ -36,7 +36,27 @@ local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local _BOSS_MAX = 5
 -- O(1) lookup for UNIT_TARGETABLE_CHANGED handler (boss adds spawning mid-fight)
 local _IS_BOSS_UNIT = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
-local _After0 = C_Timer and C_Timer.After
+local function _ScheduleOnce(key, fn)
+    local sched = _G.MSUF_ScheduleOnce
+    if sched then
+        sched(key, fn)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, fn)
+    elseif type(fn) == "function" then
+        fn()
+    end
+end
+
+local function _ScheduleDelayOnce(key, delay, fn)
+    local sched = _G.MSUF_ScheduleDelayOnce
+    if sched then
+        sched(key, delay, fn)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(delay or 0, fn)
+    elseif type(fn) == "function" then
+        fn()
+    end
+end
 
 -- P3: Boss UNIT_AURA gate.
 -- UNIT_AURA for boss slots is only meaningful during an active encounter.
@@ -132,12 +152,7 @@ local function HandlePlayerTargetChanged()
     if Events._targetSwapQueued then return end
     Events._targetSwapQueued = true
 
-    if _After0 then
-        _After0(0, Events._flushTargetSwap)
-    else
-        Events._targetSwapQueued = nil
-        MarkDirty("target", 0)
-    end
+    _ScheduleOnce("A2_TARGET_SWAP_FLUSH", Events._flushTargetSwap)
 end
 
 local function HandlePlayerFocusChanged()
@@ -160,11 +175,7 @@ end
 Events._flushTargetSwap = Events._flushTargetSwap or function()
     Events._targetSwapQueued = nil
     Events._targetRenderExpected = _targetRenderEpoch
-    if _After0 then
-        _After0(0, _flushTargetRender)
-    else
-        MarkDirty("target", 0)
-    end
+    _ScheduleOnce("A2_TARGET_RENDER_FLUSH", _flushTargetRender)
 end
 
 local function IsEditModeActive()
@@ -924,9 +935,7 @@ end
                 -- P2: per-unit burst dedup — only one timer per unit per 20ms window.
                 if not _unitAuraPending[unit] then
                     _unitAuraPending[unit] = true
-                    if _After0 then
-                        _After0(0.02, _unitAuraClearFns[unit] or function() _unitAuraPending[unit] = nil end)
-                    end
+                    _ScheduleDelayOnce("A2_UNIT_AURA_CLEAR_" .. tostring(unit), 0.02, _unitAuraClearFns[unit] or function() _unitAuraPending[unit] = nil end)
                     MarkDirty(unit)
                 end
             end

@@ -18,7 +18,7 @@ local hooksecurefunc        = hooksecurefunc
 local _G                    = _G
 local type                  = type
 local tonumber              = tonumber
-local RunNextFrame          = _G.MSUF_Core_RunNextFrame or function(fn)
+local RunNextFrame          = _G.MSUF_RunNextFrame or _G.MSUF_Core_RunNextFrame or function(fn)
     if type(fn) ~= "function" then return end
     if C_Timer and C_Timer.After then
         C_Timer.After(0, fn)
@@ -116,6 +116,13 @@ local function _PushVisualUpdates_Flush()
 end
 
 local function PushVisualUpdates()
+    local sched = _G.MSUF_ScheduleOnce
+    if sched then
+        sched("COLOR_PUSH_VISUALS", _PushVisualUpdates_Flush)
+        return
+    end
+
+    -- Fallback for very early load before Foundation/MSUF_Scheduler.lua exports globals.
     if _pushPending then return end
     _pushPending = true
     RunNextFrame(_PushVisualUpdates_Flush)
@@ -262,9 +269,7 @@ end
 -- Throttled scheduler so we don't repeatedly enumerate frames during rapid UI changes.
 -- P1 perf: after one successful scan, never scan again until /reload (session-only).
 do
-    local scheduled = false
     local function _MouseoverHighlightFixFlush()
-        scheduled = false
         if not (ns and ns.MSUF_FixMouseoverHighlightBindings) then return end
 
         ns.MSUF_FixMouseoverHighlightBindings()
@@ -276,9 +281,13 @@ do
 
     function ns.MSUF_ScheduleMouseoverHighlightFix()
         if ns and ns._msufHoverFixDone then return end
-        if scheduled then return end
-        scheduled = true
-        RunNextFrame(_MouseoverHighlightFixFlush)
+
+        local sched = _G.MSUF_ScheduleOnce
+        if sched then
+            sched("COLOR_MOUSEOVER_HIGHLIGHT_FIX", _MouseoverHighlightFixFlush)
+        else
+            RunNextFrame(_MouseoverHighlightFixFlush)
+        end
     end
 end
 

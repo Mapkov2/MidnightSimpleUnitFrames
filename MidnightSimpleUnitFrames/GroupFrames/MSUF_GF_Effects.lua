@@ -39,6 +39,23 @@ local GetReadyCheckStatus = _G.GetReadyCheckStatus
 local C_IncomingSummon = _G.C_IncomingSummon
 local C_Timer = _G.C_Timer
 local GetTime = _G.GetTime
+
+-- Central scheduler bridge (Foundation/MSUF_Scheduler.lua).
+-- Keeps hot-path deferrals keyed/deduped; falls back to C_Timer if a standalone
+-- file is loaded without the foundation module.
+local function _MSUF_ScheduleOnce(key, fn)
+    local sched = _G.MSUF_ScheduleOnce
+    if sched then return sched(key, fn) end
+    if C_Timer and C_Timer.After then return C_Timer.After(0, fn) end
+    if type(fn) == "function" then return fn() end
+end
+
+local function _MSUF_ScheduleDelayOnce(key, delay, fn)
+    local sched = _G.MSUF_ScheduleDelayOnce
+    if sched then return sched(key, delay, fn) end
+    if C_Timer and C_Timer.After then return C_Timer.After(delay or 0, fn) end
+    if type(fn) == "function" then return fn() end
+end
 local AuraUtil = _G.AuraUtil
 local CreateFrame = _G.CreateFrame
 local IsSpellInRange = _G.C_Spell and _G.C_Spell.IsSpellInRange
@@ -775,7 +792,7 @@ local _GF_ApplyDebuffStripe
 -- subsequent same-frame events within 20ms are skipped.
 -- Zero steady-state alloc: clear-callback allocated once per frame.
 ------------------------------------------------------------------------
-local _After0 = C_Timer and C_Timer.After
+-- Legacy _After0 removed from runtime hot paths; use central scheduler helpers above.
 
 ------------------------------------------------------------------------
 -- PERF: Global per-frame budget for full aura scans.
@@ -787,6 +804,19 @@ local _GF_AURA_BUDGET_MAX = 8
 local _gfAuraBudget = 0
 local _gfAuraDirtyPending = false
 local _gfAuraBudgetFrame = 0  -- GetTime of last budget reset
+local _gfAuraDirtyQueue = {}
+local _gfAuraDirtyQueued = {}
+local _gfAuraDirtyHead, _gfAuraDirtyTail = 1, 0
+
+local function _gfQueueAuraDirty(f)
+    if not f then return end
+    f._msufGFAuraDirty = true
+    if not _gfAuraDirtyQueued[f] then
+        _gfAuraDirtyQueued[f] = true
+        _gfAuraDirtyTail = _gfAuraDirtyTail + 1
+        _gfAuraDirtyQueue[_gfAuraDirtyTail] = f
+    end
+end
 
 -- Forward-declared; assigned after dispatchAura is defined.
 local _gfFlushDirtyAuras
@@ -973,16 +1003,14 @@ local function dispatchAura(f, unit, updateInfo)
     -- ════════════════════════════════════════════════════════════════
     if f._msufGFFullPending then return end
     f._msufGFFullPending = true
-    if _After0 then
+    do
         local cb = f._msufGFPendClearCB
         if not cb then
             local frame = f
             cb = function() frame._msufGFFullPending = nil end
             f._msufGFPendClearCB = cb
         end
-        _After0(0.02, cb)
-    else
-        f._msufGFFullPending = nil   -- fallback: no timer → no dedup
+        _MSUF_ScheduleDelayOnce(f._msufGFPendClearKey or ("GF_AURA_PEND_" .. tostring(f)), 0.02, cb)
     end
 
     -- ════════════════════════════════════════════════════════════════
@@ -998,10 +1026,10 @@ local function dispatchAura(f, unit, updateInfo)
         _gfAuraBudget = 1
     end
     if _gfAuraBudget > _GF_AURA_BUDGET_MAX then
-        f._msufGFAuraDirty = true
-        if not _gfAuraDirtyPending and _After0 then
+        _gfQueueAuraDirty(f)
+        if not _gfAuraDirtyPending then
             _gfAuraDirtyPending = true
-            _After0(0, _gfFlushDirtyAuras)
+            _MSUF_ScheduleOnce("GF_AURA_BUDGET_FLUSH", _gfFlushDirtyAuras)
         end
         return
     end
@@ -1054,15 +1082,22 @@ end
 _gfFlushDirtyAuras = function()
     _gfAuraBudget = 0
     _gfAuraDirtyPending = false
-    for f in pairs(GF.frames) do
-        if f._msufGFAuraDirty then
-            f._msufGFAuraDirty = nil
-            local u = f.unit
-            if u and UnitExists(u) then
-                dispatchAura(f, u, nil)
+    while _gfAuraDirtyHead <= _gfAuraDirtyTail do
+        local f = _gfAuraDirtyQueue[_gfAuraDirtyHead]
+        _gfAuraDirtyQueue[_gfAuraDirtyHead] = nil
+        _gfAuraDirtyHead = _gfAuraDirtyHead + 1
+        if f then
+            _gfAuraDirtyQueued[f] = nil
+            if f._msufGFAuraDirty then
+                f._msufGFAuraDirty = nil
+                local u = f.unit
+                if u and UnitExists(u) then
+                    dispatchAura(f, u, nil)
+                end
             end
         end
     end
+    _gfAuraDirtyHead, _gfAuraDirtyTail = 1, 0
 end
 ------------------------------------------------------------------------
 -- Range fade (1:1 EQoL pattern)
@@ -2553,75 +2588,95 @@ end
 -- In a 40-man raid at 50 UNIT_HEALTH/sec/unit = 2000 events/sec, this
 -- eliminates ~20 Lua ops per event → ~40 000 ops/sec saved.
 ------------------------------------------------------------------------
-local _gfTextDirtyFrames = {}    -- sparse: f = true
-local _gfTextFlushQueued = false
+local _gfTextDirtyFrames = {}    -- sparse: f = true (kept for cleanup compatibility)
+local _gfTextQueue = {}           -- dense queue avoids pairs() burst during flush
+local _gfTextQueued = {}          -- [frame] = true while queued
+local _gfTextHead, _gfTextTail = 1, 0
+local _gfFlushDirtyText
 
-local function _gfFlushDirtyText()
-    _gfTextFlushQueued = false
-    for f in pairs(_gfTextDirtyFrames) do
-        _gfTextDirtyFrames[f] = nil
-        local unit = f.unit
-        if unit and f.health and f:IsVisible() then
-            local c = f._c
+local function _gfMarkTextDirty(f)
+    if not f then return end
+    _gfTextDirtyFrames[f] = true
+    if not _gfTextQueued[f] then
+        _gfTextQueued[f] = true
+        _gfTextTail = _gfTextTail + 1
+        _gfTextQueue[_gfTextTail] = f
+    end
+    _MSUF_ScheduleOnce("GF_TEXT_FLUSH", _gfFlushDirtyText)
+end
 
-            -- Health text fallback: only for uncompiled modes (anySlowText)
-            if c and c.anySlowText then
-                local hp    = UnitHealth(unit)
-                local hpMax = f._msufGFCachedHpMax or UnitHealthMax(unit)
-                local iss = issecretvalue
-                if f.textLeftFS and c.tlOn and not c.tlFn then
-                    local s = GF.FormatHealthText(c.tl, hp, hpMax, c.delim, c.rev, unit)
-                    f.textLeftFS:SetText(s)
-                end
-                if f.textCenterFS and c.tcOn and not c.tcFn then
-                    local s = GF.FormatHealthText(c.tc, hp, hpMax, c.delim, c.rev, unit)
-                    f.textCenterFS:SetText(s)
-                end
-                if f.textRightFS and c.trOn and not c.trFn then
-                    local s = GF.FormatHealthText(c.tr, hp, hpMax, c.delim, c.rev, unit)
-                    f.textRightFS:SetText(s)
-                end
-            end
+function _gfFlushDirtyText()
+    while _gfTextHead <= _gfTextTail do
+        local f = _gfTextQueue[_gfTextHead]
+        _gfTextQueue[_gfTextHead] = nil
+        _gfTextHead = _gfTextHead + 1
+        if f then
+            _gfTextQueued[f] = nil
+            _gfTextDirtyFrames[f] = nil
+            local unit = f.unit
+            if unit and f.health and f:IsVisible() then
+                local c = f._c
 
-            -- Power text (set dirty by dispatchPower lean path)
-            if f._msufGFPwTextDirty then
-                f._msufGFPwTextDirty = nil
-                if c and c.anyPowerText then
-                    local pw    = UnitPower(unit)
-                    local pwMax = f._msufGFCachedPwMax or UnitPowerMax(unit)
-                    local iss2 = issecretvalue
-                    if f.powerTextLeftFS and c.ptlOn then
-                        local s = GF.FormatPowerText(c.ptl, pw, pwMax, c.pDelim, unit)
-                        local cv = f._msufGFCachedPTL
-                        if (iss2 and (iss2(s) or (cv ~= nil and iss2(cv)))) or cv ~= s then
-                            f._msufGFCachedPTL = (iss2 and iss2(s)) and nil or s
-                            f.powerTextLeftFS:SetText(s)
-                        end
+                -- Health text fallback: only for uncompiled modes (anySlowText)
+                if c and c.anySlowText then
+                    local hp    = UnitHealth(unit)
+                    local hpMax = f._msufGFCachedHpMax or UnitHealthMax(unit)
+                    if f.textLeftFS and c.tlOn and not c.tlFn then
+                        local sval = GF.FormatHealthText(c.tl, hp, hpMax, c.delim, c.rev, unit)
+                        f.textLeftFS:SetText(sval)
                     end
-                    if f.powerTextCenterFS and c.ptcOn then
-                        local s = GF.FormatPowerText(c.ptc, pw, pwMax, c.pDelim, unit)
-                        local cv = f._msufGFCachedPTC
-                        if (iss2 and (iss2(s) or (cv ~= nil and iss2(cv)))) or cv ~= s then
-                            f._msufGFCachedPTC = (iss2 and iss2(s)) and nil or s
-                            f.powerTextCenterFS:SetText(s)
-                        end
+                    if f.textCenterFS and c.tcOn and not c.tcFn then
+                        local sval = GF.FormatHealthText(c.tc, hp, hpMax, c.delim, c.rev, unit)
+                        f.textCenterFS:SetText(sval)
                     end
-                    if f.powerTextRightFS and c.ptrOn then
-                        local s = GF.FormatPowerText(c.ptr, pw, pwMax, c.pDelim, unit)
-                        local cv = f._msufGFCachedPTR
-                        if (iss2 and (iss2(s) or (cv ~= nil and iss2(cv)))) or cv ~= s then
-                            f._msufGFCachedPTR = (iss2 and iss2(s)) and nil or s
-                            f.powerTextRightFS:SetText(s)
+                    if f.textRightFS and c.trOn and not c.trFn then
+                        local sval = GF.FormatHealthText(c.tr, hp, hpMax, c.delim, c.rev, unit)
+                        f.textRightFS:SetText(sval)
+                    end
+                end
+
+                -- Power text (set dirty by dispatchPower lean path)
+                if f._msufGFPwTextDirty then
+                    f._msufGFPwTextDirty = nil
+                    if c and c.anyPowerText then
+                        local pw    = UnitPower(unit)
+                        local pwMax = f._msufGFCachedPwMax or UnitPowerMax(unit)
+                        local iss2 = issecretvalue
+                        if f.powerTextLeftFS and c.ptlOn then
+                            local sval = GF.FormatPowerText(c.ptl, pw, pwMax, c.pDelim, unit)
+                            local cv = f._msufGFCachedPTL
+                            if (iss2 and (iss2(sval) or (cv ~= nil and iss2(cv)))) or cv ~= sval then
+                                f._msufGFCachedPTL = (iss2 and iss2(sval)) and nil or sval
+                                f.powerTextLeftFS:SetText(sval)
+                            end
+                        end
+                        if f.powerTextCenterFS and c.ptcOn then
+                            local sval = GF.FormatPowerText(c.ptc, pw, pwMax, c.pDelim, unit)
+                            local cv = f._msufGFCachedPTC
+                            if (iss2 and (iss2(sval) or (cv ~= nil and iss2(cv)))) or cv ~= sval then
+                                f._msufGFCachedPTC = (iss2 and iss2(sval)) and nil or sval
+                                f.powerTextCenterFS:SetText(sval)
+                            end
+                        end
+                        if f.powerTextRightFS and c.ptrOn then
+                            local sval = GF.FormatPowerText(c.ptr, pw, pwMax, c.pDelim, unit)
+                            local cv = f._msufGFCachedPTR
+                            if (iss2 and (iss2(sval) or (cv ~= nil and iss2(cv)))) or cv ~= sval then
+                                f._msufGFCachedPTR = (iss2 and iss2(sval)) and nil or sval
+                                f.powerTextRightFS:SetText(sval)
+                            end
                         end
                     end
                 end
             end
         end
     end
+    _gfTextHead, _gfTextTail = 1, 0
 end
 -- Expose for manual flush (Options live-preview, unit show, etc.)
 GF._FlushDirtyText = _gfFlushDirtyText
 GF._TextDirtyFrames = _gfTextDirtyFrames
+GF._MarkTextDirty = _gfMarkTextDirty
 
 ------------------------------------------------------------------------
 -- LEAN PATH: UNIT_HEALTH (hottest: 10-50/s per unit, ×40 in raids)
@@ -2668,6 +2723,9 @@ local function dispatchHealthLean(f, unit)
         local fn = c.tlFn; if fn then fn(f.textLeftFS, unit, hp, hm) end
         fn = c.tcFn; if fn then fn(f.textCenterFS, unit, hp, hm) end
         fn = c.trFn; if fn then fn(f.textRightFS, unit, hp, hm) end
+    end
+    if c and c.anySlowText then
+        _gfMarkTextDirty(f)
     end
 
     -- Cutaway: stamp-based (no Timer:Cancel per event).
@@ -3216,12 +3274,8 @@ local function dispatchPower(f, unit)
 
     -- Coalesced power text: dirty flag → flush next frame
     if c.anyPowerText then
-        _gfTextDirtyFrames[f] = true
         f._msufGFPwTextDirty = true
-        if not _gfTextFlushQueued then
-            _gfTextFlushQueued = true
-            C_Timer.After(0, _gfFlushDirtyText)
-        end
+        _gfMarkTextDirty(f)
     end
 end
 
@@ -3566,11 +3620,7 @@ local function OnGlobalEvent(self, event, ...)
             _gfRosterPending = true
             _gfTargetFrame = nil
             _gfFocusFrame  = nil
-            if _After0 then
-                _After0(0, _gfRosterFlush)
-            else
-                _gfRosterFlush()
-            end
+            _MSUF_ScheduleOnce("GF_ROSTER_FLUSH", _gfRosterFlush)
         end
     elseif event == "BARBER_SHOP_OPEN" then
         -- hideInClientScene: hide all GF headers when entering barber/dressing room
@@ -3749,6 +3799,53 @@ _G.MSUF_GF_UpdateAll     = UpdateAll
 _G.MSUF_GF_UpdateAggro   = UpdateAggro
 _G.MSUF_GF_UpdateDispel   = GF._UpdateDispel
 _G.MSUF_GF_UpdateHighlight = UpdateHighlight
+_G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
+    if not f or not unit then return end
+    local c = f._c
+    if not c then GF.BuildFrameCache(f); c = f._c end
+
+    -- Visual settings changed; avoid the legacy full UpdateAll unless the change
+    -- actually needs max-health/power/layout-dependent recomputation. This keeps
+    -- Options live-apply / preview refreshes from invoking aura scans for every
+    -- frame on color/font/texture-only changes.
+    local band = bit and bit.band or bit32 and bit32.band
+    if not band or not bits or bits == 0x3F then
+        return UpdateAll(f, unit)
+    end
+
+    if band(bits, 0x01) ~= 0 then -- DIRTY_GEOMETRY
+        dispatchHealthFull(f, unit)
+        dispatchPowerFull(f, unit)
+        if c and c.healPredEn then dispatchOverlaysOnly(f, unit) end
+    end
+
+    if band(bits, 0x08) ~= 0 then -- DIRTY_COLOR
+        ApplyHealthColor(f, f._msufGFKind or "party", unit)
+        ApplyPowerColor(f, unit)
+        if c and c.rfEn then ApplyRangeFade(f, unit) end
+    end
+
+    if band(bits, 0x10) ~= 0 then -- DIRTY_BORDER
+        if c and c.needThreat then UpdateAggro(f, unit) end
+        if c and c.dispelScan and GF._playerCanDispel then GF._UpdateDispel(f, unit) end
+        UpdateTargetIndicator(f, unit)
+    end
+
+    if band(bits, 0x04) ~= 0 or band(bits, 0x20) ~= 0 then -- FONT/LAYOUT
+        -- Font/layout options can affect name truncation and name color.
+        -- The v2 visual-dirty split avoided the legacy full UpdateAll path here,
+        -- so explicitly refresh the name text to preserve live-apply for
+        -- Group Frame Fonts > Name Shortening without reintroducing aura scans.
+        dispatchName(f, unit)
+        UpdateStatusText(f, unit)
+        UpdateRoleIcon(f, unit)
+        UpdateRaidMarker(f, unit)
+        UpdateLeaderIcon(f, unit)
+        UpdateGroupNumber(f, unit)
+        if c and c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
+        if c and c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
+    end
+end
 _G.MSUF_GF_UpdateRange    = ApplyRangeFade
 _G.MSUF_GF_UpdateTarget   = UpdateTargetIndicator
 _G.MSUF_GF_UpdateStatus   = UpdateStatusText
@@ -3769,7 +3866,7 @@ _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
 --   _tooltipTarget, _gfTextDirtyFrames
 -- which are file-scope locals.
 ------------------------------------------------------------------------
-local function _GF_OnFrameRetire(f)
+_G.MSUF_GF_OnFrameRetire = function(f)
     if not f then return end
 
     -- Cancel + clear pending ready-check fade timer (closure captures `f`)
@@ -3798,6 +3895,8 @@ local function _GF_OnFrameRetire(f)
 
     -- Drop pending text-flush entry (avoids dangling key in dirty set)
     _gfTextDirtyFrames[f] = nil
+    _gfTextQueued[f] = nil
+    _gfAuraDirtyQueued[f] = nil
 
     -- Remove from GUID→frame map (search by value — guid hash unknown here)
     local gmap = GF._guidMap
@@ -3810,7 +3909,6 @@ local function _GF_OnFrameRetire(f)
     -- Drop from render dirty queue (Render module owns _dirtyFrames; expose helper if missing)
     if GF._RetireFromDirty then GF._RetireFromDirty(f) end
 end
-_G.MSUF_GF_OnFrameRetire = _GF_OnFrameRetire
 GF.GetDispelColor     = GetDispelColor
 GF.ResolveDispelColor = ResolveDispelColor
 

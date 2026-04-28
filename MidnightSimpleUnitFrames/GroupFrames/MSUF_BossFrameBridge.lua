@@ -147,7 +147,7 @@ local function _ScheduleSync()
     if _pendingSync then return end
     _pendingSync = true
     if C_Timer and C_Timer.After then
-        C_Timer.After(0, _SyncAll)
+        if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("GF_BOSS_BRIDGE_SYNC", _SyncAll) else C_Timer.After(0, _SyncAll) end
     else
         _SyncAll()
     end

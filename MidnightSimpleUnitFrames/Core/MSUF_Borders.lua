@@ -723,10 +723,10 @@ do
                 local function _flushTgt() _qTgt = nil; RefreshAggroForUnit("target") end
                 local function _flushFoc() _qFoc = nil; RefreshAggroForUnit("focus") end
                 MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-                    if not _qTgt then _qTgt = true; C_Timer.After(0, _flushTgt) end
+                    if not _qTgt then _qTgt = true; if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("BORDER_AGGRO_TARGET", _flushTgt) else C_Timer.After(0, _flushTgt) end end
                 end)
                 MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE", function()
-                    if not _qFoc then _qFoc = true; C_Timer.After(0, _flushFoc) end
+                    if not _qFoc then _qFoc = true; if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("BORDER_AGGRO_FOCUS", _flushFoc) else C_Timer.After(0, _flushFoc) end end
                 end)
             end
         else
@@ -998,10 +998,10 @@ do
                 local function _flushDTgt() _qDTgt = nil; UpdateUnit("target", true); UpdateUnit("targettarget", true) end
                 local function _flushDFoc() _qDFoc = nil; UpdateUnit("focus", true) end
                 MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-                    if not _qDTgt then _qDTgt = true; C_Timer.After(0, _flushDTgt) end
+                    if not _qDTgt then _qDTgt = true; if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("BORDER_DISPEL_TARGET", _flushDTgt) else C_Timer.After(0, _flushDTgt) end end
                 end)
                 MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_DISPEL_OUTLINE", function()
-                    if not _qDFoc then _qDFoc = true; C_Timer.After(0, _flushDFoc) end
+                    if not _qDFoc then _qDFoc = true; if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("BORDER_DISPEL_FOCUS", _flushDFoc) else C_Timer.After(0, _flushDFoc) end end
                 end)
             end
         else

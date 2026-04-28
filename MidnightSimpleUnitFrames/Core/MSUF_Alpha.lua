@@ -691,7 +691,9 @@ do
         end
         if pending then return end
         pending = true
-        if C_Timer and C_Timer.After then
+        if _G.MSUF_ScheduleOnce then
+            _G.MSUF_ScheduleOnce("ALPHA_FLUSH", _Flush)
+        elseif C_Timer and C_Timer.After then
             C_Timer.After(0, _Flush)
         else
             _Flush()
@@ -736,8 +738,14 @@ if not _G.MSUF_AlphaEventFrame then
         end
 
         _G.MSUF_RequestAlphaRefresh(false)
-        if C_Timer and C_Timer.After then
+        if _G.MSUF_ScheduleOnce then
+            _G.MSUF_ScheduleOnce("ALPHA_WORLD_REFRESH", _MSUF_AlphaPostWorldRefresh)
+        elseif C_Timer and C_Timer.After then
             C_Timer.After(0, _MSUF_AlphaPostWorldRefresh)
+        end
+        if _G.MSUF_ScheduleDelayOnce then
+            _G.MSUF_ScheduleDelayOnce("ALPHA_WORLD_REFRESH_LATE", 0.10, _MSUF_AlphaPostWorldRefreshLate)
+        elseif C_Timer and C_Timer.After then
             C_Timer.After(0.10, _MSUF_AlphaPostWorldRefreshLate)
         end
      end)

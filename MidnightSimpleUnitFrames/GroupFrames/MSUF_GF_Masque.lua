@@ -54,7 +54,7 @@ end
 local function RequestReskin()
     if _reskinQueued then return end
     _reskinQueued = true
-    C_Timer.After(0, ReskinNow)
+    if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("GF_MASQUE_RESKIN", ReskinNow) else C_Timer.After(0, ReskinNow) end
 end
 
 ------------------------------------------------------------------------

@@ -594,7 +594,10 @@ function API.RequestApply()
     if API.__applyPending then return end
     API.__applyPending = true
 
-    if C_Timer and C_Timer.After then
+    local sched = _G.MSUF_ScheduleOnce
+    if sched then
+        sched("A2_DB_APPLY", _DoApply)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, _DoApply)
     else
         _DoApply()
