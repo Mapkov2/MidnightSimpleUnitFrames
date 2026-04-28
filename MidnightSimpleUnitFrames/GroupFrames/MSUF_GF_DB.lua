@@ -73,8 +73,6 @@ local PARTY_DEFAULTS = {
     growth            = "DOWN",    -- DOWN / UP / RIGHT / LEFT
     showPlayer        = true,
     showSolo          = false,
-    -- Pet frames are not shipped yet; keep default disabled until backend exists.
-    showPets          = false,
     -- Masque skin for aura icons (requires Masque addon)
     masqueEnabled     = false,
     -- Group-frame aura/spell-indicator cooldowns default to the standard
@@ -544,6 +542,14 @@ local function MigrateCornerIndicators(conf)
     conf._ciMigratedV2 = true
 end
 
+local function RemoveGroupPetFrameConfig(conf)
+    if type(conf) ~= "table" then return end
+    conf.showPets = nil
+    if conf.anchorToFrame == "pet" then
+        conf.anchorToFrame = nil
+    end
+end
+
 ------------------------------------------------------------------------
 -- DB init
 ------------------------------------------------------------------------
@@ -578,6 +584,9 @@ function GF.EnsureDB()
     MigrateCornerIndicators(db.gf_party)
     MigrateCornerIndicators(db.gf_raid)
     MigrateCornerIndicators(db.gf_mythicraid)
+    RemoveGroupPetFrameConfig(db.gf_party)
+    RemoveGroupPetFrameConfig(db.gf_raid)
+    RemoveGroupPetFrameConfig(db.gf_mythicraid)
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
     applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)

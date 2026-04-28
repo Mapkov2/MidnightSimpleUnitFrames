@@ -3393,7 +3393,6 @@ function GF.RegisterUnitEvents(f, unit)
 
     f:SetScript("OnEvent", GF_OnEvent)
 
-    if GF.AttachPetFrame then GF.AttachPetFrame(f) end
 end
 
 function GF.UnregisterUnitEvents(f)
@@ -3406,7 +3405,6 @@ function GF.UnregisterUnitEvents(f)
     end
     f:SetScript("OnEvent", nil)
     if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
-    if GF.DetachPetFrame then GF.DetachPetFrame(f) end
 end
 
 ------------------------------------------------------------------------

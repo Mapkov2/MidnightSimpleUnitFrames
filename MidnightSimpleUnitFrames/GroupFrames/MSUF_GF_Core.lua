@@ -1267,7 +1267,7 @@ end
 function GF.ResolveAnchorFrame(kind)
     local conf = GF.GetConf(kind)
     local atv = conf.anchorToFrame
-    if type(atv) == "string" and atv ~= "" and atv ~= "FREE" then
+    if type(atv) == "string" and atv ~= "" and atv ~= "FREE" and atv ~= "pet" then
         -- Unit frame anchoring
         local uf = _G.MSUF_UnitFrames or _G.UnitFrames
         local rel = uf and uf[atv]
