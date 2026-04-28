@@ -429,6 +429,11 @@ local function ApplyGeometry(f, kind)
         end
     end
 
+    if f.powerTextLayer then
+        f.powerTextLayer:ClearAllPoints()
+        f.powerTextLayer:SetAllPoints(f.barGroup or f)
+    end
+
     -- Reverse fill
     if f.health and f.health.SetReverseFill then
         f.health:SetReverseFill(conf.reverseFill and true or false)
@@ -641,26 +646,27 @@ local function ApplyTextLayout(f, kind)
     -- 3-slot power text
     local pox = conf.powerOffsetX or 0
     local poy = conf.powerOffsetY or 0
-    local showPow = conf.showPower and (conf.powerHeight or 6) > 0
+    local showPow = conf.showPower
     local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
     local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
     local ptr = showPow and (conf.powerTextRight   or "NONE") or "NONE"
+    local powerTextAnchor = ((conf.powerHeight or 6) > 0 and f.power) or f.health or f.barGroup
 
     if f.powerTextLeftFS then
         f.powerTextLeftFS:ClearAllPoints()
-        f.powerTextLeftFS:SetPoint("LEFT", f.power, "LEFT", 2 + pox, poy)
+        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", 2 + pox, poy)
         f.powerTextLeftFS:SetJustifyH("LEFT")
         if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
     end
     if f.powerTextCenterFS then
         f.powerTextCenterFS:ClearAllPoints()
-        f.powerTextCenterFS:SetPoint("CENTER", f.power, "CENTER", pox, poy)
+        f.powerTextCenterFS:SetPoint("CENTER", powerTextAnchor, "CENTER", pox, poy)
         f.powerTextCenterFS:SetJustifyH("CENTER")
         if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end
     end
     if f.powerTextRightFS then
         f.powerTextRightFS:ClearAllPoints()
-        f.powerTextRightFS:SetPoint("RIGHT", f.power, "RIGHT", -2 + pox, poy)
+        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -2 + pox, poy)
         f.powerTextRightFS:SetJustifyH("RIGHT")
         if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
     end

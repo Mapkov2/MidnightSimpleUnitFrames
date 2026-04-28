@@ -1249,6 +1249,11 @@ function GF.BuildFrameCache(f)
     c.ptcOn     = c.ptc ~= "NONE"
     c.ptrOn     = c.ptr ~= "NONE"
     c.pDelim    = conf.powerTextDelimiter or " / "
+    c.anyPowerText = c.showPow and (c.ptlOn or c.ptcOn or c.ptrOn) or false
+    c.hasPowerElement = c.powH > 0 or c.anyPowerText
+    -- UNIT_POWER_UPDATE is enough for group members. The player's own group
+    -- button needs UNIT_POWER_FREQUENT for responsive resource text/smooth fill.
+    c.powFrequent = c.hasPowerElement and (c.powSmooth or c.anyPowerText) or false
     c.powTank   = conf.powerShowTank   ~= false
     c.powHealer = conf.powerShowHealer ~= false
     c.powDPS    = conf.powerShowDamager ~= false
@@ -1351,7 +1356,7 @@ function GF.BuildFrameCache(f)
     -- Event bitmask: drives diff-gated RegisterUnitEvents
     local evBits = 0
     if c.nameEn     then evBits = evBits + 1    end
-    if c.powH > 0   then evBits = evBits + 2    end
+    if c.hasPowerElement then evBits = evBits + 2    end
     if c.rfEn       then evBits = evBits + 4    end
     if c.needAura   then evBits = evBits + 8    end
     if c.needThreat then evBits = evBits + 16   end
@@ -1361,6 +1366,7 @@ function GF.BuildFrameCache(f)
     if c.healPredEn then evBits = evBits + 256  end
     if c.absorbEn   then evBits = evBits + 512  end
     if c.healAbsorbEn and not c.absorbEn then evBits = evBits + 1024 end
+    if c.powFrequent then evBits = evBits + 2048 end
     local prevBits = c._evBits
     c._evBits = evBits
     if prevBits ~= nil and prevBits ~= evBits and f.unit and f._msufGFRegEv then
@@ -1984,7 +1990,7 @@ local function _GF_RestoreHealthText(f, conf)
     if f.textLeftFS  and tl ~= "NONE" then f.textLeftFS:Show() end
     if f.textCenterFS and tc ~= "NONE" then f.textCenterFS:Show() end
     if f.textRightFS and tr ~= "NONE" then f.textRightFS:Show() end
-    if conf.showPower and (conf.powerHeight or 6) > 0 then
+    if conf.showPower then
         local ptl = conf.powerTextLeft   or "NONE"
         local ptc = conf.powerTextCenter  or "NONE"
         local ptr = conf.powerTextRight   or "NONE"
@@ -2578,7 +2584,7 @@ local function _gfFlushDirtyText()
             -- Power text (set dirty by dispatchPower lean path)
             if f._msufGFPwTextDirty then
                 f._msufGFPwTextDirty = nil
-                if c and c.showPow then
+                if c and c.anyPowerText then
                     local pw    = UnitPower(unit)
                     local pwMax = f._msufGFCachedPwMax or UnitPowerMax(unit)
                     local iss2 = issecretvalue
@@ -3185,17 +3191,29 @@ local function dispatchPower(f, unit)
     if not f.power then return end
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
-    if c.powH <= 0 then return end
+    if not c.hasPowerElement then return end
     -- Role visibility: cached per-frame, only re-evaluated on GROUP_ROSTER_UPDATE
     local roleHidden = f._msufGFPowRoleHidden
-    if roleHidden then if f.power:IsShown() then f.power:Hide() end; return end
+    if roleHidden then
+        if f.power:IsShown() then f.power:Hide() end
+        if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
+        if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
+        if f.powerTextRightFS then f.powerTextRightFS:Hide() end
+        return
+    end
 
     local pw = UnitPower(unit)
-    if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
-    if not f.power:IsShown() then f.power:Show() end
+    if c.powH > 0 then
+        if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
+    end
+    if c.powH > 0 then
+        if not f.power:IsShown() then f.power:Show() end
+    elseif f.power:IsShown() then
+        f.power:Hide()
+    end
 
     -- Coalesced power text: dirty flag → flush next frame
-    if c.showPow and (c.ptlOn or c.ptcOn or c.ptrOn) then
+    if c.anyPowerText then
         _gfTextDirtyFrames[f] = true
         f._msufGFPwTextDirty = true
         if not _gfTextFlushQueued then
@@ -3210,19 +3228,31 @@ local function dispatchPowerFull(f, unit)
     if not f.power then return end
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
-    if c.powH <= 0 then return end
+    if not c.hasPowerElement then return end
     local roleHidden = f._msufGFPowRoleHidden
-    if roleHidden then if f.power:IsShown() then f.power:Hide() end; return end
+    if roleHidden then
+        if f.power:IsShown() then f.power:Hide() end
+        if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
+        if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
+        if f.powerTextRightFS then f.powerTextRightFS:Hide() end
+        return
+    end
 
     local pw    = UnitPower(unit)
     local pwMax = UnitPowerMax(unit)
-    f.power:SetMinMaxValues(0, pwMax)
-    if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
+    if c.powH > 0 then
+        f.power:SetMinMaxValues(0, pwMax)
+        if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
+    end
     f._msufGFCachedPwMax = pwMax
-    if not f.power:IsShown() then f.power:Show() end
+    if c.powH > 0 then
+        if not f.power:IsShown() then f.power:Show() end
+    elseif f.power:IsShown() then
+        f.power:Hide()
+    end
 
     -- Inline text on full path (rare event ~0.5/s)
-    if c.showPow then
+    if c.anyPowerText then
         local iss = issecretvalue
         if f.powerTextLeftFS and c.ptlOn then
             local s = GF.FormatPowerText(c.ptl, pw, pwMax, c.pDelim, unit)
@@ -3275,6 +3305,7 @@ local UNIT_DISPATCH = {
     UNIT_ABSORB_AMOUNT_CHANGED        = dispatchOverlaysOnly, -- Overlays ONLY
     UNIT_HEAL_ABSORB_AMOUNT_CHANGED   = dispatchOverlaysOnly, -- Overlays ONLY
     UNIT_POWER_UPDATE                 = dispatchPower,
+    UNIT_POWER_FREQUENT               = dispatchPower,
     UNIT_MAXPOWER                     = dispatchPowerFull,
     UNIT_DISPLAYPOWER                 = dispatchDisplayPower,
     UNIT_NAME_UPDATE                  = dispatchName,
@@ -3350,8 +3381,11 @@ function GF.RegisterUnitEvents(f, unit)
     if c.nameEn then
         f:RegisterUnitEvent("UNIT_NAME_UPDATE", unit); regTbl["UNIT_NAME_UPDATE"] = true
     end
-    if c.powH > 0 then
+    if c.hasPowerElement then
         f:RegisterUnitEvent("UNIT_POWER_UPDATE", unit);  regTbl["UNIT_POWER_UPDATE"] = true
+        if c.powFrequent and UnitIsUnit and UnitIsUnit(unit, "player") then
+            f:RegisterUnitEvent("UNIT_POWER_FREQUENT", unit); regTbl["UNIT_POWER_FREQUENT"] = true
+        end
         f:RegisterUnitEvent("UNIT_MAXPOWER", unit);      regTbl["UNIT_MAXPOWER"] = true
         f:RegisterUnitEvent("UNIT_DISPLAYPOWER", unit);  regTbl["UNIT_DISPLAYPOWER"] = true
     end

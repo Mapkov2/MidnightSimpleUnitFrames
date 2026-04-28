@@ -381,10 +381,12 @@ local function BuildFrameHierarchy(f, kind)
     powerBg:SetVertexColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
     f.powerBg = powerBg
 
-    -- Power text layer
-    local powerTextLayer = CreateFrame("Frame", nil, power)
-    powerTextLayer:SetAllPoints(power)
+    -- Power text layer. Parent it to barGroup, not the power bar, so text can
+    -- remain visible when the power bar itself is hidden via powerHeight = 0.
+    local powerTextLayer = CreateFrame("Frame", nil, barGroup)
+    powerTextLayer:SetAllPoints(barGroup)
     powerTextLayer:SetFrameLevel(power:GetFrameLevel() + 2)
+    powerTextLayer:EnableMouse(false)
     f.powerTextLayer = powerTextLayer
 
     -- 3-slot power text: left / center / right
@@ -570,20 +572,21 @@ local function LayoutText(f, kind)
         f.statusIndicatorText:ClearAllPoints()
         f.statusIndicatorText:SetPoint("CENTER", f.health, "CENTER", 0, 0)
     end
+    local powerTextAnchor = ((conf.powerHeight or 6) > 0 and f.power) or f.health or f.barGroup
     if f.powerTextLeftFS then
         f.powerTextLeftFS:ClearAllPoints()
-        f.powerTextLeftFS:SetPoint("LEFT", f.power, "LEFT", 2, 0)
+        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", 2, 0)
     end
     if f.powerTextCenterFS then
         f.powerTextCenterFS:ClearAllPoints()
-        f.powerTextCenterFS:SetPoint("CENTER", f.power, "CENTER", 0, 0)
+        f.powerTextCenterFS:SetPoint("CENTER", powerTextAnchor, "CENTER", 0, 0)
     end
     if f.powerTextRightFS then
         f.powerTextRightFS:ClearAllPoints()
-        f.powerTextRightFS:SetPoint("RIGHT", f.power, "RIGHT", -2, 0)
+        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -2, 0)
     end
     do
-        local showPow = conf.showPower and (conf.powerHeight or 6) > 0
+        local showPow = conf.showPower
         local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
         local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
         local ptr = showPow and (conf.powerTextRight   or "NONE") or "NONE"
@@ -950,7 +953,9 @@ function GF.UpdateButton(f, unit)
     -- and the _msufGFPowRoleHidden cache.
     if f.power then
         local powerH = conf.powerHeight or 6
-        local showPow = powerH > 0
+        local showBar = powerH > 0
+        local powerTextEnabled = conf.showPower
+        local showPow = showBar or powerTextEnabled
         local role
         if showPow and UnitGroupRolesAssigned then
             role = UnitGroupRolesAssigned(unit)
@@ -962,7 +967,6 @@ function GF.UpdateButton(f, unit)
         if showPow then
             local pw    = UnitPower(unit)
             local pwMax = UnitPowerMax(unit)
-            f.power:SetMinMaxValues(0, pwMax)
             f._msufGFCachedPwMax = pwMax
             -- Role visibility cache (role already fetched above — Fix D)
             if role then
@@ -972,16 +976,21 @@ function GF.UpdateButton(f, unit)
             else
                 f._msufGFPowRoleHidden = false
             end
-            if conf.powerSmoothFill then
-                local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
-                if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
+            if showBar then
+                f.power:SetMinMaxValues(0, pwMax)
+                if conf.powerSmoothFill then
+                    local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
+                    if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
+                else
+                    f.power:SetValue(pw)
+                end
+                ApplyPowerColor(f, unit)
             else
-                f.power:SetValue(pw)
+                f.power:SetHeight(0.001)
             end
-            f.power:Show()
-            ApplyPowerColor(f, unit)
+            if showBar then f.power:Show() else f.power:Hide() end
             -- 3-slot power text
-            if conf.showPower then
+            if powerTextEnabled then
                 local pDelim = conf.powerTextDelimiter or " / "
                 local ptl = conf.powerTextLeft   or "NONE"
                 local ptc = conf.powerTextCenter  or "NONE"
@@ -1949,14 +1958,17 @@ function GF.ApplyPreviewData(f, index, kind)
         f.healAbsorbBar:Hide()
     end
 
-    -- Power bar
-    if f.power and (conf.powerHeight or 6) > 0 then
+    -- Power bar / text. Text is independent from the visible bar height.
+    if f.power then
+        local showBar = (conf.powerHeight or 6) > 0
         local fakePow = 50 + index * 10
         local fakePowMax = 100
-        f.power:SetMinMaxValues(0, fakePowMax)
-        f.power:SetValue(fakePow)
-        f.power:SetStatusBarColor(0.2, 0.2, 0.8, 1)
-        f.power:Show()
+        if showBar then
+            f.power:SetMinMaxValues(0, fakePowMax)
+            f.power:SetValue(fakePow)
+            f.power:SetStatusBarColor(0.2, 0.2, 0.8, 1)
+        end
+        if showBar then f.power:Show() else f.power:Hide() end
         -- 3-slot power text (preview)
         if conf.showPower then
             local pDelim = conf.powerTextDelimiter or " / "
@@ -1975,6 +1987,13 @@ function GF.ApplyPreviewData(f, index, kind)
                 f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, fakePow, fakePowMax, pDelim))
                 if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
             end
+        else
+            if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
+            if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
+            if f.powerTextRightFS then f.powerTextRightFS:Hide() end
+        end
+        if not showBar and not conf.showPower then
+            f.power:Hide()
         end
     end
 

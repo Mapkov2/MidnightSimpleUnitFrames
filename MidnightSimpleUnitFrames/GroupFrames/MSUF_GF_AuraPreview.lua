@@ -514,21 +514,20 @@ local function BuildMockFrame(parent)
     f._hpFS = hpFS
 
     -- Power text
-    if powerH > 0 and f._power then
-        local powLayer = CreateFrame("Frame", nil, f)
-        powLayer:SetAllPoints(f._power)
-        powLayer:SetFrameLevel(f._power:GetFrameLevel() + 2)
-        f._powerTextLayer = powLayer
-        local powFS = powLayer:CreateFontString(nil, "OVERLAY")
-        powFS:SetFont(GF.ResolveFontPath(kind), conf.powerFontSize or 9, GF.ResolveFontFlags(kind))
-        powFS:SetPoint("CENTER", f._power, "CENTER", 0, 0)
-        powFS:SetText("3,240")
-        powFS:SetShadowColor(0, 0, 0, 1)
-        powFS:SetShadowOffset(1, -1)
-        local fr, fg, fb = GF.ResolveFontColor(kind)
-        powFS:SetTextColor(fr, fg, fb, 0.9)
-        f._powerFS = powFS
-    end
+    local powLayer = CreateFrame("Frame", nil, f)
+    powLayer:SetAllPoints(f)
+    powLayer:SetFrameLevel((f._power and f._power:GetFrameLevel() or health:GetFrameLevel()) + 2)
+    f._powerTextLayer = powLayer
+    local powFS = powLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    powFS:SetFont(GF.ResolveFontPath(kind), conf.powerFontSize or 9, GF.ResolveFontFlags(kind))
+    powFS:SetPoint("CENTER", (powerH > 0 and f._power) or health, "CENTER", 0, 0)
+    powFS:SetText("3,240")
+    powFS:SetShadowColor(0, 0, 0, 1)
+    powFS:SetShadowOffset(1, -1)
+    local fr, fg, fb = GF.ResolveFontColor(kind)
+    powFS:SetTextColor(fr, fg, fb, 0.9)
+    powFS:Hide()
+    f._powerFS = powFS
 
     _mockFrame = f
     f._previewScale = scale
@@ -644,6 +643,10 @@ function GF.RefreshPreviewBox()
         else
             m._power:Hide()
         end
+    end
+    if m._powerTextLayer then
+        m._powerTextLayer:ClearAllPoints()
+        m._powerTextLayer:SetAllPoints(m)
     end
 
     -- Health color (mirror GF_Render ApplyHealthColor: gfBarMode → global fallback)
@@ -849,58 +852,42 @@ function GF.RefreshPreviewBox()
             end
             m._hpFS:Show()
         end
-        -- Power text: lazy-create on demand.  In the Text-toggle-on path
-        -- we always show the sample, even if conf.showPower is false or
-        -- there's no power bar — the user enabled "Text" to see where
-        -- power text would sit, so we render it at the mock frame's
-        -- bottom-center if no power bar exists.
-        if m._power and powerH > 0 then
+        -- Power text follows live group-frame fallback: use the power bar
+        -- when visible, otherwise anchor to health/mock frame.
+        do
             if not m._powerTextLayer then
                 local ptl = CreateFrame("Frame", nil, m)
-                ptl:SetAllPoints(m._power)
-                ptl:SetFrameLevel(m._power:GetFrameLevel() + 2)
+                ptl:SetAllPoints(m)
                 m._powerTextLayer = ptl
             end
             if not m._powerFS then
-                -- Inherit GameFontNormal so a font is always present
-                -- (bare CreateFontString has no font → SetText throws
-                -- "Font not set").  The explicit SetFont below overrides
-                -- to the configured MSUF font.
+                -- Inherit GameFontNormal so a font is always present.
                 m._powerFS = m._powerTextLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            elseif m._powerFS.SetParent then
+                m._powerFS:SetParent(m._powerTextLayer)
             end
+            local powerAnchor = (m._power and powerH > 0 and m._power) or m._health or m
+            local baseLevel = (powerAnchor.GetFrameLevel and powerAnchor:GetFrameLevel()) or (m.GetFrameLevel and m:GetFrameLevel()) or 0
             local ptl2 = conf.powerTextLayer or 2
-            m._powerTextLayer:SetFrameLevel(m._power:GetFrameLevel() + ptl2)
+            m._powerTextLayer:ClearAllPoints()
+            m._powerTextLayer:SetAllPoints(m)
+            m._powerTextLayer:SetFrameLevel(baseLevel + ptl2)
             if fp then
                 m._powerFS:SetFont(fp, floor((conf.powerFontSize or 9) * sc + 0.5), ff or "")
             end
-            m._powerFS:SetText("3,240")
+            local pcm = conf.powerTextCenter or "NONE"
+            local prm = conf.powerTextRight or "NONE"
+            local plm = conf.powerTextLeft or "NONE"
+            local powerMode = (pcm ~= "NONE" and pcm) or (prm ~= "NONE" and prm) or (plm ~= "NONE" and plm) or "CURRENT"
+            local sample = (powerMode == "PERCENT" and "100%") or (powerMode == "CURMAX" and "100 / 100") or (powerMode == "CURPERC" and "100 - 100%") or "100"
+            m._powerFS:SetText(sample)
             m._powerFS:SetTextColor(fr, fg, fb, 0.9)
+            m._powerFS:SetShadowColor(0, 0, 0, 1); m._powerFS:SetShadowOffset(1, -1)
             m._powerFS:ClearAllPoints()
             local pox = floor((conf.powerOffsetX or 0) * sc + 0.5)
             local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
-            m._powerFS:SetPoint("CENTER", m._power, "CENTER", pox, poy)
-            m._powerFS:Show()
-        else
-            -- No power bar in the current config: lazy-create a power
-            -- FontString anchored to the mock frame's bottom so the user
-            -- can still see where power text sits while the Text toggle
-            -- is on.  Will be hidden again on the next refresh if the
-            -- toggle is off.
-            if not m._powerFS then
-                -- Inherit GameFontNormal so a font is always present
-                -- (bare CreateFontString has no font → SetText throws
-                -- "Font not set").
-                m._powerFS = m:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            end
-            if fp then
-                m._powerFS:SetFont(fp, floor((conf.powerFontSize or 9) * sc + 0.5), ff or "")
-            end
-            m._powerFS:SetText("3,240")
-            m._powerFS:SetTextColor(fr, fg, fb, 0.9)
-            m._powerFS:ClearAllPoints()
-            local pox = floor((conf.powerOffsetX or 0) * sc + 0.5)
-            local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
-            m._powerFS:SetPoint("BOTTOM", m, "BOTTOM", pox, 2 + poy)
+            m._powerFS:SetPoint("CENTER", powerAnchor, "CENTER", pox, poy)
+            m._powerFS:SetJustifyH("CENTER")
             m._powerFS:Show()
         end
         end  -- end of _visToggles.text else-branch
