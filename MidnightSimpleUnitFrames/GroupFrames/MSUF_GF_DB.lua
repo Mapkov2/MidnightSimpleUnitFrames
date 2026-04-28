@@ -106,6 +106,7 @@ local PARTY_DEFAULTS = {
     borderA           = 1,
     -- Text: 3-slot system (replaces showHP boolean)
     showName          = true,
+    showHPText        = true,
     showPower         = false,
     nameAnchor        = "LEFT",
     nameFontSize      = 12,

@@ -465,7 +465,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
           keys = { "showName", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY",
                    "nameColorMode", "nameColorR", "nameColorG", "nameColorB",
                    "nameMaxChars", "nameNoEllipsis",
-                   "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter",
+                   "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter",
                    "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer",
                    "statusOffsetX", "statusOffsetY" } },
         { key = "font",       label = "Font Override",
@@ -2623,7 +2623,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 4: Text
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(720, "Text", false, "text")
+        local box, body = AddSection(760, "Text", false, "text")
 
         local COL_W = 310
 
@@ -2813,9 +2813,17 @@ function _G.MSUF_EnsureGFPanelBuilt()
         hpSep:SetPoint("TOPLEFT", colR, "TOPLEFT", 0, 0)
         hpSep:SetText(TR("HP Text")); hpSep:SetTextColor(1, 0.82, 0)
 
+        local hpShowChk = SCheck({
+            name = "MSUF_GF_HPTextShowCheck", parent = colR,
+            anchor = hpSep, x = 0, y = -4,
+            label = TR("Show HP Text"),
+            get = function(k) return GF.Val(k, "showHPText") ~= false end,
+            set = function(k, v) GF.GetConf(k).showHPText = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+
         local hpLeftDd = SDropdown({
             name = "MSUF_GF_TextLeftDropdown", parent = colR,
-            anchor = hpSep, anchorPoint = "BOTTOMLEFT", x = -16, y = -32, width = 180,
+            anchor = hpShowChk, anchorPoint = "BOTTOMLEFT", x = -16, y = -32, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "textLeft") or "NONE" end,
             set = function(k, v) GF.GetConf(k).textLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,

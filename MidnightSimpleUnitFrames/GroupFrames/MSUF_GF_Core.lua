@@ -550,9 +550,10 @@ local function LayoutText(f, kind)
         if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
     end
     -- 3-slot health text
-    local tl = conf.textLeft  or "NONE"
-    local tc = conf.textCenter or "NONE"
-    local tr = conf.textRight or "NONE"
+    local showHPText = conf.showHPText ~= false
+    local tl = showHPText and (conf.textLeft  or "NONE") or "NONE"
+    local tc = showHPText and (conf.textCenter or "NONE") or "NONE"
+    local tr = showHPText and (conf.textRight or "NONE") or "NONE"
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
         f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", 3, 0)
@@ -915,9 +916,10 @@ function GF.UpdateButton(f, unit)
         local c = f._c
         if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
 
-        local tl = (c and c.tl) or conf.textLeft   or "NONE"
-        local tc = (c and c.tc) or conf.textCenter or "NONE"
-        local tr = (c and c.tr) or conf.textRight  or "NONE"
+        local showHPText = conf.showHPText ~= false
+        local tl = showHPText and ((c and c.tl) or conf.textLeft   or "NONE") or "NONE"
+        local tc = showHPText and ((c and c.tc) or conf.textCenter or "NONE") or "NONE"
+        local tr = showHPText and ((c and c.tr) or conf.textRight  or "NONE") or "NONE"
 
         -- Visibility first (independent of text content path)
         if f.textLeftFS   then if tl ~= "NONE" then f.textLeftFS:Show()   else f.textLeftFS:Hide()   end end
@@ -926,14 +928,14 @@ function GF.UpdateButton(f, unit)
 
         -- Fast path: compiled closures (BuildFrameCache resolves abbreviator
         -- + percent format once, closures do C-side SetText/SetFormattedText).
-        if c and c.anyFastText then
+        if showHPText and c and c.anyFastText then
             local fn
             fn = c.tlFn; if fn and f.textLeftFS   then fn(f.textLeftFS,   unit, hp, hpMax) end
             fn = c.tcFn; if fn and f.textCenterFS then fn(f.textCenterFS, unit, hp, hpMax) end
             fn = c.trFn; if fn and f.textRightFS  then fn(f.textRightFS,  unit, hp, hpMax) end
         end
         -- Fallback: any mode that didn't compile (c.anySlowText) or no cache yet
-        if not c or c.anySlowText then
+        if showHPText and (not c or c.anySlowText) then
             local delim = (c and c.delim) or conf.textDelimiter or " / "
             local rev   = (c and c.rev)   or conf.hpTextReverse
             if f.textLeftFS and tl ~= "NONE" and (not c or not c.tlFn) then
@@ -1847,13 +1849,14 @@ function GF.ApplyPreviewData(f, index, kind)
 
     -- 3-slot health text (preview with fake values)
     do
+        local showHPText = conf.showHPText ~= false
         local fakeHP = math_floor(hpPct * 100)
         local fakeMax = 100
         local delim = conf.textDelimiter or " / "
         local rev = conf.hpTextReverse
-        local tl = conf.textLeft  or "NONE"
-        local tc = conf.textCenter or "NONE"
-        local tr = conf.textRight or "NONE"
+        local tl = showHPText and (conf.textLeft  or "NONE") or "NONE"
+        local tc = showHPText and (conf.textCenter or "NONE") or "NONE"
+        local tr = showHPText and (conf.textRight or "NONE") or "NONE"
         if f.textLeftFS then
             f.textLeftFS:SetText(GF.FormatHealthText(tl, fakeHP, fakeMax, delim, rev))
             if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end

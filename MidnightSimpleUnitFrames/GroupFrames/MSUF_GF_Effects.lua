@@ -1187,10 +1187,12 @@ function GF.BuildFrameCache(f)
     c.smooth    = conf.smoothFill ~= false and _smoothInterp or nil
     c.powSmooth = conf.powerSmoothFill and _smoothInterp or nil
 
-    -- Health text slots
-    c.tl    = conf.textLeft    or "NONE"
-    c.tc    = conf.textCenter  or "NONE"
-    c.tr    = conf.textRight   or "NONE"
+    -- Health text slots. showHPText gates the whole HP text pipeline so
+    -- disabled text builds no closures and does no event-time formatting.
+    c.hpTextEnabled = conf.showHPText ~= false
+    c.tl    = c.hpTextEnabled and (conf.textLeft    or "NONE") or "NONE"
+    c.tc    = c.hpTextEnabled and (conf.textCenter  or "NONE") or "NONE"
+    c.tr    = c.hpTextEnabled and (conf.textRight   or "NONE") or "NONE"
     c.tlOn  = c.tl ~= "NONE"
     c.tcOn  = c.tc ~= "NONE"
     c.trOn  = c.tr ~= "NONE"
