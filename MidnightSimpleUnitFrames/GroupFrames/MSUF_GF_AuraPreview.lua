@@ -872,8 +872,20 @@ function GF.RefreshPreviewBox()
             m._powerFS:ClearAllPoints()
             local pox = floor((conf.powerOffsetX or 0) * sc + 0.5)
             local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
-            m._powerFS:SetPoint("CENTER", powerAnchor, "CENTER", pox, poy)
-            m._powerFS:SetJustifyH("CENTER")
+            local pPad = floor(2 * sc + 0.5)
+            if pcm ~= "NONE" then
+                m._powerFS:SetPoint("CENTER", powerAnchor, "CENTER", pox, poy)
+                m._powerFS:SetJustifyH("CENTER")
+            elseif prm ~= "NONE" then
+                m._powerFS:SetPoint("RIGHT", powerAnchor, "RIGHT", -pPad + pox, poy)
+                m._powerFS:SetJustifyH("RIGHT")
+            elseif plm ~= "NONE" then
+                m._powerFS:SetPoint("LEFT", powerAnchor, "LEFT", pPad + pox, poy)
+                m._powerFS:SetJustifyH("LEFT")
+            else
+                m._powerFS:SetPoint("CENTER", powerAnchor, "CENTER", pox, poy)
+                m._powerFS:SetJustifyH("CENTER")
+            end
             if conf.showPower and powerMode ~= "NONE" then m._powerFS:Show() else m._powerFS:Hide() end
         end
         end  -- end of _visToggles.text else-branch

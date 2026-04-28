@@ -2738,9 +2738,19 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).showPower = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
         })
 
+        local powLeftDd = SDropdown({
+            name = "MSUF_GF_PowerTextLeftDropdown", parent = colL,
+            anchor = powShowChk, anchorPoint = "BOTTOMLEFT", x = -16, y = -32, width = 180,
+            items = TEXT_MODES,
+            get = function(k) return GF.Val(k, "powerTextLeft") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).powerTextLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+        do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOMLEFT", powLeftDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Left")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+
         local powCenterDd = SDropdown({
             name = "MSUF_GF_PowerTextCenterDropdown", parent = colL,
-            anchor = powShowChk, anchorPoint = "BOTTOMLEFT", x = -16, y = -32, width = 180,
+            anchor = powLeftDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "powerTextCenter") or "NONE" end,
             set = function(k, v) GF.GetConf(k).powerTextCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
@@ -2748,9 +2758,29 @@ function _G.MSUF_EnsureGFPanelBuilt()
         do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             lbl:SetPoint("BOTTOMLEFT", powCenterDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Center")); lbl:SetTextColor(0.6, 0.6, 0.6) end
 
+        local powRightDd = SDropdown({
+            name = "MSUF_GF_PowerTextRightDropdown", parent = colL,
+            anchor = powCenterDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
+            items = TEXT_MODES,
+            get = function(k) return GF.Val(k, "powerTextRight") or "NONE" end,
+            set = function(k, v) GF.GetConf(k).powerTextRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+        })
+        do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOMLEFT", powRightDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Right")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+
+        local powDelimDd = SDropdown({
+            name = "MSUF_GF_PowerDelimDropdown", parent = colL,
+            anchor = powRightDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
+            items = DELIM_ITEMS,
+            get = function(k) return GF.Val(k, "powerTextDelimiter") or " / " end,
+            set = function(k, v) GF.GetConf(k).powerTextDelimiter = v; GF.RefreshVisuals() end,
+        })
+        do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOMLEFT", powDelimDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Delimiter")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+
         local powSizeSl = SSlider({
             name = "MSUF_GF_PowerFontSizeSlider", parent = colL, compact = true,
-            anchor = powCenterDd, x = 16, y = -26,
+            anchor = powDelimDd, x = 16, y = -26,
             min = 6, max = 48, step = 1, width = 180, default = 9,
             get = function(k) return GF.Val(k, "powerFontSize") end,
             set = function(k, v) GF.GetConf(k).powerFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals() end,
