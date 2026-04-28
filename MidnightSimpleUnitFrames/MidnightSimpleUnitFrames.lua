@@ -938,7 +938,6 @@ local function MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
         or ((type(g.levelIndicatorAnchor) == "string") and g.levelIndicatorAnchor or "NAMERIGHT")
     f._msufLevelAnchor = anchor
     if not ns.Cache.StampChanged(f, "LevelLayout", anchor, lx, ly) then  return end
-    f._msufLevelLayoutStamp = 1
     f.levelText:ClearAllPoints()
     if anchor == "NAMELEFT" then
         f.levelText:SetPoint("RIGHT", f.nameText, "LEFT", -6 + lx, ly)
@@ -1455,7 +1454,6 @@ function MSUF_ApplyBarBackgroundVisual(frame)
                 frame.powerBarBG:SetTexture(dpbBgTex)
                 frame._msufDPBBgTexOverride = dpbBgTex
                 -- Align _MSUF_ApplyBgToTexture's cache so it doesn't re-set next call
-                frame._msufPowerBgTex = dpbBgTex
             end
         else
             -- No custom texture: clear override flag so _MSUF_ApplyBgToTexture controls it
@@ -1464,7 +1462,6 @@ function MSUF_ApplyBarBackgroundVisual(frame)
     elseif frame._msufDPBBgTexOverride then
         -- No longer detached: clear flag, let _MSUF_ApplyBgToTexture re-apply global
         frame._msufDPBBgTexOverride = nil
-        frame._msufPowerBgTex = nil  -- force _MSUF_ApplyBgToTexture refresh next cycle
     end
     if (not frame.hpBarBG) and (not frame.powerBarBG) and frame.bg then
         _MSUF_ApplyBgToTexture(frame, tex, frame.bg, "Frame", r, gg, b, a)
@@ -2768,7 +2765,6 @@ local ox = ns.Util.Num(conf, g, "leaderIconOffsetX", 0)
 local oy = ns.Util.Num(conf, g, "leaderIconOffsetY", 3)
 local anchor = ns.Util.Val(conf, g, "leaderIconAnchor", "TOPLEFT")
     if not ns.Cache.StampChanged(f, "LeaderIconLayout", size, ox, oy, anchor, (key or "")) then  return end
-f._msufLeaderIconLayoutStamp = 1
     local point, relPoint = ns.Icons._layout.Resolve(anchor, false)
     ns.Icons._layout.Apply(f.leaderIcon, f, size, point, relPoint, ox, oy)
     if f.assistantIcon then
@@ -2786,7 +2782,6 @@ local ox = ns.Util.Num(conf, g, "raidMarkerOffsetX", 16)
 local oy = ns.Util.Num(conf, g, "raidMarkerOffsetY", 3)
 local anchor = ns.Util.Val(conf, g, "raidMarkerAnchor", "TOPLEFT")
     if not ns.Cache.StampChanged(f, "RaidMarkerLayout", size, ox, oy, anchor, (key or "")) then  return end
-f._msufRaidMarkerLayoutStamp = 1
     local point, relPoint = ns.Icons._layout.Resolve(anchor, true)
     ns.Icons._layout.Apply(f.raidMarkerIcon, f, size, point, relPoint, ox, oy)
  end
@@ -4670,7 +4665,6 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     local pb = f.targetPowerBar
     if not pb then
         f._msufPowerBarReserved = nil
-        f._msufPBLayoutStamp = nil
         ns.Cache.ClearStamp(f, "PBEmbedLayout")
          return
     end
@@ -4734,7 +4728,6 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     local reserve = (embed and not detached and enabled and h > 0)
     local dpbWMode = (b.detachedPowerBarWidthMode or "")
     if not ns.Cache.StampChanged(f, "PBEmbedLayout", (reserve and 1 or 0), h, (detached and 1 or 0), dW, dH, dX, dY, (anchorToCP and 1 or 0), dpbWMode) then  return end
-    f._msufPBLayoutStamp = 1
     f._msufPowerBarReserved = reserve and true or nil
     f._msufPowerBarDetached = detached and true or nil
     -- Force text layout to re-evaluate (power text may reparent to detached bar)

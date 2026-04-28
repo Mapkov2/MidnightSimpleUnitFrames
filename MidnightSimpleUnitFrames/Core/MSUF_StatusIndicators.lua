@@ -551,19 +551,40 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
     local showGhost = sc.showGhost
     local txt = ""
     if unit and UnitExists and UnitExists(unit) then
-        if showDead and UnitIsConnected and (UnitIsConnected(unit) == false) then
+        -- Secret-safe: UnitIsConnected can return secret bool in 12.0 Midnight.
+        -- Bool comparison or arithmetic on secret values hard-errors. Guard via issecretvalue.
+        local connected
+        if UnitIsConnected then
+            connected = UnitIsConnected(unit)
+            if issecretvalue and issecretvalue(connected) then connected = true end
+        end
+        if showDead and connected == false then
             txt = "OFFLINE"
-        elseif showGhost and UnitIsGhost and UnitIsGhost(unit) then
-            txt = "GHOST"
-        elseif showDead then
-            local isDead = false
-            if UnitIsDead and UnitIsDead(unit) then
-                isDead = true
-            elseif UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) then
-                isDead = true
+        else
+            -- UnitIsGhost / UnitIsDead / UnitIsDeadOrGhost: precautionary issecretvalue
+            -- guards. Status booleans for non-self units may carry secret taint in 12.0
+            -- (same risk class as UnitIsConnected). Falls back to "not in this state"
+            -- on secret returns — matches GF_Effects UpdateStatusText pattern (L2036).
+            local ghost
+            if UnitIsGhost then
+                ghost = UnitIsGhost(unit)
+                if issecretvalue and issecretvalue(ghost) then ghost = false end
             end
-            if isDead and (not (UnitIsGhost and UnitIsGhost(unit))) then
-                txt = "DEAD"
+            if showGhost and ghost then
+                txt = "GHOST"
+            elseif showDead then
+                local isDead = false
+                if UnitIsDead then
+                    local d = UnitIsDead(unit)
+                    if not (issecretvalue and issecretvalue(d)) and d then isDead = true end
+                end
+                if not isDead and UnitIsDeadOrGhost then
+                    local d = UnitIsDeadOrGhost(unit)
+                    if not (issecretvalue and issecretvalue(d)) and d then isDead = true end
+                end
+                if isDead and not ghost then
+                    txt = "DEAD"
+                end
             end
         end
 	    if txt == "" and (showAFK or showDND) then

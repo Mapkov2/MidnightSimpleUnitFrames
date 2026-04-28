@@ -1080,7 +1080,6 @@ end
 local function ApplyRangeFade(f, unit, inRange)
     local c = f._c
     if c and not c.rfEn then
-        f._msufGFLastRange = true
         return
     end
     local kind = f._msufGFKind or "party"
@@ -1089,7 +1088,6 @@ local function ApplyRangeFade(f, unit, inRange)
 
     -- Disabled → full alpha
     if conf.rangeFadeEnabled == false then
-        f._msufGFLastRange = true
         if f.SetAlpha then f:SetAlpha(1) end
         return
     end
@@ -1097,7 +1095,6 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Solo guard (EQoL: IsInGroup + IsInRaid)
     if IsInGroup and IsInRaid then
         if not IsInGroup() and not IsInRaid() then
-            f._msufGFLastRange = true
             if f.SetAlpha then f:SetAlpha(1) end
             return
         end
@@ -1106,7 +1103,6 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Offline (EQoL: UnsecretBool on UnitIsConnected)
     local connected = unit and UnitIsConnected and _UnsecretBool(UnitIsConnected(unit)) or nil
     if connected == false then
-        f._msufGFLastRange = false
         local offA = conf.offlineAlpha or fadeAlpha
         if f.SetAlpha then f:SetAlpha(offA) end
         return
@@ -1116,11 +1112,6 @@ local function ApplyRangeFade(f, unit, inRange)
     if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
 
     if type(inRange) ~= "nil" then
-        -- Track range state for HealthFade interaction (unsecret only)
-        local plain = _UnsecretBool(inRange)
-        if plain ~= nil then
-            f._msufGFLastRange = plain
-        end
         if f.SetAlphaFromBoolean then
             f:SetAlphaFromBoolean(inRange, 1, fadeAlpha)
         end
@@ -1217,6 +1208,12 @@ function GF.BuildFrameCache(f)
     c.cwG    = conf.cutawayColorG or 0.10
     c.cwB    = conf.cutawayColorB or 0.10
     c.cwA    = conf.cutawayColorA or 0.75
+
+    -- Cooldown swipe direction (Fix B): pre-cached so ApplyCooldownVisualStyle
+    -- in RenderGroup hot path / RefreshAuraIcon doesn't need GF.GetConf.
+    -- Live-apply via Options toggle: GF.RefreshVisuals → ApplyVisuals →
+    -- BuildFrameCache (this function) → c.cdReverse refreshed.
+    c.cdReverse = conf.cooldownSwipeDarkenOnLoss == true
 
     -- Health color mode (pre-resolve full chain)
     local gfMode = conf.gfBarMode
@@ -2026,21 +2023,28 @@ local function UpdateStatusText(f, unit)
 
     if connected == false then
         newState = 1
-    elseif UnitIsDeadOrGhost(unit) then
-        local ghost = UnitIsGhost and UnitIsGhost(unit)
-        if issecretvalue and ghost and issecretvalue(ghost) then ghost = false end
-        newState = ghost and 3 or 2
     else
-        if UnitIsAFK then
-            local afk = UnitIsAFK(unit)
-            if not (issecretvalue and issecretvalue(afk)) and afk == true then
-                newState = 4
+        -- Secret-safe (12.0): UnitIsDeadOrGhost may return secret booleans for
+        -- non-self units. Guard via issecretvalue; treat secret as "alive" so
+        -- we fall through to AFK/DND check.
+        local dog = UnitIsDeadOrGhost(unit)
+        if issecretvalue and issecretvalue(dog) then dog = false end
+        if dog then
+            local ghost = UnitIsGhost and UnitIsGhost(unit)
+            if issecretvalue and ghost and issecretvalue(ghost) then ghost = false end
+            newState = ghost and 3 or 2
+        else
+            if UnitIsAFK then
+                local afk = UnitIsAFK(unit)
+                if not (issecretvalue and issecretvalue(afk)) and afk == true then
+                    newState = 4
+                end
             end
-        end
-        if newState == 0 and UnitIsDND then
-            local dnd = UnitIsDND(unit)
-            if not (issecretvalue and issecretvalue(dnd)) and dnd == true then
-                newState = 5
+            if newState == 0 and UnitIsDND then
+                local dnd = UnitIsDND(unit)
+                if not (issecretvalue and issecretvalue(dnd)) and dnd == true then
+                    newState = 5
+                end
             end
         end
     end
@@ -2313,8 +2317,11 @@ end
 
 ------------------------------------------------------------------------
 -- Health color (GF-independent barMode, then global fallback)
+-- Optional hp / hpMax parameters: when the caller (e.g. dispatchHealthFull)
+-- already has fresh values, pass them to skip the GRADIENT-no-calc fallback's
+-- duplicate UnitHealth/UnitHealthMax C-calls. nil/omitted → fetch as before.
 ------------------------------------------------------------------------
-local function ApplyHealthColor(f, kind, unit)
+local function ApplyHealthColor(f, kind, unit, hp, hpMax)
     if not f.health then return end
     if f._msufSIHealthColorR then
         f.health:SetStatusBarColor(f._msufSIHealthColorR, f._msufSIHealthColorG, f._msufSIHealthColorB, 1)
@@ -2371,9 +2378,11 @@ local function ApplyHealthColor(f, kind, unit)
                 return
             end
         end
-        -- Fallback: Lua-side (non-secret values only)
-        local hp = UnitHealth(unit)
-        local hpMax = UnitHealthMax(unit)
+        -- Fallback: Lua-side (non-secret values only). Reuse caller-provided
+        -- hp/hpMax if available — avoids redundant UnitHealth/UnitHealthMax
+        -- calls when dispatchHealthFull already has fresh values.
+        if hp == nil then hp = UnitHealth(unit) end
+        if hpMax == nil then hpMax = UnitHealthMax(unit) end
         if issecretvalue and (issecretvalue(hp) or issecretvalue(hpMax)) then
             if f._msufGFHCStamp ~= "grad_secret" then
                 f._msufGFHCStamp = "grad_secret"
@@ -2706,8 +2715,6 @@ local function dispatchHealthFull(f, unit)
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
 
-    f._msufGFHealthTick = GetTime()
-
     local calc = f._msufHPCalc
     if not calc and not _calcUnsupported then calc = _GF_EnsureCalc(f) end
     local hp, hpMax
@@ -2743,26 +2750,31 @@ local function dispatchHealthFull(f, unit)
         if not cw:IsShown() then cw:Show() end
     end
 
-    -- Color (full apply on maxHP change — handles unit-type transitions)
-    ApplyHealthColor(f, f._msufGFKind or "party", unit)
+    -- Color (full apply on maxHP change — handles unit-type transitions).
+    -- Pass hp/hpMax through so the GRADIENT-no-calc fallback inside
+    -- ApplyHealthColor doesn't re-fetch them.
+    ApplyHealthColor(f, f._msufGFKind or "party", unit, hp, hpMax)
 
-    -- Text
+    -- Text: prefer compiled closures (oUF-style C-side dispatch, ~0.3µs/slot)
+    -- over FormatHealthText (~7.5µs/slot). Falls back to FormatHealthText only
+    -- for unknown/uncompiled modes (c.anySlowText). Closures handle secret
+    -- values C-side via SetText / SetFormattedText.
     if c.anyText then
-        local iss = issecretvalue
-        if f.textLeftFS and c.tlOn then
-            local s = GF.FormatHealthText(c.tl, hp, hpMax, c.delim, c.rev, unit)
-            f._msufGFCachedTL = (iss and iss(s)) and nil or s
-            f.textLeftFS:SetText(s)
+        if c.anyFastText then
+            local fn = c.tlFn; if fn and f.textLeftFS   then fn(f.textLeftFS,   unit, hp, hpMax) end
+            fn      = c.tcFn; if fn and f.textCenterFS then fn(f.textCenterFS, unit, hp, hpMax) end
+            fn      = c.trFn; if fn and f.textRightFS  then fn(f.textRightFS,  unit, hp, hpMax) end
         end
-        if f.textCenterFS and c.tcOn then
-            local s = GF.FormatHealthText(c.tc, hp, hpMax, c.delim, c.rev, unit)
-            f._msufGFCachedTC = (iss and iss(s)) and nil or s
-            f.textCenterFS:SetText(s)
-        end
-        if f.textRightFS and c.trOn then
-            local s = GF.FormatHealthText(c.tr, hp, hpMax, c.delim, c.rev, unit)
-            f._msufGFCachedTR = (iss and iss(s)) and nil or s
-            f.textRightFS:SetText(s)
+        if c.anySlowText then
+            if f.textLeftFS and c.tlOn and not c.tlFn then
+                f.textLeftFS:SetText(GF.FormatHealthText(c.tl, hp, hpMax, c.delim, c.rev, unit))
+            end
+            if f.textCenterFS and c.tcOn and not c.tcFn then
+                f.textCenterFS:SetText(GF.FormatHealthText(c.tc, hp, hpMax, c.delim, c.rev, unit))
+            end
+            if f.textRightFS and c.trOn and not c.trFn then
+                f.textRightFS:SetText(GF.FormatHealthText(c.tr, hp, hpMax, c.delim, c.rev, unit))
+            end
         end
     end
     UpdateStatusText(f, unit)
@@ -3707,6 +3719,64 @@ _G.MSUF_GF_UpdateRange    = ApplyRangeFade
 _G.MSUF_GF_UpdateTarget   = UpdateTargetIndicator
 _G.MSUF_GF_UpdateStatus   = UpdateStatusText
 _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
+
+------------------------------------------------------------------------
+-- Memory-leak Fix 1: Frame-retire cleanup hook
+-- Called from RetireHeader for every child being retired. Removes the
+-- frame from every module-level table that strong-refs it, and cancels
+-- any pending Closure-Timer that captures the frame as upvalue.
+--
+-- Without this, retired frames live up to ~6s longer than necessary
+-- (ready-check fade timer) and module tables accumulate stale refs
+-- between retire and next GROUP_ROSTER_UPDATE.
+--
+-- Defined as upvalue-closure so it sees:
+--   _readyCheckTimers, _gfTargetFrame, _gfFocusFrame, _tooltipPending,
+--   _tooltipTarget, _gfTextDirtyFrames
+-- which are file-scope locals.
+------------------------------------------------------------------------
+local function _GF_OnFrameRetire(f)
+    if not f then return end
+
+    -- Cancel + clear pending ready-check fade timer (closure captures `f`)
+    local rcTimer = _readyCheckTimers[f]
+    if rcTimer then
+        if type(rcTimer.Cancel) == "function" then rcTimer:Cancel() end
+        _readyCheckTimers[f] = nil
+    end
+
+    -- Stop cutaway re-schedule loop (closure self-cancels when _msufCwTicking false)
+    f._msufCwTicking = false
+    f._msufCwSnapAt  = nil
+
+    -- Clear target / focus pointers if pointing at this frame
+    if _gfTargetFrame == f then _gfTargetFrame = nil end
+    if _gfFocusFrame  == f then _gfFocusFrame  = nil end
+
+    -- Cancel pending tooltip if it targets this frame
+    if _tooltipTarget == f then
+        if _tooltipPending and type(_tooltipPending.Cancel) == "function" then
+            _tooltipPending:Cancel()
+        end
+        _tooltipPending = nil
+        _tooltipTarget  = nil
+    end
+
+    -- Drop pending text-flush entry (avoids dangling key in dirty set)
+    _gfTextDirtyFrames[f] = nil
+
+    -- Remove from GUID→frame map (search by value — guid hash unknown here)
+    local gmap = GF._guidMap
+    if gmap then
+        for guid, framef in pairs(gmap) do
+            if framef == f then gmap[guid] = nil end
+        end
+    end
+
+    -- Drop from render dirty queue (Render module owns _dirtyFrames; expose helper if missing)
+    if GF._RetireFromDirty then GF._RetireFromDirty(f) end
+end
+_G.MSUF_GF_OnFrameRetire = _GF_OnFrameRetire
 GF.GetDispelColor     = GetDispelColor
 GF.ResolveDispelColor = ResolveDispelColor
 
