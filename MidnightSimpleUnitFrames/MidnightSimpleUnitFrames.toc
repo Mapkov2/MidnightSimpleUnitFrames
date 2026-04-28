@@ -52,6 +52,7 @@ Foundation\MSUF_Presets.lua
 Foundation\MSUF_Style.lua
 Foundation\MSUF_Modules.lua
 Foundation\MSUF_EventBus.lua
+Foundation\MSUF_Scheduler.lua
 Foundation\MSUF_Widgets.lua
 
 # ═══════════════════════════════════════════════════════════════

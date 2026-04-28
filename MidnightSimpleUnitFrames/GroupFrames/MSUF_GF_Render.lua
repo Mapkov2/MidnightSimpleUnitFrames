@@ -44,19 +44,42 @@ GF.DIRTY_LAYOUT   = DIRTY_LAYOUT
 GF.DIRTY_ALL      = DIRTY_ALL
 
 ------------------------------------------------------------------------
--- Dirty queue + coalesced flush
+-- Dirty queue + budgeted coalesced flush
+-- Senior-dev perf refactor:
+--   * no pairs(_dirtyFrames) burst over all frames in one tick
+--   * each frame is enqueued once, bits are OR-merged
+--   * runtime frames are processed with a small time/count budget
 ------------------------------------------------------------------------
-local _dirtyFrames = {}   -- [frame] = bitfield
-local _flushScheduled = false
+local _dirtyBits = {}   -- [frame] = bitfield
+local _queued    = {}   -- [frame] = true
+local _queue     = {}   -- dense frame queue
+local _head      = 1
+local _tail      = 0
+local function _ResetQueueIfEmpty()
+    if _head > _tail then
+        _head, _tail = 1, 0
+    end
+end
+
+local function _Enqueue(f)
+    if not f or _queued[f] then return end
+    _tail = _tail + 1
+    _queue[_tail] = f
+    _queued[f] = true
+end
 
 local function _DoFlush()
-    _flushScheduled = false
     GF._FlushDirty()
 end
 local function ScheduleFlush()
-    if _flushScheduled then return end
-    _flushScheduled = true
-    C_Timer.After(0, _DoFlush)
+    local sched = _G.MSUF_ScheduleOnce
+    if sched then
+        sched("GF_RENDER_FLUSH", _DoFlush)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, _DoFlush)
+    else
+        _DoFlush()
+    end
 end
 
 ------------------------------------------------------------------------
@@ -870,30 +893,112 @@ end
 -- Flush dirty queue
 ------------------------------------------------------------------------
 local _cachedUpdateAll -- cached reference to MSUF_GF_UpdateAll
+local _cachedUpdateVisualDirty -- cached reference to MSUF_GF_UpdateVisualDirty
 
 function GF._FlushDirty()
     if not _cachedUpdateAll then
         local fn = _G.MSUF_GF_UpdateAll
         if type(fn) == "function" then _cachedUpdateAll = fn end
     end
+    if not _cachedUpdateVisualDirty then
+        local fn = _G.MSUF_GF_UpdateVisualDirty
+        if type(fn) == "function" then _cachedUpdateVisualDirty = fn end
+    end
+
     local anyFlushed = false
-    for f, bits in pairs(_dirtyFrames) do
-        _dirtyFrames[f] = nil
-        anyFlushed = true
-        ApplyVisuals(f, bits)
-        if f._msufGFPreviewActive then
-            -- Re-apply preview data (ApplyVisuals stomps colors/text)
-            local idx = f._msufGFPreviewIndex
-            local kind = f._msufGFKind
-            if idx and kind then
-                GF.ApplyPreviewData(f, idx, kind)
+    local processed = 0
+    local maxPerFlush = 8
+    local budgetMs = 0.35
+    local db = _G.MSUF_DB
+    local perf = db and db.performance
+    if perf then
+        maxPerFlush = tonumber(perf.gfMaxFramesPerFlush) or maxPerFlush
+        budgetMs = tonumber(perf.gfFlushBudgetMs) or budgetMs
+    end
+    if maxPerFlush < 1 then maxPerFlush = 1 end
+
+    local endAt
+    if _G.debugprofilestop then
+        endAt = _G.debugprofilestop() + budgetMs
+    end
+
+    while _head <= _tail do
+        local f = _queue[_head]
+        _queue[_head] = nil
+        _head = _head + 1
+
+        if f then
+            local bits = _dirtyBits[f]
+            _dirtyBits[f] = nil
+            _queued[f] = nil
+
+            if bits then
+                anyFlushed = true
+                ApplyVisuals(f, bits)
+                if f._msufGFPreviewActive then
+                    local idx = f._msufGFPreviewIndex
+                    local kind = f._msufGFKind
+                    if idx and kind then
+                        GF.ApplyPreviewData(f, idx, kind)
+                    end
+                elseif f.unit and UnitExists(f.unit) then
+                    if _cachedUpdateVisualDirty then
+                        _cachedUpdateVisualDirty(f, f.unit, bits)
+                    elseif _cachedUpdateAll then
+                        _cachedUpdateAll(f, f.unit)
+                    end
+                end
             end
-        elseif f.unit and UnitExists(f.unit) then
-            if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+        end
+
+        processed = processed + 1
+        if processed >= maxPerFlush then
+            ScheduleFlush()
+            return
+        end
+        if endAt and processed % 4 == 0 and _G.debugprofilestop() > endAt then
+            ScheduleFlush()
+            return
         end
     end
-    -- Sync Options panel mock frame (AuraPreview) when any frame was flushed
+
+    _ResetQueueIfEmpty()
     if anyFlushed and GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+end
+
+------------------------------------------------------------------------
+-- Options-open/OOC full refresh helper
+-- Runtime stays budgeted; Options changes outside combat use one coalesced full
+-- refresh so legacy option paths remain instantly correct without reintroducing
+-- full updates in combat.
+------------------------------------------------------------------------
+function GF._OptionsFullRefreshAllowed()
+    local ic = _G.InCombatLockdown
+    if ic and ic() then return false end
+    local win = _G.MSUF_StandaloneOptionsWindow
+    if win and win.IsShown and win:IsShown() then return true end
+    local p = _G.MSUF_OptionsPanel
+    if p and p.IsShown and p:IsShown() then return true end
+    local sp = _G.SettingsPanel
+    if sp and sp.IsShown and sp:IsShown() and p then return true end
+    return false
+end
+
+function GF._ScheduleOptionsFullRefresh()
+    local sched = _G.MSUF_ScheduleOnce
+    if type(sched) == "function" then
+        sched("GF_OPTIONS_FULL_REFRESH", function()
+            if GF._OptionsFullRefreshAllowed and GF._OptionsFullRefreshAllowed() and GF.RefreshVisuals then
+                GF.RefreshVisuals()
+            end
+        end)
+    else
+        C_Timer.After(0, function()
+            if GF._OptionsFullRefreshAllowed and GF._OptionsFullRefreshAllowed() and GF.RefreshVisuals then
+                GF.RefreshVisuals()
+            end
+        end)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -902,8 +1007,9 @@ end
 function GF.MarkDirty(f, bits)
     if not f then return end
     bits = bits or DIRTY_ALL
-    local prev = _dirtyFrames[f] or 0
-    _dirtyFrames[f] = bor(prev, bits)
+    local prev = _dirtyBits[f] or 0
+    _dirtyBits[f] = bor(prev, bits)
+    _Enqueue(f)
     ScheduleFlush()
 end
 
@@ -913,7 +1019,10 @@ end
 -- the next coalesced flush would touch the (now hidden) frame.
 ------------------------------------------------------------------------
 function GF._RetireFromDirty(f)
-    if f then _dirtyFrames[f] = nil end
+    if not f then return end
+    _dirtyBits[f] = nil
+    _queued[f] = nil
+    -- Queue slots are lazily skipped on flush; avoids O(n) removal.
 end
 
 ------------------------------------------------------------------------
@@ -921,9 +1030,18 @@ end
 ------------------------------------------------------------------------
 function GF.MarkAllDirty(bits)
     bits = bits or DIRTY_ALL
+
+    -- OOC Options path: one coalesced full refresh. This preserves exact live
+    -- feedback for legacy option widgets while combat/runtime remains granular.
+    if GF._OptionsFullRefreshAllowed and GF._OptionsFullRefreshAllowed() then
+        if GF._ScheduleOptionsFullRefresh then GF._ScheduleOptionsFullRefresh() end
+        return
+    end
+
     for f in pairs(GF.frames) do
-        local prev = _dirtyFrames[f] or 0
-        _dirtyFrames[f] = bor(prev, bits)
+        local prev = _dirtyBits[f] or 0
+        _dirtyBits[f] = bor(prev, bits)
+        _Enqueue(f)
     end
     -- Also mark preview frames
     if GF._previewFrames then
@@ -931,8 +1049,9 @@ function GF.MarkAllDirty(bits)
             for i = 1, #list do
                 local f = list[i]
                 if f then
-                    local prev = _dirtyFrames[f] or 0
-                    _dirtyFrames[f] = bor(prev, bits)
+                    local prev = _dirtyBits[f] or 0
+                    _dirtyBits[f] = bor(prev, bits)
+                    _Enqueue(f)
                 end
             end
         end

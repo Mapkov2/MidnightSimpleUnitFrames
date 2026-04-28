@@ -1012,7 +1012,7 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
         if _g and _g.fontKey == key then
             if not _MSUF_DeferredFontsPending then
                 _MSUF_DeferredFontsPending = true
-                C_Timer.After(0, _MSUF_DeferredUpdateAllFonts)
+                if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("UF_FONTS_DEFERRED_UPDATE", _MSUF_DeferredUpdateAllFonts) else C_Timer.After(0, _MSUF_DeferredUpdateAllFonts) end
             end
     end
      end)
@@ -1677,7 +1677,7 @@ function _G.MSUF_RequestUnitframeUpdate(frame, forceFull, wantLayout, reason, ur
     end
     co.queued = true
     co.reason = reason
-    C_Timer.After(0, _G.__MSUF_UFREQ_Flush)
+    if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("UF_REQUEST_FLUSH", _G.__MSUF_UFREQ_Flush) else C_Timer.After(0, _G.__MSUF_UFREQ_Flush) end
  end
 local function MSUF_GetUnitLabelForKey(key)
     if key == "player" then
@@ -3933,7 +3933,7 @@ local function MSUF_ScheduleApplyCommit()
     local st = _G.MSUF_ApplyCommitState
     if not st or st.pending then return end
     st.pending = true
-    C_Timer.After(0, MSUF_CommitApplyDirty_Scheduled)
+    if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", MSUF_CommitApplyDirty_Scheduled) else C_Timer.After(0, MSUF_CommitApplyDirty_Scheduled) end
  end
 function MSUF_OnRegenEnabled_ApplyCommit(event)
     local st = _G.MSUF_ApplyCommitState
@@ -5293,7 +5293,7 @@ do
     function ns.MSUF_ToTInline_RequestRefresh(_reason)
         if _msufToTInlineQueued then  return end
         _msufToTInlineQueued = true
-        C_Timer.After(0, _MSUF_ToTInline_Flush)
+        if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("TOT_INLINE_FLUSH", _MSUF_ToTInline_Flush) else C_Timer.After(0, _MSUF_ToTInline_Flush) end
      end
     _G.MSUF_ToTInline_RequestRefresh = ns.MSUF_ToTInline_RequestRefresh
 end
@@ -5343,7 +5343,7 @@ end
         _G.MSUF_ToT_OnTargetChanged = function()
             MSUF_MarkToTDirty()
             if C_Timer and C_Timer.After then
-                C_Timer.After(0, MSUF_ToTFlushScheduled)
+                if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("TOT_EVENT_FLUSH", MSUF_ToTFlushScheduled) else C_Timer.After(0, MSUF_ToTFlushScheduled) end
             else
                 MSUF_TryUpdateToT(false)
             end
@@ -5356,7 +5356,7 @@ end
             if not self._msufPending and C_Timer and C_Timer.After then
                 self._msufPending = true
                 MSUF_ToTEventFramePending = self
-                C_Timer.After(0, MSUF_ToTFlushScheduled)
+                if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("TOT_EVENT_FLUSH", MSUF_ToTFlushScheduled) else C_Timer.After(0, MSUF_ToTFlushScheduled) end
             else
                 MSUF_TryUpdateToT(false)
             end

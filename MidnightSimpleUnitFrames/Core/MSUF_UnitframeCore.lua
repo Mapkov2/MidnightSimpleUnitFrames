@@ -1976,16 +1976,16 @@ function UFCore_EnsureToTInlineWidgets(f, conf)
 end
 
 -- ── Swap defer coalescing (unit swap visual refresh) ──
-local After0 = (_G.C_Timer and _G.C_Timer.After) and function(fn) _G.C_Timer.After(0, fn) end or nil
-Core.RunNextFrame = Core.RunNextFrame or function(fn)
+Core.RunNextFrame = Core.RunNextFrame or _G.MSUF_RunNextFrame or function(fn)
     if type(fn) ~= "function" then return end
-    if After0 then
-        After0(fn)
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, fn)
     else
         fn()
     end
 end
 _G.MSUF_Core_RunNextFrame = _G.MSUF_Core_RunNextFrame or Core.RunNextFrame
+_G.MSUF_RunNextFrame = _G.MSUF_RunNextFrame or Core.RunNextFrame
 
 Core._swapDeferCoalesce = Core._swapDeferCoalesce or {
     frames = {},
@@ -2034,7 +2034,7 @@ local function _SwapDeferFlush()
 end
 
 local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
-    if not After0 or not unit then return end
+    if not unit then return end
 
     local f = FramesByUnit[unit]
     if not f then return end
@@ -2059,7 +2059,7 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
 
     if not sd.scheduled then
         sd.scheduled = true
-        After0(_SwapDeferFlush)
+        Core.RunNextFrame(_SwapDeferFlush)
     end
 end
 
@@ -2820,11 +2820,7 @@ end
 local function _UFCore_ScheduleBossEngage()
     if _bossEngageQueued then return end
     _bossEngageQueued = true
-    if After0 then
-        After0(_UFCore_FlushBossEngage)
-    else
-        _UFCore_FlushBossEngage()
-    end
+    Core.RunNextFrame(_UFCore_FlushBossEngage)
 end
 
 -- Step 4: Explicit Request-Update API boundary (global).
@@ -3048,7 +3044,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         -- Boss target highlight (deferred — not visible on click frame)
         if FramesByUnit["boss1"] then
             local bthFn = _G.MSUF_UpdateBossTargetHighlight
-            if bthFn then After0(bthFn) end
+            if bthFn then Core.RunNextFrame(bthFn) end
         end
 
         -- 2. GF: O(1) GUID-map target highlight (border Show/Hide only)

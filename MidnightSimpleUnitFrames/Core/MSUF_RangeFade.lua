@@ -414,7 +414,7 @@ do
             local _qRF
             local function _flushRF() _qRF = nil; _state["target"] = nil; TargetClassifyAndWire() end
             bus("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
-                if not _qRF then _qRF = true; C_Timer.After(0, _flushRF) end
+                if not _qRF then _qRF = true; if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("RANGEFADE_TARGET_CHANGED", _flushRF) else C_Timer.After(0, _flushRF) end end
             end)
         end
         bus("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", function()
@@ -456,7 +456,7 @@ do
         bus("SPELLS_CHANGED", "MSUF_RANGEFADE", function()
             if _tgtSpellsDirty then return end
             _tgtSpellsDirty = true
-            if C_Timer_After then C_Timer_After(0, _FlushTargetSpellsChanged) else _FlushTargetSpellsChanged() end
+            if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("RANGEFADE_SPELLS_CHANGED", _FlushTargetSpellsChanged) elseif C_Timer_After then C_Timer_After(0, _FlushTargetSpellsChanged) else _FlushTargetSpellsChanged() end
         end)
         bus("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", function()
             RebuildPrimaries()

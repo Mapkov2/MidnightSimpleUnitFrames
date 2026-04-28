@@ -413,7 +413,14 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
     GFApplyLayout = function()
         local gf = ns and ns.GF
-        if gf and type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty((gf.DIRTY_LAYOUT or 32) + (gf.DIRTY_FONT or 4)) end
+        if not gf then return end
+        local bits = (gf.DIRTY_LAYOUT or 32) + (gf.DIRTY_FONT or 4)
+        if type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty(bits) end
+        -- Keep option feedback immediate: MarkAllDirty is budgeted/coalesced, so
+        -- previews/visible frames may update next frame. RefreshFonts is also
+        -- coalesced internally, but direct RefreshPreviewBox makes the menu feel
+        -- live without forcing a full GF UpdateAll/aura scan.
+        if type(gf.RefreshPreviewBox) == "function" then gf.RefreshPreviewBox() end
     end
     local function GFColorPicker(r, g, b, callback)
         if not ColorPickerFrame or type(callback) ~= "function" then return end
@@ -1083,12 +1090,15 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     -- GF: nameMaxChars + nameNoEllipsis (shown only for GF scopes in this section)
     local gfMaxCharsLbl = nameBody:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    gfMaxCharsLbl:SetPoint("TOPLEFT", nameBody, "TOPLEFT", 16, -8)
+    gfMaxCharsLbl:SetPoint("TOPLEFT", nameBody, "TOPLEFT", 16, -10)
     gfMaxCharsLbl:SetText(TR("Group Frame Name Truncation"))
     gfMaxCharsLbl:Hide()
     local gfMaxCharsSlider = UI.Slider({
         name = "MSUF_GF_Shorten_MaxChars", parent = nameBody, compact = true,
-        anchor = gfMaxCharsLbl, x = 0, y = -8, width = 270,
+        -- Leave enough vertical space for the OptionsSliderTemplate value text.
+        -- Before this, the external section label and the slider's dynamic
+        -- "Max Chars: X" label overlapped/clipped in the Fonts menu.
+        anchor = gfMaxCharsLbl, x = 0, y = -28, width = 300,
         label = TR("Name Max Chars"), min = 0, max = 30, step = 1, default = 0,
         lowText = "0", highText = "30",
         get = function() return GFVal("nameMaxChars") or 0 end,
@@ -1098,7 +1108,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     gfMaxCharsSlider:Hide()
     local gfNoEllipsis = UI.Check({
         name = "MSUF_GF_Shorten_NoEllipsis", parent = nameBody,
-        anchor = gfMaxCharsSlider, x = 0, y = -6, maxTextWidth = 400,
+        anchor = gfMaxCharsSlider, x = 0, y = -22, maxTextWidth = 400,
         label = TR("No Ellipsis (truncate without ..)"),
         get = function() return GFVal("nameNoEllipsis") and true or false end,
         set = function(v) local c = GFConf(); if c then c.nameNoEllipsis = v end; GFApplyLayout() end,
