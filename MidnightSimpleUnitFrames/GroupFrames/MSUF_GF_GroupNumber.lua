@@ -82,7 +82,8 @@ end
 
 local function _ResolveOutline(kindConf)
     local o = kindConf and kindConf.fontOutline
-    if type(o) == "string" and o ~= "" then return o end
+    if o == nil or o == false or o == "" or o == "NONE" then return "" end
+    if o == "OUTLINE" or o == "THICKOUTLINE" or o == "MONOCHROME" then return o end
     return "OUTLINE"
 end
 
