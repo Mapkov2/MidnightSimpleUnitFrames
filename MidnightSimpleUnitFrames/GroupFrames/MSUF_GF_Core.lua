@@ -69,19 +69,9 @@ local function RetireHeader(header)
     header:Hide()
     local hp = GetHiddenParent()
     local kids = { header:GetChildren() }
-    -- Memory-leak Fix1 hook: cancel timers + clear module-level refs
-    -- pointing at any of these children before we strip events.
-    local onRetire = _G.MSUF_GF_OnFrameRetire
     for i = 1, #kids do
         local ch = kids[i]
         if ch then
-            -- Strip module-level refs (ready-check timers, target/focus,
-            -- guid map, dirty queue, tooltip, cutaway re-schedule)
-            if onRetire then onRetire(ch) end
-            -- Memory-leak Fix3: feed ungenutzte Aura-Icons in den globalen
-            -- Recycler. Spart CreateFrame-Calls beim nächsten Header-Build
-            -- (zone change A→B, profile-swap-rebuild). Recycler hard-cap 32.
-            if GF.RecycleFramePools then GF.RecycleFramePools(ch) end
             -- Deregister from GF tracking
             UnregisterTrackedFrame(ch)
             if ch.unit and _G.MSUF_UnitFrames then
@@ -131,6 +121,67 @@ GF.frameList   = GF.frameList or {}   -- compact live-frame iteration order
 if type(_G.MSUF_UnitFrames) ~= "table" then _G.MSUF_UnitFrames = {} end
 GF._eventFrame = GF._eventFrame or nil
 GF._previewActive = GF._previewActive or {}
+
+------------------------------------------------------------------------
+-- Auto-register child frames with _G.MSUF_UnitFrames whenever the
+-- SecureGroupHeader assigns/changes their `unit` attribute.
+--
+-- Why this exists: ScanHeaderChildren can run BEFORE the secure system
+-- has populated `unit` attributes on freshly-created children (notably
+-- on raid-header activation, where C_Timer.After(0) fires the same
+-- frame as Show() but the secure environment assigns unit tokens on
+-- the NEXT secure tick). The result was raid frames not appearing
+-- in _G.MSUF_UnitFrames even though the header was visible — broke
+-- external integrations (mini-cc/OmniCD/etc.) that walk this table.
+--
+-- The OnAttributeChanged hook fires reliably whenever the secure code
+-- mutates `unit`, so registration becomes timing-independent. Idempotent
+-- via _msufGFAttrHooked flag. Combat-safe (only Lua table writes and
+-- RegisterUnitEvent calls, both legal in lockdown).
+--
+-- Handles three transitions:
+--   nil → "raid7"  : register frame as raid7
+--   "raid7" → "raid3" : clear raid7 entry, register raid3
+--   "raid7" → nil  : clear raid7 entry (member left group)
+------------------------------------------------------------------------
+local function _GFInstallAttrHook(child)
+    if not child or child._msufGFAttrHooked then return end
+    if not child.HookScript then return end
+    child._msufGFAttrHooked = true
+    child:HookScript("OnAttributeChanged", function(self, name, value)
+        if name ~= "unit" then return end
+        local uf = _G.MSUF_UnitFrames
+        if not uf then return end
+
+        -- Clear stale entry if unit changed or was cleared
+        local prev = self._msufGFRegisteredUnit
+        if prev and prev ~= value then
+            if uf[prev] == self then uf[prev] = nil end
+            self._msufGFRegisteredUnit = nil
+        end
+
+        -- Register new unit. Only party*/raid* belong in this registry —
+        -- "player" and other base unit tokens live in the standalone UF
+        -- system (MidnightSimpleUnitFrames.lua's CreateSimpleUnitFrame).
+        if type(value) == "string" and value ~= "" then
+            self.unit = value
+            local p5 = value:sub(1, 5)
+            if p5 == "party" or value:sub(1, 4) == "raid" then
+                uf[value] = self
+            end
+            -- Trigger MSUF visual + event registration when the slot
+            -- transitions from inactive → active. Only valid once the
+            -- frame has been built by GF_InitButton (otherwise the
+            -- visual subsystems are nil-bound).
+            if self._msufGFBuilt and self._msufGFRegisteredUnit ~= value then
+                self._msufGFRegisteredUnit = value
+                if GF.UpdateButton then GF.UpdateButton(self, value) end
+                if GF.RegisterUnitEvents then GF.RegisterUnitEvents(self, value) end
+            end
+        end
+    end)
+end
+GF._InstallAttrHook = _GFInstallAttrHook
 
 RegisterTrackedFrame = function(f, kind)
     if not f then return end
@@ -381,12 +432,10 @@ local function BuildFrameHierarchy(f, kind)
     powerBg:SetVertexColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
     f.powerBg = powerBg
 
-    -- Power text layer. Parent it to barGroup, not the power bar, so text can
-    -- remain visible when the power bar itself is hidden via powerHeight = 0.
-    local powerTextLayer = CreateFrame("Frame", nil, barGroup)
-    powerTextLayer:SetAllPoints(barGroup)
+    -- Power text layer
+    local powerTextLayer = CreateFrame("Frame", nil, power)
+    powerTextLayer:SetAllPoints(power)
     powerTextLayer:SetFrameLevel(power:GetFrameLevel() + 2)
-    powerTextLayer:EnableMouse(false)
     f.powerTextLayer = powerTextLayer
 
     -- 3-slot power text: left / center / right
@@ -550,10 +599,9 @@ local function LayoutText(f, kind)
         if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
     end
     -- 3-slot health text
-    local showHPText = conf.showHPText ~= false
-    local tl = showHPText and (conf.textLeft  or "NONE") or "NONE"
-    local tc = showHPText and (conf.textCenter or "NONE") or "NONE"
-    local tr = showHPText and (conf.textRight or "NONE") or "NONE"
+    local tl = conf.textLeft  or "NONE"
+    local tc = conf.textCenter or "NONE"
+    local tr = conf.textRight or "NONE"
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
         f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", 3, 0)
@@ -573,21 +621,20 @@ local function LayoutText(f, kind)
         f.statusIndicatorText:ClearAllPoints()
         f.statusIndicatorText:SetPoint("CENTER", f.health, "CENTER", 0, 0)
     end
-    local powerTextAnchor = ((conf.powerHeight or 6) > 0 and f.power) or f.health or f.barGroup
     if f.powerTextLeftFS then
         f.powerTextLeftFS:ClearAllPoints()
-        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", 2, 0)
+        f.powerTextLeftFS:SetPoint("LEFT", f.power, "LEFT", 2, 0)
     end
     if f.powerTextCenterFS then
         f.powerTextCenterFS:ClearAllPoints()
-        f.powerTextCenterFS:SetPoint("CENTER", powerTextAnchor, "CENTER", 0, 0)
+        f.powerTextCenterFS:SetPoint("CENTER", f.power, "CENTER", 0, 0)
     end
     if f.powerTextRightFS then
         f.powerTextRightFS:ClearAllPoints()
-        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -2, 0)
+        f.powerTextRightFS:SetPoint("RIGHT", f.power, "RIGHT", -2, 0)
     end
     do
-        local showPow = conf.showPower
+        local showPow = conf.showPower and (conf.powerHeight or 6) > 0
         local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
         local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
         local ptr = showPow and (conf.powerTextRight   or "NONE") or "NONE"
@@ -887,80 +934,48 @@ function GF.UpdateButton(f, unit)
     end
 
     -- Health (secret-safe: pass raw values to C-side SetValue/SetMinMaxValues)
-    -- Fix D: fetch hp/hpMax ONCE here, reuse in the text block below. Between
-    -- this block and the text block only SetValue/cache write/ApplyHealthColor
-    -- run — none mutate unit state, so values are guaranteed identical to a
-    -- second fetch. No accuracy regression vs the previous double-fetch.
-    local hp, hpMax
-    if f.health or f.textLeftFS or f.textCenterFS or f.textRightFS then
-        hp    = UnitHealth(unit)
-        hpMax = UnitHealthMax(unit)
-    end
     if f.health then
+        local hp    = UnitHealth(unit)
+        local hpMax = UnitHealthMax(unit)
         f.health:SetMinMaxValues(0, hpMax)
         f.health:SetValue(hp)
         f._msufGFCachedHpMax = hpMax
     end
 
-    -- Pass hp/hpMax through (Tier 3): skips the GRADIENT-no-calc fallback's
-    -- redundant UnitHealth/UnitHealthMax C-calls when we already have them.
-    ApplyHealthColor(f, kind, unit, hp, hpMax)
+    ApplyHealthColor(f, kind, unit)
 
-    -- 3-slot health text — Tier 3: prefer compiled closures from f._c (oUF-style
-    -- C-side dispatch, ~0.3µs/slot) over FormatHealthText (~7.5µs/slot).
-    -- BuildFrameCache compiles closures into c.tlFn / c.tcFn / c.trFn. Modes that
-    -- can't compile (unknown / fallback) keep using FormatHealthText.
-    -- Show/Hide remains here (UpdateButton is the full-refresh path that
-    -- toggles slot visibility — closures only update text content).
+    -- 3-slot health text (secret-safe: unit passed for UnitHealthPercent)
     do
-        local c = f._c
-        if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
-
-        local showHPText = conf.showHPText ~= false
-        local tl = showHPText and ((c and c.tl) or conf.textLeft   or "NONE") or "NONE"
-        local tc = showHPText and ((c and c.tc) or conf.textCenter or "NONE") or "NONE"
-        local tr = showHPText and ((c and c.tr) or conf.textRight  or "NONE") or "NONE"
-
-        -- Visibility first (independent of text content path)
-        if f.textLeftFS   then if tl ~= "NONE" then f.textLeftFS:Show()   else f.textLeftFS:Hide()   end end
-        if f.textCenterFS then if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end end
-        if f.textRightFS  then if tr ~= "NONE" then f.textRightFS:Show()  else f.textRightFS:Hide()  end end
-
-        -- Fast path: compiled closures (BuildFrameCache resolves abbreviator
-        -- + percent format once, closures do C-side SetText/SetFormattedText).
-        if showHPText and c and c.anyFastText then
-            local fn
-            fn = c.tlFn; if fn and f.textLeftFS   then fn(f.textLeftFS,   unit, hp, hpMax) end
-            fn = c.tcFn; if fn and f.textCenterFS then fn(f.textCenterFS, unit, hp, hpMax) end
-            fn = c.trFn; if fn and f.textRightFS  then fn(f.textRightFS,  unit, hp, hpMax) end
+        local hp    = UnitHealth(unit)
+        local hpMax = UnitHealthMax(unit)
+        local delim = conf.textDelimiter or " / "
+        local rev = conf.hpTextReverse
+        local tl = conf.textLeft  or "NONE"
+        local tc = conf.textCenter or "NONE"
+        local tr = conf.textRight or "NONE"
+        if f.textLeftFS then
+            local txt = GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit)
+            f.textLeftFS:SetText(txt)
+            if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
         end
-        -- Fallback: any mode that didn't compile (c.anySlowText) or no cache yet
-        if showHPText and (not c or c.anySlowText) then
-            local delim = (c and c.delim) or conf.textDelimiter or " / "
-            local rev   = (c and c.rev)   or conf.hpTextReverse
-            if f.textLeftFS and tl ~= "NONE" and (not c or not c.tlFn) then
-                f.textLeftFS:SetText(GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit))
-            end
-            if f.textCenterFS and tc ~= "NONE" and (not c or not c.tcFn) then
-                f.textCenterFS:SetText(GF.FormatHealthText(tc, hp, hpMax, delim, rev, unit))
-            end
-            if f.textRightFS and tr ~= "NONE" and (not c or not c.trFn) then
-                f.textRightFS:SetText(GF.FormatHealthText(tr, hp, hpMax, delim, rev, unit))
-            end
+        if f.textCenterFS then
+            local txt = GF.FormatHealthText(tc, hp, hpMax, delim, rev, unit)
+            f.textCenterFS:SetText(txt)
+            if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end
+        end
+        if f.textRightFS then
+            local txt = GF.FormatHealthText(tr, hp, hpMax, delim, rev, unit)
+            f.textRightFS:SetText(txt)
+            if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:Hide() end
         end
     end
 
     -- Power (secret-safe: raw values to C-side) + per-role visibility
-    -- Fix D: role fetched once at outer scope, reused for both visibility check
-    -- and the _msufGFPowRoleHidden cache.
     if f.power then
         local powerH = conf.powerHeight or 6
-        local showBar = powerH > 0
-        local powerTextEnabled = conf.showPower
-        local showPow = showBar or powerTextEnabled
-        local role
-        if showPow and UnitGroupRolesAssigned then
-            role = UnitGroupRolesAssigned(unit)
+        local showPow = powerH > 0
+        if showPow then
+            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
             if role == "TANK" and conf.powerShowTank == false then showPow = false
             elseif role == "HEALER" and conf.powerShowHealer == false then showPow = false
             elseif role == "DAMAGER" and conf.powerShowDamager == false then showPow = false
@@ -969,8 +984,10 @@ function GF.UpdateButton(f, unit)
         if showPow then
             local pw    = UnitPower(unit)
             local pwMax = UnitPowerMax(unit)
+            f.power:SetMinMaxValues(0, pwMax)
             f._msufGFCachedPwMax = pwMax
-            -- Role visibility cache (role already fetched above — Fix D)
+            -- Cache role visibility for power lean path
+            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
             if role then
                 f._msufGFPowRoleHidden = (role == "TANK" and conf.powerShowTank == false)
                     or (role == "HEALER" and conf.powerShowHealer == false)
@@ -978,21 +995,16 @@ function GF.UpdateButton(f, unit)
             else
                 f._msufGFPowRoleHidden = false
             end
-            if showBar then
-                f.power:SetMinMaxValues(0, pwMax)
-                if conf.powerSmoothFill then
-                    local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
-                    if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
-                else
-                    f.power:SetValue(pw)
-                end
-                ApplyPowerColor(f, unit)
+            if conf.powerSmoothFill then
+                local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
+                if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
             else
-                f.power:SetHeight(0.001)
+                f.power:SetValue(pw)
             end
-            if showBar then f.power:Show() else f.power:Hide() end
+            f.power:Show()
+            ApplyPowerColor(f, unit)
             -- 3-slot power text
-            if powerTextEnabled then
+            if conf.showPower then
                 local pDelim = conf.powerTextDelimiter or " / "
                 local ptl = conf.powerTextLeft   or "NONE"
                 local ptc = conf.powerTextCenter  or "NONE"
@@ -1111,6 +1123,12 @@ local function ScanHeaderChildren(header, kind)
     local firstMeasured = false
     for ci = 1, #children do
         local child = children[ci]
+        -- Install OnAttributeChanged hook on every child BEFORE filtering by
+        -- unit attribute. Children whose unit isn't set yet (secure code
+        -- hasn't ticked) will get registered the moment the secure system
+        -- assigns one — bypasses the timing race between header:Show() and
+        -- the secure unit-token assignment pass.
+        _GFInstallAttrHook(child)
         -- Skip non-button children (anchor frames, etc.)
         if child and child.GetAttribute and child:GetAttribute("unit") ~= nil then
             if not child._msufGFBuilt then
@@ -1278,7 +1296,7 @@ end
 function GF.ResolveAnchorFrame(kind)
     local conf = GF.GetConf(kind)
     local atv = conf.anchorToFrame
-    if type(atv) == "string" and atv ~= "" and atv ~= "FREE" and atv ~= "pet" then
+    if type(atv) == "string" and atv ~= "" and atv ~= "FREE" then
         -- Unit frame anchoring
         local uf = _G.MSUF_UnitFrames or _G.UnitFrames
         local rel = uf and uf[atv]
@@ -1722,44 +1740,14 @@ function GF.DisableBlizzardFrames()
         HideFrameLocked(_G.CompactRaidFrameContainer)
         if _G.CompactRaidFrameManager_SetSetting then
             _G.CompactRaidFrameManager_SetSetting("IsShown", "0")
-            GF._msufSetCRFMShown = true
         end
     end
 end
 
-------------------------------------------------------------------------
--- RestoreBlizzardFrames(kind?)
--- kind = "party"           → restore PartyFrame + CompactPartyFrame*
--- kind = "raid"|"mythicraid" → restore CompactRaidFrameContainer + CRFM
--- kind = nil               → restore all (legacy behaviour)
--- Called from RebuildAll when a kind is toggled off, and from
--- PLAYER_REGEN_ENABLED retire deferral. No-op when frame's
--- _msufGFHidden flag is not set (i.e. GF was never enabled for that kind).
-------------------------------------------------------------------------
-local _RESTORE_PARTY = { "PartyFrame", "CompactPartyFrame", "CompactPartyFrameTitle" }
-local _RESTORE_RAID  = { "CompactRaidFrameContainer" }
-local _RESTORE_ALL   = { "PartyFrame", "CompactPartyFrame", "CompactPartyFrameTitle", "CompactRaidFrameContainer" }
-
-function GF.RestoreBlizzardFrames(kind)
-    local names
-    local restoreCRFM
-    if kind == "party" then
-        names = _RESTORE_PARTY
-    elseif kind == "raid" or kind == "mythicraid" then
-        names = _RESTORE_RAID
-        restoreCRFM = true
-    else
-        names = _RESTORE_ALL
-        restoreCRFM = true
-    end
-    -- Restore CompactRaidFrameManager visibility (only if WE flipped it)
-    if restoreCRFM and GF._msufSetCRFMShown and _G.CompactRaidFrameManager_SetSetting then
-        _G.CompactRaidFrameManager_SetSetting("IsShown", "1")
-        GF._msufSetCRFMShown = false
-    end
-    -- Undo reparenting (Show-hook will no longer re-hide once flag is cleared)
-    for i = 1, #names do
-        local f = _G[names[i]]
+function GF.RestoreBlizzardFrames()
+    -- Undo reparenting
+    for _, name in pairs({ "PartyFrame", "CompactPartyFrame", "CompactPartyFrameTitle", "CompactRaidFrameContainer" }) do
+        local f = _G[name]
         if f and f._msufGFHidden then
             f._msufGFHidden = nil
             if f.SetParent and not InCombatLockdown() then f:SetParent(UIParent) end
@@ -1849,14 +1837,13 @@ function GF.ApplyPreviewData(f, index, kind)
 
     -- 3-slot health text (preview with fake values)
     do
-        local showHPText = conf.showHPText ~= false
         local fakeHP = math_floor(hpPct * 100)
         local fakeMax = 100
         local delim = conf.textDelimiter or " / "
         local rev = conf.hpTextReverse
-        local tl = showHPText and (conf.textLeft  or "NONE") or "NONE"
-        local tc = showHPText and (conf.textCenter or "NONE") or "NONE"
-        local tr = showHPText and (conf.textRight or "NONE") or "NONE"
+        local tl = conf.textLeft  or "NONE"
+        local tc = conf.textCenter or "NONE"
+        local tr = conf.textRight or "NONE"
         if f.textLeftFS then
             f.textLeftFS:SetText(GF.FormatHealthText(tl, fakeHP, fakeMax, delim, rev))
             if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
@@ -1961,17 +1948,14 @@ function GF.ApplyPreviewData(f, index, kind)
         f.healAbsorbBar:Hide()
     end
 
-    -- Power bar / text. Text is independent from the visible bar height.
-    if f.power then
-        local showBar = (conf.powerHeight or 6) > 0
+    -- Power bar
+    if f.power and (conf.powerHeight or 6) > 0 then
         local fakePow = 50 + index * 10
         local fakePowMax = 100
-        if showBar then
-            f.power:SetMinMaxValues(0, fakePowMax)
-            f.power:SetValue(fakePow)
-            f.power:SetStatusBarColor(0.2, 0.2, 0.8, 1)
-        end
-        if showBar then f.power:Show() else f.power:Hide() end
+        f.power:SetMinMaxValues(0, fakePowMax)
+        f.power:SetValue(fakePow)
+        f.power:SetStatusBarColor(0.2, 0.2, 0.8, 1)
+        f.power:Show()
         -- 3-slot power text (preview)
         if conf.showPower then
             local pDelim = conf.powerTextDelimiter or " / "
@@ -1990,13 +1974,6 @@ function GF.ApplyPreviewData(f, index, kind)
                 f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, fakePow, fakePowMax, pDelim))
                 if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
             end
-        else
-            if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
-            if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
-            if f.powerTextRightFS then f.powerTextRightFS:Hide() end
-        end
-        if not showBar and not conf.showPower then
-            f.power:Hide()
         end
     end
 
@@ -2243,6 +2220,7 @@ function GF.ShowPreview(kind, count)
             f:SetSize(w, h)
             f._msufGFKind = kind
             f._msufIsGroupFrame = true
+            f._msufGFIsPreviewFrame = true
             f.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
             BuildFrameHierarchy(f, kind)
             ApplyFonts(f, kind)
@@ -2398,9 +2376,6 @@ function GF.RebuildAll()
     local raidKind = GetLiveRaidKind()
     local raidConf  = GF.GetConf(raidKind)
 
-    -- Cache enabled-flag for global event handlers (Fix 3: zero-overhead short-circuit)
-    GF._anyEnabled = (partyConf.enabled or raidConf.enabled) and true or false
-
     local inRaid = IsInRaid and IsInRaid() or false
 
     -- Party: build once, show only outside raid
@@ -2410,14 +2385,7 @@ function GF.RebuildAll()
             GF.headers.party:Hide()
         end
     elseif GF.headers.party then
-        -- Toggle off: retire header (strip all events on children, reparent to hidden frame).
-        -- This is the ONLY place runtime-disabled UNIT_HEALTH/POWER/AURA event leak is plugged.
-        if InCombatLockdown() then
-            GF._pendingPartyRetire = true
-        else
-            RetireHeader(GF.headers.party)
-            GF.headers.party = nil
-        end
+        GF.headers.party:Hide()
     end
 
     -- Raid: build once, show only in raid
@@ -2427,25 +2395,10 @@ function GF.RebuildAll()
             GF.headers.raid:Hide()
         end
     elseif GF.headers.raid then
-        if InCombatLockdown() then
-            GF._pendingRaidRetire = true
-        else
-            RetireHeader(GF.headers.raid)
-            GF.headers.raid = nil
-        end
+        GF.headers.raid:Hide()
     end
 
     GF.DisableBlizzardFrames()
-
-    -- Restore Blizzard frames for kinds that are now disabled.
-    -- No-op when GF was never enabled for that kind (frames not marked).
-    if not partyConf.enabled and GF.RestoreBlizzardFrames then
-        GF.RestoreBlizzardFrames("party")
-    end
-    if not raidConf.enabled and GF.RestoreBlizzardFrames then
-        GF.RestoreBlizzardFrames("raid")
-    end
-
     GF.RefreshPreviewLayout("party")
     GF.RefreshPreviewLayout("raid")
     GF.RefreshPreviewLayout("mythicraid")
@@ -2543,11 +2496,6 @@ local function OnEvent(self, event, ...)
         end
 
     elseif event == "GROUP_ROSTER_UPDATE" then
-        -- Fix 3: when GF is fully disabled, do nothing. Saves ~5µs/event in
-        -- a roster-busy context. The flag is maintained by RebuildAll and the
-        -- PLAYER_REGEN_ENABLED retire-deferral path.
-        if not GF._anyEnabled then return end
-
         -- Switch party/raid visibility + rescan children
         GF.UpdateGroupVisibility()
 
@@ -2594,41 +2542,9 @@ local function OnEvent(self, event, ...)
             GF._pendingBlizzardDisable = nil
             GF.DisableBlizzardFrames()
         end
-        -- Deferred retires from toggle-off-in-combat (Fix 1)
-        if GF._pendingPartyRetire then
-            GF._pendingPartyRetire = nil
-            if GF.headers.party then
-                RetireHeader(GF.headers.party)
-                GF.headers.party = nil
-            end
-            if GF.RestoreBlizzardFrames then GF.RestoreBlizzardFrames("party") end
-            -- Update anyEnabled flag so global handlers can short-circuit
-            local pE = GF.GetConf("party").enabled
-            local rE = GF.GetConf(GetLiveRaidKind()).enabled
-            GF._anyEnabled = (pE or rE) and true or false
-        end
-        if GF._pendingRaidRetire then
-            GF._pendingRaidRetire = nil
-            if GF.headers.raid then
-                RetireHeader(GF.headers.raid)
-                GF.headers.raid = nil
-            end
-            if GF.RestoreBlizzardFrames then GF.RestoreBlizzardFrames("raid") end
-            local pE = GF.GetConf("party").enabled
-            local rE = GF.GetConf(GetLiveRaidKind()).enabled
-            GF._anyEnabled = (pE or rE) and true or false
-        end
-        -- Force rebuild if headers don't exist (mid-combat /reload recovery).
-        -- Fix 2: only when at least one kind is supposed to be enabled —
-        -- otherwise the disabled-from-login case would call RebuildAll on every combat-end.
+        -- Force rebuild if headers don't exist (mid-combat /reload recovery)
         local needRebuild = GF._pendingRebuild
-        if not needRebuild then
-            local pE = GF.GetConf("party").enabled
-            local rE = GF.GetConf(GetLiveRaidKind()).enabled
-            if (pE or rE) and not GF.headers.party and not GF.headers.raid then
-                needRebuild = true
-            end
-        end
+        if not GF.headers.party and not GF.headers.raid then needRebuild = true end
         if needRebuild then
             GF._pendingRebuild = nil
             GF.RebuildAll()
@@ -2641,18 +2557,15 @@ local function OnEvent(self, event, ...)
         -- EQoL pattern: refresh range fade on combat end.
         -- UNIT_IN_RANGE_UPDATE fires less frequently OOC;
         -- sweep all frames to ensure correct alpha after combat.
-        -- Skip entirely when GF is disabled (no frames to sweep).
-        if GF._anyEnabled then
-            C_Timer.After(0.1, function()
-                local updateRange = _G.MSUF_GF_UpdateRange
-                if not updateRange then return end
-                GF.ForEachFrame(function(f)
-                    if f.unit and f:IsVisible() then
-                        updateRange(f, f.unit)
-                    end
-                end)
+        C_Timer.After(0.1, function()
+            local updateRange = _G.MSUF_GF_UpdateRange
+            if not updateRange then return end
+            GF.ForEachFrame(function(f)
+                if f.unit and f:IsVisible() then
+                    updateRange(f, f.unit)
+                end
             end)
-        end
+        end)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local isLogin, isReload = ...
