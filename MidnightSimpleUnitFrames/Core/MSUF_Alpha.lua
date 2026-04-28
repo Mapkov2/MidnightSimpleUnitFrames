@@ -258,7 +258,6 @@ local function MSUF_Alpha_ClearBaseCache(frame)
     frame._msufAlphaBaseFG = nil
     frame._msufAlphaBaseBG = nil
     frame._msufAlphaBaseLayerMode = nil
-    frame._msufAlphaRangeMul = nil
 end
 
 local function MSUF_Alpha_ResetLayered(frame)
@@ -269,8 +268,6 @@ local function MSUF_Alpha_ResetLayered(frame)
     frame._msufAlphaLayeredMode = nil
     frame._msufAlphaLayerMode = nil
     frame._msufAlphaUnitAlpha = nil
-    frame._msufAlphaUnitAlphaFG = nil
-    frame._msufAlphaUnitAlphaBG = nil
     frame._msufAlphaLastFG = nil
     frame._msufAlphaLastBG = nil
     if frame.SetAlpha then
@@ -316,8 +313,6 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
 
     frame._msufAlphaLayeredMode = true
     frame._msufAlphaLayerMode = mode
-    frame._msufAlphaUnitAlphaFG = fg
-    frame._msufAlphaUnitAlphaBG = bg
     frame._msufAlphaLastFG = fg
     frame._msufAlphaLastBG = bg
 
@@ -441,7 +436,6 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             frame._msufAlphaBaseFG = nil
             frame._msufAlphaBaseBG = nil
             frame._msufAlphaBaseLayerMode = nil
-            frame._msufAlphaRangeMul = 1
             if frame._msufAlphaLayeredMode then
                 MSUF_Alpha_ResetLayered(frame)
             end
@@ -456,7 +450,6 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             frame._msufAlphaBaseFG = staticA
             frame._msufAlphaBaseBG = staticB
             frame._msufAlphaBaseLayerMode = staticLayerMode
-            frame._msufAlphaRangeMul = 1
             MSUF_Alpha_ApplyLayered(frame, staticA, staticB, staticLayerMode)
             if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
                 frame:SetAlpha(0.35)
@@ -483,14 +476,12 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         frame._msufAlphaBaseFG = alphaFG
         frame._msufAlphaBaseBG = alphaBG
         frame._msufAlphaBaseLayerMode = conf.alphaLayerMode
-        frame._msufAlphaRangeMul = 1
 
         local rfT = _rfMulTable
         if rfT then
             local m = rfT[key] or rfT[unit]
             if m and m < 1 then
                 if m < 0 then m = 0 end
-                frame._msufAlphaRangeMul = m
                 alphaFG = alphaFG * m
                 alphaBG = alphaBG * m
             end
@@ -517,14 +508,12 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
     frame._msufAlphaBaseFG = nil
     frame._msufAlphaBaseBG = nil
     frame._msufAlphaBaseLayerMode = nil
-    frame._msufAlphaRangeMul = 1
 
     local rfT = _rfMulTable
     if rfT then
         local m = rfT[key] or rfT[unit]
         if m and m < 1 then
             if m < 0 then m = 0 end
-            frame._msufAlphaRangeMul = m
             a = a * m
         end
     end
@@ -572,7 +561,6 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
     local m = tonumber(mul)
     if type(m) ~= "number" then m = 1 end
     if m < 0 then m = 0 elseif m > 1 then m = 1 end
-    frame._msufAlphaRangeMul = m
 
     if frame._msufAlphaBaseMode == "layered" and frame._msufAlphaSupportsLayered then
         local fg = frame._msufAlphaBaseFG

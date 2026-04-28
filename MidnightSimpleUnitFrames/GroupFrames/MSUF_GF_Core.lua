@@ -69,9 +69,19 @@ local function RetireHeader(header)
     header:Hide()
     local hp = GetHiddenParent()
     local kids = { header:GetChildren() }
+    -- Memory-leak Fix1 hook: cancel timers + clear module-level refs
+    -- pointing at any of these children before we strip events.
+    local onRetire = _G.MSUF_GF_OnFrameRetire
     for i = 1, #kids do
         local ch = kids[i]
         if ch then
+            -- Strip module-level refs (ready-check timers, target/focus,
+            -- guid map, dirty queue, tooltip, cutaway re-schedule)
+            if onRetire then onRetire(ch) end
+            -- Memory-leak Fix3: feed ungenutzte Aura-Icons in den globalen
+            -- Recycler. Spart CreateFrame-Calls beim nächsten Header-Build
+            -- (zone change A→B, profile-swap-rebuild). Recycler hard-cap 32.
+            if GF.RecycleFramePools then GF.RecycleFramePools(ch) end
             -- Deregister from GF tracking
             UnregisterTrackedFrame(ch)
             if ch.unit and _G.MSUF_UnitFrames then
@@ -873,48 +883,77 @@ function GF.UpdateButton(f, unit)
     end
 
     -- Health (secret-safe: pass raw values to C-side SetValue/SetMinMaxValues)
+    -- Fix D: fetch hp/hpMax ONCE here, reuse in the text block below. Between
+    -- this block and the text block only SetValue/cache write/ApplyHealthColor
+    -- run — none mutate unit state, so values are guaranteed identical to a
+    -- second fetch. No accuracy regression vs the previous double-fetch.
+    local hp, hpMax
+    if f.health or f.textLeftFS or f.textCenterFS or f.textRightFS then
+        hp    = UnitHealth(unit)
+        hpMax = UnitHealthMax(unit)
+    end
     if f.health then
-        local hp    = UnitHealth(unit)
-        local hpMax = UnitHealthMax(unit)
         f.health:SetMinMaxValues(0, hpMax)
         f.health:SetValue(hp)
         f._msufGFCachedHpMax = hpMax
     end
 
-    ApplyHealthColor(f, kind, unit)
+    -- Pass hp/hpMax through (Tier 3): skips the GRADIENT-no-calc fallback's
+    -- redundant UnitHealth/UnitHealthMax C-calls when we already have them.
+    ApplyHealthColor(f, kind, unit, hp, hpMax)
 
-    -- 3-slot health text (secret-safe: unit passed for UnitHealthPercent)
+    -- 3-slot health text — Tier 3: prefer compiled closures from f._c (oUF-style
+    -- C-side dispatch, ~0.3µs/slot) over FormatHealthText (~7.5µs/slot).
+    -- BuildFrameCache compiles closures into c.tlFn / c.tcFn / c.trFn. Modes that
+    -- can't compile (unknown / fallback) keep using FormatHealthText.
+    -- Show/Hide remains here (UpdateButton is the full-refresh path that
+    -- toggles slot visibility — closures only update text content).
     do
-        local hp    = UnitHealth(unit)
-        local hpMax = UnitHealthMax(unit)
-        local delim = conf.textDelimiter or " / "
-        local rev = conf.hpTextReverse
-        local tl = conf.textLeft  or "NONE"
-        local tc = conf.textCenter or "NONE"
-        local tr = conf.textRight or "NONE"
-        if f.textLeftFS then
-            local txt = GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit)
-            f.textLeftFS:SetText(txt)
-            if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
+        local c = f._c
+        if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+
+        local tl = (c and c.tl) or conf.textLeft   or "NONE"
+        local tc = (c and c.tc) or conf.textCenter or "NONE"
+        local tr = (c and c.tr) or conf.textRight  or "NONE"
+
+        -- Visibility first (independent of text content path)
+        if f.textLeftFS   then if tl ~= "NONE" then f.textLeftFS:Show()   else f.textLeftFS:Hide()   end end
+        if f.textCenterFS then if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end end
+        if f.textRightFS  then if tr ~= "NONE" then f.textRightFS:Show()  else f.textRightFS:Hide()  end end
+
+        -- Fast path: compiled closures (BuildFrameCache resolves abbreviator
+        -- + percent format once, closures do C-side SetText/SetFormattedText).
+        if c and c.anyFastText then
+            local fn
+            fn = c.tlFn; if fn and f.textLeftFS   then fn(f.textLeftFS,   unit, hp, hpMax) end
+            fn = c.tcFn; if fn and f.textCenterFS then fn(f.textCenterFS, unit, hp, hpMax) end
+            fn = c.trFn; if fn and f.textRightFS  then fn(f.textRightFS,  unit, hp, hpMax) end
         end
-        if f.textCenterFS then
-            local txt = GF.FormatHealthText(tc, hp, hpMax, delim, rev, unit)
-            f.textCenterFS:SetText(txt)
-            if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end
-        end
-        if f.textRightFS then
-            local txt = GF.FormatHealthText(tr, hp, hpMax, delim, rev, unit)
-            f.textRightFS:SetText(txt)
-            if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:Hide() end
+        -- Fallback: any mode that didn't compile (c.anySlowText) or no cache yet
+        if not c or c.anySlowText then
+            local delim = (c and c.delim) or conf.textDelimiter or " / "
+            local rev   = (c and c.rev)   or conf.hpTextReverse
+            if f.textLeftFS and tl ~= "NONE" and (not c or not c.tlFn) then
+                f.textLeftFS:SetText(GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit))
+            end
+            if f.textCenterFS and tc ~= "NONE" and (not c or not c.tcFn) then
+                f.textCenterFS:SetText(GF.FormatHealthText(tc, hp, hpMax, delim, rev, unit))
+            end
+            if f.textRightFS and tr ~= "NONE" and (not c or not c.trFn) then
+                f.textRightFS:SetText(GF.FormatHealthText(tr, hp, hpMax, delim, rev, unit))
+            end
         end
     end
 
     -- Power (secret-safe: raw values to C-side) + per-role visibility
+    -- Fix D: role fetched once at outer scope, reused for both visibility check
+    -- and the _msufGFPowRoleHidden cache.
     if f.power then
         local powerH = conf.powerHeight or 6
         local showPow = powerH > 0
-        if showPow then
-            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
+        local role
+        if showPow and UnitGroupRolesAssigned then
+            role = UnitGroupRolesAssigned(unit)
             if role == "TANK" and conf.powerShowTank == false then showPow = false
             elseif role == "HEALER" and conf.powerShowHealer == false then showPow = false
             elseif role == "DAMAGER" and conf.powerShowDamager == false then showPow = false
@@ -925,8 +964,7 @@ function GF.UpdateButton(f, unit)
             local pwMax = UnitPowerMax(unit)
             f.power:SetMinMaxValues(0, pwMax)
             f._msufGFCachedPwMax = pwMax
-            -- Cache role visibility for power lean path
-            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
+            -- Role visibility cache (role already fetched above — Fix D)
             if role then
                 f._msufGFPowRoleHidden = (role == "TANK" and conf.powerShowTank == false)
                     or (role == "HEALER" and conf.powerShowHealer == false)
@@ -2183,7 +2221,6 @@ function GF.ShowPreview(kind, count)
             f:SetSize(w, h)
             f._msufGFKind = kind
             f._msufIsGroupFrame = true
-            f._msufGFIsPreviewFrame = true
             f.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
             BuildFrameHierarchy(f, kind)
             ApplyFonts(f, kind)

@@ -902,6 +902,15 @@ function GF.MarkDirty(f, bits)
 end
 
 ------------------------------------------------------------------------
+-- Memory-leak Fix1 support: drop a retiring frame from the dirty queue
+-- so RetireHeader → _GF_OnFrameRetire can release the strong-ref before
+-- the next coalesced flush would touch the (now hidden) frame.
+------------------------------------------------------------------------
+function GF._RetireFromDirty(f)
+    if f then _dirtyFrames[f] = nil end
+end
+
+------------------------------------------------------------------------
 -- Public: mark ALL GF frames dirty (Options "Apply")
 ------------------------------------------------------------------------
 function GF.MarkAllDirty(bits)
@@ -968,10 +977,16 @@ end
 function GF.RefreshFonts()
     GF.MarkAllDirty(DIRTY_FONT)
     if GF.InvalidateCdFont then GF.InvalidateCdFont() end
+    -- Font color may also change when fonts change (Options panel groups them);
+    -- invalidate the cooldown-text color cache so next render pulls fresh DB values.
+    if GF.InvalidateCdColor then GF.InvalidateCdColor() end
 end
 
 function GF.RefreshColors()
     GF.MarkAllDirty(bor(DIRTY_COLOR, DIRTY_BORDER))
+    -- Color settings can include useCustomFontColor / fontColorCustomR/G/B
+    -- which feed ResolveCooldownBaseColor — invalidate so next render is fresh.
+    if GF.InvalidateCdColor then GF.InvalidateCdColor() end
 end
 
 function GF.RefreshGeometry()

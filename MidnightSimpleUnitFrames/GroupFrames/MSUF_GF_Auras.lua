@@ -265,18 +265,78 @@ local function AcquireAuraIcon(parent, size)
         if icon.texture then icon.texture:SetTexCoord(0, 1, 0, 1); icon.texture:SetDesaturated(false) end
         if icon.cooldown then icon.cooldown:Clear(); if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end end
         if icon.count then icon.count:SetText(""); icon.count:Hide() end
+        -- Defensive: ensure tracking fields are clean (Recycle clears them, but
+        -- belt-and-braces in case future code paths feed the recycler differently).
+        icon._msufAuraID       = nil
+        icon._msufBorderBlack  = nil
+        icon._msufPosIdx       = nil
+        icon._msufPosStep      = nil
+        icon._msufPosPR        = nil
         return icon
     end
     return nil
 end
 
+-- Memory-leak Fix3: aggressively reset icon state on recycle.
+-- Without this, a recycled icon carries stale tracking fields (auraID,
+-- unit, owner, position cache) which would cause RenderGroup's "same
+-- aura" fast-path to skip a fresh setup when the icon lands on a
+-- different frame. We also break the strong-ref to the prior owner
+-- so the recycled icon doesn't keep an old retired frame alive.
 local function RecycleAuraIcon(icon)
     if not icon or _iconRecyclerN >= _ICON_RECYCLE_MAX then return false end
     icon:Hide()
     icon:ClearAllPoints()
+    -- Clear tracking fields so a future Acquire onto a different frame
+    -- takes the full-setup branch in RenderGroup.
+    icon._msufAuraID       = nil
+    icon._msufUnit         = nil
+    icon._msufFilter       = nil
+    icon._msufBorderBlack  = nil
+    icon._msufPosIdx       = nil
+    icon._msufPosStep      = nil
+    icon._msufPosPR        = nil
+    icon._msufCdHidden     = nil
+    -- Drop owner ref so the prior frame can be GC'd (most important: when
+    -- a Header retire calls GF.RecycleFramePools, the icon→frame strong-ref
+    -- via _msufGFOwner would otherwise pin the retired frame in memory.)
+    icon._msufGFOwner      = nil
+    -- Optional: if the icon had a Masque skin, the Acquire path doesn't
+    -- re-skin (skin sticks to the frame). Leaving Masque state alone is
+    -- correct: same library handles re-anchor on next AddButton call.
     _iconRecyclerN = _iconRecyclerN + 1
     _iconRecycler[_iconRecyclerN] = icon
     return true
+end
+
+------------------------------------------------------------------------
+-- GF.RecycleFramePools(f)
+-- Called from RetireHeader: empty all aura-icon pools owned by `f`
+-- and feed the global recycler. Stops at the recycler's hard cap (32)
+-- — surplus icons remain on the retired frame and get GC'd along with
+-- the frame. This single function is the only path that consumes the
+-- recycler in the hot rebuild cycle (zone change → frames retired →
+-- next SetupHeader pulls icons from the pool instead of CreateFrame'ing).
+------------------------------------------------------------------------
+function GF.RecycleFramePools(f)
+    if not f then return end
+    for _, poolKey in pairs(POOL_KEYS) do
+        local pool = f[poolKey]
+        if type(pool) == "table" then
+            for i = 1, #pool do
+                local ic = pool[i]
+                if ic then
+                    if not RecycleAuraIcon(ic) then break end -- recycler full → stop
+                    pool[i] = nil
+                end
+            end
+            -- Reset pool meta-cache so EnsurePool re-populates correctly on next setup
+            pool._msufPoolOK = nil
+            pool._msufPoolN  = nil
+            pool._msufPoolSz = nil
+            pool._msufPoolP  = nil
+        end
+    end
 end
 
 local function CreateAuraIcon(parent, size)
@@ -563,24 +623,47 @@ local function ResolveCooldownFontString(cd)
     return nil
 end
 
+------------------------------------------------------------------------
+-- Cooldown text base color — module-level cache, mirrors ResolveGlobalFont
+-- pattern. Invalidated by GF.InvalidateCdColor() from RefreshFonts and
+-- RefreshColors hooks (covers font-color change + profile-swap-via-PushVisualUpdates).
+-- Cached values: r, g, b, a. The "1" alpha is constant and cached too so
+-- callers never have to special-case it.
+------------------------------------------------------------------------
+local _gfCdColR, _gfCdColG, _gfCdColB, _gfCdColA
 local function ResolveCooldownBaseColor()
+    local r = _gfCdColR
+    if r then return r, _gfCdColG, _gfCdColB, _gfCdColA end
     local g = _G.MSUF_DB and _G.MSUF_DB.general
     if g and g.useCustomFontColor == true then
-        local r = g.fontColorCustomR
-        local gg = g.fontColorCustomG
-        local b = g.fontColorCustomB
-        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-            return r, gg, b, 1
+        local cr = g.fontColorCustomR
+        local cg = g.fontColorCustomG
+        local cb = g.fontColorCustomB
+        if type(cr) == "number" and type(cg) == "number" and type(cb) == "number" then
+            _gfCdColR, _gfCdColG, _gfCdColB, _gfCdColA = cr, cg, cb, 1
+            return cr, cg, cb, 1
         end
     end
+    _gfCdColR, _gfCdColG, _gfCdColB, _gfCdColA = 1, 1, 1, 1
     return 1, 1, 1, 1
 end
 
-local function ApplyCooldownVisualStyle(cd, ownerFrame)
+--- Invalidate cached cooldown text color (called by font/color options changes
+--- via GF.RefreshFonts and GF.RefreshColors).
+function GF.InvalidateCdColor()
+    _gfCdColR = nil
+    _gfCdColG = nil
+    _gfCdColB = nil
+    _gfCdColA = nil
+end
+
+-- ApplyCooldownVisualStyle(cd, reverse)
+-- `reverse` is the cooldownSwipeDarkenOnLoss bool. Caller pre-resolves it
+-- once per render (RenderGroup) or per-icon-event (RefreshAuraIcon) from
+-- f._c.cdReverse — eliminates GF.GetConf from this hot path.
+-- Diff-gates remain per-icon (correctness — required for live-apply).
+local function ApplyCooldownVisualStyle(cd, reverse)
     if not cd then return end
-    local kind = (ownerFrame and ownerFrame._msufGFKind) or "party"
-    local conf = GF.GetConf and GF.GetConf(kind)
-    local reverse = conf and conf.cooldownSwipeDarkenOnLoss == true or false
 
     if cd._msufGFDrawEdge ~= false then
         cd._msufGFDrawEdge = false
@@ -599,7 +682,11 @@ end
 ------------------------------------------------------------------------
 -- Apply cooldown text font (diff-gated, global font, lazy FontString discovery)
 ------------------------------------------------------------------------
-local function ApplyCooldownFont(ic, gcfg)
+-- ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA)
+-- Caller (RenderGroup) pre-resolves the four style values once per render
+-- group — eliminates per-icon ResolveGlobalFont + ResolveCooldownBaseColor
+-- calls. Per-icon diff-gates remain for live-apply correctness.
+local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA)
     local cd = ic and ic.cooldown
     if not cd then return end
     local showCd = gcfg and gcfg.showCooldown ~= false
@@ -610,8 +697,6 @@ local function ApplyCooldownFont(ic, gcfg)
     if not fs then return end
 
     local size = gcfg.cooldownSize or 8
-    local gFont, gFlags = ResolveGlobalFont()
-    local wantFlags = gcfg.cooldownOutline or gFlags or "OUTLINE"
 
     -- Diff-gate: skip redundant SetFont (same pattern as A2_Icons line 938)
     if cd._msufGFCdTextSize ~= size or cd._msufGFCdFontPath ~= gFont then
@@ -634,18 +719,17 @@ local function ApplyCooldownFont(ic, gcfg)
         fs:SetPoint(anchor, ic, anchor, ox, oy)
     end
 
-    local r, g, b, a = ResolveCooldownBaseColor()
-    if cd._msufGFCdColorR ~= r or cd._msufGFCdColorG ~= g
-        or cd._msufGFCdColorB ~= b or cd._msufGFCdColorA ~= a
+    if cd._msufGFCdColorR ~= baseR or cd._msufGFCdColorG ~= baseG
+        or cd._msufGFCdColorB ~= baseB or cd._msufGFCdColorA ~= baseA
     then
-        cd._msufGFCdColorR = r
-        cd._msufGFCdColorG = g
-        cd._msufGFCdColorB = b
-        cd._msufGFCdColorA = a
+        cd._msufGFCdColorR = baseR
+        cd._msufGFCdColorG = baseG
+        cd._msufGFCdColorB = baseB
+        cd._msufGFCdColorA = baseA
         if fs.SetTextColor then
-            fs:SetTextColor(r, g, b, a)
+            fs:SetTextColor(baseR, baseG, baseB, baseA)
         elseif fs.SetVertexColor then
-            fs:SetVertexColor(r, g, b, a)
+            fs:SetVertexColor(baseR, baseG, baseB, baseA)
         end
     end
 end
@@ -653,8 +737,9 @@ end
 ------------------------------------------------------------------------
 -- Apply stack count layout (font size, anchor, offset)
 -- Diff-gated per icon for live-apply.
+-- Caller (RenderGroup) pre-resolves gFont + wantFlags once per render group.
 ------------------------------------------------------------------------
-local function ApplyStackLayout(ic, gcfg)
+local function ApplyStackLayout(ic, gcfg, gFont, wantFlags)
     local fs = ic and ic.count
     if not fs then return end
 
@@ -662,9 +747,6 @@ local function ApplyStackLayout(ic, gcfg)
     local anchor = gcfg.stackAnchor or "BOTTOMRIGHT"
     local ox = gcfg.stackOffsetX or -1
     local oy = gcfg.stackOffsetY or 1
-
-    local gFont, gFlags = ResolveGlobalFont()
-    local wantFlags = gcfg.stackOutline or gFlags or "OUTLINE"
 
     if ic._msufGFStkSize ~= size or ic._msufGFStkFont ~= gFont then
         if gFont and fs.SetFont then
@@ -862,6 +944,26 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local af = AF()
     local blHash = af and af.BuildBlacklistHash(gcfg) or nil
 
+    -- ── Pre-resolve per-render-group style values (Fix A) ─────────────
+    -- Hoisted out of the per-icon loop. Identical for all icons in this
+    -- render. Per-icon helpers receive these as parameters and keep their
+    -- own diff-gates for live-apply correctness.
+    -- _styleReverse: cooldown swipe direction (cooldownSwipeDarkenOnLoss)
+    --   sourced from f._c.cdReverse which BuildFrameCache populates from conf.
+    --   Live-apply: Options toggle calls GF.RefreshVisuals → ApplyVisuals →
+    --   BuildFrameCache → c.cdReverse refreshed.
+    -- _styleGFont/_styleGFlags: ResolveGlobalFont (module-cached, invalidated
+    --   by GF.InvalidateCdFont on font change).
+    -- _styleBaseR/G/B/A: ResolveCooldownBaseColor (module-cached, invalidated
+    --   by GF.InvalidateCdColor on color/font-color change).
+    -- These do NOT cache numeric data (HP, stacks, durations) — only style.
+    local _ownerC = f._c
+    local _styleReverse  = _ownerC and _ownerC.cdReverse or false
+    local _styleGFont, _styleGFlags = ResolveGlobalFont()
+    local _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA = ResolveCooldownBaseColor()
+    local _styleCdFlags  = gcfg.cooldownOutline or _styleGFlags or "OUTLINE"
+    local _styleStkFlags = gcfg.stackOutline    or _styleGFlags or "OUTLINE"
+
     for i = 2, slotCount do
         if shown >= maxIcons and (not isHarmful or topDispel) then break end
         local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
@@ -921,13 +1023,13 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                     shown = shown + 1
                     local ic = pool[shown]
                     if ic then
-                        ApplyCooldownVisualStyle(ic.cooldown, f)
+                        ApplyCooldownVisualStyle(ic.cooldown, _styleReverse)
                         local prevAid = ic._msufAuraID
                         if prevAid == aid then
                             -- ══ SAME AURA ══ cheap refresh (cooldown sweep + stacks + layout)
                             if showCd then ApplyCooldown(ic, unit, aid, true) end
-                            ApplyCooldownFont(ic, gcfg)
-                            ApplyStackLayout(ic, gcfg)
+                            ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA)
+                            ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags)
                             if showStk then ApplyStacks(ic, unit, aid, aura.applications, true, gcfg) end
                         else
                             -- ══ DIFFERENT AURA OR FIRST SHOW ══
@@ -948,8 +1050,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                                     cd:SetHideCountdownNumbers(wantHide)
                                 end
                             end
-                            ApplyCooldownFont(ic, gcfg)
-                            ApplyStackLayout(ic, gcfg)
+                            ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA)
+                            ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags)
                             ApplyStacks(ic, unit, aid, aura.applications, showStk, gcfg)
 
                             if isHarmful then
@@ -1205,7 +1307,11 @@ function GF.RefreshAuraIcon(icon, unit, aid)
     if not icon or not unit or not aid then return end
     local owner = icon._msufGFOwner
     if owner then
-        ApplyCooldownVisualStyle(icon.cooldown, owner)
+        -- Read pre-cached reverse flag from BuildFrameCache (Fix B).
+        -- Avoids GF.GetConf in this hot path (called per updated aura per UNIT_AURA event).
+        local oc = owner._c
+        local reverse = (oc and oc.cdReverse) or false
+        ApplyCooldownVisualStyle(icon.cooldown, reverse)
     end
     ApplyCooldown(icon, unit, aid, true)
     ApplyStacks(icon, unit, aid, nil, true, nil)

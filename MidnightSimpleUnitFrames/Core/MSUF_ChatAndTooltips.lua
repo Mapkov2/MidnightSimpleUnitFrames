@@ -291,10 +291,18 @@ end
 local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     local nameLine = UnitName(unit) or fallbackName
     if isPlayer then
-        if UnitIsAFK(unit) then
-            nameLine = nameLine .. " <AFK>"
-        elseif UnitIsDND(unit) then
-            nameLine = nameLine .. " <DND>"
+        -- Secret-safe (12.0): UnitIsAFK/UnitIsDND may return secret booleans;
+        -- direct boolean test in `if` would hard-error. Guard via issecretvalue.
+        if UnitIsAFK then
+            local afk = UnitIsAFK(unit)
+            if not (issecretvalue and issecretvalue(afk)) and afk then
+                nameLine = nameLine .. " <AFK>"
+            elseif UnitIsDND then
+                local dnd = UnitIsDND(unit)
+                if not (issecretvalue and issecretvalue(dnd)) and dnd then
+                    nameLine = nameLine .. " <DND>"
+                end
+            end
         end
     end
      return nameLine
