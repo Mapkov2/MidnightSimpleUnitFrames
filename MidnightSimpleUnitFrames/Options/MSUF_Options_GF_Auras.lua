@@ -677,6 +677,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         -- Per-spell config panels (lazy-created)
         ----------------------------------------------------------------
         local spellPanels = {}
+        local function SpellPanelKey(specKey, auraName)
+            return tostring(specKey or "") .. "\031" .. tostring(auraName or "")
+        end
 
         HideAllSpellPanels = function()
             for _, panel in pairs(spellPanels) do panel:Hide() end
@@ -684,7 +687,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
 
         local function BuildSpellPanel(auraName, specKey, parentTile)
-            if spellPanels[auraName] then return spellPanels[auraName] end
+            local panelKey = SpellPanelKey(specKey, auraName)
+            if spellPanels[panelKey] then return spellPanels[panelKey] end
 
             local panel = CreateFrame("Frame", nil, body)
             panel:SetSize(640, 400)
@@ -921,7 +925,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if t == "bar" then
                     showCDChk:Hide(); cdSizeSl:Hide()
                 elseif t == "number" then
-                    showCDChk:Hide(); cdSizeSl:Show()
+                    showCDChk:Hide(); cdSizeSl:Hide()
                 else
                     showCDChk:Show()
                     if PlacedCfg().showCooldown ~= false then cdSizeSl:Show() else cdSizeSl:Hide() end
@@ -1071,7 +1075,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             RefreshFxWidgets()
 
             panel:Hide()
-            spellPanels[auraName] = panel
+            spellPanels[panelKey] = panel
             return panel
         end
 
@@ -1374,11 +1378,12 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                             end
                             if btn == "LeftButton" then
                                 HideAllSpellPanels()
-                                if expandedSpell == auraName then
+                                local panelKey = SpellPanelKey(specKey, auraName)
+                                if expandedSpell == panelKey then
                                     expandedSpell = nil
                                     return
                                 end
-                                expandedSpell = auraName
+                                expandedSpell = panelKey
                                 GF._highlightedSI = auraName
                                 GF.RefreshVisuals()
                                 local panel = BuildSpellPanel(auraName, specKey, self)

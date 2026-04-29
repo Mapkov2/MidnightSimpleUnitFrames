@@ -272,6 +272,8 @@ SI.SpecDefaults = {
         PrayerOfMending = { placed = { type = "icon",   anchor = "BOTTOMLEFT", x = 1, y = 1, size = 20 } },
         VoidShield      = { placed = { type = "square", anchor = "BOTTOMRIGHT", x = -3, y = 3, size = 9 } },
         PainSuppression = { frame = { type = "border",  color = {0.81, 0.58, 0.93, 1}, priority = 1 } },
+        PowerInfusion   = { placed = { type = "icon",   anchor = "RIGHT", x = -1, y = 0, size = 20 },
+                            frame = { type = "glow",    color = {0.94, 0.82, 0.31, 1}, priority = 2, thickness = 2 } },
     },
     HolyPriest = {
         Renew           = { placed = { type = "icon",   anchor = "TOPLEFT", x = 1, y = -1, size = 22 } },

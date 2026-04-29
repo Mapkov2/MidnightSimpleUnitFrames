@@ -360,7 +360,7 @@ local function ApplyPlacedCooldownFont(ind, cfg, fontSizeOverride)
     return fs
 end
 
-local function ApplyPreviewTextStyle(fs, cfg, fallbackSize)
+local function ApplyPreviewTextStyle(fs, cfg, fallbackSize, forceFallbackSize)
     if not fs then return end
     local gfs = _G.MSUF_GetGlobalFontSettings
     local fp, ff
@@ -369,7 +369,8 @@ local function ApplyPreviewTextStyle(fs, cfg, fallbackSize)
         fp = GF and GF.ResolveFontPath and GF.ResolveFontPath() or "Fonts\\FRIZQT__.TTF"
         ff = GF and GF.ResolveFontFlags and GF.ResolveFontFlags() or "OUTLINE"
     end
-    fs:SetFont(fp, cfg.cooldownSize or fallbackSize or 8, cfg.cooldownOutline or ff or "OUTLINE")
+    local fontSize = forceFallbackSize and fallbackSize or (cfg.cooldownSize or fallbackSize or 8)
+    fs:SetFont(fp, fontSize or 8, cfg.cooldownOutline or ff or "OUTLINE")
     local r, g, b, a = ResolveCooldownBaseColor()
     fs:SetTextColor(r, g, b, a)
 end
@@ -539,7 +540,7 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
         barWidth = barWidth * scale
         if barWidth < 8 then barWidth = 8 end
     end
-    local displaySize = (itype == "number") and (cfg.cooldownSize or size) or size
+    local displaySize = size
     local ind = GetOrCreatePlaced(f, auraName, itype, displaySize, parent, barWidth, layer)
 
     ind:ClearAllPoints()
@@ -577,7 +578,7 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
                         ind.cooldown:SetCooldownFromDurationObject(obj)
                         ClearA2CooldownScope(ind)
                         if showCdText then
-                            ApplyPlacedCooldownFont(ind, cfg, isNumber and (cfg.cooldownSize or displaySize) or nil)
+                            ApplyPlacedCooldownFont(ind, cfg, isNumber and displaySize or nil)
                         end
                     else
                         ind.cooldown:Clear()
@@ -634,7 +635,7 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
             end
             ClearA2CooldownScope(ind)
             if ind.previewText then
-                ApplyPreviewTextStyle(ind.previewText, cfg, displaySize)
+                ApplyPreviewTextStyle(ind.previewText, cfg, displaySize, true)
                 ind.previewText:SetText("9")
                 ind.previewText:Show()
             end
@@ -1030,31 +1031,45 @@ function GF.PreviewSpellIndicators(f, kind, classToken, specIdx)
     ResetFrameEffects(f)
     local siLayer = siCfg.layer or 9
 
+    local function PreviewSpecConfig(sk, specCfg, processed, bestByType)
+        local function PreviewAura(auraName, auraCfg)
+            if not auraCfg or auraCfg.enabled == false then return end
+            if processed then
+                if processed[auraName] then return end
+                processed[auraName] = true
+            end
+            local mock = { icon = SI.GetAuraIcon(sk, auraName), auraInstanceID = nil, applications = 0 }
+            if auraCfg.placed then ApplyPlaced(f, nil, auraName, auraCfg.placed, mock, parent, sk, true, nil, siLayer) end
+            if auraCfg.frame and auraCfg.frame.type then
+                local ft = auraCfg.frame.type
+                local prio = auraCfg.frame.priority or 5
+                local best = bestByType[ft]
+                if not best or prio < best.prio then
+                    bestByType[ft] = { name = auraName, cfg = auraCfg.frame, data = mock, prio = prio }
+                end
+            end
+        end
+
+        local trackable = SI.TrackableAuras and SI.TrackableAuras[sk]
+        if trackable then
+            for _, info in ipairs(trackable) do
+                PreviewAura(info.name, specCfg[info.name])
+            end
+        end
+        for auraName, auraCfg in pairs(specCfg) do
+            PreviewAura(auraName, auraCfg)
+        end
+    end
+
     if specKey == "multi" then
         local ms = siCfg.multiSpecs
         if not ms then return end
-        local idx = 0
         local bestByType = {}
         for k in pairs(_multiProcessed) do _multiProcessed[k] = nil end
         for sk in pairs(ms) do
             local specCfg = EnsureSpecConfig(siCfg, sk)
             if specCfg then
-                for auraName, auraCfg in pairs(specCfg) do
-                    if auraCfg and auraCfg.enabled ~= false and not _multiProcessed[auraName] then
-                        _multiProcessed[auraName] = true
-                        idx = idx + 1
-                        local mock = (idx % 2 == 1) and { icon = SI.GetAuraIcon(sk, auraName), auraInstanceID = nil, applications = 0 } or nil
-                        if auraCfg.placed then ApplyPlaced(f, nil, auraName, auraCfg.placed, mock, parent, sk, true, nil, siLayer) end
-                        if auraCfg.frame and auraCfg.frame.type and mock then
-                            local ft = auraCfg.frame.type
-                            local prio = auraCfg.frame.priority or 5
-                            local best = bestByType[ft]
-                            if not best or prio < best.prio then
-                                bestByType[ft] = { name = auraName, cfg = auraCfg.frame, data = mock, prio = prio }
-                            end
-                        end
-                    end
-                end
+                PreviewSpecConfig(sk, specCfg, _multiProcessed, bestByType)
             end
         end
         for _, fx in pairs(bestByType) do ApplyFrameEffect(f, fx.name, fx.cfg, fx.data) end
@@ -1064,23 +1079,8 @@ function GF.PreviewSpellIndicators(f, kind, classToken, specIdx)
     local specCfg = EnsureSpecConfig(siCfg, specKey)
     if not specCfg then return end
 
-    local idx = 0
     local bestByType = {}
-    for auraName, auraCfg in pairs(specCfg) do
-        if auraCfg and auraCfg.enabled ~= false then
-            idx = idx + 1
-            local mock = (idx % 2 == 1) and { icon = SI.GetAuraIcon(specKey, auraName), auraInstanceID = nil, applications = 0 } or nil
-            if auraCfg.placed then ApplyPlaced(f, nil, auraName, auraCfg.placed, mock, parent, specKey, true, nil, siLayer) end
-            if auraCfg.frame and auraCfg.frame.type and mock then
-                local ft = auraCfg.frame.type
-                local prio = auraCfg.frame.priority or 5
-                local best = bestByType[ft]
-                if not best or prio < best.prio then
-                    bestByType[ft] = { name = auraName, cfg = auraCfg.frame, data = mock, prio = prio }
-                end
-            end
-        end
-    end
+    PreviewSpecConfig(specKey, specCfg, nil, bestByType)
     for _, fx in pairs(bestByType) do
         ApplyFrameEffect(f, fx.name, fx.cfg, fx.data)
     end

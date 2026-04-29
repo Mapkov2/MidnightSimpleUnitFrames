@@ -637,27 +637,28 @@ local function ApplyTextLayout(f, kind)
     -- 3-slot health text
     local hox = conf.hpOffsetX or 0
     local hoy = conf.hpOffsetY or 0
-    local tl = conf.textLeft  or "NONE"
-    local tc = conf.textCenter or "NONE"
-    local tr = conf.textRight or "NONE"
+    local hpTextOn = conf.showHPText ~= false
+    local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
+    local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+    local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
 
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
         f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", 3 + hox, hoy)
         f.textLeftFS:SetJustifyH("LEFT")
-        if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
+        if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:SetText(""); f.textLeftFS:Hide() end
     end
     if f.textCenterFS then
         f.textCenterFS:ClearAllPoints()
         f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", hox, hoy)
         f.textCenterFS:SetJustifyH("CENTER")
-        if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end
+        if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
     end
     if f.textRightFS then
         f.textRightFS:ClearAllPoints()
         f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -3 + hox, hoy)
         f.textRightFS:SetJustifyH("RIGHT")
-        if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:Hide() end
+        if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:SetText(""); f.textRightFS:Hide() end
     end
 
     if f.statusIndicatorText then
