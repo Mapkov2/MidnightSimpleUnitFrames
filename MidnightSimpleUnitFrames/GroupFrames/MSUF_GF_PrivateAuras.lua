@@ -26,6 +26,13 @@ local type        = type
 local AddPrivateAuraAnchor    = _G.C_UnitAuras.AddPrivateAuraAnchor
 local RemovePrivateAuraAnchor = _G.C_UnitAuras.RemovePrivateAuraAnchor
 
+local function AddPrivateAuraAnchorSafe(args)
+    if type(AddPrivateAuraAnchor) ~= "function" then return nil, "AddPrivateAuraAnchor unavailable" end
+    local ok, anchorID = pcall(AddPrivateAuraAnchor, args)
+    if ok then return anchorID end
+    return nil, anchorID
+end
+
 ------------------------------------------------------------------------
 -- Clear anchors for a frame (icon anchors + optional container overlay)
 ------------------------------------------------------------------------
@@ -295,8 +302,8 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         args.iconInfo.borderScale = borderScale
         args.iconInfo.iconAnchor.relativeTo = slot
 
-        local ok, anchorID = true, AddPrivateAuraAnchor(args)
-        if ok and anchorID then
+        local anchorID = AddPrivateAuraAnchorSafe(args)
+        if anchorID then
             f._gfPrivAnchorIDs[#f._gfPrivAnchorIDs + 1] = anchorID
         end
     end
@@ -353,16 +360,38 @@ local function _GetContainerOverlayConf(pa)
 end
 
 local function _GroupTypeForUnit(unit)
+    local G = _G.CompactRaidGroupTypeEnum
     if type(unit) == "string" and unit:find("^party") then
-        return 4
+        return G and G.Party or 4
     end
-    return 5
+    return G and G.Raid or 5
+end
+
+local function _ResolveAuraOrganizationType(gradientDir)
+    local E = _G.Enum and _G.Enum.RaidAuraOrganizationType
+    local legacy = E and E.Legacy or 0
+    local buffsTop = E and E.BuffsTopDebuffsBottom or 1
+    local buffsRight = E and E.BuffsRightDebuffsLeft or 2
+
+    if gradientDir == "BOTTOM" then return buffsTop end
+    if gradientDir == "LEFT" or gradientDir == "RIGHT" then return buffsRight end
+    return legacy
+end
+
+local function _ResolveDispelIndicatorOption(dispelMode)
+    local E = _G.Enum and _G.Enum.RaidDispelDisplayType
+    local byMe = E and E.DispellableByMe or 2
+    local all = E and E.DisplayAll or 1
+    if dispelMode == "allDispellable" then return all end
+    return byMe
 end
 
 function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
     if not f or not unit then return end
 
     local co = _GetContainerOverlayConf(pa)
+    local auraOrgType = _ResolveAuraOrganizationType(co.gradientDir)
+    local dispelOption = _ResolveDispelIndicatorOption(co.dispelMode)
 
     -- Disabled or teardown: clear existing anchor and bail.
     if not co.enabled then
@@ -385,6 +414,8 @@ function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
         and cached.showIcons   == co.showIcons
         and cached.dispelMode  == co.dispelMode
         and cached.gradientDir == co.gradientDir
+        and cached.auraOrgType == auraOrgType
+        and cached.dispelOption == dispelOption
 
     -- Lazy-init wrapper. Parent to the unitframe itself (not a sub-region)
     -- so Blizzard can size/centre the overlay across the whole frame.
@@ -408,9 +439,11 @@ function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
     wrapper:SetAttribute("ignore-debuffs", true)
     wrapper:SetAttribute("show-dispel-indicator-overlay", true)
     wrapper:SetAttribute("suppress-dispel-border-icons", not co.showIcons)
-    wrapper:SetAttribute("dispel-indicator-option", co.dispelMode)
-    wrapper:SetAttribute("aura-organization-type", co.gradientDir)
+    wrapper:SetAttribute("dispel-indicator-option", dispelOption)
+    wrapper:SetAttribute("aura-organization-type", auraOrgType)
     wrapper:SetAttribute("group-type", _GroupTypeForUnit(unit))
+    wrapper:SetAttribute("display-only-dispellable-debuffs", false)
+    wrapper:SetAttribute("ignore-dispel-debuffs", false)
     wrapper:SetAttribute("power-bar-used-height", 0)
     wrapper:SetAttribute("icon-size", 10)
     wrapper:SetAttribute("set-aura-size-to-icon-size", false)
@@ -427,7 +460,7 @@ function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
         f._gfPrivContainerOverlayID = nil
     end
 
-    local newID = AddPrivateAuraAnchor({
+    local newID, err = AddPrivateAuraAnchorSafe({
         unitToken            = unit,
         parent               = wrapper,
         isContainer          = true,
@@ -442,7 +475,15 @@ function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
             showIcons   = co.showIcons,
             dispelMode  = co.dispelMode,
             gradientDir = co.gradientDir,
+            auraOrgType = auraOrgType,
+            dispelOption = dispelOption,
         }
+    else
+        f._gfPrivContainerOverlayID   = nil
+        f._gfPrivContainerOverlayUnit = nil
+        f._gfPrivCOCached = nil
+        if wrapper then wrapper:Hide() end
+        f._gfPrivCOLastError = err
     end
 end
 
