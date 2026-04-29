@@ -2088,6 +2088,15 @@ local function MSUF_ResolveTextAnchor(anchor, isTop)
         return pt, pt, -4, "RIGHT", -1 -- spacerSign (-1 = grow left)
     end
 end
+local function MSUF_ResolveNameAnchor(anchor, x)
+    x = tonumber(x) or 0
+    if anchor == "RIGHT" then
+        return "TOPRIGHT", "TOPRIGHT", -x, "RIGHT"
+    elseif anchor == "CENTER" then
+        return "TOP", "TOP", x, "CENTER"
+    end
+    return "TOPLEFT", "TOPLEFT", x, "LEFT"
+end
 local function MSUF_TextLayout_GetSpacer(key, udb, g, hasPct, spec)
     if not hasPct then  return false, 0 end
     -- One-time seed: make Shared spacers start like Player (if Shared keys are missing).
@@ -2176,18 +2185,11 @@ local function ApplyTextLayout(f, conf)
     if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, hpHasPct, hpOn, hpEff, wUsed, (key or ""), (hpMode or ""), pHasPct, pOn, pEff, (pMode or ""), (hpAnchor or ""), (powerAnchor or ""), (nameAnchor or ""), (f._msufPowerBarDetached and 1 or 0), (_textOnBarActive and 1 or 0), pbW) then  return end
     f._msufTextLayoutStamp = 1
     if f.nameText then
-        -- Resolve name anchor: LEFT (default), CENTER, RIGHT
-        local namePt, nameRelPt, nameDefX
-        if nameAnchor == "RIGHT" then
-            namePt, nameRelPt, nameDefX = "TOPRIGHT", "TOPRIGHT", -nX
-        elseif nameAnchor == "CENTER" then
-            namePt, nameRelPt, nameDefX = "TOP", "TOP", 0
-        else
-            namePt, nameRelPt, nameDefX = "TOPLEFT", "TOPLEFT", nX
-        end
+        local namePt, nameRelPt, nameDefX, nameJustify = MSUF_ResolveNameAnchor(nameAnchor, nX)
         MSUF_ApplyPoint(f.nameText, namePt, tf, nameRelPt, nameDefX, nY)
-        if f.nameText.SetJustifyH then f.nameText:SetJustifyH(nameAnchor == "RIGHT" and "RIGHT" or nameAnchor == "CENTER" and "CENTER" or "LEFT") end
+        if f.nameText.SetJustifyH then f.nameText:SetJustifyH(nameJustify) end
         f._msufNameAnchorPoint, f._msufNameAnchorRel, f._msufNameAnchorRelPoint, f._msufNameAnchorX, f._msufNameAnchorY = namePt, tf, nameRelPt, nameDefX, nY
+        f._msufNameAnchorMode, f._msufNameJustifyH = nameAnchor, nameJustify
         f._msufNameClipSideApplied, f._msufNameClipReservedRight, f._msufNameClipTextStamp, f._msufNameClipAnchorStamp, f._msufClampStamp = nil, nil, nil, nil, nil
     end
     if f.levelText and f.nameText then MSUF_ApplyLevelIndicatorLayout_Internal(f, conf) end
@@ -2391,12 +2393,17 @@ function MSUF_ClampNameWidth(f, conf)
         local arp = f._msufNameAnchorRelPoint or "TOPLEFT"
         local ax  = (type(f._msufNameAnchorX) == "number") and f._msufNameAnchorX or 4
         local ay  = (type(f._msufNameAnchorY) == "number") and f._msufNameAnchorY or -4
+        local parentIsClip = f._msufNameClipFrame and f.nameText.GetParent and f.nameText:GetParent() == f._msufNameClipFrame
         local stamp = (_AP_HASH[ap] or 0) * 100003 + (_AP_HASH[arp] or 0) * 10007 + math_floor((ax + 200) * 100) * 101 + math_floor((ay + 200) * 100)
-        if f._msufClampStamp == stamp then
+        if f._msufClampStamp == stamp and not parentIsClip then
              return
     end
         f._msufClampStamp = stamp
-        if f._msufNameClipAnchorMode ~= nil then
+        if parentIsClip then
+            local p = f._msufNameTextOrigParent or (f.textFrame or f)
+            f.nameText:SetParent(p)
+        end
+        if parentIsClip or f._msufNameClipAnchorMode ~= nil then
             f.nameText:ClearAllPoints()
             f.nameText:SetPoint(ap, rel, arp, ax, ay)
             f._msufNameClipAnchorMode = nil
@@ -2405,7 +2412,7 @@ function MSUF_ClampNameWidth(f, conf)
             f._msufNameClipAnchorY = nil
     end
         if f.nameText.SetJustifyH then
-            f.nameText:SetJustifyH("LEFT")
+            f.nameText:SetJustifyH(f._msufNameJustifyH or "LEFT")
     end
         if f._msufNameClipFrame then
             local clip = f._msufNameClipFrame
@@ -2502,6 +2509,11 @@ function MSUF_ClampNameWidth(f, conf)
     if legacyEndClip then
         showDots = false
     end
+    local nameAnchorMode = f._msufNameAnchorMode or "LEFT"
+    f._msufNameClipAnchorMode = nameAnchorMode
+    if nameAnchorMode ~= "LEFT" then
+        showDots = false
+    end
     local tf = f.textFrame or f
     local ap  = f._msufNameAnchorPoint or "TOPLEFT"
     local rel = f._msufNameAnchorRel or tf
@@ -2543,7 +2555,7 @@ function MSUF_ClampNameWidth(f, conf)
         f._msufNameClipAnchorStamp = nil
         f._msufNameClipTextStamp = nil
         if f.nameText.SetJustifyH then
-            f.nameText:SetJustifyH("LEFT")
+            f.nameText:SetJustifyH(f._msufNameJustifyH or "LEFT")
     end
         f.nameText:SetWidth(nameWidth)
         f._msufNameClipSideApplied = "RIGHT"
@@ -2615,8 +2627,10 @@ function MSUF_ClampNameWidth(f, conf)
     end
     end
     -- IMPORTANT: this must be resilient against other code (e.g. font/apply passes) resetting justify/anchors.
-    local textStamp = (clipSide == "LEFT") and 1 or 2
-    local desiredJustify = (clipSide == "LEFT") and "RIGHT" or "LEFT"
+    local textStamp = ((clipSide == "LEFT") and 1 or 2) * 10 + ((nameAnchorMode == "RIGHT" and 3) or (nameAnchorMode == "CENTER" and 2) or 1)
+    local desiredJustify = (nameAnchorMode == "RIGHT" and "RIGHT")
+        or (nameAnchorMode == "CENTER" and "CENTER")
+        or ((clipSide == "LEFT") and "RIGHT" or "LEFT")
     local needTextReanchor = (f._msufNameClipTextStamp ~= textStamp)
     if not needTextReanchor then
         if f.nameText and f.nameText.GetParent and f.nameText:GetParent() ~= clip then
@@ -2628,16 +2642,20 @@ function MSUF_ClampNameWidth(f, conf)
     if needTextReanchor then
         f._msufNameClipTextStamp = textStamp
         f.nameText:ClearAllPoints()
-        if clipSide == "LEFT" then
+        if f.nameText and f.nameText.SetParent then
+            f.nameText:SetParent(clip)
+    end
+        if nameAnchorMode == "RIGHT" then
+            f.nameText:SetPoint("TOPRIGHT", clip, "TOPRIGHT", 0, 0)
+        elseif nameAnchorMode == "CENTER" then
+            f.nameText:SetPoint("TOP", clip, "TOP", 0, 0)
+        elseif clipSide == "LEFT" then
             f.nameText:SetPoint("TOPRIGHT", clip, "TOPRIGHT", 0, 0)
         else
             f.nameText:SetPoint("TOPLEFT", clip, "TOPLEFT", 0, 0)
     end
         if f.nameText and f.nameText.SetJustifyH then
             f.nameText:SetJustifyH(desiredJustify)
-    end
-        if f.nameText and f.nameText.SetParent then
-            f.nameText:SetParent(clip)
     end
     end
     -- Optional ellipsis/dots indicator (secret-safe: never inspects the actual name text)
