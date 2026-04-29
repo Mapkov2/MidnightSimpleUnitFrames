@@ -599,23 +599,24 @@ local function LayoutText(f, kind)
         if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
     end
     -- 3-slot health text
-    local tl = conf.textLeft  or "NONE"
-    local tc = conf.textCenter or "NONE"
-    local tr = conf.textRight or "NONE"
+    local hpTextOn = conf.showHPText ~= false
+    local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
+    local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+    local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
         f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", 3, 0)
-        if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
+        if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:SetText(""); f.textLeftFS:Hide() end
     end
     if f.textCenterFS then
         f.textCenterFS:ClearAllPoints()
         f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", 0, 0)
-        if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end
+        if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
     end
     if f.textRightFS then
         f.textRightFS:ClearAllPoints()
         f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -3, 0)
-        if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:Hide() end
+        if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:SetText(""); f.textRightFS:Hide() end
     end
     if f.statusIndicatorText then
         f.statusIndicatorText:ClearAllPoints()
@@ -950,9 +951,10 @@ function GF.UpdateButton(f, unit)
         local hpMax = UnitHealthMax(unit)
         local delim = conf.textDelimiter or " / "
         local rev = conf.hpTextReverse
-        local tl = conf.textLeft  or "NONE"
-        local tc = conf.textCenter or "NONE"
-        local tr = conf.textRight or "NONE"
+        local hpTextOn = conf.showHPText ~= false
+        local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
+        local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+        local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
         if f.textLeftFS then
             local txt = GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit)
             f.textLeftFS:SetText(txt)
@@ -1841,9 +1843,10 @@ function GF.ApplyPreviewData(f, index, kind)
         local fakeMax = 100
         local delim = conf.textDelimiter or " / "
         local rev = conf.hpTextReverse
-        local tl = conf.textLeft  or "NONE"
-        local tc = conf.textCenter or "NONE"
-        local tr = conf.textRight or "NONE"
+        local hpTextOn = conf.showHPText ~= false
+        local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
+        local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+        local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
         if f.textLeftFS then
             f.textLeftFS:SetText(GF.FormatHealthText(tl, fakeHP, fakeMax, delim, rev))
             if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end

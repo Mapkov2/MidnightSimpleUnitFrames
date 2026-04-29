@@ -609,14 +609,17 @@ local function DD_EnsureList()
     if _listFrame then return end
     -- Fullscreen click-outside catcher
     _listBackdrop = CreateFrame("Button", nil, UIParent)
-    _listBackdrop:SetFrameStrata("FULLSCREEN")
+    _listBackdrop:SetFrameStrata("FULLSCREEN_DIALOG")
+    _listBackdrop:SetFrameLevel(900)
     _listBackdrop:SetAllPoints(UIParent)
     _listBackdrop:EnableMouse(true)
     _listBackdrop:SetScript("OnClick", DD_Close)
     _listBackdrop:Hide()
     -- List container
     local lf = CreateFrame("Frame", "MSUF_SpecDDList", UIParent, "BackdropTemplate")
-    lf:SetFrameStrata("FULLSCREEN_DIALOG")
+    lf:SetFrameStrata("TOOLTIP")
+    lf:SetFrameLevel(1000)
+    if lf.SetToplevel then lf:SetToplevel(true) end
     lf:SetClampedToScreen(true)
     lf:SetBackdrop({
         bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
@@ -638,9 +641,13 @@ local function DD_EnsureList()
     end)
     -- ScrollFrame
     local sf = CreateFrame("ScrollFrame", nil, lf, "UIPanelScrollFrameTemplate")
+    sf:SetFrameStrata("TOOLTIP")
+    sf:SetFrameLevel(1001)
     sf:SetPoint("TOPLEFT", lf, "TOPLEFT", 2, -2)
     sf:SetPoint("BOTTOMRIGHT", lf, "BOTTOMRIGHT", -18, 2)
     local child = CreateFrame("Frame", nil, sf)
+    child:SetFrameStrata("TOOLTIP")
+    child:SetFrameLevel(1002)
     child:SetSize(1, 1)
     sf:SetScrollChild(child)
     lf._sf = sf
@@ -684,6 +691,9 @@ local function DD_GetItem(index)
     DD_EnsureList()
     local btn = CreateFrame("Button", nil, _listFrame._child)
     btn:SetHeight(DD_ITEM_H)
+    btn:SetFrameStrata("TOOLTIP")
+    btn:SetFrameLevel(1003)
+    btn:EnableMouse(true)
     -- Highlight (ADD blend so text stays bright, not darkened)
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints()
@@ -763,6 +773,8 @@ local function DD_Populate(owner)
         local item = items[i]
         local btn = DD_GetItem(i)
         btn:SetParent(child)
+        btn:SetFrameStrata(_listFrame:GetFrameStrata())
+        btn:SetFrameLevel(_listFrame:GetFrameLevel() + 3)
         btn:SetHeight(itemH)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(i - 1) * itemH)
@@ -815,6 +827,12 @@ local function DD_Toggle(owner)
     -- Anchor to the peel button (visible superellipse) if available, else the frame
     local anchorTo = owner._msufPeelButton or owner
     _listFrame:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, -2)
+    _listBackdrop:SetFrameStrata("FULLSCREEN_DIALOG")
+    _listBackdrop:SetFrameLevel(900)
+    _listFrame:SetFrameStrata("TOOLTIP")
+    _listFrame:SetFrameLevel(1000)
+    if _listFrame.SetToplevel then _listFrame:SetToplevel(true) end
+    if _listFrame.Raise then _listFrame:Raise() end
     _listBackdrop:Show()
     _listFrame:Show()
 end
@@ -890,6 +908,9 @@ function UI.Dropdown(spec)
     end
     -- Self-sync on Show
     dd:HookScript("OnShow", function(self) self:Refresh() end)
+    dd:HookScript("OnHide", function(self)
+        if _listOwner == self then DD_Close() end
+    end)
     -- Initial sync
     dd:Refresh()
     if spec.tooltip then AttachTooltip(dd, spec.tooltip) end
@@ -1185,6 +1206,9 @@ function UI.BindExistingDropdown(dd, spec)
         if _listOwner == self and _listFrame and _listFrame:IsShown() then DD_Populate(self) end
     end
     dd:HookScript("OnShow", function(self) self:Refresh() end)
+    dd:HookScript("OnHide", function(self)
+        if _listOwner == self then DD_Close() end
+    end)
     dd:Refresh()
     return dd
 end

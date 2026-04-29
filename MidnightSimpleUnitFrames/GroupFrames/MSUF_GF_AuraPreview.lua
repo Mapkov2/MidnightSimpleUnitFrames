@@ -1281,11 +1281,17 @@ function GF.RebuildSIHandles()
 
     local specData = siCfg.specs and siCfg.specs[specKey]
 
-    for spellName, defCfg in pairs(defaults) do
+    local seen = {}
+    local function AddPreviewSpell(spellName, defCfg)
+        if not spellName or seen[spellName] then return end
+        seen[spellName] = true
+        defCfg = defCfg or {}
         local placed = defCfg.placed
         if not placed then
-            -- frame-only effects, no visual handle
-        else
+            local userCfg = specData and specData[spellName]
+            placed = userCfg and userCfg.placed
+        end
+        if placed then
             -- Check user override
             local userPlaced
             if specData and specData[spellName] and specData[spellName].placed then
@@ -1318,7 +1324,7 @@ function GF.RebuildSIHandles()
                     h._siValue = h:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
                     h._siValue:SetPoint("CENTER", h, "CENTER", 0, 0)
                 end
-                local fontSz = max(8, cfg.cooldownSize or sz)
+                local fontSz = max(8, sz)
                 h._siValue:SetFont("Fonts\\FRIZQT__.TTF", fontSz, "OUTLINE")
                 h._siValue:SetText("12")
                 h._siValue:Show()
@@ -1347,7 +1353,7 @@ function GF.RebuildSIHandles()
             local offX   = floor(((cfg.x) or 0) * psc + 0.5)
             local offY   = floor(((cfg.y) or 0) * psc + 0.5)
             if itype == "number" then
-                local fontSz = max(8, cfg.cooldownSize or sz)
+                local fontSz = max(8, sz)
                 local pfs = max(8, floor(fontSz * psc + 0.5))
                 local pw = max(18, floor(fontSz * psc * 2.2 + 0.5))
                 local ph = max(10, floor(fontSz * psc * 1.4 + 0.5))
@@ -1401,6 +1407,20 @@ function GF.RebuildSIHandles()
                 local p = e and e.placed
                 return p and p.anchor
             end
+        end
+    end
+    local ordered = SI.TrackableAuras and SI.TrackableAuras[specKey]
+    if ordered then
+        for _, info in ipairs(ordered) do
+            AddPreviewSpell(info.name, defaults[info.name])
+        end
+    end
+    for spellName, defCfg in pairs(defaults) do
+        AddPreviewSpell(spellName, defCfg)
+    end
+    if specData then
+        for spellName in pairs(specData) do
+            AddPreviewSpell(spellName, defaults[spellName])
         end
     end
 end

@@ -130,7 +130,12 @@ local function _BuildTextFn(mode, abbrFn, delim, pctFmt)
         if _ftHpMissing then
             return function(fs, unit)
                 local m = _ftHpMissing(unit)
-                if m then fs:SetText("-" .. abbrFn(m)) else fs:SetText("") end
+                local iss = issecretvalue
+                if iss and iss(m) then
+                    fs:SetText("-" .. abbrFn(m))
+                    return
+                end
+                if m and m > 0 then fs:SetText("-" .. abbrFn(m)) else fs:SetText("") end
             end
         end
         return nil
@@ -2012,18 +2017,19 @@ end
 -- Status text helpers (module-level — zero closure allocation)
 ------------------------------------------------------------------------
 local function _GF_HideHealthText(f)
-    if f.textLeftFS then f.textLeftFS:Hide() end
-    if f.textCenterFS then f.textCenterFS:Hide() end
-    if f.textRightFS then f.textRightFS:Hide() end
+    if f.textLeftFS then f.textLeftFS:SetText(""); f.textLeftFS:Hide() end
+    if f.textCenterFS then f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
+    if f.textRightFS then f.textRightFS:SetText(""); f.textRightFS:Hide() end
     if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
     if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
     if f.powerTextRightFS then f.powerTextRightFS:Hide() end
 end
 
 local function _GF_RestoreHealthText(f, conf)
-    local tl = conf.textLeft  or "NONE"
-    local tc = conf.textCenter or "NONE"
-    local tr = conf.textRight or "NONE"
+    local hpTextOn = conf.showHPText ~= false
+    local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
+    local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+    local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
     if f.textLeftFS  and tl ~= "NONE" then f.textLeftFS:Show() end
     if f.textCenterFS and tc ~= "NONE" then f.textCenterFS:Show() end
     if f.textRightFS and tr ~= "NONE" then f.textRightFS:Show() end
