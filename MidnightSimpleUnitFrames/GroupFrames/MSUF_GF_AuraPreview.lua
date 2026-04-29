@@ -1286,10 +1286,12 @@ function GF.RebuildSIHandles()
         if not spellName or seen[spellName] then return end
         seen[spellName] = true
         defCfg = defCfg or {}
-        local placed = defCfg.placed
-        if not placed then
-            local userCfg = specData and specData[spellName]
-            placed = userCfg and userCfg.placed
+        local userCfg = specData and specData[spellName]
+        local placed
+        if userCfg and userCfg.placed ~= nil then
+            placed = userCfg.placed
+        else
+            placed = defCfg.placed
         end
         if placed then
             -- Check user override

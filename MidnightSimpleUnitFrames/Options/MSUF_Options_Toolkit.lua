@@ -673,15 +673,18 @@ local function DD_ItemClick(self)
     local item  = self._ddItem
     local owner = self._ddOwner
     if not (item and owner) then return end
+    local key = item.key
+    if key == nil then key = item.value end
+    local label = item.label or item.text or tostring(key or "")
     local spec = owner._ddSpec
-    if spec and spec.set then spec.set(item.key, item) end
+    if spec and spec.set then spec.set(key, item) end
     if owner.SetValue then
-        owner:SetValue(item.key)
+        owner:SetValue(key)
     else
         -- Auto-intercepted dropdown: update text via UIDropDownMenu API
-        owner._ddKey = item.key
-        if UIDropDownMenu_SetSelectedValue then pcall(UIDropDownMenu_SetSelectedValue, owner, item.key) end
-        if UIDropDownMenu_SetText then pcall(UIDropDownMenu_SetText, owner, item.label or tostring(item.key or "")) end
+        owner._ddKey = key
+        if UIDropDownMenu_SetSelectedValue then pcall(UIDropDownMenu_SetSelectedValue, owner, key) end
+        if UIDropDownMenu_SetText then pcall(UIDropDownMenu_SetText, owner, label) end
     end
     DD_Close()
 end
@@ -720,6 +723,7 @@ local function DD_GetItem(index)
     label:SetTextColor(DD_TEXT[1], DD_TEXT[2], DD_TEXT[3])
     btn._label = label
     -- Click
+    btn:RegisterForClicks("AnyDown")
     btn:SetScript("OnClick", DD_ItemClick)
     -- Mousewheel passthrough
     btn:EnableMouseWheel(true)
@@ -771,6 +775,9 @@ local function DD_Populate(owner)
     -- Populate
     for i = 1, count do
         local item = items[i]
+        local itemKey = item.key
+        if itemKey == nil then itemKey = item.value end
+        local itemLabel = item.label or item.text or tostring(itemKey or "")
         local btn = DD_GetItem(i)
         btn:SetParent(child)
         btn:SetFrameStrata(_listFrame:GetFrameStrata())
@@ -779,7 +786,7 @@ local function DD_Populate(owner)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(i - 1) * itemH)
         btn:SetPoint("RIGHT", child, "RIGHT", 0, 0)
-        btn._sel:SetShown(item.key == curKey or item.overrideActive == true)
+        btn._sel:SetShown(itemKey == curKey or item.overrideActive == true)
         -- Icon
         if item.icon then
             btn._icon:ClearAllPoints()
@@ -797,7 +804,7 @@ local function DD_Populate(owner)
             btn._label:SetPoint("LEFT", btn, "LEFT", 10, 0)
             btn._label:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
         end
-        btn._label:SetText(item.label or item.key or "")
+        btn._label:SetText(itemLabel)
         -- Per-item font preview (e.g. font dropdown shows each font in its own typeface)
         if item.fontObject then
             btn._label:SetFontObject(item.fontObject)
@@ -878,8 +885,10 @@ function UI.Dropdown(spec)
         if type(items) == "function" then items = items() end
         if type(items) == "table" then
             for i = 1, #items do
-                if items[i].key == key then
-                    label = items[i].label or label
+                local itemKey = items[i].key
+                if itemKey == nil then itemKey = items[i].value end
+                if itemKey == key then
+                    label = items[i].label or items[i].text or label
                     break
                 end
             end
@@ -1196,7 +1205,13 @@ function UI.BindExistingDropdown(dd, spec)
         self._ddKey = key; local label = tostring(key or "")
         local items = self._ddSpec.items
         if type(items) == "function" then items = items() end
-        if type(items) == "table" then for _, it in ipairs(items) do if it.key == key then label = it.label or label; break end end end
+        if type(items) == "table" then
+            for _, it in ipairs(items) do
+                local itemKey = it.key
+                if itemKey == nil then itemKey = it.value end
+                if itemKey == key then label = it.label or it.text or label; break end
+            end
+        end
         if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self, key) end
         if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self, label) end
     end

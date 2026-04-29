@@ -527,7 +527,11 @@ end
 -- Apply one placed indicator
 ------------------------------------------------------------------------
 local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, isPreview, scale, layer)
-    if not cfg then return end
+    if not cfg or cfg.type == "none" then
+        local old = f and f._msufSIPlaced and f._msufSIPlaced[auraName]
+        if old then old:Hide() end
+        return
+    end
     local itype  = cfg.type or "icon"
     local size   = cfg.size or 18
     if scale and scale ~= 1 then
@@ -986,13 +990,13 @@ function GF.UpdateSpellIndicators(f, unit)
                     for sk in pairs(ms) do
                         local sc = siCfg.specs and siCfg.specs[sk]
                         local ac = sc and sc[auraName]
-                        if ac and ac.enabled ~= false then enabled = true; break end
+                        if ac and ac.enabled ~= false and ac.placed then enabled = true; break end
                     end
                 end
             else
                 local sc = siCfg.specs and siCfg.specs[specKey]
                 local ac = sc and sc[auraName]
-                if ac and ac.enabled ~= false then enabled = true end
+                if ac and ac.enabled ~= false and ac.placed then enabled = true end
             end
             if not enabled then ind:Hide() end
         end
@@ -1029,6 +1033,9 @@ function GF.PreviewSpellIndicators(f, kind, classToken, specIdx)
 
     local parent = f.barGroup or f
     ResetFrameEffects(f)
+    if f._msufSIPlaced then
+        for _, ind in pairs(f._msufSIPlaced) do ind:Hide() end
+    end
     local siLayer = siCfg.layer or 9
 
     local function PreviewSpecConfig(sk, specCfg, processed, bestByType)
