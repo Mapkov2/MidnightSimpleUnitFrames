@@ -85,6 +85,7 @@ local DIRECTION4 = {
     { key = "BOTTOM", label = L["Bottom"] },
 }
 local INDICATOR_TYPES = {
+    { key = "none",   label = L["None"]   },
     { key = "icon",   label = L["Icon"]   },
     { key = "square", label = L["Square"] },
     { key = "bar",    label = L["Bar"]    },
@@ -502,7 +503,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                                 if type(auraCfg) == "table" then
                                     local fc = auraCfg.frame
                                     if fc and fc.type and LEGACY_FRAME_EFFECT_TYPES[fc.type] then
-                                        auraCfg.frame = nil
+                                        auraCfg.frame = false
                                     end
                                 end
                             end
@@ -716,9 +717,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 siCfg.specs[specKey][auraName] = siCfg.specs[specKey][auraName] or {}
                 return siCfg.specs[specKey][auraName]
             end
-            local function PlacedCfg()
+            local function PlacedCfg(create)
                 local c = SC()
-                if not c.placed then c.placed = {} end
+                if not c.placed and create ~= false then c.placed = {} end
                 return c.placed
             end
             local function FrameCfg()
@@ -830,9 +831,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 name = "MSUF_GF_SI_" .. auraName .. "_Type", parent = panel,
                 anchor = placedLbl, x = -16, y = -4, width = 100,
                 items = INDICATOR_TYPES,
-                get = function(k) return PlacedCfg().type or "icon" end,
+                get = function(k)
+                    local pc = PlacedCfg(false)
+                    return (pc and pc.type) or "none"
+                end,
                 set = function(k, v)
-                    PlacedCfg().type = v
+                    if v == "none" then
+                        SC().placed = false
+                    else
+                        PlacedCfg(true).type = v
+                    end
                     if panel._refreshBarW then panel._refreshBarW() end
                     if panel._refreshCDControls then panel._refreshCDControls() end
                     GF.RefreshVisuals()
@@ -843,16 +851,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 name = "MSUF_GF_SI_" .. auraName .. "_Anchor", parent = panel,
                 anchor = typeDd, x = 0, y = -2, width = 120,
                 items = ANCHOR9,
-                get = function(k) return PlacedCfg().anchor or "TOPLEFT" end,
-                set = function(k, v) PlacedCfg().anchor = v; GF.RefreshVisuals() end,
+                get = function(k) local pc = PlacedCfg(false); return (pc and pc.anchor) or "TOPLEFT" end,
+                set = function(k, v) PlacedCfg(true).anchor = v; GF.RefreshVisuals() end,
             })
 
             local sizeSl = SSlider({
                 name = "MSUF_GF_SI_" .. auraName .. "_Size", parent = panel, compact = true,
                 anchor = anchorDd, x = 16, y = -6,
                 min = 4, max = 40, step = 1, width = 170, default = 18,
-                get = function(k) return PlacedCfg().size or 18 end,
-                set = function(k, v) PlacedCfg().size = v; GF.RefreshVisuals() end,
+                get = function(k) local pc = PlacedCfg(false); return (pc and pc.size) or 18 end,
+                set = function(k, v) PlacedCfg(true).size = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format(L["Size: %d"], v) end,
             })
 
@@ -860,8 +868,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 name = "MSUF_GF_SI_" .. auraName .. "_X", parent = panel, compact = true,
                 anchor = sizeSl, x = 0, y = -34,
                 min = -100, max = 100, step = 1, width = 170, default = 0,
-                get = function(k) return PlacedCfg().x or 0 end,
-                set = function(k, v) PlacedCfg().x = v; GF.RefreshVisuals() end,
+                get = function(k) local pc = PlacedCfg(false); return (pc and pc.x) or 0 end,
+                set = function(k, v) PlacedCfg(true).x = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format("X: %d", v) end,
             })
 
@@ -869,8 +877,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 name = "MSUF_GF_SI_" .. auraName .. "_Y", parent = panel, compact = true,
                 anchor = xSl, x = 0, y = -34,
                 min = -100, max = 100, step = 1, width = 170, default = 0,
-                get = function(k) return PlacedCfg().y or 0 end,
-                set = function(k, v) PlacedCfg().y = v; GF.RefreshVisuals() end,
+                get = function(k) local pc = PlacedCfg(false); return (pc and pc.y) or 0 end,
+                set = function(k, v) PlacedCfg(true).y = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format("Y: %d", v) end,
             })
 
@@ -878,14 +886,18 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 name = "MSUF_GF_SI_" .. auraName .. "_BarW", parent = panel, compact = true,
                 anchor = sizeSl, x = 180, y = 0,
                 min = 10, max = 120, step = 1, width = 120, default = 54,
-                get = function(k) return PlacedCfg().barWidth or ((PlacedCfg().size or 18) * 3) end,
-                set = function(k, v) PlacedCfg().barWidth = v; GF.RefreshVisuals() end,
+                get = function(k)
+                    local pc = PlacedCfg(false)
+                    return (pc and pc.barWidth) or (((pc and pc.size) or 18) * 3)
+                end,
+                set = function(k, v) PlacedCfg(true).barWidth = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format(L["Width: %d"], v) end,
             })
             panel._barWSlider = barWSlider
 
             local function RefreshBarW()
-                local t = PlacedCfg().type or "icon"
+                local pc = PlacedCfg(false)
+                local t = pc and pc.type or "none"
                 if t == "bar" then barWSlider:Show() else barWSlider:Hide() end
             end
             panel._refreshBarW = RefreshBarW
@@ -895,17 +907,17 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 name = "MSUF_GF_SI_" .. auraName .. "_Missing", parent = panel,
                 anchor = ySl, x = 0, y = -18,
                 label = L["Show when missing"],
-                get = function(k) return PlacedCfg().missing == true end,
-                set = function(k, v) PlacedCfg().missing = v and true or false; GF.RefreshVisuals() end,
+                get = function(k) local pc = PlacedCfg(false); return pc and pc.missing == true end,
+                set = function(k, v) PlacedCfg(true).missing = v and true or false; GF.RefreshVisuals() end,
             })
 
             local showCDChk = SCheck({
                 name = "MSUF_GF_SI_" .. auraName .. "_ShowCD", parent = panel,
                 anchor = missingChk, x = 0, y = -8,
                 label = L["Show Cooldown Text"],
-                get = function(k) return PlacedCfg().showCooldown ~= false end,
+                get = function(k) local pc = PlacedCfg(false); return pc and pc.showCooldown ~= false end,
                 set = function(k, v)
-                    PlacedCfg().showCooldown = v and true or false
+                    PlacedCfg(true).showCooldown = v and true or false
                     GF.RefreshVisuals()
                     if panel._refreshCDControls then panel._refreshCDControls() end
                 end,
@@ -915,20 +927,29 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 name = "MSUF_GF_SI_" .. auraName .. "_CDSize", parent = panel, compact = true,
                 anchor = showCDChk, x = 24, y = -8,
                 min = 6, max = 24, step = 1, width = 150, default = 8,
-                get = function(k) return PlacedCfg().cooldownSize or 8 end,
-                set = function(k, v) PlacedCfg().cooldownSize = v; GF.RefreshVisuals() end,
+                get = function(k) local pc = PlacedCfg(false); return (pc and pc.cooldownSize) or 8 end,
+                set = function(k, v) PlacedCfg(true).cooldownSize = v; GF.RefreshVisuals() end,
                 formatText = function(v) return string.format(L["CD Size: %d"], v) end,
             })
 
             local function RefreshCDControls()
-                local t = PlacedCfg().type or "icon"
+                local pc = PlacedCfg(false)
+                local t = pc and pc.type or "none"
+                local placedOn = t ~= "none"
+                if anchorDd then anchorDd:SetShown(placedOn) end
+                if sizeSl then sizeSl:SetShown(placedOn) end
+                if xSl then xSl:SetShown(placedOn) end
+                if ySl then ySl:SetShown(placedOn) end
+                if missingChk then missingChk:SetShown(placedOn) end
                 if t == "bar" then
                     showCDChk:Hide(); cdSizeSl:Hide()
                 elseif t == "number" then
                     showCDChk:Hide(); cdSizeSl:Hide()
+                elseif t == "none" then
+                    showCDChk:Hide(); cdSizeSl:Hide()
                 else
                     showCDChk:Show()
-                    if PlacedCfg().showCooldown ~= false then cdSizeSl:Show() else cdSizeSl:Hide() end
+                    if pc and pc.showCooldown ~= false then cdSizeSl:Show() else cdSizeSl:Hide() end
                 end
             end
             panel._refreshCDControls = RefreshCDControls
@@ -950,14 +971,14 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                     -- Defensive cleanup: any legacy type leaks past the
                     -- one-shot migration get scrubbed on first read.
                     if LEGACY_FRAME_EFFECT_TYPES[fc.type] then
-                        SC().frame = nil
+                        SC().frame = false
                         return "none"
                     end
                     return fc.type
                 end,
                 set = function(k, v)
                     if v == "none" then
-                        SC().frame = nil
+                        SC().frame = false
                     else
                         local fc = FrameCfg()
                         fc.type = v
