@@ -172,11 +172,20 @@ function Movers.Get(k) return movers[k] end
 function Movers.SyncAll()
     if not moverParent or not moverParent:IsShown() then return end
     if EM2.Ticker and EM2.Ticker.IsDragging() then return end
-    for k, m in pairs(movers) do
-        local c = EM2.Registry and EM2.Registry.Get(k)
+    local reg = EM2.Registry and EM2.Registry.All()
+    if not reg then return end
+    for k, c in pairs(reg) do
         if c then
+            if not movers[k] then CreateMover(k, c) end
+            local m = movers[k]
             local f = c.getFrame and c.getFrame()
-            if f then SyncMoverToFrame(m, f); m:Show(); m:UpdateLabelVisibility() end
+            if f then
+                SyncMoverToFrame(m, f)
+                m:Show()
+                m:UpdateLabelVisibility()
+            elseif m then
+                m:Hide()
+            end
         end
     end
 end
