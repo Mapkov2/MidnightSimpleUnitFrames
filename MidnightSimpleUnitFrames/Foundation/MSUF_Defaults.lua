@@ -954,6 +954,23 @@ end
 	        -- 1 = Left Absorb, Right Heal-Absorb; 2 = Right Absorb, Left Heal-Absorb (default); 3 = Follow current HP edge (Blizzard-style)
         g.absorbAnchorMode = 2
     end
+
+    -- v2 absorb-colour cleanup. Pre-v2 the picker in MSUF_ColorsCore wrote to
+    -- absorbColor* / healAbsorbColor*, but every reader (UF, GF, Reset) used
+    -- the absorbBarColor* / healAbsorbBarColor* keys — so the picker had no
+    -- visible effect. The v1 patch tried to migrate by copying old → new,
+    -- which surfaced picker-default white into now-live keys and made
+    -- absorbs blend into the HP bar. v2 wipes both key sets once, so the
+    -- defaults render again until the user explicitly picks a colour via
+    -- the (now functional) picker. The marker keeps this idempotent and
+    -- preserves any choices made AFTER the marker is set.
+    if g.absorbBarColorMigrationV2 ~= true then
+        g.absorbBarColorMigrationV2 = true
+        g.absorbColorR,        g.absorbColorG,        g.absorbColorB,        g.absorbColorA        = nil, nil, nil, nil
+        g.healAbsorbColorR,    g.healAbsorbColorG,    g.healAbsorbColorB,    g.healAbsorbColorA    = nil, nil, nil, nil
+        g.absorbBarColorR,     g.absorbBarColorG,     g.absorbBarColorB,     g.absorbBarColorA     = nil, nil, nil, nil
+        g.healAbsorbBarColorR, g.healAbsorbBarColorG, g.healAbsorbBarColorB, g.healAbsorbBarColorA = nil, nil, nil, nil
+    end
     if g.showLeaderIcon == nil then
         g.showLeaderIcon = true
     end

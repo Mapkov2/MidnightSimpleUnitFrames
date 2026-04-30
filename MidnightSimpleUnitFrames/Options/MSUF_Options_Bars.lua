@@ -433,16 +433,26 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
         _BumpBorderSerial()
         Apply(); ForceTextLayout(uk)
+        -- Re-stamp absorb anchor on UF frames only — GF frames have their own
+        -- anchor pipeline (_msufGFAbsorbAnchorStamp namespace + _GF_ApplyAbsorbAnchor)
+        -- and would be corrupted by main-UF logic touching `f.hpBar` / wrong stamps.
         if _G.MSUF_UnitFrames then
             if _G.MSUF_InvalidateAbsorbCache then _G.MSUF_InvalidateAbsorbCache() end
+            local applyAnchor = _G.MSUF_ApplyAbsorbAnchorMode
+            local updateUF    = _G.UpdateSimpleUnitFrame
             for _, f in pairs(_G.MSUF_UnitFrames) do
-                if f and f.unit then
-                    f._msufAbsorbAnchorModeStamp = nil; f._msufAbsorbFollowActive = nil
-                    if _G.MSUF_ApplyAbsorbAnchorMode then _G.MSUF_ApplyAbsorbAnchorMode(f) end
-                    if _G.UpdateSimpleUnitFrame then _G.UpdateSimpleUnitFrame(f) end
+                if f and f.unit and not f._msufIsGroupFrame then
+                    f._msufAbsorbAnchorModeStamp = nil
+                    f._msufAbsorbFollowActive    = nil
+                    if applyAnchor then applyAnchor(f) end
+                    if updateUF    then updateUF(f)    end
                 end
             end
         end
+        -- Group Frames refresh through their own pipeline so per-GF overrides
+        -- and the GF-side anchor diff-gate stay consistent.
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.RefreshVisuals then GF.RefreshVisuals() end
         if _MSUF_SyncHpPowerTextScopeUI then _MSUF_SyncHpPowerTextScopeUI() end
     end)
 
@@ -566,7 +576,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local function ApplyAbsorb(mode)
         if _G.MSUF_InvalidateAbsorbCache then _G.MSUF_InvalidateAbsorbCache() end
         if _G.MSUF_UpdateAbsorbTextMode then _G.MSUF_UpdateAbsorbTextMode(mode) end
-        RefreshFrames()
+        if _G.MSUF_UFCore_NotifyConfigChanged then
+            _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, "AbsorbDisplay")
+        else
+            RefreshFrames()
+        end
         -- Refresh GF: synchronous full refresh (applies per-GF resolve + preview data)
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
         if GF and GF.RefreshVisuals then GF.RefreshVisuals()

@@ -70,7 +70,7 @@ local function _MSUF_ResolveAbsorbDisplay(unit)
     local mode = nil
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hpPowerTextOverride == true and u.absorbTextMode ~= nil then
+        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbTextMode ~= nil then
             mode = tonumber(u.absorbTextMode)
         end
     end
@@ -102,7 +102,7 @@ local function _MSUF_ResolveAbsorbAnchor(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hpPowerTextOverride == true and u.absorbAnchorMode ~= nil then
+        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbAnchorMode ~= nil then
             local v = tonumber(u.absorbAnchorMode) or 2
             _absorbCache[anchorKey] = v
             return v
@@ -129,7 +129,7 @@ local function _MSUF_ResolveAbsorbOpacity(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hpPowerTextOverride == true and u.absorbBarOpacity ~= nil then
+        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbBarOpacity ~= nil then
             local v = tonumber(u.absorbBarOpacity) or 1
             _absorbCache[ck] = v; return v
         end
@@ -148,7 +148,7 @@ local function _MSUF_ResolveHealAbsorbOpacity(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hpPowerTextOverride == true and u.healAbsorbBarOpacity ~= nil then
+        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.healAbsorbBarOpacity ~= nil then
             local v = tonumber(u.healAbsorbBarOpacity) or 1
             _absorbCache[ck] = v; return v
         end
@@ -180,6 +180,38 @@ end
 
 -- Forward declaration (defined after _MSUF_HealthCalcUpdate)
 local _MSUF_UpdateSelfHealPrediction
+
+local function _MSUF_GetDamageAbsorbs(calc, unit)
+    if calc then
+        if calc.GetTotalDamageAbsorbs then
+            local v = calc:GetTotalDamageAbsorbs()
+            if v ~= nil then return v end
+        elseif calc.GetDamageAbsorbs then
+            local v = calc:GetDamageAbsorbs()
+            if v ~= nil then return v end
+        end
+    end
+    if UnitGetTotalAbsorbs then
+        return UnitGetTotalAbsorbs(unit)
+    end
+    return nil
+end
+
+local function _MSUF_GetHealAbsorbs(calc, unit)
+    if calc then
+        if calc.GetTotalHealAbsorbs then
+            local v = calc:GetTotalHealAbsorbs()
+            if v ~= nil then return v end
+        elseif calc.GetHealAbsorbs then
+            local v = calc:GetHealAbsorbs()
+            if v ~= nil then return v end
+        end
+    end
+    if UnitGetTotalHealAbsorbs then
+        return UnitGetTotalHealAbsorbs(unit)
+    end
+    return nil
+end
 
 -- Unified health+absorb+prediction update using C-side calculator.
 -- Called on UNIT_MAXHEALTH, UNIT_ABSORB_AMOUNT_CHANGED, UNIT_HEAL_ABSORB_AMOUNT_CHANGED,
@@ -241,10 +273,14 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
         -- Absorb bar (damage absorbs)
         if frame.absorbBar then
             if frame._msufAbsorbEnCached then
-                local absorbAmt = calc:GetDamageAbsorbs()
-                frame.absorbBar:SetMinMaxValues(0, maxHP)
-                frame.absorbBar:SetValue(absorbAmt)
-                frame.absorbBar:Show()
+                local absorbAmt = _MSUF_GetDamageAbsorbs(calc, unit)
+                if absorbAmt ~= nil then
+                    frame.absorbBar:SetMinMaxValues(0, maxHP)
+                    frame.absorbBar:SetValue(absorbAmt)
+                    frame.absorbBar:Show()
+                else
+                    MSUF_ResetBarZero(frame.absorbBar, true)
+                end
             else
                 MSUF_ResetBarZero(frame.absorbBar, true)
             end
@@ -252,10 +288,14 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
 
         -- Heal absorb bar — direct C++ SetValue
         if frame.healAbsorbBar then
-            local healAbsorbAmt = calc:GetHealAbsorbs()
-            frame.healAbsorbBar:SetMinMaxValues(0, maxHP)
-            frame.healAbsorbBar:SetValue(healAbsorbAmt)
-            frame.healAbsorbBar:Show()
+            local healAbsorbAmt = _MSUF_GetHealAbsorbs(calc, unit)
+            if healAbsorbAmt ~= nil then
+                frame.healAbsorbBar:SetMinMaxValues(0, maxHP)
+                frame.healAbsorbBar:SetValue(healAbsorbAmt)
+                frame.healAbsorbBar:Show()
+            else
+                MSUF_ResetBarZero(frame.healAbsorbBar, true)
+            end
         end
 
         -- Self-heal prediction bar

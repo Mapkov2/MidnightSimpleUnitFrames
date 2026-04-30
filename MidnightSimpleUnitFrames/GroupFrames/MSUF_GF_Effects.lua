@@ -3083,7 +3083,18 @@ local function _GF_ApplyAbsorbAnchor(f)
     end
 
     -- Mode 1/2/5: full overlay (restore from mode 3/4 if needed)
-    if f._msufGFAbsorbFollowActive then
+    -- Diff-gate: when no follow-restore is needed, skip work if (mode, hpReverse)
+    -- match the cached stamp. Mirrors main UF MSUF_ApplyAbsorbAnchorMode parity.
+    -- hpReverse only matters for mode 5 (it picks the fill direction); for mode
+    -- 1 and 2 the reverse flags are constants, so the stamp alone suffices.
+    local needRestore = f._msufGFAbsorbFollowActive and true or false
+    if not needRestore
+        and f._msufGFAbsorbAnchorStamp == mode
+        and (mode ~= 5 or f._msufGFAbsorbFollowRF == hpReverse) then
+        return
+    end
+
+    if needRestore then
         f._msufGFAbsorbFollowActive = nil
         if f._msufAbsorbFollowClip then f._msufAbsorbFollowClip:Hide() end
         -- Re-parent absorb bars back to health
@@ -3124,6 +3135,8 @@ local function _GF_ApplyAbsorbAnchor(f)
         f.incomingHealBar:SetReverseFill(false)
     end
     f._msufGFAbsorbAnchorStamp = mode
+    f._msufGFAbsorbFollowRF    = (mode == 5) and hpReverse or nil
+    f._msufGFAbsorbFollowW     = nil
 end
 ------------------------------------------------------------------------
 local function _GF_ReadOverlayColor(keyR, keyG, keyB, defR, defG, defB, defA)
