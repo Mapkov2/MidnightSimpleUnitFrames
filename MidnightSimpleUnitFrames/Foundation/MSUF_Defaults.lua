@@ -1568,6 +1568,10 @@ local function fill(key, defaults)
         if u.enabled == nil then
             u.enabled = true
         end
+        -- Per-unitframe: smooth health fill animation (matches Group Frames default).
+        if u.smoothFill == nil then
+            u.smoothFill = true
+        end
         -- Default missing alpha keys to 1 (100%) without overwriting user customizations.
         if u.alphaInCombat == nil then u.alphaInCombat = 1 end
         if u.alphaOutOfCombat == nil then u.alphaOutOfCombat = 1 end

@@ -724,7 +724,10 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     if maxHP == nil and F.UnitHealthMax then maxHP = F.UnitHealthMax(unit) end
     if hp == nil and F.UnitHealth then hp = F.UnitHealth(unit) end
     if maxHP ~= nil then frame.hpBar:SetMinMaxValues(0, maxHP) end
-    if hp ~= nil then frame.hpBar:SetValue(hp) end
+    if hp ~= nil then
+        local setHealth = _G.MSUF_UFCore_SetHealthBarValue
+        if setHealth then setHealth(frame, frame.hpBar, hp) else frame.hpBar:SetValue(hp) end
+    end
     -- Test mode: show faked absorb values.
     local absorbTestMode = _G.MSUF_AbsorbTextureTestMode
     local wasTestMode = frame._msufAbsorbTestActive
@@ -3794,6 +3797,9 @@ local function _MSUF_PreviewUnitFrame(unit, conf)
     local f = UnitFrames[unit]
     if not f then return end
     f.cachedConfig = conf
+    if _G.MSUF_UFCore_GetHealthSmoothInterp then
+        _G.MSUF_UFCore_GetHealthSmoothInterp(f, conf)
+    end
     if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
         if f._msufVisibilityForced == "disabled" then
             f._msufVisibilityForced = nil
@@ -3808,6 +3814,9 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     local f = UnitFrames[unit]
     if not f then return end
     f.cachedConfig = conf
+    if _G.MSUF_UFCore_GetHealthSmoothInterp then
+        _G.MSUF_UFCore_GetHealthSmoothInterp(f, conf)
+    end
     if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
         if f._msufVisibilityForced == "disabled" then
             f._msufVisibilityForced = nil

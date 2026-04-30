@@ -330,7 +330,7 @@ local CASTBAR_TEXTICON_SPECS = {
 -- Copy engine
 --------------------------------------------------------------------
 local COPY_BASIC_FIELDS = {
-    "enabled","showName","showHP","showPower","reverseFillBars","portraitMode",
+    "enabled","showName","showHP","showPower","reverseFillBars","smoothFill","portraitMode",
     "alphaInCombat","alphaOutOfCombat","alphaSync",
     "alphaExcludeTextPortrait","alphaLayerMode",
     "alphaFGInCombat","alphaFGOutOfCombat","alphaBGInCombat","alphaBGOutOfCombat",
@@ -830,6 +830,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         { "playerShowHPCB", "MSUF_UF_ShowHPCB", "Show HP text", 164, -34 },
         { "playerShowPowerCB", "MSUF_UF_ShowPowerCB", "Show power text", 12, -58 },
         { "playerReverseFillBarsCB", "MSUF_UF_ReverseFillBarsCB", "Reverse fill", 164, -58 },
+        { "playerSmoothFillCB", "MSUF_UF_SmoothFillCB", "Smooth Health Fill", 320, -58 },
     }
     for _, s in ipairs(BASIC_TOGGLES) do
         panel[s[1]] = MkCheck(basicsBody, s[2], s[3], s[4], s[5] + 28)
@@ -1488,6 +1489,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         { "playerShowHPCB", function(c) return c.showHP ~= false end },
         { "playerShowPowerCB", function(c) return c.showPower ~= false end },
         { "playerReverseFillBarsCB", function(c) return c.reverseFillBars == true end },
+        { "playerSmoothFillCB", function(c) return c.smoothFill ~= false end },
     }
     for _, s in ipairs(BASIC_EVALS) do
         local w = panel[s[1]]; if w and w.SetChecked then w:SetChecked(s[2](conf)) end
@@ -1811,7 +1813,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
     end
 
     -- Basic checkboxes
-    for _, pair in ipairs({ {"playerEnableFrameCB","enabled"},{"playerShowNameCB","showName"},{"playerShowHPCB","showHP"},{"playerShowPowerCB","showPower"},{"playerReverseFillBarsCB","reverseFillBars"} }) do
+    for _, pair in ipairs({ {"playerEnableFrameCB","enabled"},{"playerShowNameCB","showName"},{"playerShowHPCB","showHP"},{"playerShowPowerCB","showPower"},{"playerReverseFillBarsCB","reverseFillBars"},{"playerSmoothFillCB","smoothFill"} }) do
         local w = panel[pair[1]]; if w then
             w:SetScript("OnClick", function(self) if not IsFramesTab() then return end
                 local c = EnsureKeyDB(); c[pair[2]] = self:GetChecked() and true or false; ApplyCurrent()
