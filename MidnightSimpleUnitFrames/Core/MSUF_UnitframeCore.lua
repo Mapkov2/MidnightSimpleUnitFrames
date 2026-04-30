@@ -19,6 +19,9 @@ local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
 local UnitPowerType = UnitPowerType
+local UnitGetDetailedHealPrediction = UnitGetDetailedHealPrediction
+local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
+local UnitGetTotalHealAbsorbs = UnitGetTotalHealAbsorbs
 local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
@@ -1359,6 +1362,25 @@ local UFCORE_EVENT_ALIAS = {
     -- DIRECT_APPLY maps it to the same handler as UNIT_POWER_UPDATE.
 }
 
+local function UFCore_IsAbsorbBarEnabledForFrame(f, conf)
+    local db = _G.MSUF_DB or UFCore_EnsureDBOnce()
+    local g = db and db.general
+    local mode
+    if conf and (conf.hlOverride == true or conf.hpPowerTextOverride == true) and conf.absorbTextMode ~= nil then
+        mode = tonumber(conf.absorbTextMode)
+    end
+    if mode == nil and g then
+        mode = tonumber(g.absorbTextMode)
+    end
+    if mode then
+        return (mode == 2 or mode == 3)
+    end
+    if g and g.enableAbsorbBar ~= nil then
+        return (g.enableAbsorbBar ~= false)
+    end
+    return true
+end
+
 local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
     ev = UFCORE_EVENT_ALIAS[ev] or ev
     if (unsupported and unsupported[ev]) then return end
@@ -1375,8 +1397,7 @@ local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
     -- These events only fire when the feature is enabled.
     -- Saves ~3 event dispatches/sec per frame when absorb/healpred is disabled.
     if ev == "UNIT_ABSORB_AMOUNT_CHANGED" or ev == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
-        local g = MSUF_DB and MSUF_DB.general
-        if g and g.enableAbsorbBar == false then return end
+        if not UFCore_IsAbsorbBarEnabledForFrame(f, conf) then return end
     end
     if ev == "UNIT_HEAL_PREDICTION" then
         local g = MSUF_DB and MSUF_DB.general
@@ -2146,6 +2167,45 @@ local _HealthFullFast = Elements.Health and Elements.Health.Update
 -- is read + SetValue'd. Saves ~15μs vs full chain per event.
 ------------------------------------------------------------------------
 
+local function _CalcDamageAbsorbs(calc, unit)
+    if calc then
+        if calc.GetTotalDamageAbsorbs then
+            local v = calc:GetTotalDamageAbsorbs()
+            if v ~= nil then return v end
+        elseif calc.GetDamageAbsorbs then
+            local v = calc:GetDamageAbsorbs()
+            if v ~= nil then return v end
+        end
+    end
+    if UnitGetTotalAbsorbs then
+        return UnitGetTotalAbsorbs(unit)
+    end
+    return nil
+end
+
+local function _CalcHealAbsorbs(calc, unit)
+    if calc then
+        if calc.GetTotalHealAbsorbs then
+            local v = calc:GetTotalHealAbsorbs()
+            if v ~= nil then return v end
+        elseif calc.GetHealAbsorbs then
+            local v = calc:GetHealAbsorbs()
+            if v ~= nil then return v end
+        end
+    end
+    if UnitGetTotalHealAbsorbs then
+        return UnitGetTotalHealAbsorbs(unit)
+    end
+    return nil
+end
+
+local function _ZeroOverlayBar(bar)
+    if not bar then return end
+    bar:SetMinMaxValues(0, 1)
+    bar:SetValue(0)
+    bar:Hide()
+end
+
 -- UNIT_ABSORB_AMOUNT_CHANGED: only absorb bar
 local function _AbsorbValueFast(f)
     local ab = f.absorbBar
@@ -2160,9 +2220,14 @@ local function _AbsorbValueFast(f)
     if not unit then return end
     UnitGetDetailedHealPrediction(unit, "player", calc)
     local maxHP = calc:GetMaximumHealth()
-    local absAmt = calc:GetDamageAbsorbs()  -- 2nd return (clamped) is secret, must not leak
+    local absAmt = _CalcDamageAbsorbs(calc, unit)
+    if absAmt == nil then
+        _ZeroOverlayBar(ab)
+        return
+    end
     ab:SetMinMaxValues(0, maxHP)
     ab:SetValue(absAmt)
+    ab:Show()
     local bar = f.hpBar
     local hp = calc:GetCurrentHealth()
     if bar then bar:SetValue(hp) end
@@ -2182,8 +2247,13 @@ local function _HealAbsorbValueFast(f)
     UnitGetDetailedHealPrediction(unit, "player", calc)
     local maxHP = calc:GetMaximumHealth()
     hab:SetMinMaxValues(0, maxHP)
-    local habAmt = calc:GetHealAbsorbs()
+    local habAmt = _CalcHealAbsorbs(calc, unit)
+    if habAmt == nil then
+        _ZeroOverlayBar(hab)
+        return
+    end
     hab:SetValue(habAmt)
+    hab:Show()
     local bar = f.hpBar
     local hp = calc:GetCurrentHealth()
     if bar then bar:SetValue(hp) end

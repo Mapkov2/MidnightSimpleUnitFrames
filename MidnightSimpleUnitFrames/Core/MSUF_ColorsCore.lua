@@ -519,10 +519,15 @@ local function GetPetFrameColor() return _getRGB("petFrameColorR", "petFrameColo
 local function SetPetFrameColor(r, g, b) _setRGB("petFrameColorR", "petFrameColorG", "petFrameColorB", r, g, b, 0, 0.8, 0) end
 
 -- ── Absorb / Heal-Absorb Overlay Colors ──
-local function GetAbsorbOverlayColor() return _getRGBA("absorbColorR", "absorbColorG", "absorbColorB", "absorbColorA", 1, 1, 1, 0.45) end
-local function SetAbsorbOverlayColor(r, g, b, a) _setRGBA("absorbColorR", "absorbColorG", "absorbColorB", "absorbColorA", r, g, b, a, 1, 1, 1, 0.45) end
-local function GetHealAbsorbOverlayColor() return _getRGBA("healAbsorbColorR", "healAbsorbColorG", "healAbsorbColorB", "healAbsorbColorA", 0.7, 0.0, 0.0, 0.45) end
-local function SetHealAbsorbOverlayColor(r, g, b, a) _setRGBA("healAbsorbColorR", "healAbsorbColorG", "healAbsorbColorB", "healAbsorbColorA", r, g, b, a, 0.7, 0, 0, 0.45) end
+-- Keys aligned with the readers used by main UF, GF Render, GF Core preview,
+-- GF AuraPreview, and the bar-color reset in Options_Colors. The picker used
+-- to write `absorbColor*` / `healAbsorbColor*` while every reader consumed
+-- `absorbBarColor*` / `healAbsorbBarColor*` — so color changes never landed.
+-- One-time migration of the legacy keys is done in MSUF_Defaults.
+local function GetAbsorbOverlayColor()         return _getRGBA("absorbBarColorR",     "absorbBarColorG",     "absorbBarColorB",     "absorbBarColorA",     1.0, 1.0, 1.0, 0.45) end
+local function SetAbsorbOverlayColor(r, g, b, a)      _setRGBA("absorbBarColorR",     "absorbBarColorG",     "absorbBarColorB",     "absorbBarColorA",     r, g, b, a, 1.0, 1.0, 1.0, 0.45) end
+local function GetHealAbsorbOverlayColor()     return _getRGBA("healAbsorbBarColorR", "healAbsorbBarColorG", "healAbsorbBarColorB", "healAbsorbBarColorA", 0.7, 0.0, 0.0, 0.45) end
+local function SetHealAbsorbOverlayColor(r, g, b, a)  _setRGBA("healAbsorbBarColorR", "healAbsorbBarColorG", "healAbsorbBarColorB", "healAbsorbBarColorA", r, g, b, a, 0.7, 0.0, 0.0, 0.45) end
 
 -- ── Power Bar Background ──
 local function GetPowerBarBackgroundColor()
