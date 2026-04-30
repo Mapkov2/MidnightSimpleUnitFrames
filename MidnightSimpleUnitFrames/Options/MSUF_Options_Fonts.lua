@@ -71,6 +71,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
     local CONTENT_W = 650
     local ALL_UNITS = { "player", "target", "targettarget", "focus", "pet", "boss" }
+    local GF_SCOPE_DB_KEYS = {
+        gf_party = { "gf_party" },
+        gf_raid = { "gf_raid", "gf_mythicraid" },
+    }
 
     local FONT_OVERRIDE_KEYS = {
         "boldText", "noOutline", "textBackdrop",
@@ -87,9 +91,30 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if k == "shared" then return nil end
         return k
     end
-    local function IsOverride(uk) return U(uk).fontOverride == true end
+    local function IsOverride(uk)
+        local keys = GF_SCOPE_DB_KEYS[uk]
+        if keys then
+            EnsureDB()
+            for i = 1, #keys do
+                local u = MSUF_DB[keys[i]]
+                if u and u.fontOverride == true then return true end
+            end
+            return false
+        end
+        return U(uk).fontOverride == true
+    end
+
+    local function ForEachScopeDB(uk, fn)
+        local keys = GF_SCOPE_DB_KEYS[uk]
+        if not keys then return false end
+        for i = 1, #keys do
+            fn(U(keys[i]), keys[i])
+        end
+        return true
+    end
 
     local function EnableOverride(uk)
+        if ForEachScopeDB(uk, function(u) u.fontOverride = true end) then return end
         local u = U(uk); local g = G()
         u.fontOverride = true
         for _, k in ipairs(FONT_OVERRIDE_KEYS) do
@@ -104,10 +129,19 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         local uk = GetUnitKey()
         if uk and IsOverride(uk) then
             local v
-            if rootKey then
-                v = U(uk)[rootKey]
+            local keys = GF_SCOPE_DB_KEYS[uk]
+            if keys then
+                for i = 1, #keys do
+                    local u = U(keys[i])
+                    v = rootKey and u[rootKey] or u[key]
+                    if v ~= nil then return v end
+                end
             else
-                v = U(uk)[key]
+                if rootKey then
+                    v = U(uk)[rootKey]
+                else
+                    v = U(uk)[key]
+                end
             end
             if v ~= nil then return v end
         end
@@ -122,11 +156,23 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local function ScopeSet(key, val, rootKey)
         local uk = GetUnitKey()
         if uk then
-            if not IsOverride(uk) then EnableOverride(uk) end
-            if rootKey then
-                U(uk)[rootKey] = val
+            local keys = GF_SCOPE_DB_KEYS[uk]
+            if keys then
+                ForEachScopeDB(uk, function(u)
+                    if not u.fontOverride then u.fontOverride = true end
+                    if rootKey then
+                        u[rootKey] = val
+                    else
+                        u[key] = val
+                    end
+                end)
             else
-                U(uk)[key] = val
+                if not IsOverride(uk) then EnableOverride(uk) end
+                if rootKey then
+                    U(uk)[rootKey] = val
+                else
+                    U(uk)[key] = val
+                end
             end
         else
             if rootKey then
@@ -286,7 +332,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             btn._msufLabel = fs
 
             btn._msufApplyState = function(self, active)
-                local hasOvr = (not isGF) and (bk ~= "shared") and IsOverride(bk)
+                local hasOvr = (bk ~= "shared") and IsOverride(bk)
                 if active then
                     bg:SetColorTexture(isGF and 0.10 or 0.12, isGF and 0.20 or 0.24, isGF and 0.40 or 0.50, 0.95)
                     if hasOvr then border:SetBackdropBorderColor(0.96, 0.80, 0.34, 0.98)
@@ -318,6 +364,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                         GameTooltip:AddLine(TR("Shared baseline used by units without overrides."), 0.72, 0.78, 0.88, true)
                     elseif isGF then
                         GameTooltip:AddLine(TR("Group Frame font settings (separate from unit frame overrides)."), 0.72, 0.78, 0.88, true)
+                        if bk == "gf_raid" then GameTooltip:AddLine(TR("Raid scope also applies to Mythic Raid."), 0.55, 0.70, 0.95, true) end
                     else
                         local hasOvr = IsOverride(bk)
                         GameTooltip:AddLine(hasOvr and TR("Override active: this unit uses its own font settings.") or TR("Uses Shared settings."), 0.72, 0.78, 0.88, true)
@@ -352,12 +399,16 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if self:GetChecked() then
             if gfScope then
                 -- GF: just set flag (GF config already has its own values)
-                U(uk).fontOverride = true
+                ForEachScopeDB(uk, function(u) u.fontOverride = true end)
             else
                 EnableOverride(uk)
             end
         else
-            U(uk).fontOverride = false
+            if gfScope then
+                ForEachScopeDB(uk, function(u) u.fontOverride = false end)
+            else
+                U(uk).fontOverride = false
+            end
         end
         InvalidateTextSpecs()
         LiveSyncFontVisuals({ layout = "FONT_OVERRIDE" })
@@ -383,6 +434,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         -- Reset GF overrides too
         if MSUF_DB.gf_party then MSUF_DB.gf_party.fontOverride = false end
         if MSUF_DB.gf_raid  then MSUF_DB.gf_raid.fontOverride  = false end
+        if MSUF_DB.gf_mythicraid then MSUF_DB.gf_mythicraid.fontOverride = false end
         InvalidateTextSpecs()
         LiveSyncFontVisuals({ layout = "FONT_OVERRIDE_RESET" })
         local gf = ns and ns.GF
@@ -401,11 +453,35 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local function GFKind()
         return (GetScopeKey() == "gf_raid") and "raid" or "party"
     end
-    local function GFConf()
-        local gf = ns and ns.GF; return gf and gf.GetConf(GFKind())
+    local function ForEachGFKind(fn)
+        if type(fn) ~= "function" then return end
+        if GetScopeKey() == "gf_raid" then
+            fn("raid")
+            fn("mythicraid")
+        else
+            fn("party")
+        end
     end
     local function GFVal(key)
         local gf = ns and ns.GF; return gf and gf.Val(GFKind(), key)
+    end
+    local function GFSet(key, val)
+        local gf = ns and ns.GF
+        if not (gf and gf.GetConf) then return end
+        ForEachGFKind(function(kind)
+            local c = gf.GetConf(kind)
+            if c then c[key] = val end
+        end)
+    end
+    local function GFSetMany(values)
+        local gf = ns and ns.GF
+        if not (gf and gf.GetConf and type(values) == "table") then return end
+        ForEachGFKind(function(kind)
+            local c = gf.GetConf(kind)
+            if c then
+                for k, v in pairs(values) do c[k] = v end
+            end
+        end)
     end
     GFApplyFont = function()
         local gf = ns and ns.GF
@@ -536,7 +612,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             return items
         end,
         get = function() return GFVal("fontKey") or "" end,
-        set = function(v) local c = GFConf(); if c then c.fontKey = v end; GFApplyFont() end,
+        set = function(v) GFSet("fontKey", v); GFApplyFont() end,
     })
     gfFontDrop:Hide()
     _gfRefreshFns[#_gfRefreshFns + 1] = function() if gfFontDrop and gfFontDrop.Refresh then gfFontDrop:Refresh() end end
@@ -851,7 +927,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             { key = "THICKOUTLINE",  label = "Thick Outline"    },
         },
         get = function() return GFVal("fontOutline") or "" end,
-        set = function(v) local c = GFConf(); if c then c.fontOutline = (v == "") and nil or v end; GFApplyFont() end,
+        set = function(v) GFSet("fontOutline", (v == "") and nil or v); GFApplyFont() end,
     })
     gfOutlineDrop:Hide()
     local gfGlobalColorChk = UI.Check({
@@ -859,7 +935,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         anchor = gfOutlineDrop, x = 16, y = -10, maxTextWidth = 400,
         label = TR("Use Global Font Color (Colors menu)"),
         get = function() return GFVal("useGlobalFontColor") ~= false end,
-        set = function(v) local c = GFConf(); if c then c.useGlobalFontColor = v end; GFApplyFont() end,
+        set = function(v) GFSet("useGlobalFontColor", v); GFApplyFont() end,
     })
     gfGlobalColorChk:Hide()
     _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfOutlineLbl
@@ -963,7 +1039,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             { key = "CUSTOM",  label = "Custom"               },
         },
         get = function() return GFVal("nameColorMode") or "DEFAULT" end,
-        set = function(v) local c = GFConf(); if c then c.nameColorMode = v end; GFApplyFont() end,
+        set = function(v) GFSet("nameColorMode", v); GFApplyFont() end,
     })
     gfNameColorDrop:Hide()
     local gfSwatchLbl = colorsBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -977,8 +1053,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     gfSwatchBtn:SetScript("OnShow", GFRefreshSwatch)
     gfSwatchBtn:SetScript("OnClick", function()
         GFColorPicker(GFVal("nameColorR") or 1, GFVal("nameColorG") or 1, GFVal("nameColorB") or 1, function(nr, ng, nb)
-            local c = GFConf(); if not c then return end
-            c.nameColorR = nr; c.nameColorG = ng; c.nameColorB = nb; GFApplyFont(); GFRefreshSwatch()
+            GFSetMany({ nameColorR = nr, nameColorG = ng, nameColorB = nb }); GFApplyFont(); GFRefreshSwatch()
         end)
     end)
     GFRefreshSwatch()
@@ -1102,7 +1177,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         label = TR("Name Max Chars"), min = 0, max = 30, step = 1, default = 0,
         lowText = "0", highText = "30",
         get = function() return GFVal("nameMaxChars") or 0 end,
-        set = function(v) local c = GFConf(); if c then c.nameMaxChars = floor(v + 0.5) end; GFApplyLayout() end,
+        set = function(v) GFSet("nameMaxChars", floor(v + 0.5)); GFApplyLayout() end,
         formatText = function(v) return v == 0 and "Max Chars: Unlimited" or string.format("Max Chars: %d", v) end,
     })
     gfMaxCharsSlider:Hide()
@@ -1111,7 +1186,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         anchor = gfMaxCharsSlider, x = 0, y = -22, maxTextWidth = 400,
         label = TR("No Ellipsis (truncate without ..)"),
         get = function() return GFVal("nameNoEllipsis") and true or false end,
-        set = function(v) local c = GFConf(); if c then c.nameNoEllipsis = v end; GFApplyLayout() end,
+        set = function(v) GFSet("nameNoEllipsis", v); GFApplyLayout() end,
     })
     gfNoEllipsis:Hide()
     _gfOnlyWidgets[#_gfOnlyWidgets + 1] = gfMaxCharsLbl
