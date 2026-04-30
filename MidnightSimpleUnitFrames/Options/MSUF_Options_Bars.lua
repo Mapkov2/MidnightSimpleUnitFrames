@@ -47,16 +47,19 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     if type(CreateLabeledCheckButton) ~= "function" then return end
 
     local _Scope_GetUnitKey, _Scope_GetUnitDB, _Scope_EnableOverride, _Scope_SyncUI
-    local _Scope_GetGFKey  -- returns "gf_party"/"gf_raid" DB key if in GF scope, else nil
+    local _Scope_GetGFKeys  -- GF scope DB keys; Raid also owns Mythic Raid here.
+    local HlSeedFromGeneral
 
     -- Scope-aware get/set helpers
     local function ScopeGet(generalKey, defaultVal)
         EnsureDB()
         -- GF scope override (party/raid) — check FIRST (unitKey also returns "party"/"raid")
-        local gfKey = _Scope_GetGFKey and _Scope_GetGFKey()
-        if gfKey then
-            local gf = MSUF_DB[gfKey]
-            if gf and gf.hlOverride and gf[generalKey] ~= nil then return gf[generalKey] end
+        local gfKeys = _Scope_GetGFKeys and _Scope_GetGFKeys()
+        if gfKeys then
+            for i = 1, #gfKeys do
+                local gf = MSUF_DB[gfKeys[i]]
+                if gf and gf.hlOverride and gf[generalKey] ~= nil then return gf[generalKey] end
+            end
         else
             -- Per-unit override (unified hlOverride flag)
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
@@ -72,15 +75,18 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local function ScopeSet(generalKey, val, applyFn)
         EnsureDB()
         -- GF scope override (party/raid) — check FIRST (unitKey also returns "party"/"raid")
-        local gfKey = _Scope_GetGFKey and _Scope_GetGFKey()
-        if gfKey then
-            MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
-            local gf = MSUF_DB[gfKey]
-            if not gf.hlOverride then
-                gf.hlOverride = true
-                if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(gf) end
+        local gfKeys = _Scope_GetGFKeys and _Scope_GetGFKeys()
+        if gfKeys then
+            for i = 1, #gfKeys do
+                local gfKey = gfKeys[i]
+                MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
+                local gf = MSUF_DB[gfKey]
+                if not gf.hlOverride then
+                    gf.hlOverride = true
+                    if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(gf) end
+                end
+                gf[generalKey] = val
             end
-            gf[generalKey] = val
         else
             -- Per-unit override (unified hlOverride flag)
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
@@ -103,10 +109,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local function ScopeGetBars(barsKey, defaultVal)
         EnsureDB()
-        local gfKey = _Scope_GetGFKey and _Scope_GetGFKey()
-        if gfKey then
-            local gf = MSUF_DB[gfKey]
-            if gf and gf.hlOverride and gf[barsKey] ~= nil then return gf[barsKey] end
+        local gfKeys = _Scope_GetGFKeys and _Scope_GetGFKeys()
+        if gfKeys then
+            for i = 1, #gfKeys do
+                local gf = MSUF_DB[gfKeys[i]]
+                if gf and gf.hlOverride and gf[barsKey] ~= nil then return gf[barsKey] end
+            end
         else
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
             if uk then
@@ -121,15 +129,18 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local function ScopeSetBars(barsKey, val, applyFn)
         EnsureDB()
-        local gfKey = _Scope_GetGFKey and _Scope_GetGFKey()
-        if gfKey then
-            MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
-            local gf = MSUF_DB[gfKey]
-            if not gf.hlOverride then
-                gf.hlOverride = true
-                if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(gf) end
+        local gfKeys = _Scope_GetGFKeys and _Scope_GetGFKeys()
+        if gfKeys then
+            for i = 1, #gfKeys do
+                local gfKey = gfKeys[i]
+                MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
+                local gf = MSUF_DB[gfKey]
+                if not gf.hlOverride then
+                    gf.hlOverride = true
+                    if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(gf) end
+                end
+                gf[barsKey] = val
             end
-            gf[barsKey] = val
         else
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
             if uk then
@@ -221,8 +232,22 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         party = "Party", raid = "Raid",
     }
     local GF_SCOPE_KEYS = { party = "gf_party", raid = "gf_raid" }
+    local GF_SCOPE_APPLY_KEYS = {
+        party = { "gf_party" },
+        raid = { "gf_raid", "gf_mythicraid" },
+    }
     local function IsGFScope(key) return GF_SCOPE_KEYS[key] ~= nil end
-    local function GetGFDBKey(key) return GF_SCOPE_KEYS[key] end
+    local function GetGFDBKeys(key) return GF_SCOPE_APPLY_KEYS[key] end
+    local function ScopeGFHasOverride(key)
+        local keys = GetGFDBKeys(key)
+        if not keys then return false end
+        EnsureDB()
+        for i = 1, #keys do
+            local gf = MSUF_DB[keys[i]]
+            if gf and gf.hlOverride == true then return true end
+        end
+        return false
+    end
 
     local scopeBar = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
     scopeBar:SetHeight(72); scopeBar:SetWidth(BOX_W)
@@ -238,11 +263,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local function GetScopeUnitHasOverride(key)
         if key == "shared" then return false end
         EnsureDB()
-        local gfKey = GF_SCOPE_KEYS[key]
-        if gfKey then
-            local gf = MSUF_DB[gfKey]
-            return (gf and gf.hlOverride == true)
-        end
+        if GF_SCOPE_KEYS[key] then return ScopeGFHasOverride(key) end
         local u = MSUF_DB[key]
         return (u and u.hlOverride == true)
     end
@@ -321,6 +342,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                     elseif IsGFScope(bk) then
                         local tip = GetScopeUnitHasOverride(bk) and TR("Override active: Group Frames use their own highlight settings.") or TR("Uses Shared highlight settings.")
                         GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
+                        if bk == "raid" then GameTooltip:AddLine(TR("Raid scope also applies to Mythic Raid."), 0.55, 0.70, 0.95, true) end
                         GameTooltip:AddLine(TR("Only Outline & Highlight Border applies to Group Frames."), 0.55, 0.60, 0.72, true)
                     else
                         local tip = GetScopeUnitHasOverride(bk) and TR("Override active: this unit uses its own HP/Power text settings.") or TR("Uses Shared settings.")
@@ -389,12 +411,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     _Scope_GetUnitKey = _MSUF_HPText_GetUnitKey
     _Scope_GetUnitDB = _MSUF_HPText_GetUnitDB
     _Scope_EnableOverride = _MSUF_HPText_EnableOverride
-    _Scope_GetGFKey = function()
+    _Scope_GetGFKeys = function()
         local sk = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
-        return GF_SCOPE_KEYS[sk]   -- "gf_party" / "gf_raid" / nil
+        return GF_SCOPE_APPLY_KEYS[sk]   -- Raid writes gf_raid + gf_mythicraid
     end
 
-    local HlSeedFromGeneral  -- forward decl (defined in highlight section below)
+    -- HlSeedFromGeneral is forward-declared above so scope setters can seed GF DBs.
     local _BumpBorderSerial  -- forward decl (defined in highlight section below; captured as upvalue by closures above)
 
     -- Override checkbox handler
@@ -402,16 +424,20 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local scopeKey = _MSUF_HPText_GetScopeKey()
         if scopeKey == "shared" then self:SetChecked(false); return end
 
-        -- GF scope: toggle hlOverride in gf_party/gf_raid
+        -- GF scope: toggle hlOverride in gf_party or gf_raid+gf_mythicraid
         if IsGFScope(scopeKey) then
-            local gfKey = GetGFDBKey(scopeKey)
-            EnsureDB(); MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
-            local gf = MSUF_DB[gfKey]
-            if self:GetChecked() then
-                gf.hlOverride = true
-                HlSeedFromGeneral(gf)
-            else
-                gf.hlOverride = false
+            local keys = GetGFDBKeys(scopeKey)
+            EnsureDB()
+            for i = 1, #(keys or {}) do
+                local gfKey = keys[i]
+                MSUF_DB[gfKey] = MSUF_DB[gfKey] or {}
+                local gf = MSUF_DB[gfKey]
+                if self:GetChecked() then
+                    gf.hlOverride = true
+                    HlSeedFromGeneral(gf)
+                else
+                    gf.hlOverride = false
+                end
             end
             local GF = _G.MSUF_NS and _G.MSUF_NS.GF
             if GF and GF.InvalidateConfCache then GF.InvalidateConfCache() end
@@ -465,9 +491,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 if u.hlOverride then u.hlOverride = false; any = true end
             end
         end
-        for _, gfKey in pairs(GF_SCOPE_KEYS) do
-            local gf = MSUF_DB[gfKey]
-            if gf and gf.hlOverride then gf.hlOverride = false; any = true end
+        for _, scopeName in ipairs({ "party", "raid" }) do
+            local keys = GetGFDBKeys(scopeName)
+            for i = 1, #(keys or {}) do
+                local gf = MSUF_DB[keys[i]]
+                if gf and gf.hlOverride then gf.hlOverride = false; any = true end
+            end
         end
         if any then
             _BumpBorderSerial()
@@ -492,7 +521,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     barsGFHint:SetPoint("TOPLEFT", scopeBar, "BOTTOMLEFT", 4, -6)
     barsGFHint:SetWidth(600)
     barsGFHint:SetJustifyH("LEFT")
-    barsGFHint:SetText("Group Frames inherit these textures by default. Override per Party/Raid in Group Frames > Bars & Text.")
+    barsGFHint:SetText("Group Frames inherit these textures by default. In this panel, Raid also applies to Mythic Raid.")
     barsGFHint:SetTextColor(0.50, 0.60, 0.75)
 
     -- BOX 1: Textures & Gradient (default open)
@@ -756,7 +785,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
 
     --- Scope-aware DB target for highlight writes.
-    --- GF scope → gf_party/gf_raid, unit scope → MSUF_DB[unit], else → general.
+    --- GF scope -> gf_party or gf_raid+gf_mythicraid, unit scope -> MSUF_DB[unit], else -> general.
     local function HlDB()
         local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
         local gfKey = GF_SCOPE_KEYS[scopeKey]
@@ -770,13 +799,35 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
         return G()
     end
+    local function HlCopyValue(v)
+        if type(v) ~= "table" then return v end
+        local out = {}
+        for k, val in pairs(v) do out[k] = val end
+        return out
+    end
+    local function HlSet(key, val)
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        local gfKeys = GF_SCOPE_APPLY_KEYS[scopeKey]
+        if gfKeys then
+            EnsureDB()
+            for i = 1, #gfKeys do
+                MSUF_DB[gfKeys[i]] = MSUF_DB[gfKeys[i]] or {}
+                MSUF_DB[gfKeys[i]][key] = HlCopyValue(val)
+            end
+            return
+        end
+        local db = HlDB()
+        if db then db[key] = HlCopyValue(val) end
+    end
     local function HlGet(key, def)
         local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
-        local gfKey = GF_SCOPE_KEYS[scopeKey]
-        if gfKey then
+        local gfKeys = GF_SCOPE_APPLY_KEYS[scopeKey]
+        if gfKeys then
             EnsureDB()
-            local gf = MSUF_DB[gfKey]
-            if gf and gf.hlOverride and gf[key] ~= nil then return gf[key] end
+            for i = 1, #gfKeys do
+                local gf = MSUF_DB[gfKeys[i]]
+                if gf and gf.hlOverride and gf[key] ~= nil then return gf[key] end
+            end
         elseif scopeKey ~= "shared" then
             EnsureDB()
             local u = MSUF_DB[scopeKey]
@@ -817,11 +868,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local function IsCurrentScopeOverrideActive()
         local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
         if scopeKey == "shared" then return false end
-        local gfKey = GF_SCOPE_KEYS[scopeKey]
-        if gfKey then
-            local gf = MSUF_DB and MSUF_DB[gfKey]
-            return gf and gf.hlOverride == true
-        end
+        if GF_SCOPE_KEYS[scopeKey] then return ScopeGFHasOverride(scopeKey) end
         local u = MSUF_DB and MSUF_DB[scopeKey]
         return u and u.hlOverride == true
     end
@@ -908,9 +955,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         EnsureDB()
         MSUF_DB.general.highlightBorderThickness = v
         MSUF_DB.general.hlAggroSize = v
-        local scopeDB = HlDB(); if scopeDB then scopeDB.hlAggroSize = v end
+        HlSet("hlAggroSize", v)
         if MSUF_DB.gf_party then MSUF_DB.gf_party.hlAggroSize = v end
         if MSUF_DB.gf_raid then MSUF_DB.gf_raid.hlAggroSize = v end
+        if MSUF_DB.gf_mythicraid then MSUF_DB.gf_mythicraid.hlAggroSize = v end
         -- UF refresh
         _BumpBorderSerial()
         if _G.MSUF_ApplyBarOutlineThickness_All then _G.MSUF_ApplyBarOutlineThickness_All() end
@@ -949,7 +997,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end,
             set = function(v)
                 if IsCurrentScopeNonShared() then
-                    if hlKey then HlDB()[hlKey] = (v == 1) end
+                    if hlKey then HlSet(hlKey, (v == 1)) end
                     HlApply()
                 else
                     G()[dbKey] = v
@@ -1058,7 +1106,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         },
         get = function() return HlGet("hlDispelGlowStyle", "PIXEL") end,
         set = function(v)
-            HlDB().hlDispelGlowStyle = v
+            HlSet("hlDispelGlowStyle", v)
             G().hlDispelGlowStyle = v
             GlowApply()
         end,
@@ -1071,7 +1119,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     dispelGlowLinesSlider:ClearAllPoints(); dispelGlowLinesSlider:SetPoint("TOPLEFT", dispelGlowStyleDrop, "BOTTOMLEFT", 0, -8)
     if dispelGlowLinesSlider.SetWidth then dispelGlowLinesSlider:SetWidth(170) end
     dispelGlowLinesSlider.onValueChanged = function(_, v)
-        HlDB().hlDispelGlowLines = v
+        HlSet("hlDispelGlowLines", v)
         G().hlDispelGlowLines = v
         GlowApply()
     end
@@ -1081,7 +1129,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     dispelGlowFreqSlider:ClearAllPoints(); dispelGlowFreqSlider:SetPoint("TOPLEFT", dispelGlowLinesSlider, "TOPLEFT", 0, -60)
     if dispelGlowFreqSlider.SetWidth then dispelGlowFreqSlider:SetWidth(170) end
     dispelGlowFreqSlider.onValueChanged = function(_, v)
-        HlDB().hlDispelGlowFrequency = v
+        HlSet("hlDispelGlowFrequency", v)
         G().hlDispelGlowFrequency = v
         GlowApply()
     end
@@ -1091,7 +1139,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     dispelGlowThickSlider:ClearAllPoints(); dispelGlowThickSlider:SetPoint("TOPLEFT", dispelGlowFreqSlider, "TOPLEFT", 0, -60)
     if dispelGlowThickSlider.SetWidth then dispelGlowThickSlider:SetWidth(170) end
     dispelGlowThickSlider.onValueChanged = function(_, v)
-        HlDB().hlDispelGlowThickness = v
+        HlSet("hlDispelGlowThickness", v)
         G().hlDispelGlowThickness = v
         GlowApply()
     end
@@ -1105,7 +1153,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     dispelGlowCheck:SetScript("OnClick", function(self)
         local v = self:GetChecked() and true or false
-        HlDB().hlDispelGlowEnabled = v
+        HlSet("hlDispelGlowEnabled", v)
         G().hlDispelGlowEnabled = v
         RefreshGlowVisibility()
         GlowApply()
@@ -1240,9 +1288,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local sorted = {}; for i = 1, _prioCount do sorted[i] = _prioRows[i] end
         table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
         for i = 1, _prioCount do order[i] = sorted[i].key end
-        local db = HlDB()
-        db.hlPrioOrder = order
-        if not IsCurrentScopeNonShared() and _prioCount == 3 then db.highlightPrioOrder = order end
+        HlSet("hlPrioOrder", order)
+        if not IsCurrentScopeNonShared() and _prioCount == 3 then HlSet("highlightPrioOrder", order) end
         HlApply()
     end
     local function _Prio_SetEnabled(enabled)
@@ -1309,9 +1356,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     prioCheck:SetScript("OnClick", function(self)
         local on = self:GetChecked() and true or false
-        local db = HlDB()
-        db.hlPrioEnabled = on
-        if not IsCurrentScopeNonShared() then db.highlightPrioEnabled = on and 1 or 0 end
+        HlSet("hlPrioEnabled", on)
+        if not IsCurrentScopeNonShared() then HlSet("highlightPrioEnabled", on and 1 or 0) end
         _Prio_SetEnabled(on); _Prio_SaveOrder()
     end)
     do local on = HlGet("hlPrioEnabled", false); prioCheck:SetChecked(on); _Prio_SetEnabled(on) end
@@ -1679,9 +1725,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if scopeKey ~= "shared" then
                 _C.hpPowerOverrideCheck:Show(); _C.hpPowerOverrideCheck:Enable(); _C.hpPowerOverrideCheck:SetAlpha(1)
                 if isGF then
-                    local gfKey = GetGFDBKey(scopeKey)
-                    local gf = MSUF_DB[gfKey]
-                    _C.hpPowerOverrideCheck:SetChecked(gf and gf.hlOverride == true)
+                    _C.hpPowerOverrideCheck:SetChecked(ScopeGFHasOverride(scopeKey))
                 else
                     local u = uk and _MSUF_HPText_GetUnitDB(uk)
                     _C.hpPowerOverrideCheck:SetChecked(u and u.hlOverride == true)
@@ -1700,9 +1744,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                     local u = MSUF_DB[uK]
                     if u and u.hlOverride then active[#active + 1] = _NiceUnitKey(uK) end
                 end
-                for scopeName, gfKey in pairs(GF_SCOPE_KEYS) do
-                    local gf = MSUF_DB[gfKey]
-                    if gf and gf.hlOverride then active[#active + 1] = SCOPE_LABELS[scopeName] or scopeName end
+                for _, scopeName in ipairs({ "party", "raid" }) do
+                    if ScopeGFHasOverride(scopeName) then active[#active + 1] = SCOPE_LABELS[scopeName] or scopeName end
                 end
                 if #active > 0 then
                     _C.scopeOverrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(active, ", "))
