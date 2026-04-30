@@ -230,6 +230,8 @@ local _IGNORE_CAT_META = {
     { key = "COOLDOWNS",        label = "Cooldowns",               tooltip = "Hearthstone, Reincarnation cooldown auras." },
 }
 
+local _HEALER_HOT_SPELLS = _IGNORE_CAT_SPELLS.HEALER_HOTS or {}
+
 -- Expose for Options UI
 Cache.IGNORE_CAT_META = _IGNORE_CAT_META
 
@@ -401,6 +403,7 @@ local function EnrichAura(unit, data, isHelpful)
     local sid = _DecodeSpellId(data)
     data._msufA2_sid       = sid
     data._msufA2_isSated   = (sid ~= 0 and _SATED_SPELLS[sid] == true) and 1 or 0
+    data._msufA2_isHealerHot = (sid ~= 0 and _HEALER_HOT_SPELLS[sid] == true) and 1 or 0
     -- _msufA2_isIgnored is set per-frame in FilterAura (depends on per-unit cfg)
     return data
 end
@@ -658,6 +661,7 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
     end
 
     if isHelpful then
+        if cfg._hideOtherBossHealAuras and data._msufA2_isHealerHot == 1 and not isOwn then return false end
         if cfg._buffsOnlyMine and not cfg._useMergeBuffs and not isOwn then return false end
 
         if cfg._hidePermanent and not secretsNow and lDoesExpire then
@@ -756,6 +760,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     cfg._onlyImpDebuffs   = cfg.onlyImportantDebuffs
     cfg._useMergeBuffs    = cfg.buffsOnlyMine and cfg.buffsIncludeBoss
     cfg._useMergeDebuffs  = cfg.debuffsOnlyMine and cfg.debuffsIncludeBoss
+    cfg._hideOtherBossHealAuras = (cfg.bossHealHideOthers == true)
     -- Sated/Exhaustion runtime flags (from shared, not filters)
     cfg._showSated = (cfg.showSated ~= false)
     local _satedThr = cfg.satedShowAtSeconds
@@ -777,6 +782,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
         and not cfg._buffsOnlyMine and not cfg._debuffsOnlyMine
         and not cfg._hidePermanent and not cfg._onlyImpBuffs and not cfg._onlyImpDebuffs
         and not cfg._useMergeBuffs and not cfg._useMergeDebuffs
+        and not cfg._hideOtherBossHealAuras
 
     -- Localize for inner loop
     local lIsFiltered = _isFiltered
@@ -868,6 +874,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             data._msufA2_bossFlag  = cached._msufA2_bossFlag
                             data._msufA2_sid       = cached._msufA2_sid
                             data._msufA2_isSated   = cached._msufA2_isSated
+                            data._msufA2_isHealerHot = cached._msufA2_isHealerHot
                         else
                             EnrichAura(unit, data, true)
                             allCache[aid] = data
@@ -907,6 +914,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             data._msufA2_bossFlag  = cached._msufA2_bossFlag
                             data._msufA2_sid       = cached._msufA2_sid
                             data._msufA2_isSated   = cached._msufA2_isSated
+                            data._msufA2_isHealerHot = cached._msufA2_isHealerHot
                         else
                             EnrichAura(unit, data, false)
                             allCache[aid] = data
@@ -1904,12 +1912,14 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         icon._msufAuraInstanceID = nil
         icon._msufA2_lastOwnHelpful = nil
         icon._msufA2_lastDispelAid = nil
+        icon._msufA2_forceOwnBuffHighlight = nil
         if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
         if icon._msufPandemic then icon._msufPandemic:Hide() end
         return false
     end
 
     local aid = aura._msufAuraInstanceID or aura.auraInstanceID
+    local forceOwnBuffHighlight = (aura._msufA2_forceBossHealHighlight == true)
 
     --  Fast-path diff gate: same aura, same config Ã¢â€ â€™ skip all bookkeeping
     local last = icon._msufA2_lastCommit
@@ -1917,6 +1927,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         and last.aid == aid
         and last.gen == gen
         and last.isOwn == isOwn
+        and last.forceOwnBuffHighlight == forceOwnBuffHighlight
     then
         -- Same aura, same config. Only refresh timer + stacks (values may have changed).
         -- Timer/stacks always read fresh from C API for correctness.
@@ -1963,6 +1974,8 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     last.aid = aid
     last.gen = gen
     last.isOwn = isOwn
+    last.forceOwnBuffHighlight = forceOwnBuffHighlight
+    icon._msufA2_forceOwnBuffHighlight = forceOwnBuffHighlight
 
     -- PERF: Inline gen-check to skip function call overhead
     if icon._msufA2_textCfgGen ~= gen then
@@ -2440,7 +2453,7 @@ function Icons._ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
     local show = false
     if isOwn then
         if isHelpful then
-            show = _wantBuffHL
+            show = _wantBuffHL or icon._msufA2_forceOwnBuffHighlight == true
         else
             show = _wantDebuffHL
         end

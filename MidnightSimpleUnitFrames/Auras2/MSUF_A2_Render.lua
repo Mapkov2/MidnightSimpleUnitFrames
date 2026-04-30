@@ -108,6 +108,10 @@ local MSUF_DB
 
 -- DB defaults (copied from original Render  must stay identical for migration compat)
 local A2_AURAS2_DEFAULTS = { enabled=true, showTarget=true, showFocus=true, showBoss=true, showPlayer=false, showParty=false, showRaid=false }
+local A2_BOSS_HEAL_AURA_DEFAULTS = {
+    highlightOwn = false,
+    hideOthers = false,
+}
 local A2_SHARED_DEFAULTS = {
     showBuffs=true, showDebuffs=true, showTooltip=true,
     showCooldownSwipe=true, showCooldownText=true, cooldownSwipeDarkenOnLoss=false,
@@ -153,6 +157,8 @@ local function EnsureDB()
     if type(MSUF_DB.auras2) ~= "table" then MSUF_DB.auras2 = {} end
     local a2 = MSUF_DB.auras2
     API._Render.DefaultKV(a2, A2_AURAS2_DEFAULTS)
+    if type(a2.bossHealAuras) ~= "table" then a2.bossHealAuras = {} end
+    API._Render.DefaultKV(a2.bossHealAuras, A2_BOSS_HEAL_AURA_DEFAULTS)
 
     if type(a2.shared) ~= "table" then a2.shared = {} end
     local s = a2.shared
@@ -1157,6 +1163,7 @@ local function RenderUnit(entry)
 
     if cfg._gen ~= gen then
         cfg._gen = gen
+        local pu = a2.perUnit and a2.perUnit[unit]
 
         -- Layout config
         cfg.iconSize, cfg.spacing, cfg.perRow, cfg.maxBuffs, cfg.maxDebuffs,
@@ -1188,6 +1195,16 @@ local function RenderUnit(entry)
         -- Sated/Exhaustion filter (reads from shared, independent of master filter toggle)
         cfg.showSated = (shared.showSated ~= false)
         cfg.satedShowAtSeconds = (type(shared.satedShowAtSeconds) == "number") and shared.satedShowAtSeconds or 0
+        -- Boss-only healer HoT behavior (global across boss1..boss5).
+        cfg.bossHealHighlightOwn = false
+        cfg.bossHealHideOthers = false
+        if _IS_BOSS[unit] then
+            local bha = a2.bossHealAuras
+            if type(bha) == "table" then
+                cfg.bossHealHighlightOwn = (bha.highlightOwn == true)
+                cfg.bossHealHideOthers = (bha.hideOthers == true)
+            end
+        end
         -- Global Ignore List (reads from shared, per-unit overridable, boss excluded)
         if _IS_BOSS[unit] then
             cfg.ignoreCats = nil
@@ -1223,6 +1240,7 @@ local function RenderUnit(entry)
     local showBuffs         = cfg.showBuffs
     local showDebuffs       = cfg.showDebuffs
     local masterOn          = cfg.masterOn
+    local bossHealHighlightOwn = cfg.bossHealHighlightOwn == true
 
     -- Early bail: no unit, no edit mode  nothing to render
     local unitExists = UnitExists and UnitExists(unit)
@@ -1388,6 +1406,8 @@ local function RenderUnit(entry)
         for i = 1, buffCount do
             local aura = list[i]
             if aura then
+                aura._msufA2_forceBossHealHighlight =
+                    (bossHealHighlightOwn and aura._msufA2_isHealerHot == 1 and aura._msufIsPlayerAura == true) or nil
                 local icon = pool[i]
                 if icon then
                     if not icon:IsShown() then icon:Show() end
