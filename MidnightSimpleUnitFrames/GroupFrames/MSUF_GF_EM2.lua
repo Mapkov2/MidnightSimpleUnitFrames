@@ -19,6 +19,7 @@ local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
 local CreateFrame = CreateFrame
 local hooksecurefunc = hooksecurefunc
+local GetTime = GetTime
 local type = type
 local ipairs = ipairs
 local math_max = math.max
@@ -49,6 +50,12 @@ local function IsRaidLikeKind(kind)
     return kind == "raid" or kind == "mythicraid"
 end
 
+local KIND_TO_KEY = {
+    party = "gf_party",
+    raid = "gf_raid",
+    mythicraid = "gf_mythicraid",
+}
+
 ------------------------------------------------------------------------
 -- State
 ------------------------------------------------------------------------
@@ -58,6 +65,12 @@ local _previewShownByEM2 = true
 
 local function GetDefaultCenter(kind)
     return IsRaidLikeKind(kind) and -500 or -400, 0
+end
+
+local function GetRequestedPreviewCount(kind)
+    if kind == "mythicraid" then return 20 end
+    if kind == "raid" then return 30 end
+    return 5
 end
 
 local function GetPreviewCount(kind)
@@ -71,7 +84,7 @@ local function GetPreviewCount(kind)
         end
         if n > 0 then return n end
     end
-    return IsRaidLikeKind(kind) and 10 or 5
+    return GetRequestedPreviewCount(kind)
 end
 
 ------------------------------------------------------------------------
@@ -91,18 +104,27 @@ local function EnsureContainer(kind)
     return f
 end
 
+local function IsPreviewActive(kind)
+    local gf = ns.GF
+    return _em2Active
+        and _previewShownByEM2
+        and gf
+        and gf._previewActive
+        and gf._previewActive[kind] == true
+end
+
 local function SyncContainer(kind)
     local gf = ns.GF; if not gf then return end
     local conf = gf.GetConf(kind); if not conf then return end
     local container = EnsureContainer(kind)
 
-    if not _em2Active then
+    if not IsPreviewActive(kind) then
         container:Hide()
-        return
+        return nil
     end
 
-    -- Use fixed reference count (same as PositionHeaderFromGridCenter)
-    local count = gf.GetPositionCount and gf.GetPositionCount(kind) or GetPreviewCount(kind)
+    -- EM2 preview mover must match the visible dummy grid, not max raid capacity.
+    local count = GetPreviewCount(kind)
     local _, _, totalW, totalH = gf.GetGridMetrics(kind, count)
     local cx = conf.offsetX
     local cy = conf.offsetY
@@ -113,15 +135,109 @@ local function SyncContainer(kind)
     container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
     container:ClearAllPoints()
     local anchorFrame = (gf.ResolveAnchorFrame and gf.ResolveAnchorFrame(kind)) or UIParent
-    local pt = conf.anchorPoint or conf.point or "CENTER"
-    container:SetPoint(pt, anchorFrame, pt, cx, cy)
+    container:SetPoint("CENTER", anchorFrame, "CENTER", cx, cy)
     container:Show()
+    return container
 end
 
 local function SyncAllContainers()
     SyncContainer("party")
     SyncContainer("raid")
     SyncContainer("mythicraid")
+end
+
+local function SyncMoversSoon(delay)
+    C_Timer.After(delay or 0, function()
+        if not _em2Active then return end
+        SyncAllContainers()
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    end)
+end
+
+local function OpenPreviewPopup(kind, anchor)
+    if not _em2Active then return end
+    local key = KIND_TO_KEY[kind]
+    if not key then return end
+    if EM2.State then EM2.State.SetUnitKey(key) end
+    if EM2.HUD and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
+    if EM2.Popups and EM2.Popups.Open then
+        EM2.Popups.Open(key, anchor)
+    elseif _G.MSUF_EM2_ShowGFPopup then
+        _G.MSUF_EM2_ShowGFPopup(kind)
+    end
+end
+
+local function BeginPreviewDrag(kind)
+    if not _em2Active then return false end
+    if InCombatLockdown and InCombatLockdown() then return false end
+
+    local key = KIND_TO_KEY[kind]
+    local cfg = key and Reg.Get(key)
+    if not key or not cfg then return false end
+
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    local mover = EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
+    if not mover or not EM2.Ticker then return false end
+
+    mover._dragging = true
+    if mover._coordFS then mover._coordFS:Show() end
+    if _G.MSUF_EM_UndoBeforeChange then
+        _G.MSUF_EM_UndoBeforeChange("unit", key)
+    end
+    EM2.Ticker.BeginDrag(mover, key, cfg)
+    return true
+end
+
+local function EndPreviewDrag(kind, source)
+    local key = KIND_TO_KEY[kind]
+    local mover = key and EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
+    if mover then
+        mover._dragging = false
+        if mover._coordFS then mover._coordFS:Hide() end
+    end
+    if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
+    if EM2.Ticker then EM2.Ticker.EndDrag() end
+    if mover and mover.UpdateLabelVisibility then mover:UpdateLabelVisibility() end
+    if source then
+        source._msufGFEM2Dragging = nil
+        source._msufGFEM2LastDragEnd = GetTime and GetTime() or 0
+    end
+end
+
+local function WirePreviewMouse(kind)
+    local gf = ns.GF; if not gf then return end
+    local frames = gf._previewFrames and gf._previewFrames[kind]
+    if not frames then return end
+    for i = 1, #frames do
+        local f = frames[i]
+        if f and not f._msufGFEM2MouseWired then
+            f._msufGFEM2MouseWired = true
+            f._msufGFEM2Kind = kind
+            if f.RegisterForClicks then f:RegisterForClicks("LeftButtonUp") end
+            if f.RegisterForDrag then f:RegisterForDrag("LeftButton") end
+            if f.EnableMouse then f:EnableMouse(true) end
+            f:SetScript("OnDragStart", function(self)
+                if BeginPreviewDrag(self._msufGFEM2Kind or kind) then
+                    self._msufGFEM2Dragging = true
+                end
+            end)
+            f:SetScript("OnDragStop", function(self)
+                if self._msufGFEM2Dragging then
+                    EndPreviewDrag(self._msufGFEM2Kind or kind, self)
+                end
+            end)
+            f:SetScript("OnClick", function(self, button)
+                if button ~= "LeftButton" then return end
+                if self._msufGFEM2Dragging then return end
+                local now = GetTime and GetTime() or 0
+                if self._msufGFEM2LastDragEnd and (now - self._msufGFEM2LastDragEnd) < 0.12 then return end
+                OpenPreviewPopup(self._msufGFEM2Kind or kind, self)
+            end)
+        elseif f then
+            f._msufGFEM2Kind = kind
+            if f.EnableMouse then f:EnableMouse(true) end
+        end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -144,7 +260,9 @@ local function DisablePreviewMouse(disabled)
         if frames then
             for i = 1, #frames do
                 local f = frames[i]
-                if f and f.EnableMouse then f:EnableMouse(not disabled) end
+                if f and f.EnableMouse then
+                    f:EnableMouse((disabled and f._msufGFEM2MouseWired) or not disabled)
+                end
             end
         end
     end
@@ -156,15 +274,27 @@ local function ShowPreviewOnly()
 
     if PartyEnabled() then
         gf.SetPreviewAnchor("party", EnsureContainer("party"))
-        gf.ShowPreview("party", 5)
+        gf.ShowPreview("party", GetRequestedPreviewCount("party"))
+        WirePreviewMouse("party")
+    else
+        gf.SetPreviewAnchor("party", nil)
+        gf.HidePreview("party")
     end
     if RaidEnabled() then
         gf.SetPreviewAnchor("raid", EnsureContainer("raid"))
-        gf.ShowPreview("raid", 10)
+        gf.ShowPreview("raid", GetRequestedPreviewCount("raid"))
+        WirePreviewMouse("raid")
+    else
+        gf.SetPreviewAnchor("raid", nil)
+        gf.HidePreview("raid")
     end
     if MythicRaidEnabled() then
         gf.SetPreviewAnchor("mythicraid", EnsureContainer("mythicraid"))
-        gf.ShowPreview("mythicraid", 10)
+        gf.ShowPreview("mythicraid", GetRequestedPreviewCount("mythicraid"))
+        WirePreviewMouse("mythicraid")
+    else
+        gf.SetPreviewAnchor("mythicraid", nil)
+        gf.HidePreview("mythicraid")
     end
 
     DisablePreviewMouse(true)
@@ -173,6 +303,8 @@ local function ShowPreviewOnly()
     gf.RefreshPreviewLayout("raid")
     gf.RefreshPreviewLayout("mythicraid")
     HideHeaders()
+    SyncMoversSoon(0)
+    SyncMoversSoon(0.05)
 end
 
 local function HidePreviewOnly()
@@ -186,6 +318,8 @@ local function HidePreviewOnly()
     gf.HidePreview("party")
     gf.HidePreview("raid")
     gf.HidePreview("mythicraid")
+    SyncAllContainers()
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
 end
 
 local function EnterEditMode()
@@ -194,6 +328,7 @@ local function EnterEditMode()
     SyncAllContainers()
     HideHeaders()
     ShowPreviewOnly()
+    SyncMoversSoon(0.1)
 end
 
 local function ExitEditMode()
@@ -301,8 +436,7 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            SyncContainer("party")
-            return EnsureContainer("party")
+            return SyncContainer("party")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("party") or GetPartyConf() end,
         isEnabled = PartyEnabled,
@@ -318,8 +452,7 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            SyncContainer("raid")
-            return EnsureContainer("raid")
+            return SyncContainer("raid")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("raid") or GetRaidConf() end,
         isEnabled = RaidEnabled,
@@ -335,8 +468,7 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            SyncContainer("mythicraid")
-            return EnsureContainer("mythicraid")
+            return SyncContainer("mythicraid")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("mythicraid") or GetMythicRaidConf() end,
         isEnabled = MythicRaidEnabled,
@@ -345,6 +477,13 @@ local function RegisterGF()
     })
 
     HookPostDrag()
+
+    if EM2.State and EM2.State.IsActive and EM2.State.IsActive() then
+        EnterEditMode()
+        if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
+        SyncMoversSoon(0)
+        SyncMoversSoon(0.1)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -467,6 +606,7 @@ do
                     SyncAllContainers()
                     gf.RefreshPreviewLayout("party")
                     gf.RefreshPreviewLayout("raid")
+                    gf.RefreshPreviewLayout("mythicraid")
                     HideHeaders()
                 end
             end
@@ -567,9 +707,10 @@ local ANCH = { { "LEFT", "Left" }, { "RIGHT", "Right" }, { "CENTER", "Center" } 
 ------------------------------------------------------------------------
 local function BuildGFPopup(mode)
     local gf = GetGF(); if not gf then return nil end
-    local isRaid = (mode == "raid")
+    local isRaid = (mode == "raid" or mode == "mythicraid")
+    local title = (mode == "mythicraid") and "Mythic Raid Frames" or (isRaid and "Raid Frames" or "Party Frames")
     local popup  = F.Panel("MSUF_EM2_GFPopup_" .. mode, 380, isRaid and 640 or 600,
-                           isRaid and "Raid Frames" or "Party Frames")
+                           title)
 
     local function Conf() return gf.GetConf(mode) end
     local function V(key) return gf.Val(mode, key) end

@@ -1278,6 +1278,12 @@ local function GetDefaultCenter(kind)
     return IsRaidLikeKind(kind) and -500 or -400, 0
 end
 
+local function GetDefaultPreviewCount(kind)
+    if kind == "mythicraid" then return 20 end
+    if kind == "raid" then return 30 end
+    return 5
+end
+
 local function GetLiveCount(kind)
     local conf = GF.GetConf(kind)
     if IsRaidLikeKind(kind) then
@@ -2190,7 +2196,7 @@ end
 
 function GF.ShowPreview(kind, count)
     kind = kind or "party"
-    count = count or ((kind == "raid" or kind == "mythicraid") and 20 or 5)
+    count = count or GetDefaultPreviewCount(kind)
     local conf = GF.GetConf(kind)
     local _, _, totalW, totalH, w, h, spacing, growth, upc = GF.GetGridMetrics(kind, count)
     local key = kind
@@ -2213,9 +2219,9 @@ function GF.ShowPreview(kind, count)
     end
     if container:GetParent() ~= parent then container:SetParent(parent) end
 
-    -- Position container identically to PositionHeaderFromGridCenter
-    -- Use GetPositionCount (not preview count) for consistent positioning
-    local posCount = GF.GetPositionCount(kind)
+    -- In EM2, preview container size must match the visible dummy grid.
+    -- Standalone options previews keep the full header-position reference.
+    local posCount = anchorParent and count or GF.GetPositionCount(kind)
     local _, _, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
     local cx, cy = conf.offsetX, conf.offsetY
     if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
@@ -2347,11 +2353,11 @@ function GF.RefreshPreviewLayout(kind)
     -- Update container position (grid center = stored offset)
     local container = GF._previewContainer and GF._previewContainer[kind]
     if container then
-        local posCount = GF.GetPositionCount(kind)
+        local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
+        local posCount = anchorParent and count or GF.GetPositionCount(kind)
         local _, _, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
         local cx, cy = conf.offsetX, conf.offsetY
         if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
-        local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
         container:SetSize(math_max(posTotalW, 1), math_max(posTotalH, 1))
         container:ClearAllPoints()
         if anchorParent then

@@ -1946,7 +1946,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if GF.headers.party then GF.headers.party:Hide() end
             if GF.headers.raid  then GF.headers.raid:Hide()  end
         end
-        GF.ShowPreview(kind, kind == "raid" and 10 or 4)
+        GF.ShowPreview(kind, kind == "raid" and 30 or 4)
         _barsGFPreviewKind = kind
         _barsGFPreviewOn = true
     end
@@ -2001,7 +2001,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             local inRaid  = IsInRaid  and IsInRaid()
             if inRaid then
                 -- In raid: show raid preview
-                GF.ShowPreview("raid", 10)
+                GF.ShowPreview("raid", 30)
             elseif inGroup then
                 -- In party: real frames visible, no preview needed
             else

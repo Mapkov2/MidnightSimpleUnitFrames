@@ -933,7 +933,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 if GF.headers.party then GF.headers.party:Hide() end
                 if GF.headers.raid  then GF.headers.raid:Hide()  end
             end
-            GF.ShowPreview(kind, IsRaidLike(kind) and 10 or 5)
+            GF.ShowPreview(kind, (kind == "mythicraid" and 20) or (kind == "raid" and 30) or 5)
         end
     end
 
