@@ -50,6 +50,10 @@ local function ClearAnchors(f)
     f._gfPrivSize = nil
     f._gfPrivMax = nil
     f._gfPrivAnchor = nil
+    f._gfPrivX = nil
+    f._gfPrivY = nil
+    f._gfPrivLayer = nil
+    f._gfPrivDir = nil
 
     -- Container overlay anchor
     local coID = f._gfPrivContainerOverlayID
@@ -175,7 +179,11 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     local oy = tonumber(paY) or 0
     local countdown = paCountdown
 
-    -- Diff check: skip rebuild if nothing changed
+    -- Diff check: skip rebuild if all structural settings match.
+    -- ox / oy / paLayer are NOT structural — they only reposition the
+    -- container, so we apply them via a cheap fast-path without tearing
+    -- down the AddPrivateAuraAnchor registrations (which is what made the
+    -- options X/Y sliders and Layer dropdown appear to do nothing).
     if f._gfPrivUnit == unit
        and f._gfPrivSize == iconSz
        and f._gfPrivMax == maxN
@@ -183,7 +191,22 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
        and f._gfPrivDir == paDirection
        and type(f._gfPrivAnchorIDs) == "table"
     then
-        if f._gfPrivContainer then f._gfPrivContainer:Show() end
+        local container = f._gfPrivContainer
+        if container then
+            -- Cheap reposition: only the anchor offset and layer changed.
+            if f._gfPrivX ~= ox or f._gfPrivY ~= oy then
+                f._gfPrivX, f._gfPrivY = ox, oy
+                local parent = container:GetParent() or f.statusIconLayer or f.barGroup or f
+                container:ClearAllPoints()
+                container:SetPoint(pt, parent, pt, ox, oy)
+            end
+            if f._gfPrivLayer ~= paLayer then
+                f._gfPrivLayer = paLayer
+                local parent = container:GetParent() or f.statusIconLayer or f.barGroup or f
+                container:SetFrameLevel(parent:GetFrameLevel() + paLayer)
+            end
+            container:Show()
+        end
         NormalizeAllSlots(f, iconSz)
         return
     end
@@ -223,6 +246,9 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     f._gfPrivMax = maxN
     f._gfPrivAnchor = pt
     f._gfPrivDir = paDirection
+    f._gfPrivX = ox
+    f._gfPrivY = oy
+    f._gfPrivLayer = paLayer
     f._gfPrivAnchorIDs = {}
 
     local slots = f._gfPrivSlots or {}

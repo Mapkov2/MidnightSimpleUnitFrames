@@ -106,7 +106,7 @@ SI.AltSpellIDs = {
 ------------------------------------------------------------------------
 SI.SecretSpellIDs = {
     RestorationDruid  = { IronBark = 102342 },
-    DisciplinePriest  = { PainSuppression = 33206, PowerInfusion = 10060 },
+    DisciplinePriest  = { PainSuppression = 33206 },
     HolyPriest        = { GuardianSpirit = 47788 },
     MistweaverMonk    = { LifeCocoon = 116849 },
     HolyPaladin       = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940 },
@@ -169,7 +169,6 @@ SI.IconTextures = {
     Atonement       = 458720,
     PrayerOfMending = 135944,
     PainSuppression = 135936,
-    PowerInfusion   = 135939,
     -- Holy Priest
     Renew           = 135953,
     EchoOfLight     = 237537,
@@ -224,7 +223,6 @@ SI.TrackableAuras = {
         { name = "PrayerOfMending", display = "Prayer of Mending",color = {0.56, 0.93, 0.56} },
         { name = "VoidShield",      display = "Void Shield",      color = {0.49, 0.77, 1.00} },
         { name = "PainSuppression", display = "Pain Suppression", color = {0.81, 0.58, 0.93}, secret = true },
-        { name = "PowerInfusion",   display = "Power Infusion",   color = {0.94, 0.82, 0.31}, secret = true },
     },
     HolyPriest = {
         { name = "Renew",           display = "Renew",           color = {0.56, 0.93, 0.56} },
@@ -272,8 +270,6 @@ SI.SpecDefaults = {
         PrayerOfMending = { placed = { type = "icon",   anchor = "BOTTOMLEFT", x = 1, y = 1, size = 20 } },
         VoidShield      = { placed = { type = "square", anchor = "BOTTOMRIGHT", x = -3, y = 3, size = 9 } },
         PainSuppression = { frame = { type = "border",  color = {0.81, 0.58, 0.93, 1}, priority = 1 } },
-        PowerInfusion   = { placed = { type = "icon",   anchor = "RIGHT", x = -1, y = 0, size = 20 },
-                            frame = { type = "glow",    color = {0.94, 0.82, 0.31, 1}, priority = 2, thickness = 2 } },
     },
     HolyPriest = {
         Renew           = { placed = { type = "icon",   anchor = "TOPLEFT", x = 1, y = -1, size = 22 } },
