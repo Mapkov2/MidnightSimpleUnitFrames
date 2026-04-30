@@ -25,6 +25,16 @@ local MSUF_ApplyAbsorbOverlayColor     = ns.Bars._ApplyAbsorbOverlayColor
 local MSUF_ApplyHealAbsorbOverlayColor = ns.Bars._ApplyHealAbsorbOverlayColor
 local MSUF_ResetBarZero                = ns.Bars._ResetBarZero
 
+local function _MSUF_SetHealthBarValue(frame, bar, value)
+    if not bar or value == nil then return end
+    local fn = _G.MSUF_UFCore_SetHealthBarValue
+    if fn then
+        fn(frame, bar, value)
+    else
+        bar:SetValue(value)
+    end
+end
+
 -- Per-unit absorb setting resolver.
 -- Checks MSUF_DB[unitKey] for override, falls back to MSUF_DB.general.
 -- PERF: Result cache — pure function, same input always gives same output.
@@ -239,7 +249,7 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
         local maxHP = calc:GetMaximumHealth()
         local hp = calc:GetCurrentHealth()
         hpBar:SetMinMaxValues(0, maxHP)
-        hpBar:SetValue(hp)
+        _MSUF_SetHealthBarValue(frame, hpBar, hp)
 
         -- Anchor mode: MUST run every update. hpBar:GetWidth() changes on layout/
         -- resize/first-show, but SETTINGS_SERIAL only bumps on config change, so
@@ -310,7 +320,7 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
     local maxHP = (F.UnitHealthMax and F.UnitHealthMax(unit)) or 1
     local hp = (F.UnitHealth and F.UnitHealth(unit)) or 0
     hpBar:SetMinMaxValues(0, maxHP)
-    if hp ~= nil then hpBar:SetValue(hp) end
+    if hp ~= nil then _MSUF_SetHealthBarValue(frame, hpBar, hp) end
     -- Absorb fallback: use old API
     if frame.absorbBar then
         MSUF_UpdateAbsorbBar(frame, unit, maxHP)

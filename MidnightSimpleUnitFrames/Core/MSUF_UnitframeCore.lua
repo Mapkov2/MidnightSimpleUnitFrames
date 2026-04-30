@@ -97,6 +97,9 @@ local _npcTypeInstanceActive = false
 -- Both OFF = Classic MSUF battery-saver mode.
 local _smoothPowerBar    = true
 local _realtimePowerText = true
+local _healthSmoothInterp = (type(Enum) == "table"
+    and Enum.StatusBarInterpolation
+    and Enum.StatusBarInterpolation.ExponentialEaseOut) or nil
 
 -- Phase 7: File-scope cached bar mode + colors (set in RefreshSettingsCache).
 -- Eliminates cache table lookups in RefreshHealthBarColorFast hot path.
@@ -498,6 +501,34 @@ local function GetFrameConf(f)
     return conf
 end
 
+local function UFCore_GetHealthSmoothInterp(f, conf)
+    if not f then return nil end
+    if f._msufHealthSmoothReady and conf == nil then
+        return f._msufHealthSmoothInterp
+    end
+    conf = conf or GetFrameConf(f)
+    local interp = (conf and conf.smoothFill ~= false and _healthSmoothInterp) or nil
+    f._msufHealthSmoothInterp = interp
+    f._msufHealthSmoothReady = true
+    return interp
+end
+
+local function UFCore_SetHealthBarValue(f, bar, hp)
+    if not bar or hp == nil then return end
+    local interp = f and f._msufHealthSmoothInterp or nil
+    if f and not f._msufHealthSmoothReady then
+        interp = UFCore_GetHealthSmoothInterp(f)
+    end
+    if interp then
+        bar:SetValue(hp, interp)
+    else
+        bar:SetValue(hp)
+    end
+end
+
+_G.MSUF_UFCore_GetHealthSmoothInterp = UFCore_GetHealthSmoothInterp
+_G.MSUF_UFCore_SetHealthBarValue = UFCore_SetHealthBarValue
+
 -- DB bootstrap (keep EnsureDB/Migration out of hot paths)
 
 UFCore_EnsureDBOnce = function()
@@ -544,6 +575,8 @@ function Core.InvalidateAllFrameConfigs()
             f._msufStatusConf = nil
             f._msufStatusIconsConf = nil
             f._msufTextSpec = nil
+            f._msufHealthSmoothReady = nil
+            f._msufHealthSmoothInterp = nil
             -- PERF: Invalidate component-level diff caches (Text.lua fast-path guards)
             f._msufLastH = nil
             f._msufLastPctS = nil
@@ -2109,7 +2142,7 @@ local function _HealthValueFast(f)
     local bar = f.hpBar
     if not bar then return end
     local hp = UnitHealth(f.unit)
-    bar:SetValue(hp)                          -- C-side, secret-safe
+    UFCore_SetHealthBarValue(f, bar, hp)       -- C-side, secret-safe
 
     -- Gradient mode: refresh bar color on every HP tick so the colour tracks
     -- live HP%. C-side path: UnitGetDetailedHealPrediction → calc →
@@ -2230,7 +2263,7 @@ local function _AbsorbValueFast(f)
     ab:Show()
     local bar = f.hpBar
     local hp = calc:GetCurrentHealth()
-    if bar then bar:SetValue(hp) end
+    if bar then UFCore_SetHealthBarValue(f, bar, hp) end
 end
 
 -- UNIT_HEAL_ABSORB_AMOUNT_CHANGED: only heal absorb bar
@@ -2256,7 +2289,7 @@ local function _HealAbsorbValueFast(f)
     hab:Show()
     local bar = f.hpBar
     local hp = calc:GetCurrentHealth()
-    if bar then bar:SetValue(hp) end
+    if bar then UFCore_SetHealthBarValue(f, bar, hp) end
 end
 
 -- UNIT_HEAL_PREDICTION: only self-heal prediction bar
@@ -2277,7 +2310,7 @@ local function _HealPredValueFast(f)
     local fn = _G.MSUF_UpdateSelfHealPrediction
     if fn then fn(f, unit, maxHP, hp, calc) end
     local bar = f.hpBar
-    if bar then bar:SetValue(hp) end
+    if bar then UFCore_SetHealthBarValue(f, bar, hp) end
 end
 
 -- Power: direct C-side SetMinMaxValues/SetValue, rate-limited text.
@@ -2812,6 +2845,8 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     f._msufStatusConf = nil
     f._msufStatusIconsConf = nil
     f._msufTextSpec = nil
+    f._msufHealthSmoothReady = nil
+    f._msufHealthSmoothInterp = nil
     -- PERF: Invalidate component-level diff caches (Text.lua fast-path guards)
     f._msufLastH = nil
     f._msufLastPctS = nil
@@ -3040,7 +3075,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
             local bar = tf.hpBar
             if bar then
                 bar:SetMinMaxValues(0, UnitHealthMax(unit))
-                bar:SetValue(UnitHealth(unit))
+                UFCore_SetHealthBarValue(tf, bar, UnitHealth(unit))
                 -- Resolve bar color from cached mode (zero table alloc)
                 local mode = _ufcBarMode
                 if mode == "dark" then
@@ -3079,7 +3114,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
             local bar2 = ttf.hpBar
             if bar2 and UnitExists(unit2) then
                 bar2:SetMinMaxValues(0, UnitHealthMax(unit2))
-                bar2:SetValue(UnitHealth(unit2))
+                UFCore_SetHealthBarValue(ttf, bar2, UnitHealth(unit2))
                 local mode = _ufcBarMode
                 if mode == "dark" then
                     bar2:SetStatusBarColor(_ufcDarkR, _ufcDarkG, _ufcDarkB, 1)
@@ -3253,7 +3288,7 @@ do
                 local bar = ff.hpBar
                 if bar then
                     bar:SetMinMaxValues(0, UnitHealthMax(unit))
-                    bar:SetValue(UnitHealth(unit))
+                    UFCore_SetHealthBarValue(ff, bar, UnitHealth(unit))
                     local mode = _ufcBarMode
                     if mode == "dark" then
                         bar:SetStatusBarColor(_ufcDarkR, _ufcDarkG, _ufcDarkB, 1)
