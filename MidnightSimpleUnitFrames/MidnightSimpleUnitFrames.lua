@@ -654,20 +654,12 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     if cur == nil then cur = 0 end
     if mx  == nil then mx  = 100 end
 
-    -- PERF: Read smooth setting from UFCore cache (avoids MSUF_DB.bars.smoothPowerBar chain).
-    -- Falls back to direct DB read if cache unavailable.
     local _interp = nil
-    if isPlayer then
-        local getCache = _MSUF_ResolveGetCache()
-        local cache = getCache and getCache() or nil
-        local bRef = cache and cache.barsRef
-        local wantSmooth = not (bRef and bRef.smoothPowerBar == false)
-        if not cache then
-            wantSmooth = not (MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.smoothPowerBar == false)
-        end
-        if wantSmooth and MSUF_SMOOTH_INTERPOLATION then
-            _interp = MSUF_SMOOTH_INTERPOLATION
-        end
+    local getPowerSmooth = _G.MSUF_UFCore_GetPowerSmoothInterp
+    if getPowerSmooth then
+        _interp = getPowerSmooth(frame)
+    elseif isPlayer then
+        _interp = (not (MSUF_DB and MSUF_DB.bars and MSUF_DB.bars.smoothPowerBar == false)) and MSUF_SMOOTH_INTERPOLATION or nil
     end
     if _interp then
         bar:SetMinMaxValues(0, mx, _interp)
@@ -3800,6 +3792,9 @@ local function _MSUF_PreviewUnitFrame(unit, conf)
     if _G.MSUF_UFCore_GetHealthSmoothInterp then
         _G.MSUF_UFCore_GetHealthSmoothInterp(f, conf)
     end
+    if _G.MSUF_UFCore_GetPowerSmoothInterp then
+        _G.MSUF_UFCore_GetPowerSmoothInterp(f, conf)
+    end
     if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
         if f._msufVisibilityForced == "disabled" then
             f._msufVisibilityForced = nil
@@ -3816,6 +3811,9 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     f.cachedConfig = conf
     if _G.MSUF_UFCore_GetHealthSmoothInterp then
         _G.MSUF_UFCore_GetHealthSmoothInterp(f, conf)
+    end
+    if _G.MSUF_UFCore_GetPowerSmoothInterp then
+        _G.MSUF_UFCore_GetPowerSmoothInterp(f, conf)
     end
     if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
         if f._msufVisibilityForced == "disabled" then
