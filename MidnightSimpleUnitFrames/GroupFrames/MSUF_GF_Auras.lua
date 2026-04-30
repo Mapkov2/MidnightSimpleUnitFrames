@@ -492,17 +492,52 @@ end
 
 ------------------------------------------------------------------------
 -- Apply cooldown (SetCooldownFromDurationObject — only secret-safe path)
+--
+-- Midnight 12.0 detail: the cooldown swipe will NOT animate for an aura
+-- on a non-self unit unless we also tell the CooldownFrame to use the
+-- native aura display time. Without SetUseAuraDisplayTime(true), the
+-- swirl renders as a static frame because the secret-tagged duration
+-- object alone doesn't drive C-side progress on its own.
+--
+-- Diff-gated via _msufGFCdAuraTime so we only hit the C method on real
+-- transitions (most aura updates re-enter ApplyCooldown but keep the
+-- same on/off state). Cheap when state is steady.
 ------------------------------------------------------------------------
 local function ApplyCooldown(ic, unit, auraInstanceID, showCd)
     local cd = ic.cooldown
     if not cd then return end
-    if not showCd then cd:Clear(); return end
+    if not showCd then
+        if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
+            cd._msufGFCdAuraTime = false
+            cd:SetUseAuraDisplayTime(false)
+        end
+        cd:Clear()
+        return
+    end
     if not _apisBound then BindAPIs() end
-    if not _getDuration or not auraInstanceID then cd:Clear(); return end
+    if not _getDuration or not auraInstanceID then
+        if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
+            cd._msufGFCdAuraTime = false
+            cd:SetUseAuraDisplayTime(false)
+        end
+        cd:Clear()
+        return
+    end
     local obj = _getDuration(unit, auraInstanceID)
     if obj ~= nil then
         local fn = cd.SetCooldownFromDurationObject
-        if fn then fn(cd, obj); return end
+        if fn then
+            fn(cd, obj)
+            if cd._msufGFCdAuraTime ~= true and cd.SetUseAuraDisplayTime then
+                cd._msufGFCdAuraTime = true
+                cd:SetUseAuraDisplayTime(true)
+            end
+            return
+        end
+    end
+    if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
+        cd._msufGFCdAuraTime = false
+        cd:SetUseAuraDisplayTime(false)
     end
     cd:Clear()
 end

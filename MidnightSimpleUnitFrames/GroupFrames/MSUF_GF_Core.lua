@@ -155,9 +155,37 @@ local function _GFInstallAttrHook(child)
 
         -- Clear stale entry if unit changed or was cleared
         local prev = self._msufGFRegisteredUnit
-        if prev and prev ~= value then
+        local unitChanged = (prev and prev ~= value)
+        if unitChanged then
             if uf[prev] == self then uf[prev] = nil end
             self._msufGFRegisteredUnit = nil
+        end
+
+        -- Reset volatile per-frame state when the unit token changes or
+        -- is being cleared. Without this, raid roster reshuffles (player
+        -- leaves group, replacement takes the same SecureGroupHeader slot,
+        -- or phasing-driven re-anchoring) inherit stale visuals from the
+        -- previous occupant — most visibly the debuff stripe and dispel
+        -- border, which are diff-gated on cached presence flags.
+        if unitChanged or (prev and not value) then
+            self._msufGFHasAnyDebuff       = false
+            self._msufGFDispelType         = nil
+            self._msufGFDispelAuraID       = nil
+            self._msufGFPrevDispelAuraID   = nil
+            self._msufGFMergedDispel       = nil
+            self._msufGFDispelColorObj     = nil
+            self._msufGFDispelColorRev     = nil
+            self._msufGFColorStyleRevision = nil
+            self._msufGFLastFullAura       = nil
+            self._msufGFAggroLevel         = nil
+            self._msufGFLastName           = nil
+            -- Hide any visible stripe immediately so it doesn't bleed
+            -- into the new occupant's frame for one render cycle.
+            local stripe = self._msufGFDebuffStripe
+            if stripe and stripe:IsShown() then stripe:Hide() end
+            -- Wipe displayed-aura hash; UpdateFrameAuras will repopulate.
+            local disp = self._msufDisplayedAuraIDs
+            if disp then for k in pairs(disp) do disp[k] = nil end end
         end
 
         -- Register new unit. Only party*/raid* belong in this registry —

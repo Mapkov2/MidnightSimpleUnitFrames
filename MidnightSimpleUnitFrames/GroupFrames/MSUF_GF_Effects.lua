@@ -978,6 +978,18 @@ local function dispatchAura(f, unit, updateInfo)
                     if GF.UpdateCornerIndicators and c.ciEn then
                         GF.UpdateCornerIndicators(f, unit)
                     end
+                    -- Debuff stripe: a removed off-screen debuff that was driving
+                    -- the stripe (over icon limit, or via secret-tagged path that
+                    -- didn't make it into `displayed`) must still clear it. The
+                    -- diff-gate keeps us off the C side when nothing changed.
+                    if c.dsEn then
+                        local hadDebuff = f._msufGFHasAnyDebuff or false
+                        local hasDebuff = (_FrameHasStripeDebuff and _FrameHasStripeDebuff(f, unit)) or false
+                        if hasDebuff ~= hadDebuff then
+                            f._msufGFHasAnyDebuff = hasDebuff
+                            _GF_ApplyDebuffStripe(f)
+                        end
+                    end
                     return
                 end
             end
@@ -2553,6 +2565,13 @@ local function UpdateAll(f, unit)
     if c.dsEn then
         f._msufGFHasAnyDebuff = (_FrameHasStripeDebuff and _FrameHasStripeDebuff(f, unit)) or false
         _GF_ApplyDebuffStripe(f)
+    else
+        -- Feature disabled — clear cached presence and hide stripe so the
+        -- option toggle takes effect live (without it the visual lingers
+        -- until the next aura event re-evaluates).
+        f._msufGFHasAnyDebuff = false
+        local stripe = f._msufGFDebuffStripe
+        if stripe and stripe:IsShown() then stripe:Hide() end
     end
     UpdateTargetIndicator(f, unit)
     UpdateStatusText(f, unit)
@@ -3381,7 +3400,10 @@ local UNIT_DISPATCH = {
     UNIT_THREAT_LIST_UPDATE           = function(f, u) UpdateAggro(f, u) end,
     INCOMING_SUMMON_CHANGED           = function(f, u) UpdateSummonIcon(f, u); UpdateResurrectIcon(f, u) end,
     INCOMING_RESURRECT_CHANGED        = function(f, u) UpdateResurrectIcon(f, u) end,
-    UNIT_PHASE                        = function(f, u) UpdatePhaseIcon(f, u) end,
+    -- UNIT_PHASE: phasing transitions can change UnitExists / aura visibility /
+    -- name resolution (Unknown → real). A full refresh is the only correct
+    -- response. Rare event, so the cost is negligible.
+    UNIT_PHASE                        = function(f, u) UpdateAll(f, u) end,
 }
 
 ------------------------------------------------------------------------
