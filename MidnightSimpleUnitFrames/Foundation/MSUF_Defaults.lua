@@ -1186,6 +1186,10 @@ end
             showTarget = true,
             showFocus = true,
             showBoss = true,
+            bossHealAuras = {
+                highlightOwn = false,
+                hideOthers = false,
+            },
             shared = {
                 _msufA2_migrated_v11f = true,
                 bossEditTogether = true,
@@ -1363,6 +1367,10 @@ filters = {
     -- Split toggles: Buffs + Debuffs have their own IMPORTANT toggle (like Unhalted).
     if MSUF_DB and MSUF_DB.auras2 then
         local a2 = MSUF_DB.auras2
+        if type(a2.bossHealAuras) ~= "table" then a2.bossHealAuras = {} end
+        if a2.bossHealAuras.highlightOwn == nil then a2.bossHealAuras.highlightOwn = false end
+        if a2.bossHealAuras.hideOthers == nil then a2.bossHealAuras.hideOthers = false end
+
         local function EnsureImportantSplit(f)
             if not f then return end
             f.buffs = (type(f.buffs) == "table") and f.buffs or {}

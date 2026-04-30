@@ -925,6 +925,14 @@ local function A2_Settings()
     local _, s = GetAuras2DB()
      return s
 end
+local function A2_BossHealAuras()
+    local a2 = select(1, GetAuras2DB())
+    if not a2 then return nil end
+    if type(a2.bossHealAuras) ~= "table" then
+        a2.bossHealAuras = {}
+    end
+    return a2.bossHealAuras
+end
 local A2_REMINDER_GROWTH_OK = { RIGHT = true, LEFT = true, UP = true, DOWN = true }
 local function A2_NormalizeReminderGrowth(v)
     if type(v) ~= "string" or not A2_REMINDER_GROWTH_OK[v] then
@@ -1884,6 +1892,9 @@ end
     local ghDebuffs = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     ghDebuffs:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 200, -12)
     ghDebuffs:SetText("|cff6EB5FFDebuffs|r")
+    local ghBossHeal = displayBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    ghBossHeal:SetPoint("TOPLEFT", displayBox, "TOPLEFT", 390, -12)
+    ghBossHeal:SetText("|cff6EB5FFBoss Heal Auras|r")
     local TIP_SHOW_STACK = 'Shows stack/application counts (e.g. "2") on aura icons. Disable to hide stack numbers.'
     local TIP_HIDE_PERMANENT = 'Hides buffs with no duration. Only works out of combat!'
     do
@@ -1896,6 +1907,10 @@ end
                 "Highlights your own buffs with a border color (visual only; does not filter).", "cbHLOwnBuffs" },
             { "Highlight own debuffs", 200, -74, A2_Settings, "highlightOwnDebuffs", nil,
                 "Highlights your own debuffs with a border color (visual only; does not filter).", "cbHLOwnDebuffs" },
+            { "Highlight own healer buffs", 390, -28, A2_BossHealAuras, "highlightOwn", nil,
+                "Highlights your own healer HoTs and shields on Boss frames.", "cbBossHealOwn" },
+            { "Hide other healer buffs", 390, -50, A2_BossHealAuras, "hideOthers", nil,
+                "Hides known healer HoTs and shields from other players on Boss frames. Your own remain visible.", "cbBossHealHideOthers" },
         }, displayCB)
         -- Group header: Icons | Cooldown | Borders
         local divider = displayBox:CreateTexture(nil, "ARTWORK")
