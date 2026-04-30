@@ -330,7 +330,7 @@ local CASTBAR_TEXTICON_SPECS = {
 -- Copy engine
 --------------------------------------------------------------------
 local COPY_BASIC_FIELDS = {
-    "enabled","showName","showHP","showPower","reverseFillBars","smoothFill","portraitMode",
+    "enabled","showName","showHP","showPower","reverseFillBars","smoothFill","powerSmoothFill","portraitMode",
     "alphaInCombat","alphaOutOfCombat","alphaSync",
     "alphaExcludeTextPortrait","alphaLayerMode",
     "alphaFGInCombat","alphaFGOutOfCombat","alphaBGInCombat","alphaBGOutOfCombat",
@@ -385,6 +385,15 @@ local function CopyFields(dst, src, fields)
     for i = 1, #fields do dst[fields[i]] = src[fields[i]] end
 end
 
+local function ReadPowerSmoothFill(conf, unitKey)
+    if conf and conf.powerSmoothFill ~= nil then return conf.powerSmoothFill == true end
+    if unitKey == "player" then
+        local b = MSUF_DB and MSUF_DB.bars
+        return not (b and b.smoothPowerBar == false)
+    end
+    return false
+end
+
 local CASTBAR_KEY_MAP = {
     player = { enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName" },
     target = { enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName" },
@@ -433,6 +442,7 @@ local function CopyUnitSettings(srcKey, destKey, api)
         local dst, dstC = EnsureUnitDB(toKey)
         if not dst or not dstC or dstC == srcC then return end
         CopyFields(dst, src, COPY_BASIC_FIELDS)
+        dst.powerSmoothFill = ReadPowerSmoothFill(src, srcC)
         CopyFields(dst, src, COPY_INDICATOR_FIELDS)
         CopyFields(dst, src, MSUF_COPY_STATUSICON_FIELDS)
         dst.showInterrupt = src.showInterrupt
@@ -800,6 +810,9 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local pbbLow = _G["MSUF_UF_PowerBarBorderSliderLow"]; if pbbLow then pbbLow:SetText("0") end
         local pbbHigh = _G["MSUF_UF_PowerBarBorderSliderHigh"]; if pbbHigh then pbbHigh:SetText("6") end
         panel.playerPowerBarBorderSlider = pbBorderSlider
+
+        local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -80)
+        panel.playerPowerBarSmoothCB = pbSmoothCB
     end
 
     local castbarBox, castbarBody = MkCollapsible(frameGroup, "Castbar", fullW, castbarBoxH, false)
@@ -1516,6 +1529,9 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             local t = tonumber(b.powerBarBorderThickness) or 1; if t < 0 then t = 0 elseif t > 6 then t = 6 end
             panel.playerPowerBarBorderSlider:SetValue(t)
         end
+        if panel.playerPowerBarSmoothCB then
+            panel.playerPowerBarSmoothCB:SetChecked(ReadPowerSmoothFill(conf, key))
+        end
     end
 
     -- ToT inline
@@ -1855,6 +1871,13 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         if panel.playerPowerBarBorderSlider then
             panel.playerPowerBarBorderSlider:SetScript("OnValueChanged", function(self, v)
                 v = math.floor(v + 0.5); PBBars().powerBarBorderThickness = v; PBApply()
+            end)
+        end
+        if panel.playerPowerBarSmoothCB then
+            panel.playerPowerBarSmoothCB:SetScript("OnClick", function(self)
+                local k = CanonKey(CurrentKey()); if not (k == "player" or k == "target" or k == "focus" or k == "boss") then return end
+                EnsureKeyDB().powerSmoothFill = self:GetChecked() and true or false
+                PBApply()
             end)
         end
     end

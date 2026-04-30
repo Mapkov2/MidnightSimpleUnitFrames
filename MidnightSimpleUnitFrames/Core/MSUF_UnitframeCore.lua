@@ -190,7 +190,11 @@ local function UFCore_RefreshSettingsCache(reason)
     -- Smooth power bar + real-time text (hot-path upvalues).
     -- Default ON (true) when not explicitly set. Matches MidnightRogueBars behavior.
     local prevEither = (_smoothPowerBar or _realtimePowerText)
-    _smoothPowerBar    = not (bars and bars.smoothPowerBar == false)
+    local playerPowerSmooth = db and db.player and db.player.powerSmoothFill
+    if playerPowerSmooth == nil then
+        playerPowerSmooth = not (bars and bars.smoothPowerBar == false)
+    end
+    _smoothPowerBar    = (playerPowerSmooth == true)
     _realtimePowerText = not (bars and bars.realtimePowerText == false)
     local nowEither = (_smoothPowerBar or _realtimePowerText)
 
@@ -526,8 +530,27 @@ local function UFCore_SetHealthBarValue(f, bar, hp)
     end
 end
 
+local function UFCore_GetPowerSmoothInterp(f, conf)
+    if not f then return nil end
+    if f._msufPowerSmoothReady and conf == nil then
+        return f._msufPowerSmoothInterp
+    end
+    conf = conf or GetFrameConf(f)
+    local enabled = conf and conf.powerSmoothFill
+    if enabled == nil and f._msufIsPlayer then
+        local db = UFCore_EnsureDBOnce()
+        local bars = db and db.bars
+        enabled = not (bars and bars.smoothPowerBar == false)
+    end
+    local interp = (enabled == true and _healthSmoothInterp) or nil
+    f._msufPowerSmoothInterp = interp
+    f._msufPowerSmoothReady = true
+    return interp
+end
+
 _G.MSUF_UFCore_GetHealthSmoothInterp = UFCore_GetHealthSmoothInterp
 _G.MSUF_UFCore_SetHealthBarValue = UFCore_SetHealthBarValue
+_G.MSUF_UFCore_GetPowerSmoothInterp = UFCore_GetPowerSmoothInterp
 
 -- DB bootstrap (keep EnsureDB/Migration out of hot paths)
 
@@ -577,6 +600,8 @@ function Core.InvalidateAllFrameConfigs()
             f._msufTextSpec = nil
             f._msufHealthSmoothReady = nil
             f._msufHealthSmoothInterp = nil
+            f._msufPowerSmoothReady = nil
+            f._msufPowerSmoothInterp = nil
             -- PERF: Invalidate component-level diff caches (Text.lua fast-path guards)
             f._msufLastH = nil
             f._msufLastPctS = nil
@@ -1420,11 +1445,11 @@ local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
     if ev == "INCOMING_RESURRECT_CHANGED" then
         if not (conf and conf.showIncomingResIndicator) then return end
     end
-    -- UNIT_POWER_FREQUENT: only register on the PLAYER frame when toggles ON.
-    -- Target/Focus/Boss never get this event → zero overhead for non-player.
+    -- UNIT_POWER_FREQUENT stays player-only: player resources need the fastest
+    -- visual response, while other frames can smooth normal UNIT_POWER_UPDATE ticks.
     if ev == "UNIT_POWER_FREQUENT" then
-        if not (_smoothPowerBar or _realtimePowerText) then return end
         if not f._msufIsPlayer then return end
+        if not (_smoothPowerBar or _realtimePowerText) then return end
     end
     -- Phase 6: Conditional absorb/prediction event registration.
     -- These events only fire when the feature is enabled.
@@ -2364,7 +2389,7 @@ do
         local mx  = _UnitPowerMax(unit, pType)
         if cur == nil then cur = 0 end
         if mx  == nil then mx  = 100 end
-        local interp = _pwrInterp
+        local interp = UFCore_GetPowerSmoothInterp(f)
         if interp then
             bar:SetMinMaxValues(0, mx, interp)
             bar:SetValue(cur, interp)
@@ -2385,13 +2410,25 @@ do
         local mx  = _UnitPowerMax(unit, pType)
         if cur == nil then cur = 0 end
         if mx  == nil then mx  = 100 end
-        bar:SetMinMaxValues(0, mx)
-        bar:SetValue(cur)
+        local interp = UFCore_GetPowerSmoothInterp(f)
+        if interp then
+            bar:SetMinMaxValues(0, mx, interp)
+            bar:SetValue(cur, interp)
+        else
+            bar:SetMinMaxValues(0, mx)
+            bar:SetValue(cur)
+        end
         _MaybeUpdatePowerText(f, unit, pType)
     end
 
     local function _PowerSwapHandler()
         _pwrInterp = (_smoothPowerBar and _Interp) and _Interp or nil
+        for _, frame in pairs(FramesByUnit) do
+            if frame then
+                frame._msufPowerSmoothReady = nil
+                frame._msufPowerSmoothInterp = nil
+            end
+        end
     end
     _PowerSwapHandler()
     Core._PowerSwapHandler = _PowerSwapHandler
@@ -2847,6 +2884,8 @@ function Core.NotifyConfigChanged(unitKey, alsoUpdate, urgent, reason)
     f._msufTextSpec = nil
     f._msufHealthSmoothReady = nil
     f._msufHealthSmoothInterp = nil
+    f._msufPowerSmoothReady = nil
+    f._msufPowerSmoothInterp = nil
     -- PERF: Invalidate component-level diff caches (Text.lua fast-path guards)
     f._msufLastH = nil
     f._msufLastPctS = nil
