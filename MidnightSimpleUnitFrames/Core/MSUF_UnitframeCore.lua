@@ -2568,9 +2568,13 @@ local _UF_DISPATCH = {
     -- Status
     UNIT_FLAGS = function(self)
         if not self._msufStaticHealthColor then self._msufHealthColorDirty = true end
+        self._msufAwayForceRefresh = true
         Core.MarkDirty(self, DIRTY_STATUS, false, "UNIT_FLAGS")
     end,
-    UNIT_CONNECTION = function(self) _RunStatusDirect(self) end,
+    UNIT_CONNECTION = function(self)
+        self._msufAwayForceRefresh = true
+        _RunStatusDirect(self)
+    end,
     INCOMING_RESURRECT_CHANGED = function(self)
         Core.MarkDirty(self, DIRTY_STATUS, nil, "INCOMING_RESURRECT_CHANGED")
     end,
@@ -3097,11 +3101,13 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_FLAGS_CHANGED" then
-        if arg1 == "player" then
+        if arg1 == nil or arg1 == "player" then
             local pf = FramesByUnit["player"]
             if pf and pf:IsVisible() and _StatusFast then
+                pf._msufAwayForceRefresh = true
                 _RunStatusDirect(pf, DIRTY_STATUS, event)
             else
+                if pf then pf._msufAwayForceRefresh = true end
                 MarkUnit("player", DIRTY_STATUS, true, event)
             end
         end
