@@ -3669,7 +3669,7 @@ local function OnGlobalEvent(self, event, ...)
     -- RAID_TARGET_UPDATE, PARTY_LEADER_CHANGED, GROUP_ROSTER_UPDATE,
     -- BARBER_SHOP_OPEN/CLOSE, PLAYER_FLAGS_CHANGED. Flag is maintained by
     -- RebuildAll and the PLAYER_REGEN_ENABLED retire-deferral path.
-    if not GF._anyEnabled then return end
+    if GF._anyEnabled == false then return end
 
     if event == "PLAYER_FOCUS_CHANGED" then
         local oldFocus = _gfFocusFrame
