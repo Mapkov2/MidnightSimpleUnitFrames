@@ -3365,6 +3365,22 @@ function _G.MSUF_EnsureGFPanelBuilt()
             selectorItems[i] = { key = tostring(i), label = ICON_SPECS_UI[i].label }
         end
 
+        local function SetStatusOptionEnabled(widget, enabled)
+            if not widget then return end
+            enabled = enabled and true or false
+            if widget.SetEnabled then
+                widget:SetEnabled(enabled)
+            elseif enabled then
+                if widget.EnableMouse then widget:EnableMouse(true) end
+                if widget.Enable then widget:Enable() end
+                if widget.SetAlpha then widget:SetAlpha(1) end
+            else
+                if widget.EnableMouse then widget:EnableMouse(false) end
+                if widget.Disable then widget:Disable() end
+                if widget.SetAlpha then widget:SetAlpha(0.45) end
+            end
+        end
+
         -- Forward-declare refresh
         local refreshIconControls
 
@@ -3393,7 +3409,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.enKey) end,
             set = function(k, v)
                 local s = ICON_SPECS_UI[_selectedIdx]
-                if s then GF.GetConf(k)[s.enKey] = v; GF.RefreshVisuals() end
+                if s then
+                    GF.GetConf(k)[s.enKey] = v
+                    GF.RefreshVisuals()
+                    if refreshIconControls then refreshIconControls() end
+                end
             end,
         })
 
@@ -3461,6 +3481,45 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Layer: %d (higher = on top)", v) end,
         })
 
+        local resetBtn = CreateFrame("Button", "MSUF_GF_SI_ResetButton", body, "UIPanelButtonTemplate")
+        resetBtn:SetSize(62, 22)
+        resetBtn:SetText(TR("Reset"))
+        resetBtn:SetPoint("LEFT", layerSl, "RIGHT", 84, 0)
+        resetBtn:SetScript("OnClick", function()
+            local s = ICON_SPECS_UI[_selectedIdx]
+            local kind = K()
+            local conf = GF.GetConf(kind)
+            if not (s and conf) then return end
+
+            for _, key in ipairs({ s.sizeKey, s.anchorKey, s.xKey, s.yKey, s.layerKey }) do
+                if key then
+                    local def = GF.GetDefault and GF.GetDefault(kind, key)
+                    conf[key] = def
+                end
+            end
+
+            GF.RefreshVisuals()
+            if refreshIconControls then refreshIconControls() end
+            if GF._PreviewSelectStatusIcon then GF._PreviewSelectStatusIcon(s.enKey) end
+        end)
+        resetBtn:SetScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(TR("Resets current indicator"), 1, 1, 1)
+            GameTooltip:AddLine(TR("Resets X/Y, Anchor, Size and Layer back to defaults."), 0.85, 0.85, 0.85, true)
+            GameTooltip:Show()
+        end)
+        resetBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+        local function SetStatusConfigEnabled(enabled)
+            SetStatusOptionEnabled(sizeSl, enabled)
+            SetStatusOptionEnabled(anchorDd, enabled)
+            SetStatusOptionEnabled(xSl, enabled)
+            SetStatusOptionEnabled(ySl, enabled)
+            SetStatusOptionEnabled(layerSl, enabled)
+            SetStatusOptionEnabled(resetBtn, enabled)
+        end
+
         -- Refresh all controls when selector changes
         refreshIconControls = function()
             if enChk and enChk.Refresh then enChk:Refresh() end
@@ -3469,6 +3528,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             if xSl and xSl.Refresh then xSl:Refresh() end
             if ySl and ySl.Refresh then ySl:Refresh() end
             if layerSl and layerSl.Refresh then layerSl:Refresh() end
+            local s = ICON_SPECS_UI[_selectedIdx]
+            SetStatusConfigEnabled(s and GF.Val(K(), s.enKey) and true or false)
         end
 
         -- Also refresh on scope switch
@@ -3477,6 +3538,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             if midnightChk and midnightChk.Refresh then midnightChk:Refresh() end
             if styleDd and styleDd.Refresh then styleDd:Refresh() end
         end
+        refreshIconControls()
     end
 
     ----------------------------------------------------------------
