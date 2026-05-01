@@ -1234,6 +1234,7 @@ function GF.BuildFrameCache(f)
     local conf = GF.GetConf(kind)
     local c = f._c
     if not c then c = {}; f._c = c end
+    local fScale = conf._resolvedFrameScale or 1
 
     -- Smooth fill (pre-resolved interpolation enum)
     c.smooth    = conf.smoothFill ~= false and _smoothInterp or nil
@@ -1294,7 +1295,8 @@ function GF.BuildFrameCache(f)
     c.hcGradient = (c.hcMode == "GRADIENT")
 
     -- Power
-    c.powH      = conf.powerHeight or 6
+    c.powH      = (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
+        or ((conf.powerHeight or 6) * fScale)
     c.showPow   = conf.showPower
     c.ptl       = conf.powerTextLeft   or "NONE"
     c.ptc       = conf.powerTextCenter or "NONE"
@@ -1331,7 +1333,8 @@ function GF.BuildFrameCache(f)
     -- Debuff stripe (thin edge for any debuff)
     c.dsEn    = conf.debuffStripeEnabled == true
     c.dsEdge  = conf.debuffStripeEdge or "BOTTOM"
-    c.dsH     = conf.debuffStripeHeight or 3
+    c.dsH     = (GF.ScaleValue and GF.ScaleValue(conf.debuffStripeHeight or 3, fScale, 1))
+        or (conf.debuffStripeHeight or 3)
     c.dsAlpha = conf.debuffStripeAlpha or 0.60
     c.dsR     = conf.debuffStripeColorR or 0.80
     c.dsG     = conf.debuffStripeColorG or 0.20
@@ -1657,6 +1660,11 @@ _GF_RefreshBorder = function(f, unit)
     local ofs = HLVal(kind, "hlAggroOffset") or 0
     local tex = HLVal(kind, "hlAggroTexture")
     local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
+    local fScale = conf._resolvedFrameScale or 1
+    if fScale ~= 1 and GF.ScaleValue then
+        sz = GF.ScaleValue(sz, fScale, 1)
+        ofs = GF.ScaleValue(ofs, fScale)
+    end
 
     -- Configurable priority: read hlPrioOrder from Bars menu (general DB).
     -- Maps "dispel"/"magic"/"curse"/etc → dispel, "aggro" → aggro.

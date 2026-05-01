@@ -385,11 +385,110 @@ local function IsRaidLikeKind(kind)
     return kind == "raid" or kind == "mythicraid"
 end
 
+local function IsDefaultsConf(kind, conf)
+    if kind == "raid" then return conf == RAID_DEFAULTS end
+    if kind == "mythicraid" then return conf == MYTHIC_RAID_DEFAULTS end
+    return conf == PARTY_DEFAULTS
+end
+
+------------------------------------------------------------------------
+-- Group Frame Scaling
+-- Scales the physical frame geometry first; render modules then use the
+-- cached scale for fonts and icons. Keeping the math here prevents the
+-- header, preview, mover, and child-scan paths from drifting apart.
+------------------------------------------------------------------------
+local SCALE_AUTO_DEFAULTS = {
+    { max = 10, scale = 100 },  -- 1-10 players
+    { max = 20, scale = 85  },  -- 11-20 players
+    { max = 25, scale = 80  },  -- 21-25 players
+    -- 26+ uses scaleOver25
+}
+local SCALE_OVER25_DEFAULT = 70
+
+local function ClampScalePct(v, fallback)
+    v = tonumber(v) or fallback or 100
+    if v < 50 then v = 50 elseif v > 150 then v = 150 end
+    return v
+end
+
+local function RoundScaled(v, scale)
+    v = (tonumber(v) or 0) * (tonumber(scale) or 1)
+    if v >= 0 then return math_floor(v + 0.5) end
+    return -math_floor((-v) + 0.5)
+end
+
+function GF.ResolveFrameScale(kind)
+    local conf = GF.GetConf(kind)
+    if not conf then return 1 end
+    local mode = conf.frameScaleMode or "off"
+    if mode == "off" then return 1 end
+    if mode == "manual" then
+        return ClampScalePct(conf.frameScaleManual, 100) / 100
+    end
+
+    local getNum = _G.GetNumGroupMembers
+    local n = getNum and getNum() or 0
+    local s10 = ClampScalePct(conf.scaleAt10,  SCALE_AUTO_DEFAULTS[1].scale)
+    local s20 = ClampScalePct(conf.scaleAt20,  SCALE_AUTO_DEFAULTS[2].scale)
+    local s25 = ClampScalePct(conf.scaleAt25,  SCALE_AUTO_DEFAULTS[3].scale)
+    local s26 = ClampScalePct(conf.scaleOver25, SCALE_OVER25_DEFAULT)
+    if n <= 10 then return s10 / 100 end
+    if n <= 20 then return s20 / 100 end
+    if n <= 25 then return s25 / 100 end
+    return s26 / 100
+end
+
+function GF.ApplyFrameScale(kind)
+    local conf = GF.GetConf(kind)
+    if not conf then return 1 end
+    local s = GF.ResolveFrameScale(kind)
+    if not IsDefaultsConf(kind, conf) then
+        conf._resolvedFrameScale = s
+    end
+    return s
+end
+
+function GF.GetFrameScale(kind)
+    return GF.ApplyFrameScale(kind)
+end
+
+function GF.ScaleValue(value, scale, minValue)
+    local v = RoundScaled(value, scale)
+    if minValue ~= nil and v < minValue then v = minValue end
+    return v
+end
+
+function GF.ScaleFrameValue(kind, value, minValue)
+    local conf = GF.GetConf(kind)
+    local scale = (conf and conf._resolvedFrameScale) or GF.ApplyFrameScale(kind) or 1
+    return GF.ScaleValue(value, scale, minValue)
+end
+
+function GF.GetScaledFrameMetrics(kind)
+    local conf = GF.GetConf(kind)
+    local isRaidLike = IsRaidLikeKind(kind)
+    if not conf then
+        return isRaidLike and 80 or 120, isRaidLike and 32 or 40, 1, 1
+    end
+    local scale = GF.ApplyFrameScale(kind)
+    local w = GF.ScaleValue(tonumber(conf.width) or (isRaidLike and 80 or 120), scale, 1)
+    local h = GF.ScaleValue(tonumber(conf.height) or (isRaidLike and 32 or 40), scale, 1)
+    local sp = GF.ScaleValue(tonumber(conf.spacing) or 1, scale, 0)
+    return w, h, sp, scale
+end
+
+function GF.GetScaledPowerHeight(kind)
+    local conf = GF.GetConf(kind)
+    local raw = tonumber(conf and conf.powerHeight) or (IsRaidLikeKind(kind) and 4 or 6)
+    if raw <= 0 then return 0 end
+    if not conf then return raw end
+    local scale = conf._resolvedFrameScale or GF.ApplyFrameScale(kind) or 1
+    return GF.ScaleValue(raw, scale, 1)
+end
+
 function GF.GetGridMetrics(kind, count)
     local conf = GF.GetConf(kind)
-    local w   = conf.width  or (IsRaidLikeKind(kind) and 80 or 120)
-    local h   = conf.height or (IsRaidLikeKind(kind) and 32 or 40)
-    local sp  = conf.spacing or 1
+    local w, h, sp = GF.GetScaledFrameMetrics(kind)
     local growth = conf.growth or "DOWN"
     local upc = conf.unitsPerColumn or 5
 
@@ -881,49 +980,6 @@ function GF.AutoSwitchRaidLayout(kind)
     if situation ~= conf._activeRaidLayout then
         GF.SwitchRaidLayout(situation, kind)
     end
-end
-
-------------------------------------------------------------------------
--- Group Frame Scaling
--- Scales entire frame (geometry + fonts + icons) based on group size.
--- Mode: "off" / "auto" / "manual"
--- Auto thresholds: 1-15 = 100%, 16-25 = 85%, 26-40 = 70%
--- Manual: user-defined 50-150%
--- Stored as conf._resolvedFrameScale (set during SetupHeader, read by Render)
-------------------------------------------------------------------------
-local SCALE_AUTO_DEFAULTS = {
-    { max = 10, scale = 100 },  -- 1-10 players
-    { max = 20, scale = 85  },  -- 11-20 players
-    { max = 25, scale = 80  },  -- 21-25 players
-    -- 26+ uses scaleOver25
-}
-local SCALE_OVER25_DEFAULT = 70
-
-function GF.ResolveFrameScale(kind)
-    local conf = GF.GetConf(kind)
-    if not conf then return 1 end
-    local mode = conf.frameScaleMode or "off"
-    if mode == "off" then return 1 end
-    if mode == "manual" then
-        return (conf.frameScaleManual or 100) / 100
-    end
-    -- Auto: configurable breakpoints
-    local n = GetNumGroupMembers and GetNumGroupMembers() or 0
-    local s10  = conf.scaleAt10  or SCALE_AUTO_DEFAULTS[1].scale
-    local s20  = conf.scaleAt20  or SCALE_AUTO_DEFAULTS[2].scale
-    local s25  = conf.scaleAt25  or SCALE_AUTO_DEFAULTS[3].scale
-    local s26  = conf.scaleOver25 or SCALE_OVER25_DEFAULT
-    if n <= 10 then return s10 / 100 end
-    if n <= 20 then return s20 / 100 end
-    if n <= 25 then return s25 / 100 end
-    return s26 / 100
-end
-
---- Apply resolved scale to conf cache (called before header setup)
-function GF.ApplyFrameScale(kind)
-    local conf = GF.GetConf(kind)
-    if not conf then return end
-    conf._resolvedFrameScale = GF.ResolveFrameScale(kind)
 end
 
 --- Resolve a config value with fallback to default

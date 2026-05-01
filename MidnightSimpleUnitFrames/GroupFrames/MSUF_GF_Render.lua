@@ -24,6 +24,16 @@ local tonumber = tonumber
 local math_max = math.max
 local math_floor = math.floor
 
+local function ScaleValue(value, scale, minValue)
+    if GF.ScaleValue then
+        return GF.ScaleValue(value, scale or 1, minValue)
+    end
+    local v = (tonumber(value) or 0) * (tonumber(scale) or 1)
+    if v >= 0 then v = math_floor(v + 0.5) else v = -math_floor((-v) + 0.5) end
+    if minValue ~= nil and v < minValue then v = minValue end
+    return v
+end
+
 ------------------------------------------------------------------------
 -- Dirty bits (bitmask, combinable via bor)
 ------------------------------------------------------------------------
@@ -335,6 +345,7 @@ local function ApplyFrameBorder(f, kind)
     local conf = GF.GetConf(kind)
     local bg = f.barGroup
     if not bg then return end
+    local fScale = conf._resolvedFrameScale or 1
 
     bg:SetBackdrop(_bgOnlyBd)
     bg:SetBackdropColor(
@@ -344,6 +355,7 @@ local function ApplyFrameBorder(f, kind)
     local bf = f._msufGFBorderFrame
     if bf then
         local borderSize = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2
+        if fScale ~= 1 then borderSize = ScaleValue(borderSize, fScale, 0) end
         if borderSize > 0 then
             _borderBd.edgeSize = borderSize
             bf:SetBackdrop(_borderBd)
@@ -365,6 +377,12 @@ local function ApplyEffectBorderStyles(f, kind)
     local hlLay = GF.GetHighlightVal(kind, "hlAggroLayer") or "DEFAULT"
     local anchor = f.barGroup or f
     local baseLvl = anchor:GetFrameLevel()
+    local conf = GF.GetConf(kind)
+    local fScale = conf._resolvedFrameScale or 1
+    if fScale ~= 1 then
+        hlSz = ScaleValue(hlSz, fScale, 1)
+        hlOfs = ScaleValue(hlOfs, fScale)
+    end
 
     local hb = f._msufGFHighlightBorder
     if hb then
@@ -429,8 +447,11 @@ end
 ------------------------------------------------------------------------
 local function ApplyGeometry(f, kind)
     local conf   = GF.GetConf(kind)
-    local powerH = conf.powerHeight or 6
+    local fScale = conf._resolvedFrameScale or 1
+    local powerH = (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
+        or ScaleValue(conf.powerHeight or 6, fScale, 0)
     local inset  = math_max(0, (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2)
+    if fScale ~= 1 then inset = ScaleValue(inset, fScale, 0) end
 
     if f.health then
         f.health:ClearAllPoints()
@@ -611,23 +632,26 @@ end
 ------------------------------------------------------------------------
 local function ApplyTextLayout(f, kind)
     local conf = GF.GetConf(kind)
-    local nox = conf.nameOffsetX or 0
-    local noy = conf.nameOffsetY or 0
+    local fScale = conf._resolvedFrameScale or 1
+    local pad3 = ScaleValue(3, fScale, 1)
+    local pad2 = ScaleValue(2, fScale, 1)
+    local nox = ScaleValue(conf.nameOffsetX or 0, fScale)
+    local noy = ScaleValue(conf.nameOffsetY or 0, fScale)
 
     if f.nameText then
         f.nameText:ClearAllPoints()
         local anchor = conf.nameAnchor or "LEFT"
         if anchor == "CENTER" then
-            f.nameText:SetPoint("LEFT", f.health, "LEFT", 3 + nox, noy)
-            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3 + nox, noy)
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + nox, noy)
             f.nameText:SetJustifyH("CENTER")
         elseif anchor == "RIGHT" then
-            f.nameText:SetPoint("LEFT", f.health, "LEFT", 3 + nox, noy)
-            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3 + nox, noy)
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + nox, noy)
             f.nameText:SetJustifyH("RIGHT")
         else
-            f.nameText:SetPoint("LEFT", f.health, "LEFT", 3 + nox, noy)
-            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3, noy)
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3, noy)
             f.nameText:SetJustifyH("LEFT")
         end
         f.nameText:SetWordWrap(false)
@@ -635,8 +659,8 @@ local function ApplyTextLayout(f, kind)
     end
 
     -- 3-slot health text
-    local hox = conf.hpOffsetX or 0
-    local hoy = conf.hpOffsetY or 0
+    local hox = ScaleValue(conf.hpOffsetX or 0, fScale)
+    local hoy = ScaleValue(conf.hpOffsetY or 0, fScale)
     local hpTextOn = conf.showHPText ~= false
     local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
     local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
@@ -644,7 +668,7 @@ local function ApplyTextLayout(f, kind)
 
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
-        f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", 3 + hox, hoy)
+        f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", pad3 + hox, hoy)
         f.textLeftFS:SetJustifyH("LEFT")
         if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:SetText(""); f.textLeftFS:Hide() end
     end
@@ -656,7 +680,7 @@ local function ApplyTextLayout(f, kind)
     end
     if f.textRightFS then
         f.textRightFS:ClearAllPoints()
-        f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -3 + hox, hoy)
+        f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + hox, hoy)
         f.textRightFS:SetJustifyH("RIGHT")
         if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:SetText(""); f.textRightFS:Hide() end
     end
@@ -664,12 +688,13 @@ local function ApplyTextLayout(f, kind)
     if f.statusIndicatorText then
         f.statusIndicatorText:ClearAllPoints()
         f.statusIndicatorText:SetPoint("CENTER", f.health, "CENTER",
-            conf.statusOffsetX or 0, conf.statusOffsetY or 0)
+            ScaleValue(conf.statusOffsetX or 0, fScale),
+            ScaleValue(conf.statusOffsetY or 0, fScale))
     end
 
     -- 3-slot power text
-    local pox = conf.powerOffsetX or 0
-    local poy = conf.powerOffsetY or 0
+    local pox = ScaleValue(conf.powerOffsetX or 0, fScale)
+    local poy = ScaleValue(conf.powerOffsetY or 0, fScale)
     local showPow = conf.showPower
     local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
     local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
@@ -678,7 +703,7 @@ local function ApplyTextLayout(f, kind)
 
     if f.powerTextLeftFS then
         f.powerTextLeftFS:ClearAllPoints()
-        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", 2 + pox, poy)
+        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", pad2 + pox, poy)
         f.powerTextLeftFS:SetJustifyH("LEFT")
         if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
     end
@@ -690,7 +715,7 @@ local function ApplyTextLayout(f, kind)
     end
     if f.powerTextRightFS then
         f.powerTextRightFS:ClearAllPoints()
-        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -2 + pox, poy)
+        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -pad2 + pox, poy)
         f.powerTextRightFS:SetJustifyH("RIGHT")
         if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
     end
@@ -704,6 +729,8 @@ local function ApplyTextLayout(f, kind)
             local gnY = conf.groupNumberY
             if gnX == nil then gnX = -2 end
             if gnY == nil then gnY = 2 end
+            gnX = ScaleValue(gnX, fScale)
+            gnY = ScaleValue(gnY, fScale)
             f.groupNumberText:SetPoint(gnAnchor, f.health or f.barGroup, gnAnchor, gnX, gnY)
             f.groupNumberText:SetJustifyH("RIGHT")
         else
@@ -762,7 +789,13 @@ local function ApplyIconLayout(f, kind)
             if fScale ~= 1 then sz = math_max(4, math_floor(sz * fScale + 0.5)) end
             icon:SetSize(sz, sz)
             local pt = conf[s.anchorKey] or s.defAnchor
-            icon:SetPoint(pt, anchor, pt, conf[s.xKey] or 0, conf[s.yKey] or 0)
+            local ox = conf[s.xKey] or 0
+            local oy = conf[s.yKey] or 0
+            if fScale ~= 1 then
+                ox = ScaleValue(ox, fScale)
+                oy = ScaleValue(oy, fScale)
+            end
+            icon:SetPoint(pt, anchor, pt, ox, oy)
             local layer = conf[s.layerKey] or s.defLayer
             if icon.SetDrawLayer then
                 local sub = layer
