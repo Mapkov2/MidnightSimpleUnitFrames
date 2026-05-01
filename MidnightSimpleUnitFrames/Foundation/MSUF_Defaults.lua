@@ -980,6 +980,9 @@ end
     if g.leaderIconOffsetY == nil then
         g.leaderIconOffsetY = 3
     end
+    if g.leaderIconLayer == nil then
+        g.leaderIconLayer = 7
+    end
     -- Level indicator offset (global)
     if g.levelIndicatorOffsetX == nil then
         g.levelIndicatorOffsetX = 0
@@ -990,6 +993,9 @@ end
     if g.levelIndicatorAnchor == nil then
         g.levelIndicatorAnchor = 'NAMERIGHT'
     end
+    if g.levelIndicatorLayer == nil then
+        g.levelIndicatorLayer = 7
+    end
     -- Misc -> Indicators
     if g.showIncomingResIndicator == nil then
         g.showIncomingResIndicator = true
@@ -997,11 +1003,17 @@ end
     if g.incomingResIndicatorPos == nil then
         g.incomingResIndicatorPos = 'TOPRIGHT'
     end
+    if g.incomingResIndicatorLayer == nil then
+        g.incomingResIndicatorLayer = 7
+    end
     if g.showCombatStateIndicator == nil then
         g.showCombatStateIndicator = true
     end
     if g.combatStateIndicatorPos == nil then
         g.combatStateIndicatorPos = 'TOPLEFT'
+    end
+    if g.combatStateIndicatorLayer == nil then
+        g.combatStateIndicatorLayer = 7
     end
     -- Status Icons (Summon / Resting)
     -- These are used by the Unitframe Status element (player/target) and can be overridden per-unit in the Frames menu.
@@ -1026,6 +1038,9 @@ end
 	if g.restedStateIndicatorSize == nil or type(g.restedStateIndicatorSize) ~= "number" or g.restedStateIndicatorSize <= 0 then
 		g.restedStateIndicatorSize = 30
 	end
+    if g.restedStateIndicatorLayer == nil then
+        g.restedStateIndicatorLayer = 7
+    end
     if g.stateIconsTestMode == nil then
         g.stateIconsTestMode = false
     end
@@ -1083,6 +1098,7 @@ for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
         end
     end
     if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
+    if conf.raidMarkerLayer == nil then conf.raidMarkerLayer = 7 end
 end
 -- Elite / Rare icon defaults (per-unit)
 for _, key in ipairs({"target","focus","targettarget","boss"}) do
@@ -1093,6 +1109,7 @@ for _, key in ipairs({"target","focus","targettarget","boss"}) do
     if u.eliteIconAnchor  == nil then u.eliteIconAnchor  = "TOPRIGHT" end
     if u.eliteIconOffsetX == nil then u.eliteIconOffsetX = 2          end
     if u.eliteIconOffsetY == nil then u.eliteIconOffsetY = 2          end
+    if u.eliteIconLayer   == nil then u.eliteIconLayer   = 7          end
 end
 if MSUF_DB.bars == nil then
         MSUF_DB.bars = {}

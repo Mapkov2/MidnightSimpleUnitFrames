@@ -144,6 +144,26 @@ local function _MSUF_ReadStr(conf, g, k, defaultVal, legacyKey)
     if v == nil then v = defaultVal end
      return v
 end
+local function _MSUF_ClampIconLayer(v, defaultVal)
+    v = tonumber(v) or defaultVal or 7
+    v = math.floor(v + 0.5)
+    if v < 1 then return 1 end
+    if v > 10 then return 10 end
+    return v
+end
+local function _MSUF_ApplyIconLayer(region, layer, owner)
+    if not region then return end
+    local layout = ns.Icons and ns.Icons._layout
+    if layout and layout.ApplyLayer then
+        layout.ApplyLayer(region, layer, owner or region._msufLayerOwner)
+        return
+    end
+    if region.SetDrawLayer then
+        local sub = (tonumber(layer) or 7) - 1
+        if sub < 0 then sub = 0 elseif sub > 7 then sub = 7 end
+        region:SetDrawLayer("OVERLAY", sub)
+    end
+end
 -- Status Icon Symbol Textures (Classic vs Midnight)
 local function _MSUF_GetStatusIconsUseMidnight(conf, g)
     -- Global by design; allow per-frame legacy if ever present.
@@ -373,14 +393,17 @@ local function _MSUF_UpdateStatusIcons(frame)
         local combatX = _MSUF_ReadNumber(conf, g, "combatStateIndicatorOffsetX", 0)
         local combatY = _MSUF_ReadNumber(conf, g, "combatStateIndicatorOffsetY", 0)
         local combatSize = _MSUF_ReadNumber(conf, g, "combatStateIndicatorSize", 18)
+        local combatLayer = _MSUF_ClampIconLayer(_MSUF_ReadNumber(conf, g, "combatStateIndicatorLayer", 7), 7)
         local restCorner = _MSUF_ReadStr(conf, g, "restedStateIndicatorAnchor", combatCorner)
         local restX = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetX", 0)
         local restY = _MSUF_ReadNumber(conf, g, "restedStateIndicatorOffsetY", 0)
         local restSize = _MSUF_ReadNumber(conf, g, "restedStateIndicatorSize", 18)
+        local restLayer = _MSUF_ClampIconLayer(_MSUF_ReadNumber(conf, g, "restedStateIndicatorLayer", 7), 7)
         local rezCorner = _MSUF_ReadStr(conf, g, "incomingResIndicatorAnchor", (g and g.incomingResIndicatorPos) or "TOPRIGHT", "incomingResIndicatorPos")
         local rezX = _MSUF_ReadNumber(conf, g, "incomingResIndicatorOffsetX", 0)
         local rezY = _MSUF_ReadNumber(conf, g, "incomingResIndicatorOffsetY", 0)
         local rezSize = _MSUF_ReadNumber(conf, g, "incomingResIndicatorSize", 18)
+        local rezLayer = _MSUF_ClampIconLayer(_MSUF_ReadNumber(conf, g, "incomingResIndicatorLayer", 7), 7)
         local classCorner = _MSUF_ReadStr(conf, g, "classificationIndicatorAnchor", "TOPLEFT")
         local classX = _MSUF_ReadNumber(conf, g, "classificationIndicatorOffsetX", 0)
         local classY = _MSUF_ReadNumber(conf, g, "classificationIndicatorOffsetY", 0)
@@ -394,9 +417,9 @@ local function _MSUF_UpdateStatusIcons(frame)
             showRez = showRez, showClass = showClass, useMidnight = useMidnight,
             combatSymbol = combatSymbol, restSymbol = restSymbol, rezSymbol = rezSymbol,
             iconAlpha = iconAlpha,
-            combatCorner = combatCorner, combatX = combatX, combatY = combatY, combatSize = combatSize,
-            restCorner = restCorner, restX = restX, restY = restY, restSize = restSize,
-            rezCorner = rezCorner, rezX = rezX, rezY = rezY, rezSize = rezSize,
+            combatCorner = combatCorner, combatX = combatX, combatY = combatY, combatSize = combatSize, combatLayer = combatLayer,
+            restCorner = restCorner, restX = restX, restY = restY, restSize = restSize, restLayer = restLayer,
+            rezCorner = rezCorner, rezX = rezX, rezY = rezY, rezSize = rezSize, rezLayer = rezLayer,
             classCorner = classCorner, classX = classX, classY = classY, classSize = classSize,
             restNeedsPulse = (type(restSymbol) == "string" and string.find(restSymbol, "^rested_") ~= nil),
         }
@@ -434,6 +457,7 @@ local function _MSUF_UpdateStatusIcons(frame)
                 combatIcon:SetSize(sic.combatSize, sic.combatSize)
                 combatIcon._msufSizeStamp = sic.combatSize
             end
+            _MSUF_ApplyIconLayer(combatIcon, sic.combatLayer, frame)
             _MSUF_AnchorCorner(combatIcon, frame, sic.combatCorner, sic.combatX, sic.combatY)
             combatIcon:SetAlpha(iconAlpha)
             combatIcon:Show()
@@ -447,6 +471,7 @@ local function _MSUF_UpdateStatusIcons(frame)
                 restIcon:SetSize(sic.restSize, sic.restSize)
                 restIcon._msufSizeStamp = sic.restSize
             end
+            _MSUF_ApplyIconLayer(restIcon, sic.restLayer, frame)
             _MSUF_AnchorCorner(restIcon, frame, sic.restCorner, sic.restX, sic.restY)
             restIcon:SetAlpha(iconAlpha)
             restIcon:Show()
@@ -461,6 +486,7 @@ local function _MSUF_UpdateStatusIcons(frame)
                 rezIcon:SetSize(sic.rezSize, sic.rezSize)
                 rezIcon._msufSizeStamp = sic.rezSize
             end
+            _MSUF_ApplyIconLayer(rezIcon, sic.rezLayer, frame)
             _MSUF_AnchorCorner(rezIcon, frame, sic.rezCorner, sic.rezX, sic.rezY)
             rezIcon:SetAlpha(iconAlpha)
             rezIcon:Show()

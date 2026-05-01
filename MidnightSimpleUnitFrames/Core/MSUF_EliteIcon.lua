@@ -8,6 +8,7 @@
 --   eliteIconAnchor      string   "TOPLEFT"|"TOPRIGHT"|"BOTTOMLEFT"|"BOTTOMRIGHT"  default "TOPRIGHT"
 --   eliteIconOffsetX     number   default 2
 --   eliteIconOffsetY     number   default 2
+--   eliteIconLayer       number   1-10 draw order, default 7
 --
 -- Supported units: target, focus, targettarget, boss
 -- DB defaults live in Foundation/MSUF_Defaults.lua (canonical location).
@@ -30,6 +31,20 @@ local VALID_UNITS = { target = true, focus = true, targettarget = true, boss = t
 ns.MSUF_EliteValidUnits = VALID_UNITS
 
 local floor = math.floor
+local function ClampLayer(conf, g, key, def)
+    local layout = ns.Icons and ns.Icons._layout
+    if layout and layout.Layer then return layout.Layer(conf, g, key, def or 7) end
+    local v = (ns.Util and ns.Util.Num and ns.Util.Num(conf, g, key, def or 7)) or (def or 7)
+    v = floor((tonumber(v) or def or 7) + 0.5)
+    if v < 1 then return 1 end
+    if v > 10 then return 10 end
+    return v
+end
+local function ApplyLayer(region, layer)
+    local layout = ns.Icons and ns.Icons._layout
+    if layout and layout.ApplyLayer then return layout.ApplyLayer(region, layer) end
+    if region and region.SetDrawLayer then region:SetDrawLayer("OVERLAY", layer or 7) end
+end
 
 -- ─── Classification → atlas (nil = hide) ─────────────────────────────────────
 local function GetEliteAtlas(unit)
@@ -59,15 +74,17 @@ local function ApplyLayout(f)
     local ox     = (ns.Util and ns.Util.Num and ns.Util.Num(conf, g, "eliteIconOffsetX", 2)) or 2
     local oy     = (ns.Util and ns.Util.Num and ns.Util.Num(conf, g, "eliteIconOffsetY", 2)) or 2
     local anchor = (ns.Util and ns.Util.Val and ns.Util.Val(conf, g, "eliteIconAnchor", "TOPRIGHT")) or "TOPRIGHT"
+    local layer  = ClampLayer(conf, g, "eliteIconLayer", 7)
 
     -- Stamp gate: skip ClearAllPoints/SetPoint/SetSize when nothing changed.
     if ns.Cache and ns.Cache.StampChanged and
-       not ns.Cache.StampChanged(f, "EliteIconLayout", size, ox, oy, anchor, (key or "")) then
+       not ns.Cache.StampChanged(f, "EliteIconLayout", size, ox, oy, anchor, layer, (key or "")) then
         return
     end
     f._msufEliteIconLayoutStamp = 1
 
     local point, relPoint = ns.Icons._layout.Resolve(anchor, false)
+    ApplyLayer(icon, layer, f)
     ns.Icons._layout.Apply(icon, f, size, point, relPoint, ox, oy)
 end
 
