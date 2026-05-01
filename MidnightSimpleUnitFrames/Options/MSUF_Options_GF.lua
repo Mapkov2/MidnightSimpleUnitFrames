@@ -2353,6 +2353,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             { key = "auto",   label = TR("Auto (by group size)") },
             { key = "manual", label = TR("Manual") },
         }
+        local RefreshScalingState
         local scaleDd = SDropdown({
             name = "MSUF_GF_FrameScaleMode", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -8, width = 220,
@@ -2360,6 +2361,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "frameScaleMode") or "off" end,
             set = function(k, v)
                 GF.GetConf(k).frameScaleMode = v
+                if RefreshScalingState then RefreshScalingState() end
                 GF.RebuildAll()
             end,
         })
@@ -2424,6 +2426,44 @@ function _G.MSUF_EnsureGFPanelBuilt()
         scaleHint:SetTextColor(0.5, 0.5, 0.6)
         scaleHint:SetWidth(320)
         scaleHint:SetJustifyH("LEFT")
+
+        local function SetSliderEnabled(sl, enabled)
+            if not sl then return end
+            if sl.SetEnabled then
+                sl:SetEnabled(enabled and true or false)
+            elseif enabled then
+                if sl.Enable then sl:Enable() end
+                if sl.SetAlpha then sl:SetAlpha(1) end
+            else
+                if sl.Disable then sl:Disable() end
+                if sl.SetAlpha then sl:SetAlpha(0.55) end
+            end
+            if sl.editBox and sl.editBox.SetAlpha then sl.editBox:SetAlpha(enabled and 1 or 0.55) end
+            if sl.minusButton and sl.minusButton.SetAlpha then sl.minusButton:SetAlpha(enabled and 1 or 0.55) end
+            if sl.plusButton and sl.plusButton.SetAlpha then sl.plusButton:SetAlpha(enabled and 1 or 0.55) end
+        end
+
+        RefreshScalingState = function()
+            local mode = GF.Val(K(), "frameScaleMode") or "off"
+            local manualOn = (mode == "manual")
+            local autoOn = (mode == "auto")
+
+            SetSliderEnabled(scaleManualSl, manualOn)
+            SetSliderEnabled(s10Sl, autoOn)
+            SetSliderEnabled(s20Sl, autoOn)
+            SetSliderEnabled(s25Sl, autoOn)
+            SetSliderEnabled(s26Sl, autoOn)
+
+            if autoLbl then
+                autoLbl:SetTextColor(autoOn and 1 or 0.35, autoOn and 0.82 or 0.35, autoOn and 0 or 0.35)
+                autoLbl:SetAlpha(autoOn and 1 or 0.55)
+            end
+            if scaleHint then scaleHint:SetAlpha((manualOn or autoOn) and 1 or 0.55) end
+        end
+        RefreshScalingState()
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if body:IsShown() and RefreshScalingState then RefreshScalingState() end
+        end
     end
 
     ----------------------------------------------------------------
