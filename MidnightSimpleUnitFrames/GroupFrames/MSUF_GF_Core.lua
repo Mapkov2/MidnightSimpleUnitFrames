@@ -203,6 +203,15 @@ local function _GFInstallAttrHook(child)
             -- visual subsystems are nil-bound).
             if self._msufGFBuilt and self._msufGFRegisteredUnit ~= value then
                 self._msufGFRegisteredUnit = value
+                -- Fresh SecureGroupHeader children can receive their unit token
+                -- after the initial button build pass. Re-apply layout/font here
+                -- so name anchors and offsets are correct immediately when a
+                -- party member joins, instead of only after /reload or a full
+                -- options refresh. Guarded for lockdown: no protected layout
+                -- mutations in combat, normal unit events still update values.
+                if not (InCombatLockdown and InCombatLockdown()) and GF.ApplyVisuals then
+                    GF.ApplyVisuals(self, GF.DIRTY_ALL or 0x3F)
+                end
                 if GF.UpdateButton then GF.UpdateButton(self, value) end
                 if GF.RegisterUnitEvents then GF.RegisterUnitEvents(self, value) end
             end
@@ -629,10 +638,32 @@ end
 ------------------------------------------------------------------------
 local function LayoutText(f, kind)
     local conf = GF.GetConf(kind)
+    local fScale = conf._resolvedFrameScale or 1
+    local pad3 = 3
+    local nox = conf.nameOffsetX or 0
+    local noy = conf.nameOffsetY or 0
+    if fScale ~= 1 and GF.ScaleValue then
+        pad3 = GF.ScaleValue(pad3, fScale, 1)
+        nox = GF.ScaleValue(nox, fScale)
+        noy = GF.ScaleValue(noy, fScale)
+    end
+
     if f.nameText then
         f.nameText:ClearAllPoints()
-        f.nameText:SetPoint("LEFT", f.health, "LEFT", 3, 0)
-        f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -3, 0)
+        local anchor = conf.nameAnchor or "LEFT"
+        if anchor == "CENTER" then
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + nox, noy)
+            f.nameText:SetJustifyH("CENTER")
+        elseif anchor == "RIGHT" then
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + nox, noy)
+            f.nameText:SetJustifyH("RIGHT")
+        else
+            f.nameText:SetPoint("LEFT", f.health, "LEFT", pad3 + nox, noy)
+            f.nameText:SetPoint("RIGHT", f.health, "RIGHT", -pad3, noy)
+            f.nameText:SetJustifyH("LEFT")
+        end
         f.nameText:SetWordWrap(false)
         if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
     end
@@ -1270,6 +1301,9 @@ local function ScanHeaderChildren(header, kind)
                 end
                 if child._msufGFRegisteredUnit ~= unit then
                     child._msufGFRegisteredUnit = unit
+                    if not inCombat and GF.ApplyVisuals then
+                        GF.ApplyVisuals(child, GF.DIRTY_ALL or 0x3F)
+                    end
                     GF.UpdateButton(child, unit)
                     GF.RegisterUnitEvents(child, unit)
                 end
