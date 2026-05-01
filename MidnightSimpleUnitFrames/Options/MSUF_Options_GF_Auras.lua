@@ -21,6 +21,8 @@ local ipairs  = ipairs
 local tostring = tostring
 local math_floor = math.floor
 local math_ceil  = math.ceil
+local math_min   = math.min
+local math_max   = math.max
 
 ------------------------------------------------------------------------
 -- Constants
@@ -106,12 +108,15 @@ local LEGACY_FRAME_EFFECT_TYPES = {
     framealpha = true,
     namecolor  = true,
 }
+local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
 
 ------------------------------------------------------------------------
 -- Injector: called from MSUF_Options_GF.lua
 ------------------------------------------------------------------------
 function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, TrackRefresh, MakeColorSwatch, OpenColorPicker, refreshFns)
     if not UI then UI = ns.UI end
+
+    local _inlineAuraPreviewFns = {}
 
     local function AG(groupKey)
         local conf = GF.GetConf(K())
@@ -141,6 +146,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         if g[key] == val then return end
         g[key] = val
         RequestAuraRefresh()
+        for i = 1, #_inlineAuraPreviewFns do
+            _inlineAuraPreviewFns[i]()
+        end
     end
 
     local function PA()
@@ -351,6 +359,161 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return row
     end
 
+    local AURA_TEXT_PREVIEW_IDS = {
+        buff      = { 774, 17, 139 },
+        debuff    = { 589, 980, 172 },
+        externals = { 6940, 102342, 1022 },
+    }
+    local _auraTextPreviewTexCache = {}
+
+    local function ResolveAuraPreviewTexture(spellID)
+        local cached = _auraTextPreviewTexCache[spellID]
+        if cached then return cached end
+        local tex
+        local cs = _G.C_Spell
+        if cs and cs.GetSpellTexture then
+            tex = cs.GetSpellTexture(spellID)
+        end
+        if not tex and _G.GetSpellInfo then
+            local _, _, icon = _G.GetSpellInfo(spellID)
+            tex = icon
+        end
+        tex = tex or "Interface\\Icons\\INV_Misc_QuestionMark"
+        _auraTextPreviewTexCache[spellID] = tex
+        return tex
+    end
+
+    local function ResolveAuraPreviewFont(kind)
+        local fontPath = (GF.ResolveFontPath and GF.ResolveFontPath(kind)) or "Fonts\\FRIZQT__.TTF"
+        local fontFlags = (GF.ResolveFontFlags and GF.ResolveFontFlags(kind)) or "OUTLINE"
+        return fontPath, fontFlags
+    end
+
+    local function ResolveAuraPreviewCooldownColor()
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        if g and g.useCustomFontColor == true then
+            local r = g.fontColorCustomR
+            local gg = g.fontColorCustomG
+            local b = g.fontColorCustomB
+            if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+                return r, gg, b, 1
+            end
+        end
+        return 1, 1, 1, 1
+    end
+
+    local function RowAuraTextPreview(parent, prevRow, gk, topOfs)
+        local row = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        row:SetSize(ROW_W, 68)
+        if prevRow then
+            row:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -(topOfs or 3))
+        else
+            row:SetPoint("TOPLEFT", parent, "TOPLEFT", ROW_PAD, -(topOfs or 6))
+        end
+        row:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+        row:SetBackdropColor(0.03, 0.04, 0.07, 0.60)
+        row:SetBackdropBorderColor(0.20, 0.24, 0.34, 0.75)
+
+        local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        label:SetPoint("LEFT", row, "LEFT", 8, 0)
+        label:SetText(L["Preview"] or "Preview")
+        label:SetTextColor(0.62, 0.70, 0.86, 1)
+
+        local icons = {}
+        local iconIDs = AURA_TEXT_PREVIEW_IDS[gk] or AURA_TEXT_PREVIEW_IDS.buff
+        for i = 1, 3 do
+            local ic = CreateFrame("Frame", nil, row)
+            ic:SetPoint("LEFT", row, "LEFT", 178 + (i - 1) * 54, 0)
+            ic:SetSize(42, 42)
+
+            local tex = ic:CreateTexture(nil, "ARTWORK")
+            tex:SetAllPoints(ic)
+            tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            tex:SetTexture(ResolveAuraPreviewTexture(iconIDs[i]))
+            ic._tex = tex
+
+            local border = ic:CreateTexture(nil, "BORDER")
+            border:SetTexture(TEX_W8)
+            border:SetPoint("TOPLEFT", ic, "TOPLEFT", -1, 1)
+            border:SetPoint("BOTTOMRIGHT", ic, "BOTTOMRIGHT", 1, -1)
+            border:SetVertexColor(0.08, 0.09, 0.12, 0.95)
+
+            local cdTarget = CreateFrame("Frame", nil, ic)
+            cdTarget:SetAllPoints(ic)
+            ic._cdTarget = cdTarget
+
+            local cd = ic:CreateFontString(nil, "OVERLAY")
+            ic._cdText = cd
+
+            local st = ic:CreateFontString(nil, "OVERLAY")
+            ic._stkText = st
+
+            icons[i] = ic
+        end
+
+        local function Refresh()
+            local g = AG(gk)
+            local kind = K()
+            local fontPath, fontFlags = ResolveAuraPreviewFont(kind)
+            local rawIconSize = g.size or 20
+            local previewIconSize = math_floor(math_min(46, math_max(30, rawIconSize * 1.25)) + 0.5)
+            local scale = previewIconSize / math_max(1, rawIconSize)
+            local showCd = g.showCooldown ~= false
+            local showSt = g.showStacks ~= false
+            local cdR, cdG, cdB, cdA = ResolveAuraPreviewCooldownColor()
+
+            for i = 1, #icons do
+                local ic = icons[i]
+                ic:SetSize(previewIconSize, previewIconSize)
+                if ic._cdTarget then
+                    ic._cdTarget:ClearAllPoints()
+                    ic._cdTarget:SetAllPoints(ic)
+                end
+
+                local cd = ic._cdText
+                if cd then
+                    if showCd then
+                        local cdSize = math_floor(((g.cooldownSize or 8) * scale) + 0.5)
+                        cd:SetFont(fontPath, math_max(6, cdSize), g.cooldownOutline or fontFlags)
+                        cd:SetText("3")
+                        cd:SetTextColor(cdR, cdG, cdB, cdA)
+                        cd:ClearAllPoints()
+                        local anchor = g.cooldownAnchor or "CENTER"
+                        local ox = math_floor(((g.cooldownOffsetX or 0) * scale) + 0.5)
+                        local oy = math_floor(((g.cooldownOffsetY or 0) * scale) + 0.5)
+                        cd:SetPoint(anchor, ic._cdTarget or ic, anchor, ox, oy)
+                        cd:Show()
+                    else
+                        cd:Hide()
+                    end
+                end
+
+                local st = ic._stkText
+                if st then
+                    if showSt then
+                        local stSize = math_floor(((g.stackSize or 10) * scale) + 0.5)
+                        st:SetFont(fontPath, math_max(6, stSize), g.stackOutline or fontFlags)
+                        st:SetText("2")
+                        st:SetTextColor(1, 1, 1, 1)
+                        st:ClearAllPoints()
+                        local anchor = g.stackAnchor or "BOTTOMRIGHT"
+                        local ox = math_floor(((g.stackOffsetX or -1) * scale) + 0.5)
+                        local oy = math_floor(((g.stackOffsetY or 1) * scale) + 0.5)
+                        st:SetPoint(anchor, ic, anchor, ox, oy)
+                        st:Show()
+                    else
+                        st:Hide()
+                    end
+                end
+            end
+        end
+
+        Refresh()
+        _inlineAuraPreviewFns[#_inlineAuraPreviewFns + 1] = Refresh
+        _auraRefreshFns[#_auraRefreshFns + 1] = Refresh
+        return row
+    end
+
     ----------------------------------------------------------------
     -- Declassified Spell Blacklist section (shared by Buffs + Debuffs)
     -- Replaces old spellFilter/spellList system.
@@ -489,6 +652,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         r = RowDivider(body, r)
         r = RowSubLabel(body, r, L["Cooldown Text"] or "Cooldown Text")
+        r = RowAuraTextPreview(body, r, gk)
         r = RowCheck(body, r, L["Show Cooldown Text"] or "Show Cooldown Text", gk, "showCooldown", 0)
         r = RowSlider(body, r, L["Font size"] or "Font size", gk, "cooldownSize", 6, 24, 1, 8)
         r = RowDropdown(body, r, L["Anchor"] or "Anchor", gk, "cooldownAnchor", ANCHOR9, "CENTER")
@@ -497,6 +661,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         r = RowDivider(body, r)
         r = RowSubLabel(body, r, L["Stack Count"] or "Stack Count")
+        r = RowAuraTextPreview(body, r, gk)
         r = RowCheck(body, r, L["Show Stack Count"] or "Show Stack Count", gk, "showStacks", 0)
         r = RowSlider(body, r, L["Font size"] or "Font size", gk, "stackSize", 6, 24, 1, 10)
         r = RowDropdown(body, r, L["Anchor"] or "Anchor", gk, "stackAnchor", ANCHOR9, "BOTTOMRIGHT")
@@ -1487,7 +1652,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Buffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("buff", L["Buffs"], 1300, function(body, prevRow, gk)
+    BuildAuraGroupSection("buff", L["Buffs"], 1460, function(body, prevRow, gk)
         local r = BuildSpellFilterWidgets(body, prevRow, gk)
         return r
     end)
@@ -1495,7 +1660,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Debuffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("debuff", L["Debuffs"], 1440, function(body, prevRow, gk)
+    BuildAuraGroupSection("debuff", L["Debuffs"], 1600, function(body, prevRow, gk)
         local r = RowCheck(body, prevRow, L["Show Dispel Type Border"], gk, "showDispelBorder")
         r = BuildSpellFilterWidgets(body, r, gk)
         return r
@@ -1504,7 +1669,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Defensives
     ----------------------------------------------------------------
-    BuildAuraGroupSection("externals", L["Defensives"], 700)
+    BuildAuraGroupSection("externals", L["Defensives"], 860)
 
     ----------------------------------------------------------------
     -- Section: Private Auras
