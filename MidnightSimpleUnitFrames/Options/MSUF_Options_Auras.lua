@@ -1437,7 +1437,10 @@ local function SetCheckboxEnabled(cb, enabled)
     if not cb then  return end
     enabled = enabled and true or false
     -- UIDropDownMenuTemplate: use Blizzard helpers (methods differ across versions).
-    if cb.__MSUF_isDropDown or cb.Button or cb.Text then
+    local isDropDown = (cb.__MSUF_isDropDown == true)
+        or (cb.__msufMSUFDropdown == true)
+        or (cb.GetObjectType and cb:GetObjectType() == "Frame" and cb.initialize ~= nil)
+    if isDropDown then
         if type(UIDropDownMenu_EnableDropDown) == "function" and type(UIDropDownMenu_DisableDropDown) == "function" then
             if enabled then
                 UIDropDownMenu_EnableDropDown(cb)
