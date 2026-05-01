@@ -311,6 +311,7 @@ local function AcquireAuraIcon(parent, size)
         icon._msufPosPR        = nil
         icon._msufPosAnchor    = nil
         icon._msufPosGrowth    = nil
+        icon._msufAuraGroupKey = nil
         return icon
     end
     return nil
@@ -339,6 +340,7 @@ local function RecycleAuraIcon(icon)
     icon._msufPosGrowth    = nil
     icon._msufCdHidden     = nil
     icon._msufCachedSz     = nil
+    icon._msufAuraGroupKey = nil
     -- Drop owner ref so the prior frame can be GC'd (most important: when
     -- a Header retire calls GF.RecycleFramePools, the icon→frame strong-ref
     -- via _msufGFOwner would otherwise pin the retired frame in memory.)
@@ -472,6 +474,8 @@ local function EnsurePool(f, groupKey, count, size, parent)
             if masqueAdd then masqueAdd(pool[i]) end
         end
         local ic = pool[i]
+        ic._msufGFOwner = f
+        ic._msufAuraGroupKey = groupKey
         if SyncAuraIconGeometry(ic, size) then
             anySizeChanged = true
             ic._msufPosStep = nil
@@ -579,6 +583,7 @@ local function ApplyCooldown(ic, unit, auraInstanceID, showCd)
         local fn = cd.SetCooldownFromDurationObject
         if fn then
             fn(cd, obj)
+            cd._msufCooldownFontStringDirty = true
             if cd._msufGFCdAuraTime ~= true and cd.SetUseAuraDisplayTime then
                 cd._msufGFCdAuraTime = true
                 cd:SetUseAuraDisplayTime(true)
@@ -683,28 +688,52 @@ function GF.InvalidateCdFont()
     _gfCdFontFlags = nil
 end
 
-local function ResolveCooldownFontString(cd)
-    if not cd then return nil end
-    local cached = cd._msufCooldownFontString
-    if cached and cached ~= false then return cached end
+local function WantsCooldownText(gcfg)
+    -- GF uses showCooldown as the runtime key. Legacy showCooldownText values
+    -- are ignored here so stale saved vars cannot suppress Blizzard's timer.
+    return not (gcfg and gcfg.showCooldown == false)
+end
 
-    local retryAt = cd._msufCooldownFontStringRetryAt
-    local now = GetTime()
-    if type(retryAt) == "number" and now < retryAt then
-        return nil
+local function IsCooldownFontString(region)
+    return region and region.GetObjectType and region:GetObjectType() == "FontString"
+end
+
+local function CacheCooldownFontString(cd, fs)
+    cd._msufCooldownFontString = fs
+    return fs
+end
+
+local function FindCooldownFontStringInRegions(...)
+    for i = 1, select("#", ...) do
+        local region = select(i, ...)
+        if IsCooldownFontString(region) then return region end
+    end
+    return nil
+end
+
+local function ResolveCooldownFontString(cd, forceLookup)
+    if not cd then return nil end
+
+    local fs = cd.Text
+    if IsCooldownFontString(fs) then return CacheCooldownFontString(cd, fs) end
+
+    fs = cd.text
+    if IsCooldownFontString(fs) then return CacheCooldownFontString(cd, fs) end
+
+    local cached = cd._msufCooldownFontString
+    if not forceLookup and cached and cached ~= false then return cached end
+
+    if cd.GetRegions then
+        fs = FindCooldownFontStringInRegions(cd:GetRegions())
+        if fs then return CacheCooldownFontString(cd, fs) end
     end
 
     if cd.EnumerateRegions then
         for region in cd:EnumerateRegions() do
-            if region and region.GetObjectType and region:GetObjectType() == "FontString" then
-                cd._msufCooldownFontString = region
-                cd._msufCooldownFontStringRetryAt = nil
-                return region
-            end
+            if IsCooldownFontString(region) then return CacheCooldownFontString(cd, region) end
         end
     end
 
-    cd._msufCooldownFontStringRetryAt = now + 0.50
     cd._msufCooldownFontString = false
     return nil
 end
@@ -772,40 +801,69 @@ end
 -- Caller (RenderGroup) pre-resolves the four style values once per render
 -- group — eliminates per-icon ResolveGlobalFont + ResolveCooldownBaseColor
 -- calls. Per-icon diff-gates remain for live-apply correctness.
-local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA)
+local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA, isRetry)
     local cd = ic and ic.cooldown
     if not cd then return end
-    local showCd = gcfg and gcfg.showCooldown ~= false
-    cd:SetHideCountdownNumbers(not showCd)
+    local showCd = WantsCooldownText(gcfg)
+    local wantHide = not showCd
+    ic._msufCdHidden = wantHide
+    cd:SetHideCountdownNumbers(wantHide)
     if not showCd then return end
 
-    local fs = ResolveCooldownFontString(cd)
-    if not fs then return end
+    local forceLookup = cd._msufCooldownFontStringDirty == true or isRetry == true
+    cd._msufCooldownFontStringDirty = nil
+    local fs = ResolveCooldownFontString(cd, forceLookup)
+    if not fs then
+        if not isRetry and not cd._msufGFCdFontRetryQueued then
+            local timer = _G.C_Timer
+            if timer and timer.After then
+                cd._msufGFCdFontRetryQueued = true
+                local retryIcon = ic
+                local retryCd = cd
+                local retryGroup = ic._msufAuraGroupKey
+                timer.After(0, function()
+                    retryCd._msufGFCdFontRetryQueued = nil
+                    if retryIcon and retryIcon.cooldown == retryCd
+                       and retryIcon._msufAuraGroupKey == retryGroup then
+                        retryCd._msufCooldownFontStringDirty = true
+                        ApplyCooldownFont(retryIcon, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA, true)
+                    end
+                end)
+            end
+        end
+        return
+    end
 
-    local size = gcfg.cooldownSize or 8
+    cd._msufGFCdFontRetryQueued = nil
+    local fsChanged = cd._msufGFCdStyledFS ~= fs
+    if fsChanged then cd._msufGFCdStyledFS = fs end
+
+    local size = (gcfg and gcfg.cooldownSize) or 8
 
     -- Diff-gate: skip redundant SetFont (same pattern as A2_Icons line 938)
-    if cd._msufGFCdTextSize ~= size or cd._msufGFCdFontPath ~= gFont then
+    if fsChanged or cd._msufGFCdTextSize ~= size or cd._msufGFCdFontPath ~= gFont
+       or cd._msufGFCdFontFlags ~= wantFlags then
         if gFont and fs.SetFont then
             fs:SetFont(gFont, size, wantFlags)
         end
         cd._msufGFCdTextSize = size
         cd._msufGFCdFontPath = gFont
+        cd._msufGFCdFontFlags = wantFlags
     end
 
     -- Anchor + offset (live-apply via diff-gate on anchor+x+y)
-    local anchor = gcfg.cooldownAnchor or "CENTER"
-    local ox = gcfg.cooldownOffsetX or 0
-    local oy = gcfg.cooldownOffsetY or 0
-    if cd._msufGFCdAnchor ~= anchor or cd._msufGFCdOX ~= ox or cd._msufGFCdOY ~= oy then
+    local anchor = (gcfg and gcfg.cooldownAnchor) or "CENTER"
+    local ox = (gcfg and gcfg.cooldownOffsetX) or 0
+    local oy = (gcfg and gcfg.cooldownOffsetY) or 0
+    if fsChanged or cd._msufGFCdAnchor ~= anchor or cd._msufGFCdOX ~= ox or cd._msufGFCdOY ~= oy then
         cd._msufGFCdAnchor = anchor
         cd._msufGFCdOX = ox
         cd._msufGFCdOY = oy
         fs:ClearAllPoints()
-        fs:SetPoint(anchor, ic, anchor, ox, oy)
+        fs:SetPoint(anchor, cd, anchor, ox, oy)
     end
 
-    if cd._msufGFCdColorR ~= baseR or cd._msufGFCdColorG ~= baseG
+    if fsChanged or cd._msufGFCdColorR ~= baseR or cd._msufGFCdColorG ~= baseG
         or cd._msufGFCdColorB ~= baseB or cd._msufGFCdColorA ~= baseA
     then
         cd._msufGFCdColorR = baseR
@@ -855,8 +913,8 @@ end
 -- Resolve group config from DB
 ------------------------------------------------------------------------
 local function GetGroupCfg(kind, groupKey)
-    local conf = GF.GetConf(kind)
-    local auras = conf.auras
+    local conf = GF.GetConf and GF.GetConf(kind)
+    local auras = conf and conf.auras
     if not auras then return nil end
     return auras[groupKey]
 end
@@ -1020,7 +1078,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local shown = 0
     local isBuff = (groupKey == "buff")
     local isExt  = (groupKey == "externals")
-    local showCd = (gcfg.showCooldown ~= false)
+    local showCd = WantsCooldownText(gcfg)
     local showStk = (gcfg.showStacks ~= false)
     local step = iconSize + spacing
     local topDispel = nil
@@ -1475,15 +1533,32 @@ end
 function GF.RefreshAuraIcon(icon, unit, aid)
     if not icon or not unit or not aid then return end
     local owner = icon._msufGFOwner
+    local gcfg
     if owner then
         -- Read pre-cached reverse flag from BuildFrameCache (Fix B).
         -- Avoids GF.GetConf in this hot path (called per updated aura per UNIT_AURA event).
         local oc = owner._c
         local reverse = (oc and oc.cdReverse) or false
         ApplyCooldownVisualStyle(icon.cooldown, reverse)
+        local groupKey = icon._msufAuraGroupKey
+        if groupKey then
+            gcfg = GetGroupCfg(owner._msufGFKind or "party", groupKey)
+        end
     end
-    ApplyCooldown(icon, unit, aid, true)
-    ApplyStacks(icon, unit, aid, nil, true, nil)
+    local showCd = WantsCooldownText(gcfg)
+    ApplyCooldown(icon, unit, aid, showCd)
+    if gcfg then
+        local gFont, gFlags = ResolveGlobalFont()
+        local baseR, baseG, baseB, baseA = ResolveCooldownBaseColor()
+        ApplyCooldownFont(icon, gcfg, gFont, gcfg.cooldownOutline or gFlags or "OUTLINE", baseR, baseG, baseB, baseA)
+        ApplyStackLayout(icon, gcfg, gFont, gcfg.stackOutline or gFlags or "OUTLINE")
+        ApplyStacks(icon, unit, aid, nil, gcfg.showStacks ~= false, gcfg)
+    else
+        local gFont, gFlags = ResolveGlobalFont()
+        local baseR, baseG, baseB, baseA = ResolveCooldownBaseColor()
+        ApplyCooldownFont(icon, nil, gFont, gFlags or "OUTLINE", baseR, baseG, baseB, baseA)
+        ApplyStacks(icon, unit, aid, nil, true, nil)
+    end
 end
 
 ------------------------------------------------------------------------
