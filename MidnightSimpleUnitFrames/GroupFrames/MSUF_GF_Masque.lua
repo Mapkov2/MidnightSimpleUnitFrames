@@ -80,6 +80,15 @@ function GF.Masque.IsEnabled()
     return EnsureGroup() ~= nil
 end
 
+function GF.Masque.IconUsesMasque(icon)
+    if not icon or icon._msufGFMsqAdded ~= true then return false end
+    local owner = icon._msufGFOwner
+    local kind = owner and owner._msufGFKind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    if not conf or conf.masqueEnabled ~= true then return false end
+    return EnsureGroup() ~= nil
+end
+
 function GF.Masque.AddButton(icon)
     if not icon then return false end
     local owner = icon._msufGFOwner
@@ -128,7 +137,7 @@ end
 
 function GF.Masque.ReskinAllIcons()
     if not GF.frames then return end
-    local POOLS = { "_msufGFBuff", "_msufGFDebuff", "_msufGFExt" }
+    local POOLS = { "_msufAuraPool_buff", "_msufAuraPool_debuff", "_msufAuraPool_externals" }
     GF.ForEachFrame(function(f)
         for _, pk in ipairs(POOLS) do
             local pool = f[pk]
