@@ -475,9 +475,11 @@ local function BuildFrameHierarchy(f, kind)
     f.powerBg = powerBg
 
     -- Power text layer
-    local powerTextLayer = CreateFrame("Frame", nil, power)
-    powerTextLayer:SetAllPoints(power)
-    powerTextLayer:SetFrameLevel(power:GetFrameLevel() + 2)
+    -- Parent to barGroup instead of the power StatusBar so power text can stay
+    -- visible when the power bar itself is hidden by role/settings.
+    local powerTextLayer = CreateFrame("Frame", nil, barGroup)
+    powerTextLayer:SetAllPoints(barGroup)
+    powerTextLayer:SetFrameLevel(barGroup:GetFrameLevel() + 4)
     f.powerTextLayer = powerTextLayer
 
     -- 3-slot power text: left / center / right
@@ -707,13 +709,26 @@ local function LayoutText(f, kind)
     do
         local effectivePowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
             or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
-        local showPow = conf.showPower and effectivePowerH > 0
-        local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
-        local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
-        local ptr = showPow and (conf.powerTextRight   or "NONE") or "NONE"
-        if f.powerTextLeftFS  then if ptl ~= "NONE" then f.powerTextLeftFS:Show()  else f.powerTextLeftFS:Hide()  end end
-        if f.powerTextCenterFS then if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end end
-        if f.powerTextRightFS then if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end end
+        local showPowerText = (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(kind, conf)) or false
+        local ptl = showPowerText and (conf.powerTextLeft   or "NONE") or "NONE"
+        local ptc = showPowerText and (conf.powerTextCenter  or "NONE") or "NONE"
+        local ptr = showPowerText and (conf.powerTextRight   or "NONE") or "NONE"
+        local anchor = (effectivePowerH > 0 and f.power) or f.health or f.barGroup or f
+        if f.powerTextLeftFS then
+            f.powerTextLeftFS:ClearAllPoints()
+            f.powerTextLeftFS:SetPoint("LEFT", anchor, "LEFT", 2, 0)
+            if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
+        end
+        if f.powerTextCenterFS then
+            f.powerTextCenterFS:ClearAllPoints()
+            f.powerTextCenterFS:SetPoint("CENTER", anchor, "CENTER", 0, 0)
+            if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end
+        end
+        if f.powerTextRightFS then
+            f.powerTextRightFS:ClearAllPoints()
+            f.powerTextRightFS:SetPoint("RIGHT", anchor, "RIGHT", -2, 0)
+            if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
+        end
     end
 end
 
@@ -1052,7 +1067,7 @@ function GF.UpdateButton(f, unit)
         end
     end
 
-    -- Power (secret-safe: raw values to C-side) + per-role visibility
+    -- Power (secret-safe: raw values to C-side) + independent power text
     if f.power then
         local role = (GF.GetUnitGroupRole and GF.GetUnitGroupRole(unit))
             or ((UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) or "DAMAGER")
@@ -1064,21 +1079,28 @@ function GF.UpdateButton(f, unit)
             GF.MarkDirty(f, (GF.DIRTY_GEOMETRY or 0x01) + (GF.DIRTY_LAYOUT or 0x20))
         end
         f._msufGFPowRoleHidden = roleHidden
-        if showPow then
+
+        local powerTextOn = (GF.HasActivePowerTextSlot and GF.HasActivePowerTextSlot(kind, conf)) or false
+        if showPow or powerTextOn then
             local pw    = UnitPower(unit)
             local pwMax = UnitPowerMax(unit)
-            f.power:SetMinMaxValues(0, pwMax)
             f._msufGFCachedPwMax = pwMax
-            if conf.powerSmoothFill then
-                local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
-                if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
+
+            if showPow then
+                f.power:SetMinMaxValues(0, pwMax)
+                if conf.powerSmoothFill then
+                    local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
+                    if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
+                else
+                    f.power:SetValue(pw)
+                end
+                f.power:Show()
+                ApplyPowerColor(f, unit)
             else
-                f.power:SetValue(pw)
+                f.power:Hide()
             end
-            f.power:Show()
-            ApplyPowerColor(f, unit)
-            -- 3-slot power text
-            if conf.showPower then
+
+            if powerTextOn then
                 local pDelim = conf.powerTextDelimiter or " / "
                 local ptl = conf.powerTextLeft   or "NONE"
                 local ptc = conf.powerTextCenter  or "NONE"
@@ -1095,12 +1117,16 @@ function GF.UpdateButton(f, unit)
                     f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, pw, pwMax, pDelim, unit))
                     if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
                 end
+            else
+                if f.powerTextLeftFS then f.powerTextLeftFS:SetText(""); f.powerTextLeftFS:Hide() end
+                if f.powerTextCenterFS then f.powerTextCenterFS:SetText(""); f.powerTextCenterFS:Hide() end
+                if f.powerTextRightFS then f.powerTextRightFS:SetText(""); f.powerTextRightFS:Hide() end
             end
         else
             f.power:Hide()
-            if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
-            if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
-            if f.powerTextRightFS then f.powerTextRightFS:Hide() end
+            if f.powerTextLeftFS then f.powerTextLeftFS:SetText(""); f.powerTextLeftFS:Hide() end
+            if f.powerTextCenterFS then f.powerTextCenterFS:SetText(""); f.powerTextCenterFS:Hide() end
+            if f.powerTextRightFS then f.powerTextRightFS:SetText(""); f.powerTextRightFS:Hide() end
         end
     end
 
@@ -2035,40 +2061,41 @@ function GF.ApplyPreviewData(f, index, kind)
         f.healAbsorbBar:Hide()
     end
 
-    -- Power bar
+    -- Power bar + independent power text preview
     local previewPowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind or "party", nil, role, conf))
         or (conf.powerHeight or 6)
+    local powerTextOn = (GF.HasActivePowerTextSlot and GF.HasActivePowerTextSlot(kind, conf)) or false
+    local fakePow = 50 + index * 10
+    local fakePowMax = 100
     if f.power and previewPowerH > 0 then
-        local fakePow = 50 + index * 10
-        local fakePowMax = 100
         f.power:SetMinMaxValues(0, fakePowMax)
         f.power:SetValue(fakePow)
         f.power:SetStatusBarColor(0.2, 0.2, 0.8, 1)
         f.power:Show()
-        -- 3-slot power text (preview)
-        if conf.showPower then
-            local pDelim = conf.powerTextDelimiter or " / "
-            local ptl = conf.powerTextLeft   or "NONE"
-            local ptc = conf.powerTextCenter  or "NONE"
-            local ptr = conf.powerTextRight   or "NONE"
-            if f.powerTextLeftFS then
-                f.powerTextLeftFS:SetText(GF.FormatPowerText(ptl, fakePow, fakePowMax, pDelim))
-                if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
-            end
-            if f.powerTextCenterFS then
-                f.powerTextCenterFS:SetText(GF.FormatPowerText(ptc, fakePow, fakePowMax, pDelim))
-                if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end
-            end
-            if f.powerTextRightFS then
-                f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, fakePow, fakePowMax, pDelim))
-                if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
-            end
+    elseif f.power then
+        f.power:Hide()
+    end
+    if powerTextOn then
+        local pDelim = conf.powerTextDelimiter or " / "
+        local ptl = conf.powerTextLeft   or "NONE"
+        local ptc = conf.powerTextCenter  or "NONE"
+        local ptr = conf.powerTextRight   or "NONE"
+        if f.powerTextLeftFS then
+            f.powerTextLeftFS:SetText(GF.FormatPowerText(ptl, fakePow, fakePowMax, pDelim))
+            if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
+        end
+        if f.powerTextCenterFS then
+            f.powerTextCenterFS:SetText(GF.FormatPowerText(ptc, fakePow, fakePowMax, pDelim))
+            if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end
+        end
+        if f.powerTextRightFS then
+            f.powerTextRightFS:SetText(GF.FormatPowerText(ptr, fakePow, fakePowMax, pDelim))
+            if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
         end
     else
-        if f.power then f.power:Hide() end
-        if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
-        if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
-        if f.powerTextRightFS then f.powerTextRightFS:Hide() end
+        if f.powerTextLeftFS then f.powerTextLeftFS:SetText(""); f.powerTextLeftFS:Hide() end
+        if f.powerTextCenterFS then f.powerTextCenterFS:SetText(""); f.powerTextCenterFS:Hide() end
+        if f.powerTextRightFS then f.powerTextRightFS:SetText(""); f.powerTextRightFS:Hide() end
     end
 
     -- Role icon
@@ -2276,9 +2303,11 @@ function GF.ShowPreview(kind, count)
     end
     if container:GetParent() ~= parent then container:SetParent(parent) end
 
-    -- In EM2, preview container size must match the visible dummy grid.
-    -- Standalone options previews keep the full header-position reference.
-    local posCount = anchorParent and count or GF.GetPositionCount(kind)
+    -- Position container identically to the live SecureGroupHeader:
+    -- always use the configured full grid footprint, not the reduced dummy
+    -- preview count. This keeps Edit Mode previews/movers in the same place
+    -- as the real group frames.
+    local posCount = GF.GetPositionCount(kind)
     local _, _, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
     local cx, cy = conf.offsetX, conf.offsetY
     if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
@@ -2288,8 +2317,9 @@ function GF.ShowPreview(kind, count)
         container:SetPoint("CENTER", parent, "CENTER", 0, 0)
     else
         local af = GF.ResolveAnchorFrame(kind)
-        -- (cx, cy) is grid center → anchor container CENTER there directly
-        container:SetPoint("CENTER", af, "CENTER", cx, cy)
+        local pt = conf.anchorPoint or conf.point or "CENTER"
+        -- (cx, cy) is GRID_CENTER_V1 relative to the resolved configured anchor.
+        container:SetPoint("CENTER", af, pt, cx, cy)
     end
     container:Show()
 
@@ -2410,18 +2440,19 @@ function GF.RefreshPreviewLayout(kind)
     -- Update container position (grid center = stored offset)
     local container = GF._previewContainer and GF._previewContainer[kind]
     if container then
-        local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
-        local posCount = anchorParent and count or GF.GetPositionCount(kind)
+        local posCount = GF.GetPositionCount(kind)
         local _, _, posTotalW, posTotalH = GF.GetGridMetrics(kind, posCount)
         local cx, cy = conf.offsetX, conf.offsetY
         if cx == nil or cy == nil then cx, cy = GetDefaultCenter(kind) end
+        local anchorParent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
         container:SetSize(math_max(posTotalW, 1), math_max(posTotalH, 1))
         container:ClearAllPoints()
         if anchorParent then
             container:SetPoint("CENTER", anchorParent, "CENTER", 0, 0)
         else
             local af = GF.ResolveAnchorFrame(kind)
-            container:SetPoint("CENTER", af, "CENTER", cx, cy)
+            local pt = conf.anchorPoint or conf.point or "CENTER"
+            container:SetPoint("CENTER", af, pt, cx, cy)
         end
     end
 

@@ -108,7 +108,10 @@ local PARTY_DEFAULTS = {
     -- Text: 3-slot system (replaces showHP boolean)
     showName          = true,
     showHPText        = true,
+    -- Legacy key `showPower` is kept for saved profiles; new code treats
+    -- it as the Group Frame power-text toggle, not as power-bar visibility.
     showPower         = false,
+    showPowerText     = false,
     nameAnchor        = "LEFT",
     nameFontSize      = 12,
     hpFontSize        = 10,
@@ -344,6 +347,7 @@ do
     RAID_DEFAULTS.textCenter     = "NONE"
     RAID_DEFAULTS.textRight      = "NONE"
     RAID_DEFAULTS.showPower      = false
+    RAID_DEFAULTS.showPowerText  = false
     RAID_DEFAULTS.nameFontSize   = 10
     RAID_DEFAULTS.hpFontSize     = 9
     RAID_DEFAULTS.roleIconSize   = 10
@@ -1030,6 +1034,26 @@ function GF.Val(kind, key)
     return GetDefaultsTable(kind)[key]
 end
 
+--- Group Frame power text toggle with legacy-profile compatibility.
+--- `showPower` was historically used by GF as the power-text toggle; keep
+--- reading it when the explicit `showPowerText` key does not exist yet.
+function GF.IsPowerTextEnabled(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    if not conf then return false end
+    -- OR keeps old profiles/presets working even if only one of the two
+    -- mirror keys exists or was written by older code. The setter below writes
+    -- both keys, so explicit user toggles remain deterministic.
+    return conf.showPowerText == true or conf.showPower == true
+end
+
+function GF.SetPowerTextEnabled(kind, enabled)
+    local conf = GF.GetConf(kind)
+    if not conf then return end
+    local v = enabled and true or false
+    conf.showPowerText = v
+    conf.showPower = v -- legacy mirror so Edit Mode / old profiles stay in sync
+end
+
 --- Resolve a unified highlight value with scope override support.
 --- GF-local (gf_party/gf_raid) can override general.hl* keys via hlOverride=true.
 --- Falls through to MSUF_DB.general.hl* baseline.
@@ -1514,9 +1538,9 @@ function GF.FormatPowerText(mode, pw, pwMax, delimiter, unit)
 end
 
 --- Check if any power text slot is active
-function GF.HasActivePowerTextSlot(kind)
-    local conf = GF.GetConf(kind)
-    if not conf.showPower then return false end
+function GF.HasActivePowerTextSlot(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    if not (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(kind, conf)) then return false end
     local tl = conf.powerTextLeft   or "NONE"
     local tc = conf.powerTextCenter or "NONE"
     local tr = conf.powerTextRight  or "NONE"

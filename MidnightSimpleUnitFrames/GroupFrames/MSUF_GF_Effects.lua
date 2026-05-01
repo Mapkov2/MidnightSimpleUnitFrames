@@ -1297,7 +1297,7 @@ function GF.BuildFrameCache(f)
     -- Power
     c.powH      = (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
         or ((conf.powerHeight or 6) * fScale)
-    c.showPow   = conf.showPower
+    c.showPow   = (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(kind, conf)) or false
     c.ptl       = conf.powerTextLeft   or "NONE"
     c.ptc       = conf.powerTextCenter or "NONE"
     c.ptr       = conf.powerTextRight  or "NONE"
@@ -2053,7 +2053,7 @@ local function _GF_RestoreHealthText(f, conf)
     if f.textLeftFS  and tl ~= "NONE" then f.textLeftFS:Show() end
     if f.textCenterFS and tc ~= "NONE" then f.textCenterFS:Show() end
     if f.textRightFS and tr ~= "NONE" then f.textRightFS:Show() end
-    if conf.showPower then
+    if (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(f._msufGFKind or "party", conf)) then
         local ptl = conf.powerTextLeft   or "NONE"
         local ptc = conf.powerTextCenter  or "NONE"
         local ptr = conf.powerTextRight   or "NONE"
@@ -3313,8 +3313,10 @@ local function dispatchPower(f, unit)
     if not c.hasPowerElement then return end
     -- Role visibility: cached per-frame, only re-evaluated on GROUP_ROSTER_UPDATE
     local roleHidden = f._msufGFPowRoleHidden
-    if roleHidden then
-        if f.power:IsShown() then f.power:Hide() end
+    if roleHidden and f.power:IsShown() then
+        f.power:Hide()
+    end
+    if roleHidden and not c.anyPowerText then
         if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
         if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
         if f.powerTextRightFS then f.powerTextRightFS:Hide() end
@@ -3322,10 +3324,8 @@ local function dispatchPower(f, unit)
     end
 
     local pw = UnitPower(unit)
-    if c.powH > 0 then
+    if (not roleHidden) and c.powH > 0 then
         if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
-    end
-    if c.powH > 0 then
         if not f.power:IsShown() then f.power:Show() end
     elseif f.power:IsShown() then
         f.power:Hide()
@@ -3345,8 +3345,10 @@ local function dispatchPowerFull(f, unit)
     if not c then GF.BuildFrameCache(f); c = f._c end
     if not c.hasPowerElement then return end
     local roleHidden = f._msufGFPowRoleHidden
-    if roleHidden then
-        if f.power:IsShown() then f.power:Hide() end
+    if roleHidden and f.power:IsShown() then
+        f.power:Hide()
+    end
+    if roleHidden and not c.anyPowerText then
         if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
         if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
         if f.powerTextRightFS then f.powerTextRightFS:Hide() end
@@ -3355,12 +3357,12 @@ local function dispatchPowerFull(f, unit)
 
     local pw    = UnitPower(unit)
     local pwMax = UnitPowerMax(unit)
-    if c.powH > 0 then
+    if (not roleHidden) and c.powH > 0 then
         f.power:SetMinMaxValues(0, pwMax)
         if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
     end
     f._msufGFCachedPwMax = pwMax
-    if c.powH > 0 then
+    if (not roleHidden) and c.powH > 0 then
         if not f.power:IsShown() then f.power:Show() end
     elseif f.power:IsShown() then
         f.power:Hide()

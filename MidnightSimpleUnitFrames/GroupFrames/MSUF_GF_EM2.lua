@@ -118,13 +118,19 @@ local function SyncContainer(kind)
     local conf = gf.GetConf(kind); if not conf then return end
     local container = EnsureContainer(kind)
 
-    if not IsPreviewActive(kind) then
+    if not _em2Active or not IsPreviewActive(kind) then
         container:Hide()
         return nil
     end
 
-    -- EM2 preview mover must match the visible dummy grid, not max raid capacity.
-    local count = GetPreviewCount(kind)
+    -- IMPORTANT:
+    -- The live SecureGroupHeader is positioned from the full configured
+    -- grid footprint (GF.GetPositionCount), not from the smaller visible
+    -- dummy-preview count.  Using the dummy count makes Edit Mode drift away
+    -- from the real group frames, especially raid/mythic layouts where the
+    -- preview may show 10/20/30 units while the real header reserves the
+    -- configured columns.
+    local count = (gf.GetPositionCount and gf.GetPositionCount(kind)) or GetPreviewCount(kind)
     local _, _, totalW, totalH = gf.GetGridMetrics(kind, count)
     local cx = conf.offsetX
     local cy = conf.offsetY
@@ -135,7 +141,10 @@ local function SyncContainer(kind)
     container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
     container:ClearAllPoints()
     local anchorFrame = (gf.ResolveAnchorFrame and gf.ResolveAnchorFrame(kind)) or UIParent
-    container:SetPoint("CENTER", anchorFrame, "CENTER", cx, cy)
+    local anchorPoint = conf.anchorPoint or conf.point or "CENTER"
+    -- Stored GF offsets are GRID_CENTER_V1 values.  Keep the container center
+    -- on the same configured anchor reference the live header resolves from.
+    container:SetPoint("CENTER", anchorFrame, anchorPoint, cx, cy)
     container:Show()
     return container
 end
@@ -436,7 +445,8 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            return SyncContainer("party")
+            SyncContainer("party")
+            return EnsureContainer("party")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("party") or GetPartyConf() end,
         isEnabled = PartyEnabled,
@@ -452,7 +462,8 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            return SyncContainer("raid")
+            SyncContainer("raid")
+            return EnsureContainer("raid")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("raid") or GetRaidConf() end,
         isEnabled = RaidEnabled,
@@ -468,7 +479,8 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            return SyncContainer("mythicraid")
+            SyncContainer("mythicraid")
+            return EnsureContainer("mythicraid")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("mythicraid") or GetMythicRaidConf() end,
         isEnabled = MythicRaidEnabled,
@@ -767,7 +779,10 @@ local function BuildGFPopup(mode)
         conf.hpOffsetY = San(popup.hpYBox and tonumber(popup.hpYBox:GetText()), 0)
 
         -- Power
-        if popup.powerShowCB then conf.showPower = popup.powerShowCB:GetChecked() and true or false end
+        if popup.powerShowCB then
+            local v = popup.powerShowCB:GetChecked() and true or false
+            if gf.SetPowerTextEnabled then gf.SetPowerTextEnabled(mode, v) else conf.showPower = v; conf.showPowerText = v end
+        end
         if popup._powLeftVal   then conf.powerTextLeft      = popup._powLeftVal end
         if popup._powCenterVal then conf.powerTextCenter    = popup._powCenterVal end
         if popup._powRightVal  then conf.powerTextRight     = popup._powRightVal end
@@ -781,6 +796,7 @@ local function BuildGFPopup(mode)
 
         -- Rebuild
         gf.RebuildAll()
+        if gf._RequestOptionsResync then gf._RequestOptionsResync() end
         C_Timer.After(0.1, function()
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
         end)
@@ -829,7 +845,7 @@ local function BuildGFPopup(mode)
         S(popup.hpYBox, conf.hpOffsetY or 0)
 
         -- Power
-        SC(popup.powerShowCB, V("showPower"))
+        SC(popup.powerShowCB, (gf.IsPowerTextEnabled and gf.IsPowerTextEnabled(mode, conf)) or false)
         popup._powLeftVal   = V("powerTextLeft")      or "NONE"
         popup._powCenterVal = V("powerTextCenter")    or "NONE"
         popup._powRightVal  = V("powerTextRight")     or "NONE"
@@ -908,7 +924,7 @@ local function BuildGFPopup(mode)
 
     -- ── Card 5: Power ──
     local pC, pB = F.Card(popup, hC, "Power", -6, false)
-    local pShow = F.CheckRow(popup, pB, pC, { label="Show Power", cbKey="powerShowCB",
+    local pShow = F.CheckRow(popup, pB, pC, { label="Show Power Text", cbKey="powerShowCB",
         onChanged=function() Apply() end })
     local pLeft = F.SelectRow(popup, pB, pC, { label="Left:",
         selectKey="powLeftSel", stateKey="_powLeftVal",
@@ -960,6 +976,13 @@ end
 
 _G.MSUF_EM2_ShowGFPopup = ShowGFPopup
 _G.MSUF_EM2_HideGFPopup = HideGFPopup
+_G.MSUF_EM2_SyncGFPopups = function()
+    for _, popup in pairs(_popups) do
+        if popup and popup.IsShown and popup:IsShown() and popup.Sync then
+            popup.Sync()
+        end
+    end
+end
 _G.MSUF_EM2_GFPopupIsOpen = function()
     return (_popups.party and _popups.party:IsShown())
         or (_popups.raid and _popups.raid:IsShown())

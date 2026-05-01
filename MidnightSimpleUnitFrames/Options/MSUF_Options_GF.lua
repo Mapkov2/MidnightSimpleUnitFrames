@@ -156,6 +156,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
         else GF.RefreshVisuals() end
     end
 
+    local function SyncGFEditPopup()
+        local fn = _G.MSUF_EM2_SyncGFPopups
+        if type(fn) == "function" then fn() end
+    end
+
     local function RefreshAllWidgets()
         for i = 1, #_allRefreshFns do
             local fn = _allRefreshFns[i]
@@ -454,7 +459,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
           keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB",
                    "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
                    "barTexture", "barBgTexture",
-                   "powerHeight", "showPower",
+                   "powerHeight", "showPower", "showPowerText",
                    "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter",
                    "powerFontSize", "powerOffsetX", "powerOffsetY",
                    "powerTextLayer", "powerSmoothFill",
@@ -2774,8 +2779,13 @@ function _G.MSUF_EnsureGFPanelBuilt()
             name = "MSUF_GF_PowerShowCheck", parent = colL,
             anchor = powSep, x = 0, y = -4,
             label = TR("Show Power Text"),
-            get = function(k) return GF.Val(k, "showPower") end,
-            set = function(k, v) GF.GetConf(k).showPower = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+            get = function(k) return (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(k)) or false end,
+            set = function(k, v)
+                if GF.SetPowerTextEnabled then GF.SetPowerTextEnabled(k, v) else local c = GF.GetConf(k); c.showPower = v; c.showPowerText = v end
+                GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals()
+                if GF._RequestOptionsResync then GF._RequestOptionsResync() end
+                SyncGFEditPopup()
+            end,
         })
 
         local powLeftDd = SDropdown({
@@ -2783,7 +2793,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = powShowChk, anchorPoint = "BOTTOMLEFT", x = -16, y = -32, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "powerTextLeft") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).powerTextLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+            set = function(k, v) GF.GetConf(k).powerTextLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals(); SyncGFEditPopup() end,
         })
         do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             lbl:SetPoint("BOTTOMLEFT", powLeftDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Left")); lbl:SetTextColor(0.6, 0.6, 0.6) end
@@ -2793,7 +2803,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = powLeftDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "powerTextCenter") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).powerTextCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+            set = function(k, v) GF.GetConf(k).powerTextCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals(); SyncGFEditPopup() end,
         })
         do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             lbl:SetPoint("BOTTOMLEFT", powCenterDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Center")); lbl:SetTextColor(0.6, 0.6, 0.6) end
@@ -2803,7 +2813,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = powCenterDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
             items = TEXT_MODES,
             get = function(k) return GF.Val(k, "powerTextRight") or "NONE" end,
-            set = function(k, v) GF.GetConf(k).powerTextRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+            set = function(k, v) GF.GetConf(k).powerTextRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals(); SyncGFEditPopup() end,
         })
         do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             lbl:SetPoint("BOTTOMLEFT", powRightDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Right")); lbl:SetTextColor(0.6, 0.6, 0.6) end
@@ -2813,7 +2823,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = powRightDd, anchorPoint = "BOTTOMLEFT", x = 0, y = -22, width = 180,
             items = DELIM_ITEMS,
             get = function(k) return GF.Val(k, "powerTextDelimiter") or " / " end,
-            set = function(k, v) GF.GetConf(k).powerTextDelimiter = v; GF.RefreshVisuals() end,
+            set = function(k, v) GF.GetConf(k).powerTextDelimiter = v; GF.RefreshVisuals(); SyncGFEditPopup() end,
         })
         do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             lbl:SetPoint("BOTTOMLEFT", powDelimDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Delimiter")); lbl:SetTextColor(0.6, 0.6, 0.6) end
@@ -2823,7 +2833,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = powDelimDd, x = 16, y = -26,
             min = 6, max = 48, step = 1, width = 180, default = 9,
             get = function(k) return GF.Val(k, "powerFontSize") end,
-            set = function(k, v) GF.GetConf(k).powerFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals() end,
+            set = function(k, v) GF.GetConf(k).powerFontSize = v; GF.RefreshFonts(); GF.RefreshVisuals(); SyncGFEditPopup() end,
             formatText = function(v) return string.format("Size: %d", v) end,
         })
 
@@ -2832,7 +2842,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = powSizeSl, x = 0, y = -32,
             min = -100, max = 100, step = 1, width = 180, default = 0,
             get = function(k) return GF.Val(k, "powerOffsetX") end,
-            set = function(k, v) GF.GetConf(k).powerOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            set = function(k, v) GF.GetConf(k).powerOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); SyncGFEditPopup() end,
             formatText = function(v) return string.format("X: %d", v) end,
         })
         local powYSl = SSlider({
@@ -2840,7 +2850,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = powXSl, x = 0, y = -32,
             min = -100, max = 100, step = 1, width = 180, default = 0,
             get = function(k) return GF.Val(k, "powerOffsetY") end,
-            set = function(k, v) GF.GetConf(k).powerOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            set = function(k, v) GF.GetConf(k).powerOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); SyncGFEditPopup() end,
             formatText = function(v) return string.format("Y: %d", v) end,
         })
 
@@ -2977,7 +2987,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = hpLaySl, x = 0, y = -32,
             min = 1, max = 12, step = 1, width = 180, default = 2,
             get = function(k) return GF.Val(k, "powerTextLayer") end,
-            set = function(k, v) GF.GetConf(k).powerTextLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            set = function(k, v) GF.GetConf(k).powerTextLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); SyncGFEditPopup() end,
             formatText = function(v) return string.format("Power Layer: %d", v) end,
         })
 
