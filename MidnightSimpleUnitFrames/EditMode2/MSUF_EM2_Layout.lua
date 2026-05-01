@@ -598,8 +598,17 @@ local function NudgeTarget(dx, dy)
                 end
                 g[xKey] = floor(((tonumber(g[xKey]) or 0) + ndx) + 0.5)
                 g[yKey] = floor(((tonumber(g[yKey]) or 0) + ndy) + 0.5)
-                if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-                EM2.CastPopup.Sync()
+                -- Arrow-key movement must use the same unit-aware apply path as
+                -- popup fields: it reanchors target/focus/player bars, updates
+                -- boss previews, refreshes visuals, and syncs the position popup.
+                -- A plain visual refresh leaves the live target castbar at the
+                -- previous anchor until the user clicks it again.
+                if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+                    _G.MSUF_ApplyCastbarUnitAndSync(unit)
+                elseif _G.MSUF_UpdateCastbarVisuals then
+                    _G.MSUF_UpdateCastbarVisuals()
+                    EM2.CastPopup.Sync()
+                end
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
