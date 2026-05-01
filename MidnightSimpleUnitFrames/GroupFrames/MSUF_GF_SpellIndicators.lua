@@ -158,7 +158,9 @@ local function EnsureSpecConfig(siCfg, specKey)
     for auraName, def in pairs(defaults) do
         local entry = specCfg[auraName]
         if not entry then
-            specCfg[auraName] = DeepCopy(def)
+            entry = DeepCopy(def)
+            if entry.onlyOwn == nil then entry.onlyOwn = true end
+            specCfg[auraName] = entry
         else
             if entry.placed == nil and def.placed ~= nil then
                 entry.placed = DeepCopy(def.placed)
@@ -166,6 +168,7 @@ local function EnsureSpecConfig(siCfg, specKey)
             if entry.frame == nil and def.frame ~= nil then
                 entry.frame = DeepCopy(def.frame)
             end
+            if entry.onlyOwn == nil then entry.onlyOwn = (def.onlyOwn ~= false) end
         end
     end
 
@@ -173,10 +176,12 @@ local function EnsureSpecConfig(siCfg, specKey)
 end
 
 ------------------------------------------------------------------------
--- Scan: HELPFUL filter — own casts by spellId, externals by name
+-- Scan: player-cast auras by C-side filter, optional all-caster fallback
 ------------------------------------------------------------------------
 local _slotBuf = {}
 local _slotCount = 0
+local HELPFUL_ALL = "HELPFUL"
+local HELPFUL_PLAYER = "HELPFUL|PLAYER"
 
 local function CaptureSlots(...)
     local count = select("#", ...)
@@ -205,13 +210,54 @@ local function SIQueryAuraData(unit, slot)
 end
 
 local _scanResults = {}
+local _scanOnlyOwnByAura = {}
 
-local function ScanUnit(unit, kind)
-    for k in pairs(_scanResults) do _scanResults[k] = nil end
-    if not _reverseLookup then return end
-    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot) then return end
+local function MarkScanAuraConfig(auraName, auraCfg)
+    if not auraCfg or auraCfg.enabled == false then return false end
+    if auraCfg.onlyOwn == false then
+        _scanOnlyOwnByAura[auraName] = false
+        return true
+    end
+    if _scanOnlyOwnByAura[auraName] == nil then
+        _scanOnlyOwnByAura[auraName] = true
+    end
+    return false
+end
 
-    local slots, count = SIQuerySlots(unit, "HELPFUL")
+local function BuildScanConfig(siCfg, specKey)
+    for k in pairs(_scanOnlyOwnByAura) do _scanOnlyOwnByAura[k] = nil end
+    local wantsAllCasters = false
+
+    if specKey == "multi" then
+        local ms = siCfg and siCfg.multiSpecs
+        if ms then
+            for sk in pairs(ms) do
+                local specCfg = EnsureSpecConfig(siCfg, sk)
+                if specCfg then
+                    for auraName, auraCfg in pairs(specCfg) do
+                        if MarkScanAuraConfig(auraName, auraCfg) then
+                            wantsAllCasters = true
+                        end
+                    end
+                end
+            end
+        end
+    else
+        local specCfg = EnsureSpecConfig(siCfg, specKey)
+        if specCfg then
+            for auraName, auraCfg in pairs(specCfg) do
+                if MarkScanAuraConfig(auraName, auraCfg) then
+                    wantsAllCasters = true
+                end
+            end
+        end
+    end
+
+    return wantsAllCasters
+end
+
+local function ScanAuraSlots(unit, filter, fromPlayerFilter)
+    local slots, count = SIQuerySlots(unit, filter)
     for i = 2, count do
         local aura = SIQueryAuraData(unit, slots[i])
         if aura then
@@ -230,9 +276,24 @@ local function ScanUnit(unit, kind)
                 end
             end
             if matched and not _scanResults[matched] then
-                _scanResults[matched] = aura
+                local onlyOwn = _scanOnlyOwnByAura[matched]
+                if onlyOwn ~= nil and (fromPlayerFilter or onlyOwn == false) then
+                    _scanResults[matched] = aura
+                end
             end
         end
+    end
+end
+
+local function ScanUnit(unit, kind, siCfg, specKey)
+    for k in pairs(_scanResults) do _scanResults[k] = nil end
+    if not _reverseLookup then return end
+    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot) then return end
+
+    local wantsAllCasters = BuildScanConfig(siCfg, specKey)
+    ScanAuraSlots(unit, HELPFUL_PLAYER, true)
+    if wantsAllCasters then
+        ScanAuraSlots(unit, HELPFUL_ALL, false)
     end
 end
 
@@ -948,7 +1009,7 @@ function GF.UpdateSpellIndicators(f, unit)
     local parent = f.barGroup or f
     local scale = GF.GetDynamicScale and GF.GetDynamicScale(GF.GetConf(kind)) or 1
 
-    ScanUnit(unit, kind)
+    ScanUnit(unit, kind, siCfg, specKey)
     ResetFrameEffects(f)
 
     if not f._msufSIDedupIDs then f._msufSIDedupIDs = {} end
