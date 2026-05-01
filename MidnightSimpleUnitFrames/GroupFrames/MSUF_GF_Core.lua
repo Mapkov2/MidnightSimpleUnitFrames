@@ -269,6 +269,39 @@ GF.RegisterUnitEvents = GF.RegisterUnitEvents or noop
 GF.UnregisterUnitEvents = GF.UnregisterUnitEvents or noop
 
 ------------------------------------------------------------------------
+-- Visual slot anchoring
+--
+-- SecureGroupHeader can occasionally leave one protected child (usually the
+-- first/player slot) with a stale physical width/height after roster or zone
+-- relayouts. If the visual root uses SetAllPoints(child), that stale protected
+-- size leaks into the bars and makes exactly one group frame look different.
+-- Keep the secure button sized when possible, but make the visual root use the
+-- configured slot metrics and anchor it to the same primary point as the header
+-- layout. This keeps every visible bar identical even if the protected click
+-- frame is briefly out of sync, and the late scans below still repair the real
+-- child size out of combat.
+------------------------------------------------------------------------
+local function AnchorVisualRootToSlot(f, kind, w, h)
+    if not f or not f.barGroup then return end
+    local conf = GF.GetConf(kind)
+    local growth = (conf and conf.growth) or "DOWN"
+    local bg = f.barGroup
+
+    bg:ClearAllPoints()
+    bg:SetSize(w, h)
+
+    if growth == "UP" then
+        bg:SetPoint("BOTTOM", f, "BOTTOM", 0, 0)
+    elseif growth == "RIGHT" then
+        bg:SetPoint("LEFT", f, "LEFT", 0, 0)
+    elseif growth == "LEFT" then
+        bg:SetPoint("RIGHT", f, "RIGHT", 0, 0)
+    else
+        bg:SetPoint("TOP", f, "TOP", 0, 0)
+    end
+end
+
+------------------------------------------------------------------------
 -- Frame hierarchy builder (EQoL pattern)
 ------------------------------------------------------------------------
 local function BuildFrameHierarchy(f, kind)
@@ -293,10 +326,10 @@ local function BuildFrameHierarchy(f, kind)
     -- Edge tiling on SetAllPoints frames causes TexCoord crash during
     -- SecureGroupHeader reposition (0-dimension transient). Border on separate frame.
     local barGroup = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    barGroup:SetAllPoints(f)
+    f.barGroup = barGroup
+    AnchorVisualRootToSlot(f, kind, w, h)
     barGroup:EnableMouse(false)
     if barGroup.SetClipsChildren then barGroup:SetClipsChildren(false) end
-    f.barGroup = barGroup
 
     barGroup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
     barGroup:SetBackdropColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
@@ -1205,11 +1238,13 @@ end
 ------------------------------------------------------------------------
 -- Scan header children and init them
 ------------------------------------------------------------------------
-local function ScanHeaderChildren(header, kind)
+local function ScanHeaderChildren(header, kind, force)
     if not header then return end
-    -- Throttle: skip if scanned very recently (GROUP_ROSTER_UPDATE bursts)
+    -- Throttle normal GROUP_ROSTER_UPDATE bursts, but never throttle the
+    -- explicit post-layout repair scans. The repair scans are what normalize
+    -- the first/player child after SecureGroupHeader finishes its own pass.
     local now = GetTime()
-    if header._msufGFLastScan and (now - header._msufGFLastScan) < 0.05 then return end
+    if not force and header._msufGFLastScan and (now - header._msufGFLastScan) < 0.05 then return end
     header._msufGFLastScan = now
 
     -- Protected frames: cannot call SetSize/SetPoint in combat
@@ -1256,11 +1291,10 @@ local function ScanHeaderChildren(header, kind)
                     child:SetBackdrop(nil)
                 end
 
-                -- Re-anchor barGroup + force backdrop re-render
-                if child.barGroup then
-                    child.barGroup:ClearAllPoints()
-                    child.barGroup:SetAllPoints(child)
-                end
+                -- Re-anchor the visual root to configured slot metrics.
+                -- Do not SetAllPoints(child): the protected child can be the
+                -- stale part; the visual bars must remain normalized.
+                AnchorVisualRootToSlot(child, kind, w, h)
 
                 -- borderFrame
                 if child._msufGFBorderFrame then
@@ -1542,6 +1576,8 @@ local function SetupPartyHeader()
     _GF_SetAttrIfChanged(header, "maxColumns", conf.maxColumns or 1)
     _GF_SetAttrIfChanged(header, "unitsPerColumn", conf.unitsPerColumn or 5)
     _GF_SetAttrIfChanged(header, "template", "SecureUnitButtonTemplate")
+    _GF_SetAttrIfChanged(header, "initial-width", w)
+    _GF_SetAttrIfChanged(header, "initial-height", h)
     _GF_SetAttrIfChanged(header, "sortDir", "ASC")
 
     -- Role sort
@@ -1624,7 +1660,10 @@ local function SetupPartyHeader()
 
     -- Deferred child scan (children created async after Show)
     C_Timer.After(0, function()
-        ScanHeaderChildren(header, "party")
+        if header and not InCombatLockdown() then ScanHeaderChildren(header, "party", true) end
+    end)
+    C_Timer.After(0.05, function()
+        if header and not InCombatLockdown() then ScanHeaderChildren(header, "party", true) end
     end)
 end
 
@@ -1690,6 +1729,8 @@ local function SetupRaidHeader()
     _GF_SetAttrIfChanged(header, "maxColumns", maxColumns)
     _GF_SetAttrIfChanged(header, "unitsPerColumn", unitsPerColumn)
     _GF_SetAttrIfChanged(header, "template", "SecureUnitButtonTemplate")
+    _GF_SetAttrIfChanged(header, "initial-width", w)
+    _GF_SetAttrIfChanged(header, "initial-height", h)
     _GF_SetAttrIfChanged(header, "sortDir", "ASC")
     -- Group filter: which raid groups to display (1-8)
     local gf = conf.groupFilter
@@ -1806,7 +1847,10 @@ local function SetupRaidHeader()
     header:SetAttribute("_msufLayoutNonce", nonce)
 
     C_Timer.After(0, function()
-        ScanHeaderChildren(header, kind)
+        if header and not InCombatLockdown() then ScanHeaderChildren(header, kind, true) end
+    end)
+    C_Timer.After(0.05, function()
+        if header and not InCombatLockdown() then ScanHeaderChildren(header, kind, true) end
     end)
 end
 
@@ -2540,7 +2584,7 @@ function GF.RebuildAll()
                         ch._msufGFRegisteredUnit = nil
                     end
                 end
-                ScanHeaderChildren(hdr, kind)
+                ScanHeaderChildren(hdr, kind, true)
             end
         end
         local hdr = GF.headers.raid
@@ -2552,7 +2596,7 @@ function GF.RebuildAll()
                     ch._msufGFRegisteredUnit = nil
                 end
             end
-            ScanHeaderChildren(hdr, GetLiveRaidKind())
+            ScanHeaderChildren(hdr, GetLiveRaidKind(), true)
         end
         GF.MarkAllDirty(GF.DIRTY_ALL)
     end)
@@ -2577,11 +2621,11 @@ function GF.UpdateGroupVisibility()
             GF.SyncHeaderPosition("party")
             GF.headers.party:Show()
             C_Timer.After(0, function()
-                if GF.headers.party then ScanHeaderChildren(GF.headers.party, "party") end
+                if GF.headers.party then ScanHeaderChildren(GF.headers.party, "party", true) end
             end)
             C_Timer.After(0.5, function()
                 if GF.headers.party and not InCombatLockdown() then
-                    ScanHeaderChildren(GF.headers.party, "party")
+                    ScanHeaderChildren(GF.headers.party, "party", true)
                 end
             end)
         else
@@ -2595,11 +2639,11 @@ function GF.UpdateGroupVisibility()
             GF.SyncHeaderPosition(raidKind, nil, GF.headers.raid)
             GF.headers.raid:Show()
             C_Timer.After(0, function()
-                if GF.headers.raid then ScanHeaderChildren(GF.headers.raid, GetLiveRaidKind()) end
+                if GF.headers.raid then ScanHeaderChildren(GF.headers.raid, GetLiveRaidKind(), true) end
             end)
             C_Timer.After(0.5, function()
                 if GF.headers.raid and not InCombatLockdown() then
-                    ScanHeaderChildren(GF.headers.raid, GetLiveRaidKind())
+                    ScanHeaderChildren(GF.headers.raid, GetLiveRaidKind(), true)
                 end
             end)
         else
