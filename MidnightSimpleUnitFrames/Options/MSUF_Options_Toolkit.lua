@@ -361,9 +361,14 @@ function UI.Check(spec)
         if self._msufToggleUpdate then self._msufToggleUpdate() end
     end
 
-    local function ApplyToDB(self)
+    local function ApplyToDB(self, explicitValue)
         if not spec.set then return end
-        local v = self:GetChecked() and true or false
+        local v
+        if explicitValue ~= nil then
+            v = explicitValue and true or false
+        else
+            v = self:GetChecked() and true or false
+        end
         spec.set(v)
         if self._msufToggleUpdate then self._msufToggleUpdate() end
     end
@@ -372,16 +377,21 @@ function UI.Check(spec)
         SyncFromGetter(self)
     end)
 
+    function cb:Refresh()
+        SyncFromGetter(self)
+    end
+
     cb:SetScript("OnClick", function(self)
+        local checked = self:GetChecked() and true or false
         if C_Timer and C_Timer.After then
             C_Timer.After(0, function()
                 if self and self.GetChecked then
-                    ApplyToDB(self)
+                    ApplyToDB(self, checked)
                     if spec.get then SyncFromGetter(self) end
                 end
             end)
         else
-            ApplyToDB(self)
+            ApplyToDB(self, checked)
             if spec.get then SyncFromGetter(self) end
         end
     end)

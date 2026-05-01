@@ -1042,7 +1042,17 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
             MSUF_RebuildFontChoices()
     end
         local _g = MSUF_DB and MSUF_DB.general
-        if _g and _g.fontKey == key then
+        local needsFontRefresh = _g and _g.fontKey == key
+        if not needsFontRefresh and MSUF_DB then
+            for _, unitKey in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss" }) do
+                local u = MSUF_DB[unitKey]
+                if u and u.fontOverride and u.fontKey == key then
+                    needsFontRefresh = true
+                    break
+                end
+            end
+        end
+        if needsFontRefresh then
             if not _MSUF_DeferredFontsPending then
                 _MSUF_DeferredFontsPending = true
                 if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("UF_FONTS_DEFERRED_UPDATE", _MSUF_DeferredUpdateAllFonts) else C_Timer.After(0, _MSUF_DeferredUpdateAllFonts) end
@@ -1308,6 +1318,18 @@ function GetInternalFontPathByKey(key)
     end
      return nil
 end
+local function MSUF_GetFontPathForKey(key)
+    local resolve = _G.MSUF_ResolveFontPath or function(path) return path end
+    if LSM and key and key ~= "" then
+        local p = LSM:Fetch("font", key, true)
+        if p then return resolve(p, 14, "") end
+    end
+    local internalPath = GetInternalFontPathByKey(key)
+    if internalPath then return resolve(internalPath, 14, "") end
+    return resolve(FONT_LIST[1].path, 14, "")
+end
+_G.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
+ns.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
 
 -- Castbar utilities moved to MSUF_Castbars.lua
 
@@ -4254,6 +4276,18 @@ end
 -- Module-local font state (populated once per UpdateAllFonts call, read by hoisted helpers)
 local _MSUF_FONT_FLAGS_CODE = { [""] = 0, OUTLINE = 1, THICKOUTLINE = 2 }
 local _fontState = {}
+local _MSUF_FontPathSerialByKey = {}
+local _MSUF_FontPathSerialNext = 0
+local function _MSUF_GetFontPathSerial(path)
+    local key = tostring(path or "")
+    local serial = _MSUF_FontPathSerialByKey[key]
+    if not serial then
+        _MSUF_FontPathSerialNext = _MSUF_FontPathSerialNext + 1
+        serial = _MSUF_FontPathSerialNext
+        _MSUF_FontPathSerialByKey[key] = serial
+    end
+    return serial
+end
 
 local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
     if not fs then return end
@@ -4300,8 +4334,17 @@ local function _MSUF_ApplyFontsToFrame(f)
     local powerSize = (conf and conf.powerFontSize) or S.globalPowSize
 
     -- Per-unit font override: temporarily swap shared state for this frame
-    local _origFlags, _origShadow, _origCPT
+    local _origPath, _origPathSerial, _origFlags, _origShadow, _origCPT
     if conf and conf.fontOverride then
+        if conf.fontKey ~= nil and conf.fontKey ~= "" then
+            local cPath = MSUF_GetFontPathForKey(conf.fontKey)
+            if cPath then
+                _origPath = S.path
+                _origPathSerial = S.pathSerial
+                S.path = cPath
+                S.pathSerial = _MSUF_GetFontPathSerial(cPath)
+            end
+        end
         local cNoOL = conf.noOutline
         local cBold = conf.boldText
         if cNoOL ~= nil or cBold ~= nil then
@@ -4362,6 +4405,8 @@ local function _MSUF_ApplyFontsToFrame(f)
     end
 
     -- Restore shared state after per-unit override
+    if _origPath then S.path = _origPath end
+    if _origPathSerial then S.pathSerial = _origPathSerial end
     if _origFlags then S.flags = _origFlags end
     if _origShadow ~= nil then S.useShadow = _origShadow end
     if _origCPT ~= nil then S.colorPowerByType = _origCPT end
@@ -4394,7 +4439,7 @@ local function UpdateAllFonts(onlyKey)
     -- Populate shared state for hoisted helpers
     _fontState.path = path
     _fontState.flags = flags
-    _fontState.pathSerial = _G.MSUF_FontPathSerial or 0
+    _fontState.pathSerial = _MSUF_GetFontPathSerial(path)
     _fontState.fr = fr
     _fontState.fg = fg
     _fontState.fb = fb

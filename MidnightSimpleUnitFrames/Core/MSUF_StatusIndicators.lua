@@ -852,11 +852,34 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
 -- Public refresh helper
 _G.MSUF_RefreshStatusIndicators = function()
     local frames = _G.MSUF_UnitFrames
-    if type(frames) ~= "table" then
-         return
+    local seen
+    local function refreshFrame(f)
+        if not f then return end
+        if seen then seen[f] = true end
+        f._msufStatusConf = nil
+        f._msufAwayForceRefresh = true
+        if f._msufIsGroupFrame and type(_G.MSUF_GF_UpdateStatus) == "function" then
+            f._msufGFStatusState = nil
+            _G.MSUF_GF_UpdateStatus(f, f.unit, true)
+        else
+            MSUF_UpdateStatusIndicatorForFrame(f)
+        end
     end
-    for _, f in pairs(frames) do
-        MSUF_UpdateStatusIndicatorForFrame(f)
+
+    if type(frames) == "table" then
+        seen = {}
+        for _, f in pairs(frames) do
+            refreshFrame(f)
+        end
+    end
+
+    local gf = _G.MSUF_NS and _G.MSUF_NS.GF
+    if gf and type(gf.ForEachFrame) == "function" then
+        gf.ForEachFrame(function(f)
+            if not seen or not seen[f] then
+                refreshFrame(f)
+            end
+        end)
     end
  end
 -- Keep a compatibility stub because older code may call this helper.

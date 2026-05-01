@@ -179,10 +179,17 @@ local function _GFInstallAttrHook(child)
             self._msufGFLastFullAura       = nil
             self._msufGFAggroLevel         = nil
             self._msufGFLastName           = nil
+            self._msufGFStatusState        = nil
+            self._msufGFStatusDirty        = nil
             -- Hide any visible stripe immediately so it doesn't bleed
             -- into the new occupant's frame for one render cycle.
             local stripe = self._msufGFDebuffStripe
             if stripe and stripe:IsShown() then stripe:Hide() end
+            local statusText = self._msufGFStatusText or self.statusIndicatorText
+            if statusText then
+                statusText:SetText("")
+                statusText:Hide()
+            end
             -- Wipe displayed-aura hash; UpdateFrameAuras will repopulate.
             local disp = self._msufDisplayedAuraIDs
             if disp then for k in pairs(disp) do disp[k] = nil end end
@@ -1044,6 +1051,8 @@ function GF.UpdateButton(f, unit)
         if f.resurrectIcon then f.resurrectIcon:Hide() end
         if f.phaseIcon then f.phaseIcon:Hide() end
         if f.statusIndicatorText then f.statusIndicatorText:SetText(""); f.statusIndicatorText:Hide() end
+        f._msufGFStatusState = 0
+        f._msufGFStatusDirty = nil
         return
     end
 
