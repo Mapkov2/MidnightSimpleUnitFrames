@@ -462,6 +462,11 @@ function UI.Slider(spec)
             eb:SetText(FormatValue(v))
         end
     end
+    local function SetCompanionsShown(show)
+        if eb then eb:SetShown(show) end
+        if minus then minus:SetShown(show) end
+        if plus then plus:SetShown(show) end
+    end
     -- Label update
     local function UpdateLabel(v)
         if text and text.SetText then
@@ -471,6 +476,17 @@ function UI.Slider(spec)
                 text:SetText(TR(spec.label or ""))
             end
         end
+    end
+    local function SyncFromGetter(self)
+        local v = spec.get and spec.get() or self:GetValue()
+        if type(v) ~= "number" then v = spec.default or minV end
+        if v < minV then v = minV elseif v > maxV then v = maxV end
+        self._msufSkip = true
+        self:SetValue(v)
+        self._msufSkip = false
+        SyncEditBox(v)
+        UpdateLabel(v)
+        SetCompanionsShown(self:IsShown())
     end
     if (not compact) or compactInput then
         -- Apply editbox value
@@ -514,42 +530,31 @@ function UI.Slider(spec)
     -- "ghost" input boxes leaking through. Diff-gated to avoid redundant work.
     if eb or minus or plus then
         sl:HookScript("OnShow", function()
-            if eb    and not eb:IsShown()    then eb:Show()    end
-            if minus and not minus:IsShown() then minus:Show() end
-            if plus  and not plus:IsShown()  then plus:Show()  end
+            SetCompanionsShown(true)
         end)
         sl:HookScript("OnHide", function()
-            if eb    and eb:IsShown()    then eb:Hide()    end
-            if minus and minus:IsShown() then minus:Hide() end
-            if plus  and plus:IsShown()  then plus:Hide()  end
+            SetCompanionsShown(false)
         end)
         -- Mirror initial state in case the slider is created already hidden
         -- (parent hidden at construction time → no OnHide will fire).
         if not sl:IsShown() then
-            if eb    and eb:IsShown()    then eb:Hide()    end
-            if minus and minus:IsShown() then minus:Hide() end
-            if plus  and plus:IsShown()  then plus:Hide()  end
+            SetCompanionsShown(false)
         end
     end
     -- Self-sync on Show
     sl:SetScript("OnShow", function(self)
-        if spec.get then
-            local v = spec.get()
-            if type(v) ~= "number" then v = spec.default or minV end
-            if v < minV then v = minV elseif v > maxV then v = maxV end
-            self._msufSkip = true
-            self:SetValue(v)
-            self._msufSkip = false
-            SyncEditBox(v)
-            UpdateLabel(v)
-        end
+        SyncFromGetter(self)
     end)
+    function sl:Refresh()
+        SyncFromGetter(self)
+    end
     -- Programmatic set (no callback)
     function sl:SetValueClean(v)
         self._msufSkip = true
         self:SetValue(v)
         self._msufSkip = false
         SyncEditBox(v)
+        UpdateLabel(v)
     end
     function sl:SetEnabled(enabled)
         if enabled then
@@ -581,6 +586,7 @@ function UI.Slider(spec)
     if name and spec.label and type(_G.MSUF_Search_RegisterSlider) == "function" then
         _G.MSUF_Search_RegisterSlider(name, spec.label)
     end
+    sl:Refresh()
     return sl
 end
 
