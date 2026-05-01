@@ -199,6 +199,39 @@ ns.UF.MakeTex = ns.UF.MakeTex or function(self, key, parentKey, layer, sublayer,
     self[key] = t
      return t
 end
+-- Unitframe indicator texture with a dedicated frame-level parent.
+-- This makes the unitframe indicator "Layer" sliders behave like Group Frames:
+-- higher layer = higher frame level, not just a texture sublevel.
+ns.UF.MakeLayeredTex = ns.UF.MakeLayeredTex or function(self, key, parentKey, layer, sublayer, nameSuffix)
+    if not self or not key then return nil end
+    local parent = ns.UF._ResolveParent(self, parentKey)
+    if not parent then return nil end
+
+    local layerKey = key .. "LayerFrame"
+    local layerFrame = self[layerKey]
+    if not layerFrame then
+        layerFrame = ns.UF.MakeFrame(self, layerKey, "Frame", parentKey)
+        if layerFrame and layerFrame.SetAllPoints then layerFrame:SetAllPoints(parent) end
+    end
+    if not layerFrame then
+        return ns.UF.MakeTex(self, key, parentKey, layer, sublayer, nameSuffix)
+    end
+
+    local t = self[key]
+    if not t then
+        if not layerFrame.CreateTexture then return nil end
+        local name = ns.UF._MakeChildName(self, nameSuffix)
+        t = layerFrame:CreateTexture(name, layer or "OVERLAY", nil, sublayer)
+        self[key] = t
+    elseif t.SetParent and t:GetParent() ~= layerFrame then
+        t:SetParent(layerFrame)
+    end
+
+    t._msufLayerFrame = layerFrame
+    t._msufLayerOwner = self
+    t._msufLayerParent = parent
+    return t
+end
 ns.UF.MakeFont = ns.UF.MakeFont or function(self, key, parentKey, template, layer, sublayer, nameSuffix)
     if not self or not key then  return nil end
     local fs = self[key]
@@ -931,8 +964,13 @@ local function MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
         or ((type(g.levelIndicatorOffsetY) == "number") and g.levelIndicatorOffsetY or 0)
     local anchor = (type(conf.levelIndicatorAnchor) == "string") and conf.levelIndicatorAnchor
         or ((type(g.levelIndicatorAnchor) == "string") and g.levelIndicatorAnchor or "NAMERIGHT")
+    local layer = (ns.Icons and ns.Icons._layout and ns.Icons._layout.Layer and ns.Icons._layout.Layer(conf, g, "levelIndicatorLayer", 7)) or 7
     f._msufLevelAnchor = anchor
-    if not ns.Cache.StampChanged(f, "LevelLayout", anchor, lx, ly) then  return end
+    if not ns.Cache.StampChanged(f, "LevelLayout", anchor, lx, ly, layer) then  return end
+    if ns.Icons and ns.Icons._layout then
+        if ns.Icons._layout.EnsureLayerFrame then ns.Icons._layout.EnsureLayerFrame(f, f.levelText, "levelText", f.textFrame or f) end
+        if ns.Icons._layout.ApplyLayer then ns.Icons._layout.ApplyLayer(f.levelText, layer, f) end
+    end
     f.levelText:ClearAllPoints()
     if anchor == "NAMELEFT" then
         f.levelText:SetPoint("RIGHT", f.nameText, "LEFT", -6 + lx, ly)
@@ -2765,6 +2803,53 @@ function ns.Icons._layout.Resolve(anchor, allowCenter)
     elseif anchor == "BOTTOMRIGHT" then  return "RIGHT", "BOTTOMRIGHT" end
      return "LEFT", "TOPLEFT"
 end
+function ns.Icons._layout.Layer(conf, g, key, defaultVal)
+    local v = ns.Util and ns.Util.Num and ns.Util.Num(conf, g, key, defaultVal or 7) or (defaultVal or 7)
+    v = math.floor((tonumber(v) or defaultVal or 7) + 0.5)
+    if v < 1 then return 1 end
+    if v > 10 then return 10 end
+    return v
+end
+function ns.Icons._layout.EnsureLayerFrame(owner, region, key, parent)
+    if not owner or not region or not key then return nil end
+    local layerKey = key .. "LayerFrame"
+    local layerFrame = owner[layerKey]
+    if not layerFrame then
+        local p = parent or (region.GetParent and region:GetParent()) or owner
+        layerFrame = ns.UF and ns.UF.MakeFrame and ns.UF.MakeFrame(owner, layerKey, "Frame", p)
+        if layerFrame and layerFrame.SetAllPoints and p then layerFrame:SetAllPoints(p) end
+    end
+    if layerFrame then
+        region._msufLayerFrame = layerFrame
+        region._msufLayerOwner = owner
+        if region.SetParent and region:GetParent() ~= layerFrame then region:SetParent(layerFrame) end
+    end
+    return layerFrame
+end
+function ns.Icons._layout.ApplyLayer(region, layer, owner)
+    if not region then return end
+    local l = tonumber(layer) or 7
+    l = math.floor(l + 0.5)
+    if l < 1 then l = 1 elseif l > 10 then l = 10 end
+
+    local layerFrame = region._msufLayerFrame
+    if layerFrame and layerFrame.SetFrameLevel then
+        local base = 0
+        local o = owner or region._msufLayerOwner
+        if o and o.GetFrameLevel then base = o:GetFrameLevel() or 0 end
+        local want = base + 10 + l
+        if layerFrame._msufLayerLevel ~= want then
+            layerFrame._msufLayerLevel = want
+            layerFrame:SetFrameLevel(want)
+        end
+    end
+
+    if region.SetDrawLayer then
+        local sub = l - 1
+        if sub > 7 then sub = 7 elseif sub < 0 then sub = 0 end
+        region:SetDrawLayer("OVERLAY", sub)
+    end
+end
 function ns.Icons._layout.Apply(icon, owner, size, point, relPoint, ox, oy)
     icon:SetSize(size, size); icon:ClearAllPoints(); icon:SetPoint(point, owner, relPoint, ox, oy)
  end
@@ -2777,10 +2862,13 @@ size = math.floor(size + 0.5); if size < 8 then size = 8 elseif size > 64 then s
 local ox = ns.Util.Num(conf, g, "leaderIconOffsetX", 0)
 local oy = ns.Util.Num(conf, g, "leaderIconOffsetY", 3)
 local anchor = ns.Util.Val(conf, g, "leaderIconAnchor", "TOPLEFT")
-    if not ns.Cache.StampChanged(f, "LeaderIconLayout", size, ox, oy, anchor, (key or "")) then  return end
+local layer = ns.Icons._layout.Layer(conf, g, "leaderIconLayer", 7)
+    if not ns.Cache.StampChanged(f, "LeaderIconLayout", size, ox, oy, anchor, layer, (key or "")) then  return end
     local point, relPoint = ns.Icons._layout.Resolve(anchor, false)
+    ns.Icons._layout.ApplyLayer(f.leaderIcon, layer, f)
     ns.Icons._layout.Apply(f.leaderIcon, f, size, point, relPoint, ox, oy)
     if f.assistantIcon then
+        ns.Icons._layout.ApplyLayer(f.assistantIcon, layer, f)
         ns.Icons._layout.Apply(f.assistantIcon, f, size, point, relPoint, ox, oy - (size - 1))
     end
  end
@@ -2794,8 +2882,10 @@ size = math.floor(size + 0.5); if size < 8 then size = 8 elseif size > 64 then s
 local ox = ns.Util.Num(conf, g, "raidMarkerOffsetX", 16)
 local oy = ns.Util.Num(conf, g, "raidMarkerOffsetY", 3)
 local anchor = ns.Util.Val(conf, g, "raidMarkerAnchor", "TOPLEFT")
-    if not ns.Cache.StampChanged(f, "RaidMarkerLayout", size, ox, oy, anchor, (key or "")) then  return end
+local layer = ns.Icons._layout.Layer(conf, g, "raidMarkerLayer", 7)
+    if not ns.Cache.StampChanged(f, "RaidMarkerLayout", size, ox, oy, anchor, layer, (key or "")) then  return end
     local point, relPoint = ns.Icons._layout.Resolve(anchor, true)
+    ns.Icons._layout.ApplyLayer(f.raidMarkerIcon, layer, f)
     ns.Icons._layout.Apply(f.raidMarkerIcon, f, size, point, relPoint, ox, oy)
  end
 -- 12.0: UFCore now resolves directly to ns.Bars.HealthCalcUpdate. Thin compat wrapper.
@@ -3863,6 +3953,14 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     end
     ApplyTextLayout(f, conf)
     MSUF_ClampNameWidth(f, conf)
+    -- Indicator layout is not part of UFCore's hot element update.
+    -- Apply it on the cold options/apply path so layer/anchor/size changes
+    -- live-update immediately without waiting for a roster/unit event.
+    if type(MSUF_ApplyLeaderIconLayout) == "function" then MSUF_ApplyLeaderIconLayout(f) end
+    if type(MSUF_ApplyRaidMarkerLayout) == "function" then MSUF_ApplyRaidMarkerLayout(f) end
+    if type(MSUF_ApplyLevelIndicatorLayout) == "function" then MSUF_ApplyLevelIndicatorLayout(f) end
+    if type(_G.MSUF_ApplyEliteIconLayout) == "function" then _G.MSUF_ApplyEliteIconLayout(f) end
+    if type(MSUF_UpdateStatusIndicatorForFrame) == "function" then MSUF_UpdateStatusIndicatorForFrame(f) end
     ns.UF.RequestUpdate(f, false, true, "ApplyUnitKey")
 end
 
@@ -4993,7 +5091,7 @@ local function CreateSimpleUnitFrame(unit)
         for i = 1, #defs do
             local key, ok, parentKey, layer, sub, size, file, pt, atlas, apply = unpack(defs[i])
             if ok then
-                local tex = ns.UF.MakeTex(f, key, parentKey, layer, sub)
+                local tex = (ns.UF.MakeLayeredTex or ns.UF.MakeTex)(f, key, parentKey, layer, sub)
                 if size then tex:SetSize(size, size) end
                 if pt then tex:ClearAllPoints(); tex:SetPoint(unpack(pt)) end
                 if atlas and getAtlasInfo and getAtlasInfo(atlas[1]) then
@@ -5010,7 +5108,7 @@ local function CreateSimpleUnitFrame(unit)
         local _eliteUnitKey = (type(unit) == "string" and unit:sub(1,4) == "boss") and "boss" or unit
         local _eliteValidUnits = ns.MSUF_EliteValidUnits
         if _eliteValidUnits and _eliteValidUnits[_eliteUnitKey] and not f.eliteIcon then
-            local tex = ns.UF.MakeTex(f, "eliteIcon", "textFrame", "OVERLAY", 7)
+            local tex = (ns.UF.MakeLayeredTex or ns.UF.MakeTex)(f, "eliteIcon", "textFrame", "OVERLAY", 7)
             tex:SetSize(20, 20)
             tex:Hide()
             if _G.MSUF_ApplyEliteIconLayout then

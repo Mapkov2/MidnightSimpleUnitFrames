@@ -144,6 +144,13 @@ local function ReadStr(conf, g, field, def)
     if v == nil and g then local gv = g[field]; if type(gv) == "string" then v = gv end end
     return v or def or ""
 end
+local function ClampLayerValue(v, def)
+    v = tonumber(v) or def or 7
+    v = floor(v + 0.5)
+    if v < 1 then return 1 end
+    if v > 10 then return 10 end
+    return v
+end
 
 --------------------------------------------------------------------
 -- Indicator specs (Leader / RaidMarker / Level / Elite-Rare icon)
@@ -165,6 +172,7 @@ local INDICATOR_SPECS = {
         anchorDrop = "playerLeaderAnchorDrop", anchorField = "leaderIconAnchor", anchorDefault = "TOPLEFT",
         anchorText = AnchorText, anchorChoices = MakeAnchorChoices(FOUR_ANCHORS, AnchorText),
         sizeEdit = "playerLeaderSizeEdit", sizeField = "leaderIconSize", sizeDefault = 14,
+        layerSlider = "playerLeaderLayerSlider", layerField = "leaderIconLayer", layerDefault = 7,
         divider = "playerLeaderGroupDivider", resetBtn = "playerLeaderResetBtn",
         refreshFnName = "MSUF_RefreshLeaderIconFrames",
     },
@@ -178,6 +186,7 @@ local INDICATOR_SPECS = {
         anchorText = AnchorText,
         anchorChoices = MakeAnchorChoices({ "TOPLEFT","TOPRIGHT","BOTTOMLEFT","BOTTOMRIGHT","CENTER" }, AnchorText),
         sizeEdit = "playerRaidMarkerSizeEdit", sizeField = "raidMarkerSize", sizeDefault = 18,
+        layerSlider = "playerRaidMarkerLayerSlider", layerField = "raidMarkerLayer", layerDefault = 7,
         divider = "playerRaidMarkerGroupDivider", resetBtn = "playerRaidMarkerResetBtn",
         refreshFnName = "MSUF_RefreshRaidMarkerFrames",
     },
@@ -191,6 +200,7 @@ local INDICATOR_SPECS = {
         anchorText = LevelAnchorText,
         anchorChoices = MakeAnchorChoices({ "NAMERIGHT","NAMELEFT","TOPLEFT","TOPRIGHT","BOTTOMLEFT","BOTTOMRIGHT" }, LevelAnchorText),
         sizeEdit = "playerLevelSizeEdit", sizeField = "levelIndicatorSize", sizeDefault = 14,
+        layerSlider = "playerLevelLayerSlider", layerField = "levelIndicatorLayer", layerDefault = 7,
         divider = "playerLevelGroupDivider", resetBtn = "playerLevelResetBtn",
         refreshFnName = "MSUF_RefreshLevelIndicatorFrames",
     },
@@ -203,6 +213,7 @@ local INDICATOR_SPECS = {
         anchorDrop = "playerEliteIconAnchorDrop", anchorField = "eliteIconAnchor", anchorDefault = "TOPRIGHT",
         anchorText = AnchorText, anchorChoices = MakeAnchorChoices(FOUR_ANCHORS, AnchorText),
         sizeEdit = "playerEliteIconSizeEdit", sizeField = "eliteIconSize", sizeDefault = 20,
+        layerSlider = "playerEliteIconLayerSlider", layerField = "eliteIconLayer", layerDefault = 7,
         divider = "playerEliteIconGroupDivider", resetBtn = "playerEliteIconResetBtn",
         refreshFnName = "MSUF_RefreshEliteIconFrames",
     },
@@ -219,6 +230,7 @@ local STATUS_ICON_DEFS = {
         showField = "showCombatStateIndicator", showDefault = true,
         xField = "combatStateIndicatorOffsetX", yField = "combatStateIndicatorOffsetY",
         anchorField = "combatStateIndicatorAnchor", sizeField = "combatStateIndicatorSize", sizeDefault = 18,
+        layerField = "combatStateIndicatorLayer", layerDefault = 7,
         symbolField = "combatStateIndicatorSymbol", symbolChoices = function() return SymbolChoices(COMBAT_SYMBOLS) end,
         refreshGlobal = "MSUF_RequestStatusCombatIndicatorRefresh",
         pickerTitle = "Combat icon",
@@ -229,6 +241,7 @@ local STATUS_ICON_DEFS = {
         showField = "showRestingIndicator", showDefault = false,
         xField = "restedStateIndicatorOffsetX", yField = "restedStateIndicatorOffsetY",
         anchorField = "restedStateIndicatorAnchor", sizeField = "restedStateIndicatorSize", sizeDefault = 18,
+        layerField = "restedStateIndicatorLayer", layerDefault = 7,
         symbolField = "restedStateIndicatorSymbol", symbolChoices = function() return SymbolChoices(RESTED_SYMBOLS) end,
         refreshGlobal = "MSUF_RequestStatusRestingIndicatorRefresh",
         pickerTitle = "Rested icon",
@@ -239,6 +252,7 @@ local STATUS_ICON_DEFS = {
         showField = "showIncomingResIndicator", showDefault = true,
         xField = "incomingResIndicatorOffsetX", yField = "incomingResIndicatorOffsetY",
         anchorField = "incomingResIndicatorAnchor", sizeField = "incomingResIndicatorSize", sizeDefault = 18,
+        layerField = "incomingResIndicatorLayer", layerDefault = 7,
         symbolField = "incomingResIndicatorSymbol", symbolChoices = function() return SymbolChoices(RESS_SYMBOLS) end,
         refreshGlobal = "MSUF_RequestStatusIncomingResIndicatorRefresh",
         pickerTitle = "Rez icon",
@@ -248,7 +262,7 @@ local STATUS_ICON_DEFS = {
 -- Status icon widget field suffixes for bulk show/hide
 local STATUS_WIDGET_SUFFIXES = {
     "IconCB","GroupDivider","ResetBtn","OffsetXStepper","OffsetYStepper",
-    "AnchorDrop","AnchorLabel","SizeEdit","SizeLabel","SymbolDrop","SymbolLabel",
+    "AnchorDrop","AnchorLabel","SizeEdit","SizeLabel","LayerSlider","SymbolDrop","SymbolLabel",
 }
 
 --------------------------------------------------------------------
@@ -351,20 +365,20 @@ local COPY_BASIC_FIELDS = {
     "loadCondHideSolo","loadCondHideInGroup","loadCondHideInInstance","loadCondActive",
 }
 local COPY_INDICATOR_FIELDS = {
-    "showLeaderIcon","leaderIconOffsetX","leaderIconOffsetY","leaderIconAnchor","leaderIconSize",
-    "showRaidMarker","raidMarkerOffsetX","raidMarkerOffsetY","raidMarkerAnchor","raidMarkerSize",
-    "showLevelIndicator","levelIndicatorOffsetX","levelIndicatorOffsetY","levelIndicatorAnchor","levelIndicatorSize",
-    "showEliteIcon","eliteIconSize","eliteIconAnchor","eliteIconOffsetX","eliteIconOffsetY",
+    "showLeaderIcon","leaderIconOffsetX","leaderIconOffsetY","leaderIconAnchor","leaderIconSize","leaderIconLayer",
+    "showRaidMarker","raidMarkerOffsetX","raidMarkerOffsetY","raidMarkerAnchor","raidMarkerSize","raidMarkerLayer",
+    "showLevelIndicator","levelIndicatorOffsetX","levelIndicatorOffsetY","levelIndicatorAnchor","levelIndicatorSize","levelIndicatorLayer",
+    "showEliteIcon","eliteIconSize","eliteIconAnchor","eliteIconOffsetX","eliteIconOffsetY","eliteIconLayer",
 }
 MSUF_COPY_STATUSICON_FIELDS = {
     "statusIconsTestMode","statusIconsMidnightStyle","statusIconsAlpha",
     "showCombatStateIndicator","showRestingIndicator","showIncomingResIndicator",
     "combatStateIndicatorOffsetX","combatStateIndicatorOffsetY","combatStateIndicatorAnchor",
-    "combatStateIndicatorSize","combatStateIndicatorSymbol",
+    "combatStateIndicatorSize","combatStateIndicatorLayer","combatStateIndicatorSymbol",
     "restedStateIndicatorOffsetX","restedStateIndicatorOffsetY","restedStateIndicatorAnchor",
-    "restedStateIndicatorSize","restedStateIndicatorSymbol",
+    "restedStateIndicatorSize","restedStateIndicatorLayer","restedStateIndicatorSymbol",
     "incomingResIndicatorOffsetX","incomingResIndicatorOffsetY","incomingResIndicatorAnchor",
-    "incomingResIndicatorSize","incomingResIndicatorSymbol",
+    "incomingResIndicatorSize","incomingResIndicatorLayer","incomingResIndicatorSymbol",
 }
 
 local function CanonKey(k)
@@ -959,7 +973,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
 
     -- Indicator layout constants
-    local IND_COL_X, IND_BASE_TOGGLE_Y, IND_BASE_CTRL_Y, IND_ROW_STEP = 320, -6, -8, -30
+    local IND_COL_X, IND_BASE_TOGGLE_Y, IND_BASE_CTRL_Y, IND_ROW_STEP = 300, -6, -8, -30
     panel._msufIndicatorLayout = { colX = IND_COL_X, leaderToggleY = IND_BASE_TOGGLE_Y, leaderCtrlY = IND_BASE_CTRL_Y, rowStep = IND_ROW_STEP, dividerOffset = 0 }
 
     -- Boss-only controls
@@ -1061,6 +1075,45 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         eb:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); eb:Hide()
         panel[field] = eb; return eb
     end
+    local function MkLayerSlider(field, gname, par)
+        if panel[field] then panel[field]:Hide(); return panel[field] end
+        local sl = CreateFrame("Slider", gname, par or textBody, "OptionsSliderTemplate")
+        sl:SetMinMaxValues(1, 10); sl:SetValueStep(1); sl:SetObeyStepOnDrag(true); sl:SetWidth(56)
+        EnhanceSliderTrack(sl)
+        local low, high, text = _G[gname.."Low"], _G[gname.."High"], _G[gname.."Text"]
+        if low then low:SetText(""); low:Hide() end
+        if high then high:SetText(""); high:Hide() end
+        if text then text:SetText(""); text:Hide() end
+        local val = sl:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        val:SetPoint("LEFT", sl, "RIGHT", 3, 0); val:SetText("L7")
+        sl._msufValueText = val
+        sl._msufSetLayerText = function(self, v)
+            if self._msufValueText then self._msufValueText:SetText("L" .. tostring(ClampLayerValue(v, 7))) end
+        end
+        sl.MSUF_SetValueSilent = function(self, v)
+            self._msufLayerSilent = true
+            local n = ClampLayerValue(v, 7)
+            self:SetValue(n)
+            self:_msufSetLayerText(n)
+            self._msufLayerSilent = nil
+        end
+        sl:SetScript("OnValueChanged", function(self, v)
+            local n = ClampLayerValue(v, 7)
+            self:_msufSetLayerText(n)
+            if self._msufLayerSilent then return end
+            if type(self.onValueChanged) == "function" then self.onValueChanged(self, n) end
+        end)
+        sl:SetScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(TR("Icon layer / strata"), 1, 1, 1)
+            GameTooltip:AddLine(TR("1 = behind, 10 = on top."), 0.85, 0.85, 0.85, true)
+            GameTooltip:Show()
+        end)
+        sl:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        if sl.SetHitRectInsets then sl:SetHitRectInsets(-4, -22, -8, -8) end
+        sl:Hide(); panel[field] = sl; return sl
+    end
     local function MkResetBtn(field, cb, par)
         if not panel[field] then
             local btn = CreateFrame("Button", nil, par or textBody, "UIPanelButtonTemplate")
@@ -1069,7 +1122,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if fs then fs:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); fs:ClearAllPoints(); fs:SetPoint("CENTER") end
             btn:SetScript("OnEnter", function(self)
                 if GameTooltip then GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText(TR("Resets current indicator"), 1, 1, 1)
-                    GameTooltip:AddLine("Resets X/Y, Anchor and Size back to defaults.", 0.85, 0.85, 0.85, true); GameTooltip:Show() end
+                    GameTooltip:AddLine("Resets X/Y, Anchor, Size and Layer back to defaults.", 0.85, 0.85, 0.85, true); GameTooltip:Show() end
             end)
             btn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
             panel[field] = btn
@@ -1078,7 +1131,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         return panel[field]
     end
 
-    local function LayoutRow(cb, sx, sy, ad, al, se, sl, id, il, colX, ctrlY)
+    local function LayoutRow(cb, sx, sy, ad, al, se, sl, ls, id, il, colX, ctrlY)
         if sx then sx:ClearAllPoints(); sx:SetPoint("TOPLEFT", sx:GetParent(), "TOPLEFT", colX, ctrlY)
             sx:SetWidth(46); RestyleStepper(sx); ApplyModStepper(sx); if sx.label then sx.label:Hide() end; sx:Hide() end
         if sy and sx then sy:ClearAllPoints(); sy:SetPoint("LEFT", sx, "RIGHT", 6, 0)
@@ -1087,7 +1140,9 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if al then al:ClearAllPoints(); al:SetPoint("BOTTOM", ad, "TOP", 0, 6); al:Hide() end; ad:Hide() end
         if se and ad then se:ClearAllPoints(); se:SetPoint("LEFT", ad, "RIGHT", 1, 2)
             if sl then sl:ClearAllPoints(); sl:SetPoint("BOTTOM", se, "TOP", 0, 6); sl:Hide() end; se:Hide() end
-        if id and se then id:ClearAllPoints(); id:SetPoint("LEFT", se, "RIGHT", 1, -2)
+        if ls and se then ls:ClearAllPoints(); ls:SetPoint("LEFT", se, "RIGHT", 8, -1); ls:Hide() end
+        local tail = ls or se
+        if id and tail then id:ClearAllPoints(); id:SetPoint("LEFT", tail, "RIGHT", 1, -2)
             if il then il:ClearAllPoints(); il:SetPoint("BOTTOM", id, "TOP", 0, 6); il:Hide() end; id:Hide() end
         if cb then cb:Hide() end
     end
@@ -1107,11 +1162,12 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         MkLabel(spec.anchorDrop:gsub("Drop$","Label"), "Anchor")
         panel[spec.sizeEdit] = MkSizeEdit(spec.sizeEdit, "MSUF_"..spec.sizeEdit)
         MkLabel(spec.sizeEdit:gsub("Edit$","Label"), "Size")
+        if spec.layerSlider then panel[spec.layerSlider] = MkLayerSlider(spec.layerSlider, "MSUF_"..spec.layerSlider) end
         -- Store anchorLabel/sizeLabel keys for later
         spec.anchorLabel = spec.anchorDrop:gsub("Drop$","Label")
         spec.sizeLabel = spec.sizeEdit:gsub("Edit$","Label")
         LayoutRow(panel[spec.showCB], panel[spec.xStepper], panel[spec.yStepper],
-            panel[spec.anchorDrop], panel[spec.anchorLabel], panel[spec.sizeEdit], panel[spec.sizeLabel],
+            panel[spec.anchorDrop], panel[spec.anchorLabel], panel[spec.sizeEdit], panel[spec.sizeLabel], panel[spec.layerSlider],
             nil, nil, IND_COL_X, IND_BASE_CTRL_Y + (idx - 1) * IND_ROW_STEP)
     end
 
@@ -1126,10 +1182,11 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         MkLabel(p.."AnchorLabel", "Anchor", statusBody)
         panel[p.."SizeEdit"] = MkSizeEdit(p.."SizeEdit", "MSUF_"..p.."SizeEdit", statusBody)
         MkLabel(p.."SizeLabel", "Size", statusBody)
+        panel[p.."LayerSlider"] = MkLayerSlider(p.."LayerSlider", "MSUF_"..p.."LayerSlider", statusBody)
         panel[p.."SymbolDrop"] = MkDrop(p.."SymbolDrop", "MSUF_"..p.."SymbolDropdown", 128, statusBody)
         MkLabel(p.."SymbolLabel", "Icon", statusBody)
         LayoutRow(panel[p.."IconCB"], panel[p.."OffsetXStepper"], panel[p.."OffsetYStepper"],
-            panel[p.."AnchorDrop"], panel[p.."AnchorLabel"], panel[p.."SizeEdit"], panel[p.."SizeLabel"],
+            panel[p.."AnchorDrop"], panel[p.."AnchorLabel"], panel[p.."SizeEdit"], panel[p.."SizeLabel"], panel[p.."LayerSlider"],
             panel[p.."SymbolDrop"], panel[p.."SymbolLabel"], IND_COL_X, STATUS_BASE_Y - 2 + def.rowIndex * STATUS_STEP)
     end
 
@@ -1303,7 +1360,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
     if not isFrames then
         if panel._msufStatusIconsGroup then panel._msufStatusIconsGroup:Hide() end
         for _, spec in pairs(INDICATOR_SPECS) do
-            for _, f in ipairs({ spec.showCB, spec.xStepper, spec.yStepper, spec.anchorDrop, spec.anchorLabel, spec.sizeEdit, spec.sizeLabel, spec.divider, spec.resetBtn }) do
+            for _, f in ipairs({ spec.showCB, spec.xStepper, spec.yStepper, spec.anchorDrop, spec.anchorLabel, spec.sizeEdit, spec.sizeLabel, spec.layerSlider, spec.divider, spec.resetBtn }) do
                 SW(f, false)
             end
         end
@@ -1333,7 +1390,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         local spec = INDICATOR_SPECS[id]
         if spec then
             local show = spec.allowed(currentKey) and true or false
-            for _, f in ipairs({ spec.showCB, spec.xStepper, spec.yStepper, spec.anchorDrop, spec.sizeEdit, spec.resetBtn }) do SW(f, show) end
+            for _, f in ipairs({ spec.showCB, spec.xStepper, spec.yStepper, spec.anchorDrop, spec.sizeEdit, spec.layerSlider, spec.resetBtn }) do SW(f, show) end
             SW(spec.anchorLabel, false); SW(spec.sizeLabel, false); SW(spec.divider, false)
             if show then
                 local cb = panel[spec.showCB]
@@ -1343,8 +1400,8 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
                 local reset = panel[spec.resetBtn]
                 if reset then
                     reset:ClearAllPoints()
-                    local se = panel[spec.sizeEdit]
-                    if se then reset:SetPoint("LEFT", se, "RIGHT", 6, -2) else local ad = panel[spec.anchorDrop]; if ad then reset:SetPoint("LEFT", ad, "RIGHT", 6, 0) end end
+                    local tail = panel[spec.layerSlider] or panel[spec.sizeEdit]
+                    if tail then reset:SetPoint("LEFT", tail, "RIGHT", 24, 0) else local ad = panel[spec.anchorDrop]; if ad then reset:SetPoint("LEFT", ad, "RIGHT", 6, 0) end end
                     reset:Show()
                 end
                 row = row + 1
@@ -1405,7 +1462,7 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
             local show = def.allowed(currentKey)
             local p = def.prefix
             SW(p.."GroupDivider", false); SW(p.."AnchorLabel", false); SW(p.."SizeLabel", false); SW(p.."SymbolLabel", false)
-            for _, sfx in ipairs({ "IconCB","ResetBtn","OffsetXStepper","OffsetYStepper","AnchorDrop","SizeEdit","SymbolDrop" }) do SW(p..sfx, show) end
+            for _, sfx in ipairs({ "IconCB","ResetBtn","OffsetXStepper","OffsetYStepper","AnchorDrop","SizeEdit","LayerSlider","SymbolDrop" }) do SW(p..sfx, show) end
             if show then
                 local cb = panel[p.."IconCB"]
                 if cb then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", panel._msufStatusIconsGroup, "TOPLEFT", 12, sBase + def.rowIndex * sStep) end
@@ -1414,8 +1471,8 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
                 local reset = panel[p.."ResetBtn"]
                 if reset then
                     reset:ClearAllPoints()
-                    local se = panel[p.."SizeEdit"]
-                    if se then reset:SetPoint("LEFT", se, "RIGHT", 6, -2) end
+                    local tail = panel[p.."LayerSlider"] or panel[p.."SizeEdit"]
+                    if tail then reset:SetPoint("LEFT", tail, "RIGHT", 24, 0) end
                     reset:Show()
                 end
             end
@@ -1723,6 +1780,9 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             if UIDropDownMenu_SetText then UIDropDownMenu_SetText(panel[spec.anchorDrop], spec.anchorText(v)) end
         end
         if spec.sizeEdit and panel[spec.sizeEdit] then SetNumericEB(panel[spec.sizeEdit], ReadNum(conf, g, spec.sizeField, spec.sizeDefault)) end
+        if spec.layerSlider and panel[spec.layerSlider] and panel[spec.layerSlider].MSUF_SetValueSilent then
+            panel[spec.layerSlider]:MSUF_SetValueSilent(ReadNum(conf, g, spec.layerField, spec.layerDefault or 7))
+        end
     end
 
     -- Text group height
@@ -2075,6 +2135,9 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 v = max(8, min(64, floor((tonumber(v) or spec.sizeDefault or 14) + 0.5)))
                 SetNumericEB(panel[spec.sizeEdit], v)
             end
+            if spec.layerSlider and panel[spec.layerSlider] and panel[spec.layerSlider].MSUF_SetValueSilent then
+                panel[spec.layerSlider]:MSUF_SetValueSilent(ReadNum(conf2, g2, spec.layerField, spec.layerDefault or 7))
+            end
         end
 
         -- Checkbox
@@ -2093,6 +2156,16 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 st.onValueChanged = function(_, v) if not IsFramesTab() or not AllowedNow() then return end; GetConfAndG()[pair[2]] = tonumber(v) or pair[3]; Refresh(); ApplyCurrent() end
                 st:SetScript("OnShow", function() ApplyUI() end)
             end
+        end
+        -- Layer slider (draw order: 1-10, higher = above)
+        if spec.layerSlider and panel[spec.layerSlider] and spec.layerField then
+            local lsl = panel[spec.layerSlider]
+            lsl.onValueChanged = function(_, v)
+                if not IsFramesTab() or not AllowedNow() then return end
+                GetConfAndG()[spec.layerField] = ClampLayerValue(v, spec.layerDefault or 7)
+                Refresh(); ApplyCurrent()
+            end
+            lsl:SetScript("OnShow", function() ApplyUI() end)
         end
         -- Anchor dropdown
         if spec.anchorDrop and panel[spec.anchorDrop] and UIDropDownMenu_Initialize then
@@ -2166,7 +2239,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 if not IsFramesTab() then return end
                 local c, _, k = GetConfAndG()
                 if spec.allowed and not spec.allowed(k) then return end
-                for _, f in ipairs({ spec.xField, spec.yField, spec.anchorField, spec.sizeField, spec.iconField, spec.symbolField }) do
+                for _, f in ipairs({ spec.xField, spec.yField, spec.anchorField, spec.sizeField, spec.layerField, spec.iconField, spec.symbolField }) do
                     if f then c[f] = nil end
                 end
                 ApplyUI(); Refresh(); ApplyCurrent()
@@ -2187,14 +2260,25 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             anchorDrop = def.prefix.."AnchorDrop", anchorField = def.anchorField, anchorDefault = "TOPLEFT",
             anchorText = AnchorText, anchorChoices = MakeAnchorChoices(FOUR_ANCHORS, AnchorText),
             sizeEdit = def.prefix.."SizeEdit", sizeField = def.sizeField, sizeDefault = def.sizeDefault,
+            layerSlider = def.prefix.."LayerSlider", layerField = def.layerField, layerDefault = def.layerDefault or 7,
             iconDrop = def.prefix.."SymbolDrop", iconField = def.symbolField, iconDefault = "DEFAULT",
             iconText = FindSymbolLabel, iconChoices = def.symbolChoices,
             resetBtn = def.prefix.."ResetBtn",
             refreshFnName = def.refreshGlobal,
         }
-        -- Register global refresh function (coalesced — no direct frame updates)
+        -- Register global refresh function. Status icon sliders are global-ish and can
+        -- affect both player and target, so refresh those two frames directly in addition
+        -- to the normal coalesced apply for the currently open unit.
         _G[def.refreshGlobal] = _G[def.refreshGlobal] or function()
-            ApplyCurrent()  -- goes through ScheduleApplyCommit -> single batched apply
+            local uf = _G.MSUF_UnitFrames or _G.UnitFrames
+            local fn = _G.MSUF_UpdateStatusIndicatorForFrame
+            if type(fn) == "function" and uf then
+                local fp = uf.player
+                local ft = uf.target
+                if fp then fp._msufStatusIconsConf = nil; fn(fp) end
+                if ft then ft._msufStatusIconsConf = nil; fn(ft) end
+            end
+            ApplyCurrent()
         end
         BindIndicatorRow(spec)
     end
