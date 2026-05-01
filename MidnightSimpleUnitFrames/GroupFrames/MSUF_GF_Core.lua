@@ -271,10 +271,13 @@ local function BuildFrameHierarchy(f, kind)
     if f.SetClipsChildren then f:SetClipsChildren(false) end
 
     local conf = GF.GetConf(kind)
-    local w = conf.width  or 120
-    local h = conf.height or 40
-    local powerH = conf.powerHeight or 6
+    local w, h = conf.width or 120, conf.height or 40
+    if GF.GetScaledFrameMetrics then
+        w, h = GF.GetScaledFrameMetrics(kind)
+    end
+    local powerH = (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6)
     local inset  = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
+    if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
 
     -- barGroup — visual container (bgFile-only, EQoL pattern)
     -- Edge tiling on SetAllPoints frames causes TexCoord crash during
@@ -297,6 +300,7 @@ local function BuildFrameHierarchy(f, kind)
     f._msufGFBorderFrame = borderFrame
     if conf.borderEnabled then
         local edgeSz = math_max(1, conf.borderSize or 1)
+        if GF.ScaleFrameValue then edgeSz = GF.ScaleFrameValue(kind, edgeSz, 1) end
         borderFrame:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edgeSz })
         borderFrame:SetBackdropColor(0, 0, 0, 0)
         borderFrame:SetBackdropBorderColor(conf.borderR or 0, conf.borderG or 0, conf.borderB or 0, conf.borderA or 1)
@@ -576,9 +580,15 @@ local function ApplyFonts(f, kind)
     local fontPath  = GF.ResolveFontPath(kind)
     local fontFlags = GF.ResolveFontFlags(kind)
     local fr, fg, fb = GF.ResolveFontColor(kind)
+    local fScale = conf._resolvedFrameScale or 1
     local nameSize  = conf.nameFontSize or 12
     local hpSize    = conf.hpFontSize or 10
     local powSize   = conf.powerFontSize or 9
+    if fScale ~= 1 then
+        nameSize = math_max(6, math_floor(nameSize * fScale + 0.5))
+        hpSize   = math_max(6, math_floor(hpSize * fScale + 0.5))
+        powSize  = math_max(6, math_floor(powSize * fScale + 0.5))
+    end
 
     if f.nameText then
         f.nameText:SetFont(fontPath, nameSize, fontFlags)
@@ -820,14 +830,22 @@ end
 local function LayoutIcons(f, kind)
     local conf = GF.GetConf(kind)
     local anchor = f.statusIconLayer or f.barGroup or f
+    local fScale = conf._resolvedFrameScale or 1
 
     local function lay(icon, sizeKey, defSz, anchorKey, defPt, xKey, yKey)
         if not icon then return end
         icon:ClearAllPoints()
         local sz = conf[sizeKey] or defSz
+        if fScale ~= 1 then sz = math_max(4, math_floor(sz * fScale + 0.5)) end
         icon:SetSize(sz, sz)
         local pt = conf[anchorKey] or defPt
-        icon:SetPoint(pt, anchor, pt, conf[xKey] or 0, conf[yKey] or 0)
+        local ox = conf[xKey] or 0
+        local oy = conf[yKey] or 0
+        if fScale ~= 1 and GF.ScaleValue then
+            ox = GF.ScaleValue(ox, fScale)
+            oy = GF.ScaleValue(oy, fScale)
+        end
+        icon:SetPoint(pt, anchor, pt, ox, oy)
     end
 
     lay(f.roleIcon,       "roleIconSize",      12, "roleIconAnchor",   "TOPLEFT",  "roleIconX",   "roleIconY")
@@ -1145,8 +1163,10 @@ local function ScanHeaderChildren(header, kind)
     -- Protected frames: cannot call SetSize/SetPoint in combat
     local inCombat = InCombatLockdown()
     local conf = GF.GetConf(kind)
-    local w = conf.width  or (IsRaidLikeKind(kind) and 80 or 120)
-    local h = conf.height or (IsRaidLikeKind(kind) and 32 or 40)
+    local w, h = conf.width or (IsRaidLikeKind(kind) and 80 or 120), conf.height or (IsRaidLikeKind(kind) and 32 or 40)
+    if GF.GetScaledFrameMetrics then
+        w, h = GF.GetScaledFrameMetrics(kind)
+    end
 
     -- GetChildren() is more reliable than GetAttribute("child"..i) for SecureGroupHeader
     local children = { header:GetChildren() }
@@ -1207,7 +1227,8 @@ local function ScanHeaderChildren(header, kind)
                 -- health bar
                 local conf = GF.GetConf(kind)
                 local inset = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
-                local powerH = conf.powerHeight or 6
+                if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
+                local powerH = (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6)
                 if child.health then
                     child.health:ClearAllPoints()
                     child.health:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", inset, -inset)
@@ -1442,18 +1463,14 @@ local function SetupPartyHeader()
     header:Hide()
 
     -- Attributes (combat-lockdown safe: we checked above)
-    local w = conf.width  or 120
-    local h = conf.height or 40
-    local spacing = conf.spacing or 1
+    local w, h, spacing = conf.width or 120, conf.height or 40, conf.spacing or 1
     local growth = conf.growth or "DOWN"
 
-    -- Frame scaling (scales entire frame proportionally)
-    if GF.ApplyFrameScale then GF.ApplyFrameScale("party") end
-    local fScale = conf._resolvedFrameScale or 1
-    if fScale ~= 1 then
-        w = math_floor(w * fScale + 0.5)
-        h = math_floor(h * fScale + 0.5)
-        spacing = math_max(1, math_floor(spacing * fScale + 0.5))
+    -- Frame scaling (geometry first; fonts/icons use the cached scale in render)
+    if GF.GetScaledFrameMetrics then
+        w, h, spacing = GF.GetScaledFrameMetrics("party")
+    elseif GF.ApplyFrameScale then
+        GF.ApplyFrameScale("party")
     end
 
     _GF_SetAttrIfChanged(header, "showParty", true)
@@ -1589,20 +1606,16 @@ local function SetupRaidHeader()
     end
     header._msufGFKind = kind
 
-    local w = conf.width  or 80
-    local h = conf.height or 32
-    local spacing = conf.spacing or 1
+    local w, h, spacing = conf.width or 80, conf.height or 32, conf.spacing or 1
     local growth = conf.growth or "DOWN"
     local unitsPerColumn = conf.unitsPerColumn or 5
     local maxColumns = conf.maxColumns or 8
 
-    -- Frame scaling (scales entire frame proportionally)
-    if GF.ApplyFrameScale then GF.ApplyFrameScale(kind) end
-    local fScale = conf._resolvedFrameScale or 1
-    if fScale ~= 1 then
-        w = math_floor(w * fScale + 0.5)
-        h = math_floor(h * fScale + 0.5)
-        spacing = math_max(1, math_floor(spacing * fScale + 0.5))
+    -- Frame scaling (geometry first; fonts/icons use the cached scale in render)
+    if GF.GetScaledFrameMetrics then
+        w, h, spacing = GF.GetScaledFrameMetrics(kind)
+    elseif GF.ApplyFrameScale then
+        GF.ApplyFrameScale(kind)
     end
 
     -- CRITICAL: Hide before attributes (see SetupPartyHeader comment)
