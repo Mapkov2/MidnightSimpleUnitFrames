@@ -853,7 +853,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local displayOuter, displayBody = MakeCollapsibleBox(content, leftTop, 720, 244, "Display", true)
     local capsOuter, capsBody = MakeCollapsibleBox(content, displayOuter, 720, 266, "Layout & Caps", true)
     -- Timer / cooldown text color controls
-    local timerBox, timerBody = MakeCollapsibleBox(content, capsOuter, 720, 248, "Timer Colors", false)
+    local timerBox, timerBody = MakeCollapsibleBox(content, capsOuter, 720, 492, "Text Coloring", false)
     -- Blizzard-rendered Private Auras (anchor controls)
     local privateBox, privateBody = MakeCollapsibleBox(content, timerBox, 720, 168, "Private Auras", false)
     -- Aura filtering / sorting (collapsible to match the rest of the menu)
@@ -2150,181 +2150,523 @@ end
     capsBox._msufA2_OnLayoutModeChanged = function()
         if capsBox._msufA2_ApplySplitSpacingEnabledState then capsBox._msufA2_ApplySplitSpacingEnabledState() end
      end
-    -- TIMER COLORS (middle): global master toggle
+    -- TEXT COLORING: native timer mode + remaining-time color buckets.
     do
+        local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
+        local timerRefreshFns = {}
+        local colorWidgets = {}
+        local timerColorsUsable = true
+
         local function GetGeneral()
             EnsureDB()
-            return (MSUF_DB and MSUF_DB.general) or nil
+            MSUF_DB.general = MSUF_DB.general or {}
+            return MSUF_DB.general
         end
-        -- Blizzard pass-through toggle: Blizzard C++ renders countdown text natively.
-        local cbBlizzardTimer = CreateBoolCheckboxPath(timerBox, 'Use Blizzard timer text (max performance)', 12, -10, A2_Settings, 'useBlizzardTimerText', nil,
-            'When enabled, Blizzard handles countdown numbers natively in C++.\nDisables timer colors but eliminates all periodic timer CPU overhead.\nFont, size and position are still controlled by MSUF.',
-            function()
-                if timerBox and timerBox._msufApplyTimerColorsEnabledState then
-                    pcall(timerBox._msufApplyTimerColorsEnabledState)
+        local function ReadRGB(t, dr, dg, db)
+            if type(t) ~= "table" then return dr, dg, db end
+            local r = t[1] or t.r
+            local g = t[2] or t.g
+            local b = t[3] or t.b
+            if type(r) ~= "number" then r = dr end
+            if type(g) ~= "number" then g = dg end
+            if type(b) ~= "number" then b = db end
+            return r, g, b
+        end
+        local function GetBaseColor()
+            local g = GetGeneral()
+            if g.useCustomFontColor == true
+                and type(g.fontColorCustomR) == "number"
+                and type(g.fontColorCustomG) == "number"
+                and type(g.fontColorCustomB) == "number" then
+                return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
+            end
+            return 1, 1, 1
+        end
+        local function GetSafeColor()
+            local r, g, b = GetBaseColor()
+            return ReadRGB(GetGeneral().aurasCooldownTextSafeColor, r, g, b)
+        end
+        local function GetWarnColor()
+            return ReadRGB(GetGeneral().aurasCooldownTextWarningColor, 1, 0.85, 0.20)
+        end
+        local function GetUrgentColor()
+            return ReadRGB(GetGeneral().aurasCooldownTextUrgentColor, 1, 0.45, 0.10)
+        end
+        local function OpenTimerColorPicker(r, g, b, callback)
+            local cpf = _G.ColorPickerFrame
+            if not (cpf and type(callback) == "function") then return end
+            local sr, sg, sb = r or 1, g or 1, b or 1
+            if cpf.SetupColorPickerAndShow then
+                cpf:SetupColorPickerAndShow({
+                    r = sr, g = sg, b = sb,
+                    swatchFunc = function()
+                        local nr, ng, nb = cpf:GetColorRGB()
+                        callback(nr, ng, nb)
+                    end,
+                    cancelFunc = function(prev)
+                        if type(prev) == "table" then
+                            callback(prev.r or sr, prev.g or sg, prev.b or sb)
+                        end
+                    end,
+                })
+            else
+                cpf.func = function()
+                    local nr, ng, nb = cpf:GetColorRGB()
+                    callback(nr, ng, nb)
                 end
-                A2_RequestCooldownTextRecolor()
-                A2_RequestApply()
-             end)
-        A2_Track('global', cbBlizzardTimer)
+                cpf.cancelFunc = function(prev)
+                    if type(prev) == "table" then
+                        callback(prev.r or sr, prev.g or sg, prev.b or sb)
+                    end
+                end
+                cpf.previousValues = { r = sr, g = sg, b = sb }
+                cpf.hasOpacity = false
+                cpf:SetColorRGB(sr, sg, sb)
+                cpf:Show()
+            end
+        end
+        local function RefreshTimerColorUI()
+            if timerBox and timerBox._msufApplyTimerColorsEnabledState then
+                pcall(timerBox._msufApplyTimerColorsEnabledState)
+                return
+            end
+            for i = 1, #timerRefreshFns do
+                timerRefreshFns[i]()
+            end
+        end
+        local function RequestTimerColorRefresh()
+            A2_RequestCooldownTextRecolor()
+            A2_RequestApply()
+            if _G.MSUF_GF_InvalidateCooldownTextCurve then _G.MSUF_GF_InvalidateCooldownTextCurve() end
+            if _G.MSUF_GF_ForceCooldownTextRecolor then _G.MSUF_GF_ForceCooldownTextRecolor() end
+            RefreshTimerColorUI()
+        end
 
-        local cbTimerBuckets = CreateBoolCheckboxPath(timerBox, 'Color aura timers by remaining time', 12, -34, GetGeneral, 'aurasCooldownTextUseBuckets', nil,
-            'When enabled, aura cooldown text uses Safe / Warning / Urgent colors based on remaining time.\nWhen disabled, aura cooldown text always uses the Safe color.',
+        local title = timerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        title:SetPoint("TOPLEFT", timerBox, "TOPLEFT", 12, -10)
+        title:SetText(TR("Cooldown Timer Text"))
+
+        local info = timerBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        info:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+        info:SetWidth(660)
+        info:SetJustifyH("LEFT")
+        info:SetText(TR("Unit auras can use Blizzard's native timer text for maximum performance. Timer coloring uses MSUF's Safe, Warning and Urgent colors."))
+
+        -- Blizzard pass-through toggle: Blizzard C++ renders countdown text natively.
+        local cbBlizzardTimer = CreateBoolCheckboxPath(timerBox, TR("Use Blizzard timer text (max performance)"), 12, -62, A2_Settings, "useBlizzardTimerText", nil,
+            TR("When enabled, Blizzard handles countdown numbers natively in C++.\nDisable it if you want MSUF to update timer colors every threshold."),
             function()
-                if timerBox and timerBox._msufApplyTimerColorsEnabledState then
-                    pcall(timerBox._msufApplyTimerColorsEnabledState)
-                end
-				A2_RequestCooldownTextRecolor()
-				A2_RequestApply()
+                RequestTimerColorRefresh()
+             end)
+        A2_Track("global", cbBlizzardTimer)
+
+        local cbTimerBuckets = CreateBoolCheckboxPath(timerBox, TR("Color aura timers by remaining time"), 12, -88, GetGeneral, "aurasCooldownTextUseBuckets", nil,
+            TR("When enabled, aura cooldown text uses Safe / Warning / Urgent colors based on remaining time.\nWhen disabled, aura cooldown text always uses the Safe color."),
+            function()
+                RequestTimerColorRefresh()
              end)
         A2_Track("global", cbTimerBuckets)
-        -- Breakpoint sliders (seconds).
-        -- These are global (General) settings because cooldown text styling is global.
-        local function GetSafe()
+
+        local preview = CreateFrame("Frame", nil, timerBox, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        preview:SetSize(676, 84)
+        preview:SetPoint("TOPLEFT", timerBox, "TOPLEFT", 12, -124)
+        preview:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+        preview:SetBackdropColor(0.03, 0.04, 0.07, 0.62)
+        preview:SetBackdropBorderColor(0.20, 0.24, 0.34, 0.75)
+        local previewLabel = preview:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        previewLabel:SetPoint("LEFT", preview, "LEFT", 10, 0)
+        previewLabel:SetText(TR("Preview"))
+        previewLabel:SetTextColor(0.62, 0.70, 0.86, 1)
+        colorWidgets[#colorWidgets + 1] = preview
+
+        local samples = {
+            { key = "safe", label = TR("Safe"), text = "60" },
+            { key = "warn", label = TR("Warning"), text = "15" },
+            { key = "urg",  label = TR("Urgent"), text = "5" },
+        }
+        for i = 1, #samples do
+            local box = CreateFrame("Frame", nil, preview, BackdropTemplateMixin and "BackdropTemplate" or nil)
+            box:SetSize(116, 54)
+            box:SetPoint("LEFT", preview, "LEFT", 178 + (i - 1) * 126, 0)
+            box:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            box:SetBackdropColor(0.02, 0.02, 0.03, 0.8)
+            box:SetBackdropBorderColor(0.14, 0.16, 0.22, 0.9)
+            local fs = box:CreateFontString(nil, "OVERLAY")
+            fs:SetFont("Fonts\\FRIZQT__.TTF", 18, "OUTLINE")
+            fs:SetPoint("CENTER", box, "CENTER", 0, 7)
+            fs:SetText(samples[i].text)
+            box._text = fs
+            local lbl = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOM", box, "BOTTOM", 0, 5)
+            lbl:SetText(samples[i].label)
+            samples[i].box = box
+        end
+
+        local function RefreshPreview()
+            local sr, sg, sb = GetSafeColor()
+            local wr, wg, wb = GetWarnColor()
+            local ur, ug, ub = GetUrgentColor()
+            local bucketsOn = GetGeneral().aurasCooldownTextUseBuckets ~= false
+            local cols = {
+                safe = { sr, sg, sb },
+                warn = bucketsOn and { wr, wg, wb } or { sr, sg, sb },
+                urg  = bucketsOn and { ur, ug, ub } or { sr, sg, sb },
+            }
+            for i = 1, #samples do
+                local sample = samples[i]
+                local fs = sample.box and sample.box._text
+                local col = cols[sample.key]
+                if fs then
+                    fs:SetTextColor(col[1], col[2], col[3], 1)
+                end
+            end
+        end
+        timerRefreshFns[#timerRefreshFns + 1] = RefreshPreview
+
+        local colorsLabel = timerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        colorsLabel:SetPoint("TOPLEFT", preview, "BOTTOMLEFT", 4, -16)
+        colorsLabel:SetText(TR("Colors"))
+        local swatchRefs = {}
+        local colorSpecs = {
+            { label = TR("Safe"), get = GetSafeColor, set = function(r, g, b) GetGeneral().aurasCooldownTextSafeColor = { r, g, b } end,
+                reset = function() GetGeneral().aurasCooldownTextSafeColor = nil end },
+            { label = TR("Warning"), get = GetWarnColor, set = function(r, g, b) GetGeneral().aurasCooldownTextWarningColor = { r, g, b } end,
+                reset = function() GetGeneral().aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 } end },
+            { label = TR("Urgent"), get = GetUrgentColor, set = function(r, g, b) GetGeneral().aurasCooldownTextUrgentColor = { r, g, b } end,
+                reset = function() GetGeneral().aurasCooldownTextUrgentColor = { 1.00, 0.45, 0.10 } end },
+        }
+        for i = 1, #colorSpecs do
+            local btn = CreateFrame("Button", nil, timerBox, BackdropTemplateMixin and "BackdropTemplate" or nil)
+            btn:SetSize(86, 20)
+            btn:SetPoint("LEFT", colorsLabel, "RIGHT", 186 + (i - 1) * 112, 0)
+            btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            btn:SetBackdropColor(0.09, 0.11, 0.16, 0.95)
+            btn:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.75)
+            local tex = btn:CreateTexture(nil, "ARTWORK")
+            tex:SetPoint("LEFT", btn, "LEFT", 2, 2)
+            tex:SetSize(18, 16)
+            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            fs:SetPoint("LEFT", tex, "RIGHT", 5, 0)
+            fs:SetText(colorSpecs[i].label)
+            btn._tex = tex
+            btn:SetScript("OnMouseUp", function(_, button)
+                if button == "RightButton" then
+                    colorSpecs[i].reset()
+                    RequestTimerColorRefresh()
+                    return
+                end
+                local r, g, b = colorSpecs[i].get()
+                OpenTimerColorPicker(r, g, b, function(nr, ng, nb)
+                    colorSpecs[i].set(nr, ng, nb)
+                    RequestTimerColorRefresh()
+                end)
+            end)
+            function btn:Refresh()
+                local r, g, b = colorSpecs[i].get()
+                self._tex:SetColorTexture(r, g, b, 1)
+            end
+            btn:Refresh()
+            swatchRefs[#swatchRefs + 1] = btn
+            colorWidgets[#colorWidgets + 1] = btn
+        end
+        local resetBtn = CreateFrame("Button", nil, timerBox, "UIPanelButtonTemplate")
+        resetBtn:SetSize(82, 22)
+        resetBtn:SetPoint("LEFT", swatchRefs[#swatchRefs], "RIGHT", 28, 0)
+        resetBtn:SetText(TR("Reset"))
+        resetBtn:SetScript("OnClick", function()
             local g = GetGeneral()
-            return (g and g.aurasCooldownTextSafeSeconds) or 60
+            g.aurasCooldownTextSafeColor = nil
+            g.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
+            g.aurasCooldownTextUrgentColor = { 1.00, 0.45, 0.10 }
+            RequestTimerColorRefresh()
+        end)
+        colorWidgets[#colorWidgets + 1] = resetBtn
+        local function RefreshSwatches()
+            for i = 1, #swatchRefs do
+                if swatchRefs[i].Refresh then swatchRefs[i]:Refresh() end
+            end
+        end
+        timerRefreshFns[#timerRefreshFns + 1] = RefreshSwatches
+
+        local divider = timerBox:CreateTexture(nil, "ARTWORK")
+        divider:SetPoint("TOPLEFT", colorsLabel, "BOTTOMLEFT", -4, -16)
+        divider:SetSize(676, 1)
+        divider:SetColorTexture(0.30, 0.30, 0.35, 0.5)
+
+        local function Clamp(v, lo, hi)
+            if type(v) ~= "number" then v = lo end
+            if v < lo then return lo end
+            if v > hi then return hi end
+            return v
+        end
+        local function GetSafe()
+            return Clamp(GetGeneral().aurasCooldownTextSafeSeconds or 60, 0, 600)
         end
         local function GetWarn()
-            local g = GetGeneral()
-            local v = (g and g.aurasCooldownTextWarningSeconds) or 15
-            if type(v) ~= 'number' then v = 15 end
-            if v > 30 then v = 30 end
-             return v
+            local safe = GetSafe()
+            return math.min(Clamp(GetGeneral().aurasCooldownTextWarningSeconds or 15, 0, 30), safe)
         end
         local function GetUrg()
-            local g = GetGeneral()
-            local v = (g and g.aurasCooldownTextUrgentSeconds) or 5
-            if type(v) ~= 'number' then v = 5 end
-            if v > 15 then v = 15 end
-             return v
+            local warn = GetWarn()
+            return math.min(Clamp(GetGeneral().aurasCooldownTextUrgentSeconds or 5, 0, 15), warn)
         end
         local function SetSafe(v)
-            local g = GetGeneral(); if not g then  return end
+            local g = GetGeneral()
             g.aurasCooldownTextSafeSeconds = v
-            if type(g.aurasCooldownTextWarningSeconds) ~= 'number' then g.aurasCooldownTextWarningSeconds = 15 end
-            if type(g.aurasCooldownTextUrgentSeconds)  ~= 'number' then g.aurasCooldownTextUrgentSeconds  = 5 end
+            if type(g.aurasCooldownTextWarningSeconds) ~= "number" then g.aurasCooldownTextWarningSeconds = 15 end
+            if type(g.aurasCooldownTextUrgentSeconds) ~= "number" then g.aurasCooldownTextUrgentSeconds = 5 end
             if g.aurasCooldownTextWarningSeconds > v then g.aurasCooldownTextWarningSeconds = v end
-            if g.aurasCooldownTextUrgentSeconds > g.aurasCooldownTextWarningSeconds then g.aurasCooldownTextUrgentSeconds = g.aurasCooldownTextWarningSeconds end
-			A2_RequestCooldownTextRecolor()
-			A2_RequestApply()
-         end
+            if g.aurasCooldownTextUrgentSeconds > g.aurasCooldownTextWarningSeconds then
+                g.aurasCooldownTextUrgentSeconds = g.aurasCooldownTextWarningSeconds
+            end
+            A2_RequestCooldownTextRecolor()
+            A2_RequestApply()
+        end
         local function SetWarn(v)
-            local g = GetGeneral(); if not g then  return end
-            if type(g.aurasCooldownTextSafeSeconds) ~= 'number' then g.aurasCooldownTextSafeSeconds = 60 end
+            local g = GetGeneral()
+            if type(g.aurasCooldownTextSafeSeconds) ~= "number" then g.aurasCooldownTextSafeSeconds = 60 end
             if v > g.aurasCooldownTextSafeSeconds then v = g.aurasCooldownTextSafeSeconds end
             if v > 30 then v = 30 end
             g.aurasCooldownTextWarningSeconds = v
-            if type(g.aurasCooldownTextUrgentSeconds) ~= 'number' then g.aurasCooldownTextUrgentSeconds = 5 end
+            if type(g.aurasCooldownTextUrgentSeconds) ~= "number" then g.aurasCooldownTextUrgentSeconds = 5 end
             if g.aurasCooldownTextUrgentSeconds > v then g.aurasCooldownTextUrgentSeconds = v end
-			A2_RequestCooldownTextRecolor()
-			A2_RequestApply()
-         end
+            A2_RequestCooldownTextRecolor()
+            A2_RequestApply()
+        end
         local function SetUrg(v)
-            local g = GetGeneral(); if not g then  return end
-            if type(g.aurasCooldownTextWarningSeconds) ~= 'number' then g.aurasCooldownTextWarningSeconds = 15 end
+            local g = GetGeneral()
+            if type(g.aurasCooldownTextWarningSeconds) ~= "number" then g.aurasCooldownTextWarningSeconds = 15 end
             if v > g.aurasCooldownTextWarningSeconds then v = g.aurasCooldownTextWarningSeconds end
             if v > 15 then v = 15 end
             g.aurasCooldownTextUrgentSeconds = v
-			A2_RequestCooldownTextRecolor()
-			A2_RequestApply()
-         end
-        local safeSlider = CreateAuras2CompactSlider(timerBox, 'Safe (seconds)', 0, 600, 1, 12, -72, 220, GetSafe, SetSafe)
-        A2_Track("global", safeSlider)
-        MSUF_StyleAuras2CompactSlider(safeSlider, { hideMinMax = true, leftTitle = true })
-        AttachSliderValueBox(safeSlider, 0, 600, 1, GetSafe)
-        local warnSlider = CreateAuras2CompactSlider(timerBox, 'Warning (<=)', 0, 30, 1, 260, -72, 200, GetWarn, SetWarn)
-        A2_Track("global", warnSlider)
-        MSUF_StyleAuras2CompactSlider(warnSlider, { hideMinMax = true, leftTitle = true })
-        AttachSliderValueBox(warnSlider, 0, 30, 1, GetWarn)
-        local urgSlider = CreateAuras2CompactSlider(timerBox, 'Urgent (<=)', 0, 15, 1, 486, -72, 200, GetUrg, SetUrg)
-        A2_Track("global", urgSlider)
-        MSUF_StyleAuras2CompactSlider(urgSlider, { hideMinMax = true, leftTitle = true })
-        AttachSliderValueBox(urgSlider, 0, 15, 1, GetUrg)
-        -- Enable-state: Blizzard mode greys out all custom timer controls.
+            A2_RequestCooldownTextRecolor()
+            A2_RequestApply()
+        end
+
+        local sliderRows = {}
+        local function CreateTimerSlider(label, getter, setter, lo, hi, step, y, enabledFn)
+            local row = CreateFrame("Frame", nil, timerBox)
+            row:SetSize(676, 28)
+            row:SetPoint("TOPLEFT", timerBox, "TOPLEFT", 12, y)
+            local rowLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            rowLabel:SetPoint("LEFT", row, "LEFT", 2, 0)
+            rowLabel:SetText(label)
+            rowLabel:SetTextColor(0.85, 0.85, 0.90, 1)
+
+            MSUF_Auras2_SliderGlobalCount = MSUF_Auras2_SliderGlobalCount + 1
+            local name = "MSUF_Auras2Slider_" .. tostring(MSUF_Auras2_SliderGlobalCount)
+            local sl = CreateFrame("Slider", name, row, "OptionsSliderTemplate")
+            sl:SetSize(190, 14)
+            sl:SetPoint("RIGHT", row, "RIGHT", -34, 0)
+            sl:SetMinMaxValues(lo, hi)
+            sl:SetValueStep(step)
+            sl:SetObeyStepOnDrag(true)
+            if sl.Text then sl.Text:SetText(""); sl.Text:Hide() end
+            if sl.Low then sl.Low:SetText(""); sl.Low:Hide() end
+            if sl.High then sl.High:SetText(""); sl.High:Hide() end
+            local val = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            val:SetPoint("LEFT", sl, "RIGHT", 12, 0)
+            val:SetJustifyH("RIGHT")
+            local function Snap(v)
+                v = tonumber(v) or lo
+                if step and step > 0 then
+                    v = math.floor((v / step) + 0.5) * step
+                end
+                if v < lo then v = lo end
+                if v > hi then v = hi end
+                return math.floor(v + 0.5)
+            end
+            local function Refresh()
+                local v = Snap(getter())
+                sl._msufSkip = true
+                sl:SetValue(v)
+                sl._msufSkip = false
+                sl._msufLastValue = v
+                val:SetText(tostring(v))
+                local enabled = timerColorsUsable and (not enabledFn or enabledFn() ~= false)
+                if enabled then
+                    row:SetAlpha(1)
+                    sl:Enable()
+                    sl:SetAlpha(1)
+                else
+                    row:SetAlpha(0.45)
+                    sl:Disable()
+                    sl:SetAlpha(0.35)
+                end
+            end
+            sl:SetScript("OnValueChanged", function(self, value)
+                if self._msufSkip then return end
+                local v = Snap(value)
+                if v ~= value then
+                    self:SetValue(v)
+                    return
+                end
+                val:SetText(tostring(v))
+                if self._msufLastValue == v then return end
+                self._msufLastValue = v
+                setter(v)
+                RefreshTimerColorUI()
+            end)
+            if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(sl) end
+            timerRefreshFns[#timerRefreshFns + 1] = Refresh
+            sliderRows[#sliderRows + 1] = row
+            A2_Track("global", sl)
+            Refresh()
+            return row
+        end
+
+        local function BucketsOn()
+            return GetGeneral().aurasCooldownTextUseBuckets ~= false
+        end
+        CreateTimerSlider(TR("Safe (seconds)"), GetSafe, SetSafe, 0, 600, 1, -264)
+        CreateTimerSlider(TR("Warning (<=)"), GetWarn, SetWarn, 0, 30, 1, -294, BucketsOn)
+        CreateTimerSlider(TR("Urgent (<=)"), GetUrg, SetUrg, 0, 15, 1, -324, BucketsOn)
+
+        -- Enable-state: Blizzard mode greys out custom timer-color controls.
         local function ApplyTimerEnabledState()
             local _, shared = GetAuras2DB()
             local blizzardMode = (shared and shared.useBlizzardTimerText == true)
-            local g = GetGeneral()
-            local bucketsOn = not (g and g.aurasCooldownTextUseBuckets == false)
-            local function SetWidgetEnabled(sl, on)
-                if not sl then  return end
-                if on then
-                    if sl.Show then sl:Show() end
-                    sl:Enable(); sl:SetAlpha(1)
-                    if sl.__MSUF_valueBox then
-                        sl.__MSUF_valueBox:Show(); sl.__MSUF_valueBox:Enable(); sl.__MSUF_valueBox:SetAlpha(1)
-                    end
-                else
-                    sl:Disable(); sl:SetAlpha(0.35)
-                    if sl.Hide then sl:Hide() end
-                    if sl.__MSUF_valueBox then
-                        sl.__MSUF_valueBox:Disable(); sl.__MSUF_valueBox:SetAlpha(0.35)
-                        if sl.__MSUF_valueBox.Hide then sl.__MSUF_valueBox:Hide() end
-                    end
-                end
-             end
+            local bucketsOn = BucketsOn()
+            timerColorsUsable = not blizzardMode
             SetCheckboxEnabled(cbTimerBuckets, not blizzardMode)
-            SetWidgetEnabled(safeSlider, not blizzardMode)
-            SetWidgetEnabled(warnSlider, not blizzardMode and bucketsOn)
-            SetWidgetEnabled(urgSlider, not blizzardMode and bucketsOn)
+            for i = 1, #colorWidgets do
+                local w = colorWidgets[i]
+                local enabled = timerColorsUsable
+                if w == swatchRefs[2] or w == swatchRefs[3] then
+                    enabled = enabled and bucketsOn
+                end
+                if w.EnableMouse then w:EnableMouse(enabled) end
+                if w.SetEnabled then w:SetEnabled(enabled) end
+                if w.SetAlpha then w:SetAlpha(enabled and 1 or 0.35) end
+            end
+            for i = 1, #timerRefreshFns do
+                timerRefreshFns[i]()
+            end
          end
         timerBox._msufApplyTimerColorsEnabledState = ApplyTimerEnabledState
-        ApplyTimerEnabledState()
+        RefreshTimerColorUI()
     end
-    -- Pandemic window mode dropdown (below timer sliders, full width)
+    -- Pandemic window: explicit enable toggle + mode dropdown.
     do
+        local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
+        local panLine = timerBox:CreateTexture(nil, "ARTWORK")
+        panLine:SetPoint("TOPLEFT", timerBox, "TOPLEFT", 12, -358)
+        panLine:SetSize(676, 1)
+        panLine:SetColorTexture(0.30, 0.30, 0.35, 0.5)
+
+        local panHeader = timerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        panHeader:SetPoint("TOPLEFT", timerBox, "TOPLEFT", 16, -374)
+        panHeader:SetText(TR("Pandemic Window"))
+
         local panDD = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(nil, timerBox) or CreateFrame("Frame", nil, timerBox, "UIDropDownMenuTemplate"))
-        panDD:SetPoint("TOPLEFT", timerBox, "TOPLEFT", 12 - 16, -154 + 4)
+        panDD:SetPoint("TOPLEFT", timerBox, "TOPLEFT", 300 - 16, -396 + 4)
         MSUF_FixUIDropDown(panDD, 130)
         local panTitle = timerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         panTitle:SetPoint("BOTTOMLEFT", panDD, "TOPLEFT", 16, 4)
-        panTitle:SetText("Pandemic window")
+        panTitle:SetText(TR("Mode"))
         panDD.__MSUF_titleFS = panTitle
         local panModes = {
-            { text = "Off",    value = "OFF" },
             { text = "Border", value = "BORDER" },
             { text = "Pulse",  value = "PULSE" },
             { text = "Glow",   value = "GLOW" },
         }
         local panTextByValue = {}
         for _, m in ipairs(panModes) do panTextByValue[m.value] = m.text end
+        local lastPandemicMode = "PULSE"
+        local function NormalizePandemicMode(v)
+            if v == true then return "PULSE" end
+            if v == "BORDER" or v == "PULSE" or v == "GLOW" then return v end
+            return "OFF"
+        end
         local function GetPandemicMode()
             local _, s = GetAuras2DB()
             if not s then return "OFF" end
-            local v = s.pandemicMode
-            if v == true then return "PULSE" end
-            if not v or v == false then return "OFF" end
+            local v = NormalizePandemicMode(s.pandemicMode ~= nil and s.pandemicMode or s.showPandemic)
+            if v ~= "OFF" then lastPandemicMode = v end
             return v
+        end
+        local function IsPandemicEnabled()
+            return GetPandemicMode() ~= "OFF"
         end
         local function SetPandemicMode(v)
             local _, s = GetAuras2DB()
             if not s then return end
+            v = NormalizePandemicMode(v)
+            if v ~= "OFF" then lastPandemicMode = v end
             s.pandemicMode = v
             s.showPandemic = nil
             A2_RequestApply()
         end
+        local function ShowPandemicWarning()
+            StaticPopupDialogs["MSUF_PANDEMIC_INFO"] = StaticPopupDialogs["MSUF_PANDEMIC_INFO"] or {
+                text = "Pandemic window uses a fixed 30%% remaining-duration threshold for all auras.\n\n"
+                    .. "This is a best-effort indicator - it does not know individual spell pandemic rules. "
+                    .. "It applies to every buff and debuff equally.\n\n"
+                    .. "Color can be changed in the Colors panel.",
+                button1 = "OK",
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                preferredIndex = 3,
+            }
+            StaticPopup_Show("MSUF_PANDEMIC_INFO")
+        end
         local _panWarningShown = false
+        local panEnable
+        local function RefreshPandemicControls()
+            local mode = GetPandemicMode()
+            local enabled = mode ~= "OFF"
+            if panEnable then
+                panEnable:SetChecked(enabled)
+                if panEnable._msufSync then panEnable._msufSync() end
+            end
+
+            local displayMode = enabled and mode or lastPandemicMode or "PULSE"
+            UIDropDownMenu_SetSelectedValue(panDD, displayMode)
+            UIDropDownMenu_SetText(panDD, panTextByValue[displayMode] or "Pulse")
+            if enabled then
+                if UIDropDownMenu_EnableDropDown then UIDropDownMenu_EnableDropDown(panDD) end
+                panDD:SetAlpha(1)
+                if panTitle.SetAlpha then panTitle:SetAlpha(1) end
+            else
+                if UIDropDownMenu_DisableDropDown then UIDropDownMenu_DisableDropDown(panDD) end
+                panDD:SetAlpha(0.35)
+                if panTitle.SetAlpha then panTitle:SetAlpha(0.45) end
+            end
+        end
+
+        panEnable = CreateCheckbox(timerBox, TR("Enable Pandemic Window"), 12, -396,
+            IsPandemicEnabled,
+            function(v)
+                local wasEnabled = IsPandemicEnabled()
+                if v then
+                    local mode = lastPandemicMode
+                    if NormalizePandemicMode(mode) == "OFF" then mode = "PULSE" end
+                    SetPandemicMode(mode)
+                    if not wasEnabled and not _panWarningShown then
+                        _panWarningShown = true
+                        ShowPandemicWarning()
+                    end
+                else
+                    local cur = GetPandemicMode()
+                    if cur ~= "OFF" then lastPandemicMode = cur end
+                    SetPandemicMode("OFF")
+                end
+                RefreshPandemicControls()
+            end,
+            TR("Highlights aura icons when remaining duration is inside the fixed 30% pandemic window."))
+        A2_Track("global", panEnable)
+
         local function PanOnClick(self)
-            local prev = GetPandemicMode()
             SetPandemicMode(self.value)
             UIDropDownMenu_SetSelectedValue(panDD, self.value)
+            UIDropDownMenu_SetText(panDD, panTextByValue[self.value] or self.value)
             CloseDropDownMenus()
-            -- Show one-time warning when enabling pandemic
-            if prev == "OFF" and self.value ~= "OFF" and not _panWarningShown then
+            if not _panWarningShown then
                 _panWarningShown = true
-                StaticPopupDialogs["MSUF_PANDEMIC_INFO"] = StaticPopupDialogs["MSUF_PANDEMIC_INFO"] or {
-                    text = "Pandemic window uses a fixed 30%% remaining-duration threshold for all auras.\n\n"
-                        .. "This is a best-effort indicator \226\128\148 it does not know individual spell pandemic rules. "
-                        .. "It applies to every buff and debuff equally.\n\n"
-                        .. "Color can be changed in the Colors panel.",
-                    button1 = "OK",
-                    timeout = 0,
-                    whileDead = true,
-                    hideOnEscape = true,
-                    preferredIndex = 3,
-                }
-                StaticPopup_Show("MSUF_PANDEMIC_INFO")
+                ShowPandemicWarning()
             end
+            RefreshPandemicControls()
         end
         UIDropDownMenu_Initialize(panDD, function()
             for _, m in ipairs(panModes) do
@@ -2337,17 +2679,16 @@ end
                 UIDropDownMenu_AddButton(info)
             end
         end)
-        panDD:SetScript("OnShow", function()
-            local v = GetPandemicMode()
-            UIDropDownMenu_SetSelectedValue(panDD, v)
-            UIDropDownMenu_SetText(panDD, panTextByValue[v] or "Off")
-        end)
+        panDD:SetScript("OnShow", RefreshPandemicControls)
         A2_Track("global", panDD)
 
-        -- Inline hint
         local panHint = timerBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        panHint:SetPoint("TOPLEFT", panDD, "BOTTOMLEFT", 16, -2)
-        panHint:SetText("Best-effort: fixed 30% threshold for all auras. Color: Colors panel.")
+        panHint:SetPoint("TOPLEFT", panHeader, "BOTTOMLEFT", 0, -36)
+        panHint:SetWidth(660)
+        panHint:SetJustifyH("LEFT")
+        panHint:SetText(TR("Best-effort: fixed 30% threshold for all auras. Color is configured in Global Style > Colors."))
+
+        RefreshPandemicControls()
     end
     -- AURA FILTERS & SORTING (below): Include filters + Sort order
     local rTitle = advBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
