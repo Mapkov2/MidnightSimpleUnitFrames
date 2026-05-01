@@ -40,19 +40,6 @@ if _G.MSUF_Search_RegisterRoots then
 end
 
 --------------------------------------------------------------------
--- Numeric editbox helper
---------------------------------------------------------------------
-local function SetNumericEB(edit, v)
-    if not edit then return end
-    if edit.HasFocus and edit:HasFocus() then return end
-    local n = floor((tonumber(v) or 0) + 0.5)
-    if edit.SetFontObject then edit:SetFontObject(GameFontHighlightSmall) end
-    if edit.SetTextColor then edit:SetTextColor(1, 1, 1, 1) end
-    if edit.SetNumber then edit:SetNumber(n) else edit:SetText(tostring(n)) end
-    if edit.SetCursorPosition then edit:SetCursorPosition(0) end
-end
-
---------------------------------------------------------------------
 -- Anchor text helpers (shared by indicators + status icons)
 --------------------------------------------------------------------
 local ANCHOR_LABELS = {
@@ -164,7 +151,7 @@ end
 
 local INDICATOR_SPECS = {
     leader = {
-        id = "leader", order = 1,
+        id = "leader", order = 1, label = "Leader / Assist",
         allowed = function(k) return k == "player" or k == "target" end,
         showCB = "playerLeaderIconCB", showField = "showLeaderIcon", showDefault = true,
         xStepper = "playerLeaderOffsetXStepper", xField = "leaderIconOffsetX", xDefault = 0,
@@ -177,7 +164,7 @@ local INDICATOR_SPECS = {
         refreshFnName = "MSUF_RefreshLeaderIconFrames",
     },
     raidmarker = {
-        id = "raidmarker", order = 2,
+        id = "raidmarker", order = 2, label = "Raid Marker",
         allowed = function() return true end,
         showCB = "playerRaidMarkerCB", showField = "showRaidMarker", showDefault = true,
         xStepper = "playerRaidMarkerOffsetXStepper", xField = "raidMarkerOffsetX", xDefault = 16,
@@ -191,7 +178,7 @@ local INDICATOR_SPECS = {
         refreshFnName = "MSUF_RefreshRaidMarkerFrames",
     },
     level = {
-        id = "level", order = 3,
+        id = "level", order = 3, label = "Level",
         allowed = function() return true end,
         showCB = "playerLevelIndicatorCB", showField = "showLevelIndicator", showDefault = true,
         xStepper = "playerLevelOffsetXStepper", xField = "levelIndicatorOffsetX", xDefault = 0,
@@ -205,7 +192,7 @@ local INDICATOR_SPECS = {
         refreshFnName = "MSUF_RefreshLevelIndicatorFrames",
     },
     eliteicon = {
-        id = "eliteicon", order = 4,
+        id = "eliteicon", order = 4, label = "Elite / Rare",
         allowed = function(k) return k == "target" or k == "focus" or k == "targettarget" or k == "boss" end,
         showCB = "playerEliteIconCB", showField = "showEliteIcon", showDefault = true,
         xStepper = "playerEliteIconOffsetXStepper", xField = "eliteIconOffsetX", xDefault = 2,
@@ -259,11 +246,99 @@ local STATUS_ICON_DEFS = {
     },
 }
 
--- Status icon widget field suffixes for bulk show/hide
-local STATUS_WIDGET_SUFFIXES = {
-    "IconCB","GroupDivider","ResetBtn","OffsetXStepper","OffsetYStepper",
-    "AnchorDrop","AnchorLabel","SizeEdit","SizeLabel","LayerSlider","SymbolDrop","SymbolLabel",
+local UF_STATUS_ANCHOR_ITEMS = {
+    { key = "TOPLEFT",     label = "Top Left"     },
+    { key = "TOPRIGHT",    label = "Top Right"    },
+    { key = "BOTTOMLEFT",  label = "Bottom Left"  },
+    { key = "BOTTOMRIGHT", label = "Bottom Right" },
+    { key = "CENTER",      label = "Center"       },
 }
+
+local function DropdownItemsFromPairs(pairs)
+    local items = {}
+    for i = 1, #(pairs or {}) do
+        items[i] = { key = pairs[i][2], label = pairs[i][1] }
+    end
+    return items
+end
+
+local UF_STATUS_ICON_SPECS
+local UF_STATUS_ICON_SPEC_BY_ID
+
+local function BuildUFStatusIconSpecs()
+    if UF_STATUS_ICON_SPECS then return UF_STATUS_ICON_SPECS end
+    UF_STATUS_ICON_SPECS, UF_STATUS_ICON_SPEC_BY_ID = {}, {}
+
+    local function add(spec)
+        UF_STATUS_ICON_SPECS[#UF_STATUS_ICON_SPECS + 1] = spec
+        UF_STATUS_ICON_SPEC_BY_ID[spec.id] = spec
+    end
+
+    for _, id in ipairs(INDICATOR_ORDER) do
+        local s = INDICATOR_SPECS[id]
+        if s then
+            add({
+                id = s.id, label = s.label or s.id, allowed = s.allowed,
+                showField = s.showField, showDefault = s.showDefault,
+                xField = s.xField, xDefault = s.xDefault,
+                yField = s.yField, yDefault = s.yDefault,
+                anchorField = s.anchorField, anchorDefault = s.anchorDefault,
+                anchorText = s.anchorText or AnchorText, anchorChoices = s.anchorChoices,
+                sizeField = s.sizeField, sizeDefault = s.sizeDefault,
+                layerField = s.layerField, layerDefault = s.layerDefault or 7,
+                refreshFnName = s.refreshFnName,
+                kind = "indicator",
+            })
+        end
+    end
+
+    for _, def in ipairs(STATUS_ICON_DEFS) do
+        add({
+            id = def.prefix, label = def.cbText, allowed = def.allowed,
+            showField = def.showField, showDefault = def.showDefault,
+            xField = def.xField, xDefault = 0,
+            yField = def.yField, yDefault = 0,
+            anchorField = def.anchorField, anchorDefault = "TOPLEFT",
+            anchorText = AnchorText, anchorChoices = MakeAnchorChoices(FOUR_ANCHORS, AnchorText),
+            sizeField = def.sizeField, sizeDefault = def.sizeDefault,
+            layerField = def.layerField, layerDefault = def.layerDefault or 7,
+            symbolField = def.symbolField, symbolChoices = def.symbolChoices,
+            refreshFnName = def.refreshGlobal,
+            kind = "status",
+        })
+    end
+
+    return UF_STATUS_ICON_SPECS
+end
+
+local function GetUFStatusIconSpec(id)
+    BuildUFStatusIconSpecs()
+    return UF_STATUS_ICON_SPEC_BY_ID and UF_STATUS_ICON_SPEC_BY_ID[id] or nil
+end
+
+local function FirstAllowedUFStatusIconSpec(unitKey)
+    local specs = BuildUFStatusIconSpecs()
+    for i = 1, #specs do
+        local spec = specs[i]
+        if not spec.allowed or spec.allowed(unitKey) then return spec end
+    end
+    return nil
+end
+
+local function HasAllowedUFStatusIconSpec(unitKey)
+    return FirstAllowedUFStatusIconSpec(unitKey) ~= nil
+end
+
+local function UFStatusIconSelectorItems(unitKey)
+    local specs, items = BuildUFStatusIconSpecs(), {}
+    for i = 1, #specs do
+        local spec = specs[i]
+        if not spec.allowed or spec.allowed(unitKey) then
+            items[#items + 1] = { key = spec.id, label = TR(spec.label) }
+        end
+    end
+    return items
+end
 
 --------------------------------------------------------------------
 -- Portrait options
@@ -620,47 +695,6 @@ local function MkStyledDD(name, parent, width)
     return dd
 end
 
-local function RestyleStepper(stepper)
-    if not stepper then return end
-    local eb, minus, plus = stepper.editBox, stepper.minusButton, stepper.plusButton
-    if eb then eb:Hide(); eb:SetAlpha(0); eb:EnableMouse(false); eb:ClearAllPoints(); eb:SetPoint("TOPLEFT", stepper, "TOPLEFT", -2000, 0); eb:SetWidth(1) end
-    if minus then minus:ClearAllPoints(); minus:SetPoint("LEFT", stepper, "LEFT", 0, 0) end
-    if plus then plus:ClearAllPoints(); plus:SetPoint("LEFT", minus or stepper, "RIGHT", 2, 0) end
-    local w = 46
-    if minus and minus.GetWidth then w = (minus:GetWidth() or 22) + (plus and (plus:GetWidth() or 22) or 0) + 2 end
-    stepper:SetWidth(w)
-end
-
---------------------------------------------------------------------
--- Stepper modifier support
---------------------------------------------------------------------
-local function GetGridStep()
-    local step
-    local s = _G["MSUF_EditModeGridSlider"]
-    if s and s.GetValue then step = s:GetValue()
-    elseif MSUF_DB and MSUF_DB.general and type(MSUF_DB.general.editModeGridStep) == "number" then step = MSUF_DB.general.editModeGridStep
-    else step = 20 end
-    step = tonumber(step) or 20
-    return max(8, min(64, step))
-end
-local function ModStep(base)
-    base = tonumber(base) or 1
-    if IsAltKeyDown and IsAltKeyDown() then return GetGridStep() end
-    local m = 1
-    if IsControlKeyDown and IsControlKeyDown() then m = 10
-    elseif IsShiftKeyDown and IsShiftKeyDown() then m = 5 end
-    return base * m
-end
-local function ApplyModStepper(stepper)
-    if not stepper or not stepper.minusButton or not stepper.plusButton then return end
-    stepper.minusButton:SetScript("OnClick", function()
-        stepper:SetValue((stepper:GetValue() or 0) - ModStep(stepper.step or 1), true)
-    end)
-    stepper.plusButton:SetScript("OnClick", function()
-        stepper:SetValue((stepper:GetValue() or 0) + ModStep(stepper.step or 1), true)
-    end)
-end
-
 --------------------------------------------------------------------
 -- Slider helpers
 --------------------------------------------------------------------
@@ -763,9 +797,9 @@ end
 --------------------------------------------------------------------
 function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     if not panel or not frameGroup or not helpers then return end
-    local CreateAxisStepper = helpers.CreateAxisStepper
     local CreateLabeledSlider = helpers.CreateLabeledSlider
     local texWhite, texWhite2 = helpers.texWhite, helpers.texWhite2
+    local UI = ns.UI
     local leftX, topY = 8, -110
     local leftW, gap, rightW = 320, 8, 328
     local fullW = leftW + gap + rightW - 8
@@ -801,8 +835,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
 
     -- Collapsible sections
     local basicsH, castbarBoxH, loadCondH, sizeH = 132, 132, 124, 200
-    local textBaseH, statusBoxH, bossLayoutH = 136, 188, 152
-    panel._msufTextBaseH = textBaseH; panel._msufStatusBoxH = statusBoxH
+    local statusBoxH, bossLayoutH = 420, 152
+    panel._msufStatusBoxH = statusBoxH
 
     local basicsBox, basicsBody = MkCollapsible(frameGroup, "Frame Basics", fullW, basicsH, true)
     basicsBox:Hide(); panel.playerBasicsBox = basicsBox; panel.playerBasicsBody = basicsBody; panel._msufBasicsH = basicsH
@@ -844,9 +878,6 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
 
     local castbarBox, castbarBody = MkCollapsible(frameGroup, "Castbar", fullW, castbarBoxH, false)
     castbarBox:Hide(); panel.playerCastbarBox = castbarBox; panel.playerCastbarBody = castbarBody
-
-    local textGroup, textBody = MkCollapsible(frameGroup, "Indicators", fullW, textBaseH, false)
-    textGroup:Hide(); panel.playerTextLayoutGroup = textGroup; panel.playerTextLayoutBody = textBody; panel._msufTextGroup = textBody
 
     local statusBox, statusBody = MkCollapsible(frameGroup, "Status icons", fullW, statusBoxH, false)
     statusBox:Hide(); panel._msufStatusIconsGroup = statusBox; panel._msufStatusIconsBody = statusBody
@@ -972,10 +1003,6 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         end
     end
 
-    -- Indicator layout constants
-    local IND_COL_X, IND_BASE_TOGGLE_Y, IND_BASE_CTRL_Y, IND_ROW_STEP = 300, -6, -8, -30
-    panel._msufIndicatorLayout = { colX = IND_COL_X, leaderToggleY = IND_BASE_TOGGLE_Y, leaderCtrlY = IND_BASE_CTRL_Y, rowStep = IND_ROW_STEP, dividerOffset = 0 }
-
     -- Boss-only controls
     panel.playerBossSpacingSlider = CreateLabeledSlider("MSUF_UF_BossSpacingSlider", "Boss spacing", bossLayoutBody, -400, 0, 1, 12, -14)
     FinalizeCompactSlider(panel.playerBossSpacingSlider, fullW - 24)
@@ -1041,153 +1068,144 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         panel.unitGlobalAnchorWarn:SetText(""); panel.unitGlobalAnchorWarn:Hide()
     end
 
-    -- Status icon checkboxes
-    local STATUS_BASE_Y, STATUS_STEP = -6, -30
-    panel.statusCombatIconCB = MkCheck(statusBody, "MSUF_StatusCombatIconCB", "Combat", 12, STATUS_BASE_Y)
-    panel.statusRestingIconCB = MkCheck(statusBody, "MSUF_StatusRestingIconCB", "Rested (player only)", 12, STATUS_BASE_Y + STATUS_STEP)
-    panel.statusIncomingResIconCB = MkCheck(statusBody, "MSUF_StatusIncomingResIconCB", "Incoming Rez", 12, STATUS_BASE_Y + 2*STATUS_STEP)
-    panel.statusIconsTestModeCB = MkCheck(statusBody, "MSUF_StatusIconsTestModeCB", "Test mode", 12, STATUS_BASE_Y + 3*STATUS_STEP + 10)
-    panel.statusIconsStyleCB = MkCheck(statusBody, "MSUF_StatusIconsStyleCB", "Use Midnight style icons", 12, STATUS_BASE_Y + 3*STATUS_STEP - 12)
-    for _, w in ipairs({ panel.statusCombatIconCB, panel.statusRestingIconCB, panel.statusIncomingResIconCB, panel.statusIconsTestModeCB, panel.statusIconsStyleCB }) do
-        if w then w:Hide() end
-    end
+    -- Status Icons selector: same single-selection pattern as Group Frames,
+    -- but backed by the existing unitframe indicator fields.
+    do
+        local function StatusGet(field)
+            if panel._msufUFStatusGet then return panel._msufUFStatusGet(field) end
+            if field == "selected" then return "raidmarker" end
+            if field == "enabled" then return true end
+            if field == "anchor" then return "TOPLEFT" end
+            if field == "symbol" then return "DEFAULT" end
+            if field == "layer" then return 7 end
+            if field == "size" then return 14 end
+            return 0
+        end
+        local function StatusSet(field, value)
+            if panel._msufUFStatusSet then panel._msufUFStatusSet(field, value) end
+        end
 
-    -- Helper factories for indicator/status rows
-    local function MkDivider(field, par)
-        if panel[field] then panel[field]:Hide(); return panel[field] end
-        local tex = (par or textBody):CreateTexture(nil, "ARTWORK"); tex:SetHeight(1); tex:SetColorTexture(1, 1, 1, 0.08); tex:Hide()
-        panel[field] = tex; return tex
-    end
-    local function MkDrop(field, gname, w, par)
-        if panel[field] then panel[field]:Hide(); return panel[field] end
-        local dd = MkStyledDD(gname, par or textBody, w); dd:SetScale(0.80); dd:Hide()
-        panel[field] = dd; return dd
-    end
-    local function MkLabel(field, text, par)
-        if panel[field] then panel[field]:SetText(text); panel[field]:Hide(); return panel[field] end
-        local fs = (par or textBody):CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); fs:SetText(text); fs:Hide()
-        panel[field] = fs; return fs
-    end
-    local function MkSizeEdit(field, gname, par)
-        if panel[field] then panel[field]:Hide(); return panel[field] end
-        local eb = CreateFrame("EditBox", gname, par or textBody, "InputBoxTemplate")
-        eb:SetAutoFocus(false); eb:SetSize(46, 18); eb:SetNumeric(true); eb:SetMaxLetters(3)
-        eb:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); eb:Hide()
-        panel[field] = eb; return eb
-    end
-    local function MkLayerSlider(field, gname, par)
-        if panel[field] then panel[field]:Hide(); return panel[field] end
-        local sl = CreateFrame("Slider", gname, par or textBody, "OptionsSliderTemplate")
-        sl:SetMinMaxValues(1, 10); sl:SetValueStep(1); sl:SetObeyStepOnDrag(true); sl:SetWidth(56)
-        EnhanceSliderTrack(sl)
-        local low, high, text = _G[gname.."Low"], _G[gname.."High"], _G[gname.."Text"]
-        if low then low:SetText(""); low:Hide() end
-        if high then high:SetText(""); high:Hide() end
-        if text then text:SetText(""); text:Hide() end
-        local val = sl:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        val:SetPoint("LEFT", sl, "RIGHT", 3, 0); val:SetText("L7")
-        sl._msufValueText = val
-        sl._msufSetLayerText = function(self, v)
-            if self._msufValueText then self._msufValueText:SetText("L" .. tostring(ClampLayerValue(v, 7))) end
-        end
-        sl.MSUF_SetValueSilent = function(self, v)
-            self._msufLayerSilent = true
-            local n = ClampLayerValue(v, 7)
-            self:SetValue(n)
-            self:_msufSetLayerText(n)
-            self._msufLayerSilent = nil
-        end
-        sl:SetScript("OnValueChanged", function(self, v)
-            local n = ClampLayerValue(v, 7)
-            self:_msufSetLayerText(n)
-            if self._msufLayerSilent then return end
-            if type(self.onValueChanged) == "function" then self.onValueChanged(self, n) end
-        end)
-        sl:SetScript("OnEnter", function(self)
-            if not GameTooltip then return end
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(TR("Icon layer / strata"), 1, 1, 1)
-            GameTooltip:AddLine(TR("1 = behind, 10 = on top."), 0.85, 0.85, 0.85, true)
-            GameTooltip:Show()
-        end)
-        sl:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-        if sl.SetHitRectInsets then sl:SetHitRectInsets(-4, -22, -8, -8) end
-        sl:Hide(); panel[field] = sl; return sl
-    end
-    local function MkResetBtn(field, cb, par)
-        if not panel[field] then
-            local btn = CreateFrame("Button", nil, par or textBody, "UIPanelButtonTemplate")
-            btn:SetSize(20, 20); btn:SetText(TR("R"))
-            local fs = btn.GetFontString and btn:GetFontString()
-            if fs then fs:SetFont(STANDARD_TEXT_FONT, 12, "OUTLINE"); fs:ClearAllPoints(); fs:SetPoint("CENTER") end
-            btn:SetScript("OnEnter", function(self)
-                if GameTooltip then GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText(TR("Resets current indicator"), 1, 1, 1)
-                    GameTooltip:AddLine("Resets X/Y, Anchor, Size and Layer back to defaults.", 0.85, 0.85, 0.85, true); GameTooltip:Show() end
+        if UI and UI.Dropdown and UI.Check and UI.Slider then
+            panel.statusIconsSelectorDrop = UI.Dropdown({
+                name = "MSUF_UF_SI_SelectorDropdown", parent = statusBody,
+                anchor = statusBody, anchorPoint = "TOPLEFT", x = -4, y = -8, width = 240,
+                items = function() return panel._msufUFStatusSelectorItems and panel._msufUFStatusSelectorItems() or UFStatusIconSelectorItems("player") end,
+                get = function() return StatusGet("selected") end,
+                set = function(v) StatusSet("selected", v) end,
+            })
+
+            panel.statusIconsStyleCB = UI.Check({
+                name = "MSUF_UF_SI_MidnightCheck", parent = statusBody,
+                anchor = panel.statusIconsSelectorDrop, x = 16, y = -6,
+                label = TR("Use Midnight style"),
+                get = function() return StatusGet("midnight") end,
+                set = function(v) StatusSet("midnight", v) end,
+                maxTextWidth = 200,
+            })
+
+            panel.statusIconsSymbolDrop = UI.Dropdown({
+                name = "MSUF_UF_SI_SymbolDropdown", parent = statusBody,
+                anchor = panel.statusIconsStyleCB, x = -16, y = -8, width = 240,
+                items = function() return panel._msufUFStatusSymbolItems and panel._msufUFStatusSymbolItems() or { { key = "DEFAULT", label = "Default" } } end,
+                get = function() return StatusGet("symbol") end,
+                set = function(v) StatusSet("symbol", v) end,
+            })
+
+            panel.statusIconsEnabledCB = UI.Check({
+                name = "MSUF_UF_SI_EnableCheck", parent = statusBody,
+                anchor = panel.statusIconsSymbolDrop, x = 16, y = -8,
+                label = TR("Enabled"),
+                get = function() return StatusGet("enabled") end,
+                set = function(v) StatusSet("enabled", v) end,
+                maxTextWidth = 200,
+            })
+
+            panel.statusIconsSizeSlider = UI.Slider({
+                name = "MSUF_UF_SI_SizeSlider", parent = statusBody, compact = true,
+                anchor = panel.statusIconsEnabledCB, x = 0, y = -10,
+                min = 8, max = 64, step = 1, width = 270, default = 14,
+                get = function() return StatusGet("size") end,
+                set = function(v) StatusSet("size", v) end,
+                formatText = function(v) return string.format("Size: %d", v) end,
+            })
+
+            panel.statusIconsAnchorDrop = UI.Dropdown({
+                name = "MSUF_UF_SI_AnchorDropdown", parent = statusBody,
+                anchor = panel.statusIconsSizeSlider, x = -16, y = -10, width = 200,
+                items = function() return panel._msufUFStatusAnchorItems and panel._msufUFStatusAnchorItems() or UF_STATUS_ANCHOR_ITEMS end,
+                get = function() return StatusGet("anchor") end,
+                set = function(v) StatusSet("anchor", v) end,
+            })
+
+            panel.statusIconsXSlider = UI.Slider({
+                name = "MSUF_UF_SI_XSlider", parent = statusBody, compact = true,
+                anchor = panel.statusIconsAnchorDrop, x = 16, y = -10,
+                min = -200, max = 200, step = 1, width = 270, default = 0,
+                get = function() return StatusGet("x") end,
+                set = function(v) StatusSet("x", v) end,
+                formatText = function(v) return string.format("X Offset: %d", v) end,
+            })
+
+            panel.statusIconsYSlider = UI.Slider({
+                name = "MSUF_UF_SI_YSlider", parent = statusBody, compact = true,
+                anchor = panel.statusIconsXSlider, x = 0, y = -32,
+                min = -200, max = 200, step = 1, width = 270, default = 0,
+                get = function() return StatusGet("y") end,
+                set = function(v) StatusSet("y", v) end,
+                formatText = function(v) return string.format("Y Offset: %d", v) end,
+            })
+
+            panel.statusIconsLayerSlider = UI.Slider({
+                name = "MSUF_UF_SI_LayerSlider", parent = statusBody, compact = true,
+                anchor = panel.statusIconsYSlider, x = 0, y = -32,
+                min = 1, max = 10, step = 1, width = 270, default = 7,
+                get = function() return StatusGet("layer") end,
+                set = function(v) StatusSet("layer", v) end,
+                formatText = function(v) return string.format("Layer: %d (higher = on top)", v) end,
+            })
+
+            panel.statusIconsResetBtn = CreateFrame("Button", nil, statusBody, "UIPanelButtonTemplate")
+            panel.statusIconsResetBtn:SetSize(22, 22)
+            panel.statusIconsResetBtn:SetText(TR("R"))
+            panel.statusIconsResetBtn:SetPoint("LEFT", panel.statusIconsLayerSlider, "RIGHT", 84, 0)
+            panel.statusIconsResetBtn:SetScript("OnClick", function() StatusSet("reset", true) end)
+            panel.statusIconsResetBtn:SetScript("OnEnter", function(self)
+                if not GameTooltip then return end
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(TR("Resets current indicator"), 1, 1, 1)
+                GameTooltip:AddLine(TR("Resets X/Y, Anchor, Size, Layer and icon choice back to defaults."), 0.85, 0.85, 0.85, true)
+                GameTooltip:Show()
             end)
-            btn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-            panel[field] = btn
+            panel.statusIconsResetBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+            panel.statusIconsTestModeCB = UI.Check({
+                name = "MSUF_UF_SI_TestModeCheck", parent = statusBody,
+                anchor = panel.statusIconsLayerSlider, x = 16, y = -8,
+                label = TR("Test mode"),
+                get = function() return StatusGet("testMode") end,
+                set = function(v) StatusSet("testMode", v) end,
+                maxTextWidth = 180,
+            })
+
+            panel._msufUFStatusControls = {
+                panel.statusIconsSelectorDrop,
+                panel.statusIconsStyleCB,
+                panel.statusIconsSymbolDrop,
+                panel.statusIconsEnabledCB,
+                panel.statusIconsSizeSlider,
+                panel.statusIconsAnchorDrop,
+                panel.statusIconsXSlider,
+                panel.statusIconsYSlider,
+                panel.statusIconsLayerSlider,
+                panel.statusIconsResetBtn,
+                panel.statusIconsTestModeCB,
+            }
+        else
+            local warn = statusBody:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            warn:SetPoint("TOPLEFT", statusBody, "TOPLEFT", 12, -10)
+            warn:SetText(TR("MSUF: Options toolkit missing."))
+            panel._msufUFStatusControls = { warn }
         end
-        panel[field]:Hide()
-        return panel[field]
-    end
-
-    local function LayoutRow(cb, sx, sy, ad, al, se, sl, ls, id, il, colX, ctrlY)
-        if sx then sx:ClearAllPoints(); sx:SetPoint("TOPLEFT", sx:GetParent(), "TOPLEFT", colX, ctrlY)
-            sx:SetWidth(46); RestyleStepper(sx); ApplyModStepper(sx); if sx.label then sx.label:Hide() end; sx:Hide() end
-        if sy and sx then sy:ClearAllPoints(); sy:SetPoint("LEFT", sx, "RIGHT", 6, 0)
-            sy:SetWidth(46); RestyleStepper(sy); ApplyModStepper(sy); if sy.label then sy.label:Hide() end; sy:Hide() end
-        if ad and sy then ad:ClearAllPoints(); ad:SetPoint("LEFT", sy, "RIGHT", 1, 0)
-            if al then al:ClearAllPoints(); al:SetPoint("BOTTOM", ad, "TOP", 0, 6); al:Hide() end; ad:Hide() end
-        if se and ad then se:ClearAllPoints(); se:SetPoint("LEFT", ad, "RIGHT", 1, 2)
-            if sl then sl:ClearAllPoints(); sl:SetPoint("BOTTOM", se, "TOP", 0, 6); sl:Hide() end; se:Hide() end
-        if ls and se then ls:ClearAllPoints(); ls:SetPoint("LEFT", se, "RIGHT", 8, -1); ls:Hide() end
-        local tail = ls or se
-        if id and tail then id:ClearAllPoints(); id:SetPoint("LEFT", tail, "RIGHT", 1, -2)
-            if il then il:ClearAllPoints(); il:SetPoint("BOTTOM", id, "TOP", 0, 6); il:Hide() end; id:Hide() end
-        if cb then cb:Hide() end
-    end
-
-    -- Build indicator rows
-    for idx, id in ipairs(INDICATOR_ORDER) do
-        local spec = INDICATOR_SPECS[id]; if not spec then break end
-        MkDivider(spec.divider)
-        if not panel[spec.showCB] then
-            panel[spec.showCB] = MkCheck(textBody, "MSUF_"..spec.showCB:gsub("^%l", string.upper), spec.showCB:find("Leader") and "Show leader/assist icon" or spec.showCB:find("RaidMarker") and "Show raid marker icon" or spec.showCB:find("Elite") and "Show elite / rare icon" or "Show level", 12, IND_BASE_TOGGLE_Y + (idx - 1) * IND_ROW_STEP)
-        end
-        panel[spec.showCB]:Hide()
-        MkResetBtn(spec.resetBtn, panel[spec.showCB])
-        if not panel[spec.xStepper] then panel[spec.xStepper] = CreateAxisStepper("MSUF_"..spec.xStepper, "X", textBody, spec.xDefault, 0, -200, 200, 1) end
-        if not panel[spec.yStepper] then panel[spec.yStepper] = CreateAxisStepper("MSUF_"..spec.yStepper, "Y", textBody, spec.yDefault, 0, -200, 200, 1) end
-        panel[spec.anchorDrop] = MkDrop(spec.anchorDrop, "MSUF_"..spec.anchorDrop, 70)
-        MkLabel(spec.anchorDrop:gsub("Drop$","Label"), "Anchor")
-        panel[spec.sizeEdit] = MkSizeEdit(spec.sizeEdit, "MSUF_"..spec.sizeEdit)
-        MkLabel(spec.sizeEdit:gsub("Edit$","Label"), "Size")
-        if spec.layerSlider then panel[spec.layerSlider] = MkLayerSlider(spec.layerSlider, "MSUF_"..spec.layerSlider) end
-        -- Store anchorLabel/sizeLabel keys for later
-        spec.anchorLabel = spec.anchorDrop:gsub("Drop$","Label")
-        spec.sizeLabel = spec.sizeEdit:gsub("Edit$","Label")
-        LayoutRow(panel[spec.showCB], panel[spec.xStepper], panel[spec.yStepper],
-            panel[spec.anchorDrop], panel[spec.anchorLabel], panel[spec.sizeEdit], panel[spec.sizeLabel], panel[spec.layerSlider],
-            nil, nil, IND_COL_X, IND_BASE_CTRL_Y + (idx - 1) * IND_ROW_STEP)
-    end
-
-    -- Build status icon rows
-    for _, def in ipairs(STATUS_ICON_DEFS) do
-        local p = def.prefix
-        MkDivider(p.."GroupDivider", statusBody)
-        MkResetBtn(p.."ResetBtn", panel[p.."IconCB"], statusBody)
-        if not panel[p.."OffsetXStepper"] then panel[p.."OffsetXStepper"] = CreateAxisStepper("MSUF_"..p.."OffsetX", "X", statusBody, 0, 0, -200, 200, 1) end
-        if not panel[p.."OffsetYStepper"] then panel[p.."OffsetYStepper"] = CreateAxisStepper("MSUF_"..p.."OffsetY", "Y", statusBody, 0, 0, -200, 200, 1) end
-        panel[p.."AnchorDrop"] = MkDrop(p.."AnchorDrop", "MSUF_"..p.."AnchorDropdown", 70, statusBody)
-        MkLabel(p.."AnchorLabel", "Anchor", statusBody)
-        panel[p.."SizeEdit"] = MkSizeEdit(p.."SizeEdit", "MSUF_"..p.."SizeEdit", statusBody)
-        MkLabel(p.."SizeLabel", "Size", statusBody)
-        panel[p.."LayerSlider"] = MkLayerSlider(p.."LayerSlider", "MSUF_"..p.."LayerSlider", statusBody)
-        panel[p.."SymbolDrop"] = MkDrop(p.."SymbolDrop", "MSUF_"..p.."SymbolDropdown", 128, statusBody)
-        MkLabel(p.."SymbolLabel", "Icon", statusBody)
-        LayoutRow(panel[p.."IconCB"], panel[p.."OffsetXStepper"], panel[p.."OffsetYStepper"],
-            panel[p.."AnchorDrop"], panel[p.."AnchorLabel"], panel[p.."SizeEdit"], panel[p.."SizeLabel"], panel[p.."LayerSlider"],
-            panel[p.."SymbolDrop"], panel[p.."SymbolLabel"], IND_COL_X, STATUS_BASE_Y - 2 + def.rowIndex * STATUS_STEP)
     end
 
     -- Copy-To UI (all 6 units)
@@ -1215,11 +1233,11 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local prefix, dropName, destVar, defaultDest, items = def[1], def[2], def[3], def[4], def[5]
         local lk, dk, bk, hk = prefix.."CopyToLabel", prefix.."CopyToDrop", prefix.."CopyToButton", prefix.."CopyToHint"
         if not panel[lk] then
-            panel[lk] = textGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            panel[lk] = frameGroup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             panel[lk]:SetText(TR("Copy to")); panel[lk]:Hide()
         end
         if not panel[dk] then
-            local dd = MkStyledDD(dropName, textGroup, 150); dd:SetScale(0.86); dd:Hide()
+            local dd = MkStyledDD(dropName, frameGroup, 150); dd:SetScale(0.86); dd:Hide()
             panel[dk] = dd; panel[destVar] = panel[destVar] or defaultDest
             UIDropDownMenu_Initialize(dd, function(self, level)
                 if not level then return end
@@ -1256,14 +1274,14 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             end) end
         end
         if not panel[bk] then
-            local btn = CreateFrame("Button", nil, textGroup, "UIPanelButtonTemplate")
+            local btn = CreateFrame("Button", nil, frameGroup, "UIPanelButtonTemplate")
             btn:SetSize(64, 20); btn:SetText(TR("Copy")); btn:Hide()
             btn._msufNoSlashSkin = true
             if _G.MSUF_SkinMidnightActionButton then _G.MSUF_SkinMidnightActionButton(btn) end
             panel[bk] = btn
         end
         if not panel[hk] then
-            panel[hk] = textGroup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); panel[hk]:SetText(""); panel[hk]:Hide()
+            panel[hk] = frameGroup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"); panel[hk]:SetText(""); panel[hk]:Hide()
         end
         -- Position relative to bottom anchor
         local anchorBox = panel._msufBottomAnchor or panel.unitAnchorGroup or panel.playerSizeBox
@@ -1293,7 +1311,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local function Relayout(activeKey)
             local k = CanonKey(activeKey) or "player"
             local showCB = (k == "player" or k == "target" or k == "focus" or k == "boss" or k == "targettarget")
-            local showSt = (k == "player" or k == "target")
+            local showSt = HasAllowedUFStatusIconSpec(k)
             local showBL = (k == "boss")
             local showAnch = (k == "player" or k == "target" or k == "focus" or k == "boss" or k == "pet" or k == "targettarget")
 
@@ -1307,7 +1325,6 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             local showPB = (k == "player" or k == "target" or k == "focus" or k == "boss")
             Chain(powerBarBox, showPB)
             Chain(castbarBox, showCB)
-            Chain(textGroup, true)
             Chain(statusBox, showSt)
             Chain(bossLayoutBox, showBL)
             Chain(loadCondBox, true)
@@ -1318,7 +1335,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if panel._msufFramesScrollUpdate then panel._msufFramesScrollUpdate() end
         end
         panel._msufRelayoutUnitBoxes = Relayout
-        for _, box in ipairs({ basicsBox, powerBarBox, castbarBox, textGroup, statusBox, loadCondBox, sizeBox, bossLayoutBox, anchorGroup }) do
+        for _, box in ipairs({ basicsBox, powerBarBox, castbarBox, statusBox, loadCondBox, sizeBox, bossLayoutBox, anchorGroup }) do
             if box then box._msufOnCollapsedChanged = function() Relayout(panel._msufLastApplyKey or "player") end end
         end
         Relayout("player")
@@ -1346,88 +1363,41 @@ end
 -- LAYOUT INDICATOR TEMPLATE
 --------------------------------------------------------------------
 function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
-    if not panel or not panel._msufIndicatorLayout then return end
-    local l = panel._msufIndicatorLayout
-    local container = panel._msufTextGroup or panel.playerTextLayoutGroup or panel
+    if not panel then return end
+    local key = CanonKey(currentKey) or currentKey or "player"
     local isFrames = true
     if type(panel._msufIsFramesTab) == "function" then isFrames = panel._msufIsFramesTab() end
 
-    local function SW(name, show)
-        local w = name and panel[name]; if w then w:SetShown(show) end
+    local function SetShown(w, show)
+        if type(w) == "string" then w = panel[w] end
+        if w and w.SetShown then w:SetShown(show and true or false) end
+    end
+    local function HideUFStatusControls()
+        if panel._msufUFStatusControls then
+            for i = 1, #panel._msufUFStatusControls do SetShown(panel._msufUFStatusControls[i], false) end
+        end
     end
 
-    -- Hide everything if not on Frames tab
     if not isFrames then
-        if panel._msufStatusIconsGroup then panel._msufStatusIconsGroup:Hide() end
-        for _, spec in pairs(INDICATOR_SPECS) do
-            for _, f in ipairs({ spec.showCB, spec.xStepper, spec.yStepper, spec.anchorDrop, spec.anchorLabel, spec.sizeEdit, spec.sizeLabel, spec.layerSlider, spec.divider, spec.resetBtn }) do
-                SW(f, false)
-            end
-        end
-        for _, def in ipairs(STATUS_ICON_DEFS) do
-            for _, sfx in ipairs(STATUS_WIDGET_SUFFIXES) do SW(def.prefix..sfx, false) end
-        end
-        for _, w in ipairs({ "statusIconsTestModeCB","statusIconsStyleCB","statusIconsHeader" }) do SW(w, false) end
-        if panel.playerBossSpacingSlider then panel.playerBossSpacingSlider:Hide() end
-        if panel.playerBossLayoutModeLabel then panel.playerBossLayoutModeLabel:Hide() end
-        if panel.playerBossLayoutModeDD then panel.playerBossLayoutModeDD:Hide() end
-        if panel.playerBossTargetHLCB then panel.playerBossTargetHLCB:Hide() end
-        if panel.playerBossLayoutBox then panel.playerBossLayoutBox:Hide() end
+        SetShown(panel._msufStatusIconsGroup, false)
+        HideUFStatusControls()
+        SetShown(panel.playerBossSpacingSlider, false)
+        SetShown(panel.playerBossLayoutModeLabel, false)
+        SetShown(panel.playerBossLayoutModeDD, false)
+        SetShown(panel.playerBossTargetHLCB, false)
+        SetShown(panel.playerBossLayoutBox, false)
         for _, w in ipairs({ "unitAnchorToLabel","unitAnchorToDD","unitCustomAnchorLabel","unitCustomAnchorPickButton","unitCustomAnchorClearButton","unitCustomAnchorValueText","unitGlobalAnchorWarn" }) do
-            SW(w, false)
+            SetShown(w, false)
         end
         return
     end
 
-    local baseToggleY = l.leaderToggleY or -34
-    local baseCtrlY = l.leaderCtrlY or -36
-    local step = l.rowStep or -30
-    local colX = l.colX or 420
-
-    -- Indicator rows
-    local row = 0
-    for _, id in ipairs(INDICATOR_ORDER) do
-        local spec = INDICATOR_SPECS[id]
-        if spec then
-            local show = spec.allowed(currentKey) and true or false
-            for _, f in ipairs({ spec.showCB, spec.xStepper, spec.yStepper, spec.anchorDrop, spec.sizeEdit, spec.layerSlider, spec.resetBtn }) do SW(f, show) end
-            SW(spec.anchorLabel, false); SW(spec.sizeLabel, false); SW(spec.divider, false)
-            if show then
-                local cb = panel[spec.showCB]
-                if cb then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", container, "TOPLEFT", 12, baseToggleY + row * step) end
-                local sx = panel[spec.xStepper]
-                if sx then sx:ClearAllPoints(); sx:SetPoint("TOPLEFT", container, "TOPLEFT", colX, baseCtrlY + row * step) end
-                local reset = panel[spec.resetBtn]
-                if reset then
-                    reset:ClearAllPoints()
-                    local tail = panel[spec.layerSlider] or panel[spec.sizeEdit]
-                    if tail then reset:SetPoint("LEFT", tail, "RIGHT", 24, 0) else local ad = panel[spec.anchorDrop]; if ad then reset:SetPoint("LEFT", ad, "RIGHT", 6, 0) end end
-                    reset:Show()
-                end
-                row = row + 1
-            end
-        end
-    end
-
-    -- The target tab can show four indicator rows at once
-    -- (leader/assist + raid marker + level + elite/rare). The old fixed
-    -- 3-row height caused the last row to overlap the next collapsible box.
-    if panel.playerTextLayoutGroup and panel._msufTextBaseH then
-        local extraRows = math.max(0, row - 3)
-        local extraTot = (currentKey == "targettarget") and 28 or 0
-        local neededH = panel._msufTextBaseH + extraTot + extraRows * math.abs(step)
-        panel.playerTextLayoutGroup._msufExpandedH = neededH
-        if not panel.playerTextLayoutGroup._msufCollapsed then
-            panel.playerTextLayoutGroup:SetHeight(neededH)
-        end
-    end
-
     -- Anchoring
-    local showAnch = (currentKey == "player" or currentKey == "target" or currentKey == "targettarget" or currentKey == "focus" or currentKey == "pet" or currentKey == "boss")
+    local showAnch = (key == "player" or key == "target" or key == "targettarget" or key == "focus" or key == "pet" or key == "boss")
     for _, w in ipairs({ "unitAnchorGroup","unitAnchorToLabel","unitAnchorToDD","unitCustomAnchorLabel","unitCustomAnchorPickButton","unitCustomAnchorClearButton","unitCustomAnchorValueText" }) do
-        SW(w, showAnch)
+        SetShown(w, showAnch)
     end
-    SW("unitGlobalAnchorWarn", false)
+    SetShown("unitGlobalAnchorWarn", false)
     if showAnch and panel.unitAnchorGroup then
         local g = panel.unitAnchorBody or panel.unitAnchorGroup
         if panel.unitAnchorToLabel then panel.unitAnchorToLabel:ClearAllPoints(); panel.unitAnchorToLabel:SetPoint("TOPLEFT", g, "TOPLEFT", 10, -14) end
@@ -1447,75 +1417,77 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         end
     end
 
-    -- Status icons
-    local showStatus = (currentKey == "player" or currentKey == "target")
-    if panel._msufStatusIconsGroup then panel._msufStatusIconsGroup:SetShown(showStatus) end
-    if not showStatus then
-        for _, def in ipairs(STATUS_ICON_DEFS) do
-            for _, sfx in ipairs(STATUS_WIDGET_SUFFIXES) do SW(def.prefix..sfx, false) end
+    -- Unified status icon selector
+    local showStatus = HasAllowedUFStatusIconSpec(key)
+    SetShown(panel._msufStatusIconsGroup, showStatus)
+    if showStatus then
+        if panel._msufEnsureUFStatusSelection then panel._msufEnsureUFStatusSelection(key) end
+        local spec = panel._msufCurrentUFStatusSpec or GetUFStatusIconSpec(panel._msufStatusIconSelectedId)
+        local showStateControls = (spec and spec.kind == "status") and true or false
+        local showSymbol = showStateControls and spec and spec.symbolField
+
+        for _, w in ipairs(panel._msufUFStatusControls or {}) do SetShown(w, true) end
+        SetShown(panel.statusIconsStyleCB, showStateControls)
+        SetShown(panel.statusIconsSymbolDrop, showSymbol)
+        SetShown(panel.statusIconsTestModeCB, showStateControls)
+
+        local anchor = panel.statusIconsSelectorDrop
+        if anchor and panel.statusIconsStyleCB and showStateControls then
+            panel.statusIconsStyleCB:ClearAllPoints()
+            panel.statusIconsStyleCB:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 16, -6)
+            anchor = panel.statusIconsStyleCB
         end
-        for _, w in ipairs({ "statusIconsTestModeCB","statusIconsStyleCB","statusIconsHeader" }) do SW(w, false) end
+        if anchor and panel.statusIconsSymbolDrop and showSymbol then
+            panel.statusIconsSymbolDrop:ClearAllPoints()
+            panel.statusIconsSymbolDrop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -16, -8)
+            anchor = panel.statusIconsSymbolDrop
+        end
+        if anchor and panel.statusIconsEnabledCB then
+            panel.statusIconsEnabledCB:ClearAllPoints()
+            panel.statusIconsEnabledCB:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 16, -8)
+        end
+        if panel.statusIconsSizeSlider and panel.statusIconsEnabledCB then
+            panel.statusIconsSizeSlider:ClearAllPoints()
+            panel.statusIconsSizeSlider:SetPoint("TOPLEFT", panel.statusIconsEnabledCB, "BOTTOMLEFT", 0, -10)
+        end
+        if panel.statusIconsAnchorDrop and panel.statusIconsSizeSlider then
+            panel.statusIconsAnchorDrop:ClearAllPoints()
+            panel.statusIconsAnchorDrop:SetPoint("TOPLEFT", panel.statusIconsSizeSlider, "BOTTOMLEFT", -16, -10)
+        end
+        if panel.statusIconsXSlider and panel.statusIconsAnchorDrop then
+            panel.statusIconsXSlider:ClearAllPoints()
+            panel.statusIconsXSlider:SetPoint("TOPLEFT", panel.statusIconsAnchorDrop, "BOTTOMLEFT", 16, -10)
+        end
+        if panel.statusIconsYSlider and panel.statusIconsXSlider then
+            panel.statusIconsYSlider:ClearAllPoints()
+            panel.statusIconsYSlider:SetPoint("TOPLEFT", panel.statusIconsXSlider, "BOTTOMLEFT", 0, -32)
+        end
+        if panel.statusIconsLayerSlider and panel.statusIconsYSlider then
+            panel.statusIconsLayerSlider:ClearAllPoints()
+            panel.statusIconsLayerSlider:SetPoint("TOPLEFT", panel.statusIconsYSlider, "BOTTOMLEFT", 0, -32)
+        end
+        if panel.statusIconsResetBtn and panel.statusIconsLayerSlider then
+            panel.statusIconsResetBtn:ClearAllPoints()
+            panel.statusIconsResetBtn:SetPoint("LEFT", panel.statusIconsLayerSlider, "RIGHT", 84, 0)
+        end
+        if panel.statusIconsTestModeCB and panel.statusIconsLayerSlider and showStateControls then
+            panel.statusIconsTestModeCB:ClearAllPoints()
+            panel.statusIconsTestModeCB:SetPoint("TOPLEFT", panel.statusIconsLayerSlider, "BOTTOMLEFT", 16, -8)
+        end
+        if panel._msufRefreshUFStatusControls then panel._msufRefreshUFStatusControls() end
     else
-        SW("statusIconsHeader", false)
-        local sBase, sStep = -34, -30
-        for _, def in ipairs(STATUS_ICON_DEFS) do
-            local show = def.allowed(currentKey)
-            local p = def.prefix
-            SW(p.."GroupDivider", false); SW(p.."AnchorLabel", false); SW(p.."SizeLabel", false); SW(p.."SymbolLabel", false)
-            for _, sfx in ipairs({ "IconCB","ResetBtn","OffsetXStepper","OffsetYStepper","AnchorDrop","SizeEdit","LayerSlider","SymbolDrop" }) do SW(p..sfx, show) end
-            if show then
-                local cb = panel[p.."IconCB"]
-                if cb then cb:ClearAllPoints(); cb:SetPoint("TOPLEFT", panel._msufStatusIconsGroup, "TOPLEFT", 12, sBase + def.rowIndex * sStep) end
-                local sx = panel[p.."OffsetXStepper"]
-                if sx then sx:ClearAllPoints(); sx:SetPoint("TOPLEFT", panel._msufStatusIconsGroup, "TOPLEFT", colX, sBase - 2 + def.rowIndex * sStep) end
-                local reset = panel[p.."ResetBtn"]
-                if reset then
-                    reset:ClearAllPoints()
-                    local tail = panel[p.."LayerSlider"] or panel[p.."SizeEdit"]
-                    if tail then reset:SetPoint("LEFT", tail, "RIGHT", 24, 0) end
-                    reset:Show()
-                end
-            end
-        end
-        -- Symbol pickers below the rows
-        local baseRel = panel.statusIncomingResIconCB or panel.statusCombatIconCB
-        if baseRel then
-            local pickerDefs = {}
-            for _, def in ipairs(STATUS_ICON_DEFS) do
-                pickerDefs[#pickerDefs + 1] = { label = panel[def.prefix.."SymbolLabel"], drop = panel[def.prefix.."SymbolDrop"], title = def.pickerTitle, show = def.allowed(currentKey) }
-            end
-            local xOff = 0
-            for _, pd in ipairs(pickerDefs) do
-                if pd.show and pd.label and pd.drop then
-                    pd.label:SetText(pd.title); pd.label:ClearAllPoints()
-                    pd.label:SetPoint("TOPLEFT", baseRel, "BOTTOMLEFT", 2 + xOff, -8); pd.label:Show()
-                    pd.drop:ClearAllPoints(); pd.drop:SetPoint("TOPLEFT", pd.label, "BOTTOMLEFT", -12, -4); pd.drop:Show()
-                    xOff = xOff + 138
-                else
-                    if pd.label then pd.label:Hide() end
-                    if pd.drop then pd.drop:Hide() end
-                end
-            end
-            local toggleAnchor = pickerDefs[#pickerDefs] and pickerDefs[#pickerDefs].drop
-            if panel.statusIconsTestModeCB then
-                panel.statusIconsTestModeCB:Show(); panel.statusIconsTestModeCB:ClearAllPoints()
-                if toggleAnchor then panel.statusIconsTestModeCB:SetPoint("LEFT", toggleAnchor, "RIGHT", 12, -2)
-                else panel.statusIconsTestModeCB:SetPoint("TOPLEFT", panel._msufStatusIconsGroup, "TOPLEFT", 520, -132) end
-                CBLabelRight(panel.statusIconsTestModeCB, "Test mode")
-            end
-            if panel.statusIconsStyleCB then
-                panel.statusIconsStyleCB:Show(); panel.statusIconsStyleCB:ClearAllPoints()
-                if panel.statusIconsTestModeCB and panel.statusIconsTestModeCB:IsShown() then
-                    local a = (panel.statusIconsTestModeCB.Text and panel.statusIconsTestModeCB.Text:IsShown()) and panel.statusIconsTestModeCB.Text or panel.statusIconsTestModeCB
-                    panel.statusIconsStyleCB:SetPoint("LEFT", a, "RIGHT", 14, 0)
-                elseif toggleAnchor then panel.statusIconsStyleCB:SetPoint("LEFT", toggleAnchor, "RIGHT", 112, -2) end
-                CBLabelRight(panel.statusIconsStyleCB, "Midnight style")
-            end
+        HideUFStatusControls()
+    end
+
+    if panel._msufStatusIconsGroup and panel._msufStatusBoxH then
+        panel._msufStatusIconsGroup._msufExpandedH = panel._msufStatusBoxH
+        if not panel._msufStatusIconsGroup._msufCollapsed then
+            panel._msufStatusIconsGroup:SetHeight(panel._msufStatusBoxH)
         end
     end
 
     -- Boss layout box
-    local isBoss = (currentKey == "boss")
+    local isBoss = (key == "boss")
     if panel.playerBossLayoutBox then panel.playerBossLayoutBox:SetShown(isBoss) end
     local bossBody = panel.playerBossLayoutBody or panel.playerBossLayoutBox
     if panel.playerBossSpacingSlider then
@@ -1670,11 +1642,6 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         end
     end
 
-    -- Indicators title
-    if panel.playerTextLayoutGroup and panel.playerTextLayoutGroup._msufTitleText then
-        panel.playerTextLayoutGroup._msufTitleText:SetText(TR("Indicators")); panel.playerTextLayoutGroup._msufTitleText:Show()
-    end
-
     -- Load conditions
     local lcSpecs = panel._msufLoadCondSpecs
     if lcSpecs then
@@ -1768,34 +1735,12 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         local txt = panel[k.."CastbarShowTextCB"]; if txt and txt:IsShown() then txt:ClearAllPoints(); txt:SetPoint("TOPRIGHT", panel.playerCastbarBody or panel.playerCastbarBox, "TOPRIGHT", -36, -6); CBLabelLeft(txt, "Text") end
     end
 
-    -- Indicators
-    for _, id in ipairs(INDICATOR_ORDER) do
-        local spec = INDICATOR_SPECS[id]; if not spec then break end
-        if spec.showCB and spec.showField and panel[spec.showCB] then panel[spec.showCB]:SetChecked(ReadBool(conf, g, spec.showField, spec.showDefault)) end
-        if spec.xStepper and panel[spec.xStepper] and panel[spec.xStepper].SetValue then panel[spec.xStepper]:SetValue(ReadNum(conf, g, spec.xField, spec.xDefault), false) end
-        if spec.yStepper and panel[spec.yStepper] and panel[spec.yStepper].SetValue then panel[spec.yStepper]:SetValue(ReadNum(conf, g, spec.yField, spec.yDefault), false) end
-        if spec.anchorDrop and panel[spec.anchorDrop] then
-            local v = ReadStr(conf, g, spec.anchorField, spec.anchorDefault)
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel[spec.anchorDrop], v) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(panel[spec.anchorDrop], spec.anchorText(v)) end
-        end
-        if spec.sizeEdit and panel[spec.sizeEdit] then SetNumericEB(panel[spec.sizeEdit], ReadNum(conf, g, spec.sizeField, spec.sizeDefault)) end
-        if spec.layerSlider and panel[spec.layerSlider] and panel[spec.layerSlider].MSUF_SetValueSilent then
-            panel[spec.layerSlider]:MSUF_SetValueSilent(ReadNum(conf, g, spec.layerField, spec.layerDefault or 7))
-        end
-    end
-
-    -- Text group height
-    if panel.playerTextLayoutGroup and panel._msufTextBaseH then
-        local h = panel._msufTextBaseH + (isToT and 28 or 0)
-        panel.playerTextLayoutGroup._msufExpandedH = h
-        if not panel.playerTextLayoutGroup._msufCollapsed then panel.playerTextLayoutGroup:SetHeight(h) end
-    end
-    -- Status box height
+    if panel._msufEnsureUFStatusSelection then panel._msufEnsureUFStatusSelection(currentKey) end
+    if panel._msufRefreshUFStatusControls then panel._msufRefreshUFStatusControls() end
     if panel._msufStatusIconsGroup and panel._msufStatusBoxH then
         panel._msufStatusIconsGroup._msufExpandedH = panel._msufStatusBoxH
         if not panel._msufStatusIconsGroup._msufCollapsed then panel._msufStatusIconsGroup:SetHeight(panel._msufStatusBoxH) end
-        panel._msufStatusIconsGroup:SetShown(isPlayer or isTarget)
+        panel._msufStatusIconsGroup:SetShown(isFrames and HasAllowedUFStatusIconSpec(currentKey))
     end
     if panel.playerSizeBox and panel._msufSizeBaseH and not panel.playerSizeBox._msufCollapsed then
         panel.playerSizeBox:SetHeight(panel._msufSizeBaseH)
@@ -2102,222 +2047,182 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight() end
     end) end
 
-    -- Indicator binding (shared for both indicator rows and status icon rows)
-    local function BindIndicatorRow(spec)
-        if not spec then return end
-        local function AllowedNow() local _, _, k = GetConfAndG(); return not spec.allowed or spec.allowed(k) end
-        local function Refresh()
-            -- ONLY call the dedicated layout helper (lightweight: reposition icon).
-            -- Do NOT call ApplyLayout/ApplyCurrent here — the caller does that once.
-            if spec.refreshFnName then local fn = _G[spec.refreshFnName]; if type(fn) == "function" then pcall(fn) end end
-        end
-        local function ApplyUI()
-            if not IsFramesTab() then return end
-            local conf2, g2, k2 = GetConfAndG()
-            if spec.allowed and not spec.allowed(k2) then return end
-            if spec.showCB and panel[spec.showCB] then panel[spec.showCB]:SetChecked(ReadBool(conf2, g2, spec.showField, spec.showDefault)) end
-            if spec.xStepper and panel[spec.xStepper] then panel[spec.xStepper]:SetValue(ReadNum(conf2, g2, spec.xField, spec.xDefault), false) end
-            if spec.yStepper and panel[spec.yStepper] then panel[spec.yStepper]:SetValue(ReadNum(conf2, g2, spec.yField, spec.yDefault), false) end
-            if spec.anchorDrop and panel[spec.anchorDrop] then
-                local a = ReadStr(conf2, g2, spec.anchorField, spec.anchorDefault)
-                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel[spec.anchorDrop], a) end
-                if UIDropDownMenu_SetText and spec.anchorText then UIDropDownMenu_SetText(panel[spec.anchorDrop], spec.anchorText(a)) end
-            end
-            if spec.iconDrop and panel[spec.iconDrop] and spec.iconField then
-                local v = ReadStr(conf2, g2, spec.iconField, spec.iconDefault)
-                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel[spec.iconDrop], v) end
-                if UIDropDownMenu_SetText and spec.iconText then UIDropDownMenu_SetText(panel[spec.iconDrop], spec.iconText(v)) end
-            end
-            if spec.sizeEdit and panel[spec.sizeEdit] and spec.sizeField then
-                local v = conf2[spec.sizeField]
-                if type(v) ~= "number" and g2 then v = g2[spec.sizeField] end
-                if type(v) ~= "number" and spec.id == "level" then v = ReadNum(conf2, g2, "nameFontSize", 14) end
-                v = max(8, min(64, floor((tonumber(v) or spec.sizeDefault or 14) + 0.5)))
-                SetNumericEB(panel[spec.sizeEdit], v)
-            end
-            if spec.layerSlider and panel[spec.layerSlider] and panel[spec.layerSlider].MSUF_SetValueSilent then
-                panel[spec.layerSlider]:MSUF_SetValueSilent(ReadNum(conf2, g2, spec.layerField, spec.layerDefault or 7))
-            end
-        end
-
-        -- Checkbox
-        if spec.showCB and panel[spec.showCB] then
-            panel[spec.showCB]:SetScript("OnClick", function(self)
-                if not IsFramesTab() or not AllowedNow() then return end
-                local c, _, k = GetConfAndG(); c[spec.showField] = self:GetChecked() and true or false
-                Refresh()       -- lightweight layout helper only
-                ApplyCurrent()  -- single coalesced apply
-            end)
-            panel[spec.showCB]:HookScript("OnShow", function() ApplyUI() end)
-        end
-        -- Steppers
-        for _, pair in ipairs({ {spec.xStepper, spec.xField, spec.xDefault}, {spec.yStepper, spec.yField, spec.yDefault} }) do
-            local st = panel[pair[1]]; if st then
-                st.onValueChanged = function(_, v) if not IsFramesTab() or not AllowedNow() then return end; GetConfAndG()[pair[2]] = tonumber(v) or pair[3]; Refresh(); ApplyCurrent() end
-                st:SetScript("OnShow", function() ApplyUI() end)
-            end
-        end
-        -- Layer slider (draw order: 1-10, higher = above)
-        if spec.layerSlider and panel[spec.layerSlider] and spec.layerField then
-            local lsl = panel[spec.layerSlider]
-            lsl.onValueChanged = function(_, v)
-                if not IsFramesTab() or not AllowedNow() then return end
-                GetConfAndG()[spec.layerField] = ClampLayerValue(v, spec.layerDefault or 7)
-                Refresh(); ApplyCurrent()
-            end
-            lsl:SetScript("OnShow", function() ApplyUI() end)
-        end
-        -- Anchor dropdown
-        if spec.anchorDrop and panel[spec.anchorDrop] and UIDropDownMenu_Initialize then
-            local drop = panel[spec.anchorDrop]
-            UIDropDownMenu_Initialize(drop, function(_, level)
-                if not level or level ~= 1 or not AllowedNow() then return end
-                for _, pair in ipairs(spec.anchorChoices or {}) do
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text, info.value = pair[1], pair[2]
-                    info.func = function(btn)
-                        if not IsFramesTab() then return end
-                        local c2 = GetConfAndG(); c2[spec.anchorField] = (btn and btn.value) or spec.anchorDefault
-                        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop, c2[spec.anchorField]) end
-                        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, spec.anchorText(c2[spec.anchorField])) end
-                        if CloseDropDownMenus then CloseDropDownMenus() end; Refresh(); ApplyCurrent()
-                    end
-                    info.checked = function() return ReadStr(GetConfAndG(), nil, spec.anchorField, spec.anchorDefault) == pair[2] end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end)
-            drop:SetScript("OnShow", function() ApplyUI() end)
-        end
-        -- Icon dropdown
-        if spec.iconDrop and panel[spec.iconDrop] and spec.iconField and UIDropDownMenu_Initialize then
-            local drop2 = panel[spec.iconDrop]
-            UIDropDownMenu_Initialize(drop2, function(_, level)
-                if not level or level ~= 1 or not AllowedNow() then return end
-                local choices = spec.iconChoices; if type(choices) == "function" then choices = choices() end
-                for _, pair in ipairs(choices or {}) do
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text, info.value = pair[1], pair[2]
-                    info.func = function(btn)
-                        if not IsFramesTab() then return end
-                        local c3 = GetConfAndG(); c3[spec.iconField] = (btn and btn.value) or spec.iconDefault
-                        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(drop2, c3[spec.iconField]) end
-                        if UIDropDownMenu_SetText and spec.iconText then UIDropDownMenu_SetText(drop2, spec.iconText(c3[spec.iconField])) end
-                        if CloseDropDownMenus then CloseDropDownMenus() end; Refresh(); ApplyCurrent()
-                    end
-                    info.checked = function() return ReadStr(GetConfAndG(), nil, spec.iconField, spec.iconDefault) == pair[2] end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end)
-            drop2:SetScript("OnShow", function() ApplyUI() end)
-        end
-        -- Size edit
-        if spec.sizeEdit and panel[spec.sizeEdit] and spec.sizeField then
-            local edit = panel[spec.sizeEdit]
-            local function DoSize()
-                if not IsFramesTab() or not AllowedNow() then return end
-                local c, g2 = GetConfAndG()
-                local v = tonumber(edit:GetText()) or ReadNum(c, g2, spec.sizeField, spec.sizeDefault or 14)
-                v = max(8, min(64, floor(v + 0.5))); c[spec.sizeField] = v; SetNumericEB(edit, v)
-                if spec.id == "level" then
-                    local fn = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts
-                    if type(fn) == "function" then fn() end
-                end
-                Refresh(); ApplyCurrent()
-            end
-            edit:SetScript("OnEnterPressed", function(self) DoSize(); self:ClearFocus() end)
-            edit:SetScript("OnEditFocusLost", DoSize)
-            edit:SetScript("OnTextChanged", function(self, user)
-                if not user then return end
-                self._msufSeq = (self._msufSeq or 0) + 1; local seq = self._msufSeq
-                if C_Timer and C_Timer.After then C_Timer.After(0.25, function() if self._msufSeq == seq and self:HasFocus() then DoSize() end end) end
-            end)
-            edit:HookScript("OnShow", function() ApplyUI() end)
-        end
-        -- Reset button
-        if spec.resetBtn and panel[spec.resetBtn] then
-            panel[spec.resetBtn]:SetScript("OnClick", function()
-                if not IsFramesTab() then return end
-                local c, _, k = GetConfAndG()
-                if spec.allowed and not spec.allowed(k) then return end
-                for _, f in ipairs({ spec.xField, spec.yField, spec.anchorField, spec.sizeField, spec.layerField, spec.iconField, spec.symbolField }) do
-                    if f then c[f] = nil end
-                end
-                ApplyUI(); Refresh(); ApplyCurrent()
-            end)
-        end
+    -- Unitframe status icons: selector-driven binding.
+    local function RefreshStatusIconFrames()
+        local uf = _G.MSUF_UnitFrames or _G.UnitFrames
+        local fn = _G.MSUF_UpdateStatusIndicatorForFrame
+        if type(fn) ~= "function" or not uf then return end
+        local fp = uf.player
+        local ft = uf.target
+        if fp then fp._msufStatusIconsConf = nil; fn(fp) end
+        if ft then ft._msufStatusIconsConf = nil; fn(ft) end
     end
 
-    -- Bind all indicator rows
-    for _, id in ipairs(INDICATOR_ORDER) do BindIndicatorRow(INDICATOR_SPECS[id]) end
-
-    -- Build and bind status icon specs
     for _, def in ipairs(STATUS_ICON_DEFS) do
-        local spec = {
-            id = "status_"..def.prefix, allowed = def.allowed,
-            showCB = def.prefix.."IconCB", showField = def.showField, showDefault = def.showDefault,
-            xStepper = def.prefix.."OffsetXStepper", xField = def.xField, xDefault = 0,
-            yStepper = def.prefix.."OffsetYStepper", yField = def.yField, yDefault = 0,
-            anchorDrop = def.prefix.."AnchorDrop", anchorField = def.anchorField, anchorDefault = "TOPLEFT",
-            anchorText = AnchorText, anchorChoices = MakeAnchorChoices(FOUR_ANCHORS, AnchorText),
-            sizeEdit = def.prefix.."SizeEdit", sizeField = def.sizeField, sizeDefault = def.sizeDefault,
-            layerSlider = def.prefix.."LayerSlider", layerField = def.layerField, layerDefault = def.layerDefault or 7,
-            iconDrop = def.prefix.."SymbolDrop", iconField = def.symbolField, iconDefault = "DEFAULT",
-            iconText = FindSymbolLabel, iconChoices = def.symbolChoices,
-            resetBtn = def.prefix.."ResetBtn",
-            refreshFnName = def.refreshGlobal,
-        }
-        -- Register global refresh function. Status icon sliders are global-ish and can
-        -- affect both player and target, so refresh those two frames directly in addition
-        -- to the normal coalesced apply for the currently open unit.
         _G[def.refreshGlobal] = _G[def.refreshGlobal] or function()
-            local uf = _G.MSUF_UnitFrames or _G.UnitFrames
-            local fn = _G.MSUF_UpdateStatusIndicatorForFrame
-            if type(fn) == "function" and uf then
-                local fp = uf.player
-                local ft = uf.target
-                if fp then fp._msufStatusIconsConf = nil; fn(fp) end
-                if ft then ft._msufStatusIconsConf = nil; fn(ft) end
-            end
+            RefreshStatusIconFrames()
             ApplyCurrent()
         end
-        BindIndicatorRow(spec)
-    end
-
-    -- Status icons test mode + style toggles
-    local function ApplyStatusUI()
-        if not IsFramesTab() then return end
-        local conf2, g2, k2 = GetConfAndG()
-        if not (k2 == "player" or k2 == "target") then return end
-        if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetChecked(g2.stateIconsTestMode == true) end
-        if panel.statusIconsStyleCB then panel.statusIconsStyleCB:SetChecked(GetStatusIconStyleMidnight()) end
-    end
-    _G.MSUF_RefreshStatusIconsOptionsUI = ApplyStatusUI
-
-    if panel.statusIconsTestModeCB then
-        panel.statusIconsTestModeCB:SetScript("OnClick", function(self)
-            if _G.MSUF_SetStatusIconsTestMode then _G.MSUF_SetStatusIconsTestMode(self:GetChecked() and true or false, "OPTIONS")
-            else EnsureDB(); MSUF_DB.general.stateIconsTestMode = self:GetChecked() and true or false end
-            ApplyStatusUI()
-            ApplyCurrent()  -- single coalesced apply for both player+target
-        end)
-        panel.statusIconsTestModeCB:HookScript("OnShow", ApplyStatusUI)
     end
 
     if type(_G.MSUF_SetStatusIconStyleUseMidnight) ~= "function" then
         function _G.MSUF_SetStatusIconStyleUseMidnight(useMidnight)
             EnsureDB(); MSUF_DB.general = MSUF_DB.general or {}
             MSUF_DB.general.statusIconsUseMidnightStyle = (useMidnight == true)
-            -- Caller is responsible for triggering apply (ApplyCurrent or equivalent).
-            -- No direct frame updates here to avoid bypassing coalescing.
             if type(_G.MSUF_RequestStatusIconsRefreshForCurrent) == "function" then pcall(_G.MSUF_RequestStatusIconsRefreshForCurrent) end
         end
     end
 
-    if panel.statusIconsStyleCB then panel.statusIconsStyleCB:SetScript("OnClick", function(self)
-        _G.MSUF_SetStatusIconStyleUseMidnight(self:GetChecked() and true or false)
-        ApplyStatusUI()
-        ApplyCurrent()  -- single coalesced apply
-    end) end
+    local function EnsureUFStatusSelection(unitKey)
+        local k = CanonKey(unitKey or CurrentKey()) or "player"
+        local spec = GetUFStatusIconSpec(panel._msufStatusIconSelectedId)
+        if not spec or (spec.allowed and not spec.allowed(k)) then
+            spec = FirstAllowedUFStatusIconSpec(k)
+            panel._msufStatusIconSelectedId = spec and spec.id or nil
+        end
+        panel._msufCurrentUFStatusSpec = spec
+        return spec, k
+    end
+    panel._msufEnsureUFStatusSelection = EnsureUFStatusSelection
+
+    local function CurrentUFStatusSpec()
+        local _, _, k = GetConfAndG()
+        return EnsureUFStatusSelection(k)
+    end
+
+    local function ReadUFStatusSize(spec, conf, g)
+        if not spec or not spec.sizeField then return 14 end
+        local v = conf and conf[spec.sizeField]
+        if type(v) ~= "number" and g then v = g[spec.sizeField] end
+        if type(v) ~= "number" and spec.id == "level" then v = ReadNum(conf, g, "nameFontSize", spec.sizeDefault or 14) end
+        v = floor((tonumber(v) or spec.sizeDefault or 14) + 0.5)
+        if v < 8 then return 8 end
+        if v > 64 then return 64 end
+        return v
+    end
+
+    local function RefreshUFStatusSpec(spec)
+        if not spec then return end
+        if spec.kind == "status" then
+            RefreshStatusIconFrames()
+            return
+        end
+        if spec.refreshFnName then
+            local fn = _G[spec.refreshFnName]
+            if type(fn) == "function" then pcall(fn) end
+        end
+    end
+
+    local function RefreshUFStatusControls()
+        local spec = CurrentUFStatusSpec()
+        local conf, g = GetConfAndG()
+        if panel.statusIconsSelectorDrop and panel.statusIconsSelectorDrop.Refresh then panel.statusIconsSelectorDrop:Refresh() end
+        if panel.statusIconsSymbolDrop and panel.statusIconsSymbolDrop.Refresh then panel.statusIconsSymbolDrop:Refresh() end
+        if panel.statusIconsAnchorDrop and panel.statusIconsAnchorDrop.Refresh then panel.statusIconsAnchorDrop:Refresh() end
+        if panel.statusIconsStyleCB then panel.statusIconsStyleCB:SetChecked(GetStatusIconStyleMidnight()) end
+        if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetChecked(g.stateIconsTestMode == true) end
+        if spec then
+            if panel.statusIconsEnabledCB then panel.statusIconsEnabledCB:SetChecked(ReadBool(conf, g, spec.showField, spec.showDefault)) end
+            if panel.statusIconsSizeSlider and panel.statusIconsSizeSlider.SetValueClean then panel.statusIconsSizeSlider:SetValueClean(ReadUFStatusSize(spec, conf, g)) end
+            if panel.statusIconsXSlider and panel.statusIconsXSlider.SetValueClean then panel.statusIconsXSlider:SetValueClean(ReadNum(conf, g, spec.xField, spec.xDefault or 0)) end
+            if panel.statusIconsYSlider and panel.statusIconsYSlider.SetValueClean then panel.statusIconsYSlider:SetValueClean(ReadNum(conf, g, spec.yField, spec.yDefault or 0)) end
+            if panel.statusIconsLayerSlider and panel.statusIconsLayerSlider.SetValueClean then panel.statusIconsLayerSlider:SetValueClean(ClampLayerValue(ReadNum(conf, g, spec.layerField, spec.layerDefault or 7), spec.layerDefault or 7)) end
+        end
+    end
+    panel._msufRefreshUFStatusControls = RefreshUFStatusControls
+    _G.MSUF_RefreshStatusIconsOptionsUI = RefreshUFStatusControls
+
+    panel._msufUFStatusSelectorItems = function()
+        local _, _, k = GetConfAndG()
+        return UFStatusIconSelectorItems(k)
+    end
+    panel._msufUFStatusAnchorItems = function()
+        local spec = CurrentUFStatusSpec()
+        if spec and spec.anchorChoices then return DropdownItemsFromPairs(spec.anchorChoices) end
+        return UF_STATUS_ANCHOR_ITEMS
+    end
+    panel._msufUFStatusSymbolItems = function()
+        local spec = CurrentUFStatusSpec()
+        local choices = spec and spec.symbolChoices
+        if type(choices) == "function" then choices = choices() end
+        return DropdownItemsFromPairs(choices or { { "Default", "DEFAULT" } })
+    end
+    panel._msufUFStatusGet = function(field)
+        local spec = CurrentUFStatusSpec()
+        local conf, g = GetConfAndG()
+        if field == "selected" then return spec and spec.id or "" end
+        if field == "midnight" then return GetStatusIconStyleMidnight() end
+        if field == "testMode" then return g.stateIconsTestMode == true end
+        if not spec then return nil end
+        if field == "enabled" then return ReadBool(conf, g, spec.showField, spec.showDefault) end
+        if field == "size" then return ReadUFStatusSize(spec, conf, g) end
+        if field == "x" then return ReadNum(conf, g, spec.xField, spec.xDefault or 0) end
+        if field == "y" then return ReadNum(conf, g, spec.yField, spec.yDefault or 0) end
+        if field == "layer" then return ClampLayerValue(ReadNum(conf, g, spec.layerField, spec.layerDefault or 7), spec.layerDefault or 7) end
+        if field == "anchor" then return ReadStr(conf, g, spec.anchorField, spec.anchorDefault or "TOPLEFT") end
+        if field == "symbol" then return ReadStr(conf, g, spec.symbolField, "DEFAULT") end
+        return nil
+    end
+    panel._msufUFStatusSet = function(field, value)
+        if not IsFramesTab() then return end
+        if field == "selected" then
+            local _, _, k = GetConfAndG()
+            local nextSpec = GetUFStatusIconSpec(value)
+            if nextSpec and (not nextSpec.allowed or nextSpec.allowed(k)) then
+                panel._msufStatusIconSelectedId = nextSpec.id
+                panel._msufCurrentUFStatusSpec = nextSpec
+                if ns.MSUF_Options_Player_LayoutIndicatorTemplate then ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, k) end
+            end
+            RefreshUFStatusControls()
+            return
+        end
+        if field == "midnight" then
+            _G.MSUF_SetStatusIconStyleUseMidnight(value == true)
+            RefreshStatusIconFrames()
+            RefreshUFStatusControls()
+            ApplyCurrent()
+            return
+        end
+        if field == "testMode" then
+            if _G.MSUF_SetStatusIconsTestMode then _G.MSUF_SetStatusIconsTestMode(value == true, "OPTIONS")
+            else EnsureDB(); MSUF_DB.general.stateIconsTestMode = (value == true); RefreshStatusIconFrames() end
+            RefreshUFStatusControls()
+            ApplyCurrent()
+            return
+        end
+
+        local spec = CurrentUFStatusSpec()
+        if not spec then return end
+        local conf = EnsureKeyDB()
+        if field == "enabled" then
+            conf[spec.showField] = (value == true)
+        elseif field == "size" then
+            conf[spec.sizeField] = max(8, min(64, floor((tonumber(value) or spec.sizeDefault or 14) + 0.5)))
+            if spec.id == "level" then
+                local fn = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts
+                if type(fn) == "function" then fn() end
+            end
+        elseif field == "x" then
+            conf[spec.xField] = floor((tonumber(value) or spec.xDefault or 0) + 0.5)
+        elseif field == "y" then
+            conf[spec.yField] = floor((tonumber(value) or spec.yDefault or 0) + 0.5)
+        elseif field == "layer" then
+            conf[spec.layerField] = ClampLayerValue(value, spec.layerDefault or 7)
+        elseif field == "anchor" then
+            conf[spec.anchorField] = tostring(value or spec.anchorDefault or "TOPLEFT")
+        elseif field == "symbol" and spec.symbolField then
+            conf[spec.symbolField] = tostring(value or "DEFAULT")
+        elseif field == "reset" then
+            for _, f in ipairs({ spec.xField, spec.yField, spec.anchorField, spec.sizeField, spec.layerField, spec.symbolField }) do
+                if f then conf[f] = nil end
+            end
+        else
+            return
+        end
+        RefreshUFStatusSpec(spec)
+        RefreshUFStatusControls()
+        ApplyCurrent()
+    end
 
     -- Castbar handlers
     local CASTBAR_HANDLERS = {
