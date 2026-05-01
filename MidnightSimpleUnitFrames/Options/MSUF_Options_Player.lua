@@ -1168,8 +1168,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             })
 
             panel.statusIconsResetBtn = CreateFrame("Button", nil, statusBody, "UIPanelButtonTemplate")
-            panel.statusIconsResetBtn:SetSize(22, 22)
-            panel.statusIconsResetBtn:SetText(TR("R"))
+            panel.statusIconsResetBtn:SetSize(62, 22)
+            panel.statusIconsResetBtn:SetText(TR("Reset"))
             panel.statusIconsResetBtn:SetPoint("LEFT", panel.statusIconsLayerSlider, "RIGHT", 84, 0)
             panel.statusIconsResetBtn:SetScript("OnClick", function() StatusSet("reset", true) end)
             panel.statusIconsResetBtn:SetScript("OnEnter", function(self)
@@ -2116,6 +2116,32 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         end
     end
 
+    local function SetUFStatusOptionEnabled(widget, enabled)
+        if not widget then return end
+        enabled = enabled and true or false
+        if widget.SetEnabled then
+            widget:SetEnabled(enabled)
+        elseif enabled then
+            if widget.EnableMouse then widget:EnableMouse(true) end
+            if widget.Enable then widget:Enable() end
+            if widget.SetAlpha then widget:SetAlpha(1) end
+        else
+            if widget.EnableMouse then widget:EnableMouse(false) end
+            if widget.Disable then widget:Disable() end
+            if widget.SetAlpha then widget:SetAlpha(0.45) end
+        end
+    end
+
+    local function SetUFStatusConfigEnabled(enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsSymbolDrop, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsSizeSlider, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsAnchorDrop, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsXSlider, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsYSlider, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsLayerSlider, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsResetBtn, enabled)
+    end
+
     local function RefreshUFStatusControls()
         local spec = CurrentUFStatusSpec()
         local conf, g = GetConfAndG()
@@ -2125,11 +2151,15 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         if panel.statusIconsStyleCB then panel.statusIconsStyleCB:SetChecked(GetStatusIconStyleMidnight()) end
         if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetChecked(g.stateIconsTestMode == true) end
         if spec then
-            if panel.statusIconsEnabledCB then panel.statusIconsEnabledCB:SetChecked(ReadBool(conf, g, spec.showField, spec.showDefault)) end
+            local enabled = ReadBool(conf, g, spec.showField, spec.showDefault)
+            if panel.statusIconsEnabledCB then panel.statusIconsEnabledCB:SetChecked(enabled) end
             if panel.statusIconsSizeSlider and panel.statusIconsSizeSlider.SetValueClean then panel.statusIconsSizeSlider:SetValueClean(ReadUFStatusSize(spec, conf, g)) end
             if panel.statusIconsXSlider and panel.statusIconsXSlider.SetValueClean then panel.statusIconsXSlider:SetValueClean(ReadNum(conf, g, spec.xField, spec.xDefault or 0)) end
             if panel.statusIconsYSlider and panel.statusIconsYSlider.SetValueClean then panel.statusIconsYSlider:SetValueClean(ReadNum(conf, g, spec.yField, spec.yDefault or 0)) end
             if panel.statusIconsLayerSlider and panel.statusIconsLayerSlider.SetValueClean then panel.statusIconsLayerSlider:SetValueClean(ClampLayerValue(ReadNum(conf, g, spec.layerField, spec.layerDefault or 7), spec.layerDefault or 7)) end
+            SetUFStatusConfigEnabled(enabled)
+        else
+            SetUFStatusConfigEnabled(false)
         end
     end
     panel._msufRefreshUFStatusControls = RefreshUFStatusControls
