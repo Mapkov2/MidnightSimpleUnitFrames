@@ -475,8 +475,14 @@ local function ApplyGeometry(f, kind)
     end
 
     if f.powerTextLayer then
+        local pParent = f.barGroup or f
+        if f.powerTextLayer.GetParent and f.powerTextLayer:GetParent() ~= pParent
+            and not (InCombatLockdown and InCombatLockdown()) then
+            f.powerTextLayer:SetParent(pParent)
+        end
         f.powerTextLayer:ClearAllPoints()
-        f.powerTextLayer:SetAllPoints(f.barGroup or f)
+        f.powerTextLayer:SetAllPoints(pParent)
+        f.powerTextLayer:Show()
     end
 
     -- Reverse fill
@@ -699,7 +705,7 @@ local function ApplyTextLayout(f, kind)
     local effectivePowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
         or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
         or ScaleValue(conf.powerHeight or 6, fScale, 0))
-    local showPow = conf.showPower and effectivePowerH > 0
+    local showPow = (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(kind, conf)) or false
     local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
     local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
     local ptr = showPow and (conf.powerTextRight   or "NONE") or "NONE"
@@ -752,8 +758,9 @@ local function ApplyTextLayout(f, kind)
             f.healthTextLayer:SetFrameLevel(want)
         end
     end
-    if f.powerTextLayer and f.power then
-        local pLvl = f.power:GetFrameLevel()
+    if f.powerTextLayer then
+        local base = f.health or f.barGroup or f.power or f
+        local pLvl = base.GetFrameLevel and base:GetFrameLevel() or 0
         local ptl2 = conf.powerTextLayer or 2
         local want = pLvl + ptl2
         if f._msufGFCachedPTxtLvl ~= want then

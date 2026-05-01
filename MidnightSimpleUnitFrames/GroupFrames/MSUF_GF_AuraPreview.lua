@@ -948,7 +948,8 @@ function GF.RefreshPreviewBox()
                 fs:ClearAllPoints()
                 fs:SetPoint(point, powerAnchor, relPoint, x, poy)
                 fs:SetJustifyH(justify)
-                if conf.showPower and mode ~= "NONE" then fs:Show() else fs:Hide() end
+                local powerTextOn = (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(kind, conf)) or false
+                if powerTextOn and mode ~= "NONE" then fs:Show() else fs:Hide() end
             end
 
             ApplyPowerText(m._powerLeftFS, plm, "LEFT", "LEFT", pPad + pox, "LEFT")
