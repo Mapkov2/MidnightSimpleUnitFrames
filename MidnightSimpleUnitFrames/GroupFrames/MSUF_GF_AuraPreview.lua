@@ -429,7 +429,11 @@ local function BuildMockFrame(parent)
     local scale = max(1.4, min(2.8, min(scaleW, scaleH)))
     local w = floor(rawW * scale + 0.5)
     local h = floor(rawH * scale + 0.5)
-    local powerH = floor((conf.powerHeight or 6) * scale + 0.5)
+    local rawPowerH = conf.powerHeight or 6
+    if GF.ShouldShowPowerBarForRole and not GF.ShouldShowPowerBarForRole(kind, "HEALER", conf) then
+        rawPowerH = 0
+    end
+    local powerH = rawPowerH > 0 and floor(rawPowerH * scale + 0.5) or 0
     local insetBase = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 1
     local inset = max(0, floor(insetBase * scale + 0.5))
 
@@ -662,7 +666,11 @@ function GF.RefreshPreviewBox()
     end
 
     -- Power bar geometry
-    local powerH = floor((conf.powerHeight or 6) * scale + 0.5)
+    local rawPowerH = conf.powerHeight or 6
+    if GF.ShouldShowPowerBarForRole and not GF.ShouldShowPowerBarForRole(kind, "HEALER", conf) then
+        rawPowerH = 0
+    end
+    local powerH = rawPowerH > 0 and floor(rawPowerH * scale + 0.5) or 0
     local inset = 1
     if m._health then
         m._health:ClearAllPoints()

@@ -448,8 +448,9 @@ end
 local function ApplyGeometry(f, kind)
     local conf   = GF.GetConf(kind)
     local fScale = conf._resolvedFrameScale or 1
-    local powerH = (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
-        or ScaleValue(conf.powerHeight or 6, fScale, 0)
+    local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
+        or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
+        or ScaleValue(conf.powerHeight or 6, fScale, 0))
     local inset  = math_max(0, (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2)
     if fScale ~= 1 then inset = ScaleValue(inset, fScale, 0) end
 
@@ -695,11 +696,14 @@ local function ApplyTextLayout(f, kind)
     -- 3-slot power text
     local pox = ScaleValue(conf.powerOffsetX or 0, fScale)
     local poy = ScaleValue(conf.powerOffsetY or 0, fScale)
-    local showPow = conf.showPower
+    local effectivePowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
+        or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
+        or ScaleValue(conf.powerHeight or 6, fScale, 0))
+    local showPow = conf.showPower and effectivePowerH > 0
     local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
     local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
     local ptr = showPow and (conf.powerTextRight   or "NONE") or "NONE"
-    local powerTextAnchor = ((conf.powerHeight or 6) > 0 and f.power) or f.health or f.barGroup
+    local powerTextAnchor = (effectivePowerH > 0 and f.power) or f.health or f.barGroup
 
     if f.powerTextLeftFS then
         f.powerTextLeftFS:ClearAllPoints()

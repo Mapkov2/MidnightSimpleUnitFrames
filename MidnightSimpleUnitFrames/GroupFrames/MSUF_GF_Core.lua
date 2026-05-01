@@ -284,7 +284,8 @@ local function BuildFrameHierarchy(f, kind)
     if GF.GetScaledFrameMetrics then
         w, h = GF.GetScaledFrameMetrics(kind)
     end
-    local powerH = (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6)
+    local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
+        or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
     local inset  = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
     if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
 
@@ -704,7 +705,9 @@ local function LayoutText(f, kind)
         f.powerTextRightFS:SetPoint("RIGHT", f.power, "RIGHT", -2, 0)
     end
     do
-        local showPow = conf.showPower and (conf.powerHeight or 6) > 0
+        local effectivePowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
+            or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
+        local showPow = conf.showPower and effectivePowerH > 0
         local ptl = showPow and (conf.powerTextLeft   or "NONE") or "NONE"
         local ptc = showPow and (conf.powerTextCenter  or "NONE") or "NONE"
         local ptr = showPow and (conf.powerTextRight   or "NONE") or "NONE"
@@ -1051,29 +1054,21 @@ function GF.UpdateButton(f, unit)
 
     -- Power (secret-safe: raw values to C-side) + per-role visibility
     if f.power then
-        local powerH = conf.powerHeight or 6
+        local role = (GF.GetUnitGroupRole and GF.GetUnitGroupRole(unit))
+            or ((UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) or "DAMAGER")
+        local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, unit, role, conf)) or (conf.powerHeight or 6)
         local showPow = powerH > 0
-        if showPow then
-            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-            if role == "TANK" and conf.powerShowTank == false then showPow = false
-            elseif role == "HEALER" and conf.powerShowHealer == false then showPow = false
-            elseif role == "DAMAGER" and conf.powerShowDamager == false then showPow = false
-            end
+        local roleHidden = not showPow
+        local prevRoleHidden = f._msufGFPowRoleHidden
+        if prevRoleHidden ~= nil and prevRoleHidden ~= roleHidden and not (InCombatLockdown and InCombatLockdown()) and GF.MarkDirty then
+            GF.MarkDirty(f, (GF.DIRTY_GEOMETRY or 0x01) + (GF.DIRTY_LAYOUT or 0x20))
         end
+        f._msufGFPowRoleHidden = roleHidden
         if showPow then
             local pw    = UnitPower(unit)
             local pwMax = UnitPowerMax(unit)
             f.power:SetMinMaxValues(0, pwMax)
             f._msufGFCachedPwMax = pwMax
-            -- Cache role visibility for power lean path
-            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-            if role then
-                f._msufGFPowRoleHidden = (role == "TANK" and conf.powerShowTank == false)
-                    or (role == "HEALER" and conf.powerShowHealer == false)
-                    or (role == "DAMAGER" and conf.powerShowDamager == false) or false
-            else
-                f._msufGFPowRoleHidden = false
-            end
             if conf.powerSmoothFill then
                 local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
                 if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
@@ -1221,6 +1216,7 @@ local function ScanHeaderChildren(header, kind)
             end
             child._msufGFKind = kind
             child.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ("gf_" .. tostring(kind))
+            local unit = child:GetAttribute("unit") or child.unit
             -- Force size on every scan (no diff-gate).
             -- Use SetWidth + SetHeight separately (SetSize can be ignored when
             -- SecureGroupHeader has set conflicting anchor points on children).
@@ -1259,7 +1255,8 @@ local function ScanHeaderChildren(header, kind)
                 local conf = GF.GetConf(kind)
                 local inset = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
                 if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
-                local powerH = (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6)
+                local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, unit, nil, conf))
+                    or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
                 if child.health then
                     child.health:ClearAllPoints()
                     child.health:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", inset, -inset)
@@ -1271,7 +1268,13 @@ local function ScanHeaderChildren(header, kind)
                     child.power:ClearAllPoints()
                     child.power:SetPoint("BOTTOMLEFT", child.barGroup or child, "BOTTOMLEFT", inset, inset)
                     child.power:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", -inset, inset)
-                    child.power:SetHeight(powerH)
+                    if powerH > 0 then
+                        child.power:SetHeight(powerH)
+                        child.power:Show()
+                    else
+                        child.power:SetHeight(0.001)
+                        child.power:Hide()
+                    end
                 end
             end
 
@@ -1292,7 +1295,6 @@ local function ScanHeaderChildren(header, kind)
                 end
             end
 
-            local unit = child:GetAttribute("unit") or child.unit
             if unit then
                 child.unit = unit
                 local p = unit:sub(1, 5)
@@ -1856,6 +1858,7 @@ function GF.ApplyPreviewData(f, index, kind)
     local cls = f._msufGFPreviewClass
     local name = PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
     local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
+    f._msufGFPreviewRole = role
     local hpPct = 0.3 + (index * 0.15) % 0.7
 
     -- Name (with color + truncation)
@@ -2033,7 +2036,9 @@ function GF.ApplyPreviewData(f, index, kind)
     end
 
     -- Power bar
-    if f.power and (conf.powerHeight or 6) > 0 then
+    local previewPowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind or "party", nil, role, conf))
+        or (conf.powerHeight or 6)
+    if f.power and previewPowerH > 0 then
         local fakePow = 50 + index * 10
         local fakePowMax = 100
         f.power:SetMinMaxValues(0, fakePowMax)
@@ -2059,6 +2064,11 @@ function GF.ApplyPreviewData(f, index, kind)
                 if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
             end
         end
+    else
+        if f.power then f.power:Hide() end
+        if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
+        if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
+        if f.powerTextRightFS then f.powerTextRightFS:Hide() end
     end
 
     -- Role icon

@@ -30,6 +30,7 @@ local _GF_AbbrFallback = _G.AbbreviateLargeNumbers or _G.ShortenNumber
 local _GF_UnitHealthPercent = _G.UnitHealthPercent   -- returns non-secret %
 local _GF_UnitPowerPercent  = _G.UnitPowerPercent    -- returns non-secret %
 local _GF_UnitPowerType     = _G.UnitPowerType
+local _GF_UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local _GF_UnitHealthMissing = _G.UnitHealthMissing   -- secret-safe deficit
 local _GF_CSU_Round = _G.C_StringUtil and _G.C_StringUtil.RoundToNearestString
 local _GF_ScaleTo100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
@@ -484,6 +485,45 @@ function GF.GetScaledPowerHeight(kind)
     if not conf then return raw end
     local scale = conf._resolvedFrameScale or GF.ApplyFrameScale(kind) or 1
     return GF.ScaleValue(raw, scale, 1)
+end
+
+function GF.NormalizeGroupRole(role)
+    if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
+        return role
+    end
+    return "DAMAGER"
+end
+
+function GF.GetUnitGroupRole(unit)
+    local role = unit and _GF_UnitGroupRolesAssigned and _GF_UnitGroupRolesAssigned(unit)
+    return GF.NormalizeGroupRole(role)
+end
+
+function GF.ShouldShowPowerBarForRole(kind, role, conf)
+    conf = conf or GF.GetConf(kind)
+    if not conf then return false end
+    local raw = tonumber(conf.powerHeight) or (IsRaidLikeKind(kind) and 4 or 6)
+    if raw <= 0 then return false end
+
+    role = GF.NormalizeGroupRole(role)
+    if role == "TANK" then
+        return conf.powerShowTank ~= false
+    elseif role == "HEALER" then
+        return conf.powerShowHealer ~= false
+    end
+    return conf.powerShowDamager ~= false
+end
+
+function GF.ShouldShowPowerBarForUnit(kind, unit, conf)
+    return GF.ShouldShowPowerBarForRole(kind, GF.GetUnitGroupRole(unit), conf)
+end
+
+function GF.GetEffectivePowerHeight(kind, unit, role, conf)
+    conf = conf or GF.GetConf(kind)
+    if not GF.ShouldShowPowerBarForRole(kind, role or GF.GetUnitGroupRole(unit), conf) then
+        return 0
+    end
+    return (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (tonumber(conf and conf.powerHeight) or 0)
 end
 
 function GF.GetGridMetrics(kind, count)
