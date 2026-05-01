@@ -1144,15 +1144,27 @@ local function GetAuraMockFont(kind)
     return path, flags
 end
 
+local function GetAuraMockCooldownColor()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    if g and g.useCustomFontColor == true then
+        local r = g.fontColorCustomR
+        local gg = g.fontColorCustomG
+        local b = g.fontColorCustomB
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            return r, gg, b, 1
+        end
+    end
+    return 1, 1, 1, 1
+end
+
 ------------------------------------------------------------------------
 -- Apply cooldown + stack text to a single mock icon. Reads the same
 -- gcfg keys the real aura pipeline uses so the options sliders provide
 -- live visual feedback on the mock frame.
--- `showText` gates whether the text is actually rendered — callers pass
--- true only for the representative first icon of each group to avoid a
--- visual wall of "3"s and "2"s on every icon.
+-- `showText` gates whether the text layer is rendered. Cooldown and stack
+-- text still obey the group's own showCooldown/showStacks settings.
 ------------------------------------------------------------------------
-local function ApplyMockIconText(ic, gcfg, size, kind, showText)
+local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
     if not ic or not gcfg then return end
 
     -- Hide path: if caller doesn't want text on this icon, hide any
@@ -1165,44 +1177,62 @@ local function ApplyMockIconText(ic, gcfg, size, kind, showText)
     end
 
     local fontPath, fontFlags = GetAuraMockFont(kind)
+    local sc = previewScale or 1
+    local showCd = gcfg.showCooldown ~= false
+    local showSt = gcfg.showStacks ~= false
 
-    -- Cooldown text — sized conservatively so it fits inside the icon.
-    -- Real cooldown text at live sizes is ~45% of the icon dimension;
-    -- the preview runs at 1.4-2.8× so we scale down slightly to keep
-    -- the "3" readable but not dominant.
+    local cdTarget = ic._cdPreviewFrame
+    if not cdTarget then
+        cdTarget = CreateFrame("Frame", nil, ic)
+        cdTarget:EnableMouse(false)
+        ic._cdPreviewFrame = cdTarget
+    end
+    cdTarget:ClearAllPoints()
+    cdTarget:SetAllPoints(ic)
+
+    -- Cooldown text: same settings as live GF auras, scaled with the mock frame.
     local cd = ic._cdText
     if not cd then
         cd = ic:CreateFontString(nil, "OVERLAY")
         ic._cdText = cd
     end
-    local cdSize = max(6, floor(size * 0.38 + 0.5))
-    if cd.SetFont then cd:SetFont(fontPath, cdSize, fontFlags) end
-    cd:SetText(AURA_MOCK_CD_TEXT)
-    cd:SetTextColor(1, 0.82, 0, 1)
-    cd:ClearAllPoints()
-    local cdAnchor = gcfg.cooldownAnchor or "CENTER"
-    local cdOX = (gcfg.cooldownOffsetX or 0)
-    local cdOY = (gcfg.cooldownOffsetY or 0)
-    cd:SetPoint(cdAnchor, ic, cdAnchor, cdOX, cdOY)
-    cd:Show()
+    if showCd then
+        local cdFlags = gcfg.cooldownOutline or fontFlags
+        local cdSize = max(6, floor(((gcfg.cooldownSize or 8) * sc) + 0.5))
+        if cd.SetFont then cd:SetFont(fontPath, cdSize, cdFlags) end
+        cd:SetText(AURA_MOCK_CD_TEXT)
+        cd:SetTextColor(GetAuraMockCooldownColor())
+        cd:ClearAllPoints()
+        local cdAnchor = gcfg.cooldownAnchor or "CENTER"
+        local cdOX = floor(((gcfg.cooldownOffsetX or 0) * sc) + 0.5)
+        local cdOY = floor(((gcfg.cooldownOffsetY or 0) * sc) + 0.5)
+        cd:SetPoint(cdAnchor, cdTarget, cdAnchor, cdOX, cdOY)
+        cd:Show()
+    else
+        cd:Hide()
+    end
 
-    -- Stack count text — smaller than cooldown (matches real WoW layout).
+    -- Stack count text: same settings as live GF auras, scaled with the mock frame.
     local st = ic._stkText
     if not st then
         st = ic:CreateFontString(nil, "OVERLAY")
         ic._stkText = st
     end
-    local stBase = (gcfg.stackSize or 10)
-    local stSize = max(6, floor((stBase / 10) * (size * 0.34) + 0.5))
-    if st.SetFont then st:SetFont(fontPath, stSize, fontFlags) end
-    st:SetText(AURA_MOCK_STACK_TEXT)
-    st:SetTextColor(1, 1, 1, 1)
-    st:ClearAllPoints()
-    local stAnchor = gcfg.stackAnchor or "BOTTOMRIGHT"
-    local stOX = (gcfg.stackOffsetX or -1)
-    local stOY = (gcfg.stackOffsetY or 1)
-    st:SetPoint(stAnchor, ic, stAnchor, stOX, stOY)
-    st:Show()
+    if showSt then
+        local stFlags = gcfg.stackOutline or fontFlags
+        local stSize = max(6, floor(((gcfg.stackSize or 10) * sc) + 0.5))
+        if st.SetFont then st:SetFont(fontPath, stSize, stFlags) end
+        st:SetText(AURA_MOCK_STACK_TEXT)
+        st:SetTextColor(1, 1, 1, 1)
+        st:ClearAllPoints()
+        local stAnchor = gcfg.stackAnchor or "BOTTOMRIGHT"
+        local stOX = floor(((gcfg.stackOffsetX or -1) * sc) + 0.5)
+        local stOY = floor(((gcfg.stackOffsetY or 1) * sc) + 0.5)
+        st:SetPoint(stAnchor, ic, stAnchor, stOX, stOY)
+        st:Show()
+    else
+        st:Hide()
+    end
 end
 
 local function BuildAuraGroupHandles(mockFrame)
@@ -1568,7 +1598,7 @@ function GF.RefreshPreviewHandles()
                 -- sliders.  Gated by the "CD/Stack" sidebar toggle (+
                 -- solo-on-auraText override).  Default ON.
                 local showAuraText = (_visToggles.auraText ~= false) or (_soloKey == "auraText")
-                ApplyMockIconText(ic, gcfg, sz, kind, showAuraText)
+                ApplyMockIconText(ic, gcfg, kind, showAuraText, sc)
 
                 ic:Show()
             end
@@ -2403,6 +2433,7 @@ do
             _origRefresh(...)
             if _box and _box:IsShown() then
                 GF.RefreshPreviewBox()
+                GF.RefreshPreviewHandles()
                 GF.ResizePreviewContainer()
                 if GF._RefreshOptionWidgets then GF._RefreshOptionWidgets() end
             end

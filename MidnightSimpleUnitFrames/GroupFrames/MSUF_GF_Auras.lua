@@ -1510,6 +1510,7 @@ local function _DoAuraOptionsRefresh()
     end
 
     if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
 end
 
 function GF.RequestAuraRefresh()
