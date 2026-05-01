@@ -47,6 +47,12 @@ local function A2_RequestCooldownTextRecolor()
     -- Preferred: single request method if provided by the core.
     if api and type(api.RequestCooldownTextRecolor) == "function" then
         api.RequestCooldownTextRecolor()
+        if _G and type(_G.MSUF_GF_InvalidateCooldownTextCurve) == "function" then
+            _G.MSUF_GF_InvalidateCooldownTextCurve()
+        end
+        if _G and type(_G.MSUF_GF_ForceCooldownTextRecolor) == "function" then
+            _G.MSUF_GF_ForceCooldownTextRecolor()
+        end
          return
     end
     -- Otherwise call the component methods if present.
@@ -62,6 +68,12 @@ local function A2_RequestCooldownTextRecolor()
     end
     if _G and type(_G.MSUF_A2_ForceCooldownTextRecolor) == "function" then
         _G.MSUF_A2_ForceCooldownTextRecolor()
+    end
+    if _G and type(_G.MSUF_GF_InvalidateCooldownTextCurve) == "function" then
+        _G.MSUF_GF_InvalidateCooldownTextCurve()
+    end
+    if _G and type(_G.MSUF_GF_ForceCooldownTextRecolor) == "function" then
+        _G.MSUF_GF_ForceCooldownTextRecolor()
     end
  end
 local function A2_ShowHighlightReloadPopup()

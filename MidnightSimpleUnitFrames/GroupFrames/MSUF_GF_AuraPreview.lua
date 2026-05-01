@@ -1144,7 +1144,18 @@ local function GetAuraMockFont(kind)
     return path, flags
 end
 
-local function GetAuraMockCooldownColor()
+local function ReadAuraMockColor(t, dr, dg, db)
+    if type(t) ~= "table" then return dr, dg, db, 1 end
+    local r = t[1] or t.r
+    local g = t[2] or t.g
+    local b = t[3] or t.b
+    if type(r) ~= "number" then r = dr end
+    if type(g) ~= "number" then g = dg end
+    if type(b) ~= "number" then b = db end
+    return r, g, b, 1
+end
+
+local function GetAuraMockBaseCooldownColor()
     local g = _G.MSUF_DB and _G.MSUF_DB.general
     if g and g.useCustomFontColor == true then
         local r = g.fontColorCustomR
@@ -1155,6 +1166,28 @@ local function GetAuraMockCooldownColor()
         end
     end
     return 1, 1, 1, 1
+end
+
+local function GetAuraMockCooldownColor()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local nr, ng, nb, na = GetAuraMockBaseCooldownColor()
+    local sr, sg, sb, sa = ReadAuraMockColor(g and g.aurasCooldownTextSafeColor, nr, ng, nb)
+    if g and g.aurasCooldownTextUseBuckets == false then
+        return sr, sg, sb, sa
+    end
+
+    local remain = tonumber(AURA_MOCK_CD_TEXT) or 3
+    local warn = (g and type(g.aurasCooldownTextWarningSeconds) == "number") and g.aurasCooldownTextWarningSeconds or 15
+    local urgent = (g and type(g.aurasCooldownTextUrgentSeconds) == "number") and g.aurasCooldownTextUrgentSeconds or 5
+    if urgent > warn then urgent = warn end
+
+    if remain <= urgent then
+        return ReadAuraMockColor(g and g.aurasCooldownTextUrgentColor, 1, 0.45, 0.10)
+    end
+    if remain <= warn then
+        return ReadAuraMockColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.20)
+    end
+    return sr, sg, sb, sa
 end
 
 ------------------------------------------------------------------------

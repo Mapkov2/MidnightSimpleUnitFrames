@@ -117,6 +117,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     if not UI then UI = ns.UI end
 
     local _inlineAuraPreviewFns = {}
+    local _timerColorRefreshFns = {}
 
     local function AG(groupKey)
         local conf = GF.GetConf(K())
@@ -511,6 +512,296 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         Refresh()
         _inlineAuraPreviewFns[#_inlineAuraPreviewFns + 1] = Refresh
         _auraRefreshFns[#_auraRefreshFns + 1] = Refresh
+        return row
+    end
+
+    local function GeneralDB()
+        _G.MSUF_DB = _G.MSUF_DB or {}
+        _G.MSUF_DB.general = _G.MSUF_DB.general or {}
+        return _G.MSUF_DB.general
+    end
+
+    local function ReadRGB(t, dr, dg, db)
+        if type(t) ~= "table" then return dr, dg, db end
+        local r = t[1] or t.r
+        local g = t[2] or t.g
+        local b = t[3] or t.b
+        if type(r) ~= "number" then r = dr end
+        if type(g) ~= "number" then g = dg end
+        if type(b) ~= "number" then b = db end
+        return r, g, b
+    end
+
+    local function GetBaseTimerColor()
+        local g = GeneralDB()
+        if g.useCustomFontColor == true
+            and type(g.fontColorCustomR) == "number"
+            and type(g.fontColorCustomG) == "number"
+            and type(g.fontColorCustomB) == "number" then
+            return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
+        end
+        return 1, 1, 1
+    end
+
+    local function GetTimerSafeColor()
+        local br, bg, bb = GetBaseTimerColor()
+        return ReadRGB(GeneralDB().aurasCooldownTextSafeColor, br, bg, bb)
+    end
+
+    local function GetTimerWarningColor()
+        return ReadRGB(GeneralDB().aurasCooldownTextWarningColor, 1, 0.85, 0.20)
+    end
+
+    local function GetTimerUrgentColor()
+        return ReadRGB(GeneralDB().aurasCooldownTextUrgentColor, 1, 0.45, 0.10)
+    end
+
+    local function RequestTimerColorRefresh()
+        if _G.MSUF_A2_InvalidateCooldownTextCurve then _G.MSUF_A2_InvalidateCooldownTextCurve() end
+        if _G.MSUF_A2_ForceCooldownTextRecolor then _G.MSUF_A2_ForceCooldownTextRecolor() end
+        if _G.MSUF_GF_InvalidateCooldownTextCurve then _G.MSUF_GF_InvalidateCooldownTextCurve() end
+        if _G.MSUF_GF_ForceCooldownTextRecolor then _G.MSUF_GF_ForceCooldownTextRecolor() end
+        RequestAuraRefresh()
+        for i = 1, #_inlineAuraPreviewFns do
+            _inlineAuraPreviewFns[i]()
+        end
+        for i = 1, #_timerColorRefreshFns do
+            _timerColorRefreshFns[i]()
+        end
+    end
+
+    local function RowGeneralCheck(parent, prevRow, label, key, def, topOfs)
+        local row = RowFrame(parent, prevRow, topOfs)
+        local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        cb:SetSize(22, 22)
+        cb:SetPoint("LEFT", row, "LEFT", 2, 0)
+        local fs = cb.text or cb.Text
+        if fs and fs.SetText then
+            fs:SetText(label or "")
+            if fs.SetFontObject then fs:SetFontObject("GameFontHighlightSmall") end
+        end
+        local function Refresh()
+            local v = GeneralDB()[key]
+            if v == nil then v = def end
+            cb:SetChecked(v and true or false)
+            if cb._msufToggleUpdate then cb._msufToggleUpdate() end
+        end
+        cb:SetScript("OnClick", function(self)
+            GeneralDB()[key] = self:GetChecked() and true or false
+            RequestTimerColorRefresh()
+            Refresh()
+        end)
+        if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+        if _G.MSUF_StyleToggleText then _G.MSUF_StyleToggleText(cb) end
+        Refresh()
+        _auraRefreshFns[#_auraRefreshFns + 1] = Refresh
+        _timerColorRefreshFns[#_timerColorRefreshFns + 1] = Refresh
+        row._ctrl = cb
+        return row
+    end
+
+    local function RowGeneralSlider(parent, prevRow, label, key, lo, hi, step, def, clampFn, topOfs, postSet, enabledFn)
+        local row = RowFrame(parent, prevRow, topOfs)
+        RowLabel(row, label)
+        local valFS = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        valFS:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        valFS:SetJustifyH("RIGHT")
+        local sl = CreateFrame("Slider", nil, row, "OptionsSliderTemplate")
+        sl:SetSize(SL_W, 14)
+        sl:SetPoint("RIGHT", valFS, "LEFT", -8, 0)
+        sl:SetMinMaxValues(lo, hi)
+        sl:SetValueStep(step)
+        sl:SetObeyStepOnDrag(true)
+        if sl.Text then sl.Text:SetText("") end
+        if sl.Low then sl.Low:SetText("") end
+        if sl.High then sl.High:SetText("") end
+
+        local function GetValue()
+            local v = GeneralDB()[key]
+            if type(v) ~= "number" then v = def end
+            if clampFn then v = clampFn(v) end
+            return math_floor(v + 0.5)
+        end
+        local function Refresh()
+            local v = GetValue()
+            sl._msufSkip = true
+            sl:SetValue(v)
+            sl._msufSkip = false
+            sl._msufLastValue = v
+            valFS:SetText(tostring(v))
+            local enabled = not enabledFn or enabledFn() ~= false
+            if enabled then
+                if sl.Enable then sl:Enable() end
+                row:SetAlpha(1)
+                sl:SetAlpha(1)
+            else
+                if sl.Disable then sl:Disable() end
+                row:SetAlpha(0.45)
+                sl:SetAlpha(0.35)
+            end
+        end
+        sl:SetScript("OnValueChanged", function(self, v)
+            if self._msufSkip then return end
+            v = math_floor(v + 0.5)
+            if clampFn then v = clampFn(v) end
+            valFS:SetText(tostring(v))
+            if self._msufLastValue == v then return end
+            self._msufLastValue = v
+            GeneralDB()[key] = v
+            if postSet then postSet(v) end
+            RequestTimerColorRefresh()
+        end)
+        local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+        if _styleSl then _styleSl(sl) end
+        Refresh()
+        _auraRefreshFns[#_auraRefreshFns + 1] = Refresh
+        _timerColorRefreshFns[#_timerColorRefreshFns + 1] = Refresh
+        row._ctrl = sl
+        return row
+    end
+
+    local function RowTimerColorPreview(parent, prevRow, topOfs)
+        local row = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        row:SetSize(ROW_W, 70)
+        row:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -(topOfs or 6))
+        row:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+        row:SetBackdropColor(0.03, 0.04, 0.07, 0.62)
+        row:SetBackdropBorderColor(0.20, 0.24, 0.34, 0.75)
+
+        local title = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        title:SetPoint("LEFT", row, "LEFT", 8, 0)
+        title:SetText(L["Preview"] or "Preview")
+        title:SetTextColor(0.62, 0.70, 0.86, 1)
+
+        local samples = {
+            { key = "safe", label = L["Safe"] or "Safe", text = "60" },
+            { key = "warn", label = L["Warning"] or "Warning", text = "15" },
+            { key = "urg",  label = L["Urgent"] or "Urgent", text = "5" },
+        }
+        for i = 1, #samples do
+            local box = CreateFrame("Frame", nil, row, "BackdropTemplate")
+            box:SetSize(104, 46)
+            box:SetPoint("LEFT", row, "LEFT", 150 + (i - 1) * 116, 0)
+            box:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            box:SetBackdropColor(0.02, 0.02, 0.03, 0.8)
+            box:SetBackdropBorderColor(0.14, 0.16, 0.22, 0.9)
+            local fs = box:CreateFontString(nil, "OVERLAY")
+            fs:SetFont((GF.ResolveFontPath and GF.ResolveFontPath(K())) or "Fonts\\FRIZQT__.TTF", 18, (GF.ResolveFontFlags and GF.ResolveFontFlags(K())) or "OUTLINE")
+            fs:SetPoint("CENTER", box, "CENTER", 0, 4)
+            fs:SetText(samples[i].text)
+            box._text = fs
+            local lbl = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            lbl:SetPoint("BOTTOM", box, "BOTTOM", 0, 3)
+            lbl:SetText(samples[i].label)
+            box._label = lbl
+            samples[i].box = box
+        end
+
+        local function Refresh()
+            local sr, sg, sb = GetTimerSafeColor()
+            local wr, wg, wb = GetTimerWarningColor()
+            local ur, ug, ub = GetTimerUrgentColor()
+            local cols = { safe = { sr, sg, sb }, warn = { wr, wg, wb }, urg = { ur, ug, ub } }
+            for i = 1, #samples do
+                local sample = samples[i]
+                local col = cols[sample.key]
+                local fs = sample.box and sample.box._text
+                if fs then
+                    fs:SetFont((GF.ResolveFontPath and GF.ResolveFontPath(K())) or "Fonts\\FRIZQT__.TTF", 18, (GF.ResolveFontFlags and GF.ResolveFontFlags(K())) or "OUTLINE")
+                    fs:SetTextColor(col[1], col[2], col[3], 1)
+                end
+            end
+        end
+        Refresh()
+        _auraRefreshFns[#_auraRefreshFns + 1] = Refresh
+        _timerColorRefreshFns[#_timerColorRefreshFns + 1] = Refresh
+        return row
+    end
+
+    local function RowTimerColorSwatches(parent, prevRow, topOfs)
+        local row = RowFrame(parent, prevRow, topOfs)
+        RowLabel(row, L["Colors"] or "Colors")
+        local specs = {
+            { label = L["Safe"] or "Safe", get = GetTimerSafeColor, set = function(r, g, b)
+                GeneralDB().aurasCooldownTextSafeColor = { r, g, b }
+            end, reset = function()
+                GeneralDB().aurasCooldownTextSafeColor = nil
+            end },
+            { label = L["Warning"] or "Warning", get = GetTimerWarningColor, set = function(r, g, b)
+                GeneralDB().aurasCooldownTextWarningColor = { r, g, b }
+            end, reset = function()
+                GeneralDB().aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
+            end },
+            { label = L["Urgent"] or "Urgent", get = GetTimerUrgentColor, set = function(r, g, b)
+                GeneralDB().aurasCooldownTextUrgentColor = { r, g, b }
+            end, reset = function()
+                GeneralDB().aurasCooldownTextUrgentColor = { 1.00, 0.45, 0.10 }
+            end },
+        }
+        local refs = {}
+        for i = 1, #specs do
+            local btn = CreateFrame("Button", nil, row, "BackdropTemplate")
+            btn:SetSize(74, 18)
+            btn:SetPoint("LEFT", row, "LEFT", 182 + (i - 1) * 92, 0)
+            btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+            btn:SetBackdropBorderColor(0.20, 0.30, 0.50, 0.75)
+            local tex = btn:CreateTexture(nil, "ARTWORK")
+            tex:SetPoint("LEFT", btn, "LEFT", 2, 2)
+            tex:SetSize(16, 14)
+            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            fs:SetPoint("LEFT", tex, "RIGHT", 5, 0)
+            fs:SetText(specs[i].label)
+            btn._tex = tex
+            btn:SetScript("OnMouseUp", function(_, button)
+                if button == "RightButton" then
+                    if specs[i].reset then specs[i].reset() end
+                    RequestTimerColorRefresh()
+                    for j = 1, #refs do
+                        if refs[j].Refresh then refs[j]:Refresh() end
+                    end
+                    return
+                end
+                if not OpenColorPicker then return end
+                local r, g, b = specs[i].get()
+                OpenColorPicker(r, g, b, function(nr, ng, nb)
+                    specs[i].set(nr, ng, nb)
+                    RequestTimerColorRefresh()
+                    for j = 1, #refs do
+                        if refs[j].Refresh then refs[j]:Refresh() end
+                    end
+                end)
+            end)
+            function btn:Refresh()
+                local r, g, b = specs[i].get()
+                self._tex:SetColorTexture(r, g, b, 1)
+                local bucketsOn = not (GeneralDB().aurasCooldownTextUseBuckets == false)
+                local enabled = (i == 1) or bucketsOn
+                self:EnableMouse(enabled)
+                self:SetAlpha(enabled and 1 or 0.35)
+            end
+            btn:Refresh()
+            refs[#refs + 1] = btn
+        end
+        local reset = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        reset:SetSize(70, 20)
+        reset:SetPoint("LEFT", row, "LEFT", 462, 0)
+        reset:SetText(L["Reset"] or "Reset")
+        reset:SetScript("OnClick", function()
+            local g = GeneralDB()
+            g.aurasCooldownTextSafeColor = nil
+            g.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
+            g.aurasCooldownTextUrgentColor = { 1.00, 0.45, 0.10 }
+            RequestTimerColorRefresh()
+            for j = 1, #refs do
+                if refs[j].Refresh then refs[j]:Refresh() end
+            end
+        end)
+        _auraRefreshFns[#_auraRefreshFns + 1] = function()
+            for i = 1, #refs do refs[i]:Refresh() end
+        end
+        _timerColorRefreshFns[#_timerColorRefreshFns + 1] = function()
+            for i = 1, #refs do refs[i]:Refresh() end
+        end
         return row
     end
 
@@ -1670,6 +1961,81 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Defensives
     ----------------------------------------------------------------
     BuildAuraGroupSection("externals", L["Defensives"], 860)
+
+    ----------------------------------------------------------------
+    -- Section: Text Coloring
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(340, L["Text Coloring"] or "Text Coloring", false, "textcolor")
+
+        local r = RowSubLabel(body, nil, L["Cooldown Timer Text"] or "Cooldown Timer Text", 6)
+
+        local infoRow = RowFrame(body, r, 0)
+        local infoFS = infoRow:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        infoFS:SetPoint("LEFT", infoRow, "LEFT", 4, 0)
+        infoFS:SetWidth(610)
+        infoFS:SetJustifyH("LEFT")
+        infoFS:SetText(L["Group frames use Blizzard timer text; MSUF only recolors that native text."] or "Group frames use Blizzard timer text; MSUF only recolors that native text.")
+        r = infoRow
+
+        r = RowGeneralCheck(body, r, L["Color aura timers by remaining time"] or "Color aura timers by remaining time",
+            "aurasCooldownTextUseBuckets", true, 2)
+
+        r = RowTimerColorPreview(body, r, 8)
+        r = RowTimerColorSwatches(body, r, 8)
+        r = RowDivider(body, r, 8)
+
+        local function BucketsEnabled()
+            return GeneralDB().aurasCooldownTextUseBuckets ~= false
+        end
+        local function ClampRange(v, lo, hi)
+            if type(v) ~= "number" then v = lo end
+            if v < lo then return lo end
+            if v > hi then return hi end
+            return v
+        end
+        local function ClampSafe(v)
+            return ClampRange(v, 0, 600)
+        end
+        local function ClampWarn(v)
+            local safe = GeneralDB().aurasCooldownTextSafeSeconds
+            if type(safe) ~= "number" then safe = 60 end
+            return math_min(ClampRange(v, 0, 30), safe)
+        end
+        local function ClampUrgent(v)
+            local warn = GeneralDB().aurasCooldownTextWarningSeconds
+            if type(warn) ~= "number" then warn = 15 end
+            return math_min(ClampRange(v, 0, 15), warn)
+        end
+        local function AfterSafe(v)
+            local g = GeneralDB()
+            if type(g.aurasCooldownTextWarningSeconds) ~= "number" then g.aurasCooldownTextWarningSeconds = 15 end
+            if type(g.aurasCooldownTextUrgentSeconds) ~= "number" then g.aurasCooldownTextUrgentSeconds = 5 end
+            if g.aurasCooldownTextWarningSeconds > v then g.aurasCooldownTextWarningSeconds = v end
+            if g.aurasCooldownTextUrgentSeconds > g.aurasCooldownTextWarningSeconds then
+                g.aurasCooldownTextUrgentSeconds = g.aurasCooldownTextWarningSeconds
+            end
+        end
+        local function AfterWarn(v)
+            local g = GeneralDB()
+            if type(g.aurasCooldownTextSafeSeconds) ~= "number" then g.aurasCooldownTextSafeSeconds = 60 end
+            if type(g.aurasCooldownTextUrgentSeconds) ~= "number" then g.aurasCooldownTextUrgentSeconds = 5 end
+            if v > g.aurasCooldownTextSafeSeconds then g.aurasCooldownTextWarningSeconds = g.aurasCooldownTextSafeSeconds end
+            if g.aurasCooldownTextUrgentSeconds > v then g.aurasCooldownTextUrgentSeconds = v end
+        end
+        local function AfterUrgent(v)
+            local g = GeneralDB()
+            if type(g.aurasCooldownTextWarningSeconds) ~= "number" then g.aurasCooldownTextWarningSeconds = 15 end
+            if v > g.aurasCooldownTextWarningSeconds then g.aurasCooldownTextUrgentSeconds = g.aurasCooldownTextWarningSeconds end
+        end
+
+        r = RowGeneralSlider(body, r, L["Safe (seconds)"] or "Safe (seconds)",
+            "aurasCooldownTextSafeSeconds", 0, 600, 1, 60, ClampSafe, 8, AfterSafe)
+        r = RowGeneralSlider(body, r, L["Warning (<=)"] or "Warning (<=)",
+            "aurasCooldownTextWarningSeconds", 0, 30, 1, 15, ClampWarn, 0, AfterWarn, BucketsEnabled)
+        r = RowGeneralSlider(body, r, L["Urgent (<=)"] or "Urgent (<=)",
+            "aurasCooldownTextUrgentSeconds", 0, 15, 1, 5, ClampUrgent, 0, AfterUrgent, BucketsEnabled)
+    end
 
     ----------------------------------------------------------------
     -- Section: Private Auras
