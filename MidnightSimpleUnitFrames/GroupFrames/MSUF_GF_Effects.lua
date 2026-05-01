@@ -2067,12 +2067,26 @@ end
 -- Status text: AFK / DND (red, GF-owned pipeline)
 -- Status state encoding: 0=normal, 1=offline, 2=dead, 3=ghost, 4=afk, 5=dnd
 ------------------------------------------------------------------------
+function GF.GetStatusIndicatorFlags()
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local db = gen and gen.statusIndicators
+    if type(db) ~= "table" then
+        local getDB = _G.MSUF_GetStatusIndicatorDB
+        db = (type(getDB) == "function") and getDB() or nil
+    end
+    if type(db) ~= "table" then
+        return false, false, true, true
+    end
+    return db.showAFK == true, db.showDND == true, db.showDead == true, db.showGhost == true
+end
+
 local function UpdateStatusText(f, unit, forceAway)
     local st = f._msufGFStatusText or f.statusIndicatorText
     if not st then return end
 
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
+    local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
 
     if not unit or not UnitExists(unit) then
         if f._msufGFStatusState ~= 0 then
@@ -2090,7 +2104,7 @@ local function UpdateStatusText(f, unit, forceAway)
     local connected = UnitIsConnected(unit)
     if issecretvalue and issecretvalue(connected) then connected = true end
 
-    if connected == false then
+    if connected == false and showDead then
         newState = 1
     else
         -- Secret-safe (12.0): UnitIsDeadOrGhost may return secret booleans for
@@ -2101,27 +2115,33 @@ local function UpdateStatusText(f, unit, forceAway)
         if dog then
             local ghost = UnitIsGhost and UnitIsGhost(unit)
             if issecretvalue and ghost and issecretvalue(ghost) then ghost = false end
-            newState = ghost and 3 or 2
+            if ghost and showGhost then
+                newState = 3
+            elseif showDead then
+                newState = 2
+            end
         else
-            local getAway = _G.MSUF_GetCachedAwayStatus
-            if getAway then
-                local away = getAway(unit, true, true, forceAway == true)
-                if away == 1 or away == 3 then
-                    newState = 4
-                elseif away == 2 then
-                    newState = 5
-                end
-            else
-                if UnitIsAFK then
-                    local afk = UnitIsAFK(unit)
-                    if not (issecretvalue and issecretvalue(afk)) and afk == true then
+            if showAFK or showDND then
+                local getAway = _G.MSUF_GetCachedAwayStatus
+                if getAway then
+                    local away = getAway(unit, showAFK, showDND, forceAway == true)
+                    if showAFK and (away == 1 or away == 3) then
                         newState = 4
-                    end
-                end
-                if newState == 0 and UnitIsDND then
-                    local dnd = UnitIsDND(unit)
-                    if not (issecretvalue and issecretvalue(dnd)) and dnd == true then
+                    elseif showDND and (away == 2 or away == 3) then
                         newState = 5
+                    end
+                else
+                    if showAFK and UnitIsAFK then
+                        local afk = UnitIsAFK(unit)
+                        if not (issecretvalue and issecretvalue(afk)) and afk == true then
+                            newState = 4
+                        end
+                    end
+                    if newState == 0 and showDND and UnitIsDND then
+                        local dnd = UnitIsDND(unit)
+                        if not (issecretvalue and issecretvalue(dnd)) and dnd == true then
+                            newState = 5
+                        end
                     end
                 end
             end
@@ -2724,6 +2744,11 @@ function _gfFlushDirtyText()
                         end
                     end
                 end
+
+                if f._msufGFStatusDirty then
+                    f._msufGFStatusDirty = nil
+                    UpdateStatusText(f, unit)
+                end
             end
         end
     end
@@ -2780,9 +2805,8 @@ local function dispatchHealthLean(f, unit)
         fn = c.tcFn; if fn then fn(f.textCenterFS, unit, hp, hm) end
         fn = c.trFn; if fn then fn(f.textRightFS, unit, hp, hm) end
     end
-    if c and c.anySlowText then
-        _gfMarkTextDirty(f)
-    end
+    f._msufGFStatusDirty = true
+    _gfMarkTextDirty(f)
 
     -- Cutaway: stamp-based (no Timer:Cancel per event).
     -- Just record when to snap. Callback checks stamp.
@@ -3972,6 +3996,7 @@ _G.MSUF_GF_OnFrameRetire = function(f)
     -- Drop pending text-flush entry (avoids dangling key in dirty set)
     _gfTextDirtyFrames[f] = nil
     _gfTextQueued[f] = nil
+    f._msufGFStatusDirty = nil
     _gfAuraDirtyQueued[f] = nil
 
     -- Remove from GUID→frame map (search by value — guid hash unknown here)

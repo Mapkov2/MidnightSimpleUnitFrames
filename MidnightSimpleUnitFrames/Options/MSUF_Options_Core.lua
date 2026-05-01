@@ -2186,7 +2186,9 @@ end
         if anchorCheck then
             anchorCheck:SetChecked(g.anchorToCooldown and true or false)
         end
-        if fontDrop and g.fontKey then
+        if fontDrop and fontDrop.Refresh then
+            fontDrop:Refresh()
+        elseif fontDrop and g.fontKey then
             local fontChoicesLocal = self.__MSUF_FontChoices
             local rebuild = self.__MSUF_RebuildFontChoices
             if (not fontChoicesLocal or #fontChoicesLocal == 0) and type(rebuild) == "function" then
@@ -2205,12 +2207,24 @@ end
             end
             UIDropDownMenu_SetText(fontDrop, label)
         end
-        if nameFontSizeSlider then nameFontSizeSlider:SetValue(g.nameFontSize or g.fontSize or 14) end
-        if hpFontSizeSlider then
+        if nameFontSizeSlider and nameFontSizeSlider.Refresh then
+            nameFontSizeSlider:Refresh()
+        elseif nameFontSizeSlider then
+            nameFontSizeSlider:SetValue(g.nameFontSize or g.fontSize or 14)
+        end
+        if hpFontSizeSlider and hpFontSizeSlider.Refresh then
+            hpFontSizeSlider:Refresh()
+        elseif hpFontSizeSlider then
             hpFontSizeSlider:SetValue(g.hpFontSize or g.fontSize or 14)
         end
-        if powerFontSizeSlider then powerFontSizeSlider:SetValue(g.powerFontSize or g.fontSize or 14) end
-        if castbarSpellNameFontSizeSlider then
+        if powerFontSizeSlider and powerFontSizeSlider.Refresh then
+            powerFontSizeSlider:Refresh()
+        elseif powerFontSizeSlider then
+            powerFontSizeSlider:SetValue(g.powerFontSize or g.fontSize or 14)
+        end
+        if castbarSpellNameFontSizeSlider and castbarSpellNameFontSizeSlider.Refresh then
+            castbarSpellNameFontSizeSlider:Refresh()
+        elseif castbarSpellNameFontSizeSlider then
             -- Castbar font size (0 = inherit/auto). Must be set here so the editbox shows the saved value immediately.
             castbarSpellNameFontSizeSlider:SetValue(g.castbarSpellNameFontSize or 0)
         end

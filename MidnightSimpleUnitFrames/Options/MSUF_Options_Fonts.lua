@@ -77,7 +77,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     }
 
     local FONT_OVERRIDE_KEYS = {
-        "boldText", "noOutline", "textBackdrop",
+        "fontKey", "boldText", "noOutline", "textBackdrop",
         "nameClassColor", "npcNameRed", "colorPowerTextByType",
         "shortenNameMaxChars", "shortenNameClipSide", "shortenNameFrontMaskPx", "shortenNameShowDots",
     }
@@ -591,9 +591,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             end
             return out
         end,
-        get = function() return G().fontKey or "FRIZQT" end,
+        get = function() return ScopeGet("fontKey", "FRIZQT") end,
         set = function(v)
-            G().fontKey = v; UpdateFonts()
+            ScopeSet("fontKey", v)
+            UpdateFonts()
             if C_Timer and C_Timer.After then C_Timer.After(0, UpdateFonts) end
         end,
     })
@@ -1079,6 +1080,63 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if shortenMaskSlider then shortenMaskSlider:SetAlpha(on and 1 or 0.45) end
         if shortenClipDrop then shortenClipDrop:SetEnabled(on) end
     end
+    local function ApplyShortenLive(layoutReason)
+        EnsureDB()
+        local keys
+        local scopeKey = GetScopeKey()
+        if scopeKey == "shared" then
+            keys = ALL_UNITS
+        elseif not GF_SCOPE_DB_KEYS[scopeKey] then
+            keys = { scopeKey }
+        else
+            return
+        end
+
+        if _G.MSUF_InCombat then
+            local applyQueued = _G.MSUF_ApplySettingsForKey_Immediate or _G.ApplySettingsForKey
+            if type(applyQueued) == "function" then
+                for _, key in ipairs(keys) do pcall(applyQueued, key) end
+            elseif RequestLayoutAll then
+                RequestLayoutAll(layoutReason)
+            end
+            return
+        end
+
+        local clamp = _G.MSUF_ClampNameWidth
+        local frames = _G.MSUF_UnitFrames
+        local function ApplyFrame(frame, conf)
+            if not frame then return end
+            frame._msufClampStamp = nil
+            frame._msufNameClipAnchorStamp = nil
+            frame._msufNameClipTextStamp = nil
+            frame._msufTextSpec = nil
+            if type(clamp) == "function" then clamp(frame, conf) end
+            if type(_G.MSUF_QueueUnitframeUpdate) == "function" then
+                _G.MSUF_QueueUnitframeUpdate(frame, true)
+            end
+        end
+        for _, key in ipairs(keys) do
+            local conf = MSUF_DB and MSUF_DB[key]
+            if key == "boss" then
+                for i = 1, 5 do
+                    local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
+                    ApplyFrame(frame, conf)
+                end
+            else
+                local frame = (frames and frames[key]) or _G["MSUF_" .. key]
+                ApplyFrame(frame, conf)
+            end
+        end
+    end
+    local function ApplyShortenChange(layoutReason, onlyWhenEnabled)
+        SyncShortenEnabled()
+        if SyncScopeUI then SyncScopeUI() end
+        InvalidateTextSpecs()
+        if (not onlyWhenEnabled) or ScopeGet("shortenNames", false, "shortenNames") then
+            LiveSyncFontVisuals({ layout = layoutReason })
+            ApplyShortenLive(layoutReason)
+        end
+    end
 
     local shortenCheck = UI.Check({
         name = "MSUF_ShortenNamesCheck", parent = nameBody,
@@ -1087,9 +1145,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         get = function() return ScopeGet("shortenNames", false, "shortenNames") and true or false end,
         set = function(v)
             ScopeSet("shortenNames", v, "shortenNames")
-            SyncShortenEnabled()
-            InvalidateTextSpecs()
-            LiveSyncFontVisuals({ layout = "SHORTEN_NAMES" })
+            ApplyShortenChange("SHORTEN_NAMES", false)
         end,
     })
     function shortenCheck:Refresh()
@@ -1109,10 +1165,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         get = function() return ScopeGet("shortenNameClipSide", "LEFT") end,
         set = function(v)
             ScopeSet("shortenNameClipSide", v)
-            InvalidateTextSpecs()
-            if ScopeGet("shortenNames", false, "shortenNames") then
-                LiveSyncFontVisuals({ layout = "SHORTEN_CLIP" })
-            end
+            ApplyShortenChange("SHORTEN_CLIP", true)
         end,
     })
 
@@ -1124,10 +1177,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         get = function() return ScopeGet("shortenNameMaxChars", 6) end,
         set = function(v)
             ScopeSet("shortenNameMaxChars", floor(v + 0.5))
-            InvalidateTextSpecs()
-            if ScopeGet("shortenNames", false, "shortenNames") then
-                LiveSyncFontVisuals({ layout = "SHORTEN_CHARS" })
-            end
+            ApplyShortenChange("SHORTEN_CHARS", true)
         end,
     })
 
@@ -1139,10 +1189,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         get = function() return ScopeGet("shortenNameFrontMaskPx", 8) end,
         set = function(v)
             ScopeSet("shortenNameFrontMaskPx", floor(v + 0.5))
-            InvalidateTextSpecs()
-            if ScopeGet("shortenNames", false, "shortenNames") then
-                LiveSyncFontVisuals({ layout = "SHORTEN_MASK" })
-            end
+            ApplyShortenChange("SHORTEN_MASK", true)
         end,
     })
 
@@ -1304,6 +1351,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
         -- Refresh all widgets for current scope
         if not gfScope then
+            if fontDrop and fontDrop.Refresh then fontDrop:Refresh() end
             if boldCheck and boldCheck.Refresh then boldCheck:Refresh() end
             if noOutlineCheck and noOutlineCheck.Refresh then noOutlineCheck:Refresh() end
             if textBackdropCheck and textBackdropCheck.Refresh then textBackdropCheck:Refresh() end
