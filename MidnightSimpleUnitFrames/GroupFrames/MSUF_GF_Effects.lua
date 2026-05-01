@@ -2157,40 +2157,53 @@ end
 ------------------------------------------------------------------------
 -- Role icon update
 ------------------------------------------------------------------------
+function GF._UpdatePowerRoleVisibility(f, unit)
+    if not f.power then return false end
+    local c = f._c
+    local hidden = false
+    if c then
+        local role = (GF.GetUnitGroupRole and GF.GetUnitGroupRole(unit))
+            or ((UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit)) or "DAMAGER")
+        role = (GF.NormalizeGroupRole and GF.NormalizeGroupRole(role)) or role
+        if GF.GetEffectivePowerHeight then
+            hidden = GF.GetEffectivePowerHeight(f._msufGFKind or "party", unit, role) <= 0
+        else
+            hidden = (role == "TANK" and not c.powTank)
+                or (role == "HEALER" and not c.powHealer)
+                or (role == "DAMAGER" and not c.powDPS) or false
+        end
+    end
+
+    local prev = f._msufGFPowRoleHidden
+    f._msufGFPowRoleHidden = hidden
+    if prev ~= nil and prev ~= hidden and not (InCombatLockdown and InCombatLockdown()) and GF.MarkDirty then
+        GF.MarkDirty(f, (GF.DIRTY_GEOMETRY or 0x01) + (GF.DIRTY_LAYOUT or 0x20))
+    end
+    return hidden
+end
+
 local function UpdateRoleIcon(f, unit)
     if not f.roleIcon then
         -- Still update power role cache even without role icon widget
-        if f.power then
-            local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit)
-            local c = f._c
-            if c and role then
-                f._msufGFPowRoleHidden = (role == "TANK" and not c.powTank)
-                    or (role == "HEALER" and not c.powHealer)
-                    or (role == "DAMAGER" and not c.powDPS) or false
-            else
-                f._msufGFPowRoleHidden = false
-            end
-        end
+        GF._UpdatePowerRoleVisibility(f, unit)
         return
     end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
-    if conf.roleIcon == false or not unit or not UnitExists(unit) then
+    if not unit or not UnitExists(unit) then
         if f.roleIcon:IsShown() then f.roleIcon:Hide() end
         f._msufGFPowRoleHidden = false
+        return
+    end
+    if conf.roleIcon == false then
+        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
+        GF._UpdatePowerRoleVisibility(f, unit)
         return
     end
     local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
 
     -- Cache power-per-role visibility (read by dispatchPower lean path)
-    local c = f._c
-    if c and role then
-        f._msufGFPowRoleHidden = (role == "TANK" and not c.powTank)
-            or (role == "HEALER" and not c.powHealer)
-            or (role == "DAMAGER" and not c.powDPS) or false
-    else
-        f._msufGFPowRoleHidden = false
-    end
+    GF._UpdatePowerRoleVisibility(f, unit)
 
     if role and role ~= "NONE" then
         local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
