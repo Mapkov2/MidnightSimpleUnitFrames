@@ -1092,6 +1092,10 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             LiveSyncFontVisuals({ layout = "SHORTEN_NAMES" })
         end,
     })
+    function shortenCheck:Refresh()
+        self:SetChecked(ScopeGet("shortenNames", false, "shortenNames") and true or false)
+        if self._msufToggleUpdate then self._msufToggleUpdate() end
+    end
 
     local shortenClipLabel = UI.Label({ parent = nameBody, text = TR("Truncation style"), font = "GameFontNormal", anchor = shortenCheck, x = 16, y = -10 })
 
