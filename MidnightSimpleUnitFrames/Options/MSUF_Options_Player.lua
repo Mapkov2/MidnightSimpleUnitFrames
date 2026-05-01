@@ -1123,7 +1123,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             panel.statusIconsSizeSlider = UI.Slider({
                 name = "MSUF_UF_SI_SizeSlider", parent = statusBody, compact = true,
                 anchor = panel.statusIconsEnabledCB, x = 0, y = -10,
-                min = 8, max = 64, step = 1, width = 270, default = 14,
+                compactInput = true, compactInputWidth = 48, compactInputGap = 8,
+                min = 8, max = 64, step = 1, width = 320, default = 14,
                 get = function() return StatusGet("size") end,
                 set = function(v) StatusSet("size", v) end,
                 formatText = function(v) return string.format("Size: %d", v) end,
@@ -1140,7 +1141,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             panel.statusIconsXSlider = UI.Slider({
                 name = "MSUF_UF_SI_XSlider", parent = statusBody, compact = true,
                 anchor = panel.statusIconsAnchorDrop, x = 16, y = -10,
-                min = -200, max = 200, step = 1, width = 270, default = 0,
+                compactInput = true, compactInputWidth = 56, compactInputGap = 8,
+                min = -500, max = 500, step = 1, width = 340, default = 0,
                 get = function() return StatusGet("x") end,
                 set = function(v) StatusSet("x", v) end,
                 formatText = function(v) return string.format("X Offset: %d", v) end,
@@ -1149,7 +1151,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             panel.statusIconsYSlider = UI.Slider({
                 name = "MSUF_UF_SI_YSlider", parent = statusBody, compact = true,
                 anchor = panel.statusIconsXSlider, x = 0, y = -32,
-                min = -200, max = 200, step = 1, width = 270, default = 0,
+                compactInput = true, compactInputWidth = 56, compactInputGap = 8,
+                min = -500, max = 500, step = 1, width = 340, default = 0,
                 get = function() return StatusGet("y") end,
                 set = function(v) StatusSet("y", v) end,
                 formatText = function(v) return string.format("Y Offset: %d", v) end,
