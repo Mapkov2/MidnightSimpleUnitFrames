@@ -1313,6 +1313,7 @@ Elements.Indicators = {
         if f.leaderIcon then f.leaderIcon:Hide() end
         if f.assistantIcon then f.assistantIcon:Hide() end
         if f.raidMarkerIcon then f.raidMarkerIcon:Hide() end
+        if f.eliteIcon then f.eliteIcon:Hide() end
     end,
     Update = function(f, conf)
         if not f then return false end
@@ -1322,6 +1323,7 @@ Elements.Indicators = {
         if not cache or not cache.generalRef or not unit then
             if f.leaderIcon then f.leaderIcon:Hide() end
             if f.raidMarkerIcon then f.raidMarkerIcon:Hide() end
+            if f.eliteIcon then f.eliteIcon:Hide() end
             if f.assistantIcon then f.assistantIcon:Hide() end
             return true
         end
@@ -1376,6 +1378,16 @@ Elements.Indicators = {
                 else
                     f.raidMarkerIcon:Hide()
                 end
+            end
+        end
+
+        -- Elite / Rare icon (target, focus, targettarget, boss)
+        if f.eliteIcon then
+            local updateFn = _G.MSUF_UpdateEliteIcon
+            if type(updateFn) == "function" then
+                updateFn(f)
+            else
+                f.eliteIcon:Hide()
             end
         end
 
@@ -1728,7 +1740,7 @@ end
     end
 
     -- INDICATORS: leader/assist + raid marker icons (driven by global events)
-    if (f.leaderIcon or f.raidMarkerIcon or f.assistantIcon) then
+    if (f.leaderIcon or f.raidMarkerIcon or f.assistantIcon or f.eliteIcon) then
         mask = bor(mask, EL_INDICATOR)
     end
 
