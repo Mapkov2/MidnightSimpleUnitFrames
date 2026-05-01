@@ -176,6 +176,15 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     local DD_W     = 130
 
     local _auraRefreshFns = {}
+    local AURA_CHECK_SIZE = 24
+
+    local function StyleAuraCheck(cb)
+        if not cb then return end
+        cb:SetSize(AURA_CHECK_SIZE, AURA_CHECK_SIZE)
+        if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+        if _G.MSUF_StyleToggleText then _G.MSUF_StyleToggleText(cb) end
+        if cb._msufToggleUpdate then cb._msufToggleUpdate() end
+    end
 
     local function RowFrame(parent, prevRow, topOfs)
         local r = CreateFrame("Frame", nil, parent)
@@ -199,7 +208,6 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     local function RowCheck(parent, prevRow, label, gk, key, topOfs)
         local row = RowFrame(parent, prevRow, topOfs)
         local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-        cb:SetSize(22, 22)
         cb:SetPoint("LEFT", row, "LEFT", 2, 0)
         -- Label on the checkbox's built-in text (MSUF style)
         local fs = cb.text or cb.Text
@@ -213,9 +221,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             if self._msufToggleUpdate then self._msufToggleUpdate() end
         end)
         -- Apply MSUF style AFTER SetScript (HookScript adds to chain)
-        if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
-        if _G.MSUF_StyleToggleText then _G.MSUF_StyleToggleText(cb) end
-        if cb._msufToggleUpdate then cb._msufToggleUpdate() end
+        StyleAuraCheck(cb)
         _auraRefreshFns[#_auraRefreshFns + 1] = function()
             cb:SetChecked(AV(gk, key) ~= false)
             if cb._msufToggleUpdate then cb._msufToggleUpdate() end
@@ -573,7 +579,6 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     local function RowGeneralCheck(parent, prevRow, label, key, def, topOfs)
         local row = RowFrame(parent, prevRow, topOfs)
         local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-        cb:SetSize(22, 22)
         cb:SetPoint("LEFT", row, "LEFT", 2, 0)
         local fs = cb.text or cb.Text
         if fs and fs.SetText then
@@ -591,8 +596,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             RequestTimerColorRefresh()
             Refresh()
         end)
-        if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
-        if _G.MSUF_StyleToggleText then _G.MSUF_StyleToggleText(cb) end
+        StyleAuraCheck(cb)
         Refresh()
         _auraRefreshFns[#_auraRefreshFns + 1] = Refresh
         _timerColorRefreshFns[#_timerColorRefreshFns + 1] = Refresh
@@ -841,7 +845,6 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             local catKey = catInfo.key
             local catRow = RowFrame(body, r, 0)
             local cb = CreateFrame("CheckButton", nil, catRow, "UICheckButtonTemplate")
-            cb:SetSize(20, 20)
             cb:SetPoint("LEFT", catRow, "LEFT", 12, 0)
             local fs = cb.text or cb.Text
             if fs and fs.SetText then
@@ -881,9 +884,10 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 end)
                 cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
             end
-            if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+            StyleAuraCheck(cb)
             _auraRefreshFns[#_auraRefreshFns + 1] = function()
                 cb:SetChecked(GetCatState())
+                if cb._msufToggleUpdate then cb._msufToggleUpdate() end
             end
             r = catRow
         end
@@ -994,6 +998,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
 
         local box, body = AddSection(640, L["Spell Indicators"], false, "si")
+        local siRemeasureQueued = false
+        local function RequestSISectionRemeasure()
+            if box and box._msufRemeasure then box._msufRemeasure() end
+            if siRemeasureQueued or not (C_Timer and C_Timer.After) then return end
+            siRemeasureQueued = true
+            C_Timer.After(0.05, function()
+                siRemeasureQueued = false
+                if box and box._msufRemeasure then box._msufRemeasure() end
+            end)
+        end
 
         SCheck({
             name = "MSUF_GF_SIEnable", parent = body,
@@ -1165,6 +1179,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         HideAllSpellPanels = function()
             for _, panel in pairs(spellPanels) do panel:Hide() end
             ClearSIHighlight()
+            RequestSISectionRemeasure()
         end
 
         local function BuildSpellPanel(auraName, specKey, parentTile)
@@ -1184,10 +1199,10 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             -- Trigger section re-measure on show/hide
             panel:HookScript("OnShow", function()
-                if box._msufRemeasure then box._msufRemeasure() end
+                RequestSISectionRemeasure()
             end)
             panel:HookScript("OnHide", function()
-                if box._msufRemeasure then box._msufRemeasure() end
+                RequestSISectionRemeasure()
             end)
 
             local function SC()
@@ -1907,6 +1922,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                                 local gridH = yOffset + totalRows * (TILE_SIZE + TILE_GAP) - TILE_GAP + 2
                                 panel:SetPoint("TOPLEFT", tileContainer, "TOPLEFT", 0, -gridH)
                                 panel:Show()
+                                RequestSISectionRemeasure()
                             end
                         end)
 
@@ -1930,6 +1946,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             end
 
             tileContainer:SetHeight(yOffset + 280)
+            RequestSISectionRemeasure()
         end
 
         RefreshSpellTiles()
