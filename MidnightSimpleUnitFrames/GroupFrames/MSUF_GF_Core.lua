@@ -1400,6 +1400,13 @@ local function GetLiveRaidKind()
     return (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
 end
 
+function GF.UpdateAnyEnabledFlag()
+    local partyConf = GF.GetConf("party")
+    local raidConf = GF.GetConf(GetLiveRaidKind())
+    GF._anyEnabled = ((partyConf and partyConf.enabled) or (raidConf and raidConf.enabled)) and true or false
+    return GF._anyEnabled
+end
+
 local function GetDefaultCenter(kind)
     return IsRaidLikeKind(kind) and -500 or -400, 0
 end
@@ -2553,6 +2560,7 @@ function GF.RebuildAll()
     local partyConf = GF.GetConf("party")
     local raidKind = GetLiveRaidKind()
     local raidConf  = GF.GetConf(raidKind)
+    GF.UpdateAnyEnabledFlag()
 
     local inRaid = IsInRaid and IsInRaid() or false
 
@@ -2623,6 +2631,7 @@ function GF.UpdateGroupVisibility()
     local partyConf = GF.GetConf("party")
     local raidKind = GetLiveRaidKind()
     local raidConf  = GF.GetConf(raidKind)
+    GF.UpdateAnyEnabledFlag()
 
     -- Party header
     if GF.headers.party then
@@ -2669,6 +2678,7 @@ local function OnEvent(self, event, ...)
         GF.EnsureDB()
         local partyConf = GF.GetConf("party")
         local raidConf  = GF.GetConf(GetLiveRaidKind())
+        GF.UpdateAnyEnabledFlag()
         if partyConf.enabled or raidConf.enabled then
             GF.RebuildAll()
         end
@@ -2750,6 +2760,7 @@ local function OnEvent(self, event, ...)
         GF.EnsureDB()
         local partyConf = GF.GetConf("party")
         local raidConf  = GF.GetConf(GetLiveRaidKind())
+        GF.UpdateAnyEnabledFlag()
         if partyConf.enabled or raidConf.enabled then
             -- Only recreate headers on actual zone transitions (not /reload).
             -- /reload creates everything fresh anyway, no C-side state bug.
