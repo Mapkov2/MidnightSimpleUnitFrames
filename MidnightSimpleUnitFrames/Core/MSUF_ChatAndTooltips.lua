@@ -293,7 +293,15 @@ local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     if isPlayer then
         -- Secret-safe (12.0): UnitIsAFK/UnitIsDND may return secret booleans;
         -- direct boolean test in `if` would hard-error. Guard via issecretvalue.
-        if UnitIsAFK then
+        local getAway = _G.MSUF_GetCachedAwayStatus
+        if getAway then
+            local away = getAway(unit, true, true, false)
+            if away == 1 or away == 3 then
+                nameLine = nameLine .. " <AFK>"
+            elseif away == 2 then
+                nameLine = nameLine .. " <DND>"
+            end
+        elseif UnitIsAFK then
             local afk = UnitIsAFK(unit)
             if not (issecretvalue and issecretvalue(afk)) and afk then
                 nameLine = nameLine .. " <AFK>"

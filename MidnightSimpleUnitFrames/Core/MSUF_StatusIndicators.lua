@@ -17,6 +17,16 @@ local tostring = _G.tostring
 local select   = _G.select
 local IsInInstance = _G.IsInInstance
 local issecretvalue = _G.issecretvalue
+local UnitGUID = _G.UnitGUID
+local UnitIsAFK = _G.UnitIsAFK
+local UnitIsDND = _G.UnitIsDND
+local wipe = _G.wipe
+if not wipe then
+    wipe = function(t)
+        if not t then return end
+        for k in pairs(t) do t[k] = nil end
+    end
+end
 -- Lua 5.1 (WoW) uses global unpack; some environments expose table.unpack
 local unpack = _G.unpack
 if not unpack then
@@ -58,30 +68,193 @@ if type(_G.MSUF_GetStatusIndicatorDB) ~= "function" then
 end
 -- Backwards alias used by older call sites
 MSUF_GetStatusIndicatorDB = _G.MSUF_GetStatusIndicatorDB
+
+-- AFK/DND are event-driven flags. Cache them separately from the status text
+-- refresh path so UpdateStatusIndicator can run often without repeatedly
+-- calling UnitIsAFK/UnitIsDND.
+local MSUF_AWAY_AFK = 1
+local MSUF_AWAY_DND = 2
+
+local _msufAwayFlagsByGUID = ns._msufAwayFlagsByGUID
+if type(_msufAwayFlagsByGUID) ~= "table" then
+    _msufAwayFlagsByGUID = {}
+    ns._msufAwayFlagsByGUID = _msufAwayFlagsByGUID
+end
+local _msufAwayCheckedByGUID = ns._msufAwayCheckedByGUID
+if type(_msufAwayCheckedByGUID) ~= "table" then
+    _msufAwayCheckedByGUID = {}
+    ns._msufAwayCheckedByGUID = _msufAwayCheckedByGUID
+end
+local _msufAwayFlagsByUnit = ns._msufAwayFlagsByUnit
+if type(_msufAwayFlagsByUnit) ~= "table" then
+    _msufAwayFlagsByUnit = {}
+    ns._msufAwayFlagsByUnit = _msufAwayFlagsByUnit
+end
+local _msufAwayCheckedByUnit = ns._msufAwayCheckedByUnit
+if type(_msufAwayCheckedByUnit) ~= "table" then
+    _msufAwayCheckedByUnit = {}
+    ns._msufAwayCheckedByUnit = _msufAwayCheckedByUnit
+end
+local _msufAwayCacheCount = ns._msufAwayCacheCount or 0
+ns._msufAwayRevision = ns._msufAwayRevision or 0
+
+local function _MSUF_AwayHasBit(flags, bit)
+    if bit == MSUF_AWAY_AFK then
+        return flags == 1 or flags == 3
+    end
+    return flags == 2 or flags == 3
+end
+
+local function _MSUF_AwaySetBit(flags, bit, enabled)
+    flags = flags or 0
+    local has = _MSUF_AwayHasBit(flags, bit)
+    if enabled then
+        return has and flags or (flags + bit)
+    end
+    return has and (flags - bit) or flags
+end
+
+local function _MSUF_AwayRequested(needAFK, needDND)
+    local requested = 0
+    if needAFK then requested = _MSUF_AwaySetBit(requested, MSUF_AWAY_AFK, true) end
+    if needDND then requested = _MSUF_AwaySetBit(requested, MSUF_AWAY_DND, true) end
+    return requested
+end
+
+local function _MSUF_AwayHasRequested(checked, requested)
+    if _MSUF_AwayHasBit(requested, MSUF_AWAY_AFK) and not _MSUF_AwayHasBit(checked, MSUF_AWAY_AFK) then
+        return false
+    end
+    if _MSUF_AwayHasBit(requested, MSUF_AWAY_DND) and not _MSUF_AwayHasBit(checked, MSUF_AWAY_DND) then
+        return false
+    end
+    return true
+end
+
+local function _MSUF_AwayCacheKey(unit)
+    if not unit then return nil, nil, nil end
+    local guid = UnitGUID and UnitGUID(unit)
+    if issecretvalue and issecretvalue(guid) then guid = nil end
+    if guid then
+        return _msufAwayFlagsByGUID, _msufAwayCheckedByGUID, guid
+    end
+    return _msufAwayFlagsByUnit, _msufAwayCheckedByUnit, unit
+end
+
+local function _MSUF_ClearAwayStatusCache()
+    wipe(_msufAwayFlagsByGUID)
+    wipe(_msufAwayCheckedByGUID)
+    wipe(_msufAwayFlagsByUnit)
+    wipe(_msufAwayCheckedByUnit)
+    _msufAwayCacheCount = 0
+    ns._msufAwayCacheCount = 0
+    ns._msufAwayRevision = (ns._msufAwayRevision or 0) + 1
+end
+ns.MSUF_ClearAwayStatusCache = _MSUF_ClearAwayStatusCache
+_G.MSUF_ClearAwayStatusCache = _MSUF_ClearAwayStatusCache
+
+local function _MSUF_InvalidateAwayStatus(unit)
+    if not unit then return end
+    local guid = UnitGUID and UnitGUID(unit)
+    if issecretvalue and issecretvalue(guid) then guid = nil end
+    if guid then
+        _msufAwayFlagsByGUID[guid] = nil
+        _msufAwayCheckedByGUID[guid] = nil
+    end
+    _msufAwayFlagsByUnit[unit] = nil
+    _msufAwayCheckedByUnit[unit] = nil
+    ns._msufAwayRevision = (ns._msufAwayRevision or 0) + 1
+end
+ns.MSUF_InvalidateAwayStatus = _MSUF_InvalidateAwayStatus
+_G.MSUF_InvalidateAwayStatus = _MSUF_InvalidateAwayStatus
+
+local function _MSUF_ReadAwayBit(unit, bit)
+    if bit == MSUF_AWAY_AFK then
+        if not UnitIsAFK then return false end
+        local afk = UnitIsAFK(unit)
+        if issecretvalue and issecretvalue(afk) then return nil end
+        return afk == true
+    end
+
+    if not UnitIsDND then return false end
+    local dnd = UnitIsDND(unit)
+    if issecretvalue and issecretvalue(dnd) then return nil end
+    return dnd == true
+end
+
+local function _MSUF_GetCachedAwayStatus(unit, needAFK, needDND, force)
+    local requested = _MSUF_AwayRequested(needAFK, needDND)
+    if requested == 0 or not unit or ns._msufAwaySuppressed == true then
+        return 0
+    end
+
+    local flagsMap, checkedMap, key = _MSUF_AwayCacheKey(unit)
+    if not key then return 0 end
+
+    local hadKey = (checkedMap[key] ~= nil)
+    local flags = flagsMap[key] or 0
+    local checked = (force == true) and 0 or (checkedMap[key] or 0)
+    if _MSUF_AwayHasRequested(checked, requested) then
+        return flags
+    end
+
+    if _MSUF_AwayHasBit(requested, MSUF_AWAY_AFK) and not _MSUF_AwayHasBit(checked, MSUF_AWAY_AFK) then
+        local afk = _MSUF_ReadAwayBit(unit, MSUF_AWAY_AFK)
+        if afk ~= nil then
+            flags = _MSUF_AwaySetBit(flags, MSUF_AWAY_AFK, afk)
+            checked = _MSUF_AwaySetBit(checked, MSUF_AWAY_AFK, true)
+        end
+    end
+    if _MSUF_AwayHasBit(requested, MSUF_AWAY_DND) and not _MSUF_AwayHasBit(checked, MSUF_AWAY_DND) then
+        local dnd = _MSUF_ReadAwayBit(unit, MSUF_AWAY_DND)
+        if dnd ~= nil then
+            flags = _MSUF_AwaySetBit(flags, MSUF_AWAY_DND, dnd)
+            checked = _MSUF_AwaySetBit(checked, MSUF_AWAY_DND, true)
+        end
+    end
+
+    if not hadKey then
+        _msufAwayCacheCount = _msufAwayCacheCount + 1
+        if _msufAwayCacheCount > 128 then
+            _MSUF_ClearAwayStatusCache()
+            _msufAwayCacheCount = 1
+        end
+        ns._msufAwayCacheCount = _msufAwayCacheCount
+    end
+    flagsMap[key] = flags
+    checkedMap[key] = checked
+    return flags
+end
+ns.MSUF_GetCachedAwayStatus = _MSUF_GetCachedAwayStatus
+_G.MSUF_GetCachedAwayStatus = _MSUF_GetCachedAwayStatus
+
 -- Midnight/Beta (12.0+): AFK/DND can return secret booleans in combat/encounters.
 -- Cache suppression state via events to avoid per-frame InCombatLockdown/IsEncounter calls.
 if ns._msufAwaySuppressed == nil then
     local function _MSUF_AwaySuppressedNow()
-        if InCombatLockdown and InCombatLockdown() then
-            return true
-        end
-
         -- Midnight/Beta (12.0+): chat messaging lockdown causes UnitIsAFK/UnitIsDND to return secret values.
         local CCI = _G.C_ChatInfo
         if CCI and CCI.InChatMessagingLockdown and CCI.InChatMessagingLockdown() then
             return true
         end
-        -- Instances: AFK/DND status is non-essential; avoid secret values entirely.
+
+        -- Match the GF pipeline behavior: instances are fine out of combat.
+        -- Only suppress the client-limited case: instance combat/encounters.
+        local inInst = false
         if IsInInstance then
-            local inInst = IsInInstance()
-            if inInst then
+            inInst = IsInInstance()
+            if issecretvalue and issecretvalue(inInst) then inInst = false end
+        end
+        if inInst then
+            if InCombatLockdown and InCombatLockdown() then
+                return true
+            end
+            local CIE = _G.C_InstanceEncounter
+            if CIE and CIE.IsEncounterInProgress and CIE.IsEncounterInProgress() then
                 return true
             end
         end
-        local CIE = _G.C_InstanceEncounter
-        if CIE and CIE.IsEncounterInProgress and CIE.IsEncounterInProgress() then
-            return true
-        end
+
         return false
     end
 
@@ -95,9 +268,19 @@ if ns._msufAwaySuppressed == nil then
         f:RegisterEvent("ENCOUNTER_END")
         f:RegisterEvent("PLAYER_ENTERING_WORLD")
         f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+        f:RegisterEvent("PLAYER_FLAGS_CHANGED")
 
-        local function _MSUF_AwayState_OnEvent()
+        local function _MSUF_AwayState_OnEvent(_, event, unit)
+            if event == "PLAYER_FLAGS_CHANGED" then
+                _MSUF_InvalidateAwayStatus(unit or "player")
+                return
+            end
+
+            local oldSuppressed = ns._msufAwaySuppressed
             ns._msufAwaySuppressed = _MSUF_AwaySuppressedNow()
+            if oldSuppressed ~= ns._msufAwaySuppressed or event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+                _MSUF_ClearAwayStatusCache()
+            end
         end
         f:SetScript("OnEvent", _MSUF_AwayState_OnEvent)
     end
@@ -614,29 +797,31 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
             end
         end
 	    if txt == "" and (showAFK or showDND) then
-	        -- Midnight/Beta (12.0+): UnitIsAFK/UnitIsDND can return *secret booleans*
-	        -- during combat/encounters, which hard-error on boolean tests.
-	        -- We suppress AFK/DND checks while locked down (cached via events; see file top).
-	        if ns._msufAwaySuppressed ~= true then
-	            if showAFK and UnitIsAFK then
-	                local afk = UnitIsAFK(unit)
-                    if issecretvalue and issecretvalue(afk) then
-                        afk = nil
-                    end
-                    if afk then
-	                    txt = "AFK"
-	                end
-	            end
-	            if txt == "" and showDND and UnitIsDND then
-	                local dnd = UnitIsDND(unit)
-                    if issecretvalue and issecretvalue(dnd) then
-                        dnd = nil
-                    end
-                    if dnd then
-	                    txt = "DND"
-	                end
+	        local forceAway = (frame._msufAwayForceRefresh == true)
+	        frame._msufAwayForceRefresh = nil
+	        local away
+	        if unit == "player" and forceAway ~= true then
+	            local rev = ns._msufAwayRevision or 0
+	            if frame._msufAwayStatusRev == rev and frame._msufAwayStatusAFK == showAFK and frame._msufAwayStatusDND == showDND then
+	                away = frame._msufAwayStatusFlags or 0
 	            end
 	        end
+	        if away == nil then
+	            away = _MSUF_GetCachedAwayStatus(unit, showAFK, showDND, forceAway)
+	            if unit == "player" then
+	                frame._msufAwayStatusRev = ns._msufAwayRevision or 0
+	                frame._msufAwayStatusAFK = showAFK
+	                frame._msufAwayStatusDND = showDND
+	                frame._msufAwayStatusFlags = away
+	            end
+	        end
+	        if showAFK and _MSUF_AwayHasBit(away, MSUF_AWAY_AFK) then
+	            txt = "AFK"
+	        elseif showDND and _MSUF_AwayHasBit(away, MSUF_AWAY_DND) then
+	            txt = "DND"
+	        end
+	    else
+	        frame._msufAwayForceRefresh = nil
 	    end
     end
     local fs = frame.statusIndicatorText

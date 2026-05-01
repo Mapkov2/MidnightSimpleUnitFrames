@@ -2067,7 +2067,7 @@ end
 -- Status text: AFK / DND (red, GF-owned pipeline)
 -- Status state encoding: 0=normal, 1=offline, 2=dead, 3=ghost, 4=afk, 5=dnd
 ------------------------------------------------------------------------
-local function UpdateStatusText(f, unit)
+local function UpdateStatusText(f, unit, forceAway)
     local st = f._msufGFStatusText or f.statusIndicatorText
     if not st then return end
 
@@ -2103,16 +2103,26 @@ local function UpdateStatusText(f, unit)
             if issecretvalue and ghost and issecretvalue(ghost) then ghost = false end
             newState = ghost and 3 or 2
         else
-            if UnitIsAFK then
-                local afk = UnitIsAFK(unit)
-                if not (issecretvalue and issecretvalue(afk)) and afk == true then
+            local getAway = _G.MSUF_GetCachedAwayStatus
+            if getAway then
+                local away = getAway(unit, true, true, forceAway == true)
+                if away == 1 or away == 3 then
                     newState = 4
-                end
-            end
-            if newState == 0 and UnitIsDND then
-                local dnd = UnitIsDND(unit)
-                if not (issecretvalue and issecretvalue(dnd)) and dnd == true then
+                elseif away == 2 then
                     newState = 5
+                end
+            else
+                if UnitIsAFK then
+                    local afk = UnitIsAFK(unit)
+                    if not (issecretvalue and issecretvalue(afk)) and afk == true then
+                        newState = 4
+                    end
+                end
+                if newState == 0 and UnitIsDND then
+                    local dnd = UnitIsDND(unit)
+                    if not (issecretvalue and issecretvalue(dnd)) and dnd == true then
+                        newState = 5
+                    end
                 end
             end
         end
@@ -2739,7 +2749,7 @@ GF._MarkTextDirty = _gfMarkTextDirty
 --   • SetMinMaxValues()      — only on UNIT_MAXHEALTH
 --   • 3×FormatHealthText     — coalesced text flush
 --   • 6×issecretvalue        — coalesced text flush
---   • UpdateStatusText       — coalesced (4 C-API calls: Connected/Dead/AFK/DND)
+--   • UpdateStatusText       — coalesced (AFK/DND cached; refreshed on flag events)
 --   • Cutaway SetMinMaxValues — uses cached hpMax
 --   • Cutaway color stamp    — set once at config change / UNIT_MAXHEALTH
 ------------------------------------------------------------------------
@@ -3427,7 +3437,7 @@ local UNIT_DISPATCH = {
     UNIT_DISPLAYPOWER                 = dispatchDisplayPower,
     UNIT_NAME_UPDATE                  = dispatchName,
     UNIT_CONNECTION                   = function(f, u) UpdateStatusText(f, u); ApplyRangeFade(f, u) end,
-    UNIT_FLAGS                        = function(f, u) UpdateStatusText(f, u); UpdateRoleIcon(f, u); UpdateLeaderIcon(f, u) end,
+    UNIT_FLAGS                        = function(f, u) UpdateStatusText(f, u, true); UpdateRoleIcon(f, u); UpdateLeaderIcon(f, u) end,
     UNIT_IN_RANGE_UPDATE              = function(f, u, inRange) ApplyRangeFade(f, u, inRange) end,
     UNIT_AURA                         = function(f, u, updateInfo)
         dispatchAura(f, u, updateInfo)
@@ -3709,9 +3719,11 @@ local function OnGlobalEvent(self, event, ...)
         end
 
     elseif event == "PLAYER_FLAGS_CHANGED" then
+        local changedUnit = ...
+        if not changedUnit or changedUnit == "" then changedUnit = "player" end
         for f in pairs(GF.frames) do
-            if f.unit and UnitExists(f.unit) then
-                UpdateStatusText(f, f.unit)
+            if f.unit and UnitExists(f.unit) and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit))) then
+                UpdateStatusText(f, f.unit, true)
             end
         end
     end
