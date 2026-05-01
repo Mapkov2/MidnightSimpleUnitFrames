@@ -121,9 +121,26 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return g
     end
     local function AV(groupKey, key) return AG(groupKey)[key] end
+    local function RequestVisualRefresh()
+        if GF.MarkAllDirty then
+            GF.MarkAllDirty(GF.DIRTY_ALL or 0x3F)
+        else
+            local refresh = GF.RefreshVisuals
+            if refresh then refresh() end
+        end
+    end
+    local function RequestAuraRefresh()
+        if GF.RequestAuraRefresh then
+            GF.RequestAuraRefresh()
+        else
+            RequestVisualRefresh()
+        end
+    end
     local function AW(groupKey, key, val)
-        AG(groupKey)[key] = val
-        GF.RefreshVisuals()
+        local g = AG(groupKey)
+        if g[key] == val then return end
+        g[key] = val
+        RequestAuraRefresh()
     end
 
     local function PA()
@@ -215,16 +232,23 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         if sl.Text then sl.Text:SetText("") end
         if sl.Low  then sl.Low:SetText("")  end
         if sl.High then sl.High:SetText("") end
-        valFS:SetText(tostring(math_floor((AV(gk, key) or def) + 0.5)))
+        sl._msufLastValue = math_floor((AV(gk, key) or def) + 0.5)
+        valFS:SetText(tostring(sl._msufLastValue))
         sl:SetScript("OnValueChanged", function(self, v)
+            if self._msufSkip then return end
             v = math_floor(v + 0.5)
             valFS:SetText(tostring(v))
+            if self._msufLastValue == v then return end
+            self._msufLastValue = v
             AW(gk, key, v)
         end)
         _auraRefreshFns[#_auraRefreshFns + 1] = function()
-            local v = AV(gk, key) or def
+            local v = math_floor((AV(gk, key) or def) + 0.5)
+            sl._msufSkip = true
             sl:SetValue(v)
-            valFS:SetText(tostring(math_floor(v + 0.5)))
+            sl._msufSkip = false
+            sl._msufLastValue = v
+            valFS:SetText(tostring(v))
         end
         local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
         if _styleSl then _styleSl(sl) end
@@ -385,7 +409,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if afr and afr.InvalidateBlacklistHash then
                     afr.InvalidateBlacklistHash(g)
                 end
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end)
             -- Tooltip with spell details
             if catInfo.tooltip then
@@ -522,7 +546,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             get = function(k) return SIC().enabled == true end,
             set = function(k, v)
                 SIC().enabled = v and true or false
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end,
         })
 
@@ -531,7 +555,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = body, anchorPoint = "TOPLEFT", x = 240, y = -6,
             min = 1, max = 15, step = 1, width = 160, default = 9,
             get = function(k) return SIC().layer or 9 end,
-            set = function(k, v) SIC().layer = v; GF.RefreshVisuals() end,
+            set = function(k, v) SIC().layer = v; RequestVisualRefresh() end,
             formatText = function(v) return string.format(L["Layer: %d"], v) end,
         })
 
@@ -543,7 +567,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         local function ClearSIHighlight()
             if GF._highlightedSI then
                 GF._highlightedSI = nil
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end
         end
 
@@ -570,7 +594,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 RefreshSpecLabel()
                 RefreshMultiSpecChecks()
                 RefreshSpellTiles()
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end,
         })
 
@@ -637,7 +661,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                             HideAllSpellPanels()
                             expandedSpell = nil
                             RefreshSpellTiles()
-                            GF.RefreshVisuals()
+                            RequestVisualRefresh()
                         end,
                     })
                     multiChecks[specKey] = chk
@@ -749,7 +773,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 set = function(k, v)
                     SC().enabled = v and true or false
                     RefreshSpellTiles()
-                    GF.RefreshVisuals()
+                    RequestVisualRefresh()
                 end,
             })
 
@@ -762,7 +786,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 get = function(k) return SC().onlyOwn ~= false end,
                 set = function(k, v)
                     SC().onlyOwn = v and true or false
-                    GF.RefreshVisuals()
+                    RequestVisualRefresh()
                 end,
             })
 
@@ -857,7 +881,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                     end
                     if panel._refreshBarW then panel._refreshBarW() end
                     if panel._refreshCDControls then panel._refreshCDControls() end
-                    GF.RefreshVisuals()
+                    RequestVisualRefresh()
                 end,
             })
 
@@ -866,7 +890,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 anchor = typeDd, x = 0, y = -2, width = 120,
                 items = ANCHOR9,
                 get = function(k) local pc = PlacedCfg(false); return (pc and pc.anchor) or "TOPLEFT" end,
-                set = function(k, v) PlacedCfg(true).anchor = v; GF.RefreshVisuals() end,
+                set = function(k, v) PlacedCfg(true).anchor = v; RequestVisualRefresh() end,
             })
 
             local sizeSl = SSlider({
@@ -874,7 +898,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 anchor = anchorDd, x = 16, y = -6,
                 min = 4, max = 40, step = 1, width = 170, default = 18,
                 get = function(k) local pc = PlacedCfg(false); return (pc and pc.size) or 18 end,
-                set = function(k, v) PlacedCfg(true).size = v; GF.RefreshVisuals() end,
+                set = function(k, v) PlacedCfg(true).size = v; RequestVisualRefresh() end,
                 formatText = function(v) return string.format(L["Size: %d"], v) end,
             })
 
@@ -883,7 +907,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 anchor = sizeSl, x = 0, y = -34,
                 min = -100, max = 100, step = 1, width = 170, default = 0,
                 get = function(k) local pc = PlacedCfg(false); return (pc and pc.x) or 0 end,
-                set = function(k, v) PlacedCfg(true).x = v; GF.RefreshVisuals() end,
+                set = function(k, v) PlacedCfg(true).x = v; RequestVisualRefresh() end,
                 formatText = function(v) return string.format("X: %d", v) end,
             })
 
@@ -892,7 +916,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 anchor = xSl, x = 0, y = -34,
                 min = -100, max = 100, step = 1, width = 170, default = 0,
                 get = function(k) local pc = PlacedCfg(false); return (pc and pc.y) or 0 end,
-                set = function(k, v) PlacedCfg(true).y = v; GF.RefreshVisuals() end,
+                set = function(k, v) PlacedCfg(true).y = v; RequestVisualRefresh() end,
                 formatText = function(v) return string.format("Y: %d", v) end,
             })
 
@@ -904,7 +928,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                     local pc = PlacedCfg(false)
                     return (pc and pc.barWidth) or (((pc and pc.size) or 18) * 3)
                 end,
-                set = function(k, v) PlacedCfg(true).barWidth = v; GF.RefreshVisuals() end,
+                set = function(k, v) PlacedCfg(true).barWidth = v; RequestVisualRefresh() end,
                 formatText = function(v) return string.format(L["Width: %d"], v) end,
             })
             panel._barWSlider = barWSlider
@@ -922,7 +946,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 anchor = ySl, x = 0, y = -18,
                 label = L["Show when missing"],
                 get = function(k) local pc = PlacedCfg(false); return pc and pc.missing == true end,
-                set = function(k, v) PlacedCfg(true).missing = v and true or false; GF.RefreshVisuals() end,
+                set = function(k, v) PlacedCfg(true).missing = v and true or false; RequestVisualRefresh() end,
             })
 
             local showCDChk = SCheck({
@@ -932,7 +956,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 get = function(k) local pc = PlacedCfg(false); return pc and pc.showCooldown ~= false end,
                 set = function(k, v)
                     PlacedCfg(true).showCooldown = v and true or false
-                    GF.RefreshVisuals()
+                    RequestVisualRefresh()
                     if panel._refreshCDControls then panel._refreshCDControls() end
                 end,
             })
@@ -942,7 +966,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 anchor = showCDChk, x = 24, y = -8,
                 min = 6, max = 24, step = 1, width = 150, default = 8,
                 get = function(k) local pc = PlacedCfg(false); return (pc and pc.cooldownSize) or 8 end,
-                set = function(k, v) PlacedCfg(true).cooldownSize = v; GF.RefreshVisuals() end,
+                set = function(k, v) PlacedCfg(true).cooldownSize = v; RequestVisualRefresh() end,
                 formatText = function(v) return string.format(L["CD Size: %d"], v) end,
             })
 
@@ -1010,7 +1034,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                         end
                         if not fc.priority then fc.priority = 5 end
                     end
-                    GF.RefreshVisuals()
+                    RequestVisualRefresh()
                     if panel._refreshFxWidgets then panel._refreshFxWidgets() end
                 end,
             })
@@ -1042,7 +1066,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 OpenColorPicker(c[1], c[2], c[3], function(r, g, b)
                     fc.color = { r, g, b, c[4] or 0.8 }
                     RefreshSwatch()
-                    GF.RefreshVisuals()
+                    RequestVisualRefresh()
                 end)
             end)
             fxSwatch:SetScript("OnShow", RefreshSwatch)
@@ -1058,7 +1082,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 end,
                 set = function(k, v)
                     local fc = SC().frame
-                    if fc then fc.priority = v; GF.RefreshVisuals() end
+                    if fc then fc.priority = v; RequestVisualRefresh() end
                 end,
                 formatText = function(v) return string.format(L["Priority: %d (1=highest)"], v) end,
             })
@@ -1075,7 +1099,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 set = function(k, v)
                     local fc = FrameCfg()
                     fc.alpha = v / 100
-                    GF.RefreshVisuals()
+                    RequestVisualRefresh()
                 end,
                 formatText = function(v) return string.format(L["Tint Alpha: %d%%"], v) end,
             })
@@ -1091,7 +1115,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 set = function(k, v)
                     local fc = FrameCfg()
                     fc.thickness = v
-                    GF.RefreshVisuals()
+                    RequestVisualRefresh()
                 end,
                 formatText = function(v) return string.format(L["Border: %dpx"], v) end,
             })
@@ -1408,7 +1432,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                                 local ac = sc.specs[specKey][auraName]
                                 ac.enabled = ac.enabled == false and true or false
                                 RefreshSpellTiles()
-                                GF.RefreshVisuals()
+                                RequestVisualRefresh()
                                 return
                             end
                             if btn == "LeftButton" then
@@ -1420,7 +1444,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                                 end
                                 expandedSpell = panelKey
                                 GF._highlightedSI = auraName
-                                GF.RefreshVisuals()
+                                RequestVisualRefresh()
                                 local panel = BuildSpellPanel(auraName, specKey, self)
                                 panel:ClearAllPoints()
                                 local totalRows = math_ceil(specTileCount / TILES_PER_ROW)
@@ -1482,11 +1506,6 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     BuildAuraGroupSection("externals", L["Defensives"], 700)
 
-    -- Register all compact row refresh functions
-    for i = 1, #_auraRefreshFns do
-        refreshFns[#refreshFns + 1] = _auraRefreshFns[i]
-    end
-
     ----------------------------------------------------------------
     -- Section: Private Auras
     ----------------------------------------------------------------
@@ -1514,7 +1533,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = L["Enable Private Auras"],
             get = function(k) return PA().enabled ~= false end,
-            set = function(k, v) PA().enabled = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().enabled = v; RequestVisualRefresh() end,
         })
 
         local paMaxSl = SSlider({
@@ -1522,7 +1541,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -40,
             min = 1, max = 12, step = 1, width = 200, default = 4,
             get = function(k) return PA().max or 4 end,
-            set = function(k, v) PA().max = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().max = v; RequestVisualRefresh() end,
             formatText = function(v) return string.format(L["Max: %d"], v) end,
         })
 
@@ -1531,7 +1550,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paMaxSl, x = 0, y = -32,
             min = 8, max = 60, step = 1, width = 200, default = 20,
             get = function(k) return PA().size or 20 end,
-            set = function(k, v) PA().size = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().size = v; RequestVisualRefresh() end,
             formatText = function(v) return string.format(L["Size: %d"], v) end,
         })
 
@@ -1540,7 +1559,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paSzSl, x = -16, y = -10, width = 140,
             items = DIRECTION4,
             get = function(k) return PA().direction or "LEFT" end,
-            set = function(k, v) PA().direction = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().direction = v; RequestVisualRefresh() end,
         })
 
         SDropdown({
@@ -1548,7 +1567,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paSzSl, x = 150, y = -10, width = 140,
             items = ANCHOR9,
             get = function(k) return PA().anchor or "TOPRIGHT" end,
-            set = function(k, v) PA().anchor = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().anchor = v; RequestVisualRefresh() end,
         })
 
         local paXSl = SSlider({
@@ -1556,7 +1575,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paSzSl, x = 0, y = -76,
             min = -200, max = 200, step = 1, width = 200, default = 0,
             get = function(k) return PA().x or 0 end,
-            set = function(k, v) PA().x = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().x = v; RequestVisualRefresh() end,
             formatText = function(v) return string.format("X: %d", v) end,
         })
 
@@ -1565,7 +1584,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paXSl, x = 0, y = -32,
             min = -200, max = 200, step = 1, width = 200, default = 0,
             get = function(k) return PA().y or 0 end,
-            set = function(k, v) PA().y = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().y = v; RequestVisualRefresh() end,
             formatText = function(v) return string.format("Y: %d", v) end,
         })
 
@@ -1574,7 +1593,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paYSl, x = 0, y = -32,
             min = 1, max = 15, step = 1, width = 200, default = 8,
             get = function(k) return PA().layer or 8 end,
-            set = function(k, v) PA().layer = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().layer = v; RequestVisualRefresh() end,
             formatText = function(v) return string.format(L["Layer: %d"], v) end,
         })
 
@@ -1583,7 +1602,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = body, anchorPoint = "TOPLEFT", x = 380, y = -40,
             label = L["Show Countdown Frame"],
             get = function(k) return PA().showCountdown ~= false end,
-            set = function(k, v) PA().showCountdown = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().showCountdown = v; RequestVisualRefresh() end,
         })
 
         local paNumChk = SCheck({
@@ -1591,7 +1610,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paCdChk, x = 0, y = -24,
             label = L["Show Countdown Numbers"],
             get = function(k) return PA().showNumbers == true end,
-            set = function(k, v) PA().showNumbers = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().showNumbers = v; RequestVisualRefresh() end,
         })
 
         local paDispelChk = SCheck({
@@ -1599,7 +1618,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paNumChk, x = 0, y = -24,
             label = L["Show Dispel Type"],
             get = function(k) return PA().showDispelType == true end,
-            set = function(k, v) PA().showDispelType = v; GF.RefreshVisuals() end,
+            set = function(k, v) PA().showDispelType = v; RequestVisualRefresh() end,
         })
 
         ----------------------------------------------------------------
@@ -1625,7 +1644,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             get = function() return PAC().enabled == true end,
             set = function(_, v)
                 PAC().enabled = v and true or false
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
                 -- Live-apply on every visible GF frame.
                 if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
                     for fr in pairs(GF.frames) do
@@ -1715,8 +1734,11 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
         local function CIW(key, val)
             local conf = GF.GetConf(K())
-            if conf then conf[key] = val end
-            GF.RefreshVisuals()
+            if conf then
+                if conf[key] == val then return end
+                conf[key] = val
+            end
+            RequestVisualRefresh()
         end
 
         -- Enable toggle
@@ -1816,16 +1838,23 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             if sl.Text then sl.Text:SetText("") end
             if sl.Low  then sl.Low:SetText("")  end
             if sl.High then sl.High:SetText("") end
-            valFS:SetText(tostring(math_floor((CIV("ciSize") or 8) + 0.5)))
+            sl._msufLastValue = math_floor((CIV("ciSize") or 8) + 0.5)
+            valFS:SetText(tostring(sl._msufLastValue))
             sl:SetScript("OnValueChanged", function(self, v)
+                if self._msufSkip then return end
                 v = math_floor(v + 0.5)
                 valFS:SetText(tostring(v))
+                if self._msufLastValue == v then return end
+                self._msufLastValue = v
                 CIW("ciSize", v)
             end)
             _auraRefreshFns[#_auraRefreshFns + 1] = function()
-                local v = CIV("ciSize") or 8
+                local v = math_floor((CIV("ciSize") or 8) + 0.5)
+                sl._msufSkip = true
                 sl:SetValue(v)
-                valFS:SetText(tostring(math_floor(v + 0.5)))
+                sl._msufSkip = false
+                sl._msufLastValue = v
+                valFS:SetText(tostring(v))
             end
             local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
             if _styleSl then _styleSl(sl) end
@@ -1851,14 +1880,21 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             if sl.Low  then sl.Low:SetText("")  end
             if sl.High then sl.High:SetText("") end
             valFS:SetText(tostring(cur) .. "%")
+            sl._msufLastValue = cur
             sl:SetScript("OnValueChanged", function(self, v)
+                if self._msufSkip then return end
                 v = math_floor(v + 0.5)
                 valFS:SetText(tostring(v) .. "%")
+                if self._msufLastValue == v then return end
+                self._msufLastValue = v
                 CIW("ciAlpha", v / 100)
             end)
             _auraRefreshFns[#_auraRefreshFns + 1] = function()
                 local v = math_floor(((CIV("ciAlpha") or 1.0) * 100) + 0.5)
+                sl._msufSkip = true
                 sl:SetValue(v)
+                sl._msufSkip = false
+                sl._msufLastValue = v
                 valFS:SetText(tostring(v) .. "%")
             end
             local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
@@ -2016,7 +2052,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                     cc._setStamp = nil
                     cc._set = nil
                 end
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end)
 
             -- Mode toggle button (present / missing)
@@ -2043,7 +2079,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if nextIdx > #CI_MODES then nextIdx = 1 end
                 cc.mode = CI_MODES[nextIdx].key
                 if RefreshEditorBody then RefreshEditorBody() end
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end)
 
             -- Filter dropdown button
@@ -2070,7 +2106,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if nextIdx > #CI_FILTERS then nextIdx = 1 end
                 cc.filter = CI_FILTERS[nextIdx].key
                 if RefreshEditorBody then RefreshEditorBody() end
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end)
 
             -- Color swatch
@@ -2089,7 +2125,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                     OpenColorPicker(cc.r or 0.4, cc.g or 1.0, cc.b or 0.4, function(r, g, b)
                         cc.r, cc.g, cc.b = r, g, b
                         colTex:SetColorTexture(r, g, b, 1)
-                        GF.RefreshVisuals()
+                        RequestVisualRefresh()
                     end)
                 end
             end)
@@ -2182,7 +2218,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if v then
                     if GF.Masque and GF.Masque.ReskinAllIcons then GF.Masque.ReskinAllIcons() end
                 end
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end,
         })
 
@@ -2211,7 +2247,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if conf and conf.auras then
                     conf.auras.dynamicScale = v and true or false
                 end
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end,
         })
 
@@ -2235,7 +2271,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 "ciSlotTL","ciSlotTR","ciSlotBL","ciSlotBR","ciSlotC"}) do
                 if srcConf[ck] ~= nil then dstConf[ck] = srcConf[ck] end
             end
-            GF.RefreshVisuals()
+            RequestVisualRefresh()
         end
 
         local copyLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -2346,7 +2382,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                     local ok, sk = SI.ImportConfig(siCfg, str)
                     if ok then
                         print("|cff00ff00MSUF:|r " .. L["Imported spell config for"] .. " " .. (sk or "?"))
-                        GF.RefreshVisuals()
+                        RequestVisualRefresh()
                     else
                         print("|cffff6600MSUF:|r " .. L["Import failed. Invalid string."])
                     end
@@ -2358,6 +2394,13 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 preferredIndex = 3,
             }
         end
+    end
+
+    -- Register compact/manual refresh functions after every section has
+    -- appended its callbacks. Corner Indicator rows are built later than the
+    -- aura-group rows and were previously missed by the early registration.
+    for i = 1, #_auraRefreshFns do
+        refreshFns[#refreshFns + 1] = _auraRefreshFns[i]
     end
 
 end

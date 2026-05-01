@@ -254,13 +254,50 @@ local _iconRecycler = {}
 local _iconRecyclerN = 0
 local _ICON_RECYCLE_MAX = 32
 
+local function IconUsesMasque(icon)
+    local M = GF.Masque
+    return M and M.IconUsesMasque and M.IconUsesMasque(icon) == true
+end
+
+local function SyncAuraIconGeometry(icon, size)
+    if not icon then return false end
+    local changed = (icon._msufCachedSz ~= size)
+    if changed then
+        icon._msufCachedSz = size
+        icon:SetSize(size, size)
+    end
+
+    -- Masque owns the Icon region geometry once a skin is active. For the
+    -- native skin we keep every child hard-anchored to the aura frame so a
+    -- size slider cannot resize only the backdrop/cooldown "box".
+    if icon.texture and not IconUsesMasque(icon) then
+        icon.texture:ClearAllPoints()
+        icon.texture:SetAllPoints(icon)
+    end
+    if icon.cooldown then
+        icon.cooldown:ClearAllPoints()
+        icon.cooldown:SetAllPoints(icon)
+    end
+    local overlay = icon._msufOverlay or (icon.count and icon.count.GetParent and icon.count:GetParent())
+    if overlay and overlay ~= icon then
+        icon._msufOverlay = overlay
+        overlay:ClearAllPoints()
+        overlay:SetAllPoints(icon)
+        if overlay.SetFrameLevel then
+            local base = icon.cooldown and icon.cooldown.GetFrameLevel and icon.cooldown:GetFrameLevel()
+            overlay:SetFrameLevel((base or (icon:GetFrameLevel() or 0)) + 5)
+        end
+    end
+    return changed
+end
+
 local function AcquireAuraIcon(parent, size)
     if _iconRecyclerN > 0 then
         local icon = _iconRecycler[_iconRecyclerN]
         _iconRecycler[_iconRecyclerN] = nil
         _iconRecyclerN = _iconRecyclerN - 1
         icon:SetParent(parent)
-        icon:SetSize(size, size)
+        SyncAuraIconGeometry(icon, size)
         icon:SetBackdropBorderColor(0, 0, 0, 1)
         if icon.texture then icon.texture:SetTexCoord(0, 1, 0, 1); icon.texture:SetDesaturated(false) end
         if icon.cooldown then icon.cooldown:Clear(); if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end end
@@ -272,6 +309,8 @@ local function AcquireAuraIcon(parent, size)
         icon._msufPosIdx       = nil
         icon._msufPosStep      = nil
         icon._msufPosPR        = nil
+        icon._msufPosAnchor    = nil
+        icon._msufPosGrowth    = nil
         return icon
     end
     return nil
@@ -296,7 +335,10 @@ local function RecycleAuraIcon(icon)
     icon._msufPosIdx       = nil
     icon._msufPosStep      = nil
     icon._msufPosPR        = nil
+    icon._msufPosAnchor    = nil
+    icon._msufPosGrowth    = nil
     icon._msufCdHidden     = nil
+    icon._msufCachedSz     = nil
     -- Drop owner ref so the prior frame can be GC'd (most important: when
     -- a Header retire calls GF.RecycleFramePools, the icon→frame strong-ref
     -- via _msufGFOwner would otherwise pin the retired frame in memory.)
@@ -386,6 +428,7 @@ local function CreateAuraIcon(parent, size)
     overlay:SetAllPoints(icon)
     overlay:SetFrameStrata(cd:GetFrameStrata())
     overlay:SetFrameLevel(cd:GetFrameLevel() + 5)
+    icon._msufOverlay = overlay
 
     local count = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     count:SetPoint("BOTTOMRIGHT", overlay, "BOTTOMRIGHT", -1, 1)
@@ -421,6 +464,7 @@ local function EnsurePool(f, groupKey, count, size, parent)
     pool._msufPoolOK = true
     local pLvl = parent.GetFrameLevel and (parent:GetFrameLevel() + 2) or nil
     local masqueAdd = GF.Masque and GF.Masque.AddButton
+    local anySizeChanged = false
     for i = 1, count do
         if not pool[i] then
             pool[i] = AcquireAuraIcon(parent, size) or CreateAuraIcon(parent, size)
@@ -428,15 +472,20 @@ local function EnsurePool(f, groupKey, count, size, parent)
             if masqueAdd then masqueAdd(pool[i]) end
         end
         local ic = pool[i]
-        if ic._msufCachedSz ~= size then
-            ic._msufCachedSz = size
-            ic:SetSize(size, size)
+        if SyncAuraIconGeometry(ic, size) then
+            anySizeChanged = true
+            ic._msufPosStep = nil
+            ic._msufPosAnchor = nil
+            ic._msufPosGrowth = nil
         end
         if ic:GetParent() ~= parent then ic:SetParent(parent) end
         if pLvl and ic._msufCachedFLvl ~= pLvl then
             ic._msufCachedFLvl = pLvl
             ic:SetFrameLevel(pLvl)
         end
+    end
+    if anySizeChanged and GF.Masque and GF.Masque.ForceReskin then
+        GF.Masque.ForceReskin()
     end
     return pool
 end
@@ -457,6 +506,8 @@ local function HidePool(pool, startIdx)
             ic._msufPosIdx = nil
             ic._msufPosStep = nil
             ic._msufPosPR = nil
+            ic._msufPosAnchor = nil
+            ic._msufPosGrowth = nil
             ic._msufBorderBlack = nil
         end
     end
@@ -1062,10 +1113,24 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                         local prevAid = ic._msufAuraID
                         if prevAid == aid then
                             -- ══ SAME AURA ══ cheap refresh (cooldown sweep + stacks + layout)
-                            if showCd then ApplyCooldown(ic, unit, aid, true) end
+                            ApplyCooldown(ic, unit, aid, showCd)
+                            local cd = ic.cooldown
+                            if cd then
+                                local wantHide = not showCd
+                                if ic._msufCdHidden ~= wantHide then
+                                    ic._msufCdHidden = wantHide
+                                    cd:SetHideCountdownNumbers(wantHide)
+                                end
+                            end
                             ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA)
                             ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags)
-                            if showStk then ApplyStacks(ic, unit, aid, aura.applications, true, gcfg) end
+                            ApplyStacks(ic, unit, aid, aura.applications, showStk, gcfg)
+                            if isHarmful then
+                                ApplyDispelBorder(ic, unit, aid, aura.dispelName, true, showDisp)
+                            elseif not ic._msufBorderBlack then
+                                ic._msufBorderBlack = true
+                                ic:SetBackdropBorderColor(0, 0, 0, 1)
+                            end
                         else
                             -- ══ DIFFERENT AURA OR FIRST SHOW ══
                             ic._msufAuraID = aid
@@ -1096,23 +1161,30 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                                 ic:SetBackdropBorderColor(0, 0, 0, 1)
                             end
 
-                            -- Position: deferred for centered growth, immediate otherwise
-                            -- Diff-gate: index + step (size+spacing) + perRow — ensures
-                            -- repositioning when size/spacing/perRow sliders change.
-                            if not isCentered and (ic._msufPosIdx ~= shown or ic._msufPosStep ~= step or ic._msufPosPR ~= perRow) then
-                                ic._msufPosIdx = shown
-                                ic._msufPosStep = step
-                                ic._msufPosPR = perRow
-                                ic:ClearAllPoints()
-                                local col = (shown - 1) % perRow
-                                local row = math_floor((shown - 1) / perRow)
-                                local ox = col * step * gv.px + row * step * gv.sx
-                                local oy = col * step * gv.py + row * step * gv.sy
-                                ic:SetPoint(anchor, container, anchor, ox, oy)
-                            end
-
-                            if not ic:IsShown() then ic:Show() end
                         end
+
+                        -- Position: deferred for centered growth, immediate otherwise.
+                        -- Same-aura refreshes must re-enter this gate so size,
+                        -- growth and anchor sliders apply without waiting for an
+                        -- aura add/remove event.
+                        if not isCentered and (ic._msufPosIdx ~= shown or ic._msufPosStep ~= step
+                            or ic._msufPosPR ~= perRow or ic._msufPosAnchor ~= anchor
+                            or ic._msufPosGrowth ~= growth)
+                        then
+                            ic._msufPosIdx = shown
+                            ic._msufPosStep = step
+                            ic._msufPosPR = perRow
+                            ic._msufPosAnchor = anchor
+                            ic._msufPosGrowth = growth
+                            ic:ClearAllPoints()
+                            local col = (shown - 1) % perRow
+                            local row = math_floor((shown - 1) / perRow)
+                            local ox = col * step * gv.px + row * step * gv.sx
+                            local oy = col * step * gv.py + row * step * gv.sy
+                            ic:SetPoint(anchor, container, anchor, ox, oy)
+                        end
+
+                        if not ic:IsShown() then ic:Show() end
 
                         if isExt and aid then
                             _externalsIDs[aid] = true
@@ -1127,9 +1199,11 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     if isCentered and shown > 0 then
         local prevCenterN = container._msufCenterN
         local prevCenterStep = container._msufCenterStep
-        if prevCenterN ~= shown or prevCenterStep ~= step then
+        local prevCenterGrowth = container._msufCenterGrowth
+        if prevCenterN ~= shown or prevCenterStep ~= step or prevCenterGrowth ~= growth then
             container._msufCenterN = shown
             container._msufCenterStep = step
+            container._msufCenterGrowth = growth
             local isH = (gv.px ~= 0)  -- horizontal primary axis
             local totalPrimary = shown * iconSize + (shown - 1) * spacing
             local halfOfs = totalPrimary * 0.5
@@ -1152,6 +1226,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     elseif isCentered then
         container._msufCenterN = 0
         container._msufCenterStep = nil
+        container._msufCenterGrowth = nil
     end
 
     -- Clear diff-gate flags on hidden icons
@@ -1162,6 +1237,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
             ic._msufPosIdx = nil
             ic._msufPosStep = nil
             ic._msufPosPR = nil
+            ic._msufPosAnchor = nil
+            ic._msufPosGrowth = nil
             ic._msufBorderBlack = nil
             ic._msufAuraID = nil
             ic._msufUnit = nil
@@ -1330,6 +1407,63 @@ function GF.UpdateFrameAuras(f, unit)
         -- No icons shown — clear hash set
         local disp = f._msufDisplayedAuraIDs
         if disp then for k in pairs(disp) do disp[k] = nil end end
+    end
+end
+
+------------------------------------------------------------------------
+-- Coalesced options refresh for GF aura groups only.
+-- Used by aura sliders to avoid a full unit-frame UpdateAll on every drag
+-- tick while still applying icon size/layout changes live next frame.
+------------------------------------------------------------------------
+local _auraOptionsRefreshQueued = false
+
+local function _DoAuraOptionsRefresh()
+    _auraOptionsRefreshQueued = false
+
+    if GF.ForEachFrame then
+        GF.ForEachFrame(function(f)
+            if f and GF.BuildFrameCache then GF.BuildFrameCache(f) end
+            if f and f.unit and UnitExists(f.unit) then
+                GF.UpdateFrameAuras(f, f.unit)
+            elseif f then
+                GF.HideFrameAuras(f)
+            end
+        end)
+    elseif GF.frames then
+        for f in pairs(GF.frames) do
+            if f and GF.BuildFrameCache then GF.BuildFrameCache(f) end
+            if f and f.unit and UnitExists(f.unit) then
+                GF.UpdateFrameAuras(f, f.unit)
+            elseif f then
+                GF.HideFrameAuras(f)
+            end
+        end
+    end
+
+    if GF._previewFrames then
+        for kind, list in pairs(GF._previewFrames) do
+            for i = 1, #list do
+                local f = list[i]
+                if f and f._msufGFPreviewActive and GF.PreviewFrameAuras then
+                    GF.PreviewFrameAuras(f, kind, i)
+                end
+            end
+        end
+    end
+
+    if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+end
+
+function GF.RequestAuraRefresh()
+    if _auraOptionsRefreshQueued then return end
+    _auraOptionsRefreshQueued = true
+    local sched = _G.MSUF_ScheduleOnce
+    if type(sched) == "function" then
+        sched("GF_AURA_OPTIONS_REFRESH", _DoAuraOptionsRefresh)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, _DoAuraOptionsRefresh)
+    else
+        _DoAuraOptionsRefresh()
     end
 end
 

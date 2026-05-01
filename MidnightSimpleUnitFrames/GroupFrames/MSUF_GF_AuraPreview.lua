@@ -122,6 +122,14 @@ local _coordLabel          -- FontString for coord display
 local _classIdx     = 1    -- class rotation index
 local _onSectionOpen       -- callback(sectionKey)
 
+local function RequestVisualRefresh()
+    if GF.MarkAllDirty then
+        GF.MarkAllDirty(GF.DIRTY_ALL or 0x3F)
+    elseif GF.RefreshVisuals then
+        GF.RefreshVisuals()
+    end
+end
+
 local PREVIEW_CLASSES = {
     "WARRIOR","PALADIN","HUNTER","ROGUE","PRIEST","DEATHKNIGHT",
     "SHAMAN","MAGE","WARLOCK","MONK","DRUID","DEMONHUNTER","EVOKER",
@@ -1211,7 +1219,7 @@ local function BuildAuraGroupHandles(mockFrame)
             conf.auras[grp.key].anchor = anchor
             conf.auras[grp.key].x = floor(offX / sc + 0.5)
             conf.auras[grp.key].y = floor(offY / sc + 0.5)
-            GF.RefreshVisuals()
+            RequestVisualRefresh()
         end
         handle._getCurrentAnchor = function()
             local kind = _getKind and _getKind() or "party"
@@ -1243,7 +1251,7 @@ local function BuildStatusIconHandles(mockFrame)
             conf[spec.anchorKey] = anchor
             conf[spec.xKey] = floor(offX / sc + 0.5)
             conf[spec.yKey] = floor(offY / sc + 0.5)
-            GF.RefreshVisuals()
+            RequestVisualRefresh()
         end
         handle._getCurrentAnchor = function()
             local kind = _getKind and _getKind() or "party"
@@ -1398,7 +1406,7 @@ function GF.RebuildSIHandles()
                 entry.placed.anchor = anc
                 entry.placed.x = floor(ox / dsc + 0.5)
                 entry.placed.y = floor(oy / dsc + 0.5)
-                GF.RefreshVisuals()
+                RequestVisualRefresh()
             end
             h._getCurrentAnchor = function()
                 local k = _getKind and _getKind() or "party"
@@ -1442,7 +1450,7 @@ local function BuildPrivateAuraHandle(mockFrame)
         conf.privateAuras.anchor = anchor
         conf.privateAuras.x = floor(offX / sc + 0.5)
         conf.privateAuras.y = floor(offY / sc + 0.5)
-        GF.RefreshVisuals()
+        RequestVisualRefresh()
     end
     handle._getCurrentAnchor = function()
         local kind = _getKind and _getKind() or "party"
@@ -1463,16 +1471,8 @@ function GF.RefreshPreviewHandles()
     -- Dynamic content scale: simulates icon shrink for large raids (mirrors live GetDynamicScale)
     local dynScale = GF.GetPreviewDynamicScale and GF.GetPreviewDynamicScale(conf, kind) or 1
 
-    -- Aura groups (dynamic icon count from config max)
-    -- Compute frame-height-relative icon size clamp once: a live aura icon
-    -- must physically fit inside the frame.  Preview scale multiplies raw
-    -- sizes, but a raw ac.size=22 on a 40px frame is already larger than
-    -- the frame in live play — so we clamp the raw size to 80% of frame
-    -- height before applying the preview scale. This matches what the
-    -- user actually sees in-game much more closely.
-    local frameRawH = conf.height or 40
-    local maxRawIconSize = max(6, floor(frameRawH * 0.80 + 0.5))
-
+    -- Aura groups mirror the live renderer: icons may intentionally be
+    -- larger than the unit frame, especially centered defensive groups.
     for _, grpKey in ipairs({"buff", "debuff", "externals"}) do
         local h = _handles[grpKey]
         if h then
@@ -1481,11 +1481,7 @@ function GF.RefreshPreviewHandles()
             local offX    = floor(((ac and ac.x) or 0) * sc + 0.5)
             local offY    = floor(((ac and ac.y) or 0) * sc + 0.5)
 
-            -- Icon size: user value if set, else conservative default.
-            -- Clamped to frame-relative max so externals default=22 on a
-            -- 40px frame doesn't paint giant icons the user would never see.
             local rawSz   = (ac and ac.size) or (grpKey == "externals" and 18 or 14)
-            if rawSz > maxRawIconSize then rawSz = maxRawIconSize end
             if dynScale ~= 1 then rawSz = max(8, floor(rawSz * dynScale + 0.5)) end
             local sz      = floor(rawSz * sc + 0.5)
 
