@@ -587,7 +587,7 @@ end
 -- 5. Dropdown System (own ListFrame, no DropDownList1)
 
 -- Theme
-local DD_BG     = { 0.08, 0.08, 0.10, 0.95 }
+local DD_BG     = { 0.08, 0.08, 0.10, 1.00 }
 local DD_BORDER  = { 0.30, 0.30, 0.35, 0.80 }
 local DD_HOVER   = { 0.20, 0.20, 0.25, 1.00 }
 local DD_CHECK   = { 1.00, 0.82, 0.00 }

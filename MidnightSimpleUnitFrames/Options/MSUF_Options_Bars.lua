@@ -1391,6 +1391,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local hpModeDrop = UI.Dropdown({
         name = "MSUF_HPTextModeDropdown", parent = box5Body,
         anchor = box5Body, anchorPoint = "TOPLEFT", x = 0, y = -6, width = 280,
+        maxVisible = 8,
         items = hpModeOptions,
         get = function() return NormHpMode(ScopeGet("hpTextMode", "FULL_PLUS_PERCENT")) end,
         set = function(v)
@@ -1417,6 +1418,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local powerModeDrop = UI.Dropdown({
         name = "MSUF_PowerTextModeDropdown", parent = box5Body,
         anchor = box5Body, anchorPoint = "TOPLEFT", x = 326, y = -6, width = 280,
+        maxVisible = 8,
         items = powerModeOptions,
         get = function() return NormPowerMode(ScopeGet("powerTextMode", "CURPERCENT")) end,
         set = function(v)
