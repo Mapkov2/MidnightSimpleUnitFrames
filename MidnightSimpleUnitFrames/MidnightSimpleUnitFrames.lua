@@ -2069,8 +2069,13 @@ local function _MSUF_GetSpacerMaxForUnitKey(unitKey, spec)
     end
     local useOverride = (conf and conf.hpPowerTextOverride == true)
     local mode = (useOverride and conf[spec.modeKey]) or g[spec.globalModeKey] or "FULL_PLUS_PERCENT"
+    if spec.modeKey == "hpTextMode" and type(_G.MSUF_NormalizeHpTextMode) == "function" then
+        mode = _G.MSUF_NormalizeHpTextMode(mode)
+    elseif spec.modeKey == "powerTextMode" and type(_G.MSUF_NormalizePowerTextMode) == "function" then
+        mode = _G.MSUF_NormalizePowerTextMode(mode)
+    end
     local movingW = pctW
-    if mode == "FULL_PLUS_PERCENT" then
+    if mode == "FULL_PLUS_PERCENT" or mode == "CURPERCENT" or mode == "CURMAXPERCENT" or mode == "MAXPERCENT" then
         local fullObj = f and f[spec.fullKey]
         if not fullObj and spec.fullFallbackKey then fullObj = f and f[spec.fullFallbackKey] end
         if fullObj then
@@ -2158,9 +2163,11 @@ local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, e
     local baseX = ns.Util.Offset(conf[spec.xKey], dX)
     local baseY = ns.Util.Offset(conf[spec.yKey], spec.defY)
     local fullX, pctX = baseX, baseX
-    local canSplit = hasPct and on and eff ~= 0 and (not spec.limitMode or mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL")
+    local canSplit = hasPct and on and eff ~= 0 and (not spec.limitMode
+        or mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL"
+        or mode == "CURPERCENT" or mode == "CURMAXPERCENT")
     if canSplit then
-        if mode == "FULL_PLUS_PERCENT" then
+        if mode == "FULL_PLUS_PERCENT" or mode == "CURPERCENT" or mode == "CURMAXPERCENT" or mode == "MAXPERCENT" then
             fullX = baseX + sign * eff
         else
             pctX = baseX + sign * eff
@@ -2186,7 +2193,23 @@ local function ApplyTextLayout(f, conf)
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local useOverride = (udb and udb.hpPowerTextOverride == true)
     local hpMode = (useOverride and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
+    if type(_G.MSUF_NormalizeHpTextMode) == "function" then hpMode = _G.MSUF_NormalizeHpTextMode(hpMode) end
+    do
+        local hpReverse = (useOverride and udb.hpTextReverse) or ((not useOverride) and g and g.hpTextReverse)
+        if hpReverse then
+            local rev = {
+                FULL_PLUS_PERCENT = "PERCENTCUR", PERCENT_PLUS_FULL = "CURPERCENT",
+                CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
+                CURMAX = "MAXCUR", MAXCUR = "CURMAX",
+                CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
+                MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
+                PERCENTCURMAX = "CURMAXPERCENT",
+            }
+            hpMode = rev[hpMode] or hpMode
+        end
+    end
     local pMode  = (useOverride and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
+    if type(_G.MSUF_NormalizePowerTextMode) == "function" then pMode = _G.MSUF_NormalizePowerTextMode(pMode) end
     -- Text anchors: per-unit  general  default RIGHT (no override gate; set per-unit via EditMode popup)
     local hpAnchor    = (udb and udb.hpTextAnchor)    or (g and g.hpTextAnchor)    or "RIGHT"
     local powerAnchor = (udb and udb.powerTextAnchor) or (g and g.powerTextAnchor) or "RIGHT"
@@ -2261,7 +2284,7 @@ local function ApplyTextLayout(f, conf)
         end
         if pHasPct and pctObj then
             pctObj:ClearAllPoints()
-            if pMode == "FULL_PLUS_PERCENT" or pMode == "PERCENT_PLUS_FULL" then
+            if pMode == "FULL_PLUS_PERCENT" or pMode == "PERCENT_PLUS_FULL" or pMode == "CURPERCENT" or pMode == "CURMAXPERCENT" then
                 -- Dual text: full left of center, pct right of center.
                 -- 15 % of bar width keeps spacing proportional; clamp 4–60 px.
                 -- Reuse pbW from stamp (already math_floor'd), zero extra C API calls.
@@ -2975,8 +2998,9 @@ function _G.MSUF_ApplyBossTestHpPreviewText(self, conf)
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local hpStr = MSUF_NumberToTextFast(750000)
     local hpMaxStr = MSUF_NumberToTextFast(1000000)
+    local hpDeficitStr = MSUF_NumberToTextFast(250000)
     local hpPct = 75.0
-    ns.Text.RenderHpMode(self, show, hpStr, hpPct, true, conf, g, nil, nil, hpMaxStr)
+    ns.Text.RenderHpMode(self, show, hpStr, hpPct, true, conf, g, nil, nil, hpMaxStr, hpDeficitStr)
  end
 function _G.MSUF_UFCore_UpdatePowerTextFast(self)
     return ns.Text.RenderPowerText(self)
