@@ -146,7 +146,7 @@ local function ReadStr(conf, g, field, def)
 end
 
 --------------------------------------------------------------------
--- Indicator specs (Leader / RaidMarker / Level)
+-- Indicator specs (Leader / RaidMarker / Level / Elite-Rare icon)
 --------------------------------------------------------------------
 local FOUR_ANCHORS = { "TOPLEFT","TOPRIGHT","BOTTOMLEFT","BOTTOMRIGHT" }
 local function MakeAnchorChoices(list, textFn)
@@ -194,8 +194,20 @@ local INDICATOR_SPECS = {
         divider = "playerLevelGroupDivider", resetBtn = "playerLevelResetBtn",
         refreshFnName = "MSUF_RefreshLevelIndicatorFrames",
     },
+    eliteicon = {
+        id = "eliteicon", order = 4,
+        allowed = function(k) return k == "target" or k == "focus" or k == "targettarget" or k == "boss" end,
+        showCB = "playerEliteIconCB", showField = "showEliteIcon", showDefault = true,
+        xStepper = "playerEliteIconOffsetXStepper", xField = "eliteIconOffsetX", xDefault = 2,
+        yStepper = "playerEliteIconOffsetYStepper", yField = "eliteIconOffsetY", yDefault = 2,
+        anchorDrop = "playerEliteIconAnchorDrop", anchorField = "eliteIconAnchor", anchorDefault = "TOPRIGHT",
+        anchorText = AnchorText, anchorChoices = MakeAnchorChoices(FOUR_ANCHORS, AnchorText),
+        sizeEdit = "playerEliteIconSizeEdit", sizeField = "eliteIconSize", sizeDefault = 20,
+        divider = "playerEliteIconGroupDivider", resetBtn = "playerEliteIconResetBtn",
+        refreshFnName = "MSUF_RefreshEliteIconFrames",
+    },
 }
-local INDICATOR_ORDER = { "leader", "raidmarker", "level" }
+local INDICATOR_ORDER = { "leader", "raidmarker", "level", "eliteicon" }
 
 --------------------------------------------------------------------
 -- Status icon specs (Combat / Rested / IncomingRes) — data-driven
@@ -342,6 +354,7 @@ local COPY_INDICATOR_FIELDS = {
     "showLeaderIcon","leaderIconOffsetX","leaderIconOffsetY","leaderIconAnchor","leaderIconSize",
     "showRaidMarker","raidMarkerOffsetX","raidMarkerOffsetY","raidMarkerAnchor","raidMarkerSize",
     "showLevelIndicator","levelIndicatorOffsetX","levelIndicatorOffsetY","levelIndicatorAnchor","levelIndicatorSize",
+    "showEliteIcon","eliteIconSize","eliteIconAnchor","eliteIconOffsetX","eliteIconOffsetY",
 }
 MSUF_COPY_STATUSICON_FIELDS = {
     "statusIconsTestMode","statusIconsMidnightStyle","statusIconsAlpha",
@@ -1084,7 +1097,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local spec = INDICATOR_SPECS[id]; if not spec then break end
         MkDivider(spec.divider)
         if not panel[spec.showCB] then
-            panel[spec.showCB] = MkCheck(textBody, "MSUF_"..spec.showCB:gsub("^%l", string.upper), spec.showCB:find("Leader") and "Show leader/assist icon" or spec.showCB:find("RaidMarker") and "Show raid marker icon" or "Show level", 12, IND_BASE_TOGGLE_Y + (idx - 1) * IND_ROW_STEP)
+            panel[spec.showCB] = MkCheck(textBody, "MSUF_"..spec.showCB:gsub("^%l", string.upper), spec.showCB:find("Leader") and "Show leader/assist icon" or spec.showCB:find("RaidMarker") and "Show raid marker icon" or spec.showCB:find("Elite") and "Show elite / rare icon" or "Show level", 12, IND_BASE_TOGGLE_Y + (idx - 1) * IND_ROW_STEP)
         end
         panel[spec.showCB]:Hide()
         MkResetBtn(spec.resetBtn, panel[spec.showCB])
@@ -1336,6 +1349,19 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
                 end
                 row = row + 1
             end
+        end
+    end
+
+    -- The target tab can show four indicator rows at once
+    -- (leader/assist + raid marker + level + elite/rare). The old fixed
+    -- 3-row height caused the last row to overlap the next collapsible box.
+    if panel.playerTextLayoutGroup and panel._msufTextBaseH then
+        local extraRows = math.max(0, row - 3)
+        local extraTot = (currentKey == "targettarget") and 28 or 0
+        local neededH = panel._msufTextBaseH + extraTot + extraRows * math.abs(step)
+        panel.playerTextLayoutGroup._msufExpandedH = neededH
+        if not panel.playerTextLayoutGroup._msufCollapsed then
+            panel.playerTextLayoutGroup:SetHeight(neededH)
         end
     end
 
@@ -2284,6 +2310,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
     MSUF_RefreshLeaderIconFrames = function() RefreshFrames({ "player","target" }, "MSUF_ApplyLeaderIconLayout") end
     MSUF_RefreshRaidMarkerFrames = function() RefreshFrames(ALL_UF, "MSUF_ApplyRaidMarkerLayout") end
     MSUF_RefreshLevelIndicatorFrames = function() RefreshFrames(ALL_UF, "MSUF_ApplyLevelIndicatorLayout") end
+    MSUF_RefreshEliteIconFrames = function() RefreshFrames({ "target", "focus", "targettarget", "boss1", "boss2", "boss3", "boss4", "boss5" }, "MSUF_ApplyEliteIconLayout") end
 
     -- Load Conditions
     do

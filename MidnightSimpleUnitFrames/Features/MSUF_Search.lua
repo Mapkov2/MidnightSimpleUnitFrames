@@ -325,6 +325,9 @@ local INDEX = {
     { label="Show level (Player)",
       hint="Player › Indicator", pageKey="uf_player",
       keywords={"show level","level text","lvl","character level","level number","display level"} },
+    { label="Show elite / rare icon",
+      hint="Frames › Target / Focus / ToT / Boss › Indicator", pageKey="uf_target",
+      keywords={"elite icon","rare icon","rare elite","classification icon","boss icon","dragon icon","show elite","show rare"} },
     -- NOTE: These controls live under the Target-of-Target page in the Frames menu.
     -- Options_Player builds shared widgets that are reused across unit tabs; if we tag
     -- these as uf_player, clicks will always route to Player.
