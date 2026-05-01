@@ -50,6 +50,39 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local _Scope_GetGFKeys  -- GF scope DB keys; Raid also owns Mythic Raid here.
     local HlSeedFromGeneral
 
+    -- HP/Power text overrides must be independent from Bars/Highlight overrides.
+    -- Shared is the live baseline for every unit that does NOT explicitly enable
+    -- hpPowerTextOverride. Do not let hlOverride freeze text values.
+    _G.MSUF_Bars_IsTextScopeKey = function(key)
+        return key == "hpTextMode" or key == "powerTextMode" or key == "hpTextReverse"
+            or key == "hpTextSeparator" or key == "powerTextSeparator"
+            or key == "hpTextSpacerEnabled" or key == "hpTextSpacerX"
+            or key == "powerTextSpacerEnabled" or key == "powerTextSpacerX"
+            or key == "hpTextAnchor" or key == "powerTextAnchor"
+    end
+    _G.MSUF_Bars_SeedTextFromGeneral = function(db)
+        if not db then return end
+        local g = G()
+        if db.hpTextMode == nil then db.hpTextMode = g.hpTextMode end
+        if db.hpTextReverse == nil then db.hpTextReverse = g.hpTextReverse end
+        if db.powerTextMode == nil then db.powerTextMode = g.powerTextMode end
+        if db.hpTextSeparator == nil then db.hpTextSeparator = g.hpTextSeparator end
+        if db.powerTextSeparator == nil then db.powerTextSeparator = g.powerTextSeparator end
+        if db.hpTextSpacerEnabled == nil then db.hpTextSpacerEnabled = g.hpTextSpacerEnabled end
+        if db.hpTextSpacerX == nil then db.hpTextSpacerX = g.hpTextSpacerX end
+        if db.powerTextSpacerEnabled == nil then db.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
+        if db.powerTextSpacerX == nil then db.powerTextSpacerX = g.powerTextSpacerX end
+        if db.hpTextAnchor == nil then db.hpTextAnchor = g.hpTextAnchor end
+        if db.powerTextAnchor == nil then db.powerTextAnchor = g.powerTextAnchor end
+    end
+    local function TextOverrideActive(db)
+        return db and db.hpPowerTextOverride == true
+    end
+    local function SetTextOverrideFlag(db, enabled)
+        if not db then return end
+        db.hpPowerTextOverride = enabled and true or false
+    end
+
     -- Scope-aware get/set helpers
     local function ScopeGet(generalKey, defaultVal)
         EnsureDB()
@@ -61,11 +94,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 if gf and gf.hlOverride and gf[generalKey] ~= nil then return gf[generalKey] end
             end
         else
-            -- Per-unit override (unified hlOverride flag)
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
             if uk then
                 local u = MSUF_DB[uk]
-                if u and u.hlOverride and u[generalKey] ~= nil then return u[generalKey] end
+                local active = _G.MSUF_Bars_IsTextScopeKey(generalKey) and TextOverrideActive(u) or (u and u.hlOverride == true)
+                if active and u[generalKey] ~= nil then return u[generalKey] end
             end
         end
         local v = G()[generalKey]
@@ -88,12 +121,16 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 gf[generalKey] = val
             end
         else
-            -- Per-unit override (unified hlOverride flag)
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
             if uk then
                 local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
                 if u then
-                    if not u.hlOverride then
+                    if _G.MSUF_Bars_IsTextScopeKey(generalKey) then
+                        if not TextOverrideActive(u) then
+                            SetTextOverrideFlag(u, true)
+                            _G.MSUF_Bars_SeedTextFromGeneral(u)
+                        end
+                    elseif not (u and u.hlOverride == true) then
                         u.hlOverride = true
                         if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(u) end
                     end
@@ -119,7 +156,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             local uk = _Scope_GetUnitKey and _Scope_GetUnitKey()
             if uk then
                 local u = MSUF_DB[uk]
-                if u and u.hlOverride and u[barsKey] ~= nil then return u[barsKey] end
+                if (u and u.hlOverride == true) and u[barsKey] ~= nil then return u[barsKey] end
             end
         end
         local b = B()
@@ -146,7 +183,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if uk then
                 local u = type(_Scope_GetUnitDB) == "function" and _Scope_GetUnitDB(uk)
                 if u then
-                    if not u.hlOverride then
+                    if not (u and u.hlOverride == true) then
                         u.hlOverride = true
                         if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(u) end
                     end
@@ -265,7 +302,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         EnsureDB()
         if GF_SCOPE_KEYS[key] then return ScopeGFHasOverride(key) end
         local u = MSUF_DB[key]
-        return (u and u.hlOverride == true)
+        return TextOverrideActive(u)
     end
 
     local function RefreshScopeButtons()
@@ -389,23 +426,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     _MSUF_HPText_GetUnitDB = function(unitKey) EnsureDB(); MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}; return MSUF_DB[unitKey] end
     _MSUF_HPText_EnableOverride = function(unitKey)
         local u = _MSUF_HPText_GetUnitDB(unitKey); if not u then return end
-        u.hlOverride = true
-        local g = G()
-        if u.hpTextMode == nil then u.hpTextMode = g.hpTextMode end
-        if u.hpTextReverse == nil then u.hpTextReverse = g.hpTextReverse end
-        if u.powerTextMode == nil then u.powerTextMode = g.powerTextMode end
-        if u.hpTextSeparator == nil then u.hpTextSeparator = g.hpTextSeparator end
-        if u.powerTextSeparator == nil then u.powerTextSeparator = g.powerTextSeparator end
-        if u.absorbTextMode == nil then u.absorbTextMode = g.absorbTextMode end
-        if u.absorbAnchorMode == nil then u.absorbAnchorMode = g.absorbAnchorMode end
-        if u.absorbBarOpacity == nil then u.absorbBarOpacity = g.absorbBarOpacity end
-        if u.healAbsorbBarOpacity == nil then u.healAbsorbBarOpacity = g.healAbsorbBarOpacity end
-        if u.hpTextSpacerEnabled == nil then u.hpTextSpacerEnabled = g.hpTextSpacerEnabled end
-        if u.hpTextSpacerX == nil then u.hpTextSpacerX = g.hpTextSpacerX end
-        if u.powerTextSpacerEnabled == nil then u.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
-        if u.powerTextSpacerX == nil then u.powerTextSpacerX = g.powerTextSpacerX end
-        if u.hpTextAnchor == nil then u.hpTextAnchor = g.hpTextAnchor end
-        if u.powerTextAnchor == nil then u.powerTextAnchor = g.powerTextAnchor end
+        SetTextOverrideFlag(u, true)
+        _G.MSUF_Bars_SeedTextFromGeneral(u)
     end
 
     _Scope_GetUnitKey = _MSUF_HPText_GetUnitKey
@@ -447,17 +469,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             return
         end
 
-        -- Unit scope: toggle hlOverride
+        -- Unit scope: toggle HP/Power text override only
         local uk = _MSUF_HPText_GetUnitKey(); if not uk then self:SetChecked(false); return end
         local u = _MSUF_HPText_GetUnitDB(uk); if not u then self:SetChecked(false); return end
         if self:GetChecked() then
             _MSUF_HPText_EnableOverride(uk)
-            u.hlOverride = true
-            HlSeedFromGeneral(u)
         else
-            u.hlOverride = false
+            SetTextOverrideFlag(u, false)
         end
-        _BumpBorderSerial()
         Apply(); ForceTextLayout(uk)
         -- Re-stamp absorb anchor on UF frames only — GF frames have their own
         -- anchor pipeline (_msufGFAbsorbAnchorStamp namespace + _GF_ApplyAbsorbAnchor)
@@ -488,7 +507,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         for _, uk in ipairs(ALL_UNITS) do
             local u = MSUF_DB[uk]
             if u then
-                if u.hlOverride then u.hlOverride = false; any = true end
+                if TextOverrideActive(u) then SetTextOverrideFlag(u, false); any = true end
             end
         end
         for _, scopeName in ipairs({ "party", "raid" }) do
@@ -870,7 +889,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if scopeKey == "shared" then return false end
         if GF_SCOPE_KEYS[scopeKey] then return ScopeGFHasOverride(scopeKey) end
         local u = MSUF_DB and MSUF_DB[scopeKey]
-        return u and u.hlOverride == true
+        return TextOverrideActive(u)
     end
     --- Seed hl* values from general into scope DB when first enabling override.
     HlSeedFromGeneral = function(db)
@@ -896,12 +915,6 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             "hlTargetColorR", "hlTargetColorG", "hlTargetColorB",
             "hlHoverSize", "hlHoverOffset",
             "hlPrioEnabled", "hlPrioOrder",
-            -- Box 5/6: HP / Power Text
-            "hpTextMode", "powerTextMode", "hpTextReverse",
-            "hpTextSeparator", "powerTextSeparator",
-            "hpTextSpacerEnabled", "hpTextSpacerX",
-            "powerTextSpacerEnabled", "powerTextSpacerX",
-            "hpTextAnchor", "powerTextAnchor",
             -- Box 7: Animation
             "smoothPowerBar", "realtimePowerText",
         }
@@ -1495,7 +1508,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             EnsureDB(); local g = G(); local uk = _MSUF_HPText_GetUnitKey()
             if uk then
                 local u = _MSUF_HPText_GetUnitDB(uk)
-                if u and u.hlOverride then
+                if TextOverrideActive(u) then
                     if u.powerTextSeparator ~= nil then return u.powerTextSeparator end
                     if u.hpTextSeparator ~= nil then return u.hpTextSeparator end
                 end
@@ -1577,7 +1590,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local function _GetEffSpacerMode(uk, spec, g0)
         if not uk then return (g0 and g0[spec.modeKey]) or "FULL_PLUS_PERCENT" end
         local u0 = MSUF_DB[uk]
-        return (u0 and u0.hlOverride and u0[spec.modeKey]) or (g0 and g0[spec.modeKey]) or "FULL_PLUS_PERCENT"
+        return (TextOverrideActive(u0) and u0[spec.modeKey]) or (g0 and g0[spec.modeKey]) or "FULL_PLUS_PERCENT"
     end
     local function _GetSpacerMax(spec, uk)
         local mv = spec.maxDefault or 1000
@@ -1597,7 +1610,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end
         end
         local uk, u, isShared = _HPSpacer_GetDB()
-        local unitOverride = not isShared and (u and u.hlOverride == true)
+        local unitOverride = not isShared and TextOverrideActive(u)
         hpSpacerSelectedLabel:SetText("Selected: " .. (isShared and "Shared" or _NiceUnitKey(uk)))
 
         for _, spec in ipairs(SPACER_SPECS) do
@@ -1634,7 +1647,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if spec.check then
             spec.check:SetScript("OnClick", function(self)
                 EnsureDB(); local uk2, db, isS = _HPSpacer_GetDB(); local g2 = G()
-                local canEdit = isS or (db and db.hlOverride)
+                local canEdit = isS or TextOverrideActive(db)
                 if not canEdit or not _TextModeAllowsSpacer(_GetEffSpacerMode(uk2, spec, g2)) then _SyncSpacerControls(); return end
                 (isS and g2 or db)[spec.enabledKey] = self:GetChecked() and true or false
                 _SyncSpacerControls(); _RequestTextLayoutForScope(uk2, isS, "SPACER_TOGGLE")
@@ -1643,7 +1656,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if spec.slider then
             spec.slider.onValueChanged = function(self, value)
                 EnsureDB(); local uk2, db, isS = _HPSpacer_GetDB(); local g2 = G()
-                local canEdit = isS or (db and db.hlOverride)
+                local canEdit = isS or TextOverrideActive(db)
                 if not canEdit or not _TextModeAllowsSpacer(_GetEffSpacerMode(uk2, spec, g2)) then _SyncSpacerControls(); return end
                 local maxV = _GetSpacerMax(spec, isS and "player" or uk2)
                 local v = tonumber(value) or 0; if v < 0 then v = 0 end; if v > maxV then v = maxV end
@@ -1730,7 +1743,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                     _C.hpPowerOverrideCheck:SetChecked(ScopeGFHasOverride(scopeKey))
                 else
                     local u = uk and _MSUF_HPText_GetUnitDB(uk)
-                    _C.hpPowerOverrideCheck:SetChecked(u and u.hlOverride == true)
+                    _C.hpPowerOverrideCheck:SetChecked(TextOverrideActive(u))
                 end
             else _C.hpPowerOverrideCheck:Hide() end
         end
@@ -1744,7 +1757,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 local active = {}
                 for _, uK in ipairs(ALL_UNITS) do
                     local u = MSUF_DB[uK]
-                    if u and u.hlOverride then active[#active + 1] = _NiceUnitKey(uK) end
+                    if TextOverrideActive(u) then active[#active + 1] = _NiceUnitKey(uK) end
                 end
                 for _, scopeName in ipairs({ "party", "raid" }) do
                     if ScopeGFHasOverride(scopeName) then active[#active + 1] = SCOPE_LABELS[scopeName] or scopeName end
@@ -1818,8 +1831,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
         -- Scope dimming
         local isNonShared = (uk ~= nil) or isGF
-        local hlOverrideOn = IsCurrentScopeOverrideActive()
-        local hlControlsActive = (not isNonShared) or hlOverrideOn  -- highlight controls active when shared OR override on
+        local hlOverrideOn = (scopeKey ~= "shared") and (isGF and ScopeGFHasOverride(scopeKey) or (MSUF_DB and MSUF_DB[scopeKey] and MSUF_DB[scopeKey].hlOverride == true))
+        local hlControlsActive = (not isNonShared) or hlOverrideOn  -- highlight controls active when shared OR Bars/Highlight override on
         local function DimDrop(n, lbl) MSUF_SetDropDownEnabled(_G[n], lbl, not isNonShared) end
         local function DimCheck(n)
             local cb = _G[n]; if not cb then return end
