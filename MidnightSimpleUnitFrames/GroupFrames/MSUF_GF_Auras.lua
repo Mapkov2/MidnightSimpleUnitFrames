@@ -25,9 +25,16 @@ local math_max      = math.max
 local math_ceil     = math.ceil
 local math_floor    = math.floor
 local GameTooltip   = _G.GameTooltip
+local C_Timer       = _G.C_Timer
+local C_CurveUtil   = _G.C_CurveUtil
+local C_Secrets     = _G.C_Secrets
+local CreateColor   = _G.CreateColor
 local _hasCanaccessvalue = (type(canaccessvalue) == "function")
 local _QUESTION_MARK_ICON = 136243
 local _PADLOCK_ICON = 134400
+local _GF_RegisterCooldownTextIcon
+local _GF_UnregisterCooldownTextIcon
+local _GF_TouchCooldownTextIcon
 
 ------------------------------------------------------------------------
 -- Class-based dispel detection (set once at load)
@@ -300,7 +307,9 @@ local function AcquireAuraIcon(parent, size)
         SyncAuraIconGeometry(icon, size)
         icon:SetBackdropBorderColor(0, 0, 0, 1)
         if icon.texture then icon.texture:SetTexCoord(0, 1, 0, 1); icon.texture:SetDesaturated(false) end
-        if icon.cooldown then icon.cooldown:Clear(); if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end end
+        if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(icon) end
+        icon._msufGF_cdDurationObj = nil
+        if icon.cooldown then icon.cooldown._msufGF_cdDurationObj = nil; icon.cooldown:Clear(); if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end end
         if icon.count then icon.count:SetText(""); icon.count:Hide() end
         -- Defensive: ensure tracking fields are clean (Recycle clears them, but
         -- belt-and-braces in case future code paths feed the recycler differently).
@@ -327,6 +336,9 @@ local function RecycleAuraIcon(icon)
     if not icon or _iconRecyclerN >= _ICON_RECYCLE_MAX then return false end
     icon:Hide()
     icon:ClearAllPoints()
+    if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(icon) end
+    icon._msufGF_cdDurationObj = nil
+    if icon.cooldown then icon.cooldown._msufGF_cdDurationObj = nil end
     -- Clear tracking fields so a future Acquire onto a different frame
     -- takes the full-setup branch in RenderGroup.
     icon._msufAuraID       = nil
@@ -499,6 +511,9 @@ local function HidePool(pool, startIdx)
     for i = startIdx, #pool do
         local ic = pool[i]
         if ic then
+            if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
+            ic._msufGF_cdDurationObj = nil
+            if ic.cooldown then ic.cooldown._msufGF_cdDurationObj = nil end
             ic:Hide()
             -- Invalidate diff-cache so the next render takes the full-setup
             -- branch in RenderGroup (which ends with ic:Show()) instead of
@@ -562,6 +577,9 @@ local function ApplyCooldown(ic, unit, auraInstanceID, showCd)
     local cd = ic.cooldown
     if not cd then return end
     if not showCd then
+        ic._msufGF_cdDurationObj = nil
+        cd._msufGF_cdDurationObj = nil
+        if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
         if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
             cd._msufGFCdAuraTime = false
             cd:SetUseAuraDisplayTime(false)
@@ -571,6 +589,9 @@ local function ApplyCooldown(ic, unit, auraInstanceID, showCd)
     end
     if not _apisBound then BindAPIs() end
     if not _getDuration or not auraInstanceID then
+        ic._msufGF_cdDurationObj = nil
+        cd._msufGF_cdDurationObj = nil
+        if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
         if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
             cd._msufGFCdAuraTime = false
             cd:SetUseAuraDisplayTime(false)
@@ -583,7 +604,10 @@ local function ApplyCooldown(ic, unit, auraInstanceID, showCd)
         local fn = cd.SetCooldownFromDurationObject
         if fn then
             fn(cd, obj)
+            ic._msufGF_cdDurationObj = obj
+            cd._msufGF_cdDurationObj = obj
             cd._msufCooldownFontStringDirty = true
+            if _GF_TouchCooldownTextIcon then _GF_TouchCooldownTextIcon(ic) end
             if cd._msufGFCdAuraTime ~= true and cd.SetUseAuraDisplayTime then
                 cd._msufGFCdAuraTime = true
                 cd:SetUseAuraDisplayTime(true)
@@ -595,6 +619,9 @@ local function ApplyCooldown(ic, unit, auraInstanceID, showCd)
         cd._msufGFCdAuraTime = false
         cd:SetUseAuraDisplayTime(false)
     end
+    ic._msufGF_cdDurationObj = nil
+    cd._msufGF_cdDurationObj = nil
+    if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
     cd:Clear()
 end
 
@@ -770,6 +797,376 @@ function GF.InvalidateCdColor()
     _gfCdColG = nil
     _gfCdColB = nil
     _gfCdColA = nil
+    if GF.InvalidateCooldownTextColors then GF.InvalidateCooldownTextColors() end
+end
+
+------------------------------------------------------------------------
+-- Native Blizzard cooldown text coloring for GF aura timers.
+-- Uses the same global Auras cooldown color settings as Auras2, but is
+-- fully local to Group Frames: Blizzard still owns the timer text, MSUF
+-- only recolors its FontString. Runtime is a scheduled timer manager,
+-- not OnUpdate, and remaining time is evaluated via DurationObject curves
+-- so secret aura values are never read or compared directly.
+------------------------------------------------------------------------
+local _gfCdTextSettingsDirty = true
+local _gfCdTextBucketsEnabled = true
+local _gfCdCurve
+local _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA = 1, 1, 1, 1
+local _gfCdWarnR, _gfCdWarnG, _gfCdWarnB, _gfCdWarnA = 1, 0.85, 0.2, 1
+local _gfCdUrgR,  _gfCdUrgG,  _gfCdUrgB,  _gfCdUrgA  = 1, 0.45, 0.1, 1
+local _gfCdExpR,  _gfCdExpG,  _gfCdExpB,  _gfCdExpA  = 1, 0.12, 0.12, 1
+local _gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA = 1, 1, 1, 1
+local _gfCdSecretMode, _gfCdSecretNextCheck = false, 0
+local _gfIsSecretValue = _G.issecretvalue
+    or (C_Secrets and type(C_Secrets.IsSecret) == "function" and C_Secrets.IsSecret)
+    or nil
+
+local function ReadColor(t, defR, defG, defB, defA)
+    if type(t) ~= "table" then return defR, defG, defB, defA end
+    local r = t[1]; if r == nil then r = t.r end
+    local g = t[2]; if g == nil then g = t.g end
+    local b = t[3]; if b == nil then b = t.b end
+    local a = t[4]; if a == nil then a = t.a end
+    if type(r) ~= "number" then r = defR end
+    if type(g) ~= "number" then g = defG end
+    if type(b) ~= "number" then b = defB end
+    if type(a) ~= "number" then a = defA end
+    return r, g, b, a
+end
+
+local function IsGFSecretMode(now)
+    if not (C_Secrets and type(C_Secrets.ShouldAurasBeSecret) == "function") then return false end
+    if type(now) ~= "number" then now = GetTime() end
+    if now >= (_gfCdSecretNextCheck or 0) then
+        _gfCdSecretNextCheck = now + 0.50
+        _gfCdSecretMode = (C_Secrets.ShouldAurasBeSecret() == true)
+    end
+    return _gfCdSecretMode == true
+end
+
+local function BuildGFCooldownTextCurve(g)
+    _gfCdCurve = nil
+    if not (C_CurveUtil and type(C_CurveUtil.CreateColorCurve) == "function"
+            and type(CreateColor) == "function") then
+        return
+    end
+
+    local c = C_CurveUtil.CreateColorCurve()
+    if not c then return end
+    if c.SetType and _G.Enum and _G.Enum.LuaCurveType and _G.Enum.LuaCurveType.Step then
+        c:SetType(_G.Enum.LuaCurveType.Step)
+    end
+
+    local safeSeconds = (g and type(g.aurasCooldownTextSafeSeconds) == "number") and g.aurasCooldownTextSafeSeconds or 60
+    local warnSeconds = (g and type(g.aurasCooldownTextWarningSeconds) == "number") and g.aurasCooldownTextWarningSeconds or 15
+    local urgSeconds  = (g and type(g.aurasCooldownTextUrgentSeconds) == "number") and g.aurasCooldownTextUrgentSeconds or 5
+    if warnSeconds > safeSeconds then warnSeconds = safeSeconds end
+    if urgSeconds > warnSeconds then urgSeconds = warnSeconds end
+    if urgSeconds < 0 then urgSeconds = 0 end
+
+    c:AddPoint(0, CreateColor(_gfCdExpR, _gfCdExpG, _gfCdExpB, _gfCdExpA))
+    c:AddPoint(0.25, CreateColor(_gfCdUrgR, _gfCdUrgG, _gfCdUrgB, _gfCdUrgA))
+    c:AddPoint(urgSeconds, CreateColor(_gfCdWarnR, _gfCdWarnG, _gfCdWarnB, _gfCdWarnA))
+    c:AddPoint(warnSeconds, CreateColor(_gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA))
+    c:AddPoint(safeSeconds, CreateColor(_gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA))
+    _gfCdCurve = c
+end
+
+local function EnsureGFCooldownTextColorSettings()
+    if not _gfCdTextSettingsDirty then return end
+    _gfCdTextSettingsDirty = false
+
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    _gfCdTextBucketsEnabled = not (g and g.aurasCooldownTextUseBuckets == false)
+    _gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA = ResolveCooldownBaseColor()
+    _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA = ReadColor(g and g.aurasCooldownTextSafeColor, _gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA)
+    _gfCdWarnR, _gfCdWarnG, _gfCdWarnB, _gfCdWarnA = ReadColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.2, 1)
+    _gfCdUrgR,  _gfCdUrgG,  _gfCdUrgB,  _gfCdUrgA  = ReadColor(g and g.aurasCooldownTextUrgentColor, 1, 0.45, 0.1, 1)
+    _gfCdExpR,  _gfCdExpG,  _gfCdExpB,  _gfCdExpA  = ReadColor(g and g.aurasCooldownTextExpireColor, 1, 0.12, 0.12, 1)
+
+    if _gfCdTextBucketsEnabled then
+        BuildGFCooldownTextCurve(g)
+    else
+        _gfCdCurve = nil
+    end
+end
+
+local function ApplyGFCooldownTextColor(icon, fs, r, g, b, a, secret)
+    if not fs then return end
+    if secret then
+        icon._msufGF_cdLastFS = fs
+        icon._msufGF_cdLastR = nil
+        icon._msufGF_cdLastG = nil
+        icon._msufGF_cdLastB = nil
+        icon._msufGF_cdLastA = nil
+        if fs.SetTextColor then fs:SetTextColor(r, g, b, a)
+        elseif fs.SetVertexColor then fs:SetVertexColor(r, g, b, a) end
+        return
+    end
+    if icon._msufGF_cdLastFS ~= fs
+        or icon._msufGF_cdLastR ~= r or icon._msufGF_cdLastG ~= g
+        or icon._msufGF_cdLastB ~= b or icon._msufGF_cdLastA ~= a
+    then
+        icon._msufGF_cdLastFS = fs
+        icon._msufGF_cdLastR = r
+        icon._msufGF_cdLastG = g
+        icon._msufGF_cdLastB = b
+        icon._msufGF_cdLastA = a
+        if fs.SetTextColor then fs:SetTextColor(r, g, b, a)
+        elseif fs.SetVertexColor then fs:SetVertexColor(r, g, b, a) end
+    end
+end
+
+local _gfCdTextMgr
+local function EnsureGFCooldownTextMgr()
+    if _gfCdTextMgr then return _gfCdTextMgr end
+    local mgr = {
+        icons = {},
+        count = 0,
+        timer = nil,
+        timerGen = 0,
+        interval = 0.50,
+        slowInterval = 0.50,
+        fastInterval = 0.10,
+        secretInterval = 0.20,
+        fastUntil = 0,
+    }
+    _gfCdTextMgr = mgr
+
+    local function CancelTimer()
+        if mgr.timer and mgr.timer.Cancel then mgr.timer:Cancel() end
+        mgr.timer = nil
+        mgr.timerGen = (mgr.timerGen or 0) + 1
+    end
+
+    local function StopIfIdle()
+        if mgr.count > 0 then return end
+        CancelTimer()
+    end
+
+    local function RemoveAt(i)
+        local last = mgr.count
+        local icon = mgr.icons[i]
+        local swap = mgr.icons[last]
+        mgr.icons[i] = swap
+        mgr.icons[last] = nil
+        mgr.count = last - 1
+        if swap then swap._msufGF_cdMgrIndex = i end
+        if icon then
+            icon._msufGF_cdMgrIndex = nil
+            icon._msufGF_cdMgrRegistered = false
+            icon._msufGF_cdSkipUntil = nil
+            icon._msufGF_cdLastFS = nil
+            icon._msufGF_cdLastR = nil
+            icon._msufGF_cdLastG = nil
+            icon._msufGF_cdLastB = nil
+            icon._msufGF_cdLastA = nil
+        end
+        if mgr.count <= 0 then StopIfIdle() end
+    end
+
+    local function Tick()
+        EnsureGFCooldownTextColorSettings()
+        local now = GetTime()
+        local secretsActive = IsGFSecretMode(now)
+        local wantFast = now < (mgr.fastUntil or 0)
+        local isv = _gfIsSecretValue
+        if not isv then
+            isv = _G.issecretvalue or (C_Secrets and type(C_Secrets.IsSecret) == "function" and C_Secrets.IsSecret) or nil
+            if isv then _gfIsSecretValue = isv end
+        end
+        local secretNoDetector = (secretsActive and not isv)
+
+        local i = mgr.count
+        while i > 0 do
+            local icon = mgr.icons[i]
+            local cd = icon and icon.cooldown
+            if not icon or not cd or not icon.IsShown or not icon:IsShown()
+               or icon._msufCdHidden == true or not _gfCdTextBucketsEnabled then
+                RemoveAt(i)
+            else
+                local fs = ResolveCooldownFontString(cd)
+                local obj = icon._msufGF_cdDurationObj or cd._msufGF_cdDurationObj
+                if fs and obj then
+                    local skipUntil = icon._msufGF_cdSkipUntil
+                    if not (skipUntil and now < skipUntil) then
+                        local r, g, b, a = _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA
+                        local bucket = 3
+                        local iconSecret = false
+                        local didCurveEval = false
+
+                        if _gfCdCurve and type(obj.EvaluateRemainingDuration) == "function" then
+                            local col = obj:EvaluateRemainingDuration(_gfCdCurve)
+                            if col then
+                                didCurveEval = true
+                                if col.GetRGBA then r, g, b, a = col:GetRGBA()
+                                elseif col.GetRGB then r, g, b = col:GetRGB(); a = 1 end
+                            end
+                        end
+                        if secretsActive and secretNoDetector then
+                            iconSecret = true
+                        elseif isv and isv(r) then
+                            iconSecret = true
+                        end
+                        if not didCurveEval then
+                            r, g, b, a = _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA
+                            iconSecret = secretsActive or iconSecret
+                        end
+
+                        if not iconSecret then
+                            if r == _gfCdExpR and g == _gfCdExpG and b == _gfCdExpB then
+                                bucket = 0; wantFast = true
+                            elseif r == _gfCdUrgR and g == _gfCdUrgG and b == _gfCdUrgB then
+                                bucket = 1; wantFast = true
+                            elseif r == _gfCdWarnR and g == _gfCdWarnG and b == _gfCdWarnB then
+                                bucket = 2; wantFast = true
+                            elseif r == _gfCdNormR and g == _gfCdNormG and b == _gfCdNormB then
+                                bucket = 4
+                            end
+                        else
+                            wantFast = true
+                        end
+
+                        if iconSecret then
+                            icon._msufGF_cdSkipUntil = nil
+                        elseif bucket == 4 then
+                            icon._msufGF_cdSkipUntil = now + 5.0
+                        elseif bucket == 3 then
+                            icon._msufGF_cdSkipUntil = now + 2.0
+                        else
+                            icon._msufGF_cdSkipUntil = nil
+                        end
+                        ApplyGFCooldownTextColor(icon, fs, r, g, b, a, iconSecret)
+                    end
+                end
+            end
+            i = i - 1
+        end
+
+        if wantFast then
+            mgr.fastUntil = now + 1.50
+            mgr.interval = secretsActive and (mgr.secretInterval or 0.20) or (mgr.fastInterval or 0.10)
+        else
+            mgr.interval = mgr.slowInterval or 0.50
+        end
+        StopIfIdle()
+        if mgr.count > 0 and mgr._Schedule then mgr._Schedule(mgr.interval) end
+    end
+
+    local tickCallback = function()
+        mgr.timer = nil
+        Tick()
+    end
+
+    local function Schedule(delay)
+        if mgr.count <= 0 then StopIfIdle(); return end
+        if type(delay) ~= "number" or delay < 0 then delay = 0 end
+        CancelTimer()
+        if C_Timer and type(C_Timer.NewTimer) == "function" then
+            mgr.timer = C_Timer.NewTimer(delay, tickCallback)
+        elseif C_Timer and type(C_Timer.After) == "function" then
+            mgr.timerGen = (mgr.timerGen or 0) + 1
+            local gen = mgr.timerGen
+            C_Timer.After(delay, function()
+                if mgr.timerGen ~= gen then return end
+                Tick()
+            end)
+        end
+    end
+
+    mgr._RemoveAt = RemoveAt
+    mgr._Schedule = Schedule
+    return mgr
+end
+
+_GF_RegisterCooldownTextIcon = function(icon)
+    if not icon or not icon.cooldown or icon._msufGF_cdMgrRegistered == true then return end
+    EnsureGFCooldownTextColorSettings()
+    if not _gfCdTextBucketsEnabled then return end
+    local mgr = EnsureGFCooldownTextMgr()
+    local idx = mgr.count + 1
+    mgr.count = idx
+    mgr.icons[idx] = icon
+    icon._msufGF_cdMgrRegistered = true
+    icon._msufGF_cdMgrIndex = idx
+    if mgr.count == 1 and mgr._Schedule then mgr._Schedule(0) end
+end
+
+_GF_UnregisterCooldownTextIcon = function(icon)
+    if not icon then return end
+    if icon._msufGF_cdMgrRegistered ~= true then
+        icon._msufGF_cdMgrIndex = nil
+        return
+    end
+    local mgr = _gfCdTextMgr
+    local idx = icon._msufGF_cdMgrIndex
+    if mgr and type(idx) == "number" and idx >= 1 and idx <= mgr.count and mgr._RemoveAt then
+        mgr._RemoveAt(idx)
+    else
+        icon._msufGF_cdMgrRegistered = false
+        icon._msufGF_cdMgrIndex = nil
+    end
+end
+
+_GF_TouchCooldownTextIcon = function(icon)
+    if not icon then return end
+    icon._msufGF_cdSkipUntil = nil
+    if icon._msufGF_cdMgrRegistered == true then
+        local mgr = _gfCdTextMgr
+        if mgr and mgr.count > 0 and mgr._Schedule then mgr._Schedule(0) end
+    end
+end
+
+local function ApplyGFCooldownTextColorMode(icon, fs)
+    EnsureGFCooldownTextColorSettings()
+    if _gfCdTextBucketsEnabled and icon and icon._msufGF_cdDurationObj then
+        _GF_RegisterCooldownTextIcon(icon)
+        _GF_TouchCooldownTextIcon(icon)
+        return true
+    end
+    _GF_UnregisterCooldownTextIcon(icon)
+    ApplyGFCooldownTextColor(icon, fs, _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA, false)
+    return true
+end
+
+function GF.InvalidateCooldownTextColors()
+    _gfCdTextSettingsDirty = true
+end
+
+function GF.ForceCooldownTextRecolor()
+    _gfCdTextSettingsDirty = true
+    local mgr = _gfCdTextMgr
+    if mgr and mgr.count and mgr.count > 0 then
+        for i = 1, mgr.count do
+            local icon = mgr.icons[i]
+            if icon then
+                icon._msufGF_cdSkipUntil = nil
+                icon._msufGF_cdLastFS = nil
+                icon._msufGF_cdLastR = nil
+                icon._msufGF_cdLastG = nil
+                icon._msufGF_cdLastB = nil
+                icon._msufGF_cdLastA = nil
+            end
+        end
+        if mgr._Schedule then mgr._Schedule(0) end
+    end
+end
+
+_G.MSUF_GF_InvalidateCooldownTextCurve = GF.InvalidateCooldownTextColors
+_G.MSUF_GF_ForceCooldownTextRecolor = GF.ForceCooldownTextRecolor
+
+do
+    local f = CreateFrame("Frame")
+    if f and f.RegisterEvent then
+        f:RegisterEvent("PLAYER_REGEN_DISABLED")
+        f:RegisterEvent("PLAYER_REGEN_ENABLED")
+        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+        f:SetScript("OnEvent", function()
+            if _gfCdTextMgr and _gfCdTextMgr.count and _gfCdTextMgr.count > 0 then
+                GF.ForceCooldownTextRecolor()
+            end
+        end)
+    end
 end
 
 -- ApplyCooldownVisualStyle(cd, reverse)
@@ -808,7 +1205,10 @@ local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB
     local wantHide = not showCd
     ic._msufCdHidden = wantHide
     cd:SetHideCountdownNumbers(wantHide)
-    if not showCd then return end
+    if not showCd then
+        if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
+        return
+    end
 
     local forceLookup = cd._msufCooldownFontStringDirty == true or isRetry == true
     cd._msufCooldownFontStringDirty = nil
@@ -862,6 +1262,8 @@ local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB
         fs:ClearAllPoints()
         fs:SetPoint(anchor, cd, anchor, ox, oy)
     end
+
+    if ApplyGFCooldownTextColorMode(ic, fs) then return end
 
     if fsChanged or cd._msufGFCdColorR ~= baseR or cd._msufGFCdColorG ~= baseG
         or cd._msufGFCdColorB ~= baseB or cd._msufGFCdColorA ~= baseA

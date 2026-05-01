@@ -3446,6 +3446,9 @@ F.ForceAurasCooldownTextRecolor = function()
     if type(_G.MSUF_A2_ForceCooldownTextRecolor) == 'function' then
         _G.MSUF_A2_ForceCooldownTextRecolor()
     end
+    if type(_G.MSUF_GF_ForceCooldownTextRecolor) == 'function' then
+        _G.MSUF_GF_ForceCooldownTextRecolor()
+    end
 end
 
 F.UpdateAurasColorControls = function()
@@ -3521,6 +3524,9 @@ F.SetAurasCooldownTextSafeColor = function(r, gCol, bCol)
     if _G.MSUF_A2_InvalidateCooldownTextCurve then
         _G.MSUF_A2_InvalidateCooldownTextCurve()
     end
+    if _G.MSUF_GF_InvalidateCooldownTextCurve then
+        _G.MSUF_GF_InvalidateCooldownTextCurve()
+    end
     F.ForceAurasCooldownTextRecolor()
     F.PushAuras2ColorRefresh()
 end
@@ -3532,6 +3538,9 @@ F.SetAurasCooldownTextWarningColor = function(r, gCol, bCol)
     if _G.MSUF_A2_InvalidateCooldownTextCurve then
         _G.MSUF_A2_InvalidateCooldownTextCurve()
     end
+    if _G.MSUF_GF_InvalidateCooldownTextCurve then
+        _G.MSUF_GF_InvalidateCooldownTextCurve()
+    end
     F.ForceAurasCooldownTextRecolor()
     F.PushAuras2ColorRefresh()
 end
@@ -3542,6 +3551,9 @@ F.SetAurasCooldownTextUrgentColor = function(r, gCol, bCol)
     F.UpdateAurasColorControls()
     if _G.MSUF_A2_InvalidateCooldownTextCurve then
         _G.MSUF_A2_InvalidateCooldownTextCurve()
+    end
+    if _G.MSUF_GF_InvalidateCooldownTextCurve then
+        _G.MSUF_GF_InvalidateCooldownTextCurve()
     end
     F.ForceAurasCooldownTextRecolor()
     F.PushAuras2ColorRefresh()
@@ -3637,6 +3649,9 @@ auraCDResetBtn:SetScript("OnClick", function()
                 if _G.MSUF_A2_InvalidateCooldownTextCurve then
                     _G.MSUF_A2_InvalidateCooldownTextCurve()
                 end
+                if _G.MSUF_GF_InvalidateCooldownTextCurve then
+                    _G.MSUF_GF_InvalidateCooldownTextCurve()
+                end
                 F.ForceAurasCooldownTextRecolor()
                 F.UpdateAurasColorControls()
                 F.PushAuras2ColorRefresh()
@@ -3655,6 +3670,9 @@ auraResetBtn:SetScript("OnClick", function()
                 MSUF_DB.general.aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 }
                 if _G.MSUF_A2_InvalidateCooldownTextCurve then
                     _G.MSUF_A2_InvalidateCooldownTextCurve()
+                end
+                if _G.MSUF_GF_InvalidateCooldownTextCurve then
+                    _G.MSUF_GF_InvalidateCooldownTextCurve()
                 end
                 F.ForceAurasCooldownTextRecolor()
                 F.UpdateAurasColorControls()
@@ -4136,4 +4154,3 @@ function ns.MSUF_RegisterColorsOptions(parentCategory)
 
     return panel
 end
-

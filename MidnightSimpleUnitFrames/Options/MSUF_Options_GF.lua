@@ -1082,7 +1082,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local _TAB_DEFS = {
         { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
         { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "dispel", "dstripe", "range" } },
-        { key = "auras",      keys = { "buffs", "debuffs", "ext", "priv", "masque", "autil" } },
+        { key = "auras",      keys = { "buffs", "debuffs", "ext", "textcolor", "priv", "masque", "autil" } },
         { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
     }
     -- Reverse lookup: sectionKey → tabKey
@@ -3714,7 +3714,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local ORDER = {
             { key = "frame",      keys = { "general", "layout", "sorting", "scaling", "border", "anchor", "tooltip" } },
             { key = "health",     keys = { "hcolor", "bars", "power", "text", "healpred", "dispel", "dstripe", "range" } },
-            { key = "auras",      keys = { "buffs", "debuffs", "ext", "priv", "masque", "autil" } },
+            { key = "auras",      keys = { "buffs", "debuffs", "ext", "textcolor", "priv", "masque", "autil" } },
             { key = "indicators", keys = { "indicators", "sicons", "si", "ci" } },
         }
 
