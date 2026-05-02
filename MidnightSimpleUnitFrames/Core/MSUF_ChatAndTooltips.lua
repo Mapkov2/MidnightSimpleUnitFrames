@@ -41,6 +41,7 @@ local function MSUF_PrintHelp()
     print("  /msuf fullreset - FULL factory reset (all profiles/settings).")
     print("                   Confirm stages the reset; reload via /reload or MSUF Menu  Advanced  Factory Reset.")
     print("  /msuf absorb    - Toggle showing total absorb amount in HP text.")
+    print("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry.")
     print("  !msuf help      - Print this help via chat (from your own character).")
  end
 -- Optional chat trigger: "!msuf help" (only from yourself)
@@ -197,6 +198,14 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             print("|cff00ff00MSUF:|r Total absorb amount in HP text ENABLED.")
         else
             print("|cff00ff00MSUF:|r Total absorb amount in HP text DISABLED.")
+        end
+         return
+    end
+    if cmd == "analytics" then
+        if type(_G.MSUF_Analytics_HandleSlash) == "function" then
+            _G.MSUF_Analytics_HandleSlash(msg:match("^%S+%s*(.-)%s*$") or "")
+        else
+            print("|cffff0000MSUF:|r Analytics module not loaded.")
         end
          return
     end
