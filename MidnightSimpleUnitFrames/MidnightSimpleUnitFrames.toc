@@ -3,10 +3,10 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 4.0 Beta 16
+## Version: 4.0 PUBLIC EARLY WAGO VERSION 1
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## OptionalDeps: Masque, LibSharedMedia-3.0, Clique
+## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics
 ## X-Wago-ID: XKq9aoKy
 ## X-Website: https://discord.gg/JQnhZXnTAK
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
@@ -19,6 +19,7 @@
 # LIBS
 # ═══════════════════════════════════════════════════════════════
 Libs\LibStub\LibStub.lua
+Libs\WagoAnalyticsShim\Shim.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 Libs\LibCustomGlow-1.0\LibCustomGlow-1.0.lua
@@ -93,6 +94,7 @@ Auras2\MSUF_A2_EditMode.lua
 # FEATURES
 # ═══════════════════════════════════════════════════════════════
 Features\MidnightSimpleUnitFrames_Gameplay.lua
+Features\MSUF_Analytics.lua
 Features\MSUF_Search.lua
 Features\MidnightSimpleUnitFrames_SlashMenu.lua
 Features\MSUF_VersionCheck.lua
