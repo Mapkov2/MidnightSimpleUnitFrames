@@ -534,13 +534,21 @@ local function MSUF_ApplyPowerGradient(frameOrTex)  return MSUF_ApplyBarGradient
 function _G.MSUF_ApplyPowerBarBorder(bar)
     if not bar then  return end
     local bdb = (MSUF_DB and MSUF_DB.bars) or nil
-    local enabled = bdb and (bdb.powerBarBorderEnabled == true) or false
-    local size = bdb and tonumber(bdb.powerBarBorderSize) or 1
+    local parentUF = bar:GetParent()
+    local unitKey = parentUF and (parentUF.msufConfigKey or parentUF.unit)
+    local readEnabled = _G.MSUF_ReadUnitPowerBarBorderEnabled
+    local readSize = _G.MSUF_ReadUnitPowerBarBorderThickness
+    local enabled
+    if type(readEnabled) == "function" then
+        enabled = readEnabled(unitKey)
+    else
+        enabled = bdb and (bdb.powerBarBorderEnabled == true) or false
+    end
+    local size = (type(readSize) == "function") and readSize(unitKey) or (bdb and tonumber(bdb.powerBarBorderThickness or bdb.powerBarBorderSize) or 1)
     if type(size) ~= 'number' then size = 1 end
     if size < 1 then size = 1 elseif size > 10 then size = 10 end
     -- When power bar is detached, the separator border is meaningless
     -- (the outline system in MSUF_Borders handles the detached bar's border).
-    local parentUF = bar:GetParent()
     local detached = parentUF and parentUF._msufPowerBarDetached
     local border = bar._msufPowerBorder
     if not border then

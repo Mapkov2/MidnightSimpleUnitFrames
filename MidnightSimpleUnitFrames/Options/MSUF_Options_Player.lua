@@ -448,13 +448,17 @@ local CASTBAR_TEXTICON_SPECS = {
 -- Copy engine
 --------------------------------------------------------------------
 local COPY_BASIC_FIELDS = {
-    "enabled","showName","showHP","showPower","reverseFillBars","smoothFill","powerSmoothFill","portraitMode",
+    "enabled","showName","showHP","showPower","reverseFillBars","smoothFill","portraitMode",
     "alphaInCombat","alphaOutOfCombat","alphaSync",
     "alphaExcludeTextPortrait","alphaLayerMode",
     "alphaFGInCombat","alphaFGOutOfCombat","alphaBGInCombat","alphaBGOutOfCombat","alphaHPInCombat","alphaHPOutOfCombat",
     "loadCondHideMounted","loadCondHideInVehicle","loadCondHideResting",
     "loadCondHideInCombat","loadCondHideOutOfCombat","loadCondHideStealthed",
     "loadCondHideSolo","loadCondHideInGroup","loadCondHideInInstance","loadCondActive",
+}
+local COPY_POWER_BAR_FIELDS = {
+    "showPowerBar","powerBarHeight","embedPowerBarIntoHealth",
+    "powerBarBorderEnabled","powerBarBorderThickness","powerSmoothFill",
 }
 local COPY_INDICATOR_FIELDS = {
     "showLeaderIcon","leaderIconOffsetX","leaderIconOffsetY","leaderIconAnchor","leaderIconSize","leaderIconLayer",
@@ -506,6 +510,50 @@ local function CopyFields(dst, src, fields)
     for i = 1, #fields do dst[fields[i]] = src[fields[i]] end
 end
 
+local PB_SHOW_KEY_MAP = { player = "showPlayerPowerBar", target = "showTargetPowerBar",
+    focus = "showFocusPowerBar", boss = "showBossPowerBar" }
+
+local function ReadPowerBarEnabled(conf, unitKey)
+    if conf and conf.showPowerBar ~= nil then return conf.showPowerBar ~= false end
+    local fn = _G.MSUF_ReadUnitPowerBarEnabled
+    if type(fn) == "function" then return fn(unitKey) end
+    local b, bk = MSUF_DB and MSUF_DB.bars, PB_SHOW_KEY_MAP[unitKey]
+    if b and bk and b[bk] ~= nil then return b[bk] ~= false end
+    return true
+end
+
+local function ReadPowerBarHeight(conf, unitKey)
+    if conf and type(conf.powerBarHeight) == "number" then return conf.powerBarHeight end
+    local fn = _G.MSUF_ReadUnitPowerBarHeight
+    if type(fn) == "function" then return fn(unitKey) end
+    local b = MSUF_DB and MSUF_DB.bars
+    return tonumber(b and b.powerBarHeight) or 3
+end
+
+local function ReadPowerBarEmbed(conf, unitKey)
+    if conf and conf.embedPowerBarIntoHealth ~= nil then return conf.embedPowerBarIntoHealth == true end
+    local fn = _G.MSUF_ReadUnitPowerBarEmbed
+    if type(fn) == "function" then return fn(unitKey) end
+    local b = MSUF_DB and MSUF_DB.bars
+    return b and b.embedPowerBarIntoHealth == true
+end
+
+local function ReadPowerBarBorderEnabled(conf, unitKey)
+    if conf and conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
+    local fn = _G.MSUF_ReadUnitPowerBarBorderEnabled
+    if type(fn) == "function" then return fn(unitKey) end
+    local b = MSUF_DB and MSUF_DB.bars
+    return b and b.powerBarBorderEnabled == true
+end
+
+local function ReadPowerBarBorderThickness(conf, unitKey)
+    if conf and type(conf.powerBarBorderThickness) == "number" then return conf.powerBarBorderThickness end
+    local fn = _G.MSUF_ReadUnitPowerBarBorderThickness
+    if type(fn) == "function" then return fn(unitKey) end
+    local b = MSUF_DB and MSUF_DB.bars
+    return tonumber(b and (b.powerBarBorderThickness or b.powerBarBorderSize)) or 1
+end
+
 local function ReadPowerSmoothFill(conf, unitKey)
     if conf and conf.powerSmoothFill ~= nil then return conf.powerSmoothFill == true end
     if unitKey == "player" then
@@ -513,6 +561,16 @@ local function ReadPowerSmoothFill(conf, unitKey)
         return not (b and b.smoothPowerBar == false)
     end
     return false
+end
+
+local function CopyPowerBarFields(dst, src, srcKey)
+    CopyFields(dst, src, COPY_POWER_BAR_FIELDS)
+    dst.showPowerBar = ReadPowerBarEnabled(src, srcKey)
+    dst.powerBarHeight = ReadPowerBarHeight(src, srcKey)
+    dst.embedPowerBarIntoHealth = ReadPowerBarEmbed(src, srcKey)
+    dst.powerBarBorderEnabled = ReadPowerBarBorderEnabled(src, srcKey)
+    dst.powerBarBorderThickness = ReadPowerBarBorderThickness(src, srcKey)
+    dst.powerSmoothFill = ReadPowerSmoothFill(src, srcKey)
 end
 
 local CASTBAR_KEY_MAP = {
@@ -563,7 +621,7 @@ local function CopyUnitSettings(srcKey, destKey, api)
         local dst, dstC = EnsureUnitDB(toKey)
         if not dst or not dstC or dstC == srcC then return end
         CopyFields(dst, src, COPY_BASIC_FIELDS)
-        dst.powerSmoothFill = ReadPowerSmoothFill(src, srcC)
+        CopyPowerBarFields(dst, src, srcC)
         CopyFields(dst, src, COPY_INDICATOR_FIELDS)
         CopyFields(dst, src, MSUF_COPY_STATUSICON_FIELDS)
         dst.showInterrupt = src.showInterrupt
@@ -1709,29 +1767,31 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
 
     -- Power Bar sync
     do
-        MSUF_DB.bars = MSUF_DB.bars or {}
-        local b = MSUF_DB.bars
-        local showKey = isPlayer and "showPlayerPowerBar" or isTarget and "showTargetPowerBar"
-            or isFocus and "showFocusPowerBar" or isBoss and "showBossPowerBar" or nil
         local showPB = (isPlayer or isTarget or isFocus or isBoss)
         if panel.playerPowerBarBox then panel.playerPowerBarBox:SetShown(showPB and isFrames) end
-        if panel.playerPowerBarShowCB and showKey then
-            panel.playerPowerBarShowCB:SetChecked(b[showKey] ~= false)
+        local powerEnabled = ReadPowerBarEnabled(conf, key)
+        local borderEnabled = ReadPowerBarBorderEnabled(conf, key)
+        if panel.playerPowerBarShowCB and showPB then
+            panel.playerPowerBarShowCB:SetChecked(powerEnabled)
         end
         if panel.playerPowerBarHeightSlider then
-            local h = tonumber(b.powerBarHeight) or 6; if h < 1 then h = 1 elseif h > 20 then h = 20 end
+            local h = tonumber(ReadPowerBarHeight(conf, key)) or 3; if h < 1 then h = 1 elseif h > 20 then h = 20 end
+            panel.playerPowerBarHeightSlider.MSUF_SkipCallback = true
             panel.playerPowerBarHeightSlider:SetValue(h)
+            panel.playerPowerBarHeightSlider.MSUF_SkipCallback = false
         end
-        if panel.playerPowerBarEmbedCB then panel.playerPowerBarEmbedCB:SetChecked(b.embedPowerBarIntoHealth == true) end
-        if panel.playerPowerBarBorderCB then panel.playerPowerBarBorderCB:SetChecked(b.powerBarBorderEnabled == true) end
+        if panel.playerPowerBarEmbedCB then panel.playerPowerBarEmbedCB:SetChecked(ReadPowerBarEmbed(conf, key)) end
+        if panel.playerPowerBarBorderCB then panel.playerPowerBarBorderCB:SetChecked(borderEnabled) end
         if panel.playerPowerBarBorderSlider then
-            local t = tonumber(b.powerBarBorderThickness) or 1; if t < 0 then t = 0 elseif t > 6 then t = 6 end
+            local t = tonumber(ReadPowerBarBorderThickness(conf, key)) or 1; if t < 0 then t = 0 elseif t > 6 then t = 6 end
+            panel.playerPowerBarBorderSlider.MSUF_SkipCallback = true
             panel.playerPowerBarBorderSlider:SetValue(t)
+            panel.playerPowerBarBorderSlider.MSUF_SkipCallback = false
         end
         if panel.playerPowerBarSmoothCB then
             panel.playerPowerBarSmoothCB:SetChecked(ReadPowerSmoothFill(conf, key))
         end
-        SetPowerBarConfigEnabled(panel, showKey and b[showKey] ~= false, b.powerBarBorderEnabled == true)
+        SetPowerBarConfigEnabled(panel, showPB and powerEnabled, borderEnabled)
     end
 
     -- ToT inline
@@ -2025,51 +2085,71 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
 
     -- Power Bar controls
     do
-        local PB_KEY_MAP = { player = "showPlayerPowerBar", target = "showTargetPowerBar",
-            focus = "showFocusPowerBar", boss = "showBossPowerBar" }
+        local function CurrentPowerKey()
+            local k = CanonKey(CurrentKey())
+            if k == "player" or k == "target" or k == "focus" or k == "boss" then return k end
+            return nil
+        end
+        local function PBConf()
+            local k = CurrentPowerKey()
+            if not k then return nil, nil end
+            local c = EnsureKeyDB()
+            if c.showPowerBar == nil then c.showPowerBar = ReadPowerBarEnabled(c, k) end
+            if c.powerBarHeight == nil then c.powerBarHeight = ReadPowerBarHeight(c, k) end
+            if c.embedPowerBarIntoHealth == nil then c.embedPowerBarIntoHealth = ReadPowerBarEmbed(c, k) end
+            if c.powerBarBorderEnabled == nil then c.powerBarBorderEnabled = ReadPowerBarBorderEnabled(c, k) end
+            if c.powerBarBorderThickness == nil then c.powerBarBorderThickness = ReadPowerBarBorderThickness(c, k) end
+            return c, k
+        end
         local function PBApply()
+            local k = CurrentPowerKey()
             if _G.MSUF_ApplyPowerBarEmbedLayout_All then _G.MSUF_ApplyPowerBarEmbedLayout_All() end
             if _G.MSUF_ApplyPowerBarBorder_All then _G.MSUF_ApplyPowerBarBorder_All() end
+            if _G.MSUF_UFCore_NotifyConfigChanged then _G.MSUF_UFCore_NotifyConfigChanged(k, true, true, "POWER_BAR_OPTIONS") end
             ApplyCurrent()
         end
-        local function PBBars() EnsureDB(); MSUF_DB.bars = MSUF_DB.bars or {}; return MSUF_DB.bars end
         if panel.playerPowerBarShowCB then
             panel.playerPowerBarShowCB:SetScript("OnClick", function(self)
-                local k = CanonKey(CurrentKey()); local bk = PB_KEY_MAP[k]; if not bk then return end
-                local b = PBBars()
-                b[bk] = self:GetChecked() and true or false
-                SetPowerBarConfigEnabled(panel, b[bk] ~= false, b.powerBarBorderEnabled == true)
+                local c, k = PBConf(); if not c or not k then return end
+                c.showPowerBar = self:GetChecked() and true or false
+                SetPowerBarConfigEnabled(panel, c.showPowerBar ~= false, c.powerBarBorderEnabled == true)
                 PBApply()
             end)
         end
         if panel.playerPowerBarHeightSlider then
             panel.playerPowerBarHeightSlider:SetScript("OnValueChanged", function(self, v)
-                v = math.floor(v + 0.5); PBBars().powerBarHeight = v; PBApply()
+                if self.MSUF_SkipCallback then return end
+                local c = PBConf(); if not c then return end
+                v = math.floor(v + 0.5); if v < 1 then v = 1 elseif v > 20 then v = 20 end
+                c.powerBarHeight = v; PBApply()
             end)
         end
         if panel.playerPowerBarEmbedCB then
             panel.playerPowerBarEmbedCB:SetScript("OnClick", function(self)
-                PBBars().embedPowerBarIntoHealth = self:GetChecked() and true or false; PBApply()
+                local c = PBConf(); if not c then return end
+                c.embedPowerBarIntoHealth = self:GetChecked() and true or false; PBApply()
             end)
         end
         if panel.playerPowerBarBorderCB then
             panel.playerPowerBarBorderCB:SetScript("OnClick", function(self)
-                local b = PBBars()
-                b.powerBarBorderEnabled = self:GetChecked() and true or false
-                local k = CanonKey(CurrentKey()); local bk = PB_KEY_MAP[k]
-                SetPowerBarConfigEnabled(panel, bk and b[bk] ~= false, b.powerBarBorderEnabled == true)
+                local c = PBConf(); if not c then return end
+                c.powerBarBorderEnabled = self:GetChecked() and true or false
+                SetPowerBarConfigEnabled(panel, c.showPowerBar ~= false, c.powerBarBorderEnabled == true)
                 PBApply()
             end)
         end
         if panel.playerPowerBarBorderSlider then
             panel.playerPowerBarBorderSlider:SetScript("OnValueChanged", function(self, v)
-                v = math.floor(v + 0.5); PBBars().powerBarBorderThickness = v; PBApply()
+                if self.MSUF_SkipCallback then return end
+                local c = PBConf(); if not c then return end
+                v = math.floor(v + 0.5); if v < 0 then v = 0 elseif v > 6 then v = 6 end
+                c.powerBarBorderThickness = v; PBApply()
             end)
         end
         if panel.playerPowerBarSmoothCB then
             panel.playerPowerBarSmoothCB:SetScript("OnClick", function(self)
-                local k = CanonKey(CurrentKey()); if not (k == "player" or k == "target" or k == "focus" or k == "boss") then return end
-                EnsureKeyDB().powerSmoothFill = self:GetChecked() and true or false
+                local c = PBConf(); if not c then return end
+                c.powerSmoothFill = self:GetChecked() and true or false
                 PBApply()
             end)
         end

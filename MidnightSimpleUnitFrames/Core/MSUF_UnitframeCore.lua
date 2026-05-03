@@ -171,10 +171,18 @@ local function UFCore_RefreshSettingsCache(reason)
     -- Bars config snapshot (power bar visibility gating; avoids reading MSUF_DB.bars in ComputeElementMask hot paths).
     local bars = (db and type(db.bars) == "table") and db.bars or nil
     cache.barsRef = bars
-    cache.showPlayerPowerBar = not (bars and bars.showPlayerPowerBar == false)
-    cache.showTargetPowerBar = not (bars and bars.showTargetPowerBar == false)
-    cache.showFocusPowerBar  = not (bars and bars.showFocusPowerBar == false)
-    cache.showBossPowerBar   = not (bars and bars.showBossPowerBar == false)
+    local readPowerEnabled = _G.MSUF_ReadUnitPowerBarEnabled
+    if type(readPowerEnabled) == "function" then
+        cache.showPlayerPowerBar = readPowerEnabled("player", db)
+        cache.showTargetPowerBar = readPowerEnabled("target", db)
+        cache.showFocusPowerBar  = readPowerEnabled("focus", db)
+        cache.showBossPowerBar   = readPowerEnabled("boss", db)
+    else
+        cache.showPlayerPowerBar = not (bars and bars.showPlayerPowerBar == false)
+        cache.showTargetPowerBar = not (bars and bars.showTargetPowerBar == false)
+        cache.showFocusPowerBar  = not (bars and bars.showFocusPowerBar == false)
+        cache.showBossPowerBar   = not (bars and bars.showBossPowerBar == false)
+    end
     -- Bars: Aggro indicator (Target/Focus/Boss) - mode: 'off' | 'border'
     local ag = g and g.aggroIndicatorMode
     if ag ~= "border" then ag = nil end
