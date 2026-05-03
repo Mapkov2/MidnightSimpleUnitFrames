@@ -479,7 +479,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
           keys = { "bgR", "bgG", "bgB", "bgA",
                    "hpBarAlpha", "hpBgAlpha", "hpTextIgnoreAlpha" } },
         { key = "range",      label = "Range Fade",
-          keys = { "rangeFadeEnabled", "rangeFadeAlpha", "offlineAlpha" } },
+          keys = { "rangeFadeEnabled", "rangeFadeAlpha", "rangeFadeLayerMode", "offlineAlpha" } },
         { key = "indicators", label = "Indicators & Status Icons",
           keys = { "showGroupNumber", "groupNumberSize", "groupNumberAnchor",
                    "groupNumberX", "groupNumberY",
@@ -3225,7 +3225,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 7: Range Fade
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(160, "Range Fade", false, "range")
+        local box, body = AddSection(210, "Range Fade", false, "range")
 
         local enChk = SCheck({
             name = "MSUF_GF_RangeFadeEnableCheck", parent = body,
@@ -3235,12 +3235,37 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).rangeFadeEnabled = v; GF.RefreshVisuals() end,
         })
 
+        local layerLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        layerLbl:SetPoint("TOPLEFT", enChk, "BOTTOMLEFT", 0, -10)
+        layerLbl:SetText(TR("Range fade affects"))
+        layerLbl:SetTextColor(1, 0.82, 0)
+
+        local layerDd = SDropdown({
+            name = "MSUF_GF_RangeFadeLayerDropdown", parent = body,
+            anchor = layerLbl, x = -16, y = -4, width = 180,
+            items = {
+                { key = "frame", label = TR("Frame") },
+                { key = "health", label = TR("HP Bar") },
+            },
+            get = function(k)
+                local v = GF.Val(k, "rangeFadeLayerMode")
+                return (v == "health" or v == "hp" or v == "hpbar" or v == 2) and "health" or "frame"
+            end,
+            set = function(k, v)
+                GF.GetConf(k).rangeFadeLayerMode = (v == "health") and "health" or "frame"
+                if GF.RefreshRangeFade then GF.RefreshRangeFade() else GF.RefreshVisuals() end
+            end,
+        })
+
         local fadeSl = SSlider({
             name = "MSUF_GF_FadeAlphaSlider", parent = body, compact = true,
-            anchor = enChk, x = 0, y = -14,
+            anchor = layerDd, x = 16, y = -18,
             min = 0, max = 1, step = 0.05, width = 270, default = 0.4,
             get = function(k) return GF.Val(k, "rangeFadeAlpha") end,
-            set = function(k, v) GF.GetConf(k).rangeFadeAlpha = v end,
+            set = function(k, v)
+                GF.GetConf(k).rangeFadeAlpha = v
+                if GF.RefreshRangeFade then GF.RefreshRangeFade() else GF.RefreshVisuals() end
+            end,
             formatText = function(v) return string.format("Out of Range Alpha: %.0f%%", v * 100) end,
         })
 
@@ -3249,7 +3274,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = fadeSl, x = 0, y = -32,
             min = 0, max = 1, step = 0.05, width = 270, default = 0.5,
             get = function(k) return GF.Val(k, "offlineAlpha") end,
-            set = function(k, v) GF.GetConf(k).offlineAlpha = v end,
+            set = function(k, v)
+                GF.GetConf(k).offlineAlpha = v
+                if GF.RefreshRangeFade then GF.RefreshRangeFade() else GF.RefreshVisuals() end
+            end,
             formatText = function(v) return string.format("Offline Alpha: %.0f%%", v * 100) end,
         })
     end

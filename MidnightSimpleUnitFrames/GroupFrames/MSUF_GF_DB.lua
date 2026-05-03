@@ -140,6 +140,7 @@ local PARTY_DEFAULTS = {
     -- Range fade
     rangeFadeEnabled  = true,
     rangeFadeAlpha    = 0.4,
+    rangeFadeLayerMode = "frame", -- frame / health
     offlineAlpha      = 0.5,
     hideOfflineDelay  = 0,
     -- Aggro border
