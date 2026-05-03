@@ -4952,11 +4952,15 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         end
     end
 
-    local reserve = (embed and not detached and enabled and h > 0)
+    local activeDetached = detached and enabled
+    local reserve = (embed and not activeDetached and enabled and h > 0)
     local dpbWMode = (b.detachedPowerBarWidthMode or "")
-    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (reserve and 1 or 0), h, (detached and 1 or 0), dW, dH, dX, dY, (anchorToCP and 1 or 0), dpbWMode) then  return end
+    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (enabled and 1 or 0), (embed and 1 or 0), (reserve and 1 or 0), h, (activeDetached and 1 or 0), dW, dH, dX, dY, (anchorToCP and 1 or 0), dpbWMode) then
+        if not enabled then _MSUF_Bars_HidePower(pb, true) end
+        return
+    end
     f._msufPowerBarReserved = reserve and true or nil
-    f._msufPowerBarDetached = detached and true or nil
+    f._msufPowerBarDetached = activeDetached and true or nil
     -- Force text layout to re-evaluate (power text may reparent to detached bar)
     f._msufTextLayoutStamp = nil
     ns.Cache.ClearStamp(f, "TextLayout")
@@ -4977,7 +4981,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         hb:SetPoint('BOTTOMRIGHT', f, 'BOTTOMRIGHT', -2, 2)
     end
     pb:ClearAllPoints()
-    if detached then
+    if activeDetached then
         -- Detached: freely positioned relative to parent frame (overrides embed)
         if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
         if dH < 2 then dH = 2 elseif dH > 80 then dH = 80 end
@@ -5011,6 +5015,9 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         pb:SetPoint('TOPLEFT', hb, 'BOTTOMLEFT', 0, 0)
         pb:SetPoint('TOPRIGHT', hb, 'BOTTOMRIGHT', 0, 0)
     end
+    if not enabled then
+        _MSUF_Bars_HidePower(pb, true)
+    end
 
     -- FIX: Force border system refresh after layout completes.
     -- Border stamps were invalidated above (thickness/bottomIsPower = -1/nil) but no
@@ -5023,6 +5030,26 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
  end
 
 _G.MSUF_ApplyPowerBarEmbedLayout = MSUF_ApplyPowerBarEmbedLayout
+_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey = function(unitKey, refreshPower)
+    if not UnitFrames then return end
+    if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then return end
+    local function applyOne(fr)
+        if not (fr and fr.hpBar and fr.targetPowerBar) then return end
+        if ns.Cache and ns.Cache.ClearStamp then ns.Cache.ClearStamp(fr, "PBEmbedLayout") end
+        MSUF_ApplyPowerBarEmbedLayout(fr)
+        if refreshPower and _G.MSUF_UFCore_UpdatePowerBarFast then
+            _G.MSUF_UFCore_UpdatePowerBarFast(fr)
+        end
+        if _G.MSUF_ApplyPowerBarBorder then
+            _G.MSUF_ApplyPowerBarBorder(fr.targetPowerBar)
+        end
+    end
+    if unitKey == "boss" then
+        for i = 1, (MSUF_MAX_BOSS_FRAMES or 5) do applyOne(UnitFrames["boss" .. i]) end
+    else
+        applyOne(UnitFrames[unitKey])
+    end
+end
 _G.MSUF_ApplyPowerBarEmbedLayout_All = function()
     if not UnitFrames then  return end
     for _, fr in pairs(UnitFrames) do
