@@ -2103,10 +2103,17 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         end
         local function PBApply()
             local k = CurrentPowerKey()
-            if _G.MSUF_ApplyPowerBarEmbedLayout_All then _G.MSUF_ApplyPowerBarEmbedLayout_All() end
-            if _G.MSUF_ApplyPowerBarBorder_All then _G.MSUF_ApplyPowerBarBorder_All() end
-            if _G.MSUF_UFCore_NotifyConfigChanged then _G.MSUF_UFCore_NotifyConfigChanged(k, true, true, "POWER_BAR_OPTIONS") end
-            ApplyCurrent()
+            local notifyKey = (k == "boss") and nil or k
+            local inCombat = (_G.MSUF_InCombat == true) or (_G.InCombatLockdown and _G.InCombatLockdown())
+            if _G.MSUF_UFCore_NotifyConfigChanged then _G.MSUF_UFCore_NotifyConfigChanged(notifyKey, true, true, "POWER_BAR_OPTIONS") end
+            if (not inCombat) and _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey then
+                _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(k, true)
+            elseif (not inCombat) and _G.MSUF_ApplyPowerBarEmbedLayout_All then
+                _G.MSUF_ApplyPowerBarEmbedLayout_All()
+                if _G.MSUF_ApplyPowerBarBorder_All then _G.MSUF_ApplyPowerBarBorder_All() end
+            else
+                ApplyCurrent()
+            end
         end
         if panel.playerPowerBarShowCB then
             panel.playerPowerBarShowCB:SetScript("OnClick", function(self)
