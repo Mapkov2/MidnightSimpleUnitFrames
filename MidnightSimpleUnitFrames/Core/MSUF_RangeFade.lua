@@ -126,9 +126,34 @@ do
         end
     end
 
+    local function ReapplyCurrentAlpha(f, unit, confKey)
+        if not f or (f.IsForbidden and f:IsForbidden()) then return false end
+        if f.IsShown and not f:IsShown() then return false end
+        if not _fastApply then _fastApply = _G.MSUF_ApplyRangeFadeAlphaFast end
+        local a = _mulT[unit]
+        if type(a) ~= "number" then a = 1 end
+        if type(_fastApply) == "function" and _fastApply(f, confKey, a) then
+            return true
+        end
+        if not _applyAlpha then _applyAlpha = _G.MSUF_ApplyUnitAlpha end
+        if type(_applyAlpha) == "function" then
+            _applyAlpha(f, confKey)
+            return true
+        end
+        return false
+    end
+
     local function ApplyMul(f, unit, confKey, conf, inRange)
         local prev = _state[unit]
-        if inRange == prev then return false end
+        if inRange == prev then
+            -- StatusBar:SetStatusBarColor can reset the bar texture alpha while
+            -- range state is unchanged. Repair only layered frames; flat alpha
+            -- is unaffected and stays on the cheap no-op path.
+            if f and (f._msufAlphaBaseMode == "layered" or f._msufAlphaLayeredMode) then
+                ReapplyCurrentAlpha(f, unit, confKey)
+            end
+            return false
+        end
         _state[unit] = inRange
         local a = 1
         if inRange == false then
@@ -137,14 +162,7 @@ do
         end
         _mulT[unit] = a
         PropagateBossChildren(unit, a)
-        if not f or (f.IsForbidden and f:IsForbidden()) then return true end
-        if f.IsShown and not f:IsShown() then return true end
-        if not _fastApply then _fastApply = _G.MSUF_ApplyRangeFadeAlphaFast end
-        if type(_fastApply) == "function" and _fastApply(f, confKey, a) then
-            return true
-        end
-        if not _applyAlpha then _applyAlpha = _G.MSUF_ApplyUnitAlpha end
-        if type(_applyAlpha) == "function" then _applyAlpha(f, confKey) end
+        ReapplyCurrentAlpha(f, unit, confKey)
         return true
     end
 

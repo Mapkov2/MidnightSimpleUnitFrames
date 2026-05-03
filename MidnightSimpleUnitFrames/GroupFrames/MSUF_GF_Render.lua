@@ -609,10 +609,33 @@ end
 
 ------------------------------------------------------------------------
 -- Apply: health bar foreground alpha (for behind-bar icon visibility)
--- Uses health:SetAlpha for the bar fill.
--- When textIgnoreAlpha is on, re-parents healthTextLayer to statusIconLayer
--- so text stays at full opacity (escapes health alpha inheritance).
+-- Uses the statusbar fill texture alpha so spell/status indicators parented
+-- around the health bar do not inherit HP opacity.
+-- Text and status indicators stay parented to the normal health text layer.
 ------------------------------------------------------------------------
+local function ResetHealthFrameAlpha(f)
+    if f and f.health and f.health.SetAlpha and f._msufGFHealthFrameAlphaOne ~= true then
+        f.health:SetAlpha(1)
+        f._msufGFHealthFrameAlphaOne = true
+    end
+end
+
+local function RestoreHealthTextLayer(f)
+    local txtLayer = f and f.healthTextLayer
+    if not txtLayer or not f.health then return end
+    if txtLayer._msufAlphaEscaped or txtLayer:GetParent() ~= f.health then
+        txtLayer:SetParent(f.health)
+        txtLayer:SetAllPoints(f.health)
+        txtLayer:SetFrameLevel(f.health:GetFrameLevel() + 6)
+        txtLayer._msufAlphaEscaped = nil
+    end
+    local st = f.statusIndicatorText
+    local stParent = f.statusIconLayer or f.barGroup or f.health
+    if st and stParent and st.SetParent and st.GetParent and st:GetParent() ~= stParent then
+        st:SetParent(stParent)
+    end
+end
+
 local function ApplyHealthBarAlpha(f, kind)
     if not f.health then return end
     local conf = GF.GetConf(kind)
@@ -620,14 +643,29 @@ local function ApplyHealthBarAlpha(f, kind)
     if fgA < 0 then fgA = 0 elseif fgA > 1 then fgA = 1 end
 
     local dynamic = (f._msufGFHealthAlphaDynamic == true)
+    if f._msufSIHealthColorR then
+        -- Spell Indicator health tint is itself an indicator. The HP alpha
+        -- slider must not dim that effect.
+        fgA = 1
+    end
     local boolValue = f._msufGFHealthAlphaBool
     local falseMul = tonumber(f._msufGFHealthAlphaFalseMul) or 1
     if falseMul < 0 then falseMul = 0 elseif falseMul > 1 then falseMul = 1 end
     local falseA = fgA * falseMul
+    local healthTex = f.health.GetStatusBarTexture and f.health:GetStatusBarTexture()
 
-    if dynamic and type(boolValue) ~= "nil" and f.health.SetAlphaFromBoolean then
+    if dynamic and type(boolValue) ~= "nil" and healthTex and healthTex.SetAlphaFromBoolean then
         -- boolValue may be secret; pass it straight to C-side SetAlphaFromBoolean.
         f._msufCachedHpBarAlpha = nil
+        f._msufCachedHpBarAlphaTarget = nil
+        ResetHealthFrameAlpha(f)
+        healthTex:SetAlphaFromBoolean(boolValue, fgA, falseA)
+    elseif dynamic and type(boolValue) ~= "nil" and (issecretvalue and issecretvalue(boolValue)) and f.health.SetAlphaFromBoolean then
+        -- Fallback for clients where statusbar textures cannot consume secret
+        -- booleans directly.
+        f._msufCachedHpBarAlpha = nil
+        f._msufCachedHpBarAlphaTarget = nil
+        f._msufGFHealthFrameAlphaOne = nil
         f.health:SetAlphaFromBoolean(boolValue, fgA, falseA)
     else
         local mul
@@ -642,31 +680,22 @@ local function ApplyHealthBarAlpha(f, kind)
         end
         if mul < 0 then mul = 0 elseif mul > 1 then mul = 1 end
         local targetA = fgA * mul
-        if f._msufCachedHpBarAlpha ~= targetA then
+        local alphaTarget = healthTex or f.health
+        if healthTex then ResetHealthFrameAlpha(f) else f._msufGFHealthFrameAlphaOne = nil end
+        local needsApply = (f._msufCachedHpBarAlpha ~= targetA) or (f._msufCachedHpBarAlphaTarget ~= alphaTarget)
+        -- SetStatusBarColor may reset the fill texture alpha without touching
+        -- our cache. When HP opacity is active, re-assert the texture alpha.
+        if targetA < 0.999 then needsApply = true end
+        if needsApply then
             f._msufCachedHpBarAlpha = targetA
-            f.health:SetAlpha(targetA)
+            f._msufCachedHpBarAlphaTarget = alphaTarget
+            if alphaTarget and alphaTarget.SetAlpha then
+                alphaTarget:SetAlpha(targetA)
+            end
         end
         falseA = targetA
     end
-    -- Text layer: escape alpha inheritance when toggle is on
-    local txtLayer = f.healthTextLayer
-    if not txtLayer then return end
-    local wantEscape = (conf.hpTextIgnoreAlpha ~= false) and (dynamic or falseA < 1)
-    local escaped = txtLayer._msufAlphaEscaped
-    if wantEscape and not escaped then
-        -- Re-parent to statusIconLayer (above everything, unaffected by health alpha)
-        local safeParent = f.statusIconLayer or f.barGroup or f
-        txtLayer:SetParent(safeParent)
-        txtLayer:SetAllPoints(f.health)
-        txtLayer:SetFrameLevel(f.health:GetFrameLevel() + 5)
-        txtLayer._msufAlphaEscaped = true
-    elseif not wantEscape and escaped then
-        -- Restore: parent back to health
-        txtLayer:SetParent(f.health)
-        txtLayer:SetAllPoints(f.health)
-        txtLayer:SetFrameLevel(f.health:GetFrameLevel() + 5)
-        txtLayer._msufAlphaEscaped = nil
-    end
+    RestoreHealthTextLayer(f)
 end
 GF.ApplyHealthBarAlpha = ApplyHealthBarAlpha
 
@@ -729,6 +758,12 @@ local function ApplyTextLayout(f, kind)
     end
 
     if f.statusIndicatorText then
+        local stParent = f.statusIconLayer or f.barGroup or f.health
+        if stParent and f.statusIndicatorText.SetParent and f.statusIndicatorText.GetParent
+            and f.statusIndicatorText:GetParent() ~= stParent
+        then
+            f.statusIndicatorText:SetParent(stParent)
+        end
         f.statusIndicatorText:ClearAllPoints()
         local anchor = conf.statusTextAnchor or "CENTER"
         f.statusIndicatorText:SetPoint(anchor, f.health, anchor,

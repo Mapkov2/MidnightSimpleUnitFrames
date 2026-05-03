@@ -1384,6 +1384,8 @@ function GF.BuildFrameCache(f)
     c.rfAlpha = conf.rangeFadeAlpha or 0.4
     c.offAlpha = conf.offlineAlpha or 0.5
     c.rfLayerMode = _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)
+    c.hpBarAlpha = tonumber(conf.hpBarAlpha) or 1
+    if c.hpBarAlpha < 0 then c.hpBarAlpha = 0 elseif c.hpBarAlpha > 1 then c.hpBarAlpha = 1 end
 
     -- Health fade (curve-based HP threshold dimming)
     c.hfEn     = conf.healthFadeEnabled == true
@@ -2470,6 +2472,30 @@ local function ApplyHealthColor(f, kind, unit, hp, hpMax)
     end
 end
 
+local function ApplyHealthAlphaAfterColor(f, kind)
+    if not f or not f.health or not GF.ApplyHealthBarAlpha then return end
+    kind = kind or f._msufGFKind or "party"
+    if f._msufGFHealthAlphaDynamic == true then
+        GF.ApplyHealthBarAlpha(f, kind)
+        return
+    end
+    local c = f._c
+    if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+    local alpha = c and c.hpBarAlpha
+    if type(alpha) ~= "number" then
+        local conf = GF.GetConf(kind)
+        alpha = tonumber(conf and conf.hpBarAlpha) or 1
+    end
+    if alpha < 0.999 then
+        GF.ApplyHealthBarAlpha(f, kind)
+    end
+end
+
+local function ApplyHealthColorWithAlpha(f, kind, unit, hp, hpMax)
+    ApplyHealthColor(f, kind, unit, hp, hpMax)
+    ApplyHealthAlphaAfterColor(f, kind)
+end
+
 ------------------------------------------------------------------------
 -- Power color (secret-safe pToken)
 ------------------------------------------------------------------------
@@ -2773,7 +2799,7 @@ local function dispatchHealthLean(f, unit)
                 UnitGetDetailedHealPrediction(unit, "player", calc)
             end
         end
-        ApplyHealthColor(f, f._msufGFKind or "party", unit)
+        ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", unit)
     end
 end
 
@@ -2824,7 +2850,7 @@ local function dispatchHealthFull(f, unit)
     -- Color (full apply on maxHP change — handles unit-type transitions).
     -- Pass hp/hpMax through so the GRADIENT-no-calc fallback inside
     -- ApplyHealthColor doesn't re-fetch them.
-    ApplyHealthColor(f, f._msufGFKind or "party", unit, hp, hpMax)
+    ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", unit, hp, hpMax)
 
     -- Text: prefer compiled closures (oUF-style C-side dispatch, ~0.3µs/slot)
     -- over FormatHealthText (~7.5µs/slot). Falls back to FormatHealthText only
@@ -3578,7 +3604,7 @@ local function _gfRosterFlush()
                 gmap[guid] = f
             end
             dispatchName(f, u)
-            ApplyHealthColor(f, f._msufGFKind or "party", u)
+            ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", u)
             ApplyPowerColor(f, u)
             if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
             if c and c.roleStateEn then UpdateRoleIcon(f, u) end
@@ -3922,7 +3948,7 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
     end
 
     if band(bits, 0x08) ~= 0 then -- DIRTY_COLOR
-        ApplyHealthColor(f, f._msufGFKind or "party", unit)
+        ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", unit)
         ApplyPowerColor(f, unit)
         if c and (c.rfEn or f._msufGFHealthAlphaDynamic) then ApplyRangeFade(f, unit) end
     end
@@ -4083,7 +4109,7 @@ _G.MSUF_GF_RefreshOverlays = function()
         end
     end
 end
-GF._ApplyHealthColor      = ApplyHealthColor
+GF._ApplyHealthColor      = ApplyHealthColorWithAlpha
 GF._ApplyAbsorbAnchor     = _GF_ApplyAbsorbAnchor
 GF._ReadOverlayColor      = _GF_ReadOverlayColor
 
