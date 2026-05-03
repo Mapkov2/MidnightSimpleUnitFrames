@@ -1149,6 +1149,11 @@ function GF.ResolveFontPath(kind)
     if conf.fontOverride then
         local key = conf.fontKey
         if key and key ~= "" then
+            local fn = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+            if type(fn) == "function" then
+                local p = fn(key)
+                if p then return ResolveFontPathSafe(p, conf.nameFontSize or 12, GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "") end
+            end
             local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
             if LSM then
                 local p = LSM:Fetch("font", key, true)
@@ -1160,6 +1165,8 @@ function GF.ResolveFontPath(kind)
     local db = _G.MSUF_DB
     local gKey = db and db.general and db.general.fontKey
     if gKey and gKey ~= "" then
+        local pathForKey = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+        if type(pathForKey) == "function" then return ResolveFontPathSafe(pathForKey(gKey), 12, "") end
         local fn = _G.MSUF_GetFontPath or (ns and ns.MSUF_GetFontPath)
         if type(fn) == "function" then return ResolveFontPathSafe(fn(), 12, "") end
         local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)

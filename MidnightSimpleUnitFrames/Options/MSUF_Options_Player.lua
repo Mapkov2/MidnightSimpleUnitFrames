@@ -451,7 +451,7 @@ local COPY_BASIC_FIELDS = {
     "enabled","showName","showHP","showPower","reverseFillBars","smoothFill","powerSmoothFill","portraitMode",
     "alphaInCombat","alphaOutOfCombat","alphaSync",
     "alphaExcludeTextPortrait","alphaLayerMode",
-    "alphaFGInCombat","alphaFGOutOfCombat","alphaBGInCombat","alphaBGOutOfCombat",
+    "alphaFGInCombat","alphaFGOutOfCombat","alphaBGInCombat","alphaBGOutOfCombat","alphaHPInCombat","alphaHPOutOfCombat",
     "loadCondHideMounted","loadCondHideInVehicle","loadCondHideResting",
     "loadCondHideInCombat","loadCondHideOutOfCombat","loadCondHideStealthed",
     "loadCondHideSolo","loadCondHideInGroup","loadCondHideInInstance","loadCondActive",
@@ -729,6 +729,25 @@ local function ForceSliderEB(slider)
 end
 
 local OPTION_DISABLED_ALPHA = 0.45
+local function SetCheckboxLabelEnabledVisual(cb, enabled)
+    if not cb then return end
+    local isCheck = (cb.GetObjectType and cb:GetObjectType() == "CheckButton") or (cb.GetChecked ~= nil)
+    if not isCheck then return end
+
+    local alpha = enabled and 1 or OPTION_DISABLED_ALPHA
+    local color = enabled and 1 or 0.55
+    local name = cb.GetName and cb:GetName()
+    local function Apply(label)
+        if label then
+            if label.SetAlpha then label:SetAlpha(alpha) end
+            if label.SetTextColor then label:SetTextColor(color, color, color) end
+        end
+    end
+    Apply(cb.Text)
+    Apply(cb.text)
+    if name then Apply(_G[name .. "Text"]) end
+end
+
 local function SetOptionControlEnabled(widget, enabled)
     if not widget then return end
     enabled = enabled and true or false
@@ -736,7 +755,8 @@ local function SetOptionControlEnabled(widget, enabled)
 
     if widget.SetEnabled then
         widget:SetEnabled(enabled)
-    elseif enabled then
+    end
+    if enabled then
         if widget.EnableMouse then widget:EnableMouse(true) end
         if widget.Enable then widget:Enable() end
     else
@@ -772,6 +792,7 @@ local function SetOptionControlEnabled(widget, enabled)
     if widget.SetAlpha then widget:SetAlpha(alpha) end
     if widget.Text and widget.Text.SetAlpha then widget.Text:SetAlpha(alpha) end
     if widget.text and widget.text.SetAlpha then widget.text:SetAlpha(alpha) end
+    SetCheckboxLabelEnabledVisual(widget, enabled)
     if widget.editBox and widget.editBox.SetAlpha then widget.editBox:SetAlpha(alpha) end
     if widget.minusButton and widget.minusButton.SetAlpha then widget.minusButton:SetAlpha(alpha) end
     if widget.plusButton and widget.plusButton.SetAlpha then widget.plusButton:SetAlpha(alpha) end
@@ -1784,7 +1805,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         if panel.playerAlphaLayerDropDown and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
             panel.playerAlphaLayerDropDown:Show()
             UIDropDownMenu_SetSelectedValue(panel.playerAlphaLayerDropDown, layerMode)
-            UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, layerMode == "background" and "Background" or "Foreground")
+            UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, layerMode == "background" and "Background" or (layerMode == "health" and "HP Bar" or "Foreground"))
             local btn = (_G["MSUF_UF_AlphaLayerDropDownButton"]) or (panel.playerAlphaLayerDropDown and panel.playerAlphaLayerDropDown.Button)
             if btn then if excludeTP then if btn.Enable then btn:Enable() end else if btn.Disable then btn:Disable() end end end
             if panel.playerAlphaLayerDropDown.Text and panel.playerAlphaLayerDropDown.Text.SetTextColor then
@@ -1943,12 +1964,14 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
     -- Alpha system
     Alpha_NormalizeMode = function(mode)
         if mode == true or mode == 1 or mode == "background" then return "background" end
+        if mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then return "health" end
         return "foreground"
     end
     Alpha_GetKeys = function(conf, mode)
         mode = Alpha_NormalizeMode(mode)
         if conf and conf.alphaExcludeTextPortrait == true then
             if mode == "background" then return "alphaBGInCombat","alphaBGOutOfCombat" end
+            if mode == "health" then return "alphaHPInCombat","alphaHPOutOfCombat" end
             return "alphaFGInCombat","alphaFGOutOfCombat"
         end
         return "alphaInCombat","alphaOutOfCombat"
@@ -1961,6 +1984,9 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         if conf.alphaExcludeTextPortrait == true then
             if mode == "background" then
                 aIn = tonumber(conf.alphaBGInCombat) or aIn; aOut = tonumber(conf.alphaBGOutOfCombat) or aOut
+            elseif mode == "health" then
+                aIn = tonumber(conf.alphaHPInCombat) or tonumber(conf.alphaFGInCombat) or aIn
+                aOut = tonumber(conf.alphaHPOutOfCombat) or tonumber(conf.alphaFGOutOfCombat) or aOut
             else
                 aIn = tonumber(conf.alphaFGInCombat) or aIn; aOut = tonumber(conf.alphaFGOutOfCombat) or aOut
             end
@@ -2102,15 +2128,15 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             local c = EnsureKeyDB()
             local cur = Alpha_NormalizeMode(c.alphaLayerMode)
             UIDropDownMenu_SetSelectedValue(panel.playerAlphaLayerDropDown, cur)
-            UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, cur == "background" and "Background" or "Foreground")
-            for _, pair in ipairs({ {"foreground","Foreground"},{"background","Background"} }) do
+            UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, cur == "background" and "Background" or (cur == "health" and "HP Bar" or "Foreground"))
+            for _, pair in ipairs({ {"foreground","Foreground"},{"health","HP Bar"},{"background","Background"} }) do
                 local info = UIDropDownMenu_CreateInfo()
                 info.text, info.value = pair[2], pair[1]
                 info.checked = function() return Alpha_NormalizeMode(EnsureKeyDB().alphaLayerMode) == pair[1] end
                 info.disabled = (c.alphaExcludeTextPortrait ~= true)
                 info.func = function()
                     if not IsFramesTab() then return end
-                    local c2 = EnsureKeyDB(); c2.alphaLayerMode = pair[1] == "background" and 1 or 0
+                    local c2 = EnsureKeyDB(); c2.alphaLayerMode = pair[1] == "background" and 1 or (pair[1] == "health" and 2 or 0)
                     UIDropDownMenu_SetSelectedValue(panel.playerAlphaLayerDropDown, pair[1])
                     UIDropDownMenu_SetText(panel.playerAlphaLayerDropDown, pair[2])
                     if CloseDropDownMenus then CloseDropDownMenus() end

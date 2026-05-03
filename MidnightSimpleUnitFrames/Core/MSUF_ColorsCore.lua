@@ -61,6 +61,22 @@ end
 -- We batch into a single C_Timer.After(0) flush.
 ------------------------------------------------------
 local _pushPending = false
+local function _RefreshAllBarBackgroundVisuals()
+    local forEach = _G.MSUF_ForEachUnitFrame
+    local applyBg = _G.MSUF_ApplyBarBackgroundVisual
+    local refreshHP = _G.MSUF_UFCore_RefreshHealthBarColor
+    if type(forEach) ~= "function" or type(applyBg) ~= "function" then return end
+
+    forEach(function(frame)
+        if frame and (frame.hpBarBG or frame.powerBarBG or frame.bg) then
+            if type(refreshHP) == "function" and frame.hpBar then
+                refreshHP(frame)
+            end
+            applyBg(frame)
+        end
+    end)
+end
+
 local function _PushVisualUpdates_Flush()
     _pushPending = false
     _G.MSUF_ColorStyleRevision = (_G.MSUF_ColorStyleRevision or 0) + 1
@@ -69,6 +85,7 @@ local function _PushVisualUpdates_Flush()
     if _G.MSUF_UFCore_RefreshSettingsCache then
         _G.MSUF_UFCore_RefreshSettingsCache("COLOR_CHANGE")
     end
+    _RefreshAllBarBackgroundVisuals()
 
     -- Rebuild the shared dispel color curve from the DB (per-type Magic /
     -- Curse / Disease / Poison / Bleed swatches from the Colors panel).

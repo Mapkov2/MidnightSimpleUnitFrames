@@ -1080,12 +1080,12 @@ local FONT_LIST = {
     {
         key  = "MORPHEUS",
         name = "Morpheus (default)",
-        path = "Fonts\\MORPHEUS.TTF",
+        path = "Fonts\\MORPHEUS_CYR.TTF",
     },
     {
         key  = "SKURRI",
         name = "Skurri (default)",
-        path = "Fonts\\SKURRI.TTF",
+        path = "Fonts\\SKURRI_CYR.TTF",
     },
 }
 do
@@ -1274,18 +1274,15 @@ local function MSUF_GetFontPreviewObject(key)
         obj = CreateFont("MSUF_FontPreview_" .. tostring(key))
         MSUF_FontPreviewObjects[key] = obj
     end
-    local path
-    if LSM then
-        -- IMPORTANT: use noDefault=true so internal (non-LSM) keys like "FRIZQT"/"ARIALN"/"MORPHEUS"
+    local path = GetInternalFontPathByKey(key)
+    if not path and LSM then
         local p = LSM:Fetch("font", key, true)
         if p then
             path = p
+        end
     end
-    end
-    if not path then
-        path = GetInternalFontPathByKey(key) or FONT_LIST[1].path
-    end
-    obj:SetFont(path, 14, "")
+    path = (_G.MSUF_ResolveFontPath or function(p) return p end)(path or FONT_LIST[1].path, 14, "")
+    pcall(obj.SetFont, obj, path, 14, "")
      return obj
 end
 ns.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
@@ -1326,12 +1323,12 @@ function GetInternalFontPathByKey(key)
 end
 local function MSUF_GetFontPathForKey(key)
     local resolve = _G.MSUF_ResolveFontPath or function(path) return path end
+    local internalPath = GetInternalFontPathByKey(key)
+    if internalPath then return resolve(internalPath, 14, "") end
     if LSM and key and key ~= "" then
         local p = LSM:Fetch("font", key, true)
         if p then return resolve(p, 14, "") end
     end
-    local internalPath = GetInternalFontPathByKey(key)
-    if internalPath then return resolve(internalPath, 14, "") end
     return resolve(FONT_LIST[1].path, 14, "")
 end
 _G.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey

@@ -154,13 +154,97 @@ local function GetCursorScaled()
     return cx / scale, cy / scale
 end
 
+local function SetLegacyPopupOpen(open)
+    local EM2 = rawget(_G, "MSUF_EM2")
+    local State = EM2 and EM2.State
+    if State and type(State.SetPopupOpen) == "function" then
+        State.SetPopupOpen(open == true)
+        return
+    end
+
+    local st = rawget(_G, "MSUF_EditState")
+    if st then st.popupOpen = open == true end
+end
+
+local function IsPopupOpen(popup)
+    return popup and type(popup.IsOpen) == "function" and popup.IsOpen() == true
+end
+
+local function IsAuraPopupOpen()
+    local EM2 = rawget(_G, "MSUF_EM2")
+    if IsPopupOpen(EM2 and EM2.AuraPopup) then return true end
+
+    -- Legacy popup name kept for older callers/builds.
+    local ap = rawget(_G, "MSUF_Auras2PositionPopup")
+    return ap and ap.IsShown and ap:IsShown() or false
+end
+
+local function IsLiveNonAuraPopupOpen()
+    local EM2 = rawget(_G, "MSUF_EM2")
+    if IsPopupOpen(EM2 and EM2.UnitPopup) then return true end
+    if IsPopupOpen(EM2 and EM2.CastPopup) then return true end
+
+    local gfOpen = rawget(_G, "MSUF_EM2_GFPopupIsOpen")
+    if type(gfOpen) == "function" and gfOpen() == true then return true end
+
+    return false
+end
+
 local function IsAnyPopupOpen()
+    if IsLiveNonAuraPopupOpen() then return true end
+    if IsAuraPopupOpen() then
+        SetLegacyPopupOpen(false)
+        return false
+    end
+
     local st = rawget(_G, "MSUF_EditState")
     if not st or not st.popupOpen then return false end
-    -- Allow dragging while the Auras2 position popup is open
-    local ap = _G.MSUF_Auras2PositionPopup
-    if ap and ap.IsShown and ap:IsShown() then return false end
+
+    -- If EM2 can report live popup state and no popup is actually open, this
+    -- flag is stale (for example after closing a unit popup with its X button).
+    local EM2 = rawget(_G, "MSUF_EM2")
+    local Popups = EM2 and EM2.Popups
+    if Popups and type(Popups.IsAnyOpen) == "function" and Popups.IsAnyOpen() ~= true then
+        SetLegacyPopupOpen(false)
+        return false
+    end
+
     return true
+end
+
+local function CloseNonAuraEditPopups()
+    local EM2 = rawget(_G, "MSUF_EM2")
+    local closed = false
+
+    local function CloseIfOpen(popup)
+        if popup and type(popup.IsOpen) == "function" and popup.IsOpen() == true then
+            if type(popup.Close) == "function" then
+                popup.Close()
+                return true
+            end
+        end
+        return false
+    end
+
+    if EM2 then
+        closed = CloseIfOpen(EM2.UnitPopup) or closed
+        closed = CloseIfOpen(EM2.CastPopup) or closed
+    end
+
+    local gfOpen = rawget(_G, "MSUF_EM2_GFPopupIsOpen")
+    local hideGF = rawget(_G, "MSUF_EM2_HideGFPopup")
+    if type(gfOpen) == "function" and gfOpen() == true and type(hideGF) == "function" then
+        hideGF("party")
+        hideGF("raid")
+        hideGF("mythicraid")
+        closed = true
+    end
+
+    -- The aura popup itself must not block aura dragging. Keep it open so its
+    -- fields can sync while dragging, but clear the legacy blocking bit.
+    if closed or IsAuraPopupOpen() or (not IsLiveNonAuraPopupOpen()) then
+        SetLegacyPopupOpen(false)
+    end
 end
 
 -- Kind-specific visuals
@@ -310,6 +394,7 @@ local function CreateMover(entry, unitKey, kind, labelText)
 
         if button ~= "LeftButton" then return end
         if InCombatLockdown() then return end
+        CloseNonAuraEditPopups()
         if IsAnyPopupOpen() then return end
 
         -- Undo: capture aura state BEFORE drag writes to DB

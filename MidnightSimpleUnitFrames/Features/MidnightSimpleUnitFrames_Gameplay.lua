@@ -410,7 +410,11 @@ local function GetGameplayFontSettings(kind)
     local fontPath
 
     local fontKey = general.fontKey
-    if LSM and fontKey and fontKey ~= "" then
+    local pathForKey = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+    if type(pathForKey) == "function" and fontKey and fontKey ~= "" then
+        fontPath = pathForKey(fontKey)
+    end
+    if (not fontPath or fontPath == "") and LSM and fontKey and fontKey ~= "" then
         local fetched = LSM:Fetch("font", fontKey, true)
         if fetched then
             fontPath = ResolveFontPath(fetched, general.fontSize or 14, "")

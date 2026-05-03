@@ -6,6 +6,16 @@ local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber = type, tonumber
 local issecretvalue = _G.issecretvalue
 
+local function _AlphaNormalizeLayerMode(mode)
+    if mode == true or mode == 1 or mode == "background" then
+        return "background"
+    end
+    if mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then
+        return "health"
+    end
+    return "foreground"
+end
+
 function _G.MSUF_GetDesiredUnitAlpha(key)
     if not MSUF_DB then EnsureDB() end
     local conf = key and MSUF_DB and MSUF_DB[key]
@@ -16,19 +26,17 @@ function _G.MSUF_GetDesiredUnitAlpha(key)
     local aOutLegacy = tonumber(conf.alphaOutOfCombat) or 1
     local aIn, aOut = aInLegacy, aOutLegacy
     if conf.alphaExcludeTextPortrait == true then
-        local mode = conf.alphaLayerMode
-        if mode == true or mode == 1 or mode == "background" then
-            mode = "background"
-        else
-            mode = "foreground"
-    end
+        local mode = _AlphaNormalizeLayerMode(conf.alphaLayerMode)
         if mode == "background" then
             aIn  = tonumber(conf.alphaBGInCombat) or aInLegacy
             aOut = tonumber(conf.alphaBGOutOfCombat) or aOutLegacy
+        elseif mode == "health" then
+            aIn  = tonumber(conf.alphaHPInCombat) or tonumber(conf.alphaFGInCombat) or aInLegacy
+            aOut = tonumber(conf.alphaHPOutOfCombat) or tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
         else
             aIn  = tonumber(conf.alphaFGInCombat) or aInLegacy
             aOut = tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
-    end
+        end
     end
     local sync = conf.alphaSyncBoth
     if sync == nil then
@@ -79,11 +87,7 @@ do
         function _G.MSUF_Alpha_GetLayerMode(key)
             local conf = _Alpha_GetConf(key)
             if not conf then  return "foreground" end
-            local mode = conf.alphaLayerMode
-            if mode == true or mode == 1 or mode == "background" then
-                 return "background"
-            end
-             return "foreground"
+            return _AlphaNormalizeLayerMode(conf.alphaLayerMode)
         end
     end
     if not _G.MSUF_Alpha_GetAlphaInCombat then
@@ -146,9 +150,15 @@ end
 
 local function _SetGradArrayAlpha(grads, a)
     if not grads then return end
-    for i = 1, #grads do
-        local g = grads[i]
-        if g then g:SetAlpha(a) end
+    if grads.left then grads.left:SetAlpha(a) end
+    if grads.right then grads.right:SetAlpha(a) end
+    if grads.up then grads.up:SetAlpha(a) end
+    if grads.down then grads.down:SetAlpha(a) end
+    if #grads > 0 then
+        for i = 1, #grads do
+            local g = grads[i]
+            if g then g:SetAlpha(a) end
+        end
     end
 end
 
@@ -177,8 +187,24 @@ local function _AlphaObjectMatches(obj, target)
     return _AlphaNearlyEqual(obj:GetAlpha() or 1, target)
 end
 
-local function _AlphaLayeredStateMatches(frame, fg, bg)
+local function _AlphaGradSetMatches(grads, target)
+    if not grads then return true end
+    if not _AlphaObjectMatches(grads.left, target) then return false end
+    if not _AlphaObjectMatches(grads.right, target) then return false end
+    if not _AlphaObjectMatches(grads.up, target) then return false end
+    if not _AlphaObjectMatches(grads.down, target) then return false end
+    if #grads > 0 then
+        for i = 1, #grads do
+            if not _AlphaObjectMatches(grads[i], target) then return false end
+        end
+    end
+    return true
+end
+
+local function _AlphaLayeredStateMatches(frame, fg, bg, mode)
     if not frame then return false end
+    mode = _AlphaNormalizeLayerMode(mode)
+    local powerAlpha = (mode == "health") and 1 or fg
 
     local hpTex = _GetBarTexture(frame.hpBar)
     if frame.hpBar and not hpTex then return false end
@@ -194,12 +220,14 @@ local function _AlphaLayeredStateMatches(frame, fg, bg)
     if frame.healAbsorbBar and not healAbsorbTex then return false end
 
     return _AlphaObjectMatches(hpTex, fg)
-        and _AlphaObjectMatches(powerTex, fg)
+        and _AlphaObjectMatches(powerTex, powerAlpha)
         and _AlphaObjectMatches(absorbTex, fg)
         and _AlphaObjectMatches(healAbsorbTex, fg)
         and _AlphaObjectMatches(frame.hpBarBG, bg)
         and _AlphaObjectMatches(frame.powerBarBG, bg)
         and _AlphaObjectMatches(frame.bg, bg)
+        and _AlphaGradSetMatches(frame.hpGradients, fg)
+        and _AlphaGradSetMatches(frame.powerGradients, powerAlpha)
 end
 
 local function MSUF_Alpha_UseLiteRuntime()
@@ -232,12 +260,17 @@ local function MSUF_Alpha_GetStaticMode(frame, conf)
     if sync == nil then sync = conf.alphaSync end
 
     if conf.alphaExcludeTextPortrait == true and frame._msufAlphaSupportsLayered then
+        local mode = _AlphaNormalizeLayerMode(conf.alphaLayerMode)
         local fgIn  = _AlphaClamp01(tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1)
         local fgOut = sync and fgIn or _AlphaClamp01(tonumber(conf.alphaFGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
+        if mode == "health" then
+            fgIn  = _AlphaClamp01(tonumber(conf.alphaHPInCombat) or tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1)
+            fgOut = sync and fgIn or _AlphaClamp01(tonumber(conf.alphaHPOutOfCombat) or tonumber(conf.alphaFGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
+        end
         local bgIn  = _AlphaClamp01(tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1)
         local bgOut = sync and bgIn or _AlphaClamp01(tonumber(conf.alphaBGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
         if fgIn == fgOut and bgIn == bgOut then
-            return "layered", fgIn, bgIn, conf.alphaLayerMode
+            return "layered", fgIn, bgIn, mode
         end
         return nil
     end
@@ -290,11 +323,7 @@ end
 
 local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
     if not frame then return end
-    if mode == true or mode == 1 or mode == "background" then
-        mode = "background"
-    else
-        mode = "foreground"
-    end
+    mode = _AlphaNormalizeLayerMode(mode)
 
     local fg = type(alphaFG) == "number" and alphaFG or 1
     local bg = type(alphaBG) == "number" and alphaBG or 1
@@ -306,7 +335,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
         local lastBG = frame._msufAlphaLastBG or 1
         local dfg = lastFG - fg; if dfg < 0 then dfg = -dfg end
         local dbg = lastBG - bg; if dbg < 0 then dbg = -dbg end
-        if dfg <= 0.001 and dbg <= 0.001 and _AlphaLayeredStateMatches(frame, fg, bg) then
+        if dfg <= 0.001 and dbg <= 0.001 and _AlphaLayeredStateMatches(frame, fg, bg, mode) then
             return
         end
     end
@@ -333,11 +362,12 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode)
     _SetTexAlpha(frame.powerBarBG, bg)
     _SetTexAlpha(frame.bg, bg)
     _SetBarTexAlpha(frame.hpBar, fg)
-    _SetBarTexAlpha(frame.targetPowerBar or frame.powerBar, fg)
+    local powerAlpha = (mode == "health") and 1 or fg
+    _SetBarTexAlpha(frame.targetPowerBar or frame.powerBar, powerAlpha)
     _SetBarTexAlpha(frame.absorbBar, fg)
     _SetBarTexAlpha(frame.healAbsorbBar, fg)
     _SetGradArrayAlpha(frame.hpGradients, fg)
-    _SetGradArrayAlpha(frame.powerGradients, fg)
+    _SetGradArrayAlpha(frame.powerGradients, powerAlpha)
     _SetTexAlpha(frame.portrait, 1)
     local nt = frame.nameText;  if nt then nt:SetAlpha(1) end
     local ht = frame.hpText;    if ht then ht:SetAlpha(1) end
@@ -462,9 +492,14 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         local inCombat = (_G.MSUF_InCombat == true)
         local sync = conf.alphaSyncBoth
         if sync == nil then sync = conf.alphaSync end
+        local layerMode = _AlphaNormalizeLayerMode(conf.alphaLayerMode)
 
         local fgIn  = tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1
         local fgOut = sync and fgIn or (tonumber(conf.alphaFGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
+        if layerMode == "health" then
+            fgIn  = tonumber(conf.alphaHPInCombat) or tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1
+            fgOut = sync and fgIn or (tonumber(conf.alphaHPOutOfCombat) or tonumber(conf.alphaFGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
+        end
         local bgIn  = tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1
         local bgOut = sync and bgIn or (tonumber(conf.alphaBGOutOfCombat) or tonumber(conf.alphaOutOfCombat) or 1)
         local alphaFG = inCombat and fgIn or fgOut
@@ -475,7 +510,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         frame._msufAlphaBaseA = nil
         frame._msufAlphaBaseFG = alphaFG
         frame._msufAlphaBaseBG = alphaBG
-        frame._msufAlphaBaseLayerMode = conf.alphaLayerMode
+        frame._msufAlphaBaseLayerMode = layerMode
 
         local rfT = _rfMulTable
         if rfT then
@@ -487,7 +522,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             end
         end
 
-        MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, conf.alphaLayerMode)
+        MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode)
         if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
             frame:SetAlpha(0.35)
         end
@@ -614,15 +649,13 @@ local function _MSUF_ConfWantsCombatAlphaSwap(conf)
     local aIn, aOut = aInLegacy, aOutLegacy
 
     if conf.alphaExcludeTextPortrait == true then
-        local mode = conf.alphaLayerMode
-        if mode == true or mode == 1 or mode == "background" then
-            mode = "background"
-        else
-            mode = "foreground"
-        end
+        local mode = _AlphaNormalizeLayerMode(conf.alphaLayerMode)
         if mode == "background" then
             aIn  = tonumber(conf.alphaBGInCombat) or aInLegacy
             aOut = tonumber(conf.alphaBGOutOfCombat) or aOutLegacy
+        elseif mode == "health" then
+            aIn  = tonumber(conf.alphaHPInCombat) or tonumber(conf.alphaFGInCombat) or aInLegacy
+            aOut = tonumber(conf.alphaHPOutOfCombat) or tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
         else
             aIn  = tonumber(conf.alphaFGInCombat) or aInLegacy
             aOut = tonumber(conf.alphaFGOutOfCombat) or aOutLegacy
@@ -750,4 +783,3 @@ if not _G.MSUF_AlphaEventFrame then
         end
      end)
 end
-
