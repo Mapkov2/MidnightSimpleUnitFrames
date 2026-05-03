@@ -1472,7 +1472,7 @@ local _MSUF_pendingMsufScale;
 local _MSUF_pendingGlobalScale;
 local _MSUF_pendingDisableScaling;
 local _MSUF_pendingReloadOnScalingOff;
-local _MSUF_scaleApplyWatcher local MSUF_EnsureScaleApplyAfterCombat local function MSUF_ApplyMsufScale(scale,opts) if MSUF_IsScalingDisabled()
+local _MSUF_scaleApplyWatcher local MSUF_EnsureScaleApplyAfterCombat local MSUF_ResetGlobalUiScale local function MSUF_ApplyMsufScale(scale,opts) if MSUF_IsScalingDisabled()
 and not(opts and opts.ignoreDisable)
 then return end
 scale=tonumber(scale)
@@ -1490,18 +1490,42 @@ end
 local UI_SCALE_1080=768/1080;
 local UI_SCALE_1440=768/1440;
 local UI_SCALE_4K=768/2160;
-local _MSUF_lastGlobalCVarScale local _MSUF_lastGlobalUiParentScale local function MSUF_GetCurrentGlobalUiScale() if UIParent and UIParent.GetScale then return tonumber(UIParent:GetScale()) end
+local _MSUF_lastGlobalUiParentScale local function MSUF_GetCurrentGlobalUiScale() if UIParent and UIParent.GetScale then return tonumber(UIParent:GetScale()) end
 return nil end
-local function MSUF_SetCVarIfChanged(name,value) if not name or value==nil then return end
-local v=tostring(value)
-if C_CVar and C_CVar.GetCVar and C_CVar.SetCVar then local cur=C_CVar.GetCVar(name)
-if cur~=v then pcall(C_CVar.SetCVar,name,v)
+local function MSUF_GetPixelPerfectScale() if type(GetPhysicalScreenSize)=="function"then local _,h=GetPhysicalScreenSize()
+h=tonumber(h)
+if h and h>0 then return clamp(768/h,0.3,2.0) end
 end
-return end
-if GetCVar and SetCVar then local cur=GetCVar(name)
-if cur~=v then pcall(SetCVar,name,v)
+return UI_SCALE_1440 end
+local function MSUF_ResolveGlobalPresetScale(preset,scale) if preset=="1080p"then return UI_SCALE_1080 elseif preset=="1440p"then return UI_SCALE_1440 elseif preset=="4k"then return UI_SCALE_4K elseif preset=="pixel"then return MSUF_GetPixelPerfectScale() end
+return tonumber(scale) end
+local function MSUF_EnsureGlobalUiScaleTable(g) if not g then return nil end
+local ui=(type(g.UIScale)=="table")and g.UIScale or nil
+if not ui then ui={}
+g.UIScale=ui
+local preset=g.globalUiScalePreset
+local scale=MSUF_ResolveGlobalPresetScale(preset,g.globalUiScaleValue) or 1.0
+local enabled=(g.disableScaling~=true)and(preset=="1080p"or preset=="1440p"or preset=="4k"or preset=="pixel"or preset=="custom")
+ui.Enabled=enabled and true or false
+ui.Scale=scale
+ui._migratedFromGlobalPreset_v1=true
 end
-end
+if ui.Enabled==nil then local preset=g.globalUiScalePreset
+ui.Enabled=(g.disableScaling~=true)and(preset=="1080p"or preset=="1440p"or preset=="4k"or preset=="pixel"or preset=="custom") end
+ui.Enabled=(ui.Enabled==true)
+ui.Scale=clamp(tonumber(ui.Scale)or MSUF_ResolveGlobalPresetScale(g.globalUiScalePreset,g.globalUiScaleValue)or 1.0,0.3,2.0)
+if g.disableScaling then ui.Enabled=false end
+return ui end
+local function MSUF_SetGlobalUiScaleState(enabled,scale,preset) local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
+or nil if not g then return end
+local ui=MSUF_EnsureGlobalUiScaleTable(g)
+if not ui then return end
+enabled=enabled and true or false
+ui.Enabled=enabled
+if scale~=nil then ui.Scale=clamp(tonumber(scale)or ui.Scale or 1.0,0.3,2.0) end
+if enabled then g.globalUiScalePreset=preset or g.globalUiScalePreset or"custom"
+g.globalUiScaleValue=ui.Scale else g.globalUiScalePreset=preset or"auto"
+g.globalUiScaleValue=nil end
 end
 local function MSUF_EnforceUIParentScale(scale) scale=tonumber(scale)
 if not scale or scale<=0 then return end
@@ -1530,8 +1554,7 @@ C_Timer.After(0.60,nudge) end
 local function MSUF_SetGlobalUiScale(scale,silent,opts) opts=opts or{}
 if MSUF_IsScalingDisabled()
 and not opts.ignoreDisable then return end
-local applyCVars=(opts.applyCVars~=false)
-and true or false scale=tonumber(scale)
+scale=tonumber(scale)
 if not scale or scale<=0 then return end
 scale=clamp(scale,0.3,2.0)
 if InCombatLockdown and InCombatLockdown()
@@ -1540,17 +1563,9 @@ end
 if not silent then MSUF_Print("Cannot change global UI scale in combat. Will apply after combat.")
 end
 return end
-if applyCVars then local cvarScale=clamp(scale,0.3,2.0)
-if _MSUF_lastGlobalCVarScale~=cvarScale then MSUF_SetCVarIfChanged("useUIScale","1")
-MSUF_SetCVarIfChanged("useUiScale","1")
-MSUF_SetCVarIfChanged("uiScale",cvarScale)
-MSUF_SetCVarIfChanged("uiscale",cvarScale)
-_MSUF_lastGlobalCVarScale=cvarScale end
-end
 MSUF_EnforceUIParentScale(scale)
 MSUF_ScheduleUIParentNudges(scale)
-if not silent then local cvarScale=clamp(scale,0.3,2.0)
-MSUF_Print(string.format("Global UI scale set to %.4f (CVar %.4f)",scale,cvarScale))
+if not silent then MSUF_Print(string.format("Global UI scale set to %.4f",scale))
 end
 end
 MSUF_EnsureScaleApplyAfterCombat=function() if _MSUF_scaleApplyWatcher then return end
@@ -1583,23 +1598,20 @@ f:SetScript("OnEvent",nil)
 _MSUF_scaleApplyWatcher=nil end
 end
 ) end
-local function MSUF_ResetGlobalUiScale(silent) if InCombatLockdown and InCombatLockdown()
+MSUF_ResetGlobalUiScale=function(silent) if InCombatLockdown and InCombatLockdown()
 then if not silent then MSUF_Print("Cannot reset global UI scale in combat.")
 end
 return end
-MSUF_SetCVarIfChanged("useUIScale","0")
-MSUF_SetCVarIfChanged("useUiScale","0")
-MSUF_SetCVarIfChanged("uiScale","1.0")
-MSUF_SetCVarIfChanged("uiscale","1.0")
 if UIParent and UIParent.SetScale then pcall(UIParent.SetScale,UIParent,1.0)
 end
-_MSUF_lastGlobalCVarScale=nil _MSUF_lastGlobalUiParentScale=nil if not silent then MSUF_Print("Global UI scale reset (fallback).")
+_MSUF_lastGlobalUiParentScale=nil if not silent then MSUF_Print("Global UI scale reset.")
 end
 end
 local function MSUF_SetScalingDisabled(disable,silent) local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
 or nil if not g then return end
 disable=disable and true or false g.disableScaling=disable if not disable then _MSUF_pendingDisableScaling=nil return end
-g.globalUiScalePreset="auto"g.globalUiScaleValue=nil MSUF_SetSavedMsufScale(1.0)
+MSUF_SetGlobalUiScaleState(false,1.0,"auto")
+MSUF_SetSavedMsufScale(1.0)
 if InCombatLockdown and InCombatLockdown()
 then _MSUF_pendingDisableScaling=true if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat()
 end
@@ -1611,13 +1623,16 @@ MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
 _MSUF_pendingDisableScaling=nil _MSUF_pendingMsufScale=nil _MSUF_pendingGlobalScale=nil if not silent then MSUF_Print("MSUF scaling disabled (Blizzard handles scaling now).")
 end
 end
-_G.MSUF_SetScalingDisabled=MSUF_SetScalingDisabled local function MSUF_SaveGlobalPreset(preset,scale) local g=MSUF_EnsureGeneral()
+_G.MSUF_SetScalingDisabled=MSUF_SetScalingDisabled _G.MSUF_SetGlobalUiScale=MSUF_SetGlobalUiScale _G.MSUF_ResetGlobalUiScale=MSUF_ResetGlobalUiScale _G.MSUF_GetPixelPerfectScale=MSUF_GetPixelPerfectScale local function MSUF_SaveGlobalPreset(preset,scale) local g=MSUF_EnsureGeneral()
 if not g then return end
-g.globalUiScalePreset=preset g.globalUiScaleValue=scale end
+if preset=="auto"then MSUF_SetGlobalUiScaleState(false,scale,"auto") return end
+local resolved=MSUF_ResolveGlobalPresetScale(preset,scale) or scale or 1.0
+MSUF_SetGlobalUiScaleState(true,resolved,preset or"custom") end
 local function MSUF_GetDesiredGlobalScaleFromDB() local g=MSUF_EnsureGeneral()
 if not g then return nil end
 if g.disableScaling then return nil end
-local preset=g.globalUiScalePreset if preset=="1080p"then return UI_SCALE_1080 elseif preset=="1440p"then return UI_SCALE_1440 elseif preset=="4k"then return UI_SCALE_4K elseif preset=="custom"and g.globalUiScaleValue then return tonumber(g.globalUiScaleValue) end
+local ui=MSUF_EnsureGlobalUiScaleTable(g)
+if ui and ui.Enabled then return tonumber(ui.Scale) end
 return nil end
 local MSUF_SCALE_GUARD={suppressUntil=0}
 local function MSUF_EnsureGlobalUiScaleApplied(silent) if MSUF_IsScalingDisabled()
@@ -1763,7 +1778,7 @@ MSUF_SetSavedMsufScale(1.0)
 MSUF_ApplyMsufScale(1.0)
 MSUF_SetSavedSlashMenuScale(1.0)
 MSUF_ApplySlashMenuScale(1.0,{ignoreDisable=true})
-if g then g.disableScaling=true g.globalUiScalePreset="auto"g.globalUiScaleValue=nil end
+if g then g.disableScaling=true MSUF_SetGlobalUiScaleState(false,1.0,"auto") end
 end
 if api.Refresh then api.Refresh()
 end
@@ -1981,6 +1996,9 @@ local disabled=g and g.disableScaling
 if api.UpdateEnabledStates then api.UpdateEnabledStates()
 end
 local cur=MSUF_GetCurrentGlobalUiScale()
+if globalCur and globalCur.SetText then local txt=cur and string.format("Current: %.4f",cur) or"Current: ..."
+if disabled then txt=txt.." (Scaling OFF)" elseif preset=="auto"or preset==nil then txt=txt.." (Auto)" end
+globalCur:SetText(txt) end
 local ms=clamp(MSUF_GetSavedMsufScale(),0.25,1.5)
 local pct=MSUF_SnapMsufScalePct(ms*100)
 local scale=pct/100
@@ -3274,7 +3292,7 @@ if C_Timer and C_Timer.After then C_Timer.After(0,function() if MSUF_IsScalingDi
 then return end
 MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale());
 local want=MSUF_GetDesiredGlobalScaleFromDB()
-if want then MSUF_SetGlobalUiScale(want,true,{applyCVars=false});
+if want then MSUF_SetGlobalUiScale(want,true);
 MSUF_EnsureGlobalUiScaleApplied(true)
 end
 end
