@@ -1376,7 +1376,9 @@ function GF.BuildFrameCache(f)
     -- Status/icons: pre-resolve event/update consumers. Disabled features should
     -- not receive events and should not be called from shared dispatch paths.
     local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
-    c.statusTextEn = (conf.statusText ~= false) and (showAFK or showDND or showDead or showGhost)
+    c.statusTextEn = ((showDead and conf.statusText ~= false)
+        or (showGhost and conf.statusGhostText ~= false)
+        or ((showAFK or showDND) and conf.statusAFKText ~= false))
     c.roleIconEn   = conf.roleIcon ~= false
     c.powerRoleGated = c.hasPowerElement and ((not c.powTank) or (not c.powHealer) or (not c.powDPS))
     c.roleStateEn  = c.roleIconEn or c.powerRoleGated
@@ -2084,6 +2086,69 @@ function GF.GetStatusIndicatorFlags()
     return db.showAFK == true, db.showDND == true, db.showDead == true, db.showGhost == true
 end
 
+local STATUS_TEXT_LAYOUTS = {
+    [1] = { enKey = "statusText",      sizeKey = "statusTextSize",      anchorKey = "statusTextAnchor",      xKey = "statusOffsetX",      yKey = "statusOffsetY",      layerKey = "statusTextLayer",      defAnchor = "CENTER", defSize = 14, defLayer = 7 },
+    [2] = { enKey = "statusText",      sizeKey = "statusTextSize",      anchorKey = "statusTextAnchor",      xKey = "statusOffsetX",      yKey = "statusOffsetY",      layerKey = "statusTextLayer",      defAnchor = "CENTER", defSize = 14, defLayer = 7 },
+    [3] = { enKey = "statusGhostText", sizeKey = "statusGhostTextSize", anchorKey = "statusGhostTextAnchor", xKey = "statusGhostOffsetX", yKey = "statusGhostOffsetY", layerKey = "statusGhostTextLayer", defAnchor = "CENTER", defSize = 14, defLayer = 7 },
+    [4] = { enKey = "statusAFKText",   sizeKey = "statusAFKTextSize",   anchorKey = "statusAFKTextAnchor",   xKey = "statusAFKOffsetX",   yKey = "statusAFKOffsetY",   layerKey = "statusAFKTextLayer",   defAnchor = "CENTER", defSize = 14, defLayer = 7 },
+    [5] = { enKey = "statusAFKText",   sizeKey = "statusAFKTextSize",   anchorKey = "statusAFKTextAnchor",   xKey = "statusAFKOffsetX",   yKey = "statusAFKOffsetY",   layerKey = "statusAFKTextLayer",   defAnchor = "CENTER", defSize = 14, defLayer = 7 },
+}
+
+local function IsStatusTextStateEnabled(conf, state)
+    local s = STATUS_TEXT_LAYOUTS[state]
+    return s and conf and conf[s.enKey] ~= false
+end
+
+local function JustifyForStatusAnchor(anchor)
+    if anchor == "TOPLEFT" or anchor == "BOTTOMLEFT" or anchor == "LEFT" then
+        return "LEFT"
+    end
+    if anchor == "TOPRIGHT" or anchor == "BOTTOMRIGHT" or anchor == "RIGHT" then
+        return "RIGHT"
+    end
+    return "CENTER"
+end
+
+local function ApplyStatusTextStateLayout(f, conf, state)
+    local st = f and (f._msufGFStatusText or f.statusIndicatorText)
+    local s = STATUS_TEXT_LAYOUTS[state]
+    if not (st and conf and s) then return end
+
+    local kind = f._msufGFKind or "party"
+    local fScale = conf._resolvedFrameScale or 1
+    local size = tonumber(conf[s.sizeKey]) or s.defSize
+    if fScale ~= 1 then
+        size = math_max(6, math_floor(size * fScale + 0.5))
+    else
+        size = math_floor(size + 0.5)
+    end
+    local fontPath = GF.ResolveFontPath and GF.ResolveFontPath(kind)
+    local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind)
+    if fontPath and st.SetFont then
+        st:SetFont(fontPath, size, fontFlags or "")
+    end
+
+    local anchor = conf[s.anchorKey] or s.defAnchor
+    local ox = tonumber(conf[s.xKey]) or 0
+    local oy = tonumber(conf[s.yKey]) or 0
+    if fScale ~= 1 and GF.ScaleValue then
+        ox = GF.ScaleValue(ox, fScale)
+        oy = GF.ScaleValue(oy, fScale)
+    end
+
+    local parent = f.health or f.barGroup or f
+    st:ClearAllPoints()
+    st:SetPoint(anchor, parent, anchor, ox, oy)
+    if st.SetJustifyH then st:SetJustifyH(JustifyForStatusAnchor(anchor)) end
+    if st.SetJustifyV then st:SetJustifyV("MIDDLE") end
+    if st.SetDrawLayer then
+        local sub = tonumber(conf[s.layerKey]) or s.defLayer
+        if sub < 0 then sub = 0 elseif sub > 7 then sub = 7 end
+        st:SetDrawLayer("OVERLAY", sub)
+    end
+end
+GF.ApplyStatusTextStateLayout = ApplyStatusTextStateLayout
+
 local function UpdateStatusText(f, unit, forceAway)
     local st = f._msufGFStatusText or f.statusIndicatorText
     if not st then return end
@@ -2102,6 +2167,9 @@ local function UpdateStatusText(f, unit, forceAway)
         return
     end
     local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
+    local deadTextEnabled = IsStatusTextStateEnabled(conf, 2)
+    local ghostTextEnabled = IsStatusTextStateEnabled(conf, 3)
+    local awayTextEnabled = IsStatusTextStateEnabled(conf, 4)
 
     if not unit or not UnitExists(unit) then
         if f._msufGFStatusState ~= 0 then
@@ -2119,7 +2187,7 @@ local function UpdateStatusText(f, unit, forceAway)
     local connected = UnitIsConnected(unit)
     if issecretvalue and issecretvalue(connected) then connected = true end
 
-    if connected == false and showDead then
+    if connected == false and showDead and deadTextEnabled then
         newState = 1
     else
         -- Secret-safe (12.0): UnitIsDeadOrGhost may return secret booleans for
@@ -2130,13 +2198,17 @@ local function UpdateStatusText(f, unit, forceAway)
         if dog then
             local ghost = UnitIsGhost and UnitIsGhost(unit)
             if issecretvalue and ghost and issecretvalue(ghost) then ghost = false end
-            if ghost and showGhost then
-                newState = 3
-            elseif showDead then
+            if ghost then
+                if showGhost and ghostTextEnabled then
+                    newState = 3
+                elseif not showGhost and showDead and deadTextEnabled then
+                    newState = 2
+                end
+            elseif showDead and deadTextEnabled then
                 newState = 2
             end
         else
-            if showAFK or showDND then
+            if awayTextEnabled and (showAFK or showDND) then
                 local getAway = _G.MSUF_GetCachedAwayStatus
                 if getAway then
                     local away = getAway(unit, showAFK, showDND, forceAway == true)
@@ -2163,7 +2235,11 @@ local function UpdateStatusText(f, unit, forceAway)
         end
     end
 
-    -- Diff-gate: only update visuals when state actually changes
+    if newState ~= 0 then
+        ApplyStatusTextStateLayout(f, conf, newState)
+    end
+
+    -- Diff-gate: only update text/colors when state actually changes
     if newState == f._msufGFStatusState then return end
     f._msufGFStatusState = newState
 

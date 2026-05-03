@@ -483,7 +483,18 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return fontPath, fontFlags
     end
 
-    local function ResolveAuraPreviewCooldownColor()
+    local function ReadAuraPreviewColor(t, dr, dg, db)
+        if type(t) ~= "table" then return dr, dg, db, 1 end
+        local r = t[1] or t.r
+        local g = t[2] or t.g
+        local b = t[3] or t.b
+        if type(r) ~= "number" then r = dr end
+        if type(g) ~= "number" then g = dg end
+        if type(b) ~= "number" then b = db end
+        return r, g, b, 1
+    end
+
+    local function ResolveAuraPreviewBaseTextColor()
         local g = _G.MSUF_DB and _G.MSUF_DB.general
         if g and g.useCustomFontColor == true then
             local r = g.fontColorCustomR
@@ -494,6 +505,33 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             end
         end
         return 1, 1, 1, 1
+    end
+
+    local function ResolveAuraPreviewCooldownColor()
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        local br, bg, bb = ResolveAuraPreviewBaseTextColor()
+        local sr, sg, sb, sa = ReadAuraPreviewColor(g and g.aurasCooldownTextSafeColor, br, bg, bb)
+        if g and g.aurasCooldownTextUseBuckets == false then
+            return sr, sg, sb, sa
+        end
+
+        local warn = (g and type(g.aurasCooldownTextWarningSeconds) == "number") and g.aurasCooldownTextWarningSeconds or 15
+        local urgent = (g and type(g.aurasCooldownTextUrgentSeconds) == "number") and g.aurasCooldownTextUrgentSeconds or 5
+        if urgent > warn then urgent = warn end
+
+        local remain = 3
+        if remain <= urgent then
+            return ReadAuraPreviewColor(g and g.aurasCooldownTextUrgentColor, 1, 0.55, 0.10)
+        end
+        if remain <= warn then
+            return ReadAuraPreviewColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.20)
+        end
+        return sr, sg, sb, sa
+    end
+
+    local function ResolveAuraPreviewStackColor()
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        return ReadAuraPreviewColor(g and g.aurasStackCountColor, 1, 1, 1)
     end
 
     local function RowAuraTextPreview(parent, prevRow, gk, topOfs)
@@ -555,6 +593,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             local showCd = g.showCooldown ~= false
             local showSt = g.showStacks ~= false
             local cdR, cdG, cdB, cdA = ResolveAuraPreviewCooldownColor()
+            local stR, stG, stB, stA = ResolveAuraPreviewStackColor()
 
             for i = 1, #icons do
                 local ic = icons[i]
@@ -588,7 +627,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                         local stSize = math_floor(((g.stackSize or 10) * scale) + 0.5)
                         st:SetFont(fontPath, math_max(6, stSize), g.stackOutline or fontFlags)
                         st:SetText("2")
-                        st:SetTextColor(1, 1, 1, 1)
+                        st:SetTextColor(stR, stG, stB, stA)
                         st:ClearAllPoints()
                         local anchor = g.stackAnchor or "BOTTOMRIGHT"
                         local ox = math_floor(((g.stackOffsetX or -1) * scale) + 0.5)
@@ -646,7 +685,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     local function GetTimerUrgentColor()
-        return ReadRGB(GeneralDB().aurasCooldownTextUrgentColor, 1, 0.45, 0.10)
+        return ReadRGB(GeneralDB().aurasCooldownTextUrgentColor, 1, 0.55, 0.10)
+    end
+
+    local function RefreshTimerColorControlsOnly()
+        for i = 1, #_inlineAuraPreviewFns do
+            _inlineAuraPreviewFns[i]()
+        end
+        for i = 1, #_timerColorRefreshFns do
+            _timerColorRefreshFns[i]()
+        end
     end
 
     local function RequestTimerColorRefresh()
@@ -655,13 +703,11 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         if _G.MSUF_GF_InvalidateCooldownTextCurve then _G.MSUF_GF_InvalidateCooldownTextCurve() end
         if _G.MSUF_GF_ForceCooldownTextRecolor then _G.MSUF_GF_ForceCooldownTextRecolor() end
         RequestAuraRefresh()
-        for i = 1, #_inlineAuraPreviewFns do
-            _inlineAuraPreviewFns[i]()
-        end
-        for i = 1, #_timerColorRefreshFns do
-            _timerColorRefreshFns[i]()
-        end
+        RefreshTimerColorControlsOnly()
+        if _G.MSUF_Colors_RefreshAurasColorControls then _G.MSUF_Colors_RefreshAurasColorControls() end
+        if _G.MSUF_Auras2Options_RefreshTimerColorControls then _G.MSUF_Auras2Options_RefreshTimerColorControls() end
     end
+    _G.MSUF_GFAurasOptions_RefreshTimerColorControls = RefreshTimerColorControlsOnly
 
     local function RowGeneralCheck(parent, prevRow, label, key, def, topOfs)
         local row = RowFrame(parent, prevRow, topOfs)
@@ -826,7 +872,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             { label = L["Urgent"] or "Urgent", get = GetTimerUrgentColor, set = function(r, g, b)
                 GeneralDB().aurasCooldownTextUrgentColor = { r, g, b }
             end, reset = function()
-                GeneralDB().aurasCooldownTextUrgentColor = { 1.00, 0.45, 0.10 }
+                GeneralDB().aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 }
             end },
         }
         local refs = {}
@@ -881,7 +927,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             local g = GeneralDB()
             g.aurasCooldownTextSafeColor = nil
             g.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
-            g.aurasCooldownTextUrgentColor = { 1.00, 0.45, 0.10 }
+            g.aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 }
             RequestTimerColorRefresh()
             for j = 1, #refs do
                 if refs[j].Refresh then refs[j]:Refresh() end

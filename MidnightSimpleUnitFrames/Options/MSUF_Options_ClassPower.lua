@@ -59,6 +59,91 @@ end
 local function B() if MSUF_DB then MSUF_DB.bars = MSUF_DB.bars or {}; return MSUF_DB.bars end; return {} end
 local function CPRefresh() if _G.MSUF_ClassPower_Refresh then _G.MSUF_ClassPower_Refresh() end end
 
+local function ShowClassPowerReloadPrompt()
+    _G.StaticPopupDialogs = _G.StaticPopupDialogs or {}
+    if not _G.StaticPopupDialogs["MSUF_CLASSPOWER_ENABLE_RELOAD"] then
+        _G.StaticPopupDialogs["MSUF_CLASSPOWER_ENABLE_RELOAD"] = {
+            text = "Class Resources were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?",
+            button1 = "Reload Now",
+            button2 = "Later",
+            OnAccept = function()
+                if _G.ReloadUI then _G.ReloadUI() end
+            end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+    if _G.StaticPopup_Show then _G.StaticPopup_Show("MSUF_CLASSPOWER_ENABLE_RELOAD") end
+end
+
+local MSUF_SetCheckboxEnabled = _G.MSUF_SetCheckboxEnabled or function(cb, enabled)
+    if not cb then return end
+    if enabled then
+        if cb.Enable then cb:Enable() end
+    else
+        if cb.Disable then cb:Disable() end
+    end
+    if cb.SetAlpha then cb:SetAlpha(enabled and 1 or 0.35) end
+end
+
+local function SetCPOptionEnabled(widget, enabled)
+    if not widget then return end
+    enabled = enabled and true or false
+
+    if widget.slider and widget.editBox and widget.SetEnabled then
+        widget:SetEnabled(enabled)
+        return
+    end
+
+    local objectType = widget.GetObjectType and widget:GetObjectType() or nil
+    if objectType == "FontString" then
+        if widget.SetTextColor then
+            local c = enabled and 0.88 or 0.35
+            widget:SetTextColor(c, c, c)
+        elseif widget.SetAlpha then
+            widget:SetAlpha(enabled and 1 or 0.35)
+        end
+        return
+    end
+
+    if widget._ddSpec and widget.SetEnabled then
+        pcall(widget.SetEnabled, widget, enabled)
+    elseif widget.GetChecked and widget.SetChecked then
+        MSUF_SetCheckboxEnabled(widget, enabled)
+    elseif widget.SetEnabled then
+        pcall(widget.SetEnabled, widget, enabled)
+    elseif enabled then
+        if widget.Enable then pcall(widget.Enable, widget) end
+    else
+        if widget.Disable then pcall(widget.Disable, widget) end
+    end
+
+    if widget.EnableMouse then pcall(widget.EnableMouse, widget, enabled) end
+    if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.35) end
+
+    local label = widget.Text or widget.text
+    if not label and widget.GetName then
+        local n = widget:GetName()
+        label = n and _G[n .. "Text"] or nil
+    end
+    if label and label.SetTextColor then
+        local c = enabled and 1 or 0.35
+        label:SetTextColor(c, c, c)
+    end
+end
+
+local function SetCPSectionTitleEnabled(section, enabled)
+    local title = section and section._msufTitleText
+    if title and title.SetTextColor then
+        local c = enabled and 1 or 0.35
+        title:SetTextColor(c, c, c)
+    elseif title then
+        SetCPOptionEnabled(title, enabled)
+    end
+end
+
 -- Compact inline slider factory (label left, slider, editbox, +/-)
 local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor, anchorPt, oX, oY, sliderW, labelW, opts)
     sliderW = sliderW or 188; labelW = labelW or 88; step = step or 1
@@ -245,6 +330,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     local CHECK_TW = totalW - 80
     local DD_W = 220
     local SEC_W = totalW - 2
+    local SyncAll
 
     local cpPanel = CreateFrame("Frame", "MSUF_ClassPowerOptionsPanel", leftPanel:GetParent())
     cpPanel:SetSize(totalW, 800)
@@ -269,10 +355,10 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     local cpShowCheck = EnhanceCheck(UI.Check({
         name = "MSUF_ClassPowerShowCheck", parent = layBody,
-        anchor = layBody, anchorPoint = "TOPLEFT", x = PAD_X, y = -8, maxTextWidth = CHECK_TW,
-        label = TR("Show class power"),
+        anchor = layBody, anchorPoint = "TOPLEFT", x = PAD_X, y = -8, maxTextWidth = 120,
+        label = TR("Enable"),
         get = function() return B().showClassPower ~= false end,
-        set = function(v) B().showClassPower = v; CPRefresh() end,
+        set = function(v) B().showClassPower = v; CPRefresh(); if SyncAll then SyncAll() end; ShowClassPowerReloadPrompt() end,
     }))
 
     local cpHeightRow = MakeRow("MSUF_CPHeight", "Height", layBody, 2, 30, 1, "classPowerHeight", cpShowCheck, "TOPLEFT", 0, -10, nil, L_LABEL_W)
@@ -294,7 +380,7 @@ local function BuildClassPowerOptions(leftName, rightName)
             { key = "custom",        label = TR("Custom") },
         },
         get = function() return B().classPowerWidthMode or "player" end,
-        set = function(v) B().classPowerWidthMode = v; CPRefresh() end,
+        set = function(v) B().classPowerWidthMode = v; CPRefresh(); if SyncAll then SyncAll() end end,
     })
     EnhanceDropdown(cpWidthModeDrop, DD_W)
 
@@ -315,7 +401,7 @@ local function BuildClassPowerOptions(leftName, rightName)
             maxTextWidth = HALF_W - 50,
             label = TR(label),
             get = function() local v = B()[dbKey]; if v == nil then return defaultVal or false end; return v and true or false end,
-            set = function(v) B()[dbKey] = v; CPRefresh() end,
+            set = function(v) B()[dbKey] = v; CPRefresh(); if SyncAll then SyncAll() end end,
         })
         return EnhanceCheck(cb)
     end
@@ -367,9 +453,9 @@ local function BuildClassPowerOptions(leftName, rightName)
     local cpGapRow         = MakeRow("MSUF_CPGap",           "Pip gap",   styBody, 0, 8, 1,   "classPowerGap",          cpEmptyAlphaRow.label,  "TOPLEFT", 0, -10, nil, R_LABEL_W)
 
     local CPTexRefresh = function() if _G.MSUF_ClassPower_RefreshTextures then _G.MSUF_ClassPower_RefreshTextures() end end
-    local cpFgTexLabel, _ = MakeTexDrop("MSUF_CPFgTextureDropdown", styBody, cpGapRow.label, -12, "classPowerTexture", TR("Use global bar texture"), CPTexRefresh)
+    local cpFgTexLabel, cpFgTexDrop = MakeTexDrop("MSUF_CPFgTextureDropdown", styBody, cpGapRow.label, -12, "classPowerTexture", TR("Use global bar texture"), CPTexRefresh)
     cpPanel._cpFgTexLabel = cpFgTexLabel
-    local cpBgTexLabel, _ = MakeTexDrop("MSUF_CPBgTextureDropdown", styBody, cpFgTexLabel, -34, "classPowerBgTexture", TR("Use foreground texture"), CPTexRefresh)
+    local cpBgTexLabel, cpBgTexDrop = MakeTexDrop("MSUF_CPBgTextureDropdown", styBody, cpFgTexLabel, -34, "classPowerBgTexture", TR("Use foreground texture"), CPTexRefresh)
     cpPanel._cpBgTexLabel = cpBgTexLabel
 
     -- Section 4: Auto-Hide
@@ -381,7 +467,7 @@ local function BuildClassPowerOptions(leftName, rightName)
             anchor = anchor, anchorPoint = anchorPt, x = (anchorPt and PAD_X or 0), y = (anchorPt and -8 or -6), maxTextWidth = CHECK_TW,
             label = TR(label),
             get = function() local v = B()[dbKey]; if v == nil then return defaultVal or false end; return v and true or false end,
-            set = function(v) B()[dbKey] = v; CPRefresh() end,
+            set = function(v) B()[dbKey] = v; CPRefresh(); if SyncAll then SyncAll() end end,
         })
     end
 
@@ -459,7 +545,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         anchor = amSub, x = 0, y = -6, maxTextWidth = CHECK_TW,
         label = TR("Show mana bar (dual resource)"),
         get = function() return B().showAltMana ~= false end,
-        set = function(v) B().showAltMana = v; CPRefresh() end,
+        set = function(v) B().showAltMana = v; CPRefresh(); if SyncAll then SyncAll() end end,
     }))
 
     local amHeightRow = MakeRow("MSUF_AMHeight", "Height",   amBody, 2, 30, 1,  "altManaHeight",  amShowCheck,        "TOPLEFT", 0, -10, nil, R_LABEL_W)
@@ -528,11 +614,16 @@ local function BuildClassPowerOptions(leftName, rightName)
     end
 
     -- Sync all widget values from DB (initial + every OnShow)
-    local function SyncAll()
+    SyncAll = function()
         if not MSUF_DB then return end
         local b = MSUF_DB.bars or {}
         local cpOn = (b.showClassPower ~= false)
         local amOn = (b.showAltMana ~= false)
+        local cpTextOn = (b.classPowerShowText == true)
+        local anyDetached = false
+        for _, k in ipairs({ "player", "target", "focus" }) do
+            if MSUF_DB[k] and MSUF_DB[k].powerBarDetached then anyDetached = true; break end
+        end
 
         cpHeightRow:Set(tonumber(b.classPowerHeight) or 4)
         local w = tonumber(b.classPowerWidth); if not w or w < 30 then w = ((MSUF_DB.player and tonumber(MSUF_DB.player.width)) or 275) - 4 end
@@ -552,17 +643,44 @@ local function BuildClassPowerOptions(leftName, rightName)
         amOffsetRow:Set(tonumber(b.altManaOffsetY) or -2)
 
         local wm = b.classPowerWidthMode or "player"
+        SetCPOptionEnabled(cpWidthModeLabel, cpOn)
+        SetCPOptionEnabled(cpWidthModeDrop, cpOn)
         cpWidthRow:SetEnabled(cpOn and wm == "custom")
 
         cpHeightRow:SetEnabled(cpOn); cpXOffsetRow:SetEnabled(cpOn); cpYOffsetRow:SetEnabled(cpOn)
         cpBgAlphaRow:SetEnabled(cpOn); cpTickRow:SetEnabled(cpOn); cpOutlineRow:SetEnabled(cpOn)
         cpFilledAlphaRow:SetEnabled(cpOn); cpEmptyAlphaRow:SetEnabled(cpOn); cpGapRow:SetEnabled(cpOn)
-        cpFontSizeRow:SetEnabled(cpOn); cpTextOffsetXRow:SetEnabled(cpOn); cpTextOffsetYRow:SetEnabled(cpOn)
+        cpFontSizeRow:SetEnabled(cpOn and cpTextOn)
+        cpTextOffsetXRow:SetEnabled(cpOn and cpTextOn)
+        cpTextOffsetYRow:SetEnabled(cpOn and cpTextOn)
+
+        for _, cb in ipairs({
+            cpAnchorCDCheck, cpChargedCheck, cpTextCheck, cpRuneTimeCheck, cpFillReverseCheck,
+            cpEleMaelCheck, cpEbonMightCheck, cpShadowManaCheck, cpPredictionCheck,
+            cpColorCheck, cpHideOOCCheck, cpHideFullCheck, cpHideEmptyCheck,
+        }) do
+            SetCPOptionEnabled(cb, cpOn)
+        end
+        SetCPSectionTitleEnabled(secBehav, cpOn)
+        SetCPSectionTitleEnabled(secStyle, cpOn)
+        SetCPSectionTitleEnabled(secHide, cpOn)
+        SetCPOptionEnabled(cpFgTexLabel, cpOn); SetCPOptionEnabled(cpFgTexDrop, cpOn)
+        SetCPOptionEnabled(cpBgTexLabel, cpOn); SetCPOptionEnabled(cpBgTexDrop, cpOn)
+
+        SetCPSectionTitleEnabled(secDPB, anyDetached)
+        SetCPOptionEnabled(dpbSub, anyDetached)
+        SetCPOptionEnabled(dpbWidthModeLabel, anyDetached)
+        SetCPOptionEnabled(dpbWidthModeDrop, anyDetached)
+        SetCPOptionEnabled(dpbFgLabel, anyDetached); SetCPOptionEnabled(dpbFgDrop, anyDetached)
+        SetCPOptionEnabled(dpbBgLabel, anyDetached); SetCPOptionEnabled(dpbBgDrop, anyDetached)
+
         amHeightRow:SetEnabled(amOn); amOffsetRow:SetEnabled(amOn)
+        SetCPOptionEnabled(amSub, true)
+        SetCPSectionTitleEnabled(secAM, true)
 
         local dpbT = tonumber(b.detachedPowerBarOutline) or tonumber(b.barOutlineThickness) or 1
         dpbOutlineRow:Set(dpbT)
-        if _G.MSUF_RefreshDPBOutlineSliderState then _G.MSUF_RefreshDPBOutlineSliderState() end
+        dpbOutlineRow:SetEnabled(anyDetached)
     end
 
     SyncAll()

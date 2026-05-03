@@ -1027,6 +1027,52 @@ local function EnsurePreviewCDText(icon)
     return fs
 end
 
+local function ReadPreviewColor(t, dr, dg, db)
+    if type(t) ~= "table" then return dr, dg, db, 1 end
+    local r = t[1] or t.r
+    local g = t[2] or t.g
+    local b = t[3] or t.b
+    if type(r) ~= "number" then r = dr end
+    if type(g) ~= "number" then g = dg end
+    if type(b) ~= "number" then b = db end
+    return r, g, b, 1
+end
+
+local function GetPreviewBaseCooldownColor()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    if g and g.useCustomFontColor == true then
+        local r = g.fontColorCustomR
+        local gg = g.fontColorCustomG
+        local b = g.fontColorCustomB
+        if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
+            return r, gg, b, 1
+        end
+    end
+    return 1, 1, 1, 1
+end
+
+local function GetPreviewCooldownColor(remain)
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local br, bg, bb = GetPreviewBaseCooldownColor()
+    local sr, sg, sb, sa = ReadPreviewColor(g and g.aurasCooldownTextSafeColor, br, bg, bb)
+    if g and g.aurasCooldownTextUseBuckets == false then
+        return sr, sg, sb, sa
+    end
+
+    local warn = (g and type(g.aurasCooldownTextWarningSeconds) == "number") and g.aurasCooldownTextWarningSeconds or 15
+    local urgent = (g and type(g.aurasCooldownTextUrgentSeconds) == "number") and g.aurasCooldownTextUrgentSeconds or 5
+    if urgent > warn then urgent = warn end
+
+    remain = tonumber(remain) or 0
+    if remain <= urgent then
+        return ReadPreviewColor(g and g.aurasCooldownTextUrgentColor, 1, 0.55, 0.10)
+    end
+    if remain <= warn then
+        return ReadPreviewColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.20)
+    end
+    return sr, sg, sb, sa
+end
+
 local function _PreviewStackIconFn(icon)
     if not icon or not icon.count then return end
 
@@ -1127,6 +1173,7 @@ local function _PreviewCooldownIconFn(icon)
     if counter > 9 then counter = 1 end
     icon._msufA2_previewCDCounter = counter
     fs:SetText(tostring(counter))
+    fs:SetTextColor(GetPreviewCooldownColor(counter))
     fs:Show()
 end
 

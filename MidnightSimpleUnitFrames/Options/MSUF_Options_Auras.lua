@@ -2190,7 +2190,7 @@ end
             return ReadRGB(GetGeneral().aurasCooldownTextWarningColor, 1, 0.85, 0.20)
         end
         local function GetUrgentColor()
-            return ReadRGB(GetGeneral().aurasCooldownTextUrgentColor, 1, 0.45, 0.10)
+            return ReadRGB(GetGeneral().aurasCooldownTextUrgentColor, 1, 0.55, 0.10)
         end
         local function OpenTimerColorPicker(r, g, b, callback)
             local cpf = _G.ColorPickerFrame
@@ -2234,12 +2234,16 @@ end
                 timerRefreshFns[i]()
             end
         end
+        _G.MSUF_Auras2Options_RefreshTimerColorControls = RefreshTimerColorUI
+
         local function RequestTimerColorRefresh()
             A2_RequestCooldownTextRecolor()
             A2_RequestApply()
             if _G.MSUF_GF_InvalidateCooldownTextCurve then _G.MSUF_GF_InvalidateCooldownTextCurve() end
             if _G.MSUF_GF_ForceCooldownTextRecolor then _G.MSUF_GF_ForceCooldownTextRecolor() end
             RefreshTimerColorUI()
+            if _G.MSUF_Colors_RefreshAurasColorControls then _G.MSUF_Colors_RefreshAurasColorControls() end
+            if _G.MSUF_GFAurasOptions_RefreshTimerColorControls then _G.MSUF_GFAurasOptions_RefreshTimerColorControls() end
         end
 
         local title = timerBox:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -2254,7 +2258,7 @@ end
 
         -- Blizzard pass-through toggle: Blizzard C++ renders countdown text natively.
         local cbBlizzardTimer = CreateBoolCheckboxPath(timerBox, TR("Use Blizzard timer text (max performance)"), 12, -62, A2_Settings, "useBlizzardTimerText", nil,
-            TR("When enabled, Blizzard handles countdown numbers natively in C++.\nDisable it if you want MSUF to update timer colors every threshold."),
+            TR("When enabled, Blizzard handles countdown numbers natively in C++ while MSUF still applies the selected timer text colors."),
             function()
                 RequestTimerColorRefresh()
              end)
@@ -2333,7 +2337,7 @@ end
             { label = TR("Warning"), get = GetWarnColor, set = function(r, g, b) GetGeneral().aurasCooldownTextWarningColor = { r, g, b } end,
                 reset = function() GetGeneral().aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 } end },
             { label = TR("Urgent"), get = GetUrgentColor, set = function(r, g, b) GetGeneral().aurasCooldownTextUrgentColor = { r, g, b } end,
-                reset = function() GetGeneral().aurasCooldownTextUrgentColor = { 1.00, 0.45, 0.10 } end },
+                reset = function() GetGeneral().aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 } end },
         }
         for i = 1, #colorSpecs do
             local btn = CreateFrame("Button", nil, timerBox, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -2377,7 +2381,7 @@ end
             local g = GetGeneral()
             g.aurasCooldownTextSafeColor = nil
             g.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
-            g.aurasCooldownTextUrgentColor = { 1.00, 0.45, 0.10 }
+            g.aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 }
             RequestTimerColorRefresh()
         end)
         colorWidgets[#colorWidgets + 1] = resetBtn
@@ -2522,13 +2526,11 @@ end
         CreateTimerSlider(TR("Warning (<=)"), GetWarn, SetWarn, 0, 30, 1, -294, BucketsOn)
         CreateTimerSlider(TR("Urgent (<=)"), GetUrg, SetUrg, 0, 15, 1, -324, BucketsOn)
 
-        -- Enable-state: Blizzard mode greys out custom timer-color controls.
+        -- Enable-state: Warning/Urgent depend only on bucket coloring.
         local function ApplyTimerEnabledState()
-            local _, shared = GetAuras2DB()
-            local blizzardMode = (shared and shared.useBlizzardTimerText == true)
             local bucketsOn = BucketsOn()
-            timerColorsUsable = not blizzardMode
-            SetCheckboxEnabled(cbTimerBuckets, not blizzardMode)
+            timerColorsUsable = true
+            SetCheckboxEnabled(cbTimerBuckets, true)
             for i = 1, #colorWidgets do
                 local w = colorWidgets[i]
                 local enabled = timerColorsUsable

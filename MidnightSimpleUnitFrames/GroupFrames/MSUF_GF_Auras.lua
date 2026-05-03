@@ -813,7 +813,7 @@ local _gfCdTextBucketsEnabled = true
 local _gfCdCurve
 local _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA = 1, 1, 1, 1
 local _gfCdWarnR, _gfCdWarnG, _gfCdWarnB, _gfCdWarnA = 1, 0.85, 0.2, 1
-local _gfCdUrgR,  _gfCdUrgG,  _gfCdUrgB,  _gfCdUrgA  = 1, 0.45, 0.1, 1
+local _gfCdUrgR,  _gfCdUrgG,  _gfCdUrgB,  _gfCdUrgA  = 1, 0.55, 0.1, 1
 local _gfCdExpR,  _gfCdExpG,  _gfCdExpB,  _gfCdExpA  = 1, 0.12, 0.12, 1
 local _gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA = 1, 1, 1, 1
 local _gfCdSecretMode, _gfCdSecretNextCheck = false, 0
@@ -832,6 +832,11 @@ local function ReadColor(t, defR, defG, defB, defA)
     if type(b) ~= "number" then b = defB end
     if type(a) ~= "number" then a = defA end
     return r, g, b, a
+end
+
+local function ResolveStackTextColor()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    return ReadColor(g and g.aurasStackCountColor, 1, 1, 1, 1)
 end
 
 local function IsGFSecretMode(now)
@@ -881,7 +886,7 @@ local function EnsureGFCooldownTextColorSettings()
     _gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA = ResolveCooldownBaseColor()
     _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA = ReadColor(g and g.aurasCooldownTextSafeColor, _gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA)
     _gfCdWarnR, _gfCdWarnG, _gfCdWarnB, _gfCdWarnA = ReadColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.2, 1)
-    _gfCdUrgR,  _gfCdUrgG,  _gfCdUrgB,  _gfCdUrgA  = ReadColor(g and g.aurasCooldownTextUrgentColor, 1, 0.45, 0.1, 1)
+    _gfCdUrgR,  _gfCdUrgG,  _gfCdUrgB,  _gfCdUrgA  = ReadColor(g and g.aurasCooldownTextUrgentColor, 1, 0.55, 0.1, 1)
     _gfCdExpR,  _gfCdExpG,  _gfCdExpB,  _gfCdExpA  = ReadColor(g and g.aurasCooldownTextExpireColor, 1, 0.12, 0.12, 1)
 
     if _gfCdTextBucketsEnabled then
@@ -1152,8 +1157,19 @@ function GF.ForceCooldownTextRecolor()
     end
 end
 
+function GF.ForceAuraTextColorRefresh()
+    if GF.ForceCooldownTextRecolor then GF.ForceCooldownTextRecolor() end
+    if GF.RequestAuraRefresh then
+        GF.RequestAuraRefresh()
+    elseif GF.MarkAllDirty then
+        GF.MarkAllDirty(GF.DIRTY_ALL or 0x3F)
+    end
+    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
+end
+
 _G.MSUF_GF_InvalidateCooldownTextCurve = GF.InvalidateCooldownTextColors
 _G.MSUF_GF_ForceCooldownTextRecolor = GF.ForceCooldownTextRecolor
+_G.MSUF_GF_ForceAuraTextColorRefresh = GF.ForceAuraTextColorRefresh
 
 do
     local f = CreateFrame("Frame")
@@ -1308,6 +1324,16 @@ local function ApplyStackLayout(ic, gcfg, gFont, wantFlags)
         ic._msufGFStkOY = oy
         fs:ClearAllPoints()
         fs:SetPoint(anchor, ic, anchor, ox, oy)
+    end
+
+    local sr, sg, sb, sa = ResolveStackTextColor()
+    if ic._msufGFStkColorR ~= sr or ic._msufGFStkColorG ~= sg
+        or ic._msufGFStkColorB ~= sb or ic._msufGFStkColorA ~= sa then
+        ic._msufGFStkColorR = sr
+        ic._msufGFStkColorG = sg
+        ic._msufGFStkColorB = sb
+        ic._msufGFStkColorA = sa
+        fs:SetTextColor(sr, sg, sb, sa)
     end
 end
 

@@ -157,6 +157,9 @@ local STATUS_ICON_SPECS = {
     { key = "summonIcon",    label = "Summon",       sizeKey = "summonIconSize",    anchorKey = "summonAnchor",     xKey = "summonX",     yKey = "summonY",     layerKey = "summonLayer",     defAnchor = "CENTER",   defSize = 16 },
     { key = "resurrectIcon", label = "Rez",          sizeKey = "resurrectIconSize", anchorKey = "resurrectAnchor",  xKey = "resurrectX",  yKey = "resurrectY",  layerKey = "resurrectLayer",  defAnchor = "CENTER",   defSize = 16 },
     { key = "phaseIcon",     label = "Phase",        sizeKey = "phaseIconSize",     anchorKey = "phaseAnchor",      xKey = "phaseX",      yKey = "phaseY",      layerKey = "phaseLayer",      defAnchor = "TOPLEFT",  defSize = 14 },
+    { key = "statusText",      label = "Dead Text",      sizeKey = "statusTextSize",      anchorKey = "statusTextAnchor",      xKey = "statusOffsetX",      yKey = "statusOffsetY",      layerKey = "statusTextLayer",      defAnchor = "CENTER", defSize = 14, isText = true, previewText = "DEAD" },
+    { key = "statusGhostText", label = "Ghost Text",     sizeKey = "statusGhostTextSize", anchorKey = "statusGhostTextAnchor", xKey = "statusGhostOffsetX", yKey = "statusGhostOffsetY", layerKey = "statusGhostTextLayer", defAnchor = "CENTER", defSize = 14, isText = true, previewText = "GHOST" },
+    { key = "statusAFKText",   label = "AFK / DND Text", sizeKey = "statusAFKTextSize",   anchorKey = "statusAFKTextAnchor",   xKey = "statusAFKOffsetX",   yKey = "statusAFKOffsetY",   layerKey = "statusAFKTextLayer",   defAnchor = "CENTER", defSize = 14, isText = true, previewText = "AFK" },
 }
 
 ------------------------------------------------------------------------
@@ -1182,12 +1185,17 @@ local function GetAuraMockCooldownColor()
     if urgent > warn then urgent = warn end
 
     if remain <= urgent then
-        return ReadAuraMockColor(g and g.aurasCooldownTextUrgentColor, 1, 0.45, 0.10)
+        return ReadAuraMockColor(g and g.aurasCooldownTextUrgentColor, 1, 0.55, 0.10)
     end
     if remain <= warn then
         return ReadAuraMockColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.20)
     end
     return sr, sg, sb, sa
+end
+
+local function GetAuraMockStackColor()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    return ReadAuraMockColor(g and g.aurasStackCountColor, 1, 1, 1)
 end
 
 ------------------------------------------------------------------------
@@ -1256,7 +1264,7 @@ local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
         local stSize = max(6, floor(((gcfg.stackSize or 10) * sc) + 0.5))
         if st.SetFont then st:SetFont(fontPath, stSize, stFlags) end
         st:SetText(AURA_MOCK_STACK_TEXT)
-        st:SetTextColor(1, 1, 1, 1)
+        st:SetTextColor(GetAuraMockStackColor())
         st:ClearAllPoints()
         local stAnchor = gcfg.stackAnchor or "BOTTOMRIGHT"
         local stOX = floor(((gcfg.stackOffsetX or -1) * sc) + 0.5)
@@ -1312,9 +1320,17 @@ local function BuildStatusIconHandles(mockFrame)
             spec.defSize, spec.defSize, "status")
         handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
         handle._label:SetText(spec.label)
-        local t = handle:CreateTexture(nil, "ARTWORK")
-        t:SetAllPoints(handle)
-        handle._statusTex = t
+        if spec.isText then
+            local fs = handle:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+            fs:SetPoint("CENTER", handle, "CENTER", 0, 0)
+            fs:SetJustifyH("CENTER")
+            fs:SetText(spec.previewText or spec.label or "TEXT")
+            handle._statusText = fs
+        else
+            local t = handle:CreateTexture(nil, "ARTWORK")
+            t:SetAllPoints(handle)
+            handle._statusTex = t
+        end
         handle._statusSpec = spec
         handle._onDragFinish = function(anchor, offX, offY)
             local sc = _mockFrame and _mockFrame._previewScale or 1
@@ -1744,18 +1760,34 @@ function GF.RefreshPreviewHandles()
             local offY   = floor(((conf[spec.yKey]) or 0) * sc + 0.5)
             local sz     = floor(((conf[spec.sizeKey]) or spec.defSize) * sc + 0.5)
             local layer  = (conf[spec.layerKey]) or 1
-            h:SetSize(max(6, sz), max(6, sz))
+            if spec.isText then
+                h:SetSize(max(42, sz * 4), max(12, sz + 4))
+            else
+                h:SetSize(max(6, sz), max(6, sz))
+            end
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(baseLvl + layer)
-            local en = conf[spec.key] ~= false
+            local en = (conf[spec.key] ~= false)
             -- Visibility = sidebar toggle only. Disabled-config handles
             -- still need to be clickable for click-to-navigate.
             h:SetShown(_visToggles.status ~= false)
 
             -- Apply real texture
             local tex = h._statusTex
-            if tex then
+            if spec.isText then
+                local fs = h._statusText
+                if fs then
+                    local fp, ff = GetAuraMockFont(kind)
+                    fs:SetFont(fp, max(8, sz), ff or "OUTLINE")
+                    fs:SetText(spec.previewText or spec.label or "TEXT")
+                    fs:SetTextColor(en and 1 or 0.45, en and 1 or 0.45, en and 1 or 0.50, en and 1 or 0.60)
+                    fs:ClearAllPoints()
+                    fs:SetPoint("CENTER", h, "CENTER", 0, 0)
+                    fs:Show()
+                end
+                if tex then tex:Hide() end
+            elseif tex then
                 local sKey = spec.key
                 local l, r, t, b = 0, 1, 0, 1
                 local path
