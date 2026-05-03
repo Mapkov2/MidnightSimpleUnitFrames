@@ -465,10 +465,19 @@ local function MSUF_UpdatePowerBarHeightFromEdit(editBox)
     local v = MSUF_GetNumber(text, 3, 3, 50)
     editBox:SetText(tostring(v))
     EnsureDB()
-    MSUF_DB.bars = MSUF_DB.bars or {}
-    MSUF_DB.bars.powerBarHeight = v
+    local scopeKey = MSUF_DB.general and MSUF_DB.general.hpPowerTextSelectedKey
+    local canon = _G.MSUF_CanonPowerBarUnitKey
+    local unitKey = type(canon) == "function" and canon(scopeKey) or nil
+    local targets = unitKey and { unitKey } or { "player", "target", "focus", "boss" }
+    for i = 1, #targets do
+        local k = targets[i]
+        MSUF_DB[k] = MSUF_DB[k] or {}
+        MSUF_DB[k].powerBarHeight = v
+    end
     if _G.MSUF_UnitFrames then
-        local units = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+        local units = unitKey == "boss" and { "boss1", "boss2", "boss3", "boss4", "boss5" }
+            or unitKey and { unitKey }
+            or { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
         for _, key in ipairs(units) do
             local f = _G.MSUF_UnitFrames[key]
             if f and f.targetPowerBar then
@@ -485,8 +494,15 @@ local function MSUF_UpdatePowerBarBorderSizeFromEdit(editBox)
     local v = MSUF_GetNumber(text, 1, 1, 10)
     editBox:SetText(tostring(v))
     EnsureDB()
-    MSUF_DB.bars = MSUF_DB.bars or {}
-    MSUF_DB.bars.powerBarBorderSize = v
+    local scopeKey = MSUF_DB.general and MSUF_DB.general.hpPowerTextSelectedKey
+    local canon = _G.MSUF_CanonPowerBarUnitKey
+    local unitKey = type(canon) == "function" and canon(scopeKey) or nil
+    local targets = unitKey and { unitKey } or { "player", "target", "focus", "boss" }
+    for i = 1, #targets do
+        local k = targets[i]
+        MSUF_DB[k] = MSUF_DB[k] or {}
+        MSUF_DB[k].powerBarBorderThickness = v
+    end
     if type(_G.MSUF_ApplyPowerBarBorder_All) == 'function' then
         _G.MSUF_ApplyPowerBarBorder_All()
     else

@@ -44,6 +44,109 @@ if type(_G.MSUF_IsBossUnitToken) ~= "function" then
     end
 end
 
+local MSUF_POWER_BAR_SHOW_KEYS = {
+    player = "showPlayerPowerBar",
+    target = "showTargetPowerBar",
+    focus  = "showFocusPowerBar",
+    boss   = "showBossPowerBar",
+}
+
+if type(_G.MSUF_CanonPowerBarUnitKey) ~= "function" then
+    function _G.MSUF_CanonPowerBarUnitKey(unitKey)
+        if type(unitKey) ~= "string" then return nil end
+        unitKey = unitKey:lower()
+        if unitKey == "tot" or unitKey == "targetoftarget" or unitKey == "target_of_target" then
+            unitKey = "targettarget"
+        elseif _G.MSUF_GetBossIndexFromToken(unitKey) then
+            unitKey = "boss"
+        end
+        if unitKey == "player" or unitKey == "target" or unitKey == "focus" or unitKey == "boss" then
+            return unitKey
+        end
+        return nil
+    end
+end
+
+if type(_G.MSUF_ReadUnitPowerBarEnabled) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarEnabled(unitKey, db)
+        db = db or _G.MSUF_DB
+        local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+        if not k then return true end
+        local u = db and db[k]
+        if u and u.showPowerBar ~= nil then
+            return u.showPowerBar ~= false
+        end
+        local legacyKey = MSUF_POWER_BAR_SHOW_KEYS[k]
+        local bars = db and db.bars
+        if legacyKey and bars and bars[legacyKey] ~= nil then
+            return bars[legacyKey] ~= false
+        end
+        return true
+    end
+end
+
+local function MSUF_ReadUnitPowerBarNumber(unitKey, field, legacyField, defaultVal, minVal, maxVal, db)
+    db = db or _G.MSUF_DB
+    local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+    local u = k and db and db[k]
+    local v = u and u[field]
+    if type(v) ~= "number" then
+        local bars = db and db.bars
+        v = bars and bars[legacyField]
+    end
+    v = tonumber(v) or defaultVal
+    if minVal and v < minVal then v = minVal end
+    if maxVal and v > maxVal then v = maxVal end
+    return v
+end
+
+local function MSUF_ReadUnitPowerBarBool(unitKey, field, legacyField, defaultVal, db)
+    db = db or _G.MSUF_DB
+    local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+    local u = k and db and db[k]
+    local v = u and u[field]
+    if v == nil then
+        local bars = db and db.bars
+        v = bars and bars[legacyField]
+    end
+    if v == nil then return defaultVal and true or false end
+    return v == true
+end
+
+if type(_G.MSUF_ReadUnitPowerBarHeight) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarHeight(unitKey, db)
+        return MSUF_ReadUnitPowerBarNumber(unitKey, "powerBarHeight", "powerBarHeight", 3, 1, 80, db)
+    end
+end
+
+if type(_G.MSUF_ReadUnitPowerBarEmbed) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarEmbed(unitKey, db)
+        return MSUF_ReadUnitPowerBarBool(unitKey, "embedPowerBarIntoHealth", "embedPowerBarIntoHealth", true, db)
+    end
+end
+
+if type(_G.MSUF_ReadUnitPowerBarBorderEnabled) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarBorderEnabled(unitKey, db)
+        return MSUF_ReadUnitPowerBarBool(unitKey, "powerBarBorderEnabled", "powerBarBorderEnabled", false, db)
+    end
+end
+
+if type(_G.MSUF_ReadUnitPowerBarBorderThickness) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarBorderThickness(unitKey, db)
+        db = db or _G.MSUF_DB
+        local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+        local u = k and db and db[k]
+        local v = u and u.powerBarBorderThickness
+        if type(v) ~= "number" then
+            local bars = db and db.bars
+            v = bars and (bars.powerBarBorderThickness or bars.powerBarBorderSize)
+        end
+        v = tonumber(v) or 1
+        if v < 0 then v = 0 elseif v > 10 then v = 10 end
+        return v
+    end
+end
+
 -- MSUF_Util.lua
 -- Stateless helpers / pure functions extracted from MidnightSimpleUnitFrames.lua
 -- Keep names stable (globals) to avoid touching call-sites.

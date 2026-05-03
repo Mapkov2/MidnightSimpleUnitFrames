@@ -569,6 +569,13 @@ function ns.Bars.ApplyPowerGradientOnce(frame)
     end
  end
 function ns.Bars.PowerBarAllowed(barsConf, isBoss, isPlayer, isTarget, isFocus)
+    local readEnabled = _G.MSUF_ReadUnitPowerBarEnabled
+    if type(readEnabled) == "function" then
+        if isPlayer then return readEnabled("player") end
+        if isFocus then return readEnabled("focus") end
+        if isTarget then return readEnabled("target") end
+        if isBoss then return readEnabled("boss") end
+    end
     if not barsConf then  return true end
     if isPlayer then
         return (barsConf.showPlayerPowerBar ~= false)
@@ -3324,7 +3331,13 @@ local function MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTar
             or (isPlayer and "showPlayerPowerBar")
             or (isTarget and "showTargetPowerBar")
             or (isFocus and "showFocusPowerBar")
-  if flag and barsConf and barsConf[flag] == false then  return false end
+  local readEnabled = _G.MSUF_ReadUnitPowerBarEnabled
+  if type(readEnabled) == "function" then
+      local unitKey = (self.isBoss and "boss") or (isPlayer and "player") or (isTarget and "target") or (isFocus and "focus") or nil
+      if unitKey and readEnabled(unitKey) == false then return _MSUF_Bars_HidePower(pb, true) end
+  elseif flag and barsConf and barsConf[flag] == false then
+      return _MSUF_Bars_HidePower(pb, true)
+  end
   if MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus) then  return true end
    return false
 end
@@ -3550,7 +3563,14 @@ end
         MSUF_ApplyBarBackgroundVisual(self)
     end
                if self.targetPowerBar then
-            if (barsConf.showBossPowerBar == false) then
+            local bossPowerEnabled = true
+            local readPowerEnabled = _G.MSUF_ReadUnitPowerBarEnabled
+            if type(readPowerEnabled) == "function" then
+                bossPowerEnabled = readPowerEnabled("boss")
+            else
+                bossPowerEnabled = not (barsConf.showBossPowerBar == false)
+            end
+            if not bossPowerEnabled then
                 self.targetPowerBar:SetScript("OnUpdate", nil)
                 self.targetPowerBar:Hide()
                 MSUF_ResetBarZero(self.targetPowerBar, true)
@@ -4866,13 +4886,26 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     end
     if not MSUF_DB then EnsureDB() end
     local b = (MSUF_DB and MSUF_DB.bars) or {}
-    local h = tonumber(b.powerBarHeight) or 3
+    local unit = f.unit
+    local key = f.msufConfigKey
+    if not key and GetConfigKeyForUnit then key = GetConfigKeyForUnit(unit) end
+    if key then f.msufConfigKey = key end
+    local readHeight = _G.MSUF_ReadUnitPowerBarHeight
+    local h = (type(readHeight) == "function" and readHeight(key or unit)) or tonumber(b.powerBarHeight) or 3
     h = math.floor(h + 0.5)
     if h < 1 then h = 1 elseif h > 80 then h = 80 end
-    local embed = (b.embedPowerBarIntoHealth == true)
+    local readEmbed = _G.MSUF_ReadUnitPowerBarEmbed
+    local embed
+    if type(readEmbed) == "function" then
+        embed = readEmbed(key or unit)
+    else
+        embed = (b.embedPowerBarIntoHealth == true)
+    end
+    local readEnabled = _G.MSUF_ReadUnitPowerBarEnabled
     local enabled = false
-    local unit = f.unit
-    if unit == 'player' then
+    if type(readEnabled) == "function" then
+        enabled = readEnabled(key or unit)
+    elseif unit == 'player' then
         enabled = (b.showPlayerPowerBar ~= false)
     elseif unit == 'target' then
         enabled = (b.showTargetPowerBar ~= false)
@@ -4887,8 +4920,6 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     local dW, dH, dX, dY = 0, 0, 0, 0
     local anchorToCP = false
     if (unit == 'player' or unit == 'target' or unit == 'focus') then
-        local key = f.msufConfigKey
-        if not key and GetConfigKeyForUnit then key = GetConfigKeyForUnit(unit) end
         local conf = (key and MSUF_DB and MSUF_DB[key]) or nil
         if conf and conf.powerBarDetached == true then
             detached = true
@@ -5117,7 +5148,8 @@ local function CreateSimpleUnitFrame(unit)
     if unit == "player" or unit == "focus" or unit == "target" or isBossUnit then
         local pBar = ns.UF.MakeBar(f, "targetPowerBar", "self")
         pBar:SetStatusBarTexture(MSUF_GetBarTexture())
-        local h = ((MSUF_DB and MSUF_DB.bars and type(MSUF_DB.bars.powerBarHeight) == "number" and MSUF_DB.bars.powerBarHeight > 0) and MSUF_DB.bars.powerBarHeight) or 3
+        local readHeight = _G.MSUF_ReadUnitPowerBarHeight
+        local h = (type(readHeight) == "function" and readHeight(key)) or ((MSUF_DB and MSUF_DB.bars and type(MSUF_DB.bars.powerBarHeight) == "number" and MSUF_DB.bars.powerBarHeight > 0) and MSUF_DB.bars.powerBarHeight) or 3
         pBar:SetHeight(h)
         pBar:SetPoint("TOPLEFT",  hpBar, "BOTTOMLEFT",  0, 0); pBar:SetPoint("TOPRIGHT", hpBar, "BOTTOMRIGHT", 0, 0)
         pBar:SetMinMaxValues(0, 1)

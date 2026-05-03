@@ -10,6 +10,61 @@ local EnsureDB = ns.EnsureDB
 local floor = math.floor
 local CreateFrame = CreateFrame
 
+local MSUF_POWER_BAR_SCOPE_UNITS = { player = true, target = true, focus = true, boss = true }
+
+local function MSUF_Bars_EnsureDB()
+    if _G.EnsureDB then _G.EnsureDB()
+    elseif ns and ns.EnsureDB then ns.EnsureDB()
+    end
+    _G.MSUF_DB = _G.MSUF_DB or {}
+    _G.MSUF_DB.general = _G.MSUF_DB.general or {}
+    _G.MSUF_DB.bars = _G.MSUF_DB.bars or {}
+end
+
+local function MSUF_Bars_GetCurrentScopeKey()
+    MSUF_Bars_EnsureDB()
+    local key = _G.MSUF_DB.general.hpPowerTextSelectedKey
+    if key == nil or key == "" or key == "shared" then return "shared" end
+    return key
+end
+
+function _G.MSUF_Bars_GetPowerBarScopeUnitKey()
+    local key = MSUF_Bars_GetCurrentScopeKey()
+    return MSUF_POWER_BAR_SCOPE_UNITS[key] and key or nil
+end
+
+function _G.MSUF_Bars_GetSmoothPowerForCurrentScope()
+    MSUF_Bars_EnsureDB()
+    local uk = _G.MSUF_Bars_GetPowerBarScopeUnitKey()
+    if uk then
+        local u = _G.MSUF_DB[uk]
+        if type(u) ~= "table" then
+            u = {}
+            _G.MSUF_DB[uk] = u
+        end
+        if u.powerSmoothFill ~= nil then return u.powerSmoothFill == true end
+        if uk == "player" then return _G.MSUF_DB.bars.smoothPowerBar ~= false end
+        return false
+    end
+    return false
+end
+
+function _G.MSUF_Bars_SetSmoothPowerForCurrentScope(enabled)
+    MSUF_Bars_EnsureDB()
+    enabled = enabled and true or false
+    local uk = _G.MSUF_Bars_GetPowerBarScopeUnitKey()
+    if uk then
+        _G.MSUF_DB[uk] = _G.MSUF_DB[uk] or {}
+        _G.MSUF_DB[uk].powerSmoothFill = enabled
+        if _G.MSUF_UFCore_NotifyConfigChanged then
+            _G.MSUF_UFCore_NotifyConfigChanged(uk, true, true, "SMOOTH_POWER_SCOPE")
+        elseif _G.MSUF_UFCore_RefreshSettingsCache then
+            _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER_SCOPE")
+        end
+        return
+    end
+end
+
 function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     if not panel or not barGroup then return end
     if barGroup._msufBuilt then return end
@@ -924,7 +979,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             "hlHoverSize", "hlHoverOffset",
             "hlPrioEnabled", "hlPrioOrder",
             -- Box 7: Animation
-            "smoothPowerBar", "realtimePowerText",
+            "realtimePowerText",
         }
         for _, key in ipairs(seeds) do
             if db[key] == nil then
@@ -1701,9 +1756,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     smoothBarCheck:SetPoint("TOPLEFT", box7Body, "TOPLEFT", 14, -6)
     smoothBarCheck.text = _G["MSUF_SmoothPowerBarCheckText"]; if smoothBarCheck.text then smoothBarCheck.text:SetText(TR("Smooth power bar")) end
     UI.StyleToggleText(smoothBarCheck); UI.StyleCheckmark(smoothBarCheck)
-    do EnsureDB(); local v = B().smoothPowerBar; if v == nil then v = true end; smoothBarCheck:SetChecked(v) end
-    smoothBarCheck:SetScript("OnClick", function(self) B().smoothPowerBar = self:GetChecked() and true or false
-        if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER") end end)
+    smoothBarCheck:SetChecked(_G.MSUF_Bars_GetSmoothPowerForCurrentScope())
+    smoothBarCheck:SetScript("OnClick", function(self) _G.MSUF_Bars_SetSmoothPowerForCurrentScope(self:GetChecked() and true or false) end)
 
     local smoothHint = box7Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     smoothHint:SetPoint("TOPLEFT", smoothBarCheck, "BOTTOMLEFT", 0, -1)
@@ -1822,6 +1876,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if _C.selfHealPredCB then _C.selfHealPredCB:SetChecked(G().showSelfHealPrediction == true) end
             _SyncSpacerControls()
         end
+        if _C.smoothBarCheck then _C.smoothBarCheck:SetChecked(_G.MSUF_Bars_GetSmoothPowerForCurrentScope()) end
 
         -- Absorb controls: scope-aware, refresh for ALL scopes
         if _C.absorbDisplayDrop and _C.absorbDisplayDrop.Refresh then _C.absorbDisplayDrop:Refresh() end
@@ -1862,6 +1917,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local absorbBarActive = (absorbMode == 2 or absorbMode == 3)
         local absorbScopedControlsActive = hlControlsActive and absorbBarActive
         local absorbSharedControlsActive = sharedControlsActive and absorbBarActive
+        local powerBarScopeControlsActive = (_G.MSUF_Bars_GetPowerBarScopeUnitKey() ~= nil)
 
         local function SetDropActive(n, lbl, active) MSUF_SetDropDownEnabled(_G[n], lbl, active and true or false) end
         local function SetCheckActive(n, active)
@@ -1938,9 +1994,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             SetLabelActive(_C.powerSepLabel, textControlsActive)
         end
 
-        SetCheckActive("MSUF_SmoothPowerBarCheck", sharedControlsActive)
+        SetCheckActive("MSUF_SmoothPowerBarCheck", powerBarScopeControlsActive)
         SetCheckActive("MSUF_RealtimePowerTextCheck", sharedControlsActive)
-        SetLabelActive(_C.smoothHint, sharedControlsActive)
+        SetLabelActive(_C.smoothHint, powerBarScopeControlsActive)
 
         -- Refresh dropdowns when scope changes
         -- Box 1
@@ -1968,7 +2024,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         TitleDim(_C.box3c, hlControlsActive)
         TitleDim(_C.box5, textControlsActive)
         TitleDim(_C.box6, textControlsActive)
-        TitleDim(_C.box7, sharedControlsActive)
+        TitleDim(_C.box7, powerBarScopeControlsActive or sharedControlsActive)
 
         -- Re-trigger active test modes with current scope (prevents scope bleed)
         if _G.MSUF_DispelBorderTestMode and _G.MSUF_SetDispelBorderTestMode then
@@ -2031,7 +2087,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local function SC(cb, v) if cb then cb:SetChecked(v and true or false); if cb.__msufToggleUpdate then cb.__msufToggleUpdate() end end end
         SC(absorbTexTestCB, _G.MSUF_AbsorbTextureTestMode)
         SC(_C.selfHealPredCB, G().showSelfHealPrediction == true)
-        local smoothCB = _G["MSUF_SmoothPowerBarCheck"]; if smoothCB then local v = b.smoothPowerBar; if v == nil then v = true end; smoothCB:SetChecked(v) end
+        local smoothCB = _G["MSUF_SmoothPowerBarCheck"]; if smoothCB then smoothCB:SetChecked(_G.MSUF_Bars_GetSmoothPowerForCurrentScope()) end
         local rtCB = _G["MSUF_RealtimePowerTextCheck"]; if rtCB then local v = b.realtimePowerText; if v == nil then v = true end; rtCB:SetChecked(v) end
         _MSUF_SyncHpPowerTextScopeUI()
         MSUF_BarsMenu_QueueScrollUpdate()

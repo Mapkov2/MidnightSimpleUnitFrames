@@ -1591,6 +1591,39 @@ local function fill(key, defaults)
     -- Range fade: also fade castbar / auras when boss is out of range (off by default).
     if MSUF_DB.boss.rangeFadeCastbar == nil then MSUF_DB.boss.rangeFadeCastbar = false end
     if MSUF_DB.boss.rangeFadeAuras   == nil then MSUF_DB.boss.rangeFadeAuras   = false end
+    do
+        local bars = MSUF_DB.bars or {}
+        local showKeys = {
+            player = "showPlayerPowerBar",
+            target = "showTargetPowerBar",
+            focus  = "showFocusPowerBar",
+            boss   = "showBossPowerBar",
+        }
+        for _, unitKey in ipairs({"player", "target", "focus", "boss"}) do
+            MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+            local u = MSUF_DB[unitKey]
+            local legacyShowKey = showKeys[unitKey]
+            if u.showPowerBar == nil then
+                local legacyShow = legacyShowKey and bars[legacyShowKey]
+                u.showPowerBar = (legacyShow ~= false)
+            end
+            if u.powerBarHeight == nil then
+                u.powerBarHeight = tonumber(bars.powerBarHeight) or 3
+            end
+            if u.embedPowerBarIntoHealth == nil then
+                u.embedPowerBarIntoHealth = (bars.embedPowerBarIntoHealth == true)
+            end
+            if u.powerBarBorderEnabled == nil then
+                u.powerBarBorderEnabled = (bars.powerBarBorderEnabled == true)
+            end
+            if u.powerBarBorderThickness == nil then
+                u.powerBarBorderThickness = tonumber(bars.powerBarBorderThickness or bars.powerBarBorderSize) or 1
+            end
+            if u.powerSmoothFill == nil then
+                u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar ~= false) or false
+            end
+        end
+    end
     for _, unitKey in ipairs({"player", "target", "targettarget", "focus", "pet", "boss"}) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
         local u = MSUF_DB[unitKey]

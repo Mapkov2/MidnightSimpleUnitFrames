@@ -1611,7 +1611,16 @@ MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
 _MSUF_pendingDisableScaling=nil _MSUF_pendingMsufScale=nil _MSUF_pendingGlobalScale=nil if not silent then MSUF_Print("MSUF scaling disabled (Blizzard handles scaling now).")
 end
 end
-_G.MSUF_SetScalingDisabled=MSUF_SetScalingDisabled local function MSUF_SaveGlobalPreset(preset,scale) local g=MSUF_EnsureGeneral()
+_G.MSUF_SetScalingDisabled=MSUF_SetScalingDisabled
+local function MSUF_SetGlobalUiScaleAuto(silent) local g=MSUF_EnsureGeneral()
+if g then g.disableScaling=false g.globalUiScalePreset="auto"g.globalUiScaleValue=nil end
+_MSUF_pendingGlobalScale=nil
+MSUF_SetCVarIfChanged("useUIScale","0")
+MSUF_SetCVarIfChanged("useUiScale","0")
+_MSUF_lastGlobalCVarScale=nil _MSUF_lastGlobalUiParentScale=nil if not silent then MSUF_Print("Global UI scale set to Auto (Blizzard handles global UI scaling).")
+end
+end
+local function MSUF_SaveGlobalPreset(preset,scale) local g=MSUF_EnsureGeneral()
 if not g then return end
 g.globalUiScalePreset=preset g.globalUiScaleValue=scale end
 local function MSUF_GetDesiredGlobalScaleFromDB() local g=MSUF_EnsureGeneral()
@@ -1715,12 +1724,9 @@ MSUF_SetGlobalUiScale(UI_SCALE_4K,true)
 ReloadUI()
 end)
 end},
-{text="Auto",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: Auto",tipBody="Stops enforcing MSUF global scale and restores your previous Blizzard UI scale.",onClick=function()
+{text="Auto",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: Auto",tipBody="Stops enforcing MSUF global UI scale and lets Blizzard handle global UI scaling.",onClick=function()
 MSUF_ShowReloadConfirm("Global UI Scale: Auto",function()
-if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
-end
-MSUF_SaveGlobalPreset("auto",nil)
-MSUF_ResetGlobalUiScale(true)
+MSUF_SetGlobalUiScaleAuto(true)
 ReloadUI()
 end)
 end},
@@ -3017,7 +3023,7 @@ scaleCard:SetPoint("BOTTOMLEFT",colL,"BOTTOMLEFT",0,0)
 scaleCard:SetPoint("BOTTOMRIGHT",colL,"BOTTOMRIGHT",0,0)
 local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-30,"Quick access to scaling.",MSUF_SkinMuted)
 local scaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-54,"Global UI Scale",MSUF_SkinText)
-local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("auto",nil) MSUF_ResetGlobalUiScale(true) ReloadUI() end) end},},-1)
+local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() MSUF_SetGlobalUiScaleAuto(true) ReloadUI() end) end},},-1)
 local btn1080,btn1440,btn4k,btnAuto=scaleRow[1],scaleRow[2],scaleRow[3],scaleRow[4]
 local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-112,"MSUF Frame Scale",MSUF_SkinText)
 local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-130,"Current: 1.00",MSUF_SkinMuted)
