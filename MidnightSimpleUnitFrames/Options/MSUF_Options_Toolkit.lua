@@ -822,12 +822,28 @@ local function DD_Populate(owner)
         end
         btn._label:SetText(itemLabel)
         -- Per-item font preview (e.g. font dropdown shows each font in its own typeface)
-        if item.fontObject then
-            btn._label:SetFontObject(item.fontObject)
-        elseif btn._fontOverridden then
+        local appliedFont = false
+        if item.fontPath and btn._label.SetFont then
+            if btn._label.SetFontObject then btn._label:SetFontObject(GameFontHighlight) end
+            local ok, result = pcall(btn._label.SetFont, btn._label, item.fontPath, item.fontSize or 14, item.fontFlags or "")
+            appliedFont = ok and result ~= false
+        end
+        if (not appliedFont) and item.fontObject then
+            if item.fontObject.GetFont and btn._label.SetFont then
+                local fp, fs, ff = item.fontObject:GetFont()
+                if fp then
+                    local ok, result = pcall(btn._label.SetFont, btn._label, fp, item.fontSize or fs or 14, item.fontFlags or ff or "")
+                    appliedFont = ok and result ~= false
+                end
+            end
+            if (not appliedFont) and btn._label.SetFontObject then
+                btn._label:SetFontObject(item.fontObject)
+                appliedFont = true
+            end
+        elseif btn._fontOverridden and btn._label.SetFontObject then
             btn._label:SetFontObject(GameFontHighlight)
         end
-        btn._fontOverridden = (item.fontObject ~= nil)
+        btn._fontOverridden = appliedFont
         btn._ddItem = item
         btn._ddOwner = owner
         btn:Show()

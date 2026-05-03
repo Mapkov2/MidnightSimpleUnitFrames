@@ -269,7 +269,7 @@ local function CreateMover(entry, unitKey, kind, labelText)
     local moverName = "MSUF_A2_" .. safeName .. "_Mover_" .. tostring(kind)
 
     local mover = CreateFrame("Frame", moverName, UIParent, "BackdropTemplate")
-    mover:SetFrameStrata("DIALOG")
+    mover:SetFrameStrata("FULLSCREEN")
     mover:SetFrameLevel(500)
     mover:SetClampedToScreen(true)
     mover:EnableMouse(true)

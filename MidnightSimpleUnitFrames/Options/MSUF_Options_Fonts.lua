@@ -630,12 +630,14 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         items = function()
             if #fontChoices == 0 then RebuildFontChoices() end
             local getFP = _G.MSUF_GetFontPreviewObject
+            local getPath = _G.MSUF_GetFontPathForKey
             local out = {}
             for i = 1, #fontChoices do
                 local c = fontChoices[i]
                 out[i] = {
                     key = c.key,
                     label = c.label,
+                    fontPath = type(getPath) == "function" and getPath(c.key) or c.path,
                     fontObject = type(getFP) == "function" and getFP(c.key) or nil,
                 }
             end

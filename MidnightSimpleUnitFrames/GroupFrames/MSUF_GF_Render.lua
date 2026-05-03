@@ -616,15 +616,42 @@ end
 local function ApplyHealthBarAlpha(f, kind)
     if not f.health then return end
     local conf = GF.GetConf(kind)
-    local fgA = conf.hpBarAlpha or 1
-    if f._msufCachedHpBarAlpha ~= fgA then
-        f._msufCachedHpBarAlpha = fgA
-        f.health:SetAlpha(fgA)
+    local fgA = tonumber(conf.hpBarAlpha) or 1
+    if fgA < 0 then fgA = 0 elseif fgA > 1 then fgA = 1 end
+
+    local dynamic = (f._msufGFHealthAlphaDynamic == true)
+    local boolValue = f._msufGFHealthAlphaBool
+    local falseMul = tonumber(f._msufGFHealthAlphaFalseMul) or 1
+    if falseMul < 0 then falseMul = 0 elseif falseMul > 1 then falseMul = 1 end
+    local falseA = fgA * falseMul
+
+    if dynamic and type(boolValue) ~= "nil" and f.health.SetAlphaFromBoolean then
+        -- boolValue may be secret; pass it straight to C-side SetAlphaFromBoolean.
+        f._msufCachedHpBarAlpha = nil
+        f.health:SetAlphaFromBoolean(boolValue, fgA, falseA)
+    else
+        local mul
+        if dynamic then
+            if type(boolValue) ~= "nil" and not (issecretvalue and issecretvalue(boolValue)) then
+                mul = (boolValue == false) and falseMul or 1
+            else
+                mul = tonumber(f._msufGFHealthAlphaMul) or falseMul
+            end
+        else
+            mul = tonumber(f._msufGFHealthAlphaMul) or 1
+        end
+        if mul < 0 then mul = 0 elseif mul > 1 then mul = 1 end
+        local targetA = fgA * mul
+        if f._msufCachedHpBarAlpha ~= targetA then
+            f._msufCachedHpBarAlpha = targetA
+            f.health:SetAlpha(targetA)
+        end
+        falseA = targetA
     end
     -- Text layer: escape alpha inheritance when toggle is on
     local txtLayer = f.healthTextLayer
     if not txtLayer then return end
-    local wantEscape = (conf.hpTextIgnoreAlpha ~= false) and (fgA < 1)
+    local wantEscape = (conf.hpTextIgnoreAlpha ~= false) and (dynamic or falseA < 1)
     local escaped = txtLayer._msufAlphaEscaped
     if wantEscape and not escaped then
         -- Re-parent to statusIconLayer (above everything, unaffected by health alpha)
@@ -641,6 +668,7 @@ local function ApplyHealthBarAlpha(f, kind)
         txtLayer._msufAlphaEscaped = nil
     end
 end
+GF.ApplyHealthBarAlpha = ApplyHealthBarAlpha
 
 ------------------------------------------------------------------------
 -- Apply: text layout

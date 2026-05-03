@@ -1108,17 +1108,69 @@ local function _UnsecretBool(value)
     return value
 end
 
+local function _NormalizeRangeFadeLayerMode(mode)
+    if mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then
+        return "health"
+    end
+    return "frame"
+end
+
+local function _ClearHealthRangeFade(f, kind)
+    if not f then return end
+    if f._msufGFHealthAlphaDynamic or f._msufGFHealthAlphaMul or type(f._msufGFHealthAlphaBool) ~= "nil" then
+        f._msufGFHealthAlphaDynamic = nil
+        f._msufGFHealthAlphaMul = nil
+        f._msufGFHealthAlphaBool = nil
+        f._msufGFHealthAlphaFalseMul = nil
+        if GF.ApplyHealthBarAlpha then
+            GF.ApplyHealthBarAlpha(f, kind or f._msufGFKind or "party")
+        elseif f.health and f.health.SetAlpha then
+            f.health:SetAlpha(1)
+        end
+    end
+end
+
+local function _ApplyHealthRangeFade(f, kind, boolValue, fadeMul, numericMul)
+    if not f then return end
+    local m = tonumber(fadeMul) or 1
+    if m < 0 then m = 0 elseif m > 1 then m = 1 end
+
+    f._msufGFHealthAlphaDynamic = true
+    f._msufGFHealthAlphaFalseMul = m
+    if type(boolValue) ~= "nil" then
+        f._msufGFHealthAlphaBool = boolValue
+        f._msufGFHealthAlphaMul = nil
+    else
+        local nm = tonumber(numericMul)
+        if nm == nil then nm = m end
+        if nm < 0 then nm = 0 elseif nm > 1 then nm = 1 end
+        f._msufGFHealthAlphaBool = nil
+        f._msufGFHealthAlphaMul = nm
+    end
+
+    if f.SetAlpha then f:SetAlpha(1) end
+    if GF.ApplyHealthBarAlpha then
+        GF.ApplyHealthBarAlpha(f, kind or f._msufGFKind or "party")
+    elseif f.health and f.health.SetAlpha and type(boolValue) == "nil" then
+        f.health:SetAlpha(f._msufGFHealthAlphaMul or 1)
+    end
+end
+
 local function ApplyRangeFade(f, unit, inRange)
     local c = f._c
     if c and not c.rfEn then
+        _ClearHealthRangeFade(f, f._msufGFKind or "party")
+        if f.SetAlpha then f:SetAlpha(1) end
         return
     end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
-    local fadeAlpha = conf.rangeFadeAlpha or 0.4
+    local fadeAlpha = (c and c.rfAlpha) or conf.rangeFadeAlpha or 0.4
+    local hpMode = (_NormalizeRangeFadeLayerMode((c and c.rfLayerMode) or conf.rangeFadeLayerMode) == "health")
 
     -- Disabled → full alpha
     if conf.rangeFadeEnabled == false then
+        _ClearHealthRangeFade(f, kind)
         if f.SetAlpha then f:SetAlpha(1) end
         return
     end
@@ -1126,6 +1178,7 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Solo guard (EQoL: IsInGroup + IsInRaid)
     if IsInGroup and IsInRaid then
         if not IsInGroup() and not IsInRaid() then
+            _ClearHealthRangeFade(f, kind)
             if f.SetAlpha then f:SetAlpha(1) end
             return
         end
@@ -1134,17 +1187,47 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Offline (EQoL: UnsecretBool on UnitIsConnected)
     local connected = unit and UnitIsConnected and _UnsecretBool(UnitIsConnected(unit)) or nil
     if connected == false then
-        local offA = conf.offlineAlpha or fadeAlpha
-        if f.SetAlpha then f:SetAlpha(offA) end
+        local offA = (c and c.offAlpha) or conf.offlineAlpha or fadeAlpha
+        if hpMode then
+            _ApplyHealthRangeFade(f, kind, nil, offA, offA)
+        else
+            _ClearHealthRangeFade(f, kind)
+            if f.SetAlpha then f:SetAlpha(offA) end
+        end
         return
+    end
+
+    if not hpMode then
+        _ClearHealthRangeFade(f, kind)
     end
 
     -- EQoL exact pattern (line 8424)
     if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
 
     if type(inRange) ~= "nil" then
-        if f.SetAlphaFromBoolean then
-            f:SetAlphaFromBoolean(inRange, 1, fadeAlpha)
+        if hpMode then
+            _ApplyHealthRangeFade(f, kind, inRange, fadeAlpha)
+        else
+            if f.SetAlphaFromBoolean then
+                f:SetAlphaFromBoolean(inRange, 1, fadeAlpha)
+            end
+        end
+    end
+end
+
+function GF.RefreshRangeFade()
+    local frames = GF.frames
+    if not frames then return end
+    for f in pairs(frames) do
+        if f then
+            if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+            local unit = f.unit
+            if unit and UnitExists(unit) then
+                ApplyRangeFade(f, unit)
+            else
+                _ClearHealthRangeFade(f, f._msufGFKind or "party")
+                if f.SetAlpha then f:SetAlpha(1) end
+            end
         end
     end
 end
@@ -1300,6 +1383,7 @@ function GF.BuildFrameCache(f)
     c.rfEn    = conf.rangeFadeEnabled ~= false
     c.rfAlpha = conf.rangeFadeAlpha or 0.4
     c.offAlpha = conf.offlineAlpha or 0.5
+    c.rfLayerMode = _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)
 
     -- Health fade (curve-based HP threshold dimming)
     c.hfEn     = conf.healthFadeEnabled == true
@@ -2416,7 +2500,7 @@ local function UpdateAll(f, unit)
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
     GF.UpdateButton(f, unit)
-    if c.rfEn then ApplyRangeFade(f, unit) end
+    if c.rfEn or f._msufGFHealthAlphaDynamic then ApplyRangeFade(f, unit) end
     if c.needThreat then UpdateAggro(f, unit) end
 
     local _siOn = c.siEn
@@ -3304,7 +3388,7 @@ local UNIT_DISPATCH = {
     UNIT_CONNECTION                   = function(f, u)
         local c = f._c
         if c and c.statusTextEn then UpdateStatusText(f, u) end
-        if c and c.rfEn then ApplyRangeFade(f, u) end
+        if c and (c.rfEn or f._msufGFHealthAlphaDynamic) then ApplyRangeFade(f, u) end
     end,
     UNIT_FLAGS                        = function(f, u)
         local c = f._c
@@ -3840,7 +3924,7 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
     if band(bits, 0x08) ~= 0 then -- DIRTY_COLOR
         ApplyHealthColor(f, f._msufGFKind or "party", unit)
         ApplyPowerColor(f, unit)
-        if c and c.rfEn then ApplyRangeFade(f, unit) end
+        if c and (c.rfEn or f._msufGFHealthAlphaDynamic) then ApplyRangeFade(f, unit) end
     end
 
     if band(bits, 0x10) ~= 0 then -- DIRTY_BORDER
