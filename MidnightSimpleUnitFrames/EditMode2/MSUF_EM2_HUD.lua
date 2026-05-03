@@ -12,6 +12,7 @@ local floor, max, min = math.floor, math.max, math.min
 
 local hudFrame, row2Frame
 local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
+local previewAddonSlot
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 local helpBtn, tutorialPanel, tourState
@@ -651,6 +652,10 @@ local function EnsureHUD()
     end)
     SetTip(previewBtn, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
     r1[#r1+1] = previewBtn
+
+    previewAddonSlot = CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", c1)
+    previewAddonSlot:SetSize(38, BTN_H)
+    r1[#r1+1] = previewAddonSlot
 
     auraBtn = MakeBtn(c1, "Auras", 52, BTN_H, 12, function()
         local db = _G.MSUF_DB; if not db then return end
