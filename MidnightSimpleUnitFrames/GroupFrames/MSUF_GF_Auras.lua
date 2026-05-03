@@ -54,12 +54,15 @@ GF._playerCanDispel = _playerCanDispel
 ------------------------------------------------------------------------
 -- C API bindings (deferred to first use)
 ------------------------------------------------------------------------
-local _getDuration, _getStackCount, _apisBound
+local _getSlots, _getBySlot, _getByIndex, _getDuration, _getStackCount, _apisBound
 
 local function BindAPIs()
     if _apisBound then return end
     _apisBound = true
     if C_UnitAuras then
+        _getSlots      = C_UnitAuras.GetAuraSlots
+        _getBySlot     = C_UnitAuras.GetAuraDataBySlot
+        _getByIndex    = C_UnitAuras.GetAuraDataByIndex
         _getDuration   = C_UnitAuras.GetAuraDuration
         _getStackCount = C_UnitAuras.GetAuraApplicationDisplayCount
     end
@@ -80,11 +83,12 @@ local function CaptureSlots(...)
 end
 
 local function QuerySlots(unit, filter, maxCount)
-    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots) then return _slotBuf, 0 end
+    if not _apisBound then BindAPIs() end
+    if not _getSlots then return _slotBuf, 0 end
     if maxCount then
-        return CaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter, maxCount))
+        return CaptureSlots(_getSlots(unit, filter, maxCount))
     end
-    return CaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter))
+    return CaptureSlots(_getSlots(unit, filter))
 end
 
 ------------------------------------------------------------------------
@@ -1538,7 +1542,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
 
     for i = 2, slotCount do
         if shown >= maxIcons and (not isHarmful or topDispel) then break end
-        local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+        local aura = _getBySlot(unit, slots[i])
         if aura then
             local aid = aura.auraInstanceID
             if (isBuff and aid and _externalsIDs[aid])
@@ -1767,7 +1771,8 @@ function GF.UpdateFrameAuras(f, unit)
         f._msufGFDispelColorRev = nil
         return
     end
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not C_UnitAuras.GetAuraDataBySlot then return end
+    if not _apisBound then BindAPIs() end
+    if not _getSlots or not _getBySlot then return end
 
     local parent = f.statusIconLayer or f.barGroup or f
     local scale = GetDynamicScale(conf)
@@ -1815,8 +1820,8 @@ function GF.UpdateFrameAuras(f, unit)
         -- Lightweight dispel scan ONLY when class can dispel AND dispel enabled
         -- Uses C-side RAID_PLAYER_DISPELLABLE filter (secret-safe)
         if dispelNeeded then
-            if C_UnitAuras.GetAuraDataByIndex then
-                local aura = C_UnitAuras.GetAuraDataByIndex(unit, 1, _DISPEL_FILTER)
+            if _getByIndex then
+                local aura = _getByIndex(unit, 1, _DISPEL_FILTER)
                 if aura and aura.auraInstanceID then
                     mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
                     f._msufGFDispelAuraID = aura.auraInstanceID
@@ -1827,7 +1832,7 @@ function GF.UpdateFrameAuras(f, unit)
             elseif _isFilteredOut then
                 local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
                 if sc >= 2 then
-                    local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[2])
+                    local aura = _getBySlot(unit, slots[2])
                     if aura and aura.auraInstanceID then
                         mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
                         f._msufGFDispelAuraID = aura.auraInstanceID
@@ -1839,7 +1844,7 @@ function GF.UpdateFrameAuras(f, unit)
             else
                 local slots, sc = QuerySlots(unit, "HARMFUL", 12)
                 for i = 2, sc do
-                    local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+                    local aura = _getBySlot(unit, slots[i])
                     if aura then
                         local dn = _GetReadableDispelName(aura.dispelName)
                         if dn then

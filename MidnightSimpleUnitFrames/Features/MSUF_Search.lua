@@ -30,6 +30,7 @@ local _tScroll   = nil
 local _tRetry    = nil
 
 local function _CancelTimer(t)
+    if type(t) == "table" then t.cancelled = true end
     if t and t.Cancel then
         t:Cancel()
     end
@@ -43,11 +44,13 @@ end
 
 local function _StartTimer(sec, fn)
     if not (C_Timer and fn) then return nil end
-    if C_Timer.NewTimer then
-        return C_Timer.NewTimer(sec, function()
-            if not _menuActive then return end
+    if C_Timer.After then
+        local token = {}
+        C_Timer.After(sec, function()
+            if token.cancelled or not _menuActive then return end
             fn()
         end)
+        return token
     end
     return nil
 end

@@ -682,6 +682,34 @@ local function MSUF_Gameplay_TickCombatTimer()
     end
 end
 
+local function MSUF_CombatTimerLoopStep()
+    local loop = ns._MSUF_CombatTimerLoopActive
+    if not loop then return end
+    MSUF_Gameplay_TickCombatTimer()
+    if ns._MSUF_CombatTimerLoopActive == loop and C_Timer and C_Timer.After then
+        C_Timer.After(1.0, loop.step)
+    elseif ns._MSUF_CombatTimerLoopActive == loop then
+        ns._MSUF_CombatTimerLoopActive = nil
+    end
+end
+
+local function _StartCombatTimerTick()
+    if ns._MSUF_CombatTimerLoopActive then return end
+    if not (C_Timer and C_Timer.After) then return end
+    local loop = {}
+    loop.step = function()
+        if ns._MSUF_CombatTimerLoopActive == loop then
+            MSUF_CombatTimerLoopStep()
+        end
+    end
+    ns._MSUF_CombatTimerLoopActive = loop
+    C_Timer.After(1.0, loop.step)
+end
+
+local function _StopCombatTimerTick()
+    ns._MSUF_CombatTimerLoopActive = nil
+end
+
 -- Rogue "The First Dance" 6s window (out-of-combat)
 local FIRST_DANCE_WINDOW = 6
 local firstDanceActive = false
@@ -1447,6 +1475,22 @@ end
 
 -- Forward declaration so calls above resolve to local, not _G
 local MSUF_UpdateCombatCrosshairRangeColor
+local function MSUF_CombatCrosshairRangeOnUpdate(self, elapsed)
+    if not self:IsShown() then return end
+    self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
+    if self.MSUF_RangeElapsed < 0.15 then return end
+    self.MSUF_RangeElapsed = 0
+    local g3 = GetGameplayDBFast()
+    if not g3 or not g3.enableCombatCrosshair or not g3.enableCombatCrosshairMeleeRangeColor then
+        self:SetScript("OnUpdate", nil)
+        self.MSUF_RangeOnUpdate = nil
+        return
+    end
+    if MSUF_UpdateCombatCrosshairRangeColor then
+        MSUF_UpdateCombatCrosshairRangeColor()
+    end
+end
+
 local function EnsureCombatCrosshair()
     local g = EnsureGameplayDefaults()
 
@@ -1566,22 +1610,7 @@ local function EnsureCombatCrosshair()
         if not combatCrosshairFrame.MSUF_RangeOnUpdate then
             combatCrosshairFrame.MSUF_RangeOnUpdate = true
             combatCrosshairFrame.MSUF_RangeElapsed = 0
-            combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed)
-                if not self:IsShown() then return end
-                -- PERF: Throttle FIRST, before any work. Cheap elapsed accum.
-                -- Old code called EnsureGameplayDefaults() at ~171 Hz; now it
-                -- only runs at ~6.7 Hz (every 0.15s).
-                self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
-                if self.MSUF_RangeElapsed < 0.15 then return end
-                self.MSUF_RangeElapsed = 0
-                local g3 = EnsureGameplayDefaults()
-                if not g3.enableCombatCrosshair or not g3.enableCombatCrosshairMeleeRangeColor then
-                    self:SetScript("OnUpdate", nil)
-                    self.MSUF_RangeOnUpdate = nil
-                    return
-                end
-                MSUF_UpdateCombatCrosshairRangeColor()
-            end)
+            combatCrosshairFrame:SetScript("OnUpdate", MSUF_CombatCrosshairRangeOnUpdate)
         end
     else
         if combatCrosshairFrame.MSUF_RangeOnUpdate then
@@ -2137,13 +2166,7 @@ local function MSUF_SetCrosshairRangeTaskEnabled(enabled)
         if not combatCrosshairFrame.MSUF_RangeOnUpdate then
             combatCrosshairFrame.MSUF_RangeOnUpdate = true
             combatCrosshairFrame.MSUF_RangeElapsed = 0
-            combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed)
-                if not self:IsShown() then return end
-                self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
-                if self.MSUF_RangeElapsed < 0.15 then return end
-                self.MSUF_RangeElapsed = 0
-                MSUF_UpdateCombatCrosshairRangeColor()
-            end)
+            combatCrosshairFrame:SetScript("OnUpdate", MSUF_CombatCrosshairRangeOnUpdate)
         end
     else
         if combatCrosshairFrame.MSUF_RangeOnUpdate then
@@ -2963,21 +2986,43 @@ local function _TickTotemText()
     end
 end
 
-    local _totemTicker = nil
+    local _totemLoopActive = nil
+    local function _TotemTextLoopStep()
+        local loop = _totemLoopActive
+        if not loop then return end
+        _TickTotemText()
+
+        local g = GetGameplayDBFast()
+        local enableTick = (g and g.enablePlayerTotems and g.playerTotemsShowText and totemsFrame and totemsFrame:IsShown()) and true or false
+        if not enableTick then
+            if _totemLoopActive == loop then
+                _totemLoopActive = nil
+            end
+            return
+        end
+
+        if _totemLoopActive == loop and C_Timer and C_Timer.After then
+            C_Timer.After(ns._MSUF_PlayerTotemsTickInterval or 0.50, loop.step)
+        elseif _totemLoopActive == loop then
+            _totemLoopActive = nil
+        end
+    end
+
     local function _UpdateTotemTickEnabled(g, any)
         local enableTick = (g and g.enablePlayerTotems and g.playerTotemsShowText and any) and true or false
         if enableTick then
-            if not _totemTicker and C_Timer and C_Timer.NewTicker then
-                local interval = (ns._MSUF_PlayerTotemsTickInterval or 0.50)
-                _totemTicker = C_Timer.NewTicker(interval, function()
-                    _TickTotemText()
-                end)
+            if not _totemLoopActive and C_Timer and C_Timer.After then
+                local loop = {}
+                loop.step = function()
+                    if _totemLoopActive == loop then
+                        _TotemTextLoopStep()
+                    end
+                end
+                _totemLoopActive = loop
+                C_Timer.After(ns._MSUF_PlayerTotemsTickInterval or 0.50, loop.step)
             end
         else
-            if _totemTicker then
-                _totemTicker:Cancel()
-                _totemTicker = nil
-            end
+            _totemLoopActive = nil
         end
     end
 
@@ -3098,21 +3143,6 @@ function ns.MSUF_RequestGameplayApply()
     Gameplay_ApplyAllFeatures(g)
 
 -- Phase 7A: combat-timer tick — event-driven start/stop (no permanent ticker)
-    local function _StartCombatTimerTick()
-        if ns._MSUF_CombatTimerTicker then return end  -- already running
-        if C_Timer and C_Timer.NewTicker then
-            ns._MSUF_CombatTimerTicker = C_Timer.NewTicker(1.0, function()
-                MSUF_Gameplay_TickCombatTimer()
-            end)
-        end
-    end
-    local function _StopCombatTimerTick()
-        if ns._MSUF_CombatTimerTicker then
-            ns._MSUF_CombatTimerTicker:Cancel()
-            ns._MSUF_CombatTimerTicker = nil
-        end
-    end
-
     -- Phase 7B: combat timer events via EventBus (frame eliminated)
     local function _CombatTimer_OnRegenDisabled()
         local gd = GetGameplayDBFast()
@@ -3309,11 +3339,8 @@ do
                 end
             end,
             Disable = function()
-                -- Stop combat timer ticker
-                if ns._MSUF_CombatTimerTicker then
-                    ns._MSUF_CombatTimerTicker:Cancel()
-                    ns._MSUF_CombatTimerTicker = nil
-                end
+                -- Stop combat timer loop
+                ns._MSUF_CombatTimerLoopActive = nil
                 -- Unregister EventBus keys (idempotent)
                 local unreg = _G.MSUF_EventBus_Unregister
                 if type(unreg) == "function" then
@@ -3330,11 +3357,8 @@ do
                 end
             end,
             Shutdown = function(_, reason)
-                -- Stop all tickers
-                if ns._MSUF_CombatTimerTicker then
-                    ns._MSUF_CombatTimerTicker:Cancel()
-                    ns._MSUF_CombatTimerTicker = nil
-                end
+                -- Stop combat timer loop
+                ns._MSUF_CombatTimerLoopActive = nil
                 -- Unregister all EventBus keys
                 local unreg = _G.MSUF_EventBus_Unregister
                 if type(unreg) == "function" then

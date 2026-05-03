@@ -10,6 +10,8 @@ if not GF then return end
 
 local issecretvalue = _G.issecretvalue
 local C_UnitAuras = _G.C_UnitAuras
+local CUA_GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
+local CUA_GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 local CreateFrame = _G.CreateFrame
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
@@ -324,39 +326,51 @@ local function QueryAuraSlots(unit, filter, maxCount)
     if GF and GF.QueryAuraSlots then
         return GF.QueryAuraSlots(unit, filter, maxCount)
     end
-    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots) then return _slotBuf2, 0 end
+    if not CUA_GetAuraSlots and C_UnitAuras then CUA_GetAuraSlots = C_UnitAuras.GetAuraSlots end
+    if not CUA_GetAuraSlots then return _slotBuf2, 0 end
     if maxCount then
-        return CaptureSlots2(C_UnitAuras.GetAuraSlots(unit, filter, maxCount))
+        return CaptureSlots2(CUA_GetAuraSlots(unit, filter, maxCount))
     end
-    return CaptureSlots2(C_UnitAuras.GetAuraSlots(unit, filter))
+    return CaptureSlots2(CUA_GetAuraSlots(unit, filter))
 end
 
 local function QueryAuraData(unit, slot)
     if GF and GF.GetAuraDataBySlot then
         return GF.GetAuraDataBySlot(unit, slot)
     end
-    return C_UnitAuras and C_UnitAuras.GetAuraDataBySlot and C_UnitAuras.GetAuraDataBySlot(unit, slot)
+    if not CUA_GetAuraDataBySlot and C_UnitAuras then CUA_GetAuraDataBySlot = C_UnitAuras.GetAuraDataBySlot end
+    return CUA_GetAuraDataBySlot and CUA_GetAuraDataBySlot(unit, slot)
 end
 
--- Returns: activeFamilies[familyId] = { aura=auraData, auraInstanceID=id }
+-- Returns: activeFamilies[familyId] = auraData
 local _wantedPlayerSpells = {}
 local _wantedAllSpells = {}
+local _activeFamilies = {}
 
 local function ScanFamiliesForUnit(unit, compiledSlots, kind)
     AuraFilter = AuraFilter or GF.AuraFilter or _G.MSUF_GF_AuraFilter
-    local result = {}
+    local result = _activeFamilies
+    for k in pairs(result) do result[k] = nil end
+
     if not (unit and UnitExists(unit)) then return result end
-    if not ((GF and GF.QueryAuraSlots and GF.GetAuraDataBySlot) or (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot)) then return result end
+    if (not CUA_GetAuraSlots or not CUA_GetAuraDataBySlot) and C_UnitAuras then
+        CUA_GetAuraSlots = CUA_GetAuraSlots or C_UnitAuras.GetAuraSlots
+        CUA_GetAuraDataBySlot = CUA_GetAuraDataBySlot or C_UnitAuras.GetAuraDataBySlot
+    end
+    if not ((GF and GF.QueryAuraSlots and GF.GetAuraDataBySlot) or (CUA_GetAuraSlots and CUA_GetAuraDataBySlot)) then return result end
 
     for k in pairs(_wantedPlayerSpells) do _wantedPlayerSpells[k] = nil end
     for k in pairs(_wantedAllSpells) do _wantedAllSpells[k] = nil end
 
     local wantsAllCasters = false
-    for _, slot in ipairs(compiledSlots) do
+    for i = 1, #compiledSlots do
+        local slot = compiledSlots[i]
         local fam = slot.familyId and FAMILY_BY_ID[slot.familyId]
         local dst = (fam and fam.scanAll == true) and _wantedAllSpells or _wantedPlayerSpells
         if dst == _wantedAllSpells then wantsAllCasters = true end
-        for _, sid in ipairs(slot.spellIds) do
+        local spellIds = slot.spellIds
+        for j = 1, #spellIds do
+            local sid = spellIds[j]
             dst[sid] = slot.familyId
         end
     end
@@ -370,7 +384,7 @@ local function ScanFamiliesForUnit(unit, compiledSlots, kind)
                 sid = tonumber(sid)
                 local famId = sid and (_wantedPlayerSpells[sid] or _wantedAllSpells[sid])
                 if famId and not result[famId] then
-                    result[famId] = { aura = aura, auraInstanceID = aura.auraInstanceID }
+                    result[famId] = aura
                 end
             end
         end
@@ -386,7 +400,7 @@ local function ScanFamiliesForUnit(unit, compiledSlots, kind)
                     sid = tonumber(sid)
                     local famId = sid and _wantedAllSpells[sid]
                     if famId and not result[famId] then
-                        result[famId] = { aura = aura, auraInstanceID = aura.auraInstanceID }
+                        result[famId] = aura
                     end
                 end
             end

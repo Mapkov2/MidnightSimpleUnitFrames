@@ -161,11 +161,7 @@ end
 local _readyCheckTimers = {}
 
 function GF.CancelReadyCheckTimer(f)
-    local timer = f and _readyCheckTimers[f]
-    if timer then
-        if type(timer.Cancel) == "function" then timer:Cancel() end
-        _readyCheckTimers[f] = nil
-    end
+    if f then _readyCheckTimers[f] = nil end
 end
 
 function GF.UpdateReadyCheck(f, unit, event)
@@ -191,9 +187,14 @@ function GF.UpdateReadyCheck(f, unit, event)
     else
         if event == "READY_CHECK_FINISHED" and f.readyCheckIcon:IsShown() then
             GF.CancelReadyCheckTimer(f)
-            _readyCheckTimers[f] = C_Timer.NewTimer(6, function()
+            local token = {}
+            _readyCheckTimers[f] = token
+            C_Timer.After(6, function()
+                if _readyCheckTimers[f] ~= token then return end
                 _readyCheckTimers[f] = nil
-                f.readyCheckIcon:Hide()
+                if f.readyCheckIcon then
+                    f.readyCheckIcon:Hide()
+                end
             end)
         else
             f.readyCheckIcon:Hide()

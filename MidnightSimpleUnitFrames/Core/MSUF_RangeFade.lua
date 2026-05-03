@@ -293,10 +293,36 @@ do
     local _targetFriendlyTicker = nil
 
     local function StopTargetFriendlyTicker()
-        if _targetFriendlyTicker then
-            _targetFriendlyTicker:Cancel()
+        _targetFriendlyTicker = nil
+    end
+
+    local function TargetFriendlyLoopStep()
+        local loop = _targetFriendlyTicker
+        if not loop then return end
+        local c = TargetGetConf()
+        if not c or not UnitExists("target") then
+            StopTargetFriendlyTicker()
+            ClearMul("target", "target")
+            return
+        end
+        ApplyMul(GetFrame("target"), "target", "target", c, CheckFriendly("target"))
+        if _targetFriendlyTicker == loop and C_Timer_After then
+            C_Timer_After(1.0, loop.step)
+        elseif _targetFriendlyTicker == loop then
             _targetFriendlyTicker = nil
         end
+    end
+
+    local function StartTargetFriendlyLoop()
+        if _targetFriendlyTicker or not C_Timer_After then return end
+        local loop = {}
+        loop.step = function()
+            if _targetFriendlyTicker == loop then
+                TargetFriendlyLoopStep()
+            end
+        end
+        _targetFriendlyTicker = loop
+        C_Timer_After(1.0, loop.step)
     end
 
     local function TargetClassifyAndWire()
@@ -375,17 +401,7 @@ do
                 _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
                 _targetEvtFrame:SetScript("OnEvent", nil)
                 StopTargetFriendlyTicker()
-                if _G.C_Timer and _G.C_Timer.NewTicker then
-                    _targetFriendlyTicker = _G.C_Timer.NewTicker(1.0, function()
-                        local c = TargetGetConf()
-                        if not c or not UnitExists("target") then
-                            StopTargetFriendlyTicker()
-                            ClearMul("target", "target")
-                            return
-                        end
-                        ApplyMul(GetFrame("target"), "target", "target", c, CheckFriendly("target"))
-                    end)
-                end
+                StartTargetFriendlyLoop()
             end
 
             -- Immediate check
@@ -585,7 +601,6 @@ do
     local _TICK_BURST = 0.05
     local _BURST_DURATION = 0.75
     local _burstSerial = 0
-    local C_Timer_NewTicker = _G.C_Timer and _G.C_Timer.NewTicker
     local HasActiveEnemyFocusRangeUnit, HasActiveBossRangeUnit, NeedsPoll, RequestBurst
     local _pollUnits, _pollConfKey, _pollFrames, _pollCount = {}, {}, {}, 0
 
@@ -605,7 +620,7 @@ do
     end
 
     local function StopTicker()
-        if _ticker then _ticker:Cancel(); _ticker = nil end
+        _ticker = nil
         _tickRate = 0
         _burstSerial = _burstSerial + 1
     end
@@ -717,12 +732,37 @@ do
         return _TICK_OOC
     end
 
+    local ScheduleTickerStep
+    local function RangeFadeTickerLoopStep()
+        local loop = _ticker
+        if not loop then return end
+        CheckEnemyUnits()
+        if _ticker == loop then
+            ScheduleTickerStep(loop)
+        end
+    end
+
+    ScheduleTickerStep = function(loop)
+        if not C_Timer_After then
+            StopTicker()
+            return
+        end
+        C_Timer_After(_tickRate, loop.step)
+    end
+
     local function EnsureTicker(rate)
-        if not C_Timer_NewTicker then return end
+        if not C_Timer_After then return end
         if _ticker and _tickRate == rate then return end
-        StopTicker()
+        _burstSerial = _burstSerial + 1
         _tickRate = rate
-        _ticker = C_Timer_NewTicker(rate, CheckEnemyUnits)
+        local loop = {}
+        loop.step = function()
+            if _ticker == loop then
+                RangeFadeTickerLoopStep()
+            end
+        end
+        _ticker = loop
+        ScheduleTickerStep(loop)
     end
 
     function HasActiveBossRangeUnit()

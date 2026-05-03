@@ -895,7 +895,7 @@ end
 Preview.RenderEntryPreview = RenderEntryPreview
 API.RenderEntryPreview = API.RenderEntryPreview or RenderEntryPreview
 
--- Preview tickers (Edit Mode): cycle stacks + cooldowns
+-- Preview loops (Edit Mode): cycle stacks + cooldowns while previews are active.
 
 local PreviewTickers = {
     stacks = nil,
@@ -1203,17 +1203,40 @@ local function PreviewTickCooldown()
     ForEachPreviewIcon(_PreviewCooldownIconFn)
  end
 
+local function RunPreviewLoop(kind)
+    local loop = PreviewTickers[kind]
+    if not loop then return end
+
+    loop.fn()
+
+    if PreviewTickers[kind] ~= loop then return end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(loop.interval, loop.step)
+    else
+        PreviewTickers[kind] = nil
+    end
+end
+
 local function EnsureTicker(kind, need, interval, fn)
     local t = PreviewTickers[kind]
     if need then
         if not t then
-            PreviewTickers[kind] = C_Timer.NewTicker(interval, fn)
+            local loop = { interval = interval, fn = fn }
+            loop.step = function()
+                if PreviewTickers[kind] == loop then
+                    RunPreviewLoop(kind)
+                end
+            end
+            PreviewTickers[kind] = loop
+            if C_Timer and C_Timer.After then
+                C_Timer.After(interval, loop.step)
+            else
+                fn()
+                PreviewTickers[kind] = nil
+            end
         end
     else
-        if t then
-            t:Cancel()
-            PreviewTickers[kind] = nil
-        end
+        PreviewTickers[kind] = nil
     end
  end
 
