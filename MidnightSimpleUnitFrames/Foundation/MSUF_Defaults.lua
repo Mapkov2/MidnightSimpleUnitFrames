@@ -131,6 +131,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.disableScaling = false
         g.globalUiScalePreset = "auto"
         g.globalUiScaleValue = nil
+        g.UIScale = { Enabled = false, Scale = 1.0 }
         g.msufUiScale = 1.0
     end
  end
@@ -185,6 +186,54 @@ if g.disableScaling == nil then
 end
 if g.globalUiScalePreset == nil then
     g.globalUiScalePreset = "auto"
+end
+-- Migrate global UI scale storage to the Unhalted-style table:
+-- General.UIScale.Enabled + General.UIScale.Scale. Keep the legacy preset keys
+-- populated so older exports/tools can still reason about the profile.
+do
+    local function PresetScale(preset, fallback)
+        if preset == "1080p" then return 768 / 1080 end
+        if preset == "1440p" then return 768 / 1440 end
+        if preset == "4k" then return 768 / 2160 end
+        if preset == "pixel" and type(GetPhysicalScreenSize) == "function" then
+            local _, h = GetPhysicalScreenSize()
+            h = tonumber(h)
+            if h and h > 0 then return 768 / h end
+        end
+        return tonumber(fallback)
+    end
+    local ui = (type(g.UIScale) == "table") and g.UIScale or nil
+    if not ui then
+        ui = {}
+        g.UIScale = ui
+        local preset = g.globalUiScalePreset
+        local scale = PresetScale(preset, g.globalUiScaleValue) or 1.0
+        local enabled = (g.disableScaling ~= true)
+            and (preset == "1080p" or preset == "1440p" or preset == "4k" or preset == "pixel" or preset == "custom")
+        ui.Enabled = enabled and true or false
+        ui.Scale = scale
+        ui._migratedFromGlobalPreset_v1 = true
+    end
+    if ui.Enabled == nil then
+        local preset = g.globalUiScalePreset
+        ui.Enabled = (g.disableScaling ~= true)
+            and (preset == "1080p" or preset == "1440p" or preset == "4k" or preset == "pixel" or preset == "custom")
+    end
+    ui.Enabled = (ui.Enabled == true)
+    ui.Scale = tonumber(ui.Scale) or PresetScale(g.globalUiScalePreset, g.globalUiScaleValue) or 1.0
+    if ui.Scale < 0.3 then ui.Scale = 0.3 elseif ui.Scale > 2.0 then ui.Scale = 2.0 end
+    if g.disableScaling == true then
+        ui.Enabled = false
+    end
+    if ui.Enabled then
+        g.globalUiScaleValue = ui.Scale
+        if g.globalUiScalePreset ~= "1080p" and g.globalUiScalePreset ~= "1440p"
+            and g.globalUiScalePreset ~= "4k" and g.globalUiScalePreset ~= "pixel" and g.globalUiScalePreset ~= "custom" then
+            g.globalUiScalePreset = "custom"
+        end
+    elseif g.globalUiScalePreset == nil then
+        g.globalUiScalePreset = "auto"
+    end
 end
 -- Nil value = Auto (no enforced custom global UI scale)
 -- (Do NOT seed a default globalUiScaleValue on fresh installs.)
