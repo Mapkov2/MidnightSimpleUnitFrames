@@ -292,6 +292,23 @@ local function BuildUFStatusIconSpecs()
         end
     end
 
+    add({
+        id = "statusText", label = "Status Text",
+        allowed = function(k)
+            return k == "player" or k == "target" or k == "targettarget" or k == "focus" or k == "pet" or k == "boss"
+        end,
+        showField = "statusTextEnabled", showDefault = true,
+        xField = "statusTextOffsetX", xDefault = 0,
+        yField = "statusTextOffsetY", yDefault = 0,
+        anchorField = "statusTextAnchor", anchorDefault = "CENTER",
+        anchorText = AnchorText,
+        anchorChoices = MakeAnchorChoices({ "TOPLEFT","TOPRIGHT","BOTTOMLEFT","BOTTOMRIGHT","CENTER" }, AnchorText),
+        sizeField = "statusTextSize", sizeDefault = 16,
+        layerField = "statusTextLayer", layerDefault = 7,
+        refreshFnName = "MSUF_RequestStatusTextRefresh",
+        kind = "statusText",
+    })
+
     for _, def in ipairs(STATUS_ICON_DEFS) do
         add({
             id = def.prefix, label = def.cbText, allowed = def.allowed,
@@ -447,6 +464,8 @@ local COPY_INDICATOR_FIELDS = {
 }
 MSUF_COPY_STATUSICON_FIELDS = {
     "statusIconsTestMode","statusIconsMidnightStyle","statusIconsAlpha",
+    "statusTextEnabled","statusTextOffsetX","statusTextOffsetY",
+    "statusTextAnchor","statusTextSize","statusTextLayer",
     "showCombatStateIndicator","showRestingIndicator","showIncomingResIndicator",
     "combatStateIndicatorOffsetX","combatStateIndicatorOffsetY","combatStateIndicatorAnchor",
     "combatStateIndicatorSize","combatStateIndicatorLayer","combatStateIndicatorSymbol",
@@ -926,7 +945,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
 
     -- Collapsible sections
     local basicsH, castbarBoxH, loadCondH, sizeH = 132, 132, 124, 200
-    local statusBoxH, bossLayoutH = 420, 152
+    local statusBoxH, bossLayoutH = 500, 152
     panel._msufStatusBoxH = statusBoxH
 
     local basicsBox, basicsBody = MkCollapsible(frameGroup, "Frame Basics", fullW, basicsH, true)
@@ -1281,6 +1300,48 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
                 maxTextWidth = 180,
             })
 
+            local statusFlagSep = statusBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            statusFlagSep:SetPoint("TOPLEFT", panel.statusIconsTestModeCB, "BOTTOMLEFT", -16, -12)
+            statusFlagSep:SetText(TR("Status Text States"))
+            statusFlagSep:SetTextColor(1, 0.82, 0)
+            panel.statusIconsStatusFlagSep = statusFlagSep
+
+            panel.statusIconsShowDeadCB = UI.Check({
+                name = "MSUF_UF_SI_ShowDeadCheck", parent = statusBody,
+                anchor = statusFlagSep, x = 0, y = -8,
+                label = TR("Show Dead / Offline"),
+                get = function() return StatusGet("flagDead") end,
+                set = function(v) StatusSet("flagDead", v) end,
+                maxTextWidth = 220,
+            })
+
+            panel.statusIconsShowGhostCB = UI.Check({
+                name = "MSUF_UF_SI_ShowGhostCheck", parent = statusBody,
+                anchor = panel.statusIconsShowDeadCB, x = 0, y = -6,
+                label = TR("Show Ghost"),
+                get = function() return StatusGet("flagGhost") end,
+                set = function(v) StatusSet("flagGhost", v) end,
+                maxTextWidth = 220,
+            })
+
+            panel.statusIconsShowAFKCB = UI.Check({
+                name = "MSUF_UF_SI_ShowAFKCheck", parent = statusBody,
+                anchor = panel.statusIconsShowGhostCB, x = 0, y = -6,
+                label = TR("Show AFK"),
+                get = function() return StatusGet("flagAFK") end,
+                set = function(v) StatusSet("flagAFK", v) end,
+                maxTextWidth = 220,
+            })
+
+            panel.statusIconsShowDNDCB = UI.Check({
+                name = "MSUF_UF_SI_ShowDNDCheck", parent = statusBody,
+                anchor = panel.statusIconsShowAFKCB, x = 0, y = -6,
+                label = TR("Show DND"),
+                get = function() return StatusGet("flagDND") end,
+                set = function(v) StatusSet("flagDND", v) end,
+                maxTextWidth = 220,
+            })
+
             panel._msufUFStatusControls = {
                 panel.statusIconsSelectorDrop,
                 panel.statusIconsStyleCB,
@@ -1293,6 +1354,11 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
                 panel.statusIconsLayerSlider,
                 panel.statusIconsResetBtn,
                 panel.statusIconsTestModeCB,
+                panel.statusIconsStatusFlagSep,
+                panel.statusIconsShowDeadCB,
+                panel.statusIconsShowGhostCB,
+                panel.statusIconsShowAFKCB,
+                panel.statusIconsShowDNDCB,
             }
         else
             local warn = statusBody:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -1518,12 +1584,19 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
         if panel._msufEnsureUFStatusSelection then panel._msufEnsureUFStatusSelection(key) end
         local spec = panel._msufCurrentUFStatusSpec or GetUFStatusIconSpec(panel._msufStatusIconSelectedId)
         local showStateControls = (spec and spec.kind == "status") and true or false
+        local showStatusTextControls = (spec and spec.kind == "statusText") and true or false
+        local showTestMode = showStateControls or showStatusTextControls
         local showSymbol = showStateControls and spec and spec.symbolField
 
         for _, w in ipairs(panel._msufUFStatusControls or {}) do SetShown(w, true) end
         SetShown(panel.statusIconsStyleCB, showStateControls)
         SetShown(panel.statusIconsSymbolDrop, showSymbol)
-        SetShown(panel.statusIconsTestModeCB, showStateControls)
+        SetShown(panel.statusIconsTestModeCB, showTestMode)
+        SetShown(panel.statusIconsStatusFlagSep, showStatusTextControls)
+        SetShown(panel.statusIconsShowDeadCB, showStatusTextControls)
+        SetShown(panel.statusIconsShowGhostCB, showStatusTextControls)
+        SetShown(panel.statusIconsShowAFKCB, showStatusTextControls)
+        SetShown(panel.statusIconsShowDNDCB, showStatusTextControls)
 
         local anchor = panel.statusIconsSelectorDrop
         if anchor and panel.statusIconsStyleCB and showStateControls then
@@ -1564,9 +1637,29 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
             panel.statusIconsResetBtn:ClearAllPoints()
             panel.statusIconsResetBtn:SetPoint("LEFT", panel.statusIconsLayerSlider, "RIGHT", 84, 0)
         end
-        if panel.statusIconsTestModeCB and panel.statusIconsLayerSlider and showStateControls then
+        if panel.statusIconsTestModeCB and panel.statusIconsLayerSlider and showTestMode then
             panel.statusIconsTestModeCB:ClearAllPoints()
             panel.statusIconsTestModeCB:SetPoint("TOPLEFT", panel.statusIconsLayerSlider, "BOTTOMLEFT", 16, -8)
+        end
+        if panel.statusIconsStatusFlagSep and panel.statusIconsTestModeCB and showStatusTextControls then
+            panel.statusIconsStatusFlagSep:ClearAllPoints()
+            panel.statusIconsStatusFlagSep:SetPoint("TOPLEFT", panel.statusIconsTestModeCB, "BOTTOMLEFT", -16, -12)
+        end
+        if panel.statusIconsShowDeadCB and panel.statusIconsStatusFlagSep and showStatusTextControls then
+            panel.statusIconsShowDeadCB:ClearAllPoints()
+            panel.statusIconsShowDeadCB:SetPoint("TOPLEFT", panel.statusIconsStatusFlagSep, "BOTTOMLEFT", 0, -8)
+        end
+        if panel.statusIconsShowGhostCB and panel.statusIconsShowDeadCB and showStatusTextControls then
+            panel.statusIconsShowGhostCB:ClearAllPoints()
+            panel.statusIconsShowGhostCB:SetPoint("TOPLEFT", panel.statusIconsShowDeadCB, "BOTTOMLEFT", 0, -6)
+        end
+        if panel.statusIconsShowAFKCB and panel.statusIconsShowGhostCB and showStatusTextControls then
+            panel.statusIconsShowAFKCB:ClearAllPoints()
+            panel.statusIconsShowAFKCB:SetPoint("TOPLEFT", panel.statusIconsShowGhostCB, "BOTTOMLEFT", 0, -6)
+        end
+        if panel.statusIconsShowDNDCB and panel.statusIconsShowAFKCB and showStatusTextControls then
+            panel.statusIconsShowDNDCB:ClearAllPoints()
+            panel.statusIconsShowDNDCB:SetPoint("TOPLEFT", panel.statusIconsShowAFKCB, "BOTTOMLEFT", 0, -6)
         end
         if panel._msufRefreshUFStatusControls then panel._msufRefreshUFStatusControls() end
     else
@@ -2160,10 +2253,23 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         local uf = _G.MSUF_UnitFrames or _G.UnitFrames
         local fn = _G.MSUF_UpdateStatusIndicatorForFrame
         if type(fn) ~= "function" or not uf then return end
-        local fp = uf.player
-        local ft = uf.target
-        if fp then fp._msufStatusIconsConf = nil; fn(fp) end
-        if ft then ft._msufStatusIconsConf = nil; fn(ft) end
+        for _, frame in pairs(uf) do
+            if frame and frame.statusIndicatorText then
+                frame._msufStatusConf = nil
+                frame._msufStatusIconsConf = nil
+                frame._msufAwayForceRefresh = true
+                if _G.MSUF_ApplyStatusTextLayout then _G.MSUF_ApplyStatusTextLayout(frame) end
+                fn(frame)
+            elseif frame then
+                frame._msufStatusIconsConf = nil
+            end
+        end
+    end
+
+    _G.MSUF_RequestStatusTextRefresh = _G.MSUF_RequestStatusTextRefresh or function()
+        RefreshStatusIconFrames()
+        if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+        ApplyCurrent()
     end
 
     for _, def in ipairs(STATUS_ICON_DEFS) do
@@ -2198,6 +2304,63 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         return EnsureUFStatusSelection(k)
     end
 
+    local RefreshUFStatusControls
+
+    local function GetStatusIndicatorDB()
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        MSUF_DB.general.statusIndicators = MSUF_DB.general.statusIndicators or {}
+        local db = MSUF_DB.general.statusIndicators
+        if db.showAFK == nil then db.showAFK = false end
+        if db.showDND == nil then db.showDND = false end
+        if db.showDead == nil then db.showDead = true end
+        if db.showGhost == nil then db.showGhost = true end
+        return db
+    end
+
+    local function EnsureStatusAFKDNDPopupWarning()
+        if not _G.StaticPopupDialogs then return end
+        if _G.StaticPopupDialogs["MSUF_STATUS_AFKDND_WARNING"] then return end
+        _G.StaticPopupDialogs["MSUF_STATUS_AFKDND_WARNING"] = {
+            text = "WARNING:\n\nAFK/DND status indicators do NOT update while you are inside an instance AND in combat.\nThis is a client/API limitation.\n\nOutside of instance combat they should work normally.\n\nEnable anyway?",
+            button1 = "Enable", button2 = "Cancel",
+            timeout = 0, whileDead = 1, hideOnEscape = 1, preferredIndex = 3,
+            OnAccept = function(_, data)
+                if not data then return end
+                local db = GetStatusIndicatorDB()
+                db[data.key] = true
+                local cb = data.cbName and _G[data.cbName]
+                if cb and cb.SetChecked then cb:SetChecked(true) end
+                if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+            end,
+            OnCancel = function(_, data)
+                if not data then return end
+                local db = GetStatusIndicatorDB()
+                db[data.key] = false
+                local cb = data.cbName and _G[data.cbName]
+                if cb and cb.SetChecked then cb:SetChecked(false) end
+                if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+            end,
+        }
+    end
+
+    local function SetStatusIndicatorFlag(key, value, cbName, confirm)
+        local db = GetStatusIndicatorDB()
+        local want = value == true
+        if want and confirm and _G.StaticPopup_Show then
+            EnsureStatusAFKDNDPopupWarning()
+            db[key] = false
+            local popup = _G.StaticPopup_Show("MSUF_STATUS_AFKDND_WARNING", nil, nil, { key = key, cbName = cbName })
+            if popup then
+                if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+                return
+            end
+        end
+        db[key] = want
+        if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+        RefreshUFStatusControls()
+    end
+
     local function ReadUFStatusSize(spec, conf, g)
         if not spec or not spec.sizeField then return 14 end
         local v = conf and conf[spec.sizeField]
@@ -2211,7 +2374,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
 
     local function RefreshUFStatusSpec(spec)
         if not spec then return end
-        if spec.kind == "status" then
+        if spec.kind == "status" or spec.kind == "statusText" then
             RefreshStatusIconFrames()
             return
         end
@@ -2245,16 +2408,27 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         SetUFStatusOptionEnabled(panel.statusIconsYSlider, enabled)
         SetUFStatusOptionEnabled(panel.statusIconsLayerSlider, enabled)
         SetUFStatusOptionEnabled(panel.statusIconsResetBtn, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsShowDeadCB, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsShowGhostCB, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsShowAFKCB, enabled)
+        SetUFStatusOptionEnabled(panel.statusIconsShowDNDCB, enabled)
     end
 
-    local function RefreshUFStatusControls()
+    RefreshUFStatusControls = function()
         local spec = CurrentUFStatusSpec()
         local conf, g = GetConfAndG()
         if panel.statusIconsSelectorDrop and panel.statusIconsSelectorDrop.Refresh then panel.statusIconsSelectorDrop:Refresh() end
         if panel.statusIconsSymbolDrop and panel.statusIconsSymbolDrop.Refresh then panel.statusIconsSymbolDrop:Refresh() end
         if panel.statusIconsAnchorDrop and panel.statusIconsAnchorDrop.Refresh then panel.statusIconsAnchorDrop:Refresh() end
         if panel.statusIconsStyleCB then panel.statusIconsStyleCB:SetChecked(GetStatusIconStyleMidnight()) end
-        if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetChecked(g.stateIconsTestMode == true) end
+        if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetChecked((conf and conf.stateIconsTestMode == true) or (g.stateIconsTestMode == true)) end
+        do
+            local sidb = GetStatusIndicatorDB()
+            if panel.statusIconsShowAFKCB then panel.statusIconsShowAFKCB:SetChecked(sidb.showAFK == true) end
+            if panel.statusIconsShowDNDCB then panel.statusIconsShowDNDCB:SetChecked(sidb.showDND == true) end
+            if panel.statusIconsShowDeadCB then panel.statusIconsShowDeadCB:SetChecked(sidb.showDead == true) end
+            if panel.statusIconsShowGhostCB then panel.statusIconsShowGhostCB:SetChecked(sidb.showGhost == true) end
+        end
         if spec then
             local enabled = ReadBool(conf, g, spec.showField, spec.showDefault)
             if panel.statusIconsEnabledCB then panel.statusIconsEnabledCB:SetChecked(enabled) end
@@ -2290,7 +2464,11 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         local conf, g = GetConfAndG()
         if field == "selected" then return spec and spec.id or "" end
         if field == "midnight" then return GetStatusIconStyleMidnight() end
-        if field == "testMode" then return g.stateIconsTestMode == true end
+        if field == "testMode" then return (conf and conf.stateIconsTestMode == true) or (g.stateIconsTestMode == true) end
+        if field == "flagAFK" then return GetStatusIndicatorDB().showAFK == true end
+        if field == "flagDND" then return GetStatusIndicatorDB().showDND == true end
+        if field == "flagDead" then return GetStatusIndicatorDB().showDead == true end
+        if field == "flagGhost" then return GetStatusIndicatorDB().showGhost == true end
         if not spec then return nil end
         if field == "enabled" then return ReadBool(conf, g, spec.showField, spec.showDefault) end
         if field == "size" then return ReadUFStatusSize(spec, conf, g) end
@@ -2322,12 +2500,22 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             return
         end
         if field == "testMode" then
-            if _G.MSUF_SetStatusIconsTestMode then _G.MSUF_SetStatusIconsTestMode(value == true, "OPTIONS")
-            else EnsureDB(); MSUF_DB.general.stateIconsTestMode = (value == true); RefreshStatusIconFrames() end
+            local conf = EnsureKeyDB()
+            local on = value == true
+            conf.stateIconsTestMode = on
+            if not on then
+                EnsureDB()
+                MSUF_DB.general.stateIconsTestMode = false
+            end
+            RefreshStatusIconFrames()
             RefreshUFStatusControls()
             ApplyCurrent()
             return
         end
+        if field == "flagAFK" then SetStatusIndicatorFlag("showAFK", value == true, "MSUF_UF_SI_ShowAFKCheck", true); return end
+        if field == "flagDND" then SetStatusIndicatorFlag("showDND", value == true, "MSUF_UF_SI_ShowDNDCheck", true); return end
+        if field == "flagDead" then SetStatusIndicatorFlag("showDead", value == true, "MSUF_UF_SI_ShowDeadCheck", false); return end
+        if field == "flagGhost" then SetStatusIndicatorFlag("showGhost", value == true, "MSUF_UF_SI_ShowGhostCheck", false); return end
 
         local spec = CurrentUFStatusSpec()
         if not spec then return end

@@ -198,6 +198,9 @@ local PARTY_DEFAULTS = {
     phaseAnchor       = "TOPLEFT",
     phaseX            = 0,
     phaseY            = 0,
+    statusText        = true,
+    statusTextSize    = 14,
+    statusTextAnchor  = "CENTER",
     -- Status icon layers (draw order: higher = on top)
     roleIconLayer     = 1,
     leaderIconLayer   = 2,
@@ -207,6 +210,7 @@ local PARTY_DEFAULTS = {
     summonLayer       = 4,
     resurrectLayer    = 4,
     phaseLayer        = 3,
+    statusTextLayer   = 7,
     -- Text offsets
     nameOffsetX       = 0,
     nameOffsetY       = 0,

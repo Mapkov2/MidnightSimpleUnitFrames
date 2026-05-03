@@ -524,6 +524,56 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
     end
 
+    local MSUF_SetCheckboxEnabled = _G.MSUF_SetCheckboxEnabled or function(cb, enabled)
+        if not cb then return end
+        if enabled then
+            if cb.Enable then cb:Enable() end
+        else
+            if cb.Disable then cb:Disable() end
+        end
+        if cb.SetAlpha then cb:SetAlpha(enabled and 1 or 0.4) end
+    end
+
+    local function SetWidgetEnabled(widget, enabled)
+        if not widget then return end
+        enabled = enabled and true or false
+        if widget._ddSpec and widget.SetEnabled then
+            pcall(widget.SetEnabled, widget, enabled)
+        elseif widget.GetChecked and widget.SetChecked then
+            MSUF_SetCheckboxEnabled(widget, enabled)
+        elseif widget.SetEnabled then
+            pcall(widget.SetEnabled, widget, enabled)
+        elseif enabled then
+            if widget.Enable then pcall(widget.Enable, widget) end
+        else
+            if widget.Disable then pcall(widget.Disable, widget) end
+        end
+        local objectType = widget.GetObjectType and widget:GetObjectType() or nil
+        if objectType ~= "FontString" and widget.EnableMouse then pcall(widget.EnableMouse, widget, enabled) end
+        if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.4) end
+
+        local label = widget.Text or widget.text
+        if not label and widget.GetName then
+            local n = widget:GetName()
+            label = n and _G[n .. "Text"] or nil
+        end
+        if label and label.SetTextColor then
+            local c = enabled and 1 or 0.35
+            label:SetTextColor(c, c, c)
+        end
+    end
+
+    local function SetWidgetListEnabled(list, enabled)
+        if type(list) ~= "table" then return end
+        for i = 1, #list do
+            SetWidgetEnabled(list[i], enabled)
+        end
+    end
+
+    local function SetBoxTitleEnabled(box, enabled)
+        if box and box._msufTitle then SetWidgetEnabled(box._msufTitle, enabled) end
+    end
+
     -- =====================================================================
     -- Scroll frame (below scope bar)
     -- =====================================================================
@@ -629,6 +679,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     local UpdateSizeOverrideInfo
     local sizeHint, nameSizeSlider, hpSizeSlider, powerSizeSlider, castbarSizeSlider
+    local resetSizeBtn, nameOvr, hpOvr, powerOvr
     local RefreshSizeScopeUI
 
     local function GetScopedCastbarFontSizeKey(scopeKey)
@@ -805,9 +856,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         return fs
     end
 
-    local nameOvr  = MakeOverrideInfo(sizeBody)
-    local hpOvr    = MakeOverrideInfo(sizeBody)
-    local powerOvr = MakeOverrideInfo(sizeBody)
+    nameOvr  = MakeOverrideInfo(sizeBody)
+    hpOvr    = MakeOverrideInfo(sizeBody)
+    powerOvr = MakeOverrideInfo(sizeBody)
     nameOvr:SetPoint("TOP", nameSizeSlider.editBox, "BOTTOM", 0, -2)
     hpOvr:SetPoint("TOP", hpSizeSlider.editBox, "BOTTOM", 0, -2)
     powerOvr:SetPoint("TOP", powerSizeSlider.editBox, "BOTTOM", 0, -2)
@@ -859,7 +910,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         }
     end
 
-    local resetSizeBtn = UI.Button({
+    resetSizeBtn = UI.Button({
         name = "MSUF_ResetFontOverridesBtn", parent = sizeBody,
         text = TR("Reset overrides"), width = 280, height = 20,
         onClick = function() StaticPopup_Show("MSUF_RESET_FONT_OVERRIDES") end,
@@ -1085,13 +1136,19 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- =====================================================================
     local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 280, TR("Name Shortening"), false)
 
-    local shortenMaxSlider, shortenMaskSlider, shortenClipDrop
+    local shortenCheck, shortenMaxSlider, shortenMaskSlider, shortenClipDrop, shortenClipLabel, infoBtn
 
     local function SyncShortenEnabled()
         local on = ScopeGet("shortenNames", false, "shortenNames") and true or false
-        if shortenMaxSlider then shortenMaxSlider:SetAlpha(on and 1 or 0.45) end
-        if shortenMaskSlider then shortenMaskSlider:SetAlpha(on and 1 or 0.45) end
-        if shortenClipDrop then shortenClipDrop:SetEnabled(on) end
+        local scopeKey = GetScopeKey()
+        local canEdit = (scopeKey == "shared") or ((not GF_SCOPE_DB_KEYS[scopeKey]) and IsOverride(scopeKey))
+        local detailActive = canEdit and on
+        SetWidgetEnabled(shortenCheck, canEdit)
+        SetWidgetEnabled(shortenClipLabel, detailActive)
+        SetWidgetEnabled(shortenClipDrop, detailActive)
+        SetWidgetEnabled(shortenMaxSlider, detailActive)
+        SetWidgetEnabled(shortenMaskSlider, detailActive)
+        SetWidgetEnabled(infoBtn, canEdit)
     end
     local function ApplyShortenLive(layoutReason)
         EnsureDB()
@@ -1151,7 +1208,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
     end
 
-    local shortenCheck = UI.Check({
+    shortenCheck = UI.Check({
         name = "MSUF_ShortenNamesCheck", parent = nameBody,
         anchor = nameBody, anchorPoint = "TOPLEFT", x = 16, y = -8, maxTextWidth = 400,
         label = TR("Shorten unit names (except Player)"),
@@ -1166,7 +1223,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if self._msufToggleUpdate then self._msufToggleUpdate() end
     end
 
-    local shortenClipLabel = UI.Label({ parent = nameBody, text = TR("Truncation style"), font = "GameFontNormal", anchor = shortenCheck, x = 16, y = -10 })
+    shortenClipLabel = UI.Label({ parent = nameBody, text = TR("Truncation style"), font = "GameFontNormal", anchor = shortenCheck, x = 16, y = -10 })
 
     shortenClipDrop = UI.Dropdown({
         name = "MSUF_ShortenNameClipSideDrop", parent = nameBody,
@@ -1206,7 +1263,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
     })
 
-    local infoBtn = CreateFrame("Button", "MSUF_ShortenNameInfoButton", nameBody)
+    infoBtn = CreateFrame("Button", "MSUF_ShortenNameInfoButton", nameBody)
     infoBtn:SetSize(16, 16)
     infoBtn:SetNormalTexture("Interface\\FriendsFrame\\InformationIcon")
     infoBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
@@ -1342,13 +1399,25 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             scopeResetBtn:Hide()
         end
 
-        -- Dim sections when any non-Shared scope without override
-        local scopeDim = (not isShared and not isOvr)
-        local dimAlpha = scopeDim and 0.40 or 1.0
-        styleBox:SetAlpha(dimAlpha)
-        colorsBox:SetAlpha(dimAlpha)
+        -- Font/style/color/shortening use fontOverride. Text size sliders keep
+        -- their own per-size override system, so they stay editable for UF scopes.
+        local fontControlsActive = isShared or isOvr
+        local function ApplyFontScopeEnabled()
+            SetWidgetListEnabled(_ufOnlyWidgets, (not gfScope) and fontControlsActive)
+            SetWidgetListEnabled(_gfOnlyWidgets, gfScope and fontControlsActive)
+            SetBoxTitleEnabled(fontBox, fontControlsActive)
+            SetBoxTitleEnabled(styleBox, fontControlsActive)
+            SetBoxTitleEnabled(colorsBox, fontControlsActive)
+            SetBoxTitleEnabled(sizeBox, not gfScope)
+            if resetSizeBtn then SetWidgetEnabled(resetSizeBtn, isShared) end
+            if nameOvr then SetWidgetEnabled(nameOvr, isShared) end
+            if hpOvr then SetWidgetEnabled(hpOvr, isShared) end
+            if powerOvr then SetWidgetEnabled(powerOvr, isShared) end
+            if not gfScope and SyncShortenEnabled then SyncShortenEnabled() end
+        end
+        ApplyFontScopeEnabled()
 
-        -- Name Shortening: hide for Player scope, dim for non-override
+        -- Name Shortening: hide for Player scope, disable for non-override
         local isPlayer = (GetScopeKey() == "player")
         if isPlayer then
             nameBox:SetAlpha(0)
@@ -1359,7 +1428,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 nameBox._msufHiddenForPlayer = nil
                 nameBox:SetHeight(280)
             end
-            nameBox:SetAlpha(dimAlpha)
+            nameBox:SetAlpha(1)
+            SetBoxTitleEnabled(nameBox, fontControlsActive)
         end
 
         -- Refresh all widgets for current scope
@@ -1380,6 +1450,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         else
             GFSyncAll()
         end
+        ApplyFontScopeEnabled()
 
         if MSUF_Fonts_UpdateContentHeight then pcall(MSUF_Fonts_UpdateContentHeight) end
     end
