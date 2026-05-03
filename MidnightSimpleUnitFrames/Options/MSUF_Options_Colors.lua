@@ -2068,6 +2068,9 @@ end
             highlightColorSwatch:EnableMouse(enabled)
         end
         if S.highlightColorTex then S.highlightColorTex:SetAlpha(a) end
+        if type(_G.MSUF_GF_RefreshIndicatorControlStates) == "function" then
+            _G.MSUF_GF_RefreshIndicatorControlStates()
+        end
     end
 
     S.highlightEnableCheck:SetScript("OnClick", function(self)
