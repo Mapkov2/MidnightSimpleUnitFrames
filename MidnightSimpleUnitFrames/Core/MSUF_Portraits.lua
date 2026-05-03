@@ -103,6 +103,27 @@ local function ResetBudgetNextFrame()
     end)
 end
 
+-- Budget retry after the one-render-per-frame gate.
+local function SchedulePortraitRetry(f, nextAt, now)
+    if not f or f._msufPortraitRetryScheduled or not (C_Timer and C_Timer.After) then return end
+    f._msufPortraitRetryScheduled = true
+    local delay = 0
+    if now and nextAt and now < nextAt then
+        delay = nextAt - now
+        if delay < 0 then delay = 0 end
+    end
+    C_Timer.After(delay, function()
+        if not f then return end
+        f._msufPortraitRetryScheduled = nil
+        if not f._msufPortraitDirty then return end
+        if ns and ns.UF and type(ns.UF.RequestUpdate) == "function" then
+            ns.UF.RequestUpdate(f, false, false, "PortraitRetry")
+        elseif type(_G.MSUF_QueueUnitframeUpdate) == "function" then
+            _G.MSUF_QueueUnitframeUpdate(f, false)
+        end
+    end)
+end
+
 -- ── Core update function (2D / 3D / CLASS / OFF) ──
 local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if not f or not f.portrait or not conf then return end
@@ -133,6 +154,8 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if mode == "OFF" then
         SetShown(portrait, false)
         SetShown(model, false)
+        f._msufPortraitDirty = nil
+        f._msufPortraitNextAt = 0
         return
     end
 
@@ -147,6 +170,9 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if not existsForPortrait and not allowPreview then
         SetShown(portrait, false)
         SetShown(model, false)
+        f._msufPortraitDirty = nil
+        f._msufPortraitNextAt = 0
+        f._msufPortraitLastGuid = nil
         return
     end
 
@@ -177,6 +203,7 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
                 _budgetUsed = true
                 ResetBudgetNextFrame()
             else
+                SchedulePortraitRetry(f, nextAt, now)
                 ResetBudgetNextFrame()
             end
         end
@@ -237,17 +264,7 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
             _budgetUsed = true
             ResetBudgetNextFrame()
         else
-            if not f._msufPortraitRetryScheduled and C_Timer and C_Timer.After then
-                f._msufPortraitRetryScheduled = true
-                local delay = 0
-                if now < nextAt then delay = nextAt - now; if delay < 0 then delay = 0 end end
-                C_Timer.After(delay, function()
-                    if not f then return end
-                    f._msufPortraitRetryScheduled = nil
-                    if not f._msufPortraitDirty then return end
-                    ns.UF.RequestUpdate(f, false, false, "PortraitRetry")
-                end)
-            end
+            SchedulePortraitRetry(f, nextAt, now)
             ResetBudgetNextFrame()
         end
     end
