@@ -546,6 +546,7 @@ local function BuildFrameHierarchy(f, kind)
     statusIconLayer:EnableMouse(false)
     if statusIconLayer.SetClipsChildren then statusIconLayer:SetClipsChildren(false) end
     f.statusIconLayer = statusIconLayer
+    if statusText.SetParent then statusText:SetParent(statusIconLayer) end
 
     -- Role icon
     local roleIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)

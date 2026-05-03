@@ -1,4 +1,4 @@
--- MSUF_GF_SpellIndicators.lua — Group Frames: Per-Spell Indicator Engine
+atus in-- MSUF_GF_SpellIndicators.lua — Group Frames: Per-Spell Indicator Engine
 -- Tracks player-cast healer HoTs on party/raid members.
 -- 2-tier: placed indicators (icon/square/bar/number) + frame effects (healthtint/border/glow/pulse/namecolor/framealpha).
 -- Uses proven HealerBuffs scan pattern (HELPFUL filter, spellId lookup).
@@ -912,6 +912,9 @@ local function ApplyFrameEffect(f, auraName, cfg, auraData)
             f._msufSIHealthColorG = c[2]
             f._msufSIHealthColorB = c[3]
             f.health:SetStatusBarColor(c[1], c[2], c[3], 1)
+            if GF.ApplyHealthBarAlpha then
+                GF.ApplyHealthBarAlpha(f, f._msufGFKind or "party")
+            end
         end
     elseif cfg.type == "border" then
         local overlay = EnsureBorderOverlay(f)

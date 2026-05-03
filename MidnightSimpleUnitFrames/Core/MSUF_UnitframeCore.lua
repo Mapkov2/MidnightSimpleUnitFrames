@@ -701,6 +701,21 @@ local function _SetText(fs, txt)
     if fs.SetText then fs:SetText(txt or "") end
 end
 
+local function UFCore_ReapplyLayeredAlpha(frame)
+    if not frame or not (frame._msufAlphaBaseMode == "layered" or frame._msufAlphaLayeredMode) then return end
+    local key = frame._msufAlphaBaseKey or frame.msufConfigKey
+    if not key then return end
+    local mulT = _G.MSUF_RangeFadeMul
+    local unit = frame.unit or key
+    local mul = mulT and (mulT[unit] or mulT[key]) or nil
+    local fast = _G.MSUF_ApplyRangeFadeAlphaFast
+    if type(mul) == "number" and type(fast) == "function" and fast(frame, key, mul) then
+        return
+    end
+    local fn = FN_ApplyUnitAlpha or _G.MSUF_ApplyUnitAlpha
+    if type(fn) == "function" then fn(frame, key) end
+end
+
 local UFCore_GetNPCReactionColorFast, UFCore_GetClassBarColorFast
 
 -- P4: Cache per-frame unit identity facts computed from C API.
@@ -1053,6 +1068,7 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
                         fnBgS(frame)
                     end
                 end
+                UFCore_ReapplyLayeredAlpha(frame)
                 return
             end
         end
@@ -1107,6 +1123,7 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
             fnBg(frame)
         end
     end
+    UFCore_ReapplyLayeredAlpha(frame)
 end
 
 Elements.Health = {
@@ -2197,6 +2214,7 @@ local function _HealthValueFast(f)
             if color then
                 local cr, cg, cb = color:GetRGB()
                 bar:SetStatusBarColor(cr, cg, cb, 1)
+                UFCore_ReapplyLayeredAlpha(f)
             end
         end
     end
@@ -3164,6 +3182,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                     local r, g, b = UFCore_GetClassBarColorFast(ct)
                     bar:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
                 end
+                UFCore_ReapplyLayeredAlpha(tf)
             end
             if tf.nameText then tf.nameText:SetText(UnitName(unit) or "") end
             -- Queue non-portrait refresh for next frame; portrait render is budgeted below.
@@ -3201,6 +3220,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                     local r, g, b = UFCore_GetClassBarColorFast(ct2)
                     bar2:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
                 end
+                UFCore_ReapplyLayeredAlpha(ttf)
             end
             if ttf.nameText and UnitExists(unit2) then ttf.nameText:SetText(UnitName(unit2) or "") end
             Core.MarkDirty(ttf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
@@ -3377,6 +3397,7 @@ do
                         local r, g, b = UFCore_GetClassBarColorFast(ct)
                         bar:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
                     end
+                    UFCore_ReapplyLayeredAlpha(ff)
                 end
                 if ff.nameText then ff.nameText:SetText(UnitName(unit) or "") end
                 Core.MarkDirty(ff, MASK_UNIT_SWAP_NO_PORTRAIT, false, "FOCUS_SWAP_DEFERRED")
