@@ -1,4 +1,4 @@
-atus in-- MSUF_GF_SpellIndicators.lua — Group Frames: Per-Spell Indicator Engine
+-- MSUF_GF_SpellIndicators.lua - Group Frames: Per-Spell Indicator Engine
 -- Tracks player-cast healer HoTs on party/raid members.
 -- 2-tier: placed indicators (icon/square/bar/number) + frame effects (healthtint/border/glow/pulse/namecolor/framealpha).
 -- Uses proven HealerBuffs scan pattern (HELPFUL filter, spellId lookup).
