@@ -9,6 +9,15 @@ do
     local FONT_ALIASES = {
         ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
         ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway regular.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
+        ["fonts\\morpheus.ttf"] = "Fonts\\MORPHEUS_CYR.TTF",
+        ["fonts\\skurri.ttf"] = "Fonts\\SKURRI_CYR.TTF",
+    }
+    local TRUSTED_GAME_FONTS = {
+        ["fonts\\frizqt__.ttf"] = true,
+        ["fonts\\frizqt___cyr.ttf"] = true,
+        ["fonts\\arialn.ttf"] = true,
+        ["fonts\\morpheus_cyr.ttf"] = true,
+        ["fonts\\skurri_cyr.ttf"] = true,
     }
     local _probeFrame, _probeFS
     local _fontPathCache = {}
@@ -30,6 +39,11 @@ do
         return FONT_ALIASES[key] or path
     end
 
+    local function FontPathKey(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        return path:gsub("/", "\\"):lower()
+    end
+
     local function GetProbeFS()
         if _probeFS then return _probeFS end
         if type(CreateFrame) ~= "function" then return nil end
@@ -44,7 +58,13 @@ do
 
     local function TrySetFont(fs, path, size, flags)
         if not (fs and type(fs.SetFont) == "function" and path and size) then return false end
-        return pcall(fs.SetFont, fs, path, size, flags)
+        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+        if not ok or applied == false then return false end
+        if type(fs.GetFont) == "function" then
+            local actual = fs:GetFont()
+            return FontPathKey(actual) == FontPathKey(path)
+        end
+        return true
     end
 
     function _G.MSUF_NormalizeFontFlags(flags)
@@ -61,6 +81,9 @@ do
         flags = NormalizeFontFlags(flags)
 
         local normalized = NormalizeFontPath(path)
+        if TRUSTED_GAME_FONTS[FontPathKey(normalized)] then
+            return normalized
+        end
         local cacheKey = tostring(normalized or "") .. "|" .. tostring(flags)
         local cached = _fontPathCache[cacheKey]
         if cached then return cached end

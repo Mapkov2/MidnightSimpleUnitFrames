@@ -104,6 +104,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         conf.alphaFGOutOfCombat = 1
         conf.alphaBGInCombat = 1
         conf.alphaBGOutOfCombat = 1
+        conf.alphaHPInCombat = 1
+        conf.alphaHPOutOfCombat = 1
      end
     ForceUnitAlpha100(db.player)
     -- Fresh-install default: player name hidden
@@ -1606,6 +1608,8 @@ local function fill(key, defaults)
         if u.alphaFGOutOfCombat == nil then u.alphaFGOutOfCombat = 1 end
         if u.alphaBGInCombat == nil then u.alphaBGInCombat = 1 end
         if u.alphaBGOutOfCombat == nil then u.alphaBGOutOfCombat = 1 end
+        if u.alphaHPInCombat == nil then u.alphaHPInCombat = 1 end
+        if u.alphaHPOutOfCombat == nil then u.alphaHPOutOfCombat = 1 end
         -- Portrait Decoration defaults (MSUF_PortraitDecoration.lua)
         -- portraitRender: inherit from general._portraitSharedRender if not set (shared/per-unit sync)
         if u.portraitRender == nil then

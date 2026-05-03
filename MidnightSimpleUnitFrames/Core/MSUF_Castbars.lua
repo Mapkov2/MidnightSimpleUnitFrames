@@ -159,17 +159,18 @@ local function MSUF_GetFontPath()
     local g = MSUF_DB.general or {}
     MSUF_DB.general = g
     local key = g.fontKey
+    local internalPath = (type(GetInternalFontPathByKey) == "function") and GetInternalFontPathByKey(key) or nil
+    if internalPath then
+         return ResolveFontPath(internalPath, 14, "")
+    end
     if LSM and key and key ~= "" then
         local p = LSM:Fetch("font", key, true)
         if p then
              return ResolveFontPath(p, 14, "")
     end
     end
-    local internalPath = GetInternalFontPathByKey(key)
-    if internalPath then
-         return ResolveFontPath(internalPath, 14, "")
-    end
-    return ResolveFontPath(FONT_LIST[1].path, 14, "")
+    local fallback = (FONT_LIST and FONT_LIST[1] and FONT_LIST[1].path) or "Fonts\\FRIZQT__.TTF"
+    return ResolveFontPath(fallback, 14, "")
 end
 local function MSUF_GetFontFlags()
     if not MSUF_DB then EnsureDB() end
