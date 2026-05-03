@@ -1373,10 +1373,21 @@ function GF.BuildFrameCache(f)
     -- Name display
     c.nameEn = conf.showName ~= false
 
-    -- Status icons (gate event registration)
-    c.summonEn = conf.summonIcon ~= false
-    c.resEn    = conf.resurrectIcon ~= false
-    c.phaseEn  = conf.phaseIcon ~= false
+    -- Status/icons: pre-resolve event/update consumers. Disabled features should
+    -- not receive events and should not be called from shared dispatch paths.
+    local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
+    c.statusTextEn = showAFK or showDND or showDead or showGhost
+    c.roleIconEn   = conf.roleIcon ~= false
+    c.powerRoleGated = c.hasPowerElement and ((not c.powTank) or (not c.powHealer) or (not c.powDPS))
+    c.roleStateEn  = c.roleIconEn or c.powerRoleGated
+    c.leaderEn     = conf.leaderIcon ~= false or conf.assistIcon ~= false
+    c.raidMarkerEn = conf.raidMarker ~= false
+    c.readyEn      = conf.readyCheckIcon ~= false
+    c.summonEn     = conf.summonIcon ~= false
+    c.resEn        = conf.resurrectIcon ~= false
+    c.phaseEn      = conf.phaseIcon ~= false
+    c.flagsEn      = c.statusTextEn or c.roleStateEn or c.leaderEn
+    c.connectionEn = c.statusTextEn or c.rfEn
 
     -- Composite: does anything need UNIT_AURA?
     c.needAura = c.anyAuraGrp or c.ciAura
@@ -1404,11 +1415,14 @@ function GF.BuildFrameCache(f)
     if c.absorbEn   then evBits = evBits + 512  end
     if c.healAbsorbEn and not c.absorbEn then evBits = evBits + 1024 end
     if c.powFrequent then evBits = evBits + 2048 end
+    if c.connectionEn then evBits = evBits + 4096 end
+    if c.flagsEn then evBits = evBits + 8192 end
     local prevBits = c._evBits
     c._evBits = evBits
     if prevBits ~= nil and prevBits ~= evBits and f.unit and f._msufGFRegEv then
         GF.RegisterUnitEvents(f, f.unit)
     end
+    if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
 
     -- Invalidate module-level text format cache (hidePercentSymbol, useShortNumbers)
     if GF.InvalidateTextFormatCache then GF.InvalidateTextFormatCache() end
@@ -2076,6 +2090,17 @@ local function UpdateStatusText(f, unit, forceAway)
 
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
+    local c = f._c
+    if c and not c.statusTextEn then
+        if f._msufGFStatusState ~= 0 then
+            f._msufGFStatusState = 0
+            st:SetText("")
+            st:Hide()
+            _GF_RestoreHealthText(f, conf)
+            if f.nameText then f.nameText:Show() end
+        end
+        return
+    end
     local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
 
     if not unit or not UnitExists(unit) then
@@ -2345,14 +2370,19 @@ local function UpdateAll(f, unit)
         if stripe and stripe:IsShown() then stripe:Hide() end
     end
     UpdateTargetIndicator(f, unit)
-    UpdateStatusText(f, unit)
+    if c.statusTextEn or f._msufGFStatusState ~= 0 then UpdateStatusText(f, unit) end
     if c.healPredEn then dispatchOverlays(f, unit) end
-    UpdateRoleIcon(f, unit)
-    UpdateRaidMarker(f, unit)
-    UpdateLeaderIcon(f, unit)
-    if c.summonEn then UpdateSummonIcon(f, unit) end
-    if c.resEn then UpdateResurrectIcon(f, unit) end
-    if c.phaseEn then UpdatePhaseIcon(f, unit) end
+    if c.roleStateEn or (f.roleIcon and f.roleIcon:IsShown()) then UpdateRoleIcon(f, unit) end
+    if c.raidMarkerEn or (f.raidIcon and f.raidIcon:IsShown()) then UpdateRaidMarker(f, unit) end
+    if c.leaderEn
+        or (f.leaderIcon and f.leaderIcon:IsShown())
+        or (f.assistIcon and f.assistIcon:IsShown())
+    then
+        UpdateLeaderIcon(f, unit)
+    end
+    if c.summonEn or (f.summonIcon and f.summonIcon:IsShown()) then UpdateSummonIcon(f, unit) end
+    if c.resEn or (f.resurrectIcon and f.resurrectIcon:IsShown()) then UpdateResurrectIcon(f, unit) end
+    if c.phaseEn or (f.phaseIcon and f.phaseIcon:IsShown()) then UpdatePhaseIcon(f, unit) end
     UpdateGroupNumber(f, unit)
     if c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
     if c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
@@ -2525,8 +2555,13 @@ local function dispatchHealthLean(f, unit)
         fn = c.tcFn; if fn then fn(f.textCenterFS, unit, hp, hm) end
         fn = c.trFn; if fn then fn(f.textRightFS, unit, hp, hm) end
     end
-    f._msufGFStatusDirty = true
-    _gfMarkTextDirty(f)
+    if c and (c.anySlowText or c.statusTextEn) then
+        if c.statusTextEn then f._msufGFStatusDirty = true end
+        _gfMarkTextDirty(f)
+    elseif not c then
+        f._msufGFStatusDirty = true
+        _gfMarkTextDirty(f)
+    end
 
     -- Cutaway: stamp-based (no Timer:Cancel per event).
     -- Just record when to snap. Callback checks stamp.
@@ -3180,8 +3215,17 @@ local UNIT_DISPATCH = {
     UNIT_MAXPOWER                     = dispatchPowerFull,
     UNIT_DISPLAYPOWER                 = dispatchDisplayPower,
     UNIT_NAME_UPDATE                  = dispatchName,
-    UNIT_CONNECTION                   = function(f, u) UpdateStatusText(f, u); ApplyRangeFade(f, u) end,
-    UNIT_FLAGS                        = function(f, u) UpdateStatusText(f, u, true); UpdateRoleIcon(f, u); UpdateLeaderIcon(f, u) end,
+    UNIT_CONNECTION                   = function(f, u)
+        local c = f._c
+        if c and c.statusTextEn then UpdateStatusText(f, u) end
+        if c and c.rfEn then ApplyRangeFade(f, u) end
+    end,
+    UNIT_FLAGS                        = function(f, u)
+        local c = f._c
+        if c and c.statusTextEn then UpdateStatusText(f, u, true) end
+        if c and c.roleStateEn then UpdateRoleIcon(f, u) end
+        if c and c.leaderEn then UpdateLeaderIcon(f, u) end
+    end,
     UNIT_IN_RANGE_UPDATE              = function(f, u, inRange) ApplyRangeFade(f, u, inRange) end,
     UNIT_AURA                         = function(f, u, updateInfo)
         dispatchAura(f, u, updateInfo)
@@ -3266,8 +3310,12 @@ function GF.RegisterUnitEvents(f, unit)
 
     f:RegisterUnitEvent("UNIT_HEALTH", unit);        regTbl["UNIT_HEALTH"] = true
     f:RegisterUnitEvent("UNIT_MAXHEALTH", unit);     regTbl["UNIT_MAXHEALTH"] = true
-    f:RegisterUnitEvent("UNIT_CONNECTION", unit);     regTbl["UNIT_CONNECTION"] = true
-    f:RegisterUnitEvent("UNIT_FLAGS", unit);          regTbl["UNIT_FLAGS"] = true
+    if c.connectionEn then
+        f:RegisterUnitEvent("UNIT_CONNECTION", unit); regTbl["UNIT_CONNECTION"] = true
+    end
+    if c.flagsEn then
+        f:RegisterUnitEvent("UNIT_FLAGS", unit); regTbl["UNIT_FLAGS"] = true
+    end
 
     if c.nameEn then
         f:RegisterUnitEvent("UNIT_NAME_UPDATE", unit); regTbl["UNIT_NAME_UPDATE"] = true
@@ -3353,6 +3401,8 @@ local function _gfRosterFlush()
     for f in pairs(GF.frames) do
         local u = f.unit
         if u and UnitExists(u) then
+            local c = f._c
+            if not c then GF.BuildFrameCache(f); c = f._c end
             local guid = UnitGUID and UnitGUID(u)
             if guid and not (issecretvalue and issecretvalue(guid)) then
                 gmap[guid] = f
@@ -3360,10 +3410,10 @@ local function _gfRosterFlush()
             dispatchName(f, u)
             ApplyHealthColor(f, f._msufGFKind or "party", u)
             ApplyPowerColor(f, u)
-            UpdateStatusText(f, u)
-            UpdateRoleIcon(f, u)
-            UpdateRaidMarker(f, u)
-            UpdateLeaderIcon(f, u)
+            if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
+            if c and c.roleStateEn then UpdateRoleIcon(f, u) end
+            if c and c.raidMarkerEn then UpdateRaidMarker(f, u) end
+            if c and c.leaderEn then UpdateLeaderIcon(f, u) end
             UpdateGroupNumber(f, u)
             if UnitIsUnit(u, "target") then
                 f._msufGFIsTarget = true
@@ -3400,6 +3450,42 @@ end
 
 -- READY_CHECK / READY_CHECK_FINISHED: update ready check icons
 -- RAID_TARGET_UPDATE: update raid markers
+function GF._AnyGroupConfFlag(key)
+    if not key or not GF.GetConf then return false end
+    local party = GF.GetConf("party")
+    if party and party[key] ~= false then return true end
+    local raidKind = (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
+    local raid = GF.GetConf(raidKind)
+    if raid and raid[key] ~= false then return true end
+    if raidKind ~= "raid" then
+        raid = GF.GetConf("raid")
+        if raid and raid[key] ~= false then return true end
+    end
+    return false
+end
+
+function GF.SyncGroupGlobalEvents()
+    if not _globalFrame then return end
+    local function setEvent(ev, active)
+        if active then
+            _globalFrame:RegisterEvent(ev)
+        else
+            _globalFrame:UnregisterEvent(ev)
+        end
+    end
+
+    local ready = GF._AnyGroupConfFlag("readyCheckIcon")
+    setEvent("READY_CHECK", ready)
+    setEvent("READY_CHECK_CONFIRM", ready)
+    setEvent("READY_CHECK_FINISHED", ready)
+
+    setEvent("RAID_TARGET_UPDATE", GF._AnyGroupConfFlag("raidMarker"))
+    setEvent("PARTY_LEADER_CHANGED", GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon"))
+
+    local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
+    setEvent("PLAYER_FLAGS_CHANGED", showAFK or showDND or showDead or showGhost)
+end
+
 local function OnGlobalEvent(self, event, ...)
     -- Fix 3: when GF is fully disabled, do nothing. Saves the per-event
     -- dispatch + empty-loop cost across PLAYER_FOCUS_CHANGED, READY_CHECK*,
@@ -3427,23 +3513,31 @@ local function OnGlobalEvent(self, event, ...)
         end
 
     elseif event == "READY_CHECK" or event == "READY_CHECK_CONFIRM" then
+        if not GF._AnyGroupConfFlag("readyCheckIcon") then return end
         for f in pairs(GF.frames) do
-            if f.unit then UpdateReadyCheck(f, f.unit, event) end
+            local c = f._c
+            if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, event) end
         end
 
     elseif event == "READY_CHECK_FINISHED" then
+        if not GF._AnyGroupConfFlag("readyCheckIcon") then return end
         for f in pairs(GF.frames) do
-            if f.unit then UpdateReadyCheck(f, f.unit, "READY_CHECK_FINISHED") end
+            local c = f._c
+            if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, "READY_CHECK_FINISHED") end
         end
 
     elseif event == "RAID_TARGET_UPDATE" then
+        if not GF._AnyGroupConfFlag("raidMarker") then return end
         for f in pairs(GF.frames) do
-            if f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
+            local c = f._c
+            if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
         end
 
     elseif event == "PARTY_LEADER_CHANGED" then
+        if not (GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon")) then return end
         for f in pairs(GF.frames) do
-            if f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
+            local c = f._c
+            if c and c.leaderEn and f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
         end
 
     elseif event == "GROUP_ROSTER_UPDATE" then
@@ -3480,10 +3574,15 @@ local function OnGlobalEvent(self, event, ...)
         end
 
     elseif event == "PLAYER_FLAGS_CHANGED" then
+        local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
+        if not (showAFK or showDND or showDead or showGhost) then return end
         local changedUnit = ...
         if not changedUnit or changedUnit == "" then changedUnit = "player" end
         for f in pairs(GF.frames) do
-            if f.unit and UnitExists(f.unit) and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit))) then
+            local c = f._c
+            if c and c.statusTextEn and f.unit and UnitExists(f.unit)
+                and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit)))
+            then
                 UpdateStatusText(f, f.unit, true)
             end
         end
@@ -3491,15 +3590,10 @@ local function OnGlobalEvent(self, event, ...)
 end
 
 _globalFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
-_globalFrame:RegisterEvent("READY_CHECK")
-_globalFrame:RegisterEvent("READY_CHECK_CONFIRM")
-_globalFrame:RegisterEvent("READY_CHECK_FINISHED")
-_globalFrame:RegisterEvent("RAID_TARGET_UPDATE")
-_globalFrame:RegisterEvent("PARTY_LEADER_CHANGED")
 _globalFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 _globalFrame:RegisterEvent("BARBER_SHOP_OPEN")
 _globalFrame:RegisterEvent("BARBER_SHOP_CLOSE")
-_globalFrame:RegisterEvent("PLAYER_FLAGS_CHANGED")
+GF.SyncGroupGlobalEvents()
 _globalFrame:SetScript("OnEvent", OnGlobalEvent)
 
 ------------------------------------------------------------------------
@@ -3674,10 +3768,16 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
         -- so explicitly refresh the name text to preserve live-apply for
         -- Group Frame Fonts > Name Shortening without reintroducing aura scans.
         dispatchName(f, unit)
-        UpdateStatusText(f, unit)
-        UpdateRoleIcon(f, unit)
-        UpdateRaidMarker(f, unit)
-        UpdateLeaderIcon(f, unit)
+        if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, unit) end
+        if c and (c.roleStateEn or (f.roleIcon and f.roleIcon:IsShown())) then UpdateRoleIcon(f, unit) end
+        if c and (c.raidMarkerEn or (f.raidIcon and f.raidIcon:IsShown())) then UpdateRaidMarker(f, unit) end
+        if c and (
+            c.leaderEn
+            or (f.leaderIcon and f.leaderIcon:IsShown())
+            or (f.assistIcon and f.assistIcon:IsShown())
+        ) then
+            UpdateLeaderIcon(f, unit)
+        end
         UpdateGroupNumber(f, unit)
         if c and c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
         if c and c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end

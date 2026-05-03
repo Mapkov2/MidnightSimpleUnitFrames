@@ -566,7 +566,8 @@ do
                 local dot = gfBtn:CreateTexture(nil, "OVERLAY")
                 dot:SetSize(30, 2); dot:SetPoint("BOTTOM", gfBtn, "BOTTOM", 0, 2)
                 dot:SetColorTexture(0.38, 0.65, 1.00, 0.90); dot:Hide(); gfBtn._dot = dot
-                gfBtn:SetPoint("RIGHT", hf, "RIGHT", -10, 0)
+                -- Keep this with the center toggles; the right edge is reserved for Cancel/Exit.
+                gfBtn:SetPoint("LEFT", hf, "CENTER", 160, 0)
 
                 local function Vis()
                     if _previewShownByEM2 then
