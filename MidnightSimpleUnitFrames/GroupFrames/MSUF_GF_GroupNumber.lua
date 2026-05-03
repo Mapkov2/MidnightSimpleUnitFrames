@@ -234,9 +234,63 @@ end
 -- ---------------------------------------------------------------------------
 local _scheduler
 local _pending = false
+local _eventFrame
+local _eventsActive = false
+local _Schedule
+
+local function _AnyEnabled()
+    local NS = _G.MSUF_NS
+    local GF = NS and NS.GF
+    if not GF or not GF.GetConf then return false end
+    local party = GF.GetConf("party")
+    if party and party.showGroupNumber == true then return true end
+    local raidKind = (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
+    local raid = GF.GetConf(raidKind)
+    if raid and raid.showGroupNumber == true then return true end
+    if raidKind ~= "raid" then
+        raid = GF.GetConf("raid")
+        if raid and raid.showGroupNumber == true then return true end
+    end
+    return false
+end
+
+local function _SetEvents(active)
+    if active == _eventsActive then return end
+    if active then
+        if not _eventFrame then _eventFrame = CreateFrame("Frame") end
+        _eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+        _eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        _eventFrame:SetScript("OnEvent", _Schedule)
+        _eventsActive = true
+    else
+        if _eventFrame then
+            _eventFrame:UnregisterAllEvents()
+            _eventFrame:SetScript("OnEvent", nil)
+        end
+        _eventsActive = false
+    end
+end
+
+local function _HideAll()
+    local NS = _G.MSUF_NS
+    local GF = NS and NS.GF
+    if not GF or not GF.frames then return end
+    for f in pairs(GF.frames) do
+        local fs = f._msufGroupNumberFS or f.groupNumberText
+        if fs and fs:IsShown() then fs:Hide() end
+    end
+end
 
 local function _RefreshAll()
     _pending = false
+    if not _AnyEnabled() then
+        if _eventsActive then
+            _SetEvents(false)
+            _HideAll()
+        end
+        return
+    end
+    _SetEvents(true)
     local NS = _G.MSUF_NS
     local GF = NS and NS.GF
     if not GF or not GF.frames or not GF.GetConf then return end
@@ -249,7 +303,15 @@ local function _RefreshAll()
     end
 end
 
-local function _Schedule()
+_Schedule = function()
+    if not _AnyEnabled() then
+        _pending = false
+        if _eventsActive then
+            _SetEvents(false)
+            _HideAll()
+        end
+        return
+    end
     if _pending then return end
     _pending = true
     if not _scheduler then _scheduler = CreateFrame("Frame") end
@@ -356,12 +418,6 @@ local function _Init()
         if fs then fs._msufLastSub = nil end
         _Schedule()
     end
-
-    -- Roster events drive refreshes inside real groups.
-    local ev = CreateFrame("Frame")
-    ev:RegisterEvent("GROUP_ROSTER_UPDATE")
-    ev:RegisterEvent("PLAYER_ENTERING_WORLD")
-    ev:SetScript("OnEvent", _Schedule)
 
     _Schedule()
     return true
