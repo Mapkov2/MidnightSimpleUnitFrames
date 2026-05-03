@@ -266,7 +266,10 @@ function ns.UF.ResolveKeyAndConf(self, unit, db)
      return key, conf
 end
 function ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, fb)
-    if not f or (unit ~= "player" and unit ~= "target") then  return end
+    if not f then return end
+    local isStatusUnit = (unit == "player" or unit == "target" or unit == "focus" or unit == "pet" or unit == "targettarget" or unit == "tot")
+        or (type(unit) == "string" and unit:match("^boss"))
+    if not isStatusUnit then  return end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local size = ((g and (g.nameFontSize or g.fontSize)) or 14) + 2
     local ov = ns.UF.MakeFrame(f, "statusIndicatorOverlayFrame", "Frame", UIParent, nil, nil, "HIGH", 999)
@@ -279,6 +282,9 @@ function ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, f
             fs:SetFont(fontPath, size, flags); fs:SetJustifyH("CENTER"); if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
             fs:SetTextColor(fr, fg, fb, a); fs:ClearAllPoints(); fs:SetPoint("CENTER", f, "CENTER", 0, 0); fs:SetText(""); fs:Hide()
     end
+    end
+    if _G.MSUF_ApplyStatusTextLayout then
+        _G.MSUF_ApplyStatusTextLayout(f)
     end
  end
 -- Shared text object creation (unitframes)

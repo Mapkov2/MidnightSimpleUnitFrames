@@ -1376,7 +1376,7 @@ function GF.BuildFrameCache(f)
     -- Status/icons: pre-resolve event/update consumers. Disabled features should
     -- not receive events and should not be called from shared dispatch paths.
     local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
-    c.statusTextEn = showAFK or showDND or showDead or showGhost
+    c.statusTextEn = (conf.statusText ~= false) and (showAFK or showDND or showDead or showGhost)
     c.roleIconEn   = conf.roleIcon ~= false
     c.powerRoleGated = c.hasPowerElement and ((not c.powTank) or (not c.powHealer) or (not c.powDPS))
     c.roleStateEn  = c.roleIconEn or c.powerRoleGated

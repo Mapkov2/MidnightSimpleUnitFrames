@@ -20,6 +20,7 @@ local issecretvalue = _G.issecretvalue
 local UnitGUID = _G.UnitGUID
 local UnitIsAFK = _G.UnitIsAFK
 local UnitIsDND = _G.UnitIsDND
+local math = _G.math
 local wipe = _G.wipe
 if not wipe then
     wipe = function(t)
@@ -347,6 +348,78 @@ local function _MSUF_ApplyIconLayer(region, layer, owner)
         region:SetDrawLayer("OVERLAY", sub)
     end
 end
+
+local function _MSUF_GetStatusTextConfig(frame, db)
+    if not frame then return nil end
+    db = db or _G.MSUF_DB
+    if not db then return nil end
+    local unit = frame.unit
+    local key = frame.msufConfigKey
+    if type(key) == "string" and key:match("^boss") then key = "boss" end
+    if key == "tot" or key == "targetoftarget" or key == "target_of_target" then key = "targettarget" end
+    if not key then
+        if frame._msufIsPlayer or unit == "player" then
+            key = "player"
+        elseif frame._msufIsTarget or unit == "target" then
+            key = "target"
+        elseif type(unit) == "string" and unit:match("^boss") then
+            key = "boss"
+        elseif unit == "focus" or unit == "pet" or unit == "targettarget" or unit == "tot" then
+            key = (unit == "tot") and "targettarget" or unit
+        end
+    end
+    return key and db[key] or nil, db.general or nil
+end
+
+local function _MSUF_GetStatusTextSize(conf, g)
+    local v = _MSUF_ReadNumber(conf, g, "statusTextSize", nil)
+    if type(v) ~= "number" then
+        v = ((g and (tonumber(g.nameFontSize) or tonumber(g.fontSize))) or 14) + 2
+    end
+    v = math.floor((tonumber(v) or 16) + 0.5)
+    if v < 8 then return 8 end
+    if v > 64 then return 64 end
+    return v
+end
+
+local function _MSUF_JustifyForAnchor(anchor)
+    if anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM" then
+        return "CENTER"
+    end
+    if anchor == "TOPRIGHT" or anchor == "BOTTOMRIGHT" or anchor == "RIGHT" then
+        return "RIGHT"
+    end
+    return "LEFT"
+end
+
+function _G.MSUF_ApplyStatusTextLayout(frame)
+    if not frame then return end
+    local conf, g = _MSUF_GetStatusTextConfig(frame)
+    local anchor = _MSUF_ReadStr(conf, g, "statusTextAnchor", "CENTER")
+    local x = _MSUF_ReadNumber(conf, g, "statusTextOffsetX", 0)
+    local y = _MSUF_ReadNumber(conf, g, "statusTextOffsetY", 0)
+    local size = _MSUF_GetStatusTextSize(conf, g)
+    local layer = _MSUF_ClampIconLayer(_MSUF_ReadNumber(conf, g, "statusTextLayer", 7), 7)
+    local owner = frame.hpBar or frame.health or frame
+    local justify = _MSUF_JustifyForAnchor(anchor)
+
+    local function apply(fs)
+        if not fs then return end
+        if fs.GetFont and fs.SetFont then
+            local fontPath, _, flags = fs:GetFont()
+            if fontPath then fs:SetFont(fontPath, size, flags or "") end
+        end
+        fs:ClearAllPoints()
+        fs:SetPoint(anchor, owner, anchor, x, y)
+        if fs.SetJustifyH then fs:SetJustifyH(justify) end
+        if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+        _MSUF_ApplyIconLayer(fs, layer, frame)
+    end
+
+    apply(frame.statusIndicatorText)
+    apply(frame.statusIndicatorOverlayText)
+end
+
 -- Status Icon Symbol Textures (Classic vs Midnight)
 local function _MSUF_GetStatusIconsUseMidnight(conf, g)
     -- Global by design; allow per-frame legacy if ever present.
@@ -740,6 +813,20 @@ end
 function MSUF_UpdateStatusIndicatorForFrame(frame)
     if not frame or not frame.statusIndicatorText then return end
     local unit = frame.unit
+    local dbRoot = _G.MSUF_DB
+    local textConf, generalConf = _MSUF_GetStatusTextConfig(frame, dbRoot)
+    if textConf and textConf.statusTextEnabled == false then
+        local fsOff = frame.statusIndicatorText
+        _MSUF_StatusSetText(fsOff, "")
+        fsOff:Hide()
+        if frame.statusIndicatorOverlayText then
+            _MSUF_StatusSetText(frame.statusIndicatorOverlayText, "")
+            frame.statusIndicatorOverlayText:Hide()
+        end
+        if frame.statusIndicatorOverlayFrame then frame.statusIndicatorOverlayFrame:Hide() end
+        _MSUF_UpdateStatusIcons(frame)
+        return
+    end
     -- PERF: Cache resolved status indicator flags per-frame.
     -- The DB doesn't change in combat; cache is invalidated when cachedConfig is cleared.
     local sc = frame._msufStatusConf
@@ -759,7 +846,10 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
     local showDead  = sc.showDead
     local showGhost = sc.showGhost
     local txt = ""
-    if unit and UnitExists and UnitExists(unit) then
+    local testMode = ((generalConf and generalConf.stateIconsTestMode == true) or (textConf and textConf.stateIconsTestMode == true)) and true or false
+    if testMode and showDead then
+        txt = "DEAD"
+    elseif unit and UnitExists and UnitExists(unit) then
         -- Secret-safe: UnitIsConnected can return secret bool in 12.0 Midnight.
         -- Bool comparison or arithmetic on secret values hard-errors. Guard via issecretvalue.
         local connected
@@ -825,6 +915,9 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
 	    end
     end
     local fs = frame.statusIndicatorText
+    if _G.MSUF_ApplyStatusTextLayout then
+        _G.MSUF_ApplyStatusTextLayout(frame)
+    end
     local ovText = frame.statusIndicatorOverlayText
     local ovFrame = frame.statusIndicatorOverlayFrame
     if ovText and ovFrame then
