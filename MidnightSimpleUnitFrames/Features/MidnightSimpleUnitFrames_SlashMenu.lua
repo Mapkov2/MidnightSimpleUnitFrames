@@ -1490,11 +1490,7 @@ end
 local UI_SCALE_1080=768/1080;
 local UI_SCALE_1440=768/1440;
 local UI_SCALE_4K=768/2160;
-local _MSUF_lastGlobalCVarScale local _MSUF_lastGlobalUiParentScale local function MSUF_GetCVarValue(name) if C_CVar and C_CVar.GetCVar then return C_CVar.GetCVar(name) end
-if GetCVar then return GetCVar(name) end
-return nil end
-local function MSUF_GetCurrentGlobalUiScale() local use=MSUF_GetCVarValue("useUIScale") or MSUF_GetCVarValue("useUiScale")
-if tostring(use)=="1" then return tonumber(MSUF_GetCVarValue("uiScale") or MSUF_GetCVarValue("uiscale")) end
+local _MSUF_lastGlobalCVarScale local _MSUF_lastGlobalUiParentScale local function MSUF_GetCurrentGlobalUiScale() if UIParent and UIParent.GetScale then return tonumber(UIParent:GetScale()) end
 return nil end
 local function MSUF_SetCVarIfChanged(name,value) if not name or value==nil then return end
 local v=tostring(value)
@@ -1507,6 +1503,30 @@ if cur~=v then pcall(SetCVar,name,v)
 end
 end
 end
+local function MSUF_EnforceUIParentScale(scale) scale=tonumber(scale)
+if not scale or scale<=0 then return end
+scale=clamp(scale,0.3,2.0)
+if not(UIParent and UIParent.SetScale)
+then return end
+local cur=nil if UIParent.GetScale then cur=tonumber(UIParent:GetScale())
+end
+cur=cur or 0 if math.abs(cur-scale)>0.001 then pcall(UIParent.SetScale,UIParent,scale)
+end
+_MSUF_lastGlobalUiParentScale=scale end
+local function MSUF_ScheduleUIParentNudges(scale) if MSUF_IsScalingDisabled()
+then return end
+if not(C_Timer and C_Timer.After)
+then return end
+scale=tonumber(scale)
+if not scale or scale<=0 then return end
+local want=scale local function nudge() if InCombatLockdown and InCombatLockdown()
+then _MSUF_pendingGlobalScale=want if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat()
+end
+return end
+MSUF_EnforceUIParentScale(want) end
+C_Timer.After(0.05,nudge)
+C_Timer.After(0.25,nudge)
+C_Timer.After(0.60,nudge) end
 local function MSUF_SetGlobalUiScale(scale,silent,opts) opts=opts or{}
 if MSUF_IsScalingDisabled()
 and not opts.ignoreDisable then return end
@@ -1527,6 +1547,8 @@ MSUF_SetCVarIfChanged("uiScale",cvarScale)
 MSUF_SetCVarIfChanged("uiscale",cvarScale)
 _MSUF_lastGlobalCVarScale=cvarScale end
 end
+MSUF_EnforceUIParentScale(scale)
+MSUF_ScheduleUIParentNudges(scale)
 if not silent then local cvarScale=clamp(scale,0.3,2.0)
 MSUF_Print(string.format("Global UI scale set to %.4f (CVar %.4f)",scale,cvarScale))
 end
@@ -1569,6 +1591,8 @@ MSUF_SetCVarIfChanged("useUIScale","0")
 MSUF_SetCVarIfChanged("useUiScale","0")
 MSUF_SetCVarIfChanged("uiScale","1.0")
 MSUF_SetCVarIfChanged("uiscale","1.0")
+if UIParent and UIParent.SetScale then pcall(UIParent.SetScale,UIParent,1.0)
+end
 _MSUF_lastGlobalCVarScale=nil _MSUF_lastGlobalUiParentScale=nil if not silent then MSUF_Print("Global UI scale reset (fallback).")
 end
 end
@@ -1587,16 +1611,7 @@ MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
 _MSUF_pendingDisableScaling=nil _MSUF_pendingMsufScale=nil _MSUF_pendingGlobalScale=nil if not silent then MSUF_Print("MSUF scaling disabled (Blizzard handles scaling now).")
 end
 end
-_G.MSUF_SetScalingDisabled=MSUF_SetScalingDisabled
-local function MSUF_SetGlobalUiScaleAuto(silent) local g=MSUF_EnsureGeneral()
-if g then g.disableScaling=false g.globalUiScalePreset="auto"g.globalUiScaleValue=nil end
-_MSUF_pendingGlobalScale=nil
-MSUF_SetCVarIfChanged("useUIScale","0")
-MSUF_SetCVarIfChanged("useUiScale","0")
-_MSUF_lastGlobalCVarScale=nil _MSUF_lastGlobalUiParentScale=nil if not silent then MSUF_Print("Global UI scale set to Auto (Blizzard handles global UI scaling).")
-end
-end
-local function MSUF_SaveGlobalPreset(preset,scale) local g=MSUF_EnsureGeneral()
+_G.MSUF_SetScalingDisabled=MSUF_SetScalingDisabled local function MSUF_SaveGlobalPreset(preset,scale) local g=MSUF_EnsureGeneral()
 if not g then return end
 g.globalUiScalePreset=preset g.globalUiScaleValue=scale end
 local function MSUF_GetDesiredGlobalScaleFromDB() local g=MSUF_EnsureGeneral()
@@ -1620,7 +1635,14 @@ if diff>0.001 then MSUF_SCALE_GUARD.suppressUntil=now+0.10 if InCombatLockdown a
 then _MSUF_pendingGlobalScale=want if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat()
 end
 return end
-MSUF_SetGlobalUiScale(want,true)
+MSUF_EnforceUIParentScale(want)
+if C_Timer and C_Timer.After then C_Timer.After(0,function() MSUF_EnforceUIParentScale(want) end
+)
+C_Timer.After(0.25,function() MSUF_EnforceUIParentScale(want) end
+)
+C_Timer.After(1.0,function() MSUF_EnforceUIParentScale(want) end
+)
+end
 end
 end
 local function MSUF_IsMSUFEditModeActive() local st=_G.MSUF_EditState if type(st)=="table"and st.active~=nil then return st.active and true or false end
@@ -1693,9 +1715,12 @@ MSUF_SetGlobalUiScale(UI_SCALE_4K,true)
 ReloadUI()
 end)
 end},
-{text="Auto",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: Auto",tipBody="Stops enforcing MSUF global UI scale and lets Blizzard handle global UI scaling.",onClick=function()
+{text="Auto",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: Auto",tipBody="Stops enforcing MSUF global scale and restores your previous Blizzard UI scale.",onClick=function()
 MSUF_ShowReloadConfirm("Global UI Scale: Auto",function()
-MSUF_SetGlobalUiScaleAuto(true)
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
+end
+MSUF_SaveGlobalPreset("auto",nil)
+MSUF_ResetGlobalUiScale(true)
 ReloadUI()
 end)
 end},
@@ -2992,7 +3017,7 @@ scaleCard:SetPoint("BOTTOMLEFT",colL,"BOTTOMLEFT",0,0)
 scaleCard:SetPoint("BOTTOMRIGHT",colL,"BOTTOMRIGHT",0,0)
 local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-30,"Quick access to scaling.",MSUF_SkinMuted)
 local scaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-54,"Global UI Scale",MSUF_SkinText)
-local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() MSUF_SetGlobalUiScaleAuto(true) ReloadUI() end) end},},-1)
+local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("auto",nil) MSUF_ResetGlobalUiScale(true) ReloadUI() end) end},},-1)
 local btn1080,btn1440,btn4k,btnAuto=scaleRow[1],scaleRow[2],scaleRow[3],scaleRow[4]
 local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-112,"MSUF Frame Scale",MSUF_SkinText)
 local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-130,"Current: 1.00",MSUF_SkinMuted)
