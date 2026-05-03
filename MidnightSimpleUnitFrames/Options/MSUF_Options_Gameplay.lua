@@ -879,6 +879,64 @@ local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
     return dd
 end
 
+    local GAMEPLAY_DISABLED_ALPHA = 0.35
+    local function SetGameplayControlEnabled(widget, enabled)
+        if not widget then return end
+        enabled = enabled and true or false
+        local alpha = enabled and 1 or GAMEPLAY_DISABLED_ALPHA
+
+        if widget.SetEnabled then
+            widget:SetEnabled(enabled)
+        elseif enabled then
+            if widget.EnableMouse then widget:EnableMouse(true) end
+            if widget.Enable then widget:Enable() end
+        else
+            if widget.EnableMouse then widget:EnableMouse(false) end
+            if widget.Disable then widget:Disable() end
+        end
+
+        if widget.EnableMouse then widget:EnableMouse(enabled) end
+        if widget.SetAlpha then widget:SetAlpha(alpha) end
+        if widget.Text and widget.Text.SetAlpha then widget.Text:SetAlpha(alpha) end
+        if widget.text and widget.text.SetAlpha then widget.text:SetAlpha(alpha) end
+        if widget._msufLabel and widget._msufLabel.SetAlpha then widget._msufLabel:SetAlpha(alpha) end
+        if widget._msufSwatch and widget._msufSwatch.SetAlpha then widget._msufSwatch:SetAlpha(alpha) end
+
+        local name = widget.GetName and widget:GetName()
+        local button = widget.Button or (name and _G[name .. "Button"])
+        if button then
+            if button.SetEnabled then
+                button:SetEnabled(enabled)
+            elseif enabled then
+                if button.EnableMouse then button:EnableMouse(true) end
+                if button.Enable then button:Enable() end
+            else
+                if button.EnableMouse then button:EnableMouse(false) end
+                if button.Disable then button:Disable() end
+            end
+            if button.SetAlpha then button:SetAlpha(alpha) end
+        end
+
+        if name then
+            for _, suffix in ipairs({ "Text", "Low", "High" }) do
+                local region = _G[name .. suffix]
+                if region and region.SetAlpha then region:SetAlpha(alpha) end
+            end
+        end
+
+        if widget.GetRegions then
+            for _, region in ipairs({ widget:GetRegions() }) do
+                if region and region.SetAlpha then region:SetAlpha(alpha) end
+            end
+        end
+    end
+
+    local function SetGameplayControlsEnabled(enabled, widgets)
+        for i = 1, #(widgets or {}) do
+            SetGameplayControlEnabled(widgets[i], enabled)
+        end
+    end
+
     -- ═══════════════════════════════════════════════════════════
     -- Section 1: Combat Timer (default open)
     -- ═══════════════════════════════════════════════════════════
@@ -1775,6 +1833,99 @@ _totemsLeftBottom = totemsDragHint
 
     lastControl = crosshairSizeSlider
 
+    function panel:MSUF_UpdateGameplayDisabledStates()
+        local g = EnsureGameplayDefaults()
+
+        local combatTimerEnabled = g and g.enableCombatTimer == true
+        SetGameplayControlsEnabled(combatTimerEnabled, {
+            combatTimerAnchorLabel,
+            combatTimerAnchorDD,
+            combatSlider,
+            combatLock,
+            combatClickThrough,
+            combatPosLabel,
+            combatOffsetXSlider,
+            combatOffsetYSlider,
+        })
+
+        local combatStateEnabled = g and g.enableCombatStateText == true
+        SetGameplayControlsEnabled(combatStateEnabled, {
+            combatStateEnterLabel,
+            combatStateEnterInput,
+            combatStateLeaveLabel,
+            combatStateLeaveInput,
+            combatStateSlider,
+            combatStateLock,
+            combatStateDurationSlider,
+            combatStateDurationReset,
+        })
+
+        if self.playerTotemsCheck then
+            SetGameplayControlEnabled(self.playerTotemsCheck, _isShaman)
+        end
+        local totemsEnabled = _isShaman and g and g.enablePlayerTotems == true
+        SetGameplayControlsEnabled(totemsEnabled, {
+            self.playerTotemsShowTextCheck,
+            self.playerTotemsPreviewButton,
+            self.playerTotemsDragHint,
+            self.playerTotemsIconSizeSlider,
+            self.playerTotemsSpacingSlider,
+            self.playerTotemsOffsetXSlider,
+            self.playerTotemsOffsetYSlider,
+            self.playerTotemsLayoutLabel,
+            self.playerTotemsGrowthDropdown,
+            self.playerTotemsAnchorFromButton,
+            self.playerTotemsAnchorToButton,
+            self.playerTotemsResetButton,
+        })
+
+        local totemsTextEnabled = totemsEnabled and (g.playerTotemsShowText ~= false)
+        SetGameplayControlsEnabled(totemsTextEnabled, {
+            self.playerTotemsScaleByIconCheck,
+            self.playerTotemsFontSizeSlider,
+        })
+
+        SetGameplayControlEnabled(self.firstDanceCheck, _isRogue)
+        local firstDanceEnabled = _isRogue and g and g.enableFirstDanceTimer == true
+        SetGameplayControlsEnabled(firstDanceEnabled, {
+            self.lockFirstDanceCheck,
+            self.firstDanceClickThroughCheck,
+            self.firstDanceShowIconCheck,
+            self.firstDanceShowReadyCheck,
+            self.firstDanceOffsetXSlider,
+            self.firstDanceOffsetYSlider,
+        })
+        SetGameplayControlEnabled(self.firstDanceIconSizeSlider, firstDanceEnabled and (g.firstDanceShowIcon ~= false))
+
+        local crosshairEnabled = g and g.enableCombatCrosshair == true
+        SetGameplayControlsEnabled(crosshairEnabled, {
+            crosshairRangeColorCheck,
+            crosshairThicknessLabel,
+            crosshairThicknessSlider,
+            crosshairSizeLabel,
+            crosshairSizeSlider,
+            crosshairPreview,
+        })
+
+        local rangeColorEnabled = crosshairEnabled and g.enableCombatCrosshairMeleeRangeColor == true
+        SetGameplayControlsEnabled(rangeColorEnabled, {
+            crosshairRangeHint,
+            crosshairRangeWarn,
+            meleeSharedTitle,
+            meleeSharedSubText,
+            meleeLabel,
+            meleeInput,
+            meleeSelected,
+            meleeUsedBy,
+            meleeSharedWarn,
+            perClassCB,
+        })
+        SetGameplayControlEnabled(perSpecCB, rangeColorEnabled and g.meleeSpellPerClass == true)
+        if suggestionFrame and not rangeColorEnabled then
+            suggestionFrame:Hide()
+        end
+    end
+
     -- Reset sectionParent back to content for any remaining widgets
     sectionParent = content
 
@@ -2265,4 +2416,3 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
     return panel
 
     end
-

@@ -3259,6 +3259,12 @@ function _G.MSUF_EnsureGFPanelBuilt()
     ----------------------------------------------------------------
     do
         local box, body = AddSection(580, "Indicators", false, "indicators")
+        local refreshIndicatorControls
+
+        local function IsMouseoverHighlightEnabled()
+            local gen = _G.MSUF_DB and _G.MSUF_DB.general
+            return not (gen and gen.highlightEnabled == false)
+        end
 
         -- Redirect: aggro/dispel/target are controlled from the Bars menu
         local hlRedirect = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -3284,7 +3290,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = gnSep, x = 0, y = -6,
             label = TR("Show Group Number"),
             get = function(k) return GF.Val(k, "showGroupNumber") end,
-            set = function(k, v) GF.GetConf(k).showGroupNumber = v; GF.RefreshVisuals() end,
+            set = function(k, v)
+                GF.GetConf(k).showGroupNumber = v
+                GF.RefreshVisuals()
+                if refreshIndicatorControls then refreshIndicatorControls() end
+            end,
         })
 
         local gnSizeSl = SSlider({
@@ -3362,7 +3372,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = focusSep, x = 0, y = -6,
             label = TR("Enable Focus Glow"),
             get = function(k) return GF.Val(k, "hlFocusEnabled") end,
-            set = function(k, v) GF.GetConf(k).hlFocusEnabled = v; GF.RefreshVisuals() end,
+            set = function(k, v)
+                GF.GetConf(k).hlFocusEnabled = v
+                GF.RefreshVisuals()
+                if refreshIndicatorControls then refreshIndicatorControls() end
+            end,
         })
 
         local focusHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -3381,7 +3395,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Border Thickness: %d", v) end,
         })
 
-        MakeColorSwatch(body, focusSzSl, "BOTTOMLEFT", 0, -16,
+        local focusColorLabel, focusColorSwatch = MakeColorSwatch(body, focusSzSl, "BOTTOMLEFT", 0, -16,
             "Focus Glow Color",
             function()
                 return V("hlFocusColorR") or 0.5, V("hlFocusColorG") or 0.5, V("hlFocusColorB") or 1.0
@@ -3391,6 +3405,29 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 c.hlFocusColorR = r; c.hlFocusColorG = g; c.hlFocusColorB = b
                 GF.RefreshVisuals()
             end)
+
+        refreshIndicatorControls = function()
+            local groupNumberEnabled = GF.Val(K(), "showGroupNumber") and true or false
+            SetGFOptionControlsEnabled(groupNumberEnabled, {
+                gnSizeSl, gnAnchorDd, gnXSl, gnYSl,
+            })
+
+            SetGFOptionControlEnabled(hoverSizeSl, IsMouseoverHighlightEnabled())
+
+            local focusEnabled = GF.Val(K(), "hlFocusEnabled") and true or false
+            SetGFOptionControlsEnabled(focusEnabled, {
+                focusSzSl, focusColorSwatch,
+            }, {
+                focusHint, focusColorLabel,
+            })
+        end
+
+        _G.MSUF_GF_RefreshIndicatorControlStates = refreshIndicatorControls
+        if body.HookScript then body:HookScript("OnShow", refreshIndicatorControls) end
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if body:IsShown() and refreshIndicatorControls then refreshIndicatorControls() end
+        end
+        refreshIndicatorControls()
     end
 
     ----------------------------------------------------------------
