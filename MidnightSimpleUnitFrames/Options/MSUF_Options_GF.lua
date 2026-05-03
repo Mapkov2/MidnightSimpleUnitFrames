@@ -1344,6 +1344,76 @@ function _G.MSUF_EnsureGFPanelBuilt()
         return dd
     end
 
+    local OPTION_DISABLED_ALPHA = 0.45
+    local function SetGFOptionControlEnabled(widget, enabled)
+        if not widget then return end
+        enabled = enabled and true or false
+        local alpha = enabled and 1 or OPTION_DISABLED_ALPHA
+
+        if widget.SetEnabled then
+            widget:SetEnabled(enabled)
+        elseif enabled then
+            if widget.EnableMouse then widget:EnableMouse(true) end
+            if widget.Enable then widget:Enable() end
+        else
+            if widget.EnableMouse then widget:EnableMouse(false) end
+            if widget.Disable then widget:Disable() end
+        end
+
+        local name = widget.GetName and widget:GetName()
+        local dropButton = widget.Button or (name and _G[name .. "Button"])
+        if dropButton then
+            if enabled then
+                if dropButton.EnableMouse then dropButton:EnableMouse(true) end
+                if dropButton.Enable then dropButton:Enable() end
+            else
+                if dropButton.EnableMouse then dropButton:EnableMouse(false) end
+                if dropButton.Disable then dropButton:Disable() end
+            end
+            if dropButton.SetAlpha then dropButton:SetAlpha(alpha) end
+        end
+
+        if widget._msufPeelButton then
+            if widget._msufPeelButton.EnableMouse then widget._msufPeelButton:EnableMouse(enabled) end
+            if enabled then
+                if widget._msufPeelButton.Enable then widget._msufPeelButton:Enable() end
+            else
+                if widget._msufPeelButton.Disable then widget._msufPeelButton:Disable() end
+            end
+            if widget._msufPeelButton.SetAlpha then widget._msufPeelButton:SetAlpha(alpha) end
+        end
+
+        if widget.SetAlpha then widget:SetAlpha(alpha) end
+        if widget.Text and widget.Text.SetAlpha then widget.Text:SetAlpha(alpha) end
+        if widget.text and widget.text.SetAlpha then widget.text:SetAlpha(alpha) end
+        if widget.editBox and widget.editBox.SetAlpha then widget.editBox:SetAlpha(alpha) end
+        if widget.minusButton and widget.minusButton.SetAlpha then widget.minusButton:SetAlpha(alpha) end
+        if widget.plusButton and widget.plusButton.SetAlpha then widget.plusButton:SetAlpha(alpha) end
+
+        if widget._msufToggleUpdate then widget._msufToggleUpdate() end
+        if widget.__msufToggleUpdate then widget.__msufToggleUpdate() end
+
+        if name then
+            for _, suffix in ipairs({ "Text", "Low", "High" }) do
+                local region = _G[name .. suffix]
+                if region and region.SetAlpha then region:SetAlpha(alpha) end
+            end
+        end
+    end
+
+    local function SetGFOptionRegionEnabled(region, enabled)
+        if region and region.SetAlpha then region:SetAlpha(enabled and 1 or OPTION_DISABLED_ALPHA) end
+    end
+
+    local function SetGFOptionControlsEnabled(enabled, widgets, labels)
+        for i = 1, #(widgets or {}) do
+            SetGFOptionControlEnabled(widgets[i], enabled)
+        end
+        for i = 1, #(labels or {}) do
+            SetGFOptionRegionEnabled(labels[i], enabled)
+        end
+    end
+
     ----------------------------------------------------------------
     -- All sections stacked below scopeBar
     ----------------------------------------------------------------
@@ -2711,6 +2781,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 { key = " / ", label = "/" }, { key = " - ", label = "-" }, { key = " ", label = TR("Space") },
             }
         end
+        local refreshTextControlStates
 
         -- ════════════════════════════════════════════════
         -- LEFT COLUMN: Name + Status/Layer
@@ -2726,7 +2797,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = nameSep, x = 0, y = -4,
             label = TR("Show Name"),
             get = function(k) return GF.Val(k, "showName") end,
-            set = function(k, v) GF.GetConf(k).showName = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+            set = function(k, v)
+                GF.GetConf(k).showName = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals()
+                if refreshTextControlStates then refreshTextControlStates() end
+            end,
         })
 
         local nameSizeSl = SSlider({
@@ -2774,6 +2848,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local powSep = colL:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         powSep:SetPoint("TOPLEFT", nameYSl, "BOTTOMLEFT", 0, -28)
         powSep:SetText(TR("Power Text")); powSep:SetTextColor(1, 0.82, 0)
+        local powLeftLbl, powCenterLbl, powRightLbl, powDelimLbl
 
         local powShowChk = SCheck({
             name = "MSUF_GF_PowerShowCheck", parent = colL,
@@ -2785,6 +2860,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals()
                 if GF._RequestOptionsResync then GF._RequestOptionsResync() end
                 SyncGFEditPopup()
+                if refreshTextControlStates then refreshTextControlStates() end
             end,
         })
 
@@ -2795,8 +2871,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "powerTextLeft") or "NONE" end,
             set = function(k, v) GF.GetConf(k).powerTextLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals(); SyncGFEditPopup() end,
         })
-        do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            lbl:SetPoint("BOTTOMLEFT", powLeftDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Left")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+        powLeftLbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        powLeftLbl:SetPoint("BOTTOMLEFT", powLeftDd, "TOPLEFT", 18, 1); powLeftLbl:SetText(TR("Left")); powLeftLbl:SetTextColor(0.6, 0.6, 0.6)
 
         local powCenterDd = SDropdown({
             name = "MSUF_GF_PowerTextCenterDropdown", parent = colL,
@@ -2805,8 +2881,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "powerTextCenter") or "NONE" end,
             set = function(k, v) GF.GetConf(k).powerTextCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals(); SyncGFEditPopup() end,
         })
-        do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            lbl:SetPoint("BOTTOMLEFT", powCenterDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Center")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+        powCenterLbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        powCenterLbl:SetPoint("BOTTOMLEFT", powCenterDd, "TOPLEFT", 18, 1); powCenterLbl:SetText(TR("Center")); powCenterLbl:SetTextColor(0.6, 0.6, 0.6)
 
         local powRightDd = SDropdown({
             name = "MSUF_GF_PowerTextRightDropdown", parent = colL,
@@ -2815,8 +2891,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "powerTextRight") or "NONE" end,
             set = function(k, v) GF.GetConf(k).powerTextRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals(); SyncGFEditPopup() end,
         })
-        do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            lbl:SetPoint("BOTTOMLEFT", powRightDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Right")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+        powRightLbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        powRightLbl:SetPoint("BOTTOMLEFT", powRightDd, "TOPLEFT", 18, 1); powRightLbl:SetText(TR("Right")); powRightLbl:SetTextColor(0.6, 0.6, 0.6)
 
         local powDelimDd = SDropdown({
             name = "MSUF_GF_PowerDelimDropdown", parent = colL,
@@ -2825,8 +2901,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "powerTextDelimiter") or " / " end,
             set = function(k, v) GF.GetConf(k).powerTextDelimiter = v; GF.RefreshVisuals(); SyncGFEditPopup() end,
         })
-        do local lbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            lbl:SetPoint("BOTTOMLEFT", powDelimDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Delimiter")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+        powDelimLbl = colL:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        powDelimLbl:SetPoint("BOTTOMLEFT", powDelimDd, "TOPLEFT", 18, 1); powDelimLbl:SetText(TR("Delimiter")); powDelimLbl:SetTextColor(0.6, 0.6, 0.6)
 
         local powSizeSl = SSlider({
             name = "MSUF_GF_PowerFontSizeSlider", parent = colL, compact = true,
@@ -2862,13 +2938,17 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local hpSep = colR:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         hpSep:SetPoint("TOPLEFT", colR, "TOPLEFT", 0, 0)
         hpSep:SetText(TR("HP Text")); hpSep:SetTextColor(1, 0.82, 0)
+        local hpLeftLbl, hpCenterLbl, hpRightLbl, hpDelimLbl
 
         local hpShowChk = SCheck({
             name = "MSUF_GF_HPTextShowCheck", parent = colR,
             anchor = hpSep, x = 0, y = -4,
             label = TR("Show HP Text"),
             get = function(k) return GF.Val(k, "showHPText") ~= false end,
-            set = function(k, v) GF.GetConf(k).showHPText = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
+            set = function(k, v)
+                GF.GetConf(k).showHPText = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals()
+                if refreshTextControlStates then refreshTextControlStates() end
+            end,
         })
 
         local hpLeftDd = SDropdown({
@@ -2878,8 +2958,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "textLeft") or "NONE" end,
             set = function(k, v) GF.GetConf(k).textLeft = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
         })
-        do local lbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            lbl:SetPoint("BOTTOMLEFT", hpLeftDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Left")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+        hpLeftLbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hpLeftLbl:SetPoint("BOTTOMLEFT", hpLeftDd, "TOPLEFT", 18, 1); hpLeftLbl:SetText(TR("Left")); hpLeftLbl:SetTextColor(0.6, 0.6, 0.6)
 
         local hpCenterDd = SDropdown({
             name = "MSUF_GF_TextCenterDropdown", parent = colR,
@@ -2888,8 +2968,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "textCenter") or "NONE" end,
             set = function(k, v) GF.GetConf(k).textCenter = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
         })
-        do local lbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            lbl:SetPoint("BOTTOMLEFT", hpCenterDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Center")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+        hpCenterLbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hpCenterLbl:SetPoint("BOTTOMLEFT", hpCenterDd, "TOPLEFT", 18, 1); hpCenterLbl:SetText(TR("Center")); hpCenterLbl:SetTextColor(0.6, 0.6, 0.6)
 
         local hpRightDd = SDropdown({
             name = "MSUF_GF_TextRightDropdown", parent = colR,
@@ -2898,8 +2978,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "textRight") or "NONE" end,
             set = function(k, v) GF.GetConf(k).textRight = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); GF.RefreshVisuals() end,
         })
-        do local lbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            lbl:SetPoint("BOTTOMLEFT", hpRightDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Right")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+        hpRightLbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hpRightLbl:SetPoint("BOTTOMLEFT", hpRightDd, "TOPLEFT", 18, 1); hpRightLbl:SetText(TR("Right")); hpRightLbl:SetTextColor(0.6, 0.6, 0.6)
 
         local hpDelimDd = SDropdown({
             name = "MSUF_GF_HPDelimDropdown", parent = colR,
@@ -2908,8 +2988,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "textDelimiter") or " / " end,
             set = function(k, v) GF.GetConf(k).textDelimiter = v; GF.RefreshVisuals() end,
         })
-        do local lbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            lbl:SetPoint("BOTTOMLEFT", hpDelimDd, "TOPLEFT", 18, 1); lbl:SetText(TR("Delimiter")); lbl:SetTextColor(0.6, 0.6, 0.6) end
+        hpDelimLbl = colR:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        hpDelimLbl:SetPoint("BOTTOMLEFT", hpDelimDd, "TOPLEFT", 18, 1); hpDelimLbl:SetText(TR("Delimiter")); hpDelimLbl:SetTextColor(0.6, 0.6, 0.6)
 
         local hpReverseCB = SCheck({
             name = "MSUF_GF_HPReverseCheck", parent = colR,
@@ -2982,7 +3062,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).textLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
             formatText = function(v) return string.format("HP Layer: %d", v) end,
         })
-        SSlider({
+        local powerLaySl = SSlider({
             name = "MSUF_GF_PowerTextLayerSlider", parent = colR, compact = true,
             anchor = hpLaySl, x = 0, y = -32,
             min = 1, max = 12, step = 1, width = 180, default = 2,
@@ -2990,6 +3070,26 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).powerTextLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); SyncGFEditPopup() end,
             formatText = function(v) return string.format("Power Layer: %d", v) end,
         })
+
+        refreshTextControlStates = function()
+            local kind = K()
+            local nameEnabled = GF.Val(kind, "showName") and true or false
+            local powerEnabled = (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(kind)) or false
+            local hpEnabled = GF.Val(kind, "showHPText") ~= false
+
+            SetGFOptionControlsEnabled(nameEnabled, { nameSizeSl, nameAnchorDd, nameXSl, nameYSl })
+            SetGFOptionControlsEnabled(powerEnabled,
+                { powLeftDd, powCenterDd, powRightDd, powDelimDd, powSizeSl, powXSl, powYSl, powerLaySl },
+                { powLeftLbl, powCenterLbl, powRightLbl, powDelimLbl })
+            SetGFOptionControlsEnabled(hpEnabled,
+                { hpLeftDd, hpCenterDd, hpRightDd, hpDelimDd, hpReverseCB, hpSizeSl, hpXSl, hpYSl, hpLaySl },
+                { hpLeftLbl, hpCenterLbl, hpRightLbl, hpDelimLbl })
+        end
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if refreshTextControlStates then refreshTextControlStates() end
+        end
+        if body.HookScript then body:HookScript("OnShow", function() if refreshTextControlStates then refreshTextControlStates() end end) end
+        refreshTextControlStates()
 
     end
 

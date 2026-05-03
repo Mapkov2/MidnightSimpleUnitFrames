@@ -366,6 +366,93 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return row
     end
 
+    local AURA_DISABLED_ALPHA = 0.45
+    local function SetAuraControlEnabled(widget, enabled, applyAlpha)
+        if not widget then return end
+        enabled = enabled and true or false
+        local alpha = enabled and 1 or AURA_DISABLED_ALPHA
+
+        if widget.SetEnabled then
+            widget:SetEnabled(enabled)
+        elseif enabled then
+            if widget.EnableMouse then widget:EnableMouse(true) end
+            if widget.Enable then widget:Enable() end
+        else
+            if widget.EnableMouse then widget:EnableMouse(false) end
+            if widget.Disable then widget:Disable() end
+        end
+
+        local name = widget.GetName and widget:GetName()
+        local dropButton = widget.Button or (name and _G[name .. "Button"])
+        if dropButton then
+            if enabled then
+                if dropButton.EnableMouse then dropButton:EnableMouse(true) end
+                if dropButton.Enable then dropButton:Enable() end
+            else
+                if dropButton.EnableMouse then dropButton:EnableMouse(false) end
+                if dropButton.Disable then dropButton:Disable() end
+            end
+            if applyAlpha ~= false and dropButton.SetAlpha then dropButton:SetAlpha(alpha) end
+        end
+
+        if widget._msufPeelButton then
+            if widget._msufPeelButton.EnableMouse then widget._msufPeelButton:EnableMouse(enabled) end
+            if enabled then
+                if widget._msufPeelButton.Enable then widget._msufPeelButton:Enable() end
+            else
+                if widget._msufPeelButton.Disable then widget._msufPeelButton:Disable() end
+            end
+            if applyAlpha ~= false and widget._msufPeelButton.SetAlpha then widget._msufPeelButton:SetAlpha(alpha) end
+        end
+
+        if applyAlpha ~= false then
+            if widget.SetAlpha then widget:SetAlpha(alpha) end
+            if widget.Text and widget.Text.SetAlpha then widget.Text:SetAlpha(alpha) end
+            if widget.text and widget.text.SetAlpha then widget.text:SetAlpha(alpha) end
+            if widget.editBox and widget.editBox.SetAlpha then widget.editBox:SetAlpha(alpha) end
+            if widget.minusButton and widget.minusButton.SetAlpha then widget.minusButton:SetAlpha(alpha) end
+            if widget.plusButton and widget.plusButton.SetAlpha then widget.plusButton:SetAlpha(alpha) end
+            if name then
+                for _, suffix in ipairs({ "Text", "Low", "High" }) do
+                    local region = _G[name .. suffix]
+                    if region and region.SetAlpha then region:SetAlpha(alpha) end
+                end
+            end
+        end
+
+        if widget._msufToggleUpdate then widget._msufToggleUpdate() end
+        if widget.__msufToggleUpdate then widget.__msufToggleUpdate() end
+    end
+
+    local function SetAuraRegionEnabled(region, enabled)
+        if region and region.SetAlpha then region:SetAlpha(enabled and 1 or AURA_DISABLED_ALPHA) end
+    end
+
+    local function SetAuraControlsEnabled(enabled, widgets, regions)
+        for i = 1, #(widgets or {}) do
+            SetAuraControlEnabled(widgets[i], enabled, true)
+        end
+        for i = 1, #(regions or {}) do
+            SetAuraRegionEnabled(regions[i], enabled)
+        end
+    end
+
+    local function SetAuraBodyRowsEnabled(body, enabled, keepRow)
+        if not body or not body.GetChildren then return end
+        local alpha = enabled and 1 or AURA_DISABLED_ALPHA
+        local rows = { body:GetChildren() }
+        for i = 1, #rows do
+            local row = rows[i]
+            if row == keepRow then
+                if row.SetAlpha then row:SetAlpha(1) end
+                if row._ctrl then SetAuraControlEnabled(row._ctrl, true, false) end
+            else
+                if row.SetAlpha then row:SetAlpha(alpha) end
+                if row._ctrl then SetAuraControlEnabled(row._ctrl, enabled, false) end
+            end
+        end
+    end
+
     local AURA_TEXT_PREVIEW_IDS = {
         buff      = { 774, 17, 139 },
         debuff    = { 589, 980, 172 },
@@ -908,6 +995,14 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         -- Row chain
         local r
         r = RowCheck(body, nil, L["Enable"], gk, "enabled", 6)
+        local enableRow = r
+        local function RefreshAuraGroupControls()
+            SetAuraBodyRowsEnabled(body, AV(gk, "enabled") ~= false, enableRow)
+        end
+        local enableCb = enableRow and enableRow._ctrl
+        if enableCb and enableCb.HookScript then
+            enableCb:HookScript("OnClick", RefreshAuraGroupControls)
+        end
         r = RowDropdown(body, r, L["Anchor"], gk, "anchor", ANCHOR9, "BOTTOMLEFT")
         r = RowDropdown(body, r, L["Growth"], gk, "growth", GROWTH8, "RIGHTDOWN")
         r = RowValue(body, r, L["Offset X / Y"], function()
@@ -962,6 +1057,10 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         r = RowDropdown(body, r, L["Anchor"] or "Anchor", gk, "stackAnchor", ANCHOR9, "BOTTOMRIGHT")
         r = RowSlider(body, r, L["Offset X"] or "Offset X", gk, "stackOffsetX", -20, 20, 1, -1)
         r = RowSlider(body, r, L["Offset Y"] or "Offset Y", gk, "stackOffsetY", -20, 20, 1, 1)
+
+        _auraRefreshFns[#_auraRefreshFns + 1] = RefreshAuraGroupControls
+        if body.HookScript then body:HookScript("OnShow", RefreshAuraGroupControls) end
+        RefreshAuraGroupControls()
 
         return box, body
     end
@@ -2076,12 +2175,18 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             return pa.containerOverlay
         end
 
-        SCheck({
+        local refreshPrivateAuraControls
+
+        local paEnableChk = SCheck({
             name = "MSUF_GF_PAEnable", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = L["Enable Private Auras"],
             get = function(k) return PA().enabled ~= false end,
-            set = function(k, v) PA().enabled = v; RequestVisualRefresh() end,
+            set = function(k, v)
+                PA().enabled = v
+                RequestVisualRefresh()
+                if refreshPrivateAuraControls then refreshPrivateAuraControls() end
+            end,
         })
 
         local paMaxSl = SSlider({
@@ -2102,7 +2207,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             formatText = function(v) return string.format(L["Size: %d"], v) end,
         })
 
-        SDropdown({
+        local paDirDd = SDropdown({
             name = "MSUF_GF_PADirection", parent = body,
             anchor = paSzSl, x = -16, y = -10, width = 140,
             items = DIRECTION4,
@@ -2110,7 +2215,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             set = function(k, v) PA().direction = v; RequestVisualRefresh() end,
         })
 
-        SDropdown({
+        local paAnchorDd = SDropdown({
             name = "MSUF_GF_PAAnchor", parent = body,
             anchor = paSzSl, x = 150, y = -10, width = 140,
             items = ANCHOR9,
@@ -2193,6 +2298,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             set = function(_, v)
                 PAC().enabled = v and true or false
                 RequestVisualRefresh()
+                if refreshPrivateAuraControls then refreshPrivateAuraControls() end
                 -- Live-apply on every visible GF frame.
                 if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
                     for fr in pairs(GF.frames) do
@@ -2243,7 +2349,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             end,
         })
 
-        SDropdown({
+        local coGradientDD = SDropdown({
             name = "MSUF_GF_PAContainerOverlayGradient", parent = body, compact = true,
             anchor = coDispelModeDD, anchorPoint = "TOPRIGHT", x = 12, y = 0,
             width = DD_W,
@@ -2267,6 +2373,25 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 end
             end,
         })
+
+        refreshPrivateAuraControls = function()
+            local enabled = PA().enabled ~= false
+            local overlayEnabled = enabled and PAC().enabled == true
+
+            SetAuraControlsEnabled(enabled, {
+                paMaxSl, paSzSl, paDirDd, paAnchorDd, paXSl, paYSl, paLayerSl,
+                paCdChk, paNumChk, paDispelChk, coEnableChk,
+            }, { coHeader })
+
+            SetAuraControlsEnabled(overlayEnabled, {
+                coShowIconsChk, coDispelModeDD, coGradientDD,
+            })
+        end
+        _auraRefreshFns[#_auraRefreshFns + 1] = function()
+            if refreshPrivateAuraControls then refreshPrivateAuraControls() end
+        end
+        if body.HookScript then body:HookScript("OnShow", function() if refreshPrivateAuraControls then refreshPrivateAuraControls() end end) end
+        refreshPrivateAuraControls()
     end
 
     ----------------------------------------------------------------

@@ -709,6 +709,97 @@ local function ForceSliderEB(slider)
     slider.editBox:SetText(FormatSliderVal(slider, slider.GetValue and slider:GetValue() or 0))
 end
 
+local OPTION_DISABLED_ALPHA = 0.45
+local function SetOptionControlEnabled(widget, enabled)
+    if not widget then return end
+    enabled = enabled and true or false
+    local alpha = enabled and 1 or OPTION_DISABLED_ALPHA
+
+    if widget.SetEnabled then
+        widget:SetEnabled(enabled)
+    elseif enabled then
+        if widget.EnableMouse then widget:EnableMouse(true) end
+        if widget.Enable then widget:Enable() end
+    else
+        if widget.EnableMouse then widget:EnableMouse(false) end
+        if widget.Disable then widget:Disable() end
+    end
+
+    local name = widget.GetName and widget:GetName()
+    local dropButton = widget.Button or (name and _G[name .. "Button"])
+    if dropButton then
+        if enabled then
+            if UIDropDownMenu_EnableDropDown then UIDropDownMenu_EnableDropDown(widget) end
+            if dropButton.EnableMouse then dropButton:EnableMouse(true) end
+            if dropButton.Enable then dropButton:Enable() end
+        else
+            if UIDropDownMenu_DisableDropDown then UIDropDownMenu_DisableDropDown(widget) end
+            if dropButton.EnableMouse then dropButton:EnableMouse(false) end
+            if dropButton.Disable then dropButton:Disable() end
+        end
+        if dropButton.SetAlpha then dropButton:SetAlpha(alpha) end
+    end
+
+    if widget._msufPeelButton then
+        if widget._msufPeelButton.EnableMouse then widget._msufPeelButton:EnableMouse(enabled) end
+        if enabled then
+            if widget._msufPeelButton.Enable then widget._msufPeelButton:Enable() end
+        else
+            if widget._msufPeelButton.Disable then widget._msufPeelButton:Disable() end
+        end
+        if widget._msufPeelButton.SetAlpha then widget._msufPeelButton:SetAlpha(alpha) end
+    end
+
+    if widget.SetAlpha then widget:SetAlpha(alpha) end
+    if widget.Text and widget.Text.SetAlpha then widget.Text:SetAlpha(alpha) end
+    if widget.text and widget.text.SetAlpha then widget.text:SetAlpha(alpha) end
+    if widget.editBox and widget.editBox.SetAlpha then widget.editBox:SetAlpha(alpha) end
+    if widget.minusButton and widget.minusButton.SetAlpha then widget.minusButton:SetAlpha(alpha) end
+    if widget.plusButton and widget.plusButton.SetAlpha then widget.plusButton:SetAlpha(alpha) end
+
+    if name then
+        for _, suffix in ipairs({ "Text", "Low", "High" }) do
+            local region = _G[name .. suffix]
+            if region and region.SetAlpha then region:SetAlpha(alpha) end
+        end
+    end
+end
+
+local function SetFrameBasicsConfigEnabled(panel, enabled)
+    if not panel then return end
+    for _, key in ipairs({
+        "playerShowNameCB",
+        "playerShowHPCB",
+        "playerShowPowerCB",
+        "playerReverseFillBarsCB",
+        "playerSmoothFillCB",
+        "playerPortraitDropDown",
+    }) do
+        SetOptionControlEnabled(panel[key], enabled)
+    end
+    if panel.playerPortraitLabel and panel.playerPortraitLabel.SetAlpha then
+        panel.playerPortraitLabel:SetAlpha(enabled and 1 or OPTION_DISABLED_ALPHA)
+    end
+end
+
+local function SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
+    if not panel then return end
+    powerEnabled = powerEnabled and true or false
+    borderEnabled = borderEnabled and true or false
+    SetOptionControlEnabled(panel.playerPowerBarHeightSlider, powerEnabled)
+    SetOptionControlEnabled(panel.playerPowerBarEmbedCB, powerEnabled)
+    SetOptionControlEnabled(panel.playerPowerBarBorderCB, powerEnabled)
+    SetOptionControlEnabled(panel.playerPowerBarSmoothCB, powerEnabled)
+    SetOptionControlEnabled(panel.playerPowerBarBorderSlider, powerEnabled and borderEnabled)
+end
+
+local function SetCastbarConfigEnabled(panel, unitKey, enabled)
+    if not panel or not unitKey then return end
+    for _, suffix in ipairs({ "CastbarTimeCB", "CastbarInterruptCB", "CastbarShowIconCB", "CastbarShowTextCB" }) do
+        SetOptionControlEnabled(panel[unitKey .. suffix], enabled)
+    end
+end
+
 local function EnhanceSliderTrack(slider)
     if not slider or slider._msufTrackEnhanced then return end
     slider._msufTrackEnhanced = true
@@ -1565,6 +1656,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     for _, s in ipairs(BASIC_EVALS) do
         local w = panel[s[1]]; if w and w.SetChecked then w:SetChecked(s[2](conf)) end
     end
+    SetFrameBasicsConfigEnabled(panel, conf.enabled ~= false)
 
     -- Power Bar sync
     do
@@ -1590,6 +1682,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         if panel.playerPowerBarSmoothCB then
             panel.playerPowerBarSmoothCB:SetChecked(ReadPowerSmoothFill(conf, key))
         end
+        SetPowerBarConfigEnabled(panel, showKey and b[showKey] ~= false, b.powerBarBorderEnabled == true)
     end
 
     -- ToT inline
@@ -1737,6 +1830,10 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         local ico = panel[k.."CastbarShowIconCB"]; if ico and ico:IsShown() then ico:ClearAllPoints(); ico:SetPoint("TOPRIGHT", panel.playerCastbarBody or panel.playerCastbarBox, "TOPRIGHT", -112, -6); CBLabelLeft(ico, "Icon") end
         local txt = panel[k.."CastbarShowTextCB"]; if txt and txt:IsShown() then txt:ClearAllPoints(); txt:SetPoint("TOPRIGHT", panel.playerCastbarBody or panel.playerCastbarBox, "TOPRIGHT", -36, -6); CBLabelLeft(txt, "Text") end
     end
+    for _, spec in ipairs(CASTBAR_TOGGLE_SPECS) do
+        local show = isFrames and currentKey == spec.key
+        SetCastbarConfigEnabled(panel, spec.key, show and g[spec.enableK] ~= false)
+    end
 
     if panel._msufEnsureUFStatusSelection then panel._msufEnsureUFStatusSelection(currentKey) end
     if panel._msufRefreshUFStatusControls then panel._msufRefreshUFStatusControls() end
@@ -1867,6 +1964,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         local w = panel[pair[1]]; if w then
             w:SetScript("OnClick", function(self) if not IsFramesTab() then return end
                 local c = EnsureKeyDB(); c[pair[2]] = self:GetChecked() and true or false; ApplyCurrent()
+                if pair[2] == "enabled" then SetFrameBasicsConfigEnabled(panel, c.enabled ~= false) end
                 if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup(CurrentKey(), c) end end)
         end
     end
@@ -1884,7 +1982,10 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         if panel.playerPowerBarShowCB then
             panel.playerPowerBarShowCB:SetScript("OnClick", function(self)
                 local k = CanonKey(CurrentKey()); local bk = PB_KEY_MAP[k]; if not bk then return end
-                PBBars()[bk] = self:GetChecked() and true or false; PBApply()
+                local b = PBBars()
+                b[bk] = self:GetChecked() and true or false
+                SetPowerBarConfigEnabled(panel, b[bk] ~= false, b.powerBarBorderEnabled == true)
+                PBApply()
             end)
         end
         if panel.playerPowerBarHeightSlider then
@@ -1899,7 +2000,11 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         end
         if panel.playerPowerBarBorderCB then
             panel.playerPowerBarBorderCB:SetScript("OnClick", function(self)
-                PBBars().powerBarBorderEnabled = self:GetChecked() and true or false; PBApply()
+                local b = PBBars()
+                b.powerBarBorderEnabled = self:GetChecked() and true or false
+                local k = CanonKey(CurrentKey()); local bk = PB_KEY_MAP[k]
+                SetPowerBarConfigEnabled(panel, bk and b[bk] ~= false, b.powerBarBorderEnabled == true)
+                PBApply()
             end)
         end
         if panel.playerPowerBarBorderSlider then
@@ -2275,13 +2380,14 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             iconW = "bossCastbarShowIconCB", iconK = "showBossCastIcon", textW = "bossCastbarShowTextCB", textK = "showBossCastName",
             bar = function() return nil end, reanchor = function() end, preview = function() end },
     }
-    for _, spec in pairs(CASTBAR_HANDLERS) do
+    for unitKey, spec in pairs(CASTBAR_HANDLERS) do
         -- Enable toggle
         local ew = panel[spec.enableW]; if ew then
             ew:SetScript("OnClick", function(self)
                 EnsureCastbars(); if not IsFramesTab() then return end
                 if spec.requireKey and CurrentKey() ~= spec.requireKey then return end
                 if api.EnsureDB then api.EnsureDB() end; MSUF_DB.general[spec.enableK] = self:GetChecked() and true or false
+                SetCastbarConfigEnabled(panel, unitKey, MSUF_DB.general[spec.enableK] ~= false)
                 if spec.requireKey == "boss" then
                     if _G.MSUF_SetBossCastbarsEnabled then _G.MSUF_SetBossCastbarsEnabled(MSUF_DB.general.enableBossCastbar ~= false) end
                     if _G.MSUF_RefreshBossCastbarLayout then _G.MSUF_RefreshBossCastbarLayout() end; return
