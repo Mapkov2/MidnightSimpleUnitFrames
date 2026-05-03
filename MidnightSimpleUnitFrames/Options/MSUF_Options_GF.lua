@@ -471,8 +471,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                    "nameColorMode", "nameColorR", "nameColorG", "nameColorB",
                    "nameMaxChars", "nameNoEllipsis",
                    "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter",
-                   "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer",
-                   "statusOffsetX", "statusOffsetY" } },
+                   "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer" } },
         { key = "font",       label = "Font Override",
           keys = { "fontOverride", "fontKey", "fontOutline", "useGlobalFontColor",
                    "fontR", "fontG", "fontB" } },
@@ -484,7 +483,13 @@ function _G.MSUF_EnsureGFPanelBuilt()
         { key = "indicators", label = "Indicators & Status Icons",
           keys = { "showGroupNumber", "groupNumberSize", "groupNumberAnchor",
                    "groupNumberX", "groupNumberY",
-                   "iconStyle", "useMidnightIcons" },
+                   "iconStyle", "useMidnightIcons",
+                   "statusText", "statusTextSize", "statusTextAnchor",
+                   "statusOffsetX", "statusOffsetY", "statusTextLayer",
+                   "statusGhostText", "statusGhostTextSize", "statusGhostTextAnchor",
+                   "statusGhostOffsetX", "statusGhostOffsetY", "statusGhostTextLayer",
+                   "statusAFKText", "statusAFKTextSize", "statusAFKTextAnchor",
+                   "statusAFKOffsetX", "statusAFKOffsetY", "statusAFKTextLayer" },
           prefix = { "si_", "statusIcon", "indicator" } },
         { key = "auras",      label = "Auras (Buffs/Debuffs/Defensives)",
           tables = { "auras" } },
@@ -3025,38 +3030,21 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Y: %d", v) end,
         })
 
-        -- Subtle horizontal divider separating HP Text and Status & Layer
+        -- Subtle horizontal divider separating HP Text and text-layer controls
         local rcSubDiv = colR:CreateTexture(nil, "ARTWORK")
         rcSubDiv:SetHeight(1)
         rcSubDiv:SetColorTexture(0.20, 0.32, 0.45, 0.30)
         rcSubDiv:SetPoint("TOPLEFT",  hpYSl, "BOTTOMLEFT", -8, -14)
         rcSubDiv:SetPoint("TOPRIGHT", hpYSl, "BOTTOMRIGHT", 100, -14)
 
-        -- ── Status + Layer ── (right column, below HP)
+        -- Text layers (right column, below HP)
         local tOffSep = colR:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         tOffSep:SetPoint("TOPLEFT", hpYSl, "BOTTOMLEFT", 0, -28)
-        tOffSep:SetText(TR("Status & Layer")); tOffSep:SetTextColor(1, 0.82, 0)
-
-        local statXSl = SSlider({
-            name = "MSUF_GF_StatusOffsetXSlider", parent = colR, compact = true,
-            anchor = tOffSep, x = 0, y = -26,
-            min = -100, max = 100, step = 1, width = 180, default = 0,
-            get = function(k) return GF.Val(k, "statusOffsetX") end,
-            set = function(k, v) GF.GetConf(k).statusOffsetX = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("Status X: %d", v) end,
-        })
-        local statYSl = SSlider({
-            name = "MSUF_GF_StatusOffsetYSlider", parent = colR, compact = true,
-            anchor = statXSl, x = 0, y = -32,
-            min = -100, max = 100, step = 1, width = 180, default = 0,
-            get = function(k) return GF.Val(k, "statusOffsetY") end,
-            set = function(k, v) GF.GetConf(k).statusOffsetY = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
-            formatText = function(v) return string.format("Status Y: %d", v) end,
-        })
+        tOffSep:SetText(TR("Text Layers")); tOffSep:SetTextColor(1, 0.82, 0)
 
         local hpLaySl = SSlider({
             name = "MSUF_GF_TextLayerSlider", parent = colR, compact = true,
-            anchor = statYSl, x = 0, y = -32,
+            anchor = tOffSep, x = 0, y = -26,
             min = 1, max = 12, step = 1, width = 180, default = 5,
             get = function(k) return GF.Val(k, "textLayer") end,
             set = function(k, v) GF.GetConf(k).textLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
@@ -3419,6 +3407,9 @@ function _G.MSUF_EnsureGFPanelBuilt()
             { label = "Summon",      enKey = "summonIcon",     sizeKey = "summonIconSize",    anchorKey = "summonAnchor",      xKey = "summonX",      yKey = "summonY",      layerKey = "summonLayer",        defSize = 16 },
             { label = "Resurrect",   enKey = "resurrectIcon",  sizeKey = "resurrectIconSize", anchorKey = "resurrectAnchor",   xKey = "resurrectX",   yKey = "resurrectY",   layerKey = "resurrectLayer",     defSize = 16 },
             { label = "Phase",       enKey = "phaseIcon",      sizeKey = "phaseIconSize",     anchorKey = "phaseAnchor",       xKey = "phaseX",       yKey = "phaseY",       layerKey = "phaseLayer",         defSize = 14 },
+            { label = "Dead Text",   enKey = "statusText",     sizeKey = "statusTextSize",    anchorKey = "statusTextAnchor",  xKey = "statusOffsetX", yKey = "statusOffsetY", layerKey = "statusTextLayer",    defSize = 14, isStatusText = true },
+            { label = "Ghost Text",  enKey = "statusGhostText", sizeKey = "statusGhostTextSize", anchorKey = "statusGhostTextAnchor", xKey = "statusGhostOffsetX", yKey = "statusGhostOffsetY", layerKey = "statusGhostTextLayer", defSize = 14, isStatusText = true },
+            { label = "AFK / DND Text", enKey = "statusAFKText", sizeKey = "statusAFKTextSize", anchorKey = "statusAFKTextAnchor", xKey = "statusAFKOffsetX", yKey = "statusAFKOffsetY", layerKey = "statusAFKTextLayer", defSize = 14, isStatusText = true },
         }
         local ANCHOR_ITEMS = {
             { key = "TOPLEFT",     label = "Top Left"     },

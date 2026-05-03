@@ -2251,7 +2251,7 @@ local bucketsEnabled = true
 local safeR, safeG, safeB, safeA = 1, 1, 1, 1
 local normalR, normalG, normalB, normalA = 1, 1, 1, 1
 local warnR, warnG, warnB, warnA = 1, 0.85, 0.2, 1
-local urgR,  urgG,  urgB,  urgA  = 1, 0.45, 0.1, 1
+local urgR,  urgG,  urgB,  urgA  = 1, 0.55, 0.1, 1
 local expR,  expG,  expB,  expA  = 1, 0.12, 0.12, 1
 local curve = nil
 
@@ -2286,7 +2286,7 @@ local function BuildCurve(g)
     -- Colors (stored as plain SV numbers; no clamping here for speed)
     local safeCR, safeCG, safeCB, safeCA = ReadColor(g and g.aurasCooldownTextSafeColor, safeR, safeG, safeB, safeA)
     local warnCR, warnCG, warnCB, warnCA = ReadColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.2, 1)
-    local urgCR,  urgCG,  urgCB,  urgCA  = ReadColor(g and g.aurasCooldownTextUrgentColor, 1, 0.45, 0.1, 1)
+    local urgCR,  urgCG,  urgCB,  urgCA  = ReadColor(g and g.aurasCooldownTextUrgentColor, 1, 0.55, 0.1, 1)
     local expCR,  expCG,  expCB,  expCA  = ReadColor(g and g.aurasCooldownTextExpireColor, 1, 0.12, 0.12, 1)
 
     local safeCol   = CreateColor(safeCR, safeCG, safeCB, safeCA)
@@ -2353,7 +2353,7 @@ local function EnsureSettings()
     safeR, safeG, safeB, safeA = ReadColor(g and g.aurasCooldownTextSafeColor, normalR, normalG, normalB, normalA)
 
     warnR, warnG, warnB, warnA = ReadColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.2, 1)
-    urgR,  urgG,  urgB,  urgA  = ReadColor(g and g.aurasCooldownTextUrgentColor, 1, 0.45, 0.1, 1)
+    urgR,  urgG,  urgB,  urgA  = ReadColor(g and g.aurasCooldownTextUrgentColor, 1, 0.55, 0.1, 1)
     expR,  expG,  expB,  expA  = ReadColor(g and g.aurasCooldownTextExpireColor, 1, 0.12, 0.12, 1)
 
     if bucketsEnabled then

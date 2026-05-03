@@ -431,7 +431,15 @@ local function ApplyFonts(f, kind)
     set(f.textLeftFS,            hpSize,       fr, fg, fb, 0.9)
     set(f.textCenterFS,          hpSize,       fr, fg, fb, 0.9)
     set(f.textRightFS,           hpSize,       fr, fg, fb, 0.9)
-    set(f.statusIndicatorText,   nameSize + 2, nil, nil, nil)
+    do
+        local statusSize = tonumber(conf.statusTextSize)
+        if statusSize then
+            if fScale ~= 1 then statusSize = math_max(6, math_floor(statusSize * fScale + 0.5)) end
+        else
+            statusSize = nameSize + 2
+        end
+        set(f.statusIndicatorText, statusSize, nil, nil, nil)
+    end
     set(f.powerTextLeftFS,       powSize,      fr, fg, fb, 0.9)
     set(f.powerTextCenterFS,     powSize,      fr, fg, fb, 0.9)
     set(f.powerTextRightFS,      powSize,      fr, fg, fb, 0.9)
@@ -694,9 +702,27 @@ local function ApplyTextLayout(f, kind)
 
     if f.statusIndicatorText then
         f.statusIndicatorText:ClearAllPoints()
-        f.statusIndicatorText:SetPoint("CENTER", f.health, "CENTER",
+        local anchor = conf.statusTextAnchor or "CENTER"
+        f.statusIndicatorText:SetPoint(anchor, f.health, anchor,
             ScaleValue(conf.statusOffsetX or 0, fScale),
             ScaleValue(conf.statusOffsetY or 0, fScale))
+        if f.statusIndicatorText.SetJustifyH then
+            local j = "CENTER"
+            if anchor == "TOPLEFT" or anchor == "BOTTOMLEFT" or anchor == "LEFT" then
+                j = "LEFT"
+            elseif anchor == "TOPRIGHT" or anchor == "BOTTOMRIGHT" or anchor == "RIGHT" then
+                j = "RIGHT"
+            end
+            f.statusIndicatorText:SetJustifyH(j)
+        end
+        if f.statusIndicatorText.SetDrawLayer then
+            local sub = tonumber(conf.statusTextLayer) or 7
+            if sub < 0 then sub = 0 elseif sub > 7 then sub = 7 end
+            f.statusIndicatorText:SetDrawLayer("OVERLAY", sub)
+        end
+        if f._msufGFStatusState and f._msufGFStatusState ~= 0 and GF.ApplyStatusTextStateLayout then
+            GF.ApplyStatusTextStateLayout(f, conf, f._msufGFStatusState)
+        end
     end
 
     -- 3-slot power text

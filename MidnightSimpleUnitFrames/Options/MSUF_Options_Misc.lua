@@ -361,6 +361,12 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         local g = G(); g.statusIndicators = g.statusIndicators or {}; return g.statusIndicators
     end
 
+    local function RefreshStatusIndicators()
+        if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+        local gf = _G.MSUF_NS and _G.MSUF_NS.GF
+        if gf and gf.RefreshVisuals then gf.RefreshVisuals() end
+    end
+
     local function EnsureStatusAFKDNDPopupWarning()
         if not _G.StaticPopupDialogs then return end
         if _G.StaticPopupDialogs["MSUF_STATUS_AFKDND_WARNING"] then return end
@@ -372,13 +378,13 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
                 local d = data or (popup and popup.data)
                 if not d then return end
                 local db = d.getDB(); db[d.key] = true; d.cb:SetChecked(true)
-                if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+                RefreshStatusIndicators()
             end,
             OnCancel = function(popup, data)
                 local d = data or (popup and popup.data)
                 if not d then return end
                 local db = d.getDB(); db[d.key] = false; d.cb:SetChecked(false)
-                if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+                RefreshStatusIndicators()
             end,
         }
     end
@@ -416,7 +422,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
                 want = true; self:SetChecked(true)
             end
             GetStatusDB()[s.key] = want
-            if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
+            RefreshStatusIndicators()
         end)
 
         statusCBs[i] = cb

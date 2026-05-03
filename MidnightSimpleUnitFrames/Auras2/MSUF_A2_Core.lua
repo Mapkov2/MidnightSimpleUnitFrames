@@ -2178,45 +2178,41 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
         ClearCooldownVisual(icon, cd)
     end
 
-    -- Cooldown text manager: skip entirely in pass-through (Blizzard C++ renders text).
-    if not _useBlizzardTimer then
-        CT = CT or API.CooldownText
-        local wantText = _showText and (icon._msufA2_hideCDNumbers ~= true)
-        if CT then
-            if wantText and hadTimer then
-                local wasRegistered = (icon._msufA2_cdMgrRegistered == true)
-                if (not wasRegistered) and CT.RegisterIcon then
-                    CT.RegisterIcon(icon)
-                    wasRegistered = (icon._msufA2_cdMgrRegistered == true)
-                end
+    -- Cooldown text manager only recolors the existing Cooldown FontString.
+    -- This also works in Blizzard-native timer mode: Blizzard owns the text,
+    -- MSUF only applies Safe/Warning/Urgent colors from the Colors menu.
+    CT = CT or API.CooldownText
+    local wantText = _showText and (icon._msufA2_hideCDNumbers ~= true)
+    if CT then
+        if wantText and hadTimer then
+            local wasRegistered = (icon._msufA2_cdMgrRegistered == true)
+            if (not wasRegistered) and CT.RegisterIcon then
+                CT.RegisterIcon(icon)
+                wasRegistered = (icon._msufA2_cdMgrRegistered == true)
+            end
 
-                local objChanged = (icon._msufA2_lastCdDurationObj ~= obj)
-                local aidChanged = (icon._msufA2_lastCdAid ~= aid)
-                local textStateChanged = (icon._msufA2_lastCdWantText ~= true)
-                local shownChanged = (icon._msufA2_lastCdShown ~= true)
+            local objChanged = (icon._msufA2_lastCdDurationObj ~= obj)
+            local aidChanged = (icon._msufA2_lastCdAid ~= aid)
+            local textStateChanged = (icon._msufA2_lastCdWantText ~= true)
+            local shownChanged = (icon._msufA2_lastCdShown ~= true)
 
-                if wasRegistered and CT.TouchIcon and (objChanged or aidChanged or textStateChanged or shownChanged) then
-                    CT.TouchIcon(icon)
-                end
+            if wasRegistered and CT.TouchIcon and (objChanged or aidChanged or textStateChanged or shownChanged) then
+                CT.TouchIcon(icon)
+            end
 
-                icon._msufA2_lastCdDurationObj = obj
-                icon._msufA2_lastCdAid = aid
-                icon._msufA2_lastCdWantText = true
-                icon._msufA2_lastCdShown = true
-            else
-                icon._msufA2_lastCdWantText = false
-                icon._msufA2_lastCdShown = false
-                icon._msufA2_lastCdDurationObj = nil
-                icon._msufA2_lastCdAid = nil
-                if CT.UnregisterIcon then
-                    CT.UnregisterIcon(icon)
-                end
+            icon._msufA2_lastCdDurationObj = obj
+            icon._msufA2_lastCdAid = aid
+            icon._msufA2_lastCdWantText = true
+            icon._msufA2_lastCdShown = true
+        else
+            icon._msufA2_lastCdWantText = false
+            icon._msufA2_lastCdShown = false
+            icon._msufA2_lastCdDurationObj = nil
+            icon._msufA2_lastCdAid = nil
+            if CT.UnregisterIcon then
+                CT.UnregisterIcon(icon)
             end
         end
-    else
-        -- Pass-through: ensure CT is not tracking this icon.
-        CT = CT or API.CooldownText
-        if CT and CT.UnregisterIcon then CT.UnregisterIcon(icon) end
     end
 
     -- Apply cooldown text font size + offsets (styles Blizzard native text too).
@@ -2278,15 +2274,18 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
     cd._msufA2_durationObj = obj
     icon._msufA2_lastHadTimer = true
 
-    -- CT ticker: only when NOT pass-through AND text is enabled.
-    -- Pass-through: Blizzard C++ auto-updates countdown from SetUseAuraDisplayTime.
-    -- Text disabled: no reason to touch CT at all.
-    if not _useBlizzardTimer and _showText then
+    -- CT ticker recolors the existing Cooldown FontString in both timer modes.
+    if _showText then
         CT = CT or API.CooldownText
+        local wasRegistered = (icon._msufA2_cdMgrRegistered == true)
+        if CT and (not wasRegistered) and CT.RegisterIcon then
+            CT.RegisterIcon(icon)
+            wasRegistered = (icon._msufA2_cdMgrRegistered == true)
+        end
         local objChanged = (icon._msufA2_lastCdDurationObj ~= obj)
         local aidChanged = (icon._msufA2_lastCdAid ~= aid)
         local shownChanged = (icon._msufA2_lastCdShown ~= true)
-        if CT and CT.TouchIcon and (objChanged or aidChanged or shownChanged) then
+        if CT and wasRegistered and CT.TouchIcon and (objChanged or aidChanged or shownChanged) then
             CT.TouchIcon(icon)
         end
         icon._msufA2_lastCdDurationObj = obj
@@ -2298,6 +2297,8 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
         icon._msufA2_lastCdShown = false
         icon._msufA2_lastCdDurationObj = nil
         icon._msufA2_lastCdAid = nil
+        CT = CT or API.CooldownText
+        if CT and CT.UnregisterIcon then CT.UnregisterIcon(icon) end
     end
 
     -- Pandemic: update when duration object refreshes.
@@ -2424,10 +2425,7 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
 
     -- At this point we have a visible stack display (count already set).
     -- Diff-gate SetTextColor to avoid redundant C-API calls on hot path.
-    local wantR, wantG, wantB = 1, 1, 1
-    if shared and shared.ownStackCountColor == true and icon._msufA2_lastCommit and icon._msufA2_lastCommit.isOwn == true then
-        wantR, wantG, wantB = GetStackCountRGB()
-    end
+    local wantR, wantG, wantB = GetStackCountRGB()
     if icon._msufA2_lastStackR ~= wantR or icon._msufA2_lastStackG ~= wantG or icon._msufA2_lastStackB ~= wantB then
         icon._msufA2_lastStackR = wantR
         icon._msufA2_lastStackG = wantG
@@ -3059,6 +3057,9 @@ function Apply.ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
     else
         countFS:SetPoint("TOPRIGHT", icon, "TOPRIGHT", offX, offY)
     end
+
+    local r, g, b = GetStackCountRGB()
+    countFS:SetTextColor(r, g, b, 1)
 end
 
 function Apply.ApplyCooldownTextOffsets(icon, unit, shared)

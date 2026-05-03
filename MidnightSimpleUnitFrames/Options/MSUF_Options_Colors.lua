@@ -3436,6 +3436,15 @@ F.PushAuras2ColorRefresh = function()
     if _G.MSUF_Auras2_RefreshAll then
         _G.MSUF_Auras2_RefreshAll()
     end
+    if _G.MSUF_GF_ForceAuraTextColorRefresh then
+        _G.MSUF_GF_ForceAuraTextColorRefresh()
+    end
+    if _G.MSUF_Auras2Options_RefreshTimerColorControls then
+        _G.MSUF_Auras2Options_RefreshTimerColorControls()
+    end
+    if _G.MSUF_GFAurasOptions_RefreshTimerColorControls then
+        _G.MSUF_GFAurasOptions_RefreshTimerColorControls()
+    end
     if PushVisualUpdates then
         PushVisualUpdates()
     end
@@ -3489,6 +3498,12 @@ F.UpdateAurasColorControls = function()
     end
     if auraCDUrgentLabel then
         auraCDUrgentLabel:SetAlpha(a)
+    end
+end
+
+_G.MSUF_Colors_RefreshAurasColorControls = function()
+    if F.UpdateAurasColorControls then
+        F.UpdateAurasColorControls()
     end
 end
 
