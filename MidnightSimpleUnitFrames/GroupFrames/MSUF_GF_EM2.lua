@@ -557,8 +557,9 @@ do
             origShow(...)
             if not gfBtn then
                 local hf = _G["MSUF_EM2_HUD"]; if not hf then return end
+                local slot = _G["MSUF_EM2_HUD_PreviewAddonSlot"]
                 local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
-                gfBtn = CreateFrame("Button", nil, hf); gfBtn:SetSize(38, 32)
+                gfBtn = CreateFrame("Button", nil, slot or hf); gfBtn:SetSize(38, 32)
                 gfBtn:CreateTexture(nil, "HIGHLIGHT"):SetAllPoints()
                 local lbl = gfBtn:CreateFontString(nil, "OVERLAY")
                 lbl:SetFont(FONT, 12, ""); lbl:SetShadowOffset(1, -1)
@@ -566,8 +567,11 @@ do
                 local dot = gfBtn:CreateTexture(nil, "OVERLAY")
                 dot:SetSize(30, 2); dot:SetPoint("BOTTOM", gfBtn, "BOTTOM", 0, 2)
                 dot:SetColorTexture(0.38, 0.65, 1.00, 0.90); dot:Hide(); gfBtn._dot = dot
-                -- Keep this with the center toggles; the right edge is reserved for Cancel/Exit.
-                gfBtn:SetPoint("LEFT", hf, "CENTER", 160, 0)
+                if slot then
+                    gfBtn:SetAllPoints(slot)
+                else
+                    gfBtn:SetPoint("LEFT", hf, "CENTER", -198, 0)
+                end
 
                 local function Vis()
                     if _previewShownByEM2 then

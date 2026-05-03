@@ -114,6 +114,7 @@ function Factory.Panel(name, width, visibleH, title)
         local cur = self:GetVerticalScroll()
         local mx = max(0, (self:GetScrollChild():GetHeight() or 0) - self:GetHeight())
         self:SetVerticalScroll(max(0, min(mx, cur - delta * 32)))
+        if pf.UpdateScrollIndicator then pf:UpdateScrollIndicator() end
     end)
     pf._scrollFrame = sf
 
@@ -121,12 +122,97 @@ function Factory.Panel(name, width, visibleH, title)
     sc:SetWidth(width); sc:SetHeight(1); sf:SetScrollChild(sc)
     pf._scrollChild = sc
 
+    local scrollIndicator = CreateFrame("Frame", nil, pf, "BackdropTemplate")
+    scrollIndicator:SetSize(26, 50)
+    scrollIndicator:SetPoint("RIGHT", sf, "RIGHT", -15, 0)
+    scrollIndicator:SetFrameLevel(pf:GetFrameLevel() + 4)
+    scrollIndicator:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+    scrollIndicator:SetBackdropColor(0.01, 0.015, 0.04, 0.88)
+    scrollIndicator:SetBackdropBorderColor(C.panelEdge[1], C.panelEdge[2], C.panelEdge[3], 0.95)
+    scrollIndicator:Hide()
+    pf._scrollIndicator = scrollIndicator
+
+    local function MakeScrollButton(parent, rotation, y)
+        local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+        b:SetSize(22, 22)
+        b:SetPoint("TOP", parent, "TOP", 0, y)
+        b:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+        b:SetBackdropColor(0.055, 0.075, 0.14, 0.98)
+        b:SetBackdropBorderColor(C.title[1], C.title[2], C.title[3], 0.85)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(); hl:SetColorTexture(C.orange[1], C.orange[2], C.orange[3], 0.18)
+        local icon = b:CreateTexture(nil, "OVERLAY")
+        icon:SetSize(13, 13)
+        icon:SetPoint("CENTER", 0, 0)
+        icon:SetTexture(CHEVRON)
+        icon:SetRotation(rotation)
+        icon:SetVertexColor(C.orange[1], C.orange[2], C.orange[3], 1)
+        b._icon = icon
+        return b
+    end
+
+    local upBtn = MakeScrollButton(scrollIndicator, -math.pi * 0.5, -2)
+    local downBtn = MakeScrollButton(scrollIndicator, math.pi * 0.5, -26)
+    scrollIndicator.upBtn = upBtn
+    scrollIndicator.downBtn = downBtn
+
+    local function SetScrollButtonEnabled(btn, enabled)
+        if not btn then return end
+        btn:SetAlpha(enabled and 1 or 0.65)
+        if enabled then
+            btn:SetBackdropColor(0.055, 0.075, 0.14, 0.98)
+            btn:SetBackdropBorderColor(C.title[1], C.title[2], C.title[3], 0.85)
+        else
+            btn:SetBackdropColor(C.btnBg[1], C.btnBg[2], C.btnBg[3], 0.74)
+            btn:SetBackdropBorderColor(C.btnEdge[1], C.btnEdge[2], C.btnEdge[3], 0.55)
+        end
+        if btn._icon then
+            if enabled then btn._icon:SetVertexColor(C.orange[1], C.orange[2], C.orange[3], 1)
+            else btn._icon:SetVertexColor(C.muted[1], C.muted[2], C.muted[3], 0.75) end
+        end
+    end
+
+    function pf:UpdateScrollIndicator()
+        local mx = max(0, (sf:GetScrollChild():GetHeight() or 0) - (sf:GetHeight() or 0))
+        if mx <= 1 then
+            scrollIndicator:Hide()
+            return
+        end
+        local cur = max(0, min(mx, sf:GetVerticalScroll() or 0))
+        scrollIndicator:Show()
+        SetScrollButtonEnabled(upBtn, cur > 1)
+        SetScrollButtonEnabled(downBtn, cur < mx - 1)
+    end
+
+    local function StepScroll(direction)
+        local mx = max(0, (sf:GetScrollChild():GetHeight() or 0) - (sf:GetHeight() or 0))
+        local cur = sf:GetVerticalScroll() or 0
+        sf:SetVerticalScroll(max(0, min(mx, cur + direction * 64)))
+        pf:UpdateScrollIndicator()
+    end
+    upBtn:SetScript("OnClick", function() StepScroll(-1) end)
+    downBtn:SetScript("OnClick", function() StepScroll(1) end)
+    sf:SetScript("OnVerticalScroll", function()
+        if pf.UpdateScrollIndicator then pf:UpdateScrollIndicator() end
+    end)
+    pf:SetScript("OnShow", function(self)
+        if self.UpdateScrollIndicator then self:UpdateScrollIndicator() end
+    end)
+
     local anchor = sc:CreateFontString(nil, "OVERLAY")
     anchor:SetFont(FONT, 1, ""); anchor:SetText("")
     anchor:SetPoint("TOPLEFT", sc, "TOPLEFT", PAD, -6)
     pf._contentTop = anchor
 
-    function pf:UpdateScrollHeight(h) sc:SetHeight(max(1, h + 20)) end
+    function pf:UpdateScrollHeight(h)
+        sc:SetHeight(max(1, h + 20))
+        if self.UpdateScrollIndicator then self:UpdateScrollIndicator() end
+        if C_Timer then
+            C_Timer.After(0, function()
+                if pf.UpdateScrollIndicator then pf:UpdateScrollIndicator() end
+            end)
+        end
+    end
     pf.__msufEditPopupRoot = true; pf:Hide()
     return pf
 end
