@@ -15,6 +15,8 @@ local SI = GF.SpellIndicators
 if not SI then return end
 
 local C_UnitAuras   = _G.C_UnitAuras
+local CUA_GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
+local CUA_GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 local CreateFrame   = _G.CreateFrame
 local UnitExists    = _G.UnitExists
 local GetTime       = _G.GetTime
@@ -195,18 +197,20 @@ local function SIQuerySlots(unit, filter, maxCount)
     if GF and GF.QueryAuraSlots then
         return GF.QueryAuraSlots(unit, filter, maxCount)
     end
-    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots) then return _slotBuf, 0 end
+    if not CUA_GetAuraSlots and C_UnitAuras then CUA_GetAuraSlots = C_UnitAuras.GetAuraSlots end
+    if not CUA_GetAuraSlots then return _slotBuf, 0 end
     if maxCount then
-        return CaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter, maxCount))
+        return CaptureSlots(CUA_GetAuraSlots(unit, filter, maxCount))
     end
-    return CaptureSlots(C_UnitAuras.GetAuraSlots(unit, filter))
+    return CaptureSlots(CUA_GetAuraSlots(unit, filter))
 end
 
 local function SIQueryAuraData(unit, slot)
     if GF and GF.GetAuraDataBySlot then
         return GF.GetAuraDataBySlot(unit, slot)
     end
-    return C_UnitAuras and C_UnitAuras.GetAuraDataBySlot and C_UnitAuras.GetAuraDataBySlot(unit, slot)
+    if not CUA_GetAuraDataBySlot and C_UnitAuras then CUA_GetAuraDataBySlot = C_UnitAuras.GetAuraDataBySlot end
+    return CUA_GetAuraDataBySlot and CUA_GetAuraDataBySlot(unit, slot)
 end
 
 local _scanResults = {}
@@ -288,7 +292,11 @@ end
 local function ScanUnit(unit, kind, siCfg, specKey)
     for k in pairs(_scanResults) do _scanResults[k] = nil end
     if not _reverseLookup then return end
-    if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot) then return end
+    if (not CUA_GetAuraSlots or not CUA_GetAuraDataBySlot) and C_UnitAuras then
+        CUA_GetAuraSlots = CUA_GetAuraSlots or C_UnitAuras.GetAuraSlots
+        CUA_GetAuraDataBySlot = CUA_GetAuraDataBySlot or C_UnitAuras.GetAuraDataBySlot
+    end
+    if not (CUA_GetAuraSlots and CUA_GetAuraDataBySlot) then return end
 
     local wantsAllCasters = BuildScanConfig(siCfg, specKey)
     ScanAuraSlots(unit, HELPFUL_PLAYER, true)

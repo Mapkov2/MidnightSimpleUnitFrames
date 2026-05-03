@@ -2797,17 +2797,33 @@ do
         end
     end
 
-    -- Demand-driven ticker: only runs when pandemic display is active.
+    -- Demand-driven loop: only runs when pandemic display is active.
     -- Zero idle overhead when _showPandemic is false (default).
     local _pandemicTicker
+    local function PandemicLoopStep()
+        local loop = _pandemicTicker
+        if not loop then return end
+        PandemicTick()
+        if _pandemicTicker == loop and C_Timer and C_Timer.After then
+            C_Timer.After(0.10, loop.step)
+        elseif _pandemicTicker == loop then
+            _pandemicTicker = nil
+        end
+    end
     local function _StartPandemicTicker()
         if _pandemicTicker then return end
-        if not (C_Timer and C_Timer.NewTicker) then return end
-        _pandemicTicker = C_Timer.NewTicker(0.10, PandemicTick)
+        if not (C_Timer and C_Timer.After) then return end
+        local loop = {}
+        loop.step = function()
+            if _pandemicTicker == loop then
+                PandemicLoopStep()
+            end
+        end
+        _pandemicTicker = loop
+        C_Timer.After(0.10, loop.step)
     end
     local function _StopPandemicTicker()
         if not _pandemicTicker then return end
-        _pandemicTicker:Cancel()
         _pandemicTicker = nil
         -- One cleanup pass
         PandemicTick()

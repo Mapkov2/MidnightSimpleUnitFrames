@@ -761,24 +761,20 @@ do
         local getSlots = CUA and CUA.GetAuraSlots
         local getBySlot = CUA and CUA.GetAuraDataBySlot
         if type(getSlots) ~= "function" then return false end
-        local slots = { getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil) }
         local has = false
         local aid, dispelType
-        for i = 2, #slots do
-            local slot = slots[i]
-            if slot ~= nil then
-                has = true
-                if type(getBySlot) == "function" then
-                    local aura = getBySlot(unit, slot)
-                    if aura then
-                        aid = aura.auraInstanceID or aid
-                        local dn = aura.dispelName
-                        if type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
-                            dispelType = dn
-                        end
+        local _, slot = getSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1, nil)
+        if slot ~= nil then
+            has = true
+            if type(getBySlot) == "function" then
+                local aura = getBySlot(unit, slot)
+                if aura then
+                    aid = aura.auraInstanceID or aid
+                    local dn = aura.dispelName
+                    if type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
+                        dispelType = dn
                     end
                 end
-                break
             end
         end
         return has, aid, dispelType

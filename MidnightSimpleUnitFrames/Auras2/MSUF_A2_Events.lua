@@ -73,11 +73,13 @@ local _bossEncounterActive = false
 -- Clear functions are pre-allocated at module load (zero GC at runtime).
 local _unitAuraPending = {}   -- [unit] = true while a render timer is in flight
 local _unitAuraClearFns = {}  -- [unit] = pre-allocated clear closure
+local _unitAuraClearKeys = {} -- [unit] = stable ScheduleDelayOnce key
 do
     local _knownUnits = {"player","target","focus","boss1","boss2","boss3","boss4","boss5"}
     for _, u in ipairs(_knownUnits) do
         local unit = u
         _unitAuraClearFns[unit] = function() _unitAuraPending[unit] = nil end
+        _unitAuraClearKeys[unit] = "A2_UNIT_AURA_CLEAR_" .. unit
     end
 end
 
@@ -935,7 +937,18 @@ end
                 -- P2: per-unit burst dedup — only one timer per unit per 20ms window.
                 if not _unitAuraPending[unit] then
                     _unitAuraPending[unit] = true
-                    _ScheduleDelayOnce("A2_UNIT_AURA_CLEAR_" .. tostring(unit), 0.02, _unitAuraClearFns[unit] or function() _unitAuraPending[unit] = nil end)
+                    local clearFn = _unitAuraClearFns[unit]
+                    if not clearFn then
+                        local clearUnit = unit
+                        clearFn = function() _unitAuraPending[clearUnit] = nil end
+                        _unitAuraClearFns[unit] = clearFn
+                    end
+                    local clearKey = _unitAuraClearKeys[unit]
+                    if not clearKey then
+                        clearKey = "A2_UNIT_AURA_CLEAR_" .. tostring(unit)
+                        _unitAuraClearKeys[unit] = clearKey
+                    end
+                    _ScheduleDelayOnce(clearKey, 0.02, clearFn)
                     MarkDirty(unit)
                 end
             end

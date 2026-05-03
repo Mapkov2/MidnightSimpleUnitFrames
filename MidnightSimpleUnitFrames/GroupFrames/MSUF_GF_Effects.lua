@@ -630,22 +630,18 @@ local function ResolveDispelColorObj(f, dispelName)
 
         -- Recovery fallback for clients where GetAuraDataByIndex on this filter misbehaves.
         if CUA.GetAuraSlots and CUA.GetAuraDataBySlot then
-            local slots = { CUA.GetAuraSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE") }
-            for i = 2, #slots do
-                local slot = slots[i]
-                local auraBySlot = slot and CUA.GetAuraDataBySlot(unit, slot)
-                if auraBySlot and auraBySlot.auraInstanceID then
-                    if f then f._msufGFDispelAuraID = auraBySlot.auraInstanceID end
-                    fallbackType = fallbackType or GetReadableDispelTypeName(auraBySlot.dispelName)
-                    local color = CUA.GetAuraDispelTypeColor(unit, auraBySlot.auraInstanceID, curve)
-                    if color then
-                        if f then
-                            f._msufGFDispelColorObj = color
-                            f._msufGFDispelColorRev = colorRev
-                        end
-                        return color
+            local _, slot = CUA.GetAuraSlots(unit, "HARMFUL|RAID_PLAYER_DISPELLABLE", 1)
+            local auraBySlot = slot and CUA.GetAuraDataBySlot(unit, slot)
+            if auraBySlot and auraBySlot.auraInstanceID then
+                if f then f._msufGFDispelAuraID = auraBySlot.auraInstanceID end
+                fallbackType = fallbackType or GetReadableDispelTypeName(auraBySlot.dispelName)
+                local color = CUA.GetAuraDispelTypeColor(unit, auraBySlot.auraInstanceID, curve)
+                if color then
+                    if f then
+                        f._msufGFDispelColorObj = color
+                        f._msufGFDispelColorRev = colorRev
                     end
-                    break
+                    return color
                 end
             end
         end
@@ -996,7 +992,12 @@ local function dispatchAura(f, unit, updateInfo)
             cb = function() frame._msufGFFullPending = nil end
             f._msufGFPendClearCB = cb
         end
-        _MSUF_ScheduleDelayOnce(f._msufGFPendClearKey or ("GF_AURA_PEND_" .. tostring(f)), 0.02, cb)
+        local key = f._msufGFPendClearKey
+        if not key then
+            key = "GF_AURA_PEND_" .. tostring(f)
+            f._msufGFPendClearKey = key
+        end
+        _MSUF_ScheduleDelayOnce(key, 0.02, cb)
     end
 
     -- ════════════════════════════════════════════════════════════════
@@ -1068,7 +1069,8 @@ end
 _gfFlushDirtyAuras = function()
     _gfAuraBudget = 0
     _gfAuraDirtyPending = false
-    while _gfAuraDirtyHead <= _gfAuraDirtyTail do
+    local stopTail = _gfAuraDirtyTail
+    while _gfAuraDirtyHead <= stopTail do
         local f = _gfAuraDirtyQueue[_gfAuraDirtyHead]
         _gfAuraDirtyQueue[_gfAuraDirtyHead] = nil
         _gfAuraDirtyHead = _gfAuraDirtyHead + 1
@@ -1078,12 +1080,20 @@ _gfFlushDirtyAuras = function()
                 f._msufGFAuraDirty = nil
                 local u = f.unit
                 if u and UnitExists(u) then
+                    -- This is the deferred full scan, so bypass the short
+                    -- same-unit burst guard that scheduled the deferral.
+                    f._msufGFFullPending = nil
                     dispatchAura(f, u, nil)
                 end
             end
         end
     end
-    _gfAuraDirtyHead, _gfAuraDirtyTail = 1, 0
+    if _gfAuraDirtyHead > _gfAuraDirtyTail then
+        _gfAuraDirtyHead, _gfAuraDirtyTail = 1, 0
+    elseif not _gfAuraDirtyPending then
+        _gfAuraDirtyPending = true
+        _MSUF_ScheduleOnce("GF_AURA_BUDGET_FLUSH", _gfFlushDirtyAuras)
+    end
 end
 ------------------------------------------------------------------------
 -- Range fade (1:1 EQoL pattern)
@@ -3728,7 +3738,7 @@ end
 ------------------------------------------------------------------------
 -- Tooltip + Highlight hooks
 ------------------------------------------------------------------------
-local _tooltipPending -- C_Timer handle for deferred tooltip
+local _tooltipPendingToken = 0 -- invalidates deferred tooltip callbacks
 local _tooltipTarget  -- frame awaiting tooltip
 
 local function OnEnter(f)
@@ -3736,7 +3746,7 @@ local function OnEnter(f)
     local hb = EnsureMouseoverHighlight(f)
     if hb then hb:Show() end
     -- Cancel any pending tooltip for a different frame
-    if _tooltipPending then _tooltipPending:Cancel(); _tooltipPending = nil end
+    _tooltipPendingToken = _tooltipPendingToken + 1
     _tooltipTarget = f
     -- Tooltip (throttled 150ms)
     if not f.unit or not UnitExists(f.unit) then return end
@@ -3750,8 +3760,9 @@ local function OnEnter(f)
         if mod == "CTRL"  and not IsControlKeyDown()  then return end
         if mod == "SHIFT" and not IsShiftKeyDown()    then return end
     end
-    _tooltipPending = C_Timer.NewTimer(0.15, function()
-        _tooltipPending = nil
+    local token = _tooltipPendingToken
+    C_Timer.After(0.15, function()
+        if _tooltipPendingToken ~= token then return end
         if _tooltipTarget ~= f then return end
         if not f.unit or not UnitExists(f.unit) then return end
         if _G.GameTooltip and not _G.GameTooltip:IsForbidden() then
@@ -3764,7 +3775,7 @@ end
 
 local function OnLeave(f)
     -- Cancel pending tooltip
-    if _tooltipPending then _tooltipPending:Cancel(); _tooltipPending = nil end
+    _tooltipPendingToken = _tooltipPendingToken + 1
     _tooltipTarget = nil
     -- Hide highlight
     if f._msufGFHoverBorder then f._msufGFHoverBorder:Hide() end
@@ -3868,14 +3879,14 @@ _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
 -- Memory-leak Fix 1: Frame-retire cleanup hook
 -- Called from RetireHeader for every child being retired. Removes the
 -- frame from every module-level table that strong-refs it, and cancels
--- any pending Closure-Timer that captures the frame as upvalue.
+-- any pending deferred callback that captures the frame as upvalue.
 --
 -- Without this, retired frames live up to ~6s longer than necessary
 -- (ready-check fade timer) and module tables accumulate stale refs
 -- between retire and next GROUP_ROSTER_UPDATE.
 --
 -- Defined as upvalue-closure so it sees:
---   _gfTargetFrame, _gfFocusFrame, _tooltipPending, _tooltipTarget,
+--   _gfTargetFrame, _gfFocusFrame, _tooltipPendingToken, _tooltipTarget,
 --   _gfTextDirtyFrames
 -- which are file-scope locals.
 ------------------------------------------------------------------------
@@ -3895,10 +3906,7 @@ _G.MSUF_GF_OnFrameRetire = function(f)
 
     -- Cancel pending tooltip if it targets this frame
     if _tooltipTarget == f then
-        if _tooltipPending and type(_tooltipPending.Cancel) == "function" then
-            _tooltipPending:Cancel()
-        end
-        _tooltipPending = nil
+        _tooltipPendingToken = _tooltipPendingToken + 1
         _tooltipTarget  = nil
     end
 

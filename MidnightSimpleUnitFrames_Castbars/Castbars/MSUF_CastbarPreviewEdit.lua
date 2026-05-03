@@ -111,16 +111,20 @@ local function MSUF_PulseCastbarPreview(kind)
         _G.MSUF_CastbarPreviewPulseTimers = timers
     end
 
-    if not (C_Timer and C_Timer.NewTimer) then
+    if not (C_Timer and C_Timer.After) then
         return
     end
 
     local function ScheduleStop(delay)
         local old = timers[kind]
+        if type(old) == "table" then old.cancelled = true end
         if old and old.Cancel then
             old:Cancel()
         end
-        timers[kind] = C_Timer.NewTimer(delay, function()
+        local token = {}
+        timers[kind] = token
+        C_Timer.After(delay, function()
+            if token.cancelled or timers[kind] ~= token then return end
             if not MSUF_UnitEditModeActive then return end
             if InCombatLockdown and InCombatLockdown() then return end
             if type(EnsureDB) == "function" then EnsureDB() end
@@ -139,6 +143,9 @@ local function MSUF_PulseCastbarPreview(kind)
                 return
             end
 
+            if timers[kind] == token then
+                timers[kind] = nil
+            end
             stopFn(false, true)
         end)
     end
@@ -335,4 +342,3 @@ end
         end
     end)
 end
-
