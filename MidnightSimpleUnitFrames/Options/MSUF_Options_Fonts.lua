@@ -876,43 +876,56 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- =====================================================================
     local styleBox, styleBody = MakeCollapsibleBox(content, sizeBox, CONTENT_W, 148, TR("Text Style"), false)
 
-    local boldCheck = UI.Check({
+    local ufOutlineLbl = styleBody:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ufOutlineLbl:SetPoint("TOPLEFT", styleBody, "TOPLEFT", 16, -8)
+    ufOutlineLbl:SetText(TR("Font Outline"))
+
+    local boldCheck = UI.Dropdown({
         name = "MSUF_BoldTextCheck", parent = styleBody,
-        anchor = styleBody, anchorPoint = "TOPLEFT", x = 16, y = -8, maxTextWidth = 400,
-        label = TR("Use bold text (THICKOUTLINE)"),
-        get = function() return ScopeGet("boldText", false) and true or false end,
+        anchor = ufOutlineLbl, x = -16, y = -2, width = 240,
+        items = {
+            { key = "OUTLINE",      label = "Outline"       },
+            { key = "THICKOUTLINE", label = "Thick Outline" },
+            { key = "NONE",         label = "None"          },
+        },
+        get = function()
+            if ScopeGet("noOutline", false) then return "NONE" end
+            if ScopeGet("boldText", false) then return "THICKOUTLINE" end
+            return "OUTLINE"
+        end,
         set = function(v)
-            ScopeSet("boldText", v)
+            ScopeSet("boldText", v == "THICKOUTLINE")
+            ScopeSet("noOutline", v == "NONE")
             InvalidateTextSpecs()
             LiveSyncFontVisuals({ layout = "FONT_STYLE" })
         end,
     })
 
-    local noOutlineCheck = UI.Check({
-        name = "MSUF_NoOutlineCheck", parent = styleBody,
-        anchor = boldCheck, x = 0, y = -10, maxTextWidth = 400,
-        label = TR("Disable black outline around text"),
-        get = function() return ScopeGet("noOutline", false) and true or false end,
-        set = function(v)
-            ScopeSet("noOutline", v)
-            InvalidateTextSpecs()
-            LiveSyncFontVisuals({ layout = "FONT_STYLE" })
-        end,
-    })
+    local ufShadowLbl = styleBody:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ufShadowLbl:SetPoint("TOPLEFT", boldCheck, "BOTTOMLEFT", 16, -10)
+    ufShadowLbl:SetText(TR("Add text shadow (backdrop)"))
 
-    local textBackdropCheck = UI.Check({
+    local textBackdropCheck = UI.Dropdown({
         name = "MSUF_TextBackdropCheck", parent = styleBody,
-        anchor = noOutlineCheck, x = 0, y = -10, maxTextWidth = 400,
-        label = TR("Add text shadow (backdrop)"),
-        get = function() return ScopeGet("textBackdrop", true) and true or false end,
+        anchor = ufShadowLbl, x = -16, y = -2, width = 240,
+        items = {
+            { key = "ON",  label = "On"  },
+            { key = "OFF", label = "Off" },
+        },
+        get = function()
+            return ScopeGet("textBackdrop", true) and "ON" or "OFF"
+        end,
         set = function(v)
-            ScopeSet("textBackdrop", v)
+            ScopeSet("textBackdrop", v == "ON")
             InvalidateTextSpecs()
             LiveSyncFontVisuals({ layout = "FONT_STYLE" })
         end,
     })
+
+    local noOutlineCheck = nil
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = ufOutlineLbl
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = boldCheck
-    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = noOutlineCheck
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = ufShadowLbl
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = textBackdropCheck
 
     -- GF: Font Outline dropdown + Use Global Font Color
