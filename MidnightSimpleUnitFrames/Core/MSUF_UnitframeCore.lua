@@ -2295,6 +2295,50 @@ local function _ZeroOverlayBar(bar)
     bar:Hide()
 end
 
+local function _ResolveAbsorbDisplayFast(f)
+    local bars = addon and addon.Bars
+    local resolve = bars and bars._ResolveAbsorbDisplay
+    if type(resolve) == "function" then
+        return resolve(f and f.unit)
+    end
+
+    local db = UFCore_EnsureDBOnce()
+    local g = db and db.general or nil
+    local mode = tonumber(g and g.absorbTextMode)
+    if mode then
+        return (mode == 2 or mode == 3), (mode == 3 or mode == 4)
+    end
+    return not (g and g.enableAbsorbBar == false), (g and g.showTotalAbsorbAmount == true)
+end
+
+local function _RefreshAbsorbTextFast(f, hp, showText)
+    if not f or f.showHPText == false then return end
+    if showText == nil then
+        local cached = f._msufCachedShowAbsorbText
+        if cached ~= nil then
+            showText = cached
+        else
+            local _, resolvedShowText = _ResolveAbsorbDisplayFast(f)
+            showText = resolvedShowText
+        end
+    end
+    if not showText then return end
+
+    local fnTxt = FN_UpdateHpTextFast
+    if not fnTxt then
+        UFCore_ResolveFastFns()
+        fnTxt = FN_UpdateHpTextFast
+    end
+    if not fnTxt then return end
+
+    if hp == nil and f.unit and UnitHealth then
+        hp = UnitHealth(f.unit)
+    end
+    if hp ~= nil then
+        fnTxt(f, hp)
+    end
+end
+
 -- UNIT_ABSORB_AMOUNT_CHANGED: only absorb bar
 local function _AbsorbValueFast(f)
     local ab = f.absorbBar
@@ -2307,19 +2351,40 @@ local function _AbsorbValueFast(f)
     end
     local unit = f.unit
     if not unit then return end
+    if UnitExists and not UnitExists(unit) then
+        _ZeroOverlayBar(ab)
+        return
+    end
+
+    local enableBar, showText = _ResolveAbsorbDisplayFast(f)
+    f._msufAbsorbEnCached = enableBar and true or false
+    if not enableBar and not showText then
+        _ZeroOverlayBar(ab)
+        return
+    end
+
     UnitGetDetailedHealPrediction(unit, "player", calc)
     local maxHP = calc:GetMaximumHealth()
+    local hp = calc:GetCurrentHealth()
+    local bar = f.hpBar
+    if bar then UFCore_SetHealthBarValue(f, bar, hp) end
+
+    if not enableBar then
+        _ZeroOverlayBar(ab)
+        _RefreshAbsorbTextFast(f, hp, showText)
+        return
+    end
+
     local absAmt = _CalcDamageAbsorbs(calc, unit)
     if absAmt == nil then
         _ZeroOverlayBar(ab)
+        _RefreshAbsorbTextFast(f, hp, showText)
         return
     end
     ab:SetMinMaxValues(0, maxHP)
     ab:SetValue(absAmt)
     ab:Show()
-    local bar = f.hpBar
-    local hp = calc:GetCurrentHealth()
-    if bar then UFCore_SetHealthBarValue(f, bar, hp) end
+    _RefreshAbsorbTextFast(f, hp, showText)
 end
 
 -- UNIT_HEAL_ABSORB_AMOUNT_CHANGED: only heal absorb bar
@@ -2333,19 +2398,25 @@ local function _HealAbsorbValueFast(f)
     end
     local unit = f.unit
     if not unit then return end
+    if UnitExists and not UnitExists(unit) then
+        _ZeroOverlayBar(hab)
+        return
+    end
     UnitGetDetailedHealPrediction(unit, "player", calc)
     local maxHP = calc:GetMaximumHealth()
+    local hp = calc:GetCurrentHealth()
     hab:SetMinMaxValues(0, maxHP)
     local habAmt = _CalcHealAbsorbs(calc, unit)
     if habAmt == nil then
         _ZeroOverlayBar(hab)
+        _RefreshAbsorbTextFast(f, hp, nil)
         return
     end
     hab:SetValue(habAmt)
     hab:Show()
     local bar = f.hpBar
-    local hp = calc:GetCurrentHealth()
     if bar then UFCore_SetHealthBarValue(f, bar, hp) end
+    _RefreshAbsorbTextFast(f, hp, nil)
 end
 
 -- UNIT_HEAL_PREDICTION: only self-heal prediction bar
