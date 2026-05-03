@@ -443,6 +443,7 @@ local MASK_ALL = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_PORTRAIT,
 
 local MASK_UNIT_EVENT_FALLBACK = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_STATUS, DIRTY_PORTRAIT, DIRTY_INDICATOR, DIRTY_TOTINLINE)
 local MASK_UNIT_SWAP = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_STATUS, DIRTY_PORTRAIT, DIRTY_INDICATOR, DIRTY_TOTINLINE)
+local MASK_UNIT_SWAP_NO_PORTRAIT = band(MASK_UNIT_SWAP, bnot(DIRTY_PORTRAIT))
 
 -- When a frame becomes visible again, refresh only dynamic values (no layout).
 -- This matches the "no layout in runtime" goal while preventing stale displays after being hidden.
@@ -2969,6 +2970,10 @@ local function _UFCore_FlushBossEngage()
         local f = FramesByUnit[unit]
         -- Fast path: only queue live/visible boss frames; skip empty tokens.
         if (UnitExists and UnitExists(unit)) or (f and f.IsShown and f:IsShown()) then
+            if f then
+                f._msufPortraitDirty = true
+                f._msufPortraitNextAt = 0
+            end
             -- Non-urgent lane: preserve correctness while smoothing pull spikes.
             QueueUnit(unit, false, _bossEngageMask, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
         end
@@ -3161,8 +3166,8 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                 end
             end
             if tf.nameText then tf.nameText:SetText(UnitName(unit) or "") end
-            -- Queue full refresh for next frame (absorbs, text, power, status, etc.)
-            Core.MarkDirty(tf, MASK_UNIT_SWAP, false, "TARGET_SWAP_DEFERRED")
+            -- Queue non-portrait refresh for next frame; portrait render is budgeted below.
+            Core.MarkDirty(tf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
         end
         -- ToT: same naked path
         local ttf = FramesByUnit["targettarget"]
@@ -3198,11 +3203,11 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                 end
             end
             if ttf.nameText and UnitExists(unit2) then ttf.nameText:SetText(UnitName(unit2) or "") end
-            Core.MarkDirty(ttf, MASK_UNIT_SWAP, false, "TARGET_SWAP_DEFERRED")
+            Core.MarkDirty(ttf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
         end
         -- Deferred: portrait, visual, absorb cache invalidation
-        DeferSwapWork("target", "PLAYER_TARGET_CHANGED", false, false)
-        if ttf then DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", false, false) end
+        DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
+        if ttf then DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", true, false) end
         -- Boss target highlight (deferred — not visible on click frame)
         if FramesByUnit["boss1"] then
             local bthFn = _G.MSUF_UpdateBossTargetHighlight
@@ -3238,8 +3243,8 @@ Global:SetScript("OnEvent", function(_, event, arg1)
             end
         end
         if totFrame then
-            QueueUnit("targettarget", true, MASK_UNIT_SWAP, event)
-            DeferSwapWork("targettarget", event, false, false)
+            QueueUnit("targettarget", true, MASK_UNIT_SWAP_NO_PORTRAIT, event)
+            DeferSwapWork("targettarget", event, true, false)
         end
         return
     end
@@ -3287,6 +3292,8 @@ Global:SetScript("OnEvent", function(_, event, arg1)
             pf._msufCachedReactionKind = nil
             pf._msufCachedIsPlayer = nil
             pf._msufHealthColorDirty = true
+            pf._msufPortraitDirty = true
+            pf._msufPortraitNextAt = 0
             Core.MarkDirty(pf, MASK_UNIT_SWAP, true, "UNIT_PET")
         end
         return
@@ -3372,9 +3379,9 @@ do
                     end
                 end
                 if ff.nameText then ff.nameText:SetText(UnitName(unit) or "") end
-                Core.MarkDirty(ff, MASK_UNIT_SWAP, false, "FOCUS_SWAP_DEFERRED")
+                Core.MarkDirty(ff, MASK_UNIT_SWAP_NO_PORTRAIT, false, "FOCUS_SWAP_DEFERRED")
             end
-            DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", false, false)
+            DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", true, false)
         end)
     end
 end
