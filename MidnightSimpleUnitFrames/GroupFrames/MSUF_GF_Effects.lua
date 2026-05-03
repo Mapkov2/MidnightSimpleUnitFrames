@@ -1,6 +1,6 @@
 -- MSUF_GF_Effects.lua — Group Frames Phase 2: Events + Effects
 -- Per-frame RegisterUnitEvent, range fade (Grid2 pattern), aggro/dispel/target
--- borders, status icons, AFK/DND text, UNIT_AURA coalescing
+-- borders, AFK/DND text, UNIT_AURA coalescing
 -- Midnight 12.0 secret-safe, zero combat overhead
 local _, ns = ...
 ns = ns or (_G.MSUF_NS) or {}
@@ -20,7 +20,6 @@ local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitIsAFK = _G.UnitIsAFK
 local UnitIsDND = _G.UnitIsDND
 local UnitIsUnit = _G.UnitIsUnit
-local UnitIsPlayer = _G.UnitIsPlayer
 local UnitClass = _G.UnitClass
 local UnitHealth = _G.UnitHealth
 local UnitHealthMax = _G.UnitHealthMax
@@ -29,16 +28,21 @@ local UnitPowerMax = _G.UnitPowerMax
 local UnitPowerType = _G.UnitPowerType
 local UnitName = _G.UnitName
 local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
-local UnitIsGroupLeader = _G.UnitIsGroupLeader
-local UnitIsGroupAssistant = _G.UnitIsGroupAssistant
 local UnitThreatSituation = _G.UnitThreatSituation
-local UnitPhaseReason = _G.UnitPhaseReason
-local UnitHasIncomingResurrection = _G.UnitHasIncomingResurrection
-local GetRaidTargetIndex = _G.GetRaidTargetIndex
-local GetReadyCheckStatus = _G.GetReadyCheckStatus
-local C_IncomingSummon = _G.C_IncomingSummon
 local C_Timer = _G.C_Timer
 local GetTime = _G.GetTime
+
+local UpdateRoleIcon = GF.UpdateRoleIcon
+local UpdateRaidMarker = GF.UpdateRaidMarker
+local UpdateLeaderIcon = GF.UpdateLeaderIcon
+local UpdateReadyCheck = GF.UpdateReadyCheck
+local UpdateSummonIcon = GF.UpdateSummonIcon
+local UpdateResurrectIcon = GF.UpdateResurrectIcon
+local UpdatePhaseIcon = GF.UpdatePhaseIcon
+local function UpdateGroupNumber(f)
+    local fn = GF.UpdateGroupNumberFrame
+    if fn then return fn(f) end
+end
 
 -- Central scheduler bridge (Foundation/MSUF_Scheduler.lua).
 -- Keeps hot-path deferrals keyed/deduped; falls back to C_Timer if a standalone
@@ -305,8 +309,6 @@ local UnitInRange      = _G.UnitInRange
 local IsInGroup        = _G.IsInGroup
 local IsInRaid         = _G.IsInRaid
 local UnitIsGhost      = _G.UnitIsGhost
-local GetRaidRosterInfo = _G.GetRaidRosterInfo
-local strmatch         = string.match
 local _smoothInterp    = _G.Enum and _G.Enum.StatusBarInterpolation
                          and _G.Enum.StatusBarInterpolation.ExponentialEaseOut
 
@@ -715,39 +717,6 @@ local function _GF_StopDispelGlow(f)
 end
 
 ------------------------------------------------------------------------
--- Status icon textures
-------------------------------------------------------------------------
-local ICON_TEX = {
-    ready      = "Interface\\RaidFrame\\ReadyCheck-Ready",
-    notReady   = "Interface\\RaidFrame\\ReadyCheck-NotReady",
-    waiting    = "Interface\\RaidFrame\\ReadyCheck-Waiting",
-    resurrect  = "Interface\\RaidFrame\\Raid-Icon-Rez",
-    phase      = "Interface\\TargetingFrame\\UI-PhasingIcon",
-}
-local SUMMON_PENDING  = 1
-local SUMMON_ACCEPTED = 2
-local SUMMON_DECLINED = 3
-local SUMMON_TEX = {
-    [1] = "Interface\\RaidFrame\\Raid-Icon-SummonPending",
-    [2] = "Interface\\RaidFrame\\Raid-Icon-SummonAccepted",
-    [3] = "Interface\\RaidFrame\\Raid-Icon-SummonDeclined",
-}
-
-------------------------------------------------------------------------
--- Role icon coords
-------------------------------------------------------------------------
-local ROLE_TEXTURES = {
-    TANK    = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES",
-    HEALER  = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES",
-    DAMAGER = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES",
-}
-local ROLE_COORDS = {
-    TANK    = { 0,     19/64, 22/64, 41/64 },
-    HEALER  = { 20/64, 39/64, 1/64,  20/64 },
-    DAMAGER = { 20/64, 39/64, 22/64, 41/64 },
-}
-
-------------------------------------------------------------------------
 -- Debuff stripe: presence callback (must be before dispatchAura)
 ------------------------------------------------------------------------
 local _QUESTION_MARK_ICON = 136243
@@ -899,7 +868,7 @@ local function dispatchAura(f, unit, updateInfo)
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
         end
-        if ciRelevant and GF.UpdateCornerIndicators and c.ciEn then
+        if ciRelevant and GF.UpdateCornerIndicators and c.ciAura then
             GF.UpdateCornerIndicators(f, unit)
         end
         return
@@ -975,7 +944,7 @@ local function dispatchAura(f, unit, updateInfo)
                         GF.UpdateSpellIndicators(f, unit)
                     end
                     -- Corner Indicators: removal may clear a dispel/boss dot
-                    if GF.UpdateCornerIndicators and c.ciEn then
+                    if GF.UpdateCornerIndicators and c.ciAura then
                         GF.UpdateCornerIndicators(f, unit)
                     end
                     -- Debuff stripe: a removed off-screen debuff that was driving
@@ -1086,7 +1055,7 @@ local function dispatchAura(f, unit, updateInfo)
     end
 
     -- Corner Indicators (only when enabled)
-    if GF.UpdateCornerIndicators and c.ciEn then
+    if GF.UpdateCornerIndicators and c.ciAura then
         GF.UpdateCornerIndicators(f, unit)
     end
 
@@ -1306,6 +1275,9 @@ function GF.BuildFrameCache(f)
     c.ptrOn     = c.ptr ~= "NONE"
     c.pDelim    = conf.powerTextDelimiter or " / "
     c.anyPowerText = c.showPow and (c.ptlOn or c.ptcOn or c.ptrOn) or false
+    -- Static config gate only. Runtime UnitEvent registration below also
+    -- checks the current unit role so DPS frames with hidden power bars do
+    -- not still wake up on UNIT_POWER_*.
     c.hasPowerElement = c.powH > 0 or c.anyPowerText
     -- UNIT_POWER_UPDATE is enough for group members. The player's own group
     -- button needs UNIT_POWER_FREQUENT for responsive resource text/smooth fill.
@@ -1375,6 +1347,14 @@ function GF.BuildFrameCache(f)
     c.ciSlotBL = (conf.ciSlotBL or "none")
     c.ciSlotBR = (conf.ciSlotBR or "none")
     c.ciSlotC  = (conf.ciSlotC  or "none")
+    c.ciAura = c.ciEn and (
+        c.ciSlotTL == "dispel" or c.ciSlotTR == "dispel" or c.ciSlotBL == "dispel"
+        or c.ciSlotBR == "dispel" or c.ciSlotC == "dispel"
+        or c.ciSlotTL == "custom" or c.ciSlotTR == "custom" or c.ciSlotBL == "custom"
+        or c.ciSlotBR == "custom" or c.ciSlotC == "custom")
+    c.ciThreat = c.ciEn and (
+        c.ciSlotTL == "aggro" or c.ciSlotTR == "aggro" or c.ciSlotBL == "aggro"
+        or c.ciSlotBR == "aggro" or c.ciSlotC == "aggro")
 
     -- Raid debuffs
 
@@ -1399,12 +1379,12 @@ function GF.BuildFrameCache(f)
     c.phaseEn  = conf.phaseIcon ~= false
 
     -- Composite: does anything need UNIT_AURA?
-    c.needAura = c.anyAuraGrp or c.ciEn
+    c.needAura = c.anyAuraGrp or c.ciAura
                  or (c.dispelScan and GF._playerCanDispel)
                  or c.siEn
 
     -- Composite: does anything need UNIT_THREAT?
-    c.needThreat = c.aggroEn
+    c.needThreat = c.aggroEn or c.ciThreat
 
     -- Private auras
     local pa = conf.privateAuras
@@ -1751,11 +1731,20 @@ _GF_RefreshBorder = function(f, unit)
     _GF_StopDispelGlow(f)
 end
 
+function GF._RefreshAggroConsumers(f, unit, c)
+    _GF_RefreshBorder(f, unit)
+    if c and c.ciThreat and GF.UpdateCornerIndicators then
+        f._msufCILastAt = nil
+        GF.UpdateCornerIndicators(f, unit)
+    end
+end
+
 local function UpdateAggro(f, unit)
     local kind = f._msufGFKind or "party"
     local prevLevel = f._msufGFAggroLevel
     -- PERF: pre-resolved flags on _c cache (populated in BuildFrameCache).
     local c = f._c
+    if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
 
     local testMode = _G.MSUF_AggroBorderTestMode
     -- Scope filtering
@@ -1768,37 +1757,38 @@ local function UpdateAggro(f, unit)
             if scopeKind ~= kind then testMode = false end
         end
     end
-    if (((c and c.aggroEn) == false) or not unit) and not testMode then
-        if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+    local wantsAggroState = c and (c.aggroEn or c.ciThreat)
+    if ((not wantsAggroState) or not unit) and not testMode then
+        if prevLevel ~= nil then f._msufGFAggroLevel = nil; GF._RefreshAggroConsumers(f, unit, c) end
         return
     end
 
     if not testMode then
         if not UnitExists(unit) then
-            if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+            if prevLevel ~= nil then f._msufGFAggroLevel = nil; GF._RefreshAggroConsumers(f, unit, c) end
             return
         end
         local aggroMode = (c and c.aggroMode) or "ALL"
         if aggroMode ~= "ALL" then
             local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
             if aggroMode == "HEALER_ONLY" and role ~= "HEALER" then
-                if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+                if prevLevel ~= nil then f._msufGFAggroLevel = nil; GF._RefreshAggroConsumers(f, unit, c) end
                 return
             end
             if aggroMode == "TANK_ONLY" and role ~= "TANK" then
-                if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+                if prevLevel ~= nil then f._msufGFAggroLevel = nil; GF._RefreshAggroConsumers(f, unit, c) end
                 return
             end
         end
         local status = UnitThreatSituation and UnitThreatSituation(unit)
         if issecretvalue and issecretvalue(status) then
             -- Secret: can't diff-gate, but only refresh if we had aggro before
-            if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+            if prevLevel ~= nil then f._msufGFAggroLevel = nil; GF._RefreshAggroConsumers(f, unit, c) end
             return
         end
         local s = tonumber(status)
         if not s or s < 1 then
-            if prevLevel ~= nil then f._msufGFAggroLevel = nil; _GF_RefreshBorder(f, unit) end
+            if prevLevel ~= nil then f._msufGFAggroLevel = nil; GF._RefreshAggroConsumers(f, unit, c) end
             return
         end
         -- Diff-gate: only refresh border when threat level actually changes
@@ -1807,7 +1797,7 @@ local function UpdateAggro(f, unit)
     else
         f._msufGFAggroLevel = 3
     end
-    _GF_RefreshBorder(f, unit)
+    GF._RefreshAggroConsumers(f, unit, c)
 end
 GF._UpdateAggro = UpdateAggro
 
@@ -2185,249 +2175,6 @@ local function UpdateStatusText(f, unit, forceAway)
 end
 
 ------------------------------------------------------------------------
--- Role icon update
-------------------------------------------------------------------------
-function GF._UpdatePowerRoleVisibility(f, unit)
-    if not f.power then return false end
-    local c = f._c
-    local hidden = false
-    if c then
-        local role = (GF.GetUnitGroupRole and GF.GetUnitGroupRole(unit))
-            or ((UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit)) or "DAMAGER")
-        role = (GF.NormalizeGroupRole and GF.NormalizeGroupRole(role)) or role
-        if GF.GetEffectivePowerHeight then
-            hidden = GF.GetEffectivePowerHeight(f._msufGFKind or "party", unit, role) <= 0
-        else
-            hidden = (role == "TANK" and not c.powTank)
-                or (role == "HEALER" and not c.powHealer)
-                or (role == "DAMAGER" and not c.powDPS) or false
-        end
-    end
-
-    local prev = f._msufGFPowRoleHidden
-    f._msufGFPowRoleHidden = hidden
-    if prev ~= nil and prev ~= hidden and not (InCombatLockdown and InCombatLockdown()) and GF.MarkDirty then
-        GF.MarkDirty(f, (GF.DIRTY_GEOMETRY or 0x01) + (GF.DIRTY_LAYOUT or 0x20))
-    end
-    return hidden
-end
-
-local function UpdateRoleIcon(f, unit)
-    if not f.roleIcon then
-        -- Still update power role cache even without role icon widget
-        GF._UpdatePowerRoleVisibility(f, unit)
-        return
-    end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    if not unit or not UnitExists(unit) then
-        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
-        f._msufGFPowRoleHidden = false
-        return
-    end
-    if conf.roleIcon == false then
-        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
-        GF._UpdatePowerRoleVisibility(f, unit)
-        return
-    end
-    local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-
-    -- Cache power-per-role visibility (read by dispatchPower lean path)
-    GF._UpdatePowerRoleVisibility(f, unit)
-
-    if role and role ~= "NONE" then
-        local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
-        if tex then
-            f.roleIcon:SetTexture(tex)
-            f.roleIcon:SetTexCoord(l, r, t, b)
-            if not f.roleIcon:IsShown() then f.roleIcon:Show() end
-        else
-            if f.roleIcon:IsShown() then f.roleIcon:Hide() end
-        end
-    else
-        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
-    end
-end
-
-------------------------------------------------------------------------
--- Raid target marker update
-------------------------------------------------------------------------
-local function UpdateRaidMarker(f, unit)
-    if not f.raidIcon then return end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    if conf.raidMarker == false or not unit or not UnitExists(unit) then
-        if f.raidIcon:IsShown() then f.raidIcon:Hide() end
-        return
-    end
-    local idx = GetRaidTargetIndex(unit)
-    if idx then
-        SetRaidTargetIconTexture(f.raidIcon, idx)
-        if not f.raidIcon:IsShown() then f.raidIcon:Show() end
-    else
-        if f.raidIcon:IsShown() then f.raidIcon:Hide() end
-    end
-end
-
-------------------------------------------------------------------------
--- Leader / Assistant icon update
-------------------------------------------------------------------------
-local function UpdateLeaderIcon(f, unit)
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    -- Leader icon
-    if f.leaderIcon then
-        if conf.leaderIcon == false or not unit or not UnitExists(unit) then
-            if f.leaderIcon:IsShown() then f.leaderIcon:Hide() end
-        else
-            local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
-            if isLeader then
-                local tex, l, r, t, b = GF.GetLeaderTexture(kind)
-                f.leaderIcon:SetTexture(tex)
-                f.leaderIcon:SetTexCoord(l, r, t, b)
-                if not f.leaderIcon:IsShown() then f.leaderIcon:Show() end
-            else
-                if f.leaderIcon:IsShown() then f.leaderIcon:Hide() end
-            end
-        end
-    end
-    -- Assist icon (separate from leader)
-    if f.assistIcon then
-        if conf.assistIcon == false or not unit or not UnitExists(unit) then
-            if f.assistIcon:IsShown() then f.assistIcon:Hide() end
-        else
-            local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
-            -- Only show assist if not also leader (avoid double-icon)
-            local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
-            if isAssist and not isLeader then
-                local tex, l, r, t, b = GF.GetAssistTexture(kind)
-                f.assistIcon:SetTexture(tex)
-                f.assistIcon:SetTexCoord(l, r, t, b)
-                if not f.assistIcon:IsShown() then f.assistIcon:Show() end
-            else
-                if f.assistIcon:IsShown() then f.assistIcon:Hide() end
-            end
-        end
-    end
-end
-
-------------------------------------------------------------------------
--- Ready check icon
-------------------------------------------------------------------------
-local _readyCheckTimers = {} -- [frame] = timer handle
-
-local function UpdateReadyCheck(f, unit, event)
-    if not f.readyCheckIcon then return end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    if conf.readyCheckIcon == false or not unit then
-        f.readyCheckIcon:Hide()
-        if _readyCheckTimers[f] then _readyCheckTimers[f]:Cancel(); _readyCheckTimers[f] = nil end
-        return
-    end
-
-    local status = GetReadyCheckStatus and GetReadyCheckStatus(unit)
-    if status == "ready" then
-        f.readyCheckIcon:SetTexture(ICON_TEX.ready)
-        f.readyCheckIcon:Show()
-    elseif status == "notready" then
-        f.readyCheckIcon:SetTexture(ICON_TEX.notReady)
-        f.readyCheckIcon:Show()
-    elseif status == "waiting" then
-        f.readyCheckIcon:SetTexture(ICON_TEX.waiting)
-        f.readyCheckIcon:Show()
-    else
-        if event == "READY_CHECK_FINISHED" and f.readyCheckIcon:IsShown() then
-            -- Fade out after 6 seconds
-            if _readyCheckTimers[f] then _readyCheckTimers[f]:Cancel() end
-            _readyCheckTimers[f] = C_Timer.NewTimer(6, function()
-                _readyCheckTimers[f] = nil
-                f.readyCheckIcon:Hide()
-            end)
-        else
-            f.readyCheckIcon:Hide()
-        end
-    end
-end
-
-------------------------------------------------------------------------
--- Summon icon
-------------------------------------------------------------------------
-local function UpdateSummonIcon(f, unit)
-    if not f.summonIcon then return end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    if conf.summonIcon == false or not unit then
-        f.summonIcon:Hide()
-        f._msufGFSummonActive = false
-        return
-    end
-    local status
-    if C_IncomingSummon and C_IncomingSummon.IncomingSummonStatus then
-        status = C_IncomingSummon.IncomingSummonStatus(unit)
-    end
-    local tex = status and SUMMON_TEX[status]
-    if tex then
-        f.summonIcon:SetTexture(tex)
-        f.summonIcon:Show()
-        f._msufGFSummonActive = true
-    else
-        f.summonIcon:Hide()
-        f._msufGFSummonActive = false
-    end
-end
-
-------------------------------------------------------------------------
--- Resurrect icon
-------------------------------------------------------------------------
-local function UpdateResurrectIcon(f, unit)
-    if not f.resurrectIcon then return end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    if conf.resurrectIcon == false or not unit then
-        f.resurrectIcon:Hide()
-        return
-    end
-    -- Suppress if summon is active
-    if f._msufGFSummonActive then
-        f.resurrectIcon:Hide()
-        return
-    end
-    local show = UnitHasIncomingResurrection and UnitHasIncomingResurrection(unit)
-    if show then
-        f.resurrectIcon:SetTexture(ICON_TEX.resurrect)
-        f.resurrectIcon:Show()
-    else
-        f.resurrectIcon:Hide()
-    end
-end
-
-------------------------------------------------------------------------
--- Phase icon
-------------------------------------------------------------------------
-local function UpdatePhaseIcon(f, unit)
-    if not f.phaseIcon then return end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    if conf.phaseIcon == false or not unit then
-        f.phaseIcon:Hide()
-        return
-    end
-    local reason
-    if UnitIsPlayer and UnitIsPlayer(unit) and UnitPhaseReason then
-        local conn = UnitIsConnected(unit)
-        if issecretvalue and issecretvalue(conn) then conn = true end
-        if conn then reason = UnitPhaseReason(unit) end
-    end
-    if reason then
-        f.phaseIcon:SetTexture(ICON_TEX.phase)
-        f.phaseIcon:Show()
-    else
-        f.phaseIcon:Hide()
-    end
-end
-
-------------------------------------------------------------------------
 -- Health color (GF-independent barMode, then global fallback)
 -- Optional hp / hpMax parameters: when the caller (e.g. dispatchHealthFull)
 -- already has fresh values, pass them to skip the GRADIENT-no-calc fallback's
@@ -2545,33 +2292,6 @@ local function ApplyPowerColor(f, unit)
         f.power:SetStatusBarColor(c.r or 0.5, c.g or 0.5, c.b or 0.5, 1)
     else
         f.power:SetStatusBarColor(0.5, 0.5, 0.8, 1)
-    end
-end
-
-------------------------------------------------------------------------
--- Group number (raid subgroup) — secret-safe
-------------------------------------------------------------------------
-local function UpdateGroupNumber(f, unit)
-    if not f.groupNumberText then return end
-    local conf = GF.GetConf(f._msufGFKind or "party")
-    if not conf.showGroupNumber then f.groupNumberText:Hide(); return end
-    if not unit or not GetRaidRosterInfo then f.groupNumberText:Hide(); return end
-    local idx = strmatch(unit, "^raid(%d+)$")
-    if not idx then f.groupNumberText:Hide(); return end
-    local raidIdx = tonumber(idx)
-    if not raidIdx then f.groupNumberText:Hide(); return end
-    local _, _, subgroup = GetRaidRosterInfo(raidIdx)
-    if issecretvalue and issecretvalue(subgroup) then
-        f.groupNumberText:SetText("")
-        f.groupNumberText:Hide()
-        return
-    end
-    local sg = tonumber(subgroup)
-    if sg and sg >= 1 and sg <= 8 then
-        f.groupNumberText:SetText(tostring(sg))
-        f.groupNumberText:Show()
-    else
-        f.groupNumberText:Hide()
     end
 end
 
@@ -3496,15 +3216,32 @@ end
 ------------------------------------------------------------------------
 -- RegisterUnitEvents / UnregisterUnitEvents (replaces Phase 1 stubs)
 ------------------------------------------------------------------------
+function GF._ShouldRegisterPowerEvents(f, unit, c)
+    if not (f and unit and c and c.hasPowerElement) then return false end
+    if c.anyPowerText then return true end
+    if (c.powH or 0) <= 0 then return false end
+    if GF.GetEffectivePowerHeight then
+        return GF.GetEffectivePowerHeight(f._msufGFKind or "party", unit, nil) > 0
+    end
+    local roleHidden = f._msufGFPowRoleHidden
+    if roleHidden ~= nil then return not roleHidden end
+    return true
+end
+
 function GF.RegisterUnitEvents(f, unit)
     if not (f and unit) then return end
     f._msufGFFullPending = nil
 
     if not f._c then GF.BuildFrameCache(f) end
     local c = f._c
+    local powerEvents = GF._ShouldRegisterPowerEvents(f, unit, c)
 
     -- Diff-gate: skip if same unit and same event bitmask
     local evBits = c._evBits or 0
+    if not powerEvents then
+        if c.hasPowerElement then evBits = evBits - 2 end
+        if c.powFrequent then evBits = evBits - 2048 end
+    end
     if f._msufGFRegUnit == unit and f._msufGFRegBits == evBits and f._msufGFRegEv then
         return
     end
@@ -3535,7 +3272,7 @@ function GF.RegisterUnitEvents(f, unit)
     if c.nameEn then
         f:RegisterUnitEvent("UNIT_NAME_UPDATE", unit); regTbl["UNIT_NAME_UPDATE"] = true
     end
-    if c.hasPowerElement then
+    if powerEvents then
         f:RegisterUnitEvent("UNIT_POWER_UPDATE", unit);  regTbl["UNIT_POWER_UPDATE"] = true
         if c.powFrequent and UnitIsUnit and UnitIsUnit(unit, "player") then
             f:RegisterUnitEvent("UNIT_POWER_FREQUENT", unit); regTbl["UNIT_POWER_FREQUENT"] = true
@@ -3962,19 +3699,15 @@ _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
 -- between retire and next GROUP_ROSTER_UPDATE.
 --
 -- Defined as upvalue-closure so it sees:
---   _readyCheckTimers, _gfTargetFrame, _gfFocusFrame, _tooltipPending,
---   _tooltipTarget, _gfTextDirtyFrames
+--   _gfTargetFrame, _gfFocusFrame, _tooltipPending, _tooltipTarget,
+--   _gfTextDirtyFrames
 -- which are file-scope locals.
 ------------------------------------------------------------------------
 _G.MSUF_GF_OnFrameRetire = function(f)
     if not f then return end
 
     -- Cancel + clear pending ready-check fade timer (closure captures `f`)
-    local rcTimer = _readyCheckTimers[f]
-    if rcTimer then
-        if type(rcTimer.Cancel) == "function" then rcTimer:Cancel() end
-        _readyCheckTimers[f] = nil
-    end
+    if GF.CancelReadyCheckTimer then GF.CancelReadyCheckTimer(f) end
 
     -- Stop cutaway re-schedule loop (closure self-cancels when _msufCwTicking false)
     f._msufCwTicking = false

@@ -157,6 +157,11 @@ end
 local function _GetOrCreateFS(frame)
     local fs = frame._msufGroupNumberFS
     if fs then return fs end
+    fs = frame.groupNumberText
+    if fs then
+        frame._msufGroupNumberFS = fs
+        return fs
+    end
     fs = frame:CreateFontString(nil, "OVERLAY")
     fs:SetJustifyH("CENTER")
     fs:SetJustifyV("MIDDLE")
@@ -333,6 +338,12 @@ local function _Init()
     end
 
     -- Public hooks for render-side / preview integrations.
+    GF.UpdateGroupNumberFrame = function(frame)
+        if type(frame) ~= "table" then return end
+        local kind = frame._msufGFKind or "party"
+        local conf = GF.GetConf(kind)
+        if conf then _UpdateFrame(frame, conf) end
+    end
     GF.RefreshGroupNumbers = _Schedule
     GF.SetGroupNumberOverride = function(frame, n)
         if type(frame) ~= "table" then return end
