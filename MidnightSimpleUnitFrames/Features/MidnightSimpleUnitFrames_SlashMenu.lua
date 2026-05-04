@@ -2463,11 +2463,10 @@ local sel=info and info.select;
 local wantSub=subkey if wantSub==nil and S and S.mirror then wantSub=S.mirror.pendingSubKey S.mirror.pendingSubKey=nil end
 if S and S.mirror then if isCastbarKey and type(wantSub)=="string"and wantSub~=""then S.mirror.currentSubKey=wantSub elseif not isCastbarKey then S.mirror.currentSubKey=nil end
 end
-if type(sel)=="function"then local epoch=S.mirror.selectEpoch if C_Timer and C_Timer.After then C_Timer.After(0,function() if S.mirror.selectEpoch~=epoch then return end pcall(sel,wantSub) end
+if type(sel)=="function"then local epoch=S.mirror.selectEpoch pcall(sel,wantSub) if C_Timer and C_Timer.After then C_Timer.After(0,function() if S.mirror.selectEpoch~=epoch then return end pcall(sel,wantSub) end
 )
 C_Timer.After(0.05,function() if S.mirror.selectEpoch~=epoch then return end pcall(sel,wantSub) end
 )
-else pcall(sel,wantSub)
 end
 end
 end
