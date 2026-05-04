@@ -90,15 +90,16 @@ local function ResolveAnchor(rx, ry)
 end
 
 ------------------------------------------------------------------------
--- Calculate x/y offset of handle's anchor-point vs mockFrame's anchor-point
+-- Calculate x/y offset of handle's anchor-point vs target frame's anchor-point
 ------------------------------------------------------------------------
-local function CalcOffset(handle, mockFrame, anchor)
+local function CalcOffset(handle, anchorFrame, anchor)
     local frac = AF[anchor]
     if not frac then return 0, 0 end
-    local mL = mockFrame:GetLeft()  or 0
-    local mB = mockFrame:GetBottom() or 0
-    local mW = max(1, mockFrame:GetWidth()  or 1)
-    local mH = max(1, mockFrame:GetHeight() or 1)
+    if not anchorFrame then return 0, 0 end
+    local mL = anchorFrame:GetLeft()  or 0
+    local mB = anchorFrame:GetBottom() or 0
+    local mW = max(1, anchorFrame:GetWidth()  or 1)
+    local mH = max(1, anchorFrame:GetHeight() or 1)
     local aX = mL + frac[1] * mW
     local aY = mB + frac[2] * mH
     local hW = handle:GetWidth()  or 1
@@ -121,6 +122,14 @@ local _getKind             -- fn() → "party" | "raid"
 local _coordLabel          -- FontString for coord display
 local _classIdx     = 1    -- class rotation index
 local _onSectionOpen       -- callback(sectionKey)
+
+local function GetHandleAnchorFrame(handle)
+    if handle and handle._getAnchorFrame then
+        local target = handle:_getAnchorFrame()
+        if target then return target end
+    end
+    return _mockFrame
+end
 
 local function RequestVisualRefresh()
     if GF.MarkAllDirty then
@@ -293,11 +302,12 @@ do
             for i = 1, 6 do _mockFrame._snapLines[i]:Hide() end
         end
         if not _mockFrame then return end
+        local anchorFrame = GetHandleAnchorFrame(self) or _mockFrame
 
-        local mL = _mockFrame:GetLeft()  or 0
-        local mT = _mockFrame:GetTop()   or 0
-        local mW = max(1, _mockFrame:GetWidth()  or 1)
-        local mH = max(1, _mockFrame:GetHeight() or 1)
+        local mL = anchorFrame:GetLeft()  or 0
+        local mT = anchorFrame:GetTop()   or 0
+        local mW = max(1, anchorFrame:GetWidth()  or 1)
+        local mH = max(1, anchorFrame:GetHeight() or 1)
         local hCX = ((self:GetLeft() or 0) + (self:GetRight()  or 0)) / 2
         local hCY = ((self:GetTop()  or 0) + (self:GetBottom() or 0)) / 2
 
@@ -312,10 +322,10 @@ do
         if not anchor then
             anchor = ResolveAnchor(rx, ry)
         end
-        local offX, offY = CalcOffset(self, _mockFrame, anchor)
+        local offX, offY = CalcOffset(self, anchorFrame, anchor)
 
         self:ClearAllPoints()
-        self:SetPoint(anchor, _mockFrame, anchor, offX, offY)
+        self:SetPoint(anchor, anchorFrame, anchor, offX, offY)
 
         UpdateCoordDisplay(self._cfgKey, anchor, offX, offY)
 
@@ -1568,6 +1578,13 @@ function GF.RefreshPreviewHandles()
             local anchor  = (ac and ac.anchor) or h._defAnchor or "BOTTOMLEFT"
             local offX    = floor(((ac and ac.x) or 0) * sc + 0.5)
             local offY    = floor(((ac and ac.y) or 0) * sc + 0.5)
+            local anchorTarget = (ac and ac.behindBar and _mockFrame._health) or _mockFrame
+            h._getAnchorFrame = function()
+                local k = _getKind and _getKind() or "party"
+                local c = GF.GetConf(k)
+                local cfg = c and c.auras and c.auras[grpKey]
+                return ((cfg and cfg.behindBar and _mockFrame and _mockFrame._health) or _mockFrame)
+            end
 
             local rawSz   = (ac and ac.size) or (grpKey == "externals" and 18 or 14)
             if dynScale ~= 1 then rawSz = max(8, floor(rawSz * dynScale + 0.5)) end
@@ -1727,7 +1744,7 @@ function GF.RefreshPreviewHandles()
             h:SetSize(max(sz, handleW), max(sz, handleH))
 
             h:ClearAllPoints()
-            h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
+            h:SetPoint(anchor, anchorTarget, anchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
             -- Visibility is the user's sidebar toggle alone. The config
             -- `en` state no longer hides the handle: clicking on a

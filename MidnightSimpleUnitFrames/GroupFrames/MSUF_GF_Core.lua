@@ -1484,6 +1484,12 @@ local function GetPreviewShownCount(kind)
     return n
 end
 
+function GF.GetPreviewAuraCount(kind)
+    local n = GF._previewShownCounts and GF._previewShownCounts[kind]
+    if n and n > 0 then return n end
+    return GetPreviewShownCount(kind)
+end
+
 --- Fixed reference count for positioning: deterministic regardless of live party size.
 function GF.GetPositionCount(kind)
     local conf = GF.GetConf(kind)
@@ -2350,6 +2356,7 @@ end
 -- Preview frames (standalone, not tied to SecureGroupHeader)
 ------------------------------------------------------------------------
 GF._previewFrames = GF._previewFrames or {}
+GF._previewShownCounts = GF._previewShownCounts or {}
 
 function GF.SetPreviewAnchor(kind, parent)
     GF._previewAnchorFrame[kind] = parent
@@ -2382,6 +2389,7 @@ function GF.ShowPreview(kind, count)
     local key = kind
 
     GF._previewActive[key] = true
+    GF._previewShownCounts[key] = count
 
     if not GF._previewFrames[key] then GF._previewFrames[key] = {} end
     local frames = GF._previewFrames[key]
@@ -2482,6 +2490,7 @@ end
 function GF.HidePreview(kind)
     kind = kind or "party"
     GF._previewActive[kind] = nil
+    if GF._previewShownCounts then GF._previewShownCounts[kind] = nil end
     local frames = GF._previewFrames[kind]
     if frames then
         for i = 1, #frames do

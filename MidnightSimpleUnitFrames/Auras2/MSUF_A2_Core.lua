@@ -471,7 +471,8 @@ function Cache.OnUnitAura(unit, updateInfo)
         -- skip immediate FullScan. FilterAndSort will rebuild on demand in the render pipeline.
         -- Saves 60-322µs from the target-click hot path.
         -- For party/raid units, _units[unit] is always non-nil → FullScan runs normally.
-        if _units[unit] then
+        -- Player can be the only live consumer when only reminders are enabled.
+        if unit == "player" or _units[unit] then
             Cache.FullScan(unit)
         end
         return
