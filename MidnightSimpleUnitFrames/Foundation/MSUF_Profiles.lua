@@ -697,6 +697,39 @@ aurasOwnBuffHighlightColor = true,
 local function MSUF_IsAuraGeneralKey(key)
     return (type(key) == "string") and (MSUF_AURA_GENERAL_KEYS[key] == true)
 end
+local MSUF_UNITFRAME_ALPHA_KEYS = {
+    alphaInCombat = true,
+    alphaOutOfCombat = true,
+    alphaSync = true,
+    alphaSyncBoth = true,
+    alphaExcludeTextPortrait = true,
+    alphaLayerMode = true,
+    alphaFGInCombat = true,
+    alphaFGOutOfCombat = true,
+    alphaBGInCombat = true,
+    alphaBGOutOfCombat = true,
+    alphaHPInCombat = true,
+    alphaHPOutOfCombat = true,
+    alphaPreserveHPColor = true,
+}
+local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
+    alphaInCombat = 1,
+    alphaOutOfCombat = 1,
+    alphaSync = false,
+    alphaExcludeTextPortrait = false,
+    alphaLayerMode = 0,
+    alphaFGInCombat = 1,
+    alphaFGOutOfCombat = 1,
+    alphaBGInCombat = 1,
+    alphaBGOutOfCombat = 1,
+    alphaHPInCombat = 1,
+    alphaHPOutOfCombat = 1,
+    alphaPreserveHPColor = false,
+}
+local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focus", "pet", "boss" }
+local function MSUF_IsUnitframeAlphaKey(key)
+    return (type(key) == "string") and (MSUF_UNITFRAME_ALPHA_KEYS[key] == true)
+end
 local function MSUF_IsCastbarKey(k)
     if type(k) ~= "string" then  return false end
     local lk = string.lower(k)
@@ -710,6 +743,9 @@ local function MSUF_IsCastbarKey(k)
     -- Per-castbar font override fields (global storage)
     if lk:find("spellnamefontsize", 1, true) or lk:find("timefontsize", 1, true) then  return true end
      return false
+end
+local function MSUF_IsUnitframeGeneralKey(key)
+    return (MSUF_IsUnitframeAlphaKey(key) or (not MSUF_IsColorKey(key)) or MSUF_IsAuraGeneralKey(key)) and (not MSUF_IsCastbarKey(key))
 end
 local function MSUF_CopyGeneralSubset(filterFn)
     local out = {}
@@ -740,6 +776,25 @@ local function MSUF_ApplyGeneralSubset(tbl)
         g[k] = MSUF_DeepCopy(v)
     end
  end
+local function MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+    if type(MSUF_DB) ~= "table" then  return end
+    local function ensureAlpha(conf)
+        if type(conf) ~= "table" then  return end
+        for k, v in pairs(MSUF_UNITFRAME_ALPHA_DEFAULTS) do
+            if conf[k] == nil then
+                conf[k] = v
+            end
+        end
+    end
+    for _, unitKey in ipairs(MSUF_UNITFRAME_UNIT_KEYS) do
+        MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+        ensureAlpha(MSUF_DB[unitKey])
+    end
+    -- Legacy alias used by older exports; only preserve/materialize it when it exists.
+    if type(MSUF_DB.tot) == "table" then
+        ensureAlpha(MSUF_DB.tot)
+    end
+ end
 local function MSUF_ProfileIO_EnsureGroupFramesDB()
     local ensureGF = _G.MSUF_GF_EnsureDB
     if type(ensureGF) == "function" then
@@ -749,6 +804,21 @@ local function MSUF_ProfileIO_EnsureGroupFramesDB()
     local gf = _G.MSUF_NS and _G.MSUF_NS.GF
     if gf and type(gf.EnsureDB) == "function" then
         gf.EnsureDB()
+    end
+end
+local function MSUF_ProfileIO_EnsureCompleteProfileDB()
+    EnsureDB()
+    MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+    MSUF_ProfileIO_EnsureGroupFramesDB()
+    local auras = ns and ns.MSUF_Auras2
+    if auras then
+        if type(auras.EnsureDB) == "function" then
+            pcall(auras.EnsureDB)
+        end
+        local aurasDB = auras.DB
+        if aurasDB and type(aurasDB.Ensure) == "function" then
+            pcall(aurasDB.Ensure)
+        end
     end
 end
 local function MSUF_CopyGroupFramePayload()
@@ -768,18 +838,13 @@ local function MSUF_CopyGroupFramePayload()
     return payload
 end
 local function MSUF_SnapshotForKind(kind)
-    EnsureDB()
-    if kind == "unitframe" or kind == "groupframe" or kind == "groupframes" or kind == "all" then
-        MSUF_ProfileIO_EnsureGroupFramesDB()
-    end
+    MSUF_ProfileIO_EnsureCompleteProfileDB()
     local payload = {}
     if kind == "unitframe" then
         -- Everything EXCEPT: gameplay, colors, castbars
         for k, v in pairs(MSUF_DB or {}) do
             if k == "general" then
-                payload.general = MSUF_CopyGeneralSubset(function(key)
-                    return ((not MSUF_IsColorKey(key)) or MSUF_IsAuraGeneralKey(key)) and (not MSUF_IsCastbarKey(key))
-                end)
+                payload.general = MSUF_CopyGeneralSubset(MSUF_IsUnitframeGeneralKey)
             elseif k == "classColors" or k == "npcColors" or k == "gameplay" then
                 -- exclude
             else
@@ -863,6 +928,38 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
         _G.MSUF_GF_RefreshVisuals()
     end
 end
+local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
+    if type(payload) ~= "table" then  return end
+    local touched = (kind == "unitframe") or (kind == "all")
+    if not touched then
+        for _, unitKey in ipairs(MSUF_UNITFRAME_UNIT_KEYS) do
+            local conf = payload[unitKey]
+            if type(conf) == "table" then
+                for alphaKey in pairs(MSUF_UNITFRAME_ALPHA_KEYS) do
+                    if conf[alphaKey] ~= nil then
+                        touched = true
+                        break
+                    end
+                end
+            end
+            if touched then  break end
+        end
+    end
+    if not touched and type(payload.tot) == "table" then
+        for alphaKey in pairs(MSUF_UNITFRAME_ALPHA_KEYS) do
+            if payload.tot[alphaKey] ~= nil then
+                touched = true
+                break
+            end
+        end
+    end
+    if not touched then  return end
+    MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+    local refresh = _G.MSUF_RefreshAllUnitAlphas or _G.MSUF_RequestAlphaRefresh
+    if type(refresh) == "function" then
+        pcall(refresh)
+    end
+end
 local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if not snapshot then  return false, "not a table" end
     local kind = snapshot.kind
@@ -877,10 +974,8 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     -- Always keep the profile-table reference stable (important!).
     MSUF_DB = MSUF_DB or {}
     if kind == "unitframe" then
-        -- Wipe & replace non-color/non-castbar general keys
-        MSUF_WipeGeneralSubset(function(key)
-            return (not MSUF_IsColorKey(key)) and (not MSUF_IsCastbarKey(key))
-        end)
+        -- Wipe & replace the same general-key set that Unitframes export.
+        MSUF_WipeGeneralSubset(MSUF_IsUnitframeGeneralKey)
         if type(payload.general) == "table" then
             MSUF_ApplyGeneralSubset(payload.general)
         end
@@ -974,8 +1069,10 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
     EnsureDB()
+    MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
+    MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
      return true
 end
 function MSUF_ExportSelectionToString(kind)
@@ -1009,7 +1106,10 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
     EnsureDB()
+    MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+    MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
+    MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
     print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
      return true
 end
@@ -1084,12 +1184,28 @@ function MSUF_ImportLegacyFromString(str)
         print("|cffff0000MSUF:|r Legacy import failed (empty string).")
          return
     end
+    local function ImportDecodedLegacyTable(tbl)
+        if type(tbl) == "table" and tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" then
+            local kind = (tbl.kind == "groupframes") and "groupframe" or tbl.kind
+            if kind == "all" then
+                return MSUF_ApplyLegacyTableToActiveProfile(tbl.payload)
+            end
+            local okApply, why = MSUF_ApplySnapshotToActiveProfile(tbl)
+            if okApply then
+                print("|cff00ff00MSUF:|r Imported " .. tostring(tbl.kind) .. " settings into the active profile.")
+            else
+                print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(why))
+            end
+            return okApply
+        end
+        return MSUF_ApplyLegacyTableToActiveProfile(tbl)
+    end
     -- NEW: allow MSUF2: strings in legacy import
     local tryDec = _G.MSUF_TryDecodeCompactString
     if type(tryDec) == "function" then
         local decoded = tryDec(str)
         if type(decoded) == "table" then
-            MSUF_ApplyLegacyTableToActiveProfile(decoded)
+            ImportDecodedLegacyTable(decoded)
              return
         end
     end
@@ -1112,7 +1228,7 @@ function MSUF_ImportLegacyFromString(str)
         print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(tbl))
          return
     end
-    MSUF_ApplyLegacyTableToActiveProfile(tbl)
+    ImportDecodedLegacyTable(tbl)
  end
 ---------------------------------------------------------------------
 -- External Wago UI Packs API (stateless by profileKey)
@@ -1164,6 +1280,13 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
             target[k] = MSUF_DeepCopy(v)
         end
         MSUF_GlobalDB.profiles[profileKey] = target
+        if type(EnsureDB) == "function" then
+            EnsureDB()
+        end
+        MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+        MSUF_ProfileIO_PostImportApply_Auras("all", target)
+        MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
+        MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
          return true
     end
     if type(existing) == "table" then
@@ -1182,6 +1305,10 @@ function MSUF_ExportExternal(profileKey)
     local profileTbl = MSUF_ProfileIO_GetProfileTable(profileKey)
     if type(profileTbl) ~= "table" then
          return false, "unknown profileKey"
+    end
+    if profileKey == MSUF_ActiveProfile then
+        MSUF_ProfileIO_EnsureCompleteProfileDB()
+        profileTbl = MSUF_DB
     end
     local snap = {
         addon   = "MSUF",
@@ -1243,6 +1370,12 @@ function MSUF_ImportExternal(profileString, profileKey)
     local ok, tbl = pcall(func)
     if not ok or type(tbl) ~= "table" then
          return false, "lua decode failed"
+    end
+    if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
+        if tbl.kind == "all" then
+            return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl.payload)
+        end
+        return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
     end
     return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
 end
