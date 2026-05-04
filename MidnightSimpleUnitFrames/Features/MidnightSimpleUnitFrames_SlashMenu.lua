@@ -455,82 +455,7 @@ flags=flags or""if flags:find("ITALIC")
 then return end
 if flags~=""then flags=flags..",ITALIC"else flags="ITALIC"end
 MSUF_SafeSetFont(fs,font,size,flags) end
-local MSUF_PRESETS=(ns and ns.MSUF_PRESETS)
-or _G.MSUF_PRESETS if type(MSUF_PRESETS)~="table"then MSUF_PRESETS={}
-end
-if ns then ns.MSUF_PRESETS=MSUF_PRESETS end if _G then _G.MSUF_PRESETS=MSUF_PRESETS end
-local MSUF_PRESET_ALLOWED_KEYS={"general","player","target","focus","pet","targettarget","boss","bars","auras","gameplay","npcColors","classColors","shortenNames",}
-local function MSUF_WipeTable(t) if type(t)~="table"then return end
-for k in pairs(t)
-do t[k]=nil end
-end
-local function MSUF_DeepCopy(src,depth) if type(src)~="table"then return src end
-depth=(depth or 0)+1 if depth>30 then return {} end
-local dst={}
-for k,v in pairs(src)
-do if type(v)=="table"then dst[k]=MSUF_DeepCopy(v,depth)
-else dst[k]=v end
-end
-return dst end
-local function MSUF_CopyValue(v) if type(v)~="table"then return v end
-if type(CopyTable)=="function"then return CopyTable(v) end
-return MSUF_DeepCopy(v) end
-local MSUF_ShowReloadRecommendedPopup local function MSUF_ApplyPreset(presetName) local preset=MSUF_PRESETS and MSUF_PRESETS[presetName]
-if type(preset)~="table"then print("|cffff3333MSUF:|r Preset not found: "..tostring(presetName)) return end
-if type(MSUF_InitProfiles)=="function"then pcall(MSUF_InitProfiles)
-end
-if type(MSUF_DB)~="table"then print("|cffff3333MSUF:|r DB not ready (MSUF_DB missing).") return end
-local importStr=preset._msufImportString or preset._msufImport if type(importStr)=="string"then local okPrefix,prefix=pcall(string.match,importStr,"^%s*(MSUF%d+):")
-if okPrefix and(prefix=="MSUF2"or prefix=="MSUF3")
-then local imp=_G.MSUF_ImportFromString if type(imp)=="function"then pcall(imp,importStr)
-if type(ApplyAllSettings)=="function"then pcall(ApplyAllSettings)
-end
-if type(UpdateAllFonts)=="function"then pcall(UpdateAllFonts)
-end
-print("|cff00ff00MSUF:|r Loaded preset: "..tostring(presetName))
-if type(MSUF_ShowReloadRecommendedPopup)=="function"then MSUF_ShowReloadRecommendedPopup("Preset: "..tostring(presetName))
-end
-return else print("|cffff3333MSUF:|r Cannot load this preset (MSUF_ImportFromString missing).")
-end
-end
-end
-MSUF_WipeTable(MSUF_DB)
-for _,key in ipairs(MSUF_PRESET_ALLOWED_KEYS)
-do local val=preset[key]
-if val~=nil then MSUF_DB[key]=MSUF_CopyValue(val)
-end
-end
-if type(EnsureDB)=="function"then pcall(EnsureDB)
-end
-if type(ApplyAllSettings)=="function"then pcall(ApplyAllSettings)
-end
-if type(UpdateAllFonts)=="function"then pcall(UpdateAllFonts)
-end
-print("|cff00ff00MSUF:|r Loaded preset: "..tostring(presetName))
-if type(MSUF_ShowReloadRecommendedPopup)=="function"then MSUF_ShowReloadRecommendedPopup("Preset: "..tostring(presetName))
-end
-end
-local function MSUF_GetPresetNames() local names={}
-if type(MSUF_PRESETS)~="table"then return names end
-for name in pairs(MSUF_PRESETS)
-do table.insert(names,name)
-end
-table.sort(names) return names end
-local MSUF_PENDING_PRESET=nil local function MSUF_ShowPresetConfirm(presetName) if not presetName or presetName==""then return end
-MSUF_PENDING_PRESET=presetName local preset=MSUF_PRESETS and MSUF_PRESETS[presetName];
-local warn=preset and preset._msufWarning if warn~=nil and warn~=""then warn=tostring(warn)
-else warn=nil end
-if not StaticPopupDialogs["MSUF_LOAD_PRESET_CONFIRM"]
-then StaticPopupDialogs["MSUF_LOAD_PRESET_CONFIRM"]={text="Load preset: %s?\n\nThis will overwrite your CURRENT active profile settings.",button1=YES,button2=NO,timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3,OnAccept=function() if MSUF_PENDING_PRESET then MSUF_ApplyPreset(MSUF_PENDING_PRESET)
-end
-MSUF_PENDING_PRESET=nil end
-,OnCancel=function() MSUF_PENDING_PRESET=nil end
-,}
-end
-local dlg=StaticPopupDialogs["MSUF_LOAD_PRESET_CONFIRM"]
-if dlg then if warn then dlg.text="Load preset: %s?\n\n|cffffaa00Warning:|r "..warn.."\n\nThis will overwrite your CURRENT active profile settings."else dlg.text="Load preset: %s?\n\nThis will overwrite your CURRENT active profile settings."end
-end
-StaticPopup_Show("MSUF_LOAD_PRESET_CONFIRM",presetName) end
+local MSUF_ShowReloadRecommendedPopup
 local MSUF_PENDING_RELOAD_RECOMMEND_LABEL=nil MSUF_ShowReloadRecommendedPopup=function(label) if InCombatLockdown and InCombatLockdown()
 then if type(MSUF_Print)=="function"then MSUF_Print("Reload recommended (cannot show popup in combat).")
 else print("|cffffaa00MSUF:|r Reload recommended (cannot show popup in combat).")
@@ -623,6 +548,7 @@ f:Show()
 if f.Raise then f:Raise()
 end
 end
+_G.MSUF_ShowCopyLink=_G.MSUF_ShowCopyLink or MSUF_ShowCopyLink
 local MIRROR_PANEL_SCALE=1.00;
 local MENU_FONT_BUMP=3;
 local MIRRORED_PANEL_FONT_BUMP=1;
@@ -3316,21 +3242,21 @@ end
 home._msufRefreshScaleCard=RefreshScaleCard
 RefreshScaleCard()
 
-local presetsCard=CreateCard(colR,"Presets",profileCard,-10)
-presetsCard:SetPoint("BOTTOMLEFT",colR,"BOTTOMLEFT",0,0)
-presetsCard:SetPoint("BOTTOMRIGHT",colR,"BOTTOMRIGHT",0,0)
-local presetsTitle=presetsCard._msufTitle
-local presetDesc=UI_TextTL(presetsCard,"GameFontDisableSmall",12,-30,"Load a preset into your active profile.",MSUF_SkinMuted)
-local presetDrop=(_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_PresetDropdown", presetsCard) or CreateFrame("Frame", "MSUF_PresetDropdown", presetsCard, "UIDropDownMenuTemplate"))
-presetDrop:SetPoint("TOPLEFT",presetsCard,"TOPLEFT",-4,-48)
-UIDropDownMenu_SetWidth(presetDrop,220)
-UIDropDownMenu_SetText(presetDrop,presetsCard._msufSelectedPreset or "Select preset...")
-UIDropDownMenu_Initialize(presetDrop,function(self,level) local names=MSUF_GetPresetNames() if not names or #names==0 then local info=UIDropDownMenu_CreateInfo() info.text="(no presets)" info.notCheckable=true UIDropDownMenu_AddButton(info,level) return end for _,name in ipairs(names) do local pname=name local info=UIDropDownMenu_CreateInfo() info.text=pname info.checked=(presetsCard._msufSelectedPreset==pname) info.func=function() presetsCard._msufSelectedPreset=pname UIDropDownMenu_SetText(presetDrop,pname) end UIDropDownMenu_AddButton(info,level) end end)
-do local names=MSUF_GetPresetNames() if (not presetsCard._msufSelectedPreset) and names and names[1] then presetsCard._msufSelectedPreset=names[1] UIDropDownMenu_SetText(presetDrop,names[1]) end end
-local bLoadPreset=UI_Btn(presetsCard,"Browse Presets",220,22,"TOPLEFT",presetDrop,"BOTTOMLEFT",16,-2,function() local sel=presetsCard._msufSelectedPreset if not sel then MSUF_Print("Select a preset first.") return end MSUF_ShowPresetConfirm(sel) end,"Load preset","Applies the selected preset to your current active profile.",MSUF_SkinDashboardButton)
-local presetHint=UI_Text(presetsCard,"GameFontDisableSmall","TOPLEFT",bLoadPreset,"BOTTOMLEFT",0,-6,"Opens a confirmation before applying the preset.",MSUF_SkinMuted)
-presetHint:SetWidth(240)
-presetHint:SetJustifyH("LEFT")
+local wagoCard=CreateCard(colR,"Wago Profiles",profileCard,-10)
+wagoCard:SetPoint("BOTTOMLEFT",colR,"BOTTOMLEFT",0,0)
+wagoCard:SetPoint("BOTTOMRIGHT",colR,"BOTTOMRIGHT",0,0)
+local wagoDesc=UI_TextTL(wagoCard,"GameFontDisableSmall",12,-30,"Browse shared MSUF imports on Wago.",MSUF_SkinMuted)
+wagoDesc:SetWidth(260)
+wagoDesc:SetJustifyH("LEFT")
+local MSUF_WAGO_PROFILES_URL="https://wago.io/search/imports/wow/msuf"
+local bWagoProfiles=UI_Btn(wagoCard,"Browse Wago Profiles",220,44,"TOPLEFT",wagoDesc,"BOTTOMLEFT",0,-12,function() MSUF_ShowCopyLink("Wago MSUF Profiles",MSUF_WAGO_PROFILES_URL) end,"Wago Profiles","Copies the Wago MSUF profile search link.",MSUF_SkinPrimaryButton)
+local wagoHint=UI_Text(wagoCard,"GameFontDisableSmall","TOPLEFT",bWagoProfiles,"BOTTOMLEFT",0,-8,"Copies the Wago link so you can open it in your browser.",MSUF_SkinMuted)
+wagoHint:SetWidth(260)
+wagoHint:SetJustifyH("LEFT")
+local presetDrop=nil
+local bLoadPreset=bWagoProfiles
+local presetHint=wagoHint
+local presetsCard=wagoCard
 do local KO_FI_URL="https://ko-fi.com/midnightsimpleunitframes#linkModal"; local PAYPAL_URL="https://www.paypal.com/ncp/payment/H3N2P87S53KBQ"; local PATREON_URL="https://www.patreon.com/cw/MidnightSimpleUnitframes"; local GITHUB_URL="https://github.com/Mapkov2/MidnightSimpleUnitFrames"; local ICON_DIR="Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"; local supportLabel=presetsCard:CreateFontString(nil,"OVERLAY","GameFontDisableSmall") supportLabel:SetPoint("BOTTOMLEFT",presetsCard,"BOTTOMLEFT",12,12) supportLabel:SetJustifyH("LEFT") supportLabel:SetText("Support MSUF Development") supportLabel:SetAlpha(0.72) if MSUF_SkinMuted then pcall(MSUF_SkinMuted,supportLabel) end local aboutLine=presetsCard:CreateFontString(nil,"OVERLAY","GameFontDisableSmall") aboutLine:SetPoint("BOTTOMLEFT",supportLabel,"TOPLEFT",0,4) aboutLine:SetJustifyH("LEFT") local aboutVer=_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames","Version") local aboutStr="by |cffccd0d9Mapko|r" if type(aboutVer)=="string" and aboutVer~="" then aboutStr="v"..aboutVer.."  •  by |cffccd0d9Mapko|r  •  with help from |cffccd0d9R41z0r|r" end aboutLine:SetText(aboutStr) aboutLine:SetAlpha(0.65) if MSUF_SkinMuted then pcall(MSUF_SkinMuted,aboutLine) end local row=CreateFrame("Frame",nil,presetsCard) row:SetHeight(24) row:SetWidth(160) row:SetPoint("BOTTOMRIGHT",presetsCard,"BOTTOMRIGHT",-12,10) local function CreateIcon(texFile,size,tooltipTitle,tooltipText,onClick) local b=CreateFrame("Button",nil,row) b:SetSize(size,size) local t=b:CreateTexture(nil,"ARTWORK") t:SetAllPoints() t:SetTexture(ICON_DIR..texFile) local hl=b:CreateTexture(nil,"HIGHLIGHT") hl:SetAllPoints() hl:SetColorTexture(1,1,1,0.10) b:SetScript("OnClick",onClick) if MSUF_AddTooltip then MSUF_AddTooltip(b,tooltipTitle,tooltipText) else b:SetScript("OnEnter",function(self) if not GameTooltip then return end GameTooltip:SetOwner(self,"ANCHOR_TOPLEFT"); GameTooltip:AddLine(tooltipTitle or "",1,1,1) if tooltipText and tooltipText~="" then GameTooltip:AddLine(tooltipText,0.85,0.85,0.85,true) end GameTooltip:Show() end) b:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end) end return b end local sz=22 local gap=7 local icons={{tex="Patreon.png",title="Patreon",tip="Click to copy the Patreon support link.",onClick=function() MSUF_ShowCopyLink("Patreon",PATREON_URL) end},{tex="PayPal.png",title="PayPal",tip="Click to copy the PayPal support link.",onClick=function() MSUF_ShowCopyLink("PayPal",PAYPAL_URL) end},{tex="Ko-Fi.png",title="Ko-fi",tip="Click to copy the Ko-fi link.",onClick=function() MSUF_ShowCopyLink("Ko-fi",KO_FI_URL) end},{tex="GitHub.png",title="GitHub",tip="Click to copy the GitHub repository link.",onClick=function() MSUF_ShowCopyLink("GitHub",GITHUB_URL) end},} local prev for _,d in ipairs(icons) do local b=CreateIcon(d.tex,sz,d.title,d.tip,d.onClick) if not prev then b:SetPoint("RIGHT",row,"RIGHT",0,0) else b:SetPoint("RIGHT",prev,"LEFT",-gap,0) end prev=b end end
 
 local adv=CreateCard(home,"Advanced")

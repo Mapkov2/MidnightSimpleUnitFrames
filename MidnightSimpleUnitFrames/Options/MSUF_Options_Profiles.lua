@@ -18,6 +18,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
     local function Skin(btn)
         if SkinBtn then SkinBtn(btn, { textR = 1, textG = 0.85, textB = 0.1 }) end
     end
+    local WAGO_PROFILES_URL = "https://wago.io/search/imports/wow/msuf"
 
     ---------------------------------------------------------------------------
     -- StaticPopup dialogs
@@ -330,6 +331,20 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
     legacyBtn:ClearAllPoints(); legacyBtn:SetPoint("LEFT", exportBtn, "RIGHT", 8, 0)
     Skin(importBtn); Skin(exportBtn); Skin(legacyBtn)
     legacyBtn:SetScript("OnClick", function() ShowImportPopup("legacy") end)
+
+    local wagoBtn = UI.Button({ parent = profileGroup, text = TR("Browse Wago Profiles"), width = 364, height = 32 })
+    wagoBtn:ClearAllPoints(); wagoBtn:SetPoint("TOPLEFT", importBtn, "BOTTOMLEFT", 0, -10)
+    Skin(wagoBtn)
+    wagoBtn:SetScript("OnClick", function()
+        if type(_G.MSUF_ShowCopyLink) == "function" then
+            _G.MSUF_ShowCopyLink("Wago MSUF Profiles", WAGO_PROFILES_URL)
+        else
+            ShowCopyPopup(WAGO_PROFILES_URL)
+        end
+    end)
+    if type(_G.MSUF_AddTooltip) == "function" then
+        _G.MSUF_AddTooltip(wagoBtn, TR("Wago Profiles"), WAGO_PROFILES_URL)
+    end
 
     ---------------------------------------------------------------------------
     -- Export picker popup
