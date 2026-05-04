@@ -106,6 +106,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         conf.alphaBGOutOfCombat = 1
         conf.alphaHPInCombat = 1
         conf.alphaHPOutOfCombat = 1
+        conf.alphaPreserveHPColor = false
      end
     ForceUnitAlpha100(db.player)
     -- Fresh-install default: player name hidden
@@ -240,14 +241,14 @@ end
 if g.msufUiScale == nil then
     g.msufUiScale = 1.0
 end
-if g.flashFullPoint == nil then g.flashFullPoint = "LEFT" end
-if g.flashFullRelPoint == nil then g.flashFullRelPoint = "LEFT" end
-if g.flashFullX == nil then g.flashFullX = -2.0000178813934 end
-if g.flashFullY == nil then g.flashFullY = 91.75 end
-if g.flashFullW == nil then g.flashFullW = 880.75018310547 end
-if g.flashFullH == nil then g.flashFullH = 628.50018310547 end
-if g.flashFullXpx == nil then g.flashFullXpx = -1.4222349723183 end
-if g.flashFullYpx == nil then g.flashFullYpx = 65.244446024299 end
+if g.flashFullPoint == nil then g.flashFullPoint = "CENTER" end
+if g.flashFullRelPoint == nil then g.flashFullRelPoint = "CENTER" end
+if g.flashFullX == nil then g.flashFullX = -60 end
+if g.flashFullY == nil then g.flashFullY = 10 end
+if g.flashFullW == nil then g.flashFullW = 900 end
+if g.flashFullH == nil then g.flashFullH = 650 end
+if g.flashFullXpx == nil then g.flashFullXpx = -60 end
+if g.flashFullYpx == nil then g.flashFullYpx = 10 end
 if g.tipCycleIndex == nil then
     g.tipCycleIndex = 11
 end
@@ -1692,6 +1693,7 @@ local function fill(key, defaults)
         if u.alphaBGOutOfCombat == nil then u.alphaBGOutOfCombat = 1 end
         if u.alphaHPInCombat == nil then u.alphaHPInCombat = 1 end
         if u.alphaHPOutOfCombat == nil then u.alphaHPOutOfCombat = 1 end
+        if u.alphaPreserveHPColor == nil then u.alphaPreserveHPColor = false end
         -- Portrait Decoration defaults (MSUF_PortraitDecoration.lua)
         -- portraitRender: inherit from general._portraitSharedRender if not set (shared/per-unit sync)
         if u.portraitRender == nil then

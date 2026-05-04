@@ -243,6 +243,7 @@ local PARTY_DEFAULTS = {
     alphaFGOutOfCombat   = 1,
     alphaBGInCombat      = 1,
     alphaBGOutOfCombat   = 1,
+    alphaPreserveHPColor = false,
     -- Health prediction overlays: NO defaults here — falls through to global Bars settings
     -- (absorbEnabled, healAbsorbEnabled, healPredEnabled are resolved at runtime)
     -- Tooltip

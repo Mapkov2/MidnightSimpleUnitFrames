@@ -68,6 +68,8 @@ L["Install the addon 'SharedMedia' (LibSharedMedia-3.0) to select castbar textur
 L["Keep end: shows the last letters (clips the beginning)."] = "Ende behalten: zeigt die letzten Buchstaben (Anfang wird abgeschnitten)."
 L["Keep start: shows the first letters (clips the end)."] = "Anfang behalten: zeigt die ersten Buchstaben (Ende wird abgeschnitten)."
 L["Keep text + portrait visible"] = "Text + Porträt sichtbar lassen"
+L["Preserve HP color"] = "HP-Farbe erhalten"
+L["Keeps the health fill fully colored while layered transparency fades other parts."] = "Laesst die Gesundheitsleiste voll farbig, waehrend Layer-Transparenz andere Teile ausblendet."
 L["Layout"] = "Layout"
 L["Left-click: set this frame override"] = "Linksklick: Override für dieses Frame setzen"
 L["Legacy clean mode uses plain FontString width clipping."] = "Legacy-Clean-Modus nutzt schlichtes FontString-Breiten-Clipping."
