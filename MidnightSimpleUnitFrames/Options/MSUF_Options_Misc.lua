@@ -533,7 +533,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end,
     })
 
-    UI.Slider({
+    local rfAlphaSlider = UI.Slider({
         name = "MSUF_MiscRangeFadeStrengthSlider", parent = s5Body, compact = true,
         compactInput = true, compactInputWidth = 48,
         anchor = s5Body, anchorPoint = "TOPLEFT", x = 365, y = -72,
@@ -555,6 +555,18 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end,
         formatText = function(v)
             return string.format("Out of range alpha: %d%%", ClampRangeFadeAlphaPercent(v))
+        end,
+    })
+
+    UI.Check({
+        name = "MSUF_RangeFadePortraitCheck", parent = s5Body,
+        anchor = rfAlphaSlider, x = 0, y = -18,
+        label = TR("Also Fade Portrait"),
+        get = function() return G().rangeFadePortrait == true end,
+        set = function(v)
+            G().rangeFadePortrait = v and true or false
+            RefreshRangeFadeRuntime()
+            if _G.MSUF_RefreshAllUnitAlphas then _G.MSUF_RefreshAllUnitAlphas() end
         end,
     })
 

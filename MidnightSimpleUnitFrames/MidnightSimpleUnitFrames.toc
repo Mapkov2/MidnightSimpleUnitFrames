@@ -49,7 +49,6 @@ Foundation\MSUF_Util.lua
 Foundation\MSUF_Transitions.lua
 Foundation\MSUF_Defaults.lua
 Foundation\MSUF_Profiles.lua
-Foundation\MSUF_Presets.lua
 Foundation\MSUF_Style.lua
 Foundation\MSUF_Modules.lua
 Foundation\MSUF_EventBus.lua

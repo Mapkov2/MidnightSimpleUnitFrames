@@ -33,6 +33,18 @@ do
     local function StripWS(s)
         return (s:gsub("%s+", ""))
     end
+    local function CleanBase64(s)
+        s = StripWS(s or "")
+        local rem = #s % 4
+        if rem == 1 then
+            return nil
+        elseif rem == 2 then
+            s = s .. "=="
+        elseif rem == 3 then
+            s = s .. "="
+        end
+        return s
+    end
     -- LibDeflate's print-safe alphabet is 64 chars:
     -- 0-9, A-Z, a-z, (, )
     local _PRINT_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()"
@@ -178,7 +190,8 @@ do
         do
             local b64 = s:match("^MSUF3:%s*(.+)$")
             if b64 then
-                b64 = StripWS(b64)
+                b64 = CleanBase64(b64)
+                if not b64 then  return nil end
                 local ok1, blob = pcall(E.DecodeBase64, b64)
                 if ok1 and type(blob) == "string" then
                     local plain = TryBlizzardDecompress(E, blob) or blob
@@ -194,12 +207,14 @@ do
             if not payload then  return nil end
             payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
             -- 1) Try Blizzard base64 first (older internal MSUF2 variant)
-            local b64 = StripWS(payload)
-            local ok1, blob = pcall(E.DecodeBase64, b64)
-            if ok1 and type(blob) == "string" then
-                local plain = TryBlizzardDecompress(E, blob) or blob
-                local t = TryDeserialize(E, plain)
-                if t then  return t end
+            local b64 = CleanBase64(payload)
+            if b64 then
+                local ok1, blob = pcall(E.DecodeBase64, b64)
+                if ok1 and type(blob) == "string" then
+                    local plain = TryBlizzardDecompress(E, blob) or blob
+                    local t = TryDeserialize(E, plain)
+                    if t then  return t end
+                end
             end
             -- 2) Try LibDeflate print-safe (Wago/WA style)
             local raw_lsb, raw_msb = DecodeForPrint_Variants(payload)
