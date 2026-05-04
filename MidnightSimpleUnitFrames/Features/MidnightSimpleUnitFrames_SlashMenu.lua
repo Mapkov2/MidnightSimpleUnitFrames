@@ -1490,8 +1490,80 @@ end
 local UI_SCALE_1080=768/1080;
 local UI_SCALE_1440=768/1440;
 local UI_SCALE_4K=768/2160;
-local _MSUF_lastGlobalUiParentScale local function MSUF_GetCurrentGlobalUiScale() if UIParent and UIParent.GetScale then return tonumber(UIParent:GetScale()) end
+local MSUF_DEFAULT_SLASH_MENU_W=900;
+local MSUF_DEFAULT_SLASH_MENU_H=650;
+local MSUF_DEFAULT_SLASH_MENU_POINT="CENTER";
+local MSUF_DEFAULT_SLASH_MENU_RELPOINT="CENTER";
+local MSUF_DEFAULT_SLASH_MENU_X=-60;
+local MSUF_DEFAULT_SLASH_MENU_Y=10;
+local function MSUF_SaveDefaultStandaloneGeometry(g)
+if not g then return end
+g.flashFullW=MSUF_DEFAULT_SLASH_MENU_W
+g.flashFullH=MSUF_DEFAULT_SLASH_MENU_H
+g.flashFullPoint=MSUF_DEFAULT_SLASH_MENU_POINT
+g.flashFullRelPoint=MSUF_DEFAULT_SLASH_MENU_RELPOINT
+g.flashFullX=MSUF_DEFAULT_SLASH_MENU_X
+g.flashFullY=MSUF_DEFAULT_SLASH_MENU_Y
+local s=(UIParent and UIParent.GetScale and UIParent:GetScale())
+or 1 if not s or s==0 then s=1 end
+g.flashFullXpx=MSUF_DEFAULT_SLASH_MENU_X*s
+g.flashFullYpx=MSUF_DEFAULT_SLASH_MENU_Y*s
+end
+local function MSUF_ResetStandaloneWindowGeometry(frame,silent)
+local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
+or nil
+MSUF_SaveDefaultStandaloneGeometry(g)
+local win=frame or _G.MSUF_StandaloneOptionsWindow
+if win then
+if win.SetScale then pcall(win.SetScale,win,1.0) end
+if win.SetSize then pcall(win.SetSize,win,MSUF_DEFAULT_SLASH_MENU_W,MSUF_DEFAULT_SLASH_MENU_H) end
+if win.ClearAllPoints then pcall(win.ClearAllPoints,win) end
+if win.SetPoint then pcall(win.SetPoint,win,MSUF_DEFAULT_SLASH_MENU_POINT,UIParent,MSUF_DEFAULT_SLASH_MENU_RELPOINT,MSUF_DEFAULT_SLASH_MENU_X,MSUF_DEFAULT_SLASH_MENU_Y) end
+end
+if not silent then MSUF_Print("Slash Menu size reset to default.") end
+end
+local _MSUF_lastGlobalUiParentScale;
+local _MSUF_blizzardUiParentScale;
+local function MSUF_GetCurrentGlobalUiScale() if UIParent and UIParent.GetScale then return tonumber(UIParent:GetScale()) end
 return nil end
+local function MSUF_CaptureBlizzardUiScale()
+if _MSUF_blizzardUiParentScale then return end
+local cur=MSUF_GetCurrentGlobalUiScale()
+if cur and cur>0 then _MSUF_blizzardUiParentScale=cur end
+end
+local function MSUF_GetBlizzardCVarScale()
+local use=nil
+if type(GetCVarBool)=="function"then local ok,v=pcall(GetCVarBool,"useUiScale") if ok then use=v end end
+if use==nil and type(GetCVar)=="function"then local ok,v=pcall(GetCVar,"useUiScale") if ok then use=(tostring(v)=="1") end end
+if use and type(GetCVar)=="function"then local ok,v=pcall(GetCVar,"uiScale") if ok then v=tonumber(v) if v and v>0 then return clamp(v,0.3,2.0) end end end
+if type(GetPhysicalScreenSize)=="function"then local _,h=GetPhysicalScreenSize()
+h=tonumber(h)
+if h and h>0 then return clamp(768/h,0.3,2.0) end
+end
+if _MSUF_blizzardUiParentScale and _MSUF_blizzardUiParentScale>0 then return clamp(_MSUF_blizzardUiParentScale,0.3,2.0) end
+return nil
+end
+local function MSUF_RestoreBlizzardUiScaleOnce()
+if type(UIParent_UpdateScale)=="function"then local ok=pcall(UIParent_UpdateScale) if ok then return true end end
+local scale=MSUF_GetBlizzardCVarScale()
+if scale and UIParent and UIParent.SetScale then pcall(UIParent.SetScale,UIParent,scale) return true end
+return false
+end
+local function MSUF_RestoreBlizzardUiScale(silent)
+if InCombatLockdown and InCombatLockdown()
+then if not silent then MSUF_Print("Cannot restore Blizzard UI scale in combat.")
+end
+return false end
+MSUF_RestoreBlizzardUiScaleOnce()
+if C_Timer and C_Timer.After then
+C_Timer.After(0,function() MSUF_RestoreBlizzardUiScaleOnce() end)
+C_Timer.After(0.25,function() MSUF_RestoreBlizzardUiScaleOnce() end)
+C_Timer.After(1.0,function() MSUF_RestoreBlizzardUiScaleOnce() end)
+end
+_MSUF_lastGlobalUiParentScale=nil
+if not silent then MSUF_Print("Global UI scale restored to Blizzard settings.") end
+return true
+end
 local function MSUF_GetPixelPerfectScale() if type(GetPhysicalScreenSize)=="function"then local _,h=GetPhysicalScreenSize()
 h=tonumber(h)
 if h and h>0 then return clamp(768/h,0.3,2.0) end
@@ -1532,6 +1604,10 @@ if not scale or scale<=0 then return end
 scale=clamp(scale,0.3,2.0)
 if not(UIParent and UIParent.SetScale)
 then return end
+local curBefore=MSUF_GetCurrentGlobalUiScale()
+if not _MSUF_blizzardUiParentScale and curBefore and (not _MSUF_lastGlobalUiParentScale or math.abs(curBefore-_MSUF_lastGlobalUiParentScale)>0.001) then
+_MSUF_blizzardUiParentScale=curBefore
+end
 local cur=nil if UIParent.GetScale then cur=tonumber(UIParent:GetScale())
 end
 cur=cur or 0 if math.abs(cur-scale)>0.001 then pcall(UIParent.SetScale,UIParent,scale)
@@ -1578,6 +1654,9 @@ if _MSUF_pendingDisableScaling then _MSUF_pendingDisableScaling=nil;
 _MSUF_pendingMsufScale=nil _MSUF_pendingGlobalScale=nil;
 MSUF_ResetGlobalUiScale(true)
 MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
+MSUF_SetSavedSlashMenuScale(1.0)
+MSUF_ApplySlashMenuScale(1.0,{ignoreDisable=true})
+MSUF_ResetStandaloneWindowGeometry(nil,true)
 elseif MSUF_IsScalingDisabled()
 then _MSUF_pendingMsufScale=nil;
 _MSUF_pendingGlobalScale=nil else local s=_MSUF_pendingMsufScale;
@@ -1598,20 +1677,18 @@ f:SetScript("OnEvent",nil)
 _MSUF_scaleApplyWatcher=nil end
 end
 ) end
-MSUF_ResetGlobalUiScale=function(silent) if InCombatLockdown and InCombatLockdown()
-then if not silent then MSUF_Print("Cannot reset global UI scale in combat.")
+MSUF_ResetGlobalUiScale=function(silent)
+return MSUF_RestoreBlizzardUiScale(silent)
 end
-return end
-if UIParent and UIParent.SetScale then pcall(UIParent.SetScale,UIParent,1.0)
-end
-_MSUF_lastGlobalUiParentScale=nil if not silent then MSUF_Print("Global UI scale reset.")
-end
-end
-local function MSUF_SetScalingDisabled(disable,silent) local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
+local function MSUF_SetScalingDisabled(disable,silent)
+local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
 or nil if not g then return end
-disable=disable and true or false g.disableScaling=disable if not disable then _MSUF_pendingDisableScaling=nil return end
+disable=disable and true or false
+g.disableScaling=disable
+if not disable then _MSUF_pendingDisableScaling=nil return end
 MSUF_SetGlobalUiScaleState(false,1.0,"auto")
 MSUF_SetSavedMsufScale(1.0)
+MSUF_SetSavedSlashMenuScale(1.0)
 if InCombatLockdown and InCombatLockdown()
 then _MSUF_pendingDisableScaling=true if MSUF_EnsureScaleApplyAfterCombat then MSUF_EnsureScaleApplyAfterCombat()
 end
@@ -1620,10 +1697,12 @@ end
 return end
 MSUF_ResetGlobalUiScale(true)
 MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
+MSUF_ApplySlashMenuScale(1.0,{ignoreDisable=true})
+MSUF_ResetStandaloneWindowGeometry(nil,true)
 _MSUF_pendingDisableScaling=nil _MSUF_pendingMsufScale=nil _MSUF_pendingGlobalScale=nil if not silent then MSUF_Print("MSUF scaling disabled (Blizzard handles scaling now).")
 end
 end
-_G.MSUF_SetScalingDisabled=MSUF_SetScalingDisabled _G.MSUF_SetGlobalUiScale=MSUF_SetGlobalUiScale _G.MSUF_ResetGlobalUiScale=MSUF_ResetGlobalUiScale _G.MSUF_GetPixelPerfectScale=MSUF_GetPixelPerfectScale local function MSUF_SaveGlobalPreset(preset,scale) local g=MSUF_EnsureGeneral()
+_G.MSUF_SetScalingDisabled=MSUF_SetScalingDisabled _G.MSUF_SetGlobalUiScale=MSUF_SetGlobalUiScale _G.MSUF_ResetGlobalUiScale=MSUF_ResetGlobalUiScale _G.MSUF_ResetStandaloneWindowGeometry=MSUF_ResetStandaloneWindowGeometry _G.MSUF_GetPixelPerfectScale=MSUF_GetPixelPerfectScale local function MSUF_SaveGlobalPreset(preset,scale) local g=MSUF_EnsureGeneral()
 if not g then return end
 if preset=="auto"then MSUF_SetGlobalUiScaleState(false,scale,"auto") return end
 local resolved=MSUF_ResolveGlobalPresetScale(preset,scale) or scale or 1.0
@@ -1703,41 +1782,33 @@ local globalCur=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",globalLabel,"B
 
 local btn1080,btn1440,btn4k,btnAuto
 local presetRow=MSUF_BuildButtonRow(parent,globalCur,"TOPLEFT","BOTTOMLEFT",0,-8,{
-{text="1080",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1080",tipBody="Applies MSUF's global scale preset for 1080p-like setups and reloads your UI. Auto restores Blizzard scaling on reload.",onClick=function()
-MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function()
+{text="1080",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1080",tipBody="Applies MSUF's global scale preset for 1080p-like setups.",onClick=function()
 if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080)
 MSUF_SetGlobalUiScale(UI_SCALE_1080,true)
-ReloadUI()
-end)
+if api.Refresh then api.Refresh() end
 end},
-{text="1440",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1440",tipBody="Applies MSUF's global scale preset for 1440p-like setups and reloads your UI. Auto restores Blizzard scaling on reload.",onClick=function()
-MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function()
+{text="1440",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1440",tipBody="Applies MSUF's global scale preset for 1440p-like setups.",onClick=function()
 if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440)
 MSUF_SetGlobalUiScale(UI_SCALE_1440,true)
-ReloadUI()
-end)
+if api.Refresh then api.Refresh() end
 end},
-{text="4K",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 4K",tipBody="Applies MSUF's global scale preset for 4K (2160p) setups (0.3556) and reloads your UI. Auto restores Blizzard scaling on reload.",onClick=function()
-MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function()
+{text="4K",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 4K",tipBody="Applies MSUF's global scale preset for 4K (2160p) setups (0.3556).",onClick=function()
 if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 MSUF_SaveGlobalPreset("4k",UI_SCALE_4K)
 MSUF_SetGlobalUiScale(UI_SCALE_4K,true)
-ReloadUI()
-end)
+if api.Refresh then api.Refresh() end
 end},
 {text="Auto",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: Auto",tipBody="Stops enforcing MSUF global scale and restores your previous Blizzard UI scale.",onClick=function()
-MSUF_ShowReloadConfirm("Global UI Scale: Auto",function()
 if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true)
 end
 MSUF_SaveGlobalPreset("auto",nil)
 MSUF_ResetGlobalUiScale(true)
-ReloadUI()
-end)
+if api.Refresh then api.Refresh() end
 end},
 },segGap)
 btn1080,btn1440,btn4k,btnAuto=presetRow[1],presetRow[2],presetRow[3],presetRow[4]
@@ -1757,7 +1828,7 @@ MSUF_SetGlobalUiScale(1.0,true)
 if api.Refresh then api.Refresh()
 end
 end},
-{text="Scaling OFF",w=offW,h=18,skinFn=MSUF_SkinDashboardButton,tipTitle="Disable ALL MSUF scaling",tipBody="Turns off all scaling MSUF applies (global UI scale + MSUF unitframe scale + Slash Menu scale), then reloads your UI. Blizzard handles scaling.",onClick=function()
+{text="Scaling OFF",w=offW,h=18,skinFn=MSUF_SkinDashboardButton,tipTitle="Disable ALL MSUF scaling",tipBody="Turns off all scaling MSUF applies (global UI scale + MSUF unitframe scale + Slash Menu scale) and resets the Slash Menu to its default size.",onClick=function()
 local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
 or nil
 local isDisabled=g and g.disableScaling
@@ -1782,7 +1853,8 @@ if g then g.disableScaling=true MSUF_SetGlobalUiScaleState(false,1.0,"auto") end
 end
 if api.Refresh then api.Refresh()
 end
-MSUF_RequestReloadSafe()
+if type(MSUF_ShowReloadRecommendedPopup)=="function" then MSUF_ShowReloadRecommendedPopup("Scaling OFF")
+end
 end},
 },8)
 msufReset,msufOff=row and row[1],row and row[2]
@@ -2762,6 +2834,8 @@ do
 local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral()
 or nil
 local disabled=g and g.disableScaling
+if disabled then MSUF_ResetStandaloneWindowGeometry(f,true)
+end
 local sc=(disabled and 1.0) or MSUF_GetSavedSlashMenuScale()
 MSUF_ApplySlashMenuScale(sc,{ignoreDisable=true})
 end
@@ -3033,12 +3107,138 @@ profMeta:SetJustifyH("LEFT")
 local scaleCard=CreateCard(colL,"UI Scale",navCard,-10)
 scaleCard:SetPoint("BOTTOMLEFT",colL,"BOTTOMLEFT",0,0)
 scaleCard:SetPoint("BOTTOMRIGHT",colL,"BOTTOMRIGHT",0,0)
-local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-30,"Quick access to scaling.",MSUF_SkinMuted)
-local scaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-54,"Global UI Scale",MSUF_SkinText)
-local scaleRow=MSUF_BuildButtonRowTL(scaleCard,12,-78,{{text="1080",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1080p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080) MSUF_SetGlobalUiScale(UI_SCALE_1080,true) ReloadUI() end) end},{text="1440",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 1440p",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440) MSUF_SetGlobalUiScale(UI_SCALE_1440,true) ReloadUI() end) end},{text="4K",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: 4K (2160p)",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("4k",UI_SCALE_4K) MSUF_SetGlobalUiScale(UI_SCALE_4K,true) ReloadUI() end) end},{text="Auto",w=74,h=22,gap=-1,skinFn=MSUF_SkinDashboardButton,onClick=function() MSUF_ShowReloadConfirm("Global UI Scale: Auto",function() if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end MSUF_SaveGlobalPreset("auto",nil) MSUF_ResetGlobalUiScale(true) ReloadUI() end) end},},-1)
-local btn1080,btn1440,btn4k,btnAuto=scaleRow[1],scaleRow[2],scaleRow[3],scaleRow[4]
-local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-112,"MSUF Frame Scale",MSUF_SkinText)
-local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-130,"Current: 1.00",MSUF_SkinMuted)
+local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-28,"Apply-based scaling. OFF resets the menu size.",MSUF_SkinMuted)
+scaleDesc:SetWidth(280)
+local function HideSliderParts(slider)
+local n=(slider and slider.GetName and slider:GetName()) or nil
+local t=(n and _G[n.."Text"]) or (slider and slider.Text)
+if t then t:SetText(""); t:Hide() end
+local low=(n and _G[n.."Low"]) or (slider and slider.Low)
+if low then low:SetText(""); low:Hide() end
+local high=(n and _G[n.."High"]) or (slider and slider.High)
+if high then high:SetText(""); high:Hide() end
+end
+local function SnapScalePct(value,minPct,maxPct,stepPct)
+minPct=minPct or 25
+maxPct=maxPct or 150
+stepPct=stepPct or 5
+local pct=math.floor((tonumber(value) or 100)/stepPct+0.5)*stepPct
+if pct<minPct then pct=minPct elseif pct>maxPct then pct=maxPct end
+return pct
+end
+local function SetSliderValueSafe(slider,value)
+if slider and slider.SetValue then slider.__msufSkip=true slider:SetValue(value) slider.__msufSkip=nil end
+end
+
+local globalScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-48,"Global UI Scale",MSUF_SkinText)
+local globalScaleStatus=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-64,"Applied: Auto",MSUF_SkinMuted)
+globalScaleStatus:SetWidth(280)
+local globalScaleSlider=CreateFrame("Slider","MSUF_DashboardGlobalScaleSlider",scaleCard,"OptionsSliderTemplate")
+globalScaleSlider:ClearAllPoints()
+globalScaleSlider:SetPoint("TOPLEFT",globalScaleStatus,"BOTTOMLEFT",0,-8)
+globalScaleSlider:SetPoint("RIGHT",scaleCard,"RIGHT",-26,0)
+globalScaleSlider:SetMinMaxValues(30,150)
+globalScaleSlider:SetValueStep(1)
+globalScaleSlider:SetObeyStepOnDrag(true)
+if globalScaleSlider.SetStepsPerPage then globalScaleSlider:SetStepsPerPage(1) end
+HideSliderParts(globalScaleSlider)
+local bGlobalApply,bGlobalRevert,bGlobalAuto,bGlobalOff
+local function GetGlobalUiState()
+local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+local disabled=g and g.disableScaling
+local ui=MSUF_EnsureGlobalUiScaleTable(g)
+local enabled=(not disabled) and ui and ui.Enabled
+local scale=clamp(tonumber(ui and ui.Scale) or 1.0,0.3,1.5)
+return disabled and true or false,enabled and true or false,scale
+end
+local function GetPendingGlobalScale(enabled,applied)
+local pending=scaleCard._msufPendingGlobalScale
+if pending==nil then pending=applied end
+pending=clamp(tonumber(pending) or applied or 1.0,0.3,1.5)
+local pendingEnabled=scaleCard._msufPendingGlobalEnabled
+if pendingEnabled==nil then pendingEnabled=enabled end
+return pendingEnabled and true or false,pending
+end
+local function RefreshGlobalScaleControls()
+local disabled,enabled,applied=GetGlobalUiState()
+if disabled then scaleCard._msufPendingGlobalEnabled=nil scaleCard._msufPendingGlobalScale=nil end
+local pendingEnabled,pending=GetPendingGlobalScale(enabled,applied)
+local changed=(not disabled) and ((pendingEnabled~=enabled) or math.abs((pending or 1)-(applied or 1))>0.001)
+local appliedTxt=enabled and string.format("%d%%",math.floor(applied*100+0.5)) or "Auto"
+local pendingTxt=pendingEnabled and string.format("%d%%",math.floor(pending*100+0.5)) or "Auto"
+if disabled then appliedTxt="Scaling OFF"; pendingTxt="Default" end
+if globalScaleStatus and globalScaleStatus.SetText then
+if changed then globalScaleStatus:SetText("Applied: "..appliedTxt.."  Selected: "..pendingTxt.."  |cffffd200Apply|r")
+else globalScaleStatus:SetText("Applied: "..appliedTxt.."  Selected: "..pendingTxt) end
+end
+SetSliderValueSafe(globalScaleSlider,SnapScalePct((pending or applied or 1)*100,30,150,1))
+MSUF_SetEnabled(globalScaleSlider,not disabled)
+MSUF_SetEnabled(bGlobalApply,changed)
+MSUF_SetEnabled(bGlobalRevert,changed)
+MSUF_SetEnabled(bGlobalAuto,not disabled)
+MSUF_SetEnabled(bGlobalOff,true)
+if bGlobalApply and bGlobalApply._msufSetSelected then bGlobalApply:_msufSetSelected(changed) end
+if bGlobalAuto and bGlobalAuto._msufSetSelected then bGlobalAuto:_msufSetSelected((not disabled) and (pendingEnabled==false)) end
+if bGlobalOff and bGlobalOff._msufSetSelected then bGlobalOff:_msufSetSelected(disabled) end
+if bGlobalOff and bGlobalOff.SetText then bGlobalOff:SetText(disabled and "Scale ON" or "Scale OFF") end
+local a=disabled and 0.55 or 1.0
+if globalScaleLabel and globalScaleLabel.SetAlpha then globalScaleLabel:SetAlpha(a) end
+if globalScaleStatus and globalScaleStatus.SetAlpha then globalScaleStatus:SetAlpha(a) end
+end
+globalScaleSlider:EnableMouseWheel(true)
+globalScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 1 or -1) self:SetValue(SnapScalePct(v,30,150,1)) end)
+globalScaleSlider:SetScript("OnValueChanged",function(self,value)
+if self.__msufSkip then return end
+local pct=SnapScalePct(value,30,150,1)
+if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end
+scaleCard._msufPendingGlobalEnabled=true
+scaleCard._msufPendingGlobalScale=pct/100
+RefreshGlobalScaleControls()
+end)
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,globalScaleSlider,"Global UI Scale","Selects the UIParent scale MSUF should enforce. Drag or use the mouse wheel, then press Apply. Auto stops enforcing global UI scale.") end
+local RefreshScaleCard
+local globalRow=MSUF_BuildButtonRowTL(scaleCard,12,-108,{{text="Apply",w=72,h=20,gap=6,skinFn=MSUF_SkinDashboardButton,onClick=function()
+local disabled,enabled,applied=GetGlobalUiState()
+if disabled then return end
+local pendingEnabled,pending=GetPendingGlobalScale(enabled,applied)
+if pendingEnabled then
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end
+MSUF_SetGlobalUiScaleState(true,pending,"custom")
+MSUF_SetGlobalUiScale(pending,true)
+else
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) end
+MSUF_SaveGlobalPreset("auto",nil)
+MSUF_ResetGlobalUiScale(true)
+end
+scaleCard._msufPendingGlobalEnabled=nil
+scaleCard._msufPendingGlobalScale=nil
+RefreshGlobalScaleControls()
+end},{text="Revert",w=72,h=20,gap=6,skinFn=MSUF_SkinDashboardButton,onClick=function()
+scaleCard._msufPendingGlobalEnabled=nil
+scaleCard._msufPendingGlobalScale=nil
+RefreshGlobalScaleControls()
+end},{text="Auto",w=58,h=20,gap=6,skinFn=MSUF_SkinDashboardButton,onClick=function()
+local disabled=GetGlobalUiState()
+if disabled then return end
+scaleCard._msufPendingGlobalEnabled=false
+RefreshGlobalScaleControls()
+end},{text="Scale OFF",w=76,h=20,skinFn=MSUF_SkinDashboardButton,onClick=function()
+local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+if g and g.disableScaling then
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(false,true) else g.disableScaling=false end
+else
+if _G.MSUF_SetScalingDisabled then _G.MSUF_SetScalingDisabled(true,false) elseif g then g.disableScaling=true end
+if type(MSUF_ShowReloadRecommendedPopup)=="function" then MSUF_ShowReloadRecommendedPopup("Scaling OFF") end
+end
+scaleCard._msufPendingGlobalEnabled=nil
+scaleCard._msufPendingGlobalScale=nil
+scaleCard._msufPendingMenuScale=nil
+if RefreshScaleCard then RefreshScaleCard() else RefreshGlobalScaleControls() end
+end},},6)
+bGlobalApply,bGlobalRevert,bGlobalAuto,bGlobalOff=globalRow[1],globalRow[2],globalRow[3],globalRow[4]
+
+local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-134,"MSUF Frame Scale",MSUF_SkinText)
+local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-151,"Current: 1.00",MSUF_SkinMuted)
 local msufScaleSlider=CreateFrame("Slider","MSUF_DashboardMsufScaleSlider",scaleCard,"OptionsSliderTemplate")
 msufScaleSlider:ClearAllPoints()
 msufScaleSlider:SetPoint("TOPLEFT",msufScaleCur,"BOTTOMLEFT",0,-8)
@@ -3047,58 +3247,72 @@ msufScaleSlider:SetMinMaxValues(25,150)
 msufScaleSlider:SetValueStep(5)
 msufScaleSlider:SetObeyStepOnDrag(true)
 if msufScaleSlider.SetStepsPerPage then msufScaleSlider:SetStepsPerPage(1) end
-do local n=(msufScaleSlider.GetName and msufScaleSlider:GetName()) local t=(n and _G[n.."Text"]) or msufScaleSlider.Text if t then t:SetText("") t:Hide() end local low=(n and _G[n.."Low"]) or msufScaleSlider.Low if low then low:SetText("") low:Hide() end local high=(n and _G[n.."High"]) or msufScaleSlider.High if high then high:SetText("") high:Hide() end end
+HideSliderParts(msufScaleSlider)
 msufScaleSlider:EnableMouseWheel(true)
-msufScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) if v<25 then v=25 elseif v>150 then v=150 end self:SetValue(v) end)
-msufScaleSlider:SetScript("OnValueChanged",function(self,value) if self.__msufSkip then return end local pct=math.floor((tonumber(value) or 100)/5+0.5)*5 if pct<25 then pct=25 elseif pct>150 then pct=150 end if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end local scale=pct/100 MSUF_SetSavedMsufScale(scale) MSUF_ApplyMsufScale(scale) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end end)
+msufScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) self:SetValue(SnapScalePct(v,25,150,5)) end)
+msufScaleSlider:SetScript("OnValueChanged",function(self,value) if self.__msufSkip then return end local pct=SnapScalePct(value,25,150,5) if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end local scale=pct/100 MSUF_SetSavedMsufScale(scale) MSUF_ApplyMsufScale(scale) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end end)
 if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Frame Scale","Scales only MSUF frames (unitframes + castbars). Use the mouse wheel for 5% steps.") end
-local menuScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-174,"MSUF Slash Menu Scale",MSUF_SkinText)
-local menuScaleApplied=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-192,"Applied: 1.00 (100%)",MSUF_SkinMuted)
-local menuScaleSelected=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-208,"Selected: 1.00 (100%)",MSUF_SkinMuted)
+
+local menuScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-198,"MSUF Slash Menu Scale",MSUF_SkinText)
+local menuScaleStatus=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-215,"Applied: 100%  Selected: 100%",MSUF_SkinMuted)
+menuScaleStatus:SetWidth(280)
 local menuScaleSlider=CreateFrame("Slider","MSUF_DashboardSlashMenuScaleSlider",scaleCard,"OptionsSliderTemplate")
 menuScaleSlider:ClearAllPoints()
-menuScaleSlider:SetPoint("TOPLEFT",menuScaleSelected,"BOTTOMLEFT",0,-8)
+menuScaleSlider:SetPoint("TOPLEFT",menuScaleStatus,"BOTTOMLEFT",0,-8)
 menuScaleSlider:SetPoint("RIGHT",scaleCard,"RIGHT",-26,0)
 menuScaleSlider:SetMinMaxValues(25,150)
 menuScaleSlider:SetValueStep(5)
 menuScaleSlider:SetObeyStepOnDrag(true)
 if menuScaleSlider.SetStepsPerPage then menuScaleSlider:SetStepsPerPage(1) end
-do local n=(menuScaleSlider.GetName and menuScaleSlider:GetName()) local t=(n and _G[n.."Text"]) or menuScaleSlider.Text if t then t:SetText("") t:Hide() end local low=(n and _G[n.."Low"]) or menuScaleSlider.Low if low then low:SetText("") low:Hide() end local high=(n and _G[n.."High"]) or menuScaleSlider.High if high then high:SetText("") high:Hide() end end
+HideSliderParts(menuScaleSlider)
 menuScaleSlider:EnableMouseWheel(true)
-menuScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) if v<25 then v=25 elseif v>150 then v=150 end self:SetValue(v) end)
-local function SnapScalePct(value) local pct=math.floor((tonumber(value) or 100)/5+0.5)*5 if pct<25 then pct=25 elseif pct>150 then pct=150 end return pct end
+menuScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) self:SetValue(SnapScalePct(v,25,150,5)) end)
 local function GetAppliedMenuScale(disabled) if disabled then return 1.0 end return clamp(MSUF_GetSavedSlashMenuScale(),0.25,1.5) end
 local function GetPendingMenuScale(disabled) local pending=scaleCard._msufPendingMenuScale if pending==nil then pending=GetAppliedMenuScale(disabled) end pending=tonumber(pending) or 1.0 return clamp(pending,0.25,1.5) end
 local bMenuApply,bMenuRevert
 local function RefreshMenuScaleControls(disabled)
- local applied=GetAppliedMenuScale(disabled)
- local pending=GetPendingMenuScale(disabled)
- local changed=(math.abs(applied-pending)>0.001) and (not disabled)
- if menuScaleApplied and menuScaleApplied.SetText then menuScaleApplied:SetText(string.format("Applied: %.2f (%d%%)",applied,math.floor(applied*100+0.5))) end
- if menuScaleSelected and menuScaleSelected.SetText then
-  if changed then menuScaleSelected:SetText(string.format("Selected: %.2f (%d%%)  |cffffd200Press Apply|r",pending,math.floor(pending*100+0.5))) else menuScaleSelected:SetText(string.format("Selected: %.2f (%d%%)",pending,math.floor(pending*100+0.5))) end
- end
- if menuScaleSlider and menuScaleSlider.SetValue then menuScaleSlider.__msufSkip=true menuScaleSlider:SetValue(SnapScalePct(pending*100)) menuScaleSlider.__msufSkip=nil end
- MSUF_SetEnabled(menuScaleSlider,not disabled)
- MSUF_SetEnabled(bMenuApply,changed)
- MSUF_SetEnabled(bMenuRevert,changed)
- if bMenuApply and bMenuApply._msufSetSelected then bMenuApply:_msufSetSelected(changed) end
- if menuScaleLabel and menuScaleLabel.SetAlpha then menuScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end
- if menuScaleApplied and menuScaleApplied.SetAlpha then menuScaleApplied:SetAlpha(disabled and 0.55 or 1.0) end
- if menuScaleSelected and menuScaleSelected.SetAlpha then menuScaleSelected:SetAlpha(disabled and 0.55 or 1.0) end
+local applied=GetAppliedMenuScale(disabled)
+local pending=GetPendingMenuScale(disabled)
+local changed=(math.abs(applied-pending)>0.001) and (not disabled)
+if menuScaleStatus and menuScaleStatus.SetText then
+local txt=string.format("Applied: %d%%  Selected: %d%%",math.floor(applied*100+0.5),math.floor(pending*100+0.5))
+if changed then txt=txt.."  |cffffd200Apply|r" end
+menuScaleStatus:SetText(txt)
+end
+SetSliderValueSafe(menuScaleSlider,SnapScalePct(pending*100,25,150,5))
+MSUF_SetEnabled(menuScaleSlider,not disabled)
+MSUF_SetEnabled(bMenuApply,changed)
+MSUF_SetEnabled(bMenuRevert,changed)
+if bMenuApply and bMenuApply._msufSetSelected then bMenuApply:_msufSetSelected(changed) end
+local a=disabled and 0.55 or 1.0
+if menuScaleLabel and menuScaleLabel.SetAlpha then menuScaleLabel:SetAlpha(a) end
+if menuScaleStatus and menuScaleStatus.SetAlpha then menuScaleStatus:SetAlpha(a) end
 end
 menuScaleSlider:SetScript("OnValueChanged",function(self,value)
- if self.__msufSkip then return end
- local pct=SnapScalePct(value)
- if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end
- scaleCard._msufPendingMenuScale=pct/100
- local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
- RefreshMenuScaleControls(g and g.disableScaling)
+if self.__msufSkip then return end
+local pct=SnapScalePct(value,25,150,5)
+if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end
+scaleCard._msufPendingMenuScale=pct/100
+local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+RefreshMenuScaleControls(g and g.disableScaling)
 end)
 if MSUF_AddTooltip then pcall(MSUF_AddTooltip,menuScaleSlider,"MSUF Slash Menu Scale","Chooses the standalone Slash Menu scale. Drag or use the mouse wheel, then press Apply.") end
-local menuRow=MSUF_BuildButtonRowTL(scaleCard,12,-250,{{text="Apply",w=96,h=20,gap=8,skinFn=MSUF_SkinDashboardButton,onClick=function() local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil if g and g.disableScaling then return end local scale=GetPendingMenuScale(false) MSUF_SetSavedSlashMenuScale(scale) MSUF_ApplySlashMenuScale(scale,{ignoreDisable=true}) scaleCard._msufPendingMenuScale=nil RefreshMenuScaleControls(false) end},{text="Revert",w=96,h=20,skinFn=MSUF_SkinDashboardButton,onClick=function() scaleCard._msufPendingMenuScale=nil local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil RefreshMenuScaleControls(g and g.disableScaling) end},},8)
+local menuRow=MSUF_BuildButtonRowTL(scaleCard,12,-260,{{text="Apply",w=96,h=20,gap=8,skinFn=MSUF_SkinDashboardButton,onClick=function() local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil if g and g.disableScaling then return end local scale=GetPendingMenuScale(false) MSUF_SetSavedSlashMenuScale(scale) MSUF_ApplySlashMenuScale(scale,{ignoreDisable=true}) scaleCard._msufPendingMenuScale=nil RefreshMenuScaleControls(false) end},{text="Revert",w=96,h=20,skinFn=MSUF_SkinDashboardButton,onClick=function() scaleCard._msufPendingMenuScale=nil local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil RefreshMenuScaleControls(g and g.disableScaling) end},},8)
 bMenuApply,bMenuRevert=menuRow[1],menuRow[2]
-local function RefreshScaleCard() local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil local disabled=g and g.disableScaling local preset=g and g.globalUiScalePreset if btn1080 and btn1080._msufSetSelected then btn1080:_msufSetSelected((not disabled) and preset=="1080p") end if btn1440 and btn1440._msufSetSelected then btn1440:_msufSetSelected((not disabled) and preset=="1440p") end if btn4k and btn4k._msufSetSelected then btn4k:_msufSetSelected((not disabled) and preset=="4k") end if btnAuto and btnAuto._msufSetSelected then btnAuto:_msufSetSelected(disabled or preset=="auto" or preset==nil) end MSUF_SetEnabled(btn1080,not disabled) MSUF_SetEnabled(btn1440,not disabled) MSUF_SetEnabled(btn4k,not disabled) MSUF_SetEnabled(btnAuto,true) MSUF_SetEnabled(msufScaleSlider,not disabled) if msufScaleLabel and msufScaleLabel.SetAlpha then msufScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end if msufScaleCur and msufScaleCur.SetAlpha then msufScaleCur:SetAlpha(disabled and 0.55 or 1.0) end local scale=clamp(MSUF_GetSavedMsufScale(),0.25,1.5) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end if msufScaleSlider and msufScaleSlider.SetValue then msufScaleSlider.__msufSkip=true msufScaleSlider:SetValue(math.floor(scale*100+0.5)) msufScaleSlider.__msufSkip=nil end if disabled then scaleCard._msufPendingMenuScale=nil end RefreshMenuScaleControls(disabled) end
+RefreshScaleCard=function()
+local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
+local disabled=g and g.disableScaling
+RefreshGlobalScaleControls()
+MSUF_SetEnabled(msufScaleSlider,not disabled)
+if msufScaleLabel and msufScaleLabel.SetAlpha then msufScaleLabel:SetAlpha(disabled and 0.55 or 1.0) end
+if msufScaleCur and msufScaleCur.SetAlpha then msufScaleCur:SetAlpha(disabled and 0.55 or 1.0) end
+local scale=clamp(MSUF_GetSavedMsufScale(),0.25,1.5)
+if disabled then scale=1.0 end
+if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end
+SetSliderValueSafe(msufScaleSlider,SnapScalePct(scale*100,25,150,5))
+if disabled then scaleCard._msufPendingMenuScale=nil end
+RefreshMenuScaleControls(disabled)
+end
 home._msufRefreshScaleCard=RefreshScaleCard
 RefreshScaleCard()
 
@@ -3278,7 +3492,12 @@ scaleEvent:RegisterEvent("PLAYER_LOGIN")
 scaleEvent:RegisterEvent("PLAYER_ENTERING_WORLD")
 scaleEvent:RegisterEvent("DISPLAY_SIZE_CHANGED")
 scaleEvent:SetScript("OnEvent",function(_,event,arg1) if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled()
-then return end
+then
+MSUF_ResetGlobalUiScale(true)
+MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
+MSUF_SetSavedSlashMenuScale(1.0)
+MSUF_ApplySlashMenuScale(1.0,{ignoreDisable=true})
+return end
 MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale());
 local want=MSUF_GetDesiredGlobalScaleFromDB()
 if want then if event=="PLAYER_LOGIN"then MSUF_SetGlobalUiScale(want,true);
@@ -3289,7 +3508,12 @@ end
 end
 )
 if C_Timer and C_Timer.After then C_Timer.After(0,function() if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled()
-then return end
+then
+MSUF_ResetGlobalUiScale(true)
+MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
+MSUF_SetSavedSlashMenuScale(1.0)
+MSUF_ApplySlashMenuScale(1.0,{ignoreDisable=true})
+return end
 MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale());
 local want=MSUF_GetDesiredGlobalScaleFromDB()
 if want then MSUF_SetGlobalUiScale(want,true);
