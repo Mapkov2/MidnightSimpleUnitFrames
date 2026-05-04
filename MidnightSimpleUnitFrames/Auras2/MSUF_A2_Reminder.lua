@@ -4,7 +4,7 @@
 -- Edit Mode popup with X, Y, Size, and Spacing.
 --
 -- Default: all reminders ON (nil = enabled). User sets key = false to disable.
--- Secret-safe: reads Cache._msufA2_sid, Cache.GetMinRemaining.
+-- Secret-safe: direct spell-id lookups first, cache fallback for older clients.
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
@@ -26,8 +26,13 @@ local IsInGroup, IsInRaid, GetNumGroupMembers = IsInGroup, IsInRaid, GetNumGroup
 local InCombatLockdown = InCombatLockdown
 local GetCursorPosition = GetCursorPosition
 local floor, format, max, min = math.floor, string.format, math.max, math.min
+local C_UnitAuras = C_UnitAuras
 local C_Spell_GetSpellTexture = C_Spell and C_Spell.GetSpellTexture
 local GetSpellTexture_fn = GetSpellTexture
+local tonumber = tonumber
+local canaccessvalue = _G.canaccessvalue
+local issecretvalue = _G.issecretvalue
+local _hasCanaccessvalue = (type(canaccessvalue) == "function")
 
 local function _GetIcon(spellId)
     if C_Spell_GetSpellTexture then
@@ -124,6 +129,70 @@ end
 local _providerHasBuff = {}
 local _providerMinRem  = {}
 
+local _getPlayerAuraBySpellID, _getUnitAuraBySpellID, _auraLookupBound
+
+local function _BindAuraLookups()
+    if _auraLookupBound then return end
+    local CUA = C_UnitAuras or _G.C_UnitAuras
+    if not CUA then return end
+    _auraLookupBound = true
+    C_UnitAuras = CUA
+    if CUA then
+        _getPlayerAuraBySpellID = CUA.GetPlayerAuraBySpellID
+        _getUnitAuraBySpellID = CUA.GetUnitAuraBySpellID
+    end
+end
+
+local function _DecodeSpellId(data)
+    local sid = data and (data.spellId or data.spellID)
+    if _hasCanaccessvalue then
+        if canaccessvalue(sid) ~= true then return 0 end
+    elseif issecretvalue and issecretvalue(sid) == true then
+        return 0
+    end
+    return tonumber(sid) or 0
+end
+
+local function _AddProviderAura(idx, data, threshold)
+    _providerHasBuff[idx] = true
+    if threshold > 0 then
+        local exp = data and data.expirationTime
+        if exp and exp ~= 0 then
+            local rem = exp - GetTime()
+            if rem < 0 then rem = 0 end
+            local prev = _providerMinRem[idx]
+            if not prev or rem < prev then
+                _providerMinRem[idx] = rem
+            end
+        else
+            if not _providerMinRem[idx] then
+                _providerMinRem[idx] = 999999
+            end
+        end
+    end
+end
+
+local function _ScanPlayerAurasDirect(threshold)
+    _BindAuraLookups()
+    if not _getPlayerAuraBySpellID and not _getUnitAuraBySpellID then return false end
+    for i = 1, _providerCount do
+        local spells = _PROVIDERS[i].satisfiedBy
+        for sid in next, spells do
+            local data
+            if _getPlayerAuraBySpellID then
+                data = _getPlayerAuraBySpellID(sid)
+            end
+            if not data and _getUnitAuraBySpellID then
+                data = _getUnitAuraBySpellID("player", sid)
+            end
+            if data then
+                _AddProviderAura(i, data, threshold)
+            end
+        end
+    end
+    return true
+end
+
 -- ---- Epoch + dirty tracking ----
 local _lastEpoch       = -1   -- last Cache.GetEpoch("player") we scanned at
 local _lastRosterGen   = -1   -- last roster gen we scanned at
@@ -145,36 +214,24 @@ function Reminder.MarkDirty()
 end
 
 local function _ScanPlayerAuras(threshold)
+    if _ScanPlayerAurasDirect(threshold) then return true end
+
     local Cache = API.Cache
     local s = Cache._units and Cache._units.player
-    if not s or not s.all then return end
-    local now = GetTime()
+    if not s or not s.all then return false end
     local thr = threshold
     local lookup = _spellToProvider
     for _, data in next, s.all do
         local sid = data._msufA2_sid
+        if not sid or sid == 0 then sid = _DecodeSpellId(data) end
         if sid and sid ~= 0 then
             local idx = lookup[sid]
             if idx then
-                _providerHasBuff[idx] = true
-                if thr > 0 then
-                    local exp = data.expirationTime
-                    if exp and exp ~= 0 then
-                        local rem = exp - now
-                        if rem < 0 then rem = 0 end
-                        local prev = _providerMinRem[idx]
-                        if not prev or rem < prev then
-                            _providerMinRem[idx] = rem
-                        end
-                    else
-                        if not _providerMinRem[idx] then
-                            _providerMinRem[idx] = 999999
-                        end
-                    end
-                end
+                _AddProviderAura(idx, data, thr)
             end
         end
     end
+    return true
 end
 
 -- Build compact result signature (zero-alloc via reusable buffer)
@@ -193,10 +250,10 @@ local function _BuildResultSig()
 end
 
 local function _ComputeMissing(reminders, threshold, isPreview)
-    _resultCount = 0
     local thr = (type(threshold) == "number" and threshold > 0) and threshold or 0
 
     if isPreview then
+        _resultCount = 0
         for i = 1, _providerCount do
             local p = _PROVIDERS[i]
             if not reminders or reminders[p.key] ~= false then
@@ -209,7 +266,11 @@ local function _ComputeMissing(reminders, threshold, isPreview)
     end
 
     -- PERF: No provider class in group → nothing can be missing, skip scan
-    if not _anyProviderInGroup then return false end
+    if not _anyProviderInGroup then
+        local changed = (_resultCount ~= 0)
+        _resultCount = 0
+        return changed
+    end
 
     -- PERF: Epoch-gate — only rescan when player auras actually changed
     local Cache = API.Cache
@@ -223,12 +284,16 @@ local function _ComputeMissing(reminders, threshold, isPreview)
     _lastRosterGen = rGen
 
     -- Reset (fixed-size, no wipe)
+    _resultCount = 0
     for i = 1, _providerCount do
         _providerHasBuff[i] = false
         _providerMinRem[i] = nil
     end
 
-    _ScanPlayerAuras(thr)
+    if not _ScanPlayerAuras(thr) then
+        _lastEpoch = -1
+        return true
+    end
 
     for i = 1, _providerCount do
         local p = _PROVIDERS[i]

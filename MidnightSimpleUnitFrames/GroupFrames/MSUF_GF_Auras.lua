@@ -1214,11 +1214,13 @@ end
 ------------------------------------------------------------------------
 -- Apply cooldown text font (diff-gated, global font, lazy FontString discovery)
 ------------------------------------------------------------------------
--- ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA)
+local ScaleFrameValue
+
+-- ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA, frameScale)
 -- Caller (RenderGroup) pre-resolves the four style values once per render
 -- group — eliminates per-icon ResolveGlobalFont + ResolveCooldownBaseColor
 -- calls. Per-icon diff-gates remain for live-apply correctness.
-local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA, isRetry)
+local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA, frameScale, isRetry)
     local cd = ic and ic.cooldown
     if not cd then return end
     local showCd = WantsCooldownText(gcfg)
@@ -1246,7 +1248,7 @@ local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB
                     if retryIcon and retryIcon.cooldown == retryCd
                        and retryIcon._msufAuraGroupKey == retryGroup then
                         retryCd._msufCooldownFontStringDirty = true
-                        ApplyCooldownFont(retryIcon, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA, true)
+                        ApplyCooldownFont(retryIcon, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA, frameScale, true)
                     end
                 end)
             end
@@ -1258,7 +1260,7 @@ local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB
     local fsChanged = cd._msufGFCdStyledFS ~= fs
     if fsChanged then cd._msufGFCdStyledFS = fs end
 
-    local size = (gcfg and gcfg.cooldownSize) or 8
+    local size = ScaleFrameValue((gcfg and gcfg.cooldownSize) or 8, frameScale or 1, 6)
 
     -- Diff-gate: skip redundant SetFont (same pattern as A2_Icons line 938)
     if fsChanged or cd._msufGFCdTextSize ~= size or cd._msufGFCdFontPath ~= gFont
@@ -1273,8 +1275,8 @@ local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB
 
     -- Anchor + offset (live-apply via diff-gate on anchor+x+y)
     local anchor = (gcfg and gcfg.cooldownAnchor) or "CENTER"
-    local ox = (gcfg and gcfg.cooldownOffsetX) or 0
-    local oy = (gcfg and gcfg.cooldownOffsetY) or 0
+    local ox = ScaleFrameValue((gcfg and gcfg.cooldownOffsetX) or 0, frameScale or 1)
+    local oy = ScaleFrameValue((gcfg and gcfg.cooldownOffsetY) or 0, frameScale or 1)
     if fsChanged or cd._msufGFCdAnchor ~= anchor or cd._msufGFCdOX ~= ox or cd._msufGFCdOY ~= oy then
         cd._msufGFCdAnchor = anchor
         cd._msufGFCdOX = ox
@@ -1305,14 +1307,14 @@ end
 -- Diff-gated per icon for live-apply.
 -- Caller (RenderGroup) pre-resolves gFont + wantFlags once per render group.
 ------------------------------------------------------------------------
-local function ApplyStackLayout(ic, gcfg, gFont, wantFlags)
+local function ApplyStackLayout(ic, gcfg, gFont, wantFlags, frameScale)
     local fs = ic and ic.count
     if not fs then return end
 
-    local size = gcfg.stackSize or 10
+    local size = ScaleFrameValue(gcfg.stackSize or 10, frameScale or 1, 6)
     local anchor = gcfg.stackAnchor or "BOTTOMRIGHT"
-    local ox = gcfg.stackOffsetX or -1
-    local oy = gcfg.stackOffsetY or 1
+    local ox = ScaleFrameValue(gcfg.stackOffsetX or -1, frameScale or 1)
+    local oy = ScaleFrameValue(gcfg.stackOffsetY or 1, frameScale or 1)
 
     if ic._msufGFStkSize ~= size or ic._msufGFStkFont ~= gFont then
         if gFont and fs.SetFont then
@@ -1399,32 +1401,89 @@ local function GetDynamicScale(conf)
     return 0.70
 end
 
---- Preview variant: uses configured capacity instead of live group size
+local function GetDefaultPreviewCount(kind)
+    if kind == "mythicraid" then return 20 end
+    if kind == "raid" then return 30 end
+    return 5
+end
+
+local function GetPreviewReferenceCount(kind)
+    local previewN = GF.GetPreviewAuraCount and GF.GetPreviewAuraCount(kind) or 0
+    if previewN and previewN > 0 then return previewN end
+
+    local isRaidLike = (kind == "raid" or kind == "mythicraid")
+    if isRaidLike then
+        local inRaid = _G.IsInRaid and _G.IsInRaid()
+        local liveKind = (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
+        if inRaid and liveKind == kind then
+            local liveN = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+            if liveN > 0 then return liveN end
+        end
+        return GetDefaultPreviewCount(kind)
+    end
+
+    if _G.IsInGroup and _G.IsInGroup() and not (_G.IsInRaid and _G.IsInRaid()) then
+        local liveN = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+        if liveN > 0 then return liveN end
+    end
+    return GetDefaultPreviewCount(kind)
+end
+
+--- Preview variant: uses the same visible/live group size that the user is editing.
 local function GetPreviewDynamicScale(conf, kind)
     if not conf or not conf.auras or not conf.auras.dynamicScale then return 1 end
-    local n = GF.GetPositionCount and GF.GetPositionCount(kind) or 0
+    local n = GetPreviewReferenceCount(kind)
     if n <= 15 then return 1 end
     if n <= 25 then return 0.85 end
     return 0.70
 end
 
+local function GetFrameScale(kind, conf)
+    local s = conf and conf._resolvedFrameScale
+    if s and s > 0 then return s end
+    if GF.GetFrameScale then
+        s = GF.GetFrameScale(kind)
+        if s and s > 0 then return s end
+    end
+    return 1
+end
+
+ScaleFrameValue = function(value, scale, minValue)
+    value = tonumber(value) or 0
+    scale = tonumber(scale) or 1
+    local v
+    if scale == 1 then
+        v = value
+    elseif GF.ScaleValue then
+        v = GF.ScaleValue(value, scale, minValue)
+    else
+        local scaled = value * scale
+        if scaled >= 0 then
+            v = math_floor(scaled + 0.5)
+        else
+            v = -math_floor((-scaled) + 0.5)
+        end
+        if minValue ~= nil and v < minValue then v = minValue end
+    end
+    if minValue ~= nil and v < minValue then v = minValue end
+    return v
+end
+
 ------------------------------------------------------------------------
 -- Main render: one aura group
 ------------------------------------------------------------------------
-local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale)
+local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale, frameScale)
     if not gcfg or gcfg.enabled == false then
         HidePool(f[POOL_KEYS[groupKey]], 1)
         return 0, nil
     end
 
     local maxIcons = gcfg.max or 6
-    local iconSize = gcfg.size or 20
-    if scale and scale ~= 1 then
-        iconSize = math_max(8, math_floor(iconSize * scale + 0.5))
-    end
+    local totalScale = (scale or 1) * (frameScale or 1)
+    local iconSize = ScaleFrameValue(gcfg.size or 20, totalScale, 8)
     local anchor   = gcfg.anchor or "BOTTOMLEFT"
     local growth   = gcfg.growth or "RIGHTDOWN"
-    local spacing  = gcfg.spacing or 1
+    local spacing  = ScaleFrameValue(gcfg.spacing or 1, frameScale or 1, 0)
     local perRow   = gcfg.perRow or maxIcons
     local showDisp = gcfg.showDispelBorder ~= false
 
@@ -1468,8 +1527,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     end
 
     -- Diff-gate container position
-    local cx = gcfg.x or 0
-    local cy = gcfg.y or 0
+    local cx = ScaleFrameValue(gcfg.x or 0, frameScale or 1)
+    local cy = ScaleFrameValue(gcfg.y or 0, frameScale or 1)
     local effAnchor = isCentered and "CENTER" or anchor
     local anchorTarget = behindBar and (f.health or wantParent) or wantParent
     if container._msufAnchor ~= effAnchor or container._msufAnchorX ~= cx
@@ -1612,8 +1671,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                                     cd:SetHideCountdownNumbers(wantHide)
                                 end
                             end
-                            ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA)
-                            ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags)
+                            ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA, frameScale)
+                            ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags, frameScale)
                             ApplyStacks(ic, unit, aid, aura.applications, showStk, gcfg)
                             if isHarmful then
                                 ApplyDispelBorder(ic, unit, aid, aura.dispelName, true, showDisp)
@@ -1640,8 +1699,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                                     cd:SetHideCountdownNumbers(wantHide)
                                 end
                             end
-                            ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA)
-                            ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags)
+                            ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA, frameScale)
+                            ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags, frameScale)
                             ApplyStacks(ic, unit, aid, aura.applications, showStk, gcfg)
 
                             if isHarmful then
@@ -1776,6 +1835,7 @@ function GF.UpdateFrameAuras(f, unit)
 
     local parent = f.statusIconLayer or f.barGroup or f
     local scale = GetDynamicScale(conf)
+    local frameScale = GetFrameScale(kind, conf)
     local anyShown = false
 
     -- 1) Externals
@@ -1784,7 +1844,7 @@ function GF.UpdateFrameAuras(f, unit)
         for k in pairs(_externalsIDs) do _externalsIDs[k] = nil end
         local afr = AF()
         local extFilter = afr and afr.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
-        local n = RenderGroup(f, unit, "externals", extCfg, extFilter, false, parent, nil, scale)
+        local n = RenderGroup(f, unit, "externals", extCfg, extFilter, false, parent, nil, scale, frameScale)
         if n > 0 then anyShown = true end
     elseif not f._msufGFExtHidden then
         f._msufGFExtHidden = true
@@ -1807,7 +1867,7 @@ function GF.UpdateFrameAuras(f, unit)
     if debOn then
         local afr = AF()
         local debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
-        local n, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale)
+        local n, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, frameScale)
         mergedDispel = md
         mergedDispelColor = mdColor
         if n > 0 then anyShown = true end
@@ -1869,7 +1929,7 @@ function GF.UpdateFrameAuras(f, unit)
     if buffCfg and buffCfg.enabled ~= false then
         local afr = AF()
         local buffFilter = afr and afr.ResolveBuffFilter(buffCfg.filterToken) or "HELPFUL|RAID"
-        local n = RenderGroup(f, unit, "buff", buffCfg, buffFilter, false, parent, f._msufSIDedupIDs, scale)
+        local n = RenderGroup(f, unit, "buff", buffCfg, buffFilter, false, parent, f._msufSIDedupIDs, scale, frameScale)
         if n > 0 then anyShown = true end
         f._msufGFBufHidden = nil
     elseif not f._msufGFBufHidden then
@@ -1968,6 +2028,7 @@ function GF.RefreshAuraIcon(icon, unit, aid)
     if not icon or not unit or not aid then return end
     local owner = icon._msufGFOwner
     local gcfg
+    local frameScale = 1
     if owner then
         -- Read pre-cached reverse flag from BuildFrameCache (Fix B).
         -- Avoids GF.GetConf in this hot path (called per updated aura per UNIT_AURA event).
@@ -1975,8 +2036,11 @@ function GF.RefreshAuraIcon(icon, unit, aid)
         local reverse = (oc and oc.cdReverse) or false
         ApplyCooldownVisualStyle(icon.cooldown, reverse)
         local groupKey = icon._msufAuraGroupKey
+        local kind = owner._msufGFKind or "party"
+        local conf = GF.GetConf and GF.GetConf(kind)
+        frameScale = GetFrameScale(kind, conf)
         if groupKey then
-            gcfg = GetGroupCfg(owner._msufGFKind or "party", groupKey)
+            gcfg = GetGroupCfg(kind, groupKey)
         end
     end
     local showCd = WantsCooldownText(gcfg)
@@ -1984,13 +2048,13 @@ function GF.RefreshAuraIcon(icon, unit, aid)
     if gcfg then
         local gFont, gFlags = ResolveGlobalFont()
         local baseR, baseG, baseB, baseA = ResolveCooldownBaseColor()
-        ApplyCooldownFont(icon, gcfg, gFont, gcfg.cooldownOutline or gFlags or "OUTLINE", baseR, baseG, baseB, baseA)
-        ApplyStackLayout(icon, gcfg, gFont, gcfg.stackOutline or gFlags or "OUTLINE")
+        ApplyCooldownFont(icon, gcfg, gFont, gcfg.cooldownOutline or gFlags or "OUTLINE", baseR, baseG, baseB, baseA, frameScale)
+        ApplyStackLayout(icon, gcfg, gFont, gcfg.stackOutline or gFlags or "OUTLINE", frameScale)
         ApplyStacks(icon, unit, aid, nil, gcfg.showStacks ~= false, gcfg)
     else
         local gFont, gFlags = ResolveGlobalFont()
         local baseR, baseG, baseB, baseA = ResolveCooldownBaseColor()
-        ApplyCooldownFont(icon, nil, gFont, gFlags or "OUTLINE", baseR, baseG, baseB, baseA)
+        ApplyCooldownFont(icon, nil, gFont, gFlags or "OUTLINE", baseR, baseG, baseB, baseA, frameScale)
         ApplyStacks(icon, unit, aid, nil, true, nil)
     end
 end
@@ -2056,25 +2120,27 @@ do
         end
 
         local parent = f.statusIconLayer or f.barGroup or f
-        -- Apply dynamic scale based on configured capacity (mirrors live GetDynamicScale)
+        -- Apply dynamic scale based on the same visible/live count the user is editing.
         local dynScale = GetPreviewDynamicScale(conf, kind)
+        local frameScale = GetFrameScale(kind, conf)
 
         -- Buffs
         local buffCfg = auras.buff
         if buffCfg and buffCfg.enabled ~= false then
             local rawSize = buffCfg.size or 20
-            local size = rawSize
-            if dynScale ~= 1 then size = math_max(8, math_floor(rawSize * dynScale + 0.5)) end
+            local size = ScaleFrameValue(rawSize, dynScale * frameScale, 8)
             local anchor = buffCfg.anchor or "BOTTOMLEFT"
             local growth = buffCfg.growth or "RIGHTDOWN"
-            local spacing = buffCfg.spacing or 1
+            local spacing = ScaleFrameValue(buffCfg.spacing or 1, frameScale, 0)
             local perRow = buffCfg.perRow or 4
             local maxShow = math_min(#MOCK_BUFFS, buffCfg.max or 6)
             local gv = GetGrowthVectors(growth)
             local container = EnsureContainer(f, "buff")
             local anchorTarget = ApplyContainerMode(container, f, buffCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, anchorTarget, anchor, buffCfg.x or 0, buffCfg.y or 0)
+            container:SetPoint(anchor, anchorTarget, anchor,
+                ScaleFrameValue(buffCfg.x or 0, frameScale),
+                ScaleFrameValue(buffCfg.y or 0, frameScale))
             container:SetSize(1, 1)
             container:Show()
             local pool = EnsurePool(f, "buff", maxShow, size, container)
@@ -2099,18 +2165,19 @@ do
         local debCfg = auras.debuff
         if debCfg and debCfg.enabled ~= false then
             local rawSize = debCfg.size or 20
-            local size = rawSize
-            if dynScale ~= 1 then size = math_max(8, math_floor(rawSize * dynScale + 0.5)) end
+            local size = ScaleFrameValue(rawSize, dynScale * frameScale, 8)
             local anchor = debCfg.anchor or "TOPLEFT"
             local growth = debCfg.growth or "RIGHTDOWN"
-            local spacing = debCfg.spacing or 1
+            local spacing = ScaleFrameValue(debCfg.spacing or 1, frameScale, 0)
             local perRow = debCfg.perRow or 3
             local maxShow = math_min(#MOCK_DEBUFFS, debCfg.max or 6)
             local gv = GetGrowthVectors(growth)
             local container = EnsureContainer(f, "debuff")
             local anchorTarget = ApplyContainerMode(container, f, debCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, anchorTarget, anchor, debCfg.x or 0, debCfg.y or 0)
+            container:SetPoint(anchor, anchorTarget, anchor,
+                ScaleFrameValue(debCfg.x or 0, frameScale),
+                ScaleFrameValue(debCfg.y or 0, frameScale))
             container:SetSize(1, 1)
             container:Show()
             local pool = EnsurePool(f, "debuff", maxShow, size, container)
@@ -2143,18 +2210,19 @@ do
         local extCfg = auras.externals
         if extCfg and extCfg.enabled and index == 1 then
             local rawSize = extCfg.size or 28
-            local size = rawSize
-            if dynScale ~= 1 then size = math_max(8, math_floor(rawSize * dynScale + 0.5)) end
+            local size = ScaleFrameValue(rawSize, dynScale * frameScale, 8)
             local anchor = extCfg.anchor or "CENTER"
             local growth = extCfg.growth or "RIGHTDOWN"
-            local spacing = extCfg.spacing or 1
+            local spacing = ScaleFrameValue(extCfg.spacing or 1, frameScale, 0)
             local perRow = extCfg.perRow or 3
             local maxShow = math_min(#MOCK_EXTERNALS, extCfg.max or 2)
             local gv = GetGrowthVectors(growth)
             local container = EnsureContainer(f, "externals")
             local anchorTarget = ApplyContainerMode(container, f, extCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, anchorTarget, anchor, extCfg.x or 0, extCfg.y or 0)
+            container:SetPoint(anchor, anchorTarget, anchor,
+                ScaleFrameValue(extCfg.x or 0, frameScale),
+                ScaleFrameValue(extCfg.y or 0, frameScale))
             container:SetSize(1, 1)
             container:Show()
             local pool = EnsurePool(f, "externals", maxShow, size, container)

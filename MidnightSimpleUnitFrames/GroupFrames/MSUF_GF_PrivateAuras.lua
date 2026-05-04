@@ -22,6 +22,27 @@ local math_max    = math.max
 local math_min    = math.min
 local type        = type
 
+local function ScaleFrameValue(value, scale, minValue)
+    value = tonumber(value) or 0
+    scale = tonumber(scale) or 1
+    local v
+    if scale == 1 then
+        v = value
+    elseif GF.ScaleValue then
+        v = GF.ScaleValue(value, scale, minValue)
+    else
+        local scaled = value * scale
+        if scaled >= 0 then
+            v = math_floor(scaled + 0.5)
+        else
+            v = -math_floor((-scaled) + 0.5)
+        end
+        if minValue ~= nil and v < minValue then v = minValue end
+    end
+    if minValue ~= nil and v < minValue then v = minValue end
+    return v
+end
+
 -- Direct localizations: 12.0.5+ guarantees these APIs exist.
 local AddPrivateAuraAnchor    = _G.C_UnitAuras.AddPrivateAuraAnchor
 local RemovePrivateAuraAnchor = _G.C_UnitAuras.RemovePrivateAuraAnchor
@@ -124,12 +145,12 @@ end
 function GF.ApplyPrivateAuras(f, unit, paOverride)
     if not f then return end
 
-    local pa, conf
+    local pa, conf, kind
     if type(paOverride) == "table" then
         pa   = paOverride
         conf = paOverride   -- satisfies the `conf.privateAura*` fallback reads below
     else
-        local kind = f._msufGFKind or "party"
+        kind = f._msufGFKind or "party"
         conf = GF.GetConf(kind)
         pa   = conf.privateAuras
     end
@@ -173,10 +194,19 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     if maxN == 0 then ClearAnchors(f); return end
     if maxN > 12 then maxN = 12 end
 
-    local iconSz = math_max(8, math_floor((tonumber(paSize) or 20) + 0.5))
+    local frameScale = 1
+    if kind then
+        if conf and conf._resolvedFrameScale then
+            frameScale = conf._resolvedFrameScale
+        elseif GF.GetFrameScale then
+            frameScale = GF.GetFrameScale(kind) or 1
+        end
+    end
+
+    local iconSz = ScaleFrameValue(paSize or 20, frameScale, 8)
     local pt = paAnchor
-    local ox = tonumber(paX) or 0
-    local oy = tonumber(paY) or 0
+    local ox = ScaleFrameValue(paX or 0, frameScale)
+    local oy = ScaleFrameValue(paY or 0, frameScale)
     local countdown = paCountdown
 
     -- Diff check: skip rebuild if all structural settings match.
@@ -226,7 +256,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     if container.SetClipsChildren then container:SetClipsChildren(false) end
 
     -- Direction-aware container sizing + slot positioning
-    local spacing = 1
+    local spacing = ScaleFrameValue((pa and pa.spacing) or 1, frameScale, 0)
     local isVertical = (paDirection == "TOP" or paDirection == "BOTTOM")
     local totalPrimary = maxN * iconSz + (maxN - 1) * spacing
 
@@ -545,12 +575,13 @@ function GF.PreviewPrivateAuras(f, kind)
 
     local maxN     = math_max(1, math_floor((tonumber(pa.max) or 4) + 0.5))
     if maxN > 12 then maxN = 12 end
-    local iconSz   = math_max(8, math_floor((tonumber(pa.size) or 20) + 0.5))
+    local frameScale = (conf and conf._resolvedFrameScale) or (GF.GetFrameScale and GF.GetFrameScale(kind)) or 1
+    local iconSz   = ScaleFrameValue(pa.size or 20, frameScale, 8)
     local pt       = pa.anchor or "TOPRIGHT"
     local dir      = pa.direction or "LEFT"
-    local ox       = tonumber(pa.x) or 0
-    local oy       = tonumber(pa.y) or 0
-    local spacing  = tonumber(pa.spacing) or 1
+    local ox       = ScaleFrameValue(pa.x or 0, frameScale)
+    local oy       = ScaleFrameValue(pa.y or 0, frameScale)
+    local spacing  = ScaleFrameValue(pa.spacing or 1, frameScale, 0)
     local previewN = math_min(maxN, 2)
 
     local parent = f.statusIconLayer or f.barGroup or f
