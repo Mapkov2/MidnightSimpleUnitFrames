@@ -333,6 +333,37 @@ local function _GetUserOutlineMixin()
     return _G.CreateColor(r, gg, b, a)
 end
 
+local function _RefreshRawNotInterruptible(frame)
+    if not frame then return nil end
+
+    local unit = frame.unit
+    if unit then
+        local chName, _, _, _, _, _, chRawNI = UnitChannelInfo(unit)
+        if chName then
+            frame._msufApiNotInterruptibleRaw = chRawNI
+            frame.MSUF_apiNotInterruptibleRaw = chRawNI
+            return chRawNI
+        else
+            local caName, _, _, _, _, _, _, caRawNI = UnitCastingInfo(unit)
+            if caName then
+                frame._msufApiNotInterruptibleRaw = caRawNI
+                frame.MSUF_apiNotInterruptibleRaw = caRawNI
+                return caRawNI
+            end
+        end
+    end
+
+    local rawNI = frame._msufApiNotInterruptibleRaw
+    if rawNI == nil then
+        rawNI = frame.MSUF_apiNotInterruptibleRaw
+    end
+
+    -- Keep target/focus (`_msuf...`) and boss (`MSUF...`) castbar caches in sync.
+    frame._msufApiNotInterruptibleRaw = rawNI
+    frame.MSUF_apiNotInterruptibleRaw = rawNI
+    return rawNI
+end
+
 -- Secret-safe RGBA tuple for the edge / box fill.
 --
 -- This composes up to TWO C-side EvaluateColorFromBoolean calls so neither
@@ -484,7 +515,7 @@ local function _PaintFrame(frame, readyBool)
     --   EvaluateColorFromBoolean inside _PickColor, which selects between
     --   our indicator colour and the user's outline colour without ever
     --   exposing the secret value to the Lua VM.
-    local rawNI = frame._msufApiNotInterruptibleRaw
+    local rawNI = _RefreshRawNotInterruptible(frame)
 
     if style == "box" then
         local box = frame.kickReadyBox
@@ -622,7 +653,7 @@ local function _InstallOutlineHook()
 
         -- Secret-safe rawNI gate: see comment in _PaintFrame for why this
         -- is needed in addition to the plain-bool check above.
-        local rawNI = frame._msufApiNotInterruptibleRaw
+        local rawNI = _RefreshRawNotInterruptible(frame)
 
         local readyMixin, cdMixin = _ResolveColorPair(cfg)
         local userMixin = _GetUserOutlineMixin()
