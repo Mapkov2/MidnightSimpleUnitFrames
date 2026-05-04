@@ -949,6 +949,7 @@ local function EnsureGFCooldownTextMgr()
         slowInterval = 0.50,
         fastInterval = 0.10,
         secretInterval = 0.20,
+        maxIdleInterval = 5.00,
         fastUntil = 0,
     }
     _gfCdTextMgr = mgr
@@ -990,6 +991,7 @@ local function EnsureGFCooldownTextMgr()
         local now = GetTime()
         local secretsActive = IsGFSecretMode(now)
         local wantFast = now < (mgr.fastUntil or 0)
+        local nextDue
         local isv = _gfIsSecretValue
         if not isv then
             isv = _G.issecretvalue or (C_Secrets and type(C_Secrets.IsSecret) == "function" and C_Secrets.IsSecret) or nil
@@ -1009,7 +1011,9 @@ local function EnsureGFCooldownTextMgr()
                 local obj = icon._msufGF_cdDurationObj or cd._msufGF_cdDurationObj
                 if fs and obj then
                     local skipUntil = icon._msufGF_cdSkipUntil
-                    if not (skipUntil and now < skipUntil) then
+                    if skipUntil and now < skipUntil then
+                        if not nextDue or skipUntil < nextDue then nextDue = skipUntil end
+                    else
                         local r, g, b, a = _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA
                         local bucket = 3
                         local iconSecret = false
@@ -1051,8 +1055,10 @@ local function EnsureGFCooldownTextMgr()
                             icon._msufGF_cdSkipUntil = nil
                         elseif bucket == 4 then
                             icon._msufGF_cdSkipUntil = now + 5.0
+                            if not nextDue or icon._msufGF_cdSkipUntil < nextDue then nextDue = icon._msufGF_cdSkipUntil end
                         elseif bucket == 3 then
                             icon._msufGF_cdSkipUntil = now + 2.0
+                            if not nextDue or icon._msufGF_cdSkipUntil < nextDue then nextDue = icon._msufGF_cdSkipUntil end
                         else
                             icon._msufGF_cdSkipUntil = nil
                         end
@@ -1066,6 +1072,11 @@ local function EnsureGFCooldownTextMgr()
         if wantFast then
             mgr.fastUntil = now + 1.50
             mgr.interval = secretsActive and (mgr.secretInterval or 0.20) or (mgr.fastInterval or 0.10)
+        elseif nextDue and nextDue > now then
+            local delay = nextDue - now
+            local maxIdle = mgr.maxIdleInterval or 5.0
+            if delay < 0.05 then delay = 0.05 elseif delay > maxIdle then delay = maxIdle end
+            mgr.interval = delay
         else
             mgr.interval = mgr.slowInterval or 0.50
         end

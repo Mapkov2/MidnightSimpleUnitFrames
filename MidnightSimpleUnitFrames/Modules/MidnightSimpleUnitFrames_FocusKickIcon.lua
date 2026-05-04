@@ -701,7 +701,6 @@ local function FocusKick_UpdateMode()
                 bar:SetAlpha(0)
             end
 
-            FocusKick_EnsureTimeUpdater()
             if _G.MSUF_FocusKickDriver_ForceUpdate then
                 _G.MSUF_FocusKickDriver_ForceUpdate()
             end
@@ -1089,6 +1088,13 @@ local function FocusKick_EnsureInitialized(forceFrame)
 end
 _G.MSUF_FocusKick_EnsureInitialized = FocusKick_EnsureInitialized
 
+local function FocusKick_EnsureRuntimeFrame()
+    -- Driver apply path must not run UpdateMode(), because UpdateMode() can
+    -- request a driver refresh and create an eventless C_Timer.After(0) loop.
+    FocusKick_EnsureInitialized(false)
+    FocusKick_CreateFrame()
+end
+
 function MSUF_InitFocusKickIcon()
     FocusKick_EnsureInitialized(FocusKick_IsEnabled())
 end
@@ -1126,7 +1132,7 @@ function _G.MSUF_FocusKick_ApplyCastState(state)
         return
     end
 
-    FocusKick_EnsureInitialized(true)
+    FocusKick_EnsureRuntimeFrame()
     if not FocusKickFrame then return end
 
     if not state or state.active ~= true then
@@ -1162,6 +1168,6 @@ end
 function _G.MSUF_FocusKick_PlayInterruptFeedback()
     FocusKick_EnsureDB()
     if not FocusKick_IsEnabled() then return end
-    FocusKick_EnsureInitialized(true)
+    FocusKick_EnsureRuntimeFrame()
     FocusKick_PlayInterruptFeedback()
 end
