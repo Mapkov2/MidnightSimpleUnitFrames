@@ -925,6 +925,21 @@ local function SetCastbarConfigEnabled(panel, unitKey, enabled)
     end
 end
 
+local function QueueCastbarConfigRefresh(panel, unitKey, show)
+    if not panel or not unitKey or not C_Timer or type(C_Timer.After) ~= "function" then return end
+    panel._msufCastbarConfigRefreshToken = (panel._msufCastbarConfigRefreshToken or 0) + 1
+    local token = panel._msufCastbarConfigRefreshToken
+    C_Timer.After(0, function()
+        if not panel or panel._msufCastbarConfigRefreshToken ~= token then return end
+        local enabled = show and true or false
+        local cb = panel[unitKey .. "CastbarEnableCB"]
+        if enabled and cb and cb.GetChecked then
+            enabled = cb:GetChecked() and true or false
+        end
+        SetCastbarConfigEnabled(panel, unitKey, enabled)
+    end)
+end
+
 local function EnhanceSliderTrack(slider)
     if not slider or slider._msufTrackEnhanced then return end
     slider._msufTrackEnhanced = true
@@ -1993,7 +2008,12 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     end
     for _, spec in ipairs(CASTBAR_TOGGLE_SPECS) do
         local show = isFrames and currentKey == spec.key
-        SetCastbarConfigEnabled(panel, spec.key, show and g[spec.enableK] ~= false)
+        local castbarEnabled = show and g[spec.enableK] ~= false
+        if castbarEnabled and panel[spec.enableW] and panel[spec.enableW].GetChecked then
+            castbarEnabled = panel[spec.enableW]:GetChecked() and true or false
+        end
+        SetCastbarConfigEnabled(panel, spec.key, castbarEnabled)
+        if show then QueueCastbarConfigRefresh(panel, spec.key, true) end
     end
 
     if panel._msufEnsureUFStatusSelection then panel._msufEnsureUFStatusSelection(currentKey) end
@@ -2610,6 +2630,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 if spec.requireKey and CurrentKey() ~= spec.requireKey then return end
                 if api.EnsureDB then api.EnsureDB() end; MSUF_DB.general[spec.enableK] = self:GetChecked() and true or false
                 SetCastbarConfigEnabled(panel, unitKey, MSUF_DB.general[spec.enableK] ~= false)
+                QueueCastbarConfigRefresh(panel, unitKey, true)
                 if spec.requireKey == "boss" then
                     if _G.MSUF_SetBossCastbarsEnabled then _G.MSUF_SetBossCastbarsEnabled(MSUF_DB.general.enableBossCastbar ~= false) end
                     if _G.MSUF_RefreshBossCastbarLayout then _G.MSUF_RefreshBossCastbarLayout() end; return
