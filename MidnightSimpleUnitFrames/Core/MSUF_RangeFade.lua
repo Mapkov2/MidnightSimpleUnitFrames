@@ -143,6 +143,14 @@ do
         return false
     end
 
+    local function ResolveFadeAlpha(conf)
+        local a = (conf and tonumber(conf.rangeFadeAlpha)) or 0.6
+        -- Misc exposes this as remaining out-of-range alpha: 0% = hidden,
+        -- 60% = 60% of the unitframe's normal alpha.
+        if a < 0 then a = 0 elseif a > 0.6 then a = 0.6 end
+        return a
+    end
+
     local function ApplyMul(f, unit, confKey, conf, inRange)
         local prev = _state[unit]
         if inRange == prev then
@@ -157,8 +165,7 @@ do
         _state[unit] = inRange
         local a = 1
         if inRange == false then
-            a = (conf and tonumber(conf.rangeFadeAlpha)) or 0.5
-            if a < 0 then a = 0 elseif a > 1 then a = 1 end
+            a = ResolveFadeAlpha(conf)
         end
         _mulT[unit] = a
         PropagateBossChildren(unit, a)

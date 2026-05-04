@@ -431,8 +431,40 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     -- =====================================================================
     -- Section 5: Range Fade
     -- =====================================================================
-    local s5Box, s5Body = MakeCollapsibleSection(scrollChild, 240, "Range Fade", false)
+    local s5Box, s5Body = MakeCollapsibleSection(scrollChild, 285, "Range Fade", false)
     s5Box:SetPoint("TOPLEFT", s4Box, "BOTTOMLEFT", 0, -6)
+
+    local function ClampRangeFadeAlphaPercent(v)
+        v = tonumber(v) or 60
+        if v < 0 then v = 0 elseif v > 60 then v = 60 end
+        return math.floor(v + 0.5)
+    end
+
+    local function PercentToRangeFadeAlpha(v)
+        return ClampRangeFadeAlphaPercent(v) / 100
+    end
+
+    local function AlphaToRangeFadePercent(a)
+        a = tonumber(a) or 0.6
+        if a < 0 then a = 0 elseif a > 0.6 then a = 0.6 end
+        return ClampRangeFadeAlphaPercent(a * 100)
+    end
+
+    local function RefreshRangeFadeRuntime()
+        if _G.MSUF_RangeFade_Reset then _G.MSUF_RangeFade_Reset() end
+        if _G.MSUF_RangeFade_EvaluateActive then
+            _G.MSUF_RangeFade_EvaluateActive(true)
+        elseif _G.MSUF_RangeFade_ApplyCurrent then
+            _G.MSUF_RangeFade_ApplyCurrent(true)
+        end
+
+        if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
+        if _G.MSUF_RangeFadeFB_EvaluateActive then
+            _G.MSUF_RangeFadeFB_EvaluateActive(true)
+        elseif _G.MSUF_RangeFadeFB_ApplyCurrent then
+            _G.MSUF_RangeFadeFB_ApplyCurrent(true)
+        end
+    end
 
     local rfTarget = UI.Check({
         name = "MSUF_TargetRangeFadeCheck", parent = s5Body,
@@ -490,7 +522,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end,
     })
 
-    UI.Check({
+    local rfBossAuras = UI.Check({
         name = "MSUF_BossRFAurasCheck", parent = s5Body,
         anchor = rfBossCB, x = 0, y = -6,
         label = TR("Also Fade Auras"),
@@ -498,6 +530,31 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         set = function(v)
             B().rangeFadeAuras = v
             if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+        end,
+    })
+
+    UI.Slider({
+        name = "MSUF_MiscRangeFadeStrengthSlider", parent = s5Body, compact = true,
+        compactInput = true, compactInputWidth = 48,
+        anchor = s5Body, anchorPoint = "TOPLEFT", x = 365, y = -72,
+        min = 0, max = 60, step = 5, width = 280, default = 60,
+        lowText = "0%", highText = "60%",
+        label = TR("Out of range alpha"),
+        get = function()
+            local a = T().rangeFadeAlpha
+            if a == nil then a = F().rangeFadeAlpha end
+            if a == nil then a = B().rangeFadeAlpha end
+            return AlphaToRangeFadePercent(a)
+        end,
+        set = function(v)
+            local a = PercentToRangeFadeAlpha(v)
+            T().rangeFadeAlpha = a
+            F().rangeFadeAlpha = a
+            B().rangeFadeAlpha = a
+            RefreshRangeFadeRuntime()
+        end,
+        formatText = function(v)
+            return string.format("Out of range alpha: %d%%", ClampRangeFadeAlphaPercent(v))
         end,
     })
 

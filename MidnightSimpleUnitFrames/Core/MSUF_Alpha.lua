@@ -423,6 +423,23 @@ local function MSUF_Alpha_SetFlat(frame, a)
     end
 end
 
+local function MSUF_Alpha_SetTextAlpha(frame, a)
+    if not frame then return end
+    a = tonumber(a) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+
+    local o = frame.nameText; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.levelText; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.hpText; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.hpTextPct; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.powerText; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.powerTextPct; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.statusIndicatorText; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.statusIndicatorOverlayText; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame._msufToTInlineText; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame._msufToTInlineSep; if o and o.SetAlpha then o:SetAlpha(a) end
+end
+
 local function MSUF_Alpha_GetStaticMode(frame, conf)
     if not conf or conf.loadCondActive == true then return nil end
     if conf.rangeFadeEnabled == true then return nil end
@@ -491,9 +508,7 @@ local function MSUF_Alpha_ResetLayered(frame)
     _SetGradArrayAlpha(frame.hpGradients, 1)
     _SetGradArrayAlpha(frame.powerGradients, 1)
     _SetTexAlpha(frame.portrait, 1)
-    local nt = frame.nameText;  if nt then nt:SetAlpha(1) end
-    local ht = frame.hpText;    if ht then ht:SetAlpha(1) end
-    local pt = frame.powerText; if pt then pt:SetAlpha(1) end
+    MSUF_Alpha_SetTextAlpha(frame, 1)
 end
 
 local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHPColor)
@@ -556,9 +571,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     _SetGradArrayAlpha(frame.hpGradients, fg)
     _SetGradArrayAlpha(frame.powerGradients, powerAlpha)
     _SetTexAlpha(frame.portrait, 1)
-    local nt = frame.nameText;  if nt then nt:SetAlpha(1) end
-    local ht = frame.hpText;    if ht then ht:SetAlpha(1) end
-    local pt = frame.powerText; if pt then pt:SetAlpha(1) end
+    MSUF_Alpha_SetTextAlpha(frame, 1)
 end
 
 local _rfMulTable = _G.MSUF_RangeFadeMul
@@ -703,17 +716,21 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         frame._msufAlphaBaseLayerMode = layerMode
         frame._msufAlphaBasePreserveHPColor = preserveHPColor
 
+        local textAlpha = 1
         local rfT = _rfMulTable
         if rfT then
             local m = rfT[key] or rfT[unit]
             if m and m < 1 then
                 if m < 0 then m = 0 end
+                if m > 1 then m = 1 end
+                textAlpha = m
                 alphaFG = alphaFG * m
                 alphaBG = alphaBG * m
             end
         end
 
         MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode, preserveHPColor)
+        MSUF_Alpha_SetTextAlpha(frame, textAlpha)
         if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
             frame:SetAlpha(0.35)
         end
@@ -798,6 +815,7 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
             return false
         end
         MSUF_Alpha_ApplyLayered(frame, fg * m, bg * m, mode, preserveHPColor)
+        MSUF_Alpha_SetTextAlpha(frame, m)
         return true
     end
 
