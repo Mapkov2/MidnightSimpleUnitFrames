@@ -450,7 +450,7 @@ local CASTBAR_TEXTICON_SPECS = {
 local COPY_BASIC_FIELDS = {
     "enabled","showName","showHP","showPower","reverseFillBars","smoothFill","portraitMode",
     "alphaInCombat","alphaOutOfCombat","alphaSync",
-    "alphaExcludeTextPortrait","alphaLayerMode",
+    "alphaExcludeTextPortrait","alphaPreserveHPColor","alphaLayerMode",
     "alphaFGInCombat","alphaFGOutOfCombat","alphaBGInCombat","alphaBGOutOfCombat","alphaHPInCombat","alphaHPOutOfCombat",
     "loadCondHideMounted","loadCondHideInVehicle","loadCondHideResting",
     "loadCondHideInCombat","loadCondHideOutOfCombat","loadCondHideStealthed",
@@ -810,6 +810,8 @@ local function SetOptionControlEnabled(widget, enabled)
     if not widget then return end
     enabled = enabled and true or false
     local alpha = enabled and 1 or OPTION_DISABLED_ALPHA
+    local textColor = enabled and 1 or 0.35
+    local mutedColor = enabled and 0.7 or 0.35
 
     if widget.SetEnabled then
         widget:SetEnabled(enabled)
@@ -852,6 +854,9 @@ local function SetOptionControlEnabled(widget, enabled)
     if widget.text and widget.text.SetAlpha then widget.text:SetAlpha(alpha) end
     SetCheckboxLabelEnabledVisual(widget, enabled)
     if widget.editBox and widget.editBox.SetAlpha then widget.editBox:SetAlpha(alpha) end
+    if widget.editBox and widget.editBox.SetTextColor then
+        widget.editBox:SetTextColor(textColor, textColor, textColor)
+    end
     if widget.minusButton and widget.minusButton.SetAlpha then widget.minusButton:SetAlpha(alpha) end
     if widget.plusButton and widget.plusButton.SetAlpha then widget.plusButton:SetAlpha(alpha) end
 
@@ -859,8 +864,15 @@ local function SetOptionControlEnabled(widget, enabled)
         for _, suffix in ipairs({ "Text", "Low", "High" }) do
             local region = _G[name .. suffix]
             if region and region.SetAlpha then region:SetAlpha(alpha) end
+            if region and region.SetTextColor then
+                local c = (suffix == "Text") and textColor or mutedColor
+                region:SetTextColor(c, c, c)
+            end
         end
     end
+
+    local update = widget.__msufToggleUpdate or widget._msufToggleUpdate
+    if type(update) == "function" then pcall(update) end
 end
 
 local function SetFrameBasicsConfigEnabled(panel, enabled)
@@ -889,6 +901,21 @@ local function SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
     SetOptionControlEnabled(panel.playerPowerBarBorderCB, powerEnabled)
     SetOptionControlEnabled(panel.playerPowerBarSmoothCB, powerEnabled)
     SetOptionControlEnabled(panel.playerPowerBarBorderSlider, powerEnabled and borderEnabled)
+end
+
+local function QueuePowerBarConfigRefresh(panel, showPB, borderEnabled)
+    if not panel or not C_Timer or type(C_Timer.After) ~= "function" then return end
+    panel._msufPowerBarConfigRefreshToken = (panel._msufPowerBarConfigRefreshToken or 0) + 1
+    local token = panel._msufPowerBarConfigRefreshToken
+    C_Timer.After(0, function()
+        if not panel or panel._msufPowerBarConfigRefreshToken ~= token then return end
+        local powerEnabled = showPB and true or false
+        local cb = panel.playerPowerBarShowCB
+        if powerEnabled and cb and cb.GetChecked then
+            powerEnabled = cb:GetChecked() and true or false
+        end
+        SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
+    end)
 end
 
 local function SetCastbarConfigEnabled(panel, unitKey, enabled)
@@ -1140,6 +1167,22 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     CBLabelLeft(alphaExcludeCB, "Keep text + portrait visible")
     if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(alphaExcludeCB, 220) end
     panel.playerAlphaExcludeTextPortraitCB = alphaExcludeCB
+
+    local alphaPreserveHPCB = CreateFrame("CheckButton", "MSUF_UF_AlphaPreserveHPColorCB", sizeBody, "UICheckButtonTemplate")
+    alphaPreserveHPCB:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 304, -44)
+    if alphaPreserveHPCB.Text then alphaPreserveHPCB.Text:SetText(TR("Preserve HP color")) end
+    if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(alphaPreserveHPCB, 220) end
+    panel.playerAlphaPreserveHPColorCB = alphaPreserveHPCB
+    if alphaPreserveHPCB.SetScript then
+        alphaPreserveHPCB:SetScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(TR("Preserve HP color"), 1, 1, 1)
+            GameTooltip:AddLine(TR("Keeps the health fill fully colored while layered transparency fades other parts."), 0.85, 0.85, 0.85, true)
+            GameTooltip:Show()
+        end)
+        alphaPreserveHPCB:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    end
 
     sizeBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"):SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 12, -44)
     -- (label text set implicitly via fontstring above, but we need to set text)
@@ -1791,7 +1834,12 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         if panel.playerPowerBarSmoothCB then
             panel.playerPowerBarSmoothCB:SetChecked(ReadPowerSmoothFill(conf, key))
         end
-        SetPowerBarConfigEnabled(panel, showPB and powerEnabled, borderEnabled)
+        local controlsPowerEnabled = showPB and powerEnabled
+        if controlsPowerEnabled and panel.playerPowerBarShowCB and panel.playerPowerBarShowCB.GetChecked then
+            controlsPowerEnabled = panel.playerPowerBarShowCB:GetChecked() and true or false
+        end
+        SetPowerBarConfigEnabled(panel, controlsPowerEnabled, borderEnabled)
+        QueuePowerBarConfigRefresh(panel, showPB, borderEnabled)
     end
 
     -- ToT inline
@@ -1860,6 +1908,10 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     -- Alpha
     local excludeTP = (conf.alphaExcludeTextPortrait == true)
     if panel.playerAlphaExcludeTextPortraitCB then panel.playerAlphaExcludeTextPortraitCB:SetChecked(excludeTP) end
+    if panel.playerAlphaPreserveHPColorCB then
+        panel.playerAlphaPreserveHPColorCB:SetChecked(conf.alphaPreserveHPColor == true)
+        SetOptionControlEnabled(panel.playerAlphaPreserveHPColorCB, excludeTP)
+    end
     if Alpha_NormalizeMode then
         local layerMode = Alpha_NormalizeMode(conf.alphaLayerMode)
         if panel.playerAlphaLayerDropDown and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
@@ -2120,6 +2172,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 local c, k = PBConf(); if not c or not k then return end
                 c.showPowerBar = self:GetChecked() and true or false
                 SetPowerBarConfigEnabled(panel, c.showPowerBar ~= false, c.powerBarBorderEnabled == true)
+                QueuePowerBarConfigRefresh(panel, true, c.powerBarBorderEnabled == true)
                 PBApply()
             end)
         end
@@ -2142,6 +2195,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 local c = PBConf(); if not c then return end
                 c.powerBarBorderEnabled = self:GetChecked() and true or false
                 SetPowerBarConfigEnabled(panel, c.showPowerBar ~= false, c.powerBarBorderEnabled == true)
+                QueuePowerBarConfigRefresh(panel, true, c.powerBarBorderEnabled == true)
                 PBApply()
             end)
         end
@@ -2206,7 +2260,14 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             if btn then if on then if btn.Enable then btn:Enable() end else if btn.Disable then btn:Disable() end end end
             if dd.Text and dd.Text.SetTextColor then dd.Text:SetTextColor(on and 1 or 0.5, on and 1 or 0.5, on and 1 or 0.5) end
         end
+        SetOptionControlEnabled(panel.playerAlphaPreserveHPColorCB, on)
         AlphaUI_RefreshSliders(); ApplyAlpha()
+    end) end
+
+    if panel.playerAlphaPreserveHPColorCB then panel.playerAlphaPreserveHPColorCB:SetScript("OnClick", function(self)
+        if not IsFramesTab() then return end
+        local c = EnsureKeyDB(); c.alphaPreserveHPColor = self:GetChecked() and true or false
+        ApplyAlpha()
     end) end
 
     if panel.playerAlphaLayerDropDown and UIDropDownMenu_Initialize then
