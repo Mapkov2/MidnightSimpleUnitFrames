@@ -1356,7 +1356,6 @@ local function ScanHeaderChildren(header, kind, force)
                 end
 
                 -- health bar
-                local conf = GF.GetConf(kind)
                 local inset = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
                 if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
                 local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, unit, nil, conf))

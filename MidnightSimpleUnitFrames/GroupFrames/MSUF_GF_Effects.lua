@@ -1123,7 +1123,12 @@ end
 
 local function _GF_ApplyFrameAlpha(f, kind, conf)
     if f and f.SetAlpha then
-        f:SetAlpha(_GF_GetFrameAlpha(kind, conf or GF.GetConf(kind)))
+        local c = f._c
+        local a = c and c.frameAlpha
+        if type(a) ~= "number" then
+            a = _GF_GetFrameAlpha(kind, conf or GF.GetConf(kind))
+        end
+        f:SetAlpha(a)
     end
 end
 
@@ -1171,22 +1176,17 @@ end
 local function ApplyRangeFade(f, unit, inRange)
     local c = f._c
     local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    local frameAlpha = _GF_GetFrameAlpha(kind, conf)
-    if c and not c.rfEn then
+    if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+    local conf
+    if not c then conf = GF.GetConf(kind) end
+    local frameAlpha = (c and c.frameAlpha) or _GF_GetFrameAlpha(kind, conf)
+    if (c and not c.rfEn) or (conf and conf.rangeFadeEnabled == false) then
         _ClearHealthRangeFade(f, kind)
         if f.SetAlpha then f:SetAlpha(frameAlpha) end
         return
     end
-    local fadeAlpha = (c and c.rfAlpha) or conf.rangeFadeAlpha or 0.4
-    local hpMode = (_NormalizeRangeFadeLayerMode((c and c.rfLayerMode) or conf.rangeFadeLayerMode) == "health")
-
-    -- Disabled → full alpha
-    if conf.rangeFadeEnabled == false then
-        _ClearHealthRangeFade(f, kind)
-        if f.SetAlpha then f:SetAlpha(frameAlpha) end
-        return
-    end
+    local fadeAlpha = (c and c.rfAlpha) or (conf and conf.rangeFadeAlpha) or 0.4
+    local hpMode = ((c and c.rfLayerMode) or (conf and _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)) or "frame") == "health"
 
     -- Solo guard (EQoL: IsInGroup + IsInRaid)
     if IsInGroup and IsInRaid then
@@ -1235,15 +1235,32 @@ end
 function GF.RefreshRangeFade()
     local frames = GF.frames
     if not frames then return end
-    for f in pairs(frames) do
-        if f then
-            if GF.BuildFrameCache then GF.BuildFrameCache(f) end
-            local unit = f.unit
-            if unit and UnitExists(unit) then
-                ApplyRangeFade(f, unit)
-            else
-                _ClearHealthRangeFade(f, f._msufGFKind or "party")
-                _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                local unit = f.unit
+                if unit and UnitExists(unit) then
+                    ApplyRangeFade(f, unit)
+                else
+                    _ClearHealthRangeFade(f, f._msufGFKind or "party")
+                    _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
+                end
+            end
+        end
+    else
+        for f in pairs(frames) do
+            if f then
+                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                local unit = f.unit
+                if unit and UnitExists(unit) then
+                    ApplyRangeFade(f, unit)
+                else
+                    _ClearHealthRangeFade(f, f._msufGFKind or "party")
+                    _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
+                end
             end
         end
     end
@@ -1252,16 +1269,34 @@ end
 function GF.RefreshGroupAlphas()
     local frames = GF.frames
     if frames then
-        for f in pairs(frames) do
-            if f then
-                local kind = f._msufGFKind or "party"
-                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
-                if GF.ApplyHealthBarAlpha then GF.ApplyHealthBarAlpha(f, kind) end
-                if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, kind) end
-                if f.unit and UnitExists(f.unit) then
-                    ApplyRangeFade(f, f.unit)
-                else
-                    _GF_ApplyFrameAlpha(f, kind)
+        local list = GF.frameList
+        if list then
+            for i = 1, #list do
+                local f = list[i]
+                if f then
+                    local kind = f._msufGFKind or "party"
+                    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                    if GF.ApplyHealthBarAlpha then GF.ApplyHealthBarAlpha(f, kind) end
+                    if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, kind) end
+                    if f.unit and UnitExists(f.unit) then
+                        ApplyRangeFade(f, f.unit)
+                    else
+                        _GF_ApplyFrameAlpha(f, kind)
+                    end
+                end
+            end
+        else
+            for f in pairs(frames) do
+                if f then
+                    local kind = f._msufGFKind or "party"
+                    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                    if GF.ApplyHealthBarAlpha then GF.ApplyHealthBarAlpha(f, kind) end
+                    if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, kind) end
+                    if f.unit and UnitExists(f.unit) then
+                        ApplyRangeFade(f, f.unit)
+                    else
+                        _GF_ApplyFrameAlpha(f, kind)
+                    end
                 end
             end
         end
@@ -1275,6 +1310,8 @@ end
 local function _GF_ShouldApplyRangeOrFrameAlpha(f, c, kind)
     if c and c.rfEn then return true end
     if f and f._msufGFHealthAlphaDynamic then return true end
+    local cachedAlpha = c and c.frameAlpha
+    if type(cachedAlpha) == "number" then return cachedAlpha < 0.999 end
     local fn = GF.GetEffectiveFrameAlpha
     if type(fn) ~= "function" then return false end
     kind = kind or (f and f._msufGFKind) or "party"
@@ -1347,6 +1384,7 @@ function GF.BuildFrameCache(f)
     local c = f._c
     if not c then c = {}; f._c = c end
     local fScale = conf._resolvedFrameScale or 1
+    c.frameScale = fScale
 
     -- Smooth fill (pre-resolved interpolation enum)
     c.smooth    = conf.smoothFill ~= false and _smoothInterp or nil
@@ -1381,6 +1419,7 @@ function GF.BuildFrameCache(f)
     -- Live-apply via Options toggle: GF.RefreshVisuals → ApplyVisuals →
     -- BuildFrameCache (this function) → c.cdReverse refreshed.
     c.cdReverse = conf.cooldownSwipeDarkenOnLoss == true
+    c.reverseFill = conf.reverseFill == true
 
     -- Health color mode (pre-resolve full chain)
     local gfMode = conf.gfBarMode
@@ -1436,6 +1475,8 @@ function GF.BuildFrameCache(f)
     c.rfLayerMode = _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)
     c.hpBarAlpha = (GF.GetEffectiveHealthAlpha and GF.GetEffectiveHealthAlpha(kind, conf)) or tonumber(conf.hpBarAlpha) or 1
     if c.hpBarAlpha < 0 then c.hpBarAlpha = 0 elseif c.hpBarAlpha > 1 then c.hpBarAlpha = 1 end
+    c.alphaPreserveHPColor = conf.alphaPreserveHPColor == true
+    c.frameAlpha = (GF.GetEffectiveFrameAlpha and GF.GetEffectiveFrameAlpha(kind, conf)) or 1
 
     -- Health fade (curve-based HP threshold dimming)
     c.hfEn     = conf.healthFadeEnabled == true
@@ -1464,13 +1505,28 @@ function GF.BuildFrameCache(f)
     c.dispelEn  = HLVal(kind, "hlDispelEnabled") ~= false
     c.targetEn  = HLVal(kind, "hlTargetEnabled") ~= false
     c.focusEn   = conf.hlFocusEnabled ~= false
+    c.aggroSize = HLVal(kind, "hlAggroSize") or 2
+    c.aggroOfs = HLVal(kind, "hlAggroOffset") or 0
+    c.aggroTex = HLVal(kind, "hlAggroTexture")
+    c.aggroLayer = HLVal(kind, "hlAggroLayer") or "DEFAULT"
+    c.aggroR = HLColor("hlAggroColorR", 1)
+    c.aggroG = HLColor("hlAggroColorG", 0.55)
+    c.aggroB = HLColor("hlAggroColorB", 0)
 
     -- Target color (pre-resolve HLColor)
+    c.tgtSize = HLVal(kind, "hlTargetSize") or 2
+    c.tgtOfs = HLVal(kind, "hlTargetOffset") or 0
+    c.tgtTex = HLVal(kind, "hlTargetTexture")
+    c.tgtLayer = HLVal(kind, "hlTargetLayer") or "DEFAULT"
     c.tgtR = HLColor("hlTargetColorR", 1)
     c.tgtG = HLColor("hlTargetColorG", 1)
     c.tgtB = HLColor("hlTargetColorB", 1)
 
     -- Focus color
+    c.focSize = conf.hlFocusSize or 2
+    c.focOfs = conf.hlFocusOffset or 0
+    c.focTex = conf.hlFocusTexture
+    c.focLayer = conf.hlFocusLayer or "DEFAULT"
     c.focR = conf.hlFocusColorR or 0.5
     c.focG = conf.hlFocusColorG or 0.5
     c.focB = conf.hlFocusColorB or 1.0
@@ -1518,6 +1574,8 @@ function GF.BuildFrameCache(f)
 
     -- Name display
     c.nameEn = conf.showName ~= false
+    c.nameMaxChars = conf.nameMaxChars or 0
+    c.nameNoEllipsis = conf.nameNoEllipsis
 
     -- Status/icons: pre-resolve event/update consumers. Disabled features should
     -- not receive events and should not be called from shared dispatch paths.
@@ -1534,6 +1592,7 @@ function GF.BuildFrameCache(f)
     c.summonEn     = conf.summonIcon ~= false
     c.resEn        = conf.resurrectIcon ~= false
     c.phaseEn      = conf.phaseIcon ~= false
+    c.groupNumberEn = conf.showGroupNumber == true
     c.flagsEn      = c.statusTextEn or c.roleStateEn or c.leaderEn
     c.connectionEn = c.statusTextEn or c.rfEn
 
@@ -1570,7 +1629,13 @@ function GF.BuildFrameCache(f)
     if prevBits ~= nil and prevBits ~= evBits and f.unit and f._msufGFRegEv then
         GF.RegisterUnitEvents(f, f.unit)
     end
-    if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+    if prevBits == nil or prevBits ~= evBits then
+        if GF.RequestSyncGroupGlobalEvents then
+            GF.RequestSyncGroupGlobalEvents()
+        elseif GF.SyncGroupGlobalEvents then
+            GF.SyncGroupGlobalEvents()
+        end
+    end
 
     -- Invalidate module-level text format cache (hidePercentSymbol, useShortNumbers)
     if GF.InvalidateTextFormatCache then GF.InvalidateTextFormatCache() end
@@ -1597,13 +1662,11 @@ local function _GF_QuickBorderUpdate(f)
     if f._msufGFIsTarget and c.targetEn then
         if border._msufHLActivePrio ~= 3 then
             border._msufHLActivePrio = 3
-            local kind = f._msufGFKind or "party"
-            local conf = GF.GetConf(kind)
-            _applyHighlightBorderStyle(border, conf,
-                HLVal(kind, "hlTargetSize") or 2,
-                HLVal(kind, "hlTargetOffset") or 0,
-                HLVal(kind, "hlTargetTexture"),
-                HLVal(kind, "hlTargetLayer") or "DEFAULT",
+            _applyHighlightBorderStyle(border, nil,
+                c.tgtSize or 2,
+                c.tgtOfs or 0,
+                c.tgtTex,
+                c.tgtLayer or "DEFAULT",
                 c.tgtR, c.tgtG, c.tgtB, 1)
         else
             border:SetBackdropBorderColor(c.tgtR, c.tgtG, c.tgtB, 1)
@@ -1616,13 +1679,11 @@ local function _GF_QuickBorderUpdate(f)
     if f._msufGFIsFocus and c.focusEn then
         if border._msufHLActivePrio ~= 4 then
             border._msufHLActivePrio = 4
-            local kind = f._msufGFKind or "party"
-            local conf = GF.GetConf(kind)
-            _applyHighlightBorderStyle(border, conf,
-                conf.hlFocusSize or 2,
-                conf.hlFocusOffset or 0,
-                conf.hlFocusTexture,
-                conf.hlFocusLayer or "DEFAULT",
+            _applyHighlightBorderStyle(border, nil,
+                c.focSize or 2,
+                c.focOfs or 0,
+                c.focTex,
+                c.focLayer or "DEFAULT",
                 c.focR, c.focG, c.focB, 1)
         else
             border:SetBackdropBorderColor(c.focR, c.focG, c.focB, 1)
@@ -1725,9 +1786,7 @@ _GF_ApplyDispelOverlay = function(f)
 
     -- Reverse fill sync (match health bar direction)
     if dov.SetReverseFill then
-        local kind = f._msufGFKind or "party"
-        local conf = GF.GetConf(kind)
-        dov:SetReverseFill(conf.reverseFill and true or false)
+        dov:SetReverseFill(c.reverseFill and true or false)
     end
 
     if not dov:IsShown() then dov:Show() end
@@ -1788,21 +1847,22 @@ _GF_RefreshBorder = function(f, unit)
 
     local border = f._msufGFHighlightBorder
     if not border then return end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
+    local c = f._c
+    if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+    if not c then return end
 
     -- Resolve active states
     local dispelType = f._msufGFDispelType
-    local hasDispel  = dispelType and HLVal(kind, "hlDispelEnabled") ~= false
+    local hasDispel  = dispelType and c.dispelEn
     local aggroLevel = f._msufGFAggroLevel
-    local hasAggro   = aggroLevel and aggroLevel >= 1 and HLVal(kind, "hlAggroEnabled") ~= false
+    local hasAggro   = aggroLevel and aggroLevel >= 1 and c.aggroEn
 
     -- Shared geometry for dispel/aggro/purge (all use Aggro size keys)
-    local sz  = HLVal(kind, "hlAggroSize") or 2
-    local ofs = HLVal(kind, "hlAggroOffset") or 0
-    local tex = HLVal(kind, "hlAggroTexture")
-    local lay = HLVal(kind, "hlAggroLayer") or "DEFAULT"
-    local fScale = conf._resolvedFrameScale or 1
+    local sz  = c.aggroSize or 2
+    local ofs = c.aggroOfs or 0
+    local tex = c.aggroTex
+    local lay = c.aggroLayer or "DEFAULT"
+    local fScale = c.frameScale or 1
     if fScale ~= 1 and GF.ScaleValue then
         sz = GF.ScaleValue(sz, fScale, 1)
         ofs = GF.ScaleValue(ofs, fScale)
@@ -1822,7 +1882,7 @@ _GF_RefreshBorder = function(f, unit)
                 if hasDispel then
                     local r, g, b = ResolveDispelColor(dispelType, f)
                     if r then
-                        _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
+                        _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay, r, g, b, 1)
                         border._msufHLActivePrio = 1; border:Show()
                         _GF_StartDispelGlow(f, r, g, b)
                         return
@@ -1830,8 +1890,8 @@ _GF_RefreshBorder = function(f, unit)
                 end
             elseif pk == "aggro" then
                 if hasAggro then
-                    _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
-                        HLColor("hlAggroColorR", 1), HLColor("hlAggroColorG", 0.55), HLColor("hlAggroColorB", 0), 1)
+                    _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay,
+                        c.aggroR or 1, c.aggroG or 0.55, c.aggroB or 0, 1)
                     border._msufHLActivePrio = 2; border:Show()
                     _GF_StopDispelGlow(f)
                     return
@@ -1843,15 +1903,15 @@ _GF_RefreshBorder = function(f, unit)
         if hasDispel then
             local r, g, b = ResolveDispelColor(dispelType, f)
             if r then
-                _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay, r, g, b, 1)
+                _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay, r, g, b, 1)
                 border._msufHLActivePrio = 1; border:Show()
                 _GF_StartDispelGlow(f, r, g, b)
                 return
             end
         end
         if hasAggro then
-            _applyHighlightBorderStyle(border, conf, sz, ofs, tex, lay,
-                HLColor("hlAggroColorR", 1), HLColor("hlAggroColorG", 0.55), HLColor("hlAggroColorB", 0), 1)
+            _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay,
+                c.aggroR or 1, c.aggroG or 0.55, c.aggroB or 0, 1)
             border._msufHLActivePrio = 2; border:Show()
             _GF_StopDispelGlow(f)
             return
@@ -1859,30 +1919,30 @@ _GF_RefreshBorder = function(f, unit)
     end
 
     -- After configurable prio: Target (GF-specific, always after dispel/aggro)
-    if f._msufGFIsTarget and HLVal(kind, "hlTargetEnabled") ~= false then
-        _applyHighlightBorderStyle(border, conf,
-            HLVal(kind, "hlTargetSize") or 2,
-            HLVal(kind, "hlTargetOffset") or 0,
-            HLVal(kind, "hlTargetTexture"),
-            HLVal(kind, "hlTargetLayer") or "DEFAULT",
-            HLColor("hlTargetColorR", 1),
-            HLColor("hlTargetColorG", 1),
-            HLColor("hlTargetColorB", 1), 1)
+    if f._msufGFIsTarget and c.targetEn then
+        _applyHighlightBorderStyle(border, nil,
+            c.tgtSize or 2,
+            c.tgtOfs or 0,
+            c.tgtTex,
+            c.tgtLayer or "DEFAULT",
+            c.tgtR or 1,
+            c.tgtG or 1,
+            c.tgtB or 1, 1)
         border._msufHLActivePrio = 3; border:Show()
         _GF_StopDispelGlow(f)
         return
     end
 
     -- Focus (GF-specific, lowest priority)
-    if f._msufGFIsFocus and conf.hlFocusEnabled ~= false then
-        _applyHighlightBorderStyle(border, conf,
-            conf.hlFocusSize or 2,
-            conf.hlFocusOffset or 0,
-            conf.hlFocusTexture,
-            conf.hlFocusLayer or "DEFAULT",
-            conf.hlFocusColorR or 0.5,
-            conf.hlFocusColorG or 0.5,
-            conf.hlFocusColorB or 1.0, 1)
+    if f._msufGFIsFocus and c.focusEn then
+        _applyHighlightBorderStyle(border, nil,
+            c.focSize or 2,
+            c.focOfs or 0,
+            c.focTex,
+            c.focLayer or "DEFAULT",
+            c.focR or 0.5,
+            c.focG or 0.5,
+            c.focB or 1.0, 1)
         border._msufHLActivePrio = 4; border:Show()
         _GF_StopDispelGlow(f)
         return
@@ -2159,26 +2219,26 @@ end
 -- Target indicator border
 ------------------------------------------------------------------------
 local function UpdateTargetIndicator(f, unit)
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
     local border = f._msufGFTargetBorder
     if not border then return end
+    local c = f._c
+    if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
 
-    if HLVal(kind, "hlTargetEnabled") == false or not unit then
+    if not (c and c.targetEn) or not unit then
         border:Hide()
         return
     end
 
     local isTarget = UnitIsUnit and UnitIsUnit(unit, "target")
     if isTarget then
-        local edgeSz = HLVal(kind, "hlTargetSize") or 2
-        local ofs    = HLVal(kind, "hlTargetOffset") or 0
-        local tex    = HLVal(kind, "hlTargetTexture")
-        local lay    = HLVal(kind, "hlTargetLayer") or "DEFAULT"
-        _applyHighlightBorderStyle(border, conf, edgeSz, ofs, tex, lay,
-            HLVal(kind, "hlTargetColorR") or 1,
-            HLVal(kind, "hlTargetColorG") or 1,
-            HLVal(kind, "hlTargetColorB") or 1, 1)
+        _applyHighlightBorderStyle(border, nil,
+            c.tgtSize or 2,
+            c.tgtOfs or 0,
+            c.tgtTex,
+            c.tgtLayer or "DEFAULT",
+            c.tgtR or 1,
+            c.tgtG or 1,
+            c.tgtB or 1, 1)
         border:Show()
     else
         border:Hide()
@@ -2532,12 +2592,17 @@ local function ApplyHealthAlphaAfterColor(f, kind)
     local c = f._c
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
     local alpha = c and c.hpBarAlpha
+    local preserve = c and c.alphaPreserveHPColor
+    local conf
     if type(alpha) ~= "number" then
-        local conf = GF.GetConf(kind)
+        conf = GF.GetConf(kind)
         alpha = (GF.GetEffectiveHealthAlpha and GF.GetEffectiveHealthAlpha(kind, conf)) or tonumber(conf and conf.hpBarAlpha) or 1
+        preserve = conf and conf.alphaPreserveHPColor == true
+    elseif preserve == nil then
+        conf = GF.GetConf(kind)
+        preserve = conf and conf.alphaPreserveHPColor == true
     end
-    local conf = GF.GetConf(kind)
-    if alpha < 0.999 or (conf and conf.alphaPreserveHPColor == true) then
+    if alpha < 0.999 or preserve then
         GF.ApplyHealthBarAlpha(f, kind)
     end
 end
@@ -2632,7 +2697,12 @@ local function UpdateAll(f, unit)
     if c.summonEn or (f.summonIcon and f.summonIcon:IsShown()) then UpdateSummonIcon(f, unit) end
     if c.resEn or (f.resurrectIcon and f.resurrectIcon:IsShown()) then UpdateResurrectIcon(f, unit) end
     if c.phaseEn or (f.phaseIcon and f.phaseIcon:IsShown()) then UpdatePhaseIcon(f, unit) end
-    UpdateGroupNumber(f, unit)
+    if c.groupNumberEn
+        or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
+        or (f.groupNumberText and f.groupNumberText:IsShown())
+    then
+        UpdateGroupNumber(f, unit)
+    end
     if c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
     if c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
 end
@@ -3441,12 +3511,13 @@ end
 local function dispatchName(f, unit)
     if f.nameText then
         local kind = f._msufGFKind or "party"
-        local conf = GF.GetConf(kind)
-        if conf.showName ~= false then
+        local c = f._c
+        if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+        if not c or c.nameEn then
             local name = UnitName(unit) or ""
-            local maxC = conf.nameMaxChars or 0
+            local maxC = (c and c.nameMaxChars) or 0
             if maxC > 0 then
-                name = GF.TruncateName(name, maxC, conf.nameNoEllipsis)
+                name = GF.TruncateName(name, maxC, c and c.nameNoEllipsis)
             end
             f.nameText:SetText(name)
             -- Cache class token (avoids C API call in ApplyHealthColor hot path)
@@ -3548,7 +3619,7 @@ function GF.RegisterUnitEvents(f, unit)
     f._msufGFRegBits = evBits
 
     -- GUID→frame map (rebuilt on roster change, used for O(1) target/focus scan)
-    local guid = UnitGUID and UnitGUID(unit)
+    local guid = _G.UnitGUID and _G.UnitGUID(unit)
     if guid and not (issecretvalue and issecretvalue(guid)) then
         local gmap = GF._guidMap
         if not gmap then gmap = {}; GF._guidMap = gmap end
@@ -3652,33 +3723,85 @@ local function _gfRosterFlush()
     _gfFocusFrame  = nil
     -- Rebuild GUID→frame map (GUIDs change on roster change)
     local gmap = GF._guidMap
-    if gmap then wipe(gmap) else gmap = {}; GF._guidMap = gmap end
-    for f in pairs(GF.frames) do
-        local u = f.unit
-        if u and UnitExists(u) then
-            local c = f._c
-            if not c then GF.BuildFrameCache(f); c = f._c end
-            local guid = UnitGUID and UnitGUID(u)
-            if guid and not (issecretvalue and issecretvalue(guid)) then
-                gmap[guid] = f
+    if gmap then
+        local wipeFn = _G.wipe
+        if wipeFn then wipeFn(gmap) else for k in pairs(gmap) do gmap[k] = nil end end
+    else
+        gmap = {}
+        GF._guidMap = gmap
+    end
+    local focusExists = UnitExists("focus")
+    local list = GF.frameList
+    local count = list and #list or 0
+    for i = 1, count do
+        local f = list[i]
+        if f then
+            local u = f.unit
+            if u and UnitExists(u) then
+                local c = f._c
+                if not c then GF.BuildFrameCache(f); c = f._c end
+                local guid = _G.UnitGUID and _G.UnitGUID(u)
+                if guid and not (issecretvalue and issecretvalue(guid)) then
+                    gmap[guid] = f
+                end
+                dispatchName(f, u)
+                ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", u)
+                ApplyPowerColor(f, u)
+                if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
+                if c and c.roleStateEn then UpdateRoleIcon(f, u) end
+                if c and c.raidMarkerEn then UpdateRaidMarker(f, u) end
+                if c and c.leaderEn then UpdateLeaderIcon(f, u) end
+                if (c and c.groupNumberEn)
+                    or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
+                    or (f.groupNumberText and f.groupNumberText:IsShown())
+                then
+                    UpdateGroupNumber(f, u)
+                end
+                if UnitIsUnit(u, "target") then
+                    f._msufGFIsTarget = true
+                    _gfTargetFrame = f
+                end
+                if focusExists and UnitIsUnit(u, "focus") then
+                    f._msufGFIsFocus = true
+                    _gfFocusFrame = f
+                end
+                UpdateTargetIndicator(f, u)
             end
-            dispatchName(f, u)
-            ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", u)
-            ApplyPowerColor(f, u)
-            if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
-            if c and c.roleStateEn then UpdateRoleIcon(f, u) end
-            if c and c.raidMarkerEn then UpdateRaidMarker(f, u) end
-            if c and c.leaderEn then UpdateLeaderIcon(f, u) end
-            UpdateGroupNumber(f, u)
-            if UnitIsUnit(u, "target") then
-                f._msufGFIsTarget = true
-                _gfTargetFrame = f
+        end
+    end
+    if not list then
+        for f in pairs(GF.frames) do
+            local u = f.unit
+            if u and UnitExists(u) then
+                local c = f._c
+                if not c then GF.BuildFrameCache(f); c = f._c end
+                local guid = _G.UnitGUID and _G.UnitGUID(u)
+                if guid and not (issecretvalue and issecretvalue(guid)) then
+                    gmap[guid] = f
+                end
+                dispatchName(f, u)
+                ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", u)
+                ApplyPowerColor(f, u)
+                if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
+                if c and c.roleStateEn then UpdateRoleIcon(f, u) end
+                if c and c.raidMarkerEn then UpdateRaidMarker(f, u) end
+                if c and c.leaderEn then UpdateLeaderIcon(f, u) end
+                if (c and c.groupNumberEn)
+                    or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
+                    or (f.groupNumberText and f.groupNumberText:IsShown())
+                then
+                    UpdateGroupNumber(f, u)
+                end
+                if UnitIsUnit(u, "target") then
+                    f._msufGFIsTarget = true
+                    _gfTargetFrame = f
+                end
+                if focusExists and UnitIsUnit(u, "focus") then
+                    f._msufGFIsFocus = true
+                    _gfFocusFrame = f
+                end
+                UpdateTargetIndicator(f, u)
             end
-            if UnitExists("focus") and UnitIsUnit(u, "focus") then
-                f._msufGFIsFocus = true
-                _gfFocusFrame = f
-            end
-            UpdateTargetIndicator(f, u)
         end
     end
 end
@@ -3691,7 +3814,7 @@ _G.MSUF_GF_OnTargetChanged = function()
         oldTarget._msufGFIsTarget = nil
         _GF_QuickBorderUpdate(oldTarget)
     end
-    local tGUID = UnitGUID and UnitGUID("target")
+    local tGUID = _G.UnitGUID and _G.UnitGUID("target")
     if tGUID and not (issecretvalue and issecretvalue(tGUID)) then
         local gmap = GF._guidMap
         local f = gmap and gmap[tGUID]
@@ -3719,26 +3842,56 @@ function GF._AnyGroupConfFlag(key)
     return false
 end
 
-function GF.SyncGroupGlobalEvents()
-    if not _globalFrame then return end
-    local function setEvent(ev, active)
-        if active then
-            _globalFrame:RegisterEvent(ev)
-        else
-            _globalFrame:UnregisterEvent(ev)
-        end
+do
+    local _globalEventBits
+    local _globalEventSyncQueued = false
+    local function _DoSyncGroupGlobalEvents()
+        _globalEventSyncQueued = false
+        if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
     end
 
-    local ready = GF._AnyGroupConfFlag("readyCheckIcon")
-    setEvent("READY_CHECK", ready)
-    setEvent("READY_CHECK_CONFIRM", ready)
-    setEvent("READY_CHECK_FINISHED", ready)
+    function GF.RequestSyncGroupGlobalEvents()
+        if _globalEventSyncQueued then return end
+        _globalEventSyncQueued = true
+        _MSUF_ScheduleOnce("GF_GLOBAL_EVENTS_SYNC", _DoSyncGroupGlobalEvents)
+    end
 
-    setEvent("RAID_TARGET_UPDATE", GF._AnyGroupConfFlag("raidMarker"))
-    setEvent("PARTY_LEADER_CHANGED", GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon"))
+    function GF.SyncGroupGlobalEvents()
+        if not _globalFrame then return end
 
-    local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
-    setEvent("PLAYER_FLAGS_CHANGED", showAFK or showDND or showDead or showGhost)
+        local ready = GF._AnyGroupConfFlag("readyCheckIcon")
+        local raidMarker = GF._AnyGroupConfFlag("raidMarker")
+        local leader = GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon")
+        local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
+        local flags = showAFK or showDND or showDead or showGhost
+
+        local bits = 0
+        if ready then bits = bits + 1 end
+        if raidMarker then bits = bits + 2 end
+        if leader then bits = bits + 4 end
+        if flags then bits = bits + 8 end
+        if bits == _globalEventBits then return end
+
+        local prevBits = _globalEventBits
+        _globalEventBits = bits
+
+        local function setEvent(ev, active, bit)
+            local wasActive = prevBits and ((prevBits % (bit + bit)) >= bit)
+            if wasActive == active then return end
+            if active then
+                _globalFrame:RegisterEvent(ev)
+            else
+                _globalFrame:UnregisterEvent(ev)
+            end
+        end
+
+        setEvent("READY_CHECK", ready, 1)
+        setEvent("READY_CHECK_CONFIRM", ready, 1)
+        setEvent("READY_CHECK_FINISHED", ready, 1)
+        setEvent("RAID_TARGET_UPDATE", raidMarker, 2)
+        setEvent("PARTY_LEADER_CHANGED", leader, 4)
+        setEvent("PLAYER_FLAGS_CHANGED", flags, 8)
+    end
 end
 
 local function OnGlobalEvent(self, event, ...)
@@ -3764,7 +3917,7 @@ local function OnGlobalEvent(self, event, ...)
             oldFocus._msufGFIsFocus = nil
             _GF_QuickBorderUpdate(oldFocus)
         end
-        local fGUID = UnitGUID and UnitExists("focus") and UnitGUID("focus")
+        local fGUID = _G.UnitGUID and UnitExists("focus") and _G.UnitGUID("focus")
         if fGUID and not (issecretvalue and issecretvalue(fGUID)) then
             local gmap = GF._guidMap
             local f = gmap and gmap[fGUID]
@@ -3777,30 +3930,66 @@ local function OnGlobalEvent(self, event, ...)
 
     elseif event == "READY_CHECK" or event == "READY_CHECK_CONFIRM" then
         if not GF._AnyGroupConfFlag("readyCheckIcon") then return end
-        for f in pairs(GF.frames) do
-            local c = f._c
-            if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, event) end
+        local list = GF.frameList
+        if list then
+            for i = 1, #list do
+                local f = list[i]
+                local c = f and f._c
+                if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, event) end
+            end
+        else
+            for f in pairs(GF.frames) do
+                local c = f._c
+                if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, event) end
+            end
         end
 
     elseif event == "READY_CHECK_FINISHED" then
         if not GF._AnyGroupConfFlag("readyCheckIcon") then return end
-        for f in pairs(GF.frames) do
-            local c = f._c
-            if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, "READY_CHECK_FINISHED") end
+        local list = GF.frameList
+        if list then
+            for i = 1, #list do
+                local f = list[i]
+                local c = f and f._c
+                if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, "READY_CHECK_FINISHED") end
+            end
+        else
+            for f in pairs(GF.frames) do
+                local c = f._c
+                if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, "READY_CHECK_FINISHED") end
+            end
         end
 
     elseif event == "RAID_TARGET_UPDATE" then
         if not GF._AnyGroupConfFlag("raidMarker") then return end
-        for f in pairs(GF.frames) do
-            local c = f._c
-            if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
+        local list = GF.frameList
+        if list then
+            for i = 1, #list do
+                local f = list[i]
+                local c = f and f._c
+                if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
+            end
+        else
+            for f in pairs(GF.frames) do
+                local c = f._c
+                if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
+            end
         end
 
     elseif event == "PARTY_LEADER_CHANGED" then
         if not (GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon")) then return end
-        for f in pairs(GF.frames) do
-            local c = f._c
-            if c and c.leaderEn and f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
+        local list = GF.frameList
+        if list then
+            for i = 1, #list do
+                local f = list[i]
+                local c = f and f._c
+                if c and c.leaderEn and f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
+            end
+        else
+            for f in pairs(GF.frames) do
+                local c = f._c
+                if c and c.leaderEn and f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
+            end
         end
 
     elseif event == "GROUP_ROSTER_UPDATE" then
@@ -3841,12 +4030,25 @@ local function OnGlobalEvent(self, event, ...)
         if not (showAFK or showDND or showDead or showGhost) then return end
         local changedUnit = ...
         if not changedUnit or changedUnit == "" then changedUnit = "player" end
-        for f in pairs(GF.frames) do
-            local c = f._c
-            if c and c.statusTextEn and f.unit and UnitExists(f.unit)
-                and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit)))
-            then
-                UpdateStatusText(f, f.unit, true)
+        local list = GF.frameList
+        if list then
+            for i = 1, #list do
+                local f = list[i]
+                local c = f and f._c
+                if c and c.statusTextEn and f.unit and UnitExists(f.unit)
+                    and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit)))
+                then
+                    UpdateStatusText(f, f.unit, true)
+                end
+            end
+        else
+            for f in pairs(GF.frames) do
+                local c = f._c
+                if c and c.statusTextEn and f.unit and UnitExists(f.unit)
+                    and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit)))
+                then
+                    UpdateStatusText(f, f.unit, true)
+                end
             end
         end
     end
@@ -4044,7 +4246,12 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
         ) then
             UpdateLeaderIcon(f, unit)
         end
-        UpdateGroupNumber(f, unit)
+        if (c and c.groupNumberEn)
+            or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
+            or (f.groupNumberText and f.groupNumberText:IsShown())
+        then
+            UpdateGroupNumber(f, unit)
+        end
         if c and c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
         if c and c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
     end
@@ -4109,15 +4316,28 @@ end
 GF.GetDispelColor     = GetDispelColor
 GF.ResolveDispelColor = ResolveDispelColor
 
+local function _GF_ForEachLiveGroupFrame(fn)
+    if type(fn) ~= "function" then return end
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f and f._msufIsGroupFrame then fn(f) end
+        end
+    elseif GF.frames then
+        for f in pairs(GF.frames) do
+            if f and f._msufIsGroupFrame then fn(f) end
+        end
+    end
+end
+
 -- Dispel overlay: refresh all frames (called from Options when settings change)
 _G.MSUF_GF_RefreshDispelOverlay = function()
     if not GF.frames then return end
-    for f in pairs(GF.frames) do
-        if f._msufIsGroupFrame then
-            GF.BuildFrameCache(f)
-            _GF_ApplyDispelOverlay(f)
-        end
-    end
+    _GF_ForEachLiveGroupFrame(function(f)
+        GF.BuildFrameCache(f)
+        _GF_ApplyDispelOverlay(f)
+    end)
 end
 -- Single-frame overlay apply (for Borders.lua test-mode cleanup)
 _G.MSUF_GF_ApplyDispelOverlay = _GF_ApplyDispelOverlay
@@ -4125,12 +4345,10 @@ _G.MSUF_GF_ApplyDispelOverlay = _GF_ApplyDispelOverlay
 -- Debuff stripe: refresh all frames (called from Options when settings change)
 _G.MSUF_GF_RefreshDebuffStripe = function()
     if not GF.frames then return end
-    for f in pairs(GF.frames) do
-        if f._msufIsGroupFrame then
-            GF.BuildFrameCache(f)
-            _GF_ApplyDebuffStripe(f)
-        end
-    end
+    _GF_ForEachLiveGroupFrame(function(f)
+        GF.BuildFrameCache(f)
+        _GF_ApplyDebuffStripe(f)
+    end)
 end
 _G.MSUF_GF_ApplyDebuffStripe = _GF_ApplyDebuffStripe
 
@@ -4146,19 +4364,17 @@ _G.MSUF_GF_GlobalEventFrame     = _globalFrame
 _G.MSUF_GF_RefreshOverlays = function()
     if not GF.frames then return end
     local testMode = _G.MSUF_AbsorbTextureTestMode
-    for f in pairs(GF.frames) do
-        if f._msufIsGroupFrame then
-            _GF_ApplyAbsorbAnchor(f)
-            local u = f.unit
-            if u then
-                dispatchOverlays(f, u)
-            elseif testMode then
-                dispatchIncomingHeal(f, nil)
-                dispatchAbsorb(f, nil)
-                dispatchHealAbsorb(f, nil)
-            end
+    _GF_ForEachLiveGroupFrame(function(f)
+        _GF_ApplyAbsorbAnchor(f)
+        local u = f.unit
+        if u then
+            dispatchOverlays(f, u)
+        elseif testMode then
+            dispatchIncomingHeal(f, nil)
+            dispatchAbsorb(f, nil)
+            dispatchHealAbsorb(f, nil)
         end
-    end
+    end)
     if GF._previewFrames then
         for _, list in pairs(GF._previewFrames) do
             for i = 1, #list do

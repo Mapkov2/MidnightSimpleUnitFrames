@@ -540,8 +540,11 @@ local function HidePool(pool, startIdx)
             ic._msufPosAnchor = nil
             ic._msufPosGrowth = nil
             ic._msufBorderBlack = nil
+            ic._msufAuraGroupCfg = nil
+            ic._msufAuraFrameScale = nil
         end
     end
+    pool._msufShown = (startIdx and startIdx > 1) and (startIdx - 1) or 0
 end
 
 ------------------------------------------------------------------------
@@ -1666,6 +1669,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                     shown = shown + 1
                     local ic = pool[shown]
                     if ic then
+                        ic._msufAuraGroupCfg = gcfg
+                        ic._msufAuraFrameScale = frameScale
                         ApplyCooldownVisualStyle(ic.cooldown, _styleReverse)
                         local prevAid = ic._msufAuraID
                         if prevAid == aid then
@@ -1787,9 +1792,14 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     end
 
     -- Clear diff-gate flags on hidden icons
-    for j = shown + 1, #pool do
+    local prevShown = pool._msufShown or #pool
+    if prevShown < shown then prevShown = shown end
+    for j = shown + 1, prevShown do
         local ic = pool[j]
         if ic then
+            if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
+            ic._msufGF_cdDurationObj = nil
+            if ic.cooldown then ic.cooldown._msufGF_cdDurationObj = nil end
             if ic:IsShown() then ic:Hide() end
             ic._msufPosIdx = nil
             ic._msufPosStep = nil
@@ -1800,8 +1810,11 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
             ic._msufAuraID = nil
             ic._msufUnit = nil
             ic._msufFilter = nil
+            ic._msufAuraGroupCfg = nil
+            ic._msufAuraFrameScale = nil
         end
     end
+    pool._msufShown = shown
     return shown, topDispel, topDispelColor
 end
 
@@ -2043,12 +2056,16 @@ function GF.RefreshAuraIcon(icon, unit, aid)
         local oc = owner._c
         local reverse = (oc and oc.cdReverse) or false
         ApplyCooldownVisualStyle(icon.cooldown, reverse)
-        local groupKey = icon._msufAuraGroupKey
-        local kind = owner._msufGFKind or "party"
-        local conf = GF.GetConf and GF.GetConf(kind)
-        frameScale = GetFrameScale(kind, conf)
-        if groupKey then
-            gcfg = GetGroupCfg(kind, groupKey)
+        gcfg = icon._msufAuraGroupCfg
+        frameScale = icon._msufAuraFrameScale or frameScale
+        if not gcfg then
+            local groupKey = icon._msufAuraGroupKey
+            local kind = owner._msufGFKind or "party"
+            local conf = GF.GetConf and GF.GetConf(kind)
+            frameScale = GetFrameScale(kind, conf)
+            if groupKey then
+                gcfg = GetGroupCfg(kind, groupKey)
+            end
         end
     end
     local showCd = WantsCooldownText(gcfg)
