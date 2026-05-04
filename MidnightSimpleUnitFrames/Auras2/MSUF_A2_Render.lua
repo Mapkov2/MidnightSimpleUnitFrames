@@ -123,7 +123,7 @@ local A2_SHARED_DEFAULTS = {
     growth="RIGHT", rowWrap="DOWN",
     offsetX=0, offsetY=6, buffOffsetY=30,
     stackTextSize=14, cooldownTextSize=14, bossEditTogether=true,
-    showPrivateAurasPlayer=true,
+    privateAurasEnabled=true, showPrivateAurasPlayer=true,
     privateAuraMaxPlayer=4,
     showSated=true, satedShowAtSeconds=0,
     ignoreCats={},
@@ -704,7 +704,11 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
 
     -- 12.0.1: Private aura anchor APIs blocked in combat.
     -- Player-only (focus/boss swaps mid-combat would require Add/Remove calls).
-    if unit ~= "player" or shared.showPrivateAurasPlayer ~= true or not PrivateAurasSupported() then
+    if unit ~= "player"
+       or shared.privateAurasEnabled ~= true
+       or shared.showPrivateAurasPlayer ~= true
+       or not PrivateAurasSupported()
+    then
         PrivateClear(entry)
         return
     end
