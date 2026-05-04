@@ -278,10 +278,18 @@ local function SyncAuraIconGeometry(icon, size)
         icon:SetSize(size, size)
     end
 
+    local masqueActive
+    local M = GF.Masque
+    if M and M.SyncIconGeometry then
+        masqueActive = M.SyncIconGeometry(icon, size) == true
+    else
+        masqueActive = IconUsesMasque(icon)
+    end
+
     -- Masque owns the Icon region geometry once a skin is active. For the
     -- native skin we keep every child hard-anchored to the aura frame so a
     -- size slider cannot resize only the backdrop/cooldown "box".
-    if icon.texture and not IconUsesMasque(icon) then
+    if icon.texture and not masqueActive then
         icon.texture:ClearAllPoints()
         icon.texture:SetAllPoints(icon)
     end

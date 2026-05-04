@@ -432,23 +432,32 @@ local function BuildMockFrame(parent)
     local conf = GF.GetConf(kind)
     local rawW = conf.width or 120
     local rawH = conf.height or 40
+    local liveW, liveH, frameScale = rawW, rawH, 1
+    if GF.GetScaledFrameMetrics then
+        liveW, liveH, _, frameScale = GF.GetScaledFrameMetrics(kind)
+    elseif GF.GetFrameScale then
+        frameScale = GF.GetFrameScale(kind) or 1
+        liveW = floor(rawW * frameScale + 0.5)
+        liveH = floor(rawH * frameScale + 0.5)
+    end
     -- Aspect-faithful scaling: pick a uniform scale such that the mock
     -- frame fits inside (PREVIEW_MIN_W × PREVIEW_MIN_H) while preserving
     -- the live w/h ratio exactly.  Previously a max(PREVIEW_MIN_W, ...)
     -- floor stretched narrow frames horizontally so the preview no longer
     -- matched what the user saw in-game.
-    local scaleW = PREVIEW_MIN_W / max(1, rawW)
-    local scaleH = PREVIEW_MIN_H / max(1, rawH)
+    local scaleW = PREVIEW_MIN_W / max(1, liveW)
+    local scaleH = PREVIEW_MIN_H / max(1, liveH)
     local scale = max(1.4, min(2.8, min(scaleW, scaleH)))
-    local w = floor(rawW * scale + 0.5)
-    local h = floor(rawH * scale + 0.5)
+    local rawToMock = scale * (frameScale or 1)
+    local w = floor(liveW * scale + 0.5)
+    local h = floor(liveH * scale + 0.5)
     local rawPowerH = conf.powerHeight or 6
     if GF.ShouldShowPowerBarForRole and not GF.ShouldShowPowerBarForRole(kind, "HEALER", conf) then
         rawPowerH = 0
     end
-    local powerH = rawPowerH > 0 and floor(rawPowerH * scale + 0.5) or 0
+    local powerH = rawPowerH > 0 and floor(rawPowerH * rawToMock + 0.5) or 0
     local insetBase = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 1
-    local inset = max(0, floor(insetBase * scale + 0.5))
+    local inset = max(0, floor(insetBase * rawToMock + 0.5))
 
     local f = CreateFrame("Frame", "MSUF_GFPreviewMock", parent, "BackdropTemplate")
     f:SetSize(w, h)
@@ -581,7 +590,9 @@ local function BuildMockFrame(parent)
     f._powerFS = powCenterFS
 
     _mockFrame = f
-    f._previewScale = scale
+    f._previewScale = rawToMock
+    f._previewZoom = scale
+    f._previewFrameScale = frameScale
 
     -- Corner indicator dots are lazy-created in RefreshPreviewHandles (BackdropTemplate frames)
 
@@ -654,13 +665,24 @@ function GF.RefreshPreviewBox()
     -- max(PREVIEW_MIN_W, ...) floor stretched narrow frames horizontally.
     local rawW = conf.width or 120
     local rawH = conf.height or 40
-    local scaleW = PREVIEW_MIN_W / max(1, rawW)
-    local scaleH = PREVIEW_MIN_H / max(1, rawH)
+    local liveW, liveH, frameScale = rawW, rawH, 1
+    if GF.GetScaledFrameMetrics then
+        liveW, liveH, _, frameScale = GF.GetScaledFrameMetrics(kind)
+    elseif GF.GetFrameScale then
+        frameScale = GF.GetFrameScale(kind) or 1
+        liveW = floor(rawW * frameScale + 0.5)
+        liveH = floor(rawH * frameScale + 0.5)
+    end
+    local scaleW = PREVIEW_MIN_W / max(1, liveW)
+    local scaleH = PREVIEW_MIN_H / max(1, liveH)
     local scale = max(1.4, min(2.8, min(scaleW, scaleH)))
-    local w = floor(rawW * scale + 0.5)
-    local h = floor(rawH * scale + 0.5)
+    local rawToMock = scale * (frameScale or 1)
+    local w = floor(liveW * scale + 0.5)
+    local h = floor(liveH * scale + 0.5)
     m:SetSize(w, h)
-    m._previewScale = scale
+    m._previewScale = rawToMock
+    m._previewZoom = scale
+    m._previewFrameScale = frameScale
 
     -- Background
     m:SetBackdropColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
@@ -683,8 +705,9 @@ function GF.RefreshPreviewBox()
     if GF.ShouldShowPowerBarForRole and not GF.ShouldShowPowerBarForRole(kind, "HEALER", conf) then
         rawPowerH = 0
     end
-    local powerH = rawPowerH > 0 and floor(rawPowerH * scale + 0.5) or 0
-    local inset = 1
+    local powerH = rawPowerH > 0 and floor(rawPowerH * rawToMock + 0.5) or 0
+    local insetBase = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 1
+    local inset = max(0, floor(insetBase * rawToMock + 0.5))
     if m._health then
         m._health:ClearAllPoints()
         m._health:SetPoint("TOPLEFT", m, "TOPLEFT", inset, -inset)
@@ -1625,6 +1648,8 @@ function GF.RefreshPreviewHandles()
                     tex:SetAllPoints(ic)
                     tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- Blizzard-style edge trim
                     ic._tex = tex
+                    ic.texture = tex
+                    ic._msufGFIsPreviewAura = true
 
                     -- Soft charcoal edge (not pure black) so a mock icon
                     -- never reads as a solid black block even if the spell
@@ -1653,11 +1678,26 @@ function GF.RefreshPreviewHandles()
                 end
 
                 ic:SetSize(sz, sz)
-                -- 1px border at preview scale (resolves to exactly 1 screen px)
-                local bw = max(1, floor(sc * 0.5 + 0.5))
-                ic._border:ClearAllPoints()
-                ic._border:SetPoint("TOPLEFT", ic, "TOPLEFT", -bw, bw)
-                ic._border:SetPoint("BOTTOMRIGHT", ic, "BOTTOMRIGHT", bw, -bw)
+                ic.texture = ic._tex
+                ic._msufGFMasqueKind = kind
+
+                local masqueActive = false
+                if GF.Masque and GF.Masque.SyncIconGeometry then
+                    masqueActive = GF.Masque.SyncIconGeometry(ic, sz, kind) == true
+                end
+                if masqueActive then
+                    ic._border:Hide()
+                else
+                    ic._tex:ClearAllPoints()
+                    ic._tex:SetAllPoints(ic)
+                    ic._tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                    ic._border:Show()
+                    -- 1px border at preview scale (resolves to exactly 1 screen px)
+                    local bw = max(1, floor(sc * 0.5 + 0.5))
+                    ic._border:ClearAllPoints()
+                    ic._border:SetPoint("TOPLEFT", ic, "TOPLEFT", -bw, bw)
+                    ic._border:SetPoint("BOTTOMRIGHT", ic, "BOTTOMRIGHT", bw, -bw)
+                end
 
                 -- Mock countdown/stack text rendered on every icon so the
                 -- user gets live feedback on every drag of the offset
@@ -1665,6 +1705,9 @@ function GF.RefreshPreviewHandles()
                 -- solo-on-auraText override).  Default ON.
                 local showAuraText = (_visToggles.auraText ~= false) or (_soloKey == "auraText")
                 ApplyMockIconText(ic, gcfg, kind, showAuraText, sc)
+                if masqueActive and GF.Masque and GF.Masque.SyncIconGeometry then
+                    GF.Masque.SyncIconGeometry(ic, sz, kind)
+                end
 
                 ic:Show()
             end
