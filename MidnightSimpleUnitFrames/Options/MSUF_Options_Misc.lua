@@ -1,9 +1,9 @@
 -- ---------------------------------------------------------------------------
 -- MSUF_Options_Misc.lua  (Phase 9: Accordion UX)
 --
--- Miscellaneous options: 5 collapsible sections.
+-- Miscellaneous options: 4 collapsible sections.
 -- 1. Update Intervals   2. Unitframe Tooltips   3. Blizzard Frames
--- 4. Status Indicators  5. Range Fade
+-- 4. Range Fade
 -- ---------------------------------------------------------------------------
 local addonName, ns = ...
 local TR = ns.TR
@@ -352,87 +352,10 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     })
 
     -- =====================================================================
-    -- Section 4: Status Indicators
-    -- =====================================================================
-    local s4Box, s4Body = MakeCollapsibleSection(scrollChild, 170, "Status Indicators", false)
-    s4Box:SetPoint("TOPLEFT", s3Box, "BOTTOMLEFT", 0, -6)
-
-    local function GetStatusDB()
-        local g = G(); g.statusIndicators = g.statusIndicators or {}; return g.statusIndicators
-    end
-
-    local function RefreshStatusIndicators()
-        if _G.MSUF_RefreshStatusIndicators then _G.MSUF_RefreshStatusIndicators() end
-        local gf = _G.MSUF_NS and _G.MSUF_NS.GF
-        if gf and gf.RefreshVisuals then gf.RefreshVisuals() end
-    end
-
-    local function EnsureStatusAFKDNDPopupWarning()
-        if not _G.StaticPopupDialogs then return end
-        if _G.StaticPopupDialogs["MSUF_STATUS_AFKDND_WARNING"] then return end
-        _G.StaticPopupDialogs["MSUF_STATUS_AFKDND_WARNING"] = {
-            text = "WARNING:\n\nAFK/DND status indicators do NOT update while you are inside an instance AND in combat.\nThis is a client/API limitation.\n\nOutside of instance combat they should work normally.\n\nEnable anyway?",
-            button1 = "Enable", button2 = "Cancel",
-            timeout = 0, whileDead = 1, hideOnEscape = 1, preferredIndex = 3,
-            OnAccept = function(popup, data)
-                local d = data or (popup and popup.data)
-                if not d then return end
-                local db = d.getDB(); db[d.key] = true; d.cb:SetChecked(true)
-                RefreshStatusIndicators()
-            end,
-            OnCancel = function(popup, data)
-                local d = data or (popup and popup.data)
-                if not d then return end
-                local db = d.getDB(); db[d.key] = false; d.cb:SetChecked(false)
-                RefreshStatusIndicators()
-            end,
-        }
-    end
-
-    local step = 30
-    local statusSpecs = {
-        { key = "showAFK",   label = "Show AFK",   confirm = true },
-        { key = "showDND",   label = "Show DND",   confirm = true },
-        { key = "showDead",  label = "Show Dead" },
-        { key = "showGhost", label = "Show Ghost" },
-    }
-
-    local statusCBs = {}
-    for i, s in ipairs(statusSpecs) do
-        local cb = CreateFrame("CheckButton", nil, s4Body, "InterfaceOptionsCheckButtonTemplate")
-        cb:SetPoint("TOPLEFT", s4Body, "TOPLEFT", 12, -6 - ((i - 1) * step))
-        local fs = cb.Text or cb.text
-        if fs and fs.SetText then fs:SetText(TR(s.label)) end
-        UI.StyleToggleText(cb)
-        UI.StyleCheckmark(cb)
-
-        cb:SetScript("OnShow", function(self)
-            local db = GetStatusDB()
-            self:SetChecked(db[s.key] and true or false)
-        end)
-
-        cb:SetScript("OnClick", function(self)
-            local want = self:GetChecked() and true or false
-            if want and s.confirm and _G.StaticPopup_Show then
-                EnsureStatusAFKDNDPopupWarning()
-                self:SetChecked(false)
-                GetStatusDB()[s.key] = false
-                local popup = _G.StaticPopup_Show("MSUF_STATUS_AFKDND_WARNING", nil, nil, { key = s.key, cb = self, getDB = GetStatusDB })
-                if popup then return end
-                want = true; self:SetChecked(true)
-            end
-            GetStatusDB()[s.key] = want
-            RefreshStatusIndicators()
-        end)
-
-        statusCBs[i] = cb
-    end
-
-    -- =====================================================================
-    -- Section 5: Range Fade
+    -- Section 4: Range Fade
     -- =====================================================================
     local s5Box, s5Body = MakeCollapsibleSection(scrollChild, 285, "Range Fade", false)
-    s5Box:SetPoint("TOPLEFT", s4Box, "BOTTOMLEFT", 0, -6)
+    s5Box:SetPoint("TOPLEFT", s3Box, "BOTTOMLEFT", 0, -6)
 
     local function ClampRangeFadeAlphaPercent(v)
         v = tonumber(v) or 60
@@ -577,8 +500,6 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
             + (s2Box.GetHeight and s2Box:GetHeight() or 0)
             + 6
             + (s3Box.GetHeight and s3Box:GetHeight() or 0)
-            + 6
-            + (s4Box.GetHeight and s4Box:GetHeight() or 0)
             + 6
             + (s5Box.GetHeight and s5Box:GetHeight() or 0)
             + 24
