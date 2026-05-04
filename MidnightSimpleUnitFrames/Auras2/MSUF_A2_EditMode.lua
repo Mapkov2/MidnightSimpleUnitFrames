@@ -927,12 +927,14 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
 
     local showTest = (shared.showInEditMode == true and isEditActive == true)
 
+    local showPrivatePreview = (shared.privateAurasEnabled == true and shared.showPrivateAurasPlayer == true)
+
     if showTest then
         if entry.buffs then entry.buffs:Show() end
         if entry.debuffs then entry.debuffs:Show() end
         if entry.mixed then entry.mixed:Hide() end
         -- Private auras: only for player
-        if entry.private and unit == "player" then entry.private:Show()
+        if entry.private and unit == "player" and showPrivatePreview then entry.private:Show()
         elseif entry.private then entry.private:Hide() end
         entry._msufA2_previewActive = true
     elseif entry._msufA2_previewActive then
@@ -963,7 +965,7 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
         Icons.LayoutIcons(entry.debuffs, dc or 0, cfg.debuffIconSize, cfg.spacing, cfg.perRow, cfg.debuffGrowth, cfg.debuffRowWrap)
     end
 
-    if Icons.RenderPreviewPrivateIcons and unit == "player" then
+    if Icons.RenderPreviewPrivateIcons and unit == "player" and showPrivatePreview then
         Icons.RenderPreviewPrivateIcons(entry, unit, shared, cfg.privateIconSize, cfg.spacing, cfg.stackCountAnchor, cfg.privateGrowth)
     end
 
