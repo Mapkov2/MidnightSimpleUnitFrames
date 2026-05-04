@@ -27,6 +27,7 @@ local math_floor = math.floor
 local MSUF_BETTER_BLIZZARD_TEXTURE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\BetterBlizzard.blp"
 local UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B = 34/255, 34/255, 34/255
 local _unhaltedTextureChecked, _unhaltedTexture
+local GRAD_KEYS = { "left", "right", "up", "down" }
 
 local function ResolveUnhaltedTexture()
     if _unhaltedTextureChecked then return _unhaltedTexture end
@@ -226,14 +227,17 @@ local function ApplyBarTexture(f, kind)
             end
         end
     end
-    if f.incomingHealBar and f.incomingHealBar.SetStatusBarTexture then
+    if f.incomingHealBar and f.incomingHealBar.SetStatusBarTexture and f._msufGFCachedIncomingTex ~= tex then
         f.incomingHealBar:SetStatusBarTexture(tex)
+        f._msufGFCachedIncomingTex = tex
     end
-    if f.absorbBar and f.absorbBar.SetStatusBarTexture then
+    if f.absorbBar and f.absorbBar.SetStatusBarTexture and f._msufGFCachedAbsorbTex ~= absorbTex then
         f.absorbBar:SetStatusBarTexture(absorbTex)
+        f._msufGFCachedAbsorbTex = absorbTex
     end
-    if f.healAbsorbBar and f.healAbsorbBar.SetStatusBarTexture then
+    if f.healAbsorbBar and f.healAbsorbBar.SetStatusBarTexture and f._msufGFCachedHealAbsorbTex ~= healAbsorbTex then
         f.healAbsorbBar:SetStatusBarTexture(healAbsorbTex)
+        f._msufGFCachedHealAbsorbTex = healAbsorbTex
     end
 
     -- Gradient overlays (reads from MSUF_DB.general — same source as main UF)
@@ -287,11 +291,17 @@ local function _GF_ApplyGradientToBar(bar, gen, isPower)
     else
         if gen.enableGradient == false then strength = 0 end
     end
-    local grads = _GF_EnsureGradients(bar)
     if strength <= 0 then
-        for _, k in ipairs({"left","right","up","down"}) do if grads[k] then grads[k]:Hide() end end
+        local grads = bar._msufGFGrads
+        if grads then
+            for i = 1, #GRAD_KEYS do
+                local g = grads[GRAD_KEYS[i]]
+                if g then g:Hide() end
+            end
+        end
         return
     end
+    local grads = _GF_EnsureGradients(bar)
     -- Read per-edge toggles (same keys as main UF)
     local left  = (gen.gradientDirLeft == true)
     local right = (gen.gradientDirRight == true)
@@ -1399,10 +1409,22 @@ function GF.MarkAllDirty(bits)
         return
     end
 
-    for f in pairs(GF.frames) do
-        local prev = _dirtyBits[f] or 0
-        _dirtyBits[f] = bor(prev, bits)
-        _Enqueue(f)
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                local prev = _dirtyBits[f] or 0
+                _dirtyBits[f] = bor(prev, bits)
+                _Enqueue(f)
+            end
+        end
+    else
+        for f in pairs(GF.frames) do
+            local prev = _dirtyBits[f] or 0
+            _dirtyBits[f] = bor(prev, bits)
+            _Enqueue(f)
+        end
     end
     -- Also mark preview frames
     if GF._previewFrames then
@@ -1429,10 +1451,23 @@ function GF.RefreshVisuals()
         local fn = _G.MSUF_GF_UpdateAll
         if type(fn) == "function" then _cachedUpdateAll = fn end
     end
-    for f in pairs(GF.frames) do
-        ApplyVisuals(f, DIRTY_ALL)
-        if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
-            if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                ApplyVisuals(f, DIRTY_ALL)
+                if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
+                    if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+                end
+            end
+        end
+    else
+        for f in pairs(GF.frames) do
+            ApplyVisuals(f, DIRTY_ALL)
+            if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
+                if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+            end
         end
     end
     -- Preview frames

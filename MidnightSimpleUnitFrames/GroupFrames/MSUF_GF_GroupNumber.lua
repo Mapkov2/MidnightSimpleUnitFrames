@@ -42,6 +42,7 @@ local math_floor      = math.floor
 local UnitIsUnit      = UnitIsUnit
 local IsInRaid        = IsInRaid
 local GetRaidRosterInfo = GetRaidRosterInfo
+local InCombatLockdown = InCombatLockdown
 
 -- ---------------------------------------------------------------------------
 -- Defaults: mirror the slider/dropdown defaults declared in MSUF_Options_GF.lua
@@ -236,7 +237,36 @@ local _scheduler
 local _pending = false
 local _eventFrame
 local _eventsActive = false
+local _regenListening = false
+local _combatDeferred = false
+local _deferInvalidateAnchor = false
+local _deferInvalidateFont = false
 local _Schedule
+local _InvalidateAll
+
+local function _EnsureEventFrame()
+    if not _eventFrame then _eventFrame = CreateFrame("Frame") end
+    _eventFrame:SetScript("OnEvent", _Schedule)
+    return _eventFrame
+end
+
+local function _ListenRegen()
+    if _regenListening then return end
+    local f = _EnsureEventFrame()
+    f:RegisterEvent("PLAYER_REGEN_ENABLED")
+    _regenListening = true
+end
+
+local function _StopRegen()
+    if _eventFrame and _regenListening then
+        _eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    _regenListening = false
+end
+
+local function _InCombat()
+    return InCombatLockdown and InCombatLockdown()
+end
 
 local function _AnyEnabled()
     local NS = _G.MSUF_NS
@@ -257,10 +287,9 @@ end
 local function _SetEvents(active)
     if active == _eventsActive then return end
     if active then
-        if not _eventFrame then _eventFrame = CreateFrame("Frame") end
-        _eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
-        _eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        _eventFrame:SetScript("OnEvent", _Schedule)
+        local f = _EnsureEventFrame()
+        f:RegisterEvent("GROUP_ROSTER_UPDATE")
+        f:RegisterEvent("PLAYER_ENTERING_WORLD")
         _eventsActive = true
     else
         if _eventFrame then
@@ -268,6 +297,7 @@ local function _SetEvents(active)
             _eventFrame:SetScript("OnEvent", nil)
         end
         _eventsActive = false
+        _regenListening = false
     end
 end
 
@@ -275,14 +305,34 @@ local function _HideAll()
     local NS = _G.MSUF_NS
     local GF = NS and NS.GF
     if not GF or not GF.frames then return end
-    for f in pairs(GF.frames) do
-        local fs = f._msufGroupNumberFS or f.groupNumberText
-        if fs and fs:IsShown() then fs:Hide() end
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                local fs = f._msufGroupNumberFS or f.groupNumberText
+                if fs and fs:IsShown() then fs:Hide() end
+            end
+        end
+    else
+        for f in pairs(GF.frames) do
+            local fs = f._msufGroupNumberFS or f.groupNumberText
+            if fs and fs:IsShown() then fs:Hide() end
+        end
     end
 end
 
 local function _RefreshAll()
     _pending = false
+    _combatDeferred = false
+    _StopRegen()
+    if _deferInvalidateAnchor or _deferInvalidateFont then
+        local invalAnchor = _deferInvalidateAnchor
+        local invalFont = _deferInvalidateFont
+        _deferInvalidateAnchor = false
+        _deferInvalidateFont = false
+        _InvalidateAll(invalAnchor, invalFont)
+    end
     if not _AnyEnabled() then
         if _eventsActive then
             _SetEvents(false)
@@ -294,18 +344,40 @@ local function _RefreshAll()
     local NS = _G.MSUF_NS
     local GF = NS and NS.GF
     if not GF or not GF.frames or not GF.GetConf then return end
-    for f in pairs(GF.frames) do
-        if type(f) == "table" and f.unit then
-            local kind = f._msufGFKind or "party"
-            local conf = GF.GetConf(kind)
-            if conf then _UpdateFrame(f, conf) end
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if type(f) == "table" and f.unit then
+                local kind = f._msufGFKind or "party"
+                local conf = GF.GetConf(kind)
+                if conf then _UpdateFrame(f, conf) end
+            end
+        end
+    else
+        for f in pairs(GF.frames) do
+            if type(f) == "table" and f.unit then
+                local kind = f._msufGFKind or "party"
+                local conf = GF.GetConf(kind)
+                if conf then _UpdateFrame(f, conf) end
+            end
         end
     end
 end
 
 _Schedule = function()
+    if _InCombat() then
+        _pending = false
+        _combatDeferred = true
+        _ListenRegen()
+        return
+    end
     if not _AnyEnabled() then
         _pending = false
+        if _combatDeferred then
+            _combatDeferred = false
+            _StopRegen()
+        end
         if _eventsActive then
             _SetEvents(false)
             _HideAll()
@@ -321,17 +393,41 @@ _Schedule = function()
     end)
 end
 
-local function _InvalidateAll(invalAnchor, invalFont)
+local function _RequestInvalidate(invalAnchor, invalFont)
+    if _InCombat() then
+        _deferInvalidateAnchor = _deferInvalidateAnchor or invalAnchor
+        _deferInvalidateFont = _deferInvalidateFont or invalFont
+        return
+    end
+    _InvalidateAll(invalAnchor, invalFont)
+end
+
+_InvalidateAll = function(invalAnchor, invalFont)
     local NS = _G.MSUF_NS
     local GF = NS and NS.GF
     if not GF or not GF.frames then return end
-    for f in pairs(GF.frames) do
-        local fs = f._msufGroupNumberFS
-        if fs then
-            if invalAnchor then fs._msufAnchorKey = nil end
-            if invalFont   then
-                fs._msufFontKey  = nil
-                fs._msufColorKey = nil
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            local fs = f and f._msufGroupNumberFS
+            if fs then
+                if invalAnchor then fs._msufAnchorKey = nil end
+                if invalFont   then
+                    fs._msufFontKey  = nil
+                    fs._msufColorKey = nil
+                end
+            end
+        end
+    else
+        for f in pairs(GF.frames) do
+            local fs = f._msufGroupNumberFS
+            if fs then
+                if invalAnchor then fs._msufAnchorKey = nil end
+                if invalFont   then
+                    fs._msufFontKey  = nil
+                    fs._msufColorKey = nil
+                end
             end
         end
     end
@@ -363,7 +459,7 @@ local function _Init()
         local orig = GF.RefreshFonts
         GF.RefreshFonts = function(...)
             orig(...)
-            _InvalidateAll(false, true)
+            _RequestInvalidate(false, true)
             _Schedule()
         end
     end
@@ -375,7 +471,7 @@ local function _Init()
             orig(level, ...)
             -- Conservative: invalidate anchor on every dirty mark. The
             -- coalesced scheduler keeps the cost to one walk per tick.
-            _InvalidateAll(true, false)
+            _RequestInvalidate(true, false)
             _Schedule()
         end
     end
@@ -387,7 +483,7 @@ local function _Init()
         local orig = GF.ShowPreview
         GF.ShowPreview = function(...)
             orig(...)
-            _InvalidateAll(true, true)
+            _RequestInvalidate(true, true)
             _Schedule()
         end
     end
@@ -402,6 +498,10 @@ local function _Init()
     -- Public hooks for render-side / preview integrations.
     GF.UpdateGroupNumberFrame = function(frame)
         if type(frame) ~= "table" then return end
+        if _InCombat() and not frame._msufGFPreviewActive then
+            if not _combatDeferred then _Schedule() end
+            return
+        end
         local kind = frame._msufGFKind or "party"
         local conf = GF.GetConf(kind)
         if conf then _UpdateFrame(frame, conf) end
