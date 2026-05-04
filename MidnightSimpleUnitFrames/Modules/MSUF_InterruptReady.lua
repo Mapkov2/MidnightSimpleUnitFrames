@@ -42,8 +42,6 @@ local C_Timer           = _G.C_Timer
 local C_CurveUtil       = _G.C_CurveUtil
 local CreateFrame       = _G.CreateFrame
 local UnitClass         = _G.UnitClass
-local UnitClassification = _G.UnitClassification
-local UnitIsUnit        = _G.UnitIsUnit
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 
@@ -455,31 +453,8 @@ local function _HideIndicator(frame)
     _RestoreCastbarOutline(frame)
 end
 
-local function _FrameRequiresKickConfirmation(frame)
-    if not frame then return false end
-    if frame._msufIsBossCastbar then return true end
-
-    local unit = frame.unit
-    if type(unit) ~= "string" then return false end
-    if unit:sub(1, 4) == "boss" then return true end
-
-    if UnitIsUnit then
-        for i = 1, 8 do
-            if UnitIsUnit(unit, "boss" .. i) then return true end
-        end
-    end
-
-    if UnitClassification then
-        local cls = UnitClassification(unit)
-        if cls == "worldboss" then return true end
-    end
-
-    return false
-end
-
 local function _CastAllowsKickIndicator(frame)
-    if not _FrameRequiresKickConfirmation(frame) then return true end
-    return frame.MSUF_kickInterruptibleConfirmed == true
+    return not (frame and frame.MSUF_kickInterruptibleConfirmed == false)
 end
 
 local function ApplyLayout(frame)
