@@ -32,6 +32,10 @@ local function _MSUF_SetHealthBarValue(frame, bar, value)
         fn(frame, bar, value)
     else
         bar:SetValue(value)
+        local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
+        if type(syncMissing) == "function" then
+            syncMissing(frame, nil, value)
+        end
     end
 end
 

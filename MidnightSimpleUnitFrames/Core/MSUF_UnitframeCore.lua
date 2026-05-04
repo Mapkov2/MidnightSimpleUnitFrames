@@ -537,6 +537,10 @@ local function UFCore_SetHealthBarValue(f, bar, hp)
     else
         bar:SetValue(hp)
     end
+    local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
+    if type(syncMissing) == "function" then
+        syncMissing(f, nil, hp)
+    end
 end
 
 local function UFCore_GetPowerSmoothInterp(f, conf)

@@ -1115,6 +1115,18 @@ local function _NormalizeRangeFadeLayerMode(mode)
     return "frame"
 end
 
+local function _GF_GetFrameAlpha(kind, conf)
+    local fn = GF.GetEffectiveFrameAlpha
+    if type(fn) == "function" then return fn(kind, conf) end
+    return 1
+end
+
+local function _GF_ApplyFrameAlpha(f, kind, conf)
+    if f and f.SetAlpha then
+        f:SetAlpha(_GF_GetFrameAlpha(kind, conf or GF.GetConf(kind)))
+    end
+end
+
 local function _ClearHealthRangeFade(f, kind)
     if not f then return end
     if f._msufGFHealthAlphaDynamic or f._msufGFHealthAlphaMul or type(f._msufGFHealthAlphaBool) ~= "nil" then
@@ -1148,7 +1160,7 @@ local function _ApplyHealthRangeFade(f, kind, boolValue, fadeMul, numericMul)
         f._msufGFHealthAlphaMul = nm
     end
 
-    if f.SetAlpha then f:SetAlpha(1) end
+    _GF_ApplyFrameAlpha(f, kind or f._msufGFKind or "party")
     if GF.ApplyHealthBarAlpha then
         GF.ApplyHealthBarAlpha(f, kind or f._msufGFKind or "party")
     elseif f.health and f.health.SetAlpha and type(boolValue) == "nil" then
@@ -1158,20 +1170,21 @@ end
 
 local function ApplyRangeFade(f, unit, inRange)
     local c = f._c
-    if c and not c.rfEn then
-        _ClearHealthRangeFade(f, f._msufGFKind or "party")
-        if f.SetAlpha then f:SetAlpha(1) end
-        return
-    end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
+    local frameAlpha = _GF_GetFrameAlpha(kind, conf)
+    if c and not c.rfEn then
+        _ClearHealthRangeFade(f, kind)
+        if f.SetAlpha then f:SetAlpha(frameAlpha) end
+        return
+    end
     local fadeAlpha = (c and c.rfAlpha) or conf.rangeFadeAlpha or 0.4
     local hpMode = (_NormalizeRangeFadeLayerMode((c and c.rfLayerMode) or conf.rangeFadeLayerMode) == "health")
 
     -- Disabled → full alpha
     if conf.rangeFadeEnabled == false then
         _ClearHealthRangeFade(f, kind)
-        if f.SetAlpha then f:SetAlpha(1) end
+        if f.SetAlpha then f:SetAlpha(frameAlpha) end
         return
     end
 
@@ -1179,7 +1192,7 @@ local function ApplyRangeFade(f, unit, inRange)
     if IsInGroup and IsInRaid then
         if not IsInGroup() and not IsInRaid() then
             _ClearHealthRangeFade(f, kind)
-            if f.SetAlpha then f:SetAlpha(1) end
+            if f.SetAlpha then f:SetAlpha(frameAlpha) end
             return
         end
     end
@@ -1192,7 +1205,7 @@ local function ApplyRangeFade(f, unit, inRange)
             _ApplyHealthRangeFade(f, kind, nil, offA, offA)
         else
             _ClearHealthRangeFade(f, kind)
-            if f.SetAlpha then f:SetAlpha(offA) end
+            if f.SetAlpha then f:SetAlpha(frameAlpha * offA) end
         end
         return
     end
@@ -1209,9 +1222,13 @@ local function ApplyRangeFade(f, unit, inRange)
             _ApplyHealthRangeFade(f, kind, inRange, fadeAlpha)
         else
             if f.SetAlphaFromBoolean then
-                f:SetAlphaFromBoolean(inRange, 1, fadeAlpha)
+                f:SetAlphaFromBoolean(inRange, frameAlpha, frameAlpha * fadeAlpha)
+            elseif f.SetAlpha then
+                f:SetAlpha(frameAlpha)
             end
         end
+    else
+        if f.SetAlpha then f:SetAlpha(frameAlpha) end
     end
 end
 
@@ -1226,10 +1243,43 @@ function GF.RefreshRangeFade()
                 ApplyRangeFade(f, unit)
             else
                 _ClearHealthRangeFade(f, f._msufGFKind or "party")
-                if f.SetAlpha then f:SetAlpha(1) end
+                _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
             end
         end
     end
+end
+
+function GF.RefreshGroupAlphas()
+    local frames = GF.frames
+    if frames then
+        for f in pairs(frames) do
+            if f then
+                local kind = f._msufGFKind or "party"
+                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                if GF.ApplyHealthBarAlpha then GF.ApplyHealthBarAlpha(f, kind) end
+                if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, kind) end
+                if f.unit and UnitExists(f.unit) then
+                    ApplyRangeFade(f, f.unit)
+                else
+                    _GF_ApplyFrameAlpha(f, kind)
+                end
+            end
+        end
+    end
+    local bits = 0
+    if GF.DIRTY_COLOR then bits = bits + GF.DIRTY_COLOR end
+    if GF.DIRTY_BORDER then bits = bits + GF.DIRTY_BORDER end
+    if bits > 0 and GF.MarkAllDirty then GF.MarkAllDirty(bits) end
+end
+
+local function _GF_ShouldApplyRangeOrFrameAlpha(f, c, kind)
+    if c and c.rfEn then return true end
+    if f and f._msufGFHealthAlphaDynamic then return true end
+    local fn = GF.GetEffectiveFrameAlpha
+    if type(fn) ~= "function" then return false end
+    kind = kind or (f and f._msufGFKind) or "party"
+    local a = fn(kind, GF.GetConf(kind))
+    return type(a) == "number" and a < 0.999
 end
 
 ------------------------------------------------------------------------
@@ -1384,7 +1434,7 @@ function GF.BuildFrameCache(f)
     c.rfAlpha = conf.rangeFadeAlpha or 0.4
     c.offAlpha = conf.offlineAlpha or 0.5
     c.rfLayerMode = _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)
-    c.hpBarAlpha = tonumber(conf.hpBarAlpha) or 1
+    c.hpBarAlpha = (GF.GetEffectiveHealthAlpha and GF.GetEffectiveHealthAlpha(kind, conf)) or tonumber(conf.hpBarAlpha) or 1
     if c.hpBarAlpha < 0 then c.hpBarAlpha = 0 elseif c.hpBarAlpha > 1 then c.hpBarAlpha = 1 end
 
     -- Health fade (curve-based HP threshold dimming)
@@ -2484,9 +2534,10 @@ local function ApplyHealthAlphaAfterColor(f, kind)
     local alpha = c and c.hpBarAlpha
     if type(alpha) ~= "number" then
         local conf = GF.GetConf(kind)
-        alpha = tonumber(conf and conf.hpBarAlpha) or 1
+        alpha = (GF.GetEffectiveHealthAlpha and GF.GetEffectiveHealthAlpha(kind, conf)) or tonumber(conf and conf.hpBarAlpha) or 1
     end
-    if alpha < 0.999 then
+    local conf = GF.GetConf(kind)
+    if alpha < 0.999 or (conf and conf.alphaPreserveHPColor == true) then
         GF.ApplyHealthBarAlpha(f, kind)
     end
 end
@@ -2506,6 +2557,7 @@ local function ApplyPowerColor(f, unit)
     -- Secret-safe: pToken may be secret in 12.0
     if issecretvalue and pToken and issecretvalue(pToken) then
         f.power:SetStatusBarColor(0.5, 0.5, 0.8, 1)
+        if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, f._msufGFKind or "party") end
         return
     end
     if pToken and PowerBarColor and PowerBarColor[pToken] then
@@ -2514,6 +2566,7 @@ local function ApplyPowerColor(f, unit)
     else
         f.power:SetStatusBarColor(0.5, 0.5, 0.8, 1)
     end
+    if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, f._msufGFKind or "party") end
 end
 
 ------------------------------------------------------------------------
@@ -2526,7 +2579,7 @@ local function UpdateAll(f, unit)
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
     GF.UpdateButton(f, unit)
-    if c.rfEn or f._msufGFHealthAlphaDynamic then ApplyRangeFade(f, unit) end
+    if _GF_ShouldApplyRangeOrFrameAlpha(f, c, f._msufGFKind or "party") then ApplyRangeFade(f, unit) end
     if c.needThreat then UpdateAggro(f, unit) end
 
     local _siOn = c.siEn
@@ -2737,6 +2790,9 @@ local function dispatchHealthLean(f, unit)
     else
         bar:SetValue(hp)
     end
+    if GF.SyncPreserveMissingHP then
+        GF.SyncPreserveMissingHP(f, f._msufGFKind or "party", hp, f._msufGFCachedHpMax)
+    end
 
     -- Dispel overlay health sync ("current health only" — secret-safe SetValue)
     local dov = f._msufGFDispelOverlay
@@ -2827,6 +2883,9 @@ local function dispatchHealthFull(f, unit)
     f.health:SetMinMaxValues(0, hpMax)
     if c.smooth then f.health:SetValue(hp, c.smooth) else f.health:SetValue(hp) end
     f._msufGFCachedHpMax = hpMax
+    if GF.SyncPreserveMissingHP then
+        GF.SyncPreserveMissingHP(f, f._msufGFKind or "party", hp, hpMax)
+    end
 
     -- Dispel overlay health sync ("current health only" — secret-safe)
     local dov = f._msufGFDispelOverlay
@@ -3414,7 +3473,7 @@ local UNIT_DISPATCH = {
     UNIT_CONNECTION                   = function(f, u)
         local c = f._c
         if c and c.statusTextEn then UpdateStatusText(f, u) end
-        if c and (c.rfEn or f._msufGFHealthAlphaDynamic) then ApplyRangeFade(f, u) end
+        if c and _GF_ShouldApplyRangeOrFrameAlpha(f, c, f._msufGFKind or "party") then ApplyRangeFade(f, u) end
     end,
     UNIT_FLAGS                        = function(f, u)
         local c = f._c
@@ -3690,7 +3749,15 @@ local function OnGlobalEvent(self, event, ...)
     -- RebuildAll and the PLAYER_REGEN_ENABLED retire-deferral path.
     if GF._anyEnabled == false then return end
 
-    if event == "PLAYER_FOCUS_CHANGED" then
+    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+        _G.MSUF_InCombat = (event == "PLAYER_REGEN_DISABLED")
+        if GF.RefreshGroupAlphas then
+            GF.RefreshGroupAlphas()
+        elseif GF.RefreshRangeFade then
+            GF.RefreshRangeFade()
+        end
+
+    elseif event == "PLAYER_FOCUS_CHANGED" then
         local oldFocus = _gfFocusFrame
         _gfFocusFrame = nil
         if oldFocus and oldFocus.unit then
@@ -3789,6 +3856,8 @@ _globalFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 _globalFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 _globalFrame:RegisterEvent("BARBER_SHOP_OPEN")
 _globalFrame:RegisterEvent("BARBER_SHOP_CLOSE")
+_globalFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+_globalFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 GF.SyncGroupGlobalEvents()
 _globalFrame:SetScript("OnEvent", OnGlobalEvent)
 
@@ -3950,7 +4019,7 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
     if band(bits, 0x08) ~= 0 then -- DIRTY_COLOR
         ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", unit)
         ApplyPowerColor(f, unit)
-        if c and (c.rfEn or f._msufGFHealthAlphaDynamic) then ApplyRangeFade(f, unit) end
+        if c and _GF_ShouldApplyRangeOrFrameAlpha(f, c, f._msufGFKind or "party") then ApplyRangeFade(f, unit) end
     end
 
     if band(bits, 0x10) ~= 0 then -- DIRTY_BORDER

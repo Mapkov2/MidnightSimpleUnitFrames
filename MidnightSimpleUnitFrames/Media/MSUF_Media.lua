@@ -34,6 +34,7 @@ Reg("MSUF Slickrock",  "Slickrock.tga")
 Reg("MSUF Smooth",     "MSUF_Smooth.tga")
 Reg("MSUF Smooth v2",  "Smoothv2.tga")
 Reg("MSUF Smoother",   "smoother.tga")
+Reg("Better Blizzard", "BetterBlizzard.blp")
 
 -- DB migration: eliminate broken legacy selections
 local function TryMigrate()

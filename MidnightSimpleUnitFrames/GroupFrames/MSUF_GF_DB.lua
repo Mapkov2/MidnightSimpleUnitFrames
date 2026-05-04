@@ -98,6 +98,8 @@ local PARTY_DEFAULTS = {
     bgG               = 0.1,
     bgB               = 0.1,
     bgA               = 0.85,
+    hpBarAlpha        = 1,
+    hpTextIgnoreAlpha = true,
     -- Border
     borderEnabled     = true,
     borderSize        = 1,
@@ -237,12 +239,17 @@ local PARTY_DEFAULTS = {
     textLayer         = 5,
     powerTextLayer    = 2,
     -- Alpha pipeline (matches main UF alpha fields)
+    alphaSync            = false,
+    alphaExcludeTextPortrait = false,
+    alphaLayerMode       = 0,
     alphaInCombat        = 1,
     alphaOutOfCombat     = 1,
     alphaFGInCombat      = 1,
     alphaFGOutOfCombat   = 1,
     alphaBGInCombat      = 1,
     alphaBGOutOfCombat   = 1,
+    alphaHPInCombat      = 1,
+    alphaHPOutOfCombat   = 1,
     alphaPreserveHPColor = false,
     -- Health prediction overlays: NO defaults here — falls through to global Bars settings
     -- (absorbEnabled, healAbsorbEnabled, healPredEnabled are resolved at runtime)
@@ -1050,6 +1057,110 @@ function GF.Val(kind, key)
     local v = conf[key]
     if v ~= nil then return v end
     return GetDefaultsTable(kind)[key]
+end
+
+------------------------------------------------------------------------
+-- Alpha resolution (GF-local equivalent of Core/MSUF_Alpha.lua)
+------------------------------------------------------------------------
+local function Clamp01(v, fallback)
+    v = tonumber(v)
+    if v == nil then v = fallback or 1 end
+    if v < 0 then return 0 end
+    if v > 1 then return 1 end
+    return v
+end
+
+function GF.NormalizeAlphaLayerMode(mode)
+    if mode == true or mode == 1 or mode == "background" then
+        return "background"
+    end
+    if mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then
+        return "health"
+    end
+    return "foreground"
+end
+
+function GF.GetAlphaKeys(conf, mode)
+    mode = GF.NormalizeAlphaLayerMode(mode)
+    if conf and conf.alphaExcludeTextPortrait == true then
+        if mode == "background" then return "alphaBGInCombat", "alphaBGOutOfCombat" end
+        if mode == "health" then return "alphaHPInCombat", "alphaHPOutOfCombat" end
+        return "alphaFGInCombat", "alphaFGOutOfCombat"
+    end
+    return "alphaInCombat", "alphaOutOfCombat"
+end
+
+function GF.GetAlphaPair(conf, mode)
+    if not conf then return 1, 1 end
+    mode = GF.NormalizeAlphaLayerMode(mode or conf.alphaLayerMode)
+
+    local aIn = Clamp01(conf.alphaInCombat, 1)
+    local aOut = Clamp01(conf.alphaOutOfCombat, 1)
+    if conf.alphaExcludeTextPortrait == true then
+        if mode == "background" then
+            aIn = Clamp01(conf.alphaBGInCombat, aIn)
+            aOut = Clamp01(conf.alphaBGOutOfCombat, aOut)
+        elseif mode == "health" then
+            aIn = Clamp01(conf.alphaHPInCombat, Clamp01(conf.alphaFGInCombat, aIn))
+            aOut = Clamp01(conf.alphaHPOutOfCombat, Clamp01(conf.alphaFGOutOfCombat, aOut))
+        else
+            aIn = Clamp01(conf.alphaFGInCombat, aIn)
+            aOut = Clamp01(conf.alphaFGOutOfCombat, aOut)
+        end
+    end
+
+    local sync = conf.alphaSyncBoth
+    if sync == nil then sync = conf.alphaSync end
+    if sync then aOut = aIn end
+    return aIn, aOut
+end
+
+function GF.GetCurrentAlpha(conf, mode)
+    local aIn, aOut = GF.GetAlphaPair(conf, mode)
+    local inCombat = _G.MSUF_InCombat
+    if inCombat == nil and _G.InCombatLockdown then inCombat = _G.InCombatLockdown() end
+    return (inCombat == true) and aIn or aOut
+end
+
+function GF.GetEffectiveFrameAlpha(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    if not conf then return 1 end
+    if conf.alphaExcludeTextPortrait == true then return 1 end
+    return GF.GetCurrentAlpha(conf, "foreground")
+end
+
+function GF.GetEffectiveHealthAlpha(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    if not conf then return 1 end
+    if conf.alphaExcludeTextPortrait == true then
+        local mode = GF.NormalizeAlphaLayerMode(conf.alphaLayerMode)
+        if mode == "background" then
+            local aIn = Clamp01(conf.alphaFGInCombat, Clamp01(conf.alphaInCombat, 1))
+            local aOut = Clamp01(conf.alphaFGOutOfCombat, Clamp01(conf.alphaOutOfCombat, 1))
+            local sync = conf.alphaSyncBoth
+            if sync == nil then sync = conf.alphaSync end
+            if sync then aOut = aIn end
+            local inCombat = _G.MSUF_InCombat
+            if inCombat == nil and _G.InCombatLockdown then inCombat = _G.InCombatLockdown() end
+            return (inCombat == true) and aIn or aOut
+        end
+        return GF.GetCurrentAlpha(conf, mode)
+    end
+    return Clamp01(conf.hpBarAlpha, 1)
+end
+
+function GF.GetEffectivePowerAlpha(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    if not conf or conf.alphaExcludeTextPortrait ~= true then return 1 end
+    local mode = GF.NormalizeAlphaLayerMode(conf.alphaLayerMode)
+    if mode == "health" or mode == "background" then return 1 end
+    return GF.GetCurrentAlpha(conf, "foreground")
+end
+
+function GF.GetEffectiveBackgroundAlpha(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    if not conf or conf.alphaExcludeTextPortrait ~= true then return 1 end
+    return GF.GetCurrentAlpha(conf, "background")
 end
 
 --- Group Frame power text toggle with legacy-profile compatibility.

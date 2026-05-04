@@ -1069,6 +1069,7 @@ function GF.UpdateButton(f, unit)
         if f.textCenterFS then f.textCenterFS:SetText("") end
         if f.textRightFS then f.textRightFS:SetText("") end
         if f.health then f.health:SetValue(0) end
+        if GF.SyncPreserveMissingHP then GF.SyncPreserveMissingHP(f, kind, 1, 1) end
         if f.power then f.power:SetValue(0) end
         if f.powerTextLeftFS then f.powerTextLeftFS:SetText("") end
         if f.powerTextCenterFS then f.powerTextCenterFS:SetText("") end
@@ -1109,6 +1110,9 @@ function GF.UpdateButton(f, unit)
         f.health:SetMinMaxValues(0, hpMax)
         f.health:SetValue(hp)
         f._msufGFCachedHpMax = hpMax
+        if GF.SyncPreserveMissingHP then
+            GF.SyncPreserveMissingHP(f, kind, hp, hpMax)
+        end
     end
 
     ApplyHealthColor(f, kind, unit)
@@ -2318,6 +2322,7 @@ function GF.ClearPreviewData(f)
     if f.textCenterFS then f.textCenterFS:SetText("") end
     if f.textRightFS then f.textRightFS:SetText("") end
     if f.health then f.health:SetValue(0) end
+    if GF.SyncPreserveMissingHP then GF.SyncPreserveMissingHP(f, f._msufGFKind or "party", 1, 1) end
     if f.incomingHealBar then f.incomingHealBar:SetValue(0); f.incomingHealBar:Hide() end
     if f.absorbBar then f.absorbBar:SetValue(0); f.absorbBar:Hide() end
     if f.healAbsorbBar then f.healAbsorbBar:SetValue(0); f.healAbsorbBar:Hide() end
