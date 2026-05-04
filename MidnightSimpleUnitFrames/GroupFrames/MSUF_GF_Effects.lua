@@ -2615,9 +2615,26 @@ end
 ------------------------------------------------------------------------
 -- Power color (secret-safe pToken)
 ------------------------------------------------------------------------
+function GF._PowerBarActiveForUnit(f, unit, c)
+    if not (f and f.power and unit and c and c.hasPowerElement and (c.powH or 0) > 0) then return false end
+    local hidden = f._msufGFPowRoleHidden
+    if (hidden == nil or f._msufGFPowRoleUnit ~= unit) and GF.GetEffectivePowerHeight then
+        hidden = GF.GetEffectivePowerHeight(f._msufGFKind or "party", unit, nil) <= 0
+        f._msufGFPowRoleHidden = hidden
+        f._msufGFPowRoleUnit = unit
+    end
+    return not hidden
+end
+
 local function ApplyPowerColor(f, unit)
     if not (f.power and unit) then return end
     if not UnitExists(unit) then return end
+    local c = f._c
+    if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+    if not (GF._PowerBarActiveForUnit and GF._PowerBarActiveForUnit(f, unit, c)) then
+        if f.power:IsShown() then f.power:Hide() end
+        return
+    end
     local _, pToken = UnitPowerType(unit)
     -- Secret-safe: pToken may be secret in 12.0
     if issecretvalue and pToken and issecretvalue(pToken) then
@@ -3425,12 +3442,11 @@ local function dispatchPower(f, unit)
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
     if not c.hasPowerElement then return end
-    -- Role visibility: cached per-frame, only re-evaluated on GROUP_ROSTER_UPDATE
-    local roleHidden = f._msufGFPowRoleHidden
-    if roleHidden and f.power:IsShown() then
+    local barActive = GF._PowerBarActiveForUnit and GF._PowerBarActiveForUnit(f, unit, c)
+    if not barActive and f.power:IsShown() then
         f.power:Hide()
     end
-    if roleHidden and not c.anyPowerText then
+    if not barActive and not c.anyPowerText then
         if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
         if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
         if f.powerTextRightFS then f.powerTextRightFS:Hide() end
@@ -3438,7 +3454,7 @@ local function dispatchPower(f, unit)
     end
 
     local pw = UnitPower(unit)
-    if (not roleHidden) and c.powH > 0 then
+    if barActive then
         if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
         if not f.power:IsShown() then f.power:Show() end
     elseif f.power:IsShown() then
@@ -3458,11 +3474,11 @@ local function dispatchPowerFull(f, unit)
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
     if not c.hasPowerElement then return end
-    local roleHidden = f._msufGFPowRoleHidden
-    if roleHidden and f.power:IsShown() then
+    local barActive = GF._PowerBarActiveForUnit and GF._PowerBarActiveForUnit(f, unit, c)
+    if not barActive and f.power:IsShown() then
         f.power:Hide()
     end
-    if roleHidden and not c.anyPowerText then
+    if not barActive and not c.anyPowerText then
         if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
         if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
         if f.powerTextRightFS then f.powerTextRightFS:Hide() end
@@ -3471,12 +3487,12 @@ local function dispatchPowerFull(f, unit)
 
     local pw    = UnitPower(unit)
     local pwMax = UnitPowerMax(unit)
-    if (not roleHidden) and c.powH > 0 then
+    if barActive then
         f.power:SetMinMaxValues(0, pwMax)
         if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
     end
     f._msufGFCachedPwMax = pwMax
-    if (not roleHidden) and c.powH > 0 then
+    if barActive then
         if not f.power:IsShown() then f.power:Show() end
     elseif f.power:IsShown() then
         f.power:Hide()
@@ -3589,13 +3605,7 @@ end
 function GF._ShouldRegisterPowerEvents(f, unit, c)
     if not (f and unit and c and c.hasPowerElement) then return false end
     if c.anyPowerText then return true end
-    if (c.powH or 0) <= 0 then return false end
-    if GF.GetEffectivePowerHeight then
-        return GF.GetEffectivePowerHeight(f._msufGFKind or "party", unit, nil) > 0
-    end
-    local roleHidden = f._msufGFPowRoleHidden
-    if roleHidden ~= nil then return not roleHidden end
-    return true
+    return (GF._PowerBarActiveForUnit and GF._PowerBarActiveForUnit(f, unit, c)) or false
 end
 
 function GF.RegisterUnitEvents(f, unit)
@@ -4281,6 +4291,8 @@ _G.MSUF_GF_OnFrameRetire = function(f)
 
     -- Cancel + clear pending ready-check fade timer (closure captures `f`)
     if GF.CancelReadyCheckTimer then GF.CancelReadyCheckTimer(f) end
+    if GF.HideFrameAuras then GF.HideFrameAuras(f) end
+    if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(f) end
 
     -- Stop cutaway re-schedule loop (closure self-cancels when _msufCwTicking false)
     f._msufCwTicking = false

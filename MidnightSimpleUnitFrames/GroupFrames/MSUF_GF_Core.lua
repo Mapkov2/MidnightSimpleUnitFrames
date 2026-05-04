@@ -72,6 +72,14 @@ local function RetireHeader(header)
     for i = 1, #kids do
         local ch = kids[i]
         if ch then
+            local retireFn = _G.MSUF_GF_OnFrameRetire
+            if type(retireFn) == "function" then
+                retireFn(ch)
+            else
+                if GF.HideFrameAuras then GF.HideFrameAuras(ch) end
+                if GF.ClearPrivateAuras then GF.ClearPrivateAuras(ch) end
+                if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(ch) end
+            end
             -- Deregister from GF tracking
             UnregisterTrackedFrame(ch)
             if ch.unit and _G.MSUF_UnitFrames then
