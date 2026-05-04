@@ -892,6 +892,32 @@ local function SetFrameBasicsConfigEnabled(panel, enabled)
     end
 end
 
+local function ApplyFrameBasicsConfigState(panel, unitKey)
+    if not panel or not unitKey then return end
+    local key = CanonKey(unitKey) or unitKey
+    local conf = MSUF_DB and MSUF_DB[key]
+    local enabled = (not conf) or conf.enabled ~= false
+    local cb = panel.playerEnableFrameCB
+    if cb and cb.SetChecked then
+        cb:SetChecked(enabled)
+    end
+    SetFrameBasicsConfigEnabled(panel, enabled)
+end
+
+local function QueueFrameBasicsConfigRefresh(panel, unitKey)
+    if not panel or not unitKey or not C_Timer or type(C_Timer.After) ~= "function" then return end
+    local queueKey = CanonKey(unitKey) or unitKey
+    panel._msufFrameBasicsConfigRefreshToken = (panel._msufFrameBasicsConfigRefreshToken or 0) + 1
+    local token = panel._msufFrameBasicsConfigRefreshToken
+    local function ApplyQueued()
+        if not panel or panel._msufFrameBasicsConfigRefreshToken ~= token then return end
+        if (CanonKey(panel._msufLastApplyKey) or panel._msufLastApplyKey) ~= queueKey then return end
+        ApplyFrameBasicsConfigState(panel, queueKey)
+    end
+    C_Timer.After(0, ApplyQueued)
+    C_Timer.After(0.05, ApplyQueued)
+end
+
 local function SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
     if not panel then return end
     powerEnabled = powerEnabled and true or false
@@ -903,12 +929,19 @@ local function SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
     SetOptionControlEnabled(panel.playerPowerBarBorderSlider, powerEnabled and borderEnabled)
 end
 
-local function QueuePowerBarConfigRefresh(panel, showPB, borderEnabled)
+local function QueuePowerBarConfigRefresh(panel, unitKey, showPB, borderEnabled)
     if not panel or not C_Timer or type(C_Timer.After) ~= "function" then return end
+    if type(unitKey) == "boolean" then
+        borderEnabled = showPB
+        showPB = unitKey
+        unitKey = panel._msufLastApplyKey
+    end
+    local queueKey = unitKey and (CanonKey(unitKey) or unitKey) or nil
     panel._msufPowerBarConfigRefreshToken = (panel._msufPowerBarConfigRefreshToken or 0) + 1
     local token = panel._msufPowerBarConfigRefreshToken
     C_Timer.After(0, function()
         if not panel or panel._msufPowerBarConfigRefreshToken ~= token then return end
+        if queueKey and (CanonKey(panel._msufLastApplyKey) or panel._msufLastApplyKey) ~= queueKey then return end
         local powerEnabled = showPB and true or false
         local cb = panel.playerPowerBarShowCB
         if powerEnabled and cb and cb.GetChecked then
@@ -925,18 +958,32 @@ local function SetCastbarConfigEnabled(panel, unitKey, enabled)
     end
 end
 
+local CASTBAR_ENABLE_KEYS = {
+    player = "enablePlayerCastbar",
+    target = "enableTargetCastbar",
+    focus  = "enableFocusCastbar",
+    boss   = "enableBossCastbar",
+}
+
 local function QueueCastbarConfigRefresh(panel, unitKey, show)
     if not panel or not unitKey or not C_Timer or type(C_Timer.After) ~= "function" then return end
+    local queueKey = CanonKey(unitKey) or unitKey
     panel._msufCastbarConfigRefreshToken = (panel._msufCastbarConfigRefreshToken or 0) + 1
     local token = panel._msufCastbarConfigRefreshToken
     C_Timer.After(0, function()
         if not panel or panel._msufCastbarConfigRefreshToken ~= token then return end
+        if (CanonKey(panel._msufLastApplyKey) or panel._msufLastApplyKey) ~= queueKey then return end
         local enabled = show and true or false
-        local cb = panel[unitKey .. "CastbarEnableCB"]
+        local enableKey = CASTBAR_ENABLE_KEYS[queueKey]
+        local g = MSUF_DB and MSUF_DB.general
+        if enabled and enableKey and g then
+            enabled = g[enableKey] ~= false
+        end
+        local cb = panel[queueKey .. "CastbarEnableCB"]
         if enabled and cb and cb.GetChecked then
             enabled = cb:GetChecked() and true or false
         end
-        SetCastbarConfigEnabled(panel, unitKey, enabled)
+        SetCastbarConfigEnabled(panel, queueKey, enabled)
     end)
 end
 
@@ -1821,7 +1868,8 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     for _, s in ipairs(BASIC_EVALS) do
         local w = panel[s[1]]; if w and w.SetChecked then w:SetChecked(s[2](conf)) end
     end
-    SetFrameBasicsConfigEnabled(panel, conf.enabled ~= false)
+    ApplyFrameBasicsConfigState(panel, currentKey)
+    QueueFrameBasicsConfigRefresh(panel, currentKey)
 
     -- Power Bar sync
     do
@@ -1854,7 +1902,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             controlsPowerEnabled = panel.playerPowerBarShowCB:GetChecked() and true or false
         end
         SetPowerBarConfigEnabled(panel, controlsPowerEnabled, borderEnabled)
-        QueuePowerBarConfigRefresh(panel, showPB, borderEnabled)
+        QueuePowerBarConfigRefresh(panel, currentKey, showPB, borderEnabled)
     end
 
     -- ToT inline
@@ -2055,6 +2103,8 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
 
     if panel._msufRelayoutUnitBoxes then panel._msufRelayoutUnitBoxes(currentKey) end
     if panel._msufBindCopyButtons then panel._msufBindCopyButtons() end
+    ApplyFrameBasicsConfigState(panel, currentKey)
+    QueueFrameBasicsConfigRefresh(panel, currentKey)
 end
 
 --------------------------------------------------------------------
@@ -2150,7 +2200,10 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         local w = panel[pair[1]]; if w then
             w:SetScript("OnClick", function(self) if not IsFramesTab() then return end
                 local c = EnsureKeyDB(); c[pair[2]] = self:GetChecked() and true or false; ApplyCurrent()
-                if pair[2] == "enabled" then SetFrameBasicsConfigEnabled(panel, c.enabled ~= false) end
+                if pair[2] == "enabled" then
+                    ApplyFrameBasicsConfigState(panel, CurrentKey())
+                    QueueFrameBasicsConfigRefresh(panel, CurrentKey())
+                end
                 if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup(CurrentKey(), c) end end)
         end
     end
@@ -2192,7 +2245,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 local c, k = PBConf(); if not c or not k then return end
                 c.showPowerBar = self:GetChecked() and true or false
                 SetPowerBarConfigEnabled(panel, c.showPowerBar ~= false, c.powerBarBorderEnabled == true)
-                QueuePowerBarConfigRefresh(panel, true, c.powerBarBorderEnabled == true)
+                QueuePowerBarConfigRefresh(panel, k, true, c.powerBarBorderEnabled == true)
                 PBApply()
             end)
         end
@@ -2212,10 +2265,10 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         end
         if panel.playerPowerBarBorderCB then
             panel.playerPowerBarBorderCB:SetScript("OnClick", function(self)
-                local c = PBConf(); if not c then return end
+                local c, k = PBConf(); if not c or not k then return end
                 c.powerBarBorderEnabled = self:GetChecked() and true or false
                 SetPowerBarConfigEnabled(panel, c.showPowerBar ~= false, c.powerBarBorderEnabled == true)
-                QueuePowerBarConfigRefresh(panel, true, c.powerBarBorderEnabled == true)
+                QueuePowerBarConfigRefresh(panel, k, true, c.powerBarBorderEnabled == true)
                 PBApply()
             end)
         end
