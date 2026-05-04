@@ -537,6 +537,7 @@ end
             MSUF_Driver_CancelStartRetry(self)
             local tok = MSUF_Driver_BumpCastToken(self)
             self.isNotInterruptible = false
+            self.MSUF_kickInterruptibleConfirmed = nil
             MSUF_Driver_CastResync(self)
             -- Most casts are correctly detected on first attempt; this avoids a closure+timer per start.
             local st = MSUF_Driver_BuildCastStateFor(self)
@@ -557,14 +558,17 @@ end
             MSUF_Driver_CastResync(self)
 
 	        elseif event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
+            self.MSUF_kickInterruptibleConfirmed = nil
 	            MSUF_Driver_QueueStopConfirm(self, "CAST")
             
 
 	        elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+            self.MSUF_kickInterruptibleConfirmed = nil
 	            MSUF_Driver_QueueStopConfirm(self, "CHANNEL")
             
 
 	        elseif event == "UNIT_SPELLCAST_FAILED" then
+            self.MSUF_kickInterruptibleConfirmed = nil
 	            MSUF_Driver_QueueStopConfirm(self, "CAST")
 
         elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
@@ -586,6 +590,7 @@ end
             -- Light fast-path: this event only changes interruptibility mid-cast.
             -- Do NOT resync the whole cast state (expensive + can cause jitter); just refresh visuals.
             self.isNotInterruptible = false
+            self.MSUF_kickInterruptibleConfirmed = true
             self._msufApiNotInterruptibleRaw = false -- keep vertex-tint source in sync; plain boolean is safe.
             if self.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(self) end
             -- Interrupt Ready Indicator: re-evaluate visibility/color now that
@@ -596,13 +601,15 @@ end
 	            if arg1 ~= self.unit then return end
             -- Light fast-path: see above.
             self.isNotInterruptible = true
+            self.MSUF_kickInterruptibleConfirmed = false
             self._msufApiNotInterruptibleRaw = true
             if self.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(self) end
             if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
 
 	        elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
-	            if arg1 ~= self.unit then return end
+            if arg1 ~= self.unit then return end
             MSUF_Driver_CancelStopConfirm(self)
+            self.MSUF_kickInterruptibleConfirmed = nil
             self:SetInterrupted()
 
         elseif (event == "PLAYER_TARGET_CHANGED" and self.unit == "target")
@@ -616,6 +623,7 @@ end
                 self.timer = nil
             end
             self.interrupted = nil
+            self.MSUF_kickInterruptibleConfirmed = nil
             MSUF_Driver_CastResync(self)
         end
     end)
@@ -829,6 +837,7 @@ self.MSUF_timerDriven = okTimer and true or false
 self:SetScript("OnUpdate", nil)
 -- Cast no longer active: clear kick indicator state.
 self.MSUF_castActive = false
+self.MSUF_kickInterruptibleConfirmed = nil
 if self.kickReadyBox then self.kickReadyBox:Hide() end
 if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
 if self.hideTimer and self.hideTimer.Cancel then
@@ -873,6 +882,7 @@ function frame:SetInterrupted()
     self._msufApiNotInterruptibleRaw = nil
     -- Cast no longer active: clear kick indicator state + cancel CD timer.
     self.MSUF_castActive = false
+    self.MSUF_kickInterruptibleConfirmed = nil
     if self.kickReadyBox then self.kickReadyBox:Hide() end
     if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
 

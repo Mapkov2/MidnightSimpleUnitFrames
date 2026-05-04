@@ -3090,9 +3090,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             set = function(k, v)
                 local conf = GF.GetConf(K())
                 if conf then conf.masqueEnabled = v and true or false end
-                if v then
-                    if GF.Masque and GF.Masque.ReskinAllIcons then GF.Masque.ReskinAllIcons() end
-                end
+                if GF.Masque and GF.Masque.ReskinAllIcons then GF.Masque.ReskinAllIcons() end
                 RequestVisualRefresh()
             end,
         })
