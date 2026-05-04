@@ -42,6 +42,8 @@ local C_Timer           = _G.C_Timer
 local C_CurveUtil       = _G.C_CurveUtil
 local CreateFrame       = _G.CreateFrame
 local UnitClass         = _G.UnitClass
+local UnitClassification = _G.UnitClassification
+local UnitIsUnit        = _G.UnitIsUnit
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 
@@ -453,6 +455,33 @@ local function _HideIndicator(frame)
     _RestoreCastbarOutline(frame)
 end
 
+local function _FrameRequiresKickConfirmation(frame)
+    if not frame then return false end
+    if frame._msufIsBossCastbar then return true end
+
+    local unit = frame.unit
+    if type(unit) ~= "string" then return false end
+    if unit:sub(1, 4) == "boss" then return true end
+
+    if UnitIsUnit then
+        for i = 1, 8 do
+            if UnitIsUnit(unit, "boss" .. i) then return true end
+        end
+    end
+
+    if UnitClassification then
+        local cls = UnitClassification(unit)
+        if cls == "worldboss" then return true end
+    end
+
+    return false
+end
+
+local function _CastAllowsKickIndicator(frame)
+    if not _FrameRequiresKickConfirmation(frame) then return true end
+    return frame.MSUF_kickInterruptibleConfirmed == true
+end
+
 local function ApplyLayout(frame)
     if not frame or not frame.statusBar then return end
 
@@ -516,6 +545,10 @@ local function _PaintFrame(frame, readyBool)
     --   our indicator colour and the user's outline colour without ever
     --   exposing the secret value to the Lua VM.
     local rawNI = _RefreshRawNotInterruptible(frame)
+    if rawNI == nil then
+        _HideIndicator(frame)
+        return
+    end
 
     if style == "box" then
         local box = frame.kickReadyBox
@@ -583,6 +616,11 @@ local function RefreshFrame(frame, state)
         return
     end
 
+    if not _CastAllowsKickIndicator(frame) then
+        _HideIndicator(frame)
+        return
+    end
+
     if not _state.spellID then Resolve() end
 
     local readyBool = _GetReadyBoolSecret()
@@ -604,7 +642,8 @@ function _TickerStep()
     local anyActive = false
     for frame in pairs(_registeredFrames) do
         if frame.MSUF_castActive == true
-           and not (frame.isNotInterruptible == true) then
+           and not (frame.isNotInterruptible == true)
+           and _CastAllowsKickIndicator(frame) then
             local cfg = _GetCfg()
             if cfg and frame.unit and _ShowOnUnit(cfg, frame.unit) then
                 local readyBool = _GetReadyBoolSecret()
@@ -647,6 +686,10 @@ local function _InstallOutlineHook()
         -- skip the C-side composition entirely — the user's colour from
         -- the original ApplyCastbarOutline call is already correct.
         if frame.isNotInterruptible == true then return end
+        if not _CastAllowsKickIndicator(frame) then
+            _HideIndicator(frame)
+            return
+        end
         local cfg = _GetCfg()
         if not cfg or _GetStyle(cfg) ~= "border" then return end
         if not frame.unit or not _ShowOnUnit(cfg, frame.unit) then return end
@@ -654,6 +697,10 @@ local function _InstallOutlineHook()
         -- Secret-safe rawNI gate: see comment in _PaintFrame for why this
         -- is needed in addition to the plain-bool check above.
         local rawNI = _RefreshRawNotInterruptible(frame)
+        if rawNI == nil then
+            _HideIndicator(frame)
+            return
+        end
 
         local readyMixin, cdMixin = _ResolveColorPair(cfg)
         local userMixin = _GetUserOutlineMixin()
