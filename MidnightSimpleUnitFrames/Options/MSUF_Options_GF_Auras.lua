@@ -230,40 +230,90 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return row
     end
 
+    local function FormatNumberBoxValue(v, step)
+        v = tonumber(v) or 0
+        if step and step >= 1 then
+            return tostring(math_floor(v + 0.5))
+        end
+        return tostring(v)
+    end
+
+    local function ClampStepValue(v, lo, hi, step, def)
+        v = tonumber(v)
+        if v == nil then v = def or lo or 0 end
+        if step and step > 0 then
+            v = ((math_floor(((v - lo) / step) + 0.5) * step) + lo)
+        end
+        if v < lo then v = lo end
+        if v > hi then v = hi end
+        if step and step >= 1 then v = math_floor(v + 0.5) end
+        return v
+    end
+
     local function RowSlider(parent, prevRow, label, gk, key, lo, hi, step, def, topOfs)
         local row = RowFrame(parent, prevRow, topOfs)
         RowLabel(row, label)
-        local valFS = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        valFS:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-        valFS:SetJustifyH("RIGHT")
+        local eb = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+        eb:SetSize(44, 20)
+        eb:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        eb:SetAutoFocus(false)
+        eb:SetJustifyH("CENTER")
+        eb:SetMaxLetters(6)
+        if GameFontHighlightSmall then eb:SetFontObject(GameFontHighlightSmall) end
+        if eb.SetTextColor then eb:SetTextColor(1, 1, 1, 1) end
         local sl = CreateFrame("Slider", nil, row, "OptionsSliderTemplate")
         sl:SetSize(SL_W, 14)
-        sl:SetPoint("RIGHT", valFS, "LEFT", -8, 0)
+        sl:SetPoint("RIGHT", eb, "LEFT", -8, 0)
         sl:SetMinMaxValues(lo, hi)
         sl:SetValueStep(step)
         sl:SetObeyStepOnDrag(true)
-        sl:SetValue(AV(gk, key) or def)
         -- Hide default slider text
         if sl.Text then sl.Text:SetText("") end
         if sl.Low  then sl.Low:SetText("")  end
         if sl.High then sl.High:SetText("") end
-        sl._msufLastValue = math_floor((AV(gk, key) or def) + 0.5)
-        valFS:SetText(tostring(sl._msufLastValue))
+        sl.editBox = eb
+        sl._msufLastValue = ClampStepValue(AV(gk, key), lo, hi, step, def)
+        eb:SetText(FormatNumberBoxValue(sl._msufLastValue, step))
+        sl:SetValue(sl._msufLastValue)
+        local function SyncBox(v)
+            if not eb:HasFocus() then
+                eb:SetText(FormatNumberBoxValue(v, step))
+            end
+        end
+        local function ApplyBox()
+            local v = ClampStepValue(eb:GetText(), lo, hi, step, sl._msufLastValue or def)
+            eb:SetText(FormatNumberBoxValue(v, step))
+            sl:SetValue(v)
+        end
+        eb:SetScript("OnEnterPressed", function(self)
+            ApplyBox()
+            self:ClearFocus()
+        end)
+        eb:SetScript("OnEditFocusLost", ApplyBox)
+        eb:SetScript("OnEscapePressed", function(self)
+            self:SetText(FormatNumberBoxValue(sl:GetValue() or sl._msufLastValue or def, step))
+            self:ClearFocus()
+        end)
+        eb:SetScript("OnEditFocusGained", function(self)
+            self:HighlightText()
+        end)
         sl:SetScript("OnValueChanged", function(self, v)
             if self._msufSkip then return end
-            v = math_floor(v + 0.5)
-            valFS:SetText(tostring(v))
+            v = ClampStepValue(v, lo, hi, step, def)
+            SyncBox(v)
             if self._msufLastValue == v then return end
             self._msufLastValue = v
             AW(gk, key, v)
         end)
         _auraRefreshFns[#_auraRefreshFns + 1] = function()
-            local v = math_floor((AV(gk, key) or def) + 0.5)
+            local v = ClampStepValue(AV(gk, key), lo, hi, step, def)
             sl._msufSkip = true
             sl:SetValue(v)
             sl._msufSkip = false
             sl._msufLastValue = v
-            valFS:SetText(tostring(v))
+            if not eb:HasFocus() then
+                eb:SetText(FormatNumberBoxValue(v, step))
+            end
         end
         local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
         if _styleSl then _styleSl(sl) end
@@ -337,6 +387,101 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return row
     end
 
+    local function RowOffsetPair(parent, prevRow, label, gk, xKey, yKey, topOfs)
+        local row = RowFrame(parent, prevRow, topOfs)
+        RowLabel(row, label)
+
+        local holder = CreateFrame("Frame", nil, row)
+        holder:SetSize(116, 20)
+        holder:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+
+        local xEB = CreateFrame("EditBox", nil, holder, "InputBoxTemplate")
+        xEB:SetSize(48, 20)
+        xEB:SetPoint("LEFT", holder, "LEFT", 0, 0)
+        xEB:SetAutoFocus(false)
+        xEB:SetJustifyH("CENTER")
+        xEB:SetMaxLetters(6)
+        if GameFontHighlightSmall then xEB:SetFontObject(GameFontHighlightSmall) end
+        if xEB.SetTextColor then xEB:SetTextColor(1, 1, 1, 1) end
+
+        local sep = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        sep:SetPoint("LEFT", xEB, "RIGHT", 4, 0)
+        sep:SetText("/")
+        sep:SetTextColor(0.75, 0.75, 0.82, 1)
+
+        local yEB = CreateFrame("EditBox", nil, holder, "InputBoxTemplate")
+        yEB:SetSize(48, 20)
+        yEB:SetPoint("LEFT", sep, "RIGHT", 4, 0)
+        yEB:SetAutoFocus(false)
+        yEB:SetJustifyH("CENTER")
+        yEB:SetMaxLetters(6)
+        if GameFontHighlightSmall then yEB:SetFontObject(GameFontHighlightSmall) end
+        if yEB.SetTextColor then yEB:SetTextColor(1, 1, 1, 1) end
+
+        local function ClampOffset(v, def)
+            v = tonumber(v)
+            if v == nil then v = def or 0 end
+            v = math_floor(v + 0.5)
+            if v < -9999 then v = -9999 end
+            if v > 9999 then v = 9999 end
+            return v
+        end
+        local function CurrentX()
+            return ClampOffset(AV(gk, xKey), 0)
+        end
+        local function CurrentY()
+            return ClampOffset(AV(gk, yKey), 0)
+        end
+        local function Sync()
+            if not xEB:HasFocus() then xEB:SetText(tostring(CurrentX())) end
+            if not yEB:HasFocus() then yEB:SetText(tostring(CurrentY())) end
+        end
+        local function Apply()
+            local x = ClampOffset(xEB:GetText(), CurrentX())
+            local y = ClampOffset(yEB:GetText(), CurrentY())
+            xEB:SetText(tostring(x))
+            yEB:SetText(tostring(y))
+            AW(gk, xKey, x)
+            AW(gk, yKey, y)
+        end
+        local function Escape(self)
+            xEB:SetText(tostring(CurrentX()))
+            yEB:SetText(tostring(CurrentY()))
+            self:ClearFocus()
+        end
+        for _, eb in ipairs({ xEB, yEB }) do
+            eb:SetScript("OnEnterPressed", function(self)
+                Apply()
+                self:ClearFocus()
+            end)
+            eb:SetScript("OnEditFocusLost", Apply)
+            eb:SetScript("OnEscapePressed", Escape)
+            eb:SetScript("OnEditFocusGained", function(self)
+                self:HighlightText()
+            end)
+        end
+        function holder:SetEnabled(enabled)
+            enabled = enabled and true or false
+            for _, eb in ipairs({ xEB, yEB }) do
+                if eb.EnableMouse then eb:EnableMouse(enabled) end
+                if enabled then
+                    if eb.Enable then eb:Enable() end
+                else
+                    if eb.Disable then eb:Disable() end
+                end
+                if eb.SetTextColor then
+                    local c = enabled and 1 or 0.55
+                    eb:SetTextColor(c, c, c, 1)
+                end
+            end
+        end
+
+        Sync()
+        _auraRefreshFns[#_auraRefreshFns + 1] = Sync
+        row._ctrl = holder
+        return row
+    end
+
     local function RowDivider(parent, prevRow, topOfs)
         local row = CreateFrame("Frame", nil, parent)
         row:SetSize(ROW_W, 1)
@@ -405,11 +550,24 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             if applyAlpha ~= false and widget._msufPeelButton.SetAlpha then widget._msufPeelButton:SetAlpha(alpha) end
         end
 
+        if widget.editBox then
+            if widget.editBox.EnableMouse then widget.editBox:EnableMouse(enabled) end
+            if enabled then
+                if widget.editBox.Enable then widget.editBox:Enable() end
+            else
+                if widget.editBox.Disable then widget.editBox:Disable() end
+            end
+        end
+
         if applyAlpha ~= false then
             if widget.SetAlpha then widget:SetAlpha(alpha) end
             if widget.Text and widget.Text.SetAlpha then widget.Text:SetAlpha(alpha) end
             if widget.text and widget.text.SetAlpha then widget.text:SetAlpha(alpha) end
             if widget.editBox and widget.editBox.SetAlpha then widget.editBox:SetAlpha(alpha) end
+            if widget.editBox and widget.editBox.SetTextColor then
+                local c = enabled and 1 or 0.55
+                widget.editBox:SetTextColor(c, c, c, 1)
+            end
             if widget.minusButton and widget.minusButton.SetAlpha then widget.minusButton:SetAlpha(alpha) end
             if widget.plusButton and widget.plusButton.SetAlpha then widget.plusButton:SetAlpha(alpha) end
             if name then
@@ -1051,9 +1209,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
         r = RowDropdown(body, r, L["Anchor"], gk, "anchor", ANCHOR9, "BOTTOMLEFT")
         r = RowDropdown(body, r, L["Growth"], gk, "growth", GROWTH8, "RIGHTDOWN")
-        r = RowValue(body, r, L["Offset X / Y"], function()
-            return tostring(AV(gk, "x") or 0) .. " / " .. tostring(AV(gk, "y") or 0)
-        end)
+        r = RowOffsetPair(body, r, L["Offset X / Y"], gk, "x", "y")
 
         r = RowDivider(body, r)
         r = RowSlider(body, r, L["Icon size"], gk, "size", 8, 60, 1, 20, 4)

@@ -24,6 +24,84 @@ local tonumber = tonumber
 local math_max = math.max
 local math_floor = math.floor
 
+local MSUF_BETTER_BLIZZARD_TEXTURE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\BetterBlizzard.blp"
+local UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B = 34/255, 34/255, 34/255
+local _unhaltedTextureChecked, _unhaltedTexture
+
+local function ResolveUnhaltedTexture()
+    if _unhaltedTextureChecked then return _unhaltedTexture end
+    _unhaltedTextureChecked = true
+
+    local globalResolve = _G.MSUF_Alpha_GetPreserveHPTexture
+    if type(globalResolve) == "function" then
+        local ok, tex = pcall(globalResolve)
+        if ok and type(tex) == "string" and tex ~= "" then
+            _unhaltedTexture = tex
+            return _unhaltedTexture
+        end
+    end
+
+    local LibStub = _G.LibStub
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if LSM and type(LSM.Fetch) == "function" then
+        local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", "Better Blizzard", true)
+        if ok and type(tex) == "string" and tex ~= "" then
+            _unhaltedTexture = tex
+            return _unhaltedTexture
+        end
+    end
+
+    _unhaltedTexture = MSUF_BETTER_BLIZZARD_TEXTURE
+    return _unhaltedTexture
+end
+
+local function GetGFFrameAlpha(kind, conf)
+    local fn = GF.GetEffectiveFrameAlpha
+    if type(fn) == "function" then return fn(kind, conf) end
+    return 1
+end
+
+local function GetGFHealthAlpha(kind, conf)
+    local fn = GF.GetEffectiveHealthAlpha
+    if type(fn) == "function" then return fn(kind, conf) end
+    return tonumber(conf and conf.hpBarAlpha) or 1
+end
+
+local function GetGFPowerAlpha(kind, conf)
+    local fn = GF.GetEffectivePowerAlpha
+    if type(fn) == "function" then return fn(kind, conf) end
+    return 1
+end
+
+local function GetGFBackgroundAlpha(kind, conf)
+    local fn = GF.GetEffectiveBackgroundAlpha
+    if type(fn) == "function" then return fn(kind, conf) end
+    return 1
+end
+
+local function SetStatusBarTextureAlpha(bar, alpha)
+    if not bar then return end
+    if type(alpha) ~= "number" then alpha = 1 end
+    if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+    local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+    local target = tex or bar
+    if target and target.SetAlpha then target:SetAlpha(alpha) end
+end
+
+local function SetStatusBarTextureAlphaFromBoolean(bar, boolValue, activeAlpha, inactiveAlpha)
+    if not bar then return false end
+    local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+    if tex and tex.SetAlphaFromBoolean then
+        tex:SetAlphaFromBoolean(boolValue, activeAlpha, inactiveAlpha)
+        return true
+    end
+    if bar.SetAlphaFromBoolean then
+        bar:SetAlphaFromBoolean(boolValue, activeAlpha, inactiveAlpha)
+        return true
+    end
+    return false
+end
+
 local function ScaleValue(value, scale, minValue)
     if GF.ScaleValue then
         return GF.ScaleValue(value, scale or 1, minValue)
@@ -99,11 +177,16 @@ local ApplyGradient   -- forward decl (defined after ApplyBarTexture)
 local function ApplyBarTexture(f, kind)
     local tex   = GF.ResolveBarTexture(kind)
     local bgTex = GF.ResolveBarBgTexture(kind)
+    local hpTex = tex
+    local conf = GF.GetConf(kind)
+    if conf and conf.alphaPreserveHPColor == true then
+        hpTex = ResolveUnhaltedTexture() or tex
+    end
 
     if f.health and f.health.SetStatusBarTexture then
-        if f._msufGFCachedHTex ~= tex then
-            f.health:SetStatusBarTexture(tex)
-            f._msufGFCachedHTex = tex
+        if f._msufGFCachedHTex ~= hpTex then
+            f.health:SetStatusBarTexture(hpTex)
+            f._msufGFCachedHTex = hpTex
         end
     end
     if f.healthBg then
@@ -282,6 +365,9 @@ local function ApplyBackgroundTint(f, kind)
     local b = conf.bgB or 0.1
     local a = conf.bgA or 0.85
     local hpBgA = conf.hpBgAlpha or a
+    local layerA = GetGFBackgroundAlpha(kind, conf)
+    local effA = a * layerA
+    local effHpBgA = hpBgA * layerA
 
     -- Detect if any aura group uses behind-bar
     local auras = conf.auras
@@ -303,9 +389,9 @@ local function ApplyBackgroundTint(f, kind)
         local bbBg = f._msufBehindBarBg
         bbBg:SetAllPoints(f.health)
         bbBg:SetTexture(GF.ResolveBarBgTexture(kind))
-        if f._msufBBgR ~= r or f._msufBBgG ~= g or f._msufBBgB ~= b or f._msufBBgA ~= hpBgA then
-            f._msufBBgR, f._msufBBgG, f._msufBBgB, f._msufBBgA = r, g, b, hpBgA
-            bbBg:SetVertexColor(r, g, b, hpBgA)
+        if f._msufBBgR ~= r or f._msufBBgG ~= g or f._msufBBgB ~= b or f._msufBBgA ~= effHpBgA then
+            f._msufBBgR, f._msufBBgG, f._msufBBgB, f._msufBBgA = r, g, b, effHpBgA
+            bbBg:SetVertexColor(r, g, b, effHpBgA)
         end
         bbBg:Show()
         f._msufBehindBarActive = true
@@ -318,18 +404,18 @@ local function ApplyBackgroundTint(f, kind)
         end
         if f.healthBg then
             if f._msufGFCachedHBgR ~= r or f._msufGFCachedHBgG ~= g
-               or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= hpBgA then
-                f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, hpBgA
-                f.healthBg:SetVertexColor(r, g, b, hpBgA)
+               or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= effHpBgA then
+                f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, effHpBgA
+                f.healthBg:SetVertexColor(r, g, b, effHpBgA)
             end
         end
     end
 
     if f.powerBg then
         if f._msufGFCachedPBgR ~= r or f._msufGFCachedPBgG ~= g
-           or f._msufGFCachedPBgB ~= b or f._msufGFCachedPBgA ~= a then
-            f._msufGFCachedPBgR, f._msufGFCachedPBgG, f._msufGFCachedPBgB, f._msufGFCachedPBgA = r, g, b, a
-            f.powerBg:SetVertexColor(r, g, b, a)
+           or f._msufGFCachedPBgB ~= b or f._msufGFCachedPBgA ~= effA then
+            f._msufGFCachedPBgR, f._msufGFCachedPBgG, f._msufGFCachedPBgB, f._msufGFCachedPBgA = r, g, b, effA
+            f.powerBg:SetVertexColor(r, g, b, effA)
         end
     end
 end
@@ -350,7 +436,7 @@ local function ApplyFrameBorder(f, kind)
     bg:SetBackdrop(_bgOnlyBd)
     bg:SetBackdropColor(
         conf.bgR or 0.1, conf.bgG or 0.1,
-        conf.bgB or 0.1, conf.bgA or 0.85)
+        conf.bgB or 0.1, (conf.bgA or 0.85) * GetGFBackgroundAlpha(kind, conf))
 
     local bf = f._msufGFBorderFrame
     if bf then
@@ -620,6 +706,117 @@ local function ResetHealthFrameAlpha(f)
     end
 end
 
+local function HidePreserveMissingHP(f)
+    if f and f._msufGFMissingHPBg then f._msufGFMissingHPBg:Hide() end
+end
+
+local function EnsurePreserveMissingHP(f, kind)
+    local h = f and f.health
+    if not h then return nil end
+    local bg = f._msufGFMissingHPBg
+    if not bg then
+        if _G.InCombatLockdown and _G.InCombatLockdown() then return nil end
+        local CreateFrame = _G.CreateFrame
+        if type(CreateFrame) ~= "function" then return nil end
+        bg = CreateFrame("StatusBar", nil, f.barGroup or f)
+        bg:SetMinMaxValues(0, 1)
+        bg:SetValue(0)
+        bg:SetStatusBarColor(UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1)
+        bg:Hide()
+        f._msufGFMissingHPBg = bg
+    end
+
+    bg:ClearAllPoints()
+    bg:SetAllPoints(h)
+    if bg.SetFrameLevel and h.GetFrameLevel then
+        local lvl = (h:GetFrameLevel() or 1) - 1
+        if lvl < 0 then lvl = 0 end
+        bg:SetFrameLevel(lvl)
+    end
+    local tex = ResolveUnhaltedTexture() or GF.ResolveBarBgTexture(kind)
+    if tex and bg._msufGFMissingBgTex ~= tex then
+        bg:SetStatusBarTexture(tex)
+        bg._msufGFMissingBgTex = tex
+    end
+    bg:SetStatusBarColor(UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1)
+    if bg.SetReverseFill and h.GetReverseFill then
+        bg:SetReverseFill(not h:GetReverseFill())
+    end
+    return bg
+end
+
+local function SyncPreserveMissingHP(f, kind, hp, hpMax)
+    if not f or not f.health then return end
+    kind = kind or f._msufGFKind or "party"
+    local conf = GF.GetConf(kind)
+    local preserve = conf and conf.alphaPreserveHPColor == true
+    if f.healthBg and f.healthBg.SetAlpha then f.healthBg:SetAlpha(preserve and 0 or 1) end
+    if f._msufBehindBarBg and f._msufBehindBarBg.SetAlpha then f._msufBehindBarBg:SetAlpha(preserve and 0 or 1) end
+    if not preserve then
+        HidePreserveMissingHP(f)
+        return
+    end
+
+    local bg = EnsurePreserveMissingHP(f, kind)
+    if not bg then return end
+    local unit = f.unit
+    if hpMax == nil and unit and UnitHealthMax then hpMax = UnitHealthMax(unit) end
+    if hpMax == nil and f.health.GetMinMaxValues then
+        local _, mx = f.health:GetMinMaxValues()
+        hpMax = mx
+    end
+
+    local missing
+    if unit and _G.UnitHealthMissing then
+        missing = _G.UnitHealthMissing(unit, true)
+    end
+    if missing == nil then
+        if hp == nil and unit and UnitHealth then hp = UnitHealth(unit) end
+        if type(hpMax) == "number" and type(hp) == "number" then
+            missing = hpMax - hp
+            if missing < 0 then missing = 0 end
+        end
+    end
+
+    bg:SetMinMaxValues(0, hpMax or 1)
+    bg:SetValue(missing or 0)
+    bg:Show()
+end
+GF.SyncPreserveMissingHP = SyncPreserveMissingHP
+
+local function SetHealthColorAlpha(f, alpha, preserve, kind)
+    local h = f and f.health
+    if not h or not h.GetStatusBarColor or not h.SetStatusBarColor then return end
+    if type(alpha) ~= "number" then alpha = 1 end
+    if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+    if h.SetStatusBarTexture then
+        local tex
+        if preserve == true then
+            tex = ResolveUnhaltedTexture()
+        elseif kind then
+            tex = GF.ResolveBarTexture(kind)
+            h._msufGFHpColorPreserveTexture = nil
+        end
+        local fill = h.GetStatusBarTexture and h:GetStatusBarTexture()
+        local cur = fill and fill.GetTexture and fill:GetTexture()
+        if tex and cur ~= tex then
+            h:SetStatusBarTexture(tex)
+            f._msufGFCachedHTex = tex
+            h._msufGFHpColorPreserveTexture = (preserve == true) and tex or nil
+        end
+    end
+    local r, g, b = h:GetStatusBarColor()
+    h:SetStatusBarColor(r, g, b, 1)
+
+    local backing = h._msufGFHpColorBacking
+    if backing then
+        backing:Hide()
+        h._msufGFHpColorBackingR, h._msufGFHpColorBackingG, h._msufGFHpColorBackingB, h._msufGFHpColorBackingA = nil, nil, nil, nil
+    end
+    h._msufGFHpColorPreserveApplied = (preserve == true) or nil
+    SyncPreserveMissingHP(f, kind)
+end
+
 local function RestoreHealthTextLayer(f)
     local txtLayer = f and f.healthTextLayer
     if not txtLayer or not f.health then return end
@@ -639,7 +836,7 @@ end
 local function ApplyHealthBarAlpha(f, kind)
     if not f.health then return end
     local conf = GF.GetConf(kind)
-    local fgA = tonumber(conf.hpBarAlpha) or 1
+    local fgA = GetGFHealthAlpha(kind, conf)
     if fgA < 0 then fgA = 0 elseif fgA > 1 then fgA = 1 end
     local preserveHPColor = (conf.alphaPreserveHPColor == true)
 
@@ -653,8 +850,8 @@ local function ApplyHealthBarAlpha(f, kind)
     local falseMul = tonumber(f._msufGFHealthAlphaFalseMul) or 1
     if falseMul < 0 then falseMul = 0 elseif falseMul > 1 then falseMul = 1 end
     local falseA = fgA * falseMul
-    local activeA = preserveHPColor and 1 or fgA
-    local inactiveA = preserveHPColor and 1 or falseA
+    local activeA = fgA
+    local inactiveA = falseA
     local healthTex = f.health.GetStatusBarTexture and f.health:GetStatusBarTexture()
 
     if dynamic and type(boolValue) ~= "nil" and healthTex and healthTex.SetAlphaFromBoolean then
@@ -662,18 +859,22 @@ local function ApplyHealthBarAlpha(f, kind)
         f._msufCachedHpBarAlpha = nil
         f._msufCachedHpBarAlphaTarget = nil
         ResetHealthFrameAlpha(f)
+        SetHealthColorAlpha(f, fgA, preserveHPColor, kind)
         healthTex:SetAlphaFromBoolean(boolValue, activeA, inactiveA)
+        SetStatusBarTextureAlphaFromBoolean(f.absorbBar, boolValue, activeA, inactiveA)
+        SetStatusBarTextureAlphaFromBoolean(f.healAbsorbBar, boolValue, activeA, inactiveA)
+        SetStatusBarTextureAlphaFromBoolean(f.incomingHealBar, boolValue, activeA, inactiveA)
     elseif dynamic and type(boolValue) ~= "nil" and (issecretvalue and issecretvalue(boolValue)) and f.health.SetAlphaFromBoolean then
         -- Fallback for clients where statusbar textures cannot consume secret
         -- booleans directly.
         f._msufCachedHpBarAlpha = nil
         f._msufCachedHpBarAlphaTarget = nil
-        if preserveHPColor then
-            ResetHealthFrameAlpha(f)
-        else
-            f._msufGFHealthFrameAlphaOne = nil
-            f.health:SetAlphaFromBoolean(boolValue, fgA, falseA)
-        end
+        f._msufGFHealthFrameAlphaOne = nil
+        SetHealthColorAlpha(f, fgA, preserveHPColor, kind)
+        f.health:SetAlphaFromBoolean(boolValue, fgA, falseA)
+        SetStatusBarTextureAlphaFromBoolean(f.absorbBar, boolValue, activeA, inactiveA)
+        SetStatusBarTextureAlphaFromBoolean(f.healAbsorbBar, boolValue, activeA, inactiveA)
+        SetStatusBarTextureAlphaFromBoolean(f.incomingHealBar, boolValue, activeA, inactiveA)
     else
         local mul
         if dynamic then
@@ -686,9 +887,10 @@ local function ApplyHealthBarAlpha(f, kind)
             mul = tonumber(f._msufGFHealthAlphaMul) or 1
         end
         if mul < 0 then mul = 0 elseif mul > 1 then mul = 1 end
-        local targetA = preserveHPColor and 1 or (fgA * mul)
+        local targetA = fgA * mul
         local alphaTarget = healthTex or f.health
         if healthTex then ResetHealthFrameAlpha(f) else f._msufGFHealthFrameAlphaOne = nil end
+        SetHealthColorAlpha(f, targetA, preserveHPColor, kind)
         local needsApply = (f._msufCachedHpBarAlpha ~= targetA) or (f._msufCachedHpBarAlphaTarget ~= alphaTarget)
         -- SetStatusBarColor may reset the fill texture alpha without touching
         -- our cache. When HP opacity is active, re-assert the texture alpha.
@@ -700,11 +902,27 @@ local function ApplyHealthBarAlpha(f, kind)
                 alphaTarget:SetAlpha(targetA)
             end
         end
+        SetStatusBarTextureAlpha(f.absorbBar, targetA)
+        SetStatusBarTextureAlpha(f.healAbsorbBar, targetA)
+        SetStatusBarTextureAlpha(f.incomingHealBar, targetA)
         falseA = targetA
     end
     RestoreHealthTextLayer(f)
 end
 GF.ApplyHealthBarAlpha = ApplyHealthBarAlpha
+
+local function ApplyPowerBarAlpha(f, kind)
+    if not f or not f.power then return end
+    local conf = GF.GetConf(kind)
+    SetStatusBarTextureAlpha(f.power, GetGFPowerAlpha(kind, conf))
+end
+GF.ApplyPowerBarAlpha = ApplyPowerBarAlpha
+
+local function ApplyFrameAlpha(f, kind)
+    if not f or not f.SetAlpha then return end
+    f:SetAlpha(GetGFFrameAlpha(kind, GF.GetConf(kind)))
+end
+GF.ApplyFrameAlpha = ApplyFrameAlpha
 
 ------------------------------------------------------------------------
 -- Apply: text layout
@@ -1007,13 +1225,15 @@ local function ApplyVisuals(f, bits)
     end
     if band(bits, DIRTY_COLOR) ~= 0 then
         ApplyHealthColor(f, kind, f.unit)
-        ApplyHealthBarAlpha(f, kind)
         ApplyOverlayColors(f)
+        ApplyHealthBarAlpha(f, kind)
+        ApplyPowerBarAlpha(f, kind)
     end
     if band(bits, DIRTY_BORDER) ~= 0 then
         ApplyFrameBorder(f, kind)
         ApplyBackgroundTint(f, kind)
         ApplyHealthBarAlpha(f, kind)
+        ApplyPowerBarAlpha(f, kind)
         ApplyEffectBorderStyles(f, kind)
     end
     if band(bits, DIRTY_LAYOUT) ~= 0 then

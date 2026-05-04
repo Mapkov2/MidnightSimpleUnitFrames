@@ -148,6 +148,151 @@ local function _SetBarTexAlpha(sb, a)
     if t then t:SetAlpha(a) end
 end
 
+local MSUF_BETTER_BLIZZARD_TEXTURE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\BetterBlizzard.blp"
+local MSUF_UNHALTED_BG_R, MSUF_UNHALTED_BG_G, MSUF_UNHALTED_BG_B = 34/255, 34/255, 34/255
+local _alphaUnhaltedTextureChecked, _alphaUnhaltedTexture
+
+local function _AlphaResolveUnhaltedTexture()
+    if _alphaUnhaltedTextureChecked then return _alphaUnhaltedTexture end
+    _alphaUnhaltedTextureChecked = true
+
+    local LibStub = _G.LibStub
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if LSM and type(LSM.Fetch) == "function" then
+        local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", "Better Blizzard", true)
+        if ok and type(tex) == "string" and tex ~= "" then
+            _alphaUnhaltedTexture = tex
+            return _alphaUnhaltedTexture
+        end
+    end
+
+    _alphaUnhaltedTexture = MSUF_BETTER_BLIZZARD_TEXTURE
+    return _alphaUnhaltedTexture
+end
+
+_G.MSUF_Alpha_GetPreserveHPTexture = _AlphaResolveUnhaltedTexture
+
+local function _AlphaApplyPreserveTexture(sb, preserve)
+    if not sb or not sb.SetStatusBarTexture then return end
+    local tex
+    if preserve == true then
+        tex = _AlphaResolveUnhaltedTexture()
+        if not tex then return end
+    else
+        tex = (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or nil
+        sb._msufAlphaPreserveTexture = nil
+    end
+    local fill = sb.GetStatusBarTexture and sb:GetStatusBarTexture()
+    local cur = fill and fill.GetTexture and fill:GetTexture()
+    if tex and cur ~= tex then
+        sb:SetStatusBarTexture(tex)
+        sb.MSUF_cachedStatusbarTexture = tex
+        sb._msufAlphaPreserveTexture = (preserve == true) and tex or nil
+    end
+end
+
+local function _AlphaPreserveTextureMatches(sb)
+    local want = _AlphaResolveUnhaltedTexture()
+    if not want or not sb then return true end
+    local fill = sb.GetStatusBarTexture and sb:GetStatusBarTexture()
+    local cur = fill and fill.GetTexture and fill:GetTexture()
+    if cur ~= nil then return cur == want end
+    return sb._msufAlphaPreserveTexture == want
+end
+
+local function _SetBarColorAlpha(sb, a, preserve)
+    if not sb or not sb.GetStatusBarColor or not sb.SetStatusBarColor then return end
+    if type(a) ~= "number" then a = 1 end
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    _AlphaApplyPreserveTexture(sb, preserve == true)
+    local r, g, b = sb:GetStatusBarColor()
+    sb:SetStatusBarColor(r, g, b, 1)
+
+    local backing = sb._msufAlphaPreserveBacking
+    if backing then
+        backing:Hide()
+        sb._msufAlphaBackingR, sb._msufAlphaBackingG, sb._msufAlphaBackingB, sb._msufAlphaBackingA = nil, nil, nil, nil
+    end
+    sb._msufAlphaPreserveApplied = (preserve == true) or nil
+end
+
+local function _AlphaHideMissingHPBackground(frame)
+    local bg = frame and frame._msufAlphaMissingHPBg
+    if bg then bg:Hide() end
+end
+
+local function _AlphaEnsureMissingHPBackground(frame)
+    if not frame or not frame.hpBar then return nil end
+    local bg = frame._msufAlphaMissingHPBg
+    if not bg then
+        if _G.InCombatLockdown and _G.InCombatLockdown() then return nil end
+        local CreateFrame = _G.CreateFrame
+        if type(CreateFrame) ~= "function" then return nil end
+        bg = CreateFrame("StatusBar", nil, frame)
+        bg:SetMinMaxValues(0, 1)
+        bg:SetValue(0)
+        bg:SetStatusBarColor(MSUF_UNHALTED_BG_R, MSUF_UNHALTED_BG_G, MSUF_UNHALTED_BG_B, 1)
+        bg:Hide()
+        frame._msufAlphaMissingHPBg = bg
+    end
+
+    bg:ClearAllPoints()
+    bg:SetAllPoints(frame.hpBar)
+    if bg.SetFrameLevel and frame.hpBar.GetFrameLevel then
+        local lvl = (frame.hpBar:GetFrameLevel() or 1) - 1
+        if lvl < 0 then lvl = 0 end
+        bg:SetFrameLevel(lvl)
+    end
+    local tex = _AlphaResolveUnhaltedTexture()
+        or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture())
+        or "Interface\\Buttons\\WHITE8x8"
+    if bg._msufMissingBgTex ~= tex then
+        bg:SetStatusBarTexture(tex)
+        bg._msufMissingBgTex = tex
+    end
+    bg:SetStatusBarColor(MSUF_UNHALTED_BG_R, MSUF_UNHALTED_BG_G, MSUF_UNHALTED_BG_B, 1)
+    if bg.SetReverseFill and frame.hpBar.GetReverseFill then
+        bg:SetReverseFill(not frame.hpBar:GetReverseFill())
+    end
+    return bg
+end
+
+local function _AlphaSyncMissingHPBackground(frame, maxHP, hp)
+    if not frame then return end
+    if frame._msufAlphaPreserveHPColor ~= true then
+        _AlphaHideMissingHPBackground(frame)
+        return
+    end
+    local bg = _AlphaEnsureMissingHPBackground(frame)
+    if not bg then return end
+
+    local unit = frame.unit
+    if maxHP == nil and unit and _G.UnitHealthMax then
+        maxHP = _G.UnitHealthMax(unit)
+    end
+    if maxHP == nil and frame.hpBar and frame.hpBar.GetMinMaxValues then
+        local _, mx = frame.hpBar:GetMinMaxValues()
+        maxHP = mx
+    end
+
+    local missing
+    if unit and _G.UnitHealthMissing then
+        missing = _G.UnitHealthMissing(unit, true)
+    end
+    if missing == nil then
+        if hp == nil and unit and _G.UnitHealth then hp = _G.UnitHealth(unit) end
+        if type(maxHP) == "number" and type(hp) == "number" then
+            missing = maxHP - hp
+            if missing < 0 then missing = 0 end
+        end
+    end
+
+    bg:SetMinMaxValues(0, maxHP or 1)
+    bg:SetValue(missing or 0)
+    bg:Show()
+end
+_G.MSUF_Alpha_UpdatePreserveMissingHP = _AlphaSyncMissingHPBackground
+
 local function _SetGradArrayAlpha(grads, a)
     if not grads then return end
     if grads.left then grads.left:SetAlpha(a) end
@@ -187,6 +332,24 @@ local function _AlphaObjectMatches(obj, target)
     return _AlphaNearlyEqual(obj:GetAlpha() or 1, target)
 end
 
+local function _AlphaBarColorMatches(sb, target)
+    if not sb then return true end
+    if not sb.GetStatusBarColor then return true end
+    local _, _, _, a = sb:GetStatusBarColor()
+    return _AlphaNearlyEqual(a, target)
+end
+
+local function _AlphaPreservedBarColorMatches(sb, targetAlpha)
+    if not sb then return true end
+    return sb._msufAlphaPreserveApplied == true
+end
+
+local function _AlphaMissingHPBackgroundMatches(frame)
+    if not frame or frame._msufAlphaPreserveHPColor ~= true then return true end
+    local bg = frame._msufAlphaMissingHPBg
+    return bg and (not bg.IsShown or bg:IsShown()) and true or false
+end
+
 local function _AlphaGradSetMatches(grads, target)
     if not grads then return true end
     if not _AlphaObjectMatches(grads.left, target) then return false end
@@ -205,7 +368,9 @@ local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor)
     if not frame then return false end
     mode = _AlphaNormalizeLayerMode(mode)
     preserveHPColor = (preserveHPColor == true)
-    local hpAlpha = preserveHPColor and 1 or fg
+    local hpTexAlpha = fg
+    local hpColorAlpha = 1
+    local hpBgAlpha = preserveHPColor and 0 or bg
     local powerAlpha = (mode == "health") and 1 or fg
 
     local hpTex = _GetBarTexture(frame.hpBar)
@@ -221,14 +386,18 @@ local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor)
     local healAbsorbTex = _GetBarTexture(frame.healAbsorbBar)
     if frame.healAbsorbBar and not healAbsorbTex then return false end
 
-    return _AlphaObjectMatches(hpTex, hpAlpha)
+    return _AlphaObjectMatches(hpTex, hpTexAlpha)
+        and _AlphaBarColorMatches(frame.hpBar, hpColorAlpha)
+        and ((not preserveHPColor) or _AlphaPreservedBarColorMatches(frame.hpBar, fg))
+        and ((not preserveHPColor) or _AlphaPreserveTextureMatches(frame.hpBar))
+        and ((not preserveHPColor) or _AlphaMissingHPBackgroundMatches(frame))
         and _AlphaObjectMatches(powerTex, powerAlpha)
         and _AlphaObjectMatches(absorbTex, fg)
         and _AlphaObjectMatches(healAbsorbTex, fg)
-        and _AlphaObjectMatches(frame.hpBarBG, bg)
+        and _AlphaObjectMatches(frame.hpBarBG, hpBgAlpha)
         and _AlphaObjectMatches(frame.powerBarBG, bg)
         and _AlphaObjectMatches(frame.bg, bg)
-        and _AlphaGradSetMatches(frame.hpGradients, hpAlpha)
+        and _AlphaGradSetMatches(frame.hpGradients, fg)
         and _AlphaGradSetMatches(frame.powerGradients, powerAlpha)
 end
 
@@ -310,6 +479,8 @@ local function MSUF_Alpha_ResetLayered(frame)
     if frame.SetAlpha then
         frame:SetAlpha(unitAlpha)
     end
+    _SetBarColorAlpha(frame.hpBar, 1, false)
+    _AlphaHideMissingHPBackground(frame)
     _SetBarTexAlpha(frame.hpBar, 1)
     _SetBarTexAlpha(frame.targetPowerBar or frame.powerBar, 1)
     _SetBarTexAlpha(frame.absorbBar, 1)
@@ -364,16 +535,25 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
         end
     end
 
-    _SetTexAlpha(frame.hpBarBG, bg)
+    _SetTexAlpha(frame.hpBarBG, preserveHPColor and 0 or bg)
     _SetTexAlpha(frame.powerBarBG, bg)
     _SetTexAlpha(frame.bg, bg)
-    local hpAlpha = preserveHPColor and 1 or fg
-    _SetBarTexAlpha(frame.hpBar, hpAlpha)
+    if preserveHPColor then
+        -- Match Unhalted: transparent HP fill over the world, with only missing
+        -- health rendered as a dark reverse-fill background.
+        _SetBarColorAlpha(frame.hpBar, fg, true)
+        _SetBarTexAlpha(frame.hpBar, fg)
+        _AlphaSyncMissingHPBackground(frame)
+    else
+        _SetBarColorAlpha(frame.hpBar, 1, false)
+        _AlphaHideMissingHPBackground(frame)
+        _SetBarTexAlpha(frame.hpBar, fg)
+    end
     local powerAlpha = (mode == "health") and 1 or fg
     _SetBarTexAlpha(frame.targetPowerBar or frame.powerBar, powerAlpha)
     _SetBarTexAlpha(frame.absorbBar, fg)
     _SetBarTexAlpha(frame.healAbsorbBar, fg)
-    _SetGradArrayAlpha(frame.hpGradients, hpAlpha)
+    _SetGradArrayAlpha(frame.hpGradients, fg)
     _SetGradArrayAlpha(frame.powerGradients, powerAlpha)
     _SetTexAlpha(frame.portrait, 1)
     local nt = frame.nameText;  if nt then nt:SetAlpha(1) end

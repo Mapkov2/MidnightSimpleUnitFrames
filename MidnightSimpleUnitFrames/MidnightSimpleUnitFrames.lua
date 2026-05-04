@@ -748,6 +748,10 @@ end
 function ns.Bars.ResetHealthAndOverlays(frame, clearAbsorbs)
     if not frame then  return end
     MSUF_ResetBarZero(frame.hpBar)
+    local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
+    if type(syncMissing) == "function" then
+        syncMissing(frame, 1, 1)
+    end
     if frame.selfHealPredBar then
         MSUF_ResetBarZero(frame.selfHealPredBar, true)
     end

@@ -25,3 +25,4 @@ pcall(LSM.Register, LSM, "statusbar", "MSUF Slickrock",  baseBars .. "Slickrock.
 pcall(LSM.Register, LSM, "statusbar", "MSUF Smooth",     baseBars .. "MSUF_Smooth.tga")
 pcall(LSM.Register, LSM, "statusbar", "MSUF Smooth v2",  baseBars .. "Smoothv2.tga")
 pcall(LSM.Register, LSM, "statusbar", "MSUF Smoother",   baseBars .. "smoother.tga")
+pcall(LSM.Register, LSM, "statusbar", "Better Blizzard", baseBars .. "BetterBlizzard.blp")

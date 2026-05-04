@@ -3203,7 +3203,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             anchor = bgLbl, anchorPoint = "TOPLEFT", x = 320, y = -56,
             label = TR("Preserve HP color"),
             maxTextWidth = 220,
-            tooltip = TR("Keeps the health fill fully colored while layered transparency fades other parts."),
+            tooltip = TR("On: HP stays transparent and missing health is dark like Unhalted. Off: normal background transparency is used."),
             get = function(k) return GF.Val(k, "alphaPreserveHPColor") == true end,
             set = function(k, v)
                 GF.GetConf(k).alphaPreserveHPColor = v
@@ -3233,6 +3233,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             set = function(k, v) GF.GetConf(k).hpBgAlpha = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
             formatText = function(v) return string.format("HP Background: %.0f%%", v * 100) end,
         })
+
     end
 
     ----------------------------------------------------------------

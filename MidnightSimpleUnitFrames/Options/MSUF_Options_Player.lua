@@ -1178,7 +1178,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if not GameTooltip then return end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR("Preserve HP color"), 1, 1, 1)
-            GameTooltip:AddLine(TR("Keeps the health fill fully colored while layered transparency fades other parts."), 0.85, 0.85, 0.85, true)
+            GameTooltip:AddLine(TR("On: HP stays transparent and missing health is dark like Unhalted. Off: normal background transparency is used."), 0.85, 0.85, 0.85, true)
             GameTooltip:Show()
         end)
         alphaPreserveHPCB:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
