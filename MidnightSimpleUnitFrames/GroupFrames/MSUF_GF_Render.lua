@@ -641,6 +641,7 @@ local function ApplyHealthBarAlpha(f, kind)
     local conf = GF.GetConf(kind)
     local fgA = tonumber(conf.hpBarAlpha) or 1
     if fgA < 0 then fgA = 0 elseif fgA > 1 then fgA = 1 end
+    local preserveHPColor = (conf.alphaPreserveHPColor == true)
 
     local dynamic = (f._msufGFHealthAlphaDynamic == true)
     if f._msufSIHealthColorR then
@@ -652,6 +653,8 @@ local function ApplyHealthBarAlpha(f, kind)
     local falseMul = tonumber(f._msufGFHealthAlphaFalseMul) or 1
     if falseMul < 0 then falseMul = 0 elseif falseMul > 1 then falseMul = 1 end
     local falseA = fgA * falseMul
+    local activeA = preserveHPColor and 1 or fgA
+    local inactiveA = preserveHPColor and 1 or falseA
     local healthTex = f.health.GetStatusBarTexture and f.health:GetStatusBarTexture()
 
     if dynamic and type(boolValue) ~= "nil" and healthTex and healthTex.SetAlphaFromBoolean then
@@ -659,14 +662,18 @@ local function ApplyHealthBarAlpha(f, kind)
         f._msufCachedHpBarAlpha = nil
         f._msufCachedHpBarAlphaTarget = nil
         ResetHealthFrameAlpha(f)
-        healthTex:SetAlphaFromBoolean(boolValue, fgA, falseA)
+        healthTex:SetAlphaFromBoolean(boolValue, activeA, inactiveA)
     elseif dynamic and type(boolValue) ~= "nil" and (issecretvalue and issecretvalue(boolValue)) and f.health.SetAlphaFromBoolean then
         -- Fallback for clients where statusbar textures cannot consume secret
         -- booleans directly.
         f._msufCachedHpBarAlpha = nil
         f._msufCachedHpBarAlphaTarget = nil
-        f._msufGFHealthFrameAlphaOne = nil
-        f.health:SetAlphaFromBoolean(boolValue, fgA, falseA)
+        if preserveHPColor then
+            ResetHealthFrameAlpha(f)
+        else
+            f._msufGFHealthFrameAlphaOne = nil
+            f.health:SetAlphaFromBoolean(boolValue, fgA, falseA)
+        end
     else
         local mul
         if dynamic then
@@ -679,7 +686,7 @@ local function ApplyHealthBarAlpha(f, kind)
             mul = tonumber(f._msufGFHealthAlphaMul) or 1
         end
         if mul < 0 then mul = 0 elseif mul > 1 then mul = 1 end
-        local targetA = fgA * mul
+        local targetA = preserveHPColor and 1 or (fgA * mul)
         local alphaTarget = healthTex or f.health
         if healthTex then ResetHealthFrameAlpha(f) else f._msufGFHealthFrameAlphaOne = nil end
         local needsApply = (f._msufCachedHpBarAlpha ~= targetA) or (f._msufCachedHpBarAlphaTarget ~= alphaTarget)

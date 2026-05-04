@@ -477,9 +477,9 @@ function _G.MSUF_EnsureGFPanelBuilt()
                    "fontR", "fontG", "fontB" } },
         { key = "border",     label = "Background & Opacity",
           keys = { "bgR", "bgG", "bgB", "bgA",
-                   "hpBarAlpha", "hpBgAlpha", "hpTextIgnoreAlpha" } },
+                   "hpBarAlpha", "hpBgAlpha", "hpTextIgnoreAlpha", "alphaPreserveHPColor" } },
         { key = "range",      label = "Range Fade",
-          keys = { "rangeFadeEnabled", "rangeFadeAlpha", "rangeFadeLayerMode", "offlineAlpha" } },
+          keys = { "rangeFadeEnabled", "rangeFadeAlpha", "rangeFadeLayerMode", "offlineAlpha", "alphaPreserveHPColor" } },
         { key = "indicators", label = "Indicators & Status Icons",
           keys = { "showGroupNumber", "groupNumberSize", "groupNumberAnchor",
                    "groupNumberX", "groupNumberY",
@@ -3196,6 +3196,20 @@ function _G.MSUF_EnsureGFPanelBuilt()
             get = function(k) return GF.Val(k, "hpBarAlpha") or 1 end,
             set = function(k, v) GF.GetConf(k).hpBarAlpha = v; GF.MarkAllDirty(GF.DIRTY_COLOR) end,
             formatText = function(v) return string.format("HP Bar Foreground: %.0f%%", v * 100) end,
+        })
+
+        SCheck({
+            name = "MSUF_GF_PreserveHPColorCheck", parent = body,
+            anchor = bgLbl, anchorPoint = "TOPLEFT", x = 320, y = -56,
+            label = TR("Preserve HP color"),
+            maxTextWidth = 220,
+            tooltip = TR("Keeps the health fill fully colored while layered transparency fades other parts."),
+            get = function(k) return GF.Val(k, "alphaPreserveHPColor") == true end,
+            set = function(k, v)
+                GF.GetConf(k).alphaPreserveHPColor = v
+                GF.MarkAllDirty(GF.DIRTY_COLOR)
+                if GF.RefreshRangeFade then GF.RefreshRangeFade() else GF.RefreshVisuals() end
+            end,
         })
 
         -- Text ignores foreground opacity (stays full alpha when bar is transparent)
