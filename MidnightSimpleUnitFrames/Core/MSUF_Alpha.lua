@@ -142,6 +142,23 @@ local function _SetTexAlpha(tex, a)
     if tex then tex:SetAlpha(a) end
 end
 
+local function _AlphaShouldRangeFadePortrait()
+    local db = MSUF_DB
+    local g = db and db.general
+    return (g and g.rangeFadePortrait == true) and true or false
+end
+
+local function _AlphaSetPortraitAlpha(frame, a)
+    if not frame then return end
+    a = tonumber(a) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    local p = frame.portrait
+    if p and p.SetAlpha then p:SetAlpha(a) end
+    p = frame.portrait3D or frame.portrait3d or frame.portraitModel or frame.portraitModelFrame
+        or frame.portrait3DModel or frame.portrait3DFrame or frame.modelPortrait or frame.model3D
+    if p and p.SetAlpha then p:SetAlpha(a) end
+end
+
 local function _SetBarTexAlpha(sb, a)
     if not sb then return end
     local t = sb.GetStatusBarTexture and sb:GetStatusBarTexture()
@@ -257,7 +274,7 @@ local function _AlphaEnsureMissingHPBackground(frame)
     return bg
 end
 
-local function _AlphaSyncMissingHPBackground(frame, maxHP, hp)
+local function _AlphaSyncMissingHPBackground(frame, maxHP, hp, alpha)
     if not frame then return end
     if frame._msufAlphaPreserveHPColor ~= true then
         _AlphaHideMissingHPBackground(frame)
@@ -265,6 +282,11 @@ local function _AlphaSyncMissingHPBackground(frame, maxHP, hp)
     end
     local bg = _AlphaEnsureMissingHPBackground(frame)
     if not bg then return end
+
+    alpha = tonumber(alpha)
+    if alpha == nil then alpha = tonumber(frame._msufAlphaMissingHPAlpha) or 1 end
+    if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+    frame._msufAlphaMissingHPAlpha = alpha
 
     local unit = frame.unit
     if maxHP == nil and unit and _G.UnitHealthMax then
@@ -289,6 +311,8 @@ local function _AlphaSyncMissingHPBackground(frame, maxHP, hp)
 
     bg:SetMinMaxValues(0, maxHP or 1)
     bg:SetValue(missing or 0)
+    if bg.SetAlpha then bg:SetAlpha(alpha) end
+    bg:SetStatusBarColor(MSUF_UNHALTED_BG_R, MSUF_UNHALTED_BG_G, MSUF_UNHALTED_BG_B, 1)
     bg:Show()
 end
 _G.MSUF_Alpha_UpdatePreserveMissingHP = _AlphaSyncMissingHPBackground
@@ -332,6 +356,14 @@ local function _AlphaObjectMatches(obj, target)
     return _AlphaNearlyEqual(obj:GetAlpha() or 1, target)
 end
 
+local function _AlphaPortraitMatches(frame, target)
+    if not frame then return true end
+    if not _AlphaObjectMatches(frame.portrait, target) then return false end
+    local p = frame.portrait3D or frame.portrait3d or frame.portraitModel or frame.portraitModelFrame
+        or frame.portrait3DModel or frame.portrait3DFrame or frame.modelPortrait or frame.model3D
+    return _AlphaObjectMatches(p, target)
+end
+
 local function _AlphaBarColorMatches(sb, target)
     if not sb then return true end
     if not sb.GetStatusBarColor then return true end
@@ -344,10 +376,14 @@ local function _AlphaPreservedBarColorMatches(sb, targetAlpha)
     return sb._msufAlphaPreserveApplied == true
 end
 
-local function _AlphaMissingHPBackgroundMatches(frame)
+local function _AlphaMissingHPBackgroundMatches(frame, targetAlpha)
     if not frame or frame._msufAlphaPreserveHPColor ~= true then return true end
     local bg = frame._msufAlphaMissingHPBg
-    return bg and (not bg.IsShown or bg:IsShown()) and true or false
+    if not bg or (bg.IsShown and not bg:IsShown()) then return false end
+    if type(targetAlpha) ~= "number" then
+        targetAlpha = tonumber(frame._msufAlphaMissingHPAlpha) or 1
+    end
+    return _AlphaObjectMatches(bg, targetAlpha)
 end
 
 local function _AlphaGradSetMatches(grads, target)
@@ -364,10 +400,11 @@ local function _AlphaGradSetMatches(grads, target)
     return true
 end
 
-local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor)
+local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor, portraitAlpha)
     if not frame then return false end
     mode = _AlphaNormalizeLayerMode(mode)
     preserveHPColor = (preserveHPColor == true)
+    portraitAlpha = tonumber(portraitAlpha) or 1
     local hpTexAlpha = fg
     local hpColorAlpha = 1
     local hpBgAlpha = preserveHPColor and 0 or bg
@@ -390,7 +427,7 @@ local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor)
         and _AlphaBarColorMatches(frame.hpBar, hpColorAlpha)
         and ((not preserveHPColor) or _AlphaPreservedBarColorMatches(frame.hpBar, fg))
         and ((not preserveHPColor) or _AlphaPreserveTextureMatches(frame.hpBar))
-        and ((not preserveHPColor) or _AlphaMissingHPBackgroundMatches(frame))
+        and ((not preserveHPColor) or _AlphaMissingHPBackgroundMatches(frame, fg))
         and _AlphaObjectMatches(powerTex, powerAlpha)
         and _AlphaObjectMatches(absorbTex, fg)
         and _AlphaObjectMatches(healAbsorbTex, fg)
@@ -399,6 +436,7 @@ local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor)
         and _AlphaObjectMatches(frame.bg, bg)
         and _AlphaGradSetMatches(frame.hpGradients, fg)
         and _AlphaGradSetMatches(frame.powerGradients, powerAlpha)
+        and _AlphaPortraitMatches(frame, portraitAlpha)
 end
 
 local function MSUF_Alpha_UseLiteRuntime()
@@ -493,6 +531,7 @@ local function MSUF_Alpha_ResetLayered(frame)
     frame._msufAlphaUnitAlpha = nil
     frame._msufAlphaLastFG = nil
     frame._msufAlphaLastBG = nil
+    frame._msufAlphaMissingHPAlpha = nil
     if frame.SetAlpha then
         frame:SetAlpha(unitAlpha)
     end
@@ -507,26 +546,28 @@ local function MSUF_Alpha_ResetLayered(frame)
     _SetTexAlpha(frame.bg, 1)
     _SetGradArrayAlpha(frame.hpGradients, 1)
     _SetGradArrayAlpha(frame.powerGradients, 1)
-    _SetTexAlpha(frame.portrait, 1)
+    _AlphaSetPortraitAlpha(frame, 1)
     MSUF_Alpha_SetTextAlpha(frame, 1)
 end
 
-local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHPColor)
+local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHPColor, portraitAlpha)
     if not frame then return end
     mode = _AlphaNormalizeLayerMode(mode)
     preserveHPColor = (preserveHPColor == true)
+    portraitAlpha = tonumber(portraitAlpha) or 1
 
     local fg = type(alphaFG) == "number" and alphaFG or 1
     local bg = type(alphaBG) == "number" and alphaBG or 1
     if fg < 0 then fg = 0 elseif fg > 1 then fg = 1 end
     if bg < 0 then bg = 0 elseif bg > 1 then bg = 1 end
+    if portraitAlpha < 0 then portraitAlpha = 0 elseif portraitAlpha > 1 then portraitAlpha = 1 end
 
     if frame._msufAlphaLayeredMode and frame._msufAlphaLayerMode == mode and frame._msufAlphaPreserveHPColor == preserveHPColor then
         local lastFG = frame._msufAlphaLastFG or 1
         local lastBG = frame._msufAlphaLastBG or 1
         local dfg = lastFG - fg; if dfg < 0 then dfg = -dfg end
         local dbg = lastBG - bg; if dbg < 0 then dbg = -dbg end
-        if dfg <= 0.001 and dbg <= 0.001 and _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor) then
+        if dfg <= 0.001 and dbg <= 0.001 and _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor, portraitAlpha) then
             return
         end
     end
@@ -556,10 +597,12 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     if preserveHPColor then
         -- Match Unhalted: transparent HP fill over the world, with only missing
         -- health rendered as a dark reverse-fill background.
+        frame._msufAlphaMissingHPAlpha = fg
         _SetBarColorAlpha(frame.hpBar, fg, true)
         _SetBarTexAlpha(frame.hpBar, fg)
-        _AlphaSyncMissingHPBackground(frame)
+        _AlphaSyncMissingHPBackground(frame, nil, nil, fg)
     else
+        frame._msufAlphaMissingHPAlpha = nil
         _SetBarColorAlpha(frame.hpBar, 1, false)
         _AlphaHideMissingHPBackground(frame)
         _SetBarTexAlpha(frame.hpBar, fg)
@@ -570,7 +613,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     _SetBarTexAlpha(frame.healAbsorbBar, fg)
     _SetGradArrayAlpha(frame.hpGradients, fg)
     _SetGradArrayAlpha(frame.powerGradients, powerAlpha)
-    _SetTexAlpha(frame.portrait, 1)
+    _AlphaSetPortraitAlpha(frame, portraitAlpha)
     MSUF_Alpha_SetTextAlpha(frame, 1)
 end
 
@@ -716,21 +759,22 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         frame._msufAlphaBaseLayerMode = layerMode
         frame._msufAlphaBasePreserveHPColor = preserveHPColor
 
-        local textAlpha = 1
+        local rangeMul = 1
         local rfT = _rfMulTable
         if rfT then
             local m = rfT[key] or rfT[unit]
             if m and m < 1 then
                 if m < 0 then m = 0 end
                 if m > 1 then m = 1 end
-                textAlpha = m
+                rangeMul = m
                 alphaFG = alphaFG * m
                 alphaBG = alphaBG * m
             end
         end
 
-        MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode, preserveHPColor)
-        MSUF_Alpha_SetTextAlpha(frame, textAlpha)
+        MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode, preserveHPColor,
+            _AlphaShouldRangeFadePortrait() and rangeMul or 1)
+        MSUF_Alpha_SetTextAlpha(frame, rangeMul)
         if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
             frame:SetAlpha(0.35)
         end
@@ -814,7 +858,8 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
         if type(fg) ~= "number" or type(bg) ~= "number" or mode == nil then
             return false
         end
-        MSUF_Alpha_ApplyLayered(frame, fg * m, bg * m, mode, preserveHPColor)
+        MSUF_Alpha_ApplyLayered(frame, fg * m, bg * m, mode, preserveHPColor,
+            _AlphaShouldRangeFadePortrait() and m or 1)
         MSUF_Alpha_SetTextAlpha(frame, m)
         return true
     end
