@@ -552,6 +552,32 @@ do
         end
     end
 
+    local function MSUF_Tooltip_SetNudgeTarget(handle)
+        if not handle or not _G.MSUF_EM2_SetPreviewNudgeTarget then return end
+        _G.MSUF_EM2_SetPreviewNudgeTarget({
+            frame = handle,
+            IsActive = function()
+                local p = handle:GetParent()
+                return tooltipEditPreviewActive and handle:IsShown() and p and p.IsShown and p:IsShown()
+            end,
+            Nudge = function(_, dx, dy)
+                local p = handle:GetParent()
+                if not p then return end
+                if type(EnsureDB) == "function" then EnsureDB() end
+                local g = MSUF_DB and MSUF_DB.general
+                if not g then return end
+                local left = tonumber(g.tooltipPosX)
+                local bottom = tonumber(g.tooltipPosY)
+                if left == nil then left = p:GetLeft() or 0 end
+                if bottom == nil then bottom = p:GetBottom() or 0 end
+                g.tooltipPosX = math.floor(left + (dx or 0) + 0.5)
+                g.tooltipPosY = math.floor(bottom + (dy or 0) + 0.5)
+                p:ClearAllPoints()
+                p:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", g.tooltipPosX, g.tooltipPosY)
+            end,
+        })
+    end
+
     -- ---- reset helper (called from Options / slash) ------------------------
     local function MSUF_Tooltip_ResetPosition()
         if type(EnsureDB) == "function" then EnsureDB() end
@@ -587,12 +613,13 @@ do
 
         local label = dh:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         label:SetPoint("TOP", dh, "TOP", 0, -2)
-        label:SetText("Drag to reposition")
+        label:SetText("Drag or arrow keys to reposition")
         label:SetTextColor(0.4, 0.8, 1.0, 0.9)
         dh._label = label
 
         dh:SetScript("OnDragStart", function(self)
             if InCombatLockdown and InCombatLockdown() then return end
+            MSUF_Tooltip_SetNudgeTarget(self)
             local p = self:GetParent()
             if p then
                 p:SetMovable(true)
@@ -607,6 +634,12 @@ do
             p:StopMovingOrSizing()
             p:SetMovable(false)
             MSUF_Tooltip_SavePosition(p)
+        end)
+
+        dh:SetScript("OnMouseDown", function(self, button)
+            if button == "LeftButton" then
+                MSUF_Tooltip_SetNudgeTarget(self)
+            end
         end)
 
         dh:Hide()

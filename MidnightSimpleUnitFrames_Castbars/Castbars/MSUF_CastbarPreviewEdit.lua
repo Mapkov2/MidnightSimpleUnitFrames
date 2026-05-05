@@ -153,6 +153,56 @@ local function MSUF_PulseCastbarPreview(kind)
     ScheduleStop(MSUF_PREVIEW_PULSE_SECONDS)
 end
 
+local function MSUF_SetCastbarPreviewNudgeTarget(frame, kind, cfg)
+    if not frame or not kind or not cfg then return end
+    if not _G.MSUF_EM2_SetPreviewNudgeTarget then return end
+
+    _G.MSUF_EM2_SetPreviewNudgeTarget({
+        frame = frame,
+        IsActive = function()
+            return MSUF_UnitEditModeActive and frame.IsShown and frame:IsShown()
+        end,
+        Nudge = function(_, dx, dy)
+            if not MSUF_UnitEditModeActive then return end
+            if InCombatLockdown and InCombatLockdown() then return end
+            if type(EnsureDB) == "function" then EnsureDB() end
+            local g = MSUF_DB and MSUF_DB.general
+            if not g then return end
+            if _G.MSUF_EM_UndoBeforeChange then
+                _G.MSUF_EM_UndoBeforeChange("castbar", kind, true)
+            end
+            local defX = cfg.defaultXFrom and MSUF_GetFirstNonNil(g, cfg.defaultXFrom, cfg.defaultX) or cfg.defaultX
+            local defY = cfg.defaultYFrom and MSUF_GetFirstNonNil(g, cfg.defaultYFrom, cfg.defaultY) or cfg.defaultY
+            g[cfg.offsetXKey] = math.floor(((tonumber(g[cfg.offsetXKey]) or defX or 0) + (dx or 0)) + 0.5)
+            g[cfg.offsetYKey] = math.floor(((tonumber(g[cfg.offsetYKey]) or defY or 0) + (dy or 0)) + 0.5)
+
+            if kind == "boss" then
+                local sx = _G["MSUF_CastbarBossXOffsetSlider"]
+                local sy = _G["MSUF_CastbarBossYOffsetSlider"]
+                if sx and type(MSUF_ClampToSlider) == "function" then g[cfg.offsetXKey] = MSUF_ClampToSlider(sx, tonumber(g[cfg.offsetXKey]) or 0) end
+                if sy and type(MSUF_ClampToSlider) == "function" then g[cfg.offsetYKey] = MSUF_ClampToSlider(sy, tonumber(g[cfg.offsetYKey]) or 0) end
+            end
+
+            if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+                _G.MSUF_ApplyCastbarUnitAndSync(kind)
+            else
+                local rf = cfg.reanchorFunc and _G[cfg.reanchorFunc]
+                if type(rf) == "function" then rf() end
+                if type(MSUF_UpdateCastbarVisuals) == "function" then MSUF_UpdateCastbarVisuals() end
+                if kind == "boss" and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                    _G.MSUF_UpdateBossCastbarPreview()
+                end
+                if type(MSUF_SyncCastbarPositionPopup) == "function" then
+                    MSUF_SyncCastbarPositionPopup(kind)
+                end
+            end
+            if type(MSUF_UpdateCastbarEditInfo) == "function" then
+                MSUF_UpdateCastbarEditInfo(kind)
+            end
+        end,
+    })
+end
+
 function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
     if not frame or frame.MSUF_PreviewEditHandlersSetup then return end
     frame.MSUF_PreviewEditHandlersSetup = true
@@ -163,6 +213,9 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
     frame:EnableMouse(true)
 
     frame:SetScript("OnMouseDown", function(self, button)
+        if MSUF_UnitEditModeActive then
+            MSUF_SetCastbarPreviewNudgeTarget(self, kind, cfg)
+        end
         if button == "RightButton" then
             if not MSUF_UnitEditModeActive then return end
             if MSUF_EditModeSizing then return end
