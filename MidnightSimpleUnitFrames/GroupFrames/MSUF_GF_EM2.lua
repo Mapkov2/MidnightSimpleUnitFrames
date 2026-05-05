@@ -23,6 +23,7 @@ local GetTime = GetTime
 local type = type
 local ipairs = ipairs
 local math_max = math.max
+local math_floor = math.floor
 
 ------------------------------------------------------------------------
 -- Real config
@@ -62,6 +63,7 @@ local KIND_TO_KEY = {
 local _containers = {}
 local _em2Active = false
 local _previewShownByEM2 = true
+local HideHeaders
 
 local function GetDefaultCenter(kind)
     return IsRaidLikeKind(kind) and -500 or -400, 0
@@ -168,12 +170,48 @@ local function OpenPreviewPopup(kind, anchor)
     local key = KIND_TO_KEY[kind]
     if not key then return end
     if EM2.State then EM2.State.SetUnitKey(key) end
+    if _G.MSUF_GF_EM2_SetPreviewNudgeTarget then _G.MSUF_GF_EM2_SetPreviewNudgeTarget(kind, anchor) end
     if EM2.HUD and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
     if EM2.Popups and EM2.Popups.Open then
         EM2.Popups.Open(key, anchor)
     elseif _G.MSUF_EM2_ShowGFPopup then
         _G.MSUF_EM2_ShowGFPopup(kind)
     end
+end
+
+function _G.MSUF_GF_EM2_SetPreviewNudgeTarget(kind, source)
+    local key = KIND_TO_KEY[kind]
+    if not key then return end
+    if EM2.State then EM2.State.SetUnitKey(key) end
+    if not _G.MSUF_EM2_SetPreviewNudgeTarget then return end
+
+    _G.MSUF_EM2_SetPreviewNudgeTarget({
+        frame = source or EnsureContainer(kind),
+        IsActive = function()
+            return _em2Active and _previewShownByEM2 and IsPreviewActive(kind)
+        end,
+        Nudge = function(_, dx, dy)
+            if InCombatLockdown and InCombatLockdown() then return end
+            local gf = ns.GF; if not gf then return end
+            local conf = gf.GetConf and gf.GetConf(kind)
+            if not conf then return end
+            local defX, defY = GetDefaultCenter(kind)
+            if _G.MSUF_EM_UndoBeforeChange then
+                _G.MSUF_EM_UndoBeforeChange("unit", key, true)
+            end
+            conf.offsetX = math_floor(((tonumber(conf.offsetX) or defX) + (dx or 0)) + 0.5)
+            conf.offsetY = math_floor(((tonumber(conf.offsetY) or defY) + (dy or 0)) + 0.5)
+            SyncContainer(kind)
+            if _previewShownByEM2 and gf.RefreshPreviewLayout then
+                gf.RefreshPreviewLayout(kind)
+                HideHeaders()
+            end
+            if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+            if EM2.UnitPopup and EM2.UnitPopup.IsOpen and EM2.UnitPopup.IsOpen() and EM2.UnitPopup.Sync then
+                EM2.UnitPopup.Sync()
+            end
+        end,
+    })
 end
 
 local function BeginPreviewDrag(kind)
@@ -183,6 +221,7 @@ local function BeginPreviewDrag(kind)
     local key = KIND_TO_KEY[kind]
     local cfg = key and Reg.Get(key)
     if not key or not cfg then return false end
+    if _G.MSUF_GF_EM2_SetPreviewNudgeTarget then _G.MSUF_GF_EM2_SetPreviewNudgeTarget(kind) end
 
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     local mover = EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
@@ -252,7 +291,7 @@ end
 ------------------------------------------------------------------------
 -- Header hiding
 ------------------------------------------------------------------------
-local function HideHeaders()
+function HideHeaders()
     if InCombatLockdown() then return end
     local gf = ns.GF; if not gf or not gf.headers then return end
     if gf.headers.party then gf.headers.party:Hide() end

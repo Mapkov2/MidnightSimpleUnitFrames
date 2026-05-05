@@ -15,6 +15,8 @@ local CreateFrame   = _G.CreateFrame
 local GetCursorPosition = _G.GetCursorPosition
 local UnitExists    = _G.UnitExists
 local IsShiftKeyDown = _G.IsShiftKeyDown
+local IsControlKeyDown = _G.IsControlKeyDown
+local GetCurrentKeyBoardFocus = _G.GetCurrentKeyBoardFocus
 local pairs         = pairs
 local ipairs        = ipairs
 local type          = type
@@ -177,10 +179,54 @@ local STATUS_ICON_SPECS = {
 local function UpdateCoordDisplay(key, anchor, offX, offY)
     if not _coordLabel then return end
     if not key then
-        _coordLabel:SetText("Click a handle to select \194\183 drag to reposition")
+        _coordLabel:SetText("Click a handle to select \194\183 drag or arrow keys to move")
     else
         _coordLabel:SetText((key or "?") .. "   anchor: " .. (anchor or "?") .. "   x: " .. (offX or 0) .. "   y: " .. (offY or 0))
     end
+end
+
+local function GetCurrentHandleAnchor(handle)
+    local anchor
+    if handle and handle._getCurrentAnchor then
+        anchor = handle:_getCurrentAnchor()
+    end
+    if anchor and AF[anchor] then return anchor end
+
+    if handle and handle.GetPoint then
+        local point, _, relPoint = handle:GetPoint(1)
+        if point and AF[point] then return point end
+        if relPoint and AF[relPoint] then return relPoint end
+    end
+    return "CENTER"
+end
+
+local function PreviewToConfigOffset(offX, offY)
+    local sc = _mockFrame and _mockFrame._previewScale or 1
+    if sc == 0 then sc = 1 end
+    return floor(((offX or 0) / sc) + 0.5), floor(((offY or 0) / sc) + 0.5)
+end
+
+local function ConfigToPreviewOffset(cfgX, cfgY)
+    local sc = _mockFrame and _mockFrame._previewScale or 1
+    if sc == 0 then sc = 1 end
+    return floor(((cfgX or 0) * sc) + 0.5), floor(((cfgY or 0) * sc) + 0.5)
+end
+
+local function GetHandlePosition(handle)
+    if not handle or not _mockFrame then return nil end
+    local anchorFrame = GetHandleAnchorFrame(handle) or _mockFrame
+    local anchor = GetCurrentHandleAnchor(handle)
+    local offX, offY = CalcOffset(handle, anchorFrame, anchor)
+    local cfgX, cfgY = PreviewToConfigOffset(offX, offY)
+    return anchorFrame, anchor, offX, offY, cfgX, cfgY
+end
+
+local function RefreshSelectedCoordDisplay()
+    if not _selected or not _selected.IsShown or not _selected:IsShown() then return false end
+    local _, anchor, _, _, cfgX, cfgY = GetHandlePosition(_selected)
+    if not anchor then return false end
+    UpdateCoordDisplay(_selected._cfgKey, anchor, cfgX, cfgY)
+    return true
 end
 
 ------------------------------------------------------------------------
@@ -226,16 +272,17 @@ local function ApplyLayerVisibility()
     end
 end
 
-local function SelectHandle(handle)
+local function SelectHandle(handle, skipSectionOpen)
     if _selected and _selected ~= handle and _selected._selBorder then
         _selected._selBorder:Hide()
     end
     _selected = handle
     if handle then
         if handle._selBorder then handle._selBorder:Show() end
-        if handle._sectionKey and _onSectionOpen then
+        if not skipSectionOpen and handle._sectionKey and _onSectionOpen then
             _onSectionOpen(handle._sectionKey)
         end
+        RefreshSelectedCoordDisplay()
     end
     -- While solo-highlight is active, solo owns alpha — don't fight it
     -- from the selection dim-cascade. ApplyLayerVisibility has already
@@ -252,6 +299,40 @@ local function SelectHandle(handle)
     for _, h in pairs(_siHandles) do
         if h ~= handle then h:SetAlpha(dimAlpha) else h:SetAlpha(1) end
     end
+end
+
+local function GetNudgeStep()
+    if IsControlKeyDown and IsControlKeyDown() then return 10 end
+    if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
+    return 1
+end
+
+local function IsTextInputFocused()
+    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    return focus and focus.IsObjectType and focus:IsObjectType("EditBox")
+end
+
+local function NudgeSelectedHandle(dx, dy)
+    local h = _selected
+    if not h or not h.IsShown or not h:IsShown() or not h._onDragFinish then return false end
+    if not _mockFrame then return false end
+
+    local anchorFrame, anchor, _, _, cfgX, cfgY = GetHandlePosition(h)
+    if not anchorFrame or not anchor then return false end
+
+    local step = GetNudgeStep()
+    local newCfgX = (cfgX or 0) + dx * step
+    local newCfgY = (cfgY or 0) + dy * step
+    local newOffX, newOffY = ConfigToPreviewOffset(newCfgX, newCfgY)
+
+    h:ClearAllPoints()
+    h:SetPoint(anchor, anchorFrame, anchor, newOffX, newOffY)
+    h._onDragFinish(anchor, newOffX, newOffY)
+
+    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
+    SelectHandle(h, true)
+    UpdateCoordDisplay(h._cfgKey, anchor, newCfgX, newCfgY)
+    return true
 end
 
 ------------------------------------------------------------------------
@@ -317,9 +398,9 @@ do
         -- If handle has a fixed anchor from config, keep it; otherwise resolve from position
         local anchor
         if self._getCurrentAnchor then
-            anchor = self._getCurrentAnchor()
+            anchor = self:_getCurrentAnchor()
         end
-        if not anchor then
+        if not anchor or not AF[anchor] then
             anchor = ResolveAnchor(rx, ry)
         end
         local offX, offY = CalcOffset(self, anchorFrame, anchor)
@@ -327,7 +408,8 @@ do
         self:ClearAllPoints()
         self:SetPoint(anchor, anchorFrame, anchor, offX, offY)
 
-        UpdateCoordDisplay(self._cfgKey, anchor, offX, offY)
+        local cfgX, cfgY = PreviewToConfigOffset(offX, offY)
+        UpdateCoordDisplay(self._cfgKey, anchor, cfgX, cfgY)
 
         if self._onDragFinish then
             self._onDragFinish(anchor, offX, offY)
@@ -380,7 +462,7 @@ local function CreateHandle(parent, key, sectionKey, w, h, colorKey)
             if self._sectionKey then
                 GameTooltip:AddLine("Section: " .. self._sectionKey, 0.5, 0.5, 0.6)
             end
-            GameTooltip:AddLine("Drag to reposition", 0.4, 0.4, 0.5)
+            GameTooltip:AddLine("Drag to reposition. Arrow keys nudge by 1.", 0.4, 0.4, 0.5)
             GameTooltip:Show()
         end
     end)
@@ -2134,6 +2216,11 @@ function GF.RefreshPreviewHandles()
     -- the section-focus logic above so solo-highlight mode behaves
     -- consistently after a rebuild.
     ApplyLayerVisibility()
+    if _selected and _selected.IsShown and _selected:IsShown() then
+        SelectHandle(_selected, true)
+    else
+        RefreshSelectedCoordDisplay()
+    end
 end
 
 ------------------------------------------------------------------------
@@ -2200,7 +2287,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     local hint = headerBar:CreateFontString(nil, "OVERLAY")
     hint:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
     hint:SetPoint("LEFT", hdr, "RIGHT", 8, 0)
-    hint:SetText("click to configure \194\183 drag to move")
+    hint:SetText("click to configure \194\183 drag or arrows to move")
     hint:SetTextColor(0.32, 0.32, 0.40, 0.5)
 
     -- Header separator
@@ -2497,8 +2584,39 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     coord:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
     coord:SetPoint("LEFT", statusBar, "LEFT", 10, 0)
     coord:SetTextColor(0.38, 0.40, 0.50, 0.6)
-    coord:SetText("Click a handle to select \194\183 drag to reposition")
+    coord:SetText("Click a handle to select \194\183 drag or arrow keys to move")
     _coordLabel = coord
+
+    container:EnableKeyboard(true)
+    if container.SetPropagateKeyboardInput then container:SetPropagateKeyboardInput(true) end
+    container:SetScript("OnKeyDown", function(self, key)
+        local dx, dy = 0, 0
+        if key == "LEFT" then
+            dx = -1
+        elseif key == "RIGHT" then
+            dx = 1
+        elseif key == "UP" then
+            dy = 1
+        elseif key == "DOWN" then
+            dy = -1
+        else
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            return
+        end
+
+        if IsTextInputFocused() then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            return
+        end
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+        if not NudgeSelectedHandle(dx, dy) then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+        end
+    end)
+    container:SetScript("OnHide", function(self)
+        SelectHandle(nil)
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
 
     -- Initial refresh
     GF.RefreshPreviewBox()
@@ -2522,13 +2640,9 @@ function GF._PreviewSelectStatusIcon(iconKey)
     if not iconKey then return end
     local h = _statusHandles[iconKey]
     if not h then return end
-    -- Select without triggering section open
-    if _selected and _selected ~= h and _selected._selBorder then
-        _selected._selBorder:Hide()
-    end
-    _selected = h
-    if h._selBorder then h._selBorder:Show() end
-    UpdateCoordDisplay("sicons", iconKey, nil, nil)
+    -- Select without triggering section open.
+    SelectHandle(h, true)
+    RefreshSelectedCoordDisplay()
 end
 
 ------------------------------------------------------------------------

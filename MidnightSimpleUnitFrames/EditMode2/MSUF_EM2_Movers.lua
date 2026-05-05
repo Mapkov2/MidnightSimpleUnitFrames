@@ -105,6 +105,7 @@ local function CreateMover(key, cfg)
     -- Drag → delegate to Ticker
     mover:SetScript("OnDragStart", function(self)
         if InCombatLockdown and InCombatLockdown() then return end
+        if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         self._dragging = true
         self._coordFS:Show()
 
@@ -134,6 +135,7 @@ local function CreateMover(key, cfg)
     -- Click → popup
     mover:SetScript("OnClick", function(self, button)
         if button ~= "LeftButton" then return end
+        if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         if EM2.State then EM2.State.SetUnitKey(key) end
         if EM2.HUD then EM2.HUD.RefreshUnitSelector() end
         if EM2.Popups and EM2.Popups.Open then EM2.Popups.Open(key, self) end
