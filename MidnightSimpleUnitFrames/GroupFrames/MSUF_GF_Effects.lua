@@ -4268,9 +4268,26 @@ local function OnEnter(f)
         if _tooltipTarget ~= f then return end
         if not f.unit or not UnitExists(f.unit) then return end
         if _G.GameTooltip and not _G.GameTooltip:IsForbidden() then
-            _G.GameTooltip:SetOwner(f, "ANCHOR_RIGHT")
-            _G.GameTooltip:SetUnit(f.unit)
-            _G.GameTooltip:Show()
+            local gt = _G.GameTooltip
+            local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+            if g.disableUnitInfoTooltips then
+                if (g.unitInfoTooltipStyle or "classic") == "modern" then
+                    gt:SetOwner(_G.UIParent, "ANCHOR_CURSOR", 0, -100)
+                else
+                    gt:SetOwner(_G.UIParent, "ANCHOR_NONE")
+                    gt:ClearAllPoints()
+                    local cx, cy = g.tooltipPosX, g.tooltipPosY
+                    if type(cx) == "number" and type(cy) == "number" then
+                        gt:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", cx, cy)
+                    else
+                        gt:SetPoint("BOTTOMRIGHT", _G.UIParent, "BOTTOMRIGHT", -16, 16)
+                    end
+                end
+            else
+                gt:SetOwner(f, "ANCHOR_RIGHT")
+            end
+            gt:SetUnit(f.unit)
+            gt:Show()
         end
     end)
 end
