@@ -177,6 +177,10 @@ local function EnsureSpecConfig(siCfg, specKey)
     return specCfg
 end
 
+function SI.EnsureSpecConfig(siCfg, specKey)
+    return EnsureSpecConfig(siCfg, specKey)
+end
+
 ------------------------------------------------------------------------
 -- Scan: player-cast auras by C-side filter, optional all-caster fallback
 ------------------------------------------------------------------------
