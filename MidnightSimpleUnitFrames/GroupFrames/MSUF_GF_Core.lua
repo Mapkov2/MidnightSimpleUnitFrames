@@ -1348,7 +1348,7 @@ local function ScanHeaderChildren(header, kind, force)
                     GF._pendingRebuild = true
                     break
                 end
-                GF_InitButton(child, kind)
+                _G.MSUF_GF_InitButton(child, kind)
             end
             child._msufGFKind = kind
             child.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ("gf_" .. tostring(kind))
