@@ -432,10 +432,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                     if bk == "shared" then
                         GameTooltip:AddLine(TR("Shared baseline used by units without overrides."), 0.72, 0.78, 0.88, true)
                     elseif IsGFScope(bk) then
-                        local tip = GetScopeUnitHasOverride(bk) and TR("Override active: Group Frames use their own highlight settings.") or TR("Uses Shared highlight settings.")
+                        local tip = GetScopeUnitHasOverride(bk) and TR("Override active: Group Frames use their own Bars settings.") or TR("Uses Shared Bars settings.")
                         GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
                         if bk == "raid" then GameTooltip:AddLine(TR("Raid scope also applies to Mythic Raid."), 0.55, 0.70, 0.95, true) end
-                        GameTooltip:AddLine(TR("Only Outline & Highlight Border applies to Group Frames."), 0.55, 0.60, 0.72, true)
+                        GameTooltip:AddLine(TR("Absorb display/opacity and highlight settings apply to Group Frames."), 0.55, 0.60, 0.72, true)
                     else
                         local tip = GetScopeUnitHasOverride(bk) and TR("Override active: this unit uses its own Bars/Text settings.") or TR("Uses Shared settings.")
                         GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
@@ -599,7 +599,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     barsGFHint:SetPoint("TOPLEFT", scopeBar, "BOTTOMLEFT", 4, -6)
     barsGFHint:SetWidth(600)
     barsGFHint:SetJustifyH("LEFT")
-    barsGFHint:SetText("Group Frames inherit these textures by default. In this panel, Raid also applies to Mythic Raid.")
+    barsGFHint:SetText("Group Frames inherit Shared by default. Party/Raid overrides apply to absorb display/opacity and highlights; textures stay Shared. Raid also applies to Mythic Raid.")
     barsGFHint:SetTextColor(0.50, 0.60, 0.75)
 
     -- BOX 1: Textures & Gradient (default open)
@@ -720,12 +720,15 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end
     local function ApplyAbsorbOpacity()
         if _G.MSUF_InvalidateAbsorbCache then _G.MSUF_InvalidateAbsorbCache() end
-        if _G.MSUF_UnitFrames then
-            for _, f in pairs(_G.MSUF_UnitFrames) do
-                if f and not f._msufIsGroupFrame then f._msufAbsorbDirty = true; f._msufHealAbsorbDirty = true end
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        if not IsGFScope(scopeKey) then
+            if _G.MSUF_UFCore_NotifyConfigChanged then
+                local notifyKey = (scopeKey ~= "shared" and scopeKey ~= "boss") and scopeKey or nil
+                _G.MSUF_UFCore_NotifyConfigChanged(notifyKey, true, true, "AbsorbOpacity")
+            else
+                RefreshFrames()
             end
         end
-        RefreshFrames()
         -- Refresh GF: synchronous full refresh (per-GF opacity + preview data)
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
         if GF and GF.RefreshVisuals then GF.RefreshVisuals()
