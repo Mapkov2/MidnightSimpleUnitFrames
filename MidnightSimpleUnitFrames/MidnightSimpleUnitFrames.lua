@@ -1076,9 +1076,12 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
     MSUF_LSM_FontCallbackRegistered = true
     LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
         if mediatype ~= "font" then  return end
+        if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
+            _G.MSUF_ClearResolvedFontPathCache()
+        end
         if MSUF_RebuildFontChoices then
             MSUF_RebuildFontChoices()
-    end
+        end
         local _g = MSUF_DB and MSUF_DB.general
         local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
         local registeredKey = normalizeFontKey(key)
@@ -1102,24 +1105,24 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
 end
 local FONT_LIST = {
     {
-        key  = "Friz Quadrata TT",
+        key  = "FRIZQT",
         name = "Friz Quadrata (default)",
         path = "Fonts\\FRIZQT__.TTF",
     },
 {
-        key  = "Arial Narrow",
+        key  = "ARIALN",
         name = "Arial (default)",
         path = "Fonts\\ARIALN.TTF",
     },
     {
-        key  = "Morpheus",
+        key  = "MORPHEUS",
         name = "Morpheus (default)",
-        path = "Fonts\\MORPHEUS_CYR.TTF",
+        path = "Fonts\\MORPHEUS.TTF",
     },
     {
-        key  = "Skurri",
+        key  = "SKURRI",
         name = "Skurri (default)",
-        path = "Fonts\\SKURRI_CYR.TTF",
+        path = "Fonts\\SKURRI.TTF",
     },
 }
 do
@@ -1154,14 +1157,14 @@ do
 end
 _G.MSUF_FONT_LIST = _G.MSUF_FONT_LIST or FONT_LIST
 local MSUF_INTERNAL_LSM_FONT_KEYS = {
-    FRIZQT   = "Friz Quadrata TT",
-    ARIALN   = "Arial Narrow",
-    MORPHEUS = "Morpheus",
-    SKURRI   = "Skurri",
-    ["Friz Quadrata (default)"] = "Friz Quadrata TT",
-    ["Arial (default)"]         = "Arial Narrow",
-    ["Morpheus (default)"]      = "Morpheus",
-    ["Skurri (default)"]        = "Skurri",
+    ["Friz Quadrata TT"]        = "FRIZQT",
+    ["Arial Narrow"]            = "ARIALN",
+    ["Morpheus"]                = "MORPHEUS",
+    ["Skurri"]                  = "SKURRI",
+    ["Friz Quadrata (default)"] = "FRIZQT",
+    ["Arial (default)"]         = "ARIALN",
+    ["Morpheus (default)"]      = "MORPHEUS",
+    ["Skurri (default)"]        = "SKURRI",
 }
 
 local function MSUF_NormalizeFontKey(key)
@@ -1363,7 +1366,7 @@ local function MSUF_FetchFontPathFromLSM(key)
         if type(p) == "string" and p ~= "" then return p end
     end
 
-    if type(lsm.Fetch) == "function" and not (type(lsm.GetGlobal) == "function" and lsm:GetGlobal("font")) then
+    if type(lsm.Fetch) == "function" then
         p = lsm:Fetch("font", lsmKey, true)
         if type(p) == "string" and p ~= "" then return p end
         if lsmKey ~= key then
@@ -1371,6 +1374,7 @@ local function MSUF_FetchFontPathFromLSM(key)
             if type(p) == "string" and p ~= "" then return p end
         end
     end
+
     return nil
 end
 
@@ -4423,9 +4427,15 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
     -- Content-based: only call SetFont when path/flags (serial) or size actually changed
     local rev = S.pathSerial * 10 + (_MSUF_FONT_FLAGS_CODE[S.flags] or 1) + size * 10000030
     if fs._msufFontRev ~= rev then
-        fs:SetFont(S.path, size, S.flags)
-        fs._msufFontRev = rev
-        fs._msufShadowOn = nil
+        local ok, applied = pcall(fs.SetFont, fs, S.path, size, S.flags)
+        if not ok then
+            local fallback = _G.MSUF_ResolveFontPath and _G.MSUF_ResolveFontPath("Fonts\\FRIZQT__.TTF", size, S.flags) or "Fonts\\FRIZQT__.TTF"
+            ok, applied = pcall(fs.SetFont, fs, fallback, size, S.flags)
+        end
+        if ok then
+            fs._msufFontRev = rev
+            fs._msufShadowOn = nil
+        end
     end
     if setColor then
         local crev = cr * 1000000 + cg * 1000 + cb

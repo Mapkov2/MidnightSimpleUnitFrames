@@ -75,9 +75,18 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         gf_party = { "gf_party" },
         gf_raid = { "gf_raid", "gf_mythicraid" },
     }
+    local function ClearUFFontKeyOverrides()
+        EnsureDB()
+        for _, k in ipairs(ALL_UNITS) do
+            local u = MSUF_DB[k]
+            if type(u) == "table" then
+                u.fontKey = nil
+            end
+        end
+    end
 
     local FONT_OVERRIDE_KEYS = {
-        "fontKey", "boldText", "noOutline", "textBackdrop",
+        "boldText", "noOutline", "textBackdrop",
         "nameClassColor", "npcNameRed", "colorPowerTextByType",
         "shortenNameMaxChars", "shortenNameClipSide", "shortenNameFrontMaskPx", "shortenNameShowDots",
     }
@@ -616,10 +625,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                     end
                 end
             end
-            local used = {}; for _, e in ipairs(fontChoices) do used[e.key] = true end
+            local used = {}; for _, e in ipairs(fontChoices) do used[normalizeFontKey(e.key)] = true end
             local names = LSM:List("font"); table.sort(names)
             for _, name in ipairs(names) do
-                if not used[name] then fontChoices[#fontChoices + 1] = { key = name, label = name }; used[name] = true end
+                local normalizedName = normalizeFontKey(name)
+                if not used[normalizedName] then fontChoices[#fontChoices + 1] = { key = name, label = name }; used[normalizedName] = true end
             end
         end
     end
@@ -633,14 +643,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         items = function()
             if #fontChoices == 0 then RebuildFontChoices() end
             local getFP = _G.MSUF_GetFontPreviewObject
-            local getPath = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
             local out = {}
             for i = 1, #fontChoices do
                 local c = fontChoices[i]
                 out[i] = {
                     key = c.key,
                     label = c.label,
-                    fontPath = type(getPath) == "function" and getPath(c.key) or c.path,
                     fontObject = type(getFP) == "function" and getFP(c.key) or nil,
                 }
             end
@@ -648,14 +656,21 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
         get = function()
             local normalizeFontKey = _G.MSUF_NormalizeFontKey or (ns and ns.MSUF_NormalizeFontKey) or function(key) return key end
-            return normalizeFontKey(ScopeGet("fontKey", "FRIZQT"))
+            return normalizeFontKey(G().fontKey or "FRIZQT")
         end,
         set = function(v)
             local normalizeFontKey = _G.MSUF_NormalizeFontKey or (ns and ns.MSUF_NormalizeFontKey) or function(key) return key end
-            v = normalizeFontKey(v)
-            ScopeSet("fontKey", v)
-            UpdateFonts()
-            if C_Timer and C_Timer.After then C_Timer.After(0, UpdateFonts) end
+            G().fontKey = normalizeFontKey(v)
+            ClearUFFontKeyOverrides()
+            if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then
+                _G.MSUF_NormalizeStoredFontKeys()
+            end
+            InvalidateTextSpecs()
+            LiveSyncFontVisuals({ layout = "FONT_GLOBAL" })
+            if C_Timer and C_Timer.After then C_Timer.After(0, function()
+                InvalidateTextSpecs()
+                LiveSyncFontVisuals({ layout = "FONT_GLOBAL_DEFERRED" })
+            end) end
         end,
     })
 
@@ -664,11 +679,26 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         name = "MSUF_GF_FontDrop", parent = fontBody,
         anchor = fontBody, anchorPoint = "TOPLEFT", x = 14, y = -8, width = 300,
         items = function()
+            local normalizeFontKey = _G.MSUF_NormalizeFontKey or (ns and ns.MSUF_NormalizeFontKey) or function(key) return key end
             local items = { { key = "", label = "(Global Default)" } }
+            local used = { [""] = true }
+            for _, info in ipairs(_G.MSUF_FONT_LIST or _G.FONT_LIST or {}) do
+                local key = normalizeFontKey(info.key)
+                if not used[key] then
+                    items[#items + 1] = { key = key, label = info.name or key }
+                    used[key] = true
+                end
+            end
             local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
             if LSM then
                 local list = LSM:List("font")
-                for i = 1, #list do items[#items + 1] = { key = list[i], label = list[i] } end
+                for i = 1, #list do
+                    local key = normalizeFontKey(list[i])
+                    if not used[key] then
+                        items[#items + 1] = { key = list[i], label = list[i] }
+                        used[key] = true
+                    end
+                end
             end
             return items
         end,
@@ -686,7 +716,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     _gfRefreshFns[#_gfRefreshFns + 1] = function() if gfFontDrop and gfFontDrop.Refresh then gfFontDrop:Refresh() end end
 
     -- Widget visibility tracking
-    local _ufOnlyWidgets = { fontDrop }
+    local _ufOnlyWidgets = {}
     local _gfOnlyWidgets = { gfFontDrop }
 
     -- =====================================================================
@@ -1383,6 +1413,13 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             if w and w.SetShown then w:SetShown(gfScope)
             elseif w and w.Show then if gfScope then w:Show() else w:Hide() end end
         end
+        if fontDrop then
+            if fontDrop.SetShown then
+                fontDrop:SetShown(not gfScope)
+            elseif fontDrop.Show then
+                if gfScope then fontDrop:Hide() else fontDrop:Show() end
+            end
+        end
 
         -- Text Sizes: scope-aware for UF, hidden for GF
         if RefreshSizeScopeUI then
@@ -1422,7 +1459,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         local function ApplyFontScopeEnabled()
             SetWidgetListEnabled(_ufOnlyWidgets, (not gfScope) and fontControlsActive)
             SetWidgetListEnabled(_gfOnlyWidgets, gfScope and fontControlsActive)
-            SetBoxTitleEnabled(fontBox, fontControlsActive)
+            if fontDrop then SetWidgetEnabled(fontDrop, not gfScope) end
+            SetBoxTitleEnabled(fontBox, (not gfScope) or fontControlsActive)
             SetBoxTitleEnabled(styleBox, fontControlsActive)
             SetBoxTitleEnabled(colorsBox, fontControlsActive)
             SetBoxTitleEnabled(sizeBox, not gfScope)

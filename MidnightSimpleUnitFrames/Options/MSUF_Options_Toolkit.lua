@@ -824,33 +824,10 @@ local function DD_Populate(owner)
         btn._label:SetTextColor(DD_TEXT[1], DD_TEXT[2], DD_TEXT[3])
         btn._label:SetText(itemLabel)
         -- Per-item font preview (e.g. font dropdown shows each font in its own typeface)
-        local appliedFont = false
-        if item.fontPath and btn._label.SetFont then
-            local ok, result = pcall(btn._label.SetFont, btn._label, item.fontPath, item.fontSize or 14, item.fontFlags or "")
-            appliedFont = ok and result ~= false
-            if appliedFont and btn._label.GetFont and type(_G.MSUF_FontPathMatches) == "function" then
-                local actual = btn._label:GetFont()
-                appliedFont = _G.MSUF_FontPathMatches(item.fontPath, actual)
-            end
-        end
-        if (not appliedFont) and item.fontObject then
-            if item.fontObject.GetFont and btn._label.SetFont then
-                local fp, fs, ff = item.fontObject:GetFont()
-                if fp then
-                    local ok, result = pcall(btn._label.SetFont, btn._label, fp, item.fontSize or fs or 14, item.fontFlags or ff or "")
-                    appliedFont = ok and result ~= false
-                    if appliedFont and btn._label.GetFont and type(_G.MSUF_FontPathMatches) == "function" then
-                        local actual = btn._label:GetFont()
-                        appliedFont = _G.MSUF_FontPathMatches(fp, actual)
-                    end
-                end
-            end
-            if (not appliedFont) and not item.fontPath and btn._label.SetFontObject then
-                btn._label:SetFontObject(item.fontObject)
-                appliedFont = true
-            end
-        end
-        if (not appliedFont) and btn._fontOverridden and btn._label.SetFontObject then
+        local appliedFont = item.fontObject ~= nil
+        if item.fontObject and btn._label.SetFontObject then
+            btn._label:SetFontObject(item.fontObject)
+        elseif btn._fontOverridden and btn._label.SetFontObject then
             btn._label:SetFontObject(GameFontHighlight)
         end
         btn._fontOverridden = appliedFont

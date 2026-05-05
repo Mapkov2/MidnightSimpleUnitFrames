@@ -9,8 +9,6 @@ do
     local FONT_ALIASES = {
         ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
         ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway regular.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
-        ["fonts\\morpheus.ttf"] = "Fonts\\MORPHEUS_CYR.TTF",
-        ["fonts\\skurri.ttf"] = "Fonts\\SKURRI_CYR.TTF",
     }
     local _probeFrame, _probeFS
     local _fontPathCache = {}
@@ -36,16 +34,6 @@ do
         if type(path) ~= "string" or path == "" then return nil end
         return path:gsub("/", "\\"):lower()
     end
-
-    local TRUSTED_GAME_FONTS = {
-        ["fonts\\frizqt__.ttf"] = true,
-        ["fonts\\frizqt___cyr.ttf"] = true,
-        ["fonts\\arialn.ttf"] = true,
-        ["fonts\\morpheus.ttf"] = true,
-        ["fonts\\morpheus_cyr.ttf"] = true,
-        ["fonts\\skurri.ttf"] = true,
-        ["fonts\\skurri_cyr.ttf"] = true,
-    }
 
     local FONT_EQUIV = {
         ["fonts\\frizqt__.ttf"] = "friz",
@@ -80,13 +68,7 @@ do
 
     local function TrySetFont(fs, path, size, flags)
         if not (fs and type(fs.SetFont) == "function" and path and size) then return false end
-        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
-        if not ok or applied == false then return false end
-        if type(fs.GetFont) == "function" then
-            local actual = fs:GetFont()
-            return FontPathMatches(path, actual)
-        end
-        return true
+        return pcall(fs.SetFont, fs, path, size, flags)
     end
 
     function _G.MSUF_NormalizeFontFlags(flags)
@@ -101,15 +83,18 @@ do
         return FontPathMatches(requested, actual)
     end
 
+    function _G.MSUF_ClearResolvedFontPathCache()
+        for k in pairs(_fontPathCache) do
+            _fontPathCache[k] = nil
+        end
+    end
+
     function _G.MSUF_ResolveFontPath(path, size, flags)
         size = tonumber(size) or 12
         if size <= 0 then size = 12 end
         flags = NormalizeFontFlags(flags)
 
         local normalized = NormalizeFontPath(path)
-        if TRUSTED_GAME_FONTS[FontPathKey(normalized)] then
-            return normalized
-        end
         local cacheKey = tostring(normalized or "") .. "|" .. tostring(flags)
         local cached = _fontPathCache[cacheKey]
         if cached then return cached end
@@ -122,8 +107,21 @@ do
             seen[p] = true
             candidates[#candidates + 1] = p
         end
+        local function AddGameFontAlternates(p)
+            local key = FontPathKey(p)
+            if key == "fonts\\morpheus.ttf" then
+                Add("Fonts\\MORPHEUS_CYR.TTF")
+            elseif key == "fonts\\morpheus_cyr.ttf" then
+                Add("Fonts\\MORPHEUS.TTF")
+            elseif key == "fonts\\skurri.ttf" then
+                Add("Fonts\\SKURRI_CYR.TTF")
+            elseif key == "fonts\\skurri_cyr.ttf" then
+                Add("Fonts\\SKURRI.TTF")
+            end
+        end
 
         Add(normalized)
+        AddGameFontAlternates(normalized)
         Add(FALLBACK_FONT)
         Add("Fonts\\ARIALN.TTF")
         Add(STANDARD_TEXT_FONT)
@@ -139,7 +137,7 @@ do
             end
         end
 
-        local fallback = NormalizeFontPath(STANDARD_TEXT_FONT) or FALLBACK_FONT
+        local fallback = NormalizeFontPath(FALLBACK_FONT)
         _fontPathCache[cacheKey] = fallback
         return fallback
     end
@@ -181,6 +179,9 @@ local function EnsureLSMCallbacks()
 
     LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
         if mediatype == "font" then
+            if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
+                _G.MSUF_ClearResolvedFontPathCache()
+            end
             if _G.MSUF_RebuildFontChoices then
                 _G.MSUF_RebuildFontChoices()
             end
