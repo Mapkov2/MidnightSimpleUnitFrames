@@ -3096,7 +3096,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     local coord = statusBar:CreateFontString(nil, "OVERLAY")
     coord:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
     coord:SetPoint("LEFT", statusBar, "LEFT", 10, 0)
-    coord:SetTextColor(0.38, 0.40, 0.50, 0.6)
+    coord:SetTextColor(1, 0.82, 0, 0.9)
     coord:SetText("Click a handle to select \194\183 drag or arrow keys to move")
     _coordLabel = coord
 

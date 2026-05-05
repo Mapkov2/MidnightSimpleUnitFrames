@@ -2296,7 +2296,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 2: Health Colors (GF-independent bar mode)
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(200, "Health Colors", false, "hcolor")
+        local box, body = AddSection(120, "Health Colors", false, "hcolor")
 
         local modeLbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         modeLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
@@ -2400,28 +2400,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         _allRefreshFns[#_allRefreshFns + 1] = RefreshColorControls
         RefreshColorControls()
-
-        -- Background color (quick access — full controls in Layout > Background)
-        local bgSep = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        bgSep:SetPoint("TOPLEFT", gfModeDd, "BOTTOMLEFT", 16, -42)
-        bgSep:SetText(TR("Background")); bgSep:SetTextColor(1, 0.82, 0)
-
-        local bgLbl2 = MakeColorSwatch(body, bgSep, "BOTTOMLEFT", 0, -8,
-            "Background Color",
-            function() return V("bgR"), V("bgG"), V("bgB") end,
-            function(r, g, b)
-                local c = C(); c.bgR = r; c.bgG = g; c.bgB = b
-                GF.MarkAllDirty(GF.DIRTY_BORDER)
-            end)
-
-        SSlider({
-            name = "MSUF_GF_HColor_BgAlpha", parent = body, compact = true,
-            anchor = bgLbl2, x = 0, y = -20,
-            min = 0, max = 1, step = 0.05, width = 270, default = 0.85,
-            get = function(k) return GF.Val(k, "bgA") end,
-            set = function(k, v) GF.GetConf(k).bgA = v; GF.MarkAllDirty(GF.DIRTY_BORDER) end,
-            formatText = function(v) return string.format("Background Alpha: %.0f%%", v * 100) end,
-        })
     end
 
     ----------------------------------------------------------------
