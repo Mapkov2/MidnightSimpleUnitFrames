@@ -1,7 +1,7 @@
 -- MSUF_GF_AuraPreview.lua — Group Frames: Drag-to-Position Preview Box
 -- Renders a live mock frame in the GF options panel with draggable handles
--- for aura groups (buff/debuff/externals), spell indicators, status icons,
--- and private auras. All colors, textures, fonts sync live from the active
+-- for aura groups (buff/debuff/externals), text, spell indicators, status
+-- icons, and private auras. All colors, textures, fonts sync live from the active
 -- config. Drag resolves nearest anchor + x/y offset, writes to DB.
 -- Midnight 12.0, cold-path only, zero combat overhead.
 local _, ns = ...
@@ -63,6 +63,12 @@ local _visToggles = { buff = true, debuff = true, externals = true, blizzard = t
 local _soloKey = nil
 local _SOLO_DIM = 0.15
 
+local function ShouldShowTextPreview()
+    local focus = GF._previewFocus
+    local userTextOn = (_visToggles.text == true) or (_soloKey == "text")
+    return userTextOn or (not focus) or focus == "text" or focus == "overlay"
+end
+
 ------------------------------------------------------------------------
 -- Anchor fraction table: x from left (0-1), y from bottom (0-1)
 ------------------------------------------------------------------------
@@ -117,9 +123,10 @@ end
 ------------------------------------------------------------------------
 local _box                 -- outer container
 local _mockFrame           -- the visual mock group-frame
-local _handles      = {}   -- [key] = handle frame
-local _siHandles    = {}   -- [spellName] = handle frame (SI pool)
+local _handles       = {}  -- [key] = handle frame
+local _siHandles     = {}  -- [spellName] = handle frame (SI pool)
 local _statusHandles = {}  -- [iconKey] = handle frame
+local _textHandles   = {}  -- name / health / power text handles
 local _selected            -- currently selected handle
 local _getKind             -- fn() → "party" | "raid"
 local _coordLabel          -- FontString for coord display
@@ -159,6 +166,7 @@ local HANDLE_COLORS = {
     si        = { 0.69, 0.50, 0.88 },
     status    = { 0.80, 0.67, 0.20 },
     private   = { 0.50, 0.50, 0.50 },
+    text      = { 0.55, 0.78, 0.95 },
 }
 
 local NATIVE_AURA_HANDLE_TYPES = {
@@ -287,12 +295,28 @@ local function ConfigToPreviewOffset(cfgX, cfgY)
            LiveToPreviewValue(ScaleFrameValue(cfgY or 0, frameScale))
 end
 
+local function GetHandlePreviewAdjust(handle)
+    return (handle and handle._previewOffsetAdjustX) or 0,
+           (handle and handle._previewOffsetAdjustY) or 0
+end
+
+local function PreviewToHandleConfigOffset(handle, offX, offY)
+    local adjX, adjY = GetHandlePreviewAdjust(handle)
+    return PreviewToConfigOffset((offX or 0) - adjX, (offY or 0) - adjY)
+end
+
+local function ConfigToHandlePreviewOffset(handle, cfgX, cfgY)
+    local offX, offY = ConfigToPreviewOffset(cfgX, cfgY)
+    local adjX, adjY = GetHandlePreviewAdjust(handle)
+    return offX + adjX, offY + adjY
+end
+
 local function GetHandlePosition(handle)
     if not handle or not _mockFrame then return nil end
     local anchorFrame = GetHandleAnchorFrame(handle) or _mockFrame
     local anchor = GetCurrentHandleAnchor(handle)
     local offX, offY = CalcOffset(handle, anchorFrame, anchor)
-    local cfgX, cfgY = PreviewToConfigOffset(offX, offY)
+    local cfgX, cfgY = PreviewToHandleConfigOffset(handle, offX, offY)
     return anchorFrame, anchor, offX, offY, cfgX, cfgY
 end
 
@@ -326,6 +350,8 @@ local function ForEachLayerHandle(key, fn)
     elseif key == "private" then
         local h = _handles.private
         if h then fn(h) end
+    elseif key == "text" then
+        for _, th in pairs(_textHandles) do fn(th) end
     end
 end
 
@@ -337,7 +363,7 @@ end
 -- handle-selection dim-cascade in SelectHandle is active, which composes
 -- with this by early-returning in solo mode).
 local function ApplyLayerVisibility()
-    local KEYS = { "buff", "debuff", "externals", "blizzard", "status", "si", "private" }
+    local KEYS = { "buff", "debuff", "externals", "blizzard", "status", "si", "private", "text" }
     for i = 1, #KEYS do
         local k = KEYS[i]
         local alpha = 1
@@ -377,6 +403,9 @@ local function SelectHandle(handle, skipSectionOpen)
     for _, h in pairs(_siHandles) do
         if h ~= handle then h:SetAlpha(dimAlpha) else h:SetAlpha(1) end
     end
+    for _, h in pairs(_textHandles) do
+        if h ~= handle then h:SetAlpha(dimAlpha) else h:SetAlpha(1) end
+    end
 end
 
 local function GetNudgeStep()
@@ -401,7 +430,7 @@ local function NudgeSelectedHandle(dx, dy)
     local step = GetNudgeStep()
     local newCfgX = (cfgX or 0) + dx * step
     local newCfgY = (cfgY or 0) + dy * step
-    local newOffX, newOffY = ConfigToPreviewOffset(newCfgX, newCfgY)
+    local newOffX, newOffY = ConfigToHandlePreviewOffset(h, newCfgX, newCfgY)
 
     h:ClearAllPoints()
     h:SetPoint(anchor, anchorFrame, anchor, newOffX, newOffY)
@@ -486,7 +515,7 @@ do
         self:ClearAllPoints()
         self:SetPoint(anchor, anchorFrame, anchor, offX, offY)
 
-        local cfgX, cfgY = PreviewToConfigOffset(offX, offY)
+        local cfgX, cfgY = PreviewToHandleConfigOffset(self, offX, offY)
         UpdateCoordDisplay(self._cfgKey, anchor, cfgX, cfgY)
 
         if self._onDragFinish then
@@ -840,6 +869,12 @@ local function BuildMockFrame(parent)
     return f
 end
 
+local function NormalizeTextAnchor(anchor)
+    if anchor == "RIGHT" or anchor == "TOPRIGHT" or anchor == "BOTTOMRIGHT" then return "RIGHT" end
+    if anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM" then return "CENTER" end
+    return "LEFT"
+end
+
 ------------------------------------------------------------------------
 -- Refresh mock frame visuals from config (colors, textures, fonts, size)
 ------------------------------------------------------------------------
@@ -1038,12 +1073,18 @@ function GF.RefreshPreviewBox()
         local fr, fg, fb = GF.ResolveFontColor(kind)
         local cls   = PREVIEW_CLASSES[_classIdx] or "WARRIOR"
         local nr, ng, nb = GF.ResolveNameColor(kind, cls)
-        local sc = m._previewScale or 1.6
+        local textFrameScale = m._previewFrameScale or frameScale or 1
+        local function PreviewTextValue(value, minValue)
+            return LiveToPreviewValue(ScaleFrameValue(value or 0, textFrameScale, minValue))
+        end
+        local function PreviewTextFontSize(value)
+            return max(6, PreviewTextValue(value or 6, 6))
+        end
 
         -- Text toggle gate: when off (default), hide name/HP/power text
         -- so aura icons underneath read cleanly. When on, render only the
         -- text elements enabled by the active group-frame config.
-        local showText = (_visToggles.text == true) or (_soloKey == "text")
+        local showText = ShouldShowTextPreview()
         if not showText then
             if m._nameFS  then m._nameFS:Hide()  end
             if m._hpFS    then m._hpFS:Hide()    end
@@ -1070,15 +1111,15 @@ function GF.RefreshPreviewBox()
             if m._nameLayer and m._nameFS.SetParent and m._nameFS.GetParent and m._nameFS:GetParent() ~= m._nameLayer then
                 m._nameFS:SetParent(m._nameLayer)
             end
-            m._nameFS:SetFont(fp, floor((conf.nameFontSize or 12) * sc + 0.5), ff)
+            m._nameFS:SetFont(fp, PreviewTextFontSize(conf.nameFontSize or 12), ff)
             m._nameFS:SetTextColor(nr or fr, ng or fg, nb or fb, 1)
             m._nameFS:SetText(PREVIEW_NAMES[_classIdx] or "Thrall")
             -- Position from config (anchor + offset, scaled)
             m._nameFS:ClearAllPoints()
-            local nAnch = conf.nameAnchor or "LEFT"
-            local nox = floor((conf.nameOffsetX or 0) * sc + 0.5)
-            local noy = floor((conf.nameOffsetY or 0) * sc + 0.5)
-            local pad = floor(3 * sc + 0.5)
+            local nAnch = NormalizeTextAnchor(conf.nameAnchor or "LEFT")
+            local nox = PreviewTextValue(conf.nameOffsetX or 0)
+            local noy = PreviewTextValue(conf.nameOffsetY or 0)
+            local pad = PreviewTextValue(3, 1)
             if nAnch == "CENTER" then
                 m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
                 m._nameFS:SetPoint("RIGHT", m._health, "RIGHT", -pad + nox, noy)
@@ -1089,6 +1130,7 @@ function GF.RefreshPreviewBox()
                 m._nameFS:SetJustifyH("RIGHT")
             else
                 m._nameFS:SetPoint("LEFT", m._health, "LEFT", pad + nox, noy)
+                m._nameFS:SetPoint("RIGHT", m._health, "RIGHT", -pad + nox, noy)
                 m._nameFS:SetJustifyH("LEFT")
             end
             if conf.showName ~= false then m._nameFS:Show() else m._nameFS:Hide() end
@@ -1117,10 +1159,10 @@ function GF.RefreshPreviewBox()
             local tr = conf.textRight or "NONE"
             local hDelim = conf.textDelimiter or " / "
             local hRev = conf.hpTextReverse
-            local hSize = floor((conf.hpFontSize or 10) * sc + 0.5)
-            local hox = floor((conf.hpOffsetX or 0) * sc + 0.5)
-            local hoy = floor((conf.hpOffsetY or 0) * sc + 0.5)
-            local hPad = floor(6 * sc + 0.5)
+            local hSize = PreviewTextFontSize(conf.hpFontSize or 10)
+            local hox = PreviewTextValue(conf.hpOffsetX or 0)
+            local hoy = PreviewTextValue(conf.hpOffsetY or 0)
+            local hPad = PreviewTextValue(3, 1)
 
             local function ApplyHPText(fs, mode, point, relPoint, x, justify)
                 if not fs then return end
@@ -1173,10 +1215,10 @@ function GF.RefreshPreviewBox()
             local prm = conf.powerTextRight or "NONE"
             local plm = conf.powerTextLeft or "NONE"
             local pDelim = conf.powerTextDelimiter or " / "
-            local pSize = floor((conf.powerFontSize or 9) * sc + 0.5)
-            local pox = floor((conf.powerOffsetX or 0) * sc + 0.5)
-            local poy = floor((conf.powerOffsetY or 0) * sc + 0.5)
-            local pPad = floor(2 * sc + 0.5)
+            local pSize = PreviewTextFontSize(conf.powerFontSize or 9)
+            local pox = PreviewTextValue(conf.powerOffsetX or 0)
+            local poy = PreviewTextValue(conf.powerOffsetY or 0)
+            local pPad = PreviewTextValue(2, 1)
 
             local function ApplyPowerText(fs, mode, point, relPoint, x, justify)
                 if not fs then return end
@@ -1811,6 +1853,137 @@ local function BuildPrivateAuraHandle(mockFrame)
     _handles.private = handle
 end
 
+------------------------------------------------------------------------
+-- Build text handles
+------------------------------------------------------------------------
+local function IsTextModeActive(mode)
+    return mode ~= nil and mode ~= "NONE"
+end
+
+local function PickTextSlotAnchor(leftMode, centerMode, rightMode)
+    if IsTextModeActive(centerMode) then return "CENTER" end
+    if IsTextModeActive(leftMode) then return "LEFT" end
+    if IsTextModeActive(rightMode) then return "RIGHT" end
+    return "CENTER"
+end
+
+local function GetTextHandleAnchor(textKey, conf)
+    if textKey == "nameText" then
+        return NormalizeTextAnchor((conf and conf.nameAnchor) or "LEFT")
+    elseif textKey == "hpText" then
+        return PickTextSlotAnchor(conf and conf.textLeft, conf and conf.textCenter, conf and conf.textRight)
+    end
+    return PickTextSlotAnchor(conf and conf.powerTextLeft, conf and conf.powerTextCenter, conf and conf.powerTextRight)
+end
+
+local function GetTextHandleTarget(textKey)
+    if not _mockFrame then return nil end
+    if textKey == "powerText" and _mockFrame._power and _mockFrame._power.IsShown and _mockFrame._power:IsShown() then
+        return _mockFrame._power
+    end
+    return _mockFrame._health or _mockFrame
+end
+
+local function GetTextHandleFontString(textKey, anchor)
+    if not _mockFrame then return nil end
+    if textKey == "nameText" then return _mockFrame._nameFS end
+    if textKey == "hpText" then
+        if anchor == "LEFT" then return _mockFrame._hpLeftFS end
+        if anchor == "RIGHT" then return _mockFrame._hpRightFS end
+        return _mockFrame._hpCenterFS or _mockFrame._hpFS
+    end
+    if anchor == "LEFT" then return _mockFrame._powerLeftFS end
+    if anchor == "RIGHT" then return _mockFrame._powerRightFS end
+    return _mockFrame._powerCenterFS or _mockFrame._powerFS
+end
+
+local function GetTextHandleConfigKeys(textKey)
+    if textKey == "nameText" then return "nameOffsetX", "nameOffsetY" end
+    if textKey == "hpText" then return "hpOffsetX", "hpOffsetY" end
+    return "powerOffsetX", "powerOffsetY"
+end
+
+local function GetTextHandlePad(textKey, anchor)
+    local base = (textKey == "powerText") and 2 or 3
+    local pad = LiveToPreviewValue(ScaleFrameValue(base, GetPreviewFrameScale(), 1))
+    if anchor == "LEFT" then return pad end
+    if anchor == "RIGHT" then return -pad end
+    return 0
+end
+
+local function IsTextHandleEnabled(textKey, conf)
+    if textKey == "nameText" then
+        return not conf or conf.showName ~= false
+    elseif textKey == "hpText" then
+        return (not conf or conf.showHPText ~= false)
+            and (IsTextModeActive(conf and conf.textLeft)
+                or IsTextModeActive(conf and conf.textCenter)
+                or IsTextModeActive(conf and conf.textRight))
+    end
+    return (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(_getKind and _getKind() or "party", conf) or false)
+        and (IsTextModeActive(conf and conf.powerTextLeft)
+            or IsTextModeActive(conf and conf.powerTextCenter)
+            or IsTextModeActive(conf and conf.powerTextRight))
+end
+
+local function MeasureTextHandle(fs, fallbackW, fallbackH)
+    local w = fallbackW or 48
+    local h = fallbackH or 14
+    if fs and fs.GetStringWidth then
+        local sw = fs:GetStringWidth()
+        if sw and sw > 0 then w = max(w, RoundToNearest(sw) + 10) end
+    end
+    if fs and fs.GetStringHeight then
+        local sh = fs:GetStringHeight()
+        if sh and sh > 0 then h = max(h, RoundToNearest(sh) + 6) end
+    end
+    return max(24, w), max(12, h)
+end
+
+local function SaveTextHandlePosition(handle, textKey, anchor, offX, offY)
+    local kind = _getKind and _getKind() or "party"
+    local conf = GF.GetConf(kind)
+    if not conf then return end
+    local xKey, yKey = GetTextHandleConfigKeys(textKey)
+    local cfgX, cfgY = PreviewToHandleConfigOffset(handle, offX, offY)
+    conf[xKey] = cfgX
+    conf[yKey] = cfgY
+    if textKey == "nameText" then
+        conf.nameAnchor = NormalizeTextAnchor(anchor)
+    end
+    if GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_LAYOUT or 0x04) end
+    if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
+    if GF._RefreshOptionWidgets then GF._RefreshOptionWidgets() end
+end
+
+local function BuildTextHandles(mockFrame)
+    local specs = {
+        { key = "nameText", label = "Name" },
+        { key = "hpText", label = "HP" },
+        { key = "powerText", label = "Power" },
+    }
+    for _, spec in ipairs(specs) do
+        local textKey = spec.key
+        local handle = CreateHandle(mockFrame, textKey, "text", 54, 16, "text")
+        handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
+        handle._label:SetText(spec.label)
+        handle._textKey = textKey
+        handle._getAnchorFrame = function(self)
+            return GetTextHandleTarget(self._textKey)
+        end
+        handle._getCurrentAnchor = function(self)
+            local kind = _getKind and _getKind() or "party"
+            local conf = GF.GetConf(kind)
+            return GetTextHandleAnchor(self._textKey, conf)
+        end
+        handle._onDragFinish = function(anchor, offX, offY)
+            SaveTextHandlePosition(handle, textKey, anchor, offX, offY)
+        end
+        _textHandles[textKey] = handle
+    end
+end
+
 -- Refresh all handle positions from config
 ------------------------------------------------------------------------
 function GF.RefreshPreviewHandles()
@@ -2362,6 +2535,42 @@ function GF.RefreshPreviewHandles()
         end
     end
 
+    -- Name / HP / Power text handles. They share the same drag and keyboard
+    -- pipeline as every other preview handle, but keep their internal text
+    -- padding separate from the stored config offsets.
+    do
+        local showTextHandles = ShouldShowTextPreview()
+        local textSpecs = {
+            nameText  = { rawSize = conf.nameFontSize or 12, fallbackW = 54, fallbackH = 16 },
+            hpText    = { rawSize = conf.hpFontSize or 10, fallbackW = 58, fallbackH = 16 },
+            powerText = { rawSize = conf.powerFontSize or 9, fallbackW = 52, fallbackH = 15 },
+        }
+        for textKey, spec in pairs(textSpecs) do
+            local h = _textHandles[textKey]
+            if h then
+                local anchor = GetTextHandleAnchor(textKey, conf)
+                local target = GetTextHandleTarget(textKey) or _mockFrame
+                local xKey, yKey = GetTextHandleConfigKeys(textKey)
+                h._previewOffsetAdjustX = GetTextHandlePad(textKey, anchor)
+                h._previewOffsetAdjustY = 0
+                local offX, offY = ConfigToHandlePreviewOffset(h, conf[xKey] or 0, conf[yKey] or 0)
+                local liveFont = ScaleFrameValue(spec.rawSize, frameScale, 6)
+                local fallbackH = max(spec.fallbackH, LiveToPreviewValue(liveFont) + 6)
+                local fs = GetTextHandleFontString(textKey, anchor)
+                local w, hh = MeasureTextHandle(fs, spec.fallbackW, fallbackH)
+                h:SetSize(w, hh)
+                h:ClearAllPoints()
+                h:SetPoint(anchor, target, anchor, offX, offY)
+                h:SetFrameLevel(_mockFrame:GetFrameLevel() + 30)
+                h:SetShown(showTextHandles and IsTextHandleEnabled(textKey, conf))
+                if h._label then
+                    local lc = HANDLE_COLORS.text
+                    h._label:SetTextColor(lc[1], lc[2], lc[3], 0.9)
+                end
+            end
+        end
+    end
+
     -- SI handles
     GF.RebuildSIHandles()
 
@@ -2492,8 +2701,7 @@ function GF.RefreshPreviewHandles()
     -- The focus-based auto-dim is just a convenience for when the toggle
     -- is off — it shows text during the Text accordion section and hides
     -- it elsewhere so aura layouts read cleanly.
-    local userTextOn = (_visToggles.text == true) or (_soloKey == "text")
-    local showText   = userTextOn or (not focus) or focus == "text" or focus == "overlay"
+    local showText   = ShouldShowTextPreview()
     local showAuras  = not focus or focus == "indicators" or focus == "sicons" or focus == "blizzrenderer"
     local showSIcons = not focus or focus == "sicons"
     local showSI     = not focus or focus == "indicators"
@@ -2504,6 +2712,11 @@ function GF.RefreshPreviewHandles()
     if _mockFrame._nameLayer then _mockFrame._nameLayer:SetShown(showText) end
     if _mockFrame._textLayer then _mockFrame._textLayer:SetShown(showText) end
     if _mockFrame._powerTextLayer then _mockFrame._powerTextLayer:SetShown(showText) end
+    for _, h in pairs(_textHandles) do
+        if h and h:IsShown() then
+            h:SetAlpha(showText and 1 or 0.15)
+        end
+    end
 
     -- Aura group handles
     for _, grpKey in ipairs({"buff", "debuff", "externals"}) do
@@ -2815,8 +3028,9 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                 elseif spec.key == "text" then
                     -- Text visibility is gated inside RefreshPreviewBox via
                     -- the _visToggles.text check.  Re-run it so name/HP/power
-                    -- FontStrings show or hide immediately.
+                    -- FontStrings and drag handles show or hide immediately.
                     if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+                    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
                 elseif spec.key == "auraText" then
                     -- Aura-icon cooldown/stack text is applied inside
                     -- RefreshPreviewHandles → ApplyMockIconText.  Re-run
@@ -2876,6 +3090,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     BuildAuraGroupHandles(_mockFrame)
     BuildStatusIconHandles(_mockFrame)
     BuildPrivateAuraHandle(_mockFrame)
+    BuildTextHandles(_mockFrame)
 
     -- Coord display (in status bar)
     local coord = statusBar:CreateFontString(nil, "OVERLAY")
