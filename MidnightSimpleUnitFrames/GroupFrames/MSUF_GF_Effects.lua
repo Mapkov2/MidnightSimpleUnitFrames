@@ -829,6 +829,7 @@ local function dispatchAura(f, unit, updateInfo)
     local ciRelevant = not updateInfo or updateInfo.isFullUpdate
         or (updateInfo.addedAuras and #updateInfo.addedAuras > 0)
         or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0)
+    local paOverlayRefresh = c.paDispelOverlay and ciRelevant
 
     if not aurasOn then
         if c.dispelScan and GF._playerCanDispel then
@@ -867,6 +868,9 @@ local function dispatchAura(f, unit, updateInfo)
         if ciRelevant and GF.UpdateCornerIndicators and c.ciAura then
             GF.UpdateCornerIndicators(f, unit)
         end
+        if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+            GF.UpdatePrivateAuraContainerOverlayVisibility(f)
+        end
         return
     end
 
@@ -881,6 +885,9 @@ local function dispatchAura(f, unit, updateInfo)
             if last and (now - last) < 0.5 then
                 if siRefresh and GF.UpdateSpellIndicators then
                     GF.UpdateSpellIndicators(f, unit)
+                end
+                if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+                    GF.UpdatePrivateAuraContainerOverlayVisibility(f)
                 end
                 return
             end
@@ -900,6 +907,9 @@ local function dispatchAura(f, unit, updateInfo)
             if siRefresh and GF.UpdateSpellIndicators then
                 GF.UpdateSpellIndicators(f, unit)
             end
+            if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+                GF.UpdatePrivateAuraContainerOverlayVisibility(f)
+            end
             return
         end
 
@@ -916,6 +926,9 @@ local function dispatchAura(f, unit, updateInfo)
                 end
                 if siRefresh and GF.UpdateSpellIndicators then
                     GF.UpdateSpellIndicators(f, unit)
+                end
+                if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+                    GF.UpdatePrivateAuraContainerOverlayVisibility(f)
                 end
                 return
             end
@@ -955,6 +968,9 @@ local function dispatchAura(f, unit, updateInfo)
                             _GF_ApplyDebuffStripe(f)
                         end
                     end
+                    if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+                        GF.UpdatePrivateAuraContainerOverlayVisibility(f)
+                    end
                     return
                 end
             end
@@ -971,6 +987,9 @@ local function dispatchAura(f, unit, updateInfo)
             if siRefresh and GF.UpdateSpellIndicators then
                 GF.UpdateSpellIndicators(f, unit)
             end
+            if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+                GF.UpdatePrivateAuraContainerOverlayVisibility(f)
+            end
             return
         end
         f._msufGFLastFullAura = now
@@ -983,7 +1002,12 @@ local function dispatchAura(f, unit, updateInfo)
     -- Saves N-1 full pipeline runs per AoE burst (N=simultaneous aura
     -- changes per unit). Clear-callback allocated once per frame.
     -- ════════════════════════════════════════════════════════════════
-    if f._msufGFFullPending then return end
+    if f._msufGFFullPending then
+        if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+            GF.UpdatePrivateAuraContainerOverlayVisibility(f)
+        end
+        return
+    end
     f._msufGFFullPending = true
     do
         local cb = f._msufGFPendClearCB
@@ -1017,6 +1041,9 @@ local function dispatchAura(f, unit, updateInfo)
         if not _gfAuraDirtyPending then
             _gfAuraDirtyPending = true
             _MSUF_ScheduleOnce("GF_AURA_BUDGET_FLUSH", _gfFlushDirtyAuras)
+        end
+        if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+            GF.UpdatePrivateAuraContainerOverlayVisibility(f)
         end
         return
     end
@@ -1058,6 +1085,10 @@ local function dispatchAura(f, unit, updateInfo)
     -- Corner Indicators (only when enabled)
     if GF.UpdateCornerIndicators and c.ciAura then
         GF.UpdateCornerIndicators(f, unit)
+    end
+
+    if paOverlayRefresh and GF.UpdatePrivateAuraContainerOverlayVisibility then
+        GF.UpdatePrivateAuraContainerOverlayVisibility(f)
     end
 
 end
@@ -1558,6 +1589,11 @@ function GF.BuildFrameCache(f)
         c.ciSlotTL == "aggro" or c.ciSlotTR == "aggro" or c.ciSlotBL == "aggro"
         or c.ciSlotBR == "aggro" or c.ciSlotC == "aggro")
 
+    -- Private auras
+    local pa = conf.privateAuras
+    c.paEn = pa and pa.enabled ~= false
+    c.paDispelOverlay = c.paEn and pa and pa.containerOverlay and pa.containerOverlay.enabled == true
+
     -- Raid debuffs
 
     -- Heal prediction (resolve full fallthrough: conf → general → default true)
@@ -1599,14 +1635,11 @@ function GF.BuildFrameCache(f)
     -- Composite: does anything need UNIT_AURA?
     c.needAura = c.anyAuraGrp or c.ciAura
                  or (c.dispelScan and GF._playerCanDispel)
+                 or c.paDispelOverlay
                  or c.siEn
 
     -- Composite: does anything need UNIT_THREAT?
     c.needThreat = c.aggroEn or c.ciThreat
-
-    -- Private auras
-    local pa = conf.privateAuras
-    c.paEn = pa and pa.enabled ~= false
 
     -- Event bitmask: drives diff-gated RegisterUnitEvents
     local evBits = 0
@@ -1727,7 +1760,11 @@ local _GRAD_TEXTURES = {
 
 _GF_ApplyDispelOverlay = function(f)
     local dov = f._msufGFDispelOverlay
-    if not dov then return end
+    local syncPrivateOverlay = GF.UpdatePrivateAuraContainerOverlayVisibility
+    if not dov then
+        if syncPrivateOverlay then syncPrivateOverlay(f) end
+        return
+    end
     local c = f._c
     if not c then return end
 
@@ -1735,6 +1772,7 @@ _GF_ApplyDispelOverlay = function(f)
     if not c.doEn or not dispelType then
         if dov:IsShown() then dov:Hide() end
         dov._msufDOSyncHP = nil
+        if syncPrivateOverlay then syncPrivateOverlay(f) end
         return
     end
 
@@ -1790,6 +1828,7 @@ _GF_ApplyDispelOverlay = function(f)
     end
 
     if not dov:IsShown() then dov:Show() end
+    if syncPrivateOverlay then syncPrivateOverlay(f) end
 end
 
 ------------------------------------------------------------------------

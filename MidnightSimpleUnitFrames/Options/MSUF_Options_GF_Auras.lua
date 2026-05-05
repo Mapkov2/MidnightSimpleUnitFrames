@@ -1544,8 +1544,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             SCheck({
                 name = "MSUF_GF_SI_" .. auraName .. "_Enable", parent = panel,
                 anchor = titleFs, x = 80, y = 4,
-                label = "",
-                maxTextWidth = 0,
+                label = L["Enabled"] or "Enabled",
+                maxTextWidth = 70,
                 get = function(k) return SC().enabled ~= false end,
                 set = function(k, v)
                     SC().enabled = v and true or false
@@ -1556,7 +1556,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
             SCheck({
                 name = "MSUF_GF_SI_" .. tostring(specKey) .. "_" .. auraName .. "_OnlyOwn", parent = panel,
-                anchor = titleFs, x = 170, y = 4,
+                anchor = titleFs, x = 210, y = 4,
                 label = L["Only my cast"],
                 maxTextWidth = 120,
                 tooltip = L["Only show this spell indicator for auras cast by you."],

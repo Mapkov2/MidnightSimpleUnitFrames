@@ -17,6 +17,8 @@ local GF = ns.GF
 
 local C_Timer     = _G.C_Timer
 local CreateFrame = _G.CreateFrame
+local UnitExists  = _G.UnitExists
+local issecretvalue = _G.issecretvalue
 local math_floor  = math.floor
 local math_max    = math.max
 local math_min    = math.min
@@ -54,6 +56,13 @@ local function AddPrivateAuraAnchorSafe(args)
     return nil, anchorID
 end
 
+local function ForceFrameLevelRefresh(frame)
+    if not frame or not frame.GetFrameLevel or not frame.SetFrameLevel then return end
+    local level = frame:GetFrameLevel()
+    frame:SetFrameLevel(0)
+    frame:SetFrameLevel(level)
+end
+
 ------------------------------------------------------------------------
 -- Clear anchors for a frame (icon anchors + optional container overlay)
 ------------------------------------------------------------------------
@@ -81,6 +90,7 @@ local function ClearAnchors(f)
     if coID then RemovePrivateAuraAnchor(coID) end
     f._gfPrivContainerOverlayID  = nil
     f._gfPrivContainerOverlayUnit = nil
+    f._gfPrivCOCached = nil
 
     local slots = f._gfPrivSlots
     if type(slots) == "table" then
@@ -361,6 +371,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         local anchorID = AddPrivateAuraAnchorSafe(args)
         if anchorID then
             f._gfPrivAnchorIDs[#f._gfPrivAnchorIDs + 1] = anchorID
+            ForceFrameLevelRefresh(slot)
         end
     end
 
@@ -436,10 +447,73 @@ end
 
 local function _ResolveDispelIndicatorOption(dispelMode)
     local E = _G.Enum and _G.Enum.RaidDispelDisplayType
-    local byMe = E and E.DispellableByMe or 2
-    local all = E and E.DisplayAll or 1
+    local byMe = E and E.DispellableByMe or 1
+    local all = E and E.DisplayAll or 2
     if dispelMode == "allDispellable" then return all end
     return byMe
+end
+
+local function _HasNormalDispelDebuff(unit, dispelMode)
+    if not unit or (UnitExists and not UnitExists(unit)) then return false end
+
+    local CUA = _G.C_UnitAuras
+    local getByIndex = CUA and CUA.GetAuraDataByIndex
+    if type(getByIndex) ~= "function" then return false end
+
+    if dispelMode ~= "allDispellable" then
+        return getByIndex(unit, 1, "HARMFUL|RAID_PLAYER_DISPELLABLE") ~= nil
+    end
+
+    for i = 1, 40 do
+        local aura = getByIndex(unit, i, "HARMFUL|RAID")
+        if not aura then break end
+        local dispelName = aura.dispelName
+        if dispelName ~= nil
+           and not (issecretvalue and issecretvalue(dispelName))
+           and dispelName ~= ""
+           and dispelName ~= "None"
+        then
+            return true
+        end
+    end
+    return false
+end
+
+local function _UpdatePrivateAuraContainerOverlayVisibility(f)
+    local wrapper = f and f._gfPrivOverlayFrame
+    if not wrapper or not f._gfPrivContainerOverlayID then return end
+
+    local cached = f._gfPrivCOCached
+    local normalDispelVisible = f._msufGFDispelOverlay and f._msufGFDispelOverlay:IsShown()
+    local normalDispelKnown = f._msufGFDispelAuraID ~= nil
+
+    local unit = f._gfPrivContainerOverlayUnit or f.unit
+    if not normalDispelVisible and not normalDispelKnown then
+        normalDispelKnown = _HasNormalDispelDebuff(unit, cached and cached.dispelMode)
+    end
+
+    if normalDispelVisible or normalDispelKnown then
+        wrapper:SetAlpha(0)
+        return
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            local w = f and f._gfPrivOverlayFrame
+            if not w or not f._gfPrivContainerOverlayID then return end
+            local c = f._gfPrivCOCached
+            local shown = f._msufGFDispelOverlay and f._msufGFDispelOverlay:IsShown()
+            local known = f._msufGFDispelAuraID ~= nil
+            local u = f._gfPrivContainerOverlayUnit or f.unit
+            if not shown and not known then
+                known = _HasNormalDispelDebuff(u, c and c.dispelMode)
+            end
+            if shown or known then return end
+            w:SetAlpha(1)
+        end)
+    else
+        wrapper:SetAlpha(1)
+    end
 end
 
 function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
@@ -507,6 +581,7 @@ function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
     if samePayload then
         -- Live-update path: signal Blizzard to re-read attributes.
         wrapper:SetAttribute("update-settings", true)
+        _UpdatePrivateAuraContainerOverlayVisibility(f)
         return
     end
 
@@ -534,6 +609,8 @@ function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
             auraOrgType = auraOrgType,
             dispelOption = dispelOption,
         }
+        ForceFrameLevelRefresh(wrapper)
+        _UpdatePrivateAuraContainerOverlayVisibility(f)
     else
         f._gfPrivContainerOverlayID   = nil
         f._gfPrivContainerOverlayUnit = nil
@@ -552,6 +629,8 @@ function GF.UpdatePrivateAuraContainerOverlay(f)
     if not conf then return end
     GF.ApplyPrivateAuraContainerOverlay(f, f.unit, conf.privateAuras)
 end
+
+GF.UpdatePrivateAuraContainerOverlayVisibility = _UpdatePrivateAuraContainerOverlayVisibility
 
 ------------------------------------------------------------------------
 -- Clear (exported for unit-change / hide)
