@@ -21,6 +21,7 @@ local pairs         = pairs
 local ipairs        = ipairs
 local type          = type
 local tostring      = tostring
+local tonumber      = tonumber
 local floor         = math.floor
 local max           = math.max
 local min           = math.min
@@ -237,16 +238,53 @@ local function GetCurrentHandleAnchor(handle)
     return "CENTER"
 end
 
+local function RoundToNearest(v)
+    v = tonumber(v) or 0
+    if v >= 0 then return floor(v + 0.5) end
+    return -floor((-v) + 0.5)
+end
+
+local function ScaleFrameValue(value, scale, minValue)
+    value = tonumber(value) or 0
+    scale = tonumber(scale) or 1
+    local v
+    if scale == 1 then
+        v = value
+    elseif GF.ScaleValue then
+        v = GF.ScaleValue(value, scale, minValue)
+    else
+        v = RoundToNearest(value * scale)
+    end
+    if minValue ~= nil and v < minValue then v = minValue end
+    return v
+end
+
+local function GetPreviewZoom()
+    local zoom = _mockFrame and _mockFrame._previewZoom or 1
+    if zoom == 0 then zoom = 1 end
+    return zoom
+end
+
+local function GetPreviewFrameScale()
+    local frameScale = _mockFrame and _mockFrame._previewFrameScale or 1
+    if frameScale == 0 then frameScale = 1 end
+    return frameScale
+end
+
+local function LiveToPreviewValue(value)
+    return RoundToNearest((tonumber(value) or 0) * GetPreviewZoom())
+end
+
 local function PreviewToConfigOffset(offX, offY)
-    local sc = _mockFrame and _mockFrame._previewScale or 1
-    if sc == 0 then sc = 1 end
-    return floor(((offX or 0) / sc) + 0.5), floor(((offY or 0) / sc) + 0.5)
+    local denom = GetPreviewZoom() * GetPreviewFrameScale()
+    if denom == 0 then denom = 1 end
+    return RoundToNearest((offX or 0) / denom), RoundToNearest((offY or 0) / denom)
 end
 
 local function ConfigToPreviewOffset(cfgX, cfgY)
-    local sc = _mockFrame and _mockFrame._previewScale or 1
-    if sc == 0 then sc = 1 end
-    return floor(((cfgX or 0) * sc) + 0.5), floor(((cfgY or 0) * sc) + 0.5)
+    local frameScale = GetPreviewFrameScale()
+    return LiveToPreviewValue(ScaleFrameValue(cfgX or 0, frameScale)),
+           LiveToPreviewValue(ScaleFrameValue(cfgY or 0, frameScale))
 end
 
 local function GetHandlePosition(handle)
@@ -548,6 +586,45 @@ end
 ------------------------------------------------------------------------
 local PREVIEW_MIN_W = 380
 local PREVIEW_MIN_H = 130
+local PREVIEW_ROLE = "HEALER"
+
+local function GetMockPowerHeight(kind, conf, zoom, frameScale)
+    local livePowerH
+    if GF.GetEffectivePowerHeight then
+        livePowerH = GF.GetEffectivePowerHeight(kind, nil, PREVIEW_ROLE, conf)
+    end
+    if livePowerH == nil then
+        local rawPowerH = conf and (conf.powerHeight or 6) or 6
+        if GF.ShouldShowPowerBarForRole and not GF.ShouldShowPowerBarForRole(kind, PREVIEW_ROLE, conf) then
+            rawPowerH = 0
+        end
+        livePowerH = rawPowerH > 0 and ScaleFrameValue(rawPowerH, frameScale or 1, 0) or 0
+    end
+    livePowerH = tonumber(livePowerH) or 0
+    if livePowerH <= 0 then return 0 end
+    zoom = tonumber(zoom) or 1
+    if zoom == 0 then zoom = 1 end
+    return RoundToNearest(livePowerH * zoom)
+end
+
+local function EnsureMockPowerBar(f, kind, conf)
+    if f._power then return f._power end
+
+    local power = CreateFrame("StatusBar", nil, f)
+    power:SetStatusBarTexture(GF.ResolveBarTexture(kind))
+    power:SetMinMaxValues(0, 1)
+    power:SetValue(1)
+    power:SetStatusBarColor(0.13, 0.27, 0.67, 1)
+    f._power = power
+
+    local powerBg = power:CreateTexture(nil, "BACKGROUND")
+    powerBg:SetAllPoints(power)
+    powerBg:SetTexture(W8)
+    powerBg:SetVertexColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
+    f._powerBg = powerBg
+
+    return power
+end
 
 local function BuildMockFrame(parent)
     local kind = _getKind and _getKind() or "party"
@@ -573,11 +650,7 @@ local function BuildMockFrame(parent)
     local rawToMock = scale * (frameScale or 1)
     local w = floor(liveW * scale + 0.5)
     local h = floor(liveH * scale + 0.5)
-    local rawPowerH = conf.powerHeight or 6
-    if GF.ShouldShowPowerBarForRole and not GF.ShouldShowPowerBarForRole(kind, "HEALER", conf) then
-        rawPowerH = 0
-    end
-    local powerH = rawPowerH > 0 and floor(rawPowerH * rawToMock + 0.5) or 0
+    local powerH = GetMockPowerHeight(kind, conf, scale, frameScale)
     local insetBase = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 1
     local inset = max(0, floor(insetBase * rawToMock + 0.5))
 
@@ -628,21 +701,10 @@ local function BuildMockFrame(parent)
 
     -- Power bar
     if powerH > 0 then
-        local power = CreateFrame("StatusBar", nil, f)
-        power:SetStatusBarTexture(GF.ResolveBarTexture(kind))
-        power:SetMinMaxValues(0, 1)
-        power:SetValue(1)
-        power:SetStatusBarColor(0.13, 0.27, 0.67, 1)
+        local power = EnsureMockPowerBar(f, kind, conf)
         power:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", inset, inset)
         power:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -inset, inset)
         power:SetHeight(powerH)
-        f._power = power
-
-        local powerBg = power:CreateTexture(nil, "BACKGROUND")
-        powerBg:SetAllPoints(power)
-        powerBg:SetTexture(W8)
-        powerBg:SetVertexColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
-        f._powerBg = powerBg
     end
 
     -- Name text layer
@@ -818,6 +880,9 @@ function GF.RefreshPreviewBox()
     if m._healthBg then
         m._healthBg:SetVertexColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
     end
+    if m._powerBg then
+        m._powerBg:SetVertexColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
+    end
 
     -- Bar textures
     local barTex = GF.ResolveBarTexture(kind)
@@ -827,13 +892,12 @@ function GF.RefreshPreviewBox()
         local bgTex = (GF.ResolveBarBgTexture and GF.ResolveBarBgTexture(kind)) or W8
         m._healthBg:SetTexture(bgTex)
     end
+    if m._powerBg then
+        m._powerBg:SetTexture(W8)
+    end
 
     -- Power bar geometry
-    local rawPowerH = conf.powerHeight or 6
-    if GF.ShouldShowPowerBarForRole and not GF.ShouldShowPowerBarForRole(kind, "HEALER", conf) then
-        rawPowerH = 0
-    end
-    local powerH = rawPowerH > 0 and floor(rawPowerH * rawToMock + 0.5) or 0
+    local powerH = GetMockPowerHeight(kind, conf, scale, frameScale)
     local insetBase = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 1
     local inset = max(0, floor(insetBase * rawToMock + 0.5))
     if m._health then
@@ -842,13 +906,17 @@ function GF.RefreshPreviewBox()
         m._health:SetPoint("BOTTOMRIGHT", m, "BOTTOMRIGHT", -inset,
             powerH > 0 and (powerH + inset) or inset)
     end
-    if m._power then
-        if powerH > 0 then
-            m._power:SetHeight(powerH)
-            m._power:Show()
-        else
-            m._power:Hide()
-        end
+    if powerH > 0 then
+        local power = EnsureMockPowerBar(m, kind, conf)
+        power:SetStatusBarTexture(barTex)
+        power:ClearAllPoints()
+        power:SetPoint("BOTTOMLEFT", m, "BOTTOMLEFT", inset, inset)
+        power:SetPoint("BOTTOMRIGHT", m, "BOTTOMRIGHT", -inset, inset)
+        power:SetHeight(powerH)
+        power:Show()
+    elseif m._power then
+        m._power:SetHeight(0.001)
+        m._power:Hide()
     end
     if m._powerTextLayer then
         m._powerTextLayer:ClearAllPoints()
@@ -1386,7 +1454,7 @@ local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
     end
 
     local fontPath, fontFlags = GetAuraMockFont(kind)
-    local sc = previewScale or 1
+    local frameScale = GetPreviewFrameScale()
     local showCd = gcfg.showCooldown ~= false
     local showSt = gcfg.showStacks ~= false
 
@@ -1407,14 +1475,14 @@ local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
     end
     if showCd then
         local cdFlags = gcfg.cooldownOutline or fontFlags
-        local cdSize = max(6, floor(((gcfg.cooldownSize or 8) * sc) + 0.5))
+        local cdSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownSize or 8, frameScale, 6)))
         if cd.SetFont then cd:SetFont(fontPath, cdSize, cdFlags) end
         cd:SetText(AURA_MOCK_CD_TEXT)
         cd:SetTextColor(GetAuraMockCooldownColor())
         cd:ClearAllPoints()
         local cdAnchor = gcfg.cooldownAnchor or "CENTER"
-        local cdOX = floor(((gcfg.cooldownOffsetX or 0) * sc) + 0.5)
-        local cdOY = floor(((gcfg.cooldownOffsetY or 0) * sc) + 0.5)
+        local cdOX = LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownOffsetX or 0, frameScale))
+        local cdOY = LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownOffsetY or 0, frameScale))
         cd:SetPoint(cdAnchor, cdTarget, cdAnchor, cdOX, cdOY)
         cd:Show()
     else
@@ -1429,14 +1497,14 @@ local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
     end
     if showSt then
         local stFlags = gcfg.stackOutline or fontFlags
-        local stSize = max(6, floor(((gcfg.stackSize or 10) * sc) + 0.5))
+        local stSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.stackSize or 10, frameScale, 6)))
         if st.SetFont then st:SetFont(fontPath, stSize, stFlags) end
         st:SetText(AURA_MOCK_STACK_TEXT)
         st:SetTextColor(GetAuraMockStackColor())
         st:ClearAllPoints()
         local stAnchor = gcfg.stackAnchor or "BOTTOMRIGHT"
-        local stOX = floor(((gcfg.stackOffsetX or -1) * sc) + 0.5)
-        local stOY = floor(((gcfg.stackOffsetY or 1) * sc) + 0.5)
+        local stOX = LiveToPreviewValue(ScaleFrameValue(gcfg.stackOffsetX or -1, frameScale))
+        local stOY = LiveToPreviewValue(ScaleFrameValue(gcfg.stackOffsetY or 1, frameScale))
         st:SetPoint(stAnchor, ic, stAnchor, stOX, stOY)
         st:Show()
     else
@@ -1459,20 +1527,21 @@ local function BuildAuraGroupHandles(mockFrame)
         handle._defAnchor = grp.defAnchor
         handle._grpIcons = {}
         handle._onDragFinish = function(anchor, offX, offY)
-            local sc = _mockFrame and _mockFrame._previewScale or 1
             local kind = _getKind and _getKind() or "party"
             local conf = GF.GetConf(kind)
             if not conf.auras then conf.auras = {} end
             if not conf.auras[grp.key] then conf.auras[grp.key] = {} end
+            local cfgX, cfgY = PreviewToConfigOffset(offX, offY)
             conf.auras[grp.key].anchor = anchor
-            conf.auras[grp.key].x = floor(offX / sc + 0.5)
-            conf.auras[grp.key].y = floor(offY / sc + 0.5)
+            conf.auras[grp.key].x = cfgX
+            conf.auras[grp.key].y = cfgY
             RequestVisualRefresh()
         end
         handle._getCurrentAnchor = function()
             local kind = _getKind and _getKind() or "party"
             local conf = GF.GetConf(kind)
             local ac = conf.auras and conf.auras[grp.key]
+            if ac and ResolvePreviewGrowth(ac.growth).centered then return "CENTER" end
             return ac and ac.anchor or grp.defAnchor
         end
         _handles[grp.key] = handle
@@ -1724,20 +1793,20 @@ local function BuildPrivateAuraHandle(mockFrame)
     handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
     handle._label:SetText("Private")
     handle._onDragFinish = function(anchor, offX, offY)
-        local sc = _mockFrame and _mockFrame._previewScale or 1
         local kind = _getKind and _getKind() or "party"
         local conf = GF.GetConf(kind)
         if not conf.privateAuras then conf.privateAuras = {} end
+        local cfgX, cfgY = PreviewToConfigOffset(offX, offY)
         conf.privateAuras.anchor = anchor
-        conf.privateAuras.x = floor(offX / sc + 0.5)
-        conf.privateAuras.y = floor(offY / sc + 0.5)
+        conf.privateAuras.x = cfgX
+        conf.privateAuras.y = cfgY
         RequestVisualRefresh()
     end
     handle._getCurrentAnchor = function()
         local kind = _getKind and _getKind() or "party"
         local conf = GF.GetConf(kind)
         local pa = conf.privateAuras
-        return pa and pa.anchor or "BOTTOM"
+        return pa and pa.anchor or "TOPRIGHT"
     end
     _handles.private = handle
 end
@@ -1749,6 +1818,7 @@ function GF.RefreshPreviewHandles()
     local kind = _getKind()
     local conf = GF.GetConf(kind)
     local sc   = _mockFrame._previewScale or 1.6
+    local frameScale = _mockFrame._previewFrameScale or 1
     -- Dynamic content scale: simulates icon shrink for large raids (mirrors live GetDynamicScale)
     local dynScale = GF.GetPreviewDynamicScale and GF.GetPreviewDynamicScale(conf, kind) or 1
 
@@ -1759,8 +1829,7 @@ function GF.RefreshPreviewHandles()
         if h then
             local ac = conf.auras and conf.auras[grpKey]
             local anchor  = (ac and ac.anchor) or h._defAnchor or "BOTTOMLEFT"
-            local offX    = floor(((ac and ac.x) or 0) * sc + 0.5)
-            local offY    = floor(((ac and ac.y) or 0) * sc + 0.5)
+            local offX, offY = ConfigToPreviewOffset((ac and ac.x) or 0, (ac and ac.y) or 0)
             local anchorTarget = (ac and ac.behindBar and _mockFrame._health) or _mockFrame
             h._getAnchorFrame = function()
                 local k = _getKind and _getKind() or "party"
@@ -1770,14 +1839,14 @@ function GF.RefreshPreviewHandles()
             end
 
             local rawSz   = (ac and ac.size) or (grpKey == "externals" and 18 or 14)
-            if dynScale ~= 1 then rawSz = max(8, floor(rawSz * dynScale + 0.5)) end
-            local sz      = floor(rawSz * sc + 0.5)
+            local liveSz  = ScaleFrameValue(rawSz, dynScale * frameScale, 8)
+            local sz      = max(6, LiveToPreviewValue(liveSz))
 
             -- Realistic defaults: 3 icons per row (not 6) so a live preview
             -- with config-less defaults matches typical user setups.
             local perRow  = (ac and ac.perRow) or (grpKey == "externals" and 2 or 3)
             local rawSpc  = (ac and ac.spacing) or 1
-            local spacing = floor(rawSpc * sc + 0.5)
+            local spacing = max(0, LiveToPreviewValue(ScaleFrameValue(rawSpc, frameScale, 0)))
             local maxIcons = (ac and ac.max) or (grpKey == "externals" and 2 or 3)
             local en = not ac or ac.enabled ~= false
             local nativeGroup = IsNativeAuraHandle(kind, grpKey)
@@ -1787,6 +1856,7 @@ function GF.RefreshPreviewHandles()
             -- PositionIcon) exactly so preview = live.
             local gv = ResolvePreviewGrowth(ac and ac.growth)
             local isCentered = gv.centered == true
+            local effectiveAnchor = isCentered and "CENTER" or anchor
 
             -- Ensure icon pool (Platynator-style: real spell icon + soft border + mock text on icon[1])
             local pool = h._grpIcons or {}
@@ -1937,18 +2007,19 @@ function GF.RefreshPreviewHandles()
             if isCentered then
                 -- Centered handles need to span the full primary extent
                 -- (icons spread both directions from anchor center).
+                local centeredExtent = maxIcons * sz + max(0, maxIcons - 1) * spacing
                 if gv.px ~= 0 then
-                    handleW = extentP
+                    handleW = centeredExtent
                     handleH = sz
                 else
                     handleW = sz
-                    handleH = extentP
+                    handleH = centeredExtent
                 end
             end
             h:SetSize(max(sz, handleW), max(sz, handleH))
 
             h:ClearAllPoints()
-            h:SetPoint(anchor, anchorTarget, anchor, offX, offY)
+            h:SetPoint(effectiveAnchor, anchorTarget, effectiveAnchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
             -- Per-category handles are custom-layout handles. In native
             -- Blizzard mode the single Blizzard handle owns block movement.
@@ -1980,38 +2051,93 @@ function GF.RefreshPreviewHandles()
                 h:Hide()
             else
                 local auras = conf.auras or {}
-                local anchor = auras.blizzardContainerAnchor
-                if not AF[anchor] then anchor = "CENTER" end
-                local offX, offY = ConfigToPreviewOffset(auras.blizzardContainerX or 0, auras.blizzardContainerY or 0)
+                local rawAnchor = auras.blizzardContainerAnchor
+                local anchor = (rawAnchor and AF[rawAnchor]) and rawAnchor or "CENTER"
+                local offX, offY = 0, 0
+                if rawAnchor and AF[rawAnchor] then
+                    offX, offY = ConfigToPreviewOffset(auras.blizzardContainerX or 0, auras.blizzardContainerY or 0)
+                end
 
                 local types = auras.blizzardTypes or {}
                 local buffOn = IsNativeAuraHandle(kind, "buff") or (type(types) ~= "table" and true)
                 local debuffOn = IsNativeAuraHandle(kind, "debuff") or (type(types) ~= "table" and true)
                 local extOn = IsNativeAuraHandle(kind, "externals") or (type(types) ~= "table" and true)
+                local dispelOn = false
+                if GF.IsBlizzardAuraTypeEnabled then
+                    dispelOn = GF.IsBlizzardAuraTypeEnabled(conf, "dispels") == true
+                else
+                    dispelOn = type(types) ~= "table" or types.dispels ~= false
+                end
                 local pa = conf.privateAuras or {}
                 local privateOn = IsNativeAuraHandle(kind, "private") or (type(types) ~= "table" and pa.enabled ~= false)
-                local buffMax = buffOn and min((auras.buff and auras.buff.max) or 6, 5) or 0
-                local debuffMax = debuffOn and min((auras.debuff and auras.debuff.max) or 6, 5) or 0
-                if privateOn then
-                    debuffMax = max(debuffMax, min(pa.max or 4, 5))
+                local function CountValue(value, def)
+                    local n = RoundToNearest(tonumber(value) or def or 0)
+                    if n < 0 then return 0 end
+                    return n
                 end
+                local buffMax = buffOn and CountValue(auras.buff and auras.buff.max, 6) or 0
+                local debuffMax = debuffOn and CountValue(auras.debuff and auras.debuff.max, 6) or 0
+                local privateMax = privateOn and CountValue(pa.max, 4) or 0
+                local dispelMax = dispelOn and 3 or 0
+                debuffMax = max(debuffMax, privateMax, dispelMax)
                 local extMax = extOn and 1 or 0
-                local count = max(1, buffMax + debuffMax + extMax)
-                local frameScale = _mockFrame._previewFrameScale or 1
-                local zoom = _mockFrame._previewZoom or 1
-                local nativeScale = (GF.GetAuraDynamicScale and GF.GetAuraDynamicScale(conf)) or dynScale or 1
+                local nativeScale = dynScale or 1
                 local liveSz
                 if GF.GetBlizzardAuraIconSize then
                     liveSz = GF.GetBlizzardAuraIconSize(conf, nativeScale, frameScale)
                 else
-                    liveSz = max(8, floor(((auras.blizzardIconSize or 20) * nativeScale * frameScale) + 0.5))
+                    liveSz = ScaleFrameValue(auras.blizzardIconSize or 20, nativeScale * frameScale, 8)
                 end
-                local sz = max(8, floor((liveSz or 20) * zoom + 0.5))
-                local gap = max(1, floor(2 * frameScale * zoom + 0.5))
-                local cols = min(6, count)
-                local rows = floor((count - 1) / cols) + 1
-                local w = max(sz, cols * sz + (cols - 1) * gap)
-                local hh = max(sz, rows * sz + (rows - 1) * gap)
+                local extCfg = auras.externals or {}
+                local liveBigSz = extOn and ScaleFrameValue(extCfg.size or liveSz or 20, nativeScale * frameScale, 8) or liveSz
+                local sz = max(8, LiveToPreviewValue(liveSz or 20))
+                local bigSz = max(8, LiveToPreviewValue(liveBigSz or liveSz or 20))
+                local gap = max(1, LiveToPreviewValue(ScaleFrameValue(2, frameScale, 0)))
+
+                local buffEntries, harmfulEntries = {}, {}
+                local function AddEntries(out, entryKind, count, iconSize)
+                    for i = 1, count do
+                        out[#out + 1] = { kind = entryKind, size = iconSize, seq = i }
+                    end
+                end
+                AddEntries(buffEntries, "buff", buffMax, sz)
+                AddEntries(harmfulEntries, "debuff", debuffMax, sz)
+                AddEntries(harmfulEntries, "externals", extMax, bigSz)
+                if #buffEntries == 0 and #harmfulEntries == 0 then
+                    AddEntries(harmfulEntries, "debuff", 1, sz)
+                end
+
+                local function Metrics(entries, cellSize)
+                    local count = #entries
+                    if count <= 0 then return 0, 0, 0 end
+                    local cols = min(6, count)
+                    local rows = floor((count - 1) / cols) + 1
+                    return cols * cellSize + max(0, cols - 1) * gap,
+                           rows * cellSize + max(0, rows - 1) * gap,
+                           cols
+                end
+
+                local org = auras.blizzardOrganizationType or auras.blizzardOrganization or "default"
+                local cellHarm = max(sz, bigSz)
+                local buffW, buffH, buffCols = Metrics(buffEntries, sz)
+                local harmW, harmH, harmCols = Metrics(harmfulEntries, cellHarm)
+                local splitRows = (org == "BUFFS_TOP_DEBUFFS_BOTTOM" or org == "BOTTOM")
+                local splitCols = (org == "BUFFS_RIGHT_DEBUFFS_LEFT" or org == "LEFT" or org == "RIGHT")
+                local w, hh
+                if splitRows then
+                    w = max(sz, buffW, harmW)
+                    hh = max(sz, buffH + harmH + ((buffH > 0 and harmH > 0) and gap or 0))
+                elseif splitCols then
+                    w = max(sz, buffW + harmW + ((buffW > 0 and harmW > 0) and gap or 0))
+                    hh = max(sz, buffH, harmH)
+                else
+                    local allCount = #buffEntries + #harmfulEntries
+                    local cell = max(sz, bigSz)
+                    local cols = min(6, allCount)
+                    local rows = floor((allCount - 1) / cols) + 1
+                    w = max(sz, cols * cell + max(0, cols - 1) * gap)
+                    hh = max(sz, rows * cell + max(0, rows - 1) * gap)
+                end
 
                 h:SetSize(w, hh)
                 h:ClearAllPoints()
@@ -2020,33 +2146,52 @@ function GF.RefreshPreviewHandles()
 
                 local pool = h._blizzIcons or {}
                 h._blizzIcons = pool
-                for i = 1, count do
-                    local tex = pool[i]
+                local poolIndex = 1
+                local function PlaceEntry(entry, x, y, cellSize)
+                    local tex = pool[poolIndex]
                     if not tex then
                         tex = h:CreateTexture(nil, "ARTWORK")
                         tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                        pool[i] = tex
+                        pool[poolIndex] = tex
                     end
-                    local iconIDs
-                    if i <= buffMax then
-                        iconIDs = AURA_GRP_ICON_IDS.buff
-                    elseif i <= buffMax + debuffMax then
-                        iconIDs = AURA_GRP_ICON_IDS.debuff
-                    else
-                        iconIDs = AURA_GRP_ICON_IDS.externals
-                    end
-                    local spellId = iconIDs[((i - 1) % #iconIDs) + 1]
+                    local iconIDs = AURA_GRP_ICON_IDS[entry.kind] or AURA_GRP_ICON_IDS.debuff
+                    local spellId = iconIDs[((entry.seq - 1) % #iconIDs) + 1]
+                    local iconSize = entry.size or sz
+                    local pad = max(0, RoundToNearest((cellSize - iconSize) * 0.5))
                     tex:SetTexture(GetMockSpellTexture(spellId))
-                    tex:SetSize(sz, sz)
+                    tex:SetSize(iconSize, iconSize)
                     tex:ClearAllPoints()
-                    local col = (i - 1) % cols
-                    local row = floor((i - 1) / cols)
-                    tex:SetPoint("TOPLEFT", h, "TOPLEFT", col * (sz + gap), -row * (sz + gap))
+                    tex:SetPoint("TOPLEFT", h, "TOPLEFT", x + pad, -(y + pad))
                     tex:SetVertexColor(1, 1, 1, 0.92)
                     tex:Show()
+                    poolIndex = poolIndex + 1
                 end
-                for i = count + 1, #pool do
-                    pool[i]:Hide()
+                local function PlaceGrid(entries, startX, startY, cellSize, cols)
+                    if #entries <= 0 then return end
+                    cols = max(1, cols or min(6, #entries))
+                    for i, entry in ipairs(entries) do
+                        local col = (i - 1) % cols
+                        local row = floor((i - 1) / cols)
+                        PlaceEntry(entry, startX + col * (cellSize + gap), startY + row * (cellSize + gap), cellSize)
+                    end
+                end
+
+                if splitRows then
+                    PlaceGrid(buffEntries, 0, 0, sz, buffCols)
+                    PlaceGrid(harmfulEntries, 0, buffH + ((buffH > 0 and harmH > 0) and gap or 0), cellHarm, harmCols)
+                elseif splitCols then
+                    PlaceGrid(harmfulEntries, 0, 0, cellHarm, harmCols)
+                    PlaceGrid(buffEntries, harmW + ((buffW > 0 and harmW > 0) and gap or 0), 0, sz, buffCols)
+                else
+                    local allEntries = {}
+                    for _, entry in ipairs(buffEntries) do allEntries[#allEntries + 1] = entry end
+                    for _, entry in ipairs(harmfulEntries) do allEntries[#allEntries + 1] = entry end
+                    PlaceGrid(allEntries, 0, 0, max(sz, bigSz), min(6, #allEntries))
+                end
+
+                for i = poolIndex, #pool do
+                    local tex = pool[i]
+                    if tex then tex:Hide() end
                 end
                 if h._label then
                     h._label:SetTextColor(0.36, 0.62, 0.95, 0.95)
@@ -2143,13 +2288,22 @@ function GF.RefreshPreviewHandles()
         local h = _handles.private
         if h then
             local pa = conf.privateAuras or {}
-            local anchor = pa.anchor or "BOTTOM"
-            local offX = floor(((pa.x) or 0) * sc + 0.5)
-            local offY = floor(((pa.y) or 0) * sc + 0.5)
-            local paSz = floor(((pa.size) or 16) * sc + 0.5)
-            local paMax = (pa.max) or 3
-            local totalW = max(6, paSz * paMax + (paMax - 1) * 2)
-            h:SetSize(totalW, max(6, paSz))
+            local anchor = pa.anchor or "TOPRIGHT"
+            local offX, offY = ConfigToPreviewOffset(pa.x or 0, pa.y or 0)
+            local livePaSz = ScaleFrameValue(pa.size or 20, frameScale, 8)
+            local paSz = max(6, LiveToPreviewValue(livePaSz))
+            local paMax = RoundToNearest(tonumber(pa.max) or 4)
+            if paMax < 0 then paMax = 0 end
+            if paMax > 12 then paMax = 12 end
+            local paSpacing = max(0, LiveToPreviewValue(ScaleFrameValue(pa.spacing or 1, frameScale, 0)))
+            local dir = pa.direction or "LEFT"
+            local isVertical = (dir == "TOP" or dir == "BOTTOM")
+            local totalPrimary = paMax > 0 and (paMax * paSz + max(0, paMax - 1) * paSpacing) or paSz
+            if isVertical then
+                h:SetSize(max(6, paSz), max(6, totalPrimary))
+            else
+                h:SetSize(max(6, totalPrimary), max(6, paSz))
+            end
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (pa.layer or 8))
@@ -2163,6 +2317,17 @@ function GF.RefreshPreviewHandles()
             else
                 paR, paG, paB, paA = 0.10, 0.10, 0.12, 0.50
             end
+            local step = paSz + paSpacing
+            local slotAnchor, slotDX, slotDY
+            if dir == "LEFT" then
+                slotAnchor = "RIGHT"; slotDX = -step; slotDY = 0
+            elseif dir == "RIGHT" then
+                slotAnchor = "LEFT"; slotDX = step; slotDY = 0
+            elseif dir == "TOP" then
+                slotAnchor = "BOTTOM"; slotDX = 0; slotDY = step
+            else
+                slotAnchor = "TOP"; slotDX = 0; slotDY = -step
+            end
             for pi = 1, paMax do
                 local pic = h._paIcons[pi]
                 if not pic then
@@ -2171,7 +2336,7 @@ function GF.RefreshPreviewHandles()
                 end
                 pic:SetSize(paSz, paSz)
                 pic:ClearAllPoints()
-                pic:SetPoint("TOPLEFT", h, "TOPLEFT", (pi - 1) * (paSz + 2), 0)
+                pic:SetPoint(slotAnchor, h, slotAnchor, (pi - 1) * slotDX, (pi - 1) * slotDY)
                 pic:SetColorTexture(paR, paG, paB, paA)
                 pic:Show()
             end
@@ -2182,7 +2347,7 @@ function GF.RefreshPreviewHandles()
             -- clickable so the user can navigate to the Private Aura
             -- options section to re-enable it.
             local nativePrivate = IsNativeAuraHandle(kind, "private")
-            h:SetShown(_visToggles.private ~= false and not nativePrivate)
+            h:SetShown(_visToggles.private ~= false and not nativePrivate and paMax > 0)
             -- Label tint reflects enabled state.
             if h._label then
                 local lc = HANDLE_COLORS.private
@@ -2464,44 +2629,6 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     sep:SetPoint("TOPLEFT", headerBar, "BOTTOMLEFT", 0, 0)
     sep:SetPoint("TOPRIGHT", headerBar, "BOTTOMRIGHT", 0, 0)
     sep:SetColorTexture(0.12, 0.12, 0.16, 0.5)
-
-    -- Styled header button helper
-    local function MakeHeaderBtn(label, w)
-        local btn = CreateFrame("Button", nil, headerBar, "BackdropTemplate")
-        btn:SetSize(w, 16)
-        btn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
-        btn:SetBackdropColor(0.10, 0.11, 0.15, 0.8)
-        btn:SetBackdropBorderColor(0.16, 0.16, 0.22, 0.5)
-        local fs = btn:CreateFontString(nil, "OVERLAY")
-        fs:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
-        fs:SetPoint("CENTER")
-        fs:SetText(label)
-        fs:SetTextColor(0.50, 0.55, 0.65, 0.85)
-        btn:SetScript("OnEnter", function(self)
-            self:SetBackdropColor(0.14, 0.15, 0.20, 1)
-            self:SetBackdropBorderColor(0.25, 0.35, 0.55, 0.7)
-            fs:SetTextColor(0.65, 0.72, 0.85, 1)
-        end)
-        btn:SetScript("OnLeave", function(self)
-            self:SetBackdropColor(0.10, 0.11, 0.15, 0.8)
-            self:SetBackdropBorderColor(0.16, 0.16, 0.22, 0.5)
-            fs:SetTextColor(0.50, 0.55, 0.65, 0.85)
-        end)
-        return btn
-    end
-
-    local classBtn = MakeHeaderBtn("\226\134\187 Class", 52)
-    classBtn:SetPoint("RIGHT", headerBar, "RIGHT", -56, 0)
-    classBtn:SetScript("OnClick", function()
-        _classIdx = (_classIdx % #PREVIEW_CLASSES) + 1
-        GF.RefreshPreviewBox()
-    end)
-
-    local resetBtn = MakeHeaderBtn("Reset", 42)
-    resetBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
-    resetBtn:SetScript("OnClick", function()
-        GF.RefreshPreviewHandles()
-    end)
 
     -- Preview canvas (dark recessed surface)
     local area = CreateFrame("Frame", nil, container, "BackdropTemplate")

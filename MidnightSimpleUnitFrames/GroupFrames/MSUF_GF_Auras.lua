@@ -565,11 +565,25 @@ end
 ------------------------------------------------------------------------
 -- Position an icon within its group container
 ------------------------------------------------------------------------
-local function PositionIcon(ic, anchor, container, idx, perRow, size, spacing, gv)
+local function PositionIcon(ic, anchor, container, idx, perRow, size, spacing, gv, totalCount)
     ic:ClearAllPoints()
+    local step = size + spacing
+    if gv and gv.centered then
+        local count = math_max(1, totalCount or 1)
+        local col = idx - 1
+        local totalPrimary = count * size + (count - 1) * spacing
+        local halfOfs = totalPrimary * 0.5
+        if gv.px ~= 0 then
+            local ox = col * step - halfOfs + size * 0.5
+            ic:SetPoint("CENTER", container, "CENTER", ox, 0)
+        else
+            local oy = -(col * step - halfOfs) - size * 0.5
+            ic:SetPoint("CENTER", container, "CENTER", 0, oy)
+        end
+        return
+    end
     local col = (idx - 1) % perRow
     local row = math_floor((idx - 1) / perRow)
-    local step = size + spacing
     local ox = col * step * gv.px + row * step * gv.sx
     local oy = col * step * gv.py + row * step * gv.sy
     ic:SetPoint(anchor, container, anchor, ox, oy)
@@ -2438,10 +2452,11 @@ do
             local perRow = buffCfg.perRow or 4
             local maxShow = math_min(#MOCK_BUFFS, buffCfg.max or 6)
             local gv = GetGrowthVectors(growth)
+            local effAnchor = gv.centered and "CENTER" or anchor
             local container = EnsureContainer(f, "buff")
             local anchorTarget = ApplyContainerMode(container, f, buffCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, anchorTarget, anchor,
+            container:SetPoint(effAnchor, anchorTarget, effAnchor,
                 ScaleFrameValue(buffCfg.x or 0, frameScale),
                 ScaleFrameValue(buffCfg.y or 0, frameScale))
             container:SetSize(1, 1)
@@ -2455,7 +2470,7 @@ do
                     if ic.cooldown then ic.cooldown:Clear() end
                     if ic.count then ic.count:SetText(""); ic.count:Hide() end
                     ic:SetBackdropBorderColor(0, 0, 0, 1)
-                    PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv)
+                    PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv, maxShow)
                     ic:Show()
                 end
             end
@@ -2475,10 +2490,11 @@ do
             local perRow = debCfg.perRow or 3
             local maxShow = math_min(#MOCK_DEBUFFS, debCfg.max or 6)
             local gv = GetGrowthVectors(growth)
+            local effAnchor = gv.centered and "CENTER" or anchor
             local container = EnsureContainer(f, "debuff")
             local anchorTarget = ApplyContainerMode(container, f, debCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, anchorTarget, anchor,
+            container:SetPoint(effAnchor, anchorTarget, effAnchor,
                 ScaleFrameValue(debCfg.x or 0, frameScale),
                 ScaleFrameValue(debCfg.y or 0, frameScale))
             container:SetSize(1, 1)
@@ -2500,7 +2516,7 @@ do
                     else
                         ic:SetBackdropBorderColor(0.8, 0, 0, 1)
                     end
-                    PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv)
+                    PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv, maxShow)
                     ic:Show()
                 end
             end
@@ -2520,10 +2536,11 @@ do
             local perRow = extCfg.perRow or 3
             local maxShow = math_min(#MOCK_EXTERNALS, extCfg.max or 2)
             local gv = GetGrowthVectors(growth)
+            local effAnchor = gv.centered and "CENTER" or anchor
             local container = EnsureContainer(f, "externals")
             local anchorTarget = ApplyContainerMode(container, f, extCfg, parent)
             container:ClearAllPoints()
-            container:SetPoint(anchor, anchorTarget, anchor,
+            container:SetPoint(effAnchor, anchorTarget, effAnchor,
                 ScaleFrameValue(extCfg.x or 0, frameScale),
                 ScaleFrameValue(extCfg.y or 0, frameScale))
             container:SetSize(1, 1)
@@ -2537,7 +2554,7 @@ do
                     if ic.cooldown then ic.cooldown:Clear() end
                     if ic.count then ic.count:SetText(""); ic.count:Hide() end
                     ic:SetBackdropBorderColor(0, 0, 0, 1)
-                    PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv)
+                    PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv, maxShow)
                     ic:Show()
                 end
             end
