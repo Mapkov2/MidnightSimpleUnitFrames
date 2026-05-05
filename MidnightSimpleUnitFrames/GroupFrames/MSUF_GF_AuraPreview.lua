@@ -1055,8 +1055,10 @@ function GF.RefreshPreviewBox()
                     if type(gen.absorbBarColorG) == "number" then g = gen.absorbBarColorG end
                     if type(gen.absorbBarColorB) == "number" then b = gen.absorbBarColorB end
                 end
-                local a = tonumber(resolve("absorbBarOpacity")) or 0.5
-                m._absorb:SetStatusBarColor(r, g, b, a)
+                local a = tonumber(resolve("absorbBarOpacity")) or 0.6
+                m._absorb:SetStatusBarColor(r, g, b, 1)
+                local tex = m._absorb.GetStatusBarTexture and m._absorb:GetStatusBarTexture()
+                if tex and tex.SetAlpha then tex:SetAlpha(a) end
                 m._absorb:SetWidth(max(1, w * 0.08))
                 m._absorb:Show()
             else

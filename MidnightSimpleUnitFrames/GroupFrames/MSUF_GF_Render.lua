@@ -85,13 +85,38 @@ local function SetStatusBarTextureAlpha(bar, alpha)
     if not bar then return end
     if type(alpha) ~= "number" then alpha = 1 end
     if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+    bar._msufGFTextureAlphaMul = alpha
+    local overlayAlpha = bar._msufGFOverlayTextureAlpha
+    if type(overlayAlpha) == "number" then
+        alpha = alpha * overlayAlpha
+    end
     local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
     local target = tex or bar
     if target and target.SetAlpha then target:SetAlpha(alpha) end
 end
 
+local function SetOverlayStatusBarTextureAlpha(bar, alpha)
+    if not bar then return end
+    if type(alpha) == "number" then
+        if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+        bar._msufGFOverlayTextureAlpha = alpha
+    else
+        alpha = bar._msufGFOverlayTextureAlpha
+    end
+    if type(alpha) ~= "number" then return end
+    local mul = tonumber(bar._msufGFTextureAlphaMul) or 1
+    local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+    local target = tex or bar
+    if target and target.SetAlpha then target:SetAlpha(alpha * mul) end
+end
+
 local function SetStatusBarTextureAlphaFromBoolean(bar, boolValue, activeAlpha, inactiveAlpha)
     if not bar then return false end
+    local overlayAlpha = bar._msufGFOverlayTextureAlpha
+    if type(overlayAlpha) == "number" then
+        activeAlpha = (tonumber(activeAlpha) or 1) * overlayAlpha
+        inactiveAlpha = (tonumber(inactiveAlpha) or 1) * overlayAlpha
+    end
     local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
     if tex and tex.SetAlphaFromBoolean then
         tex:SetAlphaFromBoolean(boolValue, activeAlpha, inactiveAlpha)
@@ -235,10 +260,12 @@ local function ApplyBarTexture(f, kind)
     if f.absorbBar and f.absorbBar.SetStatusBarTexture and f._msufGFCachedAbsorbTex ~= absorbTex then
         f.absorbBar:SetStatusBarTexture(absorbTex)
         f._msufGFCachedAbsorbTex = absorbTex
+        SetOverlayStatusBarTextureAlpha(f.absorbBar)
     end
     if f.healAbsorbBar and f.healAbsorbBar.SetStatusBarTexture and f._msufGFCachedHealAbsorbTex ~= healAbsorbTex then
         f.healAbsorbBar:SetStatusBarTexture(healAbsorbTex)
         f._msufGFCachedHealAbsorbTex = healAbsorbTex
+        SetOverlayStatusBarTextureAlpha(f.healAbsorbBar)
     end
 
     -- Gradient overlays (reads from MSUF_DB.general — same source as main UF)
@@ -1221,7 +1248,8 @@ local function ApplyOverlayColors(f)
         local a = tonumber(_GF_ResolveOverlaySetting(kind, "absorbBarOpacity")) or 0.6
         if f._gfCAbR ~= r or f._gfCAbG ~= g or f._gfCAbB ~= b or f._gfCAbA ~= a then
             f._gfCAbR, f._gfCAbG, f._gfCAbB, f._gfCAbA = r, g, b, a
-            f.absorbBar:SetStatusBarColor(r, g, b, a)
+            f.absorbBar:SetStatusBarColor(r, g, b, 1)
+            SetOverlayStatusBarTextureAlpha(f.absorbBar, a)
         end
     end
     -- Heal absorb (color from general, opacity per-GF override → general)
@@ -1235,7 +1263,8 @@ local function ApplyOverlayColors(f)
         local a = tonumber(_GF_ResolveOverlaySetting(kind, "healAbsorbBarOpacity")) or 0.7
         if f._gfCHAbR ~= r or f._gfCHAbG ~= g or f._gfCHAbB ~= b or f._gfCHAbA ~= a then
             f._gfCHAbR, f._gfCHAbG, f._gfCHAbB, f._gfCHAbA = r, g, b, a
-            f.healAbsorbBar:SetStatusBarColor(r, g, b, a)
+            f.healAbsorbBar:SetStatusBarColor(r, g, b, 1)
+            SetOverlayStatusBarTextureAlpha(f.healAbsorbBar, a)
         end
     end
     -- Absorb anchoring (per-GF override → general).

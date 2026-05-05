@@ -40,7 +40,8 @@ local function _MSUF_SetHealthBarValue(frame, bar, value)
 end
 
 -- Per-unit absorb setting resolver.
--- Checks MSUF_DB[unitKey] for override, falls back to MSUF_DB.general.
+-- Checks MSUF_DB[unitKey] only when Bars/Highlight override is active,
+-- then falls back to MSUF_DB.general.
 -- PERF: Result cache — pure function, same input always gives same output.
 -- Eliminates 8× GetBossIndexFromToken lookups per target click.
 local _normalizeCache = {}
@@ -69,7 +70,8 @@ local function _MSUF_InvalidateAbsorbCache()
 end
 
 -- Resolve absorb display flags (enableBar, showText) for a unit.
--- Uses absorbTextMode from per-unit DB if overridden, else from general.
+-- Uses absorbTextMode from per-unit DB if Bars/Highlight override is active,
+-- else from general. HP/Power text overrides must not freeze absorb settings.
 local function _MSUF_ResolveAbsorbDisplay(unit)
     if not MSUF_DB then EnsureDB() end
     -- Invalidate cache if DB reference changed (profile switch).
@@ -84,7 +86,7 @@ local function _MSUF_ResolveAbsorbDisplay(unit)
     local mode = nil
     if nk then
         local u = MSUF_DB[nk]
-        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbTextMode ~= nil then
+        if u and u.hlOverride == true and u.absorbTextMode ~= nil then
             mode = tonumber(u.absorbTextMode)
         end
     end
@@ -116,7 +118,7 @@ local function _MSUF_ResolveAbsorbAnchor(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbAnchorMode ~= nil then
+        if u and u.hlOverride == true and u.absorbAnchorMode ~= nil then
             local v = tonumber(u.absorbAnchorMode) or 2
             _absorbCache[anchorKey] = v
             return v
@@ -143,12 +145,12 @@ local function _MSUF_ResolveAbsorbOpacity(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbBarOpacity ~= nil then
-            local v = tonumber(u.absorbBarOpacity) or 1
+        if u and u.hlOverride == true and u.absorbBarOpacity ~= nil then
+            local v = tonumber(u.absorbBarOpacity)
             _absorbCache[ck] = v; return v
         end
     end
-    local v = tonumber(g.absorbBarOpacity) or 1
+    local v = tonumber(g.absorbBarOpacity)
     _absorbCache[ck] = v; return v
 end
 
@@ -162,12 +164,12 @@ local function _MSUF_ResolveHealAbsorbOpacity(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.healAbsorbBarOpacity ~= nil then
-            local v = tonumber(u.healAbsorbBarOpacity) or 1
+        if u and u.hlOverride == true and u.healAbsorbBarOpacity ~= nil then
+            local v = tonumber(u.healAbsorbBarOpacity)
             _absorbCache[ck] = v; return v
         end
     end
-    local v = tonumber(g.healAbsorbBarOpacity) or 1
+    local v = tonumber(g.healAbsorbBarOpacity)
     _absorbCache[ck] = v; return v
 end
 

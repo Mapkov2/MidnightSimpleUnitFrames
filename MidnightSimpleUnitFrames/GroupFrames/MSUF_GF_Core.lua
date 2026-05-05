@@ -2099,6 +2099,12 @@ function GF.ApplyPreviewData(f, index, kind)
         if gfHasOvr and gfDb[key] ~= nil then return gfDb[key] end
         return gen and gen[key]
     end
+    local function _pSetOverlayAlpha(bar, alpha)
+        if type(alpha) ~= "number" then return end
+        if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+        local tex = bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+        if tex and tex.SetAlpha then tex:SetAlpha(alpha) end
+    end
     if f.incomingHealBar then
         local hpEnabled = (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(f._msufGFKind or "party", conf)) or false
         if hpEnabled ~= false then
@@ -2153,7 +2159,8 @@ function GF.ApplyPreviewData(f, index, kind)
             if type(gen.absorbBarColorB) == "number" then b = gen.absorbBarColorB end
         end
         local a = tonumber(_pResolve("absorbBarOpacity")) or 0.6
-        f.absorbBar:SetStatusBarColor(r, g, b, a)
+        f.absorbBar:SetStatusBarColor(r, g, b, 1)
+        _pSetOverlayAlpha(f.absorbBar, a)
         f.absorbBar:Show()
     elseif f.absorbBar then
         f.absorbBar:Hide()
@@ -2170,7 +2177,8 @@ function GF.ApplyPreviewData(f, index, kind)
             if type(gen.healAbsorbBarColorB) == "number" then b = gen.healAbsorbBarColorB end
         end
         local a = tonumber(_pResolve("healAbsorbBarOpacity")) or 0.7
-        f.healAbsorbBar:SetStatusBarColor(r, g, b, a)
+        f.healAbsorbBar:SetStatusBarColor(r, g, b, 1)
+        _pSetOverlayAlpha(f.healAbsorbBar, a)
         f.healAbsorbBar:Show()
     elseif f.healAbsorbBar then
         f.healAbsorbBar:Hide()
