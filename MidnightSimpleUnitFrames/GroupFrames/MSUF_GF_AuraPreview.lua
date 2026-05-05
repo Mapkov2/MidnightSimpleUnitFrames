@@ -563,7 +563,7 @@ local function CreateHandle(parent, key, sectionKey, w, h, colorKey)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(self._cfgKey or "?", 1, 1, 1)
             if self._getCurrentAnchor then
-                local anc = self._getCurrentAnchor() or "?"
+                local anc = self:_getCurrentAnchor() or "?"
                 GameTooltip:AddLine("Anchor: " .. anc, 0.7, 0.7, 0.7)
             end
             if self._sectionKey then
