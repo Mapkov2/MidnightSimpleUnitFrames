@@ -25,6 +25,9 @@ local GetCVarBool = GetCVarBool
 local math_min     = math.min
 local math_max     = math.max
 local IsAltKeyDown  = IsAltKeyDown
+local IsShiftKeyDown = IsShiftKeyDown
+local IsControlKeyDown = IsControlKeyDown
+local GetCurrentKeyBoardFocus = GetCurrentKeyBoardFocus
 local GetSpecialization    = GetSpecialization
 local GetSpecializationInfo = GetSpecializationInfo
 local tonumber            = tonumber
@@ -91,6 +94,93 @@ if not _MSUF_RoundInt then
         return math.ceil(v - 0.5)
     end
     _G._MSUF_RoundInt = _MSUF_RoundInt
+end
+
+local gameplayNudgeSelection
+
+local function MSUF_Gameplay_IsTextInputFocused()
+    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    return focus and focus.IsObjectType and focus:IsObjectType("EditBox")
+end
+
+local function MSUF_Gameplay_GetNudgeStep()
+    if IsControlKeyDown and IsControlKeyDown() then return 10 end
+    if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
+    return 1
+end
+
+local function MSUF_Gameplay_SelectNudgeFrame(frame, selected)
+    if selected and gameplayNudgeSelection and gameplayNudgeSelection ~= frame then
+        MSUF_Gameplay_SelectNudgeFrame(gameplayNudgeSelection, false)
+    end
+
+    if selected then
+        gameplayNudgeSelection = frame
+    elseif gameplayNudgeSelection == frame then
+        gameplayNudgeSelection = nil
+    end
+
+    if frame and frame._msufGameplayNudgeBorder then
+        frame._msufGameplayNudgeBorder:SetShown(selected and true or false)
+    end
+end
+
+local function MSUF_Gameplay_SetupArrowNudge(frame, nudgeFn, canNudgeFn)
+    if not frame or frame._msufGameplayArrowNudgeSetup then return end
+    frame._msufGameplayArrowNudgeSetup = true
+    frame._msufGameplayNudgeFn = nudgeFn
+    frame._msufGameplayCanNudgeFn = canNudgeFn
+
+    if frame.EnableKeyboard then frame:EnableKeyboard(true) end
+    if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
+
+    local border = frame:CreateTexture(nil, "OVERLAY")
+    border:SetPoint("TOPLEFT", frame, "TOPLEFT", -3, 3)
+    border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 3, -3)
+    border:SetColorTexture(0.27, 0.53, 0.80, 0.40)
+    border:Hide()
+    frame._msufGameplayNudgeBorder = border
+
+    frame:HookScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
+        local can = self._msufGameplayCanNudgeFn
+        if type(can) == "function" and not can(self) then return end
+        MSUF_Gameplay_SelectNudgeFrame(self, true)
+    end)
+
+    frame:HookScript("OnHide", function(self)
+        MSUF_Gameplay_SelectNudgeFrame(self, false)
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
+
+    frame:SetScript("OnKeyDown", function(self, key)
+        local dx, dy = 0, 0
+        if key == "LEFT" then
+            dx = -1
+        elseif key == "RIGHT" then
+            dx = 1
+        elseif key == "UP" then
+            dy = 1
+        elseif key == "DOWN" then
+            dy = -1
+        else
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            return
+        end
+
+        local can = self._msufGameplayCanNudgeFn
+        if gameplayNudgeSelection ~= self or MSUF_Gameplay_IsTextInputFocused() or (type(can) == "function" and not can(self)) then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            return
+        end
+
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+        local step = MSUF_Gameplay_GetNudgeStep()
+        local fn = self._msufGameplayNudgeFn
+        if type(fn) ~= "function" or not fn(self, dx * step, dy * step) then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+        end
+    end)
 end
 
 local C_Timer      = C_Timer
@@ -856,6 +946,25 @@ local function EnsureFirstDanceFrame()
     firstDanceFrame:SetClampedToScreen(true)
     firstDanceFrame:SetMovable(true)
     firstDanceFrame:RegisterForDrag("LeftButton")
+    MSUF_Gameplay_SetupArrowNudge(firstDanceFrame,
+        function(self, dx, dy)
+            local db = EnsureGameplayDefaults()
+            if db.lockFirstDance then return false end
+            db.firstDanceOffsetX = _MSUF_Clamp(_MSUF_RoundInt((tonumber(db.firstDanceOffsetX) or 0) + (dx or 0)), -800, 800)
+            db.firstDanceOffsetY = _MSUF_Clamp(_MSUF_RoundInt((tonumber(db.firstDanceOffsetY) or 80) + (dy or 0)), -800, 800)
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "CENTER", db.firstDanceOffsetX, db.firstDanceOffsetY)
+            local p = _G.MSUF_GameplayPanel
+            if p and p.MSUF_SyncFirstDanceOffsetSliders then
+                p:MSUF_SyncFirstDanceOffsetSliders()
+            end
+            _ApplyFirstDanceLockState()
+            return true
+        end,
+        function(self)
+            local gd = EnsureGameplayDefaults()
+            return gd.enableFirstDanceTimer and not gd.lockFirstDance and self.IsShown and self:IsShown()
+        end)
 
     firstDanceFrame:SetScript("OnDragStart", function(self)
         local gd = EnsureGameplayDefaults()
@@ -863,6 +972,7 @@ local function EnsureFirstDanceFrame()
         if gd.firstDanceClickThrough ~= false then
             if not (IsAltKeyDown and IsAltKeyDown()) then return end
         end
+        MSUF_Gameplay_SelectNudgeFrame(self, true)
         self._msufDragging = true
         self:StartMoving()
     end)
@@ -883,6 +993,7 @@ local function EnsureFirstDanceFrame()
         if p and p.MSUF_SyncFirstDanceOffsetSliders then
             p:MSUF_SyncFirstDanceOffsetSliders()
         end
+        MSUF_Gameplay_SelectNudgeFrame(self, true)
         _ApplyFirstDanceLockState()
     end)
 
@@ -1162,10 +1273,25 @@ EnsureCombatStateText = function()
         combatStateFrame:SetClampedToScreen(true)
         combatStateFrame:SetMovable(true)
         combatStateFrame:RegisterForDrag("LeftButton")
+        MSUF_Gameplay_SetupArrowNudge(combatStateFrame,
+            function(self, dx, dy)
+                local db = EnsureGameplayDefaults()
+                if db.lockCombatState then return false end
+                db.combatStateOffsetX = _MSUF_RoundInt((tonumber(db.combatStateOffsetX) or 0) + (dx or 0))
+                db.combatStateOffsetY = _MSUF_RoundInt((tonumber(db.combatStateOffsetY) or 80) + (dy or 0))
+                self:ClearAllPoints()
+                self:SetPoint("CENTER", UIParent, "CENTER", db.combatStateOffsetX, db.combatStateOffsetY)
+                return true
+            end,
+            function(self)
+                local gd = EnsureGameplayDefaults()
+                return gd.enableCombatStateText and not gd.lockCombatState and self.IsShown and self:IsShown()
+            end)
 
         combatStateFrame:SetScript("OnDragStart", function(self)
             local gd = EnsureGameplayDefaults()
             if gd.lockCombatState then return end
+            MSUF_Gameplay_SelectNudgeFrame(self, true)
             self:StartMoving()
         end)
 
@@ -1178,6 +1304,7 @@ EnsureCombatStateText = function()
             local db = EnsureGameplayDefaults()
             db.combatStateOffsetX = dx
             db.combatStateOffsetY = dy
+            MSUF_Gameplay_SelectNudgeFrame(self, true)
         end)
     end
 
@@ -1754,6 +1881,25 @@ local function CreateCombatTimerFrame()
     combatFrame:SetClampedToScreen(true)
     combatFrame:SetMovable(true)
     combatFrame:RegisterForDrag("LeftButton")
+    MSUF_Gameplay_SetupArrowNudge(combatFrame,
+        function(self, dx, dy)
+            local db = EnsureGameplayDefaults()
+            if db.lockCombatTimer then return false end
+            db.combatOffsetX = _MSUF_Clamp(_MSUF_RoundInt((tonumber(db.combatOffsetX) or 0) + (dx or 0)), -800, 800)
+            db.combatOffsetY = _MSUF_Clamp(_MSUF_RoundInt((tonumber(db.combatOffsetY) or 0) + (dy or 0)), -800, 800)
+            MSUF_Gameplay_ApplyCombatTimerAnchor(db)
+            MSUF_Gameplay_TickCombatTimer()
+            local p = _G.MSUF_GameplayPanel
+            if p and p.MSUF_SyncCombatTimerOffsetSliders then
+                p:MSUF_SyncCombatTimerOffsetSliders()
+            end
+            ApplyLockState()
+            return true
+        end,
+        function(self)
+            local gd = EnsureGameplayDefaults()
+            return gd.enableCombatTimer and not gd.lockCombatTimer and self.IsShown and self:IsShown()
+        end)
 
     combatFrame:SetScript("OnDragStart", function(self)
         local gd = EnsureGameplayDefaults()
@@ -1765,6 +1911,7 @@ local function CreateCombatTimerFrame()
             if not (IsAltKeyDown and IsAltKeyDown()) then return end
         end
 
+        MSUF_Gameplay_SelectNudgeFrame(self, true)
         self._msufDragging = true
         self:StartMoving()
     end)
@@ -1799,6 +1946,7 @@ local function CreateCombatTimerFrame()
             p:MSUF_SyncCombatTimerOffsetSliders()
         end
 
+        MSUF_Gameplay_SelectNudgeFrame(self, true)
         -- Re-apply click-through / ALT-to-drag state after the drag ends.
         ApplyLockState()
     end)
@@ -2631,7 +2779,7 @@ if not totemsFrame._msufDragOverlay then
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:AddLine("Totems Preview", 1, 1, 1)
-            GameTooltip:AddLine("Drag to move.", 0.9, 0.9, 0.9)
+            GameTooltip:AddLine("Drag or arrow keys to move.", 0.9, 0.9, 0.9)
             GameTooltip:AddLine("Use X/Y offsets for fine tuning.", 0.7, 0.7, 0.7)
             GameTooltip:Show()
         end
@@ -2701,7 +2849,28 @@ if not totemsFrame._msufDragOverlay then
         if opt and opt.MSUF_SyncTotemOffsetSliders then
             opt:MSUF_SyncTotemOffsetSliders()
         end
+        MSUF_Gameplay_SelectNudgeFrame(self, true)
     end)
+
+    MSUF_Gameplay_SetupArrowNudge(ov,
+        function(self, dx, dy)
+            local g = EnsureGameplayDefaults()
+            if not totemsFrame or not totemsFrame._msufPreviewActive then return false end
+            local offX = _MSUF_RoundInt((tonumber(g.playerTotemsOffsetX) or 0) + (dx or 0))
+            local offY = _MSUF_RoundInt((tonumber(g.playerTotemsOffsetY) or -6) + (dy or 0))
+            g.playerTotemsOffsetX = offX
+            g.playerTotemsOffsetY = offY
+            _ApplyTotemsAnchorOnly(g, offX, offY)
+
+            local opt = _G.MSUF_GameplayPanel
+            if opt and opt.MSUF_SyncTotemOffsetSliders then
+                opt:MSUF_SyncTotemOffsetSliders()
+            end
+            return true
+        end,
+        function(self)
+            return totemsFrame and totemsFrame._msufPreviewActive and self.IsShown and self:IsShown()
+        end)
 
     totemsFrame._msufDragOverlay = ov
 end

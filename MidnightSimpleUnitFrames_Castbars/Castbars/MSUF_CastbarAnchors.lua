@@ -349,6 +349,201 @@ end
 -- Player castbar sizing: always follow castbar size keys (NOT unitframe width).
 -- Also keep the player preview frame in perfect sync with the real bar.
 -- ============================================================
+local PLAYER_WIDTH_RETRY_DELAYS = { 0.05, 0.15, 0.35, 0.75, 1.5, 3.0, 5.0, 7.0 }
+local PLAYER_WIDTH_SOURCE_HOOKED = setmetatable({}, { __mode = "k" })
+local playerWidthSourceQueued = false
+local playerWidthSourceRetryActive = false
+local playerWidthSourceRetryIndex = 0
+
+local function MSUF_IsPlayerCastbarWidthSource(matchSrc)
+    return matchSrc == "essential" or matchSrc == "utility"
+end
+
+local function MSUF_GetPlayerCastbarWidthSourceNames(matchSrc)
+    if matchSrc == "utility" then
+        return "UtilityCooldownViewer_AnchorContainer", "UtilityCooldownViewer"
+    end
+    if matchSrc == "essential" then
+        return "EssentialCooldownViewer_CDM_Container", "EssentialCooldownViewer"
+    end
+end
+
+local function MSUF_GetEffectiveCooldownViewer(viewerKey)
+    if not viewerKey then return nil end
+    local getEffective = _G.MSUF_GetEffectiveCooldownFrame
+    if type(getEffective) == "function" then
+        local frame = getEffective(viewerKey)
+        if frame then return frame end
+    end
+    return _G[viewerKey]
+end
+
+local function MSUF_GetScaledWidthForPlayerCastbar(sourceFrame, targetFrame)
+    if not sourceFrame then return nil end
+
+    local getScaled = _G.MSUF_CDM_GetScaledWidth
+    if type(getScaled) == "function" then
+        return getScaled(sourceFrame, targetFrame)
+    end
+
+    if not sourceFrame.GetWidth then return nil end
+    local w = sourceFrame:GetWidth()
+    if not w or w <= 0 then return nil end
+
+    local sourceScale = (sourceFrame.GetEffectiveScale and sourceFrame:GetEffectiveScale()) or 1
+    local targetScale = (targetFrame and targetFrame.GetEffectiveScale and targetFrame:GetEffectiveScale()) or 1
+    if not sourceScale or sourceScale <= 0 then sourceScale = 1 end
+    if not targetScale or targetScale <= 0 then targetScale = 1 end
+
+    if sourceScale == targetScale then
+        return floor(w + 0.5)
+    end
+    return floor(w * sourceScale / targetScale + 0.5)
+end
+
+local function MSUF_GetPlayerCastbarWidthFromSource(matchSrc, targetFrame)
+    local containerKey, viewerKey = MSUF_GetPlayerCastbarWidthSourceNames(matchSrc)
+    local sourceFrame = containerKey and _G[containerKey] or nil
+    local w = MSUF_GetScaledWidthForPlayerCastbar(sourceFrame, targetFrame)
+
+    if not w or w <= 0 then
+        sourceFrame = MSUF_GetEffectiveCooldownViewer(viewerKey)
+        w = MSUF_GetScaledWidthForPlayerCastbar(sourceFrame, targetFrame)
+    end
+
+    if (not w or w <= 0) and viewerKey then
+        local rawViewer = _G[viewerKey]
+        if rawViewer and rawViewer ~= sourceFrame then
+            w = MSUF_GetScaledWidthForPlayerCastbar(rawViewer, targetFrame)
+        end
+    end
+
+    return w
+end
+
+local MSUF_QueuePlayerCastbarWidthSourceSync
+
+local function MSUF_PlayerCastbarWidthSourceChanged()
+    if MSUF_QueuePlayerCastbarWidthSourceSync then
+        MSUF_QueuePlayerCastbarWidthSourceSync()
+    end
+end
+
+local function MSUF_FlushPlayerCastbarWidthSourceSync()
+    playerWidthSourceQueued = false
+    EnsureDB()
+    local g = MSUF_DB and MSUF_DB.general or {}
+    if g.enablePlayerCastbar == false or not MSUF_IsPlayerCastbarWidthSource(g.castbarPlayerMatchWidth) then
+        return
+    end
+    if type(MSUF_ReanchorPlayerCastBar) == "function" then
+        MSUF_ReanchorPlayerCastBar()
+    end
+end
+
+local function MSUF_HookPlayerCastbarWidthSourceFrame(frame)
+    if not frame or not frame.HookScript or PLAYER_WIDTH_SOURCE_HOOKED[frame] then
+        return false
+    end
+
+    PLAYER_WIDTH_SOURCE_HOOKED[frame] = true
+    frame:HookScript("OnSizeChanged", MSUF_PlayerCastbarWidthSourceChanged)
+    frame:HookScript("OnShow", MSUF_PlayerCastbarWidthSourceChanged)
+    frame:HookScript("OnHide", MSUF_PlayerCastbarWidthSourceChanged)
+    return true
+end
+
+local function MSUF_EnsurePlayerCastbarWidthSourceHooks(g)
+    local matchSrc = g and g.castbarPlayerMatchWidth
+    if not MSUF_IsPlayerCastbarWidthSource(matchSrc) then return false end
+
+    local found = false
+    local containerKey, viewerKey = MSUF_GetPlayerCastbarWidthSourceNames(matchSrc)
+
+    local container = containerKey and _G[containerKey] or nil
+    if container then
+        found = true
+        MSUF_HookPlayerCastbarWidthSourceFrame(container)
+    end
+
+    local viewer = MSUF_GetEffectiveCooldownViewer(viewerKey)
+    if viewer then
+        found = true
+        MSUF_HookPlayerCastbarWidthSourceFrame(viewer)
+    end
+
+    local rawViewer = viewerKey and _G[viewerKey] or nil
+    if rawViewer and rawViewer ~= viewer then
+        found = true
+        MSUF_HookPlayerCastbarWidthSourceFrame(rawViewer)
+    end
+
+    return found
+end
+
+local function MSUF_PlayerCastbarWidthSourceRetryStep()
+    playerWidthSourceRetryIndex = playerWidthSourceRetryIndex + 1
+
+    EnsureDB()
+    local g = MSUF_DB and MSUF_DB.general or {}
+    if g.enablePlayerCastbar == false or not MSUF_IsPlayerCastbarWidthSource(g.castbarPlayerMatchWidth) then
+        playerWidthSourceRetryActive = false
+        return
+    end
+
+    if MSUF_EnsurePlayerCastbarWidthSourceHooks(g) then
+        playerWidthSourceRetryActive = false
+        MSUF_PlayerCastbarWidthSourceChanged()
+        return
+    end
+
+    local delay = PLAYER_WIDTH_RETRY_DELAYS[playerWidthSourceRetryIndex]
+    if delay and C_Timer and C_Timer.After then
+        C_Timer.After(delay, MSUF_PlayerCastbarWidthSourceRetryStep)
+    else
+        playerWidthSourceRetryActive = false
+    end
+end
+
+local function MSUF_StartPlayerCastbarWidthSourceRetry()
+    if playerWidthSourceRetryActive or not (C_Timer and C_Timer.After) then return end
+    playerWidthSourceRetryActive = true
+    playerWidthSourceRetryIndex = 0
+    C_Timer.After(0, MSUF_PlayerCastbarWidthSourceRetryStep)
+end
+
+MSUF_QueuePlayerCastbarWidthSourceSync = function()
+    if playerWidthSourceQueued then return end
+    playerWidthSourceQueued = true
+
+    local runNext = _G.MSUF_Castbars_RunNextFrame
+    if type(runNext) == "function" then
+        runNext(MSUF_FlushPlayerCastbarWidthSourceSync)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, MSUF_FlushPlayerCastbarWidthSourceSync)
+    else
+        MSUF_FlushPlayerCastbarWidthSourceSync()
+    end
+end
+
+local function MSUF_UpdatePlayerCastbarWidthSourceSync(g)
+    if not MSUF_IsPlayerCastbarWidthSource(g and g.castbarPlayerMatchWidth) then return end
+    if not MSUF_EnsurePlayerCastbarWidthSourceHooks(g) then
+        MSUF_StartPlayerCastbarWidthSourceRetry()
+    end
+end
+
+do
+    local boot = CreateFrame("Frame")
+    boot:RegisterEvent("PLAYER_ENTERING_WORLD")
+    boot:SetScript("OnEvent", function()
+        EnsureDB()
+        local g = MSUF_DB and MSUF_DB.general or {}
+        MSUF_UpdatePlayerCastbarWidthSourceSync(g)
+        MSUF_PlayerCastbarWidthSourceChanged()
+    end)
+end
+
 local function MSUF_GetPlayerCastbarDesiredSize(g, bar, fallbackW, fallbackH)
     local w = g and tonumber(g.castbarPlayerBarWidth) or nil
     local h = g and tonumber(g.castbarPlayerBarHeight) or nil
@@ -356,29 +551,10 @@ local function MSUF_GetPlayerCastbarDesiredSize(g, bar, fallbackW, fallbackH)
     -- Width sync to CooldownManager Essential/Utility viewer (scale-compensated)
     if g then
         local matchSrc = g.castbarPlayerMatchWidth
-        if matchSrc == "essential" or matchSrc == "utility" then
-            local getScaled = _G.MSUF_CDM_GetScaledWidth
-            if type(getScaled) == "function" then
-                local ww
-                -- 1) CDM anchor container (exact calculated content width)
-                local containerKey = (matchSrc == "utility")
-                    and "UtilityCooldownViewer_AnchorContainer"
-                    or  "EssentialCooldownViewer_CDM_Container"
-                local container = _G[containerKey]
-                if container then
-                    ww = getScaled(container, bar)
-                end
-                -- 2) Blizzard viewer frame fallback
-                if not ww or ww <= 0 then
-                    local viewerKey = (matchSrc == "utility") and "UtilityCooldownViewer" or "EssentialCooldownViewer"
-                    local viewer = _G[viewerKey]
-                    if viewer then
-                        ww = getScaled(viewer, bar)
-                    end
-                end
-                if ww and ww > 0 then
-                    w = ww
-                end
+        if MSUF_IsPlayerCastbarWidthSource(matchSrc) then
+            local ww = MSUF_GetPlayerCastbarWidthFromSource(matchSrc, bar)
+            if ww and ww > 0 then
+                w = ww
             end
         end
     end
@@ -515,6 +691,8 @@ function MSUF_ReanchorPlayerCastBar()
             MSUF_PlayerCastbar:SetPoint("BOTTOM", msufPlayer, "TOP", offsetX, offsetY)
         end
     end
+
+    MSUF_UpdatePlayerCastbarWidthSourceSync(g)
 
     local w, h = MSUF_GetPlayerCastbarDesiredSize(g, MSUF_PlayerCastbar, 250, 18)
     MSUF_ApplyPlayerCastbarSizeAndLayout(MSUF_PlayerCastbar, g, w, h)
