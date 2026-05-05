@@ -159,6 +159,19 @@ local HANDLE_COLORS = {
     private   = { 0.50, 0.50, 0.50 },
 }
 
+local NATIVE_AURA_HANDLE_TYPES = {
+    buff = "buffs",
+    debuff = "debuffs",
+    externals = "externals",
+}
+
+local function IsNativeAuraHandle(kind, key)
+    local nativeKey = NATIVE_AURA_HANDLE_TYPES[key]
+    if not nativeKey or not GF.IsBlizzardAuraTypeEnabled or not GF.GetConf then return false end
+    local conf = GF.GetConf(kind or "party")
+    return GF.IsBlizzardAuraTypeEnabled(conf, nativeKey) == true
+end
+
 local STATUS_ICON_SPECS = {
     { key = "roleIcon",      label = "Role",        sizeKey = "roleIconSize",      anchorKey = "roleIconAnchor",   xKey = "roleIconX",   yKey = "roleIconY",   layerKey = "roleIconLayer",   defAnchor = "TOPLEFT",  defSize = 12 },
     { key = "leaderIcon",    label = "Leader",       sizeKey = "leaderIconSize",    anchorKey = "leaderIconAnchor", xKey = "leaderIconX", yKey = "leaderIconY", layerKey = "leaderIconLayer", defAnchor = "TOPRIGHT", defSize = 12 },
@@ -1702,6 +1715,7 @@ function GF.RefreshPreviewHandles()
             local spacing = floor(rawSpc * sc + 0.5)
             local maxIcons = (ac and ac.max) or (grpKey == "externals" and 2 or 3)
             local en = not ac or ac.enabled ~= false
+            local nativeGroup = IsNativeAuraHandle(kind, grpKey)
 
             -- Growth direction drives where icons flow from the anchor.
             -- Must match the canonical renderer (MSUF_GF_Auras.lua
@@ -1871,18 +1885,17 @@ function GF.RefreshPreviewHandles()
             h:ClearAllPoints()
             h:SetPoint(anchor, anchorTarget, anchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
-            -- Visibility is the user's sidebar toggle alone. The config
-            -- `en` state no longer hides the handle: clicking on a
-            -- disabled-feature handle must still navigate to the matching
-            -- Options section so the user can re-enable it. The disabled
-            -- state is conveyed via dimmed icon vertex color (above) and
-            -- label tint (below).
+            -- Visibility is the user's sidebar toggle. Native Blizzard
+            -- categories still use this handle for the per-category block
+            -- anchor/offset; only custom-only layout controls are disabled.
             h:SetShown(_visToggles[grpKey] ~= false)
             -- Label tint reflects en state: bright = live, dim = disabled.
             -- Cheap; HANDLE_COLORS is a small file-scope literal table.
             if h._label then
                 local lc = HANDLE_COLORS[grpKey] or HANDLE_COLORS.status
-                if en then
+                if nativeGroup then
+                    h._label:SetTextColor(0.36, 0.62, 0.95, 0.95)
+                elseif en then
                     h._label:SetTextColor(lc[1], lc[2], lc[3], 0.9)
                 else
                     h._label:SetTextColor(lc[1] * 0.5, lc[2] * 0.5, lc[3] * 0.5, 0.6)
@@ -2017,11 +2030,14 @@ function GF.RefreshPreviewHandles()
             -- Visibility = sidebar toggle only. Disabled-config still
             -- clickable so the user can navigate to the Private Aura
             -- options section to re-enable it.
+            local nativePrivate = IsNativeAuraHandle(kind, "private")
             h:SetShown(_visToggles.private ~= false)
             -- Label tint reflects enabled state.
             if h._label then
                 local lc = HANDLE_COLORS.private
-                if paEn then
+                if nativePrivate then
+                    h._label:SetTextColor(0.36, 0.62, 0.95, 0.95)
+                elseif paEn then
                     h._label:SetTextColor(lc[1], lc[2], lc[3], 0.9)
                 else
                     h._label:SetTextColor(lc[1] * 0.5, lc[2] * 0.5, lc[3] * 0.5, 0.6)
@@ -2162,7 +2178,7 @@ function GF.RefreshPreviewHandles()
     -- it elsewhere so aura layouts read cleanly.
     local userTextOn = (_visToggles.text == true) or (_soloKey == "text")
     local showText   = userTextOn or (not focus) or focus == "text" or focus == "overlay"
-    local showAuras  = not focus or focus == "indicators" or focus == "sicons"
+    local showAuras  = not focus or focus == "indicators" or focus == "sicons" or focus == "blizzrenderer"
     local showSIcons = not focus or focus == "sicons"
     local showSI     = not focus or focus == "indicators"
     local showPriv   = not focus or focus == "indicators"

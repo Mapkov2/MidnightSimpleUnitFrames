@@ -63,10 +63,46 @@ local function ForceFrameLevelRefresh(frame)
     frame:SetFrameLevel(level)
 end
 
+local function ClearContainerOverlay(f)
+    if not f then return end
+    if f._gfPrivContainerOverlayID then
+        RemovePrivateAuraAnchor(f._gfPrivContainerOverlayID)
+    end
+    f._gfPrivContainerOverlayID = nil
+    f._gfPrivContainerOverlayUnit = nil
+    f._gfPrivCOCached = nil
+    if f._gfPrivOverlayFrame then f._gfPrivOverlayFrame:Hide() end
+end
+
+local TriggerPrivateAuraShowDispelType = _G.C_UnitAuras and _G.C_UnitAuras.TriggerPrivateAuraShowDispelType
+local privateAuraShowDispelType = false
+local privateAuraShowDispelCount = 0
+
+local function UpdatePrivateAuraShowDispelType(f, enabled)
+    local want = enabled == true
+    local prev = f and f._gfPrivShowDispelType == true
+    if prev == want then return end
+    if f then f._gfPrivShowDispelType = want end
+    if want then
+        privateAuraShowDispelCount = privateAuraShowDispelCount + 1
+    else
+        privateAuraShowDispelCount = privateAuraShowDispelCount - 1
+        if privateAuraShowDispelCount < 0 then privateAuraShowDispelCount = 0 end
+    end
+    local show = privateAuraShowDispelCount > 0
+    if privateAuraShowDispelType ~= show then
+        privateAuraShowDispelType = show
+        if type(TriggerPrivateAuraShowDispelType) == "function" then
+            pcall(TriggerPrivateAuraShowDispelType, show)
+        end
+    end
+end
+
 ------------------------------------------------------------------------
 -- Clear anchors for a frame (icon anchors + optional container overlay)
 ------------------------------------------------------------------------
 local function ClearAnchors(f)
+    UpdatePrivateAuraShowDispelType(f, false)
     -- Icon anchor IDs
     local ids = f._gfPrivAnchorIDs
     if type(ids) == "table" then
@@ -85,19 +121,13 @@ local function ClearAnchors(f)
     f._gfPrivLayer = nil
     f._gfPrivDir = nil
 
-    -- Container overlay anchor
-    local coID = f._gfPrivContainerOverlayID
-    if coID then RemovePrivateAuraAnchor(coID) end
-    f._gfPrivContainerOverlayID  = nil
-    f._gfPrivContainerOverlayUnit = nil
-    f._gfPrivCOCached = nil
+    ClearContainerOverlay(f)
 
     local slots = f._gfPrivSlots
     if type(slots) == "table" then
         for i = 1, #slots do if slots[i] then slots[i]:Hide() end end
     end
     if f._gfPrivContainer then f._gfPrivContainer:Hide() end
-    if f._gfPrivOverlayFrame then f._gfPrivOverlayFrame:Hide() end
 end
 
 ------------------------------------------------------------------------
@@ -166,7 +196,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     end
 
     -- Read from nested privateAuras table (migrated) or flat keys (legacy)
-    local paEnabled, paMax, paSize, paAnchor, paX, paY, paCountdown, paDirection, paNumbers, paLayer
+    local paEnabled, paMax, paSize, paAnchor, paX, paY, paCountdown, paDirection, paNumbers, paLayer, paShowDispelType
     if pa and pa.enabled ~= nil then
         paEnabled   = pa.enabled
         paMax       = pa.max or 4
@@ -178,6 +208,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         paCountdown = pa.showCountdown ~= false
         paNumbers   = pa.showNumbers == true
         paLayer     = pa.layer or 8
+        paShowDispelType = pa.showDispelType == true
     else
         paEnabled   = conf.privateAurasEnabled
         paMax       = conf.privateAuraMax or 4
@@ -189,6 +220,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         paCountdown = conf.privateAuraCountdown ~= false
         paNumbers   = false
         paLayer     = 8
+        paShowDispelType = conf.privateAuraShowDispelType == true
     end
 
     -- Feature disabled → clear
@@ -200,9 +232,14 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     -- No unit → clear
     if not unit then ClearAnchors(f); return end
 
+    local nativeDispels = (paOverride == nil)
+        and GF.IsBlizzardAuraTypeEnabled
+        and GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
+
     local maxN = math_max(0, math_floor((tonumber(paMax) or 4) + 0.5))
     if maxN == 0 then ClearAnchors(f); return end
     if maxN > 12 then maxN = 12 end
+    UpdatePrivateAuraShowDispelType(f, paShowDispelType)
 
     local frameScale = 1
     if kind then
@@ -386,7 +423,12 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     end
 
     -- 12.0.5+ native Private Aura Dispel Overlay (separate container anchor).
-    GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
+    -- The full Blizzard aura renderer owns dispel overlays when that category is enabled.
+    if nativeDispels then
+        GF.ApplyPrivateAuraContainerOverlay(f, unit, { containerOverlay = { enabled = false } })
+    else
+        GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -518,6 +560,12 @@ end
 
 function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
     if not f or not unit then return end
+    local kind = f._msufGFKind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    if GF.IsBlizzardDispelRendererActive and GF.IsBlizzardDispelRendererActive(conf) then
+        ClearContainerOverlay(f)
+        return
+    end
 
     local co = _GetContainerOverlayConf(pa)
     local auraOrgType = _ResolveAuraOrganizationType(co.gradientDir)
@@ -525,12 +573,7 @@ function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
 
     -- Disabled or teardown: clear existing anchor and bail.
     if not co.enabled then
-        if f._gfPrivContainerOverlayID then
-            RemovePrivateAuraAnchor(f._gfPrivContainerOverlayID)
-        end
-        f._gfPrivContainerOverlayID   = nil
-        f._gfPrivContainerOverlayUnit = nil
-        if f._gfPrivOverlayFrame then f._gfPrivOverlayFrame:Hide() end
+        ClearContainerOverlay(f)
         return
     end
 
