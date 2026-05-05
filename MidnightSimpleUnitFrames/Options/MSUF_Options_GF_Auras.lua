@@ -206,6 +206,42 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return AurasRoot().renderer == "BLIZZARD"
     end
 
+    if not _G.StaticPopupDialogs["MSUF_SI_ICON_BLIZZARD_WARN"] then
+        _G.StaticPopupDialogs["MSUF_SI_ICON_BLIZZARD_WARN"] = {
+            text = "Spell Indicator |cffffd200Icon|r + |cffffd200Blizzard Renderer|r:\n\nTo prevent duplicate buff icons, MSUF switches Buff display to Custom Rendering whenever an Icon-type Spell Indicator is active on a unit frame.\n\nAll other buffs continue to display normally.",
+            button1 = "OK",
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+
+    local function ShowSIIconBlizzardWarn()
+        if _G.StaticPopup_Show then
+            _G.StaticPopup_Show("MSUF_SI_ICON_BLIZZARD_WARN")
+        end
+    end
+
+    local function AnySpellIndicatorHasIconPlaced()
+        local conf = GF.GetConf(K())
+        local si = conf and conf.spellIndicators
+        if not (si and si.enabled ~= false) then return false end
+        local specs = si.specs
+        if not specs then return false end
+        for _, specCfg in pairs(specs) do
+            if type(specCfg) == "table" then
+                for _, auraCfg in pairs(specCfg) do
+                    if type(auraCfg) == "table" and auraCfg.enabled ~= false and auraCfg.placed then
+                        local ptype = auraCfg.placed.type
+                        if ptype == nil or ptype == "icon" then return true end
+                    end
+                end
+            end
+        end
+        return false
+    end
+
     local NATIVE_TYPE_BY_GROUP = {
         buff = "buffs",
         debuff = "debuffs",
@@ -1751,6 +1787,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                     if panel._refreshBarW then panel._refreshBarW() end
                     if panel._refreshCDControls then panel._refreshCDControls() end
                     RequestVisualRefresh()
+                    if (v == "icon" or v == nil) and IsNativeRenderer() then
+                        ShowSIIconBlizzardWarn()
+                    end
                 end,
             })
 
@@ -2395,6 +2434,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 RequestAuraRefresh()
                 if refreshBlizzardControls then refreshBlizzardControls() end
                 RefreshAuraOptionControls()
+                if v == "BLIZZARD" and AnySpellIndicatorHasIconPlaced() then
+                    ShowSIIconBlizzardWarn()
+                end
             end,
         })
 
