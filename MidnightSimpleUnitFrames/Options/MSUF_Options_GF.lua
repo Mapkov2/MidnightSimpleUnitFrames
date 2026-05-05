@@ -2910,10 +2910,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
     end
 
     ----------------------------------------------------------------
-    -- Section 6: Background
+    -- Section 6: Transparency
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(310, "Background", false, "border")
+        local box, body = AddSection(310, "Transparency", false, "border")
 
         -- Hint: outline border is controlled in Bars menu
         local hint = body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
