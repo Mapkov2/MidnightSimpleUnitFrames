@@ -125,14 +125,24 @@ local function MSUF_Gameplay_SelectNudgeFrame(frame, selected)
     end
 end
 
+local function MSUF_Gameplay_EnableKeyboardNudge(frame)
+    if not frame or not frame.EnableKeyboard then return end
+
+    if frame.SetPropagateKeyboardInput then
+        if InCombatLockdown and InCombatLockdown() then return end
+        frame:SetPropagateKeyboardInput(true)
+    end
+
+    frame:EnableKeyboard(true)
+end
+
 local function MSUF_Gameplay_SetupArrowNudge(frame, nudgeFn, canNudgeFn)
     if not frame or frame._msufGameplayArrowNudgeSetup then return end
     frame._msufGameplayArrowNudgeSetup = true
     frame._msufGameplayNudgeFn = nudgeFn
     frame._msufGameplayCanNudgeFn = canNudgeFn
 
-    if frame.EnableKeyboard then frame:EnableKeyboard(true) end
-    if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
+    MSUF_Gameplay_EnableKeyboardNudge(frame)
 
     local border = frame:CreateTexture(nil, "OVERLAY")
     border:SetPoint("TOPLEFT", frame, "TOPLEFT", -3, 3)
@@ -150,7 +160,6 @@ local function MSUF_Gameplay_SetupArrowNudge(frame, nudgeFn, canNudgeFn)
 
     frame:HookScript("OnHide", function(self)
         MSUF_Gameplay_SelectNudgeFrame(self, false)
-        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
 
     frame:SetScript("OnKeyDown", function(self, key)
@@ -164,21 +173,18 @@ local function MSUF_Gameplay_SetupArrowNudge(frame, nudgeFn, canNudgeFn)
         elseif key == "DOWN" then
             dy = -1
         else
-            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
             return
         end
 
         local can = self._msufGameplayCanNudgeFn
         if gameplayNudgeSelection ~= self or MSUF_Gameplay_IsTextInputFocused() or (type(can) == "function" and not can(self)) then
-            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
             return
         end
 
-        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
         local step = MSUF_Gameplay_GetNudgeStep()
         local fn = self._msufGameplayNudgeFn
-        if type(fn) ~= "function" or not fn(self, dx * step, dy * step) then
-            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+        if type(fn) == "function" then
+            fn(self, dx * step, dy * step)
         end
     end)
 end
