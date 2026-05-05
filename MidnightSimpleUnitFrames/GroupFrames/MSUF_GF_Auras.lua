@@ -1611,7 +1611,9 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale)
     local debCfg = auras.debuff or {}
     local extCfg = auras.externals or {}
 
-    local renderBuffs = Native.TypeEnabled(types, "buffs", true) and buffCfg.enabled ~= false
+    -- When an icon-type spell indicator is active, fall back to custom buff rendering
+    -- so the dedup logic (f._msufSIDedupIDs) can suppress the duplicate buff icon.
+    local renderBuffs = Native.TypeEnabled(types, "buffs", true) and buffCfg.enabled ~= false and not f._msufSIHasIconPlaced
     local renderDebuffs = Native.TypeEnabled(types, "debuffs", true) and debCfg.enabled ~= false
     local renderDispels = Native.TypeEnabled(types, "dispels", true) and conf.dispelEnabled ~= false
     local renderExt = Native.TypeEnabled(types, "externals", true) and extCfg.enabled == true
