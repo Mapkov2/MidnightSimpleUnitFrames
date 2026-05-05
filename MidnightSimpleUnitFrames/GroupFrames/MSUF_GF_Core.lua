@@ -44,6 +44,7 @@ local type = type
 local tostring = tostring
 local select = select
 local GetTime = _G.GetTime
+local GF_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate,PingableUnitFrameTemplate"
 
 ------------------------------------------------------------------------
 -- Hidden parent for Blizzard frame hiding
@@ -1639,7 +1640,7 @@ local function SetupPartyHeader()
     _GF_SetAttrIfChanged(header, "showSolo", conf.showSolo and true or false)
     _GF_SetAttrIfChanged(header, "maxColumns", conf.maxColumns or 1)
     _GF_SetAttrIfChanged(header, "unitsPerColumn", conf.unitsPerColumn or 5)
-    _GF_SetAttrIfChanged(header, "template", "SecureUnitButtonTemplate")
+    _GF_SetAttrIfChanged(header, "template", GF_UNIT_BUTTON_TEMPLATE)
     _GF_SetAttrIfChanged(header, "initial-width", w)
     _GF_SetAttrIfChanged(header, "initial-height", h)
     _GF_SetAttrIfChanged(header, "sortDir", "ASC")
@@ -1792,7 +1793,7 @@ local function SetupRaidHeader()
     _GF_SetAttrIfChanged(header, "showSolo", false)
     _GF_SetAttrIfChanged(header, "maxColumns", maxColumns)
     _GF_SetAttrIfChanged(header, "unitsPerColumn", unitsPerColumn)
-    _GF_SetAttrIfChanged(header, "template", "SecureUnitButtonTemplate")
+    _GF_SetAttrIfChanged(header, "template", GF_UNIT_BUTTON_TEMPLATE)
     _GF_SetAttrIfChanged(header, "initial-width", w)
     _GF_SetAttrIfChanged(header, "initial-height", h)
     _GF_SetAttrIfChanged(header, "sortDir", "ASC")
