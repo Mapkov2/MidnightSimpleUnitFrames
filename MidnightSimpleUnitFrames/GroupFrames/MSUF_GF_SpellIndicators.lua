@@ -991,6 +991,12 @@ local function IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestB
                 end
                 if auraData and auraData.auraInstanceID and (auraCfg.placed or auraCfg.frame) then
                     dedup[auraData.auraInstanceID] = true
+                    if auraCfg.placed then
+                        local ptype = auraCfg.placed.type
+                        if ptype == nil or ptype == "icon" then
+                            f._msufSIHasIconPlaced = true
+                        end
+                    end
                 end
                 if auraCfg.frame and auraCfg.frame.type and auraData then
                     local ft = auraCfg.frame.type
@@ -1030,6 +1036,7 @@ function GF.UpdateSpellIndicators(f, unit)
     if not f._msufSIDedupIDs then f._msufSIDedupIDs = {} end
     local dedup = f._msufSIDedupIDs
     for k in pairs(dedup) do dedup[k] = nil end
+    f._msufSIHasIconPlaced = false
 
     -- Reuse module-level table (cleared per call, zero GC)
     local bestByType = _siBestByType
@@ -1086,6 +1093,7 @@ function GF.HideSpellIndicators(f)
     if f._msufSIDedupIDs then
         for k in pairs(f._msufSIDedupIDs) do f._msufSIDedupIDs[k] = nil end
     end
+    f._msufSIHasIconPlaced = false
     ResetFrameEffects(f)
 end
 

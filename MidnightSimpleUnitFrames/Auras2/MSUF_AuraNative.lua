@@ -195,6 +195,9 @@ function Native.Signature(unit, cfg)
         tostring(cfg.setAuraSizeToIconSize ~= false),
         tostring(cfg.powerBarUsedHeight or 0),
         tostring(cfg.groupType or ""),
+        tostring(cfg.containerAnchor or cfg.anchor or ""),
+        tostring(cfg.containerOffsetX or 0),
+        tostring(cfg.containerOffsetY or 0),
     }, ":")
 end
 
@@ -218,6 +221,7 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     if parent and container:GetParent() ~= parent then
         container:SetParent(parent)
     end
+    local resolvedIconAnchor = "CENTER"
     container:ClearAllPoints()
     if parent then
         local anchor = cfg.containerAnchor or cfg.anchor
@@ -225,13 +229,8 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
         local offsetY = Clamp(cfg.containerOffsetY, 0, -10000, 10000)
         if anchor or offsetX ~= 0 or offsetY ~= 0 then
             anchor = VALID_FRAME_ANCHORS[anchor] and anchor or "CENTER"
-            local w, h = 1, 1
-            if parent.GetSize then
-                w, h = parent:GetSize()
-            end
-            if not w or w < 1 then w = 1 end
-            if not h or h < 1 then h = 1 end
-            container:SetSize(w or 1, h or 1)
+            resolvedIconAnchor = anchor
+            container:SetSize(1, 1)
             container:SetPoint(anchor, parent, anchor, offsetX, offsetY)
         else
             container:SetAllPoints(parent)
@@ -276,9 +275,9 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
             iconHeight = iconSize,
             borderScale = borderScale,
             iconAnchor = {
-                point = "CENTER",
+                point = resolvedIconAnchor,
                 relativeTo = container,
-                relativePoint = "CENTER",
+                relativePoint = resolvedIconAnchor,
                 offsetX = 0,
                 offsetY = 0,
             },
