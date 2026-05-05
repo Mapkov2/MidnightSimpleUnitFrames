@@ -309,6 +309,56 @@ local function ScanUnit(unit, kind, siCfg, specKey)
     end
 end
 
+function GF.SpellIndicatorsUnitAuraRelevant(f, unit, kind, updateInfo)
+    if not updateInfo or updateInfo.isFullUpdate then return true end
+
+    local siCfg = GetSIConfig(kind or (f and f._msufGFKind) or "party")
+    if not siCfg or not siCfg.enabled then return false end
+
+    local specKey = ResolveSpec(siCfg)
+    if not specKey then return false end
+    CompileLookup(specKey, siCfg)
+
+    local added = updateInfo.addedAuras
+    if added then
+        for i = 1, #added do
+            local aura = added[i]
+            if aura then
+                local sid = aura.spellId
+                if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
+                    sid = tonumber(sid)
+                    if sid and _reverseLookup and _reverseLookup[sid] then return true end
+                end
+                if _nameLookup then
+                    local auraName = aura.name
+                    if auraName ~= nil and not (issecretvalue and issecretvalue(auraName)) and _nameLookup[auraName] then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    local tracked = f and f._msufSIDedupIDs
+    if not tracked then return false end
+
+    local updated = updateInfo.updatedAuraInstanceIDs
+    if updated then
+        for i = 1, #updated do
+            if tracked[updated[i]] then return true end
+        end
+    end
+
+    local removed = updateInfo.removedAuraInstanceIDs
+    if removed then
+        for i = 1, #removed do
+            if tracked[removed[i]] then return true end
+        end
+    end
+
+    return false
+end
+
 local function ResolveCooldownFontString(cd)
     if not cd then return nil end
     local cached = cd._msufCooldownFontString

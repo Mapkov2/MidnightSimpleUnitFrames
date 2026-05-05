@@ -207,7 +207,6 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
         return false
     end
     cfg = cfg or {}
-    cfg.unit = unit
 
     local maxBuffs = math_floor(Clamp(cfg.maxBuffs, 0, 0, 80) + 0.5)
     local maxDebuffs = math_floor(Clamp(cfg.maxDebuffs, 0, 0, 80) + 0.5)
@@ -217,6 +216,18 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
         return false
     end
 
+    -- Fast path: resolve unit + check signature BEFORE any expensive UI operations.
+    -- On every UNIT_AURA event this runs; if config hasn't changed we return immediately.
+    unit = Native.ResolveUnitToken(unit)
+    cfg.unit = unit
+    local sig = Native.Signature(unit, cfg)
+    if not cfg.forceApply and container._msufNativeAuraAnchorID and container._msufNativeAuraSignature == sig then
+        container:SetAttribute("update-settings", true)
+        container:Show()
+        return true
+    end
+
+    -- Slow path: config changed; do full reposition + re-registration.
     parent = parent or container:GetParent()
     if parent and container:GetParent() ~= parent then
         container:SetParent(parent)
@@ -245,17 +256,6 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     end
     if container.SetFrameLevel and levelParent and levelParent.GetFrameLevel then
         container:SetFrameLevel((levelParent:GetFrameLevel() or 0) + 100 + (cfg.frameLevelOffset or 0))
-    end
-
-    unit = Native.ResolveUnitToken(unit)
-    cfg.unit = unit
-    Native.SetContainerAttributes(container, cfg)
-
-    local sig = Native.Signature(unit, cfg)
-    if container._msufNativeAuraAnchorID and container._msufNativeAuraSignature == sig then
-        container:SetAttribute("update-settings", true)
-        container:Show()
-        return true
     end
 
     Native.Clear(container)

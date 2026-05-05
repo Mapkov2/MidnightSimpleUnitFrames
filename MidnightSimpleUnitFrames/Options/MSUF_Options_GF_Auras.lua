@@ -141,6 +141,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         else
             RequestVisualRefresh()
         end
+        local refreshDebuffStripeControls = _G.MSUF_GF_RefreshDebuffStripeControlStates
+        if type(refreshDebuffStripeControls) == "function" then refreshDebuffStripeControls() end
     end
     local function AW(groupKey, key, val)
         local g = AG(groupKey)
@@ -208,7 +210,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
     if not _G.StaticPopupDialogs["MSUF_SI_ICON_BLIZZARD_WARN"] then
         _G.StaticPopupDialogs["MSUF_SI_ICON_BLIZZARD_WARN"] = {
-            text = "Spell Indicator |cffffd200Icon|r + |cffffd200Blizzard Renderer|r:\n\nTo prevent duplicate buff icons, MSUF switches Buff display to Custom Rendering whenever an Icon-type Spell Indicator is active on a unit frame.\n\nAll other buffs continue to display normally.",
+            text = "Spell Indicator |cffffd200Icon|r + |cffffd200Blizzard Renderer|r:\n\nSpell Indicators stay independent from aura rendering. If an indicator icon tracks the same aura Blizzard also shows, both icons can be visible.",
             button1 = "OK",
             timeout = 0,
             whileDead = true,
@@ -710,18 +712,11 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         if row._ctrl then SetAuraControlEnabled(row._ctrl, enabled, false) end
     end
 
-    local function ApplyNativeGroupSuppression(body, groupKey, keepRows)
+    local function ApplyNativeGroupSuppression(body, groupKey)
         if not (body and body.GetChildren and IsNativeAuraGroup(groupKey)) then return end
-        local groupEnabled = AV(groupKey, "enabled") ~= false
-        keepRows = keepRows or {}
         local rows = { body:GetChildren() }
         for i = 1, #rows do
-            local row = rows[i]
-            if keepRows[row] then
-                SetAuraRowEnabled(row, row == keepRows.enableRow or groupEnabled)
-            else
-                SetAuraRowEnabled(row, false)
-            end
+            SetAuraRowEnabled(rows[i], false)
         end
     end
 
@@ -1314,39 +1309,25 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         local r
         r = RowCheck(body, nil, L["Enable"], gk, "enabled", 6)
         local enableRow = r
-        local nativeKeepRows = { enableRow = enableRow, [enableRow] = true }
         local function RefreshAuraGroupControls()
             SetAuraBodyRowsEnabled(body, AV(gk, "enabled") ~= false, enableRow)
-            ApplyNativeGroupSuppression(body, gk, nativeKeepRows)
+            ApplyNativeGroupSuppression(body, gk)
         end
         local enableCb = enableRow and enableRow._ctrl
         if enableCb and enableCb.HookScript then
             enableCb:HookScript("OnClick", RefreshAuraGroupControls)
         end
         r = RowDropdown(body, r, L["Anchor"], gk, "anchor", ANCHOR9, "BOTTOMLEFT")
-        local anchorRow = r
         r = RowDropdown(body, r, L["Growth"], gk, "growth", GROWTH8, "RIGHTDOWN")
         r = RowOffsetPair(body, r, L["Offset X / Y"], gk, "x", "y")
-        local offsetRow = r
 
         r = RowDivider(body, r)
         r = RowSlider(body, r, L["Icon size"], gk, "size", 8, 60, 1, 20, 4)
-        local sizeRow = r
         r = RowSlider(body, r, L["Per row"], gk, "perRow", 1, 16, 1, 4)
         r = RowSlider(body, r, L["Max icons"], gk, "max", 1, 20, 1, 6)
-        local maxRow = r
         r = RowSlider(body, r, L["Spacing"], gk, "spacing", 0, 10, 1, 1)
         r = RowSlider(body, r, L["Layer (Z-Order)"], gk, "layer", 1, 15, 1,
             gk == "buff" and 5 or (gk == "debuff" and 6 or 7))
-        local layerRow = r
-        nativeKeepRows[anchorRow] = true
-        nativeKeepRows[offsetRow] = true
-        nativeKeepRows[sizeRow] = true
-        nativeKeepRows[layerRow] = true
-        if gk == "buff" or gk == "debuff" then
-            nativeKeepRows[maxRow] = true
-        end
-
         -- ── Behind Health Bar ───────────────────────────────────
         r = RowDivider(body, r)
         r = RowSubLabel(body, r, L["Behind Health Bar"] or "Behind Health Bar")
@@ -2398,7 +2379,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Blizzard Renderer
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(260, L["Blizzard Renderer"] or "Blizzard Renderer", false, "blizzrenderer")
+        local box, body = AddSection(410, L["Blizzard Renderer"] or "Blizzard Renderer", false, "blizzrenderer")
         local refreshBlizzardControls
         local function RendererCheck(spec)
             spec.maxTextWidth = spec.maxTextWidth or 132
@@ -2414,13 +2395,13 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local info = body:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         info:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
-        info:SetWidth(680)
+        info:SetWidth(610)
         info:SetJustifyH("LEFT")
-        info:SetText(L["Blizzard mode lets the game render selected aura categories with default-frame filtering. Buffs, Debuffs and Defensives use their own Anchor, Offset, Icon Size and Layer rows below. Dispel Overlay is drawn on the unit frame itself, so Debuff X/Y does not move that frame border. Private Auras keep their own section."] or "Blizzard mode lets the game render selected aura categories with default-frame filtering. Buffs, Debuffs and Defensives use their own Anchor, Offset, Icon Size and Layer rows below. Dispel Overlay is drawn on the unit frame itself, so Debuff X/Y does not move that frame border. Private Auras keep their own section.")
+        info:SetText(L["Blizzard mode uses one native aura container per group frame. Category sections below are Custom-only when their Blizzard type is active."] or "Blizzard mode uses one native aura container per group frame. Category sections below are Custom-only when their Blizzard type is active.")
 
         local rendererDD = SDropdown({
             name = "MSUF_GF_BlizzardRendererMode", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = -4, y = -48,
+            anchor = body, anchorPoint = "TOPLEFT", x = -4, y = -72,
             width = DD_W,
             label = L["Renderer"] or "Renderer",
             items = {
@@ -2442,7 +2423,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local buffChk = RendererCheck({
             name = "MSUF_GF_BlizzardBuffs", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 260, y = -48,
+            anchor = body, anchorPoint = "TOPLEFT", x = 300, y = -72,
             label = L["Buffs"],
             get = function() return BlizzardTypes().buffs == true end,
             set = function(_, v) BlizzardTypes().buffs = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
@@ -2463,7 +2444,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
         local extChk = RendererCheck({
             name = "MSUF_GF_BlizzardExt", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 470, y = -48,
+            anchor = body, anchorPoint = "TOPLEFT", x = 510, y = -72,
             label = L["Defensives"],
             get = function() return BlizzardTypes().externals == true end,
             set = function(_, v) BlizzardTypes().externals = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
@@ -2478,19 +2459,57 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local iconSizeSl = SSlider({
             name = "MSUF_GF_BlizzardIconSize", parent = body, compact = true,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -138,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -140,
             min = 8, max = 80, step = 1, width = 200, default = 20,
             get = function() return AurasRoot().blizzardIconSize or 20 end,
             set = function(_, v) AurasRoot().blizzardIconSize = v; RequestAuraRefresh() end,
-            formatText = function(v) return string.format(L["Fallback size: %d"] or "Fallback size: %d", v) end,
+            formatText = function(v) return string.format(L["Icon size: %d"] or "Icon size: %d", v) end,
+        })
+
+        local buffMaxSl = SSlider({
+            name = "MSUF_GF_BlizzardBuffMax", parent = body, compact = true,
+            anchor = iconSizeSl, x = 0, y = -52,
+            min = 0, max = 20, step = 1, width = 200, default = 6,
+            get = function() return AG("buff").max or 6 end,
+            set = function(_, v) AG("buff").max = v; RequestAuraRefresh() end,
+            formatText = function(v) return string.format(L["Buff max: %d"] or "Buff max: %d", v) end,
+        })
+
+        local debuffMaxSl = SSlider({
+            name = "MSUF_GF_BlizzardDebuffMax", parent = body, compact = true,
+            anchor = buffMaxSl, x = 0, y = -52,
+            min = 0, max = 20, step = 1, width = 200, default = 6,
+            get = function() return AG("debuff").max or 6 end,
+            set = function(_, v) AG("debuff").max = v; RequestAuraRefresh() end,
+            formatText = function(v) return string.format(L["Debuff max: %d"] or "Debuff max: %d", v) end,
+        })
+
+        local orgLabel = body:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        orgLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 320, -198)
+        orgLabel:SetText(L["Organization"] or "Organization")
+
+        local orgDD = SDropdown({
+            name = "MSUF_GF_BlizzardOrganization", parent = body,
+            anchor = orgLabel, anchorPoint = "BOTTOMLEFT", x = -16, y = -6,
+            width = 240,
+            items = {
+                { key = "default", label = L["Default"] or "Default" },
+                { key = "BUFFS_TOP_DEBUFFS_BOTTOM", label = L["Buffs Top / Debuffs Bottom"] or "Buffs Top / Debuffs Bottom" },
+                { key = "BUFFS_RIGHT_DEBUFFS_LEFT", label = L["Buffs Right / Debuffs Left"] or "Buffs Right / Debuffs Left" },
+            },
+            get = function() return AurasRoot().blizzardOrganizationType or "default" end,
+            set = function(_, v)
+                AurasRoot().blizzardOrganizationType = v or "default"
+                RequestAuraRefresh()
+            end,
         })
 
         refreshBlizzardControls = function()
             local enabled = (AurasRoot().renderer == "BLIZZARD")
             SetAuraControlsEnabled(enabled, {
                 buffChk, debuffChk, dispelChk, extChk, cdTextChk,
-                iconSizeSl,
-            })
+                iconSizeSl, buffMaxSl, debuffMaxSl, orgDD,
+            }, { orgLabel })
         end
         _auraRefreshFns[#_auraRefreshFns + 1] = refreshBlizzardControls
         if rendererDD and rendererDD.HookScript then
@@ -2597,6 +2616,23 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             "aurasCooldownTextWarningSeconds", 0, 30, 1, 15, ClampWarn, 0, AfterWarn, BucketsEnabled)
         r = RowGeneralSlider(body, r, L["Urgent (<=)"] or "Urgent (<=)",
             "aurasCooldownTextUrgentSeconds", 0, 15, 1, 5, ClampUrgent, 0, AfterUrgent, BucketsEnabled)
+
+        local function RefreshTextColorControls()
+            local enabled = HasCustomIconAuraGroups()
+            local rows = { body:GetChildren() }
+            for i = 1, #rows do
+                local row = rows[i]
+                if row == infoRow then
+                    SetAuraRowEnabled(row, true)
+                else
+                    SetAuraRowEnabled(row, enabled)
+                end
+            end
+            if enabled then RefreshTimerColorControlsOnly() end
+        end
+        _auraRefreshFns[#_auraRefreshFns + 1] = RefreshTextColorControls
+        if body.HookScript then body:HookScript("OnShow", RefreshTextColorControls) end
+        RefreshTextColorControls()
     end
 
     ----------------------------------------------------------------

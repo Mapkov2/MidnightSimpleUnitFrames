@@ -3558,6 +3558,13 @@ function _G.MSUF_EnsureGFPanelBuilt()
     ----------------------------------------------------------------
     do
         local box, body = AddSection(320, "Debuff Stripe", false, "dstripe")
+        local refreshDebuffStripeControls
+
+        local function IsNativeDebuffsActive()
+            local conf = GF.GetConf(K())
+            return GF.IsBlizzardAuraTypeEnabled
+                and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs") == true
+        end
 
         local dsChk = SCheck({
             name = "MSUF_GF_DebuffStripeCheck", parent = body,
@@ -3569,6 +3576,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 GF.RefreshVisuals()
                 local fn = _G.MSUF_GF_RefreshDebuffStripe
                 if type(fn) == "function" then fn() end
+                if refreshDebuffStripeControls then refreshDebuffStripeControls() end
             end,
         })
 
@@ -3578,6 +3586,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
         dsHint:SetJustifyH("LEFT")
         dsHint:SetText(TR("Shows a thin colored stripe when a debuff matching your Debuffs filter/list is active — including non-dispellable ones when allowed there.\nWorks independently from the Dispel Overlay."))
         dsHint:SetTextColor(0.55, 0.60, 0.70)
+        local dsHintText = dsHint:GetText()
+        local dsNativeHintText = TR("Disabled while Group Frames > Buffs & Debuffs > Blizzard Renderer owns Debuffs. The stripe needs a custom debuff scan, so it is suppressed in Blizzard mode for performance.")
 
         local dsEdgeDd = SDropdown({
             name = "MSUF_GF_DebuffStripeEdgeDropdown", parent = body,
@@ -3611,7 +3621,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             formatText = function(v) return string.format("Height: %dpx", v) end,
         })
 
-        SSlider({
+        local dsAlphaSl = SSlider({
             name = "MSUF_GF_DebuffStripeAlphaSlider", parent = body, compact = true,
             anchor = dsHeightSl, x = 0, y = -26,
             min = 0.10, max = 1, step = 0.05, width = 270, default = 0.60,
@@ -3623,6 +3633,20 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end,
             formatText = function(v) return string.format("Opacity: %.0f%%", v * 100) end,
         })
+
+        refreshDebuffStripeControls = function()
+            local nativeDebuffs = IsNativeDebuffsActive()
+            local enabled = GF.Val(K(), "debuffStripeEnabled") == true and not nativeDebuffs
+            dsHint:SetText(nativeDebuffs and dsNativeHintText or dsHintText)
+            SetGFOptionControlsEnabled(not nativeDebuffs, { dsChk }, { dsHint })
+            SetGFOptionControlsEnabled(enabled, { dsEdgeDd, dsHeightSl, dsAlphaSl })
+        end
+        _G.MSUF_GF_RefreshDebuffStripeControlStates = refreshDebuffStripeControls
+        if body.HookScript then body:HookScript("OnShow", refreshDebuffStripeControls) end
+        _allRefreshFns[#_allRefreshFns + 1] = function()
+            if body:IsShown() and refreshDebuffStripeControls then refreshDebuffStripeControls() end
+        end
+        refreshDebuffStripeControls()
     end
 
     ----------------------------------------------------------------

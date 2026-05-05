@@ -809,6 +809,9 @@ end
 -- Forward-declared; assigned after dispatchAura is defined.
 local _gfFlushDirtyAuras
 local function SpellIndicatorsNeedRefresh(f, updateInfo)
+    if GF.SpellIndicatorsUnitAuraRelevant then
+        return GF.SpellIndicatorsUnitAuraRelevant(f, f and f.unit, f and f._msufGFKind or "party", updateInfo)
+    end
     if not updateInfo or updateInfo.isFullUpdate then return true end
 
     local added = updateInfo.addedAuras
@@ -832,6 +835,14 @@ local function SpellIndicatorsNeedRefresh(f, updateInfo)
     end
 
     return false
+end
+
+local function NativeAuraContainerReady(f, unit)
+    local container = f and f._msufGFNativeAuras
+    if not (container and container._msufNativeAuraAnchorID) then return false end
+    local Native = ns and ns.MSUF_AuraNative
+    local effectiveUnit = Native and Native.ResolveUnitToken and Native.ResolveUnitToken(unit) or unit
+    return container._msufNativeAuraUnit == effectiveUnit
 end
 
 local function dispatchAura(f, unit, updateInfo)
@@ -893,6 +904,15 @@ local function dispatchAura(f, unit, updateInfo)
     end
 
     -- c.anyAuraGrp already includes sub-group enabled check, no need for second pass
+    if c.nativeBlizzardAuraOnly and not c.ciAura and not c.dsEn and not paOverlayRefresh then
+        if siRefresh and GF.UpdateSpellIndicators then
+            GF.UpdateSpellIndicators(f, unit)
+        end
+        if not NativeAuraContainerReady(f, unit) and GF.UpdateFrameAuras then
+            GF.UpdateFrameAuras(f, unit, updateInfo)
+        end
+        return
+    end
 
     -- Full rescan required
     if not updateInfo or updateInfo.isFullUpdate then
@@ -1072,7 +1092,7 @@ local function dispatchAura(f, unit, updateInfo)
         GF.UpdateSpellIndicators(f, unit)
     end
     if GF.UpdateFrameAuras then
-        GF.UpdateFrameAuras(f, unit)
+        GF.UpdateFrameAuras(f, unit, updateInfo)
         if c.nativeBlizzardDispels then
             if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
         else
@@ -1536,6 +1556,9 @@ function GF.BuildFrameCache(f)
     c.hfAlpha  = conf.healthFadeAlpha or 0.45
     c.hfThresh = conf.healthFadeThreshold or 95
 
+    c.nativeBlizzardBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs") == true
+    c.nativeBlizzardDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs") == true
+    c.nativeBlizzardExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals") == true
     c.nativeBlizzardDispels = _GF_IsBlizzardDispelRendererActive(conf)
 
     -- Dispel overlay (color wash on health bar)
@@ -1544,8 +1567,10 @@ function GF.BuildFrameCache(f)
     c.doOnHP  = conf.dispelOverlayOnHealth ~= false
     c.doAlpha = conf.dispelOverlayAlpha or 0.35
 
-    -- Debuff stripe (thin edge for any debuff)
-    c.dsEn    = conf.debuffStripeEnabled == true
+    -- Debuff stripe (thin edge for any debuff). This is a custom aura-derived
+    -- visual, so it must not keep UNIT_AURA/custom scans alive when Blizzard
+    -- owns debuff rendering.
+    c.dsEn    = conf.debuffStripeEnabled == true and not c.nativeBlizzardDebuffs
     c.dsEdge  = conf.debuffStripeEdge or "BOTTOM"
     c.dsH     = (GF.ScaleValue and GF.ScaleValue(conf.debuffStripeHeight or 3, fScale, 1))
         or (conf.debuffStripeHeight or 3)
@@ -1589,13 +1614,19 @@ function GF.BuildFrameCache(f)
     -- Aura dispatch
     c.dispelScan = conf.dispelEnabled ~= false and not c.nativeBlizzardDispels
     c.siEn       = conf.spellIndicators and conf.spellIndicators.enabled == true
+    c.healerBuffsEn = conf.healerBuffs and conf.healerBuffs.enabled == true and not c.siEn
     local auras  = conf.auras
     c.aurasOn    = auras and auras.enabled ~= false
-    c.anyAuraGrp = c.aurasOn and (
-                   (auras.debuff and auras.debuff.enabled ~= false) or
-                   (auras.buff and auras.buff.enabled ~= false) or
-                   (auras.externals and auras.externals.enabled) or
-                   c.nativeBlizzardDispels)
+    c.nativeBlizzardAuras = c.aurasOn and (
+                   c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs
+                   or c.nativeBlizzardExt or c.nativeBlizzardDispels)
+    c.customAuraGrp = c.aurasOn and (
+                   (auras.debuff and auras.debuff.enabled ~= false and not c.nativeBlizzardDebuffs) or
+                   (auras.buff and auras.buff.enabled ~= false and not c.nativeBlizzardBuffs) or
+                   (auras.externals and auras.externals.enabled and not c.nativeBlizzardExt) or
+                   (c.dispelScan and GF._playerCanDispel))
+    c.anyAuraGrp = c.nativeBlizzardAuras or c.customAuraGrp
+    c.nativeBlizzardAuraOnly = c.nativeBlizzardAuras and not c.customAuraGrp
 
     -- Corner indicators
     c.ciEn = conf.ciEnabled ~= false
@@ -1605,11 +1636,13 @@ function GF.BuildFrameCache(f)
     c.ciSlotBL = (conf.ciSlotBL or "none")
     c.ciSlotBR = (conf.ciSlotBR or "none")
     c.ciSlotC  = (conf.ciSlotC  or "none")
-    c.ciAura = c.ciEn and (
+    c.ciDispel = c.ciEn and (
         c.ciSlotTL == "dispel" or c.ciSlotTR == "dispel" or c.ciSlotBL == "dispel"
-        or c.ciSlotBR == "dispel" or c.ciSlotC == "dispel"
-        or c.ciSlotTL == "custom" or c.ciSlotTR == "custom" or c.ciSlotBL == "custom"
+        or c.ciSlotBR == "dispel" or c.ciSlotC == "dispel")
+    c.ciCustom = c.ciEn and (
+        c.ciSlotTL == "custom" or c.ciSlotTR == "custom" or c.ciSlotBL == "custom"
         or c.ciSlotBR == "custom" or c.ciSlotC == "custom")
+    c.ciAura = c.ciCustom or (c.ciDispel and not c.nativeBlizzardDispels)
     c.ciThreat = c.ciEn and (
         c.ciSlotTL == "aggro" or c.ciSlotTR == "aggro" or c.ciSlotBL == "aggro"
         or c.ciSlotBR == "aggro" or c.ciSlotC == "aggro")
@@ -1658,9 +1691,10 @@ function GF.BuildFrameCache(f)
     c.connectionEn = c.statusTextEn or c.rfEn
 
     -- Composite: does anything need UNIT_AURA?
-    c.needAura = c.anyAuraGrp or c.ciAura
+    c.needAura = c.customAuraGrp or c.ciAura
                  or (c.dispelScan and GF._playerCanDispel)
                  or c.paDispelOverlay
+                 or c.dsEn
                  or c.siEn
 
     -- Composite: does anything need UNIT_THREAT?
