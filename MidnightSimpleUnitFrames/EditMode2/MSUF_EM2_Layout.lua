@@ -554,6 +554,21 @@ EM2.Nudge = Nudge
 local floor = math.floor
 local owner
 
+local function GetPreviewNudgeTarget()
+    local target = _G.MSUF_EM2_ActivePreviewNudgeTarget
+    if type(target) ~= "table" or type(target.Nudge) ~= "function" then return nil end
+    if type(target.IsActive) == "function" and not target:IsActive() then return nil end
+    local frame = target.frame
+    if frame and frame.IsShown and not frame:IsShown() then return nil end
+    return target
+end
+
+function _G.MSUF_EM2_SetPreviewNudgeTarget(target)
+    if target == nil or type(target) == "table" then
+        _G.MSUF_EM2_ActivePreviewNudgeTarget = target
+    end
+end
+
 local function GetStep()
     local step = 1
     if IsAltKeyDown and IsAltKeyDown() then
@@ -583,6 +598,17 @@ local function NudgeTarget(dx, dy)
     if not db then return end
     local s = GetStep()
     local ndx, ndy = dx * s, dy * s
+
+    -- Priority 0: selected custom preview frame.
+    -- Some previews are not normal EM2 movers but still write normal position
+    -- keys. They register here on click/drag so arrow keys move what the user
+    -- just selected.
+    local previewTarget = GetPreviewNudgeTarget()
+    if previewTarget then
+        previewTarget:Nudge(ndx, ndy)
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        return
+    end
 
     -- Priority 1: open castbar popup
     if EM2.CastPopup and EM2.CastPopup.IsOpen() then

@@ -804,6 +804,7 @@ end
 local FocusKickOptionsPanelRef
 local FocusKickPreviewFrame
 local FocusKickPreviewEnabled = false
+local FocusKickPreviewSelected = false
 
 -- Cache slider min/max so drag can clamp even when options panel is closed.
 local FocusKickPreviewMinX, FocusKickPreviewMaxX = -500, 500
@@ -840,6 +841,47 @@ end
 -- Forward decl (referenced by preview drag handlers)
 local MSUF_FocusKick_SyncPreviewFromDB
 
+local function FocusKick_GetNudgeStep()
+    if IsControlKeyDown and IsControlKeyDown() then return 10 end
+    if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
+    return 1
+end
+
+local function FocusKick_IsTextInputFocused()
+    local getFocus = _G.GetCurrentKeyBoardFocus
+    local focus = getFocus and getFocus()
+    return focus and focus.IsObjectType and focus:IsObjectType("EditBox")
+end
+
+local function FocusKick_SelectPreview(selected)
+    FocusKickPreviewSelected = selected and true or false
+    if FocusKickPreviewFrame and FocusKickPreviewFrame._selBorder then
+        FocusKickPreviewFrame._selBorder:SetShown(FocusKickPreviewSelected)
+    end
+end
+
+local function FocusKick_NudgePreview(dx, dy)
+    if not FocusKickPreviewEnabled or not FocusKickPreviewSelected then return false end
+    if InCombatLockdown and InCombatLockdown() then return false end
+    FocusKick_EnsureDB()
+    local gg = MSUF_DB and MSUF_DB.general
+    if not gg then return false end
+
+    gg.focusKickIconOffsetX = FocusKick_Clamp(
+        FocusKick_Round((tonumber(gg.focusKickIconOffsetX) or 0) + (dx or 0)),
+        FocusKickPreviewMinX, FocusKickPreviewMaxX)
+    gg.focusKickIconOffsetY = FocusKick_Clamp(
+        FocusKick_Round((tonumber(gg.focusKickIconOffsetY) or 0) + (dy or 0)),
+        FocusKickPreviewMinY, FocusKickPreviewMaxY)
+
+    FocusKick_UpdateAppearance()
+    if MSUF_FocusKick_SyncPreviewFromDB then
+        MSUF_FocusKick_SyncPreviewFromDB(FocusKickOptionsPanelRef)
+    end
+    FocusKick_SelectPreview(true)
+    return true
+end
+
 local function FocusKick_EnsurePreviewFrame()
     if FocusKickPreviewFrame then return end
 
@@ -848,11 +890,20 @@ local function FocusKick_EnsurePreviewFrame()
     f:SetFrameLevel(70)
     f:SetMovable(true)
     f:EnableMouse(true)
+    f:EnableKeyboard(true)
+    if f.SetPropagateKeyboardInput then f:SetPropagateKeyboardInput(true) end
     f:RegisterForDrag("LeftButton")
 
     local icon = f:CreateTexture(nil, "ARTWORK")
     icon:SetAllPoints()
     f.icon = icon
+
+    local sel = f:CreateTexture(nil, "OVERLAY")
+    sel:SetPoint("TOPLEFT", f, "TOPLEFT", -3, 3)
+    sel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 3, -3)
+    sel:SetColorTexture(0.27, 0.53, 0.80, 0.45)
+    sel:Hide()
+    f._selBorder = sel
 
     -- Preview cast-time text (always visible; fake timer while preview is shown)
     local timeText = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -890,12 +941,51 @@ local function FocusKick_EnsurePreviewFrame()
 
     f:Hide()
 
+    f:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then
+            FocusKick_SelectPreview(true)
+        end
+    end)
+
+    f:SetScript("OnKeyDown", function(self, key)
+        local dx, dy = 0, 0
+        if key == "LEFT" then
+            dx = -1
+        elseif key == "RIGHT" then
+            dx = 1
+        elseif key == "UP" then
+            dy = 1
+        elseif key == "DOWN" then
+            dy = -1
+        else
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            return
+        end
+
+        if FocusKick_IsTextInputFocused() or not FocusKickPreviewSelected then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            return
+        end
+
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+        local step = FocusKick_GetNudgeStep()
+        if not FocusKick_NudgePreview(dx * step, dy * step) then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+        end
+    end)
+
+    f:SetScript("OnHide", function(self)
+        FocusKick_SelectPreview(false)
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
+
     f:SetScript("OnDragStart", function(self)
         if not FocusKickPreviewEnabled then return end
         if InCombatLockdown and InCombatLockdown() then
             FocusKick_PrintSystem("In combat - cannot move Focus Interrupt Tracker preview.")
             return
         end
+        FocusKick_SelectPreview(true)
         self:StartMoving()
     end)
 
@@ -933,6 +1023,7 @@ local function FocusKick_EnsurePreviewFrame()
         if MSUF_FocusKick_SyncPreviewFromDB then
             MSUF_FocusKick_SyncPreviewFromDB(FocusKickOptionsPanelRef)
         end
+        FocusKick_SelectPreview(true)
     end)
 
     FocusKickPreviewFrame = f
@@ -948,6 +1039,7 @@ local function FocusKick_SetPreviewEnabled(enabled)
         if FocusKickPreviewFrame._msufFakeTimerAG and FocusKickPreviewFrame._msufFakeTimerAG.Stop then
             FocusKickPreviewFrame._msufFakeTimerAG:Stop()
         end
+        FocusKick_SelectPreview(false)
         FocusKickPreviewFrame:Hide()
         return
     end
@@ -959,6 +1051,7 @@ local function FocusKick_SetPreviewEnabled(enabled)
         if FocusKickPreviewFrame._msufFakeTimerAG and FocusKickPreviewFrame._msufFakeTimerAG.Stop then
             FocusKickPreviewFrame._msufFakeTimerAG:Stop()
         end
+        FocusKick_SelectPreview(false)
         FocusKickPreviewFrame:Hide()
         FocusKick_PrintSystem("Enable Focus Interrupt Tracker first to use the on-screen preview.")
         if FocusKickOptionsPanelRef and FocusKickOptionsPanelRef._msufFocusKickPreviewCheck then

@@ -1294,7 +1294,7 @@ end
         _RefreshTotemsPreviewButton()
 
 -- Tip: positioning workflow
-local totemsDragHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsPreviewBtn, "BOTTOMLEFT", 0, -4, "Tip: Move the preview via mousedrag", "playerTotemsDragHint")
+local totemsDragHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsPreviewBtn, "BOTTOMLEFT", 0, -4, "Tip: Move the preview via mousedrag or arrow keys", "playerTotemsDragHint")
 panel.playerTotemsDragHint = totemsDragHint
 
 _totemsLeftBottom = totemsDragHint
