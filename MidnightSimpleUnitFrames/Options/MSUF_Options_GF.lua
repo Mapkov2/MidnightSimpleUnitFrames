@@ -559,7 +559,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local function ShowCopyPopup(anchorFrame)
         if _copyPopup and _copyPopup:IsShown() then _copyPopup:Hide(); return end
         if not _copyPopup then
-            local pop = CreateFrame("Frame", nil, anchorFrame, "BackdropTemplate")
+            local pop = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
             pop:SetSize(350, 30 + #_COPY_CATEGORIES * 22 + 36)
             pop:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
                 insets = { left = 1, right = 1, top = 1, bottom = 1 } })
