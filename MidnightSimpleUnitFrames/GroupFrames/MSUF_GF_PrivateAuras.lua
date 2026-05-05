@@ -17,7 +17,6 @@ local C_Timer     = _G.C_Timer
 local CreateFrame = _G.CreateFrame
 local math_floor  = math.floor
 local math_max    = math.max
-local math_min    = math.min
 local type        = type
 
 local function ScaleFrameValue(value, scale, minValue)
@@ -480,7 +479,7 @@ function GF.PreviewPrivateAuras(f, kind)
     local ox       = ScaleFrameValue(pa.x or 0, frameScale)
     local oy       = ScaleFrameValue(pa.y or 0, frameScale)
     local spacing  = ScaleFrameValue(pa.spacing or 1, frameScale, 0)
-    local previewN = math_min(maxN, 2)
+    local previewN = maxN
 
     local parent = f.statusIconLayer or f.barGroup or f
     local container = f._gfPrivPreviewCont
