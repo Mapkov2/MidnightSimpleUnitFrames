@@ -114,8 +114,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
     if not GF then return nil end
 
     -- One-shot migration: Cutaway Health was removed. Clear every saved
-    -- cutaway* key across all GF kinds so the render side (if it still
-    -- watches those flags) stops re-engaging on existing profiles. Runs
+    -- cutaway* key across all GF kinds so old profiles do not keep stale
+    -- settings around. Runs
     -- once per session on first GF panel build; idempotent on subsequent
     -- opens because the keys are already nil after the first pass.
     do
@@ -3462,13 +3462,19 @@ function _G.MSUF_EnsureGFPanelBuilt()
             name = "MSUF_GF_HealPredEnableCheck", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -6,
             label = TR("Heal Prediction Overlay"),
-            get = function(k) return GF.Val(k, "healPredEnabled") end,
+            get = function(k)
+                return (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(k, GF.GetConf(k))) or false
+            end,
             set = function(k, v)
                 GF.GetConf(k).healPredEnabled = v
-                for f in pairs(GF.frames) do
-                    if f.unit then GF.RegisterUnitEvents(f, f.unit) end
+                if GF.frames then
+                    for f in pairs(GF.frames) do
+                        if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                        if f.unit then GF.RegisterUnitEvents(f, f.unit) end
+                    end
                 end
                 GF.RefreshVisuals()
+                if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
             end,
         })
 
