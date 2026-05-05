@@ -1309,9 +1309,70 @@ local max, min = math.max, math.min
 local function A2() local db=_G.MSUF_DB; return db and db.auras2 end
 local function Sh() local a=A2(); return a and a.shared or {} end
 local function Lay(k) local a=A2(); if not a then return {} end; a.perUnit=a.perUnit or {}; a.perUnit[k]=a.perUnit[k] or {}; a.perUnit[k].layout=a.perUnit[k].layout or {}; return a.perUnit[k].layout end
+local function NativeRoot(k)
+    local a=A2(); if not a then return nil end
+    local sh=a.shared or {}
+    local u=a.perUnit and k and a.perUnit[k]
+    if u and u.overrideNativeAuras==true and type(u.nativeAuras)=="table" then return u.nativeAuras end
+    return sh
+end
+local function IsNativeAuraType(k, typ)
+    local root=NativeRoot(k); if not root then return false end
+    local Native=ns and ns.MSUF_AuraNative
+    if Native and Native.Supported and Native.Supported()~=true then return false end
+    if Native and Native.IsBlizzardRenderer then
+        if Native.IsBlizzardRenderer(root.auraRenderer)~=true then return false end
+    elseif root.auraRenderer~="BLIZZARD" then return false end
+    if Native and Native.TypeEnabled then
+        return Native.TypeEnabled(root.blizzardAuraTypes, typ, true)==true
+    end
+    local t=root.blizzardAuraTypes
+    return type(t)~="table" or t[typ]~=false
+end
 local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 then v=d or 0 end; return floor(v+0.5) end
 local function IsBoss(u) return type(u)=="string" and u:match("^boss%d+$") end
 local pf
+
+local function SetPopupObjectEnabled(obj, enabled)
+    if not obj then return end
+    enabled=enabled and true or false
+    if obj.EnableMouse then obj:EnableMouse(enabled) end
+    if obj.SetEnabled then
+        obj:SetEnabled(enabled)
+    elseif obj.Enable and obj.Disable then
+        if enabled then obj:Enable() else obj:Disable() end
+    end
+    if obj.SetAlpha then obj:SetAlpha(enabled and 1 or 0.35) end
+end
+local function SetPopupKeyEnabled(key, enabled)
+    if not (pf and key) then return end
+    SetPopupObjectEnabled(pf[key], enabled)
+    SetPopupObjectEnabled(pf[key.."Minus"], enabled)
+    SetPopupObjectEnabled(pf[key.."Plus"], enabled)
+    SetPopupObjectEnabled(pf[key.."Label"], enabled)
+end
+local function SetPopupRowEnabled(row, enabled)
+    SetPopupObjectEnabled(row, enabled)
+    if not (row and row.GetChildren) then return end
+    local kids={row:GetChildren()}
+    for i=1,#kids do SetPopupObjectEnabled(kids[i], enabled) end
+end
+local function ApplyNativePopupState()
+    if not (pf and pf.unit) then return end
+    local customTextUsable = not (IsNativeAuraType(pf.unit, "buffs") and IsNativeAuraType(pf.unit, "debuffs"))
+    local rows=pf._auraCustomTextRows
+    if rows then for i=1,#rows do SetPopupRowEnabled(rows[i], customTextUsable) end end
+    SetPopupKeyEnabled("stSzBox", customTextUsable)
+    SetPopupKeyEnabled("stXBox", customTextUsable)
+    SetPopupKeyEnabled("stYBox", customTextUsable)
+    SetPopupKeyEnabled("cdSzBox", customTextUsable)
+    SetPopupKeyEnabled("cdXBox", customTextUsable)
+    SetPopupKeyEnabled("cdYBox", customTextUsable)
+    if pf._auraNativeHint then
+        if customTextUsable then pf._auraNativeHint:Hide()
+        else pf._auraNativeHint:Show() end
+    end
+end
 
 local function Apply()
     if InCombatLockdown and InCombatLockdown() then return end
@@ -1393,6 +1454,7 @@ local function Sync()
     S(pf.prXBox,V("privateOffsetX","privateOffsetX",0)); S(pf.prYBox,V("privateOffsetY","privateOffsetY",0)); S(pf.prSzBox,V("privateSize","privateSize",26))
     SC(pf.prPreviewCB,sh.highlightPrivateAuras); SC(pf.bossTogetherCB,sh.bossEditTogether~=false)
     if pf._bossRow then pf._bossRow:SetShown(IsBoss(uk)) end
+    ApplyNativePopupState()
 end
 
 local function Build()
@@ -1410,6 +1472,20 @@ local function Build()
     local tStXY = F.PairRow(pf, tB, tC, { label1="St X:", label2="St Y:", key1="stXBox", key2="stYBox", anchorTo=tStSz, onChanged=Apply })
     local tCdSz = F.SingleRow(pf, tB, tC, { label="CD size:", boxKey="cdSzBox", anchorTo=tStXY, yOff=-8, onChanged=Apply })
     local tCdXY = F.PairRow(pf, tB, tC, { label1="CD X:", label2="CD Y:", key1="cdXBox", key2="cdYBox", anchorTo=tCdSz, onChanged=Apply })
+    pf._auraCustomTextRows = { tStSz, tStXY, tCdSz, tCdXY }
+    local tHintRow = CreateFrame("Frame", nil, tB)
+    tHintRow:SetHeight(26)
+    tHintRow:SetPoint("TOPLEFT", tCdXY, "BOTTOMLEFT", 0, -4)
+    tHintRow:SetPoint("RIGHT", tB, "RIGHT", 0, 0)
+    local tHint = tHintRow:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    tHint:SetPoint("LEFT", tHintRow, "LEFT", 0, 0)
+    tHint:SetPoint("RIGHT", tHintRow, "RIGHT", -4, 0)
+    tHint:SetJustifyH("LEFT")
+    tHint:SetText("Blizzard renders cooldown/stack text for native Buffs and Debuffs. These text overlay fields only affect custom icons.")
+    tHint:Hide()
+    pf._auraNativeHint = tHint
+    tC._rowCount = tC._rowCount + 1
+    tC._rows[tC._rowCount] = tHintRow
     tC:RecalcHeight()
 
     local bC,bB = F.Card(pf, tC, "Buffs", -6, true)

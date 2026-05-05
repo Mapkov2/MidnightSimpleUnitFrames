@@ -1278,6 +1278,22 @@ local function MakePrivateAuraDefaults()
     }
 end
 
+local function EnsureBlizzardAuraDefaults(auras)
+    if type(auras) ~= "table" then return end
+    if auras.renderer == nil then auras.renderer = "CUSTOM" end
+    if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
+    local types = auras.blizzardTypes
+    if types.buffs == nil then types.buffs = true end
+    if types.debuffs == nil then types.debuffs = true end
+    if types.dispels == nil then types.dispels = true end
+    if types.externals == nil then types.externals = true end
+    if types.privateAuras == nil then types.privateAuras = true end
+    if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
+    if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
+    if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
+    if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+end
+
 function GF.MigrateAuraConfig(conf, isRaid)
     if not conf then return end
     if conf.aurasEnabled ~= nil and not conf.auras then
@@ -1322,6 +1338,7 @@ function GF.MigrateAuraConfig(conf, isRaid)
         conf.privateAuraX = nil; conf.privateAuraY = nil; conf.privateAuraCountdown = nil
     end
     if not conf.privateAuras then conf.privateAuras = MakePrivateAuraDefaults() end
+    EnsureBlizzardAuraDefaults(conf.auras)
     if not conf.spellIndicators then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 } end
 end
 end -- do block
