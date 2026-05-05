@@ -801,6 +801,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         G().showSelfHealPrediction = self:GetChecked() and true or false
         if _G.MSUF_RefreshSelfHealPredUnitEvent then _G.MSUF_RefreshSelfHealPredUnitEvent() end
         RefreshFrames()
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.RefreshVisuals then GF.RefreshVisuals() end
+        if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
     end)
 
     -- Right col: absorb textures (aligned with left col)

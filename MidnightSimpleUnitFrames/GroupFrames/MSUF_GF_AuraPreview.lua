@@ -1023,8 +1023,7 @@ function GF.RefreshPreviewBox()
 
         -- Heal prediction
         if m._healPred then
-            local hpEn = conf.healPredEnabled
-            if hpEn == nil then hpEn = not gen or gen.enableHealPrediction ~= false end
+            local hpEn = (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf)) or false
             if hpEn ~= false then
                 local r, g, b = 0, 1, 0.4
                 if gen then

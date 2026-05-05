@@ -267,13 +267,6 @@ local PARTY_DEFAULTS = {
     reverseFill           = false,
     -- Smooth fill
     smoothFill            = true,
-    -- Cutaway health (red fadeout showing health loss)
-    cutawayEnabled        = true,
-    cutawayFadeTime       = 0.4,   -- seconds before cutaway fades
-    cutawayColorR         = 0.70,
-    cutawayColorG         = 0.10,
-    cutawayColorB         = 0.10,
-    cutawayColorA         = 0.75,
     -- Dispel overlay (color wash on health bar when dispellable debuff active)
     dispelOverlayEnabled  = false,
     dispelOverlayStyle    = "FULL",   -- FULL / BOTTOM / TOP / LEFT / RIGHT
@@ -1087,6 +1080,19 @@ function GF.Val(kind, key)
     local v = conf[key]
     if v ~= nil then return v end
     return GetDefaultsTable(kind)[key]
+end
+
+function GF.IsHealPredictionEnabled(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    if conf and conf.healPredEnabled ~= nil then
+        return conf.healPredEnabled == true
+    end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen then
+        if gen.showSelfHealPrediction ~= nil then return gen.showSelfHealPrediction == true end
+        if gen.enableHealPrediction ~= nil then return gen.enableHealPrediction ~= false end
+    end
+    return false
 end
 
 ------------------------------------------------------------------------

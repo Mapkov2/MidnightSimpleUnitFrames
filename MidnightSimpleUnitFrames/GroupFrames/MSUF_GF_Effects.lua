@@ -1450,14 +1450,6 @@ function GF.BuildFrameCache(f)
     -- Compile fast text functions (oUF-style: mode → C-side closure)
     _BuildSlotFns(c)
 
-    -- Cutaway
-    c.cwEn   = conf.cutawayEnabled ~= false
-    c.cwFade = conf.cutawayFadeTime or 0.4
-    c.cwR    = conf.cutawayColorR or 0.70
-    c.cwG    = conf.cutawayColorG or 0.10
-    c.cwB    = conf.cutawayColorB or 0.10
-    c.cwA    = conf.cutawayColorA or 0.75
-
     -- Cooldown swipe direction (Fix B): pre-cached so ApplyCooldownVisualStyle
     -- in RenderGroup hot path / RefreshAuraIcon doesn't need GF.GetConf.
     -- Live-apply via Options toggle: GF.RefreshVisuals → ApplyVisuals →
@@ -1628,13 +1620,8 @@ function GF.BuildFrameCache(f)
 
     -- Raid debuffs
 
-    -- Heal prediction (resolve full fallthrough: conf → general → default true)
-    local hpEn = conf.healPredEnabled
-    if hpEn == nil then
-        local gen = _G.MSUF_DB and _G.MSUF_DB.general
-        hpEn = not gen or gen.enableHealPrediction ~= false
-    end
-    c.healPredEn = hpEn
+    -- Heal prediction (GF override -> global Bars toggle -> default off)
+    c.healPredEn = (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf)) or false
 
     -- Absorb: independently gated from heal prediction
     c.absorbEn = _GF_IsAbsorbEnabled(kind)
@@ -2849,9 +2836,9 @@ end
 -- UNIT_HEAL_ABSORB_CHANGED:   Overlays only (heal absorbs changed).
 --
 -- This eliminates ~60% of Lua work per UNIT_HEALTH event.
--- Before: Calculator + SetMinMax + SetValue + Cutaway + Color + 3×Text
+-- Before: Calculator + SetMinMax + SetValue + Color + 3×Text
 --         + 3×Overlay + HealthFade + StatusText = ~15 ops
--- After:  UnitHealth + SetValue + Cutaway + Text + StatusText = ~5 ops
+-- After:  UnitHealth + SetValue + Text + StatusText = ~5 ops
 -- ════════════════════════════════════════════════════════════════════════
 
 ------------------------------------------------------------------------
@@ -2962,7 +2949,7 @@ GF._MarkTextDirty = _gfMarkTextDirty
 -- oUF-style: absolute minimum work per event.
 --   1. UnitHealth(unit)             — 1 C-call (secret)
 --   2. bar:SetValue(hp)             — 1 C-call (secret-safe)
---   3. Cutaway timer (if enabled)   — reuse cached hpMax, no SetMinMax
+--   3. Text/status refresh only when needed
 --   4. Color (GRADIENT only)        — other modes stamp-gated elsewhere
 --   5. Dirty flag for text+status   — coalesced flush next frame
 --
@@ -2972,8 +2959,7 @@ GF._MarkTextDirty = _gfMarkTextDirty
 --   • 3×FormatHealthText     — coalesced text flush
 --   • 6×issecretvalue        — coalesced text flush
 --   • UpdateStatusText       — coalesced (AFK/DND cached; refreshed on flag events)
---   • Cutaway SetMinMaxValues — uses cached hpMax
---   • Cutaway color stamp    — set once at config change / UNIT_MAXHEALTH
+--   • Non-gradient health color — stamp-gated outside the lean path
 ------------------------------------------------------------------------
 local function dispatchHealthLean(f, unit)
     local bar = f.health
@@ -3011,34 +2997,6 @@ local function dispatchHealthLean(f, unit)
     elseif not c then
         f._msufGFStatusDirty = true
         _gfMarkTextDirty(f)
-    end
-
-    -- Cutaway: stamp-based (no Timer:Cancel per event).
-    -- Just record when to snap. Callback checks stamp.
-    local cw = f._msufCutaway
-    if cw and c and c.cwEn then
-        f._msufCwSnapAt = GetTime() + c.cwFade
-        if not f._msufCwTicking then
-            f._msufCwTicking = true
-            if not f._msufCwTickFn then
-                local frame = f
-                f._msufCwTickFn = function()
-                    frame._msufCwTicking = false
-                    local cw2 = frame._msufCutaway
-                    local snapAt = frame._msufCwSnapAt
-                    if cw2 and snapAt and GetTime() >= snapAt then
-                        if frame.unit and UnitExists(frame.unit) then
-                            cw2:SetValue(UnitHealth(frame.unit))
-                        end
-                    elseif cw2 and snapAt then
-                        -- Not yet: re-schedule for remaining time
-                        frame._msufCwTicking = true
-                        C_Timer.After(snapAt - GetTime(), frame._msufCwTickFn)
-                    end
-                end
-            end
-            C_Timer.After(c.cwFade, f._msufCwTickFn)
-        end
     end
 
     -- GRADIENT color only (all other modes stamp-gated elsewhere)
@@ -3092,18 +3050,6 @@ local function dispatchHealthFull(f, unit)
         dov:SetValue(hp)
     end
 
-    -- Cutaway
-    local cw = f._msufCutaway
-    if cw and c.cwEn then
-        cw:SetMinMaxValues(0, hpMax)
-        -- Apply cutaway color (stamp-gated — only changes on config)
-        if cw._cwStampR ~= c.cwR or cw._cwStampG ~= c.cwG or cw._cwStampB ~= c.cwB then
-            cw._cwStampR, cw._cwStampG, cw._cwStampB = c.cwR, c.cwG, c.cwB
-            cw:SetStatusBarColor(c.cwR, c.cwG, c.cwB, c.cwA)
-        end
-        if not cw:IsShown() then cw:Show() end
-    end
-
     -- Color (full apply on maxHP change — handles unit-type transitions).
     -- Pass hp/hpMax through so the GRADIENT-no-calc fallback inside
     -- ApplyHealthColor doesn't re-fetch them.
@@ -3134,14 +3080,19 @@ local function dispatchHealthFull(f, unit)
     UpdateStatusText(f, unit)
 
     -- Overlays from calculator
+    local ihBar = f.incomingHealBar
+    if ihBar and c and c.healPredEn == false then
+        ihBar:SetMinMaxValues(0, 1)
+        ihBar:SetValue(0)
+        if ihBar:IsShown() then ihBar:Hide() end
+    end
     if calc and not _G.MSUF_AbsorbTextureTestMode then
-        local ihBar = f.incomingHealBar
         if ihBar then
             if c.healPredEn ~= false then
                 local v = calc:GetIncomingHeals()
                 if v ~= nil then ihBar:SetMinMaxValues(0, hpMax); ihBar:SetValue(v); if not ihBar:IsShown() then ihBar:Show() end
                 else if ihBar:IsShown() then ihBar:Hide() end end
-            else if ihBar:IsShown() then ihBar:Hide() end end
+            else ihBar:SetMinMaxValues(0, 1); ihBar:SetValue(0); if ihBar:IsShown() then ihBar:Hide() end end
         end
         local abBar = f.absorbBar
         if abBar then
@@ -3175,6 +3126,16 @@ end
 local function dispatchOverlaysOnly(f, unit)
     if not f.health then return end
 
+    local c = f._c
+    if not c then return end
+
+    local ihBar = f.incomingHealBar
+    if ihBar and c.healPredEn == false then
+        ihBar:SetMinMaxValues(0, 1)
+        ihBar:SetValue(0)
+        if ihBar:IsShown() then ihBar:Hide() end
+    end
+
     -- PERF: Same-frame dedup. UNIT_HEAL_PREDICTION + UNIT_ABSORB_AMOUNT_CHANGED
     -- + UNIT_HEAL_ABSORB_AMOUNT_CHANGED frequently fire in the same WoW frame
     -- (e.g. heal lands with absorb bubble). This function reads calc and
@@ -3184,9 +3145,6 @@ local function dispatchOverlaysOnly(f, unit)
     local nowT = GetTime()
     if f._msufGFOverlayT == nowT then return end
     f._msufGFOverlayT = nowT
-
-    local c = f._c
-    if not c then return end
 
     local calc = f._msufHPCalc
     if not calc and not _calcUnsupported then calc = _GF_EnsureCalc(f) end
@@ -3201,7 +3159,6 @@ local function dispatchOverlaysOnly(f, unit)
 
     if _G.MSUF_AbsorbTextureTestMode then return end
 
-    local ihBar = f.incomingHealBar
     if ihBar and c.healPredEn ~= false then
         local v = calc:GetIncomingHeals()
         if v ~= nil then ihBar:SetMinMaxValues(0, hpMax); ihBar:SetValue(v); if not ihBar:IsShown() then ihBar:Show() end
@@ -3416,6 +3373,14 @@ end
 dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
     local bar = f.incomingHealBar
     if not bar then return end
+    -- PERF: use pre-cached healPredEn from BuildFrameCache (was GF.GetConf + DB read per call)
+    local c = f._c
+    if c and c.healPredEn == false then
+        bar:SetMinMaxValues(0, 1)
+        bar:SetValue(0)
+        if bar:IsShown() then bar:Hide() end
+        return
+    end
     -- Test mode: fixed values (same as main UF preview)
     if _G.MSUF_AbsorbTextureTestMode then
         bar:SetMinMaxValues(0, 100)
@@ -3423,9 +3388,6 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
         if not bar:IsShown() then bar:Show() end
         return
     end
-    -- PERF: use pre-cached healPredEn from BuildFrameCache (was GF.GetConf + DB read per call)
-    local c = f._c
-    if c and c.healPredEn == false then if bar:IsShown() then bar:Hide() end; return end
     if not unit or not UnitExists(unit) then if bar:IsShown() then bar:Hide() end; return end
     if not hpMax then
         hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
@@ -4429,10 +4391,6 @@ _G.MSUF_GF_OnFrameRetire = function(f)
     if GF.CancelReadyCheckTimer then GF.CancelReadyCheckTimer(f) end
     if GF.HideFrameAuras then GF.HideFrameAuras(f) end
     if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(f) end
-
-    -- Stop cutaway re-schedule loop (closure self-cancels when _msufCwTicking false)
-    f._msufCwTicking = false
-    f._msufCwSnapAt  = nil
 
     -- Clear target / focus pointers if pointing at this frame
     if _gfTargetFrame == f then _gfTargetFrame = nil end
