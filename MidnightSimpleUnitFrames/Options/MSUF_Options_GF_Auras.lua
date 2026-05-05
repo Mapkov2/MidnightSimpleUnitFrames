@@ -38,6 +38,18 @@ local ANCHOR9 = {
     { key = "BOTTOM",      label = L["Bottom"]        },
     { key = "BOTTOMRIGHT", label = L["Bottom Right"]  },
 }
+local BLIZZARD_CONTAINER_ANCHORS = {
+    { key = "FRAME",       label = L["Frame Default"] or "Frame Default" },
+    { key = "TOPLEFT",     label = L["Top Left"]     },
+    { key = "TOP",         label = L["Top"]           },
+    { key = "TOPRIGHT",    label = L["Top Right"]     },
+    { key = "LEFT",        label = L["Left"]          },
+    { key = "CENTER",      label = L["Center"]        },
+    { key = "RIGHT",       label = L["Right"]         },
+    { key = "BOTTOMLEFT",  label = L["Bottom Left"]   },
+    { key = "BOTTOM",      label = L["Bottom"]        },
+    { key = "BOTTOMRIGHT", label = L["Bottom Right"]  },
+}
 local GROWTH8 = {
     { key = "RIGHTDOWN", label = L["Right -> Down"] },
     { key = "RIGHTUP",   label = L["Right -> Up"]   },
@@ -205,7 +217,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     local function IsNativeRenderer()
-        return AurasRoot().renderer == "BLIZZARD"
+        return (AurasRoot().renderer or "BLIZZARD") == "BLIZZARD"
     end
 
     if not _G.StaticPopupDialogs["MSUF_SI_ICON_BLIZZARD_WARN"] then
@@ -2379,7 +2391,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Blizzard Renderer
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(410, L["Blizzard Renderer"] or "Blizzard Renderer", false, "blizzrenderer")
+        local box, body = AddSection(720, L["Blizzard Renderer"] or "Blizzard Renderer", false, "blizzrenderer")
         local refreshBlizzardControls
         local function RendererCheck(spec)
             spec.maxTextWidth = spec.maxTextWidth or 132
@@ -2388,7 +2400,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             -- hit rects far to the right, which steals clicks from neighboring
             -- renderer checkboxes and the size slider.
             if cb and cb.SetHitRectInsets then
-                cb:SetHitRectInsets(0, -132, 0, 0)
+                cb:SetHitRectInsets(0, 0, 0, 0)
             end
             return cb
         end
@@ -2397,18 +2409,18 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         info:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
         info:SetWidth(610)
         info:SetJustifyH("LEFT")
-        info:SetText(L["Blizzard mode uses one native aura container per group frame. Category sections below are Custom-only when their Blizzard type is active."] or "Blizzard mode uses one native aura container per group frame. Category sections below are Custom-only when their Blizzard type is active.")
+        info:SetText(L["Blizzard mode uses one native aura container per group frame. Category sections below are Custom-only when their Blizzard type is active. Use Block Position here or drag the Blizzard preview handle to move the native aura block."] or "Blizzard mode uses one native aura container per group frame. Category sections below are Custom-only when their Blizzard type is active. Use Block Position here or drag the Blizzard preview handle to move the native aura block.")
 
         local rendererDD = SDropdown({
             name = "MSUF_GF_BlizzardRendererMode", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = -4, y = -72,
+            anchor = body, anchorPoint = "TOPLEFT", x = -4, y = -88,
             width = DD_W,
             label = L["Renderer"] or "Renderer",
             items = {
-                { key = "CUSTOM", label = L["Custom"] or "Custom" },
                 { key = "BLIZZARD", label = L["Blizzard"] or "Blizzard" },
+                { key = "CUSTOM", label = L["Custom"] or "Custom" },
             },
-            get = function() return AurasRoot().renderer or "CUSTOM" end,
+            get = function() return AurasRoot().renderer or "BLIZZARD" end,
             set = function(_, v)
                 AurasRoot().renderer = (v == "BLIZZARD") and "BLIZZARD" or "CUSTOM"
                 BlizzardTypes()
@@ -2423,43 +2435,50 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local buffChk = RendererCheck({
             name = "MSUF_GF_BlizzardBuffs", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 300, y = -72,
+            anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -88,
             label = L["Buffs"],
             get = function() return BlizzardTypes().buffs == true end,
             set = function(_, v) BlizzardTypes().buffs = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
         local debuffChk = RendererCheck({
             name = "MSUF_GF_BlizzardDebuffs", parent = body,
-            anchor = buffChk, x = 0, y = -30,
+            anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -148,
             label = L["Debuffs"],
             get = function() return BlizzardTypes().debuffs == true end,
             set = function(_, v) BlizzardTypes().debuffs = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
         local dispelChk = RendererCheck({
             name = "MSUF_GF_BlizzardDispels", parent = body,
-            anchor = debuffChk, x = 0, y = -30,
+            anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -208,
             label = L["Dispel Overlay"] or "Dispel Overlay",
             get = function() return BlizzardTypes().dispels == true end,
             set = function(_, v) BlizzardTypes().dispels = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
         local extChk = RendererCheck({
             name = "MSUF_GF_BlizzardExt", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 510, y = -72,
+            anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -88,
             label = L["Defensives"],
             get = function() return BlizzardTypes().externals == true end,
             set = function(_, v) BlizzardTypes().externals = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
         local cdTextChk = RendererCheck({
             name = "MSUF_GF_BlizzardCooldownText", parent = body,
-            anchor = extChk, x = 0, y = -30,
+            anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -148,
             label = L["Cooldown Text"] or "Cooldown Text",
             get = function() return AurasRoot().blizzardShowCooldownText ~= false end,
             set = function(_, v) AurasRoot().blizzardShowCooldownText = v and true or false; RequestAuraRefresh() end,
         })
+        local privateChk = RendererCheck({
+            name = "MSUF_GF_BlizzardPrivateAuras", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -208,
+            label = L["Private Auras"] or "Private Auras",
+            get = function() return BlizzardTypes().privateAuras == true end,
+            set = function(_, v) BlizzardTypes().privateAuras = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
+        })
 
         local iconSizeSl = SSlider({
             name = "MSUF_GF_BlizzardIconSize", parent = body, compact = true,
-            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -140,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -168,
             min = 8, max = 80, step = 1, width = 200, default = 20,
             get = function() return AurasRoot().blizzardIconSize or 20 end,
             set = function(_, v) AurasRoot().blizzardIconSize = v; RequestAuraRefresh() end,
@@ -2485,7 +2504,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
 
         local orgLabel = body:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        orgLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 320, -198)
+        orgLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 340, -268)
         orgLabel:SetText(L["Organization"] or "Organization")
 
         local orgDD = SDropdown({
@@ -2504,12 +2523,55 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             end,
         })
 
+        local posLabel = body:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        posLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 340, -350)
+        posLabel:SetText(L["Blizzard Block Position"] or "Blizzard Block Position")
+
+        local anchorDD = SDropdown({
+            name = "MSUF_GF_BlizzardContainerAnchor", parent = body,
+            anchor = posLabel, anchorPoint = "BOTTOMLEFT", x = -16, y = -6,
+            width = 200,
+            items = BLIZZARD_CONTAINER_ANCHORS,
+            get = function() return AurasRoot().blizzardContainerAnchor or "FRAME" end,
+            set = function(_, v)
+                AurasRoot().blizzardContainerAnchor = v or "FRAME"
+                RequestAuraRefresh()
+                if refreshBlizzardControls then refreshBlizzardControls() end
+            end,
+        })
+
+        local posXSl = SSlider({
+            name = "MSUF_GF_BlizzardContainerX", parent = body, compact = true,
+            anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -438,
+            min = -200, max = 200, step = 1, width = 200, default = 0,
+            get = function() return AurasRoot().blizzardContainerX or 0 end,
+            set = function(_, v) AurasRoot().blizzardContainerX = v; RequestAuraRefresh() end,
+            formatText = function(v) return string.format(L["Block X: %d"] or "Block X: %d", v) end,
+        })
+
+        local posYSl = SSlider({
+            name = "MSUF_GF_BlizzardContainerY", parent = body, compact = true,
+            anchor = posXSl, x = 0, y = -52,
+            min = -200, max = 200, step = 1, width = 200, default = 0,
+            get = function() return AurasRoot().blizzardContainerY or 0 end,
+            set = function(_, v) AurasRoot().blizzardContainerY = v; RequestAuraRefresh() end,
+            formatText = function(v) return string.format(L["Block Y: %d"] or "Block Y: %d", v) end,
+        })
+
+        local posHint = body:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        posHint:SetPoint("TOPLEFT", posYSl, "BOTTOMLEFT", 0, -12)
+        posHint:SetWidth(330)
+        posHint:SetJustifyH("LEFT")
+        posHint:SetText(L["Frame Default keeps Blizzard's frame-relative icon layout. Dispel overlay stays on the unit frame."] or "Frame Default keeps Blizzard's frame-relative icon layout. Dispel overlay stays on the unit frame.")
+
         refreshBlizzardControls = function()
-            local enabled = (AurasRoot().renderer == "BLIZZARD")
+            local enabled = ((AurasRoot().renderer or "BLIZZARD") == "BLIZZARD")
+            local moveEnabled = enabled and (AurasRoot().blizzardContainerAnchor or "FRAME") ~= "FRAME"
             SetAuraControlsEnabled(enabled, {
-                buffChk, debuffChk, dispelChk, extChk, cdTextChk,
-                iconSizeSl, buffMaxSl, debuffMaxSl, orgDD,
-            }, { orgLabel })
+                buffChk, debuffChk, dispelChk, extChk, cdTextChk, privateChk,
+                iconSizeSl, buffMaxSl, debuffMaxSl, orgDD, anchorDD,
+            }, { orgLabel, posLabel, posHint })
+            SetAuraControlsEnabled(moveEnabled, { posXSl, posYSl })
         end
         _auraRefreshFns[#_auraRefreshFns + 1] = refreshBlizzardControls
         if rendererDD and rendererDD.HookScript then
@@ -2639,23 +2701,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Private Auras
     ----------------------------------------------------------------
     do
-        -- Height extended to accommodate the 12.0.5 Private Aura Dispel
-        -- Overlay controls at the bottom of the section.
-        local box, body = AddSection(700, L["Private Auras"], false, "priv")
-
-        -- Helper for container-overlay sub-table (created lazily).
-        local function PAC()
-            local pa = PA()
-            if not pa.containerOverlay then
-                pa.containerOverlay = {
-                    enabled     = false,
-                    showIcons   = true,
-                    dispelMode  = "dispellableByMe",
-                    gradientDir = "default",
-                }
-            end
-            return pa.containerOverlay
-        end
+        local box, body = AddSection(320, L["Private Auras"], false, "priv")
 
         local refreshPrivateAuraControls
 
@@ -2666,7 +2712,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             get = function(k) return PA().enabled ~= false end,
             set = function(k, v)
                 PA().enabled = v
-                RequestVisualRefresh()
+                RequestAuraRefresh()
                 if refreshPrivateAuraControls then refreshPrivateAuraControls() end
             end,
         })
@@ -2676,7 +2722,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -40,
             min = 1, max = 12, step = 1, width = 200, default = 4,
             get = function(k) return PA().max or 4 end,
-            set = function(k, v) PA().max = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().max = v; RequestAuraRefresh() end,
             formatText = function(v) return string.format(L["Max: %d"], v) end,
         })
 
@@ -2751,130 +2797,21 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         local paDispelChk = SCheck({
             name = "MSUF_GF_PADispelType", parent = body,
             anchor = paNumChk, x = 0, y = -24,
-            label = L["Show Dispel Type"],
+            label = L["Show Private Dispel Type"] or "Show Private Dispel Type",
             get = function(k) return PA().showDispelType == true end,
             set = function(k, v) PA().showDispelType = v; RequestVisualRefresh() end,
         })
 
-        ----------------------------------------------------------------
-        -- Sub-section: Private Aura Dispel Overlay
-        --
-        -- Blizzard-rendered overlay driven by container-anchor attributes
-        -- (max-buffs / max-debuffs / max-dispel-debuffs / dispel-indicator-
-        -- option / aura-organization-type). 12.0.5+ baseline.
-        --
-        -- LAYOUT: anchor below paLayerSl (left column), NOT paDispelChk
-        -- (right column). The left column ends ~110px lower; anchoring to
-        -- the right column would render this header on top of paYSl/paLayerSl.
-        ----------------------------------------------------------------
-        local coHeader = body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        coHeader:SetPoint("TOPLEFT", paLayerSl, "BOTTOMLEFT", 0, -24)
-        coHeader:SetText(L["Dispel Overlay"] or "Dispel Overlay")
-        coHeader:SetTextColor(1.00, 0.82, 0.00)
-
-        local coEnableChk = SCheck({
-            name = "MSUF_GF_PAContainerOverlayEnable", parent = body,
-            anchor = coHeader, x = 0, y = -22,
-            label = L["Enable Dispel Overlay"] or "Enable Dispel Overlay",
-            get = function() return PAC().enabled == true end,
-            set = function(_, v)
-                PAC().enabled = v and true or false
-                RequestVisualRefresh()
-                if refreshPrivateAuraControls then refreshPrivateAuraControls() end
-                -- Live-apply on every visible GF frame.
-                if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
-                    for fr in pairs(GF.frames) do
-                        if fr.unit and fr:IsShown() then
-                            GF.UpdatePrivateAuraContainerOverlay(fr)
-                        end
-                    end
-                end
-            end,
-        })
-
-        local coShowIconsChk = SCheck({
-            name = "MSUF_GF_PAContainerOverlayShowIcons", parent = body,
-            anchor = coEnableChk, x = 0, y = -24,
-            label = L["Show Dispel Icon"] or "Show Dispel Icon",
-            get = function() return PAC().showIcons ~= false end,
-            set = function(_, v)
-                PAC().showIcons = v and true or false
-                if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
-                    for fr in pairs(GF.frames) do
-                        if fr.unit and fr:IsShown() then
-                            GF.UpdatePrivateAuraContainerOverlay(fr)
-                        end
-                    end
-                end
-            end,
-        })
-
-        local coDispelModeDD = SDropdown({
-            name = "MSUF_GF_PAContainerOverlayDispelMode", parent = body, compact = true,
-            anchor = coShowIconsChk, x = 0, y = -28,
-            width = DD_W,
-            label = L["Dispel Filter"] or "Dispel Filter",
-            items = {
-                { value = "dispellableByMe", text = L["Dispellable By Me"] or "Dispellable By Me" },
-                { value = "allDispellable",  text = L["All Dispellable"]   or "All Dispellable"   },
-            },
-            get = function() return PAC().dispelMode or "dispellableByMe" end,
-            set = function(_, v)
-                PAC().dispelMode = v
-                if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
-                    for fr in pairs(GF.frames) do
-                        if fr.unit and fr:IsShown() then
-                            GF.UpdatePrivateAuraContainerOverlay(fr)
-                        end
-                    end
-                end
-            end,
-        })
-
-        local coGradientDD = SDropdown({
-            name = "MSUF_GF_PAContainerOverlayGradient", parent = body, compact = true,
-            anchor = coDispelModeDD, anchorPoint = "TOPRIGHT", x = 12, y = 0,
-            width = DD_W,
-            label = L["Gradient Direction"] or "Gradient Direction",
-            items = {
-                { value = "default", text = L["Default"] or "Default" },
-                { value = "TOP",     text = L["Top"]     or "Top"     },
-                { value = "BOTTOM",  text = L["Bottom"]  or "Bottom"  },
-                { value = "LEFT",    text = L["Left"]    or "Left"    },
-                { value = "RIGHT",   text = L["Right"]   or "Right"   },
-            },
-            get = function() return PAC().gradientDir or "default" end,
-            set = function(_, v)
-                PAC().gradientDir = v
-                if GF.frames and GF.UpdatePrivateAuraContainerOverlay then
-                    for fr in pairs(GF.frames) do
-                        if fr.unit and fr:IsShown() then
-                            GF.UpdatePrivateAuraContainerOverlay(fr)
-                        end
-                    end
-                end
-            end,
-        })
-
         refreshPrivateAuraControls = function()
             local enabled = PA().enabled ~= false
-            local overlayEnabled = enabled and PAC().enabled == true
-            local nativeDispels = IsNativeAuraType("dispels")
+            local nativePrivate = IsNativeAuraType("privateAuras")
 
             SetAuraControlsEnabled(enabled, {
                 paMaxSl,
+            })
+            SetAuraControlsEnabled(enabled and not nativePrivate, {
                 paSzSl, paDirDd, paAnchorDd, paXSl, paYSl, paLayerSl,
                 paCdChk, paNumChk, paDispelChk,
-            })
-
-            -- The old custom dispel overlay is replaced by Blizzard's native
-            -- dispel overlay when that renderer type is enabled.
-            SetAuraControlsEnabled(enabled and not nativeDispels, {
-                coEnableChk,
-            }, { coHeader })
-
-            SetAuraControlsEnabled(overlayEnabled and not nativeDispels, {
-                coShowIconsChk, coDispelModeDD, coGradientDD,
             })
         end
         _auraRefreshFns[#_auraRefreshFns + 1] = function()

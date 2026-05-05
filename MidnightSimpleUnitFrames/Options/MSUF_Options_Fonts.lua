@@ -598,18 +598,20 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     local fontChoices = {}
     local function RebuildFontChoices()
-        fontChoices = {}
+        local normalizeFontKey = _G.MSUF_NormalizeFontKey or (ns and ns.MSUF_NormalizeFontKey) or function(key) return key end
+        for i = #fontChoices, 1, -1 do fontChoices[i] = nil end
         for _, info in ipairs(_G.MSUF_FONT_LIST or _G.FONT_LIST or {}) do
-            fontChoices[#fontChoices + 1] = { key = info.key, label = info.name, path = info.path }
+            fontChoices[#fontChoices + 1] = { key = normalizeFontKey(info.key), label = info.name, path = info.path }
         end
         local LSM = (ns and ns.LSM) or _G.MSUF_LSM
         if LSM then
             if LSM.Register then
+                local rawFonts = type(LSM.HashTable) == "function" and LSM:HashTable("font") or nil
                 for _, d in ipairs(fontChoices) do
                     if d.key and d.key ~= "" and d.path and d.path ~= "" then
-                        if LSM.Fetch then
-                            local ok, v = pcall(LSM.Fetch, LSM, "font", d.key, true)
-                            if not (ok and v) then pcall(LSM.Register, LSM, "font", d.key, d.path) end
+                        local v = rawFonts and rawFonts[d.key]
+                        if not v then
+                            pcall(LSM.Register, LSM, "font", d.key, d.path)
                         end
                     end
                 end
@@ -621,6 +623,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             end
         end
     end
+    _G.MSUF_RebuildFontChoices = RebuildFontChoices
     RebuildFontChoices()
 
     local fontDrop = UI.Dropdown({
@@ -630,7 +633,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         items = function()
             if #fontChoices == 0 then RebuildFontChoices() end
             local getFP = _G.MSUF_GetFontPreviewObject
-            local getPath = _G.MSUF_GetFontPathForKey
+            local getPath = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
             local out = {}
             for i = 1, #fontChoices do
                 local c = fontChoices[i]
@@ -643,8 +646,13 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             end
             return out
         end,
-        get = function() return ScopeGet("fontKey", "FRIZQT") end,
+        get = function()
+            local normalizeFontKey = _G.MSUF_NormalizeFontKey or (ns and ns.MSUF_NormalizeFontKey) or function(key) return key end
+            return normalizeFontKey(ScopeGet("fontKey", "FRIZQT"))
+        end,
         set = function(v)
+            local normalizeFontKey = _G.MSUF_NormalizeFontKey or (ns and ns.MSUF_NormalizeFontKey) or function(key) return key end
+            v = normalizeFontKey(v)
             ScopeSet("fontKey", v)
             UpdateFonts()
             if C_Timer and C_Timer.After then C_Timer.After(0, UpdateFonts) end
@@ -664,8 +672,15 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             end
             return items
         end,
-        get = function() return GFVal("fontKey") or "" end,
-        set = function(v) GFSet("fontKey", v); GFApplyFont() end,
+        get = function()
+            local normalizeFontKey = _G.MSUF_NormalizeFontKey or (ns and ns.MSUF_NormalizeFontKey) or function(key) return key end
+            return normalizeFontKey(GFVal("fontKey") or "")
+        end,
+        set = function(v)
+            local normalizeFontKey = _G.MSUF_NormalizeFontKey or (ns and ns.MSUF_NormalizeFontKey) or function(key) return key end
+            GFSet("fontKey", normalizeFontKey(v))
+            GFApplyFont()
+        end,
     })
     gfFontDrop:Hide()
     _gfRefreshFns[#_gfRefreshFns + 1] = function() if gfFontDrop and gfFontDrop.Refresh then gfFontDrop:Refresh() end end

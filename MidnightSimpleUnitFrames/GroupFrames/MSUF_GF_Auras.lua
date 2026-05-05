@@ -1517,11 +1517,13 @@ end
 
 function GF.IsAuraRendererBlizzard(conf)
     local auras = conf and conf.auras
+    if not auras then return false end
+    if auras.renderer == nil then return true end
     local Native = GetNativeAuraAPI()
     if Native then
-        return Native.IsBlizzardRenderer(auras and auras.renderer)
+        return Native.IsBlizzardRenderer(auras.renderer)
     end
-    return auras and auras.renderer == "BLIZZARD"
+    return auras.renderer == "BLIZZARD"
 end
 
 function GF.IsBlizzardAuraTypeEnabled(conf, key)
@@ -1544,7 +1546,9 @@ function GF.GetBlizzardAuraIconSize(conf, scale, frameScale)
     if not raw then
         local buffCfg = auras and auras.buff
         local debCfg = auras and auras.debuff
-        raw = (buffCfg and buffCfg.size) or (debCfg and debCfg.size) or 20
+        local extCfg = auras and auras.externals
+        local paCfg = conf and conf.privateAuras
+        raw = (buffCfg and buffCfg.size) or (debCfg and debCfg.size) or (extCfg and extCfg.size) or (paCfg and paCfg.size) or 20
     end
     return ScaleFrameValue(raw, (scale or 1) * (frameScale or 1), 8)
 end
@@ -1603,6 +1607,8 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
     local types = GF.EnsureBlizzardAuraTypes(conf)
     local buffCfg = auras.buff or {}
     local debCfg = auras.debuff or {}
+    local extCfg = auras.externals or {}
+    local paCfg = conf.privateAuras or {}
 
     -- Blizzard rendering is owned by the Renderer dropdown plus the Blizzard
     -- type checkboxes. The Buff/Debuff/Defensive sections below are custom-only
@@ -1611,8 +1617,9 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
     local renderDebuffs = Native.TypeEnabled(types, "debuffs", true)
     local renderDispels = Native.TypeEnabled(types, "dispels", true) and conf.dispelEnabled ~= false
     local renderExt = Native.TypeEnabled(types, "externals", true)
+    local renderPrivate = Native.TypeEnabled(types, "privateAuras", true) and paCfg.enabled ~= false
 
-    if not (renderBuffs or renderDebuffs or renderDispels or renderExt) then
+    if not (renderBuffs or renderDebuffs or renderDispels or renderExt or renderPrivate) then
         GF.ClearBlizzardAuraContainer(f)
         return nil
     end
@@ -1637,10 +1644,28 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
     if not container then return nil end
 
     local iconSize = GF.GetBlizzardAuraIconSize(conf, scale, frameScale)
-    local bigDefensiveSize = iconSize
+    local bigDefensiveSize = renderExt and ScaleFrameValue(extCfg.size or iconSize, (scale or 1) * (frameScale or 1), 8) or iconSize
+    local iconAnchor = auras.blizzardContainerAnchor
+    if iconAnchor == "FRAME" or iconAnchor == "" then
+        iconAnchor = nil
+    end
+    local iconOffsetX = 0
+    local iconOffsetY = 0
+    if iconAnchor then
+        iconOffsetX = ScaleFrameValue(auras.blizzardContainerX or 0, frameScale or 1)
+        iconOffsetY = ScaleFrameValue(auras.blizzardContainerY or 0, frameScale or 1)
+    end
+    if renderPrivate and GF.ClearPrivateAuras then
+        GF.ClearPrivateAuras(f)
+    end
+    local maxDebuffs = renderDebuffs and (tonumber(debCfg.max) or 6) or 0
+    if renderPrivate then
+        local privateMax = tonumber(paCfg.max) or 4
+        if privateMax > maxDebuffs then maxDebuffs = privateMax end
+    end
     local cfg = {
         maxBuffs = renderBuffs and (tonumber(buffCfg.max) or 6) or 0,
-        maxDebuffs = renderDebuffs and (tonumber(debCfg.max) or 6) or 0,
+        maxDebuffs = maxDebuffs,
         maxDispelDebuffs = renderDispels and 3 or 0,
         iconSize = iconSize,
         bigDefensiveSize = bigDefensiveSize,
@@ -1651,9 +1676,11 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
         showCountdownFrame = true,
         showCountdownNumbers = auras.blizzardShowCooldownText ~= false,
         groupType = groupType,
-        displayLargerRoleSpecificDebuffs = true,
+        displayLargerRoleSpecificDebuffs = debCfg.displayLargerRoleSpecificDebuffs ~= false,
         powerBarUsedHeight = tonumber(powerUsedHeight) or 0,
-        frameLevelOffset = 8,
+        iconAnchor = iconAnchor,
+        iconOffsetX = iconOffsetX,
+        iconOffsetY = iconOffsetY,
     }
 
     local effectiveUnit = Native.ResolveUnitToken and Native.ResolveUnitToken(unit) or unit
@@ -1662,12 +1689,16 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
         and container._msufNativeAuraUnit == effectiveUnit
         and (not desiredSig or container._msufNativeAuraSignature == desiredSig)
     if ready then
+        if Native.ApplyFrameStrata then
+            Native.ApplyFrameStrata(container, parent, levelParent)
+        end
         container:Show()
         return {
             buffs = renderBuffs,
             debuffs = renderDebuffs,
             dispels = renderDispels,
             externals = renderExt,
+            privateAuras = renderPrivate,
         }
     end
 
@@ -1678,6 +1709,7 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
         debuffs = applied and renderDebuffs,
         dispels = applied and renderDispels,
         externals = applied and renderExt,
+        privateAuras = applied and renderPrivate,
     }
 end
 
@@ -2519,4 +2551,5 @@ end
 ------------------------------------------------------------------------
 GF.GetDynamicScale = GetDynamicScale
 GF.GetPreviewDynamicScale = GetPreviewDynamicScale
+GF.GetAuraDynamicScale = GetDynamicScale
 _G.MSUF_GF_UpdateFrameAuras = GF.UpdateFrameAuras

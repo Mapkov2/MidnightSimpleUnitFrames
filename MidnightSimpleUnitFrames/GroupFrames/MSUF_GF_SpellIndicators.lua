@@ -1338,7 +1338,7 @@ end
 
 local function EnsureBlizzardAuraDefaults(auras)
     if type(auras) ~= "table" then return end
-    if auras.renderer == nil then auras.renderer = "CUSTOM" end
+    if auras.renderer == nil then auras.renderer = "BLIZZARD" end
     if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
     local types = auras.blizzardTypes
     if types.buffs == nil then types.buffs = true end
@@ -1350,6 +1350,9 @@ local function EnsureBlizzardAuraDefaults(auras)
     if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
     if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
     if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+    if auras.blizzardContainerAnchor == nil then auras.blizzardContainerAnchor = "FRAME" end
+    if auras.blizzardContainerX == nil then auras.blizzardContainerX = 0 end
+    if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end
 end
 
 function GF.MigrateAuraConfig(conf, isRaid)

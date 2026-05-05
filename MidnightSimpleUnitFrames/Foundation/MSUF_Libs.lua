@@ -12,13 +12,6 @@ do
         ["fonts\\morpheus.ttf"] = "Fonts\\MORPHEUS_CYR.TTF",
         ["fonts\\skurri.ttf"] = "Fonts\\SKURRI_CYR.TTF",
     }
-    local TRUSTED_GAME_FONTS = {
-        ["fonts\\frizqt__.ttf"] = true,
-        ["fonts\\frizqt___cyr.ttf"] = true,
-        ["fonts\\arialn.ttf"] = true,
-        ["fonts\\morpheus_cyr.ttf"] = true,
-        ["fonts\\skurri_cyr.ttf"] = true,
-    }
     local _probeFrame, _probeFS
     local _fontPathCache = {}
 
@@ -44,6 +37,35 @@ do
         return path:gsub("/", "\\"):lower()
     end
 
+    local TRUSTED_GAME_FONTS = {
+        ["fonts\\frizqt__.ttf"] = true,
+        ["fonts\\frizqt___cyr.ttf"] = true,
+        ["fonts\\arialn.ttf"] = true,
+        ["fonts\\morpheus.ttf"] = true,
+        ["fonts\\morpheus_cyr.ttf"] = true,
+        ["fonts\\skurri.ttf"] = true,
+        ["fonts\\skurri_cyr.ttf"] = true,
+    }
+
+    local FONT_EQUIV = {
+        ["fonts\\frizqt__.ttf"] = "friz",
+        ["fonts\\frizqt___cyr.ttf"] = "friz",
+        ["fonts\\arialn.ttf"] = "arial",
+        ["fonts\\morpheus.ttf"] = "morpheus",
+        ["fonts\\morpheus_cyr.ttf"] = "morpheus",
+        ["fonts\\skurri.ttf"] = "skurri",
+        ["fonts\\skurri_cyr.ttf"] = "skurri",
+    }
+
+    local function FontPathMatches(requested, actual)
+        local want = FontPathKey(NormalizeFontPath(requested))
+        local got = FontPathKey(NormalizeFontPath(actual))
+        if not want or not got then return false end
+        if want == got then return true end
+        local wantGroup = FONT_EQUIV[want]
+        return wantGroup ~= nil and wantGroup == FONT_EQUIV[got]
+    end
+
     local function GetProbeFS()
         if _probeFS then return _probeFS end
         if type(CreateFrame) ~= "function" then return nil end
@@ -62,7 +84,7 @@ do
         if not ok or applied == false then return false end
         if type(fs.GetFont) == "function" then
             local actual = fs:GetFont()
-            return FontPathKey(actual) == FontPathKey(path)
+            return FontPathMatches(path, actual)
         end
         return true
     end
@@ -73,6 +95,10 @@ do
 
     function _G.MSUF_NormalizeFontPath(path)
         return NormalizeFontPath(path)
+    end
+
+    function _G.MSUF_FontPathMatches(requested, actual)
+        return FontPathMatches(requested, actual)
     end
 
     function _G.MSUF_ResolveFontPath(path, size, flags)
@@ -98,9 +124,9 @@ do
         end
 
         Add(normalized)
-        Add(STANDARD_TEXT_FONT)
         Add(FALLBACK_FONT)
         Add("Fonts\\ARIALN.TTF")
+        Add(STANDARD_TEXT_FONT)
 
         local probe = GetProbeFS()
         if probe then
@@ -159,7 +185,8 @@ local function EnsureLSMCallbacks()
                 _G.MSUF_RebuildFontChoices()
             end
 
-            if _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.fontKey == key then
+            local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
+            if _G.MSUF_DB and _G.MSUF_DB.general and normalizeFontKey(_G.MSUF_DB.general.fontKey) == normalizeFontKey(key) then
                 if _G.C_Timer and _G.C_Timer.After then
                     _G.C_Timer.After(0, function()
                         if _G.UpdateAllFonts then

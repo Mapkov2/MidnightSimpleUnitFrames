@@ -32,8 +32,27 @@ if type(MSUF_GetGlobalFontSettings_Resolved) ~= "function" then
         local fontPath = DEFAULT_FONT
         local lsm = (ns and ns.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
         local fontKey = g and (g.fontKey or g.font)
-        if fontKey and fontKey ~= "" and lsm and lsm.Fetch then
-            local p = lsm:Fetch("font", fontKey, true)
+        if fontKey and fontKey ~= "" and type(_G.MSUF_FetchFontPathFromLSM) == "function" then
+            local p = _G.MSUF_FetchFontPathFromLSM(fontKey)
+            if p and p ~= "" then
+                fontPath = ResolveFontPath(p, baseSize, fontFlags)
+            end
+        elseif fontKey and fontKey ~= "" and lsm then
+            local lsmKey = (fontKey == "FRIZQT" and "Friz Quadrata TT")
+                or (fontKey == "ARIALN" and "Arial Narrow")
+                or (fontKey == "MORPHEUS" and "Morpheus")
+                or (fontKey == "SKURRI" and "Skurri")
+                or (fontKey == "Friz Quadrata (default)" and "Friz Quadrata TT")
+                or (fontKey == "Arial (default)" and "Arial Narrow")
+                or (fontKey == "Morpheus (default)" and "Morpheus")
+                or (fontKey == "Skurri (default)" and "Skurri")
+                or fontKey
+            local raw = _G.MSUF_GetRawLSMFontPath
+            local p = type(raw) == "function" and (raw(lsm, lsmKey) or raw(lsm, fontKey)) or nil
+            if not p and type(lsm.HashTable) == "function" then
+                local fonts = lsm:HashTable("font")
+                p = fonts and (fonts[lsmKey] or fonts[fontKey])
+            end
             if p and p ~= "" then
                 fontPath = ResolveFontPath(p, baseSize, fontFlags)
             end

@@ -70,15 +70,13 @@ local function _ResolveFontPath(kindConf)
         local g = _G.MSUF_DB and _G.MSUF_DB.general
         key = (g and g.fontKey) or "FRIZQT"
     end
-    local fn = _G.MSUF_GetFontPreviewObject
+    local fn = _G.MSUF_GetFontPathForKey
     if type(fn) == "function" then
-        local obj = fn(key)
-        if obj and obj.GetFont then
-            local p = obj:GetFont()
-            if type(p) == "string" and p ~= "" then return p end
-        end
+        local p = fn(key)
+        if type(p) == "string" and p ~= "" then return p end
     end
-    return STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local resolve = _G.MSUF_ResolveFontPath or function(path) return path end
+    return resolve("Fonts\\FRIZQT__.TTF", 12, "")
 end
 
 local function _ResolveOutline(kindConf)

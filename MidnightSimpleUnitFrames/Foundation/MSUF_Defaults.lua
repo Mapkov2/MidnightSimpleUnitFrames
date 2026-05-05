@@ -134,6 +134,25 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         if conf.alphaHPOutOfCombat == nil then conf.alphaHPOutOfCombat = 1 end
         if conf.alphaPreserveHPColor == nil then conf.alphaPreserveHPColor = false end
      end
+    local function ForceFreshGroupAuraBlizzardRenderer(conf)
+        if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
+        local auras = conf.auras
+        auras.renderer = "BLIZZARD"
+        if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
+        local types = auras.blizzardTypes
+        if types.buffs == nil then types.buffs = true end
+        if types.debuffs == nil then types.debuffs = true end
+        if types.dispels == nil then types.dispels = true end
+        if types.externals == nil then types.externals = true end
+        if types.privateAuras == nil then types.privateAuras = true end
+        if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
+        if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
+        if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
+        if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+        if auras.blizzardContainerAnchor == nil then auras.blizzardContainerAnchor = "FRAME" end
+        if auras.blizzardContainerX == nil then auras.blizzardContainerX = 0 end
+        if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end
+    end
     EnsureUnitAlphaDefaults(db.player)
     -- Fresh-install default: player name hidden
     if type(db.player) == "table" then
@@ -145,6 +164,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureUnitAlphaDefaults(db.boss)
     EnsureUnitAlphaDefaults(db.targettarget)
     EnsureUnitAlphaDefaults(db.tot)
+    ForceFreshGroupAuraBlizzardRenderer(db.gf_party)
+    ForceFreshGroupAuraBlizzardRenderer(db.gf_raid)
+    ForceFreshGroupAuraBlizzardRenderer(db.gf_mythicraid)
     -- Fresh-install defaults: status indicators (AFK/DND) off by default
     local g = db.general
     if type(g) == 'table' then
@@ -183,6 +205,30 @@ local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     MSUF_DB.general._msufFactoryProfileApplied = true
  end
 local MSUF_DB_LastHeavyRun
+local MSUF_DEFAULTS_FONT_KEY_ALIASES = {
+    FRIZQT   = "Friz Quadrata TT",
+    ARIALN   = "Arial Narrow",
+    MORPHEUS = "Morpheus",
+    SKURRI   = "Skurri",
+    ["Friz Quadrata (default)"] = "Friz Quadrata TT",
+    ["Arial (default)"]         = "Arial Narrow",
+    ["Morpheus (default)"]      = "Morpheus",
+    ["Skurri (default)"]        = "Skurri",
+}
+
+local function MSUF_Defaults_NormalizeFontKey(key)
+    if type(key) ~= "string" or key == "" then return key end
+    return MSUF_DEFAULTS_FONT_KEY_ALIASES[key] or key
+end
+
+local function MSUF_Defaults_NormalizeFontField(tbl)
+    if type(tbl) ~= "table" then return end
+    local normalized = MSUF_Defaults_NormalizeFontKey(tbl.fontKey)
+    if normalized ~= tbl.fontKey then
+        tbl.fontKey = normalized
+    end
+end
+
 function MSUF_EnsureDB_Heavy()
     if not MSUF_DB then
         MSUF_DB = {}
@@ -194,7 +240,9 @@ function MSUF_EnsureDB_Heavy()
     MSUF_DB.classColors = MSUF_DB.classColors or {}
     MSUF_DB.npcColors = MSUF_DB.npcColors or {}
     if g.fontKey == nil then
-        g.fontKey = "FRIZQT"
+        g.fontKey = MSUF_Defaults_NormalizeFontKey("FRIZQT")
+    else
+        MSUF_Defaults_NormalizeFontField(g)
     end
     if g.hardKillBlizzardPlayerFrame == nil then
         -- Default: Hard-hide Blizzard PlayerFrame (compat mode OFF).
@@ -1750,6 +1798,13 @@ local function fill(key, defaults)
         if u.portraitBgColorB == nil then u.portraitBgColorB = (g.portraitBgColorB) or 0.05 end
         if u.portraitBgColorA == nil then u.portraitBgColorA = (g.portraitBgColorA) or 0.85 end
         if u.portraitFillBorder == nil then u.portraitFillBorder = g.portraitFillBorder or false end
+    end
+    for _, key in ipairs({
+        "general",
+        "player", "target", "targettarget", "focus", "pet", "boss",
+        "gf_party", "gf_raid", "gf_mythicraid",
+    }) do
+        MSUF_Defaults_NormalizeFontField(MSUF_DB[key])
     end
     MSUF_DB_LastHeavyRun = MSUF_DB
  end

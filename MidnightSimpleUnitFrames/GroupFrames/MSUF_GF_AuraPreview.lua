@@ -52,7 +52,7 @@ local HP_SAMPLES = {
 -- primary setting this tab configures — users need live feedback on
 -- every icon while dragging the offset sliders.
 ------------------------------------------------------------------------
-local _visToggles = { buff = true, debuff = true, externals = true,
+local _visToggles = { buff = true, debuff = true, externals = true, blizzard = true,
     status = true, si = true, private = true,
     text = false, auraText = true }
 
@@ -154,6 +154,7 @@ local HANDLE_COLORS = {
     buff      = { 0.36, 0.79, 0.36 },
     debuff    = { 0.89, 0.29, 0.29 },
     externals = { 0.20, 0.67, 0.53 },
+    blizzard  = { 0.36, 0.62, 0.95 },
     si        = { 0.69, 0.50, 0.88 },
     status    = { 0.80, 0.67, 0.20 },
     private   = { 0.50, 0.50, 0.50 },
@@ -163,13 +164,36 @@ local NATIVE_AURA_HANDLE_TYPES = {
     buff = "buffs",
     debuff = "debuffs",
     externals = "externals",
+    private = "privateAuras",
 }
 
 local function IsNativeAuraHandle(kind, key)
     local nativeKey = NATIVE_AURA_HANDLE_TYPES[key]
     if not nativeKey or not GF.IsBlizzardAuraTypeEnabled or not GF.GetConf then return false end
     local conf = GF.GetConf(kind or "party")
+    if nativeKey == "privateAuras" then
+        local pa = conf and conf.privateAuras
+        if pa and pa.enabled == false then return false end
+    end
     return GF.IsBlizzardAuraTypeEnabled(conf, nativeKey) == true
+end
+
+local function IsNativeRendererActive(kind)
+    if not GF.GetConf then return false end
+    local conf = GF.GetConf(kind or "party")
+    local auras = conf and conf.auras
+    local nativeRenderer = (GF.IsAuraRendererBlizzard and GF.IsAuraRendererBlizzard(conf)) or (auras and auras.renderer == "BLIZZARD")
+    if not (auras and auras.enabled ~= false and nativeRenderer) then return false end
+    if GF.IsBlizzardAuraTypeEnabled then
+        return GF.IsBlizzardAuraTypeEnabled(conf, "buffs")
+            or GF.IsBlizzardAuraTypeEnabled(conf, "debuffs")
+            or GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
+            or GF.IsBlizzardAuraTypeEnabled(conf, "externals")
+            or IsNativeAuraHandle(kind, "private")
+    end
+    local types = auras.blizzardTypes
+    if type(types) ~= "table" then return true end
+    return types.buffs ~= false or types.debuffs ~= false or types.dispels ~= false or types.externals ~= false or types.privateAuras ~= false
 end
 
 local STATUS_ICON_SPECS = {
@@ -254,6 +278,9 @@ local function ForEachLayerHandle(key, fn)
     if key == "buff" or key == "debuff" or key == "externals" then
         local h = _handles[key]
         if h then fn(h) end
+    elseif key == "blizzard" then
+        local h = _handles.blizzard
+        if h then fn(h) end
     elseif key == "status" then
         for _, sh in pairs(_statusHandles) do fn(sh) end
     elseif key == "si" then
@@ -272,7 +299,7 @@ end
 -- handle-selection dim-cascade in SelectHandle is active, which composes
 -- with this by early-returning in solo mode).
 local function ApplyLayerVisibility()
-    local KEYS = { "buff", "debuff", "externals", "status", "si", "private" }
+    local KEYS = { "buff", "debuff", "externals", "blizzard", "status", "si", "private" }
     for i = 1, #KEYS do
         local k = KEYS[i]
         local alpha = 1
@@ -618,6 +645,12 @@ local function BuildMockFrame(parent)
         f._powerBg = powerBg
     end
 
+    -- Name text layer
+    local nameLayer = CreateFrame("Frame", nil, f)
+    nameLayer:SetAllPoints(health)
+    nameLayer:SetFrameLevel(health:GetFrameLevel() + (conf.nameTextLayer or 5))
+    f._nameLayer = nameLayer
+
     -- Text overlay layer (above health/absorb bars so text is visible)
     local textLayer = CreateFrame("Frame", nil, f)
     textLayer:SetAllPoints(health)
@@ -625,7 +658,7 @@ local function BuildMockFrame(parent)
     f._textLayer = textLayer
 
     -- Name text
-    local nameFS = textLayer:CreateFontString(nil, "OVERLAY")
+    local nameFS = nameLayer:CreateFontString(nil, "OVERLAY")
     nameFS:SetFont(GF.ResolveFontPath(kind), conf.nameFontSize or 12, GF.ResolveFontFlags(kind))
     nameFS:SetPoint("LEFT", health, "LEFT", 6, 0)
     nameFS:SetText(PREVIEW_NAMES[_classIdx] or "Thrall")
@@ -956,12 +989,19 @@ function GF.RefreshPreviewBox()
         else
 
         -- Update text layer level from config
+        if m._nameLayer and m._health then
+            local ntl2 = conf.nameTextLayer or 5
+            m._nameLayer:SetFrameLevel(m._health:GetFrameLevel() + ntl2)
+        end
         if m._textLayer and m._health then
             local tl2 = conf.textLayer or 5
             m._textLayer:SetFrameLevel(m._health:GetFrameLevel() + tl2)
         end
 
         if m._nameFS then
+            if m._nameLayer and m._nameFS.SetParent and m._nameFS.GetParent and m._nameFS:GetParent() ~= m._nameLayer then
+                m._nameFS:SetParent(m._nameLayer)
+            end
             m._nameFS:SetFont(fp, floor((conf.nameFontSize or 12) * sc + 0.5), ff)
             m._nameFS:SetTextColor(nr or fr, ng or fg, nb or fb, 1)
             m._nameFS:SetText(PREVIEW_NAMES[_classIdx] or "Thrall")
@@ -1437,6 +1477,31 @@ local function BuildAuraGroupHandles(mockFrame)
         end
         _handles[grp.key] = handle
     end
+
+    local nativeHandle = CreateHandle(mockFrame, "blizzard", "blizzrenderer", 56, 24, "blizzard")
+    nativeHandle._label:SetPoint("BOTTOM", nativeHandle, "TOP", 0, 1)
+    nativeHandle._label:SetText("Blizzard")
+    nativeHandle._getAnchorFrame = function() return _mockFrame end
+    nativeHandle._onDragFinish = function(anchor, offX, offY)
+        local kind = _getKind and _getKind() or "party"
+        local conf = GF.GetConf(kind)
+        if not conf.auras then conf.auras = {} end
+        local cfgX, cfgY = PreviewToConfigOffset(offX, offY)
+        conf.auras.blizzardContainerAnchor = (anchor and AF[anchor]) and anchor or "CENTER"
+        conf.auras.blizzardContainerX = cfgX
+        conf.auras.blizzardContainerY = cfgY
+        RequestVisualRefresh()
+        if GF._RefreshOptionWidgets then GF._RefreshOptionWidgets() end
+        if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
+    end
+    nativeHandle._getCurrentAnchor = function()
+        local kind = _getKind and _getKind() or "party"
+        local conf = GF.GetConf(kind)
+        local anchor = conf and conf.auras and conf.auras.blizzardContainerAnchor
+        return (anchor and AF[anchor]) and anchor or "CENTER"
+    end
+    nativeHandle._blizzIcons = {}
+    _handles.blizzard = nativeHandle
 end
 
 ------------------------------------------------------------------------
@@ -1885,10 +1950,9 @@ function GF.RefreshPreviewHandles()
             h:ClearAllPoints()
             h:SetPoint(anchor, anchorTarget, anchor, offX, offY)
             h:SetFrameLevel(_mockFrame:GetFrameLevel() + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
-            -- Visibility is the user's sidebar toggle. Native Blizzard
-            -- categories still use this handle for the per-category block
-            -- anchor/offset; only custom-only layout controls are disabled.
-            h:SetShown(_visToggles[grpKey] ~= false)
+            -- Per-category handles are custom-layout handles. In native
+            -- Blizzard mode the single Blizzard handle owns block movement.
+            h:SetShown(_visToggles[grpKey] ~= false and not nativeGroup)
             -- Label tint reflects en state: bright = live, dim = disabled.
             -- Cheap; HANDLE_COLORS is a small file-scope literal table.
             if h._label then
@@ -1902,6 +1966,93 @@ function GF.RefreshPreviewHandles()
                 end
             end
             UpdateCoordDisplay(nil)
+        end
+    end
+
+    -- Single native Blizzard aura block handle. This mirrors the one
+    -- C_UnitAuras anchor used live, so dragging it writes the shared
+    -- blizzardContainerAnchor/X/Y settings instead of per-category offsets.
+    do
+        local h = _handles.blizzard
+        if h then
+            local nativeActive = IsNativeRendererActive(kind)
+            if not nativeActive then
+                h:Hide()
+            else
+                local auras = conf.auras or {}
+                local anchor = auras.blizzardContainerAnchor
+                if not AF[anchor] then anchor = "CENTER" end
+                local offX, offY = ConfigToPreviewOffset(auras.blizzardContainerX or 0, auras.blizzardContainerY or 0)
+
+                local types = auras.blizzardTypes or {}
+                local buffOn = IsNativeAuraHandle(kind, "buff") or (type(types) ~= "table" and true)
+                local debuffOn = IsNativeAuraHandle(kind, "debuff") or (type(types) ~= "table" and true)
+                local extOn = IsNativeAuraHandle(kind, "externals") or (type(types) ~= "table" and true)
+                local pa = conf.privateAuras or {}
+                local privateOn = IsNativeAuraHandle(kind, "private") or (type(types) ~= "table" and pa.enabled ~= false)
+                local buffMax = buffOn and min((auras.buff and auras.buff.max) or 6, 5) or 0
+                local debuffMax = debuffOn and min((auras.debuff and auras.debuff.max) or 6, 5) or 0
+                if privateOn then
+                    debuffMax = max(debuffMax, min(pa.max or 4, 5))
+                end
+                local extMax = extOn and 1 or 0
+                local count = max(1, buffMax + debuffMax + extMax)
+                local frameScale = _mockFrame._previewFrameScale or 1
+                local zoom = _mockFrame._previewZoom or 1
+                local nativeScale = (GF.GetAuraDynamicScale and GF.GetAuraDynamicScale(conf)) or dynScale or 1
+                local liveSz
+                if GF.GetBlizzardAuraIconSize then
+                    liveSz = GF.GetBlizzardAuraIconSize(conf, nativeScale, frameScale)
+                else
+                    liveSz = max(8, floor(((auras.blizzardIconSize or 20) * nativeScale * frameScale) + 0.5))
+                end
+                local sz = max(8, floor((liveSz or 20) * zoom + 0.5))
+                local gap = max(1, floor(2 * frameScale * zoom + 0.5))
+                local cols = min(6, count)
+                local rows = floor((count - 1) / cols) + 1
+                local w = max(sz, cols * sz + (cols - 1) * gap)
+                local hh = max(sz, rows * sz + (rows - 1) * gap)
+
+                h:SetSize(w, hh)
+                h:ClearAllPoints()
+                h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
+                h:SetFrameLevel(_mockFrame:GetFrameLevel() + 10)
+
+                local pool = h._blizzIcons or {}
+                h._blizzIcons = pool
+                for i = 1, count do
+                    local tex = pool[i]
+                    if not tex then
+                        tex = h:CreateTexture(nil, "ARTWORK")
+                        tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                        pool[i] = tex
+                    end
+                    local iconIDs
+                    if i <= buffMax then
+                        iconIDs = AURA_GRP_ICON_IDS.buff
+                    elseif i <= buffMax + debuffMax then
+                        iconIDs = AURA_GRP_ICON_IDS.debuff
+                    else
+                        iconIDs = AURA_GRP_ICON_IDS.externals
+                    end
+                    local spellId = iconIDs[((i - 1) % #iconIDs) + 1]
+                    tex:SetTexture(GetMockSpellTexture(spellId))
+                    tex:SetSize(sz, sz)
+                    tex:ClearAllPoints()
+                    local col = (i - 1) % cols
+                    local row = floor((i - 1) / cols)
+                    tex:SetPoint("TOPLEFT", h, "TOPLEFT", col * (sz + gap), -row * (sz + gap))
+                    tex:SetVertexColor(1, 1, 1, 0.92)
+                    tex:Show()
+                end
+                for i = count + 1, #pool do
+                    pool[i]:Hide()
+                end
+                if h._label then
+                    h._label:SetTextColor(0.36, 0.62, 0.95, 0.95)
+                end
+                h:SetShown(_visToggles.blizzard ~= false)
+            end
         end
     end
 
@@ -2031,7 +2182,7 @@ function GF.RefreshPreviewHandles()
             -- clickable so the user can navigate to the Private Aura
             -- options section to re-enable it.
             local nativePrivate = IsNativeAuraHandle(kind, "private")
-            h:SetShown(_visToggles.private ~= false)
+            h:SetShown(_visToggles.private ~= false and not nativePrivate)
             -- Label tint reflects enabled state.
             if h._label then
                 local lc = HANDLE_COLORS.private
@@ -2185,6 +2336,7 @@ function GF.RefreshPreviewHandles()
     local showCI     = not focus or focus == "ci"
 
     -- Text layer visibility
+    if _mockFrame._nameLayer then _mockFrame._nameLayer:SetShown(showText) end
     if _mockFrame._textLayer then _mockFrame._textLayer:SetShown(showText) end
     if _mockFrame._powerTextLayer then _mockFrame._powerTextLayer:SetShown(showText) end
 
@@ -2398,6 +2550,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
             { key="buff",      label="Buffs",   color={0.40,0.82,0.40} },
             { key="debuff",    label="Debuffs", color={0.92,0.32,0.32} },
             { key="externals", label="Extern",  color={0.25,0.70,0.55} },
+            { key="blizzard",  label="Blizzard",color={0.36,0.62,0.95} },
             { key="status",    label="Status",  color={0.85,0.70,0.25} },
             { key="si",        label="Spells",  color={0.72,0.52,0.90} },
             { key="private",   label="Private", color={0.55,0.55,0.60} },
@@ -2523,6 +2676,8 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                 if spec.key == "buff" or spec.key == "debuff" or spec.key == "externals" then
                     local h = _handles[spec.key]
                     if h then h:SetShown(on) end
+                elseif spec.key == "blizzard" then
+                    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
                 elseif spec.key == "status" then
                     for _, sh in pairs(_statusHandles) do sh:SetShown(on) end
                 elseif spec.key == "si" then

@@ -11,6 +11,7 @@ if not GF then return end
 
 local issecretvalue = _G.issecretvalue
 local C_Timer = _G.C_Timer
+local CreateFrame = _G.CreateFrame
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
 local UnitHealth = _G.UnitHealth
@@ -589,6 +590,16 @@ local function ApplyGeometry(f, kind)
         f.powerTextLayer:Show()
     end
 
+    if f.nameTextLayer and f.health then
+        if f.nameTextLayer.GetParent and f.nameTextLayer:GetParent() ~= f.health
+            and not (InCombatLockdown and InCombatLockdown()) then
+            f.nameTextLayer:SetParent(f.health)
+        end
+        f.nameTextLayer:ClearAllPoints()
+        f.nameTextLayer:SetAllPoints(f.health)
+        f.nameTextLayer:Show()
+    end
+
     -- Reverse fill
     if f.health and f.health.SetReverseFill then
         f.health:SetReverseFill(conf.reverseFill and true or false)
@@ -830,6 +841,13 @@ end
 local function RestoreHealthTextLayer(f)
     local txtLayer = f and f.healthTextLayer
     if not txtLayer or not f.health then return end
+    local nameLayer = f.nameTextLayer
+    if nameLayer and (nameLayer._msufAlphaEscaped or nameLayer:GetParent() ~= f.health) then
+        nameLayer:SetParent(f.health)
+        nameLayer:SetAllPoints(f.health)
+        nameLayer:SetFrameLevel(f.health:GetFrameLevel() + (GF.GetConf(f._msufGFKind or "party").nameTextLayer or 5))
+        nameLayer._msufAlphaEscaped = nil
+    end
     if txtLayer._msufAlphaEscaped or txtLayer:GetParent() ~= f.health then
         txtLayer:SetParent(f.health)
         txtLayer:SetAllPoints(f.health)
@@ -945,7 +963,15 @@ local function ApplyTextLayout(f, kind)
     local nox = ScaleValue(conf.nameOffsetX or 0, fScale)
     local noy = ScaleValue(conf.nameOffsetY or 0, fScale)
 
+    if not f.nameTextLayer and f.health and CreateFrame and not (InCombatLockdown and InCombatLockdown()) then
+        f.nameTextLayer = CreateFrame("Frame", nil, f.health)
+        f.nameTextLayer:SetAllPoints(f.health)
+    end
+
     if f.nameText then
+        if f.nameTextLayer and f.nameText.SetParent and f.nameText.GetParent and f.nameText:GetParent() ~= f.nameTextLayer then
+            f.nameText:SetParent(f.nameTextLayer)
+        end
         f.nameText:ClearAllPoints()
         local anchor = conf.nameAnchor or "LEFT"
         if anchor == "CENTER" then
@@ -1073,6 +1099,15 @@ local function ApplyTextLayout(f, kind)
     end
 
     -- Text layer (frame level above health bar)
+    if f.nameTextLayer and f.health then
+        local hLvl = f.health:GetFrameLevel()
+        local ntl2 = conf.nameTextLayer or 5
+        local want = hLvl + ntl2
+        if f._msufGFCachedNameTxtLvl ~= want then
+            f._msufGFCachedNameTxtLvl = want
+            f.nameTextLayer:SetFrameLevel(want)
+        end
+    end
     if f.healthTextLayer and f.health then
         local hLvl = f.health:GetFrameLevel()
         local tl2 = conf.textLayer or 5

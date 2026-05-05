@@ -6,19 +6,15 @@
 -- AppliedSound. We don't use AddPrivateAuraAppliedSound (still restricted
 -- during encounters/M+/PvP), so this file has zero combat-aware code.
 --
--- The Blizzard-rendered "Private Aura Dispel Overlay" uses a second anchor
--- with `isContainer = true` + container attributes (max-buffs / max-debuffs /
--- max-dispel-debuffs / dispel-indicator-option / aura-organization-type).
--- Blizzard paints it; addons have no colour/art control. Independent of the
--- icon anchor stack — does not replace it.
+-- Blizzard-like private/dispel indicators are handled by the shared native
+-- aura renderer. The custom Private Aura path here only owns explicit private
+-- aura icon anchors.
 local _, ns = ...
 ns.GF = ns.GF or {}
 local GF = ns.GF
 
 local C_Timer     = _G.C_Timer
 local CreateFrame = _G.CreateFrame
-local UnitExists  = _G.UnitExists
-local issecretvalue = _G.issecretvalue
 local math_floor  = math.floor
 local math_max    = math.max
 local math_min    = math.min
@@ -195,6 +191,14 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         pa   = conf.privateAuras
     end
 
+    if paOverride == nil
+        and GF.IsBlizzardAuraTypeEnabled
+        and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras")
+    then
+        ClearAnchors(f)
+        return
+    end
+
     -- Read from nested privateAuras table (migrated) or flat keys (legacy)
     local paEnabled, paMax, paSize, paAnchor, paX, paY, paCountdown, paDirection, paNumbers, paLayer, paShowDispelType
     if pa and pa.enabled ~= nil then
@@ -231,10 +235,6 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
 
     -- No unit → clear
     if not unit then ClearAnchors(f); return end
-
-    local nativeDispels = (paOverride == nil)
-        and GF.IsBlizzardAuraTypeEnabled
-        and GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
 
     local maxN = math_max(0, math_floor((tonumber(paMax) or 4) + 0.5))
     if maxN == 0 then ClearAnchors(f); return end
@@ -422,249 +422,25 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         end)
     end
 
-    -- 12.0.5+ native Private Aura Dispel Overlay (separate container anchor).
-    -- The full Blizzard aura renderer owns dispel overlays when that category is enabled.
-    if nativeDispels then
-        GF.ApplyPrivateAuraContainerOverlay(f, unit, { containerOverlay = { enabled = false } })
-    else
-        GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
-    end
+    -- The old separate Private Aura Dispel Overlay is no longer exposed for
+    -- custom Private Auras. Blizzard-like dispel indicators are owned by the
+    -- native Blizzard aura renderer.
+    GF.ApplyPrivateAuraContainerOverlay(f, unit, { containerOverlay = { enabled = false } })
 end
 
 ------------------------------------------------------------------------
--- Private Aura Dispel Overlay (12.0.5+ Blizzard-rendered)
---
--- A SECOND anchor with isContainer=true. Blizzard paints the overlay
--- inside the wrapper frame using attributes set BEFORE AddPrivateAuraAnchor
--- (OnAnchorAdded reads ReadContainerSettings immediately).
---
--- Customisation is deliberately limited by Blizzard:
---   dispel-indicator-option         : "dispellableByMe" | "allDispellable"
---   aura-organization-type          : sweep direction ("default", etc.)
---   suppress-dispel-border-icons    : hide the small Magic/Curse/Poison/Disease icon
---   group-type                      : 4 for party slots, 5 for raid — required for
---                                     Blizzard's internal hooks even on a GF frame.
---
--- This is additive: the icon anchors set up above (which show the actual
--- private aura textures + countdown) remain unchanged. The container
--- overlay only replaces the old DF-drawn frame-border overlay.
+-- Legacy container overlay cleanup
 ------------------------------------------------------------------------
-local function _GetContainerOverlayConf(pa)
-    -- Nested table (new) or flat-key legacy — both supported.
-    if type(pa) == "table" and pa.containerOverlay then
-        local co = pa.containerOverlay
-        return {
-            enabled     = co.enabled and true or false,
-            showIcons   = co.showIcons ~= false,                 -- default true
-            dispelMode  = co.dispelMode or "dispellableByMe",
-            gradientDir = co.gradientDir or "default",
-        }
-    end
-    return {
-        enabled     = false,
-        showIcons   = true,
-        dispelMode  = "dispellableByMe",
-        gradientDir = "default",
-    }
-end
-
-local function _GroupTypeForUnit(unit)
-    local G = _G.CompactRaidGroupTypeEnum
-    if type(unit) == "string" and unit:find("^party") then
-        return G and G.Party or 4
-    end
-    return G and G.Raid or 5
-end
-
-local function _ResolveAuraOrganizationType(gradientDir)
-    local E = _G.Enum and _G.Enum.RaidAuraOrganizationType
-    local legacy = E and E.Legacy or 0
-    local buffsTop = E and E.BuffsTopDebuffsBottom or 1
-    local buffsRight = E and E.BuffsRightDebuffsLeft or 2
-
-    if gradientDir == "BOTTOM" then return buffsTop end
-    if gradientDir == "LEFT" or gradientDir == "RIGHT" then return buffsRight end
-    return legacy
-end
-
-local function _ResolveDispelIndicatorOption(dispelMode)
-    local E = _G.Enum and _G.Enum.RaidDispelDisplayType
-    local byMe = E and E.DispellableByMe or 1
-    local all = E and E.DisplayAll or 2
-    if dispelMode == "allDispellable" then return all end
-    return byMe
-end
-
-local function _HasNormalDispelDebuff(unit, dispelMode)
-    if not unit or (UnitExists and not UnitExists(unit)) then return false end
-
-    local CUA = _G.C_UnitAuras
-    local getByIndex = CUA and CUA.GetAuraDataByIndex
-    if type(getByIndex) ~= "function" then return false end
-
-    if dispelMode ~= "allDispellable" then
-        return getByIndex(unit, 1, "HARMFUL|RAID_PLAYER_DISPELLABLE") ~= nil
-    end
-
-    for i = 1, 40 do
-        local aura = getByIndex(unit, i, "HARMFUL|RAID")
-        if not aura then break end
-        local dispelName = aura.dispelName
-        if dispelName ~= nil
-           and not (issecretvalue and issecretvalue(dispelName))
-           and dispelName ~= ""
-           and dispelName ~= "None"
-        then
-            return true
-        end
-    end
-    return false
-end
-
 local function _UpdatePrivateAuraContainerOverlayVisibility(f)
-    local wrapper = f and f._gfPrivOverlayFrame
-    if not wrapper or not f._gfPrivContainerOverlayID then return end
-
-    local cached = f._gfPrivCOCached
-    local normalDispelVisible = f._msufGFDispelOverlay and f._msufGFDispelOverlay:IsShown()
-    local normalDispelKnown = f._msufGFDispelAuraID ~= nil
-
-    local unit = f._gfPrivContainerOverlayUnit or f.unit
-    if not normalDispelVisible and not normalDispelKnown then
-        normalDispelKnown = _HasNormalDispelDebuff(unit, cached and cached.dispelMode)
-    end
-
-    if normalDispelVisible or normalDispelKnown then
-        wrapper:SetAlpha(0)
-        return
-    end
-
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
-            local w = f and f._gfPrivOverlayFrame
-            if not w or not f._gfPrivContainerOverlayID then return end
-            local c = f._gfPrivCOCached
-            local shown = f._msufGFDispelOverlay and f._msufGFDispelOverlay:IsShown()
-            local known = f._msufGFDispelAuraID ~= nil
-            local u = f._gfPrivContainerOverlayUnit or f.unit
-            if not shown and not known then
-                known = _HasNormalDispelDebuff(u, c and c.dispelMode)
-            end
-            if shown or known then return end
-            w:SetAlpha(1)
-        end)
-    else
-        wrapper:SetAlpha(1)
-    end
+    ClearContainerOverlay(f)
 end
 
 function GF.ApplyPrivateAuraContainerOverlay(f, unit, pa)
-    if not f or not unit then return end
-    local kind = f._msufGFKind or "party"
-    local conf = GF.GetConf and GF.GetConf(kind)
-    if GF.IsBlizzardDispelRendererActive and GF.IsBlizzardDispelRendererActive(conf) then
-        ClearContainerOverlay(f)
-        return
-    end
-
-    local co = _GetContainerOverlayConf(pa)
-    local auraOrgType = _ResolveAuraOrganizationType(co.gradientDir)
-    local dispelOption = _ResolveDispelIndicatorOption(co.dispelMode)
-
-    -- Disabled or teardown: clear existing anchor and bail.
-    if not co.enabled then
-        ClearContainerOverlay(f)
-        return
-    end
-
-    -- Diff: same unit + same attrs → just re-show + update-settings attribute.
-    local cached = f._gfPrivCOCached
-    local wrapper = f._gfPrivOverlayFrame
-    local samePayload = wrapper
-        and f._gfPrivContainerOverlayID
-        and f._gfPrivContainerOverlayUnit == unit
-        and cached
-        and cached.showIcons   == co.showIcons
-        and cached.dispelMode  == co.dispelMode
-        and cached.gradientDir == co.gradientDir
-        and cached.auraOrgType == auraOrgType
-        and cached.dispelOption == dispelOption
-
-    -- Lazy-init wrapper. Parent to the unitframe itself (not a sub-region)
-    -- so Blizzard can size/centre the overlay across the whole frame.
-    if not wrapper then
-        wrapper = CreateFrame("Frame", nil, f)
-        wrapper:EnableMouse(false)
-        if wrapper.SetMouseClickEnabled then wrapper:SetMouseClickEnabled(false) end
-        f._gfPrivOverlayFrame = wrapper
-    end
-    wrapper:SetParent(f)
-    wrapper:ClearAllPoints()
-    wrapper:SetAllPoints(f)
-    wrapper:Show()
-
-    -- Update attributes BEFORE AddPrivateAuraAnchor — OnAnchorAdded reads them
-    -- via ReadContainerSettings immediately on registration.
-    wrapper:SetAttribute("max-buffs", 0)
-    wrapper:SetAttribute("max-debuffs", 0)
-    wrapper:SetAttribute("max-dispel-debuffs", 1)
-    wrapper:SetAttribute("ignore-buffs", true)
-    wrapper:SetAttribute("ignore-debuffs", true)
-    wrapper:SetAttribute("show-dispel-indicator-overlay", true)
-    wrapper:SetAttribute("suppress-dispel-border-icons", not co.showIcons)
-    wrapper:SetAttribute("dispel-indicator-option", dispelOption)
-    wrapper:SetAttribute("aura-organization-type", auraOrgType)
-    wrapper:SetAttribute("group-type", _GroupTypeForUnit(unit))
-    wrapper:SetAttribute("display-only-dispellable-debuffs", false)
-    wrapper:SetAttribute("ignore-dispel-debuffs", false)
-    wrapper:SetAttribute("power-bar-used-height", 0)
-    wrapper:SetAttribute("icon-size", 10)
-    wrapper:SetAttribute("set-aura-size-to-icon-size", false)
-
-    if samePayload then
-        -- Live-update path: signal Blizzard to re-read attributes.
-        wrapper:SetAttribute("update-settings", true)
-        _UpdatePrivateAuraContainerOverlayVisibility(f)
-        return
-    end
-
-    -- Full (re)registration: remove old ID if any, add new anchor.
-    if f._gfPrivContainerOverlayID then
-        RemovePrivateAuraAnchor(f._gfPrivContainerOverlayID)
-        f._gfPrivContainerOverlayID = nil
-    end
-
-    local newID, err = AddPrivateAuraAnchorSafe({
-        unitToken            = unit,
-        parent               = wrapper,
-        isContainer          = true,
-        auraIndex            = 1,
-        showCountdownFrame   = false,
-        showCountdownNumbers = false,
-    })
-    if newID then
-        f._gfPrivContainerOverlayID   = newID
-        f._gfPrivContainerOverlayUnit = unit
-        f._gfPrivCOCached = {
-            showIcons   = co.showIcons,
-            dispelMode  = co.dispelMode,
-            gradientDir = co.gradientDir,
-            auraOrgType = auraOrgType,
-            dispelOption = dispelOption,
-        }
-        ForceFrameLevelRefresh(wrapper)
-        _UpdatePrivateAuraContainerOverlayVisibility(f)
-    else
-        f._gfPrivContainerOverlayID   = nil
-        f._gfPrivContainerOverlayUnit = nil
-        f._gfPrivCOCached = nil
-        if wrapper then wrapper:Hide() end
-        f._gfPrivCOLastError = err
-    end
+    ClearContainerOverlay(f)
 end
 
--- Cheap live-update path used by Options live-apply. Diff-gate inside
--- ApplyPrivateAuraContainerOverlay short-circuits when nothing changed.
+-- Legacy live-update path kept for callers from older configs. It now only
+-- clears the removed container overlay.
 function GF.UpdatePrivateAuraContainerOverlay(f)
     if not f or not f.unit then return end
     local kind = f._msufGFKind or "party"

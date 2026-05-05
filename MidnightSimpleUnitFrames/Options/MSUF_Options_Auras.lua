@@ -891,8 +891,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     end
     -- Display + Layout are collapsible for a cleaner menu, but stay open by default.
     local displayOuter, displayBody = MakeCollapsibleBox(content, leftTop, 720, 244, "Display", true)
-    local nativeOuter, nativeBody = MakeCollapsibleBox(content, displayOuter, 720, 190, "Blizzard Renderer", false)
-    local capsOuter, capsBody = MakeCollapsibleBox(content, nativeOuter, 720, 266, "Layout & Caps", true)
+    local capsOuter, capsBody = MakeCollapsibleBox(content, displayOuter, 720, 266, "Layout & Caps", true)
     -- Timer / cooldown text color controls
     local timerBox, timerBody = MakeCollapsibleBox(content, capsOuter, 720, 492, "Text Coloring", false)
     -- Blizzard-rendered Private Auras (anchor controls)
@@ -910,7 +909,6 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local _capsBoxOuter = capsOuter
     local _reminderBoxOuter = reminderBox
     displayBox = displayBody or displayOuter
-    nativeBox = nativeBody or nativeOuter
     capsBox = capsBody or capsOuter
     timerBox = timerBody or timerBox
     privateBox = privateBody or privateBox
@@ -935,7 +933,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     -- (kept as a local so we can call it from refresh paths below)
 -- Helpers (Filters override only)
 local advGate = {} -- checkboxes gated by 'Enable filters'
-local ddEditFilters, cbOverrideFilters, cbOverrideCaps, cbOverrideNative
+local ddEditFilters, cbOverrideFilters, cbOverrideCaps
 local function DeepCopy(src)
     if not src then  return src end
     if type(CopyTable) == "function" then
@@ -1307,7 +1305,6 @@ local function A2_ShowOverrideWarn(msg, holdSeconds)
 -- Forward declarations (functions are defined later, but used above)
 local GetOverrideForEditing, SetOverrideForEditing
 local GetOverrideCapsForEditing, SetOverrideCapsForEditing
-local GetOverrideNativeForEditing, SetOverrideNativeForEditing
 local function A2_AutoOverrideFiltersIfNeeded()
     if GetEditingKey() == "shared" then  return false end
     if GetOverrideForEditing() then  return false end
@@ -1322,13 +1319,6 @@ local function A2_AutoOverrideCapsIfNeeded()
     A2_ShowOverrideWarn("Caps override enabled for this unit.")
      return true
 end
-local function A2_AutoOverrideNativeIfNeeded()
-    if GetEditingKey() == "shared" then  return false end
-    if GetOverrideNativeForEditing() then  return false end
-    SetOverrideNativeForEditing(true)
-    A2_ShowOverrideWarn("Renderer override enabled for this unit.")
-     return true
-end
 local function A2_WrapCheckboxAutoOverride(cb, scope)
     if not cb or type(cb.GetScript) ~= "function" then  return end
     local old = cb:GetScript("OnClick")
@@ -1337,8 +1327,6 @@ local function A2_WrapCheckboxAutoOverride(cb, scope)
             A2_AutoOverrideFiltersIfNeeded()
         elseif scope == "caps" then
             A2_AutoOverrideCapsIfNeeded()
-        elseif scope == "native" then
-            A2_AutoOverrideNativeIfNeeded()
         end
         if old then return old(self, ...) end
      end)
@@ -1353,8 +1341,7 @@ local function ApplyOverrideUISafety()
     end
     local overrideFilters = GetOverrideForEditing() and true or false
     local overrideCaps = GetOverrideCapsForEditing() and true or false
-    local overrideNative = GetOverrideNativeForEditing() and true or false
-    local anyOverride = overrideFilters or overrideCaps or overrideNative
+    local anyOverride = overrideFilters or overrideCaps
     -- Default: no override = no safety dimming
     if not anyOverride then
         A2_RestoreAllScopes()
@@ -1368,14 +1355,12 @@ local function ApplyOverrideUISafety()
     -- Grey-out non-overridden scope(s).
     if not overrideFilters then A2_ApplyScopeState("filters", false) end
     if not overrideCaps then A2_ApplyScopeState("caps", false) end
-    if not overrideNative then A2_ApplyScopeState("native", false) end
     -- Short, unobtrusive hint under the Override toggles (static; auto-hide handled by A2_ShowOverrideWarn)
     local fs = panel.__msufA2_overrideWarn
     if fs then
         local parts = {}
         if overrideFilters then parts[#parts + 1] = "Filters" end
         if overrideCaps then parts[#parts + 1] = "Caps" end
-        if overrideNative then parts[#parts + 1] = "Renderer" end
         local msg = "Unit override active: " .. table.concat(parts, " + ") .. ". Greyed options are Shared."
         fs:SetText(msg)
         fs:SetAlpha(1)
@@ -1502,148 +1487,9 @@ SetOverrideCapsForEditing = function(v)
         if panel and panel.OnRefresh then panel.OnRefresh() end
      end)
  end
-local A2Native = {}
-function A2Native.Seed(dst, src)
-    dst = (type(dst) == "table") and dst or {}
-    src = (type(src) == "table") and src or {}
-    if dst.auraRenderer == nil then dst.auraRenderer = src.auraRenderer or "CUSTOM" end
-    if dst.blizzardIconSize == nil then dst.blizzardIconSize = src.blizzardIconSize or 26 end
-    if dst.blizzardShowCooldownText == nil then dst.blizzardShowCooldownText = src.blizzardShowCooldownText ~= false end
-    if dst.blizzardOrganizationType == nil then dst.blizzardOrganizationType = src.blizzardOrganizationType or "default" end
-    if dst.blizzardDispelMode == nil then dst.blizzardDispelMode = src.blizzardDispelMode or "allDispellable" end
-    if type(dst.blizzardAuraTypes) ~= "table" then
-        dst.blizzardAuraTypes = DeepCopy(src.blizzardAuraTypes or { buffs = true, debuffs = true, dispels = true, privateAuras = true })
-    end
-    local t = dst.blizzardAuraTypes
-    if t.buffs == nil then t.buffs = true end
-    if t.debuffs == nil then t.debuffs = true end
-    if t.dispels == nil then t.dispels = true end
-    if t.privateAuras == nil then t.privateAuras = true end
-    t.externals = nil
-    return dst
-end
-function A2Native.Root(unitKey, create)
-    local a2, shared = GetAuras2DB()
-    if not a2 or not shared then return nil end
-    if unitKey and unitKey ~= "shared" then
-        local u = a2.perUnit and a2.perUnit[unitKey]
-        if u and u.overrideNativeAuras == true then
-            if create and type(u.nativeAuras) ~= "table" then
-                u.nativeAuras = A2Native.Seed({}, shared)
-            end
-            if type(u.nativeAuras) == "table" then
-                return A2Native.Seed(u.nativeAuras, shared)
-            end
-        end
-    end
-    return A2Native.Seed(shared, shared)
-end
-function A2Native.Get(unitKey, key, fallback)
-    local root = A2Native.Root(unitKey, false)
-    if root and root[key] ~= nil then return root[key] end
-    return fallback
-end
-function A2Native.Set(unitKey, key, value)
-    local a2, shared = GetAuras2DB()
-    if not a2 or not shared then return end
-    local root
-    if unitKey and unitKey ~= "shared" then
-        local u = a2.perUnit and a2.perUnit[unitKey]
-        if u and u.overrideNativeAuras == true then
-            if type(u.nativeAuras) ~= "table" then u.nativeAuras = A2Native.Seed({}, shared) end
-            root = u.nativeAuras
-        end
-    end
-    root = root or shared
-    A2Native.Seed(root, shared)
-    root[key] = value
-    if root == shared then A2_RequestApply()
-    elseif A2_IsAuras2UnitKey(unitKey) and type(_G.MSUF_Auras2_RefreshUnit) == "function" then _G.MSUF_Auras2_RefreshUnit(unitKey)
-    else A2_RequestApply()
-    end
-end
-function A2Native.Types(unitKey, create)
-    local root = A2Native.Root(unitKey, create)
-    return root and root.blizzardAuraTypes
-end
 local function A2_ApplyNativeRendererUISuppression()
-    if not panel then return end
-    local key = GetEditingKey()
-    local nativeOn = A2Native.Get(key, "auraRenderer", "CUSTOM") == "BLIZZARD"
-    local types = A2Native.Types(key, false) or {}
-    local ownBuffs = nativeOn and types.buffs ~= false
-    local ownDebuffs = nativeOn and types.debuffs ~= false
-    local ownPrivate = false
-    local ownDispels = nativeOn and types.dispels ~= false
-    local ownAllCustom = ownBuffs and ownDebuffs
-    local tracks = panel.__msufA2_nativeSuppressed
-
-    local function Suppress(group, disabled)
-        if not (disabled and tracks and tracks[group]) then return end
-        for i = 1, #tracks[group] do
-            A2_SetWidgetEnabled(tracks[group][i], false)
-        end
-    end
-
-    Suppress("buff", ownBuffs)
-    Suppress("debuff", ownDebuffs)
-    Suppress("private", ownPrivate)
-    Suppress("dispel", ownDispels)
-    Suppress("all", ownAllCustom)
-
-    local hint = panel.__msufA2_nativeModeHint
-    if hint then
-        if nativeOn then
-            local parts = {}
-            if ownBuffs then parts[#parts + 1] = "Buffs" end
-            if ownDebuffs then parts[#parts + 1] = "Debuffs" end
-            if ownDispels then parts[#parts + 1] = "Dispels" end
-            if ownPrivate then parts[#parts + 1] = "Private Auras" end
-            if #parts > 0 then
-                local scope = (key == "shared") and "Shared" or "Unit override"
-                hint:SetText("|cffffcc66" .. scope .. ": Blizzard owns " .. table.concat(parts, ", ") .. ".|r |cff9aa3b5Greyed controls are custom-only; Edit Mode position/size and Private Aura placement stay available where Blizzard allows them.|r")
-                hint:Show()
-            else
-                hint:SetText("|cff9aa3b5Blizzard renderer is enabled, but no aura category is assigned to it.|r")
-                hint:Show()
-            end
-        else
-            hint:Hide()
-        end
-    end
-end
-local function A2_ReapplyRendererUISafety()
-    ApplyOverrideUISafety()
-    local refreshNative = panel and panel.__msufA2_refreshNativeControls
-    if type(refreshNative) == "function" then pcall(refreshNative) end
-    A2_ApplyNativeRendererUISuppression()
-end
-GetOverrideNativeForEditing = function()
-    local key = GetEditingKey()
-    if key == "shared" then return false end
-    local a2 = select(1, GetAuras2DB())
-    local u = a2 and a2.perUnit and a2.perUnit[key]
-    return u and u.overrideNativeAuras == true
-end
-SetOverrideNativeForEditing = function(v)
-    local key = GetEditingKey()
-    if key == "shared" then return end
-    local a2, shared = GetAuras2DB()
-    if not a2 or not shared then return end
-    a2.perUnit = (type(a2.perUnit) == "table") and a2.perUnit or {}
-    if type(a2.perUnit[key]) ~= "table" then a2.perUnit[key] = {} end
-    local u = a2.perUnit[key]
-    if v == true then
-        u.overrideNativeAuras = true
-        u.nativeAuras = A2Native.Seed(type(u.nativeAuras) == "table" and u.nativeAuras or {}, shared)
-    else
-        u.overrideNativeAuras = false
-        u.nativeAuras = nil
-    end
-    A2_RequestApply()
-    C_Timer.After(0, function()
-        if panel and panel.OnRefresh then panel.OnRefresh() end
-     end)
+    -- Unit Frame Blizzard renderer UI is disabled for now; Group Frames own
+    -- the Blizzard native aura-container feature.
 end
 local function SyncLegacySharedFromSharedFilters()
     -- Keep legacy/shared fields in sync for backward compatibility.
@@ -1848,21 +1694,19 @@ do
         local u = a2 and a2.perUnit and a2.perUnit[key]
         local overrideFilters = (u and u.overrideFilters == true) and true or false
         local overrideCaps = (u and u.overrideSharedLayout == true) and true or false
-        local overrideNative = (u and u.overrideNativeAuras == true) and true or false
-        return overrideFilters, overrideCaps, overrideNative
+        return overrideFilters, overrideCaps, false
     end
     local function GetUnitHasOverride(key)
-        local overrideFilters, overrideCaps, overrideNative = GetUnitOverrideState(key)
-        return (overrideFilters or overrideCaps or overrideNative) and true or false
+        local overrideFilters, overrideCaps = GetUnitOverrideState(key)
+        return (overrideFilters or overrideCaps) and true or false
     end
     local function GetUnitOverrideTooltip(key)
-        local overrideFilters, overrideCaps, overrideNative = GetUnitOverrideState(key)
+        local overrideFilters, overrideCaps = GetUnitOverrideState(key)
         local parts = {}
         if overrideFilters then parts[#parts + 1] = "Filters" end
         if overrideCaps then parts[#parts + 1] = "Caps" end
-        if overrideNative then parts[#parts + 1] = "Renderer" end
         if #parts > 0 then return "Override active: this unit uses its own " .. table.concat(parts, " + ") .. "." end
-        return "Uses Shared filters, caps and renderer."
+        return "Uses Shared filters and caps."
     end
     local scopeBtns = {}
     local function RefreshScopeButtons()
@@ -1974,10 +1818,6 @@ do
         function()  return GetOverrideCapsForEditing() end,
         function(v)  SetOverrideCapsForEditing(v)  end,
         "When off, this unit uses Shared caps (Max Buffs/Debuffs, Icons per row). When on, it uses its own caps.")
-    cbOverrideNative = CreateCheckbox(scopeBar, "Override renderer", 360, -32,
-        function() return GetOverrideNativeForEditing() end,
-        function(v) SetOverrideNativeForEditing(v) end,
-        "When off, this unit uses Shared Blizzard Renderer settings. When on, it uses its own renderer mode and categories.")
     local overrideKeys = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
     -- Reset button aligned to the right edge of the scope bar, second row
     local btnResetOverrides = CreateFrame("Button", nil, scopeBar, "UIPanelButtonTemplate")
@@ -2078,7 +1918,7 @@ do
         GameTooltip:ClearAllPoints()
         GameTooltip:SetPoint("TOPLEFT", self, "TOPRIGHT", 12, 0)
         GameTooltip:SetText(TR("Reset overrides"), 1, 1, 1)
-        GameTooltip:AddLine("Turns off Filters, Caps and Renderer overrides for all units and reverts them to Shared.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Turns off Filters and Caps overrides for all units and reverts them to Shared.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
      end)
     btnResetOverrides:SetScript("OnLeave", function()
@@ -2240,112 +2080,6 @@ end
         A2_TrackNativeSuppressed("buff", filterCB.cbHidePermanent)
         A2_TrackNativeSuppressed("debuff", filterCB.cbOnlyMyDebuffs)
     end
-    -- BLIZZARD RENDERER: native container path for private auras/dispels and optional aura categories.
-    do
-        local refs = {}
-        local function A2_BlizzardTypes()
-            return A2Native.Types(GetEditingKey(), true)
-        end
-        local function IsBlizzardRenderer()
-            return A2Native.Get(GetEditingKey(), "auraRenderer", "CUSTOM") == "BLIZZARD"
-        end
-
-        local info = nativeBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        info:SetPoint("TOPLEFT", nativeBox, "TOPLEFT", 14, -10)
-        info:SetWidth(670)
-        info:SetJustifyH("LEFT")
-        info:SetText(TR("Blizzard mode lets the game render selected aura categories. Buffs and Debuffs keep their Edit Mode position and per-group icon size; Private Auras keep their own section. Custom text, coloring and filters still apply to categories left on Custom. Blizzard cooldown text can be toggled, but MSUF Safe/Warning/Urgent coloring only applies to custom icons."))
-        local nativeHint = nativeBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        nativeHint:SetPoint("TOPLEFT", nativeBox, "TOPLEFT", 14, -144)
-        nativeHint:SetWidth(670)
-        nativeHint:SetJustifyH("LEFT")
-        nativeHint:Hide()
-        panel.__msufA2_nativeModeHint = nativeHint
-
-        local RefreshNativeControls
-        local rendererDD = CreateOptionsDropdown(nativeBox, "Renderer", 12, -48, 150, {
-            { text = TR("Custom"), value = "CUSTOM" },
-            { text = TR("Blizzard"), value = "BLIZZARD" },
-        }, function()
-            return A2Native.Get(GetEditingKey(), "auraRenderer", "CUSTOM")
-        end, function(v)
-            A2_AutoOverrideNativeIfNeeded()
-            A2Native.Set(GetEditingKey(), "auraRenderer", (v == "BLIZZARD") and "BLIZZARD" or "CUSTOM")
-            A2_BlizzardTypes()
-            if RefreshNativeControls then RefreshNativeControls() end
-            A2_ReapplyRendererUISafety()
-        end)
-        A2_Track("native", rendererDD)
-
-        local function NativeTypeCheck(label, x, y, key, tip, refKey)
-            local cb = CreateCheckbox(nativeBox, label, x, y,
-                function()
-                    local t = A2_BlizzardTypes()
-                    return t and t[key] ~= false
-                end,
-                function(v)
-                    A2_AutoOverrideNativeIfNeeded()
-                    local editKey = GetEditingKey()
-                    local t = A2Native.Types(editKey, true)
-                    if t then
-                        t[key] = v and true or false
-                        A2Native.Set(editKey, "blizzardAuraTypes", t)
-                    end
-                    if RefreshNativeControls then RefreshNativeControls() end
-                    A2_ReapplyRendererUISafety()
-                end,
-                tip)
-            refs[refKey] = cb
-            return cb
-        end
-        NativeTypeCheck("Buffs", 210, -48, "buffs",
-            "When enabled, Blizzard renders buffs. The custom buff icon controls are ignored for this category.", "cbNativeBuffs")
-        NativeTypeCheck("Debuffs", 330, -48, "debuffs",
-            "When enabled, Blizzard renders debuffs. The custom debuff icon controls are ignored for this category.", "cbNativeDebuffs")
-        NativeTypeCheck("Dispels", 450, -48, "dispels",
-            "Uses Blizzard's dispel overlay instead of the custom frame overlay.", "cbNativeDispels")
-        refs.cbNativeCooldownText = CreateCheckbox(nativeBox, "Cooldown text", 210, -82,
-            function() return A2Native.Get(GetEditingKey(), "blizzardShowCooldownText", true) ~= false end,
-            function(v)
-                A2_AutoOverrideNativeIfNeeded()
-                A2Native.Set(GetEditingKey(), "blizzardShowCooldownText", v and true or false)
-                A2_ReapplyRendererUISafety()
-            end,
-            "Shows Blizzard countdown numbers on Blizzard-rendered auras.")
-        for _, cb in pairs(refs) do
-            A2_Track("native", cb)
-        end
-
-        local function GetNativeIconSize()
-            return A2Native.Get(GetEditingKey(), "blizzardIconSize", 26)
-        end
-        local function SetNativeIconSize(v)
-            v = tonumber(v) or 26
-            if v < 8 then v = 8 end
-            if v > 80 then v = 80 end
-            A2_AutoOverrideNativeIfNeeded()
-            A2Native.Set(GetEditingKey(), "blizzardIconSize", v)
-            A2_ReapplyRendererUISafety()
-        end
-        local nativeSizeSlider = CreateAuras2CompactSlider(nativeBox, "Fallback size", 8, 80, 1, 390, -102, 160, GetNativeIconSize, SetNativeIconSize)
-        MSUF_StyleAuras2CompactSlider(nativeSizeSlider, { hideMinMax = true, leftTitle = true })
-        AttachSliderValueBox(nativeSizeSlider, 8, 80, 1, GetNativeIconSize)
-        A2_Track("native", nativeSizeSlider)
-
-        RefreshNativeControls = function()
-            local enabled = IsBlizzardRenderer()
-            if enabled then return end
-            for _, cb in pairs(refs) do
-                A2_SetWidgetEnabled(cb, false)
-            end
-            A2_SetWidgetEnabled(nativeSizeSlider, false)
-        end
-        panel.__msufA2_refreshNativeControls = RefreshNativeControls
-        if rendererDD and rendererDD.HookScript then rendererDD:HookScript("OnShow", RefreshNativeControls) end
-        if nativeBox and nativeBox.HookScript then nativeBox:HookScript("OnShow", RefreshNativeControls) end
-        RefreshNativeControls()
-        A2_ApplyNativeRendererUISuppression()
-    end
     -- LAYOUT & CAPS (capsBox): sliders + dropdowns in grid
     -- Outer collapsible header already provides the section title.
     local function MakeCapsNumberGS(key, default, legacyKey)
@@ -2484,6 +2218,7 @@ end
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "privateGrowth", A2_GetCapsValue(key, "growth", "RIGHT")) end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "privateGrowth", v)  end)
     A2_Track("caps", privateGrowthCapsDD)
+    A2_TrackNativeSuppressed("private", privateGrowthCapsDD)
     local buffRowWrapDD = CreateRowWrapDropdown(capsBox, DD_C1, DD_R3,
         function()  local key = GetEditingKey(); return A2_GetCapsValue(key, "buffRowWrap", A2_GetCapsValue(key, "rowWrap", "DOWN")) end,
         function(v)  A2_AutoOverrideCapsIfNeeded(); local key = GetEditingKey(); A2_SetCapsValue(key, "buffRowWrap", v)  end,
@@ -3212,6 +2947,7 @@ end
         MSUF_StyleAuras2CompactSlider(privateBorderScale, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(privateBorderScale, 0, 10, 0.5, GetPrivateBorderScale)
         if privateBorderScale then A2_Track("global", privateBorderScale) end
+        A2_TrackNativeSuppressed("private", privateBorderScale)
         local function UpdatePrivateAurasEnabled()
             local s = A2_Settings()
             local master = (s and s.privateAurasEnabled == true) or false
@@ -3718,8 +3454,6 @@ end
         -- Sync reminder gating (master toggle)
         local fn2 = rawget(_G, "MSUF_A2_UpdateReminderGating")
         if type(fn2) == "function" then pcall(fn2) end
-        local refreshNative = panel and panel.__msufA2_refreshNativeControls
-        if type(refreshNative) == "function" then pcall(refreshNative) end
         A2_ApplyNativeRendererUISuppression()
      end
     -- Settings sometimes calls OnRefresh (old InterfaceOptions style) when a category is selected.

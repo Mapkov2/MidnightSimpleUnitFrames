@@ -1059,11 +1059,13 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
             MSUF_RebuildFontChoices()
     end
         local _g = MSUF_DB and MSUF_DB.general
-        local needsFontRefresh = _g and _g.fontKey == key
+        local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
+        local registeredKey = normalizeFontKey(key)
+        local needsFontRefresh = _g and normalizeFontKey(_g.fontKey) == registeredKey
         if not needsFontRefresh and MSUF_DB then
             for _, unitKey in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss" }) do
                 local u = MSUF_DB[unitKey]
-                if u and u.fontOverride and u.fontKey == key then
+                if u and u.fontOverride and normalizeFontKey(u.fontKey) == registeredKey then
                     needsFontRefresh = true
                     break
                 end
@@ -1079,22 +1081,22 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
 end
 local FONT_LIST = {
     {
-        key  = "FRIZQT",
+        key  = "Friz Quadrata TT",
         name = "Friz Quadrata (default)",
         path = "Fonts\\FRIZQT__.TTF",
     },
 {
-        key  = "ARIALN",
+        key  = "Arial Narrow",
         name = "Arial (default)",
         path = "Fonts\\ARIALN.TTF",
     },
     {
-        key  = "MORPHEUS",
+        key  = "Morpheus",
         name = "Morpheus (default)",
         path = "Fonts\\MORPHEUS_CYR.TTF",
     },
     {
-        key  = "SKURRI",
+        key  = "Skurri",
         name = "Skurri (default)",
         path = "Fonts\\SKURRI_CYR.TTF",
     },
@@ -1130,6 +1132,46 @@ do
     end
 end
 _G.MSUF_FONT_LIST = _G.MSUF_FONT_LIST or FONT_LIST
+local MSUF_INTERNAL_LSM_FONT_KEYS = {
+    FRIZQT   = "Friz Quadrata TT",
+    ARIALN   = "Arial Narrow",
+    MORPHEUS = "Morpheus",
+    SKURRI   = "Skurri",
+    ["Friz Quadrata (default)"] = "Friz Quadrata TT",
+    ["Arial (default)"]         = "Arial Narrow",
+    ["Morpheus (default)"]      = "Morpheus",
+    ["Skurri (default)"]        = "Skurri",
+}
+
+local function MSUF_NormalizeFontKey(key)
+    if type(key) ~= "string" or key == "" then return key end
+    return MSUF_INTERNAL_LSM_FONT_KEYS[key] or key
+end
+_G.MSUF_NormalizeFontKey = MSUF_NormalizeFontKey
+ns.MSUF_NormalizeFontKey = MSUF_NormalizeFontKey
+local function MSUF_NormalizeFontKeyField(tbl)
+    if type(tbl) ~= "table" then return end
+    local normalized = MSUF_NormalizeFontKey(tbl.fontKey)
+    if normalized ~= tbl.fontKey then
+        tbl.fontKey = normalized
+    end
+end
+
+local function MSUF_NormalizeStoredFontKeys()
+    local db = _G.MSUF_DB
+    if type(db) ~= "table" then return end
+    for _, key in ipairs({
+        "general",
+        "player", "target", "targettarget", "focus", "pet", "boss",
+        "gf_party", "gf_raid", "gf_mythicraid",
+    }) do
+        MSUF_NormalizeFontKeyField(db[key])
+    end
+end
+_G.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys
+ns.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys
+MSUF_NormalizeStoredFontKeys()
+
 local MSUF_FONT_COLORS = {
     white     = {1.0, 1.0, 1.0},
     black     = {0.0, 0.0, 0.0},
@@ -1276,24 +1318,59 @@ local function MSUF_GetConfiguredFontColor()
 end
 ns.MSUF_GetConfiguredFontColor = MSUF_GetConfiguredFontColor
 local MSUF_FontPreviewObjects = {}
+local MSUF_FontPreviewObjectCount = 0
+local function MSUF_GetRawLSMFontPath(lsm, key)
+    if type(key) ~= "string" or key == "" then return nil end
+    if lsm and type(lsm.HashTable) == "function" then
+        local fonts = lsm:HashTable("font")
+        local p = fonts and fonts[key]
+        if type(p) == "string" and p ~= "" then return p end
+    end
+    return nil
+end
+
+local function MSUF_FetchFontPathFromLSM(key)
+    if type(key) ~= "string" or key == "" then return nil end
+    local lsm = LSM or (ns and ns.LSM) or _G.MSUF_LSM
+    if not lsm then return nil end
+
+    local lsmKey = MSUF_NormalizeFontKey(key)
+    local p = MSUF_GetRawLSMFontPath(lsm, lsmKey)
+    if type(p) == "string" and p ~= "" then return p end
+    if lsmKey ~= key then
+        p = MSUF_GetRawLSMFontPath(lsm, key)
+        if type(p) == "string" and p ~= "" then return p end
+    end
+
+    if type(lsm.Fetch) == "function" and not (type(lsm.GetGlobal) == "function" and lsm:GetGlobal("font")) then
+        p = lsm:Fetch("font", lsmKey, true)
+        if type(p) == "string" and p ~= "" then return p end
+        if lsmKey ~= key then
+            p = lsm:Fetch("font", key, true)
+            if type(p) == "string" and p ~= "" then return p end
+        end
+    end
+    return nil
+end
+
 local function MSUF_GetFontPreviewObject(key)
     if not key or key == "" then
         return GameFontHighlightSmall
     end
     local obj = MSUF_FontPreviewObjects[key]
     if not obj then
-        obj = CreateFont("MSUF_FontPreview_" .. tostring(key))
+        MSUF_FontPreviewObjectCount = MSUF_FontPreviewObjectCount + 1
+        obj = CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
         MSUF_FontPreviewObjects[key] = obj
     end
-    local path = GetInternalFontPathByKey(key)
-    if not path and LSM then
-        local p = LSM:Fetch("font", key, true)
-        if p then
-            path = p
-        end
+    local path = MSUF_FetchFontPathFromLSM(key)
+    if not path then
+        path = GetInternalFontPathByKey(key) or FONT_LIST[1].path
     end
-    path = (_G.MSUF_ResolveFontPath or function(p) return p end)(path or FONT_LIST[1].path, 14, "")
-    pcall(obj.SetFont, obj, path, 14, "")
+    path = (_G.MSUF_ResolveFontPath or function(p) return p end)(path, 14, "")
+    if path then
+        pcall(obj.SetFont, obj, path, 14, "")
+    end
      return obj
 end
 ns.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
@@ -1325,8 +1402,9 @@ MSUF_DARK_TONES = {
 }
 function GetInternalFontPathByKey(key)
     if not key then  return nil end
+    local normalized = MSUF_NormalizeFontKey(key)
     for _, info in ipairs(FONT_LIST) do
-        if info.key == key or info.name == key then
+        if info.key == key or info.key == normalized or info.name == key then
             return info.path
     end
     end
@@ -1334,16 +1412,18 @@ function GetInternalFontPathByKey(key)
 end
 local function MSUF_GetFontPathForKey(key)
     local resolve = _G.MSUF_ResolveFontPath or function(path) return path end
+    local lsmPath = MSUF_FetchFontPathFromLSM(key)
+    if lsmPath then return resolve(lsmPath, 14, "") end
     local internalPath = GetInternalFontPathByKey(key)
     if internalPath then return resolve(internalPath, 14, "") end
-    if LSM and key and key ~= "" then
-        local p = LSM:Fetch("font", key, true)
-        if p then return resolve(p, 14, "") end
-    end
     return resolve(FONT_LIST[1].path, 14, "")
 end
 _G.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
 ns.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
+_G.MSUF_FetchFontPathFromLSM = MSUF_FetchFontPathFromLSM
+ns.MSUF_FetchFontPathFromLSM = MSUF_FetchFontPathFromLSM
+_G.MSUF_GetRawLSMFontPath = MSUF_GetRawLSMFontPath
+ns.MSUF_GetRawLSMFontPath = MSUF_GetRawLSMFontPath
 
 -- Castbar utilities moved to MSUF_Castbars.lua
 

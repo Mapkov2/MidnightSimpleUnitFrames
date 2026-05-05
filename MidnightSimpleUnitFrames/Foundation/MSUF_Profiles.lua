@@ -821,6 +821,86 @@ local function MSUF_ProfileIO_EnsureCompleteProfileDB()
         end
     end
 end
+
+local MSUF_GF_BLIZZARD_TYPE_DEFAULTS = {
+    buffs = true,
+    debuffs = true,
+    dispels = true,
+    externals = true,
+    privateAuras = true,
+}
+
+local function MSUF_ProfileIO_GetGFAuraFilter()
+    local gf = (type(ns) == "table" and ns.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF)
+    return (gf and gf.AuraFilter) or _G.MSUF_GF_AuraFilter
+end
+
+local function MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
+    local af = MSUF_ProfileIO_GetGFAuraFilter()
+    local defs = af and ((groupKey == "buff") and af.DEFAULT_BLACKLIST_BUFF
+        or (groupKey == "debuff") and af.DEFAULT_BLACKLIST_DEBUFF
+        or nil)
+    if type(defs) ~= "table" then
+        return {}
+    end
+    return MSUF_DeepCopy(defs)
+end
+
+local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, defaultToken)
+    local group = auras and auras[groupKey]
+    if type(group) ~= "table" then return end
+
+    if group.filterToken == nil then
+        local fm = group.filterMode
+        if fm == "RAID_PLAYER" or fm == "RAID_IN_COMBAT" or fm == "ALL_PLAYER" then
+            group.filterToken = (groupKey == "debuff") and "ALL" or "RAID"
+        elseif fm == "ALL" or fm == "PLAYER" or fm == "RAID" then
+            group.filterToken = fm
+        elseif fm == "NOT_PLAYER" then
+            group.filterToken = "ALL"
+        else
+            group.filterToken = defaultToken
+        end
+    end
+
+    if type(group.blacklistCats) ~= "table" then
+        group.blacklistCats = MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
+    end
+end
+
+local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
+    if type(conf) ~= "table" then return end
+    if type(conf.auras) ~= "table" then return end
+
+    local auras = conf.auras
+    if auras.renderer == nil then auras.renderer = "BLIZZARD" end
+    if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
+    for key, value in pairs(MSUF_GF_BLIZZARD_TYPE_DEFAULTS) do
+        if auras.blizzardTypes[key] == nil then
+            auras.blizzardTypes[key] = value
+        end
+    end
+    if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
+    if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
+    if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
+    if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+    if auras.blizzardContainerAnchor == nil then auras.blizzardContainerAnchor = "FRAME" end
+    if auras.blizzardContainerX == nil then auras.blizzardContainerX = 0 end
+    if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end
+
+    MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "buff", "RAID")
+    MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "debuff", "ALL")
+    MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "externals", "RAID")
+end
+
+local function MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload)
+    if type(payload) ~= "table" then return payload end
+    MSUF_ProfileIO_NormalizeGroupFrameForExport(payload.gf_party)
+    MSUF_ProfileIO_NormalizeGroupFrameForExport(payload.gf_raid)
+    MSUF_ProfileIO_NormalizeGroupFrameForExport(payload.gf_mythicraid)
+    return payload
+end
+
 local function MSUF_CopyGroupFramePayload()
     local payload = {}
     if type(MSUF_DB) ~= "table" then
@@ -828,12 +908,15 @@ local function MSUF_CopyGroupFramePayload()
     end
     if type(MSUF_DB.gf_party) == "table" then
         payload.gf_party = MSUF_DeepCopy(MSUF_DB.gf_party)
+        MSUF_ProfileIO_NormalizeGroupFrameForExport(payload.gf_party)
     end
     if type(MSUF_DB.gf_raid) == "table" then
         payload.gf_raid = MSUF_DeepCopy(MSUF_DB.gf_raid)
+        MSUF_ProfileIO_NormalizeGroupFrameForExport(payload.gf_raid)
     end
     if type(MSUF_DB.gf_mythicraid) == "table" then
         payload.gf_mythicraid = MSUF_DeepCopy(MSUF_DB.gf_mythicraid)
+        MSUF_ProfileIO_NormalizeGroupFrameForExport(payload.gf_mythicraid)
     end
     return payload
 end
@@ -851,6 +934,7 @@ local function MSUF_SnapshotForKind(kind)
                 payload[k] = MSUF_DeepCopy(v)
             end
         end
+        MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload)
     elseif kind == "castbar" then
         payload.general = MSUF_CopyGeneralSubset(function(key)
             return MSUF_IsCastbarKey(key) and (not MSUF_IsColorKey(key))
@@ -867,6 +951,7 @@ local function MSUF_SnapshotForKind(kind)
         payload = MSUF_CopyGroupFramePayload()
     elseif kind == "all" then
         payload = MSUF_DeepCopy(MSUF_DB or {})
+        MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload)
     else
          return nil
     end
@@ -917,8 +1002,18 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
     end
     if not touched then  return end
     MSUF_ProfileIO_EnsureGroupFramesDB()
+    local af = MSUF_ProfileIO_GetGFAuraFilter()
+    if af and type(af.InvalidateAllBlacklistHashes) == "function" then
+        af.InvalidateAllBlacklistHashes()
+    end
     if type(_G.MSUF_GF_InvalidateConfCache) == "function" then
         _G.MSUF_GF_InvalidateConfCache()
+    end
+    local gf = (type(ns) == "table" and ns.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF)
+    if gf and type(gf.RequestAuraRefresh) == "function" then
+        gf.RequestAuraRefresh()
+    elseif gf and type(gf.MarkAllDirty) == "function" then
+        gf.MarkAllDirty(gf.DIRTY_AURAS or gf.DIRTY_ALL or 0x3F)
     end
     if type(_G.MSUF_GF_RebuildAll) == "function" then
         _G.MSUF_GF_RebuildAll()
@@ -1316,7 +1411,7 @@ function MSUF_ExportExternal(profileKey)
         schema  = 1,
         kind    = "all",
         profile = profileKey,
-        payload = MSUF_DeepCopy(profileTbl),
+        payload = MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(MSUF_DeepCopy(profileTbl)),
     }
     local enc = _G.MSUF_EncodeCompactTable
     if type(enc) == "function" then
