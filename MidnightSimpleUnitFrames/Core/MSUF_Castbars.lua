@@ -160,26 +160,23 @@ local function MSUF_GetFontPath()
     local g = MSUF_DB.general or {}
     MSUF_DB.general = g
     local key = g.fontKey
-    local pathForKey = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
-    if type(pathForKey) == "function" and key and key ~= "" then
-        local p = pathForKey(key)
-        if type(p) == "string" and p ~= "" then
-            return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags())
-        end
-    end
     local lsm = LSM or (ns and ns.LSM) or _G.MSUF_LSM
+    local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
+    local lsmKey = normalizeFontKey(key)
     if lsm and key and key ~= "" then
-        local raw = _G.MSUF_GetRawLSMFontPath
-        local p = type(raw) == "function" and raw(lsm, key) or nil
-        if not p and type(lsm.HashTable) == "function" then
-            local fonts = lsm:HashTable("font")
-            p = fonts and fonts[key]
+        local p
+        if type(lsm.Fetch) == "function" then
+            p = lsm:Fetch("font", lsmKey, true)
+            if not p and lsmKey ~= key then
+                p = lsm:Fetch("font", key, true)
+            end
         end
-        if p then
-             return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags())
+        if p then return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags()) end
     end
+    local internalPath
+    if type(GetInternalFontPathByKey) == "function" then
+        internalPath = GetInternalFontPathByKey(lsmKey) or GetInternalFontPathByKey(key)
     end
-    local internalPath = (type(GetInternalFontPathByKey) == "function") and GetInternalFontPathByKey(key) or nil
     if internalPath then
          return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags())
     end

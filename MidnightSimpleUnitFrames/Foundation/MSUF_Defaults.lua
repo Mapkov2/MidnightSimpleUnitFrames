@@ -182,6 +182,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.globalUiScaleValue = nil
         g.UIScale = { Enabled = false, Scale = 1.0 }
         g.msufUiScale = 1.0
+        g.fontKey = "FRIZQT"
     end
  end
 local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
@@ -206,14 +207,14 @@ local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
  end
 local MSUF_DB_LastHeavyRun
 local MSUF_DEFAULTS_FONT_KEY_ALIASES = {
-    FRIZQT   = "Friz Quadrata TT",
-    ARIALN   = "Arial Narrow",
-    MORPHEUS = "Morpheus",
-    SKURRI   = "Skurri",
-    ["Friz Quadrata (default)"] = "Friz Quadrata TT",
-    ["Arial (default)"]         = "Arial Narrow",
-    ["Morpheus (default)"]      = "Morpheus",
-    ["Skurri (default)"]        = "Skurri",
+    ["Friz Quadrata TT"]        = "FRIZQT",
+    ["Arial Narrow"]            = "ARIALN",
+    ["Morpheus"]                = "MORPHEUS",
+    ["Skurri"]                  = "SKURRI",
+    ["Friz Quadrata (default)"] = "FRIZQT",
+    ["Arial (default)"]         = "ARIALN",
+    ["Morpheus (default)"]      = "MORPHEUS",
+    ["Skurri (default)"]        = "SKURRI",
 }
 
 local function MSUF_Defaults_NormalizeFontKey(key)
@@ -1805,6 +1806,15 @@ local function fill(key, defaults)
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         MSUF_Defaults_NormalizeFontField(MSUF_DB[key])
+    end
+    if g._msufUFLocalFontKeyMigration_v407 ~= true then
+        for _, key in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss" }) do
+            local u = MSUF_DB[key]
+            if type(u) == "table" then
+                u.fontKey = nil
+            end
+        end
+        g._msufUFLocalFontKeyMigration_v407 = true
     end
     MSUF_DB_LastHeavyRun = MSUF_DB
  end

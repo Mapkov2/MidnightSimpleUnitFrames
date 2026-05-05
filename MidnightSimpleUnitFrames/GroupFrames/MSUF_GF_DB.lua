@@ -725,14 +725,14 @@ local function applyDefaults(dst, src)
 end
 
 local GF_FONT_KEY_ALIASES = {
-    FRIZQT   = "Friz Quadrata TT",
-    ARIALN   = "Arial Narrow",
-    MORPHEUS = "Morpheus",
-    SKURRI   = "Skurri",
-    ["Friz Quadrata (default)"] = "Friz Quadrata TT",
-    ["Arial (default)"]         = "Arial Narrow",
-    ["Morpheus (default)"]      = "Morpheus",
-    ["Skurri (default)"]        = "Skurri",
+    ["Friz Quadrata TT"]        = "FRIZQT",
+    ["Arial Narrow"]            = "ARIALN",
+    ["Morpheus"]                = "MORPHEUS",
+    ["Skurri"]                  = "SKURRI",
+    ["Friz Quadrata (default)"] = "FRIZQT",
+    ["Arial (default)"]         = "ARIALN",
+    ["Morpheus (default)"]      = "MORPHEUS",
+    ["Skurri (default)"]        = "SKURRI",
 }
 
 local function NormalizeFontField(conf)
