@@ -1403,6 +1403,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         multiContainer:Hide()
 
         local multiChecks = {}
+        local multiSpecColW, multiSpecRowH, multiSpecLabelW = 150, 22, 108
 
         do
             local idx = 0
@@ -1411,11 +1412,15 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                     idx = idx + 1
                     local col = ((idx - 1) % 4)
                     local row = math_floor((idx - 1) / 4)
+                    -- UI.Check expands its click target over the label. Keep that
+                    -- expansion inside the 4-column grid so neighboring specs do
+                    -- not steal clicks from the visible checkbox.
                     local chk = SCheck({
                         name = "MSUF_GF_SIMulti_" .. specKey, parent = multiContainer,
                         anchor = multiContainer, anchorPoint = "TOPLEFT",
-                        x = col * 150, y = -(row * 22),
+                        x = col * multiSpecColW, y = -(row * multiSpecRowH),
                         label = info.display,
+                        maxTextWidth = multiSpecLabelW,
                         get = function()
                             local ms = SIC().multiSpecs
                             return ms and ms[specKey] == true
@@ -1439,7 +1444,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 end
             end
             local totalRows = math_ceil(idx / 4)
-            multiContainer:SetHeight(totalRows * 22 + 4)
+            multiContainer:SetHeight(totalRows * multiSpecRowH + 4)
         end
 
         RefreshMultiSpecChecks = function()
