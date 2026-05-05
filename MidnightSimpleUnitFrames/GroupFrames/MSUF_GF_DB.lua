@@ -236,6 +236,7 @@ local PARTY_DEFAULTS = {
     statusAFKOffsetX   = 0,
     statusAFKOffsetY   = 0,
     -- Text layer (frame level relative to bar)
+    nameTextLayer     = 5,
     textLayer         = 5,
     powerTextLayer    = 2,
     -- Alpha pipeline (matches main UF alpha fields)
@@ -730,6 +731,28 @@ local function applyDefaults(dst, src)
     end
 end
 
+local GF_FONT_KEY_ALIASES = {
+    FRIZQT   = "Friz Quadrata TT",
+    ARIALN   = "Arial Narrow",
+    MORPHEUS = "Morpheus",
+    SKURRI   = "Skurri",
+    ["Friz Quadrata (default)"] = "Friz Quadrata TT",
+    ["Arial (default)"]         = "Arial Narrow",
+    ["Morpheus (default)"]      = "Morpheus",
+    ["Skurri (default)"]        = "Skurri",
+}
+
+local function NormalizeFontField(conf)
+    if type(conf) ~= "table" then return end
+    local key = conf.fontKey
+    if type(key) ~= "string" or key == "" then return end
+    local normalize = _G.MSUF_NormalizeFontKey or function(k) return GF_FONT_KEY_ALIASES[k] or k end
+    local normalized = normalize(key)
+    if normalized ~= key then
+        conf.fontKey = normalized
+    end
+end
+
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
@@ -739,6 +762,9 @@ function GF.EnsureDB()
     if _partyFresh then db.gf_party = {} end
     if _raidFresh  then db.gf_raid  = {} end
     if _mythicFresh then db.gf_mythicraid = {} end
+    NormalizeFontField(db.gf_party)
+    NormalizeFontField(db.gf_raid)
+    NormalizeFontField(db.gf_mythicraid)
     MigrateShowHPTo3Slot(db.gf_party)
     MigrateShowHPTo3Slot(db.gf_raid)
     MigrateShowHPTo3Slot(db.gf_mythicraid)
@@ -1273,7 +1299,12 @@ function GF.ResolveFontPath(kind)
             end
             local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
             if LSM then
-                local p = LSM:Fetch("font", key, true)
+                local raw = _G.MSUF_GetRawLSMFontPath
+                local p = type(raw) == "function" and raw(LSM, key) or nil
+                if not p and type(LSM.HashTable) == "function" then
+                    local fonts = LSM:HashTable("font")
+                    p = fonts and fonts[key]
+                end
                 if p then return ResolveFontPathSafe(p, conf.nameFontSize or 12, GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "") end
             end
         end
@@ -1288,7 +1319,12 @@ function GF.ResolveFontPath(kind)
         if type(fn) == "function" then return ResolveFontPathSafe(fn(), 12, "") end
         local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
         if LSM then
-            local p = LSM:Fetch("font", gKey, true)
+            local raw = _G.MSUF_GetRawLSMFontPath
+            local p = type(raw) == "function" and raw(LSM, gKey) or nil
+            if not p and type(LSM.HashTable) == "function" then
+                local fonts = LSM:HashTable("font")
+                p = fonts and fonts[gKey]
+            end
             if p then return ResolveFontPathSafe(p, 12, "") end
         end
     end

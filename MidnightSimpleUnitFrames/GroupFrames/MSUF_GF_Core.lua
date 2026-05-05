@@ -453,14 +453,20 @@ local function BuildFrameHierarchy(f, kind)
     debuffStripe:Hide()
     f._msufGFDebuffStripe = debuffStripe
 
+    -- Name text layer
+    local nameTextLayer = CreateFrame("Frame", nil, health)
+    nameTextLayer:SetAllPoints(health)
+    nameTextLayer:SetFrameLevel(hLvl + (conf.nameTextLayer or 5))
+    f.nameTextLayer = nameTextLayer
+
     -- Health text layer (above all overlays)
     local healthTextLayer = CreateFrame("Frame", nil, health)
     healthTextLayer:SetAllPoints(health)
-    healthTextLayer:SetFrameLevel(hLvl + 6)
+    healthTextLayer:SetFrameLevel(hLvl + (conf.textLayer or 5))
     f.healthTextLayer = healthTextLayer
 
     -- Name text
-    local nameText = healthTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local nameText = nameTextLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     nameText:SetJustifyH("LEFT")
     f.nameText = nameText
     f.name = nameText
@@ -708,6 +714,9 @@ local function LayoutText(f, kind)
     end
 
     if f.nameText then
+        if f.nameTextLayer and f.nameText.SetParent and f.nameText.GetParent and f.nameText:GetParent() ~= f.nameTextLayer then
+            f.nameText:SetParent(f.nameTextLayer)
+        end
         f.nameText:ClearAllPoints()
         local anchor = conf.nameAnchor or "LEFT"
         if anchor == "CENTER" then
@@ -809,6 +818,19 @@ local function LayoutText(f, kind)
             f.powerTextRightFS:SetPoint("RIGHT", anchor, "RIGHT", -2, 0)
             if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
         end
+    end
+    if f.nameTextLayer and f.health then
+        f.nameTextLayer:ClearAllPoints()
+        f.nameTextLayer:SetAllPoints(f.health)
+        f.nameTextLayer:SetFrameLevel(f.health:GetFrameLevel() + (conf.nameTextLayer or 5))
+    end
+    if f.healthTextLayer and f.health then
+        f.healthTextLayer:SetFrameLevel(f.health:GetFrameLevel() + (conf.textLayer or 5))
+    end
+    if f.powerTextLayer then
+        local base = f.health or f.barGroup or f.power or f
+        local pLvl = base.GetFrameLevel and base:GetFrameLevel() or 0
+        f.powerTextLayer:SetFrameLevel(pLvl + (conf.powerTextLayer or 2))
     end
 end
 

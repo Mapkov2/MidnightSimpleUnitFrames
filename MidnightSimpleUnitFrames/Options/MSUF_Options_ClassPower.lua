@@ -544,7 +544,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         name = "MSUF_AltManaShowCheck", parent = amBody,
         anchor = amSub, x = 0, y = -6, maxTextWidth = CHECK_TW,
         label = TR("Show mana bar (dual resource)"),
-        get = function() return B().showAltMana ~= false end,
+        get = function() return B().showAltMana == true end,
         set = function(v) B().showAltMana = v; CPRefresh(); if SyncAll then SyncAll() end end,
     }))
 
@@ -618,7 +618,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         if not MSUF_DB then return end
         local b = MSUF_DB.bars or {}
         local cpOn = (b.showClassPower ~= false)
-        local amOn = (b.showAltMana ~= false)
+        local amOn = (b.showAltMana == true)
         local cpTextOn = (b.classPowerShowText == true)
         local anyDetached = false
         for _, k in ipairs({ "player", "target", "focus" }) do

@@ -56,6 +56,16 @@ local KIND_TO_KEY = {
     raid = "gf_raid",
     mythicraid = "gf_mythicraid",
 }
+local KEY_TO_KIND = {
+    gf_party = "party",
+    gf_raid = "raid",
+    gf_mythicraid = "mythicraid",
+}
+
+local function NormalizeKind(kind)
+    if kind == "party" or kind == "raid" or kind == "mythicraid" then return kind end
+    return KEY_TO_KIND[kind]
+end
 
 ------------------------------------------------------------------------
 -- State
@@ -63,6 +73,7 @@ local KIND_TO_KEY = {
 local _containers = {}
 local _em2Active = false
 local _previewShownByEM2 = true
+local _activePreviewKind = nil
 local HideHeaders
 
 local function GetDefaultCenter(kind)
@@ -73,6 +84,34 @@ local function GetRequestedPreviewCount(kind)
     if kind == "mythicraid" then return 20 end
     if kind == "raid" then return 30 end
     return 5
+end
+
+local function GetSelectedPreviewKind()
+    local gf = ns.GF
+    local panel = _G.MSUF_GFOptionsPanel
+    if panel and panel.IsShown and panel:IsShown() then
+        local optionsKind = NormalizeKind(gf and gf._optionsActiveKind)
+        if optionsKind then return optionsKind end
+        local explicitKind = NormalizeKind(_activePreviewKind)
+        if explicitKind then return explicitKind end
+    end
+
+    local stateKey = EM2.State and EM2.State.GetUnitKey and EM2.State.GetUnitKey()
+    return NormalizeKind(stateKey)
+end
+
+local function ShouldShowPreviewKind(kind)
+    local selected = GetSelectedPreviewKind()
+    return selected == nil or selected == kind
+end
+
+local function RefreshGFPositionUI(kind)
+    local gf = ns.GF
+    if gf and gf._RequestOptionsResync then gf._RequestOptionsResync() end
+    if type(_G.MSUF_EM2_SyncGFPopups) == "function" then
+        _G.MSUF_EM2_SyncGFPopups()
+    end
+    if EM2.HUD and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
 end
 
 local function GetPreviewCount(kind)
@@ -179,6 +218,39 @@ local function OpenPreviewPopup(kind, anchor)
     end
 end
 
+local function NudgePreviewKind(kind, dx, dy)
+    kind = NormalizeKind(kind)
+    local key = KIND_TO_KEY[kind]
+    if not key then return false end
+    if not (_em2Active and _previewShownByEM2 and IsPreviewActive(kind)) then return false end
+    if InCombatLockdown and InCombatLockdown() then return true end
+
+    local gf = ns.GF; if not gf then return false end
+    local conf = gf.GetConf and gf.GetConf(kind)
+    if not conf then return false end
+
+    local defX, defY = GetDefaultCenter(kind)
+    if _G.MSUF_EM_UndoBeforeChange then
+        _G.MSUF_EM_UndoBeforeChange("unit", key, true)
+    end
+
+    conf.offsetX = math_floor(((tonumber(conf.offsetX) or defX) + (dx or 0)) + 0.5)
+    conf.offsetY = math_floor(((tonumber(conf.offsetY) or defY) + (dy or 0)) + 0.5)
+
+    SyncContainer(kind)
+    if gf.RefreshPreviewLayout then
+        gf.RefreshPreviewLayout(kind)
+    end
+    HideHeaders()
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshGFPositionUI(kind)
+    return true
+end
+
+function _G.MSUF_GF_EM2_NudgePreview(kind, dx, dy)
+    return NudgePreviewKind(kind, dx, dy)
+end
+
 function _G.MSUF_GF_EM2_SetPreviewNudgeTarget(kind, source)
     local key = KIND_TO_KEY[kind]
     if not key then return end
@@ -186,30 +258,13 @@ function _G.MSUF_GF_EM2_SetPreviewNudgeTarget(kind, source)
     if not _G.MSUF_EM2_SetPreviewNudgeTarget then return end
 
     _G.MSUF_EM2_SetPreviewNudgeTarget({
-        frame = source or EnsureContainer(kind),
+        frame = EnsureContainer(kind),
+        sourceFrame = source,
         IsActive = function()
             return _em2Active and _previewShownByEM2 and IsPreviewActive(kind)
         end,
         Nudge = function(_, dx, dy)
-            if InCombatLockdown and InCombatLockdown() then return end
-            local gf = ns.GF; if not gf then return end
-            local conf = gf.GetConf and gf.GetConf(kind)
-            if not conf then return end
-            local defX, defY = GetDefaultCenter(kind)
-            if _G.MSUF_EM_UndoBeforeChange then
-                _G.MSUF_EM_UndoBeforeChange("unit", key, true)
-            end
-            conf.offsetX = math_floor(((tonumber(conf.offsetX) or defX) + (dx or 0)) + 0.5)
-            conf.offsetY = math_floor(((tonumber(conf.offsetY) or defY) + (dy or 0)) + 0.5)
-            SyncContainer(kind)
-            if _previewShownByEM2 and gf.RefreshPreviewLayout then
-                gf.RefreshPreviewLayout(kind)
-                HideHeaders()
-            end
-            if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            if EM2.UnitPopup and EM2.UnitPopup.IsOpen and EM2.UnitPopup.IsOpen() and EM2.UnitPopup.Sync then
-                EM2.UnitPopup.Sync()
-            end
+            NudgePreviewKind(kind, dx, dy)
         end,
     })
 end
@@ -319,8 +374,9 @@ end
 local function ShowPreviewOnly()
     local gf = ns.GF; if not gf then return end
     _previewShownByEM2 = true
+    local selectedKind = GetSelectedPreviewKind()
 
-    if PartyEnabled() then
+    if PartyEnabled() and ShouldShowPreviewKind("party") then
         gf.SetPreviewAnchor("party", EnsureContainer("party"))
         gf.ShowPreview("party", GetRequestedPreviewCount("party"))
         WirePreviewMouse("party")
@@ -328,7 +384,7 @@ local function ShowPreviewOnly()
         gf.SetPreviewAnchor("party", nil)
         gf.HidePreview("party")
     end
-    if RaidEnabled() then
+    if RaidEnabled() and ShouldShowPreviewKind("raid") then
         gf.SetPreviewAnchor("raid", EnsureContainer("raid"))
         gf.ShowPreview("raid", GetRequestedPreviewCount("raid"))
         WirePreviewMouse("raid")
@@ -336,7 +392,7 @@ local function ShowPreviewOnly()
         gf.SetPreviewAnchor("raid", nil)
         gf.HidePreview("raid")
     end
-    if MythicRaidEnabled() then
+    if MythicRaidEnabled() and ShouldShowPreviewKind("mythicraid") then
         gf.SetPreviewAnchor("mythicraid", EnsureContainer("mythicraid"))
         gf.ShowPreview("mythicraid", GetRequestedPreviewCount("mythicraid"))
         WirePreviewMouse("mythicraid")
@@ -351,8 +407,18 @@ local function ShowPreviewOnly()
     gf.RefreshPreviewLayout("raid")
     gf.RefreshPreviewLayout("mythicraid")
     HideHeaders()
+    if selectedKind and _G.MSUF_GF_EM2_SetPreviewNudgeTarget then
+        _G.MSUF_GF_EM2_SetPreviewNudgeTarget(selectedKind)
+    end
     SyncMoversSoon(0)
     SyncMoversSoon(0.05)
+end
+
+function _G.MSUF_GF_EM2_SetActivePreviewKind(kind)
+    _activePreviewKind = NormalizeKind(kind)
+    if _em2Active and _previewShownByEM2 then
+        ShowPreviewOnly()
+    end
 end
 
 local function HidePreviewOnly()
@@ -466,6 +532,7 @@ local function HookPostDrag()
                 gf.RefreshPreviewLayout(kind)
                 HideHeaders()
             end
+            RefreshGFPositionUI(kind)
         end
     end)
 end
@@ -484,8 +551,7 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            SyncContainer("party")
-            return EnsureContainer("party")
+            return SyncContainer("party")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("party") or GetPartyConf() end,
         isEnabled = PartyEnabled,
@@ -501,8 +567,7 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            SyncContainer("raid")
-            return EnsureContainer("raid")
+            return SyncContainer("raid")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("raid") or GetRaidConf() end,
         isEnabled = RaidEnabled,
@@ -518,8 +583,7 @@ local function RegisterGF()
         canResize = false,
         canNudge  = true,
         getFrame  = function()
-            SyncContainer("mythicraid")
-            return EnsureContainer("mythicraid")
+            return SyncContainer("mythicraid")
         end,
         getConf   = function() local gf = ns.GF; return gf and gf.GetConf("mythicraid") or GetMythicRaidConf() end,
         isEnabled = MythicRaidEnabled,
@@ -838,10 +902,30 @@ local function BuildGFPopup(mode)
         conf.powerOffsetX = San(popup.powXBox and tonumber(popup.powXBox:GetText()), 0)
         conf.powerOffsetY = San(popup.powYBox and tonumber(popup.powYBox:GetText()), 0)
 
-        -- Rebuild
+        -- Rebuild + immediate Edit Mode preview sync.  UnitFrame popups apply
+        -- directly to the live frame; GF needs the same direct path for its
+        -- preview container or X/Y fields appear stale until a later rebuild.
         gf.RebuildAll()
+        if _em2Active then
+            if _previewShownByEM2 and ShouldShowPreviewKind(mode) then
+                gf.SetPreviewAnchor(mode, EnsureContainer(mode))
+                gf.ShowPreview(mode, GetRequestedPreviewCount(mode))
+                WirePreviewMouse(mode)
+            end
+            SyncContainer(mode)
+            if gf.RefreshPreviewLayout then gf.RefreshPreviewLayout(mode) end
+            if _previewShownByEM2 then HideHeaders()
+            elseif gf.SyncHeaderPosition and not InCombatLockdown() then gf.SyncHeaderPosition(mode) end
+            if _G.MSUF_GF_EM2_SetPreviewNudgeTarget then _G.MSUF_GF_EM2_SetPreviewNudgeTarget(mode) end
+        elseif gf.SyncHeaderPosition and not InCombatLockdown() then
+            gf.SyncHeaderPosition(mode)
+        end
+
+        if gf.MarkAllDirty then gf.MarkAllDirty(gf.DIRTY_ALL or 0x3F)
+        elseif gf.RefreshVisuals then gf.RefreshVisuals() end
         if gf._RequestOptionsResync then gf._RequestOptionsResync() end
-        C_Timer.After(0.1, function()
+        C_Timer.After(0.05, function()
+            if popup and popup.IsShown and popup:IsShown() and popup.Sync then popup.Sync() end
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
         end)
     end
@@ -1011,6 +1095,9 @@ end
 local function ShowGFPopup(mode)
     if not _popups[mode] then _popups[mode] = BuildGFPopup(mode) end
     local popup = _popups[mode]; if not popup then return end
+    if _G.MSUF_GF_EM2_SetPreviewNudgeTarget then
+        _G.MSUF_GF_EM2_SetPreviewNudgeTarget(mode)
+    end
     popup.Sync(); popup:Show()
 end
 

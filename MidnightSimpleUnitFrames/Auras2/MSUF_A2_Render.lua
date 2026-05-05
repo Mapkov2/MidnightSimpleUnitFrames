@@ -178,21 +178,10 @@ local function EnsureDB()
 
     if s.maxBuffs == nil then s.maxBuffs = s.maxIcons or 12 end
     if s.maxDebuffs == nil then s.maxDebuffs = s.maxIcons or 12 end
-    local Native = ns and ns.MSUF_AuraNative
-    if Native then
-        s.auraRenderer = Native.NormalizeRenderer(s.auraRenderer)
-        s.blizzardAuraTypes = Native.EnsureTypes(s.blizzardAuraTypes, false)
-        s.blizzardIconSize = API._Render.Clamp(s.blizzardIconSize, s.iconSize or 26, 8, 80)
-        if s.blizzardShowCooldownText == nil then s.blizzardShowCooldownText = true end
-        if s.blizzardOrganizationType == nil then s.blizzardOrganizationType = "default" end
-        if s.blizzardDispelMode == nil then s.blizzardDispelMode = "allDispellable" end
-    else
-        if type(s.blizzardAuraTypes) ~= "table" then
-            s.blizzardAuraTypes = { buffs=true, debuffs=true, dispels=true, privateAuras=true }
-        end
-        s.auraRenderer = (s.auraRenderer == "BLIZZARD") and "BLIZZARD" or "CUSTOM"
-        s.blizzardIconSize = API._Render.Clamp(s.blizzardIconSize, s.iconSize or 26, 8, 80)
-    end
+    -- Unit Frames stay on MSUF custom aura rendering for now. The shared
+    -- Blizzard native container path is currently reserved for Group Frames.
+    s.auraRenderer = "CUSTOM"
+    s.blizzardIconSize = API._Render.Clamp(s.blizzardIconSize, s.iconSize or 26, 8, 80)
     s.showPrivateAurasTarget = false
     s.privateAuraMaxPlayer = API._Render.Clamp(s.privateAuraMaxPlayer, 4, 0, 12)
     s.satedShowAtSeconds   = API._Render.Clamp(s.satedShowAtSeconds, 0, 0, 3600)
@@ -209,6 +198,12 @@ local function EnsureDB()
 
     -- Per-unit config
     if type(a2.perUnit) ~= "table" then a2.perUnit = {} end
+    for _, pu in pairs(a2.perUnit) do
+        if type(pu) == "table" then
+            pu.overrideNativeAuras = nil
+            pu.nativeAuras = nil
+        end
+    end
 
     -- Rebuild DB cache
     local DB = API.DB
@@ -717,23 +712,12 @@ API._Render.ClearNativeContainerKey = function(entry, key)
 end
 
 API._Render.IsNativeAuraType = function(shared, key, defaultValue)
-    local Native = API._Render.NativeAPI()
-    if not (Native and shared and Native.IsBlizzardRenderer(shared.auraRenderer)) then
-        return false
-    end
-    if Native.Supported and not Native.Supported() then
-        return false
-    end
-    return Native.TypeEnabled(shared.blizzardAuraTypes, key, defaultValue)
+    -- Unit Frames do not use the Blizzard native aura container path.
+    -- Group Frames call MSUF_AuraNative directly from GF code.
+    return false
 end
 
 API._Render.ResolveNativeAuraSettings = function(a2, shared, unit)
-    if type(a2) == "table" and type(a2.perUnit) == "table" and unit then
-        local pu = a2.perUnit[unit]
-        if pu and pu.overrideNativeAuras == true and type(pu.nativeAuras) == "table" then
-            return pu.nativeAuras
-        end
-    end
     return shared
 end
 
@@ -743,8 +727,9 @@ API._Render.ApplyNativeAuras = function(entry, unit, shared, nativeSettings, cfg
     local useBuffs = flags.buffs == true
     local useDebuffs = flags.debuffs == true
     local useDispels = flags.dispels == true
+    local usePrivate = flags.privateAuras == true
 
-    if not (useBuffs or useDebuffs or useDispels) then
+    if not (useBuffs or useDebuffs or useDispels or usePrivate) then
         API._Render.ClearNativeAuras(entry)
         return false
     end
@@ -775,7 +760,6 @@ API._Render.ApplyNativeAuras = function(entry, unit, shared, nativeSettings, cfg
             showCountdownNumbers = (nativeSettings.blizzardShowCooldownText ~= false) and (shared.showCooldownText ~= false),
             showBigDefensive = false,
             groupType = 5,
-            frameLevelOffset = opts.frameLevelOffset or 18,
         }, parent or entry.frame or entry.anchor or UIParent, levelParent) then
             any = true
         end
@@ -784,14 +768,13 @@ API._Render.ApplyNativeAuras = function(entry, unit, shared, nativeSettings, cfg
     ApplyOne("buff", entry.buffs, cfg.buffIconSize or nativeSettings.blizzardIconSize, {
         enabled = useBuffs,
         maxBuffs = cfg.maxBuffs or 0,
-        frameLevelOffset = 18,
     })
+    local privateMax = usePrivate and API._Render.Clamp(shared.privateAuraMaxPlayer or 4, 4, 0, 12) or 0
     ApplyOne("debuff", entry.debuffs, cfg.debuffIconSize or nativeSettings.blizzardIconSize, {
-        enabled = useDebuffs or useDispels,
-        maxDebuffs = useDebuffs and (cfg.maxDebuffs or 0) or 0,
+        enabled = useDebuffs or useDispels or usePrivate,
+        maxDebuffs = max(useDebuffs and (cfg.maxDebuffs or 0) or 0, privateMax),
         maxDispels = useDispels and 3 or 0,
         showDispelOverlay = useDispels,
-        frameLevelOffset = 19,
     })
 
     if not any then API._Render.ClearNativeAuras(entry) end
@@ -1451,7 +1434,10 @@ local function RenderUnit(entry)
     local configNativeBuffs = showBuffs and API._Render.IsNativeAuraType(nativeSettings, "buffs", true)
     local configNativeDebuffs = showDebuffs and API._Render.IsNativeAuraType(nativeSettings, "debuffs", true)
     local configNativeDispels = API._Render.IsNativeAuraType(nativeSettings, "dispels", true)
-    local configNativePrivate = false
+    local configNativePrivate = unit == "player"
+        and shared.privateAurasEnabled == true
+        and shared.showPrivateAurasPlayer == true
+        and API._Render.IsNativeAuraType(nativeSettings, "privateAuras", true)
 
     local nativeBuffs = unitExists and configNativeBuffs
     local nativeDebuffs = unitExists and configNativeDebuffs
@@ -1470,13 +1456,17 @@ local function RenderUnit(entry)
             dispels = nativeDispels,
             privateAuras = nativePrivate,
         })
-    else
+    elseif entry.native or entry.nativeContainers then
         API._Render.ClearNativeAuras(entry)
     end
 
-    -- Private auras keep the dedicated AddPrivateAuraAnchor slot stack. That
-    -- path is still Blizzard-rendered, but MSUF can keep size/position/growth.
-    PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
+    if nativePrivate then
+        PrivateClear(entry)
+    else
+        -- Private auras keep the dedicated AddPrivateAuraAnchor slot stack. That
+        -- path is still Blizzard-rendered, but MSUF can keep size/position/growth.
+        PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
+    end
     entry._lastPrivateGen = gen
 
     -- Edit Mode: show/hide movers (skip entirely in combat)

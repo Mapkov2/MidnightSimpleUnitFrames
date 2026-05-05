@@ -505,7 +505,12 @@ local function GetGameplayFontSettings(kind)
         fontPath = pathForKey(fontKey)
     end
     if (not fontPath or fontPath == "") and LSM and fontKey and fontKey ~= "" then
-        local fetched = LSM:Fetch("font", fontKey, true)
+        local raw = _G.MSUF_GetRawLSMFontPath
+        local fetched = type(raw) == "function" and raw(LSM, fontKey) or nil
+        if not fetched and type(LSM.HashTable) == "function" then
+            local fonts = LSM:HashTable("font")
+            fetched = fonts and fonts[fontKey]
+        end
         if fetched then
             fontPath = ResolveFontPath(fetched, general.fontSize or 14, "")
         end

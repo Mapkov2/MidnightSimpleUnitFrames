@@ -420,7 +420,7 @@ local function EnsureDefaults()
     if b.classPowerTextOffsetY    == nil then b.classPowerTextOffsetY    = 0    end
 
     -- AltMana defaults
-    if b.showAltMana          == nil then b.showAltMana          = true  end
+    if b.showAltMana          == nil then b.showAltMana          = false end
     if b.altManaHeight        == nil then b.altManaHeight        = 4     end
     if b.altManaOffsetY       == nil then b.altManaOffsetY       = -2    end
     if b.altManaColorR        == nil then b.altManaColorR        = 0.0   end
@@ -1265,7 +1265,7 @@ local function CP_ComputeStructuralSignature()
     local newPowerType, newRenderMode, newAuraPower = GetClassPowerType()
     local newVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
     local wantCPVisible = (b.showClassPower ~= false) and newPowerType and newRenderMode ~= CPK.MODE.NONE
-    local wantAMVisible = (b.showAltMana ~= false) and NeedsAltManaBar() and (_G.MSUF_UnitEditModeActive ~= true)
+    local wantAMVisible = (b.showAltMana == true) and NeedsAltManaBar() and (_G.MSUF_UnitEditModeActive ~= true)
     return table.concat({
         wantCPVisible and 1 or 0,
         wantAMVisible and 1 or 0,
@@ -1576,7 +1576,7 @@ local function FullRefresh()
     end
 
     -- ---- AltMana ----
-    local amEnabled = (b.showAltMana ~= false)
+    local amEnabled = (b.showAltMana == true)
     local needsAlt = NeedsAltManaBar()
 
     if amEnabled and needsAlt and not inEditMode then

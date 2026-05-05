@@ -468,6 +468,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
                    "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha" } },
         { key = "text",       label = "Text & Name",
           keys = { "showName", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY",
+                   "nameTextLayer",
                    "nameColorMode", "nameColorR", "nameColorG", "nameColorB",
                    "nameMaxChars", "nameNoEllipsis",
                    "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter",
@@ -716,6 +717,12 @@ function _G.MSUF_EnsureGFPanelBuilt()
         return not (((IsInGroup and IsInGroup()) or false) and not inRaid)
     end
 
+    local function SyncActiveScopeForEM2(kind)
+        GF._optionsActiveKind = kind
+        local fn = _G.MSUF_GF_EM2_SetActivePreviewKind
+        if type(fn) == "function" then fn(kind) end
+    end
+
     local function ShowPreviewIfNeeded(kind)
         if NeedsPreview(kind) then
             -- Hide SecureGroupHeaders to prevent doubling with preview frames
@@ -724,22 +731,26 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 if GF.headers.raid  then GF.headers.raid:Hide()  end
             end
             GF.ShowPreview(kind, (kind == "mythicraid" and 20) or (kind == "raid" and 30) or 5)
+        elseif not InCombatLockdown() and GF.UpdateGroupVisibility then
+            GF.UpdateGroupVisibility()
         end
     end
 
-    local function HideAllPreviews()
+    local function HideAllPreviews(restoreHeaders)
+        if restoreHeaders == nil then restoreHeaders = true end
         GF.HidePreview("party")
         GF.HidePreview("raid")
         GF.HidePreview("mythicraid")
         -- Restore headers
-        if not InCombatLockdown() and GF.UpdateGroupVisibility then
+        if restoreHeaders and not InCombatLockdown() and GF.UpdateGroupVisibility then
             GF.UpdateGroupVisibility()
         end
     end
 
     local function RefreshAfterFullReset()
         RefreshAllWidgets()
-        HideAllPreviews()
+        HideAllPreviews(false)
+        SyncActiveScopeForEM2(_activeKind)
         ShowPreviewIfNeeded(_activeKind)
         if GF.PreviewScopeChanged then GF.PreviewScopeChanged() end
         if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
@@ -768,7 +779,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
         _activeKind = kind
         RefreshScopeBtns()
         RefreshAllWidgets()
-        HideAllPreviews()
+        HideAllPreviews(false)
+        SyncActiveScopeForEM2(kind)
         ShowPreviewIfNeeded(kind)
         if GF.PreviewScopeChanged then GF.PreviewScopeChanged() end
     end
@@ -801,7 +813,8 @@ function _G.MSUF_EnsureGFPanelBuilt()
             RefreshScopeBtns()
             local panel = _G.MSUF_GFOptionsPanel
             if panel and panel.IsShown and panel:IsShown() then
-                HideAllPreviews()
+                HideAllPreviews(false)
+                SyncActiveScopeForEM2(_activeKind)
                 ShowPreviewIfNeeded(_activeKind)
             end
         end
@@ -2476,7 +2489,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Section 4: Text
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(760, "Text", false, "text")
+        local box, body = AddSection(800, "Text", false, "text")
 
         local COL_W = 310
 
@@ -2775,9 +2788,17 @@ function _G.MSUF_EnsureGFPanelBuilt()
         tOffSep:SetPoint("TOPLEFT", hpYSl, "BOTTOMLEFT", 0, -28)
         tOffSep:SetText(TR("Text Layers")); tOffSep:SetTextColor(1, 0.82, 0)
 
+        local nameLaySl = SSlider({
+            name = "MSUF_GF_NameTextLayerSlider", parent = colR, compact = true,
+            anchor = tOffSep, x = 0, y = -26,
+            min = 1, max = 12, step = 1, width = 180, default = 5,
+            get = function(k) return GF.Val(k, "nameTextLayer") end,
+            set = function(k, v) GF.GetConf(k).nameTextLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
+            formatText = function(v) return string.format("Name Layer: %d", v) end,
+        })
         local hpLaySl = SSlider({
             name = "MSUF_GF_TextLayerSlider", parent = colR, compact = true,
-            anchor = tOffSep, x = 0, y = -26,
+            anchor = nameLaySl, x = 0, y = -32,
             min = 1, max = 12, step = 1, width = 180, default = 5,
             get = function(k) return GF.Val(k, "textLayer") end,
             set = function(k, v) GF.GetConf(k).textLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
@@ -2798,7 +2819,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             local powerEnabled = (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(kind)) or false
             local hpEnabled = GF.Val(kind, "showHPText") ~= false
 
-            SetGFOptionControlsEnabled(nameEnabled, { nameSizeSl, nameAnchorDd, nameXSl, nameYSl })
+            SetGFOptionControlsEnabled(nameEnabled, { nameSizeSl, nameAnchorDd, nameXSl, nameYSl, nameLaySl })
             SetGFOptionControlsEnabled(powerEnabled,
                 { powLeftDd, powCenterDd, powRightDd, powDelimDd, powSizeSl, powXSl, powYSl, powerLaySl },
                 { powLeftLbl, powCenterLbl, powRightLbl, powDelimLbl })
@@ -3784,6 +3805,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     -- Preview management
     ----------------------------------------------------------------
     _panel:SetScript("OnShow", function()
+        SyncActiveScopeForEM2(_activeKind)
         ShowPreviewIfNeeded(_activeKind)
         RefreshAllWidgets()
         if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end

@@ -703,6 +703,13 @@ local function NudgeTarget(dx, dy)
 
     -- Priority 3: current unit frame
     local key = EM2.State.GetUnitKey() or "player"
+    if (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid")
+        and type(_G.MSUF_GF_EM2_NudgePreview) == "function"
+        and _G.MSUF_GF_EM2_NudgePreview(key, ndx, ndy)
+    then
+        return
+    end
+
     local conf = db[key]
     if not conf then return end
     if _G.MSUF_EM_UndoBeforeChange then

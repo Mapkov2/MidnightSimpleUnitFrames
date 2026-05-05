@@ -153,26 +153,40 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
         MSUF_SyncCastbarPositionPopup(unitKey)
     end
  end
+local MSUF_GetFontFlags
 local function MSUF_GetFontPath()
     if not MSUF_DB then EnsureDB() end
     MSUF_DB = MSUF_DB or {}
     local g = MSUF_DB.general or {}
     MSUF_DB.general = g
     local key = g.fontKey
+    local pathForKey = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+    if type(pathForKey) == "function" and key and key ~= "" then
+        local p = pathForKey(key)
+        if type(p) == "string" and p ~= "" then
+            return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags())
+        end
+    end
+    local lsm = LSM or (ns and ns.LSM) or _G.MSUF_LSM
+    if lsm and key and key ~= "" then
+        local raw = _G.MSUF_GetRawLSMFontPath
+        local p = type(raw) == "function" and raw(lsm, key) or nil
+        if not p and type(lsm.HashTable) == "function" then
+            local fonts = lsm:HashTable("font")
+            p = fonts and fonts[key]
+        end
+        if p then
+             return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags())
+    end
+    end
     local internalPath = (type(GetInternalFontPathByKey) == "function") and GetInternalFontPathByKey(key) or nil
     if internalPath then
-         return ResolveFontPath(internalPath, 14, "")
-    end
-    if LSM and key and key ~= "" then
-        local p = LSM:Fetch("font", key, true)
-        if p then
-             return ResolveFontPath(p, 14, "")
-    end
+         return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags())
     end
     local fallback = (FONT_LIST and FONT_LIST[1] and FONT_LIST[1].path) or "Fonts\\FRIZQT__.TTF"
-    return ResolveFontPath(fallback, 14, "")
+    return ResolveFontPath(fallback, g.fontSize or 14, MSUF_GetFontFlags())
 end
-local function MSUF_GetFontFlags()
+MSUF_GetFontFlags = function()
     if not MSUF_DB then EnsureDB() end
     MSUF_DB = MSUF_DB or {}
     MSUF_DB.general = MSUF_DB.general or {}
@@ -908,4 +922,8 @@ MSUF_BumpCastbarStyleRevision()
 ns.Castbars = ns.Castbars or {}
 ns.Castbars._GetFontPath = MSUF_GetFontPath
 ns.Castbars._GetFontFlags = MSUF_GetFontFlags
+ns.MSUF_GetFontPath = MSUF_GetFontPath
+ns.MSUF_GetFontFlags = MSUF_GetFontFlags
+_G.MSUF_GetFontPath = MSUF_GetFontPath
+_G.MSUF_GetFontFlags = MSUF_GetFontFlags
 ns.Castbars._InitPlayerCastbarPreviewToggle = MSUF_InitPlayerCastbarPreviewToggle

@@ -85,9 +85,9 @@ end
 
 function Native.ResolveOrganizationType(value)
     local E = _G.Enum and _G.Enum.RaidAuraOrganizationType
-    local legacy = E and E.Legacy or 0
-    local buffsTop = E and E.BuffsTopDebuffsBottom or 1
-    local buffsRight = E and E.BuffsRightDebuffsLeft or 2
+    local legacy = E and E.Legacy or 1
+    local buffsTop = E and E.BuffsTopDebuffsBottom or 2
+    local buffsRight = E and E.BuffsRightDebuffsLeft or 3
 
     if value == "BOTTOM" or value == "BUFFS_TOP_DEBUFFS_BOTTOM" then return buffsTop end
     if value == "LEFT" or value == "RIGHT" or value == "BUFFS_RIGHT_DEBUFFS_LEFT" then return buffsRight end
@@ -198,7 +198,22 @@ function Native.Signature(unit, cfg)
         tostring(cfg.containerAnchor or cfg.anchor or ""),
         tostring(cfg.containerOffsetX or 0),
         tostring(cfg.containerOffsetY or 0),
+        tostring(cfg.iconAnchor or ""),
+        tostring(cfg.iconOffsetX or 0),
+        tostring(cfg.iconOffsetY or 0),
     }, ":")
+end
+
+function Native.ApplyFrameStrata(container, parent, levelParent)
+    if not container then return end
+
+    local strataSource = (levelParent and levelParent.GetFrameStrata and levelParent) or (parent and parent.GetFrameStrata and parent)
+    if container.SetFrameStrata and strataSource then
+        local wantStrata = STRATA_FIX[strataSource:GetFrameStrata()] or "DIALOG"
+        if not container.GetFrameStrata or container:GetFrameStrata() ~= wantStrata then
+            container:SetFrameStrata(wantStrata)
+        end
+    end
 end
 
 function Native.Apply(container, unit, cfg, parent, levelParent)
@@ -221,18 +236,21 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     unit = Native.ResolveUnitToken(unit)
     cfg.unit = unit
     local sig = Native.Signature(unit, cfg)
+    parent = parent or container:GetParent()
     if not cfg.forceApply and container._msufNativeAuraAnchorID and container._msufNativeAuraSignature == sig then
+        Native.ApplyFrameStrata(container, parent, levelParent)
         container:SetAttribute("update-settings", true)
         container:Show()
         return true
     end
 
     -- Slow path: config changed; do full reposition + re-registration.
-    parent = parent or container:GetParent()
     if parent and container:GetParent() ~= parent then
         container:SetParent(parent)
     end
     local resolvedIconAnchor = "CENTER"
+    local resolvedIconOffsetX = Clamp(cfg.iconOffsetX, 0, -10000, 10000)
+    local resolvedIconOffsetY = Clamp(cfg.iconOffsetY, 0, -10000, 10000)
     container:ClearAllPoints()
     if parent then
         local anchor = cfg.containerAnchor or cfg.anchor
@@ -247,16 +265,12 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
             container:SetAllPoints(parent)
         end
     end
+    if cfg.iconAnchor and VALID_FRAME_ANCHORS[cfg.iconAnchor] then
+        resolvedIconAnchor = cfg.iconAnchor
+    end
     container:EnableMouse(false)
     if container.SetMouseClickEnabled then container:SetMouseClickEnabled(false) end
-    local strataSource = (levelParent and levelParent.GetFrameStrata and levelParent) or (parent and parent.GetFrameStrata and parent)
-    if container.SetFrameStrata and strataSource then
-        local strata = strataSource:GetFrameStrata()
-        container:SetFrameStrata(STRATA_FIX[strata] or "DIALOG")
-    end
-    if container.SetFrameLevel and levelParent and levelParent.GetFrameLevel then
-        container:SetFrameLevel((levelParent:GetFrameLevel() or 0) + 100 + (cfg.frameLevelOffset or 0))
-    end
+    Native.ApplyFrameStrata(container, parent, levelParent)
 
     Native.Clear(container)
     Native.SetContainerAttributes(container, cfg)
@@ -278,8 +292,8 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
                 point = resolvedIconAnchor,
                 relativeTo = container,
                 relativePoint = resolvedIconAnchor,
-                offsetX = 0,
-                offsetY = 0,
+                offsetX = resolvedIconOffsetX,
+                offsetY = resolvedIconOffsetY,
             },
         },
     }

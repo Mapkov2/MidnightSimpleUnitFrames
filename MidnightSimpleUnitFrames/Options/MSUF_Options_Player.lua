@@ -898,8 +898,14 @@ local function ApplyFrameBasicsConfigState(panel, unitKey)
     local conf = MSUF_DB and MSUF_DB[key]
     local enabled = (not conf) or conf.enabled ~= false
     local cb = panel.playerEnableFrameCB
-    if cb and cb.SetChecked then
-        cb:SetChecked(enabled)
+    if cb then
+        if cb.SetChecked then cb:SetChecked(enabled) end
+        if cb.SetEnabled then cb:SetEnabled(true) end
+        if cb.EnableMouse then cb:EnableMouse(true) end
+        if cb.Enable then cb:Enable() end
+        if cb.SetAlpha then cb:SetAlpha(1) end
+        local update = cb.__msufToggleUpdate or cb._msufToggleUpdate
+        if type(update) == "function" then pcall(update) end
     end
     SetFrameBasicsConfigEnabled(panel, enabled)
 end
@@ -929,6 +935,35 @@ local function SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
     SetOptionControlEnabled(panel.playerPowerBarBorderSlider, powerEnabled and borderEnabled)
 end
 
+local function IsPowerBarUnitKey(unitKey)
+    local key = CanonKey(unitKey) or unitKey
+    return key == "player" or key == "target" or key == "focus" or key == "boss"
+end
+
+local function ApplyPowerBarConfigState(panel, unitKey, show)
+    if not panel or not unitKey then return end
+    local key = CanonKey(unitKey) or unitKey
+    local visible = (show ~= false) and IsPowerBarUnitKey(key)
+    local conf = MSUF_DB and MSUF_DB[key]
+    local powerEnabled = visible and ReadPowerBarEnabled(conf, key) or false
+    local borderEnabled = visible and ReadPowerBarBorderEnabled(conf, key) or false
+
+    local cb = panel.playerPowerBarShowCB
+    if cb then
+        if cb.SetChecked then cb:SetChecked(powerEnabled) end
+        if visible then
+            if cb.SetEnabled then cb:SetEnabled(true) end
+            if cb.EnableMouse then cb:EnableMouse(true) end
+            if cb.Enable then cb:Enable() end
+            if cb.SetAlpha then cb:SetAlpha(1) end
+            local update = cb.__msufToggleUpdate or cb._msufToggleUpdate
+            if type(update) == "function" then pcall(update) end
+        end
+    end
+
+    SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
+end
+
 local function QueuePowerBarConfigRefresh(panel, unitKey, showPB, borderEnabled)
     if not panel or not C_Timer or type(C_Timer.After) ~= "function" then return end
     if type(unitKey) == "boolean" then
@@ -939,22 +974,49 @@ local function QueuePowerBarConfigRefresh(panel, unitKey, showPB, borderEnabled)
     local queueKey = unitKey and (CanonKey(unitKey) or unitKey) or nil
     panel._msufPowerBarConfigRefreshToken = (panel._msufPowerBarConfigRefreshToken or 0) + 1
     local token = panel._msufPowerBarConfigRefreshToken
-    C_Timer.After(0, function()
+    local function ApplyQueued()
         if not panel or panel._msufPowerBarConfigRefreshToken ~= token then return end
         if queueKey and (CanonKey(panel._msufLastApplyKey) or panel._msufLastApplyKey) ~= queueKey then return end
-        local powerEnabled = showPB and true or false
-        local cb = panel.playerPowerBarShowCB
-        if powerEnabled and cb and cb.GetChecked then
-            powerEnabled = cb:GetChecked() and true or false
-        end
-        SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
-    end)
+        ApplyPowerBarConfigState(panel, queueKey or panel._msufLastApplyKey, showPB)
+    end
+    C_Timer.After(0, ApplyQueued)
+    C_Timer.After(0.05, ApplyQueued)
 end
 
 local function SetCastbarConfigEnabled(panel, unitKey, enabled)
     if not panel or not unitKey then return end
     for _, suffix in ipairs({ "CastbarTimeCB", "CastbarInterruptCB", "CastbarShowIconCB", "CastbarShowTextCB" }) do
         SetOptionControlEnabled(panel[unitKey .. suffix], enabled)
+    end
+end
+
+local function SetCastbarCheck(panel, widgetKey, checked)
+    local w = panel and panel[widgetKey]
+    if not w then return end
+    if w.SetChecked then w:SetChecked(checked and true or false) end
+end
+
+local function ReadCastbarGeneralToggle(g, key, fallbackKey)
+    if g and g[key] ~= nil then return g[key] ~= false end
+    if fallbackKey and g and g[fallbackKey] ~= nil then return g[fallbackKey] ~= false end
+    return true
+end
+
+local function ApplyCastbarOptionChecks(panel, unitKey, conf, g)
+    if not panel or not unitKey then return end
+    for _, spec in ipairs(CASTBAR_TOGGLE_SPECS) do
+        if spec.key == unitKey then
+            SetCastbarCheck(panel, spec.timeW, ReadCastbarGeneralToggle(g, spec.timeK))
+            SetCastbarCheck(panel, spec.interruptW, (not conf) or conf.showInterrupt ~= false)
+            break
+        end
+    end
+    for _, spec in ipairs(CASTBAR_TEXTICON_SPECS) do
+        if spec.key == unitKey then
+            SetCastbarCheck(panel, spec.iconW, ReadCastbarGeneralToggle(g, spec.iconK, "castbarShowIcon"))
+            SetCastbarCheck(panel, spec.textW, spec.textDirect and ReadCastbarGeneralToggle(g, spec.textK) or ReadCastbarGeneralToggle(g, spec.textK, "castbarShowSpellName"))
+            break
+        end
     end
 end
 
@@ -973,6 +1035,7 @@ local function ApplyCastbarConfigState(panel, unitKey, show)
 
     local visible = show ~= false
     local g = MSUF_DB and MSUF_DB.general
+    local conf = MSUF_DB and MSUF_DB[key]
     local enabled = visible and ((not g) or g[enableKey] ~= false)
     local cb = panel[key .. "CastbarEnableCB"]
     if visible and cb then
@@ -981,8 +1044,11 @@ local function ApplyCastbarConfigState(panel, unitKey, show)
         if cb.EnableMouse then cb:EnableMouse(true) end
         if cb.Enable then cb:Enable() end
         if cb.SetAlpha then cb:SetAlpha(1) end
+        local update = cb.__msufToggleUpdate or cb._msufToggleUpdate
+        if type(update) == "function" then pcall(update) end
     end
 
+    ApplyCastbarOptionChecks(panel, key, conf, g)
     SetCastbarConfigEnabled(panel, key, enabled)
 end
 
@@ -1910,11 +1976,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         if panel.playerPowerBarSmoothCB then
             panel.playerPowerBarSmoothCB:SetChecked(ReadPowerSmoothFill(conf, key))
         end
-        local controlsPowerEnabled = showPB and powerEnabled
-        if controlsPowerEnabled and panel.playerPowerBarShowCB and panel.playerPowerBarShowCB.GetChecked then
-            controlsPowerEnabled = panel.playerPowerBarShowCB:GetChecked() and true or false
-        end
-        SetPowerBarConfigEnabled(panel, controlsPowerEnabled, borderEnabled)
+        ApplyPowerBarConfigState(panel, currentKey, showPB)
         QueuePowerBarConfigRefresh(panel, currentKey, showPB, borderEnabled)
     end
 
@@ -2257,7 +2319,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             panel.playerPowerBarShowCB:SetScript("OnClick", function(self)
                 local c, k = PBConf(); if not c or not k then return end
                 c.showPowerBar = self:GetChecked() and true or false
-                SetPowerBarConfigEnabled(panel, c.showPowerBar ~= false, c.powerBarBorderEnabled == true)
+                ApplyPowerBarConfigState(panel, k, true)
                 QueuePowerBarConfigRefresh(panel, k, true, c.powerBarBorderEnabled == true)
                 PBApply()
             end)
@@ -2280,7 +2342,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             panel.playerPowerBarBorderCB:SetScript("OnClick", function(self)
                 local c, k = PBConf(); if not c or not k then return end
                 c.powerBarBorderEnabled = self:GetChecked() and true or false
-                SetPowerBarConfigEnabled(panel, c.showPowerBar ~= false, c.powerBarBorderEnabled == true)
+                ApplyPowerBarConfigState(panel, k, true)
                 QueuePowerBarConfigRefresh(panel, k, true, c.powerBarBorderEnabled == true)
                 PBApply()
             end)
