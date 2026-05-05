@@ -303,7 +303,9 @@ function GF.UpdateCornerIndicators(f, unit)
     for k in pairs(_scanBuf) do _scanBuf[k] = nil end
 
     -- Resolve once: dispel + aggro (shared across slots)
-    local needDispel = (s1 == "dispel" or s2 == "dispel" or s3 == "dispel" or s4 == "dispel" or s5 == "dispel")
+    local nativeDispels = c.nativeBlizzardDispels == true
+    local needDispel = not nativeDispels
+        and (s1 == "dispel" or s2 == "dispel" or s3 == "dispel" or s4 == "dispel" or s5 == "dispel")
     local needAggro  = (s1 == "aggro"  or s2 == "aggro"  or s3 == "aggro"  or s4 == "aggro"  or s5 == "aggro")
 
     local kind = f._msufGFKind or "party"

@@ -1526,6 +1526,9 @@ end
 
 function GF.IsBlizzardAuraTypeEnabled(conf, key)
     if not GF.IsAuraRendererBlizzard(conf) then return false end
+    local auras = conf and conf.auras
+    if not auras or auras.enabled == false then return false end
+    if key == "dispels" and conf and conf.dispelEnabled == false then return false end
     local types = GF.EnsureBlizzardAuraTypes(conf)
     local Native = GetNativeAuraAPI()
     if Native then
@@ -1567,34 +1570,25 @@ function GF.ClearBlizzardAuraContainer(f)
             ClearOneBlizzardAuraContainer(container)
         end
     end
+    f._msufGFNativeAuraContainers = nil
     if f._msufGFNativeAuraRoot then f._msufGFNativeAuraRoot:Hide() end
 end
 
-local function EnsureBlizzardAuraContainer(f, key, parent)
-    if not f or not key then return nil end
-    local containers = f._msufGFNativeAuraContainers
-    if not containers then
-        containers = {}
-        f._msufGFNativeAuraContainers = containers
-    end
-    local container = containers[key]
+local function EnsureBlizzardAuraContainer(f, parent)
+    if not f then return nil end
+    local container = f._msufGFNativeAuras
     if not container then
         container = CreateFrame("Frame", nil, parent or f)
         container:EnableMouse(false)
         if container.SetMouseClickEnabled then container:SetMouseClickEnabled(false) end
-        containers[key] = container
+        f._msufGFNativeAuras = container
     elseif parent and container.GetParent and container:GetParent() ~= parent then
         container:SetParent(parent)
     end
     return container
 end
 
-local function ClearBlizzardAuraContainerKey(f, key)
-    local containers = f and f._msufGFNativeAuraContainers
-    ClearOneBlizzardAuraContainer(containers and containers[key])
-end
-
-function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale)
+function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
     local Native = GetNativeAuraAPI()
     local auras = conf and conf.auras
     if not (Native and f and unit and auras and auras.enabled ~= false and GF.IsAuraRendererBlizzard(conf)) then
@@ -1609,23 +1603,28 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale)
     local types = GF.EnsureBlizzardAuraTypes(conf)
     local buffCfg = auras.buff or {}
     local debCfg = auras.debuff or {}
-    local extCfg = auras.externals or {}
 
-    -- When an icon-type spell indicator is active, fall back to custom buff rendering
-    -- so the dedup logic (f._msufSIDedupIDs) can suppress the duplicate buff icon.
-    local renderBuffs = Native.TypeEnabled(types, "buffs", true) and buffCfg.enabled ~= false and not f._msufSIHasIconPlaced
-    local renderDebuffs = Native.TypeEnabled(types, "debuffs", true) and debCfg.enabled ~= false
+    -- Blizzard rendering is owned by the Renderer dropdown plus the Blizzard
+    -- type checkboxes. The Buff/Debuff/Defensive sections below are custom-only
+    -- controls and must not disable native rendering.
+    local renderBuffs = Native.TypeEnabled(types, "buffs", true)
+    local renderDebuffs = Native.TypeEnabled(types, "debuffs", true)
     local renderDispels = Native.TypeEnabled(types, "dispels", true) and conf.dispelEnabled ~= false
-    local renderExt = Native.TypeEnabled(types, "externals", true) and extCfg.enabled == true
+    local renderExt = Native.TypeEnabled(types, "externals", true)
 
     if not (renderBuffs or renderDebuffs or renderDispels or renderExt) then
         GF.ClearBlizzardAuraContainer(f)
         return nil
     end
 
-    local frameParent = f
-    ClearOneBlizzardAuraContainer(f._msufGFNativeAuras)
-    f._msufGFNativeAuras = nil
+    -- Legacy cleanup: older builds used one native container per category.
+    -- EQoL's performant path uses exactly one Blizzard container per unit frame.
+    if f._msufGFNativeAuraContainers then
+        for _, container in pairs(f._msufGFNativeAuraContainers) do
+            ClearOneBlizzardAuraContainer(container)
+        end
+        f._msufGFNativeAuraContainers = nil
+    end
 
     local kind = f._msufGFKind or "party"
     local groupType = (kind == "party") and 4 or 5
@@ -1633,84 +1632,52 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale)
     local powerUsedHeight = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, unit, f._msufGFPreviewRole, conf))
         or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 0))
     if f._msufGFNativeAuraRoot then f._msufGFNativeAuraRoot:Hide() end
-    local parent = f.statusIconLayer or f.barGroup or frameParent
+    local parent = f.statusIconLayer or f.barGroup or f
+    local container = EnsureBlizzardAuraContainer(f, parent)
+    if not container then return nil end
 
-    local function ApplyCategory(key, gcfg, opts)
-        opts = opts or {}
-        if not opts.enabled then
-            ClearBlizzardAuraContainerKey(f, key)
-            return false
-        end
-        gcfg = gcfg or {}
-        local iconSize = ScaleFrameValue(opts.rawSize or gcfg.size or auras.blizzardIconSize or 20,
-            (scale or 1) * (frameScale or 1), 8)
-        local container = EnsureBlizzardAuraContainer(f, key, parent)
-        local containerAnchor, containerOffsetX, containerOffsetY
-        if opts.frameOverlay then
-            containerAnchor, containerOffsetX, containerOffsetY = nil, 0, 0
-        else
-            containerAnchor = opts.containerAnchor or gcfg.anchor or "CENTER"
-            containerOffsetX = ScaleFrameValue(gcfg.x or 0, frameScale or 1)
-            containerOffsetY = ScaleFrameValue(gcfg.y or 0, frameScale or 1)
-        end
-        return Native.Apply(container, unit, {
-            maxBuffs = opts.maxBuffs or 0,
-            maxDebuffs = opts.maxDebuffs or 0,
-            maxDispelDebuffs = opts.maxDispels or 0,
-            iconSize = iconSize,
-            bigDefensiveSize = opts.bigDefensiveSize and ScaleFrameValue(opts.bigDefensiveSize,
-                (scale or 1) * (frameScale or 1), 8) or iconSize,
-            showBigDefensive = opts.showBigDefensive == true,
-            showDispelOverlay = opts.showDispelOverlay == true,
-            organizationType = "default",
-            dispelMode = auras.blizzardDispelMode or "allDispellable",
-            showCountdownFrame = true,
-            showCountdownNumbers = auras.blizzardShowCooldownText ~= false,
-            groupType = groupType,
-            displayLargerRoleSpecificDebuffs = opts.displayLargerRoleSpecificDebuffs == true,
-            powerBarUsedHeight = tonumber(powerUsedHeight) or 0,
-            frameLevelOffset = tonumber(gcfg.layer) or opts.frameLevelOffset or 8,
-            containerAnchor = containerAnchor,
-            containerOffsetX = containerOffsetX,
-            containerOffsetY = containerOffsetY,
-        }, parent, levelParent)
+    local iconSize = GF.GetBlizzardAuraIconSize(conf, scale, frameScale)
+    local bigDefensiveSize = iconSize
+    local cfg = {
+        maxBuffs = renderBuffs and (tonumber(buffCfg.max) or 6) or 0,
+        maxDebuffs = renderDebuffs and (tonumber(debCfg.max) or 6) or 0,
+        maxDispelDebuffs = renderDispels and 3 or 0,
+        iconSize = iconSize,
+        bigDefensiveSize = bigDefensiveSize,
+        showBigDefensive = renderExt,
+        showDispelOverlay = renderDispels,
+        organizationType = auras.blizzardOrganizationType or auras.blizzardOrganization or "default",
+        dispelMode = auras.blizzardDispelMode or "allDispellable",
+        showCountdownFrame = true,
+        showCountdownNumbers = auras.blizzardShowCooldownText ~= false,
+        groupType = groupType,
+        displayLargerRoleSpecificDebuffs = true,
+        powerBarUsedHeight = tonumber(powerUsedHeight) or 0,
+        frameLevelOffset = 8,
+    }
+
+    local effectiveUnit = Native.ResolveUnitToken and Native.ResolveUnitToken(unit) or unit
+    local desiredSig = Native.Signature and Native.Signature(effectiveUnit, cfg)
+    local ready = container._msufNativeAuraAnchorID
+        and container._msufNativeAuraUnit == effectiveUnit
+        and (not desiredSig or container._msufNativeAuraSignature == desiredSig)
+    if ready then
+        container:Show()
+        return {
+            buffs = renderBuffs,
+            debuffs = renderDebuffs,
+            dispels = renderDispels,
+            externals = renderExt,
+        }
     end
 
-    local appliedBuffs = ApplyCategory("buff", buffCfg, {
-        enabled = renderBuffs,
-        maxBuffs = tonumber(buffCfg.max) or 0,
-        rawSize = buffCfg.size,
-        frameLevelOffset = 5,
-    })
-    local appliedDebuffs = ApplyCategory("debuff", debCfg, {
-        enabled = renderDebuffs,
-        maxDebuffs = renderDebuffs and (tonumber(debCfg.max) or 0) or 0,
-        rawSize = debCfg.size,
-        displayLargerRoleSpecificDebuffs = true,
-        frameLevelOffset = 6,
-    })
-    local appliedDispels = ApplyCategory("dispel", debCfg, {
-        enabled = renderDispels,
-        maxDispels = 3,
-        rawSize = debCfg.size,
-        showDispelOverlay = true,
-        displayLargerRoleSpecificDebuffs = true,
-        frameOverlay = true,
-        frameLevelOffset = 6,
-    })
-    local appliedExt = ApplyCategory("externals", extCfg, {
-        enabled = renderExt,
-        rawSize = extCfg.size,
-        bigDefensiveSize = extCfg.size,
-        showBigDefensive = true,
-        frameLevelOffset = 7,
-    })
+    local applied = Native.Apply(container, unit, cfg, parent, levelParent)
 
     return {
-        buffs = appliedBuffs and renderBuffs,
-        debuffs = appliedDebuffs and renderDebuffs,
-        dispels = appliedDispels and renderDispels,
-        externals = appliedExt and renderExt,
+        buffs = applied and renderBuffs,
+        debuffs = applied and renderDebuffs,
+        dispels = applied and renderDispels,
+        externals = applied and renderExt,
     }
 end
 
@@ -2055,7 +2022,7 @@ end
 ------------------------------------------------------------------------
 -- Main entry: UpdateFrameAuras (orchestrator for 3 groups)
 ------------------------------------------------------------------------
-function GF.UpdateFrameAuras(f, unit)
+function GF.UpdateFrameAuras(f, unit, updateInfo)
     if not f or not unit then return end
 
     local kind = f._msufGFKind or "party"
@@ -2087,18 +2054,41 @@ function GF.UpdateFrameAuras(f, unit)
         f._msufGFDispelColorRev = nil
         return
     end
-    if not _apisBound then BindAPIs() end
-    if not _getSlots or not _getBySlot then return end
-
     local parent = f.statusIconLayer or f.barGroup or f
     local scale = GetDynamicScale(conf)
     local frameScale = GetFrameScale(kind, conf)
     local anyShown = false
-    local nativeFlags = GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale)
+    local nativeFlags = GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
     local nativeBuffs = nativeFlags and nativeFlags.buffs
     local nativeDebuffs = nativeFlags and nativeFlags.debuffs
     local nativeDispels = nativeFlags and nativeFlags.dispels
     local nativeExt = nativeFlags and nativeFlags.externals
+
+    local c = f._c
+    if nativeFlags and c and c.nativeBlizzardAuraOnly then
+        if not f._msufGFExtHidden then
+            HidePool(f[POOL_KEYS.externals], 1)
+            f._msufGFExtHidden = true
+        end
+        if not f._msufGFDebHidden then
+            HidePool(f[POOL_KEYS.debuff], 1)
+            f._msufGFDebHidden = true
+        end
+        if not f._msufGFBufHidden then
+            HidePool(f[POOL_KEYS.buff], 1)
+            f._msufGFBufHidden = true
+        end
+        f._msufGFMergedDispel = nil
+        f._msufGFDispelAuraID = nil
+        f._msufGFDispelColorObj = nil
+        f._msufGFDispelColorRev = nil
+        local disp = f._msufDisplayedAuraIDs
+        if disp then for k in pairs(disp) do disp[k] = nil end end
+        return
+    end
+
+    if not _apisBound then BindAPIs() end
+    if not _getSlots or not _getBySlot then return end
 
     -- 1) Externals
     local extCfg = auras.externals
@@ -2245,6 +2235,7 @@ local function _DoAuraOptionsRefresh()
     if GF.ForEachFrame then
         GF.ForEachFrame(function(f)
             if f and GF.BuildFrameCache then GF.BuildFrameCache(f) end
+            if f and f.unit and GF.RegisterUnitEvents then GF.RegisterUnitEvents(f, f.unit) end
             if f and f.unit and UnitExists(f.unit) then
                 GF.UpdateFrameAuras(f, f.unit)
             elseif f then
@@ -2254,6 +2245,7 @@ local function _DoAuraOptionsRefresh()
     elseif GF.frames then
         for f in pairs(GF.frames) do
             if f and GF.BuildFrameCache then GF.BuildFrameCache(f) end
+            if f and f.unit and GF.RegisterUnitEvents then GF.RegisterUnitEvents(f, f.unit) end
             if f and f.unit and UnitExists(f.unit) then
                 GF.UpdateFrameAuras(f, f.unit)
             elseif f then

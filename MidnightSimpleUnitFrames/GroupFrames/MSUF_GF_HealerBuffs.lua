@@ -592,6 +592,27 @@ function HB.UpdateFrame(f, unit)
     end
 end
 
+function HB.HideFrame(f)
+    local pool = f and f._msufGFHBIcons
+    if not pool then return end
+    for i = 1, #pool do
+        local icon = pool[i]
+        if icon and icon:IsShown() then icon:Hide() end
+    end
+end
+
+local function FrameWantsHealerBuffs(f, kind, conf)
+    if not f or f._msufGFPreviewActive then return false end
+    local c = f._c
+    if c and c.healerBuffsEn ~= nil then
+        return c.healerBuffsEn == true
+    end
+    conf = conf or (GF.GetConf and GF.GetConf(kind or f._msufGFKind or "party"))
+    if not (conf and conf.healerBuffs and conf.healerBuffs.enabled == true) then return false end
+    local si = conf.spellIndicators
+    return not (si and si.enabled)
+end
+
 ------------------------------------------------------------------------
 -- Hook into UNIT_AURA coalescing (from Effects.lua)
 ------------------------------------------------------------------------
@@ -601,12 +622,11 @@ do
         GF._UpdateDispel = function(f, unit)
             origUpdateDispel(f, unit)
             if f._msufIsGroupFrame and unit and UnitExists(unit) and not f._msufGFPreviewActive then
-                -- Skip HB if SpellIndicators is enabled (SI replaces HB)
                 local kind = f._msufGFKind or "party"
-                local conf = GF.GetConf(kind)
-                local si = conf and conf.spellIndicators
-                if not (si and si.enabled) then
+                if FrameWantsHealerBuffs(f, kind) then
                     HB.UpdateFrame(f, unit)
+                else
+                    HB.HideFrame(f)
                 end
             end
         end
@@ -623,10 +643,10 @@ do
             origUpdateButton(f, unit)
             if f._msufIsGroupFrame and unit and UnitExists(unit) and not f._msufGFPreviewActive then
                 local kind = f._msufGFKind or "party"
-                local conf = GF.GetConf(kind)
-                local si = conf and conf.spellIndicators
-                if not (si and si.enabled) then
+                if FrameWantsHealerBuffs(f, kind) then
                     HB.UpdateFrame(f, unit)
+                else
+                    HB.HideFrame(f)
                 end
             end
         end
@@ -646,9 +666,10 @@ do
         GF.ForEachFrame(function(f, kind)
             if f.unit and UnitExists(f.unit) then
                 local conf = GF.GetConf(kind)
-                local si = conf and conf.spellIndicators
-                if not (si and si.enabled) then
+                if FrameWantsHealerBuffs(f, kind, conf) then
                     HB.UpdateFrame(f, f.unit)
+                else
+                    HB.HideFrame(f)
                 end
             end
         end)
@@ -684,6 +705,7 @@ end
 -- Global exports
 ------------------------------------------------------------------------
 _G.MSUF_GF_HB_UpdateFrame = HB.UpdateFrame
+_G.MSUF_GF_HB_HideFrame   = HB.HideFrame
 _G.MSUF_GF_HB_EnsureConf  = HB.EnsureConf
 _G.MSUF_GF_HB_GetSlots    = HB.GetCompiledSlots
 _G.MSUF_GF_HB_FAMILY_DATA = FAMILY_DATA
