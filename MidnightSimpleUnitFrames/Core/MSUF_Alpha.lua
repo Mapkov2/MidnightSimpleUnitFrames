@@ -161,6 +161,11 @@ end
 
 local function _SetBarTexAlpha(sb, a)
     if not sb then return end
+    sb._msufAlphaTextureMul = a
+    local overlayAlpha = sb._msufOverlayTextureAlpha
+    if type(overlayAlpha) == "number" then
+        a = a * overlayAlpha
+    end
     local t = sb.GetStatusBarTexture and sb:GetStatusBarTexture()
     if t then t:SetAlpha(a) end
 end

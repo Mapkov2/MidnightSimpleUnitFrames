@@ -1887,8 +1887,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         -- Absorb controls: scope-aware, refresh for ALL scopes
         if _C.absorbDisplayDrop and _C.absorbDisplayDrop.Refresh then _C.absorbDisplayDrop:Refresh() end
         if _C.absorbAnchorDrop and _C.absorbAnchorDrop.Refresh then _C.absorbAnchorDrop:Refresh() end
-        if _C.absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(_C.absorbOpacitySlider, v) end
-        if _C.healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 1)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(_C.healAbsorbOpacitySlider, v) end
+        if _C.absorbOpacitySlider then local v = tonumber(ScopeGet("absorbBarOpacity", 0.6)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(_C.absorbOpacitySlider, v) end
+        if _C.healAbsorbOpacitySlider then local v = tonumber(ScopeGet("healAbsorbBarOpacity", 0.7)); if v < 0 then v = 0 elseif v > 1 then v = 1 end; MSUF_SetLabeledSliderValue(_C.healAbsorbOpacitySlider, v) end
         if absorbTexTestCB then absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false) end
         if MSUF_RefreshAbsorbBarUIEnabled then MSUF_RefreshAbsorbBarUIEnabled() end
 

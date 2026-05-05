@@ -612,12 +612,26 @@ function ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
     bar:SetStatusBarColor(pr, pg, pb)
     ns.Bars.ApplyPowerGradientOnce(frame)
  end
+local function MSUF_ApplyOverlayTextureAlpha(bar, alpha)
+    if not bar then return end
+    if type(alpha) == "number" then
+        if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+        bar._msufOverlayTextureAlpha = alpha
+    else
+        alpha = bar._msufOverlayTextureAlpha
+    end
+    if type(alpha) ~= "number" then return end
+    local mul = tonumber(bar._msufAlphaTextureMul) or 1
+    local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+    if tex and tex.SetAlpha then tex:SetAlpha(alpha * mul) end
+end
 function ns.Bars.SetOverlayBarTexture(bar, texGetter)
     if not bar or not bar.SetStatusBarTexture or not texGetter then  return end
     local tex = texGetter()
     if tex then
         bar:SetStatusBarTexture(tex)
         bar.MSUF_cachedStatusbarTexture = tex
+        MSUF_ApplyOverlayTextureAlpha(bar)
     end
  end
 -- Patch Q2: Bars spec-driven Apply (Health/Power/Absorb/HealAbsorb + Reset/Hide)
@@ -937,21 +951,28 @@ local function MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a)
     if bar.MSUF_overlayR == r and bar.MSUF_overlayG == g and bar.MSUF_overlayB == b and bar.MSUF_overlayA == a then
          return
     end
-    MSUF_SetStatusBarColor(bar, r, g, b, a)
+    MSUF_SetStatusBarColor(bar, r, g, b, 1)
+    MSUF_ApplyOverlayTextureAlpha(bar, a)
     bar.MSUF_overlayR, bar.MSUF_overlayG, bar.MSUF_overlayB, bar.MSUF_overlayA = r, g, b, a
  end
 local function MSUF_ApplyAbsorbOverlayColor(bar, unit)
     local r, g, b, a = MSUF_GetAbsorbOverlayColor()
     local resolve = ns.Bars._ResolveAbsorbOpacity
-    local op = resolve and resolve(unit) or 1
-    a = a * op
+    local op = resolve and resolve(unit) or nil
+    if type(op) == "number" then
+        if op < 0 then op = 0 elseif op > 1 then op = 1 end
+        a = op
+    end
     MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a)
  end
 local function MSUF_ApplyHealAbsorbOverlayColor(bar, unit)
     local r, g, b, a = MSUF_GetHealAbsorbOverlayColor()
     local resolve = ns.Bars._ResolveHealAbsorbOpacity
-    local op = resolve and resolve(unit) or 1
-    a = a * op
+    local op = resolve and resolve(unit) or nil
+    if type(op) == "number" then
+        if op < 0 then op = 0 elseif op > 1 then op = 1 end
+        a = op
+    end
     MSUF_ApplyOverlayBarColorCached(bar, r, g, b, a)
  end
 ns.Bars._ApplyAbsorbOverlayColor = MSUF_ApplyAbsorbOverlayColor
@@ -4640,6 +4661,7 @@ local function _ApplyTexCached(sb, tex)
     if sb.MSUF_cachedStatusbarTexture ~= tex then
         sb:SetStatusBarTexture(tex)
         sb.MSUF_cachedStatusbarTexture = tex
+        MSUF_ApplyOverlayTextureAlpha(sb)
     end
 end
 local function _Iter_ApplyAllBarTex(f)
