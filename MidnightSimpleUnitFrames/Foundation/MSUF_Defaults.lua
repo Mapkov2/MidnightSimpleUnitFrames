@@ -185,6 +185,19 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.fontKey = "FRIZQT"
     end
  end
+local function MSUF_Defaults_CreateFactoryProfile()
+    local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
+    if not tbl then  return nil end
+    local payload = MSUF_Defaults_GetProfilePayload(tbl)
+    if type(payload) ~= "table" then  return nil end
+
+    local out = {}
+    MSUF_Defaults_DeepCopy(out, payload)
+    MSUF_Defaults_ApplyFreshInstallOverrides(out)
+    out.general = out.general or {}
+    out.general._msufFactoryProfileApplied = true
+    return out
+end
 local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     if not MSUF_DB then  return end
     local g = (type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
@@ -195,15 +208,10 @@ local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     -- (Existing installs always already have keys before EnsureDB_Heavy runs.)
     local isEmpty = (next(MSUF_DB) == nil)
     if not isEmpty then return end
-    local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
-    if not tbl then  return end
-    local payload = MSUF_Defaults_GetProfilePayload(tbl)
+    local payload = MSUF_Defaults_CreateFactoryProfile()
     if type(payload) ~= "table" then  return end
     -- Replace the empty DB with the decoded payload.
     MSUF_Defaults_DeepCopy(MSUF_DB, payload)
-    MSUF_Defaults_ApplyFreshInstallOverrides(MSUF_DB)
-    MSUF_DB.general = MSUF_DB.general or {}
-    MSUF_DB.general._msufFactoryProfileApplied = true
  end
 local MSUF_DB_LastHeavyRun
 local MSUF_DEFAULTS_FONT_KEY_ALIASES = {
@@ -1825,5 +1833,7 @@ function EnsureDB()
     MSUF_EnsureDB_Heavy()
  end
 -- Optional exports for other modules
+ns.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile
 ns.MSUF_EnsureDB_Heavy = MSUF_EnsureDB_Heavy
 ns.EnsureDB = EnsureDB
+_G.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile

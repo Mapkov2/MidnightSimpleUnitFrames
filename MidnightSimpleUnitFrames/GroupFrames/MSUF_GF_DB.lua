@@ -964,6 +964,22 @@ local function ResetConfToDefaults(conf, defaults)
     end
 end
 
+local function GetFactoryGroupFrameDefaults()
+    local createProfile = (type(ns) == "table" and ns.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
+    if type(createProfile) ~= "function" then return nil end
+
+    local profile = createProfile()
+    if type(profile) ~= "table" then return nil end
+
+    local party = type(profile.gf_party) == "table" and profile.gf_party or nil
+    local raid = type(profile.gf_raid) == "table" and profile.gf_raid or nil
+    local mythicraid = type(profile.gf_mythicraid) == "table" and profile.gf_mythicraid or nil
+    if party and raid and mythicraid then
+        return party, raid, mythicraid
+    end
+    return nil
+end
+
 function GF.ResetAllToDefaults()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then return false end
@@ -972,9 +988,10 @@ function GF.ResetAllToDefaults()
     db.gf_raid  = db.gf_raid or {}
     db.gf_mythicraid = db.gf_mythicraid or {}
 
-    ResetConfToDefaults(db.gf_party, PARTY_DEFAULTS)
-    ResetConfToDefaults(db.gf_raid, RAID_DEFAULTS)
-    ResetConfToDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
+    local partyDefaults, raidDefaults, mythicRaidDefaults = GetFactoryGroupFrameDefaults()
+    ResetConfToDefaults(db.gf_party, partyDefaults or PARTY_DEFAULTS)
+    ResetConfToDefaults(db.gf_raid, raidDefaults or RAID_DEFAULTS)
+    ResetConfToDefaults(db.gf_mythicraid, mythicRaidDefaults or MYTHIC_RAID_DEFAULTS)
 
     GF.EnsureDB()
 
