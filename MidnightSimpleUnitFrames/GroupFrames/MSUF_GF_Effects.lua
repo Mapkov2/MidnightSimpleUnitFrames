@@ -1527,6 +1527,10 @@ function GF.BuildFrameCache(f)
     c.nativeBlizzardPrivate = GF.IsBlizzardAuraTypeEnabled
         and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras") == true
         and pa and pa.enabled ~= false
+    if pa and pa.enabled ~= false and not c.nativeBlizzardPrivate then
+        c.nativeBlizzardDebuffs = false
+        c.nativeBlizzardDispels = false
+    end
 
     -- Dispel overlay (color wash on health bar)
     c.doEn    = conf.dispelOverlayEnabled == true and not c.nativeBlizzardDispels
@@ -4440,6 +4444,7 @@ _G.MSUF_GF_OnFrameRetire = function(f)
     -- Cancel + clear pending ready-check fade timer (closure captures `f`)
     if GF.CancelReadyCheckTimer then GF.CancelReadyCheckTimer(f) end
     if GF.HideFrameAuras then GF.HideFrameAuras(f) end
+    if GF.RecycleFramePools then GF.RecycleFramePools(f) end
     if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(f) end
 
     -- Clear target / focus pointers if pointing at this frame
@@ -4456,6 +4461,8 @@ _G.MSUF_GF_OnFrameRetire = function(f)
     _gfTextDirtyFrames[f] = nil
     _gfTextQueued[f] = nil
     f._msufGFStatusDirty = nil
+    f._msufGFAuraDirty = nil
+    f._msufGFFullPending = nil
     _gfAuraDirtyQueued[f] = nil
 
     -- Remove from GUID→frame map (search by value — guid hash unknown here)

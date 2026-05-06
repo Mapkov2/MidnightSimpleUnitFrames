@@ -668,10 +668,20 @@ API._Render.ClearNativeAuras = function(entry)
 
     local container = entry.native
     if container then
-        container:Hide()
-        container._msufNativeAuraAnchorID = nil
-        container._msufNativeAuraSignature = nil
-        container._msufNativeAuraUnit = nil
+        local Native = ns and ns.MSUF_AuraNative
+        if Native and type(Native.Clear) == "function" then
+            Native.Clear(container)
+        else
+            local id = container._msufNativeAuraAnchorID
+            local removeFn = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
+            if id and type(removeFn) == "function" then
+                pcall(removeFn, id)
+            end
+            container:Hide()
+            container._msufNativeAuraAnchorID = nil
+            container._msufNativeAuraSignature = nil
+            container._msufNativeAuraUnit = nil
+        end
     end
     entry.native = nil
 
@@ -679,10 +689,20 @@ API._Render.ClearNativeAuras = function(entry)
     if containers then
         for key, native in pairs(containers) do
             if native then
-                native:Hide()
-                native._msufNativeAuraAnchorID = nil
-                native._msufNativeAuraSignature = nil
-                native._msufNativeAuraUnit = nil
+                local Native = ns and ns.MSUF_AuraNative
+                if Native and type(Native.Clear) == "function" then
+                    Native.Clear(native)
+                else
+                    local id = native._msufNativeAuraAnchorID
+                    local removeFn = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
+                    if id and type(removeFn) == "function" then
+                        pcall(removeFn, id)
+                    end
+                    native:Hide()
+                    native._msufNativeAuraAnchorID = nil
+                    native._msufNativeAuraSignature = nil
+                    native._msufNativeAuraUnit = nil
+                end
             end
             containers[key] = nil
         end

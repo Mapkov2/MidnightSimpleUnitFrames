@@ -193,6 +193,7 @@ function Native.Signature(unit, cfg)
         tostring(showDebuffs),
         tostring(showDispels),
         tostring(showBigDefensive),
+        tostring(cfg.privateAuras ~= false),
         tostring(cfg.maxBuffs or 0),
         tostring(cfg.maxDebuffs or 0),
         tostring(cfg.maxDispelDebuffs or 0),

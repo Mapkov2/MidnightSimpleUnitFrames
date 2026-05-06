@@ -113,6 +113,15 @@ local function _PushVisualUpdates_Flush()
     elseif _G.MSUF_RefreshAllFrames then
         _G.MSUF_RefreshAllFrames()
     end
+    -- Group Frames have their own render/dirty pipeline; refresh it explicitly
+    -- so shared bar-color swatches (absorb/heal-absorb, borders, etc.) live-apply.
+    do
+        local gf = ns and ns.GF
+        local refreshGFColors = (gf and gf.RefreshColors) or _G.MSUF_GF_RefreshColors
+        if type(refreshGFColors) == "function" then
+            refreshGFColors()
+        end
+    end
 
     -- Sync highlight priority stripe colors when border colors change.
     local reinit = _G.MSUF_PrioRows_Reinit
