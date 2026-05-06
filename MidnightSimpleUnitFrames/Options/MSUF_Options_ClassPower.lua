@@ -167,19 +167,20 @@ local function MakeRow(name, labelText, parent, minV, maxV, step, dbKey, anchor,
 
     local eb = CreateFrame("EditBox", name .. "EB", parent, "InputBoxTemplate")
     eb:SetSize(52, 22); eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
-    eb:SetPoint("LEFT", s, "RIGHT", 6, 0)
     eb:SetFontObject(GameFontNormal); eb:SetTextColor(1, 1, 1, 1)
     row.editBox = eb
 
     local minus = CreateFrame("Button", name .. "Minus", parent)
-    minus:SetPoint("LEFT", eb, "RIGHT", 4, 0)
+    minus:SetPoint("LEFT", s, "RIGHT", 6, 0)
     if UI.StyleSmallButton then UI.StyleSmallButton(minus, false) end
-    minus:SetSize(24, 22)
+    minus:SetSize(20, 22)
+
+    eb:SetPoint("LEFT", minus, "RIGHT", 2, 0)
 
     local plus = CreateFrame("Button", name .. "Plus", parent)
-    plus:SetPoint("LEFT", minus, "RIGHT", 3, 0)
+    plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
     if UI.StyleSmallButton then UI.StyleSmallButton(plus, true) end
-    plus:SetSize(24, 22)
+    plus:SetSize(20, 22)
 
     local function Clamp(v) v = tonumber(v); if not v then return nil end; v = floor(v + 0.5); if v < minV then v = minV elseif v > maxV then v = maxV end; return v end
 

@@ -161,25 +161,11 @@ end
 local function StyleSmallButton(button, isPlus)
     if not button or button._msufStyled then return end
     button._msufStyled = true
-    button:SetSize(20, 20)
-    local normal = button:CreateTexture(nil, "BACKGROUND")
-    normal:SetAllPoints(); normal:SetTexture(TEX_W8); normal:SetVertexColor(0, 0, 0, 0.9)
-    button:SetNormalTexture(normal)
-    local pushed = button:CreateTexture(nil, "BACKGROUND")
-    pushed:SetAllPoints(); pushed:SetTexture(TEX_W8); pushed:SetVertexColor(0.7, 0.55, 0.15, 0.95)
-    button:SetPushedTexture(pushed)
-    local hl = button:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(); hl:SetTexture(TEX_W8); hl:SetVertexColor(1, 0.9, 0.4, 0.25)
-    button:SetHighlightTexture(hl)
-    local border = CreateFrame("Frame", nil, button, "BackdropTemplate")
-    border:SetAllPoints()
-    border:SetBackdrop({ edgeFile = TEX_W8, edgeSize = 1 })
-    border:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-    local fs = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("CENTER")
-    fs:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-    fs:SetTextColor(1, 0.9, 0.4)
-    fs:SetText(isPlus and "+" or "-")
+    button:SetSize(18, 18)
+    local fs = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    fs:SetText(isPlus and "+" or "\226\128\147")
+    fs:SetAllPoints()
+    if button.SetFontString then button:SetFontString(fs) end
     button.text = fs
 end
 
@@ -413,10 +399,12 @@ function UI.Slider(spec)
     local compactInput = compact and spec.compactInput
     local compactInputWidth = spec.compactInputWidth or 46
     local compactInputGap = spec.compactInputGap or 8
+    local compactButtonWidth = spec.compactInputButtonWidth or 18
+    local compactButtonGap = spec.compactInputButtonGap or 2
     local sliderWidth = spec.width or 270
     local trackWidth = sliderWidth
     if compactInput then
-        trackWidth = sliderWidth - compactInputWidth - compactInputGap
+        trackWidth = sliderWidth - compactInputWidth - compactInputGap - (compactButtonWidth * 2) - (compactButtonGap * 2)
         if trackWidth < 80 then trackWidth = 80 end
     end
     local sl = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
@@ -441,7 +429,19 @@ function UI.Slider(spec)
         eb:SetSize(compactInput and compactInputWidth or 60, 18)
         eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
         if compactInput then
-            eb:SetPoint("LEFT", sl, "RIGHT", compactInputGap, 0)
+            minus = CreateFrame("Button", name and (name .. "Minus"), parent)
+            minus:SetPoint("LEFT", sl, "RIGHT", compactInputGap, 0)
+            StyleSmallButton(minus, false)
+            minus:SetSize(compactButtonWidth, 18)
+            sl.minusButton = minus
+
+            eb:SetPoint("LEFT", minus, "RIGHT", compactButtonGap, 0)
+
+            plus = CreateFrame("Button", name and (name .. "Plus"), parent)
+            plus:SetPoint("LEFT", eb, "RIGHT", compactButtonGap, 0)
+            StyleSmallButton(plus, true)
+            plus:SetSize(compactButtonWidth, 18)
+            sl.plusButton = plus
         else
             eb:SetPoint("TOP", sl, "BOTTOM", 0, -6)
         end

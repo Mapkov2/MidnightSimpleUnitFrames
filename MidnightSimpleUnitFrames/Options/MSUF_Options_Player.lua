@@ -1068,6 +1068,14 @@ end
 
 local function EnhanceSliderTrack(slider)
     if not slider or slider._msufTrackEnhanced then return end
+    local styleSlider = (ns and ns.UI and ns.UI.StyleSlider) or (ns and ns.MSUF_StyleSlider) or _G.MSUF_StyleSlider
+    if type(styleSlider) == "function" then
+        styleSlider(slider)
+        slider._msufTrackRail = slider._msufTrackRail or slider._msufTrack
+        slider._msufTrackLine = slider._msufTrackLine or slider._msufFill
+        slider._msufTrackEnhanced = true
+        return
+    end
     slider._msufTrackEnhanced = true
     local rail = slider:CreateTexture(nil, "BACKGROUND")
     rail:SetPoint("LEFT", slider, "LEFT", 2, 0); rail:SetPoint("RIGHT", slider, "RIGHT", -2, 0)
@@ -1212,6 +1220,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local pbhText = _G["MSUF_UF_PowerBarHeightSliderText"]; if pbhText then pbhText:SetText("Height") end
         local pbhLow = _G["MSUF_UF_PowerBarHeightSliderLow"]; if pbhLow then pbhLow:SetText("1") end
         local pbhHigh = _G["MSUF_UF_PowerBarHeightSliderHigh"]; if pbhHigh then pbhHigh:SetText("20") end
+        EnhanceSliderTrack(pbHeightSlider)
         panel.playerPowerBarHeightSlider = pbHeightSlider
 
         local pbEmbedCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarEmbedCB", "Embed into health bar", 12, -80)
@@ -1227,6 +1236,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local pbbText = _G["MSUF_UF_PowerBarBorderSliderText"]; if pbbText then pbbText:SetText("Border thickness") end
         local pbbLow = _G["MSUF_UF_PowerBarBorderSliderLow"]; if pbbLow then pbbLow:SetText("0") end
         local pbbHigh = _G["MSUF_UF_PowerBarBorderSliderHigh"]; if pbbHigh then pbbHigh:SetText("6") end
+        EnhanceSliderTrack(pbBorderSlider)
         panel.playerPowerBarBorderSlider = pbBorderSlider
 
         local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -80)
