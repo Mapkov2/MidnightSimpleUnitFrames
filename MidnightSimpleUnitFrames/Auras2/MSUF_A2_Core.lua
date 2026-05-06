@@ -995,6 +995,12 @@ Store.InvalidateUnit = function(unit)
     Store._epochs[unit] = nil
 end
 
+Store.FullScanUnit = function(unit)
+    if unit then
+        Cache.FullScan(unit)
+    end
+end
+
 if not Store.GetEpoch then Store.GetEpoch = function(unit) return Cache.GetEpoch(unit) end end
 if not Store.GetEpochSig then Store.GetEpochSig = function(unit) return Cache.GetEpoch(unit) end end
 

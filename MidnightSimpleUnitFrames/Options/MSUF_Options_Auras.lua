@@ -1903,8 +1903,6 @@ do
                 u.filters = nil -- revert to Shared
                 u.overrideSharedLayout = false
                 u.layoutShared = nil -- revert to Shared
-                u.overrideNativeAuras = false
-                u.nativeAuras = nil -- revert to Shared
             end
         end
         A2_RequestApply()

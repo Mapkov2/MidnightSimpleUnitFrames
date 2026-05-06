@@ -605,9 +605,6 @@ function EM.ShowMovers(entry)
     if entry.editMoverPrivate and u == "player" then
         entry.editMoverPrivate:Show()
     end
-    if entry.editMoverReminder and entry._msufA2NativeBuffs then
-        entry.editMoverReminder:Hide()
-    end
 end
 
 function EM.HideMovers(entry)
@@ -936,9 +933,6 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
 
     local showTest = (shared.showInEditMode == true and isEditActive == true)
     cfg = cfg or {}
-    local nativeBuffs = cfg.nativeBuffs == true
-    local nativeDebuffs = cfg.nativeDebuffs == true
-    local nativePrivate = cfg.nativePrivate == true
     local showPrivatePreview = (shared.privateAurasEnabled == true and shared.showPrivateAurasPlayer == true)
 
     if showTest then
@@ -969,8 +963,8 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
     local isPlayer = (unit == "player")
 
     if Icons.RenderPreviewIcons and not isPlayer then
-        local buffCap = nativeBuffs and 0 or (cfg.maxBuffs or 0)
-        local debuffCap = nativeDebuffs and 0 or (cfg.maxDebuffs or 0)
+        local buffCap = cfg.maxBuffs or 0
+        local debuffCap = cfg.maxDebuffs or 0
         local bc, dc = 0, 0
         if buffCap > 0 or debuffCap > 0 then
             bc, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, buffCap, debuffCap, cfg.stackCountAnchor)
@@ -978,24 +972,16 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
             ClearPreviewIconsInContainer(entry.buffs)
             ClearPreviewIconsInContainer(entry.debuffs)
         end
-        if nativeBuffs then
-            ClearPreviewIconsInContainer(entry.buffs)
-        elseif Icons.LayoutIcons then
+        if Icons.LayoutIcons then
             Icons.LayoutIcons(entry.buffs, bc or 0, cfg.buffIconSize, cfg.spacing, cfg.perRow, cfg.buffGrowth, cfg.buffRowWrap)
         end
-        if nativeDebuffs then
-            ClearPreviewIconsInContainer(entry.debuffs)
-        elseif Icons.LayoutIcons then
+        if Icons.LayoutIcons then
             Icons.LayoutIcons(entry.debuffs, dc or 0, cfg.debuffIconSize, cfg.spacing, cfg.perRow, cfg.debuffGrowth, cfg.debuffRowWrap)
         end
     elseif Icons.RenderPreviewIcons and isPlayer then
-        if nativeDebuffs then
-            ClearPreviewIconsInContainer(entry.debuffs)
-        else
-            local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, 0, cfg.maxDebuffs, cfg.stackCountAnchor)
-            if Icons.LayoutIcons then
-                Icons.LayoutIcons(entry.debuffs, dc or 0, cfg.debuffIconSize, cfg.spacing, cfg.perRow, cfg.debuffGrowth, cfg.debuffRowWrap)
-            end
+        local _, dc = Icons.RenderPreviewIcons(entry, unit, shared, false, 0, cfg.maxDebuffs, cfg.stackCountAnchor)
+        if Icons.LayoutIcons then
+            Icons.LayoutIcons(entry.debuffs, dc or 0, cfg.debuffIconSize, cfg.spacing, cfg.perRow, cfg.debuffGrowth, cfg.debuffRowWrap)
         end
     end
 
@@ -1010,8 +996,7 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
         return showTest, false
     end
 
-    local anyCustomPreview = ((not nativeBuffs) and (cfg.maxBuffs or 0) > 0)
-        or ((not nativeDebuffs) and (cfg.maxDebuffs or 0) > 0)
+    local anyCustomPreview = ((cfg.maxBuffs or 0) > 0) or ((cfg.maxDebuffs or 0) > 0)
     return showTest, anyCustomPreview
 end
 

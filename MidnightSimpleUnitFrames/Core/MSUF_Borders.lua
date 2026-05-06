@@ -7,6 +7,7 @@ local F = ns.Cache and ns.Cache.F or {}
 F.CreateFrame = F.CreateFrame or CreateFrame
 local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
+local issecretvalue = _G.issecretvalue
 
 -- From main file (exported to _G)
 local MSUF_ForEachUnitFrame = _G.MSUF_ForEachUnitFrame
@@ -184,6 +185,11 @@ local function _GetUFDispelColor(dispelName, unit, auraID)
     end
 
     -- Non-curve fallbacks: dispel name lookup from DB and Blizzard color globals.
+    -- Midnight/Beta can return dispelName as a secret string; string comparisons
+    -- on that value taint/error, so fall back to the generic dispel color.
+    if issecretvalue and issecretvalue(dispelName) then
+        dispelName = nil
+    end
     if dispelName == "DISPELLABLE" then dispelName = nil end
     if type(dispelName) == "string" then
         local r = g and g["dispelType" .. dispelName .. "R"]
@@ -771,7 +777,8 @@ do
                 if aura then
                     aid = aura.auraInstanceID or aid
                     local dn = aura.dispelName
-                    if type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
+                    local dnIsSecret = issecretvalue and issecretvalue(dn)
+                    if not dnIsSecret and type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
                         dispelType = dn
                     end
                 end
