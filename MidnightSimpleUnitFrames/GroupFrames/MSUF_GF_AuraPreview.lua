@@ -207,6 +207,16 @@ local function IsNativeRendererActive(kind)
     return types.buffs ~= false or types.debuffs ~= false or types.dispels ~= false or types.externals ~= false or types.privateAuras ~= false
 end
 
+local function IsCustomRendererActive(kind)
+    if not GF.GetConf then return false end
+    local conf = GF.GetConf(kind or "party")
+    local auras = conf and conf.auras
+    if not (auras and auras.enabled ~= false) then return false end
+    if GF.IsAuraRendererCustom then return GF.IsAuraRendererCustom(conf) == true end
+    local mode = auras.renderer or "BLIZZARD"
+    return mode == "CUSTOM" or mode == "MIXED"
+end
+
 local STATUS_ICON_SPECS = {
     { key = "roleIcon",      label = "Role",        sizeKey = "roleIconSize",      anchorKey = "roleIconAnchor",   xKey = "roleIconX",   yKey = "roleIconY",   layerKey = "roleIconLayer",   defAnchor = "TOPLEFT",  defSize = 12 },
     { key = "leaderIcon",    label = "Leader",       sizeKey = "leaderIconSize",    anchorKey = "leaderIconAnchor", xKey = "leaderIconX", yKey = "leaderIconY", layerKey = "leaderIconLayer", defAnchor = "TOPRIGHT", defSize = 12 },
@@ -2036,6 +2046,7 @@ function GF.RefreshPreviewHandles()
             local maxIcons = (ac and ac.max) or (grpKey == "externals" and 2 or 3)
             local en = not ac or ac.enabled ~= false
             local nativeGroup = IsNativeAuraHandle(kind, grpKey)
+            local customRenderer = IsCustomRendererActive(kind)
 
             -- Growth direction drives where icons flow from the anchor.
             -- Must match the canonical renderer (MSUF_GF_Auras.lua
@@ -2207,14 +2218,14 @@ function GF.RefreshPreviewHandles()
             h:ClearAllPoints()
             h:SetPoint(effectiveAnchor, anchorTarget, effectiveAnchor, offX, offY)
             h:SetFrameLevel(((_mockFrame._health and _mockFrame._health.GetFrameLevel and _mockFrame._health:GetFrameLevel()) or (_mockFrame:GetFrameLevel() + 1)) + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
-            -- Per-category handles are custom-layout handles. In native
-            -- Blizzard mode the single Blizzard handle owns block movement.
-            h:SetShown(_visToggles[grpKey] ~= false and not nativeGroup)
+            -- Per-category handles are custom-layout handles. They are visible
+            -- in Custom and Custom + Blizzard renderer paths.
+            h:SetShown(_visToggles[grpKey] ~= false and customRenderer)
             -- Label tint reflects en state: bright = live, dim = disabled.
             -- Cheap; HANDLE_COLORS is a small file-scope literal table.
             if h._label then
                 local lc = HANDLE_COLORS[grpKey] or HANDLE_COLORS.status
-                if nativeGroup then
+                if nativeGroup and not customRenderer then
                     h._label:SetTextColor(0.36, 0.62, 0.95, 0.95)
                 elseif en then
                     h._label:SetTextColor(lc[1], lc[2], lc[3], 0.9)
@@ -2534,11 +2545,13 @@ function GF.RefreshPreviewHandles()
             -- clickable so the user can navigate to the Private Aura
             -- options section to re-enable it.
             local nativePrivate = IsNativeAuraHandle(kind, "private")
-            h:SetShown(_visToggles.private ~= false and not nativePrivate and paMax > 0)
+            local nativeActive = IsNativeRendererActive(kind)
+            local customPrivate = IsCustomRendererActive(kind) and not nativeActive
+            h:SetShown(_visToggles.private ~= false and customPrivate and paMax > 0)
             -- Label tint reflects enabled state.
             if h._label then
                 local lc = HANDLE_COLORS.private
-                if nativePrivate then
+                if nativePrivate or nativeActive then
                     h._label:SetTextColor(0.36, 0.62, 0.95, 0.95)
                 elseif paEn then
                     h._label:SetTextColor(lc[1], lc[2], lc[3], 0.9)
