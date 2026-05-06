@@ -1569,6 +1569,8 @@ icon.countFrame = countFrame
     cd:SetReverse(false)
     cd:SetSwipeColor(0, 0, 0, 0.65)
     cd:SetHideCountdownNumbers(true)
+    cd._msufA2_lastHideNumbers = true
+    cd._msufA2_lastUseAuraDisplayTime = false
     icon.cooldown = cd
 
     -- Stack count text
@@ -2047,10 +2049,14 @@ local function ClearCooldownVisual(icon, cd)
     -- Clear swipe/timer state (works across template variants).
     if cd.Clear then cd:Clear() end
     if cd.SetCooldown then cd:SetCooldown(0, 0) end
-    if cd.SetUseAuraDisplayTime then cd:SetUseAuraDisplayTime(false) end
+    if cd.SetUseAuraDisplayTime then
+        cd._msufA2_lastUseAuraDisplayTime = false
+        cd:SetUseAuraDisplayTime(false)
+    end
 
     -- Force-hide countdown numbers when no timer is present (prevents stale text).
     if cd.SetHideCountdownNumbers then
+        cd._msufA2_lastHideNumbers = true
         cd:SetHideCountdownNumbers(true)
     end
 
@@ -2162,8 +2168,10 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
     end
 
     -- Pass-through: tell Blizzard CooldownFrame to render aura timer natively in C++.
-    if _useBlizzardTimer and cd.SetUseAuraDisplayTime then
-        cd:SetUseAuraDisplayTime(hadTimer)
+    local wantAuraDisplayTime = (_useBlizzardTimer == true and hadTimer == true)
+    if cd.SetUseAuraDisplayTime and cd._msufA2_lastUseAuraDisplayTime ~= wantAuraDisplayTime then
+        cd._msufA2_lastUseAuraDisplayTime = wantAuraDisplayTime
+        cd:SetUseAuraDisplayTime(wantAuraDisplayTime)
     end
 
     -- PERF: Diff-gate cooldown visual flags (avoid redundant C-API calls per icon).
@@ -2176,8 +2184,8 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
         cd:SetReverse(_swipeReverse)
     end
     if hadTimer then
-        local wantHide = not _showText
-        if cd._msufA2_lastHideNumbers ~= wantHide then
+        local wantHide = (not _showText) or (icon._msufA2_hideCDNumbers == true)
+        if cd._msufA2_lastHideNumbers ~= wantHide or icon._msufA2_lastHadTimer ~= true then
             cd._msufA2_lastHideNumbers = wantHide
             cd:SetHideCountdownNumbers(wantHide)
         end
@@ -2277,12 +2285,35 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
         cdSetFn(cd, obj)
     end
 
+    local wasTimerActive = (icon._msufA2_lastHadTimer == true)
     icon._msufA2_durationObj = obj
     cd._msufA2_durationObj = obj
     icon._msufA2_lastHadTimer = true
 
+    -- A prior no-duration pass calls ClearCooldownVisual(), which hides native
+    -- numbers and disables aura display time. Same-aura refreshes must restore
+    -- those visual flags without waiting for a full CommitIcon.
+    local wantAuraDisplayTime = (_useBlizzardTimer == true)
+    if cd.SetUseAuraDisplayTime and cd._msufA2_lastUseAuraDisplayTime ~= wantAuraDisplayTime then
+        cd._msufA2_lastUseAuraDisplayTime = wantAuraDisplayTime
+        cd:SetUseAuraDisplayTime(wantAuraDisplayTime)
+    end
+    if cd._msufA2_lastSwipe ~= _showSwipe then
+        cd._msufA2_lastSwipe = _showSwipe
+        cd:SetDrawSwipe(_showSwipe)
+    end
+    if cd._msufA2_lastReverse ~= _swipeReverse then
+        cd._msufA2_lastReverse = _swipeReverse
+        cd:SetReverse(_swipeReverse)
+    end
+    local wantHide = (not _showText) or (icon._msufA2_hideCDNumbers == true)
+    if cd._msufA2_lastHideNumbers ~= wantHide or not wasTimerActive then
+        cd._msufA2_lastHideNumbers = wantHide
+        cd:SetHideCountdownNumbers(wantHide)
+    end
+
     -- CT ticker recolors the existing Cooldown FontString in both timer modes.
-    if _showText then
+    if _showText and icon._msufA2_hideCDNumbers ~= true then
         CT = CT or API.CooldownText
         local wasRegistered = (icon._msufA2_cdMgrRegistered == true)
         if CT and (not wasRegistered) and CT.RegisterIcon then
@@ -2299,6 +2330,7 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
         icon._msufA2_lastCdAid = aid
         icon._msufA2_lastCdShown = true
         icon._msufA2_lastCdWantText = true
+        ApplyCooldownTextStyle(icon, cd, nil)
     else
         icon._msufA2_lastCdWantText = false
         icon._msufA2_lastCdShown = false
