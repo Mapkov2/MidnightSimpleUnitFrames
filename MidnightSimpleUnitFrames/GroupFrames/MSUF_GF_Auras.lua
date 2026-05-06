@@ -1677,13 +1677,17 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
         local privateMax = tonumber(paCfg.max) or 4
         if privateMax > maxDebuffs then maxDebuffs = privateMax end
     end
+    local showDebuffs = renderDebuffs or renderPrivate
     local cfg = {
+        showBuffs = renderBuffs,
+        showDebuffs = showDebuffs,
+        showDispels = renderDispels,
+        showBigDefensive = renderExt,
         maxBuffs = renderBuffs and (tonumber(buffCfg.max) or 6) or 0,
         maxDebuffs = maxDebuffs,
         maxDispelDebuffs = renderDispels and 3 or 0,
         iconSize = iconSize,
         bigDefensiveSize = bigDefensiveSize,
-        showBigDefensive = renderExt,
         showDispelOverlay = renderDispels,
         organizationType = auras.blizzardOrganizationType or auras.blizzardOrganization or "default",
         dispelMode = auras.blizzardDispelMode or "allDispellable",
@@ -2285,6 +2289,7 @@ local function _DoAuraOptionsRefresh()
             if f and f.unit and GF.RegisterUnitEvents then GF.RegisterUnitEvents(f, f.unit) end
             if f and f.unit and UnitExists(f.unit) then
                 GF.UpdateFrameAuras(f, f.unit)
+                if GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, f.unit) end
             elseif f then
                 GF.HideFrameAuras(f)
             end
@@ -2295,6 +2300,7 @@ local function _DoAuraOptionsRefresh()
             if f and f.unit and GF.RegisterUnitEvents then GF.RegisterUnitEvents(f, f.unit) end
             if f and f.unit and UnitExists(f.unit) then
                 GF.UpdateFrameAuras(f, f.unit)
+                if GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, f.unit) end
             elseif f then
                 GF.HideFrameAuras(f)
             end
@@ -2307,6 +2313,9 @@ local function _DoAuraOptionsRefresh()
                 local f = list[i]
                 if f and f._msufGFPreviewActive and GF.PreviewFrameAuras then
                     GF.PreviewFrameAuras(f, kind, i)
+                end
+                if f and f._msufGFPreviewActive and GF.PreviewPrivateAuras then
+                    GF.PreviewPrivateAuras(f, kind)
                 end
             end
         end

@@ -913,7 +913,7 @@ function ns.MSUF_RegisterAurasOptions_Full(parentCategory)
     local capsOuter, capsBody = MakeCollapsibleBox(content, displayOuter, 720, 266, "Layout & Caps", true)
     -- Timer / cooldown text color controls
     local timerBox, timerBody = MakeCollapsibleBox(content, capsOuter, 720, 492, "Text Coloring", false)
-    -- Blizzard-rendered Private Auras (anchor controls)
+    -- Custom Private Auras (anchor controls)
     local privateBox, privateBody = MakeCollapsibleBox(content, timerBox, 720, 168, "Private Auras", false)
     -- Aura filtering / sorting (collapsible to match the rest of the menu)
     local advOuter, advBody = MakeCollapsibleBox(content, privateBox, 720, 268, "Aura Filters & Sorting", false)
@@ -2921,8 +2921,7 @@ do
     A2_TrackNativeSuppressed("debuff", refs.cbOnlyImpDebuffs)
     A2_TrackNativeSuppressed("all", refs.cbOnlyBoss)
 end
-        -- Private Auras (Blizzard-rendered): dedicated section + master toggle
-        -- NOTE: Target private auras are intentionally NOT supported (user request).
+        -- Private Auras (custom slot anchors): dedicated section + master toggle
         -- Private Auras live in their own box between "Timer colors" and "Advanced" (see layout above).
         local btnPrivateEnable = CreateBoolToggleButtonPath(
             privateBox,
@@ -2932,13 +2931,16 @@ end
             A2_Settings,
             "privateAurasEnabled",
             nil,
-            "Master switch for anchoring Blizzard Private Auras to MSUF.")
+            "Master switch for anchoring Private Auras to MSUF custom slots.")
         A2_Track("global", btnPrivateEnable)
         BuildBoolPathCheckboxes(privateBox, {
             { "Show (Player)", 12, -40, A2_Settings, "showPrivateAurasPlayer", nil,
-                "Re-anchors Blizzard Private Auras to MSUF (no spell lists).", "cbPrivateShowP" },
+                "Re-anchors player Private Auras to MSUF custom slots (no spell lists).", "cbPrivateShowP" },
+            { "Show (Target)", 150, -40, A2_Settings, "showPrivateAurasTarget", nil,
+                "Re-anchors target Private Auras to MSUF custom slots (no spell lists).", "cbPrivateShowT" },
         }, refs)
         if refs.cbPrivateShowP then A2_Track("global", refs.cbPrivateShowP) end
+        if refs.cbPrivateShowT then A2_Track("global", refs.cbPrivateShowT) end
         local function SetWidgetEnabled(widget, enabled)
             if not widget then  return end
             enabled = not not enabled
@@ -2975,7 +2977,7 @@ end
             if v > 12 then v = 12 end
             s.privateAuraMaxPlayer = v
          end
-        local privateMaxPlayer = CreateAuras2CompactSlider(privateBox, "Max (Player)", 0, 12, 1, 340, -34, 150, GetPrivateMaxPlayer, SetPrivateMaxPlayer)
+        local privateMaxPlayer = CreateAuras2CompactSlider(privateBox, "Max", 0, 12, 1, 340, -34, 150, GetPrivateMaxPlayer, SetPrivateMaxPlayer)
         MSUF_StyleAuras2CompactSlider(privateMaxPlayer, { hideMinMax = true, leftTitle = true })
         AttachSliderValueBox(privateMaxPlayer, 0, 12, 1, GetPrivateMaxPlayer)
         if privateMaxPlayer then A2_Track("global", privateMaxPlayer) end
@@ -3000,12 +3002,23 @@ end
             local s = A2_Settings()
             local master = (s and s.privateAurasEnabled == true) or false
             local p = (master and s and s.showPrivateAurasPlayer == true) or false
+            local t = (master and s and s.showPrivateAurasTarget == true) or false
             if refs.cbPrivateShowP then SetWidgetEnabled(refs.cbPrivateShowP, master) end
-            if privateMaxPlayer then SetWidgetEnabled(privateMaxPlayer, p) end
-            if privateBorderScale then SetWidgetEnabled(privateBorderScale, p) end
+            if refs.cbPrivateShowT then SetWidgetEnabled(refs.cbPrivateShowT, master) end
+            if privateMaxPlayer then SetWidgetEnabled(privateMaxPlayer, p or t) end
+            if privateBorderScale then SetWidgetEnabled(privateBorderScale, p or t) end
          end
         do
             local cb = refs.cbPrivateShowP
+            if cb then
+                local old = cb:GetScript("OnClick")
+                cb:SetScript("OnClick", function(self, ...)
+                    if old then pcall(old, self, ...) end
+                    UpdatePrivateAurasEnabled()
+                 end)
+                cb:HookScript("OnShow", UpdatePrivateAurasEnabled)
+            end
+            cb = refs.cbPrivateShowT
             if cb then
                 local old = cb:GetScript("OnClick")
                 cb:SetScript("OnClick", function(self, ...)
@@ -3031,7 +3044,7 @@ end
                 if cb then advGate[#advGate + 1] = cb end
             end
          end
-        Track({ "cbBossBuffs", "cbBossDebuffs", "cbShowSated", "cbOnlyBoss", "cbOnlyImpBuffs", "cbOnlyImpDebuffs", "cbPrivateShowP" })
+        Track({ "cbBossBuffs", "cbBossDebuffs", "cbShowSated", "cbOnlyBoss", "cbOnlyImpBuffs", "cbOnlyImpDebuffs", "cbPrivateShowP", "cbPrivateShowT" })
         if satedSlider then advGate[#advGate + 1] = satedSlider end
         -- Advanced gating should also affect the Private Auras master + sliders.
         if btnPrivateEnable then advGate[#advGate + 1] = btnPrivateEnable end

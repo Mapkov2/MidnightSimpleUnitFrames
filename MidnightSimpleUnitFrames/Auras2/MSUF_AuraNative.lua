@@ -32,6 +32,8 @@ local STRATA_FIX = {
     LOW = "MEDIUM",
     MEDIUM = "HIGH",
     HIGH = "DIALOG",
+    DIALOG = "FULLSCREEN",
+    FULLSCREEN = "FULLSCREEN_DIALOG",
     FULLSCREEN_DIALOG = "TOOLTIP",
 }
 
@@ -132,10 +134,14 @@ function Native.SetContainerAttributes(container, cfg)
     local maxDebuffs = math_floor(Clamp(cfg.maxDebuffs, 0, 0, 80) + 0.5)
     local maxDispels = math_floor(Clamp(cfg.maxDispelDebuffs, 0, 0, 10) + 0.5)
     local bigSize = math_floor(Clamp(cfg.bigDefensiveSize or cfg.iconSize, iconSize, 1, 128) + 0.5)
+    local showBuffs = (cfg.showBuffs ~= nil) and (cfg.showBuffs == true) or (maxBuffs > 0)
+    local showDebuffs = (cfg.showDebuffs ~= nil) and (cfg.showDebuffs == true) or (maxDebuffs > 0)
+    local showDispels = (cfg.showDispels ~= nil) and (cfg.showDispels == true) or (maxDispels > 0)
+    local showBigDefensive = cfg.showBigDefensive == true
 
-    container:SetAttribute("max-buffs", maxBuffs)
-    container:SetAttribute("max-debuffs", maxDebuffs)
-    container:SetAttribute("max-dispel-debuffs", maxDispels)
+    container:SetAttribute("max-buffs", showBuffs and maxBuffs or 0)
+    container:SetAttribute("max-debuffs", showDebuffs and maxDebuffs or 0)
+    container:SetAttribute("max-dispel-debuffs", showDispels and maxDispels or 0)
     container:SetAttribute("aura-organization-type", Native.ResolveOrganizationType(cfg.organizationType))
     container:SetAttribute("dispel-indicator-option", Native.ResolveDispelOption(cfg.dispelMode))
     container:SetAttribute("group-type", Native.ResolveGroupType(cfg.unit, cfg.groupType))
@@ -144,13 +150,13 @@ function Native.SetContainerAttributes(container, cfg)
     container:SetAttribute("border-scale", Clamp(cfg.borderScale, iconSize / 11, 0, 20))
     container:SetAttribute("power-bar-used-height", Clamp(cfg.powerBarUsedHeight, 0, 0, 200))
 
-    BoolAttr(container, "ignore-buffs", maxBuffs <= 0)
-    BoolAttr(container, "ignore-debuffs", maxDebuffs <= 0)
-    BoolAttr(container, "ignore-dispel-debuffs", maxDispels <= 0)
+    BoolAttr(container, "ignore-buffs", not showBuffs)
+    BoolAttr(container, "ignore-debuffs", not showDebuffs)
+    BoolAttr(container, "ignore-dispel-debuffs", not showDispels)
     BoolAttr(container, "display-only-dispellable-debuffs", cfg.displayOnlyDispellableDebuffs == true)
     BoolAttr(container, "display-larger-role-specific-debuffs", cfg.displayLargerRoleSpecificDebuffs == true)
-    BoolAttr(container, "show-big-defensive", cfg.showBigDefensive == true)
-    BoolAttr(container, "show-dispel-indicator-overlay", maxDispels > 0 and cfg.showDispelOverlay ~= false)
+    BoolAttr(container, "show-big-defensive", showBigDefensive)
+    BoolAttr(container, "show-dispel-indicator-overlay", showDispels and cfg.showDispelOverlay ~= false)
     BoolAttr(container, "suppress-dispel-border-icons", cfg.suppressDispelBorderIcons ~= false)
     BoolAttr(container, "always-hide-duration", cfg.alwaysHideDuration ~= false)
     BoolAttr(container, "set-aura-size-to-icon-size", cfg.setAuraSizeToIconSize ~= false)
@@ -174,8 +180,19 @@ end
 
 function Native.Signature(unit, cfg)
     cfg = cfg or {}
+    local maxBuffs = tonumber(cfg.maxBuffs) or 0
+    local maxDebuffs = tonumber(cfg.maxDebuffs) or 0
+    local maxDispels = tonumber(cfg.maxDispelDebuffs) or 0
+    local showBuffs = (cfg.showBuffs ~= nil) and (cfg.showBuffs == true) or (maxBuffs > 0)
+    local showDebuffs = (cfg.showDebuffs ~= nil) and (cfg.showDebuffs == true) or (maxDebuffs > 0)
+    local showDispels = (cfg.showDispels ~= nil) and (cfg.showDispels == true) or (maxDispels > 0)
+    local showBigDefensive = cfg.showBigDefensive == true
     return table.concat({
         tostring(unit or ""),
+        tostring(showBuffs),
+        tostring(showDebuffs),
+        tostring(showDispels),
+        tostring(showBigDefensive),
         tostring(cfg.maxBuffs or 0),
         tostring(cfg.maxDebuffs or 0),
         tostring(cfg.maxDispelDebuffs or 0),
@@ -186,7 +203,6 @@ function Native.Signature(unit, cfg)
         tostring(cfg.dispelMode or "dispellableByMe"),
         tostring(cfg.showCountdownFrame ~= false),
         tostring(cfg.showCountdownNumbers == true),
-        tostring(cfg.showBigDefensive == true),
         tostring(cfg.displayOnlyDispellableDebuffs == true),
         tostring(cfg.displayLargerRoleSpecificDebuffs == true),
         tostring(cfg.showDispelOverlay ~= false),
@@ -214,6 +230,12 @@ function Native.ApplyFrameStrata(container, parent, levelParent)
             container:SetFrameStrata(wantStrata)
         end
     end
+    if levelParent and container.SetFrameLevel and levelParent.GetFrameLevel then
+        local wantLevel = (levelParent:GetFrameLevel() or 0) + 100
+        if not container.GetFrameLevel or container:GetFrameLevel() ~= wantLevel then
+            container:SetFrameLevel(wantLevel)
+        end
+    end
 end
 
 function Native.Apply(container, unit, cfg, parent, levelParent)
@@ -226,7 +248,14 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     local maxBuffs = math_floor(Clamp(cfg.maxBuffs, 0, 0, 80) + 0.5)
     local maxDebuffs = math_floor(Clamp(cfg.maxDebuffs, 0, 0, 80) + 0.5)
     local maxDispels = math_floor(Clamp(cfg.maxDispelDebuffs, 0, 0, 10) + 0.5)
-    if maxBuffs <= 0 and maxDebuffs <= 0 and maxDispels <= 0 and cfg.showBigDefensive ~= true then
+    local showBuffs = (cfg.showBuffs ~= nil) and (cfg.showBuffs == true) or (maxBuffs > 0)
+    local showDebuffs = (cfg.showDebuffs ~= nil) and (cfg.showDebuffs == true) or (maxDebuffs > 0)
+    local showDispels = (cfg.showDispels ~= nil) and (cfg.showDispels == true) or (maxDispels > 0)
+    if not (showBuffs and maxBuffs > 0)
+       and not (showDebuffs and maxDebuffs > 0)
+       and not (showDispels and maxDispels > 0)
+       and cfg.showBigDefensive ~= true
+    then
         Native.Clear(container)
         return false
     end
