@@ -230,6 +230,7 @@ local tostring              = tostring
 local tonumber              = tonumber
 local table_sort            = table.sort
 local ipairs                = ipairs
+local issecretvalue         = _G.issecretvalue
 
 local LibStub       = LibStub
 local LSM           = LibStub and LibStub("LibSharedMedia-3.0", true)
@@ -3028,6 +3029,9 @@ totemsFrame:Hide()
 end
 
 local function _FormatTotemTime(left)
+    if issecretvalue and issecretvalue(left) then
+        return nil
+    end
     if type(left) ~= "number" or left <= 0 then
         return ""
     end
@@ -3050,6 +3054,9 @@ local function _FormatTotemTime(left)
 end
 
 local function _PickTotemTickInterval(minLeft)
+    if issecretvalue and issecretvalue(minLeft) then
+        return 1.00
+    end
     if type(minLeft) ~= "number" then
         return 0.50
     end
@@ -3060,6 +3067,41 @@ local function _PickTotemTickInterval(minLeft)
         return 0.50
     end
     return 1.00
+end
+
+local function _SetTotemTimeText(slot, left)
+    local text = slot and slot.text
+    if not text then
+        return nil
+    end
+
+    -- Midnight secret values cannot be compared or formatted in Lua. Let the
+    -- FontString C method consume the raw value instead.
+    if issecretvalue and issecretvalue(left) then
+        if text.SetFormattedText then
+            text:SetFormattedText("%.0fs", left)
+            text:Show()
+        else
+            text:SetText("")
+            text:Hide()
+        end
+        return 1.00
+    end
+
+    if type(left) == "number" then
+        local formatted = _FormatTotemTime(left)
+        text:SetText(formatted or "")
+        if formatted and formatted ~= "" then
+            text:Show()
+        else
+            text:Hide()
+        end
+        return _PickTotemTickInterval(left)
+    end
+
+    text:SetText("")
+    text:Hide()
+    return nil
 end
 
 local function _UpdateTotemsNow(g)
@@ -3091,20 +3133,12 @@ local function _UpdateTotemsNow(g)
 
                 if g.playerTotemsShowText then
                     local left = GetTotemTimeLeft(slotIndex)
-                    if type(left) == "number" then
-                        slot.text:SetText(_FormatTotemTime(left))
-                        slot.text:Show()
-
-                        -- Step 4 tick selection without cross-slot numeric compares.
-                        local hint = _PickTotemTickInterval(left)
-                        if hint == 0.10 then
-                            anyFast = true
-                        elseif hint == 0.50 then
-                            anyMed = true
-                        end
-                    else
-                        slot.text:SetText("")
-                        slot.text:Hide()
+                    local hint = _SetTotemTimeText(slot, left)
+                    -- Step 4 tick selection without cross-slot numeric compares.
+                    if hint == 0.10 then
+                        anyFast = true
+                    elseif hint == 0.50 then
+                        anyMed = true
                     end
                 else
                     slot.text:SetText("")
@@ -3147,16 +3181,11 @@ local function _TickTotemText()
         local slot = totemSlots[i]
         if slot and slot.shown then
             local left = GetTotemTimeLeft(i)
-            if type(left) == "number" then
-                slot.text:SetText(_FormatTotemTime(left))
-                local hint = _PickTotemTickInterval(left)
-                if hint == 0.10 then
-                    anyFast = true
-                elseif hint == 0.50 then
-                    anyMed = true
-                end
-            else
-                slot.text:SetText("")
+            local hint = _SetTotemTimeText(slot, left)
+            if hint == 0.10 then
+                anyFast = true
+            elseif hint == 0.50 then
+                anyMed = true
             end
         end
     end

@@ -1588,13 +1588,11 @@ function GF.BuildFrameCache(f)
                    c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs
                    or c.nativeBlizzardExt or c.nativeBlizzardDispels
                    or c.nativeBlizzardPrivate)
-    local customRenderer = (GF.IsAuraRendererCustom and GF.IsAuraRendererCustom(conf)) or false
     c.customAuraGrp = c.aurasOn and (
-                   customRenderer and (
-                       (auras.debuff and auras.debuff.enabled ~= false) or
-                       (auras.buff and auras.buff.enabled ~= false) or
-                       (auras.externals and auras.externals.enabled) or
-                       (c.dispelScan and GF._playerCanDispel)))
+                   (auras.debuff and auras.debuff.enabled ~= false and not c.nativeBlizzardDebuffs) or
+                   (auras.buff and auras.buff.enabled ~= false and not c.nativeBlizzardBuffs) or
+                   (auras.externals and auras.externals.enabled ~= false and not c.nativeBlizzardExt) or
+                   (c.dispelScan and GF._playerCanDispel))
     c.anyAuraGrp = c.nativeBlizzardAuras or c.customAuraGrp
     c.nativeBlizzardAuraOnly = c.nativeBlizzardAuras and not c.customAuraGrp
 
@@ -1623,9 +1621,7 @@ function GF.BuildFrameCache(f)
         or c.ciSlotBR == "aggro" or c.ciSlotC == "aggro")
 
     -- Private auras
-    c.paEn = pa and pa.enabled ~= false
-        and not c.nativeBlizzardPrivate
-        and not (c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs or c.nativeBlizzardDispels or c.nativeBlizzardExt)
+    c.paEn = pa and pa.enabled ~= false and not c.nativeBlizzardPrivate
 
     -- Raid debuffs
 

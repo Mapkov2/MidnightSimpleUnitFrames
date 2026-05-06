@@ -55,23 +55,21 @@ function Native.NormalizeRenderer(value)
         or value == "BOTH" or value == "both"
         or value == "CUSTOM_BLIZZARD" or value == "CUSTOM+BLIZZARD"
     then
-        return Native.RENDER_MIXED
+        return Native.RENDER_BLIZZARD
     end
     return Native.RENDER_CUSTOM
 end
 
 function Native.IsBlizzardRenderer(value)
-    local mode = Native.NormalizeRenderer(value)
-    return mode == Native.RENDER_BLIZZARD or mode == Native.RENDER_MIXED
+    return Native.NormalizeRenderer(value) == Native.RENDER_BLIZZARD
 end
 
 function Native.IsCustomRenderer(value)
-    local mode = Native.NormalizeRenderer(value)
-    return mode == Native.RENDER_CUSTOM or mode == Native.RENDER_MIXED
+    return Native.NormalizeRenderer(value) == Native.RENDER_CUSTOM
 end
 
 function Native.IsMixedRenderer(value)
-    return Native.NormalizeRenderer(value) == Native.RENDER_MIXED
+    return false
 end
 
 function Native.EnsureTypes(types, includeExternals)
@@ -151,9 +149,9 @@ function Native.SetContainerAttributes(container, cfg)
     local maxDebuffs = math_floor(Clamp(cfg.maxDebuffs, 0, 0, 80) + 0.5)
     local maxDispels = math_floor(Clamp(cfg.maxDispelDebuffs, 0, 0, 10) + 0.5)
     local bigSize = math_floor(Clamp(cfg.bigDefensiveSize or cfg.iconSize, iconSize, 1, 128) + 0.5)
-    local showBuffs = (cfg.showBuffs ~= nil) and (cfg.showBuffs == true) or (maxBuffs > 0)
-    local showDebuffs = (cfg.showDebuffs ~= nil) and (cfg.showDebuffs == true) or (maxDebuffs > 0)
-    local showDispels = (cfg.showDispels ~= nil) and (cfg.showDispels == true) or (maxDispels > 0)
+    local showBuffs = cfg.showBuffs == true
+    local showDebuffs = cfg.showDebuffs == true
+    local showDispels = cfg.showDispels == true
     local showBigDefensive = cfg.showBigDefensive == true
 
     container:SetAttribute("max-buffs", showBuffs and maxBuffs or 0)
@@ -180,19 +178,27 @@ function Native.SetContainerAttributes(container, cfg)
 end
 
 function Native.Clear(container)
-    if not container then return end
+    if not container then return true end
     local id = container._msufNativeAuraAnchorID
     if id then
         local CUA = _G.C_UnitAuras
         local removeFn = CUA and CUA.RemovePrivateAuraAnchor
         if type(removeFn) == "function" then
-            pcall(removeFn, id)
+            local ok, err = pcall(removeFn, id)
+            if not ok then
+                container._msufNativeAuraLastError = err
+                return false
+            end
+        else
+            container._msufNativeAuraLastError = "RemovePrivateAuraAnchor unavailable"
+            return false
         end
     end
     container._msufNativeAuraAnchorID = nil
     container._msufNativeAuraSignature = nil
     container._msufNativeAuraUnit = nil
     container:Hide()
+    return true
 end
 
 function Native.Signature(unit, cfg)
@@ -200,9 +206,9 @@ function Native.Signature(unit, cfg)
     local maxBuffs = tonumber(cfg.maxBuffs) or 0
     local maxDebuffs = tonumber(cfg.maxDebuffs) or 0
     local maxDispels = tonumber(cfg.maxDispelDebuffs) or 0
-    local showBuffs = (cfg.showBuffs ~= nil) and (cfg.showBuffs == true) or (maxBuffs > 0)
-    local showDebuffs = (cfg.showDebuffs ~= nil) and (cfg.showDebuffs == true) or (maxDebuffs > 0)
-    local showDispels = (cfg.showDispels ~= nil) and (cfg.showDispels == true) or (maxDispels > 0)
+    local showBuffs = cfg.showBuffs == true
+    local showDebuffs = cfg.showDebuffs == true
+    local showDispels = cfg.showDispels == true
     local showBigDefensive = cfg.showBigDefensive == true
     return table.concat({
         tostring(unit or ""),
@@ -258,7 +264,7 @@ end
 
 function Native.Apply(container, unit, cfg, parent, levelParent)
     if not container or not unit or not Native.Supported() then
-        Native.Clear(container)
+        if container then Native.Clear(container) end
         return false
     end
     cfg = cfg or {}
@@ -266,15 +272,17 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     local maxBuffs = math_floor(Clamp(cfg.maxBuffs, 0, 0, 80) + 0.5)
     local maxDebuffs = math_floor(Clamp(cfg.maxDebuffs, 0, 0, 80) + 0.5)
     local maxDispels = math_floor(Clamp(cfg.maxDispelDebuffs, 0, 0, 10) + 0.5)
-    local showBuffs = (cfg.showBuffs ~= nil) and (cfg.showBuffs == true) or (maxBuffs > 0)
-    local showDebuffs = (cfg.showDebuffs ~= nil) and (cfg.showDebuffs == true) or (maxDebuffs > 0)
-    local showDispels = (cfg.showDispels ~= nil) and (cfg.showDispels == true) or (maxDispels > 0)
+    local showBuffs = cfg.showBuffs == true
+    local showDebuffs = cfg.showDebuffs == true
+    local showDispels = cfg.showDispels == true
     if not (showBuffs and maxBuffs > 0)
        and not (showDebuffs and maxDebuffs > 0)
        and not (showDispels and maxDispels > 0)
        and cfg.showBigDefensive ~= true
     then
-        Native.Clear(container)
+        if Native.Clear(container) ~= false then
+            container._msufNativeAuraLastError = nil
+        end
         return false
     end
 
@@ -319,8 +327,10 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     if container.SetMouseClickEnabled then container:SetMouseClickEnabled(false) end
     Native.ApplyFrameStrata(container, parent, levelParent)
 
-    Native.Clear(container)
     Native.SetContainerAttributes(container, cfg)
+    if not Native.Clear(container) then
+        return false
+    end
 
     local iconSize = math_floor(Clamp(cfg.iconSize, 20, 1, 96) + 0.5)
     local borderScale = Clamp(cfg.borderScale, iconSize / 11, 0, 20)
