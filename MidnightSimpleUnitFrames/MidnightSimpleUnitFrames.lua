@@ -2567,100 +2567,6 @@ local function MSUF_GetApproxNameWidthForChars(templateFS, maxChars)
     return avg * maxChars
 end
 
-local function MSUF_GetNameShortenOptions(f)
-    local unitKey = f and (f.msufConfigKey or f._msufConfigKey or f.unitKey or f.unit)
-    if unitKey and GetConfigKeyForUnit then
-        unitKey = GetConfigKeyForUnit(unitKey) or unitKey
-    end
-
-    local shorten = (MSUF_DB and MSUF_DB.shortenNames) and true or false
-    local fontConf = unitKey and MSUF_DB and MSUF_DB[unitKey]
-    if fontConf and fontConf.fontOverride and fontConf.shortenNames ~= nil then
-        shorten = fontConf.shortenNames and true or false
-    end
-    if unitKey == "player" or unitKey == "Player" or unitKey == "PLAYER" then
-        shorten = false
-    end
-
-    local g = MSUF_DB and MSUF_DB.general
-    local maxChars = 16
-    if fontConf and fontConf.fontOverride and type(fontConf.shortenNameMaxChars) == "number" then
-        maxChars = fontConf.shortenNameMaxChars
-    elseif g and type(g.shortenNameMaxChars) == "number" then
-        maxChars = g.shortenNameMaxChars
-    end
-    maxChars = math_floor((tonumber(maxChars) or 16) + 0.5)
-    if maxChars < 4 then maxChars = 4 end
-    if maxChars > 40 then maxChars = 40 end
-
-    local mode
-    if fontConf and fontConf.fontOverride and fontConf.shortenNameClipSide ~= nil then
-        mode = fontConf.shortenNameClipSide
-    else
-        mode = (g and g.shortenNameClipSide) or "LEFT"
-    end
-    if mode ~= "LEFT" and mode ~= "RIGHT" then mode = "LEFT" end
-
-    local showDots = true
-    if fontConf and fontConf.fontOverride and fontConf.shortenNameShowDots ~= nil then
-        showDots = fontConf.shortenNameShowDots and true or false
-    elseif g and g.shortenNameShowDots ~= nil then
-        showDots = g.shortenNameShowDots and true or false
-    end
-
-    return shorten, maxChars, mode, showDots
-end
-_G.MSUF_GetNameShortenOptions = MSUF_GetNameShortenOptions
-
-local function MSUF_UTF8NextPos(text, pos, len)
-    local b = string.byte(text, pos)
-    if not b then return len + 1 end
-    if b < 128 then return pos + 1 end
-    if b < 224 then return pos + 2 end
-    if b < 240 then return pos + 3 end
-    return pos + 4
-end
-
-local function MSUF_TruncateStartUTF8(text, maxChars)
-    local charCount, pos, len = 0, 1, #text
-    while pos <= len and charCount < maxChars do
-        charCount = charCount + 1
-        pos = MSUF_UTF8NextPos(text, pos, len)
-    end
-    if pos > len then return text, false end
-    return string.sub(text, 1, pos - 1), true
-end
-
-local function MSUF_TruncateEndUTF8(text, maxChars)
-    local starts, pos, len = {}, 1, #text
-    while pos <= len do
-        starts[#starts + 1] = pos
-        pos = MSUF_UTF8NextPos(text, pos, len)
-    end
-    local count = #starts
-    if count <= maxChars then return text, false end
-    return string.sub(text, starts[count - maxChars + 1]), true
-end
-
-function _G.MSUF_TruncateUFName(text, frame, conf)
-    if type(text) ~= "string" or text == "" then return text end
-    local isSecret = _G.issecretvalue
-    if type(isSecret) == "function" and isSecret(text) then return text end
-
-    local shorten, maxChars, mode, showDots = MSUF_GetNameShortenOptions(frame)
-    if not shorten then return text end
-
-    local truncated, didTruncate
-    if mode == "RIGHT" then
-        truncated, didTruncate = MSUF_TruncateStartUTF8(text, maxChars)
-        if didTruncate and showDots then truncated = truncated .. ".." end
-    else
-        truncated, didTruncate = MSUF_TruncateEndUTF8(text, maxChars)
-        if didTruncate and showDots then truncated = ".." .. truncated end
-    end
-    return truncated
-end
-
 local _AP_HASH = { TOPLEFT=1, TOP=2, TOPRIGHT=3, LEFT=4, CENTER=5, RIGHT=6, BOTTOMLEFT=7, BOTTOM=8, BOTTOMRIGHT=9 }
 function MSUF_ClampNameWidth(f, conf)
     if not f or not f.nameText then  return end
@@ -2677,9 +2583,6 @@ function MSUF_ClampNameWidth(f, conf)
     end
     if unitKey == "player" or unitKey == "Player" or unitKey == "PLAYER" then
         shorten = false
-    end
-    if type(MSUF_GetNameShortenOptions) == "function" then
-        shorten = MSUF_GetNameShortenOptions(f)
     end
     if not shorten then
         local tf = f.textFrame or f
@@ -2724,59 +2627,6 @@ function MSUF_ClampNameWidth(f, conf)
     end
         f.nameText:SetWidth(0)
          return
-    end
-    if type(_G.MSUF_TruncateUFName) == "function" then
-        -- Exact shortening happens when text is assigned; here we only unwind the old pixel clipper.
-        local tf = f.textFrame or f
-        local ap  = f._msufNameAnchorPoint or "TOPLEFT"
-        local rel = f._msufNameAnchorRel or tf
-        local arp = f._msufNameAnchorRelPoint or "TOPLEFT"
-        local ax  = (type(f._msufNameAnchorX) == "number") and f._msufNameAnchorX or 4
-        local ay  = (type(f._msufNameAnchorY) == "number") and f._msufNameAnchorY or -4
-        local _, maxChars, mode, showDots = MSUF_GetNameShortenOptions(f)
-        local parentIsClip = f._msufNameClipFrame and f.nameText.GetParent and f.nameText:GetParent() == f._msufNameClipFrame
-        local stamp = 2000000000
-            + (_AP_HASH[ap] or 0) * 1000003
-            + (_AP_HASH[arp] or 0) * 10007
-            + math_floor((ax + 200) * 100) * 101
-            + math_floor((ay + 200) * 100)
-            + (tonumber(maxChars) or 0) * 17
-            + (mode == "RIGHT" and 3 or 0)
-            + (showDots and 1 or 0)
-        if f._msufClampStamp == stamp and not parentIsClip then
-            return
-        end
-        f._msufClampStamp = stamp
-        if parentIsClip then
-            local p = f._msufNameTextOrigParent or (f.textFrame or f)
-            f.nameText:SetParent(p)
-        end
-        if parentIsClip or f._msufNameClipAnchorMode ~= nil then
-            f.nameText:ClearAllPoints()
-            f.nameText:SetPoint(ap, rel, arp, ax, ay)
-            f._msufNameClipAnchorMode = nil
-            f._msufNameClipSideApplied = nil
-            f._msufNameClipAnchorX = nil
-            f._msufNameClipAnchorY = nil
-        end
-        if f.nameText.SetJustifyH then
-            f.nameText:SetJustifyH(f._msufNameJustifyH or "LEFT")
-        end
-        if f._msufNameClipFrame then
-            local clip = f._msufNameClipFrame
-            if clip.Hide then clip:Hide() end
-            if f.nameText and f.nameText.GetParent and f.nameText:GetParent() == clip then
-                local p = f._msufNameTextOrigParent or (f.textFrame or f)
-                f.nameText:SetParent(p)
-            end
-        end
-        f._msufNameClipAnchorStamp = nil
-        f._msufNameClipTextStamp = nil
-        if f._msufNameDotsFS then
-            if f._msufNameDotsFS.Hide then f._msufNameDotsFS:Hide() end
-        end
-        f.nameText:SetWidth(0)
-        return
     end
     -- Secret-safe: avoid measuring real (secret) unit names. We only compute a pixel clamp width.
     local frameWidth = 0

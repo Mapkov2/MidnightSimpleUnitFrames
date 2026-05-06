@@ -868,17 +868,18 @@ end
 local function RestoreHealthTextLayer(f)
     local txtLayer = f and f.healthTextLayer
     if not txtLayer or not f.health then return end
+    local conf = GF.GetConf(f._msufGFKind or "party")
     local nameLayer = f.nameTextLayer
     if nameLayer and (nameLayer._msufAlphaEscaped or nameLayer:GetParent() ~= f.health) then
         nameLayer:SetParent(f.health)
         nameLayer:SetAllPoints(f.health)
-        nameLayer:SetFrameLevel(f.health:GetFrameLevel() + (GF.GetConf(f._msufGFKind or "party").nameTextLayer or 5))
+        GF.SetFrameLayerLevel(nameLayer, f, conf.nameTextLayer, 5)
         nameLayer._msufAlphaEscaped = nil
     end
     if txtLayer._msufAlphaEscaped or txtLayer:GetParent() ~= f.health then
         txtLayer:SetParent(f.health)
         txtLayer:SetAllPoints(f.health)
-        txtLayer:SetFrameLevel(f.health:GetFrameLevel() + 6)
+        GF.SetFrameLayerLevel(txtLayer, f, conf.textLayer, 5)
         txtLayer._msufAlphaEscaped = nil
     end
     local st = f.statusIndicatorText
@@ -1135,28 +1136,21 @@ local function ApplyTextLayout(f, kind)
 
     -- Text layer (frame level above health bar)
     if f.nameTextLayer and f.health then
-        local hLvl = f.health:GetFrameLevel()
-        local ntl2 = conf.nameTextLayer or 5
-        local want = hLvl + ntl2
+        local want = GF.GetFrameLayerLevel(f, conf.nameTextLayer, 5)
         if f._msufGFCachedNameTxtLvl ~= want then
             f._msufGFCachedNameTxtLvl = want
             f.nameTextLayer:SetFrameLevel(want)
         end
     end
     if f.healthTextLayer and f.health then
-        local hLvl = f.health:GetFrameLevel()
-        local tl2 = conf.textLayer or 5
-        local want = hLvl + tl2
+        local want = GF.GetFrameLayerLevel(f, conf.textLayer, 5)
         if f._msufGFCachedTxtLvl ~= want then
             f._msufGFCachedTxtLvl = want
             f.healthTextLayer:SetFrameLevel(want)
         end
     end
     if f.powerTextLayer then
-        local base = f.health or f.barGroup or f.power or f
-        local pLvl = base.GetFrameLevel and base:GetFrameLevel() or 0
-        local ptl2 = conf.powerTextLayer or 2
-        local want = pLvl + ptl2
+        local want = GF.GetFrameLayerLevel(f, conf.powerTextLayer, 2)
         if f._msufGFCachedPTxtLvl ~= want then
             f._msufGFCachedPTxtLvl = want
             f.powerTextLayer:SetFrameLevel(want)
@@ -1205,7 +1199,8 @@ local function ApplyIconLayout(f, kind)
             region:SetPoint(pt, anchor, pt, ox, oy)
             local layer = tonumber(conf[s.layerKey]) or s.defLayer
             if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
-            if region.SetFrameLevel then region:SetFrameLevel(baseLvl + layer) end
+            local frameLevel = (GF.GetFrameLayerLevel and GF.GetFrameLayerLevel(f, layer, s.defLayer)) or (baseLvl + layer)
+            if region.SetFrameLevel then region:SetFrameLevel(frameLevel) end
             if region ~= icon then
                 icon:ClearAllPoints()
                 icon:SetAllPoints(region)
@@ -1213,7 +1208,7 @@ local function ApplyIconLayout(f, kind)
             if icon.SetDrawLayer then
                 icon:SetDrawLayer("OVERLAY", 7)
             elseif icon.SetFrameLevel then
-                icon:SetFrameLevel(baseLvl + layer)
+                icon:SetFrameLevel(frameLevel)
             end
         end
     end

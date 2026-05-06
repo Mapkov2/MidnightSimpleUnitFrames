@@ -755,7 +755,7 @@ local function BuildMockFrame(parent)
     -- Text overlay layer (above health/absorb bars so text is visible)
     local textLayer = CreateFrame("Frame", nil, f)
     textLayer:SetAllPoints(health)
-    textLayer:SetFrameLevel(health:GetFrameLevel() + 5)
+    textLayer:SetFrameLevel(health:GetFrameLevel() + (conf.textLayer or 5))
     f._textLayer = textLayer
 
     -- Name text
@@ -792,7 +792,7 @@ local function BuildMockFrame(parent)
     -- Power text
     local powLayer = CreateFrame("Frame", nil, f)
     powLayer:SetAllPoints(f)
-    powLayer:SetFrameLevel((f._power and f._power:GetFrameLevel() or health:GetFrameLevel()) + 2)
+    powLayer:SetFrameLevel(health:GetFrameLevel() + (conf.powerTextLayer or 2))
     f._powerTextLayer = powLayer
     local fr, fg, fb = GF.ResolveFontColor(kind)
     local powLeftFS = powLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1217,7 +1217,9 @@ function GF.RefreshPreviewBox()
             end
             m._powerFS = m._powerCenterFS
             local powerAnchor = (m._power and powerH > 0 and m._power) or m._health or m
-            local baseLevel = (powerAnchor.GetFrameLevel and powerAnchor:GetFrameLevel()) or (m.GetFrameLevel and m:GetFrameLevel()) or 0
+            local baseLevel = (m._health and m._health.GetFrameLevel and m._health:GetFrameLevel())
+                or (m.GetFrameLevel and m:GetFrameLevel())
+                or 0
             local ptl2 = conf.powerTextLayer or 2
             m._powerTextLayer:ClearAllPoints()
             m._powerTextLayer:SetAllPoints(m)
@@ -1781,7 +1783,7 @@ function GF.RebuildSIHandles()
             end
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
-            h:SetFrameLevel(_mockFrame:GetFrameLevel() + (siCfg.layer or 9))
+            h:SetFrameLevel(((_mockFrame._health and _mockFrame._health.GetFrameLevel and _mockFrame._health:GetFrameLevel()) or (_mockFrame:GetFrameLevel() + 1)) + (siCfg.layer or 9))
             h:SetShown(_visToggles.si ~= false)
 
             -- Drag writes to per-spell config (unscaled)
@@ -2204,7 +2206,7 @@ function GF.RefreshPreviewHandles()
 
             h:ClearAllPoints()
             h:SetPoint(effectiveAnchor, anchorTarget, effectiveAnchor, offX, offY)
-            h:SetFrameLevel(_mockFrame:GetFrameLevel() + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
+            h:SetFrameLevel(((_mockFrame._health and _mockFrame._health.GetFrameLevel and _mockFrame._health:GetFrameLevel()) or (_mockFrame:GetFrameLevel() + 1)) + (ac and ac.layer or (grpKey == "buff" and 5 or (grpKey == "debuff" and 6 or 7))))
             -- Per-category handles are custom-layout handles. In native
             -- Blizzard mode the single Blizzard handle owns block movement.
             h:SetShown(_visToggles[grpKey] ~= false and not nativeGroup)
@@ -2491,7 +2493,7 @@ function GF.RefreshPreviewHandles()
             end
             h:ClearAllPoints()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
-            h:SetFrameLevel(_mockFrame:GetFrameLevel() + (pa.layer or 8))
+            h:SetFrameLevel(((_mockFrame._health and _mockFrame._health.GetFrameLevel and _mockFrame._health:GetFrameLevel()) or (_mockFrame:GetFrameLevel() + 1)) + (pa.layer or 8))
             if not h._paIcons then
                 h._paIcons = {}
             end
