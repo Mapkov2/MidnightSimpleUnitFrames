@@ -1,4 +1,4 @@
--- MSUF_Search.lua  v5
+-- MSUF_Search.lua  v6
 -- Every label indexed. Portrait fully covered. Click scrolls to exact widget.
 -- Secret-safe: INDEX is static strings only, zero live API calls at query time.
 local addonName, ns = ...
@@ -174,6 +174,9 @@ local INDEX = {
     { label="Copy settings to / Copy size to / Copy text to (Edit Mode)",
       hint="Edit Mode", pageKey="home",
       keywords={"copy settings","copy size","copy text","clone frame","transfer settings","copy to"} },
+    { label="Font size / Text size (Edit Mode)",
+      hint="Edit Mode", pageKey="home",
+      keywords={"font size","text size","bigger font","smaller font","font pt","font px","increase font","name size","hp size","power size","spell size","time size"} },
     { label="Name X / Name Y / Name Size (Edit Mode)",
       hint="Edit Mode", pageKey="home",
       keywords={"name x","name y","name size","move name","name offset","name position","text name pos"} },
@@ -574,9 +577,6 @@ local INDEX = {
     { label="Font selection (SharedMedia)",
       hint="Fonts", pageKey="opt_fonts",
       keywords={"font selection","choose font","change font","font name","typeface","which font","font picker","custom font","sharedmedia font","lsm font"} },
-    { label="Font size",
-      hint="Fonts", pageKey="opt_fonts",
-      keywords={"font size","text size","bigger font","smaller font","font pt","font px","increase font"} },
     { label="Font outline (Shadow / Outline / Thick / Monochrome / None)",
       hint="Fonts", pageKey="opt_fonts",
       keywords={"font outline","text shadow","outline style","thick outline","monochrome","no outline","font border","shadow text","outline off","thickoutline"} },
@@ -584,7 +584,7 @@ local INDEX = {
       hint="Fonts › Overrides", pageKey="opt_fonts",
       keywords={"font overrides","overrides section","font override"} },
     { label="Reset overrides (Fonts)",
-      hint="Fonts › Overrides", pageKey="opt_fonts",anchor="MSUF_ResetFontOverridesBtn",
+      hint="Fonts › Overrides", pageKey="opt_fonts",anchor="MSUF_FontResetOverridesBtn",
       keywords={"reset font overrides","clear font override","default font","restore font","reset overrides"} },
     { label="Truncation style (keep start / keep end)",
       hint="Fonts › Name Shortening", pageKey="opt_fonts",

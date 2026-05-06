@@ -1,7 +1,7 @@
 -- ---------------------------------------------------------------------------
 -- MSUF_Options_Fonts.lua  (Phase 7: Per-unit scope system — Bars/Portraits pattern)
 --
--- Font settings: global font, text sizes, text style, name colors, name display.
+-- Font settings: global font, text style, name colors, name display.
 -- Scope bar: Shared + per-unit overrides (fontOverride flag).
 -- ---------------------------------------------------------------------------
 local addonName, ns = ...
@@ -715,9 +715,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local _gfOnlyWidgets = { gfFontDrop }
 
     -- =====================================================================
-    -- SECTION 2: Text Style (scope-aware, default collapsed)
+    -- SECTION 2: Text Style (scope-aware, default open)
     -- =====================================================================
-    local styleBox, styleBody = MakeCollapsibleBox(content, fontBox, CONTENT_W, 148, TR("Text Style"), false)
+    local styleBox, styleBody = MakeCollapsibleBox(content, fontBox, CONTENT_W, 148, TR("Text Style"), true)
 
     local ufOutlineLbl = styleBody:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     ufOutlineLbl:SetPoint("TOPLEFT", styleBody, "TOPLEFT", 16, -8)
@@ -804,9 +804,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     -- =====================================================================
-    -- SECTION 4: Name Colors (scope-aware, default collapsed)
+    -- SECTION 4: Name Colors (scope-aware, default open)
     -- =====================================================================
-    local colorsBox, colorsBody = MakeCollapsibleBox(content, styleBox, CONTENT_W, 220, TR("Name & Power Colors"), false)
+    local colorsBox, colorsBody = MakeCollapsibleBox(content, styleBox, CONTENT_W, 220, TR("Name & Power Colors"), true)
 
     -- ── UF: Name Color ──
     local ufNameColorLbl = UI.Label({ parent = colorsBody, text = TR("Player Name Color"),
@@ -924,9 +924,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     end
 
     -- =====================================================================
-    -- SECTION 5: Name Shortening (scope-aware, default collapsed)
+    -- SECTION 5: Name Shortening (scope-aware, default open)
     -- =====================================================================
-    local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 280, TR("Name Shortening"), false)
+    local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 280, TR("Name Shortening"), true)
 
     local shortenCheck, shortenMaxSlider, shortenMaskSlider, shortenClipDrop, shortenClipLabel, infoBtn
 
