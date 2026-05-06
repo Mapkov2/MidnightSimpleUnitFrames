@@ -893,7 +893,12 @@ local function UFCore_UpdateIdentityFast(frame, conf)
 
     if frame.nameText then
         if showName and exists then
-            _SetText(frame.nameText, UnitName(unit) or "")
+            local name = UnitName(unit) or ""
+            local truncateName = _G.MSUF_TruncateUFName
+            if type(truncateName) == "function" then
+                name = truncateName(name, frame, conf)
+            end
+            _SetText(frame.nameText, name)
         else
             _SetText(frame.nameText, "")
         end
@@ -3267,7 +3272,14 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                 end
                 UFCore_ReapplyLayeredAlpha(tf)
             end
-            if tf.nameText then tf.nameText:SetText(UnitName(unit) or "") end
+            if tf.nameText then
+                local name = UnitName(unit) or ""
+                local truncateName = _G.MSUF_TruncateUFName
+                if type(truncateName) == "function" then
+                    name = truncateName(name, tf)
+                end
+                tf.nameText:SetText(name)
+            end
             -- Queue non-portrait refresh for next frame; portrait render is budgeted below.
             Core.MarkDirty(tf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
         end
@@ -3305,7 +3317,14 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                 end
                 UFCore_ReapplyLayeredAlpha(ttf)
             end
-            if ttf.nameText and UnitExists(unit2) then ttf.nameText:SetText(UnitName(unit2) or "") end
+            if ttf.nameText and UnitExists(unit2) then
+                local name2 = UnitName(unit2) or ""
+                local truncateName = _G.MSUF_TruncateUFName
+                if type(truncateName) == "function" then
+                    name2 = truncateName(name2, ttf)
+                end
+                ttf.nameText:SetText(name2)
+            end
             Core.MarkDirty(ttf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
         end
         -- Deferred: portrait, visual, absorb cache invalidation
@@ -3482,7 +3501,14 @@ do
                     end
                     UFCore_ReapplyLayeredAlpha(ff)
                 end
-                if ff.nameText then ff.nameText:SetText(UnitName(unit) or "") end
+                if ff.nameText then
+                    local name = UnitName(unit) or ""
+                    local truncateName = _G.MSUF_TruncateUFName
+                    if type(truncateName) == "function" then
+                        name = truncateName(name, ff)
+                    end
+                    ff.nameText:SetText(name)
+                end
                 Core.MarkDirty(ff, MASK_UNIT_SWAP_NO_PORTRAIT, false, "FOCUS_SWAP_DEFERRED")
             end
             DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", true, false)

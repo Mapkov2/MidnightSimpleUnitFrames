@@ -868,6 +868,10 @@ function ns.Text.ApplyName(frame, unit, overrideText)
         show = false
         txt = ""
     end
+    local truncateName = _G.MSUF_TruncateUFName
+    if show and type(truncateName) == "function" then
+        txt = truncateName(txt, frame)
+    end
     ns.Text.Set(frame.nameText, txt, show)
  end
 function ns.Text.ApplyLevel(frame, unit, conf, overrideText, forceShow)
