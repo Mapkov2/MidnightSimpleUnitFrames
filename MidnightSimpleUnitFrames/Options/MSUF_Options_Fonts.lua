@@ -83,7 +83,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     local FONT_OVERRIDE_KEYS = {
         "boldText", "noOutline", "textBackdrop",
         "nameClassColor", "npcNameRed", "colorPowerTextByType",
-        "shortenNameMaxChars", "shortenNameClipSide", "shortenNameFrontMaskPx", "shortenNameShowDots",
+        "shortenNameMaxChars", "shortenNameClipSide", "shortenNameShowDots",
     }
 
     -- =====================================================================
@@ -556,6 +556,32 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         if objectType ~= "FontString" and widget.EnableMouse then pcall(widget.EnableMouse, widget, enabled) end
         if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.4) end
 
+        if widget.editBox then
+            if widget.editBox.EnableMouse then widget.editBox:EnableMouse(enabled) end
+            if enabled then
+                if widget.editBox.Enable then widget.editBox:Enable() end
+            else
+                if widget.editBox.Disable then widget.editBox:Disable() end
+            end
+            if widget.editBox.SetAlpha then widget.editBox:SetAlpha(enabled and 1 or 0.4) end
+        end
+        if widget.minusButton then
+            if enabled then
+                if widget.minusButton.Enable then widget.minusButton:Enable() end
+            else
+                if widget.minusButton.Disable then widget.minusButton:Disable() end
+            end
+            if widget.minusButton.SetAlpha then widget.minusButton:SetAlpha(enabled and 1 or 0.4) end
+        end
+        if widget.plusButton then
+            if enabled then
+                if widget.plusButton.Enable then widget.plusButton:Enable() end
+            else
+                if widget.plusButton.Disable then widget.plusButton:Disable() end
+            end
+            if widget.plusButton.SetAlpha then widget.plusButton:SetAlpha(enabled and 1 or 0.4) end
+        end
+
         local label = widget.Text or widget.text
         if not label and widget.GetName then
             local n = widget:GetName()
@@ -926,9 +952,9 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     -- =====================================================================
     -- SECTION 5: Name Shortening (scope-aware, default open)
     -- =====================================================================
-    local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 280, TR("Name Shortening"), true)
+    local nameBox, nameBody = MakeCollapsibleBox(content, colorsBox, CONTENT_W, 220, TR("Name Shortening"), true)
 
-    local shortenCheck, shortenMaxSlider, shortenMaskSlider, shortenClipDrop, shortenClipLabel, infoBtn
+    local shortenCheck, shortenMaxSlider, shortenNoEllipsis, shortenClipDrop, shortenClipLabel, infoBtn
 
     local function SyncShortenEnabled()
         local on = ScopeGet("shortenNames", false, "shortenNames") and true or false
@@ -939,7 +965,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         SetWidgetEnabled(shortenClipLabel, detailActive)
         SetWidgetEnabled(shortenClipDrop, detailActive)
         SetWidgetEnabled(shortenMaxSlider, detailActive)
-        SetWidgetEnabled(shortenMaskSlider, detailActive)
+        SetWidgetEnabled(shortenNoEllipsis, canEdit)
         SetWidgetEnabled(infoBtn, canEdit)
     end
     local function ApplyShortenLive(layoutReason)
@@ -1032,8 +1058,8 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     })
 
     shortenMaxSlider = UI.Slider({
-        name = "MSUF_ShortenNameMaxCharsSlider", parent = nameBody, compact = true,
-        anchor = shortenClipDrop, x = 16, y = -12, width = 200,
+        name = "MSUF_ShortenNameMaxCharsSlider", parent = nameBody, compact = true, compactInput = true,
+        anchor = shortenClipDrop, x = 16, y = -12, width = 254,
         label = TR("Max name length"), min = 6, max = 30, step = 1, default = 6,
         lowText = "6", highText = "30",
         get = function() return ScopeGet("shortenNameMaxChars", 6) end,
@@ -1043,23 +1069,26 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end,
     })
 
-    shortenMaskSlider = UI.Slider({
-        name = "MSUF_ShortenNameFrontMaskSlider", parent = nameBody, compact = true,
-        anchor = shortenMaxSlider, x = 0, y = -20, width = 200,
-        label = TR("Reserved space"), min = 0, max = 40, step = 1, default = 8,
-        lowText = "0", highText = "40",
-        get = function() return ScopeGet("shortenNameFrontMaskPx", 8) end,
+    shortenNoEllipsis = UI.Check({
+        name = "MSUF_ShortenNameNoEllipsis", parent = nameBody,
+        anchor = shortenMaxSlider, x = 0, y = -22, maxTextWidth = 400,
+        label = TR("No Ellipsis (truncate without ..)"),
+        get = function() return not ScopeGet("shortenNameShowDots", true) end,
         set = function(v)
-            ScopeSet("shortenNameFrontMaskPx", floor(v + 0.5))
-            ApplyShortenChange("SHORTEN_MASK", true)
+            ScopeSet("shortenNameShowDots", not v)
+            ApplyShortenChange("SHORTEN_ELLIPSIS", false)
         end,
     })
+    function shortenNoEllipsis:Refresh()
+        self:SetChecked(not ScopeGet("shortenNameShowDots", true))
+        if self._msufToggleUpdate then self._msufToggleUpdate() end
+    end
 
     infoBtn = CreateFrame("Button", "MSUF_ShortenNameInfoButton", nameBody)
     infoBtn:SetSize(16, 16)
     infoBtn:SetNormalTexture("Interface\\FriendsFrame\\InformationIcon")
     infoBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-    infoBtn:SetPoint("TOPLEFT", shortenMaskSlider, "BOTTOMLEFT", 0, -6)
+    infoBtn:SetPoint("TOPLEFT", shortenNoEllipsis, "BOTTOMLEFT", 0, -6)
     infoBtn:SetScript("OnClick", function(self)
         if GameTooltip:IsOwned(self) and GameTooltip:IsShown() then GameTooltip:Hide(); return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -1069,7 +1098,6 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             GameTooltip:AddLine("Keep start: shows the first letters (clips the end).", 1, 1, 1, true)
         else
             GameTooltip:AddLine("Keep end: shows the last letters (clips the beginning).", 1, 1, 1, true)
-            GameTooltip:AddLine("Reserved space protects the clipped edge (avoids overlaps).", 0.95, 0.95, 0.95, true)
         end
         GameTooltip:Show()
     end)
@@ -1082,11 +1110,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     gfMaxCharsLbl:SetText(TR("Group Frame Name Truncation"))
     gfMaxCharsLbl:Hide()
     local gfMaxCharsSlider = UI.Slider({
-        name = "MSUF_GF_Shorten_MaxChars", parent = nameBody, compact = true,
+        name = "MSUF_GF_Shorten_MaxChars", parent = nameBody, compact = true, compactInput = true,
         -- Leave enough vertical space for the OptionsSliderTemplate value text.
         -- Before this, the external section label and the slider's dynamic
         -- "Max Chars: X" label overlapped/clipped in the Fonts menu.
-        anchor = gfMaxCharsLbl, x = 0, y = -28, width = 300,
+        anchor = gfMaxCharsLbl, x = 0, y = -28, width = 354,
         label = TR("Name Max Chars"), min = 0, max = 30, step = 1, default = 0,
         lowText = "0", highText = "30",
         get = function() return GFVal("nameMaxChars") or 0 end,
@@ -1109,7 +1137,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenClipLabel
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenClipDrop
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenMaxSlider
-    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenMaskSlider
+    _ufOnlyWidgets[#_ufOnlyWidgets + 1] = shortenNoEllipsis
     _ufOnlyWidgets[#_ufOnlyWidgets + 1] = infoBtn
     _gfRefreshFns[#_gfRefreshFns + 1] = function()
         if gfMaxCharsSlider and gfMaxCharsSlider.Refresh then gfMaxCharsSlider:Refresh() end
@@ -1214,7 +1242,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         else
             if nameBox._msufHiddenForPlayer then
                 nameBox._msufHiddenForPlayer = nil
-                nameBox:SetHeight(280)
+                nameBox:SetHeight(nameBox._msufCollapsed and 28 or (nameBox._msufExpandedH or 220))
             end
             nameBox:SetAlpha(1)
             SetBoxTitleEnabled(nameBox, fontControlsActive)
@@ -1232,7 +1260,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             if shortenCheck and shortenCheck.Refresh then shortenCheck:Refresh() end
             if shortenClipDrop and shortenClipDrop.Refresh then shortenClipDrop:Refresh() end
             if shortenMaxSlider and shortenMaxSlider.Refresh then shortenMaxSlider:Refresh() end
-            if shortenMaskSlider and shortenMaskSlider.Refresh then shortenMaskSlider:Refresh() end
+            if shortenNoEllipsis and shortenNoEllipsis.Refresh then shortenNoEllipsis:Refresh() end
             SyncShortenEnabled()
         else
             GFSyncAll()
@@ -1289,5 +1317,5 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     panel.shortenNamesCheck = shortenCheck
     panel.shortenNameClipSideDrop = shortenClipDrop
     panel.shortenNameMaxCharsSlider = shortenMaxSlider
-    panel.shortenNameFrontMaskSlider = shortenMaskSlider
+    panel.shortenNameNoEllipsisCheck = shortenNoEllipsis
 end
