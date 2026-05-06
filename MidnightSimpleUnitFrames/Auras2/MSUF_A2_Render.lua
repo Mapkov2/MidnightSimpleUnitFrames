@@ -123,7 +123,7 @@ local A2_SHARED_DEFAULTS = {
     growth="RIGHT", rowWrap="DOWN",
     offsetX=0, offsetY=6, buffOffsetY=30,
     stackTextSize=14, cooldownTextSize=14, bossEditTogether=true,
-    privateAurasEnabled=true, showPrivateAurasPlayer=true,
+    privateAurasEnabled=true, showPrivateAurasPlayer=true, showPrivateAurasTarget=false,
     privateAuraMaxPlayer=4,
     showSated=true, satedShowAtSeconds=0,
     ignoreCats={},
@@ -180,8 +180,10 @@ local function EnsureDB()
     s.blizzardShowCooldownText = nil
     s.blizzardOrganizationType = nil
     s.blizzardDispelMode = nil
-    s.showPrivateAurasTarget = false
     s.privateAuraMaxPlayer = API._Render.Clamp(s.privateAuraMaxPlayer, 4, 0, 12)
+    if s.privateAuraMaxTarget ~= nil then
+        s.privateAuraMaxTarget = API._Render.Clamp(s.privateAuraMaxTarget, 4, 0, 12)
+    end
     s.satedShowAtSeconds   = API._Render.Clamp(s.satedShowAtSeconds, 0, 0, 3600)
     -- Per-type growth: sanitize invalid values (nil = fall back to s.growth)
     if s.buffGrowth ~= nil and not A2_GROWTH_OK[s.buffGrowth] then s.buffGrowth = nil end
@@ -591,12 +593,27 @@ end
     return iconSize, spacing, perRow, maxBuffs, maxDebuffs, growth, buffGrowth, debuffGrowth, privateGrowth, rowWrap, buffRowWrap, debuffRowWrap, stackCountAnchor, buffIconSize, debuffIconSize, privateIconSize, sortOrder
 end
 
--- Private Auras (Blizzard-rendered)
+-- Private Auras (custom slot anchors)
 
 local function PrivateAurasSupported()
     return C_UnitAuras
         and type(C_UnitAuras.AddPrivateAuraAnchor) == "function"
         and type(C_UnitAuras.RemovePrivateAuraAnchor) == "function"
+end
+
+API._Render.PrivateAurasShownForUnit = function(shared, unit)
+    if not shared or shared.privateAurasEnabled ~= true then return false end
+    if unit == "player" then return shared.showPrivateAurasPlayer == true end
+    if unit == "target" then return shared.showPrivateAurasTarget == true end
+    return false
+end
+
+API._Render.PrivateAuraMaxForUnit = function(shared, unit)
+    if not shared then return 0 end
+    local value
+    if unit == "target" then value = shared.privateAuraMaxTarget end
+    if value == nil then value = shared.privateAuraMaxPlayer end
+    return API._Render.Clamp(value, 4, 0, 12)
 end
 
 local _pendingRemoveIDs
@@ -744,10 +761,8 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     local unit = entry.unit
 
     -- 12.0.1: Private aura anchor APIs blocked in combat.
-    -- Player-only (focus/boss swaps mid-combat would require Add/Remove calls).
-    if unit ~= "player"
-       or shared.privateAurasEnabled ~= true
-       or shared.showPrivateAurasPlayer ~= true
+    -- Keep this to stable unit tokens where the anchor can follow unit changes.
+    if not API._Render.PrivateAurasShownForUnit(shared, unit)
        or not PrivateAurasSupported()
     then
         PrivateClear(entry)
@@ -757,12 +772,10 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     -- Safety net: never call Add/RemovePrivateAuraAnchor in combat.
     if _inCombat then return end
 
-    local maxN = shared.privateAuraMaxPlayer or 4
-    maxN = API._Render.Clamp(maxN, 4, 0, 12)
+    local maxN = API._Render.PrivateAuraMaxForUnit(shared, unit)
     if maxN == 0 then PrivateClear(entry); return end
 
-    -- unit is always "player" here (focus/boss removed in 12.0.1)
-    local effectiveToken = "player"
+    local effectiveToken = unit
 
     local borderScale = tonumber(shared.privateAuraBorderScale)
     if not borderScale or borderScale < 0 then borderScale = privateIconSize / 10 end
@@ -948,6 +961,13 @@ local function UpdateAnchor(entry, shared, isEditActive)
     local a2 = MSUF_DB and MSUF_DB.auras2
     local pu = a2 and a2.perUnit and a2.perUnit[unit]
     local lay = (pu and pu.overrideLayout == true and type(pu.layout) == "table") and pu.layout or nil
+    local ls = (pu and pu.overrideSharedLayout == true and type(pu.layoutShared) == "table") and pu.layoutShared or nil
+    local privateGrowth = shared.privateGrowth or shared.growth or "RIGHT"
+    if ls and ls.privateGrowth and A2_GROWTH_OK[ls.privateGrowth] then
+        privateGrowth = ls.privateGrowth
+    elseif not A2_GROWTH_OK[privateGrowth] then
+        privateGrowth = (shared.growth and A2_GROWTH_OK[shared.growth]) and shared.growth or "RIGHT"
+    end
 
     if lay then
         if type(lay.offsetX) == "number" then offX = lay.offsetX end
@@ -1062,15 +1082,16 @@ end
 
         MirrorMover(entry.editMoverBuff,    entry.buffs,   anchor, cols * stepB,  buffIconSize + headerH)
         MirrorMover(entry.editMoverDebuff,  entry.debuffs, anchor, dcols * stepD, debuffIconSize + headerH)
-        -- Private auras are player-only; skip mover for target.
-        if unit ~= "target" then
+        if API._Render.PrivateAurasShownForUnit(shared, unit) then
             local privVertical = (privateGrowth == "UP" or privateGrowth == "DOWN")
+            local privMax = API._Render.PrivateAuraMaxForUnit(shared, unit)
+            if privMax < 1 then privMax = 1 end
             local privW, privH
             if privVertical then
                 privW = privateIconSize
-                privH = (4 * stepP) + headerH
+                privH = (privMax * stepP) + headerH
             else
-                privW = 4 * stepP
+                privW = privMax * stepP
                 privH = privateIconSize + headerH
             end
             MirrorMover(entry.editMoverPrivate, entry.private, anchor, privW, privH)
@@ -1628,7 +1649,7 @@ local function MarkAllDirty(delay)
 end
 
 -- Combat-leave guard: tear down + rebuild all private aura anchors.
--- Blizzard-rendered private auras can survive encounter cleanup if the engine
+-- Engine-managed private aura visuals can survive encounter cleanup if the engine
 -- fails to remove stale anchor state, leaving ghost icons stuck on frames.
 -- Forcing a PrivateClear → MarkAllDirty cycle on PLAYER_REGEN_ENABLED
 -- guarantees a clean slate; PrivateRebuild runs on the next RenderUnit pass

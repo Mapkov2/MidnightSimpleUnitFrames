@@ -520,8 +520,7 @@ function EM.EnsureMovers(entry, unit, shared, iconSize, spacing)
     local base = UnitLabel(unit)
     CreateMover(entry, unit, "buff",    base .. " Buffs")
     CreateMover(entry, unit, "debuff",  base .. " Debuffs")
-    -- Private auras are player-only
-    if unit == "player" then
+    if unit == "player" or unit == "target" then
         CreateMover(entry, unit, "private", base .. " Private")
     end
     -- Mover positioning is handled by Render's UpdateAnchor after containers are placed
@@ -545,7 +544,9 @@ function EM.PositionMovers(entry, shared, iconSize, spacing)
 
     local buffW  = buffCols  * step
     local debuffW = debuffCols * step
-    local privW   = 4 * step  -- max private aura slots
+    local privMax = (shared and tonumber(shared.privateAuraMaxPlayer)) or 4
+    if privMax < 1 then privMax = 1 elseif privMax > 12 then privMax = 12 end
+    local privW   = privMax * step
 
     local rowH = iconSize
     local headerH = 20
@@ -601,8 +602,7 @@ function EM.ShowMovers(entry)
     if entry.editMoverDebuff then
         entry.editMoverDebuff:Show()
     end
-    -- Private auras are player-only
-    if entry.editMoverPrivate and u == "player" then
+    if entry.editMoverPrivate and (u == "player" or u == "target") then
         entry.editMoverPrivate:Show()
     end
 end
@@ -934,14 +934,15 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
 
     local showTest = (shared.showInEditMode == true and isEditActive == true)
     cfg = cfg or {}
-    local showPrivatePreview = (shared.privateAurasEnabled == true and shared.showPrivateAurasPlayer == true)
+    local showPrivatePreview = (shared.privateAurasEnabled == true)
+        and ((unit == "player" and shared.showPrivateAurasPlayer == true)
+            or (unit == "target" and shared.showPrivateAurasTarget == true))
 
     if showTest then
         if entry.buffs then entry.buffs:Show() end
         if entry.debuffs then entry.debuffs:Show() end
         if entry.mixed then entry.mixed:Hide() end
-        -- Private auras: only for player
-        if entry.private and unit == "player" and showPrivatePreview then entry.private:Show()
+        if entry.private and showPrivatePreview then entry.private:Show()
         elseif entry.private then entry.private:Hide() end
         entry._msufA2_previewActive = true
     elseif entry._msufA2_previewActive then
@@ -986,7 +987,7 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
         end
     end
 
-    if Icons.RenderPreviewPrivateIcons and unit == "player" and showPrivatePreview then
+    if Icons.RenderPreviewPrivateIcons and showPrivatePreview then
         Icons.RenderPreviewPrivateIcons(entry, unit, shared, cfg.privateIconSize, cfg.spacing, cfg.stackCountAnchor, cfg.privateGrowth)
     end
 

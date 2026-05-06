@@ -58,6 +58,22 @@ local function ForceFrameLevelRefresh(frame)
     frame:SetFrameLevel(level)
 end
 
+local function SyncSlotLayer(slot, container)
+    if not (slot and container) then return end
+    if slot.SetFrameStrata and container.GetFrameStrata then
+        local strata = container:GetFrameStrata()
+        if strata and (not slot.GetFrameStrata or slot:GetFrameStrata() ~= strata) then
+            slot:SetFrameStrata(strata)
+        end
+    end
+    if slot.SetFrameLevel and container.GetFrameLevel then
+        local lvl = (container:GetFrameLevel() or 0) + 1
+        if not slot.GetFrameLevel or slot:GetFrameLevel() ~= lvl then
+            slot:SetFrameLevel(lvl)
+        end
+    end
+end
+
 local function ClearContainerOverlay(f)
     if not f then return end
     if f._gfPrivContainerOverlayID then
@@ -115,6 +131,9 @@ local function ClearAnchors(f)
     f._gfPrivY = nil
     f._gfPrivLayer = nil
     f._gfPrivDir = nil
+    f._gfPrivSpacing = nil
+    f._gfPrivCountdown = nil
+    f._gfPrivNumbers = nil
 
     ClearContainerOverlay(f)
 
@@ -159,9 +178,13 @@ end
 local function NormalizeAllSlots(f, sz)
     local slots = f._gfPrivSlots
     if not slots then return end
+    local container = f._gfPrivContainer
     for i = 1, #slots do
         local s = slots[i]
-        if s and s:IsShown() then NormalizeSlot(s, sz) end
+        if s and s:IsShown() then
+            SyncSlotLayer(s, container)
+            NormalizeSlot(s, sz)
+        end
     end
 end
 
@@ -254,6 +277,8 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     local ox = ScaleFrameValue(paX or 0, frameScale)
     local oy = ScaleFrameValue(paY or 0, frameScale)
     local countdown = paCountdown
+    local showNumbers = paNumbers == true
+    local spacing = ScaleFrameValue((pa and pa.spacing) or 1, frameScale, 0)
 
     -- Diff check: skip rebuild if all structural settings match.
     -- ox / oy / paLayer are NOT structural — they only reposition the
@@ -265,6 +290,9 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
        and f._gfPrivMax == maxN
        and f._gfPrivAnchor == pt
        and f._gfPrivDir == paDirection
+       and f._gfPrivSpacing == spacing
+       and f._gfPrivCountdown == countdown
+       and f._gfPrivNumbers == showNumbers
        and type(f._gfPrivAnchorIDs) == "table"
     then
         local container = f._gfPrivContainer
@@ -306,7 +334,6 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     if container.SetClipsChildren then container:SetClipsChildren(false) end
 
     -- Direction-aware container sizing + slot positioning
-    local spacing = ScaleFrameValue((pa and pa.spacing) or 1, frameScale, 0)
     local isVertical = (paDirection == "TOP" or paDirection == "BOTTOM")
     local totalPrimary = maxN * iconSz + (maxN - 1) * spacing
 
@@ -333,6 +360,9 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
     f._gfPrivX = ox
     f._gfPrivY = oy
     f._gfPrivLayer = paLayer
+    f._gfPrivSpacing = spacing
+    f._gfPrivCountdown = countdown
+    f._gfPrivNumbers = showNumbers
     f._gfPrivAnchorIDs = {}
 
     local slots = f._gfPrivSlots or {}
@@ -363,7 +393,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
             auraIndex = 1,
             parent = nil,
             showCountdownFrame = countdown,
-            showCountdownNumbers = false,
+            showCountdownNumbers = showNumbers,
             -- 12.0.5 REQUIRED FIELD for slot/index anchors too.
             -- GF icon private auras still use the same one-anchor-per-slot
             -- model as Auras2, so this path must stay non-container.
@@ -385,8 +415,6 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         local slot = slots[i]
         if not slot then
             slot = CreateFrame("Frame", nil, container)
-            slot:SetFrameStrata("MEDIUM")
-            slot:SetFrameLevel(62)
             if slot.SetClipsChildren then slot:SetClipsChildren(false) end
             if not slot._gfPrivSizeHook then
                 slot._gfPrivSizeHook = true
@@ -396,6 +424,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
             end
             slots[i] = slot
         end
+        SyncSlotLayer(slot, container)
         slot:ClearAllPoints()
         slot:SetPoint(slotAnchor, container, slotAnchor, (i - 1) * slotDX, (i - 1) * slotDY)
         NormalizeSlot(slot, iconSz)
@@ -405,7 +434,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         args.auraIndex = i
         args.parent = slot
         args.showCountdownFrame = countdown
-        args.showCountdownNumbers = paNumbers
+        args.showCountdownNumbers = showNumbers
         args.isContainer = false
         args.iconInfo.iconWidth = iconSz
         args.iconInfo.iconHeight = iconSz

@@ -2850,7 +2850,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paMaxSl, x = 0, y = -32,
             min = 8, max = 60, step = 1, width = 200, default = 20,
             get = function(k) return PA().size or 20 end,
-            set = function(k, v) PA().size = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().size = v; RequestAuraRefresh() end,
             formatText = function(v) return string.format(L["Size: %d"], v) end,
         })
 
@@ -2859,7 +2859,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paSzSl, x = -16, y = -10, width = 140,
             items = DIRECTION4,
             get = function(k) return PA().direction or "LEFT" end,
-            set = function(k, v) PA().direction = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().direction = v; RequestAuraRefresh() end,
         })
 
         local paAnchorDd = SDropdown({
@@ -2867,7 +2867,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paSzSl, x = 150, y = -10, width = 140,
             items = ANCHOR9,
             get = function(k) return PA().anchor or "TOPRIGHT" end,
-            set = function(k, v) PA().anchor = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().anchor = v; RequestAuraRefresh() end,
         })
 
         local paXSl = SSlider({
@@ -2875,7 +2875,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paSzSl, x = 0, y = -76,
             min = -200, max = 200, step = 1, width = 200, default = 0,
             get = function(k) return PA().x or 0 end,
-            set = function(k, v) PA().x = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().x = v; RequestAuraRefresh() end,
             formatText = function(v) return string.format("X: %d", v) end,
         })
 
@@ -2884,7 +2884,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paXSl, x = 0, y = -32,
             min = -200, max = 200, step = 1, width = 200, default = 0,
             get = function(k) return PA().y or 0 end,
-            set = function(k, v) PA().y = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().y = v; RequestAuraRefresh() end,
             formatText = function(v) return string.format("Y: %d", v) end,
         })
 
@@ -2893,7 +2893,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paYSl, x = 0, y = -32,
             min = 1, max = 15, step = 1, width = 200, default = 8,
             get = function(k) return PA().layer or 8 end,
-            set = function(k, v) PA().layer = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().layer = v; RequestAuraRefresh() end,
             formatText = function(v) return string.format(L["Layer: %d"], v) end,
         })
 
@@ -2902,7 +2902,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = body, anchorPoint = "TOPLEFT", x = 380, y = -40,
             label = L["Show Countdown Frame"],
             get = function(k) return PA().showCountdown ~= false end,
-            set = function(k, v) PA().showCountdown = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().showCountdown = v; RequestAuraRefresh() end,
         })
 
         local paNumChk = SCheck({
@@ -2910,7 +2910,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paCdChk, x = 0, y = -24,
             label = L["Show Countdown Numbers"],
             get = function(k) return PA().showNumbers == true end,
-            set = function(k, v) PA().showNumbers = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().showNumbers = v; RequestAuraRefresh() end,
         })
 
         local paDispelChk = SCheck({
@@ -2918,7 +2918,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             anchor = paNumChk, x = 0, y = -24,
             label = L["Show Private Dispel Type"] or "Show Private Dispel Type",
             get = function(k) return PA().showDispelType == true end,
-            set = function(k, v) PA().showDispelType = v; RequestVisualRefresh() end,
+            set = function(k, v) PA().showDispelType = v; RequestAuraRefresh() end,
         })
 
         refreshPrivateAuraControls = function()
