@@ -226,6 +226,14 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return mode == "CUSTOM" or mode == "MIXED"
     end
 
+    local function GeneralWarnDB()
+        _G.MSUF_DB = _G.MSUF_DB or {}
+        _G.MSUF_DB.general = _G.MSUF_DB.general or {}
+        return _G.MSUF_DB.general
+    end
+
+    _G.StaticPopupDialogs = _G.StaticPopupDialogs or {}
+
     if not _G.StaticPopupDialogs["MSUF_SI_ICON_BLIZZARD_WARN"] then
         _G.StaticPopupDialogs["MSUF_SI_ICON_BLIZZARD_WARN"] = {
             text = "Spell Indicator |cffffd200Icon|r + |cffffd200Blizzard Renderer|r:\n\nSpell Indicators stay independent from aura rendering. If an indicator icon tracks the same aura Blizzard also shows, both icons can be visible.",
@@ -237,9 +245,71 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         }
     end
 
+    if not _G.StaticPopupDialogs["MSUF_GF_MIXED_RENDERER_WARN"] then
+        _G.StaticPopupDialogs["MSUF_GF_MIXED_RENDERER_WARN"] = {
+            text = "Custom + Blizzard renders Blizzard's native aura block and MSUF custom aura groups at the same time.\n\nIf the same aura type is enabled in both places, duplicate icons can be visible. You can disable individual Custom groups below if you only want Blizzard to show that type.\n\nCustom Private Auras stay disabled while any Blizzard native block is active.",
+            button1 = "OK",
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function(self)
+                local cb = self and self.__msufNoMore
+                if cb and cb:GetChecked() then
+                    GeneralWarnDB().gfMixedRendererWarningHidden = true
+                end
+            end,
+            OnShow = function(self)
+                local cb = self.__msufNoMore
+                if not cb then
+                    cb = CreateFrame("CheckButton", nil, self, "UICheckButtonTemplate")
+                    cb:SetSize(22, 22)
+                    local text = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    text:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+                    text:SetText("Do not show this again")
+                    cb.text = text
+                    self.__msufNoMore = cb
+                end
+                self.__msufMixedWarnBaseHeight = self.GetHeight and self:GetHeight() or nil
+                if self.__msufMixedWarnBaseHeight and self.SetHeight then
+                    self:SetHeight(self.__msufMixedWarnBaseHeight + 28)
+                end
+                cb:SetChecked(false)
+                cb:ClearAllPoints()
+                local dialogText = self.text or _G[self:GetName() .. "Text"]
+                if dialogText then
+                    cb:SetPoint("TOPLEFT", dialogText, "BOTTOMLEFT", -2, -8)
+                else
+                    cb:SetPoint("TOPLEFT", self, "TOPLEFT", 24, -92)
+                end
+                cb:Show()
+                if cb.text then cb.text:Show() end
+            end,
+            OnHide = function(self)
+                local cb = self and self.__msufNoMore
+                if cb then
+                    cb:Hide()
+                    if cb.text then cb.text:Hide() end
+                end
+                if self and self.__msufMixedWarnBaseHeight and self.SetHeight then
+                    self:SetHeight(self.__msufMixedWarnBaseHeight)
+                    self.__msufMixedWarnBaseHeight = nil
+                end
+            end,
+        }
+    end
+
     local function ShowSIIconBlizzardWarn()
         if _G.StaticPopup_Show then
             _G.StaticPopup_Show("MSUF_SI_ICON_BLIZZARD_WARN")
+        end
+    end
+
+    local function ShowMixedRendererWarn()
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        if g and g.gfMixedRendererWarningHidden == true then return end
+        if _G.StaticPopup_Show then
+            _G.StaticPopup_Show("MSUF_GF_MIXED_RENDERER_WARN")
         end
     end
 
@@ -2551,7 +2621,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 RequestAuraRefresh()
                 if refreshBlizzardControls then refreshBlizzardControls() end
                 RefreshAuraOptionControls()
-                if (v == "BLIZZARD" or v == "MIXED") and AnySpellIndicatorHasIconPlaced() then
+                if v == "MIXED" then
+                    ShowMixedRendererWarn()
+                elseif v == "BLIZZARD" and AnySpellIndicatorHasIconPlaced() then
                     ShowSIIconBlizzardWarn()
                 end
             end,
