@@ -395,27 +395,18 @@ end
     if g.meleeSpellPerSpec == nil then g.meleeSpellPerSpec = false end
     if type(g.nameplateMeleeSpellIDByClass) ~= "table" then g.nameplateMeleeSpellIDByClass = {} end
     if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then g.nameplateMeleeSpellIDBySpec = {} end
-    -- Shaman: player totem tracker (player-only for now)
-    -- Default ON for Shamans on first run; otherwise default OFF.
+    -- Blizzard TotemFrame re-anchor. Used by Shaman totems and Monk statues.
+    -- Default ON for supported classes on first run; otherwise default OFF.
     if g.enablePlayerTotems == nil then
-        local isShaman = false
+        local hasTotemFrame = false
         if UnitClass then
             local _, cls = UnitClass("player")
-            isShaman = (cls == "SHAMAN")
+            hasTotemFrame = (cls == "SHAMAN" or cls == "MONK")
         end
-        g.enablePlayerTotems = isShaman and true or false
-    end
-    if g.playerTotemsShowText == nil then
-        g.playerTotemsShowText = true
-    end
-    if g.playerTotemsScaleTextByIconSize == nil then
-        g.playerTotemsScaleTextByIconSize = true
+        g.enablePlayerTotems = hasTotemFrame and true or false
     end
     if g.playerTotemsIconSize == nil or g.playerTotemsIconSize <= 0 then
         g.playerTotemsIconSize = 24
-    end
-    if g.playerTotemsSpacing == nil then
-        g.playerTotemsSpacing = 4
     end
     if g.playerTotemsOffsetX == nil then
         g.playerTotemsOffsetX = 0
@@ -429,16 +420,15 @@ end
     if type(g.playerTotemsAnchorTo) ~= "string" or g.playerTotemsAnchorTo == "" then
         g.playerTotemsAnchorTo = "BOTTOMLEFT"
     end
-    if g.playerTotemsGrowthDirection ~= "LEFT" and g.playerTotemsGrowthDirection ~= "RIGHT"
-        and g.playerTotemsGrowthDirection ~= "UP" and g.playerTotemsGrowthDirection ~= "DOWN" then
-        g.playerTotemsGrowthDirection = "RIGHT"
-    end
-    if g.playerTotemsFontSize == nil or g.playerTotemsFontSize <= 0 then
-        g.playerTotemsFontSize = 14
-    end
-    if type(g.playerTotemsTextColor) ~= "table" then
-        g.playerTotemsTextColor = { 1, 1, 1 }
-    end
+
+    -- Retire settings from the removed custom scanner. Blizzard's TotemFrame owns
+    -- text, spacing, duration, and colors now.
+    g.playerTotemsShowText = nil
+    g.playerTotemsScaleTextByIconSize = nil
+    g.playerTotemsSpacing = nil
+    g.playerTotemsGrowthDirection = nil
+    g.playerTotemsFontSize = nil
+    g.playerTotemsTextColor = nil
 
     -- One-time tip popup flag
     if g.shownGameplayColorsTip == nil then
@@ -2631,684 +2621,493 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
     end
 end
 
-------------------------------------------------------
--- Shaman: Player Totems tracker (player-only)
---
--- Goal: lightweight, event-driven. Only uses UpdateManager when the text needs ticking.
-------------------------------------------------------
+-- Blizzard owns TotemFrame, its buttons, and all secret runtime values. MSUF only
+-- re-anchors the frame out of combat, similar to how EQoL handles this class frame.
 do
-    local totemsFrame
-    local totemSlots = {} -- [1..4] = {btn, icon, text, endTime, shown}
+    local eventFrame
+    local originalLayout
+    local managed = false
+    local hooked = false
+    local previewWanted = false
+    local previewFrame
+    local previewButton
 
-    local totemEventFrame
-    local lastHasAnyTotem = false
-    local _previewWanted = false
+    local BLIZZ_TOTEM_BASE_SIZE = 37
+    local MONK_BLACK_OX_STATUE_SPELL_ID = 115315
+    local MONK_JADE_SERPENT_STATUE_SPELL_ID = 115313
+    local TOTEM_FRAME_CLASSES = {
+        SHAMAN = true,
+        MONK = true,
+    }
+    local VALID_ANCHORS = {
+        TOPLEFT = true, TOP = true, TOPRIGHT = true,
+        LEFT = true, CENTER = true, RIGHT = true,
+        BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+    }
 
-    local function _IsPlayerShaman()
+    local _RefreshBlizzardTotems
+
+    local function _GetPlayerTotemFrameClass()
         if UnitClass then
             local _, class = UnitClass("player")
-            return class == "SHAMAN"
-        end
-        return false
-    end
-
-    local function _ToNumberSafe(v)
-        if type(v) == "number" then
-            return v
-        end
-        if v == nil then
-            return nil
-        end
-        local n = tonumber(v)
-        if type(n) == "number" then
-            return n
+            if TOTEM_FRAME_CLASSES[class] then
+                return class
+            end
         end
         return nil
     end
-    local function _FormatRemaining(sec)
-        if not sec or sec <= 0 then
-            return ""
-        end
-        if sec < 10 then
-            return string_format("%.1f", sec)
-        end
-        if sec < 60 then
-            return string_format("%d", math.floor(sec + 0.5))
-        end
-        local m = math.floor(sec / 60)
-        local s = math.floor(sec - (m * 60) + 0.5)
-        if s >= 60 then
-            m = m + 1
-            s = 0
-        end
-        return string_format("%d:%02d", m, s)
+
+    local function _PlayerHasBlizzardTotemFrame()
+        return _GetPlayerTotemFrameClass() ~= nil
     end
 
-------------------------------------------------------
--- Totems preview drag positioning
--- Workflow:
--- 1) Use "Preview" to show the totem row.
--- 2) Drag the preview to place it roughly.
--- 3) Use X/Y sliders for fine tuning.
---
--- Dragging updates ONLY the stored offsets (playerTotemsOffsetX/Y).
--- It does NOT call the full Gameplay Apply path on every mouse move.
--- _MSUF_RoundInt: use module-level local (defined at top of file).
-------------------------------------------------------
-
-local function _ApplyTotemsAnchorOnly(g, offX, offY)
-    if not totemsFrame then return end
-
-    local playerFrame = _G.MSUF_player
-
-    local anchorFrom = (g and type(g.playerTotemsAnchorFrom) == "string" and g.playerTotemsAnchorFrom ~= "") and g.playerTotemsAnchorFrom or "TOPLEFT"
-    local anchorTo = (g and type(g.playerTotemsAnchorTo) == "string" and g.playerTotemsAnchorTo ~= "") and g.playerTotemsAnchorTo or "BOTTOMLEFT"
-
-    totemsFrame:ClearAllPoints()
-
-    local x = (type(offX) == "number") and offX or (tonumber(g and g.playerTotemsOffsetX) or 0)
-    local y = (type(offY) == "number") and offY or (tonumber(g and g.playerTotemsOffsetY) or -6)
-
-    if playerFrame then
-        totemsFrame:SetPoint(anchorFrom, playerFrame, anchorTo, x, y)
-    else
-        totemsFrame:SetPoint("CENTER", UIParent, "CENTER", x, y)
+    local function _CanMoveBlizzardTotemFrame()
+        return not (InCombatLockdown and InCombatLockdown())
     end
-end
 
-local function _SetTotemsDragEnabled(on)
-    if not totemsFrame then return end
-    local ov = totemsFrame._msufDragOverlay
-    if not ov then return end
-
-    if on then
-        ov:Show()
-        ov:EnableMouse(true)
-    else
-        ov:EnableMouse(false)
-        ov:SetScript("OnUpdate", nil)
-        ov._msufDragging = nil
-        ov:Hide()
-    end
-end
-
-    local function _EnsureTotemsFrame()
-        if totemsFrame then
-            return totemsFrame
+    local function _AnchorValue(value, fallback)
+        if type(value) == "string" and VALID_ANCHORS[value] then
+            return value
         end
+        return fallback
+    end
 
-        totemsFrame = CreateFrame("Frame", "MSUF_PlayerTotemsFrame", UIParent)
-        totemsFrame:SetFrameStrata("MEDIUM")
-        totemsFrame:SetFrameLevel(50)
+    local function _TotemIconSize(g)
+        return _MSUF_Clamp(math_floor((tonumber(g and g.playerTotemsIconSize) or 24) + 0.5), 8, 64)
+    end
 
-        for i = 1, 4 do
-            local b = CreateFrame("Frame", "MSUF_PlayerTotemSlot"..i, totemsFrame)
-            b:SetSize(24, 24)
+    local function _GetPreviewSpellID()
+        local class = _GetPlayerTotemFrameClass()
+        if class == "MONK" then
+            return (MSUF_GetPlayerSpecID() == 270) and MONK_JADE_SERPENT_STATUE_SPELL_ID or MONK_BLACK_OX_STATUE_SPELL_ID
+        end
+        return nil
+    end
 
-            if i == 1 then
-                b:SetPoint("TOPLEFT", totemsFrame, "TOPLEFT", 0, 0)
-            else
-                b:SetPoint("LEFT", totemSlots[i-1].btn, "RIGHT", 4, 0)
+    local function _GetPreviewIconTexture()
+        local spellID = _GetPreviewSpellID()
+        if spellID and C_Spell and C_Spell.GetSpellTexture then
+            local icon = C_Spell.GetSpellTexture(spellID)
+            if icon then
+                return icon
             end
-
-            local icon = b:CreateTexture(nil, "ARTWORK")
-            icon:SetAllPoints()
-            icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-            local text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            text:SetPoint("CENTER", b, "CENTER", 0, 0)
-            text:SetJustifyH("CENTER")
-            text:SetJustifyV("MIDDLE")
-
-            totemSlots[i] = {
-                btn = b,
-                icon = icon,
-                text = text,
-                endTime = 0,
-                shown = false,
-				-- lastText cache intentionally not used (secret-safe: never compare secret strings)
-				lastText = nil,
-            }
-
-end
-
--- Drag overlay for Preview positioning (X/Y sliders remain for fine tuning).
-if not totemsFrame._msufDragOverlay then
-    local ov = CreateFrame("Button", nil, totemsFrame)
-    ov:SetAllPoints(totemsFrame)
-    ov:SetFrameLevel(totemsFrame:GetFrameLevel() + 200)
-    ov:EnableMouse(false)
-    ov:Hide()
-
-    local hi = ov:CreateTexture(nil, "OVERLAY")
-    hi:SetAllPoints()
-    hi:SetColorTexture(1, 1, 1, 0.08)
-    hi:Hide()
-    ov._msufHi = hi
-
-    ov:SetScript("OnEnter", function(self)
-        if self._msufHi then self._msufHi:Show() end
-        if GameTooltip then
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:AddLine("Totems Preview", 1, 1, 1)
-            GameTooltip:AddLine("Drag or arrow keys to move.", 0.9, 0.9, 0.9)
-            GameTooltip:AddLine("Use X/Y offsets for fine tuning.", 0.7, 0.7, 0.7)
-            GameTooltip:Show()
         end
-    end)
-    ov:SetScript("OnLeave", function(self)
-        if self._msufHi then self._msufHi:Hide() end
-        if GameTooltip then GameTooltip:Hide() end
-    end)
 
-    ov:SetScript("OnMouseDown", function(self, btn)
-        if btn ~= "LeftButton" then return end
+        -- Same generic sample icon EQoL uses for TotemButtonTemplate previews.
+        return 136099
+    end
 
-        local g = EnsureGameplayDefaults()
-        self._msufDragG = g
+    local function _AnchorFrameToPlayer(frame, g, offX, offY)
+        if not frame then return end
 
-        local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-        local cx, cy = GetCursorPosition()
-        cx = cx / scale
-        cy = cy / scale
+        local playerFrame = _G.MSUF_player
+        local anchorFrom = _AnchorValue(g and g.playerTotemsAnchorFrom, "TOPLEFT")
+        local anchorTo = _AnchorValue(g and g.playerTotemsAnchorTo, "BOTTOMLEFT")
+        local x = (type(offX) == "number") and offX or (tonumber(g and g.playerTotemsOffsetX) or 0)
+        local y = (type(offY) == "number") and offY or (tonumber(g and g.playerTotemsOffsetY) or -6)
 
-        self._msufDragStartCursorX = cx
-        self._msufDragStartCursorY = cy
-        self._msufDragStartOffX = tonumber(g.playerTotemsOffsetX) or 0
-        self._msufDragStartOffY = tonumber(g.playerTotemsOffsetY) or -6
-        self._msufDragLastOffX = self._msufDragStartOffX
-        self._msufDragLastOffY = self._msufDragStartOffY
-        self._msufDragging = true
+        frame:ClearAllPoints()
+        if playerFrame then
+            frame:SetPoint(anchorFrom, playerFrame, anchorTo, x, y)
+        else
+            frame:SetPoint("CENTER", UIParent, "CENTER", x, y)
+        end
+    end
 
-        self:SetScript("OnUpdate", function(self)
-            if not self._msufDragging then return end
-            local g = self._msufDragG
-            if not g then return end
+    local function _StoreOriginalLayout(frame)
+        if not frame or originalLayout then return end
 
+        local info = {
+            parent = frame:GetParent(),
+            scale = frame:GetScale(),
+            strata = frame:GetFrameStrata(),
+            level = frame:GetFrameLevel(),
+            ignoreFramePositionManager = frame.ignoreFramePositionManager,
+            points = {},
+        }
+
+        for i = 1, frame:GetNumPoints() do
+            local point, relativeTo, relativePoint, x, y = frame:GetPoint(i)
+            info.points[#info.points + 1] = {
+                point = point,
+                relativeTo = relativeTo,
+                relativePoint = relativePoint,
+                x = x,
+                y = y,
+            }
+        end
+
+        originalLayout = info
+    end
+
+    local function _HookBlizzardTotemFrame(frame)
+        if not frame or hooked then return end
+        hooked = true
+        frame:HookScript("OnShow", function()
+            if _RefreshBlizzardTotems then
+                _RefreshBlizzardTotems()
+            end
+        end)
+    end
+
+    local function _RestoreBlizzardTotemFrame()
+        if not managed then return true end
+
+        local frame = _G.TotemFrame
+        if not frame then
+            managed = false
+            return true
+        end
+
+        if not _CanMoveBlizzardTotemFrame() then
+            return false
+        end
+
+        local info = originalLayout
+        managed = false
+
+        if not info then return true end
+
+        if frame.SetParent then
+            frame:SetParent(info.parent or UIParent)
+        end
+
+        frame:ClearAllPoints()
+        if info.points and #info.points > 0 then
+            for _, pt in pairs(info.points) do
+                frame:SetPoint(pt.point, pt.relativeTo or UIParent, pt.relativePoint or pt.point, pt.x or 0, pt.y or 0)
+            end
+        else
+            frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        end
+
+        if info.scale and frame.SetScale then frame:SetScale(info.scale) end
+        if info.strata and frame.SetFrameStrata then frame:SetFrameStrata(info.strata) end
+        if info.level and frame.SetFrameLevel then frame:SetFrameLevel(info.level) end
+        if info.ignoreFramePositionManager ~= nil then
+            frame.ignoreFramePositionManager = info.ignoreFramePositionManager
+        end
+        if frame.Layout then frame:Layout() end
+
+        return true
+    end
+
+    local function _ApplyBlizzardTotemFrame(g)
+        local frame = _G.TotemFrame
+        if not frame then return false end
+
+        if not _CanMoveBlizzardTotemFrame() then
+            return false
+        end
+
+        local playerFrame = _G.MSUF_player
+        _StoreOriginalLayout(frame)
+        _HookBlizzardTotemFrame(frame)
+
+        managed = true
+        frame.ignoreFramePositionManager = true
+
+        if frame.SetParent then
+            frame:SetParent(playerFrame or UIParent)
+        end
+        _AnchorFrameToPlayer(frame, g)
+
+        if frame.SetScale then
+            local baseScale = (originalLayout and originalLayout.scale) or 1
+            local scale = _MSUF_Clamp((_TotemIconSize(g) / BLIZZ_TOTEM_BASE_SIZE) * baseScale, 0.35, 2.50)
+            frame:SetScale(scale)
+        end
+
+        if playerFrame then
+            if frame.SetFrameStrata and playerFrame.GetFrameStrata then
+                frame:SetFrameStrata(playerFrame:GetFrameStrata())
+            end
+            if frame.SetFrameLevel and playerFrame.GetFrameLevel then
+                frame:SetFrameLevel((playerFrame:GetFrameLevel() or 0) + 5)
+            end
+        end
+
+        if frame.Layout then frame:Layout() end
+        return true
+    end
+
+    local function _ApplyPreviewAnchorOnly(g, offX, offY)
+        if not previewFrame then return end
+        _AnchorFrameToPlayer(previewFrame, g, offX, offY)
+    end
+
+    local function _SetPreviewDragEnabled(enabled)
+        if not previewFrame or not previewFrame._msufDragOverlay then return end
+
+        local overlay = previewFrame._msufDragOverlay
+        if enabled then
+            overlay:Show()
+            overlay:EnableMouse(true)
+        else
+            overlay:EnableMouse(false)
+            overlay:SetScript("OnUpdate", nil)
+            overlay._msufDragging = nil
+            overlay:Hide()
+        end
+    end
+
+    local function _EnsurePreviewFrame()
+        if previewFrame then return previewFrame end
+
+        previewFrame = CreateFrame("Frame", "MSUF_PlayerTotemsPreviewFrame", UIParent)
+        previewFrame:SetFrameStrata("MEDIUM")
+        previewFrame:SetFrameLevel(200)
+        previewFrame:SetSize(BLIZZ_TOTEM_BASE_SIZE, BLIZZ_TOTEM_BASE_SIZE)
+
+        previewButton = CreateFrame("Button", nil, previewFrame, "TotemButtonTemplate")
+        previewButton:SetAllPoints(previewFrame)
+        previewButton.layoutIndex = 1
+        previewButton.slot = 0
+        previewButton:EnableMouse(false)
+        if previewButton.SetScript then
+            previewButton:SetScript("OnUpdate", nil)
+        end
+        if previewButton.Icon and previewButton.Icon.Cooldown then previewButton.Icon.Cooldown:Hide() end
+        if previewButton.Duration then
+            previewButton.Duration:SetText("")
+            previewButton.Duration:Hide()
+        end
+        if not (previewButton.Icon and previewButton.Icon.Texture) then
+            local icon = previewButton:CreateTexture(nil, "ARTWORK")
+            icon:SetAllPoints(previewButton)
+            icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            previewButton._msufFallbackIcon = icon
+        end
+
+        local overlay = CreateFrame("Button", nil, previewFrame)
+        overlay:SetAllPoints(previewFrame)
+        overlay:SetFrameLevel(previewFrame:GetFrameLevel() + 20)
+        overlay:EnableMouse(false)
+        overlay:Hide()
+
+        local highlight = overlay:CreateTexture(nil, "OVERLAY")
+        highlight:SetAllPoints()
+        highlight:SetColorTexture(1, 1, 1, 0.08)
+        highlight:Hide()
+        overlay._msufHi = highlight
+
+        overlay:SetScript("OnEnter", function(self)
+            if self._msufHi then self._msufHi:Show() end
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:AddLine("Blizzard TotemFrame Preview", 1, 1, 1)
+                GameTooltip:AddLine("Drag or arrow keys to move.", 0.9, 0.9, 0.9)
+                GameTooltip:Show()
+            end
+        end)
+        overlay:SetScript("OnLeave", function(self)
+            if self._msufHi then self._msufHi:Hide() end
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+        overlay:SetScript("OnMouseDown", function(self, button)
+            if button ~= "LeftButton" then return end
+
+            local g = EnsureGameplayDefaults()
             local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-            local x, y = GetCursorPosition()
-            x = x / scale
-            y = y / scale
+            local cursorX, cursorY = GetCursorPosition()
+            cursorX = cursorX / scale
+            cursorY = cursorY / scale
 
-            local dx = x - (self._msufDragStartCursorX or x)
-            local dy = y - (self._msufDragStartCursorY or y)
+            self._msufDragG = g
+            self._msufDragStartCursorX = cursorX
+            self._msufDragStartCursorY = cursorY
+            self._msufDragStartOffX = tonumber(g.playerTotemsOffsetX) or 0
+            self._msufDragStartOffY = tonumber(g.playerTotemsOffsetY) or -6
+            self._msufDragLastOffX = self._msufDragStartOffX
+            self._msufDragLastOffY = self._msufDragStartOffY
+            self._msufDragging = true
 
-            local offX = _MSUF_RoundInt((self._msufDragStartOffX or 0) + dx)
-            local offY = _MSUF_RoundInt((self._msufDragStartOffY or -6) + dy)
+            self:SetScript("OnUpdate", function(frame)
+                if not frame._msufDragging then return end
+                local dragG = frame._msufDragG
+                if not dragG then return end
 
-            if offX ~= self._msufDragLastOffX or offY ~= self._msufDragLastOffY then
-                self._msufDragLastOffX = offX
-                self._msufDragLastOffY = offY
-                g.playerTotemsOffsetX = offX
-                g.playerTotemsOffsetY = offY
+                local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+                local x, y = GetCursorPosition()
+                x = x / uiScale
+                y = y / uiScale
 
-                _ApplyTotemsAnchorOnly(g, offX, offY)
+                local offX = _MSUF_RoundInt((frame._msufDragStartOffX or 0) + (x - (frame._msufDragStartCursorX or x)))
+                local offY = _MSUF_RoundInt((frame._msufDragStartOffY or -6) + (y - (frame._msufDragStartCursorY or y)))
+                if offX == frame._msufDragLastOffX and offY == frame._msufDragLastOffY then return end
+
+                frame._msufDragLastOffX = offX
+                frame._msufDragLastOffY = offY
+                dragG.playerTotemsOffsetX = offX
+                dragG.playerTotemsOffsetY = offY
+                _ApplyPreviewAnchorOnly(dragG, offX, offY)
 
                 local opt = _G.MSUF_GameplayPanel
                 if opt and opt.MSUF_SyncTotemOffsetSliders then
                     opt:MSUF_SyncTotemOffsetSliders()
                 end
-            end
+            end)
         end)
-    end)
+        overlay:SetScript("OnMouseUp", function(self, button)
+            if button ~= "LeftButton" then return end
+            self._msufDragging = nil
+            self:SetScript("OnUpdate", nil)
+            MSUF_Gameplay_SelectNudgeFrame(self, true)
 
-    ov:SetScript("OnMouseUp", function(self, btn)
-        if btn ~= "LeftButton" then return end
-        self._msufDragging = nil
-        self:SetScript("OnUpdate", nil)
-
-        local opt = _G.MSUF_GameplayPanel
-        if opt and opt.MSUF_SyncTotemOffsetSliders then
-            opt:MSUF_SyncTotemOffsetSliders()
-        end
-        MSUF_Gameplay_SelectNudgeFrame(self, true)
-    end)
-
-    MSUF_Gameplay_SetupArrowNudge(ov,
-        function(self, dx, dy)
-            local g = EnsureGameplayDefaults()
-            if not totemsFrame or not totemsFrame._msufPreviewActive then return false end
-            local offX = _MSUF_RoundInt((tonumber(g.playerTotemsOffsetX) or 0) + (dx or 0))
-            local offY = _MSUF_RoundInt((tonumber(g.playerTotemsOffsetY) or -6) + (dy or 0))
-            g.playerTotemsOffsetX = offX
-            g.playerTotemsOffsetY = offY
-            _ApplyTotemsAnchorOnly(g, offX, offY)
+            if _RefreshBlizzardTotems then
+                _RefreshBlizzardTotems()
+            end
 
             local opt = _G.MSUF_GameplayPanel
             if opt and opt.MSUF_SyncTotemOffsetSliders then
                 opt:MSUF_SyncTotemOffsetSliders()
             end
-            return true
-        end,
-        function(self)
-            return totemsFrame and totemsFrame._msufPreviewActive and self.IsShown and self:IsShown()
         end)
 
-    totemsFrame._msufDragOverlay = ov
-end
+        MSUF_Gameplay_SetupArrowNudge(overlay,
+            function(_, dx, dy)
+                local g = EnsureGameplayDefaults()
+                if not previewFrame or not previewFrame._msufPreviewActive then return false end
 
-totemsFrame:Hide()
-        return totemsFrame
-    end
-
-    local function _ClearTotemsPreview()
-        if totemsFrame then
-            totemsFrame._msufPreviewActive = nil
-        end
-        _SetTotemsDragEnabled(false)
-    end
-
-    local function _ApplyTotemsPreview(g)
-        local f = _EnsureTotemsFrame()
-        f._msufPreviewActive = true
-        f:Show()
-
-        -- Static, safe preview icons (no API reads / no secret values)
-        local icons = {
-            "Interface\\Icons\\Spell_Nature_StoneClawTotem",
-            "Interface\\Icons\\Spell_Nature_StrengthOfEarthTotem02",
-            "Interface\\Icons\\Spell_Nature_TremorTotem",
-            "Interface\\Icons\\Spell_Nature_Windfury",
-        }
-
-        for i = 1, 4 do
-            local slot = totemSlots[i]
-            if slot and slot.btn then
-                slot.icon:SetTexture(icons[i] or "Interface\\Icons\\INV_Misc_QuestionMark")
-                if slot.icon.GetTexture and slot.icon:GetTexture() == nil then
-                    slot.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+                local offX = _MSUF_RoundInt((tonumber(g.playerTotemsOffsetX) or 0) + (dx or 0))
+                local offY = _MSUF_RoundInt((tonumber(g.playerTotemsOffsetY) or -6) + (dy or 0))
+                g.playerTotemsOffsetX = offX
+                g.playerTotemsOffsetY = offY
+                _ApplyPreviewAnchorOnly(g, offX, offY)
+                if _RefreshBlizzardTotems then
+                    _RefreshBlizzardTotems()
                 end
-                slot.btn:Show()
-                slot.shown = true
 
-                if g and g.playerTotemsShowText then
-                    local t = (i == 1 and "12s") or (i == 2 and "8s") or (i == 3 and "5s") or "3s"
-                    slot.text:SetText(t)
-                    slot.text:Show()
-                else
-                    slot.text:SetText("")
-                    slot.text:Hide()
+                local opt = _G.MSUF_GameplayPanel
+                if opt and opt.MSUF_SyncTotemOffsetSliders then
+                    opt:MSUF_SyncTotemOffsetSliders()
                 end
+                return true
+            end,
+            function()
+                return previewFrame and previewFrame._msufPreviewActive and overlay.IsShown and overlay:IsShown()
+            end)
+
+        previewFrame._msufDragOverlay = overlay
+        previewFrame:Hide()
+        return previewFrame
+    end
+
+    local function _ApplyPreview(g)
+        local frame = _EnsurePreviewFrame()
+        frame._msufPreviewActive = true
+
+        frame:SetSize(BLIZZ_TOTEM_BASE_SIZE, BLIZZ_TOTEM_BASE_SIZE)
+        frame:SetScale(_MSUF_Clamp(_TotemIconSize(g) / BLIZZ_TOTEM_BASE_SIZE, 0.35, 2.50))
+
+        if previewButton then
+            previewButton:SetAllPoints(frame)
+            previewButton.layoutIndex = 1
+            previewButton.slot = 0
+            local texture = (previewButton.Icon and previewButton.Icon.Texture) or previewButton._msufFallbackIcon
+            if texture then
+                texture:SetTexture(_GetPreviewIconTexture())
+                texture:Show()
             end
-        end
-
-        _SetTotemsDragEnabled(true)
-    end
-
-    local function _ApplyTotemsLayout(g)
-        local f = _EnsureTotemsFrame()
-        local playerFrame = _G.MSUF_player
-
-        f:ClearAllPoints()
-
-        local anchorFrom = (type(g.playerTotemsAnchorFrom) == "string" and g.playerTotemsAnchorFrom ~= "") and g.playerTotemsAnchorFrom or "TOPLEFT"
-        local anchorTo = (type(g.playerTotemsAnchorTo) == "string" and g.playerTotemsAnchorTo ~= "") and g.playerTotemsAnchorTo or "BOTTOMLEFT"
-
-        if playerFrame then
-            f:SetPoint(anchorFrom, playerFrame, anchorTo, tonumber(g.playerTotemsOffsetX) or 0, tonumber(g.playerTotemsOffsetY) or -6)
-        else
-            -- Fallback: still usable if unitframes are disabled / not yet created.
-            f:SetPoint("CENTER", UIParent, "CENTER", tonumber(g.playerTotemsOffsetX) or 0, tonumber(g.playerTotemsOffsetY) or -6)
-        end
-
-        local size = _MSUF_Clamp(math.floor((tonumber(g.playerTotemsIconSize) or 24) + 0.5), 8, 64)
-        local spacing = _MSUF_Clamp(math.floor((tonumber(g.playerTotemsSpacing) or 4) + 0.5), 0, 20)
-
-        -- Use MSUF's global font settings (Fonts menu) so the totem countdown matches the rest of the addon.
-        local fontPath = (STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF")
-        local fontFlags = "OUTLINE"
-        if type(_G.MSUF_GetGlobalFontSettings) == "function" then
-            local p, flags = _G.MSUF_GetGlobalFontSettings()
-            if type(p) == "string" and p ~= "" then
-                fontPath = p
+            if previewButton.Icon and previewButton.Icon.Cooldown then previewButton.Icon.Cooldown:Hide() end
+            if previewButton.Duration then
+                previewButton.Duration:SetText("")
+                previewButton.Duration:Hide()
             end
-            if type(flags) == "string" and flags ~= "" then
-                fontFlags = flags
-            end
-        end
-        local fontSize = _MSUF_Clamp(math.floor((tonumber(g.playerTotemsFontSize) or 14) + 0.5), 8, 64)
-        if g.playerTotemsScaleTextByIconSize then
-            fontSize = _MSUF_Clamp(math.floor(size * 0.55 + 0.5), 8, 64)
+            previewButton:Show()
         end
 
-            local tr, tg, tb = _MSUF_NormalizeRGB(g.playerTotemsTextColor, 1, 1, 1)
-
-    -- Growth direction:
-    --  RIGHT/LEFT = horizontal row
-    --  UP/DOWN    = vertical column
-    local growth = g.playerTotemsGrowthDirection
-    if growth ~= "LEFT" and growth ~= "RIGHT" and growth ~= "UP" and growth ~= "DOWN" then
-        growth = "RIGHT"
+        _AnchorFrameToPlayer(frame, g)
+        frame:Show()
+        _SetPreviewDragEnabled(true)
     end
-    local vertical = (growth == "UP" or growth == "DOWN")
 
-    for i = 1, 4 do
-        local slot = totemSlots[i]
-        if slot and slot.btn then
-            slot.btn:SetSize(size, size)
-            slot.text:SetFont(fontPath, fontSize, fontFlags)
-            slot.text:SetTextColor(tr, tg, tb, 1)
-
-            slot.btn:ClearAllPoints()
-
-            if i == 1 then
-                if growth == "LEFT" then
-                    slot.btn:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
-                elseif growth == "UP" then
-                    slot.btn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
-                elseif growth == "DOWN" then
-                    slot.btn:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-                else -- RIGHT
-                    slot.btn:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-                end
-            else
-                local prev = totemSlots[i-1] and totemSlots[i-1].btn
-                if prev then
-                    if growth == "LEFT" then
-                        slot.btn:SetPoint("RIGHT", prev, "LEFT", -spacing, 0)
-                    elseif growth == "UP" then
-                        slot.btn:SetPoint("BOTTOM", prev, "TOP", 0, spacing)
-                    elseif growth == "DOWN" then
-                        slot.btn:SetPoint("TOP", prev, "BOTTOM", 0, -spacing)
-                    else -- RIGHT
-                        slot.btn:SetPoint("LEFT", prev, "RIGHT", spacing, 0)
-                    end
-                else
-                    -- Fallback: should not happen, but keep stable
-                    slot.btn:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-                end
-            end
+    local function _ClearPreview()
+        if previewFrame then
+            previewFrame._msufPreviewActive = nil
+            previewFrame:Hide()
         end
+        _SetPreviewDragEnabled(false)
     end
 
-    if vertical then
-        f:SetSize(size, (size * 4) + (spacing * 3))
-    else
-        f:SetSize((size * 4) + (spacing * 3), size)
-    end
-end
-
-local function _FormatTotemTime(left)
-    if issecretvalue and issecretvalue(left) then
-        return nil
-    end
-    if type(left) ~= "number" or left <= 0 then
-        return ""
-    end
-
-    if left < 10 then
-        return string_format("%.1fs", left)
-    end
-
-    if left < 60 then
-        return string_format("%ds", math_floor(left + 0.5))
-    end
-
-    local m = math_floor(left / 60)
-    local s = math_floor((left - (m * 60)) + 0.5)
-    if s >= 60 then
-        m = m + 1
-        s = 0
-    end
-    return string_format("%d:%02d", m, s)
-end
-
-local function _PickTotemTickInterval(minLeft)
-    if issecretvalue and issecretvalue(minLeft) then
-        return 1.00
-    end
-    if type(minLeft) ~= "number" then
-        return 0.50
-    end
-    if minLeft < 10 then
-        return 0.10
-    end
-    if minLeft < 60 then
-        return 0.50
-    end
-    return 1.00
-end
-
-local function _SetTotemTimeText(slot, left)
-    local text = slot and slot.text
-    if not text then
-        return nil
-    end
-
-    -- Midnight secret values cannot be compared or formatted in Lua. Let the
-    -- FontString C method consume the raw value instead.
-    if issecretvalue and issecretvalue(left) then
-        if text.SetFormattedText then
-            text:SetFormattedText("%.0fs", left)
-            text:Show()
-        else
-            text:SetText("")
-            text:Hide()
-        end
-        return 1.00
-    end
-
-    if type(left) == "number" then
-        local formatted = _FormatTotemTime(left)
-        text:SetText(formatted or "")
-        if formatted and formatted ~= "" then
-            text:Show()
-        else
-            text:Hide()
-        end
-        return _PickTotemTickInterval(left)
-    end
-
-    text:SetText("")
-    text:Hide()
-    return nil
-end
-
-local function _UpdateTotemsNow(g)
-    if not totemsFrame then
-        return false
-    end
-
-    local any = false
-    local anyFast = false
-    local anyMed = false
-
-    for slotIndex = 1, 4 do
-        local haveTotem, name, startTime, duration, icon = GetTotemInfo(slotIndex)
-        local slot = totemSlots[slotIndex]
-
-        if slot and slot.btn then
-            -- Always pass-through the texture; secret values are fine to pass through.
-            slot.icon:SetTexture(icon)
-
-            local tex = slot.icon:GetTexture()
-            local isActive = (tex ~= nil)
-
-            if isActive then
-                any = true
-
-                slot.btn:Show()
-                slot.icon:Show()
-                slot.shown = true
-
-                if g.playerTotemsShowText then
-                    local left = GetTotemTimeLeft(slotIndex)
-                    local hint = _SetTotemTimeText(slot, left)
-                    -- Step 4 tick selection without cross-slot numeric compares.
-                    if hint == 0.10 then
-                        anyFast = true
-                    elseif hint == 0.50 then
-                        anyMed = true
-                    end
-                else
-                    slot.text:SetText("")
-                    slot.text:Hide()
-                end
-            else
-                slot.shown = false
-                slot.text:SetText("")
-                slot.text:Hide()
-                slot.btn:Hide()
-            end
-        end
-    end
-
-    totemsFrame:SetShown(any)
-    lastHasAnyTotem = any
-
-    -- Step 4: dynamic tick (fast under 10s, slower otherwise) without secret compares.
-    if anyFast then
-        ns._MSUF_PlayerTotemsTickInterval = 0.10
-    elseif anyMed then
-        ns._MSUF_PlayerTotemsTickInterval = 0.50
-    else
-        ns._MSUF_PlayerTotemsTickInterval = 1.00
-    end
-
-    return any
-end
-
-local function _TickTotemText()
-    local g = GetGameplayDBFast()
-    if not g or not g.enablePlayerTotems or not g.playerTotemsShowText then return end
-
-    if not totemsFrame or not totemsFrame:IsShown() then return end
-
-    local anyFast = false
-    local anyMed = false
-
-    for i = 1, 4 do
-        local slot = totemSlots[i]
-        if slot and slot.shown then
-            local left = GetTotemTimeLeft(i)
-            local hint = _SetTotemTimeText(slot, left)
-            if hint == 0.10 then
-                anyFast = true
-            elseif hint == 0.50 then
-                anyMed = true
-            end
-        end
-    end
-
-    if anyFast then
-        ns._MSUF_PlayerTotemsTickInterval = 0.10
-    elseif anyMed then
-        ns._MSUF_PlayerTotemsTickInterval = 0.50
-    else
-        ns._MSUF_PlayerTotemsTickInterval = 1.00
-    end
-end
-
-    local _totemLoopActive = nil
-    local function _TotemTextLoopStep()
-        local loop = _totemLoopActive
-        if not loop then return end
-        _TickTotemText()
-
-        local g = GetGameplayDBFast()
-        local enableTick = (g and g.enablePlayerTotems and g.playerTotemsShowText and totemsFrame and totemsFrame:IsShown()) and true or false
-        if not enableTick then
-            if _totemLoopActive == loop then
-                _totemLoopActive = nil
-            end
-            return
-        end
-
-        if _totemLoopActive == loop and C_Timer and C_Timer.After then
-            C_Timer.After(ns._MSUF_PlayerTotemsTickInterval or 0.50, loop.step)
-        elseif _totemLoopActive == loop then
-            _totemLoopActive = nil
-        end
-    end
-
-    local function _UpdateTotemTickEnabled(g, any)
-        local enableTick = (g and g.enablePlayerTotems and g.playerTotemsShowText and any) and true or false
-        if enableTick then
-            if not _totemLoopActive and C_Timer and C_Timer.After then
-                local loop = {}
-                loop.step = function()
-                    if _totemLoopActive == loop then
-                        _TotemTextLoopStep()
-                    end
-                end
-                _totemLoopActive = loop
-                C_Timer.After(ns._MSUF_PlayerTotemsTickInterval or 0.50, loop.step)
-            end
-        else
-            _totemLoopActive = nil
-        end
-    end
-
-    local function _RefreshTotems()
+    function _RefreshBlizzardTotems()
         local g = EnsureGameplayDefaults()
+        local hasTotemFrame = _PlayerHasBlizzardTotemFrame()
 
-        local isShaman = _IsPlayerShaman()
-        if not isShaman then
-            _previewWanted = false
+        if not hasTotemFrame then
+            previewWanted = false
         end
 
-        -- Preview: Shaman-only. Works even if the feature toggle is off (positioning).
-        if isShaman and _previewWanted then
-            _EnsureTotemsFrame()
-            _ApplyTotemsLayout(g)
-            _ApplyTotemsPreview(g)
-            _UpdateTotemTickEnabled(g, false)
-            return
+        if hasTotemFrame and previewWanted then
+            _ApplyPreview(g)
         else
-            _ClearTotemsPreview()
+            _ClearPreview()
         end
 
-        if (not g.enablePlayerTotems) or (not isShaman) then
-            _UpdateTotemTickEnabled(g, false)
-            if totemsFrame then
-                totemsFrame:Hide()
-            end
-            lastHasAnyTotem = false
+        if not hasTotemFrame or not (g and g.enablePlayerTotems) then
+            _RestoreBlizzardTotemFrame()
             return
         end
 
-        _EnsureTotemsFrame()
-        _ApplyTotemsLayout(g)
-        local any = _UpdateTotemsNow(g)
-        _UpdateTotemTickEnabled(g, any)
+        _ApplyBlizzardTotemFrame(g)
     end
 
-    local function _EnsureTotemEvents()
-        if totemEventFrame then return end
+    local function _EnsureEventFrame()
+        if eventFrame then return end
 
-        totemEventFrame = CreateFrame("Frame", "MSUF_PlayerTotemsEventFrame", UIParent)
-        totemEventFrame:SetScript("OnEvent", function()
-            _RefreshTotems()
+        eventFrame = CreateFrame("Frame", "MSUF_PlayerTotemsBlizzardEventFrame", UIParent)
+        eventFrame:SetScript("OnEvent", function(_, event, ...)
+            if event == "UNIT_SPELLCAST_SUCCEEDED" then
+                local unit = ...
+                if unit ~= "player" then return end
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(0, _RefreshBlizzardTotems)
+                    C_Timer.After(0.10, _RefreshBlizzardTotems)
+                else
+                    _RefreshBlizzardTotems()
+                end
+                return
+            end
+
+            if event == "ADDON_LOADED" and not _G.TotemFrame then
+                return
+            end
+
+            _RefreshBlizzardTotems()
         end)
     end
 
     function GameplayFeatures_PlayerTotems_Apply(g)
-        -- small wrapper used by the GameplayFeatures table (defined later)
-        _EnsureTotemEvents()
+        _EnsureEventFrame()
 
-        totemEventFrame:UnregisterAllEvents()
-        if g and g.enablePlayerTotems and _IsPlayerShaman() then
-            -- Totems change is best covered by PLAYER_TOTEM_UPDATE. Also refresh on login/world.
-            totemEventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
-            totemEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-            totemEventFrame:RegisterEvent("PLAYER_LOGIN")
+        eventFrame:UnregisterAllEvents()
+        eventFrame:RegisterEvent("ADDON_LOADED")
+        eventFrame:RegisterEvent("PLAYER_LOGIN")
+        eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+
+        if g and g.enablePlayerTotems and _PlayerHasBlizzardTotemFrame() then
+            eventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
+            if eventFrame.RegisterUnitEvent then
+                eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+            else
+                eventFrame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+            end
         end
 
-        _RefreshTotems()
+        _RefreshBlizzardTotems()
     end
 
-    -- Public escape hatch: Options / other modules can force a refresh without poking locals.
-    _G.MSUF_PlayerTotems_ForceRefresh = _RefreshTotems
+    _G.MSUF_PlayerTotems_ForceRefresh = _RefreshBlizzardTotems
 
     function ns.MSUF_PlayerTotems_TogglePreview()
-        _previewWanted = not _previewWanted
-        _RefreshTotems()
+        previewWanted = not previewWanted
+        _RefreshBlizzardTotems()
     end
 
     function ns.MSUF_PlayerTotems_IsPreviewActive()
-        return (_previewWanted and true) or false
+        return previewWanted and true or false
     end
-
 end
 
 -- Feature tables (single-file modules) for readability and safer future refactors

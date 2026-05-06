@@ -1424,31 +1424,33 @@ end
     local classSpecHeader = classSpecBody:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     classSpecHeader:SetPoint("TOPLEFT", classSpecBody, "TOPLEFT", PAD_X, -4); classSpecHeader:SetText(""); classSpecHeader:SetHeight(1)
 
-    -- Shaman: Player Totem tracker (player-only)
+    -- Blizzard TotemFrame re-anchor (Shaman totems / Monk statues)
     local _isShaman = false
+    local _isMonk = false
     local _isRogue = false
     if UnitClass then
         local _, _cls = UnitClass("player")
         _isShaman = (_cls == "SHAMAN")
+        _isMonk = (_cls == "MONK")
         _isRogue = (_cls == "ROGUE")
     end
+    local _hasTotemFrame = _isShaman or _isMonk
 
     local _classSpecAnchorRef = classSpecHeader
-    local _totemsLeftBottom = nil
-    local _totemsRightBottom = nil
 
-    if _isShaman then
-        local totemsTitle = _MSUF_Label("GameFontNormal", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, "Shaman: Totem tracker", "playerTotemsTitle")
+    if _hasTotemFrame then
+        local totemsTitleText = _isMonk and "Monk: Statue frame" or "Shaman: Totem frame"
+        local totemsTitle = _MSUF_Label("GameFontNormal", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, totemsTitleText, "playerTotemsTitle")
         panel.playerTotemsTitle = totemsTitle
 
-        local totemsSub = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsTitle, "BOTTOMLEFT", 0, -2, "Player-only. Secret-safe in combat.", "playerTotemsSubText")
+        local totemsSub = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsTitle, "BOTTOMLEFT", 0, -2, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", "playerTotemsSubText")
 
-        local totemsDismissHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsSub, "BOTTOMLEFT", 0, -2, "Note: Right-click to dismiss totems is protected by Blizzard (secure) and not supported yet.", "playerTotemsDismissHint")
+        local totemsDismissHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsSub, "BOTTOMLEFT", 0, -2, "Right-click dismiss remains handled by Blizzard.", "playerTotemsDismissHint")
         panel.playerTotemsDismissHint = totemsDismissHint
 
         panel.playerTotemsSubText = totemsSub
 
-        local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsDismissHint, "BOTTOMLEFT", 0, -8, "Enable Totem tracker", "playerTotemsCheck", "enablePlayerTotems",
+        local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsDismissHint, "BOTTOMLEFT", 0, -8, "Re-anchor Blizzard TotemFrame", "playerTotemsCheck", "enablePlayerTotems",
             function()
                 if ns and ns.MSUF_RequestGameplayApply then
                     ns.MSUF_RequestGameplayApply()
@@ -1466,31 +1468,9 @@ end
             end
         end
 
-        local totemsShowText = _MSUF_Check("MSUF_Gameplay_PlayerTotemsShowTextCheck", "TOPLEFT", totemsCheck, "BOTTOMLEFT", 0, -8, "Show cooldown text", "playerTotemsShowTextCheck", "playerTotemsShowText",
-            function()
-                if ns and ns.MSUF_RequestGameplayApply then
-                    ns.MSUF_RequestGameplayApply()
-                end
-                if panel and panel.MSUF_UpdateGameplayDisabledStates then
-                    panel:MSUF_UpdateGameplayDisabledStates()
-                end
-            end
-        )
-
-        local totemsScaleText = _MSUF_Check("MSUF_Gameplay_PlayerTotemsScaleTextCheck", "TOPLEFT", totemsShowText, "BOTTOMLEFT", 0, -8, "Scale text by icon size", "playerTotemsScaleByIconCheck", "playerTotemsScaleTextByIconSize",
-            function()
-                if ns and ns.MSUF_RequestGameplayApply then
-                    ns.MSUF_RequestGameplayApply()
-                end
-                if panel and panel.MSUF_UpdateGameplayDisabledStates then
-                    panel:MSUF_UpdateGameplayDisabledStates()
-                end
-            end
-        )
-
         -- Preview button: keep it in the left column under the toggles (cleaner layout).
-        -- Preview is Shaman-only and works even when the feature toggle is off (positioning).
-        local totemsPreviewBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsPreviewButton", "TOPLEFT", totemsScaleText, "BOTTOMLEFT", 0, -12, 140, 22, "Preview", "playerTotemsPreviewButton")
+        -- Preview works even when the feature toggle is off (positioning).
+        local totemsPreviewBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsPreviewButton", "TOPLEFT", totemsCheck, "BOTTOMLEFT", 0, -12, 140, 22, "Preview", "playerTotemsPreviewButton")
         totemsPreviewBtn:SetScript("OnClick", function()
             if ns and ns.MSUF_PlayerTotems_TogglePreview then
                 ns.MSUF_PlayerTotems_TogglePreview()
@@ -1499,16 +1479,14 @@ end
         end)
         _RefreshTotemsPreviewButton()
 
--- Tip: positioning workflow
-local totemsDragHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsPreviewBtn, "BOTTOMLEFT", 0, -4, "Tip: Move the preview via mousedrag or arrow keys", "playerTotemsDragHint")
-panel.playerTotemsDragHint = totemsDragHint
+        -- Tip: positioning workflow
+        local totemsDragHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsPreviewBtn, "BOTTOMLEFT", 0, -4, "Tip: Move the preview via mousedrag or arrow keys", "playerTotemsDragHint")
+        panel.playerTotemsDragHint = totemsDragHint
 
-_totemsLeftBottom = totemsDragHint
+        -- Right column for layout/size controls (keeps the left side clean, avoids clipping)
+        local _totemsRightX = 300
 
-	        -- Right column for layout/size controls (keeps the left side clean, avoids clipping)
-	        local _totemsRightX = 300
-
-	        local totemsIconSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsIconSizeSlider", "TOPLEFT", totemsCheck, "TOPLEFT", _totemsRightX, -2, 240, 8, 64, 1, "Small", "Big", "Icon size", "playerTotemsIconSizeSlider", "playerTotemsIconSize",
+        local totemsIconSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsIconSizeSlider", "TOPLEFT", totemsCheck, "TOPLEFT", _totemsRightX, -2, 240, 8, 64, 1, "Small", "Big", "Icon size", "playerTotemsIconSizeSlider", "playerTotemsIconSize",
             function(v) return math.floor((v or 0) + 0.5) end,
             function()
                 if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
@@ -1516,13 +1494,7 @@ _totemsLeftBottom = totemsDragHint
             true
         )
 
-        local totemsSpacing = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsSpacingSlider", "TOPLEFT", totemsIconSize, "BOTTOMLEFT", 0, -18, 240, 0, 20, 1, "Tight", "Wide", "Spacing", "playerTotemsSpacingSlider", "playerTotemsSpacing",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
-            true
-        )
-
-        local totemsOffsetX = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsOffsetXSlider", "TOPLEFT", totemsSpacing, "BOTTOMLEFT", 0, -18, 240, -200, 200, 1, "Left", "Right", "X offset", "playerTotemsOffsetXSlider", "playerTotemsOffsetX",
+        local totemsOffsetX = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsOffsetXSlider", "TOPLEFT", totemsIconSize, "BOTTOMLEFT", 0, -18, 240, -200, 200, 1, "Left", "Right", "X offset", "playerTotemsOffsetXSlider", "playerTotemsOffsetX",
             function(v) return math.floor((v or 0) + 0.5) end,
             function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
             true
@@ -1534,13 +1506,7 @@ _totemsLeftBottom = totemsDragHint
             true
         )
 
-        local totemsFontSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsFontSizeSlider", "TOPLEFT", totemsOffsetY, "BOTTOMLEFT", 0, -18, 240, 8, 64, 1, "Small", "Big", "Font size", "playerTotemsFontSizeSlider", "playerTotemsFontSize",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
-            true
-        )
-
-        local totemsLayoutLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", totemsFontSize, "BOTTOMLEFT", 0, -12, "Layout", "playerTotemsLayoutLabel")
+        local totemsLayoutLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", totemsOffsetY, "BOTTOMLEFT", 0, -12, "Layout", "playerTotemsLayoutLabel")
         panel.playerTotemsLayoutLabel = totemsLayoutLabel
 
         local anchorPoints = {"TOPLEFT","TOP","TOPRIGHT","LEFT","CENTER","RIGHT","BOTTOMLEFT","BOTTOM","BOTTOMRIGHT"}
@@ -1556,67 +1522,9 @@ _totemsLeftBottom = totemsDragHint
                 end
             end
             return anchorPoints[1]
-                end
-
-        -- Growth direction dropdown (RIGHT / LEFT / UP / DOWN)
-        local growthDD = _MSUF_Dropdown("MSUF_Gameplay_PlayerTotemsGrowthDropDown", "TOPLEFT", totemsLayoutLabel, "BOTTOMLEFT", -16, -10, 110, "playerTotemsGrowthDropdown")
-
-        local function _TotemsGrowth_Validate(v)
-            if v ~= "LEFT" and v ~= "RIGHT" and v ~= "UP" and v ~= "DOWN" then
-                return "RIGHT"
-            end
-            return v
         end
 
-        local function _TotemsGrowth_Set(v)
-            local g = MSUF_DB and MSUF_DB.gameplay
-            if not g then return end
-            local val = _TotemsGrowth_Validate(v)
-            g.playerTotemsGrowthDirection = val
-
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(growthDD, val) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(growthDD, val) end
-
-            if panel and panel.refresh then panel:refresh() end
-            if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
-        end
-
-        if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
-            UIDropDownMenu_Initialize(growthDD, function(self, level)
-                local g = MSUF_DB and MSUF_DB.gameplay
-                local cur = _TotemsGrowth_Validate(g and g.playerTotemsGrowthDirection)
-
-                local items = {
-                    {"RIGHT", "Grow Right"},
-                    {"LEFT",  "Grow Left"},
-                    {"UP",    "Vertical Up"},
-                    {"DOWN",  "Vertical Down"},
-                }
-
-                for i = 1, #items do
-                    local value = items[i][1]
-                    local text  = items[i][2]
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = text
-                    info.value = value
-                    info.checked = (cur == value)
-                    info.func = function(btn)
-                        _TotemsGrowth_Set(btn and btn.value)
-                    end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end)
-        end
-
-        -- Initial label/selection (kept in sync by panel.refresh)
-        do
-            local g = MSUF_DB and MSUF_DB.gameplay
-            local cur = _TotemsGrowth_Validate(g and g.playerTotemsGrowthDirection)
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(growthDD, cur) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(growthDD, cur) end
-        end
-
-	        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", growthDD, "TOPRIGHT", 8, -4, 122, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function()
+        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", totemsLayoutLabel, "BOTTOMLEFT", 0, -8, 122, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
             g.playerTotemsAnchorFrom = _NextAnchor(g.playerTotemsAnchorFrom)
@@ -1625,7 +1533,7 @@ _totemsLeftBottom = totemsDragHint
         end)
         panel.playerTotemsAnchorFromButton = anchorFromBtn
 
-	        local anchorToBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorToBtn", "TOPLEFT", growthDD, "BOTTOMLEFT", 16, -6, 240, 20, "To: BOTTOMLEFT", "playerTotemsAnchorToButton", function()
+        local anchorToBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorToBtn", "TOPLEFT", anchorFromBtn, "BOTTOMLEFT", 0, -6, 240, 20, "To: BOTTOMLEFT", "playerTotemsAnchorToButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
             g.playerTotemsAnchorTo = _NextAnchor(g.playerTotemsAnchorTo)
@@ -1634,43 +1542,36 @@ _totemsLeftBottom = totemsDragHint
         end)
         panel.playerTotemsAnchorToButton = anchorToBtn
 
-	        local resetTotemsBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsResetBtn", "TOPLEFT", anchorToBtn, "BOTTOMLEFT", 0, -6, 240, 20, "Reset Totem tracker layout", "playerTotemsResetButton", function()
+        local resetTotemsBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsResetBtn", "TOPLEFT", anchorToBtn, "BOTTOMLEFT", 0, -6, 240, 20, "Reset TotemFrame layout", "playerTotemsResetButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
-            g.playerTotemsShowText = true
-            g.playerTotemsScaleTextByIconSize = true
             g.playerTotemsIconSize = 24
-            g.playerTotemsSpacing = 4
             g.playerTotemsOffsetX = 0
             g.playerTotemsOffsetY = -6
             g.playerTotemsAnchorFrom = "TOPLEFT"
             g.playerTotemsAnchorTo = "BOTTOMLEFT"
-            g.playerTotemsGrowthDirection = "RIGHT"
-            g.playerTotemsFontSize = 14
-            g.playerTotemsTextColor = { 1, 1, 1 }
             if panel and panel.refresh then panel:refresh() end
             if panel and panel.MSUF_UpdateGameplayDisabledStates then panel:MSUF_UpdateGameplayDisabledStates() end
             if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
         end)
         panel.playerTotemsResetButton = resetTotemsBtn
-        _totemsRightBottom = resetTotemsBtn
 
         _classSpecAnchorRef = resetTotemsBtn
     else
-        local shamanHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, "(Totem tracker is Shaman-only)", "playerTotemsNotShamanHint")
+        local shamanHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, "(Totem/Statue frame is Shaman/Monk-only)", "playerTotemsNotShamanHint")
         panel.playerTotemsNotShamanHint = shamanHint
         _classSpecAnchorRef = shamanHint
     end
 
     -- Rogue: "The First Dance" tracker (separate class block)
-    -- Place it clearly BELOW the Shaman block (right column bottom), aligned to the left column.
+    -- Place it clearly below the class-frame block (right column bottom), aligned to the left column.
     local _rogueAnchorRef = _classSpecAnchorRef
     local _rogueSep = nil
 
     do
-        -- If we're Shaman, _classSpecAnchorRef points at the right-column reset button.
+        -- If this class has Blizzard's TotemFrame, _classSpecAnchorRef points at the right-column reset button.
         -- Add a subtle divider that spans both columns, then anchor Rogue block under it.
-        local _sepX = (_isShaman and -300) or 0
+        local _sepX = (_hasTotemFrame and -300) or 0
         _rogueSep = panel:CreateTexture(nil, "ARTWORK")
         _rogueSep:SetColorTexture(1, 1, 1, 0.06)
         _rogueSep:SetHeight(1)
@@ -1770,7 +1671,7 @@ _totemsLeftBottom = totemsDragHint
 
     do
         local specH = 420
-        if _isShaman then specH = 980 end
+        if _hasTotemFrame then specH = 740 end
         secClassSpec._msufExpandedH = specH
         if not secClassSpec._msufCollapsed then secClassSpec:SetHeight(specH) end
     end
@@ -2067,28 +1968,19 @@ _totemsLeftBottom = totemsDragHint
         })
 
         if self.playerTotemsCheck then
-            SetGameplayControlEnabled(self.playerTotemsCheck, _isShaman)
+            SetGameplayControlEnabled(self.playerTotemsCheck, _hasTotemFrame)
         end
-        local totemsEnabled = _isShaman and g and g.enablePlayerTotems == true
+        local totemsEnabled = _hasTotemFrame and g and g.enablePlayerTotems == true
         SetGameplayControlsEnabled(totemsEnabled, {
-            self.playerTotemsShowTextCheck,
             self.playerTotemsPreviewButton,
             self.playerTotemsDragHint,
             self.playerTotemsIconSizeSlider,
-            self.playerTotemsSpacingSlider,
             self.playerTotemsOffsetXSlider,
             self.playerTotemsOffsetYSlider,
             self.playerTotemsLayoutLabel,
-            self.playerTotemsGrowthDropdown,
             self.playerTotemsAnchorFromButton,
             self.playerTotemsAnchorToButton,
             self.playerTotemsResetButton,
-        })
-
-        local totemsTextEnabled = totemsEnabled and (g.playerTotemsShowText ~= false)
-        SetGameplayControlsEnabled(totemsTextEnabled, {
-            self.playerTotemsScaleByIconCheck,
-            self.playerTotemsFontSizeSlider,
         })
 
         SetGameplayControlEnabled(self.firstDanceCheck, _isRogue)
@@ -2208,17 +2100,11 @@ _totemsLeftBottom = totemsDragHint
         "firstDanceShowReady",
 
         "enablePlayerTotems",
-        "playerTotemsShowText",
-        "playerTotemsScaleTextByIconSize",
         "playerTotemsIconSize",
-        "playerTotemsSpacing",
         "playerTotemsAnchorFrom",
         "playerTotemsAnchorTo",
-        "playerTotemsGrowthDirection",
         "playerTotemsOffsetX",
         "playerTotemsOffsetY",
-        "playerTotemsFontSize",
-        "playerTotemsTextColor",
 
         "enableCombatCrosshair",
         "enableCombatCrosshairMeleeRangeColor",
@@ -2310,8 +2196,6 @@ _totemsLeftBottom = totemsDragHint
             {"firstDanceShowReadyCheck", "firstDanceShowReady"},
 
             {"playerTotemsCheck", "enablePlayerTotems"},
-            {"playerTotemsShowTextCheck", "playerTotemsShowText"},
-            {"playerTotemsScaleByIconCheck", "playerTotemsScaleTextByIconSize"},
 
             {"combatCrosshairCheck", "enableCombatCrosshair"},
             {"crosshairRangeColorCheck", "enableCombatCrosshairMeleeRangeColor"},
@@ -2334,8 +2218,6 @@ _totemsLeftBottom = totemsDragHint
             {"firstDanceIconSizeSlider", "firstDanceIconSize", 40},
 
             {"playerTotemsIconSizeSlider", "playerTotemsIconSize", 24},
-            {"playerTotemsSpacingSlider", "playerTotemsSpacing", 4},
-            {"playerTotemsFontSizeSlider", "playerTotemsFontSize", 14},
             {"playerTotemsOffsetXSlider", "playerTotemsOffsetX", 0},
             {"playerTotemsOffsetYSlider", "playerTotemsOffsetY", -6},
         }
@@ -2421,15 +2303,6 @@ _totemsLeftBottom = totemsDragHint
         if self.MSUF_UpdateCrosshairPreview then
             self.MSUF_UpdateCrosshairPreview()
         end
-        if self.playerTotemsGrowthDropdown then
-            local growth = g.playerTotemsGrowthDirection
-            if growth ~= "LEFT" and growth ~= "RIGHT" and growth ~= "UP" and growth ~= "DOWN" then
-                growth = "RIGHT"
-            end
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self.playerTotemsGrowthDropdown, growth) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self.playerTotemsGrowthDropdown, growth) end
-        end
-
         if self.playerTotemsAnchorFromButton and self.playerTotemsAnchorFromButton.SetText then
             local af = g.playerTotemsAnchorFrom
             if type(af) ~= "string" or af == "" then

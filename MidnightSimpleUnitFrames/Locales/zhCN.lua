@@ -835,7 +835,6 @@ local T = {
     ["Crosshair in-range color"] = "十字准星范围内颜色",
     ["Turned Off in Gameplay"] = "在游戏性中关闭",
     ["Crosshair out-of-range color"] = "十字准星范围外颜色",
-    ["Totem tracker text color"] = "图腾追踪器文本颜色",
     ["Turned Off in Gameplay"] = "在游戏性中关闭",
 
     ["Power bar colors"] = "能量条颜色",
@@ -956,10 +955,6 @@ local T = {
     ["Long"] = "长",
 
     ["Class-specific toggles"] = "职业特定切换",
-    ["Shaman: Totem tracker"] = "萨满: 图腾追踪器",
-    ["Player-only. Secret-safe in combat."] = "仅限玩家. 战斗中安全.",
-    ["Note: Right-click to dismiss totems is protected by Blizzard (secure) and not supported yet."] = "注意: 右键点击以取消图腾受暴雪 (安全) 保护, 暂不支持.",
-    ["Enable Totem tracker"] = "启用图腾追踪器",
     ["Stop preview"] = "停止预览",
     ["Preview"] = "预览",
     ["Show cooldown text"] = "显示冷却文本",
@@ -997,8 +992,6 @@ local T = {
     ["Timer position (offset)"] = "计时器位置 (偏移)",
     ["Click-through (ALT to drag when unlocked)"]   = "点击穿透 (解锁时ALT拖动)",
 
-    ["Reset Totem tracker layout"] = "重置图腾追踪器布局",
-    ["(Totem tracker is Shaman-only)"] = "(图腾追踪器仅限萨满)",
     ["Rogue: First Dance tracker"] = "潜行者: 第一支舞追踪器",
     ["Optional helper. Shows a 6s timer after leaving combat."] = "可选助手. 在离开战斗后显示6秒计时器.",
     ["Track 'The First Dance' (6s after leaving combat)"] = "追踪'第一支舞'(离开战斗后6秒)",
