@@ -3419,10 +3419,9 @@ scaleEvent:RegisterEvent("PLAYER_ENTERING_WORLD")
 scaleEvent:RegisterEvent("DISPLAY_SIZE_CHANGED")
 scaleEvent:SetScript("OnEvent",function(_,event,arg1) if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled()
 then
-MSUF_ResetGlobalUiScale(true)
-MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
-MSUF_SetSavedSlashMenuScale(1.0)
-MSUF_ApplySlashMenuScale(1.0,{ignoreDisable=true})
+-- Passive OFF state must not touch live scales on login; the explicit Scaling OFF button performs resets.
+_MSUF_pendingMsufScale=nil
+_MSUF_pendingGlobalScale=nil
 return end
 MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale());
 local want=MSUF_GetDesiredGlobalScaleFromDB()
@@ -3435,10 +3434,8 @@ end
 )
 if C_Timer and C_Timer.After then C_Timer.After(0,function() if MSUF_IsScalingDisabled and MSUF_IsScalingDisabled()
 then
-MSUF_ResetGlobalUiScale(true)
-MSUF_ApplyMsufScale(1.0,{ignoreDisable=true})
-MSUF_SetSavedSlashMenuScale(1.0)
-MSUF_ApplySlashMenuScale(1.0,{ignoreDisable=true})
+_MSUF_pendingMsufScale=nil
+_MSUF_pendingGlobalScale=nil
 return end
 MSUF_ApplyMsufScale(MSUF_GetSavedMsufScale());
 local want=MSUF_GetDesiredGlobalScaleFromDB()
