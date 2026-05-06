@@ -2462,6 +2462,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     do
         local box, body = AddSection(720, L["Blizzard Renderer"] or "Blizzard Renderer", false, "blizzrenderer")
         local refreshBlizzardControls
+        local routeLeftX, routeRightX = 340, 500
         local function RendererCheck(spec)
             spec.maxTextWidth = spec.maxTextWidth or 150
             local cb = SCheck(spec)
@@ -2513,7 +2514,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local buffChk = RendererCheck({
             name = "MSUF_GF_BlizzardBuffs", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -88,
+            anchor = body, anchorPoint = "TOPLEFT", x = routeLeftX, y = -88,
             label = L["Use Blizzard: Buffs"] or "Use Blizzard: Buffs",
             tooltip = routeTip,
             get = function() return BlizzardTypes().buffs == true end,
@@ -2521,7 +2522,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
         local debuffChk = RendererCheck({
             name = "MSUF_GF_BlizzardDebuffs", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -148,
+            anchor = body, anchorPoint = "TOPLEFT", x = routeLeftX, y = -148,
             label = L["Use Blizzard: Debuffs"] or "Use Blizzard: Debuffs",
             tooltip = routeTip,
             get = function() return BlizzardTypes().debuffs == true end,
@@ -2529,7 +2530,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
         local dispelChk = RendererCheck({
             name = "MSUF_GF_BlizzardDispels", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -208,
+            anchor = body, anchorPoint = "TOPLEFT", x = routeLeftX, y = -208,
             label = L["Use Blizzard: Dispels"] or "Use Blizzard: Dispels",
             tooltip = routeTip,
             get = function() return BlizzardTypes().dispels == true end,
@@ -2537,7 +2538,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
         local extChk = RendererCheck({
             name = "MSUF_GF_BlizzardExt", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -88,
+            anchor = body, anchorPoint = "TOPLEFT", x = routeRightX, y = -88,
             label = L["Use Blizzard: Defensives"] or "Use Blizzard: Defensives",
             tooltip = routeTip,
             get = function() return BlizzardTypes().externals == true end,
@@ -2545,7 +2546,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
         local cdTextChk = RendererCheck({
             name = "MSUF_GF_BlizzardCooldownText", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -148,
+            anchor = body, anchorPoint = "TOPLEFT", x = routeRightX, y = -148,
             label = L["Blizzard Cooldown Text"] or "Blizzard Cooldown Text",
             tooltip = L["Controls cooldown numbers on Blizzard-rendered aura icons."] or "Controls cooldown numbers on Blizzard-rendered aura icons.",
             get = function() return AurasRoot().blizzardShowCooldownText ~= false end,
@@ -2553,7 +2554,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         })
         local privateChk = RendererCheck({
             name = "MSUF_GF_BlizzardPrivateAuras", parent = body,
-            anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -208,
+            anchor = body, anchorPoint = "TOPLEFT", x = routeRightX, y = -208,
             label = L["Use Blizzard: Private"] or "Use Blizzard: Private",
             tooltip = routeTip,
             get = function() return BlizzardTypes().privateAuras == true end,
