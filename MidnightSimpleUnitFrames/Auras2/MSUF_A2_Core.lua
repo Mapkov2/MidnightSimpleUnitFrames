@@ -1197,6 +1197,8 @@ local max = math_max
 
 -- Secret value detector (Midnight/Beta)
 local issecretvalue = _G.issecretvalue
+local canaccessvalue = _G.canaccessvalue
+local _hasCanaccessvalue = (type(canaccessvalue) == "function")
 
 -- Lazy-bound references
 local Collect   -- bound on first use
@@ -1218,6 +1220,7 @@ local _hasExpirationFast -- Collect.HasExpirationFast
 -- PERF: Direct C API refs for inlined CommitIcon path (skip wrapper function calls)
 local _getDurationDirect   -- C_UnitAuras.GetAuraDuration
 local _getStackCountDirect -- C_UnitAuras.GetAuraApplicationDisplayCount
+local _getByAidDirect      -- C_UnitAuras.GetAuraDataByAuraInstanceID (numeric timer fallback)
 local _fastPathBound = false
 
 local function BindFastPaths()
@@ -1231,8 +1234,52 @@ local function BindFastPaths()
     if CUA then
         _getDurationDirect   = CUA.GetAuraDuration
         _getStackCountDirect = CUA.GetAuraApplicationDisplayCount
+        _getByAidDirect      = CUA.GetAuraDataByAuraInstanceID
     end
     _fastPathBound = true
+end
+
+local function ReadAccessibleNumber(v)
+    if v == nil then return nil end
+    if _hasCanaccessvalue then
+        if canaccessvalue(v) ~= true then return nil end
+    elseif issecretvalue and issecretvalue(v) == true then
+        return nil
+    end
+    return tonumber(v)
+end
+
+local function ApplyNumericCooldownFallback(icon, cd, unit, aid, aura, durationValue)
+    if not icon or not cd or not cd.SetCooldown then return false end
+
+    local data
+    if _getByAidDirect and unit and aid then
+        data = _getByAidDirect(unit, aid)
+    end
+    if type(data) ~= "table" then
+        data = aura
+    end
+    if type(data) ~= "table" then return false end
+
+    local duration = ReadAccessibleNumber(durationValue)
+    if not duration then
+        duration = ReadAccessibleNumber(data.duration)
+    end
+    local expiration = ReadAccessibleNumber(data.expirationTime)
+    if not duration or not expiration or duration <= 0 or expiration <= 0 then
+        return false
+    end
+
+    local remaining = expiration - GetTime()
+    if remaining <= 0 then
+        return false
+    end
+
+    cd:SetCooldown(expiration - duration, duration)
+    icon._msufA2_durationObj = nil
+    cd._msufA2_durationObj = nil
+    icon._msufA2_cdNumericFallback = true
+    return true
 end
 
 -- Phase 8: file-scope locals for Icons._ methods (eliminates hash-table
@@ -2140,11 +2187,16 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
 
     -- PERF: Inline GetDurationObjectFast — direct C API call, skip wrapper
     local obj
+    local numericDuration
     if _getDurationDirect then
         obj = _getDurationDirect(unit, aid)
-        if obj ~= nil and type(obj) == "number" then obj = nil end
+        if obj ~= nil and type(obj) == "number" then
+            numericDuration = obj
+            obj = nil
+        end
     end
 
+    local hadDurationObject = false
     if obj then
         local cdSetFn = cd._msufA2_cdSetFn
         if cdSetFn == nil then
@@ -2161,14 +2213,18 @@ function Icons._ApplyTimer(icon, unit, aid, shared, aura)
         if cdSetFn then
             cdSetFn(cd, obj)
             hadTimer = true
+            hadDurationObject = true
         end
 
         icon._msufA2_durationObj = obj
         cd._msufA2_durationObj = obj
+        icon._msufA2_cdNumericFallback = nil
+    elseif ApplyNumericCooldownFallback(icon, cd, unit, aid, aura, numericDuration) then
+        hadTimer = true
     end
 
     -- Pass-through: tell Blizzard CooldownFrame to render aura timer natively in C++.
-    local wantAuraDisplayTime = (_useBlizzardTimer == true and hadTimer == true)
+    local wantAuraDisplayTime = (_useBlizzardTimer == true and hadDurationObject == true)
     if cd.SetUseAuraDisplayTime and cd._msufA2_lastUseAuraDisplayTime ~= wantAuraDisplayTime then
         cd._msufA2_lastUseAuraDisplayTime = wantAuraDisplayTime
         cd:SetUseAuraDisplayTime(wantAuraDisplayTime)
@@ -2246,14 +2302,62 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
 
     -- PERF: Inline GetDurationObjectFast — direct C API call, skip wrapper
     local obj
+    local numericDuration
     if _getDurationDirect then
         obj = _getDurationDirect(unit, aid)
-        if obj ~= nil and type(obj) == "number" then obj = nil end
+        if obj ~= nil and type(obj) == "number" then
+            numericDuration = obj
+            obj = nil
+        end
     end
 
     if not obj then
-        -- PERF: Only clear if there WAS a timer before (avoid redundant ClearCooldownVisual calls)
-        if icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil then
+        if ApplyNumericCooldownFallback(icon, cd, unit, aid, aura, numericDuration) then
+            local wasTimerActive = (icon._msufA2_lastHadTimer == true)
+            icon._msufA2_lastHadTimer = true
+
+            if cd.SetUseAuraDisplayTime and cd._msufA2_lastUseAuraDisplayTime ~= false then
+                cd._msufA2_lastUseAuraDisplayTime = false
+                cd:SetUseAuraDisplayTime(false)
+            end
+            if cd._msufA2_lastSwipe ~= _showSwipe then
+                cd._msufA2_lastSwipe = _showSwipe
+                cd:SetDrawSwipe(_showSwipe)
+            end
+            if cd._msufA2_lastReverse ~= _swipeReverse then
+                cd._msufA2_lastReverse = _swipeReverse
+                cd:SetReverse(_swipeReverse)
+            end
+            local wantHide = (not _showText) or (icon._msufA2_hideCDNumbers == true)
+            if cd._msufA2_lastHideNumbers ~= wantHide or not wasTimerActive then
+                cd._msufA2_lastHideNumbers = wantHide
+                cd:SetHideCountdownNumbers(wantHide)
+            end
+
+            if _showText and icon._msufA2_hideCDNumbers ~= true then
+                CT = CT or API.CooldownText
+                if CT and icon._msufA2_cdMgrRegistered ~= true and CT.RegisterIcon then
+                    CT.RegisterIcon(icon)
+                elseif CT and CT.TouchIcon then
+                    CT.TouchIcon(icon)
+                end
+                icon._msufA2_lastCdDurationObj = nil
+                icon._msufA2_lastCdAid = aid
+                icon._msufA2_lastCdShown = true
+                icon._msufA2_lastCdWantText = true
+                ApplyCooldownTextStyle(icon, cd, nil)
+            else
+                icon._msufA2_lastCdWantText = false
+                icon._msufA2_lastCdShown = false
+                icon._msufA2_lastCdDurationObj = nil
+                icon._msufA2_lastCdAid = nil
+                CT = CT or API.CooldownText
+                if CT and CT.UnregisterIcon then CT.UnregisterIcon(icon) end
+            end
+
+            if _showPandemic then _fast_ApplyPandemic(icon) end
+        elseif icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil or icon._msufA2_cdNumericFallback == true then
+            -- PERF: Only clear if there WAS a timer before (avoid redundant ClearCooldownVisual calls)
             ClearCooldownVisual(icon, cd)
         end
         return
@@ -2289,6 +2393,7 @@ function Icons._RefreshTimer(icon, unit, aid, shared, aura)
     icon._msufA2_durationObj = obj
     cd._msufA2_durationObj = obj
     icon._msufA2_lastHadTimer = true
+    icon._msufA2_cdNumericFallback = nil
 
     -- A prior no-duration pass calls ClearCooldownVisual(), which hides native
     -- numbers and disables aura display time. Same-aura refreshes must restore
