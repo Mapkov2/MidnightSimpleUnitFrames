@@ -31,7 +31,19 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                 MSUF_ResetProfile(data.name)
                 if data.panel.LoadFromDB then data.panel:LoadFromDB() end
                 if data.panel.UpdateProfileUI then data.panel:UpdateProfileUI(data.name) end
+                StaticPopup_Show("MSUF_PROFILE_RESET_RELOAD", data.name)
             end
+        end,
+    }
+    StaticPopupDialogs["MSUF_PROFILE_RESET_RELOAD"] = {
+        text = "Profile '%s' was reset. Reload UI now to fully apply the reset?",
+        button1 = TR("Yes, reload"), button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+        OnAccept = function()
+            if InCombatLockdown and InCombatLockdown() then
+                print("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")
+                return
+            end
+            if type(ReloadUI) == "function" then ReloadUI() end
         end,
     }
     StaticPopupDialogs["MSUF_CONFIRM_DELETE_PROFILE"] = {
