@@ -455,13 +455,13 @@ local function BuildFrameHierarchy(f, kind)
     -- Name text layer
     local nameTextLayer = CreateFrame("Frame", nil, health)
     nameTextLayer:SetAllPoints(health)
-    nameTextLayer:SetFrameLevel(hLvl + (conf.nameTextLayer or 5))
+    GF.SetFrameLayerLevel(nameTextLayer, f, conf.nameTextLayer, 5)
     f.nameTextLayer = nameTextLayer
 
     -- Health text layer (above all overlays)
     local healthTextLayer = CreateFrame("Frame", nil, health)
     healthTextLayer:SetAllPoints(health)
-    healthTextLayer:SetFrameLevel(hLvl + (conf.textLayer or 5))
+    GF.SetFrameLayerLevel(healthTextLayer, f, conf.textLayer, 5)
     f.healthTextLayer = healthTextLayer
 
     -- Name text
@@ -533,7 +533,7 @@ local function BuildFrameHierarchy(f, kind)
     -- visible when the power bar itself is hidden by role/settings.
     local powerTextLayer = CreateFrame("Frame", nil, barGroup)
     powerTextLayer:SetAllPoints(barGroup)
-    powerTextLayer:SetFrameLevel(barGroup:GetFrameLevel() + 4)
+    GF.SetFrameLayerLevel(powerTextLayer, f, conf.powerTextLayer, 2)
     f.powerTextLayer = powerTextLayer
 
     -- 3-slot power text: left / center / right
@@ -564,7 +564,7 @@ local function BuildFrameHierarchy(f, kind)
 
     local statusTextLayer = CreateFrame("Frame", nil, barGroup)
     statusTextLayer:SetAllPoints(barGroup)
-    statusTextLayer:SetFrameLevel(hLvl + (conf.statusTextLayer or 7))
+    GF.SetFrameLayerLevel(statusTextLayer, f, conf.statusTextLayer, 7)
     statusTextLayer:EnableMouse(false)
     if statusTextLayer.SetClipsChildren then statusTextLayer:SetClipsChildren(false) end
     f.statusTextLayer = statusTextLayer
@@ -833,15 +833,13 @@ local function LayoutText(f, kind)
     if f.nameTextLayer and f.health then
         f.nameTextLayer:ClearAllPoints()
         f.nameTextLayer:SetAllPoints(f.health)
-        f.nameTextLayer:SetFrameLevel(f.health:GetFrameLevel() + (conf.nameTextLayer or 5))
+        GF.SetFrameLayerLevel(f.nameTextLayer, f, conf.nameTextLayer, 5)
     end
     if f.healthTextLayer and f.health then
-        f.healthTextLayer:SetFrameLevel(f.health:GetFrameLevel() + (conf.textLayer or 5))
+        GF.SetFrameLayerLevel(f.healthTextLayer, f, conf.textLayer, 5)
     end
     if f.powerTextLayer then
-        local base = f.health or f.barGroup or f.power or f
-        local pLvl = base.GetFrameLevel and base:GetFrameLevel() or 0
-        f.powerTextLayer:SetFrameLevel(pLvl + (conf.powerTextLayer or 2))
+        GF.SetFrameLayerLevel(f.powerTextLayer, f, conf.powerTextLayer, 2)
     end
 end
 
@@ -1013,7 +1011,9 @@ local function LayoutIcons(f, kind)
         region:SetPoint(pt, anchor, pt, ox, oy)
         local layer = tonumber(conf[layerKey]) or defLayer or 1
         if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
-        if region.SetFrameLevel then region:SetFrameLevel(baseLvl + layer) end
+        if region.SetFrameLevel then
+            region:SetFrameLevel((GF.GetFrameLayerLevel and GF.GetFrameLayerLevel(f, layer, defLayer)) or (baseLvl + layer))
+        end
         if region ~= icon then
             icon:ClearAllPoints()
             icon:SetAllPoints(region)

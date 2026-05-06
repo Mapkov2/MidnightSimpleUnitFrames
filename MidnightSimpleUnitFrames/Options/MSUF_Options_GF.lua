@@ -2770,7 +2770,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local nameLaySl = SSlider({
             name = "MSUF_GF_NameTextLayerSlider", parent = colR, compact = true,
             anchor = tOffSep, x = 0, y = -26,
-            min = 1, max = 12, step = 1, width = 180, default = 5,
+            min = 1, max = 15, step = 1, width = 180, default = 5,
             get = function(k) return GF.Val(k, "nameTextLayer") end,
             set = function(k, v) GF.GetConf(k).nameTextLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
             formatText = function(v) return string.format("Name Layer: %d", v) end,
@@ -2778,7 +2778,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local hpLaySl = SSlider({
             name = "MSUF_GF_TextLayerSlider", parent = colR, compact = true,
             anchor = nameLaySl, x = 0, y = -32,
-            min = 1, max = 12, step = 1, width = 180, default = 5,
+            min = 1, max = 15, step = 1, width = 180, default = 5,
             get = function(k) return GF.Val(k, "textLayer") end,
             set = function(k, v) GF.GetConf(k).textLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT) end,
             formatText = function(v) return string.format("HP Layer: %d", v) end,
@@ -2786,7 +2786,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local powerLaySl = SSlider({
             name = "MSUF_GF_PowerTextLayerSlider", parent = colR, compact = true,
             anchor = hpLaySl, x = 0, y = -32,
-            min = 1, max = 12, step = 1, width = 180, default = 2,
+            min = 1, max = 15, step = 1, width = 180, default = 2,
             get = function(k) return GF.Val(k, "powerTextLayer") end,
             set = function(k, v) GF.GetConf(k).powerTextLayer = v; GF.MarkAllDirty(GF.DIRTY_LAYOUT); SyncGFEditPopup() end,
             formatText = function(v) return string.format("Power Layer: %d", v) end,

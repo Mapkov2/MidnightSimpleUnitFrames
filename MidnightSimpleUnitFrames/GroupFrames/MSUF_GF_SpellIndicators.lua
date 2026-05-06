@@ -621,8 +621,12 @@ local function GetOrCreatePlaced(f, auraName, itype, size, parent, barWidth, lay
         ind:SetSize(size, size)
     end
     if ind:GetParent() ~= parent then ind:SetParent(parent) end
-    if parent.GetFrameLevel then
-        ind:SetFrameLevel(parent:GetFrameLevel() + (layer or 9))
+    if ind.SetFrameLevel then
+        if GF.SetFrameLayerLevel then
+            GF.SetFrameLayerLevel(ind, f, layer, 9)
+        elseif parent.GetFrameLevel then
+            ind:SetFrameLevel(parent:GetFrameLevel() + (layer or 9))
+        end
     end
     return ind
 end
