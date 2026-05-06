@@ -19,6 +19,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
     local NotSecret = E.NotSecret
     local ResolveClassPowerColor = E.ResolveClassPowerColor
     local ResolveChargedColor = E.ResolveChargedColor
+    local ResolveComboPointSlotColor = E.ResolveComboPointSlotColor
     local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local GetSpec = E.GetSpec
@@ -194,6 +195,8 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         local showCharged = _cpDB.bars and (_cpDB.showCharged ~= false) and powerType == PT.ComboPoints
         local chargedR, chargedG, chargedB
         if showCharged and chargedMap then chargedR, chargedG, chargedB = ResolveChargedColor() end
+        local cpSlotMode = _cpDB.comboPointColorMode
+        local useSlotColors = (powerType == PT.ComboPoints and (cpSlotMode == "ramp" or cpSlotMode == "custom") and type(ResolveComboPointSlotColor) == "function")
         local bgA = _cpDB.bars and tonumber(_cpDB.bgAlpha) or 0.3
         local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
         local filledAlpha, emptyAlpha = E.GetFilledAlpha(), E.GetEmptyAlpha()
@@ -214,6 +217,14 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
                         local dB = chargedB * 0.45; if dB < 0.05 then dB = 0.05 end
                         bar._bg:SetVertexColor(dR, dG, dB, 1)
                     end
+                elseif useSlotColors then
+                    local slotR, slotG, slotB = ResolveComboPointSlotColor(i)
+                    if slotR then
+                        bar:SetStatusBarColor(slotR, slotG, slotB, 1)
+                    else
+                        bar:SetStatusBarColor(baseR, baseG, baseB, 1)
+                    end
+                    bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
                 else
                     bar:SetStatusBarColor(baseR, baseG, baseB, 1)
                     bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
