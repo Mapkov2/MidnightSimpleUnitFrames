@@ -2828,15 +2828,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         local fgDd = SDropdown({
             name = "MSUF_GF_BarTextureDropdown", parent = body,
-            anchor = fgLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 240,
+            anchor = fgLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 280, maxVisible = 12,
+            iconWidth = 80, iconHeight = 12,
             items = function()
-                local items = { { key = "", label = "(Follow Global Style)" } }
-                local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-                if LSM then
-                    local list = LSM:List("statusbar")
-                    for i = 1, #list do items[#items + 1] = { key = list[i], label = list[i] } end
-                end
-                return items
+                return UI.StatusBarTextureItems(TR("(Follow Global Style)"))
             end,
             get = function(k) return GF.Val(k, "barTexture") or "" end,
             set = function(k, v)
@@ -2852,15 +2847,10 @@ function _G.MSUF_EnsureGFPanelBuilt()
 
         SDropdown({
             name = "MSUF_GF_BarBackgroundTextureDropdown", parent = body,
-            anchor = bgLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 240,
+            anchor = bgLbl, anchorPoint = "BOTTOMLEFT", x = -16, y = -4, width = 280, maxVisible = 12,
+            iconWidth = 80, iconHeight = 12,
             items = function()
-                local items = { { key = "", label = "(Follow Global Style)" } }
-                local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-                if LSM then
-                    local list = LSM:List("statusbar")
-                    for i = 1, #list do items[#items + 1] = { key = list[i], label = list[i] } end
-                end
-                return items
+                return UI.StatusBarTextureItems(TR("(Follow Global Style)"))
             end,
             get = function(k) return GF.Val(k, "barBgTexture") or "" end,
             set = function(k, v)
