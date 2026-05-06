@@ -3244,9 +3244,9 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
                 -- Status line above the editor
                 if cat == "custom" then
-                    statusFS:SetText("|cff80e080●|r Editing slot " .. activeSlot .. "  (active)")
+                    statusFS:SetText("Editing slot " .. activeSlot .. "  (active)")
                 else
-                    statusFS:SetText("|cff888888○|r Slot " .. activeSlot .. " is set to '" .. cat .. "'. Set to 'Custom Spell' in the dropdown above to activate this configuration.")
+                    statusFS:SetText("Slot " .. activeSlot .. " is set to '" .. cat .. "'. Set to 'Custom Spell' in the dropdown above to activate this configuration.")
                 end
 
                 -- Spells text
@@ -3279,7 +3279,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if filtSafe then
                     warnFS:SetText("|cff666666The selected filter is reliable in 12.0: only the local player's casts are tracked, and their spell IDs are always visible.|r")
                 else
-                    warnFS:SetText("|cffffaa55⚠ Warning:|r |cff999999This filter scans buffs/debuffs from any caster. Midnight 12.0 marks other players' aura spell IDs as 'secret', so most matches will be silently skipped. Use this filter only for spells you've verified are visible (e.g. permanent raid buffs you cast yourself).|r")
+                    warnFS:SetText("|cffffaa55Warning:|r |cff999999This filter scans buffs/debuffs from any caster. Midnight 12.0 marks other players' aura spell IDs as 'secret', so most matches will be silently skipped. Use this filter only for spells you've verified are visible (e.g. permanent raid buffs you cast yourself).|r")
                 end
             end
             _auraRefreshFns[#_auraRefreshFns + 1] = RefreshEditorBody
