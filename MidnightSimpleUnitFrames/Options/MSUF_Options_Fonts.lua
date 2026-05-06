@@ -151,10 +151,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
         end
         if rootKey then
             local rv = MSUF_DB[rootKey]
-            return (rv ~= nil) and rv or def
+            if rv ~= nil then return rv end
+            return def
         end
         local v = G()[key]
-        return (v ~= nil) and v or def
+        if v ~= nil then return v end
+        return def
     end
 
     local function ScopeSet(key, val, rootKey)
