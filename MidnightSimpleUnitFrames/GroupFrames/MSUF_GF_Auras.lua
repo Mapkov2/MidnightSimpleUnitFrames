@@ -1546,22 +1546,19 @@ function GF.GetAuraRendererMode(conf)
         return Native.NormalizeRenderer(auras.renderer)
     end
     if auras.renderer == "CUSTOM" then return "CUSTOM" end
-    if auras.renderer == "MIXED" or auras.renderer == "CUSTOM_BLIZZARD" then return "MIXED" end
     return "BLIZZARD"
 end
 
 function GF.IsAuraRendererBlizzard(conf)
-    local mode = GF.GetAuraRendererMode(conf)
-    return mode == "BLIZZARD" or mode == "MIXED"
+    return GF.GetAuraRendererMode(conf) == "BLIZZARD"
 end
 
 function GF.IsAuraRendererCustom(conf)
-    local mode = GF.GetAuraRendererMode(conf)
-    return mode == "CUSTOM" or mode == "MIXED"
+    return GF.GetAuraRendererMode(conf) == "CUSTOM"
 end
 
 function GF.IsAuraRendererMixed(conf)
-    return GF.GetAuraRendererMode(conf) == "MIXED"
+    return false
 end
 
 function GF.IsBlizzardAuraTypeEnabled(conf, key)
@@ -1599,31 +1596,46 @@ end
 local function ClearOneBlizzardAuraContainer(container)
     local Native = GetNativeAuraAPI()
     if Native and container then
-        Native.Clear(container)
+        return Native.Clear(container) ~= false
     elseif container then
         local id = container._msufNativeAuraAnchorID
         local removeFn = _G.C_UnitAuras and _G.C_UnitAuras.RemovePrivateAuraAnchor
         if id and type(removeFn) == "function" then
-            pcall(removeFn, id)
+            local ok, err = pcall(removeFn, id)
+            if not ok then
+                container._msufNativeAuraLastError = err
+                return false
+            end
+        elseif id then
+            container._msufNativeAuraLastError = "RemovePrivateAuraAnchor unavailable"
+            return false
         end
         container:Hide()
         container._msufNativeAuraAnchorID = nil
         container._msufNativeAuraSignature = nil
         container._msufNativeAuraUnit = nil
+        return true
     end
+    return true
 end
 
 function GF.ClearBlizzardAuraContainer(f)
     if not f then return end
-    ClearOneBlizzardAuraContainer(f._msufGFNativeAuras)
-    f._msufGFNativeAuras = nil
+    if ClearOneBlizzardAuraContainer(f._msufGFNativeAuras) then
+        f._msufGFNativeAuras = nil
+    end
     local containers = f._msufGFNativeAuraContainers
     if containers then
+        local allCleared = true
         for _, container in pairs(containers) do
-            ClearOneBlizzardAuraContainer(container)
+            if not ClearOneBlizzardAuraContainer(container) then
+                allCleared = false
+            end
+        end
+        if allCleared then
+            f._msufGFNativeAuraContainers = nil
         end
     end
-    f._msufGFNativeAuraContainers = nil
     if f._msufGFNativeAuraRoot then f._msufGFNativeAuraRoot:Hide() end
 end
 
@@ -1659,10 +1671,10 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
     local extCfg = auras.externals or {}
     local paCfg = conf.privateAuras or {}
 
-    local renderBuffs = Native.TypeEnabled(types, "buffs", true)
-    local renderDebuffs = Native.TypeEnabled(types, "debuffs", true)
+    local renderBuffs = Native.TypeEnabled(types, "buffs", true) and buffCfg.enabled ~= false
+    local renderDebuffs = Native.TypeEnabled(types, "debuffs", true) and debCfg.enabled ~= false
     local renderDispels = Native.TypeEnabled(types, "dispels", true) and conf.dispelEnabled ~= false
-    local renderExt = Native.TypeEnabled(types, "externals", true)
+    local renderExt = Native.TypeEnabled(types, "externals", true) and extCfg.enabled ~= false
     local renderPrivate = Native.TypeEnabled(types, "privateAuras", true) and paCfg.enabled ~= false
 
     if not (renderBuffs or renderDebuffs or renderDispels or renderExt or renderPrivate) then
@@ -2142,12 +2154,14 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local scale = GetDynamicScale(conf)
     local frameScale = GetFrameScale(kind, conf)
     local anyShown = false
-    local nativeFlags = GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
-    local nativeDispels = nativeFlags and nativeFlags.dispels
-    local customRenderer = GF.IsAuraRendererCustom and GF.IsAuraRendererCustom(conf)
+    local nativeBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs")
+    local nativeDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs")
+    local nativeDispels = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
+    local nativeExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals")
+    GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
 
     local c = f._c
-    if nativeFlags and c and c.nativeBlizzardAuraOnly then
+    if c and c.nativeBlizzardAuraOnly then
         if not f._msufGFExtHidden then
             HidePool(f[POOL_KEYS.externals], 1)
             f._msufGFExtHidden = true
@@ -2174,17 +2188,22 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
 
     -- 1) Externals
     local extCfg = auras.externals
-    if customRenderer and extCfg and extCfg.enabled then
+    if nativeExt then
+        if not f._msufGFExtHidden then
+            f._msufGFExtHidden = true
+            HidePool(f[POOL_KEYS.externals], 1)
+        end
+    elseif extCfg and extCfg.enabled ~= false then
         for k in pairs(_externalsIDs) do _externalsIDs[k] = nil end
         local afr = AF()
         local extFilter = afr and afr.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
         local n = RenderGroup(f, unit, "externals", extCfg, extFilter, false, parent, nil, scale, frameScale)
         if n > 0 then anyShown = true end
+        f._msufGFExtHidden = nil
     elseif not f._msufGFExtHidden then
         f._msufGFExtHidden = true
         HidePool(f[POOL_KEYS.externals], 1)
     end
-    if customRenderer and extCfg and extCfg.enabled then f._msufGFExtHidden = nil end
 
     -- 2) Debuffs + merged dispel
     local debCfg = auras.debuff
@@ -2195,10 +2214,15 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     f._msufGFDispelAuraID = nil
     f._msufGFDispelColorObj = nil
     f._msufGFDispelColorRev = nil
-    local debOn = customRenderer and debCfg and debCfg.enabled ~= false
+    local debOn = debCfg and debCfg.enabled ~= false and not nativeDebuffs
     local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false and not nativeDispels
 
-    if debOn then
+    if nativeDebuffs then
+        if not f._msufGFDebHidden then
+            f._msufGFDebHidden = true
+            HidePool(f[POOL_KEYS.debuff], 1)
+        end
+    elseif debOn then
         local afr = AF()
         local debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
         local n, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, frameScale)
@@ -2262,7 +2286,12 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
 
     -- 3) Buffs
     local buffCfg = auras.buff
-    if customRenderer and buffCfg and buffCfg.enabled ~= false then
+    if nativeBuffs then
+        if not f._msufGFBufHidden then
+            f._msufGFBufHidden = true
+            HidePool(f[POOL_KEYS.buff], 1)
+        end
+    elseif buffCfg and buffCfg.enabled ~= false then
         local afr = AF()
         local buffFilter = afr and afr.ResolveBuffFilter(buffCfg.filterToken) or "HELPFUL|RAID"
         local n = RenderGroup(f, unit, "buff", buffCfg, buffFilter, false, parent, f._msufSIDedupIDs, scale, frameScale)
@@ -2472,17 +2501,13 @@ do
         -- Apply dynamic scale based on the same visible/live count the user is editing.
         local dynScale = GetPreviewDynamicScale(conf, kind)
         local frameScale = GetFrameScale(kind, conf)
-        local customRenderer = (GF.IsAuraRendererCustom and GF.IsAuraRendererCustom(conf)) or false
-        if not customRenderer then
-            HidePool(f._msufAuraPool_buff, 1)
-            HidePool(f._msufAuraPool_debuff, 1)
-            HidePool(f._msufAuraPool_externals, 1)
-            return
-        end
+        local nativeBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs")
+        local nativeDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs")
+        local nativeExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals")
 
         -- Buffs
         local buffCfg = auras.buff
-        if buffCfg and buffCfg.enabled ~= false then
+        if buffCfg and buffCfg.enabled ~= false and not nativeBuffs then
             local rawSize = buffCfg.size or 20
             local size = ScaleFrameValue(rawSize, dynScale * frameScale, 8)
             local anchor = buffCfg.anchor or "BOTTOMLEFT"
@@ -2520,7 +2545,7 @@ do
 
         -- Debuffs
         local debCfg = auras.debuff
-        if debCfg and debCfg.enabled ~= false then
+        if debCfg and debCfg.enabled ~= false and not nativeDebuffs then
             local rawSize = debCfg.size or 20
             local size = ScaleFrameValue(rawSize, dynScale * frameScale, 8)
             local anchor = debCfg.anchor or "TOPLEFT"
@@ -2566,7 +2591,7 @@ do
 
         -- Externals
         local extCfg = auras.externals
-        if extCfg and extCfg.enabled and index == 1 then
+        if extCfg and extCfg.enabled ~= false and index == 1 and not nativeExt then
             local rawSize = extCfg.size or 28
             local size = ScaleFrameValue(rawSize, dynScale * frameScale, 8)
             local anchor = extCfg.anchor or "CENTER"

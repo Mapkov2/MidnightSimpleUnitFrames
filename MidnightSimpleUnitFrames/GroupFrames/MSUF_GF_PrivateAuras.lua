@@ -51,13 +51,9 @@ local function AddPrivateAuraAnchorSafe(args)
     return nil, anchorID
 end
 
-local function HasNativeBlizzardAuraContainer(conf)
+local function HasNativeBlizzardPrivateAuras(conf)
     if not (conf and GF.IsBlizzardAuraTypeEnabled) then return false end
     return GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras")
-        or GF.IsBlizzardAuraTypeEnabled(conf, "buffs")
-        or GF.IsBlizzardAuraTypeEnabled(conf, "debuffs")
-        or GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
-        or GF.IsBlizzardAuraTypeEnabled(conf, "externals")
 end
 
 local function ForceFrameLevelRefresh(frame)
@@ -222,7 +218,7 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         pa   = conf.privateAuras
     end
 
-    if paOverride == nil and HasNativeBlizzardAuraContainer(conf) then
+    if paOverride == nil and HasNativeBlizzardPrivateAuras(conf) then
         ClearAnchors(f)
         return
     end
@@ -505,7 +501,7 @@ function GF.PreviewPrivateAuras(f, kind)
     if not f then return end
     local conf = GF.GetConf(kind)
     local pa = conf and conf.privateAuras
-    if not pa or pa.enabled == false or HasNativeBlizzardAuraContainer(conf) then
+    if not pa or pa.enabled == false or HasNativeBlizzardPrivateAuras(conf) then
         if f._gfPrivPreviewSlots then
             for i = 1, #f._gfPrivPreviewSlots do f._gfPrivPreviewSlots[i]:Hide() end
         end
