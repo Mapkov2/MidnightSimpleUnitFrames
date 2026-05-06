@@ -3444,7 +3444,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local layerSl = SSlider({
             name = "MSUF_GF_SI_LayerSlider", parent = body, compact = true,
             anchor = ySl, x = 0, y = -32,
-            min = 1, max = 8, step = 1, width = 270, default = 1,
+            min = 1, max = 15, step = 1, width = 270, default = 1,
             get = function(k) local s = ICON_SPECS_UI[_selectedIdx]; return s and GF.Val(k, s.layerKey) or 1 end,
             set = function(k, v)
                 local s = ICON_SPECS_UI[_selectedIdx]

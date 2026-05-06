@@ -882,7 +882,11 @@ local function RestoreHealthTextLayer(f)
         txtLayer._msufAlphaEscaped = nil
     end
     local st = f.statusIndicatorText
-    local stParent = f.statusIconLayer or f.barGroup or f.health
+    local stParent
+    if GF.EnsureStatusTextLayer then
+        stParent = GF.EnsureStatusTextLayer(f, GF.GetConf(f._msufGFKind or "party"), f._msufGFStatusState)
+    end
+    stParent = stParent or f.statusTextLayer or f.statusIconLayer or f.barGroup or f.health
     if st and stParent and st.SetParent and st.GetParent and st:GetParent() ~= stParent then
         st:SetParent(stParent)
     end
@@ -1046,7 +1050,11 @@ local function ApplyTextLayout(f, kind)
     end
 
     if f.statusIndicatorText then
-        local stParent = f.statusIconLayer or f.barGroup or f.health
+        local stParent
+        if GF.EnsureStatusTextLayer then
+            stParent = GF.EnsureStatusTextLayer(f, conf, f._msufGFStatusState)
+        end
+        stParent = stParent or f.statusTextLayer or f.statusIconLayer or f.barGroup or f.health
         if stParent and f.statusIndicatorText.SetParent and f.statusIndicatorText.GetParent
             and f.statusIndicatorText:GetParent() ~= stParent
         then
@@ -1174,17 +1182,19 @@ GF.ICON_SPECS = ICON_SPECS
 local function ApplyIconLayout(f, kind)
     local conf   = GF.GetConf(kind)
     local anchor = f.statusIconLayer or f.barGroup or f
-    local baseLvl = anchor:GetFrameLevel()
+    local base = f.health or anchor
+    local baseLvl = base.GetFrameLevel and base:GetFrameLevel() or anchor:GetFrameLevel()
     local fScale = conf._resolvedFrameScale or 1
 
     for i = 1, #ICON_SPECS do
         local s = ICON_SPECS[i]
         local icon = f[s.field]
         if icon then
-            icon:ClearAllPoints()
+            local region = icon._msufGFLayerFrame or icon
+            region:ClearAllPoints()
             local sz = conf[s.sizeKey] or s.defSize
             if fScale ~= 1 then sz = math_max(4, math_floor(sz * fScale + 0.5)) end
-            icon:SetSize(sz, sz)
+            region:SetSize(sz, sz)
             local pt = conf[s.anchorKey] or s.defAnchor
             local ox = conf[s.xKey] or 0
             local oy = conf[s.yKey] or 0
@@ -1192,12 +1202,16 @@ local function ApplyIconLayout(f, kind)
                 ox = ScaleValue(ox, fScale)
                 oy = ScaleValue(oy, fScale)
             end
-            icon:SetPoint(pt, anchor, pt, ox, oy)
-            local layer = conf[s.layerKey] or s.defLayer
+            region:SetPoint(pt, anchor, pt, ox, oy)
+            local layer = tonumber(conf[s.layerKey]) or s.defLayer
+            if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
+            if region.SetFrameLevel then region:SetFrameLevel(baseLvl + layer) end
+            if region ~= icon then
+                icon:ClearAllPoints()
+                icon:SetAllPoints(region)
+            end
             if icon.SetDrawLayer then
-                local sub = layer
-                if sub > 7 then sub = 7 elseif sub < -8 then sub = -8 end
-                icon:SetDrawLayer("OVERLAY", sub)
+                icon:SetDrawLayer("OVERLAY", 7)
             elseif icon.SetFrameLevel then
                 icon:SetFrameLevel(baseLvl + layer)
             end
