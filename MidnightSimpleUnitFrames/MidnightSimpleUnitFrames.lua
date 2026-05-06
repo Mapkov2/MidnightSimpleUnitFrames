@@ -2685,32 +2685,29 @@ function MSUF_ClampNameWidth(f, conf)
     if mode ~= "LEFT" and mode ~= "RIGHT" then
         mode = "LEFT"
     end
-    local legacyEndClip = (mode == "RIGHT")
-    local clipSide = "LEFT"
+    local clipSide = mode
     local maskPx = 0
-    if not legacyEndClip then
-        if _fontConf and _fontConf.fontOverride and _fontConf.shortenNameFrontMaskPx ~= nil then
-            maskPx = tonumber(_fontConf.shortenNameFrontMaskPx) or 0
-        elseif g and g.shortenNameFrontMaskPx ~= nil then
-            maskPx = tonumber(g.shortenNameFrontMaskPx) or 0
+    if _fontConf and _fontConf.fontOverride and _fontConf.shortenNameFrontMaskPx ~= nil then
+        maskPx = tonumber(_fontConf.shortenNameFrontMaskPx) or 0
+    elseif g and g.shortenNameFrontMaskPx ~= nil then
+        maskPx = tonumber(g.shortenNameFrontMaskPx) or 0
     end
-        maskPx = math.floor(maskPx + 0.5)
-        if maskPx < 0 then maskPx = 0 end
-        if maskPx > 80 then maskPx = 80 end
-    end
+    maskPx = math.floor(maskPx + 0.5)
+    if maskPx < 0 then maskPx = 0 end
+    if maskPx > 80 then maskPx = 80 end
     local showDots = true
     if _fontConf and _fontConf.fontOverride and _fontConf.shortenNameShowDots ~= nil then
         showDots = (_fontConf.shortenNameShowDots and true or false)
     elseif g and g.shortenNameShowDots ~= nil then
         showDots = (g.shortenNameShowDots and true or false)
     end
-    if legacyEndClip then
-        showDots = false
-    end
     local nameAnchorMode = f._msufNameAnchorMode or "LEFT"
     f._msufNameClipAnchorMode = nameAnchorMode
     if nameAnchorMode ~= "LEFT" then
         showDots = false
+    end
+    if not showDots then
+        maskPx = 0
     end
     local tf = f.textFrame or f
     local ap  = f._msufNameAnchorPoint or "TOPLEFT"
@@ -2736,29 +2733,6 @@ function MSUF_ClampNameWidth(f, conf)
          return
     end
     f._msufClampStamp = stamp
-    if legacyEndClip then
-        if f._msufNameClipFrame then
-            local clip = f._msufNameClipFrame
-            if clip.Hide then clip:Hide() end
-            if f.nameText and f.nameText.GetParent and f.nameText:GetParent() == clip then
-                local p = f._msufNameTextOrigParent or (f.textFrame or f)
-                f.nameText:SetParent(p)
-            end
-    end
-        if f._msufNameDotsFS then
-            if f._msufNameDotsFS.Hide then f._msufNameDotsFS:Hide() end
-    end
-        f.nameText:ClearAllPoints()
-        f.nameText:SetPoint(ap, rel, arp, ax, ay)
-        f._msufNameClipAnchorStamp = nil
-        f._msufNameClipTextStamp = nil
-        if f.nameText.SetJustifyH then
-            f.nameText:SetJustifyH(f._msufNameJustifyH or "LEFT")
-    end
-        f.nameText:SetWidth(nameWidth)
-        f._msufNameClipSideApplied = "RIGHT"
-         return
-    end
     local clipW = nameWidth - maskPx
     if clipW < 10 then clipW = 10 end
     local clip = f._msufNameClipFrame

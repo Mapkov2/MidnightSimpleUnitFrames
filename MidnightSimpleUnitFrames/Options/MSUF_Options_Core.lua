@@ -1323,9 +1323,11 @@ local function MSUF_StyleNumberStepButton(button, isPlus)
 end
 -- Gradient direction selector (D-pad style)
 -- Multi-direction: active arrows are gold; you can combine multiple directions.
--- Stored in MSUF_DB.general.gradientDirLeft/Right/Up/Down (booleans).
--- Legacy: MSUF_DB.general.gradientDirection ("RIGHT"/"LEFT"/"UP"/"DOWN") is auto-migrated.
-local function MSUF_CreateGradientDirectionPad(parent)
+-- Default storage is MSUF_DB.general.gradientDirLeft/Right/Up/Down (booleans);
+-- callers can pass scoped DB callbacks for per-unit/group overrides.
+-- Legacy: gradientDirection ("RIGHT"/"LEFT"/"UP"/"DOWN") is auto-migrated.
+local function MSUF_CreateGradientDirectionPad(parent, opts)
+    opts = (type(opts) == "table") and opts or {}
     local pad = CreateFrame("Frame", "MSUF_GradientDirectionPad", parent, "BackdropTemplate")
     pad:SetSize(82, 66)
     pad:SetBackdrop({
@@ -1336,6 +1338,26 @@ local function MSUF_CreateGradientDirectionPad(parent)
     pad:SetBackdropColor(0, 0, 0, 0.25)
     pad:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
     pad.buttons = {}
+    local function GetGradientDB()
+        if type(opts.getDB) == "function" then
+            local db = opts.getDB()
+            if type(db) == "table" then return db end
+        end
+        EnsureDB()
+        MSUF_DB.general = MSUF_DB.general or {}
+        return MSUF_DB.general
+    end
+    local function ApplyGradientChange()
+        if type(opts.apply) == "function" then
+            opts.apply()
+        elseif type(MSUF_BarsApplyGradient) == "function" then
+            MSUF_BarsApplyGradient()
+        elseif _G.MSUF_BarsApplyGradient then
+            _G.MSUF_BarsApplyGradient()
+        elseif type(ApplyAllSettings) == "function" then
+            ApplyAllSettings()
+        end
+    end
     local function AnyDirOn(g)
         return (g.gradientDirLeft == true) or (g.gradientDirRight == true) or (g.gradientDirUp == true) or (g.gradientDirDown == true)
     end
@@ -1388,25 +1410,23 @@ local function MSUF_CreateGradientDirectionPad(parent)
         b._msufDBKey = dbKey
         b._msufDirKey = dirKey
         b:SetScript("OnClick", function()
-            EnsureDB()
-            MSUF_DB.general = MSUF_DB.general or {}
-            local g = MSUF_DB.general
+            local g = GetGradientDB()
             MigrateLegacyIfNeeded(g)
             -- Toggle this direction
-            g[dbKey] = not (g[dbKey] == true)
-            -- Ensure at least one direction remains active
-            if not AnyDirOn(g) then g[dbKey] = true end
-            -- Keep legacy key around as "last touched" for older builds/tools.
-            g.gradientDirection = dirKey
+            local nextVal = not (g[dbKey] == true)
+            if type(opts.toggleDir) == "function" then
+                opts.toggleDir(dbKey, dirKey, nextVal)
+                g = GetGradientDB()
+            else
+                g[dbKey] = nextVal
+                -- Ensure at least one direction remains active
+                if not AnyDirOn(g) then g[dbKey] = true end
+                -- Keep legacy key around as "last touched" for older builds/tools.
+                g.gradientDirection = dirKey
+            end
             if pad.SyncFromDB then pad:SyncFromDB() end
             -- Apply gradient changes live (HP + Power, throttle-safe).
-            if type(MSUF_BarsApplyGradient) == "function" then
-                MSUF_BarsApplyGradient()
-            elseif _G.MSUF_BarsApplyGradient then
-                _G.MSUF_BarsApplyGradient()
-            elseif type(ApplyAllSettings) == "function" then
-                ApplyAllSettings()
-            end
+            ApplyGradientChange()
          end)
         pad.buttons[dirKey] = b
          return b
@@ -1440,8 +1460,7 @@ local function MSUF_CreateGradientDirectionPad(parent)
         self:SetAlpha(enabled and 1 or 0.55)
      end
     function pad:SyncFromDB()
-        EnsureDB()
-        local g = (MSUF_DB and MSUF_DB.general) or {}
+        local g = GetGradientDB()
         MigrateLegacyIfNeeded(g)
         -- Normalize nils
         if g.gradientDirLeft == nil then g.gradientDirLeft = false end
@@ -1486,7 +1505,12 @@ local function MSUF_CreateGradientDirectionPad(parent)
         -- Enable the D-pad when *either* gradient is enabled.
         -- Bugfix: previously this was gated only by HP gradient (enableGradient), which made
         -- the power-gradient controller unusable when HP gradient was turned off.
-        local enabled = ((g.enableGradient ~= false) or (g.enablePowerGradient ~= false))
+        local enabled
+        if type(opts.isEnabled) == "function" then
+            enabled = opts.isEnabled() and true or false
+        else
+            enabled = ((g.enableGradient ~= false) or (g.enablePowerGradient ~= false))
+        end
         self:SetEnabledVisual(enabled)
      end
     pad:SyncFromDB()
