@@ -160,11 +160,24 @@ end
 local function EnsureDot(f, sk)
     local pool = f._msufCI
     if not pool then pool = {}; f._msufCI = pool end
+    local parent = f.statusIconLayer or f.barGroup or f
     local d = pool[sk]
-    if d then return d end
-    d = f:CreateTexture(nil, "OVERLAY", nil, 6)
-    d:SetPoint(SLOT_ANCHORS[sk], f, SLOT_ANCHORS[sk], SLOT_OFS_X[sk], SLOT_OFS_Y[sk])
-    pool[sk] = d
+    if d and d.GetParent and d:GetParent() ~= parent then
+        d:Hide()
+        d = nil
+    end
+    if not d then
+        d = parent:CreateTexture(nil, "OVERLAY", nil, 6)
+        pool[sk] = d
+    elseif d.SetDrawLayer then
+        d:SetDrawLayer("OVERLAY", 6)
+    end
+
+    local c = f._c
+    local sz = (c and c.ciSize) or 8
+    d:SetSize(sz, sz)
+    d:ClearAllPoints()
+    d:SetPoint(SLOT_ANCHORS[sk], parent, SLOT_ANCHORS[sk], SLOT_OFS_X[sk], SLOT_OFS_Y[sk])
     return d
 end
 
@@ -174,18 +187,30 @@ end
 function GF.LayoutCornerIndicators(f, kind)
     if not f then return end
     local conf = GF.GetConf and GF.GetConf(kind or f._msufGFKind or "party")
-    if not conf or conf.ciEnabled == false then return end
-    local sz = conf.ciSize or 8
-    if sz < 4 then sz = 4 elseif sz > 24 then sz = 24 end
     local pool = f._msufCI
+    if not conf or conf.ciEnabled == false then
+        if pool then for i = 1, 5 do local d = pool[SLOT_KEYS[i]]; if d then d:Hide() end end end
+        return
+    end
+    local c = f._c
+    local sz = tonumber((c and c.ciSize) or conf.ciSize) or 8
+    if sz < 4 then sz = 4 elseif sz > 24 then sz = 24 end
     if not pool then return end
+    local parent = f.statusIconLayer or f.barGroup or f
     for i = 1, 5 do
         local sk = SLOT_KEYS[i]
         local d = pool[sk]
         if d then
+            if d.GetParent and d:GetParent() ~= parent then
+                d:Hide()
+                d = parent:CreateTexture(nil, "OVERLAY", nil, 6)
+                pool[sk] = d
+            elseif d.SetDrawLayer then
+                d:SetDrawLayer("OVERLAY", 6)
+            end
             d:SetSize(sz, sz)
             d:ClearAllPoints()
-            d:SetPoint(SLOT_ANCHORS[sk], f, SLOT_ANCHORS[sk], SLOT_OFS_X[sk], SLOT_OFS_Y[sk])
+            d:SetPoint(SLOT_ANCHORS[sk], parent, SLOT_ANCHORS[sk], SLOT_OFS_X[sk], SLOT_OFS_Y[sk])
         end
     end
 end

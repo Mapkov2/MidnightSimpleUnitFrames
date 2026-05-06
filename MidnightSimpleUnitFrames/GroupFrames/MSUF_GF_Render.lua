@@ -1313,6 +1313,7 @@ local function ApplyVisuals(f, bits)
     if band(bits, DIRTY_LAYOUT) ~= 0 then
         ApplyTextLayout(f, kind)
         ApplyIconLayout(f, kind)
+        if GF.LayoutCornerIndicators then GF.LayoutCornerIndicators(f, kind) end
     end
     -- Absorb anchor: ensure mode 4 overflow and mode 3 clipping track hpBar
     -- width changes from DIRTY_GEOMETRY / DIRTY_LAYOUT (not just DIRTY_COLOR
