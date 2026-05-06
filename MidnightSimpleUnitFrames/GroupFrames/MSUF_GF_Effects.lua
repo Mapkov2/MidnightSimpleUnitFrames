@@ -1598,6 +1598,11 @@ function GF.BuildFrameCache(f)
 
     -- Corner indicators
     c.ciEn = conf.ciEnabled ~= false
+    c.ciSize = tonumber(conf.ciSize) or 8
+    if fScale ~= 1 then c.ciSize = math_max(4, math_floor(c.ciSize * fScale + 0.5)) end
+    if c.ciSize < 4 then c.ciSize = 4 elseif c.ciSize > 24 then c.ciSize = 24 end
+    c.ciAlpha = tonumber(conf.ciAlpha) or 1.0
+    if c.ciAlpha < 0 then c.ciAlpha = 0 elseif c.ciAlpha > 1 then c.ciAlpha = 1 end
     -- PERF: Pre-compute slot→category map (eliminates 63K SlotCat calls/session)
     c.ciSlotTL = (conf.ciSlotTL or "none")
     c.ciSlotTR = (conf.ciSlotTR or "none")
