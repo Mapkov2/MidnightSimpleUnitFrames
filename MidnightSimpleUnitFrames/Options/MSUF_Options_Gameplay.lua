@@ -818,6 +818,107 @@ end)
         return btn, label
     end
 
+    local function _MSUF_StyleGameplayStepButton(button, isPlus)
+        if not button then return end
+        local style = _G.MSUF_StyleSmallButton or (ns and ns.MSUF_StyleSmallButton)
+        if style then
+            style(button, isPlus)
+            button:SetSize(18, 20)
+            return
+        end
+        button:SetSize(18, 20)
+        local fs = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        fs:SetText(isPlus and "+" or "\226\128\147")
+        fs:SetAllPoints()
+        if button.SetFontString then button:SetFontString(fs) end
+        button.text = fs
+    end
+
+    local function _MSUF_FormatSliderBoxValue(value, step)
+        value = tonumber(value) or 0
+        if step and step > 0 and step < 1 then
+            local text = string_format("%.1f", value)
+            return (text:gsub("%.0$", ""))
+        end
+        return tostring(math_floor(value + 0.5))
+    end
+
+    local function _MSUF_AttachGameplaySliderValueBox(slider, minV, maxV, step)
+        if not slider or slider.__MSUF_hasValueBox then return end
+        slider.__MSUF_hasValueBox = true
+
+        local minus = CreateFrame("Button", nil, sectionParent)
+        _MSUF_StyleGameplayStepButton(minus, false)
+        minus:SetPoint("LEFT", slider, "RIGHT", 8, 0)
+
+        local eb = CreateFrame("EditBox", nil, sectionParent, "InputBoxTemplate")
+        eb:SetSize(46, 20)
+        eb:SetPoint("LEFT", minus, "RIGHT", 2, 0)
+        eb:SetAutoFocus(false)
+        eb:SetJustifyH("CENTER")
+        eb:SetMaxLetters(7)
+        if GameFontHighlightSmall then eb:SetFontObject(GameFontHighlightSmall) end
+        if eb.SetTextColor then eb:SetTextColor(1, 1, 1, 1) end
+
+        local plus = CreateFrame("Button", nil, sectionParent)
+        _MSUF_StyleGameplayStepButton(plus, true)
+        plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
+
+        local function ClampStepValue(value)
+            value = tonumber(value)
+            if value == nil then value = slider:GetValue() or minV or 0 end
+            if step and step > 0 then
+                value = (math_floor(((value - minV) / step) + 0.5) * step) + minV
+            end
+            if value < minV then value = minV end
+            if value > maxV then value = maxV end
+            return value
+        end
+
+        local function SyncBox(value)
+            if eb:HasFocus() then return end
+            eb:SetText(_MSUF_FormatSliderBoxValue(ClampStepValue(value), step))
+        end
+
+        local function CommitBox()
+            local value = ClampStepValue(eb:GetText())
+            eb:SetText(_MSUF_FormatSliderBoxValue(value, step))
+            slider:SetValue(value)
+            eb:ClearFocus()
+        end
+
+        local function StepValue(dir)
+            local value = ClampStepValue((slider:GetValue() or minV or 0) + ((step or 1) * dir))
+            slider:SetValue(value)
+            SyncBox(value)
+        end
+
+        eb:SetScript("OnEnterPressed", CommitBox)
+        eb:SetScript("OnEscapePressed", function(self)
+            self:ClearFocus()
+            SyncBox(slider:GetValue())
+            self:HighlightText(0, 0)
+        end)
+        eb:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        eb:SetScript("OnEditFocusLost", function(self)
+            SyncBox(slider:GetValue())
+            self:HighlightText(0, 0)
+        end)
+        minus:SetScript("OnClick", function() StepValue(-1) end)
+        plus:SetScript("OnClick", function() StepValue(1) end)
+        slider:HookScript("OnValueChanged", function(self, value)
+            SyncBox(value or self:GetValue())
+        end)
+
+        slider.editBox = eb
+        slider.minusButton = minus
+        slider.plusButton = plus
+        slider.__MSUF_valueBox = eb
+        slider.__MSUF_valueBoxMinus = minus
+        slider.__MSUF_valueBoxPlus = plus
+        SyncBox(slider:GetValue())
+    end
+
     local function _MSUF_Slider(name, point, rel, relPoint, x, y, width, lo, hi, step, lowText, highText, titleText, field, key, roundFunc, after, applyNow)
         local sl = CreateFrame("Slider", name, sectionParent, "OptionsSliderTemplate")
         sl:SetWidth(width or 220)
@@ -834,6 +935,7 @@ end)
         if field then panel[field] = sl end
         if key then BindSlider(sl, key, roundFunc, after, applyNow) end
         if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(sl) end
+        _MSUF_AttachGameplaySliderValueBox(sl, lo, hi, step)
         return sl
     end
 
@@ -841,7 +943,9 @@ end)
         local t = _G[name .. "Text"]
         if t then
             t:ClearAllPoints()
-            t:SetPoint("LEFT", _G[name], "RIGHT", 12, 0)
+            local sl = _G[name]
+            local anchor = (sl and sl.plusButton) or sl
+            t:SetPoint("LEFT", anchor or _G[name], "RIGHT", (sl and sl.plusButton) and 8 or 12, 0)
             t:SetJustifyH("LEFT")
         end
     end
@@ -927,6 +1031,19 @@ end
         if widget.GetRegions then
             for _, region in ipairs({ widget:GetRegions() }) do
                 if region and region.SetAlpha then region:SetAlpha(alpha) end
+            end
+        end
+
+        for _, child in ipairs({
+            widget.editBox,
+            widget.minusButton,
+            widget.plusButton,
+            widget.__MSUF_valueBox,
+            widget.__MSUF_valueBoxMinus,
+            widget.__MSUF_valueBoxPlus,
+        }) do
+            if child and child ~= widget then
+                SetGameplayControlEnabled(child, enabled)
             end
         end
     end
@@ -1061,7 +1178,7 @@ end
     )
 
     -- Combat Timer lock checkbox
-    local combatLock = _MSUF_Check("MSUF_Gameplay_LockCombatTimerCheck", "LEFT", combatSlider, "RIGHT", 40, 0, "Lock position", "lockCombatTimerCheck", "lockCombatTimer",
+    local combatLock = _MSUF_Check("MSUF_Gameplay_LockCombatTimerCheck", "LEFT", combatSlider.plusButton or combatSlider, "RIGHT", 28, 0, "Lock position", "lockCombatTimerCheck", "lockCombatTimer",
         function()
             ApplyLockState()
         end
@@ -1195,7 +1312,7 @@ end
     )
 
     -- Reset button next to Duration (restore default 1.5s)
-    local combatStateDurationReset = _MSUF_Button("MSUF_Gameplay_CombatStateDurationReset", "LEFT", combatStateSlider, "RIGHT", 40, 0, 60, 20, "Reset", "combatStateDurationResetButton")
+    local combatStateDurationReset = _MSUF_Button("MSUF_Gameplay_CombatStateDurationReset", "LEFT", combatStateSlider.plusButton or combatStateSlider, "RIGHT", 28, 0, 60, 20, "Reset", "combatStateDurationResetButton")
     combatStateDurationReset:SetScript("OnClick", function()
         local g = EnsureGameplayDefaults()
         g.combatStateDuration = 1.5

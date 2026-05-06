@@ -454,6 +454,32 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     local function RowDropdown(parent, prevRow, label, gk, key, items, def, topOfs)
         local row = RowFrame(parent, prevRow, topOfs)
         RowLabel(row, label)
+        local function CurrentValue()
+            local cur = AV(gk, key)
+            for _, item in ipairs(items or {}) do
+                local itemKey = item.key
+                if itemKey == nil then itemKey = item.value end
+                if itemKey == cur then return cur end
+            end
+            return def or (items and items[1] and (items[1].key or items[1].value))
+        end
+        if UI and UI.Dropdown then
+            local dd = UI.Dropdown({
+                parent = row,
+                width = DD_W,
+                items = items,
+                get = CurrentValue,
+                set = function(v) AW(gk, key, v) end,
+                maxVisible = 10,
+            })
+            dd:ClearAllPoints()
+            dd:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+            _auraRefreshFns[#_auraRefreshFns + 1] = function()
+                if dd.Refresh then dd:Refresh() end
+            end
+            row._ctrl = dd
+            return row
+        end
         local btn = CreateFrame("Button", nil, row, "BackdropTemplate")
         btn:SetSize(DD_W, 20)
         btn:SetPoint("RIGHT", row, "RIGHT", -4, 0)
@@ -464,32 +490,40 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
         fs:SetTextColor(0.40, 0.67, 0.93, 1)
         local function RefreshLabel()
-            local cur = AV(gk, key) or def
-            for _, item in ipairs(items) do
-                if item.key == cur then fs:SetText(item.label or item.key); return end
+            local cur = CurrentValue()
+            for _, item in ipairs(items or {}) do
+                local itemKey = item.key
+                if itemKey == nil then itemKey = item.value end
+                if itemKey == cur then fs:SetText(item.label or item.text or tostring(itemKey or "")); return end
             end
             fs:SetText(tostring(cur))
         end
         RefreshLabel()
         -- Simple click-cycle through items
         btn:SetScript("OnClick", function()
-            local cur = AV(gk, key) or def
+            local count = #(items or {})
+            if count <= 0 then return end
+            local cur = CurrentValue()
             local idx = 1
             for i, item in ipairs(items) do
-                if item.key == cur then idx = i; break end
+                local itemKey = item.key
+                if itemKey == nil then itemKey = item.value end
+                if itemKey == cur then idx = i; break end
             end
-            idx = (idx % #items) + 1
-            AW(gk, key, items[idx].key)
+            idx = (idx % count) + 1
+            AW(gk, key, items[idx].key or items[idx].value)
             RefreshLabel()
         end)
         btn:SetScript("OnEnter", function(self)
             self:SetBackdropBorderColor(0.35, 0.50, 0.75, 1)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(label, 1, 1, 1)
-            for _, item in ipairs(items) do
-                local cur = AV(gk, key) or def
-                local pre = item.key == cur and "|cff66aaee> " or "  "
-                GameTooltip:AddLine(pre .. (item.label or item.key), 0.8, 0.8, 0.8)
+            for _, item in ipairs(items or {}) do
+                local cur = CurrentValue()
+                local itemKey = item.key
+                if itemKey == nil then itemKey = item.value end
+                local pre = itemKey == cur and "|cff66aaee> " or "  "
+                GameTooltip:AddLine(pre .. (item.label or item.text or tostring(itemKey or "")), 0.8, 0.8, 0.8)
             end
             GameTooltip:AddLine(" ", 0.5, 0.5, 0.5)
             GameTooltip:AddLine("Click to cycle", 0.5, 0.5, 0.6)
