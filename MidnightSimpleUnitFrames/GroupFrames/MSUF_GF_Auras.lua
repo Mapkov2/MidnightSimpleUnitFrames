@@ -263,7 +263,8 @@ local CONT_KEYS = {
 ------------------------------------------------------------------------
 local _iconRecycler = {}
 local _iconRecyclerN = 0
-local _ICON_RECYCLE_MAX = 32
+-- Bounded high enough to absorb a full custom raid-aura header rebuild.
+local _ICON_RECYCLE_MAX = 2048
 
 local function IconUsesMasque(icon)
     local M = GF.Masque
@@ -345,7 +346,7 @@ end
 -- different frame. We also break the strong-ref to the prior owner
 -- so the recycled icon doesn't keep an old retired frame alive.
 local function RecycleAuraIcon(icon)
-    if not icon or _iconRecyclerN >= _ICON_RECYCLE_MAX then return false end
+    if not icon then return false end
     icon:Hide()
     icon:ClearAllPoints()
     if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(icon) end
@@ -369,6 +370,7 @@ local function RecycleAuraIcon(icon)
     -- a Header retire calls GF.RecycleFramePools, the icon→frame strong-ref
     -- via _msufGFOwner would otherwise pin the retired frame in memory.)
     icon._msufGFOwner      = nil
+    if _iconRecyclerN >= _ICON_RECYCLE_MAX then return true end
     -- Optional: if the icon had a Masque skin, the Acquire path doesn't
     -- re-skin (skin sticks to the frame). Leaving Masque state alone is
     -- correct: same library handles re-anchor on next AddButton call.
@@ -380,11 +382,10 @@ end
 ------------------------------------------------------------------------
 -- GF.RecycleFramePools(f)
 -- Called from RetireHeader: empty all aura-icon pools owned by `f`
--- and feed the global recycler. Stops at the recycler's hard cap (32)
--- — surplus icons remain on the retired frame and get GC'd along with
--- the frame. This single function is the only path that consumes the
--- recycler in the hot rebuild cycle (zone change → frames retired →
--- next SetupHeader pulls icons from the pool instead of CreateFrame'ing).
+-- and feed reusable icons into the global recycler. If the recycler is full,
+-- icons are still detached from frame-local Lua tables to avoid stale refs.
+-- The next SetupHeader can then reuse retained icons instead of creating
+-- a fresh set after every zone-triggered header rebuild.
 ------------------------------------------------------------------------
 function GF.RecycleFramePools(f)
     if not f then return end
@@ -394,7 +395,7 @@ function GF.RecycleFramePools(f)
             for i = 1, #pool do
                 local ic = pool[i]
                 if ic then
-                    if not RecycleAuraIcon(ic) then break end -- recycler full → stop
+                    RecycleAuraIcon(ic)
                     pool[i] = nil
                 end
             end
@@ -403,6 +404,7 @@ function GF.RecycleFramePools(f)
             pool._msufPoolN  = nil
             pool._msufPoolSz = nil
             pool._msufPoolP  = nil
+            f[poolKey] = nil
         end
     end
 end
@@ -971,6 +973,7 @@ local function EnsureGFCooldownTextMgr()
     local function CancelTimer()
         if mgr.timer and mgr.timer.Cancel then mgr.timer:Cancel() end
         mgr.timer = nil
+        mgr.touchScheduled = false
         mgr.timerGen = (mgr.timerGen or 0) + 1
     end
 
@@ -1001,6 +1004,7 @@ local function EnsureGFCooldownTextMgr()
     end
 
     local function Tick()
+        mgr.touchScheduled = false
         EnsureGFCooldownTextColorSettings()
         local now = GetTime()
         local secretsActive = IsGFSecretMode(now)
@@ -1107,6 +1111,7 @@ local function EnsureGFCooldownTextMgr()
         if mgr.count <= 0 then StopIfIdle(); return end
         if type(delay) ~= "number" or delay < 0 then delay = 0 end
         CancelTimer()
+        mgr.touchScheduled = delay <= 0
         if C_Timer and type(C_Timer.NewTimer) == "function" then
             mgr.timer = C_Timer.NewTimer(delay, tickCallback)
         elseif C_Timer and type(C_Timer.After) == "function" then
@@ -1114,6 +1119,7 @@ local function EnsureGFCooldownTextMgr()
             local gen = mgr.timerGen
             C_Timer.After(delay, function()
                 if mgr.timerGen ~= gen then return end
+                mgr.touchScheduled = false
                 Tick()
             end)
         end
@@ -1158,7 +1164,9 @@ _GF_TouchCooldownTextIcon = function(icon)
     icon._msufGF_cdSkipUntil = nil
     if icon._msufGF_cdMgrRegistered == true then
         local mgr = _gfCdTextMgr
-        if mgr and mgr.count > 0 and mgr._Schedule then mgr._Schedule(0) end
+        if mgr and mgr.count > 0 and mgr._Schedule and not mgr.touchScheduled then
+            mgr._Schedule(0)
+        end
     end
 end
 
@@ -1572,9 +1580,15 @@ local function ClearOneBlizzardAuraContainer(container)
     if Native and container then
         Native.Clear(container)
     elseif container then
+        local id = container._msufNativeAuraAnchorID
+        local removeFn = _G.C_UnitAuras and _G.C_UnitAuras.RemovePrivateAuraAnchor
+        if id and type(removeFn) == "function" then
+            pcall(removeFn, id)
+        end
         container:Hide()
         container._msufNativeAuraAnchorID = nil
         container._msufNativeAuraSignature = nil
+        container._msufNativeAuraUnit = nil
     end
 end
 
@@ -1632,6 +1646,16 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
     local renderDispels = Native.TypeEnabled(types, "dispels", true) and conf.dispelEnabled ~= false
     local renderExt = Native.TypeEnabled(types, "externals", true)
     local renderPrivate = Native.TypeEnabled(types, "privateAuras", true) and paCfg.enabled ~= false
+    local customPrivate = paCfg.enabled ~= false and not renderPrivate
+
+    -- Blizzard's native debuff/dispel container can keep private auras at
+    -- its own anchor. When Private Auras are routed to MSUF custom slots,
+    -- keep debuffs/dispels on the custom path too so the native anchor cannot
+    -- steal the visual position.
+    if customPrivate then
+        renderDebuffs = false
+        renderDispels = false
+    end
 
     if not (renderBuffs or renderDebuffs or renderDispels or renderExt or renderPrivate) then
         GF.ClearBlizzardAuraContainer(f)
@@ -1683,6 +1707,7 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
         showDebuffs = showDebuffs,
         showDispels = renderDispels,
         showBigDefensive = renderExt,
+        privateAuras = renderPrivate,
         maxBuffs = renderBuffs and (tonumber(buffCfg.max) or 6) or 0,
         maxDebuffs = maxDebuffs,
         maxDispelDebuffs = renderDispels and 3 or 0,
