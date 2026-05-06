@@ -60,6 +60,75 @@ local function _MSUF_NormalizeUnitKey(unit)
     return result
 end
 
+local function _MSUF_GetGradientScopeKey(frameOrUnit)
+    local unit = frameOrUnit
+    if type(frameOrUnit) == "table" then
+        unit = frameOrUnit.msufConfigKey or frameOrUnit._msufConfigKey or frameOrUnit.unitKey or frameOrUnit.unit
+        if (not unit) and frameOrUnit.GetParent then
+            local parent = frameOrUnit:GetParent()
+            unit = parent and (parent.msufConfigKey or parent._msufConfigKey or parent.unitKey or parent.unit)
+            if (not unit) and parent and parent.GetParent then
+                local owner = parent:GetParent()
+                unit = owner and (owner.msufConfigKey or owner._msufConfigKey or owner.unitKey or owner.unit)
+            end
+        end
+    end
+    return _MSUF_NormalizeUnitKey(unit)
+end
+
+local function _MSUF_GetScopedGradientDB(frameOrUnit)
+    local db = _G.MSUF_DB
+    if not db then return nil end
+    local scopeKey = _MSUF_GetGradientScopeKey(frameOrUnit)
+    if not scopeKey or scopeKey == "shared" then return nil end
+    local scoped = db[scopeKey]
+    if type(scoped) == "table" and scoped.hlOverride == true then
+        return scoped
+    end
+    return nil
+end
+
+local function _MSUF_GradientValue(scoped, gen, key, defaultVal)
+    local v = nil
+    if scoped and scoped[key] ~= nil then v = scoped[key] end
+    if v == nil and gen then v = gen[key] end
+    if v == nil then return defaultVal end
+    return v
+end
+
+local function _MSUF_GradientDirState(scoped, gen)
+    local hasScoped = scoped and (
+        scoped.gradientDirLeft ~= nil or scoped.gradientDirRight ~= nil or
+        scoped.gradientDirUp ~= nil or scoped.gradientDirDown ~= nil
+    )
+    if hasScoped then
+        local left = (scoped.gradientDirLeft == true)
+        local right = (scoped.gradientDirRight == true)
+        local up = (scoped.gradientDirUp == true)
+        local down = (scoped.gradientDirDown == true)
+        if not left and not right and not up and not down then
+            local dir = scoped.gradientDirection
+            if dir == "LEFT" then left = true
+            elseif dir == "UP" then up = true
+            elseif dir == "DOWN" then down = true
+            else right = true end
+        end
+        return left, right, up, down
+    end
+    local left = (gen and gen.gradientDirLeft == true)
+    local right = (gen and gen.gradientDirRight == true)
+    local up = (gen and gen.gradientDirUp == true)
+    local down = (gen and gen.gradientDirDown == true)
+    if not left and not right and not up and not down then
+        local dir = gen and gen.gradientDirection
+        if dir == "LEFT" then left = true
+        elseif dir == "UP" then up = true
+        elseif dir == "DOWN" then down = true
+        else right = true end
+    end
+    return left, right, up, down
+end
+
 -- Absorb display/anchor resolver cache (invalidated on DB reference change).
 local _absorbCache = {}
 local _absorbCacheDBRef = nil
@@ -455,17 +524,18 @@ local function MSUF_ApplyBarGradient(frameOrTex, isPower)
     if not frameOrTex then  return end
     if not MSUF_DB then EnsureDB() end
     local g = MSUF_DB.general or {}
-    local strength = g.gradientStrength or 0.45
+    local scoped = _MSUF_GetScopedGradientDB(frameOrTex)
+    local strength = tonumber(_MSUF_GradientValue(scoped, g, "gradientStrength", 0.45)) or 0.45
     if isPower then
-        if g.enablePowerGradient == false then strength = 0 end
+        if _MSUF_GradientValue(scoped, g, "enablePowerGradient", true) == false then strength = 0 end
     else
-        if g.enableGradient == false then strength = 0 end
+        if _MSUF_GradientValue(scoped, g, "enableGradient", true) == false then strength = 0 end
     end
     -- Allow applying to a standalone texture (used by some indicators).
     if frameOrTex.SetGradientAlpha and not (isPower and frameOrTex.powerGradients or frameOrTex.hpGradients) then
         local tex = frameOrTex
-        local dir = g.gradientDirection
-        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT'; g.gradientDirection = dir end
+        local dir = _MSUF_GradientValue(scoped, g, "gradientDirection", "RIGHT")
+        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT' end
         local orientation, a1, a2 = 'HORIZONTAL', 0, strength
         if dir == 'LEFT' then a1, a2 = strength, 0
         elseif dir == 'UP' then orientation = 'VERTICAL'; a1, a2 = 0, strength
@@ -477,22 +547,8 @@ local function MSUF_ApplyBarGradient(frameOrTex, isPower)
     local bar = isPower and (frame.targetPowerBar or frame.powerBar) or frame.hpBar
     local grads = isPower and frame.powerGradients or frame.hpGradients
     if not bar or not grads then  return end
-    -- Migrate old single-direction setting to the new per-edge toggles once.
-    local hasNew = (g.gradientDirLeft ~= nil) or (g.gradientDirRight ~= nil) or (g.gradientDirUp ~= nil) or (g.gradientDirDown ~= nil)
-    if not hasNew then
-        local dir = g.gradientDirection
-        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT' end
-        dir = string.upper(dir)
-        g.gradientDirLeft = (dir == 'LEFT')
-        g.gradientDirRight = (dir == 'RIGHT')
-        g.gradientDirUp = (dir == 'UP')
-        g.gradientDirDown = (dir == 'DOWN')
-    end
-    local left = (g.gradientDirLeft == true)
-    local right = (g.gradientDirRight == true)
-    local up = (g.gradientDirUp == true)
-    local down = (g.gradientDirDown == true)
-    if not left and not right and not up and not down then right = true; g.gradientDirRight = true end
+    -- Resolve scoped per-edge toggles, with legacy single-direction fallback.
+    local left, right, up, down = _MSUF_GradientDirState(scoped, g)
     if strength <= 0 then
         MSUF_HideGradSet(grads)
          return

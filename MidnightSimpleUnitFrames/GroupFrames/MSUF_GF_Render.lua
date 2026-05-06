@@ -268,12 +268,12 @@ local function ApplyBarTexture(f, kind)
         SetOverlayStatusBarTextureAlpha(f.healAbsorbBar)
     end
 
-    -- Gradient overlays (reads from MSUF_DB.general — same source as main UF)
-    ApplyGradient(f)
+    -- Gradient overlays inherit Shared unless this GF scope has Bars overrides.
+    ApplyGradient(f, kind)
 end
 
 ------------------------------------------------------------------------
--- Gradient overlays: lazy-create + apply from MSUF_DB.general
+-- Gradient overlays: lazy-create + apply from scoped Bars settings
 -- Mirrors main UF gradient system (4-directional, per-edge toggles)
 ------------------------------------------------------------------------
 local function _GF_MakeGradTex(bar)
@@ -311,13 +311,53 @@ local function _GF_SetGrad(tex, orientation, a1, a2, strength)
     if strength > 0 then tex:Show() else tex:Hide() end
 end
 
-local function _GF_ApplyGradientToBar(bar, gen, isPower)
+local function _GF_GradientValue(conf, gen, key, defaultVal)
+    local v = nil
+    if conf and conf.hlOverride == true and conf[key] ~= nil then v = conf[key] end
+    if v == nil and gen then v = gen[key] end
+    if v == nil then return defaultVal end
+    return v
+end
+
+local function _GF_GradientDirState(conf, gen)
+    if conf and conf.hlOverride == true and (
+        conf.gradientDirLeft ~= nil or conf.gradientDirRight ~= nil or
+        conf.gradientDirUp ~= nil or conf.gradientDirDown ~= nil
+    ) then
+        local left  = (conf.gradientDirLeft == true)
+        local right = (conf.gradientDirRight == true)
+        local up    = (conf.gradientDirUp == true)
+        local down  = (conf.gradientDirDown == true)
+        if not left and not right and not up and not down then
+            local dir = conf.gradientDirection
+            if dir == "LEFT" then left = true
+            elseif dir == "UP" then up = true
+            elseif dir == "DOWN" then down = true
+            else right = true end
+        end
+        return left, right, up, down
+    end
+    local left  = (gen and gen.gradientDirLeft == true)
+    local right = (gen and gen.gradientDirRight == true)
+    local up    = (gen and gen.gradientDirUp == true)
+    local down  = (gen and gen.gradientDirDown == true)
+    if not left and not right and not up and not down then
+        local dir = gen and gen.gradientDirection
+        if dir == "LEFT" then left = true
+        elseif dir == "UP" then up = true
+        elseif dir == "DOWN" then down = true
+        else right = true end
+    end
+    return left, right, up, down
+end
+
+local function _GF_ApplyGradientToBar(bar, conf, gen, isPower)
     if not bar then return end
-    local strength = gen.gradientStrength or 0.45
+    local strength = tonumber(_GF_GradientValue(conf, gen, "gradientStrength", 0.45)) or 0.45
     if isPower then
-        if gen.enablePowerGradient == false then strength = 0 end
+        if _GF_GradientValue(conf, gen, "enablePowerGradient", true) == false then strength = 0 end
     else
-        if gen.enableGradient == false then strength = 0 end
+        if _GF_GradientValue(conf, gen, "enableGradient", true) == false then strength = 0 end
     end
     if strength <= 0 then
         local grads = bar._msufGFGrads
@@ -330,19 +370,7 @@ local function _GF_ApplyGradientToBar(bar, gen, isPower)
         return
     end
     local grads = _GF_EnsureGradients(bar)
-    -- Read per-edge toggles (same keys as main UF)
-    local left  = (gen.gradientDirLeft == true)
-    local right = (gen.gradientDirRight == true)
-    local up    = (gen.gradientDirUp == true)
-    local down  = (gen.gradientDirDown == true)
-    -- Legacy: migrate single gradientDirection
-    if not left and not right and not up and not down then
-        local dir = gen.gradientDirection
-        if dir == "LEFT" then left = true
-        elseif dir == "UP" then up = true
-        elseif dir == "DOWN" then down = true
-        else right = true end
-    end
+    local left, right, up, down = _GF_GradientDirState(conf, gen)
     -- Left
     if left then
         local t = grads.left; t:ClearAllPoints()
@@ -373,11 +401,12 @@ local function _GF_ApplyGradientToBar(bar, gen, isPower)
     elseif grads.down then grads.down:Hide() end
 end
 
-ApplyGradient = function(f)
+ApplyGradient = function(f, kind)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if not gen then return end
-    if f.health then _GF_ApplyGradientToBar(f.health, gen, false) end
-    if f.power  then _GF_ApplyGradientToBar(f.power,  gen, true)  end
+    local conf = kind and GF.GetConf and GF.GetConf(kind) or nil
+    if f.health then _GF_ApplyGradientToBar(f.health, conf, gen, false) end
+    if f.power  then _GF_ApplyGradientToBar(f.power,  conf, gen, true)  end
 end
 
 ------------------------------------------------------------------------

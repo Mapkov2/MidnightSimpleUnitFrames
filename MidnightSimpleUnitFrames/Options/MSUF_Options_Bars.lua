@@ -341,6 +341,97 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         return false
     end
 
+    local Gradient = {}
+    function Gradient.HasSettings(db)
+        return db and (
+            db.enableGradient ~= nil or db.enablePowerGradient ~= nil
+            or db.gradientStrength ~= nil or db.gradientDirection ~= nil
+            or db.gradientDirLeft ~= nil or db.gradientDirRight ~= nil
+            or db.gradientDirUp ~= nil or db.gradientDirDown ~= nil
+        )
+    end
+
+    function Gradient.HasDirSettings(db)
+        return db and (
+            db.gradientDirection ~= nil
+            or db.gradientDirLeft ~= nil or db.gradientDirRight ~= nil
+            or db.gradientDirUp ~= nil or db.gradientDirDown ~= nil
+        )
+    end
+
+    function Gradient.NeedsSeed(db)
+        return not Gradient.HasSettings(db) or not Gradient.HasDirSettings(db)
+    end
+
+    function Gradient.EnsureSeed()
+        EnsureDB()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        if scopeKey == "shared" or type(HlSeedFromGeneral) ~= "function" then return end
+        local gfKeys = GF_SCOPE_APPLY_KEYS[scopeKey]
+        if gfKeys then
+            for i = 1, #gfKeys do
+                local gf = MSUF_DB[gfKeys[i]]
+                if gf and gf.hlOverride == true and Gradient.NeedsSeed(gf) then
+                    HlSeedFromGeneral(gf)
+                end
+            end
+            return
+        end
+        local u = MSUF_DB[scopeKey]
+        if u and u.hlOverride == true and Gradient.NeedsSeed(u) then
+            HlSeedFromGeneral(u)
+        end
+    end
+
+    function Gradient.Get(key, defaultVal)
+        return ScopeGet(key, defaultVal)
+    end
+
+    function Gradient.Set(key, val)
+        Gradient.EnsureSeed()
+        ScopeSet(key, val)
+    end
+
+    function Gradient.GetDisplayDB()
+        EnsureDB()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        if scopeKey == "shared" then return G() end
+        local gfKeys = GF_SCOPE_APPLY_KEYS[scopeKey]
+        if gfKeys then
+            for i = 1, #gfKeys do
+                local gf = MSUF_DB[gfKeys[i]]
+                if gf and gf.hlOverride == true and Gradient.HasSettings(gf) then
+                    if not Gradient.HasDirSettings(gf) and type(HlSeedFromGeneral) == "function" then
+                        HlSeedFromGeneral(gf)
+                    end
+                    return gf
+                end
+            end
+            return G()
+        end
+        local u = MSUF_DB[scopeKey]
+        if u and u.hlOverride == true and Gradient.HasSettings(u) then
+            if not Gradient.HasDirSettings(u) and type(HlSeedFromGeneral) == "function" then
+                HlSeedFromGeneral(u)
+            end
+            return u
+        end
+        return G()
+    end
+
+    function Gradient.AnyDirOn()
+        return (Gradient.Get("gradientDirLeft", false) == true)
+            or (Gradient.Get("gradientDirRight", false) == true)
+            or (Gradient.Get("gradientDirUp", false) == true)
+            or (Gradient.Get("gradientDirDown", false) == true)
+    end
+
+    function Gradient.ToggleDir(dbKey, dirKey, nextVal)
+        Gradient.Set(dbKey, nextVal and true or false)
+        if not Gradient.AnyDirOn() then Gradient.Set(dbKey, true) end
+        Gradient.Set("gradientDirection", dirKey)
+    end
+
     local scopeBar = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
     scopeBar:SetHeight(72); scopeBar:SetWidth(BOX_W)
     scopeBar:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, -120)
@@ -435,7 +526,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                         local tip = GetScopeUnitHasOverride(bk) and TR("Override active: Group Frames use their own Bars settings.") or TR("Uses Shared Bars settings.")
                         GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
                         if bk == "raid" then GameTooltip:AddLine(TR("Raid scope also applies to Mythic Raid."), 0.55, 0.70, 0.95, true) end
-                        GameTooltip:AddLine(TR("Absorb display/opacity and highlight settings apply to Group Frames."), 0.55, 0.60, 0.72, true)
+                        GameTooltip:AddLine(TR("Gradient, absorb display/opacity and highlight settings apply to Group Frames."), 0.55, 0.60, 0.72, true)
                     else
                         local tip = GetScopeUnitHasOverride(bk) and TR("Override active: this unit uses its own Bars/Text settings.") or TR("Uses Shared settings.")
                         GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
@@ -599,7 +690,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     barsGFHint:SetPoint("TOPLEFT", scopeBar, "BOTTOMLEFT", 4, -6)
     barsGFHint:SetWidth(600)
     barsGFHint:SetJustifyH("LEFT")
-    barsGFHint:SetText("Group Frames inherit Shared by default. Party/Raid overrides apply to absorb display/opacity and highlights; textures stay Shared. Raid also applies to Mythic Raid.")
+    barsGFHint:SetText("Group Frames inherit Shared by default. Party/Raid overrides apply to gradients, absorb display/opacity and highlights; textures stay Shared. Raid also applies to Mythic Raid.")
     barsGFHint:SetTextColor(0.50, 0.60, 0.75)
 
     -- BOX 1: Textures & Gradient (default open)
@@ -656,7 +747,17 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     gradientStrengthSlider:ClearAllPoints(); gradientStrengthSlider:SetPoint("TOPLEFT", powerGradientCheck, "BOTTOMLEFT", 0, -18)
     if gradientStrengthSlider.SetWidth then gradientStrengthSlider:SetWidth(200) end
 
-    local gradientDirPad = MSUF_CreateGradientDirectionPad and MSUF_CreateGradientDirectionPad(box1Body) or nil
+    local gradientDirPad = MSUF_CreateGradientDirectionPad and MSUF_CreateGradientDirectionPad(box1Body, {
+        getDB = Gradient.GetDisplayDB,
+        toggleDir = Gradient.ToggleDir,
+        isEnabled = function()
+            return (Gradient.Get("enableGradient", true) ~= false)
+                or (Gradient.Get("enablePowerGradient", false) ~= false)
+        end,
+        apply = function()
+            if _G.MSUF_BarsApplyGradient then _G.MSUF_BarsApplyGradient() else Apply() end
+        end,
+    }) or nil
     if gradientDirPad then
         if gradientDirPad.SetParent then gradientDirPad:SetParent(box1Body) end
         gradientDirPad:ClearAllPoints(); gradientDirPad:SetPoint("TOPLEFT", gradientCheck, "TOPLEFT", 218, -3); gradientDirPad:Show()
@@ -964,10 +1065,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     HlSeedFromGeneral = function(db)
         local gen = G()
         local seeds = {
-            -- Box 1: Textures & Gradient
-            "barTexture", "barBackgroundTexture",
-            "gradientEnabled", "powerGradientEnabled", "gradientStrength",
-            "gradientDirection",
+            -- Box 1: Gradient (bar textures stay Shared/global)
+            "enableGradient", "enablePowerGradient", "gradientStrength",
+            "gradientDirection", "gradientDirLeft", "gradientDirRight",
+            "gradientDirUp", "gradientDirDown",
             -- Box 2: Absorb Display
             "absorbTextMode", "absorbAnchorMode",
             "absorbBarOpacity", "healAbsorbBarOpacity",
@@ -1796,7 +1897,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         purgeOutlineDrop = purgeOutlineDrop,
         bossTargetOutlineDrop = bossTargetOutlineDrop, bossTargetTestCheck = bossTargetTestCheck,
         highlightBorderThicknessSlider = highlightBorderThicknessSlider,
-        gradientStrengthSlider = gradientStrengthSlider,
+        gradientCheck = gradientCheck, powerGradientCheck = powerGradientCheck,
+        gradientStrengthSlider = gradientStrengthSlider, gradientDirPad = gradientDirPad,
         hpModeDrop = hpModeDrop, powerModeDrop = powerModeDrop,
         hpSepDrop = hpSepDrop, powerSepDrop = powerSepDrop,
         hpSepLabel = hpSepLabel, powerSepLabel = powerSepLabel,
@@ -1884,6 +1986,19 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
         if _C.smoothBarCheck then _C.smoothBarCheck:SetChecked(_G.MSUF_Bars_GetSmoothPowerForCurrentScope()) end
 
+        local hpGrad = (Gradient.Get("enableGradient", true) ~= false)
+        local powGrad = (Gradient.Get("enablePowerGradient", false) ~= false)
+        if _C.gradientCheck then _C.gradientCheck:SetChecked(hpGrad) end
+        if _C.powerGradientCheck then _C.powerGradientCheck:SetChecked(powGrad) end
+        if _C.gradientDirPad and _C.gradientDirPad.SyncFromDB then
+            _C.gradientDirPad:SyncFromDB()
+        end
+        if _C.gradientStrengthSlider then
+            local v = tonumber(Gradient.Get("gradientStrength", 0.45)) or 0.45
+            if v < 0 then v = 0 elseif v > 1 then v = 1 end
+            MSUF_SetLabeledSliderValue(_C.gradientStrengthSlider, v)
+        end
+
         -- Absorb controls: scope-aware, refresh for ALL scopes
         if _C.absorbDisplayDrop and _C.absorbDisplayDrop.Refresh then _C.absorbDisplayDrop:Refresh() end
         if _C.absorbAnchorDrop and _C.absorbAnchorDrop.Refresh then _C.absorbAnchorDrop:Refresh() end
@@ -1924,6 +2039,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local absorbScopedControlsActive = hlControlsActive and absorbBarActive
         local absorbSharedControlsActive = sharedControlsActive and absorbBarActive
         local powerBarScopeControlsActive = (_G.MSUF_Bars_GetPowerBarScopeUnitKey() ~= nil)
+        local gradientControlsActive = sharedControlsActive or hlOverrideOn or textOverrideOn
+        local gradientDirControlsActive = gradientControlsActive and (hpGrad or powGrad)
 
         local function SetDropActive(n, lbl, active) MSUF_SetDropDownEnabled(_G[n], lbl, active and true or false) end
         local function SetCheckActive(n, active)
@@ -1947,16 +2064,19 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             elseif fs.SetAlpha then fs:SetAlpha(active and 1 or 0.35) end
         end
 
-        -- Box 1: textures and gradient are Shared/global only.
+        -- Box 1: textures are Shared/global only; gradient is Bars-override scoped.
         SetDropActive("MSUF_BarTextureDropdown", nil, sharedControlsActive)
         SetDropActive("MSUF_BarBackgroundTextureDropdown", nil, sharedControlsActive)
         SetLabelActive(_C.texColLabel, sharedControlsActive)
         SetLabelActive(_C.barBgTexLabel, sharedControlsActive)
-        SetCheckActive("MSUF_GradientEnableCheck", sharedControlsActive)
-        SetCheckActive("MSUF_PowerGradientEnableCheck", sharedControlsActive)
-        SetSliderActive("MSUF_GradientStrengthSlider", sharedControlsActive)
-        SetFrameActive("MSUF_GradientDirectionPad", sharedControlsActive)
-        SetLabelActive(_C.gradColLabel, sharedControlsActive)
+        SetCheckActive("MSUF_GradientEnableCheck", gradientControlsActive)
+        SetCheckActive("MSUF_PowerGradientEnableCheck", gradientControlsActive)
+        SetSliderActive("MSUF_GradientStrengthSlider", gradientDirControlsActive)
+        SetFrameActive("MSUF_GradientDirectionPad", gradientDirControlsActive)
+        if _C.gradientDirPad and _C.gradientDirPad.SetEnabledVisual then
+            _C.gradientDirPad:SetEnabledVisual(gradientDirControlsActive)
+        end
+        SetLabelActive(_C.gradColLabel, gradientControlsActive)
 
         -- Box 2: display/anchor/opacity are scoped; textures/test/self-heal are Shared.
         SetDropActive("MSUF_AbsorbDisplayDrop", nil, hlControlsActive)
@@ -2023,7 +2143,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if not box or not box._msufTitle then return end
             SetLabelActive(box._msufTitle, active)
         end
-        TitleDim(_C.box1, sharedControlsActive)
+        TitleDim(_C.box1, sharedControlsActive or gradientControlsActive)
         TitleDim(_C.box2, hlControlsActive or sharedControlsActive)
         TitleDim(_C.box3a, hlControlsActive)
         TitleDim(_C.box3b, hlControlsActive)
@@ -2047,9 +2167,13 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     -- MSUF_BarsApplyGradient (live gradient apply)
     local MSUF_BarsApplyGradient
     MSUF_BarsApplyGradient = function()
-        EnsureDB(); local g = G()
-        if (g.enableGradient ~= false) or (g.enablePowerGradient ~= false) then
-            if not (tonumber(g.gradientStrength) and tonumber(g.gradientStrength) > 0) then g.gradientStrength = 0.45 end
+        EnsureDB()
+        local hpGrad = (Gradient.Get("enableGradient", true) ~= false)
+        local powGrad = (Gradient.Get("enablePowerGradient", false) ~= false)
+        if hpGrad or powGrad then
+            if not (tonumber(Gradient.Get("gradientStrength", nil)) and tonumber(Gradient.Get("gradientStrength", nil)) > 0) then
+                Gradient.Set("gradientStrength", 0.45)
+            end
         end
         if gradientDirPad and gradientDirPad.SyncFromDB then gradientDirPad:SyncFromDB() end
         if InCombatLockdown and InCombatLockdown() then Apply()
@@ -2067,6 +2191,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if C_Timer then C_Timer.After(0.08, Repaint) end
         -- Refresh GF gradient overlays
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and GF.InvalidateConfCache then GF.InvalidateConfCache() end
         if GF and GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_TEXTURE or 0x02) end
     end
 
@@ -2075,7 +2200,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         EnsureDB(); local g = G(); local b = B()
         -- Ensure hlAggroSize exists in general (migrate from legacy key)
         if g.hlAggroSize == nil and g.highlightBorderThickness ~= nil then g.hlAggroSize = g.highlightBorderThickness end
-        local hpGrad = (g.enableGradient ~= false); local powGrad = (g.enablePowerGradient ~= false)
+        local hpGrad = (Gradient.Get("enableGradient", true) ~= false); local powGrad = (Gradient.Get("enablePowerGradient", false) ~= false)
         if gradientCheck then gradientCheck:SetChecked(hpGrad) end
         if powerGradientCheck then powerGradientCheck:SetChecked(powGrad) end
         if gradientDirPad then
@@ -2083,7 +2208,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if gradientDirPad.SetEnabledVisual then gradientDirPad:SetEnabledVisual(hpGrad or powGrad) end
         end
         if gradientStrengthSlider then
-            local v = tonumber(g.gradientStrength) or 0.45; if v < 0 then v = 0 elseif v > 1 then v = 1 end
+            local v = tonumber(Gradient.Get("gradientStrength", 0.45)) or 0.45; if v < 0 then v = 0 elseif v > 1 then v = 1 end
             MSUF_SetLabeledSliderValue(gradientStrengthSlider, v)
             MSUF_SetLabeledSliderEnabled(gradientStrengthSlider, hpGrad or powGrad)
         end
@@ -2147,13 +2272,26 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     end)
 
     -- DB bindings
-    if _G.MSUF_Options_BindDBBoolCheck then
-        _G.MSUF_Options_BindDBBoolCheck(gradientCheck, "general.enableGradient", MSUF_BarsApplyGradient, SyncAll)
-        _G.MSUF_Options_BindDBBoolCheck(powerGradientCheck, "general.enablePowerGradient", MSUF_BarsApplyGradient, SyncAll)
-        local function Bind(cb, path, apply) if cb then _G.MSUF_Options_BindDBBoolCheck(cb, path, apply or Apply, SyncAll) end end
+    if gradientCheck then
+        gradientCheck:SetScript("OnClick", function(self)
+            local v = not (Gradient.Get("enableGradient", true) ~= false)
+            Gradient.Set("enableGradient", v)
+            if self.SetChecked then self:SetChecked(v) end
+            MSUF_BarsApplyGradient()
+            SyncAll()
+        end)
+    end
+    if powerGradientCheck then
+        powerGradientCheck:SetScript("OnClick", function(self)
+            local v = not (Gradient.Get("enablePowerGradient", false) ~= false)
+            Gradient.Set("enablePowerGradient", v)
+            if self.SetChecked then self:SetChecked(v) end
+            MSUF_BarsApplyGradient()
+            SyncAll()
+        end)
     end
     if gradientStrengthSlider then
-        gradientStrengthSlider.onValueChanged = function(_, v) G().gradientStrength = v; MSUF_BarsApplyGradient() end
+        gradientStrengthSlider.onValueChanged = function(_, v) Gradient.Set("gradientStrength", v); MSUF_BarsApplyGradient() end
     end
 
     -- Panel stores (Core compat)
