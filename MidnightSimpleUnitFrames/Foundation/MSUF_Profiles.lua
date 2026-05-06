@@ -1213,7 +1213,7 @@ end
 function MSUF_ImportFromString(str)
     if not str or not str:match("%S") then
         print("|cffff0000MSUF:|r Import failed (empty string).")
-         return
+         return false
     end
     -- NEW: compact path (no loadstring)
     local tryDec = _G.MSUF_TryDecodeCompactString
@@ -1229,18 +1229,17 @@ function MSUF_ImportFromString(str)
                 else
                     print("|cffff0000MSUF:|r Import failed: " .. tostring(why))
                 end
-                 return
+                 return okApply == true
             end
             -- Otherwise treat decoded table as legacy full-profile dump.
-            MSUF_ApplyLegacyTableToActiveProfile(tbl)
-             return
+            return MSUF_ApplyLegacyTableToActiveProfile(tbl)
         end
     end
     -- If this looks like a compact MSUF2/MSUF3 string, NEVER attempt loadstring.
     local prefix = str:match("^%s*(MSUF%d+):")
     if prefix == "MSUF2" or prefix == "MSUF3" then
         print("|cffff0000MSUF:|r Import failed: could not decode compact profile string (" .. prefix .. ").")
-         return
+         return false
     end
     -- OLD PATH (Lua table string)
     local func, err = loadstring(str)
@@ -1249,16 +1248,16 @@ function MSUF_ImportFromString(str)
     end
     if not func then
         print("|cffff0000MSUF:|r Import failed: " .. tostring(err))
-         return
+         return false
     end
     local ok, tbl = pcall(func)
     if not ok then
         print("|cffff0000MSUF:|r Import failed: " .. tostring(tbl))
-         return
+         return false
     end
     if type(tbl) ~= "table" then
         print("|cffff0000MSUF:|r Import failed: not a table.")
-         return
+         return false
     end
     -- Snapshot format?
     if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
@@ -1268,16 +1267,16 @@ function MSUF_ImportFromString(str)
         else
             print("|cffff0000MSUF:|r Import failed: " .. tostring(why))
         end
-         return
+         return okApply == true
     end
     -- Otherwise treat it as legacy full-profile dump.
-    MSUF_ApplyLegacyTableToActiveProfile(tbl)
+    return MSUF_ApplyLegacyTableToActiveProfile(tbl)
  end
 -- Legacy import: replaces the entire ACTIVE profile with the provided table.
 function MSUF_ImportLegacyFromString(str)
     if not str or not str:match("%S") then
         print("|cffff0000MSUF:|r Legacy import failed (empty string).")
-         return
+         return false
     end
     local function ImportDecodedLegacyTable(tbl)
         if type(tbl) == "table" and tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" then
@@ -1300,15 +1299,14 @@ function MSUF_ImportLegacyFromString(str)
     if type(tryDec) == "function" then
         local decoded = tryDec(str)
         if type(decoded) == "table" then
-            ImportDecodedLegacyTable(decoded)
-             return
+            return ImportDecodedLegacyTable(decoded)
         end
     end
     -- If this looks like a compact MSUF2/MSUF3 string, NEVER attempt loadstring.
     local prefix = str:match("^%s*(MSUF%d+):")
     if prefix == "MSUF2" or prefix == "MSUF3" then
         print("|cffff0000MSUF:|r Legacy import failed: could not decode compact profile string (" .. prefix .. ").")
-         return
+         return false
     end
     local func, err = loadstring(str)
     if not func then
@@ -1316,14 +1314,14 @@ function MSUF_ImportLegacyFromString(str)
     end
     if not func then
         print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(err))
-         return
+         return false
     end
     local ok, tbl = pcall(func)
     if not ok then
         print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(tbl))
-         return
+         return false
     end
-    ImportDecodedLegacyTable(tbl)
+    return ImportDecodedLegacyTable(tbl)
  end
 ---------------------------------------------------------------------
 -- External Wago UI Packs API (stateless by profileKey)
