@@ -1639,6 +1639,14 @@ function GF.ClearBlizzardAuraContainer(f)
     if f._msufGFNativeAuraRoot then f._msufGFNativeAuraRoot:Hide() end
 end
 
+local function NativeBlizzardAuraContainerReady(f, unit)
+    local container = f and f._msufGFNativeAuras
+    if not (container and container._msufNativeAuraAnchorID and container._msufNativeAuraSignature) then return false end
+    local Native = GetNativeAuraAPI()
+    local effectiveUnit = Native and Native.ResolveUnitToken and Native.ResolveUnitToken(unit) or unit
+    return container._msufNativeAuraUnit == effectiveUnit
+end
+
 local function EnsureBlizzardAuraContainer(f, parent)
     if not f then return nil end
     local container = f._msufGFNativeAuras
@@ -2158,7 +2166,20 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local nativeDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs")
     local nativeDispels = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
     local nativeExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals")
-    GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
+    local nativePrivate = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras")
+    local buffCfg = auras.buff or {}
+    local debCfg = auras.debuff or {}
+    local extCfg = auras.externals or {}
+    local nativeRendered = (nativeBuffs and buffCfg.enabled ~= false)
+        or (nativeDebuffs and debCfg.enabled ~= false)
+        or nativeDispels
+        or (nativeExt and extCfg.enabled ~= false)
+        or nativePrivate
+    -- EQoL-style fast path: UNIT_AURA deltas do not need to re-register an
+    -- already applied Blizzard container. Full/options refreshes still rebuild.
+    if not (updateInfo and not updateInfo.isFullUpdate and nativeRendered and NativeBlizzardAuraContainerReady(f, unit)) then
+        GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
+    end
 
     local c = f._c
     if c and c.nativeBlizzardAuraOnly then
