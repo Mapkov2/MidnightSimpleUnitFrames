@@ -317,6 +317,20 @@ local function AnchorVisualRootToSlot(f, kind, w, h)
     end
 end
 
+function GF.GetFrameLayerLevel(f, layer, fallback)
+    local lvl = tonumber(layer) or fallback or 1
+    if lvl < 0 then lvl = 0 elseif lvl > 30 then lvl = 30 end
+
+    local base = f and (f.health or f.barGroup or f)
+    local baseLvl = base and base.GetFrameLevel and base:GetFrameLevel() or 0
+    return baseLvl + lvl, lvl
+end
+
+function GF.SetFrameLayerLevel(frame, owner, layer, fallback)
+    if not (frame and frame.SetFrameLevel) then return end
+    frame:SetFrameLevel(GF.GetFrameLayerLevel(owner, layer, fallback))
+end
+
 ------------------------------------------------------------------------
 -- Frame hierarchy builder (EQoL pattern)
 ------------------------------------------------------------------------
@@ -539,65 +553,68 @@ local function BuildFrameHierarchy(f, kind)
     f.powerTextRightFS = powerTextRightFS
     f.powerText = powerTextCenterFS  -- backward compat alias
 
-    -- Status icon layer (OVERLAY sublevel 7)
+    -- Status icon anchor layer. Actual status icons/text get their own child
+    -- frames so their configured layer can order them against name/HP text.
     local statusIconLayer = CreateFrame("Frame", nil, barGroup)
     statusIconLayer:SetAllPoints(barGroup)
     statusIconLayer:SetFrameLevel(barGroup:GetFrameLevel() + 5)
     statusIconLayer:EnableMouse(false)
     if statusIconLayer.SetClipsChildren then statusIconLayer:SetClipsChildren(false) end
     f.statusIconLayer = statusIconLayer
-    if statusText.SetParent then statusText:SetParent(statusIconLayer) end
+
+    local statusTextLayer = CreateFrame("Frame", nil, barGroup)
+    statusTextLayer:SetAllPoints(barGroup)
+    statusTextLayer:SetFrameLevel(hLvl + (conf.statusTextLayer or 7))
+    statusTextLayer:EnableMouse(false)
+    if statusTextLayer.SetClipsChildren then statusTextLayer:SetClipsChildren(false) end
+    f.statusTextLayer = statusTextLayer
+    if statusText.SetParent then statusText:SetParent(statusTextLayer) end
+
+    local function CreateLayeredStatusTexture(size, texture)
+        local layerFrame = CreateFrame("Frame", nil, barGroup)
+        layerFrame:SetSize(size, size)
+        layerFrame:SetFrameLevel(hLvl + 1)
+        layerFrame:EnableMouse(false)
+        if layerFrame.SetClipsChildren then layerFrame:SetClipsChildren(false) end
+
+        local tex = layerFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+        tex:SetAllPoints(layerFrame)
+        if texture then tex:SetTexture(texture) end
+        tex:Hide()
+        tex._msufGFLayerFrame = layerFrame
+        return tex
+    end
 
     -- Role icon
-    local roleIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)
-    roleIcon:SetSize(conf.roleIconSize or 12, conf.roleIconSize or 12)
-    roleIcon:Hide()
+    local roleIcon = CreateLayeredStatusTexture(conf.roleIconSize or 12)
     f.roleIcon = roleIcon
 
     -- Raid target icon
-    local raidIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)
-    raidIcon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
-    raidIcon:SetSize(conf.raidMarkerSize or 14, conf.raidMarkerSize or 14)
-    raidIcon:Hide()
+    local raidIcon = CreateLayeredStatusTexture(conf.raidMarkerSize or 14, "Interface\\TargetingFrame\\UI-RaidTargetingIcons")
     f.raidIcon = raidIcon
 
     -- Leader icon
-    local leaderIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)
-    leaderIcon:SetSize(conf.leaderIconSize or 12, conf.leaderIconSize or 12)
-    leaderIcon:Hide()
+    local leaderIcon = CreateLayeredStatusTexture(conf.leaderIconSize or 12)
     f.leaderIcon = leaderIcon
 
     -- Assist icon
-    local assistIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)
-    assistIcon:SetSize(conf.assistIconSize or 12, conf.assistIconSize or 12)
-    assistIcon:Hide()
+    local assistIcon = CreateLayeredStatusTexture(conf.assistIconSize or 12)
     f.assistIcon = assistIcon
 
     -- Ready check icon
-    local readyCheckIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)
-    readyCheckIcon:SetTexture("Interface\\RaidFrame\\ReadyCheck-Waiting")
-    readyCheckIcon:SetSize(conf.readyCheckSize or 16, conf.readyCheckSize or 16)
-    readyCheckIcon:Hide()
+    local readyCheckIcon = CreateLayeredStatusTexture(conf.readyCheckSize or 16, "Interface\\RaidFrame\\ReadyCheck-Waiting")
     f.readyCheckIcon = readyCheckIcon
 
     -- Summon icon
-    local summonIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)
-    summonIcon:SetSize(conf.summonIconSize or 16, conf.summonIconSize or 16)
-    summonIcon:Hide()
+    local summonIcon = CreateLayeredStatusTexture(conf.summonIconSize or 16)
     f.summonIcon = summonIcon
 
     -- Resurrect icon
-    local resurrectIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)
-    resurrectIcon:SetTexture("Interface\\RaidFrame\\Raid-Icon-Rez")
-    resurrectIcon:SetSize(conf.resurrectIconSize or 16, conf.resurrectIconSize or 16)
-    resurrectIcon:Hide()
+    local resurrectIcon = CreateLayeredStatusTexture(conf.resurrectIconSize or 16, "Interface\\RaidFrame\\Raid-Icon-Rez")
     f.resurrectIcon = resurrectIcon
 
     -- Phase icon
-    local phaseIcon = statusIconLayer:CreateTexture(nil, "OVERLAY", nil, 7)
-    phaseIcon:SetTexture("Interface\\TargetingFrame\\UI-PhasingIcon")
-    phaseIcon:SetSize(conf.phaseIconSize or 14, conf.phaseIconSize or 14)
-    phaseIcon:Hide()
+    local phaseIcon = CreateLayeredStatusTexture(conf.phaseIconSize or 14, "Interface\\TargetingFrame\\UI-PhasingIcon")
     f.phaseIcon = phaseIcon
 
     -- Unified highlight border (aggro/dispel/target — priority pipeline like main UF)
@@ -741,6 +758,15 @@ local function LayoutText(f, kind)
         if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:SetText(""); f.textRightFS:Hide() end
     end
     if f.statusIndicatorText then
+        local stLayer = f.statusTextLayer or f.statusIconLayer
+        if stLayer and f.statusIndicatorText.SetParent and f.statusIndicatorText.GetParent
+            and f.statusIndicatorText:GetParent() ~= stLayer
+        then
+            f.statusIndicatorText:SetParent(stLayer)
+        end
+        if stLayer and stLayer.SetFrameLevel and f.health and f.health.GetFrameLevel then
+            GF.SetFrameLayerLevel(stLayer, f, conf.statusTextLayer, 7)
+        end
         f.statusIndicatorText:ClearAllPoints()
         local anchor = conf.statusTextAnchor or "CENTER"
         local sox = conf.statusOffsetX or 0
@@ -966,14 +992,17 @@ end
 local function LayoutIcons(f, kind)
     local conf = GF.GetConf(kind)
     local anchor = f.statusIconLayer or f.barGroup or f
+    local base = f.health or anchor
+    local baseLvl = base.GetFrameLevel and base:GetFrameLevel() or anchor:GetFrameLevel()
     local fScale = conf._resolvedFrameScale or 1
 
-    local function lay(icon, sizeKey, defSz, anchorKey, defPt, xKey, yKey)
+    local function lay(icon, sizeKey, defSz, anchorKey, defPt, xKey, yKey, layerKey, defLayer)
         if not icon then return end
-        icon:ClearAllPoints()
+        local region = icon._msufGFLayerFrame or icon
+        region:ClearAllPoints()
         local sz = conf[sizeKey] or defSz
         if fScale ~= 1 then sz = math_max(4, math_floor(sz * fScale + 0.5)) end
-        icon:SetSize(sz, sz)
+        region:SetSize(sz, sz)
         local pt = conf[anchorKey] or defPt
         local ox = conf[xKey] or 0
         local oy = conf[yKey] or 0
@@ -981,17 +1010,25 @@ local function LayoutIcons(f, kind)
             ox = GF.ScaleValue(ox, fScale)
             oy = GF.ScaleValue(oy, fScale)
         end
-        icon:SetPoint(pt, anchor, pt, ox, oy)
+        region:SetPoint(pt, anchor, pt, ox, oy)
+        local layer = tonumber(conf[layerKey]) or defLayer or 1
+        if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
+        if region.SetFrameLevel then region:SetFrameLevel(baseLvl + layer) end
+        if region ~= icon then
+            icon:ClearAllPoints()
+            icon:SetAllPoints(region)
+        end
+        if icon.SetDrawLayer then icon:SetDrawLayer("OVERLAY", 7) end
     end
 
-    lay(f.roleIcon,       "roleIconSize",      12, "roleIconAnchor",   "TOPLEFT",  "roleIconX",   "roleIconY")
-    lay(f.leaderIcon,     "leaderIconSize",     12, "leaderIconAnchor", "TOPRIGHT", "leaderIconX", "leaderIconY")
-    lay(f.assistIcon,     "assistIconSize",     12, "assistIconAnchor", "TOPRIGHT", "assistIconX", "assistIconY")
-    lay(f.raidIcon,       "raidMarkerSize",     14, "raidMarkerAnchor", "CENTER",   "raidMarkerX", "raidMarkerY")
-    lay(f.readyCheckIcon, "readyCheckSize",     16, "readyCheckAnchor", "CENTER",   "readyCheckX", "readyCheckY")
-    lay(f.summonIcon,     "summonIconSize",     16, "summonAnchor",     "CENTER",   "summonX",     "summonY")
-    lay(f.resurrectIcon,  "resurrectIconSize",  16, "resurrectAnchor",  "CENTER",   "resurrectX",  "resurrectY")
-    lay(f.phaseIcon,      "phaseIconSize",      14, "phaseAnchor",      "TOPLEFT",  "phaseX",      "phaseY")
+    lay(f.roleIcon,       "roleIconSize",      12, "roleIconAnchor",   "TOPLEFT",  "roleIconX",   "roleIconY",   "roleIconLayer",   1)
+    lay(f.leaderIcon,     "leaderIconSize",     12, "leaderIconAnchor", "TOPRIGHT", "leaderIconX", "leaderIconY", "leaderIconLayer", 2)
+    lay(f.assistIcon,     "assistIconSize",     12, "assistIconAnchor", "TOPRIGHT", "assistIconX", "assistIconY", "assistIconLayer", 2)
+    lay(f.raidIcon,       "raidMarkerSize",     14, "raidMarkerAnchor", "CENTER",   "raidMarkerX", "raidMarkerY", "raidMarkerLayer", 3)
+    lay(f.readyCheckIcon, "readyCheckSize",     16, "readyCheckAnchor", "CENTER",   "readyCheckX", "readyCheckY", "readyCheckLayer", 4)
+    lay(f.summonIcon,     "summonIconSize",     16, "summonAnchor",     "CENTER",   "summonX",     "summonY",     "summonLayer", 4)
+    lay(f.resurrectIcon,  "resurrectIconSize",  16, "resurrectAnchor",  "CENTER",   "resurrectX",  "resurrectY",  "resurrectLayer", 4)
+    lay(f.phaseIcon,      "phaseIconSize",      14, "phaseAnchor",      "TOPLEFT",  "phaseX",      "phaseY",      "phaseLayer", 3)
 end
 
 ------------------------------------------------------------------------

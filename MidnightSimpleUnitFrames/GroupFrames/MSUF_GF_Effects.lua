@@ -2394,6 +2394,50 @@ local STATUS_TEXT_LAYOUTS = {
     [5] = { enKey = "statusAFKText",   sizeKey = "statusAFKTextSize",   anchorKey = "statusAFKTextAnchor",   xKey = "statusAFKOffsetX",   yKey = "statusAFKOffsetY",   layerKey = "statusAFKTextLayer",   defAnchor = "CENTER", defSize = 14, defLayer = 7 },
 }
 
+function GF.EnsureStatusTextLayer(f, conf, state)
+    local s = STATUS_TEXT_LAYOUTS[state]
+    local layer = tonumber(s and conf and conf[s.layerKey]) or (s and s.defLayer) or 7
+    if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
+
+    local st = f and (f._msufGFStatusText or f.statusIndicatorText)
+    if not st then return nil, layer end
+
+    local parent = f.barGroup or f.health or f
+    local layerFrame = f.statusTextLayer
+    if not layerFrame and _G.CreateFrame and not (InCombatLockdown and InCombatLockdown()) then
+        layerFrame = _G.CreateFrame("Frame", nil, parent)
+        layerFrame:EnableMouse(false)
+        if layerFrame.SetClipsChildren then layerFrame:SetClipsChildren(false) end
+        f.statusTextLayer = layerFrame
+    end
+
+    if layerFrame then
+        if layerFrame.GetParent and layerFrame:GetParent() ~= parent
+            and layerFrame.SetParent and not (InCombatLockdown and InCombatLockdown())
+        then
+            layerFrame:SetParent(parent)
+        end
+        if layerFrame.ClearAllPoints then
+            layerFrame:ClearAllPoints()
+            layerFrame:SetAllPoints(parent)
+        end
+        if layerFrame.SetFrameLevel then
+            if GF.SetFrameLayerLevel then
+                GF.SetFrameLayerLevel(layerFrame, f, layer, 7)
+            else
+                local base = f.health or f.barGroup or f
+                local baseLvl = base.GetFrameLevel and base:GetFrameLevel() or 0
+                layerFrame:SetFrameLevel(baseLvl + layer)
+            end
+        end
+        if st.SetParent and st.GetParent and st:GetParent() ~= layerFrame then
+            st:SetParent(layerFrame)
+        end
+    end
+
+    return layerFrame, layer
+end
+
 local function IsStatusTextStateEnabled(conf, state)
     local s = STATUS_TEXT_LAYOUTS[state]
     return s and conf and conf[s.enKey] ~= false
@@ -2413,6 +2457,7 @@ local function ApplyStatusTextStateLayout(f, conf, state)
     local st = f and (f._msufGFStatusText or f.statusIndicatorText)
     local s = STATUS_TEXT_LAYOUTS[state]
     if not (st and conf and s) then return end
+    local _, frameLayer = GF.EnsureStatusTextLayer(f, conf, state)
 
     local kind = f._msufGFKind or "party"
     local fScale = conf._resolvedFrameScale or 1
@@ -2442,7 +2487,7 @@ local function ApplyStatusTextStateLayout(f, conf, state)
     if st.SetJustifyH then st:SetJustifyH(JustifyForStatusAnchor(anchor)) end
     if st.SetJustifyV then st:SetJustifyV("MIDDLE") end
     if st.SetDrawLayer then
-        local sub = tonumber(conf[s.layerKey]) or s.defLayer
+        local sub = frameLayer or s.defLayer
         if sub < 0 then sub = 0 elseif sub > 7 then sub = 7 end
         st:SetDrawLayer("OVERLAY", sub)
     end

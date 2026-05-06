@@ -279,7 +279,11 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
             if f._gfPrivLayer ~= paLayer then
                 f._gfPrivLayer = paLayer
                 local parent = container:GetParent() or f.statusIconLayer or f.barGroup or f
-                container:SetFrameLevel(parent:GetFrameLevel() + paLayer)
+                if GF.SetFrameLayerLevel then
+                    GF.SetFrameLayerLevel(container, f, paLayer, 8)
+                else
+                    container:SetFrameLevel(parent:GetFrameLevel() + paLayer)
+                end
             end
             container:Show()
         end
@@ -313,7 +317,11 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         container:SetSize(totalPrimary, iconSz)
     end
     container:SetPoint(pt, parent, pt, ox, oy)
-    container:SetFrameLevel(parent:GetFrameLevel() + paLayer)
+    if GF.SetFrameLayerLevel then
+        GF.SetFrameLayerLevel(container, f, paLayer, 8)
+    else
+        container:SetFrameLevel(parent:GetFrameLevel() + paLayer)
+    end
     container:Show()
 
     -- Store diff keys
@@ -498,7 +506,11 @@ function GF.PreviewPrivateAuras(f, kind)
     if isVert then container:SetSize(iconSz, totalP)
     else container:SetSize(totalP, iconSz) end
     container:SetPoint(pt, parent, pt, ox, oy)
-    container:SetFrameLevel(parent:GetFrameLevel() + (pa.layer or 8))
+    if GF.SetFrameLayerLevel then
+        GF.SetFrameLayerLevel(container, f, pa.layer, 8)
+    else
+        container:SetFrameLevel(parent:GetFrameLevel() + (pa.layer or 8))
+    end
     container:Show()
 
     local step = iconSz + spacing

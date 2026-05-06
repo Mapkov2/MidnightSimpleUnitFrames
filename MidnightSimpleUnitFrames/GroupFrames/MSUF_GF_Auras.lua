@@ -1765,7 +1765,8 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
         wantLvl = f.health:GetFrameLevel() - 1
     else
         wantParent = parent
-        wantLvl = parent:GetFrameLevel() + (gcfg.layer or 5)
+        wantLvl = (GF.GetFrameLayerLevel and GF.GetFrameLayerLevel(f, gcfg.layer, 5))
+            or (parent:GetFrameLevel() + (gcfg.layer or 5))
     end
 
     -- Re-parent container if mode changed (diff-gated)
@@ -2407,7 +2408,8 @@ do
         if behindBar then
             wantLvl = f.health:GetFrameLevel() - 1
         else
-            wantLvl = normalParent:GetFrameLevel() + (gcfg.layer or 5)
+            wantLvl = (GF.GetFrameLayerLevel and GF.GetFrameLayerLevel(f, gcfg.layer, 5))
+                or (normalParent:GetFrameLevel() + (gcfg.layer or 5))
         end
         if container._msufCachedLvl ~= wantLvl then
             container._msufCachedLvl = wantLvl
