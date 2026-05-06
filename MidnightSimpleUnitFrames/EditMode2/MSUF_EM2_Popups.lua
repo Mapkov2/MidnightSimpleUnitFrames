@@ -1309,26 +1309,6 @@ local max, min = math.max, math.min
 local function A2() local db=_G.MSUF_DB; return db and db.auras2 end
 local function Sh() local a=A2(); return a and a.shared or {} end
 local function Lay(k) local a=A2(); if not a then return {} end; a.perUnit=a.perUnit or {}; a.perUnit[k]=a.perUnit[k] or {}; a.perUnit[k].layout=a.perUnit[k].layout or {}; return a.perUnit[k].layout end
-local function NativeRoot(k)
-    local a=A2(); if not a then return nil end
-    local sh=a.shared or {}
-    local u=a.perUnit and k and a.perUnit[k]
-    if u and u.overrideNativeAuras==true and type(u.nativeAuras)=="table" then return u.nativeAuras end
-    return sh
-end
-local function IsNativeAuraType(k, typ)
-    local root=NativeRoot(k); if not root then return false end
-    local Native=ns and ns.MSUF_AuraNative
-    if Native and Native.Supported and Native.Supported()~=true then return false end
-    if Native and Native.IsBlizzardRenderer then
-        if Native.IsBlizzardRenderer(root.auraRenderer)~=true then return false end
-    elseif root.auraRenderer~="BLIZZARD" then return false end
-    if Native and Native.TypeEnabled then
-        return Native.TypeEnabled(root.blizzardAuraTypes, typ, true)==true
-    end
-    local t=root.blizzardAuraTypes
-    return type(t)~="table" or t[typ]~=false
-end
 local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 then v=d or 0 end; return floor(v+0.5) end
 local function IsBoss(u) return type(u)=="string" and u:match("^boss%d+$") end
 local pf
@@ -1359,18 +1339,16 @@ local function SetPopupRowEnabled(row, enabled)
 end
 local function ApplyNativePopupState()
     if not (pf and pf.unit) then return end
-    local customTextUsable = not (IsNativeAuraType(pf.unit, "buffs") and IsNativeAuraType(pf.unit, "debuffs"))
     local rows=pf._auraCustomTextRows
-    if rows then for i=1,#rows do SetPopupRowEnabled(rows[i], customTextUsable) end end
-    SetPopupKeyEnabled("stSzBox", customTextUsable)
-    SetPopupKeyEnabled("stXBox", customTextUsable)
-    SetPopupKeyEnabled("stYBox", customTextUsable)
-    SetPopupKeyEnabled("cdSzBox", customTextUsable)
-    SetPopupKeyEnabled("cdXBox", customTextUsable)
-    SetPopupKeyEnabled("cdYBox", customTextUsable)
+    if rows then for i=1,#rows do SetPopupRowEnabled(rows[i], true) end end
+    SetPopupKeyEnabled("stSzBox", true)
+    SetPopupKeyEnabled("stXBox", true)
+    SetPopupKeyEnabled("stYBox", true)
+    SetPopupKeyEnabled("cdSzBox", true)
+    SetPopupKeyEnabled("cdXBox", true)
+    SetPopupKeyEnabled("cdYBox", true)
     if pf._auraNativeHint then
-        if customTextUsable then pf._auraNativeHint:Hide()
-        else pf._auraNativeHint:Show() end
+        pf._auraNativeHint:Hide()
     end
 end
 

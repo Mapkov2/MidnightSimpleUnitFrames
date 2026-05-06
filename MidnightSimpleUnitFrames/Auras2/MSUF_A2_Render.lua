@@ -135,12 +135,6 @@ local A2_SHARED_DEFAULTS = {
     reminderIconSize=22,
     reminderSpacing=2,
     reminderGrowth="RIGHT",
-    auraRenderer="CUSTOM",
-    blizzardAuraTypes={ buffs=true, debuffs=true, dispels=true, privateAuras=true },
-    blizzardIconSize=26,
-    blizzardShowCooldownText=true,
-    blizzardOrganizationType="default",
-    blizzardDispelMode="allDispellable",
 }
 
 local A2_GROWTH_OK = {RIGHT=true,LEFT=true,UP=true,DOWN=true}
@@ -178,10 +172,14 @@ local function EnsureDB()
 
     if s.maxBuffs == nil then s.maxBuffs = s.maxIcons or 12 end
     if s.maxDebuffs == nil then s.maxDebuffs = s.maxIcons or 12 end
-    -- Unit Frames stay on MSUF custom aura rendering for now. The shared
-    -- Blizzard native container path is currently reserved for Group Frames.
-    s.auraRenderer = "CUSTOM"
-    s.blizzardIconSize = API._Render.Clamp(s.blizzardIconSize, s.iconSize or 26, 8, 80)
+    -- Unit Frames use MSUF custom aura icons. The Blizzard native aura-container
+    -- renderer is owned by Group Frames, so strip stale Unit Aura profile keys.
+    s.auraRenderer = nil
+    s.blizzardAuraTypes = nil
+    s.blizzardIconSize = nil
+    s.blizzardShowCooldownText = nil
+    s.blizzardOrganizationType = nil
+    s.blizzardDispelMode = nil
     s.showPrivateAurasTarget = false
     s.privateAuraMaxPlayer = API._Render.Clamp(s.privateAuraMaxPlayer, 4, 0, 12)
     s.satedShowAtSeconds   = API._Render.Clamp(s.satedShowAtSeconds, 0, 0, 3600)
@@ -648,137 +646,31 @@ local function PrivateClear(entry)
     if entry.private then entry.private:Hide() end
 end
 
-API._Render.NativeAPI = function()
-    return ns and ns.MSUF_AuraNative
-end
+API._Render.ClearNativeAuras = function(entry)
+    if not entry then return end
 
-API._Render.ClearOneNativeContainer = function(container)
-    local Native = API._Render.NativeAPI()
-    if Native and container then
-        Native.Clear(container)
-    elseif container then
+    local container = entry.native
+    if container then
         container:Hide()
         container._msufNativeAuraAnchorID = nil
         container._msufNativeAuraSignature = nil
+        container._msufNativeAuraUnit = nil
     end
-end
-
-API._Render.ClearNativeAuras = function(entry)
-    if not entry then return end
-    API._Render.ClearOneNativeContainer(entry.native)
     entry.native = nil
+
     local containers = entry.nativeContainers
     if containers then
-        for _, container in pairs(containers) do
-            API._Render.ClearOneNativeContainer(container)
+        for key, native in pairs(containers) do
+            if native then
+                native:Hide()
+                native._msufNativeAuraAnchorID = nil
+                native._msufNativeAuraSignature = nil
+                native._msufNativeAuraUnit = nil
+            end
+            containers[key] = nil
         end
     end
-end
-
-API._Render.EnsureNativeContainer = function(entry, key, parent)
-    if not entry then return nil end
-    if not key then
-        if entry.native then return entry.native end
-        parent = parent or entry.frame or entry.anchor or UIParent
-        local native = CreateFrame("Frame", nil, parent)
-        native:EnableMouse(false)
-        if native.SetMouseClickEnabled then native:SetMouseClickEnabled(false) end
-        native:Hide()
-        entry.native = native
-        return native
-    end
-    parent = parent or entry.frame or entry.anchor or UIParent
-    local containers = entry.nativeContainers
-    if not containers then
-        containers = {}
-        entry.nativeContainers = containers
-    end
-    local native = containers[key]
-    if native then
-        if parent and native.GetParent and native:GetParent() ~= parent then native:SetParent(parent) end
-        return native
-    end
-    local native = CreateFrame("Frame", nil, parent)
-    native:EnableMouse(false)
-    if native.SetMouseClickEnabled then native:SetMouseClickEnabled(false) end
-    native:Hide()
-    containers[key] = native
-    return native
-end
-
-API._Render.ClearNativeContainerKey = function(entry, key)
-    local containers = entry and entry.nativeContainers
-    API._Render.ClearOneNativeContainer(containers and containers[key])
-end
-
-API._Render.IsNativeAuraType = function(shared, key, defaultValue)
-    -- Unit Frames do not use the Blizzard native aura container path.
-    -- Group Frames call MSUF_AuraNative directly from GF code.
-    return false
-end
-
-API._Render.ResolveNativeAuraSettings = function(a2, shared, unit)
-    return shared
-end
-
-API._Render.ApplyNativeAuras = function(entry, unit, shared, nativeSettings, cfg, flags)
-    local Native = API._Render.NativeAPI()
-    if not (Native and entry and unit and shared and nativeSettings and cfg and flags) then return false end
-    local useBuffs = flags.buffs == true
-    local useDebuffs = flags.debuffs == true
-    local useDispels = flags.dispels == true
-    local usePrivate = flags.privateAuras == true
-
-    if not (useBuffs or useDebuffs or useDispels or usePrivate) then
-        API._Render.ClearNativeAuras(entry)
-        return false
-    end
-
-    API._Render.ClearOneNativeContainer(entry.native)
-    entry.native = nil
-
-    local any = false
-    local levelParent = entry.frame or entry.anchor
-    local function ApplyOne(key, parent, iconSize, opts)
-        opts = opts or {}
-        if not opts.enabled then
-            API._Render.ClearNativeContainerKey(entry, key)
-            return
-        end
-        if parent and parent.Show then parent:Show() end
-        iconSize = iconSize or nativeSettings.blizzardIconSize or cfg.iconSize or 26
-        if Native.Apply(API._Render.EnsureNativeContainer(entry, key, parent), unit, {
-            maxBuffs = opts.maxBuffs or 0,
-            maxDebuffs = opts.maxDebuffs or 0,
-            maxDispelDebuffs = opts.maxDispels or 0,
-            iconSize = iconSize,
-            borderScale = shared.privateAuraBorderScale or (iconSize / 11),
-            organizationType = "default",
-            dispelMode = nativeSettings.blizzardDispelMode or "allDispellable",
-            showDispelOverlay = opts.showDispelOverlay == true,
-            showCountdownFrame = shared.showCooldownSwipe ~= false,
-            showCountdownNumbers = (nativeSettings.blizzardShowCooldownText ~= false) and (shared.showCooldownText ~= false),
-            showBigDefensive = false,
-            groupType = 5,
-        }, parent or entry.frame or entry.anchor or UIParent, levelParent) then
-            any = true
-        end
-    end
-
-    ApplyOne("buff", entry.buffs, cfg.buffIconSize or nativeSettings.blizzardIconSize, {
-        enabled = useBuffs,
-        maxBuffs = cfg.maxBuffs or 0,
-    })
-    local privateMax = usePrivate and API._Render.Clamp(shared.privateAuraMaxPlayer or 4, 4, 0, 12) or 0
-    ApplyOne("debuff", entry.debuffs, cfg.debuffIconSize or nativeSettings.blizzardIconSize, {
-        enabled = useDebuffs or useDispels or usePrivate,
-        maxDebuffs = max(useDebuffs and (cfg.maxDebuffs or 0) or 0, privateMax),
-        maxDispels = useDispels and 3 or 0,
-        showDispelOverlay = useDispels,
-    })
-
-    if not any then API._Render.ClearNativeAuras(entry) end
-    return any
+    entry.nativeContainers = nil
 end
 
 local function PrivateRelaxTexSnap(tex)
@@ -1372,7 +1264,6 @@ local function RenderUnit(entry)
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)
-        cfg.nativeAuraSettings = API._Render.ResolveNativeAuraSettings(a2, shared, unit)
     end
 
     -- Local aliases for hot-path values
@@ -1430,43 +1321,13 @@ local function RenderUnit(entry)
     end
     entry.anchor:Show()
 
-    local nativeSettings = cfg.nativeAuraSettings or shared
-    local configNativeBuffs = showBuffs and API._Render.IsNativeAuraType(nativeSettings, "buffs", true)
-    local configNativeDebuffs = showDebuffs and API._Render.IsNativeAuraType(nativeSettings, "debuffs", true)
-    local configNativeDispels = API._Render.IsNativeAuraType(nativeSettings, "dispels", true)
-    local configNativePrivate = unit == "player"
-        and shared.privateAurasEnabled == true
-        and shared.showPrivateAurasPlayer == true
-        and API._Render.IsNativeAuraType(nativeSettings, "privateAuras", true)
-
-    local nativeBuffs = unitExists and configNativeBuffs
-    local nativeDebuffs = unitExists and configNativeDebuffs
-    local nativeDispels = unitExists and configNativeDispels
-    local nativePrivate = unitExists and configNativePrivate
-
-    entry._msufA2NativeBuffs = configNativeBuffs == true
-    entry._msufA2NativeDebuffs = configNativeDebuffs == true
-    entry._msufA2NativeDispels = configNativeDispels == true
-    entry._msufA2NativePrivate = configNativePrivate == true
-
-    if nativeBuffs or nativeDebuffs or nativeDispels or nativePrivate then
-        API._Render.ApplyNativeAuras(entry, unit, shared, nativeSettings, cfg, {
-            buffs = nativeBuffs,
-            debuffs = nativeDebuffs,
-            dispels = nativeDispels,
-            privateAuras = nativePrivate,
-        })
-    elseif entry.native or entry.nativeContainers then
+    if entry.native or entry.nativeContainers then
         API._Render.ClearNativeAuras(entry)
     end
 
-    if nativePrivate then
-        PrivateClear(entry)
-    else
-        -- Private auras keep the dedicated AddPrivateAuraAnchor slot stack. That
-        -- path is still Blizzard-rendered, but MSUF can keep size/position/growth.
-        PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
-    end
+    -- Private auras keep the dedicated AddPrivateAuraAnchor slot stack. That
+    -- path is separate from the Blizzard native buff/debuff container renderer.
+    PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
     entry._lastPrivateGen = gen
 
     -- Edit Mode: show/hide movers (skip entirely in combat)
@@ -1474,10 +1335,8 @@ local function RenderUnit(entry)
         if EditMode then
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
             -- Reminder mover
-            if unit == "player" and entry.editMoverReminder and not configNativeBuffs then
+            if unit == "player" and entry.editMoverReminder then
                 entry.editMoverReminder:Show()
-            elseif entry.editMoverReminder and configNativeBuffs then
-                entry.editMoverReminder:Hide()
             end
         else
             local EM = API.EditMode
@@ -1521,9 +1380,6 @@ local function RenderUnit(entry)
             pv.privateGrowth = privateGrowth
             pv.buffRowWrap = buffRowWrap
             pv.debuffRowWrap = debuffRowWrap
-            pv.nativeBuffs = configNativeBuffs == true
-            pv.nativeDebuffs = configNativeDebuffs == true
-            pv.nativePrivate = configNativePrivate == true
 
             local pvShow, stopLive = runPreview(entry, unit, shared, isEditActive, pv)
             showTest = (pvShow == true)
@@ -1566,8 +1422,8 @@ local function RenderUnit(entry)
     local _, nB, _, nD = CacheModule.FilterAndSort(unit, cfg, entry._buffList, entry._debuffList)
     CacheModule.ClearChanged(unit)
 
-    local customBuffs = showBuffs and not nativeBuffs
-    local customDebuffs = showDebuffs and not nativeDebuffs
+    local customBuffs = showBuffs
+    local customDebuffs = showDebuffs
 
     buffCount  = customBuffs and nB or 0
     debuffCount = (customDebuffs and not skipDebuffs) and nD or 0
@@ -1671,7 +1527,7 @@ local function RenderUnit(entry)
 
     -- Buff Reminders: ghost icons for missing group buffs (player only).
     -- PERF: Zero overhead when disabled or non-player — no function call at all.
-    if unit == "player" and shared and shared.showReminders ~= false and not nativeBuffs then
+    if unit == "player" and shared and shared.showReminders ~= false then
         local ReminderMod = API.Reminder
         if ReminderMod and ReminderMod.Render then
             ReminderMod.Render(entry, unit, shared, buffIconSize, spacing, buffGrowth, showTest)
@@ -1845,6 +1701,85 @@ local function HardDisableAll()
                 Icons.HideUnused(entry.mixed, 1)
             end
         end
+    end
+end
+
+API._ClearUnitAuraContainerVisualState = function(container)
+    if not container then return end
+
+    Icons = API.Icons or API.Apply
+    if Icons and Icons.HideUnused then
+        Icons.HideUnused(container, 1)
+    end
+
+    local pool = container._msufIcons
+    if not pool then
+        container._msufA2_activeN = 0
+        container._msufA2_lastLayoutN = nil
+        return
+    end
+
+    local map = container._msufA2_iconByAid
+    if map then
+        for aid in pairs(map) do
+            map[aid] = nil
+        end
+    end
+
+    for i = 1, #pool do
+        local icon = pool[i]
+        if icon then
+            icon._msufAuraInstanceID = nil
+            icon._msufAura = nil
+            icon._msufA2_lastTexAid = nil
+            icon._msufA2_lastOwnHelpful = nil
+            icon._msufA2_lastDispelAid = nil
+            icon._msufA2_forceOwnBuffHighlight = nil
+
+            local lc = icon._msufA2_lastCommit
+            if lc then
+                lc.aid = nil
+                lc.gen = nil
+                lc.isOwn = nil
+                lc.forceOwnBuffHighlight = nil
+            end
+
+            if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
+            if icon._msufPandemic then icon._msufPandemic:Hide() end
+            if icon:IsShown() then icon:Hide() end
+        end
+    end
+
+    container._msufA2_activeN = 0
+    container._msufA2_lastLayoutN = nil
+end
+
+API.ClearUnitVisualState = function(unit)
+    local entry = AurasByUnit and AurasByUnit[unit]
+    if not entry then return end
+
+    local clearContainer = API._ClearUnitAuraContainerVisualState
+    if clearContainer then
+        clearContainer(entry.buffs)
+        clearContainer(entry.debuffs)
+        clearContainer(entry.mixed)
+    end
+
+    entry._lastBuffCount = 0
+    entry._lastDebuffCount = 0
+    entry._msufA2_lastBuffLayoutStamp = nil
+    entry._msufA2_lastDebuffLayoutStamp = nil
+
+    local list = entry._buffList
+    if list then
+        for i = 1, (list._msufA2_n or #list) do list[i] = nil end
+        list._msufA2_n = 0
+    end
+
+    list = entry._debuffList
+    if list then
+        for i = 1, (list._msufA2_n or #list) do list[i] = nil end
+        list._msufA2_n = 0
     end
 end
 

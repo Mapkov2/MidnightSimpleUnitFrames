@@ -88,6 +88,7 @@ local _cachedReqUnit      -- API.RequestUnit (fast MarkDirty path)
 local _cachedMarkDirty    -- API.MarkDirty (fallback)
 local _cachedOnUnitAura   -- API.Store.OnUnitAura
 local _cachedInvalidUnit  -- API.Store.InvalidateUnit
+local _cachedFullScanUnit -- API.Store.FullScanUnit
 local _cachedIsEditFn     -- API.IsEditModeActive
 local _refsBound = false
 
@@ -97,6 +98,7 @@ local function BindCachedRefs()
     local Store = API.Store
     _cachedOnUnitAura  = Store and Store.OnUnitAura
     _cachedInvalidUnit = Store and Store.InvalidateUnit
+    _cachedFullScanUnit = Store and Store.FullScanUnit
     _cachedIsEditFn    = API.IsEditModeActive
     -- Only mark fully bound when Store is available.
     -- If Store hasn't loaded yet (load-order race), retry next event.
@@ -147,12 +149,16 @@ local function HandlePlayerTargetChanged()
     if _cachedInvalidUnit then
         _cachedInvalidUnit("target")
     end
+    local clearVisual = API and API.ClearUnitVisualState
+    if clearVisual then
+        clearVisual("target")
+    end
     _unitAuraPending["target"] = nil   -- P2: clear dedup so next UNIT_AURA is accepted
 
-    -- Coalesce target swap to one next-frame aura refresh.
-    -- UNIT_AURA bursts arriving this frame still update Store deltas, then piggyback this flush.
-    if Events._targetSwapQueued then return end
+    -- Keep target aura deltas out of the cache during the swap window.
+    -- The delayed flush below performs one full scan against the current target.
     Events._targetSwapQueued = true
+    Events._targetRenderExpected = _targetRenderEpoch
 
     _ScheduleOnce("A2_TARGET_SWAP_FLUSH", Events._flushTargetSwap)
 end
@@ -166,18 +172,24 @@ local function HandlePlayerFocusChanged()
     MarkDirty("focus", 0)
 end
 
--- PERF: Double-defer — _flushTargetSwap schedules _flushTargetRender one frame later.
--- If a new target change arrives before _flushTargetRender fires, the epoch mismatch
--- causes the outdated FullScan to be skipped. Saves 50-330µs per superseded click.
+-- Target swaps use a short settle window before rendering. UNIT_AURA deltas
+-- during that window are ignored; the final render starts from a full scan.
 local function _flushTargetRender()
     if _targetRenderEpoch ~= Events._targetRenderExpected then return end
+    if not _refsBound then BindCachedRefs() end
+    if _cachedFullScanUnit then
+        _cachedFullScanUnit("target")
+    elseif _cachedInvalidUnit then
+        _cachedInvalidUnit("target")
+    end
+    Events._targetSwapQueued = nil
+    _unitAuraPending["target"] = nil
     MarkDirty("target", 0)
 end
 
-Events._flushTargetSwap = Events._flushTargetSwap or function()
-    Events._targetSwapQueued = nil
+Events._flushTargetSwap = function()
     Events._targetRenderExpected = _targetRenderEpoch
-    _ScheduleOnce("A2_TARGET_RENDER_FLUSH", _flushTargetRender)
+    _ScheduleDelayOnce("A2_TARGET_RENDER_FLUSH", 0.05, _flushTargetRender)
 end
 
 local function IsEditModeActive()
@@ -917,6 +929,11 @@ end
                 -- Cache is fully invalidated on INSTANCE_ENCOUNTER_ENGAGE_UNIT anyway.
                 if _IS_BOSS_UNIT[unit] and not _bossEncounterActive then return end
 
+                -- During a target swap, ignore target deltas completely.
+                -- They can belong to the outgoing target or be partial updates for
+                -- the incoming target; the swap flush does a full scan instead.
+                if unit == "target" and Events._targetSwapQueued then return end
+
                 -- Always feed delta into Store so cache stays current.
                 -- ShouldProcessUnitEvent is NOT gated here — RegisterUnitEvent
                 -- already ensures we only receive events for enabled units.
@@ -929,10 +946,6 @@ end
                 -- Hard gate: hidden unit frames do not need live aura renders.
                 -- Avoids queue/flush churn while preserving correctness via Store + OnShow invalidation.
                 if not ShouldScheduleLiveRender(unit) then return end
-
-                -- Target swap already scheduled a consolidated next-frame render.
-                -- Keep Store current but skip duplicate same-frame dirty marks.
-                if unit == "target" and Events._targetSwapQueued then return end
 
                 -- P2: per-unit burst dedup — only one timer per unit per 20ms window.
                 if not _unitAuraPending[unit] then

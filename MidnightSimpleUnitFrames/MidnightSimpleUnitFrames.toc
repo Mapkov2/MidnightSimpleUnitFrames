@@ -85,7 +85,6 @@ Foundation\MSUF_BlizzKill.lua
 Auras2\MSUF_A2_DB.lua
 Auras2\MSUF_A2_Core.lua
 Auras2\MSUF_A2_Reminder.lua
-Auras2\MSUF_AuraNative.lua
 Auras2\MSUF_A2_Render.lua
 Auras2\MSUF_A2_Events.lua
 Auras2\MSUF_A2_EditMode.lua
@@ -125,6 +124,7 @@ Core\MSUF_ClassPower.lua
 # ═══════════════════════════════════════════════════════════════
 # GROUP FRAMES
 # ═══════════════════════════════════════════════════════════════
+Auras2\MSUF_AuraNative.lua
 GroupFrames\MSUF_GF_DB.lua
 GroupFrames\MSUF_GF_Core.lua
 GroupFrames\MSUF_GF_StatusIcons.lua
