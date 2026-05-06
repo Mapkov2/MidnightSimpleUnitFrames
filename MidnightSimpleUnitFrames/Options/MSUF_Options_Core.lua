@@ -1308,9 +1308,19 @@ border:SetBackdrop({
     fs:SetPoint("CENTER")
     fs:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     fs:SetTextColor(1, 0.9, 0.4) -- Gold
-    fs:SetText(isPlus and "+" or "-")
+    fs:SetText(isPlus and "+" or "\226\128\147")
     button.text = fs
  end
+local function MSUF_StyleNumberStepButton(button, isPlus)
+    if not button or button.MSUFNumberStepStyled then return end
+    button.MSUFNumberStepStyled = true
+    button:SetSize(18, 18)
+    local fs = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    fs:SetText(isPlus and "+" or "\226\128\147")
+    fs:SetAllPoints()
+    if button.SetFontString then button:SetFontString(fs) end
+    button.text = fs
+end
 -- Gradient direction selector (D-pad style)
 -- Multi-direction: active arrows are gold; you can combine multiple directions.
 -- Stored in MSUF_DB.general.gradientDirLeft/Right/Up/Down (booleans).
@@ -1550,7 +1560,7 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
         slider._msufUserChange = true
         slider:SetValue(nv)
      end)
-    MSUF_StyleSmallButton(minus, false) -- Midnight minus
+    MSUF_StyleNumberStepButton(minus, false)
     local plus = CreateFrame("Button", name .. "Plus", parent)
     plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
     slider.plusButton = plus
@@ -1562,7 +1572,7 @@ CreateLabeledSlider = function(name, label, parent, minVal, maxVal, step, x, y)
         slider._msufUserChange = true
         slider:SetValue(nv)
      end)
-    MSUF_StyleSmallButton(plus, true) -- Midnight plus
+    MSUF_StyleNumberStepButton(plus, true)
     slider:SetScript("OnValueChanged", function(self, value)
         if self.MSUF_SkipCallback then  return end
         local step = self.step or 1
@@ -1885,7 +1895,7 @@ local function MSUF_InstallCompatWrappers()
     ExportFn("MSUF_SetDropDownEnabled", (ns and ns.MSUF_SetDropDownEnabled) or MSUF_SetDropDownEnabled)
     ExportFn("MSUF_StyleSlider", (ns and ns.MSUF_StyleSlider) or MSUF_StyleSlider)
     ExportFn("MSUF_SkinMidnightActionButton", (ns and ns.MSUF_SkinMidnightActionButton) or MSUF_SkinMidnightActionButton)
-    ExportFn("MSUF_StyleSmallButton", MSUF_StyleSmallButton)
+    ExportFn("MSUF_StyleSmallButton", (ns and ns.MSUF_StyleSmallButton) or MSUF_StyleNumberStepButton)
     ExportFn("MSUF_Options_RequestLayoutAll", (ns and ns.MSUF_Options_RequestLayoutAll) or MSUF_Options_RequestLayoutAll)
     ExportFn("MSUF_CallUpdateAllFonts", (ns and ns.MSUF_CallUpdateAllFonts) or MSUF_CallUpdateAllFonts)
     ExportFn("MSUF_KillMenuPreviewBar", MSUF_KillMenuPreviewBar)
@@ -1922,11 +1932,11 @@ function CreateAxisStepper(name, shortLabel, parent, x, y, minVal, maxVal, step)
     f.editBox = eb
     local minus = CreateFrame("Button", name .. "Minus", f)
     minus:SetPoint("RIGHT", eb, "LEFT", -2, 0)
-    MSUF_StyleSmallButton(minus, false)
+    MSUF_StyleNumberStepButton(minus, false)
     f.minusButton = minus
     local plus = CreateFrame("Button", name .. "Plus", f)
     plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
-    MSUF_StyleSmallButton(plus, true)
+    MSUF_StyleNumberStepButton(plus, true)
     f.plusButton = plus
     local function Clamp(v)
         v = tonumber(v) or 0

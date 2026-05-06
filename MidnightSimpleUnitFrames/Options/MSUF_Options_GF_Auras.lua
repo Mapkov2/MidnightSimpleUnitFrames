@@ -357,20 +357,32 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         return v
     end
 
+    local function MakeNumberStepButton(parent, isPlus, width, height)
+        local b = CreateFrame("Button", nil, parent)
+        b:SetSize(width or 18, height or 20)
+        local style = _G.MSUF_StyleSmallButton or (UI and UI.StyleSmallButton)
+        if style then style(b, isPlus); b:SetSize(width or 18, height or 20) end
+        return b
+    end
+
     local function RowSlider(parent, prevRow, label, gk, key, lo, hi, step, def, topOfs)
         local row = RowFrame(parent, prevRow, topOfs)
         RowLabel(row, label)
+        local plus = MakeNumberStepButton(row, true, 18, 20)
+        plus:SetPoint("RIGHT", row, "RIGHT", -4, 0)
         local eb = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
         eb:SetSize(44, 20)
-        eb:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        eb:SetPoint("RIGHT", plus, "LEFT", -2, 0)
         eb:SetAutoFocus(false)
         eb:SetJustifyH("CENTER")
         eb:SetMaxLetters(6)
         if GameFontHighlightSmall then eb:SetFontObject(GameFontHighlightSmall) end
         if eb.SetTextColor then eb:SetTextColor(1, 1, 1, 1) end
+        local minus = MakeNumberStepButton(row, false, 18, 20)
+        minus:SetPoint("RIGHT", eb, "LEFT", -2, 0)
         local sl = CreateFrame("Slider", nil, row, "OptionsSliderTemplate")
         sl:SetSize(SL_W, 14)
-        sl:SetPoint("RIGHT", eb, "LEFT", -8, 0)
+        sl:SetPoint("RIGHT", minus, "LEFT", -8, 0)
         sl:SetMinMaxValues(lo, hi)
         sl:SetValueStep(step)
         sl:SetObeyStepOnDrag(true)
@@ -404,6 +416,15 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         eb:SetScript("OnEditFocusGained", function(self)
             self:HighlightText()
         end)
+        local function StepBox(dir)
+            local base = tonumber(eb:GetText())
+            if base == nil then base = sl:GetValue() or sl._msufLastValue or def end
+            local v = ClampStepValue(base + ((step or 1) * dir), lo, hi, step, def)
+            eb:SetText(FormatNumberBoxValue(v, step))
+            sl:SetValue(v)
+        end
+        minus:SetScript("OnClick", function() StepBox(-1) end)
+        plus:SetScript("OnClick", function() StepBox(1) end)
         sl:SetScript("OnValueChanged", function(self, v)
             if self._msufSkip then return end
             v = ClampStepValue(v, lo, hi, step, def)
@@ -424,6 +445,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
         local _styleSl = _G.MSUF_StyleSlider or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
         if _styleSl then _styleSl(sl) end
+        sl.minusButton = minus
+        sl.plusButton = plus
         row._ctrl = sl
         return row
     end
@@ -499,31 +522,43 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         RowLabel(row, label)
 
         local holder = CreateFrame("Frame", nil, row)
-        holder:SetSize(116, 20)
+        holder:SetSize(184, 20)
         holder:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+
+        local xMinus = MakeNumberStepButton(holder, false, 16, 20)
+        xMinus:SetPoint("LEFT", holder, "LEFT", 0, 0)
 
         local xEB = CreateFrame("EditBox", nil, holder, "InputBoxTemplate")
         xEB:SetSize(48, 20)
-        xEB:SetPoint("LEFT", holder, "LEFT", 0, 0)
+        xEB:SetPoint("LEFT", xMinus, "RIGHT", 2, 0)
         xEB:SetAutoFocus(false)
         xEB:SetJustifyH("CENTER")
         xEB:SetMaxLetters(6)
         if GameFontHighlightSmall then xEB:SetFontObject(GameFontHighlightSmall) end
         if xEB.SetTextColor then xEB:SetTextColor(1, 1, 1, 1) end
 
+        local xPlus = MakeNumberStepButton(holder, true, 16, 20)
+        xPlus:SetPoint("LEFT", xEB, "RIGHT", 2, 0)
+
         local sep = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        sep:SetPoint("LEFT", xEB, "RIGHT", 4, 0)
+        sep:SetPoint("LEFT", xPlus, "RIGHT", 5, 0)
         sep:SetText("/")
         sep:SetTextColor(0.75, 0.75, 0.82, 1)
 
+        local yMinus = MakeNumberStepButton(holder, false, 16, 20)
+        yMinus:SetPoint("LEFT", sep, "RIGHT", 5, 0)
+
         local yEB = CreateFrame("EditBox", nil, holder, "InputBoxTemplate")
         yEB:SetSize(48, 20)
-        yEB:SetPoint("LEFT", sep, "RIGHT", 4, 0)
+        yEB:SetPoint("LEFT", yMinus, "RIGHT", 2, 0)
         yEB:SetAutoFocus(false)
         yEB:SetJustifyH("CENTER")
         yEB:SetMaxLetters(6)
         if GameFontHighlightSmall then yEB:SetFontObject(GameFontHighlightSmall) end
         if yEB.SetTextColor then yEB:SetTextColor(1, 1, 1, 1) end
+
+        local yPlus = MakeNumberStepButton(holder, true, 16, 20)
+        yPlus:SetPoint("LEFT", yEB, "RIGHT", 2, 0)
 
         local function ClampOffset(v, def)
             v = tonumber(v)
@@ -567,8 +602,32 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 self:HighlightText()
             end)
         end
+        local function StepOffset(axis, dir)
+            if axis == "x" then
+                local v = ClampOffset((tonumber(xEB:GetText()) or CurrentX()) + dir, CurrentX())
+                xEB:SetText(tostring(v))
+                AW(gk, xKey, v)
+            else
+                local v = ClampOffset((tonumber(yEB:GetText()) or CurrentY()) + dir, CurrentY())
+                yEB:SetText(tostring(v))
+                AW(gk, yKey, v)
+            end
+        end
+        xMinus:SetScript("OnClick", function() StepOffset("x", -1) end)
+        xPlus:SetScript("OnClick", function() StepOffset("x", 1) end)
+        yMinus:SetScript("OnClick", function() StepOffset("y", -1) end)
+        yPlus:SetScript("OnClick", function() StepOffset("y", 1) end)
         function holder:SetEnabled(enabled)
             enabled = enabled and true or false
+            local a = enabled and 1 or 0.45
+            for _, btn in ipairs({ xMinus, xPlus, yMinus, yPlus }) do
+                if btn.SetAlpha then btn:SetAlpha(a) end
+                if enabled then
+                    if btn.Enable then btn:Enable() end
+                else
+                    if btn.Disable then btn:Disable() end
+                end
+            end
             for _, eb in ipairs({ xEB, yEB }) do
                 if eb.EnableMouse then eb:EnableMouse(enabled) end
                 if enabled then
@@ -663,6 +722,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
                 if widget.editBox.Enable then widget.editBox:Enable() end
             else
                 if widget.editBox.Disable then widget.editBox:Disable() end
+            end
+        end
+
+        for _, btn in ipairs({ widget.minusButton, widget.plusButton }) do
+            if btn then
+                if enabled then
+                    if btn.Enable then btn:Enable() end
+                else
+                    if btn.Disable then btn:Disable() end
+                end
             end
         end
 
@@ -2394,7 +2463,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         local box, body = AddSection(720, L["Blizzard Renderer"] or "Blizzard Renderer", false, "blizzrenderer")
         local refreshBlizzardControls
         local function RendererCheck(spec)
-            spec.maxTextWidth = spec.maxTextWidth or 132
+            spec.maxTextWidth = spec.maxTextWidth or 150
             local cb = SCheck(spec)
             -- This section is multi-column. The generic checkbox helper expands
             -- hit rects far to the right, which steals clicks from neighboring
@@ -2409,7 +2478,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         info:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
         info:SetWidth(610)
         info:SetJustifyH("LEFT")
-        info:SetText(L["Blizzard mode uses one native aura container per group frame. Category sections below are Custom-only when their Blizzard type is active. Use Block Position here or drag the Blizzard preview handle to move the native aura block."] or "Blizzard mode uses one native aura container per group frame. Category sections below are Custom-only when their Blizzard type is active. Use Block Position here or drag the Blizzard preview handle to move the native aura block.")
+        info:SetText(L["Blizzard mode uses one native aura block per group frame. Checked aura types are shown by Blizzard. Turning a type off does not hide it; MSUF renders that type in the Custom section below."] or "Blizzard mode uses one native aura block per group frame. Checked aura types are shown by Blizzard. Turning a type off does not hide it; MSUF renders that type in the Custom section below.")
+
+        local routingLabel = body:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        routingLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 340, -64)
+        routingLabel:SetWidth(330)
+        routingLabel:SetJustifyH("LEFT")
+        routingLabel:SetTextColor(0.74, 0.82, 0.95, 1)
+        routingLabel:SetText(L["Aura routing: checked = Blizzard, off = Custom"] or "Aura routing: checked = Blizzard, off = Custom")
+
+        local routeTip = L["Only applies while Renderer is Blizzard. Checked = Blizzard native block. Off = MSUF Custom below, not hidden."] or "Only applies while Renderer is Blizzard. Checked = Blizzard native block. Off = MSUF Custom below, not hidden."
 
         local rendererDD = SDropdown({
             name = "MSUF_GF_BlizzardRendererMode", parent = body,
@@ -2436,42 +2514,48 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         local buffChk = RendererCheck({
             name = "MSUF_GF_BlizzardBuffs", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -88,
-            label = L["Buffs"],
+            label = L["Use Blizzard: Buffs"] or "Use Blizzard: Buffs",
+            tooltip = routeTip,
             get = function() return BlizzardTypes().buffs == true end,
             set = function(_, v) BlizzardTypes().buffs = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
         local debuffChk = RendererCheck({
             name = "MSUF_GF_BlizzardDebuffs", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -148,
-            label = L["Debuffs"],
+            label = L["Use Blizzard: Debuffs"] or "Use Blizzard: Debuffs",
+            tooltip = routeTip,
             get = function() return BlizzardTypes().debuffs == true end,
             set = function(_, v) BlizzardTypes().debuffs = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
         local dispelChk = RendererCheck({
             name = "MSUF_GF_BlizzardDispels", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -208,
-            label = L["Dispel Overlay"] or "Dispel Overlay",
+            label = L["Use Blizzard: Dispels"] or "Use Blizzard: Dispels",
+            tooltip = routeTip,
             get = function() return BlizzardTypes().dispels == true end,
             set = function(_, v) BlizzardTypes().dispels = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
         local extChk = RendererCheck({
             name = "MSUF_GF_BlizzardExt", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -88,
-            label = L["Defensives"],
+            label = L["Use Blizzard: Defensives"] or "Use Blizzard: Defensives",
+            tooltip = routeTip,
             get = function() return BlizzardTypes().externals == true end,
             set = function(_, v) BlizzardTypes().externals = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
         local cdTextChk = RendererCheck({
             name = "MSUF_GF_BlizzardCooldownText", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -148,
-            label = L["Cooldown Text"] or "Cooldown Text",
+            label = L["Blizzard Cooldown Text"] or "Blizzard Cooldown Text",
+            tooltip = L["Controls cooldown numbers on Blizzard-rendered aura icons."] or "Controls cooldown numbers on Blizzard-rendered aura icons.",
             get = function() return AurasRoot().blizzardShowCooldownText ~= false end,
             set = function(_, v) AurasRoot().blizzardShowCooldownText = v and true or false; RequestAuraRefresh() end,
         })
         local privateChk = RendererCheck({
             name = "MSUF_GF_BlizzardPrivateAuras", parent = body,
             anchor = body, anchorPoint = "TOPLEFT", x = 520, y = -208,
-            label = L["Private Auras"] or "Private Auras",
+            label = L["Use Blizzard: Private"] or "Use Blizzard: Private",
+            tooltip = routeTip,
             get = function() return BlizzardTypes().privateAuras == true end,
             set = function(_, v) BlizzardTypes().privateAuras = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })

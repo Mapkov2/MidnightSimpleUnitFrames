@@ -420,6 +420,14 @@ local function AttachSliderValueBox(slider, minV, maxV, step, getter)
     -- (Keeps Low/High labels visible on the left/right.)
     eb:SetPoint("TOP", slider, "BOTTOM", 0, -6)
     eb:SetText(tostring(slider:GetValue() or (getter and getter()) or minV))
+    local minus = CreateFrame("Button", nil, slider)
+    minus:SetPoint("RIGHT", eb, "LEFT", -2, 0)
+    if _G.MSUF_StyleSmallButton then _G.MSUF_StyleSmallButton(minus, false) end
+    minus:SetSize(18, 20)
+    local plus = CreateFrame("Button", nil, slider)
+    plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
+    if _G.MSUF_StyleSmallButton then _G.MSUF_StyleSmallButton(plus, true) end
+    plus:SetSize(18, 20)
     local function ClampRound(v)
         v = tonumber(v) or 0
         if step and step > 0 then
@@ -448,16 +456,27 @@ local function AttachSliderValueBox(slider, minV, maxV, step, getter)
         local v = slider:GetValue() or (getter and getter()) or minV
         self:SetText(tostring(ClampRound(v)))
         self:HighlightText(0, 0)
-     end)
+      end)
+    local function StepValue(dir)
+        local v = slider:GetValue() or (getter and getter()) or minV
+        v = ClampRound(v + ((step or 1) * dir))
+        slider:SetValue(v)
+    end
+    minus:SetScript("OnClick", function() StepValue(-1) end)
+    plus:SetScript("OnClick", function() StepValue(1) end)
     -- Keep the box in sync when the slider changes.
     slider:HookScript("OnValueChanged", function(self, value)
         if not eb:HasFocus() then
             value = ClampRound(value)
             eb:SetText(tostring(value))
         end
-     end)
+      end)
     slider.__MSUF_valueBox = eb
-     return eb
+    slider.__MSUF_valueBoxMinus = minus
+    slider.__MSUF_valueBoxPlus = plus
+    slider.minusButton = minus
+    slider.plusButton = plus
+      return eb
 end
 -- Auras 2.0 style: small slider with a centered [-][value][+] control UNDER the bar.
 -- This matches the "Outline thickness" style used elsewhere in MSUF.
@@ -1261,6 +1280,16 @@ local function A2_SetWidgetEnabled(widget, enabled, alpha)
         if box.SetEnabled then box:SetEnabled(enabled) end
         if box.Enable and box.Disable then
             if enabled then box:Enable() else box:Disable() end
+        end
+    end
+    for _, btn in ipairs({ widget.__MSUF_valueBoxMinus, widget.__MSUF_valueBoxPlus, widget.minusButton, widget.plusButton }) do
+        if btn then
+            if btn.SetAlpha then btn:SetAlpha(alpha) end
+            if enabled then
+                if btn.Enable then btn:Enable() end
+            else
+                if btn.Disable then btn:Disable() end
+            end
         end
     end
     -- Optional title fontstring (dropdown helper)
@@ -2163,6 +2192,17 @@ end
                 splitSpacingSlider.__MSUF_valueBox:SetAlpha(0.6)
             end
         end
+        for _, btn in ipairs({ splitSpacingSlider.__MSUF_valueBoxMinus, splitSpacingSlider.__MSUF_valueBoxPlus, splitSpacingSlider.minusButton, splitSpacingSlider.plusButton }) do
+            if btn then
+                if ok then
+                    if btn.Enable then btn:Enable() end
+                    if btn.SetAlpha then btn:SetAlpha(1) end
+                else
+                    if btn.Disable then btn:Disable() end
+                    if btn.SetAlpha then btn:SetAlpha(0.6) end
+                end
+            end
+        end
      end
     capsBox._msufA2_ApplySplitSpacingEnabledState = A2_ApplySplitSpacingEnabledState
     A2_ApplySplitSpacingEnabledState()
@@ -2908,6 +2948,16 @@ end
                 local vb = widget.__MSUF_valueBox
                 if vb and vb.SetEnabled then vb:SetEnabled(enabled) end
                 if vb and vb.SetAlpha then vb:SetAlpha(enabled and 1 or 0.35) end
+                for _, btn in ipairs({ widget.__MSUF_valueBoxMinus, widget.__MSUF_valueBoxPlus, widget.minusButton, widget.plusButton }) do
+                    if btn then
+                        if enabled then
+                            if btn.Enable then btn:Enable() end
+                        else
+                            if btn.Disable then btn:Disable() end
+                        end
+                        if btn.SetAlpha then btn:SetAlpha(enabled and 1 or 0.35) end
+                    end
+                end
                  return
             end
             if widget.SetEnabled then widget:SetEnabled(enabled) end
@@ -3361,6 +3411,10 @@ end
         local thrHigh = _G[thrSliderName .. "High"]
         if thrLow then thrLow:SetText("0 (Off)") end
         if thrHigh then thrHigh:SetText("10 min") end
+        AttachSliderValueBox(thrSlider, 0, 600, 5, function()
+            local s = A2_Settings()
+            return (s and type(s.reminderThreshold) == "number") and s.reminderThreshold or 0
+        end)
         A2_Track("global", thrSlider)
         A2_TrackNativeSuppressed("buff", thrSlider)
 
@@ -3381,13 +3435,7 @@ end
             for i = 1, #remCbs do
                 SetCheckboxEnabled(remCbs[i], enabled)
             end
-            if thrSlider.EnableDisable then
-                thrSlider:EnableDisable(enabled)
-            elseif enabled then
-                thrSlider:Enable()
-            else
-                thrSlider:Disable()
-            end
+            A2_SetWidgetEnabled(thrSlider, enabled)
             A2_SetWidgetEnabled(reminderGrowthDD, enabled)
         end
 
