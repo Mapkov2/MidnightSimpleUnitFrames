@@ -132,6 +132,8 @@ local _getKind             -- fn() → "party" | "raid"
 local _coordLabel          -- FontString for coord display
 local _classIdx     = 1    -- class rotation index
 local _onSectionOpen       -- callback(sectionKey)
+local _statusPreviewSelectedKey = "roleIcon"
+local _statusPreviewShowAll = false
 
 local function GetHandleAnchorFrame(handle)
     if handle and handle._getAnchorFrame then
@@ -218,6 +220,14 @@ local STATUS_ICON_SPECS = {
     { key = "statusGhostText", label = "Ghost Text",     sizeKey = "statusGhostTextSize", anchorKey = "statusGhostTextAnchor", xKey = "statusGhostOffsetX", yKey = "statusGhostOffsetY", layerKey = "statusGhostTextLayer", defAnchor = "CENTER", defSize = 14, isText = true, previewText = "GHOST" },
     { key = "statusAFKText",   label = "AFK / DND Text", sizeKey = "statusAFKTextSize",   anchorKey = "statusAFKTextAnchor",   xKey = "statusAFKOffsetX",   yKey = "statusAFKOffsetY",   layerKey = "statusAFKTextLayer",   defAnchor = "CENTER", defSize = 14, isText = true, previewText = "AFK" },
 }
+
+local function ShouldShowStatusPreviewHandle(iconKey)
+    if _visToggles.status == false then return false end
+    if GF._previewFocus == "sicons" and _statusPreviewShowAll ~= true and _statusPreviewSelectedKey then
+        return iconKey == _statusPreviewSelectedKey
+    end
+    return true
+end
 
 ------------------------------------------------------------------------
 -- Selection
@@ -2394,9 +2404,10 @@ function GF.RefreshPreviewHandles()
             h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
             h:SetFrameLevel(baseLvl + layer)
             local en = (conf[spec.key] ~= false)
-            -- Visibility = sidebar toggle only. Disabled-config handles
-            -- still need to be clickable for click-to-navigate.
-            h:SetShown(_visToggles.status ~= false)
+            -- Visibility = sidebar toggle plus optional Status Icons focus
+            -- filter. Disabled-config handles still need to be clickable for
+            -- click-to-navigate whenever they are in the active preview set.
+            h:SetShown(ShouldShowStatusPreviewHandle(spec.key))
 
             -- Apply real texture
             local tex = h._statusTex
@@ -2785,6 +2796,15 @@ function GF.SetPreviewFocus(focus)
     if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
 end
 
+function GF.SetStatusPreviewMode(mode)
+    _statusPreviewShowAll = (mode == "all")
+    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
+end
+
+function GF.GetStatusPreviewMode()
+    return _statusPreviewShowAll and "all" or "current"
+end
+
 ------------------------------------------------------------------------
 -- Main API: Create the full preview box
 -- parent: scrollChild frame to embed into
@@ -3020,7 +3040,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                 elseif spec.key == "blizzard" then
                     if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
                 elseif spec.key == "status" then
-                    for _, sh in pairs(_statusHandles) do sh:SetShown(on) end
+                    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
                 elseif spec.key == "si" then
                     for _, sh in pairs(_siHandles) do sh:SetShown(on) end
                 elseif spec.key == "private" then
@@ -3152,11 +3172,13 @@ end
 ------------------------------------------------------------------------
 function GF._PreviewSelectStatusIcon(iconKey)
     if not iconKey then return end
+    _statusPreviewSelectedKey = iconKey
     local h = _statusHandles[iconKey]
     if not h then return end
     -- Select without triggering section open.
     SelectHandle(h, true)
     RefreshSelectedCoordDisplay()
+    if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
 end
 
 ------------------------------------------------------------------------

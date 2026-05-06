@@ -970,12 +970,47 @@ end)
         return b
     end
 
+local function _MSUF_CleanGameplayDropdownChrome(dd, width)
+    if not (dd and (dd._msufPeelButton or dd.__msufPeelDropSkinned)) then return end
+    width = width or dd._msufPeelWidth or dd._msufButtonWidth or 120
+    if _G.MSUF_PeelDropdownTemplate then
+        _G.MSUF_PeelDropdownTemplate(dd, { width = width })
+    end
+
+    local name = dd.GetName and dd:GetName()
+    local function HideRegion(region)
+        if not region then return end
+        if region.SetAlpha then region:SetAlpha(0) end
+    end
+    HideRegion(dd.Left or (name and _G[name .. "Left"]))
+    HideRegion(dd.Middle or (name and _G[name .. "Middle"]))
+    HideRegion(dd.Right or (name and _G[name .. "Right"]))
+    HideRegion(dd.Text or (name and _G[name .. "Text"]))
+
+    local nativeButton = dd.Button or (name and _G[name .. "Button"])
+    if nativeButton then
+        local nt = nativeButton.GetNormalTexture and nativeButton:GetNormalTexture()
+        local pt = nativeButton.GetPushedTexture and nativeButton:GetPushedTexture()
+        local ht = nativeButton.GetHighlightTexture and nativeButton:GetHighlightTexture()
+        HideRegion(nt)
+        HideRegion(pt)
+        HideRegion(ht)
+        if nativeButton.SetAlpha then nativeButton:SetAlpha(0.01) end
+    end
+end
+
 local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
     -- Simple UIDropDownMenu-based control (used sparingly in Gameplay to avoid heavy UI scaffolding).
-    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, sectionParent) or CreateFrame("Frame", name, sectionParent, "UIDropDownMenuTemplate"))
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, sectionParent, { width = width or 120 }) or CreateFrame("Frame", name, sectionParent, "UIDropDownMenuTemplate"))
     dd:SetPoint(point, rel, relPoint, x or 0, y or 0)
     if UIDropDownMenu_SetWidth then
         UIDropDownMenu_SetWidth(dd, width or 120)
+    end
+    _MSUF_CleanGameplayDropdownChrome(dd, width or 120)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            _MSUF_CleanGameplayDropdownChrome(dd, width or 120)
+        end)
     end
     if field then
         panel[field] = dd
@@ -988,6 +1023,20 @@ end
         if not widget then return end
         enabled = enabled and true or false
         local alpha = enabled and 1 or GAMEPLAY_DISABLED_ALPHA
+        local isStyledDropdown = widget._msufPeelButton or widget.__msufPeelDropSkinned or widget.__MSUF_GameplaySpecDropdown
+
+        if isStyledDropdown then
+            if widget.SetEnabled then
+                widget:SetEnabled(enabled)
+            elseif enabled then
+                if UIDropDownMenu_EnableDropDown then UIDropDownMenu_EnableDropDown(widget) end
+            else
+                if UIDropDownMenu_DisableDropDown then UIDropDownMenu_DisableDropDown(widget) end
+            end
+            if widget.SetAlpha then widget:SetAlpha(alpha) end
+            _MSUF_CleanGameplayDropdownChrome(widget, widget._msufPeelWidth or widget._msufButtonWidth or 120)
+            return
+        end
 
         if widget.SetEnabled then
             widget:SetEnabled(enabled)
@@ -1070,7 +1119,7 @@ end
 
     -- Combat Timer anchor dropdown (None / Player / Target / Focus)
     local combatTimerAnchorLabel = _MSUF_Label("GameFontNormal", "LEFT", combatTimerCheck, "RIGHT", 220, 0, "Anchor", "combatTimerAnchorLabel")
-    local combatTimerAnchorDD = _MSUF_Dropdown("MSUF_Gameplay_CombatTimerAnchorDropDown", "LEFT", combatTimerAnchorLabel, "RIGHT", 6, -2, 120, "combatTimerAnchorDropdown")
+    local combatTimerAnchorDD
 
     local function _CombatTimerAnchor_Validate(v)
         if v ~= "none" and v ~= "player" and v ~= "target" and v ~= "focus" then
@@ -1084,6 +1133,18 @@ end
         if v == "target" then return "Target" end
         if v == "focus" then return "Focus" end
         return "None"
+    end
+
+    local COMBAT_TIMER_ANCHOR_ITEMS = {
+        { key = "none",   label = "None"   },
+        { key = "player", label = "Player" },
+        { key = "target", label = "Target" },
+        { key = "focus",  label = "Focus"  },
+    }
+
+    local function _CombatTimerAnchor_Current()
+        local g = MSUF_DB and MSUF_DB.gameplay
+        return _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
     end
 
     local function _CombatTimerAnchor_Set(v)
@@ -1124,8 +1185,14 @@ end
             MSUF_Gameplay_TickCombatTimer()
         end
 
-        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, val) end
-        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(val)) end
+        if combatTimerAnchorDD then
+            if combatTimerAnchorDD.Refresh then
+                combatTimerAnchorDD:Refresh()
+            else
+                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, val) end
+                if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(val)) end
+            end
+        end
 
         if ns and ns.MSUF_RequestGameplayApply then
             ns.MSUF_RequestGameplayApply()
@@ -1135,21 +1202,40 @@ end
         end
     end
 
-    if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
+    do
+        local UI = ns and ns.UI
+        if UI and UI.Dropdown then
+            combatTimerAnchorDD = UI.Dropdown({
+                name = "MSUF_Gameplay_CombatTimerAnchorDropDown",
+                parent = sectionParent,
+                width = 120,
+                items = COMBAT_TIMER_ANCHOR_ITEMS,
+                get = _CombatTimerAnchor_Current,
+                set = function(v) _CombatTimerAnchor_Set(v) end,
+                maxVisible = 4,
+            })
+            combatTimerAnchorDD:ClearAllPoints()
+            combatTimerAnchorDD:SetPoint("LEFT", combatTimerAnchorLabel, "RIGHT", -9, -2)
+            combatTimerAnchorDD.__MSUF_GameplaySpecDropdown = true
+            _MSUF_CleanGameplayDropdownChrome(combatTimerAnchorDD, 120)
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    _MSUF_CleanGameplayDropdownChrome(combatTimerAnchorDD, 120)
+                end)
+            end
+            panel.combatTimerAnchorDropdown = combatTimerAnchorDD
+        else
+            combatTimerAnchorDD = _MSUF_Dropdown("MSUF_Gameplay_CombatTimerAnchorDropDown", "LEFT", combatTimerAnchorLabel, "RIGHT", 6, -2, 120, "combatTimerAnchorDropdown")
+        end
+    end
+
+    if combatTimerAnchorDD and not combatTimerAnchorDD.__MSUF_GameplaySpecDropdown and UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
         UIDropDownMenu_Initialize(combatTimerAnchorDD, function(self, level)
-            local g = MSUF_DB and MSUF_DB.gameplay
-            local cur = _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
+            local cur = _CombatTimerAnchor_Current()
 
-            local items = {
-                {"none",  "None"},
-                {"player", "Player"},
-                {"target", "Target"},
-                {"focus",  "Focus"},
-            }
-
-            for i = 1, #items do
-                local value = items[i][1]
-                local text  = items[i][2]
+            for i = 1, #COMBAT_TIMER_ANCHOR_ITEMS do
+                local value = COMBAT_TIMER_ANCHOR_ITEMS[i].key
+                local text  = COMBAT_TIMER_ANCHOR_ITEMS[i].label
                 local info = UIDropDownMenu_CreateInfo()
                 info.text = text
                 info.value = value
@@ -1164,10 +1250,13 @@ end
     end
 
     do
-        local g = MSUF_DB and MSUF_DB.gameplay
-        local cur = _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
-        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, cur) end
-        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(cur)) end
+        local cur = _CombatTimerAnchor_Current()
+        if combatTimerAnchorDD and combatTimerAnchorDD.Refresh then
+            combatTimerAnchorDD:Refresh()
+        elseif combatTimerAnchorDD then
+            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, cur) end
+            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(cur)) end
+        end
     end
 
     -- Combat Timer size slider
@@ -2290,13 +2379,17 @@ _totemsLeftBottom = totemsDragHint
             if v ~= "none" and v ~= "player" and v ~= "target" and v ~= "focus" then
                 v = "none"
             end
-            local txt
-            if v == "player" then txt = "Player"
-            elseif v == "target" then txt = "Target"
-            elseif v == "focus" then txt = "Focus"
-            else txt = "None" end
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self.combatTimerAnchorDropdown, v) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self.combatTimerAnchorDropdown, txt) end
+            if self.combatTimerAnchorDropdown.Refresh then
+                self.combatTimerAnchorDropdown:Refresh()
+            else
+                local txt
+                if v == "player" then txt = "Player"
+                elseif v == "target" then txt = "Target"
+                elseif v == "focus" then txt = "Focus"
+                else txt = "None" end
+                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self.combatTimerAnchorDropdown, v) end
+                if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self.combatTimerAnchorDropdown, txt) end
+            end
         end
 
         -- Combat state texts

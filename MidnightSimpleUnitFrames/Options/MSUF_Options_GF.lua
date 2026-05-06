@@ -275,7 +275,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
     local function _UpdatePreviewFocus()
         local openKey = nil
         for key, box in pairs(_sectionLookup) do
-            if box and not box._msufCollapsed then
+            if box and box:IsShown() and not box._msufCollapsed then
                 openKey = key
                 break
             end
@@ -292,6 +292,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             box._msufCollapsed = false
             if box._msufApplyCollapseState then box._msufApplyCollapseState() end
         end
+        _UpdatePreviewFocus()
     end
 
     ----------------------------------------------------------------
@@ -3294,6 +3295,84 @@ function _G.MSUF_EnsureGFPanelBuilt()
             end,
         })
 
+        local statusPreviewMode = "current"
+        local statusPreviewModeBtns = {}
+        local function RefreshStatusPreviewMode()
+            local mode = (GF.GetStatusPreviewMode and GF.GetStatusPreviewMode()) or statusPreviewMode
+            mode = (mode == "all") and "all" or "current"
+            statusPreviewMode = mode
+            for key, btn in pairs(statusPreviewModeBtns) do
+                local active = (key == mode)
+                if active then
+                    btn:SetBackdropColor(0.12, 0.18, 0.30, 0.95)
+                    btn:SetBackdropBorderColor(0.30, 0.55, 0.90, 1)
+                    btn._fs:SetTextColor(0.85, 0.92, 1.00, 1)
+                elseif btn._hover then
+                    btn:SetBackdropColor(0.11, 0.13, 0.18, 0.95)
+                    btn:SetBackdropBorderColor(0.25, 0.35, 0.50, 0.9)
+                    btn._fs:SetTextColor(0.78, 0.82, 0.90, 1)
+                else
+                    btn:SetBackdropColor(0.04, 0.05, 0.08, 0.85)
+                    btn:SetBackdropBorderColor(0.16, 0.20, 0.28, 0.75)
+                    btn._fs:SetTextColor(0.55, 0.60, 0.70, 1)
+                end
+            end
+        end
+        local function SetStatusPreviewMode(mode)
+            mode = (mode == "all") and "all" or "current"
+            statusPreviewMode = mode
+            if GF.SetStatusPreviewMode then GF.SetStatusPreviewMode(mode) end
+            RefreshStatusPreviewMode()
+        end
+
+        local previewLbl = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        previewLbl:SetPoint("TOPLEFT", body, "TOPLEFT", 360, -76)
+        previewLbl:SetText(TR("Status Preview"))
+
+        local function MakeStatusPreviewModeButton(mode, label, width)
+            local btn = CreateFrame("Button", nil, body, "BackdropTemplate")
+            btn:SetSize(width or 84, 20)
+            btn:SetBackdrop({
+                bgFile = TEX_W8,
+                edgeFile = TEX_W8,
+                edgeSize = 1,
+                insets = { left = 1, right = 1, top = 1, bottom = 1 },
+            })
+            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            fs:SetPoint("CENTER")
+            fs:SetText(TR(label))
+            btn._fs = fs
+            btn:SetScript("OnClick", function()
+                SetStatusPreviewMode(mode)
+            end)
+            btn:SetScript("OnEnter", function(self)
+                self._hover = true
+                RefreshStatusPreviewMode()
+                if not GameTooltip then return end
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(TR("Status Preview"), 1, 1, 1)
+                if mode == "all" then
+                    GameTooltip:AddLine(TR("Shows every status indicator while this section is open."), 0.75, 0.80, 0.90, true)
+                else
+                    GameTooltip:AddLine(TR("Shows only the selected status indicator while this section is open."), 0.75, 0.80, 0.90, true)
+                end
+                GameTooltip:Show()
+            end)
+            btn:SetScript("OnLeave", function(self)
+                self._hover = false
+                RefreshStatusPreviewMode()
+                if GameTooltip then GameTooltip:Hide() end
+            end)
+            statusPreviewModeBtns[mode] = btn
+            return btn
+        end
+
+        local currentPreviewBtn = MakeStatusPreviewModeButton("current", "Current", 82)
+        currentPreviewBtn:SetPoint("TOPLEFT", previewLbl, "BOTTOMLEFT", 0, -6)
+        local allPreviewBtn = MakeStatusPreviewModeButton("all", "Show All", 88)
+        allPreviewBtn:SetPoint("LEFT", currentPreviewBtn, "RIGHT", 2, 0)
+        RefreshStatusPreviewMode()
+
         -- Enable checkbox
         local enChk = SCheck({
             name = "MSUF_GF_SI_EnableCheck", parent = body,
@@ -3430,6 +3509,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
             if refreshIconControls then refreshIconControls() end
             if midnightChk and midnightChk.Refresh then midnightChk:Refresh() end
             if styleDd and styleDd.Refresh then styleDd:Refresh() end
+            if RefreshStatusPreviewMode then RefreshStatusPreviewMode() end
         end
         refreshIconControls()
     end
@@ -3770,7 +3850,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
     _G.MSUF_GF_SwitchTab = SwitchTab
     _G.MSUF_GF_OpenSectionByKey = function(sectionKey)
         OpenSectionByKey(sectionKey)
-        _UpdatePreviewFocus()
         if type(RefreshScrollLayout) == "function" then RefreshScrollLayout() end
     end
     RefreshScrollLayout()
