@@ -867,6 +867,7 @@ local function ClearPreviewIconsInContainer(container)
 
                 -- Restore Blizzard native countdown for real auras.
                 if icon.cooldown.SetHideCountdownNumbers then
+                    icon.cooldown._msufA2_lastHideNumbers = false
                     icon.cooldown:SetHideCountdownNumbers(false)
                 end
             end
@@ -1229,6 +1230,7 @@ local function _PreviewCooldownIconFn(icon)
 
     -- Hide Blizzard's native countdown; we render our own preview text.
     if cd.SetHideCountdownNumbers then
+        cd._msufA2_lastHideNumbers = true
         cd:SetHideCountdownNumbers(true)
     end
 
@@ -1477,6 +1479,7 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
             local startTime = now - elapsed
 
             if cd.SetHideCountdownNumbers then
+                cd._msufA2_lastHideNumbers = false
                 cd:SetHideCountdownNumbers(false)
             end
             if cd.SetCooldown then
@@ -1639,6 +1642,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
                 local elapsed = (i * 3.1) % dur
 
                 if cd.SetHideCountdownNumbers then
+                    cd._msufA2_lastHideNumbers = false
                     cd:SetHideCountdownNumbers(false)
                 end
                 if cd.SetCooldown then
