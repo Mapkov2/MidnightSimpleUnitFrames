@@ -217,7 +217,13 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     local function IsNativeRenderer()
-        return (AurasRoot().renderer or "BLIZZARD") == "BLIZZARD"
+        local mode = AurasRoot().renderer or "BLIZZARD"
+        return mode == "BLIZZARD" or mode == "MIXED"
+    end
+
+    local function IsCustomRenderer()
+        local mode = AurasRoot().renderer or "BLIZZARD"
+        return mode == "CUSTOM" or mode == "MIXED"
     end
 
     if not _G.StaticPopupDialogs["MSUF_SI_ICON_BLIZZARD_WARN"] then
@@ -281,8 +287,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     local function HasCustomIconAuraGroups()
-        if not IsNativeRenderer() then return true end
-        return not (IsNativeAuraType("buffs") and IsNativeAuraType("debuffs") and IsNativeAuraType("externals"))
+        return IsCustomRenderer()
     end
 
     local function StyleAuraCheck(cb)
@@ -828,6 +833,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     local function ApplyNativeGroupSuppression(body, groupKey)
+        if HasCustomIconAuraGroups() then return end
         if not (body and body.GetChildren and IsNativeAuraGroup(groupKey)) then return end
         local rows = { body:GetChildren() }
         for i = 1, #rows do
@@ -1425,6 +1431,10 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         r = RowCheck(body, nil, L["Enable"], gk, "enabled", 6)
         local enableRow = r
         local function RefreshAuraGroupControls()
+            if not HasCustomIconAuraGroups() then
+                SetAuraBodyRowsEnabled(body, false)
+                return
+            end
             SetAuraBodyRowsEnabled(body, AV(gk, "enabled") ~= false, enableRow)
             ApplyNativeGroupSuppression(body, gk)
         end
@@ -2513,16 +2523,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         info:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
         info:SetWidth(610)
         info:SetJustifyH("LEFT")
-        info:SetText(L["Blizzard mode uses one native aura block per group frame. Checked aura types are shown by Blizzard. Turning a type off does not hide it; MSUF renders that type in the Custom section below."] or "Blizzard mode uses one native aura block per group frame. Checked aura types are shown by Blizzard. Turning a type off does not hide it; MSUF renders that type in the Custom section below.")
+        info:SetText(L["Renderer path: Blizzard is the default native aura block. Custom uses only MSUF icons. Custom + Blizzard keeps the native block and also allows Custom Buffs, Debuffs and Defensives. Custom Private Auras stay disabled while any Blizzard native block is active."] or "Renderer path: Blizzard is the default native aura block. Custom uses only MSUF icons. Custom + Blizzard keeps the native block and also allows Custom Buffs, Debuffs and Defensives. Custom Private Auras stay disabled while any Blizzard native block is active.")
 
         local routingLabel = body:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
         routingLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 340, -64)
         routingLabel:SetWidth(330)
         routingLabel:SetJustifyH("LEFT")
         routingLabel:SetTextColor(0.74, 0.82, 0.95, 1)
-        routingLabel:SetText(L["Aura routing: checked = Blizzard, off = Custom"] or "Aura routing: checked = Blizzard, off = Custom")
+        routingLabel:SetText(L["Blizzard native block types"] or "Blizzard native block types")
 
-        local routeTip = L["Only applies while Renderer is Blizzard. Checked = Blizzard native block. Off = MSUF Custom below, not hidden."] or "Only applies while Renderer is Blizzard. Checked = Blizzard native block. Off = MSUF Custom below, not hidden."
+        local routeTip = L["Checked types are included in the Blizzard native block. In Custom + Blizzard mode, Custom sections below can render additional MSUF icons. Private Auras remain exclusive while any native block is active."] or "Checked types are included in the Blizzard native block. In Custom + Blizzard mode, Custom sections below can render additional MSUF icons. Private Auras remain exclusive while any native block is active."
 
         local rendererDD = SDropdown({
             name = "MSUF_GF_BlizzardRendererMode", parent = body,
@@ -2532,15 +2542,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             items = {
                 { key = "BLIZZARD", label = L["Blizzard"] or "Blizzard" },
                 { key = "CUSTOM", label = L["Custom"] or "Custom" },
+                { key = "MIXED", label = L["Custom + Blizzard"] or "Custom + Blizzard" },
             },
             get = function() return AurasRoot().renderer or "BLIZZARD" end,
             set = function(_, v)
-                AurasRoot().renderer = (v == "BLIZZARD") and "BLIZZARD" or "CUSTOM"
+                AurasRoot().renderer = (v == "CUSTOM" or v == "MIXED") and v or "BLIZZARD"
                 BlizzardTypes()
                 RequestAuraRefresh()
                 if refreshBlizzardControls then refreshBlizzardControls() end
                 RefreshAuraOptionControls()
-                if v == "BLIZZARD" and AnySpellIndicatorHasIconPlaced() then
+                if (v == "BLIZZARD" or v == "MIXED") and AnySpellIndicatorHasIconPlaced() then
                     ShowSIIconBlizzardWarn()
                 end
             end,
@@ -2594,7 +2605,6 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             get = function() return BlizzardTypes().privateAuras == true end,
             set = function(_, v) BlizzardTypes().privateAuras = v and true or false; RequestAuraRefresh(); RefreshAuraOptionControls() end,
         })
-
         local iconSizeSl = SSlider({
             name = "MSUF_GF_BlizzardIconSize", parent = body, compact = true,
             anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -168,
@@ -2684,7 +2694,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         posHint:SetText(L["Frame Default keeps Blizzard's frame-relative icon layout. Dispel overlay stays on the unit frame."] or "Frame Default keeps Blizzard's frame-relative icon layout. Dispel overlay stays on the unit frame.")
 
         refreshBlizzardControls = function()
-            local enabled = ((AurasRoot().renderer or "BLIZZARD") == "BLIZZARD")
+            local enabled = IsNativeRenderer()
             local moveEnabled = enabled and (AurasRoot().blizzardContainerAnchor or "FRAME") ~= "FRAME"
             SetAuraControlsEnabled(enabled, {
                 buffChk, debuffChk, dispelChk, extChk, cdTextChk, privateChk,
@@ -2924,11 +2934,16 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         refreshPrivateAuraControls = function()
             local enabled = PA().enabled ~= false
             local nativePrivate = IsNativeAuraType("privateAuras")
+            local nativeContainerActive = IsNativeAuraType("buffs")
+                or IsNativeAuraType("debuffs")
+                or IsNativeAuraType("dispels")
+                or IsNativeAuraType("externals")
+            local customPrivateActive = IsCustomRenderer() and not nativePrivate and not nativeContainerActive
 
-            SetAuraControlsEnabled(enabled, {
+            SetAuraControlsEnabled(enabled and (nativePrivate or customPrivateActive), {
                 paMaxSl,
             })
-            SetAuraControlsEnabled(enabled and not nativePrivate, {
+            SetAuraControlsEnabled(enabled and customPrivateActive, {
                 paSzSl, paDirDd, paAnchorDd, paXSl, paYSl, paLayerSl,
                 paCdChk, paNumChk, paDispelChk,
             })

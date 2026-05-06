@@ -1527,10 +1527,6 @@ function GF.BuildFrameCache(f)
     c.nativeBlizzardPrivate = GF.IsBlizzardAuraTypeEnabled
         and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras") == true
         and pa and pa.enabled ~= false
-    if pa and pa.enabled ~= false and not c.nativeBlizzardPrivate then
-        c.nativeBlizzardDebuffs = false
-        c.nativeBlizzardDispels = false
-    end
 
     -- Dispel overlay (color wash on health bar)
     c.doEn    = conf.dispelOverlayEnabled == true and not c.nativeBlizzardDispels
@@ -1592,11 +1588,13 @@ function GF.BuildFrameCache(f)
                    c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs
                    or c.nativeBlizzardExt or c.nativeBlizzardDispels
                    or c.nativeBlizzardPrivate)
+    local customRenderer = (GF.IsAuraRendererCustom and GF.IsAuraRendererCustom(conf)) or false
     c.customAuraGrp = c.aurasOn and (
-                   (auras.debuff and auras.debuff.enabled ~= false and not c.nativeBlizzardDebuffs) or
-                   (auras.buff and auras.buff.enabled ~= false and not c.nativeBlizzardBuffs) or
-                   (auras.externals and auras.externals.enabled and not c.nativeBlizzardExt) or
-                   (c.dispelScan and GF._playerCanDispel))
+                   customRenderer and (
+                       (auras.debuff and auras.debuff.enabled ~= false) or
+                       (auras.buff and auras.buff.enabled ~= false) or
+                       (auras.externals and auras.externals.enabled) or
+                       (c.dispelScan and GF._playerCanDispel)))
     c.anyAuraGrp = c.nativeBlizzardAuras or c.customAuraGrp
     c.nativeBlizzardAuraOnly = c.nativeBlizzardAuras and not c.customAuraGrp
 
@@ -1625,7 +1623,9 @@ function GF.BuildFrameCache(f)
         or c.ciSlotBR == "aggro" or c.ciSlotC == "aggro")
 
     -- Private auras
-    c.paEn = pa and pa.enabled ~= false and not c.nativeBlizzardPrivate
+    c.paEn = pa and pa.enabled ~= false
+        and not c.nativeBlizzardPrivate
+        and not (c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs or c.nativeBlizzardDispels or c.nativeBlizzardExt)
 
     -- Raid debuffs
 

@@ -11,6 +11,7 @@ local math_floor = math.floor
 
 Native.RENDER_CUSTOM = "CUSTOM"
 Native.RENDER_BLIZZARD = "BLIZZARD"
+Native.RENDER_MIXED = "MIXED"
 
 local DEFAULT_TYPES = {
     buffs = true,
@@ -50,11 +51,27 @@ function Native.NormalizeRenderer(value)
     if value == Native.RENDER_BLIZZARD or value == "blizzard" or value == "Blizzard" then
         return Native.RENDER_BLIZZARD
     end
+    if value == Native.RENDER_MIXED or value == "mixed" or value == "Mixed"
+        or value == "BOTH" or value == "both"
+        or value == "CUSTOM_BLIZZARD" or value == "CUSTOM+BLIZZARD"
+    then
+        return Native.RENDER_MIXED
+    end
     return Native.RENDER_CUSTOM
 end
 
 function Native.IsBlizzardRenderer(value)
-    return Native.NormalizeRenderer(value) == Native.RENDER_BLIZZARD
+    local mode = Native.NormalizeRenderer(value)
+    return mode == Native.RENDER_BLIZZARD or mode == Native.RENDER_MIXED
+end
+
+function Native.IsCustomRenderer(value)
+    local mode = Native.NormalizeRenderer(value)
+    return mode == Native.RENDER_CUSTOM or mode == Native.RENDER_MIXED
+end
+
+function Native.IsMixedRenderer(value)
+    return Native.NormalizeRenderer(value) == Native.RENDER_MIXED
 end
 
 function Native.EnsureTypes(types, includeExternals)
