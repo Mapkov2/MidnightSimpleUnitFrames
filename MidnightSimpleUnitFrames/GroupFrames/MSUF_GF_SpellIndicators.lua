@@ -1354,9 +1354,9 @@ local function EnsureBlizzardAuraDefaults(auras)
     if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
     if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
     if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
-    if auras.blizzardContainerAnchor == nil then auras.blizzardContainerAnchor = "FRAME" end
-    if auras.blizzardContainerX == nil then auras.blizzardContainerX = 0 end
-    if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end
+    auras.blizzardContainerAnchor = "FRAME"
+    auras.blizzardContainerX = 0
+    auras.blizzardContainerY = 0
 end
 
 function GF.MigrateAuraConfig(conf, isRaid)

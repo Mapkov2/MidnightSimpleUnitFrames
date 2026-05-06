@@ -38,18 +38,6 @@ local ANCHOR9 = {
     { key = "BOTTOM",      label = L["Bottom"]        },
     { key = "BOTTOMRIGHT", label = L["Bottom Right"]  },
 }
-local BLIZZARD_CONTAINER_ANCHORS = {
-    { key = "FRAME",       label = L["Frame Default"] or "Frame Default" },
-    { key = "TOPLEFT",     label = L["Top Left"]     },
-    { key = "TOP",         label = L["Top"]           },
-    { key = "TOPRIGHT",    label = L["Top Right"]     },
-    { key = "LEFT",        label = L["Left"]          },
-    { key = "CENTER",      label = L["Center"]        },
-    { key = "RIGHT",       label = L["Right"]         },
-    { key = "BOTTOMLEFT",  label = L["Bottom Left"]   },
-    { key = "BOTTOM",      label = L["Bottom"]        },
-    { key = "BOTTOMRIGHT", label = L["Bottom Right"]  },
-}
 local GROWTH8 = {
     { key = "RIGHTDOWN", label = L["Right -> Down"] },
     { key = "RIGHTUP",   label = L["Right -> Up"]   },
@@ -217,13 +205,19 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     local function IsNativeRenderer()
+        if GF.IsAuraRendererBlizzard and GF.GetConf then
+            return GF.IsAuraRendererBlizzard(GF.GetConf(K())) == true
+        end
         local mode = AurasRoot().renderer or "BLIZZARD"
         return mode == "BLIZZARD" or mode == "MIXED" or mode == "CUSTOM_BLIZZARD"
+            or mode == "CUSTOM+BLIZZARD" or mode == "BOTH"
     end
 
     local function IsCustomRenderer()
-        local mode = AurasRoot().renderer or "BLIZZARD"
-        return mode == "CUSTOM"
+        if GF.IsAuraRendererCustom and GF.GetConf then
+            return GF.IsAuraRendererCustom(GF.GetConf(K())) == true
+        end
+        return AurasRoot().renderer == "CUSTOM"
     end
 
     _G.StaticPopupDialogs = _G.StaticPopupDialogs or {}
@@ -2504,7 +2498,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     -- Section: Blizzard Renderer
     ----------------------------------------------------------------
     do
-        local box, body = AddSection(720, L["Blizzard Renderer"] or "Blizzard Renderer", false, "blizzrenderer")
+        local box, body = AddSection(560, L["Blizzard Renderer"] or "Blizzard Renderer", false, "blizzrenderer")
         local refreshBlizzardControls
         local routeLeftX, routeRightX = 340, 500
         local function RendererCheck(spec)
@@ -2523,7 +2517,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         info:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -8)
         info:SetWidth(610)
         info:SetJustifyH("LEFT")
-        info:SetText(L["Renderer path: Blizzard is the default native aura block. Checked types below are rendered by Blizzard; unchecked types use MSUF Custom groups. Custom mode disables the native block completely."] or "Renderer path: Blizzard is the default native aura block. Checked types below are rendered by Blizzard; unchecked types use MSUF Custom groups. Custom mode disables the native block completely.")
+        info:SetText(L["Renderer path: Blizzard is the default native aura block. Checked types below are rendered by Blizzard; unchecked types use MSUF Custom groups. Custom mode disables the native block completely. Blizzard controls final native aura placement; MSUF only shows an approximate locked preview."] or "Renderer path: Blizzard is the default native aura block. Checked types below are rendered by Blizzard; unchecked types use MSUF Custom groups. Custom mode disables the native block completely. Blizzard controls final native aura placement; MSUF only shows an approximate locked preview.")
 
         local routingLabel = body:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
         routingLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 340, -64)
@@ -2655,53 +2649,20 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
 
         local posLabel = body:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
         posLabel:SetPoint("TOPLEFT", body, "TOPLEFT", 340, -350)
-        posLabel:SetText(L["Blizzard Block Position"] or "Blizzard Block Position")
-
-        local anchorDD = SDropdown({
-            name = "MSUF_GF_BlizzardContainerAnchor", parent = body,
-            anchor = posLabel, anchorPoint = "BOTTOMLEFT", x = -16, y = -6,
-            width = 200,
-            items = BLIZZARD_CONTAINER_ANCHORS,
-            get = function() return AurasRoot().blizzardContainerAnchor or "FRAME" end,
-            set = function(_, v)
-                AurasRoot().blizzardContainerAnchor = v or "FRAME"
-                RequestAuraRefresh()
-                if refreshBlizzardControls then refreshBlizzardControls() end
-            end,
-        })
-
-        local posXSl = SSlider({
-            name = "MSUF_GF_BlizzardContainerX", parent = body, compact = true,
-            anchor = body, anchorPoint = "TOPLEFT", x = 340, y = -438,
-            min = -200, max = 200, step = 1, width = 200, default = 0,
-            get = function() return AurasRoot().blizzardContainerX or 0 end,
-            set = function(_, v) AurasRoot().blizzardContainerX = v; RequestAuraRefresh() end,
-            formatText = function(v) return string.format(L["Block X: %d"] or "Block X: %d", v) end,
-        })
-
-        local posYSl = SSlider({
-            name = "MSUF_GF_BlizzardContainerY", parent = body, compact = true,
-            anchor = posXSl, x = 0, y = -52,
-            min = -200, max = 200, step = 1, width = 200, default = 0,
-            get = function() return AurasRoot().blizzardContainerY or 0 end,
-            set = function(_, v) AurasRoot().blizzardContainerY = v; RequestAuraRefresh() end,
-            formatText = function(v) return string.format(L["Block Y: %d"] or "Block Y: %d", v) end,
-        })
+        posLabel:SetText(L["Blizzard Position"] or "Blizzard Position")
 
         local posHint = body:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        posHint:SetPoint("TOPLEFT", posYSl, "BOTTOMLEFT", 0, -12)
+        posHint:SetPoint("TOPLEFT", posLabel, "BOTTOMLEFT", 0, -8)
         posHint:SetWidth(330)
         posHint:SetJustifyH("LEFT")
-        posHint:SetText(L["Frame Default keeps Blizzard's frame-relative icon layout. Dispel overlay stays on the unit frame."] or "Frame Default keeps Blizzard's frame-relative icon layout. Dispel overlay stays on the unit frame.")
+        posHint:SetText(L["Locked by Blizzard. MSUF can pass the native renderer settings above, but cannot drag or set the native block position. The preview marks the Blizzard-owned area and enabled aura types; exact placement is decided by Blizzard at runtime."] or "Locked by Blizzard. MSUF can pass the native renderer settings above, but cannot drag or set the native block position. The preview marks the Blizzard-owned area and enabled aura types; exact placement is decided by Blizzard at runtime.")
 
         refreshBlizzardControls = function()
             local enabled = IsNativeRenderer()
-            local moveEnabled = enabled and (AurasRoot().blizzardContainerAnchor or "FRAME") ~= "FRAME"
             SetAuraControlsEnabled(enabled, {
                 buffChk, debuffChk, dispelChk, extChk, cdTextChk, privateChk,
-                iconSizeSl, buffMaxSl, debuffMaxSl, orgDD, anchorDD,
+                iconSizeSl, buffMaxSl, debuffMaxSl, orgDD,
             }, { orgLabel, posLabel, posHint })
-            SetAuraControlsEnabled(moveEnabled, { posXSl, posYSl })
         end
         _auraRefreshFns[#_auraRefreshFns + 1] = refreshBlizzardControls
         if rendererDD and rendererDD.HookScript then

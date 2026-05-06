@@ -135,6 +135,10 @@ local _onSectionOpen       -- callback(sectionKey)
 local _statusPreviewSelectedKey = "roleIcon"
 local _statusPreviewShowAll = false
 
+local function IsHandleLocked(handle)
+    return handle and handle._previewLocked == true
+end
+
 local function GetHandleAnchorFrame(handle)
     if handle and handle._getAnchorFrame then
         local target = handle:_getAnchorFrame()
@@ -235,7 +239,9 @@ end
 local function UpdateCoordDisplay(key, anchor, offX, offY)
     if not _coordLabel then return end
     if not key then
-        _coordLabel:SetText("Click a handle to select \194\183 drag or arrow keys to move")
+        _coordLabel:SetText("Click a handle to select - custom layers can be moved; Blizzard is locked")
+    elseif anchor == "LOCKED" then
+        _coordLabel:SetText((key or "?") .. "   locked: Blizzard controls native aura placement")
     else
         _coordLabel:SetText((key or "?") .. "   anchor: " .. (anchor or "?") .. "   x: " .. (offX or 0) .. "   y: " .. (offY or 0))
     end
@@ -332,6 +338,10 @@ end
 
 local function RefreshSelectedCoordDisplay()
     if not _selected or not _selected.IsShown or not _selected:IsShown() then return false end
+    if IsHandleLocked(_selected) then
+        UpdateCoordDisplay(_selected._cfgKey, "LOCKED")
+        return true
+    end
     local _, anchor, _, _, cfgX, cfgY = GetHandlePosition(_selected)
     if not anchor then return false end
     UpdateCoordDisplay(_selected._cfgKey, anchor, cfgX, cfgY)
@@ -431,6 +441,10 @@ end
 
 local function NudgeSelectedHandle(dx, dy)
     local h = _selected
+    if IsHandleLocked(h) then
+        RefreshSelectedCoordDisplay()
+        return false
+    end
     if not h or not h.IsShown or not h:IsShown() or not h._onDragFinish then return false end
     if not _mockFrame then return false end
 
@@ -475,6 +489,7 @@ do
     local function DragStart(self, btn)
         if btn ~= "LeftButton" then return end
         SelectHandle(self)
+        if IsHandleLocked(self) then return end
         _dragging     = true
         _dragHandle   = self
         _dragOrigStrata = self:GetFrameStrata() or "MEDIUM"
@@ -572,14 +587,19 @@ local function CreateHandle(parent, key, sectionKey, w, h, colorKey)
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(self._cfgKey or "?", 1, 1, 1)
-            if self._getCurrentAnchor then
+            if IsHandleLocked(self) then
+                GameTooltip:AddLine("Locked: Blizzard controls native aura placement.", 0.7, 0.7, 0.7)
+                GameTooltip:AddLine("The preview shows where Blizzard-rendered auras can appear.", 0.4, 0.4, 0.5)
+            elseif self._getCurrentAnchor then
                 local anc = self:_getCurrentAnchor() or "?"
                 GameTooltip:AddLine("Anchor: " .. anc, 0.7, 0.7, 0.7)
             end
             if self._sectionKey then
                 GameTooltip:AddLine("Section: " .. self._sectionKey, 0.5, 0.5, 0.6)
             end
-            GameTooltip:AddLine("Drag to reposition. Arrow keys nudge by 1.", 0.4, 0.4, 0.5)
+            if not IsHandleLocked(self) then
+                GameTooltip:AddLine("Drag to reposition. Arrow keys nudge by 1.", 0.4, 0.4, 0.5)
+            end
             GameTooltip:Show()
         end
     end)
@@ -1604,25 +1624,11 @@ local function BuildAuraGroupHandles(mockFrame)
 
     local nativeHandle = CreateHandle(mockFrame, "blizzard", "blizzrenderer", 56, 24, "blizzard")
     nativeHandle._label:SetPoint("BOTTOM", nativeHandle, "TOP", 0, 1)
-    nativeHandle._label:SetText("Blizzard")
+    nativeHandle._label:SetText("Blizzard locked")
     nativeHandle._getAnchorFrame = function() return _mockFrame end
-    nativeHandle._onDragFinish = function(anchor, offX, offY)
-        local kind = _getKind and _getKind() or "party"
-        local conf = GF.GetConf(kind)
-        if not conf.auras then conf.auras = {} end
-        local cfgX, cfgY = PreviewToConfigOffset(offX, offY)
-        conf.auras.blizzardContainerAnchor = (anchor and AF[anchor]) and anchor or "CENTER"
-        conf.auras.blizzardContainerX = cfgX
-        conf.auras.blizzardContainerY = cfgY
-        RequestVisualRefresh()
-        if GF._RefreshOptionWidgets then GF._RefreshOptionWidgets() end
-        if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
-    end
+    nativeHandle._previewLocked = true
     nativeHandle._getCurrentAnchor = function()
-        local kind = _getKind and _getKind() or "party"
-        local conf = GF.GetConf(kind)
-        local anchor = conf and conf.auras and conf.auras.blizzardContainerAnchor
-        return (anchor and AF[anchor]) and anchor or "CENTER"
+        return "LOCKED"
     end
     nativeHandle._blizzIcons = {}
     _handles.blizzard = nativeHandle
@@ -2226,9 +2232,8 @@ function GF.RefreshPreviewHandles()
         end
     end
 
-    -- Single native Blizzard aura block handle. This mirrors the one
-    -- C_UnitAuras anchor used live, so dragging it writes the shared
-    -- blizzardContainerAnchor/X/Y settings instead of per-category offsets.
+    -- Single native Blizzard aura block preview. It is locked because
+    -- Blizzard owns the final native aura placement.
     do
         local h = _handles.blizzard
         if h then
@@ -2237,12 +2242,8 @@ function GF.RefreshPreviewHandles()
                 h:Hide()
             else
                 local auras = conf.auras or {}
-                local rawAnchor = auras.blizzardContainerAnchor
-                local anchor = (rawAnchor and AF[rawAnchor]) and rawAnchor or "CENTER"
+                local anchor = "CENTER"
                 local offX, offY = 0, 0
-                if rawAnchor and AF[rawAnchor] then
-                    offX, offY = ConfigToPreviewOffset(auras.blizzardContainerX or 0, auras.blizzardContainerY or 0)
-                end
 
                 local types = auras.blizzardTypes or {}
                 local buffOn = IsNativeAuraHandle(kind, "buff") or (type(types) ~= "table" and true)
@@ -2281,16 +2282,36 @@ function GF.RefreshPreviewHandles()
                 local gap = max(1, LiveToPreviewValue(ScaleFrameValue(2, frameScale, 0)))
 
                 local buffEntries, harmfulEntries = {}, {}
-                local function AddEntries(out, entryKind, count, iconSize)
+                local function AddEntries(out, entryKind, count, iconSize, firstTag, tagColor)
                     for i = 1, count do
-                        out[#out + 1] = { kind = entryKind, size = iconSize, seq = i }
+                        out[#out + 1] = {
+                            kind = entryKind,
+                            size = iconSize,
+                            seq = i,
+                            tag = (i == 1) and firstTag or nil,
+                            tagColor = tagColor,
+                        }
                     end
                 end
-                AddEntries(buffEntries, "buff", buffMax, sz)
-                AddEntries(harmfulEntries, "debuff", debuffMax, sz)
-                AddEntries(harmfulEntries, "externals", extMax, bigSz)
+                AddEntries(buffEntries, "buff", buffMax, sz, "BUFFS", { 0.55, 1.00, 0.55 })
+
+                local harmfulMarks = {}
+                if debuffOn then harmfulMarks[#harmfulMarks + 1] = { kind = "debuff", tag = "DEBUFFS", color = { 1.00, 0.45, 0.45 } } end
+                if dispelOn then harmfulMarks[#harmfulMarks + 1] = { kind = "debuff", tag = "DISPEL", color = { 0.55, 0.78, 1.00 } } end
+                if privateOn then harmfulMarks[#harmfulMarks + 1] = { kind = "debuff", tag = "PRIVATE", color = { 0.78, 0.78, 0.84 } } end
+                for i = 1, debuffMax do
+                    local mark = harmfulMarks[i]
+                    harmfulEntries[#harmfulEntries + 1] = {
+                        kind = (mark and mark.kind) or "debuff",
+                        size = sz,
+                        seq = i,
+                        tag = mark and mark.tag or nil,
+                        tagColor = mark and mark.color or nil,
+                    }
+                end
+                AddEntries(harmfulEntries, "externals", extMax, bigSz, "DEF", { 0.45, 1.00, 0.78 })
                 if #buffEntries == 0 and #harmfulEntries == 0 then
-                    AddEntries(harmfulEntries, "debuff", 1, sz)
+                    AddEntries(harmfulEntries, "debuff", 1, sz, "DEBUFFS", { 1.00, 0.45, 0.45 })
                 end
 
                 local function Metrics(entries, cellSize)
@@ -2332,6 +2353,8 @@ function GF.RefreshPreviewHandles()
 
                 local pool = h._blizzIcons or {}
                 h._blizzIcons = pool
+                local tagPool = h._blizzTags or {}
+                h._blizzTags = tagPool
                 local poolIndex = 1
                 local function PlaceEntry(entry, x, y, cellSize)
                     local tex = pool[poolIndex]
@@ -2350,6 +2373,23 @@ function GF.RefreshPreviewHandles()
                     tex:SetPoint("TOPLEFT", h, "TOPLEFT", x + pad, -(y + pad))
                     tex:SetVertexColor(1, 1, 1, 0.92)
                     tex:Show()
+
+                    local tag = tagPool[poolIndex]
+                    if not tag then
+                        tag = h:CreateFontString(nil, "OVERLAY")
+                        tag:SetFont("Fonts\\FRIZQT__.TTF", 6, "OUTLINE")
+                        tagPool[poolIndex] = tag
+                    end
+                    if entry.tag then
+                        local tc = entry.tagColor or { 1, 1, 1 }
+                        tag:SetText(entry.tag)
+                        tag:SetTextColor(tc[1] or 1, tc[2] or 1, tc[3] or 1, 1)
+                        tag:ClearAllPoints()
+                        tag:SetPoint("TOPLEFT", h, "TOPLEFT", x + pad + 1, -(y + pad + 1))
+                        tag:Show()
+                    else
+                        tag:Hide()
+                    end
                     poolIndex = poolIndex + 1
                 end
                 local function PlaceGrid(entries, startX, startY, cellSize, cols)
@@ -2378,6 +2418,10 @@ function GF.RefreshPreviewHandles()
                 for i = poolIndex, #pool do
                     local tex = pool[i]
                     if tex then tex:Hide() end
+                end
+                for i = poolIndex, #tagPool do
+                    local tag = tagPool[i]
+                    if tag then tag:Hide() end
                 end
                 if h._label then
                     h._label:SetTextColor(0.36, 0.62, 0.95, 0.95)
@@ -2856,7 +2900,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     local hint = headerBar:CreateFontString(nil, "OVERLAY")
     hint:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
     hint:SetPoint("LEFT", hdr, "RIGHT", 8, 0)
-    hint:SetText("click to configure \194\183 drag or arrows to move")
+    hint:SetText("click to configure - custom layers drag; Blizzard is locked")
     hint:SetTextColor(0.32, 0.32, 0.40, 0.5)
 
     -- Header separator
@@ -3120,7 +3164,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     coord:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
     coord:SetPoint("LEFT", statusBar, "LEFT", 10, 0)
     coord:SetTextColor(1, 0.82, 0, 0.9)
-    coord:SetText("Click a handle to select \194\183 drag or arrow keys to move")
+    coord:SetText("Click a handle to select - custom layers can be moved; Blizzard is locked")
     _coordLabel = coord
 
     container:EnableKeyboard(true)
