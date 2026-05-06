@@ -63,12 +63,15 @@ local _cpDB = {
     showText       = true,   fontSize       = 14,
     smooth         = true,   colorOverrides = nil,
     bgColorOverrides = nil,  bars = nil, general = nil,
+    comboPointColorMode = "default",
 }
 local function _CP_RefreshConfig()
     local db = MSUF_DB
     if not db then return end
     local b = db.bars or {}
     local g = db.general or {}
+    local cpMode = b.classPowerComboPointColorMode
+    if cpMode ~= "ramp" and cpMode ~= "custom" then cpMode = "default" end
     _cpDB.bars              = b
     _cpDB.general           = g
     _cpDB.colorByType       = (b.classPowerColorByType ~= false)
@@ -80,6 +83,7 @@ local function _CP_RefreshConfig()
     _cpDB.smooth            = (b.smoothPowerBar ~= false)
     _cpDB.colorOverrides    = (type(g.classPowerColorOverrides) == "table") and g.classPowerColorOverrides or nil
     _cpDB.bgColorOverrides  = (type(g.classPowerBgColorOverrides) == "table") and g.classPowerBgColorOverrides or nil
+    _cpDB.comboPointColorMode = cpMode
 end
 
 -- Spec API (12.0: C_SpecializationInfo preferred, fallback to global)
@@ -413,6 +417,7 @@ local function EnsureDefaults()
     if b.classPowerOffsetY    == nil then b.classPowerOffsetY    = 0     end
     if b.smoothPowerBar       == nil then b.smoothPowerBar       = false end
     if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
+    if b.classPowerComboPointColorMode == nil then b.classPowerComboPointColorMode = "default" end
     if b.classPowerShowText    == nil then b.classPowerShowText    = false end
     if b.classPowerFontSize    == nil then b.classPowerFontSize    = 16    end
     if b.classPowerShowPrediction == nil then b.classPowerShowPrediction = true end
@@ -793,6 +798,35 @@ local function ResolveChargedColor()
     return 0.60, 0.20, 0.80
 end
 
+local COMBO_POINT_SLOT_TOKENS = {
+    "COMBO_POINTS_1", "COMBO_POINTS_2", "COMBO_POINTS_3", "COMBO_POINTS_4",
+    "COMBO_POINTS_5", "COMBO_POINTS_6", "COMBO_POINTS_7",
+}
+local COMBO_POINT_RAMP_R = { 0.00, 0.00, 1.00, 1.00, 1.00, 1.00, 1.00 }
+local COMBO_POINT_RAMP_G = { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
+local COMBO_POINT_RAMP_B = { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
+
+local function ResolveComboPointSlotColor(slot)
+    local mode = _cpDB.comboPointColorMode
+    if mode ~= "ramp" and mode ~= "custom" then return nil end
+
+    slot = tonumber(slot) or 1
+    if slot < 1 then slot = 1 elseif slot > 7 then slot = 7 end
+
+    if mode == "custom" then
+        local ov = _cpDB.colorOverrides
+        local c = ov and ov[COMBO_POINT_SLOT_TOKENS[slot]]
+        if type(c) == "table" then
+            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+                return r, g, b
+            end
+        end
+    end
+
+    return COMBO_POINT_RAMP_R[slot], COMBO_POINT_RAMP_G[slot], COMBO_POINT_RAMP_B[slot]
+end
+
 -- ClassPower visual: segmented bars (created lazily on player frame)
 -- Scale-compensated width helper lives in ClassPower/Core/MSUF_CP_Presentation.lua
 local CDM_GetScaledWidth
@@ -986,6 +1020,7 @@ do
         ResolveClassPowerColor = ResolveClassPowerColor,
         ResolveClassPowerBgColor = ResolveClassPowerBgColor,
         ResolveChargedColor = ResolveChargedColor,
+        ResolveComboPointSlotColor = ResolveComboPointSlotColor,
         ResolveMWAbove5Color = ResolveMWAbove5Color,
         CP_CheckAutoHide = CP_CheckAutoHide,
         WW = WW,

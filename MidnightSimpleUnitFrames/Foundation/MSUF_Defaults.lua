@@ -1273,6 +1273,9 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.smoothPowerBar == nil then
         MSUF_DB.bars.smoothPowerBar = true
     end
+    if MSUF_DB.bars.classPowerComboPointColorMode == nil then
+        MSUF_DB.bars.classPowerComboPointColorMode = "default"
+    end
     if MSUF_DB.bars.realtimePowerText == nil then
         MSUF_DB.bars.realtimePowerText = true
     end

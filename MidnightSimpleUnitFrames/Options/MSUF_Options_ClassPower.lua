@@ -419,7 +419,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     local cpPredictionCheck  = BehCheck("MSUF_ClassPowerPredictionCheck",     "Show resource prediction",      "classPowerShowPrediction",    2, 4, true)
 
     -- Section 3: Style
-    local secStyle, styBody = MakeCollapsibleSection(cpPanel, secBehav, SEC_W, 430, TR("Style"), false)
+    local secStyle, styBody = MakeCollapsibleSection(cpPanel, secBehav, SEC_W, 462, TR("Style"), false)
 
     local cpColorCheck = EnhanceCheck(UI.Check({
         name = "MSUF_ClassPowerColorCheck", parent = styBody,
@@ -428,6 +428,35 @@ local function BuildClassPowerOptions(leftName, rightName)
         get = function() return B().classPowerColorByType ~= false end,
         set = function(v) B().classPowerColorByType = v; CPRefresh() end,
     }))
+
+    local cpComboModeLabel = styBody:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    cpComboModeLabel:SetPoint("TOPLEFT", cpColorCheck, "BOTTOMLEFT", 0, -10)
+    cpComboModeLabel:SetText(TR("Combo point colors"))
+    cpComboModeLabel:SetTextColor(0.88, 0.88, 0.88)
+    cpComboModeLabel:SetWidth(R_LABEL_W)
+    cpComboModeLabel:SetJustifyH("LEFT")
+    ApplyReadableFont(cpComboModeLabel)
+
+    local cpComboModeDrop = UI.Dropdown({
+        name = "MSUF_CPComboPointColorModeDrop", parent = styBody,
+        anchor = cpComboModeLabel, anchorPoint = "TOPLEFT", x = R_LABEL_W + 16, y = 2, width = DD_W,
+        items = {
+            { key = "default", label = TR("Resource color") },
+            { key = "ramp",    label = TR("Combo ramp") },
+            { key = "custom",  label = TR("Custom slots") },
+        },
+        get = function()
+            local mode = B().classPowerComboPointColorMode
+            if mode ~= "ramp" and mode ~= "custom" then mode = "default" end
+            return mode
+        end,
+        set = function(v)
+            if v ~= "ramp" and v ~= "custom" then v = "default" end
+            B().classPowerComboPointColorMode = v
+            CPRefresh()
+        end,
+    })
+    EnhanceDropdown(cpComboModeDrop, DD_W)
 
     local percentAlphaOpts = {
         toDB = function(v)
@@ -443,7 +472,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         end,
     }
 
-    local cpFontSizeRow    = MakeRow("MSUF_CPFontSize",    "Font size",  styBody, 6, 32, 1,  "classPowerFontSize",     cpColorCheck,           "TOPLEFT", 0, -10, nil, R_LABEL_W)
+    local cpFontSizeRow    = MakeRow("MSUF_CPFontSize",    "Font size",  styBody, 6, 32, 1,  "classPowerFontSize",     cpComboModeLabel,       "TOPLEFT", 0, -10, nil, R_LABEL_W)
     local cpTextOffsetXRow = MakeRow("MSUF_CPTextOffsetX",  "Text X",    styBody, -200, 200, 1, "classPowerTextOffsetX", cpFontSizeRow.label,   "TOPLEFT", 0, -10, nil, R_LABEL_W)
     local cpTextOffsetYRow = MakeRow("MSUF_CPTextOffsetY",  "Text Y",    styBody, -200, 200, 1, "classPowerTextOffsetY", cpTextOffsetXRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W)
     local cpBgAlphaRow     = MakeRow("MSUF_CPBgAlpha",      "BG opacity",styBody, 0, 100, 1,  "classPowerBgAlpha",      cpTextOffsetYRow.label, "TOPLEFT", 0, -10, nil, R_LABEL_W, percentAlphaOpts)
@@ -654,6 +683,8 @@ local function BuildClassPowerOptions(leftName, rightName)
         cpFontSizeRow:SetEnabled(cpOn and cpTextOn)
         cpTextOffsetXRow:SetEnabled(cpOn and cpTextOn)
         cpTextOffsetYRow:SetEnabled(cpOn and cpTextOn)
+        SetCPOptionEnabled(cpComboModeLabel, cpOn)
+        SetCPOptionEnabled(cpComboModeDrop, cpOn)
 
         for _, cb in ipairs({
             cpAnchorCDCheck, cpChargedCheck, cpTextCheck, cpRuneTimeCheck, cpFillReverseCheck,
@@ -686,6 +717,7 @@ local function BuildClassPowerOptions(leftName, rightName)
 
     SyncAll()
     if cpWidthModeDrop and cpWidthModeDrop.Refresh then cpWidthModeDrop:Refresh() end
+    if cpComboModeDrop and cpComboModeDrop.Refresh then cpComboModeDrop:Refresh() end
     if dpbWidthModeDrop and dpbWidthModeDrop.Refresh then dpbWidthModeDrop:Refresh() end
 
     for _, cb in ipairs({ cpShowCheck, cpColorCheck, cpAnchorCDCheck, cpChargedCheck, cpTextCheck,
@@ -698,6 +730,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     cpPanel:HookScript("OnShow", function()
         SyncAll()
         if cpWidthModeDrop and cpWidthModeDrop.Refresh then cpWidthModeDrop:Refresh() end
+        if cpComboModeDrop and cpComboModeDrop.Refresh then cpComboModeDrop:Refresh() end
         if dpbWidthModeDrop and dpbWidthModeDrop.Refresh then dpbWidthModeDrop:Refresh() end
     end)
 

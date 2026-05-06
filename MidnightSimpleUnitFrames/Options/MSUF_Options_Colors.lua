@@ -2907,7 +2907,7 @@ end -- section 9
 --------------------------------------------------
 -- Section 10: Class Power Colors
 --------------------------------------------------
-S.sec10Box, S.sec10Body = F.MakeCollapsibleSection(content, 200, "Class Power Colors", false)
+S.sec10Box, S.sec10Body = F.MakeCollapsibleSection(content, 292, "Class Power Colors", false)
 S.sec10Box:SetPoint("TOPLEFT", S.sec9Box, "BOTTOMLEFT", 0, -6)
 do local content = S.sec10Body
 
@@ -2947,6 +2947,26 @@ local cpColBgResetBtn = CreateFrame("Button", "MSUF_Colors_ClassPowerBgColorRese
 cpColBgResetBtn:SetText("Reset")
 cpColBgResetBtn:SetSize(70, 18)
 cpColBgResetBtn:SetPoint("LEFT", cpColBgSwatch, "RIGHT", 10, 0)
+
+local cpSlotPanel = CreateFrame("Frame", nil, content)
+cpSlotPanel:SetPoint("TOPLEFT", cpColBgLabel, "BOTTOMLEFT", 0, -24)
+cpSlotPanel:SetSize(620, 72)
+
+local cpSlotLabel = cpSlotPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+cpSlotLabel:SetPoint("TOPLEFT", cpSlotPanel, "TOPLEFT", 0, 0)
+cpSlotLabel:SetText("Combo point slot colors")
+
+local cpSlotModeDrop = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown("MSUF_Colors_CPComboPointModeDropdown", cpSlotPanel) or CreateFrame("Frame", "MSUF_Colors_CPComboPointModeDropdown", cpSlotPanel, "UIDropDownMenuTemplate"))
+cpSlotModeDrop:SetPoint("LEFT", cpSlotLabel, "RIGHT", 12, 1)
+UIDropDownMenu_SetWidth(cpSlotModeDrop, 140)
+MSUF_ExpandDropdownClickArea(cpSlotModeDrop)
+
+local cpSlotResetBtn = CreateFrame("Button", "MSUF_Colors_CPComboPointSlotsResetBtn", cpSlotPanel, "UIPanelButtonTemplate")
+cpSlotResetBtn:SetText("Reset slots")
+cpSlotResetBtn:SetSize(92, 18)
+cpSlotResetBtn:SetPoint("LEFT", cpSlotModeDrop, "RIGHT", 12, 2)
+
+local cpSlotSwatches = {}
 
 -- Class power token options (secondary resources)
 local CP_TOKEN_OPTIONS = {
@@ -2989,8 +3009,31 @@ local CP_TOKEN_OPTIONS = {
     { token = "RESOURCE_TEXT",  label = "Resource Text" },
 }
 
+local CP_SLOT_TOKENS = {
+    "COMBO_POINTS_1", "COMBO_POINTS_2", "COMBO_POINTS_3", "COMBO_POINTS_4",
+    "COMBO_POINTS_5", "COMBO_POINTS_6", "COMBO_POINTS_7",
+}
+local CP_SLOT_DEFAULTS = {
+    COMBO_POINTS_1 = { 0.00, 0.95, 1.00 },
+    COMBO_POINTS_2 = { 0.00, 0.95, 1.00 },
+    COMBO_POINTS_3 = { 1.00, 1.00, 0.00 },
+    COMBO_POINTS_4 = { 1.00, 1.00, 0.00 },
+    COMBO_POINTS_5 = { 1.00, 1.00, 0.00 },
+    COMBO_POINTS_6 = { 1.00, 0.05, 0.05 },
+    COMBO_POINTS_7 = { 1.00, 0.05, 0.05 },
+}
+local CP_SLOT_MODE_LABELS = {
+    default = "Resource color",
+    ramp = "Combo ramp",
+    custom = "Custom slots",
+}
+
 F.EnsureClassPowerColorsDB = function()
     EnsureDB()
+    MSUF_DB.bars = MSUF_DB.bars or {}
+    if MSUF_DB.bars.classPowerComboPointColorMode == nil then
+        MSUF_DB.bars.classPowerComboPointColorMode = "default"
+    end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
     if type(g.classPowerColorOverrides) ~= "table" then
@@ -3006,6 +3049,10 @@ F.GetDefaultClassPowerColor = function(token)
     -- Charged/empowered has a built-in default (not in PowerBarColor)
     if token == "CHARGED" then
         return 0.60, 0.20, 0.80  -- MidnightRogueBars purple
+    end
+    local slotDefault = CP_SLOT_DEFAULTS[token]
+    if slotDefault then
+        return slotDefault[1], slotDefault[2], slotDefault[3]
     end
     -- Resource text: default = global font color from MSUF settings
     if token == "RESOURCE_TEXT" then
@@ -3148,6 +3195,135 @@ F.GetEffectiveClassPowerBgColor = function(token)
     return 0, 0, 0, false
 end
 
+local function GetComboPointColorMode()
+    local b = MSUF_DB and MSUF_DB.bars
+    local mode = b and b.classPowerComboPointColorMode or "default"
+    if mode ~= "ramp" and mode ~= "custom" then mode = "default" end
+    return mode
+end
+
+local function RefreshComboPointModeDropdown()
+    local mode = GetComboPointColorMode()
+    UIDropDownMenu_SetSelectedValue(cpSlotModeDrop, mode)
+    UIDropDownMenu_SetText(cpSlotModeDrop, CP_SLOT_MODE_LABELS[mode] or CP_SLOT_MODE_LABELS.default)
+end
+
+local function RefreshComboPointSlotSwatches()
+    local anyOverride = false
+    local mode = GetComboPointColorMode()
+    for i = 1, #CP_SLOT_TOKENS do
+        local token = CP_SLOT_TOKENS[i]
+        local sw = cpSlotSwatches[i]
+        local r, gCol, bCol, hasOverride
+        if mode == "custom" then
+            r, gCol, bCol, hasOverride = F.GetEffectiveClassPowerColor(token)
+        else
+            r, gCol, bCol = F.GetDefaultClassPowerColor(token)
+            local _r, _g, _b, slotOverride = F.GetEffectiveClassPowerColor(token)
+            hasOverride = slotOverride
+        end
+        if sw and sw.tex then sw.tex:SetColorTexture(r, gCol, bCol) end
+        if sw and sw.SetAlpha then sw:SetAlpha(mode == "default" and 0.65 or 1) end
+        anyOverride = anyOverride or hasOverride
+    end
+    if cpSlotResetBtn then
+        cpSlotResetBtn:SetEnabled(anyOverride)
+        cpSlotResetBtn:SetAlpha(anyOverride and 1 or 0.35)
+    end
+end
+
+local function ApplyComboPointColorMode(mode)
+    if mode ~= "ramp" and mode ~= "custom" then mode = "default" end
+    F.EnsureClassPowerColorsDB()
+    MSUF_DB.bars.classPowerComboPointColorMode = mode
+    RefreshComboPointModeDropdown()
+    if F.UpdateClassPowerColorControls then
+        F.UpdateClassPowerColorControls()
+    end
+    if _G.MSUF_ClassPower_InvalidateColors then
+        _G.MSUF_ClassPower_InvalidateColors()
+    end
+    PushVisualUpdates()
+end
+
+for i = 1, #CP_SLOT_TOKENS do
+    local idx = i
+    local sw = CreateFrame("Button", "MSUF_Colors_CPComboPointSlot" .. i .. "Swatch", cpSlotPanel)
+    sw:SetSize(32, 18)
+    if i == 1 then
+        sw:SetPoint("TOPLEFT", cpSlotLabel, "BOTTOMLEFT", 0, -16)
+    else
+        sw:SetPoint("LEFT", cpSlotSwatches[i - 1], "RIGHT", 8, 0)
+    end
+    local tex = sw:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints()
+    sw.tex = tex
+    local num = sw:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    num:SetPoint("CENTER", sw, "CENTER", 0, 0)
+    num:SetText(tostring(idx))
+    num:SetTextColor(1, 1, 1, 1)
+    num:SetShadowColor(0, 0, 0, 1)
+    num:SetShadowOffset(1, -1)
+    sw:SetScript("OnClick", function()
+        local token = CP_SLOT_TOKENS[idx]
+        local r, gCol, bCol
+        if GetComboPointColorMode() == "custom" then
+            r, gCol, bCol = F.GetEffectiveClassPowerColor(token)
+        else
+            r, gCol, bCol = F.GetDefaultClassPowerColor(token)
+        end
+        OpenColorPicker(r, gCol, bCol, function(nr, ng, nb)
+            local g = F.EnsureClassPowerColorsDB()
+            g.classPowerColorOverrides[token] = { nr, ng, nb }
+            MSUF_DB.bars.classPowerComboPointColorMode = "custom"
+            RefreshComboPointModeDropdown()
+            F.UpdateClassPowerColorControls()
+            if _G.MSUF_ClassPower_InvalidateColors then
+                _G.MSUF_ClassPower_InvalidateColors()
+            end
+            PushVisualUpdates()
+        end)
+    end)
+    cpSlotSwatches[i] = sw
+end
+
+local function CPComboPointModeDropdown_Init(self, level)
+    local selected = GetComboPointColorMode()
+    local modes = {
+        { key = "default", label = CP_SLOT_MODE_LABELS.default },
+        { key = "ramp",    label = CP_SLOT_MODE_LABELS.ramp },
+        { key = "custom",  label = CP_SLOT_MODE_LABELS.custom },
+    }
+    for _, opt in ipairs(modes) do
+        local modeKey = opt.key
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = opt.label
+        info.value = modeKey
+        info.func = function()
+            ApplyComboPointColorMode(modeKey)
+        end
+        info.checked = (modeKey == selected)
+        UIDropDownMenu_AddButton(info, level)
+    end
+end
+
+UIDropDownMenu_Initialize(cpSlotModeDrop, CPComboPointModeDropdown_Init)
+RefreshComboPointModeDropdown()
+
+cpSlotResetBtn:SetScript("OnClick", function()
+    MSUF_ConfirmColorReset("combo point slot", function()
+        local g = F.EnsureClassPowerColorsDB()
+        for i = 1, #CP_SLOT_TOKENS do
+            g.classPowerColorOverrides[CP_SLOT_TOKENS[i]] = nil
+        end
+        F.UpdateClassPowerColorControls()
+        if _G.MSUF_ClassPower_InvalidateColors then
+            _G.MSUF_ClassPower_InvalidateColors()
+        end
+        PushVisualUpdates()
+    end)
+end)
+
 F.UpdateClassPowerColorControls = function()
     local token = cpColTypeDrop._msufSelectedToken or "COMBO_POINTS"
     local r, gCol, bCol, hasOverride = F.GetEffectiveClassPowerColor(token)
@@ -3165,6 +3341,14 @@ F.UpdateClassPowerColorControls = function()
     if cpColBgResetBtn then
         cpColBgResetBtn:SetEnabled(hasBgOverride)
         cpColBgResetBtn:SetAlpha(hasBgOverride and 1 or 0.35)
+    end
+    local showSlots = (token == "COMBO_POINTS")
+    if cpSlotPanel then
+        cpSlotPanel:SetShown(showSlots)
+    end
+    if showSlots then
+        RefreshComboPointModeDropdown()
+        RefreshComboPointSlotSwatches()
     end
 end
 
@@ -3251,7 +3435,7 @@ end)
 
 F.UpdateClassPowerColorControls()
 
-S.lastControl = cpColBgResetBtn
+S.lastControl = cpSlotResetBtn
 
 end -- section 10
 
