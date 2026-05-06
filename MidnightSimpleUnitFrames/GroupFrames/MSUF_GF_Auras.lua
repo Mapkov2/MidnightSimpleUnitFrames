@@ -1711,16 +1711,12 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
 
     local iconSize = GF.GetBlizzardAuraIconSize(conf, scale, frameScale)
     local bigDefensiveSize = renderExt and ScaleFrameValue(extCfg.size or iconSize, (scale or 1) * (frameScale or 1), 8) or iconSize
-    local iconAnchor = auras.blizzardContainerAnchor
-    if iconAnchor == "FRAME" or iconAnchor == "" then
-        iconAnchor = nil
-    end
+    -- Native Blizzard containers are intentionally not user-positioned.
+    -- Blizzard owns the exact anchor and final placement; MSUF only supplies
+    -- the native renderer settings such as aura types, counts and sizes.
+    local iconAnchor = nil
     local iconOffsetX = 0
     local iconOffsetY = 0
-    if iconAnchor then
-        iconOffsetX = ScaleFrameValue(auras.blizzardContainerX or 0, frameScale or 1)
-        iconOffsetY = ScaleFrameValue(auras.blizzardContainerY or 0, frameScale or 1)
-    end
     if renderPrivate and GF.ClearPrivateAuras then
         GF.ClearPrivateAuras(f)
     end

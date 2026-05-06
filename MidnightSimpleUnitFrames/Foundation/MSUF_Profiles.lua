@@ -830,6 +830,13 @@ local MSUF_GF_BLIZZARD_TYPE_DEFAULTS = {
     privateAuras = true,
 }
 
+local function MSUF_ProfileIO_NormalizeBlizzardAuraPosition(auras)
+    if type(auras) ~= "table" then return end
+    auras.blizzardContainerAnchor = "FRAME"
+    auras.blizzardContainerX = 0
+    auras.blizzardContainerY = 0
+end
+
 local function MSUF_ProfileIO_GetGFAuraFilter()
     local gf = (type(ns) == "table" and ns.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF)
     return (gf and gf.AuraFilter) or _G.MSUF_GF_AuraFilter
@@ -884,9 +891,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
     if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
     if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
     if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
-    if auras.blizzardContainerAnchor == nil then auras.blizzardContainerAnchor = "FRAME" end
-    if auras.blizzardContainerX == nil then auras.blizzardContainerX = 0 end
-    if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end
+    MSUF_ProfileIO_NormalizeBlizzardAuraPosition(auras)
 
     MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "buff", "RAID")
     MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "debuff", "ALL")
