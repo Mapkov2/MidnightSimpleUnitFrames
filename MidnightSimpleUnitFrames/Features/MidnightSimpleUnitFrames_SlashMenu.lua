@@ -464,13 +464,14 @@ return end
 MSUF_PENDING_RELOAD_RECOMMEND_LABEL=tostring(label or"")
 if MSUF_PENDING_RELOAD_RECOMMEND_LABEL==""then MSUF_PENDING_RELOAD_RECOMMEND_LABEL="these changes"end
 if not StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"]
-then StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"]={text="MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?",button1="Reload",button2="Not now",timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3,OnAccept=function() MSUF_PENDING_RELOAD_RECOMMEND_LABEL=nil if type(ReloadUI)=="function"then ReloadUI()
+then StaticPopupDialogs["MSUF_RELOAD_RECOMMENDED"]={text=T("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),button1=T("Reload"),button2=T("Not now"),timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3,OnAccept=function() MSUF_PENDING_RELOAD_RECOMMEND_LABEL=nil if type(ReloadUI)=="function"then ReloadUI()
 end
 end
 ,OnCancel=function() MSUF_PENDING_RELOAD_RECOMMEND_LABEL=nil end
 ,}
 end
 StaticPopup_Show("MSUF_RELOAD_RECOMMENDED",MSUF_PENDING_RELOAD_RECOMMEND_LABEL) end
+_G.MSUF_ShowReloadRecommendedPopup=MSUF_ShowReloadRecommendedPopup
 local MSUF_PENDING_RELOAD_LABEL=nil;
 local MSUF_PENDING_RELOAD_FN=nil local function MSUF_ShowReloadConfirm(label,fn) if InCombatLockdown and InCombatLockdown()
 then MSUF_Print("Cannot reload UI in combat.") return end

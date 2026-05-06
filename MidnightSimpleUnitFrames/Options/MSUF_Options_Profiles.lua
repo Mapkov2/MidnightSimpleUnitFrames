@@ -307,12 +307,16 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                     and (_G.MSUF_ImportLegacyFromString or ns.MSUF_ImportLegacyFromString)
                     or  (_G.MSUF_ImportFromString or ns.MSUF_ImportFromString)
                 if type(Importer) ~= "function" then print("|cffff0000MSUF:|r Import failed: importer missing."); return end
-                Importer(str)
+                local ok = Importer(str)
+                if ok == false then return end
                 if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
                 if _G.MSUF_CallUpdateAllFonts then _G.MSUF_CallUpdateAllFonts() end
                 if panel.LoadFromDB then panel:LoadFromDB() end
                 if panel.UpdateProfileUI then panel:UpdateProfileUI(MSUF_ActiveProfile) end
                 importPopup:Hide()
+                if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                    _G.MSUF_ShowReloadRecommendedPopup(TR("Profile import"))
+                end
             end
             doBtn:SetScript("OnClick", RunImport)
             importEdit:SetScript("OnEnterPressed", RunImport)
