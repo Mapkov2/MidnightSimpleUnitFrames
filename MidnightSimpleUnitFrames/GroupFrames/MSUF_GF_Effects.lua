@@ -1650,6 +1650,7 @@ function GF.BuildFrameCache(f)
                    (c.dispelScan and GF._playerCanDispel))
     c.anyAuraGrp = c.nativeBlizzardAuras or c.customAuraGrp
     c.nativeBlizzardAuraOnly = c.nativeBlizzardAuras and not c.customAuraGrp
+    c.auraCacheSig = nil
 
     -- Corner indicators
     c.ciEn = conf.ciEnabled ~= false
