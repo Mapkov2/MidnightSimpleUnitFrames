@@ -3126,10 +3126,14 @@ local function _gfMarkTextDirty(f)
 end
 
 function _gfFlushDirtyText()
-    while _gfTextHead <= _gfTextTail do
-        local f = _gfTextQueue[_gfTextHead]
-        _gfTextQueue[_gfTextHead] = nil
-        _gfTextHead = _gfTextHead + 1
+    local queue = _gfTextQueue
+    local head = _gfTextHead
+    local stopTail = _gfTextTail
+
+    while head <= stopTail do
+        local f = queue[head]
+        queue[head] = nil
+        head = head + 1
         if f then
             _gfTextQueued[f] = nil
             _gfTextDirtyFrames[f] = nil
@@ -3211,8 +3215,32 @@ function _gfFlushDirtyText()
             end
         end
     end
-    _gfTextHead, _gfTextTail = 1, 0
-    _gfTextQueue.__flushQueued = nil
+
+    -- Snapshot semantics: frames marked dirty by callbacks during this flush
+    -- were appended after stopTail. Preserve them for the next frame instead
+    -- of extending this flush or dropping them in the reset below.
+    local liveTail = _gfTextTail
+    if liveTail >= head then
+        local writeIdx = 0
+        for i = head, liveTail do
+            local f = queue[i]
+            queue[i] = nil
+            if f then
+                writeIdx = writeIdx + 1
+                queue[writeIdx] = f
+            end
+        end
+        _gfTextHead, _gfTextTail = 1, writeIdx
+        if writeIdx > 0 then
+            queue.__flushQueued = true
+            _MSUF_ScheduleOnce("GF_TEXT_FLUSH", _gfFlushDirtyText)
+        else
+            queue.__flushQueued = nil
+        end
+    else
+        _gfTextHead, _gfTextTail = 1, 0
+        queue.__flushQueued = nil
+    end
 end
 -- Expose for manual flush (Options live-preview, unit show, etc.)
 GF._FlushDirtyText = _gfFlushDirtyText
