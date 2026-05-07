@@ -1471,7 +1471,8 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         end
 
         r = RowDivider(body, r)
-        r = RowSubLabel(body, r, L["Cooldown Text"] or "Cooldown Text")
+        r = RowSubLabel(body, r, L["Cooldown"] or "Cooldown")
+        r = RowCheck(body, r, L["Show Cooldown Swipe"] or "Show Cooldown Swipe", gk, "showCooldownSwipe", 0)
         r = RowAuraTextPreview(body, r, gk)
         r = RowCheck(body, r, L["Show Cooldown Text"] or "Show Cooldown Text", gk, "showCooldown", 0)
         r = RowSlider(body, r, L["Font size"] or "Font size", gk, "cooldownSize", 6, 24, 1, 8)
@@ -2495,6 +2496,35 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     end
 
     ----------------------------------------------------------------
+    -- Section: Cooldown Style
+    ----------------------------------------------------------------
+    do
+        local box, body = AddSection(120, L["Cooldown Style"] or "Cooldown Style", false, "cooldownstyle")
+
+        local cdSwipeChk = SCheck({
+            name = "MSUF_GF_AuraCooldownSwipeStyleCheck", parent = body,
+            anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -10,
+            label = L["Swipe darkens on loss"] or "Swipe darkens on loss",
+            get = function(k)
+                local conf = GF.GetConf(k)
+                return conf and conf.cooldownSwipeDarkenOnLoss == true
+            end,
+            set = function(k, v)
+                local conf = GF.GetConf(k)
+                if conf then conf.cooldownSwipeDarkenOnLoss = v and true or false end
+                RequestVisualRefresh()
+            end,
+        })
+
+        local cdSwipeHint = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        cdSwipeHint:SetPoint("TOPLEFT", cdSwipeChk, "BOTTOMLEFT", 24, -2)
+        cdSwipeHint:SetWidth(560)
+        cdSwipeHint:SetJustifyH("LEFT")
+        cdSwipeHint:SetText(L["Off = default Blizzard cooldown swipe. On = elapsed-time swipe that darkens as time is lost."] or "Off = default Blizzard cooldown swipe. On = elapsed-time swipe that darkens as time is lost.")
+        cdSwipeHint:SetTextColor(0.5, 0.55, 0.65)
+    end
+
+    ----------------------------------------------------------------
     -- Section: Blizzard Renderer
     ----------------------------------------------------------------
     do
@@ -2677,7 +2707,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Buffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("buff", L["Buffs"], 1460, function(body, prevRow, gk)
+    BuildAuraGroupSection("buff", L["Buffs"], 1490, function(body, prevRow, gk)
         local r = BuildSpellFilterWidgets(body, prevRow, gk)
         return r
     end)
@@ -2685,7 +2715,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Debuffs
     ----------------------------------------------------------------
-    BuildAuraGroupSection("debuff", L["Debuffs"], 1600, function(body, prevRow, gk)
+    BuildAuraGroupSection("debuff", L["Debuffs"], 1630, function(body, prevRow, gk)
         local r = RowCheck(body, prevRow, L["Show Dispel Type Border"], gk, "showDispelBorder")
         r = BuildSpellFilterWidgets(body, r, gk)
         return r
@@ -2694,7 +2724,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
     ----------------------------------------------------------------
     -- Section: Defensives
     ----------------------------------------------------------------
-    BuildAuraGroupSection("externals", L["Defensives"], 860)
+    BuildAuraGroupSection("externals", L["Defensives"], 890)
 
     ----------------------------------------------------------------
     -- Section: Text Coloring

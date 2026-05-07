@@ -604,10 +604,10 @@ end
 -- transitions (most aura updates re-enter ApplyCooldown but keep the
 -- same on/off state). Cheap when state is steady.
 ------------------------------------------------------------------------
-local function ApplyCooldown(ic, unit, auraInstanceID, showCd)
+local function ApplyCooldown(ic, unit, auraInstanceID, showCooldown, showText)
     local cd = ic.cooldown
     if not cd then return end
-    if not showCd then
+    if not showCooldown then
         ic._msufGF_cdDurationObj = nil
         cd._msufGF_cdDurationObj = nil
         if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
@@ -638,7 +638,7 @@ local function ApplyCooldown(ic, unit, auraInstanceID, showCd)
             ic._msufGF_cdDurationObj = obj
             cd._msufGF_cdDurationObj = obj
             cd._msufCooldownFontStringDirty = true
-            if _GF_TouchCooldownTextIcon then _GF_TouchCooldownTextIcon(ic) end
+            if showText and _GF_TouchCooldownTextIcon then _GF_TouchCooldownTextIcon(ic) end
             if cd._msufGFCdAuraTime ~= true and cd.SetUseAuraDisplayTime then
                 cd._msufGFCdAuraTime = true
                 cd:SetUseAuraDisplayTime(true)
@@ -750,6 +750,10 @@ local function WantsCooldownText(gcfg)
     -- GF uses showCooldown as the runtime key. Legacy showCooldownText values
     -- are ignored here so stale saved vars cannot suppress Blizzard's timer.
     return not (gcfg and gcfg.showCooldown == false)
+end
+
+local function WantsCooldownSwipe(gcfg)
+    return not (gcfg and gcfg.showCooldownSwipe == false)
 end
 
 local function IsCooldownFontString(region)
@@ -1233,13 +1237,14 @@ do
     end
 end
 
--- ApplyCooldownVisualStyle(cd, reverse)
+-- ApplyCooldownVisualStyle(cd, reverse, drawSwipe)
 -- `reverse` is the cooldownSwipeDarkenOnLoss bool. Caller pre-resolves it
 -- once per render (RenderGroup) or per-icon-event (RefreshAuraIcon) from
 -- f._c.cdReverse — eliminates GF.GetConf from this hot path.
 -- Diff-gates remain per-icon (correctness — required for live-apply).
-local function ApplyCooldownVisualStyle(cd, reverse)
+local function ApplyCooldownVisualStyle(cd, reverse, drawSwipe)
     if not cd then return end
+    drawSwipe = drawSwipe ~= false
 
     if cd._msufGFDrawEdge ~= false then
         cd._msufGFDrawEdge = false
@@ -1252,6 +1257,10 @@ local function ApplyCooldownVisualStyle(cd, reverse)
     if cd._msufGFReverse ~= reverse then
         cd._msufGFReverse = reverse
         cd:SetReverse(reverse)
+    end
+    if cd._msufGFDrawSwipe ~= drawSwipe then
+        cd._msufGFDrawSwipe = drawSwipe
+        cd:SetDrawSwipe(drawSwipe)
     end
 end
 
@@ -1881,7 +1890,9 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local shown = 0
     local isBuff = (groupKey == "buff")
     local isExt  = (groupKey == "externals")
-    local showCd = WantsCooldownText(gcfg)
+    local showCdText = WantsCooldownText(gcfg)
+    local showCdSwipe = WantsCooldownSwipe(gcfg)
+    local showCdVisual = showCdText or showCdSwipe
     local showStk = (gcfg.showStacks ~= false)
     local step = iconSize + spacing
     local topDispel = nil
@@ -1972,14 +1983,14 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                     if ic then
                         ic._msufAuraGroupCfg = gcfg
                         ic._msufAuraFrameScale = frameScale
-                        ApplyCooldownVisualStyle(ic.cooldown, _styleReverse)
+                        ApplyCooldownVisualStyle(ic.cooldown, _styleReverse, showCdSwipe)
                         local prevAid = ic._msufAuraID
                         if prevAid == aid then
                             -- ══ SAME AURA ══ cheap refresh (cooldown sweep + stacks + layout)
-                            ApplyCooldown(ic, unit, aid, showCd)
+                            ApplyCooldown(ic, unit, aid, showCdVisual, showCdText)
                             local cd = ic.cooldown
                             if cd then
-                                local wantHide = not showCd
+                                local wantHide = not showCdText
                                 if ic._msufCdHidden ~= wantHide then
                                     ic._msufCdHidden = wantHide
                                     cd:SetHideCountdownNumbers(wantHide)
@@ -2004,10 +2015,10 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                             ic.texture:SetTexture(aura.icon or "")
                             if not ic.texture:IsShown() then ic.texture:Show() end
 
-                            ApplyCooldown(ic, unit, aid, showCd)
+                            ApplyCooldown(ic, unit, aid, showCdVisual, showCdText)
                             local cd = ic.cooldown
                             if cd then
-                                local wantHide = not showCd
+                                local wantHide = not showCdText
                                 if ic._msufCdHidden ~= wantHide then
                                     ic._msufCdHidden = wantHide
                                     cd:SetHideCountdownNumbers(wantHide)
@@ -2423,7 +2434,6 @@ function GF.RefreshAuraIcon(icon, unit, aid)
         -- Avoids GF.GetConf in this hot path (called per updated aura per UNIT_AURA event).
         local oc = owner._c
         local reverse = (oc and oc.cdReverse) or false
-        ApplyCooldownVisualStyle(icon.cooldown, reverse)
         gcfg = icon._msufAuraGroupCfg
         frameScale = icon._msufAuraFrameScale or frameScale
         if not gcfg then
@@ -2435,9 +2445,11 @@ function GF.RefreshAuraIcon(icon, unit, aid)
                 gcfg = GetGroupCfg(kind, groupKey)
             end
         end
+        ApplyCooldownVisualStyle(icon.cooldown, reverse, WantsCooldownSwipe(gcfg))
     end
-    local showCd = WantsCooldownText(gcfg)
-    ApplyCooldown(icon, unit, aid, showCd)
+    local showCdText = WantsCooldownText(gcfg)
+    local showCdSwipe = WantsCooldownSwipe(gcfg)
+    ApplyCooldown(icon, unit, aid, showCdText or showCdSwipe, showCdText)
     if gcfg then
         local gFont, gFlags = ResolveGlobalFont()
         local baseR, baseG, baseB, baseA = ResolveCooldownBaseColor()
