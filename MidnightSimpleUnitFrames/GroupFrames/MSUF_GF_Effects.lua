@@ -1241,10 +1241,18 @@ local function ApplyRangeFade(f, unit, inRange)
     local c = f._c
     local kind = f._msufGFKind or "party"
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+    if f._msufGFRangeFadeUnit ~= unit then
+        f._msufGFRangeFadeUnit = unit
+        f._msufGFRangeFadeApplied = nil
+        f._msufGFRangeFadeLastBool = nil
+    end
     local conf
     if not c then conf = GF.GetConf(kind) end
     local frameAlpha = (c and c.frameAlpha) or _GF_GetFrameAlpha(kind, conf)
     if (c and not c.rfEn) or (conf and conf.rangeFadeEnabled == false) then
+        f._msufGFRangeFadeUnit = nil
+        f._msufGFRangeFadeApplied = nil
+        f._msufGFRangeFadeLastBool = nil
         _ClearHealthRangeFade(f, kind)
         if f.SetAlpha then f:SetAlpha(frameAlpha) end
         return
@@ -1255,6 +1263,9 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Solo guard (EQoL: IsInGroup + IsInRaid)
     if IsInGroup and IsInRaid then
         if not IsInGroup() and not IsInRaid() then
+            f._msufGFRangeFadeUnit = nil
+            f._msufGFRangeFadeApplied = nil
+            f._msufGFRangeFadeLastBool = nil
             _ClearHealthRangeFade(f, kind)
             if f.SetAlpha then f:SetAlpha(frameAlpha) end
             return
@@ -1264,6 +1275,9 @@ local function ApplyRangeFade(f, unit, inRange)
     -- Offline (EQoL: UnsecretBool on UnitIsConnected)
     local connected = unit and UnitIsConnected and _UnsecretBool(UnitIsConnected(unit)) or nil
     if connected == false then
+        f._msufGFRangeFadeUnit = nil
+        f._msufGFRangeFadeApplied = nil
+        f._msufGFRangeFadeLastBool = nil
         local offA = (c and c.offAlpha) or conf.offlineAlpha or fadeAlpha
         if hpMode then
             _ApplyHealthRangeFade(f, kind, nil, offA, offA)
@@ -1282,6 +1296,10 @@ local function ApplyRangeFade(f, unit, inRange)
     if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
 
     if type(inRange) ~= "nil" then
+        f._msufGFRangeFadeApplied = true
+        if not (issecretvalue and issecretvalue(inRange)) then
+            f._msufGFRangeFadeLastBool = inRange and true or false
+        end
         if hpMode then
             _ApplyHealthRangeFade(f, kind, inRange, fadeAlpha)
         else
@@ -1292,7 +1310,18 @@ local function ApplyRangeFade(f, unit, inRange)
             end
         end
     else
-        if f.SetAlpha then f:SetAlpha(frameAlpha) end
+        local last = f._msufGFRangeFadeLastBool
+        if f._msufGFRangeFadeApplied and type(last) ~= "nil" then
+            if hpMode then
+                _ApplyHealthRangeFade(f, kind, last, fadeAlpha)
+            elseif f.SetAlphaFromBoolean then
+                f:SetAlphaFromBoolean(last, frameAlpha, frameAlpha * fadeAlpha)
+            elseif f.SetAlpha then
+                f:SetAlpha(frameAlpha)
+            end
+        elseif f.SetAlpha then
+            f:SetAlpha(frameAlpha)
+        end
     end
 end
 
@@ -1309,6 +1338,9 @@ function GF.RefreshRangeFade()
                 if unit and UnitExists(unit) then
                     ApplyRangeFade(f, unit)
                 else
+                    f._msufGFRangeFadeUnit = nil
+                    f._msufGFRangeFadeApplied = nil
+                    f._msufGFRangeFadeLastBool = nil
                     _ClearHealthRangeFade(f, f._msufGFKind or "party")
                     _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
                 end
@@ -1322,6 +1354,9 @@ function GF.RefreshRangeFade()
                 if unit and UnitExists(unit) then
                     ApplyRangeFade(f, unit)
                 else
+                    f._msufGFRangeFadeUnit = nil
+                    f._msufGFRangeFadeApplied = nil
+                    f._msufGFRangeFadeLastBool = nil
                     _ClearHealthRangeFade(f, f._msufGFKind or "party")
                     _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
                 end
