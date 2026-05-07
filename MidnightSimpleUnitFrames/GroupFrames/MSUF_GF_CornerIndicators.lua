@@ -218,7 +218,23 @@ end
 ------------------------------------------------------------------------
 -- Per-slot resolution helpers (return show, r, g, b for the slot category)
 ------------------------------------------------------------------------
-local function _ResolveDispel(unit)
+local function _ResolveDispel(f, unit)
+    if f and f._msufGFDispelKnown then
+        local aid = f._msufGFDispelAuraID
+        if not aid and not f._msufGFDispelType then return false end
+        local color = f._msufGFDispelColorObj
+        if color then
+            if color.r ~= nil then
+                return true, color.r, color.g, color.b
+            else
+                local r, g, b = color:GetRGB()
+                return true, r, g, b
+            end
+        end
+        local dn = f._msufGFDispelType
+        return true, DISPEL_R[dn] or 0.25, DISPEL_G[dn] or 0.75, DISPEL_B[dn] or 1.00
+    end
+
     local colorCurve = (GF and GF._sharedDispelColorCurve) or _dispelColorCurve
     if _getDispelColor and colorCurve and _getAuraByIndex then
         local bestAura = _getAuraByIndex(unit, 1, "HARMFUL|RAID_PLAYER_DISPELLABLE")
@@ -302,12 +318,14 @@ function GF.UpdateCornerIndicators(f, unit)
     if not c or not c.ciEn then
         local pool = f._msufCI
         if pool then for i = 1, 5 do local d = pool[SLOT_KEYS[i]]; if d then d:Hide() end end end
+        f._msufCIHasVisible = nil
         return
     end
 
     if not UnitExists(unit) then
         local pool = f._msufCI
         if pool then for i = 1, 5 do local d = pool[SLOT_KEYS[i]]; if d then d:Hide() end end end
+        f._msufCIHasVisible = nil
         return
     end
 
@@ -321,6 +339,7 @@ function GF.UpdateCornerIndicators(f, unit)
     if s1 == "none" and s2 == "none" and s3 == "none" and s4 == "none" and s5 == "none" then
         local pool = f._msufCI
         if pool then for i = 1, 5 do local d = pool[SLOT_KEYS[i]]; if d and d:IsShown() then d:Hide() end end end
+        f._msufCIHasVisible = nil
         return
     end
 
@@ -329,7 +348,9 @@ function GF.UpdateCornerIndicators(f, unit)
 
     -- Resolve once: dispel + aggro (shared across slots)
     local nativeDispels = c.nativeBlizzardDispels == true
-    local needDispel = not nativeDispels
+    local allowDispel = c.ciDispel == true
+    local allowCustom = c.ciCustom == true
+    local needDispel = allowDispel and not nativeDispels
         and (s1 == "dispel" or s2 == "dispel" or s3 == "dispel" or s4 == "dispel" or s5 == "dispel")
     local needAggro  = (s1 == "aggro"  or s2 == "aggro"  or s3 == "aggro"  or s4 == "aggro"  or s5 == "aggro")
 
@@ -338,7 +359,7 @@ function GF.UpdateCornerIndicators(f, unit)
 
     local dispelShow, dispelR, dispelG, dispelB = false, 0, 0, 0
     if needDispel then
-        local ok, r, g, b = _ResolveDispel(unit)
+        local ok, r, g, b = _ResolveDispel(f, unit)
         if ok then dispelShow, dispelR, dispelG, dispelB = true, r, g, b end
     end
 
@@ -354,16 +375,17 @@ function GF.UpdateCornerIndicators(f, unit)
     if not cache then cache = {}; f._msufCICache = cache end
 
     _slotBuf[1] = s1; _slotBuf[2] = s2; _slotBuf[3] = s3; _slotBuf[4] = s4; _slotBuf[5] = s5
+    local anyVisible
     for i = 1, 5 do
         local sk = SLOT_KEYS[i]
         local cat = _slotBuf[i]
         local show, r, g, b = false, 0, 0, 0
 
-        if cat == "dispel" then
+        if cat == "dispel" and allowDispel then
             show, r, g, b = dispelShow, dispelR, dispelG, dispelB
         elseif cat == "aggro" then
             show, r, g, b = aggroShow, aggroR, aggroG, aggroB
-        elseif cat == "custom" then
+        elseif cat == "custom" and allowCustom then
             -- Per-slot custom config: read directly from conf (5Hz limit makes
             -- this safe perf-wise; avoids needing to extend BuildFrameCache).
             local cc = conf and conf["ciCustom" .. sk]
@@ -380,6 +402,7 @@ function GF.UpdateCornerIndicators(f, unit)
             dot:SetColorTexture(r, g, b, alpha)
             if not dot:IsShown() then dot:Show() end
             cache[sk] = true
+            anyVisible = true
         else
             if prev then
                 cache[sk] = nil
@@ -388,6 +411,7 @@ function GF.UpdateCornerIndicators(f, unit)
             end
         end
     end
+    f._msufCIHasVisible = anyVisible or nil
 end
 
 ------------------------------------------------------------------------
@@ -400,6 +424,7 @@ function GF.HideCornerIndicators(f)
         local d = pool[SLOT_KEYS[i]]
         if d then d:Hide() end
     end
+    f._msufCIHasVisible = nil
 end
 
 ------------------------------------------------------------------------

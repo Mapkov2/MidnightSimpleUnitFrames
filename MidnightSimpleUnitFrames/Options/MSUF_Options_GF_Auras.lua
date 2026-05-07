@@ -897,12 +897,12 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         local g = _G.MSUF_DB and _G.MSUF_DB.general
         local br, bg, bb = ResolveAuraPreviewBaseTextColor()
         local sr, sg, sb, sa = ReadAuraPreviewColor(g and g.aurasCooldownTextSafeColor, br, bg, bb)
-        if g and g.aurasCooldownTextUseBuckets == false then
+        if g and g.gfAurasCooldownTextUseBuckets == false then
             return sr, sg, sb, sa
         end
 
-        local warn = (g and type(g.aurasCooldownTextWarningSeconds) == "number") and g.aurasCooldownTextWarningSeconds or 15
-        local urgent = (g and type(g.aurasCooldownTextUrgentSeconds) == "number") and g.aurasCooldownTextUrgentSeconds or 5
+        local warn = (g and type(g.gfAurasCooldownTextWarningSeconds) == "number") and g.gfAurasCooldownTextWarningSeconds or 15
+        local urgent = (g and type(g.gfAurasCooldownTextUrgentSeconds) == "number") and g.gfAurasCooldownTextUrgentSeconds or 5
         if urgent > warn then urgent = warn end
 
         local remain = 3
@@ -1297,7 +1297,7 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             function btn:Refresh()
                 local r, g, b = specs[i].get()
                 self._tex:SetColorTexture(r, g, b, 1)
-                local bucketsOn = not (GeneralDB().aurasCooldownTextUseBuckets == false)
+                local bucketsOn = not (GeneralDB().gfAurasCooldownTextUseBuckets == false)
                 local enabled = (i == 1) or bucketsOn
                 self:EnableMouse(enabled)
                 self:SetAlpha(enabled and 1 or 0.35)
@@ -2743,14 +2743,14 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
         r = infoRow
 
         r = RowGeneralCheck(body, r, L["Color aura timers by remaining time"] or "Color aura timers by remaining time",
-            "aurasCooldownTextUseBuckets", true, 2)
+            "gfAurasCooldownTextUseBuckets", true, 2)
 
         r = RowTimerColorPreview(body, r, 8)
         r = RowTimerColorSwatches(body, r, 8)
         r = RowDivider(body, r, 8)
 
         local function BucketsEnabled()
-            return GeneralDB().aurasCooldownTextUseBuckets ~= false
+            return GeneralDB().gfAurasCooldownTextUseBuckets ~= false
         end
         local function ClampRange(v, lo, hi)
             if type(v) ~= "number" then v = lo end
@@ -2762,43 +2762,43 @@ function GF.BuildAuraOptionsSections(AddSection, SCheck, SSlider, SDropdown, K, 
             return ClampRange(v, 0, 600)
         end
         local function ClampWarn(v)
-            local safe = GeneralDB().aurasCooldownTextSafeSeconds
+            local safe = GeneralDB().gfAurasCooldownTextSafeSeconds
             if type(safe) ~= "number" then safe = 60 end
             return math_min(ClampRange(v, 0, 30), safe)
         end
         local function ClampUrgent(v)
-            local warn = GeneralDB().aurasCooldownTextWarningSeconds
+            local warn = GeneralDB().gfAurasCooldownTextWarningSeconds
             if type(warn) ~= "number" then warn = 15 end
             return math_min(ClampRange(v, 0, 15), warn)
         end
         local function AfterSafe(v)
             local g = GeneralDB()
-            if type(g.aurasCooldownTextWarningSeconds) ~= "number" then g.aurasCooldownTextWarningSeconds = 15 end
-            if type(g.aurasCooldownTextUrgentSeconds) ~= "number" then g.aurasCooldownTextUrgentSeconds = 5 end
-            if g.aurasCooldownTextWarningSeconds > v then g.aurasCooldownTextWarningSeconds = v end
-            if g.aurasCooldownTextUrgentSeconds > g.aurasCooldownTextWarningSeconds then
-                g.aurasCooldownTextUrgentSeconds = g.aurasCooldownTextWarningSeconds
+            if type(g.gfAurasCooldownTextWarningSeconds) ~= "number" then g.gfAurasCooldownTextWarningSeconds = 15 end
+            if type(g.gfAurasCooldownTextUrgentSeconds) ~= "number" then g.gfAurasCooldownTextUrgentSeconds = 5 end
+            if g.gfAurasCooldownTextWarningSeconds > v then g.gfAurasCooldownTextWarningSeconds = v end
+            if g.gfAurasCooldownTextUrgentSeconds > g.gfAurasCooldownTextWarningSeconds then
+                g.gfAurasCooldownTextUrgentSeconds = g.gfAurasCooldownTextWarningSeconds
             end
         end
         local function AfterWarn(v)
             local g = GeneralDB()
-            if type(g.aurasCooldownTextSafeSeconds) ~= "number" then g.aurasCooldownTextSafeSeconds = 60 end
-            if type(g.aurasCooldownTextUrgentSeconds) ~= "number" then g.aurasCooldownTextUrgentSeconds = 5 end
-            if v > g.aurasCooldownTextSafeSeconds then g.aurasCooldownTextWarningSeconds = g.aurasCooldownTextSafeSeconds end
-            if g.aurasCooldownTextUrgentSeconds > v then g.aurasCooldownTextUrgentSeconds = v end
+            if type(g.gfAurasCooldownTextSafeSeconds) ~= "number" then g.gfAurasCooldownTextSafeSeconds = 60 end
+            if type(g.gfAurasCooldownTextUrgentSeconds) ~= "number" then g.gfAurasCooldownTextUrgentSeconds = 5 end
+            if v > g.gfAurasCooldownTextSafeSeconds then g.gfAurasCooldownTextWarningSeconds = g.gfAurasCooldownTextSafeSeconds end
+            if g.gfAurasCooldownTextUrgentSeconds > v then g.gfAurasCooldownTextUrgentSeconds = v end
         end
         local function AfterUrgent(v)
             local g = GeneralDB()
-            if type(g.aurasCooldownTextWarningSeconds) ~= "number" then g.aurasCooldownTextWarningSeconds = 15 end
-            if v > g.aurasCooldownTextWarningSeconds then g.aurasCooldownTextUrgentSeconds = g.aurasCooldownTextWarningSeconds end
+            if type(g.gfAurasCooldownTextWarningSeconds) ~= "number" then g.gfAurasCooldownTextWarningSeconds = 15 end
+            if v > g.gfAurasCooldownTextWarningSeconds then g.gfAurasCooldownTextUrgentSeconds = g.gfAurasCooldownTextWarningSeconds end
         end
 
         r = RowGeneralSlider(body, r, L["Safe (seconds)"] or "Safe (seconds)",
-            "aurasCooldownTextSafeSeconds", 0, 600, 1, 60, ClampSafe, 8, AfterSafe)
+            "gfAurasCooldownTextSafeSeconds", 0, 600, 1, 60, ClampSafe, 8, AfterSafe)
         r = RowGeneralSlider(body, r, L["Warning (<=)"] or "Warning (<=)",
-            "aurasCooldownTextWarningSeconds", 0, 30, 1, 15, ClampWarn, 0, AfterWarn, BucketsEnabled)
+            "gfAurasCooldownTextWarningSeconds", 0, 30, 1, 15, ClampWarn, 0, AfterWarn, BucketsEnabled)
         r = RowGeneralSlider(body, r, L["Urgent (<=)"] or "Urgent (<=)",
-            "aurasCooldownTextUrgentSeconds", 0, 15, 1, 5, ClampUrgent, 0, AfterUrgent, BucketsEnabled)
+            "gfAurasCooldownTextUrgentSeconds", 0, 15, 1, 5, ClampUrgent, 0, AfterUrgent, BucketsEnabled)
 
         local function RefreshTextColorControls()
             local enabled = HasCustomIconAuraGroups()

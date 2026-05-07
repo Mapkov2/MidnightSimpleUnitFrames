@@ -1486,13 +1486,13 @@ local function GetAuraMockCooldownColor()
     local g = _G.MSUF_DB and _G.MSUF_DB.general
     local nr, ng, nb, na = GetAuraMockBaseCooldownColor()
     local sr, sg, sb, sa = ReadAuraMockColor(g and g.aurasCooldownTextSafeColor, nr, ng, nb)
-    if g and g.aurasCooldownTextUseBuckets == false then
+    if g and g.gfAurasCooldownTextUseBuckets == false then
         return sr, sg, sb, sa
     end
 
     local remain = tonumber(AURA_MOCK_CD_TEXT) or 3
-    local warn = (g and type(g.aurasCooldownTextWarningSeconds) == "number") and g.aurasCooldownTextWarningSeconds or 15
-    local urgent = (g and type(g.aurasCooldownTextUrgentSeconds) == "number") and g.aurasCooldownTextUrgentSeconds or 5
+    local warn = (g and type(g.gfAurasCooldownTextWarningSeconds) == "number") and g.gfAurasCooldownTextWarningSeconds or 15
+    local urgent = (g and type(g.gfAurasCooldownTextUrgentSeconds) == "number") and g.gfAurasCooldownTextUrgentSeconds or 5
     if urgent > warn then urgent = warn end
 
     if remain <= urgent then

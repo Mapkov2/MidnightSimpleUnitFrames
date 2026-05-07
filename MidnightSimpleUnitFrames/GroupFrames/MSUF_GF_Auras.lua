@@ -54,7 +54,7 @@ GF._playerCanDispel = _playerCanDispel
 ------------------------------------------------------------------------
 -- C API bindings (deferred to first use)
 ------------------------------------------------------------------------
-local _getSlots, _getBySlot, _getByIndex, _getDuration, _getStackCount, _apisBound
+local _getSlots, _getBySlot, _getByIndex, _getByAuraInstanceID, _getDuration, _getStackCount, _apisBound
 
 local function BindAPIs()
     if _apisBound then return end
@@ -63,6 +63,7 @@ local function BindAPIs()
         _getSlots      = C_UnitAuras.GetAuraSlots
         _getBySlot     = C_UnitAuras.GetAuraDataBySlot
         _getByIndex    = C_UnitAuras.GetAuraDataByIndex
+        _getByAuraInstanceID = C_UnitAuras.GetAuraDataByAuraInstanceID
         _getDuration   = C_UnitAuras.GetAuraDuration
         _getStackCount = C_UnitAuras.GetAuraApplicationDisplayCount
     end
@@ -407,6 +408,7 @@ function GF.RecycleFramePools(f)
             f[poolKey] = nil
         end
     end
+    if GF.ClearFrameAuraCache then GF.ClearFrameAuraCache(f) end
 end
 
 local function CreateAuraIcon(parent, size)
@@ -835,10 +837,9 @@ function GF.InvalidateCdColor()
     if GF.InvalidateCooldownTextColors then GF.InvalidateCooldownTextColors() end
 end
 
-------------------------------------------------------------------------
 -- Native Blizzard cooldown text coloring for GF aura timers.
--- Uses the same global Auras cooldown color settings as Auras2, but is
--- fully local to Group Frames: Blizzard still owns the timer text, MSUF
+-- Uses GF-scoped bucket/threshold settings and the shared aura timer colors.
+-- Blizzard still owns the timer text; MSUF
 -- only recolors its FontString. Runtime is a scheduled timer manager,
 -- not OnUpdate, and remaining time is evaluated via DurationObject curves
 -- so secret aura values are never read or compared directly.
@@ -897,9 +898,9 @@ local function BuildGFCooldownTextCurve(g)
         c:SetType(_G.Enum.LuaCurveType.Step)
     end
 
-    local safeSeconds = (g and type(g.aurasCooldownTextSafeSeconds) == "number") and g.aurasCooldownTextSafeSeconds or 60
-    local warnSeconds = (g and type(g.aurasCooldownTextWarningSeconds) == "number") and g.aurasCooldownTextWarningSeconds or 15
-    local urgSeconds  = (g and type(g.aurasCooldownTextUrgentSeconds) == "number") and g.aurasCooldownTextUrgentSeconds or 5
+    local safeSeconds = (g and type(g.gfAurasCooldownTextSafeSeconds) == "number") and g.gfAurasCooldownTextSafeSeconds or 60
+    local warnSeconds = (g and type(g.gfAurasCooldownTextWarningSeconds) == "number") and g.gfAurasCooldownTextWarningSeconds or 15
+    local urgSeconds  = (g and type(g.gfAurasCooldownTextUrgentSeconds) == "number") and g.gfAurasCooldownTextUrgentSeconds or 5
     if warnSeconds > safeSeconds then warnSeconds = safeSeconds end
     if urgSeconds > warnSeconds then urgSeconds = warnSeconds end
     if urgSeconds < 0 then urgSeconds = 0 end
@@ -917,7 +918,7 @@ local function EnsureGFCooldownTextColorSettings()
     _gfCdTextSettingsDirty = false
 
     local g = _G.MSUF_DB and _G.MSUF_DB.general
-    _gfCdTextBucketsEnabled = not (g and g.aurasCooldownTextUseBuckets == false)
+    _gfCdTextBucketsEnabled = not (g and g.gfAurasCooldownTextUseBuckets == false)
     _gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA = ResolveCooldownBaseColor()
     _gfCdSafeR, _gfCdSafeG, _gfCdSafeB, _gfCdSafeA = ReadColor(g and g.aurasCooldownTextSafeColor, _gfCdNormR, _gfCdNormG, _gfCdNormB, _gfCdNormA)
     _gfCdWarnR, _gfCdWarnG, _gfCdWarnB, _gfCdWarnA = ReadColor(g and g.aurasCooldownTextWarningColor, 1, 0.85, 0.2, 1)
@@ -1412,6 +1413,352 @@ end
 local _externalsIDs = {}
 
 ------------------------------------------------------------------------
+-- EQoL-style frame-local aura cache
+-- Stores C_UnitAuras auraData by auraInstanceID and applies UNIT_AURA
+-- deltas in Lua, so add/remove events do not need fresh GetAuraSlots scans.
+------------------------------------------------------------------------
+local AURA_KIND_HELPFUL  = 1
+local AURA_KIND_HARMFUL  = 2
+local AURA_KIND_EXTERNAL = 4
+local AURA_KIND_DISPEL   = 8
+
+local function HasAuraKind(flags, flag)
+    return flags and flags % (flag * 2) >= flag
+end
+
+local function AddAuraKind(flags, flag)
+    flags = flags or 0
+    if HasAuraKind(flags, flag) then return flags end
+    return flags + flag
+end
+
+local function NewAuraCache()
+    return { auras = {}, order = {}, indexById = {} }
+end
+
+local function EnsureFrameAuraCache(f)
+    local st = f._msufGFAuraCache
+    if not st then
+        st = {
+            buff = NewAuraCache(),
+            debuff = NewAuraCache(),
+            externals = NewAuraCache(),
+            flagsById = {},
+        }
+        f._msufGFAuraCache = st
+    end
+    return st
+end
+
+local function ResetAuraCache(cache)
+    if not cache then return end
+    for k in pairs(cache.auras) do cache.auras[k] = nil end
+    for k in pairs(cache.indexById) do cache.indexById[k] = nil end
+    for i = 1, #cache.order do cache.order[i] = nil end
+    cache._orderDirty = nil
+end
+
+local function ClearFrameAuraCache(f)
+    local st = f and f._msufGFAuraCache
+    if not st then return end
+    ResetAuraCache(st.buff)
+    ResetAuraCache(st.debuff)
+    ResetAuraCache(st.externals)
+    for k in pairs(st.flagsById) do st.flagsById[k] = nil end
+    st.unit = nil
+    st.sig = nil
+    st.ready = nil
+end
+GF.ClearFrameAuraCache = ClearFrameAuraCache
+
+local function AuraCacheAddOrder(cache, auraInstanceID)
+    local idx = cache.indexById[auraInstanceID]
+    if idx then return idx, false end
+    idx = #cache.order + 1
+    cache.order[idx] = auraInstanceID
+    cache.indexById[auraInstanceID] = idx
+    return idx, true
+end
+
+local function AuraCachePut(cache, aura)
+    local auraInstanceID = aura and aura.auraInstanceID
+    if not auraInstanceID then return nil, false end
+    cache.auras[auraInstanceID] = aura
+    return AuraCacheAddOrder(cache, auraInstanceID)
+end
+
+local function AuraCacheRemove(cache, auraInstanceID)
+    if not (cache and auraInstanceID) then return nil end
+    local idx = cache.indexById[auraInstanceID]
+    if cache.auras[auraInstanceID] ~= nil then
+        cache.auras[auraInstanceID] = nil
+    end
+    if idx then
+        cache.indexById[auraInstanceID] = nil
+        cache._orderDirty = true
+    end
+    return idx
+end
+
+local function CompactAuraCache(cache)
+    if not (cache and cache._orderDirty) then return end
+    local order, indexById, auras = cache.order, cache.indexById, cache.auras
+    for k in pairs(indexById) do indexById[k] = nil end
+    local write = 1
+    for read = 1, #order do
+        local auraInstanceID = order[read]
+        if auraInstanceID and auras[auraInstanceID] and not indexById[auraInstanceID] then
+            order[write] = auraInstanceID
+            indexById[auraInstanceID] = write
+            write = write + 1
+        end
+    end
+    for i = write, #order do order[i] = nil end
+    cache._orderDirty = nil
+end
+
+local function AuraCacheVisibleIndex(cache, auraInstanceID, maxIcons, includeSpare)
+    local idx = cache and cache.indexById and cache.indexById[auraInstanceID]
+    if not idx then return false end
+    local limit = (tonumber(maxIcons) or 0) + (includeSpare and 1 or 0)
+    return limit <= 0 or idx <= limit
+end
+
+local function AuraMatchesFilter(unit, aura, filter)
+    local auraInstanceID = aura and aura.auraInstanceID
+    if not (unit and auraInstanceID and filter) then return false end
+    if _isFilteredOut then
+        return _isFilteredOut(unit, auraInstanceID, filter) == false
+    end
+    if type(filter) == "string" then
+        if filter:find("HELPFUL", 1, true) then return aura.isHelpful == true end
+        if filter:find("HARMFUL", 1, true) then return aura.isHarmful == true end
+    end
+    return false
+end
+
+local function ScanAuraCache(unit, cache, filter, queryLimit)
+    ResetAuraCache(cache)
+    if not (unit and cache and filter) then return end
+    local slots, slotCount = QuerySlots(unit, filter, queryLimit)
+    for i = 2, slotCount do
+        local aura = _getBySlot(unit, slots[i])
+        if aura and aura.auraInstanceID then
+            AuraCachePut(cache, aura)
+        end
+    end
+end
+
+local _fullScanSeen = {}
+local function ScanAuraCacheSeen(unit, cache, filter, queryLimit, seen)
+    ResetAuraCache(cache)
+    if not (unit and cache and filter) then return end
+    local slots, slotCount = QuerySlots(unit, filter, queryLimit)
+    for i = 2, slotCount do
+        local aura = _getBySlot(unit, slots[i])
+        local aid = aura and aura.auraInstanceID
+        if aid and not seen[aid] then
+            seen[aid] = true
+            AuraCachePut(cache, aura)
+        end
+    end
+end
+
+local function AuraQueryLimit(maxIcons)
+    local n = tonumber(maxIcons) or 0
+    if n < 1 then return nil end
+    return n + 1
+end
+
+local function BuildAuraCacheSig(buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel)
+    return tostring(buffFilter) .. "\001" .. tostring(debuffFilter) .. "\001" .. tostring(externalFilter) .. "\001"
+        .. tostring(buffMax) .. "\001" .. tostring(debuffMax) .. "\001" .. tostring(externalMax) .. "\001"
+        .. tostring(wantBuff) .. "\001" .. tostring(wantDebuff) .. "\001" .. tostring(wantExternals) .. "\001" .. tostring(wantDispel)
+end
+
+local function GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel)
+    if not (unit and aura and aura.auraInstanceID) then return nil end
+    local flags
+    if wantBuff and AuraMatchesFilter(unit, aura, buffFilter) then
+        flags = AddAuraKind(flags, AURA_KIND_HELPFUL)
+    end
+    if wantDebuff and AuraMatchesFilter(unit, aura, debuffFilter) then
+        flags = AddAuraKind(flags, AURA_KIND_HARMFUL)
+    end
+    if wantExternals and AuraMatchesFilter(unit, aura, externalFilter) then
+        flags = AddAuraKind(flags, AURA_KIND_EXTERNAL)
+    end
+    if wantDispel and AuraMatchesFilter(unit, aura, _DISPEL_FILTER) then
+        flags = AddAuraKind(flags, AURA_KIND_DISPEL)
+    end
+    return flags
+end
+
+local function CacheAuraWithFlags(st, aura, flags)
+    local auraInstanceID = aura and aura.auraInstanceID
+    if not (st and auraInstanceID) then return end
+
+    if HasAuraKind(flags, AURA_KIND_HELPFUL) then
+        AuraCachePut(st.buff, aura)
+    else
+        AuraCacheRemove(st.buff, auraInstanceID)
+    end
+
+    if HasAuraKind(flags, AURA_KIND_HARMFUL) then
+        AuraCachePut(st.debuff, aura)
+    else
+        AuraCacheRemove(st.debuff, auraInstanceID)
+    end
+
+    if HasAuraKind(flags, AURA_KIND_EXTERNAL) then
+        AuraCachePut(st.externals, aura)
+    else
+        AuraCacheRemove(st.externals, auraInstanceID)
+    end
+
+    st.flagsById[auraInstanceID] = flags or false
+end
+
+local function TouchFromFlags(st, auraInstanceID, flags, buffMax, debuffMax, externalMax, includeSpare)
+    local touchBuff, touchDebuff, touchExt, touchDispel
+    if HasAuraKind(flags, AURA_KIND_HELPFUL) and AuraCacheVisibleIndex(st.buff, auraInstanceID, buffMax, includeSpare) then
+        touchBuff = true
+    end
+    if (HasAuraKind(flags, AURA_KIND_HARMFUL) or HasAuraKind(flags, AURA_KIND_DISPEL))
+        and AuraCacheVisibleIndex(st.debuff, auraInstanceID, debuffMax, includeSpare) then
+        touchDebuff = HasAuraKind(flags, AURA_KIND_HARMFUL) or nil
+        touchDispel = HasAuraKind(flags, AURA_KIND_DISPEL) or nil
+    elseif HasAuraKind(flags, AURA_KIND_DISPEL) then
+        touchDispel = true
+    end
+    if HasAuraKind(flags, AURA_KIND_EXTERNAL) and AuraCacheVisibleIndex(st.externals, auraInstanceID, externalMax, includeSpare) then
+        touchExt = true
+        touchBuff = true
+    end
+    return touchBuff, touchDebuff, touchExt, touchDispel
+end
+
+local function MergeTouches(a, b, c, d, aa, bb, cc, dd)
+    return a or aa, b or bb, c or cc, d or dd
+end
+
+local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel)
+    local st = EnsureFrameAuraCache(f)
+    ResetAuraCache(st.buff)
+    ResetAuraCache(st.debuff)
+    ResetAuraCache(st.externals)
+    for k in pairs(st.flagsById) do st.flagsById[k] = nil end
+    for k in pairs(_fullScanSeen) do _fullScanSeen[k] = nil end
+
+    if wantExternals then
+        ScanAuraCacheSeen(unit, st.externals, externalFilter, AuraQueryLimit(externalMax), _fullScanSeen)
+    end
+    if wantDebuff then
+        ScanAuraCache(unit, st.debuff, debuffFilter or "HARMFUL", AuraQueryLimit(debuffMax))
+    end
+    if wantBuff then
+        ScanAuraCacheSeen(unit, st.buff, buffFilter, AuraQueryLimit(buffMax), _fullScanSeen)
+    end
+    for k in pairs(_fullScanSeen) do _fullScanSeen[k] = nil end
+
+    if wantDispel and _getByIndex then
+        local aura = _getByIndex(unit, 1, _DISPEL_FILTER)
+        local aid = aura and aura.auraInstanceID
+        if aid then
+            st.flagsById[aid] = AddAuraKind(st.flagsById[aid], AURA_KIND_DISPEL)
+        end
+    end
+
+    for aid, aura in pairs(st.buff.auras) do
+        st.flagsById[aid] = AddAuraKind(st.flagsById[aid], AURA_KIND_HELPFUL)
+    end
+    for aid, aura in pairs(st.debuff.auras) do
+        local flags = st.flagsById[aid] or 0
+        if wantDebuff and AuraMatchesFilter(unit, aura, debuffFilter) then
+            flags = AddAuraKind(flags, AURA_KIND_HARMFUL)
+        end
+        if wantDispel and AuraMatchesFilter(unit, aura, _DISPEL_FILTER) then
+            flags = AddAuraKind(flags, AURA_KIND_DISPEL)
+        end
+        st.flagsById[aid] = flags ~= 0 and flags or false
+    end
+    for aid in pairs(st.externals.auras) do
+        st.flagsById[aid] = AddAuraKind(st.flagsById[aid], AURA_KIND_EXTERNAL)
+    end
+
+    st.unit = unit
+    st.sig = sig
+    st.ready = true
+    return st
+end
+
+local function UpdateFrameAuraCacheDelta(f, unit, updateInfo, buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel)
+    local st = f and f._msufGFAuraCache
+    if not (st and st.ready and updateInfo) then return nil end
+    if not _apisBound then BindAPIs() end
+
+    local touchBuff, touchDebuff, touchExt, touchDispel
+    local flagsById = st.flagsById
+
+    local removed = updateInfo.removedAuraInstanceIDs
+    if removed then
+        for i = 1, #removed do
+            local aid = removed[i]
+            local oldFlags = flagsById[aid]
+            local tb, td, te, tp = TouchFromFlags(st, aid, oldFlags, buffMax, debuffMax, externalMax, true)
+            touchBuff, touchDebuff, touchExt, touchDispel = MergeTouches(touchBuff, touchDebuff, touchExt, touchDispel, tb, td, te, tp)
+            AuraCacheRemove(st.buff, aid)
+            AuraCacheRemove(st.debuff, aid)
+            AuraCacheRemove(st.externals, aid)
+            flagsById[aid] = nil
+        end
+    end
+
+    local added = updateInfo.addedAuras
+    if added then
+        for i = 1, #added do
+            local aura = added[i]
+            local aid = aura and aura.auraInstanceID
+            if aid then
+                local flags = GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel)
+                CacheAuraWithFlags(st, aura, flags)
+                local tb, td, te, tp = TouchFromFlags(st, aid, flags, buffMax, debuffMax, externalMax, false)
+                touchBuff, touchDebuff, touchExt, touchDispel = MergeTouches(touchBuff, touchDebuff, touchExt, touchDispel, tb, td, te, tp)
+            end
+        end
+    end
+
+    local updated = updateInfo.updatedAuraInstanceIDs
+    if updated and _getByAuraInstanceID then
+        for i = 1, #updated do
+            local aid = updated[i]
+            if aid then
+                local oldFlags = flagsById[aid]
+                if oldFlags then
+                    local tb, td, te, tp = TouchFromFlags(st, aid, oldFlags, buffMax, debuffMax, externalMax, false)
+                    touchBuff, touchDebuff, touchExt, touchDispel = MergeTouches(touchBuff, touchDebuff, touchExt, touchDispel, tb, td, te, tp)
+
+                    local aura = _getByAuraInstanceID(unit, aid)
+                    if aura then
+                        local flags = GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel)
+                        CacheAuraWithFlags(st, aura, flags)
+                        tb, td, te, tp = TouchFromFlags(st, aid, flags, buffMax, debuffMax, externalMax, false)
+                        touchBuff, touchDebuff, touchExt, touchDispel = MergeTouches(touchBuff, touchDebuff, touchExt, touchDispel, tb, td, te, tp)
+                    else
+                        AuraCacheRemove(st.buff, aid)
+                        AuraCacheRemove(st.debuff, aid)
+                        AuraCacheRemove(st.externals, aid)
+                        flagsById[aid] = nil
+                    end
+                end
+            end
+        end
+    end
+
+    return st, touchBuff, touchDebuff, touchExt, touchDispel
+end
+
+------------------------------------------------------------------------
 -- Tier 2 filter: decoded spellId blacklist check
 -- Uses AuraFilter.DecodeSpellId + AuraFilter.IsBlacklisted
 -- Secret spellIds (decoded=0) pass through — only declassified spells
@@ -1688,10 +2035,10 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
     local extCfg = auras.externals or {}
     local paCfg = conf.privateAuras or {}
 
-    local renderBuffs = Native.TypeEnabled(types, "buffs", true) and buffCfg.enabled ~= false
-    local renderDebuffs = Native.TypeEnabled(types, "debuffs", true) and debCfg.enabled ~= false
+    local renderBuffs = Native.TypeEnabled(types, "buffs", true)
+    local renderDebuffs = Native.TypeEnabled(types, "debuffs", true)
     local renderDispels = Native.TypeEnabled(types, "dispels", true) and conf.dispelEnabled ~= false
-    local renderExt = Native.TypeEnabled(types, "externals", true) and extCfg.enabled ~= false
+    local renderExt = Native.TypeEnabled(types, "externals", true)
     local renderPrivate = Native.TypeEnabled(types, "privateAuras", true) and paCfg.enabled ~= false
 
     if not (renderBuffs or renderDebuffs or renderDispels or renderExt or renderPrivate) then
@@ -1792,7 +2139,7 @@ end
 ------------------------------------------------------------------------
 -- Main render: one aura group
 ------------------------------------------------------------------------
-local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale, frameScale)
+local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale, frameScale, sourceCache)
     if not gcfg or gcfg.enabled == false then
         HidePool(f[POOL_KEYS[groupKey]], 1)
         return 0, nil
@@ -1884,9 +2231,20 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
             end
         end
     end
-    -- Harmful: scan extra slots for merged dispel detection (dispellables sort first)
-    local queryLimit = isHarmful and math_max(maxIcons + 1, 12) or (maxIcons + 1)
-    local slots, slotCount = QuerySlots(unit, filter, queryLimit)
+    -- Full fallback only asks for visible icons + one spare. Dispel state uses
+    -- the direct RAID_PLAYER_DISPELLABLE query, so debuffs no longer need the
+    -- old fixed 12-slot scan.
+    local slots, slotCount
+    local order, aurasById, orderCount
+    if sourceCache then
+        CompactAuraCache(sourceCache)
+        order = sourceCache.order
+        aurasById = sourceCache.auras
+        orderCount = #order
+    else
+        local queryLimit = maxIcons + 1
+        slots, slotCount = QuerySlots(unit, filter, queryLimit)
+    end
     local shown = 0
     local isBuff = (groupKey == "buff")
     local isExt  = (groupKey == "externals")
@@ -1922,9 +2280,11 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local _styleCdFlags  = gcfg.cooldownOutline or _styleGFlags or "OUTLINE"
     local _styleStkFlags = gcfg.stackOutline    or _styleGFlags or "OUTLINE"
 
-    for i = 2, slotCount do
+    local startIndex = sourceCache and 1 or 2
+    local endIndex = sourceCache and orderCount or slotCount
+    for i = startIndex, endIndex do
         if shown >= maxIcons and (not isHarmful or topDispel) then break end
-        local aura = _getBySlot(unit, slots[i])
+        local aura = sourceCache and aurasById[order[i]] or _getBySlot(unit, slots[i])
         if aura then
             local aid = aura.auraInstanceID
             if (isBuff and aid and _externalsIDs[aid])
@@ -2130,10 +2490,52 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     return shown, topDispel, topDispelColor
 end
 
+local function FillDisplayedExternalIDs(f, dst)
+    for k in pairs(dst) do dst[k] = nil end
+    local pool = f and f._msufAuraPool_externals
+    if not pool then return end
+    local shown = pool._msufShown or #pool
+    for i = 1, shown do
+        local ic = pool[i]
+        if ic and ic:IsShown() and ic._msufAuraID then
+            dst[ic._msufAuraID] = true
+        end
+    end
+end
+
+local function RefreshDisplayedAuraIDMap(f)
+    if not f then return false end
+    local disp = f._msufDisplayedAuraIDs
+    if not disp then
+        disp = {}
+        f._msufDisplayedAuraIDs = disp
+    else
+        for k in pairs(disp) do disp[k] = nil end
+    end
+
+    local anyShown = false
+    local function addPool(pool)
+        if not pool then return end
+        local shown = pool._msufShown or #pool
+        for i = 1, shown do
+            local ic = pool[i]
+            if ic and ic:IsShown() and ic._msufAuraID then
+                disp[ic._msufAuraID] = ic
+                anyShown = true
+            end
+        end
+    end
+
+    addPool(f._msufAuraPool_buff)
+    addPool(f._msufAuraPool_debuff)
+    addPool(f._msufAuraPool_externals)
+    return anyShown
+end
+
 ------------------------------------------------------------------------
 -- Main entry: UpdateFrameAuras (orchestrator for 3 groups)
 ------------------------------------------------------------------------
-function GF.UpdateFrameAuras(f, unit, updateInfo)
+local function UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
     if not f or not unit then return end
 
     local kind = f._msufGFKind or "party"
@@ -2148,6 +2550,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
             HidePool(f[POOL_KEYS.externals], 1)
         end
         GF.ClearBlizzardAuraContainer(f)
+        if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
         f._msufGFDispelAuraID = nil
         f._msufGFDispelColorObj = nil
         f._msufGFDispelColorRev = nil
@@ -2160,6 +2563,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
         HidePool(f[POOL_KEYS.debuff], 1)
         HidePool(f[POOL_KEYS.externals], 1)
         GF.ClearBlizzardAuraContainer(f)
+        if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
         f._msufGFDispelAuraID = nil
         f._msufGFDispelColorObj = nil
         f._msufGFDispelColorRev = nil
@@ -2177,10 +2581,10 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local buffCfg = auras.buff or {}
     local debCfg = auras.debuff or {}
     local extCfg = auras.externals or {}
-    local nativeRendered = (nativeBuffs and buffCfg.enabled ~= false)
-        or (nativeDebuffs and debCfg.enabled ~= false)
+    local nativeRendered = nativeBuffs
+        or nativeDebuffs
         or nativeDispels
-        or (nativeExt and extCfg.enabled ~= false)
+        or nativeExt
         or nativePrivate
     -- EQoL-style fast path: UNIT_AURA deltas do not need to re-register an
     -- already applied Blizzard container. Full/options refreshes still rebuild.
@@ -2355,6 +2759,253 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
 end
 
 ------------------------------------------------------------------------
+-- EQoL-style cache-backed orchestrator.
+-- Full updates rebuild the cache from C_UnitAuras.GetAuraSlots; deltas mutate
+-- the frame-local cache by auraInstanceID and render only touched groups.
+------------------------------------------------------------------------
+function GF.UpdateFrameAuras(f, unit, updateInfo)
+    if not f or not unit then return end
+
+    local kind = f._msufGFKind or "party"
+    local conf = GF.GetConf(kind)
+    local auras = conf and conf.auras
+
+    if not auras or auras.enabled == false then
+        if not f._msufGFAurasHidden then
+            f._msufGFAurasHidden = true
+            HidePool(f[POOL_KEYS.buff], 1)
+            HidePool(f[POOL_KEYS.debuff], 1)
+            HidePool(f[POOL_KEYS.externals], 1)
+        end
+        GF.ClearBlizzardAuraContainer(f)
+        if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
+        ClearFrameAuraCache(f)
+        f._msufGFDispelAuraID = nil
+        f._msufGFDispelColorObj = nil
+        f._msufGFDispelColorRev = nil
+        RefreshDisplayedAuraIDMap(f)
+        return
+    end
+    f._msufGFAurasHidden = nil
+
+    if not UnitExists(unit) then
+        HidePool(f[POOL_KEYS.buff], 1)
+        HidePool(f[POOL_KEYS.debuff], 1)
+        HidePool(f[POOL_KEYS.externals], 1)
+        GF.ClearBlizzardAuraContainer(f)
+        if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
+        ClearFrameAuraCache(f)
+        f._msufGFDispelAuraID = nil
+        f._msufGFDispelColorObj = nil
+        f._msufGFDispelColorRev = nil
+        RefreshDisplayedAuraIDMap(f)
+        return
+    end
+
+    if not _apisBound then BindAPIs() end
+    if not _getSlots or not _getBySlot then
+        return UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
+    end
+
+    local parent = f.statusIconLayer or f.barGroup or f
+    local scale = GetDynamicScale(conf)
+    local frameScale = GetFrameScale(kind, conf)
+    local nativeBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs")
+    local nativeDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs")
+    local nativeDispels = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
+    local nativeExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals")
+    local nativePrivate = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras")
+    local buffCfg = auras.buff or {}
+    local debCfg = auras.debuff or {}
+    local extCfg = auras.externals or {}
+    local nativeRendered = nativeBuffs
+        or nativeDebuffs
+        or nativeDispels
+        or nativeExt
+        or nativePrivate
+
+    if not (updateInfo and not updateInfo.isFullUpdate and nativeRendered and NativeBlizzardAuraContainerReady(f, unit)) then
+        GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
+    end
+
+    local c = f._c
+    if c and c.nativeBlizzardAuraOnly then
+        if not f._msufGFExtHidden then HidePool(f[POOL_KEYS.externals], 1); f._msufGFExtHidden = true end
+        if not f._msufGFDebHidden then HidePool(f[POOL_KEYS.debuff], 1); f._msufGFDebHidden = true end
+        if not f._msufGFBufHidden then HidePool(f[POOL_KEYS.buff], 1); f._msufGFBufHidden = true end
+        f._msufGFMergedDispel = nil
+        f._msufGFDispelAuraID = nil
+        f._msufGFDispelColorObj = nil
+        f._msufGFDispelColorRev = nil
+        ClearFrameAuraCache(f)
+        RefreshDisplayedAuraIDMap(f)
+        return
+    end
+
+    local extOn = extCfg and extCfg.enabled ~= false and not nativeExt
+    local debOn = debCfg and debCfg.enabled ~= false and not nativeDebuffs
+    local buffOn = buffCfg and buffCfg.enabled ~= false and not nativeBuffs
+    local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false and not nativeDispels
+    local afr = AF()
+    local extFilter = afr and afr.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
+    local debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
+    local buffFilter = afr and afr.ResolveBuffFilter(buffCfg.filterToken) or "HELPFUL|RAID"
+    local extMax = tonumber(extCfg.max) or 6
+    local debMax = tonumber(debCfg.max) or 6
+    local buffMax = tonumber(buffCfg.max) or 6
+    local sig = BuildAuraCacheSig(buffFilter, debFilter, extFilter, buffMax, debMax, extMax, buffOn, debOn, extOn, dispelNeeded)
+
+    local st = f._msufGFAuraCache
+    local useDelta = updateInfo and not updateInfo.isFullUpdate
+        and st and st.ready and st.unit == unit and st.sig == sig
+
+    local touchBuff, touchDebuff, touchExt, touchDispel
+    if useDelta then
+        st, touchBuff, touchDebuff, touchExt, touchDispel = UpdateFrameAuraCacheDelta(
+            f, unit, updateInfo,
+            buffFilter, debFilter, extFilter,
+            buffMax, debMax, extMax,
+            buffOn, debOn, extOn, dispelNeeded
+        )
+    else
+        st = FullScanFrameAuraCache(
+            f, unit, sig,
+            buffFilter, debFilter, extFilter,
+            buffMax, debMax, extMax,
+            buffOn, debOn, extOn, dispelNeeded
+        )
+        touchBuff = buffOn
+        touchDebuff = debOn
+        touchExt = extOn
+        touchDispel = dispelNeeded
+    end
+
+    if nativeExt then
+        if not f._msufGFExtHidden then
+            f._msufGFExtHidden = true
+            HidePool(f[POOL_KEYS.externals], 1)
+        end
+    elseif extOn then
+        if touchExt then
+            for k in pairs(_externalsIDs) do _externalsIDs[k] = nil end
+            RenderGroup(f, unit, "externals", extCfg, extFilter, false, parent, nil, scale, frameScale, st and st.externals)
+        else
+            FillDisplayedExternalIDs(f, _externalsIDs)
+        end
+        f._msufGFExtHidden = nil
+    elseif not f._msufGFExtHidden then
+        f._msufGFExtHidden = true
+        HidePool(f[POOL_KEYS.externals], 1)
+        for k in pairs(_externalsIDs) do _externalsIDs[k] = nil end
+    else
+        for k in pairs(_externalsIDs) do _externalsIDs[k] = nil end
+    end
+
+    if nativeDebuffs then
+        if not f._msufGFDebHidden then
+            f._msufGFDebHidden = true
+            HidePool(f[POOL_KEYS.debuff], 1)
+        end
+    elseif debOn then
+        if touchDebuff or touchDispel then
+            f._msufGFDispelAuraID = nil
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
+            local _, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, frameScale, st and st.debuff)
+            if not nativeDispels then
+                if touchDispel and dispelNeeded and not md then
+                    if _getByIndex then
+                        local aura = _getByIndex(unit, 1, _DISPEL_FILTER)
+                        if aura and aura.auraInstanceID then
+                            md = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
+                            f._msufGFDispelAuraID = aura.auraInstanceID
+                            if _getDispelColor and _dispelColorCurve then
+                                mdColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
+                            end
+                        end
+                    elseif _isFilteredOut then
+                        local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
+                        if sc >= 2 then
+                            local aura = _getBySlot(unit, slots[2])
+                            if aura and aura.auraInstanceID then
+                                md = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
+                                f._msufGFDispelAuraID = aura.auraInstanceID
+                                if _getDispelColor and _dispelColorCurve then
+                                    mdColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
+                                end
+                            end
+                        end
+                    end
+                end
+                f._msufGFMergedDispel = md
+                f._msufGFDispelColorObj = mdColor
+                f._msufGFDispelColorRev = mdColor and (_G.MSUF_ColorStyleRevision or 0) or nil
+            end
+        end
+        f._msufGFDebHidden = nil
+    else
+        if not f._msufGFDebHidden then
+            f._msufGFDebHidden = true
+            HidePool(f[POOL_KEYS.debuff], 1)
+        end
+        if dispelNeeded and (not useDelta or touchDispel) then
+            local mergedDispel, mergedDispelColor
+            f._msufGFDispelAuraID = nil
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
+            if _getByIndex then
+                local aura = _getByIndex(unit, 1, _DISPEL_FILTER)
+                if aura and aura.auraInstanceID then
+                    mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
+                    f._msufGFDispelAuraID = aura.auraInstanceID
+                    if _getDispelColor and _dispelColorCurve then
+                        mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
+                    end
+                end
+            elseif _isFilteredOut then
+                local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
+                if sc >= 2 then
+                    local aura = _getBySlot(unit, slots[2])
+                    if aura and aura.auraInstanceID then
+                        mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
+                        f._msufGFDispelAuraID = aura.auraInstanceID
+                        if _getDispelColor and _dispelColorCurve then
+                            mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
+                        end
+                    end
+                end
+            end
+            f._msufGFMergedDispel = mergedDispel
+            f._msufGFDispelColorObj = mergedDispelColor
+            f._msufGFDispelColorRev = mergedDispelColor and (_G.MSUF_ColorStyleRevision or 0) or nil
+        elseif not dispelNeeded then
+            f._msufGFMergedDispel = nil
+            f._msufGFDispelAuraID = nil
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
+        end
+    end
+
+    if nativeBuffs then
+        if not f._msufGFBufHidden then
+            f._msufGFBufHidden = true
+            HidePool(f[POOL_KEYS.buff], 1)
+        end
+    elseif buffOn then
+        if touchBuff or touchExt then
+            if not touchExt then FillDisplayedExternalIDs(f, _externalsIDs) end
+            RenderGroup(f, unit, "buff", buffCfg, buffFilter, false, parent, f._msufSIDedupIDs, scale, frameScale, st and st.buff)
+        end
+        f._msufGFBufHidden = nil
+    elseif not f._msufGFBufHidden then
+        f._msufGFBufHidden = true
+        HidePool(f[POOL_KEYS.buff], 1)
+    end
+
+    RefreshDisplayedAuraIDMap(f)
+end
+
+------------------------------------------------------------------------
 -- Coalesced options refresh for GF aura groups only.
 -- Used by aura sliders to avoid a full unit-frame UpdateAll on every drag
 -- tick while still applying icon size/layout changes live next frame.
@@ -2370,7 +3021,12 @@ local function _DoAuraOptionsRefresh()
             if f and f.unit and GF.RegisterUnitEvents then GF.RegisterUnitEvents(f, f.unit) end
             if f and f.unit and UnitExists(f.unit) then
                 GF.UpdateFrameAuras(f, f.unit)
-                if GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, f.unit) end
+                local c = f._c
+                if c and c.paEn and GF.ApplyPrivateAuras then
+                    GF.ApplyPrivateAuras(f, f.unit)
+                elseif GF.ClearPrivateAuras then
+                    GF.ClearPrivateAuras(f)
+                end
             elseif f then
                 GF.HideFrameAuras(f)
             end
@@ -2381,7 +3037,12 @@ local function _DoAuraOptionsRefresh()
             if f and f.unit and GF.RegisterUnitEvents then GF.RegisterUnitEvents(f, f.unit) end
             if f and f.unit and UnitExists(f.unit) then
                 GF.UpdateFrameAuras(f, f.unit)
-                if GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, f.unit) end
+                local c = f._c
+                if c and c.paEn and GF.ApplyPrivateAuras then
+                    GF.ApplyPrivateAuras(f, f.unit)
+                elseif GF.ClearPrivateAuras then
+                    GF.ClearPrivateAuras(f)
+                end
             elseif f then
                 GF.HideFrameAuras(f)
             end
@@ -2469,9 +3130,11 @@ end
 ------------------------------------------------------------------------
 function GF.HideFrameAuras(f)
     GF.ClearBlizzardAuraContainer(f)
+    if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
     HidePool(f[POOL_KEYS.buff], 1)
     HidePool(f[POOL_KEYS.debuff], 1)
     HidePool(f[POOL_KEYS.externals], 1)
+    ClearFrameAuraCache(f)
     for _, cKey in pairs(CONT_KEYS) do
         local c = f[cKey]
         if c then c:Hide() end

@@ -865,6 +865,52 @@ local function NativeAuraContainerReady(f, unit)
     return container._msufNativeAuraUnit == effectiveUnit
 end
 
+function GF.FinishAuraVisuals(f, unit, c, updateInfo)
+    if not (f and c) then return end
+    if c.nativeBlizzardDispels then
+        if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
+    else
+        local mergedDispel = f._msufGFMergedDispel
+        local prevDispel = f._msufGFDispelType
+        local dispelAid = f._msufGFDispelAuraID
+        local prevAid = f._msufGFPrevDispelAuraID
+        local colorRev = _G.MSUF_ColorStyleRevision or 0
+        local prevColorRev = f._msufGFColorStyleRevision or 0
+        if mergedDispel ~= prevDispel or dispelAid ~= prevAid or colorRev ~= prevColorRev then
+            f._msufGFDispelType = mergedDispel
+            f._msufGFPrevDispelAuraID = dispelAid
+            f._msufGFColorStyleRevision = colorRev
+            _GF_RefreshBorder(f, unit)
+            _GF_ApplyDispelOverlay(f)
+        end
+    end
+
+    if c.dsEn then
+        local scanStripe = not updateInfo or updateInfo.isFullUpdate or f._msufGFHasAnyDebuff == nil
+        if not scanStripe then
+            local added = updateInfo.addedAuras
+            if added and #added > 0 then
+                scanStripe = true
+            else
+                local removed = updateInfo.removedAuraInstanceIDs
+                scanStripe = removed and #removed > 0
+            end
+        end
+        if scanStripe then
+            local hadDebuff = f._msufGFHasAnyDebuff or false
+            local hasDebuff = (_FrameHasStripeDebuff and _FrameHasStripeDebuff(f, unit)) or false
+            f._msufGFHasAnyDebuff = hasDebuff
+            if hasDebuff ~= hadDebuff then
+                _GF_ApplyDebuffStripe(f)
+            end
+        end
+    end
+
+    if GF.UpdateCornerIndicators and c.ciAura then
+        GF.UpdateCornerIndicators(f, unit)
+    end
+end
+
 local function dispatchAura(f, unit, updateInfo)
     local c = f._c
     if not c then return end
@@ -880,6 +926,7 @@ local function dispatchAura(f, unit, updateInfo)
         or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0)
 
     if not aurasOn then
+        local dispelChanged, dispelRelevant
         if c.dispelScan and GF._playerCanDispel then
             -- EQoL dirty-flag: only rescan when dispel state may have changed
             local needDispelScan = false
@@ -907,13 +954,20 @@ local function dispatchAura(f, unit, updateInfo)
                 end
             end
             if needDispelScan then
-                GF._UpdateDispel(f, unit)
+                if GF._UpdateDispelFromAuraDelta then
+                    dispelChanged, dispelRelevant = GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
+                else
+                    GF._UpdateDispel(f, unit)
+                    dispelChanged, dispelRelevant = true, true
+                end
             end
         end
         if siRefresh and GF.UpdateSpellIndicators then
             GF.UpdateSpellIndicators(f, unit)
         end
-        if ciRelevant and GF.UpdateCornerIndicators and c.ciAura then
+        if GF.UpdateCornerIndicators and ((c.ciCustom and ciRelevant)
+            or (c.ciDispel and ((not c.dispelScan and ciRelevant) or dispelChanged or dispelRelevant)))
+        then
             GF.UpdateCornerIndicators(f, unit)
         end
         return
@@ -979,46 +1033,20 @@ local function dispatchAura(f, unit, updateInfo)
             end
         end
 
-        -- Remove-only: skip if none of the removed auras were displayed
-        if hasRem and not hasAdd then
-            if displayed then
-                local anyDisplayed = false
-                for ri = 1, #removed do
-                    if displayed[removed[ri]] then anyDisplayed = true; break end
-                end
-                if not anyDisplayed then
-                    -- Removed auras weren't visible — also handle updates if present
-                    if hasUpd and GF.RefreshAuraIcon then
-                        for ui = 1, #updated do
-                            local icon = displayed[updated[ui]]
-                            if icon then GF.RefreshAuraIcon(icon, unit, updated[ui]) end
-                        end
-                    end
-                    if siRefresh and GF.UpdateSpellIndicators then
-                        GF.UpdateSpellIndicators(f, unit)
-                    end
-                    -- Corner Indicators: removal may clear a dispel/boss dot
-                    if GF.UpdateCornerIndicators and c.ciAura then
-                        GF.UpdateCornerIndicators(f, unit)
-                    end
-                    -- Debuff stripe: a removed off-screen debuff that was driving
-                    -- the stripe (over icon limit, or via secret-tagged path that
-                    -- didn't make it into `displayed`) must still clear it. The
-                    -- diff-gate keeps us off the C side when nothing changed.
-                    if c.dsEn then
-                        local hadDebuff = f._msufGFHasAnyDebuff or false
-                        local hasDebuff = (_FrameHasStripeDebuff and _FrameHasStripeDebuff(f, unit)) or false
-                        if hasDebuff ~= hadDebuff then
-                            f._msufGFHasAnyDebuff = hasDebuff
-                            _GF_ApplyDebuffStripe(f)
-                        end
-                    end
-                    return
-                end
-            end
-        end
+        -- Add/remove: handled below by the cache-backed delta pipeline.
+    end
 
-        -- Add or displayed-remove: fall through to full pipeline
+    if updateInfo and not updateInfo.isFullUpdate then
+        if c.siEn and GF.UpdateSpellIndicators then
+            GF.UpdateSpellIndicators(f, unit)
+        end
+        if GF.UpdateFrameAuras then
+            GF.UpdateFrameAuras(f, unit, updateInfo)
+        elseif GF._UpdateDispel then
+            GF._UpdateDispel(f, unit)
+        end
+        GF.FinishAuraVisuals(f, unit, c, updateInfo)
+        return
     end
 
     -- Out-of-combat rate limit: max 2 full rescans/s per frame (idle optimization)
@@ -1088,41 +1116,10 @@ local function dispatchAura(f, unit, updateInfo)
     end
     if GF.UpdateFrameAuras then
         GF.UpdateFrameAuras(f, unit, updateInfo)
-        if c.nativeBlizzardDispels then
-            if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
-        else
-            local mergedDispel = f._msufGFMergedDispel
-            local prevDispel = f._msufGFDispelType
-            local dispelAid = f._msufGFDispelAuraID
-            local prevAid = f._msufGFPrevDispelAuraID
-            local colorRev = _G.MSUF_ColorStyleRevision or 0
-            local prevColorRev = f._msufGFColorStyleRevision or 0
-            if mergedDispel ~= prevDispel or dispelAid ~= prevAid or colorRev ~= prevColorRev then
-                f._msufGFDispelType = mergedDispel
-                f._msufGFPrevDispelAuraID = dispelAid
-                f._msufGFColorStyleRevision = colorRev
-                _GF_RefreshBorder(f, unit)
-                _GF_ApplyDispelOverlay(f)
-            end
-        end
     else
         GF._UpdateDispel(f, unit)
     end
-
-    -- Debuff stripe: detect a debuff that passes the Debuffs filter/list.
-    if c.dsEn then
-        local hadDebuff = f._msufGFHasAnyDebuff or false
-        local hasDebuff = (_FrameHasStripeDebuff and _FrameHasStripeDebuff(f, unit)) or false
-        f._msufGFHasAnyDebuff = hasDebuff
-        if hasDebuff ~= hadDebuff then
-            _GF_ApplyDebuffStripe(f)
-        end
-    end
-
-    -- Corner Indicators (only when enabled)
-    if GF.UpdateCornerIndicators and c.ciAura then
-        GF.UpdateCornerIndicators(f, unit)
-    end
+    GF.FinishAuraVisuals(f, unit, c, updateInfo)
 
 end
 
@@ -1575,6 +1572,10 @@ function GF.BuildFrameCache(f)
     c.hfAlpha  = conf.healthFadeAlpha or 0.45
     c.hfThresh = conf.healthFadeThreshold or 95
 
+    local auras = conf.auras
+    c.aurasOn = auras and auras.enabled ~= false
+    local auraMasterOn = c.aurasOn == true
+
     local pa = conf.privateAuras
     c.nativeBlizzardBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs") == true
     c.nativeBlizzardDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs") == true
@@ -1585,7 +1586,7 @@ function GF.BuildFrameCache(f)
         and pa and pa.enabled ~= false
 
     -- Dispel overlay (color wash on health bar)
-    c.doEn    = conf.dispelOverlayEnabled == true and not c.nativeBlizzardDispels
+    c.doEn    = auraMasterOn and conf.dispelOverlayEnabled == true and not c.nativeBlizzardDispels
     c.doStyle = conf.dispelOverlayStyle or "FULL"
     c.doOnHP  = conf.dispelOverlayOnHealth ~= false
     c.doAlpha = conf.dispelOverlayAlpha or 0.35
@@ -1593,7 +1594,7 @@ function GF.BuildFrameCache(f)
     -- Debuff stripe (thin edge for any debuff). This is a custom aura-derived
     -- visual, so it must not keep UNIT_AURA/custom scans alive when Blizzard
     -- owns debuff rendering.
-    c.dsEn    = conf.debuffStripeEnabled == true and not c.nativeBlizzardDebuffs
+    c.dsEn    = auraMasterOn and conf.debuffStripeEnabled == true and not c.nativeBlizzardDebuffs
     c.dsEdge  = conf.debuffStripeEdge or "BOTTOM"
     c.dsH     = (GF.ScaleValue and GF.ScaleValue(conf.debuffStripeHeight or 3, fScale, 1))
         or (conf.debuffStripeHeight or 3)
@@ -1605,7 +1606,7 @@ function GF.BuildFrameCache(f)
     -- Highlight border (pre-resolve HLVal)
     c.aggroEn   = HLVal(kind, "hlAggroEnabled") ~= false
     c.aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
-    c.dispelEn  = HLVal(kind, "hlDispelEnabled") ~= false and not c.nativeBlizzardDispels
+    c.dispelEn  = auraMasterOn and HLVal(kind, "hlDispelEnabled") ~= false and not c.nativeBlizzardDispels
     c.targetEn  = HLVal(kind, "hlTargetEnabled") ~= false
     c.focusEn   = conf.hlFocusEnabled ~= false
     c.aggroSize = HLVal(kind, "hlAggroSize") or 2
@@ -1635,11 +1636,9 @@ function GF.BuildFrameCache(f)
     c.focB = conf.hlFocusColorB or 1.0
 
     -- Aura dispatch
-    c.dispelScan = conf.dispelEnabled ~= false and not c.nativeBlizzardDispels
-    c.siEn       = conf.spellIndicators and conf.spellIndicators.enabled == true
-    c.healerBuffsEn = conf.healerBuffs and conf.healerBuffs.enabled == true and not c.siEn
-    local auras  = conf.auras
-    c.aurasOn    = auras and auras.enabled ~= false
+    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and not c.nativeBlizzardDispels
+    c.siEn       = auraMasterOn and conf.spellIndicators and conf.spellIndicators.enabled == true
+    c.healerBuffsEn = auraMasterOn and conf.healerBuffs and conf.healerBuffs.enabled == true and not c.siEn
     c.nativeBlizzardAuras = c.aurasOn and (
                    c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs
                    or c.nativeBlizzardExt or c.nativeBlizzardDispels
@@ -1665,10 +1664,10 @@ function GF.BuildFrameCache(f)
     c.ciSlotBL = (conf.ciSlotBL or "none")
     c.ciSlotBR = (conf.ciSlotBR or "none")
     c.ciSlotC  = (conf.ciSlotC  or "none")
-    c.ciDispel = c.ciEn and (
+    c.ciDispel = c.ciEn and auraMasterOn and (
         c.ciSlotTL == "dispel" or c.ciSlotTR == "dispel" or c.ciSlotBL == "dispel"
         or c.ciSlotBR == "dispel" or c.ciSlotC == "dispel")
-    c.ciCustom = c.ciEn and (
+    c.ciCustom = c.ciEn and auraMasterOn and (
         c.ciSlotTL == "custom" or c.ciSlotTR == "custom" or c.ciSlotBL == "custom"
         or c.ciSlotBR == "custom" or c.ciSlotC == "custom")
     c.ciAura = c.ciCustom or (c.ciDispel and not c.nativeBlizzardDispels)
@@ -1677,7 +1676,7 @@ function GF.BuildFrameCache(f)
         or c.ciSlotBR == "aggro" or c.ciSlotC == "aggro")
 
     -- Private auras
-    c.paEn = pa and pa.enabled ~= false and not c.nativeBlizzardPrivate
+    c.paEn = auraMasterOn and pa and pa.enabled ~= false and not c.nativeBlizzardPrivate
 
     -- Raid debuffs
 
@@ -2300,12 +2299,31 @@ function GF._UpdateDispel(f, unit)
         end
     end
 
+    local auras = conf and conf.auras
+    if not testMode and (not auras or auras.enabled == false) then
+        f._msufGFDispelKnown = true
+        if _GF_ClearNativeSuppressedDispel then
+            _GF_ClearNativeSuppressedDispel(f, unit)
+        else
+            f._msufGFMergedDispel = nil
+            f._msufGFDispelType = nil
+            f._msufGFDispelAuraID = nil
+            f._msufGFPrevDispelAuraID = nil
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
+            f._msufGFColorStyleRevision = nil
+        end
+        return
+    end
+
     if not testMode and _GF_IsBlizzardDispelRendererActive(conf) then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
+        f._msufGFDispelKnown = true
         return
     end
 
     if (HLVal(kind, "hlDispelEnabled") == false or not unit) and not testMode then
+        f._msufGFDispelKnown = true
         if f._msufGFDispelType then
             f._msufGFDispelType = nil
             f._msufGFDispelAuraID = nil
@@ -2323,6 +2341,7 @@ function GF._UpdateDispel(f, unit)
     f._msufGFDispelColorRev = nil
     if not testMode then
         if not UnitExists(unit) then
+            f._msufGFDispelKnown = true
             if f._msufGFDispelType then
                 f._msufGFDispelType = nil
                 f._msufGFDispelAuraID = nil
@@ -2375,6 +2394,7 @@ function GF._UpdateDispel(f, unit)
     local prevAid = f._msufGFPrevDispelAuraID
     local colorRev = _G.MSUF_ColorStyleRevision or 0
     local prevColorRev = f._msufGFColorStyleRevision or 0
+    f._msufGFDispelKnown = true
     f._msufGFDispelType = topDispel
     f._msufGFDispelAuraID = topAid
     f._msufGFPrevDispelAuraID = topAid
@@ -2387,6 +2407,96 @@ function GF._UpdateDispel(f, unit)
     if not testMode then
         _GF_ApplyDispelOverlay(f)
     end
+end
+
+function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
+    if not (f and unit) then return false, false end
+
+    local prevDispel = f._msufGFDispelType
+    local prevAid = f._msufGFDispelAuraID
+    local prevColorRev = f._msufGFColorStyleRevision or 0
+
+    local function finishFull()
+        GF._UpdateDispel(f, unit)
+        return f._msufGFDispelType ~= prevDispel
+            or f._msufGFDispelAuraID ~= prevAid
+            or (f._msufGFColorStyleRevision or 0) ~= prevColorRev, true
+    end
+
+    if not updateInfo or updateInfo.isFullUpdate then
+        return finishFull()
+    end
+
+    local trackedAid = f._msufGFDispelAuraID
+    local removed = updateInfo.removedAuraInstanceIDs
+    if removed and trackedAid then
+        for i = 1, #removed do
+            if removed[i] == trackedAid then
+                return finishFull()
+            end
+        end
+    end
+
+    local updated = updateInfo.updatedAuraInstanceIDs
+    if updated and trackedAid and C_UnitAuras_IsAuraFilteredOut then
+        for i = 1, #updated do
+            if updated[i] == trackedAid then
+                if C_UnitAuras_IsAuraFilteredOut(unit, trackedAid, _DISPEL_SCAN_FILTER) ~= false then
+                    return finishFull()
+                end
+                return false, true
+            end
+        end
+    end
+
+    if trackedAid then
+        return false, false
+    end
+
+    local added = updateInfo.addedAuras
+    if not added then
+        return false, false
+    end
+
+    for i = 1, #added do
+        local aura = added[i]
+        local aid = aura and aura.auraInstanceID
+        if aid then
+            local dispellable
+            if C_UnitAuras_IsAuraFilteredOut then
+                dispellable = C_UnitAuras_IsAuraFilteredOut(unit, aid, _DISPEL_SCAN_FILTER) == false
+            else
+                local dn = aura.dispelName
+                dispellable = not (issecretvalue and issecretvalue(dn))
+                    and type(dn) == "string" and dn ~= "" and dn ~= "None"
+            end
+            if dispellable then
+                local dn = aura.dispelName
+                if not (issecretvalue and issecretvalue(dn)) and type(dn) == "string" and dn ~= "" and dn ~= "None" then
+                    f._msufGFDispelType = dn
+                else
+                    f._msufGFDispelType = "DISPELLABLE"
+                end
+                f._msufGFDispelAuraID = aid
+                f._msufGFPrevDispelAuraID = aid
+                f._msufGFDispelKnown = true
+                if C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor and GF and GF._sharedDispelColorCurve then
+                    f._msufGFDispelColorObj = C_UnitAuras.GetAuraDispelTypeColor(unit, aid, GF._sharedDispelColorCurve)
+                    f._msufGFDispelColorRev = _G.MSUF_ColorStyleRevision or 0
+                else
+                    f._msufGFDispelColorObj = nil
+                    f._msufGFDispelColorRev = nil
+                end
+                local colorRev = _G.MSUF_ColorStyleRevision or 0
+                f._msufGFColorStyleRevision = colorRev
+                _GF_RefreshBorder(f, unit)
+                _GF_ApplyDispelOverlay(f)
+                return true, true
+            end
+        end
+    end
+
+    return false, false
 end
 
 ------------------------------------------------------------------------
@@ -2910,8 +3020,15 @@ local function UpdateAll(f, unit)
             end
         end
     else
-        if GF.UpdateFrameAuras then GF.UpdateFrameAuras(f, unit) end
-        if c.nativeBlizzardDispels then
+        if GF.UpdateFrameAuras and not f._msufGFAurasHidden then GF.UpdateFrameAuras(f, unit) end
+        if not c.aurasOn then
+            if _GF_ClearNativeSuppressedDispel and (
+                f._msufGFDispelType or f._msufGFMergedDispel or f._msufGFDispelAuraID
+                or f._msufGFPrevDispelAuraID or f._msufGFDispelGlowActive or f._gfPrivContainerOverlayID
+            ) then
+                _GF_ClearNativeSuppressedDispel(f, unit)
+            end
+        elseif c.nativeBlizzardDispels then
             if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
         elseif c.dispelScan and GF._playerCanDispel then GF._UpdateDispel(f, unit) end
     end
@@ -2947,8 +3064,15 @@ local function UpdateAll(f, unit)
     then
         UpdateGroupNumber(f, unit)
     end
-    if c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
-    if c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
+    if c.ciEn and GF.UpdateCornerIndicators and (c.ciAura or c.ciThreat or f._msufCIHasVisible) then
+        if not c.ciAura then f._msufCILastAt = nil end
+        GF.UpdateCornerIndicators(f, unit)
+    end
+    if c.paEn and GF.ApplyPrivateAuras then
+        GF.ApplyPrivateAuras(f, unit)
+    elseif GF.ClearPrivateAuras and (f._gfPrivAnchorIDs or f._gfPrivUnit or f._gfPrivContainerOverlayID) then
+        GF.ClearPrivateAuras(f)
+    end
     if f._gfPrivContainerOverlayID and GF.ApplyPrivateAuraContainerOverlay then
         GF.ApplyPrivateAuraContainerOverlay(f, unit, { containerOverlay = { enabled = false } })
     end
@@ -4010,6 +4134,9 @@ function GF.RegisterUnitEvents(f, unit)
     if f._msufGFRegUnit == unit and f._msufGFRegBits == evBits and f._msufGFRegEv then
         return
     end
+    if f._msufGFRegUnit ~= unit then
+        f._msufGFDispelKnown = nil
+    end
     f._msufGFRegUnit = unit
     f._msufGFRegBits = evBits
     f._msufGFLastHealthValue = nil
@@ -4098,6 +4225,7 @@ function GF.UnregisterUnitEvents(f)
         f._msufGFRegEv = nil
     end
     f:SetScript("OnEvent", nil)
+    f._msufGFDispelKnown = nil
     if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
 end
 
@@ -4660,10 +4788,13 @@ local function UpdateHighlight(f, unit)
     UpdateAggro(f, unit)
     local c = f._c
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
-    if c and c.nativeBlizzardDispels then
+    local dispelTest = _G.MSUF_DispelBorderTestMode == true
+    if c and c.nativeBlizzardDispels and not dispelTest then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
-    else
+    elseif dispelTest or (c and c.dispelScan and GF._playerCanDispel) then
         GF._UpdateDispel(f, unit)
+    elseif _GF_ClearNativeSuppressedDispel then
+        _GF_ClearNativeSuppressedDispel(f, unit)
     end
     UpdateTargetIndicator(f, unit)
 end
@@ -4700,7 +4831,14 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
 
     if band(bits, 0x10) ~= 0 then -- DIRTY_BORDER
         if c and c.needThreat then UpdateAggro(f, unit) end
-        if c and c.nativeBlizzardDispels then
+        if c and not c.aurasOn then
+            if _GF_ClearNativeSuppressedDispel and (
+                f._msufGFDispelType or f._msufGFMergedDispel or f._msufGFDispelAuraID
+                or f._msufGFPrevDispelAuraID or f._msufGFDispelGlowActive or f._gfPrivContainerOverlayID
+            ) then
+                _GF_ClearNativeSuppressedDispel(f, unit)
+            end
+        elseif c and c.nativeBlizzardDispels then
             if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
         elseif c and c.dispelScan and GF._playerCanDispel then GF._UpdateDispel(f, unit) end
         UpdateTargetIndicator(f, unit)
@@ -4728,8 +4866,15 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
         then
             UpdateGroupNumber(f, unit)
         end
-        if c and c.ciEn and GF.UpdateCornerIndicators then GF.UpdateCornerIndicators(f, unit) end
-        if c and c.paEn and GF.ApplyPrivateAuras then GF.ApplyPrivateAuras(f, unit) end
+        if c and c.ciEn and GF.UpdateCornerIndicators and (c.ciAura or c.ciThreat or f._msufCIHasVisible) then
+            if not c.ciAura then f._msufCILastAt = nil end
+            GF.UpdateCornerIndicators(f, unit)
+        end
+        if c and c.paEn and GF.ApplyPrivateAuras then
+            GF.ApplyPrivateAuras(f, unit)
+        elseif GF.ClearPrivateAuras and (f._gfPrivAnchorIDs or f._gfPrivUnit or f._gfPrivContainerOverlayID) then
+            GF.ClearPrivateAuras(f)
+        end
     end
 end
 _G.MSUF_GF_UpdateRange    = ApplyRangeFade

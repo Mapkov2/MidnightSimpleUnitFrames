@@ -218,6 +218,11 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         pa   = conf.privateAuras
     end
 
+    if paOverride == nil and conf and conf.auras and conf.auras.enabled == false then
+        ClearAnchors(f)
+        return
+    end
+
     if paOverride == nil and HasNativeBlizzardPrivateAuras(conf) then
         ClearAnchors(f)
         return
