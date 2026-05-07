@@ -1300,6 +1300,7 @@ local function MakeBuffDefaults()
         x = 0, y = 0, size = 22, perRow = 4, max = 6, spacing = 1,
         layer = 5,
         filterMode = "RAID_PLAYER",
+        showCooldownSwipe = true,
         showCooldown = true, cooldownAnchor = "CENTER",
         cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
         showStacks = true, stackAnchor = "BOTTOMRIGHT",
@@ -1312,6 +1313,7 @@ local function MakeDebuffDefaults()
         x = 0, y = 0, size = 20, perRow = 3, max = 6, spacing = 1,
         layer = 6,
         showDispelBorder = true,
+        showCooldownSwipe = true,
         showCooldown = true, cooldownAnchor = "CENTER",
         cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 8, cooldownOutline = "OUTLINE",
         showStacks = true, stackAnchor = "BOTTOMRIGHT",
@@ -1323,6 +1325,7 @@ local function MakeExternalsDefaults()
         enabled = true, anchor = "CENTER", growth = "RIGHTDOWN",
         x = 0, y = 0, size = 28, perRow = 3, max = 2, spacing = 1,
         layer = 7,
+        showCooldownSwipe = true,
         showCooldown = true, cooldownAnchor = "CENTER",
         cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
         showStacks = false, stackAnchor = "BOTTOMRIGHT",
@@ -1338,6 +1341,13 @@ local function MakePrivateAuraDefaults()
         showDispelType = false, showDuration = false,
         durationAnchor = "BOTTOM", durationOffsetX = 0, durationOffsetY = -1,
     }
+end
+
+local function EnsureAuraGroupDefaults(group, defaults)
+    if type(group) ~= "table" or type(defaults) ~= "table" then return end
+    for key, value in pairs(defaults) do
+        if group[key] == nil then group[key] = value end
+    end
 end
 
 local function EnsureBlizzardAuraDefaults(auras)
@@ -1404,6 +1414,12 @@ function GF.MigrateAuraConfig(conf, isRaid)
     end
     if not conf.privateAuras then conf.privateAuras = MakePrivateAuraDefaults() end
     EnsureBlizzardAuraDefaults(conf.auras)
+    if type(conf.auras.buff) ~= "table" then conf.auras.buff = MakeBuffDefaults() end
+    if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = MakeDebuffDefaults() end
+    if type(conf.auras.externals) ~= "table" then conf.auras.externals = MakeExternalsDefaults() end
+    EnsureAuraGroupDefaults(conf.auras.buff, MakeBuffDefaults())
+    EnsureAuraGroupDefaults(conf.auras.debuff, MakeDebuffDefaults())
+    EnsureAuraGroupDefaults(conf.auras.externals, MakeExternalsDefaults())
     if not conf.spellIndicators then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 } end
 end
 end -- do block
