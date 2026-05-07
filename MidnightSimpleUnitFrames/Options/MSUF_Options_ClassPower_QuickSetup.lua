@@ -63,7 +63,7 @@ local BARS_KEYS = {
     "showEleMaelstrom",
     "showEbonMight",
     "showChargedComboPoints",
-    "runeShowTimeText",
+    "runeShowTime",
     "classPowerOffsetX",
     "classPowerOffsetY",
     "classPowerOutline",
@@ -269,7 +269,7 @@ local function ApplyPhase1(offsets)
     b.showEleMaelstrom            = true
     b.showEbonMight               = true
     b.showChargedComboPoints      = true
-    b.runeShowTimeText            = true
+    b.runeShowTime                = true
     b.classPowerOffsetX           = offsets.cpOffsetX
     b.classPowerOffsetY           = offsets.cpOffsetY
     b.classPowerOutline           = 1

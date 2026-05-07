@@ -695,7 +695,12 @@ builders.RUNTIME = function(env)
 
     local function OnRuneUpdate(runeID, energize)
         if not CP.visible or CP.renderMode ~= CPK.MODE.RUNE_CD then return end
-        if env.CP_UpdateValues_RuneCD then env.CP_UpdateValues_RuneCD(CP.powerType, CP.currentMax) end
+        if RunActiveUpdate then
+            RunActiveUpdate(CP.powerType, CP.currentMax)
+        elseif env.CP_UpdateValues_RuneCD then
+            env.CP_UpdateValues_RuneCD(CP.powerType, CP.currentMax)
+            if CP_SyncRuntimeOnUpdates then CP_SyncRuntimeOnUpdates(false) end
+        end
     end
 
     local function OnSpellcastStart(spellID)
