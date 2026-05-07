@@ -602,7 +602,7 @@ function EM.ShowMovers(entry)
     if entry.editMoverDebuff then
         entry.editMoverDebuff:Show()
     end
-    if entry.editMoverPrivate and (u == "player" or u == "target") then
+    if entry.editMoverPrivate and u == "player" then
         entry.editMoverPrivate:Show()
     end
 end
@@ -935,8 +935,8 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
     local showTest = (shared.showInEditMode == true and isEditActive == true)
     cfg = cfg or {}
     local showPrivatePreview = (shared.privateAurasEnabled == true)
-        and ((unit == "player" and shared.showPrivateAurasPlayer == true)
-            or (unit == "target" and shared.showPrivateAurasTarget == true))
+        and unit == "player"
+        and shared.showPrivateAurasPlayer == true
 
     if showTest then
         if entry.buffs then entry.buffs:Show() end

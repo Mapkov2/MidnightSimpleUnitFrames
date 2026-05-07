@@ -167,6 +167,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_party)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_raid)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_mythicraid)
+    db.bars = db.bars or {}
+    db.bars.showAltMana = false
     -- Fresh-install defaults: status indicators (AFK/DND) off by default
     local g = db.general
     if type(g) == 'table' then
