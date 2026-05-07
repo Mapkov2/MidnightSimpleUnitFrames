@@ -1616,7 +1616,7 @@ local function CacheAuraWithFlags(st, aura, flags)
         AuraCacheRemove(st.externals, auraInstanceID)
     end
 
-    st.flagsById[auraInstanceID] = flags or false
+    st.flagsById[auraInstanceID] = flags or nil
 end
 
 local function TouchFromFlags(st, auraInstanceID, flags, buffMax, debuffMax, externalMax, includeSpare)
@@ -1674,13 +1674,13 @@ local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, ex
     end
     for aid, aura in pairs(st.debuff.auras) do
         local flags = st.flagsById[aid] or 0
-        if wantDebuff and AuraMatchesFilter(unit, aura, debuffFilter) then
+        if wantDebuff then
             flags = AddAuraKind(flags, AURA_KIND_HARMFUL)
         end
         if wantDispel and AuraMatchesFilter(unit, aura, _DISPEL_FILTER) then
             flags = AddAuraKind(flags, AURA_KIND_DISPEL)
         end
-        st.flagsById[aid] = flags ~= 0 and flags or false
+        st.flagsById[aid] = flags ~= 0 and flags or nil
     end
     for aid in pairs(st.externals.auras) do
         st.flagsById[aid] = AddAuraKind(st.flagsById[aid], AURA_KIND_EXTERNAL)
@@ -1705,12 +1705,14 @@ local function UpdateFrameAuraCacheDelta(f, unit, updateInfo, buffFilter, debuff
         for i = 1, #removed do
             local aid = removed[i]
             local oldFlags = flagsById[aid]
-            local tb, td, te, tp = TouchFromFlags(st, aid, oldFlags, buffMax, debuffMax, externalMax, true)
-            touchBuff, touchDebuff, touchExt, touchDispel = MergeTouches(touchBuff, touchDebuff, touchExt, touchDispel, tb, td, te, tp)
-            AuraCacheRemove(st.buff, aid)
-            AuraCacheRemove(st.debuff, aid)
-            AuraCacheRemove(st.externals, aid)
-            flagsById[aid] = nil
+            if oldFlags ~= nil then
+                local tb, td, te, tp = TouchFromFlags(st, aid, oldFlags, buffMax, debuffMax, externalMax, true)
+                touchBuff, touchDebuff, touchExt, touchDispel = MergeTouches(touchBuff, touchDebuff, touchExt, touchDispel, tb, td, te, tp)
+                AuraCacheRemove(st.buff, aid)
+                AuraCacheRemove(st.debuff, aid)
+                AuraCacheRemove(st.externals, aid)
+                flagsById[aid] = nil
+            end
         end
     end
 
@@ -2573,11 +2575,22 @@ local function UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
     local scale = GetDynamicScale(conf)
     local frameScale = GetFrameScale(kind, conf)
     local anyShown = false
-    local nativeBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs")
-    local nativeDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs")
-    local nativeDispels = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
-    local nativeExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals")
-    local nativePrivate = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras")
+    local c = f._c
+    local nativeBuffs, nativeDebuffs, nativeDispels, nativeExt, nativePrivate
+    if c then
+        nativeBuffs = c.nativeBlizzardBuffs
+        nativeDebuffs = c.nativeBlizzardDebuffs
+        nativeDispels = c.nativeBlizzardDispels
+        nativeExt = c.nativeBlizzardExt
+        nativePrivate = c.nativeBlizzardPrivate
+    else
+        local nativeEnabled = GF.IsBlizzardAuraTypeEnabled
+        nativeBuffs = nativeEnabled and nativeEnabled(conf, "buffs")
+        nativeDebuffs = nativeEnabled and nativeEnabled(conf, "debuffs")
+        nativeDispels = nativeEnabled and nativeEnabled(conf, "dispels")
+        nativeExt = nativeEnabled and nativeEnabled(conf, "externals")
+        nativePrivate = nativeEnabled and nativeEnabled(conf, "privateAuras")
+    end
     local buffCfg = auras.buff or {}
     local debCfg = auras.debuff or {}
     local extCfg = auras.externals or {}
@@ -2592,7 +2605,6 @@ local function UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
         GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
     end
 
-    local c = f._c
     if c and c.nativeBlizzardAuraOnly then
         if not f._msufGFExtHidden then
             HidePool(f[POOL_KEYS.externals], 1)
@@ -2810,11 +2822,22 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local parent = f.statusIconLayer or f.barGroup or f
     local scale = GetDynamicScale(conf)
     local frameScale = GetFrameScale(kind, conf)
-    local nativeBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs")
-    local nativeDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs")
-    local nativeDispels = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "dispels")
-    local nativeExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals")
-    local nativePrivate = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras")
+    local c = f._c
+    local nativeBuffs, nativeDebuffs, nativeDispels, nativeExt, nativePrivate
+    if c then
+        nativeBuffs = c.nativeBlizzardBuffs
+        nativeDebuffs = c.nativeBlizzardDebuffs
+        nativeDispels = c.nativeBlizzardDispels
+        nativeExt = c.nativeBlizzardExt
+        nativePrivate = c.nativeBlizzardPrivate
+    else
+        local nativeEnabled = GF.IsBlizzardAuraTypeEnabled
+        nativeBuffs = nativeEnabled and nativeEnabled(conf, "buffs")
+        nativeDebuffs = nativeEnabled and nativeEnabled(conf, "debuffs")
+        nativeDispels = nativeEnabled and nativeEnabled(conf, "dispels")
+        nativeExt = nativeEnabled and nativeEnabled(conf, "externals")
+        nativePrivate = nativeEnabled and nativeEnabled(conf, "privateAuras")
+    end
     local buffCfg = auras.buff or {}
     local debCfg = auras.debuff or {}
     local extCfg = auras.externals or {}
@@ -2828,7 +2851,6 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
         GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, updateInfo)
     end
 
-    local c = f._c
     if c and c.nativeBlizzardAuraOnly then
         if not f._msufGFExtHidden then HidePool(f[POOL_KEYS.externals], 1); f._msufGFExtHidden = true end
         if not f._msufGFDebHidden then HidePool(f[POOL_KEYS.debuff], 1); f._msufGFDebHidden = true end
@@ -2853,7 +2875,11 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local extMax = tonumber(extCfg.max) or 6
     local debMax = tonumber(debCfg.max) or 6
     local buffMax = tonumber(buffCfg.max) or 6
-    local sig = BuildAuraCacheSig(buffFilter, debFilter, extFilter, buffMax, debMax, extMax, buffOn, debOn, extOn, dispelNeeded)
+    local sig = c and c.auraCacheSig
+    if not sig then
+        sig = BuildAuraCacheSig(buffFilter, debFilter, extFilter, buffMax, debMax, extMax, buffOn, debOn, extOn, dispelNeeded)
+        if c then c.auraCacheSig = sig end
+    end
 
     local st = f._msufGFAuraCache
     local useDelta = updateInfo and not updateInfo.isFullUpdate
