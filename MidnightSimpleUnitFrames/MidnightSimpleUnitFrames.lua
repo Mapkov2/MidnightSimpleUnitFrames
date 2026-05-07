@@ -5952,16 +5952,19 @@ do
         if d then _MSUF_SwapRecolor_Schedule(d) end
     end
 
+    _G.MSUF_SwapRecolor_OnUnitTargetChanged = _G.MSUF_SwapRecolor_OnUnitTargetChanged or function()
+        _swapDirtyToT = true
+        local d = _G.MSUF_SwapRecolorDriver
+        if d then _MSUF_SwapRecolor_Schedule(d) end
+    end
+
     _G.MSUF_EnsureSwapRecolorDriver = _G.MSUF_EnsureSwapRecolorDriver or function()
         if _G.MSUF_SwapRecolorDriver then return _G.MSUF_SwapRecolorDriver end
         local d = CreateFrame("Frame", "MSUF_SwapRecolorDriver", UIParent)
         d._msufSwapRecolorQueued = false
-        -- TARGET/FOCUS via EventBus, keep UNIT_TARGET on frame (filtered to "target" only)
-        d:RegisterUnitEvent("UNIT_TARGET", "target")
-        d:SetScript("OnEvent", function(self, event, arg1)
-            _swapDirtyToT = true
-            _MSUF_SwapRecolor_Schedule(self)
-        end)
+        -- PLAYER_TARGET_CHANGED/PLAYER_FOCUS_CHANGED come through EventBus.
+        -- UNIT_TARGET is already owned by UFCore; it calls
+        -- MSUF_SwapRecolor_OnUnitTargetChanged only when ToT work is active.
         _G.MSUF_SwapRecolorDriver = d
 
         MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_SWAP_RECOLOR", _MSUF_SwapRecolor_OnTargetChanged)

@@ -2725,6 +2725,7 @@ local function RunUpdate(f)
     if not f then return end
     local mask = f._msufDirtyMask or 0
     f._msufDirtyMask = 0
+    local conf
 
     if mask == 0 then return end
 
@@ -2736,7 +2737,7 @@ local function RunUpdate(f)
             mask = band(mask, bnot(DIRTY_LAYOUT))
             if mask == 0 then return end
         else
-            local conf = GetFrameConf(f)
+            conf = GetFrameConf(f)
             Core.ApplyLayout(f, conf, f._msufLayoutWhy or "DIRTY_LAYOUT")
             f._msufLayoutWhy = nil
             mask = band(mask, bnot(DIRTY_LAYOUT))
@@ -2773,7 +2774,6 @@ local function RunUpdate(f)
     end
 
     -- ── Direct element dispatch ──
-    local conf
     if band(mask, DIRTY_HEALTH) ~= 0 then
         if _HealthFullFast then _HealthFullFast(f) end
         if f._msufHealthColorDirty then
@@ -3349,6 +3349,8 @@ Global:SetScript("OnEvent", function(_, event, arg1)
             QueueUnit("targettarget", true, MASK_UNIT_SWAP_NO_PORTRAIT, event)
             DeferSwapWork("targettarget", event, true, false)
         end
+        local recolor = _G.MSUF_SwapRecolor_OnUnitTargetChanged
+        if recolor then recolor() end
         return
     end
 
@@ -3402,7 +3404,6 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         return
     end
 end)
-
 -- Boss Target Highlight: set _msufBossTargetHLOn flag on boss frames so the
 -- Borders.lua priority system can render the highlight overlay.
 -- Secret-safe: UnitIsUnit takes string tokens only; guard result anyway.

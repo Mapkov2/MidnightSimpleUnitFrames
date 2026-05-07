@@ -640,6 +640,39 @@ local function RefreshAll()
     end
 end
 
+local function RefreshActiveCooldownFrames()
+    local cfg = _GetCfg()
+    if not cfg or not _AnyShowEnabled(cfg) then return end
+
+    local didRefresh = false
+    for frame in pairs(_registeredFrames) do
+        if frame.MSUF_castActive == true
+           and not (frame.isNotInterruptible == true)
+           and _CastAllowsKickIndicator(frame)
+           and frame.unit and _ShowOnUnit(cfg, frame.unit) then
+            RefreshFrame(frame, nil)
+            didRefresh = true
+        end
+    end
+    return didRefresh
+end
+
+local _cooldownRefreshQueued = false
+local function _CooldownRefreshFlush()
+    _cooldownRefreshQueued = false
+    RefreshActiveCooldownFrames()
+end
+
+local function _QueueCooldownRefresh()
+    if _cooldownRefreshQueued then return end
+    _cooldownRefreshQueued = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.03, _CooldownRefreshFlush)
+    else
+        _CooldownRefreshFlush()
+    end
+end
+
 -- =============================================================================
 -- Outline-hook: re-apply our border tint after the user's outline color is
 -- (re)applied. Without this, any options-driven outline refresh would wipe
@@ -702,7 +735,7 @@ local function _HandleEvent(_, event)
         return
     end
     if event == "SPELL_UPDATE_COOLDOWN" then
-        RefreshAll()
+        _QueueCooldownRefresh()
         return
     end
 end

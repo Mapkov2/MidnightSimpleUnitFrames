@@ -1427,6 +1427,7 @@ function GF.BuildFrameCache(f)
     local conf = GF.GetConf(kind)
     local c = f._c
     if not c then c = {}; f._c = c end
+    f._msufGFStatusLayoutState = nil
     local fScale = conf._resolvedFrameScale or 1
     c.frameScale = fScale
 
@@ -1636,6 +1637,25 @@ function GF.BuildFrameCache(f)
     c.nameEn = conf.showName ~= false
     c.nameMaxChars = conf.nameMaxChars or 0
     c.nameNoEllipsis = conf.nameNoEllipsis
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    c.nameStyleKey = tostring(c.nameEn) .. "\001"
+        .. tostring(c.nameMaxChars) .. "\001"
+        .. tostring(c.nameNoEllipsis) .. "\001"
+        .. tostring(conf.fontOverride) .. "\001"
+        .. tostring(conf.useGlobalFontColor) .. "\001"
+        .. tostring(conf.nameColorMode) .. "\001"
+        .. tostring(conf.nameColorR) .. "\001"
+        .. tostring(conf.nameColorG) .. "\001"
+        .. tostring(conf.nameColorB) .. "\001"
+        .. tostring(conf.fontR) .. "\001"
+        .. tostring(conf.fontG) .. "\001"
+        .. tostring(conf.fontB) .. "\001"
+        .. tostring(gen and gen.nameClassColor)
+    f._msufGFNameCacheKey = nil
+    f._msufGFNameStyleKey = nil
+    f._msufGFNameText = nil
+    f._msufGFNameClass = nil
+    f._msufGFNameColorKey = nil
 
     -- Status/icons: pre-resolve event/update consumers. Disabled features should
     -- not receive events and should not be called from shared dispatch paths.
@@ -1643,6 +1663,7 @@ function GF.BuildFrameCache(f)
     c.statusTextEn = ((showDead and conf.statusText ~= false)
         or (showGhost and conf.statusGhostText ~= false)
         or ((showAFK or showDND) and conf.statusAFKText ~= false))
+    c.statusAwayEn = (showAFK or showDND) and conf.statusAFKText ~= false
     c.roleIconEn   = conf.roleIcon ~= false
     c.powerRoleGated = c.hasPowerElement and ((not c.powTank) or (not c.powHealer) or (not c.powDPS))
     c.roleStateEn  = c.roleIconEn or c.powerRoleGated
@@ -1653,7 +1674,11 @@ function GF.BuildFrameCache(f)
     c.resEn        = conf.resurrectIcon ~= false
     c.phaseEn      = conf.phaseIcon ~= false
     c.groupNumberEn = conf.showGroupNumber == true
-    c.flagsEn      = c.statusTextEn or c.roleStateEn or c.leaderEn
+    -- Status flags are driven by the global PLAYER_FLAGS_CHANGED path below;
+    -- dead/offline states are covered by UNIT_HEALTH/UNIT_CONNECTION. Do not
+    -- subscribe every raid button to UNIT_FLAGS: boss pulls and stealth/vanish
+    -- transitions can flood it for the whole group.
+    c.flagsEn      = false
     c.connectionEn = c.statusTextEn or c.rfEn
 
     -- Composite: does anything need UNIT_AURA?
@@ -2346,9 +2371,11 @@ local function _GF_HideHealthText(f)
     if f.textLeftFS then f.textLeftFS:SetText(""); f.textLeftFS:Hide() end
     if f.textCenterFS then f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
     if f.textRightFS then f.textRightFS:SetText(""); f.textRightFS:Hide() end
+    f._msufGFCachedTL, f._msufGFCachedTC, f._msufGFCachedTR = nil, nil, nil
     if f.powerTextLeftFS then f.powerTextLeftFS:Hide() end
     if f.powerTextCenterFS then f.powerTextCenterFS:Hide() end
     if f.powerTextRightFS then f.powerTextRightFS:Hide() end
+    f._msufGFCachedPTL, f._msufGFCachedPTC, f._msufGFCachedPTR = nil, nil, nil
 end
 
 local function _GF_RestoreHealthText(f, conf)
@@ -2504,6 +2531,7 @@ local function UpdateStatusText(f, unit, forceAway)
     if c and not c.statusTextEn then
         if f._msufGFStatusState ~= 0 then
             f._msufGFStatusState = 0
+            f._msufGFStatusLayoutState = nil
             st:SetText("")
             st:Hide()
             _GF_RestoreHealthText(f, conf)
@@ -2519,6 +2547,7 @@ local function UpdateStatusText(f, unit, forceAway)
     if not unit or not UnitExists(unit) then
         if f._msufGFStatusState ~= 0 then
             f._msufGFStatusState = 0
+            f._msufGFStatusLayoutState = nil
             st:SetText("")
             st:Hide()
             _GF_RestoreHealthText(f, conf)
@@ -2580,8 +2609,9 @@ local function UpdateStatusText(f, unit, forceAway)
         end
     end
 
-    if newState ~= 0 then
+    if newState ~= 0 and f._msufGFStatusLayoutState ~= newState then
         ApplyStatusTextStateLayout(f, conf, newState)
+        f._msufGFStatusLayoutState = newState
     end
 
     -- Diff-gate: only update text/colors when state actually changes
@@ -2589,6 +2619,7 @@ local function UpdateStatusText(f, unit, forceAway)
     f._msufGFStatusState = newState
 
     if newState == 0 then
+        f._msufGFStatusLayoutState = nil
         st:SetText("")
         st:Hide()
         _GF_RestoreHealthText(f, conf)
@@ -2912,7 +2943,10 @@ local function _gfMarkTextDirty(f)
         _gfTextTail = _gfTextTail + 1
         _gfTextQueue[_gfTextTail] = f
     end
-    _MSUF_ScheduleOnce("GF_TEXT_FLUSH", _gfFlushDirtyText)
+    if not _gfTextQueue.__flushQueued then
+        _gfTextQueue.__flushQueued = true
+        _MSUF_ScheduleOnce("GF_TEXT_FLUSH", _gfFlushDirtyText)
+    end
 end
 
 function _gfFlushDirtyText()
@@ -2929,19 +2963,33 @@ function _gfFlushDirtyText()
 
                 -- Health text fallback: only for uncompiled modes (anySlowText)
                 if c and c.anySlowText then
-                    local hp    = UnitHealth(unit)
-                    local hpMax = f._msufGFCachedHpMax or UnitHealthMax(unit)
+                    local hp    = f._msufGFHealthTextValue
+                    if hp == nil then hp = UnitHealth(unit) end
+                    local hpMax = f._msufGFHealthTextMax or f._msufGFCachedHpMax or UnitHealthMax(unit)
+                    local iss = issecretvalue
                     if f.textLeftFS and c.tlOn and not c.tlFn then
                         local sval = GF.FormatHealthText(c.tl, hp, hpMax, c.delim, c.rev, unit)
-                        f.textLeftFS:SetText(sval)
+                        local cv = f._msufGFCachedTL
+                        if (iss and (iss(sval) or (cv ~= nil and iss(cv)))) or cv ~= sval then
+                            f._msufGFCachedTL = (iss and iss(sval)) and nil or sval
+                            f.textLeftFS:SetText(sval)
+                        end
                     end
                     if f.textCenterFS and c.tcOn and not c.tcFn then
                         local sval = GF.FormatHealthText(c.tc, hp, hpMax, c.delim, c.rev, unit)
-                        f.textCenterFS:SetText(sval)
+                        local cv = f._msufGFCachedTC
+                        if (iss and (iss(sval) or (cv ~= nil and iss(cv)))) or cv ~= sval then
+                            f._msufGFCachedTC = (iss and iss(sval)) and nil or sval
+                            f.textCenterFS:SetText(sval)
+                        end
                     end
                     if f.textRightFS and c.trOn and not c.trFn then
                         local sval = GF.FormatHealthText(c.tr, hp, hpMax, c.delim, c.rev, unit)
-                        f.textRightFS:SetText(sval)
+                        local cv = f._msufGFCachedTR
+                        if (iss and (iss(sval) or (cv ~= nil and iss(cv)))) or cv ~= sval then
+                            f._msufGFCachedTR = (iss and iss(sval)) and nil or sval
+                            f.textRightFS:SetText(sval)
+                        end
                     end
                 end
 
@@ -2949,8 +2997,9 @@ function _gfFlushDirtyText()
                 if f._msufGFPwTextDirty then
                     f._msufGFPwTextDirty = nil
                     if c and c.anyPowerText then
-                        local pw    = UnitPower(unit)
-                        local pwMax = f._msufGFCachedPwMax or UnitPowerMax(unit)
+                        local pw    = f._msufGFPwTextValue
+                        if pw == nil then pw = UnitPower(unit) end
+                        local pwMax = f._msufGFPwTextMax or f._msufGFCachedPwMax or UnitPowerMax(unit)
                         local iss2 = issecretvalue
                         if f.powerTextLeftFS and c.ptlOn then
                             local sval = GF.FormatPowerText(c.ptl, pw, pwMax, c.pDelim, unit)
@@ -2987,6 +3036,7 @@ function _gfFlushDirtyText()
         end
     end
     _gfTextHead, _gfTextTail = 1, 0
+    _gfTextQueue.__flushQueued = nil
 end
 -- Expose for manual flush (Options live-preview, unit show, etc.)
 GF._FlushDirtyText = _gfFlushDirtyText
@@ -3018,6 +3068,17 @@ local function dispatchHealthLean(f, unit)
 
     -- 1 C-call → secret value → C-side SetValue
     local hp = UnitHealth(unit)
+    local iss = issecretvalue
+    local secretHP = iss and iss(hp)
+    if not secretHP then
+        if f._msufGFLastHealthValue == hp then
+            return
+        end
+        f._msufGFLastHealthValue = hp
+    else
+        f._msufGFLastHealthValue = nil
+    end
+
     if c then
         local sm = c.smooth
         if sm then bar:SetValue(hp, sm) else bar:SetValue(hp) end
@@ -3042,8 +3103,56 @@ local function dispatchHealthLean(f, unit)
         fn = c.trFn; if fn then fn(f.textRightFS, unit, hp, hm) end
     end
     if c and (c.anySlowText or c.statusTextEn) then
-        if c.statusTextEn then f._msufGFStatusDirty = true end
-        _gfMarkTextDirty(f)
+        local slowTextDirty = false
+        local nowT
+        if c.anySlowText then
+            local hpMax = f._msufGFCachedHpMax
+            f._msufGFHealthTextValue = hp
+            f._msufGFHealthTextMax = hpMax
+
+            local comparable = not (secretHP or (iss and hpMax ~= nil and iss(hpMax)))
+            if comparable then
+                if f._msufGFHealthTextCmpValue ~= hp or f._msufGFHealthTextCmpMax ~= hpMax then
+                    f._msufGFHealthTextCmpValue = hp
+                    f._msufGFHealthTextCmpMax = hpMax
+                    slowTextDirty = true
+                end
+            else
+                f._msufGFHealthTextCmpValue = nil
+                f._msufGFHealthTextCmpMax = nil
+                nowT = nowT or GetTime()
+                local nextAt = f._msufGFSecretTextNextAt or 0
+                if nowT >= nextAt then
+                    f._msufGFSecretTextNextAt = nowT + 0.05
+                    slowTextDirty = true
+                end
+            end
+        end
+
+        local statusDirty = false
+        if c.statusTextEn then
+            local state = f._msufGFStatusState or 0
+            if secretHP then
+                nowT = nowT or GetTime()
+                local nextAt = f._msufGFSecretStatusNextAt or 0
+                if nowT >= nextAt then
+                    f._msufGFSecretStatusNextAt = nowT + 0.20
+                    statusDirty = true
+                end
+            elseif hp == 0 then
+                -- Only enter the expensive status resolver when we are not
+                -- already showing a dead/offline/ghost state. Repeated
+                -- UNIT_HEALTH on dead raid members is otherwise pure churn.
+                statusDirty = not (state == 1 or state == 2 or state == 3)
+            else
+                -- Health is back above zero: clear existing death states.
+                statusDirty = (state == 1 or state == 2 or state == 3)
+            end
+            if statusDirty then f._msufGFStatusDirty = true end
+        end
+        if slowTextDirty or statusDirty then
+            _gfMarkTextDirty(f)
+        end
     elseif not c then
         f._msufGFStatusDirty = true
         _gfMarkTextDirty(f)
@@ -3089,6 +3198,23 @@ local function dispatchHealthFull(f, unit)
     f.health:SetMinMaxValues(0, hpMax)
     if c.smooth then f.health:SetValue(hp, c.smooth) else f.health:SetValue(hp) end
     f._msufGFCachedHpMax = hpMax
+    if not (issecretvalue and issecretvalue(hp)) then
+        f._msufGFLastHealthValue = hp
+    else
+        f._msufGFLastHealthValue = nil
+    end
+    f._msufGFHealthTextValue = hp
+    f._msufGFHealthTextMax = hpMax
+    if c and c.anySlowText then
+        local iss = issecretvalue
+        if not (iss and (iss(hp) or iss(hpMax))) then
+            f._msufGFHealthTextCmpValue = hp
+            f._msufGFHealthTextCmpMax = hpMax
+        else
+            f._msufGFHealthTextCmpValue = nil
+            f._msufGFHealthTextCmpMax = nil
+        end
+    end
     if GF.SyncPreserveMissingHP then
         GF.SyncPreserveMissingHP(f, f._msufGFKind or "party", hp, hpMax)
     end
@@ -3116,14 +3242,30 @@ local function dispatchHealthFull(f, unit)
             fn      = c.trFn; if fn and f.textRightFS  then fn(f.textRightFS,  unit, hp, hpMax) end
         end
         if c.anySlowText then
+            local iss = issecretvalue
             if f.textLeftFS and c.tlOn and not c.tlFn then
-                f.textLeftFS:SetText(GF.FormatHealthText(c.tl, hp, hpMax, c.delim, c.rev, unit))
+                local sval = GF.FormatHealthText(c.tl, hp, hpMax, c.delim, c.rev, unit)
+                local cv = f._msufGFCachedTL
+                if (iss and (iss(sval) or (cv ~= nil and iss(cv)))) or cv ~= sval then
+                    f._msufGFCachedTL = (iss and iss(sval)) and nil or sval
+                    f.textLeftFS:SetText(sval)
+                end
             end
             if f.textCenterFS and c.tcOn and not c.tcFn then
-                f.textCenterFS:SetText(GF.FormatHealthText(c.tc, hp, hpMax, c.delim, c.rev, unit))
+                local sval = GF.FormatHealthText(c.tc, hp, hpMax, c.delim, c.rev, unit)
+                local cv = f._msufGFCachedTC
+                if (iss and (iss(sval) or (cv ~= nil and iss(cv)))) or cv ~= sval then
+                    f._msufGFCachedTC = (iss and iss(sval)) and nil or sval
+                    f.textCenterFS:SetText(sval)
+                end
             end
             if f.textRightFS and c.trOn and not c.trFn then
-                f.textRightFS:SetText(GF.FormatHealthText(c.tr, hp, hpMax, c.delim, c.rev, unit))
+                local sval = GF.FormatHealthText(c.tr, hp, hpMax, c.delim, c.rev, unit)
+                local cv = f._msufGFCachedTR
+                if (iss and (iss(sval) or (cv ~= nil and iss(cv)))) or cv ~= sval then
+                    f._msufGFCachedTR = (iss and iss(sval)) and nil or sval
+                    f.textRightFS:SetText(sval)
+                end
             end
         end
     end
@@ -3586,6 +3728,31 @@ local function dispatchPower(f, unit)
 
     -- Coalesced power text: dirty flag → flush next frame
     if c.anyPowerText then
+        local pwMax = f._msufGFCachedPwMax
+        if pwMax == nil then
+            pwMax = UnitPowerMax(unit)
+            f._msufGFCachedPwMax = pwMax
+        end
+        f._msufGFPwTextValue = pw
+        f._msufGFPwTextMax = pwMax
+
+        local iss = issecretvalue
+        local comparable = not (iss and (iss(pw) or iss(pwMax)))
+        if comparable then
+            if not f._msufGFPwTextDirty
+                and f._msufGFPwTextCmpValue == pw
+                and f._msufGFPwTextCmpMax == pwMax
+            then
+                return
+            end
+            f._msufGFPwTextCmpValue = pw
+            f._msufGFPwTextCmpMax = pwMax
+        else
+            f._msufGFPwTextCmpValue = nil
+            f._msufGFPwTextCmpMax = nil
+        end
+
+        if f._msufGFPwTextDirty then return end
         f._msufGFPwTextDirty = true
         _gfMarkTextDirty(f)
     end
@@ -3615,6 +3782,8 @@ local function dispatchPowerFull(f, unit)
         if c.powSmooth then f.power:SetValue(pw, c.powSmooth) else f.power:SetValue(pw) end
     end
     f._msufGFCachedPwMax = pwMax
+    f._msufGFPwTextValue = pw
+    f._msufGFPwTextMax = pwMax
     if barActive then
         if not f.power:IsShown() then f.power:Show() end
     elseif f.power:IsShown() then
@@ -3624,6 +3793,14 @@ local function dispatchPowerFull(f, unit)
     -- Inline text on full path (rare event ~0.5/s)
     if c.anyPowerText then
         local iss = issecretvalue
+        if not (iss and (iss(pw) or iss(pwMax))) then
+            f._msufGFPwTextCmpValue = pw
+            f._msufGFPwTextCmpMax = pwMax
+        else
+            f._msufGFPwTextCmpValue = nil
+            f._msufGFPwTextCmpMax = nil
+        end
+        f._msufGFPwTextDirty = nil
         if f.powerTextLeftFS and c.ptlOn then
             local s = GF.FormatPowerText(c.ptl, pw, pwMax, c.pDelim, unit)
             f._msufGFCachedPTL = (iss and iss(s)) and nil or s
@@ -3648,24 +3825,58 @@ local function dispatchDisplayPower(f, unit)
 end
 
 local function dispatchName(f, unit)
-    if f.nameText then
-        local kind = f._msufGFKind or "party"
-        local c = f._c
-        if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
-        if not c or c.nameEn then
-            local name = UnitName(unit) or ""
-            local maxC = (c and c.nameMaxChars) or 0
-            if maxC > 0 then
-                name = GF.TruncateName(name, maxC, c and c.nameNoEllipsis)
-            end
-            f.nameText:SetText(name)
-            -- Cache class token (avoids C API call in ApplyHealthColor hot path)
-            local _, classToken = UnitClass(unit)
-            f._msufGFClass = classToken
-            local nr, ng, nb = GF.ResolveNameColor(kind, classToken)
-            f.nameText:SetTextColor(nr, ng, nb, 1)
-        end
+    if not f.nameText then return end
+
+    local kind = f._msufGFKind or "party"
+    local c = f._c
+    if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+    if c and not c.nameEn then
+        f._msufGFNameCacheKey = nil
+        f._msufGFNameStyleKey = nil
+        return
     end
+
+    local guidFn = _G.UnitGUID
+    local guid = guidFn and guidFn(unit)
+    if guid and issecretvalue and issecretvalue(guid) then guid = nil end
+    local cacheKey = guid or unit or ""
+    local styleKey = (c and c.nameStyleKey) or kind
+    local cachedName = f._msufGFNameText
+
+    if f._msufGFNameCacheKey == cacheKey
+        and f._msufGFNameStyleKey == styleKey
+        and cachedName ~= nil
+        and cachedName ~= ""
+        and cachedName ~= _G.UNKNOWN
+        and cachedName ~= _G.UNKNOWNOBJECT
+    then
+        return
+    end
+
+    local name = UnitName(unit) or ""
+    local maxC = (c and c.nameMaxChars) or 0
+    if maxC > 0 then
+        name = GF.TruncateName(name, maxC, c and c.nameNoEllipsis)
+    end
+
+    if f._msufGFNameText ~= name then
+        f.nameText:SetText(name)
+    end
+
+    -- Cache class token (avoids C API call in ApplyHealthColor hot path)
+    local _, classToken = UnitClass(unit)
+    f._msufGFClass = classToken
+    local nr, ng, nb = GF.ResolveNameColor(kind, classToken)
+    local colorKey = tostring(nr) .. "\001" .. tostring(ng) .. "\001" .. tostring(nb)
+    if f._msufGFNameColorKey ~= colorKey then
+        f.nameText:SetTextColor(nr, ng, nb, 1)
+    end
+
+    f._msufGFNameCacheKey = cacheKey
+    f._msufGFNameStyleKey = styleKey
+    f._msufGFNameText = name
+    f._msufGFNameClass = classToken
+    f._msufGFNameColorKey = colorKey
 end
 
 local UNIT_DISPATCH = {
@@ -3687,9 +3898,9 @@ local UNIT_DISPATCH = {
     end,
     UNIT_FLAGS                        = function(f, u)
         local c = f._c
-        if c and c.statusTextEn then UpdateStatusText(f, u, true) end
-        if c and c.roleStateEn then UpdateRoleIcon(f, u) end
-        if c and c.leaderEn then UpdateLeaderIcon(f, u) end
+        if c and c.statusTextEn and (c.statusAwayEn or (f._msufGFStatusState or 0) ~= 0) then
+            UpdateStatusText(f, u, true)
+        end
     end,
     UNIT_IN_RANGE_UPDATE              = function(f, u, inRange) ApplyRangeFade(f, u, inRange) end,
     UNIT_AURA                         = function(f, u, updateInfo)
@@ -3750,6 +3961,7 @@ function GF.RegisterUnitEvents(f, unit)
     end
     f._msufGFRegUnit = unit
     f._msufGFRegBits = evBits
+    f._msufGFLastHealthValue = nil
 
     -- GUID→frame map (rebuilt on roster change, used for O(1) target/focus scan)
     local guid = _G.UnitGUID and _G.UnitGUID(unit)
@@ -3824,7 +4036,6 @@ function GF.RegisterUnitEvents(f, unit)
     end
 
     f:SetScript("OnEvent", GF_OnEvent)
-
 end
 
 function GF.UnregisterUnitEvents(f)
@@ -3850,11 +4061,93 @@ local _gfFocusFrame  = nil -- the frame whose unit was last "focus"
 
 -- PERF: Coalesced GROUP_ROSTER_UPDATE flush (one iteration per burst instead of N).
 local _gfRosterPending = false
+local function _gfRosterFlushFrame(f, gmap)
+    if not f then return end
+
+    local u = f.unit
+    if not (u and UnitExists(u)) then
+        f._msufGFRosterGUID = nil
+        f._msufGFRosterUnit = nil
+        f._msufGFRosterRole = nil
+        f._msufGFRosterLeaderState = nil
+        f._msufGFIsTarget = nil
+        f._msufGFIsFocus = nil
+        return
+    end
+
+    local c = f._c
+    if not c then GF.BuildFrameCache(f); c = f._c end
+
+    local UnitGUID = _G.UnitGUID
+    local guid = UnitGUID and UnitGUID(u)
+    local hasGUID = guid and not (issecretvalue and issecretvalue(guid))
+    if hasGUID then gmap[guid] = f end
+
+    local sameRosterUnit = hasGUID and f._msufGFRosterGUID == guid and f._msufGFRosterUnit == u
+    f._msufGFRosterGUID = hasGUID and guid or nil
+    f._msufGFRosterUnit = u
+
+    local role
+    local roleChanged = false
+    if c and c.roleStateEn then
+        role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(u)
+        roleChanged = f._msufGFRosterRole ~= role
+        f._msufGFRosterRole = role
+    end
+
+    local leaderState
+    local leaderChanged = false
+    if c and c.leaderEn then
+        local isLeader = _G.UnitIsGroupLeader and _G.UnitIsGroupLeader(u)
+        local isAssist = _G.UnitIsGroupAssistant and _G.UnitIsGroupAssistant(u)
+        leaderState = (isLeader and 1 or 0) + (isAssist and 2 or 0)
+        leaderChanged = f._msufGFRosterLeaderState ~= leaderState
+        f._msufGFRosterLeaderState = leaderState
+    end
+
+    if sameRosterUnit then
+        -- Same button/unit after a roster event: skip full visual refresh.
+        -- Role, leader/assist and group-number metadata can still change.
+        if roleChanged then UpdateRoleIcon(f, u) end
+        if leaderChanged then UpdateLeaderIcon(f, u) end
+        if (c and c.groupNumberEn)
+            or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
+            or (f.groupNumberText and f.groupNumberText:IsShown())
+        then
+            UpdateGroupNumber(f, u)
+        end
+    else
+        dispatchName(f, u)
+        ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", u)
+        ApplyPowerColor(f, u)
+        if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
+        if c and c.roleStateEn then UpdateRoleIcon(f, u) end
+        if c and c.raidMarkerEn then UpdateRaidMarker(f, u) end
+        if c and c.leaderEn then UpdateLeaderIcon(f, u) end
+        if (c and c.groupNumberEn)
+            or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
+            or (f.groupNumberText and f.groupNumberText:IsShown())
+        then
+            UpdateGroupNumber(f, u)
+        end
+    end
+
+    if not sameRosterUnit then
+        UpdateTargetIndicator(f, u)
+    end
+end
+
 local function _gfRosterFlush()
     _gfRosterPending = false
+    local oldTarget = _gfTargetFrame
+    local oldFocus  = _gfFocusFrame
+    if oldTarget then oldTarget._msufGFIsTarget = nil end
+    if oldFocus then oldFocus._msufGFIsFocus = nil end
     _gfTargetFrame = nil
     _gfFocusFrame  = nil
-    -- Rebuild GUID→frame map (GUIDs change on roster change)
+
+    -- Rebuild GUID->frame map. GUID changes identify the small subset of
+    -- frames that need a full visual refresh after roster churn.
     local gmap = GF._guidMap
     if gmap then
         local wipeFn = _G.wipe
@@ -3863,79 +4156,53 @@ local function _gfRosterFlush()
         gmap = {}
         GF._guidMap = gmap
     end
-    local focusExists = UnitExists("focus")
+
     local list = GF.frameList
     local count = list and #list or 0
     for i = 1, count do
-        local f = list[i]
-        if f then
-            local u = f.unit
-            if u and UnitExists(u) then
-                local c = f._c
-                if not c then GF.BuildFrameCache(f); c = f._c end
-                local guid = _G.UnitGUID and _G.UnitGUID(u)
-                if guid and not (issecretvalue and issecretvalue(guid)) then
-                    gmap[guid] = f
-                end
-                dispatchName(f, u)
-                ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", u)
-                ApplyPowerColor(f, u)
-                if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
-                if c and c.roleStateEn then UpdateRoleIcon(f, u) end
-                if c and c.raidMarkerEn then UpdateRaidMarker(f, u) end
-                if c and c.leaderEn then UpdateLeaderIcon(f, u) end
-                if (c and c.groupNumberEn)
-                    or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
-                    or (f.groupNumberText and f.groupNumberText:IsShown())
-                then
-                    UpdateGroupNumber(f, u)
-                end
-                if UnitIsUnit(u, "target") then
-                    f._msufGFIsTarget = true
-                    _gfTargetFrame = f
-                end
-                if focusExists and UnitIsUnit(u, "focus") then
-                    f._msufGFIsFocus = true
-                    _gfFocusFrame = f
-                end
-                UpdateTargetIndicator(f, u)
-            end
-        end
+        _gfRosterFlushFrame(list[i], gmap)
     end
     if not list then
         for f in pairs(GF.frames) do
-            local u = f.unit
-            if u and UnitExists(u) then
-                local c = f._c
-                if not c then GF.BuildFrameCache(f); c = f._c end
-                local guid = _G.UnitGUID and _G.UnitGUID(u)
-                if guid and not (issecretvalue and issecretvalue(guid)) then
-                    gmap[guid] = f
-                end
-                dispatchName(f, u)
-                ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", u)
-                ApplyPowerColor(f, u)
-                if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
-                if c and c.roleStateEn then UpdateRoleIcon(f, u) end
-                if c and c.raidMarkerEn then UpdateRaidMarker(f, u) end
-                if c and c.leaderEn then UpdateLeaderIcon(f, u) end
-                if (c and c.groupNumberEn)
-                    or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
-                    or (f.groupNumberText and f.groupNumberText:IsShown())
-                then
-                    UpdateGroupNumber(f, u)
-                end
-                if UnitIsUnit(u, "target") then
-                    f._msufGFIsTarget = true
-                    _gfTargetFrame = f
-                end
-                if focusExists and UnitIsUnit(u, "focus") then
-                    f._msufGFIsFocus = true
-                    _gfFocusFrame = f
-                end
-                UpdateTargetIndicator(f, u)
+            _gfRosterFlushFrame(f, gmap)
+        end
+    end
+
+    local UnitGUID = _G.UnitGUID
+    if UnitGUID then
+        local tGUID = UnitExists("target") and UnitGUID("target")
+        if tGUID and not (issecretvalue and issecretvalue(tGUID)) then
+            local f = gmap[tGUID]
+            if f and f.unit then
+                f._msufGFIsTarget = true
+                _gfTargetFrame = f
             end
         end
+
+        local fGUID = UnitExists("focus") and UnitGUID("focus")
+        if fGUID and not (issecretvalue and issecretvalue(fGUID)) then
+            local f = gmap[fGUID]
+            if f and f.unit then
+                f._msufGFIsFocus = true
+                _gfFocusFrame = f
+            end
+        end
+    end
+
+    if oldTarget ~= _gfTargetFrame then
+        if oldTarget and oldTarget.unit then
+            UpdateTargetIndicator(oldTarget, oldTarget.unit)
+            _GF_QuickBorderUpdate(oldTarget)
+        end
+        if _gfTargetFrame and _gfTargetFrame.unit then
+            UpdateTargetIndicator(_gfTargetFrame, _gfTargetFrame.unit)
+            _GF_QuickBorderUpdate(_gfTargetFrame)
+        end
+    end
+
+    if oldFocus ~= _gfFocusFrame then
+        if oldFocus and oldFocus.unit then _GF_QuickBorderUpdate(oldFocus) end
+        if _gfFocusFrame and _gfFocusFrame.unit then _GF_QuickBorderUpdate(_gfFocusFrame) end
     end
 end
 
@@ -4459,6 +4726,11 @@ _G.MSUF_GF_OnFrameRetire = function(f)
     f._msufGFStatusDirty = nil
     f._msufGFAuraDirty = nil
     f._msufGFFullPending = nil
+    f._msufGFNameCacheKey = nil
+    f._msufGFNameStyleKey = nil
+    f._msufGFNameText = nil
+    f._msufGFNameClass = nil
+    f._msufGFNameColorKey = nil
     _gfAuraDirtyQueued[f] = nil
 
     -- Remove from GUID→frame map (search by value — guid hash unknown here)
@@ -4511,7 +4783,7 @@ _G.MSUF_GF_RefreshDebuffStripe = function()
 end
 _G.MSUF_GF_ApplyDebuffStripe = _GF_ApplyDebuffStripe
 
--- Exports for Perfy profiling (target-click spike diagnosis)
+-- Diagnostic exports (target-click spike diagnosis)
 _G.MSUF_GF_QuickBorderUpdate   = _GF_QuickBorderUpdate
 _G.MSUF_GF_RefreshBorder        = _GF_RefreshBorder
 _G.MSUF_GF_ApplyHLBorderStyle   = _applyHighlightBorderStyle
@@ -4557,7 +4829,7 @@ GF._ApplyHealthColor      = ApplyHealthColorWithAlpha
 GF._ApplyAbsorbAnchor     = _GF_ApplyAbsorbAnchor
 GF._ReadOverlayColor      = _GF_ReadOverlayColor
 
--- Perfy idle-diagnosis exports (zero cost when Perfy absent)
+-- Idle-diagnosis exports
 _G.MSUF_GF_DispatchHealth  = dispatchHealthFull  -- Full refresh (for Options/manual use)
 _G.MSUF_GF_DispatchPower   = dispatchPower
 _G.MSUF_GF_DispatchAura    = dispatchAura

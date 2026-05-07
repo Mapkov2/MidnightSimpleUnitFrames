@@ -91,6 +91,7 @@ local function _AuraCopyFieldsUpdate(dst, src)
     dst.applications           = src.applications
     dst.isRaid                 = src.isRaid
     dst.isBossAura             = src.isBossAura
+    dst._msufA2_updateRev      = (dst._msufA2_updateRev or 0) + 1
 end
 local C_Secrets = C_Secrets
 local GetTime = GetTime
@@ -441,6 +442,7 @@ function Cache.FullScan(unit)
     s.changed = true
     s.epoch = s.epoch + 1
     s.structureChanged = true
+    if s.updatedIDs then wipe(s.updatedIDs) end
     local _st = API.Store; if _st and _st._epochs then _st._epochs[unit] = s.epoch end
     local slotsN = _PackSlots(_getSlots(unit, HELPFUL, 40))
     for i = 2, slotsN do
@@ -486,6 +488,7 @@ function Cache.OnUnitAura(unit, updateInfo)
     -- PERF: track structure change inline instead of re-scanning the arrays
     -- via `next()` after the loops complete (2 redundant calls eliminated).
     local hasAdd, hasRem = false, false
+    local updatedIDs = s.updatedIDs
 
     local added = updateInfo.addedAuras
     if added then
@@ -526,6 +529,11 @@ function Cache.OnUnitAura(unit, updateInfo)
                     -- the saving (~0.1µs/call) is far less than the risk of
                     -- onlyBoss/merge filter failure from stale cache.
                     entry._msufA2_bossFlag = nil
+                    if not updatedIDs then
+                        updatedIDs = {}
+                        s.updatedIDs = updatedIDs
+                    end
+                    updatedIDs[aid] = true
                     any = true
                 end
             end
@@ -552,7 +560,10 @@ function Cache.OnUnitAura(unit, updateInfo)
         s.epoch = s.epoch + 1
         -- PERF: Track whether list structure changed (add/remove) vs data-only update.
         -- update-only → FilterAndSort can skip full rescan and reuse previous output.
-        if hasAdd or hasRem then s.structureChanged = true end
+        if hasAdd or hasRem then
+            s.structureChanged = true
+            if updatedIDs then wipe(updatedIDs) end
+        end
         -- PERF: Inlined Store epoch tracking (was separate Store.OnUnitAura wrapper)
         local _st = API.Store; if _st and _st._epochs then _st._epochs[unit] = s.epoch end
     end
@@ -565,6 +576,7 @@ function Cache.Invalidate(unit)
         s.changed = true
         s.epoch = s.epoch + 1
         s.structureChanged = true
+        if s.updatedIDs then wipe(s.updatedIDs) end
         s._lastFilterGen = nil
         s._lastNB = nil
         s._lastND = nil
@@ -576,6 +588,7 @@ function Cache.InvalidateAll()
         s.changed = true
         s.epoch = s.epoch + 1
         s.structureChanged = true
+        if s.updatedIDs then wipe(s.updatedIDs) end
         -- Clear fast-path filter cache: options changes (Important, OnlyMine,
         -- Caps, IgnoreList, etc.) must force a full re-filter on next
         -- FilterAndSort, even when no aura add/remove occurred.
@@ -592,7 +605,15 @@ end
 
 function Cache.ClearChanged(unit)
     local s = _units[unit]
-    if s then s.changed = false end
+    if s then
+        s.changed = false
+        if s.updatedIDs then wipe(s.updatedIDs) end
+    end
+end
+
+function Cache.GetUpdatedAuraIDs(unit)
+    local s = _units[unit]
+    return s and s.updatedIDs or nil
 end
 
 function Cache.GetEpoch(unit)
@@ -1734,6 +1755,8 @@ icon.countFrame = countFrame
     return icon
 end
 
+local ClearCooldownVisual
+
 function Icons.AcquireIcon(container, index)
     if not container then return nil end
 
@@ -1792,12 +1815,16 @@ function Icons.HideUnused(container, fromIndex)
         local icon = pool[i]
         if icon then
             if icon:IsShown() then
+                if ClearCooldownVisual and icon.cooldown then
+                    ClearCooldownVisual(icon, icon.cooldown)
+                end
                 icon:Hide()
                 local aid = icon._msufAuraInstanceID
                 if aid and map and map[aid] == icon then
                     map[aid] = nil
                 end
                 icon._msufAuraInstanceID = nil
+                icon._msufAura = nil
                 -- Bug 1 fix: Clear stale commit + texture cache so recycled
                 -- icons always do a full CommitIcon on next AcquireIcon.
                 -- PERF: Reuse the lastCommit table (avoid ~96B alloc on recycle).
@@ -1805,6 +1832,7 @@ function Icons.HideUnused(container, fromIndex)
                 local lc = icon._msufA2_lastCommit
                 if lc then lc.aid = nil end
                 icon._msufA2_lastTexAid = nil
+                icon._msufA2_timerRev = nil
             end
         end
     end
@@ -1987,6 +2015,7 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     then
         -- Same aura, same config. Only refresh timer + stacks (values may have changed).
         -- Timer/stacks always read fresh from C API for correctness.
+        icon._msufAura = aura
         _fast_RefreshTimer(icon, unit, aid, shared, aura)
         _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
         return true
@@ -2084,7 +2113,7 @@ end
 -- Timer application (cooldown swipe + text)
 -- Uses duration objects (secret-safe pass-through)
 
-local function ClearCooldownVisual(icon, cd)
+function ClearCooldownVisual(icon, cd)
     if not icon or not cd then return end
 
     -- Unregister from the cooldown text manager to prevent stale updates.
@@ -2119,6 +2148,7 @@ local function ClearCooldownVisual(icon, cd)
     icon._msufA2_lastCdDurationObj = nil
     icon._msufA2_lastCdAid = nil
     icon._msufA2_lastCdShown = false
+    icon._msufA2_timerRev = nil
 
     -- Pandemic: immediately hide pulsing border when timer clears.
     local pan = icon._msufPandemic
@@ -2182,6 +2212,14 @@ end
 function Icons._ApplyTimer(icon, unit, aid, shared, aura)
     local cd = icon.cooldown
     if not cd then return end
+
+    local auraRev = aura and aura._msufA2_updateRev
+    if auraRev and icon._msufA2_timerRev ~= auraRev then
+        if icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil or icon._msufA2_cdNumericFallback == true then
+            ClearCooldownVisual(icon, cd)
+        end
+        icon._msufA2_timerRev = auraRev
+    end
 
     local hadTimer = false
 
@@ -2299,6 +2337,14 @@ end
 function Icons._RefreshTimer(icon, unit, aid, shared, aura)
     local cd = icon.cooldown
     if not cd then return end
+
+    local auraRev = aura and aura._msufA2_updateRev
+    if auraRev and icon._msufA2_timerRev ~= auraRev then
+        if icon._msufA2_lastHadTimer == true or cd._msufA2_durationObj ~= nil or icon._msufA2_cdNumericFallback == true then
+            ClearCooldownVisual(icon, cd)
+        end
+        icon._msufA2_timerRev = auraRev
+    end
 
     -- PERF: Inline GetDurationObjectFast — direct C API call, skip wrapper
     local obj

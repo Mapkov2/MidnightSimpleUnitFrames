@@ -523,6 +523,8 @@ local function MSUF_Alpha_ClearBaseCache(frame)
     frame._msufAlphaBaseBG = nil
     frame._msufAlphaBaseLayerMode = nil
     frame._msufAlphaBasePreserveHPColor = nil
+    frame._msufAlphaLayeredFastValid = nil
+    frame._msufAlphaLayeredFastHits = nil
 end
 
 local function MSUF_Alpha_ResetLayered(frame)
@@ -536,6 +538,9 @@ local function MSUF_Alpha_ResetLayered(frame)
     frame._msufAlphaUnitAlpha = nil
     frame._msufAlphaLastFG = nil
     frame._msufAlphaLastBG = nil
+    frame._msufAlphaLastPortrait = nil
+    frame._msufAlphaLayeredFastValid = nil
+    frame._msufAlphaLayeredFastHits = nil
     frame._msufAlphaMissingHPAlpha = nil
     if frame.SetAlpha then
         frame:SetAlpha(unitAlpha)
@@ -570,10 +575,26 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     if frame._msufAlphaLayeredMode and frame._msufAlphaLayerMode == mode and frame._msufAlphaPreserveHPColor == preserveHPColor then
         local lastFG = frame._msufAlphaLastFG or 1
         local lastBG = frame._msufAlphaLastBG or 1
+        local lastPortrait = frame._msufAlphaLastPortrait or 1
         local dfg = lastFG - fg; if dfg < 0 then dfg = -dfg end
         local dbg = lastBG - bg; if dbg < 0 then dbg = -dbg end
-        if dfg <= 0.001 and dbg <= 0.001 and _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor, portraitAlpha) then
-            return
+        local dp = lastPortrait - portraitAlpha; if dp < 0 then dp = -dp end
+        if dfg <= 0.001 and dbg <= 0.001 and dp <= 0.001 then
+            if frame._msufAlphaLayeredFastValid then
+                local hits = (frame._msufAlphaLayeredFastHits or 0) + 1
+                if hits < 16 then
+                    frame._msufAlphaLayeredFastHits = hits
+                    return
+                end
+                frame._msufAlphaLayeredFastHits = 0
+            end
+            if frame._msufAlphaLayeredFastValid then
+                frame._msufAlphaLayeredFastValid = nil
+            end
+            if _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor, portraitAlpha) then
+                frame._msufAlphaLayeredFastValid = true
+                return
+            end
         end
     end
 
@@ -582,6 +603,9 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     frame._msufAlphaPreserveHPColor = preserveHPColor
     frame._msufAlphaLastFG = fg
     frame._msufAlphaLastBG = bg
+    frame._msufAlphaLastPortrait = portraitAlpha
+    frame._msufAlphaLayeredFastValid = nil
+    frame._msufAlphaLayeredFastHits = nil
 
     if frame.SetAlpha then
         local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
@@ -620,6 +644,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     _SetGradArrayAlpha(frame.powerGradients, powerAlpha)
     _AlphaSetPortraitAlpha(frame, portraitAlpha)
     MSUF_Alpha_SetTextAlpha(frame, 1)
+    frame._msufAlphaLayeredFastValid = true
 end
 
 local _rfMulTable = _G.MSUF_RangeFadeMul
