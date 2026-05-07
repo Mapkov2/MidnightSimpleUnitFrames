@@ -329,6 +329,26 @@ local UnitIsGhost      = _G.UnitIsGhost
 local _smoothInterp    = _G.Enum and _G.Enum.StatusBarInterpolation
                          and _G.Enum.StatusBarInterpolation.ExponentialEaseOut
 
+local function ResolvePowerBarColor(powerToken)
+    local resolver = _G.MSUF_GetResolvedPowerColor
+    if type(resolver) == "function" then
+        local r, g, b = resolver(nil, powerToken)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+
+    if powerToken and PowerBarColor and PowerBarColor[powerToken] then
+        local c = PowerBarColor[powerToken]
+        local r = c.r or c[1] or 0.5
+        local g = c.g or c[2] or 0.5
+        local b = c.b or c[3] or 0.8
+        return r, g, b
+    end
+
+    return 0.5, 0.5, 0.8
+end
+
 -- Forward declarations (defined later in file)
 local _GF_IsAbsorbEnabled
 
@@ -2812,12 +2832,8 @@ local function ApplyPowerColor(f, unit)
         if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, f._msufGFKind or "party") end
         return
     end
-    if pToken and PowerBarColor and PowerBarColor[pToken] then
-        local c = PowerBarColor[pToken]
-        f.power:SetStatusBarColor(c.r or 0.5, c.g or 0.5, c.b or 0.5, 1)
-    else
-        f.power:SetStatusBarColor(0.5, 0.5, 0.8, 1)
-    end
+    local r, g, b = ResolvePowerBarColor(pToken)
+    f.power:SetStatusBarColor(r, g, b, 1)
     if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, f._msufGFKind or "party") end
 end
 
