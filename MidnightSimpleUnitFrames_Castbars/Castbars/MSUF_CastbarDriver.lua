@@ -15,9 +15,15 @@ local MSUF_FastCall = MSUF_FastCall or function(...) return pcall(...) end
 -- Secret-safe: UnitExists/UnitIsDeadOrGhost return plain booleans.
 local _DriverNow = GetTime
 local _driverFloor = math.floor
+local _DriverNewTicker = _G.C_Timer and _G.C_Timer.NewTicker
+local MSUF_Driver_SetSafetyTicker
 
 local function MSUF_Driver_SafetyOnUpdate(self, elapsed)
-    if not self or not self.unit or not self:IsShown() then return end
+    if not self or not self.unit then return end
+    if not self:IsShown() then
+        if MSUF_Driver_SetSafetyTicker then MSUF_Driver_SetSafetyTicker(self, false) else self:SetScript("OnUpdate", nil) end
+        return
+    end
     if self.interrupted then return end
 
     local now = _DriverNow()
@@ -28,7 +34,7 @@ local function MSUF_Driver_SafetyOnUpdate(self, elapsed)
     -- Unit gone or dead → stop immediately.
     local u = self.unit
     if not UnitExists(u) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(u)) then
-        self:SetScript("OnUpdate", nil)
+        if MSUF_Driver_SetSafetyTicker then MSUF_Driver_SetSafetyTicker(self, false) else self:SetScript("OnUpdate", nil) end
         _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
         return
     end
@@ -41,7 +47,7 @@ local function MSUF_Driver_SafetyOnUpdate(self, elapsed)
             self._msufZeroCount = (self._msufZeroCount or 0) + 1
             if self._msufZeroCount >= 2 then
                 self._msufZeroCount = nil
-                self:SetScript("OnUpdate", nil)
+                if MSUF_Driver_SetSafetyTicker then MSUF_Driver_SetSafetyTicker(self, false) else self:SetScript("OnUpdate", nil) end
                 if self.SetSucceeded then
                     self:SetSucceeded()
                 else
@@ -51,6 +57,29 @@ local function MSUF_Driver_SafetyOnUpdate(self, elapsed)
         else
             self._msufZeroCount = nil
         end
+    end
+end
+
+MSUF_Driver_SetSafetyTicker = function(frame, enabled)
+    if not frame then return end
+    if enabled then
+        frame:SetScript("OnUpdate", nil)
+        if frame._msufSafetyTicker then return end
+        frame._msufSafetyNext = 0
+        if _DriverNewTicker then
+            frame._msufSafetyTicker = _DriverNewTicker(0.25, function()
+                MSUF_Driver_SafetyOnUpdate(frame, 0.25)
+            end)
+        else
+            frame:SetScript("OnUpdate", MSUF_Driver_SafetyOnUpdate)
+        end
+    else
+        if frame._msufSafetyTicker and frame._msufSafetyTicker.Cancel then
+            frame._msufSafetyTicker:Cancel()
+        end
+        frame._msufSafetyTicker = nil
+        frame._msufSafetyNext = nil
+        frame:SetScript("OnUpdate", nil)
     end
 end
 
@@ -418,7 +447,7 @@ local function CreateCastBar(name, unit)
             if not self:IsShown() or self.interrupted then return end
             local u = self.unit
             if u and (not UnitExists(u) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(u))) then
-                self:SetScript("OnUpdate", nil)
+                MSUF_Driver_SetSafetyTicker(self, false)
                 MSUF_Driver_CancelStopConfirm(self)
                 MSUF_Driver_CancelStartRetry(self)
                 MSUF__HidePlayerChannelHasteStripes(self)
@@ -480,6 +509,7 @@ local function CreateCastBar(name, unit)
 frame:SetScript("OnEvent", function(self, event, arg1, ...)
         local _, spellID = ...
         if not MSUF_Driver_IsCastbarEnabled(self.unit or "") then
+            MSUF_Driver_SetSafetyTicker(self, false)
             MSUF_Driver_CancelStopConfirm(self)
             MSUF__HidePlayerChannelHasteStripes(self)
             _G.MSUF_CB_ResetStateOnStop(self, "HARDHIDE")
@@ -491,7 +521,7 @@ frame:SetScript("OnEvent", function(self, event, arg1, ...)
             if self:IsShown() and not self.interrupted then
                 local u = self.unit
                 if u and (not UnitExists(u) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(u))) then
-                    self:SetScript("OnUpdate", nil)
+                    MSUF_Driver_SetSafetyTicker(self, false)
                     MSUF_Driver_CancelStopConfirm(self)
                     MSUF_Driver_CancelStartRetry(self)
                     MSUF__HidePlayerChannelHasteStripes(self)
@@ -830,31 +860,30 @@ self.MSUF_timerDriven = okTimer and true or false
             -- Safety net: 4Hz existence + remaining=0 check catches stuck bars.
             if self.unit ~= "player" then
                 self._msufZeroCount = nil
-                self._msufSafetyNext = 0
-                self:SetScript("OnUpdate", MSUF_Driver_SafetyOnUpdate)
+                MSUF_Driver_SetSafetyTicker(self, true)
             end
         else
-self:SetScript("OnUpdate", nil)
--- Cast no longer active: clear kick indicator state.
-self.MSUF_castActive = false
-self.MSUF_kickInterruptibleConfirmed = nil
-if self.kickReadyBox then self.kickReadyBox:Hide() end
-if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
-if self.hideTimer and self.hideTimer.Cancel then
-    self.hideTimer:Cancel()
-end
+            MSUF_Driver_SetSafetyTicker(self, false)
+            -- Cast no longer active: clear kick indicator state.
+            self.MSUF_castActive = false
+            self.MSUF_kickInterruptibleConfirmed = nil
+            if self.kickReadyBox then self.kickReadyBox:Hide() end
+            if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
+            if self.hideTimer and self.hideTimer.Cancel then
+                self.hideTimer:Cancel()
+            end
 
-self.hideTimer = C_Timer.NewTimer(0, function()
-    if not self or not self.unit then return end
+            self.hideTimer = C_Timer.NewTimer(0, function()
+                if not self or not self.unit then return end
 
-    local st = MSUF_Driver_BuildCastStateFor(self)
-if st and st.active then
-    self:Cast(st)
-    return
-end
+                local st = MSUF_Driver_BuildCastStateFor(self)
+                if st and st.active then
+                    self:Cast(st)
+                    return
+                end
 
-    _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
-end)
+                _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
+            end)
         end
 
         if self.timer then
@@ -877,6 +906,7 @@ end)
 
 function frame:SetInterrupted()
     MSUF__HidePlayerChannelHasteStripes(self)
+    MSUF_Driver_SetSafetyTicker(self, false)
     _G.MSUF_CB_ResetStateOnStop(self, "INTERRUPTED")
     self.interrupted = true
     self._msufApiNotInterruptibleRaw = nil
@@ -953,6 +983,7 @@ function frame:SetSucceeded()
         return
     end
 
+    MSUF_Driver_SetSafetyTicker(self, false)
     _G.MSUF_CB_ResetStateOnStop(self, "SUCCEEDED")
 end
 
@@ -975,10 +1006,10 @@ end
     frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
     frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
 
-    -- Death detection: UnitIsDeadOrGhost returns plain boolean (secret-safe).
-    if unit ~= "player" then
-        frame:RegisterUnitEvent("UNIT_HEALTH", unit)
-    end
+    -- Death detection is handled by the low-frequency safety ticker while a cast
+    -- is active. Do not subscribe target/focus castbars to UNIT_HEALTH: on raid
+    -- bosses it can fire thousands of times per minute and does not change cast
+    -- state except for the rare death case the ticker already catches.
 
     if unit == "target" or unit == "focus" then
         frame:RegisterEvent("PLAYER_" .. unit:upper() .. "_CHANGED")

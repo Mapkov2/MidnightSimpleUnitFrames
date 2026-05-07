@@ -703,6 +703,20 @@ do
         local frames = _G.MSUF_UnitFrames
         local uf = frames and frames[u]
         if not uf or uf.unit ~= u then return end
+
+        if not _G.MSUF_AggroBorderTestMode then
+            local on = false
+            if UnitThreatSituation then
+                local raw = UnitThreatSituation("player", u)
+                if raw ~= nil then
+                    if issecretvalue and issecretvalue(raw) then return end
+                    on = (raw == 3) and true or false
+                end
+            end
+            if uf._msufAggroOutlineOn == on then return end
+            uf._msufAggroOutlineOn = on
+        end
+
         local fn = _G.MSUF_RefreshRareBarVisuals
         if type(fn) == "function" then fn(uf) end
     end
@@ -712,7 +726,6 @@ do
     ef:SetScript("OnEvent", function(_, event, unit)
         RefreshAggroForUnit(unit)
     end)
-
     local function ApplyAggroOutlineEventRegistration()
         local g = MSUF_DB and MSUF_DB.general
         local want = (g and g.aggroOutlineMode == 1) and true or false
@@ -805,9 +818,9 @@ do
 
     -- Cached purge color ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â refreshed once per UpdatePurgeSentinels call.
     local _purgeR, _purgeG, _purgeB = 1.00, 0.85, 0.00
-    local function _RefreshPurgeColor()
-        local g = MSUF_DB and MSUF_DB.general
-        _purgeR, _purgeG, _purgeB = _ReadRGB(g, "purgeBorderColorR", "purgeBorderColorG", "purgeBorderColorB", 1.00, 0.85, 0.00)
+    local function _RefreshPurgeColor(cfg)
+        if not cfg then cfg = _RefreshBorderSettingsCache() end
+        _purgeR, _purgeG, _purgeB = cfg.purgeR or 1.00, cfg.purgeG or 0.85, cfg.purgeB or 0.00
     end
 
     local function _EnsureSentinel(uf, idx)
@@ -853,15 +866,13 @@ do
     -- Single-pass: scan HELPFUL slots and set sentinel alphas inline.
     -- No intermediate allSlots table ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â process each batch directly.
     local _purgeScratch = {}
-    local function UpdatePurgeSentinels(uf, unit)
+    local function UpdatePurgeSentinels(uf, unit, cfg)
         if type(_getSlots) ~= "function" or type(_getBySlot) ~= "function" then return false end
 
-        _RefreshPurgeColor()
+        cfg = cfg or _RefreshBorderSettingsCache()
+        _RefreshPurgeColor(cfg)
 
-        local g = MSUF_DB and MSUF_DB.general
-        local hlThickness = (g and g.highlightBorderThickness) or 2
-        hlThickness = tonumber(hlThickness) or 2
-        if hlThickness < 1 then hlThickness = 1 end
+        local hlThickness = cfg.highlightBorderThickness or 2
         local snap = _G.MSUF_Snap
 
         local sentIdx = 0
@@ -919,9 +930,9 @@ do
         local uf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit]
         if not uf or uf.unit ~= unit then return end
 
-        local g = MSUF_DB and MSUF_DB.general
-        local dispelEnabled = (g and g.dispelOutlineMode == 1)
-        local purgeEnabled  = (g and g.purgeOutlineMode  == 1)
+        local cfg = _RefreshBorderSettingsCache()
+        local dispelEnabled = (cfg.dispelOutlineMode == 1)
+        local purgeEnabled  = (cfg.purgeOutlineMode  == 1)
 
         local dispelOn = false
         -- Dispel = remove debuffs from allies; Purge = steal/remove buffs from enemies.
@@ -938,7 +949,7 @@ do
         -- Secret constraints prevent boolean tracking ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â sentinels ARE the border.
         -- Purge participates in highlight priority only via test mode.
         if purgeEnabled and canAttack and unit ~= "player" then
-            UpdatePurgeSentinels(uf, unit)
+            UpdatePurgeSentinels(uf, unit, cfg)
         else
             HideAllPurgeSentinels(uf)
         end
@@ -965,12 +976,49 @@ do
         UpdateUnit("targettarget", true)
     end
 
-    f:SetScript("OnEvent", function(_, event, unit)
+    local _dispelAuraQueued = {}
+    local _dispelAuraUnits = {}
+    local _dispelAuraUnitsN = 0
+    local _dispelAuraFlushQueued = false
+    local _dispelAuraWant = false
+    local function FlushDispelAuraUnits()
+        _dispelAuraFlushQueued = false
+        for i = 1, _dispelAuraUnitsN do
+            local u = _dispelAuraUnits[i]
+            _dispelAuraUnits[i] = nil
+            _dispelAuraQueued[u] = nil
+            if u then
+                UpdateUnit(u, false)
+            end
+        end
+        _dispelAuraUnitsN = 0
+    end
+    local function QueueDispelAuraUnit(unit)
+        if _dispelAuraQueued[unit] then return end
+        _dispelAuraQueued[unit] = true
+        _dispelAuraUnitsN = _dispelAuraUnitsN + 1
+        _dispelAuraUnits[_dispelAuraUnitsN] = unit
+        if not _dispelAuraFlushQueued then
+            _dispelAuraFlushQueued = true
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.05, FlushDispelAuraUnits)
+            else
+                FlushDispelAuraUnits()
+            end
+        end
+    end
+
+    f:SetScript("OnEvent", function(_, event, unit, updateInfo)
         if event == "UNIT_AURA" then
             if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
-            local g = MSUF_DB and MSUF_DB.general
-            if not (g and (g.dispelOutlineMode == 1 or g.purgeOutlineMode == 1)) then return end
-            UpdateUnit(unit, false)
+            if not _dispelAuraWant or _dispelAuraQueued[unit] then return end
+            if type(updateInfo) == "table" and not updateInfo.isFullUpdate then
+                local a = updateInfo.addedAuras
+                local r = updateInfo.removedAuraInstanceIDs
+                local u = updateInfo.updatedAuraInstanceIDs
+                if (not a or #a == 0) and (not r or #r == 0) and (not u or #u == 0) then return end
+            end
+            QueueDispelAuraUnit(unit)
             return
         end
 
@@ -980,10 +1028,10 @@ do
             return
         end
     end)
-
     local function ApplyDispelOutlineEventRegistration()
         local g = MSUF_DB and MSUF_DB.general
         local want = (g and (g.dispelOutlineMode == 1 or g.purgeOutlineMode == 1)) and true or false
+        _dispelAuraWant = want
 
         if want then
             if not f:IsEventRegistered("PLAYER_ENTERING_WORLD") then
@@ -998,8 +1046,19 @@ do
             end
             do
                 local _qDTgt, _qDFoc
-                local function _flushDTgt() _qDTgt = nil; UpdateUnit("target", true); UpdateUnit("targettarget", true) end
-                local function _flushDFoc() _qDFoc = nil; UpdateUnit("focus", true) end
+                local function ForceVisualTest()
+                    return _G.MSUF_DispelBorderTestMode == true or _G.MSUF_PurgeBorderTestMode == true
+                end
+                local function _flushDTgt()
+                    _qDTgt = nil
+                    local force = ForceVisualTest()
+                    UpdateUnit("target", force)
+                    UpdateUnit("targettarget", force)
+                end
+                local function _flushDFoc()
+                    _qDFoc = nil
+                    UpdateUnit("focus", ForceVisualTest())
+                end
                 MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()
                     if not _qDTgt then _qDTgt = true; if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("BORDER_DISPEL_TARGET", _flushDTgt) else C_Timer.After(0, _flushDTgt) end end
                 end)

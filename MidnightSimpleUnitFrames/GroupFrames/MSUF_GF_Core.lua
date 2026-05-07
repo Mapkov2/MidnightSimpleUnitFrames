@@ -34,6 +34,7 @@ local CreateFrame = _G.CreateFrame
 local UIParent = _G.UIParent
 local hooksecurefunc = _G.hooksecurefunc
 local C_Timer = _G.C_Timer
+local GetInstanceInfo = _G.GetInstanceInfo
 local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 local PowerBarColor = _G.PowerBarColor
 local math_max = math.max
@@ -164,6 +165,9 @@ local function _GFInstallAttrHook(child)
 
         -- Clear stale entry if unit changed or was cleared
         local prev = self._msufGFRegisteredUnit
+        if prev == value and self.unit == value and type(value) == "string" and uf[value] == self then
+            return
+        end
         local unitChanged = (prev and prev ~= value)
         if unitChanged then
             if uf[prev] == self then uf[prev] = nil end
@@ -188,6 +192,11 @@ local function _GFInstallAttrHook(child)
             self._msufGFLastFullAura       = nil
             self._msufGFAggroLevel         = nil
             self._msufGFLastName           = nil
+            self._msufGFNameCacheKey       = nil
+            self._msufGFNameStyleKey       = nil
+            self._msufGFNameText           = nil
+            self._msufGFNameClass          = nil
+            self._msufGFNameColorKey       = nil
             self._msufGFStatusState        = nil
             self._msufGFStatusDirty        = nil
             -- Hide any visible stripe immediately so it doesn't bleed
@@ -2723,6 +2732,22 @@ function GF.RebuildAll()
     end)
 end
 
+local function GF_DifficultySignature()
+    local liveKind = GetLiveRaidKind()
+    local _, instanceType, difficultyID = GetInstanceInfo and GetInstanceInfo()
+    local situation = (GF.DetectRaidSituation and GF.DetectRaidSituation()) or ""
+    local conf = GF.GetConf(liveKind)
+    local mode = (conf and conf.raidLayoutMode) or "manual"
+    local active = (conf and conf._activeRaidLayout) or ""
+    return tostring(liveKind) .. "|" .. tostring(instanceType) .. "|" .. tostring(difficultyID)
+        .. "|" .. tostring(mode) .. "|" .. tostring(active) .. "|" .. tostring(situation)
+end
+
+local function GF_UpdateDifficultyCache()
+    GF._lastDifficultySig = GF_DifficultySignature()
+    GF._lastDifficultyLiveKind = GetLiveRaidKind()
+end
+
 ------------------------------------------------------------------------
 -- Toggle headers when group type changes (party ↔ raid)
 ------------------------------------------------------------------------
@@ -2786,6 +2811,7 @@ local function OnEvent(self, event, ...)
         if partyConf.enabled or raidConf.enabled then
             GF.RebuildAll()
         end
+        GF_UpdateDifficultyCache()
 
     elseif event == "GROUP_ROSTER_UPDATE" then
         -- Switch party/raid visibility + rescan children
@@ -2840,6 +2866,7 @@ local function OnEvent(self, event, ...)
         if needRebuild then
             GF._pendingRebuild = nil
             GF.RebuildAll()
+            GF_UpdateDifficultyCache()
         end
         if GF._pendingVisibilityUpdate then
             GF._pendingVisibilityUpdate = nil
@@ -2883,19 +2910,33 @@ local function OnEvent(self, event, ...)
                     end
                     GF.RebuildAll()
                     GF._forceRecreateHeaders = nil
+                    GF_UpdateDifficultyCache()
                 end
             end)
         end
     elseif event == "PLAYER_DIFFICULTY_CHANGED" then
+        local sig = GF_DifficultySignature()
+        if GF._lastDifficultySig == sig then
+            return
+        end
+        GF._lastDifficultySig = sig
+
         if InCombatLockdown() then
             GF._pendingRebuild = true
             GF._pendingVisibilityUpdate = true
         else
+            local oldKind = GF._lastDifficultyLiveKind
+            local switched = false
             if GF.AutoSwitchRaidLayout then
-                GF.AutoSwitchRaidLayout()
+                switched = (GF.AutoSwitchRaidLayout() == true)
             end
-            GF.RebuildAll()
+            local liveKind = GetLiveRaidKind()
+            GF._lastDifficultyLiveKind = liveKind
+            if not switched and oldKind and oldKind ~= liveKind then
+                GF.RebuildAll()
+            end
             GF.UpdateGroupVisibility()
+            GF_UpdateDifficultyCache()
         end
     end
 end
@@ -2930,7 +2971,7 @@ _G.MSUF_GF_UpdateButton      = GF.UpdateButton
 _G.MSUF_GF_InitButton        = GF_InitButton
 _G.MSUF_GF_UpdateGroupVisibility = GF.UpdateGroupVisibility
 
--- Perfy idle-diagnosis exports
+-- Idle-diagnosis exports
 _G.MSUF_GF_ScanHeaderChildren = ScanHeaderChildren
 _G.MSUF_GF_CoreEventFrame     = ef
 

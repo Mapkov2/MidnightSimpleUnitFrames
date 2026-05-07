@@ -43,14 +43,7 @@ local function FlushNextFrame()
     Scheduler.head, Scheduler.tail = 1, 0
 end
 
-function Scheduler.RunNextFrame(fn)
-    if type(fn) ~= "function" then return end
-    Scheduler.ScheduleOnce(fn, fn)
-end
-
-function Scheduler.ScheduleOnce(key, fn)
-    if type(fn) ~= "function" then return end
-    key = key or fn
+local function QueueNextFrame(key, fn)
     if pending[key] then return end
 
     pending[key] = fn
@@ -68,6 +61,17 @@ function Scheduler.ScheduleOnce(key, fn)
     else
         FlushNextFrame()
     end
+end
+
+function Scheduler.RunNextFrame(fn)
+    if type(fn) ~= "function" then return end
+    QueueNextFrame(fn, fn)
+end
+
+function Scheduler.ScheduleOnce(key, fn)
+    if type(fn) ~= "function" then return end
+    key = key or fn
+    QueueNextFrame(key, fn)
 end
 
 function Scheduler.ScheduleDelayOnce(key, delay, fn)

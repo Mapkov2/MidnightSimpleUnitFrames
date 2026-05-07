@@ -63,10 +63,11 @@ local function ApplyPortraitLayout(f, conf, widget)
     end
 end
 
-function MSUF_UpdateBossPortraitLayout(f, conf)
+local function UpdateBossPortraitLayout(f, conf)
     if not f or not f.portrait or not conf then return end
     ApplyPortraitLayout(f, conf, f.portrait)
 end
+_G.MSUF_UpdateBossPortraitLayout = UpdateBossPortraitLayout
 
 local function ApplyPortraitLayoutIfNeeded(f, conf)
     if not f or not conf or not f.portrait then return end
@@ -363,7 +364,7 @@ end
 
 -- ── Boss layout hook (keep 3D model in sync) ──
 if type(hooksecurefunc) == "function" then
-    hooksecurefunc("MSUF_UpdateBossPortraitLayout", function(f, conf)
+    local function OnBossPortraitLayout(f, conf)
         if not (f and conf) then return end
         if conf.portraitRender == "3D" and IsPortraitModeActive(conf) then
             local m = rawget(f, "portraitModel")
@@ -374,7 +375,8 @@ if type(hooksecurefunc) == "function" then
         else
             SetShown(rawget(f, "portraitModel"), false)
         end
-    end)
+    end
+    hooksecurefunc("MSUF_UpdateBossPortraitLayout", OnBossPortraitLayout)
 end
 
 -- ── Sync helpers (called from Options) ──
@@ -393,7 +395,7 @@ local function GetFramesForUnitKey(key)
     return f and { f } or {}
 end
 
-function _G.MSUF_3DPortraits_SyncUnit(unitKey)
+local function SyncPortraitUnit(unitKey)
     if type(unitKey) ~= "string" or unitKey == "" then return end
     local db = _G.MSUF_DB
     if not db then return end
@@ -415,9 +417,10 @@ function _G.MSUF_3DPortraits_SyncUnit(unitKey)
         end
     end
 end
+_G.MSUF_3DPortraits_SyncUnit = SyncPortraitUnit
 
 -- Visibility sync (called from visual apply path)
-function _G.MSUF_3DPortraits_SyncVisibility(f)
+local function SyncPortraitVisibility(f)
     if not f then return end
     local db = _G.MSUF_DB
     local conf = db and (f.isBoss and db.boss or db[f.unitKey or f.msufConfigKey or f.unit])
@@ -434,8 +437,9 @@ function _G.MSUF_3DPortraits_SyncVisibility(f)
         SetShown(rawget(f, "portraitModel"), false)
     end
 end
+_G.MSUF_3DPortraits_SyncVisibility = SyncPortraitVisibility
 
-_G.MSUF_3DPortraits_ForceRefresh = function()
+local function ForcePortraitRefresh()
     local keys = { "player", "target", "focus", "pet", "targettarget" }
     for _, k in ipairs(keys) do
         local f = _G["MSUF_" .. k]
@@ -446,5 +450,6 @@ _G.MSUF_3DPortraits_ForceRefresh = function()
         if f then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end
     end
 end
+_G.MSUF_3DPortraits_ForceRefresh = ForcePortraitRefresh
 
 _G.MSUF_3DPortraits_Loaded = true

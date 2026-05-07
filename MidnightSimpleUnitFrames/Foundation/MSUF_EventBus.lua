@@ -9,6 +9,7 @@ local type, pairs, pcall, tostring = type, pairs, pcall, tostring
 local bus = { safeCalls = false, handlers = {}, _errOnce = {} }
 local driver = CreateFrame("Frame")
 driver:Hide()
+bus.driver = driver
 
 local function Compact(ev)
     if not ev or not ev.dirty then return end
@@ -140,7 +141,6 @@ driver:SetScript("OnEvent", function(_, event, ...)
         end
     end
 end)
-
 -- Public API
 _G.MSUF_EventBus = bus
 _G.MSUF_EventBus_Register = function(e, k, f, u, o) return bus:Register(e, k, f, u, o) end

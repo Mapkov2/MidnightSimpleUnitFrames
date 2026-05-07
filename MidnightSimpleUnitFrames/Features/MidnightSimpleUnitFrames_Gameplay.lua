@@ -191,6 +191,7 @@ end
 
 local C_Timer      = C_Timer
 local C_Timer_After = C_Timer and C_Timer.After
+local C_Timer_NewTicker = C_Timer and C_Timer.NewTicker
 
 ------------------------------------------------------
 -- Apply queue: coalesce multiple option changes into a single Apply per frame
@@ -1608,15 +1609,16 @@ end
 
 -- Forward declaration so calls above resolve to local, not _G
 local MSUF_UpdateCombatCrosshairRangeColor
-local function MSUF_CombatCrosshairRangeOnUpdate(self, elapsed)
-    if not self:IsShown() then return end
-    self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
-    if self.MSUF_RangeElapsed < 0.15 then return end
-    self.MSUF_RangeElapsed = 0
+local MSUF_SetCrosshairRangeTaskEnabled
+local function MSUF_CombatCrosshairRangeTick()
+    local self = combatCrosshairFrame
+    if not self or not self:IsShown() then
+        if MSUF_SetCrosshairRangeTaskEnabled then MSUF_SetCrosshairRangeTaskEnabled(false) end
+        return
+    end
     local g3 = GetGameplayDBFast()
     if not g3 or not g3.enableCombatCrosshair or not g3.enableCombatCrosshairMeleeRangeColor then
-        self:SetScript("OnUpdate", nil)
-        self.MSUF_RangeOnUpdate = nil
+        if MSUF_SetCrosshairRangeTaskEnabled then MSUF_SetCrosshairRangeTaskEnabled(false) end
         return
     end
     if MSUF_UpdateCombatCrosshairRangeColor then
@@ -1739,18 +1741,9 @@ local function EnsureCombatCrosshair()
         MSUF_UpdateCombatCrosshairRangeColor()
 
         -- Phase 7A: direct range-color tick (UpdateManager removed)
-    if g.enableCombatCrosshairMeleeRangeColor then
-        if not combatCrosshairFrame.MSUF_RangeOnUpdate then
-            combatCrosshairFrame.MSUF_RangeOnUpdate = true
-            combatCrosshairFrame.MSUF_RangeElapsed = 0
-            combatCrosshairFrame:SetScript("OnUpdate", MSUF_CombatCrosshairRangeOnUpdate)
+        if MSUF_SetCrosshairRangeTaskEnabled then
+            MSUF_SetCrosshairRangeTaskEnabled(g.enableCombatCrosshairMeleeRangeColor == true)
         end
-    else
-        if combatCrosshairFrame.MSUF_RangeOnUpdate then
-            combatCrosshairFrame:SetScript("OnUpdate", nil)
-            combatCrosshairFrame.MSUF_RangeOnUpdate = nil
-        end
-    end
 
     end
 
@@ -2313,19 +2306,42 @@ MSUF_CrosshairHasValidTarget = function()
         and UnitIsDeadOrGhost and (not UnitIsDeadOrGhost("target"))
 end
 
-local function MSUF_SetCrosshairRangeTaskEnabled(enabled)
-    -- Phase 7A: toggle the local OnUpdate tick on combatCrosshairFrame directly
+MSUF_SetCrosshairRangeTaskEnabled = function(enabled)
     if not combatCrosshairFrame then return end
     if enabled then
-        if not combatCrosshairFrame.MSUF_RangeOnUpdate then
-            combatCrosshairFrame.MSUF_RangeOnUpdate = true
+        local interval = combatCrosshairFrame._msufRangeTickInterval or 0.15
+        if interval < 0.10 then interval = 0.10 end
+        if combatCrosshairFrame.MSUF_RangeTicker and combatCrosshairFrame._msufRangeTickerInterval == interval then
+            return
+        end
+        if combatCrosshairFrame.MSUF_RangeTicker and combatCrosshairFrame.MSUF_RangeTicker.Cancel then
+            combatCrosshairFrame.MSUF_RangeTicker:Cancel()
+        end
+        combatCrosshairFrame.MSUF_RangeTicker = nil
+        combatCrosshairFrame:SetScript("OnUpdate", nil)
+        combatCrosshairFrame.MSUF_RangeOnUpdate = true
+        combatCrosshairFrame._msufRangeTickerInterval = interval
+        if C_Timer_NewTicker then
+            combatCrosshairFrame.MSUF_RangeTicker = C_Timer_NewTicker(interval, MSUF_CombatCrosshairRangeTick)
+        else
             combatCrosshairFrame.MSUF_RangeElapsed = 0
-            combatCrosshairFrame:SetScript("OnUpdate", MSUF_CombatCrosshairRangeOnUpdate)
+            combatCrosshairFrame:SetScript("OnUpdate", function(self, elapsed)
+                self.MSUF_RangeElapsed = (self.MSUF_RangeElapsed or 0) + (elapsed or 0)
+                if self.MSUF_RangeElapsed < interval then return end
+                self.MSUF_RangeElapsed = 0
+                MSUF_CombatCrosshairRangeTick()
+            end)
         end
     else
         if combatCrosshairFrame.MSUF_RangeOnUpdate then
+            if combatCrosshairFrame.MSUF_RangeTicker and combatCrosshairFrame.MSUF_RangeTicker.Cancel then
+                combatCrosshairFrame.MSUF_RangeTicker:Cancel()
+            end
+            combatCrosshairFrame.MSUF_RangeTicker = nil
+            combatCrosshairFrame._msufRangeTickerInterval = nil
             combatCrosshairFrame:SetScript("OnUpdate", nil)
             combatCrosshairFrame.MSUF_RangeOnUpdate = nil
+            combatCrosshairFrame.MSUF_RangeElapsed = nil
         end
     end
 end

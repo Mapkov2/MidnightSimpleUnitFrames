@@ -356,7 +356,9 @@ local function FlushDriverOnUpdate()
     local now = GetTime()
     if now >= at then
         _flushNextAt = nil
-        if Flush then Flush() end
+        if Flush then
+            Flush()
+        end
     end
 end
 
@@ -1461,13 +1463,18 @@ local function RenderUnit(entry)
     cfg.sortOrder = cfg.capsSortOrder or cfg.sortOrder or 0
 
     local _, nB, _, nD = CacheModule.FilterAndSort(unit, cfg, entry._buffList, entry._debuffList)
-    CacheModule.ClearChanged(unit)
+    local updatedAuraIDs = CacheModule.GetUpdatedAuraIDs and CacheModule.GetUpdatedAuraIDs(unit)
 
     local customBuffs = showBuffs
     local customDebuffs = showDebuffs
 
     buffCount  = customBuffs and nB or 0
     debuffCount = (customDebuffs and not skipDebuffs) and nD or 0
+
+    local lastBuffCount = entry._lastBuffCount or 0
+    local lastDebuffCount = entry._lastDebuffCount or 0
+    local countsChanged = (buffCount ~= lastBuffCount) or (debuffCount ~= lastDebuffCount)
+    local commitUpdatedOnly = updatedAuraIDs and entry._lastA2CommitGen == gen and not countsChanged and not isEditActive and not showTest
 
     -- CommitIcon: debuffs
     -- PERF: Inlined AcquireIcon fast path — pool[i] hit skips function call.
@@ -1486,8 +1493,16 @@ local function RenderUnit(entry)
                     if not icon:IsShown() then icon:Show() end
                 else
                     icon = _AcquireIcon(container, i)
+                    commitUpdatedOnly = false
                 end
-                _CommitIcon(icon, unit, aura, shared, false, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
+                local doCommit = not commitUpdatedOnly
+                if not doCommit then
+                    local aid = aura._msufAuraInstanceID or aura.auraInstanceID
+                    doCommit = updatedAuraIDs[aid] == true or not icon._msufA2_lastCommit
+                end
+                if doCommit then
+                    _CommitIcon(icon, unit, aura, shared, false, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
+                end
             end
         end
     end
@@ -1509,8 +1524,16 @@ local function RenderUnit(entry)
                     if not icon:IsShown() then icon:Show() end
                 else
                     icon = _AcquireIcon(container, i)
+                    commitUpdatedOnly = false
                 end
-                _CommitIcon(icon, unit, aura, shared, true, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
+                local doCommit = not commitUpdatedOnly
+                if not doCommit then
+                    local aid = aura._msufAuraInstanceID or aura.auraInstanceID
+                    doCommit = updatedAuraIDs[aid] == true or not icon._msufA2_lastCommit
+                end
+                if doCommit then
+                    _CommitIcon(icon, unit, aura, shared, true, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
+                end
             end
         end
     end
@@ -1519,11 +1542,6 @@ local function RenderUnit(entry)
     -- PERF: Local function references
     local _LayoutIcons = Icons.LayoutIcons
     local _HideUnused = Icons.HideUnused
-
-    -- PERF: Skip redundant HideUnused when counts unchanged
-    local lastBuffCount = entry._lastBuffCount or 0
-    local lastDebuffCount = entry._lastDebuffCount or 0
-    local countsChanged = (buffCount ~= lastBuffCount) or (debuffCount ~= lastDebuffCount)
 
     -- SEPARATE (only) layout path
     if skipDebuffs then
@@ -1565,6 +1583,11 @@ local function RenderUnit(entry)
 
     entry._lastBuffCount = buffCount
     entry._lastDebuffCount = debuffCount
+    entry._lastA2CommitGen = gen
+
+    if CacheModule.ClearChanged then
+        CacheModule.ClearChanged(unit)
+    end
 
     -- Buff Reminders: ghost icons for missing group buffs (player only).
     -- PERF: Zero overhead when disabled or non-player — no function call at all.
@@ -1611,6 +1634,7 @@ Flush = function()
     end
 
     local budgetHit = false
+    local clearAuraRescanQueued = API.Events and API.Events._ClearUnitAuraRescanQueued
 
     for i = 1, count do
         -- PERF: Budget check after each unit (not each aura icon).
@@ -1633,17 +1657,20 @@ Flush = function()
         -- Fast path: entry already attached with valid frame â†’ skip FindUnitFrame
         if entry and entry.frame then
             RenderUnit(entry)
+            if clearAuraRescanQueued then clearAuraRescanQueued(unit) end
         else
             local frame = FindUnitFrame(unit)
             if not frame then
                 -- No parent frame at all: just hide anchor if leftover
                 if entry and entry.anchor then entry.anchor:Hide() end
+                if clearAuraRescanQueued then clearAuraRescanQueued(unit) end
             else
                 -- Always let RenderUnit handle both rendering AND cleanup.
                 -- UnitEnabled gating lives inside RenderUnit so disabled units
                 -- get their icons hidden properly.
                 local e = EnsureAttached(unit)
                 if e then RenderUnit(e) end
+                if clearAuraRescanQueued then clearAuraRescanQueued(unit) end
             end
         end
     end

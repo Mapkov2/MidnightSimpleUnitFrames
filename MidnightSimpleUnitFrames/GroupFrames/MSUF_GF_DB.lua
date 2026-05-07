@@ -1048,8 +1048,9 @@ end
 function GF.SwitchRaidLayout(situationKey, kind)
     kind = kind or (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
     local conf = GF.GetConf(kind)
-    if not conf then return end
+    if not conf then return false end
     local prev = conf._activeRaidLayout
+    if prev == situationKey then return false end
     if prev and prev ~= situationKey then
         GF.SaveRaidLayout(conf, prev)
     end
@@ -1057,6 +1058,7 @@ function GF.SwitchRaidLayout(situationKey, kind)
     GF.LoadRaidLayout(conf, situationKey)
     GF.InvalidateConfCache()
     if GF.RebuildAll then GF.RebuildAll() end
+    return true
 end
 
 --- Detect situation from instance difficulty
@@ -1082,13 +1084,14 @@ end
 function GF.AutoSwitchRaidLayout(kind)
     kind = kind or (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
     local conf = GF.GetConf(kind)
-    if not conf then return end
+    if not conf then return false end
     local mode = conf.raidLayoutMode or "manual"
-    if mode ~= "auto" then return end
+    if mode ~= "auto" then return false end
     local situation = GF.DetectRaidSituation()
     if situation ~= conf._activeRaidLayout then
-        GF.SwitchRaidLayout(situation, kind)
+        return GF.SwitchRaidLayout(situation, kind) == true
     end
+    return false
 end
 
 --- Resolve a config value with fallback to default

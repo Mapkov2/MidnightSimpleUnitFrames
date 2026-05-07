@@ -20,7 +20,6 @@
 _G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
 local _rfMul = _G.MSUF_RangeFadeMul
 
-
 -- Shared: Spell selection + secret helpers
 do
     local C_Spell = _G.C_Spell
@@ -1007,6 +1006,33 @@ do
         end
     end
 
+    local function SetFBUnitEvent(event, focusOn, bossOn)
+        local ef = EnsureFBEventFrame()
+        local mask = (focusOn and 1 or 0) + (bossOn and 2 or 0)
+        if mask == 0 then
+            if _fbEvents[event] then
+                ef:UnregisterEvent(event)
+                _fbEvents[event] = nil
+            end
+            return
+        end
+        if _fbEvents[event] == mask then return end
+        if _fbEvents[event] then ef:UnregisterEvent(event) end
+
+        local ok = false
+        if ef.RegisterUnitEvent then
+            if mask == 3 then
+                ok = pcall(ef.RegisterUnitEvent, ef, event, "focus", "boss1", "boss2", "boss3", "boss4", "boss5")
+            elseif focusOn then
+                ok = pcall(ef.RegisterUnitEvent, ef, event, "focus")
+            else
+                ok = pcall(ef.RegisterUnitEvent, ef, event, "boss1", "boss2", "boss3", "boss4", "boss5")
+            end
+        end
+        if not ok then ef:RegisterEvent(event) end
+        _fbEvents[event] = mask
+    end
+
     local function RefreshFBEventLifecycle()
         local db = _G.MSUF_DB
         local focusOn = db and db.focus and db.focus.rangeFadeEnabled == true and not UseLiteFBRuntime()
@@ -1030,11 +1056,11 @@ do
         SetFBEvent("PLAYER_TALENT_UPDATE", true)
         SetFBEvent("TRAIT_CONFIG_UPDATED", true)
         SetFBEvent("PLAYER_ENTERING_WORLD", true)
-        SetFBEvent("UNIT_FLAGS", true)
-        SetFBEvent("UNIT_CONNECTION", true)
-        SetFBEvent("UNIT_PHASE", true)
-        SetFBEvent("UNIT_TARGETABLE_CHANGED", true)
-        SetFBEvent("UNIT_FACTION", true)
+        SetFBUnitEvent("UNIT_FLAGS", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_CONNECTION", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_PHASE", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_TARGETABLE_CHANGED", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_FACTION", focusOn, bossOn)
 
         -- focus-only lifecycle
         SetFBEvent("PLAYER_FOCUS_CHANGED", focusOn)
