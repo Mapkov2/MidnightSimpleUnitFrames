@@ -1786,6 +1786,17 @@ end},
 },8)
 msufReset,msufOff=row and row[1],row and row[2]
 
+local function StyleToolsSlider(slider)
+local UI=ns and ns.UI
+local style=(_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+if type(style)=="function"then pcall(style,slider) return end
+if C_Timer and C_Timer.After then C_Timer.After(0,function()
+local UI2=ns and ns.UI
+local later=(_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI2 and UI2.StyleSlider)
+if type(later)=="function"then pcall(later,slider) end
+end) end
+end
+
 -- MSUF-only (unitframes + castbars) scale slider
 -- Align header with the slider track (same left inset as the sliders).
 local msufScaleLabel=UI_Text(parent,"GameFontHighlight","TOPLEFT",(msufReset or (row and row[1]) or (btn1080 or globalCur)),"BOTTOMLEFT",10,-12,"MSUF Unitframe Scale",MSUF_SkinText)
@@ -1810,6 +1821,7 @@ if low then low:SetText(""); low:Hide() end
 local high=(n and _G[n.."High"]) or msufScaleSlider.High
 if high then high:SetText(""); high:Hide() end
 end
+StyleToolsSlider(msufScaleSlider)
 
 local function MSUF_UpdateMsufScaleRow(scale)
 scale=tonumber(scale) or 1.0
@@ -1868,6 +1880,7 @@ if low then low:SetText(""); low:Hide() end
 local high=(n and _G[n.."High"]) or menuScaleSlider.High
 if high then high:SetText(""); high:Hide() end
 end
+StyleToolsSlider(menuScaleSlider)
 
 local menuScaleApply,menuScaleRevert
 local function MSUF_GetPendingSlashMenuScale()
@@ -3055,6 +3068,16 @@ end
 local function SetSliderValueSafe(slider,value)
 if slider and slider.SetValue then slider.__msufSkip=true slider:SetValue(value) slider.__msufSkip=nil end
 end
+local function StyleDashboardSlider(slider)
+local UI=ns and ns.UI
+local style=(_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+if type(style)=="function"then pcall(style,slider) return end
+if C_Timer and C_Timer.After then C_Timer.After(0,function()
+local UI2=ns and ns.UI
+local later=(_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI2 and UI2.StyleSlider)
+if type(later)=="function"then pcall(later,slider) end
+end) end
+end
 
 local globalScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-48,"Global UI Scale",MSUF_SkinText)
 local globalScaleStatus=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-64,"Applied: Auto",MSUF_SkinMuted)
@@ -3068,6 +3091,7 @@ globalScaleSlider:SetValueStep(1)
 globalScaleSlider:SetObeyStepOnDrag(true)
 if globalScaleSlider.SetStepsPerPage then globalScaleSlider:SetStepsPerPage(1) end
 HideSliderParts(globalScaleSlider)
+StyleDashboardSlider(globalScaleSlider)
 local bGlobalApply,bGlobalRevert,bGlobalAuto,bGlobalOff
 local function GetGlobalUiState()
 local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
@@ -3174,6 +3198,7 @@ msufScaleSlider:SetValueStep(5)
 msufScaleSlider:SetObeyStepOnDrag(true)
 if msufScaleSlider.SetStepsPerPage then msufScaleSlider:SetStepsPerPage(1) end
 HideSliderParts(msufScaleSlider)
+StyleDashboardSlider(msufScaleSlider)
 msufScaleSlider:EnableMouseWheel(true)
 msufScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) self:SetValue(SnapScalePct(v,25,150,5)) end)
 msufScaleSlider:SetScript("OnValueChanged",function(self,value) if self.__msufSkip then return end local pct=SnapScalePct(value,25,150,5) if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end local scale=pct/100 MSUF_SetSavedMsufScale(scale) MSUF_ApplyMsufScale(scale) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end end)
@@ -3191,6 +3216,7 @@ menuScaleSlider:SetValueStep(5)
 menuScaleSlider:SetObeyStepOnDrag(true)
 if menuScaleSlider.SetStepsPerPage then menuScaleSlider:SetStepsPerPage(1) end
 HideSliderParts(menuScaleSlider)
+StyleDashboardSlider(menuScaleSlider)
 menuScaleSlider:EnableMouseWheel(true)
 menuScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then return end local v=tonumber((self.GetValue and self:GetValue()) or 100) or 100 v=v+(delta>0 and 5 or -5) self:SetValue(SnapScalePct(v,25,150,5)) end)
 local function GetAppliedMenuScale(disabled) if disabled then return 1.0 end return clamp(MSUF_GetSavedSlashMenuScale(),0.25,1.5) end
