@@ -212,7 +212,7 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
         end)
     end
 
-	    local function BindSlider(sl, key, roundFunc, after, applyNow)
+    local function BindSlider(sl, key, roundFunc, after, applyNow)
         sl:SetScript("OnValueChanged", function(self, value)
             -- UI sync (panel:refresh / drag-sync) should not write DB or trigger apply.
             if panel and panel._msufSuppressSliderChanges then return end
@@ -225,6 +225,14 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
             if after then after(self, g, value) end
             if applyNow then RequestApply() end
         end)
+    end
+
+    local function StyleGameplaySlider(slider)
+        local UI = ns and ns.UI
+        local style = (_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+        if type(style) == "function" then
+            style(slider)
+        end
     end
 
     local title = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -936,7 +944,7 @@ end)
 
         if field then panel[field] = sl end
         if key then BindSlider(sl, key, roundFunc, after, applyNow) end
-        if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(sl) end
+        StyleGameplaySlider(sl)
         _MSUF_AttachGameplaySliderValueBox(sl, lo, hi, step)
         return sl
     end

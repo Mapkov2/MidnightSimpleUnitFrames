@@ -350,6 +350,13 @@ end
 -- Using a per-parent counter causes name collisions (and sliders "teleport" between boxes)
 -- because OptionsSliderTemplate relies on globally-named regions (<Name>Text/Low/High).
 local MSUF_Auras2_SliderGlobalCount = 0
+local function StyleAuras2Slider(slider)
+    local UI = ns and ns.UI
+    local style = (_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+    if type(style) == "function" then
+        style(slider)
+    end
+end
 local function CreateSlider(parent, label, minV, maxV, step, x, y, getter, setter)
     MSUF_Auras2_SliderGlobalCount = MSUF_Auras2_SliderGlobalCount + 1
     local sliderName = "MSUF_Auras2Slider_" .. tostring(MSUF_Auras2_SliderGlobalCount)
@@ -389,7 +396,7 @@ local function CreateSlider(parent, label, minV, maxV, step, x, y, getter, sette
     s:SetScript("OnShow", function(self)
         self:SetValue(getter() or minV)
      end)
-     if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(s) end
+     StyleAuras2Slider(s)
      return s
 end
 -- Compact slider variant used in the Auras 2.0 box.
@@ -2638,7 +2645,7 @@ end
                 setter(v)
                 RefreshTimerColorUI()
             end)
-            if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(sl) end
+            StyleAuras2Slider(sl)
             timerRefreshFns[#timerRefreshFns + 1] = Refresh
             sliderRows[#sliderRows + 1] = row
             A2_Track("global", sl)

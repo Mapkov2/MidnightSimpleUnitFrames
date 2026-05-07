@@ -67,23 +67,28 @@ local SLIDER_FILL_R, SLIDER_FILL_G, SLIDER_FILL_B = 0.27, 0.53, 0.80
 local SLIDER_THUMB_R, SLIDER_THUMB_G, SLIDER_THUMB_B = 0.35, 0.62, 0.92
 local SLIDER_THUMB_TEX = "Interface/AddOns/" .. ADDON .. "/Media/msuf_slider_thumb.tga"
 
-local function StyleSlider(slider)
-    if not slider or slider._msufStyled then return end
-    slider._msufStyled = true
-    slider:SetHeight(SLIDER_THUMB_SIZE)
+local function HideSliderTemplateParts(slider, thumb)
+    if not slider then return end
 
-    -- Get thumb FIRST, skip it in the hide loop
-    local thumb = slider:GetThumbTexture()
-
-    -- Hide all template background/border textures EXCEPT thumb
+    -- Hide all template background/border textures EXCEPT thumb.
+    -- Some client builds expose region type through GetObjectType rather than
+    -- IsObjectType, so handle both paths.
     local _regions = { slider:GetRegions() }
     for i = 1, #_regions do
         local region = _regions[i]
-        if region and region ~= thumb and region.IsObjectType and region:IsObjectType("Texture") then
+        local isTexture = false
+        if region and region.IsObjectType then
+            isTexture = region:IsObjectType("Texture") and true or false
+        end
+        if (not isTexture) and region and region.GetObjectType then
+            isTexture = (region:GetObjectType() == "Texture")
+        end
+        if isTexture and region ~= thumb and region ~= slider._msufTrack and region ~= slider._msufFill then
             region:SetAlpha(0)
             region:Hide()
         end
     end
+
     -- Hide Low/High labels
     local sName = slider.GetName and slider:GetName()
     if sName then
@@ -94,6 +99,18 @@ local function StyleSlider(slider)
     end
     if slider.Low  then slider.Low:SetAlpha(0);  slider.Low:Hide()  end
     if slider.High then slider.High:SetAlpha(0); slider.High:Hide() end
+end
+
+local function StyleSlider(slider)
+    if not slider then return end
+
+    -- Get thumb FIRST, skip it in the hide loop.
+    local thumb = slider:GetThumbTexture()
+    HideSliderTemplateParts(slider, thumb)
+
+    if slider._msufStyled then return end
+    slider._msufStyled = true
+    slider:SetHeight(SLIDER_THUMB_SIZE)
 
     -- Custom track
     local track = slider:CreateTexture(nil, "BACKGROUND", nil, -1)
@@ -138,7 +155,10 @@ local function StyleSlider(slider)
         fill:SetWidth(w)
     end
     slider:HookScript("OnValueChanged", function(self) UpdateFill(self) end)
-    slider:HookScript("OnShow",         function(self) UpdateFill(self) end)
+    slider:HookScript("OnShow",         function(self)
+        HideSliderTemplateParts(self, self:GetThumbTexture())
+        UpdateFill(self)
+    end)
     slider:HookScript("OnSizeChanged",  function(self) UpdateFill(self) end)
 
     -- Hover
@@ -1122,6 +1142,8 @@ ns.MSUF_StyleSlider             = StyleSlider
 ns.MSUF_StyleSmallButton        = StyleSmallButton
 ns.MSUF_StyleToggleText         = StyleToggleText
 ns.MSUF_StyleCheckmark          = StyleCheckmark
+_G.MSUF_StyleSlider             = StyleSlider
+_G.MSUF_StyleSmallButton        = StyleSmallButton
 _G.MSUF_StyleToggleText         = _G.MSUF_StyleToggleText or StyleToggleText
 _G.MSUF_StyleCheckmark          = _G.MSUF_StyleCheckmark or StyleCheckmark
 
