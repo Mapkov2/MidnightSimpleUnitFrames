@@ -4318,7 +4318,12 @@ local function _gfRosterFlushFrame(f, gmap)
 end
 
 local function _gfRosterFlush()
-    _gfRosterPending = false
+    -- PERF (4.22 Beta hotfix): _gfRosterPending stays TRUE during the entire
+    -- flush body. Any GROUP_ROSTER_UPDATE that fires while we are running
+    -- (or, paired with the Scheduler tail-snapshot, fires inside any callback
+    -- on the same flush iteration) is dropped instead of re-enqueueing.
+    -- The flag is cleared at the END of this function -- the next event after
+    -- our work is done can schedule the next flush normally.
     local oldTarget = _gfTargetFrame
     local oldFocus  = _gfFocusFrame
     if oldTarget then oldTarget._msufGFIsTarget = nil end
@@ -4384,6 +4389,9 @@ local function _gfRosterFlush()
         if oldFocus and oldFocus.unit then _GF_QuickBorderUpdate(oldFocus) end
         if _gfFocusFrame and _gfFocusFrame.unit then _GF_QuickBorderUpdate(_gfFocusFrame) end
     end
+
+    -- Pending flag cleared at END (see header comment for rationale).
+    _gfRosterPending = false
 end
 
 -- Exported for consolidated PLAYER_TARGET_CHANGED handler in UFCore
@@ -4474,23 +4482,50 @@ do
     end
 end
 
-local function OnGlobalEvent(self, event, ...)
-    -- Fix 3: when GF is fully disabled, do nothing. Saves the per-event
-    -- dispatch + empty-loop cost across PLAYER_FOCUS_CHANGED, READY_CHECK*,
-    -- RAID_TARGET_UPDATE, PARTY_LEADER_CHANGED, GROUP_ROSTER_UPDATE,
-    -- BARBER_SHOP_OPEN/CLOSE, PLAYER_FLAGS_CHANGED. Flag is maintained by
-    -- RebuildAll and the PLAYER_REGEN_ENABLED retire-deferral path.
-    if GF._anyEnabled == false then return end
+-- ════════════════════════════════════════════════════════════════════════
+-- OnGlobalEvent: dispatch table + shared frame-iteration helper.
+-- (4.22 Beta hotfix.)
+--
+-- Replaces a long if/elseif chain (8+ string compares per dispatch) with a
+-- single hash lookup. The per-event work itself is unchanged -- only the
+-- dispatch shape and the duplicated `if list then for i=1,#list else for f
+-- in pairs(GF.frames)` boilerplate (5+ identical copies) is consolidated.
+--
+-- All helpers, per-frame callbacks, and per-event handlers live inside
+-- nested do/end blocks so each goes out of scope as soon as its handler
+-- closure has captured it. This keeps simultaneously-active locals well
+-- below the Lua 5.1 200-per-function limit. The dispatch table and the
+-- final OnEvent function are stashed in GF (no new file-scope locals).
+-- ════════════════════════════════════════════════════════════════════════
+do
+    -- Iterate either GF.frameList (preferred ordered list) or GF.frames
+    -- (fallback hash). Forwards extra args to the callback. Mirrors the
+    -- shape used 5+ times in the previous OnGlobalEvent body.
+    local function _ForEachFrame(cb, ...)
+        local list = GF.frameList
+        if list then
+            for i = 1, #list do cb(list[i], ...) end
+        else
+            for f in pairs(GF.frames) do cb(f, ...) end
+        end
+    end
 
-    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+    local H = {}
+
+    -- Events that don't need per-frame iteration: assign anonymous handlers
+    -- directly into the dispatch table (no per-handler local).
+
+    H.PLAYER_REGEN_DISABLED = function(_, event)
         _G.MSUF_InCombat = (event == "PLAYER_REGEN_DISABLED")
         if GF.RefreshGroupAlphas then
             GF.RefreshGroupAlphas()
         elseif GF.RefreshRangeFade then
             GF.RefreshRangeFade()
         end
+    end
+    H.PLAYER_REGEN_ENABLED = H.PLAYER_REGEN_DISABLED
 
-    elseif event == "PLAYER_FOCUS_CHANGED" then
+    H.PLAYER_FOCUS_CHANGED = function()
         local oldFocus = _gfFocusFrame
         _gfFocusFrame = nil
         if oldFocus and oldFocus.unit then
@@ -4507,72 +4542,9 @@ local function OnGlobalEvent(self, event, ...)
                 _GF_QuickBorderUpdate(f)
             end
         end
+    end
 
-    elseif event == "READY_CHECK" or event == "READY_CHECK_CONFIRM" then
-        if not GF._AnyGroupConfFlag("readyCheckIcon") then return end
-        local list = GF.frameList
-        if list then
-            for i = 1, #list do
-                local f = list[i]
-                local c = f and f._c
-                if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, event) end
-            end
-        else
-            for f in pairs(GF.frames) do
-                local c = f._c
-                if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, event) end
-            end
-        end
-
-    elseif event == "READY_CHECK_FINISHED" then
-        if not GF._AnyGroupConfFlag("readyCheckIcon") then return end
-        local list = GF.frameList
-        if list then
-            for i = 1, #list do
-                local f = list[i]
-                local c = f and f._c
-                if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, "READY_CHECK_FINISHED") end
-            end
-        else
-            for f in pairs(GF.frames) do
-                local c = f._c
-                if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, "READY_CHECK_FINISHED") end
-            end
-        end
-
-    elseif event == "RAID_TARGET_UPDATE" then
-        if not GF._AnyGroupConfFlag("raidMarker") then return end
-        local list = GF.frameList
-        if list then
-            for i = 1, #list do
-                local f = list[i]
-                local c = f and f._c
-                if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
-            end
-        else
-            for f in pairs(GF.frames) do
-                local c = f._c
-                if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
-            end
-        end
-
-    elseif event == "PARTY_LEADER_CHANGED" then
-        if not (GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon")) then return end
-        local list = GF.frameList
-        if list then
-            for i = 1, #list do
-                local f = list[i]
-                local c = f and f._c
-                if c and c.leaderEn and f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
-            end
-        else
-            for f in pairs(GF.frames) do
-                local c = f._c
-                if c and c.leaderEn and f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
-            end
-        end
-
-    elseif event == "GROUP_ROSTER_UPDATE" then
+    H.GROUP_ROSTER_UPDATE = function()
         -- PERF: Coalesce roster updates. At a world boss, GROUP_ROSTER_UPDATE
         -- fires 0.5/sec with 672µs P50 per call (iterates all 40 GF frames × 10 functions).
         -- Multiple updates can fire in the same frame (join + promote + type change).
@@ -4583,54 +4555,105 @@ local function OnGlobalEvent(self, event, ...)
             _gfFocusFrame  = nil
             _MSUF_ScheduleOnce("GF_ROSTER_FLUSH", _gfRosterFlush)
         end
-    elseif event == "BARBER_SHOP_OPEN" then
-        -- hideInClientScene: hide all GF headers when entering barber/dressing room
-        for _, headerKind in ipairs({"party", "raid"}) do
-            local confKind = (headerKind == "raid" and GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or headerKind
-            local conf = GF.GetConf(confKind)
-            if conf.hideInClientScene ~= false then
-                local header = GF.headers and GF.headers[headerKind]
-                if header and not InCombatLockdown() then
-                    header._msufGF_clientSceneHidden = true
-                    header:SetAlpha(0)
-                end
-            end
-        end
-    elseif event == "BARBER_SHOP_CLOSE" then
-        for _, scope in ipairs({"party", "raid"}) do
-            local header = GF.headers and GF.headers[scope]
-            if header and header._msufGF_clientSceneHidden then
-                header._msufGF_clientSceneHidden = nil
-                header:SetAlpha(1)
-            end
-        end
+    end
 
-    elseif event == "PLAYER_FLAGS_CHANGED" then
-        local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
-        if not (showAFK or showDND or showDead or showGhost) then return end
-        local changedUnit = ...
-        if not changedUnit or changedUnit == "" then changedUnit = "player" end
-        local list = GF.frameList
-        if list then
-            for i = 1, #list do
-                local f = list[i]
-                local c = f and f._c
-                if c and c.statusTextEn and f.unit and UnitExists(f.unit)
-                    and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit)))
-                then
-                    UpdateStatusText(f, f.unit, true)
-                end
-            end
-        else
-            for f in pairs(GF.frames) do
-                local c = f._c
-                if c and c.statusTextEn and f.unit and UnitExists(f.unit)
-                    and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit)))
-                then
-                    UpdateStatusText(f, f.unit, true)
+    -- READY_CHECK / READY_CHECK_CONFIRM / READY_CHECK_FINISHED share one
+    -- handler. The per-frame CB closes over UpdateReadyCheck and is freed
+    -- when this nested do/end ends.
+    do
+        local function CB(f, event)
+            local c = f and f._c
+            if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, event) end
+        end
+        local h = function(_, event)
+            if not GF._AnyGroupConfFlag("readyCheckIcon") then return end
+            _ForEachFrame(CB, event)
+        end
+        H.READY_CHECK           = h
+        H.READY_CHECK_CONFIRM   = h
+        H.READY_CHECK_FINISHED  = h
+    end
+
+    do
+        local function CB(f)
+            local c = f and f._c
+            if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
+        end
+        H.RAID_TARGET_UPDATE = function()
+            if not GF._AnyGroupConfFlag("raidMarker") then return end
+            _ForEachFrame(CB)
+        end
+    end
+
+    do
+        local function CB(f)
+            local c = f and f._c
+            if c and c.leaderEn and f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
+        end
+        H.PARTY_LEADER_CHANGED = function()
+            if not (GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon")) then return end
+            _ForEachFrame(CB)
+        end
+    end
+
+    -- BARBER_SHOP: hoisted constant `KINDS` was a fresh literal each call
+    -- (`for _, k in ipairs({"party","raid"})`).
+    do
+        local KINDS = { "party", "raid" }
+        H.BARBER_SHOP_OPEN = function()
+            -- hideInClientScene: hide all GF headers when entering barber/dressing room
+            for i = 1, #KINDS do
+                local headerKind = KINDS[i]
+                local confKind = (headerKind == "raid" and GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or headerKind
+                local conf = GF.GetConf(confKind)
+                if conf.hideInClientScene ~= false then
+                    local header = GF.headers and GF.headers[headerKind]
+                    if header and not InCombatLockdown() then
+                        header._msufGF_clientSceneHidden = true
+                        header:SetAlpha(0)
+                    end
                 end
             end
         end
+        H.BARBER_SHOP_CLOSE = function()
+            for i = 1, #KINDS do
+                local scope = KINDS[i]
+                local header = GF.headers and GF.headers[scope]
+                if header and header._msufGF_clientSceneHidden then
+                    header._msufGF_clientSceneHidden = nil
+                    header:SetAlpha(1)
+                end
+            end
+        end
+    end
+
+    do
+        local function CB(f, changedUnit)
+            local c = f and f._c
+            if c and c.statusTextEn and f.unit and UnitExists(f.unit)
+                and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit)))
+            then
+                UpdateStatusText(f, f.unit, true)
+            end
+        end
+        H.PLAYER_FLAGS_CHANGED = function(_, _, changedUnit)
+            local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
+            if not (showAFK or showDND or showDead or showGhost) then return end
+            if not changedUnit or changedUnit == "" then changedUnit = "player" end
+            _ForEachFrame(CB, changedUnit)
+        end
+    end
+
+    -- Stash dispatch entry on GF (avoids a new file-scope local).
+    GF._OnGlobalEvent = function(self, event, ...)
+        -- Fix 3: when GF is fully disabled, do nothing. Saves the per-event
+        -- dispatch + empty-loop cost across PLAYER_FOCUS_CHANGED, READY_CHECK*,
+        -- RAID_TARGET_UPDATE, PARTY_LEADER_CHANGED, GROUP_ROSTER_UPDATE,
+        -- BARBER_SHOP_OPEN/CLOSE, PLAYER_FLAGS_CHANGED. Flag is maintained by
+        -- RebuildAll and the PLAYER_REGEN_ENABLED retire-deferral path.
+        if GF._anyEnabled == false then return end
+        local h = H[event]
+        if h then h(self, event, ...) end
     end
 end
 
@@ -4641,7 +4664,7 @@ _globalFrame:RegisterEvent("BARBER_SHOP_CLOSE")
 _globalFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 _globalFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 GF.SyncGroupGlobalEvents()
-_globalFrame:SetScript("OnEvent", OnGlobalEvent)
+_globalFrame:SetScript("OnEvent", GF._OnGlobalEvent)
 
 ------------------------------------------------------------------------
 -- Mouseover highlight

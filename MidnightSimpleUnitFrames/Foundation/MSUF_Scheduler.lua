@@ -25,13 +25,30 @@ if not frame and _G.CreateFrame then
     Scheduler.frame = frame
 end
 
+-- PERF (4.22 Beta hotfix): Re-entry safety + leftover preservation.
+--
+-- Problem: callbacks executed inside this loop can re-schedule via
+-- ScheduleOnce/RunNextFrame. Without a snapshot of `tail` taken BEFORE the
+-- loop, the loop would extend itself within the same frame -- this is the
+-- runaway pattern that produced 1739x amplification on GROUP_ROSTER_UPDATE
+-- bursts and 67ms frame stalls in the prior trace.
+--
+-- We snapshot `snapshotTail` once. Items appended during this flush land at
+-- queue[snapshotTail+1..Scheduler.tail] and are NOT processed this frame.
+-- Without explicit handling those leftovers would be silently dropped when
+-- we reset Scheduler.head/tail. So we compact them to the front and
+-- re-arm the OnUpdate driver for the next frame.
+--
+-- Net result: one schedule = one execution per frame, no re-entry storm,
+-- no lost work. Pure Lua state -- secret-safe by construction.
 local function FlushNextFrame()
     if frame then frame:SetScript("OnUpdate", nil) end
     Scheduler.nextFrameActive = false
 
     local head = Scheduler.head or 1
-    local tail = Scheduler.tail or 0
-    while head <= tail do
+    local snapshotTail = Scheduler.tail or 0
+
+    while head <= snapshotTail do
         local key = queue[head]
         queue[head] = nil
         head = head + 1
@@ -40,7 +57,28 @@ local function FlushNextFrame()
         pending[key] = nil
         if type(cb) == "function" then cb() end
     end
-    Scheduler.head, Scheduler.tail = 1, 0
+
+    -- Items appended during the flush (snapshotTail+1 .. Scheduler.tail).
+    -- Compact them to the head of the queue and arm next-frame flush.
+    local liveTail = Scheduler.tail or 0
+    if liveTail >= head then
+        local writeIdx = 0
+        for i = head, liveTail do
+            writeIdx = writeIdx + 1
+            queue[writeIdx] = queue[i]
+            queue[i] = nil
+        end
+        Scheduler.head = 1
+        Scheduler.tail = writeIdx
+        if frame and not Scheduler.nextFrameActive then
+            Scheduler.nextFrameActive = true
+            frame:SetScript("OnUpdate", FlushNextFrame)
+        elseif not frame and C_Timer and C_Timer.After then
+            C_Timer.After(0, FlushNextFrame)
+        end
+    else
+        Scheduler.head, Scheduler.tail = 1, 0
+    end
 end
 
 local function QueueNextFrame(key, fn)
