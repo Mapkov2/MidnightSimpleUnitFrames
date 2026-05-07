@@ -123,7 +123,7 @@ local A2_SHARED_DEFAULTS = {
     growth="RIGHT", rowWrap="DOWN",
     offsetX=0, offsetY=6, buffOffsetY=30,
     stackTextSize=14, cooldownTextSize=14, bossEditTogether=true,
-    privateAurasEnabled=true, showPrivateAurasPlayer=true, showPrivateAurasTarget=false,
+    privateAurasEnabled=true, showPrivateAurasPlayer=true,
     privateAuraMaxPlayer=4,
     showSated=true, satedShowAtSeconds=0,
     ignoreCats={},
@@ -180,10 +180,9 @@ local function EnsureDB()
     s.blizzardShowCooldownText = nil
     s.blizzardOrganizationType = nil
     s.blizzardDispelMode = nil
+    s.showPrivateAurasTarget = nil
+    s.privateAuraMaxTarget = nil
     s.privateAuraMaxPlayer = API._Render.Clamp(s.privateAuraMaxPlayer, 4, 0, 12)
-    if s.privateAuraMaxTarget ~= nil then
-        s.privateAuraMaxTarget = API._Render.Clamp(s.privateAuraMaxTarget, 4, 0, 12)
-    end
     s.satedShowAtSeconds   = API._Render.Clamp(s.satedShowAtSeconds, 0, 0, 3600)
     -- Per-type growth: sanitize invalid values (nil = fall back to s.growth)
     if s.buffGrowth ~= nil and not A2_GROWTH_OK[s.buffGrowth] then s.buffGrowth = nil end
@@ -606,16 +605,12 @@ end
 API._Render.PrivateAurasShownForUnit = function(shared, unit)
     if not shared or shared.privateAurasEnabled ~= true then return false end
     if unit == "player" then return shared.showPrivateAurasPlayer == true end
-    if unit == "target" then return shared.showPrivateAurasTarget == true end
     return false
 end
 
 API._Render.PrivateAuraMaxForUnit = function(shared, unit)
-    if not shared then return 0 end
-    local value
-    if unit == "target" then value = shared.privateAuraMaxTarget end
-    if value == nil then value = shared.privateAuraMaxPlayer end
-    return API._Render.Clamp(value, 4, 0, 12)
+    if not shared or unit ~= "player" then return 0 end
+    return API._Render.Clamp(shared.privateAuraMaxPlayer, 4, 0, 12)
 end
 
 local _pendingRemoveIDs

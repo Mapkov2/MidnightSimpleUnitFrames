@@ -267,10 +267,12 @@ meleeLabel:SetText("Choose spell (type spell ID or name):")
 panel.meleeSpellChooseLabel = meleeLabel
 
 local meleeInput = CreateFrame("EditBox", "MSUF_Gameplay_MeleeSpellInput", content, "InputBoxTemplate")
-meleeInput:SetSize(240, 20)
+meleeInput:SetSize(240, 24)
 meleeInput:SetPoint("TOPLEFT", meleeLabel, "BOTTOMLEFT", -4, -6)
 meleeInput:SetAutoFocus(false)
 meleeInput:SetMaxLetters(60)
+if GameFontHighlightSmall then meleeInput:SetFontObject(GameFontHighlightSmall) end
+if meleeInput.SetTextInsets then meleeInput:SetTextInsets(4, 4, 1, 1) end
 panel.meleeSpellInput = meleeInput
 local MSUF_SuppressMeleeInputChange = false
 local MSUF_SkipMeleeFocusLostResolve = false
@@ -1897,10 +1899,15 @@ end
 
     panel.MSUF_UpdateCrosshairPreview = UpdateCrosshairPreview
 
+    -- Combat crosshair sliders share the row with step buttons, editbox, and
+    -- the live "px" label. Keep them narrower than other Gameplay sliders so
+    -- the full row stays inside the scroll child on compact Settings panels.
+    local CROSSHAIR_SLIDER_W = 210
+
     -- Combat crosshair thickness slider
     local crosshairThicknessLabel = _MSUF_Label("GameFontHighlight", "TOPLEFT", meleeSelected or (meleeSharedWarn or crosshairRangeWarn), "BOTTOMLEFT", 0, -24, "Crosshair thickness", "crosshairThicknessLabel")
 
-    local crosshairThicknessSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairThicknessSlider", "TOPLEFT", crosshairThicknessLabel, "BOTTOMLEFT", 0, -12, 240, 1, 10, 1, "1 px", "10 px", "2 px", "crosshairThicknessSlider", "crosshairThickness",
+    local crosshairThicknessSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairThicknessSlider", "TOPLEFT", crosshairThicknessLabel, "BOTTOMLEFT", 0, -12, CROSSHAIR_SLIDER_W, 1, 10, 1, "1 px", "10 px", "2 px", "crosshairThicknessSlider", "crosshairThickness",
         function(v) return math.floor(v + 0.5) end,
         function(self, g, v)
             _G[self:GetName() .. "Text"]:SetText(string.format("%d px", v))
@@ -1918,7 +1925,7 @@ end
     -- Combat crosshair size slider
     local crosshairSizeLabel = _MSUF_Label("GameFontHighlight", "TOPLEFT", crosshairThicknessSlider, "BOTTOMLEFT", 0, -24, "Crosshair size", "crosshairSizeLabel")
 
-    local crosshairSizeSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairSizeSlider", "TOPLEFT", crosshairSizeLabel, "BOTTOMLEFT", 0, -14, 240, 20, 80, 2, "20 px", "80 px", "40 px", "crosshairSizeSlider", "crosshairSize",
+    local crosshairSizeSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairSizeSlider", "TOPLEFT", crosshairSizeLabel, "BOTTOMLEFT", 0, -14, CROSSHAIR_SLIDER_W, 20, 80, 2, "20 px", "80 px", "40 px", "crosshairSizeSlider", "crosshairSize",
         function(v)
             v = math.floor(v + 0.5)
             if v < 20 then v = 20 elseif v > 80 then v = 80 end
