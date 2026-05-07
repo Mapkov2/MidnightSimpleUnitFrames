@@ -2084,7 +2084,9 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
     _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
 
     -- 4. Own-aura highlight (same effective state rarely changes across full commits)
-    local ownHelpfulKey = ((isOwn and 1) or 0) * 2 + ((isHelpful and 1) or 0)
+    local ownHelpfulKey = ((isOwn and 1) or 0) * 4
+        + ((isHelpful and 1) or 0) * 2
+        + ((forceOwnBuffHighlight and 1) or 0)
     if icon._msufA2_lastOwnHelpful ~= ownHelpfulKey then
         icon._msufA2_lastOwnHelpful = ownHelpfulKey
         _fast_ApplyOwnHighlight(icon, isOwn, isHelpful, shared)
