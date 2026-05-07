@@ -339,6 +339,7 @@ _G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
 
 _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
     local math_floor = math.floor
+    local string_format = string.format
     local CP = E.CP
     local _cpDB = E._cpDB
     local GetTime = E.GetTime
@@ -350,30 +351,65 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
     local GetRuneMap = E.GetRuneMap
     local GetFilledAlpha = E.GetFilledAlpha
     local GetEmptyAlpha = E.GetEmptyAlpha
+    local _runeTimeTextCache = {}
+
+    local function GetRuneTimeText(q)
+        local s = _runeTimeTextCache[q]
+        if not s then
+            s = string_format("%.1f", q / 10)
+            _runeTimeTextCache[q] = s
+        end
+        return s
+    end
+
+    local function ClearRuneText(bar)
+        if not bar then return end
+        local rfs = bar and bar._runeText
+        if rfs then
+            if bar._runeTextQ ~= -1 then rfs:SetText("") end
+            if bar._runeTextVisible ~= false then rfs:Hide() end
+        end
+        bar._runeTextQ = -1
+        bar._runeTextVisible = false
+    end
+
+    local function ApplyRuneText(bar, remaining)
+        local rfs = bar and bar._runeText
+        if not rfs or not bar._runeShowTime then
+            ClearRuneText(bar)
+            return
+        end
+
+        if remaining < 0 then remaining = 0 end
+        local q = math_floor(remaining * 10 + 0.5)
+        if q == (bar._runeTextQ or -1) then return end
+
+        bar._runeTextQ = q
+        if q <= 0 then
+            rfs:SetText("")
+            if bar._runeTextVisible ~= false then rfs:Hide() end
+            bar._runeTextVisible = false
+        else
+            rfs:SetText(GetRuneTimeText(q))
+            if bar._runeTextVisible ~= true then rfs:Show() end
+            bar._runeTextVisible = true
+        end
+    end
 
     -- Per-bar tick logic (called from central RuntimeTick, not per-bar OnUpdate).
     local function RuneBarTick(bar, elapsed)
-        local dur = (bar._runeDuration or 0) + elapsed
+        local start = bar._runeStart
+        local dur = start and (GetTime() - start) or ((bar._runeDuration or 0) + elapsed)
+        local total = bar._runeTotalDuration
+        if total and dur > total then dur = total end
+        if dur < 0 then dur = 0 end
         bar._runeDuration = dur
         bar:SetValue(dur)
 
-        local rfs = bar._runeText
-        if rfs and bar._runeShowTime and bar._runeTotalDuration and bar._runeTotalDuration > 0 then
-            local rem = bar._runeTotalDuration - dur
-            if rem < 0 then rem = 0 end
-            local q = math_floor(rem * 10 + 0.5)
-            if q ~= (bar._runeTextQ or -1) then
-                bar._runeTextQ = q
-                if q <= 0 then
-                    rfs:SetText("")
-                    rfs:Hide()
-                else
-                    rfs:SetFormattedText("%.1f", q / 10)
-                    rfs:Show()
-                end
-            end
-        elseif rfs then
-            if rfs:IsShown() then rfs:Hide() end
+        if total and total > 0 then
+            ApplyRuneText(bar, total - dur)
+        elseif bar._runeText then
+            ClearRuneText(bar)
         end
     end
 
@@ -405,12 +441,9 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
             if bar then
                 bar._runeOUA = false
                 bar._runeDuration = nil
+                bar._runeStart = nil
                 bar._runeTotalDuration = nil
-                bar._runeTextQ = -1
-                if clearText and bar._runeText then
-                    bar._runeText:SetText("")
-                    bar._runeText:Hide()
-                end
+                if clearText then ClearRuneText(bar) end
             end
         end
         CP.runeOUAAny = false
@@ -455,47 +488,39 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
                     bar:SetValue(1)
                     SetRuneBarActive(bar, false)
                     bar._runeDuration = nil
+                    bar._runeStart = nil
                     bar:SetAlpha(filledAlpha)
                     bar._runeTotalDuration = nil
                     bar._runeShowTime = showRuneTime
-                    bar._runeTextQ = -1
-                    if bar._runeText then bar._runeText:SetText(""); bar._runeText:Hide() end
+                    ClearRuneText(bar)
                     readyCount = readyCount + 1
                 elseif start and duration and duration > 0 then
-                    bar._runeDuration = now - start
+                    local runeDuration = now - start
+                    if runeDuration < 0 then runeDuration = 0 end
+                    if runeDuration > duration then runeDuration = duration end
+                    local wasShowingTime = bar._runeShowTime
+                    bar._runeDuration = runeDuration
+                    bar._runeStart = start
                     bar._runeTotalDuration = duration
                     bar._runeShowTime = showRuneTime
-                    bar._runeTextQ = -1
                     bar:SetMinMaxValues(0, duration)
-                    bar:SetValue(bar._runeDuration)
+                    bar:SetValue(runeDuration)
                     SetRuneBarActive(bar, true)
                     activeRuneOUA = activeRuneOUA + 1
                     bar:SetAlpha(filledAlpha)
-                    if showRuneTime and bar._runeText then
-                        local rem = duration - bar._runeDuration
-                        if rem < 0 then rem = 0 end
-                        local q = math_floor(rem * 10 + 0.5)
-                        bar._runeTextQ = q
-                        if q > 0 then
-                            bar._runeText:SetFormattedText("%.1f", q / 10)
-                            bar._runeText:Show()
-                        else
-                            bar._runeText:SetText("")
-                            bar._runeText:Hide()
-                        end
-                    elseif bar._runeText then
-                        bar._runeText:SetText("")
-                        bar._runeText:Hide()
+                    if wasShowingTime ~= showRuneTime then
+                        bar._runeTextQ = -1
                     end
+                    ApplyRuneText(bar, duration - runeDuration)
                 else
                     bar:SetMinMaxValues(0, 1)
                     bar:SetValue(0)
                     SetRuneBarActive(bar, false)
                     bar._runeDuration = nil
+                    bar._runeStart = nil
                     bar._runeTotalDuration = nil
                     bar._runeShowTime = showRuneTime
-                    bar._runeTextQ = -1
-                    if bar._runeText then bar._runeText:SetText(""); bar._runeText:Hide() end
+                    ClearRuneText(bar)
                     bar:SetAlpha(emptyAlpha)
                 end
 

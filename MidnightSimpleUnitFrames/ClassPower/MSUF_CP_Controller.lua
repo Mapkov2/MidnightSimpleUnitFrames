@@ -440,6 +440,7 @@ local function EnsureDefaults()
     -- DK Rune sort order: "asc" = ready first, "desc" = recharging first, nil = natural
     if b.runeSortOrder        == nil then b.runeSortOrder        = "asc" end
     -- DK Runes: show per-rune cooldown time text on the runes (Sensei-style)
+    if b.runeShowTime == nil and b.runeShowTimeText ~= nil then b.runeShowTime = b.runeShowTimeText and true or false end
     if b.runeShowTime        == nil then b.runeShowTime        = true end
 
     -- Ele Shaman: Maelstrom Power continuous bar (off by default — niche preference)
