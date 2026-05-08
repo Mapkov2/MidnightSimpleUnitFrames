@@ -193,10 +193,10 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         si.showDND = false
 
         -- Fresh-install scaling defaults:
-        -- Always start in Auto (Blizzard decides the global UI scale), with MSUF scaling disabled.
+        -- Match Unhalted-style global UI scale: disabled until the user enables it.
         g.anchorToCooldown = false
         g.anchorName = "UIParent"
-        g.disableScaling = true
+        g.disableScaling = false
         g.globalUiScalePreset = "auto"
         g.globalUiScaleValue = nil
         g.UIScale = { Enabled = false, Scale = 1.0 }
@@ -283,9 +283,9 @@ if g.anchorToCooldown == nil then
     g.anchorToCooldown = false
 end
 -- New install defaults (UI scale + Flash menu anchor)
--- Default: Auto global UI scale (Blizzard handles it), with MSUF scaling disabled.
+-- Default: Unhalted-style global UI scale disabled; local MSUF scales remain independent.
 if g.disableScaling == nil then
-    g.disableScaling = true
+    g.disableScaling = false
 end
 if g.globalUiScalePreset == nil then
     g.globalUiScalePreset = "auto"
@@ -294,6 +294,7 @@ end
 -- General.UIScale.Enabled + General.UIScale.Scale. Keep the legacy preset keys
 -- populated so older exports/tools can still reason about the profile.
 do
+    local legacyScalingDisabled = (g.disableScaling == true)
     local function PresetScale(preset, fallback)
         if preset == "1080p" then return 768 / 1080 end
         if preset == "1440p" then return 768 / 1440 end
@@ -311,7 +312,7 @@ do
         g.UIScale = ui
         local preset = g.globalUiScalePreset
         local scale = PresetScale(preset, g.globalUiScaleValue) or 1.0
-        local enabled = (g.disableScaling ~= true)
+        local enabled = (not legacyScalingDisabled)
             and (preset == "1080p" or preset == "1440p" or preset == "4k" or preset == "pixel" or preset == "custom")
         ui.Enabled = enabled and true or false
         ui.Scale = scale
@@ -319,15 +320,16 @@ do
     end
     if ui.Enabled == nil then
         local preset = g.globalUiScalePreset
-        ui.Enabled = (g.disableScaling ~= true)
+        ui.Enabled = (not legacyScalingDisabled)
             and (preset == "1080p" or preset == "1440p" or preset == "4k" or preset == "pixel" or preset == "custom")
     end
     ui.Enabled = (ui.Enabled == true)
     ui.Scale = tonumber(ui.Scale) or PresetScale(g.globalUiScalePreset, g.globalUiScaleValue) or 1.0
-    if ui.Scale < 0.3 then ui.Scale = 0.3 elseif ui.Scale > 2.0 then ui.Scale = 2.0 end
-    if g.disableScaling == true then
+    if ui.Scale < 0.3 then ui.Scale = 0.3 elseif ui.Scale > 1.5 then ui.Scale = 1.5 end
+    if legacyScalingDisabled then
         ui.Enabled = false
     end
+    g.disableScaling = false
     if ui.Enabled then
         g.globalUiScaleValue = ui.Scale
         if g.globalUiScalePreset ~= "1080p" and g.globalUiScalePreset ~= "1440p"
@@ -338,7 +340,7 @@ do
         g.globalUiScalePreset = "auto"
     end
 end
--- Nil value = Auto (no enforced custom global UI scale)
+-- Nil value = Off (Unhalted-style global UI scale disabled)
 -- (Do NOT seed a default globalUiScaleValue on fresh installs.)
 if g.msufUiScale == nil then
     g.msufUiScale = 1.0
