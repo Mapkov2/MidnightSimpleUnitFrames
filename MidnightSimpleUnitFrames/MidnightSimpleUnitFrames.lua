@@ -620,8 +620,11 @@ local function MSUF_ApplyOverlayTextureAlpha(bar, alpha)
     else
         alpha = bar._msufOverlayTextureAlpha
     end
-    if type(alpha) ~= "number" then return end
     local mul = tonumber(bar._msufAlphaTextureMul) or 1
+    if type(alpha) ~= "number" then
+        if mul == 1 then return end
+        alpha = 1
+    end
     local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
     if tex and tex.SetAlpha then tex:SetAlpha(alpha * mul) end
 end
@@ -3911,7 +3914,10 @@ end
     end
     -- IMPORTANT: layered alpha uses per-texture alpha, which visual steps reset.
     if conf and conf.alphaExcludeTextPortrait == true then
-        if _UF.Alpha then _UF.Alpha(self, key) end
+        local applyAlpha = _UF.Alpha or _G.MSUF_ApplyUnitAlpha
+        self._msufAlphaLayeredFastValid = nil
+        self._msufAlphaLayeredFastHits = nil
+        if applyAlpha then applyAlpha(self, key) end
     end
     if _UF.TPASync then
         _UF.TPASync(self)
@@ -5748,6 +5754,8 @@ do
     _UF.PwrText  = _G.MSUF_UFCore_UpdatePowerTextFast   or _UF.PwrText
     _UF.PwrBar   = _G.MSUF_UFCore_UpdatePowerBarFast    or _UF.PwrBar
     _UF.QueueVis = _G.MSUF_QueueUnitframeVisual         or _UF.QueueVis
+    -- Frames can be drawn before this local is resolved; repair load-time HP alpha.
+    if _G.MSUF_RefreshAllUnitAlphas then _G.MSUF_RefreshAllUnitAlphas() end
 end
     if _G.MSUF_ReanchorTargetCastBar then
         _G.MSUF_ReanchorTargetCastBar()
