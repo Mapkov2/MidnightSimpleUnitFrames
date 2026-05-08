@@ -18,6 +18,31 @@ local function SetShown(obj, shown)
     else if obj.Hide then obj:Hide() end end
 end
 
+local MODEL_KEYS = {
+    "portraitModel", "portrait3D", "portrait3d", "portraitModelFrame",
+    "portrait3DModel", "portrait3DFrame", "modelPortrait", "model3D",
+}
+
+local function GetPortraitModel(f)
+    if not f then return nil end
+    local m = rawget(f, "portraitModel")
+    if m then return m end
+    for i = 2, #MODEL_KEYS do
+        m = rawget(f, MODEL_KEYS[i])
+        if m then return m end
+    end
+    return nil
+end
+
+local function HidePortraitModels(f)
+    if not f then return end
+    SetShown(rawget(f, "portraitModel"), false)
+    for i = 2, #MODEL_KEYS do
+        local m = rawget(f, MODEL_KEYS[i])
+        if m then SetShown(m, false) end
+    end
+end
+
 local function IsPortraitModeActive(conf)
     if type(conf) ~= "table" then return false end
     local pm = conf.portraitMode
@@ -27,7 +52,7 @@ end
 -- ── 3D Model creation ──
 local function EnsureModel(f)
     if not f then return nil end
-    local m = rawget(f, "portraitModel")
+    local m = GetPortraitModel(f)
     if m and m.SetUnit then return m end
     m = CreateFrame("PlayerModel", nil, f)
     m:Hide()
@@ -43,6 +68,24 @@ local function EnsureModel(f)
 end
 
 -- ── Layout ──
+local function ApplyClassPortraitTexture(portrait, unit, conf, existsForPortrait)
+    if not portrait then return end
+
+    local u = existsForPortrait and unit or "player"
+    local class = (F.UnitClassBase and F.UnitClassBase(u)) or (F.UnitClass and select(2, F.UnitClass(u)))
+    local style = conf.portraitClassStyle or "BLIZZARD"
+    local visual = PM and PM.ResolveClassPortrait and PM.ResolveClassPortrait(class, style) or nil
+
+    if visual and portrait.SetTexture and portrait.SetTexCoord then
+        portrait:SetTexture(visual.texture)
+        portrait:SetTexCoord(visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
+        return
+    end
+
+    if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
+    if portrait.SetTexture then portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark") end
+end
+
 local function ApplyPortraitLayout(f, conf, widget)
     if not (f and conf and widget) then return end
     local mode = conf.portraitMode or "OFF"
@@ -79,7 +122,7 @@ local function ApplyPortraitLayoutIfNeeded(f, conf)
 end
 
 local function ApplyModelLayoutIfNeeded(f, conf)
-    local m = rawget(f, "portraitModel")
+    local m = GetPortraitModel(f)
     if not (m and m.SetUnit) then return end
     local mode = conf.portraitMode or "OFF"
     local h = conf.height or (f.GetHeight and f:GetHeight()) or 30
@@ -134,7 +177,6 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if render ~= "3D" and render ~= "CLASS" then render = "2D" end
 
     local portrait = f.portrait
-    local model = rawget(f, "portraitModel")
 
     -- Track render/mode changes
     local classStyle = conf.portraitClassStyle or "BLIZZARD"
@@ -154,7 +196,7 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     -- OFF: hide everything
     if mode == "OFF" then
         SetShown(portrait, false)
-        SetShown(model, false)
+        HidePortraitModels(f)
         f._msufPortraitDirty = nil
         f._msufPortraitNextAt = 0
         return
@@ -170,7 +212,7 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     end
     if not existsForPortrait and not allowPreview then
         SetShown(portrait, false)
-        SetShown(model, false)
+        HidePortraitModels(f)
         f._msufPortraitDirty = nil
         f._msufPortraitNextAt = 0
         f._msufPortraitLastGuid = nil
@@ -214,43 +256,14 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
 
     -- ── 2D / CLASS path ──
     -- Hide 3D model
-    SetShown(model, false)
+    HidePortraitModels(f)
 
     if f._msufPortraitDirty then
         local now = (F.GetTime and F.GetTime()) or 0
         local nextAt = tonumber(f._msufPortraitNextAt) or 0
         if (now >= nextAt) and not _budgetUsed then
             if render == "CLASS" then
-                local useClassIcon = false
-                if not existsForPortrait then
-                    useClassIcon = true
-                elseif F.UnitIsPlayer and (F.UnitIsPlayer(unit) == true) then
-                    useClassIcon = true
-                end
-                if useClassIcon then
-                    local u = existsForPortrait and unit or "player"
-                    local class = (F.UnitClassBase and F.UnitClassBase(u)) or (F.UnitClass and select(2, F.UnitClass(u)))
-                    local style = conf.portraitClassStyle or "BLIZZARD"
-                    local visual = PM and PM.ResolveClassPortrait and PM.ResolveClassPortrait(class, style) or nil
-                    if visual and portrait.SetTexture and portrait.SetTexCoord then
-                        portrait:SetTexture(visual.texture)
-                        portrait:SetTexCoord(visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
-                    else
-                        if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
-                        if existsForPortrait and SetPortraitTexture then
-                            SetPortraitTexture(portrait, unit)
-                        elseif portrait.SetTexture then
-                            portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
-                        end
-                    end
-                else
-                    if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
-                    if existsForPortrait and SetPortraitTexture then
-                        SetPortraitTexture(portrait, unit)
-                    elseif portrait.SetTexture then
-                        portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
-                    end
-                end
+                ApplyClassPortraitTexture(portrait, unit, conf, existsForPortrait)
             else
                 -- 2D: standard portrait texture
                 if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
@@ -285,7 +298,7 @@ local function MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
     -- Fast OFF gate
     if mode == "OFF" and f._msufPortraitModeStamp == "OFF" and not f._msufPortraitDirty then
         SetShown(f.portrait, false)
-        SetShown(rawget(f, "portraitModel"), false)
+        HidePortraitModels(f)
         return
     end
 
@@ -367,13 +380,13 @@ if type(hooksecurefunc) == "function" then
     local function OnBossPortraitLayout(f, conf)
         if not (f and conf) then return end
         if conf.portraitRender == "3D" and IsPortraitModeActive(conf) then
-            local m = rawget(f, "portraitModel")
+            local m = GetPortraitModel(f)
             if m and m.SetUnit then
                 f._msufPortraitModelLayoutStamp = nil
                 ApplyModelLayoutIfNeeded(f, conf)
             end
         else
-            SetShown(rawget(f, "portraitModel"), false)
+            HidePortraitModels(f)
         end
     end
     hooksecurefunc("MSUF_UpdateBossPortraitLayout", OnBossPortraitLayout)
@@ -410,7 +423,7 @@ local function SyncPortraitUnit(unitKey)
             f._msufPortraitNextAt = 0
             if not IsPortraitModeActive(conf) then
                 SetShown(f.portrait, false)
-                SetShown(rawget(f, "portraitModel"), false)
+                HidePortraitModels(f)
             else
                 UpdatePortraitIfNeeded(f, f.unit or unitKey, conf, UnitExists and UnitExists(f.unit or unitKey) or true)
             end
@@ -428,13 +441,13 @@ local function SyncPortraitVisibility(f)
     if IsPortraitModeActive(conf) then
         if conf.portraitRender == "3D" then
             SetShown(f.portrait, false)
-            SetShown(rawget(f, "portraitModel"), true)
+            SetShown(GetPortraitModel(f), true)
         else
-            SetShown(rawget(f, "portraitModel"), false)
+            HidePortraitModels(f)
         end
     else
         SetShown(f.portrait, false)
-        SetShown(rawget(f, "portraitModel"), false)
+        HidePortraitModels(f)
     end
 end
 _G.MSUF_3DPortraits_SyncVisibility = SyncPortraitVisibility
