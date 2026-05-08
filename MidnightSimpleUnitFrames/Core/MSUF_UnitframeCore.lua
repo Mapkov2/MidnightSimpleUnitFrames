@@ -1337,8 +1337,8 @@ Elements.Indicators = {
     bit = EL_INDICATOR,
     dirty = DIRTY_INDICATOR,
     -- Driven by global events (GROUP_ROSTER_UPDATE / PARTY_LEADER_CHANGED / RAID_TARGET_UPDATE).
-    -- UNIT_CLASSIFICATION_CHANGED is also wired here so mid-pull elite/rare icon changes update live.
-    events = { "UNIT_CLASSIFICATION_CHANGED" },
+    -- No per-frame unit events here.
+    events = nil,
     Enable = function(f, conf) end,
     Disable = function(f)
         if not f then return end
