@@ -2998,7 +2998,7 @@ then MSUF_Print("Cannot reset while in combat.") return end
 -- === Slash Commands ===
 
 if not StaticPopupDialogs["MSUF_RESET_POS_CONFIRM"]
-then StaticPopupDialogs["MSUF_RESET_POS_CONFIRM"]={text="Reset MSUF frame positions now?\n\nThis resets MSUF frame positions + visibility to defaults for the ACTIVE profile.",button1=YES,button2=NO,timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3,OnAccept=function() if _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
+then StaticPopupDialogs["MSUF_RESET_POS_CONFIRM"]={text="Reset MSUF frame positions now?\n\nThis affects the ACTIVE profile only:\n- Resets Player, Target, Focus, Pet and ToT frame size/position/visibility defaults.\n- Anchors unitframes back to the screen center (UIParent).\n- Disables CDM/custom global anchors.\n- Clears per-frame custom/unitframe anchors.\n- Applies the layout immediately.",button1=YES,button2=NO,timeout=0,whileDead=1,hideOnEscape=1,preferredIndex=3,OnAccept=function() if _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
 then pcall(_G.SlashCmdList["MIDNIGHTSUF"],"reset")
 else MSUF_Print("/msuf reset handler not found.")
 end
