@@ -134,6 +134,13 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         if conf.alphaHPOutOfCombat == nil then conf.alphaHPOutOfCombat = 1 end
         if conf.alphaPreserveHPColor == nil then conf.alphaPreserveHPColor = false end
      end
+    local function ForceFreshUnitframeScreenPosition(conf, x, y)
+        if type(conf) ~= "table" then return end
+        conf.anchorFrameName = nil
+        conf.anchorToUnitframe = "GLOBAL"
+        conf.offsetX = x
+        conf.offsetY = y
+    end
     local function ForceFreshGroupAuraBlizzardRenderer(conf)
         if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
         local auras = conf.auras
@@ -164,6 +171,14 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureUnitAlphaDefaults(db.boss)
     EnsureUnitAlphaDefaults(db.targettarget)
     EnsureUnitAlphaDefaults(db.tot)
+    -- Fresh factory profiles must start from stable screen-center anchors.
+    -- Exported profiles can contain external/CDM-relative offsets; those are
+    -- correct for that user's live anchor but wrong as universal defaults.
+    ForceFreshUnitframeScreenPosition(db.player, -260, 80)
+    ForceFreshUnitframeScreenPosition(db.target, 260, 80)
+    ForceFreshUnitframeScreenPosition(db.focus, 260, 135)
+    ForceFreshUnitframeScreenPosition(db.pet, -260, 135)
+    ForceFreshUnitframeScreenPosition(db.targettarget or db.tot, 260, 225)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_party)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_raid)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_mythicraid)
@@ -179,6 +194,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
 
         -- Fresh-install scaling defaults:
         -- Always start in Auto (Blizzard decides the global UI scale), with MSUF scaling disabled.
+        g.anchorToCooldown = false
+        g.anchorName = "UIParent"
         g.disableScaling = true
         g.globalUiScalePreset = "auto"
         g.globalUiScaleValue = nil
