@@ -357,14 +357,6 @@ function State.Exit(source)
 
     -- Notify listeners
     NotifyListeners()
-
-    if type(_G.MSUF_HardLockAllFramePositions) == "function" then
-        C_Timer.After(0, function()
-            if not (EM2.State and EM2.State.IsActive()) then
-                _G.MSUF_HardLockAllFramePositions("EditModeExit")
-            end
-        end)
-    end
 end
 
 -- CANCEL ALL — restore DB to pre-edit-mode state, then exit
@@ -425,14 +417,6 @@ function State.CancelAll()
     if _G.MSUF_Auras2_RefreshAll then _G.MSUF_Auras2_RefreshAll() end
 
     NotifyListeners()
-
-    if type(_G.MSUF_HardLockAllFramePositions) == "function" then
-        C_Timer.After(0, function()
-            if not (EM2.State and EM2.State.IsActive()) then
-                _G.MSUF_HardLockAllFramePositions("EditModeCancel")
-            end
-        end)
-    end
 end
 
 -- Combat guard: auto-exit on PLAYER_REGEN_DISABLED

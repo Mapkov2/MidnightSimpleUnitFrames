@@ -823,18 +823,12 @@ end
 local function ResolveAnchor(key, conf)
     local anchorFn = _G.MSUF_GetAnchorFrame
     local anchor = (type(anchorFn) == "function" and anchorFn()) or UIParent
-    local usableExternal = _G.MSUF_IsExternalAnchorUsable
-    if type(usableExternal) == "function" and not usableExternal(anchor) then
-        anchor = UIParent
-    end
     if not conf then return anchor end
     local cn = conf.anchorFrameName
     if type(cn) == "string" and cn ~= "" then
         local ecvFn = _G.MSUF_GetEffectiveCooldownFrame
         local cf = (type(ecvFn) == "function" and cn == "EssentialCooldownViewer") and ecvFn(cn) or _G[cn]
-        if cf and cf ~= UIParent and cf ~= WorldFrame then
-            if type(usableExternal) ~= "function" or usableExternal(cf) then return cf end
-        end
+        if cf and cf ~= UIParent and cf ~= WorldFrame then return cf end
     end
     local atv = conf.anchorToUnitframe
     if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
