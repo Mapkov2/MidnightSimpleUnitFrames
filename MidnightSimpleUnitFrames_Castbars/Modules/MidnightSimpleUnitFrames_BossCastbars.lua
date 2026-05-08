@@ -599,8 +599,13 @@ end
         local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
         local ox = math.floor((tonumber(g.bossCastbarOffsetX) or 0) + 0.5)
         local oy = math.floor((tonumber(g.bossCastbarOffsetY) or 0) + 0.5)
-        local forcedW = tonumber(g.bossCastbarWidth)
-        local forcedH = tonumber(g.bossCastbarHeight)
+        local forcedW, forcedH
+        if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+            forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize(unit, g, self, 240, 12)
+        else
+            forcedW = tonumber(g.bossCastbarWidth)
+            forcedH = tonumber(g.bossCastbarHeight)
+        end
         if forcedW then forcedW = math.floor(forcedW + 0.5) end
         if forcedH then forcedH = math.floor(forcedH + 0.5) end
 
@@ -1686,10 +1691,14 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
     EnsureDBSafe()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 
-    local forcedW = tonumber(g.bossCastbarWidth)
-    local forcedH = tonumber(g.bossCastbarHeight)
-
     local uf = _G["MSUF_boss" .. index] or _G["MSUF_boss1"]
+    local forcedW, forcedH
+    if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+        forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize("boss" .. index, g, f, 240, 12)
+    else
+        forcedW = tonumber(g.bossCastbarWidth)
+        forcedH = tonumber(g.bossCastbarHeight)
+    end
     local w = (forcedW and forcedW > 10) and forcedW or (uf and uf.GetWidth and uf:GetWidth()) or 240
     local h = (forcedH and forcedH > 4) and forcedH or 12
 

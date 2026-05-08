@@ -389,6 +389,12 @@ _G.MSUF_ResetCurrentEditUnit = function()
     local conf = db and db[key]
     if not conf then return end
     conf.width = nil; conf.height = nil; conf.offsetX = nil; conf.offsetY = nil
+    conf.anchorFrameName = nil
+    conf.anchorToUnitframe = "GLOBAL"
+    if db.general then
+        db.general.anchorToCooldown = false
+        db.general.anchorName = "UIParent"
+    end
     if type(ApplySettingsForKey) == "function" then ApplySettingsForKey(key)
     elseif type(ApplyAllSettings) == "function" then ApplyAllSettings() end
 end

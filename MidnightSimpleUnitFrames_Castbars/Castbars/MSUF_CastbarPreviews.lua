@@ -852,10 +852,14 @@ end
         EnsureDB()
         local g = (MSUF_DB and MSUF_DB.general) or {}
 
-        local forcedW = tonumber(g.bossCastbarWidth)
-        local forcedH = tonumber(g.bossCastbarHeight)
-
         local uf = _G["MSUF_boss1"]
+        local forcedW, forcedH
+        if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+            forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize("boss1", g, f, 240, 12)
+        else
+            forcedW = tonumber(g.bossCastbarWidth)
+            forcedH = tonumber(g.bossCastbarHeight)
+        end
         local w = (forcedW and forcedW > 10) and forcedW or (uf and uf.GetWidth and uf:GetWidth()) or 240
         local h = (forcedH and forcedH > 4) and forcedH or 12
 
@@ -1490,13 +1494,18 @@ end
         end
         return hv
     end
+    local function GetCastbarDesiredPreviewSize(unitKey, frame, widthKey, heightKey, detachedFlag, fallbackW, fallbackH)
+        if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+            return _G.MSUF_GetCastbarDesiredSize(unitKey, g, frame, fallbackW or 250, fallbackH or 18)
+        end
+        return GetAttachedWidthOrDB(widthKey, detachedFlag, unitKey, fallbackW), GetHeightOrDB(heightKey, fallbackH)
+    end
 
     if UnitFrames and UnitFrames["target"] then
         local targetPreview = MSUF_TargetCastbarPreview or MSUF_CreateTargetCastbarPreview()
         if targetPreview and MSUF_PositionTargetCastbarPreview then
             if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-                local tw = GetAttachedWidthOrDB("castbarTargetBarWidth", g.castbarTargetDetached, "target", 250)
-                local th = GetHeightOrDB("castbarTargetBarHeight", 18)
+                local tw, th = GetCastbarDesiredPreviewSize("target", targetPreview, "castbarTargetBarWidth", "castbarTargetBarHeight", g.castbarTargetDetached, 250, 18)
                 _G.MSUF_ApplyPlayerCastbarSizeAndLayout(targetPreview, g, tw, th)
             end
             MSUF_PositionTargetCastbarPreview()
@@ -1510,12 +1519,11 @@ end
         local focusPreview = MSUF_FocusCastbarPreview or MSUF_CreateFocusCastbarPreview()
         if focusPreview and MSUF_PositionFocusCastbarPreview then
             if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-                local fw = GetAttachedWidthOrDB("castbarFocusBarWidth", g.castbarFocusDetached, "focus", 250)
+                local fw, fh = GetCastbarDesiredPreviewSize("focus", focusPreview, "castbarFocusBarWidth", "castbarFocusBarHeight", g.castbarFocusDetached, 250, 18)
                 -- If focus is attached but has no unitframe yet, mirror target as a pragmatic fallback.
                 if (not fw or fw <= 0) and (UnitFrames and UnitFrames["target"] and UnitFrames["target"].GetWidth) then
                     fw = UnitFrames["target"]:GetWidth()
                 end
-                local fh = GetHeightOrDB("castbarFocusBarHeight", 18)
                 _G.MSUF_ApplyPlayerCastbarSizeAndLayout(focusPreview, g, fw, fh)
             end
             MSUF_PositionFocusCastbarPreview()

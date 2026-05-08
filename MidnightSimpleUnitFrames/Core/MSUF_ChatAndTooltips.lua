@@ -9,7 +9,25 @@ local MSUF_RESET_DEFAULTS = {
     pet    = { width=220, height=30, offsetX=-260, offsetY=135, showName=true, showHP=false, showPower=false },
     targettarget = { width=220, height=30, offsetX=260, offsetY=225, showName=true, showHP=true, showPower=false },
 }
+local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "pet", "targettarget", "boss" }
 local MSUF_FullResetPending = false
+local function MSUF_ResetPositionAnchorsToScreen()
+    if type(MSUF_DB) ~= "table" then return end
+
+    MSUF_DB.general = MSUF_DB.general or {}
+    local g = MSUF_DB.general
+    g.anchorToCooldown = false
+    g.anchorName = "UIParent"
+
+    for i = 1, #MSUF_RESET_ANCHOR_UNITS do
+        local unit = MSUF_RESET_ANCHOR_UNITS[i]
+        local conf = MSUF_DB[unit]
+        if type(conf) == "table" then
+            conf.anchorFrameName = nil
+            conf.anchorToUnitframe = "GLOBAL"
+        end
+    end
+end
 local function MSUF_DoFullReset(opts)
     opts = opts or {}
     local skipReload = (opts.skipReload == true)
@@ -171,9 +189,15 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
                     t.enabled = true
                 end
             end
+            MSUF_ResetPositionAnchorsToScreen()
         end
-        if type(ApplyAllSettings) == "function" then
+        if type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
+            _G.MSUF_ApplyAllSettings_Immediate()
+        elseif type(ApplyAllSettings) == "function" then
             ApplyAllSettings()
+        end
+        if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
+            _G.MSUF_ForceReanchorAllUnitFrames_Once()
         end
         if type(UpdateAllFonts) == "function" then
             UpdateAllFonts()
