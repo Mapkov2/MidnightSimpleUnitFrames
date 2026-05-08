@@ -1,31 +1,23 @@
 -- MSUF_VersionCheck.lua
 -- Midnight Simple Unit Frames (MSUF)
 -- Peer-to-peer version check via addon messaging (like DBM/BigWigs).
---
 -- How it works:
 --   1. On login, broadcast our version to Guild + Group (once).
 --   2. Listen for other MSUF clients' version broadcasts.
 --   3. If a higher version is detected, print a one-shot chat message.
---
 -- Secret-safe: All values are addon-generated strings/numbers, never game
 -- API return values. No comparisons on secret/protected data.
---
 -- Performance: Near-zero overhead. Single broadcast at login, passive
 -- listener on CHAT_MSG_ADDON. No combat paths, no OnUpdate.
---
 -- Debug: /msuf versiontest  — simulates an update notification.
 
 local addonName, ns = ...
 ns = ns or {}
 
--- =========================================================================
 -- Constants
--- =========================================================================
 local MSG_PREFIX = "MSUF" -- 4 chars, well within 16-char limit
 
--- =========================================================================
 -- Perf locals
--- =========================================================================
 local type, tonumber, tostring = type, tonumber, tostring
 local string_format, string_match = string.format, string.match
 local C_ChatInfo = C_ChatInfo
@@ -34,9 +26,7 @@ local IsInGroup, IsInRaid, IsInGuild = IsInGroup, IsInRaid, IsInGuild
 local LE_PARTY_CATEGORY_HOME     = LE_PARTY_CATEGORY_HOME
 local LE_PARTY_CATEGORY_INSTANCE = LE_PARTY_CATEGORY_INSTANCE
 
--- =========================================================================
 -- Version parsing
--- =========================================================================
 -- "2.2" / "2.2.1" / "2.10.3" → single integer for fast comparison.
 -- Format: major * 10000 + minor * 100 + patch
 -- Secret-safe: operates on addon-controlled strings only.
@@ -58,9 +48,7 @@ local function NumberToVersion(num)
     return string_format("%d.%d", maj, min)
 end
 
--- =========================================================================
 -- State (session-scoped)
--- =========================================================================
 local myVersionStr   = nil
 local myVersionNum   = 0
 local highestSeenNum = 0
@@ -69,9 +57,7 @@ local notifiedUser   = false
 local prefixOk       = false
 local moduleActive   = false  -- true if Init() ran successfully
 
--- =========================================================================
 -- Core
--- =========================================================================
 local function ReadMyVersion()
     if myVersionStr then return end
     local ok, ver = pcall(function()
@@ -141,18 +127,14 @@ local function OnAddonMessage(_, prefix, payload, _, _)
     end
 end
 
--- =========================================================================
 -- DB helper
--- =========================================================================
 local function IsEnabled()
     local db = _G.MSUF_DB
     if not db or not db.general then return true end -- default: enabled
     return db.general.versionCheckEnabled ~= false
 end
 
--- =========================================================================
 -- Event wiring
--- =========================================================================
 local KEY = "MSUF_VersionCheck"
 
 local function Init()
@@ -180,9 +162,7 @@ local function Init()
     moduleActive = true
 end
 
--- =========================================================================
 -- Module registration
--- =========================================================================
 ns.MSUF_RegisterModule("VersionCheck", {
     key     = "VersionCheck",
     order   = 999,
@@ -190,9 +170,7 @@ ns.MSUF_RegisterModule("VersionCheck", {
     Init    = function() Init() end,
 })
 
--- =========================================================================
 -- Public API (slash commands, options, debug)
--- =========================================================================
 ns.VersionCheck = {
     GetMyVersion = function()
         ReadMyVersion()
@@ -225,11 +203,9 @@ ns.VersionCheck = {
     end,
 }
 
--- =========================================================================
 -- Slash command: /msuf versiontest
 -- Hooks into existing slash handler cleanly via a global the SlashMenu
 -- can call, or works standalone via /run.
--- =========================================================================
 _G.MSUF_VersionCheck_DebugFakeUpdate = function()
     if ns.VersionCheck and ns.VersionCheck.DebugFakeUpdate then
         ns.VersionCheck.DebugFakeUpdate()

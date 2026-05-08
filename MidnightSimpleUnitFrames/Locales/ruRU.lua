@@ -15,12 +15,12 @@ if loc ~= "ruRU" then return end
 
 ns = ns or {}
 ns.LOCALE = loc
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
 end
-if _G then _G.MSUF_L = L end
+_G.MSUF_L = L
 
 local T = {
     ["Open MSUF Menu"] = "Открыть меню MSUF",
@@ -84,7 +84,11 @@ local T = {
     ["2D Portrait Right"] = "2D портрет справа",
     ["3D Portrait Left"] = "3D портрет слева",
     ["3D Portrait Right"] = "3D портрет справа",
-    ["Invert boss order"] = "Инвертировать порядок боссов",
+    ["Boss frame layout"] = "Расположение рамок боссов",
+    ["Vertical (top -> bottom)"] = "Вертикально (сверху -> вниз)",
+    ["Vertical (bottom -> top)"] = "Вертикально (снизу -> вверх)",
+    ["Horizontal (left -> right)"] = "Горизонтально (слева -> направо)",
+    ["Horizontal (right -> left)"] = "Горизонтально (справа -> налево)",
     ["Player Alpha"] = "Прозрачность игрока",
     ["Target Alpha"] = "Прозрачность цели",
     ["Focus Alpha"] = "Прозрачность фокуса",

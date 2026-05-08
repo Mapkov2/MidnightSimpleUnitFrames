@@ -25,19 +25,108 @@ local MSUF_ApplyAbsorbOverlayColor     = ns.Bars._ApplyAbsorbOverlayColor
 local MSUF_ApplyHealAbsorbOverlayColor = ns.Bars._ApplyHealAbsorbOverlayColor
 local MSUF_ResetBarZero                = ns.Bars._ResetBarZero
 
+local function _MSUF_SetHealthBarValue(frame, bar, value)
+    if not bar or value == nil then return end
+    local fn = _G.MSUF_UFCore_SetHealthBarValue
+    if fn then
+        fn(frame, bar, value)
+    else
+        bar:SetValue(value)
+        local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
+        if type(syncMissing) == "function" then
+            syncMissing(frame, nil, value)
+        end
+    end
+end
+
 -- Per-unit absorb setting resolver.
--- Checks MSUF_DB[unitKey] for override, falls back to MSUF_DB.general.
+-- Checks MSUF_DB[unitKey] only when Bars/Highlight override is active,
+-- then falls back to MSUF_DB.general.
+-- PERF: Result cache — pure function, same input always gives same output.
+-- Eliminates 8× GetBossIndexFromToken lookups per target click.
+local _normalizeCache = {}
 local function _MSUF_NormalizeUnitKey(unit)
     if not unit then return nil end
-    if unit == "tot" then return "targettarget" end
-    -- P0: Use file-scope cache; re-resolve if nil (load-order defense)
+    local cached = _normalizeCache[unit]
+    if cached then return cached end
+    if unit == "tot" then _normalizeCache[unit] = "targettarget"; return "targettarget" end
     local bossFn = _MSUF_GetBossIndexFromToken
     if not bossFn then
         bossFn = _G.MSUF_GetBossIndexFromToken
         if bossFn then _MSUF_GetBossIndexFromToken = bossFn end
     end
-    if bossFn and bossFn(unit) then return "boss" end
-    return unit
+    local result = (bossFn and bossFn(unit)) and "boss" or unit
+    _normalizeCache[unit] = result
+    return result
+end
+
+local function _MSUF_GetGradientScopeKey(frameOrUnit)
+    local unit = frameOrUnit
+    if type(frameOrUnit) == "table" then
+        unit = frameOrUnit.msufConfigKey or frameOrUnit._msufConfigKey or frameOrUnit.unitKey or frameOrUnit.unit
+        if (not unit) and frameOrUnit.GetParent then
+            local parent = frameOrUnit:GetParent()
+            unit = parent and (parent.msufConfigKey or parent._msufConfigKey or parent.unitKey or parent.unit)
+            if (not unit) and parent and parent.GetParent then
+                local owner = parent:GetParent()
+                unit = owner and (owner.msufConfigKey or owner._msufConfigKey or owner.unitKey or owner.unit)
+            end
+        end
+    end
+    return _MSUF_NormalizeUnitKey(unit)
+end
+
+local function _MSUF_GetScopedGradientDB(frameOrUnit)
+    local db = _G.MSUF_DB
+    if not db then return nil end
+    local scopeKey = _MSUF_GetGradientScopeKey(frameOrUnit)
+    if not scopeKey or scopeKey == "shared" then return nil end
+    local scoped = db[scopeKey]
+    if type(scoped) == "table" and scoped.hlOverride == true then
+        return scoped
+    end
+    return nil
+end
+
+local function _MSUF_GradientValue(scoped, gen, key, defaultVal)
+    local v = nil
+    if scoped and scoped[key] ~= nil then v = scoped[key] end
+    if v == nil and gen then v = gen[key] end
+    if v == nil then return defaultVal end
+    return v
+end
+
+local function _MSUF_GradientDirState(scoped, gen)
+    local hasScoped = scoped and (
+        scoped.gradientDirLeft ~= nil or scoped.gradientDirRight ~= nil or
+        scoped.gradientDirUp ~= nil or scoped.gradientDirDown ~= nil
+    )
+    if hasScoped then
+        local left = (scoped.gradientDirLeft == true)
+        local right = (scoped.gradientDirRight == true)
+        local up = (scoped.gradientDirUp == true)
+        local down = (scoped.gradientDirDown == true)
+        if not left and not right and not up and not down then
+            local dir = scoped.gradientDirection
+            if dir == "LEFT" then left = true
+            elseif dir == "UP" then up = true
+            elseif dir == "DOWN" then down = true
+            else right = true end
+        end
+        return left, right, up, down
+    end
+    local left = (gen and gen.gradientDirLeft == true)
+    local right = (gen and gen.gradientDirRight == true)
+    local up = (gen and gen.gradientDirUp == true)
+    local down = (gen and gen.gradientDirDown == true)
+    if not left and not right and not up and not down then
+        local dir = gen and gen.gradientDirection
+        if dir == "LEFT" then left = true
+        elseif dir == "UP" then up = true
+        elseif dir == "DOWN" then down = true
+        else right = true end
+    end
+    return left, right, up, down
 end
 
 -- Absorb display/anchor resolver cache (invalidated on DB reference change).
@@ -50,7 +139,8 @@ local function _MSUF_InvalidateAbsorbCache()
 end
 
 -- Resolve absorb display flags (enableBar, showText) for a unit.
--- Uses absorbTextMode from per-unit DB if overridden, else from general.
+-- Uses absorbTextMode from per-unit DB if Bars/Highlight override is active,
+-- else from general. HP/Power text overrides must not freeze absorb settings.
 local function _MSUF_ResolveAbsorbDisplay(unit)
     if not MSUF_DB then EnsureDB() end
     -- Invalidate cache if DB reference changed (profile switch).
@@ -65,7 +155,7 @@ local function _MSUF_ResolveAbsorbDisplay(unit)
     local mode = nil
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hpPowerTextOverride == true and u.absorbTextMode ~= nil then
+        if u and u.hlOverride == true and u.absorbTextMode ~= nil then
             mode = tonumber(u.absorbTextMode)
         end
     end
@@ -97,7 +187,7 @@ local function _MSUF_ResolveAbsorbAnchor(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hpPowerTextOverride == true and u.absorbAnchorMode ~= nil then
+        if u and u.hlOverride == true and u.absorbAnchorMode ~= nil then
             local v = tonumber(u.absorbAnchorMode) or 2
             _absorbCache[anchorKey] = v
             return v
@@ -124,12 +214,12 @@ local function _MSUF_ResolveAbsorbOpacity(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hpPowerTextOverride == true and u.absorbBarOpacity ~= nil then
-            local v = tonumber(u.absorbBarOpacity) or 1
+        if u and u.hlOverride == true and u.absorbBarOpacity ~= nil then
+            local v = tonumber(u.absorbBarOpacity)
             _absorbCache[ck] = v; return v
         end
     end
-    local v = tonumber(g.absorbBarOpacity) or 1
+    local v = tonumber(g.absorbBarOpacity)
     _absorbCache[ck] = v; return v
 end
 
@@ -143,12 +233,12 @@ local function _MSUF_ResolveHealAbsorbOpacity(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hpPowerTextOverride == true and u.healAbsorbBarOpacity ~= nil then
-            local v = tonumber(u.healAbsorbBarOpacity) or 1
+        if u and u.hlOverride == true and u.healAbsorbBarOpacity ~= nil then
+            local v = tonumber(u.healAbsorbBarOpacity)
             _absorbCache[ck] = v; return v
         end
     end
-    local v = tonumber(g.healAbsorbBarOpacity) or 1
+    local v = tonumber(g.healAbsorbBarOpacity)
     _absorbCache[ck] = v; return v
 end
 
@@ -159,40 +249,166 @@ ns.Bars._ResolveHealAbsorbOpacity = _MSUF_ResolveHealAbsorbOpacity
 -- Self-heal prediction overlay
 -- ══════════════════════════════════════════════════════════════
 
-local _msufSelfHealCalc = nil
-
-local function _MSUF_GetIncomingSelfHeals(unit)
-    unit = unit or "player"
-
-    local calc = _msufSelfHealCalc
+-- ═══════════════════════════════════════════════════════════════════════
+-- 12.0 Calculator-based health update (oUF pattern)
+-- ONE CreateUnitHealPredictionCalculator per frame, ONE UnitGetDetailedHealPrediction
+-- call gives: health, absorbs, heal-absorbs, incoming heals — all C-side, secret-safe.
+-- ═══════════════════════════════════════════════════════════════════════
+local function _MSUF_EnsureCalc(frame)
+    local calc = frame._msufHealthCalc
     if not calc and CreateUnitHealPredictionCalculator then
         calc = CreateUnitHealPredictionCalculator()
-        _msufSelfHealCalc = calc
+        frame._msufHealthCalc = calc
     end
+    return calc
+end
+
+-- Forward declaration (defined after _MSUF_HealthCalcUpdate)
+local _MSUF_UpdateSelfHealPrediction
+
+local function _MSUF_GetDamageAbsorbs(calc, unit)
+    if calc then
+        if calc.GetTotalDamageAbsorbs then
+            local v = calc:GetTotalDamageAbsorbs()
+            if v ~= nil then return v end
+        elseif calc.GetDamageAbsorbs then
+            local v = calc:GetDamageAbsorbs()
+            if v ~= nil then return v end
+        end
+    end
+    if UnitGetTotalAbsorbs then
+        return UnitGetTotalAbsorbs(unit)
+    end
+    return nil
+end
+
+local function _MSUF_GetHealAbsorbs(calc, unit)
+    if calc then
+        if calc.GetTotalHealAbsorbs then
+            local v = calc:GetTotalHealAbsorbs()
+            if v ~= nil then return v end
+        elseif calc.GetHealAbsorbs then
+            local v = calc:GetHealAbsorbs()
+            if v ~= nil then return v end
+        end
+    end
+    if UnitGetTotalHealAbsorbs then
+        return UnitGetTotalHealAbsorbs(unit)
+    end
+    return nil
+end
+
+-- Unified health+absorb+prediction update using C-side calculator.
+-- Called on UNIT_MAXHEALTH, UNIT_ABSORB_AMOUNT_CHANGED, UNIT_HEAL_ABSORB_AMOUNT_CHANGED,
+-- UNIT_HEAL_PREDICTION, UNIT_MAXHEALTHMODIFIER — NOT on UNIT_HEALTH (lean path).
+-- Returns hp, maxHP for text pipeline.
+local function _MSUF_HealthCalcUpdate(frame, unit)
+    if not frame or not unit or not frame.hpBar then return nil, nil end
+    if not (F.UnitExists and F.UnitExists(unit)) then
+        ns.Bars.ResetHealthAndOverlays(frame, true)
+        return 0, 1
+    end
+
+    -- PERF C++ DELEGATION: Inlined _MSUF_EnsureCalc fast path
+    local calc = frame._msufHealthCalc
+    if not calc and CreateUnitHealPredictionCalculator then
+        calc = CreateUnitHealPredictionCalculator()
+        frame._msufHealthCalc = calc
+    end
+    local hpBar = frame.hpBar
 
     if calc and UnitGetDetailedHealPrediction then
-        local data = UnitGetDetailedHealPrediction(unit, "player", calc)
-        if data and type(data) == "table" then
-            -- Secret-safe: prefer clampedIncomingHealsFromHealer; == nil is a reference check.
-            local v = data.clampedIncomingHealsFromHealer
-            if v == nil then
-                v = data.incomingHealsFromHealer
+        -- ONE C-side call — populates calculator with all prediction data.
+        UnitGetDetailedHealPrediction(unit, "player", calc)
+
+        local maxHP = calc:GetMaximumHealth()
+        local hp = calc:GetCurrentHealth()
+        hpBar:SetMinMaxValues(0, maxHP)
+        _MSUF_SetHealthBarValue(frame, hpBar, hp)
+
+        -- Anchor mode: MUST run every update. hpBar:GetWidth() changes on layout/
+        -- resize/first-show, but SETTINGS_SERIAL only bumps on config change, so
+        -- gating this behind _msufBarConfigGen would strand mode 4 overflow bars
+        -- at the w=0 (pre-layout) width they got on frame creation. The function
+        -- has a secret-safe internal stamp+FollowActive+RF+W diff-gate that makes
+        -- no-op re-entry cost ~2μs (4 field reads + 4 equality checks).
+        if frame.absorbBar or frame.healAbsorbBar then
+            if not _cachedApplyAbsorbAnchorMode then
+                _cachedApplyAbsorbAnchorMode = _G.MSUF_ApplyAbsorbAnchorMode
             end
-            if v ~= nil then
-                return v
+            if _cachedApplyAbsorbAnchorMode then _cachedApplyAbsorbAnchorMode(frame) end
+        end
+
+        -- PERF: remaining per-frame caches (colors, absorb-enabled) only change
+        -- on config events, so keep them behind the SETTINGS_SERIAL gate.
+        local gen = _G.MSUF_UFCORE_SETTINGS_SERIAL or 0
+        if frame._msufBarConfigGen ~= gen then
+            frame._msufBarConfigGen = gen
+            -- Overlay colors
+            if frame.absorbBar then
+                MSUF_ApplyAbsorbOverlayColor(frame.absorbBar, unit)
+            end
+            if frame.healAbsorbBar then
+                MSUF_ApplyHealAbsorbOverlayColor(frame.healAbsorbBar, unit)
+            end
+            -- Absorb enabled state
+            frame._msufAbsorbEnCached = frame.absorbBar and _MSUF_ResolveAbsorbDisplay(unit) or false
+        end
+
+        -- Absorb bar (damage absorbs)
+        if frame.absorbBar then
+            if frame._msufAbsorbEnCached then
+                local absorbAmt = _MSUF_GetDamageAbsorbs(calc, unit)
+                if absorbAmt ~= nil then
+                    frame.absorbBar:SetMinMaxValues(0, maxHP)
+                    frame.absorbBar:SetValue(absorbAmt)
+                    frame.absorbBar:Show()
+                else
+                    MSUF_ResetBarZero(frame.absorbBar, true)
+                end
+            else
+                MSUF_ResetBarZero(frame.absorbBar, true)
             end
         end
-    end
 
-    if UnitGetIncomingHeals then
-        local v = UnitGetIncomingHeals(unit, "player")
-        if v ~= nil then
-            return v
+        -- Heal absorb bar — direct C++ SetValue
+        if frame.healAbsorbBar then
+            local healAbsorbAmt = _MSUF_GetHealAbsorbs(calc, unit)
+            if healAbsorbAmt ~= nil then
+                frame.healAbsorbBar:SetMinMaxValues(0, maxHP)
+                frame.healAbsorbBar:SetValue(healAbsorbAmt)
+                frame.healAbsorbBar:Show()
+            else
+                MSUF_ResetBarZero(frame.healAbsorbBar, true)
+            end
         end
+
+        -- Self-heal prediction bar
+        if frame.selfHealPredBar then
+            _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp, calc)
+        end
+
+        return hp, maxHP
     end
 
-    return 0
+    -- Fallback: no calculator available (pre-12.0 compat)
+    local maxHP = (F.UnitHealthMax and F.UnitHealthMax(unit)) or 1
+    local hp = (F.UnitHealth and F.UnitHealth(unit)) or 0
+    hpBar:SetMinMaxValues(0, maxHP)
+    if hp ~= nil then _MSUF_SetHealthBarValue(frame, hpBar, hp) end
+    -- Absorb fallback: use old API
+    if frame.absorbBar then
+        MSUF_UpdateAbsorbBar(frame, unit, maxHP)
+    end
+    if frame.healAbsorbBar then
+        MSUF_UpdateHealAbsorbBar(frame, unit, maxHP)
+    end
+    if frame.selfHealPredBar then
+        _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp, nil)
+    end
+    return hp, maxHP
 end
+ns.Bars.HealthCalcUpdate = _MSUF_HealthCalcUpdate
 
 local function _MSUF_HideSelfHealPredBar(frame)
     if not frame or not frame.selfHealPredBar then return end
@@ -203,8 +419,7 @@ local function _MSUF_HideSelfHealPredBar(frame)
     bar._msufSelfHealPredAnchorRev = nil
 end
 
-
-local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
+_MSUF_UpdateSelfHealPrediction = function(frame, unit, maxHP, hp, calc)
     local g = MSUF_DB and MSUF_DB.general
     if not g or not g.showSelfHealPrediction then
         _MSUF_HideSelfHealPredBar(frame)
@@ -230,13 +445,6 @@ local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
         _MSUF_HideSelfHealPredBar(frame)
         return
     end
-
-    -- NOTE (Midnight/secret-safe):
-    -- - Do NOT do ANY arithmetic or comparisons on incoming-heal numbers (can be secret-tainted).
-    -- - Do NOT read/compare HP texture width.
-    -- Instead: render a second statusbar segment anchored to the current HP texture edge.
-    -- The statusbar fill itself computes the pixel length (inc/maxHP) internally.
-    -- Overflow (inc > missing) is clipped by the dedicated clip-frame created at unitframe build.
 
     -- Sync size to full HP bar size (frame dimensions are safe numbers).
     if hpBar.GetWidth and hpBar.GetHeight then
@@ -265,20 +473,23 @@ local function _MSUF_UpdateSelfHealPrediction(frame, unit, maxHP, hp)
         predBar:SetReverseFill(rev and true or false)
     end
 
-    -- Incoming heals (self only) — pass-through to StatusBar API.
-    -- Secret-safe: inc comes from _MSUF_GetIncomingSelfHeals which returns 0 on nil.
-    -- maxHP from UnitHealthMax CAN be secret in 12.0. StatusBar:SetMinMaxValues
-    -- accepts secret numbers natively (no Lua arithmetic needed).
-    local inc = _MSUF_GetIncomingSelfHeals(unit)
-    if inc == nil then
-        inc = 0
+    -- Incoming heals: use calculator if available, else fallback to legacy API.
+    -- Secret-safe: all values from calculator are C-side computed.
+    local inc = 0
+    if calc and calc.GetIncomingHeals then
+        local _, playerHeal = calc:GetIncomingHeals()
+        if playerHeal ~= nil then inc = playerHeal end
+    elseif UnitGetIncomingHeals then
+        local v = UnitGetIncomingHeals(unit, "player")
+        if v ~= nil then inc = v end
     end
+
     if maxHP ~= nil then
         predBar:SetMinMaxValues(0, maxHP)
     else
         predBar:SetMinMaxValues(0, 1)
     end
-    MSUF_SetBarValue(predBar, inc, false)
+    predBar:SetValue(inc)
     predBar:Show()
 end
 
@@ -313,17 +524,18 @@ local function MSUF_ApplyBarGradient(frameOrTex, isPower)
     if not frameOrTex then  return end
     if not MSUF_DB then EnsureDB() end
     local g = MSUF_DB.general or {}
-    local strength = g.gradientStrength or 0.45
+    local scoped = _MSUF_GetScopedGradientDB(frameOrTex)
+    local strength = tonumber(_MSUF_GradientValue(scoped, g, "gradientStrength", 0.45)) or 0.45
     if isPower then
-        if g.enablePowerGradient == false then strength = 0 end
+        if _MSUF_GradientValue(scoped, g, "enablePowerGradient", true) == false then strength = 0 end
     else
-        if g.enableGradient == false then strength = 0 end
+        if _MSUF_GradientValue(scoped, g, "enableGradient", true) == false then strength = 0 end
     end
     -- Allow applying to a standalone texture (used by some indicators).
     if frameOrTex.SetGradientAlpha and not (isPower and frameOrTex.powerGradients or frameOrTex.hpGradients) then
         local tex = frameOrTex
-        local dir = g.gradientDirection
-        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT'; g.gradientDirection = dir end
+        local dir = _MSUF_GradientValue(scoped, g, "gradientDirection", "RIGHT")
+        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT' end
         local orientation, a1, a2 = 'HORIZONTAL', 0, strength
         if dir == 'LEFT' then a1, a2 = strength, 0
         elseif dir == 'UP' then orientation = 'VERTICAL'; a1, a2 = 0, strength
@@ -335,22 +547,8 @@ local function MSUF_ApplyBarGradient(frameOrTex, isPower)
     local bar = isPower and (frame.targetPowerBar or frame.powerBar) or frame.hpBar
     local grads = isPower and frame.powerGradients or frame.hpGradients
     if not bar or not grads then  return end
-    -- Migrate old single-direction setting to the new per-edge toggles once.
-    local hasNew = (g.gradientDirLeft ~= nil) or (g.gradientDirRight ~= nil) or (g.gradientDirUp ~= nil) or (g.gradientDirDown ~= nil)
-    if not hasNew then
-        local dir = g.gradientDirection
-        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT' end
-        dir = string.upper(dir)
-        g.gradientDirLeft = (dir == 'LEFT')
-        g.gradientDirRight = (dir == 'RIGHT')
-        g.gradientDirUp = (dir == 'UP')
-        g.gradientDirDown = (dir == 'DOWN')
-    end
-    local left = (g.gradientDirLeft == true)
-    local right = (g.gradientDirRight == true)
-    local up = (g.gradientDirUp == true)
-    local down = (g.gradientDirDown == true)
-    if not left and not right and not up and not down then right = true; g.gradientDirRight = true end
+    -- Resolve scoped per-edge toggles, with legacy single-direction fallback.
+    local left, right, up, down = _MSUF_GradientDirState(scoped, g)
     if strength <= 0 then
         MSUF_HideGradSet(grads)
          return
@@ -398,13 +596,21 @@ local function MSUF_ApplyPowerGradient(frameOrTex)  return MSUF_ApplyBarGradient
 function _G.MSUF_ApplyPowerBarBorder(bar)
     if not bar then  return end
     local bdb = (MSUF_DB and MSUF_DB.bars) or nil
-    local enabled = bdb and (bdb.powerBarBorderEnabled == true) or false
-    local size = bdb and tonumber(bdb.powerBarBorderSize) or 1
+    local parentUF = bar:GetParent()
+    local unitKey = parentUF and (parentUF.msufConfigKey or parentUF.unit)
+    local readEnabled = _G.MSUF_ReadUnitPowerBarBorderEnabled
+    local readSize = _G.MSUF_ReadUnitPowerBarBorderThickness
+    local enabled
+    if type(readEnabled) == "function" then
+        enabled = readEnabled(unitKey)
+    else
+        enabled = bdb and (bdb.powerBarBorderEnabled == true) or false
+    end
+    local size = (type(readSize) == "function") and readSize(unitKey) or (bdb and tonumber(bdb.powerBarBorderThickness or bdb.powerBarBorderSize) or 1)
     if type(size) ~= 'number' then size = 1 end
     if size < 1 then size = 1 elseif size > 10 then size = 10 end
     -- When power bar is detached, the separator border is meaningless
     -- (the outline system in MSUF_Borders handles the detached bar's border).
-    local parentUF = bar:GetParent()
     local detached = parentUF and parentUF._msufPowerBarDetached
     local border = bar._msufPowerBorder
     if not border then
@@ -485,7 +691,7 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     end
     if _G.MSUF_AbsorbTextureTestMode then
         bar:SetMinMaxValues(0, 100)
-        MSUF_SetBarValue(bar, isHeal and 15 or 25)
+        bar:SetValue(isHeal and 15 or 25)
         bar:Show()
          return
     end
@@ -496,7 +702,7 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     end
     local max = maxHP or F.UnitHealthMax(unit) or 1
     bar:SetMinMaxValues(0, max)
-    MSUF_SetBarValue(bar, total)
+    bar:SetValue(total)
     bar:Show()
  end
 local function MSUF_UpdateAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorbBars(self, unit, maxHP, false) end
@@ -590,14 +796,10 @@ local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAb
         end
 
         -- Mode 3/4: follow current HP edge.
-        if not hpBar or not hpBar.GetStatusBarTexture then
-            return
-        end
+        if not hpBar or not hpBar.GetStatusBarTexture then return end
 
         local hpTex = hpBar:GetStatusBarTexture()
-        if not hpTex then
-            return
-        end
+        if not hpTex then return end
 
         local hpReverse = false
         if hpBar.GetReverseFill then

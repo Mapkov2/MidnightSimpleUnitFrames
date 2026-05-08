@@ -333,6 +333,37 @@ local function _GetUserOutlineMixin()
     return _G.CreateColor(r, gg, b, a)
 end
 
+local function _RefreshRawNotInterruptible(frame)
+    if not frame then return nil end
+
+    local unit = frame.unit
+    if unit then
+        local chName, _, _, _, _, _, chRawNI = UnitChannelInfo(unit)
+        if chName then
+            frame._msufApiNotInterruptibleRaw = chRawNI
+            frame.MSUF_apiNotInterruptibleRaw = chRawNI
+            return chRawNI
+        else
+            local caName, _, _, _, _, _, _, caRawNI = UnitCastingInfo(unit)
+            if caName then
+                frame._msufApiNotInterruptibleRaw = caRawNI
+                frame.MSUF_apiNotInterruptibleRaw = caRawNI
+                return caRawNI
+            end
+        end
+    end
+
+    local rawNI = frame._msufApiNotInterruptibleRaw
+    if rawNI == nil then
+        rawNI = frame.MSUF_apiNotInterruptibleRaw
+    end
+
+    -- Keep target/focus (`_msuf...`) and boss (`MSUF...`) castbar caches in sync.
+    frame._msufApiNotInterruptibleRaw = rawNI
+    frame.MSUF_apiNotInterruptibleRaw = rawNI
+    return rawNI
+end
+
 -- Secret-safe RGBA tuple for the edge / box fill.
 --
 -- This composes up to TWO C-side EvaluateColorFromBoolean calls so neither
@@ -422,6 +453,10 @@ local function _HideIndicator(frame)
     _RestoreCastbarOutline(frame)
 end
 
+local function _CastAllowsKickIndicator(frame)
+    return not (frame and frame.MSUF_kickInterruptibleConfirmed == false)
+end
+
 local function ApplyLayout(frame)
     if not frame or not frame.statusBar then return end
 
@@ -484,7 +519,11 @@ local function _PaintFrame(frame, readyBool)
     --   EvaluateColorFromBoolean inside _PickColor, which selects between
     --   our indicator colour and the user's outline colour without ever
     --   exposing the secret value to the Lua VM.
-    local rawNI = frame._msufApiNotInterruptibleRaw
+    local rawNI = _RefreshRawNotInterruptible(frame)
+    if rawNI == nil then
+        _HideIndicator(frame)
+        return
+    end
 
     if style == "box" then
         local box = frame.kickReadyBox
@@ -552,6 +591,11 @@ local function RefreshFrame(frame, state)
         return
     end
 
+    if not _CastAllowsKickIndicator(frame) then
+        _HideIndicator(frame)
+        return
+    end
+
     if not _state.spellID then Resolve() end
 
     local readyBool = _GetReadyBoolSecret()
@@ -573,7 +617,8 @@ function _TickerStep()
     local anyActive = false
     for frame in pairs(_registeredFrames) do
         if frame.MSUF_castActive == true
-           and not (frame.isNotInterruptible == true) then
+           and not (frame.isNotInterruptible == true)
+           and _CastAllowsKickIndicator(frame) then
             local cfg = _GetCfg()
             if cfg and frame.unit and _ShowOnUnit(cfg, frame.unit) then
                 local readyBool = _GetReadyBoolSecret()
@@ -592,6 +637,39 @@ end
 local function RefreshAll()
     for frame in pairs(_registeredFrames) do
         RefreshFrame(frame, nil)
+    end
+end
+
+local function RefreshActiveCooldownFrames()
+    local cfg = _GetCfg()
+    if not cfg or not _AnyShowEnabled(cfg) then return end
+
+    local didRefresh = false
+    for frame in pairs(_registeredFrames) do
+        if frame.MSUF_castActive == true
+           and not (frame.isNotInterruptible == true)
+           and _CastAllowsKickIndicator(frame)
+           and frame.unit and _ShowOnUnit(cfg, frame.unit) then
+            RefreshFrame(frame, nil)
+            didRefresh = true
+        end
+    end
+    return didRefresh
+end
+
+local _cooldownRefreshQueued = false
+local function _CooldownRefreshFlush()
+    _cooldownRefreshQueued = false
+    RefreshActiveCooldownFrames()
+end
+
+local function _QueueCooldownRefresh()
+    if _cooldownRefreshQueued then return end
+    _cooldownRefreshQueued = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.03, _CooldownRefreshFlush)
+    else
+        _CooldownRefreshFlush()
     end
 end
 
@@ -616,13 +694,21 @@ local function _InstallOutlineHook()
         -- skip the C-side composition entirely — the user's colour from
         -- the original ApplyCastbarOutline call is already correct.
         if frame.isNotInterruptible == true then return end
+        if not _CastAllowsKickIndicator(frame) then
+            _HideIndicator(frame)
+            return
+        end
         local cfg = _GetCfg()
         if not cfg or _GetStyle(cfg) ~= "border" then return end
         if not frame.unit or not _ShowOnUnit(cfg, frame.unit) then return end
 
         -- Secret-safe rawNI gate: see comment in _PaintFrame for why this
         -- is needed in addition to the plain-bool check above.
-        local rawNI = frame._msufApiNotInterruptibleRaw
+        local rawNI = _RefreshRawNotInterruptible(frame)
+        if rawNI == nil then
+            _HideIndicator(frame)
+            return
+        end
 
         local readyMixin, cdMixin = _ResolveColorPair(cfg)
         local userMixin = _GetUserOutlineMixin()
@@ -649,7 +735,7 @@ local function _HandleEvent(_, event)
         return
     end
     if event == "SPELL_UPDATE_COOLDOWN" then
-        RefreshAll()
+        _QueueCooldownRefresh()
         return
     end
 end

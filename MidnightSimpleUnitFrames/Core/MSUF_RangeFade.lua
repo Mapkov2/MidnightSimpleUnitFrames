@@ -1,46 +1,26 @@
--- ============================================================================
 -- MSUF RangeFade v4 — Minimal C-API overhead
---
 -- Architecture:
 --   Target:
 --     Friendly: UNIT_IN_RANGE_UPDATE event → 1× UnitInRange (0 polling)
 --     Enemy:    1 spell registered with EnableSpellRangeCheck
 --               → SPELL_RANGE_CHECK_UPDATE fires only for THAT spell (1 event/change)
 --     Dead:     1 res spell registered → same mechanism
---
 --   Focus:
 --     Friendly: UNIT_IN_RANGE_UPDATE event (0 polling)
 --     Enemy:    Ticker 0.5s combat / 2.0s OOC → 1× IsSpellInRange
---
 --   Boss 1-5:
 --     Ticker (shared with enemy focus) → 1× IsSpellInRange per visible boss
 --     Only active during encounters.
---
 -- Old R41z0r engine cost: 512 EnableSpellRangeCheck registrations → 100-500
 -- SPELL_RANGE_CHECK_UPDATE events/sec → EventBus dispatch per event
---
 -- New cost: 1 EnableSpellRangeCheck registration → 1 event on actual change
---
 -- Secret-safe: IsSpellInRange NOT secret (Unhalted). Only UnitInRange +
 --              CheckInteractDistance need issecretvalue guards.
--- ============================================================================
 
 _G.MSUF_RangeFadeMul = _G.MSUF_RangeFadeMul or {}
 local _rfMul = _G.MSUF_RangeFadeMul
 
-function _G.MSUF_GetRangeFadeMul(key, unit, frame)
-    local v = _rfMul[key]
-    if v ~= nil then return v end
-    if unit then
-        v = _rfMul[unit]
-        if v ~= nil then return v end
-    end
-    return 1
-end
-
--- ============================================================================
 -- Shared: Spell selection + secret helpers
--- ============================================================================
 do
     local C_Spell = _G.C_Spell
     local C_SpellBook = _G.C_SpellBook
@@ -69,8 +49,16 @@ do
         MONK={115178}, PALADIN={7328,391054}, PRIEST={2006,212036},
         SHAMAN={2008}, WARLOCK={20707},
     }
+    -- Friendly spells for non-party range check (IsSpellInRange fallback).
+    -- 40yd heals/buffs that most specs have access to.
+    local FRIENDLY_SPELLS = {
+        DRUID={774,8936}, EVOKER={360823,361469}, HUNTER={34477},
+        MAGE={475}, MONK={116670,115546}, PALADIN={19750,85673},
+        PRIEST={17,2061}, ROGUE={57934}, SHAMAN={8004,188070},
+        WARLOCK={20707}, WARRIOR={3411},
+    }
 
-    local _pEnemy, _pRes = nil, nil
+    local _pEnemy, _pRes, _pFriendly = nil, nil, nil
 
     local function PickFirst(list)
         if not list or not IsSpellInSpellBook then return nil end
@@ -81,8 +69,9 @@ do
     end
 
     local function RebuildPrimaries()
-        _pEnemy = PickFirst(ENEMY_SPELLS[playerClass])
-        _pRes   = PickFirst(RES_SPELLS[playerClass])
+        _pEnemy    = PickFirst(ENEMY_SPELLS[playerClass])
+        _pRes      = PickFirst(RES_SPELLS[playerClass])
+        _pFriendly = PickFirst(FRIENDLY_SPELLS[playerClass])
     end
 
     -- ══════════════════════════════════════════════════════════════
@@ -136,25 +125,50 @@ do
         end
     end
 
-    local function ApplyMul(f, unit, confKey, conf, inRange)
-        local prev = _state[unit]
-        if inRange == prev then return false end
-        _state[unit] = inRange
-        local a = 1
-        if inRange == false then
-            a = (conf and tonumber(conf.rangeFadeAlpha)) or 0.5
-            if a < 0 then a = 0 elseif a > 1 then a = 1 end
-        end
-        _mulT[unit] = a
-        PropagateBossChildren(unit, a)
-        if not f or (f.IsForbidden and f:IsForbidden()) then return true end
-        if f.IsShown and not f:IsShown() then return true end
+    local function ReapplyCurrentAlpha(f, unit, confKey)
+        if not f or (f.IsForbidden and f:IsForbidden()) then return false end
+        if f.IsShown and not f:IsShown() then return false end
         if not _fastApply then _fastApply = _G.MSUF_ApplyRangeFadeAlphaFast end
+        local a = _mulT[unit]
+        if type(a) ~= "number" then a = 1 end
         if type(_fastApply) == "function" and _fastApply(f, confKey, a) then
             return true
         end
         if not _applyAlpha then _applyAlpha = _G.MSUF_ApplyUnitAlpha end
-        if type(_applyAlpha) == "function" then _applyAlpha(f, confKey) end
+        if type(_applyAlpha) == "function" then
+            _applyAlpha(f, confKey)
+            return true
+        end
+        return false
+    end
+
+    local function ResolveFadeAlpha(conf)
+        local a = (conf and tonumber(conf.rangeFadeAlpha)) or 0.6
+        -- Misc exposes this as remaining out-of-range alpha: 0% = hidden,
+        -- 60% = 60% of the unitframe's normal alpha.
+        if a < 0 then a = 0 elseif a > 0.6 then a = 0.6 end
+        return a
+    end
+
+    local function ApplyMul(f, unit, confKey, conf, inRange)
+        local prev = _state[unit]
+        if inRange == prev then
+            -- StatusBar:SetStatusBarColor can reset the bar texture alpha while
+            -- range state is unchanged. Repair only layered frames; flat alpha
+            -- is unaffected and stays on the cheap no-op path.
+            if f and (f._msufAlphaBaseMode == "layered" or f._msufAlphaLayeredMode) then
+                ReapplyCurrentAlpha(f, unit, confKey)
+            end
+            return false
+        end
+        _state[unit] = inRange
+        local a = 1
+        if inRange == false then
+            a = ResolveFadeAlpha(conf)
+        end
+        _mulT[unit] = a
+        PropagateBossChildren(unit, a)
+        ReapplyCurrentAlpha(f, unit, confKey)
         return true
     end
 
@@ -194,23 +208,54 @@ do
             local r = IsSpellInRange(_pEnemy, unit)
             if r ~= nil then return r and true or false end
         end
-        if _G.MSUF_InCombat ~= true and CheckInteractDistance then
+        -- CheckInteractDistance: works on any unit, may return secret in combat
+        if CheckInteractDistance then
             local ci = CheckInteractDistance(unit, 4)
-            if not issecretvalue or not issecretvalue(ci) then return ci end
+            if ci ~= nil then
+                if issecretvalue and issecretvalue(ci) then return nil end
+                return ci and true or false
+            end
         end
         return nil
     end
 
     -- Friendly range via UnitInRange (secret-guarded)
+    -- Fallback chain for non-party friendly targets:
+    --   1. UnitInRange (party/raid only — checked=true means reliable)
+    --   2. IsSpellInRange with a friendly spell (works on any friendly unit)
+    --   3. CheckInteractDistance (28yd, OOC only, secret-guarded)
+    --   4. nil → treated as in-range (safe default)
     local function CheckFriendly(unit)
         if not UnitExists(unit) then return nil end
-        if not UnitInRange then return nil end
-        local inR, checked = UnitInRange(unit)
-        if issecretvalue and (issecretvalue(checked) or issecretvalue(inR)) then
-            return true  -- secret → treat as in-range
+
+        -- Try UnitInRange first (works for party/raid members)
+        if UnitInRange then
+            local inR, checked = UnitInRange(unit)
+            if issecretvalue and (issecretvalue(checked) or issecretvalue(inR)) then
+                return true  -- secret → treat as in-range
+            end
+            if checked then return inR and true or false end
         end
-        if checked then return inR and true or false end
-        return true  -- not in group → treat as in-range
+
+        -- Fallback: IsSpellInRange with a friendly spell (NOT secret per Unhalted)
+        -- Works on friendly players, but returns nil on NPCs (can't cast heals on them)
+        if _pFriendly and IsSpellInRange then
+            local r = IsSpellInRange(_pFriendly, unit)
+            if r ~= nil then return r and true or false end
+        end
+
+        -- Fallback: CheckInteractDistance (works on ANY unit including NPCs)
+        -- In combat may return secret values → secret guard handles this
+        -- Index 4 = 28 yards (Follow distance)
+        if CheckInteractDistance then
+            local ci = CheckInteractDistance(unit, 4)
+            if ci ~= nil then
+                if issecretvalue and issecretvalue(ci) then return true end
+                return ci and true or false
+            end
+        end
+
+        return nil  -- truly indeterminate → caller treats as in-range
     end
 
     -- ══════════════════════════════════════════════════════════════
@@ -269,17 +314,73 @@ do
         _targetEvtFrame = CreateFrame("Frame")
     end
 
+    local _targetFriendlyTicker = nil
+
+    local function StopTargetFriendlyTicker()
+        _targetFriendlyTicker = nil
+    end
+
+    local function TargetFriendlyLoopStep()
+        local loop = _targetFriendlyTicker
+        if not loop then return end
+        local c = TargetGetConf()
+        if not c or not UnitExists("target") then
+            StopTargetFriendlyTicker()
+            ClearMul("target", "target")
+            return
+        end
+        ApplyMul(GetFrame("target"), "target", "target", c, CheckFriendly("target"))
+        if _targetFriendlyTicker == loop and C_Timer_After then
+            C_Timer_After(1.0, loop.step)
+        elseif _targetFriendlyTicker == loop then
+            _targetFriendlyTicker = nil
+        end
+    end
+
+    local function StartTargetFriendlyLoop()
+        if _targetFriendlyTicker or not C_Timer_After then return end
+        local loop = {}
+        loop.step = function()
+            if _targetFriendlyTicker == loop then
+                TargetFriendlyLoopStep()
+            end
+        end
+        _targetFriendlyTicker = loop
+        C_Timer_After(1.0, loop.step)
+    end
+
     local function TargetClassifyAndWire()
         local conf = TargetGetConf()
         if not conf or not UnitExists("target") then
             _targetDeadState = nil
             TargetUnregisterSpell()
+            StopTargetFriendlyTicker()
             ClearMul("target", "target")
             if _targetEvtFrame then
                 _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
                 _targetEvtFrame:SetScript("OnEvent", nil)
             end
             return
+        end
+
+        -- PERF: Fast-path for party/raid members (the common case when clicking GF).
+        -- UnitInRange returns (inRange, checked); checked==true means party/raid member.
+        -- Skips: UnitCanAttack, UnitIsDeadOrGhost, spell registration, ticker setup.
+        if UnitInRange then
+            local inR, checked = UnitInRange("target")
+            if not issecretvalue or not issecretvalue(checked) then
+                if checked == true then
+                    _targetIsEnemy = false
+                    _targetDeadState = false
+                    TargetUnregisterSpell()
+                    StopTargetFriendlyTicker()
+                    EnsureTargetEvtFrame()
+                    _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
+                    _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
+                    ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
+                    return
+                end
+            end
         end
 
         EnsureTargetEvtFrame()
@@ -289,6 +390,7 @@ do
         if _targetIsEnemy then
             -- Enemy: register 1 spell for SPELL_RANGE_CHECK_UPDATE
             _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
+            StopTargetFriendlyTicker()
             local spell = _pEnemy
             if _targetDeadState then spell = _pRes end
             if spell then
@@ -299,10 +401,34 @@ do
             -- Also do an immediate check
             ApplyMul(GetFrame("target"), "target", "target", conf, CheckEnemy("target"))
         else
-            -- Friendly: UNIT_IN_RANGE_UPDATE (zero polling)
+            -- Friendly path
             TargetUnregisterSpell()
-            _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
-            _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
+
+            -- Check if target is a party/raid member (UnitInRange works → event-driven)
+            local isPartyMember = false
+            if UnitInRange then
+                local _, checked = UnitInRange("target")
+                if not issecretvalue or not issecretvalue(checked) then
+                    isPartyMember = (checked == true)
+                end
+            end
+
+            if isPartyMember then
+                -- Party member: UNIT_IN_RANGE_UPDATE fires reliably
+                StopTargetFriendlyTicker()
+                _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
+                _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
+            else
+                -- Non-party friendly (NPC, non-group player):
+                -- UNIT_IN_RANGE_UPDATE won't fire. Use 1s ticker with
+                -- IsSpellInRange / CheckInteractDistance fallback.
+                _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
+                _targetEvtFrame:SetScript("OnEvent", nil)
+                StopTargetFriendlyTicker()
+                StartTargetFriendlyLoop()
+            end
+
+            -- Immediate check
             ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
         end
     end
@@ -324,10 +450,13 @@ do
             end
         end)
 
-        bus("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
-            _state["target"] = nil
-            TargetClassifyAndWire()
-        end)
+        do
+            local _qRF
+            local function _flushRF() _qRF = nil; _state["target"] = nil; TargetClassifyAndWire() end
+            bus("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE", function()
+                if not _qRF then _qRF = true; if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("RANGEFADE_TARGET_CHANGED", _flushRF) else C_Timer.After(0, _flushRF) end end
+            end)
+        end
         bus("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE", function()
             RebuildPrimaries()
             _state["target"] = nil
@@ -350,9 +479,12 @@ do
                 TargetClassifyAndWire()
             end
         end)
-        bus("SPELLS_CHANGED", "MSUF_RANGEFADE", function()
+        -- SPELLS_CHANGED coalescing: can fire 800+/sec in combat.
+        -- Defer to next frame to process once regardless of fire count.
+        local _tgtSpellsDirty = false
+        local function _FlushTargetSpellsChanged()
+            _tgtSpellsDirty = false
             RebuildPrimaries()
-            -- Re-register with potentially new primary spell and/or dead-state spell.
             if _targetIsEnemy and UnitExists("target") then
                 local spell = _pEnemy
                 if UnitIsDeadOrGhost and UnitIsDeadOrGhost("target") then spell = _pRes end
@@ -360,6 +492,11 @@ do
                     TargetRegisterSpell(spell)
                 end
             end
+        end
+        bus("SPELLS_CHANGED", "MSUF_RANGEFADE", function()
+            if _tgtSpellsDirty then return end
+            _tgtSpellsDirty = true
+            if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("RANGEFADE_SPELLS_CHANGED", _FlushTargetSpellsChanged) elseif C_Timer_After then C_Timer_After(0, _FlushTargetSpellsChanged) else _FlushTargetSpellsChanged() end
         end)
         bus("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", function()
             RebuildPrimaries()
@@ -424,11 +561,13 @@ do
     function _G.MSUF_RangeFade_Reset()
         _state["target"] = nil
         _mulT.target = 1
+        StopTargetFriendlyTicker()
         -- Re-apply on next target event
     end
 
     function _G.MSUF_RangeFade_Shutdown()
         TargetUnregisterSpell()
+        StopTargetFriendlyTicker()
         UnwireTargetEvents()
         ClearMul("target", "target")
         if _targetEvtFrame then
@@ -448,6 +587,7 @@ do
             TargetClassifyAndWire()
         else
             TargetUnregisterSpell()
+            StopTargetFriendlyTicker()
             UnwireTargetEvents()
             ClearMul("target", "target")
         end
@@ -461,12 +601,10 @@ do
     -- ══════════════════════════════════════════════════════════════
     -- ══════════════════════════════════════════════════════════════
     -- FOCUS/BOSS: Smart-sleep ticker + event-driven friendly focus
-    --
     -- Ticker lifecycle (SyncTicker):
     --   RUNNING when: enemy focus OR boss range enabled → 0.50s combat / 2.0s OOC
     --   SLEEPING when: only friendly focus (event-driven) → 0 CPU
     --   STOPPED when: no focus + no boss enabled → 0 CPU
-    --
     -- Friendly focus: UNIT_IN_RANGE_UPDATE (oUF approach, 0 polling always)
     -- Unit swaps: immediate check via events, then SyncTicker re-evaluates
     -- Burst mode: 0.20s for a short window after focus/boss state changes
@@ -487,9 +625,8 @@ do
     local _TICK_BURST = 0.05
     local _BURST_DURATION = 0.75
     local _burstSerial = 0
-    local C_Timer_NewTicker = _G.C_Timer and _G.C_Timer.NewTicker
     local HasActiveEnemyFocusRangeUnit, HasActiveBossRangeUnit, NeedsPoll, RequestBurst
-    local _pollUnits, _pollConfKey, _pollCount = {}, {}, 0
+    local _pollUnits, _pollConfKey, _pollFrames, _pollCount = {}, {}, {}, 0
 
     local function OnFocusFriendlyRange(_, event, arg1)
         if arg1 and arg1 ~= "focus" then return end
@@ -507,7 +644,7 @@ do
     end
 
     local function StopTicker()
-        if _ticker then _ticker:Cancel(); _ticker = nil end
+        _ticker = nil
         _tickRate = 0
         _burstSerial = _burstSerial + 1
     end
@@ -524,6 +661,7 @@ do
                 _pollCount = _pollCount + 1
                 _pollUnits[_pollCount] = "focus"
                 _pollConfKey[_pollCount] = "focus"
+                _pollFrames[_pollCount] = f
             end
         end
 
@@ -537,6 +675,7 @@ do
                     _pollCount = _pollCount + 1
                     _pollUnits[_pollCount] = unit
                     _pollConfKey[_pollCount] = "boss"
+                    _pollFrames[_pollCount] = f
                 end
             end
         end
@@ -560,7 +699,10 @@ do
             local unit = _pollUnits[i]
             local confKey = _pollConfKey[i]
             local conf = (confKey == "focus") and focusConf or bossConf
-            local f = GetFrame(unit)
+            -- PERF: cached frame ref (populated in RebuildPollList). Eliminates
+            -- GetFrame(unit) hash lookup per poll tick. During burst (20/s × up
+            -- to 6 units = 120 lookups/s) this is meaningful.
+            local f = _pollFrames[i]
             if conf and f and (not f.IsShown or f:IsShown()) and UnitExists(unit) then
                 if ApplyMul(f, unit, confKey, conf, CheckEnemy(unit)) then
                     changedAny = true
@@ -614,12 +756,37 @@ do
         return _TICK_OOC
     end
 
+    local ScheduleTickerStep
+    local function RangeFadeTickerLoopStep()
+        local loop = _ticker
+        if not loop then return end
+        CheckEnemyUnits()
+        if _ticker == loop then
+            ScheduleTickerStep(loop)
+        end
+    end
+
+    ScheduleTickerStep = function(loop)
+        if not C_Timer_After then
+            StopTicker()
+            return
+        end
+        C_Timer_After(_tickRate, loop.step)
+    end
+
     local function EnsureTicker(rate)
-        if not C_Timer_NewTicker then return end
+        if not C_Timer_After then return end
         if _ticker and _tickRate == rate then return end
-        StopTicker()
+        _burstSerial = _burstSerial + 1
         _tickRate = rate
-        _ticker = C_Timer_NewTicker(rate, CheckEnemyUnits)
+        local loop = {}
+        loop.step = function()
+            if _ticker == loop then
+                RangeFadeTickerLoopStep()
+            end
+        end
+        _ticker = loop
+        ScheduleTickerStep(loop)
     end
 
     function HasActiveBossRangeUnit()
@@ -696,6 +863,7 @@ do
 
     local _fbEvtFrame = nil
     local _fbEvents = {}
+    local _fbSpellsDirty = false
     local function EnsureFBEventFrame()
         if _fbEvtFrame then return _fbEvtFrame end
         local ef = CreateFrame("Frame")
@@ -780,9 +948,10 @@ do
                 elseif unit ~= "focus" then
                     ClearMul(unit, "boss")
                 end
-            elseif event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD"
-                or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
-                or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
+            elseif event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+                or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED"
+                or event == "PLAYER_ENTERING_WORLD" then
+                -- Rare events: process immediately
                 if event == "PLAYER_ENTERING_WORLD" then
                     _playerMoving = false
                 end
@@ -794,6 +963,29 @@ do
                         RequestBurst(0.80)
                     end
                     CheckEnemyUnits()
+                end
+            elseif event == "SPELLS_CHANGED" then
+                -- SPELLS_CHANGED coalescing: can fire 800+/sec in combat.
+                -- Defer to next frame to process once.
+                if not _fbSpellsDirty then
+                    _fbSpellsDirty = true
+                    if C_Timer_After then
+                        C_Timer_After(0, function()
+                            _fbSpellsDirty = false
+                            RebuildPrimaries()
+                            for k in pairs(_state) do _state[k] = nil end
+                            SyncTicker()
+                            if NeedsPoll() or _ticker then
+                                if NeedsPoll() then RequestBurst(0.80) end
+                                CheckEnemyUnits()
+                            end
+                        end)
+                    else
+                        _fbSpellsDirty = false
+                        RebuildPrimaries()
+                        for k in pairs(_state) do _state[k] = nil end
+                        SyncTicker()
+                    end
                 end
             end
         end)
@@ -812,6 +1004,33 @@ do
             ef:UnregisterEvent(event)
             _fbEvents[event] = nil
         end
+    end
+
+    local function SetFBUnitEvent(event, focusOn, bossOn)
+        local ef = EnsureFBEventFrame()
+        local mask = (focusOn and 1 or 0) + (bossOn and 2 or 0)
+        if mask == 0 then
+            if _fbEvents[event] then
+                ef:UnregisterEvent(event)
+                _fbEvents[event] = nil
+            end
+            return
+        end
+        if _fbEvents[event] == mask then return end
+        if _fbEvents[event] then ef:UnregisterEvent(event) end
+
+        local ok = false
+        if ef.RegisterUnitEvent then
+            if mask == 3 then
+                ok = pcall(ef.RegisterUnitEvent, ef, event, "focus", "boss1", "boss2", "boss3", "boss4", "boss5")
+            elseif focusOn then
+                ok = pcall(ef.RegisterUnitEvent, ef, event, "focus")
+            else
+                ok = pcall(ef.RegisterUnitEvent, ef, event, "boss1", "boss2", "boss3", "boss4", "boss5")
+            end
+        end
+        if not ok then ef:RegisterEvent(event) end
+        _fbEvents[event] = mask
     end
 
     local function RefreshFBEventLifecycle()
@@ -837,11 +1056,11 @@ do
         SetFBEvent("PLAYER_TALENT_UPDATE", true)
         SetFBEvent("TRAIT_CONFIG_UPDATED", true)
         SetFBEvent("PLAYER_ENTERING_WORLD", true)
-        SetFBEvent("UNIT_FLAGS", true)
-        SetFBEvent("UNIT_CONNECTION", true)
-        SetFBEvent("UNIT_PHASE", true)
-        SetFBEvent("UNIT_TARGETABLE_CHANGED", true)
-        SetFBEvent("UNIT_FACTION", true)
+        SetFBUnitEvent("UNIT_FLAGS", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_CONNECTION", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_PHASE", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_TARGETABLE_CHANGED", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_FACTION", focusOn, bossOn)
 
         -- focus-only lifecycle
         SetFBEvent("PLAYER_FOCUS_CHANGED", focusOn)

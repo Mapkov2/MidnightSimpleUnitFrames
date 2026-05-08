@@ -1,10 +1,7 @@
--- ============================================================================
 -- MSUF_Options_ClassPower_QuickSetup.lua
---
 -- "Quick Setup: Detached Class Bar" — One-click configuration for a fully
 -- detached, CDM-anchored class resource + power bar combo, positioned ABOVE
 -- the Essential Cooldowns bar.
---
 -- Features:
 --   - First-time popup: when the Class Resources tab is opened for the first
 --     time, a prompt offers to run the quick setup automatically.
@@ -13,21 +10,18 @@
 --   - Two-phase apply: handles specs without class resources (Havoc DH etc.).
 --   - Width mode: both CP and DPB auto-match Essential Cooldown width.
 --   - Undo via popup.
---
 -- Debug:
 --   /run MSUF_QuickSetup_ResetFirstRun()
 --   Resets the "already offered" flag so the first-time popup shows again.
---
 -- Architecture:
 --   - Injection via hooksecurefunc on MSUF_ClassPower_SyncOptions.
 --   - Secret-safe: no value comparisons, pure boolean/number writes.
--- ============================================================================
 
 if _G.__MSUF_QuickSetup_ClassBar_Loaded then return end
 _G.__MSUF_QuickSetup_ClassBar_Loaded = true
 
 -- Search helper (additive): quick setup lives under Class Resources.
-if _G and _G.MSUF_Search_RegisterRoots then
+if _G.MSUF_Search_RegisterRoots then
     _G.MSUF_Search_RegisterRoots({ "classpower" }, { "MSUF_ClassPowerOptionsPanel" }, "Class Resources")
 end
 
@@ -35,7 +29,7 @@ local type, tonumber = type, tonumber
 local math_floor, math_ceil = math.floor, math.ceil
 
 -- Localization
-local ns = (_G and _G.MSUF_NS) or {}
+local ns = (_G.MSUF_NS) or {}
 local L = ns.L or {}
 if not getmetatable(L) then
     setmetatable(L, { __index = function(_, k) return k end })
@@ -50,9 +44,7 @@ local function QS_Print(msg)
     end
 end
 
--- ============================================================================
 -- Constants
--- ============================================================================
 local DEFAULT_CP_HEIGHT  = 4
 local DEFAULT_DPB_HEIGHT = 6
 local DPB_GAP            = 2
@@ -62,9 +54,7 @@ local FALLBACK_Y_FRAC    = 0.60
 -- DB flag key
 local FLAG_KEY = "quickSetupClassBarOffered"
 
--- ============================================================================
 -- Snapshot keys
--- ============================================================================
 local BARS_KEYS = {
     "showClassPower",
     "classPowerShowText",
@@ -73,16 +63,16 @@ local BARS_KEYS = {
     "showEleMaelstrom",
     "showEbonMight",
     "showChargedComboPoints",
-    "runeShowTimeText",
+    "runeShowTime",
     "classPowerOffsetX",
     "classPowerOffsetY",
     "classPowerOutline",
     "detachedPowerBarWidthMode",
     "detachedPowerBarOutline",
-    "showPlayerPowerBar",
 }
 
 local PLAYER_KEYS = {
+    "showPowerBar",
     "showPower",
     "powerBarDetached",
     "detachedPowerBarSyncClassPower",
@@ -106,11 +96,9 @@ local PLAYER_KEYS = {
     "powerTextAnchor",
 }
 
--- ============================================================================
 -- Snapshot / Restore
--- ============================================================================
 local function SnapshotState()
-    if type(MSUF_DB) ~= "table" then return nil end
+    if not MSUF_DB then return nil end
     local snap = {}
 
     snap.bars = {}
@@ -129,7 +117,7 @@ local function SnapshotState()
 end
 
 local function RestoreState(snap)
-    if type(snap) ~= "table" or type(MSUF_DB) ~= "table" then return end
+    if type(snap) ~= "table" or not MSUF_DB then return end
     if type(snap.bars) == "table" then
         MSUF_DB.bars = MSUF_DB.bars or {}
         for i = 1, #BARS_KEYS do MSUF_DB.bars[BARS_KEYS[i]] = snap.bars[BARS_KEYS[i]] end
@@ -140,9 +128,7 @@ local function RestoreState(snap)
     end
 end
 
--- ============================================================================
 -- CDM detection helpers
--- ============================================================================
 local function GetVisibleCDM()
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     if ecv and ecv.IsShown and ecv:IsShown()
@@ -163,9 +149,7 @@ local function GetPlayerFrame()
         or _G.MSUF_player
 end
 
--- ============================================================================
 -- Position calculations
--- ============================================================================
 
 -- Path A: CP above CDM (normal path)
 local function CalcCPAboveCDM(ecv)
@@ -270,11 +254,9 @@ local function CalcScreenCenter()
     }
 end
 
--- ============================================================================
 -- DB writes
--- ============================================================================
 local function ApplyPhase1(offsets)
-    if type(MSUF_DB) ~= "table" then return end
+    if not MSUF_DB then return end
 
     MSUF_DB.bars = MSUF_DB.bars or {}
     local b = MSUF_DB.bars
@@ -287,18 +269,17 @@ local function ApplyPhase1(offsets)
     b.showEleMaelstrom            = true
     b.showEbonMight               = true
     b.showChargedComboPoints      = true
-    b.runeShowTimeText            = true
+    b.runeShowTime                = true
     b.classPowerOffsetX           = offsets.cpOffsetX
     b.classPowerOffsetY           = offsets.cpOffsetY
     b.classPowerOutline           = 1
     b.detachedPowerBarOutline     = 1
     -- Force player power bar ON — installer requires visible power bar
-    b.showPlayerPowerBar          = true
-
     MSUF_DB.player = MSUF_DB.player or {}
     local p = MSUF_DB.player
 
     -- Force per-unit power display ON
+    p.showPowerBar                     = true
     p.showPower                          = true
     p.powerBarDetached                   = true
     p.detachedPowerBarSyncClassPower     = offsets.anchorDPBtoCP and true or false
@@ -336,7 +317,7 @@ local function ApplyPhase1(offsets)
 end
 
 local function ApplyPhase2_NoCPFix(offsets)
-    if type(MSUF_DB) ~= "table" then return end
+    if not MSUF_DB then return end
     MSUF_DB.player = MSUF_DB.player or {}
     local p = MSUF_DB.player
     p.detachedPowerBarSyncClassPower     = offsets.anchorDPBtoCP and true or false
@@ -345,54 +326,48 @@ local function ApplyPhase2_NoCPFix(offsets)
     p.detachedPowerBarOffsetY            = offsets.dpbOffsetY
 end
 
--- ============================================================================
 -- Refresh chain
--- ============================================================================
 local function RefreshCP()
-    if type(_G.MSUF_ClassPower_Refresh) == "function" then
+    if _G.MSUF_ClassPower_Refresh then
         _G.MSUF_ClassPower_Refresh()
     end
 end
 
 local function RefreshAll()
     RefreshCP()
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+    if _G.MSUF_ApplyPowerBarEmbedLayout_All then
         _G.MSUF_ApplyPowerBarEmbedLayout_All()
     end
-    if type(_G.MSUF_ApplyBarOutlineThickness_All) == "function" then
+    if _G.MSUF_ApplyBarOutlineThickness_All then
         _G.MSUF_ApplyBarOutlineThickness_All()
     end
-    if type(_G.MSUF_RefreshDPBOutlineSliderState) == "function" then
+    if _G.MSUF_RefreshDPBOutlineSliderState then
         _G.MSUF_RefreshDPBOutlineSliderState()
     end
     -- Refresh text rendering (invalidate cache + mark frames dirty for re-render)
-    if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+    if _G.MSUF_UFCore_NotifyConfigChanged then
         _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, "QuickSetup")
     end
-    if type(_G.MSUF_ClassPower_SyncOptions) == "function" then
+    if _G.MSUF_ClassPower_SyncOptions then
         _G.MSUF_ClassPower_SyncOptions()
     end
 end
 
--- ============================================================================
 -- "Offered" flag read/write
--- ============================================================================
 local function HasBeenOffered()
-    if type(MSUF_DB) ~= "table" then return false end
+    if not MSUF_DB then return false end
     local g = MSUF_DB.general
-    if type(g) ~= "table" then return false end
+    if not g then return false end
     return g[FLAG_KEY] == true
 end
 
 local function MarkAsOffered()
-    if type(MSUF_DB) ~= "table" then return end
+    if not MSUF_DB then return end
     MSUF_DB.general = MSUF_DB.general or {}
     MSUF_DB.general[FLAG_KEY] = true
 end
 
--- ============================================================================
 -- Confirmation / Result popups
--- ============================================================================
 local _undoSnapshot = nil
 
 local function MakePopup(name, text)
@@ -433,11 +408,9 @@ MakePopup("MSUF_QUICKSETUP_NOCDM",
     .. "Enable it for automatic anchoring.\n\n"
     .. "Use Edit Mode for fine-tuning.")
 
--- ============================================================================
 -- Master action
--- ============================================================================
 local function ExecuteQuickSetup()
-    if type(MSUF_DB) ~= "table" then return end
+    if not MSUF_DB then return end
 
     -- Mark as offered (regardless of how it was triggered)
     MarkAsOffered()
@@ -474,9 +447,7 @@ local function ExecuteQuickSetup()
     StaticPopup_Show(popupName)
 end
 
--- ============================================================================
 -- First-time offer popup (shown once on first Class Resources tab open)
--- ============================================================================
 StaticPopupDialogs["MSUF_QUICKSETUP_FIRSTRUN_OFFER"] = {
     text = TR("Welcome to Class Resources!\n\n"
         .. "Would you like to automatically set up a\n"
@@ -534,12 +505,10 @@ local function CheckFirstRunOffer()
     end
 end
 
--- ============================================================================
 -- Debug: reset first-run flag
 --   /run MSUF_QuickSetup_ResetFirstRun()
--- ============================================================================
 _G.MSUF_QuickSetup_ResetFirstRun = function()
-    if type(MSUF_DB) == "table" then
+    if MSUF_DB then
         MSUF_DB.general = MSUF_DB.general or {}
         MSUF_DB.general[FLAG_KEY] = nil
     end
@@ -547,9 +516,7 @@ _G.MSUF_QuickSetup_ResetFirstRun = function()
     QS_Print("First-run flag reset. Reopen the Class Resources tab to see the offer popup.")
 end
 
--- ============================================================================
 -- Button injection
--- ============================================================================
 local _btnInjected = false
 
 local function InjectQuickSetupButton()
@@ -614,9 +581,7 @@ local function InjectQuickSetupButton()
     qsBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
--- ============================================================================
 -- Combined hook: button injection + first-run check
--- ============================================================================
 local function OnSyncOptions()
     InjectQuickSetupButton()
     CheckFirstRunOffer()

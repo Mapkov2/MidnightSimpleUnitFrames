@@ -1,11 +1,9 @@
 local addonName, ns = ...
 ns = ns or {}
 
--- =========================================================================
 -- PERF LOCALS (core runtime)
 --  - Reduce global table lookups in high-frequency event/render paths.
 --  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
 local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
 local math_min, math_max, math_floor = math.min, math.max, math.floor
@@ -18,15 +16,11 @@ local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
 
--- ---------------------------------------------------------------------------
 -- Boss unit token helpers (perf)
---
 -- Avoid pattern matching (string:match) in hot paths. Pattern matching is
 -- noticeably heavier than simple substring/tonumber checks.
---
 -- Returns bossIndex (number) if u is "bossN" (N>=1), otherwise nil.
 -- NOTE: Keep global names stable so call-sites across files can use them.
--- ---------------------------------------------------------------------------
 if type(_G.MSUF_GetBossIndexFromToken) ~= "function" then
     function _G.MSUF_GetBossIndexFromToken(u)
         if type(u) ~= "string" then
@@ -50,6 +44,109 @@ if type(_G.MSUF_IsBossUnitToken) ~= "function" then
     end
 end
 
+local MSUF_POWER_BAR_SHOW_KEYS = {
+    player = "showPlayerPowerBar",
+    target = "showTargetPowerBar",
+    focus  = "showFocusPowerBar",
+    boss   = "showBossPowerBar",
+}
+
+if type(_G.MSUF_CanonPowerBarUnitKey) ~= "function" then
+    function _G.MSUF_CanonPowerBarUnitKey(unitKey)
+        if type(unitKey) ~= "string" then return nil end
+        unitKey = unitKey:lower()
+        if unitKey == "tot" or unitKey == "targetoftarget" or unitKey == "target_of_target" then
+            unitKey = "targettarget"
+        elseif _G.MSUF_GetBossIndexFromToken(unitKey) then
+            unitKey = "boss"
+        end
+        if unitKey == "player" or unitKey == "target" or unitKey == "focus" or unitKey == "boss" then
+            return unitKey
+        end
+        return nil
+    end
+end
+
+if type(_G.MSUF_ReadUnitPowerBarEnabled) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarEnabled(unitKey, db)
+        db = db or _G.MSUF_DB
+        local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+        if not k then return true end
+        local u = db and db[k]
+        if u and u.showPowerBar ~= nil then
+            return u.showPowerBar ~= false
+        end
+        local legacyKey = MSUF_POWER_BAR_SHOW_KEYS[k]
+        local bars = db and db.bars
+        if legacyKey and bars and bars[legacyKey] ~= nil then
+            return bars[legacyKey] ~= false
+        end
+        return true
+    end
+end
+
+local function MSUF_ReadUnitPowerBarNumber(unitKey, field, legacyField, defaultVal, minVal, maxVal, db)
+    db = db or _G.MSUF_DB
+    local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+    local u = k and db and db[k]
+    local v = u and u[field]
+    if type(v) ~= "number" then
+        local bars = db and db.bars
+        v = bars and bars[legacyField]
+    end
+    v = tonumber(v) or defaultVal
+    if minVal and v < minVal then v = minVal end
+    if maxVal and v > maxVal then v = maxVal end
+    return v
+end
+
+local function MSUF_ReadUnitPowerBarBool(unitKey, field, legacyField, defaultVal, db)
+    db = db or _G.MSUF_DB
+    local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+    local u = k and db and db[k]
+    local v = u and u[field]
+    if v == nil then
+        local bars = db and db.bars
+        v = bars and bars[legacyField]
+    end
+    if v == nil then return defaultVal and true or false end
+    return v == true
+end
+
+if type(_G.MSUF_ReadUnitPowerBarHeight) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarHeight(unitKey, db)
+        return MSUF_ReadUnitPowerBarNumber(unitKey, "powerBarHeight", "powerBarHeight", 3, 1, 80, db)
+    end
+end
+
+if type(_G.MSUF_ReadUnitPowerBarEmbed) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarEmbed(unitKey, db)
+        return MSUF_ReadUnitPowerBarBool(unitKey, "embedPowerBarIntoHealth", "embedPowerBarIntoHealth", true, db)
+    end
+end
+
+if type(_G.MSUF_ReadUnitPowerBarBorderEnabled) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarBorderEnabled(unitKey, db)
+        return MSUF_ReadUnitPowerBarBool(unitKey, "powerBarBorderEnabled", "powerBarBorderEnabled", false, db)
+    end
+end
+
+if type(_G.MSUF_ReadUnitPowerBarBorderThickness) ~= "function" then
+    function _G.MSUF_ReadUnitPowerBarBorderThickness(unitKey, db)
+        db = db or _G.MSUF_DB
+        local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+        local u = k and db and db[k]
+        local v = u and u.powerBarBorderThickness
+        if type(v) ~= "number" then
+            local bars = db and db.bars
+            v = bars and (bars.powerBarBorderThickness or bars.powerBarBorderSize)
+        end
+        v = tonumber(v) or 1
+        if v < 0 then v = 0 elseif v > 10 then v = 10 end
+        return v
+    end
+end
+
 -- MSUF_Util.lua
 -- Stateless helpers / pure functions extracted from MidnightSimpleUnitFrames.lua
 -- Keep names stable (globals) to avoid touching call-sites.
@@ -58,7 +155,6 @@ ns.MSUF_Util = ns.MSUF_Util or {}
 local U = ns.MSUF_Util
 _G.MSUF_Util = U
 
--- ---------------------------------------------------------------------------
 -- Atlas helper used by status/state indicator icons.
 -- Some call-sites use a global helper name; provide it here as a safe fallback
 -- so indicator modules can remain self-contained without load-order fragility.
@@ -115,33 +211,10 @@ function MSUF_CaptureKeys(src, keys)
 end
 
 function MSUF_RestoreKeys(dst, snap)
-    if type(dst) ~= "table" or type(snap) ~= "table" then
-        return
-    end
+    if type(dst) ~= "table" or type(snap) ~= "table" then return end
     for k, v in pairs(snap) do
         dst[k] = v -- assigning nil removes the key (restores defaults)
     end
-end
-
-function MSUF_ClampAlpha(a, default)
-    a = tonumber(a) or default or 1
-    if a < 0 then
-        a = 0
-    elseif a > 1 then
-        a = 1
-    end
-    return a
-end
-
-function MSUF_ClampScale(s, default, maxValue)
-    s = tonumber(s) or default or 1
-    if s <= 0 then
-        s = default or 1
-    end
-    if maxValue and s > maxValue then
-        s = maxValue
-    end
-    return s
 end
 
 function MSUF_GetNumber(v, default, minValue, maxValue)
@@ -168,7 +241,7 @@ function MSUF_SetTextIfChanged(fs, text)
 
     -- Secret-safe diff gate: only compare/cache plain Lua values.
     -- Secret values must pass straight through to C-side SetText().
-    local sv = _G and _G.issecretvalue
+    local sv = _G.issecretvalue
     if sv and sv(v) == true then
         fs._msufLastText = nil
         fs:SetText(v)
@@ -177,9 +250,7 @@ function MSUF_SetTextIfChanged(fs, text)
 
     local tv = type(v)
     if tv == "string" or tv == "number" or tv == "boolean" then
-        if fs._msufLastText == v then
-            return
-        end
+        if fs._msufLastText == v then return end
         fs._msufLastText = v
         fs:SetText(v)
         return
@@ -188,7 +259,6 @@ function MSUF_SetTextIfChanged(fs, text)
     fs._msufLastText = nil
     fs:SetText(v)
 end
-
 
 function MSUF_SetCastTimeText(frame, seconds)
     local fs = frame and frame.timeText
@@ -213,127 +283,6 @@ function MSUF_SetCastTimeText(frame, seconds)
         MSUF_SetTextIfChanged(fs, string.format("%.1f", n))
     end
 end
-
-
-function MSUF_SetFormattedTextIfChanged(fs, fmt, ...)
-    if not fs then return end
-    if fmt == nil then
-        MSUF_SetTextIfChanged(fs, "")
-        return
-    end
-    -- Prefer the C-side formatter when available (faster + more secret-safe).
-    if fs.SetFormattedText then
-        fs:SetFormattedText(fmt, ...)
-    else
-        MSUF_SetTextIfChanged(fs, string.format(fmt, ...))
-    end
-end
-
-function MSUF_SetTimeTextTenth(fs, seconds)
-    if not fs then return end
-
-    if type(seconds) == "nil" then
-        MSUF_SetTextIfChanged(fs, "")
-        fs.MSUF_lastTimeTenth = nil
-        return
-    end
-
-    -- Midnight/Beta "secret value" safety:
-    -- Avoid arithmetic directly on potentially secret values.
-    local n = tonumber(seconds)
-    if type(n) ~= "number" then
-        MSUF_SetTextIfChanged(fs, "")
-        fs.MSUF_lastTimeTenth = nil
-        return
-    end
-
-    -- Round to tenths (0.1s) to match display.
-    local tenths = math.floor(n * 10 + 0.5)
-    if fs.MSUF_lastTimeTenth ~= tenths then
-        fs.MSUF_lastTimeTenth = tenths
-        MSUF_SetTextIfChanged(fs, string.format("%.1f", tenths / 10))
-    end
-end
-
--- ---------------------------------------------------------------------------
--- Stamp cache (performance)
---
--- Avoid re-applying expensive UI state (SetFont/SetPoint/SetColor/etc.) when
--- the inputs are unchanged.
---
--- Secret-safe rules:
--- - Only compares primitive Lua types (number/string/boolean/nil).
--- - Any non-primitive value is treated as "changed" to avoid secret-value
---   equality errors.
--- - Stores the last tuple in a reusable table on the target object.
-
-local function _MSUF_IsStampPrimitive(v)
-    local t = type(v)
-    return (t == "number" or t == "string" or t == "boolean" or t == "nil")
-end
-
-function MSUF_StampChanged(obj, stampKey, ...)
-    if not obj or not stampKey then
-        return true
-    end
-    local cacheKey = "_msufStamp_" .. stampKey
-    local prev = obj[cacheKey]
-    if not prev then
-        prev = {}
-        obj[cacheKey] = prev
-        -- store
-        local n = select('#', ...)
-        prev._n = n
-        for i = 1, n do
-            local v = select(i, ...)
-            if not _MSUF_IsStampPrimitive(v) then
-                -- unknown type => always "changed"; do not cache
-                prev._n = 0
-                return true
-            end
-            prev[i] = v
-        end
-        return true
-    end
-
-    local n = select('#', ...)
-    if prev._n ~= n then
-        prev._n = n
-        for i = 1, n do
-            local v = select(i, ...)
-            if not _MSUF_IsStampPrimitive(v) then
-                prev._n = 0
-                return true
-            end
-            prev[i] = v
-        end
-        return true
-    end
-
-    -- compare
-    for i = 1, n do
-        local v = select(i, ...)
-        if not _MSUF_IsStampPrimitive(v) then
-            prev._n = 0
-            return true
-        end
-        if prev[i] ~= v then
-            -- update cached tuple
-            for j = i, n do
-                local vv = select(j, ...)
-                if not _MSUF_IsStampPrimitive(vv) then
-                    prev._n = 0
-                    return true
-                end
-                prev[j] = vv
-            end
-            return true
-        end
-    end
-    return false
-end
-
-
 
 function MSUF_SetAlphaIfChanged(f, a)
     if not f or not f.SetAlpha or a == nil then return end
@@ -407,13 +356,9 @@ U.DeepCopy = MSUF_DeepCopy
 U.CaptureKeys = MSUF_CaptureKeys
 U.RestoreKeys = MSUF_RestoreKeys
 U.Clamp = MSUF_Clamp
-U.ClampAlpha = MSUF_ClampAlpha
-U.ClampScale = MSUF_ClampScale
 U.GetNumber = MSUF_GetNumber
 U.SetTextIfChanged = MSUF_SetTextIfChanged
-U.SetFormattedTextIfChanged = MSUF_SetFormattedTextIfChanged
 U.SetCastTimeText = MSUF_SetCastTimeText
-U.SetTimeTextTenth = MSUF_SetTimeTextTenth
 U.SetAlphaIfChanged = MSUF_SetAlphaIfChanged
 U.SetWidthIfChanged = MSUF_SetWidthIfChanged
 U.SetHeightIfChanged = MSUF_SetHeightIfChanged
@@ -510,10 +455,8 @@ do
     end
 end
 
--- =============================================================
 -- Phase 2: Global helpers relocated from MSUF_UpdateManager.lua
 -- (These must load before any consumer; MSUF_Util.lua is in TOC slot 2.)
--- =============================================================
 
 -- Fast-path replacement for protected calls.
 -- Intentionally does NOT catch errors (for maximum performance).
@@ -531,7 +474,7 @@ end
 if not _G.MSUF_IsInAnyEditMode then
     function _G.MSUF_IsInAnyEditMode()
         local st = rawget(_G, "MSUF_EditState")
-        if type(st) == "table" and st.active == true then
+        if st and st.active == true then
              return true
         end
         if rawget(_G, "MSUF_UnitEditModeActive") == true then
@@ -540,7 +483,6 @@ if not _G.MSUF_IsInAnyEditMode then
          return false
     end
 end
-
 
 -- Global helper: restore UIPanelButtonTemplate pieces if another skin/hide pass removed them.
 -- This is defensive and safe to call repeatedly; it only touches obvious regions (Left/Middle/Right/Normal/Font).
@@ -555,8 +497,8 @@ if not _G.MSUF_ForceShowUIPanelButtonPieces then
 
         local function ShowTex(t)
             if not t then return end
-            if t.SetAlpha then pcall(t.SetAlpha, t, 1) end
-            if t.Show then pcall(t.Show, t) end
+            if t.SetAlpha then t:SetAlpha(1) end
+            if t.Show then t:Show() end
         end
 
         ShowTex(left)
@@ -568,27 +510,146 @@ if not _G.MSUF_ForceShowUIPanelButtonPieces then
 
         local fs = (btn.GetFontString and btn:GetFontString()) or btn.Text or nil
         if fs then
-            if fs.SetAlpha then pcall(fs.SetAlpha, fs, 1) end
-            if fs.SetDrawLayer then pcall(fs.SetDrawLayer, fs, "OVERLAY", 7) end
-            if fs.Show then pcall(fs.Show, fs) end
+            if fs.SetAlpha then fs:SetAlpha(1) end
+            if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
+            if fs.Show then fs:Show() end
         end
 
-        if btn.SetAlpha then pcall(btn.SetAlpha, btn, 1) end
+        if btn.SetAlpha then btn:SetAlpha(1) end
     end
 end
 
--- =========================================================================
 -- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC)
--- =========================================================================
 BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
 BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
 BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
+local MSUF_BINDING_COMMANDS = {
+    "MSUF_TOGGLE_OPTIONS",
+    "MSUF_TOGGLE_EDITMODE",
+}
+
+local function MSUF_EnsureGlobalBindingState()
+    _G.MSUF_GlobalDB = _G.MSUF_GlobalDB or {}
+    local gdb = _G.MSUF_GlobalDB
+    gdb.global = gdb.global or {}
+    gdb.global.bindings = gdb.global.bindings or {}
+    gdb.global.bindings.commands = gdb.global.bindings.commands or {}
+    return gdb.global.bindings.commands
+end
+
+local function MSUF_GetBindingKeysForCommand(command)
+    local keys = {}
+    if type(command) ~= "string" or command == "" or type(_G.GetBindingKey) ~= "function" then
+        return keys
+    end
+
+    local seen = {}
+    local count = select("#", _G.GetBindingKey(command))
+    for i = 1, count do
+        local key = select(i, _G.GetBindingKey(command))
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            keys[#keys + 1] = key
+        end
+    end
+
+    table.sort(keys)
+    return keys
+end
+
+local function MSUF_CopyBindingKeys(keys)
+    local out = {}
+    if type(keys) ~= "table" then return out end
+
+    local seen = {}
+    for i = 1, #keys do
+        local key = keys[i]
+        if type(key) == "string" and key ~= "" and not seen[key] then
+            seen[key] = true
+            out[#out + 1] = key
+        end
+    end
+
+    table.sort(out)
+    return out
+end
+
+local function MSUF_BindingListsEqual(a, b)
+    a = MSUF_CopyBindingKeys(a)
+    b = MSUF_CopyBindingKeys(b)
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
+local function MSUF_GetStoredBindingKeys(command)
+    local commands = MSUF_EnsureGlobalBindingState()
+    return MSUF_CopyBindingKeys(commands[command])
+end
+
+local function MSUF_SetStoredBindingKeys(command, keys)
+    if type(command) ~= "string" or command == "" then return end
+    local commands = MSUF_EnsureGlobalBindingState()
+    commands[command] = MSUF_CopyBindingKeys(keys)
+end
+
+local _msufBindingSyncInFlight = false
+local _msufBindingApplyPending = false
+
+local function MSUF_ApplyStoredBindingsToCurrentSet()
+    if _msufBindingSyncInFlight then return end
+    if type(_G.SetBinding) ~= "function" then return end
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
+        _msufBindingApplyPending = true
+        return
+    end
+
+    _msufBindingApplyPending = false
+    _msufBindingSyncInFlight = true
+
+    for i = 1, #MSUF_BINDING_COMMANDS do
+        local command = MSUF_BINDING_COMMANDS[i]
+        local liveKeys = MSUF_GetBindingKeysForCommand(command)
+        for j = 1, #liveKeys do
+            _G.SetBinding(liveKeys[j])
+        end
+
+        local storedKeys = MSUF_GetStoredBindingKeys(command)
+        for j = 1, #storedKeys do
+            _G.SetBinding(storedKeys[j], command)
+        end
+    end
+
+    _msufBindingSyncInFlight = false
+end
+
+local function MSUF_SyncCurrentBindingsIntoGlobalStore()
+    if _msufBindingSyncInFlight then return end
+    for i = 1, #MSUF_BINDING_COMMANDS do
+        local command = MSUF_BINDING_COMMANDS[i]
+        local liveKeys = MSUF_GetBindingKeysForCommand(command)
+        if not MSUF_BindingListsEqual(liveKeys, MSUF_GetStoredBindingKeys(command)) then
+            MSUF_SetStoredBindingKeys(command, liveKeys)
+        end
+    end
+end
+
+local function MSUF_HasAnyStoredGlobalBindings()
+    for i = 1, #MSUF_BINDING_COMMANDS do
+        if #MSUF_GetStoredBindingKeys(MSUF_BINDING_COMMANDS[i]) > 0 then
+            return true
+        end
+    end
+    return false
+end
 
 function MSUF_Keybind_ToggleOptions()
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
         local win = _G.MSUF_StandaloneOptionsWindow
         if win and win.IsShown and win:IsShown() then
-            if type(_G.MSUF_HideStandaloneOptionsWindow) == "function" then
+            if _G.MSUF_HideStandaloneOptionsWindow then
                 _G.MSUF_HideStandaloneOptionsWindow()
             elseif win.Hide then
                 win:Hide()
@@ -603,7 +664,7 @@ function MSUF_Keybind_ToggleEditMode()
     if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
         local st = _G.MSUF_EditState
         local nextActive = true
-        if type(st) == "table" and st.active ~= nil then
+        if st and st.active ~= nil then
             nextActive = not st.active
         end
         pcall(_G.MSUF_SetMSUFEditModeDirect, nextActive, nil)
@@ -612,16 +673,11 @@ function MSUF_Keybind_ToggleEditMode()
     end
 end
 
--- =========================================================================
 -- i18n UI helpers — prevent text overflow in translated locales.
---
 -- Checkbox text in narrow columns can overflow when German/Spanish/French
 -- strings are longer than English. These helpers clamp the FontString
 -- width so text truncates instead of overlapping adjacent UI elements.
---
 -- Usage:  MSUF_ClampCheckboxText(cb, maxPixelWidth)
---         MSUF_AutoSizeButton(btn, minWidth, padding)
--- =========================================================================
 
 --- Clamp a checkbox's label FontString to a max pixel width.
 --- Disables word-wrap so long translations truncate cleanly.
@@ -640,16 +696,27 @@ function MSUF_ClampCheckboxText(cb, maxWidth)
 end
 _G.MSUF_ClampCheckboxText = MSUF_ClampCheckboxText
 
---- Auto-size a button to fit its current text content.
---- Width = max(minWidth, textWidth + padding).
-function MSUF_AutoSizeButton(btn, minWidth, padding)
-    if not btn then return end
-    minWidth = minWidth or 120
-    padding  = padding  or 24
-    local fs = btn.GetFontString and btn:GetFontString()
-    local tw = (fs and fs.GetStringWidth and fs:GetStringWidth()) or 0
-    local w = tw + padding
-    if w < minWidth then w = minWidth end
-    btn:SetWidth(w)
+do
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_LOGIN")
+    f:RegisterEvent("UPDATE_BINDINGS")
+    f:RegisterEvent("PLAYER_REGEN_ENABLED")
+    f:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_LOGIN" then
+            if not MSUF_HasAnyStoredGlobalBindings() then
+                MSUF_SyncCurrentBindingsIntoGlobalStore()
+            end
+            MSUF_ApplyStoredBindingsToCurrentSet()
+            return
+        end
+
+        if event == "UPDATE_BINDINGS" then
+            MSUF_SyncCurrentBindingsIntoGlobalStore()
+            return
+        end
+
+        if event == "PLAYER_REGEN_ENABLED" and _msufBindingApplyPending then
+            MSUF_ApplyStoredBindingsToCurrentSet()
+        end
+    end)
 end
-_G.MSUF_AutoSizeButton = MSUF_AutoSizeButton

@@ -1,6 +1,6 @@
 local addonName, addonNS = ...
-local ns = (_G and _G.MSUF_NS) or addonNS or {}
-if _G then _G.MSUF_NS = ns end
+local ns = (_G.MSUF_NS) or addonNS or {}
+_G.MSUF_NS = ns
 
 -- MSUF default class-resource colors
 -- Keep this tiny and global so:
@@ -8,7 +8,7 @@ if _G then _G.MSUF_NS = ns end
 -- 2) reset-to-default in the Colors menu also lands on these defaults
 -- 3) no runtime overhead in hot paths (one-time table write at load)
 do
-    local pbc = _G and _G.PowerBarColor
+    local pbc = _G.PowerBarColor
     if type(pbc) == "table" then
         pbc.RUNES = pbc.RUNES or {}
         pbc.RUNES.r, pbc.RUNES.g, pbc.RUNES.b = 128/255, 0, 17/255      -- #800011
@@ -20,7 +20,7 @@ end
 
 -- MSUF Defaults / DB initialization
 -- ---------------------------------------------------------------------------
--- Factory default profile (MSUF2 compact string)
+-- Factory default profile (MSUF compact string)
 --
 -- If MSUF_DB is NEW (fresh install / full reset), we seed it from this payload
 -- so the addon boots with your preferred baseline.
@@ -28,9 +28,10 @@ end
 -- Existing installs are NOT overwritten. This only runs when MSUF_DB was
 -- created empty in this session.
 -- ---------------------------------------------------------------------------
-local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = [[MSUF2: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]]
+-- Current factory default profile.
+local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = [[MSUF3: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]]
 
--- Export the factory compact string so other modules (e.g. Presets) can reuse it safely.
+-- Expose the factory compact string for diagnostics and future tooling.
 if type(ns) == "table" then
     ns.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
 end
@@ -40,33 +41,46 @@ end
 
 local function MSUF_Defaults_TryDecodeCompactString(str)
     if type(str) ~= "string" then  return nil end
-    local E = _G and _G.C_EncodingUtil
-    if type(E) ~= "table" then  return nil end
+    local E = _G.C_EncodingUtil
+    if not E then  return nil end
     if type(E.DeserializeCBOR) ~= "function" then  return nil end
-    if type(E.DecompressString) ~= "function" then  return nil end
     if type(E.DecodeBase64) ~= "function" then  return nil end
-    local ok, b64 = pcall(string.match, str, "^%s*MSUF2:%s*(.-)%s*$")
-    if not ok or type(b64) ~= "string" or b64 == "" then  return nil end
+    local ok, prefix, b64 = pcall(string.match, str, "^%s*(MSUF%d+):%s*(.-)%s*$")
+    if not ok or (prefix ~= "MSUF2" and prefix ~= "MSUF3") or type(b64) ~= "string" or b64 == "" then  return nil end
     local ok2, cleaned = pcall(string.gsub, b64, "%s+", "")
-    if not ok2 or type(cleaned) ~= "string" then  return nil end
-    b64 = cleaned
-    local ok3, comp = pcall(E.DecodeBase64, b64)
-    if not ok3 or type(comp) ~= "string" then  return nil end
+    if not ok2 or type(cleaned) ~= "string" or cleaned == "" then  return nil end
+    local rem = #cleaned % 4
+    if rem == 1 then
+        return nil
+    elseif rem == 2 then
+        cleaned = cleaned .. "=="
+    elseif rem == 3 then
+        cleaned = cleaned .. "="
+    end
+    local ok3, blob = pcall(E.DecodeBase64, cleaned)
+    if not ok3 or type(blob) ~= "string" then  return nil end
+    local function TryDeserialize(payload)
+        if type(payload) ~= "string" then  return nil end
+        local okD, tbl = pcall(E.DeserializeCBOR, payload)
+        if okD and type(tbl) == "table" then  return tbl end
+        return nil
+    end
+    local tbl = TryDeserialize(blob)
+    if tbl then  return tbl end
+    if type(E.DecompressString) ~= "function" then  return nil end
     local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
-    local ok4, bin
+    local ok4, plain
     if method ~= nil then
-        ok4, bin = pcall(E.DecompressString, comp, method)
+        ok4, plain = pcall(E.DecompressString, blob, method)
+        tbl = ok4 and TryDeserialize(plain) or nil
+        if tbl then  return tbl end
     end
-    if not ok4 or type(bin) ~= "string" then
-        ok4, bin = pcall(E.DecompressString, comp)
-    end
-    if not ok4 or type(bin) ~= "string" then  return nil end
-    local ok5, tbl = pcall(E.DeserializeCBOR, bin)
-    if not ok5 or type(tbl) ~= "table" then  return nil end
-     return tbl
+    ok4, plain = pcall(E.DecompressString, blob)
+    tbl = ok4 and TryDeserialize(plain) or nil
+    return tbl
 end
 local function MSUF_Defaults_WipeInPlace(t)
-    if type(t) ~= "table" then  return end
+    if not t then  return end
     for k in pairs(t) do t[k] = nil end
  end
 local function MSUF_Defaults_DeepCopy(dst, src)
@@ -90,32 +104,71 @@ local function MSUF_Defaults_DeepCopy(dst, src)
         end
     end
  end
+local function MSUF_Defaults_GetProfilePayload(tbl)
+    if type(tbl) ~= "table" then
+        return nil
+    end
+    -- Current exports wrap profile data as a snapshot. Older/tooling exports may
+    -- decode directly to the profile table; keep both valid for factory defaults.
+    if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" then
+        return tbl.payload
+    end
+    return tbl
+end
 -- Fresh-install overrides (applied only when the factory profile payload is seeded).
 -- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
-    if type(db) ~= "table" then  return end
-    local function ForceUnitAlpha100(conf)
-        if type(conf) ~= "table" then  return end
-        -- Main alpha (used when layered alpha is off)
-        conf.alphaInCombat = 1
-        conf.alphaOutOfCombat = 1
-        -- Layered alpha (used when "Keep text/portrait visible" is on)
-        conf.alphaFGInCombat = 1
-        conf.alphaFGOutOfCombat = 1
-        conf.alphaBGInCombat = 1
-        conf.alphaBGOutOfCombat = 1
+    if not db then  return end
+    local function EnsureUnitAlphaDefaults(conf)
+        if not conf then  return end
+        if conf.alphaInCombat == nil then conf.alphaInCombat = 1 end
+        if conf.alphaOutOfCombat == nil then conf.alphaOutOfCombat = 1 end
+        if conf.alphaSync == nil then conf.alphaSync = false end
+        if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
+        if conf.alphaLayerMode == nil then conf.alphaLayerMode = 0 end
+        if conf.alphaFGInCombat == nil then conf.alphaFGInCombat = 1 end
+        if conf.alphaFGOutOfCombat == nil then conf.alphaFGOutOfCombat = 1 end
+        if conf.alphaBGInCombat == nil then conf.alphaBGInCombat = 1 end
+        if conf.alphaBGOutOfCombat == nil then conf.alphaBGOutOfCombat = 1 end
+        if conf.alphaHPInCombat == nil then conf.alphaHPInCombat = 1 end
+        if conf.alphaHPOutOfCombat == nil then conf.alphaHPOutOfCombat = 1 end
+        if conf.alphaPreserveHPColor == nil then conf.alphaPreserveHPColor = false end
      end
-    ForceUnitAlpha100(db.player)
+    local function ForceFreshGroupAuraBlizzardRenderer(conf)
+        if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
+        local auras = conf.auras
+        auras.renderer = "BLIZZARD"
+        if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
+        local types = auras.blizzardTypes
+        if types.buffs == nil then types.buffs = true end
+        if types.debuffs == nil then types.debuffs = true end
+        if types.dispels == nil then types.dispels = true end
+        if types.externals == nil then types.externals = true end
+        if types.privateAuras == nil then types.privateAuras = true end
+        if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
+        if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
+        if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
+        if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+        auras.blizzardContainerAnchor = "FRAME"
+        auras.blizzardContainerX = 0
+        auras.blizzardContainerY = 0
+    end
+    EnsureUnitAlphaDefaults(db.player)
     -- Fresh-install default: player name hidden
     if type(db.player) == "table" then
         db.player.showName = false
     end
-    ForceUnitAlpha100(db.target)
-    ForceUnitAlpha100(db.focus)
-    ForceUnitAlpha100(db.pet)
-    ForceUnitAlpha100(db.boss)
-    ForceUnitAlpha100(db.targettarget)
-    ForceUnitAlpha100(db.tot)
+    EnsureUnitAlphaDefaults(db.target)
+    EnsureUnitAlphaDefaults(db.focus)
+    EnsureUnitAlphaDefaults(db.pet)
+    EnsureUnitAlphaDefaults(db.boss)
+    EnsureUnitAlphaDefaults(db.targettarget)
+    EnsureUnitAlphaDefaults(db.tot)
+    ForceFreshGroupAuraBlizzardRenderer(db.gf_party)
+    ForceFreshGroupAuraBlizzardRenderer(db.gf_raid)
+    ForceFreshGroupAuraBlizzardRenderer(db.gf_mythicraid)
+    db.bars = db.bars or {}
+    db.bars.showAltMana = false
     -- Fresh-install defaults: status indicators (AFK/DND) off by default
     local g = db.general
     if type(g) == 'table' then
@@ -125,15 +178,30 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         si.showDND = false
 
         -- Fresh-install scaling defaults:
-        -- Always start in Auto (Blizzard decides the global UI scale), and keep MSUF scaling enabled.
-        g.disableScaling = false
+        -- Always start in Auto (Blizzard decides the global UI scale), with MSUF scaling disabled.
+        g.disableScaling = true
         g.globalUiScalePreset = "auto"
         g.globalUiScaleValue = nil
+        g.UIScale = { Enabled = false, Scale = 1.0 }
         g.msufUiScale = 1.0
+        g.fontKey = "FRIZQT"
     end
  end
+local function MSUF_Defaults_CreateFactoryProfile()
+    local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
+    if not tbl then  return nil end
+    local payload = MSUF_Defaults_GetProfilePayload(tbl)
+    if type(payload) ~= "table" then  return nil end
+
+    local out = {}
+    MSUF_Defaults_DeepCopy(out, payload)
+    MSUF_Defaults_ApplyFreshInstallOverrides(out)
+    out.general = out.general or {}
+    out.general._msufFactoryProfileApplied = true
+    return out
+end
 local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
-    if type(MSUF_DB) ~= "table" then  return end
+    if not MSUF_DB then  return end
     local g = (type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
     if g and g._msufFactoryProfileApplied then
          return
@@ -141,20 +209,37 @@ local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     -- Only seed when the DB was just created empty.
     -- (Existing installs always already have keys before EnsureDB_Heavy runs.)
     local isEmpty = (next(MSUF_DB) == nil)
-    if not isEmpty then
-         return
-    end
-    local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
-    if type(tbl) ~= "table" then  return end
-    local payload = tbl.payload
+    if not isEmpty then return end
+    local payload = MSUF_Defaults_CreateFactoryProfile()
     if type(payload) ~= "table" then  return end
     -- Replace the empty DB with the decoded payload.
     MSUF_Defaults_DeepCopy(MSUF_DB, payload)
-    MSUF_Defaults_ApplyFreshInstallOverrides(MSUF_DB)
-    MSUF_DB.general = MSUF_DB.general or {}
-    MSUF_DB.general._msufFactoryProfileApplied = true
  end
 local MSUF_DB_LastHeavyRun
+local MSUF_DEFAULTS_FONT_KEY_ALIASES = {
+    ["Friz Quadrata TT"]        = "FRIZQT",
+    ["Arial Narrow"]            = "ARIALN",
+    ["Morpheus"]                = "MORPHEUS",
+    ["Skurri"]                  = "SKURRI",
+    ["Friz Quadrata (default)"] = "FRIZQT",
+    ["Arial (default)"]         = "ARIALN",
+    ["Morpheus (default)"]      = "MORPHEUS",
+    ["Skurri (default)"]        = "SKURRI",
+}
+
+local function MSUF_Defaults_NormalizeFontKey(key)
+    if type(key) ~= "string" or key == "" then return key end
+    return MSUF_DEFAULTS_FONT_KEY_ALIASES[key] or key
+end
+
+local function MSUF_Defaults_NormalizeFontField(tbl)
+    if type(tbl) ~= "table" then return end
+    local normalized = MSUF_Defaults_NormalizeFontKey(tbl.fontKey)
+    if normalized ~= tbl.fontKey then
+        tbl.fontKey = normalized
+    end
+end
+
 function MSUF_EnsureDB_Heavy()
     if not MSUF_DB then
         MSUF_DB = {}
@@ -166,7 +251,9 @@ function MSUF_EnsureDB_Heavy()
     MSUF_DB.classColors = MSUF_DB.classColors or {}
     MSUF_DB.npcColors = MSUF_DB.npcColors or {}
     if g.fontKey == nil then
-        g.fontKey = "FRIZQT"
+        g.fontKey = MSUF_Defaults_NormalizeFontKey("FRIZQT")
+    else
+        MSUF_Defaults_NormalizeFontField(g)
     end
     if g.hardKillBlizzardPlayerFrame == nil then
         -- Default: Hard-hide Blizzard PlayerFrame (compat mode OFF).
@@ -179,32 +266,83 @@ if g.anchorToCooldown == nil then
     g.anchorToCooldown = false
 end
 -- New install defaults (UI scale + Flash menu anchor)
--- Default: Auto global UI scale (Blizzard handles it). MSUF scaling is enabled unless the user turns it off.
+-- Default: Auto global UI scale (Blizzard handles it), with MSUF scaling disabled.
 if g.disableScaling == nil then
-    g.disableScaling = false
+    g.disableScaling = true
 end
 if g.globalUiScalePreset == nil then
     g.globalUiScalePreset = "auto"
+end
+-- Migrate global UI scale storage to the Unhalted-style table:
+-- General.UIScale.Enabled + General.UIScale.Scale. Keep the legacy preset keys
+-- populated so older exports/tools can still reason about the profile.
+do
+    local function PresetScale(preset, fallback)
+        if preset == "1080p" then return 768 / 1080 end
+        if preset == "1440p" then return 768 / 1440 end
+        if preset == "4k" then return 768 / 2160 end
+        if preset == "pixel" and type(GetPhysicalScreenSize) == "function" then
+            local _, h = GetPhysicalScreenSize()
+            h = tonumber(h)
+            if h and h > 0 then return 768 / h end
+        end
+        return tonumber(fallback)
+    end
+    local ui = (type(g.UIScale) == "table") and g.UIScale or nil
+    if not ui then
+        ui = {}
+        g.UIScale = ui
+        local preset = g.globalUiScalePreset
+        local scale = PresetScale(preset, g.globalUiScaleValue) or 1.0
+        local enabled = (g.disableScaling ~= true)
+            and (preset == "1080p" or preset == "1440p" or preset == "4k" or preset == "pixel" or preset == "custom")
+        ui.Enabled = enabled and true or false
+        ui.Scale = scale
+        ui._migratedFromGlobalPreset_v1 = true
+    end
+    if ui.Enabled == nil then
+        local preset = g.globalUiScalePreset
+        ui.Enabled = (g.disableScaling ~= true)
+            and (preset == "1080p" or preset == "1440p" or preset == "4k" or preset == "pixel" or preset == "custom")
+    end
+    ui.Enabled = (ui.Enabled == true)
+    ui.Scale = tonumber(ui.Scale) or PresetScale(g.globalUiScalePreset, g.globalUiScaleValue) or 1.0
+    if ui.Scale < 0.3 then ui.Scale = 0.3 elseif ui.Scale > 2.0 then ui.Scale = 2.0 end
+    if g.disableScaling == true then
+        ui.Enabled = false
+    end
+    if ui.Enabled then
+        g.globalUiScaleValue = ui.Scale
+        if g.globalUiScalePreset ~= "1080p" and g.globalUiScalePreset ~= "1440p"
+            and g.globalUiScalePreset ~= "4k" and g.globalUiScalePreset ~= "pixel" and g.globalUiScalePreset ~= "custom" then
+            g.globalUiScalePreset = "custom"
+        end
+    elseif g.globalUiScalePreset == nil then
+        g.globalUiScalePreset = "auto"
+    end
 end
 -- Nil value = Auto (no enforced custom global UI scale)
 -- (Do NOT seed a default globalUiScaleValue on fresh installs.)
 if g.msufUiScale == nil then
     g.msufUiScale = 1.0
 end
-if g.flashFullPoint == nil then g.flashFullPoint = "LEFT" end
-if g.flashFullRelPoint == nil then g.flashFullRelPoint = "LEFT" end
-if g.flashFullX == nil then g.flashFullX = -2.0000178813934 end
-if g.flashFullY == nil then g.flashFullY = 91.75 end
-if g.flashFullW == nil then g.flashFullW = 880.75018310547 end
-if g.flashFullH == nil then g.flashFullH = 628.50018310547 end
-if g.flashFullXpx == nil then g.flashFullXpx = -1.4222349723183 end
-if g.flashFullYpx == nil then g.flashFullYpx = 65.244446024299 end
+if g.flashFullPoint == nil then g.flashFullPoint = "CENTER" end
+if g.flashFullRelPoint == nil then g.flashFullRelPoint = "CENTER" end
+if g.flashFullX == nil then g.flashFullX = -60 end
+if g.flashFullY == nil then g.flashFullY = 10 end
+if g.flashFullW == nil then g.flashFullW = 900 end
+if g.flashFullH == nil then g.flashFullH = 650 end
+if g.flashFullXpx == nil then g.flashFullXpx = -60 end
+if g.flashFullYpx == nil then g.flashFullYpx = 10 end
 if g.tipCycleIndex == nil then
     g.tipCycleIndex = 11
 end
 -- Minimap icon (LibDBIcon) defaults
 if g.showMinimapIcon == nil then
     g.showMinimapIcon = true
+end
+if g.rangeFadePortrait == nil then
+    g.rangeFadePortrait = false
 end
 if g.dropdownStyleMode == nil then
     g.dropdownStyleMode = "msuf"
@@ -355,8 +493,8 @@ end
             g.useClassColors = false
         end
     end
-    -- Normalize Bar mode (supports: dark / class / unified) and keep legacy flags in sync
-    if g.barMode ~= "dark" and g.barMode ~= "class" and g.barMode ~= "unified" then
+    -- Normalize Bar mode (supports: dark / class / unified / gradient) and keep legacy flags in sync
+    if g.barMode ~= "dark" and g.barMode ~= "class" and g.barMode ~= "unified" and g.barMode ~= "gradient" then
         g.barMode = (g.useClassColors and "class") or (g.darkMode and "dark") or "dark"
     end
     if g.barMode == "dark" then
@@ -365,6 +503,10 @@ end
     elseif g.barMode == "class" then
         g.darkMode = false
         g.useClassColors = true
+    elseif g.barMode == "gradient" then
+        -- Gradient mode is HP-derived; neither legacy flag applies.
+        g.darkMode = false
+        g.useClassColors = false
     else -- unified
         g.darkMode = false
         g.useClassColors = false
@@ -444,7 +586,7 @@ end
         g.highlightColor = "white"
     else
         g.highlightColor = string.lower(g.highlightColor)
-        if not (type(fontColors) == "table" and fontColors[g.highlightColor]) then
+        if not (fontColors and fontColors[g.highlightColor]) then
             g.highlightColor = "white"
         end
     end
@@ -534,9 +676,9 @@ if g.castbarUnifiedFillDirection ~= nil then
     if g.castbarOpositeDirectionTarget == nil then
         g.castbarOpositeDirectionTarget = false
     end
-    -- GCD/Instant-cast bar (disabled by default; short flash, no timer text by default)
+    -- GCD/Instant-cast bar (disabled by default; options treat nil as enabled)
     if g.showGCDBar == nil then g.showGCDBar = false end
-    if g.showGCDBarTime == nil then g.showGCDBarTime = false end
+    if g.showGCDBarTime == nil then g.showGCDBarTime = true end
     if g.showGCDBarSpell == nil then g.showGCDBarSpell = true end
     if g.empowerColorStages == nil then
         g.empowerColorStages = true
@@ -687,10 +829,30 @@ end
 if g.castbarSparkOverflow == nil then
     g.castbarSparkOverflow = true
 end
--- Player castbar width matching: nil = manual, "essential" = CDM essential row, "utility" = CDM utility bar
-if g.castbarPlayerMatchWidth == nil then
-    g.castbarPlayerMatchWidth = nil
+-- Unit castbar width matching:
+-- nil/"manual" = manual, "unitframe" = own MSUF unitframe,
+-- "essential" = CDM essential row, "utility" = CDM utility bar.
+local function NormalizeCastbarWidthSourceKey(key, legacyUnitWidthKey, aliasKey)
+    if aliasKey and g[key] == nil and g[aliasKey] ~= nil then
+        g[key] = g[aliasKey]
+    end
+    if g[key] == nil and legacyUnitWidthKey and g[legacyUnitWidthKey] == true then
+        g[key] = "unitframe"
+    end
+    if g[key] == "manual" then
+        g[key] = nil
+    elseif g[key] ~= nil
+        and g[key] ~= "unitframe"
+        and g[key] ~= "essential"
+        and g[key] ~= "utility"
+    then
+        g[key] = nil
+    end
 end
+NormalizeCastbarWidthSourceKey("castbarPlayerMatchWidth", "castbarPlayerMatchUnitWidth")
+NormalizeCastbarWidthSourceKey("castbarTargetMatchWidth", "castbarTargetMatchUnitWidth")
+NormalizeCastbarWidthSourceKey("castbarFocusMatchWidth", "castbarFocusMatchUnitWidth")
+NormalizeCastbarWidthSourceKey("bossCastbarMatchWidth", "castbarBossMatchUnitWidth", "castbarBossMatchWidth")
 -- Interrupt Ready Indicator
 if g.kickReadyShowTarget == nil then g.kickReadyShowTarget = false end
 if g.kickReadyShowFocus  == nil then g.kickReadyShowFocus  = false end
@@ -952,6 +1114,23 @@ end
 	        -- 1 = Left Absorb, Right Heal-Absorb; 2 = Right Absorb, Left Heal-Absorb (default); 3 = Follow current HP edge (Blizzard-style)
         g.absorbAnchorMode = 2
     end
+
+    -- v2 absorb-colour cleanup. Pre-v2 the picker in MSUF_ColorsCore wrote to
+    -- absorbColor* / healAbsorbColor*, but every reader (UF, GF, Reset) used
+    -- the absorbBarColor* / healAbsorbBarColor* keys — so the picker had no
+    -- visible effect. The v1 patch tried to migrate by copying old → new,
+    -- which surfaced picker-default white into now-live keys and made
+    -- absorbs blend into the HP bar. v2 wipes both key sets once, so the
+    -- defaults render again until the user explicitly picks a colour via
+    -- the (now functional) picker. The marker keeps this idempotent and
+    -- preserves any choices made AFTER the marker is set.
+    if g.absorbBarColorMigrationV2 ~= true then
+        g.absorbBarColorMigrationV2 = true
+        g.absorbColorR,        g.absorbColorG,        g.absorbColorB,        g.absorbColorA        = nil, nil, nil, nil
+        g.healAbsorbColorR,    g.healAbsorbColorG,    g.healAbsorbColorB,    g.healAbsorbColorA    = nil, nil, nil, nil
+        g.absorbBarColorR,     g.absorbBarColorG,     g.absorbBarColorB,     g.absorbBarColorA     = nil, nil, nil, nil
+        g.healAbsorbBarColorR, g.healAbsorbBarColorG, g.healAbsorbBarColorB, g.healAbsorbBarColorA = nil, nil, nil, nil
+    end
     if g.showLeaderIcon == nil then
         g.showLeaderIcon = true
     end
@@ -960,6 +1139,9 @@ end
     end
     if g.leaderIconOffsetY == nil then
         g.leaderIconOffsetY = 3
+    end
+    if g.leaderIconLayer == nil then
+        g.leaderIconLayer = 7
     end
     -- Level indicator offset (global)
     if g.levelIndicatorOffsetX == nil then
@@ -971,6 +1153,9 @@ end
     if g.levelIndicatorAnchor == nil then
         g.levelIndicatorAnchor = 'NAMERIGHT'
     end
+    if g.levelIndicatorLayer == nil then
+        g.levelIndicatorLayer = 7
+    end
     -- Misc -> Indicators
     if g.showIncomingResIndicator == nil then
         g.showIncomingResIndicator = true
@@ -978,11 +1163,17 @@ end
     if g.incomingResIndicatorPos == nil then
         g.incomingResIndicatorPos = 'TOPRIGHT'
     end
+    if g.incomingResIndicatorLayer == nil then
+        g.incomingResIndicatorLayer = 7
+    end
     if g.showCombatStateIndicator == nil then
         g.showCombatStateIndicator = true
     end
     if g.combatStateIndicatorPos == nil then
         g.combatStateIndicatorPos = 'TOPLEFT'
+    end
+    if g.combatStateIndicatorLayer == nil then
+        g.combatStateIndicatorLayer = 7
     end
     -- Status Icons (Summon / Resting)
     -- These are used by the Unitframe Status element (player/target) and can be overridden per-unit in the Frames menu.
@@ -1007,6 +1198,9 @@ end
 	if g.restedStateIndicatorSize == nil or type(g.restedStateIndicatorSize) ~= "number" or g.restedStateIndicatorSize <= 0 then
 		g.restedStateIndicatorSize = 30
 	end
+    if g.restedStateIndicatorLayer == nil then
+        g.restedStateIndicatorLayer = 7
+    end
     if g.stateIconsTestMode == nil then
         g.stateIconsTestMode = false
     end
@@ -1064,6 +1258,18 @@ for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
         end
     end
     if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
+    if conf.raidMarkerLayer == nil then conf.raidMarkerLayer = 7 end
+end
+-- Elite / Rare icon defaults (per-unit)
+for _, key in ipairs({"target","focus","targettarget","boss"}) do
+    MSUF_DB[key] = MSUF_DB[key] or {}
+    local u = MSUF_DB[key]
+    if u.showEliteIcon    == nil then u.showEliteIcon    = true       end
+    if u.eliteIconSize    == nil then u.eliteIconSize    = 20         end
+    if u.eliteIconAnchor  == nil then u.eliteIconAnchor  = "TOPRIGHT" end
+    if u.eliteIconOffsetX == nil then u.eliteIconOffsetX = 2          end
+    if u.eliteIconOffsetY == nil then u.eliteIconOffsetY = 2          end
+    if u.eliteIconLayer   == nil then u.eliteIconLayer   = 7          end
 end
 if MSUF_DB.bars == nil then
         MSUF_DB.bars = {}
@@ -1088,6 +1294,9 @@ if MSUF_DB.bars == nil then
     end
     if MSUF_DB.bars.smoothPowerBar == nil then
         MSUF_DB.bars.smoothPowerBar = true
+    end
+    if MSUF_DB.bars.classPowerComboPointColorMode == nil then
+        MSUF_DB.bars.classPowerComboPointColorMode = "default"
     end
     if MSUF_DB.bars.realtimePowerText == nil then
         MSUF_DB.bars.realtimePowerText = true
@@ -1167,6 +1376,10 @@ end
             showTarget = true,
             showFocus = true,
             showBoss = true,
+            bossHealAuras = {
+                highlightOwn = false,
+                hideOthers = false,
+            },
             shared = {
                 _msufA2_migrated_v11f = true,
                 bossEditTogether = true,
@@ -1344,8 +1557,12 @@ filters = {
     -- Split toggles: Buffs + Debuffs have their own IMPORTANT toggle (like Unhalted).
     if MSUF_DB and MSUF_DB.auras2 then
         local a2 = MSUF_DB.auras2
+        if type(a2.bossHealAuras) ~= "table" then a2.bossHealAuras = {} end
+        if a2.bossHealAuras.highlightOwn == nil then a2.bossHealAuras.highlightOwn = false end
+        if a2.bossHealAuras.hideOthers == nil then a2.bossHealAuras.hideOthers = false end
+
         local function EnsureImportantSplit(f)
-            if type(f) ~= "table" then return end
+            if not f then return end
             f.buffs = (type(f.buffs) == "table") and f.buffs or {}
             f.debuffs = (type(f.debuffs) == "table") and f.debuffs or {}
             local b, d = f.buffs, f.debuffs
@@ -1509,7 +1726,7 @@ local function fill(key, defaults)
         offsetY      = 309,
         spacing      = -96,
         -- Layout mode: "VERTICAL_DOWN" | "VERTICAL_UP" | "HORIZONTAL_RIGHT" | "HORIZONTAL_LEFT"
-        -- Replaces the legacy invertBossOrder checkbox. invertBossOrder kept for migration only.
+        -- Kept invertBossOrder for one-shot migration (see below).
         bossLayoutMode = "VERTICAL_DOWN",
         invertBossOrder = false,
         showName     = true,
@@ -1521,34 +1738,76 @@ local function fill(key, defaults)
         -- Per-unitframe: reverse fill direction for HP + Power bars.
         reverseFillBars = false,
     })
+    for k, v in pairs(textDefaults) do
+        if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
+    end
     -- One-shot migration: old invertBossOrder checkbox → new bossLayoutMode dropdown.
-    -- Runs once per install; converts legacy saved setting into the new mode value.
-    if MSUF_DB.boss and MSUF_DB.boss._bossLayoutMigrated ~= true then
-        if MSUF_DB.boss.invertBossOrder == true and
-           (MSUF_DB.boss.bossLayoutMode == nil or MSUF_DB.boss.bossLayoutMode == "VERTICAL_DOWN") then
+    -- Runs once on first login with v4.0 Beta 5+; converts legacy saved setting.
+    if MSUF_DB.boss._bossLayoutMigrated ~= true then
+        if MSUF_DB.boss.invertBossOrder == true then
             MSUF_DB.boss.bossLayoutMode = "VERTICAL_UP"
         end
         MSUF_DB.boss._bossLayoutMigrated = true
     end
-    for k, v in pairs(textDefaults) do
-        if MSUF_DB.boss[k] == nil then MSUF_DB.boss[k] = v end
-    end
     -- Range fade: also fade castbar / auras when boss is out of range (off by default).
     if MSUF_DB.boss.rangeFadeCastbar == nil then MSUF_DB.boss.rangeFadeCastbar = false end
     if MSUF_DB.boss.rangeFadeAuras   == nil then MSUF_DB.boss.rangeFadeAuras   = false end
+    do
+        local bars = MSUF_DB.bars or {}
+        local showKeys = {
+            player = "showPlayerPowerBar",
+            target = "showTargetPowerBar",
+            focus  = "showFocusPowerBar",
+            boss   = "showBossPowerBar",
+        }
+        for _, unitKey in ipairs({"player", "target", "focus", "boss"}) do
+            MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+            local u = MSUF_DB[unitKey]
+            local legacyShowKey = showKeys[unitKey]
+            if u.showPowerBar == nil then
+                local legacyShow = legacyShowKey and bars[legacyShowKey]
+                u.showPowerBar = (legacyShow ~= false)
+            end
+            if u.powerBarHeight == nil then
+                u.powerBarHeight = tonumber(bars.powerBarHeight) or 3
+            end
+            if u.embedPowerBarIntoHealth == nil then
+                u.embedPowerBarIntoHealth = (bars.embedPowerBarIntoHealth == true)
+            end
+            if u.powerBarBorderEnabled == nil then
+                u.powerBarBorderEnabled = (bars.powerBarBorderEnabled == true)
+            end
+            if u.powerBarBorderThickness == nil then
+                u.powerBarBorderThickness = tonumber(bars.powerBarBorderThickness or bars.powerBarBorderSize) or 1
+            end
+            if u.powerSmoothFill == nil then
+                u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar ~= false) or false
+            end
+        end
+    end
     for _, unitKey in ipairs({"player", "target", "targettarget", "focus", "pet", "boss"}) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
         local u = MSUF_DB[unitKey]
         if u.enabled == nil then
             u.enabled = true
         end
+        -- Per-unitframe: smooth health fill animation (matches Group Frames default).
+        if u.smoothFill == nil then
+            u.smoothFill = true
+        end
         -- Default missing alpha keys to 1 (100%) without overwriting user customizations.
         if u.alphaInCombat == nil then u.alphaInCombat = 1 end
         if u.alphaOutOfCombat == nil then u.alphaOutOfCombat = 1 end
+        if u.alphaSync == nil then u.alphaSync = false end
+        if u.alphaExcludeTextPortrait == nil then u.alphaExcludeTextPortrait = false end
+        if u.alphaLayerMode == nil then u.alphaLayerMode = 0 end
         if u.alphaFGInCombat == nil then u.alphaFGInCombat = 1 end
         if u.alphaFGOutOfCombat == nil then u.alphaFGOutOfCombat = 1 end
         if u.alphaBGInCombat == nil then u.alphaBGInCombat = 1 end
         if u.alphaBGOutOfCombat == nil then u.alphaBGOutOfCombat = 1 end
+        if u.alphaHPInCombat == nil then u.alphaHPInCombat = 1 end
+        if u.alphaHPOutOfCombat == nil then u.alphaHPOutOfCombat = 1 end
+        if u.alphaPreserveHPColor == nil then u.alphaPreserveHPColor = false end
         -- Portrait Decoration defaults (MSUF_PortraitDecoration.lua)
         -- portraitRender: inherit from general._portraitSharedRender if not set (shared/per-unit sync)
         if u.portraitRender == nil then
@@ -1574,6 +1833,22 @@ local function fill(key, defaults)
         if u.portraitBgColorA == nil then u.portraitBgColorA = (g.portraitBgColorA) or 0.85 end
         if u.portraitFillBorder == nil then u.portraitFillBorder = g.portraitFillBorder or false end
     end
+    for _, key in ipairs({
+        "general",
+        "player", "target", "targettarget", "focus", "pet", "boss",
+        "gf_party", "gf_raid", "gf_mythicraid",
+    }) do
+        MSUF_Defaults_NormalizeFontField(MSUF_DB[key])
+    end
+    if g._msufUFLocalFontKeyMigration_v407 ~= true then
+        for _, key in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss" }) do
+            local u = MSUF_DB[key]
+            if type(u) == "table" then
+                u.fontKey = nil
+            end
+        end
+        g._msufUFLocalFontKeyMigration_v407 = true
+    end
     MSUF_DB_LastHeavyRun = MSUF_DB
  end
 function EnsureDB()
@@ -1583,5 +1858,7 @@ function EnsureDB()
     MSUF_EnsureDB_Heavy()
  end
 -- Optional exports for other modules
+ns.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile
 ns.MSUF_EnsureDB_Heavy = MSUF_EnsureDB_Heavy
 ns.EnsureDB = EnsureDB
+_G.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile

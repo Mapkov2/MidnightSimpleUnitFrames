@@ -8,9 +8,7 @@ local _, ns = ...
 -- are not visible as bare globals. Castbar visuals depend on MSUF_GetGlobalFontSettings.
 -- Resolve it once (prefer local env -> root global), and provide a safe fallback.
 local ROOT_G = (getfenv and getfenv(0)) or _G
-local ResolveFontPath = (ns and ns.Util and ns.Util.ResolveFontPath) or (ROOT_G and ROOT_G.MSUF_ResolveFontPath) or _G.MSUF_ResolveFontPath or function(path)
-    return path or "Fonts\\FRIZQT__.TTF"
-end
+local ResolveFontPath = (ROOT_G and ROOT_G.MSUF_ResolveFontPath) or _G.MSUF_ResolveFontPath or function(path) return path end
 
 local MSUF_GetGlobalFontSettings_Resolved = MSUF_GetGlobalFontSettings or (ROOT_G and ROOT_G.MSUF_GetGlobalFontSettings)
 if type(MSUF_GetGlobalFontSettings_Resolved) ~= "function" then
@@ -34,10 +32,29 @@ if type(MSUF_GetGlobalFontSettings_Resolved) ~= "function" then
         local fontPath = DEFAULT_FONT
         local lsm = (ns and ns.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
         local fontKey = g and (g.fontKey or g.font)
-        if fontKey and fontKey ~= "" and lsm and lsm.Fetch then
-            local p = lsm:Fetch("font", fontKey, true)
+        if fontKey and fontKey ~= "" and type(_G.MSUF_FetchFontPathFromLSM) == "function" then
+            local p = _G.MSUF_FetchFontPathFromLSM(fontKey)
             if p and p ~= "" then
-                fontPath = p
+                fontPath = ResolveFontPath(p, baseSize, fontFlags)
+            end
+        elseif fontKey and fontKey ~= "" and lsm then
+            local lsmKey = (fontKey == "FRIZQT" and "Friz Quadrata TT")
+                or (fontKey == "ARIALN" and "Arial Narrow")
+                or (fontKey == "MORPHEUS" and "Morpheus")
+                or (fontKey == "SKURRI" and "Skurri")
+                or (fontKey == "Friz Quadrata (default)" and "Friz Quadrata TT")
+                or (fontKey == "Arial (default)" and "Arial Narrow")
+                or (fontKey == "Morpheus (default)" and "Morpheus")
+                or (fontKey == "Skurri (default)" and "Skurri")
+                or fontKey
+            local raw = _G.MSUF_GetRawLSMFontPath
+            local p = type(raw) == "function" and (raw(lsm, lsmKey) or raw(lsm, fontKey)) or nil
+            if not p and type(lsm.HashTable) == "function" then
+                local fonts = lsm:HashTable("font")
+                p = fonts and (fonts[lsmKey] or fonts[fontKey])
+            end
+            if p and p ~= "" then
+                fontPath = ResolveFontPath(p, baseSize, fontFlags)
             end
         end
 
@@ -52,7 +69,6 @@ if type(MSUF_GetGlobalFontSettings_Resolved) ~= "function" then
             end
         end
 
-        fontPath = ResolveFontPath(fontPath, baseSize, fontFlags)
         return fontPath, fontFlags, fr, fg, fb, baseSize, useShadow
     end
 end
@@ -173,6 +189,11 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
     if not frame or not frame.statusBar then return end
     if not g then return end
 
+    if unitKey == "player" and type(_G.MSUF_ApplyPlayerCastbarIconLayout) == "function" then
+        _G.MSUF_ApplyPlayerCastbarIconLayout(frame, g, -1, 1)
+        return
+    end
+
     local showIcon = (g.castbarShowIcon ~= false)
     if frame and frame._msufIsPreview then
         -- In Edit Mode previews we ALWAYS show an icon for positioning (even if disabled in settings).
@@ -180,6 +201,7 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
     end
     local iconOX = tonumber(g.castbarIconOffsetX) or 0
     local iconOY = tonumber(g.castbarIconOffsetY) or 0
+    local iconSize = tonumber(g.castbarIconSize)
 
     if unitKey == "boss" then
         if g.showBossCastIcon ~= nil then
@@ -187,6 +209,7 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
         end
         iconOX = tonumber(g.bossCastIconOffsetX) or iconOX
         iconOY = tonumber(g.bossCastIconOffsetY) or iconOY
+        iconSize = tonumber(g.bossCastIconSize) or iconSize
     else
         local prefix = (unitKey == "player" and "castbarPlayer") or (unitKey == "target" and "castbarTarget") or (unitKey == "focus" and "castbarFocus") or nil
         if prefix then
@@ -199,6 +222,7 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
             if g[prefix .. "IconOffsetY"] ~= nil then
                 iconOY = tonumber(g[prefix .. "IconOffsetY"]) or iconOY
             end
+            iconSize = tonumber(g[prefix .. "IconSize"]) or iconSize
         end
     end
 
@@ -211,7 +235,9 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
     if height <= 0 then height = 18 end
 
     local iconDetached = (iconOX ~= 0 or iconOY ~= 0)
-    local iconSize = height
+    iconSize = tonumber(iconSize) or height
+    if iconSize < 6 then iconSize = 6 end
+    if iconSize > 128 then iconSize = 128 end
 
     if icon then
         if frame and frame._msufIsPreview and icon.SetTexture then

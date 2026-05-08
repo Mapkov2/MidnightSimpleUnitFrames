@@ -18,6 +18,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
     local function Skin(btn)
         if SkinBtn then SkinBtn(btn, { textR = 1, textG = 0.85, textB = 0.1 }) end
     end
+    local WAGO_PROFILES_URL = "https://wago.io/search/imports/wow/msuf"
 
     ---------------------------------------------------------------------------
     -- StaticPopup dialogs
@@ -30,7 +31,19 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                 MSUF_ResetProfile(data.name)
                 if data.panel.LoadFromDB then data.panel:LoadFromDB() end
                 if data.panel.UpdateProfileUI then data.panel:UpdateProfileUI(data.name) end
+                StaticPopup_Show("MSUF_PROFILE_RESET_RELOAD", data.name)
             end
+        end,
+    }
+    StaticPopupDialogs["MSUF_PROFILE_RESET_RELOAD"] = {
+        text = "Profile '%s' was reset. Reload UI now to fully apply the reset?",
+        button1 = TR("Yes, reload"), button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+        OnAccept = function()
+            if InCombatLockdown and InCombatLockdown() then
+                print("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")
+                return
+            end
+            if type(ReloadUI) == "function" then ReloadUI() end
         end,
     }
     StaticPopupDialogs["MSUF_CONFIRM_DELETE_PROFILE"] = {
@@ -102,7 +115,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
             return type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled()
         end,
         set = function(v)
-            if type(_G.MSUF_SetSpecAutoSwitchEnabled) == "function" then _G.MSUF_SetSpecAutoSwitchEnabled(v) end
+            if _G.MSUF_SetSpecAutoSwitchEnabled then _G.MSUF_SetSpecAutoSwitchEnabled(v) end
         end,
     })
 
@@ -154,7 +167,7 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                     return cur or "None"
                 end,
                 set = function(v)
-                    if type(_G.MSUF_SetSpecProfile) == "function" then
+                    if _G.MSUF_SetSpecProfile then
                         _G.MSUF_SetSpecProfile(s.id, v ~= "None" and v or nil)
                     end
                 end,
@@ -306,12 +319,16 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
                     and (_G.MSUF_ImportLegacyFromString or ns.MSUF_ImportLegacyFromString)
                     or  (_G.MSUF_ImportFromString or ns.MSUF_ImportFromString)
                 if type(Importer) ~= "function" then print("|cffff0000MSUF:|r Import failed: importer missing."); return end
-                Importer(str)
+                local ok = Importer(str)
+                if ok == false then return end
                 if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
-                if type(_G.MSUF_CallUpdateAllFonts) == "function" then _G.MSUF_CallUpdateAllFonts() end
+                if _G.MSUF_CallUpdateAllFonts then _G.MSUF_CallUpdateAllFonts() end
                 if panel.LoadFromDB then panel:LoadFromDB() end
                 if panel.UpdateProfileUI then panel:UpdateProfileUI(MSUF_ActiveProfile) end
                 importPopup:Hide()
+                if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                    _G.MSUF_ShowReloadRecommendedPopup(TR("Profile import"))
+                end
             end
             doBtn:SetScript("OnClick", RunImport)
             importEdit:SetScript("OnEnterPressed", RunImport)
@@ -330,6 +347,20 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
     legacyBtn:ClearAllPoints(); legacyBtn:SetPoint("LEFT", exportBtn, "RIGHT", 8, 0)
     Skin(importBtn); Skin(exportBtn); Skin(legacyBtn)
     legacyBtn:SetScript("OnClick", function() ShowImportPopup("legacy") end)
+
+    local wagoBtn = UI.Button({ parent = profileGroup, text = TR("Browse Wago Profiles"), width = 364, height = 32 })
+    wagoBtn:ClearAllPoints(); wagoBtn:SetPoint("TOPLEFT", importBtn, "BOTTOMLEFT", 0, -10)
+    Skin(wagoBtn)
+    wagoBtn:SetScript("OnClick", function()
+        if type(_G.MSUF_ShowCopyLink) == "function" then
+            _G.MSUF_ShowCopyLink("Wago MSUF Profiles", WAGO_PROFILES_URL)
+        else
+            ShowCopyPopup(WAGO_PROFILES_URL)
+        end
+    end)
+    if type(_G.MSUF_AddTooltip) == "function" then
+        _G.MSUF_AddTooltip(wagoBtn, TR("Wago Profiles"), WAGO_PROFILES_URL)
+    end
 
     ---------------------------------------------------------------------------
     -- Export picker popup
@@ -353,11 +384,13 @@ function ns.MSUF_Options_Profiles_Build(panel, profileGroup, ctx)
             local bCast = makeBtn("Castbars");   bCast:SetPoint("LEFT", bUnit, "RIGHT", 8, 0)
             local bCol  = makeBtn("Colors");     bCol:SetPoint("LEFT", bCast, "RIGHT", 8, 0)
             local bGame = makeBtn("Gameplay");   bGame:SetPoint("TOPLEFT", bUnit, "TOPLEFT", 0, 26)
-            local bAll  = makeBtn("Everything"); bAll:SetPoint("LEFT", bGame, "RIGHT", 8, 0)
+            local bGroup = makeBtn("Group Frames"); bGroup:SetPoint("LEFT", bGame, "RIGHT", 8, 0)
+            local bAll  = makeBtn("Everything"); bAll:SetPoint("LEFT", bGroup, "RIGHT", 8, 0)
             bUnit:SetScript("OnClick", function() doExport("unitframe") end)
             bCast:SetScript("OnClick", function() doExport("castbar") end)
             bCol:SetScript("OnClick",  function() doExport("colors") end)
             bGame:SetScript("OnClick", function() doExport("gameplay") end)
+            bGroup:SetScript("OnClick", function() doExport("groupframe") end)
             bAll:SetScript("OnClick",  function() doExport("all") end)
         end
         exportPickerPopup:Show()

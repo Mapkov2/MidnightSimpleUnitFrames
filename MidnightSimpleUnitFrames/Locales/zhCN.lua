@@ -15,12 +15,12 @@ if loc ~= "zhCN" then return end
 
 ns = ns or {}
 ns.LOCALE = loc
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
 end
-if _G then _G.MSUF_L = L end
+_G.MSUF_L = L
 
 -- Add / edit translations below.
 local T = {
@@ -38,7 +38,6 @@ local T = {
     ["OK"] = "确定",
     ["Undo"] = "撤销",
     ["All"] = "全部",
-
 
     ["Override"] = "覆盖",
     ["Overrides"] = "覆盖",
@@ -58,15 +57,11 @@ local T = {
     ["Top to Bottom"] = "从上到下",
     ["Left to Right"] = "从左到右",
 
-
     ["Top Left"] = "左上",
     ["Top Right"] = "右上",
     ["Bottom Left"] = "左下",
     ["Bottom Right"] = "右下",
     ["Hold Shift"]  = "按住Shift",
-
-
-
 
     -- Add more as you go:
     -- ["..."] = "...",
@@ -77,7 +72,7 @@ local T = {
     ["Bigger steps: Hold |cff00ff00SHIFT|r while adjusting sliders to change values faster."]   = "更大的步骤: 调整滑块时按住|cff00ff00SHIFT|r以更快地更改值.",
     ["Fine tuning: Hold |cff00ff00CTRL|r while adjusting sliders for smaller steps."]  = "精细调整: 调整滑块时按住|cff00ff00CTRL|r以进行更小的步骤.",
     ["Quick reset: If something feels off, try |cff00ff00/msuf reset|r (frame positions)."]  = "快速重置: 如果感觉不对,请尝试|cff00ff00/msuf reset|r(框架位置).",
-    ["Factory reset: Use |cff00ff00Menu → Advanced → Factory Reset|r (or /msuf fullreset confirm + /reload)."]  = "重置为默认: 使用|cff00ff00菜单 → 高级 → 重置为默认|r(或/msuf fullreset confirm + /reload).",
+    ["Factory reset: Use |cff00ff00Menu -> Advanced -> Factory Reset|r (or /msuf fullreset confirm + /reload)."]  = "重置为默认: 使用|cff00ff00菜单 -> 高级 -> 重置为默认|r(或/msuf fullreset confirm + /reload).",
     ["Edit Mode: Use |cff00ff00Toggle Edit Mode|r to move frames quickly, then fine-tune with the position popup."]  = "编辑模式: 使用|cff00ff00切换编辑模式|r快速移动框架,然后使用位置弹出窗口进行精细调整.",
     ["Profiles safety: Create a new profile before big experiments — switch back instantly if needed."]  = "配置文件安全: 在进行大型实验之前创建一个新的配置文件——如果需要,可以立即切换回来.",
     ["Colors: The |cff00ff00Colors|r tab lets you customize almost everything (fonts, bars, castbars, highlights)."]  = "颜色: |cff00ff00颜色|r选项卡允许您自定义几乎所有内容(字体,计量条,施法条,高亮显示).",
@@ -89,7 +84,6 @@ local T = {
     ["During development of MSUF Unhalted, R41z0r and other great addon developers helped out!"]  = "在MSUF Unhalted的开发过程中,R41z0r和其他伟大的插件开发人员提供了帮助!",
     ["Danders is a great Party/Raidframe addon and works really well with MSUF"]  = "Danders是一个很棒的团队/团队框架插件,与MSUF配合使用效果非常好",
     ["Community: If you like MSUF, share it with a friend — UI addons grow by word of mouth."]  = "社区: 如果您喜欢MSUF,请与朋友分享——UI插件是通过口碑传播的.",
-
 
     ["Profile: "] = "配置文件: ",
     ["   •   Edit Mode: "] = "   •  编辑模式: ",
@@ -125,11 +119,8 @@ local T = {
     ["Stops enforcing MSUF global scale and restores your previous Blizzard UI scale."] = "停止强制MSUF全局缩放并恢复您以前的暴雪UI缩放.",
     ["Turns off all scaling MSUF applies (global UI scale + MSUF-only scale), then reloads your UI. Blizzard handles scaling."] = "关闭所有MSUF应用的缩放(全局UI缩放 + MSUF-only缩放),然后重新加载您的UI. 暴雪处理缩放.",
 
-
-
     ["Current: ..."] =     "当前: ...",
     ["Current: %.2f (%d%%)"] = "当前: %.2f (%d%%)",
-
 
     ["Reset"] = "重置",
     ["Reset UI Scale"] = "重置UI缩放",
@@ -142,11 +133,6 @@ local T = {
     ["TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only MSUF frames (unitframes + castbars). Range 25%–150% (0.25–1.50). Drag or click to adjust. Applied immediately; in combat it applies after combat."] = "提示: 将鼠标悬停在此滑块上并使用鼠标滚轮以5%的步长更改缩放.\n\n仅MSUF框架(单位框架 + 施法条)的缩放. 范围25%-150%(0.25–1.50). 拖动或点击调整. 立即应用; 在战斗中,它会在战斗后应用.",
     ["MSUF Slash Menu Scale"] = "MSUF菜单缩放",
     ["TIP: Hover this slider and use the Mouse Wheel to change the scale in 5% steps.\n\nScales only the MSUF Slash Menu window. Range 25%–150% (0.25–1.50). Drag or click to adjust. Applied immediately."] = "提示: 将鼠标悬停在此滑块上并使用鼠标滚轮以5%的步长更改缩放.\n\n仅MSUF菜单窗口的缩放. 范围25%-150%(0.25–1.50). 拖动或点击调整. 立即应用.",
-
-
-
-
-
 
     ["Dashboard"] = "控制面板",
     ["Unit Frames"] = "单位框架",
@@ -178,10 +164,11 @@ local T = {
     ["Class Icon Left (players)"] = "职业图标左 (玩家)",
     ["Class Icon Right (players)"] = "职业图标右 (玩家)",
     ["Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target."] = "将这些设置复制到所有单位框架?\n\n这将覆盖玩家/目标/焦点/首领/宠物/目标的目标上的现有设置.",
-    ["Invert boss order"] = "反转首领顺序",
-
-
-
+    ["Boss frame layout"] = "首领框架布局",
+    ["Vertical (top -> bottom)"] = "垂直 (从上到下)",
+    ["Vertical (bottom -> top)"] = "垂直 (从下到上)",
+    ["Horizontal (left -> right)"] = "水平 (从左到右)",
+    ["Horizontal (right -> left)"] = "水平 (从右到左)",
 
     ["Player Alpha"]   = "玩家透明度",
     ["Target Alpha"]    = "目标透明度",
@@ -227,20 +214,6 @@ local T = {
     ["Current custom anchor: "] = "当前自定义锚点:" ,
     ["Current custom anchor: none"] = "当前自定义锚点: 无" ,
 
-
-
-
-
-
-
-
-   
-
-
-
-    
-
-
     ["Castbar"] = "施法条",
     ["Inline Text"] = "内联文本",
     ["Show ToT text in Target frame"] = "在目标框架中显示目标的目标文本",
@@ -265,7 +238,6 @@ local T = {
     ["Resets X/Y, Anchor and Size back to defaults."] = "重置X/Y, 锚点和大小回到默认值.",
     ["Anchor pet to"] = "宠物锚点",
 
-
     ["Boss spacing"] = "首领间距",
 
     ["Status icons"] = "状态图标",
@@ -285,15 +257,11 @@ local T = {
     ["Rez icon"] = "复活图标",
     ["Rested icon"] = "休息图标",
 
-
-
-
     ["Options"] = "选项",
 
     ["Bars"] = "计量条",
     ["Bar scope"]   = "计量条范围",
     ["Configure settings for"]  = "配置设置",
-
 
     ["Bar appearance"] = "计量条外观",
     ["Absorb display"] = "吸收显示",
@@ -450,7 +418,6 @@ local T = {
     ["Shadow, Ret, Ele, Enh, Balance, Feral, WW"]  = "暗影, 恢复, 元素, 增强, 平衡, 野性, 双武器",
     ["Show mana bar (dual resource)"]  = "显示法力条 (双资源)",
 
-
     ["Welcome to Class Resources!\n\n" .. "Would you like to automatically set up a\n" .. "detached Class Bar positioned above your\n" .. "Essential Cooldowns?\n\n" .. "This configures class resources, power bar,\n" .. "anchoring and width matching in one click.\n\n" .. "You can always run this later via the\n" .. "|cff00ff00Quick Setup: Class Bar|r button below."]     = "欢迎使用职业资源!\n\n" .. "是否要自动设置一个分离的\n" .. "职业计量条，定位在重要冷却上方?\n\n" .. "这将一键配置职业资源、能量条、\n" .. "锚定和宽度匹配.\n\n" .. "您可以随时通过下方的\n" .. "|cff00ff00快速设置: 职业计量条|r按钮运行此功能.",
     ["Setup Now"] = "立即设置",
     ["Not Now"] = "稍后再说",
@@ -470,27 +437,6 @@ local T = {
     ["Quick Setup applied!\n\n" .. "Class Power + Power Bar are now\n" .. "positioned above Essential Cooldowns.\n\n" .. "Use Edit Mode for fine-tuning."]  = "快速设置已应用!\n\n" .. "职业资源 + 能量条现已\n" .. "定位于重要冷却上方.\n\n" .. "使用编辑模式进行微调.",
     ["Quick Setup applied!\n\n" .. "Power Bar is positioned above\n" .. "Essential Cooldowns.\n\n" .. "Your spec has no class resource bar.\n" .. "If you respec, it will appear automatically.\n\n" .. "Use Edit Mode for fine-tuning."]   = "快速设置已应用!\n\n" .. "能量条已定位于\n" .. "重要冷却上方.\n\n" .. "您的专精没有职业资源条.\n" .. "如果您切换专精, 它将自动出现.\n\n" .. "使用编辑模式进行微调.",
     ["Quick Setup applied!\n\n" .. "Class Power + Power Bar are detached\n" .. "and positioned at screen center.\n\n" .. "Essential Cooldowns not detected.\n" .. "Enable it for automatic anchoring.\n\n" .. "Use Edit Mode for fine-tuning."]   = "快速设置已应用!\n\n" .. "职业资源 + 能量条被分离并定位在屏幕中心.\n\n" .. "重要冷却未检测到.\n" .. "启用它进行自动锚定.\n\n" .. "使用编辑模式进行微调.",
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
  --------------------------------------   
     ["Fonts"] = "字体",
@@ -574,9 +520,6 @@ local T = {
     ["Editing: |cffffd200"] = "编辑: |cffffd200",
     ["|cffffffffOverrides:|r "] = "|cffffffff覆盖:|r ",
 
-
-
-
     ["Show Buffs"] = "显示Buffs",
     ["Show Debuffs"]   = "显示Debuffs",
     ["Highlight own buffs"] =  "高亮自己的Buffs",
@@ -592,9 +535,6 @@ local T = {
     ["Shows the countdown numbers on aura icons. Disable to hide cooldown numbers (swipe can remain enabled)."] = "在光环图标上显示倒计时数字. 禁用以隐藏冷却数字 (扫过可以保持启用).",
     ["Click-through auras"] = "点击穿透光环",
     ["Makes aura icons click-through so mouse clicks pass to the game world.\n\nWhen 'Show tooltip' is also enabled, hovering still shows aura tooltips.\nWhen 'Show tooltip' is off, icons are fully non-interactive."] = "使光环图标点击穿透, 以便鼠标点击传递到游戏世界.\n\n当同时启用 '显示提示' 时, 悬停仍然会显示光环工具提示.\n当关闭 '显示提示' 时, 图标完全不可交互.",
-
-    
-
 
     ["Show tooltip"] = "显示鼠标提示",
    
@@ -658,10 +598,6 @@ local T = {
     ["0 (Off)"] = "0(关)",
     ["10 min"] = "10分",
 
-
-
-
-
 ------BUFF REMINDERS----------------
     ["Buff Reminders"] = "Buff提醒",
     ["Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover."] = "当缺少Buff或即将过期时, 玩家框架上会显示半透明图标.可通过编辑模式移动器调整其位置.",
@@ -691,15 +627,6 @@ local T = {
     ["MSUF Edit  Player Reminders"]   = "MSUF编辑 玩家提醒",
     ["Reminder Icons"]   = "提醒图标",
     ["Player Reminders"]    = "玩家提醒",
-
-    
-
-
-
-
-
-
-
 
     ["Preview"] = "预览",
     ["Visual only: adds a purple border + corner marker on private aura slots."] = "仅视觉: 在私有光环槽上添加紫色边框 + 角标记.",
@@ -743,7 +670,6 @@ local T = {
     ["Shared (all units)"]  = "共享 (所有单位)",
     ["|cff888888Not available for Boss frames|r"]  = "|cff888888Boss框架不可用|r",
 
-
     ["Raid Buffs"]  = "团队Buff",
     ["Mark of the Wild, Fortitude, Arcane Intellect, Battle Shout, etc."]  = "野性印记, 韧, 奥术智慧, 战斗怒吼等.",
     ["Blessing of the Bronze"]  = "青铜龙的祝福",
@@ -766,16 +692,6 @@ local T = {
     ["Hearthstone, Reincarnation cooldown auras."]    = "炉石, 复活冷却光环.",
     ["Growth:"]  = "增长:",
 
-
-
-
-
-
-
-
-
-
-
     ["Castbar"] = "施法条",
     ["Focus Kick"] = "焦点打断",
     ["Focus Kick Icon"] = "焦点打断图标",
@@ -786,8 +702,6 @@ local T = {
     ["Show on Screen Preview"]  = "显示屏幕预览",
     ["Reset Position"] = "重置位置",
     ["Text Size"]   = "文本大小",
-
-
 
 --------------
     ["Behavior"] = "行为",
@@ -814,7 +728,6 @@ local T = {
     ["Add stage blink (Empowered casts)"] = "添加阶段闪烁 (强化施法)",
     ["Stage blink time (sec)"] = "阶段闪烁时间 (秒)",
     ["Use opposite fill direction for target"] = "目标使用相反填充方向",
-
 
     ["Miscellaneous"] = "杂项",
     ["Updates"] = "更新",
@@ -850,8 +763,6 @@ local T = {
     ["Show welcome message on login"]   = "登录时显示欢迎消息",
     ["Enable version check (peer-to-peer)"] = "启用版本检查 (点对点)",
 
-
-
     ["Colors"] = "颜色",
     ["Midnight Simple Unit Frames - Colors"] = "Midnight Simple Unit Frames - 颜色",
     ["Configure global colors such as the global font color, per-class bar colors, and NPC reaction colors."] = "配置全局颜色, 如全局字体颜色, 每个职业条颜色和NPC反应颜色.",
@@ -876,7 +787,6 @@ local T = {
     ["Custom color in Dark Mode"] = "暗黑模式自定义颜色",
     ["Bar Colors"]  = "计量条颜色"    ,
 
-
     ["Extra Color Options"] = "额外颜色选项",
     ["Friendly NPC Color"] = "友好NPC颜色",
     ["Neutral NPC Color"] = "中立NPC颜色",
@@ -890,9 +800,6 @@ local T = {
     ["Aggro Border Color"] = "仇恨边框颜色",
     ["Dispel Border Color"] = "驱散边框颜色",
     ["Purge Border Color"] = "净化边框颜色",
-
-
-
 
     ["Absorb Bar Color"] = "吸收条颜色",
     ["Heal-Absorb Bar Color"] = "治疗吸收条颜色",
@@ -928,7 +835,6 @@ local T = {
     ["Crosshair in-range color"] = "十字准星范围内颜色",
     ["Turned Off in Gameplay"] = "在游戏性中关闭",
     ["Crosshair out-of-range color"] = "十字准星范围外颜色",
-    ["Totem tracker text color"] = "图腾追踪器文本颜色",
     ["Turned Off in Gameplay"] = "在游戏性中关闭",
 
     ["Power bar colors"] = "能量条颜色",
@@ -952,8 +858,6 @@ local T = {
     ["Pain"] =    "痛苦",
     ["Essence"] =    "精华",
 
-
-
     ["Class Power colors"] = "职业能量颜色",
     ["Configure colors for secondary resource bars: Combo Points, Holy Power, Soul Shards, Chi, Runes, Arcane Charges, Essence, Soul Fragments (DH), Maelstrom (Enh/Ele), Stagger (BrM), Insanity (Shadow), Whirlwind (Fury), Tip of the Spear (SV), Ebon Might (Aug), Eclipse + Prediction (Balance)."] = "配置次要资源条的颜色: 连击点, 神圣能量, 灵魂碎片, 真气, 符文, 奥术充能, 精华, 灵魂残片 (DH), 漩涡值 (增强/元素), 醉拳 (酒仙), 狂乱值 (暗影), 激怒值 (狂暴), 利矛之刃 (生存), 黑檀之力 (增辉), 日月之蚀 + 预测 (平衡).",
 
@@ -971,7 +875,6 @@ local T = {
     ["Maelstrom Weapon \124cFFFF8000(5+ Spender Ready)\124r"] = "漩涡武器 \124cFFFF80005+ 消耗就绪\124r",
     ["Astral Power (Balance)"] = "星界能量 (平衡)",
     
-
     ["Astral Power \124cFF7799CC(Prediction Overlay)\124r"] = "星界能量 \124cFF7799CC预测叠加层\124r",
     ["Eclipse \124cFFD18F3F(Solar)\124r"]   = "日月之蚀 \124cFFD18F3F日蚀\124r",
     ["Eclipse \124cFF697ED1(Lunar)\124r"] = "日月之蚀 \124cFF697ED1月蚀\124r",
@@ -1025,30 +928,10 @@ local T = {
     ["Style"]   = "样式",
     ["Thickness"]   = "粗细",
     
-
-
-
-
-
-
-
-
     ["Shape & Size"] = "形状与大小",
     ["Shape"] = "形状",
     ["Offset X"] = "X偏移",
     ["Offset Y"] = "Y偏移",
-
-
-
-
-
-
-
-
-
-
-
-
 
 ---------Gameplay------    
 
@@ -1061,11 +944,6 @@ local T = {
     ["Timer size"] = "计时器大小",
     ["Lock position"] = "锁定位置",
 
-
-
-
-
-    
     ["Combat Enter/Leave"] = "战斗进入/离开",
     ["Show combat enter/leave text"] = "显示战斗进入/离开文本",
     ["Enter text"] = "进入战斗文本",
@@ -1076,13 +954,7 @@ local T = {
     ["Short"] = "短",
     ["Long"] = "长",
 
-
-
     ["Class-specific toggles"] = "职业特定切换",
-    ["Shaman: Totem tracker"] = "萨满: 图腾追踪器",
-    ["Player-only. Secret-safe in combat."] = "仅限玩家. 战斗中安全.",
-    ["Note: Right-click to dismiss totems is protected by Blizzard (secure) and not supported yet."] = "注意: 右键点击以取消图腾受暴雪 (安全) 保护, 暂不支持.",
-    ["Enable Totem tracker"] = "启用图腾追踪器",
     ["Stop preview"] = "停止预览",
     ["Preview"] = "预览",
     ["Show cooldown text"] = "显示冷却文本",
@@ -1113,8 +985,6 @@ local T = {
     ["Each class keeps its own melee range spell.\nAllows one profile across multiple characters."] = "每个职业保留自己的近战范围法术.\n允许跨多个角色使用一个配置文件.",
     ["Each specialization keeps its own melee range spell.\nRequires 'Store per class' to be enabled."] = "每个专精保留自己的近战范围法术.\n需要启用'按职业存储'.",
 
-   
-
     ["Keeps per character settings."] = "保存每个角色的设置.",
     
     ["Selected: (none)"]   = "已选择: (无)",
@@ -1122,13 +992,9 @@ local T = {
     ["Timer position (offset)"] = "计时器位置 (偏移)",
     ["Click-through (ALT to drag when unlocked)"]   = "点击穿透 (解锁时ALT拖动)",
 
-
-    ["Reset Totem tracker layout"] = "重置图腾追踪器布局",
-    ["(Totem tracker is Shaman-only)"] = "(图腾追踪器仅限萨满)",
     ["Rogue: First Dance tracker"] = "潜行者: 第一支舞追踪器",
     ["Optional helper. Shows a 6s timer after leaving combat."] = "可选助手. 在离开战斗后显示6秒计时器.",
     ["Track 'The First Dance' (6s after leaving combat)"] = "追踪'第一支舞'(离开战斗后6秒)",
-
 
     ["Combat crosshair"] = "战斗十字准星",
     ["Show green combat crosshair under player (in combat)"] = "战斗中在玩家脚下显示绿色战斗准星定位玩家位置",
@@ -1144,8 +1010,6 @@ local T = {
     ["-Combat"] = "离开战斗",
     ["None"] = "无",
 
-
-    
     ["Party Interrupt Tracker"] = "小队打断追踪器",
     ["Party Interrupt Tracker\n\nThis is a BEST-GUESS tracker:\n• Detects PARTY interrupts via UNIT_SPELLCAST_SUCCEEDED.\n• Cooldowns are estimated from a static table (talents/resets may differ).\n• Some abilities/modifiers cannot be inspected reliably in 12.0.\n\nIf other party members also use MSUF, kicks are synced via addon messages to improve reliability.\n\nMythic+ only (party). Disabled in raid/open world."] = "小队打断追踪器\n\n这是一个最佳猜测追踪器:\n• 通过UNIT_SPELLCAST_SUCCEEDED检测小队打断.\n• 冷却时间从静态表估计 (天赋/重置可能不同).\n• 在12.0中, 一些能力/修饰符无法可靠地检查.\n\n如果其他小队成员也使用MSUF, 打断通过插件消息同步以提高可靠性.\n\n仅限大秘境(小队). 团队/开放世界禁用.",
     ["Enable party interrupt tracker"] = "启用小队打断追踪器",
@@ -1156,9 +1020,6 @@ local T = {
     ["Background alpha"] = "背景透明度",
     ["Row spacing"] = "行间距",
 
-
-
-
     ["Modules"] = "模块",
     ["Optional MSUF modules and UI styling (MSUF only)."] = "可选MSUF模块和UI样式 (仅限MSUF).",
     ["Style"] = "风格",
@@ -1166,7 +1027,6 @@ local T = {
     ["Disabling may require /reload to fully remove existing styling."] = "禁用可能需要/reload以完全移除现有样式.",
     ["Rounded unitframes"] = "圆角单位框架",
     ["Round MSUF unitframes by masking HP/Power/Absorb bars and backgrounds with the superellipse mask."] = "使用超级椭圆遮罩来遮罩HP/能量/吸收条和背景, 使MSUF单位框架圆角化.",
-
 
     ["Profiles"] = "配置文件",
     ["Reset profile"] = "重置配置文件",
@@ -1184,7 +1044,6 @@ local T = {
     ["Import"] = "导入",
     ["Export"] = "导出",
     ["Legacy Import"] = "旧版导入",
-
 
 ---------EditMode------,
 
@@ -1216,9 +1075,6 @@ local T = {
     ["Undo last change"] =    "撤销上次更改",
     ["Redo >"] =    "重做 >",
     ["Redo last undone change"] =    "重做上次撤销的更改",
-
-
-
 
 -----------popup----------,
     ["MSUF Edit"]   = "MSUF 编辑",
@@ -1307,9 +1163,6 @@ local T = {
     ["Attaches the detached power bar to the Class Power bar.\n\nMoving the Class Power bar also moves the power bar.\nYou can still adjust X/Y offsets relative to the resource bar."]  = "将分离的能量条锚定到职业能量条.\n\n移动职业能量条也会移动能量条.\n您仍可调整相对于资源条的X/Y偏移.",
     ["Power text on bar"]   = "能量条文本",
     ["Moves the power text from the unit frame onto the detached power bar.\n\nText offset X/Y still works relative to the power bar."]  = "将能量条文本从单位框架移动到分离的能量条.\n\n文本偏移X/Y仍相对于能量条工作.",
-
-
-
 
     ["Copy size settings to..."] = "复制大小设置到...",
     ["Copy text settings to..."] = "复制文本设置到...",
