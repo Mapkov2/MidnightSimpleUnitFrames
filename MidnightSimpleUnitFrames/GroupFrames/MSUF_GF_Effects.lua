@@ -1199,6 +1199,19 @@ local function _GF_ApplyFrameAlpha(f, kind, conf)
     end
 end
 
+local function _GF_IsSelfUnit(unit)
+    if unit == "player" then return true end
+    if not (unit and UnitIsUnit) then return false end
+    local secrets = _G.C_Secrets
+    local shouldBeSecret = secrets and secrets.ShouldUnitComparisonBeSecret
+    if shouldBeSecret and shouldBeSecret(unit, "player") then return false end
+    local canCompare = secrets and secrets.CanCompareUnitTokens
+    if canCompare and canCompare(unit, "player") == false then return false end
+    local isSelf = UnitIsUnit(unit, "player")
+    if issecretvalue and issecretvalue(isSelf) then return false end
+    return isSelf and true or false
+end
+
 local function _ClearHealthRangeFade(f, kind)
     if not f then return end
     if f._msufGFHealthAlphaDynamic or f._msufGFHealthAlphaMul or type(f._msufGFHealthAlphaBool) ~= "nil" then
@@ -1263,8 +1276,7 @@ local function ApplyRangeFade(f, unit, inRange)
     local fadeAlpha = (c and c.rfAlpha) or (conf and conf.rangeFadeAlpha) or 0.4
     local hpMode = ((c and c.rfLayerMode) or (conf and _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)) or "frame") == "health"
 
-    local isSelf = UnitIsUnit and UnitIsUnit(unit, "player")
-    if not (issecretvalue and issecretvalue(isSelf)) and isSelf then
+    if _GF_IsSelfUnit(unit) then
         f._msufGFRangeFadeApplied = true
         f._msufGFRangeFadeLastBool = true
         _ClearHealthRangeFade(f, kind)
