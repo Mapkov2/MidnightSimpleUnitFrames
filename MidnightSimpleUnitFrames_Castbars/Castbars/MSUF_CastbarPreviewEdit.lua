@@ -309,7 +309,20 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
                 local newW = math.max(50, (self.dragStartWidth  or 250) + dx)
                 local newH = math.max(8,  (self.dragStartHeight or 18) + dy)
 
-                g2[cfg.widthKey]  = math.floor(newW + 0.5)
+                local lockWidth = false
+                local widthSourceKey = _G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey(kind)
+                if widthSourceKey then
+                    local normWidthSource = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
+                    local rawWidthSource = g2[widthSourceKey]
+                    if type(normWidthSource) == "function" then
+                        lockWidth = normWidthSource(rawWidthSource) ~= nil
+                    elseif rawWidthSource == "unitframe" or rawWidthSource == "essential" or rawWidthSource == "utility" then
+                        lockWidth = true
+                    end
+                end
+                if not lockWidth then
+                    g2[cfg.widthKey] = math.floor(newW + 0.5)
+                end
                 g2[cfg.heightKey] = math.floor(newH + 0.5)
 
                 if kind == "boss" then
@@ -326,6 +339,10 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
                         MSUF_SyncCastbarPositionPopup("boss")
                     end
                 else
+                    local rf = cfg.reanchorFunc and _G[cfg.reanchorFunc]
+                    if type(rf) == "function" then
+                        rf()
+                    end
                     if type(MSUF_UpdateCastbarVisuals) == "function" then
                         MSUF_UpdateCastbarVisuals()
                     end

@@ -189,6 +189,11 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
     if not frame or not frame.statusBar then return end
     if not g then return end
 
+    if unitKey == "player" and type(_G.MSUF_ApplyPlayerCastbarIconLayout) == "function" then
+        _G.MSUF_ApplyPlayerCastbarIconLayout(frame, g, -1, 1)
+        return
+    end
+
     local showIcon = (g.castbarShowIcon ~= false)
     if frame and frame._msufIsPreview then
         -- In Edit Mode previews we ALWAYS show an icon for positioning (even if disabled in settings).
@@ -196,6 +201,7 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
     end
     local iconOX = tonumber(g.castbarIconOffsetX) or 0
     local iconOY = tonumber(g.castbarIconOffsetY) or 0
+    local iconSize = tonumber(g.castbarIconSize)
 
     if unitKey == "boss" then
         if g.showBossCastIcon ~= nil then
@@ -203,6 +209,7 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
         end
         iconOX = tonumber(g.bossCastIconOffsetX) or iconOX
         iconOY = tonumber(g.bossCastIconOffsetY) or iconOY
+        iconSize = tonumber(g.bossCastIconSize) or iconSize
     else
         local prefix = (unitKey == "player" and "castbarPlayer") or (unitKey == "target" and "castbarTarget") or (unitKey == "focus" and "castbarFocus") or nil
         if prefix then
@@ -215,6 +222,7 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
             if g[prefix .. "IconOffsetY"] ~= nil then
                 iconOY = tonumber(g[prefix .. "IconOffsetY"]) or iconOY
             end
+            iconSize = tonumber(g[prefix .. "IconSize"]) or iconSize
         end
     end
 
@@ -227,7 +235,9 @@ local function ApplyIconAndBarLayout(frame, unitKey, g)
     if height <= 0 then height = 18 end
 
     local iconDetached = (iconOX ~= 0 or iconOY ~= 0)
-    local iconSize = height
+    iconSize = tonumber(iconSize) or height
+    if iconSize < 6 then iconSize = 6 end
+    if iconSize > 128 then iconSize = 128 end
 
     if icon then
         if frame and frame._msufIsPreview and icon.SetTexture then

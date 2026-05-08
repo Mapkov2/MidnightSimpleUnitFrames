@@ -643,7 +643,12 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
         if wasActive then
             local bf = _G.MSUF_BossCastbarPreview
             if bf and bf.GetWidth and bf.GetHeight then
-                g.bossCastbarWidth  = math.floor((bf:GetWidth()  or (tonumber(g.bossCastbarWidth)  or 240)) + 0.5)
+                local widthSourceKey = _G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey("boss")
+                local normWidthSource = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
+                local activeWidthSource = widthSourceKey and type(normWidthSource) == "function" and normWidthSource(g[widthSourceKey])
+                if not activeWidthSource then
+                    g.bossCastbarWidth  = math.floor((bf:GetWidth()  or (tonumber(g.bossCastbarWidth)  or 240)) + 0.5)
+                end
                 g.bossCastbarHeight = math.floor((bf:GetHeight() or (tonumber(g.bossCastbarHeight) or 18)) + 0.5)
                 bf.isDragging = false
                 if bf.SetScript then
@@ -752,15 +757,25 @@ MSUF_BumpCastbarStyleRevision()
             local gw = tonumber(cfg.castbarGlobalWidth)
             local gh = tonumber(cfg.castbarGlobalHeight)
             unitKey = MSUF_GetCastbarUnitFromFrame(frame)
-            local skipWidth = (unitKey == "player" and cfg.castbarPlayerMatchWidth)
+            local normWidthSource = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
+            local widthSourceKey = _G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey(unitKey)
+            local widthSource = nil
+            if widthSourceKey then
+                local rawWidthSource = cfg[widthSourceKey]
+                if type(normWidthSource) == "function" then
+                    widthSource = normWidthSource(rawWidthSource)
+                elseif rawWidthSource == "unitframe" or rawWidthSource == "essential" or rawWidthSource == "utility" then
+                    widthSource = rawWidthSource
+                end
+            end
+            local skipWidth = (widthSource ~= nil)
             if gw and gw > 0 and not skipWidth then width = gw; frame:SetWidth(width) end
             if gh and gh > 0 then height = gh; frame:SetHeight(gh) end
             prefix = unitKey and MSUF_GetCastbarPrefix(unitKey) or nil
             if prefix then
                 local bw = tonumber(cfg[prefix .. "BarWidth"])
                 local bh = tonumber(cfg[prefix .. "BarHeight"])
-                -- Skip width override for player when CDM width matching is active
-                local skipWidth = (unitKey == "player" and cfg.castbarPlayerMatchWidth)
+                -- Skip width override when an external width source is active.
                 if bw and bw > 0 and not skipWidth then width = bw; frame:SetWidth(width) end
                 if bh and bh > 0 then height = bh; frame:SetHeight(bh) end
             end
