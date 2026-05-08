@@ -201,11 +201,6 @@ builders.LAYOUT = function(E)
             local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
             if ecv and ecv.IsShown and ecv:IsShown() then
                 CP.container:SetPoint("TOP", ecv, "BOTTOM", oX, oY)
-                local lockPos = _G.MSUF_SnapshotFrameToUIParentCenter
-                local isEditing = _G.MSUF_IsLayoutEditingActive
-                if type(lockPos) == "function" and not (type(isEditing) == "function" and isEditing()) then
-                    lockPos(CP.container)
-                end
             else
                 CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
             end
