@@ -1703,12 +1703,12 @@ local globalCur=UI_Text(parent,"GameFontHighlightSmall","TOPLEFT",globalLabel,"B
 
 local btn1080,btn1440,btn4k,btnPixel,btnAuto
 local presetRow=MSUF_BuildButtonRow(parent,globalCur,"TOPLEFT","BOTTOMLEFT",0,-8,{
-{text="1080",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1080",tipBody="Applies the Unhalted-style UI scale preset for 1080p-like setups.",onClick=function()
+{text="1080",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1080",tipBody="Applies the global UI scale preset for 1080p-like setups.",onClick=function()
 MSUF_SaveGlobalPreset("1080p",UI_SCALE_1080)
 MSUF_SetGlobalUiScale(UI_SCALE_1080,true)
 if api.Refresh then api.Refresh() end
 end},
-{text="1440",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1440",tipBody="Applies the Unhalted-style UI scale preset for 1440p-like setups.",onClick=function()
+{text="1440",w=segW,h=segH,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1440",tipBody="Applies the global UI scale preset for 1440p-like setups.",onClick=function()
 MSUF_SaveGlobalPreset("1440p",UI_SCALE_1440)
 MSUF_SetGlobalUiScale(UI_SCALE_1440,true)
 if api.Refresh then api.Refresh() end
@@ -3009,8 +3009,7 @@ profMeta:SetJustifyH("LEFT")
 local scaleCard=CreateCard(colL,"UI Scale",navCard,-10)
 scaleCard:SetPoint("BOTTOMLEFT",colL,"BOTTOMLEFT",0,0)
 scaleCard:SetPoint("BOTTOMRIGHT",colL,"BOTTOMRIGHT",0,0)
-local scaleDesc=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-28,"Unhalted-style global UI scale. MSUF frame and menu scales stay separate.",MSUF_SkinMuted)
-scaleDesc:SetWidth(380)
+local scaleDesc=nil
 local function HideSliderParts(slider)
 local n=(slider and slider.GetName and slider:GetName()) or nil
 local t=(n and _G[n.."Text"]) or (slider and slider.Text)
@@ -3042,8 +3041,8 @@ if type(later)=="function"then pcall(later,slider) end
 end) end
 end
 
-local globalScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-76,"Global UI Scale",MSUF_SkinText)
-local globalScaleStatus=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-93,"Applied: Off",MSUF_SkinMuted)
+local globalScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-36,"Global UI Scale",MSUF_SkinText)
+local globalScaleStatus=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-53,"Applied: Off",MSUF_SkinMuted)
 globalScaleStatus:SetWidth(280)
 local globalScaleSlider=CreateFrame("Slider","MSUF_DashboardGlobalScaleSlider",scaleCard,"OptionsSliderTemplate")
 globalScaleSlider:ClearAllPoints()
@@ -3115,7 +3114,7 @@ scaleCard._msufPendingGlobalEnabled=true
 scaleCard._msufPendingGlobalScale=pct/100
 RefreshGlobalScaleControls()
 end)
-if MSUF_AddTooltip then pcall(MSUF_AddTooltip,globalScaleSlider,"Global UI Scale","Selects the Unhalted-style UIParent scale. Drag or use the mouse wheel, then press Apply. Off stops MSUF enforcing global scale and keeps the current size through Blizzard UI scale.") end
+if MSUF_AddTooltip then pcall(MSUF_AddTooltip,globalScaleSlider,"Global UI Scale","Selects the global UIParent scale. Drag or use the mouse wheel, then press Apply. Off stops MSUF enforcing global scale and keeps the current size through Blizzard UI scale.") end
 local RefreshScaleCard
 local function ApplyDashboardGlobalPreset(preset,scale)
 scaleCard._msufPendingGlobalEnabled=nil
@@ -3124,9 +3123,9 @@ MSUF_SaveGlobalPreset(preset,scale)
 MSUF_SetGlobalUiScale(scale,true)
 RefreshGlobalScaleControls()
 end
-local presetGlobalRow=MSUF_BuildButtonRowTL(scaleCard,12,-136,{{text="1080p",w=64,h=18,gap=6,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1080p",tipBody="Applies the global UI scale preset for 1080p-like setups.",onClick=function() ApplyDashboardGlobalPreset("1080p",UI_SCALE_1080) end},{text="1440p",w=64,h=18,gap=6,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1440p",tipBody="Applies the global UI scale preset for 1440p-like setups.",onClick=function() ApplyDashboardGlobalPreset("1440p",UI_SCALE_1440) end},{text="4K",w=54,h=18,gap=6,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 4K",tipBody="Applies the global UI scale preset for 4K (2160p) setups.",onClick=function() ApplyDashboardGlobalPreset("4k",UI_SCALE_4K) end},{text="Pixel",w=64,h=18,skinFn=MSUF_SkinDashboardButton,tipTitle="Pixel Perfect Scale",tipBody="Applies the pixel perfect UI scale for the current screen height (768 / screen height).",onClick=function() ApplyDashboardGlobalPreset("pixel",MSUF_GetPixelPerfectScale()) end},},6)
+local presetGlobalRow=MSUF_BuildButtonRowTL(scaleCard,12,-96,{{text="1080p",w=64,h=18,gap=6,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1080p",tipBody="Applies the global UI scale preset for 1080p-like setups.",onClick=function() ApplyDashboardGlobalPreset("1080p",UI_SCALE_1080) end},{text="1440p",w=64,h=18,gap=6,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 1440p",tipBody="Applies the global UI scale preset for 1440p-like setups.",onClick=function() ApplyDashboardGlobalPreset("1440p",UI_SCALE_1440) end},{text="4K",w=54,h=18,gap=6,skinFn=MSUF_SkinDashboardButton,tipTitle="Global UI Scale: 4K",tipBody="Applies the global UI scale preset for 4K (2160p) setups.",onClick=function() ApplyDashboardGlobalPreset("4k",UI_SCALE_4K) end},{text="Pixel",w=64,h=18,skinFn=MSUF_SkinDashboardButton,tipTitle="Pixel Perfect Scale",tipBody="Applies the pixel perfect UI scale for the current screen height (768 / screen height).",onClick=function() ApplyDashboardGlobalPreset("pixel",MSUF_GetPixelPerfectScale()) end},},6)
 bGlobal1080,bGlobal1440,bGlobal4k,bGlobalPixel=presetGlobalRow[1],presetGlobalRow[2],presetGlobalRow[3],presetGlobalRow[4]
-local globalRow=MSUF_BuildButtonRowTL(scaleCard,12,-160,{{text="Apply",w=72,h=20,gap=6,skinFn=MSUF_SkinDashboardButton,onClick=function()
+local globalRow=MSUF_BuildButtonRowTL(scaleCard,12,-120,{{text="Apply",w=72,h=20,gap=6,skinFn=MSUF_SkinDashboardButton,onClick=function()
 local disabled,enabled,applied=GetGlobalUiState()
 local pendingEnabled,pending=GetPendingGlobalScale(enabled,applied)
 if pendingEnabled then
@@ -3163,8 +3162,8 @@ if RefreshScaleCard then RefreshScaleCard() else RefreshGlobalScaleControls() en
 end},},6)
 bGlobalApply,bGlobalRevert,bGlobalAuto,bGlobalOff=globalRow[1],globalRow[2],globalRow[3],globalRow[4]
 
-local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-186,"MSUF Frame Scale",MSUF_SkinText)
-local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-203,"Current: 1.00",MSUF_SkinMuted)
+local msufScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-146,"MSUF Frame Scale",MSUF_SkinText)
+local msufScaleCur=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-163,"Current: 1.00",MSUF_SkinMuted)
 local msufScaleSlider=CreateFrame("Slider","MSUF_DashboardMsufScaleSlider",scaleCard,"OptionsSliderTemplate")
 msufScaleSlider:ClearAllPoints()
 msufScaleSlider:SetPoint("TOPLEFT",msufScaleCur,"BOTTOMLEFT",0,-8)
@@ -3180,8 +3179,8 @@ msufScaleSlider:SetScript("OnMouseWheel",function(self,delta) if not delta then 
 msufScaleSlider:SetScript("OnValueChanged",function(self,value) if self.__msufSkip then return end local pct=SnapScalePct(value,25,150,5) if pct~=value then self.__msufSkip=true self:SetValue(pct) self.__msufSkip=nil return end local scale=pct/100 MSUF_SetSavedMsufScale(scale) MSUF_ApplyMsufScale(scale) if msufScaleCur and msufScaleCur.SetText then msufScaleCur:SetText(string.format("Current: %.2f",scale)) end end)
 if MSUF_AddTooltip then pcall(MSUF_AddTooltip,msufScaleSlider,"MSUF Frame Scale","Scales only MSUF frames (unitframes + castbars). Use the mouse wheel for 5% steps.") end
 
-local menuScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-250,"MSUF Slash Menu Scale",MSUF_SkinText)
-local menuScaleStatus=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-267,"Applied: 100%  Selected: 100%",MSUF_SkinMuted)
+local menuScaleLabel=UI_TextTL(scaleCard,"GameFontHighlight",12,-210,"MSUF Slash Menu Scale",MSUF_SkinText)
+local menuScaleStatus=UI_TextTL(scaleCard,"GameFontDisableSmall",12,-227,"Applied: 100%  Selected: 100%",MSUF_SkinMuted)
 menuScaleStatus:SetWidth(280)
 local menuScaleSlider=CreateFrame("Slider","MSUF_DashboardSlashMenuScaleSlider",scaleCard,"OptionsSliderTemplate")
 menuScaleSlider:ClearAllPoints()
@@ -3224,7 +3223,7 @@ scaleCard._msufPendingMenuScale=pct/100
 RefreshMenuScaleControls(false)
 end)
 if MSUF_AddTooltip then pcall(MSUF_AddTooltip,menuScaleSlider,"MSUF Slash Menu Scale","Chooses the standalone Slash Menu scale. Drag or use the mouse wheel, then press Apply.") end
-local menuRow=MSUF_BuildButtonRowTL(scaleCard,12,-312,{{text="Apply",w=96,h=20,gap=8,skinFn=MSUF_SkinDashboardButton,onClick=function() local scale=GetPendingMenuScale(false) MSUF_SetSavedSlashMenuScale(scale) MSUF_ApplySlashMenuScale(scale,{ignoreDisable=true}) scaleCard._msufPendingMenuScale=nil RefreshMenuScaleControls(false) end},{text="Revert",w=96,h=20,skinFn=MSUF_SkinDashboardButton,onClick=function() scaleCard._msufPendingMenuScale=nil RefreshMenuScaleControls(false) end},},8)
+local menuRow=MSUF_BuildButtonRowTL(scaleCard,12,-272,{{text="Apply",w=96,h=20,gap=8,skinFn=MSUF_SkinDashboardButton,onClick=function() local scale=GetPendingMenuScale(false) MSUF_SetSavedSlashMenuScale(scale) MSUF_ApplySlashMenuScale(scale,{ignoreDisable=true}) scaleCard._msufPendingMenuScale=nil RefreshMenuScaleControls(false) end},{text="Revert",w=96,h=20,skinFn=MSUF_SkinDashboardButton,onClick=function() scaleCard._msufPendingMenuScale=nil RefreshMenuScaleControls(false) end},},8)
 bMenuApply,bMenuRevert=menuRow[1],menuRow[2]
 RefreshScaleCard=function()
 local g=MSUF_EnsureGeneral and MSUF_EnsureGeneral() or nil
