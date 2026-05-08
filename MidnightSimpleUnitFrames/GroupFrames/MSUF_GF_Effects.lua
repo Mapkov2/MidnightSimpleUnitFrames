@@ -1263,6 +1263,15 @@ local function ApplyRangeFade(f, unit, inRange)
     local fadeAlpha = (c and c.rfAlpha) or (conf and conf.rangeFadeAlpha) or 0.4
     local hpMode = ((c and c.rfLayerMode) or (conf and _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)) or "frame") == "health"
 
+    local isSelf = UnitIsUnit and UnitIsUnit(unit, "player")
+    if not (issecretvalue and issecretvalue(isSelf)) and isSelf then
+        f._msufGFRangeFadeApplied = true
+        f._msufGFRangeFadeLastBool = true
+        _ClearHealthRangeFade(f, kind)
+        if f.SetAlpha then f:SetAlpha(frameAlpha) end
+        return
+    end
+
     -- Solo guard (EQoL: IsInGroup + IsInRaid)
     if IsInGroup and IsInRaid then
         if not IsInGroup() and not IsInRaid() then
