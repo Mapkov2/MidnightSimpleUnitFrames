@@ -1657,6 +1657,11 @@ function GF.BuildFrameCache(f)
     c.anyAuraGrp = c.nativeBlizzardAuras or c.customAuraGrp
     c.nativeBlizzardAuraOnly = c.nativeBlizzardAuras and not c.customAuraGrp
     c.auraCacheSig = nil
+    -- PERF (4.22 Beta hotfix): clear cached resolved filter/max so next
+    -- UpdateFrameAuras call re-reads from auras.X (settings may have changed).
+    -- Paired with c.auraCacheSig invalidation -- both caches share lifetime.
+    -- Re-allocation on next call is negligible (settings changes are rare).
+    c.auraResolved = nil
 
     -- Corner indicators
     c.ciEn = conf.ciEnabled ~= false

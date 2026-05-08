@@ -97,6 +97,15 @@ end
 -- Tier 1: Blizzard API tokens (GetAuraSlots filter string)
 -- Tier 2: Declassified spell blacklist (categorized, user-toggleable)
 ------------------------------------------------------------------------
+
+-- Shared empty-config sentinel (4.22 Beta hotfix).
+-- Was: `local buffCfg = auras.buff or {}` -- 3 sites in UpdateFrameAuras
+-- allocated a fresh empty table per call when the config branch was nil.
+-- We point all three to ONE frozen empty table. Read-only access only
+-- (the value flows into `cfg.enabled`, `cfg.max`, `cfg.filterToken`).
+-- Zero allocations on the cold-config branch.
+local _EMPTY_AURA_CFG = {}
+
 local _AF  -- deferred AuraFilter reference (resolved at first use)
 local function AF()
     if _AF then return _AF end
@@ -2032,10 +2041,10 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
     end
 
     local types = GF.EnsureBlizzardAuraTypes(conf)
-    local buffCfg = auras.buff or {}
-    local debCfg = auras.debuff or {}
-    local extCfg = auras.externals or {}
-    local paCfg = conf.privateAuras or {}
+    local buffCfg = auras.buff or _EMPTY_AURA_CFG
+    local debCfg = auras.debuff or _EMPTY_AURA_CFG
+    local extCfg = auras.externals or _EMPTY_AURA_CFG
+    local paCfg = conf.privateAuras or _EMPTY_AURA_CFG
 
     local renderBuffs = Native.TypeEnabled(types, "buffs", true)
     local renderDebuffs = Native.TypeEnabled(types, "debuffs", true)
@@ -2591,9 +2600,9 @@ local function UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
         nativeExt = nativeEnabled and nativeEnabled(conf, "externals")
         nativePrivate = nativeEnabled and nativeEnabled(conf, "privateAuras")
     end
-    local buffCfg = auras.buff or {}
-    local debCfg = auras.debuff or {}
-    local extCfg = auras.externals or {}
+    local buffCfg = auras.buff or _EMPTY_AURA_CFG
+    local debCfg = auras.debuff or _EMPTY_AURA_CFG
+    local extCfg = auras.externals or _EMPTY_AURA_CFG
     local nativeRendered = nativeBuffs
         or nativeDebuffs
         or nativeDispels
@@ -2838,9 +2847,9 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
         nativeExt = nativeEnabled and nativeEnabled(conf, "externals")
         nativePrivate = nativeEnabled and nativeEnabled(conf, "privateAuras")
     end
-    local buffCfg = auras.buff or {}
-    local debCfg = auras.debuff or {}
-    local extCfg = auras.externals or {}
+    local buffCfg = auras.buff or _EMPTY_AURA_CFG
+    local debCfg = auras.debuff or _EMPTY_AURA_CFG
+    local extCfg = auras.externals or _EMPTY_AURA_CFG
     local nativeRendered = nativeBuffs
         or nativeDebuffs
         or nativeDispels
@@ -2868,13 +2877,38 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local debOn = debCfg and debCfg.enabled ~= false and not nativeDebuffs
     local buffOn = buffCfg and buffCfg.enabled ~= false and not nativeBuffs
     local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false and not nativeDispels
-    local afr = AF()
-    local extFilter = afr and afr.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
-    local debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
-    local buffFilter = afr and afr.ResolveBuffFilter(buffCfg.filterToken) or "HELPFUL|RAID"
-    local extMax = tonumber(extCfg.max) or 6
-    local debMax = tonumber(debCfg.max) or 6
-    local buffMax = tonumber(buffCfg.max) or 6
+
+    -- PERF (4.22 Beta hotfix): cache settings-stable filter/max resolutions
+    -- on the frame settings cache `c`. Was: 3× ResolveDebuff/Buff function
+    -- calls + EXTERNALS_TOKEN read + 3× tonumber per UpdateFrameAuras call,
+    -- reading from auras.X.filterToken / auras.X.max which only change on
+    -- options updates. Invalidated together with c.auraCacheSig when
+    -- BuildFrameCache rebuilds settings cache (c.auraResolved = nil).
+    local resolved = c and c.auraResolved
+    local extFilter, debFilter, buffFilter, extMax, debMax, buffMax
+    if resolved then
+        extFilter = resolved.extFilter
+        debFilter = resolved.debFilter
+        buffFilter = resolved.buffFilter
+        extMax = resolved.extMax
+        debMax = resolved.debMax
+        buffMax = resolved.buffMax
+    else
+        local afr = AF()
+        extFilter = afr and afr.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
+        debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
+        buffFilter = afr and afr.ResolveBuffFilter(buffCfg.filterToken) or "HELPFUL|RAID"
+        extMax = tonumber(extCfg.max) or 6
+        debMax = tonumber(debCfg.max) or 6
+        buffMax = tonumber(buffCfg.max) or 6
+        if c then
+            c.auraResolved = {
+                extFilter = extFilter, debFilter = debFilter, buffFilter = buffFilter,
+                extMax = extMax, debMax = debMax, buffMax = buffMax,
+            }
+        end
+    end
+
     local sig = c and c.auraCacheSig
     if not sig then
         sig = BuildAuraCacheSig(buffFilter, debFilter, extFilter, buffMax, debMax, extMax, buffOn, debOn, extOn, dispelNeeded)
