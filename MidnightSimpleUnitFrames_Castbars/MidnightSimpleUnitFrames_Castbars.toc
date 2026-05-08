@@ -1,10 +1,11 @@
-## Interface: 120001, 120000. 120005
+## Interface: 120001, 120000
 ## Title: Midnight Simple UnitFrames - Castbars
 ## Notes: Castbar LoD for MSUF
 ## Author: Mapko 
-## Version: 4.0
+## Version: 4.3
 ## Category: Combat
 ## Dependencies: MidnightSimpleUnitFrames
+## OptionalDeps:
 ## LoadOnDemand: 1
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## X-Wago-ID: XKq9aoKy

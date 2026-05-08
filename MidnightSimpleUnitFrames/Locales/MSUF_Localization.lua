@@ -16,7 +16,7 @@
 -- ============================================================================
 local addonName, ns = ...
 ns = ns or {}
-if _G then _G.MSUF_NS = ns end
+_G.MSUF_NS = ns
 
 ns.LOCALE = ns.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
 
@@ -29,11 +29,11 @@ if not getmetatable(L) then
 end
 
 -- Public global handle for external modules / debugging.
-if _G then _G.MSUF_L = L end
+_G.MSUF_L = L
 
 -- Merge translations for the active locale.
 ns.AddLocale = ns.AddLocale or function(locale, dict)
-    if type(dict) ~= "table" then return end
+    if not dict then return end
     local active = ns.LOCALE or "enUS"
     if locale ~= active then return end
     for k, v in pairs(dict) do

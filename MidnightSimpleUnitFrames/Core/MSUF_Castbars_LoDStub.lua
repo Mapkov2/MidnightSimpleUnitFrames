@@ -1,6 +1,5 @@
 -- MSUF_Castbars_LoDStub.lua
 -- LoadOnDemand bridge for MSUF Castbars (+ BossCastbars + FocusKickIcon).
---
 -- Step 24: tighter enable-gate
 -- - Do NOT load the Castbars LoD addon unless at least one castbar-related feature is enabled.
 -- - Provide wrapper globals that core can call safely at PLAYER_LOGIN without forcing a load.
@@ -30,28 +29,35 @@ local function _EnsureDB()
     end
 end
 
+-- PERF: Cache general ref — invalidated only when MSUF_DB itself changes.
+local _cachedGeneral, _cachedGeneralDB
 local function _GetGeneral()
-    _EnsureDB()
-    return (MSUF_DB and MSUF_DB.general) or {}
+    local db = MSUF_DB
+    if not db then _EnsureDB(); db = MSUF_DB end
+    if _cachedGeneralDB == db and _cachedGeneral then return _cachedGeneral end
+    _cachedGeneralDB = db
+    _cachedGeneral = (db and db.general) or {}
+    return _cachedGeneral
 end
 
-local function _ShouldLoadForBoss()
-    if _IsLoaded(CASTBARS_ADDON) then
-        return true
+-- Shared castbar next-frame deferral.
+-- Scope intentionally stays narrow: only true next-frame castbar/runtime deferrals
+-- that are already equivalent to C_Timer.After(0, fn).
+local _CastbarsRunNextFrame = _G.MSUF_Castbars_RunNextFrame
+if type(_CastbarsRunNextFrame) ~= "function" then
+    _CastbarsRunNextFrame = function(fn)
+        if type(fn) ~= "function" then return end
+        local timer = _G.C_Timer
+        if timer and timer.After then
+            timer.After(0, fn)
+        else
+            fn()
+        end
     end
-
-    local g = _GetGeneral()
-    if g.enableBossCastbar == false then
-        return false
-    end
-    if MSUF_DB and MSUF_DB.boss and MSUF_DB.boss.enabled == false then
-        return false
-    end
-    return true
+    _G.MSUF_Castbars_RunNextFrame = _CastbarsRunNextFrame
 end
 ---------------------------------------------------------------------
 -- Blizzard castbar ownership handshake (stub-level)
---
 -- Why here:
 -- - Core loads this stub without forcing the Castbars LoD addon.
 -- - Both Core and the LoD module can use the same owner tag to avoid
@@ -77,7 +83,6 @@ if type(_G.MSUF_GetBlizzardCastbarOwner) ~= "function" then
 end
 
 -- As long as MSUF is running, never allow the Blizzard *player* castbar(s) to show.
---
 -- IMPORTANT:
 -- - This is intentionally NOT tied to MSUF_DB.general.enablePlayerCastbar.
 --   If the user disables the MSUF player castbar, we do NOT want to silently fall back to
@@ -100,9 +105,7 @@ if type(_G.MSUF_SuppressBlizzardPlayerCastbars) ~= "function" then
     end
 
     local function _MSUF_TryRegisterHideDriver(frame)
-        if not frame or frame.MSUF_StateDriven then
-            return
-        end
+        if not frame or frame.MSUF_StateDriven then return end
         if RegisterStateDriver and (not InCombatLockdown or not InCombatLockdown()) then
             local ok = pcall(RegisterStateDriver, frame, "visibility", "hide")
             if ok then
@@ -112,12 +115,8 @@ if type(_G.MSUF_SuppressBlizzardPlayerCastbars) ~= "function" then
     end
 
     local function _MSUF_TryStopFrameWork(frame)
-        if not frame or frame.MSUF_WorkStopped then
-            return
-        end
-        if InCombatLockdown and InCombatLockdown() then
-            return
-        end
+        if not frame or frame.MSUF_WorkStopped then return end
+        if InCombatLockdown and InCombatLockdown() then return end
 
         frame.MSUF_WorkStopped = true
 
@@ -128,9 +127,7 @@ if type(_G.MSUF_SuppressBlizzardPlayerCastbars) ~= "function" then
     end
 
     local function _MSUF_HardenAndHide(frame)
-        if not frame then
-            return
-        end
+        if not frame then return end
 
         -- Always attempt to upgrade hardening when possible (e.g. first call might be in combat).
         _MSUF_TryRegisterHideDriver(frame)
@@ -177,18 +174,14 @@ if type(_G.MSUF_SuppressBlizzardPlayerCastbars) ~= "function" then
     -- Self-stopping, throttled fallback in case the Blizzard castingbar addon loads late.
     local _msufCbSuppressPoller
     local function _StartSuppressPoller()
-        if _msufCbSuppressPoller and _msufCbSuppressPoller:IsShown() then
-            return
-        end
+        if _msufCbSuppressPoller and _msufCbSuppressPoller:IsShown() then return end
         _msufCbSuppressPoller = _msufCbSuppressPoller or CreateFrame("Frame")
         _msufCbSuppressPoller.elapsed = 0
         _msufCbSuppressPoller.tries = 0
         _msufCbSuppressPoller:Show()
         _msufCbSuppressPoller:SetScript("OnUpdate", function(self, elapsed)
             self.elapsed = (self.elapsed or 0) + (elapsed or 0)
-            if self.elapsed < 0.25 then
-                return
-            end
+            if self.elapsed < 0.25 then return end
             self.elapsed = 0
             self.tries = (self.tries or 0) + 1
 
@@ -208,9 +201,7 @@ if type(_G.MSUF_SuppressBlizzardPlayerCastbars) ~= "function" then
     _msufCbSuppressEvt:SetScript("OnEvent", function(_, event, arg1)
         -- Prefer event-driven suppression (Blizzard_CastingBarFrame typically creates PlayerCastingBarFrame).
         if event == "ADDON_LOADED" then
-            if arg1 ~= "Blizzard_CastingBarFrame" and arg1 ~= "Blizzard_CastingBar" then
-                return
-            end
+            if arg1 ~= "Blizzard_CastingBarFrame" and arg1 ~= "Blizzard_CastingBar" then return end
         end
 
         local ok, didAny = pcall(_G.MSUF_SuppressBlizzardPlayerCastbars)
@@ -266,16 +257,30 @@ end
 -- Keeping them here prevents nil-access during early load, and allows the stub
 -- to decide whether to load the LoD addon.
 if not _G.MSUF_IsCastbarEnabledForUnit then
+    -- PERF: Cache enabled state per unit — invalidated when MSUF_DB changes.
+    -- Eliminates _GetGeneral + table lookup on every call (43/s per unit).
+    local _cbEnabledCache = {}
+    local _cbEnabledDBRef = nil
     function _G.MSUF_IsCastbarEnabledForUnit(unit)
-        local g = _GetGeneral()
-        if unit == "player" then
-            return g.enablePlayerCastbar ~= false
-        elseif unit == "target" then
-            return g.enableTargetCastbar ~= false
-        elseif unit == "focus" then
-            return g.enableFocusCastbar ~= false
+        if _cbEnabledDBRef ~= MSUF_DB then
+            _cbEnabledDBRef = MSUF_DB
+            _cbEnabledCache = {}
         end
-        return true
+        local cached = _cbEnabledCache[unit]
+        if cached ~= nil then return cached end
+        local g = _GetGeneral()
+        local result
+        if unit == "player" then
+            result = g.enablePlayerCastbar ~= false
+        elseif unit == "target" then
+            result = g.enableTargetCastbar ~= false
+        elseif unit == "focus" then
+            result = g.enableFocusCastbar ~= false
+        else
+            result = true
+        end
+        _cbEnabledCache[unit] = result
+        return result
     end
 end
 
@@ -343,39 +348,57 @@ end
 -- The real implementations in the LoD addon re-define these globals
 -- unconditionally, so these wrappers will be replaced automatically after load.
 
+local _BossPreviewStubWrapper
+local function _BossPreviewStubCallReal()
+    local fn = rawget(_G, "MSUF_UpdateBossCastbarPreview")
+    if type(fn) == "function" and fn ~= _BossPreviewStubWrapper then
+        fn()
+    end
+    _G.MSUF__BossPreviewStubGuard = false
+end
+
+local function _ShouldLoadForBoss()
+    if _IsLoaded(CASTBARS_ADDON) then
+        return true
+    end
+
+    _EnsureDB()
+    local g = _GetGeneral()
+    if g.enableBossCastbar == false then
+        return false
+    end
+    if MSUF_DB and MSUF_DB.boss and MSUF_DB.boss.enabled == false then
+        return false
+    end
+    return true
+end
+
 if type(_G.MSUF_ReanchorTargetCastBar) ~= "function" then
-    local wrapper
-    wrapper = function()
+    _BossPreviewStubWrapper = function()
         _EnsureDB()
         local g = _GetGeneral()
 
         -- If previews are off, there is nothing to do (and we should not force-load).
-        if not g.castbarPlayerPreviewEnabled then
-            return
-        end
+        if not g.castbarPlayerPreviewEnabled then return end
 
         -- If boss castbars are explicitly disabled, don't force-load just to hide a preview
         -- that can't exist yet. If LoD is already loaded, the real function will handle hiding.
         if g.enableBossCastbar == false then
             if _IsLoaded(CASTBARS_ADDON) then
                 local fn = rawget(_G, "MSUF_UpdateBossCastbarPreview")
-                if type(fn) == "function" and fn ~= wrapper then
+                if type(fn) == "function" and fn ~= _BossPreviewStubWrapper then
                     return fn()
                 end
             end
             return
         end
 
-        if MSUF_DB and MSUF_DB.boss and MSUF_DB.boss.enabled == false then
-            return
-        end
+        if MSUF_DB and MSUF_DB.boss and MSUF_DB.boss.enabled == false then return end
 
         -- Reentrancy guard: during LoadAddOn the boss module may call MSUF_UpdateBossCastbarPreview()
         -- before it replaces this stub wrapper, which can cause infinite recursion / C stack overflow.
         _G.MSUF__BossPreviewStubGuard = _G.MSUF__BossPreviewStubGuard or false
-        if _G.MSUF__BossPreviewStubGuard then
-            return
-        end
+        if _G.MSUF__BossPreviewStubGuard then return end
         _G.MSUF__BossPreviewStubGuard = true
 
         local ok = _G.MSUF_EnsureCastbarsLoaded("boss_preview")
@@ -384,30 +407,16 @@ if type(_G.MSUF_ReanchorTargetCastBar) ~= "function" then
             return
         end
 
-        local function _CallReal()
-            local fn = rawget(_G, "MSUF_UpdateBossCastbarPreview")
-            if type(fn) == "function" and fn ~= wrapper then
-                pcall(fn)
-            end
-            _G.MSUF__BossPreviewStubGuard = false
-        end
-
         -- Defer one frame to guarantee the LoD addon finished loading & replaced the global.
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, _CallReal)
-        else
-            _CallReal()
-        end
+        _CastbarsRunNextFrame(_BossPreviewStubCallReal)
     end
-    _G.MSUF_UpdateBossCastbarPreview = wrapper
+    _G.MSUF_UpdateBossCastbarPreview = _BossPreviewStubWrapper
 end
 
 if type(_G.MSUF_SetBossCastbarTestMode) ~= "function" then
     local wrapper
     wrapper = function(active, keepSetting)
-        if not _ShouldLoadForBoss() then
-            return
-        end
+        if not _ShouldLoadForBoss() then return end
         _G.MSUF_EnsureCastbarsLoaded("boss_testmode")
         local fn = rawget(_G, "MSUF_SetBossCastbarTestMode")
         if type(fn) == "function" and fn ~= wrapper then
@@ -417,7 +426,6 @@ if type(_G.MSUF_SetBossCastbarTestMode) ~= "function" then
     _G.MSUF_SetBossCastbarTestMode = wrapper
 end
 
-
 -- Focus kick icon lives in the Castbars LoD addon. Provide a wrapper so core can
 -- call it safely even if the addon isn't loaded yet.
 if type(_G.MSUF_InitFocusKickIcon) ~= "function" then
@@ -425,12 +433,8 @@ if type(_G.MSUF_InitFocusKickIcon) ~= "function" then
     wrapper = function()
         _EnsureDB()
         local g = _GetGeneral()
-        if g.enableFocusKickIcon ~= true then
-            return
-        end
-        if MSUF_DB and MSUF_DB.focus and MSUF_DB.focus.enabled == false then
-            return
-        end
+        if g.enableFocusKickIcon ~= true then return end
+        if MSUF_DB and MSUF_DB.focus and MSUF_DB.focus.enabled == false then return end
         _G.MSUF_EnsureCastbarsLoaded("focus_kick")
         local fn = rawget(_G, "MSUF_InitFocusKickIcon")
         if type(fn) == "function" and fn ~= wrapper then
@@ -449,14 +453,13 @@ f:SetScript("OnEvent", function()
     end
 end)
 
-
 -- Channeled cast tick markers (5 lines)
 -- The real Castbars LoD addon should override this with the actual implementation.
 if type(_G.MSUF_UpdateCastbarChannelTicks) ~= "function" then
     function _G.MSUF_UpdateCastbarChannelTicks()
         -- Stub fallback: force a full visuals refresh if available.
         if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-            if type(_G.MSUF_EnsureCastbars) == "function" then
+            if _G.MSUF_EnsureCastbars then
                 _G.MSUF_EnsureCastbars()
             end
             _G.MSUF_UpdateCastbarVisuals()
@@ -464,14 +467,11 @@ if type(_G.MSUF_UpdateCastbarChannelTicks) ~= "function" then
     end
 end
 
-
--- ============================================================
 -- Player castbar: Custom channel tick markers (REAL CASTBAR)
 -- - Reads MSUF_DB.player.castbar.channelTickUseCustom / channelTickCount / channelTickPosPct
 -- - Renders vertical tick lines ON the real MSUF player castbar statusbar.
 -- - Shows lines only while the player is CHANNELING (UnitChannelInfo("player") exists).
 -- - Player-only. Does not affect target/focus/boss.
--- ============================================================
 
 do
     local WHITE = "Interface\\Buttons\\WHITE8x8"
@@ -522,7 +522,7 @@ do
                 return nil
             end
         end
-        if type(_G.MSUF_EnsureCastbarsLoaded) == "function" then
+        if _G.MSUF_EnsureCastbarsLoaded then
             _G.MSUF_EnsureCastbarsLoaded("player_custom_channel_ticks")
         end
 
@@ -598,9 +598,7 @@ do
         local h = bar:GetHeight() or 0
         if w <= 1 or h <= 1 then
             -- Defer until layout.
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, _RenderTicks)
-            end
+            _CastbarsRunNextFrame(_RenderTicks)
             return
         end
 
@@ -661,20 +659,18 @@ do
     ev:SetScript("OnEvent", function(_, event, unit)
         if unit and unit ~= "player" then return end
         if event == "UNIT_SPELLCAST_CHANNEL_START" or event == "UNIT_SPELLCAST_CHANNEL_UPDATE" or event == "UNIT_SPELLCAST_CHANNEL_STOP" or event == "PLAYER_ENTERING_WORLD" then
-            if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
+            if _G.MSUF_ApplyPlayerChannelTickMarkers then
                 _G.MSUF_ApplyPlayerChannelTickMarkers()
             end
         end
     end)
 end
 
--- ============================================================================
 -- Phase 4: Module Registration
 -- Castbars registers into the unified module lifecycle so that:
 --   - Profile switches broadcast RefreshSettings → castbar visuals re-apply
 --   - Debug toggle can suppress all castbars at runtime
 --   - LoD loading is NOT touched — existing stub handles load/unload logic
--- ============================================================================
 do
     local reg = _G.MSUF_RegisterModule
     if type(reg) == "function" then
@@ -685,30 +681,30 @@ do
             end,
             Enable = function()
                 if _G.MSUF_AreAnyCastbarsEnabled and _G.MSUF_AreAnyCastbarsEnabled() then
-                    if type(_G.MSUF_EnsureCastbarsLoaded) == "function" then
+                    if _G.MSUF_EnsureCastbarsLoaded then
                         _G.MSUF_EnsureCastbarsLoaded("module_enable")
                     end
                 end
             end,
             Disable = function()
-                if type(_G.MSUF_Castbars_ForceHideAll) == "function" then
+                if _G.MSUF_Castbars_ForceHideAll then
                     _G.MSUF_Castbars_ForceHideAll()
                 end
             end,
             RefreshSettings = function(_, source)
-                if type(_G.MSUF_Castbars_OnSettingsChanged) == "function" then
+                if _G.MSUF_Castbars_OnSettingsChanged then
                     _G.MSUF_Castbars_OnSettingsChanged(source or "module_refresh")
                 end
                 -- Bump style revision so castbar frames pick up texture/font changes
                 if type(_G.MSUF_CastbarStyleRevision) == "number" then
                     _G.MSUF_CastbarStyleRevision = _G.MSUF_CastbarStyleRevision + 1
                 end
-                if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
+                if _G.MSUF_ApplyPlayerChannelTickMarkers then
                     _G.MSUF_ApplyPlayerChannelTickMarkers()
                 end
             end,
             Shutdown = function()
-                if type(_G.MSUF_Castbars_ForceHideAll) == "function" then
+                if _G.MSUF_Castbars_ForceHideAll then
                     _G.MSUF_Castbars_ForceHideAll()
                 end
             end,

@@ -6,10 +6,10 @@
 local addonName, ns = ...
 ns = ns or {}
 ns.LOCALE = ns.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then setmetatable(L, { __index = function(t, k) return k end }) end
-if _G then _G.MSUF_L = L end
+_G.MSUF_L = L
 if ns.LOCALE ~= "enUS" then return end
 
 -- Put overrides here if you ever want to change wording without touching code.

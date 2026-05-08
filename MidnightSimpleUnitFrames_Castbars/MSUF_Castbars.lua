@@ -538,6 +538,10 @@ do
 
     local function ManagerOnUpdate(self, elapsed)
         local active = self.active
+        if activeCount <= 0 then
+            self:Hide()
+            return
+        end
 
         _monoClock = _monoClock + elapsed
 
@@ -614,7 +618,18 @@ do
                         -- Inline GlowFade for non-channels (uses cached total from driver).
                         local totalNum = frame._msufPlainTotal
                         if totalNum and totalNum > 0 then
-                            _GlowFade(frame, rem, totalNum)
+                            local glowIn = frame._msufGlowIn
+                            if glowIn then
+                                glowIn = glowIn - elapsed
+                            else
+                                glowIn = 0
+                            end
+                            if glowIn <= 0 then
+                                frame._msufGlowIn = 0.04
+                                _GlowFade(frame, rem, totalNum)
+                            else
+                                frame._msufGlowIn = glowIn
+                            end
                         end
                     end
                 end
@@ -651,7 +666,6 @@ do
 
     -- Export as the canonical manager so existing code paths use it.
     MSUF_CastbarManager = manager
-
     function MSUF_RegisterCastbar(frame)
         if not frame or not frame.statusBar then return end
         if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
@@ -726,6 +740,7 @@ do
         frame._msufLastTimeDecimal = nil
         frame._msufFastText = nil
         frame._msufRemaining = nil
+        frame._msufGlowIn = nil
         frame._msufCastTimeWasEnabled = nil
 
         frame._msufInUnregister = nil

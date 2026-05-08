@@ -111,16 +111,20 @@ local function MSUF_PulseCastbarPreview(kind)
         _G.MSUF_CastbarPreviewPulseTimers = timers
     end
 
-    if not (C_Timer and C_Timer.NewTimer) then
+    if not (C_Timer and C_Timer.After) then
         return
     end
 
     local function ScheduleStop(delay)
         local old = timers[kind]
+        if type(old) == "table" then old.cancelled = true end
         if old and old.Cancel then
             old:Cancel()
         end
-        timers[kind] = C_Timer.NewTimer(delay, function()
+        local token = {}
+        timers[kind] = token
+        C_Timer.After(delay, function()
+            if token.cancelled or timers[kind] ~= token then return end
             if not MSUF_UnitEditModeActive then return end
             if InCombatLockdown and InCombatLockdown() then return end
             if type(EnsureDB) == "function" then EnsureDB() end
@@ -139,11 +143,64 @@ local function MSUF_PulseCastbarPreview(kind)
                 return
             end
 
+            if timers[kind] == token then
+                timers[kind] = nil
+            end
             stopFn(false, true)
         end)
     end
 
     ScheduleStop(MSUF_PREVIEW_PULSE_SECONDS)
+end
+
+local function MSUF_SetCastbarPreviewNudgeTarget(frame, kind, cfg)
+    if not frame or not kind or not cfg then return end
+    if not _G.MSUF_EM2_SetPreviewNudgeTarget then return end
+
+    _G.MSUF_EM2_SetPreviewNudgeTarget({
+        frame = frame,
+        IsActive = function()
+            return MSUF_UnitEditModeActive and frame.IsShown and frame:IsShown()
+        end,
+        Nudge = function(_, dx, dy)
+            if not MSUF_UnitEditModeActive then return end
+            if InCombatLockdown and InCombatLockdown() then return end
+            if type(EnsureDB) == "function" then EnsureDB() end
+            local g = MSUF_DB and MSUF_DB.general
+            if not g then return end
+            if _G.MSUF_EM_UndoBeforeChange then
+                _G.MSUF_EM_UndoBeforeChange("castbar", kind, true)
+            end
+            local defX = cfg.defaultXFrom and MSUF_GetFirstNonNil(g, cfg.defaultXFrom, cfg.defaultX) or cfg.defaultX
+            local defY = cfg.defaultYFrom and MSUF_GetFirstNonNil(g, cfg.defaultYFrom, cfg.defaultY) or cfg.defaultY
+            g[cfg.offsetXKey] = math.floor(((tonumber(g[cfg.offsetXKey]) or defX or 0) + (dx or 0)) + 0.5)
+            g[cfg.offsetYKey] = math.floor(((tonumber(g[cfg.offsetYKey]) or defY or 0) + (dy or 0)) + 0.5)
+
+            if kind == "boss" then
+                local sx = _G["MSUF_CastbarBossXOffsetSlider"]
+                local sy = _G["MSUF_CastbarBossYOffsetSlider"]
+                if sx and type(MSUF_ClampToSlider) == "function" then g[cfg.offsetXKey] = MSUF_ClampToSlider(sx, tonumber(g[cfg.offsetXKey]) or 0) end
+                if sy and type(MSUF_ClampToSlider) == "function" then g[cfg.offsetYKey] = MSUF_ClampToSlider(sy, tonumber(g[cfg.offsetYKey]) or 0) end
+            end
+
+            if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+                _G.MSUF_ApplyCastbarUnitAndSync(kind)
+            else
+                local rf = cfg.reanchorFunc and _G[cfg.reanchorFunc]
+                if type(rf) == "function" then rf() end
+                if type(MSUF_UpdateCastbarVisuals) == "function" then MSUF_UpdateCastbarVisuals() end
+                if kind == "boss" and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                    _G.MSUF_UpdateBossCastbarPreview()
+                end
+                if type(MSUF_SyncCastbarPositionPopup) == "function" then
+                    MSUF_SyncCastbarPositionPopup(kind)
+                end
+            end
+            if type(MSUF_UpdateCastbarEditInfo) == "function" then
+                MSUF_UpdateCastbarEditInfo(kind)
+            end
+        end,
+    })
 end
 
 function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
@@ -156,6 +213,9 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
     frame:EnableMouse(true)
 
     frame:SetScript("OnMouseDown", function(self, button)
+        if MSUF_UnitEditModeActive then
+            MSUF_SetCastbarPreviewNudgeTarget(self, kind, cfg)
+        end
         if button == "RightButton" then
             if not MSUF_UnitEditModeActive then return end
             if MSUF_EditModeSizing then return end
@@ -249,7 +309,20 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
                 local newW = math.max(50, (self.dragStartWidth  or 250) + dx)
                 local newH = math.max(8,  (self.dragStartHeight or 18) + dy)
 
-                g2[cfg.widthKey]  = math.floor(newW + 0.5)
+                local lockWidth = false
+                local widthSourceKey = _G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey(kind)
+                if widthSourceKey then
+                    local normWidthSource = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
+                    local rawWidthSource = g2[widthSourceKey]
+                    if type(normWidthSource) == "function" then
+                        lockWidth = normWidthSource(rawWidthSource) ~= nil
+                    elseif rawWidthSource == "unitframe" or rawWidthSource == "essential" or rawWidthSource == "utility" then
+                        lockWidth = true
+                    end
+                end
+                if not lockWidth then
+                    g2[cfg.widthKey] = math.floor(newW + 0.5)
+                end
                 g2[cfg.heightKey] = math.floor(newH + 0.5)
 
                 if kind == "boss" then
@@ -266,6 +339,10 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
                         MSUF_SyncCastbarPositionPopup("boss")
                     end
                 else
+                    local rf = cfg.reanchorFunc and _G[cfg.reanchorFunc]
+                    if type(rf) == "function" then
+                        rf()
+                    end
                     if type(MSUF_UpdateCastbarVisuals) == "function" then
                         MSUF_UpdateCastbarVisuals()
                     end
@@ -335,4 +412,3 @@ end
         end
     end)
 end
-

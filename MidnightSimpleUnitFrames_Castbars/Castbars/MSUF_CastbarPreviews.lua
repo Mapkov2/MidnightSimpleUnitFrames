@@ -852,10 +852,14 @@ end
         EnsureDB()
         local g = (MSUF_DB and MSUF_DB.general) or {}
 
-        local forcedW = tonumber(g.bossCastbarWidth)
-        local forcedH = tonumber(g.bossCastbarHeight)
-
         local uf = _G["MSUF_boss1"]
+        local forcedW, forcedH
+        if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+            forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize("boss1", g, f, 240, 12)
+        else
+            forcedW = tonumber(g.bossCastbarWidth)
+            forcedH = tonumber(g.bossCastbarHeight)
+        end
         local w = (forcedW and forcedW > 10) and forcedW or (uf and uf.GetWidth and uf:GetWidth()) or 240
         local h = (forcedH and forcedH > 4) and forcedH or 12
 
@@ -975,10 +979,19 @@ end
     end
 
     function _G.MSUF_UpdateBossCastbarPreview()
-        EnsureDB()
-        local g = (MSUF_DB and MSUF_DB.general) or {}
+        -- Defense in depth: external callers (Options, hooks, etc.) may
+        -- invoke Update during combat. Skip silently -- the preview is
+        -- not user-visible during combat (Edit Mode is locked) and the
+        -- positioning helpers below may touch protected layout state.
+        if (InCombatLockdown and InCombatLockdown()) or _G.MSUF_InCombat then
+            return
+        end
 
-        if not g.castbarPlayerPreviewEnabled or g.enableBossCastbar == false then
+        EnsureDB()
+        local db = _G.MSUF_DB
+        local g = db and db.general
+
+        if not g or not g.castbarPlayerPreviewEnabled or g.enableBossCastbar == false then
             if _G.MSUF_BossCastbarPreview then
                 _G.MSUF_BossCastbarPreview:Hide()
             end
@@ -1000,6 +1013,107 @@ end
     end
 end
 
+-- ════════════════════════════════════════════════════════════════════════
+-- Boss Preview shared helpers (4.22 Beta hotfix)
+-- ════════════════════════════════════════════════════════════════════════
+-- Module-scope helpers used by Setup/Refresh paths. Defined ONCE at file
+-- load (no per-call closure allocation), and used as stable references to
+-- C_Timer.After / Scheduler.ScheduleOnce so neither path produces garbage
+-- on hot events (GROUP_ROSTER_UPDATE @ ~20/sec at boss + 40-man raid).
+--
+-- Combat lockdown semantics: Boss preview is an Edit-Mode-only feature
+-- (Edit Mode cannot open during combat by Blizzard restriction). Refreshing
+-- the preview during combat does nothing visible -- so we skip everything
+-- for 0 overhead and replay once at PLAYER_REGEN_ENABLED if any event was
+-- dropped. This kills the entire 20/sec burst path during boss combat.
+-- ════════════════════════════════════════════════════════════════════════
+
+local _pendingPostCombatRefresh = false
+
+local _MAX_BOSS_FRAMES_FALLBACK = 5
+
+-- Iterate all boss-preview frames (boss1..bossN). One-time definition.
+local function _IterateBossPreviews(fn)
+    local f1 = _G.MSUF_BossCastbarPreview
+    if f1 then fn(f1) end
+
+    local n = tonumber(_G.MAX_BOSS_FRAMES) or _MAX_BOSS_FRAMES_FALLBACK
+    if n < 1 or n > 12 then n = _MAX_BOSS_FRAMES_FALLBACK end
+    for i = 2, n do
+        local p = _G["MSUF_BossCastbarPreview" .. i]
+        if p then fn(p) end
+    end
+end
+
+-- "No-fill" preview setup applied to every boss preview during edit-mode setup.
+-- Hoisted out of the previous inline closure (was allocated per call inside
+-- MSUF_SetupBossCastbarPreviewEditMode).
+local function _ApplyNoFillToBossPreview(p)
+    if not p or not p.statusBar then return end
+    if p.statusBar.GetStatusBarTexture then
+        local t = p.statusBar:GetStatusBarTexture()
+        if t and t.SetAlpha then
+            t:SetAlpha(0)
+        end
+        if p.statusBar.SetValue then
+            p.statusBar:SetValue(0)
+        end
+        p.statusBar.MSUF_hideFillTexture = true
+    end
+end
+
+-- Read the boss-preview config once. Returns the .general table iff the
+-- preview is enabled; otherwise returns nil. Replaces the previous
+-- `(MSUF_DB and MSUF_DB.general) or {}` pattern (no empty-table allocation)
+-- and consolidates the two enable-checks into one place.
+local function _BossPreviewActiveConfig()
+    local db = _G.MSUF_DB
+    local g = db and db.general
+    if not g then return nil end
+    if not g.castbarPlayerPreviewEnabled then return nil end
+    if g.enableBossCastbar == false then return nil end
+    return g
+end
+
+-- Combat lockdown check. Cheap C-API call (~50ns). MSUF_InCombat is a Lua
+-- bool maintained by the GF event dispatcher as a fast fallback.
+local function _BossPreviewCombatLockdown()
+    if InCombatLockdown and InCombatLockdown() then return true end
+    if _G.MSUF_InCombat then return true end
+    return false
+end
+
+-- Stable refresh callback. Used as the value passed to Scheduler.ScheduleOnce
+-- and C_Timer.After -- never replaced, so no closure allocation per event.
+-- The hooksecurefunc on MSUF_UpdateBossCastbarPreview will trigger Setup
+-- automatically; we do NOT call Setup explicitly any more (was double-work).
+local function _DoBossPreviewRefresh()
+    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        _G.MSUF_UpdateBossCastbarPreview()
+    end
+end
+
+-- Replay deferred refresh after combat ends, if any event was dropped.
+local function _OnBossPreviewCombatEnd()
+    if not _pendingPostCombatRefresh then return end
+    _pendingPostCombatRefresh = false
+    if type(_G.MSUF_RefreshBossPreview) == "function" then
+        _G.MSUF_RefreshBossPreview("PLAYER_REGEN_ENABLED")
+    end
+end
+
+local function _ScheduleBossPreviewRefresh()
+    -- Coalesce via MSUF Scheduler. Multiple events in same frame collapse
+    -- to one refresh. Stable callback ref -- no per-event closure alloc.
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("MSUF_BOSS_PREVIEW_REFRESH", _DoBossPreviewRefresh)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, _DoBossPreviewRefresh)
+    else
+        _DoBossPreviewRefresh()
+    end
+end
+
 local function MSUF_SetupBossCastbarPreviewEditMode()
     -- Prevent recursion:
     -- MSUF_UpdateBossCastbarPreview() is hooksecured below to call this setup function.
@@ -1007,23 +1121,12 @@ local function MSUF_SetupBossCastbarPreviewEditMode()
     -- the hook chain, otherwise we can spiral into MSUF_Update -> hook -> Setup -> Update ...
     if _G.MSUF_BossPreviewSetupInProgress then return end
 
+    -- Combat lockdown: nothing to set up while in combat (Edit Mode is
+    -- unavailable to the user during combat anyway). Return immediately.
+    if _BossPreviewCombatLockdown() then return end
+
     EnsureDB()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    if not g.castbarPlayerPreviewEnabled or g.enableBossCastbar == false then
-        return
-    end
-
-    local function IterateBossPreviews(fn)
-        local f1 = _G.MSUF_BossCastbarPreview
-        if f1 then fn(f1) end
-
-        local n = tonumber(_G.MAX_BOSS_FRAMES) or 5
-        if n < 1 or n > 12 then n = 5 end
-        for i = 2, n do
-            local p = _G["MSUF_BossCastbarPreview" .. i]
-            if p then fn(p) end
-        end
-    end
+    if not _BossPreviewActiveConfig() then return end
 
     local f = _G.MSUF_BossCastbarPreview
     if not f and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
@@ -1035,19 +1138,9 @@ local function MSUF_SetupBossCastbarPreviewEditMode()
     end
 
     -- Apply the "no-fill" preview setup to ALL boss previews (boss1..bossN).
-    IterateBossPreviews(function(p)
-        if not p or not p.statusBar then return end
-        if p.statusBar.GetStatusBarTexture then
-            local t = p.statusBar:GetStatusBarTexture()
-            if t and t.SetAlpha then
-                t:SetAlpha(0)
-            end
-            if p.statusBar.SetValue then
-                p.statusBar:SetValue(0)
-            end
-            p.statusBar.MSUF_hideFillTexture = true
-        end
-    end)
+    -- Both the iterator and the per-frame callback are module-scope helpers
+    -- (no per-call closure allocation).
+    _IterateBossPreviews(_ApplyNoFillToBossPreview)
 
     -- Only boss1 needs edit handlers (settings are shared for all boss castbars).
     if f then
@@ -1060,51 +1153,74 @@ _G.MSUF_SetupBossCastbarPreviewEditMode = MSUF_SetupBossCastbarPreviewEditMode
 if not _G.MSUF_BossPreviewSetupHooked then
     _G.MSUF_BossPreviewSetupHooked = true
     if type(_G.MSUF_UpdateBossCastbarPreview) == "function" and type(hooksecurefunc) == "function" then
-        hooksecurefunc("MSUF_UpdateBossCastbarPreview", function()
+        -- Stable hook callback (one definition, reused by hooksecurefunc).
+        local function _onUpdateHook()
             if _G.MSUF_BossPreviewSetupInProgress then return end
+            -- Combat lockdown: hooksecurefunc still fires if Update is called
+            -- in combat (e.g. via Options change). Skip the heavy Setup call;
+            -- it will be replayed at REGEN_ENABLED if needed.
+            if _BossPreviewCombatLockdown() then return end
             EnsureDB()
-            local g = (MSUF_DB and MSUF_DB.general) or {}
-            if not g.castbarPlayerPreviewEnabled then return end
-            if g.enableBossCastbar == false then return end
+            if not _BossPreviewActiveConfig() then return end
             if _G.MSUF_SetupBossCastbarPreviewEditMode then
                 _G.MSUF_SetupBossCastbarPreviewEditMode()
             end
-        end)
+        end
+        hooksecurefunc("MSUF_UpdateBossCastbarPreview", _onUpdateHook)
     end
 end
 
 if not _G.MSUF_BossPreviewEventDriver then
     _G.MSUF_BossPreviewEventDriver = true
 
-    function MSUF_RefreshBossPreview(event, ...)
-if type(_G.MSUF_UpdateBossCastbarPreview) ~= "function" then return end
-            EnsureDB()
-            local g = (MSUF_DB and MSUF_DB.general) or {}
-            if not g.castbarPlayerPreviewEnabled then return end
-            if g.enableBossCastbar == false then return end
+    -- ────────────────────────────────────────────────────────────────────
+    -- MSUF_RefreshBossPreview (4.22 Beta hotfix)
+    -- ────────────────────────────────────────────────────────────────────
+    -- Original trace (60s boss + 40-man raid) showed this handler firing
+    -- 1234x at 20/sec, allocating a fresh closure per call into C_Timer.After
+    -- (~1.2k closures/min) and double-calling Setup (once via hooksecurefunc,
+    -- once explicitly).
+    --
+    -- Changes:
+    --  1. Combat lockdown short-circuit. Boss preview is Edit-Mode-only,
+    --     and Edit Mode cannot open during combat. So during combat we set
+    --     a pending flag and return -- 0 EnsureDB, 0 DB lookup, 0 schedule,
+    --     0 closure alloc.
+    --  2. PLAYER_REGEN_ENABLED replays a single deferred refresh if any
+    --     event was dropped during combat.
+    --  3. Out of combat: stable callback ref + Scheduler.ScheduleOnce
+    --     coalescing so multiple events in one frame collapse to one refresh.
+    --  4. Removed the explicit Setup call in the deferred body (the
+    --     hooksecurefunc on Update calls it; was duplicate work).
+    --  5. Removed `(MSUF_DB and MSUF_DB.general) or {}` allocation pattern.
+    -- ────────────────────────────────────────────────────────────────────
 
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-                        _G.MSUF_UpdateBossCastbarPreview()
-                    end
-                    if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
-                        _G.MSUF_SetupBossCastbarPreviewEditMode()
-                    end
-                end)
-            else
-                _G.MSUF_UpdateBossCastbarPreview()
-                if type(_G.MSUF_SetupBossCastbarPreviewEditMode) == "function" then
-                    _G.MSUF_SetupBossCastbarPreviewEditMode()
-                end
-            end
+    function MSUF_RefreshBossPreview(event, ...)
+        -- Combat fast-path: ~50ns C-call + 1 bool test, then return.
+        -- This is the entire cost of the handler during a 40-man boss
+        -- combat, where the original implementation paid ~1.2k closure
+        -- allocations/min and 1234 redundant deferred refreshes/min.
+        if _BossPreviewCombatLockdown() then
+            _pendingPostCombatRefresh = true
+            return
+        end
+
+        if type(_G.MSUF_UpdateBossCastbarPreview) ~= "function" then return end
+        EnsureDB()
+        if not _BossPreviewActiveConfig() then return end
+
+        _ScheduleBossPreviewRefresh()
     end
 
     MSUF_EventBus_Register("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("ENCOUNTER_START", "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("ENCOUNTER_END", "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("GROUP_ROSTER_UPDATE", "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+    MSUF_EventBus_Register("ENCOUNTER_START",                "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+    MSUF_EventBus_Register("ENCOUNTER_END",                  "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+    MSUF_EventBus_Register("PLAYER_ENTERING_WORLD",          "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+    MSUF_EventBus_Register("GROUP_ROSTER_UPDATE",            "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+
+    -- Replay channel: fires once after combat ends, only if any event was
+    -- deferred during combat. Stable callback ref.
+    MSUF_EventBus_Register("PLAYER_REGEN_ENABLED",           "MSUF_BOSS_PREVIEW_COMBAT_END", _OnBossPreviewCombatEnd)
 end
 
 if not _G.MSUF_BossPreviewApplyHooked and type(hooksecurefunc) == "function" then
@@ -1378,13 +1494,18 @@ end
         end
         return hv
     end
+    local function GetCastbarDesiredPreviewSize(unitKey, frame, widthKey, heightKey, detachedFlag, fallbackW, fallbackH)
+        if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+            return _G.MSUF_GetCastbarDesiredSize(unitKey, g, frame, fallbackW or 250, fallbackH or 18)
+        end
+        return GetAttachedWidthOrDB(widthKey, detachedFlag, unitKey, fallbackW), GetHeightOrDB(heightKey, fallbackH)
+    end
 
     if UnitFrames and UnitFrames["target"] then
         local targetPreview = MSUF_TargetCastbarPreview or MSUF_CreateTargetCastbarPreview()
         if targetPreview and MSUF_PositionTargetCastbarPreview then
             if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-                local tw = GetAttachedWidthOrDB("castbarTargetBarWidth", g.castbarTargetDetached, "target", 250)
-                local th = GetHeightOrDB("castbarTargetBarHeight", 18)
+                local tw, th = GetCastbarDesiredPreviewSize("target", targetPreview, "castbarTargetBarWidth", "castbarTargetBarHeight", g.castbarTargetDetached, 250, 18)
                 _G.MSUF_ApplyPlayerCastbarSizeAndLayout(targetPreview, g, tw, th)
             end
             MSUF_PositionTargetCastbarPreview()
@@ -1398,12 +1519,11 @@ end
         local focusPreview = MSUF_FocusCastbarPreview or MSUF_CreateFocusCastbarPreview()
         if focusPreview and MSUF_PositionFocusCastbarPreview then
             if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-                local fw = GetAttachedWidthOrDB("castbarFocusBarWidth", g.castbarFocusDetached, "focus", 250)
+                local fw, fh = GetCastbarDesiredPreviewSize("focus", focusPreview, "castbarFocusBarWidth", "castbarFocusBarHeight", g.castbarFocusDetached, 250, 18)
                 -- If focus is attached but has no unitframe yet, mirror target as a pragmatic fallback.
                 if (not fw or fw <= 0) and (UnitFrames and UnitFrames["target"] and UnitFrames["target"].GetWidth) then
                     fw = UnitFrames["target"]:GetWidth()
                 end
-                local fh = GetHeightOrDB("castbarFocusBarHeight", 18)
                 _G.MSUF_ApplyPlayerCastbarSizeAndLayout(focusPreview, g, fw, fh)
             end
             MSUF_PositionFocusCastbarPreview()

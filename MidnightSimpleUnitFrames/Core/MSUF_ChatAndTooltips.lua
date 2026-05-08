@@ -9,7 +9,25 @@ local MSUF_RESET_DEFAULTS = {
     pet    = { width=220, height=30, offsetX=-260, offsetY=135, showName=true, showHP=false, showPower=false },
     targettarget = { width=220, height=30, offsetX=260, offsetY=225, showName=true, showHP=true, showPower=false },
 }
+local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "pet", "targettarget", "boss" }
 local MSUF_FullResetPending = false
+local function MSUF_ResetPositionAnchorsToScreen()
+    if type(MSUF_DB) ~= "table" then return end
+
+    MSUF_DB.general = MSUF_DB.general or {}
+    local g = MSUF_DB.general
+    g.anchorToCooldown = false
+    g.anchorName = "UIParent"
+
+    for i = 1, #MSUF_RESET_ANCHOR_UNITS do
+        local unit = MSUF_RESET_ANCHOR_UNITS[i]
+        local conf = MSUF_DB[unit]
+        if type(conf) == "table" then
+            conf.anchorFrameName = nil
+            conf.anchorToUnitframe = "GLOBAL"
+        end
+    end
+end
 local function MSUF_DoFullReset(opts)
     opts = opts or {}
     local skipReload = (opts.skipReload == true)
@@ -41,6 +59,7 @@ local function MSUF_PrintHelp()
     print("  /msuf fullreset - FULL factory reset (all profiles/settings).")
     print("                   Confirm stages the reset; reload via /reload or MSUF Menu  Advanced  Factory Reset.")
     print("  /msuf absorb    - Toggle showing total absorb amount in HP text.")
+    print("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry.")
     print("  !msuf help      - Print this help via chat (from your own character).")
  end
 -- Optional chat trigger: "!msuf help" (only from yourself)
@@ -159,7 +178,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
         if type(EnsureDB) == "function" then
             EnsureDB()
         end
-        if type(MSUF_DB) == "table" then
+        if MSUF_DB then
             for unit, defaults in pairs(MSUF_RESET_DEFAULTS) do
                 MSUF_DB[unit] = MSUF_DB[unit] or {}
                 local t = MSUF_DB[unit]
@@ -170,9 +189,15 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
                     t.enabled = true
                 end
             end
+            MSUF_ResetPositionAnchorsToScreen()
         end
-        if type(ApplyAllSettings) == "function" then
+        if type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
+            _G.MSUF_ApplyAllSettings_Immediate()
+        elseif type(ApplyAllSettings) == "function" then
             ApplyAllSettings()
+        end
+        if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
+            _G.MSUF_ForceReanchorAllUnitFrames_Once()
         end
         if type(UpdateAllFonts) == "function" then
             UpdateAllFonts()
@@ -197,6 +222,14 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             print("|cff00ff00MSUF:|r Total absorb amount in HP text ENABLED.")
         else
             print("|cff00ff00MSUF:|r Total absorb amount in HP text DISABLED.")
+        end
+         return
+    end
+    if cmd == "analytics" then
+        if type(_G.MSUF_Analytics_HandleSlash) == "function" then
+            _G.MSUF_Analytics_HandleSlash(msg:match("^%S+%s*(.-)%s*$") or "")
+        else
+            print("|cffff0000MSUF:|r Analytics module not loaded.")
         end
          return
     end
@@ -291,10 +324,26 @@ end
 local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     local nameLine = UnitName(unit) or fallbackName
     if isPlayer then
-        if UnitIsAFK(unit) then
-            nameLine = nameLine .. " <AFK>"
-        elseif UnitIsDND(unit) then
-            nameLine = nameLine .. " <DND>"
+        -- Secret-safe (12.0): UnitIsAFK/UnitIsDND may return secret booleans;
+        -- direct boolean test in `if` would hard-error. Guard via issecretvalue.
+        local getAway = _G.MSUF_GetCachedAwayStatus
+        if getAway then
+            local away = getAway(unit, true, true, false)
+            if away == 1 or away == 3 then
+                nameLine = nameLine .. " <AFK>"
+            elseif away == 2 then
+                nameLine = nameLine .. " <DND>"
+            end
+        elseif UnitIsAFK then
+            local afk = UnitIsAFK(unit)
+            if not (issecretvalue and issecretvalue(afk)) and afk then
+                nameLine = nameLine .. " <AFK>"
+            elseif UnitIsDND then
+                local dnd = UnitIsDND(unit)
+                if not (issecretvalue and issecretvalue(dnd)) and dnd then
+                    nameLine = nameLine .. " <DND>"
+                end
+            end
         end
     end
      return nameLine
@@ -445,7 +494,7 @@ function MSUF_HidePlayerInfoTooltip()
         -- instead of hiding the frame (OnLeave from unit frames must not
         -- kill the persistent drag-preview).
         if MSUF_PlayerInfoFrame._msufEditPreviewActive then
-            if type(_G.MSUF_Tooltip_ShowEditPreview) == "function" then
+            if _G.MSUF_Tooltip_ShowEditPreview then
                 _G.MSUF_Tooltip_ShowEditPreview()
             end
             return
@@ -465,9 +514,7 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
              return
         end
         local emf = _G.EditModeManagerFrame
-        if not emf then
-             return
-        end
+        if not emf then return end
         if active then
             if not _G.MSUF_BlizzEditModeStartedByMSUF then
                 _G.MSUF_BlizzEditModeStartedByMSUF = true
@@ -485,9 +532,7 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
                 _G.MSUF_BlizzEditModeStartedByMSUF = nil
             end
         else
-            if not _G.MSUF_BlizzEditModeStartedByMSUF then
-                 return
-            end
+            if not _G.MSUF_BlizzEditModeStartedByMSUF then return end
             _G.MSUF_BlizzEditModeStartedByMSUF = nil
             pcall(function()
                 if type(securecallfunction) == "function" and type(emf.ExitEditMode) == "function" then
@@ -521,8 +566,8 @@ do
     local function MSUF_Tooltip_SavePosition(frame)
         if not frame then return end
         if type(EnsureDB) == "function" then EnsureDB() end
-        local g = type(MSUF_DB) == "table" and MSUF_DB.general
-        if type(g) ~= "table" then return end
+        local g = MSUF_DB and MSUF_DB.general
+        if not g then return end
         local left   = frame.GetLeft   and frame:GetLeft()
         local bottom = frame.GetBottom and frame:GetBottom()
         if type(left) == "number" and type(bottom) == "number" then
@@ -531,11 +576,37 @@ do
         end
     end
 
+    local function MSUF_Tooltip_SetNudgeTarget(handle)
+        if not handle or not _G.MSUF_EM2_SetPreviewNudgeTarget then return end
+        _G.MSUF_EM2_SetPreviewNudgeTarget({
+            frame = handle,
+            IsActive = function()
+                local p = handle:GetParent()
+                return tooltipEditPreviewActive and handle:IsShown() and p and p.IsShown and p:IsShown()
+            end,
+            Nudge = function(_, dx, dy)
+                local p = handle:GetParent()
+                if not p then return end
+                if type(EnsureDB) == "function" then EnsureDB() end
+                local g = MSUF_DB and MSUF_DB.general
+                if not g then return end
+                local left = tonumber(g.tooltipPosX)
+                local bottom = tonumber(g.tooltipPosY)
+                if left == nil then left = p:GetLeft() or 0 end
+                if bottom == nil then bottom = p:GetBottom() or 0 end
+                g.tooltipPosX = math.floor(left + (dx or 0) + 0.5)
+                g.tooltipPosY = math.floor(bottom + (dy or 0) + 0.5)
+                p:ClearAllPoints()
+                p:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", g.tooltipPosX, g.tooltipPosY)
+            end,
+        })
+    end
+
     -- ---- reset helper (called from Options / slash) ------------------------
     local function MSUF_Tooltip_ResetPosition()
         if type(EnsureDB) == "function" then EnsureDB() end
-        local g = type(MSUF_DB) == "table" and MSUF_DB.general
-        if type(g) ~= "table" then return end
+        local g = MSUF_DB and MSUF_DB.general
+        if not g then return end
         g.tooltipPosX = nil
         g.tooltipPosY = nil
     end
@@ -566,12 +637,13 @@ do
 
         local label = dh:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         label:SetPoint("TOP", dh, "TOP", 0, -2)
-        label:SetText("Drag to reposition")
+        label:SetText("Drag or arrow keys to reposition")
         label:SetTextColor(0.4, 0.8, 1.0, 0.9)
         dh._label = label
 
         dh:SetScript("OnDragStart", function(self)
             if InCombatLockdown and InCombatLockdown() then return end
+            MSUF_Tooltip_SetNudgeTarget(self)
             local p = self:GetParent()
             if p then
                 p:SetMovable(true)
@@ -586,6 +658,12 @@ do
             p:StopMovingOrSizing()
             p:SetMovable(false)
             MSUF_Tooltip_SavePosition(p)
+        end)
+
+        dh:SetScript("OnMouseDown", function(self, button)
+            if button == "LeftButton" then
+                MSUF_Tooltip_SetNudgeTarget(self)
+            end
         end)
 
         dh:Hide()
@@ -638,7 +716,7 @@ do
     _G.MSUF_Tooltip_ShowEditPreview = MSUF_Tooltip_ShowEditPreview
 
     -- Register as AnyEditMode listener (fires on MSUF and/or Blizzard Edit Mode transitions).
-    if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
+    if _G.MSUF_RegisterAnyEditModeListener then
         _G.MSUF_RegisterAnyEditModeListener(function(active)
             if active then
                 MSUF_Tooltip_ShowEditPreview()

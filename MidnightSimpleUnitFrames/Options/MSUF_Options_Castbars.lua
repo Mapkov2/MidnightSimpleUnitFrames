@@ -29,6 +29,57 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         return UI.Slider(spec)
     end
 
+    local MSUF_SetCheckboxEnabled = _G.MSUF_SetCheckboxEnabled or function(cb, enabled)
+        if not cb then return end
+        if enabled then
+            if cb.Enable then cb:Enable() end
+        else
+            if cb.Disable then cb:Disable() end
+        end
+        if cb.SetAlpha then cb:SetAlpha(enabled and 1 or 0.4) end
+    end
+
+    local function SetCastbarOptionEnabled(widget, enabled)
+        if not widget then return end
+        enabled = enabled and true or false
+        local objectType = widget.GetObjectType and widget:GetObjectType() or nil
+        if objectType == "FontString" then
+            if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.4) end
+            return
+        end
+
+        if widget._ddSpec and widget.SetEnabled then
+            pcall(widget.SetEnabled, widget, enabled)
+        elseif widget.GetChecked and widget.SetChecked then
+            MSUF_SetCheckboxEnabled(widget, enabled)
+        elseif widget.SetEnabled then
+            pcall(widget.SetEnabled, widget, enabled)
+        elseif enabled then
+            if widget.Enable then pcall(widget.Enable, widget) end
+        else
+            if widget.Disable then pcall(widget.Disable, widget) end
+        end
+
+        if widget.EnableMouse then pcall(widget.EnableMouse, widget, enabled) end
+        if widget.SetAlpha then widget:SetAlpha(enabled and 1 or 0.4) end
+
+        local label = widget.Text or widget.text
+        if not label and widget.GetName then
+            local n = widget:GetName()
+            label = n and _G[n .. "Text"] or nil
+        end
+        if label and label.SetTextColor then
+            local c = enabled and 1 or 0.35
+            label:SetTextColor(c, c, c)
+        end
+    end
+
+    local function SetCastbarOptionsEnabled(enabled, ...)
+        for i = 1, select("#", ...) do
+            SetCastbarOptionEnabled(select(i, ...), enabled)
+        end
+    end
+
     local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
     local CreateFrame = CreateFrame
     local math_pi = math.pi
@@ -265,7 +316,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         name = "MSUF_CastbarGCDTimeCheck", parent = s2Body,
         anchor = gcdCheck, x = 18, y = -4,
         label = TR("GCD bar: show time text"),
-        get = function() return G().showGCDBarTime == true end,
+        get = function() return G().showGCDBarTime ~= false end,
         set = function(v) G().showGCDBarTime = v; ApplyGCDVisuals() end,
     })
 
@@ -278,7 +329,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     })
 
     -- Section 3: Textures & Outline
-    local s3Box, s3Body = MakeCollapsibleSection(castbarEnemyGroup, 310, "Textures & Outline", false)
+    local s3Box, s3Body = MakeCollapsibleSection(castbarEnemyGroup, 250, "Textures & Outline", false)
     s3Box:SetPoint("TOPLEFT", s2Box, "BOTTOMLEFT", 0, -6)
 
     local function ApplyTextures()
@@ -360,29 +411,6 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         label = TR("Spark extends beyond bar"),
         get = function() return G().castbarSparkOverflow ~= false end,
         set = function(v) G().castbarSparkOverflow = v; ApplyTextures() end,
-    })
-
-    local matchLabel = UI.Label({ parent = s3Body, text = TR("Player castbar width source"), anchor = sparkOverflowCheck, y = -12 })
-
-    local matchDrop = UI.Dropdown({
-        name = "MSUF_CastbarPlayerMatchWidthDropdown", parent = s3Body,
-        anchor = matchLabel, x = -16, y = -4, width = 260,
-        items = {
-            { key = "manual",    label = "Manual (per-unit width)" },
-            { key = "essential", label = "Essential Cooldown Row" },
-            { key = "utility",   label = "Utility Cooldown Bar" },
-        },
-        get = function()
-            local v = G().castbarPlayerMatchWidth
-            if v == "essential" or v == "utility" then return v end
-            return "manual"
-        end,
-        set = function(v)
-            if v == "manual" then v = nil end
-            G().castbarPlayerMatchWidth = v
-            ApplyTextures()
-            if _G.MSUF_ReanchorPlayerCastBar then _G.MSUF_ReanchorPlayerCastBar() end
-        end,
     })
 
     -- Section 4: Empowered Casts
@@ -496,6 +524,9 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     s6Box:SetPoint("TOPLEFT", s5Box, "BOTTOMLEFT", 0, -6)
 
     local _fkSyncing = false
+    local SyncFocusKickControls
+    local fkDesc, fkPreviewCheck, fkSizeLabel, fkWidthSlider, fkHeightSlider, fkTextSlider
+    local fkPosDivider, fkPosLabel, fkOffXSlider, fkOffYSlider, fkResetBtn
 
     local function FKEnsureDB()
         EnsureDB()
@@ -530,17 +561,18 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
             if not v and type(_G.MSUF_FocusKick_SetPreviewEnabled) == "function" then
                 _G.MSUF_FocusKick_SetPreviewEnabled(false)
             end
+            if SyncFocusKickControls then SyncFocusKickControls() end
         end,
     })
 
-    local fkDesc = s6Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    fkDesc = s6Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     fkDesc:SetPoint("TOPLEFT", fkEnableCheck, "BOTTOMLEFT", 20, -2)
     fkDesc:SetWidth(300)
     fkDesc:SetJustifyH("LEFT")
     fkDesc:SetText(TR("Track interrupts on your focus without showing the focus castbar."))
     fkDesc:SetTextColor(0.55, 0.55, 0.55)
 
-    local fkPreviewCheck = UI.Check({
+    fkPreviewCheck = UI.Check({
         name = "MSUF_FocusKickPreviewCheckInline", parent = s6Body,
         anchor = fkDesc, anchorPoint = "BOTTOMLEFT", x = -20, y = -6,
         label = TR("Show on-screen preview"),
@@ -558,11 +590,11 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     -- Right column: Size sliders (all aligned at x=380)
     local FK_RIGHT = 380
 
-    local fkSizeLabel = s6Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    fkSizeLabel = s6Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     fkSizeLabel:SetPoint("TOPLEFT", s6Body, "TOPLEFT", FK_RIGHT, -6)
     fkSizeLabel:SetText(TR("Size"))
 
-    local fkWidthSlider = CastbarSlider({
+    fkWidthSlider = CastbarSlider({
         name = "MSUF_FocusKickIconWidthSlider", parent = s6Body,
         anchor = fkSizeLabel, x = 0, y = -8, width = 260, compact = true,
         label = TR("Width"), min = 16, max = 128, step = 1, default = 40,
@@ -570,7 +602,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconWidth = v; FKApply() end,
     })
 
-    local fkHeightSlider = CastbarSlider({
+    fkHeightSlider = CastbarSlider({
         name = "MSUF_FocusKickIconHeightSlider", parent = s6Body,
         anchor = fkWidthSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Height"), min = 16, max = 128, step = 1, default = 40,
@@ -578,7 +610,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconHeight = v; FKApply() end,
     })
 
-    local fkTextSlider = CastbarSlider({
+    fkTextSlider = CastbarSlider({
         name = "MSUF_FocusKickTextSizeSlider", parent = s6Body,
         anchor = fkHeightSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Text size"), min = 8, max = 24, step = 1, default = 12,
@@ -595,18 +627,18 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
     })
 
     -- Divider anchors to right column bottom (text size slider extends deeper than preview check)
-    local fkPosDivider = s6Body:CreateTexture(nil, "ARTWORK")
+    fkPosDivider = s6Body:CreateTexture(nil, "ARTWORK")
     fkPosDivider:SetPoint("TOPLEFT", fkTextSlider, "BOTTOMLEFT", -FK_RIGHT + 12, -12)
     fkPosDivider:SetPoint("RIGHT", s6Body, "RIGHT", -12, 0)
     fkPosDivider:SetHeight(1)
     fkPosDivider:SetColorTexture(1, 1, 1, 0.06)
 
     -- Position row: X left, Y right (same Y line)
-    local fkPosLabel = s6Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    fkPosLabel = s6Body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     fkPosLabel:SetPoint("TOPLEFT", fkPosDivider, "BOTTOMLEFT", 0, -8)
     fkPosLabel:SetText(TR("Position"))
 
-    local fkOffXSlider = CastbarSlider({
+    fkOffXSlider = CastbarSlider({
         name = "MSUF_FocusKickIconOffsetXSlider", parent = s6Body,
         anchor = fkPosLabel, x = 0, y = -8, width = 280, compact = true,
         label = TR("X offset"), min = -500, max = 500, step = 1, default = 300,
@@ -614,7 +646,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconOffsetX = v; FKApply() end,
     })
 
-    local fkOffYSlider = CastbarSlider({
+    fkOffYSlider = CastbarSlider({
         name = "MSUF_FocusKickIconOffsetYSlider", parent = s6Body,
         anchor = fkPosLabel, x = FK_RIGHT - 12, y = -8, width = 280, compact = true,
         label = TR("Y offset"), min = -500, max = 500, step = 1, default = 0,
@@ -622,7 +654,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) if _fkSyncing then return end; FKEnsureDB(); _G.MSUF_DB.general.focusKickIconOffsetY = v; FKApply() end,
     })
 
-    local fkResetBtn = UI.Button({
+    fkResetBtn = UI.Button({
         name = "MSUF_FocusKickResetPositionButton", parent = s6Body,
         anchor = fkOffXSlider, x = 0, y = -16, width = 150, height = 22,
         text = TR("Reset Position"),
@@ -636,6 +668,21 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         end,
     })
 
+    SyncFocusKickControls = function()
+        FKEnsureDB()
+        local enabled = _G.MSUF_DB.general.enableFocusKickIcon == true
+        if not enabled and type(_G.MSUF_FocusKick_SetPreviewEnabled) == "function" then
+            _G.MSUF_FocusKick_SetPreviewEnabled(false)
+        end
+        if fkPreviewCheck and fkPreviewCheck.Refresh then fkPreviewCheck:Refresh() end
+        SetCastbarOptionsEnabled(enabled,
+            fkDesc, fkPreviewCheck, fkSizeLabel, fkWidthSlider, fkHeightSlider, fkTextSlider,
+            fkPosLabel, fkOffXSlider, fkOffYSlider, fkResetBtn
+        )
+        if fkPosDivider and fkPosDivider.SetAlpha then fkPosDivider:SetAlpha(enabled and 1 or 0.25) end
+    end
+    SyncFocusKickControls()
+
     _G.MSUF_FocusKickOptionsBuiltInCastbar = true
 
     -- Section 7: Interrupt Ready Indicator
@@ -646,6 +693,8 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         Apply("castbarVisuals")
         if type(_G.MSUF_UpdateCastbarVisuals) == "function" then pcall(_G.MSUF_UpdateCastbarVisuals) end
     end
+    local SyncKickReadyControls
+    local kickStyleDrop, kickSizeSlider, kickAutoSizeCheck, kickColorHint, kickAnchorDrop, kickOffXSlider, kickOffYSlider
 
     local kickDesc = s7Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     kickDesc:SetPoint("TOPLEFT", s7Body, "TOPLEFT", 12, -6)
@@ -658,7 +707,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         anchor = kickDesc, x = 0, y = -10,
         label = TR("Show on Target castbar"),
         get = function() return G().kickReadyShowTarget == true end,
-        set = function(v) G().kickReadyShowTarget = v; KickApply() end,
+        set = function(v) G().kickReadyShowTarget = v; KickApply(); if SyncKickReadyControls then SyncKickReadyControls() end end,
     })
 
     local kickFocusCheck = UI.Check({
@@ -666,7 +715,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         anchor = kickTargetCheck, x = 0, y = -6,
         label = TR("Show on Focus castbar"),
         get = function() return G().kickReadyShowFocus == true end,
-        set = function(v) G().kickReadyShowFocus = v; KickApply() end,
+        set = function(v) G().kickReadyShowFocus = v; KickApply(); if SyncKickReadyControls then SyncKickReadyControls() end end,
     })
 
     local kickBossCheck = UI.Check({
@@ -674,10 +723,18 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         anchor = kickFocusCheck, x = 0, y = -6,
         label = TR("Show on Boss castbars"),
         get = function() return G().kickReadyShowBoss == true end,
-        set = function(v) G().kickReadyShowBoss = v; KickApply() end,
+        set = function(v) G().kickReadyShowBoss = v; KickApply(); if SyncKickReadyControls then SyncKickReadyControls() end end,
     })
 
-    local kickStyleDrop = UI.Dropdown({
+    -- Style dropdown: where the indicator visually shows up.
+    --   "border" = tint the castbar's own border green/red (default; clean,
+    --              uses the existing outline that's already configured in
+    --              the Color menu — only the tint is overridden while a
+    --              tracked cast is active).
+    --   "box"    = small colored square next to the bar (no icon, just a
+    --              solid green/red fill). Honors the size + anchor sliders
+    --              below.
+    kickStyleDrop = UI.Dropdown({
         name = "MSUF_KickReadyStyleDropdown", parent = s7Body,
         anchor = s7Body, anchorPoint = "TOPLEFT", x = 370, y = -30, width = 260,
         items = {
@@ -688,7 +745,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyStyle = v; KickApply() end,
     })
 
-    local kickSizeSlider = CastbarSlider({
+    kickSizeSlider = CastbarSlider({
         name = "MSUF_KickReadySizeSlider", parent = s7Body,
         anchor = kickStyleDrop, x = 0, y = -28, width = 260, compact = true,
         label = TR("Indicator size"), min = 8, max = 32, step = 1, default = 16,
@@ -696,7 +753,10 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadySize = v; KickApply() end,
     })
 
-    local kickAutoSizeCheck = UI.Check({
+    -- Auto-scale toggle: when on, the indicator size tracks the castbar
+    -- height (square, just like the bar's own spell icon). The size slider
+    -- is ignored in that case. Default ON for new users.
+    kickAutoSizeCheck = UI.Check({
         name = "MSUF_KickReadyAutoSizeCheck", parent = s7Body,
         anchor = kickSizeSlider, x = 0, y = -22,
         label = TR("Auto-size to castbar height"),
@@ -705,20 +765,47 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
             if v == nil then return true end
             return v == true
         end,
-        set = function(v) G().kickReadyAutoSize = v; KickApply() end,
+        set = function(v)
+            G().kickReadyAutoSize = v
+            -- Visually disable / enable the slider for clarity.
+            if kickSizeSlider then
+                if v then
+                    if kickSizeSlider.Disable then kickSizeSlider:Disable() end
+                else
+                    if kickSizeSlider.Enable  then kickSizeSlider:Enable()  end
+                end
+            end
+            KickApply()
+            if SyncKickReadyControls then SyncKickReadyControls() end
+        end,
     })
 
-    -- Indicator colors (ready / on cooldown) live in the Colors menu under
-    -- "Interrupt Ready Indicator" so the indicator stays visually distinct
-    -- from the castbar fill colors. Defaults: green = ready, red = on CD.
-    local kickColorHint = s7Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    -- Reflect the slider's enabled-state on first show, before the user
+    -- interacts with the checkbox.
+    do
+        local autoOn = G().kickReadyAutoSize
+        if autoOn == nil then autoOn = true end
+        if kickSizeSlider then
+            if autoOn then
+                if kickSizeSlider.Disable then kickSizeSlider:Disable() end
+            else
+                if kickSizeSlider.Enable  then kickSizeSlider:Enable()  end
+            end
+        end
+    end
+
+    -- Indicator colors (ready / on cooldown) are configured in the
+    -- Colors menu under "Interrupt Ready Indicator" — kept separate from
+    -- the castbar fill colors so the indicator remains visually distinct.
+    -- Defaults: green = kick ready, red = kick on cooldown.
+    kickColorHint = s7Body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     kickColorHint:SetPoint("TOPLEFT", kickAutoSizeCheck, "BOTTOMLEFT", 0, -10)
     kickColorHint:SetWidth(260)
     kickColorHint:SetJustifyH("LEFT")
     kickColorHint:SetTextColor(0.7, 0.7, 0.7, 1)
     kickColorHint:SetText(TR("Ready / cooldown colors: Colors menu > Interrupt Ready Indicator"))
 
-    local kickAnchorDrop = UI.Dropdown({
+    kickAnchorDrop = UI.Dropdown({
         name = "MSUF_KickReadyAnchorDropdown", parent = s7Body,
         anchor = kickColorHint, x = 0, y = -10, width = 260,
         items = {
@@ -731,7 +818,7 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyAnchor = v; KickApply() end,
     })
 
-    local kickOffXSlider = CastbarSlider({
+    kickOffXSlider = CastbarSlider({
         name = "MSUF_KickReadyOffsetXSlider", parent = s7Body,
         anchor = kickAnchorDrop, x = 0, y = -28, width = 260, compact = true,
         label = TR("X offset"), min = -50, max = 50, step = 1, default = 4,
@@ -739,13 +826,28 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         set = function(v) G().kickReadyOffsetX = v; KickApply() end,
     })
 
-    local kickOffYSlider = CastbarSlider({
+    kickOffYSlider = CastbarSlider({
         name = "MSUF_KickReadyOffsetYSlider", parent = s7Body,
         anchor = kickOffXSlider, x = 0, y = -36, width = 260, compact = true,
         label = TR("Y offset"), min = -50, max = 50, step = 1, default = 0,
         get = function() return G().kickReadyOffsetY or 0 end,
         set = function(v) G().kickReadyOffsetY = v; KickApply() end,
     })
+
+    SyncKickReadyControls = function()
+        local g = G()
+        local enabled = (g.kickReadyShowTarget == true) or (g.kickReadyShowFocus == true) or (g.kickReadyShowBoss == true)
+        local autoOn = g.kickReadyAutoSize
+        if autoOn == nil then autoOn = true end
+        SetCastbarOptionEnabled(kickStyleDrop, enabled)
+        SetCastbarOptionEnabled(kickSizeSlider, enabled and not autoOn)
+        SetCastbarOptionEnabled(kickAutoSizeCheck, enabled)
+        SetCastbarOptionEnabled(kickColorHint, enabled)
+        SetCastbarOptionEnabled(kickAnchorDrop, enabled)
+        SetCastbarOptionEnabled(kickOffXSlider, enabled)
+        SetCastbarOptionEnabled(kickOffYSlider, enabled)
+    end
+    SyncKickReadyControls()
 
     -- Bottom anchor (for Edit Mode button placement from Options_Core)
     local bottomAnchor = CreateFrame("Frame", "MSUF_CastbarMenuPanel", castbarEnemyGroup)
@@ -757,6 +859,8 @@ function ns.MSUF_Options_Castbar_Build(panel, castbarGroupHost, castbarGroup, ca
         EnsureDB()
         SyncGCDSubs()
         SyncShortenToggle()
+        if SyncFocusKickControls then SyncFocusKickControls() end
+        if SyncKickReadyControls then SyncKickReadyControls() end
         QueueScrollUpdate()
     end
     SyncAll()

@@ -331,26 +331,30 @@ end
 if type(hooksecurefunc) == "function" then
     -- After portrait rendering (2D/3D/CLASS texture is set)
     if type(_G.MSUF_UpdatePortraitIfNeeded) == "function" then
-        hooksecurefunc("MSUF_UpdatePortraitIfNeeded", function(f, unit, conf, exists)
-            MSUF_ApplyPortraitDecoration(f, unit, conf, exists)
-        end)
+        local function OnUpdatePortrait(f, unit, conf, exists)
+            local fn = _G.MSUF_ApplyPortraitDecoration
+            if type(fn) == "function" then fn(f, unit, conf, exists) end
+        end
+        hooksecurefunc("MSUF_UpdatePortraitIfNeeded", OnUpdatePortrait)
     end
     -- After parent layout (ClearAllPoints + SetSize + SetPoint on portrait)
     if type(_G.MSUF_UpdateBossPortraitLayout) == "function" then
-        hooksecurefunc("MSUF_UpdateBossPortraitLayout", function(f, conf)
+        local function OnBossPortraitLayout(f, conf)
             if not f or not f.portrait or not conf then return end
             if (conf.portraitMode or "OFF") == "OFF" then return end
             -- Invalidate layout stamp so ComputeAndApplyLayout re-asserts
             f._msufLayoutStamp = nil
             ComputeAndApplyLayout(f, conf, f.portrait)
-        end)
+        end
+        hooksecurefunc("MSUF_UpdateBossPortraitLayout", OnBossPortraitLayout)
     end
     -- OFF-gate cleanup
     if type(_G.MSUF_MaybeUpdatePortrait) == "function" then
-        hooksecurefunc("MSUF_MaybeUpdatePortrait", function(f, unit, conf)
+        local function OnMaybeUpdatePortrait(f, unit, conf)
             if not f or not conf then return end
             if (conf.portraitMode or "OFF") == "OFF" then HideAllDecor(f) end
-        end)
+        end
+        hooksecurefunc("MSUF_MaybeUpdatePortrait", OnMaybeUpdatePortrait)
     end
 end
 
@@ -385,31 +389,71 @@ local function SyncUnitSafe(key)
     if type(fn) == "function" then fn(key) end
 end
 
+local function RefreshAllTimer()
+    InvalidateAll()
+    local fn = _G.MSUF_PortraitDecoration_RefreshAll
+    if type(fn) == "function" then fn() end
+end
+
+local function SyncTargetTimer()
+    SyncUnitSafe("target")
+    SyncUnitSafe("targettarget")
+end
+
+local function SyncFocusTimer()
+    SyncUnitSafe("focus")
+end
+
+local function SyncPetTimer()
+    SyncUnitSafe("pet")
+end
+
+local function SyncBossTimer()
+    SyncUnitSafe("boss")
+end
+
+local function SchedulePortraitTimer(delay, label, fn)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay, fn)
+    end
+end
+
 do
     local ev = CreateFrame("Frame")
+    _G.MSUF_PortraitDecorationEventFrame = ev
     ev:RegisterEvent("PLAYER_ENTERING_WORLD")
     ev:RegisterEvent("PLAYER_TARGET_CHANGED")
     ev:RegisterEvent("PLAYER_FOCUS_CHANGED")
     ev:RegisterEvent("UNIT_PET")
     ev:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
     ev:SetScript("OnEvent", function(self, event)
-        if event == "PLAYER_ENTERING_WORLD" then
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0.1, function() InvalidateAll(); if _G.MSUF_PortraitDecoration_RefreshAll then _G.MSUF_PortraitDecoration_RefreshAll() end end)
-                C_Timer.After(0.5, function() InvalidateAll(); if _G.MSUF_PortraitDecoration_RefreshAll then _G.MSUF_PortraitDecoration_RefreshAll() end end)
+        -- PERF: Skip ALL portrait work when portraits are OFF for all units.
+        -- This saves InvalidateByKey + SyncUnitSafe + HideAllDecor per target click.
+        local db = _G.MSUF_DB
+        if db then
+            local allOff = true
+            for _, k in ipairs({"player","target","focus","pet","targettarget","boss"}) do
+                local c = db[k]
+                if c and (c.portraitMode or "OFF") ~= "OFF" then allOff = false; break end
             end
+            if allOff then return end
+        end
+
+        if event == "PLAYER_ENTERING_WORLD" then
+            SchedulePortraitTimer(0.1, "PortraitDecoration.Timer.RefreshAll.0.1", RefreshAllTimer)
+            SchedulePortraitTimer(0.5, "PortraitDecoration.Timer.RefreshAll.0.5", RefreshAllTimer)
         elseif event == "PLAYER_TARGET_CHANGED" then
             InvalidateByKey("target"); InvalidateByKey("targettarget")
-            if C_Timer and C_Timer.After then C_Timer.After(0, function() SyncUnitSafe("target"); SyncUnitSafe("targettarget") end) end
+            SchedulePortraitTimer(0, "PortraitDecoration.Timer.SyncTarget", SyncTargetTimer)
         elseif event == "PLAYER_FOCUS_CHANGED" then
             InvalidateByKey("focus")
-            if C_Timer and C_Timer.After then C_Timer.After(0, function() SyncUnitSafe("focus") end) end
+            SchedulePortraitTimer(0, "PortraitDecoration.Timer.SyncFocus", SyncFocusTimer)
         elseif event == "UNIT_PET" then
             InvalidateByKey("pet")
-            if C_Timer and C_Timer.After then C_Timer.After(0, function() SyncUnitSafe("pet") end) end
+            SchedulePortraitTimer(0, "PortraitDecoration.Timer.SyncPet", SyncPetTimer)
         elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
             InvalidateByKey("boss")
-            if C_Timer and C_Timer.After then C_Timer.After(0, function() SyncUnitSafe("boss") end) end
+            SchedulePortraitTimer(0, "PortraitDecoration.Timer.SyncBoss", SyncBossTimer)
         end
     end)
 end
@@ -429,12 +473,12 @@ local function GetFramesForUnitKey(key)
     return f and { f } or {}
 end
 
-function _G.MSUF_PortraitDecoration_SyncUnit(unitKey)
+local function SyncDecorationUnit(unitKey)
     if type(unitKey) ~= "string" or unitKey == "" then return end
-    local db = _G.MSUF_DB; if type(db) ~= "table" then return end
+    local db = _G.MSUF_DB; if not db then return end
     local conf = (unitKey == "boss") and db.boss or db[unitKey]
     if unitKey == "tot" then conf = db.targettarget or db.tot end
-    if type(conf) ~= "table" then return end
+    if not conf then return end
     local frames = GetFramesForUnitKey(unitKey)
     for i = 1, #frames do
         local f = frames[i]
@@ -442,14 +486,17 @@ function _G.MSUF_PortraitDecoration_SyncUnit(unitKey)
             InvalidateFrame(f)
             local unit = f.unit or unitKey
             local exists = UnitExists and UnitExists(unit) or false
-            MSUF_ApplyPortraitDecoration(f, unit, conf, exists)
+            local fn = _G.MSUF_ApplyPortraitDecoration
+            if type(fn) == "function" then fn(f, unit, conf, exists) end
         end
     end
 end
+_G.MSUF_PortraitDecoration_SyncUnit = SyncDecorationUnit
 
-function _G.MSUF_PortraitDecoration_RefreshAll()
+local function RefreshAllDecoration()
     for _, k in ipairs({"player","target","focus","pet","targettarget"}) do
         _G.MSUF_PortraitDecoration_SyncUnit(k)
     end
     _G.MSUF_PortraitDecoration_SyncUnit("boss")
 end
+_G.MSUF_PortraitDecoration_RefreshAll = RefreshAllDecoration

@@ -2,8 +2,8 @@
 -- Minimal, robust minimap icon implementation (LibDataBroker + LibDBIcon, with safe fallback).
 
 local addonName, addonNS = ...
-local ns = (_G and _G.MSUF_NS) or addonNS or {}
-if _G then _G.MSUF_NS = ns end
+local ns = (_G.MSUF_NS) or addonNS or {}
+_G.MSUF_NS = ns
 
 local _G = _G
 
@@ -34,7 +34,7 @@ local function ToggleEditMode()
     if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
         local st = _G.MSUF_EditState
         local nextActive = true
-        if type(st) == "table" and st.active ~= nil then
+        if st and st.active ~= nil then
             nextActive = not st.active
         end
         pcall(_G.MSUF_SetMSUFEditModeDirect, nextActive, nil)
@@ -90,7 +90,7 @@ local function BuildTooltip(tt)
 
     -- Edit Mode status
     local st = _G.MSUF_EditState
-    if type(st) == "table" and st.active then
+    if st and st.active then
         tt:AddLine("Edit Mode: |cff00ff00Active|r", 0.8, 0.8, 0.8)
     end
 
@@ -101,7 +101,7 @@ local function BuildTooltip(tt)
 end
 
 -- LDB/DBIcon path
-local LibStub = _G and _G.LibStub
+local LibStub = _G.LibStub
 local LDB = LibStub and LibStub("LibDataBroker-1.1", true) or nil
 local DBIcon = LibStub and LibStub("LibDBIcon-1.0", true) or nil
 

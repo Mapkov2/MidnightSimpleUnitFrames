@@ -1,12 +1,8 @@
--- ============================================================================
 -- MSUF - esES
---
 -- Basic translations for Midnight Simple Unit Frames.
 -- Keys are the original English UI strings.
---
 -- Perf note:
 -- This file is an immediate no-op unless the active locale is esES.
--- ============================================================================
 local addonName, ns = ...
 
 -- Fast exit for non-esES clients.
@@ -15,12 +11,12 @@ if loc ~= "esES" then return end
 
 ns = ns or {}
 ns.LOCALE = loc
-ns.L = ns.L or (_G and _G.MSUF_L) or {}
+ns.L = ns.L or (_G.MSUF_L) or {}
 local L = ns.L
 if not getmetatable(L) then
     setmetatable(L, { __index = function(t, k) return k end })
 end
-if _G then _G.MSUF_L = L end
+_G.MSUF_L = L
 
 local T = {
     ["Open MSUF Menu"] = "Abrir menú MSUF",
@@ -101,7 +97,11 @@ local T = {
     ["3D Portrait Right"] = "Retrato 3D derecha",
     ["Class Icon Left (players)"] = "Icono de clase izquierda (jugadores)",
     ["Class Icon Right (players)"] = "Icono de clase derecha (jugadores)",
-    ["Invert boss order"] = "Invertir orden de jefes",
+    ["Boss frame layout"] = "Disposición de marcos de jefe",
+    ["Vertical (top -> bottom)"] = "Vertical (arriba -> abajo)",
+    ["Vertical (bottom -> top)"] = "Vertical (abajo -> arriba)",
+    ["Horizontal (left -> right)"] = "Horizontal (izquierda -> derecha)",
+    ["Horizontal (right -> left)"] = "Horizontal (derecha -> izquierda)",
     ["Player Alpha"] = "Opacidad del jugador",
     ["Target Alpha"] = "Opacidad del objetivo",
     ["Target of Target Alpha"] = "Opacidad objetivo del objetivo",
@@ -383,9 +383,7 @@ local T = {
     ["Current: "] = "Actual: ",
     ["Midnight Simple Unit Frames"] = "Midnight Simple Unit Frames",
 
-    -- =================================================================
     -- Options menus — missing translations (i18n completeness)
-    -- =================================================================
     -- Core / Bars
     ["Aggro border: Target, Focus, Boss frames"] = "Borde aggro: Objetivo, Foco, Jefe",
     ["Auto-switch profile by specialization"] = "Cambiar perfil por especialización",

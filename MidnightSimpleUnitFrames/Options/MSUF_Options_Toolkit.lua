@@ -67,23 +67,28 @@ local SLIDER_FILL_R, SLIDER_FILL_G, SLIDER_FILL_B = 0.27, 0.53, 0.80
 local SLIDER_THUMB_R, SLIDER_THUMB_G, SLIDER_THUMB_B = 0.35, 0.62, 0.92
 local SLIDER_THUMB_TEX = "Interface/AddOns/" .. ADDON .. "/Media/msuf_slider_thumb.tga"
 
-local function StyleSlider(slider)
-    if not slider or slider._msufStyled then return end
-    slider._msufStyled = true
-    slider:SetHeight(SLIDER_THUMB_SIZE)
+local function HideSliderTemplateParts(slider, thumb)
+    if not slider then return end
 
-    -- Get thumb FIRST, skip it in the hide loop
-    local thumb = slider:GetThumbTexture()
-
-    -- Hide all template background/border textures EXCEPT thumb
+    -- Hide all template background/border textures EXCEPT thumb.
+    -- Some client builds expose region type through GetObjectType rather than
+    -- IsObjectType, so handle both paths.
     local _regions = { slider:GetRegions() }
     for i = 1, #_regions do
         local region = _regions[i]
-        if region and region ~= thumb and region.IsObjectType and region:IsObjectType("Texture") then
+        local isTexture = false
+        if region and region.IsObjectType then
+            isTexture = region:IsObjectType("Texture") and true or false
+        end
+        if (not isTexture) and region and region.GetObjectType then
+            isTexture = (region:GetObjectType() == "Texture")
+        end
+        if isTexture and region ~= thumb and region ~= slider._msufTrack and region ~= slider._msufFill then
             region:SetAlpha(0)
             region:Hide()
         end
     end
+
     -- Hide Low/High labels
     local sName = slider.GetName and slider:GetName()
     if sName then
@@ -94,6 +99,18 @@ local function StyleSlider(slider)
     end
     if slider.Low  then slider.Low:SetAlpha(0);  slider.Low:Hide()  end
     if slider.High then slider.High:SetAlpha(0); slider.High:Hide() end
+end
+
+local function StyleSlider(slider)
+    if not slider then return end
+
+    -- Get thumb FIRST, skip it in the hide loop.
+    local thumb = slider:GetThumbTexture()
+    HideSliderTemplateParts(slider, thumb)
+
+    if slider._msufStyled then return end
+    slider._msufStyled = true
+    slider:SetHeight(SLIDER_THUMB_SIZE)
 
     -- Custom track
     local track = slider:CreateTexture(nil, "BACKGROUND", nil, -1)
@@ -138,7 +155,10 @@ local function StyleSlider(slider)
         fill:SetWidth(w)
     end
     slider:HookScript("OnValueChanged", function(self) UpdateFill(self) end)
-    slider:HookScript("OnShow",         function(self) UpdateFill(self) end)
+    slider:HookScript("OnShow",         function(self)
+        HideSliderTemplateParts(self, self:GetThumbTexture())
+        UpdateFill(self)
+    end)
     slider:HookScript("OnSizeChanged",  function(self) UpdateFill(self) end)
 
     -- Hover
@@ -161,25 +181,11 @@ end
 local function StyleSmallButton(button, isPlus)
     if not button or button._msufStyled then return end
     button._msufStyled = true
-    button:SetSize(20, 20)
-    local normal = button:CreateTexture(nil, "BACKGROUND")
-    normal:SetAllPoints(); normal:SetTexture(TEX_W8); normal:SetVertexColor(0, 0, 0, 0.9)
-    button:SetNormalTexture(normal)
-    local pushed = button:CreateTexture(nil, "BACKGROUND")
-    pushed:SetAllPoints(); pushed:SetTexture(TEX_W8); pushed:SetVertexColor(0.7, 0.55, 0.15, 0.95)
-    button:SetPushedTexture(pushed)
-    local hl = button:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(); hl:SetTexture(TEX_W8); hl:SetVertexColor(1, 0.9, 0.4, 0.25)
-    button:SetHighlightTexture(hl)
-    local border = CreateFrame("Frame", nil, button, "BackdropTemplate")
-    border:SetAllPoints()
-    border:SetBackdrop({ edgeFile = TEX_W8, edgeSize = 1 })
-    border:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-    local fs = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("CENTER")
-    fs:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-    fs:SetTextColor(1, 0.9, 0.4)
-    fs:SetText(isPlus and "+" or "-")
+    button:SetSize(18, 18)
+    local fs = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    fs:SetText(isPlus and "+" or "\226\128\147")
+    fs:SetAllPoints()
+    if button.SetFontString then button:SetFontString(fs) end
     button.text = fs
 end
 
@@ -361,9 +367,14 @@ function UI.Check(spec)
         if self._msufToggleUpdate then self._msufToggleUpdate() end
     end
 
-    local function ApplyToDB(self)
+    local function ApplyToDB(self, explicitValue)
         if not spec.set then return end
-        local v = self:GetChecked() and true or false
+        local v
+        if explicitValue ~= nil then
+            v = explicitValue and true or false
+        else
+            v = self:GetChecked() and true or false
+        end
         spec.set(v)
         if self._msufToggleUpdate then self._msufToggleUpdate() end
     end
@@ -372,16 +383,21 @@ function UI.Check(spec)
         SyncFromGetter(self)
     end)
 
+    function cb:Refresh()
+        SyncFromGetter(self)
+    end
+
     cb:SetScript("OnClick", function(self)
+        local checked = self:GetChecked() and true or false
         if C_Timer and C_Timer.After then
             C_Timer.After(0, function()
                 if self and self.GetChecked then
-                    ApplyToDB(self)
+                    ApplyToDB(self, checked)
                     if spec.get then SyncFromGetter(self) end
                 end
             end)
         else
-            ApplyToDB(self)
+            ApplyToDB(self, checked)
             if spec.get then SyncFromGetter(self) end
         end
     end)
@@ -403,10 +419,12 @@ function UI.Slider(spec)
     local compactInput = compact and spec.compactInput
     local compactInputWidth = spec.compactInputWidth or 46
     local compactInputGap = spec.compactInputGap or 8
+    local compactButtonWidth = spec.compactInputButtonWidth or 18
+    local compactButtonGap = spec.compactInputButtonGap or 2
     local sliderWidth = spec.width or 270
     local trackWidth = sliderWidth
     if compactInput then
-        trackWidth = sliderWidth - compactInputWidth - compactInputGap
+        trackWidth = sliderWidth - compactInputWidth - compactInputGap - (compactButtonWidth * 2) - (compactButtonGap * 2)
         if trackWidth < 80 then trackWidth = 80 end
     end
     local sl = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
@@ -431,7 +449,19 @@ function UI.Slider(spec)
         eb:SetSize(compactInput and compactInputWidth or 60, 18)
         eb:SetAutoFocus(false); eb:SetJustifyH("CENTER")
         if compactInput then
-            eb:SetPoint("LEFT", sl, "RIGHT", compactInputGap, 0)
+            minus = CreateFrame("Button", name and (name .. "Minus"), parent)
+            minus:SetPoint("LEFT", sl, "RIGHT", compactInputGap, 0)
+            StyleSmallButton(minus, false)
+            minus:SetSize(compactButtonWidth, 18)
+            sl.minusButton = minus
+
+            eb:SetPoint("LEFT", minus, "RIGHT", compactButtonGap, 0)
+
+            plus = CreateFrame("Button", name and (name .. "Plus"), parent)
+            plus:SetPoint("LEFT", eb, "RIGHT", compactButtonGap, 0)
+            StyleSmallButton(plus, true)
+            plus:SetSize(compactButtonWidth, 18)
+            sl.plusButton = plus
         else
             eb:SetPoint("TOP", sl, "BOTTOM", 0, -6)
         end
@@ -462,6 +492,11 @@ function UI.Slider(spec)
             eb:SetText(FormatValue(v))
         end
     end
+    local function SetCompanionsShown(show)
+        if eb then eb:SetShown(show) end
+        if minus then minus:SetShown(show) end
+        if plus then plus:SetShown(show) end
+    end
     -- Label update
     local function UpdateLabel(v)
         if text and text.SetText then
@@ -471,6 +506,17 @@ function UI.Slider(spec)
                 text:SetText(TR(spec.label or ""))
             end
         end
+    end
+    local function SyncFromGetter(self)
+        local v = spec.get and spec.get() or self:GetValue()
+        if type(v) ~= "number" then v = spec.default or minV end
+        if v < minV then v = minV elseif v > maxV then v = maxV end
+        self._msufSkip = true
+        self:SetValue(v)
+        self._msufSkip = false
+        SyncEditBox(v)
+        UpdateLabel(v)
+        SetCompanionsShown(self:IsShown())
     end
     if (not compact) or compactInput then
         -- Apply editbox value
@@ -507,25 +553,38 @@ function UI.Slider(spec)
         UpdateLabel(value)
         if spec.set then spec.set(value) end
     end)
+    -- Companion-widget visibility: the editbox / ± buttons are parented to
+    -- `parent` (sibling of `sl`) for layout reasons, so sl:Hide()/Show() does
+    -- NOT cascade to them. Hook the slider's OnShow/OnHide so callers can
+    -- treat the slider as the single visibility owner without leftover
+    -- "ghost" input boxes leaking through. Diff-gated to avoid redundant work.
+    if eb or minus or plus then
+        sl:HookScript("OnShow", function()
+            SetCompanionsShown(true)
+        end)
+        sl:HookScript("OnHide", function()
+            SetCompanionsShown(false)
+        end)
+        -- Mirror initial state in case the slider is created already hidden
+        -- (parent hidden at construction time → no OnHide will fire).
+        if not sl:IsShown() then
+            SetCompanionsShown(false)
+        end
+    end
     -- Self-sync on Show
     sl:SetScript("OnShow", function(self)
-        if spec.get then
-            local v = spec.get()
-            if type(v) ~= "number" then v = spec.default or minV end
-            if v < minV then v = minV elseif v > maxV then v = maxV end
-            self._msufSkip = true
-            self:SetValue(v)
-            self._msufSkip = false
-            SyncEditBox(v)
-            UpdateLabel(v)
-        end
+        SyncFromGetter(self)
     end)
+    function sl:Refresh()
+        SyncFromGetter(self)
+    end
     -- Programmatic set (no callback)
     function sl:SetValueClean(v)
         self._msufSkip = true
         self:SetValue(v)
         self._msufSkip = false
         SyncEditBox(v)
+        UpdateLabel(v)
     end
     function sl:SetEnabled(enabled)
         if enabled then
@@ -557,13 +616,14 @@ function UI.Slider(spec)
     if name and spec.label and type(_G.MSUF_Search_RegisterSlider) == "function" then
         _G.MSUF_Search_RegisterSlider(name, spec.label)
     end
+    sl:Refresh()
     return sl
 end
 
 -- 5. Dropdown System (own ListFrame, no DropDownList1)
 
 -- Theme
-local DD_BG     = { 0.08, 0.08, 0.10, 0.95 }
+local DD_BG     = { 0.08, 0.08, 0.10, 1.00 }
 local DD_BORDER  = { 0.30, 0.30, 0.35, 0.80 }
 local DD_HOVER   = { 0.20, 0.20, 0.25, 1.00 }
 local DD_CHECK   = { 1.00, 0.82, 0.00 }
@@ -585,14 +645,17 @@ local function DD_EnsureList()
     if _listFrame then return end
     -- Fullscreen click-outside catcher
     _listBackdrop = CreateFrame("Button", nil, UIParent)
-    _listBackdrop:SetFrameStrata("FULLSCREEN")
+    _listBackdrop:SetFrameStrata("FULLSCREEN_DIALOG")
+    _listBackdrop:SetFrameLevel(900)
     _listBackdrop:SetAllPoints(UIParent)
     _listBackdrop:EnableMouse(true)
     _listBackdrop:SetScript("OnClick", DD_Close)
     _listBackdrop:Hide()
     -- List container
     local lf = CreateFrame("Frame", "MSUF_SpecDDList", UIParent, "BackdropTemplate")
-    lf:SetFrameStrata("FULLSCREEN_DIALOG")
+    lf:SetFrameStrata("TOOLTIP")
+    lf:SetFrameLevel(1000)
+    if lf.SetToplevel then lf:SetToplevel(true) end
     lf:SetClampedToScreen(true)
     lf:SetBackdrop({
         bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
@@ -614,9 +677,13 @@ local function DD_EnsureList()
     end)
     -- ScrollFrame
     local sf = CreateFrame("ScrollFrame", nil, lf, "UIPanelScrollFrameTemplate")
+    sf:SetFrameStrata("TOOLTIP")
+    sf:SetFrameLevel(1001)
     sf:SetPoint("TOPLEFT", lf, "TOPLEFT", 2, -2)
     sf:SetPoint("BOTTOMRIGHT", lf, "BOTTOMRIGHT", -18, 2)
     local child = CreateFrame("Frame", nil, sf)
+    child:SetFrameStrata("TOOLTIP")
+    child:SetFrameLevel(1002)
     child:SetSize(1, 1)
     sf:SetScrollChild(child)
     lf._sf = sf
@@ -642,15 +709,18 @@ local function DD_ItemClick(self)
     local item  = self._ddItem
     local owner = self._ddOwner
     if not (item and owner) then return end
+    local key = item.key
+    if key == nil then key = item.value end
+    local label = item.label or item.text or tostring(key or "")
     local spec = owner._ddSpec
-    if spec and spec.set then spec.set(item.key, item) end
+    if spec and spec.set then spec.set(key, item) end
     if owner.SetValue then
-        owner:SetValue(item.key)
+        owner:SetValue(key)
     else
         -- Auto-intercepted dropdown: update text via UIDropDownMenu API
-        owner._ddKey = item.key
-        if UIDropDownMenu_SetSelectedValue then pcall(UIDropDownMenu_SetSelectedValue, owner, item.key) end
-        if UIDropDownMenu_SetText then pcall(UIDropDownMenu_SetText, owner, item.label or tostring(item.key or "")) end
+        owner._ddKey = key
+        if UIDropDownMenu_SetSelectedValue then pcall(UIDropDownMenu_SetSelectedValue, owner, key) end
+        if UIDropDownMenu_SetText then pcall(UIDropDownMenu_SetText, owner, label) end
     end
     DD_Close()
 end
@@ -660,6 +730,9 @@ local function DD_GetItem(index)
     DD_EnsureList()
     local btn = CreateFrame("Button", nil, _listFrame._child)
     btn:SetHeight(DD_ITEM_H)
+    btn:SetFrameStrata("TOOLTIP")
+    btn:SetFrameLevel(1003)
+    btn:EnableMouse(true)
     -- Highlight (ADD blend so text stays bright, not darkened)
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints()
@@ -686,6 +759,7 @@ local function DD_GetItem(index)
     label:SetTextColor(DD_TEXT[1], DD_TEXT[2], DD_TEXT[3])
     btn._label = label
     -- Click
+    btn:RegisterForClicks("AnyDown")
     btn:SetScript("OnClick", DD_ItemClick)
     -- Mousewheel passthrough
     btn:EnableMouseWheel(true)
@@ -737,13 +811,18 @@ local function DD_Populate(owner)
     -- Populate
     for i = 1, count do
         local item = items[i]
+        local itemKey = item.key
+        if itemKey == nil then itemKey = item.value end
+        local itemLabel = item.label or item.text or tostring(itemKey or "")
         local btn = DD_GetItem(i)
         btn:SetParent(child)
+        btn:SetFrameStrata(_listFrame:GetFrameStrata())
+        btn:SetFrameLevel(_listFrame:GetFrameLevel() + 3)
         btn:SetHeight(itemH)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(i - 1) * itemH)
         btn:SetPoint("RIGHT", child, "RIGHT", 0, 0)
-        btn._sel:SetShown(item.key == curKey or item.overrideActive == true)
+        btn._sel:SetShown(itemKey == curKey or item.overrideActive == true)
         -- Icon
         if item.icon then
             btn._icon:ClearAllPoints()
@@ -761,14 +840,17 @@ local function DD_Populate(owner)
             btn._label:SetPoint("LEFT", btn, "LEFT", 10, 0)
             btn._label:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
         end
-        btn._label:SetText(item.label or item.key or "")
+        if btn._label.SetFontObject then btn._label:SetFontObject(GameFontHighlight) end
+        btn._label:SetTextColor(DD_TEXT[1], DD_TEXT[2], DD_TEXT[3])
+        btn._label:SetText(itemLabel)
         -- Per-item font preview (e.g. font dropdown shows each font in its own typeface)
-        if item.fontObject then
+        local appliedFont = item.fontObject ~= nil
+        if item.fontObject and btn._label.SetFontObject then
             btn._label:SetFontObject(item.fontObject)
-        elseif btn._fontOverridden then
+        elseif btn._fontOverridden and btn._label.SetFontObject then
             btn._label:SetFontObject(GameFontHighlight)
         end
-        btn._fontOverridden = (item.fontObject ~= nil)
+        btn._fontOverridden = appliedFont
         btn._ddItem = item
         btn._ddOwner = owner
         btn:Show()
@@ -791,6 +873,12 @@ local function DD_Toggle(owner)
     -- Anchor to the peel button (visible superellipse) if available, else the frame
     local anchorTo = owner._msufPeelButton or owner
     _listFrame:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, -2)
+    _listBackdrop:SetFrameStrata("FULLSCREEN_DIALOG")
+    _listBackdrop:SetFrameLevel(900)
+    _listFrame:SetFrameStrata("TOOLTIP")
+    _listFrame:SetFrameLevel(1000)
+    if _listFrame.SetToplevel then _listFrame:SetToplevel(true) end
+    if _listFrame.Raise then _listFrame:Raise() end
     _listBackdrop:Show()
     _listFrame:Show()
 end
@@ -836,8 +924,10 @@ function UI.Dropdown(spec)
         if type(items) == "function" then items = items() end
         if type(items) == "table" then
             for i = 1, #items do
-                if items[i].key == key then
-                    label = items[i].label or label
+                local itemKey = items[i].key
+                if itemKey == nil then itemKey = items[i].value end
+                if itemKey == key then
+                    label = items[i].label or items[i].text or label
                     break
                 end
             end
@@ -866,6 +956,9 @@ function UI.Dropdown(spec)
     end
     -- Self-sync on Show
     dd:HookScript("OnShow", function(self) self:Refresh() end)
+    dd:HookScript("OnHide", function(self)
+        if _listOwner == self then DD_Close() end
+    end)
     -- Initial sync
     dd:Refresh()
     if spec.tooltip then AttachTooltip(dd, spec.tooltip) end
@@ -1049,6 +1142,8 @@ ns.MSUF_StyleSlider             = StyleSlider
 ns.MSUF_StyleSmallButton        = StyleSmallButton
 ns.MSUF_StyleToggleText         = StyleToggleText
 ns.MSUF_StyleCheckmark          = StyleCheckmark
+_G.MSUF_StyleSlider             = StyleSlider
+_G.MSUF_StyleSmallButton        = StyleSmallButton
 _G.MSUF_StyleToggleText         = _G.MSUF_StyleToggleText or StyleToggleText
 _G.MSUF_StyleCheckmark          = _G.MSUF_StyleCheckmark or StyleCheckmark
 
@@ -1151,7 +1246,13 @@ function UI.BindExistingDropdown(dd, spec)
         self._ddKey = key; local label = tostring(key or "")
         local items = self._ddSpec.items
         if type(items) == "function" then items = items() end
-        if type(items) == "table" then for _, it in ipairs(items) do if it.key == key then label = it.label or label; break end end end
+        if type(items) == "table" then
+            for _, it in ipairs(items) do
+                local itemKey = it.key
+                if itemKey == nil then itemKey = it.value end
+                if itemKey == key then label = it.label or it.text or label; break end
+            end
+        end
         if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self, key) end
         if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self, label) end
     end
@@ -1161,6 +1262,9 @@ function UI.BindExistingDropdown(dd, spec)
         if _listOwner == self and _listFrame and _listFrame:IsShown() then DD_Populate(self) end
     end
     dd:HookScript("OnShow", function(self) self:Refresh() end)
+    dd:HookScript("OnHide", function(self)
+        if _listOwner == self then DD_Close() end
+    end)
     dd:Refresh()
     return dd
 end

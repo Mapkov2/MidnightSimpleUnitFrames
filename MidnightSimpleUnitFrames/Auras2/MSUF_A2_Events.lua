@@ -4,13 +4,10 @@
 
 local addonName, ns = ...
 
-
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
--- =========================================================================
 -- PERF LOCALS (Auras2 runtime)
 --  - Reduce global table lookups in high-frequency aura pipelines.
 --  - Secret-safe: localizing function references only (no value comparisons).
--- =========================================================================
 local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
 local math_min, math_max, math_floor = math.min, math.max, math.floor
@@ -39,7 +36,27 @@ local _BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local _BOSS_MAX = 5
 -- O(1) lookup for UNIT_TARGETABLE_CHANGED handler (boss adds spawning mid-fight)
 local _IS_BOSS_UNIT = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
-local _After0 = C_Timer and C_Timer.After
+local function _ScheduleOnce(key, fn)
+    local sched = _G.MSUF_ScheduleOnce
+    if sched then
+        sched(key, fn)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, fn)
+    elseif type(fn) == "function" then
+        fn()
+    end
+end
+
+local function _ScheduleDelayOnce(key, delay, fn)
+    local sched = _G.MSUF_ScheduleDelayOnce
+    if sched then
+        sched(key, delay, fn)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(delay or 0, fn)
+    elseif type(fn) == "function" then
+        fn()
+    end
+end
 
 -- P3: Boss UNIT_AURA gate.
 -- UNIT_AURA for boss slots is only meaningful during an active encounter.
@@ -51,19 +68,16 @@ local _After0 = C_Timer and C_Timer.After
 local _bossEncounterActive = false
 
 -- P2: Per-unit UNIT_AURA burst dedup.
--- Prevents N timer allocations when N UNIT_AURA events fire for the same unit
--- within the same 20ms coalesce window.  One timer max per unit per burst.
--- Clear functions are pre-allocated at module load (zero GC at runtime).
-local _unitAuraPending = {}   -- [unit] = true while a render timer is in flight
-local _unitAuraClearFns = {}  -- [unit] = pre-allocated clear closure
-do
-    local _knownUnits = {"player","target","focus","boss1","boss2","boss3","boss4","boss5"}
-    for _, u in ipairs(_knownUnits) do
-        local unit = u
-        _unitAuraClearFns[unit] = function() _unitAuraPending[unit] = nil end
-    end
-end
-
+-- Stores the next accepted timestamp per unit. This keeps a small coalescing
+-- window without scheduling one clear timer for every aura burst.
+local _unitAuraPending = {}   -- [unit] = next accepted GetTime() timestamp
+local _unitAuraRescanQueued = {} -- [unit] = true when burst deltas were collapsed into one render-time full scan
+local _hiddenAuraInvalid = {} -- [unit] = true while hidden frame cache is invalidated
+local _liveRenderVisible = {} -- [unit] = cached unitframe visibility for UNIT_AURA hot path
+local _liveRenderVisibleUntil = {}
+local _LIVE_RENDER_VISIBLE_CACHE_SEC = 0.05
+local _UNIT_AURA_COALESCE_DEFAULT = 0.04
+local _UNIT_AURA_COALESCE_PLAYER = 0.03
 
 -- Cached module refs (bound lazily, reset on InvalidateDB)
 local _cachedReqUnit      -- API.RequestUnit (fast MarkDirty path)
@@ -85,9 +99,7 @@ local function BindCachedRefs()
     _refsBound = (Store ~= nil)
 end
 
--- ------------------------------------------------------------
 -- Helpers
--- ------------------------------------------------------------
 
 -- Strict coalescing for UNIT_AURA bursts:
 --  * Never render "per event".
@@ -113,26 +125,40 @@ local function MarkDirty(unit, delay)
     end
 end
 
+-- PERF: Epoch counter for rapid-click deduplication.
+-- Each target change increments the epoch. The deferred render checks if its epoch
+-- still matches — if a newer click arrived, the outdated FullScan is skipped entirely.
+local _targetRenderEpoch = 0
+
 local function HandlePlayerTargetChanged()
     if not _refsBound then BindCachedRefs() end
+    -- PERF: Skip A2 entirely when target auras aren't enabled (saves FullScan ~76µs/click)
+    local DB = API and API.DB
+    if DB and DB.UnitEnabledCached and DB.UnitEnabledCached("target") ~= true then
+        return
+    end
+
+    _targetRenderEpoch = _targetRenderEpoch + 1  -- invalidate any pending render
+
     if _cachedInvalidUnit then
         _cachedInvalidUnit("target")
     end
+    _hiddenAuraInvalid["target"] = nil
+    _liveRenderVisible["target"] = nil
+    _liveRenderVisibleUntil["target"] = nil
+    _unitAuraRescanQueued["target"] = nil
+    local clearVisual = API and API.ClearUnitVisualState
+    if clearVisual then
+        clearVisual("target")
+    end
     _unitAuraPending["target"] = nil   -- P2: clear dedup so next UNIT_AURA is accepted
 
-    -- Coalesce target swap to one next-frame aura refresh.
-    -- UNIT_AURA bursts arriving this frame still update Store deltas, then piggyback this flush.
-    if Events._targetSwapQueued then
-        return
-    end
+    -- Keep target aura deltas out of the cache during the swap window.
+    -- The delayed flush below performs one full scan against the current target.
     Events._targetSwapQueued = true
+    Events._targetRenderExpected = _targetRenderEpoch
 
-    if _After0 then
-        _After0(0, Events._flushTargetSwap)
-    else
-        Events._targetSwapQueued = nil
-        MarkDirty("target", 0)
-    end
+    _ScheduleOnce("A2_TARGET_SWAP_FLUSH", Events._flushTargetSwap)
 end
 
 local function HandlePlayerFocusChanged()
@@ -140,44 +166,49 @@ local function HandlePlayerFocusChanged()
     if _cachedInvalidUnit then
         _cachedInvalidUnit("focus")
     end
+    _hiddenAuraInvalid["focus"] = nil
+    _liveRenderVisible["focus"] = nil
+    _liveRenderVisibleUntil["focus"] = nil
+    _unitAuraRescanQueued["focus"] = nil
     _unitAuraPending["focus"] = nil    -- P2: clear dedup so next UNIT_AURA is accepted
     MarkDirty("focus", 0)
 end
 
-Events._flushTargetSwap = Events._flushTargetSwap or function()
+-- Target swaps use a short settle window before rendering. UNIT_AURA deltas
+-- during that window are ignored; the final render performs the required full
+-- scan lazily inside the budgeted A2 render flush.
+local function _flushTargetRender()
+    if _targetRenderEpoch ~= Events._targetRenderExpected then return end
+    if not _refsBound then BindCachedRefs() end
+    if _cachedInvalidUnit then
+        _cachedInvalidUnit("target")
+    end
+    _hiddenAuraInvalid["target"] = nil
+    _liveRenderVisible["target"] = nil
+    _liveRenderVisibleUntil["target"] = nil
+    _unitAuraRescanQueued["target"] = nil
     Events._targetSwapQueued = nil
+    _unitAuraPending["target"] = nil
     MarkDirty("target", 0)
 end
 
+Events._flushTargetSwap = function()
+    Events._targetRenderExpected = _targetRenderEpoch
+    _ScheduleDelayOnce("A2_TARGET_RENDER_FLUSH", 0.05, _flushTargetRender)
+end
+
+Events._ClearUnitAuraRescanQueued = function(unit)
+    if unit then
+        _unitAuraRescanQueued[unit] = nil
+        _unitAuraPending[unit] = nil
+    end
+end
+
 local function IsEditModeActive()
-    -- Fast path: cached API function (set once by Render, never changes)
-    if not _refsBound then BindCachedRefs() end
-    local fn = _cachedIsEditFn
-    if fn then
-        return fn() == true
-    end
-
-    -- Fallback chain (rare: only before Render loads)
+    local api = ns and ns.MSUF_Auras2
+    if api and api.IsEditModeActive then return api.IsEditModeActive() end
     local st = rawget(_G, "MSUF_EditState")
-    if type(st) == "table" and st.active == true then
-        return true
-    end
-
-    if rawget(_G, "MSUF_UnitEditModeActive") == true then
-        return true
-    end
-
-    local g = rawget(_G, "MSUF_IsInEditMode")
-    if type(g) == "function" then
-        if g() == true then return true end
-    end
-
-    local h = rawget(_G, "MSUF_IsMSUFEditModeActive")
-    if type(h) == "function" then
-        if h() == true then return true end
-    end
-
-    return false
+    return (st and st.active == true) or (rawget(_G, "MSUF_UnitEditModeActive") == true)
 end
 
 local function EnsureDB()
@@ -191,7 +222,6 @@ local function EnsureDB()
     end
     return nil
 end
-
 -- Hot path: use cached unit-enabled flags (no DB work). Falls back to EnsureDB once if cache is cold.
 -- forAuraEvent=true => ONLY consider standard aura rendering (avoid UNIT_AURA spam when only private auras are enabled).
 local function ShouldProcessUnitEvent(unit, forAuraEvent)
@@ -277,17 +307,53 @@ local _UNIT_FRAME_NAMES = {
 }
 
 local function FindUnitFrame(unit)
-    local f = API.FindUnitFrame
-    if type(f) == "function" then
-        return f(unit)
+    local api = ns and ns.MSUF_Auras2
+    if api and api.FindUnitFrame then return api.FindUnitFrame(unit) end
+    local uf = _G.MSUF_UnitFrames
+    local frame = uf and uf[unit]
+    if not frame then
+        local name = _UNIT_FRAME_NAMES[unit]
+        frame = name and _G[name] or nil
+    end
+    return frame
+end
+
+local function ClearLiveRenderVisibility(unit)
+    if not unit then return end
+    _liveRenderVisible[unit] = nil
+    _liveRenderVisibleUntil[unit] = nil
+end
+
+local function ShouldScheduleLiveRenderFast(unit, helperFrame, now)
+    if not unit then return false end
+
+    local st = rawget(_G, "MSUF_EditState")
+    if (st and st.active == true) or rawget(_G, "MSUF_UnitEditModeActive") == true then
+        return true
     end
 
-    local uf = _G and _G.MSUF_UnitFrames
-    if type(uf) == "table" and unit and uf[unit] then
-        return uf[unit]
+    now = now or GetTime()
+    local untilTime = _liveRenderVisibleUntil[unit]
+    if untilTime and now < untilTime then
+        return _liveRenderVisible[unit] == true
     end
-    local name = _UNIT_FRAME_NAMES[unit]
-    return name and _G[name] or nil
+
+    local frame = helperFrame and helperFrame._msufA2_unitFrame
+    if not frame then
+        frame = FindUnitFrame(unit)
+        if helperFrame then
+            helperFrame._msufA2_unitFrame = frame
+        end
+    end
+
+    local visible = false
+    if frame then
+        visible = not (frame.IsShown and not frame:IsShown())
+    end
+
+    _liveRenderVisible[unit] = visible
+    _liveRenderVisibleUntil[unit] = now + _LIVE_RENDER_VISIBLE_CACHE_SEC
+    return visible
 end
 
 local function UnitNeedsAuraRuntime(unit, cache)
@@ -320,33 +386,14 @@ end
 
 -- Live-runtime render gate (MUF-style): do not schedule aura renders for hidden frames.
 -- Store deltas still update so OnShow can render the latest state immediately.
+-- PERF REWRITE: Inlined IsEditModeActive + FindUnitFrame (was 2 function calls per event)
 local function ShouldScheduleLiveRender(unit)
-    if not unit then return false end
-
-    -- Edit Mode always renders (preview/movers must stay responsive).
-    if IsEditModeActive() then
-        return true
-    end
-
-    local frame = FindUnitFrame(unit)
-    if not frame then
-        return false
-    end
-
-    if frame.IsShown and frame:IsShown() ~= true then
-        return false
-    end
-
-    return true
+    return ShouldScheduleLiveRenderFast(unit, nil, nil)
 end
 
--- ------------------------------------------------------------
 -- UNIT_AURA binding (helper frames)
--- ------------------------------------------------------------
 local function EnsureUnitAuraBinding(eventFrame)
-    if not eventFrame then
-        return
-    end
+    if not eventFrame then return end
 
     local DB = API and API.DB
     local c = DB and DB.cache
@@ -363,9 +410,7 @@ local function EnsureUnitAuraBinding(eventFrame)
         return
     end
 
-    if not ue then
-        return
-    end
+    if not ue then return end
 
     eventFrame._msufA2_unitAuraFrames = eventFrame._msufA2_unitAuraFrames or {}
     local frames = eventFrame._msufA2_unitAuraFrames
@@ -395,7 +440,6 @@ local function EnsureUnitAuraBinding(eventFrame)
     local i = 1
     while i <= n do
         local unit1 = units[i]
-        local unit2 = units[i + 1]
 
         local f = frames[idx]
         if not f then
@@ -411,21 +455,20 @@ local function EnsureUnitAuraBinding(eventFrame)
 
         local regUnit = f.RegisterUnitEvent
         if type(regUnit) == "function" then
-            if unit2 then
-                regUnit(f, "UNIT_AURA", unit1, unit2)
-            else
-                regUnit(f, "UNIT_AURA", unit1)
-            end
+            regUnit(f, "UNIT_AURA", unit1)
         elseif f.RegisterEvent then
             -- Fallback: register generic UNIT_AURA and filter in handler.
             f:RegisterEvent("UNIT_AURA")
         end
 
+        f._msufA2_unitAuraUnit = unit1
+        f._msufA2_unitFrame = FindUnitFrame(unit1)
         f._msufA2_unitAuraUnits = f._msufA2_unitAuraUnits or {}
-        f._msufA2_unitAuraUnits[1], f._msufA2_unitAuraUnits[2] = unit1, unit2
+        f._msufA2_unitAuraUnits[1], f._msufA2_unitAuraUnits[2] = unit1, nil
+        ClearLiveRenderVisibility(unit1)
 
         idx = idx + 1
-        i = i + 2
+        i = i + 1
     end
 
     -- Unused frames: fully unhook.
@@ -443,15 +486,15 @@ local function EnsureUnitAuraBinding(eventFrame)
             if f._msufA2_unitAuraUnits then
                 f._msufA2_unitAuraUnits[1], f._msufA2_unitAuraUnits[2] = nil, nil
             end
+            f._msufA2_unitAuraUnit = nil
+            f._msufA2_unitFrame = nil
         end
     end
 
     eventFrame._msufA2_unitAuraBound = (n > 0)
 end
 
--- ------------------------------------------------------------
 -- Owned event registration helper
--- ------------------------------------------------------------
 local function ApplyOwnedEvents(frame, desiredOwners)
     if not frame or type(desiredOwners) ~= "table" then return end
 
@@ -502,7 +545,6 @@ local function ApplyOwnedEvents(frame, desiredOwners)
     end
 end
 
--- ------------------------------------------------------------
 -- Boss attach retry: REMOVED.
 -- Replaced by two event-driven paths that are both faster and zero-cost:
 --   1. EnsureAttached OnShow hook: InvalidateUnit + MarkDirty when boss frame appears
@@ -511,9 +553,7 @@ end
 local function StopBossRetry() end  -- no-op (call sites still reference this)
 local function StartBossAttachRetry() end  -- no-op
 
--- ------------------------------------------------------------
 -- Edit Mode preview refresh + fallback poll
--- ------------------------------------------------------------
 local function MarkAllDirty()
     MarkDirty("player")
     MarkDirty("target")
@@ -566,7 +606,6 @@ local function OnAnyEditModeChanged(active)
         Events.UpdateEditModePoll()
     end
 end
-
 
 Events.OnAnyEditModeChanged = OnAnyEditModeChanged
 API.OnAnyEditModeChanged = API.OnAnyEditModeChanged or OnAnyEditModeChanged
@@ -650,9 +689,7 @@ local function ScheduleAnyEditModeHookRetry()
     C_Timer.After(0, step)
 end
 
--- ------------------------------------------------------------
 -- Poll fallback (last resort)
--- ------------------------------------------------------------
 local _pollLast = nil
 local _pollAcc = 0
 local _polling = false
@@ -733,9 +770,7 @@ API.UpdateEditModePoll = API.UpdateEditModePoll or function()
         return Events.UpdateEditModePoll()
     end
 end
--- ------------------------------------------------------------
 -- Public API: ApplyEventRegistration + Init
--- ------------------------------------------------------------
 function Events.ApplyEventRegistration()
     local ef = Events._eventFrame
     if not ef then return end
@@ -888,12 +923,9 @@ end
     local busReg = _G.MSUF_EventBus_Register
     local busUnreg = _G.MSUF_EventBus_Unregister
     if type(busReg) == "function" and type(busUnreg) == "function" then
-        if needTarget then
-            busReg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS", HandlePlayerTargetChanged)
-        else
-            busUnreg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS")
-        end
-
+        -- TARGET_CHANGED: exported for consolidated handler in UFCore
+        _G.MSUF_A2_OnTargetChanged = needTarget and HandlePlayerTargetChanged or nil
+        -- Keep EventBus for FOCUS (less critical path)
         if needFocus then
             busReg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS", HandlePlayerFocusChanged)
         else
@@ -911,29 +943,93 @@ end
 
                 -- PERF: RegisterUnitEvent already filters to our units.
                 -- Only validate against stored tokens as safety net for multi-unit frames.
-                local units = self._msufA2_unitAuraUnits
-                if units then
-                    if unit ~= units[1] and unit ~= units[2] then
-                        return
+                local boundUnit = self._msufA2_unitAuraUnit
+                if boundUnit then
+                    if unit ~= boundUnit then return end
+                else
+                    local units = self._msufA2_unitAuraUnits
+                    if units then
+                        if unit ~= units[1] and unit ~= units[2] then return end
                     end
                 end
 
                 -- No-op skip: some clients can fire UNIT_AURA with an empty updateInfo.
-                if type(updateInfo) == "table" then
-                    if not updateInfo.isFullUpdate then
-                        local a = updateInfo.addedAuras
-                        local r = updateInfo.removedAuraInstanceIDs
-                        local u = updateInfo.updatedAuraInstanceIDs
-                        if (not a or #a == 0) and (not r or #r == 0) and (not u or #u == 0) then
-                            return
-                        end
-                    end
-                end
-
                 -- P3: Boss UNIT_AURA gate — single table + bool check, ~0 cost.
                 -- Skips Store update + MarkDirty for boss slots outside encounters.
                 -- Cache is fully invalidated on INSTANCE_ENCOUNTER_ENGAGE_UNIT anyway.
-                if _IS_BOSS_UNIT[unit] and not _bossEncounterActive then
+                if _IS_BOSS_UNIT[unit] and not _bossEncounterActive then return end
+
+                -- During a target swap, ignore target deltas completely.
+                -- They can belong to the outgoing target or be partial updates for
+                -- the incoming target; the swap flush does a full scan instead.
+                if unit == "target" and Events._targetSwapQueued then return end
+
+                local now = GetTime()
+                local nextAt = _unitAuraPending[unit]
+                if nextAt and now < nextAt then
+                    if not _refsBound then BindCachedRefs() end
+                    local invalid = _cachedInvalidUnit
+                    if invalid and not _unitAuraRescanQueued[unit] then
+                        _unitAuraRescanQueued[unit] = true
+                        invalid(unit)
+                    end
+                    -- Correctness guard: refresh/removal deltas can arrive inside
+                    -- the coalesce window after the previous render already ran.
+                    -- Force one render so expired icons disappear and refreshed
+                    -- duration objects are reattached immediately.
+                    MarkDirty(unit, 0)
+                    return
+                end
+
+                local infoIsTable = (type(updateInfo) == "table")
+                if infoIsTable and not updateInfo.isFullUpdate then
+                    local a = updateInfo.addedAuras
+                    local r = updateInfo.removedAuraInstanceIDs
+                    local u = updateInfo.updatedAuraInstanceIDs
+                    if (not a or a[1] == nil) and (not r or r[1] == nil) and (not u or u[1] == nil) then return end
+                end
+
+                if not ShouldScheduleLiveRenderFast(unit, self, now) then
+                    if not _refsBound then BindCachedRefs() end
+                    local invalid = _cachedInvalidUnit
+                    if invalid and not _hiddenAuraInvalid[unit] then
+                        _hiddenAuraInvalid[unit] = true
+                        invalid(unit)
+                    end
+                    return
+                end
+                _hiddenAuraInvalid[unit] = nil
+
+                do
+                    if not _refsBound then BindCachedRefs() end
+                    local forceRescan = (_unitAuraRescanQueued[unit] == true)
+                    if (not forceRescan) and infoIsTable then
+                        if updateInfo.isFullUpdate then
+                            forceRescan = true
+                        else
+                            local a = updateInfo.addedAuras
+                            local r = updateInfo.removedAuraInstanceIDs
+                            local u = updateInfo.updatedAuraInstanceIDs
+                            forceRescan = (a and a[5] ~= nil) or (r and r[5] ~= nil) or (u and u[9] ~= nil)
+                        end
+                    end
+
+                    if forceRescan then
+                        local invalid = _cachedInvalidUnit
+                        if invalid then
+                            _unitAuraRescanQueued[unit] = true
+                            invalid(unit)
+                        end
+                    else
+                        local onAura = _cachedOnUnitAura
+                        if onAura then
+                            onAura(unit, updateInfo)
+                        end
+                    end
+
+                    local delay = (unit == "player") and _UNIT_AURA_COALESCE_PLAYER or _UNIT_AURA_COALESCE_DEFAULT
+                    _unitAuraPending[unit] = now + delay
+                    MarkDirty(unit, delay)
                     return
                 end
 
@@ -946,24 +1042,11 @@ end
                     onAura(unit, updateInfo)
                 end
 
-                -- Hard gate: hidden unit frames do not need live aura renders.
-                -- Avoids queue/flush churn while preserving correctness via Store + OnShow invalidation.
-                if not ShouldScheduleLiveRender(unit) then
-                    return
-                end
-
-                -- Target swap already scheduled a consolidated next-frame render.
-                -- Keep Store current but skip duplicate same-frame dirty marks.
-                if unit == "target" and Events._targetSwapQueued then
-                    return
-                end
-
                 -- P2: per-unit burst dedup — only one timer per unit per 20ms window.
-                if not _unitAuraPending[unit] then
-                    _unitAuraPending[unit] = true
-                    if _After0 then
-                        _After0(0.02, _unitAuraClearFns[unit] or function() _unitAuraPending[unit] = nil end)
-                    end
+                local now = GetTime()
+                local nextAt = _unitAuraPending[unit]
+                if not nextAt or now >= nextAt then
+                    _unitAuraPending[unit] = now + 0.02
                     MarkDirty(unit)
                 end
             end
@@ -1013,7 +1096,11 @@ function Events.Init()
             if not _refsBound then BindCachedRefs() end
             local inv = _cachedInvalidUnit
             if inv then
-                for i = 1, _BOSS_MAX do inv(_BOSS_UNITS[i]) end
+                for i = 1, _BOSS_MAX do
+                    local bossUnit = _BOSS_UNITS[i]
+                    ClearLiveRenderVisibility(bossUnit)
+                    inv(bossUnit)
+                end
             end
             for i = 1, _BOSS_MAX do
                 MarkDirty(_BOSS_UNITS[i], 0)
@@ -1027,7 +1114,10 @@ function Events.Init()
         if event == "ENCOUNTER_END" then
             _bossEncounterActive = false
             for i = 1, _BOSS_MAX do
-                _unitAuraPending[_BOSS_UNITS[i]] = nil
+                local bossUnit = _BOSS_UNITS[i]
+                _unitAuraPending[bossUnit] = nil
+                _unitAuraRescanQueued[bossUnit] = nil
+                ClearLiveRenderVisibility(bossUnit)
             end
             return
         end
@@ -1040,6 +1130,7 @@ function Events.Init()
             if arg1 and _IS_BOSS_UNIT[arg1] then
                 if not _refsBound then BindCachedRefs() end
                 local inv = _cachedInvalidUnit
+                ClearLiveRenderVisibility(arg1)
                 if inv then inv(arg1) end
                 MarkDirty(arg1, 0)
             end
@@ -1051,7 +1142,10 @@ function Events.Init()
             if event == "PLAYER_ENTERING_WORLD" then
                 _bossEncounterActive = false
                 for i = 1, _BOSS_MAX do
-                    _unitAuraPending[_BOSS_UNITS[i]] = nil
+                    local bossUnit = _BOSS_UNITS[i]
+                    _unitAuraPending[bossUnit] = nil
+                    _unitAuraRescanQueued[bossUnit] = nil
+                    ClearLiveRenderVisibility(bossUnit)
                 end
             end
             EnsureDB() -- prime + cache
@@ -1066,10 +1160,17 @@ function Events.Init()
 
             local inv = _cachedInvalidUnit
             if inv then
+                ClearLiveRenderVisibility("player")
                 inv("player")
+                ClearLiveRenderVisibility("target")
                 inv("target")
+                ClearLiveRenderVisibility("focus")
                 inv("focus")
-                for i = 1, _BOSS_MAX do inv(_BOSS_UNITS[i]) end
+                for i = 1, _BOSS_MAX do
+                    local bossUnit = _BOSS_UNITS[i]
+                    ClearLiveRenderVisibility(bossUnit)
+                    inv(bossUnit)
+                end
             end
 
             -- After entering world, always mark all units dirty for full refresh.
@@ -1086,7 +1187,6 @@ function Events.Init()
             end
         end
     end)
-
     Events.ApplyEventRegistration()
 
     -- Preferred path: hook into MSUF Edit Mode enter/exit notifications (no polling).
@@ -1100,9 +1200,7 @@ function Events.Init()
     end
 end
 
--- ------------------------------------------------------------
 -- Global wrappers (existing external call sites)
--- ------------------------------------------------------------
 if _G and type(_G.MSUF_Auras2_ApplyEventRegistration) ~= "function" then
     _G.MSUF_Auras2_ApplyEventRegistration = function()
         return API.ApplyEventRegistration()

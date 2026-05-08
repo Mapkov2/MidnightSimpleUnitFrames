@@ -1,6 +1,4 @@
--- ============================================================================
 -- MSUF_EM2_HUD.lua — Edit Mode HUD (two-row, polished)
--- ============================================================================
 local addonName, ns = ...
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -14,6 +12,7 @@ local floor, max, min = math.floor, math.max, math.min
 
 local hudFrame, row2Frame
 local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
+local previewAddonSlot
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 local helpBtn, tutorialPanel, tourState
@@ -102,9 +101,7 @@ local function LayoutCenter(anchor, items, gap, sepW)
     end
 end
 
--- =========================================================================
 -- Localization: EN defaults (translators override via ns.AddLocale)
--- =========================================================================
 do
     local raw = L
     if raw["EM_HELP_DRAG"] == "EM_HELP_DRAG" then
@@ -140,9 +137,7 @@ do
     end
 end
 
--- =========================================================================
 -- Tutorial / Help Reference Panel (lazy init)
--- =========================================================================
 local HELP_SECTIONS = {
     { title = "Drag & Move",        body = "EM_HELP_DRAG" },
     { title = "Click Popup",        body = "EM_HELP_POPUP" },
@@ -250,9 +245,7 @@ local function EnsureTutorialPanel()
     return p
 end
 
--- =========================================================================
 -- Phase 2: Guided Tour — spotlight mask + step cards
--- =========================================================================
 local MASK_ALPHA = 0.65
 local CARD_W     = 300
 local CARD_PAD   = 14
@@ -530,7 +523,6 @@ function HUD.StopTour()
     tourState.step = 0
 end
 
--- =========================================================================
 local function EnsureHUD()
     if hudFrame then return end
 
@@ -655,11 +647,15 @@ local function EnsureHUD()
 
     previewBtn = MakeBtn(c1, "Preview", 64, BTN_H, 12, function()
         _G.MSUF_UnitPreviewActive = not (_G.MSUF_UnitPreviewActive and true or false)
-        if type(_G.MSUF_SyncAllUnitPreviews) == "function" then _G.MSUF_SyncAllUnitPreviews() end
+        if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
         SetActive(previewBtn, _G.MSUF_UnitPreviewActive)
     end)
     SetTip(previewBtn, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
     r1[#r1+1] = previewBtn
+
+    previewAddonSlot = CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", c1)
+    previewAddonSlot:SetSize(38, BTN_H)
+    r1[#r1+1] = previewAddonSlot
 
     auraBtn = MakeBtn(c1, "Auras", 52, BTN_H, 12, function()
         local db = _G.MSUF_DB; if not db then return end
@@ -668,11 +664,11 @@ local function EnsureHUD()
         sh.showInEditMode = not (sh.showInEditMode and true or false)
         SetActive(auraBtn, sh.showInEditMode)
         if sh.showInEditMode then
-            if type(_G.MSUF_A2_ShowAllEditMovers) == "function" then _G.MSUF_A2_ShowAllEditMovers() end
+            if _G.MSUF_A2_ShowAllEditMovers then _G.MSUF_A2_ShowAllEditMovers() end
         else
-            if type(_G.MSUF_A2_HideAllEditMovers) == "function" then _G.MSUF_A2_HideAllEditMovers() end
+            if _G.MSUF_A2_HideAllEditMovers then _G.MSUF_A2_HideAllEditMovers() end
         end
-        if type(_G.MSUF_Auras2_RefreshAll) == "function" then _G.MSUF_Auras2_RefreshAll() end
+        if _G.MSUF_Auras2_RefreshAll then _G.MSUF_Auras2_RefreshAll() end
     end)
     SetTip(auraBtn, "Toggle aura preview icons\nand aura mover boxes.")
     r1[#r1+1] = auraBtn
@@ -696,7 +692,7 @@ local function EnsureHUD()
         if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
         C_Timer.After(0.1, function()
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            if type(_G.MSUF_EM2_ReforcePreviewFrames) == "function" then _G.MSUF_EM2_ReforcePreviewFrames() end
+            if _G.MSUF_EM2_ReforcePreviewFrames then _G.MSUF_EM2_ReforcePreviewFrames() end
         end)
     end)
     SetTip(cdmBtn, "Anchor all unitframes to the\nEssential Cooldown Manager.")
@@ -738,7 +734,7 @@ local function EnsureHUD()
     local r2 = {}
 
     undoBtn = MakeBtn(c2, "Undo", 52, BTN_H2, 11, function()
-        if type(_G.MSUF_EM_UndoUndo) == "function" then _G.MSUF_EM_UndoUndo() end
+        if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
     end)
     undoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
@@ -747,7 +743,7 @@ local function EnsureHUD()
     r2[#r2+1] = undoBtn
 
     redoBtn = MakeBtn(c2, "Redo", 52, BTN_H2, 11, function()
-        if type(_G.MSUF_EM_UndoRedo) == "function" then _G.MSUF_EM_UndoRedo() end
+        if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
     end)
     redoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
@@ -792,7 +788,6 @@ local function EnsureHUD()
     LayoutCenter(c2, r2, BTN_GAP, SEP_W)
 end
 
--- =========================================================================
 function HUD.RefreshUnitSelector() end
 
 function HUD.RefreshControls()

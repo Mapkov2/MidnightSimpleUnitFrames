@@ -9,6 +9,7 @@ local base = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 
 -- Fonts (keys used by MSUF: FRIZQT/ARIALN/MORPHEUS/SKURRI + these)
 pcall(LSM.Register, LSM, "font", "EXPRESSWAY",                 base .. "Fonts\\Expressway Regular.ttf")
+pcall(LSM.Register, LSM, "font", "Expressway Regular (MSUF)",  base .. "Fonts\\Expressway Regular.ttf")
 pcall(LSM.Register, LSM, "font", "Expressway (MSUF)",          base .. "Fonts\\Expressway Regular.ttf")
 pcall(LSM.Register, LSM, "font", "EXPRESSWAY_BOLD",            base .. "Fonts\\Expressway Bold.ttf")
 pcall(LSM.Register, LSM, "font", "Expressway Bold (MSUF)",     base .. "Fonts\\Expressway Bold.ttf")
@@ -16,15 +17,12 @@ pcall(LSM.Register, LSM, "font", "EXPRESSWAY_SEMIBOLD",        base .. "Fonts\\E
 pcall(LSM.Register, LSM, "font", "EXPRESSWAY_EXTRABOLD",       base .. "Fonts\\Expressway ExtraBold.ttf")
 pcall(LSM.Register, LSM, "font", "EXPRESSWAY_CONDENSED_LIGHT", base .. "Fonts\\Expressway Condensed Light.otf")
 
--- Statusbar textures
+-- Statusbar textures (same names/paths as main MSUF media registration)
 local baseBars = base .. "Bars\\"
-local function RegStatusbar(name, file)
-    pcall(LSM.Register, LSM, "statusbar", name, baseBars .. file)
-end
-
-RegStatusbar("MSUF Charcoal",   "Charcoal.tga")
-RegStatusbar("MSUF Minimalist", "Minimalist.tga")
-RegStatusbar("MSUF Slickrock",  "Slickrock.tga")
-RegStatusbar("MSUF Smooth",     "MSUF_Smooth.tga")
-RegStatusbar("MSUF Smooth v2",  "Smoothv2.tga")
-RegStatusbar("MSUF Smoother",   "smoother.tga")
+pcall(LSM.Register, LSM, "statusbar", "MSUF Charcoal",   baseBars .. "Charcoal.tga")
+pcall(LSM.Register, LSM, "statusbar", "MSUF Minimalist", baseBars .. "Minimalist.tga")
+pcall(LSM.Register, LSM, "statusbar", "MSUF Slickrock",  baseBars .. "Slickrock.tga")
+pcall(LSM.Register, LSM, "statusbar", "MSUF Smooth",     baseBars .. "MSUF_Smooth.tga")
+pcall(LSM.Register, LSM, "statusbar", "MSUF Smooth v2",  baseBars .. "Smoothv2.tga")
+pcall(LSM.Register, LSM, "statusbar", "MSUF Smoother",   baseBars .. "smoother.tga")
+pcall(LSM.Register, LSM, "statusbar", "Better Blizzard", baseBars .. "BetterBlizzard.blp")

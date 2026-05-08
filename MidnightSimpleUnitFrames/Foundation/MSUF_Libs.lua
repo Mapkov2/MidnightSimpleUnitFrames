@@ -2,8 +2,8 @@ local addonName, ns = ...
 ns = ns or {}
 
 -- WoW 12.0.5+ can throw hard errors when SetFont receives a missing asset.
--- Validate/canonicalize selected font paths once and cache the result, so hot
--- SetFont paths can stay plain SetFont calls.
+-- Keep one early global guard so LSM entries from disabled/missing media addons
+-- cannot break Edit Mode, previews, or runtime text refresh.
 do
     local FALLBACK_FONT = "Fonts\\FRIZQT__.TTF"
     local FONT_ALIASES = {
@@ -28,6 +28,30 @@ do
         if type(path) ~= "string" or path == "" then return nil end
         local key = path:gsub("/", "\\"):lower()
         return FONT_ALIASES[key] or path
+    end
+
+    local function FontPathKey(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        return path:gsub("/", "\\"):lower()
+    end
+
+    local FONT_EQUIV = {
+        ["fonts\\frizqt__.ttf"] = "friz",
+        ["fonts\\frizqt___cyr.ttf"] = "friz",
+        ["fonts\\arialn.ttf"] = "arial",
+        ["fonts\\morpheus.ttf"] = "morpheus",
+        ["fonts\\morpheus_cyr.ttf"] = "morpheus",
+        ["fonts\\skurri.ttf"] = "skurri",
+        ["fonts\\skurri_cyr.ttf"] = "skurri",
+    }
+
+    local function FontPathMatches(requested, actual)
+        local want = FontPathKey(NormalizeFontPath(requested))
+        local got = FontPathKey(NormalizeFontPath(actual))
+        if not want or not got then return false end
+        if want == got then return true end
+        local wantGroup = FONT_EQUIV[want]
+        return wantGroup ~= nil and wantGroup == FONT_EQUIV[got]
     end
 
     local function GetProbeFS()
@@ -55,6 +79,16 @@ do
         return NormalizeFontPath(path)
     end
 
+    function _G.MSUF_FontPathMatches(requested, actual)
+        return FontPathMatches(requested, actual)
+    end
+
+    function _G.MSUF_ClearResolvedFontPathCache()
+        for k in pairs(_fontPathCache) do
+            _fontPathCache[k] = nil
+        end
+    end
+
     function _G.MSUF_ResolveFontPath(path, size, flags)
         size = tonumber(size) or 12
         if size <= 0 then size = 12 end
@@ -73,11 +107,24 @@ do
             seen[p] = true
             candidates[#candidates + 1] = p
         end
+        local function AddGameFontAlternates(p)
+            local key = FontPathKey(p)
+            if key == "fonts\\morpheus.ttf" then
+                Add("Fonts\\MORPHEUS_CYR.TTF")
+            elseif key == "fonts\\morpheus_cyr.ttf" then
+                Add("Fonts\\MORPHEUS.TTF")
+            elseif key == "fonts\\skurri.ttf" then
+                Add("Fonts\\SKURRI_CYR.TTF")
+            elseif key == "fonts\\skurri_cyr.ttf" then
+                Add("Fonts\\SKURRI.TTF")
+            end
+        end
 
         Add(normalized)
-        Add(STANDARD_TEXT_FONT)
+        AddGameFontAlternates(normalized)
         Add(FALLBACK_FONT)
         Add("Fonts\\ARIALN.TTF")
+        Add(STANDARD_TEXT_FONT)
 
         local probe = GetProbeFS()
         if probe then
@@ -90,7 +137,7 @@ do
             end
         end
 
-        local fallback = NormalizeFontPath(STANDARD_TEXT_FONT) or FALLBACK_FONT
+        local fallback = NormalizeFontPath(FALLBACK_FONT)
         _fontPathCache[cacheKey] = fallback
         return fallback
     end
@@ -115,7 +162,7 @@ local function TryInitLSM()
         _G.MSUF_LSM = lsm
 
         -- Inform Main (which caches LSM in a local upvalue) that LSM is now ready.
-        if type(_G.MSUF_OnLSMReady) == "function" then
+        if _G.MSUF_OnLSMReady then
             _G.MSUF_OnLSMReady(lsm)
         end
 
@@ -132,41 +179,41 @@ local function EnsureLSMCallbacks()
 
     LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
         if mediatype == "font" then
-            if type(_G.MSUF_RebuildFontChoices) == "function" then
+            if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
+                _G.MSUF_ClearResolvedFontPathCache()
+            end
+            if _G.MSUF_RebuildFontChoices then
                 _G.MSUF_RebuildFontChoices()
             end
 
-            if _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.fontKey == key then
+            local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
+            if _G.MSUF_DB and _G.MSUF_DB.general and normalizeFontKey(_G.MSUF_DB.general.fontKey) == normalizeFontKey(key) then
                 if _G.C_Timer and _G.C_Timer.After then
                     _G.C_Timer.After(0, function()
-                        if type(_G.UpdateAllFonts) == "function" then
+                        if _G.UpdateAllFonts then
                             _G.UpdateAllFonts()
                         end
                     end)
-                elseif type(_G.UpdateAllFonts) == "function" then
+                elseif _G.UpdateAllFonts then
                     _G.UpdateAllFonts()
                 end
             end
 
         elseif mediatype == "statusbar" then
-            if type(_G.MSUF_RebuildStatusbarChoices) == "function" then
+            if _G.MSUF_RebuildStatusbarChoices then
                 _G.MSUF_RebuildStatusbarChoices()
             end
         end
     end)
 end
 
--- -----------------------------------------------------------------------------
 -- Bundled fonts (Media/Fonts)
--- -----------------------------------------------------------------------------
 
 local function RegisterBundledFonts()
     if _G.MSUF_BUNDLED_FONTS_REGISTERED then return end
 
     local LSM = ns.LSM
-    if not LSM or type(LSM.Register) ~= "function" then
-        return
-    end
+    if not LSM or type(LSM.Register) ~= "function" then return end
 
     local base = "Interface/AddOns/" .. tostring(addonName) .. "/Media/Fonts/"
     local fonts = {
@@ -195,6 +242,7 @@ local function RegisterBundledFonts()
     Reg("MSUF Smooth",     "MSUF_Smooth.tga")
     Reg("MSUF Smooth v2",  "Smoothv2.tga")
     Reg("MSUF Smoother",   "smoother.tga")
+    Reg("Better Blizzard", "BetterBlizzard.blp")
 
     -- DB migration: eliminate broken legacy selections ("MSUF Flat"/"MSUF Smooth")
     local function MigrateLegacyBarKeys()
@@ -275,10 +323,7 @@ else
     end)
 end
 
-
--- -----------------------------------------------------------------------------
 -- LoD module helpers (Castbars/GamePlay/etc.)
--- -----------------------------------------------------------------------------
 
 -- Export the core namespace for LoadOnDemand sub-addons.
 _G.MSUF_NS = _G.MSUF_NS or ns
@@ -319,17 +364,11 @@ function _G.MSUF_EnsureAddonLoaded(addonName)
     return IsLoaded()
 end
 
-
-
--- -----------------------------------------------------------------------------
 -- Global UI Scale (combat-safe gate)
--- -----------------------------------------------------------------------------
 -- Fixes: /reload in combat (or any in-combat scale apply) causing ADDON_ACTION_BLOCKED
 -- by deferring Global UI scale changes until PLAYER_REGEN_ENABLED.
---
 -- Important: We intentionally wrap MSUF_SetGlobalUiScale in-place so ANY caller becomes
 -- combat-safe without needing to edit every callsite (SlashMenu / Options / etc.).
---
 function _G.MSUF_InstallGlobalScaleGate()
     if _G.MSUF_GlobalScaleGateInstalled then return end
     _G.MSUF_GlobalScaleGateInstalled = true
@@ -396,9 +435,7 @@ function _G.MSUF_InstallGlobalScaleGate()
     end
 
     -- Install immediately if possible; otherwise retry on common init events.
-    if TryWrap() then
-        return
-    end
+    if TryWrap() then return end
 
     if not _G.MSUF_GlobalScaleInstallFrame then
         local f = CreateFrame("Frame")
@@ -426,21 +463,18 @@ else
     _G.MSUF_InstallGlobalScaleGate()
 end
 
-
 -- Auto-load Castbars LoD addon on login when any castbar feature is enabled.
 -- (Keeps the core addon slim, but still "just works" out of the box.)
 do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function()
-        if type(_G.EnsureDB) == "function" then
+        if _G.EnsureDB then
             _G.EnsureDB()
         end
 
         local g = _G.MSUF_DB and _G.MSUF_DB.general or nil
-        if not g then
-            return
-        end
+        if not g then return end
 
         local need = false
         if g.enablePlayerCastbar ~= false then need = true end
@@ -454,22 +488,18 @@ do
     end)
 end
 
-
-
 -- Auto-load Gameplay LoD addon on login when any gameplay feature is enabled.
 -- (Prevents "feature looks enabled but does nothing until you toggle twice" after /reload or relog.)
 do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function()
-        if type(_G.EnsureDB) == "function" then
+        if _G.EnsureDB then
             _G.EnsureDB()
         end
 
         local g = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
-        if not g then
-            return
-        end
+        if not g then return end
 
         local need = false
         if g.enableCombatTimer == true then need = true end
@@ -484,7 +514,7 @@ do
             local ns2 = _G.MSUF_NS
             if ns2 and type(ns2.MSUF_RequestGameplayApply) == "function" then
                 ns2.MSUF_RequestGameplayApply()
-            elseif type(_G.MSUF_RequestGameplayApply) == "function" then
+            elseif _G.MSUF_RequestGameplayApply then
                 _G.MSUF_RequestGameplayApply()
             end
         end

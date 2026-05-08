@@ -4,6 +4,7 @@ local addonName, ns = ...
 ns = ns or {}
 
 local MAX_BOSS = _G.MSUF_MAX_BOSS_FRAMES or 5
+local ResolveFontPath = _G.MSUF_ResolveFontPath or function(path) return path end
 
 -- Forward declarations
 local BossCastbar_Start
@@ -42,10 +43,6 @@ local function SafeCall(fn, ...)
     local ok, a, b, c, d, e = MSUF_FastCall(fn, ...)
     if ok then return a, b, c, d, e end
     return nil
-end
-
-local ResolveFontPath = (ns and ns.Util and ns.Util.ResolveFontPath) or _G.MSUF_ResolveFontPath or function(path)
-    return path or "Fonts\\FRIZQT__.TTF"
 end
 
 -- PERF: Resolve time source once at load.
@@ -181,6 +178,12 @@ end
 local function EnsureDBSafe()
     if type(_G.EnsureDB) == "function" then
         SafeCall(_G.EnsureDB)
+    end
+end
+
+local function Boss_RefreshKickReady(frame)
+    if type(_G.MSUF_KickReady_RefreshFrame) == "function" then
+        _G.MSUF_KickReady_RefreshFrame(frame, nil)
     end
 end
 
@@ -596,8 +599,13 @@ end
         local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
         local ox = math.floor((tonumber(g.bossCastbarOffsetX) or 0) + 0.5)
         local oy = math.floor((tonumber(g.bossCastbarOffsetY) or 0) + 0.5)
-        local forcedW = tonumber(g.bossCastbarWidth)
-        local forcedH = tonumber(g.bossCastbarHeight)
+        local forcedW, forcedH
+        if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+            forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize(unit, g, self, 240, 12)
+        else
+            forcedW = tonumber(g.bossCastbarWidth)
+            forcedH = tonumber(g.bossCastbarHeight)
+        end
         if forcedW then forcedW = math.floor(forcedW + 0.5) end
         if forcedH then forcedH = math.floor(forcedH + 0.5) end
 
@@ -686,6 +694,10 @@ BossCastbar_Stop = function(frame)
     frame.interrupted = nil
     frame._msufZeroCount = nil
     frame._msufDeathRecheckPending = nil
+    frame.MSUF_kickInterruptibleConfirmed = nil
+    frame.MSUF_castActive = false
+    if frame.kickReadyBox then frame.kickReadyBox:Hide() end
+    Boss_RefreshKickReady(frame)
 
     frame.MSUF_durationObj = nil
     frame._msufPlainEndTime = nil
@@ -744,6 +756,12 @@ local function BossCastbar_ShowInterruptFeedback(frame, label)
     frame._msufInterruptFeedbackActive = true
     frame._msufInterruptFeedbackUntil = MSUF_Now() + grace
     frame.interrupted = true
+    frame.MSUF_castActive = false
+    frame.MSUF_kickInterruptibleConfirmed = nil
+    if frame.kickReadyBox then frame.kickReadyBox:Hide() end
+    if type(_G.MSUF_KickReady_RefreshFrame) == "function" then
+        _G.MSUF_KickReady_RefreshFrame(frame, nil)
+    end
 
     EnsureDBSafe()
     local db = _G.MSUF_DB
@@ -1080,6 +1098,8 @@ BossCastbar_Start = function(frame)
                 if frame.icon then frame.icon:SetTexture(castTex or nil) end
 
                 frame:UpdateColorForInterruptible()
+                frame.MSUF_castActive = true
+                Boss_RefreshKickReady(frame)
                 frame:Show()
 
                 -- Force the driver to re-evaluate tick rate (empower wants ~0.03).
@@ -1117,7 +1137,9 @@ BossCastbar_Start = function(frame)
                 _G.MSUF_SetChannelStaticStripes(frame, false)
             end
             frame:UpdateColorForInterruptible()
-        frame:Show()
+            frame.MSUF_castActive = true
+            Boss_RefreshKickReady(frame)
+            frame:Show()
             return
         end
 
@@ -1177,6 +1199,8 @@ BossCastbar_Start = function(frame)
         if frame.icon then frame.icon:SetTexture(castTex or nil) end
 
         frame:UpdateColorForInterruptible()
+        frame.MSUF_castActive = true
+        Boss_RefreshKickReady(frame)
         frame:Show()
 
         Boss_RegisterWithBestDriver(frame)
@@ -1202,7 +1226,9 @@ BossCastbar_Start = function(frame)
                 _G.MSUF_SetChannelStaticStripes(frame, true)
             end
             frame:UpdateColorForInterruptible()
-        frame:Show()
+            frame.MSUF_castActive = true
+            Boss_RefreshKickReady(frame)
+            frame:Show()
             return
         end
 
@@ -1239,6 +1265,8 @@ BossCastbar_Start = function(frame)
         if frame.icon then frame.icon:SetTexture(chanTex or nil) end
 
         frame:UpdateColorForInterruptible()
+        frame.MSUF_castActive = true
+        Boss_RefreshKickReady(frame)
         frame:Show()
 
         Boss_RegisterWithBestDriver(frame)
@@ -1291,15 +1319,27 @@ local function BossCastbar_OnEvent(self, event, ...)
         return
     end
 
+    if event == "UNIT_SPELLCAST_START"
+    or event == "UNIT_SPELLCAST_CHANNEL_START"
+    or event == "UNIT_SPELLCAST_EMPOWER_START" then
+        self.MSUF_kickInterruptibleConfirmed = nil
+    end
+
     if event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
+        self.MSUF_kickInterruptibleConfirmed = true
         self.MSUF_isNotInterruptiblePlain = false
         self.isNotInterruptible = false
+        self._msufApiNotInterruptibleRaw = false
+        self.MSUF_apiNotInterruptibleRaw = false
         self:UpdateColorForInterruptible()
         self:Cast()
         return
     elseif event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
+        self.MSUF_kickInterruptibleConfirmed = false
         self.MSUF_isNotInterruptiblePlain = true
         self.isNotInterruptible = true
+        self._msufApiNotInterruptibleRaw = true
+        self.MSUF_apiNotInterruptibleRaw = true
         self:UpdateColorForInterruptible()
         self:Cast()
         return
@@ -1651,10 +1691,14 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
     EnsureDBSafe()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 
-    local forcedW = tonumber(g.bossCastbarWidth)
-    local forcedH = tonumber(g.bossCastbarHeight)
-
     local uf = _G["MSUF_boss" .. index] or _G["MSUF_boss1"]
+    local forcedW, forcedH
+    if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+        forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize("boss" .. index, g, f, 240, 12)
+    else
+        forcedW = tonumber(g.bossCastbarWidth)
+        forcedH = tonumber(g.bossCastbarHeight)
+    end
     local w = (forcedW and forcedW > 10) and forcedW or (uf and uf.GetWidth and uf:GetWidth()) or 240
     local h = (forcedH and forcedH > 4) and forcedH or 12
 

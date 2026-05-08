@@ -107,7 +107,7 @@ end
 
 ------------------------------------------------------
 function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
-    local panel = (_G and _G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
+    local panel = (_G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
     panel.name = "Gameplay"
 
     if panel.__MSUF_GameplayBuilt then
@@ -212,12 +212,10 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
         end)
     end
 
-	    local function BindSlider(sl, key, roundFunc, after, applyNow)
+    local function BindSlider(sl, key, roundFunc, after, applyNow)
         sl:SetScript("OnValueChanged", function(self, value)
             -- UI sync (panel:refresh / drag-sync) should not write DB or trigger apply.
-            if panel and panel._msufSuppressSliderChanges then
-                return
-            end
+            if panel and panel._msufSuppressSliderChanges then return end
 	            local g = EnsureGameplayDefaults()
 	            -- Defensive: only call a real round/transform function.
 	            if type(roundFunc) == "function" then
@@ -227,6 +225,14 @@ function ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
             if after then after(self, g, value) end
             if applyNow then RequestApply() end
         end)
+    end
+
+    local function StyleGameplaySlider(slider)
+        local UI = ns and ns.UI
+        local style = (_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
+        if type(style) == "function" then
+            style(slider)
+        end
     end
 
     local title = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -269,10 +275,12 @@ meleeLabel:SetText("Choose spell (type spell ID or name):")
 panel.meleeSpellChooseLabel = meleeLabel
 
 local meleeInput = CreateFrame("EditBox", "MSUF_Gameplay_MeleeSpellInput", content, "InputBoxTemplate")
-meleeInput:SetSize(240, 20)
+meleeInput:SetSize(240, 24)
 meleeInput:SetPoint("TOPLEFT", meleeLabel, "BOTTOMLEFT", -4, -6)
 meleeInput:SetAutoFocus(false)
 meleeInput:SetMaxLetters(60)
+if GameFontHighlightSmall then meleeInput:SetFontObject(GameFontHighlightSmall) end
+if meleeInput.SetTextInsets then meleeInput:SetTextInsets(4, 4, 1, 1) end
 panel.meleeSpellInput = meleeInput
 local MSUF_SuppressMeleeInputChange = false
 local MSUF_SkipMeleeFocusLostResolve = false
@@ -793,9 +801,7 @@ end)
                 return
             end
 
-            if not ColorPickerFrame then
-                return
-            end
+            if not ColorPickerFrame then return end
 
             local g = EnsureGameplayDefaults()
             local r, g2, b = _MSUF_NormalizeRGB(g and g[key], 1, 1, 1)
@@ -822,6 +828,107 @@ end)
         return btn, label
     end
 
+    local function _MSUF_StyleGameplayStepButton(button, isPlus)
+        if not button then return end
+        local style = _G.MSUF_StyleSmallButton or (ns and ns.MSUF_StyleSmallButton)
+        if style then
+            style(button, isPlus)
+            button:SetSize(18, 20)
+            return
+        end
+        button:SetSize(18, 20)
+        local fs = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        fs:SetText(isPlus and "+" or "\226\128\147")
+        fs:SetAllPoints()
+        if button.SetFontString then button:SetFontString(fs) end
+        button.text = fs
+    end
+
+    local function _MSUF_FormatSliderBoxValue(value, step)
+        value = tonumber(value) or 0
+        if step and step > 0 and step < 1 then
+            local text = string_format("%.1f", value)
+            return (text:gsub("%.0$", ""))
+        end
+        return tostring(math_floor(value + 0.5))
+    end
+
+    local function _MSUF_AttachGameplaySliderValueBox(slider, minV, maxV, step)
+        if not slider or slider.__MSUF_hasValueBox then return end
+        slider.__MSUF_hasValueBox = true
+
+        local minus = CreateFrame("Button", nil, sectionParent)
+        _MSUF_StyleGameplayStepButton(minus, false)
+        minus:SetPoint("LEFT", slider, "RIGHT", 8, 0)
+
+        local eb = CreateFrame("EditBox", nil, sectionParent, "InputBoxTemplate")
+        eb:SetSize(46, 20)
+        eb:SetPoint("LEFT", minus, "RIGHT", 2, 0)
+        eb:SetAutoFocus(false)
+        eb:SetJustifyH("CENTER")
+        eb:SetMaxLetters(7)
+        if GameFontHighlightSmall then eb:SetFontObject(GameFontHighlightSmall) end
+        if eb.SetTextColor then eb:SetTextColor(1, 1, 1, 1) end
+
+        local plus = CreateFrame("Button", nil, sectionParent)
+        _MSUF_StyleGameplayStepButton(plus, true)
+        plus:SetPoint("LEFT", eb, "RIGHT", 2, 0)
+
+        local function ClampStepValue(value)
+            value = tonumber(value)
+            if value == nil then value = slider:GetValue() or minV or 0 end
+            if step and step > 0 then
+                value = (math_floor(((value - minV) / step) + 0.5) * step) + minV
+            end
+            if value < minV then value = minV end
+            if value > maxV then value = maxV end
+            return value
+        end
+
+        local function SyncBox(value)
+            if eb:HasFocus() then return end
+            eb:SetText(_MSUF_FormatSliderBoxValue(ClampStepValue(value), step))
+        end
+
+        local function CommitBox()
+            local value = ClampStepValue(eb:GetText())
+            eb:SetText(_MSUF_FormatSliderBoxValue(value, step))
+            slider:SetValue(value)
+            eb:ClearFocus()
+        end
+
+        local function StepValue(dir)
+            local value = ClampStepValue((slider:GetValue() or minV or 0) + ((step or 1) * dir))
+            slider:SetValue(value)
+            SyncBox(value)
+        end
+
+        eb:SetScript("OnEnterPressed", CommitBox)
+        eb:SetScript("OnEscapePressed", function(self)
+            self:ClearFocus()
+            SyncBox(slider:GetValue())
+            self:HighlightText(0, 0)
+        end)
+        eb:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+        eb:SetScript("OnEditFocusLost", function(self)
+            SyncBox(slider:GetValue())
+            self:HighlightText(0, 0)
+        end)
+        minus:SetScript("OnClick", function() StepValue(-1) end)
+        plus:SetScript("OnClick", function() StepValue(1) end)
+        slider:HookScript("OnValueChanged", function(self, value)
+            SyncBox(value or self:GetValue())
+        end)
+
+        slider.editBox = eb
+        slider.minusButton = minus
+        slider.plusButton = plus
+        slider.__MSUF_valueBox = eb
+        slider.__MSUF_valueBoxMinus = minus
+        slider.__MSUF_valueBoxPlus = plus
+        SyncBox(slider:GetValue())
+    end
+
     local function _MSUF_Slider(name, point, rel, relPoint, x, y, width, lo, hi, step, lowText, highText, titleText, field, key, roundFunc, after, applyNow)
         local sl = CreateFrame("Slider", name, sectionParent, "OptionsSliderTemplate")
         sl:SetWidth(width or 220)
@@ -837,9 +944,8 @@ end)
 
         if field then panel[field] = sl end
         if key then BindSlider(sl, key, roundFunc, after, applyNow) end
-        -- Apply new slider style (blue thumb + fill bar)
-        local styleFn = ns.MSUF_StyleSlider or _G.MSUF_StyleSlider
-        if styleFn then styleFn(sl) end
+        StyleGameplaySlider(sl)
+        _MSUF_AttachGameplaySliderValueBox(sl, lo, hi, step)
         return sl
     end
 
@@ -847,7 +953,9 @@ end)
         local t = _G[name .. "Text"]
         if t then
             t:ClearAllPoints()
-            t:SetPoint("LEFT", _G[name], "RIGHT", 12, 0)
+            local sl = _G[name]
+            local anchor = (sl and sl.plusButton) or sl
+            t:SetPoint("LEFT", anchor or _G[name], "RIGHT", (sl and sl.plusButton) and 8 or 12, 0)
             t:SetJustifyH("LEFT")
         end
     end
@@ -872,18 +980,138 @@ end)
         return b
     end
 
+local function _MSUF_CleanGameplayDropdownChrome(dd, width)
+    if not (dd and (dd._msufPeelButton or dd.__msufPeelDropSkinned)) then return end
+    width = width or dd._msufPeelWidth or dd._msufButtonWidth or 120
+    if _G.MSUF_PeelDropdownTemplate then
+        _G.MSUF_PeelDropdownTemplate(dd, { width = width })
+    end
+
+    local name = dd.GetName and dd:GetName()
+    local function HideRegion(region)
+        if not region then return end
+        if region.SetAlpha then region:SetAlpha(0) end
+    end
+    HideRegion(dd.Left or (name and _G[name .. "Left"]))
+    HideRegion(dd.Middle or (name and _G[name .. "Middle"]))
+    HideRegion(dd.Right or (name and _G[name .. "Right"]))
+    HideRegion(dd.Text or (name and _G[name .. "Text"]))
+
+    local nativeButton = dd.Button or (name and _G[name .. "Button"])
+    if nativeButton then
+        local nt = nativeButton.GetNormalTexture and nativeButton:GetNormalTexture()
+        local pt = nativeButton.GetPushedTexture and nativeButton:GetPushedTexture()
+        local ht = nativeButton.GetHighlightTexture and nativeButton:GetHighlightTexture()
+        HideRegion(nt)
+        HideRegion(pt)
+        HideRegion(ht)
+        if nativeButton.SetAlpha then nativeButton:SetAlpha(0.01) end
+    end
+end
+
 local function _MSUF_Dropdown(name, point, rel, relPoint, x, y, width, field)
     -- Simple UIDropDownMenu-based control (used sparingly in Gameplay to avoid heavy UI scaffolding).
-    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, sectionParent) or CreateFrame("Frame", name, sectionParent, "UIDropDownMenuTemplate"))
+    local dd = (_G.MSUF_CreateStyledDropdown and _G.MSUF_CreateStyledDropdown(name, sectionParent, { width = width or 120 }) or CreateFrame("Frame", name, sectionParent, "UIDropDownMenuTemplate"))
     dd:SetPoint(point, rel, relPoint, x or 0, y or 0)
     if UIDropDownMenu_SetWidth then
         UIDropDownMenu_SetWidth(dd, width or 120)
+    end
+    _MSUF_CleanGameplayDropdownChrome(dd, width or 120)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            _MSUF_CleanGameplayDropdownChrome(dd, width or 120)
+        end)
     end
     if field then
         panel[field] = dd
     end
     return dd
 end
+
+    local GAMEPLAY_DISABLED_ALPHA = 0.35
+    local function SetGameplayControlEnabled(widget, enabled)
+        if not widget then return end
+        enabled = enabled and true or false
+        local alpha = enabled and 1 or GAMEPLAY_DISABLED_ALPHA
+        local isStyledDropdown = widget._msufPeelButton or widget.__msufPeelDropSkinned or widget.__MSUF_GameplaySpecDropdown
+
+        if isStyledDropdown then
+            if widget.SetEnabled then
+                widget:SetEnabled(enabled)
+            elseif enabled then
+                if UIDropDownMenu_EnableDropDown then UIDropDownMenu_EnableDropDown(widget) end
+            else
+                if UIDropDownMenu_DisableDropDown then UIDropDownMenu_DisableDropDown(widget) end
+            end
+            if widget.SetAlpha then widget:SetAlpha(alpha) end
+            _MSUF_CleanGameplayDropdownChrome(widget, widget._msufPeelWidth or widget._msufButtonWidth or 120)
+            return
+        end
+
+        if widget.SetEnabled then
+            widget:SetEnabled(enabled)
+        elseif enabled then
+            if widget.EnableMouse then widget:EnableMouse(true) end
+            if widget.Enable then widget:Enable() end
+        else
+            if widget.EnableMouse then widget:EnableMouse(false) end
+            if widget.Disable then widget:Disable() end
+        end
+
+        if widget.EnableMouse then widget:EnableMouse(enabled) end
+        if widget.SetAlpha then widget:SetAlpha(alpha) end
+        if widget.Text and widget.Text.SetAlpha then widget.Text:SetAlpha(alpha) end
+        if widget.text and widget.text.SetAlpha then widget.text:SetAlpha(alpha) end
+        if widget._msufLabel and widget._msufLabel.SetAlpha then widget._msufLabel:SetAlpha(alpha) end
+        if widget._msufSwatch and widget._msufSwatch.SetAlpha then widget._msufSwatch:SetAlpha(alpha) end
+
+        local name = widget.GetName and widget:GetName()
+        local button = widget.Button or (name and _G[name .. "Button"])
+        if button then
+            if button.SetEnabled then
+                button:SetEnabled(enabled)
+            elseif enabled then
+                if button.EnableMouse then button:EnableMouse(true) end
+                if button.Enable then button:Enable() end
+            else
+                if button.EnableMouse then button:EnableMouse(false) end
+                if button.Disable then button:Disable() end
+            end
+            if button.SetAlpha then button:SetAlpha(alpha) end
+        end
+
+        if name then
+            for _, suffix in ipairs({ "Text", "Low", "High" }) do
+                local region = _G[name .. suffix]
+                if region and region.SetAlpha then region:SetAlpha(alpha) end
+            end
+        end
+
+        if widget.GetRegions then
+            for _, region in ipairs({ widget:GetRegions() }) do
+                if region and region.SetAlpha then region:SetAlpha(alpha) end
+            end
+        end
+
+        for _, child in ipairs({
+            widget.editBox,
+            widget.minusButton,
+            widget.plusButton,
+            widget.__MSUF_valueBox,
+            widget.__MSUF_valueBoxMinus,
+            widget.__MSUF_valueBoxPlus,
+        }) do
+            if child and child ~= widget then
+                SetGameplayControlEnabled(child, enabled)
+            end
+        end
+    end
+
+    local function SetGameplayControlsEnabled(enabled, widgets)
+        for i = 1, #(widgets or {}) do
+            SetGameplayControlEnabled(widgets[i], enabled)
+        end
+    end
 
     -- ═══════════════════════════════════════════════════════════
     -- Section 1: Combat Timer (default open)
@@ -901,7 +1129,7 @@ end
 
     -- Combat Timer anchor dropdown (None / Player / Target / Focus)
     local combatTimerAnchorLabel = _MSUF_Label("GameFontNormal", "LEFT", combatTimerCheck, "RIGHT", 220, 0, "Anchor", "combatTimerAnchorLabel")
-    local combatTimerAnchorDD = _MSUF_Dropdown("MSUF_Gameplay_CombatTimerAnchorDropDown", "LEFT", combatTimerAnchorLabel, "RIGHT", 6, -2, 120, "combatTimerAnchorDropdown")
+    local combatTimerAnchorDD
 
     local function _CombatTimerAnchor_Validate(v)
         if v ~= "none" and v ~= "player" and v ~= "target" and v ~= "focus" then
@@ -915,6 +1143,18 @@ end
         if v == "target" then return "Target" end
         if v == "focus" then return "Focus" end
         return "None"
+    end
+
+    local COMBAT_TIMER_ANCHOR_ITEMS = {
+        { key = "none",   label = "None"   },
+        { key = "player", label = "Player" },
+        { key = "target", label = "Target" },
+        { key = "focus",  label = "Focus"  },
+    }
+
+    local function _CombatTimerAnchor_Current()
+        local g = MSUF_DB and MSUF_DB.gameplay
+        return _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
     end
 
     local function _CombatTimerAnchor_Set(v)
@@ -948,7 +1188,6 @@ end
             end
         end
 
-        
         -- Apply anchor immediately (independent of lock state)
         if _GetCombatFrame() then
             MSUF_Gameplay_ApplyCombatTimerAnchor(g)
@@ -956,8 +1195,14 @@ end
             MSUF_Gameplay_TickCombatTimer()
         end
 
-        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, val) end
-        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(val)) end
+        if combatTimerAnchorDD then
+            if combatTimerAnchorDD.Refresh then
+                combatTimerAnchorDD:Refresh()
+            else
+                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, val) end
+                if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(val)) end
+            end
+        end
 
         if ns and ns.MSUF_RequestGameplayApply then
             ns.MSUF_RequestGameplayApply()
@@ -967,21 +1212,40 @@ end
         end
     end
 
-    if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
+    do
+        local UI = ns and ns.UI
+        if UI and UI.Dropdown then
+            combatTimerAnchorDD = UI.Dropdown({
+                name = "MSUF_Gameplay_CombatTimerAnchorDropDown",
+                parent = sectionParent,
+                width = 120,
+                items = COMBAT_TIMER_ANCHOR_ITEMS,
+                get = _CombatTimerAnchor_Current,
+                set = function(v) _CombatTimerAnchor_Set(v) end,
+                maxVisible = 4,
+            })
+            combatTimerAnchorDD:ClearAllPoints()
+            combatTimerAnchorDD:SetPoint("LEFT", combatTimerAnchorLabel, "RIGHT", -9, -2)
+            combatTimerAnchorDD.__MSUF_GameplaySpecDropdown = true
+            _MSUF_CleanGameplayDropdownChrome(combatTimerAnchorDD, 120)
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    _MSUF_CleanGameplayDropdownChrome(combatTimerAnchorDD, 120)
+                end)
+            end
+            panel.combatTimerAnchorDropdown = combatTimerAnchorDD
+        else
+            combatTimerAnchorDD = _MSUF_Dropdown("MSUF_Gameplay_CombatTimerAnchorDropDown", "LEFT", combatTimerAnchorLabel, "RIGHT", 6, -2, 120, "combatTimerAnchorDropdown")
+        end
+    end
+
+    if combatTimerAnchorDD and not combatTimerAnchorDD.__MSUF_GameplaySpecDropdown and UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
         UIDropDownMenu_Initialize(combatTimerAnchorDD, function(self, level)
-            local g = MSUF_DB and MSUF_DB.gameplay
-            local cur = _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
+            local cur = _CombatTimerAnchor_Current()
 
-            local items = {
-                {"none",  "None"},
-                {"player", "Player"},
-                {"target", "Target"},
-                {"focus",  "Focus"},
-            }
-
-            for i = 1, #items do
-                local value = items[i][1]
-                local text  = items[i][2]
+            for i = 1, #COMBAT_TIMER_ANCHOR_ITEMS do
+                local value = COMBAT_TIMER_ANCHOR_ITEMS[i].key
+                local text  = COMBAT_TIMER_ANCHOR_ITEMS[i].label
                 local info = UIDropDownMenu_CreateInfo()
                 info.text = text
                 info.value = value
@@ -996,10 +1260,13 @@ end
     end
 
     do
-        local g = MSUF_DB and MSUF_DB.gameplay
-        local cur = _CombatTimerAnchor_Validate(g and g.combatTimerAnchor)
-        if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, cur) end
-        if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(cur)) end
+        local cur = _CombatTimerAnchor_Current()
+        if combatTimerAnchorDD and combatTimerAnchorDD.Refresh then
+            combatTimerAnchorDD:Refresh()
+        elseif combatTimerAnchorDD then
+            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(combatTimerAnchorDD, cur) end
+            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(combatTimerAnchorDD, _CombatTimerAnchor_Text(cur)) end
+        end
     end
 
     -- Combat Timer size slider
@@ -1010,7 +1277,7 @@ end
     )
 
     -- Combat Timer lock checkbox
-    local combatLock = _MSUF_Check("MSUF_Gameplay_LockCombatTimerCheck", "LEFT", combatSlider, "RIGHT", 40, 0, "Lock position", "lockCombatTimerCheck", "lockCombatTimer",
+    local combatLock = _MSUF_Check("MSUF_Gameplay_LockCombatTimerCheck", "LEFT", combatSlider.plusButton or combatSlider, "RIGHT", 28, 0, "Lock position", "lockCombatTimerCheck", "lockCombatTimer",
         function()
             ApplyLockState()
         end
@@ -1144,7 +1411,7 @@ end
     )
 
     -- Reset button next to Duration (restore default 1.5s)
-    local combatStateDurationReset = _MSUF_Button("MSUF_Gameplay_CombatStateDurationReset", "LEFT", combatStateSlider, "RIGHT", 40, 0, 60, 20, "Reset", "combatStateDurationResetButton")
+    local combatStateDurationReset = _MSUF_Button("MSUF_Gameplay_CombatStateDurationReset", "LEFT", combatStateSlider.plusButton or combatStateSlider, "RIGHT", 28, 0, 60, 20, "Reset", "combatStateDurationResetButton")
     combatStateDurationReset:SetScript("OnClick", function()
         local g = EnsureGameplayDefaults()
         g.combatStateDuration = 1.5
@@ -1167,31 +1434,33 @@ end
     local classSpecHeader = classSpecBody:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     classSpecHeader:SetPoint("TOPLEFT", classSpecBody, "TOPLEFT", PAD_X, -4); classSpecHeader:SetText(""); classSpecHeader:SetHeight(1)
 
-    -- Shaman: Player Totem tracker (player-only)
+    -- Blizzard TotemFrame re-anchor (Shaman totems / Monk statues)
     local _isShaman = false
+    local _isMonk = false
     local _isRogue = false
     if UnitClass then
         local _, _cls = UnitClass("player")
         _isShaman = (_cls == "SHAMAN")
+        _isMonk = (_cls == "MONK")
         _isRogue = (_cls == "ROGUE")
     end
+    local _hasTotemFrame = _isShaman or _isMonk
 
     local _classSpecAnchorRef = classSpecHeader
-    local _totemsLeftBottom = nil
-    local _totemsRightBottom = nil
 
-    if _isShaman then
-        local totemsTitle = _MSUF_Label("GameFontNormal", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, "Shaman: Totem tracker", "playerTotemsTitle")
+    if _hasTotemFrame then
+        local totemsTitleText = _isMonk and "Monk: Statue frame" or "Shaman: Totem frame"
+        local totemsTitle = _MSUF_Label("GameFontNormal", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, totemsTitleText, "playerTotemsTitle")
         panel.playerTotemsTitle = totemsTitle
 
-        local totemsSub = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsTitle, "BOTTOMLEFT", 0, -2, "Player-only. Secret-safe in combat.", "playerTotemsSubText")
+        local totemsSub = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsTitle, "BOTTOMLEFT", 0, -2, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", "playerTotemsSubText")
 
-        local totemsDismissHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsSub, "BOTTOMLEFT", 0, -2, "Note: Right-click to dismiss totems is protected by Blizzard (secure) and not supported yet.", "playerTotemsDismissHint")
+        local totemsDismissHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsSub, "BOTTOMLEFT", 0, -2, "Right-click dismiss remains handled by Blizzard.", "playerTotemsDismissHint")
         panel.playerTotemsDismissHint = totemsDismissHint
 
         panel.playerTotemsSubText = totemsSub
 
-        local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsDismissHint, "BOTTOMLEFT", 0, -8, "Enable Totem tracker", "playerTotemsCheck", "enablePlayerTotems",
+        local totemsCheck = _MSUF_Check("MSUF_Gameplay_PlayerTotemsCheck", "TOPLEFT", totemsDismissHint, "BOTTOMLEFT", 0, -8, "Re-anchor Blizzard TotemFrame", "playerTotemsCheck", "enablePlayerTotems",
             function()
                 if ns and ns.MSUF_RequestGameplayApply then
                     ns.MSUF_RequestGameplayApply()
@@ -1209,31 +1478,9 @@ end
             end
         end
 
-        local totemsShowText = _MSUF_Check("MSUF_Gameplay_PlayerTotemsShowTextCheck", "TOPLEFT", totemsCheck, "BOTTOMLEFT", 0, -8, "Show cooldown text", "playerTotemsShowTextCheck", "playerTotemsShowText",
-            function()
-                if ns and ns.MSUF_RequestGameplayApply then
-                    ns.MSUF_RequestGameplayApply()
-                end
-                if panel and panel.MSUF_UpdateGameplayDisabledStates then
-                    panel:MSUF_UpdateGameplayDisabledStates()
-                end
-            end
-        )
-
-        local totemsScaleText = _MSUF_Check("MSUF_Gameplay_PlayerTotemsScaleTextCheck", "TOPLEFT", totemsShowText, "BOTTOMLEFT", 0, -8, "Scale text by icon size", "playerTotemsScaleByIconCheck", "playerTotemsScaleTextByIconSize",
-            function()
-                if ns and ns.MSUF_RequestGameplayApply then
-                    ns.MSUF_RequestGameplayApply()
-                end
-                if panel and panel.MSUF_UpdateGameplayDisabledStates then
-                    panel:MSUF_UpdateGameplayDisabledStates()
-                end
-            end
-        )
-
         -- Preview button: keep it in the left column under the toggles (cleaner layout).
-        -- Preview is Shaman-only and works even when the feature toggle is off (positioning).
-        local totemsPreviewBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsPreviewButton", "TOPLEFT", totemsScaleText, "BOTTOMLEFT", 0, -12, 140, 22, "Preview", "playerTotemsPreviewButton")
+        -- Preview works even when the feature toggle is off (positioning).
+        local totemsPreviewBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsPreviewButton", "TOPLEFT", totemsCheck, "BOTTOMLEFT", 0, -12, 140, 22, "Preview", "playerTotemsPreviewButton")
         totemsPreviewBtn:SetScript("OnClick", function()
             if ns and ns.MSUF_PlayerTotems_TogglePreview then
                 ns.MSUF_PlayerTotems_TogglePreview()
@@ -1242,17 +1489,14 @@ end
         end)
         _RefreshTotemsPreviewButton()
 
-        
--- Tip: positioning workflow
-local totemsDragHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsPreviewBtn, "BOTTOMLEFT", 0, -4, "Tip: Move the preview via mousedrag", "playerTotemsDragHint")
-panel.playerTotemsDragHint = totemsDragHint
+        -- Tip: positioning workflow
+        local totemsDragHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", totemsPreviewBtn, "BOTTOMLEFT", 0, -4, "Tip: Move the preview via mousedrag or arrow keys", "playerTotemsDragHint")
+        panel.playerTotemsDragHint = totemsDragHint
 
-_totemsLeftBottom = totemsDragHint
+        -- Right column for layout/size controls (keeps the left side clean, avoids clipping)
+        local _totemsRightX = 300
 
-	        -- Right column for layout/size controls (keeps the left side clean, avoids clipping)
-	        local _totemsRightX = 300
-
-	        local totemsIconSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsIconSizeSlider", "TOPLEFT", totemsCheck, "TOPLEFT", _totemsRightX, -2, 240, 8, 64, 1, "Small", "Big", "Icon size", "playerTotemsIconSizeSlider", "playerTotemsIconSize",
+        local totemsIconSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsIconSizeSlider", "TOPLEFT", totemsCheck, "TOPLEFT", _totemsRightX, -2, 240, 8, 64, 1, "Small", "Big", "Icon size", "playerTotemsIconSizeSlider", "playerTotemsIconSize",
             function(v) return math.floor((v or 0) + 0.5) end,
             function()
                 if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
@@ -1260,13 +1504,7 @@ _totemsLeftBottom = totemsDragHint
             true
         )
 
-        local totemsSpacing = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsSpacingSlider", "TOPLEFT", totemsIconSize, "BOTTOMLEFT", 0, -18, 240, 0, 20, 1, "Tight", "Wide", "Spacing", "playerTotemsSpacingSlider", "playerTotemsSpacing",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
-            true
-        )
-
-        local totemsOffsetX = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsOffsetXSlider", "TOPLEFT", totemsSpacing, "BOTTOMLEFT", 0, -18, 240, -200, 200, 1, "Left", "Right", "X offset", "playerTotemsOffsetXSlider", "playerTotemsOffsetX",
+        local totemsOffsetX = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsOffsetXSlider", "TOPLEFT", totemsIconSize, "BOTTOMLEFT", 0, -18, 240, -200, 200, 1, "Left", "Right", "X offset", "playerTotemsOffsetXSlider", "playerTotemsOffsetX",
             function(v) return math.floor((v or 0) + 0.5) end,
             function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
             true
@@ -1278,13 +1516,7 @@ _totemsLeftBottom = totemsDragHint
             true
         )
 
-        local totemsFontSize = _MSUF_Slider("MSUF_Gameplay_PlayerTotemsFontSizeSlider", "TOPLEFT", totemsOffsetY, "BOTTOMLEFT", 0, -18, 240, 8, 64, 1, "Small", "Big", "Font size", "playerTotemsFontSizeSlider", "playerTotemsFontSize",
-            function(v) return math.floor((v or 0) + 0.5) end,
-            function() if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end end,
-            true
-        )
-
-        local totemsLayoutLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", totemsFontSize, "BOTTOMLEFT", 0, -12, "Layout", "playerTotemsLayoutLabel")
+        local totemsLayoutLabel = _MSUF_Label("GameFontNormal", "TOPLEFT", totemsOffsetY, "BOTTOMLEFT", 0, -12, "Layout", "playerTotemsLayoutLabel")
         panel.playerTotemsLayoutLabel = totemsLayoutLabel
 
         local anchorPoints = {"TOPLEFT","TOP","TOPRIGHT","LEFT","CENTER","RIGHT","BOTTOMLEFT","BOTTOM","BOTTOMRIGHT"}
@@ -1300,67 +1532,9 @@ _totemsLeftBottom = totemsDragHint
                 end
             end
             return anchorPoints[1]
-                end
-
-        -- Growth direction dropdown (RIGHT / LEFT / UP / DOWN)
-        local growthDD = _MSUF_Dropdown("MSUF_Gameplay_PlayerTotemsGrowthDropDown", "TOPLEFT", totemsLayoutLabel, "BOTTOMLEFT", -16, -10, 110, "playerTotemsGrowthDropdown")
-
-        local function _TotemsGrowth_Validate(v)
-            if v ~= "LEFT" and v ~= "RIGHT" and v ~= "UP" and v ~= "DOWN" then
-                return "RIGHT"
-            end
-            return v
         end
 
-        local function _TotemsGrowth_Set(v)
-            local g = MSUF_DB and MSUF_DB.gameplay
-            if not g then return end
-            local val = _TotemsGrowth_Validate(v)
-            g.playerTotemsGrowthDirection = val
-
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(growthDD, val) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(growthDD, val) end
-
-            if panel and panel.refresh then panel:refresh() end
-            if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
-        end
-
-        if UIDropDownMenu_Initialize and UIDropDownMenu_CreateInfo and UIDropDownMenu_AddButton then
-            UIDropDownMenu_Initialize(growthDD, function(self, level)
-                local g = MSUF_DB and MSUF_DB.gameplay
-                local cur = _TotemsGrowth_Validate(g and g.playerTotemsGrowthDirection)
-
-                local items = {
-                    {"RIGHT", "Grow Right"},
-                    {"LEFT",  "Grow Left"},
-                    {"UP",    "Vertical Up"},
-                    {"DOWN",  "Vertical Down"},
-                }
-
-                for i = 1, #items do
-                    local value = items[i][1]
-                    local text  = items[i][2]
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = text
-                    info.value = value
-                    info.checked = (cur == value)
-                    info.func = function(btn)
-                        _TotemsGrowth_Set(btn and btn.value)
-                    end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end)
-        end
-
-        -- Initial label/selection (kept in sync by panel.refresh)
-        do
-            local g = MSUF_DB and MSUF_DB.gameplay
-            local cur = _TotemsGrowth_Validate(g and g.playerTotemsGrowthDirection)
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(growthDD, cur) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(growthDD, cur) end
-        end
-
-	        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", growthDD, "TOPRIGHT", 8, -4, 122, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function()
+        local anchorFromBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorFromBtn", "TOPLEFT", totemsLayoutLabel, "BOTTOMLEFT", 0, -8, 122, 20, "From: TOPLEFT", "playerTotemsAnchorFromButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
             g.playerTotemsAnchorFrom = _NextAnchor(g.playerTotemsAnchorFrom)
@@ -1369,7 +1543,7 @@ _totemsLeftBottom = totemsDragHint
         end)
         panel.playerTotemsAnchorFromButton = anchorFromBtn
 
-	        local anchorToBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorToBtn", "TOPLEFT", growthDD, "BOTTOMLEFT", 16, -6, 240, 20, "To: BOTTOMLEFT", "playerTotemsAnchorToButton", function()
+        local anchorToBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsAnchorToBtn", "TOPLEFT", anchorFromBtn, "BOTTOMLEFT", 0, -6, 240, 20, "To: BOTTOMLEFT", "playerTotemsAnchorToButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
             g.playerTotemsAnchorTo = _NextAnchor(g.playerTotemsAnchorTo)
@@ -1378,43 +1552,36 @@ _totemsLeftBottom = totemsDragHint
         end)
         panel.playerTotemsAnchorToButton = anchorToBtn
 
-	        local resetTotemsBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsResetBtn", "TOPLEFT", anchorToBtn, "BOTTOMLEFT", 0, -6, 240, 20, "Reset Totem tracker layout", "playerTotemsResetButton", function()
+        local resetTotemsBtn = _MSUF_Button("MSUF_Gameplay_PlayerTotemsResetBtn", "TOPLEFT", anchorToBtn, "BOTTOMLEFT", 0, -6, 240, 20, "Reset TotemFrame layout", "playerTotemsResetButton", function()
             local g = MSUF_DB and MSUF_DB.gameplay
             if not g then return end
-            g.playerTotemsShowText = true
-            g.playerTotemsScaleTextByIconSize = true
             g.playerTotemsIconSize = 24
-            g.playerTotemsSpacing = 4
             g.playerTotemsOffsetX = 0
             g.playerTotemsOffsetY = -6
             g.playerTotemsAnchorFrom = "TOPLEFT"
             g.playerTotemsAnchorTo = "BOTTOMLEFT"
-            g.playerTotemsGrowthDirection = "RIGHT"
-            g.playerTotemsFontSize = 14
-            g.playerTotemsTextColor = { 1, 1, 1 }
             if panel and panel.refresh then panel:refresh() end
             if panel and panel.MSUF_UpdateGameplayDisabledStates then panel:MSUF_UpdateGameplayDisabledStates() end
             if ns and ns.MSUF_RequestGameplayApply then ns.MSUF_RequestGameplayApply() end
         end)
         panel.playerTotemsResetButton = resetTotemsBtn
-        _totemsRightBottom = resetTotemsBtn
 
         _classSpecAnchorRef = resetTotemsBtn
     else
-        local shamanHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, "(Totem tracker is Shaman-only)", "playerTotemsNotShamanHint")
+        local shamanHint = _MSUF_Label("GameFontDisableSmall", "TOPLEFT", classSpecHeader, "BOTTOMLEFT", 0, -10, "(Totem/Statue frame is Shaman/Monk-only)", "playerTotemsNotShamanHint")
         panel.playerTotemsNotShamanHint = shamanHint
         _classSpecAnchorRef = shamanHint
     end
 
     -- Rogue: "The First Dance" tracker (separate class block)
-    -- Place it clearly BELOW the Shaman block (right column bottom), aligned to the left column.
+    -- Place it clearly below the class-frame block (right column bottom), aligned to the left column.
     local _rogueAnchorRef = _classSpecAnchorRef
     local _rogueSep = nil
 
     do
-        -- If we're Shaman, _classSpecAnchorRef points at the right-column reset button.
+        -- If this class has Blizzard's TotemFrame, _classSpecAnchorRef points at the right-column reset button.
         -- Add a subtle divider that spans both columns, then anchor Rogue block under it.
-        local _sepX = (_isShaman and -300) or 0
+        local _sepX = (_hasTotemFrame and -300) or 0
         _rogueSep = panel:CreateTexture(nil, "ARTWORK")
         _rogueSep:SetColorTexture(1, 1, 1, 0.06)
         _rogueSep:SetHeight(1)
@@ -1514,7 +1681,7 @@ _totemsLeftBottom = totemsDragHint
 
     do
         local specH = 420
-        if _isShaman then specH = 980 end
+        if _hasTotemFrame then specH = 740 end
         secClassSpec._msufExpandedH = specH
         if not secClassSpec._msufCollapsed then secClassSpec:SetHeight(specH) end
     end
@@ -1740,10 +1907,15 @@ _totemsLeftBottom = totemsDragHint
 
     panel.MSUF_UpdateCrosshairPreview = UpdateCrosshairPreview
 
+    -- Combat crosshair sliders share the row with step buttons, editbox, and
+    -- the live "px" label. Keep them narrower than other Gameplay sliders so
+    -- the full row stays inside the scroll child on compact Settings panels.
+    local CROSSHAIR_SLIDER_W = 210
+
     -- Combat crosshair thickness slider
     local crosshairThicknessLabel = _MSUF_Label("GameFontHighlight", "TOPLEFT", meleeSelected or (meleeSharedWarn or crosshairRangeWarn), "BOTTOMLEFT", 0, -24, "Crosshair thickness", "crosshairThicknessLabel")
 
-    local crosshairThicknessSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairThicknessSlider", "TOPLEFT", crosshairThicknessLabel, "BOTTOMLEFT", 0, -12, 240, 1, 10, 1, "1 px", "10 px", "2 px", "crosshairThicknessSlider", "crosshairThickness",
+    local crosshairThicknessSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairThicknessSlider", "TOPLEFT", crosshairThicknessLabel, "BOTTOMLEFT", 0, -12, CROSSHAIR_SLIDER_W, 1, 10, 1, "1 px", "10 px", "2 px", "crosshairThicknessSlider", "crosshairThickness",
         function(v) return math.floor(v + 0.5) end,
         function(self, g, v)
             _G[self:GetName() .. "Text"]:SetText(string.format("%d px", v))
@@ -1761,7 +1933,7 @@ _totemsLeftBottom = totemsDragHint
     -- Combat crosshair size slider
     local crosshairSizeLabel = _MSUF_Label("GameFontHighlight", "TOPLEFT", crosshairThicknessSlider, "BOTTOMLEFT", 0, -24, "Crosshair size", "crosshairSizeLabel")
 
-    local crosshairSizeSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairSizeSlider", "TOPLEFT", crosshairSizeLabel, "BOTTOMLEFT", 0, -14, 240, 20, 80, 2, "20 px", "80 px", "40 px", "crosshairSizeSlider", "crosshairSize",
+    local crosshairSizeSlider = _MSUF_Slider("MSUF_Gameplay_CrosshairSizeSlider", "TOPLEFT", crosshairSizeLabel, "BOTTOMLEFT", 0, -14, CROSSHAIR_SLIDER_W, 20, 80, 2, "20 px", "80 px", "40 px", "crosshairSizeSlider", "crosshairSize",
         function(v)
             v = math.floor(v + 0.5)
             if v < 20 then v = 20 elseif v > 80 then v = 80 end
@@ -1782,6 +1954,90 @@ _totemsLeftBottom = totemsDragHint
     -- No Cooldown Manager section (removed)
 
     lastControl = crosshairSizeSlider
+
+    function panel:MSUF_UpdateGameplayDisabledStates()
+        local g = EnsureGameplayDefaults()
+
+        local combatTimerEnabled = g and g.enableCombatTimer == true
+        SetGameplayControlsEnabled(combatTimerEnabled, {
+            combatTimerAnchorLabel,
+            combatTimerAnchorDD,
+            combatSlider,
+            combatLock,
+            combatClickThrough,
+            combatPosLabel,
+            combatOffsetXSlider,
+            combatOffsetYSlider,
+        })
+
+        local combatStateEnabled = g and g.enableCombatStateText == true
+        SetGameplayControlsEnabled(combatStateEnabled, {
+            combatStateEnterLabel,
+            combatStateEnterInput,
+            combatStateLeaveLabel,
+            combatStateLeaveInput,
+            combatStateSlider,
+            combatStateLock,
+            combatStateDurationSlider,
+            combatStateDurationReset,
+        })
+
+        if self.playerTotemsCheck then
+            SetGameplayControlEnabled(self.playerTotemsCheck, _hasTotemFrame)
+        end
+        local totemsEnabled = _hasTotemFrame and g and g.enablePlayerTotems == true
+        SetGameplayControlsEnabled(totemsEnabled, {
+            self.playerTotemsPreviewButton,
+            self.playerTotemsDragHint,
+            self.playerTotemsIconSizeSlider,
+            self.playerTotemsOffsetXSlider,
+            self.playerTotemsOffsetYSlider,
+            self.playerTotemsLayoutLabel,
+            self.playerTotemsAnchorFromButton,
+            self.playerTotemsAnchorToButton,
+            self.playerTotemsResetButton,
+        })
+
+        SetGameplayControlEnabled(self.firstDanceCheck, _isRogue)
+        local firstDanceEnabled = _isRogue and g and g.enableFirstDanceTimer == true
+        SetGameplayControlsEnabled(firstDanceEnabled, {
+            self.lockFirstDanceCheck,
+            self.firstDanceClickThroughCheck,
+            self.firstDanceShowIconCheck,
+            self.firstDanceShowReadyCheck,
+            self.firstDanceOffsetXSlider,
+            self.firstDanceOffsetYSlider,
+        })
+        SetGameplayControlEnabled(self.firstDanceIconSizeSlider, firstDanceEnabled and (g.firstDanceShowIcon ~= false))
+
+        local crosshairEnabled = g and g.enableCombatCrosshair == true
+        SetGameplayControlsEnabled(crosshairEnabled, {
+            crosshairRangeColorCheck,
+            crosshairThicknessLabel,
+            crosshairThicknessSlider,
+            crosshairSizeLabel,
+            crosshairSizeSlider,
+            crosshairPreview,
+        })
+
+        local rangeColorEnabled = crosshairEnabled and g.enableCombatCrosshairMeleeRangeColor == true
+        SetGameplayControlsEnabled(rangeColorEnabled, {
+            crosshairRangeHint,
+            crosshairRangeWarn,
+            meleeSharedTitle,
+            meleeSharedSubText,
+            meleeLabel,
+            meleeInput,
+            meleeSelected,
+            meleeUsedBy,
+            meleeSharedWarn,
+            perClassCB,
+        })
+        SetGameplayControlEnabled(perSpecCB, rangeColorEnabled and g.meleeSpellPerClass == true)
+        if suggestionFrame and not rangeColorEnabled then
+            suggestionFrame:Hide()
+        end
+    end
 
     -- Reset sectionParent back to content for any remaining widgets
     sectionParent = content
@@ -1812,6 +2068,12 @@ _totemsLeftBottom = totemsDragHint
     end
 
     RecalcContentHeight()
+
+    -- Upgrade to smart accordion (radio + memory + auto-open)
+    if _G.MSUF_UpgradeAccordion then
+        _G.MSUF_UpgradeAccordion(allSections, RecalcContentHeight, "gameplay", panel)
+    end
+
     ------------------------------------------------------
     -- Panel scripts (refresh/okay/default)
     ------------------------------------------------------
@@ -1853,17 +2115,11 @@ _totemsLeftBottom = totemsDragHint
         "firstDanceShowReady",
 
         "enablePlayerTotems",
-        "playerTotemsShowText",
-        "playerTotemsScaleTextByIconSize",
         "playerTotemsIconSize",
-        "playerTotemsSpacing",
         "playerTotemsAnchorFrom",
         "playerTotemsAnchorTo",
-        "playerTotemsGrowthDirection",
         "playerTotemsOffsetX",
         "playerTotemsOffsetY",
-        "playerTotemsFontSize",
-        "playerTotemsTextColor",
 
         "enableCombatCrosshair",
         "enableCombatCrosshairMeleeRangeColor",
@@ -1955,8 +2211,6 @@ _totemsLeftBottom = totemsDragHint
             {"firstDanceShowReadyCheck", "firstDanceShowReady"},
 
             {"playerTotemsCheck", "enablePlayerTotems"},
-            {"playerTotemsShowTextCheck", "playerTotemsShowText"},
-            {"playerTotemsScaleByIconCheck", "playerTotemsScaleTextByIconSize"},
 
             {"combatCrosshairCheck", "enableCombatCrosshair"},
             {"crosshairRangeColorCheck", "enableCombatCrosshairMeleeRangeColor"},
@@ -1979,8 +2233,6 @@ _totemsLeftBottom = totemsDragHint
             {"firstDanceIconSizeSlider", "firstDanceIconSize", 40},
 
             {"playerTotemsIconSizeSlider", "playerTotemsIconSize", 24},
-            {"playerTotemsSpacingSlider", "playerTotemsSpacing", 4},
-            {"playerTotemsFontSizeSlider", "playerTotemsFontSize", 14},
             {"playerTotemsOffsetXSlider", "playerTotemsOffsetX", 0},
             {"playerTotemsOffsetYSlider", "playerTotemsOffsetY", -6},
         }
@@ -2024,13 +2276,17 @@ _totemsLeftBottom = totemsDragHint
             if v ~= "none" and v ~= "player" and v ~= "target" and v ~= "focus" then
                 v = "none"
             end
-            local txt
-            if v == "player" then txt = "Player"
-            elseif v == "target" then txt = "Target"
-            elseif v == "focus" then txt = "Focus"
-            else txt = "None" end
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self.combatTimerAnchorDropdown, v) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self.combatTimerAnchorDropdown, txt) end
+            if self.combatTimerAnchorDropdown.Refresh then
+                self.combatTimerAnchorDropdown:Refresh()
+            else
+                local txt
+                if v == "player" then txt = "Player"
+                elseif v == "target" then txt = "Target"
+                elseif v == "focus" then txt = "Focus"
+                else txt = "None" end
+                if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self.combatTimerAnchorDropdown, v) end
+                if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self.combatTimerAnchorDropdown, txt) end
+            end
         end
 
         -- Combat state texts
@@ -2062,15 +2318,6 @@ _totemsLeftBottom = totemsDragHint
         if self.MSUF_UpdateCrosshairPreview then
             self.MSUF_UpdateCrosshairPreview()
         end
-        if self.playerTotemsGrowthDropdown then
-            local growth = g.playerTotemsGrowthDirection
-            if growth ~= "LEFT" and growth ~= "RIGHT" and growth ~= "UP" and growth ~= "DOWN" then
-                growth = "RIGHT"
-            end
-            if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self.playerTotemsGrowthDropdown, growth) end
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(self.playerTotemsGrowthDropdown, growth) end
-        end
-
         if self.playerTotemsAnchorFromButton and self.playerTotemsAnchorFromButton.SetText then
             local af = g.playerTotemsAnchorFrom
             if type(af) ~= "string" or af == "" then
@@ -2101,9 +2348,7 @@ _totemsLeftBottom = totemsDragHint
 
 -- Live-sync: allow the Combat Timer frame to drag-update X/Y without spamming Apply().
 function panel:MSUF_SyncCombatTimerOffsetSliders()
-    if not self.combatTimerOffsetXSlider or not self.combatTimerOffsetYSlider then
-        return
-    end
+    if not self.combatTimerOffsetXSlider or not self.combatTimerOffsetYSlider then return end
     local g = EnsureGameplayDefaults()
     self._msufSuppressSliderChanges = true
     local vx = _MSUF_RoundInt(g.combatOffsetX)
@@ -2120,9 +2365,7 @@ function panel:MSUF_SyncCombatTimerOffsetSliders()
 end
 
 function panel:MSUF_SyncFirstDanceOffsetSliders()
-    if not self.firstDanceOffsetXSlider or not self.firstDanceOffsetYSlider then
-        return
-    end
+    if not self.firstDanceOffsetXSlider or not self.firstDanceOffsetYSlider then return end
     local g = EnsureGameplayDefaults()
     self._msufSuppressSliderChanges = true
     local vx = _MSUF_RoundInt(g.firstDanceOffsetX)
@@ -2140,9 +2383,7 @@ end
 
 -- Live-sync: allow the Totem preview frame to drag-update X/Y without spamming Apply().
 function panel:MSUF_SyncTotemOffsetSliders()
-    if not self.playerTotemsOffsetXSlider or not self.playerTotemsOffsetYSlider then
-        return
-    end
+    if not self.playerTotemsOffsetXSlider or not self.playerTotemsOffsetYSlider then return end
     local g = EnsureGameplayDefaults()
     self._msufSuppressSliderChanges = true
     self.playerTotemsOffsetXSlider:SetValue(tonumber(g.playerTotemsOffsetX) or 0)
@@ -2169,7 +2410,6 @@ end
         ns.MSUF_RequestGameplayApply()
 end
 
-    
     ------------------------------------------------------
     -- Dynamic content height
     ------------------------------------------------------
@@ -2205,6 +2445,15 @@ end
     -- Und aktuelle Visuals anwenden
     ns.MSUF_RequestGameplayApply()
 
+    -- Search registration
+    if _G.MSUF_Search_RegisterRoots then
+        _G.MSUF_Search_RegisterRoots(
+            { "gameplay", "combat timer", "combat state", "crosshair",
+              "melee spell", "class specific", "spec" },
+            { "MSUF_GameplayScrollChild" }, "Gameplay"
+        )
+    end
+
     panel.__MSUF_GameplayBuilt = true
     return panel
 end
@@ -2216,7 +2465,7 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
         return ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
     end
 
-    local panel = (_G and _G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
+    local panel = (_G.MSUF_GameplayPanel) or CreateFrame("Frame", "MSUF_GameplayPanel", UIParent)
     panel.name = "Gameplay"
 
     -- IMPORTANT: Panels created with UIParent are shown by default.
@@ -2246,25 +2495,15 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 
         panel.__MSUF_LazyBuildHooked = true
 
-    
-
         panel:HookScript("OnShow", function()
 
-            if panel.__MSUF_GameplayBuilt or panel.__MSUF_GameplayBuilding then
-
-                return
-
-            end
+            if panel.__MSUF_GameplayBuilt or panel.__MSUF_GameplayBuilding then return end
 
             panel.__MSUF_GameplayBuilding = true
-
-    
 
             -- Build immediately (no C_Timer.After(0)): avoids "needs second click" issues.
 
             ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
-
-    
 
             panel.__MSUF_GameplayBuilding = nil
 
@@ -2272,9 +2511,6 @@ function ns.MSUF_RegisterGameplayOptions(parentCategory)
 
     end
 
-    
-
     return panel
 
     end
-

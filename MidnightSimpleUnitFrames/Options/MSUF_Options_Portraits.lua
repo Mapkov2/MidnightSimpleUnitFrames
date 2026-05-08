@@ -3,7 +3,6 @@
 -- Scope system matches MSUF_Options_Bars.lua: Shared + per-unit dropdown + override checkbox.
 -- All render types (2D / 3D / CLASS) are configurable here.
 -- Frame Basics retains ONLY the anchor/position dropdown (LEFT/RIGHT/OFF).
---
 -- DB contract (scope-aware):
 --   Shared:   MSUF_DB.general.portraitShape / portraitBorderStyle / …
 --   Per-unit:  MSUF_DB[unitKey].portraitDecoOverride = true  +  per-unit keys
@@ -14,7 +13,7 @@ ns = ns or {}
 
 local type, tonumber, pairs, ipairs, floor = type, tonumber, pairs, ipairs, math.floor
 local CreateFrame = CreateFrame
-local EnsureDB = ns.EnsureDB or function() if type(_G.EnsureDB) == "function" then _G.EnsureDB() end end
+local EnsureDB = ns.EnsureDB or function() if _G.EnsureDB then _G.EnsureDB() end end
 local UI = ns.UI or {}
 local TR = ns.TR or function(v) return v end
 
@@ -83,9 +82,7 @@ local function MakeSliderWithEdit(parent, name, label, x, y, minV, maxV, step, w
         if ena then self:Enable(); self:SetAlpha(1) else self:Disable(); self:SetAlpha(0.4) end
         eb:SetEnabled(ena); mi:SetEnabled(ena); pl:SetEnabled(ena)
     end
-    -- Apply new slider style (blue thumb + fill bar)
-    local styleFn = ns.MSUF_StyleSlider or _G.MSUF_StyleSlider
-    if styleFn then styleFn(s) end
+    if _G.MSUF_StyleSlider then _G.MSUF_StyleSlider(s) end
     return s
 end
 
@@ -180,12 +177,12 @@ local DECO_KEYS = {
 -- BUILD
 -- ════════════════════════════════════════════════════════════
 function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
-    local panel = (_G and _G.MSUF_PortraitsPanel) or CreateFrame("Frame", "MSUF_PortraitsPanel", UIParent)
+    local panel = (_G.MSUF_PortraitsPanel) or CreateFrame("Frame", "MSUF_PortraitsPanel", UIParent)
     _G.MSUF_PortraitsPanel = panel; panel:SetSize(780, 620)
     if panel.__MSUF_PortraitsBuilt then return panel end
 
     -- Settings registration
-    if not (_G and _G.MSUF_SLASHMENU_ONLY) and parentCategory then
+    if not (_G.MSUF_SLASHMENU_ONLY) and parentCategory then
         if Settings and Settings.RegisterCanvasLayoutSubcategory and not panel.__MSUF_SettingsRegistered then
             panel.name = "Portraits"
             local sub = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
@@ -253,7 +250,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         end
     end
     local function Apply()
-        if type(_G.ApplyAllSettings) == "function" then _G.ApplyAllSettings() end
+        if _G.ApplyAllSettings then _G.ApplyAllSettings() end
     end
 
     local SyncScopeUI
@@ -441,9 +438,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     headerAnchor:SetSize(SEC_W, 1)
     headerAnchor:SetPoint("TOPLEFT", content, "TOPLEFT", PAD_X, 0)
 
-    -- =================================================================
     -- Section 1: Portrait Type (default open)
-    -- =================================================================
     local COL_R = 200
     local DD_W_WIDE = 260
     local SL_W = 220
@@ -507,9 +502,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         })
     end
 
-    -- =================================================================
     -- Section 2: Shape & Size (default open)
-    -- =================================================================
     local TWO_COL_X = 430
     local HALF_SL_W = 220
     local secShape, shapeBody = MakeCollapsibleSection(content, secType, SEC_W, 250, TR("Shape & Size"), true)
@@ -578,9 +571,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         LiveApply()
     end)
 
-    -- =================================================================
     -- Section 3: Border (collapsed)
-    -- =================================================================
     local secBorder, borderBody = MakeCollapsibleSection(content, secShape, SEC_W, 136, TR("Border"), false)
 
     MakeLabel(borderBody, "Style", PAD_X, -14)
@@ -606,9 +597,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     local borderColorHint = MakeLabel(borderBody, "Color: Colors panel", 500, -62)
     borderColorHint:SetTextColor(0.5, 0.5, 0.5)
 
-    -- =================================================================
     -- Section 4: Background (collapsed)
-    -- =================================================================
     local secBg, bgBody = MakeCollapsibleSection(content, secBorder, SEC_W, 112, TR("Background"), false)
 
     local bgCheck = MakeCheck(bgBody, "MSUF_PortraitBgCheck", "Show background", PAD_X, -12)
@@ -650,9 +639,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         ScopeSet("portraitBgColorA", val / 100); LiveApply()
     end)
 
-    -- =================================================================
     -- Post-build: collapse non-default sections, wire toggle callback
-    -- =================================================================
     local allSections = { secType, secShape, secBorder, secBg }
 
     local function RecalcHeight()
@@ -671,9 +658,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         allSections[i]._msufOnToggle = RecalcHeight
     end
 
-    -- =================================================================
     -- Scope UI Sync
-    -- =================================================================
     SyncScopeUI = function()
         EnsureDB()
         local uk = GetUnitKey()
@@ -789,6 +774,19 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     end)
     SyncScopeUI()
 
+    -- Upgrade to smart accordion (radio + memory + auto-open)
+    if _G.MSUF_UpgradeAccordion then
+        _G.MSUF_UpgradeAccordion(allSections, RecalcHeight, "portraits", panel)
+    end
+
+    -- Search registration
+    if _G.MSUF_Search_RegisterRoots then
+        _G.MSUF_Search_RegisterRoots(
+            { "portraits", "opt_portraits", "portrait type", "shape", "border", "background" },
+            { "MSUF_PortraitsPanel" }, "Portraits"
+        )
+    end
+
     panel.__MSUF_PortraitsBuilt = true
     return panel
 end
@@ -797,11 +795,11 @@ end
 -- Lightweight lazy wrapper
 -- ────────────────────────────────────────────────────────────
 function ns.MSUF_RegisterPortraitsOptions(parentCategory)
-    if _G and _G.MSUF_SLASHMENU_ONLY then return end
+    if _G.MSUF_SLASHMENU_ONLY then return end
     if not Settings or not Settings.RegisterCanvasLayoutSubcategory or not parentCategory then
         return ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     end
-    local panel = (_G and _G.MSUF_PortraitsPanel) or CreateFrame("Frame", "MSUF_PortraitsPanel", UIParent)
+    local panel = (_G.MSUF_PortraitsPanel) or CreateFrame("Frame", "MSUF_PortraitsPanel", UIParent)
     _G.MSUF_PortraitsPanel = panel; panel.name = "Portraits"
     if not panel.__MSUF_ForceHidden then panel.__MSUF_ForceHidden = true; panel:Hide() end
     if not panel.__MSUF_SettingsRegistered then
