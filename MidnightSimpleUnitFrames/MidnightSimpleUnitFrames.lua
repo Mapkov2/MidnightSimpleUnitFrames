@@ -61,6 +61,10 @@ do
     _p0Frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     _p0Frame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
+            local lock = _G.MSUF_HardLockAllFramePositions
+            if type(lock) == "function" then
+                lock("PLAYER_REGEN_DISABLED")
+            end
             _msuf_inCombat = true
         else
             -- PLAYER_REGEN_ENABLED or PLAYER_ENTERING_WORLD: sync once with C-API
@@ -2039,6 +2043,106 @@ local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
     return anchor
 end
 
+local function MSUF_IsUnitFrameAnchor(anchor)
+    if not anchor then return false end
+    local uf = UnitFrames or _G.MSUF_UnitFrames or _G.UnitFrames
+    if not uf then return false end
+    for _, frame in pairs(uf) do
+        if frame == anchor then
+            return true
+        end
+    end
+    return false
+end
+
+local function MSUF_ShouldSnapshotExternalAnchor(anchor)
+    return anchor and anchor ~= UIParent and anchor ~= WorldFrame and not MSUF_IsUnitFrameAnchor(anchor)
+end
+
+local function MSUF_IsLayoutEditingActive()
+    if _G.MSUF_UnitEditModeActive == true then return true end
+    local editState = _G.MSUF_EditState
+    if type(editState) == "table" and editState.active == true then return true end
+    local options = _G.MSUF_StandaloneOptionsWindow
+    if options and options.IsShown and options:IsShown() then return true end
+    return false
+end
+_G.MSUF_IsLayoutEditingActive = MSUF_IsLayoutEditingActive
+
+local function MSUF_IsExternalAnchorUsable(anchor)
+    if not MSUF_ShouldSnapshotExternalAnchor(anchor) then return true end
+    if anchor.IsForbidden and anchor:IsForbidden() then return false end
+    if anchor.IsShown and not anchor:IsShown() then return false end
+    if not anchor.GetCenter then return false end
+
+    local ax, ay = anchor:GetCenter()
+    if not ax or not ay then return false end
+
+    if anchor.GetWidth and anchor.GetHeight then
+        local w, h = anchor:GetWidth(), anchor:GetHeight()
+        if not w or not h or w <= 1 or h <= 1 then return false end
+    end
+
+    if UIParent and UIParent.GetWidth and anchor.GetLeft and anchor.GetRight and anchor.GetTop and anchor.GetBottom then
+        local uiW, uiH = UIParent:GetWidth(), UIParent:GetHeight()
+        local l, r, t, b = anchor:GetLeft(), anchor:GetRight(), anchor:GetTop(), anchor:GetBottom()
+        if uiW and uiH and l and r and t and b then
+            if r < -8 or l > (uiW + 8) or t < -8 or b > (uiH + 8) then
+                return false
+            end
+        end
+    end
+
+    return true
+end
+_G.MSUF_IsExternalAnchorUsable = MSUF_IsExternalAnchorUsable
+
+-- External anchors such as CDM/bridge frames may resize or move in combat.
+-- Snapshot the resolved visual position onto UIParent so secure unitframes do not drift with them.
+local function MSUF_SnapshotFrameToUIParentCenter(frame)
+    if not frame or not frame.GetCenter or not UIParent or not UIParent.GetCenter then return false end
+
+    local fx, fy = frame:GetCenter()
+    local ux, uy = UIParent:GetCenter()
+    if not fx or not fy or not ux or not uy then return false end
+
+    local fs = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+    local us = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if fs == 0 then fs = 1 end
+    if us == 0 then us = 1 end
+
+    local x = math_floor(((fx * fs - ux * us) / us) + 0.5)
+    local y = math_floor(((fy * fs - uy * us) / us) + 0.5)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", UIParent, "CENTER", x, y)
+    return true
+end
+_G.MSUF_SnapshotFrameToUIParentCenter = MSUF_SnapshotFrameToUIParentCenter
+
+local function MSUF_ApplyStableUnitFramePoint(frame, point, anchor, relPoint, x, y)
+    local isExternal = MSUF_ShouldSnapshotExternalAnchor(anchor)
+    if isExternal then
+        local hook = _G.MSUF_HookExternalAnchorForReanchor
+        if type(hook) == "function" then hook(anchor) end
+        if not MSUF_IsExternalAnchorUsable(anchor) then
+            if frame and frame._msufStableExternalAnchor == anchor and not MSUF_IsLayoutEditingActive() then
+                return true
+            end
+            return false
+        end
+    end
+
+    MSUF_ApplyPoint(frame, point, anchor, relPoint, x, y)
+    if not MSUF_IsLayoutEditingActive() and MSUF_SnapshotFrameToUIParentCenter(frame) then
+        frame._msufHardLockedToUIParent = true
+        frame._msufStableExternalAnchor = isExternal and anchor or nil
+    elseif frame then
+        frame._msufHardLockedToUIParent = nil
+        frame._msufStableExternalAnchor = nil
+    end
+    return true
+end
+
 local function PositionUnitFrame(f, unit)
     if not f or not unit then  return end
     if f._msufDragActive then  return end
@@ -2061,6 +2165,14 @@ local function PositionUnitFrame(f, unit)
     local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     local _g = MSUF_DB and MSUF_DB.general
+    if MSUF_ShouldSnapshotExternalAnchor(anchor) and not MSUF_IsExternalAnchorUsable(anchor) then
+        local hook = _G.MSUF_HookExternalAnchorForReanchor
+        if type(hook) == "function" then hook(anchor) end
+        if f._msufStableExternalAnchor == anchor and not MSUF_IsLayoutEditingActive() then
+            return
+        end
+        anchor = UIParent
+    end
     if _g and _g.anchorToCooldown and ecv and anchor == ecv then
         local rule = MSUF_ECV_ANCHORS[key]
         if rule then
@@ -2068,8 +2180,10 @@ local function PositionUnitFrame(f, unit)
             local gapY = (conf.offsetY ~= nil) and conf.offsetY or -20
             local x = baseX + (conf.offsetX or 0)
             local y = gapY + (extraY or 0)
-            MSUF_ApplyPoint(f, point, ecv, relPoint, x, y)
-             return
+            if MSUF_ApplyStableUnitFramePoint(f, point, ecv, relPoint, x, y) then
+                 return
+            end
+            anchor = UIParent
     end
     end
     if key == "boss" then
@@ -2091,9 +2205,9 @@ local function PositionUnitFrame(f, unit)
             -- VERTICAL_DOWN (default) and any legacy/unknown value (including pre-migration invertBossOrder==false)
             y = baseY + step * spacing
         end
-        MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", x, y)
+        MSUF_ApplyStableUnitFramePoint(f, "CENTER", anchor, "CENTER", x, y)
     else
-        MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
+        MSUF_ApplyStableUnitFramePoint(f, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
     end
  end
 local function MSUF_ForceReanchorAllUnitFrames_Once()
@@ -2120,8 +2234,72 @@ local function MSUF_ForceReanchorAllUnitFrames_Once()
 end
 _G.MSUF_ForceReanchorAllUnitFrames_Once = MSUF_ForceReanchorAllUnitFrames_Once
 
+local function MSUF_HardLockFramePosition(frame)
+    if not frame or frame._msufDragActive then return false end
+    if not frame.GetCenter or not frame.ClearAllPoints or not frame.SetPoint then return false end
+    local ok, locked = pcall(MSUF_SnapshotFrameToUIParentCenter, frame)
+    return ok and locked == true
+end
+
+local function MSUF_HardLockAllFramePositions(reason)
+    if _msuf_inCombat or (InCombatLockdown and InCombatLockdown()) then return false end
+    if reason ~= "PLAYER_REGEN_DISABLED" and MSUF_IsLayoutEditingActive() then return false end
+
+    local locked = false
+    for i = 1, #UnitFramesList do
+        locked = MSUF_HardLockFramePosition(UnitFramesList[i]) or locked
+    end
+
+    local named = {
+        "MSUF_ClassPowerContainer",
+        "MSUF_PlayerCastbar",
+        "MSUF_TargetCastbar",
+        "MSUF_FocusCastbar",
+    }
+    for i = 1, #named do
+        locked = MSUF_HardLockFramePosition(_G[named[i]]) or locked
+    end
+
+    local bossCastbars = _G.MSUF_BossCastbars
+    if type(bossCastbars) == "table" then
+        for i = 1, #bossCastbars do
+            locked = MSUF_HardLockFramePosition(bossCastbars[i]) or locked
+        end
+    end
+
+    return locked
+end
+_G.MSUF_HardLockAllFramePositions = MSUF_HardLockAllFramePositions
+
 _G.MSUF_CDMBridgeDirty = false
 _G.MSUF_CDMBridgeFlushScheduled = false
+
+function _G.MSUF_MarkExternalAnchorForReanchor()
+    _G.MSUF_CDMBridgeDirty = true
+    if _G.MSUF_CDMBridgeFlushScheduled then return end
+    _G.MSUF_CDMBridgeFlushScheduled = true
+    if InCombatLockdown and InCombatLockdown() then return end
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("MSUF_EXTERNAL_ANCHOR_REANCHOR", _G.MSUF_FlushCDMBridgeRefresh)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, _G.MSUF_FlushCDMBridgeRefresh)
+    else
+        _G.MSUF_FlushCDMBridgeRefresh()
+    end
+end
+
+function _G.MSUF_HookExternalAnchorForReanchor(frame)
+    if not frame or frame._msufExternalAnchorHooked or not frame.HookScript then return end
+    frame._msufExternalAnchorHooked = true
+    local function Mark()
+        if _G.MSUF_MarkExternalAnchorForReanchor then
+            _G.MSUF_MarkExternalAnchorForReanchor()
+        end
+    end
+    frame:HookScript("OnSizeChanged", Mark)
+    frame:HookScript("OnShow", Mark)
+    frame:HookScript("OnHide", Mark)
+end
 
 function _G.MSUF_FlushCDMBridgeRefresh()
     _G.MSUF_CDMBridgeFlushScheduled = false
@@ -4314,6 +4492,9 @@ end
     end
         _G.MSUF_UnitFrameApplyState.queued = false
     end
+    if type(_G.MSUF_HardLockAllFramePositions) == "function" then
+        _G.MSUF_HardLockAllFramePositions("ApplyAllSettings_Immediate")
+    end
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY")
  end
 function MSUF_CommitApplyDirty()
@@ -4379,6 +4560,9 @@ end
     st.tickers = false
     st.bossPreview = false
     st.queued = false
+    if type(_G.MSUF_HardLockAllFramePositions) == "function" then
+        _G.MSUF_HardLockAllFramePositions("CommitApplyDirty")
+    end
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT")
  end
 -- Changes:
@@ -4801,6 +4985,9 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
     local function _UpdateDBFromFrame(self, key, conf)
         if not self or not conf or not key then  return end
         local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame and MSUF_GetAnchorFrame() or UIParent)
+        if MSUF_ShouldSnapshotExternalAnchor(anchor) and not MSUF_IsExternalAnchorUsable(anchor) then
+            anchor = UIParent
+        end
         if not anchor or not anchor.GetCenter or not self.GetCenter then  return end
         local _g = MSUF_DB and MSUF_DB.general
         if _g and _g.anchorToCooldown then
