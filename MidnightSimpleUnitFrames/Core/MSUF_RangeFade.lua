@@ -31,7 +31,11 @@ do
     local UnitInRange = _G.UnitInRange
     local UnitCanAttack = _G.UnitCanAttack
     local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
+    local UnitIsPlayer = _G.UnitIsPlayer
+    local UnitPhaseReason = _G.UnitPhaseReason
+    local UnitIsConnected = _G.UnitIsConnected
     local CheckInteractDistance = _G.CheckInteractDistance
+    local InCombatLockdown = _G.InCombatLockdown
     local C_Timer_After = _G.C_Timer and _G.C_Timer.After
     local issecretvalue = _G.issecretvalue
 
@@ -58,20 +62,66 @@ do
         WARLOCK={20707}, WARRIOR={3411},
     }
 
+    -- Target-only friendly range data mirrors UnhaltedUnitFrames Elements/Range.lua.
+    local TARGET_FRIENDLY_SPELLS = {
+        DEATHKNIGHT={47541},
+        DEMONHUNTER={},
+        DRUID={8936,774,88423,2782},
+        EVOKER={361469,355913,360823},
+        HUNTER={},
+        MAGE={1459,475},
+        MONK={116670,115450},
+        PALADIN={19750,85673,4987,213644},
+        PRIEST={2061,17,21562,527},
+        ROGUE={57934,36554,921},
+        SHAMAN={8004,188070,546},
+        WARLOCK={20707,5697},
+        WARRIOR={3411},
+    }
+
     local _pEnemy, _pRes, _pFriendly = nil, nil, nil
+    local _targetFriendlyActive = {}
+
+    local function WipeTable(t)
+        if wipe then
+            wipe(t)
+            return
+        end
+        for k in pairs(t) do t[k] = nil end
+    end
+
+    local function IsKnownSpell(id)
+        if not id or not IsSpellInSpellBook then return false end
+        return IsSpellInSpellBook(id, nil, true) == true
+    end
 
     local function PickFirst(list)
-        if not list or not IsSpellInSpellBook then return nil end
+        if not list then return nil end
         for i = 1, #list do
-            if list[i] and IsSpellInSpellBook(list[i], nil, true) then return list[i] end
+            if IsKnownSpell(list[i]) then return list[i] end
         end
         return nil
+    end
+
+    local function BuildActiveSpellSet(list, dest)
+        WipeTable(dest)
+        local first
+        if not list then return nil end
+        for i = 1, #list do
+            local id = list[i]
+            if IsKnownSpell(id) then
+                dest[id] = true
+                if not first then first = id end
+            end
+        end
+        return first
     end
 
     local function RebuildPrimaries()
         _pEnemy    = PickFirst(ENEMY_SPELLS[playerClass])
         _pRes      = PickFirst(RES_SPELLS[playerClass])
         _pFriendly = PickFirst(FRIENDLY_SPELLS[playerClass])
+        BuildActiveSpellSet(TARGET_FRIENDLY_SPELLS[playerClass], _targetFriendlyActive)
     end
 
     -- ══════════════════════════════════════════════════════════════
@@ -261,6 +311,76 @@ do
     -- ══════════════════════════════════════════════════════════════
     -- TARGET: Event-driven with 1 registered spell (replaces R41z0r)
     -- ══════════════════════════════════════════════════════════════
+    local CheckFriendlyTarget
+    do
+        local function NotSecret(value)
+            return not (issecretvalue and issecretvalue(value))
+        end
+
+        local function TargetUnitSpellRange(unit, spells)
+            if not (IsSpellInRange and spells) then return nil end
+            local isNotInRange
+            for spellID in pairs(spells) do
+                local inRange = IsSpellInRange(spellID, unit)
+                if inRange then
+                    return true
+                elseif inRange ~= nil then
+                    isNotInRange = true
+                end
+            end
+            if isNotInRange then return false end
+        end
+
+        local function TargetUnitInFriendlySpellsRange(unit)
+            if not next(_targetFriendlyActive) then
+                if CheckInteractDistance and (not InCombatLockdown or not InCombatLockdown()) then
+                    return CheckInteractDistance(unit, 4)
+                end
+                return nil
+            end
+
+            local spellRange = TargetUnitSpellRange(unit, _targetFriendlyActive)
+            if (not spellRange or spellRange == 1) and CheckInteractDistance and (not InCombatLockdown or not InCombatLockdown()) then
+                local interactDistance = CheckInteractDistance(unit, 4)
+                if NotSecret(interactDistance) then
+                    return interactDistance
+                end
+                return nil
+            else
+                if NotSecret(spellRange) then
+                    return (spellRange == nil and 1) or spellRange
+                end
+                return nil
+            end
+        end
+
+        local function FriendlyTargetIsInRange(unit)
+            if UnitIsPlayer and UnitIsPlayer(unit) and UnitPhaseReason and UnitPhaseReason(unit) then
+                return false
+            end
+
+            if UnitInRange then
+                local inRange, checkedRange = UnitInRange(unit)
+                if NotSecret(checkedRange) and checkedRange and not inRange then
+                    return false
+                end
+            end
+
+            return TargetUnitInFriendlySpellsRange(unit)
+        end
+
+        CheckFriendlyTarget = function(unit)
+            if not UnitExists(unit) then return nil end
+            if UnitIsConnected and UnitIsConnected(unit) == false then return false end
+            local inRange = FriendlyTargetIsInRange(unit)
+            if inRange == nil then
+                inRange = true
+            end
+            return (inRange == true or inRange == 1) and true or false
+        end
+
+    end
+
     local _targetRegisteredSpell = nil
     local _targetIsEnemy = false
     local _targetEvtFrame = nil
@@ -306,7 +426,7 @@ do
         if arg1 and arg1 ~= "target" then return end
         local conf = TargetGetConf()
         if not conf then ClearMul("target", "target"); return end
-        ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
+        ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
     end
 
     local function EnsureTargetEvtFrame()
@@ -329,9 +449,9 @@ do
             ClearMul("target", "target")
             return
         end
-        ApplyMul(GetFrame("target"), "target", "target", c, CheckFriendly("target"))
+        ApplyMul(GetFrame("target"), "target", "target", c, CheckFriendlyTarget("target"))
         if _targetFriendlyTicker == loop and C_Timer_After then
-            C_Timer_After(1.0, loop.step)
+            C_Timer_After(0.25, loop.step)
         elseif _targetFriendlyTicker == loop then
             _targetFriendlyTicker = nil
         end
@@ -373,11 +493,11 @@ do
                     _targetIsEnemy = false
                     _targetDeadState = false
                     TargetUnregisterSpell()
-                    StopTargetFriendlyTicker()
                     EnsureTargetEvtFrame()
                     _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
                     _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
-                    ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
+                    StartTargetFriendlyLoop()
+                    ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
                     return
                 end
             end
@@ -415,12 +535,12 @@ do
 
             if isPartyMember then
                 -- Party member: UNIT_IN_RANGE_UPDATE fires reliably
-                StopTargetFriendlyTicker()
                 _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
                 _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
+                StartTargetFriendlyLoop()
             else
                 -- Non-party friendly (NPC, non-group player):
-                -- UNIT_IN_RANGE_UPDATE won't fire. Use 1s ticker with
+                -- UNIT_IN_RANGE_UPDATE won't fire. Use target-only ticker with
                 -- IsSpellInRange / CheckInteractDistance fallback.
                 _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
                 _targetEvtFrame:SetScript("OnEvent", nil)
@@ -429,7 +549,7 @@ do
             end
 
             -- Immediate check
-            ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
+            ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
         end
     end
 
@@ -491,6 +611,11 @@ do
                 if spell ~= _targetRegisteredSpell then
                     TargetRegisterSpell(spell)
                 end
+            elseif UnitExists("target") then
+                local conf = TargetGetConf()
+                if conf then
+                    ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
+                end
             end
         end
         bus("SPELLS_CHANGED", "MSUF_RANGEFADE", function()
@@ -500,19 +625,19 @@ do
         end)
         bus("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE", function()
             RebuildPrimaries()
-            if _targetIsEnemy and UnitExists("target") then
+            if UnitExists("target") then
                 TargetClassifyAndWire()
             end
         end)
         bus("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE", function()
             RebuildPrimaries()
-            if _targetIsEnemy and UnitExists("target") then
+            if UnitExists("target") then
                 TargetClassifyAndWire()
             end
         end)
         bus("TRAIT_CONFIG_UPDATED", "MSUF_RANGEFADE", function()
             RebuildPrimaries()
-            if _targetIsEnemy and UnitExists("target") then
+            if UnitExists("target") then
                 TargetClassifyAndWire()
             end
         end)
@@ -553,7 +678,7 @@ do
             if _targetIsEnemy then
                 ApplyMul(GetFrame("target"), "target", "target", conf, CheckEnemy("target"))
             else
-                ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendly("target"))
+                ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
             end
         end
     end
