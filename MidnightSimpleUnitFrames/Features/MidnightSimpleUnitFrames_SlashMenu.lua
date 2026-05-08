@@ -2795,6 +2795,15 @@ title:SetText("MSUF OPTIONS")
 title:SetTextColor(MSUF_THEME.accentR,MSUF_THEME.accentG,MSUF_THEME.accentB,0.50)
 f._msufTitleFS=title local close=UI_CloseButton(f,"TOPRIGHT",f,"TOPRIGHT",-4,-4)
 close:SetScript("OnClick",function() _TScaleDismiss(f,TRANS_CLOSE) end)
+if f.HookScript then
+f:HookScript("OnHide",function()
+local lock=_G.MSUF_HardLockAllFramePositions
+if type(lock)=="function"then
+if C_Timer and C_Timer.After then C_Timer.After(0,function() lock("SlashMenuHide") end)
+else lock("SlashMenuHide") end
+end
+end)
+end
 local function MSUF_SetPropagateKeyboardInputSafe(frame,enabled) if not frame or not frame.SetPropagateKeyboardInput then return end
 if type(InCombatLockdown)=="function"and InCombatLockdown()
 then frame._msufPendingPropagateKeyboard=enabled return end
