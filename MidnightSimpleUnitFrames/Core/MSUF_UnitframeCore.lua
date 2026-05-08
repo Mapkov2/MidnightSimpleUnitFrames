@@ -717,6 +717,8 @@ local function UFCore_ReapplyLayeredAlpha(frame)
     if not frame or not (frame._msufAlphaBaseMode == "layered" or frame._msufAlphaLayeredMode) then return end
     local key = frame._msufAlphaBaseKey or frame.msufConfigKey
     if not key then return end
+    frame._msufAlphaLayeredFastValid = nil
+    frame._msufAlphaLayeredFastHits = nil
     local mulT = _G.MSUF_RangeFadeMul
     local unit = frame.unit or key
     local mul = mulT and (mulT[unit] or mulT[key]) or nil
