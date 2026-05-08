@@ -32,6 +32,10 @@ local FocusKickOptionsInitialized = false
 -- On-screen Preview state (Focus Kick Options only)
 -- Forward-declared here so early helpers (font/apply) can access the same locals.
 ------------------------------------------------------
+local FocusKickOptionsPanelRef
+local FocusKickPreviewFrame
+local FocusKickPreviewEnabled = false
+local FocusKickPreviewSelected = false
 
 ------------------------------------------------------
 -- DB defaults
@@ -801,11 +805,6 @@ end
 -- Session-only toggle: shows a draggable preview icon on UIParent.
 -- Sync: DB <-> sliders <-> preview <-> runtime apply.
 ------------------------------------------------------
-local FocusKickOptionsPanelRef
-local FocusKickPreviewFrame
-local FocusKickPreviewEnabled = false
-local FocusKickPreviewSelected = false
-
 -- Cache slider min/max so drag can clamp even when options panel is closed.
 local FocusKickPreviewMinX, FocusKickPreviewMaxX = -500, 500
 local FocusKickPreviewMinY, FocusKickPreviewMaxY = -500, 500
@@ -1027,6 +1026,7 @@ local function FocusKick_EnsurePreviewFrame()
     end)
 
     FocusKickPreviewFrame = f
+    FocusKick_ApplyTimeTextFontNow()
 end
 
 local function FocusKick_SetPreviewEnabled(enabled)
@@ -1155,6 +1155,7 @@ MSUF_FocusKick_SyncPreviewFromDB = function(panel)
                 FocusKickPreviewFrame.icon:SetTexture(tex or "Interface\\Icons\\INV_Misc_QuestionMark")
             end
 
+            FocusKick_ApplyTimeTextFontNow()
             FocusKickPreviewFrame:Show()
         end
     elseif FocusKickPreviewFrame then
