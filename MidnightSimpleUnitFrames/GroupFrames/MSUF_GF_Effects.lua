@@ -1201,7 +1201,18 @@ end
 
 local function _GF_IsSelfUnit(unit)
     if unit == "player" then return true end
-    if not (unit and UnitIsUnit) then return false end
+    if not unit then return false end
+    local unitGUID = _G.UnitGUID
+    if unitGUID then
+        local playerGUID = unitGUID("player")
+        local frameGUID = unitGUID(unit)
+        if playerGUID and frameGUID
+            and not (issecretvalue and (issecretvalue(playerGUID) or issecretvalue(frameGUID)))
+            and playerGUID == frameGUID then
+            return true
+        end
+    end
+    if not UnitIsUnit then return false end
     local secrets = _G.C_Secrets
     local shouldBeSecret = secrets and secrets.ShouldUnitComparisonBeSecret
     if shouldBeSecret and shouldBeSecret(unit, "player") then return false end
@@ -1276,14 +1287,6 @@ local function ApplyRangeFade(f, unit, inRange)
     local fadeAlpha = (c and c.rfAlpha) or (conf and conf.rangeFadeAlpha) or 0.4
     local hpMode = ((c and c.rfLayerMode) or (conf and _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)) or "frame") == "health"
 
-    if _GF_IsSelfUnit(unit) then
-        f._msufGFRangeFadeApplied = true
-        f._msufGFRangeFadeLastBool = true
-        _ClearHealthRangeFade(f, kind)
-        if f.SetAlpha then f:SetAlpha(frameAlpha) end
-        return
-    end
-
     -- Solo guard (EQoL: IsInGroup + IsInRaid)
     if IsInGroup and IsInRaid then
         if not IsInGroup() and not IsInRaid() then
@@ -1314,6 +1317,10 @@ local function ApplyRangeFade(f, unit, inRange)
 
     if not hpMode then
         _ClearHealthRangeFade(f, kind)
+    end
+
+    if _GF_IsSelfUnit(unit) then
+        inRange = true
     end
 
     -- EQoL exact pattern (line 8424)
