@@ -3112,7 +3112,12 @@ end
 -- Cost: ~16µs (2 C-API calls) vs 130µs (31 C-API calls) for full pipeline.
 ------------------------------------------------------------------------
 function GF.RefreshAuraIcon(icon, unit, aid)
-    if not icon or not unit or not aid then return end
+    if not icon or not unit or not aid then return false end
+    if not _apisBound then BindAPIs() end
+    if _getByAuraInstanceID and not _getByAuraInstanceID(unit, aid) then
+        return false
+    end
+
     local owner = icon._msufGFOwner
     local gcfg
     local frameScale = 1
@@ -3149,6 +3154,7 @@ function GF.RefreshAuraIcon(icon, unit, aid)
         ApplyCooldownFont(icon, nil, gFont, gFlags or "OUTLINE", baseR, baseG, baseB, baseA, frameScale)
         ApplyStacks(icon, unit, aid, nil, true, nil)
     end
+    return true
 end
 
 ------------------------------------------------------------------------

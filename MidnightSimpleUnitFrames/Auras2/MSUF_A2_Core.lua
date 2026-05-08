@@ -535,6 +535,15 @@ function Cache.OnUnitAura(unit, updateInfo)
                     end
                     updatedIDs[aid] = true
                     any = true
+                else
+                    -- Blizzard can report an aura as "updated" after it has
+                    -- already expired. Treat a nil fresh lookup exactly like a
+                    -- remove so stale icons cannot survive the next render.
+                    s.all[aid] = nil
+                    _AuraRelease(entry)
+                    if updatedIDs then updatedIDs[aid] = nil end
+                    any = true
+                    hasRem = true
                 end
             end
         end

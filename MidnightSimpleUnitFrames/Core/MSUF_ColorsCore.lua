@@ -78,7 +78,13 @@ local function _RefreshAllBarBackgroundVisuals()
 end
 
 local function _PushVisualUpdates_Flush()
-    _pushPending = false
+    -- PERF (4.22 Beta hotfix): pending flag stays TRUE during the entire
+    -- flush body. The fallback path's pending dedup remains correct: any
+    -- PushVisualUpdates() call during this flush is dropped, and the next
+    -- one after we finish schedules normally. The primary path uses
+    -- MSUF_ScheduleOnce and is unaffected. Cleared at END.
+    --
+    -- Same defense-in-depth pattern as _gfRosterFlush.
     _G.MSUF_ColorStyleRevision = (_G.MSUF_ColorStyleRevision or 0) + 1
     -- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
     -- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
@@ -139,6 +145,9 @@ local function _PushVisualUpdates_Flush()
     elseif ns.MSUF_FixMouseoverHighlightBindings then
         ns.MSUF_FixMouseoverHighlightBindings()
     end
+
+    -- Pending flag cleared at END (see header comment for rationale).
+    _pushPending = false
 end
 
 local function PushVisualUpdates()

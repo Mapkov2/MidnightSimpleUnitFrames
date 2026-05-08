@@ -1020,16 +1020,22 @@ local function dispatchAura(f, unit, updateInfo)
         -- Update-only: direct icon refresh (16µs vs 115µs)
         if not hasAdd and not hasRem and hasUpd then
             if displayed and GF.RefreshAuraIcon then
+                local needsDeltaPipeline = false
                 for ui = 1, #updated do
                     local icon = displayed[updated[ui]]
                     if icon then
-                        GF.RefreshAuraIcon(icon, unit, updated[ui])
+                        if GF.RefreshAuraIcon(icon, unit, updated[ui]) == false then
+                            needsDeltaPipeline = true
+                            break
+                        end
                     end
                 end
-                if siRefresh and GF.UpdateSpellIndicators then
-                    GF.UpdateSpellIndicators(f, unit)
+                if not needsDeltaPipeline then
+                    if siRefresh and GF.UpdateSpellIndicators then
+                        GF.UpdateSpellIndicators(f, unit)
+                    end
+                    return
                 end
-                return
             end
         end
 
