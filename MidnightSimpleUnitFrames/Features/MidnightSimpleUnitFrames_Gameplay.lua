@@ -199,22 +199,29 @@ local C_Timer_NewTicker = C_Timer and C_Timer.NewTicker
 do
     local _applyPending = false
 
+    -- PERF (4.22 Beta hotfix): module-scope stable callback (one definition,
+    -- reused on every Request). Was: fresh closure allocated per call into
+    -- C_Timer.After(0, function() ... end), which spammed garbage during
+    -- Options slider drag. Pending flag now cleared at END for the same
+    -- defense-in-depth reason as _gfRosterFlush.
+    local function _DoGameplayApply()
+        if ns and ns.MSUF_ApplyGameplayVisuals then
+            ns.MSUF_ApplyGameplayVisuals()
+        end
+        _applyPending = false
+    end
+
     function ns.MSUF_RequestGameplayApply()
         if _applyPending then return end
         _applyPending = true
 
-        if C_Timer_After then
-            C_Timer_After(0, function()
-                _applyPending = false
-                if ns and ns.MSUF_ApplyGameplayVisuals then
-                    ns.MSUF_ApplyGameplayVisuals()
-                end
-            end)
+        -- Coalesce via MSUF Scheduler when available (dedup by key, no closure).
+        if _G.MSUF_ScheduleOnce then
+            _G.MSUF_ScheduleOnce("MSUF_GAMEPLAY_APPLY", _DoGameplayApply)
+        elseif C_Timer_After then
+            C_Timer_After(0, _DoGameplayApply)
         else
-            _applyPending = false
-            if ns and ns.MSUF_ApplyGameplayVisuals then
-                ns.MSUF_ApplyGameplayVisuals()
-            end
+            _DoGameplayApply()
         end
     end
 end

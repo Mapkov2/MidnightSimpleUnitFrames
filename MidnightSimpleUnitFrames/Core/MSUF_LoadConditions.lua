@@ -151,9 +151,16 @@ _G.MSUF_LoadCond_RecomputeActive = MSUF_LoadCond_RecomputeActive
 -- The actual hide/show is handled by the hook in MSUF_ApplyUnitAlpha.
 local _pendingRefresh = false
 local function _FlushScheduledRefresh()
-    _pendingRefresh = false
+    -- PERF (4.22 Beta hotfix): pending flag stays TRUE during the entire
+    -- flush body. Any state-change event that fires during MSUF_RefreshAllUnitAlphas
+    -- is dropped instead of re-queueing in the same flush iteration. The
+    -- flag is cleared at the END -- the next event after our work is done
+    -- can schedule the next refresh normally.
+    --
+    -- Same defense-in-depth pattern as _gfRosterFlush.
     local fn = _G.MSUF_RefreshAllUnitAlphas
     if type(fn) == "function" then fn() end
+    _pendingRefresh = false
 end
 
 local function _ScheduleRefresh()
