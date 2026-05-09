@@ -566,6 +566,38 @@ local function MSUF_ClearText(fs, hide)
  end
 function ns.Bars.ApplyPowerGradientOnce(frame)
     if not frame then  return end
+    local bar = frame.targetPowerBar or frame.powerBar
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local resolve = ns.Bars and ns.Bars._ResolveGradientValue
+    local enabled = resolve and (resolve(frame, "enablePowerGradient", false) == true) or (g.enablePowerGradient == true)
+    local strength = resolve and (tonumber(resolve(frame, "gradientStrength", 0.45)) or 0.45) or (tonumber(g.gradientStrength) or 0.45)
+    local left = resolve and (resolve(frame, "gradientDirLeft", false) == true) or (g.gradientDirLeft == true)
+    local right = resolve and (resolve(frame, "gradientDirRight", false) == true) or (g.gradientDirRight == true)
+    local up = resolve and (resolve(frame, "gradientDirUp", false) == true) or (g.gradientDirUp == true)
+    local down = resolve and (resolve(frame, "gradientDirDown", false) == true) or (g.gradientDirDown == true)
+    local serial = _MSUF_GetUFCoreSettingsSerial()
+    local w = bar and bar.GetWidth and bar:GetWidth() or nil
+    local h = bar and bar.GetHeight and bar:GetHeight() or nil
+    if frame._msufPowerGradEnabled == enabled
+        and frame._msufPowerGradStrength == strength
+        and frame._msufPowerGradLeft == left
+        and frame._msufPowerGradRight == right
+        and frame._msufPowerGradUp == up
+        and frame._msufPowerGradDown == down
+        and frame._msufPowerGradSerial == serial
+        and frame._msufPowerGradW == w
+        and frame._msufPowerGradH == h then
+        return
+    end
+    frame._msufPowerGradEnabled = enabled
+    frame._msufPowerGradStrength = strength
+    frame._msufPowerGradLeft = left
+    frame._msufPowerGradRight = right
+    frame._msufPowerGradUp = up
+    frame._msufPowerGradDown = down
+    frame._msufPowerGradSerial = serial
+    frame._msufPowerGradW = w
+    frame._msufPowerGradH = h
     if frame.powerGradients then
         if ns.Bars._ApplyPowerGradient then ns.Bars._ApplyPowerGradient(frame) end
     elseif frame.powerGradient then
@@ -608,7 +640,10 @@ function ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
     end
     local s = bar._msufPwrCS
     if s then
-        if s[1] == pr and s[2] == pg and s[3] == pb then return end
+        if s[1] == pr and s[2] == pg and s[3] == pb then
+            ns.Bars.ApplyPowerGradientOnce(frame)
+            return
+        end
         s[1], s[2], s[3] = pr, pg, pb
     else
         bar._msufPwrCS = { pr, pg, pb }

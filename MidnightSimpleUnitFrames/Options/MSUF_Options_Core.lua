@@ -1358,6 +1358,12 @@ local function MSUF_CreateGradientDirectionPad(parent, opts)
             ApplyAllSettings()
         end
     end
+    local function PadEnabled(g)
+        if type(opts.isEnabled) == "function" then
+            return opts.isEnabled() and true or false
+        end
+        return ((g.enableGradient ~= false) or (g.enablePowerGradient == true))
+    end
     local function AnyDirOn(g)
         return (g.gradientDirLeft == true) or (g.gradientDirRight == true) or (g.gradientDirUp == true) or (g.gradientDirDown == true)
     end
@@ -1411,6 +1417,10 @@ local function MSUF_CreateGradientDirectionPad(parent, opts)
         b._msufDirKey = dirKey
         b:SetScript("OnClick", function()
             local g = GetGradientDB()
+            if not PadEnabled(g) then
+                if pad.SyncFromDB then pad:SyncFromDB() end
+                return
+            end
             MigrateLegacyIfNeeded(g)
             -- Toggle this direction
             local nextVal = not (g[dbKey] == true)
@@ -1461,6 +1471,20 @@ local function MSUF_CreateGradientDirectionPad(parent, opts)
      end
     function pad:SyncFromDB()
         local g = GetGradientDB()
+        local enabled = PadEnabled(g)
+        if not enabled then
+            self:SetEnabledVisual(false)
+            for _, btn in pairs(self.buttons) do
+                if btn._msufSel then btn._msufSel:Hide() end
+                if btn._msufGlow then btn._msufGlow:Hide() end
+                if btn._msufBorder then btn._msufBorder:SetBackdropBorderColor(0.25, 0.25, 0.25, 1) end
+                if btn.text then
+                    btn.text:SetTextColor(0.35, 0.35, 0.35, 1)
+                    btn.text:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+                end
+            end
+            return
+        end
         MigrateLegacyIfNeeded(g)
         -- Normalize nils
         if g.gradientDirLeft == nil then g.gradientDirLeft = false end
@@ -1502,16 +1526,7 @@ local function MSUF_CreateGradientDirectionPad(parent, opts)
                 end
             end
         end
-        -- Enable the D-pad when *either* gradient is enabled.
-        -- Bugfix: previously this was gated only by HP gradient (enableGradient), which made
-        -- the power-gradient controller unusable when HP gradient was turned off.
-        local enabled
-        if type(opts.isEnabled) == "function" then
-            enabled = opts.isEnabled() and true or false
-        else
-            enabled = ((g.enableGradient ~= false) or (g.enablePowerGradient ~= false))
-        end
-        self:SetEnabledVisual(enabled)
+        self:SetEnabledVisual(true)
      end
     pad:SyncFromDB()
      return pad
