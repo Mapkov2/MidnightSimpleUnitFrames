@@ -2340,17 +2340,29 @@ function _G.MSUF_HookExternalAnchorForReanchor(frame)
             _G.MSUF_MarkExternalAnchorForReanchor()
         end
     end
-    -- OnSizeChanged fires when cooldown icons appear/disappear, which shifts the
-    -- frame's center without actually moving it. Only reanchor if the anchor
-    -- corner (GetLeft/GetTop) moved, which means the frame was genuinely repositioned.
+    -- OnSizeChanged fires when cooldown icons appear/disappear, growing the frame
+    -- without moving it. A genuine repositioning shifts all 4 edges by the same
+    -- delta (uniform shift). A resize shifts opposite edges in opposite directions.
+    -- Only call Mark() on a genuine move; ignore pure resizes.
     local function MarkIfMoved()
-        local l = frame.GetLeft and frame:GetLeft()
-        local t = frame.GetTop and frame:GetTop()
-        local pl, pt = frame._msufHookLastL, frame._msufHookLastT
+        local l = frame.GetLeft   and frame:GetLeft()
+        local r = frame.GetRight  and frame:GetRight()
+        local t = frame.GetTop    and frame:GetTop()
+        local b = frame.GetBottom and frame:GetBottom()
+        local pl, pr, pt, pb = frame._msufHookLastL, frame._msufHookLastR,
+                                frame._msufHookLastT, frame._msufHookLastB
         if l then frame._msufHookLastL = l end
+        if r then frame._msufHookLastR = r end
         if t then frame._msufHookLastT = t end
-        if not pl or not pt or not l or not t
-            or math.abs(l - pl) > 1 or math.abs(t - pt) > 1 then
+        if b then frame._msufHookLastB = b end
+        if not pl or not pr or not pt or not pb or not l or not r or not t or not b then
+            Mark(); return
+        end
+        local dx = l - pl
+        local dy = t - pt
+        if math.abs(dx) <= 1 and math.abs(dy) <= 1 then return end
+        -- Uniform shift on all four edges = genuine move. Asymmetric = resize only.
+        if math.abs((r - pr) - dx) < 1 and math.abs((b - pb) - dy) < 1 then
             Mark()
         end
     end
