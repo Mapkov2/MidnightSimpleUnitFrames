@@ -709,6 +709,11 @@ local function _MSUF_Bars_HidePower(bar, hardReset)
     if not bar then  return true end
     bar:SetScript("OnUpdate", nil)
     bar:Hide()
+    if _G.MSUF_ApplyPowerBarBorder then
+        _G.MSUF_ApplyPowerBarBorder(bar)
+    elseif bar._msufPowerBorder and bar._msufPowerBorder.Hide then
+        bar._msufPowerBorder:Hide()
+    end
     if hardReset then MSUF_ResetBarZero(bar, true) end
      return true
 end
@@ -773,6 +778,9 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     end
 
     bar:Show()
+    if _G.MSUF_ApplyPowerBarBorder then
+        _G.MSUF_ApplyPowerBarBorder(bar)
+    end
      return true
 end
 ns.Bars.Spec.power_pct = ns.Bars.Spec.power_pct or function(frame, unit, barsConf, isBoss, isPlayer, isTarget, isFocus)
@@ -2332,7 +2340,21 @@ function _G.MSUF_HookExternalAnchorForReanchor(frame)
             _G.MSUF_MarkExternalAnchorForReanchor()
         end
     end
-    frame:HookScript("OnSizeChanged", Mark)
+    -- OnSizeChanged fires when cooldown icons appear/disappear, which shifts the
+    -- frame's center without actually moving it. Only reanchor if the anchor
+    -- corner (GetLeft/GetTop) moved, which means the frame was genuinely repositioned.
+    local function MarkIfMoved()
+        local l = frame.GetLeft and frame:GetLeft()
+        local t = frame.GetTop and frame:GetTop()
+        local pl, pt = frame._msufHookLastL, frame._msufHookLastT
+        if l then frame._msufHookLastL = l end
+        if t then frame._msufHookLastT = t end
+        if not pl or not pt or not l or not t
+            or math.abs(l - pl) > 1 or math.abs(t - pt) > 1 then
+            Mark()
+        end
+    end
+    frame:HookScript("OnSizeChanged", MarkIfMoved)
     frame:HookScript("OnShow", Mark)
     frame:HookScript("OnHide", Mark)
 end
@@ -5277,6 +5299,9 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     local dpbWMode = (b.detachedPowerBarWidthMode or "")
     if not ns.Cache.StampChanged(f, "PBEmbedLayout", (enabled and 1 or 0), (embed and 1 or 0), (reserve and 1 or 0), h, (activeDetached and 1 or 0), dW, dH, dX, dY, (anchorToCP and 1 or 0), dpbWMode) then
         if not enabled then _MSUF_Bars_HidePower(pb, true) end
+        if _G.MSUF_ApplyPowerBarBorder then
+            _G.MSUF_ApplyPowerBarBorder(pb)
+        end
         return
     end
     f._msufPowerBarReserved = reserve and true or nil
@@ -5337,6 +5362,9 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     end
     if not enabled then
         _MSUF_Bars_HidePower(pb, true)
+    end
+    if _G.MSUF_ApplyPowerBarBorder then
+        _G.MSUF_ApplyPowerBarBorder(pb)
     end
 
     -- FIX: Force border system refresh after layout completes.

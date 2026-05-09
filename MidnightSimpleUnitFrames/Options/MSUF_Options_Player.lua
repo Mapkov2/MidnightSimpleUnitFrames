@@ -857,8 +857,25 @@ local function SetOptionControlEnabled(widget, enabled)
     if widget.editBox and widget.editBox.SetTextColor then
         widget.editBox:SetTextColor(textColor, textColor, textColor)
     end
-    if widget.minusButton and widget.minusButton.SetAlpha then widget.minusButton:SetAlpha(alpha) end
-    if widget.plusButton and widget.plusButton.SetAlpha then widget.plusButton:SetAlpha(alpha) end
+    if widget.editBox then
+        if widget.editBox.EnableMouse then widget.editBox:EnableMouse(enabled) end
+        if enabled then
+            if widget.editBox.Enable then widget.editBox:Enable() end
+        else
+            if widget.editBox.Disable then widget.editBox:Disable() end
+        end
+    end
+    for _, btn in ipairs({ widget.minusButton, widget.plusButton }) do
+        if btn then
+            if btn.EnableMouse then btn:EnableMouse(enabled) end
+            if enabled then
+                if btn.Enable then btn:Enable() end
+            else
+                if btn.Disable then btn:Disable() end
+            end
+            if btn.SetAlpha then btn:SetAlpha(alpha) end
+        end
+    end
 
     if name then
         for _, suffix in ipairs({ "Text", "Low", "High" }) do
@@ -1213,33 +1230,21 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local pbShowCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarShowCB", "Show power bar", 12, -6)
         panel.playerPowerBarShowCB = pbShowCB
 
-        local pbHeightSlider = CreateFrame("Slider", "MSUF_UF_PowerBarHeightSlider", powerBarBody, "OptionsSliderTemplate")
-        pbHeightSlider:SetPoint("TOPLEFT", powerBarBody, "TOPLEFT", 14, -44)
-        pbHeightSlider:SetMinMaxValues(1, 20); pbHeightSlider:SetValueStep(1); pbHeightSlider:SetObeyStepOnDrag(true)
-        pbHeightSlider:SetWidth(200)
-        local pbhText = _G["MSUF_UF_PowerBarHeightSliderText"]; if pbhText then pbhText:SetText("Height") end
-        local pbhLow = _G["MSUF_UF_PowerBarHeightSliderLow"]; if pbhLow then pbhLow:SetText("1") end
-        local pbhHigh = _G["MSUF_UF_PowerBarHeightSliderHigh"]; if pbhHigh then pbhHigh:SetText("20") end
-        EnhanceSliderTrack(pbHeightSlider)
+        local pbHeightSlider = CreateLabeledSlider("MSUF_UF_PowerBarHeightSlider", "Height", powerBarBody, 1, 20, 1, 14, -44)
+        FinalizeDashboard(pbHeightSlider, 200)
         panel.playerPowerBarHeightSlider = pbHeightSlider
 
-        local pbEmbedCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarEmbedCB", "Embed into health bar", 12, -80)
+        local pbEmbedCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarEmbedCB", "Embed into health bar", 12, -108)
         panel.playerPowerBarEmbedCB = pbEmbedCB
 
         local pbBorderCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarBorderCB", "Power bar border", 300, -6)
         panel.playerPowerBarBorderCB = pbBorderCB
 
-        local pbBorderSlider = CreateFrame("Slider", "MSUF_UF_PowerBarBorderSlider", powerBarBody, "OptionsSliderTemplate")
-        pbBorderSlider:SetPoint("TOPLEFT", powerBarBody, "TOPLEFT", 300, -44)
-        pbBorderSlider:SetMinMaxValues(0, 6); pbBorderSlider:SetValueStep(1); pbBorderSlider:SetObeyStepOnDrag(true)
-        pbBorderSlider:SetWidth(200)
-        local pbbText = _G["MSUF_UF_PowerBarBorderSliderText"]; if pbbText then pbbText:SetText("Border thickness") end
-        local pbbLow = _G["MSUF_UF_PowerBarBorderSliderLow"]; if pbbLow then pbbLow:SetText("0") end
-        local pbbHigh = _G["MSUF_UF_PowerBarBorderSliderHigh"]; if pbbHigh then pbbHigh:SetText("6") end
-        EnhanceSliderTrack(pbBorderSlider)
+        local pbBorderSlider = CreateLabeledSlider("MSUF_UF_PowerBarBorderSlider", "Border thickness", powerBarBody, 0, 6, 1, 300, -44)
+        FinalizeDashboard(pbBorderSlider, 200)
         panel.playerPowerBarBorderSlider = pbBorderSlider
 
-        local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -80)
+        local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -108)
         panel.playerPowerBarSmoothCB = pbSmoothCB
     end
 
@@ -1974,6 +1979,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             panel.playerPowerBarHeightSlider.MSUF_SkipCallback = true
             panel.playerPowerBarHeightSlider:SetValue(h)
             panel.playerPowerBarHeightSlider.MSUF_SkipCallback = false
+            ForceSliderEB(panel.playerPowerBarHeightSlider)
         end
         if panel.playerPowerBarEmbedCB then panel.playerPowerBarEmbedCB:SetChecked(ReadPowerBarEmbed(conf, key)) end
         if panel.playerPowerBarBorderCB then panel.playerPowerBarBorderCB:SetChecked(borderEnabled) end
@@ -1982,6 +1988,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             panel.playerPowerBarBorderSlider.MSUF_SkipCallback = true
             panel.playerPowerBarBorderSlider:SetValue(t)
             panel.playerPowerBarBorderSlider.MSUF_SkipCallback = false
+            ForceSliderEB(panel.playerPowerBarBorderSlider)
         end
         if panel.playerPowerBarSmoothCB then
             panel.playerPowerBarSmoothCB:SetChecked(ReadPowerSmoothFill(conf, key))
@@ -2335,12 +2342,15 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             end)
         end
         if panel.playerPowerBarHeightSlider then
-            panel.playerPowerBarHeightSlider:SetScript("OnValueChanged", function(self, v)
+            panel.playerPowerBarHeightSlider.onValueChanged = function(self, v)
                 if self.MSUF_SkipCallback then return end
                 local c = PBConf(); if not c then return end
                 v = math.floor(v + 0.5); if v < 1 then v = 1 elseif v > 20 then v = 20 end
                 c.powerBarHeight = v; PBApply()
-            end)
+            end
+            if panel.playerPowerBarHeightSlider.HookScript then
+                panel.playerPowerBarHeightSlider:HookScript("OnShow", function(self) ForceSliderEB(self) end)
+            end
         end
         if panel.playerPowerBarEmbedCB then
             panel.playerPowerBarEmbedCB:SetScript("OnClick", function(self)
@@ -2358,12 +2368,15 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             end)
         end
         if panel.playerPowerBarBorderSlider then
-            panel.playerPowerBarBorderSlider:SetScript("OnValueChanged", function(self, v)
+            panel.playerPowerBarBorderSlider.onValueChanged = function(self, v)
                 if self.MSUF_SkipCallback then return end
                 local c = PBConf(); if not c then return end
                 v = math.floor(v + 0.5); if v < 0 then v = 0 elseif v > 6 then v = 6 end
                 c.powerBarBorderThickness = v; PBApply()
-            end)
+            end
+            if panel.playerPowerBarBorderSlider.HookScript then
+                panel.playerPowerBarBorderSlider:HookScript("OnShow", function(self) ForceSliderEB(self) end)
+            end
         end
         if panel.playerPowerBarSmoothCB then
             panel.playerPowerBarSmoothCB:SetScript("OnClick", function(self)
