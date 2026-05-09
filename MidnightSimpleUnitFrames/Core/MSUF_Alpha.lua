@@ -154,9 +154,6 @@ local function _AlphaSetPortraitAlpha(frame, a)
     if a < 0 then a = 0 elseif a > 1 then a = 1 end
     local p = frame.portrait
     if p and p.SetAlpha then p:SetAlpha(a) end
-    p = frame.portrait3D or frame.portrait3d or frame.portraitModel or frame.portraitModelFrame
-        or frame.portrait3DModel or frame.portrait3DFrame or frame.modelPortrait or frame.model3D
-    if p and p.SetAlpha then p:SetAlpha(a) end
 end
 
 local function _SetBarTexAlpha(sb, a)
@@ -363,10 +360,7 @@ end
 
 local function _AlphaPortraitMatches(frame, target)
     if not frame then return true end
-    if not _AlphaObjectMatches(frame.portrait, target) then return false end
-    local p = frame.portrait3D or frame.portrait3d or frame.portraitModel or frame.portraitModelFrame
-        or frame.portrait3DModel or frame.portrait3DFrame or frame.modelPortrait or frame.model3D
-    return _AlphaObjectMatches(p, target)
+    return _AlphaObjectMatches(frame.portrait, target)
 end
 
 local function _AlphaBarColorMatches(sb, target)

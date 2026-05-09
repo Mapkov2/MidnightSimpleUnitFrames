@@ -1366,6 +1366,9 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
     if type(newTable) ~= "table" then
          return false, "not a table"
     end
+    if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
+        pcall(_G.MSUF_NormalizePortraitRenderDB, newTable)
+    end
     MSUF_ProfileIO_EnsureProfilesTable()
     local existing = MSUF_GlobalDB.profiles[profileKey]
     local isActive = (profileKey == MSUF_ActiveProfile)

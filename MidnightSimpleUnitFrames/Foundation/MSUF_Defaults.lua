@@ -115,6 +115,27 @@ local function MSUF_Defaults_GetProfilePayload(tbl)
     end
     return tbl
 end
+
+local function MSUF_Defaults_NormalizePortraitRenderValue(v)
+    if v == "CLASS" then return "CLASS" end
+    return "2D"
+end
+
+local function MSUF_Defaults_NormalizePortraitRenderDB(db)
+    if type(db) ~= "table" then return end
+    local g = type(db.general) == "table" and db.general or nil
+    if g and g._portraitSharedRender ~= nil then
+        g._portraitSharedRender = MSUF_Defaults_NormalizePortraitRenderValue(g._portraitSharedRender)
+    end
+    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focus", "pet", "boss" }) do
+        local u = db[unitKey]
+        if type(u) == "table" and u.portraitRender ~= nil then
+            u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
+        end
+    end
+end
+_G.MSUF_NormalizePortraitRenderDB = MSUF_Defaults_NormalizePortraitRenderDB
+
 -- Fresh-install overrides (applied only when the factory profile payload is seeded).
 -- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
@@ -203,6 +224,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.msufUiScale = 1.0
         g.fontKey = "FRIZQT"
     end
+    MSUF_Defaults_NormalizePortraitRenderDB(db)
  end
 local function MSUF_Defaults_CreateFactoryProfile()
     local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
@@ -265,6 +287,7 @@ function MSUF_EnsureDB_Heavy()
     MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
+    MSUF_Defaults_NormalizePortraitRenderDB(MSUF_DB)
     MSUF_DB.classColors = MSUF_DB.classColors or {}
     MSUF_DB.npcColors = MSUF_DB.npcColors or {}
     if g.fontKey == nil then
@@ -1017,10 +1040,12 @@ end
     if g._portraitSharedRender == nil then
         local pConf = MSUF_DB.player
         if pConf and pConf.portraitRender then
-            g._portraitSharedRender = pConf.portraitRender
+            g._portraitSharedRender = MSUF_Defaults_NormalizePortraitRenderValue(pConf.portraitRender)
         else
             g._portraitSharedRender = "2D"
         end
+    else
+        g._portraitSharedRender = MSUF_Defaults_NormalizePortraitRenderValue(g._portraitSharedRender)
     end
     -- Which unit's portrait settings are currently shown in the Portraits menu (UI state only).
     -- Moved from positional tabs to scope dropdown (Bars pattern).
@@ -1830,7 +1855,9 @@ local function fill(key, defaults)
         -- Portrait Decoration defaults (MSUF_PortraitDecoration.lua)
         -- portraitRender: inherit from general._portraitSharedRender if not set (shared/per-unit sync)
         if u.portraitRender == nil then
-            u.portraitRender = g._portraitSharedRender or "2D"
+            u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(g._portraitSharedRender)
+        else
+            u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
         end
         if u.portraitClassStyle == nil then
             u.portraitClassStyle = g.portraitClassStyle or "BLIZZARD"

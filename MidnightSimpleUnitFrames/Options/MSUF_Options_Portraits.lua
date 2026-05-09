@@ -1,7 +1,7 @@
 -- Options/MSUF_Options_Portraits.lua
 -- Dedicated portrait styling panel (Accordion UX).
 -- Scope system matches MSUF_Options_Bars.lua: Shared + per-unit dropdown + override checkbox.
--- All render types (2D / 3D / CLASS) are configurable here.
+-- Render types (2D / CLASS) are configurable here.
 -- Frame Basics retains ONLY the anchor/position dropdown (LEFT/RIGHT/OFF).
 -- DB contract (scope-aware):
 --   Shared:   MSUF_DB.general.portraitShape / portraitBorderStyle / …
@@ -160,9 +160,13 @@ local BORDER_ITEMS = {
     { key = "CUSTOM", label = "Custom Color" },
 }
 local RENDER_ITEMS = {
-    { key = "2D", label = "2D Portrait" }, { key = "3D", label = "3D Portrait" },
-    { key = "CLASS", label = "Class Icon" },
+    { key = "2D", label = "2D Portrait" }, { key = "CLASS", label = "Class Icon" },
 }
+
+local function NormalizeRender(v)
+    if v == "CLASS" then return "CLASS" end
+    return "2D"
+end
 
 -- Keys inherited from general → per-unit when enabling override
 local DECO_KEYS = {
@@ -238,14 +242,14 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
     local function LiveApply()
         local uk = GetUnitKey()
         local sync = _G.MSUF_PortraitDecoration_SyncUnit
-        local sync3d = _G.MSUF_3DPortraits_SyncUnit
+        local syncPortrait = _G.MSUF_Portraits_SyncUnit
         if uk then
             if type(sync) == "function" then pcall(sync, uk) end
-            if type(sync3d) == "function" then pcall(sync3d, uk) end
+            if type(syncPortrait) == "function" then pcall(syncPortrait, uk) end
         else
             for _, k in ipairs(ALL_UNITS) do
                 if type(sync) == "function" then pcall(sync, k) end
-                if type(sync3d) == "function" then pcall(sync3d, k) end
+                if type(syncPortrait) == "function" then pcall(syncPortrait, k) end
             end
         end
     end
@@ -454,16 +458,17 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
             items = RENDER_ITEMS,
             get = function()
                 local uk = GetUnitKey()
-                if uk then return U(uk).portraitRender or "2D" end
-                return G()._portraitSharedRender or "2D"
+                if uk then return NormalizeRender(U(uk).portraitRender) end
+                return NormalizeRender(G()._portraitSharedRender)
             end,
             set = function(v)
+                v = NormalizeRender(v)
                 local uk = GetUnitKey()
                 if uk then
                     if not IsOverride(uk) then EnableOverride(uk) end
                     U(uk).portraitRender = v
-                    if type(_G.MSUF_3DPortraits_SyncUnit) == "function" then
-                        pcall(_G.MSUF_3DPortraits_SyncUnit, uk)
+                    if type(_G.MSUF_Portraits_SyncUnit) == "function" then
+                        pcall(_G.MSUF_Portraits_SyncUnit, uk)
                     end
                 else
                     G()._portraitSharedRender = v
@@ -472,8 +477,8 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
                         if not u.portraitDecoOverride then u.portraitRender = v end
                     end
                     for _, k in ipairs(ALL_UNITS) do
-                        if type(_G.MSUF_3DPortraits_SyncUnit) == "function" then
-                            pcall(_G.MSUF_3DPortraits_SyncUnit, k)
+                        if type(_G.MSUF_Portraits_SyncUnit) == "function" then
+                            pcall(_G.MSUF_Portraits_SyncUnit, k)
                         end
                     end
                 end
@@ -700,9 +705,9 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
         -- Render type → show/hide class style row + adjust section height
         local render
         if isUnit then
-            render = U(uk).portraitRender or "2D"
+            render = NormalizeRender(U(uk).portraitRender)
         else
-            render = G()._portraitSharedRender or "2D"
+            render = NormalizeRender(G()._portraitSharedRender)
         end
         local isClass = (render == "CLASS")
         classLabel:SetShown(isClass)
@@ -727,7 +732,7 @@ function ns.MSUF_RegisterPortraitsOptions_Full(parentCategory)
             end
         end
 
-        -- Fill Border toggle: only for 2D/3D
+        -- Fill Border toggle: only for texture portraits
         local showFill = (render ~= "CLASS")
         fillCheck:SetShown(showFill)
         if showFill then
