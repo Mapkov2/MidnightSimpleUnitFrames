@@ -74,6 +74,7 @@ do
     end)
 end
 
+
 -- P0: Absorb text path in UpdateHpTextFast (100-500x/sec)
 local UnitGetTotalAbsorbs = UnitGetTotalAbsorbs
 local C_StringUtil = C_StringUtil

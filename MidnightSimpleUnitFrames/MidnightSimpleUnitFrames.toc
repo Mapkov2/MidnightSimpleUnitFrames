@@ -102,6 +102,7 @@ Features\MSUF_VersionCheck.lua
 # ★ BACKBONE
 # ═══════════════════════════════════════════════════════════════
 MidnightSimpleUnitFrames.lua
+Features\MidnightSimpleUnitFrames_DebugPos.lua
 
 # ═══════════════════════════════════════════════════════════════
 # CORE (post-main)

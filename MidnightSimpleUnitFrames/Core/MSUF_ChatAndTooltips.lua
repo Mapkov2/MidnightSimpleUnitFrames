@@ -60,6 +60,7 @@ local function MSUF_PrintHelp()
     print("                   Confirm stages the reset; reload via /reload or MSUF Menu  Advanced  Factory Reset.")
     print("  /msuf absorb    - Toggle showing total absorb amount in HP text.")
     print("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry.")
+    print("  /msufdbgpos     - Toggle position drift debugger (overlay + chat log).")
     print("  !msuf help      - Print this help via chat (from your own character).")
  end
 -- Optional chat trigger: "!msuf help" (only from yourself)
