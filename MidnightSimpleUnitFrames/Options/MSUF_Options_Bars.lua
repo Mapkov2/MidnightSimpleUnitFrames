@@ -65,6 +65,69 @@ function _G.MSUF_Bars_SetSmoothPowerForCurrentScope(enabled)
     end
 end
 
+local function MSUF_Bars_NormalizeAbsorbTestUnitKey(key)
+    if key == nil then return nil end
+    key = tostring(key)
+    if key == "" or key == "shared" then return "shared" end
+    key = string.lower(key)
+    if key == "tot" or key == "targetoftarget" then return "targettarget" end
+    if key == "boss1" or key == "boss2" or key == "boss3" or key == "boss4" or key == "boss5" then return "boss" end
+    if string.match(key, "^party%d+$") then return "party" end
+    if string.match(key, "^raid%d+$") then return "raid" end
+    return key
+end
+
+local function MSUF_Bars_GetAbsorbTestGFKind(frameOrUnit, gfKind)
+    if gfKind then return gfKind end
+    if type(frameOrUnit) ~= "table" then return nil end
+    if frameOrUnit._msufGFKind then return frameOrUnit._msufGFKind end
+    local key = frameOrUnit.msufConfigKey or frameOrUnit._msufConfigKey or frameOrUnit.unitKey or frameOrUnit.unit
+    if key == "gf_party" then return "party" end
+    if key == "gf_raid" then return "raid" end
+    if key == "gf_mythicraid" then return "mythicraid" end
+    return nil
+end
+
+local function MSUF_Bars_GetAbsorbTestUnitKey(frameOrUnit)
+    local key = frameOrUnit
+    if type(frameOrUnit) == "table" then
+        key = frameOrUnit.msufConfigKey or frameOrUnit._msufConfigKey or frameOrUnit._msufUnitKey or frameOrUnit.unitKey or frameOrUnit.unit
+    end
+    return MSUF_Bars_NormalizeAbsorbTestUnitKey(key)
+end
+
+local function MSUF_Bars_GFAbsorbOverrideActive(kind)
+    MSUF_Bars_EnsureDB()
+    local dbKey = (kind == "mythicraid" and "gf_mythicraid") or (kind == "raid" and "gf_raid") or (kind == "party" and "gf_party") or nil
+    local db = dbKey and _G.MSUF_DB and _G.MSUF_DB[dbKey]
+    return db and db.hlOverride == true
+end
+
+local function MSUF_Bars_UFAbsorbOverrideActive(unitKey)
+    MSUF_Bars_EnsureDB()
+    local db = unitKey and _G.MSUF_DB and _G.MSUF_DB[unitKey]
+    return db and (db.hlOverride == true or db.hpPowerTextOverride == true)
+end
+
+function _G.MSUF_SetAbsorbTextureTestMode(enabled, scopeKey)
+    _G.MSUF_AbsorbTextureTestMode = enabled and true or false
+    _G.MSUF_AbsorbTextureTestScope = _G.MSUF_AbsorbTextureTestMode and MSUF_Bars_NormalizeAbsorbTestUnitKey(scopeKey or MSUF_Bars_GetCurrentScopeKey()) or nil
+end
+
+function _G.MSUF_ShouldShowAbsorbTextureTest(frameOrUnit, gfKind)
+    if not _G.MSUF_AbsorbTextureTestMode then return false end
+    local scope = MSUF_Bars_NormalizeAbsorbTestUnitKey(_G.MSUF_AbsorbTextureTestScope or "shared")
+    local kind = MSUF_Bars_GetAbsorbTestGFKind(frameOrUnit, gfKind)
+    if scope == "shared" then
+        if kind then return not MSUF_Bars_GFAbsorbOverrideActive(kind) end
+        local unitKey = MSUF_Bars_GetAbsorbTestUnitKey(frameOrUnit)
+        return unitKey ~= nil and unitKey ~= "shared" and not MSUF_Bars_UFAbsorbOverrideActive(unitKey)
+    end
+    if scope == "party" then return kind == "party" end
+    if scope == "raid" then return kind == "raid" or kind == "mythicraid" end
+    return MSUF_Bars_GetAbsorbTestUnitKey(frameOrUnit) == scope
+end
+
 function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     if not panel or not barGroup then return end
     if barGroup._msufBuilt then return end
@@ -374,6 +437,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         EnsureDB()
         G().hpPowerTextSelectedKey = key
         if key ~= "shared" then G().hpSpacerSelectedUnitKey = key end
+        if _G.MSUF_AbsorbTextureTestMode then
+            if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(true, key)
+            else _G.MSUF_AbsorbTextureTestScope = key end
+            RefreshFrames()
+            if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
+        end
         RefreshScopeButtons()
         if type(_MSUF_SyncHpPowerTextScopeUI) == "function" then _MSUF_SyncHpPowerTextScopeUI() end
         -- Switch GF preview to match scope (party vs raid)
@@ -1056,14 +1125,17 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     UI.StyleCheckmark(absorbTexTestCB)
     absorbTexTestCB:SetChecked(_G.MSUF_AbsorbTextureTestMode and true or false)
     absorbTexTestCB:SetScript("OnClick", function(self)
-        _G.MSUF_AbsorbTextureTestMode = self:GetChecked() and true or false
+        if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(self:GetChecked(), _MSUF_HPText_GetScopeKey())
+        else _G.MSUF_AbsorbTextureTestMode = self:GetChecked() and true or false end
         RefreshFrames()
         if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
     end)
     absorbTexTestCB:SetScript("OnHide", function(self)
         if barGroup:IsShown() then return end
         if _G.MSUF_AbsorbTextureTestMode then
-            _G.MSUF_AbsorbTextureTestMode = false; self:SetChecked(false)
+            if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(false)
+            else _G.MSUF_AbsorbTextureTestMode = false end
+            self:SetChecked(false)
             RefreshFrames()
             if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
         end
@@ -1132,7 +1204,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         MSUF_SetLabeledSliderEnabled(absorbOpacitySlider, barEnabled)
         MSUF_SetLabeledSliderEnabled(healAbsorbOpacitySlider, barEnabled)
         if not barEnabled and _G.MSUF_AbsorbTextureTestMode then
-            _G.MSUF_AbsorbTextureTestMode = false; absorbTexTestCB:SetChecked(false); RefreshFrames()
+            if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(false)
+            else _G.MSUF_AbsorbTextureTestMode = false end
+            absorbTexTestCB:SetChecked(false); RefreshFrames()
         end
     end
     MSUF_RefreshAbsorbBarUIEnabled()
@@ -2248,7 +2322,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         SetDropActive("MSUF_AbsorbAnchorDrop", _C.absorbAnchorLabel, absorbScopedControlsActive)
         SetDropActive("MSUF_AbsorbBarTextureDropdown", nil, absorbSharedControlsActive)
         SetDropActive("MSUF_HealAbsorbBarTextureDropdown", nil, absorbSharedControlsActive)
-        SetCheckActive("MSUF_AbsorbTextureTestModeCheck", absorbSharedControlsActive)
+        SetCheckActive("MSUF_AbsorbTextureTestModeCheck", absorbScopedControlsActive)
         SetCheckActive("MSUF_SelfHealPredictionCheck", sharedControlsActive)
         SetSliderActive("MSUF_AbsorbBarOpacitySlider", absorbScopedControlsActive)
         SetSliderActive("MSUF_HealAbsorbBarOpacitySlider", absorbScopedControlsActive)

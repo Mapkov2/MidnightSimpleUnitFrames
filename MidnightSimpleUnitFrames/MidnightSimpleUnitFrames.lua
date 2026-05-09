@@ -687,7 +687,8 @@ ns.Bars.Spec.health = ns.Bars.Spec.health or function(frame, unit)
     end
     -- 12.0: Unified calculator update — one C-side call for health + absorbs + prediction.
     -- Test mode path still uses legacy ApplyHealthBars for faked values.
-    if _G.MSUF_AbsorbTextureTestMode then
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    if (type(testFn) == "function" and testFn(frame)) or (_G.MSUF_AbsorbTextureTestMode and type(testFn) ~= "function") then
         local maxHP = (F.UnitHealthMax and F.UnitHealthMax(unit)) or 1
         local hp = (F.UnitHealth and F.UnitHealth(unit)) or 0
         ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
@@ -827,7 +828,8 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
         if setHealth then setHealth(frame, frame.hpBar, hp) else frame.hpBar:SetValue(hp) end
     end
     -- Test mode: show faked absorb values.
-    local absorbTestMode = _G.MSUF_AbsorbTextureTestMode
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(frame) or _G.MSUF_AbsorbTextureTestMode
     local wasTestMode = frame._msufAbsorbTestActive
     if absorbTestMode then
         frame._msufAbsorbTestActive = true
