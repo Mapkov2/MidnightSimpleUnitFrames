@@ -2193,7 +2193,7 @@ end
         MSUF_DB.general.bossTargetHighlightColor = { r, g, b }
         if S.bthColorTex then S.bthColorTex:SetColorTexture(r, g, b) end
         if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("BTH_COLOR") end
-        if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight() end
+        if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight(true) end
     end
 
     bthSwatch:SetScript("OnClick", function()

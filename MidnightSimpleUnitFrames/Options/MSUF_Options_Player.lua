@@ -2536,7 +2536,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         local on = self:GetChecked() and true or false
         MSUF_DB.general.bossTargetHighlightEnabled = on; MSUF_DB.general.bossTargetOutlineMode = on and 1 or 0
         if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("BOSS_TARGET_HL") end
-        if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight() end
+        if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight(true) end
     end) end
 
     -- Unitframe status icons: selector-driven binding.
