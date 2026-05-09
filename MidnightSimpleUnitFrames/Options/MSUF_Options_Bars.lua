@@ -1446,8 +1446,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                     if hlKey then HlSet(hlKey, (v == 1)) end
                     HlApply()
                 else
-                    G()[dbKey] = v
-                    if hlKey then G()[hlKey] = (v == 1) end
+                    local g = G()
+                    g[dbKey] = v
+                    if dbKey == "bossTargetOutlineMode" then
+                        g.bossTargetHighlightEnabled = (v == 1)
+                    end
+                    if hlKey then g[hlKey] = (v == 1) end
                     if type(applyFn) == "function" then applyFn() end
                 end
             end,
@@ -1627,6 +1631,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     local function BossTargetApply()
         _BumpBorderSerial()
+        if _G.MSUF_UpdateBossTargetHighlight then _G.MSUF_UpdateBossTargetHighlight(true) end
         local fn, frames = _G.MSUF_RefreshRareBarVisuals, _G.MSUF_UnitFrames
         if type(fn) == "function" and frames then
             for i = 1, 5 do local b = frames["boss" .. i]; if b then fn(b) end end
