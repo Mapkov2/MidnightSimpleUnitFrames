@@ -435,10 +435,10 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                     if bk == "shared" then
                         GameTooltip:AddLine(TR("Shared baseline used by units without overrides."), 0.72, 0.78, 0.88, true)
                     elseif IsGFScope(bk) then
-                        local tip = GetScopeUnitHasOverride(bk) and TR("Override active: Group Frames use their own highlight settings.") or TR("Uses Shared highlight settings.")
+                        local tip = GetScopeUnitHasOverride(bk) and TR("Override active: Group Frames use their own Bars settings.") or TR("Uses Shared Bars settings.")
                         GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
                         if bk == "raid" then GameTooltip:AddLine(TR("Raid scope also applies to Mythic Raid."), 0.55, 0.70, 0.95, true) end
-                        GameTooltip:AddLine(TR("Only Outline & Highlight Border applies to Group Frames."), 0.55, 0.60, 0.72, true)
+                        GameTooltip:AddLine(TR("Textures stay Shared; gradient and highlight controls can be overridden."), 0.55, 0.60, 0.72, true)
                     else
                         local tip = GetScopeUnitHasOverride(bk) and TR("Override active: this unit uses its own Bars/Text settings.") or TR("Uses Shared settings.")
                         GameTooltip:AddLine(tip, 0.72, 0.78, 0.88, true)
@@ -602,7 +602,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     barsGFHint:SetPoint("TOPLEFT", scopeBar, "BOTTOMLEFT", 4, -6)
     barsGFHint:SetWidth(600)
     barsGFHint:SetJustifyH("LEFT")
-    barsGFHint:SetText("Group Frames inherit these textures by default. In this panel, Raid also applies to Mythic Raid.")
+    barsGFHint:SetText("Group Frames inherit Shared textures and gradients by default. In this panel, Raid also applies to Mythic Raid.")
     barsGFHint:SetTextColor(0.50, 0.60, 0.75)
 
     -- BOX 1: Textures & Gradient (default open)
@@ -628,11 +628,16 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         return scopeKey
     end
 
+    function Grad.ScopeGFKeys()
+        local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
+        return GF_SCOPE_APPLY_KEYS[scopeKey]
+    end
+
     function Grad.ControlsActive()
         EnsureDB()
         local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
         if scopeKey == "shared" then return true end
-        if IsGFScope(scopeKey) then return false end
+        if IsGFScope(scopeKey) then return ScopeGFHasOverride(scopeKey) end
         local u = MSUF_DB and MSUF_DB[scopeKey]
         return u and u.hlOverride == true
     end
@@ -678,10 +683,31 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
                 end
             end
         end
+        for _, keys in pairs(GF_SCOPE_APPLY_KEYS) do
+            for i = 1, #keys do
+                local gf = MSUF_DB and MSUF_DB[keys[i]]
+                if gf and type(gf.gradientOverrideKeys) == "table" and gf.gradientOverrideKeys[key] == true then
+                    if gf[key] == nil or gf[key] == previousSharedValue then
+                        gf.gradientOverrideKeys[key] = nil
+                        gf[key] = nil
+                        if not Grad.AnyKeyActive(gf) then
+                            gf.gradientOverride = nil
+                        end
+                    end
+                end
+            end
+        end
     end
 
     function Grad.Get(key, defaultVal)
         EnsureDB()
+        local gfKeys = Grad.ScopeGFKeys()
+        if gfKeys then
+            for i = 1, #gfKeys do
+                local gf = MSUF_DB[gfKeys[i]]
+                if Grad.KeyActive(gf, key) and gf[key] ~= nil then return gf[key] end
+            end
+        end
         local uk = Grad.ScopeUnitKey()
         if uk then
             local u = MSUF_DB[uk]
@@ -694,6 +720,26 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     function Grad.Write(key, val)
         EnsureDB()
+        local gfKeys = Grad.ScopeGFKeys()
+        if gfKeys then
+            local wrote = false
+            for i = 1, #gfKeys do
+                local gfKey = gfKeys[i]
+                local gf = MSUF_DB[gfKey]
+                if not gf then
+                    gf = {}
+                    MSUF_DB[gfKey] = gf
+                end
+                if not (gf.hlOverride == true) then
+                    gf.hlOverride = true
+                    if type(HlSeedFromGeneral) == "function" then HlSeedFromGeneral(gf) end
+                end
+                Grad.MarkKey(gf, key)
+                gf[key] = val
+                wrote = true
+            end
+            return wrote
+        end
         local uk = Grad.ScopeUnitKey()
         if uk then
             local u = _Scope_GetUnitDB and _Scope_GetUnitDB(uk)
@@ -730,6 +776,14 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         else Apply() end
     end
 
+    function Grad.RefreshGF()
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if not GF then return end
+        if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+        if GF.RefreshVisuals then GF.RefreshVisuals()
+        elseif GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_TEXTURE or 0x02) end
+    end
+
     function Grad.RepaintLive()
         if _G.MSUF_UFCore_RefreshSettingsCache then _G.MSUF_UFCore_RefreshSettingsCache("GradientSharedToggle") end
         local frames = _G.MSUF_UnitFrames
@@ -752,6 +806,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         else
             RefreshFrames()
         end
+        Grad.RefreshGF()
     end
 
     function Grad.ToggleCheck(cb, key, defaultVal)
@@ -817,6 +872,17 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     function Grad.PadDB()
         EnsureDB()
+        local gfKeys = Grad.ScopeGFKeys()
+        if gfKeys then
+            for i = 1, #gfKeys do
+                local gf = MSUF_DB[gfKeys[i]]
+                if Grad.DirActive(gf) then return gf end
+            end
+            for i = 1, #gfKeys do
+                local gf = MSUF_DB[gfKeys[i]]
+                if gf and gf.hlOverride == true then return gf end
+            end
+        end
         local uk = Grad.ScopeUnitKey()
         local u = uk and MSUF_DB[uk]
         if Grad.DirActive(u) then return u end
@@ -2125,7 +2191,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local hlControlsActive = sharedControlsActive or hlOverrideOn
         local textOverrideOn = (not isGF and uk and MSUF_DB and MSUF_DB[uk] and (TextOverrideActive(MSUF_DB[uk]) or MSUF_DB[uk].hlOverride == true)) and true or false
         local textControlsActive = (not isGF) and (sharedControlsActive or textOverrideOn)
-        local gradientControlsActive = (not isGF) and (sharedControlsActive or hlOverrideOn)
+        local gradientControlsActive = sharedControlsActive or hlOverrideOn
         local hpGrad = (Grad.Get("enableGradient", true) ~= false)
         local powGrad = (Grad.Get("enablePowerGradient", false) == true)
         local gradientValueControlsActive = gradientControlsActive and (hpGrad or powGrad)
@@ -2166,7 +2232,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             elseif fs.SetAlpha then fs:SetAlpha(active and 1 or 0.35) end
         end
 
-        -- Box 1: textures are Shared/global only; gradients are Shared or UnitFrame override.
+        -- Box 1: textures are Shared/global only; gradients are Shared or scope override.
         SetDropActive("MSUF_BarTextureDropdown", nil, sharedControlsActive)
         SetDropActive("MSUF_BarBackgroundTextureDropdown", nil, sharedControlsActive)
         SetLabelActive(_C.texColLabel, sharedControlsActive)
@@ -2242,7 +2308,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             if not box or not box._msufTitle then return end
             SetLabelActive(box._msufTitle, active)
         end
-        TitleDim(_C.box1, sharedControlsActive)
+        TitleDim(_C.box1, sharedControlsActive or gradientControlsActive)
         TitleDim(_C.box2, hlControlsActive or sharedControlsActive)
         TitleDim(_C.box3a, hlControlsActive)
         TitleDim(_C.box3b, hlControlsActive)
@@ -2267,15 +2333,18 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     _G.MSUF_BarsApplyGradient = function()
         EnsureDB()
         local scopeKey = _MSUF_HPText_GetScopeKey and _MSUF_HPText_GetScopeKey() or "shared"
-        local unitScope = scopeKey ~= "shared" and not IsGFScope(scopeKey)
-        if IsGFScope(scopeKey) then return end
+        local gfScope = IsGFScope(scopeKey)
+        local unitScope = scopeKey ~= "shared" and not gfScope
         if (Grad.Get("enableGradient", true) ~= false) or (Grad.Get("enablePowerGradient", false) == true) then
             if not (tonumber(Grad.Get("gradientStrength", nil)) and tonumber(Grad.Get("gradientStrength", nil)) > 0) then
                 Grad.Write("gradientStrength", 0.45)
             end
         end
         if gradientDirPad and gradientDirPad.SyncFromDB then gradientDirPad:SyncFromDB() end
-        if unitScope then
+        if gfScope then
+            Grad.RefreshGF()
+            return
+        elseif unitScope then
             if InCombatLockdown and InCombatLockdown() then Apply()
             elseif _G.MSUF_UFCore_NotifyConfigChanged then
                 _G.MSUF_UFCore_NotifyConfigChanged(scopeKey == "boss" and nil or scopeKey, true, true, "GradientScope")
@@ -2302,6 +2371,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
         Repaint()
         if C_Timer then C_Timer.After(0.08, Repaint) end
+        if scopeKey == "shared" then Grad.RefreshGF() end
     end
 
     -- SyncAll (called on OnShow)
@@ -2385,7 +2455,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if not InCombatLockdown() and GF.UpdateGroupVisibility then GF.UpdateGroupVisibility() end
     end)
 
-    -- Gradient DB bindings are scope-aware for UnitFrames. GroupFrame gradients stay Shared-only in Phase 1.
+    -- Gradient DB bindings are scope-aware for UnitFrames and GroupFrames.
     if gradientCheck then
         gradientCheck:SetScript("OnClick", function(self)
             Grad.ClickCheck(self, "enableGradient", true, SyncAll)

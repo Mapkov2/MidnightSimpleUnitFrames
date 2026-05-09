@@ -311,24 +311,35 @@ local function _GF_SetGrad(tex, orientation, a1, a2, strength)
     if strength > 0 then tex:Show() else tex:Hide() end
 end
 
+local function _GF_GradientKeyActive(conf, key)
+    return conf and conf.hlOverride == true and conf.gradientOverride == true
+        and conf.gradientOverrideVersion == 2
+        and type(conf.gradientOverrideKeys) == "table"
+        and conf.gradientOverrideKeys[key] == true
+end
+
 local function _GF_GradientValue(conf, gen, key, defaultVal)
-    if conf and conf.hlOverride == true and conf.gradientOverride == true and conf.gradientOverrideVersion == 2 and conf[key] ~= nil then
+    if _GF_GradientKeyActive(conf, key) and conf[key] ~= nil then
         return conf[key]
     end
+    local v = gen and gen[key]
+    if v ~= nil then return v end
     return defaultVal
 end
 
 local function _GF_GradientDirState(conf, gen)
-    if conf and conf.hlOverride == true and conf.gradientOverride == true and conf.gradientOverrideVersion == 2 and (
-        conf.gradientDirLeft ~= nil or conf.gradientDirRight ~= nil or
-        conf.gradientDirUp ~= nil or conf.gradientDirDown ~= nil
-    ) then
-        local left  = (conf.gradientDirLeft == true)
-        local right = (conf.gradientDirRight == true)
-        local up    = (conf.gradientDirUp == true)
-        local down  = (conf.gradientDirDown == true)
+    if _GF_GradientKeyActive(conf, "gradientDirLeft")
+        or _GF_GradientKeyActive(conf, "gradientDirRight")
+        or _GF_GradientKeyActive(conf, "gradientDirUp")
+        or _GF_GradientKeyActive(conf, "gradientDirDown")
+        or _GF_GradientKeyActive(conf, "gradientDirection")
+    then
+        local left  = _GF_GradientKeyActive(conf, "gradientDirLeft") and (conf.gradientDirLeft == true) or false
+        local right = _GF_GradientKeyActive(conf, "gradientDirRight") and (conf.gradientDirRight == true) or false
+        local up    = _GF_GradientKeyActive(conf, "gradientDirUp") and (conf.gradientDirUp == true) or false
+        local down  = _GF_GradientKeyActive(conf, "gradientDirDown") and (conf.gradientDirDown == true) or false
         if not left and not right and not up and not down then
-            local dir = conf.gradientDirection
+            local dir = _GF_GradientKeyActive(conf, "gradientDirection") and conf.gradientDirection or nil
             if dir == "LEFT" then left = true
             elseif dir == "UP" then up = true
             elseif dir == "DOWN" then down = true
@@ -336,7 +347,18 @@ local function _GF_GradientDirState(conf, gen)
         end
         return left, right, up, down
     end
-    return false, true, false, false
+    local left  = (gen and gen.gradientDirLeft == true)
+    local right = (gen and gen.gradientDirRight == true)
+    local up    = (gen and gen.gradientDirUp == true)
+    local down  = (gen and gen.gradientDirDown == true)
+    if not left and not right and not up and not down then
+        local dir = gen and gen.gradientDirection
+        if dir == "LEFT" then left = true
+        elseif dir == "UP" then up = true
+        elseif dir == "DOWN" then down = true
+        else right = true end
+    end
+    return left, right, up, down
 end
 
 local function _GF_ApplyGradientToBar(bar, conf, gen, isPower)
