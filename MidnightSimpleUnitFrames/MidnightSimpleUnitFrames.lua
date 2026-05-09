@@ -666,6 +666,8 @@ local function MSUF_ApplyOverlayTextureAlpha(bar, alpha)
     local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
     if tex and tex.SetAlpha then tex:SetAlpha(alpha * mul) end
 end
+ns.Bars._ApplyOverlayTextureAlpha = MSUF_ApplyOverlayTextureAlpha
+_G.MSUF_ApplyOverlayTextureAlpha = MSUF_ApplyOverlayTextureAlpha
 function ns.Bars.SetOverlayBarTexture(bar, texGetter)
     if not bar or not bar.SetStatusBarTexture or not texGetter then  return end
     local tex = texGetter()
@@ -1577,6 +1579,7 @@ function _DPB.ResolveBg()
     _DPB.bgK = key; _DPB.bgC = path
     return path
 end
+ns.Bars._DetachedPowerBarTextures = _DPB
 -- P0: Hoisted from MSUF_ApplyBarBackgroundVisual inner closure (eliminates per-call closure alloc).
 -- Pre-built cache-key strings per prefix avoid string concat on every call.
 local _MSUF_BgKeyCache = {}
@@ -1705,6 +1708,7 @@ local function GetConfigKeyForUnit(unit)
     end
      return nil
 end
+_G.MSUF_GetConfigKeyForUnit = GetConfigKeyForUnit
 function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
     if not MSUF_DB then EnsureDB() end
     MSUF_DB.general = MSUF_DB.general or {}
@@ -1995,6 +1999,7 @@ local function MSUF_UpdateNameColor(frame)
         frame.levelText:SetTextColor(r, gCol, b, 1)
     end
  end
+_G.MSUF_UpdateNameColor = MSUF_UpdateNameColor
 local function _Iter_RefreshNameColor(f)
     if f and f.nameText and f.unit and F.UnitExists(f.unit) then
         MSUF_UpdateNameColor(f)
@@ -5105,6 +5110,7 @@ local function MSUF_ScheduleApplyCommit()
     st.pending = true
     if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", MSUF_CommitApplyDirty_Scheduled) else C_Timer.After(0, MSUF_CommitApplyDirty_Scheduled) end
  end
+_G.MSUF_ScheduleApplyCommit = MSUF_ScheduleApplyCommit
 function MSUF_OnRegenEnabled_ApplyCommit(event)
     local st = _G.MSUF_ApplyCommitState
     if st and st.queued then
@@ -5290,376 +5296,8 @@ end
     st.queued = false
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT")
  end
--- Changes:
--- 1. Numeric hash replaces string concat stamps (cheaper comparison)
--- 2. Inner closures hoisted to file-level (no re-creation per call)
--- 3. 3-stamp-layer collapsed to 2 (global + per-key)
-
--- Module-local font state (populated once per UpdateAllFonts call, read by hoisted helpers)
-local _MSUF_FONT_FLAGS_CODE = { [""] = 0, OUTLINE = 1, THICKOUTLINE = 2 }
-local _fontState = {}
-local _MSUF_FontPathSerialByKey = {}
-local _MSUF_FontPathSerialNext = 0
-local function _MSUF_GetFontPathSerial(path)
-    local key = tostring(path or "")
-    local serial = _MSUF_FontPathSerialByKey[key]
-    if not serial then
-        _MSUF_FontPathSerialNext = _MSUF_FontPathSerialNext + 1
-        serial = _MSUF_FontPathSerialNext
-        _MSUF_FontPathSerialByKey[key] = serial
-    end
-    return serial
-end
-
-local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
-    if not fs then return end
-    local S = _fontState
-    -- Content-based: only call SetFont when path/flags (serial) or size actually changed
-    local rev = S.pathSerial * 10 + (_MSUF_FONT_FLAGS_CODE[S.flags] or 1) + size * 10000030
-    if fs._msufFontRev ~= rev then
-        local ok, applied = pcall(fs.SetFont, fs, S.path, size, S.flags)
-        if not ok then
-            local fallback = _G.MSUF_ResolveFontPath and _G.MSUF_ResolveFontPath("Fonts\\FRIZQT__.TTF", size, S.flags) or "Fonts\\FRIZQT__.TTF"
-            ok, applied = pcall(fs.SetFont, fs, fallback, size, S.flags)
-        end
-        if ok then
-            fs._msufFontRev = rev
-            fs._msufShadowOn = nil
-        end
-    end
-    if setColor then
-        local crev = cr * 1000000 + cg * 1000 + cb
-        if fs._msufColorRev ~= crev then
-            fs:SetTextColor(cr, cg, cb, 1)
-            fs._msufColorRev = crev
-        end
-    end
-    local sh = S.useShadow and 1 or 0
-    if fs._msufShadowOn ~= sh then
-        if sh == 1 then
-            fs:SetShadowColor(0, 0, 0, 1)
-            fs:SetShadowOffset(1, -1)
-        else
-            fs:SetShadowOffset(0, 0)
-        end
-        fs._msufShadowOn = sh
-    end
-end
-
-local function _MSUF_ApplyFontsToFrame(f)
-    if not f then return end
-    local S = _fontState
-    local key = f.msufConfigKey
-    if (not key) and f.unit then
-        key = GetConfigKeyForUnit(f.unit)
-    end
-    if S.onlyKey and key ~= S.onlyKey then return end
-
-    local conf
-    if key and MSUF_DB then conf = MSUF_DB[key] end
-    local nameSize  = (conf and conf.nameFontSize)  or S.globalNameSize
-    local hpSize    = (conf and conf.hpFontSize)    or S.globalHPSize
-    local powerSize = (conf and conf.powerFontSize) or S.globalPowSize
-
-    -- Per-unit font override: temporarily swap shared state for this frame
-    local _origPath, _origPathSerial, _origFlags, _origShadow, _origCPT
-    if conf and conf.fontOverride then
-        if conf.fontKey ~= nil and conf.fontKey ~= "" then
-            local cPath = MSUF_GetFontPathForKey(conf.fontKey)
-            if cPath then
-                _origPath = S.path
-                _origPathSerial = S.pathSerial
-                S.path = cPath
-                S.pathSerial = _MSUF_GetFontPathSerial(cPath)
-            end
-        end
-        local cNoOL = conf.noOutline
-        local cBold = conf.boldText
-        if cNoOL ~= nil or cBold ~= nil then
-            _origFlags = S.flags
-            if cNoOL then S.flags = ""
-            elseif cBold then S.flags = "THICKOUTLINE"
-            else S.flags = "OUTLINE" end
-        end
-        if conf.textBackdrop ~= nil then
-            _origShadow = S.useShadow
-            S.useShadow = conf.textBackdrop and true or false
-        end
-        if conf.colorPowerTextByType ~= nil then
-            _origCPT = S.colorPowerByType
-            S.colorPowerByType = conf.colorPowerTextByType and true or false
-        end
-    end
-
-    if f.nameText then
-        _MSUF_ApplyFontCached(f.nameText, nameSize, false, 0, 0, 0)
-    end
-    -- ToT inline text (target frame only): inherit same font + shadow as nameText.
-    if f._msufToTInlineSep then
-        _MSUF_ApplyFontCached(f._msufToTInlineSep, nameSize, false, 0, 0, 0)
-    end
-    if f._msufToTInlineText then
-        _MSUF_ApplyFontCached(f._msufToTInlineText, nameSize, false, 0, 0, 0)
-    end
-    if f.levelText then
-        _MSUF_ApplyFontCached(f.levelText, (conf and conf.levelIndicatorSize) or nameSize, false, 0, 0, 0)
-    end
-    if f.classificationIndicatorText then
-        _MSUF_ApplyFontCached(f.classificationIndicatorText, (conf and conf.classificationIndicatorSize) or nameSize, true, S.fr, S.fg, S.fb)
-    end
-    local statusSize = nameSize + 2
-    if f.statusIndicatorText then
-        _MSUF_ApplyFontCached(f.statusIndicatorText, statusSize, true, S.fr, S.fg, S.fb)
-    end
-    if f.statusIndicatorOverlayText then
-        _MSUF_ApplyFontCached(f.statusIndicatorOverlayText, statusSize, true, S.fr, S.fg, S.fb)
-    end
-    if f.nameText and S.UpdateNameColor then
-        S.UpdateNameColor(f)
-    end
-    if f.hpText then
-        _MSUF_ApplyFontCached(f.hpText, hpSize, true, S.fr, S.fg, S.fb)
-    end
-    if f.hpTextPct then
-        _MSUF_ApplyFontCached(f.hpTextPct, hpSize, true, S.fr, S.fg, S.fb)
-    end
-    local pwSetColor = not S.colorPowerByType
-    local pCr, pCg, pCb = pwSetColor and S.fr or 0, pwSetColor and S.fg or 0, pwSetColor and S.fb or 0
-    if f.powerTextPct then
-        _MSUF_ApplyFontCached(f.powerTextPct, powerSize, pwSetColor, pCr, pCg, pCb)
-    end
-    if f.powerText then
-        _MSUF_ApplyFontCached(f.powerText, powerSize, pwSetColor, pCr, pCg, pCb)
-    end
-
-    -- Restore shared state after per-unit override
-    if _origPath then S.path = _origPath end
-    if _origPathSerial then S.pathSerial = _origPathSerial end
-    if _origFlags then S.flags = _origFlags end
-    if _origShadow ~= nil then S.useShadow = _origShadow end
-    if _origCPT ~= nil then S.colorPowerByType = _origCPT end
-end
-
-local function UpdateAllFonts(onlyKey)
-    local path  = ns.Castbars._GetFontPath()
-    local flags = ns.Castbars._GetFontFlags()
-    if not MSUF_DB then EnsureDB() end
-    local g = MSUF_DB.general or {}
-    local fr, fg, fb = MSUF_GetConfiguredFontColor()
-    local baseSize       = g.fontSize or 14
-    local globalNameSize = g.nameFontSize  or baseSize
-    local globalHPSize   = g.hpFontSize    or baseSize
-    local globalPowSize  = g.powerFontSize or baseSize
-    local useShadow      = g.textBackdrop and true or false
-    local colorPowerByType = (g.colorPowerTextByType == true)
-
-    if onlyKey == "tot" or onlyKey == "targetoftarget" then onlyKey = "targettarget" end
-    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(onlyKey) then onlyKey = "boss" end
-
-    -- Build numeric global hash (cheap to compare)
-    -- Include path+flags via their string hash (changes rarely)
-    local pathKey = tostring(path) .. "|" .. tostring(flags) .. "|" .. tostring(fr) .. "|" .. tostring(fg) .. "|" .. tostring(fb)
-    if _G.MSUF_FontPathKey ~= pathKey then
-        _G.MSUF_FontPathKey = pathKey
-        _G.MSUF_FontPathSerial = (_G.MSUF_FontPathSerial or 0) + 1
-    end
-
-    -- Populate shared state for hoisted helpers
-    _fontState.path = path
-    _fontState.flags = flags
-    _fontState.pathSerial = _MSUF_GetFontPathSerial(path)
-    _fontState.fr = fr
-    _fontState.fg = fg
-    _fontState.fb = fb
-    _fontState.globalNameSize = globalNameSize
-    _fontState.globalHPSize = globalHPSize
-    _fontState.globalPowSize = globalPowSize
-    _fontState.useShadow = useShadow
-    _fontState.colorPowerByType = colorPowerByType
-    _fontState.onlyKey = onlyKey
-    _fontState.UpdateNameColor = MSUF_UpdateNameColor
-
-    MSUF_ForEachUnitFrame(_MSUF_ApplyFontsToFrame)
-
-    if _G.MSUF_UpdateCastbarVisuals_Immediate then
-        _G.MSUF_UpdateCastbarVisuals_Immediate()
-    elseif MSUF_UpdateCastbarVisuals then
-        MSUF_UpdateCastbarVisuals()
-    end
-    if ns and ns.MSUF_ApplyGameplayFontFromGlobal then
-        ns.MSUF_ApplyGameplayFontFromGlobal()
-    end
-    if type(MSCB_ApplyFontsFromMSUF) == "function" then
-        MSCB_ApplyFontsFromMSUF()
-    end
-    if _G.MSUF_Auras2_ApplyFontsFromGlobal then
-        _G.MSUF_Auras2_ApplyFontsFromGlobal()
-    end
-    if _G.MSUF_ClassPower_ApplyFonts then
-        _G.MSUF_ClassPower_ApplyFonts()
-    end
-    if ns and ns.MSUF_ToTInline_RequestRefresh then
-        ns.MSUF_ToTInline_RequestRefresh("FONTS")
-    end
-
-    -- Boss preview: synchronous full re-render so font/shortening changes are instant
-    if MSUF_BossTestMode and MSUF_UnitEditModeActive and (not _msuf_inCombat) then
-        local max = _G.MSUF_MAX_BOSS_FRAMES or 5
-        for i = 1, max do
-            local bf = UnitFrames["boss" .. i]
-            if bf and bf.isBoss then
-                if _G.MSUF_QueueUnitframeUpdate then
-                    _G.MSUF_QueueUnitframeUpdate(bf, true)
-                end
-            end
-        end
-    end
-end
-MSUF_Export2("MSUF_UpdateAllFonts", UpdateAllFonts, "UpdateAllFonts")
-if type(MSUF_UpdateCastbarVisuals) == "function" and not _G.MSUF_UpdateCastbarVisuals_Immediate then
-    _G.MSUF_UpdateCastbarVisuals_Immediate = MSUF_UpdateCastbarVisuals
-    MSUF_UpdateCastbarVisuals = function()
-        local st = _G.MSUF_ApplyCommitState
-        if st then st.castbars = true end
-        MSUF_ScheduleApplyCommit()
-     end
-end
-if type(MSUF_UpdateCastbarTextures) == "function" and not _G.MSUF_UpdateCastbarTextures_Immediate then
-    _G.MSUF_UpdateCastbarTextures_Immediate = MSUF_UpdateCastbarTextures
-    MSUF_UpdateCastbarTextures = function()
-        local st = _G.MSUF_ApplyCommitState
-        if st then st.castbars = true end
-        MSUF_ScheduleApplyCommit()
-     end
-end
-if not _G.MSUF_UpdateAllFonts_Immediate then
-    _G.MSUF_UpdateAllFonts_Immediate = _G.MSUF_UpdateAllFonts
-    _G.MSUF_UpdateAllFonts = function(onlyKey)
-        local st = _G.MSUF_ApplyCommitState
-        if st then
-            st.fonts = true
-            if onlyKey then
-                if st.fontKey == nil then
-                    st.fontKey = onlyKey
-                elseif st.fontKey == false then
-                    -- already a full refresh queued
-                elseif st.fontKey ~= onlyKey then
-                    -- multiple keys requested -> fall back to a full refresh (still stamp-gated)
-                    st.fontKey = false
-                end
-            else
-                -- explicit full refresh
-                st.fontKey = false
-            end
-        end
-        MSUF_ScheduleApplyCommit()
-     end
-    _G.UpdateAllFonts = _G.MSUF_UpdateAllFonts
-end
-local function _ApplyTexCached(sb, tex)
-    if not sb or not tex then return end
-    if sb.MSUF_cachedStatusbarTexture ~= tex then
-        sb:SetStatusBarTexture(tex)
-        sb.MSUF_cachedStatusbarTexture = tex
-        MSUF_ApplyOverlayTextureAlpha(sb)
-    end
-end
-local function _Iter_ApplyAllBarTex(f)
-    local S = _iterState
-    _ApplyTexCached(f.hpBar, S.texHP)
-    _ApplyTexCached(f.absorbBar, S.texAbs)
-    _ApplyTexCached(f.healAbsorbBar, S.texHeal)
-    _ApplyTexCached(f.selfHealPredBar, S.texHP)
-    if S.applyBg then S.applyBg(f) end
-    -- Detached power bar: honour per-bar texture override when detached
-    local pbTex = S.texHP
-    if f._msufPowerBarDetached and S.texDPB then
-        pbTex = S.texDPB
-    end
-    _ApplyTexCached(f.targetPowerBar, pbTex)
-end
-local function _Iter_ApplyAbsorbTex(f)
-    local S = _iterState
-    _ApplyTexCached(f.absorbBar, S.texAbs)
-    _ApplyTexCached(f.healAbsorbBar, S.texHeal)
-end
-local function UpdateAllBarTextures()
-    local texHP = MSUF_GetBarTexture()
-    if not texHP then  return end
-    local texAbs  = MSUF_GetAbsorbBarTexture()
-    local texHeal = MSUF_GetHealAbsorbBarTexture()
-    _iterState.texHP   = texHP
-    _iterState.texAbs  = texAbs  or texHP
-    _iterState.texHeal = texHeal or texHP
-    _iterState.texDPB  = _DPB.ResolveFg() or texHP
-    _iterState.applyBg = MSUF_ApplyBarBackgroundVisual
-    MSUF_ForEachUnitFrame(_Iter_ApplyAllBarTex)
-    -- Keep castbars in sync when they inherit from the global bar texture.
-    if _G.MSUF_UpdateCastbarTextures_Immediate then
-        _G.MSUF_UpdateCastbarTextures_Immediate()
-    elseif type(MSUF_UpdateCastbarTextures) == "function" then
-        MSUF_UpdateCastbarTextures()
-    end
- end
-local function UpdateAbsorbBarTextures()
-    local texAbs  = MSUF_GetAbsorbBarTexture()
-    local texHeal = MSUF_GetHealAbsorbBarTexture()
-    if not texAbs or not texHeal then
-        local texHP = MSUF_GetBarTexture()
-        texAbs  = texAbs  or texHP
-        texHeal = texHeal or texHP
-        if not texAbs or not texHeal then  return end
-    end
-    _iterState.texAbs  = texAbs
-    _iterState.texHeal = texHeal
-    MSUF_ForEachUnitFrame(_Iter_ApplyAbsorbTex)
- end
-MSUF_Export2("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)
-MSUF_Export2("MSUF_UpdateAllBarTextures", UpdateAllBarTextures, "UpdateAllBarTextures", true)
--- Refresh detached power bar textures (fg + bg) after settings change.
--- Invalidates caches and re-applies via the standard bar-texture pipeline.
-function _G.MSUF_DetachedPowerBar_RefreshTextures()
-    _DPB.fgK = false; _DPB.fgC = nil
-    _DPB.bgK = false; _DPB.bgC = nil
-    UpdateAllBarTextures()
-end
-if not _G.MSUF_UpdateAllBarTextures_Immediate then
-    _G.MSUF_UpdateAllBarTextures_Immediate = _G.MSUF_UpdateAllBarTextures
-    _G.MSUF_UpdateAllBarTextures = function()
-        local st = _G.MSUF_ApplyCommitState
-        if st then st.bars = true end
-        MSUF_ScheduleApplyCommit()
-     end
-    _G.UpdateAllBarTextures = _G.MSUF_UpdateAllBarTextures
-end
-if ns then
-    ns.MSUF_UpdateAllBarTextures = UpdateAllBarTextures
-end
--- Absorb display mode (Options -> Bars: "Absorb display")
--- The dropdown stores `general.absorbTextMode`, but runtime uses these flags:
---   general.enableAbsorbBar
---   general.showTotalAbsorbAmount
-local function MSUF_UpdateAbsorbTextMode()
-    if not MSUF_DB then EnsureDB() end
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    if not g then  return end
-    local mode = tonumber(g.absorbTextMode)
-    if not mode then  return end
-    if mode == 1 then
-        g.enableAbsorbBar = false
-        g.showTotalAbsorbAmount = false
-    elseif mode == 2 then
-        g.enableAbsorbBar = true
-        g.showTotalAbsorbAmount = false
-    elseif mode == 3 then
-        g.enableAbsorbBar = true
-        g.showTotalAbsorbAmount = true
-    elseif mode == 4 then
-        g.enableAbsorbBar = false
-        g.showTotalAbsorbAmount = true
-    end
- end
-MSUF_Export2("MSUF_UpdateAbsorbTextMode", MSUF_UpdateAbsorbTextMode, "MSUF_UpdateAbsorbTextMode")
+-- Font runtime moved to Core/MSUF_FontRuntime.lua.
+-- Texture runtime moved to Core/MSUF_TextureRuntime.lua.
 -- NudgeUnitFrameOffset removed (dead code)
 local function MSUF_EnableUnitFrameDrag(f, unit)
     if not f or not unit then  return end
