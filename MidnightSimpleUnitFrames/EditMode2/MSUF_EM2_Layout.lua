@@ -824,6 +824,7 @@ local function ResolveAnchor(key, conf)
     local anchorFn = _G.MSUF_GetAnchorFrame
     local anchor = (type(anchorFn) == "function" and anchorFn()) or UIParent
     if not conf then return anchor end
+    if conf.anchorToUnitframe == "SCREEN" then return UIParent end
     local cn = conf.anchorFrameName
     if type(cn) == "string" and cn ~= "" then
         local ecvFn = _G.MSUF_GetEffectiveCooldownFrame

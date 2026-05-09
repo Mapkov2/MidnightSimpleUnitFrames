@@ -112,7 +112,7 @@ do
         raw["EM_HELP_OPACITY"] = "Scroll over |cff60a5ffBG ##%|r to darken the game world. Makes it easier to see frame positions and alignment."
         raw["EM_HELP_PREVIEW"] = "|cff60a5ffPreview|r fills empty unitframes with placeholder data (health, power, names). |cff60a5ffAuras|r shows aura icons and lets you reposition aura groups."
         raw["EM_HELP_UNDO"]    = "|cff60a5ffUndo|r / |cff60a5ffRedo|r track every position change. |cff60a5ffCancel All|r reverts everything to the state before Edit Mode was opened."
-        raw["EM_HELP_CDM"]     = "|cff60a5ffCDM|r anchors all unitframes to the Essential Cooldown Manager. |cff60a5ffAnchor|r lets you pick any visible frame as a global anchor point."
+        raw["EM_HELP_CDM"]     = "|cff60a5ffCDM|r anchors all unitframes to the Essential Cooldown Manager. |cff60a5ffAnchor|r picks a global anchor. Unit popups show the active position basis and can switch a frame to screen-center coordinates."
         raw["EM_HELP_COPYTO"]  = "Inside a popup, use |cff60a5ffCopy Settings|r to copy the current frame's size, text, and layout to another unit — without copying position."
         raw["EM_HELP_EXIT"]    = "|cff60a5ffExit|r saves all changes and locks positions. You can also press |cff60a5ffEsc|r to leave Edit Mode."
         raw["EM_HELP_TITLE"]   = "Edit Mode — Quick Reference"

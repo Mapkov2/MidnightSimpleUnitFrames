@@ -2066,6 +2066,10 @@ local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
     local anchor = fallbackAnchor or (MSUF_GetAnchorFrame and MSUF_GetAnchorFrame()) or UIParent
     if not conf then return anchor end
 
+    if conf.anchorToUnitframe == "SCREEN" then
+        return UIParent
+    end
+
     local customName = conf.anchorFrameName
     if type(customName) == "string" and customName ~= "" then
         local custom = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and customName == "EssentialCooldownViewer") and _G.MSUF_GetEffectiveCooldownFrame(customName) or (_G and _G[customName])
@@ -2751,11 +2755,12 @@ local function PositionUnitFrame(f, unit, refreshConfig)
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     local _g = MSUF_DB and MSUF_DB.general
     local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
+    local explicitScreenAnchor = conf.anchorToUnitframe == "SCREEN"
     local isCooldownAnchor = false
     local usesExternalAnchor = false
-    if _g and _g.anchorToCooldown then
+    if (not explicitScreenAnchor) and _g and _g.anchorToCooldown then
         usesExternalAnchor = true
-    elseif type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then
+    elseif (not explicitScreenAnchor) and type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then
         usesExternalAnchor = true
     elseif MSUF_ShouldSnapshotExternalAnchor(anchor) then
         usesExternalAnchor = true
@@ -2769,7 +2774,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             return
         end
     end
-    if _g and _g.anchorToCooldown then
+    if (not explicitScreenAnchor) and _g and _g.anchorToCooldown then
         if ecv and anchor == ecv then
             isCooldownAnchor = true
         elseif not ecv then
@@ -2820,7 +2825,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             anchor = UIParent
         end
     end
-    if _g and _g.anchorToCooldown and isCooldownAnchor then
+    if (not explicitScreenAnchor) and _g and _g.anchorToCooldown and isCooldownAnchor then
         local rule = MSUF_ECV_ANCHORS[key]
         if rule then
             local point, relPoint, baseX, extraY = rule[1], rule[2], rule[3], rule[4]
