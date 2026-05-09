@@ -720,12 +720,46 @@ end
 local _gfGlowColor = { 0, 0, 0, 1 }
 
 local function _GF_StartDispelGlow(f, r, g, b)
-    if not LCG then return end
     local kind = f._msufGFKind or "party"
-    if not HLVal(kind, "hlDispelGlowEnabled") then return end
+    if not LCG or not HLVal(kind, "hlDispelGlowEnabled") then
+        f._msufGFDispelGlowActive = nil
+        local offAnchor = f._msufGFDispelGlowAnchor
+        f._msufGFDispelGlowAnchor = nil
+        f._msufGFDispelGlowStyle = nil
+        if LCG then
+            if offAnchor then
+                LCG.PixelGlow_Stop(offAnchor, "msufDispel")
+                LCG.AutoCastGlow_Stop(offAnchor, "msufDispel")
+                LCG.ProcGlow_Stop(offAnchor, "msufDispel")
+            end
+            local offBorder = f._msufGFHighlightBorder
+            if offBorder and offBorder ~= offAnchor then
+                LCG.PixelGlow_Stop(offBorder, "msufDispel")
+                LCG.AutoCastGlow_Stop(offBorder, "msufDispel")
+                LCG.ProcGlow_Stop(offBorder, "msufDispel")
+            end
+            if f ~= offAnchor and f ~= offBorder then
+                LCG.PixelGlow_Stop(f, "msufDispel")
+                LCG.AutoCastGlow_Stop(f, "msufDispel")
+                LCG.ProcGlow_Stop(f, "msufDispel")
+            end
+        end
+        return
+    end
     local anchor = f._msufGFHighlightBorder or f
-    _gfGlowColor[1], _gfGlowColor[2], _gfGlowColor[3] = r, g, b
     local style = HLVal(kind, "hlDispelGlowStyle") or "PIXEL"
+    local oldAnchor = f._msufGFDispelGlowAnchor
+    if oldAnchor and (oldAnchor ~= anchor or f._msufGFDispelGlowStyle ~= style) then
+        LCG.PixelGlow_Stop(oldAnchor, "msufDispel")
+        LCG.AutoCastGlow_Stop(oldAnchor, "msufDispel")
+        LCG.ProcGlow_Stop(oldAnchor, "msufDispel")
+    end
+    if anchor ~= f then
+        LCG.PixelGlow_Stop(f, "msufDispel")
+        LCG.AutoCastGlow_Stop(f, "msufDispel")
+        LCG.ProcGlow_Stop(f, "msufDispel")
+    end
+    _gfGlowColor[1], _gfGlowColor[2], _gfGlowColor[3] = r, g, b
     local lines = tonumber(HLVal(kind, "hlDispelGlowLines")) or 8
     local freq  = tonumber(HLVal(kind, "hlDispelGlowFrequency")) or 0.25
     local thick = tonumber(HLVal(kind, "hlDispelGlowThickness")) or 2
@@ -737,16 +771,34 @@ local function _GF_StartDispelGlow(f, r, g, b)
         LCG.PixelGlow_Start(anchor, _gfGlowColor, lines, freq, nil, thick, nil, nil, nil, "msufDispel")
     end
     f._msufGFDispelGlowActive = true
+    f._msufGFDispelGlowAnchor = anchor
+    f._msufGFDispelGlowStyle = style
 end
 
 local function _GF_StopDispelGlow(f)
-    if not f._msufGFDispelGlowActive then return end
+    if not f then return end
     f._msufGFDispelGlowActive = nil
+    local anchor = f._msufGFDispelGlowAnchor
+    f._msufGFDispelGlowAnchor = nil
+    f._msufGFDispelGlowStyle = nil
     if not LCG then return end
-    local anchor = f._msufGFHighlightBorder or f
-    LCG.PixelGlow_Stop(anchor, "msufDispel")
-    LCG.AutoCastGlow_Stop(anchor, "msufDispel")
-    LCG.ProcGlow_Stop(anchor, "msufDispel")
+    if anchor then
+        LCG.PixelGlow_Stop(anchor, "msufDispel")
+        LCG.AutoCastGlow_Stop(anchor, "msufDispel")
+        LCG.ProcGlow_Stop(anchor, "msufDispel")
+    end
+
+    local border = f._msufGFHighlightBorder
+    if border and border ~= anchor then
+        LCG.PixelGlow_Stop(border, "msufDispel")
+        LCG.AutoCastGlow_Stop(border, "msufDispel")
+        LCG.ProcGlow_Stop(border, "msufDispel")
+    end
+    if f ~= anchor and f ~= border then
+        LCG.PixelGlow_Stop(f, "msufDispel")
+        LCG.AutoCastGlow_Stop(f, "msufDispel")
+        LCG.ProcGlow_Stop(f, "msufDispel")
+    end
 end
 
 ------------------------------------------------------------------------
@@ -4982,6 +5034,7 @@ _G.MSUF_GF_UpdateRange    = ApplyRangeFade
 _G.MSUF_GF_UpdateTarget   = UpdateTargetIndicator
 _G.MSUF_GF_UpdateStatus   = UpdateStatusText
 _G.MSUF_GF_UpdateGroupNum = UpdateGroupNumber
+_G.MSUF_GF_StopDispelGlow = _GF_StopDispelGlow
 
 ------------------------------------------------------------------------
 -- Memory-leak Fix 1: Frame-retire cleanup hook
@@ -5003,6 +5056,7 @@ _G.MSUF_GF_OnFrameRetire = function(f)
 
     -- Cancel + clear pending ready-check fade timer (closure captures `f`)
     if GF.CancelReadyCheckTimer then GF.CancelReadyCheckTimer(f) end
+    _GF_StopDispelGlow(f)
     if GF.HideFrameAuras then GF.HideFrameAuras(f) end
     if GF.RecycleFramePools then GF.RecycleFramePools(f) end
     if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(f) end
