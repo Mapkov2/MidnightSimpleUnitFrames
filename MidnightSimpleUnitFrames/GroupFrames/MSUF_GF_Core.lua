@@ -209,6 +209,19 @@ local function _GFInstallAttrHook(child)
             self._msufGFDispelColorObj     = nil
             self._msufGFDispelColorRev     = nil
             self._msufGFColorStyleRevision = nil
+            local stopGlow = _G.MSUF_GF_StopDispelGlow
+            if type(stopGlow) == "function" then
+                stopGlow(self)
+            else
+                self._msufGFDispelGlowActive = nil
+                self._msufGFDispelGlowAnchor = nil
+                self._msufGFDispelGlowStyle = nil
+            end
+            local hlBorder = self._msufGFHighlightBorder
+            if hlBorder then
+                hlBorder._msufHLActivePrio = nil
+                if hlBorder:IsShown() then hlBorder:Hide() end
+            end
             self._msufGFLastFullAura       = nil
             self._msufGFAggroLevel         = nil
             self._msufGFLastName           = nil
