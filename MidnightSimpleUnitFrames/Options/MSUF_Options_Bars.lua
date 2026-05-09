@@ -96,19 +96,6 @@ local function MSUF_Bars_GetAbsorbTestUnitKey(frameOrUnit)
     return MSUF_Bars_NormalizeAbsorbTestUnitKey(key)
 end
 
-local function MSUF_Bars_GFAbsorbOverrideActive(kind)
-    MSUF_Bars_EnsureDB()
-    local dbKey = (kind == "mythicraid" and "gf_mythicraid") or (kind == "raid" and "gf_raid") or (kind == "party" and "gf_party") or nil
-    local db = dbKey and _G.MSUF_DB and _G.MSUF_DB[dbKey]
-    return db and db.hlOverride == true
-end
-
-local function MSUF_Bars_UFAbsorbOverrideActive(unitKey)
-    MSUF_Bars_EnsureDB()
-    local db = unitKey and _G.MSUF_DB and _G.MSUF_DB[unitKey]
-    return db and (db.hlOverride == true or db.hpPowerTextOverride == true)
-end
-
 function _G.MSUF_SetAbsorbTextureTestMode(enabled, scopeKey)
     _G.MSUF_AbsorbTextureTestMode = enabled and true or false
     _G.MSUF_AbsorbTextureTestScope = _G.MSUF_AbsorbTextureTestMode and MSUF_Bars_NormalizeAbsorbTestUnitKey(scopeKey or MSUF_Bars_GetCurrentScopeKey()) or nil
@@ -119,13 +106,47 @@ function _G.MSUF_ShouldShowAbsorbTextureTest(frameOrUnit, gfKind)
     local scope = MSUF_Bars_NormalizeAbsorbTestUnitKey(_G.MSUF_AbsorbTextureTestScope or "shared")
     local kind = MSUF_Bars_GetAbsorbTestGFKind(frameOrUnit, gfKind)
     if scope == "shared" then
-        if kind then return not MSUF_Bars_GFAbsorbOverrideActive(kind) end
+        if kind then return true end
         local unitKey = MSUF_Bars_GetAbsorbTestUnitKey(frameOrUnit)
-        return unitKey ~= nil and unitKey ~= "shared" and not MSUF_Bars_UFAbsorbOverrideActive(unitKey)
+        return unitKey ~= nil and unitKey ~= "shared"
     end
     if scope == "party" then return kind == "party" end
     if scope == "raid" then return kind == "raid" or kind == "mythicraid" end
     return MSUF_Bars_GetAbsorbTestUnitKey(frameOrUnit) == scope
+end
+
+function _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
+    local applyAnchor = _G.MSUF_ApplyAbsorbAnchorMode
+    local updateFrame = _G.UpdateSimpleUnitFrame
+    local updateAbsorb = _G.MSUF_UpdateAbsorbBar
+    local updateHealAbsorb = _G.MSUF_UpdateHealAbsorbBar
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) == "table" then
+        for _, f in pairs(frames) do
+            if f and f.unit and not f._msufIsGroupFrame then
+                if type(applyAnchor) == "function" then
+                    f._msufAbsorbAnchorModeStamp = nil
+                    f._msufAbsorbFollowActive = nil
+                    applyAnchor(f)
+                end
+                if type(updateFrame) == "function" then updateFrame(f) end
+                if _G.MSUF_ShouldShowAbsorbTextureTest(f) then
+                    if type(updateAbsorb) == "function" then updateAbsorb(f, f.unit, 100) end
+                    if type(updateHealAbsorb) == "function" then updateHealAbsorb(f, f.unit, 100) end
+                end
+            end
+        end
+    end
+    if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
+end
+
+function _G.MSUF_ClearAbsorbTextureTestMode()
+    if not _G.MSUF_AbsorbTextureTestMode then return end
+    if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(false)
+    else _G.MSUF_AbsorbTextureTestMode = false; _G.MSUF_AbsorbTextureTestScope = nil end
+    local cb = _G.MSUF_AbsorbTextureTestModeCheck
+    if cb and cb.SetChecked then cb:SetChecked(false) end
+    if _G.MSUF_Bars_RefreshAbsorbTextureTestPreview then _G.MSUF_Bars_RefreshAbsorbTextureTestPreview() end
 end
 
 function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
@@ -440,8 +461,8 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         if _G.MSUF_AbsorbTextureTestMode then
             if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(true, key)
             else _G.MSUF_AbsorbTextureTestScope = key end
-            RefreshFrames()
-            if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
+            if _G.MSUF_Bars_RefreshAbsorbTextureTestPreview then _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
+            else RefreshFrames(); if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end end
         end
         RefreshScopeButtons()
         if type(_MSUF_SyncHpPowerTextScopeUI) == "function" then _MSUF_SyncHpPowerTextScopeUI() end
@@ -1127,18 +1148,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     absorbTexTestCB:SetScript("OnClick", function(self)
         if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(self:GetChecked(), _MSUF_HPText_GetScopeKey())
         else _G.MSUF_AbsorbTextureTestMode = self:GetChecked() and true or false end
-        RefreshFrames()
-        if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
+        if _G.MSUF_Bars_RefreshAbsorbTextureTestPreview then _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
+        else RefreshFrames(); if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end end
     end)
     absorbTexTestCB:SetScript("OnHide", function(self)
         if barGroup:IsShown() then return end
-        if _G.MSUF_AbsorbTextureTestMode then
-            if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(false)
-            else _G.MSUF_AbsorbTextureTestMode = false end
-            self:SetChecked(false)
-            RefreshFrames()
-            if _G.MSUF_GF_RefreshOverlays then _G.MSUF_GF_RefreshOverlays() end
-        end
+        if _G.MSUF_ClearAbsorbTextureTestMode then _G.MSUF_ClearAbsorbTextureTestMode() end
     end)
 
     local selfHealPredCB = CreateFrame("CheckButton", "MSUF_SelfHealPredictionCheck", box2Body, "UICheckButtonTemplate")
@@ -1204,9 +1219,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         MSUF_SetLabeledSliderEnabled(absorbOpacitySlider, barEnabled)
         MSUF_SetLabeledSliderEnabled(healAbsorbOpacitySlider, barEnabled)
         if not barEnabled and _G.MSUF_AbsorbTextureTestMode then
-            if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(false)
-            else _G.MSUF_AbsorbTextureTestMode = false end
-            absorbTexTestCB:SetChecked(false); RefreshFrames()
+            if _G.MSUF_ClearAbsorbTextureTestMode then _G.MSUF_ClearAbsorbTextureTestMode()
+            else
+                if _G.MSUF_SetAbsorbTextureTestMode then _G.MSUF_SetAbsorbTextureTestMode(false)
+                else _G.MSUF_AbsorbTextureTestMode = false end
+                absorbTexTestCB:SetChecked(false); RefreshFrames()
+            end
         end
     end
     MSUF_RefreshAbsorbBarUIEnabled()
@@ -2317,12 +2335,12 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         SetFrameActive("MSUF_GradientDirectionPad", gradientValueControlsActive)
         SetLabelActive(_C.gradColLabel, gradientControlsActive)
 
-        -- Box 2: display/anchor/opacity are scoped; textures/test/self-heal are Shared.
+        -- Box 2: display/anchor/opacity are scoped; textures/self-heal are Shared; test is preview-only and scope-filtered.
         SetDropActive("MSUF_AbsorbDisplayDrop", nil, hlControlsActive)
         SetDropActive("MSUF_AbsorbAnchorDrop", _C.absorbAnchorLabel, absorbScopedControlsActive)
         SetDropActive("MSUF_AbsorbBarTextureDropdown", nil, absorbSharedControlsActive)
         SetDropActive("MSUF_HealAbsorbBarTextureDropdown", nil, absorbSharedControlsActive)
-        SetCheckActive("MSUF_AbsorbTextureTestModeCheck", absorbScopedControlsActive)
+        SetCheckActive("MSUF_AbsorbTextureTestModeCheck", absorbBarActive)
         SetCheckActive("MSUF_SelfHealPredictionCheck", sharedControlsActive)
         SetSliderActive("MSUF_AbsorbBarOpacitySlider", absorbScopedControlsActive)
         SetSliderActive("MSUF_HealAbsorbBarOpacitySlider", absorbScopedControlsActive)
@@ -2520,6 +2538,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         end
     end)
     barGroup:HookScript("OnHide", function()
+        if _G.MSUF_ClearAbsorbTextureTestMode then _G.MSUF_ClearAbsorbTextureTestMode() end
         if not _barsGFPreviewOn then return end
         _barsGFPreviewOn = false
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
@@ -2579,6 +2598,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end
         end)
         barGroupHost:HookScript("OnHide", function()
+            if _G.MSUF_ClearAbsorbTextureTestMode then _G.MSUF_ClearAbsorbTextureTestMode() end
             local GF = _G.MSUF_NS and _G.MSUF_NS.GF
             if not GF or not GF.HidePreview then return end
             GF.HidePreview("party")
