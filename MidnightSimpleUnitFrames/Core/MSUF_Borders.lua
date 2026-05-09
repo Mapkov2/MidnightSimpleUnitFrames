@@ -87,10 +87,15 @@ local function _RefreshBorderSettingsCache()
     _borderCfg.aggroOutlineMode = (g and g.aggroOutlineMode) or 0
     _borderCfg.dispelOutlineMode = (g and g.dispelOutlineMode) or 0
     _borderCfg.purgeOutlineMode = (g and g.purgeOutlineMode) or 0
+    _borderCfg.bossTargetOutlineMode = (g and g.bossTargetOutlineMode) or ((g and g.bossTargetHighlightEnabled ~= false) and 1 or 0)
     _borderCfg.highlightBorderThickness = tonumber(g and g.highlightBorderThickness) or 2
     if _borderCfg.highlightBorderThickness < 1 then _borderCfg.highlightBorderThickness = 1 end
-    _borderCfg.highlightPrioEnabled = (g and g.highlightPrioEnabled == 1) and true or false
-    _borderCfg.highlightPrioOrder = (g and type(g.highlightPrioOrder) == "table") and g.highlightPrioOrder or nil
+    local prioEnabled = g and g.hlPrioEnabled
+    if prioEnabled == nil then prioEnabled = g and (g.highlightPrioEnabled == 1) end
+    _borderCfg.highlightPrioEnabled = (prioEnabled == true)
+    _borderCfg.highlightPrioOrder = (g and type(g.hlPrioOrder) == "table" and g.hlPrioOrder)
+        or (g and type(g.highlightPrioOrder) == "table" and g.highlightPrioOrder)
+        or nil
     _borderCfg.aggroR  = _Clamp01(g and g.aggroBorderColorR,  1.00)
     _borderCfg.aggroG  = _Clamp01(g and g.aggroBorderColorG,  0.50)
     _borderCfg.aggroB  = _Clamp01(g and g.aggroBorderColorB,  0.00)
@@ -100,6 +105,10 @@ local function _RefreshBorderSettingsCache()
     _borderCfg.purgeR  = _Clamp01(g and g.purgeBorderColorR,  1.00)
     _borderCfg.purgeG  = _Clamp01(g and g.purgeBorderColorG,  0.85)
     _borderCfg.purgeB  = _Clamp01(g and g.purgeBorderColorB,  0.00)
+    local btc = g and g.bossTargetHighlightColor
+    _borderCfg.bossTargetR = _Clamp01(type(btc) == "table" and btc[1], 1.00)
+    _borderCfg.bossTargetG = _Clamp01(type(btc) == "table" and btc[2], 0.82)
+    _borderCfg.bossTargetB = _Clamp01(type(btc) == "table" and btc[3], 0.00)
     -- Dispel glow settings
     _borderCfg.dispelGlowEnabled = (g and g.hlDispelGlowEnabled) and true or false
     _borderCfg.dispelGlowStyle   = (g and g.hlDispelGlowStyle) or "PIXEL"
@@ -462,6 +471,7 @@ MSUF_ApplyRareVisuals = function(self)
     local aggroR, aggroG, aggroB = cfg.aggroR, cfg.aggroG, cfg.aggroB
     local dispelR, dispelG, dispelB = _GetUFDispelColor(self._msufDispelType, self.unit, self._msufDispelAuraID)
     local purgeR, purgeG, purgeB = cfg.purgeR, cfg.purgeG, cfg.purgeB
+    local bossTargetR, bossTargetG, bossTargetB = cfg.bossTargetR, cfg.bossTargetG, cfg.bossTargetB
 
     -- Dispel state detection.
     local dispel = false
@@ -501,20 +511,37 @@ MSUF_ApplyRareVisuals = function(self)
         end
     end
 
+    -- Boss target state detection.
+    local bossTarget = false
+    do
+        local u = self.unit
+        if type(u) == "string" and u:sub(1, 4) == "boss" then
+            local idx = tonumber(u:sub(5))
+            if idx and idx >= 1 and idx <= 5 then
+                local test = (_G.MSUF_BossTargetBorderTestMode) and true or false
+                local wantBossTarget = (cfg.bossTargetOutlineMode == 1) or test
+                if wantBossTarget then
+                    bossTarget = test or (self._msufBossTargetHLOn == true)
+                end
+            end
+        end
+    end
+
     -- Apply the normal black outline.
     MSUF_ApplyBarOutline(self, baseThickness, self._msufBarOutline)
 
-    -- Resolve highlight priority: Dispel > Aggro > Purge (default), or custom order.
+    -- Resolve highlight priority: Dispel > Aggro > Purge > Boss Target (default), or custom order.
     local hlKey = 0
     if cfg.highlightPrioEnabled and type(cfg.highlightPrioOrder) == "table" then
         for _, kind in ipairs(cfg.highlightPrioOrder) do
             if kind == "dispel" and dispel then hlKey = 2; break
             elseif kind == "aggro" and threat then hlKey = 1; break
             elseif kind == "purge" and purge then hlKey = 3; break
+            elseif kind == "bossTarget" and bossTarget then hlKey = 4; break
             end
         end
     else
-        hlKey = (dispel and 2) or (threat and 1) or (purge and 3) or 0
+        hlKey = (dispel and 2) or (threat and 1) or (purge and 3) or (bossTarget and 4) or 0
     end
 
     -- Resolve color for the active highlight key.
@@ -522,6 +549,7 @@ MSUF_ApplyRareVisuals = function(self)
     if hlKey == 1 then hlR, hlG, hlB = aggroR, aggroG, aggroB
     elseif hlKey == 2 then hlR, hlG, hlB = dispelR, dispelG, dispelB
     elseif hlKey == 3 then hlR, hlG, hlB = purgeR, purgeG, purgeB
+    elseif hlKey == 4 then hlR, hlG, hlB = bossTargetR, bossTargetG, bossTargetB
     end
 
     -- Apply (or hide) the highlight overlay.
@@ -718,6 +746,25 @@ _G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(acti
             end
             -- Refresh overlay so highlight priority system picks up the change.
             if type(fn) == "function" then fn(uf) end
+        end
+    end
+end
+
+-- Options-only: Test mode to force the boss-target border on while the Settings panel is open.
+_G.MSUF_SetBossTargetBorderTestMode = _G.MSUF_SetBossTargetBorderTestMode or function(active)
+    _G.MSUF_BossTargetBorderTestMode = active and true or false
+    local frames = _G.MSUF_UnitFrames
+    local fn = _G.MSUF_RefreshRareBarVisuals
+    if type(fn) ~= "function" or not frames then return end
+
+    if not active and type(_G.MSUF_UpdateBossTargetHighlight) == "function" then
+        _G.MSUF_UpdateBossTargetHighlight(true)
+    end
+
+    for i = 1, 5 do
+        local uf = frames["boss" .. i]
+        if uf and uf.unit == ("boss" .. i) then
+            fn(uf)
         end
     end
 end
