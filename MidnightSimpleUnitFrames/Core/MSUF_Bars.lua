@@ -632,13 +632,29 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
     local border = bar._msufPowerBorder
     if not border then
         border = F.CreateFrame('Frame', nil, bar)
-        border:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2)
         border:EnableMouse(false)
         bar._msufPowerBorder = border
     end
-    if not enabled or detached then
-        if border.Hide then border:Hide() end
+    local barShown = (not bar.IsShown) or bar:IsShown()
+    local frameLevel = (bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2
+    local stamp = (enabled and 1 or 0) .. ":" .. (detached and 1 or 0) .. ":" .. (barShown and 1 or 0) .. ":" .. size .. ":" .. frameLevel
+    if not enabled or detached or not barShown then
+        if border._msufPowerBorderStamp ~= stamp or (border.IsShown and border:IsShown()) then
+            if border.Hide then border:Hide() end
+            border._msufPowerBorderStamp = stamp
+        end
          return
+    end
+    local line = border._msufSeparatorLine
+    local borderReady = border.IsShown and border:IsShown()
+        and line
+        and ((not line.IsShown) or line:IsShown())
+        and ((not border.GetFrameLevel) or border:GetFrameLevel() == frameLevel)
+    if border._msufPowerBorderStamp == stamp and borderReady then
+        return
+    end
+    if border.SetFrameLevel then
+        border:SetFrameLevel(frameLevel)
     end
     if border.SetBackdrop then
         border:SetBackdrop(nil)
@@ -647,7 +663,6 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
     border:SetPoint('TOPLEFT', bar, 'TOPLEFT', 0, 0)
     border:SetPoint('TOPRIGHT', bar, 'TOPRIGHT', 0, 0)
     border:SetHeight(size)
-    local line = border._msufSeparatorLine
     if not line and border.CreateTexture then
         line = border:CreateTexture(nil, 'OVERLAY')
         line:SetTexture('Interface\\Buttons\\WHITE8x8')
@@ -658,6 +673,7 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
         line:SetAllPoints(border)
     end
     border:Show()
+    border._msufPowerBorderStamp = stamp
  end
 function _G.MSUF_ApplyPowerBarBorder_All()
     local frames = _G.MSUF_UnitFrames
