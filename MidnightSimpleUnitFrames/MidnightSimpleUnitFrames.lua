@@ -31,6 +31,7 @@ local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitIsConnected = UnitIsConnected
 local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
 local InCombatLockdown = InCombatLockdown
+local UnitAffectingCombat = UnitAffectingCombat
 local CreateFrame, GetTime = CreateFrame, GetTime
 -- P0: issecretvalue upvalue for event handlers (secret-safe unit filtering)
 local _MSUF_issecretvalue = _G.issecretvalue
@@ -61,14 +62,11 @@ do
     _p0Frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     _p0Frame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
-            local lock = _G.MSUF_HardLockAllFramePositions
-            if type(lock) == "function" then
-                lock("PLAYER_REGEN_DISABLED")
-            end
             _msuf_inCombat = true
         else
             -- PLAYER_REGEN_ENABLED or PLAYER_ENTERING_WORLD: sync once with C-API
-            _msuf_inCombat = (InCombatLockdown and InCombatLockdown()) or false
+            _msuf_inCombat = ((InCombatLockdown and InCombatLockdown())
+                or (UnitAffectingCombat and UnitAffectingCombat("player"))) and true or false
         end
         _G.MSUF_InCombat = _msuf_inCombat
     end)
@@ -2102,7 +2100,43 @@ local function MSUF_IsUnitFrameAnchor(anchor)
 end
 
 local function MSUF_ShouldSnapshotExternalAnchor(anchor)
-    return anchor and anchor ~= UIParent and anchor ~= WorldFrame and not MSUF_IsUnitFrameAnchor(anchor)
+    return anchor and anchor ~= UIParent and anchor ~= WorldFrame and not anchor._msufStableAnchorProxy and not MSUF_IsUnitFrameAnchor(anchor)
+end
+
+function _G.MSUF_IsSecretValue(v)
+    local isv = _MSUF_issecretvalue
+    if not isv then
+        isv = _G.issecretvalue
+        if isv then _MSUF_issecretvalue = isv end
+    end
+    if not isv then return false end
+    return isv(v) == true
+end
+
+function _G.MSUF_CallFrameMethod(frame, methodName)
+    if not frame then return false end
+    local fn = frame[methodName]
+    if not fn then return false end
+    return pcall(fn, frame)
+end
+
+function _G.MSUF_FrameMethodIsTrue(frame, methodName, secretDefault)
+    local ok, value = _G.MSUF_CallFrameMethod(frame, methodName)
+    if not ok then return false end
+    if _G.MSUF_IsSecretValue(value) then return secretDefault == true end
+    return value == true
+end
+
+function _G.MSUF_FrameMethodIsFalse(frame, methodName)
+    local ok, value = _G.MSUF_CallFrameMethod(frame, methodName)
+    if not ok then return false end
+    if _G.MSUF_IsSecretValue(value) then return false end
+    return value == false
+end
+
+function _G.MSUF_IsPlainNumber(v)
+    if _G.MSUF_IsSecretValue(v) then return false end
+    return type(v) == "number"
 end
 
 local function MSUF_IsLayoutEditingActive()
@@ -2117,22 +2151,29 @@ _G.MSUF_IsLayoutEditingActive = MSUF_IsLayoutEditingActive
 
 local function MSUF_IsExternalAnchorUsable(anchor)
     if not MSUF_ShouldSnapshotExternalAnchor(anchor) then return true end
-    if anchor.IsForbidden and anchor:IsForbidden() then return false end
-    if anchor.IsShown and not anchor:IsShown() then return false end
+    if _G.MSUF_FrameMethodIsTrue(anchor, "IsForbidden", true) then return false end
     if not anchor.GetCenter then return false end
 
-    local ax, ay = anchor:GetCenter()
-    if not ax or not ay then return false end
+    local okCenter, ax, ay = _G.MSUF_CallFrameMethod(anchor, "GetCenter")
+    if not (okCenter and _G.MSUF_IsPlainNumber(ax) and _G.MSUF_IsPlainNumber(ay)) then return false end
 
     if anchor.GetWidth and anchor.GetHeight then
-        local w, h = anchor:GetWidth(), anchor:GetHeight()
-        if not w or not h or w <= 1 or h <= 1 then return false end
+        local okW, w = _G.MSUF_CallFrameMethod(anchor, "GetWidth")
+        local okH, h = _G.MSUF_CallFrameMethod(anchor, "GetHeight")
+        if not (okW and okH and _G.MSUF_IsPlainNumber(w) and _G.MSUF_IsPlainNumber(h) and w > 1 and h > 1) then return false end
     end
 
     if UIParent and UIParent.GetWidth and anchor.GetLeft and anchor.GetRight and anchor.GetTop and anchor.GetBottom then
-        local uiW, uiH = UIParent:GetWidth(), UIParent:GetHeight()
-        local l, r, t, b = anchor:GetLeft(), anchor:GetRight(), anchor:GetTop(), anchor:GetBottom()
-        if uiW and uiH and l and r and t and b then
+        local okUIW, uiW = _G.MSUF_CallFrameMethod(UIParent, "GetWidth")
+        local okUIH, uiH = _G.MSUF_CallFrameMethod(UIParent, "GetHeight")
+        local okBounds, l, r, t, b = pcall(function()
+            return anchor:GetLeft(), anchor:GetRight(), anchor:GetTop(), anchor:GetBottom()
+        end)
+        if okUIW and okUIH and okBounds
+            and _G.MSUF_IsPlainNumber(uiW) and _G.MSUF_IsPlainNumber(uiH)
+            and _G.MSUF_IsPlainNumber(l) and _G.MSUF_IsPlainNumber(r)
+            and _G.MSUF_IsPlainNumber(t) and _G.MSUF_IsPlainNumber(b)
+        then
             if r < -8 or l > (uiW + 8) or t < -8 or b > (uiH + 8) then
                 return false
             end
@@ -2143,8 +2184,470 @@ local function MSUF_IsExternalAnchorUsable(anchor)
 end
 _G.MSUF_IsExternalAnchorUsable = MSUF_IsExternalAnchorUsable
 
--- External anchors such as CDM/bridge frames may resize or move in combat.
--- Snapshot the resolved visual position onto UIParent so secure unitframes do not drift with them.
+function _G.MSUF_GetProfileScopedCache(rootKey)
+    MSUF_GlobalDB = MSUF_GlobalDB or {}
+    MSUF_GlobalDB[rootKey] = MSUF_GlobalDB[rootKey] or {}
+    local charKey = "global"
+    if type(MSUF_GetCharKey) == "function" then
+        local ok, v = pcall(MSUF_GetCharKey)
+        if ok and type(v) == "string" and v ~= "" then charKey = v end
+    end
+    local profile = tostring(_G.MSUF_ActiveProfile or MSUF_ActiveProfile or "Default")
+    local byChar = MSUF_GlobalDB[rootKey][charKey]
+    if type(byChar) ~= "table" then
+        byChar = {}
+        MSUF_GlobalDB[rootKey][charKey] = byChar
+    end
+    local bucket = byChar[profile]
+    if type(bucket) ~= "table" then
+        bucket = {}
+        byChar[profile] = bucket
+    end
+    return bucket
+end
+
+function _G.MSUF_GetExternalAnchorCacheKey(anchorOrName)
+    if type(anchorOrName) == "string" and anchorOrName ~= "" then
+        return anchorOrName
+    end
+    local anchor = anchorOrName
+    if not anchor then return nil end
+    if anchor.GetName then
+        local name = anchor:GetName()
+        if type(name) == "string" and name ~= "" then
+            return name
+        end
+    end
+    return tostring(anchor)
+end
+
+function _G.MSUF_GetExternalAnchorCacheBucket()
+    return _G.MSUF_GetProfileScopedCache("externalAnchorCache")
+end
+
+function _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
+    local k = tostring(key or "")
+    local u = tostring(unit or "")
+    if k == "" then return u ~= "" and u or nil end
+    if k == "boss" and u ~= "" then return k .. ":" .. u end
+    return k
+end
+
+function _G.MSUF_GetUnitFrameScreenCacheBucket()
+    return _G.MSUF_GetProfileScopedCache("unitFrameScreenCache")
+end
+
+function _G.MSUF_GetSavedFrameScale()
+    local g = MSUF_DB and MSUF_DB.general
+    local v = tonumber(g and g.msufUiScale) or tonumber(g and g.uiScale) or 1
+    if v < 0.25 then v = 0.25 elseif v > 1.5 then v = 1.5 end
+    return v
+end
+
+function _G.MSUF_ApplyInitialFrameScale(frame)
+    if not frame or not frame.SetScale then return false end
+    local scale = (_G.MSUF_GetSavedFrameScale and _G.MSUF_GetSavedFrameScale()) or 1
+    local ok = pcall(frame.SetScale, frame, scale)
+    if ok then frame._msufInitialScaleApplied = scale end
+    return ok == true
+end
+
+function _G.MSUF_CacheUnitFrameScreenPosition(frame, key, unit)
+    if not frame or not key or not UIParent then return false end
+    if InCombatLockdown and InCombatLockdown() then return false end
+    if not frame.GetCenter or not UIParent.GetCenter then return false end
+    local fx, fy = frame:GetCenter()
+    local ux, uy = UIParent:GetCenter()
+    if not fx or not fy or not ux or not uy then return false end
+
+    local fs = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+    local us = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if fs == 0 then fs = 1 end
+    if us == 0 then us = 1 end
+    local id = _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
+    if not id then return false end
+    local bucket = _G.MSUF_GetUnitFrameScreenCacheBucket()
+    if not bucket then return false end
+
+    local x = math_floor(((fx * fs - ux * us) / us) + 0.5)
+    local y = math_floor(((fy * fs - uy * us) / us) + 0.5)
+    local w = frame.GetWidth and frame:GetWidth() or nil
+    local h = frame.GetHeight and frame:GetHeight() or nil
+    local visW = w and (w * fs / us) or nil
+    local visH = h and (h * fs / us) or nil
+    local scale = frame.GetScale and frame:GetScale() or nil
+    bucket[id] = { v = 3, x = x, y = y, w = w, h = h, visW = visW, visH = visH, scale = scale }
+    return true
+end
+
+function _G.MSUF_ApplyCachedUnitFrameScreenPosition(frame, key, unit)
+    if not frame or not key or not UIParent then return false end
+    local bucket = _G.MSUF_GetUnitFrameScreenCacheBucket()
+    local id = _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
+    local cached = bucket and id and bucket[id]
+    if type(cached) ~= "table" then return false end
+    if cached.v ~= 2 and cached.v ~= 3 then return false end
+    local x, y = tonumber(cached.x), tonumber(cached.y)
+    if not x or not y then return false end
+    if cached.v == 3 and frame.SetScale and tonumber(cached.scale) then
+        pcall(frame.SetScale, frame, tonumber(cached.scale))
+    elseif _G.MSUF_ApplyInitialFrameScale then
+        _G.MSUF_ApplyInitialFrameScale(frame)
+    end
+    local savedVisW = tonumber(cached.visW)
+    if not savedVisW and tonumber(cached.w) then
+        local savedScale = tonumber(cached.scale) or ((_G.MSUF_GetSavedFrameScale and _G.MSUF_GetSavedFrameScale()) or 1)
+        savedVisW = tonumber(cached.w) * savedScale
+    end
+    if savedVisW and frame.GetWidth and frame.GetEffectiveScale and UIParent.GetEffectiveScale then
+        local fs = frame:GetEffectiveScale() or 1
+        local us = UIParent:GetEffectiveScale() or 1
+        if fs == 0 then fs = 1 end
+        if us == 0 then us = 1 end
+        local curVisW = (frame:GetWidth() or 0) * fs / us
+        if curVisW > 0 then
+            local rule = MSUF_ECV_ANCHORS and MSUF_ECV_ANCHORS[key]
+            local point = rule and rule[1] or nil
+            if point == "RIGHT" or key == "player" then
+                x = x + ((savedVisW - curVisW) * 0.5)
+            elseif point == "LEFT" or key == "target" then
+                x = x + ((curVisW - savedVisW) * 0.5)
+            end
+        end
+    end
+    x = math_floor(x + 0.5)
+    y = math_floor(y + 0.5)
+    local ok = pcall(function()
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", UIParent, "CENTER", x, y)
+    end)
+    if not ok then return false end
+    frame._msufPositionInitialized = true
+    frame._msufHardLockedToUIParent = true
+    frame._msufStableExternalAnchor = nil
+    frame._msufStableExternalSig = nil
+    frame._msufLoadedFromScreenCache = true
+    return true
+end
+
+function _G.MSUF_ApplyExternalAnchorProxyCache(proxy, key)
+    if not proxy or not key or not UIParent then return false end
+    local bucket = _G.MSUF_GetExternalAnchorCacheBucket()
+    local cached = bucket and bucket[key]
+    if type(cached) ~= "table" then return false end
+    if cached.v ~= 2 then return false end
+    local x, y = tonumber(cached.x), tonumber(cached.y)
+    if not x or not y then return false end
+    local w = tonumber(cached.w) or 1
+    local h = tonumber(cached.h) or 1
+    local ok = pcall(function()
+        proxy:ClearAllPoints()
+        proxy:SetSize(math.max(1, w), math.max(1, h))
+        proxy:SetPoint("CENTER", UIParent, "CENTER", x, y)
+        if proxy.Show then proxy:Show() end
+    end)
+    if ok then
+        proxy._msufExternalAnchorCacheKey = key
+        proxy._msufExternalAnchorFromCache = true
+        proxy._msufProxyInitialized = true
+    end
+    return ok == true
+end
+
+function _G.MSUF_IsCooldownExternalAnchorKey(key, source)
+    if key == "EssentialCooldownViewer" or key == "UtilityCooldownViewer" or key == "BuffIconCooldownViewer" then
+        return true
+    end
+    if source and source.GetName then
+        local name = source:GetName()
+        if type(name) == "string" and string.find(name, "CooldownViewer", 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+function _G.MSUF_AccumulateScaledFrameBounds(frame, bounds, depth, uiScale, uiW, uiH)
+    if not frame or depth < 0 then return bounds end
+    if _G.MSUF_FrameMethodIsTrue(frame, "IsForbidden", true) then return bounds end
+    if _G.MSUF_FrameMethodIsFalse(frame, "IsShown") then return bounds end
+
+    if frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom then
+        local okBounds, l, r, t, b = pcall(function()
+            return frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+        end)
+        if okBounds
+            and _G.MSUF_IsPlainNumber(l) and _G.MSUF_IsPlainNumber(r)
+            and _G.MSUF_IsPlainNumber(t) and _G.MSUF_IsPlainNumber(b)
+            and r > l and t > b
+        then
+            local w, h = r - l, t - b
+            local hasUIW = _G.MSUF_IsPlainNumber(uiW)
+            local hasUIH = _G.MSUF_IsPlainNumber(uiH)
+            if w >= 2 and h >= 2 and (not hasUIW or w <= uiW) and (not hasUIH or h <= uiH) then
+                local s = 1
+                local okScale, scaleValue = _G.MSUF_CallFrameMethod(frame, "GetEffectiveScale")
+                if okScale and _G.MSUF_IsPlainNumber(scaleValue) and scaleValue ~= 0 then
+                    s = scaleValue
+                end
+                if not _G.MSUF_IsPlainNumber(uiScale) or uiScale == 0 then uiScale = 1 end
+                local scale = s / uiScale
+                local sl, sr = l * scale, r * scale
+                local st, sb = t * scale, b * scale
+                if not bounds then
+                    bounds = { l = sl, r = sr, t = st, b = sb, count = 1 }
+                else
+                    if sl < bounds.l then bounds.l = sl end
+                    if sr > bounds.r then bounds.r = sr end
+                    if st > bounds.t then bounds.t = st end
+                    if sb < bounds.b then bounds.b = sb end
+                    bounds.count = (bounds.count or 0) + 1
+                end
+            end
+        end
+    end
+
+    if depth > 0 and frame.GetNumChildren and frame.GetChildren then
+        local okChildren, children = pcall(function()
+            return { frame:GetChildren() }
+        end)
+        if okChildren and type(children) == "table" then
+            for i = 1, #children do
+                bounds = _G.MSUF_AccumulateScaledFrameBounds(children[i], bounds, depth - 1, uiScale, uiW, uiH)
+            end
+        end
+    end
+    return bounds
+end
+
+function _G.MSUF_GetExternalAnchorVisualBounds(source, key)
+    if not source or not UIParent or not UIParent.GetCenter then return nil end
+    local uiScale = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if uiScale == 0 then uiScale = 1 end
+    local uiW = UIParent.GetWidth and UIParent:GetWidth() or nil
+    local uiH = UIParent.GetHeight and UIParent:GetHeight() or nil
+
+    local bounds
+    if _G.MSUF_IsCooldownExternalAnchorKey(key, source) and source.GetChildren then
+        local okChildren, children = pcall(function()
+            return { source:GetChildren() }
+        end)
+        if okChildren and type(children) == "table" then
+            for i = 1, #children do
+                bounds = _G.MSUF_AccumulateScaledFrameBounds(children[i], bounds, 3, uiScale, uiW, uiH)
+            end
+        end
+    end
+    if not bounds then
+        bounds = _G.MSUF_AccumulateScaledFrameBounds(source, nil, 0, uiScale, uiW, uiH)
+    end
+    if not bounds or not bounds.l or not bounds.r or not bounds.t or not bounds.b then return nil end
+    local ux, uy = UIParent:GetCenter()
+    if not ux or not uy then return nil end
+    local centerX = ((bounds.l + bounds.r) * 0.5) - ux
+    local centerY = ((bounds.t + bounds.b) * 0.5) - uy
+    return centerX, centerY, bounds.r - bounds.l, bounds.t - bounds.b
+end
+
+function _G.MSUF_UpdateExternalAnchorProxy(proxy, source)
+    if not proxy then return false end
+    local key = _G.MSUF_GetExternalAnchorCacheKey(source) or proxy._msufExternalAnchorCacheKey
+    if not key then return false end
+    proxy._msufExternalAnchorCacheKey = key
+    if type(source) == "string" then source = nil end
+    if source then
+        proxy._msufExternalAnchorSource = source
+    end
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+        if proxy._msufProxyInitialized then
+            return true
+        end
+        if _G.MSUF_ApplyExternalAnchorProxyCache(proxy, key) == true then
+            return true
+        end
+        source = source or proxy._msufExternalAnchorSource
+        if not source then
+            return false
+        end
+        if not _G.MSUF_IsCooldownExternalAnchorKey(key, source) and not MSUF_IsExternalAnchorUsable(source) then
+            return false
+        end
+    end
+    source = source or proxy._msufExternalAnchorSource
+    if not source then
+        return _G.MSUF_ApplyExternalAnchorProxyCache(proxy, key) or (proxy.GetCenter and proxy:GetCenter() ~= nil)
+    end
+    if not _G.MSUF_IsCooldownExternalAnchorKey(key, source) and not MSUF_IsExternalAnchorUsable(source) then
+        return _G.MSUF_ApplyExternalAnchorProxyCache(proxy, key) or (proxy.GetCenter and proxy:GetCenter() ~= nil)
+    end
+
+    local x, y, w, h = _G.MSUF_GetExternalAnchorVisualBounds(source, key)
+    if not x or not y or not w or not h or w <= 1 or h <= 1 then
+        return _G.MSUF_ApplyExternalAnchorProxyCache(proxy, key) or (proxy.GetCenter and proxy:GetCenter() ~= nil)
+    end
+    x = math_floor(x + 0.5)
+    y = math_floor(y + 0.5)
+    local ok = pcall(function()
+        proxy:ClearAllPoints()
+        proxy:SetSize(math.max(1, w), math.max(1, h))
+        proxy:SetPoint("CENTER", UIParent, "CENTER", x, y)
+        if proxy.Show then proxy:Show() end
+    end)
+    if not ok then
+        return _G.MSUF_ApplyExternalAnchorProxyCache(proxy, key) or (proxy.GetCenter and proxy:GetCenter() ~= nil)
+    end
+
+    local bucket = _G.MSUF_GetExternalAnchorCacheBucket()
+    if bucket then
+        bucket[key] = { v = 2, x = x, y = y, w = math.max(1, w), h = math.max(1, h) }
+    end
+    proxy._msufExternalAnchorFromCache = nil
+    proxy._msufProxyInitialized = true
+    return true
+end
+
+function _G.MSUF_GetExternalAnchorProxy(anchorOrName, sourceOverride)
+    local key = _G.MSUF_GetExternalAnchorCacheKey(anchorOrName)
+    if not key then return nil end
+    _G.MSUF_ExternalAnchorProxies = _G.MSUF_ExternalAnchorProxies or {}
+    local proxy = _G.MSUF_ExternalAnchorProxies[key]
+    if not proxy then
+        proxy = CreateFrame("Frame", nil, UIParent)
+        proxy._msufStableAnchorProxy = true
+        proxy._msufExternalAnchorCacheKey = key
+        proxy:SetSize(1, 1)
+        if proxy.SetAlpha then proxy:SetAlpha(0) end
+        if proxy.Show then proxy:Show() end
+        _G.MSUF_ExternalAnchorProxies[key] = proxy
+    end
+    local source = sourceOverride or (type(anchorOrName) ~= "string" and anchorOrName or proxy._msufExternalAnchorSource)
+    if _G.MSUF_UpdateExternalAnchorProxy(proxy, source) then
+        return proxy
+    end
+    return nil
+end
+
+function _G.MSUF_UpdateAllExternalAnchorProxies()
+    local proxies = _G.MSUF_ExternalAnchorProxies
+    if type(proxies) ~= "table" then return false end
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then return false end
+    local changed = false
+    for _, proxy in pairs(proxies) do
+        changed = (_G.MSUF_UpdateExternalAnchorProxy(proxy, proxy._msufExternalAnchorSource) == true) or changed
+    end
+    return changed
+end
+
+_G.MSUF_LateAnchorReanchorState = _G.MSUF_LateAnchorReanchorState or {
+    pending = false,
+    attempts = 0,
+    delays = { 0, 0.1, 0.25, 0.5, 1, 2, 4, 6, 8, 10 },
+}
+_G.MSUF_ScheduleLateAnchorReanchor = function()
+    local state = _G.MSUF_LateAnchorReanchorState
+    if not state or state.pending then return end
+    local delays = state.delays
+    if type(delays) ~= "table" then return end
+    if state.attempts >= #delays then return end
+    state.attempts = state.attempts + 1
+    state.pending = true
+    local delay = delays[state.attempts] or 1
+    local function Flush()
+        state.pending = false
+        if InCombatLockdown and InCombatLockdown() then
+            _G.MSUF_CDMBridgeDirty = true
+            if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+                _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+            end
+            return
+        end
+        local force = _G.MSUF_ForceReanchorAllUnitFrames_Once
+        if type(force) == "function" then
+            if _G.MSUF_UpdateAllExternalAnchorProxies then
+                _G.MSUF_UpdateAllExternalAnchorProxies()
+            end
+            local prev = _G.MSUF_ExternalAnchorForceReanchor
+            _G.MSUF_ExternalAnchorForceReanchor = true
+            force(true)
+            _G.MSUF_ExternalAnchorForceReanchor = prev
+        end
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay, Flush)
+    else
+        Flush()
+    end
+end
+
+function _G.MSUF_IsUnitFramePositionLocked()
+    local affectingCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
+    if InCombatLockdown then
+        local locked = (InCombatLockdown() or affectingCombat or _msuf_inCombat) and true or false
+        if not locked and _msuf_inCombat then
+            _msuf_inCombat = false
+            _G.MSUF_InCombat = false
+        end
+        return locked
+    end
+    return _msuf_inCombat == true or affectingCombat
+end
+
+function _G.MSUF_RunPostCombatReanchorPass()
+    if InCombatLockdown and InCombatLockdown() then return false end
+    _msuf_inCombat = false
+    _G.MSUF_InCombat = false
+    if type(_G.MSUF_UpdateAllExternalAnchorProxies) == "function" then
+        _G.MSUF_UpdateAllExternalAnchorProxies()
+    end
+    if type(_G.MSUF_ClassPower_Refresh) == "function" then
+        _G.MSUF_ClassPower_Refresh()
+    end
+    if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+        _G.MSUF_ApplyPowerBarEmbedLayout_All()
+    end
+    _G.MSUF_ClassPowerLayoutDirty = nil
+    _G.MSUF_PowerBarLayoutDirty = nil
+    local force = _G.MSUF_ForceReanchorAllUnitFrames_Once
+    if type(force) == "function" then
+        local prev = _G.MSUF_ExternalAnchorForceReanchor
+        _G.MSUF_ExternalAnchorForceReanchor = true
+        force(true)
+        _G.MSUF_ExternalAnchorForceReanchor = prev
+    end
+    return true
+end
+
+function _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+    _G.MSUF_UnitFramePositionDirty = true
+    if _G.MSUF_UnitFramePositionRegenFrame then return end
+    local fr = CreateFrame("Frame")
+    _G.MSUF_UnitFramePositionRegenFrame = fr
+    fr:RegisterEvent("PLAYER_REGEN_ENABLED")
+    fr:SetScript("OnEvent", function()
+        if InCombatLockdown and InCombatLockdown() then return end
+        _msuf_inCombat = false
+        _G.MSUF_InCombat = false
+        if _G.MSUF_UnitFramePositionDirty then
+            _G.MSUF_UnitFramePositionDirty = false
+            if type(_G.MSUF_RunPostCombatReanchorPass) == "function" then
+                _G.MSUF_RunPostCombatReanchorPass()
+            end
+            if C_Timer and C_Timer.After then
+                local delays = { 0.05, 0.25, 0.75, 1.5 }
+                for i = 1, #delays do
+                    C_Timer.After(delays[i], function()
+                        if type(_G.MSUF_RunPostCombatReanchorPass) == "function" then
+                            _G.MSUF_RunPostCombatReanchorPass()
+                        end
+                    end)
+                end
+            end
+        end
+    end)
+end
+
+-- Legacy fallback for raw external anchors. The normal path uses stable UIParent
+-- proxy anchors so unitframes do not follow combat-time CDM/bridge resizing.
 local function MSUF_SnapshotFrameToUIParentCenter(frame)
     if InCombatLockdown and InCombatLockdown() then return false end
     if not frame or not frame.GetCenter or not UIParent or not UIParent.GetCenter then return false end
@@ -2166,12 +2669,30 @@ local function MSUF_SnapshotFrameToUIParentCenter(frame)
 end
 _G.MSUF_SnapshotFrameToUIParentCenter = MSUF_SnapshotFrameToUIParentCenter
 
+function _G.MSUF_ExternalPointSignature(point, relPoint, x, y)
+    return tostring(point or "") .. "|" .. tostring(relPoint or "") .. "|"
+        .. tostring(math_floor((tonumber(x) or 0) + 0.5)) .. "|"
+        .. tostring(math_floor((tonumber(y) or 0) + 0.5))
+end
+
+function _G.MSUF_ShouldKeepStableExternalPoint(frame, anchor, sig)
+    if not frame or not anchor or not sig then return false end
+    if _G.MSUF_ExternalAnchorForceReanchor == true then return false end
+    if MSUF_IsLayoutEditingActive() then return false end
+    return frame._msufStableExternalAnchor == anchor
+        and frame._msufStableExternalSig == sig
+        and frame._msufHardLockedToUIParent == true
+end
+
 local function MSUF_ApplyStableUnitFramePoint(frame, point, anchor, relPoint, x, y)
     local isExternal = MSUF_ShouldSnapshotExternalAnchor(anchor)
+    local sig = isExternal and _G.MSUF_ExternalPointSignature(point, relPoint, x, y) or nil
     if isExternal then
         local hook = _G.MSUF_HookExternalAnchorForReanchor
         if type(hook) == "function" then hook(anchor) end
         if not MSUF_IsExternalAnchorUsable(anchor) then
+            anchor._msufHookNeedsFirstUsableReanchor = true
+            _G.MSUF_ScheduleLateAnchorReanchor()
             if frame and frame._msufStableExternalAnchor == anchor and not MSUF_IsLayoutEditingActive() then
                 return true
             end
@@ -2179,53 +2700,142 @@ local function MSUF_ApplyStableUnitFramePoint(frame, point, anchor, relPoint, x,
         end
     end
 
-    MSUF_ApplyPoint(frame, point, anchor, relPoint, x, y)
-    if not MSUF_IsLayoutEditingActive() and MSUF_SnapshotFrameToUIParentCenter(frame) then
+    local ok = pcall(MSUF_ApplyPoint, frame, point, anchor, relPoint, x, y)
+    if not ok then
+        if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+            _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+        end
+        return false
+    end
+    if isExternal and not MSUF_IsLayoutEditingActive() and MSUF_SnapshotFrameToUIParentCenter(frame) then
+        local state = _G.MSUF_LateAnchorReanchorState
+        if state then state.attempts = 0 end
+        frame._msufPositionInitialized = true
         frame._msufHardLockedToUIParent = true
-        frame._msufStableExternalAnchor = isExternal and anchor or nil
+        frame._msufStableExternalAnchor = anchor
+        frame._msufStableExternalSig = sig
     elseif frame then
+        frame._msufPositionInitialized = true
         frame._msufHardLockedToUIParent = nil
         frame._msufStableExternalAnchor = nil
+        frame._msufStableExternalSig = nil
     end
     return true
 end
 
-local function PositionUnitFrame(f, unit)
+local function PositionUnitFrame(f, unit, refreshConfig)
     if not f or not unit then  return end
     if f._msufDragActive then  return end
+    local inLockdown = (_G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked()) or false
+    local initialized = f._msufPositionInitialized == true
+    if inLockdown and initialized then
+        if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+            _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+        end
+        return
+    end
     local key = f.msufConfigKey
     if not key then
         key = GetConfigKeyForUnit(unit)
         f.msufConfigKey = key
     end
     if not key then  return end
-    if _msuf_inCombat or (InCombatLockdown and InCombatLockdown()) then return end
-    local conf = f.cachedConfig
+    if inLockdown and initialized then return end
+    local conf = refreshConfig and nil or f.cachedConfig
     if not conf then
         if not MSUF_DB then EnsureDB() end
         conf = MSUF_DB and MSUF_DB[key]
         f.cachedConfig = conf
     end
     if not conf then  return end
-    local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     local _g = MSUF_DB and MSUF_DB.general
-    if MSUF_ShouldSnapshotExternalAnchor(anchor) and not MSUF_IsExternalAnchorUsable(anchor) then
-        local hook = _G.MSUF_HookExternalAnchorForReanchor
-        if type(hook) == "function" then hook(anchor) end
-        if f._msufStableExternalAnchor == anchor and not MSUF_IsLayoutEditingActive() then
+    local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
+    local isCooldownAnchor = false
+    local usesExternalAnchor = false
+    if _g and _g.anchorToCooldown then
+        usesExternalAnchor = true
+    elseif type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then
+        usesExternalAnchor = true
+    elseif MSUF_ShouldSnapshotExternalAnchor(anchor) then
+        usesExternalAnchor = true
+    end
+    if inLockdown and not initialized and usesExternalAnchor then
+        local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
+        if type(applyCached) == "function" and applyCached(f, key, unit) then
+            if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+                _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+            end
             return
         end
-        anchor = UIParent
     end
-    if _g and _g.anchorToCooldown and ecv and anchor == ecv then
+    if _g and _g.anchorToCooldown then
+        if ecv and anchor == ecv then
+            isCooldownAnchor = true
+        elseif not ecv then
+            if type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+                _G.MSUF_ScheduleLateAnchorReanchor()
+            end
+            local proxy = _G.MSUF_GetExternalAnchorProxy and _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer")
+            if proxy and (anchor == UIParent or not anchor) then
+                anchor = proxy
+                isCooldownAnchor = true
+            elseif inLockdown then
+                if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+                    _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+                end
+                return
+            end
+        end
+    end
+
+    if MSUF_ShouldSnapshotExternalAnchor(anchor) then
+        local hook = _G.MSUF_HookExternalAnchorForReanchor
+        if type(hook) == "function" then hook(anchor) end
+        if type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+            _G.MSUF_ScheduleLateAnchorReanchor()
+        end
+        local proxy
+        if _G.MSUF_GetExternalAnchorProxy then
+            if anchor == ecv then
+                proxy = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer", anchor)
+            else
+                proxy = _G.MSUF_GetExternalAnchorProxy(anchor)
+            end
+        end
+        if proxy then
+            if anchor == ecv then isCooldownAnchor = true end
+            anchor = proxy
+        elseif not MSUF_IsExternalAnchorUsable(anchor) then
+            anchor._msufHookNeedsFirstUsableReanchor = true
+            if inLockdown then
+                if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+                    _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+                end
+                return
+            end
+            if f._msufStableExternalAnchor == anchor and not MSUF_IsLayoutEditingActive() then
+                return
+            end
+            anchor = UIParent
+        end
+    end
+    if _g and _g.anchorToCooldown and isCooldownAnchor then
         local rule = MSUF_ECV_ANCHORS[key]
         if rule then
             local point, relPoint, baseX, extraY = rule[1], rule[2], rule[3], rule[4]
             local gapY = (conf.offsetY ~= nil) and conf.offsetY or -20
             local x = baseX + (conf.offsetX or 0)
             local y = gapY + (extraY or 0)
-            if MSUF_ApplyStableUnitFramePoint(f, point, ecv, relPoint, x, y) then
+            if MSUF_ShouldSnapshotExternalAnchor(anchor)
+                and _G.MSUF_ShouldKeepStableExternalPoint(f, anchor, _G.MSUF_ExternalPointSignature(point, relPoint, x, y))
+            then
+                return
+            end
+            if MSUF_ApplyStableUnitFramePoint(f, point, anchor, relPoint, x, y) then
+                 if _G.MSUF_CacheUnitFrameScreenPosition then
+                    _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit)
+                 end
                  return
             end
             anchor = UIParent
@@ -2250,15 +2860,41 @@ local function PositionUnitFrame(f, unit)
             -- VERTICAL_DOWN (default) and any legacy/unknown value (including pre-migration invertBossOrder==false)
             y = baseY + step * spacing
         end
-        MSUF_ApplyStableUnitFramePoint(f, "CENTER", anchor, "CENTER", x, y)
+        if MSUF_ShouldSnapshotExternalAnchor(anchor)
+            and _G.MSUF_ShouldKeepStableExternalPoint(f, anchor, _G.MSUF_ExternalPointSignature("CENTER", "CENTER", x, y))
+        then
+            return
+        end
+        if MSUF_ApplyStableUnitFramePoint(f, "CENTER", anchor, "CENTER", x, y)
+            and _G.MSUF_CacheUnitFrameScreenPosition
+        then
+            _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit)
+        end
     else
-        MSUF_ApplyStableUnitFramePoint(f, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
+        if MSUF_ShouldSnapshotExternalAnchor(anchor)
+            and _G.MSUF_ShouldKeepStableExternalPoint(f, anchor, _G.MSUF_ExternalPointSignature("CENTER", "CENTER", conf.offsetX, conf.offsetY))
+        then
+            return
+        end
+        if MSUF_ApplyStableUnitFramePoint(f, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
+            and _G.MSUF_CacheUnitFrameScreenPosition
+        then
+            _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit)
+        end
     end
  end
-local function MSUF_ForceReanchorAllUnitFrames_Once()
-    if _msuf_inCombat then return end
+MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig)
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+        if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+            _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+        end
+        return
+    end
     local uf = UnitFrames or _G.MSUF_UnitFrames or _G.UnitFrames
     if not uf then return end
+    if _G.MSUF_UpdateAllExternalAnchorProxies then
+        _G.MSUF_UpdateAllExternalAnchorProxies()
+    end
 
     local ordered = {
         "player",
@@ -2273,7 +2909,7 @@ local function MSUF_ForceReanchorAllUnitFrames_Once()
         local unit = ordered[i]
         local frame = uf[unit]
         if frame then
-            PositionUnitFrame(frame, unit)
+            PositionUnitFrame(frame, unit, refreshConfig ~= false)
         end
     end
 end
@@ -2281,6 +2917,7 @@ _G.MSUF_ForceReanchorAllUnitFrames_Once = MSUF_ForceReanchorAllUnitFrames_Once
 
 local function MSUF_HardLockFramePosition(frame)
     if not frame or frame._msufDragActive then return false end
+    if not frame._msufStableExternalAnchor then return false end
     if not frame.GetCenter or not frame.ClearAllPoints or not frame.SetPoint then return false end
     local ok, locked = pcall(MSUF_SnapshotFrameToUIParentCenter, frame)
     return ok and locked == true
@@ -2341,10 +2978,9 @@ function _G.MSUF_HookExternalAnchorForReanchor(frame)
             _G.MSUF_MarkExternalAnchorForReanchor()
         end
     end
-    -- OnSizeChanged fires when cooldown icons appear/disappear, growing the frame
-    -- without moving it. A genuine repositioning shifts all 4 edges by the same
-    -- delta (uniform shift). A resize shifts opposite edges in opposite directions.
-    -- Only call Mark() on a genuine move; ignore pure resizes.
+    -- In combat, ignore pure resizes so cooldown icon churn cannot drag unitframes.
+    -- Out of combat, resizes are valid layout changes because LEFT/RIGHT anchors
+    -- need the proxy to match the current external anchor size.
     local function MarkIfMoved()
         local l = frame.GetLeft   and frame:GetLeft()
         local r = frame.GetRight  and frame:GetRight()
@@ -2356,20 +2992,34 @@ function _G.MSUF_HookExternalAnchorForReanchor(frame)
         if r then frame._msufHookLastR = r end
         if t then frame._msufHookLastT = t end
         if b then frame._msufHookLastB = b end
+        if l and r and t and b and frame._msufHookNeedsFirstUsableReanchor then
+            frame._msufHookNeedsFirstUsableReanchor = nil
+            Mark()
+            return
+        end
         if not pl or not pr or not pt or not pb or not l or not r or not t or not b then
-            Mark(); return
+            return
         end
         local dx = l - pl
         local dy = t - pt
-        if math.abs(dx) <= 1 and math.abs(dy) <= 1 then return end
+        local dr = r - pr
+        local db = b - pb
+        if math.abs(dx) <= 1 and math.abs(dy) <= 1 and math.abs(dr) <= 1 and math.abs(db) <= 1 then return end
         -- Uniform shift on all four edges = genuine move. Asymmetric = resize only.
-        if math.abs((r - pr) - dx) < 1 and math.abs((b - pb) - dy) < 1 then
+        if math.abs(dr - dx) < 1 and math.abs(db - dy) < 1 then
+            Mark()
+        elseif not (_G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked()) then
             Mark()
         end
     end
+    MarkIfMoved()
     frame:HookScript("OnSizeChanged", MarkIfMoved)
-    frame:HookScript("OnShow", Mark)
-    frame:HookScript("OnHide", Mark)
+    frame:HookScript("OnShow", MarkIfMoved)
+    if hooksecurefunc then
+        if frame.SetPoint then pcall(hooksecurefunc, frame, "SetPoint", MarkIfMoved) end
+        if frame.SetScale then pcall(hooksecurefunc, frame, "SetScale", MarkIfMoved) end
+        if frame.ClearAllPoints then pcall(hooksecurefunc, frame, "ClearAllPoints", Mark) end
+    end
 end
 
 function _G.MSUF_FlushCDMBridgeRefresh()
@@ -2377,19 +3027,31 @@ function _G.MSUF_FlushCDMBridgeRefresh()
     if not _G.MSUF_CDMBridgeDirty then return end
     if InCombatLockdown and InCombatLockdown() then return end
     _G.MSUF_CDMBridgeDirty = false
+    if _G.MSUF_UpdateAllExternalAnchorProxies then
+        _G.MSUF_UpdateAllExternalAnchorProxies()
+    end
     if _G.MSUF_ClassPower_Refresh then
         _G.MSUF_ClassPower_Refresh()
     end
     if _G.MSUF_ApplyPowerBarEmbedLayout_All then
         _G.MSUF_ApplyPowerBarEmbedLayout_All()
     end
+    _G.MSUF_ClassPowerLayoutDirty = nil
+    _G.MSUF_PowerBarLayoutDirty = nil
+    local prev = _G.MSUF_ExternalAnchorForceReanchor
+    _G.MSUF_ExternalAnchorForceReanchor = true
     MSUF_ForceReanchorAllUnitFrames_Once()
+    _G.MSUF_ExternalAnchorForceReanchor = prev
 end
 
 if not _G.MSUF_CDMBridgeRegenFrame then
     _G.MSUF_CDMBridgeRegenFrame = CreateFrame("Frame")
     _G.MSUF_CDMBridgeRegenFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
     _G.MSUF_CDMBridgeRegenFrame:SetScript("OnEvent", function()
+        if not (InCombatLockdown and InCombatLockdown()) then
+            _msuf_inCombat = false
+            _G.MSUF_InCombat = false
+        end
         if _G.MSUF_CDMBridgeDirty then
             _G.MSUF_FlushCDMBridgeRefresh()
         end
@@ -4376,6 +5038,15 @@ local function MSUF_ApplyUnitFrameKey_Immediate(key)
     if not MSUF_DB then EnsureDB() end
     local conf = MSUF_DB[key]
     if not conf then  return end
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+        _G.MSUF_UnitFrameApplyState = _G.MSUF_UnitFrameApplyState or { dirty = {}, queued = false }
+        _G.MSUF_UnitFrameApplyState.dirty[key] = true
+        _G.MSUF_UnitFrameApplyState.queued = true
+        if type(MSUF_EventBus_Register) == "function" then
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY", MSUF_OnRegenEnabled_ApplyDirty)
+        end
+        return
+    end
 	    -- Ensure UnitframeCore refreshes event masks + option caches for this unit so
 	    -- changes apply immediately without requiring /reload or a unit swap.
 	    if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
@@ -4425,7 +5096,7 @@ function MSUF_MarkUnitFrameDirty(key)
 function MSUF_ApplyDirtyUnitFrames()
     local st = _G.MSUF_UnitFrameApplyState
     if not st or not st.dirty then  return end
-    if _msuf_inCombat then
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
         st.queued = true
          return
     end
@@ -4503,7 +5174,7 @@ function ApplyAllSettings()
 _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or function(key)
     if not key then  return end
     MSUF_MarkUnitFrameDirty(key)
-    if _msuf_inCombat then
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
         local stUF = _G.MSUF_UnitFrameApplyState
         if stUF then
             stUF.queued = true
@@ -4523,6 +5194,28 @@ _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or
  end
 _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or function()
     if not MSUF_DB then EnsureDB() end
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+        local keys = { "player", "target", "focus", "targettarget", "pet", "boss" }
+        _G.MSUF_UnitFrameApplyState = _G.MSUF_UnitFrameApplyState or { dirty = {}, queued = false }
+        for i = 1, #keys do
+            _G.MSUF_UnitFrameApplyState.dirty[keys[i]] = true
+        end
+        _G.MSUF_UnitFrameApplyState.queued = true
+        local st = _G.MSUF_ApplyCommitState
+        if st then
+            st.queued = true
+            st.fonts = true
+            st.bars = true
+            st.castbars = true
+            st.tickers = true
+            st.bossPreview = true
+        end
+        if type(MSUF_EventBus_Register) == "function" then
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY", MSUF_OnRegenEnabled_ApplyDirty)
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT", MSUF_OnRegenEnabled_ApplyCommit)
+        end
+        return
+    end
     -- Keep UnitframeCore caches + event masks in sync so settings apply immediately
     -- (fixes level/leader indicators and other cached-option regressions).
     if _G.MSUF_UFCore_NotifyConfigChanged then
@@ -4563,15 +5256,12 @@ end
     end
         _G.MSUF_UnitFrameApplyState.queued = false
     end
-    if type(_G.MSUF_HardLockAllFramePositions) == "function" then
-        _G.MSUF_HardLockAllFramePositions("ApplyAllSettings_Immediate")
-    end
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY")
  end
 function MSUF_CommitApplyDirty()
     local st = _G.MSUF_ApplyCommitState
     if not st then  return end
-    if _msuf_inCombat then
+    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
         st.queued = true
         if type(MSUF_EventBus_Register) == "function" then
             MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT", MSUF_OnRegenEnabled_ApplyCommit)
@@ -4631,9 +5321,6 @@ end
     st.tickers = false
     st.bossPreview = false
     st.queued = false
-    if type(_G.MSUF_HardLockAllFramePositions) == "function" then
-        _G.MSUF_HardLockAllFramePositions("CommitApplyDirty")
-    end
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT")
  end
 -- Changes:
@@ -5099,6 +5786,9 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
                         local y = (fy2 * fs - ay2 * as) / as
                         conf.offsetX = math_floor(((x - baseX)) + 0.5)
                         conf.offsetY = math_floor(((y - extraY)) + 0.5)
+                        if _G.MSUF_CacheUnitFrameScreenPosition then
+                            _G.MSUF_CacheUnitFrameScreenPosition(self, key, unit)
+                        end
                         if MSUF_SyncUnitPositionPopup then
                             MSUF_SyncUnitPositionPopup(unit, conf)
                         end
@@ -5126,6 +5816,9 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
     end
         conf.offsetX = math_floor((newX) + 0.5)
         conf.offsetY = math_floor((newY) + 0.5)
+        if _G.MSUF_CacheUnitFrameScreenPosition then
+            _G.MSUF_CacheUnitFrameScreenPosition(self, key, unit)
+        end
         if MSUF_SyncUnitPositionPopup then
             MSUF_SyncUnitPositionPopup(unit, conf)
     end
@@ -5245,6 +5938,18 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     local key = f.msufConfigKey
     if not key and GetConfigKeyForUnit then key = GetConfigKeyForUnit(unit) end
     if key then f.msufConfigKey = key end
+    local inLockdown = (type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked())
+        or (InCombatLockdown and InCombatLockdown())
+        or false
+    if inLockdown and f._msufPowerBarLayoutInitialized == true then
+        f._msufPowerBarLayoutDirty = true
+        _G.MSUF_PowerBarLayoutDirty = true
+        if type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
+            _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+        end
+        return
+    end
+    local layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("detachedPowerBarLayoutCache") or nil
     local readHeight = _G.MSUF_ReadUnitPowerBarHeight
     local h = (type(readHeight) == "function" and readHeight(key or unit)) or tonumber(b.powerBarHeight) or 3
     h = math.floor(h + 0.5)
@@ -5295,11 +6000,20 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
                 local dpbWMode = b.detachedPowerBarWidthMode
                 local cdmName = dpbWMode and _DPB.CDM[dpbWMode]
                 if cdmName then
-                    local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
+                    local cacheKey = tostring(unit or "player") .. ":width:" .. cdmName
+                    local cachedW = tonumber(f._msufDetachedPowerBarStableW) or (layoutCache and tonumber(layoutCache[cacheKey]))
+                    if inLockdown and cachedW and cachedW >= 30 then
+                        dW = cachedW
+                    else
+                        local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
                     -- Scale-compensated width (Sensei pattern): convert CDM coords → our bar coords
-                    if cdm and cdm.IsShown and cdm:IsShown() then
-                        local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)
-                        if scaledW and scaledW >= 30 then dW = scaledW end
+                        if cdm and cdm.IsShown and cdm:IsShown() then
+                            if type(_G.MSUF_HookExternalAnchorForReanchor) == "function" then
+                                _G.MSUF_HookExternalAnchorForReanchor(cdm)
+                            end
+                            local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)
+                            if scaledW and scaledW >= 30 then dW = scaledW end
+                        end
                     end
                     -- If CDM hidden/unavailable, keep manual dW (from DB or frame width)
                 end
@@ -5310,11 +6024,23 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     local activeDetached = detached and enabled
     local reserve = (embed and not activeDetached and enabled and h > 0)
     local dpbWMode = (b.detachedPowerBarWidthMode or "")
+    if activeDetached and dW and dW >= 20 then
+        local stableW = math.floor(dW + 0.5)
+        f._msufDetachedPowerBarStableW = stableW
+        if not inLockdown and layoutCache then
+            local cdmName = _DPB.CDM[dpbWMode]
+            if cdmName then
+                layoutCache[tostring(unit or "player") .. ":width:" .. cdmName] = stableW
+            end
+        end
+    end
     if not ns.Cache.StampChanged(f, "PBEmbedLayout", (enabled and 1 or 0), (embed and 1 or 0), (reserve and 1 or 0), h, (activeDetached and 1 or 0), dW, dH, dX, dY, (anchorToCP and 1 or 0), dpbWMode) then
         if not enabled then _MSUF_Bars_HidePower(pb, true) end
         if _G.MSUF_ApplyPowerBarBorder then
             _G.MSUF_ApplyPowerBarBorder(pb)
         end
+        f._msufPowerBarLayoutInitialized = true
+        f._msufPowerBarLayoutDirty = nil
         return
     end
     f._msufPowerBarReserved = reserve and true or nil
@@ -5388,12 +6114,20 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     if type(fnVis) == "function" then
         fnVis(f)
     end
+    f._msufPowerBarLayoutInitialized = true
+    f._msufPowerBarLayoutDirty = nil
  end
 
 _G.MSUF_ApplyPowerBarEmbedLayout = MSUF_ApplyPowerBarEmbedLayout
 _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey = function(unitKey, refreshPower)
     if not UnitFrames then return end
-    if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then return end
+    if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then
+        _G.MSUF_PowerBarLayoutDirty = true
+        if type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
+            _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+        end
+        return
+    end
     local function applyOne(fr)
         if not (fr and fr.hpBar and fr.targetPowerBar) then return end
         if ns.Cache and ns.Cache.ClearStamp then ns.Cache.ClearStamp(fr, "PBEmbedLayout") end
@@ -5491,6 +6225,9 @@ local function CreateSimpleUnitFrame(unit)
         f.isBoss = def.isBoss and true or false
         if def.startHidden then f:Hide() end
         if f.isBoss and MSUF_ApplyUnitVisibilityDriver then MSUF_ApplyUnitVisibilityDriver(f, false) end
+    end
+    if _G.MSUF_ApplyInitialFrameScale then
+        _G.MSUF_ApplyInitialFrameScale(f)
     end
     PositionUnitFrame(f, unit)
     MSUF_EnableUnitFrameDrag(f, unit)

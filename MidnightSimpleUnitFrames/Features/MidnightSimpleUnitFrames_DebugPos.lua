@@ -167,7 +167,7 @@ local function InstallHooks()
         Dbg(prefix .. "  " .. ECVLine())
     end)
 
-    -- CDMBridge: fires when OnSizeChanged/OnShow/OnHide decides a reanchor is needed
+    -- CDMBridge: fires when size/show/point hooks detect a genuine anchor move or first usable anchor
     _origMark = _G.MSUF_MarkExternalAnchorForReanchor
     if _origMark then
         _G.MSUF_MarkExternalAnchorForReanchor = function(...)

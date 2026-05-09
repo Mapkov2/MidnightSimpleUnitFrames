@@ -3414,7 +3414,7 @@ local _BTH_issecret = _UFCORE_issecret
 local _BTH_UnitIsUnit = UnitIsUnit
 local _BTH_UnitExists = UnitExists
 
-local function UFCore_UpdateBossTargetHighlight()
+local function UFCore_UpdateBossTargetHighlight(forceRefresh)
     local uf = _G.MSUF_UnitFrames
     if not uf then return end
     local fn = _G.MSUF_RefreshRareBarVisuals
@@ -3435,7 +3435,7 @@ local function UFCore_UpdateBossTargetHighlight()
 
             -- Diff-gate: nil == false for this comparison (avoid spurious RefreshRare on empty boss frames)
             local prev = frame._msufBossTargetHLOn or false
-            if prev ~= isTarget then
+            if forceRefresh or prev ~= isTarget then
                 frame._msufBossTargetHLOn = isTarget
                 if type(fn) == "function" then fn(frame) end
             end

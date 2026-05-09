@@ -1394,6 +1394,24 @@ local _MSUF_pendingMsufScale;
 local _MSUF_pendingGlobalScale;
 local _MSUF_pendingDisableScaling;
 local _MSUF_pendingReloadOnScalingOff;
+local function MSUF_ScheduleUnitframeReanchorAfterScale()
+if _G.MSUF_ScaleReanchorPending then return end
+_G.MSUF_ScaleReanchorPending=true
+local function Flush()
+_G.MSUF_ScaleReanchorPending=false
+if InCombatLockdown and InCombatLockdown() then
+if type(_G.MSUF_RequestUnitFrameReanchorAfterCombat)=="function"then _G.MSUF_RequestUnitFrameReanchorAfterCombat() end
+return end
+if type(_G.MSUF_UpdateAllExternalAnchorProxies)=="function"then _G.MSUF_UpdateAllExternalAnchorProxies() end
+local force=_G.MSUF_ForceReanchorAllUnitFrames_Once
+if type(force)=="function"then local prev=_G.MSUF_ExternalAnchorForceReanchor
+_G.MSUF_ExternalAnchorForceReanchor=true
+force(true)
+_G.MSUF_ExternalAnchorForceReanchor=prev
+end
+end
+if C_Timer and C_Timer.After then C_Timer.After(0,Flush) else Flush() end
+end
 local _MSUF_scaleApplyWatcher local MSUF_EnsureScaleApplyAfterCombat local MSUF_ResetGlobalUiScale local function MSUF_ApplyMsufScale(scale,opts)
 scale=tonumber(scale)
 if not scale then return end
@@ -1406,6 +1424,7 @@ local frames=MSUF_CollectMsufScaleFrames()
 for i=1,#frames do local f=frames[i]
 pcall(f.SetScale,f,scale)
 end
+MSUF_ScheduleUnitframeReanchorAfterScale()
 end
 local UI_SCALE_1080=768/1080;
 local UI_SCALE_1440=768/1440;
@@ -1580,6 +1599,7 @@ if not silent then MSUF_Print("Cannot change global UI scale in combat. Will app
 end
 return end
 MSUF_EnforceUIParentScale(scale)
+MSUF_ScheduleUnitframeReanchorAfterScale()
 if not silent then MSUF_Print(string.format("Global UI scale set to %.4f",scale))
 end
 end
@@ -1625,6 +1645,7 @@ MSUF_HandOffGlobalUiScaleToBlizzard(handoff)
 MSUF_SetGlobalUiScaleState(false,nil,"auto")
 _MSUF_pendingGlobalScale=nil
 if not silent then MSUF_Print(string.format("Global UI scale disabled. Blizzard UI scale kept at %d%%.",math.floor(handoff*100+0.5))) end
+MSUF_ScheduleUnitframeReanchorAfterScale()
 return true
 end
 local function MSUF_SetScalingDisabled(disable,silent)
