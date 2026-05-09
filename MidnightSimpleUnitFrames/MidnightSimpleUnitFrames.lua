@@ -1505,196 +1505,7 @@ ns.MSUF_GetRawLSMFontPath = MSUF_GetRawLSMFontPath
 
 -- Castbar utilities moved to MSUF_Castbars.lua
 
-local function MSUF_Clamp01(v)
-    v = tonumber(v)
-    if not v then  return 0 end
-    if v < 0 then  return 0 end
-    if v > 1 then  return 1 end
-     return v
-end
-ns.Bars._DarkTint = function(g, r, gg, b)
-    if g.darkMode and not g.darkBgCustomColor then
-        local br = MSUF_Clamp01(g.darkBgBrightness); return r*br, gg*br, b*br
-    end; return r, gg, b
-end
-function MSUF_GetBarBackgroundTintRGBA()
-    if not MSUF_DB then EnsureDB() end
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    local r, gg, b = ns.Bars._DarkTint(g, MSUF_Clamp01(g.classBarBgR), MSUF_Clamp01(g.classBarBgG), MSUF_Clamp01(g.classBarBgB))
-    return r, gg, b, 0.9
-end
-function MSUF_GetPowerBarBackgroundTintRGBA()
-    if not MSUF_DB then EnsureDB() end
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    local ar, ag, ab = g.powerBarBgColorR, g.powerBarBgColorG, g.powerBarBgColorB
-    if type(ar) ~= "number" or type(ag) ~= "number" or type(ab) ~= "number" then return MSUF_GetBarBackgroundTintRGBA() end
-    local r, gg, b = ns.Bars._DarkTint(g, MSUF_Clamp01(ar), MSUF_Clamp01(ag), MSUF_Clamp01(ab))
-    return r, gg, b, 0.9
-end
--- Detached power bar texture resolvers (cache + DB read).
--- Single table to stay within Lua 5.1's 200-local limit.
-local _DPB = {
-    fgC = nil, fgK = false, bgC = nil, bgK = false,
-    -- CDM frame lookup for width sync (avoids separate top-level local)
-    CDM = {
-        cooldown      = "EssentialCooldownViewer",
-        utility       = "UtilityCooldownViewer",
-        tracked_buffs = "BuffIconCooldownViewer",
-    },
-}
-function _DPB.UseMSAEssentialBridge()
-    local g = MSUF_DB and MSUF_DB.general or nil
-    return not (g and g.disableMSAEssentialBridge == true)
-end
-
-function _G.MSUF_GetEffectiveCooldownFrame(frameName)
-    if frameName == "EssentialCooldownViewer" and _DPB.UseMSAEssentialBridge() then
-        local getter = _G.MSWA_GetEssentialBridgeFrame
-        if type(getter) == "function" then
-            local bridge = getter()
-            if bridge and bridge ~= UIParent and bridge ~= WorldFrame and (not bridge.IsForbidden or not bridge:IsForbidden()) then
-                return bridge
-            end
-        end
-    end
-    return frameName and _G[frameName] or nil
-end
-function _DPB.ResolveFg()
-    local b = MSUF_DB and MSUF_DB.bars or {}
-    local key = b.detachedPowerBarTexture
-    if not key or key == "" then return nil end
-    if key == _DPB.fgK and _DPB.fgC then return _DPB.fgC end
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
-    local path = (type(resolve) == "function" and resolve(key)) or nil
-    _DPB.fgK = key; _DPB.fgC = path
-    return path
-end
-function _DPB.ResolveBg()
-    local b = MSUF_DB and MSUF_DB.bars or {}
-    local key = b.detachedPowerBarBgTexture
-    if not key or key == "" then return nil end
-    if key == _DPB.bgK and _DPB.bgC then return _DPB.bgC end
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
-    local path = (type(resolve) == "function" and resolve(key)) or nil
-    _DPB.bgK = key; _DPB.bgC = path
-    return path
-end
-ns.Bars._DetachedPowerBarTextures = _DPB
--- P0: Hoisted from MSUF_ApplyBarBackgroundVisual inner closure (eliminates per-call closure alloc).
--- Pre-built cache-key strings per prefix avoid string concat on every call.
-local _MSUF_BgKeyCache = {}
-local function _MSUF_GetBgKeys(prefix)
-    local k = _MSUF_BgKeyCache[prefix]
-    if k then return k end
-    k = {
-        tex = "_msuf" .. prefix .. "BgTex",
-        r   = "_msuf" .. prefix .. "BgR",
-        g   = "_msuf" .. prefix .. "BgG",
-        b   = "_msuf" .. prefix .. "BgB",
-        a   = "_msuf" .. prefix .. "BgA",
-    }
-    _MSUF_BgKeyCache[prefix] = k
-    return k
-end
--- Pre-warm the 3 known prefixes (zero alloc at runtime)
-_MSUF_GetBgKeys("HP"); _MSUF_GetBgKeys("Power"); _MSUF_GetBgKeys("Frame")
-local function _MSUF_ApplyBgToTexture(frame, tex, t, prefix, cr, cg, cb, ca)
-    if not t then return end
-    local k = _MSUF_GetBgKeys(prefix)
-    if frame[k.tex] ~= tex then
-        t:SetTexture(tex)
-        frame[k.tex] = tex
-    end
-    if frame[k.r] ~= cr or frame[k.g] ~= cg or frame[k.b] ~= cb or frame[k.a] ~= ca then
-        t:SetVertexColor(cr, cg, cb, ca)
-        frame[k.r], frame[k.g], frame[k.b], frame[k.a] = cr, cg, cb, ca
-    end
-end
-ns.Bars._MatchHPColor = function(frame, gen, cache, defR, defG, defB)
-    local fr, fg, fb = frame.hpBar:GetStatusBarColor()
-    if type(fr) ~= "number" or type(fg) ~= "number" or type(fb) ~= "number" then return defR, defG, defB end
-    if gen and gen.darkMode and not gen.darkBgCustomColor then
-        local br = (cache and cache.darkBgBrightness) or gen.darkBgBrightness
-        if type(br) == "number" then
-            if br < 0 then br = 0 elseif br > 1 then br = 1 end
-            fr, fg, fb = fr * br, fg * br, fb * br
-        end
-    end
-    return MSUF_Clamp01(fr), MSUF_Clamp01(fg), MSUF_Clamp01(fb)
-end
-function MSUF_ApplyBarBackgroundVisual(frame)
-    if not frame then  return end
-    local tex = MSUF_GetBarBackgroundTexture()
-
-    local getCache = _MSUF_ResolveGetCache()
-    local cache = getCache and getCache() or nil
-
-    local gen = (cache and cache.generalRef) or (MSUF_DB and MSUF_DB.general)
-    local bars = (cache and cache.barsRef) or (MSUF_DB and MSUF_DB.bars)
-
-    local r, gg, b, a
-    if cache then
-        r, gg, b, a = cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA
-    else
-        r, gg, b, a = MSUF_GetBarBackgroundTintRGBA()
-    end
-
-    if (cache and cache.barBgMatchHPColor or (gen and gen.barBgMatchHPColor)) and frame.hpBar and frame.hpBar.GetStatusBarColor then
-        r, gg, b = ns.Bars._MatchHPColor(frame, gen, cache, r, gg, b)
-    end
-
-    local alphaMul = (cache and cache.barBackgroundAlpha)
-    if type(alphaMul) ~= 'number' then
-        local alphaPct = 90
-        if bars and type(bars.barBackgroundAlpha) == 'number' then
-            alphaPct = bars.barBackgroundAlpha
-        end
-        if alphaPct < 0 then alphaPct = 0 elseif alphaPct > 100 then alphaPct = 100 end
-        alphaMul = alphaPct / 100
-    end
-    if type(a) == 'number' then a = a * alphaMul end
-
-    _MSUF_ApplyBgToTexture(frame, tex, frame.hpBarBG, "HP", r, gg, b, a)
-
-    local pr, pg, pb, pa
-    if cache then
-        pr, pg, pb, pa = cache.powerBgTintR, cache.powerBgTintG, cache.powerBgTintB, cache.powerBgTintA
-    else
-        pr, pg, pb, pa = MSUF_GetPowerBarBackgroundTintRGBA()
-    end
-    if type(pa) == 'number' then pa = pa * alphaMul end
-
-    if (cache and cache.powerBarBgMatchHPColor or ((gen and gen.powerBarBgMatchHPColor) or (bars and bars.powerBarBgMatchBarColor))) and frame.hpBar and frame.hpBar.GetStatusBarColor then
-        pr, pg, pb = ns.Bars._MatchHPColor(frame, gen, cache, pr, pg, pb)
-    end
-
-    _MSUF_ApplyBgToTexture(frame, tex, frame.powerBarBG, "Power", pr, pg, pb, pa)
-    -- Detached power bar: override bg texture when custom bg is configured.
-    -- Uses separate cache key to avoid ping-pong with _MSUF_ApplyBgToTexture's own cache.
-    if frame._msufPowerBarDetached and frame.powerBarBG then
-        local dpbBgTex = _DPB.ResolveBg()
-        if not dpbBgTex then
-            -- Follow fg: use detached fg override (nil = no override → keep global)
-            dpbBgTex = _DPB.ResolveFg()
-        end
-        if dpbBgTex then
-            if frame._msufDPBBgTexOverride ~= dpbBgTex then
-                frame.powerBarBG:SetTexture(dpbBgTex)
-                frame._msufDPBBgTexOverride = dpbBgTex
-                -- Align _MSUF_ApplyBgToTexture's cache so it doesn't re-set next call
-            end
-        else
-            -- No custom texture: clear override flag so _MSUF_ApplyBgToTexture controls it
-            frame._msufDPBBgTexOverride = nil
-        end
-    elseif frame._msufDPBBgTexOverride then
-        -- No longer detached: clear flag, let _MSUF_ApplyBgToTexture re-apply global
-        frame._msufDPBBgTexOverride = nil
-    end
-    if (not frame.hpBarBG) and (not frame.powerBarBG) and frame.bg then
-        _MSUF_ApplyBgToTexture(frame, tex, frame.bg, "Frame", r, gg, b, a)
-    end
- end
+-- Bar background runtime moved to Core/MSUF_BarBackgroundRuntime.lua.
 local function GetConfigKeyForUnit(unit)
     if unit == "player"
         or unit == "target"
@@ -3850,107 +3661,7 @@ local function MSUF_NumberToTextFast(v)
     if abbr then return abbr(v) end
     return tostring(v)
 end
-ns.Icons._layout = ns.Icons._layout or {}
-function ns.Icons._layout.GetConf(f)
-    if not MSUF_DB then EnsureDB() end
-    local db = MSUF_DB
-    if not db then  return nil, nil, nil end
-    local g = db.general or {}
-    local key = (f and f.unit) and GetConfigKeyForUnit(f.unit) or nil
-    return g, key, (key and db[key]) or nil
-end
-function ns.Icons._layout.Resolve(anchor, allowCenter)
-    if allowCenter and anchor == "CENTER" then  return "CENTER", "CENTER"
-    elseif anchor == "TOPRIGHT" then  return "RIGHT", "TOPRIGHT"
-    elseif anchor == "BOTTOMLEFT" then  return "LEFT", "BOTTOMLEFT"
-    elseif anchor == "BOTTOMRIGHT" then  return "RIGHT", "BOTTOMRIGHT" end
-     return "LEFT", "TOPLEFT"
-end
-function ns.Icons._layout.Layer(conf, g, key, defaultVal)
-    local v = ns.Util and ns.Util.Num and ns.Util.Num(conf, g, key, defaultVal or 7) or (defaultVal or 7)
-    v = math.floor((tonumber(v) or defaultVal or 7) + 0.5)
-    if v < 1 then return 1 end
-    if v > 10 then return 10 end
-    return v
-end
-function ns.Icons._layout.EnsureLayerFrame(owner, region, key, parent)
-    if not owner or not region or not key then return nil end
-    local layerKey = key .. "LayerFrame"
-    local layerFrame = owner[layerKey]
-    if not layerFrame then
-        local p = parent or (region.GetParent and region:GetParent()) or owner
-        layerFrame = ns.UF and ns.UF.MakeFrame and ns.UF.MakeFrame(owner, layerKey, "Frame", p)
-        if layerFrame and layerFrame.SetAllPoints and p then layerFrame:SetAllPoints(p) end
-    end
-    if layerFrame then
-        region._msufLayerFrame = layerFrame
-        region._msufLayerOwner = owner
-        if region.SetParent and region:GetParent() ~= layerFrame then region:SetParent(layerFrame) end
-    end
-    return layerFrame
-end
-function ns.Icons._layout.ApplyLayer(region, layer, owner)
-    if not region then return end
-    local l = tonumber(layer) or 7
-    l = math.floor(l + 0.5)
-    if l < 1 then l = 1 elseif l > 10 then l = 10 end
-
-    local layerFrame = region._msufLayerFrame
-    if layerFrame and layerFrame.SetFrameLevel then
-        local base = 0
-        local o = owner or region._msufLayerOwner
-        if o and o.GetFrameLevel then base = o:GetFrameLevel() or 0 end
-        local want = base + 10 + l
-        if layerFrame._msufLayerLevel ~= want then
-            layerFrame._msufLayerLevel = want
-            layerFrame:SetFrameLevel(want)
-        end
-    end
-
-    if region.SetDrawLayer then
-        local sub = l - 1
-        if sub > 7 then sub = 7 elseif sub < 0 then sub = 0 end
-        region:SetDrawLayer("OVERLAY", sub)
-    end
-end
-function ns.Icons._layout.Apply(icon, owner, size, point, relPoint, ox, oy)
-    icon:SetSize(size, size); icon:ClearAllPoints(); icon:SetPoint(point, owner, relPoint, ox, oy)
- end
-function MSUF_ApplyLeaderIconLayout(f)
-    if not f or not f.leaderIcon then  return end
-    local g, key, conf = ns.Icons._layout.GetConf(f)
-    if not g then  return end
-    local size = ns.Util.Num(conf, g, "leaderIconSize", 14)
-size = math.floor(size + 0.5); if size < 8 then size = 8 elseif size > 64 then size = 64 end
-local ox = ns.Util.Num(conf, g, "leaderIconOffsetX", 0)
-local oy = ns.Util.Num(conf, g, "leaderIconOffsetY", 3)
-local anchor = ns.Util.Val(conf, g, "leaderIconAnchor", "TOPLEFT")
-local layer = ns.Icons._layout.Layer(conf, g, "leaderIconLayer", 7)
-    if not ns.Cache.StampChanged(f, "LeaderIconLayout", size, ox, oy, anchor, layer, (key or "")) then  return end
-    local point, relPoint = ns.Icons._layout.Resolve(anchor, false)
-    ns.Icons._layout.ApplyLayer(f.leaderIcon, layer, f)
-    ns.Icons._layout.Apply(f.leaderIcon, f, size, point, relPoint, ox, oy)
-    if f.assistantIcon then
-        ns.Icons._layout.ApplyLayer(f.assistantIcon, layer, f)
-        ns.Icons._layout.Apply(f.assistantIcon, f, size, point, relPoint, ox, oy - (size - 1))
-    end
- end
-function MSUF_ApplyRaidMarkerLayout(f)
-    if not f or not f.raidMarkerIcon then  return end
-    local g, key, conf = ns.Icons._layout.GetConf(f)
-    if not g then  return end
-    if g.raidMarkerSize == nil then g.raidMarkerSize = 14 end
-    local size = ns.Util.Num(conf, g, "raidMarkerSize", 14)
-size = math.floor(size + 0.5); if size < 8 then size = 8 elseif size > 64 then size = 64 end
-local ox = ns.Util.Num(conf, g, "raidMarkerOffsetX", 16)
-local oy = ns.Util.Num(conf, g, "raidMarkerOffsetY", 3)
-local anchor = ns.Util.Val(conf, g, "raidMarkerAnchor", "TOPLEFT")
-local layer = ns.Icons._layout.Layer(conf, g, "raidMarkerLayer", 7)
-    if not ns.Cache.StampChanged(f, "RaidMarkerLayout", size, ox, oy, anchor, layer, (key or "")) then  return end
-    local point, relPoint = ns.Icons._layout.Resolve(anchor, true)
-    ns.Icons._layout.ApplyLayer(f.raidMarkerIcon, layer, f)
-    ns.Icons._layout.Apply(f.raidMarkerIcon, f, size, point, relPoint, ox, oy)
- end
+-- Icon layout runtime moved to Core/MSUF_IconLayoutRuntime.lua.
 -- 12.0: UFCore now resolves directly to ns.Bars.HealthCalcUpdate. Thin compat wrapper.
 local _cachedSpecHealth = nil
 function _G.MSUF_UFCore_UpdateHealthFast(self)
@@ -5603,7 +5314,8 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
             -- CDM override only meaningful for player (target/focus have no class resources).
             if unit == 'player' and conf.detachedPowerBarSyncClassPower ~= false then
                 local dpbWMode = b.detachedPowerBarWidthMode
-                local cdmName = dpbWMode and _DPB.CDM[dpbWMode]
+                local dpb = ns.Bars and ns.Bars._DetachedPowerBarTextures
+                local cdmName = dpbWMode and dpb and dpb.CDM and dpb.CDM[dpbWMode]
                 if cdmName then
                     local cacheKey = tostring(unit or "player") .. ":width:" .. cdmName
                     local cachedW = tonumber(f._msufDetachedPowerBarStableW) or (layoutCache and tonumber(layoutCache[cacheKey]))
@@ -5633,7 +5345,8 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         local stableW = math.floor(dW + 0.5)
         f._msufDetachedPowerBarStableW = stableW
         if not inLockdown and layoutCache then
-            local cdmName = _DPB.CDM[dpbWMode]
+            local dpb = ns.Bars and ns.Bars._DetachedPowerBarTextures
+            local cdmName = dpb and dpb.CDM and dpb.CDM[dpbWMode]
             if cdmName then
                 layoutCache[tostring(unit or "player") .. ":width:" .. cdmName] = stableW
             end
@@ -6360,6 +6073,8 @@ do
     _UF.PwrText  = _G.MSUF_UFCore_UpdatePowerTextFast   or _UF.PwrText
     _UF.PwrBar   = _G.MSUF_UFCore_UpdatePowerBarFast    or _UF.PwrBar
     _UF.QueueVis = _G.MSUF_QueueUnitframeVisual         or _UF.QueueVis
+    _UF.LeaderIcon = _G.MSUF_ApplyLeaderIconLayout      or _UF.LeaderIcon
+    _UF.RaidMarker = _G.MSUF_ApplyRaidMarkerLayout      or _UF.RaidMarker
     -- Frames can be drawn before this local is resolved; repair load-time HP alpha.
     if _G.MSUF_RefreshAllUnitAlphas then _G.MSUF_RefreshAllUnitAlphas() end
 end
