@@ -708,7 +708,9 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
              return
     end
     end
-    if _G.MSUF_AbsorbTextureTestMode then
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(self) or _G.MSUF_AbsorbTextureTestMode
+    if absorbTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(isHeal and 15 or 25)
         bar:Show()

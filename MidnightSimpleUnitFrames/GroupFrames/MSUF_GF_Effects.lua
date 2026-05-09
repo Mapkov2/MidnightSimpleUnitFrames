@@ -3521,7 +3521,9 @@ local function dispatchHealthFull(f, unit)
         ihBar:SetValue(0)
         if ihBar:IsShown() then ihBar:Hide() end
     end
-    if calc and not _G.MSUF_AbsorbTextureTestMode then
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    if calc and not absorbTestMode then
         if ihBar then
             if c.healPredEn ~= false then
                 local v = calc:GetIncomingHeals()
@@ -3592,7 +3594,9 @@ local function dispatchOverlaysOnly(f, unit)
     UnitGetDetailedHealPrediction(unit, "player", calc)
     local hpMax = f._msufGFCachedHpMax or calc:GetMaximumHealth()
 
-    if _G.MSUF_AbsorbTextureTestMode then return end
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    if absorbTestMode then return end
 
     if ihBar and c.healPredEn ~= false then
         local v = calc:GetIncomingHeals()
@@ -3817,7 +3821,9 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
         return
     end
     -- Test mode: fixed values (same as main UF preview)
-    if _G.MSUF_AbsorbTextureTestMode then
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    if absorbTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(20)
         if not bar:IsShown() then bar:Show() end
@@ -3860,7 +3866,9 @@ dispatchAbsorb = function(f, unit, calc, hpMax)
     local bar = f.absorbBar
     if not bar then return end
     -- Test mode: fixed values, no unit/secret dependency (same as main UF)
-    if _G.MSUF_AbsorbTextureTestMode then
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    if absorbTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(25)
         if not bar:IsShown() then bar:Show() end
@@ -3897,7 +3905,9 @@ end
 dispatchHealAbsorb = function(f, unit, calc, hpMax)
     local bar = f.healAbsorbBar
     if not bar then return end
-    if _G.MSUF_AbsorbTextureTestMode then
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    if absorbTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(15)
         if not bar:IsShown() then bar:Show() end
@@ -5081,13 +5091,13 @@ _G.MSUF_GF_GlobalEventFrame     = _globalFrame
 --- Called from Bars options when test mode or absorb settings change.
 _G.MSUF_GF_RefreshOverlays = function()
     if not GF.frames then return end
-    local testMode = _G.MSUF_AbsorbTextureTestMode
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
     _GF_ForEachLiveGroupFrame(function(f)
         _GF_ApplyAbsorbAnchor(f)
         local u = f.unit
         if u then
             dispatchOverlays(f, u)
-        elseif testMode then
+        elseif (type(testFn) == "function" and testFn(f, f._msufGFKind)) or (_G.MSUF_AbsorbTextureTestMode and type(testFn) ~= "function") then
             dispatchIncomingHeal(f, nil)
             dispatchAbsorb(f, nil)
             dispatchHealAbsorb(f, nil)
@@ -5102,7 +5112,7 @@ _G.MSUF_GF_RefreshOverlays = function()
                     local u = pf.unit or pf._msufGFPreviewUnit
                     if u then
                         dispatchOverlays(pf, u)
-                    elseif testMode then
+                    elseif (type(testFn) == "function" and testFn(pf, pf._msufGFKind)) or (_G.MSUF_AbsorbTextureTestMode and type(testFn) ~= "function") then
                         dispatchIncomingHeal(pf, nil)
                         dispatchAbsorb(pf, nil)
                         dispatchHealAbsorb(pf, nil)
