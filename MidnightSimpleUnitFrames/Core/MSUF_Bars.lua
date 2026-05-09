@@ -625,20 +625,23 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
     end
     local size = (type(readSize) == "function") and readSize(unitKey) or (bdb and tonumber(bdb.powerBarBorderThickness or bdb.powerBarBorderSize) or 1)
     if type(size) ~= 'number' then size = 1 end
-    if size < 1 then size = 1 elseif size > 10 then size = 10 end
-    -- When power bar is detached, the separator border is meaningless
-    -- (the outline system in MSUF_Borders handles the detached bar's border).
+    if size < 0 then size = 0 elseif size > 10 then size = 10 end
+    -- Detached power bars use the outline system in MSUF_Borders so they can
+    -- share the detached bar outline controls.
     local detached = parentUF and parentUF._msufPowerBarDetached
     local border = bar._msufPowerBorder
     if not border then
-        border = F.CreateFrame('Frame', nil, bar)
+        local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
+        border = F.CreateFrame('Frame', nil, bar, template)
         border:EnableMouse(false)
         bar._msufPowerBorder = border
     end
     local barShown = (not bar.IsShown) or bar:IsShown()
     local frameLevel = (bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2
-    local stamp = (enabled and 1 or 0) .. ":" .. (detached and 1 or 0) .. ":" .. (barShown and 1 or 0) .. ":" .. size .. ":" .. frameLevel
-    if not enabled or detached or not barShown then
+    local snap = _G.MSUF_Snap
+    local edge = (type(snap) == "function") and snap(border, size) or size
+    local stamp = (enabled and 1 or 0) .. ":" .. (detached and 1 or 0) .. ":" .. (barShown and 1 or 0) .. ":" .. edge .. ":" .. frameLevel
+    if not enabled or detached or not barShown or edge <= 0 then
         if border._msufPowerBorderStamp ~= stamp or (border.IsShown and border:IsShown()) then
             if border.Hide then border:Hide() end
             border._msufPowerBorderStamp = stamp
@@ -646,10 +649,10 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
          return
     end
     local line = border._msufSeparatorLine
+    if line and line.Hide then line:Hide() end
     local borderReady = border.IsShown and border:IsShown()
-        and line
-        and ((not line.IsShown) or line:IsShown())
         and ((not border.GetFrameLevel) or border:GetFrameLevel() == frameLevel)
+        and border._msufLastEdgeSize == edge
     if border._msufPowerBorderStamp == stamp and borderReady then
         return
     end
@@ -657,21 +660,13 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
         border:SetFrameLevel(frameLevel)
     end
     if border.SetBackdrop then
-        border:SetBackdrop(nil)
+        border:SetBackdrop({ edgeFile = 'Interface\\Buttons\\WHITE8x8', edgeSize = edge })
+        border:SetBackdropBorderColor(0, 0, 0, 1)
     end
     border:ClearAllPoints()
-    border:SetPoint('TOPLEFT', bar, 'TOPLEFT', 0, 0)
-    border:SetPoint('TOPRIGHT', bar, 'TOPRIGHT', 0, 0)
-    border:SetHeight(size)
-    if not line and border.CreateTexture then
-        line = border:CreateTexture(nil, 'OVERLAY')
-        line:SetTexture('Interface\\Buttons\\WHITE8x8')
-        line:SetVertexColor(0, 0, 0, 1)
-        line:SetAllPoints(border)
-        border._msufSeparatorLine = line
-    elseif line and line.SetAllPoints then
-        line:SetAllPoints(border)
-    end
+    border:SetPoint('TOPLEFT', bar, 'TOPLEFT', -edge, edge)
+    border:SetPoint('BOTTOMRIGHT', bar, 'BOTTOMRIGHT', edge, -edge)
+    border._msufLastEdgeSize = edge
     border:Show()
     border._msufPowerBorderStamp = stamp
  end

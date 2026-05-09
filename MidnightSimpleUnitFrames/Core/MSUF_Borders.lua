@@ -26,11 +26,25 @@ local LCG = LibStub and LibStub("LibCustomGlow-1.0", true)
 ------------------------------------------------------------------------
 local _glowColorTbl = { 0, 0, 0, 1 }
 
+local function _StopDispelGlowOn(anchor)
+    if not (LCG and anchor) then return end
+    LCG.PixelGlow_Stop(anchor, "msufDispel")
+    LCG.AutoCastGlow_Stop(anchor, "msufDispel")
+    LCG.ProcGlow_Stop(anchor, "msufDispel")
+end
+
 local function _StartDispelGlow(frame, r, g, b, cfg)
     if not LCG then return end
     local anchor = frame._msufHighlightOutline or frame
+    local style = cfg.dispelGlowStyle or "PIXEL"
+    local oldAnchor = frame._msufDispelGlowAnchor
+    if oldAnchor and (oldAnchor ~= anchor or frame._msufDispelGlowStyle ~= style) then
+        _StopDispelGlowOn(oldAnchor)
+    end
+    if anchor ~= frame then
+        _StopDispelGlowOn(frame)
+    end
     _glowColorTbl[1], _glowColorTbl[2], _glowColorTbl[3] = r, g, b
-    local style = cfg.dispelGlowStyle
     if style == "AUTOCAST" then
         LCG.AutoCastGlow_Start(anchor, _glowColorTbl, cfg.dispelGlowLines, cfg.dispelGlowFreq, nil, nil, nil, "msufDispel")
     elseif style == "PROC" then
@@ -39,16 +53,25 @@ local function _StartDispelGlow(frame, r, g, b, cfg)
         LCG.PixelGlow_Start(anchor, _glowColorTbl, cfg.dispelGlowLines, cfg.dispelGlowFreq, nil, cfg.dispelGlowThick, nil, nil, nil, "msufDispel")
     end
     frame._msufDispelGlowActive = true
+    frame._msufDispelGlowAnchor = anchor
+    frame._msufDispelGlowStyle = style
 end
 
 local function _StopDispelGlow(frame)
-    if not frame._msufDispelGlowActive then return end
+    if not frame then return end
     frame._msufDispelGlowActive = nil
-    if not LCG then return end
-    local anchor = frame._msufHighlightOutline or frame
-    LCG.PixelGlow_Stop(anchor, "msufDispel")
-    LCG.AutoCastGlow_Stop(anchor, "msufDispel")
-    LCG.ProcGlow_Stop(anchor, "msufDispel")
+    local anchor = frame._msufDispelGlowAnchor
+    frame._msufDispelGlowAnchor = nil
+    frame._msufDispelGlowStyle = nil
+    _StopDispelGlowOn(anchor)
+
+    local outline = frame._msufHighlightOutline
+    if outline and outline ~= anchor then
+        _StopDispelGlowOn(outline)
+    end
+    if frame ~= anchor and frame ~= outline then
+        _StopDispelGlowOn(frame)
+    end
 end
 local function _Clamp01(v, def)
     if type(v) ~= "number" then return def end
@@ -337,14 +360,8 @@ end
 local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
     local hlFrame = self._msufHighlightOutline
 
-    -- Glow management: start on dispel (hlKey==2), stop otherwise
-    if hlKey == 2 and cfg.dispelGlowEnabled then
-        _StartDispelGlow(self, hlR, hlG, hlB, cfg)
-    else
-        _StopDispelGlow(self)
-    end
-
     if hlKey == 0 then
+        _StopDispelGlow(self)
         if hlFrame then hlFrame:Hide() end
         self._msufHighlightColorKey = 0
         return
@@ -398,6 +415,13 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
             hlFrame:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", hlEdge, -hlEdge)
         end
         self._msufHighlightBottomIsPower = bottomIsPower
+    end
+
+    -- Start only after the highlight frame exists, so Stop uses the same anchor.
+    if hlKey == 2 and cfg.dispelGlowEnabled then
+        _StartDispelGlow(self, hlR, hlG, hlB, cfg)
+    else
+        _StopDispelGlow(self)
     end
 
     hlFrame:Show()
@@ -604,14 +628,18 @@ _G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(ac
             -- When turning OFF: always clean up ALL GF frames
             if not active then
                 gf._msufGFDispelType = nil
-                if gf._msufGFDispelGlowActive then
+                local stopGFGlow = _G.MSUF_GF_StopDispelGlow
+                if type(stopGFGlow) == "function" then
+                    stopGFGlow(gf)
+                else
+                    local anchor = gf._msufGFDispelGlowAnchor
                     gf._msufGFDispelGlowActive = nil
-                    if LCG then
-                        local anchor = gf._msufGFHighlightBorder or gf
-                        LCG.PixelGlow_Stop(anchor, "msufDispel")
-                        LCG.AutoCastGlow_Stop(anchor, "msufDispel")
-                        LCG.ProcGlow_Stop(anchor, "msufDispel")
-                    end
+                    gf._msufGFDispelGlowAnchor = nil
+                    gf._msufGFDispelGlowStyle = nil
+                    _StopDispelGlowOn(anchor)
+                    local borderAnchor = gf._msufGFHighlightBorder
+                    if borderAnchor and borderAnchor ~= anchor then _StopDispelGlowOn(borderAnchor) end
+                    if gf ~= anchor and gf ~= borderAnchor then _StopDispelGlowOn(gf) end
                 end
                 local border = gf._msufGFHighlightBorder
                 if border and border:IsShown() and not gf._msufGFAggroLevel then

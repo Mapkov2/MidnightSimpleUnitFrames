@@ -1196,19 +1196,30 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         EnhanceSliderTrack(s)
     end
 
-    local function FinalizeDashboard(s, w)
+    local function FinalizeDashboard(s, w, opts)
         if not s then return end
+        opts = (type(opts) == "table") and opts or nil
         s:SetWidth(w or ((fullW * 0.5) - 40))
         EnhanceSliderTrack(s)
         local eb, minus, plus = s.editBox, s.minusButton, s.plusButton
-        if eb then eb:Show(); eb:ClearAllPoints(); eb:SetPoint("TOP", s, "BOTTOM", 0, -12); eb:SetWidth(40) end
+        if eb then
+            eb:Show()
+            eb:ClearAllPoints()
+            eb:SetPoint("TOP", s, "BOTTOM", 0, opts and (opts.inputOffsetY or -14) or -12)
+            eb:SetWidth((opts and opts.inputWidth) or 40)
+        end
         if minus then minus:Show(); minus:ClearAllPoints(); minus:SetPoint("RIGHT", eb or s, "LEFT", -4, 0) end
         if plus then plus:Show(); plus:ClearAllPoints(); plus:SetPoint("LEFT", eb or s, "RIGHT", 4, 0) end
         local n = s.GetName and s:GetName()
         if n then
             local low, high = _G[n.."Low"], _G[n.."High"]
-            if low then low:ClearAllPoints(); low:SetPoint("TOPLEFT", s, "BOTTOMLEFT", 0, -2) end
-            if high then high:ClearAllPoints(); high:SetPoint("TOPRIGHT", s, "BOTTOMRIGHT", 0, -2) end
+            if opts and opts.hideRange then
+                if low then low:Hide() end
+                if high then high:Hide() end
+            else
+                if low then low:ClearAllPoints(); low:SetPoint("TOPLEFT", s, "BOTTOMLEFT", 0, -2) end
+                if high then high:ClearAllPoints(); high:SetPoint("TOPRIGHT", s, "BOTTOMRIGHT", 0, -2) end
+            end
         end
         if s.SetHitRectInsets then s:SetHitRectInsets(-6, -6, -14, -14) end
         local thumb = s.GetThumbTexture and s:GetThumbTexture()
@@ -1224,27 +1235,27 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     basicsBox:Hide(); panel.playerBasicsBox = basicsBox; panel.playerBasicsBody = basicsBody; panel._msufBasicsH = basicsH
 
     -- Power Bar section
-    local powerBarBox, powerBarBody = MkCollapsible(frameGroup, "Power Bar", fullW, 160, false)
+    local powerBarBox, powerBarBody = MkCollapsible(frameGroup, "Power Bar", fullW, 176, false)
     powerBarBox:Hide(); panel.playerPowerBarBox = powerBarBox; panel.playerPowerBarBody = powerBarBody
     do
         local pbShowCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarShowCB", "Show power bar", 12, -6)
         panel.playerPowerBarShowCB = pbShowCB
 
         local pbHeightSlider = CreateLabeledSlider("MSUF_UF_PowerBarHeightSlider", "Height", powerBarBody, 1, 20, 1, 14, -44)
-        FinalizeDashboard(pbHeightSlider, 200)
+        FinalizeDashboard(pbHeightSlider, 200, { hideRange = true, inputWidth = 54, inputOffsetY = -16 })
         panel.playerPowerBarHeightSlider = pbHeightSlider
 
-        local pbEmbedCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarEmbedCB", "Embed into health bar", 12, -108)
+        local pbEmbedCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarEmbedCB", "Embed into health bar", 12, -117)
         panel.playerPowerBarEmbedCB = pbEmbedCB
 
         local pbBorderCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarBorderCB", "Power bar border", 300, -6)
         panel.playerPowerBarBorderCB = pbBorderCB
 
         local pbBorderSlider = CreateLabeledSlider("MSUF_UF_PowerBarBorderSlider", "Border thickness", powerBarBody, 0, 6, 1, 300, -44)
-        FinalizeDashboard(pbBorderSlider, 200)
+        FinalizeDashboard(pbBorderSlider, 200, { hideRange = true, inputWidth = 54, inputOffsetY = -16 })
         panel.playerPowerBarBorderSlider = pbBorderSlider
 
-        local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -108)
+        local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -117)
         panel.playerPowerBarSmoothCB = pbSmoothCB
     end
 
