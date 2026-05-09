@@ -312,15 +312,14 @@ local function _GF_SetGrad(tex, orientation, a1, a2, strength)
 end
 
 local function _GF_GradientValue(conf, gen, key, defaultVal)
-    local v = nil
-    if conf and conf.hlOverride == true and conf[key] ~= nil then v = conf[key] end
-    if v == nil and gen then v = gen[key] end
-    if v == nil then return defaultVal end
-    return v
+    if conf and conf.hlOverride == true and conf.gradientOverride == true and conf.gradientOverrideVersion == 2 and conf[key] ~= nil then
+        return conf[key]
+    end
+    return defaultVal
 end
 
 local function _GF_GradientDirState(conf, gen)
-    if conf and conf.hlOverride == true and (
+    if conf and conf.hlOverride == true and conf.gradientOverride == true and conf.gradientOverrideVersion == 2 and (
         conf.gradientDirLeft ~= nil or conf.gradientDirRight ~= nil or
         conf.gradientDirUp ~= nil or conf.gradientDirDown ~= nil
     ) then
@@ -337,25 +336,14 @@ local function _GF_GradientDirState(conf, gen)
         end
         return left, right, up, down
     end
-    local left  = (gen and gen.gradientDirLeft == true)
-    local right = (gen and gen.gradientDirRight == true)
-    local up    = (gen and gen.gradientDirUp == true)
-    local down  = (gen and gen.gradientDirDown == true)
-    if not left and not right and not up and not down then
-        local dir = gen and gen.gradientDirection
-        if dir == "LEFT" then left = true
-        elseif dir == "UP" then up = true
-        elseif dir == "DOWN" then down = true
-        else right = true end
-    end
-    return left, right, up, down
+    return false, true, false, false
 end
 
 local function _GF_ApplyGradientToBar(bar, conf, gen, isPower)
     if not bar then return end
     local strength = tonumber(_GF_GradientValue(conf, gen, "gradientStrength", 0.45)) or 0.45
     if isPower then
-        if _GF_GradientValue(conf, gen, "enablePowerGradient", true) == false then strength = 0 end
+        if _GF_GradientValue(conf, gen, "enablePowerGradient", false) ~= true then strength = 0 end
     else
         if _GF_GradientValue(conf, gen, "enableGradient", true) == false then strength = 0 end
     end

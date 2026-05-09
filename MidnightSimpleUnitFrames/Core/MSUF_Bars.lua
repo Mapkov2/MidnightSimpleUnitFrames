@@ -40,8 +40,7 @@ local function _MSUF_SetHealthBarValue(frame, bar, value)
 end
 
 -- Per-unit absorb setting resolver.
--- Checks MSUF_DB[unitKey] only when Bars/Highlight override is active,
--- then falls back to MSUF_DB.general.
+-- Checks MSUF_DB[unitKey] for override, falls back to MSUF_DB.general.
 -- PERF: Result cache — pure function, same input always gives same output.
 -- Eliminates 8× GetBossIndexFromToken lookups per target click.
 local _normalizeCache = {}
@@ -60,75 +59,6 @@ local function _MSUF_NormalizeUnitKey(unit)
     return result
 end
 
-local function _MSUF_GetGradientScopeKey(frameOrUnit)
-    local unit = frameOrUnit
-    if type(frameOrUnit) == "table" then
-        unit = frameOrUnit.msufConfigKey or frameOrUnit._msufConfigKey or frameOrUnit.unitKey or frameOrUnit.unit
-        if (not unit) and frameOrUnit.GetParent then
-            local parent = frameOrUnit:GetParent()
-            unit = parent and (parent.msufConfigKey or parent._msufConfigKey or parent.unitKey or parent.unit)
-            if (not unit) and parent and parent.GetParent then
-                local owner = parent:GetParent()
-                unit = owner and (owner.msufConfigKey or owner._msufConfigKey or owner.unitKey or owner.unit)
-            end
-        end
-    end
-    return _MSUF_NormalizeUnitKey(unit)
-end
-
-local function _MSUF_GetScopedGradientDB(frameOrUnit)
-    local db = _G.MSUF_DB
-    if not db then return nil end
-    local scopeKey = _MSUF_GetGradientScopeKey(frameOrUnit)
-    if not scopeKey or scopeKey == "shared" then return nil end
-    local scoped = db[scopeKey]
-    if type(scoped) == "table" and scoped.hlOverride == true then
-        return scoped
-    end
-    return nil
-end
-
-local function _MSUF_GradientValue(scoped, gen, key, defaultVal)
-    local v = nil
-    if scoped and scoped[key] ~= nil then v = scoped[key] end
-    if v == nil and gen then v = gen[key] end
-    if v == nil then return defaultVal end
-    return v
-end
-
-local function _MSUF_GradientDirState(scoped, gen)
-    local hasScoped = scoped and (
-        scoped.gradientDirLeft ~= nil or scoped.gradientDirRight ~= nil or
-        scoped.gradientDirUp ~= nil or scoped.gradientDirDown ~= nil
-    )
-    if hasScoped then
-        local left = (scoped.gradientDirLeft == true)
-        local right = (scoped.gradientDirRight == true)
-        local up = (scoped.gradientDirUp == true)
-        local down = (scoped.gradientDirDown == true)
-        if not left and not right and not up and not down then
-            local dir = scoped.gradientDirection
-            if dir == "LEFT" then left = true
-            elseif dir == "UP" then up = true
-            elseif dir == "DOWN" then down = true
-            else right = true end
-        end
-        return left, right, up, down
-    end
-    local left = (gen and gen.gradientDirLeft == true)
-    local right = (gen and gen.gradientDirRight == true)
-    local up = (gen and gen.gradientDirUp == true)
-    local down = (gen and gen.gradientDirDown == true)
-    if not left and not right and not up and not down then
-        local dir = gen and gen.gradientDirection
-        if dir == "LEFT" then left = true
-        elseif dir == "UP" then up = true
-        elseif dir == "DOWN" then down = true
-        else right = true end
-    end
-    return left, right, up, down
-end
-
 -- Absorb display/anchor resolver cache (invalidated on DB reference change).
 local _absorbCache = {}
 local _absorbCacheDBRef = nil
@@ -139,8 +69,7 @@ local function _MSUF_InvalidateAbsorbCache()
 end
 
 -- Resolve absorb display flags (enableBar, showText) for a unit.
--- Uses absorbTextMode from per-unit DB if Bars/Highlight override is active,
--- else from general. HP/Power text overrides must not freeze absorb settings.
+-- Uses absorbTextMode from per-unit DB if overridden, else from general.
 local function _MSUF_ResolveAbsorbDisplay(unit)
     if not MSUF_DB then EnsureDB() end
     -- Invalidate cache if DB reference changed (profile switch).
@@ -155,7 +84,7 @@ local function _MSUF_ResolveAbsorbDisplay(unit)
     local mode = nil
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hlOverride == true and u.absorbTextMode ~= nil then
+        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbTextMode ~= nil then
             mode = tonumber(u.absorbTextMode)
         end
     end
@@ -187,7 +116,7 @@ local function _MSUF_ResolveAbsorbAnchor(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hlOverride == true and u.absorbAnchorMode ~= nil then
+        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbAnchorMode ~= nil then
             local v = tonumber(u.absorbAnchorMode) or 2
             _absorbCache[anchorKey] = v
             return v
@@ -214,12 +143,12 @@ local function _MSUF_ResolveAbsorbOpacity(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hlOverride == true and u.absorbBarOpacity ~= nil then
-            local v = tonumber(u.absorbBarOpacity)
+        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.absorbBarOpacity ~= nil then
+            local v = tonumber(u.absorbBarOpacity) or 1
             _absorbCache[ck] = v; return v
         end
     end
-    local v = tonumber(g.absorbBarOpacity)
+    local v = tonumber(g.absorbBarOpacity) or 1
     _absorbCache[ck] = v; return v
 end
 
@@ -233,12 +162,12 @@ local function _MSUF_ResolveHealAbsorbOpacity(unit)
     local g = MSUF_DB.general or {}
     if nk then
         local u = MSUF_DB[nk]
-        if u and u.hlOverride == true and u.healAbsorbBarOpacity ~= nil then
-            local v = tonumber(u.healAbsorbBarOpacity)
+        if u and (u.hlOverride == true or u.hpPowerTextOverride == true) and u.healAbsorbBarOpacity ~= nil then
+            local v = tonumber(u.healAbsorbBarOpacity) or 1
             _absorbCache[ck] = v; return v
         end
     end
-    local v = tonumber(g.healAbsorbBarOpacity)
+    local v = tonumber(g.healAbsorbBarOpacity) or 1
     _absorbCache[ck] = v; return v
 end
 
@@ -520,22 +449,87 @@ local function MSUF_SetGrad(tex, orientation, a1, a2, strength)
     end
     if strength > 0 then tex:Show() else tex:Hide() end
  end
+local function MSUF_ClearGradSet(grads, startIdx)
+    if not grads then return end
+    for i = startIdx or 1, 8 do
+        MSUF_SetGrad(grads[_MSUF_GRAD_HIDE_KEYS[i]], 'HORIZONTAL', 0, 0, 0)
+    end
+end
+local function _MSUF_GradientKeyActive(db, key)
+    return db and db.hlOverride == true and db.gradientOverride == true
+        and db.gradientOverrideVersion == 2
+        and type(db.gradientOverrideKeys) == "table"
+        and db.gradientOverrideKeys[key] == true
+end
+
+local function _MSUF_GradientDirActive(db)
+    return _MSUF_GradientKeyActive(db, "gradientDirLeft")
+        or _MSUF_GradientKeyActive(db, "gradientDirRight")
+        or _MSUF_GradientKeyActive(db, "gradientDirUp")
+        or _MSUF_GradientKeyActive(db, "gradientDirDown")
+        or _MSUF_GradientKeyActive(db, "gradientDirection")
+end
+
+local function _MSUF_GetGradientScopeDBForFrame(frameOrTex)
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    if not frameOrTex then return g end
+    -- Standalone textures do not carry unit scope; keep them on Shared.
+    if frameOrTex.SetGradientAlpha and not (frameOrTex.hpGradients or frameOrTex.powerGradients) then
+        return g
+    end
+    local key = frameOrTex.msufConfigKey or frameOrTex._msufConfigKey or frameOrTex.unitKey or frameOrTex.unit
+    key = _MSUF_NormalizeUnitKey(key)
+    local u = key and MSUF_DB and MSUF_DB[key]
+    if _MSUF_GradientDirActive(u) then return u end
+    return g
+end
+
+local function _MSUF_GetGradientOwnerFrame(frameOrTex, isPower)
+    if not frameOrTex or not frameOrTex.SetGradientAlpha then return nil end
+    local owner = frameOrTex._msufGradientOwner
+    if owner and ((isPower and owner.powerGradients) or ((not isPower) and owner.hpGradients)) then return owner end
+    if frameOrTex.GetParent then
+        owner = frameOrTex:GetParent()
+        if owner and ((isPower and owner.powerGradients) or ((not isPower) and owner.hpGradients)) then return owner end
+    end
+    return nil
+end
+
+local function _MSUF_ResolveGradientValue(frameOrTex, key, defaultVal)
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    if frameOrTex and not (frameOrTex.SetGradientAlpha and not (frameOrTex.hpGradients or frameOrTex.powerGradients)) then
+        local unitKey = frameOrTex.msufConfigKey or frameOrTex._msufConfigKey or frameOrTex.unitKey or frameOrTex.unit
+        unitKey = _MSUF_NormalizeUnitKey(unitKey)
+        local u = unitKey and MSUF_DB and MSUF_DB[unitKey]
+        if _MSUF_GradientKeyActive(u, key) and u[key] ~= nil then return u[key] end
+    end
+    local v = g[key]
+    if v ~= nil then return v end
+    return defaultVal
+end
+
 local function MSUF_ApplyBarGradient(frameOrTex, isPower)
     if not frameOrTex then  return end
     if not MSUF_DB then EnsureDB() end
-    local g = MSUF_DB.general or {}
-    local scoped = _MSUF_GetScopedGradientDB(frameOrTex)
-    local strength = tonumber(_MSUF_GradientValue(scoped, g, "gradientStrength", 0.45)) or 0.45
+    frameOrTex = _MSUF_GetGradientOwnerFrame(frameOrTex, isPower) or frameOrTex
+    local g = _MSUF_GetGradientScopeDBForFrame(frameOrTex)
+    local strength = tonumber(_MSUF_ResolveGradientValue(frameOrTex, "gradientStrength", 0.45)) or 0.45
+    local enabled
     if isPower then
-        if _MSUF_GradientValue(scoped, g, "enablePowerGradient", true) == false then strength = 0 end
+        enabled = (_MSUF_ResolveGradientValue(frameOrTex, "enablePowerGradient", false) == true)
     else
-        if _MSUF_GradientValue(scoped, g, "enableGradient", true) == false then strength = 0 end
+        enabled = (_MSUF_ResolveGradientValue(frameOrTex, "enableGradient", true) ~= false)
     end
+    if not enabled then strength = 0 end
     -- Allow applying to a standalone texture (used by some indicators).
     if frameOrTex.SetGradientAlpha and not (isPower and frameOrTex.powerGradients or frameOrTex.hpGradients) then
         local tex = frameOrTex
-        local dir = _MSUF_GradientValue(scoped, g, "gradientDirection", "RIGHT")
-        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT' end
+        if not enabled or strength <= 0 then
+            MSUF_SetGrad(tex, 'HORIZONTAL', 0, 0, 0)
+            return
+        end
+        local dir = _MSUF_ResolveGradientValue(frameOrTex, "gradientDirection", "RIGHT")
+        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT'; g.gradientDirection = dir end
         local orientation, a1, a2 = 'HORIZONTAL', 0, strength
         if dir == 'LEFT' then a1, a2 = strength, 0
         elseif dir == 'UP' then orientation = 'VERTICAL'; a1, a2 = 0, strength
@@ -547,12 +541,35 @@ local function MSUF_ApplyBarGradient(frameOrTex, isPower)
     local bar = isPower and (frame.targetPowerBar or frame.powerBar) or frame.hpBar
     local grads = isPower and frame.powerGradients or frame.hpGradients
     if not bar or not grads then  return end
-    -- Resolve scoped per-edge toggles, with legacy single-direction fallback.
-    local left, right, up, down = _MSUF_GradientDirState(scoped, g)
-    if strength <= 0 then
-        MSUF_HideGradSet(grads)
-         return
+    if not enabled or strength <= 0 then
+        MSUF_ClearGradSet(grads)
+        if isPower then MSUF_SetGrad(frame.powerGradient, 'HORIZONTAL', 0, 0, 0)
+        else MSUF_SetGrad(frame.hpGradient, 'HORIZONTAL', 0, 0, 0) end
+        return
     end
+    -- Migrate old single-direction setting to the new per-edge toggles once.
+    local rawHasNew = (g.gradientDirLeft ~= nil) or (g.gradientDirRight ~= nil) or (g.gradientDirUp ~= nil) or (g.gradientDirDown ~= nil)
+    local useScopedLegacy = (g ~= (MSUF_DB.general or {})) and (not rawHasNew) and g.gradientDirection ~= nil
+    local hasNew = rawHasNew or ((not useScopedLegacy) and (
+        (_MSUF_ResolveGradientValue(frameOrTex, "gradientDirLeft", nil) ~= nil)
+        or (_MSUF_ResolveGradientValue(frameOrTex, "gradientDirRight", nil) ~= nil)
+        or (_MSUF_ResolveGradientValue(frameOrTex, "gradientDirUp", nil) ~= nil)
+        or (_MSUF_ResolveGradientValue(frameOrTex, "gradientDirDown", nil) ~= nil)
+    ))
+    if (not hasNew) or useScopedLegacy then
+        local dir = useScopedLegacy and g.gradientDirection or _MSUF_ResolveGradientValue(frameOrTex, "gradientDirection", "RIGHT")
+        if type(dir) ~= 'string' or dir == '' then dir = 'RIGHT' end
+        dir = string.upper(dir)
+        g.gradientDirLeft = (dir == 'LEFT')
+        g.gradientDirRight = (dir == 'RIGHT')
+        g.gradientDirUp = (dir == 'UP')
+        g.gradientDirDown = (dir == 'DOWN')
+    end
+    local left = (_MSUF_ResolveGradientValue(frameOrTex, "gradientDirLeft", false) == true)
+    local right = (_MSUF_ResolveGradientValue(frameOrTex, "gradientDirRight", false) == true)
+    local up = (_MSUF_ResolveGradientValue(frameOrTex, "gradientDirUp", false) == true)
+    local down = (_MSUF_ResolveGradientValue(frameOrTex, "gradientDirDown", false) == true)
+    if not left and not right and not up and not down then right = true; g.gradientDirRight = true end
     if left then
         local useHalf = (right == true)
         local tex = grads.left
@@ -654,10 +671,12 @@ function _G.MSUF_ApplyPowerBarBorder_All()
  end
 local function MSUF_PreCreateHPGradients(hpBar)
     if not hpBar or not hpBar.CreateTexture then  return nil end
+    local owner = hpBar.GetParent and hpBar:GetParent() or nil
     local function MakeTex()
         local t = hpBar:CreateTexture(nil, "OVERLAY")
         t:SetTexture("Interface\\Buttons\\WHITE8x8")
         t:SetBlendMode("BLEND")
+        t._msufGradientOwner = owner
         t:Hide()
          return t
     end
@@ -940,6 +959,7 @@ local function MSUF_ApplyReverseFillBars(self, conf)
 _G.MSUF_ApplyReverseFillBars = _G.MSUF_ApplyReverseFillBars or MSUF_ApplyReverseFillBars
 
 -- Exports for main file callers
+ns.Bars._ResolveGradientValue = _MSUF_ResolveGradientValue
 ns.Bars._ApplyHPGradient = MSUF_ApplyHPGradient
 ns.Bars._ApplyPowerGradient = MSUF_ApplyPowerGradient
 ns.Bars._PreCreateHPGradients = MSUF_PreCreateHPGradients
