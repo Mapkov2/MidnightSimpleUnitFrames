@@ -2137,6 +2137,7 @@ _G.MSUF_IsExternalAnchorUsable = MSUF_IsExternalAnchorUsable
 -- External anchors such as CDM/bridge frames may resize or move in combat.
 -- Snapshot the resolved visual position onto UIParent so secure unitframes do not drift with them.
 local function MSUF_SnapshotFrameToUIParentCenter(frame)
+    if InCombatLockdown and InCombatLockdown() then return false end
     if not frame or not frame.GetCenter or not UIParent or not UIParent.GetCenter then return false end
 
     local fx, fy = frame:GetCenter()
@@ -2189,9 +2190,7 @@ local function PositionUnitFrame(f, unit)
         f.msufConfigKey = key
     end
     if not key then  return end
-    if _msuf_inCombat then
-         return
-    end
+    if _msuf_inCombat or (InCombatLockdown and InCombatLockdown()) then return end
     local conf = f.cachedConfig
     if not conf then
         if not MSUF_DB then EnsureDB() end
