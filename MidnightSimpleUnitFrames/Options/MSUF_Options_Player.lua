@@ -2413,7 +2413,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                     if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.playerPortraitDropDown, cur) end
                     if UIDropDownMenu_SetText then UIDropDownMenu_SetText(panel.playerPortraitDropDown, PortraitText(cur)) end
                     ApplyCurrent()
-                    local sync = _G.MSUF_3DPortraits_SyncUnit
+                    local sync = _G.MSUF_Portraits_SyncUnit
                     if type(sync) == "function" then pcall(sync, CurrentKey()) end
                 end
                 info.checked = function() return GetPortraitVal(EnsureKeyDB()) == opt.value end

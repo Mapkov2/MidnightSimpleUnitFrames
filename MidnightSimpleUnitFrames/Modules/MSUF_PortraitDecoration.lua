@@ -1,6 +1,6 @@
 -- Modules/MSUF_PortraitDecoration.lua
 -- Portrait decoration: borders, backgrounds, size override, offset, strata elevation.
--- Loads AFTER MSUF_3DPortraits.lua in the TOC.
+-- Loads AFTER Core/MSUF_Portraits.lua in the TOC.
 --
 -- Architecture:
 --   - portraitContainer frame: reparents portrait texture for strata elevation (above HP/power bars)
@@ -14,7 +14,7 @@
 
 local addonName, ns = ...
 
-local type, tonumber, math_max, rawget = type, tonumber, math.max, rawget
+local type, tonumber, math_max = type, tonumber, math.max
 local UnitClassBase = UnitClassBase or (C_UnitInfo and C_UnitInfo.GetUnitClassBase)
 local UnitReaction  = UnitReaction
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
@@ -151,20 +151,6 @@ local function ComputeAndApplyLayout(f, conf, portrait)
         else portrait:SetPoint("LEFT", anchor, "RIGHT", ox, oy) end
     end
 
-    -- 3D model follows container
-    local model = rawget(f, "portraitModel")
-    if model and model.IsShown and model:IsShown() then
-        if model.SetSize then model:SetSize(size, size) end
-        local target = (d and d.portraitContainer) or portrait
-        if model.ClearAllPoints then
-            model:ClearAllPoints()
-            if model.SetAllPoints then model:SetAllPoints(target)
-            elseif model.SetPoint then model:SetPoint("CENTER", target, "CENTER", 0, 0) end
-        end
-        if d and d.portraitContainer and model.SetFrameLevel then
-            model:SetFrameLevel(d.portraitContainer:GetFrameLevel() + 1)
-        end
-    end
 end
 
 -- ────────────────────────────────────────────────────────────
@@ -329,7 +315,7 @@ end
 -- Hooks
 -- ────────────────────────────────────────────────────────────
 if type(hooksecurefunc) == "function" then
-    -- After portrait rendering (2D/3D/CLASS texture is set)
+    -- After portrait rendering (2D/CLASS texture is set)
     if type(_G.MSUF_UpdatePortraitIfNeeded) == "function" then
         local function OnUpdatePortrait(f, unit, conf, exists)
             local fn = _G.MSUF_ApplyPortraitDecoration
