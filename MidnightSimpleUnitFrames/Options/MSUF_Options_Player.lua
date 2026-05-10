@@ -17,6 +17,7 @@ end
 local floor, max, min = math.floor, math.max, math.min
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local MEDIA_BASE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\"
+local MEDIA_SUPERELLIPSE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\superellipse.tga"
 
 --------------------------------------------------------------------
 -- Castbar LoD loader
@@ -496,6 +497,42 @@ MSUF_COPY_STATUSICON_FIELDS = {
     "incomingResIndicatorSize","incomingResIndicatorLayer","incomingResIndicatorSymbol",
 }
 
+local COPY_FRAME_BASIC_FIELDS = {
+    "enabled","showName","showHP","showPower","reverseFillBars","smoothFill",
+}
+local COPY_TRANSPARENCY_FIELDS = {
+    "alphaInCombat","alphaOutOfCombat","alphaSync","alphaSyncBoth",
+    "alphaExcludeTextPortrait","alphaPreserveHPColor","alphaLayerMode",
+    "alphaFGInCombat","alphaFGOutOfCombat","alphaBGInCombat","alphaBGOutOfCombat","alphaHPInCombat","alphaHPOutOfCombat",
+}
+local COPY_LOAD_CONDITION_FIELDS = {
+    "loadCondHideMounted","loadCondHideInVehicle","loadCondHideResting",
+    "loadCondHideInCombat","loadCondHideOutOfCombat","loadCondHideStealthed",
+    "loadCondHideSolo","loadCondHideInGroup","loadCondHideInInstance","loadCondActive",
+}
+local COPY_LAYOUT_FIELDS = {
+    "width","height","offsetX","offsetY","anchorFrameName","anchorToUnitframe",
+}
+local UF_COPY_CATEGORIES = {
+    { key = "basics",       label = "Frame Basics",     default = true },
+    { key = "text",         label = "Text",             default = true },
+    { key = "portrait",     label = "Portrait",         default = true },
+    { key = "power",        label = "Power Bar",        default = true },
+    { key = "castbar",      label = "Castbar",          default = true },
+    { key = "status",       label = "Status Icons",     default = true },
+    { key = "load",         label = "Load Conditions",  default = true },
+    { key = "transparency", label = "Transparency",     default = true },
+    { key = "layout",       label = "Size & Anchoring", default = false },
+}
+local function NewCopyScopeDefaults()
+    local t = {}
+    for i = 1, #UF_COPY_CATEGORIES do
+        local cat = UF_COPY_CATEGORIES[i]
+        t[cat.key] = cat.default ~= false
+    end
+    return t
+end
+
 local function CanonKey(k)
     if not k or type(k) ~= "string" then return k end
     k = k:lower()
@@ -624,7 +661,7 @@ local function ConfirmCopyToAll(cb)
 end
 _G.MSUF_ConfirmCopyToAll = ConfirmCopyToAll
 
-local function CopyUnitSettings(srcKey, destKey, api)
+local function CopyUnitSettings(srcKey, destKey, api, scopes)
     EnsureDB()
     MSUF_DB = MSUF_DB or {}
     MSUF_DB.general = MSUF_DB.general or {}
@@ -633,22 +670,44 @@ local function CopyUnitSettings(srcKey, destKey, api)
     destKey = type(destKey) == "string" and destKey:lower() or "target"
     local src, srcC = EnsureUnitDB(srcKey)
     if not src or not srcC then return end
+    scopes = (type(scopes) == "table") and scopes or NewCopyScopeDefaults()
 
     local function CopyOne(toKey)
         local dst, dstC = EnsureUnitDB(toKey)
         if not dst or not dstC or dstC == srcC then return end
-        CopyFields(dst, src, COPY_BASIC_FIELDS)
-        CopyFields(dst, src, COPY_TEXT_FIELDS)
-        dst.hpPowerTextOverride = nil
-        CopyFields(dst, src, COPY_PORTRAIT_FIELDS)
-        dst.portraitDecoOverride = nil
-        CopyPowerBarFields(dst, src, srcC)
-        CopyFields(dst, src, COPY_INDICATOR_FIELDS)
-        CopyFields(dst, src, MSUF_COPY_STATUSICON_FIELDS)
-        dst.showInterrupt = src.showInterrupt
-        CopyCastbar(g, srcC, dstC)
-        if _G.MSUF_Portraits_SyncUnit then _G.MSUF_Portraits_SyncUnit(dstC) end
-        if _G.MSUF_PortraitDecoration_SyncUnit then _G.MSUF_PortraitDecoration_SyncUnit(dstC) end
+        if scopes.basics then
+            CopyFields(dst, src, COPY_FRAME_BASIC_FIELDS)
+        end
+        if scopes.text then
+            CopyFields(dst, src, COPY_TEXT_FIELDS)
+            dst.hpPowerTextOverride = nil
+        end
+        if scopes.portrait then
+            CopyFields(dst, src, COPY_PORTRAIT_FIELDS)
+            dst.portraitDecoOverride = nil
+        end
+        if scopes.power then
+            CopyPowerBarFields(dst, src, srcC)
+        end
+        if scopes.status then
+            CopyFields(dst, src, COPY_INDICATOR_FIELDS)
+            CopyFields(dst, src, MSUF_COPY_STATUSICON_FIELDS)
+        end
+        if scopes.castbar then
+            dst.showInterrupt = src.showInterrupt
+            CopyCastbar(g, srcC, dstC)
+        end
+        if scopes.load then
+            CopyFields(dst, src, COPY_LOAD_CONDITION_FIELDS)
+        end
+        if scopes.transparency then
+            CopyFields(dst, src, COPY_TRANSPARENCY_FIELDS)
+        end
+        if scopes.layout then
+            CopyFields(dst, src, COPY_LAYOUT_FIELDS)
+        end
+        if scopes.portrait and _G.MSUF_Portraits_SyncUnit then _G.MSUF_Portraits_SyncUnit(dstC) end
+        if scopes.portrait and _G.MSUF_PortraitDecoration_SyncUnit then _G.MSUF_PortraitDecoration_SyncUnit(dstC) end
         if api and api.ApplySettingsForKey then api.ApplySettingsForKey(dstC) end
     end
 
@@ -657,14 +716,18 @@ local function CopyUnitSettings(srcKey, destKey, api)
             for _, k in ipairs({ "player","target","focus","boss","pet","targettarget" }) do
                 if k ~= srcC then CopyOne(k) end
             end
-            if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-            if _G.MSUF_RefreshAllIndicators then _G.MSUF_RefreshAllIndicators() end
+            if scopes.castbar and _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+            if scopes.status and _G.MSUF_RefreshAllIndicators then _G.MSUF_RefreshAllIndicators() end
+            if scopes.transparency and _G.MSUF_RefreshAllUnitAlphas then _G.MSUF_RefreshAllUnitAlphas() end
+            if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("COPY_UNIT_SETTINGS") end
         end)
         return
     end
     CopyOne(destKey)
-    if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-    if _G.MSUF_RefreshAllIndicators then _G.MSUF_RefreshAllIndicators() end
+    if scopes.castbar and _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+    if scopes.status and _G.MSUF_RefreshAllIndicators then _G.MSUF_RefreshAllIndicators() end
+    if scopes.transparency and _G.MSUF_RefreshAllUnitAlphas then _G.MSUF_RefreshAllUnitAlphas() end
+    if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("COPY_UNIT_SETTINGS") end
 end
 
 --------------------------------------------------------------------
@@ -1249,7 +1312,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local CreateLabeledSlider = helpers.CreateLabeledSlider
     local texWhite, texWhite2 = helpers.texWhite, helpers.texWhite2
     local UI = ns.UI
-    local leftX, topY = 8, -110
+    local leftX, actionBarY, topY = 8, -110, -110
     local leftW, gap, rightW = 320, 8, 328
     local fullW = leftW + gap + rightW - 8
     local sectionGap = 8
@@ -1305,6 +1368,279 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         previewBox:Hide()
         panel.unitPreviewBox = previewBox
     end
+
+    local function UnitLabel(k)
+        return ({ player = "Player", target = "Target", targettarget = "Target of Target", focus = "Focus", boss = "Boss Frames", pet = "Pet", all = "All" })[CanonKey(k) or k] or tostring(k or "")
+    end
+    local function CurrentUnitKey()
+        return CanonKey((panel._msufGetCurrentKey and panel._msufGetCurrentKey()) or panel._msufLastApplyKey or "player") or "player"
+    end
+    local function SetSuperColors(btn, bg, br, tr, hover)
+        if not btn then return end
+        bg = bg or btn._msufBgColor or { 0.04, 0.11, 0.24, 0.92 }
+        br = br or btn._msufBorderColor or { 0.22, 0.48, 0.85, 0.82 }
+        tr = tr or btn._msufTextColor or { 0.80, 0.90, 1.00, 1 }
+        local mul = hover and 1.10 or 1
+        if btn._msufSuperBg then btn._msufSuperBg:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 0.92) end
+        if btn._msufSuperBorder then btn._msufSuperBorder:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 0.82) end
+        if btn._fs and btn._fs.SetTextColor then btn._fs:SetTextColor(tr[1], tr[2], tr[3], tr[4] or 1) end
+    end
+    local function MakeSuperGroup(owner, key, layer, subLevel, pad)
+        local group = owner[key]
+        if group then return group end
+        group = {}
+        group.L = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+        group.M = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+        group.R = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+        group.parts = { group.L, group.M, group.R }
+        for i = 1, #group.parts do
+            local t = group.parts[i]
+            t:SetTexture(MEDIA_SUPERELLIPSE)
+            if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false) end
+            if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0) end
+        end
+        group.L:SetTexCoord(0.0, 0.25, 0.0, 1.0)
+        group.M:SetTexCoord(0.25, 0.75, 0.0, 1.0)
+        group.R:SetTexCoord(0.75, 1.0, 0.0, 1.0)
+        function group:SetVertexColor(r, g, b, a)
+            for i = 1, #self.parts do self.parts[i]:SetVertexColor(r, g, b, a) end
+        end
+        local function Layout()
+            local w = (owner.GetWidth and owner:GetWidth()) or 120
+            local h = (owner.GetHeight and owner:GetHeight()) or 22
+            local p = tonumber(pad) or 1
+            local innerH = max(1, h - p * 2)
+            local capW = min(floor(innerH * 0.5 + 0.5), floor(max(1, w - p * 2) * 0.5))
+            group.L:ClearAllPoints(); group.M:ClearAllPoints(); group.R:ClearAllPoints()
+            group.L:SetPoint("TOPLEFT", owner, "TOPLEFT", p, -p)
+            group.L:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", p, p)
+            group.L:SetWidth(capW)
+            group.R:SetPoint("TOPRIGHT", owner, "TOPRIGHT", -p, -p)
+            group.R:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", -p, p)
+            group.R:SetWidth(capW)
+            group.M:SetPoint("TOPLEFT", group.L, "TOPRIGHT", 0, 0)
+            group.M:SetPoint("BOTTOMRIGHT", group.R, "BOTTOMLEFT", 0, 0)
+        end
+        Layout()
+        if owner.HookScript and not owner[key .. "Hooked"] then
+            owner[key .. "Hooked"] = true
+            owner:HookScript("OnSizeChanged", Layout)
+        end
+        owner[key] = group
+        return group
+    end
+    local function MakeSuperButton(parent, text, width, height, bg, br, tr)
+        local btn = CreateFrame("Button", nil, parent)
+        btn:SetSize(width or 96, height or 22)
+        btn._msufBgColor = bg or { 0.06, 0.07, 0.13, 0.88 }
+        btn._msufBorderColor = br or { 0.15, 0.18, 0.36, 0.45 }
+        btn._msufTextColor = tr or { 0.82, 0.90, 1.00, 1 }
+        btn._msufSuperBorder = MakeSuperGroup(btn, "_msufSEBorder", "BACKGROUND", 0, 1)
+        btn._msufSuperBg = MakeSuperGroup(btn, "_msufSEFill", "BACKGROUND", 1, 2)
+        local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("CENTER")
+        fs:SetText(TR(text or ""))
+        fs:SetShadowColor(0, 0, 0, 0.55)
+        fs:SetShadowOffset(1, -1)
+        btn._fs = fs
+        local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
+        stripe:SetTexture(TEX_W8)
+        stripe:SetWidth(3)
+        stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -5)
+        stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 2, 5)
+        stripe:SetColorTexture(0.22, 0.78, 0.94, 1)
+        stripe:Hide()
+        btn._msufAccentStripe = stripe
+        SetSuperColors(btn)
+        btn:SetScript("OnEnter", function(self) SetSuperColors(self, nil, nil, nil, true) end)
+        btn:SetScript("OnLeave", function(self) SetSuperColors(self) end)
+        return btn
+    end
+    local function SetNavActive(btn, active)
+        if not btn then return end
+        btn._msufIsNavActive = active and true or false
+        if btn._msufIsNavActive then
+            btn._msufBgColor = { 0.12, 0.15, 0.32, 0.95 }
+            btn._msufBorderColor = { 0.20, 0.34, 0.80, 0.85 }
+            if btn._msufAccentStripe then btn._msufAccentStripe:Show() end
+        else
+            btn._msufBgColor = btn._msufBaseBgColor or { 0.06, 0.07, 0.13, 0.88 }
+            btn._msufBorderColor = btn._msufBaseBorderColor or { 0.15, 0.18, 0.36, 0.45 }
+            if btn._msufAccentStripe then btn._msufAccentStripe:Hide() end
+        end
+        SetSuperColors(btn)
+    end
+    local function MakeSuperPanel(parent, width, height)
+        local frame = CreateFrame("Frame", nil, parent)
+        frame:SetSize(width or 100, height or 32)
+        local border = frame:CreateTexture(nil, "BACKGROUND")
+        border:SetTexture(MEDIA_SUPERELLIPSE)
+        border:SetAllPoints()
+        border:SetVertexColor(0.12, 0.28, 0.58, 0.46)
+        frame._msufSuperBorder = border
+        local fill = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
+        fill:SetTexture(MEDIA_SUPERELLIPSE)
+        fill:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+        fill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+        fill:SetVertexColor(0.025, 0.055, 0.14, 0.94)
+        frame._msufSuperBg = fill
+        return frame
+    end
+
+    local unitActionBar = CreateFrame("Frame", nil, frameGroup)
+    unitActionBar:SetSize(fullW, 30)
+    unitActionBar:Hide()
+    panel.unitTopActionBar = unitActionBar
+    local barLine = unitActionBar:CreateTexture(nil, "ARTWORK")
+    barLine:SetPoint("BOTTOMLEFT", unitActionBar, "BOTTOMLEFT", 4, 1)
+    barLine:SetPoint("BOTTOMRIGHT", unitActionBar, "BOTTOMRIGHT", -4, 1)
+    barLine:SetHeight(1)
+    barLine:SetColorTexture(0.22, 0.42, 0.70, 0.42)
+    local editingLabel = unitActionBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    editingLabel:SetPoint("LEFT", unitActionBar, "LEFT", 8, 2)
+    editingLabel:SetText(TR("Editing:"))
+    editingLabel:SetTextColor(0.72, 0.82, 1.00, 1)
+    local unitPill = MakeSuperButton(unitActionBar, "Player", 152, 24, { 0.06, 0.07, 0.13, 0.88 }, { 0.15, 0.18, 0.36, 0.45 }, { 0.92, 0.96, 1.00, 1 })
+    unitPill:SetPoint("LEFT", editingLabel, "RIGHT", 8, 2)
+    unitPill:EnableMouse(false)
+    unitPill._msufBaseBgColor = { 0.06, 0.07, 0.13, 0.88 }
+    unitPill._msufBaseBorderColor = { 0.15, 0.18, 0.36, 0.45 }
+    SetNavActive(unitPill, true)
+    panel.unitTopCurrentPill = unitPill
+
+    local copyBtn = MakeSuperButton(unitActionBar, "Copy To", 86, 24)
+    copyBtn:SetPoint("RIGHT", unitActionBar, "RIGHT", -8, 2)
+    panel.unitTopCopyButton = copyBtn
+    local editBtn = MakeSuperButton(unitActionBar, "MSUF Edit Mode", 128, 24)
+    editBtn:SetPoint("RIGHT", copyBtn, "LEFT", -8, 0)
+    panel.unitTopEditModeButton = editBtn
+
+    local copyScopes = panel._msufUnitCopyScopes or NewCopyScopeDefaults()
+    panel._msufUnitCopyScopes = copyScopes
+    local function DefaultCopyDest(src)
+        src = CanonKey(src)
+        if src == "player" then return "target" end
+        return "player"
+    end
+    local function NormalizeCopyDest(src)
+        src = CanonKey(src)
+        local d = panel._msufUnitCopyDest or DefaultCopyDest(src)
+        d = CanonKey(d) or d
+        if d == src then d = DefaultCopyDest(src) end
+        panel._msufUnitCopyDest = d
+        return d
+    end
+    local copyPopup
+    local function RefreshCopyPopupTargets()
+        if not copyPopup then return end
+        local src = CurrentUnitKey()
+        local dest = NormalizeCopyDest(src)
+        for key, btn in pairs(copyPopup._targetBtns or {}) do
+            local active = (dest == key)
+            local same = (key == src)
+            btn:SetShown(not same)
+            if active then
+                SetSuperColors(btn, { 0.10, 0.28, 0.58, 0.98 }, { 0.42, 0.72, 1.00, 1.00 }, { 1.00, 1.00, 1.00, 1 })
+            else
+                SetSuperColors(btn)
+            end
+        end
+        if copyPopup._title then copyPopup._title:SetText(TR("Copy from") .. " " .. UnitLabel(src)) end
+    end
+    local function ShowUnitCopyPopup(anchor)
+        if copyPopup and copyPopup:IsShown() then copyPopup:Hide(); return end
+        if not copyPopup then
+            copyPopup = MakeSuperPanel(UIParent, 420, 278)
+            copyPopup:SetFrameStrata("DIALOG")
+            copyPopup:SetFrameLevel(120)
+            copyPopup:EnableMouse(true)
+            local title = copyPopup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
+            copyPopup._title = title
+            local close = MakeSuperButton(copyPopup, "x", 22, 20, { 0.10, 0.04, 0.06, 0.94 }, { 0.62, 0.18, 0.22, 0.90 }, { 1.00, 0.82, 0.82, 1 })
+            close:SetPoint("TOPRIGHT", copyPopup, "TOPRIGHT", -10, -8)
+            close:SetScript("OnClick", function() copyPopup:Hide() end)
+
+            local destLabel = copyPopup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
+            destLabel:SetText(TR("Destination"))
+            copyPopup._targetBtns = {}
+            local order = { "player", "target", "targettarget", "focus", "boss", "pet", "all" }
+            local widths = { player = 54, target = 54, targettarget = 42, focus = 52, boss = 50, pet = 42, all = 42 }
+            local shortLabel = { targettarget = "ToT", boss = "Boss" }
+            local x = 16
+            for i = 1, #order do
+                local k = order[i]
+                local btn = MakeSuperButton(copyPopup, shortLabel[k] or UnitLabel(k), widths[k], 20, { 0.045, 0.12, 0.27, 0.94 }, { 0.18, 0.42, 0.78, 0.78 }, { 0.78, 0.88, 1.00, 1 })
+                btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", x, -58)
+                btn:SetScript("OnClick", function()
+                    panel._msufUnitCopyDest = k
+                    RefreshCopyPopupTargets()
+                end)
+                btn:SetScript("OnEnter", function(self) SetSuperColors(self, nil, nil, nil, true) end)
+                btn:SetScript("OnLeave", function() RefreshCopyPopupTargets() end)
+                copyPopup._targetBtns[k] = btn
+                x = x + widths[k] + 6
+            end
+
+            local catLabel = copyPopup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            catLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -90)
+            catLabel:SetText(TR("Copy categories"))
+            copyPopup._checks = {}
+            for i, cat in ipairs(UF_COPY_CATEGORIES) do
+                local col = (i > 5) and 1 or 0
+                local row = (i - 1) % 5
+                local cb = CreateFrame("CheckButton", nil, copyPopup, "UICheckButtonTemplate")
+                cb:SetSize(20, 20)
+                cb:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16 + col * 198, -110 - row * 24)
+                cb:SetChecked(copyScopes[cat.key] == true)
+                cb:SetScript("OnClick", function(self) copyScopes[cat.key] = self:GetChecked() and true or false end)
+                if _G.MSUF_StyleCheckmark then _G.MSUF_StyleCheckmark(cb) end
+                local fs = cb.Text or cb.text
+                if fs then fs:SetText(TR(cat.label)); fs:SetFontObject("GameFontHighlightSmall") end
+                copyPopup._checks[i] = cb
+            end
+
+            local allBtn = MakeSuperButton(copyPopup, "All", 48, 20, { 0.05, 0.13, 0.30, 0.96 }, { 0.24, 0.50, 0.90, 0.82 }, { 0.84, 0.92, 1, 1 })
+            allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
+            allBtn:SetScript("OnClick", function()
+                for i, cat in ipairs(UF_COPY_CATEGORIES) do copyScopes[cat.key] = true; copyPopup._checks[i]:SetChecked(true) end
+            end)
+            local noneBtn = MakeSuperButton(copyPopup, "None", 58, 20, { 0.05, 0.13, 0.30, 0.96 }, { 0.24, 0.50, 0.90, 0.82 }, { 0.84, 0.92, 1, 1 })
+            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
+            noneBtn:SetScript("OnClick", function()
+                for i, cat in ipairs(UF_COPY_CATEGORIES) do copyScopes[cat.key] = false; copyPopup._checks[i]:SetChecked(false) end
+            end)
+            local runBtn = MakeSuperButton(copyPopup, "Copy Selected", 128, 22, { 0.05, 0.22, 0.46, 0.98 }, { 0.32, 0.68, 1.00, 1.00 }, { 0.92, 0.98, 1, 1 })
+            runBtn:SetPoint("BOTTOMRIGHT", copyPopup, "BOTTOMRIGHT", -14, 11)
+            runBtn:SetScript("OnClick", function()
+                CopyUnitSettings(CurrentUnitKey(), NormalizeCopyDest(CurrentUnitKey()), panel._msufAPI, copyScopes)
+                copyPopup:Hide()
+            end)
+        end
+        for i, cat in ipairs(UF_COPY_CATEGORIES) do
+            if copyPopup._checks and copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(copyScopes[cat.key] == true) end
+        end
+        RefreshCopyPopupTargets()
+        copyPopup:ClearAllPoints()
+        copyPopup:SetPoint("TOPRIGHT", anchor or copyBtn, "BOTTOMRIGHT", 0, -6)
+        copyPopup:Show()
+    end
+    copyBtn:SetScript("OnClick", function(self) ShowUnitCopyPopup(self) end)
+    editBtn:SetScript("OnClick", function()
+        local b = _G.MSUF_EditModeButton
+        local fn = b and b.GetScript and b:GetScript("OnClick")
+        if type(fn) == "function" then fn(b) end
+        if panel._msufRefreshUnitTopActions then panel._msufRefreshUnitTopActions() end
+    end)
+    panel._msufRefreshUnitTopActions = function()
+        local key = CurrentUnitKey()
+        if unitPill and unitPill._fs then unitPill._fs:SetText(UnitLabel(key)) end
+        if editBtn and editBtn._fs then editBtn._fs:SetText((_G.MSUF_UnitEditModeActive == true) and TR("Exit Edit Mode") or TR("MSUF Edit Mode")) end
+        NormalizeCopyDest(key)
+        if copyPopup and copyPopup:IsShown() then RefreshCopyPopupTargets() end
+    end
+    unitActionBar:SetScript("OnShow", function() if panel._msufRefreshUnitTopActions then panel._msufRefreshUnitTopActions() end end)
 
     local previewCollapsed = false
     local previewToggle = CreateFrame("Button", nil, frameGroup)
@@ -2070,9 +2406,17 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             local showAnch = (k == "player" or k == "target" or k == "focus" or k == "boss" or k == "pet" or k == "targettarget")
 
             local prev = nil
+            if unitActionBar then
+                unitActionBar:ClearAllPoints()
+                unitActionBar:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", leftX, actionBarY)
+                unitActionBar:SetWidth(fullW)
+                unitActionBar:Show()
+                if panel._msufRefreshUnitTopActions then panel._msufRefreshUnitTopActions() end
+                prev = unitActionBar
+            end
             if previewToggle and previewBox then
                 previewToggle:ClearAllPoints()
-                previewToggle:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", leftX, topY)
+                previewToggle:SetPoint("TOPLEFT", prev or frameGroup, prev and "BOTTOMLEFT" or "TOPLEFT", prev and 0 or leftX, prev and -8 or topY)
                 previewToggle:SetWidth(fullW)
                 previewToggle:Show()
                 RefreshPreviewToggle(true)
@@ -2670,6 +3014,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
 
     -- Copy visibility
     local function SetCopyVis(prefix, destVar, def, active)
+        if panel.unitTopActionBar then active = false end
         for _, sfx in ipairs({ "CopyToLabel","CopyToButton","CopyToHint" }) do
             local w = panel[prefix..sfx]; if w then w:SetShown(active) end
         end

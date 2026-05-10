@@ -812,15 +812,19 @@ panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
                 or currentKey == "boss"
                 or currentKey == "pet"
             ) then
-                editModeButton:SetParent(frameGroup)
-                editModeButton:ClearAllPoints()
-                local anchorBox = panel and (panel._msufBottomAnchor or panel.unitAnchorGroup or panel.playerSizeBox)
-                if anchorBox then
-                    editModeButton:SetPoint("TOPRIGHT", anchorBox, "BOTTOMRIGHT", 0, -18)
+                if panel and panel.unitTopActionBar then
+                    editModeButton:Hide()
                 else
-                    editModeButton:SetPoint("BOTTOMLEFT", frameGroup, "BOTTOMLEFT", 16, 16)
+                    editModeButton:SetParent(frameGroup)
+                    editModeButton:ClearAllPoints()
+                    local anchorBox = panel and (panel._msufBottomAnchor or panel.unitAnchorGroup or panel.playerSizeBox)
+                    if anchorBox then
+                        editModeButton:SetPoint("TOPRIGHT", anchorBox, "BOTTOMRIGHT", 0, -18)
+                    else
+                        editModeButton:SetPoint("BOTTOMLEFT", frameGroup, "BOTTOMLEFT", 16, 16)
+                    end
+                    editModeButton:Show()
                 end
-                editModeButton:Show()
             else
                 editModeButton:Hide()
             end
