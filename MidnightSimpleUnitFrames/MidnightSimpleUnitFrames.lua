@@ -2617,7 +2617,12 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             _G.MSUF_ScheduleLateAnchorReanchor()
         end
         local proxy
-        if _G.MSUF_GetExternalAnchorProxy then
+        -- CDM/unitframe offsets are historically stored against the real
+        -- EssentialCooldownViewer points (LEFT/RIGHT/TOP), not against the
+        -- 4.323 stable proxy bounds. Keeping the real ECV here preserves the
+        -- old X/Y semantics from 3.70 while the existing cache/snapshot logic
+        -- still protects external anchors when the source is unavailable.
+        if _G.MSUF_GetExternalAnchorProxy and not (isCooldownAnchor and anchor == ecv) then
             if anchor == ecv then
                 proxy = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer", anchor)
             else
