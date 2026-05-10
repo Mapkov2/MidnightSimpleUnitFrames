@@ -459,6 +459,9 @@ local COPY_BASIC_FIELDS = {
 local COPY_POWER_BAR_FIELDS = {
     "showPowerBar","powerBarHeight","embedPowerBarIntoHealth",
     "powerBarBorderEnabled","powerBarBorderThickness","powerSmoothFill",
+    "powerBarDetached","detachedPowerBarWidth","detachedPowerBarHeight",
+    "detachedPowerBarOffsetX","detachedPowerBarOffsetY","detachedPowerBarFrameLevelOffset",
+    "detachedPowerBarTextOnBar","detachedPowerBarSyncClassPower","detachedPowerBarAnchorToClassPower",
 }
 local COPY_PORTRAIT_FIELDS = {
     "portraitMode","portraitRender","portraitClassStyle","portraitShape",
@@ -829,14 +832,12 @@ local function SetOptionWidgetShown(widget, shown)
     end
 end
 
-local function UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive)
+local function UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive, canDetach)
     if not panel or not panel.playerPowerBarBox then return end
     local h
     if detached then
         h = panel._msufPowerBarDetachedH or 560
     elseif isPlayer and classPowerActive then
-        h = panel._msufPowerBarPlayerH or 250
-    elseif isPlayer then
         h = panel._msufPowerBarPlayerH or 250
     else
         h = panel._msufPowerBarAttachedH or 190
@@ -1017,6 +1018,11 @@ local function IsPowerBarUnitKey(unitKey)
     return key == "player" or key == "target" or key == "focus" or key == "boss"
 end
 
+local function CanDetachPowerBarUnitKey(unitKey)
+    local key = CanonKey(unitKey) or unitKey
+    return key == "player" or key == "target" or key == "focus"
+end
+
 local function ApplyPowerBarConfigState(panel, unitKey, show)
     if not panel or not unitKey then return end
     local key = CanonKey(unitKey) or unitKey
@@ -1039,6 +1045,7 @@ local function ApplyPowerBarConfigState(panel, unitKey, show)
     end
 
     SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
+    SetOptionControlEnabled(panel.playerDetachedPowerDetachCB, powerEnabled and CanDetachPowerBarUnitKey(key))
 end
 
 local function QueuePowerBarConfigRefresh(panel, unitKey, showPB, borderEnabled)
@@ -1314,9 +1321,9 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local powerBarH = 220
     local powerBarBox, powerBarBody = MkCollapsible(frameGroup, "Power Bar", fullW, powerBarH, false)
     powerBarBox:Hide(); panel.playerPowerBarBox = powerBarBox; panel.playerPowerBarBody = powerBarBody; panel._msufPowerBarH = powerBarH
-    panel._msufPowerBarAttachedH = 190
+    panel._msufPowerBarAttachedH = 220
     panel._msufPowerBarPlayerH = 250
-    panel._msufPowerBarDetachedH = 560
+    panel._msufPowerBarDetachedH = 610
     do
         local pbShowCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarShowCB", "Show power bar", 12, -6)
         panel.playerPowerBarShowCB = pbShowCB
@@ -1338,20 +1345,29 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -117)
         panel.playerPowerBarSmoothCB = pbSmoothCB
 
+        local detachCB = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerEnableCB", "Detach from frame", 12, -150)
+        panel.playerDetachedPowerDetachCB = detachCB
+
+        local textOnBar = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerTextOnBarCB", "Text on detached bar", 300, -150)
+        panel.playerDetachedPowerTextOnBarCB = textOnBar
+
+        local syncCP = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerSyncClassCB", "Sync width to Class Resource", 12, -184, 230)
+        panel.playerDetachedPowerSyncClassCB = syncCP
+
+        local anchorCP = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerAnchorClassCB", "Anchor to Class Resource", 300, -184, 230)
+        panel.playerDetachedPowerAnchorClassCB = anchorCP
+
         local info = powerBarBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        info:SetPoint("TOPLEFT", powerBarBody, "TOPLEFT", 12, -150)
+        info:SetPoint("TOPLEFT", powerBarBody, "TOPLEFT", 12, -218)
         info:SetWidth(fullW - 28)
         info:SetJustifyH("LEFT")
         info:SetTextColor(0.66, 0.78, 1)
         panel.playerPowerModeInfo = info
 
-        local textOnBar = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerTextOnBarCB", "Text on detached bar", 300, -174)
-        panel.playerDetachedPowerTextOnBarCB = textOnBar
-
         local cpBtn = CreateFrame("Button", nil, powerBarBody, "UIPanelButtonTemplate")
         cpBtn:SetSize(132, 22)
         cpBtn:SetText(TR("Class Resources"))
-        cpBtn:SetPoint("TOPRIGHT", powerBarBody, "TOPRIGHT", -14, -174)
+        cpBtn:SetPoint("TOPRIGHT", powerBarBody, "TOPRIGHT", -14, -214)
         cpBtn:SetScript("OnClick", function()
             if _G.MSUF_SwitchMirrorPage then
                 _G.MSUF_SwitchMirrorPage("classpower")
@@ -1361,30 +1377,30 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         end)
         panel.playerClassResourceShortcutBtn = cpBtn
 
-        local dpbX = CreateLabeledSlider("MSUF_UF_DetachedPowerXSlider", "Detached X", powerBarBody, -1000, 1000, 1, 14, -214)
+        local dpbX = CreateLabeledSlider("MSUF_UF_DetachedPowerXSlider", "Detached X", powerBarBody, -1000, 1000, 1, 14, -260)
         FinalizeDashboard(dpbX, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
         panel.playerDetachedPowerXSlider = dpbX
 
-        local dpbY = CreateLabeledSlider("MSUF_UF_DetachedPowerYSlider", "Detached Y", powerBarBody, -1000, 1000, 1, 334, -214)
+        local dpbY = CreateLabeledSlider("MSUF_UF_DetachedPowerYSlider", "Detached Y", powerBarBody, -1000, 1000, 1, 334, -260)
         FinalizeDashboard(dpbY, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
         panel.playerDetachedPowerYSlider = dpbY
 
-        local dpbW = CreateLabeledSlider("MSUF_UF_DetachedPowerWidthSlider", "Detached width", powerBarBody, 20, 800, 1, 14, -288)
+        local dpbW = CreateLabeledSlider("MSUF_UF_DetachedPowerWidthSlider", "Detached width", powerBarBody, 20, 800, 1, 14, -334)
         FinalizeDashboard(dpbW, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
         panel.playerDetachedPowerWidthSlider = dpbW
 
-        local dpbH = CreateLabeledSlider("MSUF_UF_DetachedPowerHeightSlider", "Detached height", powerBarBody, 2, 80, 1, 334, -288)
+        local dpbH = CreateLabeledSlider("MSUF_UF_DetachedPowerHeightSlider", "Detached height", powerBarBody, 2, 80, 1, 334, -334)
         FinalizeDashboard(dpbH, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
         panel.playerDetachedPowerHeightSlider = dpbH
 
-        local dpbLevel = CreateLabeledSlider("MSUF_UF_DetachedPowerLevelSlider", "Detached level", powerBarBody, 0, 30, 1, 14, -362)
+        local dpbLevel = CreateLabeledSlider("MSUF_UF_DetachedPowerLevelSlider", "Detached layer", powerBarBody, 0, 30, 1, 14, -408)
         FinalizeDashboard(dpbLevel, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
         panel.playerDetachedPowerLevelSlider = dpbLevel
 
         local reset = CreateFrame("Button", nil, powerBarBody, "UIPanelButtonTemplate")
         reset:SetSize(62, 22)
         reset:SetText(TR("Reset"))
-        reset:SetPoint("TOPRIGHT", powerBarBody, "TOPRIGHT", -14, -214)
+        reset:SetPoint("TOPRIGHT", powerBarBody, "TOPRIGHT", -14, -260)
         panel.playerDetachedPowerResetBtn = reset
     end
     panel._msufRefreshUnitPowerControls = function()
@@ -1393,22 +1409,31 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local conf = MSUF_DB and MSUF_DB[key] or {}
         local bars = MSUF_DB and MSUF_DB.bars or {}
         local isPlayer = (key == "player")
+        local canDetach = CanDetachPowerBarUnitKey(key)
         local powerEnabled = ReadPowerBarEnabled(conf, key)
-        local detached = isPlayer and conf.powerBarDetached == true and powerEnabled
+        local detached = canDetach and conf.powerBarDetached == true and powerEnabled
         local classPowerActive = isPlayer and (bars.showClassPower == true or detached)
         local function Show(w, on) SetOptionWidgetShown(w, on) end
-        local heightChanged = UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive)
-        Show(panel.playerPowerModeInfo, isPlayer)
-        if panel.playerPowerModeInfo and isPlayer then
-            if detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false) then
-                panel.playerPowerModeInfo:SetText(TR("Player Power is currently controlled by the MSUF Class Resource system. Detached mode is active: position, size, and level use the detached resource settings below."))
+        local heightChanged = UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive, canDetach)
+        Show(panel.playerDetachedPowerDetachCB, canDetach)
+        if panel.playerDetachedPowerDetachCB then
+            panel.playerDetachedPowerDetachCB:SetChecked(detached)
+            SetOptionControlEnabled(panel.playerDetachedPowerDetachCB, canDetach and powerEnabled)
+        end
+        local showModeInfo = detached or (isPlayer and classPowerActive)
+        if panel.playerPowerModeInfo and showModeInfo then
+            Show(panel.playerPowerModeInfo, true)
+            if isPlayer and detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false) then
+                panel.playerPowerModeInfo:SetText(TR("Player Power is currently controlled by the MSUF Class Resource system. Detached mode is active: position, size, and layer use the detached resource settings below."))
             elseif detached then
-                panel.playerPowerModeInfo:SetText(TR("Detached mode is active: position, size, and level are controlled by the detached power settings below."))
-            elseif classPowerActive then
+                panel.playerPowerModeInfo:SetText(TR("Detached mode is active: position, size, and layer are controlled by the detached power settings below."))
+            elseif isPlayer and classPowerActive then
                 panel.playerPowerModeInfo:SetText(TR("Attached mode is active: the power bar follows the Player frame layout. Class Resources are configured separately."))
             else
                 panel.playerPowerModeInfo:SetText(TR("Attached mode is active: the power bar follows the Player frame layout."))
             end
+        else
+            Show(panel.playerPowerModeInfo, false)
         end
         for _, w in ipairs({
             panel.playerDetachedPowerXSlider, panel.playerDetachedPowerYSlider,
@@ -1416,10 +1441,14 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             panel.playerDetachedPowerLevelSlider, panel.playerDetachedPowerResetBtn,
             panel.playerDetachedPowerTextOnBarCB,
         }) do
-            Show(w, isPlayer and detached)
+            Show(w, canDetach and detached)
         end
+        Show(panel.playerDetachedPowerSyncClassCB, isPlayer and detached)
+        Show(panel.playerDetachedPowerAnchorClassCB, isPlayer and detached)
         Show(panel.playerClassResourceShortcutBtn, isPlayer and classPowerActive)
         if panel.playerDetachedPowerTextOnBarCB and detached then panel.playerDetachedPowerTextOnBarCB:SetChecked(conf.detachedPowerBarTextOnBar == true) end
+        if panel.playerDetachedPowerSyncClassCB and isPlayer and detached then panel.playerDetachedPowerSyncClassCB:SetChecked(conf.detachedPowerBarSyncClassPower ~= false) end
+        if panel.playerDetachedPowerAnchorClassCB and isPlayer and detached then panel.playerDetachedPowerAnchorClassCB:SetChecked(conf.detachedPowerBarAnchorToClassPower == true) end
         local function SetSlider(slider, value)
             if slider and slider.SetValue then
                 slider.MSUF_SkipCallback = true
@@ -2291,23 +2320,34 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         QueuePowerBarConfigRefresh(panel, currentKey, showPB, borderEnabled)
         do
             local bars = MSUF_DB and MSUF_DB.bars or {}
-            local detached = isPlayer and conf.powerBarDetached == true and powerEnabled
+            local canDetach = CanDetachPowerBarUnitKey(key)
+            local detached = canDetach and conf.powerBarDetached == true and powerEnabled
             local classPowerActive = isPlayer and (bars.showClassPower == true or detached)
             local merged = detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false)
             local function Show(w, on) SetOptionWidgetShown(w, on) end
-            UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive)
+            UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive, canDetach)
+            Show(panel.playerDetachedPowerDetachCB, canDetach and showPB)
+            if panel.playerDetachedPowerDetachCB and canDetach then
+                panel.playerDetachedPowerDetachCB:SetChecked(detached)
+                SetOptionControlEnabled(panel.playerDetachedPowerDetachCB, powerEnabled)
+            end
             local info = panel.playerPowerModeInfo
             if info then
-                Show(info, isPlayer)
-                if isPlayer then
+                local showModeInfo = showPB and (detached or (isPlayer and classPowerActive))
+                Show(info, showModeInfo)
+                if showModeInfo and isPlayer then
                     if merged then
-                        info:SetText(TR("Player Power is currently controlled by the MSUF Class Resource system. Detached mode is active: position, size, and level use the detached resource settings below."))
+                        info:SetText(TR("Player Power is currently controlled by the MSUF Class Resource system. Detached mode is active: position, size, and layer use the detached resource settings below."))
                     elseif detached then
-                        info:SetText(TR("Detached mode is active: position, size, and level are controlled by the detached power settings below."))
+                        info:SetText(TR("Detached mode is active: position, size, and layer are controlled by the detached power settings below."))
                     elseif classPowerActive then
                         info:SetText(TR("Attached mode is active: the power bar follows the Player frame layout. Class Resources are configured separately."))
                     else
                         info:SetText(TR("Attached mode is active: the power bar follows the Player frame layout."))
+                    end
+                elseif showModeInfo and canDetach then
+                    if detached then
+                        info:SetText(TR("Detached mode is active: position, size, and layer are controlled by the detached power settings below."))
                     end
                 end
             end
@@ -2317,11 +2357,19 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
                 panel.playerDetachedPowerLevelSlider, panel.playerDetachedPowerResetBtn,
                 panel.playerDetachedPowerTextOnBarCB,
             }) do
-                Show(w, isPlayer and detached)
+                Show(w, canDetach and detached)
             end
+            Show(panel.playerDetachedPowerSyncClassCB, isPlayer and detached)
+            Show(panel.playerDetachedPowerAnchorClassCB, isPlayer and detached)
             Show(panel.playerClassResourceShortcutBtn, isPlayer and classPowerActive)
             if panel.playerDetachedPowerTextOnBarCB and detached then
                 panel.playerDetachedPowerTextOnBarCB:SetChecked(conf.detachedPowerBarTextOnBar == true)
+            end
+            if panel.playerDetachedPowerSyncClassCB and isPlayer and detached then
+                panel.playerDetachedPowerSyncClassCB:SetChecked(conf.detachedPowerBarSyncClassPower ~= false)
+            end
+            if panel.playerDetachedPowerAnchorClassCB and isPlayer and detached then
+                panel.playerDetachedPowerAnchorClassCB:SetChecked(conf.detachedPowerBarAnchorToClassPower == true)
             end
             local function SetSlider(slider, value)
                 if slider and slider.SetValue then
@@ -2567,6 +2615,18 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
     panel._msufGetCurrentKey = CurrentKey
     panel._msufIsFramesTab = IsFramesTab
     panel._msufAPI = api
+    _G.MSUF_UFOptions_RequestRefresh = function(reason, unitKey)
+        if not panel or not panel.__MSUF_FullBuilt then return end
+        if not IsFramesTab() then return end
+        local cur = CanonKey(CurrentKey()) or CurrentKey()
+        local requested = unitKey and (CanonKey(unitKey) or unitKey) or cur
+        if requested and cur and requested ~= cur then return end
+        if panel.LoadFromDB then panel:LoadFromDB() end
+        if panel._msufRefreshUnitPowerControls then panel._msufRefreshUnitPowerControls() end
+        if panel._msufRefreshUnitTextControls then panel._msufRefreshUnitTextControls() end
+        if panel._msufRefreshUnitPortraitControls then panel._msufRefreshUnitPortraitControls() end
+        if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh(reason or "UF_OPTIONS_REFRESH") end
+    end
 
     local function ApplyCurrent()
         if api.ApplySettingsForKey then api.ApplySettingsForKey(CurrentKey()) end
@@ -2694,6 +2754,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             if _G.MSUF_ClassPower_Refresh and k == "player" then _G.MSUF_ClassPower_Refresh() end
             if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup(k, MSUF_DB and MSUF_DB[k]) end
             if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("POWER_BAR_OPTIONS") end
+            if panel._msufRefreshUnitPowerControls then panel._msufRefreshUnitPowerControls() end
         end
         if panel.playerPowerBarShowCB then
             panel.playerPowerBarShowCB:SetScript("OnClick", function(self)
@@ -2748,13 +2809,14 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 PBApply()
             end)
         end
-        local function PlayerDetachedConf()
-            if CurrentKey() ~= "player" then return nil end
+        local function DetachedPowerConf()
+            local key = CanonKey(CurrentKey())
+            if not CanDetachPowerBarUnitKey(key) then return nil, nil end
             local c = EnsureKeyDB()
-            return c
+            return c, key
         end
         local function SetDetachedNumber(field, value, minVal, maxVal, defaultVal)
-            local c = PlayerDetachedConf(); if not c then return end
+            local c = DetachedPowerConf(); if not c then return end
             local v = tonumber(value)
             if v == nil then v = defaultVal or 0 end
             v = math.floor(v + 0.5)
@@ -2779,16 +2841,45 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 if spec.w.HookScript then spec.w:HookScript("OnShow", function(self) ForceSliderEB(self) end) end
             end
         end
+        if panel.playerDetachedPowerDetachCB then
+            panel.playerDetachedPowerDetachCB:SetScript("OnClick", function(self)
+                local c, key = DetachedPowerConf(); if not c or not key then return end
+                c.powerBarDetached = self:GetChecked() and true or false
+                if c.powerBarDetached then
+                    c.detachedPowerBarOffsetX = tonumber(c.detachedPowerBarOffsetX) or 0
+                    c.detachedPowerBarOffsetY = tonumber(c.detachedPowerBarOffsetY) or -4
+                    c.detachedPowerBarWidth = tonumber(c.detachedPowerBarWidth) or tonumber(c.width) or (key == "focus" and 180 or 275)
+                    c.detachedPowerBarHeight = tonumber(c.detachedPowerBarHeight) or 6
+                    c.detachedPowerBarFrameLevelOffset = tonumber(c.detachedPowerBarFrameLevelOffset) or 6
+                    if key == "player" and c.detachedPowerBarSyncClassPower == nil then c.detachedPowerBarSyncClassPower = true end
+                end
+                PBApply()
+            end)
+        end
         if panel.playerDetachedPowerTextOnBarCB then
             panel.playerDetachedPowerTextOnBarCB:SetScript("OnClick", function(self)
-                local c = PlayerDetachedConf(); if not c then return end
+                local c = DetachedPowerConf(); if not c then return end
                 c.detachedPowerBarTextOnBar = self:GetChecked() and true or false
+                PBApply()
+            end)
+        end
+        if panel.playerDetachedPowerSyncClassCB then
+            panel.playerDetachedPowerSyncClassCB:SetScript("OnClick", function(self)
+                local c, key = DetachedPowerConf(); if not c or key ~= "player" then return end
+                c.detachedPowerBarSyncClassPower = self:GetChecked() and true or false
+                PBApply()
+            end)
+        end
+        if panel.playerDetachedPowerAnchorClassCB then
+            panel.playerDetachedPowerAnchorClassCB:SetScript("OnClick", function(self)
+                local c, key = DetachedPowerConf(); if not c or key ~= "player" then return end
+                c.detachedPowerBarAnchorToClassPower = self:GetChecked() and true or false
                 PBApply()
             end)
         end
         if panel.playerDetachedPowerResetBtn then
             panel.playerDetachedPowerResetBtn:SetScript("OnClick", function()
-                local c = PlayerDetachedConf(); if not c then return end
+                local c = DetachedPowerConf(); if not c then return end
                 c.detachedPowerBarOffsetX = 0
                 c.detachedPowerBarOffsetY = -4
                 c.detachedPowerBarWidth = nil

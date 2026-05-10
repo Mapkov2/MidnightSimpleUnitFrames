@@ -72,7 +72,12 @@ local function GetStep()
     return s
 end
 
-local function RefreshUFPreview(reason)
+local function RefreshUFPreview(reason, unitKey)
+    local opt = _G.MSUF_UFOptions_RequestRefresh
+    if type(opt) == "function" then
+        opt(reason or "EM2_POPUP", unitKey)
+        return
+    end
     local fn = _G.MSUF_UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "EM2_POPUP") end
 end
@@ -882,7 +887,7 @@ local function Apply()
     if type(_G.MSUF_ApplyPowerBarEmbedLayout)=="function" and pf.parent then _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent) end
     if pf._refreshVisibility then pf._refreshVisibility() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-    RefreshUFPreview("EM2_UNIT_POPUP_APPLY")
+    RefreshUFPreview("EM2_UNIT_POPUP_APPLY", key)
 end
 
 local function Sync()
@@ -1005,7 +1010,7 @@ local function Build()
             -- Apply + resync
             if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
             if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
-            RefreshUFPreview("EM2_UNIT_POPUP_COPY")
+            RefreshUFPreview("EM2_UNIT_POPUP_COPY", CK(pf.unit))
             C_Timer.After(0.1, function() Sync() end)
         end,
     })
@@ -1038,7 +1043,7 @@ local function Build()
             if conf then for k,v in pairs(pf.MSUF_prev) do if k~="key" then conf[k]=v end end
                 if type(ApplyAllSettings)=="function" then ApplyAllSettings() end
                 if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
-                RefreshUFPreview("EM2_UNIT_POPUP_CANCEL")
+                RefreshUFPreview("EM2_UNIT_POPUP_CANCEL", pf.MSUF_prev.key)
             end
         end; pf:Hide()
     end)
@@ -1204,7 +1209,7 @@ local function ApplyWidthSource()
     if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     RefreshWidthSourceControls(g, u, false)
-    RefreshUFPreview("EM2_CASTBAR_WIDTH_SOURCE")
+    RefreshUFPreview("EM2_CASTBAR_WIDTH_SOURCE", u)
 end
 
 local function Apply()
@@ -1257,7 +1262,7 @@ local function Apply()
     end
     if type(_G.MSUF_UpdateCastbarVisuals)=="function" then _G.MSUF_UpdateCastbarVisuals() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-    RefreshUFPreview("EM2_CASTBAR_POPUP_APPLY")
+    RefreshUFPreview("EM2_CASTBAR_POPUP_APPLY", u)
 end
 
 local BOSS_KEYS = {
@@ -1458,7 +1463,7 @@ local function Build()
             WriteCastbarSettings(targetKey, r)
             if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
             if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
-            RefreshUFPreview("EM2_CASTBAR_POPUP_COPY")
+            RefreshUFPreview("EM2_CASTBAR_POPUP_COPY", targetKey)
             C_Timer.After(0.1, function() Sync() end)
         end,
     })
@@ -1471,7 +1476,7 @@ local function Build()
         if type(_G.MSUF_UpdateCastbarVisuals)=="function" then _G.MSUF_UpdateCastbarVisuals() end
         if type(ApplyAllSettings)=="function" then ApplyAllSettings() end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        RefreshUFPreview("EM2_CASTBAR_POPUP_CANCEL")
+        RefreshUFPreview("EM2_CASTBAR_POPUP_CANCEL", pf and pf.unit)
         pf:Hide()
     end)
     pf:EnableKeyboard(true)

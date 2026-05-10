@@ -18,7 +18,12 @@ local floor = math.floor
 local max   = math.max
 local min   = math.min
 
-local function RefreshUFPreview(reason)
+local function RefreshUFPreview(reason, unitKey)
+    local opt = _G.MSUF_UFOptions_RequestRefresh
+    if type(opt) == "function" then
+        opt(reason or "EM2_LAYOUT", unitKey)
+        return
+    end
     local fn = _G.MSUF_UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "EM2_LAYOUT") end
 end
@@ -643,7 +648,7 @@ local function NudgeTarget(dx, dy)
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        RefreshUFPreview("EM2_CASTBAR_NUDGE")
+        RefreshUFPreview("EM2_CASTBAR_NUDGE", unit)
         return
     end
 
@@ -730,7 +735,7 @@ local function NudgeTarget(dx, dy)
     end
     if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-    RefreshUFPreview("EM2_UNIT_NUDGE")
+    RefreshUFPreview("EM2_UNIT_NUDGE", key)
 end
 
 function Nudge.Enable()
@@ -1102,7 +1107,7 @@ function Ticker.EndDrag()
         end)
         if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
         if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
-        RefreshUFPreview("EM2_UNIT_DRAG_END")
+        RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)
     end
 
     return moved

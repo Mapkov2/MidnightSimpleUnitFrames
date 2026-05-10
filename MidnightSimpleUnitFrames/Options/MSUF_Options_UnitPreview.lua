@@ -1246,6 +1246,11 @@ local function ReadPowerBarEnabled(conf, key)
     return true
 end
 
+local function CanDetachPowerBarKey(key)
+    key = CanonKey(key)
+    return key == "player" or key == "target" or key == "focus"
+end
+
 local function ReadPowerBarHeight(conf)
     local h = tonumber(conf.powerBarHeight) or 3
     if h < 1 then h = 1 elseif h > 20 then h = 20 end
@@ -1383,13 +1388,74 @@ local function CastbarDetached(key, g)
     return prefix and g[prefix .. "Detached"] == true or false
 end
 
+local function NormalizeCastbarWidthSource(v)
+    local fn = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
+    if type(fn) == "function" then return fn(v) end
+    if v == true then return "unitframe" end
+    if v == "unitframe" or v == "essential" or v == "utility" then return v end
+    return nil
+end
+
+local function CastbarWidthSourceKey(key)
+    key = CanonKey(key)
+    local fn = _G.MSUF_GetCastbarWidthSourceKey
+    if type(fn) == "function" then
+        local dbKey = fn(key)
+        if dbKey then return dbKey end
+    end
+    if key == "player" then return "castbarPlayerMatchWidth", "castbarPlayerMatchUnitWidth" end
+    if key == "target" then return "castbarTargetMatchWidth", "castbarTargetMatchUnitWidth" end
+    if key == "focus" then return "castbarFocusMatchWidth", "castbarFocusMatchUnitWidth" end
+    if key == "boss" then return "bossCastbarMatchWidth", "castbarBossMatchUnitWidth", "castbarBossMatchWidth" end
+end
+
+local function CastbarWidthSource(g, key)
+    if not g then return nil end
+    local primary, legacy, alias = CastbarWidthSourceKey(key)
+    local source = NormalizeCastbarWidthSource(primary and g[primary])
+    if source then return source end
+    source = NormalizeCastbarWidthSource(alias and g[alias])
+    if source then return source end
+    if legacy and g[legacy] == true then return "unitframe" end
+    return nil
+end
+
+local function ExternalCastbarWidthSourceFrame(source)
+    if source == "essential" then
+        return (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
+            or _G.EssentialCooldownViewer
+    elseif source == "utility" then
+        return _G.UtilityCooldownViewer
+    end
+end
+
+local function ReadExternalCastbarWidth(source, targetFrame)
+    local frame = ExternalCastbarWidthSourceFrame(source)
+    if not (frame and frame.GetWidth and frame.IsShown and frame:IsShown()) then return nil end
+    local scaleWidth = _G.MSUF_CDM_GetScaledWidth
+    if type(scaleWidth) == "function" then
+        local w = scaleWidth(frame, targetFrame)
+        if w and w > 0 then return w end
+    end
+    local w = frame:GetWidth()
+    if w and w > 0 then return w end
+end
+
 local function ReadCastbarSize(key, g, fallbackW, fallbackH)
     key = CanonKey(key)
     fallbackW = tonumber(fallbackW) or 250
     fallbackH = tonumber(fallbackH) or 18
+    local widthSource = CastbarWidthSource(g, key)
     local w, h
+    if widthSource == "unitframe" then
+        w = fallbackW
+    elseif widthSource == "essential" or widthSource == "utility" then
+        w = ReadExternalCastbarWidth(widthSource) or nil
+    end
     if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-        w, h = _G.MSUF_GetCastbarDesiredSize(key, g or {}, nil, fallbackW, fallbackH)
+        local desiredW, desiredH = _G.MSUF_GetCastbarDesiredSize(key, g or {}, nil, fallbackW, fallbackH)
+        if not w or w <= 0 then w = desiredW end
+        h = desiredH
     end
     if not w or w <= 0 then
         if key == "boss" then
@@ -2181,18 +2247,18 @@ function Preview.Refresh(box)
     local castDetached = castEnabled and CastbarDetached(key, g)
     local castPreviewVisible = castEnabled
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars or {}
-    local playerDetachedPower = key == "player" and conf.powerBarDetached == true and ReadPowerBarEnabled(conf, key)
-    local classPowerOn = key == "player" and (bars.showClassPower == true or playerDetachedPower)
+    local detachedPower = CanDetachPowerBarKey(key) and conf.powerBarDetached == true and ReadPowerBarEnabled(conf, key)
+    local classPowerOn = key == "player" and (bars.showClassPower == true or detachedPower)
     local powerFrac = tonumber(data.power) or 1
-    if not playerDetachedPower and key ~= "player" then powerFrac = 1 end
+    if not detachedPower and key ~= "player" then powerFrac = 1 end
     if powerFrac < 0 then powerFrac = 0 elseif powerFrac > 1 then powerFrac = 1 end
     local cpH = classPowerOn and (tonumber(bars.classPowerHeight) or 4) or 0
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
-    local detachedH = playerDetachedPower and (tonumber(conf.detachedPowerBarHeight) or 6) or 0
+    local detachedH = detachedPower and (tonumber(conf.detachedPowerBarHeight) or 6) or 0
     if detachedH < 2 then detachedH = 2 elseif detachedH > 80 then detachedH = 80 end
     local wideW = w
     if classPowerOn and bars.classPowerWidthMode == "custom" then wideW = max(wideW, tonumber(bars.classPowerWidth) or w) end
-    if playerDetachedPower then wideW = max(wideW, tonumber(conf.detachedPowerBarWidth) or w) end
+    if detachedPower then wideW = max(wideW, tonumber(conf.detachedPowerBarWidth) or w) end
     local minX, maxX, minY, maxY = 0, w, 0, h
     if hasPortrait then
         local poX = tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0
@@ -2213,12 +2279,12 @@ function Preview.Refresh(box)
         minX, maxX = min(minX, cx), max(maxX, cx + cpW)
         minY, maxY = min(minY, cy), max(maxY, cy + cpH)
     end
-    if playerDetachedPower then
+    if detachedPower then
         local dW = tonumber(conf.detachedPowerBarWidth) or w
         local dx = tonumber(conf.detachedPowerBarOffsetX) or 0
         local dy = tonumber(conf.detachedPowerBarOffsetY) or -4
         local dLeft, dBottom = dx, -detachedH + dy
-        if conf.detachedPowerBarAnchorToClassPower == true and classPowerOn then
+        if key == "player" and conf.detachedPowerBarAnchorToClassPower == true and classPowerOn then
             local cpW = (bars.classPowerWidthMode == "custom") and (tonumber(bars.classPowerWidth) or (w - 4)) or (w - 4)
             local cx = 2 + (tonumber(bars.classPowerOffsetX) or 0)
             local cy = h + 4 + (tonumber(bars.classPowerOffsetY) or 0)
@@ -2292,7 +2358,7 @@ function Preview.Refresh(box)
     mock:ClearAllPoints()
     mock:SetPoint("CENTER", canvas, "CENTER", mockOffsetX, mockOffsetY)
 
-    local powerOn = ReadPowerBarEnabled(conf, key) and not playerDetachedPower
+    local powerOn = ReadPowerBarEnabled(conf, key) and not detachedPower
     local powerH = powerOn and S(ReadPowerBarHeight(conf)) or 0
     if powerOn and powerH < 2 then powerH = 2 end
     mock.hpBG:ClearAllPoints()
@@ -2355,10 +2421,10 @@ function Preview.Refresh(box)
         for i = 1, #mock.classPower.segments do mock.classPower.segments[i]:Hide() end
     end
 
-    if playerDetachedPower then
+    if detachedPower then
         mock.detachedPower:Show()
         local dW = tonumber(conf.detachedPowerBarWidth) or w
-        if bars.detachedPowerBarWidthMode and bars.detachedPowerBarWidthMode ~= "manual" then
+        if key == "player" and bars.detachedPowerBarWidthMode and bars.detachedPowerBarWidthMode ~= "manual" then
             dW = classPowerOn and (mock.classPower:GetWidth() / max(scale, 0.01)) or w
         end
         if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
@@ -2366,10 +2432,10 @@ function Preview.Refresh(box)
         mock.detachedPower:ClearAllPoints()
         local dx = S(tonumber(conf.detachedPowerBarOffsetX) or 0)
         local dy = S(tonumber(conf.detachedPowerBarOffsetY) or -4)
-        if conf.detachedPowerBarAnchorToClassPower == true and classPowerOn and mock.classPower:IsShown() then
+        if key == "player" and conf.detachedPowerBarAnchorToClassPower == true and classPowerOn and mock.classPower:IsShown() then
             mock.detachedPower:SetPoint("TOP", mock.classPower, "BOTTOM", dx, dy)
         else
-        mock.detachedPower:SetPoint("TOPLEFT", mock, "BOTTOMLEFT", dx, dy)
+            mock.detachedPower:SetPoint("TOPLEFT", mock, "BOTTOMLEFT", dx, dy)
         end
         mock.detachedPower.fill:SetVertexColor(pr, pg, pb, 1)
         mock.detachedPower.fill:SetWidth(max(1, S(dW) * powerFrac - 2))
@@ -2414,7 +2480,7 @@ function Preview.Refresh(box)
     mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S(tonumber(conf.nameOffsetY) or -4))
     mock.nameText:SetJustifyH(njust)
     PositionText(mock.hpText, conf.hpTextAnchor or g.hpTextAnchor or "RIGHT", true, S(tonumber(conf.hpOffsetX) or -4), S(tonumber(conf.hpOffsetY) or -4), mock.textFrame, S(-4))
-    if playerDetachedPower and conf.detachedPowerBarTextOnBar == true and mock.detachedPower:IsShown() then
+    if detachedPower and conf.detachedPowerBarTextOnBar == true and mock.detachedPower:IsShown() then
         mock.powerText:ClearAllPoints()
         mock.powerText:SetPoint("CENTER", mock.detachedPower, "CENTER", S(tonumber(conf.powerOffsetX) or 0), S(tonumber(conf.powerOffsetY) or 0))
         mock.powerText:SetJustifyH("CENTER")
