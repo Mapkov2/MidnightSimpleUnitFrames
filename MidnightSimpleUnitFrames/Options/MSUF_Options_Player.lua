@@ -1309,6 +1309,8 @@ end
 --------------------------------------------------------------------
 function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     if not panel or not frameGroup or not helpers then return end
+    if panel.__MSUF_UnitFrameOptionsBuilt then return end
+    panel.__MSUF_UnitFrameOptionsBuilt = true
     local CreateLabeledSlider = helpers.CreateLabeledSlider
     local texWhite, texWhite2 = helpers.texWhite, helpers.texWhite2
     local UI = ns.UI
@@ -1372,6 +1374,15 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local function UnitLabel(k)
         return ({ player = "Player", target = "Target", targettarget = "Target of Target", focus = "Focus", boss = "Boss Frames", pet = "Pet", all = "All" })[CanonKey(k) or k] or tostring(k or "")
     end
+    local function UnitPillWidth(k)
+        k = CanonKey(k) or k
+        if k == "targettarget" then return 116 end
+        if k == "boss" then return 92 end
+        if k == "target" then return 62 end
+        if k == "focus" then return 58 end
+        if k == "pet" then return 46 end
+        return 56
+    end
     local function CurrentUnitKey()
         return CanonKey((panel._msufGetCurrentKey and panel._msufGetCurrentKey()) or panel._msufLastApplyKey or "player") or "player"
     end
@@ -1381,11 +1392,13 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         br = br or btn._msufBorderColor or { 0.22, 0.48, 0.85, 0.82 }
         tr = tr or btn._msufTextColor or { 0.80, 0.90, 1.00, 1 }
         local mul = hover and 1.10 or 1
-        if btn._msufSuperBg then btn._msufSuperBg:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 0.92) end
-        if btn._msufSuperBorder then btn._msufSuperBorder:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 0.82) end
+        local bgR, bgG, bgB, bgA = min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 0.92
+        local brR, brG, brB, brA = min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 0.82
+        if btn._msufSuperBg then btn._msufSuperBg:SetVertexColor(bgR, bgG, bgB, bgA) end
+        if btn._msufSuperBorder then btn._msufSuperBorder:SetVertexColor(brR, brG, brB, brA) end
         if btn._fs and btn._fs.SetTextColor then btn._fs:SetTextColor(tr[1], tr[2], tr[3], tr[4] or 1) end
     end
-    local function MakeSuperGroup(owner, key, layer, subLevel, pad)
+    local function MakeSuperButtonGroup(owner, key, layer, subLevel, pad)
         local group = owner[key]
         if group then return group end
         group = {}
@@ -1435,8 +1448,11 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         btn._msufBgColor = bg or { 0.06, 0.07, 0.13, 0.88 }
         btn._msufBorderColor = br or { 0.15, 0.18, 0.36, 0.45 }
         btn._msufTextColor = tr or { 0.82, 0.90, 1.00, 1 }
-        btn._msufSuperBorder = MakeSuperGroup(btn, "_msufSEBorder", "BACKGROUND", 0, 1)
-        btn._msufSuperBg = MakeSuperGroup(btn, "_msufSEFill", "BACKGROUND", 1, 2)
+        btn._msufBaseBgColor = btn._msufBgColor
+        btn._msufBaseBorderColor = btn._msufBorderColor
+        btn._msufBaseTextColor = btn._msufTextColor
+        btn._msufSuperBorder = MakeSuperButtonGroup(btn, "_msufSEBorder", "BACKGROUND", 0, 1)
+        btn._msufSuperBg = MakeSuperButtonGroup(btn, "_msufSEFill", "BACKGROUND", 1, 2)
         local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fs:SetPoint("CENTER")
         fs:SetText(TR(text or ""))
@@ -1485,9 +1501,9 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         border:SetVertexColor(0.12, 0.28, 0.58, 0.46)
         frame._msufSuperBorder = border
         local fill = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
-        fill:SetTexture(MEDIA_SUPERELLIPSE)
         fill:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
         fill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+        fill:SetTexture(MEDIA_SUPERELLIPSE)
         fill:SetVertexColor(0.025, 0.055, 0.14, 0.94)
         frame._msufSuperBg = fill
         return frame
@@ -1519,7 +1535,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     editingLabel:SetPoint("LEFT", unitActionBar, "LEFT", 8, 2)
     editingLabel:SetText(TR("Editing:"))
     editingLabel:SetTextColor(0.72, 0.82, 1.00, 1)
-    local unitPill = MakeSuperButton(unitActionBar, "Player", 152, 24, { 0.06, 0.07, 0.13, 0.88 }, { 0.15, 0.18, 0.36, 0.45 }, { 0.92, 0.96, 1.00, 1 })
+    local unitPill = MakeSuperButton(unitActionBar, "Player", UnitPillWidth("player"), 24, { 0.06, 0.07, 0.13, 0.88 }, { 0.15, 0.18, 0.36, 0.45 }, { 0.92, 0.96, 1.00, 1 })
     unitPill:SetPoint("LEFT", editingLabel, "RIGHT", 8, 2)
     unitPill:EnableMouse(false)
     unitPill._msufBaseBgColor = { 0.06, 0.07, 0.13, 0.88 }
@@ -1662,7 +1678,10 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end)
     panel._msufRefreshUnitTopActions = function()
         local key = CurrentUnitKey()
-        if unitPill and unitPill._fs then unitPill._fs:SetText(UnitLabel(key)) end
+        if unitPill then
+            if unitPill.SetSize then unitPill:SetSize(UnitPillWidth(key), 24) end
+            if unitPill._fs then unitPill._fs:SetText(UnitLabel(key)) end
+        end
         if editBtn and editBtn._fs then editBtn._fs:SetText((_G.MSUF_UnitEditModeActive == true) and TR("Exit Edit Mode") or TR("MSUF Edit Mode")) end
         NormalizeCopyDest(key)
         if copyPopup and copyPopup:IsShown() then RefreshCopyPopupTargets() end
