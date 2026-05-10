@@ -493,20 +493,33 @@ local _rangeFriendlySpell
 local _rangeNeedsTicker = false
 
 do
-    local function IVS(id) return IsPlayerSpell and IsPlayerSpell(id) and id end
+    local function KnownSpell(id)
+        if not id then return nil end
+        local spellBook = _G.C_SpellBook
+        local inBook = spellBook and spellBook.IsSpellInSpellBook
+        if inBook and inBook(id, nil, true) == true then return id end
+        return IsPlayerSpell and IsPlayerSpell(id) and id or nil
+    end
+    local function Pick(...)
+        for i = 1, select("#", ...) do
+            local id = KnownSpell(select(i, ...))
+            if id then return id end
+        end
+        return nil
+    end
     local spells = {
-        DRUID       = function() return 8936 end,       -- Regrowth
-        PRIEST      = function() return 2061 end,       -- Flash Heal
-        SHAMAN      = function() return 8004 end,       -- Healing Surge
-        PALADIN     = function() return 19750 end,      -- Flash of Light
-        MONK        = function() return 116670 end,     -- Vivify
-        EVOKER      = function() return 355913 end,     -- Emerald Blossom
-        WARLOCK     = function() return 20707 end,      -- Soulstone
-        MAGE        = function() return 1459 end,       -- Arcane Intellect
-        HUNTER      = function() return nil end,
-        ROGUE       = function() return IVS(36554) or IVS(57934) end, -- Shadowstep / Tricks
-        DEATHKNIGHT = function() return IVS(47541) end, -- Death Coil
-        WARRIOR     = function() return nil end,
+        DRUID       = function() return Pick(8936, 774, 88423, 2782) end,        -- Regrowth/Rejuvenation/Nature's Cure
+        PRIEST      = function() return Pick(2061, 17, 21562, 527) end,          -- Flash Heal/Shield/Purify
+        SHAMAN      = function() return Pick(8004, 188070, 546) end,             -- Healing Surge/Healing Stream/Water Walking
+        PALADIN     = function() return Pick(19750, 85673, 4987, 213644) end,    -- Flash of Light/Word of Glory/Cleanse
+        MONK        = function() return Pick(116670, 115450) end,                -- Vivify/Detox
+        EVOKER      = function() return Pick(361469, 355913, 360823) end,        -- Living Flame/Emerald Blossom/Naturalize
+        WARLOCK     = function() return Pick(20707) end,                         -- Soulstone
+        MAGE        = function() return Pick(475) end,                           -- Remove Curse
+        HUNTER      = function() return Pick(34477) end,                         -- Misdirection
+        ROGUE       = function() return Pick(57934, 36554) end,                  -- Tricks/Shadowstep
+        DEATHKNIGHT = function() return Pick(47541) end,                         -- Death Coil
+        WARRIOR     = function() return Pick(3411) end,                          -- Intervene
         DEMONHUNTER = function() return nil end,
     }
     local _spellGetter = spells[_playerClass]
@@ -1251,30 +1264,6 @@ local function _GF_ApplyFrameAlpha(f, kind, conf)
     end
 end
 
-local function _GF_IsSelfUnit(unit)
-    if unit == "player" then return true end
-    if not unit then return false end
-    local unitGUID = _G.UnitGUID
-    if unitGUID then
-        local playerGUID = unitGUID("player")
-        local frameGUID = unitGUID(unit)
-        if playerGUID and frameGUID
-            and not (issecretvalue and (issecretvalue(playerGUID) or issecretvalue(frameGUID)))
-            and playerGUID == frameGUID then
-            return true
-        end
-    end
-    if not UnitIsUnit then return false end
-    local secrets = _G.C_Secrets
-    local shouldBeSecret = secrets and secrets.ShouldUnitComparisonBeSecret
-    if shouldBeSecret and shouldBeSecret(unit, "player") then return false end
-    local canCompare = secrets and secrets.CanCompareUnitTokens
-    if canCompare and canCompare(unit, "player") == false then return false end
-    local isSelf = UnitIsUnit(unit, "player")
-    if issecretvalue and issecretvalue(isSelf) then return false end
-    return isSelf and true or false
-end
-
 local function _ClearHealthRangeFade(f, kind)
     if not f then return end
     if f._msufGFHealthAlphaDynamic or f._msufGFHealthAlphaMul or type(f._msufGFHealthAlphaBool) ~= "nil" then
@@ -1316,7 +1305,92 @@ local function _ApplyHealthRangeFade(f, kind, boolValue, fadeMul, numericMul)
     end
 end
 
-local function ApplyRangeFade(f, unit, inRange)
+local ApplyRangeFade
+do
+    local RANGE_FADE_DISTANCE_SQ = 40 * 40
+
+    local function IsSecretValue(value)
+        return issecretvalue and issecretvalue(value)
+    end
+
+    local function ToPlainRangeBool(value)
+        if IsSecretValue(value) then return nil end
+        if value == true or value == 1 then return true end
+        if value == false or value == 0 then return false end
+        if type(value) == "nil" then return nil end
+        return value and true or false
+    end
+
+    local function CheckedRangeIsFalse(checkedRange)
+        if type(checkedRange) == "nil" then return false end
+        if IsSecretValue(checkedRange) then return false end
+        return checkedRange == false
+    end
+
+    local function IsSelfUnit(unit)
+        if unit == "player" then return true end
+        if not unit then return false end
+        local unitGUID = _G.UnitGUID
+        if unitGUID then
+            local playerGUID = unitGUID("player")
+            local frameGUID = unitGUID(unit)
+            if playerGUID and frameGUID
+                and not (issecretvalue and (issecretvalue(playerGUID) or issecretvalue(frameGUID)))
+                and playerGUID == frameGUID then
+                return true
+            end
+        end
+        if UnitInRaid then
+            local raidIndex = UnitInRaid("player")
+            if raidIndex and unit == ("raid" .. raidIndex) then return true end
+        end
+        if not UnitIsUnit then return false end
+        local secrets = _G.C_Secrets
+        local shouldBeSecret = secrets and secrets.ShouldUnitComparisonBeSecret
+        if shouldBeSecret and shouldBeSecret(unit, "player") then return false end
+        local canCompare = secrets and secrets.CanCompareUnitTokens
+        if canCompare and canCompare(unit, "player") == false then return false end
+        local isSelf = UnitIsUnit(unit, "player")
+        if issecretvalue and issecretvalue(isSelf) then return false end
+        return isSelf and true or false
+    end
+
+    local function DistanceRange(unit)
+        local UnitDistanceSquared = _G.UnitDistanceSquared
+        if not (unit and UnitDistanceSquared) then return nil end
+        local distSq, checkedDistance = UnitDistanceSquared(unit)
+        if CheckedRangeIsFalse(checkedDistance) then return nil end
+        if type(distSq) == "nil" or IsSecretValue(distSq) then return nil end
+        distSq = tonumber(distSq)
+        if not distSq then return nil end
+        return distSq <= RANGE_FADE_DISTANCE_SQ
+    end
+
+    local function FriendlySpellRange(unit)
+        if not (unit and _rangeFriendlySpell and IsSpellInRange) then return nil end
+        local r = IsSpellInRange(_rangeFriendlySpell, unit)
+        if type(r) == "nil" then return nil end
+        return ToPlainRangeBool(r)
+    end
+
+    local function InteractPositiveRange(unit)
+        if not (unit and CheckInteractDistance) then return nil end
+        local ci = CheckInteractDistance(unit, 4)
+        if type(ci) == "nil" or IsSecretValue(ci) then return nil end
+        return ci and true or nil
+    end
+
+    local function FriendlyFallbackRange(unit)
+        local byDistance = DistanceRange(unit)
+        if type(byDistance) ~= "nil" then return byDistance end
+
+        local bySpell = FriendlySpellRange(unit)
+        if type(bySpell) ~= "nil" then return bySpell end
+
+        return InteractPositiveRange(unit)
+    end
+
+    ApplyRangeFade = function(f, unit, inRange, checkedRange)
     local c = f._c
     local kind = f._msufGFKind or "party"
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
@@ -1371,12 +1445,58 @@ local function ApplyRangeFade(f, unit, inRange)
         _ClearHealthRangeFade(f, kind)
     end
 
-    if _GF_IsSelfUnit(unit) then
+    if IsSelfUnit(unit) then
         inRange = true
+        checkedRange = true
     end
 
-    -- EQoL exact pattern (line 8424)
-    if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
+    -- EQoL base pattern plus checkedRange and positive fallbacks. Some clients
+    -- can report unchecked/false for friendly group units out of combat; do not
+    -- let those values become a stale out-of-range fade.
+    if CheckedRangeIsFalse(checkedRange) then
+        inRange = nil
+    end
+    if unit and UnitInRange and type(checkedRange) == "nil"
+        and type(inRange) ~= "nil" and not IsSecretValue(inRange)
+        and ToPlainRangeBool(inRange) == false
+    then
+        local queriedRange, queriedChecked = UnitInRange(unit)
+        checkedRange = queriedChecked
+        if CheckedRangeIsFalse(checkedRange) then
+            inRange = nil
+        elseif type(queriedRange) ~= "nil" then
+            inRange = queriedRange
+        end
+    end
+    if inRange == nil and unit and UnitInRange then
+        local checked
+        inRange, checked = UnitInRange(unit)
+        checkedRange = checked
+        if CheckedRangeIsFalse(checkedRange) then
+            inRange = nil
+        end
+    end
+
+    if type(inRange) ~= "nil" and not IsSecretValue(inRange) then
+        local plain = ToPlainRangeBool(inRange)
+        if plain == false then
+            local fallback = FriendlyFallbackRange(unit)
+            if fallback == true then
+                inRange = true
+            else
+                inRange = false
+            end
+        else
+            inRange = plain
+        end
+    end
+
+    if type(inRange) == "nil" then
+        inRange = FriendlyFallbackRange(unit)
+        if type(inRange) == "nil" then
+            inRange = true
+        end
+    end
 
     if type(inRange) ~= "nil" then
         f._msufGFRangeFadeApplied = true
@@ -1405,6 +1525,7 @@ local function ApplyRangeFade(f, unit, inRange)
         elseif f.SetAlpha then
             f:SetAlpha(frameAlpha)
         end
+    end
     end
 end
 
@@ -4207,7 +4328,7 @@ local UNIT_DISPATCH = {
             UpdateStatusText(f, u, true)
         end
     end,
-    UNIT_IN_RANGE_UPDATE              = function(f, u, inRange) ApplyRangeFade(f, u, inRange) end,
+    UNIT_IN_RANGE_UPDATE              = function(f, u, inRange, checkedRange) ApplyRangeFade(f, u, inRange, checkedRange) end,
     UNIT_AURA                         = function(f, u, updateInfo)
         dispatchAura(f, u, updateInfo)
     end,
@@ -4654,6 +4775,21 @@ do
     end
     H.PLAYER_REGEN_ENABLED = H.PLAYER_REGEN_DISABLED
 
+    do
+        local function RebuildRangeSpell()
+            if GF._RebuildRangeSpell then GF._RebuildRangeSpell() end
+            if GF.RefreshRangeFade then GF.RefreshRangeFade() end
+        end
+        local function QueueRangeSpellRebuild()
+            _MSUF_ScheduleDelayOnce("GF_RANGE_SPELL_REBUILD", 0.05, RebuildRangeSpell)
+        end
+        H.SPELLS_CHANGED = QueueRangeSpellRebuild
+        H.ACTIVE_PLAYER_SPECIALIZATION_CHANGED = QueueRangeSpellRebuild
+        H.PLAYER_TALENT_UPDATE = QueueRangeSpellRebuild
+        H.TRAIT_CONFIG_UPDATED = QueueRangeSpellRebuild
+        H.PLAYER_ENTERING_WORLD = QueueRangeSpellRebuild
+    end
+
     H.PLAYER_FOCUS_CHANGED = function()
         local oldFocus = _gfFocusFrame
         _gfFocusFrame = nil
@@ -4788,6 +4924,11 @@ end
 
 _globalFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 _globalFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+_globalFrame:RegisterEvent("SPELLS_CHANGED")
+_globalFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+_globalFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
+_globalFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
+_globalFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 _globalFrame:RegisterEvent("BARBER_SHOP_OPEN")
 _globalFrame:RegisterEvent("BARBER_SHOP_CLOSE")
 _globalFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
