@@ -3004,8 +3004,7 @@ local function _MSUF_GetSpacerMaxForUnitKey(unitKey, spec)
     if pctObj then
         pctW = MSUF_GetApproxPercentTextWidth(pctObj)
     end
-    local useOverride = (conf and conf.hpPowerTextOverride == true)
-    local mode = (useOverride and conf[spec.modeKey]) or g[spec.globalModeKey] or "FULL_PLUS_PERCENT"
+    local mode = (conf and conf[spec.modeKey]) or g[spec.globalModeKey] or "FULL_PLUS_PERCENT"
     if spec.modeKey == "hpTextMode" and type(_G.MSUF_NormalizeHpTextMode) == "function" then
         mode = _G.MSUF_NormalizeHpTextMode(mode)
     elseif spec.modeKey == "powerTextMode" and type(_G.MSUF_NormalizePowerTextMode) == "function" then
@@ -3090,6 +3089,62 @@ local function MSUF_TextLayout_GetSpacer(key, udb, g, hasPct, spec)
     local max = (key and spec.maxFn and spec.maxFn(key)) or 0
     return on, ns.Text.ClampSpacerValue(x, max, on)
 end
+local function MSUF_ClampTextLayer(v, fallback)
+    v = math_floor((tonumber(v) or fallback or 0) + 0.5)
+    if v < 0 then return 0 end
+    if v > 30 then return 30 end
+    return v
+end
+local function MSUF_TextLayerValue(udb, g, key, fallback)
+    local v = udb and udb[key]
+    if v == nil and g then v = g[key] end
+    return MSUF_ClampTextLayer(v, fallback)
+end
+local function MSUF_EnsureTextLayerFrame(f, frameKey, parent, layer)
+    if not f or not parent then return nil end
+    local layerFrame = f[frameKey]
+    if not layerFrame then
+        layerFrame = CreateFrame("Frame", nil, parent)
+        f[frameKey] = layerFrame
+    elseif layerFrame.GetParent and layerFrame:GetParent() ~= parent then
+        layerFrame:SetParent(parent)
+    end
+    if layerFrame.ClearAllPoints then layerFrame:ClearAllPoints() end
+    if layerFrame.SetAllPoints then layerFrame:SetAllPoints(parent) end
+    if layerFrame.SetFrameLevel then
+        local base = (f.GetFrameLevel and f:GetFrameLevel()) or (parent.GetFrameLevel and parent:GetFrameLevel()) or 0
+        local want = base + 10 + MSUF_ClampTextLayer(layer, 0)
+        if layerFrame._msufTextLayerLevel ~= want then
+            layerFrame._msufTextLayerLevel = want
+            layerFrame:SetFrameLevel(want)
+        end
+    end
+    if layerFrame.Show then layerFrame:Show() end
+    return layerFrame
+end
+local function MSUF_SetTextParentIfNeeded(fs, parent)
+    if fs and parent and fs.SetParent and (not fs.GetParent or fs:GetParent() ~= parent) then
+        fs:SetParent(parent)
+    end
+end
+local function MSUF_EnsureUnitTextLayers(f, tf, nameLayer, hpLayer, powerLayer)
+    if not f or not tf then return end
+    local nl = MSUF_EnsureTextLayerFrame(f, "_msufNameTextLayer", tf, nameLayer)
+    local hl = MSUF_EnsureTextLayerFrame(f, "_msufHPTextLayer", tf, hpLayer)
+    local pl = MSUF_EnsureTextLayerFrame(f, "_msufPowerTextLayer", tf, powerLayer)
+    if f._msufNameClipFrame and f._msufNameClipFrame.SetFrameLevel and nl and nl.GetFrameLevel then
+        f._msufNameClipFrame:SetFrameLevel(nl:GetFrameLevel() or 0)
+    end
+    if f.nameText and nl and (not f._msufNameClipFrame or f.nameText:GetParent() ~= f._msufNameClipFrame) then
+        MSUF_SetTextParentIfNeeded(f.nameText, nl)
+    end
+    MSUF_SetTextParentIfNeeded(f.hpText, hl)
+    MSUF_SetTextParentIfNeeded(f.hpTextPct, hl)
+    if not (f._msufPowerBarDetached and f.targetPowerBar) then
+        MSUF_SetTextParentIfNeeded(f.powerText, pl)
+        MSUF_SetTextParentIfNeeded(f.powerTextPct, pl)
+    end
+end
 local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, eff, anchorPt, anchorRelPt, anchorDefX, anchorJustify, anchorSign)
     local fullObj, pctObj = f[spec.full], f[spec.pct]
     if not (fullObj or hasPct) then  return end
@@ -3128,11 +3183,15 @@ local function ApplyTextLayout(f, conf)
     if not key and f.unit and GetConfigKeyForUnit then key = GetConfigKeyForUnit(f.unit) end
     local udb = (MSUF_DB and key and MSUF_DB[key]) or nil
     local g = (MSUF_DB and MSUF_DB.general) or nil
-    local useOverride = (udb and udb.hpPowerTextOverride == true)
-    local hpMode = (useOverride and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
+    local nameLayer = MSUF_TextLayerValue(udb, g, "nameTextLayer", 5)
+    local hpLayer = MSUF_TextLayerValue(udb, g, "hpTextLayer", 5)
+    local powerLayer = MSUF_TextLayerValue(udb, g, "powerTextLayer", 2)
+    MSUF_EnsureUnitTextLayers(f, tf, nameLayer, hpLayer, powerLayer)
+    local hpMode = (udb and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
     if type(_G.MSUF_NormalizeHpTextMode) == "function" then hpMode = _G.MSUF_NormalizeHpTextMode(hpMode) end
     do
-        local hpReverse = (useOverride and udb.hpTextReverse) or ((not useOverride) and g and g.hpTextReverse)
+        local hpReverse = (udb and udb.hpTextReverse)
+        if hpReverse == nil and g then hpReverse = g.hpTextReverse end
         if hpReverse then
             local rev = {
                 FULL_PLUS_PERCENT = "PERCENTCUR", PERCENT_PLUS_FULL = "CURPERCENT",
@@ -3145,7 +3204,7 @@ local function ApplyTextLayout(f, conf)
             hpMode = rev[hpMode] or hpMode
         end
     end
-    local pMode  = (useOverride and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
+    local pMode  = (udb and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
     if type(_G.MSUF_NormalizePowerTextMode) == "function" then pMode = _G.MSUF_NormalizePowerTextMode(pMode) end
     -- Text anchors: per-unit  general  default RIGHT (no override gate; set per-unit via EditMode popup)
     local hpAnchor    = (udb and udb.hpTextAnchor)    or (g and g.hpTextAnchor)    or "RIGHT"
@@ -3155,8 +3214,7 @@ local function ApplyTextLayout(f, conf)
     local pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign   = MSUF_ResolveTextAnchor(powerAnchor, false)
     local hpHasPct = (f[MSUF_TEXT_LAYOUT_HP.pct] ~= nil)
     local pHasPct  = (f[MSUF_TEXT_LAYOUT_PWR.pct] ~= nil)
-    -- Spacers inherit Shared unless per-unit override is enabled.
-    local spacerDB = useOverride and udb or nil
+    local spacerDB = udb
     local hpOn, hpEff = MSUF_TextLayout_GetSpacer(key, spacerDB, g, hpHasPct, MSUF_TEXT_LAYOUT_HP)
     local pOn,  pEff  = MSUF_TextLayout_GetSpacer(key, spacerDB, g, pHasPct,  MSUF_TEXT_LAYOUT_PWR)
     local hX = ns.Util.Offset(conf.hpOffsetX,    -4)
@@ -3175,7 +3233,7 @@ local function ApplyTextLayout(f, conf)
     if _textOnBarActive then
         pbW = math_floor((f.targetPowerBar.GetWidth and f.targetPowerBar:GetWidth() or 0) + 0.5)
     end
-    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, hpHasPct, hpOn, hpEff, wUsed, (key or ""), (hpMode or ""), pHasPct, pOn, pEff, (pMode or ""), (hpAnchor or ""), (powerAnchor or ""), (nameAnchor or ""), (f._msufPowerBarDetached and 1 or 0), (_textOnBarActive and 1 or 0), pbW) then  return end
+    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, hpHasPct, hpOn, hpEff, wUsed, (key or ""), (hpMode or ""), pHasPct, pOn, pEff, (pMode or ""), (hpAnchor or ""), (powerAnchor or ""), (nameAnchor or ""), nameLayer, hpLayer, powerLayer, (f._msufPowerBarDetached and 1 or 0), (_textOnBarActive and 1 or 0), pbW) then  return end
     f._msufTextLayoutStamp = 1
     if f.nameText then
         local namePt, nameRelPt, nameDefX, nameJustify = MSUF_ResolveNameAnchor(nameAnchor, nX)
@@ -3248,11 +3306,12 @@ local function ApplyTextLayout(f, conf)
         end
         local fullObj = f[MSUF_TEXT_LAYOUT_PWR.full]
         local pctObj  = f[MSUF_TEXT_LAYOUT_PWR.pct]
-        if fullObj and fullObj.GetParent and fullObj:GetParent() ~= tf then
-            fullObj:SetParent(tf)
+        local pwrParent = f._msufPowerTextLayer or tf
+        if fullObj and fullObj.GetParent and fullObj:GetParent() ~= pwrParent then
+            fullObj:SetParent(pwrParent)
         end
-        if pctObj and pctObj.GetParent and pctObj:GetParent() ~= tf then
-            pctObj:SetParent(tf)
+        if pctObj and pctObj.GetParent and pctObj:GetParent() ~= pwrParent then
+            pctObj:SetParent(pwrParent)
         end
         MSUF_TextLayout_ApplyGroup(f, pwrTF, conf, MSUF_TEXT_LAYOUT_PWR, pMode,  pHasPct,  pOn,  pEff, pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign)
     end

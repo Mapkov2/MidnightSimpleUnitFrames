@@ -829,6 +829,29 @@ panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
     local function IsTabKey(k)
         return k == "bars" or k == "classpower" or k == "fonts" or k == "auras" or k == "castbar" or k == "misc" or k == "profiles"
     end
+    local _msufUnitMenuRefreshToken = 0
+    local function ForceUnitFrameMenuRefresh(reason)
+        if currentTabKey ~= "frames" or not UNIT_FRAME_KEYS[currentKey] then return end
+        if not (panel and panel.LoadFromDB) then return end
+        _msufUnitMenuRefreshToken = _msufUnitMenuRefreshToken + 1
+        local token = _msufUnitMenuRefreshToken
+        local function RefreshNow()
+            if token ~= _msufUnitMenuRefreshToken then return end
+            if currentTabKey ~= "frames" or not UNIT_FRAME_KEYS[currentKey] then return end
+            panel:LoadFromDB()
+            if panel._msufRefreshUnitTextControls then panel._msufRefreshUnitTextControls() end
+            if panel._msufRefreshUnitPortraitControls then panel._msufRefreshUnitPortraitControls() end
+            if panel._msufRefreshUnitPowerControls then panel._msufRefreshUnitPowerControls() end
+            if panel._msufRefreshUFStatusControls then panel._msufRefreshUFStatusControls() end
+            if _G.MSUF_UFPreview_RequestRefresh then
+                _G.MSUF_UFPreview_RequestRefresh(reason or "UNIT_MENU_ENTER")
+            end
+        end
+        RefreshNow()
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, RefreshNow)
+        end
+    end
     local function SetCurrentKey(newKey)
         -- PERF: Same-key early-exit. Hot path sees this called repeatedly with
         -- identical newKey during options mirror page-select cascades. The heavy
@@ -842,7 +865,10 @@ panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
             if IsTabKey(newKey) then
                 if currentTabKey == newKey then return end
             else
-                if currentKey == newKey and currentTabKey == "frames" then return end
+                if currentKey == newKey and currentTabKey == "frames" then
+                    ForceUnitFrameMenuRefresh("UNIT_MENU_REENTER")
+                    return
+                end
             end
         end
         _msufKeyInitialized = true
@@ -867,6 +893,9 @@ panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
             if buttons[currentTabKey] and buttons[currentTabKey].Disable then buttons[currentTabKey]:Disable() end
         end
         UpdateGroupVisibility()
+        if currentTabKey == "frames" and UNIT_FRAME_KEYS[currentKey] then
+            ForceUnitFrameMenuRefresh("UNIT_MENU_ENTER")
+        end
      end
     function MSUF_GetTabButtonHelpers(requestedPanel)
         if requestedPanel == panel then  return buttons, SetCurrentKey end

@@ -466,6 +466,14 @@ local COPY_PORTRAIT_FIELDS = {
     "portraitBorderStyle","portraitBorderThickness",
     "portraitBgEnabled","portraitFillBorder",
 }
+local COPY_TEXT_FIELDS = {
+    "nameTextAnchor","nameOffsetX","nameOffsetY","nameFontSize",
+    "hpTextAnchor","hpOffsetX","hpOffsetY","hpFontSize",
+    "hpTextMode","hpTextReverse","hpTextSeparator","hpTextSpacerEnabled","hpTextSpacerX",
+    "powerTextAnchor","powerOffsetX","powerOffsetY","powerFontSize",
+    "powerTextMode","powerTextSeparator","powerTextSpacerEnabled","powerTextSpacerX",
+    "nameTextLayer","hpTextLayer","powerTextLayer",
+}
 local COPY_INDICATOR_FIELDS = {
     "showLeaderIcon","leaderIconOffsetX","leaderIconOffsetY","leaderIconAnchor","leaderIconSize","leaderIconLayer",
     "showRaidMarker","raidMarkerOffsetX","raidMarkerOffsetY","raidMarkerAnchor","raidMarkerSize","raidMarkerLayer",
@@ -627,6 +635,8 @@ local function CopyUnitSettings(srcKey, destKey, api)
         local dst, dstC = EnsureUnitDB(toKey)
         if not dst or not dstC or dstC == srcC then return end
         CopyFields(dst, src, COPY_BASIC_FIELDS)
+        CopyFields(dst, src, COPY_TEXT_FIELDS)
+        dst.hpPowerTextOverride = nil
         CopyFields(dst, src, COPY_PORTRAIT_FIELDS)
         dst.portraitDecoOverride = nil
         CopyPowerBarFields(dst, src, srcC)
@@ -796,6 +806,48 @@ local function ForceSliderEB(slider)
     if not slider or not slider.editBox then return end
     if slider.editBox:HasFocus() then return end
     slider.editBox:SetText(FormatSliderVal(slider, slider.GetValue and slider:GetValue() or 0))
+end
+
+local function SetOptionWidgetShown(widget, shown)
+    if not widget then return end
+    shown = shown and true or false
+    if widget.SetShown then widget:SetShown(shown) end
+    if widget.Text and widget.Text.SetShown then widget.Text:SetShown(shown) end
+    if widget.text and widget.text.SetShown then widget.text:SetShown(shown) end
+    if widget.editBox and widget.editBox.SetShown then widget.editBox:SetShown(shown) end
+    if widget.minusButton and widget.minusButton.SetShown then widget.minusButton:SetShown(shown) end
+    if widget.plusButton and widget.plusButton.SetShown then widget.plusButton:SetShown(shown) end
+    local name = widget.GetName and widget:GetName()
+    if name then
+        local text = _G[name .. "Text"]
+        local low  = _G[name .. "Low"]
+        local high = _G[name .. "High"]
+        if text then text:SetShown(shown) end
+        local showRange = shown and not widget._msufHideRange
+        if low then low:SetShown(showRange) end
+        if high then high:SetShown(showRange) end
+    end
+end
+
+local function UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive)
+    if not panel or not panel.playerPowerBarBox then return end
+    local h
+    if detached then
+        h = panel._msufPowerBarDetachedH or 560
+    elseif isPlayer and classPowerActive then
+        h = panel._msufPowerBarPlayerH or 250
+    elseif isPlayer then
+        h = panel._msufPowerBarPlayerH or 250
+    else
+        h = panel._msufPowerBarAttachedH or 190
+    end
+    local changed = (panel._msufPowerBarH ~= h)
+    panel._msufPowerBarH = h
+    panel.playerPowerBarBox._msufExpandedH = h
+    if not panel.playerPowerBarBox._msufCollapsed then
+        panel.playerPowerBarBox:SetHeight(h)
+    end
+    return changed
 end
 
 local OPTION_DISABLED_ALPHA = 0.45
@@ -1208,6 +1260,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         if not s then return end
         opts = (type(opts) == "table") and opts or nil
         s:SetWidth(w or ((fullW * 0.5) - 40))
+        s._msufHideRange = opts and opts.hideRange or false
         EnhanceSliderTrack(s)
         local eb, minus, plus = s.editBox, s.minusButton, s.plusButton
         if eb then
@@ -1235,7 +1288,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
 
     -- Collapsible sections
-    local previewH, basicsH, textH, portraitH, castbarBoxH, loadCondH, sizeH = 320, 88, 900, 520, 132, 124, 200
+    local previewH, basicsH, textH, portraitH, castbarBoxH, loadCondH, sizeH = 320, 88, 1020, 520, 132, 124, 200
     local statusBoxH, bossLayoutH = 500, 152
     panel._msufStatusBoxH = statusBoxH
 
@@ -1258,9 +1311,12 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     if ns.MSUF_Options_BuildUnitPortraitSection then ns.MSUF_Options_BuildUnitPortraitSection(panel, portraitBody) end
 
     -- Power Bar section
-    local powerBarH = 520
+    local powerBarH = 220
     local powerBarBox, powerBarBody = MkCollapsible(frameGroup, "Power Bar", fullW, powerBarH, false)
     powerBarBox:Hide(); panel.playerPowerBarBox = powerBarBox; panel.playerPowerBarBody = powerBarBody; panel._msufPowerBarH = powerBarH
+    panel._msufPowerBarAttachedH = 190
+    panel._msufPowerBarPlayerH = 250
+    panel._msufPowerBarDetachedH = 560
     do
         local pbShowCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarShowCB", "Show power bar", 12, -6)
         panel.playerPowerBarShowCB = pbShowCB
@@ -1340,7 +1396,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local powerEnabled = ReadPowerBarEnabled(conf, key)
         local detached = isPlayer and conf.powerBarDetached == true and powerEnabled
         local classPowerActive = isPlayer and (bars.showClassPower == true or detached)
-        local function Show(w, on) if w and w.SetShown then w:SetShown(on and true or false) end end
+        local function Show(w, on) SetOptionWidgetShown(w, on) end
+        local heightChanged = UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive)
         Show(panel.playerPowerModeInfo, isPlayer)
         if panel.playerPowerModeInfo and isPlayer then
             if detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false) then
@@ -1379,6 +1436,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             SetSlider(panel.playerDetachedPowerHeightSlider, tonumber(conf.detachedPowerBarHeight) or 6)
             SetSlider(panel.playerDetachedPowerLevelSlider, tonumber(conf.detachedPowerBarFrameLevelOffset) or 6)
         end
+        if heightChanged and panel._msufRelayoutUnitBoxes then panel._msufRelayoutUnitBoxes(key) end
     end
 
     local castbarBox, castbarBody = MkCollapsible(frameGroup, "Castbar", fullW, castbarBoxH, false)
@@ -2236,9 +2294,8 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             local detached = isPlayer and conf.powerBarDetached == true and powerEnabled
             local classPowerActive = isPlayer and (bars.showClassPower == true or detached)
             local merged = detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false)
-            local function Show(w, on)
-                if w and w.SetShown then w:SetShown(on and true or false) end
-            end
+            local function Show(w, on) SetOptionWidgetShown(w, on) end
+            UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive)
             local info = panel.playerPowerModeInfo
             if info then
                 Show(info, isPlayer)
