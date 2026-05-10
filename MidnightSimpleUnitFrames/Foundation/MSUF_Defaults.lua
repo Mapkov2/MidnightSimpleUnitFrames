@@ -1151,6 +1151,51 @@ end
     if g.powerTextMode == nil then
         g.powerTextMode = "CURPERCENT"
     end
+
+    -- Unit Frame text is per-unit as of the Unit Frame UX refactor.
+    -- Older profiles could inherit HP/Power pattern settings from general.* unless
+    -- hpPowerTextOverride was enabled. Flatten that inherited value once so saved
+    -- profiles keep their exact look while the new UI edits only the selected unit.
+    do
+        local function _MSUF_MigrateHpMode(v)
+            if v == nil then return nil end
+            if v == "FULL_ONLY" then return "CURRENT" end
+            if v == "PERCENT_ONLY" then return "PERCENT" end
+            if v == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
+            if v == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
+            return v
+        end
+        g.hpTextMode = _MSUF_MigrateHpMode(g.hpTextMode) or "CURPERCENT"
+        local defaults = {
+            hpTextMode = g.hpTextMode or "CURPERCENT",
+            hpTextReverse = (g.hpTextReverse == true),
+            powerTextMode = g.powerTextMode or "CURPERCENT",
+            hpTextSeparator = (g.hpTextSeparator ~= nil) and g.hpTextSeparator or "-",
+            powerTextSeparator = (g.powerTextSeparator ~= nil) and g.powerTextSeparator or ((g.hpTextSeparator ~= nil) and g.hpTextSeparator or "-"),
+            hpTextSpacerEnabled = (g.hpTextSpacerEnabled == true),
+            hpTextSpacerX = tonumber(g.hpTextSpacerX) or 140,
+            powerTextSpacerEnabled = (g.powerTextSpacerEnabled == true),
+            powerTextSpacerX = tonumber(g.powerTextSpacerX) or 140,
+            hpTextAnchor = g.hpTextAnchor or "RIGHT",
+            powerTextAnchor = g.powerTextAnchor or "RIGHT",
+            nameTextLayer = tonumber(g.nameTextLayer) or 5,
+            hpTextLayer = tonumber(g.hpTextLayer) or tonumber(g.textLayer) or 5,
+            powerTextLayer = tonumber(g.powerTextLayer) or 2,
+        }
+        for _, unitKey in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+            MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+            local u = MSUF_DB[unitKey]
+            if type(u) == "table" then
+                for field, fallback in pairs(defaults) do
+                    if u[field] == nil then u[field] = fallback end
+                end
+                u.hpTextMode = _MSUF_MigrateHpMode(u.hpTextMode) or defaults.hpTextMode
+                u.powerTextMode = _MSUF_MigratePowerMode(u.powerTextMode) or defaults.powerTextMode
+                u.hpPowerTextOverride = nil
+            end
+        end
+        g._msufUFTextPerUnitMigrated_v4325 = true
+    end
     if g.showTotalAbsorbAmount == nil then
         g.showTotalAbsorbAmount = false
     end
@@ -1678,6 +1723,9 @@ local function fill(key, defaults)
         hpOffsetY     = -4,
         powerOffsetX  = -4,
         powerOffsetY  = 4,
+        nameTextLayer = 5,
+        hpTextLayer = 5,
+        powerTextLayer = 2,
     }
     fill("player", {
         width     = 275,

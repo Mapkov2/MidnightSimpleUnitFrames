@@ -472,33 +472,36 @@ function ns.Text.EnsureSpec(self)
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local key = self.msufConfigKey or self._msufConfigKey or self._msufUnitKey or self.unitKey
     local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
-    local useOverride = (udb and udb.hpPowerTextOverride == true)
-    local eff = useOverride and (self.cachedConfig or udb) or nil
+    local eff = (self.cachedConfig or udb) or nil
     -- HP
-    local hpMode = (useOverride and eff and eff.hpTextMode) or g.hpTextMode or "FULL_PLUS_PERCENT"
+    local hpMode = (eff and eff.hpTextMode) or g.hpTextMode or "FULL_PLUS_PERCENT"
     hpMode = ns.Text.NormalizeHpTextMode(hpMode)
-    local hpReverse = (useOverride and eff and eff.hpTextReverse) or ((not useOverride) and g.hpTextReverse)
+    local hpReverse = (eff and eff.hpTextReverse)
+    if hpReverse == nil then hpReverse = g.hpTextReverse end
     if hpReverse then hpMode = _MSUF_HP_REVERSE_MAP[hpMode] or hpMode end
-    local hpSepRaw = (useOverride and eff and eff.hpTextSeparator) or g.hpTextSeparator
+    local hpSepRaw = (eff and eff.hpTextSeparator)
+    if hpSepRaw == nil then hpSepRaw = g.hpTextSeparator end
     -- Power
-    local rawPMode = (useOverride and eff and eff.powerTextMode) or g.powerTextMode
+    local rawPMode = (eff and eff.powerTextMode) or g.powerTextMode
     local pMode = ns.Text.NormalizePowerTextMode(rawPMode)
     local rawPSep
-    if useOverride and eff then
+    if eff then
         rawPSep = eff.powerTextSeparator
         if rawPSep == nil then rawPSep = eff.hpTextSeparator end
-    else
-        rawPSep = g.powerTextSeparator
     end
-    local rawHpSep = (useOverride and eff and eff.hpTextSeparator) or g.hpTextSeparator
+    if rawPSep == nil then rawPSep = g.powerTextSeparator end
+    local rawHpSep = (eff and eff.hpTextSeparator)
+    if rawHpSep == nil then rawHpSep = g.hpTextSeparator end
     -- Power split
     local pSplitEnabled = false
     if self.powerTextPct and _MSUF_PowerModeAllowsSplit(pMode) then
-        local splitOn = (useOverride and eff and eff.powerTextSpacerEnabled == true)
-            or ((not useOverride) and g.powerTextSpacerEnabled == true)
+        local splitOn = (eff and eff.powerTextSpacerEnabled)
+        if splitOn == nil then splitOn = g.powerTextSpacerEnabled end
+        splitOn = (splitOn == true)
         if splitOn then
-            local splitX = (useOverride and eff and tonumber(eff.powerTextSpacerX))
-                or tonumber(g.powerTextSpacerX) or 0
+            local splitX = eff and tonumber(eff.powerTextSpacerX)
+            if splitX == nil then splitX = tonumber(g.powerTextSpacerX) end
+            splitX = splitX or 0
             splitX = tonumber(splitX) or 0
             if splitX > 0 and key and type(_G.MSUF_GetPowerSpacerMaxForUnitKey) == "function" then
                 local maxP = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(key)) or 0
@@ -513,11 +516,13 @@ function ns.Text.EnsureSpec(self)
     local hpNeedsPct = _MSUF_HpModeUsesPercent(hpMode)
     local hpSplitEnabled = false
     if self.hpTextPct and _MSUF_HpModeCanSplit(hpMode) then
-        local splitOn = (useOverride and eff and eff.hpTextSpacerEnabled == true)
-            or ((not useOverride) and g.hpTextSpacerEnabled == true)
+        local splitOn = (eff and eff.hpTextSpacerEnabled)
+        if splitOn == nil then splitOn = g.hpTextSpacerEnabled end
+        splitOn = (splitOn == true)
         if splitOn then
-            local hpSplitX = (useOverride and eff and tonumber(eff.hpTextSpacerX))
-                or tonumber(g.hpTextSpacerX) or 0
+            local hpSplitX = eff and tonumber(eff.hpTextSpacerX)
+            if hpSplitX == nil then hpSplitX = tonumber(g.hpTextSpacerX) end
+            hpSplitX = hpSplitX or 0
             hpSplitX = tonumber(hpSplitX) or 0
             hpSplitEnabled = (hpSplitX > 0)
         end
@@ -530,7 +535,7 @@ function ns.Text.EnsureSpec(self)
     spec = {
         hpMode = hpMode,
         hpSep = ns.Text._SepToken(hpSepRaw, nil),
-        hpSpacerConf = (useOverride and eff) or nil,
+        hpSpacerConf = eff,
         hpSpacerG = g,
         hpNeedsPct = hpNeedsPct,
         hpSplitEnabled = hpSplitEnabled,
@@ -538,7 +543,7 @@ function ns.Text.EnsureSpec(self)
         pSep = ns.Text._SepToken(rawPSep, rawHpSep),
         pColorByType = _pColorByType,
         pSplitEnabled = pSplitEnabled,
-        useOverride = useOverride,
+        useOverride = false,
         hpAnchor = (udb and udb.hpTextAnchor) or g.hpTextAnchor or "RIGHT",
         powerAnchor = (udb and udb.powerTextAnchor) or g.powerTextAnchor or "RIGHT",
         nameAnchor = (udb and udb.nameTextAnchor) or "LEFT",

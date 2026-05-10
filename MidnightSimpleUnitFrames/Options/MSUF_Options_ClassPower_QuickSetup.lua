@@ -82,7 +82,7 @@ local PLAYER_KEYS = {
     "detachedPowerBarOffsetX",
     "detachedPowerBarOffsetY",
     "detachedPowerBarFrameLevelOffset",
-    -- Per-unit text override (mirrors _MSUF_HPText_EnableOverride fields)
+    -- Legacy key kept in snapshots so rollback can clear old profiles cleanly.
     "hpPowerTextOverride",
     "hpTextMode",
     "powerTextMode",
@@ -295,7 +295,7 @@ local function ApplyPhase1(offsets)
     -- nothing changes except the one key we want, then override powerTextMode.
     local g = MSUF_DB.general or {}
 
-    p.hpPowerTextOverride  = true
+    p.hpPowerTextOverride  = nil
 
     -- Copy shared → player (only if player doesn't already have a value)
     if p.hpTextMode          == nil then p.hpTextMode          = g.hpTextMode          end
