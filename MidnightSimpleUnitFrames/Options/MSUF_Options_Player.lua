@@ -1306,6 +1306,51 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         panel.unitPreviewBox = previewBox
     end
 
+    local previewCollapsed = false
+    local previewToggle = CreateFrame("Button", nil, frameGroup)
+    previewToggle:SetSize(fullW, 18)
+    previewToggle:Hide()
+    panel.unitPreviewToggle = previewToggle
+
+    local pvChevron = previewToggle:CreateTexture(nil, "OVERLAY")
+    pvChevron:SetSize(10, 10)
+    pvChevron:SetPoint("LEFT", previewToggle, "LEFT", 4, 0)
+    pvChevron:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+
+    local pvLabel = previewToggle:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    pvLabel:SetPoint("LEFT", pvChevron, "RIGHT", 4, 0)
+    pvLabel:SetTextColor(0.55, 0.65, 0.85)
+
+    local pvLine = previewToggle:CreateTexture(nil, "ARTWORK")
+    pvLine:SetPoint("LEFT", pvLabel, "RIGHT", 8, 0)
+    pvLine:SetPoint("RIGHT", previewToggle, "RIGHT", -4, 0)
+    pvLine:SetHeight(1)
+    pvLine:SetColorTexture(0.35, 0.45, 0.65, 0.30)
+
+    local RefreshPreviewToggle
+    RefreshPreviewToggle = function(allowShow)
+        if previewCollapsed then
+            pvLabel:SetText(TR("Show Preview"))
+            pvChevron:SetRotation(0)
+            if previewBox then previewBox:Hide() end
+        else
+            pvLabel:SetText(TR("Hide Preview"))
+            pvChevron:SetRotation(math.pi / 2)
+            if previewBox and allowShow ~= false then previewBox:Show() end
+        end
+    end
+    previewToggle:SetScript("OnClick", function()
+        previewCollapsed = not previewCollapsed
+        RefreshPreviewToggle(true)
+        if panel._msufRelayoutUnitBoxes then panel._msufRelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end)
+    do
+        local hl = previewToggle:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.03)
+    end
+    RefreshPreviewToggle(false)
+
     local basicsBox, basicsBody = MkCollapsible(frameGroup, "Frame Basics", fullW, basicsH, true)
     basicsBox:Hide(); panel.playerBasicsBox = basicsBox; panel.playerBasicsBody = basicsBody; panel._msufBasicsH = basicsH
 
@@ -1470,6 +1515,11 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
 
     local castbarBox, castbarBody = MkCollapsible(frameGroup, "Castbar", fullW, castbarBoxH, false)
     castbarBox:Hide(); panel.playerCastbarBox = castbarBox; panel.playerCastbarBody = castbarBody
+    panel._msufCastbarBaseH = castbarBoxH
+
+    local targetInlineH = 164
+    local targetInlineBox, targetInlineBody = MkCollapsible(frameGroup, "Inline Text", fullW, targetInlineH, false)
+    targetInlineBox:Hide(); panel.targetInlineBox = targetInlineBox; panel.targetInlineBody = targetInlineBody; panel._msufTargetInlineH = targetInlineH
 
     local statusBox, statusBody = MkCollapsible(frameGroup, "Status icons", fullW, statusBoxH, false)
     statusBox:Hide(); panel._msufStatusIconsGroup = statusBox; panel._msufStatusIconsBody = statusBody
@@ -1580,18 +1630,32 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         FinalizeDashboard(panel[s[1]], 236)
     end
 
-    -- ToT inline toggle + separator
-    panel.totShowInTargetCB = MkCheck(castbarBody, "MSUF_ToTInlineInTargetCB", "Show ToT text in target frame", 12, -6)
+    panel.totInlineInfo = targetInlineBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    panel.totInlineInfo:SetPoint("TOPLEFT", targetInlineBody, "TOPLEFT", 12, -10)
+    panel.totInlineInfo:SetWidth(fullW - 24)
+    panel.totInlineInfo:SetJustifyH("LEFT")
+    panel.totInlineInfo:SetTextColor(0.72, 0.82, 1)
+    panel.totInlineInfo:SetText(TR("Target of Target inline text is shown on the Target frame name line."))
+    panel.totInlineInfo:Hide()
+
+    -- Target page UX for the existing ToT-inline runtime settings.
+    panel.totShowInTargetCB = MkCheck(targetInlineBody, "MSUF_ToTInlineInTargetCB", "Show Target of Target text inline", 12, -34)
     if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(panel.totShowInTargetCB, 230) end
     panel.totShowInTargetCB:Hide()
 
-    local totSepDD = MkStyledDD("MSUF_ToTInlineSeparatorDropDown", castbarBody, 156)
+    panel.totInlineSeparatorLabel = targetInlineBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    panel.totInlineSeparatorLabel:SetText(TR("Inline separator"))
+    panel.totInlineSeparatorLabel:SetJustifyH("LEFT")
+    panel.totInlineSeparatorLabel:SetPoint("TOPLEFT", targetInlineBody, "TOPLEFT", 14, -76)
+    panel.totInlineSeparatorLabel:Hide()
+
+    local totSepDD = MkStyledDD("MSUF_ToTInlineSeparatorDropDown", targetInlineBody, 156)
     if panel.totShowInTargetCB then
-        totSepDD:SetPoint("TOPLEFT", panel.totShowInTargetCB, "BOTTOMLEFT", -18, -8)
+        totSepDD:SetPoint("TOPLEFT", targetInlineBody, "TOPLEFT", -6, -90)
         if totSepDD.SetFrameLevel and panel.totShowInTargetCB.GetFrameLevel then
             totSepDD:SetFrameLevel((panel.totShowInTargetCB:GetFrameLevel() or 0) + 2)
         end
-    else totSepDD:SetPoint("TOPLEFT", castbarBody, "TOPLEFT", -6, -30) end
+    else totSepDD:SetPoint("TOPLEFT", targetInlineBody, "TOPLEFT", -6, -90) end
     totSepDD:Hide(); panel.totInlineSeparatorDD = totSepDD
 
     -- Castbar toggles per unit
@@ -2000,15 +2064,32 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
 
         local function Relayout(activeKey)
             local k = CanonKey(activeKey) or "player"
-            local showCB = (k == "player" or k == "target" or k == "focus" or k == "boss" or k == "targettarget")
+            local showCB = (k == "player" or k == "target" or k == "focus" or k == "boss")
             local showSt = HasAllowedUFStatusIconSpec(k)
             local showBL = (k == "boss")
             local showAnch = (k == "player" or k == "target" or k == "focus" or k == "boss" or k == "pet" or k == "targettarget")
 
             local prev = nil
+            if previewToggle and previewBox then
+                previewToggle:ClearAllPoints()
+                previewToggle:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", leftX, topY)
+                previewToggle:SetWidth(fullW)
+                previewToggle:Show()
+                RefreshPreviewToggle(true)
+                prev = previewToggle
+            elseif previewToggle then
+                previewToggle:Hide()
+            end
             if previewBox then
-                previewBox:ClearAllPoints(); previewBox:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", leftX, topY); previewBox:SetWidth(fullW); previewBox:SetShown(true)
-                prev = previewBox
+                previewBox:ClearAllPoints()
+                previewBox:SetWidth(fullW)
+                if previewCollapsed then
+                    previewBox:Hide()
+                else
+                    previewBox:SetPoint("TOPLEFT", prev or frameGroup, prev and "BOTTOMLEFT" or "TOPLEFT", prev and 0 or leftX, prev and -2 or topY)
+                    previewBox:Show()
+                    prev = previewBox
+                end
             end
             if basicsBox then
                 basicsBox:ClearAllPoints()
@@ -2023,6 +2104,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
                 if show then prev = box end
             end
             Chain(textBox, true)
+            Chain(targetInlineBox, k == "target")
             Chain(portraitBox, true)
             local showPB = (k == "player" or k == "target" or k == "focus" or k == "boss")
             Chain(powerBarBox, showPB)
@@ -2037,7 +2119,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if panel._msufFramesScrollUpdate then panel._msufFramesScrollUpdate() end
         end
         panel._msufRelayoutUnitBoxes = Relayout
-        for _, box in ipairs({ basicsBox, textBox, portraitBox, powerBarBox, castbarBox, statusBox, loadCondBox, sizeBox, bossLayoutBox, anchorGroup }) do
+        for _, box in ipairs({ basicsBox, textBox, targetInlineBox, portraitBox, powerBarBox, castbarBox, statusBox, loadCondBox, sizeBox, bossLayoutBox, anchorGroup }) do
             if box then box._msufOnCollapsedChanged = function() Relayout(panel._msufLastApplyKey or "player") end end
         end
         Relayout("player")
@@ -2089,6 +2171,11 @@ function ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, currentKey)
 
     if not isFrames then
         SetShown(panel._msufStatusIconsGroup, false)
+        SetShown(panel.targetInlineBox, false)
+        SetShown(panel.totInlineInfo, false)
+        SetShown(panel.totShowInTargetCB, false)
+        SetShown(panel.totInlineSeparatorLabel, false)
+        SetShown(panel.totInlineSeparatorDD, false)
         HideUFStatusControls()
         SetShown(panel.playerBossSpacingSlider, false)
         SetShown(panel.playerBossLayoutModeLabel, false)
@@ -2268,8 +2355,14 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         if not panel.playerPowerBarBox._msufCollapsed then panel.playerPowerBarBox:SetHeight(panel._msufPowerBarH or 520) end
     end
     if panel.playerCastbarBox then
-        panel.playerCastbarBox._msufExpandedH = 132
-        if not panel.playerCastbarBox._msufCollapsed then panel.playerCastbarBox:SetHeight(132) end
+        local castH = panel._msufCastbarBaseH or 132
+        panel.playerCastbarBox._msufExpandedH = castH
+        if not panel.playerCastbarBox._msufCollapsed then panel.playerCastbarBox:SetHeight(castH) end
+    end
+    if panel.targetInlineBox then
+        local inlineH = panel._msufTargetInlineH or 132
+        panel.targetInlineBox._msufExpandedH = inlineH
+        if not panel.targetInlineBox._msufCollapsed then panel.targetInlineBox:SetHeight(inlineH) end
     end
     if panel.playerSizeBox and panel.playerSizeBox._msufTitleText then panel.playerSizeBox._msufTitleText:SetText("Transparency") end
 
@@ -2390,33 +2483,44 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         end
     end
 
-    -- ToT inline
+    -- Target-page controls for the existing ToT-inline runtime settings.
+    if panel.totInlineInfo then
+        panel.totInlineInfo:SetShown(isTarget and isFrames)
+    end
     if panel.totShowInTargetCB then
-        panel.totShowInTargetCB:SetShown(isToT and isFrames)
-        if isToT and isFrames then panel.totShowInTargetCB:SetChecked(conf.showToTInTargetName == true) end
-        if panel.playerCastbarBody and panel.totShowInTargetCB:GetParent() ~= panel.playerCastbarBody then
-            panel.totShowInTargetCB:SetParent(panel.playerCastbarBody)
+        local showInline = isTarget and isFrames
+        local totConf = (MSUF_DB and MSUF_DB.targettarget) or {}
+        panel.totShowInTargetCB:SetShown(showInline)
+        if showInline then panel.totShowInTargetCB:SetChecked(totConf.showToTInTargetName == true) end
+        if panel.targetInlineBody and panel.totShowInTargetCB:GetParent() ~= panel.targetInlineBody then
+            panel.totShowInTargetCB:SetParent(panel.targetInlineBody)
         end
-        if panel.playerCastbarBody then
+        if panel.targetInlineBody then
             panel.totShowInTargetCB:ClearAllPoints()
-            panel.totShowInTargetCB:SetPoint("TOPLEFT", panel.playerCastbarBody, "TOPLEFT", 12, -6)
+            panel.totShowInTargetCB:SetPoint("TOPLEFT", panel.targetInlineBody, "TOPLEFT", 12, -34)
+        end
+    end
+    if panel.totInlineSeparatorLabel then
+        panel.totInlineSeparatorLabel:SetShown(isTarget and isFrames)
+        if isTarget and isFrames and panel.targetInlineBody then
+            panel.totInlineSeparatorLabel:ClearAllPoints()
+            panel.totInlineSeparatorLabel:SetPoint("TOPLEFT", panel.targetInlineBody, "TOPLEFT", 14, -76)
         end
     end
     if panel.totInlineSeparatorDD then
-        local show = isToT and isFrames
+        local show = isTarget and isFrames
+        local totConf = (MSUF_DB and MSUF_DB.targettarget) or {}
         panel.totInlineSeparatorDD:SetShown(show)
-        if panel.playerCastbarBody and panel.totInlineSeparatorDD:GetParent() ~= panel.playerCastbarBody then
-            panel.totInlineSeparatorDD:SetParent(panel.playerCastbarBody)
+        if panel.targetInlineBody and panel.totInlineSeparatorDD:GetParent() ~= panel.targetInlineBody then
+            panel.totInlineSeparatorDD:SetParent(panel.targetInlineBody)
         end
         if show then
-            if panel.totShowInTargetCB then
-                panel.totInlineSeparatorDD:ClearAllPoints()
-                panel.totInlineSeparatorDD:SetPoint("TOPLEFT", panel.totShowInTargetCB, "BOTTOMLEFT", -18, -6)
-            end
-            local token = ToTSepText(ReadStr(conf, g, "totInlineSeparator", "|"))
+            panel.totInlineSeparatorDD:ClearAllPoints()
+            panel.totInlineSeparatorDD:SetPoint("TOPLEFT", panel.targetInlineBody or panel.targetInlineBox, "TOPLEFT", -6, -90)
+            local token = ToTSepText(ReadStr(totConf, g, "totInlineSeparator", "|"))
             if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.totInlineSeparatorDD, token) end
             if UIDropDownMenu_SetText then UIDropDownMenu_SetText(panel.totInlineSeparatorDD, token) end
-            local enabled = (conf.showToTInTargetName == true)
+            local enabled = (totConf.showToTInTargetName == true)
             if UIDropDownMenu_EnableDropDown and UIDropDownMenu_DisableDropDown then
                 if enabled then UIDropDownMenu_EnableDropDown(panel.totInlineSeparatorDD) else UIDropDownMenu_DisableDropDown(panel.totInlineSeparatorDD) end
             elseif panel.totInlineSeparatorDD.Button then
@@ -2531,9 +2635,9 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     end
     -- Castbar box
     if panel.playerCastbarBox then
-        panel.playerCastbarBox:SetShown(isFrames and (isPlayer or isTarget or isFocus or isBoss or isToT))
+        panel.playerCastbarBox:SetShown(isFrames and (isPlayer or isTarget or isFocus or isBoss))
         if panel.playerCastbarBox._msufTitleText then
-            panel.playerCastbarBox._msufTitleText:SetText(TR(isToT and "Inline Text" or "Castbar"))
+            panel.playerCastbarBox._msufTitleText:SetText(TR("Castbar"))
         end
     end
     -- Reposition castbar checkboxes
@@ -3375,6 +3479,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         MSUF_DB.targettarget.showToTInTargetName = self:GetChecked() and true or false
         ApplyLayout("TOTINLINE_TOGGLE")
         if _G.MSUF_UpdateTargetToTInlineNow then _G.MSUF_UpdateTargetToTInlineNow() end
+        if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("TOTINLINE_TOGGLE") end
         if panel.totInlineSeparatorDD then
             local en = MSUF_DB.targettarget.showToTInTargetName == true
             if UIDropDownMenu_EnableDropDown and UIDropDownMenu_DisableDropDown then
@@ -3400,6 +3505,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                     if CloseDropDownMenus then CloseDropDownMenus() end
                     if _G.MSUF_ToTInline_RequestRefresh then _G.MSUF_ToTInline_RequestRefresh("TOTINLINE_SEP")
                     elseif _G.MSUF_UpdateTargetToTInlineNow then _G.MSUF_UpdateTargetToTInlineNow() end
+                    if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("TOTINLINE_SEP") end
                 end
                 info.checked = function() return cur == opt[1] end
                 UIDropDownMenu_AddButton(info, level)

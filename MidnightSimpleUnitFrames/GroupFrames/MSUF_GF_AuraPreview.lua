@@ -30,6 +30,20 @@ local L  = ns.L or setmetatable({}, { __index = function(_, k) return k end })
 local GameTooltip = _G.GameTooltip
 local SI = GF.SpellIndicators or (_G.MSUF_GF_SpellIndicators)
 local W8 = "Interface\\Buttons\\WHITE8x8"
+local PREVIEW_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+
+local function SetPreviewLabelFont(fs, size, flags)
+    if not fs or not fs.SetFont then return end
+    fs:SetFont(PREVIEW_TEXT_FONT, size or 9, flags or "")
+    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 1) end
+    if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
+end
+
+local function PreviewScopeLabel(kind)
+    if kind == "mythicraid" then return "Mythic Raid" end
+    if kind == "raid" then return "Raid" end
+    return "Party"
+end
 
 ------------------------------------------------------------------------
 -- Health text sample strings for preview (per text-mode key)
@@ -575,7 +589,7 @@ local function CreateHandle(parent, key, sectionKey, w, h, colorKey)
 
     local c = HANDLE_COLORS[colorKey or key] or HANDLE_COLORS.status
     local lbl = f:CreateFontString(nil, "OVERLAY")
-    lbl:SetFont("Fonts\\FRIZQT__.TTF", 7, "OUTLINE")
+    SetPreviewLabelFont(lbl, 9, "OUTLINE")
     lbl:SetText(key)
     lbl:SetTextColor(c[1], c[2], c[3], 0.9)
     f._label = lbl
@@ -913,6 +927,9 @@ function GF.RefreshPreviewBox()
     local kind = _getKind()
     local conf = GF.GetConf(kind)
     local m    = _mockFrame
+    if _box and _box._previewTitle then
+        _box._previewTitle:SetText("Group Frame Preview - " .. PreviewScopeLabel(kind))
+    end
 
     -- Size (aspect-faithful scaling — mirrors BuildMockFrame exactly).
     -- Pick a uniform scale so the mock fits inside PREVIEW_MIN_W ×
@@ -2864,7 +2881,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     _getKind       = getKindFn
     _onSectionOpen = onSectionOpenFn
 
-    local sideW = 62
+    local sideW = 72
 
     -- Outer container
     local container = CreateFrame("Frame", "MSUF_GFPreviewContainer", parent, "BackdropTemplate")
@@ -2885,23 +2902,25 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
 
     -- Header bar (elevated surface)
     local headerBar = CreateFrame("Frame", nil, container, "BackdropTemplate")
-    headerBar:SetHeight(22)
+    headerBar:SetHeight(26)
     headerBar:SetPoint("TOPLEFT", container, "TOPLEFT", 1, -2)
     headerBar:SetPoint("TOPRIGHT", container, "TOPRIGHT", -1, -2)
     headerBar:SetBackdrop({ bgFile = W8 })
     headerBar:SetBackdropColor(0.065, 0.065, 0.085, 1)
 
     local hdr = headerBar:CreateFontString(nil, "OVERLAY")
-    hdr:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
-    hdr:SetPoint("LEFT", headerBar, "LEFT", 10, 0)
-    hdr:SetText("PREVIEW")
-    hdr:SetTextColor(0.55, 0.60, 0.72, 0.8)
+    SetPreviewLabelFont(hdr, 12, "")
+    hdr:SetPoint("LEFT", headerBar, "LEFT", 10, 1)
+    hdr:SetText("Group Frame Preview - " .. PreviewScopeLabel(_getKind and _getKind() or "party"))
+    hdr:SetTextColor(0.92, 0.95, 1.00, 1)
+    container._previewTitle = hdr
 
     local hint = headerBar:CreateFontString(nil, "OVERLAY")
-    hint:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
-    hint:SetPoint("LEFT", hdr, "RIGHT", 8, 0)
+    SetPreviewLabelFont(hint, 9, "")
+    hint:SetPoint("LEFT", hdr, "RIGHT", 12, 0)
     hint:SetText("click to configure - custom layers drag; Blizzard is locked")
-    hint:SetTextColor(0.32, 0.32, 0.40, 0.5)
+    hint:SetTextColor(0.55, 0.58, 0.70, 0.85)
+    container._previewHint = hint
 
     -- Header separator
     local sep = container:CreateTexture(nil, "ARTWORK", nil, 1)
@@ -2912,7 +2931,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
 
     -- Preview canvas (dark recessed surface)
     local area = CreateFrame("Frame", nil, container, "BackdropTemplate")
-    area:SetPoint("TOPLEFT", container, "TOPLEFT", 4, -26)
+    area:SetPoint("TOPLEFT", container, "TOPLEFT", 4, -30)
     area:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -(sideW + 8), 22)
     area:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
         insets = { left = 1, right = 1, top = 1, bottom = 1 } })
@@ -2948,10 +2967,10 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
         sidebar:SetBackdropBorderColor(0.08, 0.08, 0.11, 0.4)
 
         local sHdr = sidebar:CreateFontString(nil, "OVERLAY")
-        sHdr:SetFont("Fonts\\FRIZQT__.TTF", 7, "")
+        SetPreviewLabelFont(sHdr, 8, "")
         sHdr:SetPoint("TOP", sidebar, "TOP", 0, -4)
         sHdr:SetText("LAYERS")
-        sHdr:SetTextColor(0.35, 0.38, 0.48, 0.6)
+        sHdr:SetTextColor(0.45, 0.50, 0.62, 0.82)
 
         local VIS_BTNS = {
             { key="buff",      label="Buffs",   color={0.40,0.82,0.40} },
@@ -2979,10 +2998,10 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
             end
         end
 
-        local btnH, gap, topPad = 20, 1, 16
+        local btnH, gap, topPad = 18, 2, 20
         for i, spec in ipairs(VIS_BTNS) do
             local btn = CreateFrame("Button", nil, sidebar)
-            btn:SetSize(sideW - 6, btnH)
+            btn:SetSize(sideW - 10, btnH)
             btn:SetPoint("TOP", sidebar, "TOP", 0, -(topPad + (i-1) * (btnH + gap)))
             btn:EnableMouse(true)
             -- Accept right-click so Shift+RightClick can also exit solo mode
@@ -3013,7 +3032,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
             btn._soloEdge = soloEdge
 
             local fs = btn:CreateFontString(nil, "OVERLAY")
-            fs:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+            SetPreviewLabelFont(fs, 9, "")
             fs:SetPoint("LEFT", bar, "RIGHT", 5, 0)
             fs:SetText(spec.label)
             btn._fs = fs
@@ -3028,7 +3047,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
                 else
                     bg:SetColorTexture(0.04, 0.04, 0.05, 0.3)
                     bar:SetColorTexture(0.18, 0.18, 0.22, 0.3)
-                    fs:SetTextColor(0.30, 0.30, 0.35, 0.45)
+                    fs:SetTextColor(0.38, 0.40, 0.48, 0.65)
                 end
                 -- Solo indicator: shown on the single soloed button. Also
                 -- brighten its label so it reads clearly when solo-dimming
@@ -3161,7 +3180,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
 
     -- Coord display (in status bar)
     local coord = statusBar:CreateFontString(nil, "OVERLAY")
-    coord:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+    SetPreviewLabelFont(coord, 9, "")
     coord:SetPoint("LEFT", statusBar, "LEFT", 10, 0)
     coord:SetTextColor(1, 0.82, 0, 0.9)
     coord:SetText("Click a handle to select - custom layers can be moved; Blizzard is locked")
