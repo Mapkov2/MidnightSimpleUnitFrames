@@ -282,6 +282,52 @@ local function MSUF_SetScopePillColors(btn, bg, br, tr, hover)
     if fs and fs.SetTextColor then fs:SetTextColor(tr[1], tr[2], tr[3], tr[4] or 1) end
 end
 
+local function MSUF_MakeScopePillGroup(owner, key, layer, subLevel, pad)
+    local group = owner and owner[key]
+    if group then return group end
+    if not (owner and owner.CreateTexture) then return nil end
+    group = {}
+    group.L = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+    group.M = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+    group.R = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+    group.parts = { group.L, group.M, group.R }
+    for i = 1, #group.parts do
+        local t = group.parts[i]
+        t:SetTexture(MSUF_TEX_SUPERELLIPSE)
+        if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false) end
+        if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0) end
+    end
+    group.L:SetTexCoord(0.0, 0.25, 0.0, 1.0)
+    group.M:SetTexCoord(0.25, 0.75, 0.0, 1.0)
+    group.R:SetTexCoord(0.75, 1.0, 0.0, 1.0)
+    function group:SetVertexColor(r, g, b, a)
+        for i = 1, #self.parts do self.parts[i]:SetVertexColor(r, g, b, a) end
+    end
+    local function Layout()
+        local w = (owner.GetWidth and owner:GetWidth()) or 120
+        local h = (owner.GetHeight and owner:GetHeight()) or 22
+        local p = tonumber(pad) or 1
+        local innerH = max(1, h - p * 2)
+        local capW = min(floor(innerH * 0.5 + 0.5), floor(max(1, w - p * 2) * 0.5))
+        group.L:ClearAllPoints(); group.M:ClearAllPoints(); group.R:ClearAllPoints()
+        group.L:SetPoint("TOPLEFT", owner, "TOPLEFT", p, -p)
+        group.L:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", p, p)
+        group.L:SetWidth(capW)
+        group.R:SetPoint("TOPRIGHT", owner, "TOPRIGHT", -p, -p)
+        group.R:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", -p, p)
+        group.R:SetWidth(capW)
+        group.M:SetPoint("TOPLEFT", group.L, "TOPRIGHT", 0, 0)
+        group.M:SetPoint("BOTTOMRIGHT", group.R, "BOTTOMLEFT", 0, 0)
+    end
+    Layout()
+    if owner.HookScript and not owner[key .. "Hooked"] then
+        owner[key .. "Hooked"] = true
+        owner:HookScript("OnSizeChanged", Layout)
+    end
+    owner[key] = group
+    return group
+end
+
 function _G.MSUF_SkinScopePillButton(btn, text, width, height, bg, br, tr)
     if not btn then return nil end
     if width and height and btn.SetSize then btn:SetSize(width, height) end
@@ -299,23 +345,8 @@ function _G.MSUF_SkinScopePillButton(btn, text, width, height, bg, br, tr)
     btn._msufScopeBaseBgColor = btn._msufScopeBgColor
     btn._msufScopeBaseBorderColor = btn._msufScopeBorderColor
     btn._msufScopeBaseTextColor = btn._msufScopeTextColor
-    if btn._msufBg then
-        btn._msufScopeFill = btn._msufBg
-    elseif not btn._msufScopeFill then
-        local fill = btn:CreateTexture(nil, "BACKGROUND")
-        fill:SetTexture(MSUF_TEX_SUPERELLIPSE)
-        fill:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -2)
-        fill:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
-        btn._msufScopeFill = fill
-    end
-    if btn._msufBorder then
-        btn._msufScopeBorder = btn._msufBorder
-    elseif not btn._msufScopeBorder then
-        local border = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
-        border:SetTexture(MSUF_TEX_SUPERELLIPSE)
-        border:SetAllPoints()
-        btn._msufScopeBorder = border
-    end
+    btn._msufScopeBorder = MSUF_MakeScopePillGroup(btn, "_msufScopeBorder3", "BACKGROUND", 0, 1)
+    btn._msufScopeFill = MSUF_MakeScopePillGroup(btn, "_msufScopeFill3", "BACKGROUND", 1, 2)
     local fs = btn._msufScopeLabel or (btn.GetFontString and btn:GetFontString())
     if not fs then
         fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -328,6 +359,16 @@ function _G.MSUF_SkinScopePillButton(btn, text, width, height, bg, br, tr)
     if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
     if text ~= nil then fs:SetText(TR(text)) end
     btn._msufScopeLabel = fs
+    if not btn._msufScopeStripe then
+        local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
+        stripe:SetTexture(MSUF_TEX_WHITE8)
+        stripe:SetWidth(3)
+        stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -5)
+        stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 2, 5)
+        stripe:SetColorTexture(0.22, 0.78, 0.94, 1)
+        stripe:Hide()
+        btn._msufScopeStripe = stripe
+    end
     MSUF_SetScopePillColors(btn)
     return btn
 end
@@ -345,10 +386,12 @@ function _G.MSUF_SetScopePillButtonState(btn, active, hasOverride)
         btn._msufScopeBgColor = { 0.12, 0.15, 0.32, 0.95 }
         btn._msufScopeBorderColor = hasOverride and { 0.96, 0.80, 0.34, 0.98 } or { 0.20, 0.34, 0.80, 0.85 }
         btn._msufScopeTextColor = { 0.92, 0.96, 1.00, 1 }
+        if btn._msufScopeStripe then btn._msufScopeStripe:Show() end
     else
         btn._msufScopeBgColor = btn._msufScopeBaseBgColor or { 0.06, 0.07, 0.13, 0.88 }
         btn._msufScopeBorderColor = hasOverride and { 0.86, 0.72, 0.28, 0.80 } or (btn._msufScopeBaseBorderColor or { 0.15, 0.18, 0.36, 0.45 })
         btn._msufScopeTextColor = hasOverride and { 0.88, 0.90, 0.96, 1 } or { 0.58, 0.66, 0.82, 1 }
+        if btn._msufScopeStripe then btn._msufScopeStripe:Hide() end
     end
     MSUF_SetScopePillColors(btn)
 end
