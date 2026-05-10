@@ -2049,17 +2049,17 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     if panel.unitAnchorToDD then panel.unitAnchorToDD:SetShown(showAnch) end
     if showAnch then
         local v = conf.anchorToUnitframe
-        if v ~= "SCREEN" and v ~= "player" and v ~= "target" and v ~= "focus" and v ~= "pet" and v ~= "targettarget" then v = "GLOBAL" end
+        if v ~= "player" and v ~= "target" and v ~= "focus" and v ~= "pet" and v ~= "targettarget" then v = "GLOBAL" end
         if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.unitAnchorToDD, v) end
         if UIDropDownMenu_SetText then
-            local custom = (v ~= "SCREEN" and type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
+            local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
             if #custom > 24 then custom = custom:sub(1, 21) .. "..." end
             local txt = custom ~= "" and ("Custom: " .. custom)
-                or (({ SCREEN = "Screen center", player = "Player frame", target = "Target frame", focus = "Focus frame", pet = "Pet frame", targettarget = "Target of Target frame" })[v] or "Global anchor")
+                or (({ player = "Player frame", target = "Target frame", focus = "Focus frame", pet = "Pet frame", targettarget = "Target of Target frame" })[v] or "Global anchor")
             UIDropDownMenu_SetText(panel.unitAnchorToDD, txt)
         end
         if panel.unitCustomAnchorValueText then
-            local an = (v ~= "SCREEN" and type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
+            local an = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
             panel.unitCustomAnchorValueText:SetText(TR("Current custom anchor: ") .. (an ~= "" and an or "none"))
         end
     end
@@ -2916,44 +2916,26 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
 
     -- Per-unit anchor dropdown
     local ANCHOR_CHOICES = {
-        {"Screen center","SCREEN"},{"Global anchor","GLOBAL"},{"Player frame","player"},{"Target frame","target"},
+        {"Global anchor","GLOBAL"},{"Player frame","player"},{"Target frame","target"},
         {"Target of Target frame","targettarget"},{"Focus frame","focus"},{"Pet frame","pet"},
     }
     local function AnchorTextFor(v)
-        return ({ SCREEN = "Screen center", player = "Player frame", target = "Target frame", focus = "Focus frame", pet = "Pet frame", targettarget = "Target of Target frame" })[v] or "Global anchor"
+        return ({ player = "Player frame", target = "Target frame", focus = "Focus frame", pet = "Pet frame", targettarget = "Target of Target frame" })[v] or "Global anchor"
     end
-    local function AnchorVal(c) local v = c and c.anchorToUnitframe; if v == "SCREEN" or v == "player" or v == "target" or v == "focus" or v == "pet" or v == "targettarget" then return v end; return "GLOBAL" end
+    local function AnchorVal(c) local v = c and c.anchorToUnitframe; if v == "player" or v == "target" or v == "focus" or v == "pet" or v == "targettarget" then return v end; return "GLOBAL" end
     local function AnchorKey() local k = CanonKey(CurrentKey()); return (k == "player" or k == "target" or k == "targettarget" or k == "focus" or k == "pet" or k == "boss") and k or nil end
-    local function ReadFrameScreenOffsetForKey(key)
-        if not key or not UIParent or not UIParent.GetCenter then return nil, nil end
-        local f
-        if key == "boss" then
-            f = _G.MSUF_boss1 or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames.boss1)
-        else
-            f = _G["MSUF_" .. key] or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[key])
-        end
-        if not f or not f.GetCenter then return nil, nil end
-        local okF, fx, fy = pcall(f.GetCenter, f)
-        local okU, ux, uy = pcall(UIParent.GetCenter, UIParent)
-        if not (okF and okU and fx and fy and ux and uy) then return nil, nil end
-        local fs = (f.GetEffectiveScale and f:GetEffectiveScale()) or 1
-        local us = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-        if fs == 0 then fs = 1 end
-        if us == 0 then us = 1 end
-        return math.floor(((fx * fs - ux * us) / us) + 0.5), math.floor(((fy * fs - uy * us) / us) + 0.5)
-    end
 
     local function RefreshAnchorWidgets()
         if not panel.unitAnchorToDD or not IsFramesTab() or not AnchorKey() then return end
         local c = EnsureKeyDB(); local v = AnchorVal(c)
         if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.unitAnchorToDD, v) end
         if UIDropDownMenu_SetText then
-            local an = (v ~= "SCREEN" and type(c.anchorFrameName) == "string" and c.anchorFrameName) or ""
+            local an = (type(c.anchorFrameName) == "string" and c.anchorFrameName) or ""
             if #an > 24 then an = an:sub(1, 21) .. "..." end
             UIDropDownMenu_SetText(panel.unitAnchorToDD, an ~= "" and ("Custom: " .. an) or AnchorTextFor(v))
         end
         if panel.unitCustomAnchorValueText then
-            local an = (v ~= "SCREEN" and type(c.anchorFrameName) == "string" and c.anchorFrameName) or ""
+            local an = (type(c.anchorFrameName) == "string" and c.anchorFrameName) or ""
             panel.unitCustomAnchorValueText:SetText(TR("Current custom anchor: ") .. (an ~= "" and an or "none"))
         end
     end
@@ -2969,13 +2951,6 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                     info.func = function()
                         if not IsFramesTab() then return end
                         local c = EnsureKeyDB()
-                        if pair[2] == "SCREEN" then
-                            local x, y = ReadFrameScreenOffsetForKey(AnchorKey())
-                            if x and y then
-                                c.offsetX = x
-                                c.offsetY = y
-                            end
-                        end
                         c.anchorToUnitframe = pair[2]
                         c.anchorFrameName = nil
                         if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(panel.unitAnchorToDD, pair[2]) end

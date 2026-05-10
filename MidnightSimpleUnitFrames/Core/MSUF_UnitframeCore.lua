@@ -3182,6 +3182,10 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_REGEN_ENABLED" then
+        if _G.MSUF_UnitFramePositionDirty and type(_G.MSUF_RunPostCombatReanchorPass) == "function" then
+            _G.MSUF_UnitFramePositionDirty = false
+            _G.MSUF_RunPostCombatReanchorPass()
+        end
         local set = Core._layoutDeferredSet
         if set then
             for f in pairs(set) do
