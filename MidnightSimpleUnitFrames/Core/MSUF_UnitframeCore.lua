@@ -3201,6 +3201,9 @@ Global:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "PLAYER_REGEN_DISABLED" then
+        if type(_G.MSUF_CacheExternalAnchorFrameScreenPositions) == "function" then
+            _G.MSUF_CacheExternalAnchorFrameScreenPositions()
+        end
         MarkPlayerStatusIf("showCombatStateIndicator", true, event)
         return
     end

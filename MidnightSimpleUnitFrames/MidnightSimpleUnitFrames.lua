@@ -2111,9 +2111,9 @@ local function MSUF_GetDirectCooldownLockPoint(key, frame)
     return "CENTER"
 end
 
-function _G.MSUF_CacheUnitFrameScreenPosition(frame, key, unit, point)
+function _G.MSUF_CacheUnitFrameScreenPosition(frame, key, unit, point, allowLocked)
     if not frame or not key or not UIParent then return false end
-    if InCombatLockdown and InCombatLockdown() then return false end
+    if allowLocked ~= true and InCombatLockdown and InCombatLockdown() then return false end
     if not UIParent.GetCenter then return false end
     point = point or ((frame._msufDirectCooldownAnchor or frame._msufHardLockedToUIParent) and frame._msufHardLockPoint) or "CENTER"
     local fx, fy, usedPoint = MSUF_GetFramePoint(frame, point)
@@ -2830,6 +2830,44 @@ local function MSUF_HardLockFramePosition(frame, cacheKey, cacheUnit)
         frame._msufHardLockedToUIParent = true
     end
     return locked == true
+end
+
+local function MSUF_CacheExternalAnchorFrameScreenPosition(frame, cacheKey, cacheUnit)
+    if not frame or frame._msufDragActive then return false end
+    if not MSUF_FrameShouldHardLockPosition(frame) then return false end
+    local point = (frame._msufDirectCooldownAnchor and MSUF_GetDirectCooldownLockPoint(cacheKey, frame))
+        or frame._msufHardLockPoint
+        or "CENTER"
+    return _G.MSUF_CacheUnitFrameScreenPosition(frame, cacheKey, cacheUnit or cacheKey, point, true)
+end
+
+function _G.MSUF_CacheExternalAnchorFrameScreenPositions()
+    local cached = false
+    for i = 1, #UnitFramesList do
+        local frame = UnitFramesList[i]
+        local unit = frame and frame.unit
+        local key = frame and (frame.msufConfigKey or (unit and GetConfigKeyForUnit(unit)))
+        cached = MSUF_CacheExternalAnchorFrameScreenPosition(frame, key, unit) or cached
+    end
+
+    local named = {
+        { "MSUF_ClassPowerContainer", "classpower" },
+        { "MSUF_PlayerCastbar", "playercastbar" },
+        { "MSUF_TargetCastbar", "targetcastbar" },
+        { "MSUF_FocusCastbar", "focuscastbar" },
+    }
+    for i = 1, #named do
+        local def = named[i]
+        cached = MSUF_CacheExternalAnchorFrameScreenPosition(_G[def[1]], def[2], def[2]) or cached
+    end
+
+    local bossCastbars = _G.MSUF_BossCastbars
+    if type(bossCastbars) == "table" then
+        for i = 1, #bossCastbars do
+            cached = MSUF_CacheExternalAnchorFrameScreenPosition(bossCastbars[i], "bosscastbar" .. i, "bosscastbar" .. i) or cached
+        end
+    end
+    return cached
 end
 
 local function MSUF_HardLockAllFramePositions(reason)
