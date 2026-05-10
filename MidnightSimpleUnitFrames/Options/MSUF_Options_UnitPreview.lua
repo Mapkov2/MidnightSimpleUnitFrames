@@ -2163,15 +2163,28 @@ local function BuildPreview(parent, panel, width, height)
 
     box:SetScript("OnShow", function(self)
         Preview.active = self
+        if self.RegisterEvent then
+            self:RegisterEvent("PLAYER_REGEN_ENABLED")
+            self:RegisterEvent("PLAYER_REGEN_DISABLED")
+        end
         Preview.RequestRefresh("SHOW")
     end)
     box:SetScript("OnHide", function(self)
+        if self.UnregisterEvent then
+            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            self:UnregisterEvent("PLAYER_REGEN_DISABLED")
+        end
         self._selectedHandle = nil
         RefreshHandleSelectionVisuals(self)
         if Preview.active == self then Preview.active = nil end
         self.dragFrame:SetScript("OnUpdate", nil)
         self.dragFrame._handle = nil
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
+    box:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+            Preview.RequestRefresh("COMBAT_ALPHA")
+        end
     end)
 
     return box
@@ -2268,6 +2281,122 @@ local function ApplyPreviewLayerVisibility(box)
         for _, handle in pairs(box.statusHandles or {}) do SetShownSafe(handle, false) end
     end
     SetShownSafe(mock.bounds, boundsOn)
+end
+
+local function NormalizePreviewAlphaLayerMode(mode)
+    if mode == true or mode == 1 or mode == "background" then return "background" end
+    if mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then return "health" end
+    return "foreground"
+end
+
+local function PreviewInCombat()
+    local inCombat = _G.MSUF_InCombat
+    if inCombat == nil and _G.InCombatLockdown then inCombat = _G.InCombatLockdown() end
+    return inCombat == true
+end
+
+local function PreviewAlphaPair(conf, mode)
+    if not conf then return 1, 1 end
+    mode = NormalizePreviewAlphaLayerMode(mode or conf.alphaLayerMode)
+    local aIn = Clamp01(conf.alphaInCombat, 1)
+    local aOut = Clamp01(conf.alphaOutOfCombat, 1)
+    if conf.alphaExcludeTextPortrait == true then
+        if mode == "background" then
+            aIn = Clamp01(conf.alphaBGInCombat, aIn)
+            aOut = Clamp01(conf.alphaBGOutOfCombat, aOut)
+        elseif mode == "health" then
+            aIn = Clamp01(conf.alphaHPInCombat, Clamp01(conf.alphaFGInCombat, aIn))
+            aOut = Clamp01(conf.alphaHPOutOfCombat, Clamp01(conf.alphaFGOutOfCombat, aOut))
+        else
+            aIn = Clamp01(conf.alphaFGInCombat, aIn)
+            aOut = Clamp01(conf.alphaFGOutOfCombat, aOut)
+        end
+    end
+    local sync = conf.alphaSyncBoth
+    if sync == nil then sync = conf.alphaSync end
+    if sync then aOut = aIn end
+    return aIn, aOut
+end
+
+local function PreviewCurrentAlpha(conf, mode)
+    local aIn, aOut = PreviewAlphaPair(conf, mode)
+    return PreviewInCombat() and aIn or aOut
+end
+
+local function PreviewAlphaState(conf)
+    local frameAlpha = PreviewCurrentAlpha(conf, "foreground")
+    if _G.MSUF_UnitEditModeActive == true and frameAlpha < 0.35 then frameAlpha = 0.35 end
+    local state = {
+        flat = true,
+        frame = frameAlpha,
+        fg = 1,
+        bg = 1,
+        hp = 1,
+        power = 1,
+        text = 1,
+        portrait = 1,
+        preserveHPColor = false,
+    }
+    if conf and conf.alphaExcludeTextPortrait == true then
+        local mode = NormalizePreviewAlphaLayerMode(conf.alphaLayerMode)
+        local fg = PreviewCurrentAlpha(conf, "foreground")
+        local bg = PreviewCurrentAlpha(conf, "background")
+        local hp = (mode == "health") and PreviewCurrentAlpha(conf, "health") or fg
+        state.flat = false
+        state.frame = 1
+        state.fg = fg
+        state.bg = bg
+        state.hp = hp
+        state.power = (mode == "health") and 1 or fg
+        state.text = 1
+        state.portrait = 1
+        state.preserveHPColor = conf.alphaPreserveHPColor == true
+    end
+    return state
+end
+
+local function SetRegionAlpha(region, alpha)
+    if region and region.SetAlpha then region:SetAlpha(Clamp01(alpha, 1)) end
+end
+
+local function SetFrameBackdropAlpha(frame, bgAlpha, borderAlpha)
+    if not frame or not frame.SetBackdropColor then return end
+    frame:SetBackdropColor(0, 0, 0, Clamp01(bgAlpha, 1))
+    if frame.SetBackdropBorderColor then frame:SetBackdropBorderColor(0, 0, 0, Clamp01(borderAlpha, 1)) end
+end
+
+local function ApplyPreviewTransparency(box, conf)
+    if not box or not box.mock then return end
+    local mock = box.mock
+    local alpha = PreviewAlphaState(conf)
+    local v = box.layerVisibility or {}
+    local bodyOn = v.body ~= false
+
+    if mock.SetAlpha then mock:SetAlpha(1) end
+    if bodyOn then
+        SetFrameBackdropAlpha(mock, 0.92 * (alpha.flat and alpha.frame or alpha.bg), alpha.flat and alpha.frame or alpha.fg)
+    else
+        SetFrameBackdropAlpha(mock, 0, 0)
+    end
+
+    if alpha.preserveHPColor then
+        mock.hpBG:SetVertexColor(34 / 255, 34 / 255, 34 / 255, 1)
+        SetRegionAlpha(mock.hpBG, alpha.hp)
+    else
+        SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or alpha.bg)
+    end
+    SetRegionAlpha(mock.hp, alpha.flat and alpha.frame or alpha.hp)
+    SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or alpha.bg)
+    SetRegionAlpha(mock.power, alpha.flat and alpha.frame or alpha.power)
+    SetRegionAlpha(mock.classPower, alpha.flat and alpha.frame or alpha.power)
+    SetRegionAlpha(mock.detachedPower, alpha.flat and alpha.frame or alpha.power)
+    if mock.detachedPower and mock.detachedPower.fill then SetRegionAlpha(mock.detachedPower.fill, 1) end
+    SetRegionAlpha(mock.portrait, alpha.flat and alpha.frame or alpha.portrait)
+    SetRegionAlpha(mock.textFrame, alpha.flat and alpha.frame or alpha.text)
+    SetRegionAlpha(mock.cast, alpha.flat and alpha.frame or alpha.fg)
+    for _, icon in pairs(mock.icons or {}) do
+        SetRegionAlpha(icon, alpha.flat and alpha.frame or alpha.fg)
+    end
 end
 
 function Preview.Refresh(box)
@@ -2761,6 +2890,7 @@ function Preview.Refresh(box)
     PlaceHandle(box.handleHP, mock.hpText)
     PlaceHandle(box.handlePower, mock.powerText)
     ApplyPreviewLayerVisibility(box)
+    ApplyPreviewTransparency(box, conf)
     RefreshHandleSelectionVisuals(box)
 end
 
@@ -2816,6 +2946,8 @@ InstallPreviewHooks = function()
         "MSUF_RefreshAllIdentityColors",
         "MSUF_RefreshAllPowerTextColors",
         "MSUF_RefreshAllFrames",
+        "MSUF_RefreshAllUnitAlphas",
+        "MSUF_RequestAlphaRefresh",
         "MSUF_ClassPower_Refresh",
         "MSUF_ApplyPowerBarEmbedLayout",
         "MSUF_ApplyPowerBarEmbedLayout_All",
