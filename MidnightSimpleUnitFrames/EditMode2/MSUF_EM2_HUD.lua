@@ -690,7 +690,16 @@ local function EnsureHUD()
         db.general.anchorToCooldown = not (db.general.anchorToCooldown and true or false)
         SetActive(cdmBtn, db.general.anchorToCooldown)
         if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+        if db.general.anchorToCooldown and type(_G.MSUF_HookCooldownAnchorsForReanchor) == "function" then
+            _G.MSUF_HookCooldownAnchorsForReanchor()
+        end
         C_Timer.After(0.1, function()
+            if db.general.anchorToCooldown and type(_G.MSUF_HookCooldownAnchorsForReanchor) == "function" then
+                _G.MSUF_HookCooldownAnchorsForReanchor()
+                if type(_G.MSUF_MarkExternalAnchorForReanchor) == "function" then
+                    _G.MSUF_MarkExternalAnchorForReanchor()
+                end
+            end
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             if _G.MSUF_EM2_ReforcePreviewFrames then _G.MSUF_EM2_ReforcePreviewFrames() end
         end)

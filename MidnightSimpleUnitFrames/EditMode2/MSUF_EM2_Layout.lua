@@ -489,10 +489,13 @@ function Anchors.PropagateMove(parentKey, dx, dy)
                     local fS = frame:GetEffectiveScale()
                     local uiS = UIParent:GetEffectiveScale()
                     local ratio = uiS / fS
-                    pcall(function()
+                    local lockedFn = _G.MSUF_IsUnitFramePositionLocked
+                    local locked = (type(lockedFn) == "function" and lockedFn())
+                        or (InCombatLockdown and InCombatLockdown())
+                    if not locked then
                         frame:ClearAllPoints()
                         frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l * ratio, b * ratio)
-                    end)
+                    end
                 end
 
                 -- Save to DB
@@ -820,17 +823,58 @@ local function PointXY(fr, p)
     return fr:GetCenter()
 end
 
+local function PointOffsetFromCenter(fr, p)
+    if not fr or not p then return 0, 0 end
+    local w = (fr.GetWidth and fr:GetWidth()) or 0
+    local h = (fr.GetHeight and fr:GetHeight()) or 0
+    local hw, hh = w * 0.5, h * 0.5
+    if p == "TOPLEFT" then return -hw, hh end
+    if p == "TOP" then return 0, hh end
+    if p == "TOPRIGHT" then return hw, hh end
+    if p == "LEFT" then return -hw, 0 end
+    if p == "RIGHT" then return hw, 0 end
+    if p == "BOTTOMLEFT" then return -hw, -hh end
+    if p == "BOTTOM" then return 0, -hh end
+    if p == "BOTTOMRIGHT" then return hw, -hh end
+    return 0, 0
+end
+
+local function IsPositionLocked()
+    local lockedFn = _G.MSUF_IsUnitFramePositionLocked
+    if type(lockedFn) == "function" then return lockedFn() == true end
+    return InCombatLockdown and InCombatLockdown()
+end
+
+local function ApplyBarPoint(bar, point, anchor, relPoint, x, y)
+    if not bar then return false end
+    bar._msufDragActive = false
+    local shouldSnapshot = _G.MSUF_ShouldSnapshotExternalAnchor
+    local applyExternal = _G.MSUF_ApplyExternalAnchorScreenPoint
+    if type(shouldSnapshot) == "function" and shouldSnapshot(anchor)
+        and type(applyExternal) == "function"
+    then
+        local ok = applyExternal(bar, point, anchor, relPoint, x, y)
+        bar._msufDragActive = true
+        return ok == true
+    end
+    bar:ClearAllPoints()
+    bar:SetPoint(point, anchor, relPoint, x, y)
+    bar._msufDragActive = true
+    return true
+end
+
 local function ResolveAnchor(key, conf)
     local anchorFn = _G.MSUF_GetAnchorFrame
     local anchor = (type(anchorFn) == "function" and anchorFn()) or UIParent
     if not conf then return anchor end
-    if conf.anchorToUnitframe == "SCREEN" then return UIParent end
     local cn = conf.anchorFrameName
     if type(cn) == "string" and cn ~= "" then
         local ecvFn = _G.MSUF_GetEffectiveCooldownFrame
         local cf = (type(ecvFn) == "function" and cn == "EssentialCooldownViewer") and ecvFn(cn) or _G[cn]
         if cf and cf ~= UIParent and cf ~= WorldFrame then return cf end
     end
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    if conf.anchorToUnitframe == "SCREEN" and not (g and g.anchorToCooldown) then return UIParent end
     local atv = conf.anchorToUnitframe
     if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
         local uf = _G.MSUF_UnitFrames or _G.UnitFrames
@@ -885,7 +929,7 @@ local function OnUpdate(self, elapsed)
         -- ═══════════════════════════════════════════════════════════════
 
         local bar = d.bar
-        if bar and not InCombatLockdown() then
+        if bar and not IsPositionLocked() then
             local anchor = d.anchor
             local conf = d.conf
 
@@ -895,21 +939,12 @@ local function OnUpdate(self, elapsed)
                 if conf.positionMode == "TOPLEFT_V2" then
                     conf.offsetX = round(snapCX - d.screenW * 0.5 - bw * 0.5)
                     conf.offsetY = round(snapCY - d.screenH * 0.5 + bh * 0.5)
-                    pcall(function()
-                        bar._msufDragActive = false
-                        bar:ClearAllPoints()
-                        bar:SetPoint("TOPLEFT", UIParent, "CENTER", conf.offsetX, conf.offsetY)
-                    end)
+                    ApplyBarPoint(bar, "TOPLEFT", UIParent, "CENTER", conf.offsetX, conf.offsetY)
                 else
                     conf.offsetX = round(snapCX - d.screenW * 0.5)
                     conf.offsetY = round(snapCY - d.screenH * 0.5)
-                    pcall(function()
-                        bar._msufDragActive = false
-                        bar:ClearAllPoints()
-                        bar:SetPoint("CENTER", UIParent, "CENTER", conf.offsetX, conf.offsetY)
-                    end)
+                    ApplyBarPoint(bar, "CENTER", UIParent, "CENTER", conf.offsetX, conf.offsetY)
                 end
-                bar._msufDragActive = true
             else
                 -- Compute where bar center IS in screen pixels after hypothetical move
                 -- snapCX/snapCY are in UIParent coords.
@@ -958,34 +993,17 @@ local function OnUpdate(self, elapsed)
                         -- PositionUnitFrame: MSUF_ApplyPoint(f, point, ecv, relPoint, baseX + offsetX, offsetY + extraY)
                         -- So we need to recompute offsetX/offsetY for ECV path
                         local ax2, ay2 = PointXY(ecv, relPoint)
-                        -- Desired bar point position
-                        local fx2, fy2 = PointXY(bar, point)
-                        -- But bar hasn't moved yet... use target position instead
-                        -- Actually, just temporarily position with CENTER, read PointXY, then fix
-                        pcall(function()
-                            bar._msufDragActive = false
-                            bar:ClearAllPoints()
-                            bar:SetPoint("CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
-                        end)
-                        bar._msufDragActive = true
-                        -- Now read the ECV offsets
-                        fx2, fy2 = PointXY(bar, point)
-                        if ax2 and ay2 and fx2 and fy2 then
-                            conf.offsetX = round((fx2 * fs - ax2 * as) / as - baseX)
-                            conf.offsetY = round((fy2 * fs - ay2 * as) / as - extraY)
+                        local localDX, localDY = PointOffsetFromCenter(bar, point)
+                        if ax2 and ay2 then
+                            local pointScreenX = barScreenCX + localDX * fs
+                            local pointScreenY = barScreenCY + localDY * fs
+                            conf.offsetX = round((pointScreenX - ax2 * as) / as - baseX)
+                            conf.offsetY = round((pointScreenY - ay2 * as) / as - extraY)
                         end
-                        pcall(function()
-                            bar:ClearAllPoints()
-                            bar:SetPoint(point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
-                        end)
+                        ApplyBarPoint(bar, point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
                     else
                         -- Normal path: CENTER-to-CENTER (same as PositionUnitFrame line 2429)
-                        pcall(function()
-                            bar._msufDragActive = false
-                            bar:ClearAllPoints()
-                            bar:SetPoint("CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
-                        end)
-                        bar._msufDragActive = true
+                        ApplyBarPoint(bar, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
                     end
                 end
             end
@@ -1078,13 +1096,8 @@ function Ticker.EndDrag()
         if d.isGroupFrame and d.conf then
             d.conf.offsetX = round(cx - d.screenW * 0.5)
             d.conf.offsetY = round(cy - d.screenH * 0.5)
-            if d.bar and not InCombatLockdown() then
-                pcall(function()
-                    d.bar._msufDragActive = false
-                    d.bar:ClearAllPoints()
-                    d.bar:SetPoint("CENTER", UIParent, "CENTER", d.conf.offsetX, d.conf.offsetY)
-                end)
-                d.bar._msufDragActive = true
+            if d.bar and not IsPositionLocked() then
+                ApplyBarPoint(d.bar, "CENTER", UIParent, "CENTER", d.conf.offsetX, d.conf.offsetY)
             end
         end
         -- Offsets already written by OnUpdate. Just finalize pipeline.
