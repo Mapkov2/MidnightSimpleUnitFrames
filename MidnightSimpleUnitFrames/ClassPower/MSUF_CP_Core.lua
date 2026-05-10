@@ -162,14 +162,6 @@ builders.LAYOUT = function(E)
         local h = height
         local b = _cpDB.bars or {}
         local layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
-        local restoredScreenLayout
-        if inLockdown and type(_G.MSUF_ApplyCachedFrameScreenLayout) == "function" then
-            restoredScreenLayout = _G.MSUF_ApplyCachedFrameScreenLayout(CP.container, "classPower", true)
-            local cachedH = restoredScreenLayout and tonumber(restoredScreenLayout.h)
-            if cachedH and cachedH >= 2 then
-                h = math_floor(cachedH + 0.5)
-            end
-        end
 
         local tickW = tonumber(b.classPowerTickWidth) or 1
         if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
@@ -220,56 +212,45 @@ builders.LAYOUT = function(E)
             end
             userW = userW - 4
         end
-        local cachedW = restoredScreenLayout and tonumber(restoredScreenLayout.w)
-        if cachedW and cachedW >= 30 then
-            userW = math_floor(cachedW + 0.5)
-        end
 
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
 
-        if restoredScreenLayout then
-            CP.container:SetSize(userW, h)
-        else
-            CP.container:ClearAllPoints()
-            CP.container:SetSize(userW, h)
-            if b.classPowerAnchorToCooldown == true then
-                local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
-                local anchorFrame = nil
-                if ecv and ecv.IsShown and ecv:IsShown() then
-                    if type(_G.MSUF_HookExternalAnchorForReanchor) == "function" then
-                        _G.MSUF_HookExternalAnchorForReanchor(ecv)
-                    end
-                    if type(_G.MSUF_GetExternalAnchorProxy) == "function" then
-                        anchorFrame = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer", ecv)
-                    end
-                    if not anchorFrame and not inLockdown then
-                        anchorFrame = ecv
-                    end
-                elseif type(_G.MSUF_GetExternalAnchorProxy) == "function" then
-                    anchorFrame = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer")
+        CP.container:ClearAllPoints()
+        CP.container:SetSize(userW, h)
+        if b.classPowerAnchorToCooldown == true then
+            local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
+            local anchorFrame = nil
+            if ecv and ecv.IsShown and ecv:IsShown() then
+                if type(_G.MSUF_HookExternalAnchorForReanchor) == "function" then
+                    _G.MSUF_HookExternalAnchorForReanchor(ecv)
                 end
-                if anchorFrame then
-                    CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
-                else
-                    if inLockdown and type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
-                        _G.MSUF_RequestUnitFrameReanchorAfterCombat()
-                    elseif type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
-                        _G.MSUF_ScheduleLateAnchorReanchor()
-                    end
-                    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                if type(_G.MSUF_GetExternalAnchorProxy) == "function" then
+                    anchorFrame = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer", ecv)
                 end
+                if not anchorFrame and not inLockdown then
+                    anchorFrame = ecv
+                end
+            elseif type(_G.MSUF_GetExternalAnchorProxy) == "function" then
+                anchorFrame = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer")
+            end
+            if anchorFrame then
+                CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
             else
+                if inLockdown and type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
+                    _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+                elseif type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+                    _G.MSUF_ScheduleLateAnchorReanchor()
+                end
                 CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
             end
+        else
+            CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
         end
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
         CP._layoutDirty = nil
         _G.MSUF_ClassPowerLayoutDirty = nil
-        if not inLockdown and type(_G.MSUF_CacheFrameScreenLayout) == "function" then
-            _G.MSUF_CacheFrameScreenLayout(CP.container, "classPower")
-        end
         if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end

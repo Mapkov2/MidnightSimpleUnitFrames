@@ -1583,9 +1583,6 @@ local function FullRefresh()
 
         CP.container:Show()
         CP.visible = true
-        if not InCombatLockdown() and type(_G.MSUF_CacheFrameScreenLayout) == "function" then
-            _G.MSUF_CacheFrameScreenLayout(CP.container, "classPower")
-        end
         -- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
         if CP._outline then CP._outline:Show() end
 
@@ -1962,11 +1959,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
         if _autoHideActive and CP.visible and CP.container then
             -- Re-run the current mode's update to trigger CP_CheckAutoHide
             CP_RunActiveUpdate(CP.powerType, CP.currentMax)
-        end
-        if event == "PLAYER_REGEN_DISABLED" and CP.visible and CP.container
-            and type(_G.MSUF_CacheFrameScreenLayout) == "function"
-        then
-            _G.MSUF_CacheFrameScreenLayout(CP.container, "classPower", true)
         end
         return
     end
