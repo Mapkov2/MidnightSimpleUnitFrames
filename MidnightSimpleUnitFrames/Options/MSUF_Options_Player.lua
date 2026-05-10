@@ -3183,7 +3183,10 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             panel._msufStatusIconSelectedId = spec and spec.id or nil
         end
         panel._msufCurrentUFStatusSpec = spec
-        if spec and _G.MSUF_UFPreview_SelectStatusIcon then _G.MSUF_UFPreview_SelectStatusIcon(spec.id) end
+        if spec and panel._msufUFStatusLastPreviewId ~= spec.id and _G.MSUF_UFPreview_SelectStatusIcon then
+            panel._msufUFStatusLastPreviewId = spec.id
+            _G.MSUF_UFPreview_SelectStatusIcon(spec.id)
+        end
         return spec, k
     end
     panel._msufEnsureUFStatusSelection = EnsureUFStatusSelection
@@ -3307,6 +3310,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             if nextSpec and (not nextSpec.allowed or nextSpec.allowed(k)) then
                 panel._msufStatusIconSelectedId = nextSpec.id
                 panel._msufCurrentUFStatusSpec = nextSpec
+                panel._msufUFStatusLastPreviewId = nextSpec.id
                 if _G.MSUF_UFPreview_SelectStatusIcon then _G.MSUF_UFPreview_SelectStatusIcon(nextSpec.id) end
                 if ns.MSUF_Options_Player_LayoutIndicatorTemplate then ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, k) end
             end

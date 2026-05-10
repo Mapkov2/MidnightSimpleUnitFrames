@@ -633,6 +633,7 @@ local DD_ITEM_H  = 22
 -- Singleton list frame
 local _listFrame, _listOwner, _listBackdrop
 local _listOpenToken = 0
+local _listBackdropIgnoreUntil = 0
 local _itemPool = {}
 local _itemCount = 0
 
@@ -651,7 +652,10 @@ local function DD_EnsureList()
     _listBackdrop:SetFrameLevel(900)
     _listBackdrop:SetAllPoints(UIParent)
     _listBackdrop:EnableMouse(true)
-    _listBackdrop:SetScript("OnClick", DD_Close)
+    _listBackdrop:SetScript("OnClick", function()
+        if GetTime and GetTime() < (_listBackdropIgnoreUntil or 0) then return end
+        DD_Close()
+    end)
     _listBackdrop:Hide()
     -- List container
     local lf = CreateFrame("Frame", "MSUF_SpecDDList", UIParent, "BackdropTemplate")
@@ -884,12 +888,13 @@ local function DD_Toggle(owner)
     if _listFrame.SetToplevel then _listFrame:SetToplevel(true) end
     if _listFrame.Raise then _listFrame:Raise() end
     _listFrame:Show()
+    _listBackdropIgnoreUntil = (GetTime and (GetTime() + 0.12)) or 0
     local function ShowBackdrop()
         if _listOpenToken == openToken and _listOwner == owner and _listFrame and _listFrame:IsShown() and _listBackdrop then
             _listBackdrop:Show()
         end
     end
-    if C_Timer and C_Timer.After then C_Timer.After(0, ShowBackdrop) else ShowBackdrop() end
+    if C_Timer and C_Timer.After then C_Timer.After(0.04, ShowBackdrop) else ShowBackdrop() end
 end
 
 -- ---- 4g. Dropdown (spec-driven, own ListFrame, superellipse trigger) ----
