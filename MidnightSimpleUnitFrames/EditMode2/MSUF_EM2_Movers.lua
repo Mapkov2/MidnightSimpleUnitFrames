@@ -28,6 +28,11 @@ end
 local movers = {}
 local moverParent
 
+local function RefreshUFPreview(reason)
+    local fn = _G.MSUF_UFPreview_RequestRefresh
+    if type(fn) == "function" then fn(reason or "EM2_MOVERS") end
+end
+
 local function SyncMoverToFrame(mover, frame)
     if not frame then return end
     local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
@@ -450,11 +455,13 @@ end
 -- ── MSUF_SyncUnitPositionPopup ───────────────────────────────────────────
 _G.MSUF_SyncUnitPositionPopup = function()
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
+    RefreshUFPreview("EM2_SYNC_UNIT_POPUP")
 end
 
 -- ── MSUF_SyncCastbarPositionPopup ────────────────────────────────────────
 _G.MSUF_SyncCastbarPositionPopup = function(unit)
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
+    RefreshUFPreview("EM2_SYNC_CASTBAR_POPUP")
 end
 
 -- ── MSUF_SyncAuras2PositionPopup ─────────────────────────────────────────
@@ -758,6 +765,7 @@ _G.MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or fun
     local ra = reanchorFns[unit]
     if ra and type(_G[ra]) == "function" then _G[ra]() end
     if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+    RefreshUFPreview("EM2_CASTBAR_ANCHOR_TOGGLE")
 end
 
 -- ── Anchor Picker Singleton ─────────────────────────────────────────────

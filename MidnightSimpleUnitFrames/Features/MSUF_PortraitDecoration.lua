@@ -33,6 +33,12 @@ local function V(conf, key, def)
     return (v ~= nil) and v or def
 end
 
+local function GV(key, def)
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    if type(g) == "table" and g[key] ~= nil then return g[key] end
+    return def
+end
+
 -- ────────────────────────────────────────────────────────────
 -- Decoration stamp (all visual fields)
 -- ────────────────────────────────────────────────────────────
@@ -40,15 +46,15 @@ local function DecoStamp(conf)
     return V(conf,"portraitShape","Q") .. "|" ..
            V(conf,"portraitBorderStyle","N") .. "|" ..
            V(conf,"portraitBorderThickness",2) .. "|" ..
-           V(conf,"portraitBorderColorR",0) .. "|" ..
-           V(conf,"portraitBorderColorG",0) .. "|" ..
-           V(conf,"portraitBorderColorB",0) .. "|" ..
-           V(conf,"portraitBorderColorA",1) .. "|" ..
+           GV("portraitBorderColorR",0) .. "|" ..
+           GV("portraitBorderColorG",0) .. "|" ..
+           GV("portraitBorderColorB",0) .. "|" ..
+           GV("portraitBorderColorA",1) .. "|" ..
            (V(conf,"portraitBgEnabled",false) and "1" or "0") .. "|" ..
-           V(conf,"portraitBgColorR",0.05) .. "|" ..
-           V(conf,"portraitBgColorG",0.05) .. "|" ..
-           V(conf,"portraitBgColorB",0.05) .. "|" ..
-           V(conf,"portraitBgColorA",0.85) .. "|" ..
+           GV("portraitBgColorR",0.05) .. "|" ..
+           GV("portraitBgColorG",0.05) .. "|" ..
+           GV("portraitBgColorB",0.05) .. "|" ..
+           GV("portraitBgColorA",0.85) .. "|" ..
            V(conf,"portraitClassStyle","B") .. "|" ..
            (conf.portraitRender or "2D")
 end
@@ -117,11 +123,6 @@ local function ComputeAndApplyLayout(f, conf, portrait)
     local sizeOvr = tonumber(V(conf, "portraitSizeOverride", 0)) or 0
     local size = (sizeOvr > 0) and math_max(16, sizeOvr) or autoSize
 
-    if V(conf, "portraitFillBorder", false) and V(conf, "portraitBorderStyle", "NONE") ~= "NONE" then
-        local thick = math_max(1, tonumber(V(conf, "portraitBorderThickness", 2)) or 2)
-        size = size + (thick * 2)
-    end
-
     local ox = tonumber(V(conf, "portraitOffsetX", 0)) or 0
     local oy = tonumber(V(conf, "portraitOffsetY", 0)) or 0
 
@@ -159,9 +160,9 @@ end
 local function ResolveBorderColor(conf, unit)
     local style = V(conf, "portraitBorderStyle", "NONE")
     if style == "NONE" then return nil end
-    if style == "CUSTOM" then
-        return V(conf,"portraitBorderColorR",1), V(conf,"portraitBorderColorG",1),
-               V(conf,"portraitBorderColorB",1), V(conf,"portraitBorderColorA",1)
+    if style == "CUSTOM" or style == "SOLID" then
+        return GV("portraitBorderColorR",1), GV("portraitBorderColorG",1),
+               GV("portraitBorderColorB",1), GV("portraitBorderColorA",1)
     end
     if style == "CLASS_COLOR" then
         local class = UnitClassBase and UnitClassBase(unit)
@@ -180,7 +181,7 @@ local function ResolveBorderColor(conf, unit)
         end
         return 1, 1, 1, 1
     end
-    return 1, 1, 1, 1  -- SOLID
+    return 1, 1, 1, 1
 end
 
 -- ────────────────────────────────────────────────────────────
@@ -204,8 +205,8 @@ local function ApplyBackground(d, conf, portrait)
     d.bg:ClearAllPoints()
     d.bg:SetPoint("TOPLEFT", portrait, "TOPLEFT", -1, 1)
     d.bg:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 1, -1)
-    d.bg:SetVertexColor(V(conf,"portraitBgColorR",0.05), V(conf,"portraitBgColorG",0.05),
-                        V(conf,"portraitBgColorB",0.05), V(conf,"portraitBgColorA",0.85))
+    d.bg:SetVertexColor(GV("portraitBgColorR",0.05), GV("portraitBgColorG",0.05),
+                        GV("portraitBgColorB",0.05), GV("portraitBgColorA",0.85))
     local pLevel = (portrait.GetParent and portrait:GetParent() and portrait:GetParent().GetFrameLevel)
         and portrait:GetParent():GetFrameLevel() or 0
     d:SetFrameLevel(math_max(0, pLevel)); d.bg:SetDrawLayer("BACKGROUND", -1); d.bg:Show()
@@ -221,29 +222,49 @@ local function ApplyBorder(d, conf, portrait, shape, r, g, b, a)
         return
     end
     local thick = math_max(1, tonumber(V(conf, "portraitBorderThickness", 2)) or 2)
+    local drawInside = V(conf, "portraitFillBorder", false) == true
     local ringTex = SHAPE_RING[shape]
     if ringTex then
         for i = 1, 4 do d._edges[i]:Hide() end
         d.shapedBorder:SetTexture(ringTex); d.shapedBorder:SetTexCoord(0, 1, 0, 1)
         d.shapedBorder:ClearAllPoints()
-        d.shapedBorder:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
-        d.shapedBorder:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
+        if drawInside then
+            d.shapedBorder:SetAllPoints(portrait)
+        else
+            d.shapedBorder:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
+            d.shapedBorder:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
+        end
         d.shapedBorder:SetVertexColor(r, g, b, a); d.shapedBorder:Show()
     else
         d.shapedBorder:Hide()
         local eT, eB, eL, eR = d.edgeT, d.edgeB, d.edgeL, d.edgeR
-        eT:ClearAllPoints(); eT:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
-        eT:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thick, thick)
-        eT:SetHeight(thick); eT:SetVertexColor(r,g,b,a); eT:Show()
-        eB:ClearAllPoints(); eB:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thick, -thick)
-        eB:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
-        eB:SetHeight(thick); eB:SetVertexColor(r,g,b,a); eB:Show()
-        eL:ClearAllPoints(); eL:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
-        eL:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thick, -thick)
-        eL:SetWidth(thick); eL:SetVertexColor(r,g,b,a); eL:Show()
-        eR:ClearAllPoints(); eR:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thick, thick)
-        eR:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
-        eR:SetWidth(thick); eR:SetVertexColor(r,g,b,a); eR:Show()
+        if drawInside then
+            eT:ClearAllPoints(); eT:SetPoint("TOPLEFT", portrait, "TOPLEFT", 0, 0)
+            eT:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", 0, 0)
+            eT:SetHeight(thick); eT:SetVertexColor(r,g,b,a); eT:Show()
+            eB:ClearAllPoints(); eB:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", 0, 0)
+            eB:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 0, 0)
+            eB:SetHeight(thick); eB:SetVertexColor(r,g,b,a); eB:Show()
+            eL:ClearAllPoints(); eL:SetPoint("TOPLEFT", portrait, "TOPLEFT", 0, 0)
+            eL:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", 0, 0)
+            eL:SetWidth(thick); eL:SetVertexColor(r,g,b,a); eL:Show()
+            eR:ClearAllPoints(); eR:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", 0, 0)
+            eR:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 0, 0)
+            eR:SetWidth(thick); eR:SetVertexColor(r,g,b,a); eR:Show()
+        else
+            eT:ClearAllPoints(); eT:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
+            eT:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thick, thick)
+            eT:SetHeight(thick); eT:SetVertexColor(r,g,b,a); eT:Show()
+            eB:ClearAllPoints(); eB:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thick, -thick)
+            eB:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
+            eB:SetHeight(thick); eB:SetVertexColor(r,g,b,a); eB:Show()
+            eL:ClearAllPoints(); eL:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
+            eL:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thick, -thick)
+            eL:SetWidth(thick); eL:SetVertexColor(r,g,b,a); eL:Show()
+            eR:ClearAllPoints(); eR:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thick, thick)
+            eR:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
+            eR:SetWidth(thick); eR:SetVertexColor(r,g,b,a); eR:Show()
+        end
     end
     local pLevel = (portrait.GetParent and portrait:GetParent() and portrait:GetParent().GetFrameLevel)
         and portrait:GetParent():GetFrameLevel() or 0

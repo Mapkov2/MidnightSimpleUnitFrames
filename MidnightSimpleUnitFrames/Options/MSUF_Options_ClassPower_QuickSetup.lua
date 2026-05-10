@@ -66,6 +66,7 @@ local BARS_KEYS = {
     "runeShowTime",
     "classPowerOffsetX",
     "classPowerOffsetY",
+    "classPowerFrameLevelOffset",
     "classPowerOutline",
     "detachedPowerBarWidthMode",
     "detachedPowerBarOutline",
@@ -80,6 +81,7 @@ local PLAYER_KEYS = {
     "detachedPowerBarTextOnBar",
     "detachedPowerBarOffsetX",
     "detachedPowerBarOffsetY",
+    "detachedPowerBarFrameLevelOffset",
     -- Per-unit text override (mirrors _MSUF_HPText_EnableOverride fields)
     "hpPowerTextOverride",
     "hpTextMode",

@@ -2116,11 +2116,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     _SyncSpacerControls()
     _G.MSUF_Options_RefreshHPSpacerControls = _SyncSpacerControls
 
-    -- GF hint (shown when Party/Raid scope, replaces Box 5/6)
+    -- Text hint (Unit Frame text moved to Frames > Text; GF text remains in GF options)
     local gfTextHint = barGroup:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     gfTextHint:SetPoint("TOPLEFT", box3c, "BOTTOMLEFT", 14, -12)
     gfTextHint:SetWidth(600); gfTextHint:SetJustifyH("LEFT")
-    gfTextHint:SetText(TR("HP / Power Text and Text Spacers for Group Frames are configured in\nGroup Frames > Health & Text."))
+    gfTextHint:SetText(TR("Unit Frame HP / Power text is configured in Frames > Text.\nGroup Frame text is configured in Group Frames > Health & Text."))
     gfTextHint:SetTextColor(0.6, 0.75, 1.0)
     gfTextHint:Hide()
 
@@ -2227,21 +2227,22 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
             end
         end
 
-        -- Box 5/6: HP / Power Text — hide for GF scopes, show hint instead
-        if _C.box5 then _C.box5:SetShown(not isGF) end
-        if _C.box6 then _C.box6:SetShown(not isGF) end
-        if _C.gfTextHint then _C.gfTextHint:SetShown(isGF) end
+        -- Box 5/6 moved out of Bars; keep the legacy controls hidden and route users to the owning panel.
+        if _C.box5 then _C.box5:SetShown(false) end
+        if _C.box6 then _C.box6:SetShown(false) end
+        if _C.gfTextHint then
+            _C.gfTextHint:SetText(isGF
+                and TR("HP / Power Text and Text Spacers for Group Frames are configured in\nGroup Frames > Health & Text.")
+                or TR("Unit Frame HP / Power text is configured in\nFrames > Text."))
+            _C.gfTextHint:SetShown(true)
+        end
         -- Re-anchor box7 when box5/6 are hidden
         if _C.box7 then
             _C.box7:ClearAllPoints()
-            if isGF then
-                _C.box7:SetPoint("TOPLEFT", _C.gfTextHint or _C.box3c, "BOTTOMLEFT", 0, -12)
-            else
-                _C.box7:SetPoint("TOPLEFT", _C.box6, "BOTTOMLEFT", 0, -4)
-            end
+            _C.box7:SetPoint("TOPLEFT", _C.gfTextHint or _C.box3c, "BOTTOMLEFT", 0, -12)
         end
 
-        -- Refresh scope-aware text dropdowns (non-GF only)
+        -- Refresh hidden legacy text dropdowns so old globals stay internally coherent.
         if not isGF then
             if _C.hpModeDrop and _C.hpModeDrop.Refresh then _C.hpModeDrop:Refresh() end
             if _C.hpReverseCheck then _C.hpReverseCheck:SetChecked(ScopeGet("hpTextReverse", false) and true or false) end

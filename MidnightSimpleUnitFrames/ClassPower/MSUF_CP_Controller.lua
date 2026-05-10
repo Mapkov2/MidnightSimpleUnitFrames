@@ -415,6 +415,7 @@ local function EnsureDefaults()
     if b.classPowerWidthMode  == nil then b.classPowerWidthMode  = "player" end
     if b.classPowerOffsetX    == nil then b.classPowerOffsetX    = 0     end
     if b.classPowerOffsetY    == nil then b.classPowerOffsetY    = 0     end
+    if b.classPowerFrameLevelOffset == nil then b.classPowerFrameLevelOffset = 5 end
     if b.smoothPowerBar       == nil then b.smoothPowerBar       = false end
     if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
     if b.classPowerComboPointColorMode == nil then b.classPowerComboPointColorMode = "default" end
