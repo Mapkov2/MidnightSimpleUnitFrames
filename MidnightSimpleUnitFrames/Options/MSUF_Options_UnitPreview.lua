@@ -220,6 +220,64 @@ local function TextScopeGet(key, field, defaultValue)
     return defaultValue
 end
 
+local TOTINLINE_SEP_VALID = {
+    ["."] = true, ["-"] = true, ["/"] = true, ["\\"] = true, ["|"] = true,
+    ["<<<"] = true, [">>>"] = true, ["||"] = true, ["--"] = true,
+    [">"] = true, ["<"] = true,
+}
+local function ToTInlineSeparator(v)
+    if type(v) ~= "string" or v == "" or not TOTINLINE_SEP_VALID[v] then return "|" end
+    return v
+end
+
+local function ShortenPreviewName(name, key, layoutConf)
+    name = tostring(name or "")
+    key = CanonKey(key)
+    if key == "player" or name == "" then return name end
+    EnsureDB()
+    local db = _G.MSUF_DB or {}
+    local g = db.general or {}
+    local u = db[key] or {}
+    local shorten = db.shortenNames and true or false
+    if u.fontOverride == true and u.shortenNames ~= nil then
+        shorten = u.shortenNames and true or false
+    end
+    if not shorten then return name end
+
+    local maxChars
+    if u.fontOverride == true and tonumber(u.shortenNameMaxChars) then
+        maxChars = tonumber(u.shortenNameMaxChars)
+    else
+        maxChars = tonumber(g.shortenNameMaxChars) or 6
+    end
+    maxChars = floor(max(2, min(64, maxChars)) + 0.5)
+    if #name <= maxChars then return name end
+
+    local mode
+    if u.fontOverride == true and u.shortenNameClipSide ~= nil then
+        mode = u.shortenNameClipSide
+    else
+        mode = g.shortenNameClipSide or "LEFT"
+    end
+    local showDots
+    if u.fontOverride == true and u.shortenNameShowDots ~= nil then
+        showDots = u.shortenNameShowDots and true or false
+    elseif g.shortenNameShowDots ~= nil then
+        showDots = g.shortenNameShowDots and true or false
+    else
+        showDots = true
+    end
+    local anchorConf = layoutConf or u
+    if (anchorConf.nameTextAnchor or "LEFT") ~= "LEFT" then showDots = false end
+
+    if mode == "RIGHT" then
+        local text = name:sub(1, maxChars)
+        return showDots and (text .. "...") or text
+    end
+    local text = name:sub(#name - maxChars + 1)
+    return showDots and ("..." .. text) or text
+end
+
 local function TextScopeSet(key, field, value)
     local u = UnitDB(key)
     SeedTextFromGeneral(u)
@@ -2025,6 +2083,8 @@ local function BuildPreview(parent, panel, width, height)
     mock.powerLayer = CreateFrame("Frame", nil, mock.textFrame)
     mock.powerLayer:SetAllPoints(mock.textFrame)
     mock.nameText = MakeFS(mock.nameLayer, "OVERLAY", 12)
+    mock.totInlineSep = MakeFS(mock.nameLayer, "OVERLAY", 12)
+    mock.totInlineText = MakeFS(mock.nameLayer, "OVERLAY", 12)
     mock.hpText = MakeFS(mock.hpLayer, "OVERLAY", 12)
     mock.powerText = MakeFS(mock.powerLayer, "OVERLAY", 12)
 
@@ -2187,7 +2247,12 @@ local function ApplyPreviewLayerVisibility(box)
     if mock.classPower and mock.classPower.segments and (not classOn or not mock.classPower:IsShown()) then
         for i = 1, #mock.classPower.segments do SetShownSafe(mock.classPower.segments[i], false) end
     end
-    if not nameOn then SetShownSafe(mock.nameText, false); SetShownSafe(box.handleName, false) end
+    if not nameOn then
+        SetShownSafe(mock.nameText, false)
+        SetShownSafe(mock.totInlineSep, false)
+        SetShownSafe(mock.totInlineText, false)
+        SetShownSafe(box.handleName, false)
+    end
     if not hpTextOn then SetShownSafe(mock.hpText, false); SetShownSafe(box.handleHP, false) end
     if not powerTextOn then SetShownSafe(mock.powerText, false); SetShownSafe(box.handlePower, false) end
     if not portraitOn then
@@ -2451,9 +2516,13 @@ function Preview.Refresh(box)
     local hpSize = S(tonumber(conf.hpFontSize) or 12); if hpSize < 7 then hpSize = 7 end
     local pwrSize = S(tonumber(conf.powerFontSize) or 12); if pwrSize < 7 then pwrSize = 7 end
     mock.nameText:SetFont(FONT, nameSize, "OUTLINE")
+    mock.totInlineSep:SetFont(FONT, nameSize, "OUTLINE")
+    mock.totInlineText:SetFont(FONT, nameSize, "OUTLINE")
     mock.hpText:SetFont(FONT, hpSize, "OUTLINE")
     mock.powerText:SetFont(FONT, pwrSize, "OUTLINE")
     mock.nameText:SetTextColor(fr, fg, fb, 1)
+    mock.totInlineSep:SetTextColor(0.72, 0.76, 0.84, 1)
+    mock.totInlineText:SetTextColor(fr, fg, fb, 1)
     mock.hpText:SetTextColor(fr, fg, fb, 1)
     if g.colorPowerTextByType == true then
         local prt, pgt, pbt = PowerColor(data.powerToken)
@@ -2461,7 +2530,7 @@ function Preview.Refresh(box)
     else
         mock.powerText:SetTextColor(fr, fg, fb, 1)
     end
-    mock.nameText:SetText(data.name)
+    mock.nameText:SetText(ShortenPreviewName(data.name, key, conf))
     local hpMax, pMax = 1000000, 240000
     local hpCur, pCur = floor(hpMax * data.hp + 0.5), floor(pMax * powerFrac + 0.5)
     local hpMode = TextScopeGet(key, "hpTextMode", "CURPERCENT")
@@ -2472,6 +2541,8 @@ function Preview.Refresh(box)
     mock.hpText:SetText(FormatMode(hpMode, hpCur, hpMax, floor(data.hp * 100 + 0.5), TextScopeGet(key, "hpTextSeparator", ""), false))
     mock.powerText:SetText(FormatMode(TextScopeGet(key, "powerTextMode", "CURPERCENT"), pCur, pMax, floor(powerFrac * 100 + 0.5), TextScopeGet(key, "powerTextSeparator", TextScopeGet(key, "hpTextSeparator", "")), true))
     mock.nameText:SetShown(conf.showName ~= false)
+    mock.totInlineSep:Hide()
+    mock.totInlineText:Hide()
     mock.hpText:SetShown(conf.showHP ~= false)
     mock.powerText:SetShown(conf.showPower ~= false)
 
@@ -2479,6 +2550,22 @@ function Preview.Refresh(box)
     local npt, nrel, nx, njust = ResolveNameAnchor(conf.nameTextAnchor or "LEFT", S(tonumber(conf.nameOffsetX) or 4))
     mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S(tonumber(conf.nameOffsetY) or -4))
     mock.nameText:SetJustifyH(njust)
+    do
+        local totConf = (_G.MSUF_DB and _G.MSUF_DB.targettarget) or {}
+        local showInline = key == "target" and conf.showName ~= false and totConf.showToTInTargetName == true
+        if showInline then
+            local sep = ToTInlineSeparator(totConf.totInlineSeparator)
+            local totData = UNIT_DATA.targettarget or { name = "Target" }
+            mock.totInlineSep:SetText(sep ~= "" and sep or " ")
+            mock.totInlineText:SetText(ShortenPreviewName(totData.name, "targettarget", conf))
+            mock.totInlineSep:ClearAllPoints()
+            mock.totInlineSep:SetPoint("LEFT", mock.nameText, "RIGHT", S(4), 0)
+            mock.totInlineText:ClearAllPoints()
+            mock.totInlineText:SetPoint("LEFT", mock.totInlineSep, "RIGHT", S(4), 0)
+            mock.totInlineSep:Show()
+            mock.totInlineText:Show()
+        end
+    end
     PositionText(mock.hpText, conf.hpTextAnchor or g.hpTextAnchor or "RIGHT", true, S(tonumber(conf.hpOffsetX) or -4), S(tonumber(conf.hpOffsetY) or -4), mock.textFrame, S(-4))
     if detachedPower and conf.detachedPowerBarTextOnBar == true and mock.detachedPower:IsShown() then
         mock.powerText:ClearAllPoints()
@@ -2663,7 +2750,11 @@ function Preview.Refresh(box)
         end
     end
 
-    box.handleName:SetSize(max(46, mock.nameText:GetStringWidth() + 10), max(18, mock.nameText:GetStringHeight() + 6))
+    local nameHandleW = mock.nameText:GetStringWidth() + 10
+    if mock.totInlineSep and mock.totInlineSep:IsShown() then
+        nameHandleW = nameHandleW + mock.totInlineSep:GetStringWidth() + mock.totInlineText:GetStringWidth() + S(8)
+    end
+    box.handleName:SetSize(max(46, nameHandleW), max(18, mock.nameText:GetStringHeight() + 6))
     box.handleHP:SetSize(max(46, mock.hpText:GetStringWidth() + 10), max(18, mock.hpText:GetStringHeight() + 6))
     box.handlePower:SetSize(max(46, mock.powerText:GetStringWidth() + 10), max(18, mock.powerText:GetStringHeight() + 6))
     PlaceHandle(box.handleName, mock.nameText)

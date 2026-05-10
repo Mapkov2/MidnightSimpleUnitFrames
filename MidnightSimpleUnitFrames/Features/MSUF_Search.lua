@@ -343,11 +343,12 @@ local INDEX = {
     { label="Show elite / rare icon",
       hint="Frames › Target / Focus / ToT / Boss › Indicator", pageKey="uf_target",
       keywords={"elite icon","rare icon","rare elite","classification icon","boss icon","dragon icon","show elite","show rare"} },
-    -- NOTE: These controls live under the Target-of-Target page in the Frames menu.
+    -- NOTE: These controls edit Target-of-Target inline runtime keys from Target,
+    -- because the text renders inside the Target frame.
     -- Options_Player builds shared widgets that are reused across unit tabs; if we tag
     -- these as uf_player, clicks will always route to Player.
     { label="Inline Text (ToT / castbar inline)",
-      hint="Frames › Target of Target", pageKey="uf_targettarget",
+      hint="Frames › Target", pageKey="uf_target",
       keywords={"inline text","tot inline","target of target inline","castbar inline","inline"} },
     { label="Status icons: Combat indicator",
       hint="Player › Status Icons", pageKey="uf_player",anchor="MSUF_StatusCombatIconCB",
@@ -371,10 +372,10 @@ local INDEX = {
       hint="Player › Castbar Toggles", pageKey="uf_player",
       keywords={"castbar","enable castbar","player castbar","target castbar","focus castbar","boss castbar","cast bar toggle","casbar","casting bar","casbar toggle"} },
     { label="Show ToT inline in Target frame",
-      hint="Frames › Target of Target", pageKey="uf_targettarget",anchor="MSUF_ToTInlineInTargetCB",
+      hint="Frames › Target", pageKey="uf_target",anchor="MSUF_ToTInlineInTargetCB",
       keywords={"tot inline","target of target inline","tot in target","secondary target text","tot text inline"} },
     { label="ToT inline separator style",
-      hint="Frames › Target of Target", pageKey="uf_targettarget",anchor="MSUF_ToTInlineSeparatorDropDown",
+      hint="Frames › Target", pageKey="uf_target",anchor="MSUF_ToTInlineSeparatorDropDown",
       keywords={"tot separator","inline separator","tot divider","separator style tot"} },
     { label="Anchor pet to (frame)",
       hint="Player › Anchors", pageKey="uf_player",anchor="MSUF_PetAnchorToDropDown",
