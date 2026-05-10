@@ -479,12 +479,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local prevBtn
         for _, k in ipairs(SCOPE_KEYS) do
             local bk = k
-            local btn = _G.MSUF_CreateScopePillButton(scopeBar, SCOPE_LABELS[bk] or bk, bk == "shared" and 62 or 50, 22)
+            local btn = _G.MSUF_CreateScopePillButton(scopeBar, SCOPE_LABELS[bk] or bk, bk == "shared" and 62 or 50, 24)
             if not prevBtn then
-                btn:SetPoint("LEFT", scopeEditLbl, "RIGHT", 8, 0)
-            elseif bk == "party" then
-                -- Visual separator before GF scope buttons
-                btn:SetPoint("LEFT", prevBtn, "RIGHT", 10, 0)
+                btn:SetPoint("LEFT", scopeEditLbl, "RIGHT", 8, 2)
             else
                 btn:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
             end
@@ -539,7 +536,7 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
 
     -- Reset overrides button
     local scopeResetBtn = CreateFrame("Button", "MSUF_HPTextResetOverridesBtn", scopeBar, "UIPanelButtonTemplate")
-    scopeResetBtn:SetSize(72, 18); scopeResetBtn:SetPoint("TOPRIGHT", scopeBar, "TOPRIGHT", -8, -36)
+    scopeResetBtn:SetSize(76, 22); scopeResetBtn:SetPoint("TOPRIGHT", scopeBar, "TOPRIGHT", -8, -34)
     scopeResetBtn:SetText(TR("Reset")); scopeResetBtn:SetNormalFontObject("GameFontNormalSmall")
     if _G.MSUF_SkinScopePillButton then
         _G.MSUF_SkinScopePillButton(scopeResetBtn, TR("Reset"), 76, 22, { 0.06, 0.07, 0.13, 0.88 }, { 0.15, 0.18, 0.36, 0.45 }, { 0.82, 0.90, 1.00, 1 })

@@ -289,10 +289,12 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
     scopeBar:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     scopeBar:SetBackdropColor(0.04, 0.08, 0.18, 0.95)
     scopeBar:SetBackdropBorderColor(0.12, 0.25, 0.50, 0.6)
+    if _G.MSUF_StyleOverrideScopeBar then _G.MSUF_StyleOverrideScopeBar(scopeBar) end
 
     local scopeEditLbl = scopeBar:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     scopeEditLbl:SetPoint("TOPLEFT", scopeBar, "TOPLEFT", 10, -10)
     scopeEditLbl:SetText(TR("Editing:"))
+    scopeEditLbl:SetTextColor(0.72, 0.82, 1.00, 1)
 
     local scopeBtns = {}
     local function RefreshScopeButtons()
@@ -310,50 +312,22 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
             local bk = k
             local isGF = (bk == "gf_party" or bk == "gf_raid")
 
-            -- Separator dot before Party
-            if bk == "gf_party" and prevBtn then
-                local sep = scopeBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                sep:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
-                sep:SetText("|cff3a5a90·|r")
-                local sepAnchor = CreateFrame("Frame", nil, scopeBar)
-                sepAnchor:SetSize(10, 18); sepAnchor:SetPoint("LEFT", sep, "RIGHT", 0, 0)
-                prevBtn = sepAnchor
+            local btn = _G.MSUF_CreateScopePillButton and _G.MSUF_CreateScopePillButton(scopeBar, SCOPE_LABELS[bk] or bk, i == 1 and 62 or (isGF and 56 or 50), 24)
+                or CreateFrame("Button", nil, scopeBar, BackdropTemplateMixin and "BackdropTemplate" or nil)
+            if not _G.MSUF_CreateScopePillButton then
+                btn:SetSize(i == 1 and 62 or 50, 24)
+                local ffs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                ffs:SetPoint("CENTER", 0, 0); ffs:SetText(SCOPE_LABELS[bk] or bk)
+                btn._msufScopeLabel = ffs
             end
-
-            local btn = CreateFrame("Button", nil, scopeBar, BackdropTemplateMixin and "BackdropTemplate" or nil)
-            btn:SetSize(i == 1 and 56 or 44, 18)
             if not prevBtn then
-                btn:SetPoint("LEFT", scopeEditLbl, "RIGHT", 8, 0)
+                btn:SetPoint("LEFT", scopeEditLbl, "RIGHT", 8, 2)
             else
-                btn:SetPoint("LEFT", prevBtn, "RIGHT", 2, 0)
+                btn:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
             end
-            local bg = btn:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.08, 0.12, 0.22, 0.80)
-            btn._msufBg = bg
-            local border = CreateFrame("Frame", nil, btn, BackdropTemplateMixin and "BackdropTemplate" or nil)
-            border:SetAllPoints(); border:SetBackdrop({ edgeFile = TEX_W8, edgeSize = 1 })
-            border:SetBackdropBorderColor(0.15, 0.30, 0.60, 0.50)
-            btn._msufBorder = border
-            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            fs:SetPoint("CENTER", 0, 0); fs:SetText(SCOPE_LABELS[bk] or bk)
-            btn._msufLabel = fs
-
             btn._msufApplyState = function(self, active)
                 local hasOvr = (bk ~= "shared") and IsOverride(bk)
-                if active then
-                    bg:SetColorTexture(isGF and 0.10 or 0.12, isGF and 0.20 or 0.24, isGF and 0.40 or 0.50, 0.95)
-                    if hasOvr then border:SetBackdropBorderColor(0.96, 0.80, 0.34, 0.98)
-                    else border:SetBackdropBorderColor(isGF and 0.25 or 0.30, isGF and 0.50 or 0.55, isGF and 0.90 or 1.00, 0.80) end
-                    fs:SetTextColor(0.90, 0.95, 1.00)
-                else
-                    bg:SetColorTexture(0.08, 0.12, 0.22, 0.80)
-                    if hasOvr then
-                        border:SetBackdropBorderColor(0.86, 0.72, 0.28, 0.80)
-                        fs:SetTextColor(0.88, 0.90, 0.96)
-                    else
-                        border:SetBackdropBorderColor(0.15, 0.30, 0.60, 0.50)
-                        fs:SetTextColor(0.50, 0.58, 0.72)
-                    end
-                end
+                if _G.MSUF_SetScopePillButtonState then _G.MSUF_SetScopePillButtonState(self, active, hasOvr) end
             end
 
             btn:SetScript("OnClick", function()
@@ -362,7 +336,7 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
                 if SyncScopeUI then SyncScopeUI() end
             end)
             btn:SetScript("OnEnter", function(self)
-                if self._msufBg then self._msufBg:SetColorTexture(0.10, 0.18, 0.36, 0.90) end
+                if _G.MSUF_SetScopePillButtonHover then _G.MSUF_SetScopePillButtonHover(self, true) end
                 if GameTooltip then
                     GameTooltip:SetOwner(self, "ANCHOR_TOP")
                     GameTooltip:SetText(SCOPE_LABELS[bk] or bk, 1, 1, 1)
@@ -429,8 +403,11 @@ function ns.MSUF_Options_Fonts_Build(panel, fontGroup)
 
     -- Reset button
     local scopeResetBtn = CreateFrame("Button", "MSUF_FontResetOverridesBtn", scopeBar, "UIPanelButtonTemplate")
-    scopeResetBtn:SetSize(72, 18); scopeResetBtn:SetPoint("TOPRIGHT", scopeBar, "TOPRIGHT", -8, -36)
+    scopeResetBtn:SetSize(76, 22); scopeResetBtn:SetPoint("TOPRIGHT", scopeBar, "TOPRIGHT", -8, -34)
     scopeResetBtn:SetText(TR("Reset")); scopeResetBtn:SetNormalFontObject("GameFontNormalSmall")
+    if _G.MSUF_SkinScopePillButton then
+        _G.MSUF_SkinScopePillButton(scopeResetBtn, TR("Reset"), 76, 22, { 0.06, 0.07, 0.13, 0.88 }, { 0.15, 0.18, 0.36, 0.45 }, { 0.82, 0.90, 1.00, 1 })
+    end
     scopeResetBtn:SetScript("OnClick", function()
         EnsureDB()
         for _, k in ipairs(ALL_UNITS) do
