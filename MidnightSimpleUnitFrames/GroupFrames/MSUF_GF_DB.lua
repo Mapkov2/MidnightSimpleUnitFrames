@@ -344,7 +344,6 @@ local PARTY_DEFAULTS = {
     -- Role sort
     sortByRole        = false,
     roleOrder         = "TANK,HEALER,DAMAGER",
-    separateMeleeRanged = false,
     playerFirstInRole   = false,
 }
 

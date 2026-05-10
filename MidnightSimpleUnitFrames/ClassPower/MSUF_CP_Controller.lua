@@ -2236,6 +2236,7 @@ local _predAmt = 0
 local _solarExp, _lunarExp, _caExp, _incExp = 0, 0, 0, 0
 local _predTex = nil
 local _eclColor = nil
+local _eclColorScratch = { 1, 1, 1 }
 
 local function GetColorOverrides()
     local db = _G.MSUF_DB
@@ -2278,6 +2279,15 @@ local function _resolveEclColor(token)
     return nil
 end
 
+local function _SetEclipseColor(r, g, b, fallback)
+    if r then
+        _eclColorScratch[1], _eclColorScratch[2], _eclColorScratch[3] = r, g, b
+        _eclColor = _eclColorScratch
+    else
+        _eclColor = fallback
+    end
+end
+
 local function _refreshEclipses()
     local getAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
     if not getAura then return end
@@ -2296,13 +2306,13 @@ local function _refreshEclipses()
     local inCA, inInc = (_caExp > now), (_incExp > now)
     if inCA or inInc then
         local r, g, b = _resolveEclColor("ECLIPSE_CA")
-        _eclColor = r and { r, g, b } or CPK.BAL.CLR_CA
+        _SetEclipseColor(r, g, b, CPK.BAL.CLR_CA)
     elseif _solarExp > now then
         local r, g, b = _resolveEclColor("ECLIPSE_SOLAR")
-        _eclColor = r and { r, g, b } or CPK.BAL.CLR_SOLAR
+        _SetEclipseColor(r, g, b, CPK.BAL.CLR_SOLAR)
     elseif _lunarExp > now then
         local r, g, b = _resolveEclColor("ECLIPSE_LUNAR")
-        _eclColor = r and { r, g, b } or CPK.BAL.CLR_LUNAR
+        _SetEclipseColor(r, g, b, CPK.BAL.CLR_LUNAR)
     else
         _eclColor = nil
     end
