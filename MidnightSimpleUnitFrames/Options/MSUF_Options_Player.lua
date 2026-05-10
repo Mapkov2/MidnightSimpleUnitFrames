@@ -1456,6 +1456,12 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         btn:SetScript("OnLeave", function(self) SetSuperColors(self) end)
         return btn
     end
+    local function MakePopupPillButton(parent, text, width, height, bg, br, tr)
+        return MakeSuperButton(parent, text, width, height or 22,
+            bg or { 0.055, 0.075, 0.16, 0.92 },
+            br or { 0.18, 0.34, 0.70, 0.66 },
+            tr or { 0.84, 0.92, 1.00, 1 })
+    end
     local function SetNavActive(btn, active)
         if not btn then return end
         btn._msufIsNavActive = active and true or false
@@ -1484,6 +1490,19 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         fill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
         fill:SetVertexColor(0.025, 0.055, 0.14, 0.94)
         frame._msufSuperBg = fill
+        return frame
+    end
+    local function MakeSquaredPanel(parent, width, height)
+        local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        frame:SetSize(width or 100, height or 32)
+        frame:SetBackdrop({
+            bgFile = TEX_W8,
+            edgeFile = TEX_W8,
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        frame:SetBackdropColor(0.025, 0.045, 0.095, 0.97)
+        frame:SetBackdropBorderColor(0.16, 0.32, 0.58, 0.88)
         return frame
     end
 
@@ -1540,24 +1559,29 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             local same = (key == src)
             btn:SetShown(not same)
             if active then
-                SetSuperColors(btn, { 0.10, 0.28, 0.58, 0.98 }, { 0.42, 0.72, 1.00, 1.00 }, { 1.00, 1.00, 1.00, 1 })
+                btn._msufBgColor = { 0.10, 0.28, 0.58, 0.98 }
+                btn._msufBorderColor = { 0.42, 0.72, 1.00, 1.00 }
+                btn._msufTextColor = { 1.00, 1.00, 1.00, 1 }
             else
-                SetSuperColors(btn)
+                btn._msufBgColor = btn._msufBaseBgColor
+                btn._msufBorderColor = btn._msufBaseBorderColor
+                btn._msufTextColor = btn._msufBaseTextColor
             end
+            SetSuperColors(btn)
         end
         if copyPopup._title then copyPopup._title:SetText(TR("Copy from") .. " " .. UnitLabel(src)) end
     end
     local function ShowUnitCopyPopup(anchor)
         if copyPopup and copyPopup:IsShown() then copyPopup:Hide(); return end
         if not copyPopup then
-            copyPopup = MakeSuperPanel(UIParent, 420, 278)
+            copyPopup = MakeSquaredPanel(UIParent, 420, 276)
             copyPopup:SetFrameStrata("DIALOG")
             copyPopup:SetFrameLevel(120)
             copyPopup:EnableMouse(true)
             local title = copyPopup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
             copyPopup._title = title
-            local close = MakeSuperButton(copyPopup, "x", 22, 20, { 0.10, 0.04, 0.06, 0.94 }, { 0.62, 0.18, 0.22, 0.90 }, { 1.00, 0.82, 0.82, 1 })
+            local close = MakePopupPillButton(copyPopup, "x", 22, 22, { 0.10, 0.04, 0.06, 0.94 }, { 0.62, 0.18, 0.22, 0.90 }, { 1.00, 0.82, 0.82, 1 })
             close:SetPoint("TOPRIGHT", copyPopup, "TOPRIGHT", -10, -8)
             close:SetScript("OnClick", function() copyPopup:Hide() end)
 
@@ -1571,7 +1595,10 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             local x = 16
             for i = 1, #order do
                 local k = order[i]
-                local btn = MakeSuperButton(copyPopup, shortLabel[k] or UnitLabel(k), widths[k], 20, { 0.045, 0.12, 0.27, 0.94 }, { 0.18, 0.42, 0.78, 0.78 }, { 0.78, 0.88, 1.00, 1 })
+                local btn = MakePopupPillButton(copyPopup, shortLabel[k] or UnitLabel(k), widths[k], 22, { 0.045, 0.12, 0.27, 0.94 }, { 0.18, 0.42, 0.78, 0.78 }, { 0.78, 0.88, 1.00, 1 })
+                btn._msufBaseBgColor = { 0.045, 0.12, 0.27, 0.94 }
+                btn._msufBaseBorderColor = { 0.18, 0.42, 0.78, 0.78 }
+                btn._msufBaseTextColor = { 0.78, 0.88, 1.00, 1 }
                 btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", x, -58)
                 btn:SetScript("OnClick", function()
                     panel._msufUnitCopyDest = k
@@ -1601,17 +1628,17 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
                 copyPopup._checks[i] = cb
             end
 
-            local allBtn = MakeSuperButton(copyPopup, "All", 48, 20, { 0.05, 0.13, 0.30, 0.96 }, { 0.24, 0.50, 0.90, 0.82 }, { 0.84, 0.92, 1, 1 })
+            local allBtn = MakePopupPillButton(copyPopup, "All", 48, 22, { 0.05, 0.13, 0.30, 0.96 }, { 0.24, 0.50, 0.90, 0.82 }, { 0.84, 0.92, 1, 1 })
             allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function()
                 for i, cat in ipairs(UF_COPY_CATEGORIES) do copyScopes[cat.key] = true; copyPopup._checks[i]:SetChecked(true) end
             end)
-            local noneBtn = MakeSuperButton(copyPopup, "None", 58, 20, { 0.05, 0.13, 0.30, 0.96 }, { 0.24, 0.50, 0.90, 0.82 }, { 0.84, 0.92, 1, 1 })
+            local noneBtn = MakePopupPillButton(copyPopup, "None", 58, 22, { 0.05, 0.13, 0.30, 0.96 }, { 0.24, 0.50, 0.90, 0.82 }, { 0.84, 0.92, 1, 1 })
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
             noneBtn:SetScript("OnClick", function()
                 for i, cat in ipairs(UF_COPY_CATEGORIES) do copyScopes[cat.key] = false; copyPopup._checks[i]:SetChecked(false) end
             end)
-            local runBtn = MakeSuperButton(copyPopup, "Copy Selected", 128, 22, { 0.05, 0.22, 0.46, 0.98 }, { 0.32, 0.68, 1.00, 1.00 }, { 0.92, 0.98, 1, 1 })
+            local runBtn = MakePopupPillButton(copyPopup, "Copy Selected", 128, 22, { 0.05, 0.22, 0.46, 0.98 }, { 0.32, 0.68, 1.00, 1.00 }, { 0.92, 0.98, 1, 1 })
             runBtn:SetPoint("BOTTOMRIGHT", copyPopup, "BOTTOMRIGHT", -14, 11)
             runBtn:SetScript("OnClick", function()
                 CopyUnitSettings(CurrentUnitKey(), NormalizeCopyDest(CurrentUnitKey()), panel._msufAPI, copyScopes)

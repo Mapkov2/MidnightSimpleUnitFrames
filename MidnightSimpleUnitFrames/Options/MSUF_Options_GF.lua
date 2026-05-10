@@ -16,6 +16,7 @@ local pairs = pairs
 local ipairs = ipairs
 
 local TEX_W8 = "Interface\\Buttons\\WHITE8x8"
+local MEDIA_SUPERELLIPSE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\superellipse.tga"
 local SECTION_W = 680
 local SECTION_COLLAPSED_H = 28
 
@@ -450,7 +451,7 @@ function _G.MSUF_EnsureGFPanelBuilt()
         { key = "general",    label = "General (size, spacing, growth)",
           keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing",
                    "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder",
-                   "separateMeleeRanged", "playerFirstInRole",
+                   "playerFirstInRole",
                    "unitsPerColumn", "maxColumns",
                    "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineDelay",
                    "tooltipMode", "tooltipModifier",
@@ -677,32 +678,136 @@ function _G.MSUF_EnsureGFPanelBuilt()
         _copyPopup:Show()
     end
 
+    local function SetGFTopButtonColors(btn, bg, br, tr, hover)
+        if not btn then return end
+        bg = bg or btn._msufBgColor or { 0.06, 0.07, 0.13, 0.88 }
+        br = br or btn._msufBorderColor or { 0.15, 0.18, 0.36, 0.45 }
+        tr = tr or btn._msufTextColor or { 0.82, 0.90, 1.00, 1 }
+        local mul = hover and 1.10 or 1
+        if btn._msufSuperBg then
+            btn._msufSuperBg:SetVertexColor(math.min(bg[1] * mul, 1), math.min(bg[2] * mul, 1), math.min(bg[3] * mul, 1), bg[4] or 0.92)
+        end
+        if btn._msufSuperBorder then
+            btn._msufSuperBorder:SetVertexColor(math.min(br[1] * mul, 1), math.min(br[2] * mul, 1), math.min(br[3] * mul, 1), br[4] or 0.82)
+        end
+        if btn._fs and btn._fs.SetTextColor then btn._fs:SetTextColor(tr[1], tr[2], tr[3], tr[4] or 1) end
+    end
+
+    local function MakeGFTopButtonGroup(owner, key, layer, subLevel, pad)
+        local group = owner[key]
+        if group then return group end
+        group = {}
+        group.L = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+        group.M = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+        group.R = owner:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+        group.parts = { group.L, group.M, group.R }
+        for i = 1, #group.parts do
+            local t = group.parts[i]
+            t:SetTexture(MEDIA_SUPERELLIPSE)
+            if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false) end
+            if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0) end
+        end
+        group.L:SetTexCoord(0.0, 0.25, 0.0, 1.0)
+        group.M:SetTexCoord(0.25, 0.75, 0.0, 1.0)
+        group.R:SetTexCoord(0.75, 1.0, 0.0, 1.0)
+        function group:SetVertexColor(r, g, b, a)
+            for i = 1, #self.parts do self.parts[i]:SetVertexColor(r, g, b, a) end
+        end
+        local function Layout()
+            local w = (owner.GetWidth and owner:GetWidth()) or 120
+            local h = (owner.GetHeight and owner:GetHeight()) or 22
+            local p = tonumber(pad) or 1
+            local innerH = math.max(1, h - p * 2)
+            local capW = math.min(math.floor(innerH * 0.5 + 0.5), math.floor(math.max(1, w - p * 2) * 0.5))
+            group.L:ClearAllPoints(); group.M:ClearAllPoints(); group.R:ClearAllPoints()
+            group.L:SetPoint("TOPLEFT", owner, "TOPLEFT", p, -p)
+            group.L:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", p, p)
+            group.L:SetWidth(capW)
+            group.R:SetPoint("TOPRIGHT", owner, "TOPRIGHT", -p, -p)
+            group.R:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", -p, p)
+            group.R:SetWidth(capW)
+            group.M:SetPoint("TOPLEFT", group.L, "TOPRIGHT", 0, 0)
+            group.M:SetPoint("BOTTOMRIGHT", group.R, "BOTTOMLEFT", 0, 0)
+        end
+        Layout()
+        if owner.HookScript and not owner[key .. "Hooked"] then
+            owner[key .. "Hooked"] = true
+            owner:HookScript("OnSizeChanged", Layout)
+        end
+        owner[key] = group
+        return group
+    end
+
+    local function MakeGFTopButton(parent, text, width, height, bg, br, tr)
+        local btn = CreateFrame("Button", nil, parent)
+        btn:SetSize(width or 96, height or 24)
+        btn._msufBgColor = bg or { 0.06, 0.07, 0.13, 0.88 }
+        btn._msufBorderColor = br or { 0.15, 0.18, 0.36, 0.45 }
+        btn._msufTextColor = tr or { 0.82, 0.90, 1.00, 1 }
+        btn._msufBaseBgColor = btn._msufBgColor
+        btn._msufBaseBorderColor = btn._msufBorderColor
+        btn._msufBaseTextColor = btn._msufTextColor
+        btn._msufSuperBorder = MakeGFTopButtonGroup(btn, "_msufSEBorder", "BACKGROUND", 0, 1)
+        btn._msufSuperBg = MakeGFTopButtonGroup(btn, "_msufSEFill", "BACKGROUND", 1, 2)
+        local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetPoint("CENTER")
+        fs:SetText(TR(text or ""))
+        fs:SetShadowColor(0, 0, 0, 0.55)
+        fs:SetShadowOffset(1, -1)
+        btn._fs = fs
+        btn:SetFontString(fs)
+        local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
+        stripe:SetTexture(TEX_W8)
+        stripe:SetWidth(3)
+        stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -5)
+        stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 2, 5)
+        stripe:SetColorTexture(0.22, 0.78, 0.94, 1)
+        stripe:Hide()
+        btn._msufAccentStripe = stripe
+        SetGFTopButtonColors(btn)
+        btn:SetScript("OnEnter", function(self) SetGFTopButtonColors(self, nil, nil, nil, true) end)
+        btn:SetScript("OnLeave", function(self) SetGFTopButtonColors(self) end)
+        return btn
+    end
+
+    local function SetGFScopeButtonActive(btn, active)
+        if not btn then return end
+        if active then
+            btn._msufBgColor = { 0.12, 0.15, 0.32, 0.95 }
+            btn._msufBorderColor = { 0.20, 0.34, 0.80, 0.85 }
+            btn._msufTextColor = { 0.92, 0.96, 1.00, 1 }
+            if btn._msufAccentStripe then btn._msufAccentStripe:Show() end
+        else
+            btn._msufBgColor = btn._msufBaseBgColor or { 0.06, 0.07, 0.13, 0.88 }
+            btn._msufBorderColor = btn._msufBaseBorderColor or { 0.15, 0.18, 0.36, 0.45 }
+            btn._msufTextColor = btn._msufBaseTextColor or { 0.70, 0.80, 0.95, 1 }
+            if btn._msufAccentStripe then btn._msufAccentStripe:Hide() end
+        end
+        SetGFTopButtonColors(btn)
+    end
+
     ----------------------------------------------------------------
     -- Scope tabs (Party / Raid) + Copy button
     ----------------------------------------------------------------
-    local scopeBar = CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
+    local scopeBar = CreateFrame("Frame", nil, scrollChild)
     scopeBar:SetSize(SECTION_W, 32)
     scopeBar:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 16, -10)
-    scopeBar:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-    scopeBar:SetBackdropColor(0.04, 0.08, 0.18, 0.95)
-    scopeBar:SetBackdropBorderColor(0.12, 0.25, 0.50, 0.6)
+    local scopeLine = scopeBar:CreateTexture(nil, "ARTWORK")
+    scopeLine:SetPoint("BOTTOMLEFT", scopeBar, "BOTTOMLEFT", 4, 1)
+    scopeLine:SetPoint("BOTTOMRIGHT", scopeBar, "BOTTOMRIGHT", -4, 1)
+    scopeLine:SetHeight(1)
+    scopeLine:SetColorTexture(0.22, 0.42, 0.70, 0.42)
 
     local scopeLbl = scopeBar:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    scopeLbl:SetPoint("LEFT", scopeBar, "LEFT", 10, 0)
+    scopeLbl:SetPoint("LEFT", scopeBar, "LEFT", 8, 2)
     scopeLbl:SetText(TR("Editing:"))
+    scopeLbl:SetTextColor(0.72, 0.82, 1.00, 1)
 
     local scopeBtns = {}
     local function RefreshScopeBtns()
         for kind, btn in pairs(scopeBtns) do
             local active = (kind == _activeKind)
-            local fs = btn:GetFontString()
-            if active then
-                btn:SetBackdropColor(0.15, 0.35, 0.65, 0.9)
-                if fs then fs:SetTextColor(1, 0.82, 0) end
-            else
-                btn:SetBackdropColor(0.08, 0.12, 0.22, 0.7)
-                if fs then fs:SetTextColor(0.6, 0.65, 0.7) end
-            end
+            SetGFScopeButtonActive(btn, active)
         end
     end
 
@@ -790,17 +895,11 @@ function _G.MSUF_EnsureGFPanelBuilt()
         local prevBtn
         for _, info in ipairs({ { "party", "Party" }, { "raid", "Raid" }, { "mythicraid", "Mythic" } }) do
             local kind, label = info[1], info[2]
-            local btn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
-            btn:SetSize((kind == "mythicraid") and 68 or 56, 20)
-            btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-            btn:SetBackdropBorderColor(0.2, 0.35, 0.55, 0.5)
-            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            fs:SetPoint("CENTER"); fs:SetText(TR(label))
-            btn:SetFontString(fs)
+            local btn = MakeGFTopButton(scopeBar, label, (kind == "mythicraid") and 68 or 56, 24)
             if not prevBtn then
-                btn:SetPoint("LEFT", scopeLbl, "RIGHT", 8, 0)
+                btn:SetPoint("LEFT", scopeLbl, "RIGHT", 8, 2)
             else
-                btn:SetPoint("LEFT", prevBtn, "RIGHT", 2, 0)
+                btn:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
             end
             btn:SetScript("OnClick", function() SwitchScope(kind) end)
             scopeBtns[kind] = btn
@@ -826,30 +925,21 @@ function _G.MSUF_EnsureGFPanelBuilt()
         _allRefreshFns[#_allRefreshFns + 1] = RefreshMythicScopeState
     end
     -- Copy button (right side of scope bar, label changes with scope)
-    local copyBtn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
-    copyBtn:SetSize(110, 20)
-    copyBtn:SetPoint("RIGHT", scopeBar, "RIGHT", -8, 0)
-    copyBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-    copyBtn:SetBackdropColor(0.12, 0.18, 0.30, 0.9)
-    copyBtn:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
-    local copyFS = copyBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    copyFS:SetPoint("CENTER")
-    copyFS:SetTextColor(0.65, 0.78, 0.95)
-    copyBtn:SetFontString(copyFS)
+    local copyBtn = MakeGFTopButton(scopeBar, "Copy To", 86, 24)
+    copyBtn:SetPoint("RIGHT", scopeBar, "RIGHT", -8, 2)
+    local copyFS = copyBtn:GetFontString()
     copyBtn:SetScript("OnClick", function()
         ShowCopyPopup(copyBtn)
     end)
     copyBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(0.18, 0.28, 0.45, 1)
-        self:SetBackdropBorderColor(0.35, 0.55, 0.80, 1)
+        SetGFTopButtonColors(self, nil, nil, nil, true)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
         GameTooltip:SetText("Copy Settings", 1, 1, 1)
         GameTooltip:AddLine("Select which categories to copy\nbetween Party, Raid, and Mythic Raid settings.", 0.7, 0.7, 0.8, true)
         GameTooltip:Show()
     end)
     copyBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(0.12, 0.18, 0.30, 0.9)
-        self:SetBackdropBorderColor(0.25, 0.40, 0.65, 0.7)
+        SetGFTopButtonColors(self)
         GameTooltip:Hide()
     end)
 
@@ -990,17 +1080,16 @@ function _G.MSUF_EnsureGFPanelBuilt()
     ----------------------------------------------------------------
     -- MSUF Edit Mode button on scope bar
     ----------------------------------------------------------------
-    local editBtn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
-    editBtn:SetSize(116, 20)
+    local editBtn = MakeGFTopButton(scopeBar, "MSUF Edit Mode", 128, 24)
     editBtn:SetPoint("RIGHT", copyBtn, "LEFT", -6, 0)
-    editBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-    editBtn:SetBackdropColor(0.12, 0.24, 0.26, 0.92)
-    editBtn:SetBackdropBorderColor(0.24, 0.55, 0.58, 0.8)
-    local editFS = editBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    editFS:SetPoint("CENTER")
-    editFS:SetTextColor(0.75, 0.95, 0.95)
-    editBtn:SetFontString(editFS)
+    editBtn._msufBaseBgColor = { 0.06, 0.07, 0.13, 0.88 }
+    editBtn._msufBaseBorderColor = { 0.15, 0.18, 0.36, 0.45 }
+    editBtn._msufBaseTextColor = { 0.82, 0.96, 1.00, 1 }
+    editBtn._msufBgColor = editBtn._msufBaseBgColor
+    editBtn._msufBorderColor = editBtn._msufBaseBorderColor
+    editBtn._msufTextColor = editBtn._msufBaseTextColor
+    SetGFTopButtonColors(editBtn)
+    local editFS = editBtn:GetFontString()
 
     local function IsMSUFEditModeActive()
         if type(_G.MSUF_IsMSUFEditModeActive) == "function" then
@@ -1036,47 +1125,34 @@ function _G.MSUF_EnsureGFPanelBuilt()
         else RefreshEditModeButton() end
     end)
     editBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(0.17, 0.34, 0.36, 1)
-        self:SetBackdropBorderColor(0.35, 0.75, 0.78, 1)
+        SetGFTopButtonColors(self, nil, nil, nil, true)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
         GameTooltip:SetText(TR("MSUF Edit Mode"), 1, 1, 1)
         GameTooltip:AddLine("Toggle MSUF Edit Mode for Group Frames.", 0.7, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     editBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(0.12, 0.24, 0.26, 0.92)
-        self:SetBackdropBorderColor(0.24, 0.55, 0.58, 0.8)
+        SetGFTopButtonColors(self)
         GameTooltip:Hide()
     end)
     editBtn:SetScript("OnShow", RefreshEditModeButton)
     RefreshEditModeButton()
     rightAnchor = editBtn
 
-    local resetBtn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
-    resetBtn:SetSize(84, 20)
+    local resetBtn = MakeGFTopButton(scopeBar, "Reset All", 84, 24, { 0.18, 0.07, 0.08, 0.92 }, { 0.50, 0.18, 0.20, 0.78 }, { 1.00, 0.82, 0.82, 1 })
     resetBtn:SetPoint("RIGHT", rightAnchor, "LEFT", -6, 0)
-    resetBtn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-    resetBtn:SetBackdropColor(0.34, 0.14, 0.14, 0.92)
-    resetBtn:SetBackdropBorderColor(0.70, 0.28, 0.28, 0.8)
-    local resetFS = resetBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    resetFS:SetPoint("CENTER")
-    resetFS:SetText(TR("Reset All"))
-    resetFS:SetTextColor(1, 0.82, 0.82)
     resetBtn:SetScript("OnClick", function()
         StaticPopup_Show("MSUF_GF_RESET_ALL_CONFIRM")
     end)
     resetBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(0.42, 0.18, 0.18, 1)
-        self:SetBackdropBorderColor(0.85, 0.35, 0.35, 1)
+        SetGFTopButtonColors(self, nil, nil, nil, true)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
         GameTooltip:SetText(TR("Reset All"), 1, 1, 1)
         GameTooltip:AddLine("Resets Party, Raid, and Mythic Raid Group Frame settings to defaults for the active profile.", 0.8, 0.8, 0.85, true)
         GameTooltip:Show()
     end)
     resetBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(0.34, 0.14, 0.14, 0.92)
-        self:SetBackdropBorderColor(0.70, 0.28, 0.28, 0.8)
+        SetGFTopButtonColors(self)
         GameTooltip:Hide()
     end)
 
@@ -1819,17 +1895,15 @@ function _G.MSUF_EnsureGFPanelBuilt()
         _roleSortWrap:SetSize(300, 24)
         do
             local ALL_ROLES = {
-                { key = "TANK",    label = "Tank",   r = 0.30, g = 0.55, b = 0.85, mode = "both" },
-                { key = "HEALER",  label = "Healer", r = 0.20, g = 0.72, b = 0.35, mode = "both" },
-                { key = "DAMAGER", label = "DPS",    r = 0.82, g = 0.30, b = 0.30, mode = "merged" },
-                { key = "MELEE",   label = "Melee",  r = 0.90, g = 0.55, b = 0.20, mode = "split" },
-                { key = "RANGED",  label = "Ranged", r = 0.55, g = 0.40, b = 0.85, mode = "split" },
+                { key = "TANK",    label = "Tank",   r = 0.30, g = 0.55, b = 0.85 },
+                { key = "HEALER",  label = "Healer", r = 0.20, g = 0.72, b = 0.35 },
+                { key = "DAMAGER", label = "DPS",    r = 0.82, g = 0.30, b = 0.30 },
             }
             local ROLE_BY_KEY = {}
             for i, rd in ipairs(ALL_ROLES) do ROLE_BY_KEY[rd.key] = i end
             local ROW_H, ROW_GAP = 22, 4
             local ROW_W = 200
-            local MAX_ROWS = 5
+            local MAX_ROWS = 3
             local W8 = "Interface\\Buttons\\WHITE8x8"
 
             local _roleRows = {}
@@ -1854,16 +1928,9 @@ function _G.MSUF_EnsureGFPanelBuilt()
                 end,
             })
 
-            local meleeChk = SCheck({
-                name = "MSUF_GF_SeparateMeleeCheck", parent = _roleSortWrap,
-                anchor = roleSortChk, x = 16, y = -2,
-                label = TR("Separate Melee / Ranged"),
-                get = function(k) return GF.Val(k, "separateMeleeRanged") end,
-                set = function(k, v) GF.GetConf(k).separateMeleeRanged = v; GF.RebuildAll() end,
-            })
             local playerFirstChk = SCheck({
                 name = "MSUF_GF_PlayerFirstCheck", parent = _roleSortWrap,
-                anchor = meleeChk, x = 0, y = -2,
+                anchor = roleSortChk, x = 16, y = -2,
                 label = TR("Player first in role"),
                 get = function(k) return GF.Val(k, "playerFirstInRole") end,
                 set = function(k, v) GF.GetConf(k).playerFirstInRole = v; GF.RebuildAll() end,
@@ -1945,25 +2012,24 @@ function _G.MSUF_EnsureGFPanelBuilt()
                     SnapAll(); SaveOrder()
                 end)
                 rf:Hide()
-                _roleRows[i] = { frame = rf, key = rd.key, slotIndex = i, active = false, mode = rd.mode }
+                _roleRows[i] = { frame = rf, key = rd.key, slotIndex = i, active = false }
             end
 
-            local function SetMode(split)
-                _activeCount = split and 4 or 3
+            local function SetMode()
+                _activeCount = 3
                 for i = 1, MAX_ROWS do
-                    local m = _roleRows[i].mode
-                    _roleRows[i].active = (m == "both") or (split and m == "split") or (not split and m == "merged")
+                    _roleRows[i].active = true
                 end
             end
 
             local function InitFromDB()
                 local conf = GF.GetConf(K())
-                local split = conf.separateMeleeRanged == true
-                SetMode(split)
-                local str = conf.roleOrder or (split and "TANK,HEALER,MELEE,RANGED" or "TANK,HEALER,DAMAGER")
+                SetMode()
+                local str = conf.roleOrder or "TANK,HEALER,DAMAGER"
                 local slot = 0
                 local assigned = {}
                 for tok in str:gmatch("[^,]+") do
+                    if tok == "MELEE" or tok == "RANGED" then tok = "DAMAGER" end
                     local ri = ROLE_BY_KEY[tok]
                     if ri and _roleRows[ri].active and not assigned[ri] then
                         slot = slot + 1
@@ -1987,8 +2053,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
                         _roleRows[i].frame:EnableMouse(enabled)
                     end
                 end
-                meleeChk:SetAlpha(enabled and 1 or 0.4)
-                meleeChk:EnableMouse(enabled)
                 playerFirstChk:SetAlpha(enabled and 1 or 0.4)
                 playerFirstChk:EnableMouse(enabled)
             end
@@ -2004,9 +2068,6 @@ function _G.MSUF_EnsureGFPanelBuilt()
             _allRefreshFns[#_allRefreshFns + 1] = SyncRoleSort
             SyncRoleSort()
             roleSortChk:HookScript("OnClick", function()
-                C_Timer.After(0, function() SyncRoleSort() end)
-            end)
-            meleeChk:HookScript("OnClick", function()
                 C_Timer.After(0, function() SyncRoleSort() end)
             end)
         end
