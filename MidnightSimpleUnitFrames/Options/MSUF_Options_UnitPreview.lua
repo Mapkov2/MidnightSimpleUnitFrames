@@ -1,0 +1,2283 @@
+local addonName, addonNS = ...
+local ns = (_G.MSUF_NS) or addonNS or {}
+_G.MSUF_NS = ns
+
+ns.L = ns.L or (_G.MSUF_L) or {}
+local L = ns.L
+if not getmetatable(L) then
+    setmetatable(L, { __index = function(_, k) return k end })
+end
+local isEn = (ns and ns.LOCALE) == "enUS"
+local function TR(v)
+    if type(v) ~= "string" then return v end
+    if isEn then return v end
+    return L[v] or v
+end
+
+local floor, max, min = math.floor, math.max, math.min
+local format = string.format
+local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
+local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
+local SYMBOL_MEDIA = MEDIA .. "Symbols\\"
+
+local UNIT_KEYS = { "player", "target", "targettarget", "focus", "boss", "pet" }
+local UNIT_SET = { player = true, target = true, targettarget = true, focus = true, boss = true, pet = true }
+local UNIT_LABELS = {
+    player = "Player",
+    target = "Target",
+    targettarget = "Target of Target",
+    focus = "Focus",
+    boss = "Boss Frames",
+    pet = "Pet",
+}
+local UNIT_DATA = {
+    player = { name = "MIDNIGHT", class = "ROGUE", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false },
+    target = { name = "Astral Warden", class = "MAGE", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true },
+    targettarget = { name = "Moonlit Tank", class = "WARRIOR", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false },
+    focus = { name = "Voidcaller", class = "WARLOCK", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true },
+    boss = { name = "Boss Preview", class = "DEATHKNIGHT", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true },
+    pet = { name = "Companion", class = "HUNTER", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false },
+}
+
+local TEXT_ANCHORS = {
+    { key = "LEFT", label = "Left" },
+    { key = "CENTER", label = "Center" },
+    { key = "RIGHT", label = "Right" },
+}
+local HP_MODES = {
+    { key = "PERCENT", label = "Percent" },
+    { key = "CURRENT", label = "Current" },
+    { key = "MAX", label = "Max" },
+    { key = "DEFICIT", label = "Deficit" },
+    { key = "CURMAX", label = "Current / Max" },
+    { key = "CURPERCENT", label = "Current / Percent" },
+    { key = "CURMAXPERCENT", label = "Current / Max / Percent" },
+    { key = "MAXPERCENT", label = "Max / Percent" },
+    { key = "PERCENTCUR", label = "Percent / Current" },
+    { key = "PERCENTMAX", label = "Percent / Max" },
+    { key = "PERCENTCURMAX", label = "Percent / Current / Max" },
+    { key = "NONE", label = "None" },
+}
+local POWER_MODES = {
+    { key = "CURRENT", label = "Current" },
+    { key = "MAX", label = "Max" },
+    { key = "CURMAX", label = "Current / Max" },
+    { key = "PERCENT", label = "Percent" },
+    { key = "CURPERCENT", label = "Current / Percent" },
+    { key = "CURMAXPERCENT", label = "Current / Max / Percent" },
+    { key = "NONE", label = "None" },
+}
+local SEP_ITEMS = {
+    { key = "", label = "space" },
+    { key = "-", label = "-" },
+    { key = "/", label = "/" },
+    { key = "\\", label = "\\" },
+    { key = "|", label = "|" },
+    { key = "<", label = "<" },
+    { key = ">", label = ">" },
+    { key = "~", label = "~" },
+    { key = ":", label = ":" },
+}
+local PORTRAIT_MODE_ITEMS = {
+    { key = "OFF", label = "Off" },
+    { key = "LEFT", label = "Left" },
+    { key = "RIGHT", label = "Right" },
+}
+local PORTRAIT_RENDER_ITEMS = {
+    { key = "2D", label = "2D portrait" },
+    { key = "CLASS", label = "Class portrait" },
+}
+local function PortraitClassItems()
+    local PM = ns and ns.PortraitMedia
+    local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {
+        { value = "BLIZZARD", text = "Blizzard Class Icon" },
+    }
+    local items = {}
+    for i = 1, #opts do
+        local o = opts[i]
+        items[#items + 1] = { key = o.value, label = o.text }
+    end
+    return items
+end
+local PORTRAIT_SHAPE_ITEMS = {
+    { key = "SQUARE", label = "Square" },
+    { key = "CIRCLE", label = "Circle" },
+    { key = "ROUNDED", label = "Rounded" },
+    { key = "DIAMOND", label = "Diamond" },
+}
+local PORTRAIT_BORDER_ITEMS = {
+    { key = "NONE", label = "No border" },
+    { key = "SOLID", label = "Solid" },
+    { key = "CLASS_COLOR", label = "Class color" },
+    { key = "REACTION", label = "Reaction color" },
+    { key = "CUSTOM", label = "Custom color" },
+}
+
+local PORTRAIT_STYLE_DEFAULTS = {
+    portraitRender = "2D",
+    portraitClassStyle = "BLIZZARD",
+    portraitShape = "SQUARE",
+    portraitSizeOverride = 0,
+    portraitOffsetX = 0,
+    portraitOffsetY = 0,
+    portraitBorderStyle = "NONE",
+    portraitBorderThickness = 2,
+    portraitBorderColorR = 1,
+    portraitBorderColorG = 1,
+    portraitBorderColorB = 1,
+    portraitBorderColorA = 1,
+    portraitBgEnabled = false,
+    portraitBgColorR = 0.05,
+    portraitBgColorG = 0.05,
+    portraitBgColorB = 0.05,
+    portraitBgColorA = 0.85,
+    portraitFillBorder = false,
+}
+
+local function CanonKey(key)
+    if key == "tot" then return "targettarget" end
+    if type(key) == "string" and key:match("^boss%d+$") then return "boss" end
+    if UNIT_SET[key] then return key end
+    return "player"
+end
+
+local function EnsureDB()
+    if type(_G.EnsureDB) == "function" then
+        _G.EnsureDB()
+    elseif ns and type(ns.EnsureDB) == "function" then
+        ns.EnsureDB()
+    end
+    _G.MSUF_DB = _G.MSUF_DB or {}
+    _G.MSUF_DB.general = _G.MSUF_DB.general or {}
+    for i = 1, #UNIT_KEYS do
+        _G.MSUF_DB[UNIT_KEYS[i]] = _G.MSUF_DB[UNIT_KEYS[i]] or {}
+    end
+end
+
+local function CurrentPanelKey(panel)
+    local key = panel and panel._msufGetCurrentKey and panel._msufGetCurrentKey()
+    if key == nil then key = panel and panel._msufLastApplyKey end
+    return CanonKey(key)
+end
+
+local function UnitDB(key)
+    EnsureDB()
+    key = CanonKey(key)
+    _G.MSUF_DB[key] = _G.MSUF_DB[key] or {}
+    return _G.MSUF_DB[key], _G.MSUF_DB.general, key
+end
+
+local function TextOverrideActive(db)
+    return db and db.hpPowerTextOverride == true
+end
+
+local function SeedTextFromGeneral(db)
+    if not db then return end
+    if type(_G.MSUF_Bars_SeedTextFromGeneral) == "function" then
+        _G.MSUF_Bars_SeedTextFromGeneral(db)
+        return
+    end
+    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    if db.hpTextMode == nil then db.hpTextMode = g.hpTextMode end
+    if db.hpTextReverse == nil then db.hpTextReverse = g.hpTextReverse end
+    if db.powerTextMode == nil then db.powerTextMode = g.powerTextMode end
+    if db.hpTextSeparator == nil then db.hpTextSeparator = g.hpTextSeparator end
+    if db.powerTextSeparator == nil then db.powerTextSeparator = g.powerTextSeparator end
+    if db.hpTextSpacerEnabled == nil then db.hpTextSpacerEnabled = g.hpTextSpacerEnabled end
+    if db.hpTextSpacerX == nil then db.hpTextSpacerX = g.hpTextSpacerX end
+    if db.powerTextSpacerEnabled == nil then db.powerTextSpacerEnabled = g.powerTextSpacerEnabled end
+    if db.powerTextSpacerX == nil then db.powerTextSpacerX = g.powerTextSpacerX end
+    if db.hpTextAnchor == nil then db.hpTextAnchor = g.hpTextAnchor end
+    if db.powerTextAnchor == nil then db.powerTextAnchor = g.powerTextAnchor end
+end
+
+local function NormalizeHpMode(mode)
+    if type(_G.MSUF_NormalizeHpTextMode) == "function" then return _G.MSUF_NormalizeHpTextMode(mode) end
+    if mode == nil then return "CURPERCENT" end
+    if mode == "FULL_ONLY" then return "CURRENT" end
+    if mode == "PERCENT_ONLY" then return "PERCENT" end
+    if mode == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
+    if mode == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
+    return mode
+end
+
+local function NormalizePowerMode(mode)
+    if type(_G.MSUF_NormalizePowerTextMode) == "function" then return _G.MSUF_NormalizePowerTextMode(mode) end
+    if mode == nil then return "CURPERCENT" end
+    if mode == "FULL_SLASH_MAX" then return "CURMAX" end
+    if mode == "FULL_ONLY" then return "CURRENT" end
+    if mode == "PERCENT_ONLY" then return "PERCENT" end
+    if mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" then return "CURPERCENT" end
+    return mode
+end
+
+local function TextScopeGet(key, field, defaultValue)
+    local u, g = UnitDB(key)
+    if TextOverrideActive(u) and u[field] ~= nil then return u[field] end
+    if g[field] ~= nil then return g[field] end
+    return defaultValue
+end
+
+local function TextScopeSet(key, field, value)
+    local u, g = UnitDB(key)
+    if TextOverrideActive(u) then
+        u[field] = value
+    else
+        g[field] = value
+    end
+end
+
+local function ForceTextUnit(key, reason)
+    key = CanonKey(key)
+    if type(_G.MSUF_UFCore_RequestLayoutForUnit) == "function" then
+        _G.MSUF_UFCore_RequestLayoutForUnit(key, reason or "UNIT_TEXT_OPTIONS", key == "target" or key == "targettarget" or key == "focus")
+    end
+    if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+        _G.MSUF_ForceTextLayoutForUnitKey(key)
+    end
+end
+
+local function ForceTextAll(reason)
+    for i = 1, #UNIT_KEYS do ForceTextUnit(UNIT_KEYS[i], reason) end
+end
+
+local function ApplyPanelUnit(panel, key, reason)
+    key = CanonKey(key or CurrentPanelKey(panel))
+    if panel and panel._msufAPI and type(panel._msufAPI.ApplySettingsForKey) == "function" then
+        panel._msufAPI.ApplySettingsForKey(key)
+    end
+    if type(_G.MSUF_SyncUnitPositionPopup) == "function" then _G.MSUF_SyncUnitPositionPopup(key, _G.MSUF_DB and _G.MSUF_DB[key]) end
+    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "UNIT_OPTIONS") end
+end
+
+local function RefreshAllControls(list)
+    if not list then return end
+    for i = 1, #list do
+        local w = list[i]
+        if w and type(w.Refresh) == "function" then w:Refresh() end
+    end
+end
+
+local function Label(parent, text, anchor, x, y, width)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local rel = (anchor and anchor ~= parent) and "BOTTOMLEFT" or "TOPLEFT"
+    fs:SetPoint("TOPLEFT", anchor or parent, rel, x or 12, y or -8)
+    fs:SetText(TR(text or ""))
+    if width then fs:SetWidth(width); fs:SetJustifyH("LEFT") end
+    return fs
+end
+
+local function PlaceTopLeft(widget, anchor, x, y)
+    if not widget or not widget.ClearAllPoints or not widget.SetPoint then return end
+    anchor = anchor or (widget.GetParent and widget:GetParent())
+    if not anchor then return end
+    widget:ClearAllPoints()
+    widget:SetPoint("TOPLEFT", anchor, "TOPLEFT", x or 0, y or 0)
+end
+
+local function SetOptionWidth(widget, width)
+    if widget and width and widget.SetWidth then widget:SetWidth(width) end
+end
+
+local function AddOptionDivider(parent, anchor, y, width)
+    if not parent or not anchor then return nil end
+    local line = parent:CreateTexture(nil, "ARTWORK")
+    line:SetHeight(1)
+    line:SetColorTexture(0.20, 0.32, 0.45, 0.32)
+    line:SetPoint("TOPLEFT", anchor, "TOPLEFT", -2, y or 0)
+    line:SetWidth(width or 260)
+    return line
+end
+
+local function SetWidgetEnabled(w, enabled)
+    if not w then return end
+    if type(w.SetEnabled) == "function" then w:SetEnabled(enabled and true or false) end
+    if w.SetAlpha then w:SetAlpha(enabled and 1 or 0.45) end
+    if w.EnableMouse then w:EnableMouse(enabled and true or false) end
+end
+
+local function AddPlainCheck(parent, name, label, x, y)
+    local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
+    cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 12, y or -8)
+    if cb.Text then cb.Text:SetText(TR(label or "")) end
+    if ns.UI and ns.UI.StyleCheckmark then ns.UI.StyleCheckmark(cb) end
+    if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(cb, 180) end
+    return cb
+end
+
+function ns.MSUF_Options_BuildUnitTextSection(panel, body)
+    if not panel or not body then return end
+    local UI = ns.UI
+    if not (UI and UI.Dropdown and UI.Slider and UI.Check) then
+        local warn = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        warn:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -12)
+        warn:SetText(TR("MSUF: Options toolkit missing."))
+        return
+    end
+
+    local controls = {}
+    panel._msufUnitTextControls = controls
+
+    local function Key() return CurrentPanelKey(panel) end
+    local function Conf() return UnitDB(Key()) end
+    local function ApplyLocal(field)
+        local key = Key()
+        ForceTextUnit(key, field or "UNIT_TEXT_OPTIONS")
+        ApplyPanelUnit(panel, key, field or "UNIT_TEXT_OPTIONS")
+        if panel._msufRefreshUnitTextControls then panel._msufRefreshUnitTextControls() end
+    end
+    local function ApplyShared(field)
+        ForceTextAll(field or "UNIT_TEXT_SHARED_OPTIONS")
+        ApplyPanelUnit(panel, Key(), field or "UNIT_TEXT_SHARED_OPTIONS")
+        if panel._msufRefreshUnitTextControls then panel._msufRefreshUnitTextControls() end
+    end
+    local function ReadUnit(field, fallback)
+        local c = Conf()
+        if c[field] ~= nil then return c[field] end
+        return fallback
+    end
+    local function WriteUnit(field, value)
+        local c = Conf()
+        c[field] = value
+        ApplyLocal(field)
+    end
+    local function ReadText(field, fallback)
+        return TextScopeGet(Key(), field, fallback)
+    end
+    local function WriteText(field, value)
+        local k = Key()
+        local u = UnitDB(k)
+        local shared = not TextOverrideActive(u)
+        TextScopeSet(k, field, value)
+        if shared then ApplyShared(field) else ApplyLocal(field) end
+    end
+
+    local source = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    source:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
+    source:SetTextColor(0.66, 0.78, 1)
+    source:SetWidth(580)
+    source:SetJustifyH("LEFT")
+    panel.unitTextSourceLabel = source
+
+    local override = UI.Check({
+        name = "MSUF_UF_TextOverrideCheck", parent = body,
+        anchor = body, anchorPoint = "TOPLEFT", x = 12, y = -28,
+        label = "Override shared HP / Power pattern",
+        maxTextWidth = 260,
+        get = function()
+            local c = Conf()
+            return TextOverrideActive(c)
+        end,
+        set = function(v)
+            local c = Conf()
+            if v then
+                c.hpPowerTextOverride = true
+                SeedTextFromGeneral(c)
+            else
+                c.hpPowerTextOverride = false
+            end
+            ApplyLocal("TEXT_OVERRIDE")
+        end,
+        tooltip = "When disabled, HP and power modes, separators, and spacers use the shared Unit Frame baseline.",
+    })
+    controls[#controls + 1] = override
+
+    panel.playerShowNameCB = AddPlainCheck(body, "MSUF_UF_ShowNameCB", "Show name", 14, -70)
+    panel.playerShowHPCB = AddPlainCheck(body, "MSUF_UF_ShowHPCB", "Show HP text", 190, -70)
+    panel.playerShowPowerCB = AddPlainCheck(body, "MSUF_UF_ShowPowerCB", "Show power text", 370, -70)
+    local function BindShowRefresh(cb, field)
+        if not cb then return end
+        function cb:Refresh()
+            local c = Conf()
+            self:SetChecked(c[field] ~= false)
+        end
+        controls[#controls + 1] = cb
+    end
+    BindShowRefresh(panel.playerShowNameCB, "showName")
+    BindShowRefresh(panel.playerShowHPCB, "showHP")
+    BindShowRefresh(panel.playerShowPowerCB, "showPower")
+
+    local nameLabel = Label(body, "Name", body, 14, -112, 120)
+    local nameAnchor = UI.Dropdown({
+        name = "MSUF_UF_NameAnchorDrop", parent = body, anchor = nameLabel, x = -16, y = -4, width = 140,
+        items = TEXT_ANCHORS,
+        get = function() return ReadUnit("nameTextAnchor", "LEFT") end,
+        set = function(v) WriteUnit("nameTextAnchor", v or "LEFT") end,
+    })
+    controls[#controls + 1] = nameAnchor
+    local nameX = UI.Slider({
+        name = "MSUF_UF_NameOffsetXSlider", parent = body, compact = true, compactInput = true,
+        anchor = nameAnchor, anchorPoint = "TOPLEFT", x = 178, y = 0, min = -300, max = 300, step = 1, width = 250, default = 4,
+        get = function() return tonumber(ReadUnit("nameOffsetX", 4)) or 4 end,
+        set = function(v) WriteUnit("nameOffsetX", floor((tonumber(v) or 4) + 0.5)) end,
+        formatText = function(v) return format("Name X: %d", v) end,
+    })
+    controls[#controls + 1] = nameX
+    local nameY = UI.Slider({
+        name = "MSUF_UF_NameOffsetYSlider", parent = body, compact = true, compactInput = true,
+        anchor = nameX, x = 0, y = -28, min = -300, max = 300, step = 1, width = 250, default = -4,
+        get = function() return tonumber(ReadUnit("nameOffsetY", -4)) or -4 end,
+        set = function(v) WriteUnit("nameOffsetY", floor((tonumber(v) or -4) + 0.5)) end,
+        formatText = function(v) return format("Name Y: %d", v) end,
+    })
+    controls[#controls + 1] = nameY
+    local nameSize = UI.Slider({
+        name = "MSUF_UF_NameFontSizeSlider", parent = body, compact = true, compactInput = true,
+        anchor = nameY, x = 0, y = -28, min = 6, max = 32, step = 1, width = 250, default = 12,
+        get = function() return tonumber(ReadUnit("nameFontSize", 12)) or 12 end,
+        set = function(v) WriteUnit("nameFontSize", floor((tonumber(v) or 12) + 0.5)); if type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then _G.MSUF_UpdateAllFonts_Immediate() end end,
+        formatText = function(v) return format("Name size: %d", v) end,
+    })
+    controls[#controls + 1] = nameSize
+
+    local hpLabel = Label(body, "Health", body, 14, -226, 120)
+    local hpMode = UI.Dropdown({
+        name = "MSUF_UF_HPTextModeDrop", parent = body, anchor = hpLabel, x = -16, y = -4, width = 240, maxVisible = 8,
+        items = HP_MODES,
+        get = function() return NormalizeHpMode(ReadText("hpTextMode", "CURPERCENT")) end,
+        set = function(v) WriteText("hpTextMode", v or "CURPERCENT") end,
+    })
+    controls[#controls + 1] = hpMode
+    local hpAnchor = UI.Dropdown({
+        name = "MSUF_UF_HPAnchorDrop", parent = body, anchor = hpMode, anchorPoint = "TOPLEFT", x = 258, y = 0, width = 140,
+        items = TEXT_ANCHORS,
+        get = function()
+            local c, g = Conf()
+            return c.hpTextAnchor or g.hpTextAnchor or "RIGHT"
+        end,
+        set = function(v) WriteUnit("hpTextAnchor", v or "RIGHT") end,
+    })
+    controls[#controls + 1] = hpAnchor
+    local hpSep = UI.Dropdown({
+        name = "MSUF_UF_HPSeparatorDrop", parent = body, anchor = hpAnchor, anchorPoint = "TOPLEFT", x = 154, y = 0, width = 110,
+        items = SEP_ITEMS,
+        get = function() return ReadText("hpTextSeparator", "") end,
+        set = function(v) WriteText("hpTextSeparator", v or "") end,
+    })
+    controls[#controls + 1] = hpSep
+    local hpX = UI.Slider({
+        name = "MSUF_UF_HPOffsetXSlider", parent = body, compact = true, compactInput = true,
+        anchor = hpMode, x = 16, y = -30, min = -300, max = 300, step = 1, width = 250, default = -4,
+        get = function() return tonumber(ReadUnit("hpOffsetX", -4)) or -4 end,
+        set = function(v) WriteUnit("hpOffsetX", floor((tonumber(v) or -4) + 0.5)) end,
+        formatText = function(v) return format("HP X: %d", v) end,
+    })
+    controls[#controls + 1] = hpX
+    local hpY = UI.Slider({
+        name = "MSUF_UF_HPOffsetYSlider", parent = body, compact = true, compactInput = true,
+        anchor = hpX, anchorPoint = "TOPLEFT", x = 286, y = 0, min = -300, max = 300, step = 1, width = 250, default = -4,
+        get = function() return tonumber(ReadUnit("hpOffsetY", -4)) or -4 end,
+        set = function(v) WriteUnit("hpOffsetY", floor((tonumber(v) or -4) + 0.5)) end,
+        formatText = function(v) return format("HP Y: %d", v) end,
+    })
+    controls[#controls + 1] = hpY
+    local hpSize = UI.Slider({
+        name = "MSUF_UF_HPFontSizeSlider", parent = body, compact = true, compactInput = true,
+        anchor = hpX, x = 0, y = -28, min = 6, max = 32, step = 1, width = 250, default = 12,
+        get = function() return tonumber(ReadUnit("hpFontSize", 12)) or 12 end,
+        set = function(v) WriteUnit("hpFontSize", floor((tonumber(v) or 12) + 0.5)); if type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then _G.MSUF_UpdateAllFonts_Immediate() end end,
+        formatText = function(v) return format("HP size: %d", v) end,
+    })
+    controls[#controls + 1] = hpSize
+    local hpSpacer = UI.Check({
+        name = "MSUF_UF_HPSpacerCheck", parent = body, anchor = hpSize, anchorPoint = "TOPLEFT", x = 286, y = -2,
+        label = "HP spacer",
+        maxTextWidth = 140,
+        get = function() return ReadText("hpTextSpacerEnabled", false) == true end,
+        set = function(v) WriteText("hpTextSpacerEnabled", v and true or false) end,
+    })
+    controls[#controls + 1] = hpSpacer
+    local hpSpacerX = UI.Slider({
+        name = "MSUF_UF_HPSpacerXSlider", parent = body, compact = true, compactInput = true,
+        anchor = hpSpacer, x = 0, y = -10, min = 0, max = 1000, step = 1, width = 250, default = 0,
+        get = function() return tonumber(ReadText("hpTextSpacerX", 0)) or 0 end,
+        set = function(v) WriteText("hpTextSpacerX", floor((tonumber(v) or 0) + 0.5)) end,
+        formatText = function(v) return format("HP spacer X: %d", v) end,
+    })
+    controls[#controls + 1] = hpSpacerX
+
+    local reverse = UI.Check({
+        name = "MSUF_UF_HPTextReverseCheck", parent = body, anchor = hpSize, x = 0, y = -8,
+        label = "Reverse HP text order",
+        maxTextWidth = 220,
+        get = function() return ReadText("hpTextReverse", false) == true end,
+        set = function(v) WriteText("hpTextReverse", v and true or false) end,
+    })
+    controls[#controls + 1] = reverse
+
+    local pLabel = Label(body, "Power", body, 14, -382, 120)
+    local pMode = UI.Dropdown({
+        name = "MSUF_UF_PowerTextModeDrop", parent = body, anchor = pLabel, x = -16, y = -4, width = 240, maxVisible = 8,
+        items = POWER_MODES,
+        get = function() return NormalizePowerMode(ReadText("powerTextMode", "CURPERCENT")) end,
+        set = function(v) WriteText("powerTextMode", v or "CURPERCENT") end,
+    })
+    controls[#controls + 1] = pMode
+    local pAnchor = UI.Dropdown({
+        name = "MSUF_UF_PowerAnchorDrop", parent = body, anchor = pMode, anchorPoint = "TOPLEFT", x = 258, y = 0, width = 140,
+        items = TEXT_ANCHORS,
+        get = function()
+            local c, g = Conf()
+            return c.powerTextAnchor or g.powerTextAnchor or "RIGHT"
+        end,
+        set = function(v) WriteUnit("powerTextAnchor", v or "RIGHT") end,
+    })
+    controls[#controls + 1] = pAnchor
+    local pSep = UI.Dropdown({
+        name = "MSUF_UF_PowerSeparatorDrop", parent = body, anchor = pAnchor, anchorPoint = "TOPLEFT", x = 154, y = 0, width = 110,
+        items = SEP_ITEMS,
+        get = function()
+            local v = ReadText("powerTextSeparator", nil)
+            if v == nil then v = ReadText("hpTextSeparator", "") end
+            return v or ""
+        end,
+        set = function(v) WriteText("powerTextSeparator", v or "") end,
+    })
+    controls[#controls + 1] = pSep
+    local pX = UI.Slider({
+        name = "MSUF_UF_PowerOffsetXSlider", parent = body, compact = true, compactInput = true,
+        anchor = pMode, x = 16, y = -30, min = -300, max = 300, step = 1, width = 250, default = -4,
+        get = function() return tonumber(ReadUnit("powerOffsetX", -4)) or -4 end,
+        set = function(v) WriteUnit("powerOffsetX", floor((tonumber(v) or -4) + 0.5)) end,
+        formatText = function(v) return format("Power X: %d", v) end,
+    })
+    controls[#controls + 1] = pX
+    local pY = UI.Slider({
+        name = "MSUF_UF_PowerOffsetYSlider", parent = body, compact = true, compactInput = true,
+        anchor = pX, anchorPoint = "TOPLEFT", x = 286, y = 0, min = -300, max = 300, step = 1, width = 250, default = 4,
+        get = function() return tonumber(ReadUnit("powerOffsetY", 4)) or 4 end,
+        set = function(v) WriteUnit("powerOffsetY", floor((tonumber(v) or 4) + 0.5)) end,
+        formatText = function(v) return format("Power Y: %d", v) end,
+    })
+    controls[#controls + 1] = pY
+    local pSize = UI.Slider({
+        name = "MSUF_UF_PowerFontSizeSlider", parent = body, compact = true, compactInput = true,
+        anchor = pX, x = 0, y = -28, min = 6, max = 32, step = 1, width = 250, default = 12,
+        get = function() return tonumber(ReadUnit("powerFontSize", 12)) or 12 end,
+        set = function(v) WriteUnit("powerFontSize", floor((tonumber(v) or 12) + 0.5)); if type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then _G.MSUF_UpdateAllFonts_Immediate() end end,
+        formatText = function(v) return format("Power size: %d", v) end,
+    })
+    controls[#controls + 1] = pSize
+    local pSpacer = UI.Check({
+        name = "MSUF_UF_PowerSpacerCheck", parent = body, anchor = pSize, anchorPoint = "TOPLEFT", x = 286, y = -2,
+        label = "Power spacer",
+        maxTextWidth = 160,
+        get = function() return ReadText("powerTextSpacerEnabled", false) == true end,
+        set = function(v) WriteText("powerTextSpacerEnabled", v and true or false) end,
+    })
+    controls[#controls + 1] = pSpacer
+    local pSpacerX = UI.Slider({
+        name = "MSUF_UF_PowerSpacerXSlider", parent = body, compact = true, compactInput = true,
+        anchor = pSpacer, x = 0, y = -10, min = 0, max = 1000, step = 1, width = 250, default = 0,
+        get = function() return tonumber(ReadText("powerTextSpacerX", 0)) or 0 end,
+        set = function(v) WriteText("powerTextSpacerX", floor((tonumber(v) or 0) + 0.5)) end,
+        formatText = function(v) return format("Power spacer X: %d", v) end,
+    })
+    controls[#controls + 1] = pSpacerX
+
+    do
+        local colL = CreateFrame("Frame", nil, body)
+        colL:SetSize(292, 1)
+        PlaceTopLeft(colL, body, 18, -76)
+
+        local colR = CreateFrame("Frame", nil, body)
+        colR:SetSize(292, 1)
+        PlaceTopLeft(colR, body, 338, -76)
+
+        local vDiv = body:CreateTexture(nil, "ARTWORK")
+        vDiv:SetWidth(1)
+        vDiv:SetColorTexture(0.20, 0.32, 0.45, 0.32)
+        vDiv:SetPoint("TOPLEFT", body, "TOPLEFT", 318, -70)
+        vDiv:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", 318, 14)
+
+        AddOptionDivider(body, colL, -286, 270)
+        AddOptionDivider(body, colR, -432, 270)
+
+        nameLabel:SetText(TR("Name"))
+        nameLabel:SetTextColor(1, 0.82, 0)
+        hpLabel:SetText(TR("HP Text"))
+        hpLabel:SetTextColor(1, 0.82, 0)
+        pLabel:SetText(TR("Power Text"))
+        pLabel:SetTextColor(1, 0.82, 0)
+
+        PlaceTopLeft(override, body, 12, -32)
+
+        PlaceTopLeft(nameLabel, colL, 0, 0)
+        PlaceTopLeft(panel.playerShowNameCB, colL, 0, -18)
+        PlaceTopLeft(nameAnchor, colL, 0, -66)
+        PlaceTopLeft(nameX, colL, 16, -112)
+        PlaceTopLeft(nameY, colL, 16, -170)
+        PlaceTopLeft(nameSize, colL, 16, -228)
+        SetOptionWidth(nameX, 180)
+        SetOptionWidth(nameY, 180)
+        SetOptionWidth(nameSize, 180)
+
+        PlaceTopLeft(pLabel, colL, 0, -314)
+        PlaceTopLeft(panel.playerShowPowerCB, colL, 0, -332)
+        PlaceTopLeft(pMode, colL, 0, -380)
+        PlaceTopLeft(pAnchor, colL, 0, -432)
+        PlaceTopLeft(pSep, colL, 0, -484)
+        PlaceTopLeft(pX, colL, 16, -540)
+        PlaceTopLeft(pY, colL, 16, -598)
+        PlaceTopLeft(pSize, colL, 16, -656)
+        PlaceTopLeft(pSpacer, colL, 0, -716)
+        PlaceTopLeft(pSpacerX, colL, 16, -760)
+        SetOptionWidth(pX, 180)
+        SetOptionWidth(pY, 180)
+        SetOptionWidth(pSize, 180)
+        SetOptionWidth(pSpacerX, 180)
+
+        PlaceTopLeft(hpLabel, colR, 0, 0)
+        PlaceTopLeft(panel.playerShowHPCB, colR, 0, -18)
+        PlaceTopLeft(hpMode, colR, 0, -66)
+        PlaceTopLeft(hpAnchor, colR, 0, -118)
+        PlaceTopLeft(hpSep, colR, 0, -170)
+        PlaceTopLeft(reverse, colR, 0, -214)
+        PlaceTopLeft(hpX, colR, 16, -260)
+        PlaceTopLeft(hpY, colR, 16, -318)
+        PlaceTopLeft(hpSize, colR, 16, -376)
+        PlaceTopLeft(hpSpacer, colR, 0, -436)
+        PlaceTopLeft(hpSpacerX, colR, 16, -480)
+        SetOptionWidth(hpX, 180)
+        SetOptionWidth(hpY, 180)
+        SetOptionWidth(hpSize, 180)
+        SetOptionWidth(hpSpacerX, 180)
+    end
+
+    panel._msufRefreshUnitTextControls = function()
+        local c = Conf()
+        if source then
+            local src = TextOverrideActive(c) and ("Editing " .. (UNIT_LABELS[Key()] or Key()) .. " HP/Power pattern override")
+                or "Editing shared HP/Power pattern baseline"
+            source:SetText(TR(src))
+        end
+        RefreshAllControls(controls)
+        local textActive = TextOverrideActive(c)
+        SetWidgetEnabled(hpSpacerX, c.showHP ~= false and ReadText("hpTextSpacerEnabled", false) == true)
+        SetWidgetEnabled(pSpacerX, c.showPower ~= false and ReadText("powerTextSpacerEnabled", false) == true)
+        SetWidgetEnabled(nameAnchor, c.showName ~= false)
+        SetWidgetEnabled(nameX, c.showName ~= false)
+        SetWidgetEnabled(nameY, c.showName ~= false)
+        SetWidgetEnabled(nameSize, c.showName ~= false)
+        SetWidgetEnabled(hpMode, c.showHP ~= false)
+        SetWidgetEnabled(hpAnchor, c.showHP ~= false)
+        SetWidgetEnabled(hpSep, c.showHP ~= false)
+        SetWidgetEnabled(hpX, c.showHP ~= false)
+        SetWidgetEnabled(hpY, c.showHP ~= false)
+        SetWidgetEnabled(hpSize, c.showHP ~= false)
+        SetWidgetEnabled(hpSpacer, c.showHP ~= false)
+        SetWidgetEnabled(reverse, c.showHP ~= false)
+        SetWidgetEnabled(pMode, c.showPower ~= false)
+        SetWidgetEnabled(pAnchor, c.showPower ~= false)
+        SetWidgetEnabled(pSep, c.showPower ~= false)
+        SetWidgetEnabled(pX, c.showPower ~= false)
+        SetWidgetEnabled(pY, c.showPower ~= false)
+        SetWidgetEnabled(pSize, c.showPower ~= false)
+        SetWidgetEnabled(pSpacer, c.showPower ~= false)
+        if not textActive then
+            -- The dropdowns remain enabled: edits intentionally update Shared, matching the inherited values shown.
+        end
+    end
+    panel._msufRefreshUnitTextControls()
+end
+
+local function NormalizePortraitClassStyle(style)
+    if style == "class_colored_border" or style == "colored" then return "RONDO_COLOR" end
+    if style == "wow_icon_border" or style == "wow" then return "RONDO_WOW" end
+    if style == "RONDO_COLOR" or style == "RONDO_WOW" or style == "BLIZZARD" then return style end
+    return "BLIZZARD"
+end
+
+local function EnsureUnitPortraitStyle(key)
+    local u = UnitDB(key)
+    if not u then return nil end
+    u.portraitDecoOverride = nil
+    for field, value in pairs(PORTRAIT_STYLE_DEFAULTS) do
+        if u[field] == nil then u[field] = value end
+    end
+    u.portraitRender = (u.portraitRender == "CLASS") and "CLASS" or "2D"
+    u.portraitClassStyle = NormalizePortraitClassStyle(u.portraitClassStyle)
+    return u
+end
+
+local function PortraitStyleGet(key, field, defaultValue)
+    local u = EnsureUnitPortraitStyle(key)
+    if u and u[field] ~= nil then return u[field] end
+    return defaultValue
+end
+
+local function PortraitStyleSet(key, field, value)
+    local u = EnsureUnitPortraitStyle(key)
+    if not u then return end
+    if field == "portraitClassStyle" then
+        value = NormalizePortraitClassStyle(value)
+    elseif field == "portraitRender" then
+        value = (value == "CLASS") and "CLASS" or "2D"
+    end
+    u[field] = value
+end
+
+local function ApplyPortrait(panel, key, reason)
+    key = CanonKey(key or CurrentPanelKey(panel))
+    if type(_G.MSUF_Portraits_SyncUnit) == "function" then _G.MSUF_Portraits_SyncUnit(key) end
+    if type(_G.MSUF_PortraitDecoration_SyncUnit) == "function" then _G.MSUF_PortraitDecoration_SyncUnit(key) end
+    if type(_G.MSUF_PortraitDecoration_RefreshAll) == "function" then _G.MSUF_PortraitDecoration_RefreshAll() end
+    ApplyPanelUnit(panel, key, reason or "UNIT_PORTRAIT_OPTIONS")
+end
+
+function ns.MSUF_Options_BuildUnitPortraitSection(panel, body)
+    if not panel or not body then return end
+    local UI = ns.UI
+    if not (UI and UI.Dropdown and UI.Slider and UI.Check) then
+        local warn = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        warn:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -12)
+        warn:SetText(TR("MSUF: Options toolkit missing."))
+        return
+    end
+
+    local controls = {}
+    panel._msufUnitPortraitControls = controls
+    local function Key() return CurrentPanelKey(panel) end
+    local function Conf() return UnitDB(Key()) end
+    local function Apply(reason)
+        ApplyPortrait(panel, Key(), reason)
+        if panel._msufRefreshUnitPortraitControls then panel._msufRefreshUnitPortraitControls() end
+    end
+
+    local source = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    source:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -8)
+    source:SetTextColor(0.66, 0.78, 1)
+    source:SetWidth(580)
+    source:SetJustifyH("LEFT")
+    panel.unitPortraitSourceLabel = source
+
+    local modeLabel = Label(body, "Position", body, 14, -36, 120)
+    local mode = UI.Dropdown({
+        name = "MSUF_UF_PortraitDropDown", parent = body, anchor = modeLabel, x = -16, y = -4, width = 190,
+        items = PORTRAIT_MODE_ITEMS,
+        get = function()
+            local c = Conf()
+            local v = c.portraitMode
+            if v == "LEFT" or v == "RIGHT" then return v end
+            return "OFF"
+        end,
+        set = function(v)
+            local c = Conf()
+            c.portraitMode = (v == "LEFT" or v == "RIGHT") and v or "OFF"
+            Apply("PORTRAIT_MODE")
+        end,
+    })
+    controls[#controls + 1] = mode
+    panel.playerPortraitDropDown = mode
+    panel.playerPortraitLabel = modeLabel
+
+    local renderLabel = Label(body, "Render", mode, -2, -30, 120)
+    local render = UI.Dropdown({
+        name = "MSUF_UF_PortraitRenderDrop", parent = body, anchor = renderLabel, x = -16, y = -4, width = 190,
+        items = PORTRAIT_RENDER_ITEMS,
+        get = function()
+            return PortraitStyleGet(Key(), "portraitRender", "2D")
+        end,
+        set = function(v)
+            PortraitStyleSet(Key(), "portraitRender", v)
+            Apply("PORTRAIT_RENDER")
+        end,
+    })
+    controls[#controls + 1] = render
+
+    local classStyle = UI.Dropdown({
+        name = "MSUF_UF_PortraitClassStyleDrop", parent = body, anchor = render, anchorPoint = "TOPLEFT", x = 232, y = 0, width = 210,
+        items = PortraitClassItems,
+        get = function() return PortraitStyleGet(Key(), "portraitClassStyle", "BLIZZARD") end,
+        set = function(v) PortraitStyleSet(Key(), "portraitClassStyle", v or "BLIZZARD"); Apply("PORTRAIT_CLASS_STYLE") end,
+    })
+    controls[#controls + 1] = classStyle
+
+    local shapeLabel = Label(body, "Shape", render, -2, -30, 120)
+    local shape = UI.Dropdown({
+        name = "MSUF_UF_PortraitShapeDrop", parent = body, anchor = shapeLabel, x = -16, y = -4, width = 190,
+        items = PORTRAIT_SHAPE_ITEMS,
+        get = function() return PortraitStyleGet(Key(), "portraitShape", "SQUARE") end,
+        set = function(v) PortraitStyleSet(Key(), "portraitShape", v or "SQUARE"); Apply("PORTRAIT_SHAPE") end,
+    })
+    controls[#controls + 1] = shape
+
+    local size = UI.Slider({
+        name = "MSUF_UF_PortraitSizeSlider", parent = body, compact = true, compactInput = true,
+        anchor = shape, anchorPoint = "TOPLEFT", x = 232, y = 2, min = 0, max = 128, step = 1, width = 280, default = 0,
+        get = function() return tonumber(PortraitStyleGet(Key(), "portraitSizeOverride", 0)) or 0 end,
+        set = function(v) PortraitStyleSet(Key(), "portraitSizeOverride", floor((tonumber(v) or 0) + 0.5)); Apply("PORTRAIT_SIZE") end,
+        formatText = function(v) return v > 0 and format("Size override: %d", v) or "Size override: Auto" end,
+    })
+    controls[#controls + 1] = size
+
+    local offX = UI.Slider({
+        name = "MSUF_UF_PortraitOffsetXSlider", parent = body, compact = true, compactInput = true,
+        anchor = shape, x = 16, y = -32, min = -120, max = 120, step = 1, width = 260, default = 0,
+        get = function() return tonumber(PortraitStyleGet(Key(), "portraitOffsetX", 0)) or 0 end,
+        set = function(v) PortraitStyleSet(Key(), "portraitOffsetX", floor((tonumber(v) or 0) + 0.5)); Apply("PORTRAIT_OFFSET_X") end,
+        formatText = function(v) return format("Offset X: %d", v) end,
+    })
+    controls[#controls + 1] = offX
+
+    local offY = UI.Slider({
+        name = "MSUF_UF_PortraitOffsetYSlider", parent = body, compact = true, compactInput = true,
+        anchor = offX, anchorPoint = "TOPLEFT", x = 286, y = 0, min = -120, max = 120, step = 1, width = 260, default = 0,
+        get = function() return tonumber(PortraitStyleGet(Key(), "portraitOffsetY", 0)) or 0 end,
+        set = function(v) PortraitStyleSet(Key(), "portraitOffsetY", floor((tonumber(v) or 0) + 0.5)); Apply("PORTRAIT_OFFSET_Y") end,
+        formatText = function(v) return format("Offset Y: %d", v) end,
+    })
+    controls[#controls + 1] = offY
+
+    local borderLabel = Label(body, "Border", offX, -2, -56, 120)
+    local borderStyle = UI.Dropdown({
+        name = "MSUF_UF_PortraitBorderStyleDrop", parent = body, anchor = borderLabel, x = -16, y = -4, width = 190,
+        items = PORTRAIT_BORDER_ITEMS,
+        get = function() return PortraitStyleGet(Key(), "portraitBorderStyle", "NONE") end,
+        set = function(v) PortraitStyleSet(Key(), "portraitBorderStyle", v or "NONE"); Apply("PORTRAIT_BORDER_STYLE") end,
+    })
+    controls[#controls + 1] = borderStyle
+
+    local borderThickness = UI.Slider({
+        name = "MSUF_UF_PortraitBorderThicknessSlider", parent = body, compact = true, compactInput = true,
+        anchor = borderStyle, anchorPoint = "TOPLEFT", x = 232, y = 2, min = 1, max = 12, step = 1, width = 260, default = 2,
+        get = function() return tonumber(PortraitStyleGet(Key(), "portraitBorderThickness", 2)) or 2 end,
+        set = function(v) PortraitStyleSet(Key(), "portraitBorderThickness", floor((tonumber(v) or 2) + 0.5)); Apply("PORTRAIT_BORDER_THICKNESS") end,
+        formatText = function(v) return format("Border thickness: %d", v) end,
+    })
+    controls[#controls + 1] = borderThickness
+
+    local fillBorder = UI.Check({
+        name = "MSUF_UF_PortraitFillBorderCheck", parent = body,
+        anchor = borderStyle, x = 16, y = -42,
+        label = "Fill border into frame gap",
+        maxTextWidth = 240,
+        get = function() return PortraitStyleGet(Key(), "portraitFillBorder", false) == true end,
+        set = function(v) PortraitStyleSet(Key(), "portraitFillBorder", v and true or false); Apply("PORTRAIT_FILL_BORDER") end,
+    })
+    controls[#controls + 1] = fillBorder
+
+    local bgEnabled = UI.Check({
+        name = "MSUF_UF_PortraitBgCheck", parent = body,
+        anchor = borderThickness, x = 16, y = -42,
+        label = "Portrait background",
+        maxTextWidth = 220,
+        get = function() return PortraitStyleGet(Key(), "portraitBgEnabled", false) == true end,
+        set = function(v) PortraitStyleSet(Key(), "portraitBgEnabled", v and true or false); Apply("PORTRAIT_BG_ENABLED") end,
+    })
+    controls[#controls + 1] = bgEnabled
+
+    do
+        local left = CreateFrame("Frame", nil, body)
+        left:SetSize(292, 1)
+        PlaceTopLeft(left, body, 18, -42)
+
+        local right = CreateFrame("Frame", nil, body)
+        right:SetSize(292, 1)
+        PlaceTopLeft(right, body, 338, -42)
+
+        local vDiv = body:CreateTexture(nil, "ARTWORK")
+        vDiv:SetWidth(1)
+        vDiv:SetColorTexture(0.20, 0.32, 0.45, 0.32)
+        vDiv:SetPoint("TOPLEFT", body, "TOPLEFT", 318, -42)
+        vDiv:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", 318, 16)
+
+        modeLabel:SetTextColor(1, 0.82, 0)
+        renderLabel:SetTextColor(1, 0.82, 0)
+        shapeLabel:SetTextColor(1, 0.82, 0)
+        borderLabel:SetTextColor(1, 0.82, 0)
+
+        PlaceTopLeft(modeLabel, left, 0, 0)
+        PlaceTopLeft(mode, left, 0, -18)
+        PlaceTopLeft(renderLabel, left, 0, -82)
+        PlaceTopLeft(render, left, 0, -100)
+        PlaceTopLeft(shapeLabel, left, 0, -164)
+        PlaceTopLeft(shape, left, 0, -182)
+
+        PlaceTopLeft(classStyle, right, 0, -100)
+        PlaceTopLeft(size, right, 16, -176)
+        PlaceTopLeft(offX, left, 16, -248)
+        PlaceTopLeft(offY, right, 16, -248)
+        PlaceTopLeft(borderLabel, left, 0, -314)
+        PlaceTopLeft(borderStyle, left, 0, -332)
+        PlaceTopLeft(borderThickness, right, 16, -326)
+        PlaceTopLeft(fillBorder, left, 12, -382)
+        PlaceTopLeft(bgEnabled, right, 12, -382)
+        SetOptionWidth(size, 180)
+        SetOptionWidth(offX, 180)
+        SetOptionWidth(offY, 180)
+        SetOptionWidth(borderThickness, 180)
+    end
+
+    panel._msufRefreshUnitPortraitControls = function()
+        EnsureUnitPortraitStyle(Key())
+        source:SetText("Editing " .. TR(UNIT_LABELS[Key()] or Key()) .. " portrait settings")
+        RefreshAllControls(controls)
+        local renderMode = PortraitStyleGet(Key(), "portraitRender", "2D")
+        local bStyle = PortraitStyleGet(Key(), "portraitBorderStyle", "NONE")
+        local bgOn = PortraitStyleGet(Key(), "portraitBgEnabled", false) == true
+        SetWidgetEnabled(classStyle, renderMode == "CLASS")
+        SetWidgetEnabled(borderThickness, bStyle ~= "NONE")
+        SetWidgetEnabled(fillBorder, bStyle ~= "NONE")
+    end
+    panel._msufRefreshUnitPortraitControls()
+end
+
+--------------------------------------------------------------------
+-- Unit frame options preview
+--------------------------------------------------------------------
+local Preview = {}
+ns.UFPreview = Preview
+local InstallPreviewHooks
+
+local function NormalizeStatusPreviewId(id)
+    id = tostring(id or "")
+    if id == "eliteicon" then return "elite" end
+    return id
+end
+
+Preview.statusPreviewMode = "current"
+Preview.selectedStatusId = nil
+local SelectPreviewHandle
+
+function Preview.SetStatusPreviewMode(mode)
+    Preview.statusPreviewMode = (mode == "all") and "all" or "current"
+    Preview.RequestRefresh("STATUS_PREVIEW_MODE")
+end
+
+function Preview.GetStatusPreviewMode()
+    return (Preview.statusPreviewMode == "all") and "all" or "current"
+end
+
+function Preview.SelectStatusIcon(id)
+    Preview.selectedStatusId = NormalizeStatusPreviewId(id)
+    local box = Preview.active
+    local h = box and box.statusHandles and box.statusHandles[Preview.selectedStatusId]
+    if h and SelectPreviewHandle then SelectPreviewHandle(h, true) end
+    Preview.RequestRefresh("STATUS_PREVIEW_SELECT")
+end
+
+local function ClassColor(class)
+    if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
+        local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(class)
+        if r then return r, g, b end
+    end
+    local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if c then return c.r, c.g, c.b end
+    return 0.12, 0.62, 0.95
+end
+
+local function HealthColor(class)
+    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    local cache = type(_G.MSUF_UFCore_GetSettingsCache) == "function" and _G.MSUF_UFCore_GetSettingsCache() or nil
+    local mode = (cache and cache.barMode) or g.barMode or "dark"
+    if mode == "class" or mode == "gradient" then return ClassColor(class) end
+    if mode == "unified" then
+        return (cache and cache.unifiedBarR) or g.unifiedBarR or 0.10,
+               (cache and cache.unifiedBarG) or g.unifiedBarG or 0.60,
+               (cache and cache.unifiedBarB) or g.unifiedBarB or 0.90
+    end
+    return (cache and cache.darkBarR) or g.darkBarR or g.darkBarGray or 0.07,
+           (cache and cache.darkBarG) or g.darkBarG or g.darkBarGray or 0.07,
+           (cache and cache.darkBarB) or g.darkBarB or g.darkBarGray or 0.07
+end
+
+local function PowerColor(token)
+    if type(_G.MSUF_GetResolvedPowerColor) == "function" then
+        local r, g, b = _G.MSUF_GetResolvedPowerColor(0, token or "MANA")
+        if r then return r, g, b end
+    end
+    if token == "ENERGY" then return 1, 0.82, 0.10 end
+    if token == "RAGE" then return 0.82, 0.12, 0.08 end
+    if token == "FOCUS" then return 0.95, 0.45, 0.10 end
+    return 0.10, 0.35, 0.95
+end
+
+local function ClassPortraitVisual(class, style)
+    local PM = ns and ns.PortraitMedia
+    if PM and PM.ResolveClassPortrait then
+        return PM.ResolveClassPortrait(class, NormalizePortraitClassStyle(style))
+    end
+    local coords = class and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[class]
+    if coords then
+        return {
+            texture = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES",
+            left = coords[1] or 0,
+            right = coords[2] or 1,
+            top = coords[3] or 0,
+            bottom = coords[4] or 1,
+        }
+    end
+    return { texture = "Interface\\ICONS\\INV_Misc_QuestionMark", left = 0, right = 1, top = 0, bottom = 1 }
+end
+
+local function FontColor()
+    local fn = (ns and ns.MSUF_GetConfiguredFontColor) or _G.MSUF_GetConfiguredFontColor
+    if type(fn) == "function" then
+        local r, g, b = fn()
+        if r then return r, g, b end
+    end
+    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    return g.fontColorR or 1, g.fontColorG or 1, g.fontColorB or 1
+end
+
+local function SetTex(region, tex)
+    if region and region.SetTexture then region:SetTexture(tex or TEX_W8) end
+end
+
+local function MakeFS(parent, layer, size)
+    local fs = parent:CreateFontString(nil, layer or "OVERLAY")
+    fs:SetFont(FONT, size or 12, "OUTLINE")
+    fs:SetShadowOffset(1, -1)
+    return fs
+end
+
+local function ReadPowerBarEnabled(conf, key)
+    if key == "pet" or key == "targettarget" then return false end
+    if conf.showPowerBar ~= nil then return conf.showPowerBar ~= false end
+    if key == "boss" then return true end
+    return true
+end
+
+local function ReadPowerBarHeight(conf)
+    local h = tonumber(conf.powerBarHeight) or 3
+    if h < 1 then h = 1 elseif h > 20 then h = 20 end
+    return h
+end
+
+local function ResolveTextAnchor(anchor, isTop)
+    if anchor == "LEFT" then
+        local pt = isTop and "TOPLEFT" or "BOTTOMLEFT"
+        return pt, pt, 4, "LEFT", 1
+    elseif anchor == "CENTER" then
+        local pt = isTop and "TOP" or "BOTTOM"
+        return pt, pt, 0, "CENTER", 1
+    end
+    local pt = isTop and "TOPRIGHT" or "BOTTOMRIGHT"
+    return pt, pt, -4, "RIGHT", -1
+end
+
+local function ResolveNameAnchor(anchor, x)
+    x = tonumber(x) or 0
+    if anchor == "RIGHT" then return "TOPRIGHT", "TOPRIGHT", -x, "RIGHT" end
+    if anchor == "CENTER" then return "TOP", "TOP", x, "CENTER" end
+    return "TOPLEFT", "TOPLEFT", x, "LEFT"
+end
+
+local function NumText(v)
+    if v >= 1000000 then return format("%.1fm", v / 1000000) end
+    if v >= 1000 then return format("%.1fk", v / 1000) end
+    return tostring(v)
+end
+
+local function JoinSep(sep)
+    sep = tostring(sep or "")
+    if sep == "" then return " " end
+    return " " .. sep .. " "
+end
+
+local function FormatMode(mode, cur, maxVal, pct, sep, isPower)
+    if isPower then mode = NormalizePowerMode(mode) else mode = NormalizeHpMode(mode) end
+    if mode == "NONE" then return "" end
+    local c = NumText(cur)
+    local m = NumText(maxVal)
+    local p = tostring(pct) .. "%"
+    local s = JoinSep(sep)
+    if mode == "PERCENT" then return p end
+    if mode == "CURRENT" then return c end
+    if mode == "MAX" then return m end
+    if mode == "DEFICIT" then return "-" .. NumText(maxVal - cur) end
+    if mode == "CURMAX" then return c .. s .. m end
+    if mode == "MAXCUR" then return m .. s .. c end
+    if mode == "CURPERCENT" then return c .. s .. p end
+    if mode == "PERCENTCUR" then return p .. s .. c end
+    if mode == "CURMAXPERCENT" then return c .. s .. m .. s .. p end
+    if mode == "PERCENTMAXCUR" then return p .. s .. m .. s .. c end
+    if mode == "MAXPERCENT" then return m .. s .. p end
+    if mode == "PERCENTMAX" then return p .. s .. m end
+    if mode == "PERCENTCURMAX" then return p .. s .. c .. s .. m end
+    return c .. s .. p
+end
+
+local function PositionText(fs, anchor, isTop, x, y, parent, defaultX)
+    if not fs then return end
+    fs:ClearAllPoints()
+    local pt, relPt, defX, justify = ResolveTextAnchor(anchor, isTop)
+    fs:SetPoint(pt, parent, relPt, tonumber(x) or defaultX or defX, tonumber(y) or (isTop and -4 or 4))
+    fs:SetJustifyH(justify)
+end
+
+local function PositionFromAnchor(frame, anchor, x, y, target, size)
+    frame:ClearAllPoints()
+    size = tonumber(size) or 14
+    x = tonumber(x) or 0
+    y = tonumber(y) or 0
+    anchor = tostring(anchor or "TOPLEFT")
+    if anchor == "TOPRIGHT" then frame:SetPoint("CENTER", target, "TOPRIGHT", x - size * 0.5, y - size * 0.5)
+    elseif anchor == "NAMERIGHT" then frame:SetPoint("LEFT", target, "TOPLEFT", x + 44, y - 8)
+    elseif anchor == "NAMELEFT" then frame:SetPoint("RIGHT", target, "TOPLEFT", x + 2, y - 8)
+    elseif anchor == "TOP" then frame:SetPoint("CENTER", target, "TOP", x, y - size * 0.5)
+    elseif anchor == "BOTTOM" then frame:SetPoint("CENTER", target, "BOTTOM", x, y + size * 0.5)
+    elseif anchor == "LEFT" then frame:SetPoint("CENTER", target, "LEFT", x + size * 0.5, y)
+    elseif anchor == "RIGHT" then frame:SetPoint("CENTER", target, "RIGHT", x - size * 0.5, y)
+    elseif anchor == "BOTTOMLEFT" then frame:SetPoint("CENTER", target, "BOTTOMLEFT", x + size * 0.5, y + size * 0.5)
+    elseif anchor == "BOTTOMRIGHT" then frame:SetPoint("CENTER", target, "BOTTOMRIGHT", x - size * 0.5, y + size * 0.5)
+    elseif anchor == "CENTER" then frame:SetPoint("CENTER", target, "CENTER", x, y)
+    else frame:SetPoint("CENTER", target, "TOPLEFT", x + size * 0.5, y - size * 0.5) end
+end
+
+local function RoundOffset(v)
+    v = tonumber(v) or 0
+    if v >= 0 then return floor(v + 0.5) end
+    return -floor((-v) + 0.5)
+end
+
+local function GetNudgeStep()
+    if IsControlKeyDown and IsControlKeyDown() then return 10 end
+    if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
+    return 1
+end
+
+local function IsTextInputFocused()
+    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    return focus and focus.IsObjectType and focus:IsObjectType("EditBox")
+end
+
+local function CastbarOffsetFields(unitKey)
+    unitKey = CanonKey(unitKey)
+    local dx, dy = 0, 0
+    if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then
+        dx, dy = _G.MSUF_GetCastbarDefaultOffsets(unitKey)
+    end
+    if unitKey == "boss" then
+        return "bossCastbarOffsetX", "bossCastbarOffsetY", dx or 0, dy or 0
+    end
+    local prefix = type(_G.MSUF_GetCastbarPrefix) == "function" and _G.MSUF_GetCastbarPrefix(unitKey) or nil
+    if not prefix or prefix == "" then return nil, nil, dx or 0, dy or 0 end
+    return prefix .. "OffsetX", prefix .. "OffsetY", dx or 0, dy or 0
+end
+
+local function ResolveHandleFields(preview, fields)
+    if fields and fields.castbar then
+        return CastbarOffsetFields(preview and preview.key)
+    end
+    return fields and fields.x, fields and fields.y, fields and fields.defaultX or 0, fields and fields.defaultY or 0
+end
+
+local function HandleStore(preview, fields)
+    local conf, g, key = UnitDB(preview and preview.key)
+    if fields and fields.portrait then EnsureUnitPortraitStyle(key) end
+    if fields and (fields.global or fields.castbar) then return g, key, conf, g end
+    return conf, key, conf, g
+end
+
+local function ReadHandleOffsets(handle)
+    if not handle then return 0, 0 end
+    local preview = handle._preview
+    local fields = handle._fields or {}
+    local xKey, yKey, defX, defY = ResolveHandleFields(preview, fields)
+    local store = HandleStore(preview, fields)
+    local x = xKey and tonumber(store[xKey]) or nil
+    local y = yKey and tonumber(store[yKey]) or nil
+    if x == nil then x = tonumber(defX) or 0 end
+    if y == nil then y = tonumber(defY) or 0 end
+    return x, y, xKey, yKey
+end
+
+local function UpdateHandleHint(box, handle)
+    if not box or not box.hint then return end
+    if not handle then
+        box.hint:SetText(TR("click layers to hide - click/drag highlighted elements - arrows nudge selected"))
+        return
+    end
+    local x, y = ReadHandleOffsets(handle)
+    box.hint:SetText(format("%s   x: %d   y: %d   %s", TR(handle._label or handle._key or "?"), x, y, TR("arrows nudge, Shift=5, Ctrl=10")))
+end
+
+local function RefreshHandleSelectionVisuals(box)
+    if not box then return end
+    local selected = box._selectedHandle
+    if selected and selected.IsShown and not selected:IsShown() then selected = nil; box._selectedHandle = nil end
+    for i = 1, #(box.handles or {}) do
+        local h = box.handles[i]
+        local isSel = h and h == selected
+        if h then
+            if h._selBorder then
+                if isSel then h._selBorder:Show() else h._selBorder:Hide() end
+            end
+            local c = h._color or { 0.7, 0.8, 1.0 }
+            if h.tex then
+                h.tex:SetColorTexture(c[1], c[2], c[3], isSel and 0.48 or ((selected and not isSel) and 0.13 or 0.24))
+            end
+            if h.edge then
+                h.edge:SetColorTexture(c[1], c[2], c[3], isSel and 0.92 or ((selected and not isSel) and 0.28 or 0.55))
+            end
+            if h.SetAlpha then h:SetAlpha((selected and not isSel) and 0.36 or 1) end
+        end
+    end
+    UpdateHandleHint(box, selected)
+end
+
+local function CommitHandleMove(handle, reason)
+    if not handle then return end
+    local box = handle._preview
+    local fields = handle._fields or {}
+    local _, _, key = UnitDB(box and box.key)
+    if fields.text then
+        ForceTextUnit(key, reason or "UNIT_PREVIEW_MOVE")
+    elseif fields.portrait then
+        ApplyPortrait(box and box._msufPanel, key, reason or "UNIT_PREVIEW_PORTRAIT_MOVE")
+    elseif fields.detachedPower then
+        if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
+            _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
+        end
+    elseif fields.castbar then
+        if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+            _G.MSUF_ApplyCastbarUnitAndSync(key)
+        elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+            _G.MSUF_UpdateCastbarVisuals()
+        end
+        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
+            _G.MSUF_SyncCastbarPositionPopup(key)
+        end
+    elseif fields.statusRefresh then
+        local fn = _G[fields.statusRefresh]
+        if type(fn) == "function" then fn() end
+    end
+    ApplyPanelUnit(box and box._msufPanel, key, reason or "UNIT_PREVIEW_MOVE")
+    Preview.Refresh(box)
+    RefreshHandleSelectionVisuals(box)
+end
+
+local function WriteHandleOffsets(handle, x, y, reason)
+    if not handle then return false end
+    local box = handle._preview
+    local fields = handle._fields or {}
+    local xKey, yKey = ResolveHandleFields(box, fields)
+    if not xKey or not yKey then return false end
+    local store = HandleStore(box, fields)
+    store[xKey] = RoundOffset(x)
+    store[yKey] = RoundOffset(y)
+    CommitHandleMove(handle, reason)
+    return true
+end
+
+local function NudgeSelectedHandle(box, dx, dy)
+    local h = box and box._selectedHandle
+    if not h or not h.IsShown or not h:IsShown() then return false end
+    local x, y = ReadHandleOffsets(h)
+    local step = GetNudgeStep()
+    return WriteHandleOffsets(h, x + (dx * step), y + (dy * step), "UNIT_PREVIEW_NUDGE")
+end
+
+SelectPreviewHandle = function(handle, skipSectionOpen)
+    local box = handle and handle._preview or Preview.active
+    if not box then return end
+    box._selectedHandle = handle
+    if handle then
+        local p = box._msufPanel
+        local fields = handle._fields or {}
+        if fields.statusRefresh then
+            Preview.selectedStatusId = NormalizeStatusPreviewId(handle._key)
+            if not skipSectionOpen and p and type(p._msufUFStatusSet) == "function" then
+                p._msufUFStatusSet("selected", handle._key)
+            end
+        end
+        if not skipSectionOpen and p and type(p._msufOpenUnitSection) == "function" then
+            p._msufOpenUnitSection(fields.section or "text")
+        end
+    end
+    RefreshHandleSelectionVisuals(box)
+end
+
+local function MakeHandle(preview, key, fields, label, color)
+    local h = CreateFrame("Button", nil, preview.canvas)
+    h:SetFrameLevel((preview.canvas:GetFrameLevel() or 0) + 30)
+    h:SetSize(20, 20)
+    h:RegisterForClicks("LeftButtonUp")
+    h:EnableMouse(true)
+    h.tex = h:CreateTexture(nil, "OVERLAY")
+    h.tex:SetAllPoints()
+    h.tex:SetColorTexture(color[1], color[2], color[3], 0.24)
+    h.edge = h:CreateTexture(nil, "BORDER")
+    h.edge:SetPoint("TOPLEFT", h, "TOPLEFT", 0, 0)
+    h.edge:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 0, 0)
+    h.edge:SetColorTexture(color[1], color[2], color[3], 0.55)
+    h._label = label
+    h._fields = fields
+    h._key = key
+    h._preview = preview
+    h._color = color
+    h._selBorder = h:CreateTexture(nil, "OVERLAY", nil, 7)
+    h._selBorder:SetPoint("TOPLEFT", h, "TOPLEFT", -2, 2)
+    h._selBorder:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 2, -2)
+    h._selBorder:SetColorTexture(0.30, 0.58, 0.95, 0.48)
+    h._selBorder:Hide()
+    h:SetScript("OnEnter", function(self)
+        self.tex:SetColorTexture(color[1], color[2], color[3], (preview._selectedHandle == self) and 0.56 or 0.42)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(TR(label), 1, 1, 1)
+            GameTooltip:AddLine(TR("Drag to adjust the same X/Y offsets used by Edit Mode."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(TR("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10."), 0.55, 0.62, 0.72, true)
+            GameTooltip:Show()
+        end
+    end)
+    h:SetScript("OnLeave", function(self)
+        RefreshHandleSelectionVisuals(preview)
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    h:SetScript("OnClick", function(self)
+        SelectPreviewHandle(self)
+    end)
+    local function StartHandleDrag(self, button)
+        if button and button ~= "LeftButton" then return end
+        SelectPreviewHandle(self)
+        local x, y = ReadHandleOffsets(self)
+        self._startX = x
+        self._startY = y
+        self._lastDragX = nil
+        self._lastDragY = nil
+        self._dragging = true
+        local cx, cy = GetCursorPosition()
+        self._cursorX, self._cursorY = cx, cy
+        preview.dragFrame._handle = self
+        preview.dragFrame:SetScript("OnUpdate", preview._onDragUpdate)
+        preview.dragFrame:Show()
+        RefreshHandleSelectionVisuals(preview)
+    end
+    local function StopHandleDrag(self, button)
+        if button and button ~= "LeftButton" then return end
+        if preview.dragFrame._handle == self then
+            preview.dragFrame:SetScript("OnUpdate", nil)
+            preview.dragFrame._handle = nil
+            preview.dragFrame:Hide()
+        end
+        self._dragging = nil
+        self._lastDragX = nil
+        self._lastDragY = nil
+        RefreshHandleSelectionVisuals(preview)
+    end
+    h:SetScript("OnMouseDown", StartHandleDrag)
+    h:SetScript("OnMouseUp", StopHandleDrag)
+    h:SetScript("OnHide", StopHandleDrag)
+    h:Hide()
+    preview.handles[#preview.handles + 1] = h
+    return h
+end
+
+local function StatusSymbolTexture(symbolKey)
+    if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then return nil end
+    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    local mid = g.statusIconsUseMidnightStyle == true
+    local folder, suffix = "Combat", mid and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
+    if symbolKey:find("^rested_") then
+        folder, suffix = "Rested", mid and "_midnight_64.tga" or "_classic_64.tga"
+    elseif symbolKey:find("^resurrection_") then
+        folder, suffix = "Ress", mid and "_midnight_64.tga" or "_classic_64.tga"
+    end
+    return SYMBOL_MEDIA .. folder .. "\\" .. symbolKey .. suffix
+end
+
+local function CreateIcon(parent, color, text)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetSize(16, 16)
+    f.bg = f:CreateTexture(nil, "BACKGROUND")
+    f.bg:SetAllPoints()
+    f.bg:SetColorTexture(0, 0, 0, 0)
+    f.tex = f:CreateTexture(nil, "ARTWORK")
+    f.tex:SetAllPoints()
+    f.txt = MakeFS(f, "OVERLAY", 10)
+    f.txt:SetPoint("CENTER")
+    f.txt:SetText(text or "")
+    f.txt:SetTextColor(color[1], color[2], color[3], 1)
+    return f
+end
+
+local function SetPreviewIconTexture(icon, spec, conf, g, key, data)
+    if not icon or not spec then return end
+    local tex, txt = icon.tex, icon.txt
+    if tex then
+        tex:Show()
+        tex:SetVertexColor(1, 1, 1, 1)
+        if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+    end
+    if txt then txt:Hide() end
+    if spec.id == "raidmarker" then
+        if tex then
+            tex:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+            if SetRaidTargetIconTexture then SetRaidTargetIconTexture(tex, 8) end
+        end
+    elseif spec.id == "leader" then
+        if tex then tex:SetTexture(key == "target" and "Interface\\GroupFrame\\UI-Group-AssistantIcon" or "Interface\\GroupFrame\\UI-Group-LeaderIcon") end
+    elseif spec.id == "elite" then
+        if tex and tex.SetAtlas then
+            tex:SetAtlas((key == "boss") and "nameplates-icon-elite-gold" or "nameplates-icon-elite-silver")
+        elseif tex then
+            tex:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
+        end
+    elseif spec.id == "statusCombat" then
+        local path = StatusSymbolTexture(conf.combatStateIndicatorSymbol or g.combatStateIndicatorSymbol)
+        if tex and path then
+            tex:SetTexture(path)
+        elseif tex and tex.SetAtlas then
+            tex:SetAtlas("UI-HUD-UnitFrame-Player-PortraitCombatIcon")
+        elseif tex then
+            tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
+            if tex.SetTexCoord then tex:SetTexCoord(0.5, 1, 0, 0.5) end
+        end
+    elseif spec.id == "statusResting" then
+        local path = StatusSymbolTexture(conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol)
+        if tex and path then
+            tex:SetTexture(path)
+        elseif tex and tex.SetAtlas then
+            tex:SetAtlas("UI-HUD-UnitFrame-Player-PortraitRestingIcon")
+        elseif tex then
+            tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
+            if tex.SetTexCoord then tex:SetTexCoord(0, 0.5, 0, 0.5) end
+        end
+    elseif spec.id == "statusIncomingRes" then
+        local path = StatusSymbolTexture(conf.incomingResIndicatorSymbol or g.incomingResIndicatorSymbol)
+        if tex then tex:SetTexture(path or "Interface\\RaidFrame\\Raid-Icon-Rez") end
+    elseif spec.id == "level" or spec.id == "statusText" then
+        if tex then tex:Hide() end
+        if txt then
+            txt:SetText(spec.id == "level" and (data.level or "80") or "DEAD")
+            txt:SetTextColor(FontColor())
+            txt:Show()
+        end
+    else
+        if tex then tex:SetTexture("Interface\\Buttons\\WHITE8X8"); tex:SetVertexColor((spec.color and spec.color[1]) or 1, (spec.color and spec.color[2]) or 1, (spec.color and spec.color[3]) or 1, 0.85) end
+    end
+end
+
+local STATUS_PREVIEW = {
+    { id = "raidmarker", show = "showRaidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerOffsetX", y = "raidMarkerOffsetY", defaultSize = 18, defaultAnchor = "TOPLEFT", defaultX = 16, defaultY = 3, text = "8", color = { 1, 0.82, 0.05 }, label = "Raid marker", refresh = "MSUF_RefreshRaidMarkerFrames" },
+    { id = "leader", show = "showLeaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconOffsetX", y = "leaderIconOffsetY", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultX = 0, defaultY = 3, text = "L", color = { 0.95, 0.82, 0.20 }, label = "Leader icon", refresh = "MSUF_RefreshLeaderIconFrames", allowed = function(k) return k == "player" or k == "target" end },
+    { id = "level", show = "showLevelIndicator", size = "levelIndicatorSize", anchor = "levelIndicatorAnchor", x = "levelIndicatorOffsetX", y = "levelIndicatorOffsetY", defaultSize = 14, defaultAnchor = "NAMERIGHT", defaultX = 0, defaultY = 0, text = "80", color = { 0.45, 0.70, 1.0 }, label = "Level indicator", refresh = "MSUF_RefreshLevelIndicatorFrames" },
+    { id = "elite", show = "showEliteIcon", size = "eliteIconSize", anchor = "eliteIconAnchor", x = "eliteIconOffsetX", y = "eliteIconOffsetY", defaultSize = 20, defaultAnchor = "TOPRIGHT", defaultX = 2, defaultY = 2, text = "*", color = { 1.0, 0.58, 0.16 }, label = "Elite icon", refresh = "MSUF_RefreshEliteIconFrames", allowed = function(k) return k == "target" or k == "focus" or k == "targettarget" or k == "boss" end },
+    { id = "statusText", show = "statusTextEnabled", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusTextOffsetX", y = "statusTextOffsetY", defaultSize = 16, defaultAnchor = "CENTER", defaultX = 0, defaultY = 0, text = "DEAD", color = { 0.68, 0.70, 0.74 }, label = "Dead text", refresh = "MSUF_RequestStatusTextRefresh" },
+    { id = "statusCombat", show = "showCombatStateIndicator", size = "combatStateIndicatorSize", anchor = "combatStateIndicatorAnchor", x = "combatStateIndicatorOffsetX", y = "combatStateIndicatorOffsetY", defaultSize = 18, defaultAnchor = "TOPLEFT", defaultX = 0, defaultY = 0, text = "C", color = { 1.0, 0.22, 0.16 }, label = "Combat icon", refresh = "MSUF_RequestStatusCombatIndicatorRefresh", allowed = function(k) return k == "player" or k == "target" end },
+    { id = "statusResting", show = "showRestingIndicator", size = "restedStateIndicatorSize", anchor = "restedStateIndicatorAnchor", x = "restedStateIndicatorOffsetX", y = "restedStateIndicatorOffsetY", defaultSize = 18, defaultAnchor = "TOPLEFT", defaultX = 0, defaultY = 0, text = "Z", color = { 0.34, 0.62, 1.0 }, label = "Rested icon", refresh = "MSUF_RequestStatusRestingIndicatorRefresh", defaultShow = false, allowed = function(k) return k == "player" end },
+    { id = "statusIncomingRes", show = "showIncomingResIndicator", size = "incomingResIndicatorSize", anchor = "incomingResIndicatorAnchor", x = "incomingResIndicatorOffsetX", y = "incomingResIndicatorOffsetY", defaultSize = 18, defaultAnchor = "TOPLEFT", defaultX = 0, defaultY = 0, text = "+", color = { 0.22, 1.0, 0.56 }, label = "Incoming Rez icon", refresh = "MSUF_RequestStatusIncomingResIndicatorRefresh", allowed = function(k) return k == "player" or k == "target" end },
+}
+
+local PREVIEW_LAYERS = {
+    { key = "body", label = "Body", color = { 0.36, 0.62, 0.95 } },
+    { key = "text", label = "Text", color = { 0.55, 0.78, 0.95 } },
+    { key = "portrait", label = "Portrait", color = { 0.90, 0.42, 1.00 } },
+    { key = "power", label = "Power", color = { 0.95, 0.72, 0.18 } },
+    { key = "classPower", label = "Class", color = { 0.30, 0.78, 0.55 } },
+    { key = "castbar", label = "Cast", color = { 0.20, 0.90, 0.85 } },
+    { key = "status", label = "Status", color = { 0.85, 0.70, 0.25 } },
+    { key = "handles", label = "Handles", color = { 0.78, 0.78, 0.86 } },
+    { key = "bounds", label = "Bounds", color = { 1.00, 0.22, 0.12 } },
+}
+
+local function BuildPreview(parent, panel, width, height)
+    local sideW = 72
+    local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    box:SetSize(width or 632, height or 228)
+    box:SetBackdrop({
+        bgFile = TEX_W8,
+        edgeFile = TEX_W8,
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    box:SetBackdropColor(0.035, 0.043, 0.058, 0.96)
+    box:SetBackdropBorderColor(0.19, 0.25, 0.34, 0.95)
+    box._msufStaticH = height or 228
+    box._msufPanel = panel
+
+    local title = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
+    title:SetText(TR("Unit Frame Preview"))
+    box.title = title
+
+    local hint = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
+    hint:SetText(TR("click layers to hide - click/drag highlighted elements - arrows nudge selected"))
+    box.hint = hint
+
+    local canvas = CreateFrame("Frame", nil, box, "BackdropTemplate")
+    canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+    canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(sideW + 18), 12)
+    canvas:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    canvas:SetBackdropColor(0.01, 0.012, 0.018, 0.86)
+    canvas:SetBackdropBorderColor(1, 1, 1, 0.06)
+    if canvas.SetClipsChildren then canvas:SetClipsChildren(true) end
+    box.canvas = canvas
+
+    local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
+    sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 6, 0)
+    sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+    sidebar:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    sidebar:SetBackdropColor(0.025, 0.028, 0.04, 0.82)
+    sidebar:SetBackdropBorderColor(0.10, 0.13, 0.18, 0.65)
+    box.sidebar = sidebar
+
+    local sHdr = sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    sHdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
+    sHdr:SetText(TR("LAYERS"))
+    sHdr:SetTextColor(0.45, 0.50, 0.62, 0.8)
+
+    box.layerVisibility = {}
+    box.layerButtons = {}
+    for i = 1, #PREVIEW_LAYERS do
+        local def = PREVIEW_LAYERS[i]
+        box.layerVisibility[def.key] = true
+        local btn = CreateFrame("Button", nil, sidebar)
+        btn:SetSize(sideW - 10, 18)
+        btn:SetPoint("TOP", sidebar, "TOP", 0, -(20 + (i - 1) * 20))
+        btn:EnableMouse(true)
+        local bg = btn:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        btn.bg = bg
+        local bar = btn:CreateTexture(nil, "ARTWORK")
+        bar:SetSize(2, 14)
+        bar:SetPoint("LEFT", btn, "LEFT", 2, 0)
+        btn.bar = bar
+        local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        fs:SetPoint("LEFT", bar, "RIGHT", 5, 0)
+        fs:SetText(TR(def.label))
+        btn.fs = fs
+        btn.key = def.key
+        btn.color = def.color
+        btn.refresh = function(self)
+            local on = box.layerVisibility[self.key] ~= false
+            local c = self.color
+            if on then
+                self.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.58)
+                self.bar:SetColorTexture(c[1], c[2], c[3], 0.88)
+                self.fs:SetTextColor(0.76, 0.80, 0.90, 0.95)
+            else
+                self.bg:SetColorTexture(0.035, 0.035, 0.045, 0.35)
+                self.bar:SetColorTexture(0.18, 0.18, 0.22, 0.32)
+                self.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
+            end
+        end
+        btn:SetScript("OnClick", function(self)
+            box.layerVisibility[self.key] = (box.layerVisibility[self.key] == false)
+            for j = 1, #box.layerButtons do box.layerButtons[j]:refresh() end
+            Preview.Refresh(box)
+        end)
+        btn:SetScript("OnEnter", function(self)
+            local c = self.color
+            if box.layerVisibility[self.key] ~= false then
+                self.bg:SetColorTexture(c[1] * 0.18, c[2] * 0.18, c[3] * 0.18, 0.78)
+            else
+                self.bg:SetColorTexture(0.08, 0.08, 0.10, 0.55)
+            end
+            self.fs:SetTextColor(0.90, 0.92, 1.0, 1)
+        end)
+        btn:SetScript("OnLeave", function(self) self:refresh() end)
+        box.layerButtons[#box.layerButtons + 1] = btn
+        btn:refresh()
+    end
+
+    local mock = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
+    mock:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock:SetBackdropColor(0, 0, 0, 0.92)
+    mock:SetBackdropBorderColor(0, 0, 0, 1)
+    box.mock = mock
+
+    mock.bounds = CreateFrame("Frame", nil, mock, "BackdropTemplate")
+    mock.bounds:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.bounds:SetBackdropColor(0, 0, 0, 0)
+    mock.bounds:SetBackdropBorderColor(1, 0.14, 0.08, 0.95)
+    mock.bounds:SetFrameLevel((mock:GetFrameLevel() or 0) + 28)
+    mock.bounds:SetAllPoints(mock)
+
+    mock.sizeTag = mock.bounds:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    mock.sizeTag:SetPoint("BOTTOM", mock.bounds, "TOP", 0, 2)
+    mock.sizeTag:SetTextColor(1, 0.35, 0.25, 0.95)
+
+    mock.hpBG = mock:CreateTexture(nil, "BACKGROUND")
+    mock.hpBG:SetTexture(TEX_W8)
+    mock.hpBG:SetColorTexture(0, 0, 0, 0.82)
+    mock.hp = mock:CreateTexture(nil, "ARTWORK")
+    SetTex(mock.hp, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+    mock.powerBG = mock:CreateTexture(nil, "BACKGROUND")
+    mock.powerBG:SetTexture(TEX_W8)
+    mock.powerBG:SetColorTexture(0, 0, 0, 0.9)
+    mock.power = mock:CreateTexture(nil, "ARTWORK")
+    SetTex(mock.power, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+
+    mock.classPower = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
+    mock.classPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.classPower:SetBackdropColor(0, 0, 0, 0.55)
+    mock.classPower:SetBackdropBorderColor(0, 0, 0, 1)
+    mock.classPower.segments = {}
+    for i = 1, 6 do
+        local seg = mock.classPower:CreateTexture(nil, "ARTWORK")
+        seg:SetTexture(TEX_W8)
+        mock.classPower.segments[i] = seg
+    end
+
+    mock.detachedPower = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
+    mock.detachedPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.detachedPower:SetBackdropColor(0, 0, 0, 0.82)
+    mock.detachedPower:SetBackdropBorderColor(0, 0, 0, 1)
+    mock.detachedPower.fill = mock.detachedPower:CreateTexture(nil, "ARTWORK")
+    SetTex(mock.detachedPower.fill, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+    mock.detachedPower.fill:SetPoint("TOPLEFT", mock.detachedPower, "TOPLEFT", 1, -1)
+    mock.detachedPower.fill:SetPoint("BOTTOMLEFT", mock.detachedPower, "BOTTOMLEFT", 1, 1)
+
+    mock.portrait = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
+    mock.portrait:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.portrait:SetBackdropColor(0.03, 0.035, 0.05, 1)
+    mock.portrait:SetBackdropBorderColor(0.72, 0.72, 0.80, 0.82)
+    mock.portrait.tex = mock.portrait:CreateTexture(nil, "ARTWORK")
+    mock.portrait.tex:SetPoint("TOPLEFT", 2, -2)
+    mock.portrait.tex:SetPoint("BOTTOMRIGHT", -2, 2)
+    mock.portrait.initial = MakeFS(mock.portrait, "OVERLAY", 22)
+    mock.portrait.initial:SetPoint("CENTER")
+
+    mock.textFrame = CreateFrame("Frame", nil, mock)
+    mock.textFrame:SetAllPoints(mock)
+    mock.nameText = MakeFS(mock.textFrame, "OVERLAY", 12)
+    mock.hpText = MakeFS(mock.textFrame, "OVERLAY", 12)
+    mock.powerText = MakeFS(mock.textFrame, "OVERLAY", 12)
+
+    mock.cast = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
+    mock.cast:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.cast:SetBackdropColor(0, 0, 0, 0.92)
+    mock.cast:SetBackdropBorderColor(0, 0, 0, 1)
+    mock.cast:EnableMouse(true)
+    mock.cast:SetScript("OnMouseUp", function()
+        local p = box and box._msufPanel
+        if p and type(p._msufOpenUnitSection) == "function" then p._msufOpenUnitSection("castbar") end
+    end)
+    mock.cast:SetScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(TR("Castbar"), 1, 1, 1)
+            GameTooltip:AddLine(TR("Preview follows the current castbar visibility, icon, text, and global color settings."), 0.82, 0.82, 0.82, true)
+            GameTooltip:Show()
+        end
+    end)
+    mock.cast:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    mock.cast.fill = mock.cast:CreateTexture(nil, "ARTWORK")
+    SetTex(mock.cast.fill, type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture() or TEX_W8)
+    mock.cast.fill:SetPoint("TOPLEFT", 1, -1)
+    mock.cast.fill:SetPoint("BOTTOMRIGHT", -60, 1)
+    mock.cast.icon = CreateFrame("Frame", nil, mock.cast, "BackdropTemplate")
+    mock.cast.icon:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.cast.icon:SetBackdropColor(0.08, 0.12, 0.22, 1)
+    mock.cast.icon:SetBackdropBorderColor(0.2, 0.28, 0.40, 1)
+    mock.cast.text = MakeFS(mock.cast, "OVERLAY", 11)
+    mock.cast.text:SetPoint("LEFT", mock.cast, "LEFT", 24, 0)
+    mock.cast.time = MakeFS(mock.cast, "OVERLAY", 11)
+    mock.cast.time:SetPoint("RIGHT", mock.cast, "RIGHT", -6, 0)
+
+    mock.icons = {}
+    for i = 1, #STATUS_PREVIEW do
+        local spec = STATUS_PREVIEW[i]
+        mock.icons[spec.id] = CreateIcon(canvas, spec.color, spec.text)
+    end
+
+    box.handles = {}
+    box.dragFrame = CreateFrame("Frame", nil, canvas)
+    box.dragFrame:Hide()
+    box._onDragUpdate = function(df)
+        local h = df._handle
+        if not h then return end
+        local cx, cy = GetCursorPosition()
+        local scale = box._mockScale or 1
+        local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+        if uiScale <= 0 then uiScale = 1 end
+        local dx = (((cx or 0) - (h._cursorX or 0)) / uiScale) / scale
+        local dy = (((cy or 0) - (h._cursorY or 0)) / uiScale) / scale
+        local nextX = RoundOffset((h._startX or 0) + dx)
+        local nextY = RoundOffset((h._startY or 0) + dy)
+        if h._lastDragX == nextX and h._lastDragY == nextY then return end
+        h._lastDragX = nextX
+        h._lastDragY = nextY
+        WriteHandleOffsets(h, nextX, nextY, "UNIT_PREVIEW_DRAG")
+    end
+
+    box.handleName = MakeHandle(box, "name", { x = "nameOffsetX", y = "nameOffsetY", defaultX = 4, defaultY = -4, text = true, section = "text" }, "Name text", { 0.30, 0.66, 1.0 })
+    box.handleHP = MakeHandle(box, "hp", { x = "hpOffsetX", y = "hpOffsetY", defaultX = -4, defaultY = -4, text = true, section = "text" }, "HP text", { 0.25, 0.90, 0.42 })
+    box.handlePower = MakeHandle(box, "power", { x = "powerOffsetX", y = "powerOffsetY", defaultX = -4, defaultY = 4, text = true, section = "text" }, "Power text", { 0.95, 0.72, 0.18 })
+    box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true, section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
+    box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "power" }, "Detached power bar", { 0.95, 0.72, 0.18 })
+    box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", { 0.20, 0.90, 0.85 })
+    box.statusHandles = {}
+    for i = 1, #STATUS_PREVIEW do
+        local spec = STATUS_PREVIEW[i]
+        box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0, statusRefresh = spec.refresh, section = "status" }, spec.label, spec.color)
+    end
+
+    box:EnableKeyboard(true)
+    if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
+    box:SetScript("OnKeyDown", function(self, keyName)
+        local dx, dy = 0, 0
+        if keyName == "LEFT" then
+            dx = -1
+        elseif keyName == "RIGHT" then
+            dx = 1
+        elseif keyName == "UP" then
+            dy = 1
+        elseif keyName == "DOWN" then
+            dy = -1
+        else
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            return
+        end
+
+        if IsTextInputFocused() then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            return
+        end
+        if NudgeSelectedHandle(self, dx, dy) then
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+        else
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+        end
+    end)
+
+    box:SetScript("OnShow", function(self)
+        Preview.active = self
+        Preview.RequestRefresh("SHOW")
+    end)
+    box:SetScript("OnHide", function(self)
+        self._selectedHandle = nil
+        RefreshHandleSelectionVisuals(self)
+        if Preview.active == self then Preview.active = nil end
+        self.dragFrame:SetScript("OnUpdate", nil)
+        self.dragFrame._handle = nil
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
+
+    return box
+end
+
+local function CastbarEnabled(key, g)
+    if key == "player" then return g.enablePlayerCastbar ~= false end
+    if key == "target" then return g.enableTargetCastbar ~= false end
+    if key == "focus" then return g.enableFocusCastbar ~= false end
+    if key == "boss" then return g.enableBossCastbar ~= false end
+    return false
+end
+
+local function CastbarShowIcon(key, g)
+    if key == "boss" then return g.showBossCastIcon ~= false end
+    if key == "player" and g.castbarPlayerShowIcon ~= nil then return g.castbarPlayerShowIcon ~= false end
+    if key == "target" and g.castbarTargetShowIcon ~= nil then return g.castbarTargetShowIcon ~= false end
+    if key == "focus" and g.castbarFocusShowIcon ~= nil then return g.castbarFocusShowIcon ~= false end
+    return g.castbarShowIcon ~= false
+end
+
+local function CastbarShowText(key, g)
+    if key == "boss" then return g.showBossCastName ~= false end
+    if key == "player" and g.castbarPlayerShowSpellName ~= nil then return g.castbarPlayerShowSpellName ~= false end
+    if key == "target" and g.castbarTargetShowSpellName ~= nil then return g.castbarTargetShowSpellName ~= false end
+    if key == "focus" and g.castbarFocusShowSpellName ~= nil then return g.castbarFocusShowSpellName ~= false end
+    return g.castbarShowSpellName ~= false
+end
+
+local function PlaceHandle(handle, target, pad)
+    if not handle or not target or not target.GetCenter then return end
+    handle:ClearAllPoints()
+    handle:SetPoint("CENTER", target, "CENTER", pad or 0, 0)
+    handle:SetShown(target:IsShown())
+end
+
+local function SetShownSafe(region, shown)
+    if region and region.SetShown then region:SetShown(shown and true or false) end
+end
+
+local function ApplyPreviewLayerVisibility(box)
+    if not box or not box.mock then return end
+    local v = box.layerVisibility or {}
+    local mock = box.mock
+    local bodyOn = v.body ~= false
+    local powerOn = v.power ~= false
+    local textOn = v.text ~= false
+    local portraitOn = v.portrait ~= false
+    local classOn = v.classPower ~= false
+    local castOn = v.castbar ~= false
+    local statusOn = v.status ~= false
+    local handlesOn = v.handles ~= false
+    local boundsOn = v.bounds ~= false
+
+    if bodyOn then
+        mock:SetBackdropColor(0, 0, 0, 0.92)
+        mock:SetBackdropBorderColor(0, 0, 0, 1)
+    else
+        mock:SetBackdropColor(0, 0, 0, 0)
+        mock:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+    SetShownSafe(mock.hpBG, bodyOn)
+    SetShownSafe(mock.hp, bodyOn)
+
+    if not powerOn then
+        SetShownSafe(mock.powerBG, false)
+        SetShownSafe(mock.power, false)
+        SetShownSafe(mock.detachedPower, false)
+        SetShownSafe(box.handleDetachedPower, false)
+    end
+    if not classOn then SetShownSafe(mock.classPower, false) end
+    if mock.classPower and mock.classPower.segments and (not classOn or not mock.classPower:IsShown()) then
+        for i = 1, #mock.classPower.segments do SetShownSafe(mock.classPower.segments[i], false) end
+    end
+    if not textOn then
+        SetShownSafe(mock.nameText, false)
+        SetShownSafe(mock.hpText, false)
+        SetShownSafe(mock.powerText, false)
+        SetShownSafe(box.handleName, false)
+        SetShownSafe(box.handleHP, false)
+        SetShownSafe(box.handlePower, false)
+    end
+    if not portraitOn then
+        SetShownSafe(mock.portrait, false)
+        SetShownSafe(box.handlePortrait, false)
+    end
+    if not castOn then
+        SetShownSafe(mock.cast, false)
+        SetShownSafe(box.handleCastbar, false)
+    end
+    if not statusOn then
+        for _, icon in pairs(mock.icons or {}) do SetShownSafe(icon, false) end
+        for _, handle in pairs(box.statusHandles or {}) do SetShownSafe(handle, false) end
+    end
+    if not handlesOn then
+        for i = 1, #(box.handles or {}) do SetShownSafe(box.handles[i], false) end
+    end
+    SetShownSafe(mock.bounds, boundsOn)
+end
+
+function Preview.Refresh(box)
+    box = box or Preview.active
+    if not box or not box:IsShown() then return end
+    local panel = box._msufPanel
+    local key = CurrentPanelKey(panel)
+    local conf, g = UnitDB(key)
+    local data = UNIT_DATA[key] or UNIT_DATA.player
+    box.key = key
+    if panel and panel._msufRefreshUnitTextControls and not box._refreshingControls then
+        box._refreshingControls = true
+        panel._msufRefreshUnitTextControls()
+        if panel._msufRefreshUnitPortraitControls then panel._msufRefreshUnitPortraitControls() end
+        if panel._msufRefreshUnitPowerControls then panel._msufRefreshUnitPowerControls() end
+        box._refreshingControls = nil
+    end
+    if box.title then box.title:SetText(TR("Unit Frame Preview") .. " - " .. TR(UNIT_LABELS[key] or key)) end
+
+    local canvas = box.canvas
+    local cw = canvas:GetWidth() or 600
+    local ch = canvas:GetHeight() or 180
+    if cw <= 1 then cw = 600 end
+    if ch <= 1 then ch = 180 end
+
+    local w = tonumber(conf.width) or (key == "boss" and 160 or 220)
+    local h = tonumber(conf.height) or (key == "boss" and 34 or 44)
+    if w < 60 then w = 60 elseif w > 520 then w = 520 end
+    if h < 18 then h = 18 elseif h > 140 then h = 140 end
+    local mode = conf.portraitMode
+    local hasPortrait = (mode == "LEFT" or mode == "RIGHT")
+    local pSize = hasPortrait and (tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) or 0
+    if pSize <= 0 then pSize = max(22, h - 4) end
+    local castH = CastbarEnabled(key, g) and 22 or 0
+    local castXKey, castYKey, castDefX, castDefY = CastbarOffsetFields(key)
+    local castOffsetX = castXKey and tonumber(g[castXKey]) or nil
+    local castOffsetY = castYKey and tonumber(g[castYKey]) or nil
+    if castOffsetX == nil then castOffsetX = tonumber(castDefX) or 0 end
+    if castOffsetY == nil then castOffsetY = tonumber(castDefY) or 0 end
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars or {}
+    local playerDetachedPower = key == "player" and conf.powerBarDetached == true and ReadPowerBarEnabled(conf, key)
+    local classPowerOn = key == "player" and (bars.showClassPower == true or playerDetachedPower)
+    local powerFrac = tonumber(data.power) or 1
+    if not playerDetachedPower and key ~= "player" then powerFrac = 1 end
+    if powerFrac < 0 then powerFrac = 0 elseif powerFrac > 1 then powerFrac = 1 end
+    local cpH = classPowerOn and (tonumber(bars.classPowerHeight) or 4) or 0
+    if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
+    local detachedH = playerDetachedPower and (tonumber(conf.detachedPowerBarHeight) or 6) or 0
+    if detachedH < 2 then detachedH = 2 elseif detachedH > 80 then detachedH = 80 end
+    local wideW = w
+    if classPowerOn and bars.classPowerWidthMode == "custom" then wideW = max(wideW, tonumber(bars.classPowerWidth) or w) end
+    if playerDetachedPower then wideW = max(wideW, tonumber(conf.detachedPowerBarWidth) or w) end
+    local footprintW = wideW + (hasPortrait and (pSize + 8) or 0)
+    local footprintH = h
+        + (castH > 0 and (castH + 10) or 0)
+        + (classPowerOn and (cpH + 12) or 0)
+        + (playerDetachedPower and (detachedH + 16) or 0)
+    local scale = min(1.45, (cw - 60) / max(footprintW, 1), (ch - 42) / max(footprintH, 1))
+    if scale < 0.75 then scale = 0.75 end
+    box._mockScale = scale
+    local function S(v) return floor((tonumber(v) or 0) * scale + 0.5) end
+    local sw, sh, sp = S(w), S(h), S(pSize)
+
+    local mock = box.mock
+    local baseLevel = (canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + 2
+    if mock.SetFrameLevel then mock:SetFrameLevel(baseLevel + 4) end
+    if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(baseLevel + 3) end
+    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(baseLevel + 5) end
+    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(baseLevel + 7) end
+    if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel(baseLevel + 6) end
+    if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(baseLevel + 15) end
+    if mock.bounds and mock.bounds.SetFrameLevel then mock.bounds:SetFrameLevel(baseLevel + 28) end
+    SetTex(mock.hp, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+    SetTex(mock.power, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+    SetTex(mock.detachedPower.fill, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+    SetTex(mock.cast.fill, type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture() or TEX_W8)
+    mock:SetSize(sw, sh)
+    if mock.sizeTag then mock.sizeTag:SetText(format("%d x %d", w, h)) end
+    mock:ClearAllPoints()
+    mock:SetPoint("CENTER", canvas, "CENTER", hasPortrait and mode == "LEFT" and S(pSize * 0.5) or (hasPortrait and mode == "RIGHT" and -S(pSize * 0.5) or 0), castH > 0 and S(castH * 0.35) or 0)
+
+    local powerOn = ReadPowerBarEnabled(conf, key) and not playerDetachedPower
+    local powerH = powerOn and S(ReadPowerBarHeight(conf)) or 0
+    if powerOn and powerH < 2 then powerH = 2 end
+    mock.hpBG:ClearAllPoints()
+    mock.hpBG:SetPoint("TOPLEFT", mock, "TOPLEFT", S(2), -S(2))
+    mock.hpBG:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -S(2), powerOn and (S(3) + powerH) or S(2))
+    mock.hp:ClearAllPoints()
+    mock.hp:SetPoint("TOPLEFT", mock.hpBG, "TOPLEFT", 0, 0)
+    mock.hp:SetPoint("BOTTOMLEFT", mock.hpBG, "BOTTOMLEFT", 0, 0)
+    mock.hp:SetWidth(max(1, (sw - S(4)) * data.hp))
+    local hr, hg, hb = HealthColor(data.class)
+    mock.hp:SetVertexColor(hr, hg, hb, 1)
+    if powerOn then
+        mock.powerBG:Show(); mock.power:Show()
+        mock.powerBG:ClearAllPoints()
+        mock.powerBG:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", S(2), S(2))
+        mock.powerBG:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -S(2), S(2))
+        mock.powerBG:SetHeight(powerH)
+        local pr, pg, pb = PowerColor(data.powerToken)
+        mock.powerBG:SetColorTexture(pr * 0.16, pg * 0.16, pb * 0.16, 0.72)
+        mock.power:ClearAllPoints()
+        mock.power:SetPoint("TOPLEFT", mock.powerBG, "TOPLEFT", 0, 0)
+        mock.power:SetPoint("BOTTOMLEFT", mock.powerBG, "BOTTOMLEFT", 0, 0)
+        mock.power:SetWidth(max(1, (sw - S(4)) * powerFrac))
+        mock.power:SetVertexColor(pr, pg, pb, 1)
+    else
+        mock.powerBG:Hide(); mock.power:Hide()
+    end
+
+    local pr, pg, pb = PowerColor(data.powerToken)
+    if classPowerOn then
+        mock.classPower:Show()
+        local cpW
+        if bars.classPowerWidthMode == "custom" then cpW = tonumber(bars.classPowerWidth) or (w - 4) else cpW = w - 4 end
+        if cpW < 30 then cpW = w - 4 elseif cpW > 800 then cpW = 800 end
+        mock.classPower:SetSize(S(cpW), max(2, S(cpH)))
+        mock.classPower:ClearAllPoints()
+        mock.classPower:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(2 + (tonumber(bars.classPowerOffsetX) or 0)), S(4 + (tonumber(bars.classPowerOffsetY) or 0)))
+        local segCount = 5
+        local gap = max(0, S(tonumber(bars.classPowerGap) or 0))
+        local segW = floor((S(cpW) - (segCount - 1) * gap) / segCount)
+        for i = 1, #mock.classPower.segments do
+            local seg = mock.classPower.segments[i]
+            if i <= segCount then
+                seg:Show()
+                seg:ClearAllPoints()
+                seg:SetPoint("TOPLEFT", mock.classPower, "TOPLEFT", (i - 1) * (segW + gap), 0)
+                seg:SetPoint("BOTTOMLEFT", mock.classPower, "BOTTOMLEFT", (i - 1) * (segW + gap), 0)
+                seg:SetWidth(i == segCount and (S(cpW) - (i - 1) * (segW + gap)) or segW)
+                local filled = i <= 3
+                seg:SetColorTexture(pr, pg, pb, filled and 0.95 or 0.28)
+            else
+                seg:Hide()
+            end
+        end
+    else
+        mock.classPower:Hide()
+        for i = 1, #mock.classPower.segments do mock.classPower.segments[i]:Hide() end
+    end
+
+    if playerDetachedPower then
+        mock.detachedPower:Show()
+        local dW = tonumber(conf.detachedPowerBarWidth) or w
+        if bars.detachedPowerBarWidthMode and bars.detachedPowerBarWidthMode ~= "manual" then
+            dW = classPowerOn and (mock.classPower:GetWidth() / max(scale, 0.01)) or w
+        end
+        if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
+        mock.detachedPower:SetSize(S(dW), max(2, S(detachedH)))
+        mock.detachedPower:ClearAllPoints()
+        local dx = S(tonumber(conf.detachedPowerBarOffsetX) or 0)
+        local dy = S(tonumber(conf.detachedPowerBarOffsetY) or -4)
+        if conf.detachedPowerBarAnchorToClassPower == true and classPowerOn and mock.classPower:IsShown() then
+            mock.detachedPower:SetPoint("TOP", mock.classPower, "BOTTOM", dx, dy)
+        else
+        mock.detachedPower:SetPoint("TOPLEFT", mock, "BOTTOMLEFT", dx, dy)
+        end
+        mock.detachedPower.fill:SetVertexColor(pr, pg, pb, 1)
+        mock.detachedPower.fill:SetWidth(max(1, S(dW) * powerFrac - 2))
+        box.handleDetachedPower:SetSize(max(36, S(dW)), max(18, S(detachedH) + 8))
+        PlaceHandle(box.handleDetachedPower, mock.detachedPower)
+    else
+        mock.detachedPower:Hide()
+        box.handleDetachedPower:Hide()
+    end
+
+    local fr, fg, fb = FontColor()
+    local nameSize = S(tonumber(conf.nameFontSize) or 12); if nameSize < 7 then nameSize = 7 end
+    local hpSize = S(tonumber(conf.hpFontSize) or 12); if hpSize < 7 then hpSize = 7 end
+    local pwrSize = S(tonumber(conf.powerFontSize) or 12); if pwrSize < 7 then pwrSize = 7 end
+    mock.nameText:SetFont(FONT, nameSize, "OUTLINE")
+    mock.hpText:SetFont(FONT, hpSize, "OUTLINE")
+    mock.powerText:SetFont(FONT, pwrSize, "OUTLINE")
+    mock.nameText:SetTextColor(fr, fg, fb, 1)
+    mock.hpText:SetTextColor(fr, fg, fb, 1)
+    if g.colorPowerTextByType == true then
+        local prt, pgt, pbt = PowerColor(data.powerToken)
+        mock.powerText:SetTextColor(prt, pgt, pbt, 1)
+    else
+        mock.powerText:SetTextColor(fr, fg, fb, 1)
+    end
+    mock.nameText:SetText(data.name)
+    local hpMax, pMax = 1000000, 240000
+    local hpCur, pCur = floor(hpMax * data.hp + 0.5), floor(pMax * powerFrac + 0.5)
+    local hpMode = TextScopeGet(key, "hpTextMode", "CURPERCENT")
+    if TextScopeGet(key, "hpTextReverse", false) == true then
+        local rev = { CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT", MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT", PERCENTCURMAX = "CURMAXPERCENT" }
+        hpMode = rev[NormalizeHpMode(hpMode)] or hpMode
+    end
+    mock.hpText:SetText(FormatMode(hpMode, hpCur, hpMax, floor(data.hp * 100 + 0.5), TextScopeGet(key, "hpTextSeparator", ""), false))
+    mock.powerText:SetText(FormatMode(TextScopeGet(key, "powerTextMode", "CURPERCENT"), pCur, pMax, floor(powerFrac * 100 + 0.5), TextScopeGet(key, "powerTextSeparator", TextScopeGet(key, "hpTextSeparator", "")), true))
+    mock.nameText:SetShown(conf.showName ~= false)
+    mock.hpText:SetShown(conf.showHP ~= false)
+    mock.powerText:SetShown(conf.showPower ~= false)
+
+    mock.nameText:ClearAllPoints()
+    local npt, nrel, nx, njust = ResolveNameAnchor(conf.nameTextAnchor or "LEFT", S(tonumber(conf.nameOffsetX) or 4))
+    mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S(tonumber(conf.nameOffsetY) or -4))
+    mock.nameText:SetJustifyH(njust)
+    PositionText(mock.hpText, conf.hpTextAnchor or g.hpTextAnchor or "RIGHT", true, S(tonumber(conf.hpOffsetX) or -4), S(tonumber(conf.hpOffsetY) or -4), mock.textFrame, S(-4))
+    if playerDetachedPower and conf.detachedPowerBarTextOnBar == true and mock.detachedPower:IsShown() then
+        mock.powerText:ClearAllPoints()
+        mock.powerText:SetPoint("CENTER", mock.detachedPower, "CENTER", S(tonumber(conf.powerOffsetX) or 0), S(tonumber(conf.powerOffsetY) or 0))
+        mock.powerText:SetJustifyH("CENTER")
+    else
+        PositionText(mock.powerText, conf.powerTextAnchor or g.powerTextAnchor or "RIGHT", false, S(tonumber(conf.powerOffsetX) or -4), S(tonumber(conf.powerOffsetY) or 4), mock.textFrame, S(-4))
+    end
+
+    if hasPortrait then
+        mock.portrait:Show()
+        mock.portrait:SetSize(sp, sp)
+        mock.portrait:ClearAllPoints()
+        local ox = S(tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0)
+        local oy = S(tonumber(PortraitStyleGet(key, "portraitOffsetY", 0)) or 0)
+        if mode == "RIGHT" then mock.portrait:SetPoint("LEFT", mock, "RIGHT", S(4) + ox, oy)
+        else mock.portrait:SetPoint("RIGHT", mock, "LEFT", -S(4) + ox, oy) end
+        local cr, cg, cb = ClassColor(data.class)
+        local renderMode = PortraitStyleGet(key, "portraitRender", "2D")
+        if renderMode == "CLASS" then
+            local visual = ClassPortraitVisual(data.class, PortraitStyleGet(key, "portraitClassStyle", "BLIZZARD"))
+            mock.portrait.tex:SetTexture(visual and visual.texture or "Interface\\ICONS\\INV_Misc_QuestionMark")
+            if mock.portrait.tex.SetTexCoord then
+                mock.portrait.tex:SetTexCoord(
+                    (visual and visual.left) or 0,
+                    (visual and visual.right) or 1,
+                    (visual and visual.top) or 0,
+                    (visual and visual.bottom) or 1
+                )
+            end
+            mock.portrait.initial:Hide()
+        else
+            mock.portrait.tex:SetColorTexture(cr * 0.55, cg * 0.55, cb * 0.55, 1)
+            mock.portrait.initial:SetText((data.class or "?"):sub(1, 1))
+            mock.portrait.initial:SetTextColor(cr, cg, cb, 1)
+            mock.portrait.initial:Show()
+        end
+        if PortraitStyleGet(key, "portraitBgEnabled", false) == true then
+            mock.portrait:SetBackdropColor(
+                g.portraitBgColorR or 0.05,
+                g.portraitBgColorG or 0.05,
+                g.portraitBgColorB or 0.05,
+                g.portraitBgColorA or 0.85
+            )
+        else
+            mock.portrait:SetBackdropColor(0.03, 0.035, 0.05, 1)
+        end
+        local bStyle = PortraitStyleGet(key, "portraitBorderStyle", "NONE")
+        if bStyle == "NONE" then
+            mock.portrait:SetBackdropBorderColor(0, 0, 0, 0)
+        elseif bStyle == "CUSTOM" or bStyle == "SOLID" then
+            mock.portrait:SetBackdropBorderColor(
+                g.portraitBorderColorR or 1,
+                g.portraitBorderColorG or 1,
+                g.portraitBorderColorB or 1,
+                g.portraitBorderColorA or 1
+            )
+        elseif bStyle == "CLASS_COLOR" then
+            mock.portrait:SetBackdropBorderColor(cr, cg, cb, 1)
+        elseif bStyle == "REACTION" then
+            local hostile = (key == "target" or key == "boss" or key == "focus")
+            mock.portrait:SetBackdropBorderColor(hostile and 1 or 0.1, hostile and 0.2 or 0.85, 0.1, 1)
+        else
+            mock.portrait:SetBackdropBorderColor(1, 1, 1, 1)
+        end
+        box.handlePortrait:SetSize(max(18, sp), max(18, sp))
+        PlaceHandle(box.handlePortrait, mock.portrait)
+    else
+        mock.portrait:Hide()
+        box.handlePortrait:Hide()
+    end
+
+    if CastbarEnabled(key, g) then
+        mock.cast:Show()
+        if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+            local br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
+            mock.cast:SetBackdropColor(br or 0.10, bg or 0.10, bb or 0.10, ba or 0.85)
+        end
+        mock.cast:SetSize(sw, S(18))
+        mock.cast:ClearAllPoints()
+        mock.cast:SetPoint("TOP", mock, "BOTTOM", S(castOffsetX), S(castOffsetY))
+        local cr, cg, cb = 0.0, 0.9, 0.8
+        if type(_G.MSUF_GetInterruptibleCastColor) == "function" then
+            cr, cg, cb = _G.MSUF_GetInterruptibleCastColor()
+        end
+        mock.cast.fill:SetVertexColor(cr or 0.0, cg or 0.9, cb or 0.8, 1)
+        local showIcon = CastbarShowIcon(key, g)
+        mock.cast.icon:SetShown(showIcon)
+        if showIcon then
+            mock.cast.icon:SetSize(S(18), S(18))
+            mock.cast.icon:ClearAllPoints()
+            mock.cast.icon:SetPoint("RIGHT", mock.cast, "LEFT", -S(4), 0)
+        end
+        local showText = CastbarShowText(key, g)
+        mock.cast.text:SetShown(showText)
+        if showText then
+            local tr, tg, tb = fr, fg, fb
+            if type(_G.MSUF_GetCastbarTextColor) == "function" then
+                tr, tg, tb = _G.MSUF_GetCastbarTextColor()
+            end
+            mock.cast.text:SetTextColor(tr, tg, tb, 1)
+            mock.cast.text:SetFont(FONT, max(7, S(11)), "OUTLINE")
+            mock.cast.text:SetText(TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
+        end
+        mock.cast.time:SetShown(key == "boss" and g.showBossCastTime ~= false or g.showPlayerCastTime ~= false)
+        mock.cast.time:SetText("1.4")
+        box.handleCastbar:SetSize(max(36, sw), max(18, S(18) + 8))
+        PlaceHandle(box.handleCastbar, mock.cast)
+    else
+        mock.cast:Hide()
+        box.handleCastbar:Hide()
+    end
+
+    for i = 1, #STATUS_PREVIEW do
+        local spec = STATUS_PREVIEW[i]
+        local icon = mock.icons[spec.id]
+        local handle = box.statusHandles[spec.id]
+        local showVal = conf[spec.show]
+        if showVal == nil then showVal = g[spec.show] end
+        local show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
+        if spec.allowed and not spec.allowed(key) then show = false end
+        if spec.id == "elite" and not data.elite then show = false end
+        if Preview.GetStatusPreviewMode() ~= "all" then
+            local selected = NormalizeStatusPreviewId(Preview.selectedStatusId)
+            if selected == "" then selected = "raidmarker" end
+            show = show and (spec.id == selected)
+        end
+        icon:SetShown(show)
+        if show then
+            local sz = S(tonumber(conf[spec.size]) or tonumber(g[spec.size]) or spec.defaultSize)
+            if sz < 10 then sz = 10 end
+            icon:SetSize(sz, sz)
+            if icon.SetFrameLevel then icon:SetFrameLevel(baseLevel + 20) end
+            SetPreviewIconTexture(icon, spec, conf, g, key, data)
+            if icon.txt then icon.txt:SetFont(FONT, max(7, floor(sz * 0.52 + 0.5)), "OUTLINE") end
+            PositionFromAnchor(icon, conf[spec.anchor] or g[spec.anchor] or spec.defaultAnchor, S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0), S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0), mock, sz)
+            handle:SetSize(max(18, sz), max(18, sz))
+            PlaceHandle(handle, icon)
+        else
+            handle:Hide()
+        end
+    end
+
+    box.handleName:SetSize(max(46, mock.nameText:GetStringWidth() + 10), max(18, mock.nameText:GetStringHeight() + 6))
+    box.handleHP:SetSize(max(46, mock.hpText:GetStringWidth() + 10), max(18, mock.hpText:GetStringHeight() + 6))
+    box.handlePower:SetSize(max(46, mock.powerText:GetStringWidth() + 10), max(18, mock.powerText:GetStringHeight() + 6))
+    PlaceHandle(box.handleName, mock.nameText)
+    PlaceHandle(box.handleHP, mock.hpText)
+    PlaceHandle(box.handlePower, mock.powerText)
+    ApplyPreviewLayerVisibility(box)
+    RefreshHandleSelectionVisuals(box)
+end
+
+function Preview.RequestRefresh(reason)
+    local box = Preview.active
+    if not box or not box:IsShown() then return end
+    if InstallPreviewHooks then InstallPreviewHooks() end
+    if reason == "OPTIONS_APPLY_DB" then
+        box._refreshQueued = nil
+        Preview.Refresh(box)
+        return
+    end
+    if box._refreshQueued then return end
+    box._refreshQueued = true
+    local function run()
+        if not box then return end
+        box._refreshQueued = nil
+        Preview.Refresh(box)
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
+end
+
+_G.MSUF_UFPreview_RequestRefresh = function(reason)
+    Preview.RequestRefresh(reason)
+end
+
+_G.MSUF_UFPreview_SetStatusPreviewMode = function(mode)
+    Preview.SetStatusPreviewMode(mode)
+end
+
+_G.MSUF_UFPreview_GetStatusPreviewMode = function()
+    return Preview.GetStatusPreviewMode()
+end
+
+_G.MSUF_UFPreview_SelectStatusIcon = function(id)
+    Preview.SelectStatusIcon(id)
+end
+
+local hookedNames = {}
+InstallPreviewHooks = function()
+    local names = {
+        "MSUF_ForceTextLayoutForUnitKey",
+        "MSUF_UpdateAllFonts",
+        "MSUF_UpdateAllFonts_Immediate",
+        "MSUF_UpdateAllBarTextures",
+        "MSUF_UpdateAllBarTextures_Immediate",
+        "MSUF_UpdateCastbarVisuals",
+        "MSUF_ApplyCastbarUnitAndSync",
+        "MSUF_SyncCastbarPositionPopup",
+        "MSUF_SyncUnitPositionPopup",
+        "MSUF_ApplyUnitFrameKey_Immediate",
+        "MSUF_UFCore_RefreshSettingsCache",
+        "MSUF_RefreshAllIdentityColors",
+        "MSUF_RefreshAllPowerTextColors",
+        "MSUF_RefreshAllFrames",
+        "MSUF_ClassPower_Refresh",
+        "MSUF_ApplyPowerBarEmbedLayout",
+        "MSUF_ApplyPowerBarEmbedLayout_All",
+        "MSUF_ApplyPowerBarEmbedLayout_ForUnitKey",
+        "MSUF_Portraits_SyncUnit",
+        "MSUF_PortraitDecoration_SyncUnit",
+        "MSUF_RefreshRaidMarkerFrames",
+        "MSUF_RefreshLeaderIconFrames",
+        "MSUF_RefreshLevelIndicatorFrames",
+        "MSUF_RefreshEliteIconFrames",
+        "MSUF_RequestStatusTextRefresh",
+        "MSUF_RequestStatusCombatIndicatorRefresh",
+        "MSUF_RequestStatusRestingIndicatorRefresh",
+        "MSUF_RequestStatusIncomingResIndicatorRefresh",
+    }
+    for i = 1, #names do
+        local name = names[i]
+        local fn = _G[name]
+        if type(fn) == "function" and type(hooksecurefunc) == "function" then
+            if not hookedNames[name] then
+                hookedNames[name] = true
+                hooksecurefunc(name, function() Preview.RequestRefresh(name) end)
+            end
+        end
+    end
+end
+
+function ns.MSUF_Options_CreateUnitPreviewBox(parent, panel, width, height)
+    local box = BuildPreview(parent, panel, width, height)
+    return box
+end

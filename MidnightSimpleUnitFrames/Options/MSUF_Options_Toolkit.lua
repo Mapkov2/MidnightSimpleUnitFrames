@@ -632,10 +632,12 @@ local DD_ITEM_H  = 22
 
 -- Singleton list frame
 local _listFrame, _listOwner, _listBackdrop
+local _listOpenToken = 0
 local _itemPool = {}
 local _itemCount = 0
 
 local function DD_Close()
+    _listOpenToken = _listOpenToken + 1
     if _listFrame then _listFrame:Hide() end
     if _listBackdrop then _listBackdrop:Hide() end
     _listOwner = nil
@@ -868,6 +870,8 @@ local function DD_Toggle(owner)
     if _listOwner == owner and _listFrame:IsShown() then DD_Close(); return end
     if _listFrame:IsShown() then DD_Close() end
     _listOwner = owner
+    _listOpenToken = _listOpenToken + 1
+    local openToken = _listOpenToken
     DD_Populate(owner)
     _listFrame:ClearAllPoints()
     -- Anchor to the peel button (visible superellipse) if available, else the frame
@@ -879,8 +883,13 @@ local function DD_Toggle(owner)
     _listFrame:SetFrameLevel(1000)
     if _listFrame.SetToplevel then _listFrame:SetToplevel(true) end
     if _listFrame.Raise then _listFrame:Raise() end
-    _listBackdrop:Show()
     _listFrame:Show()
+    local function ShowBackdrop()
+        if _listOpenToken == openToken and _listOwner == owner and _listFrame and _listFrame:IsShown() and _listBackdrop then
+            _listBackdrop:Show()
+        end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, ShowBackdrop) else ShowBackdrop() end
 end
 
 -- ---- 4g. Dropdown (spec-driven, own ListFrame, superellipse trigger) ----

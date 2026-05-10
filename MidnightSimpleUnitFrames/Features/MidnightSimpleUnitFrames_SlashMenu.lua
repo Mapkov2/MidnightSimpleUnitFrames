@@ -2079,7 +2079,7 @@ if not cat then MSUF_SafeCall(_G.MSUF_RegisterOptionsCategoryLazy)
 cat=MSUF_GetMainSettingsCategory()
 end
 return cat end
-local SETTINGS_PANEL_DEFS={colors={full="MSUF_RegisterColorsOptions_Full",fallback="MSUF_RegisterColorsOptions",globals={"MSUF_ColorsPanel","MSUF_ColorsOptionsPanel"},builtKey="__MSUF_ColorsBuilt",},auras2={full="MSUF_RegisterAurasOptions_Full",fallback="MSUF_RegisterAurasOptions",globals={"MSUF_AurasPanel","MSUF_AurasOptionsPanel"},builtKey="__MSUF_AurasBuilt",},gameplay={full="MSUF_RegisterGameplayOptions_Full",fallback="MSUF_RegisterGameplayOptions",globals={"MSUF_GameplayPanel","MSUF_GameplayOptionsPanel"},builtKey="__MSUF_GameplayBuilt",},portraits={full="MSUF_RegisterPortraitsOptions_Full",fallback="MSUF_RegisterPortraitsOptions",globals={"MSUF_PortraitsPanel"},builtKey="__MSUF_PortraitsBuilt",},}
+local SETTINGS_PANEL_DEFS={colors={full="MSUF_RegisterColorsOptions_Full",fallback="MSUF_RegisterColorsOptions",globals={"MSUF_ColorsPanel","MSUF_ColorsOptionsPanel"},builtKey="__MSUF_ColorsBuilt",},auras2={full="MSUF_RegisterAurasOptions_Full",fallback="MSUF_RegisterAurasOptions",globals={"MSUF_AurasPanel","MSUF_AurasOptionsPanel"},builtKey="__MSUF_AurasBuilt",},gameplay={full="MSUF_RegisterGameplayOptions_Full",fallback="MSUF_RegisterGameplayOptions",globals={"MSUF_GameplayPanel","MSUF_GameplayOptionsPanel"},builtKey="__MSUF_GameplayBuilt",},}
 local function MSUF_FindFirstGlobal(nameList) if not _G or type(nameList)~="table"then return nil end
 for i=1,#nameList do local k=nameList[i];
 local obj=_G[k]
@@ -2189,6 +2189,15 @@ local function MSUF_SelectClassResourcesPage()
         pcall(_G.MSUF_EnsureClassPowerMenuBuilt)
     end
 end
+local function MSUF_SelectPlayerPortraitPage()
+    MSUF_SelectMainOptionsKey("player")
+    local function openPortrait()
+        local p = _G.MSUF_OptionsPanel
+        if p and type(p._msufOpenUnitSection) == "function" then p._msufOpenUnitSection("portrait") end
+    end
+    openPortrait()
+    if C_Timer and C_Timer.After then C_Timer.After(0, openPortrait) end
+end
 local function MSUF_SelectCastbarSubPage(unitKey) if type(_G.MSUF_SetActiveCastbarSubPage)=="function"then pcall(_G.MSUF_SetActiveCastbarSubPage,unitKey)
 elseif type(MSUF_SetActiveCastbarSubPage)=="function"then pcall(MSUF_SetActiveCastbarSubPage,unitKey)
 end
@@ -2223,7 +2232,7 @@ if subkey and subkey~=""then MSUF_SelectCastbarSubPage(subkey)
 end
 end
 },profiles={title="MSUF Profiles",build=MSUF_EnsureMainOptionsPanelBuilt,select=function() MSUF_SelectMainOptionsKey("profiles") end
-},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},portraits={title="MSUF Portraits",build=MSUF_EnsurePortraitsPanelBuilt},opt_portraits={title="MSUF Portraits",build=MSUF_EnsurePortraitsPanelBuilt},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt},groupframes={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function(sub) if sub and _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab(sub) end end},gf_layout={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("frame") end end},gf_bars={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("health") end end},gf_auras={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("auras") end end},gf_indicators={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("indicators") end end},
+},colors={title="MSUF Colors",build=MSUF_EnsureColorsPanelBuilt},portraits={title="MSUF Player Portrait",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectPlayerPortraitPage},opt_portraits={title="MSUF Player Portrait",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectPlayerPortraitPage},classpower={title="MSUF Class Resources",build=MSUF_EnsureMainOptionsPanelBuilt,select=MSUF_SelectClassResourcesPage},gameplay={title="MSUF Gameplay",build=MSUF_EnsureGameplayPanelBuilt},modules={title="MSUF Modules",build=MSUF_EnsureModulesPanelBuilt},groupframes={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function(sub) if sub and _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab(sub) end end},gf_layout={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("frame") end end},gf_bars={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("health") end end},gf_auras={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("auras") end end},gf_indicators={title="MSUF Group Frames",build=function() local fn=_G.MSUF_EnsureGFPanelBuilt; if type(fn)=="function" then return fn() end end,select=function() if _G.MSUF_GF_SwitchTab then _G.MSUF_GF_SwitchTab("indicators") end end},
 -- Search results virtual page (panel built lazily by MSUF_Search.lua)
 search={title="Search Results",nav="Search",build=function()
     local fn=ns and ns.MSUF_Search_EnsurePanel
@@ -2557,7 +2566,7 @@ uf_player={1,0},uf_target={2,0},uf_targettarget={3,0},
 uf_focus={4,0},uf_boss={5,0},uf_pet={6,0},
 opt_bars={7,0},opt_fonts={0,1},auras2={1,1},
 opt_castbar={2,1},opt_misc={3,1},opt_colors={4,1},
-opt_portraits={5,1},classpower={6,1},gameplay={7,1},groupframes={0,2},gf_layout={0,2},gf_bars={0,2},gf_auras={0,2},gf_indicators={0,2},
+classpower={6,1},gameplay={7,1},groupframes={0,2},gf_layout={0,2},gf_bars={0,2},gf_auras={0,2},gf_indicators={0,2},
 modules={1,2},profiles={2,2},
 }
 local MSUF_NAV_ICON_COLORS={
@@ -2566,7 +2575,6 @@ uf_player={0.40,0.78,0.98},uf_target={0.40,0.78,0.98},uf_targettarget={0.40,0.78
 uf_focus={0.40,0.78,0.98},uf_boss={0.40,0.78,0.98},uf_pet={0.40,0.78,0.98},
 opt_bars={0.88,0.74,0.36},opt_fonts={0.88,0.74,0.36},auras2={0.88,0.74,0.36},
 opt_castbar={0.88,0.74,0.36},opt_misc={0.88,0.74,0.36},opt_colors={0.88,0.74,0.36},
-opt_portraits={0.88,0.74,0.36},
 classpower={0.35,0.82,0.50},gameplay={0.72,0.50,0.92},groupframes={0.45,0.75,0.88},gf_layout={0.45,0.75,0.88},gf_bars={0.45,0.75,0.88},gf_auras={0.45,0.75,0.88},gf_indicators={0.45,0.75,0.88},
 modules={0.40,0.80,0.75},profiles={0.90,0.62,0.30},
 }
@@ -2616,7 +2624,7 @@ navParent._msufNavStripe=stripe end
 local function MakeButton(label,w,onClick,isHeader,isChild) local b=UI_Button(navParent,tostring(label or""),w,btnH,"TOPLEFT",navParent,"TOPLEFT",0,0,onClick)
 MSUF_LeftJustifyButtonText(b,isHeader and 18 or(isChild and 22 or 24))
 MSUF_SkinNavButton(b,isHeader,isChild) return b end
-local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="groupframes",label="Group Frames",defaultOpen=true,children={{key="gf_layout",label="Layout"},{key="gf_bars",label="Health & Text"},{key="gf_auras",label="Buffs & Debuffs"},{key="gf_indicators",label="Indicators"},}},{type="header",id="options",label="Global Style",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Unit Auras"},{key="opt_castbar",label="Castbar"},{key="opt_portraits",label="Portraits"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
+local NAV={{type="leaf",key="home",label="Dashboard"},{type="header",id="unitframes",label="Unit Frames",defaultOpen=true,children={{key="uf_player",label="Player"},{key="uf_target",label="Target"},{key="uf_targettarget",label="Target of Target"},{key="uf_focus",label="Focus"},{key="uf_boss",label="Boss Frames"},{key="uf_pet",label="Pet"},}},{type="header",id="groupframes",label="Group Frames",defaultOpen=true,children={{key="gf_layout",label="Layout"},{key="gf_bars",label="Health & Text"},{key="gf_auras",label="Buffs & Debuffs"},{key="gf_indicators",label="Indicators"},}},{type="header",id="options",label="Global Style",defaultOpen=true,children={{key="opt_bars",label="Bars"},{key="opt_fonts",label="Fonts"},{key="auras2",label="Unit Auras"},{key="opt_castbar",label="Castbar"},{key="opt_colors",label="Colors"},{key="opt_misc",label="Miscellaneous"},}},{type="leaf",key="classpower",label="Class Resources"},{type="leaf",key="gameplay",label="Gameplay"},{type="header",id="modules",label="Modules",defaultOpen=false,children={{key="modules",label="Style"},}},{type="leaf",key="profiles",label="Profiles"},}
 local headerLabels={}
 for _,node in ipairs(NAV)
 do if node.type=="header"then headerLabels[node.id]=node.label end

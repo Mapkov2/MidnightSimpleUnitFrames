@@ -72,6 +72,11 @@ local function GetStep()
     return s
 end
 
+local function RefreshUFPreview(reason)
+    local fn = _G.MSUF_UFPreview_RequestRefresh
+    if type(fn) == "function" then fn(reason or "EM2_POPUP") end
+end
+
 -- Panel
 function Factory.Panel(name, width, visibleH, title)
     width = width or PW; visibleH = visibleH or 540
@@ -853,6 +858,7 @@ local function Apply()
             local dh=pf.dpbHBox and tonumber(pf.dpbHBox:GetText()); if dh then conf.detachedPowerBarHeight=floor(max(2,min(80,dh))+0.5) end
             local dx=pf.dpbXBox and tonumber(pf.dpbXBox:GetText()); if dx then conf.detachedPowerBarOffsetX=floor(dx+0.5) end
             local dy=pf.dpbYBox and tonumber(pf.dpbYBox:GetText()); if dy then conf.detachedPowerBarOffsetY=floor(dy+0.5) end
+            local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText()); if dl then conf.detachedPowerBarFrameLevelOffset=floor(max(0,min(30,dl))+0.5) end
             if pf.syncCPCB and pf.unit=="player" then conf.detachedPowerBarSyncClassPower=pf.syncCPCB:GetChecked() and true or false end
             if pf.anchorCPCB and pf.unit=="player" then conf.detachedPowerBarAnchorToClassPower=pf.anchorCPCB:GetChecked() and true or false end
             if pf.textOnBarCB then conf.detachedPowerBarTextOnBar=pf.textOnBarCB:GetChecked() and true or false end
@@ -876,6 +882,7 @@ local function Apply()
     if type(_G.MSUF_ApplyPowerBarEmbedLayout)=="function" and pf.parent then _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent) end
     if pf._refreshVisibility then pf._refreshVisibility() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshUFPreview("EM2_UNIT_POPUP_APPLY")
 end
 
 local function Sync()
@@ -907,6 +914,7 @@ local function Sync()
     SC(pf.anchorCPCB,conf.detachedPowerBarAnchorToClassPower); SC(pf.textOnBarCB,conf.detachedPowerBarTextOnBar)
     S(pf.dpbWBox,conf.detachedPowerBarWidth or 150); S(pf.dpbHBox,conf.detachedPowerBarHeight or 6)
     S(pf.dpbXBox,conf.detachedPowerBarOffsetX or 0); S(pf.dpbYBox,conf.detachedPowerBarOffsetY or 0)
+    S(pf.dpbLevelBox,conf.detachedPowerBarFrameLevelOffset or 6)
     pf.MSUF_prev = {}; for k,v in pairs(conf) do if type(v)~="table" then pf.MSUF_prev[k]=v end end; pf.MSUF_prev.key=key
     -- Refresh dependent gray-out state
     if pf.nameShowCB and pf.nameShowCB.UpdateDependents then pf.nameShowCB:UpdateDependents() end
@@ -960,6 +968,7 @@ local function Build()
     local dText = F.CheckRow(pf, dB, dC, { label="Power text on bar", cbKey="textOnBarCB", anchorTo=dAnch, onChanged=function() Apply() end })
     local dWH = F.PairRow(pf, dB, dC, { label1="W:", label2="H:", key1="dpbWBox", key2="dpbHBox", anchorTo=dText, onChanged=Apply })
     local dXY = F.PairRow(pf, dB, dC, { label1="X:", label2="Y:", key1="dpbXBox", key2="dpbYBox", anchorTo=dWH, onChanged=Apply })
+    local dLevel = F.SingleRow(pf, dB, dC, { label="Level:", boxKey="dpbLevelBox", anchorTo=dXY, onChanged=Apply })
     dC:RecalcHeight()
 
     pf._allCards = { fC, nC, hC, pC, dC }
@@ -996,6 +1005,7 @@ local function Build()
             -- Apply + resync
             if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
             if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
+            RefreshUFPreview("EM2_UNIT_POPUP_COPY")
             C_Timer.After(0.1, function() Sync() end)
         end,
     })
@@ -1027,7 +1037,9 @@ local function Build()
             local conf=Conf(pf.MSUF_prev.key)
             if conf then for k,v in pairs(pf.MSUF_prev) do if k~="key" then conf[k]=v end end
                 if type(ApplyAllSettings)=="function" then ApplyAllSettings() end
-                if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end end
+                if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
+                RefreshUFPreview("EM2_UNIT_POPUP_CANCEL")
+            end
         end; pf:Hide()
     end)
     pf:EnableKeyboard(true)
@@ -1192,6 +1204,7 @@ local function ApplyWidthSource()
     if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     RefreshWidthSourceControls(g, u, false)
+    RefreshUFPreview("EM2_CASTBAR_WIDTH_SOURCE")
 end
 
 local function Apply()
@@ -1244,6 +1257,7 @@ local function Apply()
     end
     if type(_G.MSUF_UpdateCastbarVisuals)=="function" then _G.MSUF_UpdateCastbarVisuals() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshUFPreview("EM2_CASTBAR_POPUP_APPLY")
 end
 
 local BOSS_KEYS = {
@@ -1444,6 +1458,7 @@ local function Build()
             WriteCastbarSettings(targetKey, r)
             if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
             if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+            RefreshUFPreview("EM2_CASTBAR_POPUP_COPY")
             C_Timer.After(0.1, function() Sync() end)
         end,
     })
@@ -1456,6 +1471,7 @@ local function Build()
         if type(_G.MSUF_UpdateCastbarVisuals)=="function" then _G.MSUF_UpdateCastbarVisuals() end
         if type(ApplyAllSettings)=="function" then ApplyAllSettings() end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        RefreshUFPreview("EM2_CASTBAR_POPUP_CANCEL")
         pf:Hide()
     end)
     pf:EnableKeyboard(true)

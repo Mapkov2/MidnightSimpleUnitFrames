@@ -460,6 +460,12 @@ local COPY_POWER_BAR_FIELDS = {
     "showPowerBar","powerBarHeight","embedPowerBarIntoHealth",
     "powerBarBorderEnabled","powerBarBorderThickness","powerSmoothFill",
 }
+local COPY_PORTRAIT_FIELDS = {
+    "portraitMode","portraitRender","portraitClassStyle","portraitShape",
+    "portraitSizeOverride","portraitOffsetX","portraitOffsetY",
+    "portraitBorderStyle","portraitBorderThickness",
+    "portraitBgEnabled","portraitFillBorder",
+}
 local COPY_INDICATOR_FIELDS = {
     "showLeaderIcon","leaderIconOffsetX","leaderIconOffsetY","leaderIconAnchor","leaderIconSize","leaderIconLayer",
     "showRaidMarker","raidMarkerOffsetX","raidMarkerOffsetY","raidMarkerAnchor","raidMarkerSize","raidMarkerLayer",
@@ -621,11 +627,15 @@ local function CopyUnitSettings(srcKey, destKey, api)
         local dst, dstC = EnsureUnitDB(toKey)
         if not dst or not dstC or dstC == srcC then return end
         CopyFields(dst, src, COPY_BASIC_FIELDS)
+        CopyFields(dst, src, COPY_PORTRAIT_FIELDS)
+        dst.portraitDecoOverride = nil
         CopyPowerBarFields(dst, src, srcC)
         CopyFields(dst, src, COPY_INDICATOR_FIELDS)
         CopyFields(dst, src, MSUF_COPY_STATUSICON_FIELDS)
         dst.showInterrupt = src.showInterrupt
         CopyCastbar(g, srcC, dstC)
+        if _G.MSUF_Portraits_SyncUnit then _G.MSUF_Portraits_SyncUnit(dstC) end
+        if _G.MSUF_PortraitDecoration_SyncUnit then _G.MSUF_PortraitDecoration_SyncUnit(dstC) end
         if api and api.ApplySettingsForKey then api.ApplySettingsForKey(dstC) end
     end
 
@@ -693,6 +703,7 @@ end
 local function MkCollapsible(parent, title, w, expandedH, defaultOpen)
     local box = MkGroupBox(parent, title, 0, 0, w, defaultOpen and expandedH or 28)
     box:ClearAllPoints()
+    if box.SetClipsChildren then box:SetClipsChildren(true) end
     box._msufExpandedH = expandedH
     box._msufCollapsedH = 28
     box._msufCollapsed = not defaultOpen
@@ -720,6 +731,7 @@ local function MkCollapsible(parent, title, w, expandedH, defaultOpen)
     local body = CreateFrame("Frame", nil, box)
     body:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -28)
     body:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+    if body.SetClipsChildren then body:SetClipsChildren(true) end
     body:SetShown(defaultOpen)
     box._msufBody = body
 
@@ -900,12 +912,8 @@ local function SetFrameBasicsConfigEnabled(panel, enabled)
         "playerShowPowerCB",
         "playerReverseFillBarsCB",
         "playerSmoothFillCB",
-        "playerPortraitDropDown",
     }) do
         SetOptionControlEnabled(panel[key], enabled)
-    end
-    if panel.playerPortraitLabel and panel.playerPortraitLabel.SetAlpha then
-        panel.playerPortraitLabel:SetAlpha(enabled and 1 or OPTION_DISABLED_ALPHA)
     end
 end
 
@@ -1227,16 +1235,32 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
 
     -- Collapsible sections
-    local basicsH, castbarBoxH, loadCondH, sizeH = 132, 132, 124, 200
+    local previewH, basicsH, textH, portraitH, castbarBoxH, loadCondH, sizeH = 320, 88, 900, 520, 132, 124, 200
     local statusBoxH, bossLayoutH = 500, 152
     panel._msufStatusBoxH = statusBoxH
+
+    local previewBox
+    if ns.MSUF_Options_CreateUnitPreviewBox then
+        previewBox = ns.MSUF_Options_CreateUnitPreviewBox(frameGroup, panel, fullW, previewH)
+        previewBox:Hide()
+        panel.unitPreviewBox = previewBox
+    end
 
     local basicsBox, basicsBody = MkCollapsible(frameGroup, "Frame Basics", fullW, basicsH, true)
     basicsBox:Hide(); panel.playerBasicsBox = basicsBox; panel.playerBasicsBody = basicsBody; panel._msufBasicsH = basicsH
 
+    local textBox, textBody = MkCollapsible(frameGroup, "Text", fullW, textH, true)
+    textBox:Hide(); panel.playerTextBox = textBox; panel.playerTextBody = textBody; panel._msufTextH = textH
+    if ns.MSUF_Options_BuildUnitTextSection then ns.MSUF_Options_BuildUnitTextSection(panel, textBody) end
+
+    local portraitBox, portraitBody = MkCollapsible(frameGroup, "Portrait", fullW, portraitH, false)
+    portraitBox:Hide(); panel.playerPortraitBox = portraitBox; panel.playerPortraitBody = portraitBody; panel._msufPortraitH = portraitH
+    if ns.MSUF_Options_BuildUnitPortraitSection then ns.MSUF_Options_BuildUnitPortraitSection(panel, portraitBody) end
+
     -- Power Bar section
-    local powerBarBox, powerBarBody = MkCollapsible(frameGroup, "Power Bar", fullW, 176, false)
-    powerBarBox:Hide(); panel.playerPowerBarBox = powerBarBox; panel.playerPowerBarBody = powerBarBody
+    local powerBarH = 520
+    local powerBarBox, powerBarBody = MkCollapsible(frameGroup, "Power Bar", fullW, powerBarH, false)
+    powerBarBox:Hide(); panel.playerPowerBarBox = powerBarBox; panel.playerPowerBarBody = powerBarBody; panel._msufPowerBarH = powerBarH
     do
         local pbShowCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarShowCB", "Show power bar", 12, -6)
         panel.playerPowerBarShowCB = pbShowCB
@@ -1257,6 +1281,104 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
 
         local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -117)
         panel.playerPowerBarSmoothCB = pbSmoothCB
+
+        local info = powerBarBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        info:SetPoint("TOPLEFT", powerBarBody, "TOPLEFT", 12, -150)
+        info:SetWidth(fullW - 28)
+        info:SetJustifyH("LEFT")
+        info:SetTextColor(0.66, 0.78, 1)
+        panel.playerPowerModeInfo = info
+
+        local textOnBar = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerTextOnBarCB", "Text on detached bar", 300, -174)
+        panel.playerDetachedPowerTextOnBarCB = textOnBar
+
+        local cpBtn = CreateFrame("Button", nil, powerBarBody, "UIPanelButtonTemplate")
+        cpBtn:SetSize(132, 22)
+        cpBtn:SetText(TR("Class Resources"))
+        cpBtn:SetPoint("TOPRIGHT", powerBarBody, "TOPRIGHT", -14, -174)
+        cpBtn:SetScript("OnClick", function()
+            if _G.MSUF_SwitchMirrorPage then
+                _G.MSUF_SwitchMirrorPage("classpower")
+            elseif _G.MSUF_OpenPage then
+                _G.MSUF_OpenPage("classpower")
+            end
+        end)
+        panel.playerClassResourceShortcutBtn = cpBtn
+
+        local dpbX = CreateLabeledSlider("MSUF_UF_DetachedPowerXSlider", "Detached X", powerBarBody, -1000, 1000, 1, 14, -214)
+        FinalizeDashboard(dpbX, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
+        panel.playerDetachedPowerXSlider = dpbX
+
+        local dpbY = CreateLabeledSlider("MSUF_UF_DetachedPowerYSlider", "Detached Y", powerBarBody, -1000, 1000, 1, 334, -214)
+        FinalizeDashboard(dpbY, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
+        panel.playerDetachedPowerYSlider = dpbY
+
+        local dpbW = CreateLabeledSlider("MSUF_UF_DetachedPowerWidthSlider", "Detached width", powerBarBody, 20, 800, 1, 14, -288)
+        FinalizeDashboard(dpbW, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
+        panel.playerDetachedPowerWidthSlider = dpbW
+
+        local dpbH = CreateLabeledSlider("MSUF_UF_DetachedPowerHeightSlider", "Detached height", powerBarBody, 2, 80, 1, 334, -288)
+        FinalizeDashboard(dpbH, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
+        panel.playerDetachedPowerHeightSlider = dpbH
+
+        local dpbLevel = CreateLabeledSlider("MSUF_UF_DetachedPowerLevelSlider", "Detached level", powerBarBody, 0, 30, 1, 14, -362)
+        FinalizeDashboard(dpbLevel, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
+        panel.playerDetachedPowerLevelSlider = dpbLevel
+
+        local reset = CreateFrame("Button", nil, powerBarBody, "UIPanelButtonTemplate")
+        reset:SetSize(62, 22)
+        reset:SetText(TR("Reset"))
+        reset:SetPoint("TOPRIGHT", powerBarBody, "TOPRIGHT", -14, -214)
+        panel.playerDetachedPowerResetBtn = reset
+    end
+    panel._msufRefreshUnitPowerControls = function()
+        EnsureDB()
+        local key = CanonKey((panel._msufGetCurrentKey and panel._msufGetCurrentKey()) or panel._msufLastApplyKey or "player") or "player"
+        local conf = MSUF_DB and MSUF_DB[key] or {}
+        local bars = MSUF_DB and MSUF_DB.bars or {}
+        local isPlayer = (key == "player")
+        local powerEnabled = ReadPowerBarEnabled(conf, key)
+        local detached = isPlayer and conf.powerBarDetached == true and powerEnabled
+        local classPowerActive = isPlayer and (bars.showClassPower == true or detached)
+        local function Show(w, on) if w and w.SetShown then w:SetShown(on and true or false) end end
+        Show(panel.playerPowerModeInfo, isPlayer)
+        if panel.playerPowerModeInfo and isPlayer then
+            if detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false) then
+                panel.playerPowerModeInfo:SetText(TR("Player Power is currently controlled by the MSUF Class Resource system. Detached mode is active: position, size, and level use the detached resource settings below."))
+            elseif detached then
+                panel.playerPowerModeInfo:SetText(TR("Detached mode is active: position, size, and level are controlled by the detached power settings below."))
+            elseif classPowerActive then
+                panel.playerPowerModeInfo:SetText(TR("Attached mode is active: the power bar follows the Player frame layout. Class Resources are configured separately."))
+            else
+                panel.playerPowerModeInfo:SetText(TR("Attached mode is active: the power bar follows the Player frame layout."))
+            end
+        end
+        for _, w in ipairs({
+            panel.playerDetachedPowerXSlider, panel.playerDetachedPowerYSlider,
+            panel.playerDetachedPowerWidthSlider, panel.playerDetachedPowerHeightSlider,
+            panel.playerDetachedPowerLevelSlider, panel.playerDetachedPowerResetBtn,
+            panel.playerDetachedPowerTextOnBarCB,
+        }) do
+            Show(w, isPlayer and detached)
+        end
+        Show(panel.playerClassResourceShortcutBtn, isPlayer and classPowerActive)
+        if panel.playerDetachedPowerTextOnBarCB and detached then panel.playerDetachedPowerTextOnBarCB:SetChecked(conf.detachedPowerBarTextOnBar == true) end
+        local function SetSlider(slider, value)
+            if slider and slider.SetValue then
+                slider.MSUF_SkipCallback = true
+                slider:SetValue(value)
+                slider.MSUF_SkipCallback = false
+                ForceSliderEB(slider)
+            end
+        end
+        if detached then
+            local frameW = tonumber(conf.width) or 250
+            SetSlider(panel.playerDetachedPowerXSlider, tonumber(conf.detachedPowerBarOffsetX) or 0)
+            SetSlider(panel.playerDetachedPowerYSlider, tonumber(conf.detachedPowerBarOffsetY) or -4)
+            SetSlider(panel.playerDetachedPowerWidthSlider, tonumber(conf.detachedPowerBarWidth) or frameW)
+            SetSlider(panel.playerDetachedPowerHeightSlider, tonumber(conf.detachedPowerBarHeight) or 6)
+            SetSlider(panel.playerDetachedPowerLevelSlider, tonumber(conf.detachedPowerBarFrameLevelOffset) or 6)
+        end
     end
 
     local castbarBox, castbarBody = MkCollapsible(frameGroup, "Castbar", fullW, castbarBoxH, false)
@@ -1277,14 +1399,25 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local anchorGroup, anchorBody = MkCollapsible(frameGroup, "Anchoring", fullW, 128, false)
     anchorGroup:Hide(); panel.unitAnchorGroup = anchorGroup; panel.unitAnchorBody = anchorBody
 
+    panel._msufOpenUnitSection = function(section)
+        local box = (section == "text" and textBox)
+            or (section == "portrait" and portraitBox)
+            or (section == "status" and statusBox)
+            or (section == "power" and powerBarBox)
+            or (section == "castbar" and castbarBox)
+            or basicsBox
+        if box then
+            box._msufCollapsed = false
+            if box._msufApplyCollapseState then box._msufApplyCollapseState() end
+        end
+        if panel._msufRelayoutUnitBoxes then panel._msufRelayoutUnitBoxes(panel._msufLastApplyKey or "player") end
+    end
+
     -- Basic toggles
     local BASIC_TOGGLES = {
         { "playerEnableFrameCB", "MSUF_UF_EnableFrameCB", "Enable", 0, 0 },
-        { "playerShowNameCB", "MSUF_UF_ShowNameCB", "Show name", 12, -34 },
-        { "playerShowHPCB", "MSUF_UF_ShowHPCB", "Show HP text", 164, -34 },
-        { "playerShowPowerCB", "MSUF_UF_ShowPowerCB", "Show power text", 12, -58 },
-        { "playerReverseFillBarsCB", "MSUF_UF_ReverseFillBarsCB", "Reverse fill", 164, -58 },
-        { "playerSmoothFillCB", "MSUF_UF_SmoothFillCB", "Smooth Health Fill", 320, -58 },
+        { "playerReverseFillBarsCB", "MSUF_UF_ReverseFillBarsCB", "Reverse fill", 12, -34 },
+        { "playerSmoothFillCB", "MSUF_UF_SmoothFillCB", "Smooth Health Fill", 190, -34 },
     }
     for _, s in ipairs(BASIC_TOGGLES) do
         panel[s[1]] = MkCheck(basicsBody, s[2], s[3], s[4], s[5] + 28)
@@ -1295,15 +1428,6 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         panel.playerEnableFrameCB:SetPoint("TOPRIGHT", basicsBody, "TOPRIGHT", -12, -6)
         CBLabelLeft(panel.playerEnableFrameCB, "Enable")
     end
-
-    -- Portrait dropdown
-    local portraitLabel = basicsBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    portraitLabel:SetPoint("TOPLEFT", basicsBody, "TOPLEFT", 12, -60)
-    portraitLabel:SetText(TR("Portrait"))
-    panel.playerPortraitLabel = portraitLabel
-    local pdd = MkStyledDD("MSUF_UF_PortraitDropDown", basicsBody, 190)
-    pdd:SetPoint("TOPLEFT", basicsBody, "TOPLEFT", -6, -72); pdd:Show()
-    panel.playerPortraitDropDown = pdd
 
     -- Load Conditions (3-column grid)
     local LC_SPECS = {
@@ -1493,6 +1617,80 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
                 set = function(v) StatusSet("selected", v) end,
             })
 
+            panel.statusIconsPreviewLabel = statusBody:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            panel.statusIconsPreviewLabel:SetPoint("TOPLEFT", statusBody, "TOPLEFT", 360, -76)
+            panel.statusIconsPreviewLabel:SetText(TR("Status Preview"))
+
+            local statusPreviewModeBtns = {}
+            local function RefreshStatusPreviewMode()
+                local mode = (_G.MSUF_UFPreview_GetStatusPreviewMode and _G.MSUF_UFPreview_GetStatusPreviewMode()) or "current"
+                mode = (mode == "all") and "all" or "current"
+                for key, btn in pairs(statusPreviewModeBtns) do
+                    local active = (key == mode)
+                    if active then
+                        btn:SetBackdropColor(0.12, 0.18, 0.30, 0.95)
+                        btn:SetBackdropBorderColor(0.30, 0.55, 0.90, 1)
+                        btn._fs:SetTextColor(0.85, 0.92, 1.00, 1)
+                    elseif btn._hover then
+                        btn:SetBackdropColor(0.11, 0.13, 0.18, 0.95)
+                        btn:SetBackdropBorderColor(0.25, 0.35, 0.50, 0.9)
+                        btn._fs:SetTextColor(0.78, 0.82, 0.90, 1)
+                    else
+                        btn:SetBackdropColor(0.04, 0.05, 0.08, 0.85)
+                        btn:SetBackdropBorderColor(0.16, 0.20, 0.28, 0.75)
+                        btn._fs:SetTextColor(0.55, 0.60, 0.70, 1)
+                    end
+                end
+            end
+            panel._msufRefreshUFStatusPreviewMode = RefreshStatusPreviewMode
+
+            local function SetStatusPreviewMode(mode)
+                mode = (mode == "all") and "all" or "current"
+                if _G.MSUF_UFPreview_SetStatusPreviewMode then _G.MSUF_UFPreview_SetStatusPreviewMode(mode) end
+                RefreshStatusPreviewMode()
+            end
+            local function MakeStatusPreviewModeButton(mode, label, width)
+                local btn = CreateFrame("Button", nil, statusBody, "BackdropTemplate")
+                btn:SetSize(width or 84, 20)
+                btn:SetBackdrop({
+                    bgFile = TEX_W8,
+                    edgeFile = TEX_W8,
+                    edgeSize = 1,
+                    insets = { left = 1, right = 1, top = 1, bottom = 1 },
+                })
+                local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                fs:SetPoint("CENTER")
+                fs:SetText(TR(label))
+                btn._fs = fs
+                btn:SetScript("OnClick", function() SetStatusPreviewMode(mode) end)
+                btn:SetScript("OnEnter", function(self)
+                    self._hover = true
+                    RefreshStatusPreviewMode()
+                    if not GameTooltip then return end
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:SetText(TR("Status Preview"), 1, 1, 1)
+                    if mode == "all" then
+                        GameTooltip:AddLine(TR("Shows every status indicator while this section is open."), 0.75, 0.80, 0.90, true)
+                    else
+                        GameTooltip:AddLine(TR("Shows only the selected status indicator while this section is open."), 0.75, 0.80, 0.90, true)
+                    end
+                    GameTooltip:Show()
+                end)
+                btn:SetScript("OnLeave", function(self)
+                    self._hover = false
+                    RefreshStatusPreviewMode()
+                    if GameTooltip then GameTooltip:Hide() end
+                end)
+                statusPreviewModeBtns[mode] = btn
+                return btn
+            end
+
+            panel.statusIconsPreviewCurrentBtn = MakeStatusPreviewModeButton("current", "Current", 82)
+            panel.statusIconsPreviewCurrentBtn:SetPoint("TOPLEFT", panel.statusIconsPreviewLabel, "BOTTOMLEFT", 0, -6)
+            panel.statusIconsPreviewAllBtn = MakeStatusPreviewModeButton("all", "Show All", 88)
+            panel.statusIconsPreviewAllBtn:SetPoint("LEFT", panel.statusIconsPreviewCurrentBtn, "RIGHT", 2, 0)
+            RefreshStatusPreviewMode()
+
             panel.statusIconsStyleCB = UI.Check({
                 name = "MSUF_UF_SI_MidnightCheck", parent = statusBody,
                 anchor = panel.statusIconsSelectorDrop, x = 16, y = -6,
@@ -1601,6 +1799,9 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
                 panel.statusIconsLayerSlider,
                 panel.statusIconsResetBtn,
                 panel.statusIconsTestModeCB,
+                panel.statusIconsPreviewLabel,
+                panel.statusIconsPreviewCurrentBtn,
+                panel.statusIconsPreviewAllBtn,
             }
         else
             local warn = statusBody:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -1717,13 +1918,25 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             local showBL = (k == "boss")
             local showAnch = (k == "player" or k == "target" or k == "focus" or k == "boss" or k == "pet" or k == "targettarget")
 
-            if basicsBox then basicsBox:ClearAllPoints(); basicsBox:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", leftX, topY); basicsBox:SetWidth(fullW) end
-            local prev = basicsBox
+            local prev = nil
+            if previewBox then
+                previewBox:ClearAllPoints(); previewBox:SetPoint("TOPLEFT", frameGroup, "TOPLEFT", leftX, topY); previewBox:SetWidth(fullW); previewBox:SetShown(true)
+                prev = previewBox
+            end
+            if basicsBox then
+                basicsBox:ClearAllPoints()
+                basicsBox:SetPoint("TOPLEFT", prev or frameGroup, prev and "BOTTOMLEFT" or "TOPLEFT", prev and 0 or leftX, prev and -sectionGap or topY)
+                basicsBox:SetWidth(fullW)
+                basicsBox:SetShown(true)
+                prev = basicsBox
+            end
             local function Chain(box, show)
                 if not box then return end
                 box:ClearAllPoints(); box:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -sectionGap); box:SetWidth(fullW); box:SetShown(show)
                 if show then prev = box end
             end
+            Chain(textBox, true)
+            Chain(portraitBox, true)
             local showPB = (k == "player" or k == "target" or k == "focus" or k == "boss")
             Chain(powerBarBox, showPB)
             Chain(castbarBox, showCB)
@@ -1737,7 +1950,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             if panel._msufFramesScrollUpdate then panel._msufFramesScrollUpdate() end
         end
         panel._msufRelayoutUnitBoxes = Relayout
-        for _, box in ipairs({ basicsBox, powerBarBox, castbarBox, statusBox, loadCondBox, sizeBox, bossLayoutBox, anchorGroup }) do
+        for _, box in ipairs({ basicsBox, textBox, portraitBox, powerBarBox, castbarBox, statusBox, loadCondBox, sizeBox, bossLayoutBox, anchorGroup }) do
             if box then box._msufOnCollapsedChanged = function() Relayout(panel._msufLastApplyKey or "player") end end
         end
         Relayout("player")
@@ -1955,6 +2168,18 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         panel.playerBasicsBox._msufExpandedH = panel._msufBasicsH or 132
         if not panel.playerBasicsBox._msufCollapsed then panel.playerBasicsBox:SetHeight(panel._msufBasicsH or 132) end
     end
+    if panel.playerTextBox then
+        panel.playerTextBox._msufExpandedH = panel._msufTextH or 900
+        if not panel.playerTextBox._msufCollapsed then panel.playerTextBox:SetHeight(panel._msufTextH or 900) end
+    end
+    if panel.playerPortraitBox then
+        panel.playerPortraitBox._msufExpandedH = panel._msufPortraitH or 520
+        if not panel.playerPortraitBox._msufCollapsed then panel.playerPortraitBox:SetHeight(panel._msufPortraitH or 520) end
+    end
+    if panel.playerPowerBarBox then
+        panel.playerPowerBarBox._msufExpandedH = panel._msufPowerBarH or 520
+        if not panel.playerPowerBarBox._msufCollapsed then panel.playerPowerBarBox:SetHeight(panel._msufPowerBarH or 520) end
+    end
     if panel.playerCastbarBox then
         panel.playerCastbarBox._msufExpandedH = 132
         if not panel.playerCastbarBox._msufCollapsed then panel.playerCastbarBox:SetHeight(132) end
@@ -2006,6 +2231,58 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
         end
         ApplyPowerBarConfigState(panel, currentKey, showPB)
         QueuePowerBarConfigRefresh(panel, currentKey, showPB, borderEnabled)
+        do
+            local bars = MSUF_DB and MSUF_DB.bars or {}
+            local detached = isPlayer and conf.powerBarDetached == true and powerEnabled
+            local classPowerActive = isPlayer and (bars.showClassPower == true or detached)
+            local merged = detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false)
+            local function Show(w, on)
+                if w and w.SetShown then w:SetShown(on and true or false) end
+            end
+            local info = panel.playerPowerModeInfo
+            if info then
+                Show(info, isPlayer)
+                if isPlayer then
+                    if merged then
+                        info:SetText(TR("Player Power is currently controlled by the MSUF Class Resource system. Detached mode is active: position, size, and level use the detached resource settings below."))
+                    elseif detached then
+                        info:SetText(TR("Detached mode is active: position, size, and level are controlled by the detached power settings below."))
+                    elseif classPowerActive then
+                        info:SetText(TR("Attached mode is active: the power bar follows the Player frame layout. Class Resources are configured separately."))
+                    else
+                        info:SetText(TR("Attached mode is active: the power bar follows the Player frame layout."))
+                    end
+                end
+            end
+            for _, w in ipairs({
+                panel.playerDetachedPowerXSlider, panel.playerDetachedPowerYSlider,
+                panel.playerDetachedPowerWidthSlider, panel.playerDetachedPowerHeightSlider,
+                panel.playerDetachedPowerLevelSlider, panel.playerDetachedPowerResetBtn,
+                panel.playerDetachedPowerTextOnBarCB,
+            }) do
+                Show(w, isPlayer and detached)
+            end
+            Show(panel.playerClassResourceShortcutBtn, isPlayer and classPowerActive)
+            if panel.playerDetachedPowerTextOnBarCB and detached then
+                panel.playerDetachedPowerTextOnBarCB:SetChecked(conf.detachedPowerBarTextOnBar == true)
+            end
+            local function SetSlider(slider, value)
+                if slider and slider.SetValue then
+                    slider.MSUF_SkipCallback = true
+                    slider:SetValue(value)
+                    slider.MSUF_SkipCallback = false
+                    ForceSliderEB(slider)
+                end
+            end
+            if detached then
+                local frameW = tonumber(conf.width) or 250
+                SetSlider(panel.playerDetachedPowerXSlider, tonumber(conf.detachedPowerBarOffsetX) or 0)
+                SetSlider(panel.playerDetachedPowerYSlider, tonumber(conf.detachedPowerBarOffsetY) or -4)
+                SetSlider(panel.playerDetachedPowerWidthSlider, tonumber(conf.detachedPowerBarWidth) or frameW)
+                SetSlider(panel.playerDetachedPowerHeightSlider, tonumber(conf.detachedPowerBarHeight) or 6)
+                SetSlider(panel.playerDetachedPowerLevelSlider, tonumber(conf.detachedPowerBarFrameLevelOffset) or 6)
+            end
+        end
     end
 
     -- ToT inline
@@ -2120,7 +2397,9 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
     if panel.playerBossTargetHLCB then panel.playerBossTargetHLCB:SetShown(isBoss); if isBoss then panel.playerBossTargetHLCB:SetChecked(g.bossTargetHighlightEnabled ~= false) end end
 
     -- Portrait
-    if panel.playerPortraitDropDown and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
+    if panel.playerPortraitDropDown and panel.playerPortraitDropDown.Refresh then
+        panel.playerPortraitDropDown:Refresh()
+    elseif panel.playerPortraitDropDown and UIDropDownMenu_SetSelectedValue and UIDropDownMenu_SetText then
         panel.playerPortraitDropDown:Show()
         local mode = GetPortraitVal(conf)
         UIDropDownMenu_SetSelectedValue(panel.playerPortraitDropDown, mode)
@@ -2205,6 +2484,9 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
 
     if panel._msufRelayoutUnitBoxes then panel._msufRelayoutUnitBoxes(currentKey) end
     if panel._msufBindCopyButtons then panel._msufBindCopyButtons() end
+    if panel._msufRefreshUnitTextControls then panel._msufRefreshUnitTextControls() end
+    if panel._msufRefreshUnitPortraitControls then panel._msufRefreshUnitPortraitControls() end
+    if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("OPTIONS_APPLY_DB") end
     ApplyFrameBasicsConfigState(panel, currentKey)
     QueueFrameBasicsConfigRefresh(panel, currentKey)
     if CASTBAR_ENABLE_KEYS[currentKey] then
@@ -2229,7 +2511,10 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
     panel._msufIsFramesTab = IsFramesTab
     panel._msufAPI = api
 
-    local function ApplyCurrent() if api.ApplySettingsForKey then api.ApplySettingsForKey(CurrentKey()) end end
+    local function ApplyCurrent()
+        if api.ApplySettingsForKey then api.ApplySettingsForKey(CurrentKey()) end
+        if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("UNIT_OPTIONS_APPLY") end
+    end
     local function ApplyLayout(reason)
         local key = CurrentKey()
         local fn = _G.MSUF_UFCore_RequestLayoutForUnit
@@ -2310,6 +2595,10 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                     ApplyFrameBasicsConfigState(panel, CurrentKey())
                     QueueFrameBasicsConfigRefresh(panel, CurrentKey())
                 end
+                if pair[2] == "showName" or pair[2] == "showHP" or pair[2] == "showPower" then
+                    if _G.MSUF_ForceTextLayoutForUnitKey then _G.MSUF_ForceTextLayoutForUnitKey(CurrentKey()) end
+                    if panel._msufRefreshUnitTextControls then panel._msufRefreshUnitTextControls() end
+                end
                 if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup(CurrentKey(), c) end end)
         end
     end
@@ -2345,6 +2634,9 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             else
                 ApplyCurrent()
             end
+            if _G.MSUF_ClassPower_Refresh and k == "player" then _G.MSUF_ClassPower_Refresh() end
+            if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup(k, MSUF_DB and MSUF_DB[k]) end
+            if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("POWER_BAR_OPTIONS") end
         end
         if panel.playerPowerBarShowCB then
             panel.playerPowerBarShowCB:SetScript("OnClick", function(self)
@@ -2399,10 +2691,60 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
                 PBApply()
             end)
         end
+        local function PlayerDetachedConf()
+            if CurrentKey() ~= "player" then return nil end
+            local c = EnsureKeyDB()
+            return c
+        end
+        local function SetDetachedNumber(field, value, minVal, maxVal, defaultVal)
+            local c = PlayerDetachedConf(); if not c then return end
+            local v = tonumber(value)
+            if v == nil then v = defaultVal or 0 end
+            v = math.floor(v + 0.5)
+            if minVal and v < minVal then v = minVal end
+            if maxVal and v > maxVal then v = maxVal end
+            c[field] = v
+            PBApply()
+        end
+        local DETACHED_SLIDERS = {
+            { w = panel.playerDetachedPowerXSlider, field = "detachedPowerBarOffsetX", min = -1000, max = 1000, def = 0 },
+            { w = panel.playerDetachedPowerYSlider, field = "detachedPowerBarOffsetY", min = -1000, max = 1000, def = -4 },
+            { w = panel.playerDetachedPowerWidthSlider, field = "detachedPowerBarWidth", min = 20, max = 800, def = 150 },
+            { w = panel.playerDetachedPowerHeightSlider, field = "detachedPowerBarHeight", min = 2, max = 80, def = 6 },
+            { w = panel.playerDetachedPowerLevelSlider, field = "detachedPowerBarFrameLevelOffset", min = 0, max = 30, def = 6 },
+        }
+        for _, spec in ipairs(DETACHED_SLIDERS) do
+            if spec.w then
+                spec.w.onValueChanged = function(self, value)
+                    if self.MSUF_SkipCallback then return end
+                    SetDetachedNumber(spec.field, value, spec.min, spec.max, spec.def)
+                end
+                if spec.w.HookScript then spec.w:HookScript("OnShow", function(self) ForceSliderEB(self) end) end
+            end
+        end
+        if panel.playerDetachedPowerTextOnBarCB then
+            panel.playerDetachedPowerTextOnBarCB:SetScript("OnClick", function(self)
+                local c = PlayerDetachedConf(); if not c then return end
+                c.detachedPowerBarTextOnBar = self:GetChecked() and true or false
+                PBApply()
+            end)
+        end
+        if panel.playerDetachedPowerResetBtn then
+            panel.playerDetachedPowerResetBtn:SetScript("OnClick", function()
+                local c = PlayerDetachedConf(); if not c then return end
+                c.detachedPowerBarOffsetX = 0
+                c.detachedPowerBarOffsetY = -4
+                c.detachedPowerBarWidth = nil
+                c.detachedPowerBarHeight = nil
+                c.detachedPowerBarFrameLevelOffset = nil
+                PBApply()
+                if panel.LoadFromDB then panel:LoadFromDB() end
+            end)
+        end
     end
 
     -- Portrait dropdown
-    if panel.playerPortraitDropDown and UIDropDownMenu_Initialize then
+    if panel.playerPortraitDropDown and UIDropDownMenu_Initialize and not panel.playerPortraitDropDown._ddSpec then
         UIDropDownMenu_Initialize(panel.playerPortraitDropDown, function(_, level)
             if not level or level ~= 1 then return end
             for _, opt in ipairs(PORTRAIT_OPTIONS) do
@@ -2589,6 +2931,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             panel._msufStatusIconSelectedId = spec and spec.id or nil
         end
         panel._msufCurrentUFStatusSpec = spec
+        if spec and _G.MSUF_UFPreview_SelectStatusIcon then _G.MSUF_UFPreview_SelectStatusIcon(spec.id) end
         return spec, k
     end
     panel._msufEnsureUFStatusSelection = EnsureUFStatusSelection
@@ -2657,6 +3000,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
         if panel.statusIconsAnchorDrop and panel.statusIconsAnchorDrop.Refresh then panel.statusIconsAnchorDrop:Refresh() end
         if panel.statusIconsStyleCB then panel.statusIconsStyleCB:SetChecked(GetStatusIconStyleMidnight()) end
         if panel.statusIconsTestModeCB then panel.statusIconsTestModeCB:SetChecked((conf and conf.stateIconsTestMode == true) or (g.stateIconsTestMode == true)) end
+        if panel._msufRefreshUFStatusPreviewMode then panel._msufRefreshUFStatusPreviewMode() end
         if spec then
             local enabled = ReadBool(conf, g, spec.showField, spec.showDefault)
             if panel.statusIconsEnabledCB then panel.statusIconsEnabledCB:SetChecked(enabled) end
@@ -2711,6 +3055,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
             if nextSpec and (not nextSpec.allowed or nextSpec.allowed(k)) then
                 panel._msufStatusIconSelectedId = nextSpec.id
                 panel._msufCurrentUFStatusSpec = nextSpec
+                if _G.MSUF_UFPreview_SelectStatusIcon then _G.MSUF_UFPreview_SelectStatusIcon(nextSpec.id) end
                 if ns.MSUF_Options_Player_LayoutIndicatorTemplate then ns.MSUF_Options_Player_LayoutIndicatorTemplate(panel, k) end
             end
             RefreshUFStatusControls()

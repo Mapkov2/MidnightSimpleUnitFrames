@@ -80,7 +80,10 @@ local function CP_Create(playerFrame)
         if CP.container then return end
 
         local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame)
-        c:SetFrameLevel(playerFrame:GetFrameLevel() + 5)  -- above hpBar (Unhalted overlay approach)
+        local b = _cpDB.bars or {}
+        local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
+        if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
+        c:SetFrameLevel(playerFrame:GetFrameLevel() + levelOffset)  -- above hpBar (Unhalted overlay approach)
         c:Hide()
         CP.container = c
 
@@ -162,6 +165,22 @@ builders.LAYOUT = function(E)
         local h = height
         local b = _cpDB.bars or {}
         local layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
+        local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
+        if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
+        if playerFrame.GetFrameLevel and CP.container.SetFrameLevel then
+            local targetLevel = (playerFrame:GetFrameLevel() or 0) + levelOffset
+            if CP.container._msufFrameLevelStamp ~= targetLevel then
+                CP.container:SetFrameLevel(targetLevel)
+                CP.container._msufFrameLevelStamp = targetLevel
+            end
+            if CP.textFrame and CP.textFrame.SetFrameLevel then
+                local textLevel = targetLevel + 10
+                if CP.textFrame._msufFrameLevelStamp ~= textLevel then
+                    CP.textFrame:SetFrameLevel(textLevel)
+                    CP.textFrame._msufFrameLevelStamp = textLevel
+                end
+            end
+        end
 
         local tickW = tonumber(b.classPowerTickWidth) or 1
         if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end

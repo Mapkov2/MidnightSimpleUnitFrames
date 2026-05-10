@@ -18,6 +18,11 @@ local floor = math.floor
 local max   = math.max
 local min   = math.min
 
+local function RefreshUFPreview(reason)
+    local fn = _G.MSUF_UFPreview_RequestRefresh
+    if type(fn) == "function" then fn(reason or "EM2_LAYOUT") end
+end
+
 -- Theme (read from MSUF_THEME, fall back to Midnight defaults)
 local function T()
     return _G.MSUF_THEME or {
@@ -638,6 +643,7 @@ local function NudgeTarget(dx, dy)
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        RefreshUFPreview("EM2_CASTBAR_NUDGE")
         return
     end
 
@@ -724,6 +730,7 @@ local function NudgeTarget(dx, dy)
     end
     if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshUFPreview("EM2_UNIT_NUDGE")
 end
 
 function Nudge.Enable()
@@ -1095,6 +1102,7 @@ function Ticker.EndDrag()
         end)
         if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
         if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
+        RefreshUFPreview("EM2_UNIT_DRAG_END")
     end
 
     return moved

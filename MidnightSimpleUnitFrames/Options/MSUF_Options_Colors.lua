@@ -3819,7 +3819,16 @@ S.lastControl = S.auraPanSwatch
     portraitSub:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -6)
     portraitSub:SetWidth(600)
     portraitSub:SetJustifyH("LEFT")
-    portraitSub:SetText("Custom border color (used when Border Style is set to Custom) and background color.")
+    portraitSub:SetText("Portrait border color used by Solid/Custom border styles, plus background color.")
+
+    local function RefreshPortraitColorConsumers(reason)
+        if _G.MSUF_PortraitDecoration_RefreshAll then
+            _G.MSUF_PortraitDecoration_RefreshAll()
+        end
+        if _G.MSUF_UFPreview_RequestRefresh then
+            _G.MSUF_UFPreview_RequestRefresh(reason or "PORTRAIT_COLORS")
+        end
+    end
 
     -- Portrait Border Color
     local pBorderLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
@@ -3843,19 +3852,16 @@ S.lastControl = S.auraPanSwatch
             g.portraitBorderColorG = ng
             g.portraitBorderColorB = nb
             S.portraitBorderTex:SetColorTexture(nr, ng, nb)
-            -- Propagate to non-override units
+            -- Portrait styling is per-unit now; this Global Style control acts as
+            -- an explicit "apply to all unit portraits" color shortcut.
             for _, uk in ipairs({"player","target","focus","targettarget","pet","boss"}) do
                 MSUF_DB[uk] = MSUF_DB[uk] or {}
                 local u = MSUF_DB[uk]
-                if not u.portraitDecoOverride then
-                    u.portraitBorderColorR = nr
-                    u.portraitBorderColorG = ng
-                    u.portraitBorderColorB = nb
-                end
+                u.portraitBorderColorR = nr
+                u.portraitBorderColorG = ng
+                u.portraitBorderColorB = nb
             end
-            if _G.MSUF_PortraitDecoration_RefreshAll then
-                _G.MSUF_PortraitDecoration_RefreshAll()
-            end
+            RefreshPortraitColorConsumers("PORTRAIT_BORDER_COLOR")
         end)
     end)
 
@@ -3884,15 +3890,11 @@ S.lastControl = S.auraPanSwatch
             for _, uk in ipairs({"player","target","focus","targettarget","pet","boss"}) do
                 MSUF_DB[uk] = MSUF_DB[uk] or {}
                 local u = MSUF_DB[uk]
-                if not u.portraitDecoOverride then
-                    u.portraitBgColorR = nr
-                    u.portraitBgColorG = ng
-                    u.portraitBgColorB = nb
-                end
+                u.portraitBgColorR = nr
+                u.portraitBgColorG = ng
+                u.portraitBgColorB = nb
             end
-            if _G.MSUF_PortraitDecoration_RefreshAll then
-                _G.MSUF_PortraitDecoration_RefreshAll()
-            end
+            RefreshPortraitColorConsumers("PORTRAIT_BG_COLOR")
         end)
     end)
 
@@ -3910,16 +3912,12 @@ S.lastControl = S.auraPanSwatch
             for _, uk in ipairs({"player","target","focus","targettarget","pet","boss"}) do
                 MSUF_DB[uk] = MSUF_DB[uk] or {}
                 local u = MSUF_DB[uk]
-                if not u.portraitDecoOverride then
-                    u.portraitBorderColorR = 1; u.portraitBorderColorG = 1; u.portraitBorderColorB = 1; u.portraitBorderColorA = 1
-                    u.portraitBgColorR = 0.05; u.portraitBgColorG = 0.05; u.portraitBgColorB = 0.05; u.portraitBgColorA = 0.85
-                end
+                u.portraitBorderColorR = 1; u.portraitBorderColorG = 1; u.portraitBorderColorB = 1; u.portraitBorderColorA = 1
+                u.portraitBgColorR = 0.05; u.portraitBgColorG = 0.05; u.portraitBgColorB = 0.05; u.portraitBgColorA = 0.85
             end
             S.portraitBorderTex:SetColorTexture(1, 1, 1)
             S.portraitBgTex:SetColorTexture(0.05, 0.05, 0.05)
-            if _G.MSUF_PortraitDecoration_RefreshAll then
-                _G.MSUF_PortraitDecoration_RefreshAll()
-            end
+            RefreshPortraitColorConsumers("PORTRAIT_COLOR_RESET")
         end)
     end)
 

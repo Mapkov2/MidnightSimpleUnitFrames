@@ -5354,7 +5354,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
 
     -- Detach: per-unit config for player/target/focus (detach overrides embed)
     local detached = false
-    local dW, dH, dX, dY = 0, 0, 0, 0
+    local dW, dH, dX, dY, dLevel = 0, 0, 0, 0, 6
     local anchorToCP = false
     if (unit == 'player' or unit == 'target' or unit == 'focus') then
         local conf = (key and MSUF_DB and MSUF_DB[key]) or nil
@@ -5367,6 +5367,8 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
             dH = tonumber(conf.detachedPowerBarHeight) or 6
             dX = tonumber(conf.detachedPowerBarOffsetX) or 0
             dY = tonumber(conf.detachedPowerBarOffsetY) or -4
+            dLevel = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
+            if dLevel < 0 then dLevel = 0 elseif dLevel > 30 then dLevel = 30 end
             if unit == 'player' and conf.detachedPowerBarAnchorToClassPower == true then
                 anchorToCP = true
             end
@@ -5410,7 +5412,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
             end
         end
     end
-    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (enabled and 1 or 0), (embed and 1 or 0), (reserve and 1 or 0), h, (activeDetached and 1 or 0), dW, dH, dX, dY, (anchorToCP and 1 or 0), dpbWMode) then
+    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (enabled and 1 or 0), (embed and 1 or 0), (reserve and 1 or 0), h, (activeDetached and 1 or 0), dW, dH, dX, dY, dLevel, (anchorToCP and 1 or 0), dpbWMode) then
         if not enabled then _MSUF_Bars_HidePower(pb, true) end
         if _G.MSUF_ApplyPowerBarBorder then
             _G.MSUF_ApplyPowerBarBorder(pb)
@@ -5446,6 +5448,9 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
         if dH < 2 then dH = 2 elseif dH > 80 then dH = 80 end
         pb:SetSize(dW, dH)
+        if pb.SetFrameLevel and f.GetFrameLevel then
+            pb:SetFrameLevel((f:GetFrameLevel() or 0) + dLevel)
+        end
         -- Anchor to class power container (MRB energy→combo pattern) or to unit frame
         if anchorToCP then
             local cpContainer = _G["MSUF_ClassPowerContainer"]
@@ -5467,10 +5472,12 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
             ApplyTextLayout(f, uConf)
         end
     elseif reserve then
+        if pb.SetFrameLevel and hb.GetFrameLevel then pb:SetFrameLevel(hb:GetFrameLevel()) end
         pb:SetHeight(h)
         pb:SetPoint('BOTTOMLEFT', f, 'BOTTOMLEFT', 2, 2)
         pb:SetPoint('BOTTOMRIGHT', f, 'BOTTOMRIGHT', -2, 2)
     else
+        if pb.SetFrameLevel and hb.GetFrameLevel then pb:SetFrameLevel(hb:GetFrameLevel()) end
         pb:SetHeight(h)
         pb:SetPoint('TOPLEFT', hb, 'BOTTOMLEFT', 0, 0)
         pb:SetPoint('TOPRIGHT', hb, 'BOTTOMRIGHT', 0, 0)

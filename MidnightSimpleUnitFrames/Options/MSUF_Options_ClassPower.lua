@@ -352,7 +352,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     headerAnchor:SetPoint("TOPLEFT", cpPanel, "TOPLEFT", 1, -40)
 
     -- Section 1: Layout (default open)
-    local secLayout, layBody = MakeCollapsibleSection(cpPanel, headerAnchor, SEC_W, 210, TR("Layout"), true)
+    local secLayout, layBody = MakeCollapsibleSection(cpPanel, headerAnchor, SEC_W, 246, TR("Layout"), true)
 
     local cpShowCheck = EnhanceCheck(UI.Check({
         name = "MSUF_ClassPowerShowCheck", parent = layBody,
@@ -388,6 +388,7 @@ local function BuildClassPowerOptions(leftName, rightName)
     local cpWidthRow   = MakeRow("MSUF_CPWidth",   "Width",    layBody, 30, 800,  1, "classPowerWidth",   cpWidthModeLabel, "TOPLEFT", 0, -12, nil, L_LABEL_W)
     local cpXOffsetRow = MakeRow("MSUF_CPXOffset",  "X offset", layBody, -1000, 1000, 1, "classPowerOffsetX", cpWidthRow.label,  "TOPLEFT", 0, -10, nil, L_LABEL_W)
     local cpYOffsetRow = MakeRow("MSUF_CPYOffset",  "Y offset", layBody, -1000, 1000, 1, "classPowerOffsetY", cpXOffsetRow.label, "TOPLEFT", 0, -10, nil, L_LABEL_W)
+    local cpLevelRow   = MakeRow("MSUF_CPFrameLevel", "Frame level", layBody, 0, 30, 1, "classPowerFrameLevelOffset", cpYOffsetRow.label, "TOPLEFT", 0, -10, nil, L_LABEL_W)
 
     -- Section 2: Behavior (2-column grid)
     local HALF_W = floor(SEC_W / 2)
@@ -660,6 +661,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         cpWidthRow:Set(w)
         cpXOffsetRow:Set(tonumber(b.classPowerOffsetX) or 0)
         cpYOffsetRow:Set(tonumber(b.classPowerOffsetY) or 0)
+        cpLevelRow:Set(tonumber(b.classPowerFrameLevelOffset) or 5)
         cpFontSizeRow:Set(tonumber(b.classPowerFontSize) or 16)
         cpTextOffsetXRow:Set(tonumber(b.classPowerTextOffsetX) or 0)
         cpTextOffsetYRow:Set(tonumber(b.classPowerTextOffsetY) or 0)
@@ -677,7 +679,7 @@ local function BuildClassPowerOptions(leftName, rightName)
         SetCPOptionEnabled(cpWidthModeDrop, cpOn)
         cpWidthRow:SetEnabled(cpOn and wm == "custom")
 
-        cpHeightRow:SetEnabled(cpOn); cpXOffsetRow:SetEnabled(cpOn); cpYOffsetRow:SetEnabled(cpOn)
+        cpHeightRow:SetEnabled(cpOn); cpXOffsetRow:SetEnabled(cpOn); cpYOffsetRow:SetEnabled(cpOn); cpLevelRow:SetEnabled(cpOn)
         cpBgAlphaRow:SetEnabled(cpOn); cpTickRow:SetEnabled(cpOn); cpOutlineRow:SetEnabled(cpOn)
         cpFilledAlphaRow:SetEnabled(cpOn); cpEmptyAlphaRow:SetEnabled(cpOn); cpGapRow:SetEnabled(cpOn)
         cpFontSizeRow:SetEnabled(cpOn and cpTextOn)

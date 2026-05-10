@@ -121,16 +121,30 @@ local function MSUF_Defaults_NormalizePortraitRenderValue(v)
     return "2D"
 end
 
+local function MSUF_Defaults_NormalizePortraitClassStyleValue(v)
+    if v == "class_colored_border" or v == "colored" then return "RONDO_COLOR" end
+    if v == "wow_icon_border" or v == "wow" then return "RONDO_WOW" end
+    if v == "RONDO_COLOR" or v == "RONDO_WOW" or v == "BLIZZARD" then return v end
+    return "BLIZZARD"
+end
+_G.MSUF_NormalizePortraitClassStyleValue = MSUF_Defaults_NormalizePortraitClassStyleValue
+
 local function MSUF_Defaults_NormalizePortraitRenderDB(db)
     if type(db) ~= "table" then return end
     local g = type(db.general) == "table" and db.general or nil
     if g and g._portraitSharedRender ~= nil then
         g._portraitSharedRender = MSUF_Defaults_NormalizePortraitRenderValue(g._portraitSharedRender)
     end
+    if g and g.portraitClassStyle ~= nil then
+        g.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(g.portraitClassStyle)
+    end
     for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focus", "pet", "boss" }) do
         local u = db[unitKey]
         if type(u) == "table" and u.portraitRender ~= nil then
             u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
+        end
+        if type(u) == "table" and u.portraitClassStyle ~= nil then
+            u.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(u.portraitClassStyle)
         end
     end
 end
@@ -288,6 +302,14 @@ function MSUF_EnsureDB_Heavy()
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
     MSUF_Defaults_NormalizePortraitRenderDB(MSUF_DB)
+    local legacyPortraitOverrideState = false
+    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focus", "pet", "boss" }) do
+        local u = MSUF_DB[unitKey]
+        if type(u) == "table" and u.portraitDecoOverride ~= nil then
+            legacyPortraitOverrideState = true
+            break
+        end
+    end
     MSUF_DB.classColors = MSUF_DB.classColors or {}
     MSUF_DB.npcColors = MSUF_DB.npcColors or {}
     if g.fontKey == nil then
@@ -1016,7 +1038,8 @@ end
     if g.hpPowerTextSelectedKey == nil then
         g.hpPowerTextSelectedKey = "shared"
     end
-    -- Portrait Decoration shared defaults (scope fallback for MSUF_Options_Portraits scope system)
+    -- Legacy portrait baseline. Kept only as a migration source for older profiles;
+    -- runtime and Unit Frame options use per-unit portrait fields directly.
     if g.portraitShape == nil then g.portraitShape = "SQUARE" end
     if g.portraitSizeOverride == nil then g.portraitSizeOverride = 0 end
     if g.portraitOffsetX == nil then g.portraitOffsetX = 0 end
@@ -1033,8 +1056,9 @@ end
     if g.portraitBgColorB == nil then g.portraitBgColorB = 0.05 end
     if g.portraitBgColorA == nil then g.portraitBgColorA = 0.85 end
     if g.portraitClassStyle == nil then g.portraitClassStyle = "BLIZZARD" end
+    g.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(g.portraitClassStyle)
     if g.portraitFillBorder == nil then g.portraitFillBorder = false end
-    -- Portrait panel UI state (scope dropdown selection, shared render type)
+    -- Retired Portrait panel UI state / old shared render value. Kept for imports only.
     if g._portraitScopeKey == nil then g._portraitScopeKey = "shared" end
     -- Initialize _portraitSharedRender from player's actual render type (migration from old layout)
     if g._portraitSharedRender == nil then
@@ -1852,33 +1876,49 @@ local function fill(key, defaults)
         if u.alphaHPInCombat == nil then u.alphaHPInCombat = 1 end
         if u.alphaHPOutOfCombat == nil then u.alphaHPOutOfCombat = 1 end
         if u.alphaPreserveHPColor == nil then u.alphaPreserveHPColor = false end
-        -- Portrait Decoration defaults (MSUF_PortraitDecoration.lua)
-        -- portraitRender: inherit from general._portraitSharedRender if not set (shared/per-unit sync)
-        if u.portraitRender == nil then
+        -- Portrait Decoration defaults (MSUF_PortraitDecoration.lua).
+        -- v4.324+: portraits are always per-unit. Older shared/override profiles
+        -- are flattened once: override=true keeps unit values, non-overrides adopt
+        -- the old baseline, then the override marker is retired.
+        local flattenLegacyPortrait = legacyPortraitOverrideState and g._msufPortraitPerUnitMigrated_v4324 ~= true
+        local useLegacyBaseline = flattenLegacyPortrait and u.portraitDecoOverride ~= true
+        local function PortraitDefault(field, fallback)
+            local shared = g[field]
+            if shared == nil then shared = fallback end
+            if useLegacyBaseline then
+                u[field] = shared
+            elseif u[field] == nil then
+                u[field] = shared
+            end
+        end
+        if useLegacyBaseline then
+            u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(g._portraitSharedRender or g.portraitRender)
+        elseif u.portraitRender == nil then
             u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(g._portraitSharedRender)
         else
             u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
         end
-        if u.portraitClassStyle == nil then
-            u.portraitClassStyle = g.portraitClassStyle or "BLIZZARD"
-        end
-        if u.portraitShape == nil then u.portraitShape = (g.portraitShape) or "SQUARE" end
-        if u.portraitSizeOverride == nil then u.portraitSizeOverride = (g.portraitSizeOverride) or 0 end
-        if u.portraitOffsetX == nil then u.portraitOffsetX = (g.portraitOffsetX) or 0 end
-        if u.portraitOffsetY == nil then u.portraitOffsetY = (g.portraitOffsetY) or 0 end
-        if u.portraitBorderStyle == nil then u.portraitBorderStyle = (g.portraitBorderStyle) or "NONE" end
-        if u.portraitBorderThickness == nil then u.portraitBorderThickness = (g.portraitBorderThickness) or 2 end
-        if u.portraitBorderColorR == nil then u.portraitBorderColorR = (g.portraitBorderColorR) or 1 end
-        if u.portraitBorderColorG == nil then u.portraitBorderColorG = (g.portraitBorderColorG) or 1 end
-        if u.portraitBorderColorB == nil then u.portraitBorderColorB = (g.portraitBorderColorB) or 1 end
-        if u.portraitBorderColorA == nil then u.portraitBorderColorA = (g.portraitBorderColorA) or 1 end
-        if u.portraitBgEnabled == nil then u.portraitBgEnabled = g.portraitBgEnabled or false end
-        if u.portraitBgColorR == nil then u.portraitBgColorR = (g.portraitBgColorR) or 0.05 end
-        if u.portraitBgColorG == nil then u.portraitBgColorG = (g.portraitBgColorG) or 0.05 end
-        if u.portraitBgColorB == nil then u.portraitBgColorB = (g.portraitBgColorB) or 0.05 end
-        if u.portraitBgColorA == nil then u.portraitBgColorA = (g.portraitBgColorA) or 0.85 end
-        if u.portraitFillBorder == nil then u.portraitFillBorder = g.portraitFillBorder or false end
+        PortraitDefault("portraitClassStyle", "BLIZZARD")
+        u.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(u.portraitClassStyle)
+        PortraitDefault("portraitShape", "SQUARE")
+        PortraitDefault("portraitSizeOverride", 0)
+        PortraitDefault("portraitOffsetX", 0)
+        PortraitDefault("portraitOffsetY", 0)
+        PortraitDefault("portraitBorderStyle", "NONE")
+        PortraitDefault("portraitBorderThickness", 2)
+        PortraitDefault("portraitBorderColorR", 1)
+        PortraitDefault("portraitBorderColorG", 1)
+        PortraitDefault("portraitBorderColorB", 1)
+        PortraitDefault("portraitBorderColorA", 1)
+        PortraitDefault("portraitBgEnabled", false)
+        PortraitDefault("portraitBgColorR", 0.05)
+        PortraitDefault("portraitBgColorG", 0.05)
+        PortraitDefault("portraitBgColorB", 0.05)
+        PortraitDefault("portraitBgColorA", 0.85)
+        PortraitDefault("portraitFillBorder", false)
+        u.portraitDecoOverride = nil
     end
+    g._msufPortraitPerUnitMigrated_v4324 = true
     for _, key in ipairs({
         "general",
         "player", "target", "targettarget", "focus", "pet", "boss",
