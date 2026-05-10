@@ -2805,6 +2805,7 @@ function ns.MSUF_Options_Player_InstallHandlers(panel, api)
     end
     local function ApplyAlpha()
         local fn = _G.MSUF_RefreshAllUnitAlphas; if type(fn) == "function" then pcall(fn) end
+        if _G.MSUF_UFPreview_RequestRefresh then _G.MSUF_UFPreview_RequestRefresh("ALPHA_OPTIONS") end
     end
 
     -- Basic checkboxes
