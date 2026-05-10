@@ -434,9 +434,11 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     scopeBar:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     scopeBar:SetBackdropColor(0.04, 0.08, 0.18, 0.95)
     scopeBar:SetBackdropBorderColor(0.12, 0.25, 0.50, 0.6)
+    if _G.MSUF_StyleOverrideScopeBar then _G.MSUF_StyleOverrideScopeBar(scopeBar) end
 
     local scopeEditLbl = scopeBar:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     scopeEditLbl:SetPoint("TOPLEFT", scopeBar, "TOPLEFT", 10, -10); scopeEditLbl:SetText(TR("Editing:"))
+    scopeEditLbl:SetTextColor(0.72, 0.82, 1.00, 1)
 
     local scopeBtns = {}
     local function GetScopeUnitHasOverride(key)
@@ -477,48 +479,23 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
         local prevBtn
         for _, k in ipairs(SCOPE_KEYS) do
             local bk = k
-            local btn = CreateFrame("Button", nil, scopeBar, "BackdropTemplate")
-            btn:SetSize(bk == "shared" and 56 or 48, 18)
+            local btn = _G.MSUF_CreateScopePillButton(scopeBar, SCOPE_LABELS[bk] or bk, bk == "shared" and 62 or 50, 22)
             if not prevBtn then
                 btn:SetPoint("LEFT", scopeEditLbl, "RIGHT", 8, 0)
             elseif bk == "party" then
                 -- Visual separator before GF scope buttons
                 btn:SetPoint("LEFT", prevBtn, "RIGHT", 10, 0)
             else
-                btn:SetPoint("LEFT", prevBtn, "RIGHT", 2, 0)
+                btn:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
             end
-            local bg = btn:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0.08, 0.12, 0.22, 0.80)
-            btn._msufBg = bg
-            local border = CreateFrame("Frame", nil, btn, "BackdropTemplate")
-            border:SetAllPoints(); border:SetBackdrop({ edgeFile = TEX_W8, edgeSize = 1 })
-            border:SetBackdropBorderColor(0.15, 0.30, 0.60, 0.50)
-            btn._msufBorder = border
-            local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            fs:SetPoint("CENTER", 0, 0); fs:SetText(SCOPE_LABELS[bk] or bk)
-            btn._msufLabel = fs
 
             btn._msufApplyState = function(self, active)
-                local hasOvr = GetScopeUnitHasOverride(bk)
-                if active then
-                    bg:SetColorTexture(0.12, 0.24, 0.50, 0.95)
-                    if hasOvr then border:SetBackdropBorderColor(0.96, 0.80, 0.34, 0.98)
-                    else border:SetBackdropBorderColor(0.30, 0.55, 1.00, 0.80) end
-                    fs:SetTextColor(0.90, 0.95, 1.00)
-                else
-                    bg:SetColorTexture(0.08, 0.12, 0.22, 0.80)
-                    if hasOvr then
-                        border:SetBackdropBorderColor(0.86, 0.72, 0.28, 0.80)
-                        fs:SetTextColor(0.88, 0.90, 0.96)
-                    else
-                        border:SetBackdropBorderColor(0.15, 0.30, 0.60, 0.50)
-                        fs:SetTextColor(0.50, 0.58, 0.72)
-                    end
-                end
+                if _G.MSUF_SetScopePillButtonState then _G.MSUF_SetScopePillButtonState(self, active, GetScopeUnitHasOverride(bk)) end
             end
 
             btn:SetScript("OnClick", function() ApplyScopeKey(bk) end)
             btn:SetScript("OnEnter", function(self)
-                if self._msufBg then self._msufBg:SetColorTexture(0.10, 0.18, 0.36, 0.90) end
+                if _G.MSUF_SetScopePillButtonHover then _G.MSUF_SetScopePillButtonHover(self, true) end
                 if GameTooltip then
                     GameTooltip:SetOwner(self, "ANCHOR_TOP")
                     GameTooltip:SetText(SCOPE_LABELS[bk] or bk, 1, 1, 1)
@@ -564,6 +541,9 @@ function ns.MSUF_Options_Bars_Build(panel, barGroup, barGroupHost, ctx)
     local scopeResetBtn = CreateFrame("Button", "MSUF_HPTextResetOverridesBtn", scopeBar, "UIPanelButtonTemplate")
     scopeResetBtn:SetSize(72, 18); scopeResetBtn:SetPoint("TOPRIGHT", scopeBar, "TOPRIGHT", -8, -36)
     scopeResetBtn:SetText(TR("Reset")); scopeResetBtn:SetNormalFontObject("GameFontNormalSmall")
+    if _G.MSUF_SkinScopePillButton then
+        _G.MSUF_SkinScopePillButton(scopeResetBtn, TR("Reset"), 76, 22, { 0.06, 0.07, 0.13, 0.88 }, { 0.15, 0.18, 0.36, 0.45 }, { 0.82, 0.90, 1.00, 1 })
+    end
 
     -- Scope helper functions
     _MSUF_HPText_NormalizeScopeKey = function(v) if v == nil or v == "" or v == "shared" then return "shared" end; return v end
