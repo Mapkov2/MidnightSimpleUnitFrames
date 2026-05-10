@@ -177,9 +177,6 @@ builders.LAYOUT = function(E)
             else
                 local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
                 if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() then
-                    if type(_G.MSUF_HookExternalAnchorForReanchor) == "function" then
-                        _G.MSUF_HookExternalAnchorForReanchor(cdmFrame)
-                    end
                     local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
                     if type(cdmWidthFn) == "function" then
                         userW = cdmWidthFn(cdmFrame, CP.container)
@@ -216,26 +213,44 @@ builders.LAYOUT = function(E)
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
 
-        CP.container:ClearAllPoints()
-        CP.container:SetSize(userW, h)
-        if b.classPowerAnchorToCooldown == true then
+        local cachedCooldownAnchor = false
+        if inLockdown and b.classPowerAnchorToCooldown == true then
+            CP.container:SetSize(userW, h)
+            if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
+                and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
+            then
+                CP.container._msufDirectCooldownAnchor = true
+                CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
+                cachedCooldownAnchor = true
+            else
+                CP._layoutDirty = true
+                _G.MSUF_ClassPowerLayoutDirty = true
+                if type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
+                    _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+                end
+                return
+            end
+        end
+
+        if not cachedCooldownAnchor then
+            CP.container:ClearAllPoints()
+            CP.container:SetSize(userW, h)
+        end
+        if b.classPowerAnchorToCooldown == true and not cachedCooldownAnchor then
             local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
             local anchorFrame = nil
             if ecv and ecv.IsShown and ecv:IsShown() then
-                if type(_G.MSUF_HookExternalAnchorForReanchor) == "function" then
-                    _G.MSUF_HookExternalAnchorForReanchor(ecv)
-                end
-                if type(_G.MSUF_GetExternalAnchorProxy) == "function" then
-                    anchorFrame = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer", ecv)
-                end
                 if not anchorFrame and not inLockdown then
                     anchorFrame = ecv
                 end
-            elseif type(_G.MSUF_GetExternalAnchorProxy) == "function" then
-                anchorFrame = _G.MSUF_GetExternalAnchorProxy("EssentialCooldownViewer")
             end
             if anchorFrame then
                 CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
+                CP.container._msufDirectCooldownAnchor = true
+                CP.container._msufHardLockPoint = "TOP"
+                if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
+                    _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", "TOP")
+                end
             else
                 if inLockdown and type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
                     _G.MSUF_RequestUnitFrameReanchorAfterCombat()
@@ -243,9 +258,13 @@ builders.LAYOUT = function(E)
                     _G.MSUF_ScheduleLateAnchorReanchor()
                 end
                 CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                CP.container._msufDirectCooldownAnchor = nil
+                CP.container._msufHardLockPoint = nil
             end
         else
             CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+            CP.container._msufDirectCooldownAnchor = nil
+            CP.container._msufHardLockPoint = nil
         end
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW

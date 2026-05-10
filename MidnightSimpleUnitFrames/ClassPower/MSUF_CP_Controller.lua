@@ -1386,63 +1386,6 @@ local function FullRefresh()
         end)
     end
 
-    -- Hook CDM frames (Essential/Utility/Tracked Buffs) for width-sync + anchor mode.
-    -- COMBAT LOCKDOWN: zero overhead in combat. OnSizeChanged fires but callback
-    -- exits at first line (InCombatLockdown check). A single catch-up relayout
-    -- runs on PLAYER_REGEN_ENABLED to sync any width changes that occurred mid-fight.
-    -- Out of combat: lightweight CP_Layout only (not FullRefresh).
-    for i = 1, 3 do
-        local def = CPConst.CDM_HOOK_DEFS[i]
-        if not CP[def.flag] then
-            local cdm = _G[def.name]
-            if cdm and cdm.HookScript then
-                CP[def.flag] = true
-                local myMode = def.mode
-                local function _cdmRefresh()
-                    -- COMBAT LOCKDOWN: zero work in combat
-                    if InCombatLockdown() then
-                        CP._cdmDirty = true
-                        return
-                    end
-                    local bars = _cpDB.bars
-                    if not bars then return end
-                    if (bars.classPowerWidthMode == myMode)
-                    or (bars.classPowerAnchorToCooldown == true) then
-                        if CP.visible and CP._pf and CP.currentMax and CP.currentMax > 0 then
-                            CP_Layout(CP._pf, CP.currentMax, CP._layoutH or (bars.classPowerHeight or 4))
-                        end
-                    end
-                    if bars.detachedPowerBarWidthMode == myMode then
-                        if _G.MSUF_ApplyPowerBarEmbedLayout_All then
-                            _G.MSUF_ApplyPowerBarEmbedLayout_All()
-                        end
-                    end
-                end
-                cdm:HookScript("OnSizeChanged", _cdmRefresh)
-                cdm:HookScript("OnShow", _cdmRefresh)
-                cdm:HookScript("OnHide", _cdmRefresh)
-            end
-        end
-    end
-
-    -- Combat end catch-up: single relayout for any CDM width changes during combat.
-    if not CP._regenHooked then
-        CP._regenHooked = true
-        local regenFrame = CreateFrame("Frame")
-        regenFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        regenFrame:SetScript("OnEvent", function()
-            if not CP._cdmDirty then return end
-            CP._cdmDirty = false
-            if CP.visible and CP._pf and CP.currentMax and CP.currentMax > 0 then
-                local bars = _cpDB.bars
-                CP_Layout(CP._pf, CP.currentMax, CP._layoutH or (bars and bars.classPowerHeight or 4))
-            end
-            if _G.MSUF_ApplyPowerBarEmbedLayout_All then
-                _G.MSUF_ApplyPowerBarEmbedLayout_All()
-            end
-        end)
-    end
-
     -- Edit mode: keep class power visible as live preview so bars-menu
     -- adjustments (width, height, offsets) are visible immediately.
     -- Alt-mana bar has no user-facing settings → stay hidden in edit mode.
@@ -2000,23 +1943,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
                 -- Uses pre-allocated _CP_DeferredPBRelayout (zero closures).
                 if C_Timer and C_Timer.After then
                     C_Timer.After(0.35, _CP_DeferredPBRelayout)
-                end
-                -- CDM frames (from another addon) may load after MSUF.
-                -- Retry hook installation at increasing intervals until all 3 CDM hooks are placed.
-                if C_Timer and C_Timer.After then
-                    local cdmRetries = 0
-                    local function TryCDMHooks()
-                        cdmRetries = cdmRetries + 1
-                        local allHooked = CP._ecvHooked and CP._ucvHooked and CP._bicvHooked
-                        if allHooked then return end
-                        -- FullRefresh installs hooks for any newly-available CDM frame.
-                        FullRefresh()
-                        if cdmRetries < 8 then
-                            -- Backoff: 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0 (total ~18s)
-                            C_Timer.After(0.5 * cdmRetries, TryCDMHooks)
-                        end
-                    end
-                    C_Timer.After(0.5, TryCDMHooks)
                 end
             elseif retries < 20 then
                 -- Not ready yet — retry quickly (total max ≈ 1s)

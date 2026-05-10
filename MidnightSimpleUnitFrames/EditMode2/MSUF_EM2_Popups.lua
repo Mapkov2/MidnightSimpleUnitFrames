@@ -512,71 +512,6 @@ function Factory.EnableStepper(box, m, p, on)
 end
 function Factory.EnableLabel(l, on) if l then l:SetAlpha(on and 1 or 0.25) end end
 
-function Factory.SetTooltip(frame, text)
-    if not frame or not text or text == "" then return end
-    frame:SetScript("OnEnter", function(self)
-        if not GameTooltip then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(text, 0.86, 0.92, 1.00, true)
-        GameTooltip:Show()
-    end)
-    frame:SetScript("OnLeave", function()
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-end
-
-function Factory.InfoActionRow(pf, body, card, opts)
-    opts = opts or {}
-    local anchorTo = opts.anchorTo
-    local row = CreateFrame("Frame", nil, body)
-    row:SetHeight(opts.height or 36)
-    if anchorTo then row:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, (opts.yOff or -ROW_GAP))
-    else row:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0) end
-    row:SetPoint("RIGHT", body, "RIGHT", 0, 0)
-
-    local label = FS(row, 11, C.muted)
-    label:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -2)
-    label:SetText(opts.label or "")
-
-    local btn
-    if opts.buttonKey or opts.buttonText then
-        btn = CreateFrame("Button", nil, row)
-        btn:SetSize(opts.buttonWidth or 92, BOX_H)
-        btn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-        local bg = btn:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints(); bg:SetColorTexture(unpack(C.btnBg))
-        local brd = CreateFrame("Frame", nil, btn, "BackdropTemplate")
-        brd:SetAllPoints(); brd:SetFrameLevel(max(0, btn:GetFrameLevel() - 1))
-        brd:SetBackdrop({ edgeFile=W8, edgeSize=1 }); brd:SetBackdropBorderColor(unpack(C.btnEdge))
-        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(); hl:SetColorTexture(unpack(C.btnHover))
-        local fs = FS(btn, 11, C.white)
-        fs:SetPoint("CENTER"); fs:SetText(opts.buttonText or "")
-        btn._label = fs
-        function btn:SetEnabled(on)
-            on = on and true or false
-            self:EnableMouse(on)
-            self:SetAlpha(on and 1 or 0.35)
-        end
-        if opts.onClick then btn:SetScript("OnClick", opts.onClick) end
-        if opts.tooltip then Factory.SetTooltip(btn, opts.tooltip) end
-        if opts.buttonKey then pf[opts.buttonKey] = btn end
-    end
-
-    local value = FS(row, 11, C.title)
-    value:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
-    if btn then value:SetPoint("RIGHT", btn, "LEFT", -8, 0)
-    else value:SetPoint("RIGHT", row, "RIGHT", 0, 0) end
-    value:SetJustifyH("LEFT")
-    if value.SetWordWrap then value:SetWordWrap(false) end
-    value:SetText(opts.value or "")
-
-    if opts.valueKey then pf[opts.valueKey] = value end
-    if opts.labelKey then pf[opts.labelKey] = label end
-    card._rowCount = card._rowCount + 1; card._rows[card._rowCount] = row
-    return row
-end
-
 -- SelectRow: "Label:  [ Current Value ▾ ]"   (popup menu, not cycle-click)
 function Factory.SelectRow(pf, body, card, opts)
     local selectKey = opts.selectKey
@@ -890,80 +825,6 @@ local function CK(u) if not u then return nil end; if u=="targettarget" or u=="t
 local LABELS = { player="Player", target="Target", focus="Focus", targettarget="ToT", pet="Pet", boss="Boss" }
 local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 then v=d or 0 end; return floor(v+0.5) end
 local pf
-local UNIT_ANCHOR_LABELS = { player="Player", target="Target", focus="Focus", targettarget="ToT", pet="Pet" }
-
-local function ShortName(s, limit)
-    s = tostring(s or "")
-    limit = limit or 24
-    if #s <= limit then return s end
-    return string.sub(s, 1, max(1, limit - 3)) .. "..."
-end
-
-local function GlobalAnchorLabel()
-    local db = DB()
-    local g = db and db.general or {}
-    if g.anchorToCooldown then return "CDM" end
-    local name = g.anchorName
-    if type(name) == "string" and name ~= "" and name ~= "UIParent" and name ~= "EssentialCooldownViewer" then
-        return ShortName(name, 24)
-    end
-    return "UIParent"
-end
-
-local function PositionBasisText(key, conf)
-    if not conf then return "Unknown" end
-    if conf.anchorToUnitframe == "SCREEN" then return "Screen center" end
-    local custom = conf.anchorFrameName
-    if type(custom) == "string" and custom ~= "" then return "Custom: " .. ShortName(custom, 23) end
-    local atv = conf.anchorToUnitframe
-    if UNIT_ANCHOR_LABELS[atv] then return "Unit: " .. UNIT_ANCHOR_LABELS[atv] end
-    local global = GlobalAnchorLabel()
-    if global == "UIParent" then return "Screen center (global)" end
-    return "Global: " .. global
-end
-
-local function ResolvePositionFrame(key)
-    local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key)
-    local frame = cfg and cfg.getFrame and cfg.getFrame()
-    if frame and frame.GetCenter then return frame end
-    local mover = EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
-    if mover and mover.GetCenter then return mover end
-    return pf and pf.parent or nil
-end
-
-local function ReadScreenOffset(frame)
-    if not frame or not frame.GetCenter or not UIParent or not UIParent.GetCenter then return nil, nil end
-    local okF, fx, fy = pcall(frame.GetCenter, frame)
-    local okU, ux, uy = pcall(UIParent.GetCenter, UIParent)
-    if not (okF and okU and fx and fy and ux and uy) then return nil, nil end
-    local fs = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
-    local us = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-    if fs == 0 then fs = 1 end
-    if us == 0 then us = 1 end
-    return floor(((fx * fs - ux * us) / us) + 0.5), floor(((fy * fs - uy * us) / us) + 0.5)
-end
-
-local function ApplyPositionOnly(key)
-    if type(_G.MSUF_ApplySettingsForKey_Immediate) == "function" then
-        _G.MSUF_ApplySettingsForKey_Immediate(key)
-    elseif type(ApplySettingsForKey) == "function" then
-        ApplySettingsForKey(key)
-    end
-end
-
-local function RefreshPositionBasis(key, conf)
-    if pf and pf.positionBasisValue then
-        pf.positionBasisValue:SetText(PositionBasisText(key, conf))
-    end
-    if pf and pf.positionScreenBtn then
-        local custom = conf and type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= ""
-        local explicitScreen = conf and conf.anchorToUnitframe == "SCREEN" and not custom
-        if pf.positionScreenBtn._label then
-            pf.positionScreenBtn._label:SetText(explicitScreen and "Screen Set" or "Use Screen")
-        end
-        if pf.positionScreenBtn.SetEnabled then pf.positionScreenBtn:SetEnabled(not explicitScreen) end
-    end
-end
 
 local function Apply()
     if InCombatLockdown and InCombatLockdown() then return end
@@ -1024,7 +885,6 @@ local function Sync()
     local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
     if pf._titleFS then pf._titleFS:SetText(LABELS[key] or key or "") end
     S(pf.xBox,San(conf.offsetX,0)); S(pf.yBox,San(conf.offsetY,0))
-    RefreshPositionBasis(key, conf)
     S(pf.wBox,conf.width or (pf.parent and pf.parent:GetWidth()) or 250)
     S(pf.hBox,conf.height or (pf.parent and pf.parent:GetHeight()) or 40)
     SC(pf.nameShowCB, conf.showName~=false)
@@ -1055,34 +915,6 @@ local function Sync()
     if pf._refreshVisibility then pf._refreshVisibility() end
 end
 
-local function UseScreenAnchor()
-    if InCombatLockdown and InCombatLockdown() then return end
-    if not pf or not pf.unit then return end
-    local key = CK(pf.unit)
-    local conf = key and Conf(key)
-    if not conf then return end
-    local x, y = ReadScreenOffset(ResolvePositionFrame(key))
-    if not x or not y then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
-    conf.anchorFrameName = nil
-    conf.anchorToUnitframe = "SCREEN"
-    conf.offsetX = x
-    conf.offsetY = y
-    if pf.xBox then pf.xBox:SetText(tostring(x)) end
-    if pf.yBox then pf.yBox:SetText(tostring(y)) end
-    ApplyPositionOnly(key)
-    RefreshPositionBasis(key, conf)
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-    if C_Timer then
-        C_Timer.After(0.05, function()
-            if pf and pf:IsShown() then Sync() end
-            if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        end)
-    else
-        Sync()
-    end
-end
-
 local function Build()
     if pf then return pf end
     pf = F.Panel("MSUF_EM2_UnitPopup", 380, 540, "Player")
@@ -1093,16 +925,6 @@ local function Build()
     local fC, fB = F.Card(pf, top, "Position & Size", -2, true)
     local fXY = F.PairRow(pf, fB, fC, { label1="X:", label2="Y:", key1="xBox", key2="yBox", onChanged=Apply })
     local fWH = F.PairRow(pf, fB, fC, { label1="W:", label2="H:", key1="wBox", key2="hBox", anchorTo=fXY, onChanged=Apply })
-    F.InfoActionRow(pf, fB, fC, {
-        label="Position basis:",
-        valueKey="positionBasisValue",
-        buttonKey="positionScreenBtn",
-        buttonText="Use Screen",
-        buttonWidth=96,
-        anchorTo=fWH,
-        tooltip="Store this frame as screen-center coordinates and clear custom/unit anchors for this frame.",
-        onClick=function() UseScreenAnchor() end,
-    })
     fC:RecalcHeight()
 
     -- Name
