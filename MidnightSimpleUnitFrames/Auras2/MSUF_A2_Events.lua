@@ -47,17 +47,6 @@ local function _ScheduleOnce(key, fn)
     end
 end
 
-local function _ScheduleDelayOnce(key, delay, fn)
-    local sched = _G.MSUF_ScheduleDelayOnce
-    if sched then
-        sched(key, delay, fn)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(delay or 0, fn)
-    elseif type(fn) == "function" then
-        fn()
-    end
-end
-
 -- P3: Boss UNIT_AURA gate.
 -- UNIT_AURA for boss slots is only meaningful during an active encounter.
 -- Between encounters the engine still dispatches these events (boss units exist
@@ -193,8 +182,17 @@ local function _flushTargetRender()
 end
 
 Events._flushTargetSwap = function()
-    Events._targetRenderExpected = _targetRenderEpoch
-    _ScheduleDelayOnce("A2_TARGET_RENDER_FLUSH", 0.05, _flushTargetRender)
+    local expected = _targetRenderEpoch
+    Events._targetRenderExpected = expected
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.05, function()
+            if _targetRenderEpoch ~= expected then return end
+            Events._targetRenderExpected = expected
+            _flushTargetRender()
+        end)
+    else
+        _flushTargetRender()
+    end
 end
 
 Events._ClearUnitAuraRescanQueued = function(unit)

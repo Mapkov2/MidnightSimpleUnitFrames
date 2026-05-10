@@ -899,136 +899,6 @@ local ROLE_COORDS = {
     DAMAGER = { 20/64, 39/64, 22/64, 41/64 },
 }
 
-------------------------------------------------------------------------
--- Melee/Ranged spec classification (EQoL pattern)
-------------------------------------------------------------------------
-local MELEE_SPECS = {
-    [250]=true,[251]=true,[252]=true,  -- DK
-    [577]=true,[581]=true,             -- DH
-    [103]=true,[104]=true,             -- Druid Feral/Guardian
-    [1473]=true,                       -- Evoker Aug
-    [255]=true,                        -- Hunter Survival
-    [268]=true,[269]=true,             -- Monk BM/WW
-    [66]=true,[70]=true,               -- Paladin Prot/Ret
-    [259]=true,[260]=true,[261]=true,  -- Rogue
-    [263]=true,                        -- Shaman Enh
-    [71]=true,[72]=true,[73]=true,     -- Warrior
-}
-local MELEE_CLASSES = {
-    WARRIOR=true, ROGUE=true, DEATHKNIGHT=true,
-    DEMONHUNTER=true, MONK=true, PALADIN=true,
-}
-
-local function GetDpsRangeRole(unit, classToken)
-    local specId
-    if GetInspectSpecialization and UnitIsUnit and UnitIsUnit(unit, "player") then
-        specId = GetSpecialization and GetSpecialization()
-        if specId then
-            local id = GetSpecializationInfo and GetSpecializationInfo(specId)
-            specId = id
-        end
-    end
-    if specId and MELEE_SPECS[specId] then return "MELEE" end
-    if specId and specId > 0 then return "RANGED" end
-    if classToken and MELEE_CLASSES[classToken] then return "MELEE" end
-    return "RANGED"
-end
-
-------------------------------------------------------------------------
--- NAMELIST sort builder: role → playerFirst → class → name
--- Used when separateMeleeRanged=true (native groupBy can't split DPS).
--- PERF: Pre-allocated entry pool (max 40 raid members) — zero GC per call.
-------------------------------------------------------------------------
-local _sortEntryPool = {}
-for i = 1, 40 do _sortEntryPool[i] = { name = "", sortRole = "", class = "", isPlayer = false } end
-local _sortNames = {}
-local _sortSeen  = {}
-
-local function BuildSortNameList(kind)
-    local conf = GF.GetConf(kind)
-    if not conf.sortByRole then return nil end
-
-    local separate = conf.separateMeleeRanged == true
-    local playerFirst = conf.playerFirstInRole == true
-
-    -- Parse role order string → priority map
-    local roleStr = conf.roleOrder or "TANK,HEALER,DAMAGER"
-    local rolePrio = {}
-    local idx = 0
-    for tok in roleStr:gmatch("[^,]+") do
-        idx = idx + 1
-        rolePrio[tok] = idx
-        -- Expand DAMAGER → MELEE + RANGED if separate and token is DAMAGER
-        if separate and tok == "DAMAGER" then
-            rolePrio["MELEE"] = idx
-            rolePrio["RANGED"] = idx + 0.5
-        end
-    end
-    if separate and not rolePrio["MELEE"] then rolePrio["MELEE"] = 90 end
-    if separate and not rolePrio["RANGED"] then rolePrio["RANGED"] = 91 end
-
-    -- Gather group members into pre-allocated pool
-    local entryCount = 0
-    local function addUnit(unit)
-        if not (unit and UnitExists(unit)) then return end
-        local name, realm = UnitName(unit)
-        if not name or name == "" then return end
-        if realm and realm ~= "" then name = name .. "-" .. realm end
-        local _, classToken = UnitClass(unit)
-        local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or "DAMAGER"
-        if role == "NONE" then role = "DAMAGER" end
-        local sortRole = role
-        if separate and role == "DAMAGER" then
-            sortRole = GetDpsRangeRole(unit, classToken)
-        end
-        entryCount = entryCount + 1
-        local e = _sortEntryPool[entryCount]
-        if not e then e = {}; _sortEntryPool[entryCount] = e end
-        e.name = name
-        e.sortRole = sortRole
-        e.class = classToken or ""
-        e.isPlayer = UnitIsUnit(unit, "player")
-    end
-
-    if kind == "party" then
-        if conf.showPlayer then addUnit("player") end
-        for i = 1, 4 do addUnit("party" .. i) end
-    else
-        local num = GetNumGroupMembers and GetNumGroupMembers() or 0
-        for i = 1, num do addUnit("raid" .. i) end
-    end
-
-    -- Sort only the active portion of the pool
-    -- table.sort needs a contiguous array — sort _sortEntryPool[1..entryCount]
-    -- We use a temporary view: since pool IS contiguous, sort in-place works.
-    local entries = _sortEntryPool
-    local ec = entryCount
-    table.sort(entries, function(a, b)
-        -- Only compare within active range (sort may access beyond, but pool entries exist)
-        local rA = rolePrio[a.sortRole] or 999
-        local rB = rolePrio[b.sortRole] or 999
-        if rA ~= rB then return rA < rB end
-        if playerFirst and a.isPlayer ~= b.isPlayer then return a.isPlayer == true end
-        if a.class ~= b.class then return a.class < b.class end
-        return a.name < b.name
-    end)
-
-    -- Build name list (reuse tables)
-    local nameCount = 0
-    for k in pairs(_sortSeen) do _sortSeen[k] = nil end
-    for i = 1, ec do
-        local n = entries[i].name
-        if not _sortSeen[n] then
-            _sortSeen[n] = true
-            nameCount = nameCount + 1
-            _sortNames[nameCount] = n
-        end
-    end
-    -- Trim excess from previous call
-    for i = nameCount + 1, #_sortNames do _sortNames[i] = nil end
-    return nameCount > 0 and table.concat(_sortNames, ",") or nil
-end
-
 local function LayoutIcons(f, kind)
     local conf = GF.GetConf(kind)
     local anchor = f.statusIconLayer or f.barGroup or f
@@ -1661,6 +1531,44 @@ local function _GF_InvalidateAttrCache(header)
     if header then header._msufAttrCache = nil end
 end
 
+local _nativeRoleOrderParts = {}
+local _nativeRoleOrderSeen = {}
+
+local function AppendNativeRole(tok)
+    if tok == "MELEE" or tok == "RANGED" then tok = "DAMAGER" end
+    if tok ~= "TANK" and tok ~= "HEALER" and tok ~= "DAMAGER" then return end
+    if _nativeRoleOrderSeen[tok] then return end
+    _nativeRoleOrderSeen[tok] = true
+    _nativeRoleOrderParts[#_nativeRoleOrderParts + 1] = tok
+end
+
+local function BuildNativeRoleOrder(conf)
+    for i = #_nativeRoleOrderParts, 1, -1 do _nativeRoleOrderParts[i] = nil end
+    for k in pairs(_nativeRoleOrderSeen) do _nativeRoleOrderSeen[k] = nil end
+
+    local roleStr = conf.roleOrder or "TANK,HEALER,DAMAGER"
+    for tok in roleStr:gmatch("[^,]+") do
+        AppendNativeRole(tok)
+    end
+    AppendNativeRole("TANK")
+    AppendNativeRole("HEALER")
+    AppendNativeRole("DAMAGER")
+
+    return table.concat(_nativeRoleOrderParts, ",")
+end
+
+local function ApplyNativeRoleSort(header, conf)
+    _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+    _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
+    _GF_SetAttrIfChanged(header, "groupingOrder", BuildNativeRoleOrder(conf))
+end
+
+local function ApplyIndexSort(header)
+    _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+    _GF_SetAttrIfChanged(header, "groupBy", nil)
+    _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+end
+
 ------------------------------------------------------------------------
 -- Party header setup
 ------------------------------------------------------------------------
@@ -1733,25 +1641,9 @@ local function SetupPartyHeader()
 
     -- Role sort
     if conf.sortByRole then
-        if conf.separateMeleeRanged then
-            -- NAMELIST: full control (melee/ranged split, playerFirst, class order)
-            local nameList = BuildSortNameList("party")
-            _GF_SetAttrIfChanged(header, "sortMethod", "NAMELIST")
-            _GF_SetAttrIfChanged(header, "nameList", nameList)
-            _GF_SetAttrIfChanged(header, "groupBy", nil)
-            _GF_SetAttrIfChanged(header, "groupingOrder", nil)
-        else
-            -- Native ASSIGNEDROLE (most performant, no nameList rebuild)
-            _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-            _GF_SetAttrIfChanged(header, "nameList", nil)
-            _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
-            _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
-        end
+        ApplyNativeRoleSort(header, conf)
     else
-        _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
-        _GF_SetAttrIfChanged(header, "groupBy", nil)
-        _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+        ApplyIndexSort(header)
     end
 
     -- Growth direction → point/xOffset/yOffset
@@ -1908,41 +1800,26 @@ local function SetupRaidHeader()
     end
 
     if sortMode == "ROLE" then
-        if conf.separateMeleeRanged then
-            local nameList = BuildSortNameList("raid")
-            _GF_SetAttrIfChanged(header, "sortMethod", "NAMELIST")
-            _GF_SetAttrIfChanged(header, "nameList", nameList)
-            _GF_SetAttrIfChanged(header, "groupBy", nil)
-            _GF_SetAttrIfChanged(header, "groupingOrder", nil)
-        else
-            _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-            _GF_SetAttrIfChanged(header, "nameList", nil)
-            _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
-            _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
-        end
+        ApplyNativeRoleSort(header, conf)
     elseif sortMode == "GROUP" then
         -- Group by raid group number (1-8), index within each
         _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", "GROUP")
         _GF_SetAttrIfChanged(header, "groupingOrder", "1,2,3,4,5,6,7,8")
     elseif sortMode == "GROUP_ROLE" then
         -- Group by raid group, then by role within each group
         _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", "GROUP")
         _GF_SetAttrIfChanged(header, "groupingOrder", "1,2,3,4,5,6,7,8")
         -- Note: within-group role sorting requires Blizzard's native prioritization
         -- which sorts TANK > HEALER > DAMAGER within each group automatically
     elseif sortMode == "NAME" then
         _GF_SetAttrIfChanged(header, "sortMethod", "NAME")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", nil)
         _GF_SetAttrIfChanged(header, "groupingOrder", nil)
     else
         -- INDEX (default): flat, no grouping
         _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", nil)
         _GF_SetAttrIfChanged(header, "groupingOrder", nil)
     end
@@ -2832,6 +2709,28 @@ function GF.UpdateGroupVisibility()
     end
 end
 
+local _gfVisibilityQueued = false
+local function GF_FlushGroupVisibility()
+    _gfVisibilityQueued = false
+    GF.UpdateGroupVisibility()
+end
+
+local function GF_RequestGroupVisibility()
+    if InCombatLockdown() then
+        GF._pendingVisibilityUpdate = true
+        return
+    end
+    if _gfVisibilityQueued then return end
+    _gfVisibilityQueued = true
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("GF_CORE_VISIBILITY", GF_FlushGroupVisibility)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, GF_FlushGroupVisibility)
+    else
+        GF_FlushGroupVisibility()
+    end
+end
+
 ------------------------------------------------------------------------
 -- Event frame
 ------------------------------------------------------------------------
@@ -2848,34 +2747,7 @@ local function OnEvent(self, event, ...)
 
     elseif event == "GROUP_ROSTER_UPDATE" then
         -- Switch party/raid visibility + rescan children
-        GF.UpdateGroupVisibility()
-
-        -- Refresh sort order when role-sorting with NAMELIST is active
-        -- (SecureGroupHeader auto-sorts for native groupBy modes,
-        -- but NAMELIST sort needs manual refresh on roster changes)
-        local needSortRefresh = false
-        local partyConf = GF.GetConf("party")
-        local raidConf  = GF.GetConf(GetLiveRaidKind())
-        if partyConf.separateMeleeRanged and partyConf.sortByRole then
-            needSortRefresh = true
-        end
-        local raidSort = raidConf.sortMode or (raidConf.sortByRole and "ROLE" or "INDEX")
-        if raidConf.separateMeleeRanged and raidSort == "ROLE" then
-            needSortRefresh = true
-        end
-        if needSortRefresh then
-            if InCombatLockdown() then
-                GF._pendingRebuild = true
-            else
-                C_Timer.After(0.2, function()
-                    if not InCombatLockdown() then
-                        GF.RebuildAll()
-                    else
-                        GF._pendingRebuild = true
-                    end
-                end)
-            end
-        end
+        GF_RequestGroupVisibility()
 
         -- Invalidate group size cache (dynamic aura scale)
         if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
