@@ -5490,6 +5490,9 @@ _G.MSUF_ApplyPowerBarEmbedLayout_All = function()
             MSUF_ApplyPowerBarEmbedLayout(fr)
     end
     end
+    if type(_G.MSUF_ClassPower_RefreshCDMWidthBindings) == "function" then
+        _G.MSUF_ClassPower_RefreshCDMWidthBindings(false)
+    end
  end
 
 local function _CreateSelfHealPredBar(f, hpBar)
