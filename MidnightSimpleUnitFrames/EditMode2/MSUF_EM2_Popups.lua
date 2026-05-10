@@ -912,12 +912,12 @@ end
 
 local function PositionBasisText(key, conf)
     if not conf then return "Unknown" end
-    local global = GlobalAnchorLabel()
-    if conf.anchorToUnitframe == "SCREEN" and global ~= "CDM" then return "Screen center" end
+    if conf.anchorToUnitframe == "SCREEN" then return "Screen center" end
     local custom = conf.anchorFrameName
     if type(custom) == "string" and custom ~= "" then return "Custom: " .. ShortName(custom, 23) end
     local atv = conf.anchorToUnitframe
     if UNIT_ANCHOR_LABELS[atv] then return "Unit: " .. UNIT_ANCHOR_LABELS[atv] end
+    local global = GlobalAnchorLabel()
     if global == "UIParent" then return "Screen center (global)" end
     return "Global: " .. global
 end
@@ -933,9 +933,9 @@ end
 
 local function ReadScreenOffset(frame)
     if not frame or not frame.GetCenter or not UIParent or not UIParent.GetCenter then return nil, nil end
-    local fx, fy = frame:GetCenter()
-    local ux, uy = UIParent:GetCenter()
-    if not (fx and fy and ux and uy) then return nil, nil end
+    local okF, fx, fy = pcall(frame.GetCenter, frame)
+    local okU, ux, uy = pcall(UIParent.GetCenter, UIParent)
+    if not (okF and okU and fx and fy and ux and uy) then return nil, nil end
     local fs = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
     local us = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
     if fs == 0 then fs = 1 end
@@ -957,8 +957,7 @@ local function RefreshPositionBasis(key, conf)
     end
     if pf and pf.positionScreenBtn then
         local custom = conf and type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= ""
-        local global = GlobalAnchorLabel()
-        local explicitScreen = conf and conf.anchorToUnitframe == "SCREEN" and not custom and global ~= "CDM"
+        local explicitScreen = conf and conf.anchorToUnitframe == "SCREEN" and not custom
         if pf.positionScreenBtn._label then
             pf.positionScreenBtn._label:SetText(explicitScreen and "Screen Set" or "Use Screen")
         end
