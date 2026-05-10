@@ -1399,6 +1399,37 @@ local function GetLiveRaidKind()
     return (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
 end
 
+local _scheduledHeaderScans = {}
+local function ScheduleHeaderChildScan(scope, delay, kind)
+    scope = (scope == "party") and "party" or "raid"
+    delay = delay or 0
+    local key = scope .. ":" .. tostring(delay)
+    if _scheduledHeaderScans[key] then return end
+    _scheduledHeaderScans[key] = true
+
+    local function run()
+        _scheduledHeaderScans[key] = nil
+        if InCombatLockdown() then return end
+
+        local header = GF.headers and GF.headers[scope]
+        if not header then return end
+
+        local scanKind = kind
+        if scope == "raid" then
+            scanKind = header._msufGFKind or GetLiveRaidKind()
+        else
+            scanKind = "party"
+        end
+        ScanHeaderChildren(header, scanKind, true)
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay, run)
+    else
+        run()
+    end
+end
+
 function GF.UpdateAnyEnabledFlag()
     local partyConf = GF.GetConf("party")
     local raidConf = GF.GetConf(GetLiveRaidKind())
@@ -1702,12 +1733,8 @@ local function SetupPartyHeader()
     header:SetAttribute("_msufLayoutNonce", nonce)
 
     -- Deferred child scan (children created async after Show)
-    C_Timer.After(0, function()
-        if header and not InCombatLockdown() then ScanHeaderChildren(header, "party", true) end
-    end)
-    C_Timer.After(0.05, function()
-        if header and not InCombatLockdown() then ScanHeaderChildren(header, "party", true) end
-    end)
+    ScheduleHeaderChildScan("party", 0, "party")
+    ScheduleHeaderChildScan("party", 0.05, "party")
 end
 
 ------------------------------------------------------------------------
@@ -1874,12 +1901,8 @@ local function SetupRaidHeader()
     local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
     header:SetAttribute("_msufLayoutNonce", nonce)
 
-    C_Timer.After(0, function()
-        if header and not InCombatLockdown() then ScanHeaderChildren(header, kind, true) end
-    end)
-    C_Timer.After(0.05, function()
-        if header and not InCombatLockdown() then ScanHeaderChildren(header, kind, true) end
-    end)
+    ScheduleHeaderChildScan("raid", 0, kind)
+    ScheduleHeaderChildScan("raid", 0.05, kind)
 end
 
 ------------------------------------------------------------------------
@@ -2677,14 +2700,8 @@ function GF.UpdateGroupVisibility()
         if partyConf.enabled and not inRaid then
             GF.SyncHeaderPosition("party")
             GF.headers.party:Show()
-            C_Timer.After(0, function()
-                if GF.headers.party then ScanHeaderChildren(GF.headers.party, "party", true) end
-            end)
-            C_Timer.After(0.5, function()
-                if GF.headers.party and not InCombatLockdown() then
-                    ScanHeaderChildren(GF.headers.party, "party", true)
-                end
-            end)
+            ScheduleHeaderChildScan("party", 0, "party")
+            ScheduleHeaderChildScan("party", 0.5, "party")
         else
             GF.headers.party:Hide()
         end
@@ -2695,14 +2712,8 @@ function GF.UpdateGroupVisibility()
         if raidConf.enabled and inRaid then
             GF.SyncHeaderPosition(raidKind, nil, GF.headers.raid)
             GF.headers.raid:Show()
-            C_Timer.After(0, function()
-                if GF.headers.raid then ScanHeaderChildren(GF.headers.raid, GetLiveRaidKind(), true) end
-            end)
-            C_Timer.After(0.5, function()
-                if GF.headers.raid and not InCombatLockdown() then
-                    ScanHeaderChildren(GF.headers.raid, GetLiveRaidKind(), true)
-                end
-            end)
+            ScheduleHeaderChildScan("raid", 0, raidKind)
+            ScheduleHeaderChildScan("raid", 0.5, raidKind)
         else
             GF.headers.raid:Hide()
         end

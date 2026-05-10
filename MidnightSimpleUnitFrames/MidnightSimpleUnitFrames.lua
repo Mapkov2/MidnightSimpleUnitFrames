@@ -3803,8 +3803,9 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     -- PERF: Cache hpMax + hpMaxStr — hpMax only changes on UNIT_MAXHEALTH (~0.5/s)
     -- but UNIT_HEALTH fires 10-50×/s. Saves UnitHealthMax + NumberToTextFast per tick.
     -- _msufAbsorbTextDirty is already set on UNIT_MAXHEALTH by FrameOnEvent.
+    local absorbTextDirty = self._msufAbsorbTextDirty == true
     local hpMaxStr = self._msufCachedHpMaxStr
-    if not hpMaxStr or self._msufAbsorbTextDirty then
+    if not hpMaxStr or absorbTextDirty then
         local hpMax = UnitHealthMax(unit)
         hpMaxStr = MSUF_NumberToTextFast(hpMax)
         self._msufCachedHpMaxStr = hpMaxStr
@@ -3859,6 +3860,8 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
         end
         absorbText = self._msufCachedAbsorbText
         absorbStyle = self._msufCachedAbsorbStyle
+    elseif absorbTextDirty then
+        self._msufAbsorbTextDirty = false
     end
     ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, nil, absorbText, absorbStyle,
         self._msufCachedHpMaxStr)

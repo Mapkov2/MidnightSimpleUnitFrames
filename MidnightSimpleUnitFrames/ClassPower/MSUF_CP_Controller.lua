@@ -303,7 +303,9 @@ do
     local stacks       = 0
     local expiresAt    = nil
     local noConsumeUntil = 0
-    local seenCastGUID = {}
+    local SEEN_CAST_GUID_MAX = 32
+    local seenCastGUID, seenCastRing = {}, {}
+    local seenCastWrite, seenCastCount = 1, 0
     local _expiryTimer = nil  -- pending C_Timer handle for expiry
 
     WW.MAX_STACKS = MAX_STACKS
@@ -339,6 +341,35 @@ do
         end)
     end
 
+    local function ResetSeenCastGUID()
+        for i = 1, SEEN_CAST_GUID_MAX do
+            local guid = seenCastRing[i]
+            if guid then
+                seenCastGUID[guid] = nil
+                seenCastRing[i] = nil
+            end
+        end
+        seenCastWrite, seenCastCount = 1, 0
+    end
+
+    local function CastGUIDSeen(guid)
+        if not guid then return false end
+        if seenCastGUID[guid] then return true end
+
+        if seenCastCount >= SEEN_CAST_GUID_MAX then
+            local old = seenCastRing[seenCastWrite]
+            if old then seenCastGUID[old] = nil end
+        else
+            seenCastCount = seenCastCount + 1
+        end
+
+        seenCastRing[seenCastWrite] = guid
+        seenCastGUID[guid] = true
+        seenCastWrite = (seenCastWrite % SEEN_CAST_GUID_MAX) + 1
+
+        return false
+    end
+
     -- Warrior-only: own event frame (Sensei pattern)
     if PLAYER_CLASS == "WARRIOR" then
         local f = CreateFrame("Frame")
@@ -349,7 +380,7 @@ do
             if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
                 stacks = 0
                 expiresAt = nil
-                seenCastGUID = {}
+                ResetSeenCastGUID()
                 if _wwRender then _wwRender() end
                 return
             end
@@ -358,8 +389,7 @@ do
             local known = C_SpellBook and C_SpellBook.IsSpellKnown
 
             -- castGUID dedup
-            if castGUID and seenCastGUID[castGUID] then return end
-            if castGUID then seenCastGUID[castGUID] = true end
+            if CastGUIDSeen(castGUID) then return end
 
             -- Unhinged no-consume window
             if known and known(UNHINGED) and BLADESTORMS[spellID] then
