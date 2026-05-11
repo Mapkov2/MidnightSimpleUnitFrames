@@ -183,10 +183,14 @@ local function _Enqueue(f)
     _queued[f] = true
 end
 
+local _flushQueued = false
 local function _DoFlush()
+    _flushQueued = false
     GF._FlushDirty()
 end
 local function ScheduleFlush()
+    if _flushQueued then return end
+    _flushQueued = true
     local sched = _G.MSUF_ScheduleOnce
     if sched then
         sched("GF_RENDER_FLUSH", _DoFlush)

@@ -1201,8 +1201,14 @@ end
 _gfFlushDirtyAuras = function()
     _gfAuraBudget = 0
     _gfAuraDirtyPending = false
+
+    -- Process at most the same number of deferred full aura scans that the
+    -- immediate path allows per frame. The previous loop walked the whole
+    -- queue and relied on dispatchAura to re-queue overflow frames, which was
+    -- correct but created extra Lua churn during large raid-wide aura bursts.
+    local processed = 0
     local stopTail = _gfAuraDirtyTail
-    while _gfAuraDirtyHead <= stopTail do
+    while _gfAuraDirtyHead <= stopTail and processed < _GF_AURA_BUDGET_MAX do
         local f = _gfAuraDirtyQueue[_gfAuraDirtyHead]
         _gfAuraDirtyQueue[_gfAuraDirtyHead] = nil
         _gfAuraDirtyHead = _gfAuraDirtyHead + 1
@@ -1219,6 +1225,7 @@ _gfFlushDirtyAuras = function()
                 end
             end
         end
+        processed = processed + 1
     end
     if _gfAuraDirtyHead > _gfAuraDirtyTail then
         _gfAuraDirtyHead, _gfAuraDirtyTail = 1, 0
