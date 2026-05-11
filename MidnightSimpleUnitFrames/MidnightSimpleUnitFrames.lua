@@ -5363,6 +5363,16 @@ local MSUF_UNIT_TIP_FUNCS = {
     targettarget = "MSUF_ShowTargetTargetInfoTooltip",
     pet = "MSUF_ShowPetInfoTooltip",
 }
+local function MSUF_IsClassPowerAnchorUsable(cpContainer)
+    if not cpContainer then return false end
+    if cpContainer.IsShown and cpContainer:IsShown() then return true end
+    if cpContainer._msufLayoutInitialized ~= true then return false end
+    if cpContainer.GetNumPoints and cpContainer:GetNumPoints() <= 0 then return false end
+    local w = (cpContainer.GetWidth and cpContainer:GetWidth()) or 0
+    local h = (cpContainer.GetHeight and cpContainer:GetHeight()) or 0
+    return w > 0 and h > 0
+end
+
 local function MSUF_ApplyPowerBarEmbedLayout(f)
     if not f or not f.hpBar then  return end
     local pb = f.targetPowerBar
@@ -5516,7 +5526,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         -- Anchor to class power container (MRB energy→combo pattern) or to unit frame
         if anchorToCP then
             local cpContainer = _G["MSUF_ClassPowerContainer"]
-            if cpContainer and cpContainer.IsShown and cpContainer:IsShown() then
+            if MSUF_IsClassPowerAnchorUsable(cpContainer) then
                 pb:SetPoint('TOP', cpContainer, 'BOTTOM', dX, dY)
             else
                 -- Fallback: anchor to unit frame when CP not visible
