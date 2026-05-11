@@ -973,11 +973,9 @@ end
                     end
                     -- Correctness guard: refresh/removal deltas can arrive inside
                     -- the coalesce window after the previous render already ran.
-                    -- Keep the already-coalesced deadline instead of pulling the
-                    -- pending render forward to next frame on every burst event.
-                    local remaining = nextAt - now
-                    if remaining < 0 then remaining = 0 end
-                    MarkDirty(unit, remaining)
+                    -- MarkDirty dedupes by unit and only accelerates an existing
+                    -- delayed flush when delay == 0, so force the render forward.
+                    MarkDirty(unit, 0)
                     return
                 end
 
