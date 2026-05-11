@@ -2067,7 +2067,9 @@ then panel:Show()
 panel:Hide()
 end
 end
-local function MSUF_EnsureMainOptionsPanelBuilt() MSUF_SafeCall(EnsureDB)
+local function MSUF_EnsureMainOptionsPanelBuilt() local existing=_G.MSUF_OptionsPanel
+if existing and existing.__MSUF_FullBuilt then return existing end
+MSUF_SafeCall(EnsureDB)
 MSUF_SafeCall(_G.MSUF_RegisterOptionsCategoryLazy)
 MSUF_SafeCall(_G.CreateOptionsPanel)
 local p=_G.MSUF_OptionsPanel if not p then return nil end
@@ -2165,7 +2167,8 @@ local function MSUF_SelectMainOptionsKey(key) local p=_G.MSUF_OptionsPanel if no
 if type(MSUF_GetTabButtonHelpers)~="function"then return end
 local _,setKey=MSUF_GetTabButtonHelpers(p)
 if type(setKey)=="function"then setKey(key)
-if p.LoadFromDB then pcall(p.LoadFromDB,p)
+local isUnitKey=(key=="player"or key=="target"or key=="targettarget"or key=="focus"or key=="boss"or key=="pet")
+if (not isUnitKey) and p.LoadFromDB then pcall(p.LoadFromDB,p)
 end
 end
 end
@@ -2379,6 +2382,8 @@ if panel.SetScale then pcall(panel.SetScale,panel,MIRROR_PANEL_SCALE)
 end
 if panel.SetFrameStrata then pcall(panel.SetFrameStrata,panel,"DIALOG")
 end
+local skipInitialLoad=(panel==_G.MSUF_OptionsPanel and type(activeKey)=="string"and activeKey~="main")
+if skipInitialLoad then panel.__MSUF_SuppressNextOnShowLoad=true end
 if panel.Show then pcall(panel.Show,panel)
 end
 if not panel.__MSUF_MirrorWhiteHooked and panel.HookScript then panel.__MSUF_MirrorWhiteHooked=true panel:HookScript("OnShow",function() MSUF_ApplyWhiteTextToFrame(panel);
@@ -2386,7 +2391,7 @@ MSUF_ApplyFontBumpToFrame(panel,MIRRORED_PANEL_FONT_BUMP)
 MSUF_ApplyMidnightControlsToFrame(panel) end
 )
 end
-if panel.LoadFromDB then pcall(panel.LoadFromDB,panel)
+if (not skipInitialLoad) and panel.LoadFromDB then pcall(panel.LoadFromDB,panel)
 elseif panel.Refresh then pcall(panel.Refresh,panel)
 end
 MSUF_ApplyWhiteTextToFrame(panel)
@@ -2473,7 +2478,8 @@ local sel=info and info.select;
 local wantSub=subkey if wantSub==nil and S and S.mirror then wantSub=S.mirror.pendingSubKey S.mirror.pendingSubKey=nil end
 if S and S.mirror then if isCastbarKey and type(wantSub)=="string"and wantSub~=""then S.mirror.currentSubKey=wantSub elseif not isCastbarKey then S.mirror.currentSubKey=nil end
 end
-if type(sel)=="function"then local epoch=S.mirror.selectEpoch pcall(sel,wantSub) if C_Timer and C_Timer.After then C_Timer.After(0,function() if S.mirror.selectEpoch~=epoch then return end pcall(sel,wantSub) end
+if type(sel)=="function"then local epoch=S.mirror.selectEpoch pcall(sel,wantSub) local retrySelect=(isCastbarKey or key=="portraits"or key=="opt_portraits")
+if retrySelect and C_Timer and C_Timer.After then C_Timer.After(0,function() if S.mirror.selectEpoch~=epoch then return end pcall(sel,wantSub) end
 )
 C_Timer.After(0.05,function() if S.mirror.selectEpoch~=epoch then return end pcall(sel,wantSub) end
 )
@@ -2547,6 +2553,22 @@ if S.mirror and MSUF_IsCastbarKey(S.mirror.currentKey)
 and not isCastbarKey then MSUF_Standalone_SetCastbarTopButtonsHidden(false)
 end
 local prevPanel = S.mirror.currentPanel
+local nextPanel = MSUF_GetPanelForKey(key)
+local sameOptionsDepth = true
+if prevPanel and nextPanel and prevPanel == nextPanel and nextPanel == _G.MSUF_OptionsPanel then
+local prevDeep=(type(S.mirror.currentKey)=="string"and S.mirror.currentKey~="main")
+local nextDeep=(type(key)=="string"and key~="main")
+sameOptionsDepth=(prevDeep==nextDeep)
+end
+if prevPanel and nextPanel and prevPanel == nextPanel and sameOptionsDepth and prevPanel.__MSUF_MirrorActive then
+S.mirror.currentKey=key S.mirror.currentPanel=nextPanel
+do local _w=_G.MSUF_StandaloneOptionsWindow if _w then _w._msufCurrentKey=key end end
+MSUF_Standalone_ApplySelection(key,subkey,isCastbarKey)
+MSUF_Standalone_AfterAttachFixups(key,isCastbarKey)
+MSUF_Standalone_UpdateTitle(key)
+MSUF_Standalone_UpdateNav(key)
+do local _w=S and S.win if _w and _w._msufRefreshStatusBar then pcall(_w._msufRefreshStatusBar) end end
+return end
 if S.mirror.currentPanel then local _p=S.mirror.currentPanel MSUF_DetachMirroredPanel(_p)
 S.mirror.currentPanel=nil if _p and _p.Hide then pcall(_p.Hide,_p) end end
 S.mirror.currentKey=key S.mirror.currentPanel=MSUF_Standalone_AttachMirrorPanel(key)

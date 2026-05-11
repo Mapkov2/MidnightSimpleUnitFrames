@@ -30,9 +30,19 @@ local math_floor    = math.floor
 local math_max      = math.max
 local table_sort    = table.sort
 local table_concat  = table.concat
+local setmetatable  = setmetatable
 
 -- Reusable tables (cleared per call, zero GC allocation)
 local _siBestByType = {}
+local _siBestTypes = { "healthtint", "border", "glow", "pulse", "namecolor" }
+local _siBestSlots = {
+    healthtint = {},
+    border = {},
+    glow = {},
+    pulse = {},
+    namecolor = {},
+}
+local _defaultFrameColor = { 1, 1, 1, 1 }
 
 ------------------------------------------------------------------------
 -- Compiled lookup: spellId → auraName (rebuilt on spec change)
@@ -43,6 +53,61 @@ local _reverseLookup
 local _nameLookup
 local _auraSpecMap = {} -- auraName → specKey (multi-spec config routing)
 local _isMultiMode = false
+local _siConfigRev = 1
+local _specConfigListCache = setmetatable({}, { __mode = "k" })
+local _multiSpecListCache = setmetatable({}, { __mode = "k" })
+
+local function InvalidateRuntimeCaches()
+    _siConfigRev = _siConfigRev + 1
+    _compiledSpec = nil
+    _compiledMultiKey = nil
+    _reverseLookup = nil
+    _nameLookup = nil
+    _isMultiMode = false
+    for k in pairs(_auraSpecMap) do _auraSpecMap[k] = nil end
+end
+
+SI.InvalidateRuntimeCaches = InvalidateRuntimeCaches
+_G.MSUF_GF_InvalidateSpellIndicatorsRuntimeCaches = InvalidateRuntimeCaches
+
+do
+    local oldInvalidate = GF.InvalidateConfCache
+    if type(oldInvalidate) == "function" and not GF._msufSIInvalidateWrapped then
+        GF._msufSIInvalidateWrapped = true
+        GF.InvalidateConfCache = function(...)
+            InvalidateRuntimeCaches()
+            return oldInvalidate(...)
+        end
+        _G.MSUF_GF_InvalidateConfCache = GF.InvalidateConfCache
+    end
+end
+
+local function GetMultiSpecList(siCfg)
+    local ms = siCfg and siCfg.multiSpecs
+    if not ms then return nil, 0, nil end
+
+    local cached = _multiSpecListCache[siCfg]
+    if cached and cached.rev == _siConfigRev and cached.source == ms then
+        return cached.list, cached.count, cached.key
+    end
+
+    local list, count = {}, 0
+    for sk in pairs(ms) do
+        count = count + 1
+        list[count] = sk
+    end
+    if count > 1 then table_sort(list) end
+
+    local key = table_concat(list, ",")
+    _multiSpecListCache[siCfg] = {
+        rev = _siConfigRev,
+        source = ms,
+        list = list,
+        count = count,
+        key = key,
+    }
+    return list, count, key
+end
 
 local function CompileLookup(specKey, siCfg)
     if specKey ~= "multi" then
@@ -57,12 +122,8 @@ local function CompileLookup(specKey, siCfg)
         return
     end
     -- Multi-spec mode
-    local ms = siCfg and siCfg.multiSpecs
-    if not ms then return end
-    local parts = {}
-    for sk in pairs(ms) do parts[#parts + 1] = sk end
-    table_sort(parts)
-    local key = table_concat(parts, ",")
+    local parts, count, key = GetMultiSpecList(siCfg)
+    if not parts or count <= 0 then return end
     if key == _compiledMultiKey and _reverseLookup and _isMultiMode then return end
     _compiledMultiKey = key
     _compiledSpec     = nil
@@ -70,7 +131,8 @@ local function CompileLookup(specKey, siCfg)
     _reverseLookup    = {}
     _nameLookup       = nil
     for k in pairs(_auraSpecMap) do _auraSpecMap[k] = nil end
-    for _, sk in ipairs(parts) do
+    for pi = 1, count do
+        local sk = parts[pi]
         local ids = SI.SpellIDs[sk]
         if ids then
             for auraName, spellId in pairs(ids) do
@@ -123,10 +185,8 @@ local function ResolveSpec(siCfg)
     if not siCfg then return nil end
     local spec = siCfg.spec or "auto"
     if spec == "multi" then
-        local ms = siCfg.multiSpecs
-        if ms then
-            for _ in pairs(ms) do return "multi" end
-        end
+        local _, count = GetMultiSpecList(siCfg)
+        if count > 0 then return "multi" end
         return nil
     end
     if spec == "auto" then return SI.GetPlayerSpec() end
@@ -179,6 +239,29 @@ end
 
 function SI.EnsureSpecConfig(siCfg, specKey)
     return EnsureSpecConfig(siCfg, specKey)
+end
+
+local function GetSpecConfigList(siCfg, specKey)
+    local specCfg = EnsureSpecConfig(siCfg, specKey)
+    if not specCfg then return nil, 0, nil end
+
+    local cached = _specConfigListCache[specCfg]
+    if cached and cached.rev == _siConfigRev then
+        return cached.list, cached.count, specCfg
+    end
+
+    local list, count = {}, 0
+    for auraName, auraCfg in pairs(specCfg) do
+        count = count + 1
+        list[count] = { name = auraName, cfg = auraCfg }
+    end
+
+    _specConfigListCache[specCfg] = {
+        rev = _siConfigRev,
+        list = list,
+        count = count,
+    }
+    return list, count, specCfg
 end
 
 ------------------------------------------------------------------------
@@ -237,26 +320,24 @@ local function BuildScanConfig(siCfg, specKey)
     local wantsAllCasters = false
 
     if specKey == "multi" then
-        local ms = siCfg and siCfg.multiSpecs
-        if ms then
-            for sk in pairs(ms) do
-                local specCfg = EnsureSpecConfig(siCfg, sk)
-                if specCfg then
-                    for auraName, auraCfg in pairs(specCfg) do
-                        if MarkScanAuraConfig(auraName, auraCfg) then
-                            wantsAllCasters = true
-                        end
+        local specs, specCount = GetMultiSpecList(siCfg)
+        if specs then
+            for si = 1, specCount do
+                local specList, auraCount = GetSpecConfigList(siCfg, specs[si])
+                if specList then
+                    for ai = 1, auraCount do
+                        local item = specList[ai]
+                        if MarkScanAuraConfig(item.name, item.cfg) then wantsAllCasters = true end
                     end
                 end
             end
         end
     else
-        local specCfg = EnsureSpecConfig(siCfg, specKey)
-        if specCfg then
-            for auraName, auraCfg in pairs(specCfg) do
-                if MarkScanAuraConfig(auraName, auraCfg) then
-                    wantsAllCasters = true
-                end
+        local specList, auraCount = GetSpecConfigList(siCfg, specKey)
+        if specList then
+            for ai = 1, auraCount do
+                local item = specList[ai]
+                if MarkScanAuraConfig(item.name, item.cfg) then wantsAllCasters = true end
             end
         end
     end
@@ -960,7 +1041,7 @@ end
 
 local function ApplyFrameEffect(f, auraName, cfg, auraData)
     if not cfg or not cfg.type or not auraData then return end
-    local c = cfg.color or {1, 1, 1, 1}
+    local c = cfg.color or _defaultFrameColor
 
     if cfg.type == "healthtint" then
         -- Full bar color override (not a tint overlay)
@@ -1026,16 +1107,48 @@ local function ApplyFrameEffect(f, auraName, cfg, auraData)
     end
 end
 
+local function ApplyBestFrameEffects(f, bestByType)
+    for i = 1, #_siBestTypes do
+        local fx = bestByType[_siBestTypes[i]]
+        if fx then ApplyFrameEffect(f, fx.name, fx.cfg, fx.data) end
+    end
+end
+
 ------------------------------------------------------------------------
 -- Multi-spec dedup buffer (pre-allocated)
 ------------------------------------------------------------------------
 local _multiProcessed = {}
 
+local function ClearBestByType(bestByType)
+    for i = 1, #_siBestTypes do
+        local ft = _siBestTypes[i]
+        local slot = _siBestSlots[ft]
+        slot.name, slot.cfg, slot.data, slot.prio = nil, nil, nil, nil
+        bestByType[ft] = nil
+    end
+end
+
+local function StoreBestFrameEffect(bestByType, ft, auraName, cfg, auraData, prio)
+    local slot = _siBestSlots[ft]
+    if not slot then return end
+
+    local best = bestByType[ft]
+    if best and prio >= best.prio then return end
+
+    slot.name = auraName
+    slot.cfg = cfg
+    slot.data = auraData
+    slot.prio = prio
+    bestByType[ft] = slot
+end
+
 ------------------------------------------------------------------------
 -- Core update iteration (shared logic for single/multi)
 ------------------------------------------------------------------------
-local function IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestByType, dedup, processed, siLayer)
-    for auraName, auraCfg in pairs(specCfg) do
+local function IterateSpecConfig(f, unit, specKey, specList, specCount, parent, scale, bestByType, dedup, processed, siLayer)
+    for i = 1, specCount do
+        local item = specList[i]
+        local auraName, auraCfg = item.name, item.cfg
         if auraCfg and auraCfg.enabled ~= false then
             if not processed or not processed[auraName] then
                 if processed then processed[auraName] = true end
@@ -1055,10 +1168,7 @@ local function IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestB
                 if auraCfg.frame and auraCfg.frame.type and auraData then
                     local ft = auraCfg.frame.type
                     local prio = auraCfg.frame.priority or 5
-                    local best = bestByType[ft]
-                    if not best or prio < best.prio then
-                        bestByType[ft] = { name = auraName, cfg = auraCfg.frame, data = auraData, prio = prio }
-                    end
+                    StoreBestFrameEffect(bestByType, ft, auraName, auraCfg.frame, auraData, prio)
                 end
             end
         end
@@ -1094,37 +1204,37 @@ function GF.UpdateSpellIndicators(f, unit)
 
     -- Reuse module-level table (cleared per call, zero GC)
     local bestByType = _siBestByType
-    for k in pairs(bestByType) do bestByType[k] = nil end
+    ClearBestByType(bestByType)
     local siLayer = siCfg.layer or 9
 
     if specKey == "multi" then
         for k in pairs(_multiProcessed) do _multiProcessed[k] = nil end
-        local ms = siCfg.multiSpecs
-        if ms then
-            for sk in pairs(ms) do
-                local specCfg = EnsureSpecConfig(siCfg, sk)
-                if specCfg then
-                    IterateSpecConfig(f, unit, sk, specCfg, parent, scale, bestByType, dedup, _multiProcessed, siLayer)
+        local specs, specCount = GetMultiSpecList(siCfg)
+        if specs then
+            for si = 1, specCount do
+                local sk = specs[si]
+                local specList, auraCount = GetSpecConfigList(siCfg, sk)
+                if specList then
+                    IterateSpecConfig(f, unit, sk, specList, auraCount, parent, scale, bestByType, dedup, _multiProcessed, siLayer)
                 end
             end
         end
     else
-        local specCfg = EnsureSpecConfig(siCfg, specKey)
-        if not specCfg then GF.HideSpellIndicators(f); return end
-        IterateSpecConfig(f, unit, specKey, specCfg, parent, scale, bestByType, dedup, nil, siLayer)
+        local specList, auraCount = GetSpecConfigList(siCfg, specKey)
+        if not specList then GF.HideSpellIndicators(f); return end
+        IterateSpecConfig(f, unit, specKey, specList, auraCount, parent, scale, bestByType, dedup, nil, siLayer)
     end
 
-    for _, fx in pairs(bestByType) do
-        ApplyFrameEffect(f, fx.name, fx.cfg, fx.data)
-    end
+    ApplyBestFrameEffects(f, bestByType)
 
     if f._msufSIPlaced then
         for auraName, ind in pairs(f._msufSIPlaced) do
             local enabled = false
             if specKey == "multi" then
-                local ms = siCfg.multiSpecs
-                if ms then
-                    for sk in pairs(ms) do
+                local specs, specCount = GetMultiSpecList(siCfg)
+                if specs then
+                    for si = 1, specCount do
+                        local sk = specs[si]
                         local sc = siCfg.specs and siCfg.specs[sk]
                         local ac = sc and sc[auraName]
                         if ac and ac.enabled ~= false and ac.placed then enabled = true; break end

@@ -19,6 +19,7 @@ local CreateFrame    = CreateFrame
 local UIParent       = UIParent
 local hooksecurefunc = hooksecurefunc
 local C_Timer_After  = C_Timer and C_Timer.After
+local C_Timer_NewTicker = C_Timer and C_Timer.NewTicker
 
 ------------------------------------------------------
 -- Module state
@@ -27,6 +28,18 @@ local FocusKickFrame
 local FocusKick_Hooked            = false
 local FocusKick_FocusCastBar
 local FocusKickOptionsInitialized = false
+
+local function FocusKick_StopTimeUpdater(frame)
+    frame = frame or FocusKickFrame
+    if not frame then return end
+    if frame.MSUF_timeTicker and frame.MSUF_timeTicker.Cancel then
+        frame.MSUF_timeTicker:Cancel()
+    end
+    frame.MSUF_timeTicker = nil
+    frame:SetScript("OnUpdate", nil)
+    frame.MSUF_timeUpdater = nil
+    frame.MSUF_timeAccum = nil
+end
 
 ------------------------------------------------------
 -- On-screen Preview state (Focus Kick Options only)
@@ -180,15 +193,8 @@ local function FocusKick_CreateFrame()
     FocusKickFrame:SetFrameLevel(50)
     FocusKickFrame:Hide()
 
-    -- Zero idle cost: stop OnUpdate when frame hides
-    FocusKickFrame:HookScript("OnHide", function(self)
-        self:SetScript("OnUpdate", nil)
-        self.MSUF_timeUpdater = nil
-        self.MSUF_timeAccum = nil
-        if _G.MSUF_UpdateManager and _G.MSUF_UpdateManager.Unregister then
-            _G.MSUF_UpdateManager:Unregister("FocusKick_TimeText")
-        end
-    end)
+    -- Zero idle cost: stop timer/fallback updater when frame hides.
+    FocusKickFrame:HookScript("OnHide", FocusKick_StopTimeUpdater)
 
     -- Background
     local bg = FocusKickFrame:CreateTexture(nil, "BACKGROUND")
@@ -473,31 +479,39 @@ local function FocusKick_UpdateTimeText()
     local a = src.timeText:GetAlpha()
     FocusKickFrame.timeText:SetAlpha(a or 1)
 end
+
+local function FocusKick_TimeTickerStep()
+    local frame = FocusKickFrame
+    if not frame or not frame.MSUF_timeUpdater or not frame:IsShown() then
+        if frame then FocusKick_StopTimeUpdater(frame) end
+        return
+    end
+
+    FocusKick_UpdateTimeText()
+end
+
+local function FocusKick_TimeFallbackOnUpdate(self, elapsed)
+    if not self:IsShown() then
+        FocusKick_StopTimeUpdater(self)
+        return
+    end
+    self.MSUF_timeAccum = (self.MSUF_timeAccum or 0) + (elapsed or 0)
+    if self.MSUF_timeAccum < 0.05 then return end
+    self.MSUF_timeAccum = 0
+    FocusKick_UpdateTimeText()
+end
+
 local function FocusKick_EnsureTimeUpdater()
     if not FocusKickFrame then return end
     if FocusKickFrame.MSUF_timeUpdater then return end
     FocusKickFrame.MSUF_timeUpdater = true
     FocusKickFrame.MSUF_timeAccum = 0
 
-    if _G.MSUF_UpdateManager and _G.MSUF_UpdateManager.Register then
-        _G.MSUF_UpdateManager:Register("FocusKick_TimeText", function()
-            if not FocusKickFrame or not FocusKickFrame:IsShown() then return end
-            FocusKick_UpdateTimeText()
-        end, 0.05)
+    if C_Timer_NewTicker then
+        FocusKickFrame.MSUF_timeTicker = C_Timer_NewTicker(0.05, FocusKick_TimeTickerStep)
     else
-        -- Fallback: local OnUpdate if UpdateManager isn't available
-        FocusKickFrame:SetScript("OnUpdate", function(self, elapsed)
-            -- Zero idle cost: stop immediately if hidden or no focus unit
-            if not self:IsShown() then
-                self:SetScript("OnUpdate", nil)
-                self.MSUF_timeUpdater = nil
-                return
-            end
-            self.MSUF_timeAccum = (self.MSUF_timeAccum or 0) + (elapsed or 0)
-            if self.MSUF_timeAccum < 0.05 then return end
-            self.MSUF_timeAccum = 0
-            FocusKick_UpdateTimeText()
-        end)
+        -- Legacy fallback only if C_Timer.NewTicker is unavailable.
+        FocusKickFrame:SetScript("OnUpdate", FocusKick_TimeFallbackOnUpdate)
     end
 end
 
@@ -673,14 +687,7 @@ local function FocusKick_StopWatcher()
         FocusKick_Watcher:SetScript("OnEvent", nil)
     end
 
-    if FocusKickFrame and FocusKickFrame.MSUF_timeUpdater then
-        FocusKickFrame:SetScript("OnUpdate", nil)
-        if _G.MSUF_UpdateManager and _G.MSUF_UpdateManager.Unregister then
-            _G.MSUF_UpdateManager:Unregister("FocusKick_TimeText")
-        end
-        FocusKickFrame.MSUF_timeUpdater = nil
-        FocusKickFrame.MSUF_timeAccum = nil
-    end
+    FocusKick_StopTimeUpdater(FocusKickFrame)
 end
 
 ------------------------------------------------------
