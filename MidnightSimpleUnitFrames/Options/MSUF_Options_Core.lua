@@ -3,6 +3,7 @@ ns = ns or {}
 _G.MSUF_NS = ns
 -- Slash-menu-only: the Slash Menu is the only options UI. Blizzard Settings shows only a lightweight launcher.
 _G.MSUF_SLASHMENU_ONLY = true
+_G.MSUF_DISABLE_BLIZZARD_OPTIONS = true
 -- L table setup (canonical location; Toolkit also guards this)
 ns.L = ns.L or (_G.MSUF_L) or {}
 if not getmetatable(ns.L) then setmetatable(ns.L, { __index = function(t, k) return k end }) end
@@ -446,9 +447,17 @@ end
 -- Register the MSUF Settings category at login, but build the heavy UI only when the panel is first opened.
 -- This greatly reduces addon load/login CPU (no more building thousands of UI widgets during PLAYER_LOGIN).
 function MSUF_RegisterOptionsCategoryLazy()
-    -- Slash-menu-only build: Blizzard Settings shows a lightweight launcher panel only.
-    -- The legacy multi-panel Settings UI is intentionally not registered anymore.
+    -- Slash-menu-only build: do not register MSUF in Blizzard Settings.
+    -- The standalone /msuf window is the only configuration UI.
     _G.MSUF_SLASHMENU_ONLY = true
+    _G.MSUF_DISABLE_BLIZZARD_OPTIONS = true
+    _G.MSUF_SettingsCategory = nil
+    MSUF_SettingsCategory = nil
+    if ns then ns.MSUF_MainCategory = nil end
+    return
+end
+
+local function MSUF_RegisterOptionsCategoryLazy_Disabled()
     if not Settings or not Settings.RegisterCanvasLayoutCategory then  return end
     -- Root (AddOns list) panel: lightweight launcher with a single button.
     local launcher = (_G.MSUF_LauncherPanel) or CreateFrame("Frame")
@@ -562,7 +571,6 @@ function MSUF_RegisterOptionsCategoryLazy()
 local CreateLabeledSlider
 local MSUF_SetLabeledSliderValue
 function CreateOptionsPanel()
-    if not Settings or not Settings.RegisterCanvasLayoutCategory then  return end
     -- Run all deferred inits from split-out Options files (idempotent; zero cost after first call).
     ns.MSUF_Options_EnsureLoaded()
     -- If the panel was already fully built, just refresh it.
@@ -2339,6 +2347,15 @@ do
         err:Hide()
         btn:SetScript("OnClick", function()
             err:Hide()
+            if _G.MSUF_SLASHMENU_ONLY then
+                if _G.MSUF_SwitchMirrorPage then
+                    _G.MSUF_SwitchMirrorPage("auras2")
+                    return
+                elseif _G.MSUF_OpenPage then
+                    _G.MSUF_OpenPage("auras2")
+                    return
+                end
+            end
             -- Ensure the Auras 2.0 Settings category is registered.
             local parent = _G.MSUF_SettingsCategory or MSUF_SettingsCategory or (ns and ns.MSUF_MainCategory)
             if (not _G.MSUF_AurasCategory) and ns and ns.MSUF_RegisterAurasOptions and parent then ns.MSUF_RegisterAurasOptions(parent) end
@@ -2621,7 +2638,7 @@ if panel and panel.LoadFromDB and not panel.__MSUF_OnShowHooked then
         if self.LoadFromDB then self:LoadFromDB() end
      end)
 end
-if _G and not _G.__MSUF_LauncherAutoRegistered then
+if _G and not _G.MSUF_DISABLE_BLIZZARD_OPTIONS and not _G.__MSUF_LauncherAutoRegistered then
     _G.__MSUF_LauncherAutoRegistered = true
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function()
