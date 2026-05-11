@@ -3534,7 +3534,7 @@ end
      end)
     -- Register as sub-category under the main MSUF panel
     -- NOTE: Slash-menu-only mode must NOT register any Blizzard settings / interface options categories.
-    if not (_G.MSUF_SLASHMENU_ONLY) then
+    if not (_G.MSUF_SLASHMENU_ONLY or _G.MSUF_DISABLE_BLIZZARD_OPTIONS) then
         if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
             local sub = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
             if sub and Settings.RegisterAddOnCategory then
@@ -3554,7 +3554,7 @@ end
 -- Public registration entrypoint (mirrors Colors / Gameplay pattern)
 function ns.MSUF_RegisterAurasOptions(parentCategory)
     -- Slash-menu-only: build the panel for mirroring, but do NOT register it in Blizzard Settings.
-    if _G.MSUF_SLASHMENU_ONLY then
+    if _G.MSUF_SLASHMENU_ONLY or _G.MSUF_DISABLE_BLIZZARD_OPTIONS then
         if type(ns.MSUF_RegisterAurasOptions_Full) == "function" then
             return ns.MSUF_RegisterAurasOptions_Full(nil)
         end

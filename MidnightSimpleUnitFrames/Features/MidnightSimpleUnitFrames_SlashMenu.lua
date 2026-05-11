@@ -2076,7 +2076,8 @@ local p=_G.MSUF_OptionsPanel if not p then return nil end
 MSUF_ShowHideForLazy(p,"__MSUF_FullBuilt") return p end
 local function MSUF_GetMainSettingsCategory() return (_G.MSUF_SettingsCategory)
 or(ns and ns.MSUF_MainCategory) end
-local function MSUF_EnsureMainSettingsCategory() local cat=MSUF_GetMainSettingsCategory()
+local function MSUF_EnsureMainSettingsCategory() if _G.MSUF_DISABLE_BLIZZARD_OPTIONS or _G.MSUF_SLASHMENU_ONLY then return nil end
+local cat=MSUF_GetMainSettingsCategory()
 if not cat then MSUF_SafeCall(_G.MSUF_RegisterOptionsCategoryLazy)
 cat=MSUF_GetMainSettingsCategory()
 end
@@ -2090,8 +2091,10 @@ end
 return nil end
 local function MSUF_EnsureSubOptionsPanelBuilt(kind) local def=SETTINGS_PANEL_DEFS[kind]
 if not def then return nil end
-local cat=MSUF_EnsureMainSettingsCategory()
+local cat=nil
+if not(_G.MSUF_DISABLE_BLIZZARD_OPTIONS or _G.MSUF_SLASHMENU_ONLY)then cat=MSUF_EnsureMainSettingsCategory()
 if not cat then return nil end
+end
 if ns then local fn=ns[def.full]
 if type(fn)=="function"then pcall(fn,cat)
 else fn=ns[def.fallback]

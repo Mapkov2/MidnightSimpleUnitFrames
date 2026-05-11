@@ -1377,9 +1377,7 @@ local function BossCastbar_OnEvent(self, event, ...)
 
     if event == "PLAYER_ENTERING_WORLD" then
         self:UpdateAnchor()
-        C_Timer.After(0, function()
-            if self and self.unit then BossCastbar_Start(self) end
-        end)
+        C_Timer.After(0, self._msufDeferredStartCB)
         return
     end
 
@@ -1396,9 +1394,7 @@ local function BossCastbar_OnEvent(self, event, ...)
 	    or event == "UNIT_SPELLCAST_EMPOWER_UPDATE"
 	    or event == "UNIT_SPELLCAST_EMPOWER_STOP"
     then
-        C_Timer.After(0, function()
-            if self and self.unit then BossCastbar_Start(self) end
-        end)
+        C_Timer.After(0, self._msufDeferredStartCB)
     end
 end
 
@@ -1451,10 +1447,12 @@ local function InitBossCastbars()
             end
         end
 
-        -- Late-load safety: if a boss is already casting when we load/reload, refresh once.
-        C_Timer.After(0.1, function()
+        f._msufDeferredStartCB = function()
             if f and f.unit then BossCastbar_Start(f) end
-        end)
+        end
+
+        -- Late-load safety: if a boss is already casting when we load/reload, refresh once.
+        C_Timer.After(0.1, f._msufDeferredStartCB)
     end
 
     -- ENCOUNTER_END: force-stop ALL boss castbars on encounter end (kill or wipe).

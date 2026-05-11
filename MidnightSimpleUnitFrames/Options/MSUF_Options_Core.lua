@@ -1,7 +1,7 @@
 local addonName, ns = ...
 ns = ns or {}
 _G.MSUF_NS = ns
--- Slash-menu-only: the Slash Menu is the only options UI. Blizzard Settings shows only a lightweight launcher.
+-- Slash-menu-only: the Slash Menu is the only options UI. Blizzard Settings is not registered.
 _G.MSUF_SLASHMENU_ONLY = true
 _G.MSUF_DISABLE_BLIZZARD_OPTIONS = true
 -- L table setup (canonical location; Toolkit also guards this)
@@ -444,8 +444,8 @@ local function MSUF_GetNumber(text, default, minVal, maxVal)
     if maxVal ~= nil and n > maxVal then n = maxVal end
      return n
 end
--- Register the MSUF Settings category at login, but build the heavy UI only when the panel is first opened.
--- This greatly reduces addon load/login CPU (no more building thousands of UI widgets during PLAYER_LOGIN).
+-- Blizzard Settings registration is intentionally disabled.
+-- The standalone /msuf window is the only options surface.
 function MSUF_RegisterOptionsCategoryLazy()
     -- Slash-menu-only build: do not register MSUF in Blizzard Settings.
     -- The standalone /msuf window is the only configuration UI.
@@ -457,115 +457,6 @@ function MSUF_RegisterOptionsCategoryLazy()
     return
 end
 
-local function MSUF_RegisterOptionsCategoryLazy_Disabled()
-    if not Settings or not Settings.RegisterCanvasLayoutCategory then  return end
-    -- Root (AddOns list) panel: lightweight launcher with a single button.
-    local launcher = (_G.MSUF_LauncherPanel) or CreateFrame("Frame")
-    _G.MSUF_LauncherPanel = launcher
-    launcher.name = "Midnight Simple Unit Frames"
-    -- Register the main category now (cheap) so users can find MSUF in Blizzard Settings.
-    local rootCat = (_G.MSUF_SettingsCategory) or nil
-    if not rootCat then
-        local cat = Settings.RegisterCanvasLayoutCategory(launcher, launcher.name)
-        Settings.RegisterAddOnCategory(cat)
-        rootCat = cat
-        _G.MSUF_SettingsCategory = cat
-    end
-    MSUF_SettingsCategory = rootCat
-    if ns then ns.MSUF_MainCategory = rootCat end
-    -- Combat-safe opener: avoid blocked actions/taint by deferring UI opens until after combat.
-    local function MSUF_RunAfterCombat(fn)
-        if InCombatLockdown and InCombatLockdown() then
-            _G.MSUF_PendingOpenAfterCombat = fn
-            local f = _G.MSUF_CombatDeferFrame
-            if not f then
-                f = CreateFrame("Frame")
-                _G.MSUF_CombatDeferFrame = f
-                f:RegisterEvent("PLAYER_REGEN_ENABLED")
-                f:SetScript("OnEvent", function(self)
-                    local pending = _G.MSUF_PendingOpenAfterCombat
-                    if pending then
-                        _G.MSUF_PendingOpenAfterCombat = nil
-                        pending()
-                    end
-                    -- Zero combat overhead: unregister when nothing is pending
-                    if not (_G.MSUF_PendingOpenAfterCombat) then
-                        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-                        self:SetScript("OnEvent", nil)
-                        _G.MSUF_CombatDeferFrame = nil
-                    end
-                 end)
-            end
-            if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
-                DEFAULT_CHAT_FRAME:AddMessage("|cffffaa00MSUF:|r Cannot open the menu while in combat. Will open after combat.")
-            elseif print then
-                print("MSUF: Cannot open the menu while in combat. Will open after combat.")
-            end
-             return
-        end
-        fn()
-     end
-    local function MSUF_BuildLauncherUI()
-        if launcher.__MSUF_LauncherBuilt then  return end
-        launcher.__MSUF_LauncherBuilt = true
-        local title = launcher:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        launcher.__MSUF_LauncherTitle = title
-        title:SetPoint("TOPLEFT", 16, -16)
-        title:SetText(TR("Midnight Simple Unit Frames"))
-        local desc = launcher:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        launcher.__MSUF_LauncherDesc = desc
-        desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-        desc:SetJustifyH("LEFT")
-        desc:SetJustifyV("TOP")
-        desc:SetText(TR("MSUF is configured via the in-game MSUF menu.\n\nUse the button below (or /msuf) to open it."))
-        local w = launcher.GetWidth and launcher:GetWidth() or 0
-        if w and w > 0 then
-            desc:SetWidth(math.max(420, w - 40))
-        else
-            desc:SetWidth(600)
-        end
-        local btn = CreateFrame("Button", nil, launcher, "UIPanelButtonTemplate")
-        launcher.__MSUF_LauncherBtnOpen = btn
-        btn:SetSize(260, 32)
-        btn:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -14)
-        btn:SetText(TR("Open MSUF Menu"))
-        btn:SetScript("OnClick", function()
-            MSUF_RunAfterCombat(function()
-                if _G and type(_G.MSUF_OpenPage) == "function" then
-                    _G.MSUF_OpenPage("home")
-                elseif _G and type(_G.MSUF_OpenOptionsMenu) == "function" then
-                    _G.MSUF_OpenOptionsMenu()
-                elseif _G and type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then
-                    _G.MSUF_ShowStandaloneOptionsWindow("home")
-                end
-             end)
-         end)
-        local note = launcher:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        note:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 2, -10)
-        note:SetJustifyH("LEFT")
-        note:SetText(TR("Tip: /msuf opens the menu."))
-     end
-    if not launcher.__MSUF_LauncherOnShowHooked then
-        launcher.__MSUF_LauncherOnShowHooked = true
-        launcher:SetScript("OnShow", function(self)
-            if not self.__MSUF_LauncherBuilt then MSUF_BuildLauncherUI() end
-            local d = self.__MSUF_LauncherDesc
-            if d and d.SetWidth then
-                local w = self.GetWidth and self:GetWidth() or 0
-                if w and w > 0 then d:SetWidth(math.max(420, w - 40)) end
-            end
-         end)
-        launcher:SetScript("OnSizeChanged", function(self)
-            local d = self.__MSUF_LauncherDesc
-            if d and d.SetWidth then
-                local w = self.GetWidth and self:GetWidth() or 0
-                if w and w > 0 then d:SetWidth(math.max(420, w - 40)) end
-            end
-         end)
-    end
-    -- Build now too (some containers show the panel without firing OnShow the first time)
-    MSUF_BuildLauncherUI()
- end
 -- Forward declarations (Lua resolves unknown locals in functions as GLOBALS at compile time).
 -- CreateOptionsPanel() references these helpers later, so they must be declared first.
 local CreateLabeledSlider
@@ -2347,35 +2238,23 @@ do
         err:Hide()
         btn:SetScript("OnClick", function()
             err:Hide()
-            if _G.MSUF_SLASHMENU_ONLY then
-                if _G.MSUF_SwitchMirrorPage then
-                    _G.MSUF_SwitchMirrorPage("auras2")
-                    return
-                elseif _G.MSUF_OpenPage then
-                    _G.MSUF_OpenPage("auras2")
+            if _G.MSUF_SwitchMirrorPage then
+                _G.MSUF_SwitchMirrorPage("auras2")
+                return
+            end
+            if _G.MSUF_OpenPage then
+                local ok, opened = pcall(_G.MSUF_OpenPage, "auras2")
+                if ok and opened ~= false then
                     return
                 end
             end
-            -- Ensure the Auras 2.0 Settings category is registered.
-            local parent = _G.MSUF_SettingsCategory or MSUF_SettingsCategory or (ns and ns.MSUF_MainCategory)
-            if (not _G.MSUF_AurasCategory) and ns and ns.MSUF_RegisterAurasOptions and parent then ns.MSUF_RegisterAurasOptions(parent) end
-            local cat = _G.MSUF_AurasCategory or (ns and ns.MSUF_AurasCategory)
-            if cat then
-                local id = cat
-                if type(cat) == "table" then id = cat.ID end
-                id = tonumber(id)
-                if id then
-                    if Settings and Settings.OpenToCategory then
-                        pcall(Settings.OpenToCategory, id)
-                         return
-                    end
-                    if C_SettingsUtil and C_SettingsUtil.OpenSettingsPanel then
-                        pcall(C_SettingsUtil.OpenSettingsPanel, id, nil)
-                         return
-                    end
-                end
+            if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
+                pcall(_G.SlashCmdList["MIDNIGHTSUF"], "")
+                err:SetText(TR("Opened the MSUF menu.\nSelect Unit Auras from Global Style."))
+                err:Show()
+                return
             end
-            err:SetText(TR("Could not open the Auras 2.0 menu.\nPlease make sure MSUF options are registered and try again."))
+            err:SetText(TR("Could not open the Auras 2.0 menu.\nUse /msuf and select Unit Auras."))
             err:Show()
          end)
         p._msufNote = note

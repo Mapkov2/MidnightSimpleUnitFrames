@@ -847,12 +847,14 @@ self.MSUF_timerDriven = okTimer and true or false
             -- cooldown/refresh ticker still starts from this point onward.
             if _G.MSUF_KickReady_RefreshFrame then
                 if _G.C_Timer and _G.C_Timer.After then
-                    local _bar = self
-                    _G.C_Timer.After(0, function()
-                        if _bar and _bar.MSUF_castActive == true and _G.MSUF_KickReady_RefreshFrame then
-                            _G.MSUF_KickReady_RefreshFrame(_bar, nil)
+                    if not self._msufKickReadyDeferredCB then
+                        self._msufKickReadyDeferredCB = function()
+                            if self and self.MSUF_castActive == true and _G.MSUF_KickReady_RefreshFrame then
+                                _G.MSUF_KickReady_RefreshFrame(self, nil)
+                            end
                         end
-                    end)
+                    end
+                    _G.C_Timer.After(0, self._msufKickReadyDeferredCB)
                 else
                     _G.MSUF_KickReady_RefreshFrame(self, state)
                 end

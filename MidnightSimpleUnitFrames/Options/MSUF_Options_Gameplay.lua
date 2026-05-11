@@ -2426,14 +2426,16 @@ end
     end)
 
 -- Settings registration
-    if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
-        local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
-        Settings.RegisterAddOnCategory(subcategory)
-        panel.__MSUF_SettingsRegistered = true
-        ns.MSUF_GameplayCategory = subcategory
-    elseif InterfaceOptions_AddCategory then
-        panel.parent = "Midnight Simple Unit Frames"
-        InterfaceOptions_AddCategory(panel)
+    if not (_G.MSUF_SLASHMENU_ONLY or _G.MSUF_DISABLE_BLIZZARD_OPTIONS) then
+        if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
+            local subcategory, layout = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
+            Settings.RegisterAddOnCategory(subcategory)
+            panel.__MSUF_SettingsRegistered = true
+            ns.MSUF_GameplayCategory = subcategory
+        elseif InterfaceOptions_AddCategory then
+            panel.parent = "Midnight Simple Unit Frames"
+            InterfaceOptions_AddCategory(panel)
+        end
     end
 
     -- Beim Ã–ffnen des Panels SavedVariables â†’ UI syncen
@@ -2460,6 +2462,10 @@ end
 
 -- Lightweight wrapper: register the category at login, but build the heavy UI only when opened.
 function ns.MSUF_RegisterGameplayOptions(parentCategory)
+    if _G.MSUF_SLASHMENU_ONLY or _G.MSUF_DISABLE_BLIZZARD_OPTIONS then
+        return ns.MSUF_RegisterGameplayOptions_Full(nil)
+    end
+
     if not Settings or not Settings.RegisterCanvasLayoutSubcategory or not parentCategory then
         -- Fallback: if Settings API isn't available, just build immediately.
         return ns.MSUF_RegisterGameplayOptions_Full(parentCategory)
