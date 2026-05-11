@@ -4168,7 +4168,7 @@ end
     -- Register as sub-category under the main MSUF panel
     -- NOTE: Slash-menu-only mode must NOT register any Blizzard settings / interface options categories.
     --------------------------------------------------
-    if not (_G.MSUF_SLASHMENU_ONLY) then
+    if not (_G.MSUF_SLASHMENU_ONLY or _G.MSUF_DISABLE_BLIZZARD_OPTIONS) then
         if (not panel.__MSUF_SettingsRegistered) and Settings and Settings.RegisterCanvasLayoutSubcategory and parentCategory then
             local subcategory = Settings.RegisterCanvasLayoutSubcategory(parentCategory, panel, panel.name)
             Settings.RegisterAddOnCategory(subcategory)
@@ -4226,7 +4226,7 @@ end
 
 -- Lightweight wrapper: register the category at login, but build the heavy UI only when opened.
 function ns.MSUF_RegisterColorsOptions(parentCategory)
-    if _G.MSUF_SLASHMENU_ONLY then
+    if _G.MSUF_SLASHMENU_ONLY or _G.MSUF_DISABLE_BLIZZARD_OPTIONS then
         -- Slash-menu-only: never register Colors as a Blizzard Settings/Interface Options category.
         -- The Slash Menu is the only configuration UI.
         return

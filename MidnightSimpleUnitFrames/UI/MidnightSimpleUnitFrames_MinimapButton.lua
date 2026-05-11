@@ -59,11 +59,10 @@ local function ToggleOptionsWindow()
         pcall(_G.MSUF_ShowStandaloneOptionsWindow, "home")
         return
     end
-    -- Fallback: try to open Blizzard settings (if present)
-    if _G.Settings and type(_G.Settings.OpenToCategory) == "function" then
-        pcall(_G.Settings.OpenToCategory, addonName)
-    elseif type(_G.InterfaceOptionsFrame_OpenToCategory) == "function" then
-        pcall(_G.InterfaceOptionsFrame_OpenToCategory, addonName)
+    if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
+        pcall(_G.SlashCmdList["MIDNIGHTSUF"], "")
+    elseif type(print) == "function" then
+        print("|cffffd700MSUF:|r Use /msuf to open the menu.")
     end
 end
 

@@ -2440,25 +2440,49 @@ local function _cleanup()
 end
 
 local f = CreateFrame("Frame")
-f:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
-f:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
-f:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
-f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
-f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-f:RegisterUnitEvent("UNIT_AURA", "player")
-f:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
+local _hotEventsBound = false
+
+local function _setHotEventsBound(active)
+    active = active and true or false
+    if _hotEventsBound == active then return end
+    _hotEventsBound = active
+
+    if active then
+        f:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
+        f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        f:RegisterUnitEvent("UNIT_AURA", "player")
+        f:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
+    else
+        f:UnregisterEvent("UNIT_SPELLCAST_START")
+        f:UnregisterEvent("UNIT_SPELLCAST_STOP")
+        f:UnregisterEvent("UNIT_SPELLCAST_FAILED")
+        f:UnregisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+        f:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+        f:UnregisterEvent("UNIT_AURA")
+        f:UnregisterEvent("UNIT_POWER_UPDATE")
+    end
+end
+
+local function _refreshActiveState()
+    _checkActive()
+    _setHotEventsBound(_active)
+    if _active then
+        _refreshEclipses()
+        _applyEclipseColor()
+    else
+        _cleanup()
+    end
+end
+
 f:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
 f:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:SetScript("OnEvent", function(_, event, arg1, _, arg3)
     if event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "UPDATE_SHAPESHIFT_FORM" or event == "PLAYER_ENTERING_WORLD" then
-        _checkActive()
-        if _active then
-            _refreshEclipses()
-            _applyEclipseColor()
-        else
-            _cleanup()
-        end
+        _refreshActiveState()
         return
     end
     if not _active then return end
@@ -2488,6 +2512,8 @@ f:SetScript("OnEvent", function(_, event, arg1, _, arg3)
         if _eclColor then _applyEclipseColor() end
     end
 end)
+
+_refreshActiveState()
 
 _G.MSUF_BAL_InvalidateColors = function()
     if not _active then return end
