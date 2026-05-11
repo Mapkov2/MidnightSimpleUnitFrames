@@ -2399,7 +2399,7 @@ local function ApplyPreviewTransparency(box, conf)
     end
 end
 
-function Preview.Refresh(box)
+function Preview.Refresh(box, reason)
     box = box or Preview.active
     if not box or not box:IsShown() then return end
     local panel = box._msufPanel
@@ -2407,7 +2407,8 @@ function Preview.Refresh(box)
     local conf, g = UnitDB(key)
     local data = UNIT_DATA[key] or UNIT_DATA.player
     box.key = key
-    if panel and panel._msufRefreshUnitTextControls and not box._refreshingControls then
+    local skipControlRefresh = (reason == "OPTIONS_APPLY_DB" or reason == "UNIT_MENU_ENTER" or reason == "UNIT_MENU_REENTER")
+    if panel and panel._msufRefreshUnitTextControls and not skipControlRefresh and not box._refreshingControls then
         box._refreshingControls = true
         panel._msufRefreshUnitTextControls()
         if panel._msufRefreshUnitPortraitControls then panel._msufRefreshUnitPortraitControls() end
@@ -2898,17 +2899,20 @@ function Preview.RequestRefresh(reason)
     local box = Preview.active
     if not box or not box:IsShown() then return end
     if InstallPreviewHooks then InstallPreviewHooks() end
-    if reason == "OPTIONS_APPLY_DB" then
+    if reason == "OPTIONS_APPLY_DB_IMMEDIATE" then
         box._refreshQueued = nil
-        Preview.Refresh(box)
+        Preview.Refresh(box, reason)
         return
     end
+    box._refreshReason = reason or box._refreshReason
     if box._refreshQueued then return end
     box._refreshQueued = true
     local function run()
         if not box then return end
+        local refreshReason = box._refreshReason
+        box._refreshReason = nil
         box._refreshQueued = nil
-        Preview.Refresh(box)
+        Preview.Refresh(box, refreshReason)
     end
     if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
 end

@@ -986,28 +986,22 @@ panel = (_G.MSUF_OptionsPanel) or CreateFrame("Frame")
     local function IsTabKey(k)
         return k == "bars" or k == "classpower" or k == "fonts" or k == "auras" or k == "castbar" or k == "misc" or k == "profiles"
     end
-    local _msufUnitMenuRefreshToken = 0
+    local _msufUnitMenuRefreshQueued = false
+    local _msufUnitMenuRefreshKey
     local function ForceUnitFrameMenuRefresh(reason)
         if currentTabKey ~= "frames" or not UNIT_FRAME_KEYS[currentKey] then return end
         if not (panel and panel.LoadFromDB) then return end
-        _msufUnitMenuRefreshToken = _msufUnitMenuRefreshToken + 1
-        local token = _msufUnitMenuRefreshToken
+        _msufUnitMenuRefreshKey = currentKey
+        if _msufUnitMenuRefreshQueued then return end
+        _msufUnitMenuRefreshQueued = true
         local function RefreshNow()
-            if token ~= _msufUnitMenuRefreshToken then return end
-            if currentTabKey ~= "frames" or not UNIT_FRAME_KEYS[currentKey] then return end
+            _msufUnitMenuRefreshQueued = false
+            local refreshKey = _msufUnitMenuRefreshKey
+            _msufUnitMenuRefreshKey = nil
+            if currentTabKey ~= "frames" or not UNIT_FRAME_KEYS[currentKey] or refreshKey ~= currentKey then return end
             panel:LoadFromDB()
-            if panel._msufRefreshUnitTextControls then panel._msufRefreshUnitTextControls() end
-            if panel._msufRefreshUnitPortraitControls then panel._msufRefreshUnitPortraitControls() end
-            if panel._msufRefreshUnitPowerControls then panel._msufRefreshUnitPowerControls() end
-            if panel._msufRefreshUFStatusControls then panel._msufRefreshUFStatusControls() end
-            if _G.MSUF_UFPreview_RequestRefresh then
-                _G.MSUF_UFPreview_RequestRefresh(reason or "UNIT_MENU_ENTER")
-            end
         end
-        RefreshNow()
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, RefreshNow)
-        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshNow) else RefreshNow() end
     end
     local function SetCurrentKey(newKey)
         -- PERF: Same-key early-exit. Hot path sees this called repeatedly with
@@ -2620,6 +2614,10 @@ end
 if panel and panel.LoadFromDB and not panel.__MSUF_OnShowHooked then
     panel.__MSUF_OnShowHooked = true
     panel:SetScript("OnShow", function(self)
+        if self.__MSUF_SuppressNextOnShowLoad then
+            self.__MSUF_SuppressNextOnShowLoad = nil
+            return
+        end
         if self.LoadFromDB then self:LoadFromDB() end
      end)
 end
