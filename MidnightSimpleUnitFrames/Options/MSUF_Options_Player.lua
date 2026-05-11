@@ -1359,6 +1359,48 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         if thumb then if thumb.SetAlpha then thumb:SetAlpha(1) end; if thumb.Show then thumb:Show() end end
     end
 
+    local function BuildLegacyCheckSpecs(parent, specs, opts)
+        opts = (type(opts) == "table") and opts or nil
+        local built = {}
+        local yOffset = opts and opts.yOffset or 0
+        for i = 1, #(specs or {}) do
+            local spec = specs[i]
+            if spec then
+                local cb = MkCheck(parent, spec.name, spec.label, spec.x or 0, (spec.y or 0) + yOffset, spec.maxW)
+                if spec.labelSide == "left" then
+                    CBLabelLeft(cb, spec.label)
+                elseif spec.labelSide == "right" then
+                    CBLabelRight(cb, spec.label)
+                end
+                if spec.hide then cb:Hide() end
+                if spec.panelKey then panel[spec.panelKey] = cb end
+                if spec.key then built[spec.key] = cb end
+                built[#built + 1] = cb
+            end
+        end
+        return built
+    end
+
+    local function BuildLegacySliderSpecs(parent, specs)
+        local built = {}
+        for i = 1, #(specs or {}) do
+            local spec = specs[i]
+            if spec then
+                local sl = CreateLabeledSlider(spec.name, spec.label, parent, spec.min, spec.max, spec.step, spec.x, spec.y)
+                if spec.finalize == "compact" then
+                    FinalizeCompactSlider(sl, spec.width)
+                else
+                    FinalizeDashboard(sl, spec.width, spec.finalizeOpts)
+                end
+                if spec.hide then sl:Hide() end
+                if spec.panelKey then panel[spec.panelKey] = sl end
+                if spec.key then built[spec.key] = sl end
+                built[#built + 1] = sl
+            end
+        end
+        return built
+    end
+
     -- Collapsible sections
     local previewH, basicsH, textH, portraitH, castbarBoxH, loadCondH, sizeH = 320, 88, 1020, 520, 132, 124, 200
     local statusBoxH, bossLayoutH = 500, 152
@@ -1752,37 +1794,21 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     panel._msufPowerBarPlayerH = 250
     panel._msufPowerBarDetachedH = 610
     do
-        local pbShowCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarShowCB", "Show power bar", 12, -6)
-        panel.playerPowerBarShowCB = pbShowCB
+        BuildLegacyCheckSpecs(powerBarBody, {
+            { panelKey = "playerPowerBarShowCB", name = "MSUF_UF_PowerBarShowCB", label = "Show power bar", x = 12, y = -6 },
+            { panelKey = "playerPowerBarEmbedCB", name = "MSUF_UF_PowerBarEmbedCB", label = "Embed into health bar", x = 12, y = -117 },
+            { panelKey = "playerPowerBarBorderCB", name = "MSUF_UF_PowerBarBorderCB", label = "Power bar border", x = 300, y = -6 },
+            { panelKey = "playerPowerBarSmoothCB", name = "MSUF_UF_PowerBarSmoothCB", label = "Smooth Fill", x = 300, y = -117 },
+            { panelKey = "playerDetachedPowerDetachCB", name = "MSUF_UF_DetachedPowerEnableCB", label = "Detach from frame", x = 12, y = -150 },
+            { panelKey = "playerDetachedPowerTextOnBarCB", name = "MSUF_UF_DetachedPowerTextOnBarCB", label = "Text on detached bar", x = 300, y = -150 },
+            { panelKey = "playerDetachedPowerSyncClassCB", name = "MSUF_UF_DetachedPowerSyncClassCB", label = "Sync width to Class Resource", x = 12, y = -184, maxW = 230 },
+            { panelKey = "playerDetachedPowerAnchorClassCB", name = "MSUF_UF_DetachedPowerAnchorClassCB", label = "Anchor to Class Resource", x = 300, y = -184, maxW = 230 },
+        })
 
-        local pbHeightSlider = CreateLabeledSlider("MSUF_UF_PowerBarHeightSlider", "Height", powerBarBody, 1, 20, 1, 14, -44)
-        FinalizeDashboard(pbHeightSlider, 200, { hideRange = true, inputWidth = 54, inputOffsetY = -16 })
-        panel.playerPowerBarHeightSlider = pbHeightSlider
-
-        local pbEmbedCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarEmbedCB", "Embed into health bar", 12, -117)
-        panel.playerPowerBarEmbedCB = pbEmbedCB
-
-        local pbBorderCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarBorderCB", "Power bar border", 300, -6)
-        panel.playerPowerBarBorderCB = pbBorderCB
-
-        local pbBorderSlider = CreateLabeledSlider("MSUF_UF_PowerBarBorderSlider", "Border thickness", powerBarBody, 0, 6, 1, 300, -44)
-        FinalizeDashboard(pbBorderSlider, 200, { hideRange = true, inputWidth = 54, inputOffsetY = -16 })
-        panel.playerPowerBarBorderSlider = pbBorderSlider
-
-        local pbSmoothCB = MkCheck(powerBarBody, "MSUF_UF_PowerBarSmoothCB", "Smooth Fill", 300, -117)
-        panel.playerPowerBarSmoothCB = pbSmoothCB
-
-        local detachCB = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerEnableCB", "Detach from frame", 12, -150)
-        panel.playerDetachedPowerDetachCB = detachCB
-
-        local textOnBar = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerTextOnBarCB", "Text on detached bar", 300, -150)
-        panel.playerDetachedPowerTextOnBarCB = textOnBar
-
-        local syncCP = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerSyncClassCB", "Sync width to Class Resource", 12, -184, 230)
-        panel.playerDetachedPowerSyncClassCB = syncCP
-
-        local anchorCP = MkCheck(powerBarBody, "MSUF_UF_DetachedPowerAnchorClassCB", "Anchor to Class Resource", 300, -184, 230)
-        panel.playerDetachedPowerAnchorClassCB = anchorCP
+        BuildLegacySliderSpecs(powerBarBody, {
+            { panelKey = "playerPowerBarHeightSlider", name = "MSUF_UF_PowerBarHeightSlider", label = "Height", min = 1, max = 20, step = 1, x = 14, y = -44, width = 200, finalizeOpts = { hideRange = true, inputWidth = 54, inputOffsetY = -16 } },
+            { panelKey = "playerPowerBarBorderSlider", name = "MSUF_UF_PowerBarBorderSlider", label = "Border thickness", min = 0, max = 6, step = 1, x = 300, y = -44, width = 200, finalizeOpts = { hideRange = true, inputWidth = 54, inputOffsetY = -16 } },
+        })
 
         local info = powerBarBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         info:SetPoint("TOPLEFT", powerBarBody, "TOPLEFT", 12, -218)
@@ -1804,25 +1830,13 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         end)
         panel.playerClassResourceShortcutBtn = cpBtn
 
-        local dpbX = CreateLabeledSlider("MSUF_UF_DetachedPowerXSlider", "Detached X", powerBarBody, -1000, 1000, 1, 14, -260)
-        FinalizeDashboard(dpbX, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
-        panel.playerDetachedPowerXSlider = dpbX
-
-        local dpbY = CreateLabeledSlider("MSUF_UF_DetachedPowerYSlider", "Detached Y", powerBarBody, -1000, 1000, 1, 334, -260)
-        FinalizeDashboard(dpbY, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
-        panel.playerDetachedPowerYSlider = dpbY
-
-        local dpbW = CreateLabeledSlider("MSUF_UF_DetachedPowerWidthSlider", "Detached width", powerBarBody, 20, 800, 1, 14, -334)
-        FinalizeDashboard(dpbW, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
-        panel.playerDetachedPowerWidthSlider = dpbW
-
-        local dpbH = CreateLabeledSlider("MSUF_UF_DetachedPowerHeightSlider", "Detached height", powerBarBody, 2, 80, 1, 334, -334)
-        FinalizeDashboard(dpbH, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
-        panel.playerDetachedPowerHeightSlider = dpbH
-
-        local dpbLevel = CreateLabeledSlider("MSUF_UF_DetachedPowerLevelSlider", "Detached layer", powerBarBody, 0, 30, 1, 14, -408)
-        FinalizeDashboard(dpbLevel, 230, { hideRange = true, inputWidth = 56, inputOffsetY = -16 })
-        panel.playerDetachedPowerLevelSlider = dpbLevel
+        BuildLegacySliderSpecs(powerBarBody, {
+            { panelKey = "playerDetachedPowerXSlider", name = "MSUF_UF_DetachedPowerXSlider", label = "Detached X", min = -1000, max = 1000, step = 1, x = 14, y = -260, width = 230, finalizeOpts = { hideRange = true, inputWidth = 56, inputOffsetY = -16 } },
+            { panelKey = "playerDetachedPowerYSlider", name = "MSUF_UF_DetachedPowerYSlider", label = "Detached Y", min = -1000, max = 1000, step = 1, x = 334, y = -260, width = 230, finalizeOpts = { hideRange = true, inputWidth = 56, inputOffsetY = -16 } },
+            { panelKey = "playerDetachedPowerWidthSlider", name = "MSUF_UF_DetachedPowerWidthSlider", label = "Detached width", min = 20, max = 800, step = 1, x = 14, y = -334, width = 230, finalizeOpts = { hideRange = true, inputWidth = 56, inputOffsetY = -16 } },
+            { panelKey = "playerDetachedPowerHeightSlider", name = "MSUF_UF_DetachedPowerHeightSlider", label = "Detached height", min = 2, max = 80, step = 1, x = 334, y = -334, width = 230, finalizeOpts = { hideRange = true, inputWidth = 56, inputOffsetY = -16 } },
+            { panelKey = "playerDetachedPowerLevelSlider", name = "MSUF_UF_DetachedPowerLevelSlider", label = "Detached layer", min = 0, max = 30, step = 1, x = 14, y = -408, width = 230, finalizeOpts = { hideRange = true, inputWidth = 56, inputOffsetY = -16 } },
+        })
 
         local reset = CreateFrame("Button", nil, powerBarBody, "UIPanelButtonTemplate")
         reset:SetSize(62, 22)
@@ -1934,13 +1948,11 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
 
     -- Basic toggles
     local BASIC_TOGGLES = {
-        { "playerEnableFrameCB", "MSUF_UF_EnableFrameCB", "Enable", 0, 0 },
-        { "playerReverseFillBarsCB", "MSUF_UF_ReverseFillBarsCB", "Reverse fill", 12, -34 },
-        { "playerSmoothFillCB", "MSUF_UF_SmoothFillCB", "Smooth Health Fill", 190, -34 },
+        { panelKey = "playerEnableFrameCB", name = "MSUF_UF_EnableFrameCB", label = "Enable", x = 0, y = 0 },
+        { panelKey = "playerReverseFillBarsCB", name = "MSUF_UF_ReverseFillBarsCB", label = "Reverse fill", x = 12, y = -34 },
+        { panelKey = "playerSmoothFillCB", name = "MSUF_UF_SmoothFillCB", label = "Smooth Health Fill", x = 190, y = -34 },
     }
-    for _, s in ipairs(BASIC_TOGGLES) do
-        panel[s[1]] = MkCheck(basicsBody, s[2], s[3], s[4], s[5] + 28)
-    end
+    BuildLegacyCheckSpecs(basicsBody, BASIC_TOGGLES, { yOffset = 28 })
     -- Enable checkbox: right-aligned, label-left
     if panel.playerEnableFrameCB then
         panel.playerEnableFrameCB:ClearAllPoints()
@@ -1961,28 +1973,21 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         { "playerLoadCondStealthedCB","loadCondHideStealthed","Stealthed",458,-62 },
     }
     panel._msufLoadCondSpecs = LC_SPECS
-    for _, s in ipairs(LC_SPECS) do
-        panel[s[1]] = MkCheck(loadCondBody, "MSUF_UF_"..s[1], s[3], s[4], s[5])
-        if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(panel[s[1]], 170) end
+    local loadCondCheckSpecs = {}
+    for i, s in ipairs(LC_SPECS) do
+        loadCondCheckSpecs[i] = { panelKey = s[1], name = "MSUF_UF_"..s[1], label = s[3], x = s[4], y = s[5], maxW = 170 }
     end
+    BuildLegacyCheckSpecs(loadCondBody, loadCondCheckSpecs)
 
     -- Transparency controls
-    local alphaSyncCB = CreateFrame("CheckButton", "MSUF_UF_AlphaSyncCB", sizeBody, "UICheckButtonTemplate")
-    alphaSyncCB:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 12, -12)
-    if alphaSyncCB.Text then alphaSyncCB.Text:SetText(TR("Sync both")) end
-    panel.playerAlphaSyncCB = alphaSyncCB
-
-    local alphaExcludeCB = CreateFrame("CheckButton", "MSUF_UF_AlphaExcludeTextPortraitCB", sizeBody, "UICheckButtonTemplate")
-    alphaExcludeCB:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 304, -12)
-    CBLabelLeft(alphaExcludeCB, "Keep text + portrait visible")
-    if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(alphaExcludeCB, 220) end
-    panel.playerAlphaExcludeTextPortraitCB = alphaExcludeCB
-
-    local alphaPreserveHPCB = CreateFrame("CheckButton", "MSUF_UF_AlphaPreserveHPColorCB", sizeBody, "UICheckButtonTemplate")
-    alphaPreserveHPCB:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", 304, -44)
-    if alphaPreserveHPCB.Text then alphaPreserveHPCB.Text:SetText(TR("Preserve HP color")) end
-    if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(alphaPreserveHPCB, 220) end
-    panel.playerAlphaPreserveHPColorCB = alphaPreserveHPCB
+    local alphaCheckControls = BuildLegacyCheckSpecs(sizeBody, {
+        { key = "sync", panelKey = "playerAlphaSyncCB", name = "MSUF_UF_AlphaSyncCB", label = TR("Sync both"), x = 12, y = -12 },
+        { key = "excludeTextPortrait", panelKey = "playerAlphaExcludeTextPortraitCB", name = "MSUF_UF_AlphaExcludeTextPortraitCB", label = "Keep text + portrait visible", x = 304, y = -12, maxW = 220, labelSide = "left" },
+        { key = "preserveHP", panelKey = "playerAlphaPreserveHPColorCB", name = "MSUF_UF_AlphaPreserveHPColorCB", label = TR("Preserve HP color"), x = 304, y = -44, maxW = 220 },
+    })
+    local alphaSyncCB = alphaCheckControls.sync
+    local alphaExcludeCB = alphaCheckControls.excludeTextPortrait
+    local alphaPreserveHPCB = alphaCheckControls.preserveHP
     if alphaPreserveHPCB.SetScript then
         alphaPreserveHPCB:SetScript("OnEnter", function(self)
             if not GameTooltip then return end
@@ -2004,13 +2009,10 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     alphaLayerDD:SetPoint("TOPLEFT", sizeBody, "TOPLEFT", -6, -56); alphaLayerDD:Show()
     panel.playerAlphaLayerDropDown = alphaLayerDD
 
-    for _, s in ipairs({
-        { "playerAlphaInCombatSlider","MSUF_UF_AlphaInCombatSlider","Alpha in combat",12,-98 },
-        { "playerAlphaOutCombatSlider","MSUF_UF_AlphaOutCombatSlider","Alpha out of combat",334,-98 },
-    }) do
-        panel[s[1]] = CreateLabeledSlider(s[2], s[3], sizeBody, 0.00, 1.00, 0.05, s[4], s[5])
-        FinalizeDashboard(panel[s[1]], 236)
-    end
+    BuildLegacySliderSpecs(sizeBody, {
+        { panelKey = "playerAlphaInCombatSlider", name = "MSUF_UF_AlphaInCombatSlider", label = "Alpha in combat", min = 0.00, max = 1.00, step = 0.05, x = 12, y = -98, width = 236 },
+        { panelKey = "playerAlphaOutCombatSlider", name = "MSUF_UF_AlphaOutCombatSlider", label = "Alpha out of combat", min = 0.00, max = 1.00, step = 0.05, x = 334, y = -98, width = 236 },
+    })
 
     panel.totInlineInfo = targetInlineBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     panel.totInlineInfo:SetPoint("TOPLEFT", targetInlineBody, "TOPLEFT", 12, -10)
@@ -2041,22 +2043,32 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     totSepDD:Hide(); panel.totInlineSeparatorDD = totSepDD
 
     -- Castbar toggles per unit
-    for _, spec in ipairs({
-        { key = "player", cap = "Player", et = "Enable player castbar", tt = "Show player cast time", vis = true },
-        { key = "target", cap = "Target", et = "Enable target castbar", tt = "Show target cast time" },
-        { key = "focus", cap = "Focus", et = "Enable focus castbar", tt = "Show focus cast time" },
-        { key = "boss", cap = "Boss", et = "Enable boss castbars", tt = "Show boss cast time" },
-    }) do
-        panel[spec.key.."CastbarEnableCB"] = MkCheck(castbarBody, "MSUF_"..spec.cap.."CastbarEnableCB", spec.et, 12, -6)
-        panel[spec.key.."CastbarShowIconCB"] = MkCheck(castbarBody, "MSUF_"..spec.cap.."CastbarShowIconCB", "Icon", 214, -6)
-        panel[spec.key.."CastbarShowTextCB"] = MkCheck(castbarBody, "MSUF_"..spec.cap.."CastbarShowTextCB", "Text", 276, -6)
-        panel[spec.key.."CastbarTimeCB"] = MkCheck(castbarBody, "MSUF_"..spec.cap.."CastbarTimeCB", spec.tt, 12, -30)
-        panel[spec.key.."CastbarInterruptCB"] = MkCheck(castbarBody, "MSUF_"..spec.cap.."CastbarInterruptCB", "Show interrupt", 12, -54)
-        if not spec.vis then
-            for _, sfx in ipairs({"CastbarEnableCB","CastbarShowIconCB","CastbarShowTextCB","CastbarTimeCB","CastbarInterruptCB"}) do
-                local w = panel[spec.key..sfx]; if w then w:Hide() end
-            end
+    local castbarUnitToggleSpecs = {
+        { key = "player", cap = "Player", enableText = "Enable player castbar", timeText = "Show player cast time", visible = true },
+        { key = "target", cap = "Target", enableText = "Enable target castbar", timeText = "Show target cast time" },
+        { key = "focus", cap = "Focus", enableText = "Enable focus castbar", timeText = "Show focus cast time" },
+        { key = "boss", cap = "Boss", enableText = "Enable boss castbars", timeText = "Show boss cast time" },
+    }
+    local castbarControlRows = {
+        { suffix = "CastbarEnableCB", nameSuffix = "CastbarEnableCB", label = function(spec) return spec.enableText end, x = 12, y = -6 },
+        { suffix = "CastbarShowIconCB", nameSuffix = "CastbarShowIconCB", label = "Icon", x = 214, y = -6 },
+        { suffix = "CastbarShowTextCB", nameSuffix = "CastbarShowTextCB", label = "Text", x = 276, y = -6 },
+        { suffix = "CastbarTimeCB", nameSuffix = "CastbarTimeCB", label = function(spec) return spec.timeText end, x = 12, y = -30 },
+        { suffix = "CastbarInterruptCB", nameSuffix = "CastbarInterruptCB", label = "Show interrupt", x = 12, y = -54 },
+    }
+    for _, unitSpec in ipairs(castbarUnitToggleSpecs) do
+        local checkSpecs = {}
+        for i, row in ipairs(castbarControlRows) do
+            checkSpecs[i] = {
+                panelKey = unitSpec.key..row.suffix,
+                name = "MSUF_"..unitSpec.cap..row.nameSuffix,
+                label = type(row.label) == "function" and row.label(unitSpec) or row.label,
+                x = row.x,
+                y = row.y,
+                hide = not unitSpec.visible,
+            }
         end
+        BuildLegacyCheckSpecs(castbarBody, checkSpecs)
     end
 
     -- Boss-only controls
@@ -2224,78 +2236,90 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             panel.statusIconsPreviewAllBtn:SetPoint("LEFT", panel.statusIconsPreviewCurrentBtn, "RIGHT", 2, 0)
             RefreshStatusPreviewMode()
 
-            panel.statusIconsStyleCB = UI.Check({
-                name = "MSUF_UF_SI_MidnightCheck", parent = statusBody,
-                anchor = panel.statusIconsSelectorDrop, x = 16, y = -6,
-                label = TR("Use Midnight style"),
-                get = function() return StatusGet("midnight") end,
-                set = function(v) StatusSet("midnight", v) end,
-                maxTextWidth = 200,
-            })
-
-            panel.statusIconsSymbolDrop = UI.Dropdown({
-                name = "MSUF_UF_SI_SymbolDropdown", parent = statusBody,
-                anchor = panel.statusIconsStyleCB, x = -16, y = -8, width = 240,
-                items = function() return panel._msufUFStatusSymbolItems and panel._msufUFStatusSymbolItems() or { { key = "DEFAULT", label = "Default" } } end,
-                get = function() return StatusGet("symbol") end,
-                set = function(v) StatusSet("symbol", v) end,
-            })
-
-            panel.statusIconsEnabledCB = UI.Check({
-                name = "MSUF_UF_SI_EnableCheck", parent = statusBody,
-                anchor = panel.statusIconsSymbolDrop, x = 16, y = -8,
-                label = TR("Enabled"),
-                get = function() return StatusGet("enabled") end,
-                set = function(v) StatusSet("enabled", v) end,
-                maxTextWidth = 200,
-            })
-
-            panel.statusIconsSizeSlider = UI.Slider({
-                name = "MSUF_UF_SI_SizeSlider", parent = statusBody, compact = true,
-                anchor = panel.statusIconsEnabledCB, x = 0, y = -10,
-                compactInput = true, compactInputWidth = 48, compactInputGap = 8,
-                min = 8, max = 64, step = 1, width = 320, default = 14,
-                get = function() return StatusGet("size") end,
-                set = function(v) StatusSet("size", v) end,
-                formatText = function(v) return string.format("Size: %d", v) end,
-            })
-
-            panel.statusIconsAnchorDrop = UI.Dropdown({
-                name = "MSUF_UF_SI_AnchorDropdown", parent = statusBody,
-                anchor = panel.statusIconsSizeSlider, x = -16, y = -10, width = 200,
-                items = function() return panel._msufUFStatusAnchorItems and panel._msufUFStatusAnchorItems() or UF_STATUS_ANCHOR_ITEMS end,
-                get = function() return StatusGet("anchor") end,
-                set = function(v) StatusSet("anchor", v) end,
-            })
-
-            panel.statusIconsXSlider = UI.Slider({
-                name = "MSUF_UF_SI_XSlider", parent = statusBody, compact = true,
-                anchor = panel.statusIconsAnchorDrop, x = 16, y = -10,
-                compactInput = true, compactInputWidth = 56, compactInputGap = 8,
-                min = -500, max = 500, step = 1, width = 340, default = 0,
-                get = function() return StatusGet("x") end,
-                set = function(v) StatusSet("x", v) end,
-                formatText = function(v) return string.format("X Offset: %d", v) end,
-            })
-
-            panel.statusIconsYSlider = UI.Slider({
-                name = "MSUF_UF_SI_YSlider", parent = statusBody, compact = true,
-                anchor = panel.statusIconsXSlider, x = 0, y = -32,
-                compactInput = true, compactInputWidth = 56, compactInputGap = 8,
-                min = -500, max = 500, step = 1, width = 340, default = 0,
-                get = function() return StatusGet("y") end,
-                set = function(v) StatusSet("y", v) end,
-                formatText = function(v) return string.format("Y Offset: %d", v) end,
-            })
-
-            panel.statusIconsLayerSlider = UI.Slider({
-                name = "MSUF_UF_SI_LayerSlider", parent = statusBody, compact = true,
-                anchor = panel.statusIconsYSlider, x = 0, y = -32,
-                min = 1, max = 10, step = 1, width = 270, default = 7,
-                get = function() return StatusGet("layer") end,
-                set = function(v) StatusSet("layer", v) end,
-                formatText = function(v) return string.format("Layer: %d (higher = on top)", v) end,
-            })
+            local statusIconControlSpecs = {
+                {
+                    type = "check", key = "style",
+                    name = "MSUF_UF_SI_MidnightCheck", parent = statusBody,
+                    anchor = panel.statusIconsSelectorDrop, x = 16, y = -6,
+                    label = TR("Use Midnight style"),
+                    get = function() return StatusGet("midnight") end,
+                    set = function(v) StatusSet("midnight", v) end,
+                    maxTextWidth = 200,
+                },
+                {
+                    type = "dropdown", key = "symbol",
+                    name = "MSUF_UF_SI_SymbolDropdown", parent = statusBody,
+                    x = -16, y = -8, width = 240,
+                    items = function() return panel._msufUFStatusSymbolItems and panel._msufUFStatusSymbolItems() or { { key = "DEFAULT", label = "Default" } } end,
+                    get = function() return StatusGet("symbol") end,
+                    set = function(v) StatusSet("symbol", v) end,
+                },
+                {
+                    type = "check", key = "enabled",
+                    name = "MSUF_UF_SI_EnableCheck", parent = statusBody,
+                    x = 16, y = -8,
+                    label = TR("Enabled"),
+                    get = function() return StatusGet("enabled") end,
+                    set = function(v) StatusSet("enabled", v) end,
+                    maxTextWidth = 200,
+                },
+                {
+                    type = "slider", key = "size",
+                    name = "MSUF_UF_SI_SizeSlider", parent = statusBody, compact = true,
+                    x = 0, y = -10,
+                    compactInput = true, compactInputWidth = 48, compactInputGap = 8,
+                    min = 8, max = 64, step = 1, width = 320, default = 14,
+                    get = function() return StatusGet("size") end,
+                    set = function(v) StatusSet("size", v) end,
+                    formatText = function(v) return string.format("Size: %d", v) end,
+                },
+                {
+                    type = "dropdown", key = "anchor",
+                    name = "MSUF_UF_SI_AnchorDropdown", parent = statusBody,
+                    x = -16, y = -10, width = 200,
+                    items = function() return panel._msufUFStatusAnchorItems and panel._msufUFStatusAnchorItems() or UF_STATUS_ANCHOR_ITEMS end,
+                    get = function() return StatusGet("anchor") end,
+                    set = function(v) StatusSet("anchor", v) end,
+                },
+                {
+                    type = "slider", key = "x",
+                    name = "MSUF_UF_SI_XSlider", parent = statusBody, compact = true,
+                    x = 16, y = -10,
+                    compactInput = true, compactInputWidth = 56, compactInputGap = 8,
+                    min = -500, max = 500, step = 1, width = 340, default = 0,
+                    get = function() return StatusGet("x") end,
+                    set = function(v) StatusSet("x", v) end,
+                    formatText = function(v) return string.format("X Offset: %d", v) end,
+                },
+                {
+                    type = "slider", key = "y",
+                    name = "MSUF_UF_SI_YSlider", parent = statusBody, compact = true,
+                    x = 0, y = -32,
+                    compactInput = true, compactInputWidth = 56, compactInputGap = 8,
+                    min = -500, max = 500, step = 1, width = 340, default = 0,
+                    get = function() return StatusGet("y") end,
+                    set = function(v) StatusSet("y", v) end,
+                    formatText = function(v) return string.format("Y Offset: %d", v) end,
+                },
+                {
+                    type = "slider", key = "layer",
+                    name = "MSUF_UF_SI_LayerSlider", parent = statusBody, compact = true,
+                    x = 0, y = -32,
+                    min = 1, max = 10, step = 1, width = 270, default = 7,
+                    get = function() return StatusGet("layer") end,
+                    set = function(v) StatusSet("layer", v) end,
+                    formatText = function(v) return string.format("Layer: %d (higher = on top)", v) end,
+                },
+            }
+            local _, statusIconControls = UI.BuildOptionRows(statusBody, statusIconControlSpecs)
+            panel.statusIconsStyleCB = statusIconControls.style
+            panel.statusIconsSymbolDrop = statusIconControls.symbol
+            panel.statusIconsEnabledCB = statusIconControls.enabled
+            panel.statusIconsSizeSlider = statusIconControls.size
+            panel.statusIconsAnchorDrop = statusIconControls.anchor
+            panel.statusIconsXSlider = statusIconControls.x
+            panel.statusIconsYSlider = statusIconControls.y
+            panel.statusIconsLayerSlider = statusIconControls.layer
 
             panel.statusIconsResetBtn = CreateFrame("Button", nil, statusBody, "UIPanelButtonTemplate")
             panel.statusIconsResetBtn:SetSize(62, 22)
@@ -2311,14 +2335,18 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             end)
             panel.statusIconsResetBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 
-            panel.statusIconsTestModeCB = UI.Check({
-                name = "MSUF_UF_SI_TestModeCheck", parent = statusBody,
-                anchor = panel.statusIconsLayerSlider, x = 16, y = -8,
-                label = TR("Test mode"),
-                get = function() return StatusGet("testMode") end,
-                set = function(v) StatusSet("testMode", v) end,
-                maxTextWidth = 180,
+            local _, statusIconExtraControls = UI.BuildOptionRows(statusBody, {
+                {
+                    type = "check", key = "testMode",
+                    name = "MSUF_UF_SI_TestModeCheck", parent = statusBody,
+                    anchor = panel.statusIconsLayerSlider, x = 16, y = -8,
+                    label = TR("Test mode"),
+                    get = function() return StatusGet("testMode") end,
+                    set = function(v) StatusSet("testMode", v) end,
+                    maxTextWidth = 180,
+                },
             })
+            panel.statusIconsTestModeCB = statusIconExtraControls.testMode
 
             panel._msufUFStatusControls = {
                 panel.statusIconsSelectorDrop,

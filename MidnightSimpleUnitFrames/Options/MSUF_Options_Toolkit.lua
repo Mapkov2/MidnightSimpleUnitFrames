@@ -12,6 +12,7 @@
 --   ns.UI.Panel(spec)      Dark panel box with title
 --   ns.UI.Button(spec)     UIPanelButton helper
 --   ns.UI.ButtonRow(defs)  Horizontal row of buttons
+--   ns.UI.BuildOptionRows(parent, specs, opts) Batch builder for existing widget specs
 --   ns.UI.StatusBarTextureItems(followText)  SharedMedia texture item list
 --   ns.UI.QueueScrollUpdate(host, keys)      Deferred scroll-height calc
 --   ns.UI.AttachTooltip(w, title, body)      GameTooltip helper
@@ -1246,6 +1247,45 @@ do
 end
 
 -- Also export UI.BindExistingDropdown for explicit use (e.g. refactored Bars)
+
+-- ---- 4k. Generic spec row builder ----------------------------------------
+-- Lightweight batch builder for existing widget factories. It only creates
+-- widgets when an options page calls it, so it does not add any login/combat
+-- work by itself. specs may use type = "check", "slider", "dropdown", or
+-- "label" and any normal UI.Check/UI.Slider/UI.Dropdown/UI.Label fields.
+function UI.BuildOptionRows(parent, specs, opts)
+    opts = opts or {}
+    local widgets, byKey = {}, {}
+    local prev = opts.anchor
+    for i = 1, #(specs or {}) do
+        local spec = specs[i]
+        if spec then
+            local rowSpec = {}
+            for k, v in pairs(spec) do rowSpec[k] = v end
+            rowSpec.parent = rowSpec.parent or parent
+            if rowSpec.anchor == nil then rowSpec.anchor = prev end
+            local widget
+            if rowSpec.type == "check" or rowSpec.type == "checkbox" then
+                widget = UI.Check(rowSpec)
+            elseif rowSpec.type == "slider" then
+                widget = UI.Slider(rowSpec)
+            elseif rowSpec.type == "dropdown" then
+                widget = UI.Dropdown(rowSpec)
+            elseif rowSpec.type == "label" then
+                widget = UI.Label(rowSpec)
+            end
+            if widget then
+                widgets[#widgets + 1] = widget
+                if rowSpec.key then byKey[rowSpec.key] = widget end
+                if rowSpec.name then byKey[rowSpec.name] = widget end
+                if rowSpec.nextAnchor ~= false then prev = widget end
+            end
+        end
+    end
+    widgets.byKey = byKey
+    return widgets, byKey
+end
+
 function UI.BindExistingDropdown(dd, spec)
     if not dd or not spec then return dd end
     UIDropDownMenu_Initialize(dd, function() end)

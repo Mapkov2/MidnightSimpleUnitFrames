@@ -198,65 +198,78 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end)
         presetAcc:SetPoint("LEFT", presetBal, "RIGHT", gap, 0)
 
-        sliders.updateInterval = UI.Slider({
-            name = "MSUF_UpdateIntervalSlider", parent = s1Body, compact = true,
-            anchor = row, x = 0, y = -18,
-            min = 0.01, max = 0.30, step = 0.01, width = 270, default = 0.05,
-            lowText = "0.01", highText = "0.30",
-            get = function() return G().frameUpdateInterval or _G.MSUF_FrameUpdateInterval or 0.05 end,
-            set = function(v) G().frameUpdateInterval = v; _G.MSUF_FrameUpdateInterval = v end,
-            formatText = function(v) return string.format("Unit update interval: %.2f s", v) end,
-        })
-
-        sliders.castbarUpdate = UI.Slider({
-            name = "MSUF_CastbarUpdateIntervalSlider", parent = s1Body, compact = true,
-            anchor = sliders.updateInterval, x = 0, y = -32,
-            min = 0.01, max = 0.30, step = 0.01, width = 270, default = 0.02,
-            lowText = "0.01", highText = "0.30",
-            get = function() return G().castbarUpdateInterval or _G.MSUF_CastbarUpdateInterval or 0.02 end,
-            set = function(v) G().castbarUpdateInterval = v; _G.MSUF_CastbarUpdateInterval = v end,
-            formatText = function(v) return string.format("Castbar update interval: %.2f s", v) end,
-        })
-
-        sliders.ufcoreBudget = UI.Slider({
-            name = "MSUF_UFCoreFlushBudgetSlider", parent = s1Body, compact = true,
-            anchor = sliders.castbarUpdate, x = 0, y = -32,
-            min = 0.5, max = 5.0, step = 0.1, width = 270, default = 2.0,
-            lowText = "0.5", highText = "5.0",
-            get = function() return G().ufcoreFlushBudgetMs end,
-            set = function(v) G().ufcoreFlushBudgetMs = v end,
-            formatText = function(v) return string.format("UFCore flush budget: %.1f ms", v) end,
-        })
-
-        sliders.ufcoreUrgent = UI.Slider({
-            name = "MSUF_UFCoreUrgentCapSlider", parent = s1Body, compact = true,
-            anchor = sliders.ufcoreBudget, x = 0, y = -32,
-            min = 1, max = 50, step = 1, width = 270, default = 10,
-            lowText = "1", highText = "50",
-            get = function() return G().ufcoreUrgentMaxPerFlush end,
-            set = function(v) G().ufcoreUrgentMaxPerFlush = math.floor((tonumber(v) or 10) + 0.5) end,
-            formatText = function(v) return string.format("UFCore urgent cap: %d", math.floor((tonumber(v) or 10) + 0.5)) end,
-        })
+        local updateSliderSpecs = {
+            {
+                type = "slider", key = "updateInterval",
+                name = "MSUF_UpdateIntervalSlider", parent = s1Body, compact = true,
+                anchor = row, x = 0, y = -18,
+                min = 0.01, max = 0.30, step = 0.01, width = 270, default = 0.05,
+                lowText = "0.01", highText = "0.30",
+                get = function() return G().frameUpdateInterval or _G.MSUF_FrameUpdateInterval or 0.05 end,
+                set = function(v) G().frameUpdateInterval = v; _G.MSUF_FrameUpdateInterval = v end,
+                formatText = function(v) return string.format("Unit update interval: %.2f s", v) end,
+            },
+            {
+                type = "slider", key = "castbarUpdate",
+                name = "MSUF_CastbarUpdateIntervalSlider", parent = s1Body, compact = true,
+                x = 0, y = -32,
+                min = 0.01, max = 0.30, step = 0.01, width = 270, default = 0.02,
+                lowText = "0.01", highText = "0.30",
+                get = function() return G().castbarUpdateInterval or _G.MSUF_CastbarUpdateInterval or 0.02 end,
+                set = function(v) G().castbarUpdateInterval = v; _G.MSUF_CastbarUpdateInterval = v end,
+                formatText = function(v) return string.format("Castbar update interval: %.2f s", v) end,
+            },
+            {
+                type = "slider", key = "ufcoreBudget",
+                name = "MSUF_UFCoreFlushBudgetSlider", parent = s1Body, compact = true,
+                x = 0, y = -32,
+                min = 0.5, max = 5.0, step = 0.1, width = 270, default = 2.0,
+                lowText = "0.5", highText = "5.0",
+                get = function() return G().ufcoreFlushBudgetMs end,
+                set = function(v) G().ufcoreFlushBudgetMs = v end,
+                formatText = function(v) return string.format("UFCore flush budget: %.1f ms", v) end,
+            },
+            {
+                type = "slider", key = "ufcoreUrgent",
+                name = "MSUF_UFCoreUrgentCapSlider", parent = s1Body, compact = true,
+                x = 0, y = -32,
+                min = 1, max = 50, step = 1, width = 270, default = 10,
+                lowText = "1", highText = "50",
+                get = function() return G().ufcoreUrgentMaxPerFlush end,
+                set = function(v) G().ufcoreUrgentMaxPerFlush = math.floor((tonumber(v) or 10) + 0.5) end,
+                formatText = function(v) return string.format("UFCore urgent cap: %d", math.floor((tonumber(v) or 10) + 0.5)) end,
+            },
+        }
+        local _, updateSliderByKey = UI.BuildOptionRows(s1Body, updateSliderSpecs)
+        sliders.updateInterval = updateSliderByKey.updateInterval
+        sliders.castbarUpdate = updateSliderByKey.castbarUpdate
+        sliders.ufcoreBudget = updateSliderByKey.ufcoreBudget
+        sliders.ufcoreUrgent = updateSliderByKey.ufcoreUrgent
 
         row:SetScript("OnShow", RefreshPresetButtons)
         RefreshPresetButtons()
     end
 
-    UI.Check({
-        name = "MSUF_ShowWelcomeMessageCheck", parent = s1Body,
-        anchor = sliders.ufcoreUrgent, x = 0, y = -20,
-        label = TR("Show welcome message on login"),
-        get = function() return G().showWelcomeMessage ~= false end,
-        set = function(v) G().showWelcomeMessage = v end,
-    })
-
-    local versionCheck = UI.Check({
-        name = "MSUF_VersionCheckEnabledCheck", parent = s1Body,
-        anchor = _G.MSUF_ShowWelcomeMessageCheck, x = 0, y = -6,
-        label = TR("Enable version check (peer-to-peer)"),
-        get = function() return G().versionCheckEnabled ~= false end,
-        set = function(v) G().versionCheckEnabled = v end,
-    })
+    local miscToggleSpecs = {
+        {
+            type = "check", key = "welcome",
+            name = "MSUF_ShowWelcomeMessageCheck", parent = s1Body,
+            anchor = sliders.ufcoreUrgent, x = 0, y = -20,
+            label = TR("Show welcome message on login"),
+            get = function() return G().showWelcomeMessage ~= false end,
+            set = function(v) G().showWelcomeMessage = v end,
+        },
+        {
+            type = "check", key = "versionCheck",
+            name = "MSUF_VersionCheckEnabledCheck", parent = s1Body,
+            x = 0, y = -6,
+            label = TR("Enable version check (peer-to-peer)"),
+            get = function() return G().versionCheckEnabled ~= false end,
+            set = function(v) G().versionCheckEnabled = v end,
+        },
+    }
+    local _, miscToggleByKey = UI.BuildOptionRows(s1Body, miscToggleSpecs)
+    local versionCheck = miscToggleByKey.versionCheck
 
     -- =====================================================================
     -- Section 2: Unitframe Tooltips
@@ -264,26 +277,32 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     local s2Box, s2Body = MakeCollapsibleSection(scrollChild, 130, "Unitframe Tooltips", false)
     s2Box:SetPoint("TOPLEFT", s1Box, "BOTTOMLEFT", 0, -6)
 
-    local infoTooltipDisable = UI.Check({
-        name = "MSUF_InfoTooltipDisableCheck", parent = s2Body,
-        anchor = s2Body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-        label = TR("Disable MSUF unitframe tooltips"),
-        get = function() return G().disableUnitInfoTooltips and true or false end,
-        set = function(v) G().disableUnitInfoTooltips = v end,
-    })
-
-    local posLabel = UI.Label({ parent = s2Body, text = TR("MSUF unitframe tooltip position"), anchor = infoTooltipDisable, y = -18 })
-
-    UI.Dropdown({
-        name = "MSUF_InfoTooltipPosDropdown", parent = s2Body,
-        anchor = posLabel, x = -16, y = -4, width = 200,
-        items = {
-            { key = "classic", label = "Blizzard Classic" },
-            { key = "modern", label = "Modern (under cursor)" },
+    local tooltipOptionSpecs = {
+        {
+            type = "check", key = "disable",
+            name = "MSUF_InfoTooltipDisableCheck", parent = s2Body,
+            anchor = s2Body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Disable MSUF unitframe tooltips"),
+            get = function() return G().disableUnitInfoTooltips and true or false end,
+            set = function(v) G().disableUnitInfoTooltips = v end,
         },
-        get = function() return G().unitInfoTooltipStyle or "classic" end,
-        set = function(v) G().unitInfoTooltipStyle = v end,
-    })
+        {
+            type = "label", key = "positionLabel",
+            text = TR("MSUF unitframe tooltip position"), y = -18,
+        },
+        {
+            type = "dropdown", key = "position",
+            name = "MSUF_InfoTooltipPosDropdown", parent = s2Body,
+            x = -16, y = -4, width = 200,
+            items = {
+                { key = "classic", label = "Blizzard Classic" },
+                { key = "modern", label = "Modern (under cursor)" },
+            },
+            get = function() return G().unitInfoTooltipStyle or "classic" end,
+            set = function(v) G().unitInfoTooltipStyle = v end,
+        },
+    }
+    UI.BuildOptionRows(s2Body, tooltipOptionSpecs)
 
     -- =====================================================================
     -- Section 3: Blizzard Frames
@@ -291,16 +310,7 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
     local s3Box, s3Body = MakeCollapsibleSection(scrollChild, 190, "Blizzard Frames", false)
     s3Box:SetPoint("TOPLEFT", s2Box, "BOTTOMLEFT", 0, -6)
 
-    local blizzUFDisable = UI.Check({
-        name = "MSUF_DisableBlizzUFCheck", parent = s3Body,
-        anchor = s3Body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-        label = TR("Disable Blizzard unitframes"),
-        get = function() return G().disableBlizzardUnitFrames ~= false end,
-        set = function(v)
-            G().disableBlizzardUnitFrames = v
-            print("|cffffd700MSUF:|r Changing Blizzard unitframes visibility requires a /reload.")
-        end,
-    })
+    local blizzUFDisable
 
     if not StaticPopupDialogs["MSUF_RELOAD_PLAYERFRAME_HIDE_MODE"] then
         StaticPopupDialogs["MSUF_RELOAD_PLAYERFRAME_HIDE_MODE"] = {
@@ -311,45 +321,61 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         }
     end
 
-    UI.Check({
-        name = "MSUF_HardKillPlayerFrameCheck", parent = s3Body,
-        anchor = blizzUFDisable, x = 0, y = -8,
-        label = TR("Fully Hide Blizzard PlayerFrame - Turn off for resource bar compatibility"),
-        tooltip = TR("OFF: Keeps PlayerFrame alive as a hidden parent.\nON: Fully hides PlayerFrame (may break some resource bar addons).\nRequires a UI reload."),
-        get = function() return G().hardKillBlizzardPlayerFrame == true end,
-        set = function(v)
-            G().hardKillBlizzardPlayerFrame = v
-            if StaticPopup_Show then StaticPopup_Show("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE") end
-        end,
-    })
-
-    UI.Check({
-        name = "MSUF_MinimapIconCheck", parent = s3Body,
-        anchor = _G.MSUF_HardKillPlayerFrameCheck, x = 0, y = -8,
-        label = TR("Show MSUF minimap icon"),
-        get = function() return G().showMinimapIcon ~= false end,
-        set = function(v)
-            G().showMinimapIcon = v
-            if _G.MSUF_SetMinimapIconEnabled then
-                _G.MSUF_SetMinimapIconEnabled(v)
-            else
-                G().minimapIconDB = G().minimapIconDB or {}
-                G().minimapIconDB.hide = not v
-            end
-        end,
-    })
-
-    UI.Check({
-        name = "MSUF_TargetSoundsCheck", parent = s3Body,
-        anchor = _G.MSUF_MinimapIconCheck, x = 0, y = -8,
-        label = TR("Play sound on Target/Target Lost"),
-        get = function() return G().playTargetSelectLostSounds == true end,
-        set = function(v)
-            G().playTargetSelectLostSounds = v
-            if _G.MSUF_TargetSoundDriver_ResetState then _G.MSUF_TargetSoundDriver_ResetState() end
-            if v and _G.MSUF_TargetSoundDriver_Ensure then _G.MSUF_TargetSoundDriver_Ensure() end
-        end,
-    })
+    local blizzardFrameToggleSpecs = {
+        {
+            type = "check", key = "disableBlizzardUnitFrames",
+            name = "MSUF_DisableBlizzUFCheck", parent = s3Body,
+            anchor = s3Body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Disable Blizzard unitframes"),
+            get = function() return G().disableBlizzardUnitFrames ~= false end,
+            set = function(v)
+                G().disableBlizzardUnitFrames = v
+                print("|cffffd700MSUF:|r Changing Blizzard unitframes visibility requires a /reload.")
+            end,
+        },
+        {
+            type = "check", key = "hardKillPlayerFrame",
+            name = "MSUF_HardKillPlayerFrameCheck", parent = s3Body,
+            x = 0, y = -8,
+            label = TR("Fully Hide Blizzard PlayerFrame - Turn off for resource bar compatibility"),
+            tooltip = TR("OFF: Keeps PlayerFrame alive as a hidden parent.\nON: Fully hides PlayerFrame (may break some resource bar addons).\nRequires a UI reload."),
+            get = function() return G().hardKillBlizzardPlayerFrame == true end,
+            set = function(v)
+                G().hardKillBlizzardPlayerFrame = v
+                if StaticPopup_Show then StaticPopup_Show("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE") end
+            end,
+        },
+        {
+            type = "check", key = "minimapIcon",
+            name = "MSUF_MinimapIconCheck", parent = s3Body,
+            x = 0, y = -8,
+            label = TR("Show MSUF minimap icon"),
+            get = function() return G().showMinimapIcon ~= false end,
+            set = function(v)
+                G().showMinimapIcon = v
+                if _G.MSUF_SetMinimapIconEnabled then
+                    _G.MSUF_SetMinimapIconEnabled(v)
+                else
+                    G().minimapIconDB = G().minimapIconDB or {}
+                    G().minimapIconDB.hide = not v
+                end
+            end,
+        },
+        {
+            type = "check", key = "targetSounds",
+            name = "MSUF_TargetSoundsCheck", parent = s3Body,
+            x = 0, y = -8,
+            label = TR("Play sound on Target/Target Lost"),
+            get = function() return G().playTargetSelectLostSounds == true end,
+            set = function(v)
+                G().playTargetSelectLostSounds = v
+                if _G.MSUF_TargetSoundDriver_ResetState then _G.MSUF_TargetSoundDriver_ResetState() end
+                if v and _G.MSUF_TargetSoundDriver_Ensure then _G.MSUF_TargetSoundDriver_Ensure() end
+            end,
+        },
+    }
+    local _, blizzardToggleByKey = UI.BuildOptionRows(s3Body, blizzardFrameToggleSpecs)
+    blizzUFDisable = blizzardToggleByKey.disableBlizzardUnitFrames
 
     -- =====================================================================
     -- Section 4: Range Fade
@@ -389,72 +415,81 @@ function ns.MSUF_Options_Misc_Build(panel, miscGroup)
         end
     end
 
-    local rfTarget = UI.Check({
-        name = "MSUF_TargetRangeFadeCheck", parent = s5Body,
-        anchor = s5Body, anchorPoint = "TOPLEFT", x = 12, y = -6,
-        label = TR("Enable Target Range Fade"),
-        get = function() return T().rangeFadeEnabled == true end,
-        set = function(v)
-            T().rangeFadeEnabled = v
-            if _G.MSUF_RangeFade_Reset then _G.MSUF_RangeFade_Reset() end
-            if _G.MSUF_RangeFade_EvaluateActive then _G.MSUF_RangeFade_EvaluateActive(true)
-            elseif _G.MSUF_RangeFade_RebuildSpells then _G.MSUF_RangeFade_RebuildSpells() end
-        end,
-    })
-
-    local rfFocus = UI.Check({
-        name = "MSUF_FocusRangeFadeCheck", parent = s5Body,
-        anchor = rfTarget, x = 0, y = -8,
-        label = TR("Enable Focus Range Fade"),
-        get = function() return F().rangeFadeEnabled == true end,
-        set = function(v)
-            F().rangeFadeEnabled = v
-            if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
-            if _G.MSUF_RangeFadeFB_EvaluateActive then _G.MSUF_RangeFadeFB_EvaluateActive(true)
-            else
-                if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+    local rangeFadeToggleSpecs = {
+        {
+            type = "check", key = "target",
+            name = "MSUF_TargetRangeFadeCheck", parent = s5Body,
+            anchor = s5Body, anchorPoint = "TOPLEFT", x = 12, y = -6,
+            label = TR("Enable Target Range Fade"),
+            get = function() return T().rangeFadeEnabled == true end,
+            set = function(v)
+                T().rangeFadeEnabled = v
+                if _G.MSUF_RangeFade_Reset then _G.MSUF_RangeFade_Reset() end
+                if _G.MSUF_RangeFade_EvaluateActive then _G.MSUF_RangeFade_EvaluateActive(true)
+                elseif _G.MSUF_RangeFade_RebuildSpells then _G.MSUF_RangeFade_RebuildSpells() end
+            end,
+        },
+        {
+            type = "check", key = "focus",
+            name = "MSUF_FocusRangeFadeCheck", parent = s5Body,
+            x = 0, y = -8,
+            label = TR("Enable Focus Range Fade"),
+            get = function() return F().rangeFadeEnabled == true end,
+            set = function(v)
+                F().rangeFadeEnabled = v
+                if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
+                if _G.MSUF_RangeFadeFB_EvaluateActive then _G.MSUF_RangeFadeFB_EvaluateActive(true)
+                else
+                    if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+                    if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+                end
+            end,
+        },
+        {
+            type = "check", key = "boss",
+            name = "MSUF_BossRangeFadeCheck", parent = s5Body,
+            x = 0, y = -8,
+            label = TR("Enable Boss Range Fade"),
+            get = function() return B().rangeFadeEnabled == true end,
+            set = function(v)
+                B().rangeFadeEnabled = v
+                if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
+                if _G.MSUF_RangeFadeFB_EvaluateActive then _G.MSUF_RangeFadeFB_EvaluateActive(true)
+                else
+                    if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+                    if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
+                end
+            end,
+        },
+        {
+            type = "check", key = "bossCastbar",
+            name = "MSUF_BossRFCastbarCheck", parent = s5Body,
+            x = 38, y = -6,
+            label = TR("Also Fade Castbar"),
+            get = function() return B().rangeFadeCastbar == true end,
+            set = function(v)
+                B().rangeFadeCastbar = v
                 if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
-            end
-        end,
-    })
-
-    local rfBoss = UI.Check({
-        name = "MSUF_BossRangeFadeCheck", parent = s5Body,
-        anchor = rfFocus, x = 0, y = -8,
-        label = TR("Enable Boss Range Fade"),
-        get = function() return B().rangeFadeEnabled == true end,
-        set = function(v)
-            B().rangeFadeEnabled = v
-            if _G.MSUF_RangeFadeFB_Reset then _G.MSUF_RangeFadeFB_Reset() end
-            if _G.MSUF_RangeFadeFB_EvaluateActive then _G.MSUF_RangeFadeFB_EvaluateActive(true)
-            else
-                if _G.MSUF_RangeFadeFB_RebuildSpells then _G.MSUF_RangeFadeFB_RebuildSpells() end
+            end,
+        },
+        {
+            type = "check", key = "bossAuras",
+            name = "MSUF_BossRFAurasCheck", parent = s5Body,
+            x = 0, y = -6,
+            label = TR("Also Fade Auras"),
+            get = function() return B().rangeFadeAuras == true end,
+            set = function(v)
+                B().rangeFadeAuras = v
                 if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
-            end
-        end,
-    })
-
-    local rfBossCB = UI.Check({
-        name = "MSUF_BossRFCastbarCheck", parent = s5Body,
-        anchor = rfBoss, x = 38, y = -6,
-        label = TR("Also Fade Castbar"),
-        get = function() return B().rangeFadeCastbar == true end,
-        set = function(v)
-            B().rangeFadeCastbar = v
-            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
-        end,
-    })
-
-    local rfBossAuras = UI.Check({
-        name = "MSUF_BossRFAurasCheck", parent = s5Body,
-        anchor = rfBossCB, x = 0, y = -6,
-        label = TR("Also Fade Auras"),
-        get = function() return B().rangeFadeAuras == true end,
-        set = function(v)
-            B().rangeFadeAuras = v
-            if _G.MSUF_RangeFadeFB_ApplyCurrent then _G.MSUF_RangeFadeFB_ApplyCurrent(true) end
-        end,
-    })
+            end,
+        },
+    }
+    local _, rangeFadeToggleByKey = UI.BuildOptionRows(s5Body, rangeFadeToggleSpecs)
+    local rfTarget = rangeFadeToggleByKey.target
+    local rfFocus = rangeFadeToggleByKey.focus
+    local rfBoss = rangeFadeToggleByKey.boss
+    local rfBossCB = rangeFadeToggleByKey.bossCastbar
+    local rfBossAuras = rangeFadeToggleByKey.bossAuras
 
     local rfAlphaSlider = UI.Slider({
         name = "MSUF_MiscRangeFadeStrengthSlider", parent = s5Body, compact = true,
