@@ -1396,6 +1396,37 @@ local function GetPlayerFrame()
     return _G.MSUF_player or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player) or nil
 end
 
+local function CP_ShouldMaintainHiddenAnchor()
+    local p = MSUF_DB and MSUF_DB.player
+    if not p or p.powerBarDetached ~= true or p.detachedPowerBarAnchorToClassPower ~= true then
+        return false
+    end
+    local b = _cpDB.bars or {}
+    return b.showClassPower ~= false
+end
+
+local function CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
+    if not (playerFrame and CP_Create and CP_EnsureBars and CP_Layout) then return false end
+    if not CP_ShouldMaintainHiddenAnchor() then return false end
+
+    CP_Create(playerFrame)
+
+    local maxP = tonumber(CP.currentMax) or 5
+    if maxP < 1 then maxP = 5 end
+    if maxP > CPConst.MAX_CLASS_POWER then maxP = CPConst.MAX_CLASS_POWER end
+
+    CP_EnsureBars(playerFrame, maxP)
+    CP_Layout(playerFrame, maxP, cpHeight)
+    CP._pf = playerFrame
+    CP._layoutH = cpHeight
+
+    if CP.container then
+        CP.container._msufAnchorOnly = true
+        CP.container:Hide()
+    end
+    return true
+end
+
 -- Full refresh (called on spec change, form change, config change)
 local CP_RefreshEventBindings
 local function FullRefresh()
@@ -1555,6 +1586,7 @@ local function FullRefresh()
         -- Dispatch to correct update function
         CP_RunActiveUpdate(powerType, maxP)
 
+        CP.container._msufAnchorOnly = nil
         CP.container:Show()
         CP.visible = true
         -- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
@@ -1568,6 +1600,7 @@ local function FullRefresh()
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
         if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         CP_StopCentralTick()
+        CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
         if CP.container then
             CP.container:Hide()
         end
