@@ -16,7 +16,6 @@ local min = math.min
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
 local TEXT_SCOPE_KEYS = GP.TEXT_SCOPE_KEYS or {}
 local POWER_BAR_SCOPE_UNITS = GP.POWER_BAR_SCOPE_UNITS or {}
-local GRADIENT_DIRECTIONS = GP.GRADIENT_DIRECTIONS or {}
 local GRADIENT_DIR_KEYS = GP.GRADIENT_DIR_KEYS or {}
 local PRIORITY_SINGLE = GP.PRIORITY_SINGLE or {}
 local PRIORITY_TYPE = GP.PRIORITY_TYPE or {}
@@ -44,7 +43,6 @@ local ScopeRead = GP.ScopeRead
 local ScopeWrite = GP.ScopeWrite
 local CurrentFontScope = GP.CurrentFontScope
 local CurrentBarsScope = GP.CurrentBarsScope
-local IsGFScope = GP.IsGFScope
 local IsTextScopeKey = GP.IsTextScopeKey
 local BarsFlagForKey = GP.BarsFlagForKey
 local FontScopeGet = GP.FontScopeGet
@@ -59,17 +57,9 @@ local ClearUFFontKeyOverrides = GP.ClearUFFontKeyOverrides
 local FontKeyGet = GP.FontKeyGet
 local FontKeySet = GP.FontKeySet
 local TextureValues = GP.TextureValues
-local BarsScopeHasOverride = GP.BarsScopeHasOverride
-local BarsScopeSetOverride = GP.BarsScopeSetOverride
 local CurrentPowerBarScopeUnit = GP.CurrentPowerBarScopeUnit
 local SmoothPowerGet = GP.SmoothPowerGet
 local SmoothPowerSet = GP.SmoothPowerSet
-local NormalizeHpMode = GP.NormalizeHpMode
-local NormalizePowerMode = GP.NormalizePowerMode
-local CurrentGradientDirection = GP.CurrentGradientDirection
-local CurrentGradientDirections = GP.CurrentGradientDirections
-local SetGradientDirection = GP.SetGradientDirection
-local ToggleGradientDirection = GP.ToggleGradientDirection
 local PriorityDefaults = GP.PriorityDefaults
 local PriorityAllowed = GP.PriorityAllowed
 local PriorityOrder = GP.PriorityOrder
@@ -93,12 +83,218 @@ local function BuildBars(ctx)
 
     local function ScopedBarsControlsActive()
         local scope = CurrentBarsScope()
-        return scope == "shared" or BarsScopeHasOverride(scope)
+        return scope == "shared" or ScopeHasOverride(scope, "hlOverride")
     end
 
-    local function TextBarsControlsActive()
+    local function BorderTestScope()
         local scope = CurrentBarsScope()
-        return (not IsGFScope(scope)) and (scope == "shared" or BarsScopeHasOverride(scope))
+        if scope == "gf_party" then return "party" end
+        if scope == "gf_raid" then return "raid" end
+        return scope
+    end
+
+    local function RefreshGroupFrameVisuals()
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if not GF then return end
+        if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+        if GF.RefreshVisuals then
+            GF.RefreshVisuals()
+        elseif _G.MSUF_GF_RefreshOverlays then
+            _G.MSUF_GF_RefreshOverlays()
+        end
+    end
+
+    local function RefreshGroupFrameBorders()
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if not GF then return end
+        if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+        local refreshBorder = _G.MSUF_GF_RefreshBorder
+        if refreshBorder and GF.frames then
+            for frame in pairs(GF.frames) do
+                refreshBorder(frame, frame.unit)
+            end
+        elseif GF.RefreshVisuals then
+            GF.RefreshVisuals()
+        end
+    end
+
+    local function RefreshUnitBorders(units)
+        local fn, frames = _G.MSUF_RefreshRareBarVisuals, _G.MSUF_UnitFrames
+        if type(fn) ~= "function" or not frames then return end
+        for i = 1, #units do
+            local frame = frames[units[i]]
+            if frame then fn(frame) end
+        end
+    end
+
+    local function ApplyOutlineRuntime()
+        Call("MSUF_ApplyBarOutlineThickness_All")
+        RefreshGroupFrameVisuals()
+    end
+
+    local function ApplyAggroBorderRuntime()
+        Call("MSUF_ApplyBarOutlineThickness_All")
+        Call("MSUF_AggroOutline_ApplyEventRegistration")
+        RefreshUnitBorders({ "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" })
+        RefreshGroupFrameBorders()
+    end
+
+    local function ApplyDispelPurgeBorderRuntime()
+        Call("MSUF_ApplyBarOutlineThickness_All")
+        Call("MSUF_DispelOutline_ApplyEventRegistration")
+        Call("MSUF_RefreshDispelOutlineStates", true)
+        RefreshUnitBorders({ "player", "target", "focus", "targettarget" })
+        RefreshGroupFrameBorders()
+        if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+            _G.MSUF_SetDispelBorderTestMode(true, BorderTestScope())
+        end
+    end
+
+    local function ApplyBossTargetBorderRuntime()
+        Call("MSUF_UpdateBossTargetHighlight", true)
+        RefreshUnitBorders({ "boss1", "boss2", "boss3", "boss4", "boss5" })
+    end
+
+    local function ApplyAllHighlightBorderRuntime()
+        ApplyAggroBorderRuntime()
+        ApplyDispelPurgeBorderRuntime()
+        ApplyBossTargetBorderRuntime()
+    end
+
+    local function GradientKeyActive(entry, key)
+        return entry and entry.hlOverride == true
+            and entry.gradientOverride == true
+            and entry.gradientOverrideVersion == 2
+            and type(entry.gradientOverrideKeys) == "table"
+            and entry.gradientOverrideKeys[key] == true
+    end
+
+    local function MarkGradientKey(entry, key)
+        if not entry then return end
+        entry.hlOverride = true
+        entry.gradientOverride = true
+        entry.gradientOverrideVersion = 2
+        if type(entry.gradientOverrideKeys) ~= "table" then entry.gradientOverrideKeys = {} end
+        entry.gradientOverrideKeys[key] = true
+    end
+
+    local function AdoptChangedGradientKey(entry, key, defaultValue)
+        if not (entry and entry.hlOverride == true and entry[key] ~= nil) then return end
+        if GradientKeyActive(entry, key) then return end
+        local shared = ReadG(key, defaultValue)
+        if entry[key] ~= shared then MarkGradientKey(entry, key) end
+    end
+
+    local function GradientControlsActive()
+        local scope = CurrentBarsScope()
+        return scope == "shared" or ScopeHasOverride(scope, "hlOverride")
+    end
+
+    local function GradientScopeGet(key, defaultValue)
+        local scope = CurrentBarsScope()
+        if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
+            local db = DB()
+            local keys = ScopeDBKeys(scope)
+            for i = 1, #(keys or {}) do
+                local entry = db[keys[i]]
+                AdoptChangedGradientKey(entry, key, defaultValue)
+                if GradientKeyActive(entry, key) and entry[key] ~= nil then return entry[key] end
+            end
+        end
+        return ReadG(key, defaultValue)
+    end
+
+    local function GradientScopeSet(key, value)
+        local scope = CurrentBarsScope()
+        if scope == "shared" then
+            G()[key] = value
+            return
+        end
+        local db = DB()
+        local keys = ScopeDBKeys(scope)
+        for i = 1, #(keys or {}) do
+            local entryKey = keys[i]
+            db[entryKey] = db[entryKey] or {}
+            MarkGradientKey(db[entryKey], key)
+            db[entryKey][key] = value
+        end
+    end
+
+    local function CurrentGradientDirectionsForScope()
+        local directions = {}
+        local any = false
+        for dir, key in pairs(GRADIENT_DIR_KEYS) do
+            local on = GradientScopeGet(key, false) == true
+            directions[dir] = on
+            if on then any = true end
+        end
+        if not any then
+            local legacy = GradientScopeGet("gradientDirection", "RIGHT")
+            if not GRADIENT_DIR_KEYS[legacy] then legacy = "RIGHT" end
+            directions[legacy] = true
+        end
+        return directions
+    end
+
+    local function ToggleGradientDirectionForScope(direction)
+        direction = GRADIENT_DIR_KEYS[direction] and direction or "RIGHT"
+        local directions = CurrentGradientDirectionsForScope()
+        directions[direction] = not directions[direction]
+        local any = false
+        for dir in pairs(GRADIENT_DIR_KEYS) do
+            if directions[dir] == true then
+                any = true
+                break
+            end
+        end
+        if not any then directions[direction] = true end
+        for dir, key in pairs(GRADIENT_DIR_KEYS) do
+            GradientScopeSet(key, directions[dir] == true)
+        end
+        GradientScopeSet("gradientDirection", direction)
+    end
+
+    local function ApplyGradientRuntime(reason)
+        if (GradientScopeGet("enableGradient", true) ~= false) or (GradientScopeGet("enablePowerGradient", false) == true) then
+            local strength = tonumber(GradientScopeGet("gradientStrength", nil))
+            if not (strength and strength > 0) then GradientScopeSet("gradientStrength", 0.45) end
+        end
+
+        local scope = CurrentBarsScope()
+        if scope == "shared" then
+            Call("MSUF_UFCore_RefreshSettingsCache", reason or "MSUF2_GradientShared")
+        elseif not (scope == "gf_party" or scope == "gf_raid") then
+            Call("MSUF_UFCore_NotifyConfigChanged", scope == "boss" and nil or scope, true, true, reason or "MSUF2_GradientScope")
+        end
+
+        local frames = _G.MSUF_UnitFrames
+        if type(frames) == "table" then
+            for _, frame in pairs(frames) do
+                if frame and frame.unit and frame.hpBar then
+                    frame._msufHeavyVisualNextAt = 0
+                    if _G.UpdateSimpleUnitFrame then _G.UpdateSimpleUnitFrame(frame) end
+                    if _G.MSUF_UFCore_UpdatePowerBarFast then _G.MSUF_UFCore_UpdatePowerBarFast(frame) end
+                    if ns.Bars and ns.Bars._ApplyHPGradient then
+                        if frame.hpGradients then
+                            ns.Bars._ApplyHPGradient(frame)
+                        elseif frame.hpGradient then
+                            ns.Bars._ApplyHPGradient(frame.hpGradient)
+                        end
+                    end
+                    if ns.Bars and ns.Bars.ApplyPowerGradientOnce then
+                        frame._msufPowerGradEnabled = nil
+                        ns.Bars.ApplyPowerGradientOnce(frame)
+                    elseif ns.Bars and ns.Bars._ApplyPowerGradient then
+                        if frame.powerGradients then
+                            ns.Bars._ApplyPowerGradient(frame)
+                        elseif frame.powerGradient then
+                            ns.Bars._ApplyPowerGradient(frame.powerGradient)
+                        end
+                    end
+                end
+            end
+        end
+        RefreshGroupFrameVisuals()
     end
 
     local scopeValues = {
@@ -125,19 +321,19 @@ local function BuildBars(ctx)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end,
         hasOverride = function(value)
-            return value ~= "shared" and BarsScopeHasOverride(value)
+            return value ~= "shared" and ScopeHasOverride(value, "hlOverride")
         end,
     })
     local override = W.ToggleAt(scope, "Override shared settings", 14, -58, 220)
     M.BindToggle(ctx, override,
         function()
             local key = CurrentBarsScope()
-            return BarsScopeHasOverride(key)
+            return ScopeHasOverride(key, "hlOverride")
         end,
         function(v)
             local key = CurrentBarsScope()
             if key ~= "shared" then
-                BarsScopeSetOverride(key, v)
+                ScopeSetOverride(key, "hlOverride", v)
                 ApplyBars("MSUF2_BARS_OVERRIDE")
             end
             if M.SelectPage then M.SelectPage(ctx.key) end
@@ -152,7 +348,7 @@ local function BuildBars(ctx)
     reset:SetScript("OnClick", function()
         for i = 1, #scopeValues do
             local key = scopeValues[i].value
-            if key ~= "shared" then BarsScopeSetOverride(key, false) end
+            if key ~= "shared" then ScopeSetOverride(key, "hlOverride", false) end
         end
         ApplyBars("MSUF2_BARS_RESET_OVERRIDES")
         if M.SelectPage then M.SelectPage(ctx.key) end
@@ -164,7 +360,7 @@ local function BuildBars(ctx)
         local active = {}
         for i = 1, #scopeValues do
             local item = scopeValues[i]
-            if item.value ~= "shared" and BarsScopeHasOverride(item.value) then active[#active + 1] = item.text end
+            if item.value ~= "shared" and ScopeHasOverride(item.value, "hlOverride") then active[#active + 1] = item.text end
         end
         local shared = current == "shared"
         W.SetControlShown(override, not shared)
@@ -194,7 +390,11 @@ local function BuildBars(ctx)
     barTexture:SetWidth(leftW)
     M.BindDropdown(ctx, barTexture,
         function() return ReadG("barTexture", "Blizzard") end,
-        function(v) SetG("barTexture", v or "Blizzard", "MSUF2_BAR_TEXTURE", { preview = true }); ApplyBars("MSUF2_BAR_TEXTURE") end)
+        function(v)
+            SetG("barTexture", v or "Blizzard", "MSUF2_BAR_TEXTURE", { preview = true })
+            ApplyBars("MSUF2_BAR_TEXTURE")
+            RefreshGroupFrameVisuals()
+        end)
     local bgTexture = W.Dropdown(textures, "Background texture", function() return TextureValues("Use foreground texture") end, 280)
     if bgTexture._msuf2Title then
         bgTexture._msuf2Title:ClearAllPoints()
@@ -205,18 +405,36 @@ local function BuildBars(ctx)
     bgTexture:SetWidth(leftW)
     M.BindDropdown(ctx, bgTexture,
         function() return ReadG("barBackgroundTexture", "") end,
-        function(v) SetG("barBackgroundTexture", v or "", "MSUF2_BAR_BG_TEXTURE", { preview = true }); ApplyBars("MSUF2_BAR_BG_TEXTURE") end)
+        function(v)
+            SetG("barBackgroundTexture", v or "", "MSUF2_BAR_BG_TEXTURE", { preview = true })
+            ApplyBars("MSUF2_BAR_BG_TEXTURE")
+            RefreshGroupFrameVisuals()
+        end)
 
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", "Gradient", T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, topY)
+    local RefreshGradientControls
+    local function SyncGradientControls()
+        if RefreshGradientControls then RefreshGradientControls() end
+    end
     local hpGradient = W.ToggleAt(textures, "HP bar gradient", rightX, topY - 24, 180)
     M.BindToggle(ctx, hpGradient,
-        function() return BarScopeGet("enableGradient", true) ~= false end,
-        function(v) BarScopeSet("enableGradient", v and true or false, "MSUF2_HP_GRADIENT"); ApplyBars("MSUF2_HP_GRADIENT") end)
+        function() return GradientScopeGet("enableGradient", true) ~= false end,
+        function(v)
+            GradientScopeSet("enableGradient", v and true or false)
+            ApplyBars("MSUF2_HP_GRADIENT")
+            ApplyGradientRuntime("MSUF2_HP_GRADIENT")
+            SyncGradientControls()
+        end)
     local powerGradient = W.ToggleAt(textures, "Power bar gradient", rightX, topY - 54, 190)
     M.BindToggle(ctx, powerGradient,
-        function() return BarScopeGet("enablePowerGradient", false) == true end,
-        function(v) BarScopeSet("enablePowerGradient", v and true or false, "MSUF2_POWER_GRADIENT"); ApplyBars("MSUF2_POWER_GRADIENT") end)
+        function() return GradientScopeGet("enablePowerGradient", false) == true end,
+        function(v)
+            GradientScopeSet("enablePowerGradient", v and true or false)
+            ApplyBars("MSUF2_POWER_GRADIENT")
+            ApplyGradientRuntime("MSUF2_POWER_GRADIENT")
+            SyncGradientControls()
+        end)
     local strength = W.Slider(textures, "Gradient strength", 0, 1, 0.05, 220)
     if strength._msuf2Title then
         strength._msuf2Title:ClearAllPoints()
@@ -228,8 +446,12 @@ local function BuildBars(ctx)
     strength:SetWidth(220)
     if strength._msuf2UpdateFill then strength:_msuf2UpdateFill() end
     M.BindSlider(ctx, strength,
-        function() return tonumber(BarScopeGet("gradientStrength", 0.45)) or 0.45 end,
-        function(v) BarScopeSet("gradientStrength", tonumber(v) or 0.45, "MSUF2_GRADIENT_STRENGTH"); ApplyBars("MSUF2_GRADIENT_STRENGTH") end)
+        function() return tonumber(GradientScopeGet("gradientStrength", 0.45)) or 0.45 end,
+        function(v)
+            GradientScopeSet("gradientStrength", tonumber(v) or 0.45)
+            ApplyBars("MSUF2_GRADIENT_STRENGTH")
+            ApplyGradientRuntime("MSUF2_GRADIENT_STRENGTH")
+        end)
 
     local padX = math.min(rightX + 238, (ctx.width or 720) - 104)
     local pad = T.Panel(textures, nil, { 0.020, 0.024, 0.046, 0.55 }, T.colors.borderSoft)
@@ -247,12 +469,10 @@ local function BuildBars(ctx)
         btn._msuf2Label:SetPoint("CENTER", btn, "CENTER", 0, 0)
         btn._msuf2Label:SetJustifyH("CENTER")
         btn:SetScript("OnClick", function()
-            if ToggleGradientDirection then
-                ToggleGradientDirection(value or "RIGHT")
-            else
-                SetGradientDirection(value or "RIGHT")
-            end
+            ToggleGradientDirectionForScope(value or "RIGHT")
             ApplyBars("MSUF2_GRADIENT_DIRECTION")
+            ApplyGradientRuntime("MSUF2_GRADIENT_DIRECTION")
+            SyncGradientControls()
         end)
         directionButtons[value] = btn
         return btn
@@ -261,11 +481,11 @@ local function BuildBars(ctx)
     PadButton("<", "LEFT", 8, -27)
     PadButton(">", "RIGHT", 54, -27)
     PadButton("v", "DOWN", 31, -49)
-    M.AddRefresher(ctx, function()
-        local current = (CurrentGradientDirections and CurrentGradientDirections()) or { [CurrentGradientDirection()] = true }
-        local controlsActive = ScopedBarsControlsActive()
+    RefreshGradientControls = function()
+        local current = CurrentGradientDirectionsForScope()
+        local controlsActive = GradientControlsActive()
         local sharedActive = SharedBarsControlsActive()
-        local valueControlsActive = controlsActive and ((BarScopeGet("enableGradient", true) ~= false) or (BarScopeGet("enablePowerGradient", false) == true))
+        local valueControlsActive = controlsActive and ((GradientScopeGet("enableGradient", true) ~= false) or (GradientScopeGet("enablePowerGradient", false) == true))
         SetControlEnabled(barTexture, sharedActive)
         SetControlEnabled(bgTexture, sharedActive)
         SetControlEnabled(hpGradient, controlsActive)
@@ -276,7 +496,8 @@ local function BuildBars(ctx)
             btn:SetActive(current[value] == true)
             SetControlEnabled(btn, valueControlsActive)
         end
-    end)
+    end
+    M.AddRefresher(ctx, RefreshGradientControls)
 
     local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 336, true)
     local absorbW = absorb._msuf2Width or ctx.width or 720
@@ -294,7 +515,14 @@ local function BuildBars(ctx)
     }, absorbLeftW)
     M.BindDropdown(ctx, absorbMode,
         function() return tonumber(BarScopeGet("absorbTextMode", 2)) or 2 end,
-        function(v) BarScopeSet("absorbTextMode", tonumber(v) or 2, "MSUF2_ABSORB_MODE"); ApplyBars("MSUF2_ABSORB_MODE") end)
+        function(v)
+            local mode = tonumber(v) or 2
+            BarScopeSet("absorbTextMode", mode, "MSUF2_ABSORB_MODE")
+            Call("MSUF_InvalidateAbsorbCache")
+            Call("MSUF_UpdateAbsorbTextMode", mode)
+            ApplyBars("MSUF2_ABSORB_MODE")
+            RefreshGroupFrameVisuals()
+        end)
     W.MoveWidget(absorbMode, absorb, absorbLeftX, -70, absorbLeftW, "LEFT")
 
     local absorbAnchor = W.Dropdown(absorb, "Absorb bar anchoring", {
@@ -306,31 +534,55 @@ local function BuildBars(ctx)
     }, absorbLeftW)
     M.BindDropdown(ctx, absorbAnchor,
         function() return tonumber(BarScopeGet("absorbAnchorMode", 2)) or 2 end,
-        function(v) BarScopeSet("absorbAnchorMode", tonumber(v) or 2, "MSUF2_ABSORB_ANCHOR"); ApplyBars("MSUF2_ABSORB_ANCHOR") end)
+        function(v)
+            BarScopeSet("absorbAnchorMode", tonumber(v) or 2, "MSUF2_ABSORB_ANCHOR")
+            Call("MSUF_InvalidateAbsorbCache")
+            ApplyBars("MSUF2_ABSORB_ANCHOR")
+            RefreshGroupFrameVisuals()
+        end)
     W.MoveWidget(absorbAnchor, absorb, absorbLeftX, -124, absorbLeftW, "LEFT")
 
     local selfHeal = W.ToggleAt(absorb, "Heal prediction", absorbLeftX, -186, absorbLeftW)
     M.BindToggle(ctx, selfHeal,
         function() return ReadGBool("showSelfHealPrediction", true) end,
-        function(v) SetGBool("showSelfHealPrediction", v, "MSUF2_SELF_HEAL", { preview = true }); ApplyBars("MSUF2_SELF_HEAL") end)
+        function(v)
+            SetGBool("showSelfHealPrediction", v, "MSUF2_SELF_HEAL", { preview = true })
+            Call("MSUF_RefreshSelfHealPredUnitEvent")
+            ApplyBars("MSUF2_SELF_HEAL")
+        end)
 
     local absorbOpacity = W.Slider(absorb, "Absorb bar opacity", 0, 1, 0.05, absorbLeftW)
     M.BindSlider(ctx, absorbOpacity,
         function() return tonumber(BarScopeGet("absorbBarOpacity", 0.75)) or 0.75 end,
-        function(v) BarScopeSet("absorbBarOpacity", tonumber(v) or 0.75, "MSUF2_ABSORB_OPACITY"); ApplyBars("MSUF2_ABSORB_OPACITY") end)
+        function(v)
+            BarScopeSet("absorbBarOpacity", tonumber(v) or 0.75, "MSUF2_ABSORB_OPACITY")
+            Call("MSUF_InvalidateAbsorbCache")
+            ApplyBars("MSUF2_ABSORB_OPACITY")
+            RefreshGroupFrameVisuals()
+        end)
     W.MoveWidget(absorbOpacity, absorb, absorbLeftX, -240, absorbLeftW, "LEFT")
 
     W.LabelAt(absorb, "Textures", absorbRightX, -42, absorbRightW, "GameFontNormalSmall", T.colors.accent)
     local absorbTex = W.Dropdown(absorb, "Absorb bar texture (SharedMedia)", function() return TextureValues("Use foreground texture") end, absorbRightW)
     M.BindDropdown(ctx, absorbTex,
         function() return ReadG("absorbBarTexture", "") end,
-        function(v) SetG("absorbBarTexture", v or "", "MSUF2_ABSORB_TEXTURE", { preview = true }); Call("MSUF_UpdateAbsorbBarTextures"); ApplyBars("MSUF2_ABSORB_TEXTURE") end)
+        function(v)
+            SetG("absorbBarTexture", v or "", "MSUF2_ABSORB_TEXTURE", { preview = true })
+            Call("MSUF_UpdateAbsorbBarTextures")
+            ApplyBars("MSUF2_ABSORB_TEXTURE")
+            RefreshGroupFrameVisuals()
+        end)
     W.MoveWidget(absorbTex, absorb, absorbRightX, -70, absorbRightW, "LEFT")
 
     local healAbsorbTex = W.Dropdown(absorb, "Heal-absorb texture", function() return TextureValues("Use foreground texture") end, absorbRightW)
     M.BindDropdown(ctx, healAbsorbTex,
         function() return ReadG("healAbsorbBarTexture", "") end,
-        function(v) SetG("healAbsorbBarTexture", v or "", "MSUF2_HEAL_ABSORB_TEXTURE", { preview = true }); Call("MSUF_UpdateAbsorbBarTextures"); ApplyBars("MSUF2_HEAL_ABSORB_TEXTURE") end)
+        function(v)
+            SetG("healAbsorbBarTexture", v or "", "MSUF2_HEAL_ABSORB_TEXTURE", { preview = true })
+            Call("MSUF_UpdateAbsorbBarTextures")
+            ApplyBars("MSUF2_HEAL_ABSORB_TEXTURE")
+            RefreshGroupFrameVisuals()
+        end)
     W.MoveWidget(healAbsorbTex, absorb, absorbRightX, -124, absorbRightW, "LEFT")
 
     local absorbTest = W.ToggleAt(absorb, "Test absorb textures", absorbRightX, -186, absorbRightW)
@@ -342,7 +594,12 @@ local function BuildBars(ctx)
     local healAbsorbOpacity = W.Slider(absorb, "Heal-absorb bar opacity", 0, 1, 0.05, absorbRightW)
     M.BindSlider(ctx, healAbsorbOpacity,
         function() return tonumber(BarScopeGet("healAbsorbBarOpacity", 1)) or 1 end,
-        function(v) BarScopeSet("healAbsorbBarOpacity", tonumber(v) or 1, "MSUF2_HEAL_ABSORB_OPACITY"); ApplyBars("MSUF2_HEAL_ABSORB_OPACITY") end)
+        function(v)
+            BarScopeSet("healAbsorbBarOpacity", tonumber(v) or 1, "MSUF2_HEAL_ABSORB_OPACITY")
+            Call("MSUF_InvalidateAbsorbCache")
+            ApplyBars("MSUF2_HEAL_ABSORB_OPACITY")
+            RefreshGroupFrameVisuals()
+        end)
     W.MoveWidget(healAbsorbOpacity, absorb, absorbRightX, -240, absorbRightW, "LEFT")
 
     M.AddRefresher(ctx, function()
@@ -364,7 +621,11 @@ local function BuildBars(ctx)
     local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
     M.BindSlider(ctx, outlineSlider,
         function() return tonumber(BarScopeGetBars("barOutlineThickness", 1)) or 1 end,
-        function(v) BarScopeSetBars("barOutlineThickness", floor((tonumber(v) or 1) + 0.5), "MSUF2_BAR_OUTLINE"); ApplyBars("MSUF2_BAR_OUTLINE") end)
+        function(v)
+            BarScopeSetBars("barOutlineThickness", floor((tonumber(v) or 1) + 0.5), "MSUF2_BAR_OUTLINE")
+            ApplyBars("MSUF2_BAR_OUTLINE")
+            ApplyOutlineRuntime()
+        end)
     M.AddRefresher(ctx, function()
         SetControlEnabled(outlineSlider, ScopedBarsControlsActive())
     end)
@@ -385,6 +646,7 @@ local function BuildBars(ctx)
             BarScopeSet("highlightBorderThickness", n, "MSUF2_HIGHLIGHT_BORDER")
             BarScopeSet("hlAggroSize", n, "MSUF2_HIGHLIGHT_BORDER")
             ApplyBars("MSUF2_HIGHLIGHT_BORDER")
+            ApplyAllHighlightBorderRuntime()
         end)
     W.MoveWidget(highlight, highlights, hlLeftX, -70, hlLeftW, "LEFT")
     local borderModes = {
@@ -394,19 +656,31 @@ local function BuildBars(ctx)
     local aggro = W.Dropdown(highlights, "Aggro border", borderModes, hlLeftW)
     M.BindDropdown(ctx, aggro,
         function() return tonumber(BarScopeGet("aggroOutlineMode", 1)) or 1 end,
-        function(v) BarScopeSet("aggroOutlineMode", tonumber(v) or 1, "MSUF2_AGGRO_BORDER"); ApplyBars("MSUF2_AGGRO_BORDER") end)
+        function(v)
+            BarScopeSet("aggroOutlineMode", tonumber(v) or 1, "MSUF2_AGGRO_BORDER")
+            ApplyBars("MSUF2_AGGRO_BORDER")
+            ApplyAggroBorderRuntime()
+        end)
     W.MoveWidget(aggro, highlights, hlLeftX, -136, hlLeftW, "LEFT")
 
     local dispelBorder = W.Dropdown(highlights, "Dispel border", borderModes, hlLeftW)
     M.BindDropdown(ctx, dispelBorder,
         function() return tonumber(BarScopeGet("dispelOutlineMode", 1)) or 1 end,
-        function(v) BarScopeSet("dispelOutlineMode", tonumber(v) or 1, "MSUF2_DISPEL_BORDER"); ApplyBars("MSUF2_DISPEL_BORDER") end)
+        function(v)
+            BarScopeSet("dispelOutlineMode", tonumber(v) or 1, "MSUF2_DISPEL_BORDER")
+            ApplyBars("MSUF2_DISPEL_BORDER")
+            ApplyDispelPurgeBorderRuntime()
+        end)
     W.MoveWidget(dispelBorder, highlights, hlLeftX, -190, hlLeftW, "LEFT")
 
     local purge = W.Dropdown(highlights, "Purge border", borderModes, hlLeftW)
     M.BindDropdown(ctx, purge,
         function() return tonumber(BarScopeGet("purgeOutlineMode", 0)) or 0 end,
-        function(v) BarScopeSet("purgeOutlineMode", tonumber(v) or 0, "MSUF2_PURGE_BORDER"); ApplyBars("MSUF2_PURGE_BORDER") end)
+        function(v)
+            BarScopeSet("purgeOutlineMode", tonumber(v) or 0, "MSUF2_PURGE_BORDER")
+            ApplyBars("MSUF2_PURGE_BORDER")
+            ApplyDispelPurgeBorderRuntime()
+        end)
     W.MoveWidget(purge, highlights, hlLeftX, -244, hlLeftW, "LEFT")
 
     local bossTarget = W.Dropdown(highlights, "Boss target border", borderModes, hlLeftW)
@@ -420,6 +694,7 @@ local function BuildBars(ctx)
             SetG("bossTargetOutlineMode", value, "MSUF2_BOSS_TARGET_BORDER", { preview = true })
             SetGBool("bossTargetHighlightEnabled", value == 1, "MSUF2_BOSS_TARGET_BORDER", { preview = true })
             ApplyBars("MSUF2_BOSS_TARGET_BORDER")
+            ApplyBossTargetBorderRuntime()
         end)
     W.MoveWidget(bossTarget, highlights, hlLeftX, -298, hlLeftW, "LEFT")
 
@@ -431,9 +706,7 @@ local function BuildBars(ctx)
     M.BindToggle(ctx, aggroTest,
         function() return _G.MSUF_AggroBorderTestMode and true or false end,
         function(v)
-            local scope = CurrentBarsScope()
-            if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" then scope = "raid" end
-            if type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(v and true or false, scope) end
+            if type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(v and true or false, BorderTestScope()) end
         end)
     aggroTest:HookScript("OnHide", function(self)
         if _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then
@@ -446,9 +719,7 @@ local function BuildBars(ctx)
     M.BindToggle(ctx, dispelTest,
         function() return _G.MSUF_DispelBorderTestMode and true or false end,
         function(v)
-            local scope = CurrentBarsScope()
-            if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" then scope = "raid" end
-            if type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(v and true or false, scope) end
+            if type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(v and true or false, BorderTestScope()) end
         end)
     dispelTest:HookScript("OnHide", function(self)
         if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
@@ -503,7 +774,11 @@ local function BuildBars(ctx)
     local enabled = W.ToggleAt(highlights, "Dispel glow effect", hlRightX, -344, hlRightW)
     M.BindToggle(ctx, enabled,
         function() return BarScopeGet("hlDispelGlowEnabled", true) ~= false end,
-        function(v) BarScopeSet("hlDispelGlowEnabled", v and true or false, "MSUF2_DISPEL_GLOW"); ApplyBars("MSUF2_DISPEL_GLOW") end)
+        function(v)
+            BarScopeSet("hlDispelGlowEnabled", v and true or false, "MSUF2_DISPEL_GLOW")
+            ApplyBars("MSUF2_DISPEL_GLOW")
+            ApplyDispelPurgeBorderRuntime()
+        end)
     local style = W.Segment(highlights, "Glow style", {
         { value = "PIXEL", text = "Pixel" },
         { value = "AUTOCAST", text = "AutoCast" },
@@ -511,25 +786,41 @@ local function BuildBars(ctx)
     }, hlRightW)
     M.BindSegment(ctx, style,
         function() return NormalizeGlowStyle(BarScopeGet("hlDispelGlowStyle", "PIXEL")) end,
-        function(v) BarScopeSet("hlDispelGlowStyle", NormalizeGlowStyle(v), "MSUF2_DISPEL_STYLE"); ApplyBars("MSUF2_DISPEL_STYLE") end)
+        function(v)
+            BarScopeSet("hlDispelGlowStyle", NormalizeGlowStyle(v), "MSUF2_DISPEL_STYLE")
+            ApplyBars("MSUF2_DISPEL_STYLE")
+            ApplyDispelPurgeBorderRuntime()
+        end)
     W.MoveWidget(style, highlights, hlRightX, -392, hlRightW, "LEFT")
 
     local lines = W.Slider(highlights, "Glow lines / particles", 2, 16, 1, hlRightW)
     M.BindSlider(ctx, lines,
         function() return tonumber(BarScopeGet("hlDispelGlowLines", 8)) or 8 end,
-        function(v) BarScopeSet("hlDispelGlowLines", floor((tonumber(v) or 8) + 0.5), "MSUF2_DISPEL_GLOW_LINES"); ApplyBars("MSUF2_DISPEL_GLOW_LINES") end)
+        function(v)
+            BarScopeSet("hlDispelGlowLines", floor((tonumber(v) or 8) + 0.5), "MSUF2_DISPEL_GLOW_LINES")
+            ApplyBars("MSUF2_DISPEL_GLOW_LINES")
+            ApplyDispelPurgeBorderRuntime()
+        end)
     W.MoveWidget(lines, highlights, hlRightX, -446, hlRightW, "LEFT")
 
     local speed = W.Slider(highlights, "Glow speed", 0.05, 1, 0.05, hlRightW)
     M.BindSlider(ctx, speed,
         function() return tonumber(BarScopeGet("hlDispelGlowFrequency", 0.25)) or 0.25 end,
-        function(v) BarScopeSet("hlDispelGlowFrequency", tonumber(v) or 0.25, "MSUF2_DISPEL_GLOW_SPEED"); ApplyBars("MSUF2_DISPEL_GLOW_SPEED") end)
+        function(v)
+            BarScopeSet("hlDispelGlowFrequency", tonumber(v) or 0.25, "MSUF2_DISPEL_GLOW_SPEED")
+            ApplyBars("MSUF2_DISPEL_GLOW_SPEED")
+            ApplyDispelPurgeBorderRuntime()
+        end)
     W.MoveWidget(speed, highlights, hlRightX, -500, hlRightW, "LEFT")
 
     local thickness = W.Slider(highlights, "Glow thickness (Pixel)", 1, 5, 1, hlRightW)
     M.BindSlider(ctx, thickness,
         function() return tonumber(BarScopeGet("hlDispelGlowThickness", 2)) or 2 end,
-        function(v) BarScopeSet("hlDispelGlowThickness", floor((tonumber(v) or 2) + 0.5), "MSUF2_DISPEL_THICKNESS"); ApplyBars("MSUF2_DISPEL_THICKNESS") end)
+        function(v)
+            BarScopeSet("hlDispelGlowThickness", floor((tonumber(v) or 2) + 0.5), "MSUF2_DISPEL_THICKNESS")
+            ApplyBars("MSUF2_DISPEL_THICKNESS")
+            ApplyDispelPurgeBorderRuntime()
+        end)
     W.MoveWidget(thickness, highlights, hlRightX, -554, hlRightW, "LEFT")
 
     M.AddRefresher(ctx, function()
@@ -565,6 +856,7 @@ local function BuildBars(ctx)
             BarScopeSet("hlPrioEnabled", on, "MSUF2_HIGHLIGHT_PRIORITY")
             if CurrentBarsScope() == "shared" then G().highlightPrioEnabled = on and 1 or 0 end
             ApplyBars("MSUF2_HIGHLIGHT_PRIORITY")
+            ApplyAllHighlightBorderRuntime()
         end)
 
     local rowH, rowGap, rowMax = 22, 4, 8
@@ -596,6 +888,7 @@ local function BuildBars(ctx)
         for i = 1, prioCount do order[i] = sorted[i].key end
         SetPriorityOrder(order)
         ApplyBars("MSUF2_HIGHLIGHT_PRIORITY_ORDER")
+        ApplyAllHighlightBorderRuntime()
     end
     local function SetPriorityRowsEnabled(enabled)
         enabled = enabled and true or false
@@ -700,98 +993,6 @@ local function BuildBars(ctx)
         RefreshPriorityRows()
     end)
 
-    local text = b:CollapsibleSection("bars_text", "HP / Power Text", 340, false)
-    local hpModeOptions = {
-        { value = "PERCENT", text = "Percent" },
-        { value = "CURRENT", text = "Current" },
-        { value = "MAX", text = "Max" },
-        { value = "DEFICIT", text = "Deficit" },
-        { value = "CURMAX", text = "Current / Max" },
-        { value = "CURPERCENT", text = "Current / Percent" },
-        { value = "CURMAXPERCENT", text = "Current / Max / Percent" },
-        { value = "MAXPERCENT", text = "Max / Percent" },
-        { value = "PERCENTCUR", text = "Percent / Current" },
-        { value = "PERCENTMAX", text = "Percent / Max" },
-        { value = "PERCENTCURMAX", text = "Percent / Current / Max" },
-        { value = "NONE", text = "None" },
-    }
-    local powerModeOptions = {
-        { value = "CURRENT", text = "Current" },
-        { value = "MAX", text = "Max" },
-        { value = "CURMAX", text = "Cur/Max" },
-        { value = "PERCENT", text = "Percent" },
-        { value = "CURPERCENT", text = "Cur + Percent" },
-        { value = "CURMAXPERCENT", text = "Cur/Max + Percent" },
-    }
-    local separatorOptions = {
-        { value = "", text = " " },
-        { value = "-", text = "-" },
-        { value = "/", text = "/" },
-        { value = "\\", text = "\\" },
-        { value = "|", text = "|" },
-        { value = "<", text = "<" },
-        { value = ">", text = ">" },
-        { value = "~", text = "~" },
-        { value = "\194\183", text = "\194\183" },
-        { value = "\226\128\162", text = "\226\128\162" },
-        { value = ":", text = ":" },
-        { value = "\194\187", text = "\194\187" },
-        { value = "\194\171", text = "\194\171" },
-    }
-    local hpMode = W.Dropdown(text, "HP text mode", hpModeOptions, 260)
-    M.BindDropdown(ctx, hpMode,
-        function() return NormalizeHpMode(BarScopeGet("hpTextMode", "FULL_PLUS_PERCENT")) end,
-        function(v) BarScopeSet("hpTextMode", v or "CURPERCENT", "MSUF2_HP_TEXT_MODE"); ApplyBars("MSUF2_HP_TEXT_MODE") end)
-    local powerMode = W.Dropdown(text, "Power text mode", powerModeOptions, 260)
-    M.BindDropdown(ctx, powerMode,
-        function() return NormalizePowerMode(BarScopeGet("powerTextMode", "CURPERCENT")) end,
-        function(v) BarScopeSet("powerTextMode", v or "CURPERCENT", "MSUF2_POWER_TEXT_MODE"); ApplyBars("MSUF2_POWER_TEXT_MODE") end)
-    local hpReverse = W.Toggle(text, "Reverse HP text order")
-    M.BindToggle(ctx, hpReverse,
-        function() return BarScopeGet("hpTextReverse", false) == true end,
-        function(v) BarScopeSet("hpTextReverse", v and true or false, "MSUF2_HP_TEXT_REVERSE"); ApplyBars("MSUF2_HP_TEXT_REVERSE") end)
-    local hpSep = W.Dropdown(text, "HP separator", separatorOptions, 120)
-    M.BindDropdown(ctx, hpSep,
-        function() return BarScopeGet("hpTextSeparator", "") or "" end,
-        function(v) BarScopeSet("hpTextSeparator", v or "", "MSUF2_HP_TEXT_SEPARATOR"); ApplyBars("MSUF2_HP_TEXT_SEPARATOR") end)
-    local powerSep = W.Dropdown(text, "Power separator", separatorOptions, 120)
-    M.BindDropdown(ctx, powerSep,
-        function() return BarScopeGet("powerTextSeparator", BarScopeGet("hpTextSeparator", "")) or "" end,
-        function(v) BarScopeSet("powerTextSeparator", v or "", "MSUF2_POWER_TEXT_SEPARATOR"); ApplyBars("MSUF2_POWER_TEXT_SEPARATOR") end)
-    M.AddRefresher(ctx, function()
-        local active = TextBarsControlsActive()
-        SetControlEnabled(hpMode, active)
-        SetControlEnabled(powerMode, active)
-        SetControlEnabled(hpReverse, active)
-        SetControlEnabled(hpSep, active)
-        SetControlEnabled(powerSep, active)
-    end)
-
-    local spacers = b:CollapsibleSection("bars_text_spacers", "Text Spacers", 300, false)
-    local hpSpacer = W.Toggle(spacers, "HP Spacer on/off")
-    M.BindToggle(ctx, hpSpacer,
-        function() return BarScopeGet("hpTextSpacerEnabled", false) == true end,
-        function(v) BarScopeSet("hpTextSpacerEnabled", v and true or false, "MSUF2_HP_TEXT_SPACER"); ApplyBars("MSUF2_HP_TEXT_SPACER") end)
-    local hpSpacerX = W.Slider(spacers, "HP Spacer (X)", 0, 2000, 1, 300)
-    M.BindSlider(ctx, hpSpacerX,
-        function() return tonumber(BarScopeGet("hpTextSpacerX", 0)) or 0 end,
-        function(v) BarScopeSet("hpTextSpacerX", floor((tonumber(v) or 0) + 0.5), "MSUF2_HP_TEXT_SPACER_X"); ApplyBars("MSUF2_HP_TEXT_SPACER_X") end)
-    local powerSpacer = W.Toggle(spacers, "Power Spacer on/off")
-    M.BindToggle(ctx, powerSpacer,
-        function() return BarScopeGet("powerTextSpacerEnabled", false) == true end,
-        function(v) BarScopeSet("powerTextSpacerEnabled", v and true or false, "MSUF2_POWER_TEXT_SPACER"); ApplyBars("MSUF2_POWER_TEXT_SPACER") end)
-    local powerSpacerX = W.Slider(spacers, "Power Spacer (X)", 0, 1000, 1, 300)
-    M.BindSlider(ctx, powerSpacerX,
-        function() return tonumber(BarScopeGet("powerTextSpacerX", 0)) or 0 end,
-        function(v) BarScopeSet("powerTextSpacerX", floor((tonumber(v) or 0) + 0.5), "MSUF2_POWER_TEXT_SPACER_X"); ApplyBars("MSUF2_POWER_TEXT_SPACER_X") end)
-    M.AddRefresher(ctx, function()
-        local active = TextBarsControlsActive()
-        SetControlEnabled(hpSpacer, active)
-        SetControlEnabled(hpSpacerX, active and BarScopeGet("hpTextSpacerEnabled", false) == true)
-        SetControlEnabled(powerSpacer, active)
-        SetControlEnabled(powerSpacerX, active and BarScopeGet("powerTextSpacerEnabled", false) == true)
-    end)
-
     local power = b:CollapsibleSection("bars_power", "Bar Animation + Text Accuracy", 152, false)
     local smoothPower = W.Toggle(power, "Smooth power bar")
     M.BindToggle(ctx, smoothPower,
@@ -809,4 +1010,4 @@ local function BuildBars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 4 })
+M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 7 })

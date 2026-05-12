@@ -909,7 +909,26 @@ end
 
 local function DropdownItemIcon(item)
     if type(item) ~= "table" then return nil end
-    return item.icon or item.texture or item.swatch
+    if item.icon or item.texture then return item.icon or item.texture end
+    return (type(item.swatch) == "string") and item.swatch or nil
+end
+
+local function DropdownColorTuple(color)
+    if type(color) == "function" then color = color() end
+    if type(color) ~= "table" then return nil end
+    local r = color.r or color[1]
+    local g = color.g or color[2]
+    local b = color.b or color[3]
+    local a = color.a or color[4] or 1
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+        return r, g, b, a
+    end
+    return nil
+end
+
+local function DropdownItemSwatch(item)
+    if type(item) ~= "table" then return nil end
+    return DropdownColorTuple(item.swatchColor or item.color or item.colorPreview or item.swatch)
 end
 
 local function DropdownRow(index)
@@ -936,6 +955,19 @@ local function DropdownRow(index)
     icon:SetSize(80, 12)
     icon:Hide()
     row._msuf2Icon = icon
+
+    local swatchBorder = row:CreateTexture(nil, "ARTWORK")
+    swatchBorder:SetPoint("LEFT", row, "LEFT", 10, 0)
+    swatchBorder:SetSize(16, 16)
+    swatchBorder:SetColorTexture(0, 0, 0, 0.85)
+    swatchBorder:Hide()
+    row._msuf2SwatchBorder = swatchBorder
+
+    local swatch = row:CreateTexture(nil, "OVERLAY")
+    swatch:SetPoint("CENTER", swatchBorder, "CENTER", 0, 0)
+    swatch:SetSize(12, 12)
+    swatch:Hide()
+    row._msuf2Swatch = swatch
 
     local text = T.Font(row, "GameFontHighlight", "", T.colors.text)
     text:SetPoint("LEFT", row, "LEFT", 10, 0)
@@ -1016,15 +1048,28 @@ local function OpenDropdown(owner, valuesTable)
         row._msuf2Selected:SetShown(value == selectedValue)
         if value == selectedValue then selectedIndex = i end
         row._msuf2Text:SetText(DropdownItemText(item))
+        local sr, sg, sb, sa = DropdownItemSwatch(item)
         if icon then
             row._msuf2Icon:SetTexture(icon)
             row._msuf2Icon:SetVertexColor(1, 1, 1, 1)
             row._msuf2Icon:Show()
+            row._msuf2Swatch:Hide()
+            row._msuf2SwatchBorder:Hide()
             row._msuf2Text:ClearAllPoints()
             row._msuf2Text:SetPoint("LEFT", row, "LEFT", 100, 0)
             row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+        elseif sr then
+            row._msuf2Icon:Hide()
+            row._msuf2Swatch:SetColorTexture(sr, sg, sb, sa or 1)
+            row._msuf2Swatch:Show()
+            row._msuf2SwatchBorder:Show()
+            row._msuf2Text:ClearAllPoints()
+            row._msuf2Text:SetPoint("LEFT", row, "LEFT", 34, 0)
+            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
         else
             row._msuf2Icon:Hide()
+            row._msuf2Swatch:Hide()
+            row._msuf2SwatchBorder:Hide()
             row._msuf2Text:ClearAllPoints()
             row._msuf2Text:SetPoint("LEFT", row, "LEFT", 10, 0)
             row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
@@ -1072,6 +1117,15 @@ function W.Dropdown(section, label, values, width)
     btn._msuf2Chevron:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
     btn._msuf2Chevron:SetSize(10, 10)
     btn._msuf2Chevron:SetVertexColor(T.colors.muted[1], T.colors.muted[2], T.colors.muted[3], 0.95)
+    btn._msuf2SwatchBorder = btn:CreateTexture(nil, "ARTWORK")
+    btn._msuf2SwatchBorder:SetPoint("LEFT", btn, "LEFT", 9, 0)
+    btn._msuf2SwatchBorder:SetSize(16, 16)
+    btn._msuf2SwatchBorder:SetColorTexture(0, 0, 0, 0.90)
+    btn._msuf2SwatchBorder:Hide()
+    btn._msuf2Swatch = btn:CreateTexture(nil, "OVERLAY")
+    btn._msuf2Swatch:SetPoint("CENTER", btn._msuf2SwatchBorder, "CENTER", 0, 0)
+    btn._msuf2Swatch:SetSize(12, 12)
+    btn._msuf2Swatch:Hide()
 
     local function ResolveValues(self)
         local valuesTable = self.values
@@ -1094,7 +1148,31 @@ function W.Dropdown(section, label, values, width)
     end
     function btn:SetValue(value)
         self.value = value
-        self:SetText(TextFor(value))
+        local selectedItem
+        local valuesTable = ResolveValues(self)
+        for i = 1, #valuesTable do
+            local item = valuesTable[i]
+            if DropdownItemValue(item) == value then
+                selectedItem = item
+                break
+            end
+        end
+        local sr, sg, sb, sa = DropdownItemSwatch(selectedItem)
+        if sr then
+            self._msuf2Swatch:SetColorTexture(sr, sg, sb, sa or 1)
+            self._msuf2Swatch:Show()
+            self._msuf2SwatchBorder:Show()
+            self._msuf2Label:ClearAllPoints()
+            self._msuf2Label:SetPoint("LEFT", self, "LEFT", 34, 0)
+            self._msuf2Label:SetPoint("RIGHT", self, "RIGHT", -26, 0)
+        else
+            self._msuf2Swatch:Hide()
+            self._msuf2SwatchBorder:Hide()
+            self._msuf2Label:ClearAllPoints()
+            self._msuf2Label:SetPoint("LEFT", self, "LEFT", 10, 0)
+            self._msuf2Label:SetPoint("RIGHT", self, "RIGHT", -26, 0)
+        end
+        self:SetText(selectedItem and DropdownItemText(selectedItem) or TextFor(value))
     end
     function btn:GetValue()
         return self.value
