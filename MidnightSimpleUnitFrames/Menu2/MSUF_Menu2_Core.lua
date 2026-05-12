@@ -5,6 +5,20 @@ local M = ns.MSUF2 or {}
 ns.MSUF2 = M
 _G.MSUF2 = M
 
+M.Tr = M.Tr or function(text)
+    if text == nil then return "" end
+    local key = tostring(text)
+    if type(ns.TR) == "function" then
+        local translated = ns.TR(key)
+        if translated ~= nil then return translated end
+    end
+    local locale = ns.L or _G.MSUF_L
+    if type(locale) == "table" and locale[key] ~= nil then
+        return locale[key]
+    end
+    return key
+end
+
 local T = M.Theme
 local W = M.Widgets
 
@@ -165,7 +179,7 @@ local function SetTitle(key)
     if not frame then return end
     local spec = M.pages[key]
     local title = (spec and spec.title) or "MSUF"
-    frame.title:SetText(title)
+    frame.title:SetText(M.Tr(title))
     if frame.subtitle then frame.subtitle:SetText("") end
     if frame.RefreshStatus then frame:RefreshStatus() end
 end
@@ -213,7 +227,7 @@ local function BuildPlaceholderPage(ctx, requestedKey)
     local b = W.PageBuilder(ctx)
     local sec = b:Section("Native page missing", 130)
     W.Text(sec, "This native page is not implemented yet.", 14, -42, ctx.width - 28, T.colors.muted)
-    W.Text(sec, "Requested page: " .. tostring(requestedKey or "unknown"), 14, -68, ctx.width - 28, T.colors.dim)
+    W.Text(sec, M.Format("Requested page: %s", tostring(requestedKey or "unknown")), 14, -68, ctx.width - 28, T.colors.dim)
     ctx:SetContentHeight(210)
 end
 
@@ -287,7 +301,7 @@ local function BuildNav(parent)
     search:SetMaxLetters(60)
     search:SetTextInsets(6, 6, 0, 0)
     T.SkinEditBox(search)
-    if search.Instructions then search.Instructions:SetText("Search settings...") end
+    if search.Instructions then search.Instructions:SetText(M.Tr("Search settings...")) end
     parent.searchBox = search
 
     local created = {}
@@ -296,7 +310,7 @@ local function BuildNav(parent)
         if item.header then
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
-            local btn = T.Button(parent, string.upper(item.header), NAV_W - 24, NAV_BUTTON_H)
+            local btn = T.Button(parent, string.upper(M.Tr(item.header)), NAV_W - 24, NAV_BUTTON_H)
             btn._msuf2NavHeaderId = id
             btn._msuf2Label:ClearAllPoints()
             btn._msuf2Label:SetPoint("LEFT", 24, 0)
@@ -318,7 +332,7 @@ local function BuildNav(parent)
             created[#created + 1] = { kind = "header", id = id, button = btn }
         elseif item.key then
             local indent = item.group and 12 or 0
-            local btn = CreateNavButton(parent, item.key, item.label, indent)
+            local btn = CreateNavButton(parent, item.key, M.Tr(item.label), indent)
             if item.group then M.navGroupForKey[item.key] = item.group end
             created[#created + 1] = { kind = "page", group = item.group, button = btn }
         end
@@ -471,16 +485,16 @@ local function BuildWindow()
         elseif _G.MSUF_UnitEditModeActive then
             edit = "On"
         end
-        sbProfile:SetText("|cff4a90d9Profile:|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r")
+        sbProfile:SetText("|cff4a90d9" .. M.Tr("Profile:") .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r")
         if edit == "On" then
-            sbEdit:SetText("|cff4ade80Edit: On|r  |cff3a4a66\194\183|r")
+            sbEdit:SetText("|cff4ade80" .. M.Tr("Edit: On") .. "|r  |cff3a4a66\194\183|r")
         else
-            sbEdit:SetText("|cff5a6a88Edit: Off|r  |cff3a4a66\194\183|r")
+            sbEdit:SetText("|cff5a6a88" .. M.Tr("Edit: Off") .. "|r  |cff3a4a66\194\183|r")
         end
         if _G.InCombatLockdown and _G.InCombatLockdown() then
-            sbCombat:SetText("|cffef4444In Combat|r")
+            sbCombat:SetText("|cffef4444" .. M.Tr("In Combat") .. "|r")
         else
-            sbCombat:SetText("|cff22c55eOut of Combat|r")
+            sbCombat:SetText("|cff22c55e" .. M.Tr("Out of Combat") .. "|r")
         end
         local ver = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
         if type(ver) == "string" and ver ~= "" then
@@ -662,7 +676,7 @@ local function BuildDashboard(ctx)
         local selectedScale = Clamp(pendingGlobalScale or ui.Scale, 0.3, 1.5)
         local applied = ui.Enabled and (math.floor(ui.Scale * 100 + 0.5) .. "%") or "Off"
         local selected = selectedEnabled and (math.floor(selectedScale * 100 + 0.5) .. "%") or "Off"
-        globalStatus:SetText("Applied: " .. applied .. "   Selected: " .. selected)
+        globalStatus:SetText(M.Format("Applied: %s   Selected: %s", applied, selected))
         SetSliderValueSafe(globalScale, SnapPct(selectedScale * 100, 30, 150, 1))
     end
 
@@ -713,7 +727,7 @@ local function BuildDashboard(ctx)
     AddButton(scale, "UI Off", 240, -128, 72, 20, function() ApplyGlobalScale(false, nil, "auto") end)
 
     local pendingMsufScale
-    local msufStatus = W.Text(scale, "Applied: 100%  Selected: 100%", 14, -168, colW - 28, T.colors.muted)
+    local msufStatus = W.Text(scale, M.Format("Applied: %d%%  Selected: %d%%", 100, 100), 14, -168, colW - 28, T.colors.muted)
     scale._msuf2CursorY = -146
     local msufScale = W.Slider(scale, "MSUF Frame Scale", 25, 150, 5, colW - 54)
     HideSliderValueBox(msufScale)
@@ -736,7 +750,7 @@ local function BuildDashboard(ctx)
         local applied = AppliedMsufScale()
         local pending = PendingMsufScale()
         local changed = math.abs(applied - pending) > 0.001
-        msufStatus:SetText(string.format("Applied: %d%%  Selected: %d%%", math.floor(applied * 100 + 0.5), math.floor(pending * 100 + 0.5)))
+        msufStatus:SetText(M.Format("Applied: %d%%  Selected: %d%%", math.floor(applied * 100 + 0.5), math.floor(pending * 100 + 0.5)))
         SetSliderValueSafe(msufScale, SnapPct(pending * 100, 25, 150, 5))
         if msufApply then
             if changed then msufApply:Enable() else msufApply:Disable() end
@@ -769,7 +783,7 @@ local function BuildDashboard(ctx)
     M.AddRefresher(ctx, RefreshMsufScale)
 
     local pendingMenuScale
-    local menuStatus = W.Text(scale, "Applied: 100%  Selected: 100%", 14, -286, colW - 28, T.colors.muted)
+    local menuStatus = W.Text(scale, M.Format("Applied: %d%%  Selected: %d%%", 100, 100), 14, -286, colW - 28, T.colors.muted)
     scale._msuf2CursorY = -268
     local menuScale = W.Slider(scale, "MSUF Slash Menu Scale", 25, 150, 5, colW - 54)
     HideSliderValueBox(menuScale)
@@ -792,7 +806,7 @@ local function BuildDashboard(ctx)
         local applied = AppliedMenuScale()
         local pending = PendingMenuScale()
         local changed = math.abs(applied - pending) > 0.001
-        menuStatus:SetText(string.format("Applied: %d%%  Selected: %d%%", math.floor(applied * 100 + 0.5), math.floor(pending * 100 + 0.5)))
+        menuStatus:SetText(M.Format("Applied: %d%%  Selected: %d%%", math.floor(applied * 100 + 0.5), math.floor(pending * 100 + 0.5)))
         SetSliderValueSafe(menuScale, SnapPct(pending * 100, 25, 150, 5))
         if menuApply then
             if changed then menuApply:Enable() else menuApply:Disable() end
@@ -845,8 +859,8 @@ local function BuildDashboard(ctx)
         frame:SetScript("OnEnter", function(self)
             if not GameTooltip then return end
             GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
-            GameTooltip:AddLine(title or "", 1, 1, 1)
-            if text and text ~= "" then GameTooltip:AddLine(text, 0.85, 0.85, 0.85, true) end
+            GameTooltip:AddLine(M.Tr(title or ""), 1, 1, 1)
+            if text and text ~= "" then GameTooltip:AddLine(M.Tr(text), 0.85, 0.85, 0.85, true) end
             GameTooltip:Show()
         end)
         frame:SetScript("OnLeave", function()
@@ -869,9 +883,9 @@ local function BuildDashboard(ctx)
     if _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function" then
         aboutVer = _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
     end
-    local aboutText = "by Mapko"
+    local aboutText = M.Tr("by Mapko")
     if type(aboutVer) == "string" and aboutVer ~= "" then
-        aboutText = "v" .. aboutVer .. "  -  by Mapko  -  with help from R41z0r"
+        aboutText = M.Format("v%s  -  by Mapko  -  with help from R41z0r", aboutVer)
     end
     local about = T.Font(wago, "GameFontDisableSmall", aboutText, T.colors.muted)
     about:SetPoint("BOTTOMLEFT", support, "TOPLEFT", 0, 4)
@@ -986,5 +1000,14 @@ SLASH_MSUF2OPTIONS1 = "/msuf2"
 SlashCmdList["MSUF2OPTIONS"] = function(msg)
     msg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     msg = msg:lower()
+    if msg == "locale" or msg == "locales" or msg == "loc" then
+        local total, missing = 0, 0
+        if type(M.GetLocaleCoverage) == "function" then
+            total, missing = M.GetLocaleCoverage()
+        end
+        local locale = ns.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
+        print(string.format("|cff00b7ebMSUF2|r locale %s: %d keys seen, %d missing translations.", locale, total or 0, missing or 0))
+        return
+    end
     M.Open(ALIASES[msg] or msg or "home")
 end

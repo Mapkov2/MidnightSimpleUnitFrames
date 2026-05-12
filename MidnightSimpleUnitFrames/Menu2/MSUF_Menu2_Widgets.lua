@@ -14,6 +14,18 @@ local max = math.max
 local min = math.min
 local sliderSerial = 0
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    local fn = M.Tr or ns.TR
+    if type(fn) == "function" then
+        local translated = fn(text)
+        if translated ~= nil then return translated end
+    end
+    local locale = ns.L or _G.MSUF_L
+    if type(locale) == "table" and locale[text] ~= nil then return locale[text] end
+    return text
+end
+
 local function HideSliderTemplateParts(slider)
     if not slider then return end
     local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
@@ -75,7 +87,7 @@ function W.PageBuilder(ctx)
         section._msuf2ContentX = 14
         section._msuf2Width = self.width
 
-        local fs = T.Font(section, "GameFontNormal", title or "", T.colors.text)
+        local fs = T.Font(section, "GameFontNormal", Tr(title or ""), T.colors.text)
         fs:SetPoint("TOPLEFT", 14, -12)
         section.title = fs
 
@@ -113,7 +125,7 @@ function W.PageBuilder(ctx)
         arrow:SetPoint("LEFT", header, "LEFT", 12, 0)
         arrow:SetTexture(T.media.collapseArrow)
 
-        local label = T.Font(header, "GameFontNormal", title or "", T.colors.text)
+        local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text)
         label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
         label:SetPoint("RIGHT", header, "RIGHT", -140, 0)
         label:SetJustifyH("LEFT")
@@ -159,10 +171,10 @@ function W.PageBuilder(ctx)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.border)
         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         section:SetSize(self.width, height or 78)
-        local fs = T.Font(section, "GameFontNormalLarge", title or "", T.colors.text)
+        local fs = T.Font(section, "GameFontNormalLarge", Tr(title or ""), T.colors.text)
         fs:SetPoint("TOPLEFT", 14, -12)
         if subtitle and subtitle ~= "" then
-            local sub = T.Font(section, "GameFontDisableSmall", subtitle, T.colors.muted)
+            local sub = T.Font(section, "GameFontDisableSmall", Tr(subtitle), T.colors.muted)
             sub:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -6)
             sub:SetWidth(self.width - 28)
             sub:SetJustifyH("LEFT")
@@ -185,7 +197,7 @@ function W.SetCollapsibleToggleText(section, openText, closedText)
     if not (entry and entry.label and entry.label.SetText) then return nil end
 
     local function Refresh()
-        entry.label:SetText(entry.open and (openText or "") or (closedText or openText or ""))
+        entry.label:SetText(Tr(entry.open and (openText or "") or (closedText or openText or "")))
     end
 
     if entry.header and entry.header.HookScript and not entry._msuf2DynamicTitleHooked then
@@ -207,7 +219,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
     btn:SetPoint("TOPLEFT", x, y)
     btn:SetSize(24, 24)
 
-    btn._msuf2Label = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
+    btn._msuf2Label = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     btn._msuf2Label:SetPoint("LEFT", btn, "RIGHT", 6, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
     if labelWidth then btn._msuf2Label:SetWidth(labelWidth) end
@@ -237,7 +249,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
 end
 
 function W.Text(parent, text, x, y, width, color)
-    local fs = T.Font(parent, "GameFontHighlightSmall", text or "", color or T.colors.muted)
+    local fs = T.Font(parent, "GameFontHighlightSmall", Tr(text or ""), color or T.colors.muted)
     fs:SetPoint("TOPLEFT", x or 0, y or 0)
     fs:SetWidth(width or 300)
     fs:SetJustifyH("LEFT")
@@ -256,7 +268,7 @@ end
 local function ScopeButtonWidth(item)
     if item and item.width then return item.width end
     local value = item and item.value
-    local text = tostring((item and (item.text or item.label)) or value or "")
+    local text = tostring(Tr((item and (item.text or item.label)) or value or ""))
     if value == "shared" then return 72 end
     if value == "targettarget" then return 58 end
     if text == "Boss 1" or text == "Boss 2" or text == "Boss 3" or text == "Boss 4" or text == "Boss 5" then return 74 end
@@ -275,7 +287,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
     local maxRight = opts.maxRight or (sectionW - 14)
     local startX = opts.startX or (labelX + labelW + 8)
 
-    local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", opts.label or "Editing:", opts.labelColor or T.colors.text)
+    local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", Tr(opts.label or "Editing:"), opts.labelColor or T.colors.text)
     label:SetPoint("LEFT", section, "TOPLEFT", labelX, centerY)
     label:SetWidth(labelW)
     label:SetJustifyH("LEFT")
@@ -295,7 +307,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
             x = startX
             y = y - (buttonH + 6)
         end
-        local btn = T.Button(section, item.text or item.label or item.value or "", width, buttonH)
+        local btn = T.Button(section, Tr(item.text or item.label or item.value or ""), width, buttonH)
         btn:SetPoint("LEFT", section, "TOPLEFT", x, y)
         btn._msuf2Value = item.value
         btn._msuf2BaseWidth = width
@@ -446,7 +458,7 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
         if kind == "slider" and widget._msuf2SetLayoutWidth then
             widget._msuf2RequestedWidth = width
             widget:_msuf2SetLayoutWidth(width)
-        elseif kind == "dropdown" or kind == "textinput" then
+        elseif kind == "dropdown" or kind == "textinput" or kind == "segment" then
             widget:SetSize(width, widget:GetHeight() or 22)
             if widget._msuf2Title and widget._msuf2Title.SetWidth then widget._msuf2Title:SetWidth(width) end
         end
@@ -463,7 +475,7 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     end
 
     widget:ClearAllPoints()
-    if kind == "slider" or kind == "dropdown" or kind == "textinput" then
+    if kind == "slider" or kind == "dropdown" or kind == "textinput" or kind == "segment" then
         widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 22)
     elseif kind == "color" then
         if widget._msuf2Title then widget._msuf2Title:SetWidth(100) end
@@ -475,7 +487,7 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
 end
 
 function W.LabelAt(parent, text, x, y, width, template, color)
-    local fs = T.Font(parent, template or "GameFontNormalSmall", text or "", color or T.colors.text)
+    local fs = T.Font(parent, template or "GameFontNormalSmall", Tr(text or ""), color or T.colors.text)
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
     fs:SetWidth(width or 180)
     fs:SetJustifyH("LEFT")
@@ -493,7 +505,7 @@ end
 
 function W.Button(section, label, width)
     local x, y = NextRow(section, 30)
-    local btn = T.Button(section, label, width or 160, 24)
+    local btn = T.Button(section, Tr(label or ""), width or 160, 24)
     btn:SetPoint("TOPLEFT", x, y)
     return btn
 end
@@ -512,7 +524,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local maxSliderW = max(minTrackW + valueClusterW, available)
         if width > maxSliderW then width = maxSliderW end
     end
-    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(width)
     title:SetJustifyH("LEFT")
@@ -660,6 +672,8 @@ function W.Segment(section, label, values, width)
     local holder = CreateFrame("Frame", nil, section)
     holder:SetPoint("TOPLEFT", x, y - 22)
     holder:SetSize(width or 360, 22)
+    holder._msuf2ControlKind = "segment"
+    holder._msuf2Title = title
     holder.buttons = {}
     holder.values = values or {}
 
@@ -886,11 +900,11 @@ local function DropdownItemValue(item)
 end
 
 local function DropdownItemText(item)
-    if type(item) ~= "table" then return tostring(item or "") end
-    if item.text ~= nil then return item.text end
-    if item.label ~= nil then return item.label end
-    if item[1] ~= nil and item[2] ~= nil then return tostring(item[1]) end
-    return tostring(DropdownItemValue(item) or "")
+    if type(item) ~= "table" then return Tr(tostring(item or "")) end
+    if item.text ~= nil then return Tr(item.text) end
+    if item.label ~= nil then return Tr(item.label) end
+    if item[1] ~= nil and item[2] ~= nil then return Tr(tostring(item[1])) end
+    return Tr(tostring(DropdownItemValue(item) or ""))
 end
 
 local function DropdownItemIcon(item)
@@ -1041,7 +1055,7 @@ end
 
 function W.Dropdown(section, label, values, width)
     local x, y = NextRow(section, 48)
-    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     title:SetPoint("TOPLEFT", x, y)
 
     local btn = T.Button(section, "", width or 240, 22)
@@ -1130,9 +1144,9 @@ function W.StatCard(parent, label, value, x, y, width)
     local card = T.Panel(parent, nil, T.colors.panel2, T.colors.borderSoft)
     card:SetPoint("TOPLEFT", x or 0, y or 0)
     card:SetSize(width or 170, 56)
-    local l = T.Font(card, "GameFontDisableSmall", label or "", T.colors.muted)
+    local l = T.Font(card, "GameFontDisableSmall", Tr(label or ""), T.colors.muted)
     l:SetPoint("TOPLEFT", 12, -10)
-    local v = T.Font(card, "GameFontNormal", value or "", T.colors.text)
+    local v = T.Font(card, "GameFontNormal", Tr(value or ""), T.colors.text)
     v:SetPoint("TOPLEFT", 12, -30)
     card.valueText = v
     return card
@@ -1149,7 +1163,7 @@ end
 function W.TextInput(section, label, width)
     local x, y = NextRow(section, 50)
     width = width or 260
-    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     title:SetPoint("TOPLEFT", x, y)
 
     local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
@@ -1179,7 +1193,7 @@ end
 
 function W.Color(section, label)
     local x, y = NextRow(section, 34)
-    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
+    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(230)
 

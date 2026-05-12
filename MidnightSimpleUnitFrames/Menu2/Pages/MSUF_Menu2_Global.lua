@@ -405,10 +405,45 @@ local function CurrentGradientDirection()
     return "RIGHT"
 end
 
+local function CurrentGradientDirections()
+    local directions = {}
+    local any = false
+    for i = 1, #GRADIENT_DIRECTIONS do
+        local dir = GRADIENT_DIRECTIONS[i].value
+        local on = BarScopeGet(GRADIENT_DIR_KEYS[dir], false) == true
+        directions[dir] = on
+        if on then any = true end
+    end
+    if not any then
+        local legacy = BarScopeGet("gradientDirection", "RIGHT")
+        if not GRADIENT_DIR_KEYS[legacy] then legacy = "RIGHT" end
+        directions[legacy] = true
+    end
+    return directions
+end
+
 local function SetGradientDirection(direction)
     direction = GRADIENT_DIR_KEYS[direction] and direction or "RIGHT"
     for dir, key in pairs(GRADIENT_DIR_KEYS) do
         BarScopeSet(key, dir == direction, "MSUF2_GRADIENT_DIRECTION")
+    end
+    BarScopeSet("gradientDirection", direction, "MSUF2_GRADIENT_DIRECTION")
+end
+
+local function ToggleGradientDirection(direction)
+    direction = GRADIENT_DIR_KEYS[direction] and direction or "RIGHT"
+    local directions = CurrentGradientDirections()
+    directions[direction] = not directions[direction]
+    local any = false
+    for dir in pairs(GRADIENT_DIR_KEYS) do
+        if directions[dir] == true then
+            any = true
+            break
+        end
+    end
+    if not any then directions[direction] = true end
+    for dir, key in pairs(GRADIENT_DIR_KEYS) do
+        BarScopeSet(key, directions[dir] == true, "MSUF2_GRADIENT_DIRECTION")
     end
     BarScopeSet("gradientDirection", direction, "MSUF2_GRADIENT_DIRECTION")
 end
@@ -642,7 +677,9 @@ GlobalPage.SmoothPowerSet = SmoothPowerSet
 GlobalPage.NormalizeHpMode = NormalizeHpMode
 GlobalPage.NormalizePowerMode = NormalizePowerMode
 GlobalPage.CurrentGradientDirection = CurrentGradientDirection
+GlobalPage.CurrentGradientDirections = CurrentGradientDirections
 GlobalPage.SetGradientDirection = SetGradientDirection
+GlobalPage.ToggleGradientDirection = ToggleGradientDirection
 GlobalPage.PriorityDefaults = PriorityDefaults
 GlobalPage.PriorityAllowed = PriorityAllowed
 GlobalPage.PriorityOrder = PriorityOrder

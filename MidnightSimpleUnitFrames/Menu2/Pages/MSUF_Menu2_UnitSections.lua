@@ -478,18 +478,33 @@ local function BuildBasics(ctx, builder, unit, label)
     if colW < 136 then colW = 136 end
     local x1 = 14
     local x2 = x1 + colW + gap
+    local x3 = x2 + colW + gap
     local labelW = math.max(104, colW - 34)
     local row1 = -42
 
-    local reverse = W.ToggleAt(sec, "Reverse fill direction", x1, row1, labelW)
+    local enable = W.ToggleAt(sec, "Enable", x1, row1, labelW)
+    M.BindToggle(ctx, enable,
+        function() return ReadBool(unit, "enabled", true) end,
+        function(v) SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true }) end)
+
+    local reverse = W.ToggleAt(sec, "Reverse fill direction", x2, row1, labelW)
     M.BindToggle(ctx, reverse,
         function() return ReadBool(unit, "reverseFillBars", false) end,
         function(v) SetBool(unit, "reverseFillBars", v, "MSUF2_REVERSE_FILL", { preview = true }) end)
 
-    local smooth = W.ToggleAt(sec, "Smooth fill", x2, row1, labelW)
+    local smooth = W.ToggleAt(sec, "Smooth fill", x3, row1, labelW)
     M.BindToggle(ctx, smooth,
         function() return ReadBool(unit, "smoothFill", true) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end)
+
+    local function RefreshBasicsEnabled()
+        local on = ReadBool(unit, "enabled", true)
+        SetControlEnabled(enable, true)
+        SetControlEnabled(reverse, on)
+        SetControlEnabled(smooth, on)
+    end
+    M.AddRefresher(ctx, RefreshBasicsEnabled)
+    RefreshBasicsEnabled()
 end
 
 local function BuildLayout(ctx, builder, unit)
