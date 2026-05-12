@@ -2877,7 +2877,19 @@ end
 ------------------------------------------------------------------------
 
 function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
-    if _box then return _box end
+    if _box then
+        _getKind = getKindFn or _getKind
+        _onSectionOpen = onSectionOpenFn or _onSectionOpen
+        if parent then
+            _box:SetParent(parent)
+            _box:ClearAllPoints()
+            _box:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+        end
+        _box:Show()
+        if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+        if GF.ResizePreviewContainer then GF.ResizePreviewContainer() end
+        return _box
+    end
     _getKind       = getKindFn
     _onSectionOpen = onSectionOpenFn
 

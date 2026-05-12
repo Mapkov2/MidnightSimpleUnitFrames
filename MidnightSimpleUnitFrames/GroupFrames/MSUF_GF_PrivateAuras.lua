@@ -196,34 +196,20 @@ end
 ------------------------------------------------------------------------
 -- Apply private auras for a GF frame
 ------------------------------------------------------------------------
--- Reusable across GF and boss frames.
---
--- Signature: GF.ApplyPrivateAuras(f, unit [, paOverride])
---   paOverride: optional privateAuras config table. If supplied, all
---   settings are read from it and the GF config lookup is skipped
---   entirely. Used by the boss-frame bridge so boss frames can opt into
---   the same private-aura icons + 12.0.5 container overlay without being
---   registered as GF children (which would interfere with GF layout,
---   range fade, aggro tracking, etc.).
-function GF.ApplyPrivateAuras(f, unit, paOverride)
+function GF.ApplyPrivateAuras(f, unit)
     if not f then return end
 
-    local pa, conf, kind
-    if type(paOverride) == "table" then
-        pa   = paOverride
-        conf = paOverride   -- satisfies the `conf.privateAura*` fallback reads below
-    else
-        kind = f._msufGFKind or "party"
-        conf = GF.GetConf(kind)
-        pa   = conf.privateAuras
-    end
+    local kind = f._msufGFKind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    if not conf then ClearAnchors(f); return end
+    local pa = conf.privateAuras
 
-    if paOverride == nil and conf and conf.auras and conf.auras.enabled == false then
+    if conf.auras and conf.auras.enabled == false then
         ClearAnchors(f)
         return
     end
 
-    if paOverride == nil and HasNativeBlizzardPrivateAuras(conf) then
+    if HasNativeBlizzardPrivateAuras(conf) then
         ClearAnchors(f)
         return
     end
@@ -418,6 +404,8 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
         f._gfPrivArgs = args
     end
 
+    local Native = ns and ns.MSUF_AuraNative
+    local ensureDispelOverlay = Native and Native.EnsurePrivateAuraDispelOverlay
     for i = 1, maxN do
         local slot = slots[i]
         if not slot then
@@ -430,6 +418,9 @@ function GF.ApplyPrivateAuras(f, unit, paOverride)
                 end)
             end
             slots[i] = slot
+        end
+        if ensureDispelOverlay then
+            ensureDispelOverlay(slot)
         end
         SyncSlotLayer(slot, container)
         slot:ClearAllPoints()
