@@ -1065,15 +1065,18 @@ local function QueueFrameBasicsConfigRefresh(panel, unitKey)
     C_Timer.After(0.05, ApplyQueued)
 end
 
-local function SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
+local function SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled, detached)
     if not panel then return end
     powerEnabled = powerEnabled and true or false
     borderEnabled = borderEnabled and true or false
-    SetOptionControlEnabled(panel.playerPowerBarHeightSlider, powerEnabled)
-    SetOptionControlEnabled(panel.playerPowerBarEmbedCB, powerEnabled)
-    SetOptionControlEnabled(panel.playerPowerBarBorderCB, powerEnabled)
+    detached = detached and true or false
+
+    local attachedPowerEnabled = powerEnabled and not detached
+    SetOptionControlEnabled(panel.playerPowerBarHeightSlider, attachedPowerEnabled)
+    SetOptionControlEnabled(panel.playerPowerBarEmbedCB, attachedPowerEnabled)
+    SetOptionControlEnabled(panel.playerPowerBarBorderCB, attachedPowerEnabled)
     SetOptionControlEnabled(panel.playerPowerBarSmoothCB, powerEnabled)
-    SetOptionControlEnabled(panel.playerPowerBarBorderSlider, powerEnabled and borderEnabled)
+    SetOptionControlEnabled(panel.playerPowerBarBorderSlider, attachedPowerEnabled and borderEnabled)
 end
 
 local function IsPowerBarUnitKey(unitKey)
@@ -1086,6 +1089,39 @@ local function CanDetachPowerBarUnitKey(unitKey)
     return key == "player" or key == "target" or key == "focus"
 end
 
+local function IsPlayerPowerClassResourceManaged(unitKey, conf, powerEnabled)
+    local key = CanonKey(unitKey) or unitKey
+    return key == "player"
+        and powerEnabled == true
+        and conf
+        and conf.powerBarDetached == true
+        and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false)
+end
+
+local function IsDetachedPowerWidthManaged(unitKey, conf, powerEnabled)
+    return IsPlayerPowerClassResourceManaged(unitKey, conf, powerEnabled)
+        and conf
+        and conf.detachedPowerBarSyncClassPower ~= false
+end
+
+local function ApplyDetachedPowerControlState(panel, unitKey, conf, detached, powerEnabled)
+    if not panel then return end
+    local enabled = detached and powerEnabled
+    local widthManaged = IsDetachedPowerWidthManaged(unitKey, conf, powerEnabled)
+
+    for _, w in ipairs({
+        panel.playerDetachedPowerXSlider, panel.playerDetachedPowerYSlider,
+        panel.playerDetachedPowerHeightSlider, panel.playerDetachedPowerLevelSlider,
+        panel.playerDetachedPowerTextOnBarCB, panel.playerDetachedPowerResetBtn,
+    }) do
+        SetOptionControlEnabled(w, enabled)
+    end
+
+    SetOptionControlEnabled(panel.playerDetachedPowerWidthSlider, enabled and not widthManaged)
+    SetOptionControlEnabled(panel.playerDetachedPowerSyncClassCB, enabled)
+    SetOptionControlEnabled(panel.playerDetachedPowerAnchorClassCB, enabled)
+end
+
 local function ApplyPowerBarConfigState(panel, unitKey, show)
     if not panel or not unitKey then return end
     local key = CanonKey(unitKey) or unitKey
@@ -1093,6 +1129,7 @@ local function ApplyPowerBarConfigState(panel, unitKey, show)
     local conf = MSUF_DB and MSUF_DB[key]
     local powerEnabled = visible and ReadPowerBarEnabled(conf, key) or false
     local borderEnabled = visible and ReadPowerBarBorderEnabled(conf, key) or false
+    local detached = visible and powerEnabled and CanDetachPowerBarUnitKey(key) and conf and conf.powerBarDetached == true
 
     local cb = panel.playerPowerBarShowCB
     if cb then
@@ -1107,8 +1144,9 @@ local function ApplyPowerBarConfigState(panel, unitKey, show)
         end
     end
 
-    SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled)
+    SetPowerBarConfigEnabled(panel, powerEnabled, borderEnabled, detached)
     SetOptionControlEnabled(panel.playerDetachedPowerDetachCB, powerEnabled and CanDetachPowerBarUnitKey(key))
+    ApplyDetachedPowerControlState(panel, key, conf, detached, powerEnabled)
 end
 
 local function QueuePowerBarConfigRefresh(panel, unitKey, showPB, borderEnabled)
@@ -1430,10 +1468,10 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
     local function SetSuperColors(btn, bg, br, tr, hover)
         if not btn then return end
-        bg = bg or btn._msufBgColor or { 0.04, 0.11, 0.24, 0.92 }
-        br = br or btn._msufBorderColor or { 0.22, 0.48, 0.85, 0.82 }
-        tr = tr or btn._msufTextColor or { 0.80, 0.90, 1.00, 1 }
-        local mul = hover and 1.10 or 1
+        bg = bg or btn._msufBgColor or { 0.035, 0.055, 0.115, 0.92 }
+        br = br or btn._msufBorderColor or { 0.13, 0.25, 0.48, 0.72 }
+        tr = tr or btn._msufTextColor or { 0.78, 0.88, 0.98, 1 }
+        local mul = hover and 1.06 or 1
         local bgR, bgG, bgB, bgA = min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 0.92
         local brR, brG, brB, brA = min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 0.82
         if btn._msufSuperBg then btn._msufSuperBg:SetVertexColor(bgR, bgG, bgB, bgA) end
@@ -1453,6 +1491,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             t:SetTexture(MEDIA_SUPERELLIPSE)
             if t.SetSnapToPixelGrid then t:SetSnapToPixelGrid(false) end
             if t.SetTexelSnappingBias then t:SetTexelSnappingBias(0) end
+            if t.SetBlendMode then t:SetBlendMode("BLEND") end
         end
         group.L:SetTexCoord(0.0, 0.25, 0.0, 1.0)
         group.M:SetTexCoord(0.25, 0.75, 0.0, 1.0)
@@ -1465,7 +1504,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             local h = (owner.GetHeight and owner:GetHeight()) or 22
             local p = tonumber(pad) or 1
             local innerH = max(1, h - p * 2)
-            local capW = min(floor(innerH * 0.5 + 0.5), floor(max(1, w - p * 2) * 0.5))
+            local capW = min(floor(innerH * 0.42 + 0.5), floor(max(1, w - p * 2) * 0.5))
             group.L:ClearAllPoints(); group.M:ClearAllPoints(); group.R:ClearAllPoints()
             group.L:SetPoint("TOPLEFT", owner, "TOPLEFT", p, -p)
             group.L:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", p, p)
@@ -1473,8 +1512,8 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             group.R:SetPoint("TOPRIGHT", owner, "TOPRIGHT", -p, -p)
             group.R:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", -p, p)
             group.R:SetWidth(capW)
-            group.M:SetPoint("TOPLEFT", group.L, "TOPRIGHT", 0, 0)
-            group.M:SetPoint("BOTTOMRIGHT", group.R, "BOTTOMLEFT", 0, 0)
+            group.M:SetPoint("TOPLEFT", group.L, "TOPRIGHT", -0.5, 0)
+            group.M:SetPoint("BOTTOMRIGHT", group.R, "BOTTOMLEFT", 0.5, 0)
         end
         Layout()
         if owner.HookScript and not owner[key .. "Hooked"] then
@@ -1487,9 +1526,9 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     local function MakeSuperButton(parent, text, width, height, bg, br, tr)
         local btn = CreateFrame("Button", nil, parent)
         btn:SetSize(width or 96, height or 22)
-        btn._msufBgColor = bg or { 0.06, 0.07, 0.13, 0.88 }
-        btn._msufBorderColor = br or { 0.15, 0.18, 0.36, 0.45 }
-        btn._msufTextColor = tr or { 0.82, 0.90, 1.00, 1 }
+        btn._msufBgColor = bg or { 0.045, 0.055, 0.105, 0.90 }
+        btn._msufBorderColor = br or { 0.11, 0.16, 0.30, 0.52 }
+        btn._msufTextColor = tr or { 0.78, 0.87, 0.98, 1 }
         btn._msufBaseBgColor = btn._msufBgColor
         btn._msufBaseBorderColor = btn._msufBorderColor
         btn._msufBaseTextColor = btn._msufTextColor
@@ -1516,20 +1555,20 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     end
     local function MakePopupPillButton(parent, text, width, height, bg, br, tr)
         return MakeSuperButton(parent, text, width, height or 22,
-            bg or { 0.055, 0.075, 0.16, 0.92 },
-            br or { 0.18, 0.34, 0.70, 0.66 },
-            tr or { 0.84, 0.92, 1.00, 1 })
+            bg or { 0.040, 0.065, 0.145, 0.93 },
+            br or { 0.13, 0.27, 0.52, 0.66 },
+            tr or { 0.80, 0.89, 0.99, 1 })
     end
     local function SetNavActive(btn, active)
         if not btn then return end
         btn._msufIsNavActive = active and true or false
         if btn._msufIsNavActive then
-            btn._msufBgColor = { 0.12, 0.15, 0.32, 0.95 }
-            btn._msufBorderColor = { 0.20, 0.34, 0.80, 0.85 }
+            btn._msufBgColor = { 0.075, 0.105, 0.220, 0.95 }
+            btn._msufBorderColor = { 0.18, 0.31, 0.62, 0.82 }
             if btn._msufAccentStripe then btn._msufAccentStripe:Show() end
         else
-            btn._msufBgColor = btn._msufBaseBgColor or { 0.06, 0.07, 0.13, 0.88 }
-            btn._msufBorderColor = btn._msufBaseBorderColor or { 0.15, 0.18, 0.36, 0.45 }
+            btn._msufBgColor = btn._msufBaseBgColor or { 0.045, 0.055, 0.105, 0.90 }
+            btn._msufBorderColor = btn._msufBaseBorderColor or { 0.11, 0.16, 0.30, 0.52 }
             if btn._msufAccentStripe then btn._msufAccentStripe:Hide() end
         end
         SetSuperColors(btn)
@@ -1577,11 +1616,11 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
     editingLabel:SetPoint("LEFT", unitActionBar, "LEFT", 8, 2)
     editingLabel:SetText(TR("Editing:"))
     editingLabel:SetTextColor(0.72, 0.82, 1.00, 1)
-    local unitPill = MakeSuperButton(unitActionBar, "Player", UnitPillWidth("player"), 24, { 0.06, 0.07, 0.13, 0.88 }, { 0.15, 0.18, 0.36, 0.45 }, { 0.92, 0.96, 1.00, 1 })
+    local unitPill = MakeSuperButton(unitActionBar, "Player", UnitPillWidth("player"), 24, { 0.045, 0.055, 0.105, 0.90 }, { 0.11, 0.16, 0.30, 0.52 }, { 0.90, 0.95, 1.00, 1 })
     unitPill:SetPoint("LEFT", editingLabel, "RIGHT", 8, 2)
     unitPill:EnableMouse(false)
-    unitPill._msufBaseBgColor = { 0.06, 0.07, 0.13, 0.88 }
-    unitPill._msufBaseBorderColor = { 0.15, 0.18, 0.36, 0.45 }
+    unitPill._msufBaseBgColor = { 0.045, 0.055, 0.105, 0.90 }
+    unitPill._msufBaseBorderColor = { 0.11, 0.16, 0.30, 0.52 }
     SetNavActive(unitPill, true)
     panel.unitTopCurrentPill = unitPill
 
@@ -1617,9 +1656,9 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             local same = (key == src)
             btn:SetShown(not same)
             if active then
-                btn._msufBgColor = { 0.10, 0.28, 0.58, 0.98 }
-                btn._msufBorderColor = { 0.42, 0.72, 1.00, 1.00 }
-                btn._msufTextColor = { 1.00, 1.00, 1.00, 1 }
+                btn._msufBgColor = { 0.070, 0.170, 0.360, 0.98 }
+                btn._msufBorderColor = { 0.28, 0.50, 0.82, 0.96 }
+                btn._msufTextColor = { 0.92, 0.97, 1.00, 1 }
             else
                 btn._msufBgColor = btn._msufBaseBgColor
                 btn._msufBorderColor = btn._msufBaseBorderColor
@@ -1653,10 +1692,10 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             local x = 16
             for i = 1, #order do
                 local k = order[i]
-                local btn = MakePopupPillButton(copyPopup, shortLabel[k] or UnitLabel(k), widths[k], 22, { 0.045, 0.12, 0.27, 0.94 }, { 0.18, 0.42, 0.78, 0.78 }, { 0.78, 0.88, 1.00, 1 })
-                btn._msufBaseBgColor = { 0.045, 0.12, 0.27, 0.94 }
-                btn._msufBaseBorderColor = { 0.18, 0.42, 0.78, 0.78 }
-                btn._msufBaseTextColor = { 0.78, 0.88, 1.00, 1 }
+                local btn = MakePopupPillButton(copyPopup, shortLabel[k] or UnitLabel(k), widths[k], 22, { 0.035, 0.080, 0.180, 0.94 }, { 0.12, 0.28, 0.55, 0.72 }, { 0.76, 0.86, 0.98, 1 })
+                btn._msufBaseBgColor = { 0.035, 0.080, 0.180, 0.94 }
+                btn._msufBaseBorderColor = { 0.12, 0.28, 0.55, 0.72 }
+                btn._msufBaseTextColor = { 0.76, 0.86, 0.98, 1 }
                 btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", x, -58)
                 btn:SetScript("OnClick", function()
                     panel._msufUnitCopyDest = k
@@ -1686,17 +1725,17 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
                 copyPopup._checks[i] = cb
             end
 
-            local allBtn = MakePopupPillButton(copyPopup, "All", 48, 22, { 0.05, 0.13, 0.30, 0.96 }, { 0.24, 0.50, 0.90, 0.82 }, { 0.84, 0.92, 1, 1 })
+            local allBtn = MakePopupPillButton(copyPopup, "All", 48, 22, { 0.040, 0.095, 0.220, 0.96 }, { 0.16, 0.34, 0.65, 0.78 }, { 0.82, 0.91, 1, 1 })
             allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function()
                 for i, cat in ipairs(UF_COPY_CATEGORIES) do copyScopes[cat.key] = true; copyPopup._checks[i]:SetChecked(true) end
             end)
-            local noneBtn = MakePopupPillButton(copyPopup, "None", 58, 22, { 0.05, 0.13, 0.30, 0.96 }, { 0.24, 0.50, 0.90, 0.82 }, { 0.84, 0.92, 1, 1 })
+            local noneBtn = MakePopupPillButton(copyPopup, "None", 58, 22, { 0.040, 0.095, 0.220, 0.96 }, { 0.16, 0.34, 0.65, 0.78 }, { 0.82, 0.91, 1, 1 })
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
             noneBtn:SetScript("OnClick", function()
                 for i, cat in ipairs(UF_COPY_CATEGORIES) do copyScopes[cat.key] = false; copyPopup._checks[i]:SetChecked(false) end
             end)
-            local runBtn = MakePopupPillButton(copyPopup, "Copy Selected", 128, 22, { 0.05, 0.22, 0.46, 0.98 }, { 0.32, 0.68, 1.00, 1.00 }, { 0.92, 0.98, 1, 1 })
+            local runBtn = MakePopupPillButton(copyPopup, "Copy Selected", 128, 22, { 0.045, 0.145, 0.315, 0.98 }, { 0.22, 0.44, 0.74, 0.92 }, { 0.88, 0.96, 1, 1 })
             runBtn:SetPoint("BOTTOMRIGHT", copyPopup, "BOTTOMRIGHT", -14, 11)
             runBtn:SetScript("OnClick", function()
                 CopyUnitSettings(CurrentUnitKey(), NormalizeCopyDest(CurrentUnitKey()), panel._msufAPI, copyScopes)
@@ -1854,6 +1893,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local powerEnabled = ReadPowerBarEnabled(conf, key)
         local detached = canDetach and conf.powerBarDetached == true and powerEnabled
         local classPowerActive = isPlayer and (bars.showClassPower == true or detached)
+        local classResourceManaged = IsPlayerPowerClassResourceManaged(key, conf, powerEnabled)
         local function Show(w, on) SetOptionWidgetShown(w, on) end
         local heightChanged = UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive, canDetach)
         Show(panel.playerDetachedPowerDetachCB, canDetach)
@@ -1864,10 +1904,10 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
         local showModeInfo = detached or (isPlayer and classPowerActive)
         if panel.playerPowerModeInfo and showModeInfo then
             Show(panel.playerPowerModeInfo, true)
-            if isPlayer and detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false) then
-                panel.playerPowerModeInfo:SetText(TR("Player Power is currently controlled by the MSUF Class Resource system. Detached mode is active: position, size, and layer use the detached resource settings below."))
+            if classResourceManaged then
+                panel.playerPowerModeInfo:SetText(TR("Player Power is linked to Class Resources. Attached-frame controls are locked here; position the combo from Class Resources or Edit Mode. Width is locked while sync is enabled."))
             elseif detached then
-                panel.playerPowerModeInfo:SetText(TR("Detached mode is active: position, size, and layer are controlled by the detached power settings below."))
+                panel.playerPowerModeInfo:SetText(TR("Detached mode is active. Attached-frame height, embed and border are locked; use the detached controls below."))
             elseif isPlayer and classPowerActive then
                 panel.playerPowerModeInfo:SetText(TR("Attached mode is active: the power bar follows the Player frame layout. Class Resources are configured separately."))
             else
@@ -1906,6 +1946,7 @@ function ns.MSUF_Options_Player_Build(panel, frameGroup, helpers)
             SetSlider(panel.playerDetachedPowerHeightSlider, tonumber(conf.detachedPowerBarHeight) or 6)
             SetSlider(panel.playerDetachedPowerLevelSlider, tonumber(conf.detachedPowerBarFrameLevelOffset) or 6)
         end
+        ApplyDetachedPowerControlState(panel, key, conf, detached, powerEnabled)
         if heightChanged and panel._msufRelayoutUnitBoxes then panel._msufRelayoutUnitBoxes(key) end
     end
 
@@ -2834,7 +2875,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
             local canDetach = CanDetachPowerBarUnitKey(key)
             local detached = canDetach and conf.powerBarDetached == true and powerEnabled
             local classPowerActive = isPlayer and (bars.showClassPower == true or detached)
-            local merged = detached and (conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false)
+            local classResourceManaged = IsPlayerPowerClassResourceManaged(key, conf, powerEnabled)
             local function Show(w, on) SetOptionWidgetShown(w, on) end
             UpdatePowerBarSectionHeight(panel, isPlayer, detached, classPowerActive, canDetach)
             Show(panel.playerDetachedPowerDetachCB, canDetach and showPB)
@@ -2847,10 +2888,10 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
                 local showModeInfo = showPB and (detached or (isPlayer and classPowerActive))
                 Show(info, showModeInfo)
                 if showModeInfo and isPlayer then
-                    if merged then
-                        info:SetText(TR("Player Power is currently controlled by the MSUF Class Resource system. Detached mode is active: position, size, and layer use the detached resource settings below."))
+                    if classResourceManaged then
+                        info:SetText(TR("Player Power is linked to Class Resources. Attached-frame controls are locked here; position the combo from Class Resources or Edit Mode. Width is locked while sync is enabled."))
                     elseif detached then
-                        info:SetText(TR("Detached mode is active: position, size, and layer are controlled by the detached power settings below."))
+                        info:SetText(TR("Detached mode is active. Attached-frame height, embed and border are locked; use the detached controls below."))
                     elseif classPowerActive then
                         info:SetText(TR("Attached mode is active: the power bar follows the Player frame layout. Class Resources are configured separately."))
                     else
@@ -2858,7 +2899,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
                     end
                 elseif showModeInfo and canDetach then
                     if detached then
-                        info:SetText(TR("Detached mode is active: position, size, and layer are controlled by the detached power settings below."))
+                        info:SetText(TR("Detached mode is active. Attached-frame height, embed and border are locked; use the detached controls below."))
                     end
                 end
             end
@@ -2898,6 +2939,7 @@ function ns.MSUF_Options_Player_ApplyFromDB(panel, currentKey, conf, g, GetOffse
                 SetSlider(panel.playerDetachedPowerHeightSlider, tonumber(conf.detachedPowerBarHeight) or 6)
                 SetSlider(panel.playerDetachedPowerLevelSlider, tonumber(conf.detachedPowerBarFrameLevelOffset) or 6)
             end
+            ApplyDetachedPowerControlState(panel, key, conf, detached, powerEnabled)
         end
     end
 
