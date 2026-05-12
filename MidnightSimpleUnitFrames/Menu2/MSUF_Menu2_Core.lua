@@ -294,8 +294,9 @@ local function EnsureEditModeUIHook()
 
     register(function()
         local frame = M.frame
-        if frame and frame:IsShown() and frame.RefreshStatus then
-            frame:RefreshStatus()
+        if frame and frame:IsShown() then
+            if frame.RefreshStatus then frame:RefreshStatus() end
+            if M.Refresh then M.Refresh() end
         else
             RefreshDashboardEditModeButton()
         end
@@ -604,7 +605,10 @@ local function BuildWindow()
     status:RegisterEvent("PLAYER_REGEN_DISABLED")
     status:RegisterEvent("PLAYER_REGEN_ENABLED")
     status:SetScript("OnEvent", function()
-        if f and f:IsShown() then f:RefreshStatus() end
+        if f and f:IsShown() then
+            f:RefreshStatus()
+            if M.Refresh then M.Refresh() end
+        end
     end)
     f:SetScript("OnShow", function(self)
         EnsureEditModeUIHook()

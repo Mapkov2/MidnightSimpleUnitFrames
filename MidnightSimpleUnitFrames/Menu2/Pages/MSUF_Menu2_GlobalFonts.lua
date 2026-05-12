@@ -248,6 +248,7 @@ end
 
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
+    b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
 
     local scopeValues = {
         { value = "shared", text = "Shared" },
@@ -467,4 +468,4 @@ local function BuildFonts(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_fonts", { title = "MSUF Fonts", build = BuildFonts, version = 2 })
+M.RegisterPage("opt_fonts", { title = "MSUF Fonts", build = BuildFonts, version = 3 })

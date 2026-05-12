@@ -76,6 +76,7 @@ local ApplyBars = GP.ApplyBars
 local ApplyCastbars = GP.ApplyCastbars
 local function BuildBars(ctx)
     local b = W.PageBuilder(ctx)
+    b:GlobalStyleHeader("Bars", "Textures, gradients, outlines and highlight borders.", 72)
 
     local function SharedBarsControlsActive()
         return CurrentBarsScope() == "shared"
@@ -1010,4 +1011,4 @@ local function BuildBars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 7 })
+M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 8 })

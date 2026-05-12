@@ -84,6 +84,7 @@ local ApplyBars = GP.ApplyBars
 local ApplyCastbars = GP.ApplyCastbars
 local function BuildCastbars(ctx)
     local b = W.PageBuilder(ctx)
+    b:GlobalStyleHeader("Castbar", "Castbar behavior, textures, GCD and interrupt indicators.", 72)
 
     local function EnsureCastbars()
         if type(_G.MSUF_EnsureAddonLoaded) == "function" then
@@ -444,4 +445,4 @@ local function BuildCastbars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 2 })
+M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 3 })

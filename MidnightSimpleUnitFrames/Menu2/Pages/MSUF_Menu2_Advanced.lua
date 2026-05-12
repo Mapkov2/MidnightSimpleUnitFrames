@@ -337,15 +337,6 @@ local function MarkReminderDirty()
     if reminder and type(reminder.MarkDirty) == "function" then pcall(reminder.MarkDirty) end
 end
 
-local function ToggleEditMode()
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
-    local active = (_G.MSUF_IsMSUFEditModeActive and _G.MSUF_IsMSUFEditModeActive()) or _G.MSUF_UnitEditModeActive
-    if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
-        pcall(_G.MSUF_SetMSUFEditModeDirect, not active)
-    end
-    if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
-end
-
 local AURA_GROWTH = {
     { value = "RIGHT", text = "Grow Right" },
     { value = "LEFT", text = "Grow Left" },
@@ -554,10 +545,7 @@ end
 
 local function BuildAuras(ctx)
     local b = W.PageBuilder(ctx)
-    local head = b:Header("Unit Auras", "Auras 2.0 display, filters, layout, timer text and reminders.", 72)
-    local edit = T.Button(head, "MSUF Edit Mode", 150, 24)
-    edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
-    edit:SetScript("OnClick", ToggleEditMode)
+    b:GlobalStyleHeader("Unit Auras", "Auras 2.0 display, filters, layout, timer text and reminders.", 72)
 
     local top = b:Section("Unit Auras", 148)
     ToggleAt(ctx, top, "Enable Unit Auras", 12, -34, function() return AurasDB() end, "enabled", true, function()
@@ -944,4 +932,4 @@ AdvancedPage.ScopedDropdownAt = ScopedDropdownAt
 AdvancedPage.TogglePillAt = TogglePillAt
 AdvancedPage.SetControlEnabled = SetControlEnabled
 
-M.RegisterPage("auras2", { title = "MSUF Unit Auras", build = BuildAuras, version = 4 })
+M.RegisterPage("auras2", { title = "MSUF Unit Auras", build = BuildAuras, version = 5 })
