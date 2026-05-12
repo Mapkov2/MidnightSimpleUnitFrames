@@ -1355,7 +1355,12 @@ local function ApplyCooldownFont(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB
     if fsChanged or cd._msufGFCdTextSize ~= size or cd._msufGFCdFontPath ~= gFont
        or cd._msufGFCdFontFlags ~= wantFlags then
         if gFont and fs.SetFont then
-            fs:SetFont(gFont, size, wantFlags)
+            local g = _G.MSUF_DB and _G.MSUF_DB.general
+            if type(_G.MSUF_SetFontSafe) == "function" then
+                _G.MSUF_SetFontSafe(fs, gFont, size, wantFlags, (g and g.fontKey) or "FRIZQT")
+            else
+                fs:SetFont(gFont, size, wantFlags)
+            end
         end
         cd._msufGFCdTextSize = size
         cd._msufGFCdFontPath = gFont
@@ -1407,7 +1412,12 @@ local function ApplyStackLayout(ic, gcfg, gFont, wantFlags, frameScale)
 
     if ic._msufGFStkSize ~= size or ic._msufGFStkFont ~= gFont then
         if gFont and fs.SetFont then
-            fs:SetFont(gFont, size, wantFlags)
+            local g = _G.MSUF_DB and _G.MSUF_DB.general
+            if type(_G.MSUF_SetFontSafe) == "function" then
+                _G.MSUF_SetFontSafe(fs, gFont, size, wantFlags, (g and g.fontKey) or "FRIZQT")
+            else
+                fs:SetFont(gFont, size, wantFlags)
+            end
         end
         ic._msufGFStkSize = size
         ic._msufGFStkFont = gFont

@@ -2668,7 +2668,13 @@ local function ApplyStatusTextStateLayout(f, conf, state)
     local fontPath = GF.ResolveFontPath and GF.ResolveFontPath(kind)
     local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind)
     if fontPath and st.SetFont then
-        st:SetFont(fontPath, size, fontFlags or "")
+        local db = _G.MSUF_DB
+        local fontKey = (conf.fontOverride and conf.fontKey) or (db and db.general and db.general.fontKey)
+        if type(_G.MSUF_SetFontSafe) == "function" then
+            _G.MSUF_SetFontSafe(st, fontPath, size, fontFlags or "", fontKey)
+        else
+            st:SetFont(fontPath, size, fontFlags or "")
+        end
     end
 
     local anchor = conf[s.anchorKey] or s.defAnchor

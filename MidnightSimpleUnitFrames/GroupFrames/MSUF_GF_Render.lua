@@ -568,6 +568,8 @@ local function ApplyFonts(f, kind)
     local fontPath   = GF.ResolveFontPath(kind)
     local fontFlags  = GF.ResolveFontFlags(kind)
     local fr, fg, fb = GF.ResolveFontColor(kind)
+    local db = _G.MSUF_DB
+    local fontKey = (conf.fontOverride and conf.fontKey) or (db and db.general and db.general.fontKey)
     local fScale     = conf._resolvedFrameScale or 1
     local nameSize   = (conf.nameFontSize  or 12) * fScale
     local hpSize     = (conf.hpFontSize    or 10) * fScale
@@ -584,11 +586,16 @@ local function ApplyFonts(f, kind)
     end
 
     -- Skip redundant SetFont (path+size compare) + SetTextColor (color compare)
+    local safeSetFont = _G.MSUF_SetFontSafe
     local function set(fs, size, r, g, b, a)
         if not fs then return end
         local curP, curS = fs:GetFont()
         if curP ~= fontPath or curS ~= size then
-            fs:SetFont(fontPath, size, fontFlags)
+            if type(safeSetFont) == "function" then
+                safeSetFont(fs, fontPath, size, fontFlags, fontKey)
+            else
+                fs:SetFont(fontPath, size, fontFlags)
+            end
         end
         if r and colorChanged then fs:SetTextColor(r, g, b, a or 1) end
         fs:SetShadowOffset(0, 0)

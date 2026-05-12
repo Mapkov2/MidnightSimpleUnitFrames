@@ -114,7 +114,28 @@ end
 
 local function BuildClassPower(ctx)
     local b = W.PageBuilder(ctx)
-    b:Header("Class Resources", "Native class-resource layout, visibility and text controls.", 64)
+    local head = b:Header("Class Resources", "Native class-resource layout, visibility and text controls.", 64)
+
+    local colors = T.Button(head, "Class Color", 112, 24)
+    colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -20)
+    colors:SetScript("OnClick", function() M.SelectPage("opt_colors") end)
+
+    local edit = T.Button(head, "MSUF Edit Mode", 136, 24)
+    edit:SetPoint("RIGHT", colors, "LEFT", -10, 0)
+    local function RefreshEditButton()
+        local st = _G.MSUF_EditState
+        local active = st and st.active
+        if edit.SetText then edit:SetText(active and "Exit Edit Mode" or "MSUF Edit Mode") end
+    end
+    edit:SetScript("OnClick", function()
+        local st = _G.MSUF_EditState
+        local active = st and st.active
+        local fn = _G.MSUF_SetMSUFEditModeDirect or _G.MSUF_SetEditMode
+        if type(fn) == "function" then pcall(fn, not active) end
+        RefreshEditButton()
+    end)
+    M.AddRefresher(ctx, RefreshEditButton)
+    RefreshEditButton()
 
     local display = b:CollapsibleSection("classpower_display", "Layout", 420, true)
     local cpControls = {}
@@ -238,21 +259,7 @@ local function BuildClassPower(ctx)
         SetControlEnabled(cpEnable, true)
     end)
 
-    local actions = b:Section("Quick Actions", 82)
-    local edit = T.Button(actions, "Edit Mode", 156, 24)
-    edit:SetPoint("TOPLEFT", actions, "TOPLEFT", 14, -38)
-    if T.SkinPrimaryButton then T.SkinPrimaryButton(edit) end
-    edit:SetScript("OnClick", function()
-        local st = _G.MSUF_EditState
-        local active = st and st.active
-        local fn = _G.MSUF_SetMSUFEditModeDirect or _G.MSUF_SetEditMode
-        if type(fn) == "function" then pcall(fn, not active) end
-    end)
-    local colors = T.Button(actions, "Class color", 156, 24)
-    colors:SetPoint("LEFT", edit, "RIGHT", 12, 0)
-    colors:SetScript("OnClick", function() M.SelectPage("opt_colors") end)
-
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 2 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 3 })
