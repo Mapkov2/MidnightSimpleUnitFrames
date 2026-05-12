@@ -103,18 +103,22 @@ local function BuildCastbars(ctx)
         ApplyCastbars(reason or "MSUF2_CASTBAR_TEXTURES")
     end
 
-    local behavior = b:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 260, true)
+    local behavior = b:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 196, true)
+    local leftX, rightX = 14, 392
     local shake = W.Toggle(behavior, "Shake on interrupt")
+    W.MoveWidget(shake, behavior, leftX, -42)
     M.BindToggle(ctx, shake,
         function() return ReadGBool("castbarInterruptShake", false) end,
         function(v) SetGBool("castbarInterruptShake", v, "MSUF2_CASTBAR_SHAKE", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_SHAKE") end)
 
     local strength = W.Slider(behavior, "Shake strength", 0, 30, 1, 300)
+    W.MoveWidget(strength, behavior, leftX, -72, 320)
     M.BindSlider(ctx, strength,
         function() return tonumber(ReadG("castbarShakeStrength", 8)) or 8 end,
         function(v) SetG("castbarShakeStrength", floor((tonumber(v) or 8) + 0.5), "MSUF2_CASTBAR_SHAKE_STRENGTH", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_SHAKE_STRENGTH") end)
 
     local unified = W.Toggle(behavior, "Always use fill direction for all casts")
+    W.MoveWidget(unified, behavior, rightX, -42)
     M.BindToggle(ctx, unified,
         function() return ReadGBool("castbarUnifiedDirection", false) end,
         function(v) SetGBool("castbarUnifiedDirection", v, "MSUF2_CASTBAR_UNIFIED_DIRECTION", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_UNIFIED_DIRECTION") end)
@@ -123,16 +127,19 @@ local function BuildCastbars(ctx)
         { value = "RTL", text = "Right to left (default)" },
         { value = "LTR", text = "Left to right" },
     }, 260)
+    W.MoveWidget(direction, behavior, rightX, -72, 300)
     M.BindDropdown(ctx, direction,
         function() return ReadG("castbarFillDirection", "RTL") end,
         function(v) SetG("castbarFillDirection", v or "RTL", "MSUF2_CASTBAR_FILL_DIRECTION", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_FILL_DIRECTION") end)
 
     local opposite = W.Toggle(behavior, "Use opposite fill direction for target")
+    W.MoveWidget(opposite, behavior, rightX, -126)
     M.BindToggle(ctx, opposite,
         function() return ReadGBool("castbarOpositeDirectionTarget", true) end,
         function(v) SetGBool("castbarOpositeDirectionTarget", v, "MSUF2_CASTBAR_TARGET_DIRECTION", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_TARGET_DIRECTION") end)
 
     local ticks = W.Toggle(behavior, "Show channel tick lines (5)")
+    W.MoveWidget(ticks, behavior, rightX, -150)
     M.BindToggle(ctx, ticks,
         function() return ReadGBool("castbarShowChannelTicks", true) end,
         function(v) SetGBool("castbarShowChannelTicks", v, "MSUF2_CASTBAR_TICKS", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_TICKS") end)
