@@ -20,6 +20,7 @@ local select        = select
 local pairs         = pairs
 local type          = type
 local tonumber      = tonumber
+local table_sort    = table.sort
 local math_min      = math.min
 local math_max      = math.max
 local math_ceil     = math.ceil
@@ -180,6 +181,26 @@ local function _GetReadableDispelName(dispelName)
         return nil
     end
     return dispelName
+end
+
+local function _CanReadAuraValue(value)
+    if _hasCanaccessvalue then return canaccessvalue(value) == true end
+    return not (issecretvalue and issecretvalue(value) == true)
+end
+
+local function _ReadAuraNumber(value, fallback)
+    if value == nil or not _CanReadAuraValue(value) then return fallback end
+    return tonumber(value) or fallback
+end
+
+local function _ReadAuraString(value)
+    if value == nil or not _CanReadAuraValue(value) then return nil end
+    return type(value) == "string" and value or nil
+end
+
+local function _ReadAuraBool(value)
+    if value == nil or not _CanReadAuraValue(value) then return false end
+    return value == true
 end
 
 -- Grid2-compatible dispel type ids for GetAuraDispelTypeColor():
@@ -432,6 +453,11 @@ local function CreateAuraIcon(parent, size)
         icon:EnableMouse(true)
     end
     icon:SetScript("OnEnter", function(self)
+        local owner = self._msufGFOwner
+        local kind = owner and owner._msufGFKind or "party"
+        local conf = GF.GetConf and GF.GetConf(kind)
+        local root = conf and conf.auras
+        if root and root.showTooltip == false then return end
         local unit = self._msufUnit
         local aid  = self._msufAuraID
         if not unit or not aid then return end
@@ -1526,6 +1552,57 @@ local function CompactAuraCache(cache)
     cache._orderDirty = nil
 end
 
+local _AURA_SORT_PERMANENT = 1e30
+
+local function AuraIsPlayerOwned(aura)
+    if not aura then return false end
+    if _ReadAuraBool(aura.isFromPlayerOrPlayerPet) then return true end
+    local source = _ReadAuraString(aura.sourceUnit)
+    return source == "player" or source == "pet"
+end
+
+local function AuraSortTime(aura)
+    if not aura then return _AURA_SORT_PERMANENT end
+    local expirationTime = _ReadAuraNumber(aura.expirationTime)
+    if expirationTime and expirationTime > 0 then return expirationTime end
+    local duration = _ReadAuraNumber(aura.duration)
+    if duration and duration > 0 then return GetTime() + duration end
+    return _AURA_SORT_PERMANENT
+end
+
+local function SortAuraCacheOrder(cache, sortByDuration, preferPlayer)
+    if not (cache and (sortByDuration or preferPlayer)) then return end
+    CompactAuraCache(cache)
+    local order = cache.order
+    local count = #order
+    if count <= 1 then return end
+
+    local auras = cache.auras
+    local oldIndex = cache.indexById
+    table_sort(order, function(aID, bID)
+        local a = auras[aID]
+        local b = auras[bID]
+
+        if preferPlayer then
+            local aPlayer = AuraIsPlayerOwned(a)
+            local bPlayer = AuraIsPlayerOwned(b)
+            if aPlayer ~= bPlayer then return aPlayer end
+        end
+
+        if sortByDuration then
+            local aTime = AuraSortTime(a)
+            local bTime = AuraSortTime(b)
+            if aTime ~= bTime then return aTime < bTime end
+        end
+
+        return (oldIndex[aID] or 0) < (oldIndex[bID] or 0)
+    end)
+
+    for i = 1, count do
+        oldIndex[order[i]] = i
+    end
+end
+
 local function AuraCacheVisibleIndex(cache, auraInstanceID, maxIcons, includeSpare)
     local idx = cache and cache.indexById and cache.indexById[auraInstanceID]
     if not idx then return false end
@@ -2150,7 +2227,7 @@ end
 ------------------------------------------------------------------------
 -- Main render: one aura group
 ------------------------------------------------------------------------
-local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale, frameScale, sourceCache)
+local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, dedupIDs, scale, frameScale, sourceCache, sortByDuration, preferPlayer)
     if not gcfg or gcfg.enabled == false then
         HidePool(f[POOL_KEYS[groupKey]], 1)
         return 0, nil
@@ -2249,6 +2326,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local order, aurasById, orderCount
     if sourceCache then
         CompactAuraCache(sourceCache)
+        SortAuraCacheOrder(sourceCache, sortByDuration == true, preferPlayer == true)
         order = sourceCache.order
         aurasById = sourceCache.auras
         orderCount = #order
@@ -2877,6 +2955,9 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local debOn = debCfg and debCfg.enabled ~= false and not nativeDebuffs
     local buffOn = buffCfg and buffCfg.enabled ~= false and not nativeBuffs
     local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false and not nativeDispels
+    local sortByDuration = auras.sortByDuration == true
+    local preferPlayer = auras.preferPlayer ~= false
+    local orderedAuras = sortByDuration or preferPlayer
 
     -- PERF (4.22 Beta hotfix): cache settings-stable filter/max resolutions
     -- on the frame settings cache `c`. Was: 3× ResolveDebuff/Buff function
@@ -2909,9 +2990,13 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
         end
     end
 
+    local extScanMax = orderedAuras and nil or extMax
+    local debScanMax = orderedAuras and nil or debMax
+    local buffScanMax = orderedAuras and nil or buffMax
+
     local sig = c and c.auraCacheSig
     if not sig then
-        sig = BuildAuraCacheSig(buffFilter, debFilter, extFilter, buffMax, debMax, extMax, buffOn, debOn, extOn, dispelNeeded)
+        sig = BuildAuraCacheSig(buffFilter, debFilter, extFilter, buffScanMax, debScanMax, extScanMax, buffOn, debOn, extOn, dispelNeeded)
         if c then c.auraCacheSig = sig end
     end
 
@@ -2924,14 +3009,20 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
         st, touchBuff, touchDebuff, touchExt, touchDispel = UpdateFrameAuraCacheDelta(
             f, unit, updateInfo,
             buffFilter, debFilter, extFilter,
-            buffMax, debMax, extMax,
+            buffScanMax, debScanMax, extScanMax,
             buffOn, debOn, extOn, dispelNeeded
         )
+        if orderedAuras then
+            touchBuff = buffOn
+            touchDebuff = debOn
+            touchExt = extOn
+            touchDispel = dispelNeeded
+        end
     else
         st = FullScanFrameAuraCache(
             f, unit, sig,
             buffFilter, debFilter, extFilter,
-            buffMax, debMax, extMax,
+            buffScanMax, debScanMax, extScanMax,
             buffOn, debOn, extOn, dispelNeeded
         )
         touchBuff = buffOn
@@ -2948,7 +3039,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     elseif extOn then
         if touchExt then
             for k in pairs(_externalsIDs) do _externalsIDs[k] = nil end
-            RenderGroup(f, unit, "externals", extCfg, extFilter, false, parent, nil, scale, frameScale, st and st.externals)
+            RenderGroup(f, unit, "externals", extCfg, extFilter, false, parent, nil, scale, frameScale, st and st.externals, sortByDuration, preferPlayer)
         else
             FillDisplayedExternalIDs(f, _externalsIDs)
         end
@@ -2971,7 +3062,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
             f._msufGFDispelAuraID = nil
             f._msufGFDispelColorObj = nil
             f._msufGFDispelColorRev = nil
-            local _, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, frameScale, st and st.debuff)
+            local _, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, frameScale, st and st.debuff, sortByDuration, preferPlayer)
             if not nativeDispels then
                 if touchDispel and dispelNeeded and not md then
                     if _getByIndex then
@@ -3054,7 +3145,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     elseif buffOn then
         if touchBuff or touchExt then
             if not touchExt then FillDisplayedExternalIDs(f, _externalsIDs) end
-            RenderGroup(f, unit, "buff", buffCfg, buffFilter, false, parent, f._msufSIDedupIDs, scale, frameScale, st and st.buff)
+            RenderGroup(f, unit, "buff", buffCfg, buffFilter, false, parent, f._msufSIDedupIDs, scale, frameScale, st and st.buff, sortByDuration, preferPlayer)
         end
         f._msufGFBufHidden = nil
     elseif not f._msufGFBufHidden then

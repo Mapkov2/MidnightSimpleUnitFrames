@@ -88,24 +88,45 @@ local function BuildGFLayout(ctx)
     M.GroupPreview.Add(ctx, b)
 
     local general = b:CollapsibleSection("general", "General", 292, false)
-    BindScopeToggle(ctx, W.Toggle(general, "Enable group frames"), "enabled", false, "rebuild")
-    BindScopeToggle(ctx, W.Toggle(general, "Show player"), "showPlayer", true, "rebuild")
-    BindScopeToggle(ctx, W.Toggle(general, "Show solo"), "showSolo", false, "rebuild")
-    BindScopeToggle(ctx, W.Toggle(general, "Reverse fill direction"), "reverseFill", false, "visual")
-    BindScopeToggle(ctx, W.Toggle(general, "Smooth health fill"), "smoothFill", true, "visual")
-    BindScopeToggle(ctx, W.Toggle(general, "Hide in client scene"), "hideInClientScene", true, "visual")
-    BindScopeSlider(ctx, W.Slider(general, "Hide offline after", 0, 120, 1, 300), "hideOfflineDelay", 0, "visual")
+    local generalX = 32
+    local enableGroup = BindScopeToggle(ctx, W.Toggle(general, "Enable group frames"), "enabled", false, "rebuild")
+    local showPlayer = BindScopeToggle(ctx, W.Toggle(general, "Show player"), "showPlayer", true, "rebuild")
+    local showSolo = BindScopeToggle(ctx, W.Toggle(general, "Show solo"), "showSolo", false, "rebuild")
+    local reverseFill = BindScopeToggle(ctx, W.Toggle(general, "Reverse fill direction"), "reverseFill", false, "visual")
+    local smoothFill = BindScopeToggle(ctx, W.Toggle(general, "Smooth health fill"), "smoothFill", true, "visual")
+    local hideClient = BindScopeToggle(ctx, W.Toggle(general, "Hide in client scene"), "hideInClientScene", true, "visual")
+    local hideOffline = BindScopeSlider(ctx, W.Slider(general, "Hide offline after", 0, 120, 1, 300), "hideOfflineDelay", 0, "visual")
+    W.MoveWidget(enableGroup, general, generalX, -38)
+    W.MoveWidget(showPlayer, general, generalX, -68)
+    W.MoveWidget(showSolo, general, generalX, -98)
+    W.MoveWidget(reverseFill, general, generalX, -128)
+    W.MoveWidget(smoothFill, general, generalX, -158)
+    W.MoveWidget(hideClient, general, generalX, -188)
+    W.MoveWidget(hideOffline, general, generalX, -218, 300, "LEFT")
 
     local layout = b:CollapsibleSection("layout", "Layout", 450, false)
-    BindScopeSlider(ctx, W.Slider(layout, "Width", 40, 300, 1, 300), "width", 120, "rebuild")
-    BindScopeSlider(ctx, W.Slider(layout, "Height", 16, 120, 1, 300), "height", 40, "rebuild")
-    BindScopeSlider(ctx, W.Slider(layout, "Spacing", 0, 20, 1, 300), "spacing", 1, "rebuild")
-    BuildGrowthDirectionTiles(ctx, layout)
-    BindScopeSlider(ctx, W.Slider(layout, "Units per column", 1, 40, 1, 300), "unitsPerColumn", 5, "rebuild")
-    BindScopeSlider(ctx, W.Slider(layout, "Max columns", 1, 8, 1, 300), "maxColumns", 8, "rebuild")
+    local layoutW = layout._msuf2Width or b.width or 720
+    local layoutLeftX = 32
+    local layoutRightX = min(max(500, floor(layoutW * 0.52)), max(420, layoutW - 300))
+    local layoutSliderW = max(340, min(480, layoutRightX - layoutLeftX - 56))
+    local widthSlider = BindScopeSlider(ctx, W.Slider(layout, "Width", 40, 300, 1, layoutSliderW), "width", 120, "rebuild")
+    local heightSlider = BindScopeSlider(ctx, W.Slider(layout, "Height", 16, 120, 1, layoutSliderW), "height", 40, "rebuild")
+    local spacingSlider = BindScopeSlider(ctx, W.Slider(layout, "Spacing", 0, 20, 1, layoutSliderW), "spacing", 1, "rebuild")
+    BuildGrowthDirectionTiles(ctx, layout, { x = layoutRightX, y = -38, advanceCursor = false })
+    local unitsSlider = BindScopeSlider(ctx, W.Slider(layout, "Units per column", 1, 40, 1, layoutSliderW), "unitsPerColumn", 5, "rebuild")
+    local maxColumnsSlider = BindScopeSlider(ctx, W.Slider(layout, "Max columns", 1, 8, 1, layoutSliderW), "maxColumns", 8, "rebuild")
+    W.MoveWidget(widthSlider, layout, layoutLeftX, -58, layoutSliderW, "LEFT")
+    W.MoveWidget(heightSlider, layout, layoutLeftX, -112, layoutSliderW, "LEFT")
+    W.MoveWidget(spacingSlider, layout, layoutLeftX, -166, layoutSliderW, "LEFT")
+    W.MoveWidget(unitsSlider, layout, layoutLeftX, -252, layoutSliderW, "LEFT")
+    W.MoveWidget(maxColumnsSlider, layout, layoutLeftX, -306, layoutSliderW, "LEFT")
 
     local sorting = b:CollapsibleSection("sorting", "Sorting", 300, false)
-    local sortMode = W.Dropdown(sorting, "Sort Mode", SORT_MODES, 240)
+    local sortingW = sorting._msuf2Width or b.width or 720
+    local sortingLeftX = 32
+    local sortingRightX = min(max(470, floor(sortingW * 0.54)), max(380, sortingW - 310))
+    local sortMode = W.Dropdown(sorting, "Sort Mode", SORT_MODES, 260)
+    W.MoveWidget(sortMode, sorting, sortingLeftX, -54, 260, "LEFT")
     if sortMode._msuf2Title then
         sortMode._msuf2Title:ClearAllPoints()
         sortMode._msuf2Title:SetPoint("LEFT", sortMode, "RIGHT", 8, 0)
@@ -127,6 +148,7 @@ local function BuildGFLayout(ctx)
             if refreshSortingControls then refreshSortingControls() end
         end)
     local roleSort = W.Toggle(sorting, "Sort by Role")
+    W.MoveWidget(roleSort, sorting, sortingLeftX, -94)
     M.BindToggle(ctx, roleSort,
         function()
             local conf = Conf(CurrentScope())
@@ -141,7 +163,15 @@ local function BuildGFLayout(ctx)
             if refreshSortingControls then refreshSortingControls() end
         end)
     local playerFirst = BindScopeToggle(ctx, W.Toggle(sorting, "Player first in role"), "playerFirstInRole", false, "rebuild")
-    local roleRows = BuildRoleOrderRows(ctx, sorting)
+    W.MoveWidget(playerFirst, sorting, sortingLeftX, -130)
+    local roleRows = BuildRoleOrderRows(ctx, sorting, {
+        x = sortingRightX,
+        y = -54,
+        width = 250,
+        title = "Role Priority",
+        hint = "Drag rows with mouse to reorder.",
+        advanceCursor = false,
+    })
     refreshSortingControls = function()
         local conf = Conf(CurrentScope())
         local currentMode = conf.sortMode or (conf.sortByRole and "ROLE" or "INDEX")
@@ -157,12 +187,17 @@ local function BuildGFLayout(ctx)
     M.AddRefresher(ctx, refreshSortingControls)
 
     local scale = b:CollapsibleSection("scaling", "Frame Scaling", 380, false)
+    local scaleW = scale._msuf2Width or b.width or 720
+    local scaleLeftX = 32
+    local scaleRightX = min(max(470, floor(scaleW * 0.54)), max(380, scaleW - 380))
+    local scaleLeftW = max(280, min(360, scaleRightX - scaleLeftX - 70))
+    local scaleRightW = max(280, min(360, scaleW - scaleRightX - 38))
     local RefreshScalingState
     local scaleMode = W.Dropdown(scale, "Scale Mode", {
         { value = "off", text = "Off (100%)" },
         { value = "auto", text = "Auto (by group size)" },
         { value = "manual", text = "Manual" },
-    }, 220)
+    }, scaleLeftW)
     M.BindDropdown(ctx, scaleMode,
         function() return Val(CurrentScope(), "frameScaleMode", "off") end,
         function(v)
@@ -209,28 +244,29 @@ local function BuildGFLayout(ctx)
         return widget
     end
 
-    PlaceDropdown(scaleMode, 14, -38, 220)
-    local manualScale = BindScaleSlider(W.Slider(scale, "", 50, 150, 5, 220), "frameScaleManual", 100,
+    PlaceDropdown(scaleMode, scaleLeftX, -54, scaleLeftW)
+    local manualScale = BindScaleSlider(W.Slider(scale, "", 50, 150, 5, scaleLeftW), "frameScaleManual", 100,
         function(v) return string.format("Manual Scale: %d%%", v) end)
-    PlaceScaleSlider(manualScale, 14, -78, 220)
+    PlaceScaleSlider(manualScale, scaleLeftX, -100, scaleLeftW)
 
     local autoLabel = T.Font(scale, "GameFontNormalSmall", "Auto Breakpoints", { 1.00, 0.82, 0.18, 1 })
-    autoLabel:SetPoint("TOPLEFT", scale, "TOPLEFT", 14, -130)
+    autoLabel:SetPoint("TOPLEFT", scale, "TOPLEFT", scaleRightX, -54)
+    autoLabel:SetWidth(scaleRightW)
 
-    local scaleAt10 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, 220), "scaleAt10", 100,
+    local scaleAt10 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, scaleRightW), "scaleAt10", 100,
         function(v) return string.format("1-10 players: %d%%", v) end)
-    PlaceScaleSlider(scaleAt10, 14, -158, 220)
-    local scaleAt20 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, 220), "scaleAt20", 85,
+    PlaceScaleSlider(scaleAt10, scaleRightX, -88, scaleRightW)
+    local scaleAt20 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, scaleRightW), "scaleAt20", 85,
         function(v) return string.format("11-20 players: %d%%", v) end)
-    PlaceScaleSlider(scaleAt20, 14, -208, 220)
-    local scaleAt25 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, 220), "scaleAt25", 80,
+    PlaceScaleSlider(scaleAt20, scaleRightX, -142, scaleRightW)
+    local scaleAt25 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, scaleRightW), "scaleAt25", 80,
         function(v) return string.format("21-25 players: %d%%", v) end)
-    PlaceScaleSlider(scaleAt25, 14, -258, 220)
-    local scaleOver25 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, 220), "scaleOver25", 70,
+    PlaceScaleSlider(scaleAt25, scaleRightX, -196, scaleRightW)
+    local scaleOver25 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, scaleRightW), "scaleOver25", 70,
         function(v) return string.format("26+ players: %d%%", v) end)
-    PlaceScaleSlider(scaleOver25, 14, -308, 220)
+    PlaceScaleSlider(scaleOver25, scaleRightX, -250, scaleRightW)
 
-    local scaleHint = W.Text(scale, "Scales frame size, fonts, and icons proportionally.\nBuff/debuff positions stay relative to their anchors.", 18, -348, 330, T.colors.dim)
+    local scaleHint = W.Text(scale, "Scales frame size, fonts, and icons proportionally.\nBuff/debuff positions stay relative to their anchors.", scaleLeftX, -154, scaleLeftW, T.colors.dim)
     if scaleHint.SetWordWrap then scaleHint:SetWordWrap(true) end
 
     RefreshScalingState = function()
@@ -257,18 +293,23 @@ local function BuildGFLayout(ctx)
     RefreshScalingState()
 
     local transparency = b:CollapsibleSection("border", "Transparency", 310, false)
-    local tHint = W.Text(transparency, "Outline border thickness is configured in\nGlobal Style > Bars > Outline & Highlight Border.", 14, -38, 300, { 0.60, 0.75, 1.00, 1 })
+    local transparencyW = transparency._msuf2Width or b.width or 720
+    local transLeftX = 32
+    local transRightX = min(max(470, floor(transparencyW * 0.54)), max(380, transparencyW - 380))
+    local transLeftW = max(280, min(360, transRightX - transLeftX - 70))
+    local transRightW = max(280, min(360, transparencyW - transRightX - 38))
+    local tHint = W.Text(transparency, "Outline border thickness is configured in\nGlobal Style > Bars > Outline & Highlight Border.", transLeftX, -38, transLeftW, { 0.60, 0.75, 1.00, 1 })
     if tHint.SetWordWrap then tHint:SetWordWrap(true) end
 
     local bgColor = W.Color(transparency, "Background Color")
     if bgColor._msuf2Title then
         bgColor._msuf2Title:ClearAllPoints()
-        bgColor._msuf2Title:SetPoint("TOPLEFT", transparency, "TOPLEFT", 14, -92)
+        bgColor._msuf2Title:SetPoint("TOPLEFT", transparency, "TOPLEFT", transLeftX, -100)
         bgColor._msuf2Title:SetWidth(120)
         bgColor._msuf2Title:SetJustifyH("LEFT")
     end
     bgColor:ClearAllPoints()
-    bgColor:SetPoint("TOPLEFT", transparency, "TOPLEFT", 142, -90)
+    bgColor:SetPoint("TOPLEFT", transparency, "TOPLEFT", transLeftX + 138, -98)
     bgColor:SetSize(34, 16)
     M.BindColor(ctx, bgColor,
         function()
@@ -310,25 +351,25 @@ local function BuildGFLayout(ctx)
         return widget
     end
 
-    local bgAlpha = BindTransparencySlider(W.Slider(transparency, "", 0, 1, 0.05, 270), "bgA", 0.85,
+    local bgAlpha = BindTransparencySlider(W.Slider(transparency, "", 0, 1, 0.05, transLeftW), "bgA", 0.85,
         function(v) return string.format("Background Alpha: %.0f%%", (tonumber(v) or 0) * 100) end)
-    PlaceTransparencySlider(bgAlpha, 14, -120, 270)
+    PlaceTransparencySlider(bgAlpha, transLeftX, -130, transLeftW)
 
-    local hpFg = BindTransparencySlider(W.Slider(transparency, "", 0.3, 1, 0.05, 270), "hpBarAlpha", 1,
+    local hpFg = BindTransparencySlider(W.Slider(transparency, "", 0.3, 1, 0.05, transRightW), "hpBarAlpha", 1,
         function(v) return string.format("HP Bar Foreground: %.0f%%", (tonumber(v) or 0) * 100) end)
-    PlaceTransparencySlider(hpFg, 14, -166, 270)
+    PlaceTransparencySlider(hpFg, transRightX, -82, transRightW)
 
-    local preserveHP = W.ToggleAt(transparency, "Preserve HP color", 330, -188, 220)
+    local preserveHP = W.ToggleAt(transparency, "Preserve HP color", transRightX, -128, transRightW)
     M.BindToggle(ctx, preserveHP,
         function() return Bool(CurrentScope(), "alphaPreserveHPColor", false) end,
         function(v) Set(CurrentScope(), "alphaPreserveHPColor", v and true or false, "visual") end)
 
-    local textIgnore = W.ToggleAt(transparency, "Text ignores HP opacity", 14, -208, 250)
+    local textIgnore = W.ToggleAt(transparency, "Text ignores HP opacity", transLeftX, -184, transLeftW)
     M.BindToggle(ctx, textIgnore,
         function() return Bool(CurrentScope(), "hpTextIgnoreAlpha", true) end,
         function(v) Set(CurrentScope(), "hpTextIgnoreAlpha", v and true or false, "visual") end)
 
-    local hpBg = W.Slider(transparency, "", 0, 1, 0.05, 270)
+    local hpBg = W.Slider(transparency, "", 0, 1, 0.05, transRightW)
     M.BindSlider(ctx, hpBg,
         function()
             local conf = Conf(CurrentScope())
@@ -352,7 +393,7 @@ local function BuildGFLayout(ctx)
     end)
     M.AddRefresher(ctx, RefreshHPBgLabel)
     RefreshHPBgLabel()
-    PlaceTransparencySlider(hpBg, 14, -252, 270)
+    PlaceTransparencySlider(hpBg, transRightX, -176, transRightW)
 
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
 
@@ -453,10 +494,30 @@ local function BuildGFLayout(ctx)
     M.AddRefresher(ctx, RefreshCustomAnchorBox)
 
     local tooltip = b:CollapsibleSection("tooltip", "Tooltip", 150, false)
-    BindScopeDropdown(ctx, W.Dropdown(tooltip, "Tooltip Mode", TOOLTIP_MODES, 220), "tooltipMode", "ALWAYS", "visual")
-    BindScopeDropdown(ctx, W.Dropdown(tooltip, "Modifier Key", TOOLTIP_MODIFIERS, 180), "tooltipModifier", "ALT", "visual")
+    local tooltipW = tooltip._msuf2Width or b.width or 720
+    local tooltipLeftX = 32
+    local tooltipRightX = min(max(470, floor(tooltipW * 0.54)), max(380, tooltipW - 340))
+    local tooltipLeftW = max(240, min(300, tooltipRightX - tooltipLeftX - 70))
+    local tooltipRightW = max(200, min(260, tooltipW - tooltipRightX - 38))
+    local refreshTooltipState
+    local tooltipMode = W.Dropdown(tooltip, "Tooltip Mode", TOOLTIP_MODES, tooltipLeftW)
+    W.MoveWidget(tooltipMode, tooltip, tooltipLeftX, -54, tooltipLeftW, "LEFT")
+    M.BindDropdown(ctx, tooltipMode,
+        function() return Val(CurrentScope(), "tooltipMode", "ALWAYS") end,
+        function(v)
+            Set(CurrentScope(), "tooltipMode", v or "ALWAYS", "visual")
+            if refreshTooltipState then refreshTooltipState() end
+        end)
+
+    local tooltipModifier = BindScopeDropdown(ctx, W.Dropdown(tooltip, "Modifier Key", TOOLTIP_MODIFIERS, tooltipRightW), "tooltipModifier", "ALT", "visual")
+    W.MoveWidget(tooltipModifier, tooltip, tooltipRightX, -54, tooltipRightW, "LEFT")
+    refreshTooltipState = function()
+        SetOptionEnabled(tooltipModifier, Val(CurrentScope(), "tooltipMode", "ALWAYS") == "MODIFIER")
+    end
+    M.AddRefresher(ctx, refreshTooltipState)
+    refreshTooltipState()
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 5 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 12 })

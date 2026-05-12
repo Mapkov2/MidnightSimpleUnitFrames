@@ -134,6 +134,7 @@ function W.PageBuilder(ctx)
             header = header,
             body = body,
             arrow = arrow,
+            label = label,
             hint = hint,
             open = open,
             headerHeight = headerH,
@@ -177,6 +178,22 @@ function W.PageBuilder(ctx)
     end
 
     return b
+end
+
+function W.SetCollapsibleToggleText(section, openText, closedText)
+    local entry = section and section._msuf2CollapsibleEntry
+    if not (entry and entry.label and entry.label.SetText) then return nil end
+
+    local function Refresh()
+        entry.label:SetText(entry.open and (openText or "") or (closedText or openText or ""))
+    end
+
+    if entry.header and entry.header.HookScript and not entry._msuf2DynamicTitleHooked then
+        entry._msuf2DynamicTitleHooked = true
+        entry.header:HookScript("OnClick", Refresh)
+    end
+    Refresh()
+    return Refresh
 end
 
 local function NextRow(section, height)
