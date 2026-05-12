@@ -38,6 +38,89 @@ local STRATA_FIX = {
     FULLSCREEN_DIALOG = "TOOLTIP",
 }
 
+
+local DISPEL_OVERLAY_ORIENTATION = _G.EnumUtil and _G.EnumUtil.MakeEnum("VerticalTopToBottom", "VerticalBottomToTop", "HorizontalLeftToRight")
+
+local function SetOverlayAtlas(texture, atlas)
+    if not (texture and texture.SetAtlas and atlas) then return end
+    if not texture.GetAtlas or texture:GetAtlas() ~= atlas then
+        texture:SetAtlas(atlas, false)
+    end
+end
+
+local function ResolveDispelOverlayOrientation(value)
+    if DISPEL_OVERLAY_ORIENTATION then
+        if value == DISPEL_OVERLAY_ORIENTATION.VerticalBottomToTop then return "VerticalBottomToTop" end
+        if value == DISPEL_OVERLAY_ORIENTATION.HorizontalLeftToRight then return "HorizontalLeftToRight" end
+    end
+    if type(value) == "string" then
+        local token = value:gsub("[%s_]", ""):lower()
+        if token == "verticalbottomtotop" then return "VerticalBottomToTop" end
+        if token == "horizontallefttoright" then return "HorizontalLeftToRight" end
+    end
+    return "VerticalTopToBottom"
+end
+
+-- Blizzard_PrivateAurasUI may ask every registered private-aura parent for a
+-- DispelOverlay when C_UnitAuras.TriggerPrivateAuraShowDispelType is enabled.
+-- Custom slot parents created by addons do not get that member automatically,
+-- so provide the same lightweight shape Blizzard compact frames expose.
+function Native.EnsurePrivateAuraDispelOverlay(parent)
+    if not parent then return nil end
+    local overlay = parent.DispelOverlay
+    if overlay then return overlay end
+
+    overlay = _G.CreateFrame("Frame", nil, parent)
+    overlay:EnableMouse(false)
+    overlay:SetAllPoints(parent)
+
+    local background = overlay:CreateTexture(nil, "ARTWORK", nil, -6)
+    background:SetAllPoints(overlay)
+    SetOverlayAtlas(background, "RaidFrame-Dispel-Fill")
+    overlay.Background = background
+
+    local gradient = overlay:CreateTexture(nil, "ARTWORK", nil, -5)
+    gradient:SetAllPoints(overlay)
+    overlay.Gradient = gradient
+
+    local border = overlay:CreateTexture(nil, "ARTWORK", nil, -5)
+    border:SetAllPoints(overlay)
+    SetOverlayAtlas(border, "RaidFrame-DispelHighlight")
+    overlay.Border = border
+
+    function overlay:SetOrientation(orientationOrOwner, orientation, xOffset, yOffset)
+        local resolvedOrientation = orientationOrOwner
+        local resolvedX = orientation
+        local resolvedY = xOffset
+        if type(orientationOrOwner) == "table" and orientation ~= nil then
+            resolvedOrientation = orientation
+            resolvedX = xOffset
+            resolvedY = yOffset
+        end
+        local token = ResolveDispelOverlayOrientation(resolvedOrientation)
+        if token == "HorizontalLeftToRight" then
+            SetOverlayAtlas(self.Gradient, "!RaidFrame-Dispel-Vertical")
+            self.Gradient:SetTexCoord(0, 1, 0, 1)
+        else
+            SetOverlayAtlas(self.Gradient, "_RaidFrame-Dispel-Highlight-Horizontal")
+            if token == "VerticalBottomToTop" then
+                self.Gradient:SetTexCoord(0, 1, 1, 0)
+            else
+                self.Gradient:SetTexCoord(0, 1, 0, 1)
+            end
+        end
+        self.Border:ClearAllPoints()
+        self.Border:SetPoint("TOPLEFT")
+        self.Border:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", resolvedX or 0, resolvedY or 0)
+    end
+
+    overlay:SetOrientation(DISPEL_OVERLAY_ORIENTATION and DISPEL_OVERLAY_ORIENTATION.VerticalTopToBottom or "VerticalTopToBottom", 0, 0)
+    overlay:Hide()
+    parent.DispelOverlay = overlay
+    parent.DispelOverlayAuraOffset = parent.DispelOverlayAuraOffset or 0
+    return overlay
+end
+
 local function Clamp(v, def, lo, hi)
     v = tonumber(v)
     if v == nil then v = def end

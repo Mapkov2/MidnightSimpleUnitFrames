@@ -147,7 +147,6 @@ GroupFrames\MSUF_GF_HealerBuffs_Editor.lua
 GroupFrames\MSUF_GF_EM2.lua
 GroupFrames\MSUF_GF_AuraPreview.lua
 GroupFrames\MSUF_GF_Masque.lua
-GroupFrames\MSUF_BossFrameBridge.lua
 
 # ═══════════════════════════════════════════════════════════════
 # OPTIONS
@@ -169,6 +168,16 @@ Options\MSUF_Options_Portraits.lua
 Options\MSUF_Options_Gameplay.lua
 Options\MSUF_Options_GF.lua
 Options\MSUF_Options_GF_Auras.lua
+
+# MENU2
+Menu2\MSUF_Menu2_Theme.lua
+Menu2\MSUF_Menu2_Widgets.lua
+Menu2\MSUF_Menu2_Bindings.lua
+Menu2\MSUF_Menu2_Core.lua
+Menu2\Pages\MSUF_Menu2_Unit.lua
+Menu2\Pages\MSUF_Menu2_Global.lua
+Menu2\Pages\MSUF_Menu2_Group.lua
+Menu2\Pages\MSUF_Menu2_Advanced.lua
 
 # ═══════════════════════════════════════════════════════════════
 # MODULES

@@ -892,6 +892,8 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
         entry._privateArgs = args
     end
 
+    local Native = ns and ns.MSUF_AuraNative
+    local ensureDispelOverlay = Native and Native.EnsurePrivateAuraDispelOverlay
     for i = 1, maxN do
         local slot = slots[i]
         if not slot then
@@ -905,6 +907,9 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
                 end)
             end
             slots[i] = slot
+        end
+        if ensureDispelOverlay then
+            ensureDispelOverlay(slot)
         end
         slot:ClearAllPoints()
         local off = (i - 1) * step
@@ -923,9 +928,11 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
         args.iconInfo.borderScale = borderScale
         args.iconInfo.iconAnchor.relativeTo = slot
 
-        local ok, anchorID = true, C_UnitAuras.AddPrivateAuraAnchor(args)
+        local ok, anchorID = pcall(C_UnitAuras.AddPrivateAuraAnchor, args)
         if ok and anchorID then
             entry._privateAnchorIDs[#entry._privateAnchorIDs + 1] = anchorID
+        elseif not ok then
+            entry._privateLastError = anchorID
         end
     end
 
