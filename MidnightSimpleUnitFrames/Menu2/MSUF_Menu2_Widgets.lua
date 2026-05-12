@@ -954,15 +954,30 @@ local function ApplyDropdownItemFont(fs, item)
         RestoreDropdownDefaultFont(fs)
         return
     end
+    local d = fs._msuf2DropdownDefaultFont
+    local size = (d and d[2]) or 14
+    local fontKey = item.fontKey or item.fontPreviewKey
+    local fontPath = item.fontPath or item.font
+    if (type(fontPath) ~= "string" or fontPath == "") and type(fontKey) == "string" and fontKey ~= "" then
+        local getPath = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+        if type(getPath) == "function" then
+            fontPath = getPath(fontKey)
+            if type(fontPath) == "string" and fontPath ~= "" then
+                item.fontPath = fontPath
+            end
+        end
+    end
+    local safeSetFont = _G.MSUF_SetFontSafe or (ns and ns.Util and ns.Util.SetFontSafe)
+    if type(safeSetFont) == "function" and type(fontPath) == "string" and fontPath ~= "" then
+        local ok = safeSetFont(fs, fontPath, size, "", fontKey)
+        if ok then return end
+    end
     local fontObject = item.fontObject or item.fontPreviewObject
     if fontObject and fs.SetFontObject then
         local ok = pcall(fs.SetFontObject, fs, fontObject)
         if ok then return end
     end
-    local fontPath = item.fontPath or item.font
     if type(fontPath) == "string" and fontPath ~= "" and fs.SetFont then
-        local d = fs._msuf2DropdownDefaultFont
-        local size = (d and d[2]) or 14
         local ok = pcall(fs.SetFont, fs, fontPath, size, "")
         if ok then return end
     end

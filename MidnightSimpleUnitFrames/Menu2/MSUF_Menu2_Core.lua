@@ -1110,10 +1110,17 @@ end
 _G.MSUF2_Open = function(pageKey) M.Open(pageKey) end
 _G.MSUF2_Toggle = function(pageKey) M.Toggle(pageKey) end
 
-SLASH_MSUF2OPTIONS1 = "/msuf2"
+SLASH_MSUF2OPTIONS1 = "/msuf"
 SlashCmdList["MSUF2OPTIONS"] = function(msg)
     msg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     msg = msg:lower()
+    local cmd = msg:match("^(%S+)") or ""
+    if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" or cmd == "versiontest" then
+        if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
+            pcall(_G.SlashCmdList["MIDNIGHTSUF"], msg)
+        end
+        return
+    end
     if msg == "locale" or msg == "locales" or msg == "loc" then
         local total, missing = 0, 0
         if type(M.GetLocaleCoverage) == "function" then

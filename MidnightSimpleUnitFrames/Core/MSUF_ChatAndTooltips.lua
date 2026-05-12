@@ -141,7 +141,7 @@ if type(MSUF_EventBus_Register) == "function" then
         MSUF_EventBus_Register(e, "MSUF_CHATCMD", MSUF_ChatCommand_OnChatMsg)
     end
 end
-SLASH_MIDNIGHTSUF1 = "/msuf"
+SLASH_MIDNIGHTSUF1 = "/msufold"
 SlashCmdList["MIDNIGHTSUF"] = function(msg)
     msg = msg and msg:lower() or ""
     msg = msg:gsub("^%s+", "")
