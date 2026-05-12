@@ -916,8 +916,11 @@ function ns.Text.ApplyBossTestName(frame, unit)
  end
 function ns.Text.ApplyBossTestLevel(frame, conf)
     if not frame or not frame.levelText then  return end
-    local show = (frame.showName ~= false)
-    ns.Text.Set(frame.levelText, "??", show)
+    local show = true
+    if conf and conf.showLevelIndicator == false then
+        show = false
+    end
+    ns.Text.Set(frame.levelText, show and "??" or "", show)
     if MSUF_ClampNameWidth then
         MSUF_ClampNameWidth(frame, conf)
     end

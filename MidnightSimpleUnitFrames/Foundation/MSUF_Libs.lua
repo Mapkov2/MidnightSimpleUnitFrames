@@ -54,6 +54,109 @@ do
         return wantGroup ~= nil and wantGroup == FONT_EQUIV[got]
     end
 
+    local function FontPathEquals(requested, actual)
+        local want = FontPathKey(NormalizeFontPath(requested))
+        local got = FontPathKey(NormalizeFontPath(actual))
+        return want ~= nil and want == got
+    end
+
+    local INTERNAL_FONT_PATH_KEYS = {
+        ["fonts\\frizqt__.ttf"] = "FRIZQT",
+        ["fonts\\frizqt___cyr.ttf"] = "FRIZQT",
+        ["fonts\\arialn.ttf"] = "ARIALN",
+        ["fonts\\morpheus.ttf"] = "MORPHEUS",
+        ["fonts\\morpheus_cyr.ttf"] = "MORPHEUS",
+        ["fonts\\skurri.ttf"] = "SKURRI",
+        ["fonts\\skurri_cyr.ttf"] = "SKURRI",
+    }
+
+    local INTERNAL_FONT_CANDIDATES = {
+        FRIZQT = {
+            globals = { "STANDARD_TEXT_FONT" },
+            objects = { "GameFontNormal", "GameFontHighlight", "GameFontHighlightSmall", "SystemFont_Shadow_Med1" },
+            paths = { "Fonts\\FRIZQT__.TTF", "Fonts\\FRIZQT___CYR.TTF" },
+        },
+        ARIALN = {
+            globals = { "UNIT_NAME_FONT", "NAMEPLATE_FONT" },
+            objects = { "SystemFont_NamePlate", "SystemFont_NamePlateCastBar", "NumberFontNormalSmall" },
+            paths = { "Fonts\\ARIALN.TTF" },
+        },
+        MORPHEUS = {
+            globals = { "QUEST_TEXT_FONT" },
+            objects = { "QuestFont", "QuestFont_Large", "QuestFont_Enormous" },
+            paths = { "Fonts\\MORPHEUS_CYR.TTF", "Fonts\\MORPHEUS.TTF" },
+        },
+        SKURRI = {
+            globals = { "DAMAGE_TEXT_FONT" },
+            objects = { "CombatTextFont", "NumberFontNormal", "NumberFontNormalLarge", "SystemFont_Shadow_Huge1" },
+            paths = { "Fonts\\SKURRI_CYR.TTF", "Fonts\\SKURRI.TTF" },
+        },
+    }
+
+    local function NormalizeInternalFontKey(key, path)
+        if type(_G.MSUF_NormalizeFontKey) == "function" and type(key) == "string" and key ~= "" then
+            key = _G.MSUF_NormalizeFontKey(key)
+        end
+        if type(key) == "string" then
+            key = key:upper()
+            if INTERNAL_FONT_CANDIDATES[key] then return key end
+        end
+        return INTERNAL_FONT_PATH_KEYS[FontPathKey(path)] or nil
+    end
+
+    local function InternalPathMatchesKey(key, path)
+        local info = key and INTERNAL_FONT_CANDIDATES[key]
+        if not (info and info.paths) then return false end
+        for i = 1, #info.paths do
+            if FontPathMatches(info.paths[i], path) then return true end
+        end
+        return false
+    end
+
+    local function AddUniquePath(list, seen, path)
+        path = NormalizeFontPath(path)
+        if type(path) ~= "string" or path == "" then return end
+        local pathKey = FontPathKey(path)
+        if seen[pathKey] then return end
+        seen[pathKey] = true
+        list[#list + 1] = path
+    end
+
+    local function AddFontObjectPath(list, seen, objectName)
+        local obj = type(objectName) == "string" and _G[objectName] or objectName
+        if not (obj and type(obj.GetFont) == "function") then return end
+        local ok, path = pcall(obj.GetFont, obj)
+        if ok then AddUniquePath(list, seen, path) end
+    end
+
+    local function BuildInternalFontPathCandidates(key, path)
+        key = NormalizeInternalFontKey(key, path)
+        if not key then return nil end
+        local info = INTERNAL_FONT_CANDIDATES[key]
+        if not info then return nil end
+
+        local list, seen = {}, {}
+        if InternalPathMatchesKey(key, path) then
+            AddUniquePath(list, seen, path)
+        end
+        if info.globals then
+            for i = 1, #info.globals do
+                AddUniquePath(list, seen, _G[info.globals[i]])
+            end
+        end
+        if info.objects then
+            for i = 1, #info.objects do
+                AddFontObjectPath(list, seen, info.objects[i])
+            end
+        end
+        if info.paths then
+            for i = 1, #info.paths do
+                AddUniquePath(list, seen, info.paths[i])
+            end
+        end
+        return list, key
+    end
+
     local function GetProbeFS()
         if _probeFS then return _probeFS end
         if type(CreateFrame) ~= "function" then return nil end
@@ -68,7 +171,45 @@ do
 
     local function TrySetFont(fs, path, size, flags)
         if not (fs and type(fs.SetFont) == "function" and path and size) then return false end
-        return pcall(fs.SetFont, fs, path, size, flags)
+        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+        if not ok or applied == false then return false end
+        if type(fs.GetFont) == "function" then
+            local okGet, actual = pcall(fs.GetFont, fs)
+            if okGet and actual then
+                return FontPathMatches(path, actual)
+            end
+        end
+        return true
+    end
+
+    local function TryFontObjectFallback(fs, key, size, flags)
+        local info = key and INTERNAL_FONT_CANDIDATES[key]
+        if not (info and info.objects and fs and type(fs.SetFontObject) == "function") then return false end
+
+        for i = 1, #info.objects do
+            local objectName = info.objects[i]
+            local obj = _G[objectName]
+            if obj then
+                local okObject = pcall(fs.SetFontObject, fs, obj)
+                if okObject then
+                    local actual
+                    if type(fs.GetFont) == "function" then
+                        local okGet, fontPath = pcall(fs.GetFont, fs)
+                        if okGet then actual = fontPath end
+                    end
+                    if actual and FontPathMatches(info.paths and info.paths[1], actual) then
+                        if TrySetFont(fs, actual, size, flags) or (flags ~= "" and TrySetFont(fs, actual, size, "")) then
+                            return true, actual, "fontObject:" .. tostring(objectName)
+                        end
+                        if type(fs.SetTextHeight) == "function" then
+                            pcall(fs.SetTextHeight, fs, size)
+                        end
+                        return true, actual, "fontObject:" .. tostring(objectName)
+                    end
+                end
+            end
+        end
+        return false
     end
 
     function _G.MSUF_NormalizeFontFlags(flags)
@@ -81,6 +222,15 @@ do
 
     function _G.MSUF_FontPathMatches(requested, actual)
         return FontPathMatches(requested, actual)
+    end
+
+    function _G.MSUF_FontPathEquals(requested, actual)
+        return FontPathEquals(requested, actual)
+    end
+
+    function _G.MSUF_GetInternalFontPathCandidates(key, path)
+        local candidates = BuildInternalFontPathCandidates(key, path)
+        return candidates
     end
 
     function _G.MSUF_ClearResolvedFontPathCache()
@@ -109,7 +259,11 @@ do
         end
         local function AddGameFontAlternates(p)
             local key = FontPathKey(p)
-            if key == "fonts\\morpheus.ttf" then
+            if key == "fonts\\frizqt__.ttf" then
+                Add("Fonts\\FRIZQT___CYR.TTF")
+            elseif key == "fonts\\frizqt___cyr.ttf" then
+                Add("Fonts\\FRIZQT__.TTF")
+            elseif key == "fonts\\morpheus.ttf" then
                 Add("Fonts\\MORPHEUS_CYR.TTF")
             elseif key == "fonts\\morpheus_cyr.ttf" then
                 Add("Fonts\\MORPHEUS.TTF")
@@ -121,10 +275,18 @@ do
         end
 
         Add(normalized)
+        local internalCandidates, requestedInternalKey = BuildInternalFontPathCandidates(nil, normalized)
+        if internalCandidates then
+            for i = 1, #internalCandidates do
+                Add(internalCandidates[i])
+            end
+        end
         AddGameFontAlternates(normalized)
-        Add(FALLBACK_FONT)
-        Add("Fonts\\ARIALN.TTF")
-        Add(STANDARD_TEXT_FONT)
+        if not requestedInternalKey then
+            Add(FALLBACK_FONT)
+            Add("Fonts\\ARIALN.TTF")
+            Add(STANDARD_TEXT_FONT)
+        end
 
         local probe = GetProbeFS()
         if probe then
@@ -137,13 +299,85 @@ do
             end
         end
 
+        if requestedInternalKey and normalized then
+            _fontPathCache[cacheKey] = normalized
+            return normalized
+        end
+
         local fallback = NormalizeFontPath(FALLBACK_FONT)
         _fontPathCache[cacheKey] = fallback
         return fallback
     end
 
+    function _G.MSUF_SetFontSafe(fs, path, size, flags, fontKey)
+        size = tonumber(size) or 12
+        if size <= 0 then size = 12 end
+        flags = NormalizeFontFlags(flags)
+        path = NormalizeFontPath(path) or NormalizeFontPath(FALLBACK_FONT)
+
+        local candidates, internalKey = BuildInternalFontPathCandidates(fontKey, path)
+        if not candidates then
+            candidates = { path }
+        end
+
+        local resolved = _G.MSUF_ResolveFontPath(path, size, flags)
+        if resolved and ((not internalKey) or InternalPathMatchesKey(internalKey, resolved)) then
+            local seen = {}
+            for i = 1, #candidates do
+                seen[FontPathKey(candidates[i])] = true
+            end
+            AddUniquePath(candidates, seen, resolved)
+        end
+
+        for i = 1, #candidates do
+            local p = candidates[i]
+            if TrySetFont(fs, p, size, flags) or (flags ~= "" and TrySetFont(fs, p, size, "")) then
+                return true, p, "path"
+            end
+        end
+
+        local okObject, objectPath, objectSource = TryFontObjectFallback(fs, internalKey, size, flags)
+        if okObject then return true, objectPath, objectSource end
+
+        local fallback = _G.MSUF_ResolveFontPath(FALLBACK_FONT, size, flags) or FALLBACK_FONT
+        if TrySetFont(fs, fallback, size, flags) or (flags ~= "" and TrySetFont(fs, fallback, size, "")) then
+            return true, fallback, "fallback"
+        end
+
+        return false, path, "failed"
+    end
+
+    function _G.MSUF_DebugFontProbe(key)
+        local fontKey = NormalizeInternalFontKey(key, key) or key
+        local path
+        if type(_G.MSUF_GetFontPathForKey) == "function" then
+            path = _G.MSUF_GetFontPathForKey(key)
+        elseif INTERNAL_FONT_CANDIDATES[fontKey] and INTERNAL_FONT_CANDIDATES[fontKey].paths then
+            path = INTERNAL_FONT_CANDIDATES[fontKey].paths[1]
+        else
+            path = key
+        end
+        local probe = GetProbeFS()
+        local ok, appliedPath, source = _G.MSUF_SetFontSafe(probe, path, 14, "", fontKey)
+        local actual
+        if probe and type(probe.GetFont) == "function" then
+            local okGet, got = pcall(probe.GetFont, probe)
+            if okGet then actual = got end
+        end
+        return {
+            key = fontKey,
+            requested = path,
+            ok = ok,
+            applied = appliedPath,
+            actual = actual,
+            source = source,
+            matches = FontPathMatches(appliedPath, actual),
+        }
+    end
+
     ns.Util = ns.Util or {}
     ns.Util.ResolveFontPath = _G.MSUF_ResolveFontPath
+    ns.Util.SetFontSafe = _G.MSUF_SetFontSafe
 end
 
 -- Shared Lib initialization (loaded BEFORE Options and Main)

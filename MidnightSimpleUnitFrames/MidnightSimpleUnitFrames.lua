@@ -394,6 +394,11 @@ function ns.UF.HideLeaderAndRaidMarker(self)
 function ns.UF.HandleDisabledFrame(self, conf)
     if not ns.UF.IsDisabled(conf) then  return false end
 
+    if self and self.isBoss and _G.MSUF2_BossUnitframePreviewActive == true
+        and MSUF_BossTestMode and not _msuf_inCombat then
+        return false
+    end
+
     -- In MSUF Edit Mode, keep a persistent preview for frames that are disabled,
     -- so they can still be positioned/edited. Boss frames remain hard-hidden when disabled.
     if MSUF_UnitEditModeActive and (not _msuf_inCombat) and self and not self.isBoss then
@@ -429,6 +434,7 @@ function ns.UF.ForceVisibilityHidden(frame)
         rsd(frame, "visibility", "hide")
     end
     frame._msufVisibilityForced = "disabled"
+    frame._msufVisibilityAppliedDriver = "hide"
  end
 -- P0: Centralized UFCore settings cache resolver (eliminates 4x copy/paste lazy-resolve blocks).
 -- Returns the getter function (or nil). File-scope upvalue after first successful resolve.
@@ -1082,6 +1088,9 @@ if not _G.MSUF_ApplyLevelIndicatorLayout then
             conf = MSUF_DB.tot
     end
         MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
+        if f.isBoss and MSUF_BossTestMode and ns.Text and ns.Text.ApplyBossTestLevel then
+            ns.Text.ApplyBossTestLevel(f, conf)
+        end
      end
 end
 local MSUF_ECV_ANCHORS = {
@@ -1218,6 +1227,12 @@ local MSUF_INTERNAL_LSM_FONT_KEYS = {
     ["Arial (default)"]         = "ARIALN",
     ["Morpheus (default)"]      = "MORPHEUS",
     ["Skurri (default)"]        = "SKURRI",
+    ["Expressway Regular (MSUF)"] = "EXPRESSWAY",
+    ["Expressway (MSUF)"]         = "EXPRESSWAY",
+    ["Expressway Bold (MSUF)"]    = "EXPRESSWAY_BOLD",
+    ["Expressway SemiBold (MSUF)"] = "EXPRESSWAY_SEMIBOLD",
+    ["Expressway ExtraBold (MSUF)"] = "EXPRESSWAY_EXTRABOLD",
+    ["Expressway Condensed Light (MSUF)"] = "EXPRESSWAY_CONDENSED_LIGHT",
 }
 
 local function MSUF_NormalizeFontKey(key)
@@ -1406,8 +1421,20 @@ local function MSUF_GetRawLSMFontPath(lsm, key)
     return nil
 end
 
+local function MSUF_FontKeyIsInternal(key)
+    if type(key) ~= "string" or key == "" then return false end
+    local normalized = MSUF_NormalizeFontKey(key)
+    for _, info in ipairs(FONT_LIST) do
+        if info.key == key or info.key == normalized or info.name == key then
+            return true
+        end
+    end
+    return false
+end
+
 local function MSUF_FetchFontPathFromLSM(key)
     if type(key) ~= "string" or key == "" then return nil end
+    if MSUF_FontKeyIsInternal(key) then return nil end
     local lsm = LSM or (ns and ns.LSM) or _G.MSUF_LSM
     if not lsm then return nil end
 
@@ -1441,13 +1468,26 @@ local function MSUF_GetFontPreviewObject(key)
         obj = CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
         MSUF_FontPreviewObjects[key] = obj
     end
-    local path = MSUF_FetchFontPathFromLSM(key)
-    if not path then
-        path = GetInternalFontPathByKey(key) or FONT_LIST[1].path
-    end
+    local path = GetInternalFontPathByKey(key) or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
     path = (_G.MSUF_ResolveFontPath or function(p) return p end)(path, 14, "")
     if path then
-        pcall(obj.SetFont, obj, path, 14, "")
+        local safeSet = _G.MSUF_SetFontSafe
+        local ok
+        if type(safeSet) == "function" then
+            ok = safeSet(obj, path, 14, "", key)
+        else
+            local applied
+            ok, applied = pcall(obj.SetFont, obj, path, 14, "")
+            ok = ok and applied ~= false
+        end
+        if (not ok) and FONT_LIST[1] and FONT_LIST[1].path then
+            local fallback = (_G.MSUF_ResolveFontPath or function(p) return p end)(FONT_LIST[1].path, 14, "")
+            if type(safeSet) == "function" then
+                safeSet(obj, fallback, 14, "", "FRIZQT")
+            else
+                pcall(obj.SetFont, obj, fallback, 14, "")
+            end
+        end
     end
      return obj
 end
@@ -1488,16 +1528,21 @@ function GetInternalFontPathByKey(key)
     end
      return nil
 end
+local function MSUF_IsInternalFontKey(key)
+    return MSUF_FontKeyIsInternal(key)
+end
 local function MSUF_GetFontPathForKey(key)
     local resolve = _G.MSUF_ResolveFontPath or function(path) return path end
-    local lsmPath = MSUF_FetchFontPathFromLSM(key)
-    if lsmPath then return resolve(lsmPath, 14, "") end
     local internalPath = GetInternalFontPathByKey(key)
     if internalPath then return resolve(internalPath, 14, "") end
+    local lsmPath = MSUF_FetchFontPathFromLSM(key)
+    if lsmPath then return resolve(lsmPath, 14, "") end
     return resolve(FONT_LIST[1].path, 14, "")
 end
 _G.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
 ns.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
+_G.MSUF_IsInternalFontKey = MSUF_IsInternalFontKey
+ns.MSUF_IsInternalFontKey = MSUF_IsInternalFontKey
 _G.MSUF_FetchFontPathFromLSM = MSUF_FetchFontPathFromLSM
 ns.MSUF_FetchFontPathFromLSM = MSUF_FetchFontPathFromLSM
 _G.MSUF_GetRawLSMFontPath = MSUF_GetRawLSMFontPath
@@ -1578,7 +1623,12 @@ local conf = (type(MSUF_DB) == "table" and confKey and MSUF_DB[confKey]) or nil
 if ns.UF.IsDisabled(conf) then
     -- In MSUF Edit Mode, keep disabled frames editable by allowing forceShow previews.
     -- Boss frames remain hard-hidden when disabled (see Boss preview invariants).
-    if not (forceShow and MSUF_UnitEditModeActive and (not _msuf_inCombat) and frame and not frame.isBoss) then
+    local allowBossPagePreview = frame and frame.isBoss
+        and _G.MSUF2_BossUnitframePreviewActive == true
+        and MSUF_BossTestMode
+        and not _msuf_inCombat
+    if not ((forceShow and MSUF_UnitEditModeActive and (not _msuf_inCombat) and frame and not frame.isBoss)
+        or allowBossPagePreview) then
         ns.UF.ForceVisibilityHidden(frame)
         return
     end
@@ -1598,16 +1648,18 @@ end
     if not forceShow and not frame.isBoss and not frame._msufIsPlayer and _G.MSUF_PreviewTestMode then
         forceShow = true
     end
-    if frame._msufVisibilityForced == (forceShow and true or false) then
-         return
+    local forced = (forceShow and true or false)
+    local driverToApply = forced and "show" or drv
+    if forced and frame.isBoss and MSUF_BossTestMode then
+        driverToApply = "[combat] hide; show"
     end
-    frame._msufVisibilityForced = (forceShow and true or false)
+    if frame._msufVisibilityForced == forced and frame._msufVisibilityAppliedDriver == driverToApply then
+          return
+    end
+    frame._msufVisibilityForced = forced
+    frame._msufVisibilityAppliedDriver = driverToApply
     usd(frame, "visibility")
-    if forceShow then
-        rsd(frame, "visibility", "show")
-    else
-        rsd(frame, "visibility", drv)
-    end
+    rsd(frame, "visibility", driverToApply)
  end
 local _iterState = {}
 
@@ -4398,7 +4450,21 @@ end
         self._msufNameClipTextStamp = nil
         if self.nameText then self.nameText._msufLastSetT = nil end
         ns.Text.ApplyBossTestName(self, unit)
+        if type(MSUF_ApplyLevelIndicatorLayout) == "function" then
+            MSUF_ApplyLevelIndicatorLayout(self)
+        end
         ns.Text.ApplyBossTestLevel(self, conf)
+        if self.portrait and conf then
+            if _G.MSUF_UpdateBossPortraitLayout then
+                _G.MSUF_UpdateBossPortraitLayout(self, conf)
+            end
+            self._msufPortraitDirty = true
+            self._msufPortraitNextAt = 0
+            local fnP = _UF.Portrait or _G.MSUF_MaybeUpdatePortrait
+            if type(fnP) == "function" then
+                fnP(self, unit, conf, false)
+            end
+        end
         if self.hpText then
     local show = (self.showHPText ~= false)
     if show then
@@ -4838,6 +4904,68 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     if type(_G.MSUF_ApplyEliteIconLayout) == "function" then _G.MSUF_ApplyEliteIconLayout(f) end
     if type(MSUF_UpdateStatusIndicatorForFrame) == "function" then MSUF_UpdateStatusIndicatorForFrame(f) end
     ns.UF.RequestUpdate(f, false, true, "ApplyUnitKey")
+end
+
+function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
+    if not MSUF_DB then EnsureDB() end
+    if _msuf_inCombat then
+        MSUF_BossTestMode = false
+        return
+    end
+    active = active and true or false
+    MSUF_BossTestMode = active
+
+    local conf = (MSUF_DB and MSUF_DB.boss) or {}
+    local anyFrame = false
+    for i = 1, MSUF_MAX_BOSS_FRAMES do
+        local unit = "boss" .. i
+        local f = UnitFrames[unit] or _G["MSUF_" .. unit]
+        if f then
+            anyFrame = true
+            f.cachedConfig = conf
+            if active then
+                if f._msufVisibilityForced == "disabled" then
+                    f._msufVisibilityForced = nil
+                    f._msufVisibilityAppliedDriver = nil
+                end
+                if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
+                    MSUF_ApplyUnitVisibilityDriver(f, true)
+                end
+                _MSUF_ApplyToUnitFrame(unit, conf)
+                if type(UpdateSimpleUnitFrame) == "function" then
+                    UpdateSimpleUnitFrame(f)
+                end
+                if f.Show then f:Show() end
+                if f.SetAlpha then f:SetAlpha(1) end
+                if f.EnableMouse then f:EnableMouse(true) end
+            else
+                if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
+                    MSUF_ApplyUnitVisibilityDriver(f, false)
+                end
+                if type(UpdateSimpleUnitFrame) == "function" and F.UnitExists and F.UnitExists(unit) then
+                    UpdateSimpleUnitFrame(f)
+                elseif f.Hide then
+                    f:Hide()
+                end
+            end
+        end
+    end
+    if active and not anyFrame and C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if _G.MSUF2_BossUnitframePreviewActive == true and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
+                _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_RETRY")
+            end
+        end)
+    end
+
+    if active then
+        if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+            _G.MSUF_ApplyBossCastbarPositionSetting()
+        end
+        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            _G.MSUF_UpdateBossCastbarPreview()
+        end
+    end
 end
 
 local function MSUF_ApplyUnitFrameKey_Immediate(key)

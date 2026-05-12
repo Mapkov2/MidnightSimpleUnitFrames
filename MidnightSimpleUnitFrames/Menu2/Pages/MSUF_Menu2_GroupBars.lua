@@ -97,18 +97,67 @@ local function BuildGFBars(ctx)
             conf.gfBarMode = (v == "GLOBAL") and nil or v
             if v == "CLASS" or v == "GRADIENT" then conf.healthColorMode = v end
             QueueGF(CurrentScope(), "visual")
+            if M.Refresh then M.Refresh(ctx) end
         end)
     local color = W.Color(hcolor, "Health bar")
+    local colorHint = W.Text(hcolor, "", 12, -116, hcolor._msuf2Width or 640, T.colors.muted)
+    if colorHint.SetWordWrap then colorHint:SetWordWrap(true) end
+    local function CurrentGlobalBarColor()
+        local getCache = _G.MSUF_UFCore_GetSettingsCache
+        local cache = (type(getCache) == "function") and getCache() or nil
+        local modeKey = cache and cache.barMode
+        if modeKey == "unified" then
+            return cache.unifiedBarR or 0.10, cache.unifiedBarG or 0.60, cache.unifiedBarB or 0.90
+        elseif modeKey == "dark" then
+            return cache.darkBarR or 0, cache.darkBarG or 0, cache.darkBarB or 0
+        end
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        return (g and g.unifiedBarR) or 0.10, (g and g.unifiedBarG) or 0.60, (g and g.unifiedBarB) or 0.90
+    end
     M.BindColor(ctx, color,
         function()
             local conf = Conf(CurrentScope())
-            return conf.healthCustomR or conf.gfUnifiedR or 0.2, conf.healthCustomG or conf.gfUnifiedG or 0.8, conf.healthCustomB or conf.gfUnifiedB or 0.2
+            local m = conf.gfBarMode
+            if not m or m == "GLOBAL" then
+                return CurrentGlobalBarColor()
+            elseif m == "dark" then
+                return conf.gfDarkR or 0, conf.gfDarkG or 0, conf.gfDarkB or 0
+            elseif m == "unified" then
+                return conf.gfUnifiedR or 0.10, conf.gfUnifiedG or 0.60, conf.gfUnifiedB or 0.90
+            elseif m == "CUSTOM" then
+                return conf.healthCustomR or 0.2, conf.healthCustomG or 0.8, conf.healthCustomB or 0.2
+            end
+            return 0.2, 0.8, 0.2
         end,
         function(r, g, b)
             local conf = Conf(CurrentScope())
-            conf.healthCustomR, conf.healthCustomG, conf.healthCustomB = r, g, b
+            local m = conf.gfBarMode
+            if m == "dark" then
+                conf.gfDarkR, conf.gfDarkG, conf.gfDarkB = r, g, b
+            elseif m == "unified" then
+                conf.gfUnifiedR, conf.gfUnifiedG, conf.gfUnifiedB = r, g, b
+            elseif m == "CUSTOM" then
+                conf.healthCustomR, conf.healthCustomG, conf.healthCustomB = r, g, b
+            else
+                return
+            end
             QueueGF(CurrentScope(), "visual")
         end)
+    M.AddRefresher(ctx, function()
+        local conf = Conf(CurrentScope())
+        local m = conf.gfBarMode
+        local editable = (m == "dark" or m == "unified" or m == "CUSTOM")
+        SetOptionEnabled(color, editable)
+        if not m or m == "GLOBAL" then
+            colorHint:SetText("Follows Global Style > Colors. The swatch previews the current global bar color.")
+            colorHint:Show()
+        elseif m == "CLASS" or m == "GRADIENT" then
+            colorHint:SetText("Class Color and Health Gradient use runtime colors, not a single editable swatch.")
+            colorHint:Show()
+        else
+            colorHint:Hide()
+        end
+    end)
 
     local bars = b:CollapsibleSection("bars", "Bars  (Custom)", 206, false)
     BindScopeDropdown(ctx, W.Dropdown(bars, "Foreground Texture", SIMPLE_TEXTURES, 280), "barTexture", "", "visual")

@@ -732,6 +732,12 @@ local GF_FONT_KEY_ALIASES = {
     ["Arial (default)"]         = "ARIALN",
     ["Morpheus (default)"]      = "MORPHEUS",
     ["Skurri (default)"]        = "SKURRI",
+    ["Expressway Regular (MSUF)"] = "EXPRESSWAY",
+    ["Expressway (MSUF)"]         = "EXPRESSWAY",
+    ["Expressway Bold (MSUF)"]    = "EXPRESSWAY_BOLD",
+    ["Expressway SemiBold (MSUF)"] = "EXPRESSWAY_SEMIBOLD",
+    ["Expressway ExtraBold (MSUF)"] = "EXPRESSWAY_EXTRABOLD",
+    ["Expressway Condensed Light (MSUF)"] = "EXPRESSWAY_CONDENSED_LIGHT",
 }
 
 local function NormalizeFontField(conf)

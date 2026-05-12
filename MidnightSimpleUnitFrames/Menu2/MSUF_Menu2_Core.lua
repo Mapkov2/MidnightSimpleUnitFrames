@@ -204,6 +204,105 @@ local function RunRefreshers(entry)
     end
 end
 
+local function BossPagePreviewInCombat()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function ApplyBossPagePreviewFallback(active, reason)
+    _G.MSUF2_BossUnitframePreviewActive = active and true or nil
+    if BossPagePreviewInCombat() then return end
+    if type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
+        _G.MSUF_ApplyBossUnitframePreviewState(active and true or false, reason or "MSUF2_BOSS_PAGE")
+        return
+    end
+    if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+        pcall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit)
+    end
+end
+
+local function SyncBossPagePreviewForKey(key)
+    local active = (key == "uf_boss")
+        and M.frame and M.frame.IsShown and M.frame:IsShown()
+    local fn = M.UnitPage and M.UnitPage.SetBossPagePreviewActive
+    if type(fn) == "function" then
+        local ok = pcall(fn, active and true or false)
+        if ok then
+            if active and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" and not BossPagePreviewInCombat() then
+                _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_CORE")
+            end
+        else
+            ApplyBossPagePreviewFallback(active and true or false, "MSUF2_BOSS_PAGE_FALLBACK")
+        end
+        return
+    end
+    ApplyBossPagePreviewFallback(active and true or false, "MSUF2_BOSS_PAGE_FALLBACK")
+end
+
+local function IsEditModeActive()
+    local st = rawget(_G, "MSUF_EditState")
+    if type(st) == "table" and st.active ~= nil then
+        return st.active == true
+    end
+
+    local em2 = rawget(_G, "MSUF_EM2")
+    local state = em2 and em2.State
+    if state and type(state.IsActive) == "function" then
+        return state.IsActive() and true or false
+    end
+
+    local fn = rawget(_G, "MSUF_IsMSUFEditModeActive")
+        or rawget(_G, "MSUF_IsInEditMode")
+        or rawget(_G, "MSUF_IsEditModeActive")
+    if type(fn) == "function" then
+        local ok, result = pcall(fn)
+        if ok then return result and true or false end
+    end
+
+    return rawget(_G, "MSUF_UnitEditModeActive") == true
+        or rawget(_G, "MSUF_EDITMODE_ACTIVE") == true
+end
+
+local function IsEditModeCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function RefreshDashboardEditModeButton()
+    local btn = M.dashboardEditModeButton
+    if not btn then return end
+
+    local active = IsEditModeActive()
+    local combatLocked = IsEditModeCombatLocked() and true or false
+    if active then
+        btn:SetText("Edit Mode: On")
+    elseif combatLocked then
+        btn:SetText("Edit Mode: Off (Combat)")
+    else
+        btn:SetText("Edit Mode: Off")
+    end
+
+    if btn.SetEnabled then btn:SetEnabled(active or not combatLocked) end
+    if btn.SetActive then btn:SetActive(active) end
+end
+
+local editModeUIHooked = false
+local function EnsureEditModeUIHook()
+    if editModeUIHooked then return end
+    local register = rawget(_G, "MSUF_RegisterAnyEditModeListener")
+    if type(register) ~= "function" then return end
+
+    register(function()
+        local frame = M.frame
+        if frame and frame:IsShown() and frame.RefreshStatus then
+            frame:RefreshStatus()
+        else
+            RefreshDashboardEditModeButton()
+        end
+    end)
+    editModeUIHooked = true
+end
+
 local function CreateContext(key, wrapper, entry)
     local ctx = {
         key = key,
@@ -243,10 +342,12 @@ function M.SelectPage(key)
     end
     if key == M.activeKey and cached then
         RunRefreshers(cached)
+        SyncBossPagePreviewForKey(key)
         return true
     end
 
     HideAllCachedPages()
+    SyncBossPagePreviewForKey(nil)
 
     local entry = M.cache[key]
     if not entry then
@@ -276,6 +377,7 @@ function M.SelectPage(key)
     RunRefreshers(entry)
     SetTitle(key)
     UpdateNav(key)
+    SyncBossPagePreviewForKey(key)
     return true
 end
 
@@ -479,12 +581,7 @@ local function BuildWindow()
     f.status = status
     function f:RefreshStatus()
         local profile = tostring(_G.MSUF_ActiveProfile or "Default")
-        local edit = "Off"
-        if type(_G.MSUF_IsMSUFEditModeActive) == "function" and _G.MSUF_IsMSUFEditModeActive() then
-            edit = "On"
-        elseif _G.MSUF_UnitEditModeActive then
-            edit = "On"
-        end
+        local edit = IsEditModeActive() and "On" or "Off"
         sbProfile:SetText("|cff4a90d9" .. M.Tr("Profile:") .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r")
         if edit == "On" then
             sbEdit:SetText("|cff4ade80" .. M.Tr("Edit: On") .. "|r  |cff3a4a66\194\183|r")
@@ -502,11 +599,20 @@ local function BuildWindow()
         else
             sbVersion:SetText("v5.0 Beta 1")
         end
+        RefreshDashboardEditModeButton()
     end
     status:RegisterEvent("PLAYER_REGEN_DISABLED")
     status:RegisterEvent("PLAYER_REGEN_ENABLED")
     status:SetScript("OnEvent", function()
         if f and f:IsShown() then f:RefreshStatus() end
+    end)
+    f:SetScript("OnShow", function(self)
+        EnsureEditModeUIHook()
+        if self.RefreshStatus then self:RefreshStatus() end
+        SyncBossPagePreviewForKey(M.activeKey)
+    end)
+    f:SetScript("OnHide", function()
+        SyncBossPagePreviewForKey(nil)
     end)
 
     local scroll = CreateFrame("ScrollFrame", nil, host, "UIPanelScrollFrameTemplate")
@@ -552,15 +658,23 @@ local function BuildDashboard(ctx)
     local tip = Card("Dashboard", x0, y, width, 98)
     W.Text(tip, "Tip: Quick reset: If something feels off, try /msuf reset for frame positions.", 14, -42, width - 28, T.colors.muted)
     local actionW = math.floor((width - 40) / 2)
-    local editMode = AddButton(tip, "Toggle Edit Mode", 14, -64, actionW, 24, function()
-        if _G.InCombatLockdown and _G.InCombatLockdown() then return end
-        local active = (_G.MSUF_IsMSUFEditModeActive and _G.MSUF_IsMSUFEditModeActive()) or _G.MSUF_UnitEditModeActive
+    local editMode = AddButton(tip, "Edit Mode: Off", 14, -64, actionW, 24, function()
+        local active = IsEditModeActive()
+        if (not active) and IsEditModeCombatLocked() then
+            RefreshDashboardEditModeButton()
+            if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
+            return
+        end
         if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
             _G.MSUF_SetMSUFEditModeDirect(not active)
         end
+        RefreshDashboardEditModeButton()
         if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
     end)
+    M.dashboardEditModeButton = editMode
     if T.SkinPrimaryButton then T.SkinPrimaryButton(editMode) end
+    RefreshDashboardEditModeButton()
+    M.AddRefresher(ctx, RefreshDashboardEditModeButton)
     local reset = AddButton(tip, "Reset Positions", 26 + actionW, -64, actionW, 24, function()
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
             pcall(_G.SlashCmdList["MIDNIGHTSUF"], "reset")
@@ -954,7 +1068,7 @@ local function BuildDashboard(ctx)
     ctx:SetContentHeight(math.abs(y) + 100)
 end
 
-M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard, version = 2 })
+M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard, version = 3 })
 
 local function ApplyMenuFrameScale(frame)
     if not (frame and frame.SetScale) then return end

@@ -43,6 +43,23 @@ local function ApplyClassPortraitTexture(portrait, unit, conf, existsForPortrait
     if portrait.SetTexture then portrait:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark") end
 end
 
+local function ApplyBossPreviewPortraitTexture(portrait, conf, render)
+    if not portrait then return end
+
+    if render == "CLASS" then
+        local style = conf.portraitClassStyle or "BLIZZARD"
+        local visual = PM and PM.ResolveClassPortrait and PM.ResolveClassPortrait("DEATHKNIGHT", style) or nil
+        if visual and portrait.SetTexture and portrait.SetTexCoord then
+            portrait:SetTexture(visual.texture)
+            portrait:SetTexCoord(visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
+            return
+        end
+    end
+
+    if portrait.SetTexCoord then portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    if portrait.SetTexture then portrait:SetTexture("Interface\\ICONS\\Achievement_Boss_LichKing") end
+end
+
 local function ApplyPortraitLayout(f, conf, widget)
     if not (f and conf and widget) then return end
     local mode = conf.portraitMode or "OFF"
@@ -160,7 +177,10 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
         local now = (F.GetTime and F.GetTime()) or 0
         local nextAt = tonumber(f._msufPortraitNextAt) or 0
         if (now >= nextAt) and not _budgetUsed then
-            if render == "CLASS" then
+            local bossPreview = f.isBoss and MSUF_BossTestMode and not existsForPortrait
+            if bossPreview then
+                ApplyBossPreviewPortraitTexture(portrait, conf, render)
+            elseif render == "CLASS" then
                 ApplyClassPortraitTexture(portrait, unit, conf, existsForPortrait)
             else
                 if portrait.SetTexCoord then portrait:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
