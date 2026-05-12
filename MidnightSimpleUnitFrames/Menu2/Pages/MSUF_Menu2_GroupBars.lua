@@ -137,29 +137,83 @@ local function BuildGFBars(ctx)
     W.MoveWidget(showHealer, power, powerRightX, -122)
     W.MoveWidget(showDamager, power, powerRightX, -156)
 
-    local text = b:CollapsibleSection("text", "Text", 820, false)
+    local text = b:CollapsibleSection("text", "Text", 560, false)
     local textW = text._msuf2Width or b.width or 720
-    local textLeftX = 32
-    local textRightX = min(max(450, floor(textW * 0.52)), max(370, textW - 370))
-    local textLeftW = max(260, min(320, textRightX - textLeftX - 72))
-    local textRightW = max(260, min(340, textW - textRightX - 38))
-    local textSliderW = min(280, textLeftW)
-    local hpSliderW = min(290, textRightW)
+    local textLeftX = 24
+    local textRightX = max(430, floor(textW * 0.52))
+    local textLeftW = max(260, textRightX - textLeftX - 72)
+    local textRightW = max(260, textW - textRightX - 28)
+    local textSliderW = min(310, max(230, textLeftW))
+    local hpSliderW = min(310, max(230, textRightW))
+    local textDropW = min(310, max(220, textLeftW))
 
-    local hint = W.Text(text, "Font, outline and color are controlled globally in Global Style > Fonts.\nPositions can also be dragged in Edit Mode and sync live both ways.", textLeftX, -38, textW - 64, { 0.60, 0.75, 1.00, 1 })
+    local hint = W.Text(text, "Font style is shared in Global Style > Fonts. Position can be adjusted here or dragged in Edit Mode.", 14, -38, textW - 210, { 0.60, 0.75, 1.00, 1 })
     if hint.SetWordWrap then hint:SetWordWrap(true) end
+    local scopeLabel = T.Font(text, "GameFontDisableSmall", "", T.colors.dim)
+    scopeLabel:SetPoint("TOPRIGHT", text, "TOPRIGHT", -16, -38)
+    scopeLabel:SetJustifyH("RIGHT")
+    scopeLabel:SetWidth(170)
+    text._msuf2CursorY = -62
 
-    local divider = text:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT", text, "TOPLEFT", textRightX - 20, -82)
-    divider:SetPoint("BOTTOMLEFT", text, "BOTTOMLEFT", textRightX - 20, 18)
-    divider:SetWidth(1)
-    divider:SetColorTexture(0.20, 0.32, 0.45, 0.35)
+    local tabValues = {
+        { value = "name", text = "Name" },
+        { value = "hp", text = "HP Text" },
+        { value = "power", text = "Power Text" },
+        { value = "advanced", text = "Advanced" },
+    }
+    M.gfTextTabSelection = M.gfTextTabSelection or {}
+    local function CurrentTextTab()
+        local scope = CurrentScope()
+        local key = M.gfTextTabSelection[scope] or "name"
+        if key ~= "name" and key ~= "hp" and key ~= "power" and key ~= "advanced" then key = "name" end
+        return key
+    end
+
+    local function ScopeDisplayName()
+        local scope = CurrentScope() or "party"
+        for i = 1, #SCOPE_VALUES do
+            local info = SCOPE_VALUES[i]
+            if info and info.value == scope then return info.text or scope end
+        end
+        scope = tostring(scope)
+        return scope:sub(1, 1):upper() .. scope:sub(2)
+    end
+
+    local tabs = W.Segment(text, "Text area", tabValues, min(520, textW - 48))
+    W.MoveWidget(tabs, text, 20, -68, min(520, textW - 48), "LEFT")
 
     local function SectionLabel(parent, label, x, y)
-        local fs = T.Font(parent, "GameFontNormalSmall", label, { 1.00, 0.82, 0.18, 1 })
+        local fs = T.Font(parent, "GameFontNormalSmall", label, T.colors.text)
         fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         fs:SetJustifyH("LEFT")
         return fs
+    end
+
+    local function PreviewText(parent, textValue, x, y, width)
+        W.Text(parent, "Preview", x, y, width, T.colors.dim)
+        local value = T.Font(parent, "GameFontNormalSmall", textValue, T.colors.text)
+        value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 20)
+        value:SetWidth(width or 220)
+        value:SetJustifyH("LEFT")
+        return value
+    end
+
+    local tabFrames = {}
+    local function MakeTabFrame(key)
+        local frame = CreateFrame("Frame", nil, text)
+        frame:SetPoint("TOPLEFT", text, "TOPLEFT", 0, -118)
+        frame:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 0, 12)
+        frame._msuf2Width = textW
+        tabFrames[key] = frame
+        return frame
+    end
+
+    local function PlaceDropdown(parent, control, x, y, width)
+        W.MoveWidget(control, parent, x, y, width or textDropW, "LEFT")
+    end
+
+    local function PlaceSlider(parent, control, x, y, width)
+        W.MoveWidget(control, parent, x, y, width or textSliderW, "CENTER")
     end
 
     local function IsPowerTextEnabled()
@@ -182,74 +236,113 @@ local function BuildGFBars(ctx)
     end
 
     local refreshTextControls
+    M.BindSegment(ctx, tabs,
+        CurrentTextTab,
+        function(v)
+            M.gfTextTabSelection[CurrentScope()] = v or "name"
+            if refreshTextControls then refreshTextControls() end
+        end)
 
-    SectionLabel(text, "Name", textLeftX, -92)
-    local showName = BindScopeToggle(ctx, W.Toggle(text, "Show Name"), "showName", true, "font")
-    local nameSize = BindScopeSlider(ctx, W.Slider(text, "Size", 6, 48, 1, textSliderW), "nameFontSize", 12, "font")
-    local nameAnchor = BindScopeDropdown(ctx, W.Dropdown(text, "Anchor", ANCHORS, textSliderW), "nameAnchor", "LEFT", "geometry")
-    local nameX = BindScopeSlider(ctx, W.Slider(text, "X", -100, 100, 1, textSliderW), "nameOffsetX", 0, "geometry")
-    local nameY = BindScopeSlider(ctx, W.Slider(text, "Y", -100, 100, 1, textSliderW), "nameOffsetY", 0, "geometry")
-    W.MoveWidget(showName, text, textLeftX, -118)
-    W.MoveWidget(nameSize, text, textLeftX, -158, textSliderW, "CENTER")
-    W.MoveWidget(nameAnchor, text, textLeftX, -212, textSliderW, "LEFT")
-    W.MoveWidget(nameX, text, textLeftX, -266, textSliderW, "CENTER")
-    W.MoveWidget(nameY, text, textLeftX, -320, textSliderW, "CENTER")
+    local nameTab = MakeTabFrame("name")
+    local hpTab = MakeTabFrame("hp")
+    local powerTab = MakeTabFrame("power")
+    local advancedTab = MakeTabFrame("advanced")
 
-    W.DividerAt(text, -362, textLeftX, textW - (textLeftX + textSliderW + 12))
-    SectionLabel(text, "Power Text", textLeftX, -386)
-    local powerText = W.Toggle(text, "Show Power Text")
+    SectionLabel(nameTab, "Name", textLeftX, -4)
+    PreviewText(nameTab, "Mapko", textRightX, -4, textRightW)
+
+    local showName = BindScopeToggle(ctx, W.Toggle(nameTab, "Show Name"), "showName", true, "font")
+    W.MoveWidget(showName, nameTab, textLeftX, -34)
+
+    SectionLabel(nameTab, "Position", textLeftX, -82)
+    local nameAnchor = BindScopeDropdown(ctx, W.Dropdown(nameTab, "Anchor", ANCHORS, textDropW), "nameAnchor", "LEFT", "geometry")
+    local nameX = BindScopeSlider(ctx, W.Slider(nameTab, "X Offset", -100, 100, 1, textSliderW), "nameOffsetX", 0, "geometry")
+    local nameY = BindScopeSlider(ctx, W.Slider(nameTab, "Y Offset", -100, 100, 1, textSliderW), "nameOffsetY", 0, "geometry")
+    PlaceDropdown(nameTab, nameAnchor, textLeftX, -112, textDropW)
+    PlaceSlider(nameTab, nameX, textLeftX, -166, textSliderW)
+    PlaceSlider(nameTab, nameY, textLeftX, -224, textSliderW)
+
+    SectionLabel(nameTab, "Appearance", textRightX, -82)
+    local nameSize = BindScopeSlider(ctx, W.Slider(nameTab, "Size", 6, 48, 1, hpSliderW), "nameFontSize", 12, "font")
+    PlaceSlider(nameTab, nameSize, textRightX, -112, hpSliderW)
+
+    SectionLabel(hpTab, "HP Text", textLeftX, -4)
+    PreviewText(hpTab, "630.0k / 100%", textRightX, -4, textRightW)
+
+    local showHP = BindScopeToggle(ctx, W.Toggle(hpTab, "Show HP Text"), "showHPText", true, "font")
+    W.MoveWidget(showHP, hpTab, textLeftX, -34)
+
+    SectionLabel(hpTab, "Content", textLeftX, -82)
+    local healthLeft = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Left", TEXT_MODES, textDropW), "textLeft", "NONE", "visual")
+    local healthCenter = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Center", TEXT_MODES, textDropW), "textCenter", "PERCENT", "visual")
+    local healthRight = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Right", TEXT_MODES, textDropW), "textRight", "NONE", "visual")
+    local healthDelimiter = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Delimiter", DELIMITER_VALUES, textDropW), "textDelimiter", " / ", "visual")
+    local reverseHP = BindScopeToggle(ctx, W.Toggle(hpTab, "Reverse order"), "hpTextReverse", false, "visual")
+    PlaceDropdown(hpTab, healthLeft, textLeftX, -112, textDropW)
+    PlaceDropdown(hpTab, healthCenter, textLeftX, -166, textDropW)
+    PlaceDropdown(hpTab, healthRight, textLeftX, -220, textDropW)
+    PlaceDropdown(hpTab, healthDelimiter, textLeftX, -274, min(220, textDropW))
+    W.MoveWidget(reverseHP, hpTab, textLeftX, -330)
+
+    SectionLabel(hpTab, "Position", textRightX, -82)
+    local healthX = BindScopeSlider(ctx, W.Slider(hpTab, "X Offset", -100, 100, 1, hpSliderW), "hpOffsetX", 0, "geometry")
+    local healthY = BindScopeSlider(ctx, W.Slider(hpTab, "Y Offset", -100, 100, 1, hpSliderW), "hpOffsetY", 0, "geometry")
+    PlaceSlider(hpTab, healthX, textRightX, -112, hpSliderW)
+    PlaceSlider(hpTab, healthY, textRightX, -170, hpSliderW)
+
+    SectionLabel(hpTab, "Appearance", textRightX, -252)
+    local healthSize = BindScopeSlider(ctx, W.Slider(hpTab, "Size", 6, 48, 1, hpSliderW), "hpFontSize", 10, "font")
+    PlaceSlider(hpTab, healthSize, textRightX, -282, hpSliderW)
+
+    SectionLabel(powerTab, "Power Text", textLeftX, -4)
+    PreviewText(powerTab, "100 Energy", textRightX, -4, textRightW)
+
+    local powerText = W.Toggle(powerTab, "Show Power Text")
     M.BindToggle(ctx, powerText,
         IsPowerTextEnabled,
         function(v)
             SetPowerTextEnabled(v)
             if refreshTextControls then refreshTextControls() end
         end)
-    local powerLeft = BindScopeDropdown(ctx, W.Dropdown(text, "Left", TEXT_MODES, textSliderW), "powerTextLeft", "NONE", "visual")
-    local powerCenter = BindScopeDropdown(ctx, W.Dropdown(text, "Center", TEXT_MODES, textSliderW), "powerTextCenter", "PERCENT", "visual")
-    local powerRight = BindScopeDropdown(ctx, W.Dropdown(text, "Right", TEXT_MODES, textSliderW), "powerTextRight", "NONE", "visual")
-    local powerDelimiter = BindScopeDropdown(ctx, W.Dropdown(text, "Delimiter", DELIMITER_VALUES, textSliderW), "powerTextDelimiter", " / ", "visual")
-    local powerSize = BindScopeSlider(ctx, W.Slider(text, "Size", 6, 48, 1, textSliderW), "powerFontSize", 9, "font")
-    local powerX = BindScopeSlider(ctx, W.Slider(text, "X", -100, 100, 1, textSliderW), "powerOffsetX", 0, "geometry")
-    local powerY = BindScopeSlider(ctx, W.Slider(text, "Y", -100, 100, 1, textSliderW), "powerOffsetY", 0, "geometry")
-    W.MoveWidget(powerText, text, textLeftX, -412)
-    W.MoveWidget(powerLeft, text, textLeftX, -464, textSliderW, "LEFT")
-    W.MoveWidget(powerCenter, text, textLeftX, -518, textSliderW, "LEFT")
-    W.MoveWidget(powerRight, text, textLeftX, -572, textSliderW, "LEFT")
-    W.MoveWidget(powerDelimiter, text, textLeftX, -626, textSliderW, "LEFT")
-    W.MoveWidget(powerSize, text, textLeftX, -680, textSliderW, "CENTER")
-    W.MoveWidget(powerX, text, textLeftX, -734, textSliderW, "CENTER")
-    W.MoveWidget(powerY, text, textLeftX, -788, textSliderW, "CENTER")
+    W.MoveWidget(powerText, powerTab, textLeftX, -34)
 
-    SectionLabel(text, "HP Text", textRightX, -92)
-    local showHP = BindScopeToggle(ctx, W.Toggle(text, "Show HP Text"), "showHPText", true, "font")
-    local healthLeft = BindScopeDropdown(ctx, W.Dropdown(text, "Left", TEXT_MODES, hpSliderW), "textLeft", "NONE", "visual")
-    local healthCenter = BindScopeDropdown(ctx, W.Dropdown(text, "Center", TEXT_MODES, hpSliderW), "textCenter", "PERCENT", "visual")
-    local healthRight = BindScopeDropdown(ctx, W.Dropdown(text, "Right", TEXT_MODES, hpSliderW), "textRight", "NONE", "visual")
-    local healthDelimiter = BindScopeDropdown(ctx, W.Dropdown(text, "Delimiter", DELIMITER_VALUES, hpSliderW), "textDelimiter", " / ", "visual")
-    local reverseHP = BindScopeToggle(ctx, W.Toggle(text, "Reverse Order"), "hpTextReverse", false, "visual")
-    local healthSize = BindScopeSlider(ctx, W.Slider(text, "Size", 6, 48, 1, hpSliderW), "hpFontSize", 10, "font")
-    local healthX = BindScopeSlider(ctx, W.Slider(text, "X", -100, 100, 1, hpSliderW), "hpOffsetX", 0, "geometry")
-    local healthY = BindScopeSlider(ctx, W.Slider(text, "Y", -100, 100, 1, hpSliderW), "hpOffsetY", 0, "geometry")
-    W.MoveWidget(showHP, text, textRightX, -118)
-    W.MoveWidget(healthLeft, text, textRightX, -172, hpSliderW, "LEFT")
-    W.MoveWidget(healthCenter, text, textRightX, -226, hpSliderW, "LEFT")
-    W.MoveWidget(healthRight, text, textRightX, -280, hpSliderW, "LEFT")
-    W.MoveWidget(healthDelimiter, text, textRightX, -334, hpSliderW, "LEFT")
-    W.MoveWidget(reverseHP, text, textRightX, -382)
-    W.MoveWidget(healthSize, text, textRightX, -428, hpSliderW, "CENTER")
-    W.MoveWidget(healthX, text, textRightX, -482, hpSliderW, "CENTER")
-    W.MoveWidget(healthY, text, textRightX, -536, hpSliderW, "CENTER")
+    SectionLabel(powerTab, "Content", textLeftX, -82)
+    local powerLeft = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Left", TEXT_MODES, textDropW), "powerTextLeft", "NONE", "visual")
+    local powerCenter = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Center", TEXT_MODES, textDropW), "powerTextCenter", "PERCENT", "visual")
+    local powerRight = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Right", TEXT_MODES, textDropW), "powerTextRight", "NONE", "visual")
+    local powerDelimiter = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Delimiter", DELIMITER_VALUES, textDropW), "powerTextDelimiter", " / ", "visual")
+    PlaceDropdown(powerTab, powerLeft, textLeftX, -112, textDropW)
+    PlaceDropdown(powerTab, powerCenter, textLeftX, -166, textDropW)
+    PlaceDropdown(powerTab, powerRight, textLeftX, -220, textDropW)
+    PlaceDropdown(powerTab, powerDelimiter, textLeftX, -274, min(220, textDropW))
 
-    W.DividerAt(text, -578, textRightX, textW - (textRightX + hpSliderW + 12))
-    SectionLabel(text, "Text Layers", textRightX, -602)
-    local nameLayer = BindScopeSlider(ctx, W.Slider(text, "Name Layer", 1, 15, 1, hpSliderW), "nameTextLayer", 5, "geometry")
-    local hpLayer = BindScopeSlider(ctx, W.Slider(text, "HP Layer", 1, 15, 1, hpSliderW), "textLayer", 5, "geometry")
-    local powerLayer = BindScopeSlider(ctx, W.Slider(text, "Power Layer", 1, 15, 1, hpSliderW), "powerTextLayer", 2, "geometry")
-    W.MoveWidget(nameLayer, text, textRightX, -642, hpSliderW, "CENTER")
-    W.MoveWidget(hpLayer, text, textRightX, -696, hpSliderW, "CENTER")
-    W.MoveWidget(powerLayer, text, textRightX, -750, hpSliderW, "CENTER")
+    SectionLabel(powerTab, "Position", textRightX, -82)
+    local powerX = BindScopeSlider(ctx, W.Slider(powerTab, "X Offset", -100, 100, 1, hpSliderW), "powerOffsetX", 0, "geometry")
+    local powerY = BindScopeSlider(ctx, W.Slider(powerTab, "Y Offset", -100, 100, 1, hpSliderW), "powerOffsetY", 0, "geometry")
+    PlaceSlider(powerTab, powerX, textRightX, -112, hpSliderW)
+    PlaceSlider(powerTab, powerY, textRightX, -170, hpSliderW)
+
+    SectionLabel(powerTab, "Appearance", textRightX, -252)
+    local powerSize = BindScopeSlider(ctx, W.Slider(powerTab, "Size", 6, 48, 1, hpSliderW), "powerFontSize", 9, "font")
+    PlaceSlider(powerTab, powerSize, textRightX, -282, hpSliderW)
+
+    SectionLabel(advancedTab, "Text Layers", textLeftX, -4)
+    local layerHint = W.Text(advancedTab, "Controls draw order when text overlaps bars, icons, or indicators.", textLeftX, -28, textLeftW, T.colors.dim)
+    if layerHint.SetWordWrap then layerHint:SetWordWrap(true) end
+    local nameLayer = BindScopeSlider(ctx, W.Slider(advancedTab, "Name layer", 1, 15, 1, textSliderW), "nameTextLayer", 5, "geometry")
+    local hpLayer = BindScopeSlider(ctx, W.Slider(advancedTab, "HP layer", 1, 15, 1, textSliderW), "textLayer", 5, "geometry")
+    local powerLayer = BindScopeSlider(ctx, W.Slider(advancedTab, "Power layer", 1, 15, 1, textSliderW), "powerTextLayer", 2, "geometry")
+    PlaceSlider(advancedTab, nameLayer, textLeftX, -82, textSliderW)
+    PlaceSlider(advancedTab, hpLayer, textLeftX, -140, textSliderW)
+    PlaceSlider(advancedTab, powerLayer, textLeftX, -198, textSliderW)
 
     refreshTextControls = function()
+        local tab = CurrentTextTab()
+        for key, frame in pairs(tabFrames) do
+            frame:SetShown(key == tab)
+        end
+        if tabs and tabs.SetValue then tabs:SetValue(tab) end
+        scopeLabel:SetText("Editing " .. ScopeDisplayName())
         SetOptionsEnabled({ nameSize, nameAnchor, nameX, nameY, nameLayer }, Bool(CurrentScope(), "showName", true))
         SetOptionsEnabled({ healthLeft, healthCenter, healthRight, healthDelimiter, reverseHP, healthSize, healthX, healthY, hpLayer }, Bool(CurrentScope(), "showHPText", true))
         SetOptionsEnabled({ powerLeft, powerCenter, powerRight, powerDelimiter, powerSize, powerX, powerY, powerLayer }, IsPowerTextEnabled())
