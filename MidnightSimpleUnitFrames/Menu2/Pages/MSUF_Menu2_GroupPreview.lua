@@ -6,6 +6,7 @@ ns.MSUF2 = M
 _G.MSUF2 = M
 
 local T = M.Theme
+local W = M.Widgets
 
 local floor = math.floor
 local max = math.max
@@ -886,6 +887,7 @@ end
 
 local function AddGFPreview(ctx, builder)
     local body = builder:CollapsibleSection("gf_preview_native", "Hide Preview", 326, true)
+    if W and W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(body, "Hide Preview", "Show Preview") end
     local box = CreateNativeGFPreview(body, ctx, OpenGFSection)
     box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -12)
     box:Show()

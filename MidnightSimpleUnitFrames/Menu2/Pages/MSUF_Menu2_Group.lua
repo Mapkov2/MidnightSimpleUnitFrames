@@ -41,6 +41,19 @@ local TEXT_MODES = {
     { value = "CURMAX", text = "Current / Max" },
     { value = "CURPERCENT", text = "Current / Percent" },
     { value = "CURMAXPERCENT", text = "Current / Max / Percent" },
+    { value = "MAXPERCENT", text = "Max / Percent" },
+    { value = "PERCENTCUR", text = "Percent / Current" },
+    { value = "PERCENTMAX", text = "Percent / Max" },
+    { value = "PERCENTCURMAX", text = "Percent / Current / Max" },
+}
+
+local DELIMITER_VALUES = {
+    { value = " ", text = "Space" },
+    { value = "  ", text = "Double Space" },
+    { value = " / ", text = "/" },
+    { value = " - ", text = "-" },
+    { value = " : ", text = ":" },
+    { value = " | ", text = "|" },
 }
 
 local ANCHORS = {
@@ -310,30 +323,422 @@ local function Num(kind, key, default)
     return tonumber(Val(kind, key, default)) or default or 0
 end
 
-local function ScopeSection(ctx, builder)
-    local sec = builder:Section("Scope", 100)
-    local scope = W.Segment(sec, "Editing", SCOPE_VALUES, 480)
-    M.BindSegment(ctx, scope,
-        function() return M.gfScope or "party" end,
-        function(v)
-            M.gfScope = v or "party"
-            local gf = GF()
-            if gf and type(gf.PreviewScopeChanged) == "function" then
-                gf.PreviewScopeChanged()
-            else
-                RefreshGFPreview()
-            end
-            if ctx.refreshers then
-                for i = 1, #ctx.refreshers do
-                    local fn = ctx.refreshers[i]
-                    if type(fn) == "function" then pcall(fn) end
-                end
-            end
-        end)
-end
-
 local function CurrentScope()
     return M.gfScope or "party"
+end
+
+local function ScopeLabel(kind)
+    if kind == "mythicraid" then return "Mythic Raid" end
+    if kind == "raid" then return "Raid" end
+    return "Party"
+end
+
+local function ScopeShortLabel(kind)
+    if kind == "mythicraid" then return "Mythic" end
+    return ScopeLabel(kind)
+end
+
+local GF_COPY_EXCLUDE = {
+    offsetX = true,
+    offsetY = true,
+    point = true,
+    positionMode = true,
+    _hlMigrated = true,
+}
+
+local GF_COPY_CATEGORIES = {
+    { key = "general", label = "General", keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
+    { key = "health", label = "Health & Bars", keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB", "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB", "barTexture", "barBgTexture", "powerHeight", "showPower", "showPowerText", "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter", "powerFontSize", "powerOffsetX", "powerOffsetY", "powerTextLayer", "powerSmoothFill", "powerShowTank", "powerShowHealer", "powerShowDamager", "healPredEnabled", "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha" } },
+    { key = "text", label = "Text & Name", keys = { "showName", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY", "nameTextLayer", "nameColorMode", "nameColorR", "nameColorG", "nameColorB", "nameMaxChars", "nameNoEllipsis", "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter", "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer" } },
+    { key = "font", label = "Font Override", keys = { "fontOverride", "fontKey", "fontOutline", "useGlobalFontColor", "fontR", "fontG", "fontB" } },
+    { key = "border", label = "Background & Opacity", keys = { "bgR", "bgG", "bgB", "bgA", "hpBarAlpha", "hpBgAlpha", "hpTextIgnoreAlpha", "alphaPreserveHPColor" } },
+    { key = "range", label = "Range Fade", keys = { "rangeFadeEnabled", "rangeFadeAlpha", "rangeFadeLayerMode", "offlineAlpha", "alphaPreserveHPColor" } },
+    { key = "indicators", label = "Indicators & Status Icons", keys = { "showGroupNumber", "groupNumberSize", "groupNumberAnchor", "groupNumberX", "groupNumberY", "iconStyle", "useMidnightIcons", "statusText", "statusTextSize", "statusTextAnchor", "statusOffsetX", "statusOffsetY", "statusTextLayer", "statusGhostText", "statusGhostTextSize", "statusGhostTextAnchor", "statusGhostOffsetX", "statusGhostOffsetY", "statusGhostTextLayer", "statusAFKText", "statusAFKTextSize", "statusAFKTextAnchor", "statusAFKOffsetX", "statusAFKOffsetY", "statusAFKTextLayer" }, prefix = { "si_", "statusIcon", "indicator" } },
+    { key = "auras", label = "Auras", tables = { "auras" } },
+    { key = "highlight", label = "Highlight & Aggro", prefix = { "hl", "dispel" } },
+    { key = "dstripe", label = "Debuff Stripe", prefix = { "debuffStripe" } },
+    { key = "features", label = "Corner/Spell/Private", keys = { "ciEnabled", "ciAlpha" }, tables = { "spellIndicators", "privateAuras" }, prefix = { "ci" } },
+}
+
+local function DeepCopy(value)
+    local gf = GF()
+    if gf and type(gf._DeepCopyTable) == "function" then return gf._DeepCopyTable(value) end
+    if type(_G.MSUF_DeepCopy) == "function" then return _G.MSUF_DeepCopy(value) end
+    if type(value) ~= "table" then return value end
+    local out = {}
+    for k, v in pairs(value) do out[k] = DeepCopy(v) end
+    return out
+end
+
+local function NewGFCopyScopes()
+    local scopes = {}
+    for i = 1, #GF_COPY_CATEGORIES do
+        scopes[GF_COPY_CATEGORIES[i].key] = true
+    end
+    return scopes
+end
+
+local function CopyGroupSettings(srcKind, dstKind, scopes)
+    local srcConf = Conf(srcKind)
+    local dstConf = Conf(dstKind)
+    if not (srcConf and dstConf and srcKind and dstKind) or srcKind == dstKind then return false end
+
+    scopes = (type(scopes) == "table") and scopes or NewGFCopyScopes()
+    local allowKeys, allowPrefixes, allowTables = {}, {}, {}
+    for i = 1, #GF_COPY_CATEGORIES do
+        local cat = GF_COPY_CATEGORIES[i]
+        if scopes[cat.key] then
+            if cat.keys then
+                for j = 1, #cat.keys do allowKeys[cat.keys[j]] = true end
+            end
+            if cat.prefix then
+                for j = 1, #cat.prefix do allowPrefixes[#allowPrefixes + 1] = cat.prefix[j] end
+            end
+            if cat.tables then
+                for j = 1, #cat.tables do allowTables[cat.tables[j]] = true end
+            end
+        end
+    end
+
+    for key, value in pairs(srcConf) do
+        if not GF_COPY_EXCLUDE[key] then
+            local copy = allowKeys[key] or allowTables[key]
+            if (not copy) and type(key) == "string" then
+                for i = 1, #allowPrefixes do
+                    local prefix = allowPrefixes[i]
+                    if key:sub(1, #prefix) == prefix then
+                        copy = true
+                        break
+                    end
+                end
+            end
+            if copy then dstConf[key] = DeepCopy(value) end
+        end
+    end
+
+    QueueGF(dstKind, "rebuild")
+    RefreshGFPreview()
+    return true
+end
+
+local function RefreshContext(ctx)
+    if not (ctx and ctx.refreshers) then return end
+    for i = 1, #ctx.refreshers do
+        local fn = ctx.refreshers[i]
+        if type(fn) == "function" then pcall(fn) end
+    end
+end
+
+local function ScopeSection(ctx, builder)
+    local h = 72
+    local sec = CreateFrame("Frame", nil, builder.parent)
+    sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
+    sec:SetSize(builder.width, h)
+    sec._msuf2Width = builder.width
+
+    local line = sec:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("BOTTOMLEFT", sec, "BOTTOMLEFT", 0, 0)
+    line:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", 0, 0)
+    line:SetHeight(1)
+    line:SetColorTexture(0.22, 0.42, 0.70, 0.42)
+
+    builder.y = builder.y - h - 8
+    if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
+
+    local function ApplyTopButtonVisual(btn, hover)
+        local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
+        local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
+        local tx = btn._msuf2TopActive and btn._msuf2TopActiveText or btn._msuf2TopText
+        local mul = hover and 1.06 or 1
+        if btn._msuf2Fill then btn._msuf2Fill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 1) end
+        if btn._msuf2Edge then btn._msuf2Edge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 1) end
+        if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
+    end
+
+    local function MakeTopButton(parent, text, width, opts)
+        opts = opts or {}
+        local btn = T.Button(parent, text, width, 24)
+        btn._msuf2TopBg = opts.bg or { 0.018, 0.028, 0.058, 0.95 }
+        btn._msuf2TopBorder = opts.border or { 0.082, 0.125, 0.245, 0.66 }
+        btn._msuf2TopText = opts.textColor or { 0.82, 0.90, 1.00, 1 }
+        btn._msuf2TopHoverBg = opts.hoverBg or { 0.026, 0.040, 0.078, 0.97 }
+        btn._msuf2TopHoverBorder = opts.hoverBorder or { 0.125, 0.220, 0.430, 0.80 }
+        btn._msuf2TopActiveBg = opts.activeBg or { 0.050, 0.105, 0.245, 0.98 }
+        btn._msuf2TopActiveBorder = opts.activeBorder or { 0.200, 0.420, 0.820, 0.92 }
+        btn._msuf2TopActiveText = opts.activeTextColor or { 0.94, 0.98, 1.00, 1 }
+        if btn._msuf2Label then
+            btn._msuf2Label:ClearAllPoints()
+            btn._msuf2Label:SetPoint("CENTER", btn, "CENTER", 0, 0)
+            btn._msuf2Label:SetJustifyH("CENTER")
+        end
+        btn.SetActive = function(self, active)
+            self._msuf2TopActive = active and true or false
+            ApplyTopButtonVisual(self)
+        end
+        btn.SetEnabled = function(self, enabled)
+            if enabled then
+                if self.Enable then self:Enable() end
+            elseif self.Disable then
+                self:Disable()
+            end
+            ApplyTopButtonVisual(self)
+        end
+        btn:SetScript("OnEnter", function(self) ApplyTopButtonVisual(self, true) end)
+        btn:SetScript("OnLeave", function(self) ApplyTopButtonVisual(self) end)
+        btn:SetScript("OnEnable", function(self) ApplyTopButtonVisual(self) end)
+        btn:SetScript("OnDisable", function(self) ApplyTopButtonVisual(self) end)
+        ApplyTopButtonVisual(btn)
+        return btn
+    end
+
+    local function IsEditModeActive()
+        if type(_G.MSUF_IsMSUFEditModeActive) == "function" then return _G.MSUF_IsMSUFEditModeActive() and true or false end
+        local em2 = _G.MSUF_EM2
+        if em2 and em2.State and type(em2.State.IsActive) == "function" then return em2.State.IsActive() and true or false end
+        return _G.MSUF_UnitEditModeActive == true
+    end
+
+    local function SelectScope(kind)
+        M.gfScope = kind or "party"
+        local gf = GF()
+        if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
+        if gf and type(gf.PreviewScopeChanged) == "function" then
+            gf.PreviewScopeChanged()
+        else
+            RefreshGFPreview()
+        end
+        RefreshContext(ctx)
+    end
+
+    local editing = T.Font(sec, "GameFontNormalSmall", "Editing:", { 0.72, 0.82, 1.00, 1 })
+    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -15)
+
+    local scopeBtns = {}
+    local previous
+    for i = 1, #SCOPE_VALUES do
+        local info = SCOPE_VALUES[i]
+        local width = (info.value == "mythicraid") and 68 or 56
+        local btn = MakeTopButton(sec, ScopeShortLabel(info.value), width, {
+            bg = { 0.026, 0.040, 0.084, 0.95 },
+            border = { 0.095, 0.165, 0.330, 0.62 },
+            activeBg = { 0.050, 0.110, 0.255, 0.98 },
+            activeBorder = { 0.200, 0.430, 0.850, 0.92 },
+        })
+        if previous then
+            btn:SetPoint("LEFT", previous, "RIGHT", 4, 0)
+        else
+            btn:SetPoint("LEFT", editing, "RIGHT", 8, 2)
+        end
+        btn:SetScript("OnClick", function() SelectScope(info.value) end)
+        scopeBtns[info.value] = btn
+        previous = btn
+    end
+
+    local copy = MakeTopButton(sec, "Copy To", 86)
+    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, -10)
+    local edit = MakeTopButton(sec, "MSUF Edit Mode", 128)
+    edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
+    local reset = MakeTopButton(sec, "Reset All", 84, {
+        bg = { 0.070, 0.026, 0.034, 0.94 },
+        border = { 0.340, 0.090, 0.110, 0.82 },
+        textColor = { 1.00, 0.82, 0.82, 1 },
+        hoverBg = { 0.090, 0.035, 0.045, 0.96 },
+        hoverBorder = { 0.420, 0.120, 0.140, 0.90 },
+        activeBg = { 0.070, 0.026, 0.034, 0.94 },
+        activeBorder = { 0.340, 0.090, 0.110, 0.82 },
+        activeTextColor = { 1.00, 0.82, 0.82, 1 },
+    })
+    reset:SetPoint("RIGHT", edit, "LEFT", -8, 0)
+
+    local hint = T.Font(sec, "GameFontDisableSmall", "", T.colors.dim)
+    hint:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -43)
+    hint:SetWidth(builder.width - 16)
+    hint:SetJustifyH("LEFT")
+
+    local function PageScopeHint()
+        local labels = {
+            gf_layout = "layout",
+            gf_bars = "health & text",
+            gf_auras = "buffs & debuffs",
+            gf_indicators = "indicators",
+        }
+        return labels[ctx and ctx.key] or "layout"
+    end
+
+    local function RefreshTop()
+        local current = CurrentScope()
+        for i = 1, #SCOPE_VALUES do
+            local info = SCOPE_VALUES[i]
+            if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
+        end
+        if edit.SetText then edit:SetText(IsEditModeActive() and "Exit Edit Mode" or "MSUF Edit Mode") end
+        hint:SetText("Editing " .. ScopeLabel(current) .. " " .. PageScopeHint())
+    end
+
+    if not StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] then
+        StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] = {
+            text = "Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile.",
+            button1 = YES or "Yes",
+            button2 = NO or "No",
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+    StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"].OnAccept = function()
+        local gf = GF()
+        if gf and type(gf.ResetAllToDefaults) == "function" and gf.ResetAllToDefaults() then
+            RefreshGFPreview()
+            RefreshContext(ctx)
+            print("|cffffd700MSUF:|r Group Frames reset to defaults.")
+        end
+    end
+    reset:SetScript("OnClick", function()
+        if StaticPopup_Show then StaticPopup_Show("MSUF2_GF_RESET_ALL_CONFIRM") end
+    end)
+
+    edit:SetScript("OnClick", function()
+        if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+        local active = IsEditModeActive()
+        local key = "gf_" .. CurrentScope()
+        if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
+            _G.MSUF_SetMSUFEditModeDirect(not active, key)
+        elseif _G.MSUF_EM2 and _G.MSUF_EM2.State then
+            if active and type(_G.MSUF_EM2.State.Exit) == "function" then
+                _G.MSUF_EM2.State.Exit("msuf2_group")
+            elseif (not active) and type(_G.MSUF_EM2.State.Enter) == "function" then
+                _G.MSUF_EM2.State.Enter(key)
+            end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshTop) else RefreshTop() end
+    end)
+
+    M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
+    local copyPopup
+    local function ShowCopyPopup(anchor)
+        if copyPopup and copyPopup:IsShown() then copyPopup:Hide(); return end
+        if not copyPopup then
+            copyPopup = CreateFrame("Frame", nil, UIParent, T.Template and T.Template() or nil)
+            copyPopup:SetSize(430, 334)
+            copyPopup:SetFrameStrata("DIALOG")
+            copyPopup:SetFrameLevel(120)
+            copyPopup:EnableMouse(true)
+            if copyPopup.SetBackdrop then
+                copyPopup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+                copyPopup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
+                copyPopup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
+            end
+
+            local title = T.Font(copyPopup, "GameFontNormal", "", { 1.00, 0.82, 0.10, 1 })
+            title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
+            copyPopup._title = title
+
+            local destLabel = T.Font(copyPopup, "GameFontDisableSmall", "Destination", T.colors.dim)
+            destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
+
+            local close = MakeTopButton(copyPopup, "x", 20, {
+                bg = { 0.070, 0.026, 0.034, 0.94 },
+                border = { 0.340, 0.090, 0.110, 0.82 },
+                textColor = { 0.95, 0.70, 0.70, 1 },
+                hoverBg = { 0.090, 0.035, 0.045, 0.96 },
+                hoverBorder = { 0.420, 0.120, 0.140, 0.90 },
+            })
+            close:SetSize(20, 20)
+            close:SetPoint("TOPRIGHT", copyPopup, "TOPRIGHT", -12, -9)
+            close:SetScript("OnClick", function() copyPopup:Hide() end)
+
+            copyPopup._targets = {}
+            local tx = 16
+            for i = 1, #SCOPE_VALUES do
+                local info = SCOPE_VALUES[i]
+                local width = (info.value == "mythicraid") and 70 or 58
+                local btn = MakeTopButton(copyPopup, ScopeShortLabel(info.value), width, {
+                    bg = { 0.020, 0.048, 0.105, 0.96 },
+                    border = { 0.070, 0.160, 0.330, 0.72 },
+                    activeBg = { 0.050, 0.110, 0.240, 0.98 },
+                    activeBorder = { 0.135, 0.300, 0.600, 0.86 },
+                })
+                btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", tx, -58)
+                btn:SetScript("OnClick", function()
+                    if CopyGroupSettings(CurrentScope(), info.value, M.gfCopyScopes) then
+                        RefreshContext(ctx)
+                    end
+                    copyPopup:Hide()
+                end)
+                copyPopup._targets[info.value] = btn
+                tx = tx + width + 6
+            end
+
+            local catLabel = T.Font(copyPopup, "GameFontDisableSmall", "Copy categories", T.colors.dim)
+            catLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -90)
+            copyPopup._checks = {}
+            for i = 1, #GF_COPY_CATEGORIES do
+                local cat = GF_COPY_CATEGORIES[i]
+                local col = (i > 6) and 1 or 0
+                local row = (i - 1) % 6
+                local cb = CreateFrame("CheckButton", nil, copyPopup, "UICheckButtonTemplate")
+                cb:SetSize(20, 20)
+                cb:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16 + col * 205, -110 - row * 23)
+                cb:SetChecked(M.gfCopyScopes[cat.key] == true)
+                cb:SetScript("OnClick", function(self) M.gfCopyScopes[cat.key] = self:GetChecked() and true or false end)
+                if T.StyleCheckmark then T.StyleCheckmark(cb) end
+                local fs = cb.Text or cb.text
+                if fs then
+                    fs:SetText(cat.label)
+                    if T.StyleFontString then T.StyleFontString(fs, T.colors.text, 0) end
+                end
+                copyPopup._checks[i] = cb
+            end
+
+            local allBtn = MakeTopButton(copyPopup, "All", 48)
+            allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
+            allBtn:SetScript("OnClick", function()
+                for i = 1, #GF_COPY_CATEGORIES do
+                    local cat = GF_COPY_CATEGORIES[i]
+                    M.gfCopyScopes[cat.key] = true
+                    if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(true) end
+                end
+            end)
+            local noneBtn = MakeTopButton(copyPopup, "None", 58)
+            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
+            noneBtn:SetScript("OnClick", function()
+                for i = 1, #GF_COPY_CATEGORIES do
+                    local cat = GF_COPY_CATEGORIES[i]
+                    M.gfCopyScopes[cat.key] = false
+                    if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(false) end
+                end
+            end)
+        end
+
+        local src = CurrentScope()
+        if copyPopup._title then copyPopup._title:SetText("Copy from " .. ScopeLabel(src)) end
+        for i = 1, #GF_COPY_CATEGORIES do
+            if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(M.gfCopyScopes[GF_COPY_CATEGORIES[i].key] == true) end
+        end
+        local nextX = 16
+        for i = 1, #SCOPE_VALUES do
+            local info = SCOPE_VALUES[i]
+            local btn = copyPopup._targets[info.value]
+            if btn then
+                local shown = info.value ~= src
+                btn:SetShown(shown)
+                if shown then
+                    btn:ClearAllPoints()
+                    btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", nextX, -58)
+                    nextX = nextX + btn:GetWidth() + 6
+                end
+            end
+        end
+        copyPopup:ClearAllPoints()
+        copyPopup:SetPoint("TOPRIGHT", anchor or copy, "BOTTOMRIGHT", 0, -6)
+        copyPopup:Show()
+    end
+    copy:SetScript("OnClick", function(self) ShowCopyPopup(self) end)
+    sec:SetScript("OnHide", function() if copyPopup then copyPopup:Hide() end end)
+
+    M.AddRefresher(ctx, RefreshTop)
+    RefreshTop()
 end
 
 local GroupPage = M.GroupPage or {}
@@ -380,13 +785,16 @@ local GROWTH_TILE_VALUES = {
     { value = "LEFT", text = "Left", dx = -1, dy = 0, arrow = "<" },
 }
 
-local function BuildGrowthDirectionTiles(ctx, section)
+local function BuildGrowthDirectionTiles(ctx, section, opts)
     if not section then return nil end
 
-    local x = section._msuf2ContentX or 14
-    local y = section._msuf2CursorY or -38
-    local tileW, tileH, gap = 64, 64, 6
-    section._msuf2CursorY = y - tileH - 40
+    opts = opts or {}
+    local x = opts.x or section._msuf2ContentX or 14
+    local y = opts.y or section._msuf2CursorY or -38
+    local tileW, tileH, gap = opts.tileWidth or 64, opts.tileHeight or 64, opts.gap or 6
+    if opts.advanceCursor ~= false then
+        section._msuf2CursorY = y - tileH - 40
+    end
 
     local label = T.Font(section, "GameFontNormalSmall", "Growth Direction", { 1.00, 0.82, 0.18, 1 })
     label:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
@@ -394,6 +802,7 @@ local function BuildGrowthDirectionTiles(ctx, section)
     local holder = CreateFrame("Frame", nil, section)
     holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, y - 20)
     holder:SetSize((tileW * 4) + (gap * 3), tileH)
+    holder._msuf2Label = label
 
     local buttons = {}
 
@@ -592,16 +1001,31 @@ for i = 1, #ROLE_SORT_DEFS do
     ROLE_SORT_BY_KEY[ROLE_SORT_DEFS[i].key] = i
 end
 
-local function BuildRoleOrderRows(ctx, section)
+local function BuildRoleOrderRows(ctx, section, opts)
     if not section then return nil end
 
-    local rowW, rowH, rowGap = 200, 22, 4
-    local x = section._msuf2ContentX or 14
-    local y = section._msuf2CursorY or -146
-    section._msuf2CursorY = y - (#ROLE_SORT_DEFS * (rowH + rowGap)) - 10
+    opts = opts or {}
+    local rowW, rowH, rowGap = opts.width or 220, 22, 4
+    local x = opts.x or section._msuf2ContentX or 14
+    local y = opts.y or section._msuf2CursorY or -146
+    local listY = y
+    if opts.hint or opts.title then
+        local title = T.Font(section, "GameFontNormalSmall", opts.title or "Role Priority", T.colors.text)
+        title:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
+        title:SetWidth(rowW)
+        title:SetJustifyH("LEFT")
+        local hint = T.Font(section, "GameFontDisableSmall", opts.hint or "Drag roles to reorder.", T.colors.dim)
+        hint:SetPoint("TOPLEFT", section, "TOPLEFT", x, y - 16)
+        hint:SetWidth(rowW + 80)
+        hint:SetJustifyH("LEFT")
+        listY = y - 38
+    end
+    if opts.advanceCursor ~= false then
+        section._msuf2CursorY = listY - (#ROLE_SORT_DEFS * (rowH + rowGap)) - 10
+    end
 
     local holder = CreateFrame("Frame", nil, section)
-    holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
+    holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, listY)
     holder:SetSize(rowW, (#ROLE_SORT_DEFS * (rowH + rowGap)))
 
     local rows = {}
@@ -1082,6 +1506,7 @@ GroupPage.SCOPE_VALUES = SCOPE_VALUES
 GroupPage.GROWTH_VALUES = GROWTH_VALUES
 GroupPage.HEALTH_MODES = HEALTH_MODES
 GroupPage.TEXT_MODES = TEXT_MODES
+GroupPage.DELIMITER_VALUES = DELIMITER_VALUES
 GroupPage.ANCHORS = ANCHORS
 GroupPage.AURA_ANCHORS = AURA_ANCHORS
 GroupPage.GF_RENDERERS = GF_RENDERERS

@@ -313,6 +313,91 @@ local function DeepCopy(src)
     return dst
 end
 
+local COPY_POWER_BAR_FIELDS = {
+    "showPowerBar", "powerBarHeight", "embedPowerBarIntoHealth",
+    "powerBarBorderEnabled", "powerBarBorderThickness", "powerSmoothFill",
+    "powerBarDetached", "detachedPowerBarWidth", "detachedPowerBarHeight",
+    "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", "detachedPowerBarFrameLevelOffset",
+    "detachedPowerBarTextOnBar", "detachedPowerBarSyncClassPower", "detachedPowerBarAnchorToClassPower",
+}
+
+local COPY_PORTRAIT_FIELDS = {
+    "portraitMode", "portraitRender", "portraitClassStyle", "portraitShape",
+    "portraitSizeOverride", "portraitOffsetX", "portraitOffsetY",
+    "portraitBorderStyle", "portraitBorderThickness",
+    "portraitBgEnabled", "portraitFillBorder",
+}
+
+local COPY_TEXT_FIELDS = {
+    "nameTextAnchor", "nameOffsetX", "nameOffsetY", "nameFontSize",
+    "hpTextAnchor", "hpOffsetX", "hpOffsetY", "hpFontSize",
+    "hpTextMode", "hpTextReverse", "hpTextSeparator", "hpTextSpacerEnabled", "hpTextSpacerX",
+    "powerTextAnchor", "powerOffsetX", "powerOffsetY", "powerFontSize",
+    "powerTextMode", "powerTextSeparator", "powerTextSpacerEnabled", "powerTextSpacerX",
+    "nameTextLayer", "hpTextLayer", "powerTextLayer",
+}
+
+local COPY_INDICATOR_FIELDS = {
+    "showLeaderIcon", "leaderIconOffsetX", "leaderIconOffsetY", "leaderIconAnchor", "leaderIconSize", "leaderIconLayer",
+    "showRaidMarker", "raidMarkerOffsetX", "raidMarkerOffsetY", "raidMarkerAnchor", "raidMarkerSize", "raidMarkerLayer",
+    "showLevelIndicator", "levelIndicatorOffsetX", "levelIndicatorOffsetY", "levelIndicatorAnchor", "levelIndicatorSize", "levelIndicatorLayer",
+    "showEliteIcon", "eliteIconSize", "eliteIconAnchor", "eliteIconOffsetX", "eliteIconOffsetY", "eliteIconLayer",
+}
+
+local COPY_STATUSICON_FIELDS = {
+    "statusIconsTestMode", "statusIconsMidnightStyle", "statusIconsAlpha",
+    "statusTextEnabled", "statusTextOffsetX", "statusTextOffsetY",
+    "statusTextAnchor", "statusTextSize", "statusTextLayer",
+    "showCombatStateIndicator", "showRestingIndicator", "showIncomingResIndicator",
+    "combatStateIndicatorOffsetX", "combatStateIndicatorOffsetY", "combatStateIndicatorAnchor",
+    "combatStateIndicatorSize", "combatStateIndicatorLayer", "combatStateIndicatorSymbol",
+    "restedStateIndicatorOffsetX", "restedStateIndicatorOffsetY", "restedStateIndicatorAnchor",
+    "restedStateIndicatorSize", "restedStateIndicatorLayer", "restedStateIndicatorSymbol",
+    "incomingResIndicatorOffsetX", "incomingResIndicatorOffsetY", "incomingResIndicatorAnchor",
+    "incomingResIndicatorSize", "incomingResIndicatorLayer", "incomingResIndicatorSymbol",
+}
+
+local COPY_FRAME_BASIC_FIELDS = {
+    "enabled", "showName", "showHP", "showPower", "reverseFillBars", "smoothFill",
+}
+
+local COPY_TRANSPARENCY_FIELDS = {
+    "alphaInCombat", "alphaOutOfCombat", "alphaSync", "alphaSyncBoth",
+    "alphaExcludeTextPortrait", "alphaPreserveHPColor", "alphaLayerMode",
+    "alphaFGInCombat", "alphaFGOutOfCombat", "alphaBGInCombat", "alphaBGOutOfCombat", "alphaHPInCombat", "alphaHPOutOfCombat",
+}
+
+local COPY_LOAD_CONDITION_FIELDS = {
+    "loadCondHideMounted", "loadCondHideInVehicle", "loadCondHideResting",
+    "loadCondHideInCombat", "loadCondHideOutOfCombat", "loadCondHideStealthed",
+    "loadCondHideSolo", "loadCondHideInGroup", "loadCondHideInInstance", "loadCondActive",
+}
+
+local COPY_LAYOUT_FIELDS = {
+    "width", "height", "offsetX", "offsetY", "anchorFrameName", "anchorToUnitframe",
+}
+
+local UF_COPY_CATEGORIES = {
+    { key = "basics",       label = "Frame Basics",     default = true },
+    { key = "text",         label = "Text",             default = true },
+    { key = "portrait",     label = "Portrait",         default = true },
+    { key = "power",        label = "Power Bar",        default = true },
+    { key = "castbar",      label = "Castbar",          default = true },
+    { key = "status",       label = "Status Icons",     default = true },
+    { key = "load",         label = "Load Conditions",  default = true },
+    { key = "transparency", label = "Transparency",     default = true },
+    { key = "layout",       label = "Size & Anchoring", default = false },
+}
+
+local function NewCopyScopeDefaults()
+    local t = {}
+    for i = 1, #UF_COPY_CATEGORIES do
+        local cat = UF_COPY_CATEGORIES[i]
+        t[cat.key] = cat.default ~= false
+    end
+    return t
+end
+
 local UNIT_COPY_TARGETS = {
     { value = "player", text = "Player" },
     { value = "target", text = "Target" },
@@ -350,28 +435,238 @@ local function UnitTopPillWidth(unit)
     return 56
 end
 
-local function CopyUnitSettings(unit, target)
-    if target == "all" then
-        for i = 1, #UNIT_COPY_TARGETS do
-            local value = UNIT_COPY_TARGETS[i].value
-            if value ~= unit then CopyUnitSettings(unit, value) end
-        end
-        return
-    end
-    if not target or target == unit then return end
-    local sourceConf = GetConf(unit)
-    local targetConf = GetConf(target)
-    for k in pairs(targetConf) do targetConf[k] = nil end
-    local copyConf = DeepCopy(sourceConf)
-    for k, v in pairs(copyConf) do targetConf[k] = v end
-    M.RequestUnitApply(target, "MSUF2_COPY_UNIT", { preview = true, text = true, power = true, alpha = true, castbar = true })
+local UNIT_KEY_SET = {
+    player = true,
+    target = true,
+    targettarget = true,
+    focus = true,
+    pet = true,
+    boss = true,
+}
+
+local function CanonUnitKey(key)
+    if type(key) ~= "string" then return key end
+    key = key:lower()
+    if key == "tot" or key == "targetoftarget" or key == "target_of_target" then return "targettarget" end
+    if key:match("^boss") then return "boss" end
+    return key
 end
 
-local function ToggleEditMode()
+local function EnsureUnitDB(key)
+    local db = M.EnsureDB()
+    key = CanonUnitKey(key)
+    if not UNIT_KEY_SET[key] then return nil, nil end
+    if key == "targettarget" then
+        db.targettarget = db.targettarget or db.tot or {}
+        db.tot = db.targettarget
+        return db.targettarget, key
+    end
+    db[key] = db[key] or {}
+    return db[key], key
+end
+
+local function CopyFields(dst, src, fields)
+    for i = 1, #fields do
+        dst[fields[i]] = src[fields[i]]
+    end
+end
+
+local PB_SHOW_KEY_MAP = {
+    player = "showPlayerPowerBar",
+    target = "showTargetPowerBar",
+    focus = "showFocusPowerBar",
+    boss = "showBossPowerBar",
+}
+
+local function ReadPowerBarEnabled(conf, unitKey)
+    if conf and conf.showPowerBar ~= nil then return conf.showPowerBar ~= false end
+    local fn = _G.MSUF_ReadUnitPowerBarEnabled
+    if type(fn) == "function" then return fn(unitKey) end
+    local b, bk = _G.MSUF_DB and _G.MSUF_DB.bars, PB_SHOW_KEY_MAP[unitKey]
+    if b and bk and b[bk] ~= nil then return b[bk] ~= false end
+    return true
+end
+
+local function ReadPowerBarHeight(conf, unitKey)
+    if conf and type(conf.powerBarHeight) == "number" then return conf.powerBarHeight end
+    local fn = _G.MSUF_ReadUnitPowerBarHeight
+    if type(fn) == "function" then return fn(unitKey) end
+    local b = _G.MSUF_DB and _G.MSUF_DB.bars
+    return tonumber(b and b.powerBarHeight) or 3
+end
+
+local function ReadPowerBarEmbed(conf, unitKey)
+    if conf and conf.embedPowerBarIntoHealth ~= nil then return conf.embedPowerBarIntoHealth == true end
+    local fn = _G.MSUF_ReadUnitPowerBarEmbed
+    if type(fn) == "function" then return fn(unitKey) end
+    local b = _G.MSUF_DB and _G.MSUF_DB.bars
+    return b and b.embedPowerBarIntoHealth == true
+end
+
+local function ReadPowerBarBorderEnabled(conf, unitKey)
+    if conf and conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
+    local fn = _G.MSUF_ReadUnitPowerBarBorderEnabled
+    if type(fn) == "function" then return fn(unitKey) end
+    local b = _G.MSUF_DB and _G.MSUF_DB.bars
+    return b and b.powerBarBorderEnabled == true
+end
+
+local function ReadPowerBarBorderThickness(conf, unitKey)
+    if conf and type(conf.powerBarBorderThickness) == "number" then return conf.powerBarBorderThickness end
+    local fn = _G.MSUF_ReadUnitPowerBarBorderThickness
+    if type(fn) == "function" then return fn(unitKey) end
+    local b = _G.MSUF_DB and _G.MSUF_DB.bars
+    return tonumber(b and (b.powerBarBorderThickness or b.powerBarBorderSize)) or 1
+end
+
+local function ReadPowerSmoothFill(conf, unitKey)
+    if conf and conf.powerSmoothFill ~= nil then return conf.powerSmoothFill == true end
+    if unitKey == "player" then
+        local b = _G.MSUF_DB and _G.MSUF_DB.bars
+        return not (b and b.smoothPowerBar == false)
+    end
+    return false
+end
+
+local function CopyPowerBarFields(dst, src, srcKey)
+    CopyFields(dst, src, COPY_POWER_BAR_FIELDS)
+    dst.showPowerBar = ReadPowerBarEnabled(src, srcKey)
+    dst.powerBarHeight = ReadPowerBarHeight(src, srcKey)
+    dst.embedPowerBarIntoHealth = ReadPowerBarEmbed(src, srcKey)
+    dst.powerBarBorderEnabled = ReadPowerBarBorderEnabled(src, srcKey)
+    dst.powerBarBorderThickness = ReadPowerBarBorderThickness(src, srcKey)
+    dst.powerSmoothFill = ReadPowerSmoothFill(src, srcKey)
+end
+
+local CASTBAR_KEY_MAP = {
+    player = { enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName" },
+    target = { enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName" },
+    focus  = { enable = "enableFocusCastbar",  time = "showFocusCastTime",  icon = "castbarFocusShowIcon",  name = "castbarFocusShowSpellName" },
+    boss   = { enable = "enableBossCastbar",   time = "showBossCastTime",   icon = "showBossCastIcon",      name = "showBossCastName" },
+}
+
+local function CopyCastbar(g, src, dst)
+    src, dst = CanonUnitKey(src), CanonUnitKey(dst)
+    local s, d = CASTBAR_KEY_MAP[src], CASTBAR_KEY_MAP[dst]
+    if not s or not d then return end
+    g[d.enable] = g[s.enable]
+    g[d.time] = g[s.time]
+    g[d.icon] = g[s.icon]
+    g[d.name] = g[s.name]
+end
+
+local function EnsureCopyDialog()
+    if not StaticPopupDialogs or StaticPopupDialogs.MSUF2_COPY_TO_ALL_CONFIRM then return end
+    StaticPopupDialogs.MSUF2_COPY_TO_ALL_CONFIRM = {
+        text = "Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target.",
+        button1 = YES or "Yes",
+        button2 = NO or "No",
+        OnAccept = function(_, data)
+            if type(data) == "function" then data() end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
+local function ConfirmCopyToAll(callback)
+    if type(callback) ~= "function" then return end
+    local legacy = _G.MSUF_ConfirmCopyToAll
+    if type(legacy) == "function" then
+        legacy(callback)
+        return
+    end
+    EnsureCopyDialog()
+    if StaticPopup_Show then
+        StaticPopup_Show("MSUF2_COPY_TO_ALL_CONFIRM", nil, nil, callback)
+    else
+        callback()
+    end
+end
+
+local function CopyUnitSettings(unit, target, scopes)
+    M.EnsureDB()
+    _G.MSUF_DB = _G.MSUF_DB or {}
+    _G.MSUF_DB.general = _G.MSUF_DB.general or {}
+    local g = _G.MSUF_DB.general
+    local src, srcKey = EnsureUnitDB(unit)
+    if not src or not srcKey then return end
+
+    target = (type(target) == "string") and target:lower() or DefaultCopyTarget(srcKey)
+    scopes = (type(scopes) == "table") and scopes or NewCopyScopeDefaults()
+
+    local function CopyOne(toKey)
+        local dst, dstKey = EnsureUnitDB(toKey)
+        if not dst or not dstKey or dstKey == srcKey then return end
+
+        if scopes.basics then CopyFields(dst, src, COPY_FRAME_BASIC_FIELDS) end
+        if scopes.text then
+            CopyFields(dst, src, COPY_TEXT_FIELDS)
+            dst.hpPowerTextOverride = nil
+        end
+        if scopes.portrait then
+            CopyFields(dst, src, COPY_PORTRAIT_FIELDS)
+            dst.portraitDecoOverride = nil
+        end
+        if scopes.power then CopyPowerBarFields(dst, src, srcKey) end
+        if scopes.status then
+            CopyFields(dst, src, COPY_INDICATOR_FIELDS)
+            CopyFields(dst, src, COPY_STATUSICON_FIELDS)
+        end
+        if scopes.castbar then
+            dst.showInterrupt = src.showInterrupt
+            CopyCastbar(g, srcKey, dstKey)
+        end
+        if scopes.load then CopyFields(dst, src, COPY_LOAD_CONDITION_FIELDS) end
+        if scopes.transparency then CopyFields(dst, src, COPY_TRANSPARENCY_FIELDS) end
+        if scopes.layout then CopyFields(dst, src, COPY_LAYOUT_FIELDS) end
+        if scopes.portrait then
+            Call("MSUF_Portraits_SyncUnit", dstKey)
+            Call("MSUF_PortraitDecoration_SyncUnit", dstKey)
+        end
+        M.RequestUnitApply(dstKey, "MSUF2_COPY_UNIT", {
+            preview = true,
+            text = scopes.text or scopes.status,
+            power = scopes.power,
+            alpha = scopes.transparency,
+            castbar = scopes.castbar,
+        })
+    end
+
+    local function FinishCopy()
+        if scopes.castbar then Call("MSUF_UpdateCastbarVisuals") end
+        if scopes.status then
+            Call("MSUF_RefreshAllIndicators")
+            Call("MSUF_RefreshStatusIndicators")
+        end
+        if scopes.transparency then Call("MSUF_RefreshAllUnitAlphas") end
+        Call("MSUF_UFPreview_RequestRefresh", "COPY_UNIT_SETTINGS")
+    end
+
+    if target == "all" then
+        ConfirmCopyToAll(function()
+            for i = 1, #UNIT_COPY_TARGETS do
+                local value = UNIT_COPY_TARGETS[i].value
+                if value ~= srcKey then CopyOne(value) end
+            end
+            FinishCopy()
+        end)
+        return
+    end
+
+    target = CanonUnitKey(target)
+    if not target or target == srcKey then return end
+    CopyOne(target)
+    FinishCopy()
+end
+
+local function ToggleEditMode(unit)
     if _G.InCombatLockdown and _G.InCombatLockdown() then return end
     local active = (_G.MSUF_IsMSUFEditModeActive and _G.MSUF_IsMSUFEditModeActive()) or _G.MSUF_UnitEditModeActive
     if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
-        _G.MSUF_SetMSUFEditModeDirect(not active)
+        _G.MSUF_SetMSUFEditModeDirect(not active, CanonUnitKey(unit))
     end
 end
 
@@ -607,6 +902,7 @@ UnitPage.PORTRAIT_RENDER = PORTRAIT_RENDER
 UnitPage.PORTRAIT_SHAPES = PORTRAIT_SHAPES
 UnitPage.PORTRAIT_BORDERS = PORTRAIT_BORDERS
 UnitPage.UNIT_COPY_TARGETS = UNIT_COPY_TARGETS
+UnitPage.UF_COPY_CATEGORIES = UF_COPY_CATEGORIES
 UnitPage.GetConf = GetConf
 UnitPage.GetGeneral = GetGeneral
 UnitPage.GetBars = GetBars
@@ -615,6 +911,7 @@ UnitPage.DeepCopy = DeepCopy
 UnitPage.DefaultCopyTarget = DefaultCopyTarget
 UnitPage.UnitTopLabel = UnitTopLabel
 UnitPage.UnitTopPillWidth = UnitTopPillWidth
+UnitPage.NewCopyScopeDefaults = NewCopyScopeDefaults
 UnitPage.CopyUnitSettings = CopyUnitSettings
 UnitPage.ToggleEditMode = ToggleEditMode
 UnitPage.IsEditModeActive = IsEditModeActive

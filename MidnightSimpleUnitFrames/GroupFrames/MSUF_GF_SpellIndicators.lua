@@ -1462,6 +1462,10 @@ end
 
 local function EnsureBlizzardAuraDefaults(auras)
     if type(auras) ~= "table" then return end
+    if auras.dynamicScale == nil then auras.dynamicScale = false end
+    if auras.showTooltip == nil then auras.showTooltip = true end
+    if auras.sortByDuration == nil then auras.sortByDuration = false end
+    if auras.preferPlayer == nil then auras.preferPlayer = true end
     if auras.renderer == nil then auras.renderer = "BLIZZARD" end
     if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
     local types = auras.blizzardTypes

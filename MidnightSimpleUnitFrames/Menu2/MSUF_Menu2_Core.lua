@@ -13,6 +13,7 @@ M.pageOrder = M.pageOrder or {}
 M.cache = M.cache or {}
 
 local floor = math.floor
+local max = math.max
 
 local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 900, 650
 local MIN_WINDOW_W, MIN_WINDOW_H = 760, 520
@@ -829,14 +830,91 @@ local function BuildDashboard(ctx)
     W.Text(wago, "Browse shared MSUF imports on Wago.", 14, -36, colW - 28, T.colors.muted)
     local browse = AddButton(wago, "Browse Wago Profiles", 14, -64, colW - 42, 34, function()
         if type(_G.MSUF_ShowCopyLink) == "function" then
-            _G.MSUF_ShowCopyLink("Wago Profiles", "https://wago.io/search/imports/wow?q=MidnightSimpleUnitFrames")
+            _G.MSUF_ShowCopyLink("Wago Profiles", "https://wago.io/search/imports/wow/msuf")
         end
     end)
     if browse._msuf2Label then browse._msuf2Label:SetFontObject("GameFontNormal") end
     if T.SkinPrimaryButton then T.SkinPrimaryButton(browse) end
     W.Text(wago, "Copies the Wago link so you can open it in your browser.", 14, -106, colW - 28, T.colors.muted)
-    local footer = T.Font(wago, "GameFontDisableSmall", "v5.0 Beta 1  -  by Mapko  -  with help from R4IzOr\nSupport MSUF Development", T.colors.muted)
-    footer:SetPoint("BOTTOMLEFT", wago, "BOTTOMLEFT", 14, 14)
+
+    local function AddIconTooltip(frame, title, text)
+        if type(_G.MSUF_AddTooltip) == "function" then
+            _G.MSUF_AddTooltip(frame, title, text)
+            return
+        end
+        frame:SetScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
+            GameTooltip:AddLine(title or "", 1, 1, 1)
+            if text and text ~= "" then GameTooltip:AddLine(text, 0.85, 0.85, 0.85, true) end
+            GameTooltip:Show()
+        end)
+        frame:SetScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+    end
+
+    local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
+    local links = {
+        patreon = "https://www.patreon.com/cw/MidnightSimpleUnitframes",
+        paypal = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ",
+        kofi = "https://ko-fi.com/midnightsimpleunitframes#linkModal",
+        github = "https://github.com/Mapkov2/MidnightSimpleUnitFrames",
+    }
+    local support = T.Font(wago, "GameFontDisableSmall", "Support MSUF Development", T.colors.muted)
+    support:SetPoint("BOTTOMLEFT", wago, "BOTTOMLEFT", 14, 14)
+    support:SetWidth(max(120, colW - 198))
+    support:SetJustifyH("LEFT")
+    local aboutVer
+    if _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function" then
+        aboutVer = _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
+    end
+    local aboutText = "by Mapko"
+    if type(aboutVer) == "string" and aboutVer ~= "" then
+        aboutText = "v" .. aboutVer .. "  -  by Mapko  -  with help from R41z0r"
+    end
+    local about = T.Font(wago, "GameFontDisableSmall", aboutText, T.colors.muted)
+    about:SetPoint("BOTTOMLEFT", support, "TOPLEFT", 0, 4)
+    about:SetWidth(max(120, colW - 28))
+    about:SetJustifyH("LEFT")
+
+    local iconRow = CreateFrame("Frame", nil, wago)
+    iconRow:SetSize(160, 24)
+    iconRow:SetPoint("BOTTOMRIGHT", wago, "BOTTOMRIGHT", -12, 12)
+    local function CreateSupportIcon(texture, title, tooltip, url)
+        local button = CreateFrame("Button", nil, iconRow)
+        button:SetSize(22, 22)
+        local tex = button:CreateTexture(nil, "ARTWORK")
+        tex:SetAllPoints()
+        tex:SetTexture(iconDir .. texture)
+        local hover = button:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetAllPoints()
+        hover:SetColorTexture(1, 1, 1, 0.10)
+        button:SetScript("OnClick", function()
+            if type(_G.MSUF_ShowCopyLink) == "function" then
+                _G.MSUF_ShowCopyLink(title, url)
+            end
+        end)
+        AddIconTooltip(button, title, tooltip)
+        return button
+    end
+    local icons = {
+        { texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = links.patreon },
+        { texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.", url = links.paypal },
+        { texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = links.kofi },
+        { texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = links.github },
+    }
+    local previous
+    for i = 1, #icons do
+        local data = icons[i]
+        local icon = CreateSupportIcon(data.texture, data.title, data.tooltip, data.url)
+        if previous then
+            icon:SetPoint("RIGHT", previous, "LEFT", -7, 0)
+        else
+            icon:SetPoint("RIGHT", iconRow, "RIGHT", 0, 0)
+        end
+        previous = icon
+    end
 
     y = y - (scaleCardH + 12)
     local advanced = Card("Advanced", x0, y, width, 76)
@@ -862,7 +940,7 @@ local function BuildDashboard(ctx)
     ctx:SetContentHeight(math.abs(y) + 100)
 end
 
-M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard })
+M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard, version = 2 })
 
 local function ApplyMenuFrameScale(frame)
     if not (frame and frame.SetScale) then return end
