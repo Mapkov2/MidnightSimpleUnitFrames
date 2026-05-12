@@ -1,0 +1,462 @@
+local addonName, ns = ...
+ns = ns or {}
+
+local M = ns.MSUF2 or {}
+ns.MSUF2 = M
+_G.MSUF2 = M
+
+local W = M.Widgets
+local T = M.Theme
+local GP = M.GroupPage or {}
+
+local floor = math.floor
+local ceil = math.ceil
+local max = math.max
+local min = math.min
+
+local SCOPE_VALUES = GP.SCOPE_VALUES or {}
+local GROWTH_VALUES = GP.GROWTH_VALUES or {}
+local HEALTH_MODES = GP.HEALTH_MODES or {}
+local TEXT_MODES = GP.TEXT_MODES or {}
+local ANCHORS = GP.ANCHORS or {}
+local AURA_ANCHORS = GP.AURA_ANCHORS or {}
+local GF_RENDERERS = GP.GF_RENDERERS or {}
+local GF_AURA_FILTERS = GP.GF_AURA_FILTERS or {}
+local GF_AURA_ORG = GP.GF_AURA_ORG or {}
+local SORT_MODES = GP.SORT_MODES or {}
+local GF_BAR_MODES = GP.GF_BAR_MODES or {}
+local SIMPLE_TEXTURES = GP.SIMPLE_TEXTURES or {}
+local GF_ANCHOR_TO = GP.GF_ANCHOR_TO or {}
+local GF_ANCHOR_POINTS = GP.GF_ANCHOR_POINTS or {}
+local TOOLTIP_MODES = GP.TOOLTIP_MODES or {}
+local TOOLTIP_MODIFIERS = GP.TOOLTIP_MODIFIERS or {}
+local STATUS_ICON_ANCHORS = GP.STATUS_ICON_ANCHORS or {}
+local GF_STATUS_ICON_SPECS = GP.GF_STATUS_ICON_SPECS or {}
+local GF_STATUS_ICON_VALUES = GP.GF_STATUS_ICON_VALUES or {}
+local PLACED_INDICATOR_TYPES = GP.PLACED_INDICATOR_TYPES or {}
+local FRAME_EFFECT_TYPES = GP.FRAME_EFFECT_TYPES or {}
+local SPELL_GROWTH_VALUES = GP.SPELL_GROWTH_VALUES or {}
+local CI_SLOT_VALUES = GP.CI_SLOT_VALUES or {}
+local CI_SLOT_DEFAULTS = GP.CI_SLOT_DEFAULTS or {}
+local DISPEL_OVERLAY_STYLES = GP.DISPEL_OVERLAY_STYLES or {}
+local DEBUFF_STRIPE_EDGES = GP.DEBUFF_STRIPE_EDGES or {}
+
+local GF = GP.GF
+local RefreshGFPreview = GP.RefreshGFPreview
+local Conf = GP.Conf
+local Val = GP.Val
+local QueueGF = GP.QueueGF
+local Set = GP.Set
+local Bool = GP.Bool
+local Num = GP.Num
+local ScopeSection = GP.ScopeSection
+local CurrentScope = GP.CurrentScope
+local BindScopeToggle = GP.BindScopeToggle
+local BindScopeSlider = GP.BindScopeSlider
+local BindScopeDropdown = GP.BindScopeDropdown
+local BuildGrowthDirectionTiles = GP.BuildGrowthDirectionTiles
+local BuildRoleOrderRows = GP.BuildRoleOrderRows
+local AurasRoot = GP.AurasRoot
+local AuraGroup = GP.AuraGroup
+local PrivateAuras = GP.PrivateAuras
+local SpellIndicators = GP.SpellIndicators
+local IconStyleValues = GP.IconStyleValues
+local CurrentGFStatusSpec = GP.CurrentGFStatusSpec
+local QueueSpellIndicators = GP.QueueSpellIndicators
+local SpellSpecValues = GP.SpellSpecValues
+local SpellTrackedSpecValues = GP.SpellTrackedSpecValues
+local CurrentSpellMultiSpec = GP.CurrentSpellMultiSpec
+local EffectiveSpellSpec = GP.EffectiveSpellSpec
+local SpellAuraValues = GP.SpellAuraValues
+local CurrentSpellAura = GP.CurrentSpellAura
+local CurrentSpellConfig = GP.CurrentSpellConfig
+local PlacedConfig = GP.PlacedConfig
+local FrameEffectConfig = GP.FrameEffectConfig
+local CICategoryValues = GP.CICategoryValues
+local CIFilterValues = GP.CIFilterValues
+local CIModeValues = GP.CIModeValues
+local CurrentCISlot = GP.CurrentCISlot
+local CICustomConfig = GP.CICustomConfig
+local BindNestedToggle = GP.BindNestedToggle
+local BindNestedSlider = GP.BindNestedSlider
+local BindNestedDropdown = GP.BindNestedDropdown
+local SetOptionEnabled = GP.SetOptionEnabled
+local SetOptionsEnabled = GP.SetOptionsEnabled
+local function BuildGFLayout(ctx)
+    local b = W.PageBuilder(ctx)
+    ScopeSection(ctx, b)
+    M.GroupPreview.Add(ctx, b)
+
+    local general = b:CollapsibleSection("general", "General", 292, false)
+    BindScopeToggle(ctx, W.Toggle(general, "Enable group frames"), "enabled", false, "rebuild")
+    BindScopeToggle(ctx, W.Toggle(general, "Show player"), "showPlayer", true, "rebuild")
+    BindScopeToggle(ctx, W.Toggle(general, "Show solo"), "showSolo", false, "rebuild")
+    BindScopeToggle(ctx, W.Toggle(general, "Reverse fill direction"), "reverseFill", false, "visual")
+    BindScopeToggle(ctx, W.Toggle(general, "Smooth health fill"), "smoothFill", true, "visual")
+    BindScopeToggle(ctx, W.Toggle(general, "Hide in client scene"), "hideInClientScene", true, "visual")
+    BindScopeSlider(ctx, W.Slider(general, "Hide offline after", 0, 120, 1, 300), "hideOfflineDelay", 0, "visual")
+
+    local layout = b:CollapsibleSection("layout", "Layout", 450, false)
+    BindScopeSlider(ctx, W.Slider(layout, "Width", 40, 300, 1, 300), "width", 120, "rebuild")
+    BindScopeSlider(ctx, W.Slider(layout, "Height", 16, 120, 1, 300), "height", 40, "rebuild")
+    BindScopeSlider(ctx, W.Slider(layout, "Spacing", 0, 20, 1, 300), "spacing", 1, "rebuild")
+    BuildGrowthDirectionTiles(ctx, layout)
+    BindScopeSlider(ctx, W.Slider(layout, "Units per column", 1, 40, 1, 300), "unitsPerColumn", 5, "rebuild")
+    BindScopeSlider(ctx, W.Slider(layout, "Max columns", 1, 8, 1, 300), "maxColumns", 8, "rebuild")
+
+    local sorting = b:CollapsibleSection("sorting", "Sorting", 300, false)
+    local sortMode = W.Dropdown(sorting, "Sort Mode", SORT_MODES, 240)
+    if sortMode._msuf2Title then
+        sortMode._msuf2Title:ClearAllPoints()
+        sortMode._msuf2Title:SetPoint("LEFT", sortMode, "RIGHT", 8, 0)
+        sortMode._msuf2Title:SetJustifyH("LEFT")
+        sortMode._msuf2Title:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
+    end
+    local refreshSortingControls
+    M.BindDropdown(ctx, sortMode,
+        function()
+            local conf = Conf(CurrentScope())
+            if conf.sortMode then return conf.sortMode end
+            return conf.sortByRole and "ROLE" or "INDEX"
+        end,
+        function(v)
+            local conf = Conf(CurrentScope())
+            conf.sortMode = v or "INDEX"
+            conf.sortByRole = (conf.sortMode == "ROLE")
+            QueueGF(CurrentScope(), "rebuild")
+            if refreshSortingControls then refreshSortingControls() end
+        end)
+    local roleSort = W.Toggle(sorting, "Sort by Role")
+    M.BindToggle(ctx, roleSort,
+        function()
+            local conf = Conf(CurrentScope())
+            if conf.sortMode then return conf.sortMode == "ROLE" end
+            return conf.sortByRole and true or false
+        end,
+        function(v)
+            local conf = Conf(CurrentScope())
+            conf.sortByRole = v and true or false
+            conf.sortMode = v and "ROLE" or "INDEX"
+            QueueGF(CurrentScope(), "rebuild")
+            if refreshSortingControls then refreshSortingControls() end
+        end)
+    local playerFirst = BindScopeToggle(ctx, W.Toggle(sorting, "Player first in role"), "playerFirstInRole", false, "rebuild")
+    local roleRows = BuildRoleOrderRows(ctx, sorting)
+    refreshSortingControls = function()
+        local conf = Conf(CurrentScope())
+        local currentMode = conf.sortMode or (conf.sortByRole and "ROLE" or "INDEX")
+        local enabled = currentMode == "ROLE"
+        if sortMode.SetValue then sortMode:SetValue(currentMode) end
+        if roleSort.SetChecked then roleSort:SetChecked(enabled) end
+        SetOptionEnabled(playerFirst, enabled)
+        if roleRows then
+            if roleRows.Refresh then roleRows.Refresh() end
+            if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(enabled) end
+        end
+    end
+    M.AddRefresher(ctx, refreshSortingControls)
+
+    local scale = b:CollapsibleSection("scaling", "Frame Scaling", 380, false)
+    local RefreshScalingState
+    local scaleMode = W.Dropdown(scale, "Scale Mode", {
+        { value = "off", text = "Off (100%)" },
+        { value = "auto", text = "Auto (by group size)" },
+        { value = "manual", text = "Manual" },
+    }, 220)
+    M.BindDropdown(ctx, scaleMode,
+        function() return Val(CurrentScope(), "frameScaleMode", "off") end,
+        function(v)
+            Set(CurrentScope(), "frameScaleMode", v or "off", "rebuild")
+            if RefreshScalingState then RefreshScalingState() end
+        end)
+
+    local function PlaceDropdown(control, x, y, width)
+        if not control then return end
+        width = width or 220
+        control:ClearAllPoints()
+        control:SetPoint("TOPLEFT", scale, "TOPLEFT", x, y)
+        control:SetSize(width, 22)
+        if control._msuf2Title then
+            control._msuf2Title:ClearAllPoints()
+            control._msuf2Title:SetPoint("LEFT", control, "RIGHT", 8, 0)
+            control._msuf2Title:SetJustifyH("LEFT")
+            control._msuf2Title:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
+        end
+    end
+
+    local function PlaceScaleSlider(control, x, y, width)
+        W.MoveWidget(control, scale, x, y, width or 220, "LEFT")
+    end
+
+    local function BindScaleSlider(widget, key, default, labelFn)
+        M.BindSlider(ctx, widget,
+            function() return Num(CurrentScope(), key, default) end,
+            function(v)
+                Set(CurrentScope(), key, floor((tonumber(v) or default or 0) + 0.5), "rebuild")
+            end)
+        local function RefreshLabel()
+            if widget and widget._msuf2Title then
+                widget._msuf2Title:SetText(labelFn(Num(CurrentScope(), key, default)))
+            end
+        end
+        widget:HookScript("OnValueChanged", function(_, value)
+            if widget._msuf2Title then
+                widget._msuf2Title:SetText(labelFn(floor((tonumber(value) or default or 0) + 0.5)))
+            end
+        end)
+        M.AddRefresher(ctx, RefreshLabel)
+        RefreshLabel()
+        return widget
+    end
+
+    PlaceDropdown(scaleMode, 14, -38, 220)
+    local manualScale = BindScaleSlider(W.Slider(scale, "", 50, 150, 5, 220), "frameScaleManual", 100,
+        function(v) return string.format("Manual Scale: %d%%", v) end)
+    PlaceScaleSlider(manualScale, 14, -78, 220)
+
+    local autoLabel = T.Font(scale, "GameFontNormalSmall", "Auto Breakpoints", { 1.00, 0.82, 0.18, 1 })
+    autoLabel:SetPoint("TOPLEFT", scale, "TOPLEFT", 14, -130)
+
+    local scaleAt10 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, 220), "scaleAt10", 100,
+        function(v) return string.format("1-10 players: %d%%", v) end)
+    PlaceScaleSlider(scaleAt10, 14, -158, 220)
+    local scaleAt20 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, 220), "scaleAt20", 85,
+        function(v) return string.format("11-20 players: %d%%", v) end)
+    PlaceScaleSlider(scaleAt20, 14, -208, 220)
+    local scaleAt25 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, 220), "scaleAt25", 80,
+        function(v) return string.format("21-25 players: %d%%", v) end)
+    PlaceScaleSlider(scaleAt25, 14, -258, 220)
+    local scaleOver25 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, 220), "scaleOver25", 70,
+        function(v) return string.format("26+ players: %d%%", v) end)
+    PlaceScaleSlider(scaleOver25, 14, -308, 220)
+
+    local scaleHint = W.Text(scale, "Scales frame size, fonts, and icons proportionally.\nBuff/debuff positions stay relative to their anchors.", 18, -348, 330, T.colors.dim)
+    if scaleHint.SetWordWrap then scaleHint:SetWordWrap(true) end
+
+    RefreshScalingState = function()
+        local mode = Val(CurrentScope(), "frameScaleMode", "off")
+        local manualOn = mode == "manual"
+        local autoOn = mode == "auto"
+        SetOptionEnabled(manualScale, manualOn)
+        SetOptionEnabled(scaleAt10, autoOn)
+        SetOptionEnabled(scaleAt20, autoOn)
+        SetOptionEnabled(scaleAt25, autoOn)
+        SetOptionEnabled(scaleOver25, autoOn)
+        if autoLabel then
+            if autoOn then
+                autoLabel:SetTextColor(1.00, 0.82, 0.18, 1)
+                autoLabel:SetAlpha(1)
+            else
+                autoLabel:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
+                autoLabel:SetAlpha(0.55)
+            end
+        end
+        if scaleHint then scaleHint:SetAlpha((manualOn or autoOn) and 1 or 0.55) end
+    end
+    M.AddRefresher(ctx, RefreshScalingState)
+    RefreshScalingState()
+
+    local transparency = b:CollapsibleSection("border", "Transparency", 310, false)
+    local tHint = W.Text(transparency, "Outline border thickness is configured in\nGlobal Style > Bars > Outline & Highlight Border.", 14, -38, 300, { 0.60, 0.75, 1.00, 1 })
+    if tHint.SetWordWrap then tHint:SetWordWrap(true) end
+
+    local bgColor = W.Color(transparency, "Background Color")
+    if bgColor._msuf2Title then
+        bgColor._msuf2Title:ClearAllPoints()
+        bgColor._msuf2Title:SetPoint("TOPLEFT", transparency, "TOPLEFT", 14, -92)
+        bgColor._msuf2Title:SetWidth(120)
+        bgColor._msuf2Title:SetJustifyH("LEFT")
+    end
+    bgColor:ClearAllPoints()
+    bgColor:SetPoint("TOPLEFT", transparency, "TOPLEFT", 142, -90)
+    bgColor:SetSize(34, 16)
+    M.BindColor(ctx, bgColor,
+        function()
+            local conf = Conf(CurrentScope())
+            return conf.bgR or 0.10, conf.bgG or 0.10, conf.bgB or 0.10
+        end,
+        function(r, g, b)
+            local conf = Conf(CurrentScope())
+            conf.bgR, conf.bgG, conf.bgB = r, g, b
+            QueueGF(CurrentScope(), "visual")
+        end)
+
+    local function PlaceTransparencySlider(control, x, y, width)
+        W.MoveWidget(control, transparency, x, y, width or 270, "LEFT")
+    end
+
+    local function BindTransparencySlider(widget, key, default, labelFn)
+        M.BindSlider(ctx, widget,
+            function() return Num(CurrentScope(), key, default) end,
+            function(v)
+                local n = tonumber(v) or default or 0
+                local conf = Conf(CurrentScope())
+                if conf[key] == n then return end
+                conf[key] = n
+                QueueGF(CurrentScope(), "visual")
+            end)
+        local function RefreshLabel()
+            if widget and widget._msuf2Title then
+                widget._msuf2Title:SetText(labelFn(Num(CurrentScope(), key, default)))
+            end
+        end
+        widget:HookScript("OnValueChanged", function(_, value)
+            if widget._msuf2Title then
+                widget._msuf2Title:SetText(labelFn(tonumber(value) or default or 0))
+            end
+        end)
+        M.AddRefresher(ctx, RefreshLabel)
+        RefreshLabel()
+        return widget
+    end
+
+    local bgAlpha = BindTransparencySlider(W.Slider(transparency, "", 0, 1, 0.05, 270), "bgA", 0.85,
+        function(v) return string.format("Background Alpha: %.0f%%", (tonumber(v) or 0) * 100) end)
+    PlaceTransparencySlider(bgAlpha, 14, -120, 270)
+
+    local hpFg = BindTransparencySlider(W.Slider(transparency, "", 0.3, 1, 0.05, 270), "hpBarAlpha", 1,
+        function(v) return string.format("HP Bar Foreground: %.0f%%", (tonumber(v) or 0) * 100) end)
+    PlaceTransparencySlider(hpFg, 14, -166, 270)
+
+    local preserveHP = W.ToggleAt(transparency, "Preserve HP color", 330, -188, 220)
+    M.BindToggle(ctx, preserveHP,
+        function() return Bool(CurrentScope(), "alphaPreserveHPColor", false) end,
+        function(v) Set(CurrentScope(), "alphaPreserveHPColor", v and true or false, "visual") end)
+
+    local textIgnore = W.ToggleAt(transparency, "Text ignores HP opacity", 14, -208, 250)
+    M.BindToggle(ctx, textIgnore,
+        function() return Bool(CurrentScope(), "hpTextIgnoreAlpha", true) end,
+        function(v) Set(CurrentScope(), "hpTextIgnoreAlpha", v and true or false, "visual") end)
+
+    local hpBg = W.Slider(transparency, "", 0, 1, 0.05, 270)
+    M.BindSlider(ctx, hpBg,
+        function()
+            local conf = Conf(CurrentScope())
+            return tonumber(conf.hpBgAlpha) or tonumber(conf.bgA) or 0.85
+        end,
+        function(v)
+            local n = tonumber(v) or 0.85
+            local conf = Conf(CurrentScope())
+            if conf.hpBgAlpha == n then return end
+            conf.hpBgAlpha = n
+            QueueGF(CurrentScope(), "visual")
+        end)
+    local function RefreshHPBgLabel()
+        if hpBg and hpBg._msuf2Title then
+            local conf = Conf(CurrentScope())
+            hpBg._msuf2Title:SetText(string.format("HP Background: %.0f%%", (tonumber(conf.hpBgAlpha) or tonumber(conf.bgA) or 0.85) * 100))
+        end
+    end
+    hpBg:HookScript("OnValueChanged", function(_, value)
+        if hpBg._msuf2Title then hpBg._msuf2Title:SetText(string.format("HP Background: %.0f%%", (tonumber(value) or 0) * 100)) end
+    end)
+    M.AddRefresher(ctx, RefreshHPBgLabel)
+    RefreshHPBgLabel()
+    PlaceTransparencySlider(hpBg, 14, -252, 270)
+
+    local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
+
+    local function PlaceAnchorDropdown(control, x, y, width)
+        if not control then return end
+        width = width or 200
+        if control._msuf2Title then
+            control._msuf2Title:ClearAllPoints()
+            control._msuf2Title:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, y)
+            control._msuf2Title:SetWidth(width)
+            control._msuf2Title:SetJustifyH("LEFT")
+        end
+        control:ClearAllPoints()
+        control:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, y - 22)
+        control:SetSize(width, 22)
+    end
+
+    local anchorTo = W.Dropdown(anchor, "Anchor To", GF_ANCHOR_TO, 200)
+    PlaceAnchorDropdown(anchorTo, 14, -38, 200)
+    M.BindDropdown(ctx, anchorTo,
+        function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
+        function(v)
+            local conf = Conf(CurrentScope())
+            conf.anchorToFrame = (v == "FREE") and nil or v
+            QueueGF(CurrentScope(), "rebuild")
+        end)
+
+    local anchorPoint = W.Dropdown(anchor, "Anchor Point", GF_ANCHOR_POINTS, 160)
+    PlaceAnchorDropdown(anchorPoint, 254, -38, 160)
+    BindScopeDropdown(ctx, anchorPoint, "anchorPoint", "CENTER", "rebuild")
+
+    local customLabel = T.Font(anchor, "GameFontHighlightSmall", "Custom Anchor Frame", { 0.62, 0.74, 0.96, 1 })
+    customLabel:SetPoint("TOPLEFT", anchor, "TOPLEFT", 14, -104)
+    customLabel:SetJustifyH("LEFT")
+
+    local customBox = CreateFrame("EditBox", nil, anchor, "InputBoxTemplate")
+    customBox:SetPoint("TOPLEFT", anchor, "TOPLEFT", 14, -126)
+    customBox:SetSize(200, 22)
+    customBox:SetAutoFocus(false)
+    customBox:SetMaxLetters(100)
+    customBox:SetJustifyH("LEFT")
+    T.SkinEditBox(customBox)
+
+    local function IsStandardAnchorTarget(value)
+        return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
+            or value == "targettarget" or value == "focus"
+    end
+
+    local function RefreshCustomAnchorBox()
+        local value = Conf(CurrentScope()).anchorToFrame or ""
+        if customBox and not customBox:HasFocus() then
+            customBox:SetText(IsStandardAnchorTarget(value) and "" or value)
+        end
+    end
+
+    customBox:SetScript("OnEnterPressed", function(self)
+        local value = self:GetText() or ""
+        local conf = Conf(CurrentScope())
+        conf.anchorToFrame = (value ~= "") and value or nil
+        self:ClearFocus()
+        QueueGF(CurrentScope(), "rebuild")
+    end)
+    customBox:SetScript("OnEscapePressed", function(self)
+        RefreshCustomAnchorBox()
+        self:ClearFocus()
+    end)
+    customBox:SetScript("OnEditFocusLost", RefreshCustomAnchorBox)
+
+    local pick = T.Button(anchor, "Pick", 50, 22)
+    pick:SetPoint("LEFT", customBox, "RIGHT", 6, 0)
+    pick._msuf2Label:ClearAllPoints()
+    pick._msuf2Label:SetPoint("CENTER", pick, "CENTER", 0, 0)
+    pick._msuf2Label:SetJustifyH("CENTER")
+    pick:SetScript("OnClick", function()
+        local overlay = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker() or nil
+        if not overlay then return end
+        overlay._onPick = function(frameName)
+            local conf = Conf(CurrentScope())
+            conf.anchorToFrame = frameName
+            customBox:SetText(frameName or "")
+            QueueGF(CurrentScope(), "rebuild")
+        end
+        overlay:Show()
+    end)
+
+    local clear = T.SkinDangerButton(T.Button(anchor, "Clear", 50, 22))
+    clear:SetPoint("LEFT", pick, "RIGHT", 4, 0)
+    clear._msuf2Label:ClearAllPoints()
+    clear._msuf2Label:SetPoint("CENTER", clear, "CENTER", 0, 0)
+    clear._msuf2Label:SetJustifyH("CENTER")
+    clear:SetScript("OnClick", function()
+        local conf = Conf(CurrentScope())
+        conf.anchorToFrame = nil
+        customBox:SetText("")
+        QueueGF(CurrentScope(), "rebuild")
+    end)
+
+    M.AddRefresher(ctx, RefreshCustomAnchorBox)
+
+    local tooltip = b:CollapsibleSection("tooltip", "Tooltip", 150, false)
+    BindScopeDropdown(ctx, W.Dropdown(tooltip, "Tooltip Mode", TOOLTIP_MODES, 220), "tooltipMode", "ALWAYS", "visual")
+    BindScopeDropdown(ctx, W.Dropdown(tooltip, "Modifier Key", TOOLTIP_MODIFIERS, 180), "tooltipModifier", "ALT", "visual")
+
+    ctx:SetContentHeight(math.abs(b.y) + 42)
+end
+
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 5 })

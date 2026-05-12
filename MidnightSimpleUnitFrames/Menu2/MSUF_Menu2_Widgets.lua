@@ -10,6 +10,8 @@ local W = M.Widgets or {}
 M.Widgets = W
 
 local floor = math.floor
+local max = math.max
+local min = math.min
 local sliderSerial = 0
 
 local function HideSliderTemplateParts(slider)
@@ -330,6 +332,148 @@ function W.SetControlShown(control, shown)
     end
 end
 
+local function SetEnabledState(frame, enabled)
+    if not frame then return end
+    if frame.Enable and frame.Disable then
+        if enabled then frame:Enable() else frame:Disable() end
+    elseif frame.SetEnabled then
+        frame:SetEnabled(enabled)
+    end
+    if frame.EnableMouse then frame:EnableMouse(enabled) end
+end
+
+local function SetTextEnabledColor(fontString, enabled)
+    if not (fontString and fontString.SetTextColor) then return end
+    local c = enabled and T.colors.text or T.colors.dim
+    fontString:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+end
+
+-- Shared by all Menu2 pages so disabled dependent options do not drift visually.
+function W.SetControlEnabled(control, enabled)
+    if not control then return end
+    enabled = enabled and true or false
+
+    SetEnabledState(control, enabled)
+    if control.SetAlpha then control:SetAlpha(enabled and 1 or 0.45) end
+    SetTextEnabledColor(control._msuf2Title, enabled)
+    SetTextEnabledColor(control._msuf2Label, enabled)
+
+    if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse then
+        control._msuf2LabelHit:EnableMouse(enabled)
+    end
+    if control._msuf2Chevron and control._msuf2Chevron.SetVertexColor then
+        local c = enabled and T.colors.muted or T.colors.dim
+        control._msuf2Chevron:SetVertexColor(c[1], c[2], c[3], enabled and 0.95 or 0.55)
+    end
+
+    local edit = control.editBox or control.__MSUF_valueBox
+    if edit then
+        SetEnabledState(edit, enabled)
+        if edit.SetAlpha then edit:SetAlpha(enabled and 1 or 0.45) end
+    end
+    if control._msuf2StepButtons then
+        for i = 1, #control._msuf2StepButtons do
+            local btn = control._msuf2StepButtons[i]
+            SetEnabledState(btn, enabled)
+            if btn.SetAlpha then btn:SetAlpha(enabled and 1 or 0.45) end
+        end
+    end
+    if control.buttons then
+        for i = 1, #control.buttons do
+            local btn = control.buttons[i]
+            SetEnabledState(btn, enabled)
+            if btn.SetAlpha then btn:SetAlpha(enabled and 1 or 0.45) end
+        end
+    end
+end
+
+function W.SetControlsEnabled(controls, enabled)
+    for i = 1, #(controls or {}) do
+        W.SetControlEnabled(controls[i], enabled)
+    end
+end
+
+local function ClampPlacedControlWidth(widget, parent, x)
+    if not (widget and parent and parent._msuf2Width) then return end
+    local kind = widget._msuf2ControlKind
+    if kind ~= "slider" and kind ~= "dropdown" and kind ~= "textinput" then return end
+
+    local available = floor((parent._msuf2Width or 0) - (x or 0) - 18)
+    if available <= 0 then return end
+
+    if kind == "slider" and widget._msuf2SetLayoutWidth then
+        local requested = widget._msuf2RequestedWidth or widget._msuf2RowWidth or 280
+        local minWidth = widget._msuf2MinRowWidth or 160
+        widget:_msuf2SetLayoutWidth(min(requested, max(minWidth, available)))
+        return
+    end
+
+    local currentW = widget.GetWidth and widget:GetWidth()
+    if currentW and currentW > available then
+        widget:SetWidth(max(72, available))
+        if widget._msuf2Title and widget._msuf2Title.SetWidth then
+            widget._msuf2Title:SetWidth(max(72, available))
+        end
+    end
+end
+
+function W.MoveWidget(widget, parent, x, y, width, titleJustify)
+    if not (widget and widget.ClearAllPoints) then return widget end
+    parent = parent or widget:GetParent()
+    x = x or 0
+    y = y or 0
+
+    local kind = widget._msuf2ControlKind
+    width = tonumber(width)
+    if width then
+        if kind == "slider" and widget._msuf2SetLayoutWidth then
+            widget._msuf2RequestedWidth = width
+            widget:_msuf2SetLayoutWidth(width)
+        elseif kind == "dropdown" or kind == "textinput" then
+            widget:SetSize(width, widget:GetHeight() or 22)
+            if widget._msuf2Title and widget._msuf2Title.SetWidth then widget._msuf2Title:SetWidth(width) end
+        end
+    end
+    if titleJustify and widget._msuf2Title and widget._msuf2Title.SetJustifyH then
+        widget._msuf2TitleJustify = titleJustify
+        widget._msuf2Title:SetJustifyH(titleJustify)
+    end
+
+    ClampPlacedControlWidth(widget, parent, x)
+    if widget._msuf2Title then
+        widget._msuf2Title:ClearAllPoints()
+        widget._msuf2Title:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    end
+
+    widget:ClearAllPoints()
+    if kind == "slider" or kind == "dropdown" or kind == "textinput" then
+        widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 22)
+    elseif kind == "color" then
+        if widget._msuf2Title then widget._msuf2Title:SetWidth(100) end
+        widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 108, y + 2)
+    else
+        widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    end
+    return widget
+end
+
+function W.LabelAt(parent, text, x, y, width, template, color)
+    local fs = T.Font(parent, template or "GameFontNormalSmall", text or "", color or T.colors.text)
+    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
+    fs:SetWidth(width or 180)
+    fs:SetJustifyH("LEFT")
+    return fs
+end
+
+function W.DividerAt(parent, y, leftPad, rightPad)
+    local line = parent:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("TOPLEFT", parent, "TOPLEFT", leftPad or 12, y or 0)
+    line:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -(rightPad or 12), y or 0)
+    line:SetHeight(1)
+    line:SetColorTexture(1, 1, 1, 0.06)
+    return line
+end
+
 function W.Button(section, label, width)
     local x, y = NextRow(section, 30)
     local btn = T.Button(section, label, width or 160, 24)
@@ -348,25 +492,27 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     width = width or 280
     if section and section._msuf2Width then
         local available = section._msuf2Width - x - 14
-        local maxSliderW = math.max(minTrackW + valueClusterW, available)
+        local maxSliderW = max(minTrackW + valueClusterW, available)
         if width > maxSliderW then width = maxSliderW end
     end
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(width)
-    title:SetJustifyH("CENTER")
+    title:SetJustifyH("LEFT")
 
     sliderSerial = sliderSerial + 1
     local slider = CreateFrame("Slider", "MSUF2NativeSlider" .. sliderSerial, section, "OptionsSliderTemplate")
     slider._msuf2Title = title
     slider._msuf2ControlKind = "slider"
     slider:SetPoint("TOPLEFT", x, y - 22)
-    slider:SetSize(math.max(minTrackW, width - valueClusterW), 16)
+    slider:SetSize(max(minTrackW, width - valueClusterW), 16)
     slider:SetMinMaxValues(minVal or 0, maxVal or 1)
     slider:SetValueStep(step or 1)
     if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
     if slider.SetStepsPerPage then slider:SetStepsPerPage(1) end
     slider._msuf2Step = step or 1
+    slider._msuf2RequestedWidth = width
+    slider._msuf2MinRowWidth = minTrackW + valueClusterW
     HideSliderTemplateParts(slider)
     if T.StyleSlider then T.StyleSlider(slider) end
 
@@ -400,17 +546,17 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local span = maxV - minV
         local pct = span > 0 and ((slider:GetValue() - minV) / span) or 0
         if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
-        fill:SetWidth(math.max(1, slider:GetWidth() * pct))
+        fill:SetWidth(max(1, slider:GetWidth() * pct))
     end
     slider._msuf2UpdateFill = UpdateFill
 
     function slider:_msuf2SetLayoutWidth(totalWidth)
         totalWidth = tonumber(totalWidth) or width or 280
         self._msuf2RowWidth = totalWidth
-        local trackW = math.max(minTrackW, floor(totalWidth - valueClusterW + 0.5))
+        local trackW = max(minTrackW, floor(totalWidth - valueClusterW + 0.5))
         if title then
             title:SetWidth(trackW)
-            if title.SetJustifyH then title:SetJustifyH(self._msuf2TitleJustify or "CENTER") end
+            if title.SetJustifyH then title:SetJustifyH(self._msuf2TitleJustify or "LEFT") end
         end
         self:SetSize(trackW, 16)
         minus:ClearAllPoints()
@@ -583,6 +729,30 @@ local function DropdownOwnerVisible(owner)
     return true
 end
 
+local function DropdownAvailableSpace(owner)
+    local ownerTop = owner and owner.GetTop and owner:GetTop()
+    local ownerBottom = owner and owner.GetBottom and owner:GetBottom()
+    local screenTop = _G.UIParent and _G.UIParent.GetTop and _G.UIParent:GetTop()
+    local screenBottom = _G.UIParent and _G.UIParent.GetBottom and _G.UIParent:GetBottom()
+    if not (ownerTop and ownerBottom and screenTop and screenBottom) then return nil, nil end
+    return max(0, ownerBottom - screenBottom - 10), max(0, screenTop - ownerTop - 10)
+end
+
+local function DropdownVisibleRows(owner, rowCount, preferred)
+    preferred = min(rowCount or 0, preferred or 12)
+    local below, above = DropdownAvailableSpace(owner)
+    if not below then return preferred, false end
+
+    local preferredH = preferred * DROPDOWN_ROW_H + 4
+    local openAbove = below < preferredH and above > below
+    local maxSpace = openAbove and above or below
+    local fit = floor((maxSpace - 4) / DROPDOWN_ROW_H)
+    if fit > 0 then
+        preferred = min(preferred, max(3, fit))
+    end
+    return max(1, preferred), openAbove
+end
+
 local function PositionDropdown(owner)
     if not (dropdownFrame and owner and dropdownFrame:IsShown()) then return false end
     if not DropdownOwnerVisible(owner) then
@@ -592,10 +762,23 @@ local function PositionDropdown(owner)
 
     dropdownFrame:ClearAllPoints()
     local frameH = dropdownFrame:GetHeight() or 0
+    local frameW = dropdownFrame:GetWidth() or 0
     local ownerBottom = owner.GetBottom and owner:GetBottom()
     local screenBottom = _G.UIParent and _G.UIParent.GetBottom and _G.UIParent:GetBottom() or 0
-    if ownerBottom and ownerBottom - frameH - 2 < screenBottom + 8 then
+    local openAbove = owner._msuf2DropdownOpenAbove
+    if openAbove == nil then
+        openAbove = ownerBottom and ownerBottom - frameH - 2 < screenBottom + 8
+    end
+
+    local ownerLeft = owner.GetLeft and owner:GetLeft()
+    local screenRight = _G.UIParent and _G.UIParent.GetRight and _G.UIParent:GetRight()
+    local anchorRight = ownerLeft and screenRight and ownerLeft + frameW > screenRight - 8
+    if openAbove and anchorRight then
+        dropdownFrame:SetPoint("BOTTOMRIGHT", owner, "TOPRIGHT", 0, 2)
+    elseif openAbove then
         dropdownFrame:SetPoint("BOTTOMLEFT", owner, "TOPLEFT", 0, 2)
+    elseif anchorRight then
+        dropdownFrame:SetPoint("TOPRIGHT", owner, "BOTTOMRIGHT", 0, -2)
     else
         dropdownFrame:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
     end
@@ -608,6 +791,7 @@ function CloseDropdown()
     if owner then
         owner._msuf2DropdownListSelect = nil
         owner._msuf2DropdownListValue = nil
+        owner._msuf2DropdownOpenAbove = nil
     end
     dropdownOwner = nil
 end
@@ -768,7 +952,8 @@ local function OpenDropdown(owner, valuesTable)
 
     local ownerWidth = (owner.GetWidth and owner:GetWidth()) or 240
     local rowWidth = math.max(ownerWidth, hasIcons and 300 or 180)
-    local visible = math.min(#valuesTable, hasIcons and 12 or 14)
+    local visible, openAbove = DropdownVisibleRows(owner, #valuesTable, hasIcons and 12 or 14)
+    owner._msuf2DropdownOpenAbove = openAbove
     local listHeight = visible * DROPDOWN_ROW_H + 4
     local totalHeight = #valuesTable * DROPDOWN_ROW_H
     local needsScroll = #valuesTable > visible
