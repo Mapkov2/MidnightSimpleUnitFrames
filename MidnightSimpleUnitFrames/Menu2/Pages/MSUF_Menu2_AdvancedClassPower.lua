@@ -31,7 +31,7 @@ local WriteRGB = AP.WriteRGB
 local BindTableColor = AP.BindTableColor
 local BindSeparateRGB = AP.BindSeparateRGB
 local ApplyAuras = AP.ApplyAuras
-local MoveWidget = AP.MoveWidget
+local MoveWidget = W.MoveWidget or AP.MoveWidget
 local LabelAt = AP.LabelAt
 local DividerAt = AP.DividerAt
 local BindValueToggle = AP.BindValueToggle
@@ -189,7 +189,7 @@ local function BuildClassPower(ctx)
     MoveWidget(cpShadow, behavior, behaviorRightX, -102)
     MoveWidget(cpPrediction, behavior, behaviorRightX, -134)
 
-    local visual = b:CollapsibleSection("classpower_visuals", "Style", 780, false)
+    local visual = b:CollapsibleSection("classpower_visuals", "Style", 372, false)
     local cpColor = BindTableToggle(ctx, visual, "Color by resource type", Bars, "classPowerColorByType", true, ApplyClassPower)
     local cpComboColor = BindTableDropdown(ctx, visual, "Combo point colors", {
         { value = "default", text = "Resource color" },
@@ -213,6 +213,22 @@ local function BuildClassPower(ctx)
     textControls[#textControls + 1] = cpFont
     textControls[#textControls + 1] = cpTextX
     textControls[#textControls + 1] = cpTextY
+    local styleWidth = ctx.width or 900
+    local styleMidX = min(max(360, floor(styleWidth * 0.36)), max(320, styleWidth - 650))
+    local styleRightX = min(max(styleMidX + 300, floor(styleWidth * 0.66)), max(styleMidX + 270, styleWidth - 390))
+    MoveWidget(cpColor, visual, 14, -38)
+    MoveWidget(cpComboColor, visual, 14, -70, 282)
+    MoveWidget(cpFgTex, visual, 14, -124, 322)
+    MoveWidget(cpBgTex, visual, 14, -178, 322)
+    MoveWidget(cpFont, visual, styleMidX, -38, 268)
+    MoveWidget(cpTextX, visual, styleMidX, -90, 268)
+    MoveWidget(cpTextY, visual, styleMidX, -142, 268)
+    MoveWidget(cpBg, visual, styleRightX, -38, 286)
+    MoveWidget(cpFilled, visual, styleRightX, -90, 286)
+    MoveWidget(cpEmpty, visual, styleRightX, -142, 286)
+    MoveWidget(cpSeparator, visual, styleRightX, -194, 286)
+    MoveWidget(cpOutline, visual, styleRightX, -246, 286)
+    MoveWidget(cpGap, visual, styleRightX, -298, 286)
 
     local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 170, false)
     local hideOOC = BindTableToggle(ctx, visibility, "Hide out of combat", Bars, "classPowerHideOOC", false, ApplyClassPower)
@@ -272,4 +288,4 @@ local function BuildClassPower(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 4 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 5 })
