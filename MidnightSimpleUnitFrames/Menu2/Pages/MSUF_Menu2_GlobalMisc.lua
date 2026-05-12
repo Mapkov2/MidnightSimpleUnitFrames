@@ -84,6 +84,7 @@ local ApplyBars = GP.ApplyBars
 local ApplyCastbars = GP.ApplyCastbars
 local function BuildMisc(ctx)
     local b = W.PageBuilder(ctx)
+    b:GlobalStyleHeader("Miscellaneous", "Update pacing, tooltips, Blizzard frames and range fade.", 72)
 
     local function RefreshRangeFadeRuntime()
         Call("MSUF_RangeFade_Reset")
@@ -339,4 +340,4 @@ local function BuildMisc(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 2 })

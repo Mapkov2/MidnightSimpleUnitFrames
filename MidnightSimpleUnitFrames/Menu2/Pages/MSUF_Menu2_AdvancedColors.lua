@@ -468,7 +468,7 @@ end
 
 local function BuildColors(ctx)
     local b = W.PageBuilder(ctx)
-    b:Header("Colors", "Native color controls matching the original MSUF color groups.", 64)
+    b:GlobalStyleHeader("Colors", "Frame, bar, aura, castbar and resource colors.", 72)
 
     local font = b:CollapsibleSection("colors_font", "Global Font Color", 100, false)
     ColorValueAt(ctx, font, "Global font color", 12, -10,
@@ -1039,4 +1039,4 @@ local function BuildColors(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 2 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 3 })

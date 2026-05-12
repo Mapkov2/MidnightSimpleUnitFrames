@@ -26,6 +26,46 @@ local function Tr(text)
     return text
 end
 
+local function IsMSUFEditModeActive()
+    local st = rawget(_G, "MSUF_EditState")
+    if type(st) == "table" and st.active ~= nil then
+        return st.active == true
+    end
+
+    local em2 = rawget(_G, "MSUF_EM2")
+    local state = em2 and em2.State
+    if state and type(state.IsActive) == "function" then
+        return state.IsActive() and true or false
+    end
+
+    local fn = rawget(_G, "MSUF_IsMSUFEditModeActive")
+        or rawget(_G, "MSUF_IsInEditMode")
+        or rawget(_G, "MSUF_IsEditModeActive")
+    if type(fn) == "function" then
+        local ok, active = pcall(fn)
+        if ok then return active and true or false end
+    end
+
+    return rawget(_G, "MSUF_UnitEditModeActive") == true
+        or rawget(_G, "MSUF_EDITMODE_ACTIVE") == true
+end
+
+local function IsEditModeCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function ToggleMSUFEditMode()
+    local active = IsMSUFEditModeActive()
+    if (not active) and IsEditModeCombatLocked() then return end
+    local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
+    if type(fn) == "function" then
+        pcall(fn, not active)
+    end
+    if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
+    if M.Refresh then M.Refresh() end
+end
+
 local function HideSliderTemplateParts(slider)
     if not slider then return end
     local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
@@ -184,12 +224,36 @@ function W.PageBuilder(ctx)
         return section
     end
 
+    function b:GlobalStyleHeader(title, subtitle, height)
+        return W.GlobalStyleHeader(ctx, self, title, subtitle, height)
+    end
+
     function b:Spacer(height)
         self.y = self.y - (height or 10)
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
     end
 
     return b
+end
+
+function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
+    if not (builder and builder.Header) then return nil end
+    local head = builder:Header(title, subtitle, height or 72)
+    local edit = T.Button(head, "MSUF Edit Mode", 150, 24)
+    edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
+    edit:SetScript("OnClick", ToggleMSUFEditMode)
+
+    local function RefreshEditButton()
+        local active = IsMSUFEditModeActive()
+        local locked = IsEditModeCombatLocked() and true or false
+        if edit.SetText then edit:SetText("MSUF Edit Mode") end
+        if edit.SetActive then edit:SetActive(active) end
+        if edit.SetEnabled then edit:SetEnabled(active or not locked) end
+    end
+
+    if ctx and M.AddRefresher then M.AddRefresher(ctx, RefreshEditButton) end
+    RefreshEditButton()
+    return head, edit
 end
 
 function W.SetCollapsibleToggleText(section, openText, closedText)
