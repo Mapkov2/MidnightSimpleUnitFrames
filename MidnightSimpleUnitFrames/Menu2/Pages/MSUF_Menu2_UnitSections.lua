@@ -102,6 +102,11 @@ local function BuildPreview(ctx, builder, unit)
     local box = ns.MSUF_Options_CreateUnitPreviewBox(sec, panel, ctx.width - 28, 300)
     box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -38)
     box:Show()
+    local leftBorderCover = box:CreateTexture(nil, "OVERLAY", nil, 7)
+    leftBorderCover:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+    leftBorderCover:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 0, 0)
+    leftBorderCover:SetWidth(2)
+    leftBorderCover:SetColorTexture(0.035, 0.043, 0.058, 1)
     panel.unitPreviewBox = box
 
     local function RefreshThisPreview(reason)

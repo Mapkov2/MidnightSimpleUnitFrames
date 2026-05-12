@@ -82,6 +82,122 @@ local SetControlsEnabled = GP.SetControlsEnabled
 local ApplyFonts = GP.ApplyFonts
 local ApplyBars = GP.ApplyBars
 local ApplyCastbars = GP.ApplyCastbars
+
+local function RGB(r, g, b, a)
+    return { r or 1, g or 1, b or 1, a or 1 }
+end
+
+local function ConfiguredFontColorPreview()
+    local fn = _G.MSUF_GetConfiguredFontColor or (ns and ns.MSUF_GetConfiguredFontColor)
+    if type(fn) == "function" then
+        local ok, r, g, b = pcall(fn)
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return RGB(r, g, b)
+        end
+    end
+
+    local general = G()
+    if general.useCustomFontColor and type(general.fontColorCustomR) == "number"
+        and type(general.fontColorCustomG) == "number"
+        and type(general.fontColorCustomB) == "number" then
+        return RGB(general.fontColorCustomR, general.fontColorCustomG, general.fontColorCustomB)
+    end
+
+    local colors = (ns and ns.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
+    local key = tostring(general.fontColor or "white"):lower()
+    local color = colors and (colors[key] or colors.white)
+    return RGB((color and color[1]) or 1, (color and color[2]) or 1, (color and color[3]) or 1)
+end
+
+local function PlayerClassColorPreview()
+    local classToken
+    if type(_G.UnitClass) == "function" then
+        local _, token = _G.UnitClass("player")
+        classToken = token
+    end
+    classToken = classToken or "WARRIOR"
+    if type(_G.MSUF_GetClassBarColor) == "function" then
+        local r, g, b = _G.MSUF_GetClassBarColor(classToken)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return RGB(r, g, b)
+        end
+    end
+    local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+    return RGB((color and color.r) or 0.78, (color and color.g) or 0.61, (color and color.b) or 0.43)
+end
+
+local function NPCReactionColorPreview()
+    local kind = "enemy"
+    if type(_G.UnitExists) == "function" and _G.UnitExists("target")
+        and not (type(_G.UnitIsPlayer) == "function" and _G.UnitIsPlayer("target")) then
+        if type(_G.UnitIsDeadOrGhost) == "function" and _G.UnitIsDeadOrGhost("target") then
+            kind = "dead"
+        elseif type(_G.UnitReaction) == "function" then
+            local reaction = _G.UnitReaction("player", "target")
+            if reaction and reaction >= 5 then
+                kind = "friendly"
+            elseif reaction == 4 then
+                kind = "neutral"
+            end
+        end
+    end
+    if type(_G.MSUF_GetNPCReactionColor) == "function" then
+        local r, g, b = _G.MSUF_GetNPCReactionColor(kind)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return RGB(r, g, b)
+        end
+    end
+    return RGB(0.85, 0.10, 0.10)
+end
+
+local function CurrentPowerColorPreview()
+    local powerType, powerToken
+    if type(_G.UnitPowerType) == "function" then
+        powerType, powerToken = _G.UnitPowerType("player")
+    end
+    if _G.MSUF_EleMaelstromActive or _G.MSUF_ShadowManaActive then
+        powerType, powerToken = 0, "MANA"
+    elseif _G.MSUF_AugEvokerActive then
+        powerType, powerToken = 19, "ESSENCE"
+    end
+    if powerType == nil and (powerToken == nil or powerToken == "") then
+        powerType, powerToken = 0, "MANA"
+    end
+
+    local fn = _G.MSUF_GetResolvedPowerColor or (ns and ns.MSUF_GetResolvedPowerColor)
+    if type(fn) == "function" then
+        local r, g, b = fn(powerType, powerToken)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return RGB(r, g, b)
+        end
+    end
+
+    local pbc = _G.PowerBarColor
+    local color = pbc and ((powerToken and pbc[powerToken]) or (powerType and pbc[powerType]) or pbc.MANA or pbc[0])
+    return RGB((color and (color.r or color[1])) or 0.00, (color and (color.g or color[2])) or 0.44, (color and (color.b or color[3])) or 0.87)
+end
+
+local function NameColorValues()
+    return {
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
+        { value = "CLASS", text = "Class Color", swatchColor = PlayerClassColorPreview },
+    }
+end
+
+local function NPCColorValues()
+    return {
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
+        { value = "NPC", text = "NPC / Reaction Color", swatchColor = NPCReactionColorPreview },
+    }
+end
+
+local function PowerColorValues()
+    return {
+        { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
+        { value = "RESOURCE", text = "By Power Type", swatchColor = CurrentPowerColorPreview },
+    }
+end
+
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
 
@@ -215,10 +331,7 @@ local function BuildFonts(ctx)
         end)
 
     local colors = b:CollapsibleSection("fonts_name_power_colors", "Name & Power Colors", 220, true)
-    local nameColor = W.Dropdown(colors, "Player Name Color", {
-        { value = "DEFAULT", text = "Default (Font Color)" },
-        { value = "CLASS", text = "Class Color" },
-    }, 280)
+    local nameColor = W.Dropdown(colors, "Player Name Color", NameColorValues, 280)
     M.BindDropdown(ctx, nameColor,
         function()
             if IsGFScope(CurrentFontScope()) then
@@ -235,20 +348,14 @@ local function BuildFonts(ctx)
             FontScopeSet("nameClassColor", v == "CLASS", "MSUF2_NAME_CLASS_COLOR")
             ApplyFonts("MSUF2_NAME_CLASS_COLOR")
         end)
-    local npcColor = W.Dropdown(colors, "NPC / Boss Name Color", {
-        { value = "DEFAULT", text = "Default (Font Color)" },
-        { value = "NPC", text = "NPC / Reaction Color" },
-    }, 280)
+    local npcColor = W.Dropdown(colors, "NPC / Boss Name Color", NPCColorValues, 280)
     M.BindDropdown(ctx, npcColor,
         function() return FontScopeGet("npcNameRed", false) and "NPC" or "DEFAULT" end,
         function(v)
             FontScopeSet("npcNameRed", v == "NPC", "MSUF2_NPC_RED")
             ApplyFonts("MSUF2_NPC_RED")
         end)
-    local powerColor = W.Dropdown(colors, "Power Text Color", {
-        { value = "DEFAULT", text = "Default (Font Color)" },
-        { value = "RESOURCE", text = "By Power Type" },
-    }, 280)
+    local powerColor = W.Dropdown(colors, "Power Text Color", PowerColorValues, 280)
     M.BindDropdown(ctx, powerColor,
         function() return FontScopeGet("colorPowerTextByType", false) and "RESOURCE" or "DEFAULT" end,
         function(v)
