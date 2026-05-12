@@ -82,6 +82,62 @@ local function Template()
 end
 T.Template = Template
 
+local ENGLISH_LOCALES = { enUS = true, enGB = true }
+
+local function ActiveLocale()
+    return ns.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
+end
+
+local function TrackLocaleKey(key, translated)
+    M.localeKeys = M.localeKeys or {}
+    M.localeKeys[key] = true
+    if ENGLISH_LOCALES[ActiveLocale()] or translated then return end
+    M.missingLocaleKeys = M.missingLocaleKeys or {}
+    M.missingLocaleKeys[key] = true
+end
+
+function M.GetLocaleCoverage()
+    local keys, missing = M.localeKeys or {}, M.missingLocaleKeys or {}
+    local total, missingTotal, missingList = 0, 0, {}
+    for key in pairs(keys) do total = total + 1 end
+    for key in pairs(missing) do
+        missingTotal = missingTotal + 1
+        missingList[#missingList + 1] = key
+    end
+    table.sort(missingList)
+    return total, missingTotal, missingList
+end
+
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    local locale = ns.L or _G.MSUF_L
+    if type(locale) == "table" then
+        local direct = rawget(locale, text)
+        if direct ~= nil then
+            TrackLocaleKey(text, true)
+            return direct
+        end
+    end
+    if type(ns.TR) == "function" then
+        local translated = ns.TR(text)
+        if translated ~= nil and translated ~= text then
+            TrackLocaleKey(text, true)
+            return translated
+        end
+    end
+    TrackLocaleKey(text, false)
+    return text
+end
+M.Tr = M.Tr or Tr
+T.Tr = M.Tr
+
+M.Format = M.Format or function(text, ...)
+    local translated = M.Tr(text)
+    if select("#", ...) == 0 then return translated end
+    local ok, value = pcall(string.format, translated, ...)
+    return ok and value or translated
+end
+
 local function SetColor(tex, c)
     if tex and c then tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
 end
@@ -258,7 +314,7 @@ function T.ApplyCollapseVisual(chevron, hint, open)
         end
     end
     if hint and hint.SetText then
-        hint:SetText(open and "" or "click to expand")
+        hint:SetText(open and "" or Tr("click to expand"))
         if hint.SetTextColor then hint:SetTextColor(0.45, 0.52, 0.65, 1) end
     end
 end
@@ -438,6 +494,10 @@ end
 
 function T.Font(parent, template, text, color)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    local rawSetText = fs.SetText
+    fs.SetText = function(self, value)
+        rawSetText(self, Tr(value or ""))
+    end
     fs:SetText(text or "")
     return T.StyleFontString(fs, color or T.colors.text, 1)
 end
@@ -555,7 +615,7 @@ function T.Button(parent, text, width, height)
     btn._msuf2Label = label
 
     btn.SetText = function(self, value)
-        self._msuf2Label:SetText(value or "")
+        self._msuf2Label:SetText(Tr(value or ""))
     end
     btn.GetText = function(self)
         return self._msuf2Label:GetText()

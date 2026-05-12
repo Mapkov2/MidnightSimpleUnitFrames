@@ -53,8 +53,8 @@ local function AttachTooltip(widget, titleText, bodyText)
     if not widget or (not titleText and not bodyText) then return end
     widget:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if titleText then GameTooltip:SetText(titleText, 1, 1, 1) end
-        if bodyText then GameTooltip:AddLine(bodyText, 0.9, 0.9, 0.9, true) end
+        if titleText then GameTooltip:SetText(TR(titleText), 1, 1, 1) end
+        if bodyText then GameTooltip:AddLine(TR(bodyText), 0.9, 0.9, 0.9, true) end
         GameTooltip:Show()
     end)
     widget:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -262,7 +262,7 @@ _G.MSUF_ApplyCollapseVisual = UI.ApplyCollapsibleHeaderState
 function UI.Label(spec)
     local parent = spec.parent
     local fs = parent:CreateFontString(nil, "OVERLAY", spec.font or "GameFontNormal")
-    fs:SetText(spec.text or "")
+    fs:SetText(TR(spec.text or ""))
     if spec.color then
         fs:SetTextColor(spec.color[1], spec.color[2], spec.color[3], spec.color[4] or 1)
     else
@@ -280,7 +280,7 @@ end
 function UI.Section(spec)
     local parent = spec.parent
     local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    header:SetText(spec.title or "")
+    header:SetText(TR(spec.title or ""))
     header:SetTextColor(1, 0.82, 0)
     if spec.anchor then
         header:SetPoint("TOPLEFT", spec.anchor, spec.anchorPoint or "BOTTOMLEFT", spec.x or 0, spec.y or -16)
@@ -313,7 +313,7 @@ function UI.Panel(spec)
     p:SetBackdropColor(0, 0, 0, spec.bgAlpha or 0)
     p:SetBackdropBorderColor(0, 0, 0, 0)
     local header = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    header:SetText(spec.title or "")
+    header:SetText(TR(spec.title or ""))
     header:SetTextColor(1, 0.82, 0)
     header:SetPoint("TOPLEFT", p, "TOPLEFT", 14, -14)
     local line = p:CreateTexture(nil, "ARTWORK")
@@ -330,7 +330,7 @@ end
 function UI.Button(spec)
     local b = CreateFrame("Button", spec.name, spec.parent, "UIPanelButtonTemplate")
     b:SetSize(spec.width or 140, spec.height or 24)
-    b:SetText(spec.text or "")
+    b:SetText(TR(spec.text or ""))
     if spec.anchor then
         b:SetPoint("TOPLEFT", spec.anchor, spec.anchorPoint or "BOTTOMLEFT", spec.x or 0, spec.y or -8)
     end
@@ -718,7 +718,7 @@ local function DD_ItemClick(self)
     if not (item and owner) then return end
     local key = item.key
     if key == nil then key = item.value end
-    local label = item.label or item.text or tostring(key or "")
+    local label = TR(item.label or item.text or tostring(key or ""))
     local spec = owner._ddSpec
     if spec and spec.set then spec.set(key, item) end
     if owner.SetValue then
@@ -820,7 +820,7 @@ local function DD_Populate(owner)
         local item = items[i]
         local itemKey = item.key
         if itemKey == nil then itemKey = item.value end
-        local itemLabel = item.label or item.text or tostring(itemKey or "")
+        local itemLabel = TR(item.label or item.text or tostring(itemKey or ""))
         local btn = DD_GetItem(i)
         btn:SetParent(child)
         btn:SetFrameStrata(_listFrame:GetFrameStrata())
@@ -942,7 +942,7 @@ function UI.Dropdown(spec)
                 local itemKey = items[i].key
                 if itemKey == nil then itemKey = items[i].value end
                 if itemKey == key then
-                    label = items[i].label or items[i].text or label
+                    label = TR(items[i].label or items[i].text or label)
                     break
                 end
             end
@@ -1087,13 +1087,13 @@ local function MSUF_InitSimpleDropdown(dropdown, options, getCurrentKey, setCurr
         local info = UIDropDownMenu_CreateInfo()
         local cur = getCurrentKey and getCurrentKey() or nil
         for _, opt in ipairs(options or {}) do
-            info.text = opt.menuText or opt.label
+            info.text = TR(opt.menuText or opt.label)
             info.value = opt.key
             info.checked = (opt.key == cur)
             info.func = function(btn)
                 if setCurrentKey then setCurrentKey(btn.value) end
                 UIDropDownMenu_SetSelectedValue(dropdown, btn.value)
-                UIDropDownMenu_SetText(dropdown, opt.label)
+                UIDropDownMenu_SetText(dropdown, TR(opt.label))
                 if type(onSelect) == "function" then onSelect(btn.value, opt)
                 elseif type(onSelect) == "string" and type(_G.MSUF_Options_Apply) == "function" then _G.MSUF_Options_Apply(onSelect, btn.value, opt) end
             end
@@ -1102,9 +1102,9 @@ local function MSUF_InitSimpleDropdown(dropdown, options, getCurrentKey, setCurr
     end)
     if width then UIDropDownMenu_SetWidth(dropdown, width) end
     local cur = getCurrentKey and getCurrentKey() or nil
-    local label = (options and options[1] and options[1].label) or ""
+    local label = TR((options and options[1] and options[1].label) or "")
     for _, opt in ipairs(options or {}) do
-        if opt.key == cur then label = opt.label; break end
+        if opt.key == cur then label = TR(opt.label); break end
     end
     UIDropDownMenu_SetSelectedValue(dropdown, cur)
     UIDropDownMenu_SetText(dropdown, label)
@@ -1116,7 +1116,7 @@ local function MSUF_SyncSimpleDropdown(dropdown, options, getCurrentKey)
     if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(dropdown, cur) end
     for _, opt in ipairs(options) do
         if opt.key == cur then
-            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(dropdown, opt.label) end
+            if UIDropDownMenu_SetText then UIDropDownMenu_SetText(dropdown, TR(opt.label)) end
             break
         end
     end
@@ -1136,7 +1136,7 @@ UI.CloseDropdown         = DD_Close
 
 -- ns.* exports (split modules use ns.*)
 ns.MSUF_AttachTooltip           = AttachTooltip
-ns.MSUF_UI_Text                 = function(p, t, tmpl) local fs = p:CreateFontString(nil, "ARTWORK", tmpl or "GameFontNormal"); fs:SetText(t or ""); return fs end
+ns.MSUF_UI_Text                 = function(p, t, tmpl) local fs = p:CreateFontString(nil, "ARTWORK", tmpl or "GameFontNormal"); fs:SetText(TR(t or "")); return fs end
 ns.MSUF_UI_Btn                  = function(p, n, l, fn, w, h) return UI.Button({ parent = p, name = n, text = l, onClick = fn, width = w, height = h }) end
 ns.MSUF_BuildButtonRowList      = UI.ButtonRow
 ns.MSUF_MakeDropdownScrollable  = MSUF_MakeDropdownScrollable
@@ -1304,7 +1304,7 @@ function UI.BindExistingDropdown(dd, spec)
             for _, it in ipairs(items) do
                 local itemKey = it.key
                 if itemKey == nil then itemKey = it.value end
-                if itemKey == key then label = it.label or it.text or label; break end
+                if itemKey == key then label = TR(it.label or it.text or label); break end
             end
         end
         if UIDropDownMenu_SetSelectedValue then UIDropDownMenu_SetSelectedValue(self, key) end

@@ -67,7 +67,9 @@ local SmoothPowerSet = GP.SmoothPowerSet
 local NormalizeHpMode = GP.NormalizeHpMode
 local NormalizePowerMode = GP.NormalizePowerMode
 local CurrentGradientDirection = GP.CurrentGradientDirection
+local CurrentGradientDirections = GP.CurrentGradientDirections
 local SetGradientDirection = GP.SetGradientDirection
+local ToggleGradientDirection = GP.ToggleGradientDirection
 local PriorityDefaults = GP.PriorityDefaults
 local PriorityAllowed = GP.PriorityAllowed
 local PriorityOrder = GP.PriorityOrder
@@ -84,6 +86,20 @@ local ApplyBars = GP.ApplyBars
 local ApplyCastbars = GP.ApplyCastbars
 local function BuildBars(ctx)
     local b = W.PageBuilder(ctx)
+
+    local function SharedBarsControlsActive()
+        return CurrentBarsScope() == "shared"
+    end
+
+    local function ScopedBarsControlsActive()
+        local scope = CurrentBarsScope()
+        return scope == "shared" or BarsScopeHasOverride(scope)
+    end
+
+    local function TextBarsControlsActive()
+        local scope = CurrentBarsScope()
+        return (not IsGFScope(scope)) and (scope == "shared" or BarsScopeHasOverride(scope))
+    end
 
     local scopeValues = {
         { value = "shared", text = "Shared" },
@@ -231,7 +247,11 @@ local function BuildBars(ctx)
         btn._msuf2Label:SetPoint("CENTER", btn, "CENTER", 0, 0)
         btn._msuf2Label:SetJustifyH("CENTER")
         btn:SetScript("OnClick", function()
-            SetGradientDirection(value or "RIGHT")
+            if ToggleGradientDirection then
+                ToggleGradientDirection(value or "RIGHT")
+            else
+                SetGradientDirection(value or "RIGHT")
+            end
             ApplyBars("MSUF2_GRADIENT_DIRECTION")
         end)
         directionButtons[value] = btn
@@ -242,74 +262,122 @@ local function BuildBars(ctx)
     PadButton(">", "RIGHT", 54, -27)
     PadButton("v", "DOWN", 31, -49)
     M.AddRefresher(ctx, function()
-        local current = CurrentGradientDirection()
-        local scopeKey = CurrentBarsScope()
-        local controlsActive = scopeKey == "shared" or BarsScopeHasOverride(scopeKey)
+        local current = (CurrentGradientDirections and CurrentGradientDirections()) or { [CurrentGradientDirection()] = true }
+        local controlsActive = ScopedBarsControlsActive()
+        local sharedActive = SharedBarsControlsActive()
         local valueControlsActive = controlsActive and ((BarScopeGet("enableGradient", true) ~= false) or (BarScopeGet("enablePowerGradient", false) == true))
+        SetControlEnabled(barTexture, sharedActive)
+        SetControlEnabled(bgTexture, sharedActive)
         SetControlEnabled(hpGradient, controlsActive)
         SetControlEnabled(powerGradient, controlsActive)
         SetControlEnabled(strength, valueControlsActive)
         pad:SetAlpha(valueControlsActive and 1 or 0.45)
         for value, btn in pairs(directionButtons) do
-            btn:SetActive(value == current)
+            btn:SetActive(current[value] == true)
             SetControlEnabled(btn, valueControlsActive)
         end
     end)
 
-    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 470, true)
+    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 336, true)
+    local absorbW = absorb._msuf2Width or ctx.width or 720
+    local absorbLeftX = 30
+    local absorbRightX = max(430, min(560, floor(absorbW * 0.52)))
+    local absorbLeftW = max(300, min(380, absorbRightX - absorbLeftX - 58))
+    local absorbRightW = max(300, min(420, absorbW - absorbRightX - 42))
+
+    W.LabelAt(absorb, "Display", absorbLeftX, -42, absorbLeftW, "GameFontNormalSmall", T.colors.accent)
     local absorbMode = W.Dropdown(absorb, "Display mode", {
         { value = 1, text = "Absorb off" },
         { value = 2, text = "Absorb bar" },
         { value = 3, text = "Absorb bar + text" },
         { value = 4, text = "Absorb text only" },
-    }, 280)
+    }, absorbLeftW)
     M.BindDropdown(ctx, absorbMode,
         function() return tonumber(BarScopeGet("absorbTextMode", 2)) or 2 end,
         function(v) BarScopeSet("absorbTextMode", tonumber(v) or 2, "MSUF2_ABSORB_MODE"); ApplyBars("MSUF2_ABSORB_MODE") end)
+    W.MoveWidget(absorbMode, absorb, absorbLeftX, -70, absorbLeftW, "LEFT")
+
     local absorbAnchor = W.Dropdown(absorb, "Absorb bar anchoring", {
         { value = 1, text = "Anchor to left side" },
         { value = 2, text = "Anchor to right side" },
         { value = 3, text = "Follow HP bar" },
         { value = 4, text = "Follow HP bar (overflow)" },
         { value = 5, text = "Reverse from max" },
-    }, 280)
+    }, absorbLeftW)
     M.BindDropdown(ctx, absorbAnchor,
         function() return tonumber(BarScopeGet("absorbAnchorMode", 2)) or 2 end,
         function(v) BarScopeSet("absorbAnchorMode", tonumber(v) or 2, "MSUF2_ABSORB_ANCHOR"); ApplyBars("MSUF2_ABSORB_ANCHOR") end)
-    local absorbTex = W.Dropdown(absorb, "Absorb bar texture (SharedMedia)", function() return TextureValues("Use foreground texture") end, 280)
-    M.BindDropdown(ctx, absorbTex,
-        function() return ReadG("absorbBarTexture", "") end,
-        function(v) SetG("absorbBarTexture", v or "", "MSUF2_ABSORB_TEXTURE", { preview = true }); Call("MSUF_UpdateAbsorbBarTextures"); ApplyBars("MSUF2_ABSORB_TEXTURE") end)
-    local healAbsorbTex = W.Dropdown(absorb, "Heal-absorb texture", function() return TextureValues("Use foreground texture") end, 280)
-    M.BindDropdown(ctx, healAbsorbTex,
-        function() return ReadG("healAbsorbBarTexture", "") end,
-        function(v) SetG("healAbsorbBarTexture", v or "", "MSUF2_HEAL_ABSORB_TEXTURE", { preview = true }); Call("MSUF_UpdateAbsorbBarTextures"); ApplyBars("MSUF2_HEAL_ABSORB_TEXTURE") end)
-    local selfHeal = W.Toggle(absorb, "Heal prediction")
+    W.MoveWidget(absorbAnchor, absorb, absorbLeftX, -124, absorbLeftW, "LEFT")
+
+    local selfHeal = W.ToggleAt(absorb, "Heal prediction", absorbLeftX, -186, absorbLeftW)
     M.BindToggle(ctx, selfHeal,
         function() return ReadGBool("showSelfHealPrediction", true) end,
         function(v) SetGBool("showSelfHealPrediction", v, "MSUF2_SELF_HEAL", { preview = true }); ApplyBars("MSUF2_SELF_HEAL") end)
-    local absorbTest = W.Toggle(absorb, "Test absorb textures")
+
+    local absorbOpacity = W.Slider(absorb, "Absorb bar opacity", 0, 1, 0.05, absorbLeftW)
+    M.BindSlider(ctx, absorbOpacity,
+        function() return tonumber(BarScopeGet("absorbBarOpacity", 0.75)) or 0.75 end,
+        function(v) BarScopeSet("absorbBarOpacity", tonumber(v) or 0.75, "MSUF2_ABSORB_OPACITY"); ApplyBars("MSUF2_ABSORB_OPACITY") end)
+    W.MoveWidget(absorbOpacity, absorb, absorbLeftX, -240, absorbLeftW, "LEFT")
+
+    W.LabelAt(absorb, "Textures", absorbRightX, -42, absorbRightW, "GameFontNormalSmall", T.colors.accent)
+    local absorbTex = W.Dropdown(absorb, "Absorb bar texture (SharedMedia)", function() return TextureValues("Use foreground texture") end, absorbRightW)
+    M.BindDropdown(ctx, absorbTex,
+        function() return ReadG("absorbBarTexture", "") end,
+        function(v) SetG("absorbBarTexture", v or "", "MSUF2_ABSORB_TEXTURE", { preview = true }); Call("MSUF_UpdateAbsorbBarTextures"); ApplyBars("MSUF2_ABSORB_TEXTURE") end)
+    W.MoveWidget(absorbTex, absorb, absorbRightX, -70, absorbRightW, "LEFT")
+
+    local healAbsorbTex = W.Dropdown(absorb, "Heal-absorb texture", function() return TextureValues("Use foreground texture") end, absorbRightW)
+    M.BindDropdown(ctx, healAbsorbTex,
+        function() return ReadG("healAbsorbBarTexture", "") end,
+        function(v) SetG("healAbsorbBarTexture", v or "", "MSUF2_HEAL_ABSORB_TEXTURE", { preview = true }); Call("MSUF_UpdateAbsorbBarTextures"); ApplyBars("MSUF2_HEAL_ABSORB_TEXTURE") end)
+    W.MoveWidget(healAbsorbTex, absorb, absorbRightX, -124, absorbRightW, "LEFT")
+
+    local absorbTest = W.ToggleAt(absorb, "Test absorb textures", absorbRightX, -186, absorbRightW)
     M.BindToggle(ctx, absorbTest,
         function() return _G.MSUF_AbsorbTextureTestMode and true or false end,
         function(v) SetAbsorbTextureTest(v and true or false) end)
     absorbTest:HookScript("OnHide", function() ClearAbsorbTextureTest() end)
-    local absorbOpacity = W.Slider(absorb, "Absorb bar opacity", 0, 1, 0.05, 300)
-    M.BindSlider(ctx, absorbOpacity,
-        function() return tonumber(BarScopeGet("absorbBarOpacity", 0.75)) or 0.75 end,
-        function(v) BarScopeSet("absorbBarOpacity", tonumber(v) or 0.75, "MSUF2_ABSORB_OPACITY"); ApplyBars("MSUF2_ABSORB_OPACITY") end)
-    local healAbsorbOpacity = W.Slider(absorb, "Heal-absorb bar opacity", 0, 1, 0.05, 300)
+
+    local healAbsorbOpacity = W.Slider(absorb, "Heal-absorb bar opacity", 0, 1, 0.05, absorbRightW)
     M.BindSlider(ctx, healAbsorbOpacity,
         function() return tonumber(BarScopeGet("healAbsorbBarOpacity", 1)) or 1 end,
         function(v) BarScopeSet("healAbsorbBarOpacity", tonumber(v) or 1, "MSUF2_HEAL_ABSORB_OPACITY"); ApplyBars("MSUF2_HEAL_ABSORB_OPACITY") end)
+    W.MoveWidget(healAbsorbOpacity, absorb, absorbRightX, -240, absorbRightW, "LEFT")
+
+    M.AddRefresher(ctx, function()
+        local mode = tonumber(BarScopeGet("absorbTextMode", 2)) or 2
+        local showBar = mode == 2 or mode == 3
+        local scopedActive = ScopedBarsControlsActive()
+        local sharedActive = SharedBarsControlsActive()
+        SetControlEnabled(absorbMode, scopedActive)
+        SetControlEnabled(absorbAnchor, scopedActive and showBar)
+        SetControlEnabled(absorbTex, sharedActive and showBar)
+        SetControlEnabled(healAbsorbTex, sharedActive and showBar)
+        SetControlEnabled(absorbTest, showBar)
+        SetControlEnabled(absorbOpacity, scopedActive and showBar)
+        SetControlEnabled(healAbsorbOpacity, scopedActive and showBar)
+        SetControlEnabled(selfHeal, sharedActive and mode ~= 1)
+    end)
 
     local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 126, false)
     local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
     M.BindSlider(ctx, outlineSlider,
         function() return tonumber(BarScopeGetBars("barOutlineThickness", 1)) or 1 end,
         function(v) BarScopeSetBars("barOutlineThickness", floor((tonumber(v) or 1) + 0.5), "MSUF2_BAR_OUTLINE"); ApplyBars("MSUF2_BAR_OUTLINE") end)
+    M.AddRefresher(ctx, function()
+        SetControlEnabled(outlineSlider, ScopedBarsControlsActive())
+    end)
 
-    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 790, true)
-    local highlight = W.Slider(highlights, "Highlight border thickness", 1, 30, 1, 300)
+    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 626, true)
+    local hlW = highlights._msuf2Width or ctx.width or 720
+    local hlLeftX = 30
+    local hlRightX = max(430, min(560, floor(hlW * 0.52)))
+    local hlLeftW = max(300, min(380, hlRightX - hlLeftX - 58))
+    local hlRightW = max(300, min(420, hlW - hlRightX - 42))
+
+    W.LabelAt(highlights, "Border Modes", hlLeftX, -42, hlLeftW, "GameFontNormalSmall", T.colors.accent)
+    local highlight = W.Slider(highlights, "Highlight border thickness", 1, 30, 1, hlLeftW)
     M.BindSlider(ctx, highlight,
         function() return tonumber(BarScopeGet("highlightBorderThickness", BarScopeGet("hlAggroSize", 2))) or 2 end,
         function(v)
@@ -318,15 +386,48 @@ local function BuildBars(ctx)
             BarScopeSet("hlAggroSize", n, "MSUF2_HIGHLIGHT_BORDER")
             ApplyBars("MSUF2_HIGHLIGHT_BORDER")
         end)
+    W.MoveWidget(highlight, highlights, hlLeftX, -70, hlLeftW, "LEFT")
     local borderModes = {
         { value = 0, text = "Off" },
         { value = 1, text = "On" },
     }
-    local aggro = W.Dropdown(highlights, "Aggro border on", borderModes, 190)
+    local aggro = W.Dropdown(highlights, "Aggro border", borderModes, hlLeftW)
     M.BindDropdown(ctx, aggro,
         function() return tonumber(BarScopeGet("aggroOutlineMode", 1)) or 1 end,
         function(v) BarScopeSet("aggroOutlineMode", tonumber(v) or 1, "MSUF2_AGGRO_BORDER"); ApplyBars("MSUF2_AGGRO_BORDER") end)
-    local aggroTest = W.Toggle(highlights, "Test aggro border")
+    W.MoveWidget(aggro, highlights, hlLeftX, -136, hlLeftW, "LEFT")
+
+    local dispelBorder = W.Dropdown(highlights, "Dispel border", borderModes, hlLeftW)
+    M.BindDropdown(ctx, dispelBorder,
+        function() return tonumber(BarScopeGet("dispelOutlineMode", 1)) or 1 end,
+        function(v) BarScopeSet("dispelOutlineMode", tonumber(v) or 1, "MSUF2_DISPEL_BORDER"); ApplyBars("MSUF2_DISPEL_BORDER") end)
+    W.MoveWidget(dispelBorder, highlights, hlLeftX, -190, hlLeftW, "LEFT")
+
+    local purge = W.Dropdown(highlights, "Purge border", borderModes, hlLeftW)
+    M.BindDropdown(ctx, purge,
+        function() return tonumber(BarScopeGet("purgeOutlineMode", 0)) or 0 end,
+        function(v) BarScopeSet("purgeOutlineMode", tonumber(v) or 0, "MSUF2_PURGE_BORDER"); ApplyBars("MSUF2_PURGE_BORDER") end)
+    W.MoveWidget(purge, highlights, hlLeftX, -244, hlLeftW, "LEFT")
+
+    local bossTarget = W.Dropdown(highlights, "Boss target border", borderModes, hlLeftW)
+    M.BindDropdown(ctx, bossTarget,
+        function()
+            local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
+            return tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback
+        end,
+        function(v)
+            local value = tonumber(v) or 1
+            SetG("bossTargetOutlineMode", value, "MSUF2_BOSS_TARGET_BORDER", { preview = true })
+            SetGBool("bossTargetHighlightEnabled", value == 1, "MSUF2_BOSS_TARGET_BORDER", { preview = true })
+            ApplyBars("MSUF2_BOSS_TARGET_BORDER")
+        end)
+    W.MoveWidget(bossTarget, highlights, hlLeftX, -298, hlLeftW, "LEFT")
+
+    local bossSharedHint = W.Text(highlights, "Boss target border is a shared boss-frame setting.", hlLeftX, -360, hlLeftW, T.colors.dim)
+    if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
+
+    W.LabelAt(highlights, "Preview", hlRightX, -42, hlRightW, "GameFontNormalSmall", T.colors.accent)
+    local aggroTest = W.ToggleAt(highlights, "Test aggro border", hlRightX, -72, hlRightW)
     M.BindToggle(ctx, aggroTest,
         function() return _G.MSUF_AggroBorderTestMode and true or false end,
         function(v)
@@ -340,11 +441,8 @@ local function BuildBars(ctx)
             self:SetChecked(false)
         end
     end)
-    local dispelBorder = W.Dropdown(highlights, "Dispel border on", borderModes, 190)
-    M.BindDropdown(ctx, dispelBorder,
-        function() return tonumber(BarScopeGet("dispelOutlineMode", 1)) or 1 end,
-        function(v) BarScopeSet("dispelOutlineMode", tonumber(v) or 1, "MSUF2_DISPEL_BORDER"); ApplyBars("MSUF2_DISPEL_BORDER") end)
-    local dispelTest = W.Toggle(highlights, "Test dispel border")
+
+    local dispelTest = W.ToggleAt(highlights, "Test dispel border", hlRightX, -104, hlRightW)
     M.BindToggle(ctx, dispelTest,
         function() return _G.MSUF_DispelBorderTestMode and true or false end,
         function(v)
@@ -365,18 +463,16 @@ local function BuildBars(ctx)
         { value = "Disease", text = "Disease" },
         { value = "Poison", text = "Poison" },
         { value = "Bleed", text = "Bleed" },
-    }, 190)
+    }, hlRightW)
     M.BindDropdown(ctx, dispelType,
         function() return _G.MSUF_DispelBorderTestType or "Magic" end,
         function(v)
             _G.MSUF_DispelBorderTestType = v or "Magic"
             RefreshBorderTestModes()
         end)
-    local purge = W.Dropdown(highlights, "Purge border on", borderModes, 190)
-    M.BindDropdown(ctx, purge,
-        function() return tonumber(BarScopeGet("purgeOutlineMode", 0)) or 0 end,
-        function(v) BarScopeSet("purgeOutlineMode", tonumber(v) or 0, "MSUF2_PURGE_BORDER"); ApplyBars("MSUF2_PURGE_BORDER") end)
-    local purgeTest = W.Toggle(highlights, "Test purge border")
+    W.MoveWidget(dispelType, highlights, hlRightX, -150, hlRightW, "LEFT")
+
+    local purgeTest = W.ToggleAt(highlights, "Test purge border", hlRightX, -214, hlRightW)
     M.BindToggle(ctx, purgeTest,
         function() return _G.MSUF_PurgeBorderTestMode and true or false end,
         function(v)
@@ -388,11 +484,8 @@ local function BuildBars(ctx)
             self:SetChecked(false)
         end
     end)
-    local bossTarget = W.Dropdown(highlights, "Boss target border on", borderModes, 190)
-    M.BindDropdown(ctx, bossTarget,
-        function() return tonumber(BarScopeGet("bossTargetOutlineMode", 1)) or 1 end,
-        function(v) BarScopeSet("bossTargetOutlineMode", tonumber(v) or 1, "MSUF2_BOSS_TARGET_BORDER"); ApplyBars("MSUF2_BOSS_TARGET_BORDER") end)
-    local bossTargetTest = W.Toggle(highlights, "Test boss target border")
+
+    local bossTargetTest = W.ToggleAt(highlights, "Test boss target border", hlRightX, -246, hlRightW)
     M.BindToggle(ctx, bossTargetTest,
         function() return _G.MSUF_BossTargetBorderTestMode and true or false end,
         function(v)
@@ -404,7 +497,10 @@ local function BuildBars(ctx)
             self:SetChecked(false)
         end
     end)
-    local enabled = W.Toggle(highlights, "Dispel glow effect")
+
+    W.DividerAt(highlights, -288, hlRightX, 42)
+    W.LabelAt(highlights, "Dispel Glow", hlRightX, -314, hlRightW, "GameFontNormalSmall", T.colors.accent)
+    local enabled = W.ToggleAt(highlights, "Dispel glow effect", hlRightX, -344, hlRightW)
     M.BindToggle(ctx, enabled,
         function() return BarScopeGet("hlDispelGlowEnabled", true) ~= false end,
         function(v) BarScopeSet("hlDispelGlowEnabled", v and true or false, "MSUF2_DISPEL_GLOW"); ApplyBars("MSUF2_DISPEL_GLOW") end)
@@ -412,28 +508,52 @@ local function BuildBars(ctx)
         { value = "PIXEL", text = "Pixel" },
         { value = "AUTOCAST", text = "AutoCast" },
         { value = "PROC", text = "Proc" },
-    }, 420)
+    }, hlRightW)
     M.BindSegment(ctx, style,
         function() return NormalizeGlowStyle(BarScopeGet("hlDispelGlowStyle", "PIXEL")) end,
         function(v) BarScopeSet("hlDispelGlowStyle", NormalizeGlowStyle(v), "MSUF2_DISPEL_STYLE"); ApplyBars("MSUF2_DISPEL_STYLE") end)
-    local lines = W.Slider(highlights, "Glow lines / particles", 2, 16, 1, 300)
+    W.MoveWidget(style, highlights, hlRightX, -392, hlRightW, "LEFT")
+
+    local lines = W.Slider(highlights, "Glow lines / particles", 2, 16, 1, hlRightW)
     M.BindSlider(ctx, lines,
         function() return tonumber(BarScopeGet("hlDispelGlowLines", 8)) or 8 end,
         function(v) BarScopeSet("hlDispelGlowLines", floor((tonumber(v) or 8) + 0.5), "MSUF2_DISPEL_GLOW_LINES"); ApplyBars("MSUF2_DISPEL_GLOW_LINES") end)
-    local speed = W.Slider(highlights, "Glow speed", 0.05, 1, 0.05, 300)
+    W.MoveWidget(lines, highlights, hlRightX, -446, hlRightW, "LEFT")
+
+    local speed = W.Slider(highlights, "Glow speed", 0.05, 1, 0.05, hlRightW)
     M.BindSlider(ctx, speed,
         function() return tonumber(BarScopeGet("hlDispelGlowFrequency", 0.25)) or 0.25 end,
         function(v) BarScopeSet("hlDispelGlowFrequency", tonumber(v) or 0.25, "MSUF2_DISPEL_GLOW_SPEED"); ApplyBars("MSUF2_DISPEL_GLOW_SPEED") end)
-    local thickness = W.Slider(highlights, "Glow thickness (Pixel)", 1, 5, 1, 300)
+    W.MoveWidget(speed, highlights, hlRightX, -500, hlRightW, "LEFT")
+
+    local thickness = W.Slider(highlights, "Glow thickness (Pixel)", 1, 5, 1, hlRightW)
     M.BindSlider(ctx, thickness,
         function() return tonumber(BarScopeGet("hlDispelGlowThickness", 2)) or 2 end,
         function(v) BarScopeSet("hlDispelGlowThickness", floor((tonumber(v) or 2) + 0.5), "MSUF2_DISPEL_THICKNESS"); ApplyBars("MSUF2_DISPEL_THICKNESS") end)
+    W.MoveWidget(thickness, highlights, hlRightX, -554, hlRightW, "LEFT")
+
     M.AddRefresher(ctx, function()
+        local scopedActive = ScopedBarsControlsActive()
+        local sharedActive = SharedBarsControlsActive()
         local glowOn = BarScopeGet("hlDispelGlowEnabled", true) ~= false
-        SetControlEnabled(style, glowOn)
-        SetControlEnabled(lines, glowOn)
-        SetControlEnabled(speed, glowOn)
-        SetControlEnabled(thickness, glowOn and NormalizeGlowStyle(BarScopeGet("hlDispelGlowStyle", "PIXEL")) == "PIXEL")
+        local pixelGlow = NormalizeGlowStyle(BarScopeGet("hlDispelGlowStyle", "PIXEL")) == "PIXEL"
+        SetControlEnabled(highlight, scopedActive)
+        SetControlEnabled(aggro, scopedActive)
+        SetControlEnabled(dispelBorder, scopedActive)
+        SetControlEnabled(purge, scopedActive)
+        SetControlEnabled(bossTarget, sharedActive)
+        SetControlEnabled(aggroTest, scopedActive)
+        SetControlEnabled(dispelTest, scopedActive)
+        SetControlEnabled(dispelType, scopedActive)
+        SetControlEnabled(purgeTest, scopedActive)
+        SetControlEnabled(bossTargetTest, sharedActive)
+        SetControlEnabled(enabled, scopedActive)
+        SetControlEnabled(style, scopedActive and glowOn)
+        SetControlEnabled(lines, scopedActive and glowOn)
+        SetControlEnabled(speed, scopedActive and glowOn)
+        SetControlEnabled(thickness, scopedActive and glowOn and pixelGlow)
+        local hintColor = sharedActive and T.colors.dim or T.colors.muted
+        bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)
 
     local priority = b:CollapsibleSection("bars_priority", "Highlight Priority", 280, false)
@@ -508,7 +628,7 @@ local function BuildBars(ctx)
         num:SetPoint("RIGHT", rowFrame, "RIGHT", -8, 0)
         rowFrame._numText = num
         rowFrame:SetScript("OnDragStart", function(self)
-            if not (BarScopeGet("hlPrioEnabled", false) == true) then return end
+            if not (ScopedBarsControlsActive() and BarScopeGet("hlPrioEnabled", false) == true) then return end
             if GameTooltip then GameTooltip:Hide() end
             self._msuf2OldStrata = self:GetFrameStrata()
             self:StartMoving()
@@ -572,10 +692,13 @@ local function BuildBars(ctx)
             row.frame._numText:SetText(tostring(i))
         end
         SnapPriorityRows()
-        SetPriorityRowsEnabled(BarScopeGet("hlPrioEnabled", false) == true)
+        SetPriorityRowsEnabled(ScopedBarsControlsActive() and BarScopeGet("hlPrioEnabled", false) == true)
     end
     RefreshPriorityRows()
-    M.AddRefresher(ctx, RefreshPriorityRows)
+    M.AddRefresher(ctx, function()
+        SetControlEnabled(prio, ScopedBarsControlsActive())
+        RefreshPriorityRows()
+    end)
 
     local text = b:CollapsibleSection("bars_text", "HP / Power Text", 340, false)
     local hpModeOptions = {
@@ -635,6 +758,14 @@ local function BuildBars(ctx)
     M.BindDropdown(ctx, powerSep,
         function() return BarScopeGet("powerTextSeparator", BarScopeGet("hpTextSeparator", "")) or "" end,
         function(v) BarScopeSet("powerTextSeparator", v or "", "MSUF2_POWER_TEXT_SEPARATOR"); ApplyBars("MSUF2_POWER_TEXT_SEPARATOR") end)
+    M.AddRefresher(ctx, function()
+        local active = TextBarsControlsActive()
+        SetControlEnabled(hpMode, active)
+        SetControlEnabled(powerMode, active)
+        SetControlEnabled(hpReverse, active)
+        SetControlEnabled(hpSep, active)
+        SetControlEnabled(powerSep, active)
+    end)
 
     local spacers = b:CollapsibleSection("bars_text_spacers", "Text Spacers", 300, false)
     local hpSpacer = W.Toggle(spacers, "HP Spacer on/off")
@@ -653,6 +784,13 @@ local function BuildBars(ctx)
     M.BindSlider(ctx, powerSpacerX,
         function() return tonumber(BarScopeGet("powerTextSpacerX", 0)) or 0 end,
         function(v) BarScopeSet("powerTextSpacerX", floor((tonumber(v) or 0) + 0.5), "MSUF2_POWER_TEXT_SPACER_X"); ApplyBars("MSUF2_POWER_TEXT_SPACER_X") end)
+    M.AddRefresher(ctx, function()
+        local active = TextBarsControlsActive()
+        SetControlEnabled(hpSpacer, active)
+        SetControlEnabled(hpSpacerX, active and BarScopeGet("hpTextSpacerEnabled", false) == true)
+        SetControlEnabled(powerSpacer, active)
+        SetControlEnabled(powerSpacerX, active and BarScopeGet("powerTextSpacerEnabled", false) == true)
+    end)
 
     local power = b:CollapsibleSection("bars_power", "Bar Animation + Text Accuracy", 152, false)
     local smoothPower = W.Toggle(power, "Smooth power bar")
@@ -663,6 +801,10 @@ local function BuildBars(ctx)
     M.BindToggle(ctx, realtimePower,
         function() return ReadB("realtimePowerText", true) ~= false end,
         function(v) SetB("realtimePowerText", v and true or false, "MSUF2_BARS_REALTIME_POWER", { preview = true }); ApplyBars("MSUF2_BARS_REALTIME_POWER") end)
+    M.AddRefresher(ctx, function()
+        SetControlEnabled(smoothPower, CurrentPowerBarScopeUnit() ~= nil)
+        SetControlEnabled(realtimePower, SharedBarsControlsActive())
+    end)
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
