@@ -692,6 +692,8 @@ local function ApplyFonts(f, kind)
     local fontPath  = GF.ResolveFontPath(kind)
     local fontFlags = GF.ResolveFontFlags(kind)
     local fr, fg, fb = GF.ResolveFontColor(kind)
+    local db = _G.MSUF_DB
+    local fontKey = (conf.fontOverride and conf.fontKey) or (db and db.general and db.general.fontKey)
     local fScale = conf._resolvedFrameScale or 1
     local nameSize  = conf.nameFontSize or 12
     local hpSize    = conf.hpFontSize or 10
@@ -702,21 +704,31 @@ local function ApplyFonts(f, kind)
         powSize  = math_max(6, math_floor(powSize * fScale + 0.5))
     end
 
+    local safeSetFont = _G.MSUF_SetFontSafe
+    local function SetFont(fs, size)
+        if not fs then return end
+        if type(safeSetFont) == "function" then
+            safeSetFont(fs, fontPath, size, fontFlags, fontKey)
+        else
+            fs:SetFont(fontPath, size, fontFlags)
+        end
+    end
+
     if f.nameText then
-        f.nameText:SetFont(fontPath, nameSize, fontFlags)
+        SetFont(f.nameText, nameSize)
         -- Name color applied dynamically per-unit in dispatchName/UpdateButton
         f.nameText:SetTextColor(fr, fg, fb, 1)
     end
     if f.textLeftFS then
-        f.textLeftFS:SetFont(fontPath, hpSize, fontFlags)
+        SetFont(f.textLeftFS, hpSize)
         f.textLeftFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.textCenterFS then
-        f.textCenterFS:SetFont(fontPath, hpSize, fontFlags)
+        SetFont(f.textCenterFS, hpSize)
         f.textCenterFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.textRightFS then
-        f.textRightFS:SetFont(fontPath, hpSize, fontFlags)
+        SetFont(f.textRightFS, hpSize)
         f.textRightFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.statusIndicatorText then
@@ -726,18 +738,18 @@ local function ApplyFonts(f, kind)
         else
             statusSize = nameSize + 2
         end
-        f.statusIndicatorText:SetFont(fontPath, statusSize, fontFlags)
+        SetFont(f.statusIndicatorText, statusSize)
     end
     if f.powerTextLeftFS then
-        f.powerTextLeftFS:SetFont(fontPath, powSize, fontFlags)
+        SetFont(f.powerTextLeftFS, powSize)
         f.powerTextLeftFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.powerTextCenterFS then
-        f.powerTextCenterFS:SetFont(fontPath, powSize, fontFlags)
+        SetFont(f.powerTextCenterFS, powSize)
         f.powerTextCenterFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.powerTextRightFS then
-        f.powerTextRightFS:SetFont(fontPath, powSize, fontFlags)
+        SetFont(f.powerTextRightFS, powSize)
         f.powerTextRightFS:SetTextColor(fr, fg, fb, 0.9)
     end
 end

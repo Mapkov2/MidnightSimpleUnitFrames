@@ -674,6 +674,74 @@ local function IsEditModeActive()
     return ((_G.MSUF_IsMSUFEditModeActive and _G.MSUF_IsMSUFEditModeActive()) or _G.MSUF_UnitEditModeActive) and true or false
 end
 
+local bossPagePreviewEvents
+local bossPagePreviewPendingCleanup
+local function BossPagePreviewInCombat()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function SyncBossPagePreview()
+    local active = (_G.MSUF2_BossUnitframePreviewActive == true)
+    if not BossPagePreviewInCombat() and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
+        _G.MSUF_ApplyBossUnitframePreviewState(active, active and "MSUF2_BOSS_PAGE" or "MSUF2_BOSS_PAGE_OFF")
+        return
+    end
+    if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+        pcall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit)
+    end
+end
+
+local function EnsureBossPagePreviewEvents()
+    if bossPagePreviewEvents then return bossPagePreviewEvents end
+    bossPagePreviewEvents = CreateFrame("Frame")
+    bossPagePreviewEvents:SetScript("OnEvent", function(self, event)
+        if event == "PLAYER_REGEN_ENABLED" and bossPagePreviewPendingCleanup then
+            bossPagePreviewPendingCleanup = nil
+            SyncBossPagePreview()
+            if _G.MSUF2_BossUnitframePreviewActive ~= true then
+                self:UnregisterAllEvents()
+            end
+            return
+        end
+        if _G.MSUF2_BossUnitframePreviewActive == true then
+            SyncBossPagePreview()
+        end
+    end)
+    return bossPagePreviewEvents
+end
+
+local function SetBossPagePreviewActive(active)
+    active = active and true or false
+    local current = _G.MSUF2_BossUnitframePreviewActive == true
+    if current == active then
+        if active then SyncBossPagePreview() end
+        return
+    end
+
+    _G.MSUF2_BossUnitframePreviewActive = active or nil
+
+    local events = EnsureBossPagePreviewEvents()
+    if active then
+        bossPagePreviewPendingCleanup = nil
+        events:RegisterEvent("PLAYER_REGEN_DISABLED")
+        events:RegisterEvent("PLAYER_REGEN_ENABLED")
+    elseif BossPagePreviewInCombat() then
+        bossPagePreviewPendingCleanup = true
+        events:UnregisterEvent("PLAYER_REGEN_DISABLED")
+        events:RegisterEvent("PLAYER_REGEN_ENABLED")
+    else
+        bossPagePreviewPendingCleanup = nil
+        events:UnregisterAllEvents()
+    end
+
+    SyncBossPagePreview()
+    if active and C_Timer and C_Timer.After then
+        C_Timer.After(0, SyncBossPagePreview)
+        C_Timer.After(0.12, SyncBossPagePreview)
+    end
+end
+
 local function ReadBool(unit, key, default)
     local conf = GetConf(unit)
     local value = conf[key]
@@ -801,6 +869,9 @@ local function RefreshStatusRuntime(unit, spec)
     if spec and spec.value == "level" then
         Call("MSUF_UpdateAllFonts_Immediate")
         Call("MSUF_UpdateAllFonts")
+        if unit == "boss" and _G.MSUF_BossTestMode and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
+            _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR")
+        end
     end
     M.RequestUnitApply(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true })
 end
@@ -915,6 +986,7 @@ UnitPage.NewCopyScopeDefaults = NewCopyScopeDefaults
 UnitPage.CopyUnitSettings = CopyUnitSettings
 UnitPage.ToggleEditMode = ToggleEditMode
 UnitPage.IsEditModeActive = IsEditModeActive
+UnitPage.SetBossPagePreviewActive = SetBossPagePreviewActive
 UnitPage.ReadBool = ReadBool
 UnitPage.SetBool = SetBool
 UnitPage.ReadNumber = ReadNumber

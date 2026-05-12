@@ -291,7 +291,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2)
     end
 
-    local title = T.Font(box, "GameFontNormal", "", T.colors.text)
+    local title = T.Font(box, "GameFontNormal", "", T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     title:SetText("Group Frame Preview - " .. PreviewScopeLabel(CurrentScope()))
     box._title = title

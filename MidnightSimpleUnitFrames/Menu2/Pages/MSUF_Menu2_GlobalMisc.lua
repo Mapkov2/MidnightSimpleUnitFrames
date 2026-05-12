@@ -237,8 +237,19 @@ local function BuildMisc(ctx)
             if v then Call("MSUF_TargetSoundDriver_Ensure") end
         end)
 
-    local range = b:CollapsibleSection("misc_range_fade", "Range Fade", 300, false)
-    for _, spec in ipairs({
+    local range = b:CollapsibleSection("misc_range_fade", "Range Fade", 260, false)
+    local rangeW = range._msuf2Width or ctx.width or 720
+    local rangeLeftX = 30
+    local rangeRightX = max(430, floor(rangeW * 0.50))
+    local rangeLeftW = max(260, min(340, rangeRightX - rangeLeftX - 70))
+    local rangeRightW = max(280, min(360, rangeW - rangeRightX - 42))
+    local rangeToggles = {}
+    local bossExtras = {}
+
+    W.LabelAt(range, "Unit frames", rangeLeftX, -38, rangeLeftW, "GameFontNormalSmall", T.colors.text)
+    W.LabelAt(range, "Effect", rangeRightX, -38, rangeRightW, "GameFontNormalSmall", T.colors.text)
+
+    for index, spec in ipairs({
         { unit = "target", key = "rangeFadeEnabled", label = "Target range fade" },
         { unit = "focus", key = "rangeFadeEnabled", label = "Focus range fade" },
         { unit = "boss", key = "rangeFadeEnabled", label = "Boss range fade" },
@@ -246,6 +257,13 @@ local function BuildMisc(ctx)
         { unit = "boss", key = "rangeFadeAuras", label = "Boss auras range fade" },
     }) do
         local toggle = W.Toggle(range, spec.label)
+        local y = (index <= 3) and (-66 - (index - 1) * 32) or (-174 - (index - 4) * 32)
+        W.MoveWidget(toggle, range, rangeLeftX, y)
+        if index <= 3 then
+            rangeToggles[#rangeToggles + 1] = toggle
+        else
+            bossExtras[#bossExtras + 1] = toggle
+        end
         M.BindToggle(ctx, toggle,
             function() return Unit(spec.unit)[spec.key] == true end,
             function(v)
@@ -258,7 +276,28 @@ local function BuildMisc(ctx)
             end)
     end
 
-    local alpha = W.Slider(range, "Out of range alpha", 0, 60, 5, 300)
+    W.LabelAt(range, "Boss children", rangeLeftX, -148, rangeLeftW, "GameFontNormalSmall", T.colors.text)
+
+    local affects = W.Dropdown(range, "Range fade affects", {
+        { value = "frame", text = "Frame" },
+        { value = "health", text = "HP Bar" },
+    }, rangeRightW)
+    M.BindDropdown(ctx, affects,
+        function()
+            local value = Unit("target").rangeFadeLayerMode or Unit("focus").rangeFadeLayerMode or Unit("boss").rangeFadeLayerMode or "frame"
+            return (value == "health") and "health" or "frame"
+        end,
+        function(value)
+            value = (value == "health") and "health" or "frame"
+            Unit("target").rangeFadeLayerMode = value
+            Unit("focus").rangeFadeLayerMode = value
+            Unit("boss").rangeFadeLayerMode = value
+            RefreshRangeFadeRuntime()
+            M.RequestGeneralApply("MSUF2_RANGE_FADE_LAYER", { alpha = true, preview = true, applyAll = false })
+        end)
+    W.MoveWidget(affects, range, rangeRightX, -66, rangeRightW, "LEFT")
+
+    local alpha = W.Slider(range, "Out of range alpha", 0, 60, 5, rangeRightW)
     M.BindSlider(ctx, alpha,
         function()
             local value = tonumber(Unit("target").rangeFadeAlpha or Unit("focus").rangeFadeAlpha or Unit("boss").rangeFadeAlpha or 0.6) or 0.6
@@ -274,6 +313,7 @@ local function BuildMisc(ctx)
             RefreshRangeFadeRuntime()
             M.RequestGeneralApply("MSUF2_RANGE_FADE_ALPHA", { alpha = true, preview = true, applyAll = false })
         end)
+    W.MoveWidget(alpha, range, rangeRightX, -120, rangeRightW, "CENTER")
 
     local portrait = W.Toggle(range, "Fade portrait too")
     M.BindToggle(ctx, portrait,
@@ -283,6 +323,18 @@ local function BuildMisc(ctx)
             RefreshRangeFadeRuntime()
             Call("MSUF_RefreshAllUnitAlphas")
         end)
+    W.MoveWidget(portrait, range, rangeRightX, -176)
+
+    local rangeHint = W.Text(range, "HP Bar only fades the health layer; Frame fades the full unit frame.", rangeRightX, -210, rangeRightW, T.colors.muted)
+    if rangeHint.SetWordWrap then rangeHint:SetWordWrap(true) end
+    M.AddRefresher(ctx, function()
+        local anyEnabled = Unit("target").rangeFadeEnabled == true
+            or Unit("focus").rangeFadeEnabled == true
+            or Unit("boss").rangeFadeEnabled == true
+        SetControlsEnabled({ affects, alpha, portrait }, anyEnabled)
+        SetControlsEnabled(rangeToggles, true)
+        SetControlsEnabled(bossExtras, Unit("boss").rangeFadeEnabled == true)
+    end)
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end

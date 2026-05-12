@@ -102,6 +102,10 @@ local function BuildPreview(ctx, builder, unit)
     local box = ns.MSUF_Options_CreateUnitPreviewBox(sec, panel, ctx.width - 28, 300)
     box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -38)
     box:Show()
+    if box.title and box.title.SetTextColor then
+        local c = T.colors.accent
+        box.title:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+    end
     local leftBorderCover = box:CreateTexture(nil, "OVERLAY", nil, 7)
     leftBorderCover:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
     leftBorderCover:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 0, 0)
@@ -1606,6 +1610,27 @@ end
 
 local function BuildUnitPage(info)
     return function(ctx)
+        if info.unit == "boss" and ctx and ctx.wrapper then
+            ctx.wrapper:HookScript("OnShow", function()
+                if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then
+                    M.UnitPage.SetBossPagePreviewActive(true)
+                end
+            end)
+            ctx.wrapper:HookScript("OnHide", function()
+                if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then
+                    M.UnitPage.SetBossPagePreviewActive(false)
+                end
+            end)
+            M.AddRefresher(ctx, function()
+                if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then
+                    M.UnitPage.SetBossPagePreviewActive(ctx.wrapper:IsShown())
+                end
+            end)
+            if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then
+                M.UnitPage.SetBossPagePreviewActive(true)
+            end
+        end
+
         local builder = W.PageBuilder(ctx)
         BuildTopActions(ctx, builder, info.unit, info.label)
         BuildPreview(ctx, builder, info.unit)
@@ -1628,6 +1653,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 13,
+        version = 14,
     })
 end

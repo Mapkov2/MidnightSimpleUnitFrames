@@ -298,18 +298,20 @@ local function SetHighlightRGB(r, g, b)
     end
 end
 
-local function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB)
+local function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverride, swatchWidth)
     local color = W.Color(section, label)
     M.BindColor(ctx, color, getRGB, setRGB)
     if color._msuf2Title then
         local sx, sy = x or 0, y or 0
         local sectionW = section._msuf2Width or 720
-        local labelWidth = math.min(230, math.max(86, sectionW - sx - 76))
+        local labelWidth = tonumber(labelWidthOverride) or min(230, max(86, sectionW - sx - 76))
+        local buttonWidth = tonumber(swatchWidth) or 44
         color._msuf2Title:ClearAllPoints()
         color._msuf2Title:SetPoint("TOPLEFT", section, "TOPLEFT", sx, sy)
         color._msuf2Title:SetWidth(labelWidth)
+        color:SetSize(buttonWidth, 18)
         color:ClearAllPoints()
-        color:SetPoint("TOPLEFT", section, "TOPLEFT", sx + labelWidth + 18, sy + 2)
+        color:SetPoint("TOPLEFT", section, "TOPLEFT", sx + labelWidth + 12, sy + 2)
         return color
     end
     return MoveWidget(color, section, x, y)
@@ -318,7 +320,12 @@ end
 local function ButtonAt(parent, label, x, y, width, onClick)
     local btn = T.Button(parent, label, width or 150, 22)
     btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
-    if type(onClick) == "function" then btn:SetScript("OnClick", onClick) end
+    if type(onClick) == "function" then
+        btn:SetScript("OnClick", function(self, ...)
+            onClick(self, ...)
+            if M.Refresh then M.Refresh() end
+        end)
+    end
     return btn
 end
 
@@ -476,11 +483,14 @@ local function BuildColors(ctx)
     local classColors = b:CollapsibleSection("colors_classes", "Class Bar Colors", 190, false)
     LabelAt(classColors, "Choose an override bar color per class.", 12, -8, 540, "GameFontHighlightSmall", T.colors.muted)
     local tokens = GetClassTokens()
+    local classW = classColors._msuf2Width or ctx.width or 720
+    local classColW = max(142, floor((classW - 24) / 4))
+    local classLabelW = max(76, min(112, classColW - 62))
     for i = 1, #tokens do
         local token = tokens[i]
         local col = (i - 1) % 4
         local row = floor((i - 1) / 4)
-        ColorValueAt(ctx, classColors, COLOR_DATA.CLASS_LABELS[token] or token, 12 + col * 166, -34 - row * 36,
+        ColorValueAt(ctx, classColors, COLOR_DATA.CLASS_LABELS[token] or token, 12 + col * classColW, -34 - row * 36,
             function()
                 local api = ColorAPI()
                 if type(api.GetClassColor) == "function" then
@@ -494,7 +504,7 @@ local function BuildColors(ctx)
             function(r, g, c)
                 local api = ColorAPI()
                 if type(api.SetClassColor) == "function" then pcall(api.SetClassColor, token, r, g, c) else ApplyColors() end
-            end)
+            end, classLabelW, 44)
     end
     ButtonAt(classColors, "Reset all class colors", 12, -154, 190, function()
         local fn = ColorAPI().ResetAllClassColors
@@ -502,14 +512,15 @@ local function BuildColors(ctx)
         ApplyColors()
     end)
 
-    local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 170, false)
-    ColorValueAt(ctx, background, "Bar background tint", 12, -10,
+    local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 196, false)
+    LabelAt(background, "Tint applied to the bar background in *all* bar modes. Dark Mode uses this tint too.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
+    ColorValueAt(ctx, background, "Bar background tint", 12, -46,
         function() return ApiRGB("GetClassBarBgColor", 0, 0, 0) end,
         function(r, g, c)
             local api = ColorAPI()
             if type(api.SetClassBarBgColor) == "function" then pcall(api.SetClassBarBgColor, r, g, c) else SetGeneralRGB("classBarBg", r, g, c) end
         end)
-    ValueToggleAt(ctx, background, "Background follows HP color", 12, -50,
+    ValueToggleAt(ctx, background, "Background follows HP color", 12, -86,
         function()
             local fn = ColorAPI().GetBarBgMatchHP
             if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
@@ -520,10 +531,10 @@ local function BuildColors(ctx)
             if type(fn) == "function" then pcall(fn, v) else G().barBgMatchHPColor = v and true or false end
             ApplyColors()
         end)
-    ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -78,
+    ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -114,
         function() return G().darkBgCustomColor == true end,
         function(v) G().darkBgCustomColor = v and true or false; ApplyColors() end)
-    ButtonAt(background, "Reset to black", 12, -126, 140, function()
+    ButtonAt(background, "Reset to black", 12, -154, 140, function()
         local fn = ColorAPI().ResetClassBarBgColor
         if type(fn) == "function" then pcall(fn) else G().classBarBgR, G().classBarBgG, G().classBarBgB = nil, nil, nil end
         ApplyColors()
@@ -678,17 +689,27 @@ local function BuildColors(ctx)
         for i = 1, #npcControls do SetControlEnabled(npcControls[i], enabled) end
     end)
 
-    local barColors = b:CollapsibleSection("colors_bar_colors", "Bar Colors", 270, false)
-    ColorValueAt(ctx, barColors, "Absorb Bar Color", 12, -10,
+    local barColors = b:CollapsibleSection("colors_bar_colors", "Bar Colors", 204, false)
+    local barLeftX = 30
+    local barRightX = max(430, floor((barColors._msuf2Width or ctx.width or 720) * 0.50))
+    LabelAt(barColors, "Bar overlays", barLeftX, -8, 180, "GameFontNormalSmall", T.colors.text)
+    LabelAt(barColors, "Borders & matching", barRightX, -8, 220, "GameFontNormalSmall", T.colors.text)
+    ColorValueAt(ctx, barColors, "Absorb Bar Color", barLeftX, -38,
         function() return ApiRGB("GetAbsorbOverlayColor", 1, 1, 1) end,
         function(r, g, c) ApiSetRGB("SetAbsorbOverlayColor", r, g, c) end)
-    ColorValueAt(ctx, barColors, "Heal-Absorb Bar Color", 12, -46,
+    ColorValueAt(ctx, barColors, "Heal-Absorb Bar Color", barLeftX, -74,
         function() return ApiRGB("GetHealAbsorbOverlayColor", 0.7, 0, 0) end,
         function(r, g, c) ApiSetRGB("SetHealAbsorbOverlayColor", r, g, c) end)
-    local powerBg = ColorValueAt(ctx, barColors, "Power Bar Background Color", 12, -82,
+    local powerBg = ColorValueAt(ctx, barColors, "Power Bar Background Color", barLeftX, -110,
         function() return ApiRGB("GetPowerBarBackgroundColor", 0, 0, 0) end,
         function(r, g, c) ApiSetRGB("SetPowerBarBackgroundColor", r, g, c) end)
-    local powerBgMatch = ValueToggleAt(ctx, barColors, "Match HP", 360, -82,
+    ColorValueAt(ctx, barColors, "Aggro Border Color", barRightX, -38,
+        function() return ApiRGB("GetAggroBorderColor", 1, 0.5, 0) end,
+        function(r, g, c) ApiSetRGB("SetAggroBorderColor", r, g, c) end)
+    ColorValueAt(ctx, barColors, "Purge Border Color", barRightX, -74,
+        function() return GeneralRGB("purgeBorderColor", 1.00, 0.85, 0.00) end,
+        function(r, g, c) SetGeneralRGB("purgeBorderColor", r, g, c) end)
+    local powerBgMatch = ValueToggleAt(ctx, barColors, "Power background matches HP", barRightX, -112,
         function()
             local fn = ColorAPI().GetPowerBarBackgroundMatchHP
             if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
@@ -699,13 +720,7 @@ local function BuildColors(ctx)
             if type(fn) == "function" then pcall(fn, v) else G().powerBarBgMatchBarColor = v and true or false end
             ApplyColors()
         end)
-    ColorValueAt(ctx, barColors, "Aggro Border Color", 12, -118,
-        function() return ApiRGB("GetAggroBorderColor", 1, 0.5, 0) end,
-        function(r, g, c) ApiSetRGB("SetAggroBorderColor", r, g, c) end)
-    ColorValueAt(ctx, barColors, "Purge Border Color", 12, -154,
-        function() return GeneralRGB("purgeBorderColor", 1.00, 0.85, 0.00) end,
-        function(r, g, c) SetGeneralRGB("purgeBorderColor", r, g, c) end)
-    ButtonAt(barColors, "Reset Bar Colors", 12, -224, 160, function()
+    ButtonAt(barColors, "Reset Bar Colors", barLeftX, -158, 160, function()
         local g = G()
         for _, prefix in ipairs({ "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor" }) do
             g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"], g[prefix .. "A"] = nil, nil, nil, nil
@@ -960,7 +975,7 @@ local function BuildColors(ctx)
             function(r, g, c)
                 Bars().classPowerComboPointColorMode = "custom"
                 SetClassPowerRGB(token, r, g, c)
-            end)
+            end, 24, 44)
     end
     ButtonAt(classPower, "Reset slots", 12, -246, 120, function()
         local g = EnsureClassPowerOverrides()

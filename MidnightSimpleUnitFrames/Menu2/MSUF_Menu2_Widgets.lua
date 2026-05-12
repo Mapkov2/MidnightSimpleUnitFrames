@@ -931,6 +931,44 @@ local function DropdownItemSwatch(item)
     return DropdownColorTuple(item.swatchColor or item.color or item.colorPreview or item.swatch)
 end
 
+local function StoreDropdownDefaultFont(fs)
+    if not (fs and fs.GetFont) then return end
+    local ok, font, size, flags = pcall(fs.GetFont, fs)
+    if ok and font and size then
+        fs._msuf2DropdownDefaultFont = { font, size, flags or "" }
+    end
+end
+
+local function RestoreDropdownDefaultFont(fs)
+    local d = fs and fs._msuf2DropdownDefaultFont
+    if d and fs.SetFont then
+        pcall(fs.SetFont, fs, d[1], d[2], d[3] or "")
+    elseif fs and fs.SetFontObject then
+        pcall(fs.SetFontObject, fs, GameFontHighlight)
+    end
+end
+
+local function ApplyDropdownItemFont(fs, item)
+    if not fs then return end
+    if type(item) ~= "table" then
+        RestoreDropdownDefaultFont(fs)
+        return
+    end
+    local fontObject = item.fontObject or item.fontPreviewObject
+    if fontObject and fs.SetFontObject then
+        local ok = pcall(fs.SetFontObject, fs, fontObject)
+        if ok then return end
+    end
+    local fontPath = item.fontPath or item.font
+    if type(fontPath) == "string" and fontPath ~= "" and fs.SetFont then
+        local d = fs._msuf2DropdownDefaultFont
+        local size = (d and d[2]) or 14
+        local ok = pcall(fs.SetFont, fs, fontPath, size, "")
+        if ok then return end
+    end
+    RestoreDropdownDefaultFont(fs)
+end
+
 local function DropdownRow(index)
     local row = dropdownRows[index]
     if row then return row end
@@ -973,6 +1011,7 @@ local function DropdownRow(index)
     text:SetPoint("LEFT", row, "LEFT", 10, 0)
     text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     text:SetJustifyH("LEFT")
+    StoreDropdownDefaultFont(text)
     row._msuf2Text = text
 
     row:SetScript("OnClick", function(self)
@@ -1048,6 +1087,7 @@ local function OpenDropdown(owner, valuesTable)
         row._msuf2Selected:SetShown(value == selectedValue)
         if value == selectedValue then selectedIndex = i end
         row._msuf2Text:SetText(DropdownItemText(item))
+        ApplyDropdownItemFont(row._msuf2Text, item)
         local sr, sg, sb, sa = DropdownItemSwatch(item)
         if icon then
             row._msuf2Icon:SetTexture(icon)
@@ -1112,6 +1152,7 @@ function W.Dropdown(section, label, values, width)
     btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 10, 0)
     btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -26, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
+    StoreDropdownDefaultFont(btn._msuf2Label)
     btn._msuf2Chevron = btn:CreateTexture(nil, "OVERLAY")
     btn._msuf2Chevron:SetTexture(T.media.dropdownChevron)
     btn._msuf2Chevron:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
@@ -1172,6 +1213,7 @@ function W.Dropdown(section, label, values, width)
             self._msuf2Label:SetPoint("LEFT", self, "LEFT", 10, 0)
             self._msuf2Label:SetPoint("RIGHT", self, "RIGHT", -26, 0)
         end
+        ApplyDropdownItemFont(self._msuf2Label, selectedItem)
         self:SetText(selectedItem and DropdownItemText(selectedItem) or TextFor(value))
     end
     function btn:GetValue()

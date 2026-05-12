@@ -198,6 +198,54 @@ local function PowerColorValues()
     }
 end
 
+local function PreviewFontKey()
+    local key = FontKeyGet()
+    if key == nil or key == "" then
+        key = NormalizeFontKey(G().fontKey or "FRIZQT")
+    end
+    return key
+end
+
+local function PreviewFontFlags()
+    if IsGFScope(CurrentFontScope()) then
+        local v = FontScopeGet("fontOutline", "OUTLINE")
+        if v == "" or v == "NONE" then return "" end
+        if v == "THICKOUTLINE" then return "THICKOUTLINE" end
+        return "OUTLINE"
+    end
+    if FontScopeGet("noOutline", false) then return "" end
+    if FontScopeGet("boldText", false) then return "THICKOUTLINE" end
+    return "OUTLINE"
+end
+
+local function ApplyPreviewFont(fs)
+    if not (fs and fs.SetFont) then return end
+    local key = PreviewFontKey()
+    local size = max(10, min(22, tonumber(FontScopeGet("fontSize", 14)) or 14))
+    local flags = PreviewFontFlags()
+    local path
+    local pathForKey = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+    if type(pathForKey) == "function" then
+        path = pathForKey(key)
+    end
+    if (not path or path == "") and key and key ~= "" then
+        local fetch = _G.MSUF_FetchFontPathFromLSM or (ns and ns.MSUF_FetchFontPathFromLSM)
+        if type(fetch) == "function" then path = fetch(key) end
+    end
+    path = path or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
+    local resolve = _G.MSUF_ResolveFontPath
+    if type(resolve) == "function" then path = resolve(path, size, flags) end
+    local safeSet = _G.MSUF_SetFontSafe
+    if type(safeSet) == "function" then
+        safeSet(fs, path, size, flags, key)
+    else
+        pcall(fs.SetFont, fs, path, size, flags)
+    end
+
+    local c = ConfiguredFontColorPreview()
+    if fs.SetTextColor then fs:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
+end
+
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
 
@@ -272,8 +320,16 @@ local function BuildFonts(ctx)
         hint:SetWidth(ctx.width - 28)
     end)
 
-    local font = b:CollapsibleSection("fonts_global_font", "Global Font", 112, true)
+    local font = b:CollapsibleSection("fonts_global_font", "Global Font", 146, true)
+    local RefreshFontPreview
     local fontDrop = W.Dropdown(font, "Font (SharedMedia)", function() return FontValues(IsGFScope(CurrentFontScope())) end, 340)
+    local preview = W.Text(font, "AaBbCc 12345 - Midnight Simple Unit Frames", 14, -82, ctx.width - 56, T.colors.text)
+    if preview.SetHeight then preview:SetHeight(28) end
+    if preview.SetJustifyV then preview:SetJustifyV("MIDDLE") end
+    RefreshFontPreview = function()
+        if preview and preview.SetWidth then preview:SetWidth(ctx.width - 56) end
+        ApplyPreviewFont(preview)
+    end
     M.BindDropdown(ctx, fontDrop,
         function() return FontKeyGet() end,
         function(v)
@@ -281,7 +337,9 @@ local function BuildFonts(ctx)
             M.RequestGeneralApply("MSUF2_FONT_KEY", { preview = true, applyAll = false })
             if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then _G.MSUF_NormalizeStoredFontKeys() end
             ApplyFonts("MSUF2_FONT_KEY")
+            if RefreshFontPreview then RefreshFontPreview() end
         end)
+    M.AddRefresher(ctx, RefreshFontPreview)
 
     local text = b:CollapsibleSection("fonts_text_style", "Text Style", 212, true)
     local fontSize = W.Slider(text, "Font size", 6, 32, 1, 300)

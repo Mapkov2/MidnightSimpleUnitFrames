@@ -1166,13 +1166,15 @@ if emFont then emFont:SetFontObject("GameFontNormalLarge") end
  end
 function MSUF_SyncBossUnitframePreviewWithUnitEdit()
     -- Boss preview/test frames:
-    -- - Active only during MSUF Edit Mode
-    -- - Requires Boss unitframe enabled
+    -- - Active during MSUF Edit Mode, or while MSUF2's Boss unit page is open
+    -- - Requires Boss unitframe enabled, except for MSUF2's Boss page edit preview
     -- - Optional user toggle via MSUF_EditModeBossPreviewCheck (if present)
     if type(EnsureDB) == "function" then EnsureDB() end
     local bossConf = (MSUF_DB and MSUF_DB.boss) or nil
     local bossEnabled = (not bossConf) or (bossConf.enabled ~= false)
     local editActive = (MSUF_UnitEditModeActive and true or false)
+    local inCombat = (InCombatLockdown and InCombatLockdown()) and true or false
+    local msuf2PagePreview = (_G.MSUF2_BossUnitframePreviewActive == true) and not inCombat
     -- Read preview toggle (checkbox created in MSUF_EditMode.lua).
     -- If it does not exist (older layouts), fall back to a DB flag (default true).
     local bossPreviewEnabled = true
@@ -1188,12 +1190,16 @@ function MSUF_SyncBossUnitframePreviewWithUnitEdit()
             bossPreviewEnabled = MSUF_DB.general.bossPreviewEnabled and true or false
         end
     end
-    local active = (editActive and bossEnabled and bossPreviewEnabled) and true or false
+    local active = (msuf2PagePreview or (bossEnabled and editActive and bossPreviewEnabled)) and true or false
     -- Boss Test Mode is the internal switch that force-shows boss frames for editing.
     MSUF_BossTestMode = active
-    if InCombatLockdown and InCombatLockdown() then  return end
+    if inCombat then  return end
+    if type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
+        _G.MSUF_ApplyBossUnitframePreviewState(active, msuf2PagePreview and "MSUF2_BOSS_PAGE" or "EDIT_MODE")
+        return
+    end
     -- Refresh secure visibility drivers so a previous "hide" state does not stick.
-    if MSUF_RefreshAllUnitVisibilityDrivers then MSUF_RefreshAllUnitVisibilityDrivers(editActive) end
+    if MSUF_RefreshAllUnitVisibilityDrivers then MSUF_RefreshAllUnitVisibilityDrivers(editActive and true or false) end
     for i = 1, MSUF_MAX_BOSS_FRAMES do
         local f = _G["MSUF_boss" .. i] or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames["boss" .. i])
         if f then
@@ -1205,7 +1211,7 @@ function MSUF_SyncBossUnitframePreviewWithUnitEdit()
                 if f.EnableMouse then f:EnableMouse(true) end
             else
                 -- If boss frames are disabled, ALWAYS hide them (even in Edit Mode).
-                if not bossEnabled then
+                if not bossEnabled and not msuf2PagePreview then
                     f:Hide()
                     if f.SetAlpha then f:SetAlpha(0) end
                     if f.EnableMouse then f:EnableMouse(false) end

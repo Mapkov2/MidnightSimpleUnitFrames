@@ -32,12 +32,12 @@ local UNIT_LABELS = {
     pet = "Pet",
 }
 local UNIT_DATA = {
-    player = { name = "MIDNIGHT", class = "ROGUE", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false, isPlayer = true },
-    target = { name = "Astral Warden", class = "MAGE", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, reactionKind = "neutral", npcKind = "npcRegular" },
-    targettarget = { name = "Moonlit Tank", class = "WARRIOR", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false, isPlayer = true },
-    focus = { name = "Voidcaller", class = "WARLOCK", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true, reactionKind = "enemy", npcKind = "npcCaster" },
-    boss = { name = "Boss Preview", class = "DEATHKNIGHT", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, reactionKind = "enemy", npcKind = "npcBoss" },
-    pet = { name = "Companion", class = "HUNTER", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly" },
+    player = { name = "MIDNIGHT", class = "ROGUE", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Stealth" },
+    target = { name = "Astral Warden", class = "MAGE", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, reactionKind = "neutral", npcKind = "npcRegular", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
+    targettarget = { name = "Moonlit Tank", class = "WARRIOR", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Warrior_DefensiveStance" },
+    focus = { name = "Voidcaller", class = "WARLOCK", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true, reactionKind = "enemy", npcKind = "npcCaster", portraitTexture = "Interface\\ICONS\\Spell_Shadow_Metamorphosis" },
+    boss = { name = "Boss Preview", class = "DEATHKNIGHT", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
+    pet = { name = "Companion", class = "HUNTER", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
 }
 
 local TEXT_ANCHORS = {
@@ -1274,6 +1274,11 @@ local function ClassPortraitVisual(class, style)
         }
     end
     return { texture = "Interface\\ICONS\\INV_Misc_QuestionMark", left = 0, right = 1, top = 0, bottom = 1 }
+end
+
+local function UnitPreviewPortraitTexture(key, data)
+    data = data or UNIT_DATA[CanonKey(key)] or UNIT_DATA.player
+    return data.portraitTexture or "Interface\\ICONS\\INV_Misc_QuestionMark"
 end
 
 local function FontColor()
@@ -2718,6 +2723,7 @@ function Preview.Refresh(box, reason)
         if renderMode == "CLASS" then
             local visual = ClassPortraitVisual(data.class, PortraitStyleGet(key, "portraitClassStyle", "BLIZZARD"))
             mock.portrait.tex:SetTexture(visual and visual.texture or "Interface\\ICONS\\INV_Misc_QuestionMark")
+            if mock.portrait.tex.SetVertexColor then mock.portrait.tex:SetVertexColor(1, 1, 1, 1) end
             if mock.portrait.tex.SetTexCoord then
                 mock.portrait.tex:SetTexCoord(
                     (visual and visual.left) or 0,
@@ -2728,10 +2734,12 @@ function Preview.Refresh(box, reason)
             end
             mock.portrait.initial:Hide()
         else
-            mock.portrait.tex:SetColorTexture(cr * 0.55, cg * 0.55, cb * 0.55, 1)
-            mock.portrait.initial:SetText((data.class or "?"):sub(1, 1))
-            mock.portrait.initial:SetTextColor(cr, cg, cb, 1)
-            mock.portrait.initial:Show()
+            mock.portrait.tex:SetTexture(UnitPreviewPortraitTexture(key, data))
+            if mock.portrait.tex.SetVertexColor then mock.portrait.tex:SetVertexColor(1, 1, 1, 1) end
+            if mock.portrait.tex.SetTexCoord then
+                mock.portrait.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            end
+            mock.portrait.initial:Hide()
         end
         if PortraitStyleGet(key, "portraitBgEnabled", false) == true then
             mock.portrait:SetBackdropColor(

@@ -170,12 +170,15 @@ local function BuildCastbars(ctx)
     M.AddRefresher(ctx, syncGCDSubs)
     syncGCDSubs()
 
-    local textures = b:CollapsibleSection("castbar_textures", "Textures & Outline", 330, false)
+    local textures = b:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
+    local texLeftX, texRightX = 14, 392
     local tex = W.Dropdown(textures, "Castbar texture", function() return TextureValues(nil) end, 280)
+    W.MoveWidget(tex, textures, texLeftX, -42, 300)
     M.BindDropdown(ctx, tex,
         function() return ReadG("castbarTexture", "Blizzard") end,
         function(v) SetG("castbarTexture", v or "Blizzard", "MSUF2_CASTBAR_TEXTURE", { castbar = true, preview = true }); ApplyCastbarTextures("MSUF2_CASTBAR_TEXTURE") end)
     local bgTex = W.Dropdown(textures, "Castbar background texture", function() return TextureValues(nil) end, 280)
+    W.MoveWidget(bgTex, textures, texLeftX, -96, 300)
     M.BindDropdown(ctx, bgTex,
         function()
             local v = ReadG("castbarBackgroundTexture", nil)
@@ -184,6 +187,7 @@ local function BuildCastbars(ctx)
         end,
         function(v) SetG("castbarBackgroundTexture", v or "Blizzard", "MSUF2_CASTBAR_BG_TEXTURE", { castbar = true, preview = true }); ApplyCastbarTextures("MSUF2_CASTBAR_BG_TEXTURE") end)
     local outline = W.Slider(textures, "Outline thickness", 0, 6, 1, 300)
+    W.MoveWidget(outline, textures, texRightX, -42, 320)
     M.BindSlider(ctx, outline,
         function() return tonumber(ReadG("castbarOutlineThickness", 1)) or 1 end,
         function(v)
@@ -191,55 +195,109 @@ local function BuildCastbars(ctx)
             Call("MSUF_ApplyCastbarOutlineToAll", true)
             ApplyCastbarTextures("MSUF2_CASTBAR_OUTLINE")
         end)
-    for _, spec in ipairs({
+    for i, spec in ipairs({
         { "castbarShowGlow", "Show castbar glow effect", true, "MSUF2_CASTBAR_GLOW" },
         { "castbarShowLatency", "Show latency indicator", true, "MSUF2_CASTBAR_LATENCY" },
         { "castbarShowSpark", "Show spark (leading edge highlight)", false, "MSUF2_CASTBAR_SPARK" },
         { "castbarSparkOverflow", "Spark extends beyond bar", true, "MSUF2_CASTBAR_SPARK_OVERFLOW" },
     }) do
         local toggle = W.Toggle(textures, spec[2])
+        W.MoveWidget(toggle, textures, texRightX, -96 - ((i - 1) * 24))
         M.BindToggle(ctx, toggle,
             function() return ReadGBool(spec[1], spec[3]) end,
             function(v) SetGBool(spec[1], v, spec[4], { castbar = true, preview = true }); ApplyCastbarTextures(spec[4]) end)
     end
 
-    local empowered = b:CollapsibleSection("castbar_empowered", "Empowered Casts", 170, false)
+    local empowered = b:CollapsibleSection("castbar_empowered", "Empowered Casts", 130, false)
+    local empoweredLeftX, empoweredRightX = 14, 392
+    local syncEmpowered
     local empColor = W.Toggle(empowered, "Add color to stages (Empowered casts)")
+    W.MoveWidget(empColor, empowered, empoweredLeftX, -42)
     M.BindToggle(ctx, empColor,
         function() return ReadGBool("empowerColorStages", true) end,
         function(v) SetGBool("empowerColorStages", v, "MSUF2_CASTBAR_EMPOWER_COLOR", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_EMPOWER_COLOR") end)
     local empBlink = W.Toggle(empowered, "Add stage blink (Empowered casts)")
+    W.MoveWidget(empBlink, empowered, empoweredLeftX, -68)
     M.BindToggle(ctx, empBlink,
         function() return ReadGBool("empowerStageBlink", true) end,
-        function(v) SetGBool("empowerStageBlink", v, "MSUF2_CASTBAR_EMPOWER_BLINK", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_EMPOWER_BLINK") end)
+        function(v)
+            SetGBool("empowerStageBlink", v, "MSUF2_CASTBAR_EMPOWER_BLINK", { castbar = true, preview = true })
+            ApplyCastbars("MSUF2_CASTBAR_EMPOWER_BLINK")
+            if syncEmpowered then syncEmpowered() end
+        end)
     local blinkTime = W.Slider(empowered, "Stage blink time (sec)", 0.05, 1.00, 0.01, 300)
+    W.MoveWidget(blinkTime, empowered, empoweredRightX, -42, 320)
     M.BindSlider(ctx, blinkTime,
         function() return tonumber(ReadG("empowerStageBlinkTime", 0.25)) or 0.25 end,
         function(v) SetG("empowerStageBlinkTime", tonumber(v) or 0.25, "MSUF2_CASTBAR_EMPOWER_TIME", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_EMPOWER_TIME") end)
+    syncEmpowered = function()
+        SetControlsEnabled({ blinkTime }, ReadGBool("empowerStageBlink", true))
+    end
+    M.AddRefresher(ctx, syncEmpowered)
+    syncEmpowered()
 
-    local text = b:CollapsibleSection("castbar_name_shortening", "Name Shortening", 250, false)
-    local shorten = W.Segment(text, "Spell name shortening", {
-        { value = 0, text = "Off" },
-        { value = 1, text = "On" },
-    }, 220)
-    M.BindSegment(ctx, shorten,
-        function() return tonumber(ReadG("castbarSpellNameShortening", 0)) or 0 end,
-        function(v) SetG("castbarSpellNameShortening", tonumber(v) or 0, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_NAME_SHORTEN") end)
+    local text = b:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false)
+    local textLeftX, textRightX = 14, 392
+    W.LabelAt(text, "Spell name shortening", textLeftX, -42, 240)
+    local shorten = T.Button(text, "", 116, 24)
+    shorten:SetPoint("TOPLEFT", text, "TOPLEFT", textLeftX, -64)
+    if shorten._msuf2Label then
+        shorten._msuf2Label:ClearAllPoints()
+        shorten._msuf2Label:SetPoint("CENTER", shorten, "CENTER", 0, 0)
+        shorten._msuf2Label:SetJustifyH("CENTER")
+    end
+    local syncNameShortening
+    local function NameShorteningEnabled()
+        return (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1
+    end
+    local function PaintNameShorteningButton(hover)
+        local enabled = NameShorteningEnabled()
+        if shorten.SetText then shorten:SetText(enabled and "On" or "Off") end
+        local fill, edge = shorten._msuf2Fill, shorten._msuf2Edge
+        if fill and edge then
+            if enabled then
+                fill:SetVertexColor(0.060, 0.360, 0.150, hover and 0.98 or 0.92)
+                edge:SetVertexColor(0.240, 0.820, 0.460, hover and 0.95 or 0.82)
+            else
+                fill:SetVertexColor(0.360, 0.055, 0.075, hover and 0.98 or 0.92)
+                edge:SetVertexColor(0.880, 0.280, 0.280, hover and 0.95 or 0.82)
+            end
+        end
+        if shorten._msuf2Label then shorten._msuf2Label:SetTextColor(1, 1, 1, 1) end
+    end
+    shorten:SetScript("OnClick", function()
+        local nextValue = NameShorteningEnabled() and 0 or 1
+        SetG("castbarSpellNameShortening", nextValue, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
+        ApplyCastbars("MSUF2_CASTBAR_NAME_SHORTEN")
+        if syncNameShortening then syncNameShortening() end
+    end)
+    shorten:SetScript("OnEnter", function() PaintNameShorteningButton(true) end)
+    shorten:SetScript("OnLeave", function() PaintNameShorteningButton(false) end)
 
     local maxLen = W.Slider(text, "Max name length", 6, 30, 1, 300)
+    W.MoveWidget(maxLen, text, textRightX, -42, 320)
     M.BindSlider(ctx, maxLen,
         function() return tonumber(ReadG("castbarSpellNameMaxLen", 30)) or 30 end,
         function(v) SetG("castbarSpellNameMaxLen", floor((tonumber(v) or 30) + 0.5), "MSUF2_CASTBAR_NAME_MAX", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_NAME_MAX") end)
     local reserved = W.Slider(text, "Reserved space", 0, 30, 1, 300)
+    W.MoveWidget(reserved, text, textRightX, -96, 320)
     M.BindSlider(ctx, reserved,
         function() return tonumber(ReadG("castbarSpellNameReservedSpace", 8)) or 8 end,
         function(v) SetG("castbarSpellNameReservedSpace", floor((tonumber(v) or 8) + 0.5), "MSUF2_CASTBAR_NAME_RESERVED", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_NAME_RESERVED") end)
+    syncNameShortening = function()
+        PaintNameShorteningButton(false)
+        SetControlsEnabled({ maxLen, reserved }, NameShorteningEnabled())
+    end
+    M.AddRefresher(ctx, syncNameShortening)
+    syncNameShortening()
 
-    local focusKick = b:CollapsibleSection("castbar_focus_kick", "Focus Kick", 470, false)
+    local focusKick = b:CollapsibleSection("castbar_focus_kick", "Focus Kick", 326, false)
     W.Text(focusKick, "Track interrupts on your focus without showing the focus castbar.", 14, -38, ctx.width - 28, T.colors.muted)
     focusKick._msuf2CursorY = -68
+    local focusLeftX, focusRightX = 14, 392
     local syncFocusKick
     local focusEnable = W.Toggle(focusKick, "Enable focus interrupt tracker")
+    W.MoveWidget(focusEnable, focusKick, focusLeftX, -74)
     M.BindToggle(ctx, focusEnable,
         function() return ReadGBool("enableFocusKickIcon", false) end,
         function(v)
@@ -249,6 +307,7 @@ local function BuildCastbars(ctx)
             if syncFocusKick then syncFocusKick() end
         end)
     local focusPreview = W.Toggle(focusKick, "Show on-screen preview")
+    W.MoveWidget(focusPreview, focusKick, focusLeftX, -100)
     M.BindToggle(ctx, focusPreview,
         function()
             local fn = _G.MSUF_FocusKick_IsPreviewEnabled
@@ -256,14 +315,17 @@ local function BuildCastbars(ctx)
         end,
         function(v) Call("MSUF_FocusKick_SetPreviewEnabled", v and true or false) end)
     local focusW = W.Slider(focusKick, "Width", 16, 128, 1, 300)
+    W.MoveWidget(focusW, focusKick, focusRightX, -74, 320)
     M.BindSlider(ctx, focusW,
         function() return tonumber(ReadG("focusKickIconWidth", 40)) or 40 end,
         function(v) SetG("focusKickIconWidth", floor((tonumber(v) or 40) + 0.5), "MSUF2_FOCUS_KICK_WIDTH", { castbar = true, preview = true }); Call("MSUF_UpdateFocusKickIconOptions") end)
     local focusH = W.Slider(focusKick, "Height", 16, 128, 1, 300)
+    W.MoveWidget(focusH, focusKick, focusRightX, -128, 320)
     M.BindSlider(ctx, focusH,
         function() return tonumber(ReadG("focusKickIconHeight", 40)) or 40 end,
         function(v) SetG("focusKickIconHeight", floor((tonumber(v) or 40) + 0.5), "MSUF2_FOCUS_KICK_HEIGHT", { castbar = true, preview = true }); Call("MSUF_UpdateFocusKickIconOptions") end)
     local focusText = W.Slider(focusKick, "Text size", 8, 24, 1, 300)
+    W.MoveWidget(focusText, focusKick, focusRightX, -182, 320)
     M.BindSlider(ctx, focusText,
         function()
             local v = tonumber(ReadG("focusKickTextSize", nil))
@@ -276,14 +338,17 @@ local function BuildCastbars(ctx)
             Call("MSUF_UpdateFocusKickIconOptions")
         end)
     local focusX = W.Slider(focusKick, "X offset", -500, 500, 1, 300)
+    W.MoveWidget(focusX, focusKick, focusLeftX, -150, 320)
     M.BindSlider(ctx, focusX,
         function() return tonumber(ReadG("focusKickIconOffsetX", 300)) or 300 end,
         function(v) SetG("focusKickIconOffsetX", floor((tonumber(v) or 0) + 0.5), "MSUF2_FOCUS_KICK_X", { castbar = true, preview = true }); Call("MSUF_UpdateFocusKickIconOptions") end)
     local focusY = W.Slider(focusKick, "Y offset", -500, 500, 1, 300)
+    W.MoveWidget(focusY, focusKick, focusLeftX, -204, 320)
     M.BindSlider(ctx, focusY,
         function() return tonumber(ReadG("focusKickIconOffsetY", 0)) or 0 end,
         function(v) SetG("focusKickIconOffsetY", floor((tonumber(v) or 0) + 0.5), "MSUF2_FOCUS_KICK_Y", { castbar = true, preview = true }); Call("MSUF_UpdateFocusKickIconOptions") end)
     local resetFocus = W.Button(focusKick, "Reset Position", 150)
+    W.MoveWidget(resetFocus, focusKick, focusLeftX, -258)
     resetFocus:SetScript("OnClick", function()
         SetG("focusKickIconOffsetX", 0, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
         SetG("focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
@@ -301,53 +366,80 @@ local function BuildCastbars(ctx)
     M.AddRefresher(ctx, syncFocusKick)
     syncFocusKick()
 
-    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 560, false)
+    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 360, false)
     W.Text(kick, "Shows a colored indicator on castbars when your interrupt is ready or on cooldown.", 14, -38, ctx.width - 28, T.colors.muted)
-    kick._msuf2CursorY = -68
-    for _, spec in ipairs({
+    local kickLeftX, kickRightX = 14, 392
+    W.LabelAt(kick, "Castbars", kickLeftX, -70, 160, "GameFontNormalSmall", T.colors.muted)
+    W.LabelAt(kick, "Appearance", kickRightX, -70, 160, "GameFontNormalSmall", T.colors.muted)
+    local syncKickReady
+    for i, spec in ipairs({
         { "kickReadyShowTarget", "Show on Target castbar" },
         { "kickReadyShowFocus", "Show on Focus castbar" },
         { "kickReadyShowBoss", "Show on Boss castbars" },
     }) do
         local toggle = W.Toggle(kick, spec[2])
+        W.MoveWidget(toggle, kick, kickLeftX, -88 - ((i - 1) * 26))
         M.BindToggle(ctx, toggle,
             function() return ReadGBool(spec[1], false) end,
-            function(v) SetGBool(spec[1], v, "MSUF2_KICK_READY_ENABLE", { castbar = true, preview = true }); ApplyCastbars("MSUF2_KICK_READY_ENABLE") end)
+            function(v)
+                SetGBool(spec[1], v, "MSUF2_KICK_READY_ENABLE", { castbar = true, preview = true })
+                ApplyCastbars("MSUF2_KICK_READY_ENABLE")
+                if syncKickReady then syncKickReady() end
+            end)
     end
     local style = W.Dropdown(kick, "Indicator style", {
         { value = "border", text = "Castbar border" },
         { value = "box", text = "Color box next to cast" },
     }, 260)
+    W.MoveWidget(style, kick, kickRightX, -88, 300)
     M.BindDropdown(ctx, style,
         function() return ReadG("kickReadyStyle", "border") end,
         function(v) SetG("kickReadyStyle", v or "border", "MSUF2_KICK_READY_STYLE", { castbar = true, preview = true }); ApplyCastbars("MSUF2_KICK_READY_STYLE") end)
     local size = W.Slider(kick, "Indicator size", 8, 32, 1, 300)
+    W.MoveWidget(size, kick, kickRightX, -142, 320)
     M.BindSlider(ctx, size,
         function() return tonumber(ReadG("kickReadySize", 16)) or 16 end,
         function(v) SetG("kickReadySize", floor((tonumber(v) or 16) + 0.5), "MSUF2_KICK_READY_SIZE", { castbar = true, preview = true }); ApplyCastbars("MSUF2_KICK_READY_SIZE") end)
     local auto = W.Toggle(kick, "Auto-size to castbar height")
+    W.MoveWidget(auto, kick, kickRightX, -196)
     M.BindToggle(ctx, auto,
         function() return ReadGBool("kickReadyAutoSize", true) end,
-        function(v) SetGBool("kickReadyAutoSize", v, "MSUF2_KICK_READY_AUTO", { castbar = true, preview = true }); ApplyCastbars("MSUF2_KICK_READY_AUTO") end)
-    W.Text(kick, "Ready / cooldown colors: Colors menu > Interrupt Ready Indicator", 14, -300, ctx.width - 28, T.colors.muted)
-    kick._msuf2CursorY = -330
+        function(v)
+            SetGBool("kickReadyAutoSize", v, "MSUF2_KICK_READY_AUTO", { castbar = true, preview = true })
+            ApplyCastbars("MSUF2_KICK_READY_AUTO")
+            if syncKickReady then syncKickReady() end
+        end)
+    local colorHint = W.Text(kick, "Ready / cooldown colors: Colors menu > Interrupt Ready Indicator", kickRightX, -228, 370, T.colors.muted)
+    W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.muted)
     local anchor = W.Dropdown(kick, "Anchor", {
         { value = "RIGHT", text = "Right" },
         { value = "LEFT", text = "Left" },
         { value = "TOP", text = "Top" },
         { value = "BOTTOM", text = "Bottom" },
     }, 180)
+    W.MoveWidget(anchor, kick, kickLeftX, -196, 260)
     M.BindDropdown(ctx, anchor,
         function() return ReadG("kickReadyAnchor", "RIGHT") end,
         function(v) SetG("kickReadyAnchor", v or "RIGHT", "MSUF2_KICK_READY_ANCHOR", { castbar = true, preview = true }); ApplyCastbars("MSUF2_KICK_READY_ANCHOR") end)
     local offX = W.Slider(kick, "X offset", -50, 50, 1, 300)
+    W.MoveWidget(offX, kick, kickLeftX, -250, 320)
     M.BindSlider(ctx, offX,
         function() return tonumber(ReadG("kickReadyOffsetX", 4)) or 4 end,
         function(v) SetG("kickReadyOffsetX", floor((tonumber(v) or 4) + 0.5), "MSUF2_KICK_READY_X", { castbar = true, preview = true }); ApplyCastbars("MSUF2_KICK_READY_X") end)
     local offY = W.Slider(kick, "Y offset", -50, 50, 1, 300)
+    W.MoveWidget(offY, kick, kickLeftX, -304, 320)
     M.BindSlider(ctx, offY,
         function() return tonumber(ReadG("kickReadyOffsetY", 0)) or 0 end,
         function(v) SetG("kickReadyOffsetY", floor((tonumber(v) or 0) + 0.5), "MSUF2_KICK_READY_Y", { castbar = true, preview = true }); ApplyCastbars("MSUF2_KICK_READY_Y") end)
+    syncKickReady = function()
+        local enabled = ReadGBool("kickReadyShowTarget", false) or ReadGBool("kickReadyShowFocus", false) or ReadGBool("kickReadyShowBoss", false)
+        local autoOn = ReadGBool("kickReadyAutoSize", true)
+        SetControlsEnabled({ style, auto, anchor, offX, offY }, enabled)
+        SetControlEnabled(size, enabled and not autoOn)
+        SetControlEnabled(colorHint, enabled)
+    end
+    M.AddRefresher(ctx, syncKickReady)
+    syncKickReady()
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end

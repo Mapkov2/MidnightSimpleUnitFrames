@@ -160,10 +160,22 @@ local function MSUF_GetFontPath()
     local g = MSUF_DB.general or {}
     MSUF_DB.general = g
     local key = g.fontKey
+    local pathForKey = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+    if type(pathForKey) == "function" and key and key ~= "" then
+        local p = pathForKey(key)
+        if p then return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags()) end
+    end
+
+    local internalPath
+    if type(GetInternalFontPathByKey) == "function" then
+        internalPath = GetInternalFontPathByKey(key)
+        if internalPath then return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags()) end
+    end
+
     local lsm = LSM or (ns and ns.LSM) or _G.MSUF_LSM
-    local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
-    local lsmKey = normalizeFontKey(key)
     if lsm and key and key ~= "" then
+        local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
+        local lsmKey = normalizeFontKey(key)
         local p
         if type(lsm.Fetch) == "function" then
             p = lsm:Fetch("font", lsmKey, true)
@@ -173,13 +185,7 @@ local function MSUF_GetFontPath()
         end
         if p then return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags()) end
     end
-    local internalPath
-    if type(GetInternalFontPathByKey) == "function" then
-        internalPath = GetInternalFontPathByKey(lsmKey) or GetInternalFontPathByKey(key)
-    end
-    if internalPath then
-         return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags())
-    end
+
     local fallback = (FONT_LIST and FONT_LIST[1] and FONT_LIST[1].path) or "Fonts\\FRIZQT__.TTF"
     return ResolveFontPath(fallback, g.fontSize or 14, MSUF_GetFontFlags())
 end
@@ -720,8 +726,13 @@ MSUF_BumpCastbarStyleRevision()
     local useShadow = g.textBackdrop and true or false
     local baseSize = g.fontSize or 14
     local effectiveSize = (fontSize > 0) and fontSize or baseSize
+    local safeSetFont = _G.MSUF_SetFontSafe
     local function ApplyFontColor(fs, size)
-        fs:SetFont(fontPath, size, fontFlags)
+        if type(safeSetFont) == "function" then
+            safeSetFont(fs, fontPath, size, fontFlags, g.fontKey)
+        else
+            fs:SetFont(fontPath, size, fontFlags)
+        end
         fs:SetTextColor(fr, fg, fb, 1)
      end
     local function ApplyShadow(fs)

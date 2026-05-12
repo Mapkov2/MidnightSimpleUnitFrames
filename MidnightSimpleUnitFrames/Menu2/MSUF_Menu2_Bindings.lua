@@ -192,6 +192,19 @@ function M.AddRefresher(ctx, fn)
     ctx.refreshers[#ctx.refreshers + 1] = fn
 end
 
+function M.Refresh(ctx)
+    local refreshers = ctx and ctx.refreshers
+    if not refreshers then
+        local entry = M.activeKey and M.cache and M.cache[M.activeKey]
+        refreshers = entry and entry.refreshers
+    end
+    if not refreshers then return end
+    for i = 1, #refreshers do
+        local fn = refreshers[i]
+        if type(fn) == "function" then pcall(fn) end
+    end
+end
+
 function M.BindToggle(ctx, widget, getValue, setValue)
     if not widget then return end
     widget:SetScript("OnClick", function(self)
@@ -243,7 +256,11 @@ function M.BindDropdown(ctx, dropdown, getValue, setValue)
     if not dropdown then return end
     dropdown:SetOnValueChanged(function(value)
         setValue(value)
-        dropdown:SetValue(value)
+        if type(getValue) == "function" then
+            dropdown:SetValue(getValue())
+        else
+            dropdown:SetValue(value)
+        end
     end)
     M.AddRefresher(ctx, function()
         dropdown:SetValue(getValue())
@@ -264,11 +281,14 @@ end
 
 function M.BindColor(ctx, colorButton, getRGB, setRGB)
     if not colorButton then return end
-    colorButton:SetOnColorChanged(function(r, g, b)
-        setRGB(r, g, b)
-    end)
-    M.AddRefresher(ctx, function()
+    local function RefreshColor()
+        if type(getRGB) ~= "function" then return end
         local r, g, b = getRGB()
         colorButton:SetRGB(r or 1, g or 1, b or 1)
+    end
+    colorButton:SetOnColorChanged(function(r, g, b)
+        if type(setRGB) == "function" then setRGB(r, g, b) end
+        RefreshColor()
     end)
+    M.AddRefresher(ctx, RefreshColor)
 end

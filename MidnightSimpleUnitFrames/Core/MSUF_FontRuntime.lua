@@ -78,6 +78,28 @@ local function _MSUF_GetFontPathSerial(path)
     return serial
 end
 
+local function _MSUF_FontApplied(fs, requestedPath)
+    if type(fs.GetFont) ~= "function" then return true end
+    local ok, actual = pcall(fs.GetFont, fs)
+    if not ok or not actual then return true end
+    local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
+    if type(matches) == "function" then
+        return matches(requestedPath, actual) == true
+    end
+    return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(requestedPath or ""):gsub("/", "\\"):lower()
+end
+
+local function _MSUF_SetFontChecked(fs, path, size, flags, fontKey)
+    local safeSet = _G.MSUF_SetFontSafe
+    if type(safeSet) == "function" then
+        local ok = safeSet(fs, path, size, flags, fontKey)
+        return ok == true
+    end
+
+    local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+    return ok and applied ~= false and _MSUF_FontApplied(fs, path)
+end
+
 local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
     if not fs then return end
     local S = _fontState
@@ -85,14 +107,16 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
 
     local rev = S.pathSerial * 10 + (_MSUF_FONT_FLAGS_CODE[S.flags] or 1) + size * 10000030
     if fs._msufFontRev ~= rev then
-        local ok = pcall(fs.SetFont, fs, S.path, size, S.flags)
+        local ok = _MSUF_SetFontChecked(fs, S.path, size, S.flags, S.fontKey)
         if not ok then
             local fallback = _G.MSUF_ResolveFontPath and _G.MSUF_ResolveFontPath("Fonts\\FRIZQT__.TTF", size, S.flags) or "Fonts\\FRIZQT__.TTF"
-            ok = pcall(fs.SetFont, fs, fallback, size, S.flags)
+            ok = _MSUF_SetFontChecked(fs, fallback, size, S.flags, "FRIZQT")
         end
         if ok then
             fs._msufFontRev = rev
             fs._msufShadowOn = nil
+        else
+            fs._msufFontRev = nil
         end
     end
 
@@ -132,7 +156,7 @@ local function _MSUF_ApplyFontsToFrame(f)
     local hpSize    = (conf and conf.hpFontSize)    or S.globalHPSize
     local powerSize = (conf and conf.powerFontSize) or S.globalPowSize
 
-    local _origPath, _origPathSerial, _origFlags, _origShadow, _origCPT
+    local _origPath, _origPathSerial, _origFontKey, _origFontKeySet, _origFlags, _origShadow, _origCPT
     if conf and conf.fontOverride then
         if conf.fontKey ~= nil and conf.fontKey ~= "" then
             local getFontPath = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
@@ -140,8 +164,11 @@ local function _MSUF_ApplyFontsToFrame(f)
             if cPath then
                 _origPath = S.path
                 _origPathSerial = S.pathSerial
+                _origFontKey = S.fontKey
+                _origFontKeySet = true
                 S.path = cPath
                 S.pathSerial = _MSUF_GetFontPathSerial(cPath)
+                S.fontKey = conf.fontKey
             end
         end
         local cNoOL = conf.noOutline
@@ -183,6 +210,7 @@ local function _MSUF_ApplyFontsToFrame(f)
 
     if _origPath then S.path = _origPath end
     if _origPathSerial then S.pathSerial = _origPathSerial end
+    if _origFontKeySet then S.fontKey = _origFontKey end
     if _origFlags then S.flags = _origFlags end
     if _origShadow ~= nil then S.useShadow = _origShadow end
     if _origCPT ~= nil then S.colorPowerByType = _origCPT end
@@ -224,6 +252,7 @@ local function UpdateAllFonts(onlyKey)
     _fontState.path = path
     _fontState.flags = flags
     _fontState.pathSerial = _MSUF_GetFontPathSerial(path)
+    _fontState.fontKey = g.fontKey
     _fontState.fr = fr
     _fontState.fg = fg
     _fontState.fb = fb
