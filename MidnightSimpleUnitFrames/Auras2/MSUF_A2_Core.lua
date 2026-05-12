@@ -1422,6 +1422,11 @@ local function ResolveGlobalFont()
     return _globalFontPath, _globalFontFlags
 end
 
+local function ResolveGlobalFontKey()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    return (g and g.fontKey) or "FRIZQT"
+end
+
 local function RefreshSharedFlags(shared, gen)
     if not shared then return end
     if _sharedFlagsGen == gen then return end
@@ -1660,7 +1665,11 @@ icon.countFrame = countFrame
         if type(p) == "string" then _initFont = p end
         if type(fl) == "string" then _initFlags = fl end
     end
-    count:SetFont(_initFont, 14, _initFlags)
+    if type(_G.MSUF_SetFontSafe) == "function" then
+        _G.MSUF_SetFontSafe(count, _initFont, 14, _initFlags, ResolveGlobalFontKey())
+    else
+        count:SetFont(_initFont, 14, _initFlags)
+    end
     count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
     count:SetJustifyH("RIGHT")
     count:SetTextColor(GetStackCountRGB())
@@ -2203,7 +2212,11 @@ local function ApplyCooldownTextStyle(icon, cd, now, force)
         local wantFlags = gFlags or curFlags or "OUTLINE"
         if cd._msufA2_cdTextSize ~= size or cd._msufA2_cdFontPath ~= wantFont then
             if wantFont then
-                fs:SetFont(wantFont, size, wantFlags)
+                if type(_G.MSUF_SetFontSafe) == "function" then
+                    _G.MSUF_SetFontSafe(fs, wantFont, size, wantFlags, ResolveGlobalFontKey())
+                else
+                    fs:SetFont(wantFont, size, wantFlags)
+                end
             end
             cd._msufA2_cdTextSize = size
             cd._msufA2_cdFontPath = wantFont
@@ -2529,7 +2542,11 @@ function Icons._ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
             local wantFlags = gFlags or curFlags or "OUTLINE"
             if icon._msufA2_lastStackFontSize ~= wantSize or icon._msufA2_lastStackFontPath ~= wantFont then
                 if wantFont then
-                    countFS:SetFont(wantFont, wantSize, wantFlags)
+                    if type(_G.MSUF_SetFontSafe) == "function" then
+                        _G.MSUF_SetFontSafe(countFS, wantFont, wantSize, wantFlags, ResolveGlobalFontKey())
+                    else
+                        countFS:SetFont(wantFont, wantSize, wantFlags)
+                    end
                 end
                 icon._msufA2_lastStackFontSize = wantSize
                 icon._msufA2_lastStackFontPath = wantFont
@@ -3095,7 +3112,11 @@ function Apply.ApplyFontsFromGlobal()
         local newFlags = fontFlags or curFlags or "OUTLINE"
         local newSize = wantSize or curSize or 14
         if newFont then
-            fs:SetFont(newFont, newSize, newFlags)
+            if type(_G.MSUF_SetFontSafe) == "function" then
+                _G.MSUF_SetFontSafe(fs, newFont, newSize, newFlags, ResolveGlobalFontKey())
+            else
+                fs:SetFont(newFont, newSize, newFlags)
+            end
         end
     end
 
@@ -3248,7 +3269,11 @@ function Apply.ApplyStackTextOffsets(icon, unit, shared, stackCountAnchor)
         local wantFont = gFont or curFont
         local wantFlags = gFlags or curFlags or "OUTLINE"
         if wantFont then
-            countFS:SetFont(wantFont, wantSize, wantFlags)
+            if type(_G.MSUF_SetFontSafe) == "function" then
+                _G.MSUF_SetFontSafe(countFS, wantFont, wantSize, wantFlags, ResolveGlobalFontKey())
+            else
+                countFS:SetFont(wantFont, wantSize, wantFlags)
+            end
         end
     end
     icon._msufA2_lastStackFontSize = wantSize

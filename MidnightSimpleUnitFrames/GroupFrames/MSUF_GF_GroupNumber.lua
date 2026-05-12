@@ -79,6 +79,15 @@ local function _ResolveFontPath(kindConf)
     return resolve("Fonts\\FRIZQT__.TTF", 12, "")
 end
 
+local function _ResolveFontKey(kindConf)
+    local key = kindConf and kindConf.fontKey
+    if type(key) ~= "string" or key == "" then
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        key = (g and g.fontKey) or "FRIZQT"
+    end
+    return key
+end
+
 local function _ResolveOutline(kindConf)
     local o = kindConf and kindConf.fontOutline
     if o == nil or o == false or o == "" or o == "NONE" then return "" end
@@ -191,9 +200,15 @@ local function _UpdateFrame(frame, kindConf)
     if type(size) ~= "number" or size < 4 then size = DEFAULT_SIZE end
     local path    = _ResolveFontPath(kindConf)
     local outline = _ResolveOutline(kindConf)
+    local key     = _ResolveFontKey(kindConf)
     local fontKey = path .. "\1" .. size .. "\1" .. outline
     if fs._msufFontKey ~= fontKey then
-        fs:SetFont(path, size, outline)
+        local safeSetFont = _G.MSUF_SetFontSafe
+        if type(safeSetFont) == "function" then
+            safeSetFont(fs, path, size, outline, key)
+        else
+            fs:SetFont(path, size, outline)
+        end
         fs._msufFontKey = fontKey
     end
 

@@ -407,7 +407,14 @@ function _G.MSUF_ApplyStatusTextLayout(frame)
         if not fs then return end
         if fs.GetFont and fs.SetFont then
             local fontPath, _, flags = fs:GetFont()
-            if fontPath then fs:SetFont(fontPath, size, flags or "") end
+            if fontPath then
+                local g = _G.MSUF_DB and _G.MSUF_DB.general
+                if type(_G.MSUF_SetFontSafe) == "function" then
+                    _G.MSUF_SetFontSafe(fs, fontPath, size, flags or "", (g and g.fontKey) or "FRIZQT")
+                else
+                    fs:SetFont(fontPath, size, flags or "")
+                end
+            end
         end
         fs:ClearAllPoints()
         fs:SetPoint(anchor, owner, anchor, x, y)

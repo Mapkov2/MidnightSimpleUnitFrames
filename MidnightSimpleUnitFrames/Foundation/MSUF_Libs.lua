@@ -6,12 +6,16 @@ ns = ns or {}
 -- cannot break Edit Mode, previews, or runtime text refresh.
 do
     local FALLBACK_FONT = "Fonts\\FRIZQT__.TTF"
+    local EXPRESSWAY_BOLD_FONT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\Expressway Bold.ttf"
+    local VISUAL_SAMPLE = "AaBbCcWwMmIi 0123456789 - Midnight Simple Unit Frames"
     local FONT_ALIASES = {
         ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
         ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway regular.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
     }
-    local _probeFrame, _probeFS
+    local _probeFrame, _probeFS, _probeFS2
     local _fontPathCache = {}
+    local _visualOverrideCache = {}
+    local PathLooksLikeBundledExpressway
 
     local function NormalizeFontFlags(flags)
         if type(flags) ~= "string" then return "" end
@@ -122,11 +126,16 @@ do
         list[#list + 1] = path
     end
 
-    local function AddFontObjectPath(list, seen, objectName)
+    local function AddFontObjectPath(list, seen, objectName, key)
         local obj = type(objectName) == "string" and _G[objectName] or objectName
         if not (obj and type(obj.GetFont) == "function") then return end
         local ok, path = pcall(obj.GetFont, obj)
-        if ok then AddUniquePath(list, seen, path) end
+        if ok and ((not key) or InternalPathMatchesKey(key, path)) then
+            if PathLooksLikeBundledExpressway and PathLooksLikeBundledExpressway(key, path, 14, "") then
+                return
+            end
+            AddUniquePath(list, seen, path)
+        end
     end
 
     local function BuildInternalFontPathCandidates(key, path)
@@ -135,24 +144,36 @@ do
         local info = INTERNAL_FONT_CANDIDATES[key]
         if not info then return nil end
 
-        local list, seen = {}, {}
+        local list, seen, deferred, deferredSeen = {}, {}, {}, {}
+        local function AddCandidate(p)
+            if not InternalPathMatchesKey(key, p) then return end
+            if PathLooksLikeBundledExpressway and PathLooksLikeBundledExpressway(key, p, 14, "") then
+                AddUniquePath(deferred, deferredSeen, p)
+            else
+                AddUniquePath(list, seen, p)
+            end
+        end
+
         if InternalPathMatchesKey(key, path) then
-            AddUniquePath(list, seen, path)
+            AddCandidate(path)
         end
         if info.globals then
             for i = 1, #info.globals do
-                AddUniquePath(list, seen, _G[info.globals[i]])
+                AddCandidate(_G[info.globals[i]])
             end
         end
         if info.objects then
             for i = 1, #info.objects do
-                AddFontObjectPath(list, seen, info.objects[i])
+                AddFontObjectPath(list, seen, info.objects[i], key)
             end
         end
         if info.paths then
             for i = 1, #info.paths do
-                AddUniquePath(list, seen, info.paths[i])
+                AddCandidate(info.paths[i])
             end
+        end
+        for i = 1, #deferred do
+            AddUniquePath(list, seen, deferred[i])
         end
         return list, key
     end
@@ -169,6 +190,16 @@ do
         return _probeFS
     end
 
+    local function GetProbeFS2()
+        if _probeFS2 then return _probeFS2 end
+        if not GetProbeFS() then return nil end
+        if _probeFrame and _probeFrame.CreateFontString then
+            _probeFS2 = _probeFrame:CreateFontString(nil, "OVERLAY")
+            if _probeFS2 and _probeFS2.Hide then _probeFS2:Hide() end
+        end
+        return _probeFS2
+    end
+
     local function TrySetFont(fs, path, size, flags)
         if not (fs and type(fs.SetFont) == "function" and path and size) then return false end
         local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
@@ -182,15 +213,57 @@ do
         return true
     end
 
+    local function MeasureFontWidth(fs, path, size, flags)
+        if not (fs and type(fs.SetText) == "function" and type(fs.GetStringWidth) == "function") then return nil end
+        if not TrySetFont(fs, path, size, flags) then return nil end
+        fs:SetText(VISUAL_SAMPLE)
+        local ok, width = pcall(fs.GetStringWidth, fs)
+        width = ok and tonumber(width) or nil
+        return width and width > 0 and width or nil
+    end
+
+    PathLooksLikeBundledExpressway = function(key, path, size, flags)
+        key = NormalizeInternalFontKey(key, path)
+        if not (key and InternalPathMatchesKey(key, path)) then return false end
+        local pathKey = FontPathKey(path)
+        if not pathKey then return false end
+        if pathKey:find("interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway", 1, true) then
+            return true
+        end
+
+        size = tonumber(size) or 14
+        flags = NormalizeFontFlags(flags)
+        local cacheKey = tostring(key) .. "|" .. pathKey .. "|" .. tostring(size) .. "|" .. flags
+        local cached = _visualOverrideCache[cacheKey]
+        if cached ~= nil then return cached end
+
+        local a = GetProbeFS()
+        local b = GetProbeFS2()
+        local w1 = MeasureFontWidth(a, path, size, flags)
+        local w2 = MeasureFontWidth(b, EXPRESSWAY_BOLD_FONT, size, flags)
+        local same = (w1 ~= nil and w2 ~= nil and math.abs(w1 - w2) <= 0.05) and true or false
+        _visualOverrideCache[cacheKey] = same
+        return same
+    end
+
     local function TryFontObjectFallback(fs, key, size, flags)
         local info = key and INTERNAL_FONT_CANDIDATES[key]
-        if not (info and info.objects and fs and type(fs.SetFontObject) == "function") then return false end
+        if not (info and info.objects and fs) then return false end
+        if type(fs.SetFontObject) ~= "function" and type(fs.CopyFontObject) ~= "function" then return false end
 
         for i = 1, #info.objects do
             local objectName = info.objects[i]
             local obj = _G[objectName]
             if obj then
-                local okObject = pcall(fs.SetFontObject, fs, obj)
+                local okObject
+                if type(fs.SetFontObject) == "function" then
+                    okObject = pcall(fs.SetFontObject, fs, obj)
+                    if (not okObject) and type(objectName) == "string" then
+                        okObject = pcall(fs.SetFontObject, fs, objectName)
+                    end
+                else
+                    okObject = pcall(fs.CopyFontObject, fs, obj)
+                end
                 if okObject then
                     local actual
                     if type(fs.GetFont) == "function" then
@@ -228,6 +301,10 @@ do
         return FontPathEquals(requested, actual)
     end
 
+    function _G.MSUF_FontLooksLikeBundledExpressway(key, path, size, flags)
+        return PathLooksLikeBundledExpressway(key, path, size or 14, flags or "")
+    end
+
     function _G.MSUF_GetInternalFontPathCandidates(key, path)
         local candidates = BuildInternalFontPathCandidates(key, path)
         return candidates
@@ -236,6 +313,9 @@ do
     function _G.MSUF_ClearResolvedFontPathCache()
         for k in pairs(_fontPathCache) do
             _fontPathCache[k] = nil
+        end
+        for k in pairs(_visualOverrideCache) do
+            _visualOverrideCache[k] = nil
         end
     end
 
@@ -274,8 +354,12 @@ do
             end
         end
 
-        Add(normalized)
-        local internalCandidates, requestedInternalKey = BuildInternalFontPathCandidates(nil, normalized)
+        local requestedInternalKey = NormalizeInternalFontKey(nil, normalized)
+        if not requestedInternalKey then
+            Add(normalized)
+        end
+        local internalCandidates
+        internalCandidates, requestedInternalKey = BuildInternalFontPathCandidates(requestedInternalKey, normalized)
         if internalCandidates then
             for i = 1, #internalCandidates do
                 Add(internalCandidates[i])
@@ -364,6 +448,16 @@ do
             local okGet, got = pcall(probe.GetFont, probe)
             if okGet then actual = got end
         end
+        local expresswayOverridePath
+        local info = INTERNAL_FONT_CANDIDATES[fontKey]
+        if info and info.paths then
+            for i = 1, #info.paths do
+                if PathLooksLikeBundledExpressway(fontKey, info.paths[i], 14, "") then
+                    expresswayOverridePath = info.paths[i]
+                    break
+                end
+            end
+        end
         return {
             key = fontKey,
             requested = path,
@@ -372,6 +466,9 @@ do
             actual = actual,
             source = source,
             matches = FontPathMatches(appliedPath, actual),
+            expresswayOverride = PathLooksLikeBundledExpressway(fontKey, actual or appliedPath or path, 14, ""),
+            expresswayOverridePath = expresswayOverridePath,
+            candidates = BuildInternalFontPathCandidates(fontKey, path),
         }
     end
 

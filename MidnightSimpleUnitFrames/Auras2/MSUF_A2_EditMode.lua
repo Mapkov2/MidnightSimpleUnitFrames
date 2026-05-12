@@ -1123,7 +1123,12 @@ local function EnsurePreviewCDText(icon)
         if type(p) == "string" and p ~= "" then fontPath = p end
         if type(fl) == "string" then fontFlags = fl end
     end
-    fs:SetFont(fontPath, 14, fontFlags)
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    if type(_G.MSUF_SetFontSafe) == "function" then
+        _G.MSUF_SetFontSafe(fs, fontPath, 14, fontFlags, (g and g.fontKey) or "FRIZQT")
+    else
+        fs:SetFont(fontPath, 14, fontFlags)
+    end
     -- Anchor to the cooldown frame center so it visually overlays the swirl.
     local cd = icon.cooldown
     local anchor = (cd and cd.GetObjectType) and cd or icon
@@ -1265,7 +1270,12 @@ local function _PreviewCooldownIconFn(icon)
 
     -- Apply font family + size (diff-gated)
     if icon._msufA2_pvCDSize ~= size or icon._msufA2_pvCDFont ~= fontPath then
-        fs:SetFont(fontPath, size, fontFlags)
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        if type(_G.MSUF_SetFontSafe) == "function" then
+            _G.MSUF_SetFontSafe(fs, fontPath, size, fontFlags, (g and g.fontKey) or "FRIZQT")
+        else
+            fs:SetFont(fontPath, size, fontFlags)
+        end
         icon._msufA2_pvCDSize = size
         icon._msufA2_pvCDFont = fontPath
     end

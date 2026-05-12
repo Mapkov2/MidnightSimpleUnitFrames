@@ -647,9 +647,20 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local showText = LayerOn("text") and (focus == "text" or focus == "overlay" or soloLayer == "text")
         local fontPath = (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
         local fontFlags = (gf and gf.ResolveFontFlags and gf.ResolveFontFlags(kind)) or "OUTLINE"
+        local db = _G.MSUF_DB
+        local fontKey = (conf.fontOverride and conf.fontKey) or (db and db.general and db.general.fontKey)
+        local safeSetFont = _G.MSUF_SetFontSafe
+        local function SetPreviewFont(fs, size)
+            if not fs then return end
+            if type(safeSetFont) == "function" then
+                safeSetFont(fs, fontPath, size, fontFlags, fontKey)
+            else
+                fs:SetFont(fontPath, size, fontFlags)
+            end
+        end
         local fr, fg, fb = T.colors.text[1], T.colors.text[2], T.colors.text[3]
         if gf and gf.ResolveFontColor then fr, fg, fb = gf.ResolveFontColor(kind) end
-        mock._nameFS:SetFont(fontPath, max(6, GFPreviewScaleValue(conf.nameFontSize or 12, previewScale, 6)), fontFlags)
+        SetPreviewFont(mock._nameFS, max(6, GFPreviewScaleValue(conf.nameFontSize or 12, previewScale, 6)))
         mock._nameFS:SetText(GF_PREVIEW_NAMES[5])
         mock._nameFS:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
         mock._nameFS:ClearAllPoints()
@@ -658,14 +669,14 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         mock._nameFS:SetJustifyH(conf.nameAnchor == "RIGHT" and "RIGHT" or (conf.nameAnchor == "CENTER" and "CENTER" or "LEFT"))
         mock._nameFS:SetShown(showText and conf.showName ~= false)
 
-        mock._hpFS:SetFont(fontPath, max(7, GFPreviewScaleValue(conf.hpFontSize or 10, previewScale, 6)), fontFlags)
+        SetPreviewFont(mock._hpFS, max(7, GFPreviewScaleValue(conf.hpFontSize or 10, previewScale, 6)))
         mock._hpFS:SetText("72%")
         mock._hpFS:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
         mock._hpFS:ClearAllPoints()
         mock._hpFS:SetPoint("RIGHT", mock._health, "RIGHT", -GFPreviewScaleValue(3, previewScale, 1), GFPreviewConfigToOffset(conf.hpOffsetY or 0, previewScale))
         mock._hpFS:SetShown(showText)
 
-        mock._powerFS:SetFont(fontPath, max(6, GFPreviewScaleValue(conf.powerFontSize or 9, previewScale, 6)), fontFlags)
+        SetPreviewFont(mock._powerFS, max(6, GFPreviewScaleValue(conf.powerFontSize or 9, previewScale, 6)))
         mock._powerFS:SetText("70")
         mock._powerFS:SetTextColor(fr or 1, fg or 1, fb or 1, 0.9)
         mock._powerFS:ClearAllPoints()
@@ -770,7 +781,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
         statusHandle:SetSize(max(42, GFPreviewScaleValue(conf.statusTextSize or 14, previewScale, 12) * 4), max(18, GFPreviewScaleValue(conf.statusTextSize or 14, previewScale, 12) + 8))
         if statusHandle._statusText and statusHandle._statusText.SetFont then
-            statusHandle._statusText:SetFont(fontPath, max(12, GFPreviewScaleValue(conf.statusTextSize or 14, previewScale, 10)), fontFlags)
+            SetPreviewFont(statusHandle._statusText, max(12, GFPreviewScaleValue(conf.statusTextSize or 14, previewScale, 10)))
         end
         LayoutHandle(statusHandle, conf.statusTextAnchor, conf.statusOffsetX, conf.statusOffsetY, "CENTER")
 

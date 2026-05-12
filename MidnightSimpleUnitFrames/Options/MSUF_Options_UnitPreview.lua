@@ -1401,6 +1401,22 @@ local function PositionFromAnchor(frame, anchor, x, y, target, size)
     else frame:SetPoint("CENTER", target, "TOPLEFT", x + size * 0.5, y - size * 0.5) end
 end
 
+local function PositionLevelPreview(frame, anchor, x, y, mock, gap)
+    if not frame or not mock then return end
+    frame:ClearAllPoints()
+    anchor = tostring(anchor or "NAMERIGHT")
+    x = tonumber(x) or 0
+    y = tonumber(y) or 0
+    gap = tonumber(gap) or 6
+    if anchor == "NAMELEFT" and mock.nameText then
+        frame:SetPoint("RIGHT", mock.nameText, "LEFT", -gap + x, y)
+    elseif anchor == "NAMERIGHT" and mock.nameText then
+        frame:SetPoint("LEFT", mock.nameText, "RIGHT", gap + x, y)
+    else
+        PositionFromAnchor(frame, anchor, x, y, mock.textFrame or mock, frame.GetWidth and frame:GetWidth() or 14)
+    end
+end
+
 local function RoundOffset(v)
     v = tonumber(v) or 0
     if v >= 0 then return floor(v + 0.5) end
@@ -2874,14 +2890,37 @@ function Preview.Refresh(box, reason)
         end
         icon:SetShown(show)
         if show then
-            local sz = S(tonumber(conf[spec.size]) or tonumber(g[spec.size]) or spec.defaultSize)
-            if sz < 10 then sz = 10 end
-            icon:SetSize(sz, sz)
+            local rawSize = tonumber(conf[spec.size]) or tonumber(g[spec.size]) or spec.defaultSize
+            local sz = S(rawSize)
+            if spec.id == "level" then
+                if sz < 7 then sz = 7 end
+            elseif sz < 10 then
+                sz = 10
+            end
             if icon.SetFrameLevel then icon:SetFrameLevel(baseLevel + 20) end
             SetPreviewIconTexture(icon, spec, conf, g, key, data)
-            if icon.txt then icon.txt:SetFont(FONT, max(7, floor(sz * 0.52 + 0.5)), "OUTLINE") end
-            PositionFromAnchor(icon, conf[spec.anchor] or g[spec.anchor] or spec.defaultAnchor, S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0), S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0), mock, sz)
-            handle:SetSize(max(18, sz), max(18, sz))
+            if spec.id == "level" then
+                if icon.txt then
+                    icon.txt:SetFont(FONT, max(7, sz), "OUTLINE")
+                    icon.txt:ClearAllPoints()
+                    icon.txt:SetPoint("LEFT", icon, "LEFT", 0, 0)
+                    icon.txt:SetJustifyH("LEFT")
+                end
+                local textW = icon.txt and icon.txt.GetStringWidth and icon.txt:GetStringWidth() or sz
+                local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
+                icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
+                PositionLevelPreview(icon, conf[spec.anchor] or g[spec.anchor] or spec.defaultAnchor, S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0), S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0), mock, S(6))
+            else
+                icon:SetSize(sz, sz)
+                if icon.txt then
+                    icon.txt:SetFont(FONT, max(7, floor(sz * 0.52 + 0.5)), "OUTLINE")
+                    icon.txt:ClearAllPoints()
+                    icon.txt:SetPoint("CENTER")
+                    icon.txt:SetJustifyH("CENTER")
+                end
+                PositionFromAnchor(icon, conf[spec.anchor] or g[spec.anchor] or spec.defaultAnchor, S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0), S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0), mock, sz)
+            end
+            handle:SetSize(max(18, icon:GetWidth() + 8), max(18, icon:GetHeight() + 8))
             PlaceHandle(handle, icon)
         else
             handle:Hide()
