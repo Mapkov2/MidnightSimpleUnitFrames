@@ -239,12 +239,6 @@ local function NormalizeFontKey(key)
     return key
 end
 
-local function FontPreviewObject(key)
-    local fn = _G.MSUF_GetFontPreviewObject or (ns and ns.MSUF_GetFontPreviewObject)
-    if type(fn) == "function" then return fn(key) end
-    return nil
-end
-
 local function FontValues(includeGlobalDefault)
     local out, used = {}, {}
     if includeGlobalDefault then
@@ -254,7 +248,7 @@ local function FontValues(includeGlobalDefault)
     for _, info in ipairs(_G.MSUF_FONT_LIST or _G.FONT_LIST or {}) do
         local key = NormalizeFontKey(info.key)
         if key and not used[key] then
-            out[#out + 1] = { value = key, text = info.name or key, fontObject = FontPreviewObject(key) }
+            out[#out + 1] = { value = key, text = info.name or key, fontKey = key }
             used[key] = true
         end
     end
@@ -266,14 +260,14 @@ local function FontValues(includeGlobalDefault)
             for i = 1, #names do
                 local key = NormalizeFontKey(names[i])
                 if key and not used[key] then
-                    out[#out + 1] = { value = key, text = names[i], fontObject = FontPreviewObject(key) }
+                    out[#out + 1] = { value = key, text = names[i], fontKey = key }
                     used[key] = true
                 end
             end
         end
     end
     if #out == 0 then
-        out[1] = { value = "FRIZQT", text = "Friz Quadrata" }
+        out[1] = { value = "FRIZQT", text = "Friz Quadrata", fontKey = "FRIZQT" }
     end
     return out
 end

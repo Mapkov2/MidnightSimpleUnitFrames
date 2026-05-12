@@ -16,6 +16,14 @@ do
     local _fontPathCache = {}
     local _visualOverrideCache = {}
     local PathLooksLikeBundledExpressway
+    local PrewarmInternalFontVisualCache
+    local ScheduleFontVisualPrewarm
+    local _fontPrewarmScheduled = false
+
+    local function IsCombatLocked()
+        if _G.MSUF_InCombat == true then return true end
+        return (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) and true or false
+    end
 
     local function NormalizeFontFlags(flags)
         if type(flags) ~= "string" then return "" end
@@ -236,6 +244,7 @@ do
         local cacheKey = tostring(key) .. "|" .. pathKey .. "|" .. tostring(size) .. "|" .. flags
         local cached = _visualOverrideCache[cacheKey]
         if cached ~= nil then return cached end
+        if IsCombatLocked() then return false end
 
         local a = GetProbeFS()
         local b = GetProbeFS2()
@@ -314,8 +323,13 @@ do
         for k in pairs(_fontPathCache) do
             _fontPathCache[k] = nil
         end
-        for k in pairs(_visualOverrideCache) do
-            _visualOverrideCache[k] = nil
+        if not IsCombatLocked() then
+            for k in pairs(_visualOverrideCache) do
+                _visualOverrideCache[k] = nil
+            end
+        end
+        if ScheduleFontVisualPrewarm then
+            ScheduleFontVisualPrewarm(IsCombatLocked() and 1 or 0)
         end
     end
 
@@ -370,6 +384,12 @@ do
             Add(FALLBACK_FONT)
             Add("Fonts\\ARIALN.TTF")
             Add(STANDARD_TEXT_FONT)
+        end
+
+        if IsCombatLocked() then
+            local fast = candidates[1] or normalized or NormalizeFontPath(FALLBACK_FONT)
+            _fontPathCache[cacheKey] = fast
+            return fast
         end
 
         local probe = GetProbeFS()
@@ -431,6 +451,60 @@ do
         return false, path, "failed"
     end
 
+    PrewarmInternalFontVisualCache = function()
+        _fontPrewarmScheduled = false
+        if IsCombatLocked() then
+            if ScheduleFontVisualPrewarm then
+                ScheduleFontVisualPrewarm(1)
+            end
+            return false
+        end
+
+        for key, info in pairs(INTERNAL_FONT_CANDIDATES) do
+            if info.globals then
+                for i = 1, #info.globals do
+                    PathLooksLikeBundledExpressway(key, _G[info.globals[i]], 14, "")
+                end
+            end
+            if info.objects then
+                for i = 1, #info.objects do
+                    local obj = _G[info.objects[i]]
+                    if obj and type(obj.GetFont) == "function" then
+                        local ok, p = pcall(obj.GetFont, obj)
+                        if ok then
+                            PathLooksLikeBundledExpressway(key, p, 14, "")
+                        end
+                    end
+                end
+            end
+            if info.paths then
+                for i = 1, #info.paths do
+                    local p = info.paths[i]
+                    PathLooksLikeBundledExpressway(key, p, 14, "")
+                    _G.MSUF_ResolveFontPath(p, 14, "")
+                    _G.MSUF_ResolveFontPath(p, 14, "OUTLINE")
+                    _G.MSUF_ResolveFontPath(p, 14, "THICKOUTLINE")
+                end
+            end
+        end
+        return true
+    end
+
+    ScheduleFontVisualPrewarm = function(delay)
+        if _fontPrewarmScheduled then return end
+        _fontPrewarmScheduled = true
+        delay = tonumber(delay) or 0
+        if _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(delay, PrewarmInternalFontVisualCache)
+        elseif not IsCombatLocked() then
+            PrewarmInternalFontVisualCache()
+        else
+            _fontPrewarmScheduled = false
+        end
+    end
+
+    _G.MSUF_PrewarmFontVisualCache = PrewarmInternalFontVisualCache
+
     function _G.MSUF_DebugFontProbe(key)
         local fontKey = NormalizeInternalFontKey(key, key) or key
         local path
@@ -475,6 +549,7 @@ do
     ns.Util = ns.Util or {}
     ns.Util.ResolveFontPath = _G.MSUF_ResolveFontPath
     ns.Util.SetFontSafe = _G.MSUF_SetFontSafe
+    ScheduleFontVisualPrewarm(0)
 end
 
 -- Shared Lib initialization (loaded BEFORE Options and Main)

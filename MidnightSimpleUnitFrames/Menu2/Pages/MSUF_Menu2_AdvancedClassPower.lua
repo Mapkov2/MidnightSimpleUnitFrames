@@ -165,7 +165,7 @@ local function BuildClassPower(ctx)
     cpControls[#cpControls + 1] = cpY
     cpControls[#cpControls + 1] = cpLevel
 
-    local behavior = b:CollapsibleSection("classpower_behavior", "Behavior", 328, false)
+    local behavior = b:CollapsibleSection("classpower_behavior", "Behavior", 206, false)
     local cpAnchor = BindTableToggle(ctx, behavior, "Anchor to Essential Cooldown", Bars, "classPowerAnchorToCooldown", false, ApplyClassPower)
     local cpCharged = BindTableToggle(ctx, behavior, "Show empowered combo points", Bars, "showChargedComboPoints", true, ApplyClassPower)
     local cpText = BindTableToggle(ctx, behavior, "Show resource text", Bars, "classPowerShowText", false, ApplyClassPower)
@@ -178,6 +178,16 @@ local function BuildClassPower(ctx)
     for _, control in ipairs({ cpAnchor, cpCharged, cpText, cpRune, cpReverse, cpEle, cpEbon, cpShadow, cpPrediction }) do
         cpControls[#cpControls + 1] = control
     end
+    local behaviorRightX = min(max(380, floor((ctx.width or 900) * 0.45)), max(320, (ctx.width or 900) - 420))
+    MoveWidget(cpAnchor, behavior, 14, -38)
+    MoveWidget(cpCharged, behavior, 14, -70)
+    MoveWidget(cpText, behavior, 14, -102)
+    MoveWidget(cpRune, behavior, 14, -134)
+    MoveWidget(cpReverse, behavior, 14, -166)
+    MoveWidget(cpEle, behavior, behaviorRightX, -38)
+    MoveWidget(cpEbon, behavior, behaviorRightX, -70)
+    MoveWidget(cpShadow, behavior, behaviorRightX, -102)
+    MoveWidget(cpPrediction, behavior, behaviorRightX, -134)
 
     local visual = b:CollapsibleSection("classpower_visuals", "Style", 780, false)
     local cpColor = BindTableToggle(ctx, visual, "Color by resource type", Bars, "classPowerColorByType", true, ApplyClassPower)
@@ -262,4 +272,4 @@ local function BuildClassPower(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 3 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 4 })
