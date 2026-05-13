@@ -13,6 +13,12 @@ local pendingAlpha
 local pendingCastbar
 local flushQueued = false
 
+local HISTORY_LIMIT = 100
+local historyDepth = 0
+local historyRestoring = false
+local historySessionActive = false
+local historySessionSnapshot
+
 local UNIT_KEYS = {
     player = true,
     target = true,
@@ -129,9 +135,225 @@ local function QueueFlush()
     end
 end
 
+local function DeepCopy(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local out = {}
+    seen[value] = out
+    for k, v in pairs(value) do
+        out[DeepCopy(k, seen)] = DeepCopy(v, seen)
+    end
+    return out
+end
+
+local function DeepEqual(a, b, seen)
+    if a == b then return true end
+    if type(a) ~= type(b) then return false end
+    if type(a) ~= "table" then return false end
+    seen = seen or {}
+    if seen[a] == b then return true end
+    seen[a] = b
+    for k, v in pairs(a) do
+        if not DeepEqual(v, b[k], seen) then return false end
+    end
+    for k in pairs(b) do
+        if a[k] == nil then return false end
+    end
+    return true
+end
+
+local function DeepReplace(dst, src)
+    if type(dst) ~= "table" or type(src) ~= "table" then return end
+    for k in pairs(dst) do
+        if src[k] == nil then dst[k] = nil end
+    end
+    for k, v in pairs(src) do
+        if type(v) == "table" then
+            if type(dst[k]) ~= "table" then dst[k] = {} end
+            DeepReplace(dst[k], v)
+        else
+            dst[k] = v
+        end
+    end
+end
+
+local function SnapshotDB()
+    return DeepCopy(M.EnsureDB())
+end
+
+local function NotifyHistoryChanged()
+    if M.frame and M.frame.RefreshStatus then pcall(M.frame.RefreshStatus, M.frame) end
+    if M.Refresh then M.Refresh() end
+end
+
+local function PushHistory(label, source, before, after)
+    if DeepEqual(before, after) then return false end
+
+    M.historyUndo = M.historyUndo or {}
+    M.historyRedo = M.historyRedo or {}
+
+    local stack = M.historyUndo
+    local last = stack[#stack]
+    if last and last.source == source then
+        last.after = after
+        last.label = label or last.label
+        if DeepEqual(last.before, after) then
+            stack[#stack] = nil
+        end
+    else
+        stack[#stack + 1] = {
+            label = label or "MSUF2 change",
+            source = source,
+            before = before,
+            after = after,
+        }
+        while #stack > HISTORY_LIMIT do
+            table.remove(stack, 1)
+        end
+    end
+
+    WipeTable(M.historyRedo)
+    if historySessionActive then historySessionSnapshot = after end
+    NotifyHistoryChanged()
+    return true
+end
+
+local function RebuildActivePage()
+    local key = M.activeKey
+    if key and M.frame and M.frame.IsShown and M.frame:IsShown() and M.InvalidatePage and M.SelectPage then
+        M.InvalidatePage(key)
+        M.activeKey = nil
+        M.SelectPage(key)
+    else
+        NotifyHistoryChanged()
+    end
+end
+
+local function ApplyHistorySnapshot(snapshot, reason)
+    if type(snapshot) ~= "table" then return false end
+    historyRestoring = true
+    DeepReplace(M.EnsureDB(), snapshot)
+    if historySessionActive then historySessionSnapshot = SnapshotDB() end
+    historyRestoring = false
+
+    M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
+    if ns and ns.GF then
+        if type(ns.GF.RebuildAll) == "function" then pcall(ns.GF.RebuildAll) end
+        if type(ns.GF.RefreshPreviewLayout) == "function" then pcall(ns.GF.RefreshPreviewLayout) end
+    end
+    RebuildActivePage()
+    return true
+end
+
+function M.IsHistoryCapturing()
+    return historyDepth > 0 or historyRestoring
+end
+
+function M.CaptureHistory(label, source, fn)
+    if type(fn) ~= "function" then return nil end
+    if historyDepth > 0 or historyRestoring then return fn() end
+
+    local before = SnapshotDB()
+    historyDepth = historyDepth + 1
+    local ok, result = pcall(fn)
+    historyDepth = historyDepth - 1
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then handler(result) else print(result) end
+        return nil
+    end
+    PushHistory(label, source, before, SnapshotDB())
+    return result
+end
+
+function M.StartHistorySession()
+    historySessionActive = true
+    historySessionSnapshot = SnapshotDB()
+    M.ClearHistory()
+end
+
+function M.EndHistorySession()
+    historySessionActive = false
+    historySessionSnapshot = nil
+end
+
+function M.CheckpointHistory(label, source)
+    if historyDepth > 0 or historyRestoring or not historySessionActive then return false end
+    local before = historySessionSnapshot or SnapshotDB()
+    local after = SnapshotDB()
+    return PushHistory(label or "MSUF2 change", source or "menu:checkpoint", before, after)
+end
+
+function M.ClearHistory()
+    M.historyUndo = M.historyUndo or {}
+    M.historyRedo = M.historyRedo or {}
+    WipeTable(M.historyUndo)
+    WipeTable(M.historyRedo)
+    if historySessionActive then historySessionSnapshot = SnapshotDB() end
+    NotifyHistoryChanged()
+end
+
+function M.GetHistoryState()
+    M.historyUndo = M.historyUndo or {}
+    M.historyRedo = M.historyRedo or {}
+    local undo = M.historyUndo[#M.historyUndo]
+    local redo = M.historyRedo[#M.historyRedo]
+    return {
+        canUndo = undo ~= nil,
+        canRedo = redo ~= nil,
+        undoLabel = undo and undo.label or nil,
+        redoLabel = redo and redo.label or nil,
+        undoCount = #M.historyUndo,
+        redoCount = #M.historyRedo,
+    }
+end
+
+function M.Undo()
+    M.historyUndo = M.historyUndo or {}
+    M.historyRedo = M.historyRedo or {}
+    local entry = table.remove(M.historyUndo)
+    if not entry then return false end
+    M.historyRedo[#M.historyRedo + 1] = entry
+    local ok = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO")
+    NotifyHistoryChanged()
+    return ok
+end
+
+function M.Redo()
+    M.historyUndo = M.historyUndo or {}
+    M.historyRedo = M.historyRedo or {}
+    local entry = table.remove(M.historyRedo)
+    if not entry then return false end
+    M.historyUndo[#M.historyUndo + 1] = entry
+    local ok = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO")
+    NotifyHistoryChanged()
+    return ok
+end
+
+local function WidgetHistoryLabel(ctx, widget, fallback)
+    local fs = widget and (widget._msuf2Title or widget._msuf2Label)
+    if fs and fs.GetText then
+        local text = fs:GetText()
+        if text and text ~= "" then return text end
+    end
+    if widget and widget.GetText then
+        local ok, text = pcall(widget.GetText, widget)
+        if ok and text and text ~= "" then return text end
+    end
+    return fallback or tostring((ctx and ctx.key) or "MSUF2 option")
+end
+
+local function WidgetHistorySource(ctx, widget, suffix)
+    local key = (ctx and ctx.key) or "page"
+    local kind = widget and (widget._msuf2ControlKind or widget.GetObjectType and widget:GetObjectType()) or "control"
+    return tostring(key) .. ":" .. tostring(kind) .. ":" .. tostring(suffix or WidgetHistoryLabel(ctx, widget))
+end
+
 function M.RequestUnitApply(unit, reason, opts)
     unit = (unit == "tot") and "targettarget" or unit
     if not UNIT_KEYS[unit] then return end
+    M.CheckpointHistory(reason or ("MSUF2_" .. tostring(unit)), "apply:unit:" .. tostring(unit) .. ":" .. tostring(reason or "change"))
     pendingUnits[unit] = true
     local o = pendingOpts[unit]
     if not o then
@@ -153,6 +375,11 @@ function M.RequestUnitApply(unit, reason, opts)
 end
 
 function M.SetUnitValue(unit, key, value, reason, opts)
+    if historyDepth == 0 and not historyRestoring then
+        return M.CaptureHistory(tostring(key), "unit:" .. tostring(unit) .. ":" .. tostring(key), function()
+            return M.SetUnitValue(unit, key, value, reason, opts)
+        end)
+    end
     local conf = M.GetUnitDB(unit)
     if conf[key] == value then return false end
     conf[key] = value
@@ -161,6 +388,7 @@ function M.SetUnitValue(unit, key, value, reason, opts)
 end
 
 function M.RequestGeneralApply(reason, opts)
+    M.CheckpointHistory(reason or "MSUF2_GENERAL", "apply:general:" .. tostring(reason or "change"))
     if not pendingGeneral then pendingGeneral = {} end
     pendingGeneral.reason = reason or pendingGeneral.reason or "MSUF2_GENERAL"
     if opts and opts.applyAll == false then
@@ -180,6 +408,11 @@ function M.RequestGeneralApply(reason, opts)
 end
 
 function M.SetGeneralValue(key, value, reason, opts)
+    if historyDepth == 0 and not historyRestoring then
+        return M.CaptureHistory(tostring(key), "general:" .. tostring(key), function()
+            return M.SetGeneralValue(key, value, reason, opts)
+        end)
+    end
     local g = M.GetGeneralDB()
     if g[key] == value then return false end
     g[key] = value
@@ -209,7 +442,10 @@ function M.BindToggle(ctx, widget, getValue, setValue)
     if not widget then return end
     widget:SetScript("OnClick", function(self)
         local nextValue = not (getValue() and true or false)
-        setValue(nextValue)
+        local label = WidgetHistoryLabel(ctx, self)
+        M.CaptureHistory(label, WidgetHistorySource(ctx, self, label), function()
+            setValue(nextValue)
+        end)
         self:SetChecked(nextValue)
     end)
     M.AddRefresher(ctx, function()
@@ -224,7 +460,10 @@ function M.BindSlider(ctx, slider, getValue, setValue)
         if self._msuf2Step and self._msuf2Step >= 1 then
             value = math.floor(value + 0.5)
         end
-        setValue(value)
+        local label = WidgetHistoryLabel(ctx, self)
+        M.CaptureHistory(label, WidgetHistorySource(ctx, self, label), function()
+            setValue(value)
+        end)
     end)
     M.AddRefresher(ctx, function()
         local value = tonumber(getValue()) or 0
@@ -243,7 +482,10 @@ function M.BindSegment(ctx, segment, getValue, setValue)
     for i = 1, #(segment.buttons or {}) do
         local btn = segment.buttons[i]
         btn:SetScript("OnClick", function(self)
-            setValue(self._msuf2Value)
+            local label = WidgetHistoryLabel(ctx, segment)
+            M.CaptureHistory(label, WidgetHistorySource(ctx, segment, label), function()
+                setValue(self._msuf2Value)
+            end)
             segment:SetValue(self._msuf2Value)
         end)
     end
@@ -255,7 +497,10 @@ end
 function M.BindDropdown(ctx, dropdown, getValue, setValue)
     if not dropdown then return end
     dropdown:SetOnValueChanged(function(value)
-        setValue(value)
+        local label = WidgetHistoryLabel(ctx, dropdown)
+        M.CaptureHistory(label, WidgetHistorySource(ctx, dropdown, label), function()
+            setValue(value)
+        end)
         if type(getValue) == "function" then
             dropdown:SetValue(getValue())
         else
@@ -271,7 +516,10 @@ function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
     if not editBox then return end
     editBox._msuf2CommitOnBlur = commitOnBlur and true or false
     editBox:SetOnValueCommitted(function(value)
-        setValue(value or "")
+        local label = WidgetHistoryLabel(ctx, editBox)
+        M.CaptureHistory(label, WidgetHistorySource(ctx, editBox, label), function()
+            setValue(value or "")
+        end)
     end)
     M.AddRefresher(ctx, function()
         if editBox:HasFocus() then return end
@@ -287,7 +535,10 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB)
         colorButton:SetRGB(r or 1, g or 1, b or 1)
     end
     colorButton:SetOnColorChanged(function(r, g, b)
-        if type(setRGB) == "function" then setRGB(r, g, b) end
+        local label = WidgetHistoryLabel(ctx, colorButton)
+        M.CaptureHistory(label, WidgetHistorySource(ctx, colorButton, label), function()
+            if type(setRGB) == "function" then setRGB(r, g, b) end
+        end)
         RefreshColor()
     end)
     M.AddRefresher(ctx, RefreshColor)

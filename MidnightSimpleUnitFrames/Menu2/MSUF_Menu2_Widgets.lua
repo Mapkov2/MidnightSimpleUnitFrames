@@ -770,6 +770,12 @@ local dropdownRows = {}
 local DROPDOWN_ROW_H = 22
 local CloseDropdown
 
+local function SetDropdownOwnerMouseWheel(owner, enabled)
+    if owner and owner._msuf2DropdownWheelManaged and owner.EnableMouseWheel then
+        owner:EnableMouseWheel(enabled and true or false)
+    end
+end
+
 local function DropdownMaxScroll()
     if not (dropdownScroll and dropdownChild) then return 0 end
     return math.max(0, (dropdownChild:GetHeight() or 0) - (dropdownScroll:GetHeight() or 0))
@@ -884,6 +890,7 @@ function CloseDropdown()
     local owner = dropdownOwner
     if dropdownFrame then dropdownFrame:Hide() end
     if owner then
+        SetDropdownOwnerMouseWheel(owner, false)
         owner._msuf2DropdownListSelect = nil
         owner._msuf2DropdownListValue = nil
         owner._msuf2DropdownOpenAbove = nil
@@ -947,6 +954,7 @@ local function EnsureDropdownFrame()
     end)
 
     dropdownFrame:SetScript("OnHide", function()
+        SetDropdownOwnerMouseWheel(dropdownOwner, false)
         dropdownOwner = nil
     end)
     dropdownFrame:SetScript("OnUpdate", function()
@@ -1023,12 +1031,9 @@ local function ApplyDropdownItemFont(fs, item)
     local fontKey = item.fontKey or item.fontPreviewKey
     local fontPath = item.fontPath or item.font
     if (type(fontPath) ~= "string" or fontPath == "") and type(fontKey) == "string" and fontKey ~= "" then
-        local getPath = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+        local getPath = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
         if type(getPath) == "function" then
             fontPath = getPath(fontKey)
-            if type(fontPath) == "string" and fontPath ~= "" then
-                item.fontPath = fontPath
-            end
         end
     end
     local safeSetFont = _G.MSUF_SetFontSafe or (ns and ns.Util and ns.Util.SetFontSafe)
@@ -1046,6 +1051,17 @@ local function ApplyDropdownItemFont(fs, item)
         if ok then return end
     end
     RestoreDropdownDefaultFont(fs)
+end
+
+local function DropdownItemHasFontPreview(item)
+    return type(item) == "table" and (
+        item.fontKey ~= nil
+        or item.fontPreviewKey ~= nil
+        or item.fontPath ~= nil
+        or item.font ~= nil
+        or item.fontObject ~= nil
+        or item.fontPreviewObject ~= nil
+    )
 end
 
 local function DropdownRow(index)
@@ -1092,6 +1108,14 @@ local function DropdownRow(index)
     text:SetJustifyH("LEFT")
     StoreDropdownDefaultFont(text)
     row._msuf2Text = text
+
+    local fontPreview = T.Font(row, "GameFontHighlightSmall", "AaBbCc", T.colors.muted)
+    fontPreview:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    fontPreview:SetWidth(76)
+    fontPreview:SetJustifyH("RIGHT")
+    StoreDropdownDefaultFont(fontPreview)
+    fontPreview:Hide()
+    row._msuf2FontPreview = fontPreview
 
     row:SetScript("OnClick", function(self)
         local owner = self._msuf2Owner
@@ -1165,8 +1189,17 @@ local function OpenDropdown(owner, valuesTable)
         row:SetWidth(rowWidth)
         row._msuf2Selected:SetShown(value == selectedValue)
         if value == selectedValue then selectedIndex = i end
+        RestoreDropdownDefaultFont(row._msuf2Text)
         row._msuf2Text:SetText(DropdownItemText(item))
-        ApplyDropdownItemFont(row._msuf2Text, item)
+        local showFontPreview = DropdownItemHasFontPreview(item)
+        row._msuf2FontPreview:SetShown(showFontPreview)
+        if showFontPreview then
+            row._msuf2FontPreview:SetText("AaBbCc")
+            ApplyDropdownItemFont(row._msuf2FontPreview, item)
+        else
+            RestoreDropdownDefaultFont(row._msuf2FontPreview)
+        end
+        local rightInset = showFontPreview and -88 or -6
         local sr, sg, sb, sa = DropdownItemSwatch(item)
         if icon then
             row._msuf2Icon:SetTexture(icon)
@@ -1176,7 +1209,7 @@ local function OpenDropdown(owner, valuesTable)
             row._msuf2SwatchBorder:Hide()
             row._msuf2Text:ClearAllPoints()
             row._msuf2Text:SetPoint("LEFT", row, "LEFT", 100, 0)
-            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", rightInset, 0)
         elseif sr then
             row._msuf2Icon:Hide()
             row._msuf2Swatch:SetColorTexture(sr, sg, sb, sa or 1)
@@ -1184,14 +1217,14 @@ local function OpenDropdown(owner, valuesTable)
             row._msuf2SwatchBorder:Show()
             row._msuf2Text:ClearAllPoints()
             row._msuf2Text:SetPoint("LEFT", row, "LEFT", 34, 0)
-            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", rightInset, 0)
         else
             row._msuf2Icon:Hide()
             row._msuf2Swatch:Hide()
             row._msuf2SwatchBorder:Hide()
             row._msuf2Text:ClearAllPoints()
             row._msuf2Text:SetPoint("LEFT", row, "LEFT", 10, 0)
-            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+            row._msuf2Text:SetPoint("RIGHT", row, "RIGHT", rightInset, 0)
         end
         row:Show()
     end
@@ -1200,6 +1233,7 @@ local function OpenDropdown(owner, valuesTable)
     end
 
     dropdownOwner = owner
+    SetDropdownOwnerMouseWheel(owner, true)
     dropdownFrame:Show()
     PositionDropdown(owner)
     SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * DROPDOWN_ROW_H) or 0)
@@ -1225,6 +1259,7 @@ function W.Dropdown(section, label, values, width)
     local btn = T.Button(section, "", width or 240, 22)
     btn._msuf2Title = title
     btn._msuf2ControlKind = "dropdown"
+    btn._msuf2DropdownWheelManaged = true
     btn:SetPoint("TOPLEFT", x, y - 22)
     btn.values = values or {}
     btn._msuf2Label:ClearAllPoints()
@@ -1292,7 +1327,7 @@ function W.Dropdown(section, label, values, width)
             self._msuf2Label:SetPoint("LEFT", self, "LEFT", 10, 0)
             self._msuf2Label:SetPoint("RIGHT", self, "RIGHT", -26, 0)
         end
-        ApplyDropdownItemFont(self._msuf2Label, selectedItem)
+        RestoreDropdownDefaultFont(self._msuf2Label)
         self:SetText(selectedItem and DropdownItemText(selectedItem) or TextFor(value))
     end
     function btn:GetValue()
@@ -1302,7 +1337,7 @@ function W.Dropdown(section, label, values, width)
         self._msuf2OnValueChanged = fn
     end
 
-    btn:EnableMouseWheel(true)
+    btn:EnableMouseWheel(false)
     btn:SetScript("OnClick", function(self)
         if dropdownOwner == self and dropdownFrame and dropdownFrame:IsShown() then
             CloseDropdown()
@@ -1319,20 +1354,10 @@ function W.Dropdown(section, label, values, width)
     end)
 
     btn:SetScript("OnMouseWheel", function(self, delta)
-        local nextIndex = 1
-        local valuesTable = ResolveValues(self)
-        if #valuesTable == 0 then return end
-        for i = 1, #valuesTable do
-            if DropdownItemValue(valuesTable[i]) == self.value then
-                nextIndex = ((i - 1 + ((delta or 0) < 0 and 1 or -1)) % #valuesTable) + 1
-                break
-            end
-        end
-        local item = valuesTable[nextIndex]
-        if item then
-            local value = DropdownItemValue(item)
-            self:SetValue(value)
-            if self._msuf2OnValueChanged then self._msuf2OnValueChanged(value) end
+        if dropdownOwner ~= self or not (dropdownFrame and dropdownFrame:IsShown()) then return end
+        if dropdownScroll then
+            local handler = dropdownScroll:GetScript("OnMouseWheel")
+            if handler then handler(dropdownScroll, delta) end
         end
     end)
 

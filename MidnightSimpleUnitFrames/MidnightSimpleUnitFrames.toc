@@ -170,6 +170,7 @@ Options\MSUF_Options_GF.lua
 Options\MSUF_Options_GF_Auras.lua
 
 # MENU2
+Menu2\MSUF_Menu2_Support.lua
 Menu2\MSUF_Menu2_Theme.lua
 Menu2\MSUF_Menu2_Widgets.lua
 Menu2\MSUF_Menu2_Bindings.lua

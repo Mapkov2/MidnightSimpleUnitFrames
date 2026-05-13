@@ -1,10 +1,9 @@
 local addonName, ns = ...
 ns = ns or {}
 
--- WoW 12.0.5+ can throw hard errors when SetFont receives a missing asset.
--- Keep one early global guard so LSM entries from disabled/missing media addons
--- cannot break Edit Mode, previews, or runtime text refresh.
-do
+-- Legacy font resolver disabled. The authoritative registry-based pipeline below
+-- owns all global font resolution and guarded SetFont behavior.
+if false then
     local FALLBACK_FONT = "Fonts\\FRIZQT__.TTF"
     local EXPRESSWAY_BOLD_FONT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\Expressway Bold.ttf"
     local VISUAL_SAMPLE = "AaBbCcWwMmIi 0123456789 - Midnight Simple Unit Frames"
@@ -82,6 +81,13 @@ do
         ["fonts\\skurri_cyr.ttf"] = "SKURRI",
     }
 
+    local INTERNAL_ROOT_FONT_PATHS = {
+        ["fonts\\frizqt__.ttf"] = true,
+        ["fonts\\arialn.ttf"] = true,
+        ["fonts\\morpheus.ttf"] = true,
+        ["fonts\\skurri.ttf"] = true,
+    }
+
     local INTERNAL_FONT_CANDIDATES = {
         FRIZQT = {
             globals = { "STANDARD_TEXT_FONT" },
@@ -92,6 +98,7 @@ do
             globals = { "UNIT_NAME_FONT", "NAMEPLATE_FONT" },
             objects = { "SystemFont_NamePlate", "SystemFont_NamePlateCastBar", "NumberFontNormalSmall" },
             paths = { "Fonts\\ARIALN.TTF" },
+            fallbackPaths = { "Fonts\\ARHei.TTF", "Fonts\\2002.TTF", "Fonts\\FRIZQT___CYR.TTF" },
         },
         MORPHEUS = {
             globals = { "QUEST_TEXT_FONT" },
@@ -134,12 +141,48 @@ do
         list[#list + 1] = path
     end
 
+    local function VisualOverrideCacheKnown(key, path, size, flags)
+        key = NormalizeInternalFontKey(key, path)
+        local pathKey = FontPathKey(path)
+        if not (key and pathKey) then return false end
+        size = tonumber(size) or 14
+        flags = NormalizeFontFlags(flags)
+        local cacheKey = tostring(key) .. "|" .. pathKey .. "|" .. tostring(size) .. "|" .. flags
+        return _visualOverrideCache[cacheKey] ~= nil
+    end
+
+    local function InternalPathHasAlternative(key, path)
+        local info = key and INTERNAL_FONT_CANDIDATES[key]
+        if not (info and info.paths and path) then return false end
+        for i = 1, #info.paths do
+            if not FontPathEquals(info.paths[i], path) then return true end
+        end
+        return false
+    end
+
+    local function InternalPathHasEscape(key, path)
+        local info = key and INTERNAL_FONT_CANDIDATES[key]
+        return InternalPathHasAlternative(key, path) or (info and info.fallbackPaths and #info.fallbackPaths > 0) or false
+    end
+
+    local function ShouldDeferInternalPath(key, path)
+        if not InternalPathMatchesKey(key, path) then return false end
+        if PathLooksLikeBundledExpressway and PathLooksLikeBundledExpressway(key, path, 14, "") then
+            return true
+        end
+        local pathKey = FontPathKey(path)
+        return IsCombatLocked()
+            and INTERNAL_ROOT_FONT_PATHS[pathKey] == true
+            and InternalPathHasEscape(key, path)
+            and not VisualOverrideCacheKnown(key, path, 14, "")
+    end
+
     local function AddFontObjectPath(list, seen, objectName, key)
         local obj = type(objectName) == "string" and _G[objectName] or objectName
         if not (obj and type(obj.GetFont) == "function") then return end
         local ok, path = pcall(obj.GetFont, obj)
         if ok and ((not key) or InternalPathMatchesKey(key, path)) then
-            if PathLooksLikeBundledExpressway and PathLooksLikeBundledExpressway(key, path, 14, "") then
+            if ShouldDeferInternalPath(key, path) then
                 return
             end
             AddUniquePath(list, seen, path)
@@ -155,7 +198,7 @@ do
         local list, seen, deferred, deferredSeen = {}, {}, {}, {}
         local function AddCandidate(p)
             if not InternalPathMatchesKey(key, p) then return end
-            if PathLooksLikeBundledExpressway and PathLooksLikeBundledExpressway(key, p, 14, "") then
+            if ShouldDeferInternalPath(key, p) then
                 AddUniquePath(deferred, deferredSeen, p)
             else
                 AddUniquePath(list, seen, p)
@@ -178,6 +221,11 @@ do
         if info.paths then
             for i = 1, #info.paths do
                 AddCandidate(info.paths[i])
+            end
+        end
+        if #list == 0 and #deferred > 0 and info.fallbackPaths then
+            for i = 1, #info.fallbackPaths do
+                AddUniquePath(list, seen, info.fallbackPaths[i])
             end
         end
         for i = 1, #deferred do
@@ -250,7 +298,8 @@ do
         local b = GetProbeFS2()
         local w1 = MeasureFontWidth(a, path, size, flags)
         local w2 = MeasureFontWidth(b, EXPRESSWAY_BOLD_FONT, size, flags)
-        local same = (w1 ~= nil and w2 ~= nil and math.abs(w1 - w2) <= 0.05) and true or false
+        if not (w1 and w2) then return false end
+        local same = (math.abs(w1 - w2) <= 0.05) and true or false
         _visualOverrideCache[cacheKey] = same
         return same
     end
@@ -387,9 +436,10 @@ do
         end
 
         if IsCombatLocked() then
-            local fast = candidates[1] or normalized or NormalizeFontPath(FALLBACK_FONT)
-            _fontPathCache[cacheKey] = fast
-            return fast
+            -- Do not cache an unprobed combat guess. If root Blizzard fonts are
+            -- visually overridden, caching the guess would poison the resolver
+            -- until /reload and prevent the post-combat prewarm from correcting it.
+            return candidates[1] or normalized or NormalizeFontPath(FALLBACK_FONT)
         end
 
         local probe = GetProbeFS()
@@ -458,6 +508,10 @@ do
                 ScheduleFontVisualPrewarm(1)
             end
             return false
+        end
+
+        for k in pairs(_fontPathCache) do
+            _fontPathCache[k] = nil
         end
 
         for key, info in pairs(INTERNAL_FONT_CANDIDATES) do
@@ -549,7 +603,609 @@ do
     ns.Util = ns.Util or {}
     ns.Util.ResolveFontPath = _G.MSUF_ResolveFontPath
     ns.Util.SetFontSafe = _G.MSUF_SetFontSafe
+    if type(CreateFrame) == "function" then
+        local frame = CreateFrame("Frame")
+        frame:RegisterEvent("PLAYER_LOGIN")
+        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        frame:SetScript("OnEvent", function()
+            ScheduleFontVisualPrewarm(0)
+        end)
+    end
     ScheduleFontVisualPrewarm(0)
+end
+
+-- Authoritative font pipeline v2.
+-- Key points:
+-- * One registry maps every built-in key to deterministic candidate paths.
+-- * Root Blizzard font overrides are never trusted for the four default keys.
+-- * Dropdown previews, global font runtime, castbars, auras, and group frames all
+--   go through the same resolver and guarded SetFont path.
+do
+    local ADDON_FONT_BASE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\"
+    local FALLBACK_FONT = "Fonts\\FRIZQT___CYR.TTF"
+    local LAST_FALLBACK_FONT = ADDON_FONT_BASE .. "Expressway Regular.ttf"
+
+    local _probeFrame, _probeFS
+    local _pathCache = {}
+    local _keyPathCache = {}
+
+    local KEY_ALIASES = {
+        ["Friz Quadrata TT"] = "FRIZQT",
+        ["Friz Quadrata (default)"] = "FRIZQT",
+        ["Arial Narrow"] = "ARIALN",
+        ["Arial (default)"] = "ARIALN",
+        ["Morpheus"] = "MORPHEUS",
+        ["Morpheus (default)"] = "MORPHEUS",
+        ["Skurri"] = "SKURRI",
+        ["Skurri (default)"] = "SKURRI",
+        ["Expressway Regular (MSUF)"] = "EXPRESSWAY",
+        ["Expressway (MSUF)"] = "EXPRESSWAY",
+        ["Expressway Bold (MSUF)"] = "EXPRESSWAY_BOLD",
+        ["Expressway SemiBold (MSUF)"] = "EXPRESSWAY_SEMIBOLD",
+        ["Expressway ExtraBold (MSUF)"] = "EXPRESSWAY_EXTRABOLD",
+        ["Expressway Condensed Light (MSUF)"] = "EXPRESSWAY_CONDENSED_LIGHT",
+    }
+
+    local FONT_REGISTRY = {
+        FRIZQT = {
+            name = "Friz Quadrata (default)",
+            paths = { "Fonts\\FRIZQT___CYR.TTF", "Fonts\\FRIZQT__.TTF" },
+        },
+        ARIALN = {
+            name = "Arial (default)",
+            paths = { "Fonts\\ARHei.TTF", "Fonts\\2002.TTF", "Fonts\\FRIZQT___CYR.TTF", "Fonts\\ARIALN.TTF" },
+        },
+        MORPHEUS = {
+            name = "Morpheus (default)",
+            paths = { "Fonts\\MORPHEUS_CYR.TTF", "Fonts\\MORPHEUS.TTF" },
+        },
+        SKURRI = {
+            name = "Skurri (default)",
+            paths = { "Fonts\\SKURRI_CYR.TTF", "Fonts\\SKURRI.TTF" },
+        },
+        EXPRESSWAY = {
+            name = "Expressway Regular (MSUF)",
+            paths = { ADDON_FONT_BASE .. "Expressway Regular.ttf" },
+        },
+        EXPRESSWAY_BOLD = {
+            name = "Expressway Bold (MSUF)",
+            paths = { ADDON_FONT_BASE .. "Expressway Bold.ttf" },
+        },
+        EXPRESSWAY_SEMIBOLD = {
+            name = "Expressway SemiBold (MSUF)",
+            paths = { ADDON_FONT_BASE .. "Expressway SemiBold.ttf" },
+        },
+        EXPRESSWAY_EXTRABOLD = {
+            name = "Expressway ExtraBold (MSUF)",
+            paths = { ADDON_FONT_BASE .. "Expressway ExtraBold.ttf" },
+        },
+        EXPRESSWAY_CONDENSED_LIGHT = {
+            name = "Expressway Condensed Light (MSUF)",
+            paths = { ADDON_FONT_BASE .. "Expressway Condensed Light.otf" },
+        },
+    }
+
+    local FONT_PATH_KEYS = {
+        ["fonts\\frizqt__.ttf"] = "FRIZQT",
+        ["fonts\\frizqt___cyr.ttf"] = "FRIZQT",
+        ["fonts\\arialn.ttf"] = "ARIALN",
+        ["fonts\\morpheus.ttf"] = "MORPHEUS",
+        ["fonts\\morpheus_cyr.ttf"] = "MORPHEUS",
+        ["fonts\\skurri.ttf"] = "SKURRI",
+        ["fonts\\skurri_cyr.ttf"] = "SKURRI",
+    }
+
+    local function IsCombatLocked()
+        if _G.MSUF_InCombat == true then return true end
+        return (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) and true or false
+    end
+
+    local function NormalizeFontFlags(flags)
+        if type(flags) ~= "string" then return "" end
+        flags = flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+        if flags == "NONE" then return "" end
+        flags = flags:gsub("%s*,%s*", ","):gsub(",+", ",")
+        return flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+    end
+
+    local function NormalizeFontPath(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        path = path:gsub("/", "\\")
+        local pkey = path:lower()
+        if pkey == "interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway.ttf" then
+            return ADDON_FONT_BASE .. "Expressway Regular.ttf"
+        end
+        return path
+    end
+
+    local function FontPathKey(path)
+        path = NormalizeFontPath(path)
+        return path and path:lower() or nil
+    end
+
+    local function IsFontPathString(value)
+        if type(value) ~= "string" or value == "" then return false end
+        local lower = value:lower()
+        return value:find("\\", 1, true) ~= nil
+            or value:find("/", 1, true) ~= nil
+            or lower:match("%.ttf$") ~= nil
+            or lower:match("%.otf$") ~= nil
+    end
+
+    local function NormalizeFontKey(key)
+        if IsFontPathString(key) then return nil end
+        if type(_G.MSUF_NormalizeFontKey) == "function" and type(key) == "string" and key ~= "" then
+            key = _G.MSUF_NormalizeFontKey(key)
+        end
+        if type(key) ~= "string" or key == "" then return nil end
+        key = KEY_ALIASES[key] or key
+        local upper = key:upper()
+        if FONT_REGISTRY[upper] then return upper end
+        return key
+    end
+
+    local function KeyForPath(path)
+        return FONT_PATH_KEYS[FontPathKey(path)]
+    end
+
+    local function AddUnique(list, seen, path)
+        path = NormalizeFontPath(path)
+        if type(path) ~= "string" or path == "" then return end
+        local pkey = FontPathKey(path)
+        if seen[pkey] then return end
+        seen[pkey] = true
+        list[#list + 1] = path
+    end
+
+    local function FetchLSMFontPath(key)
+        if type(key) ~= "string" or key == "" then return nil end
+        local LSM = (ns and ns.LSM) or _G.MSUF_LSM
+        if not LSM and type(_G.LibStub) == "function" then
+            local ok, lib = pcall(_G.LibStub, "LibSharedMedia-3.0", true)
+            if ok then LSM = lib end
+        end
+        if not LSM then return nil end
+
+        if type(LSM.HashTable) == "function" then
+            local fonts = LSM:HashTable("font")
+            local p = fonts and fonts[key]
+            if type(p) == "string" and p ~= "" then return p end
+        end
+        if type(LSM.Fetch) == "function" then
+            local p = LSM:Fetch("font", key, true)
+            if type(p) == "string" and p ~= "" then return p end
+        end
+        return nil
+    end
+
+    local function BuildCandidates(key, path)
+        local explicitKey = NormalizeFontKey(key)
+        local resolvedKey = explicitKey
+        local info = explicitKey and FONT_REGISTRY[explicitKey]
+        if not info and not explicitKey then
+            resolvedKey = KeyForPath(path)
+            info = resolvedKey and FONT_REGISTRY[resolvedKey]
+        end
+
+        local list, seen = {}, {}
+        if info and info.paths then
+            for i = 1, #info.paths do
+                AddUnique(list, seen, info.paths[i])
+            end
+        end
+
+        if not info then
+            AddUnique(list, seen, path)
+            local lsmPath = explicitKey and FetchLSMFontPath(explicitKey)
+            AddUnique(list, seen, lsmPath)
+        end
+
+        AddUnique(list, seen, FALLBACK_FONT)
+        AddUnique(list, seen, LAST_FALLBACK_FONT)
+        return list, resolvedKey
+    end
+
+    local function GetProbeFS()
+        if _probeFS then return _probeFS end
+        if type(CreateFrame) ~= "function" then return nil end
+        _probeFrame = _probeFrame or CreateFrame("Frame", "MSUF_FontResolverProbe", UIParent)
+        if _probeFrame and _probeFrame.Hide then _probeFrame:Hide() end
+        if _probeFrame and _probeFrame.CreateFontString then
+            _probeFS = _probeFrame:CreateFontString(nil, "OVERLAY")
+            if _probeFS and _probeFS.Hide then _probeFS:Hide() end
+        end
+        return _probeFS
+    end
+
+    local function FontPathEquals(a, b)
+        local ak, bk = FontPathKey(a), FontPathKey(b)
+        return ak ~= nil and ak == bk
+    end
+
+    local function TrySetFont(fs, path, size, flags)
+        if not (fs and type(fs.SetFont) == "function" and path and size) then return false end
+        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+        return ok and applied ~= false
+    end
+
+    local function ResolveFontPath(path, size, flags, fontKey)
+        size = tonumber(size) or 12
+        if size <= 0 then size = 12 end
+        flags = NormalizeFontFlags(flags)
+        path = NormalizeFontPath(path)
+
+        local candidates, resolvedKey = BuildCandidates(fontKey, path)
+        local cacheKey = tostring(resolvedKey or "") .. "|" .. tostring(path or "") .. "|" .. flags
+        local cached = _pathCache[cacheKey]
+        if cached then return cached end
+
+        if IsCombatLocked() then
+            return candidates[1] or path or FALLBACK_FONT
+        end
+
+        local probe = GetProbeFS()
+        if probe then
+            for i = 1, #candidates do
+                local p = candidates[i]
+                if TrySetFont(probe, p, size, flags) or (flags ~= "" and TrySetFont(probe, p, size, "")) then
+                    _pathCache[cacheKey] = p
+                    return p
+                end
+            end
+        end
+
+        local fallback = candidates[1] or path or FALLBACK_FONT
+        _pathCache[cacheKey] = fallback
+        return fallback
+    end
+
+    local function ResolveFontKeyPath(key, size, flags)
+        local rawValue = key
+        local explicitPath = IsFontPathString(rawValue) and NormalizeFontPath(rawValue) or nil
+        key = NormalizeFontKey(key)
+        if not key and not explicitPath then key = "FRIZQT" end
+        size = tonumber(size) or 14
+        flags = NormalizeFontFlags(flags)
+        local cacheKey = tostring(key or explicitPath or "") .. "|" .. tostring(size) .. "|" .. flags
+        local cached = _keyPathCache[cacheKey]
+        if cached then return cached end
+
+        if explicitPath then
+            local path = ResolveFontPath(explicitPath, size, flags, nil)
+            if path then _keyPathCache[cacheKey] = path end
+            return path
+        end
+
+        local info = FONT_REGISTRY[key]
+        local rawPath = info and info.paths and info.paths[1] or FetchLSMFontPath(key)
+        if not info and not rawPath then return nil end
+        local path = ResolveFontPath(rawPath, size, flags, key)
+        if info or rawPath then
+            _keyPathCache[cacheKey] = path
+        end
+        return path
+    end
+
+    local function ClearFontCaches()
+        for k in pairs(_pathCache) do _pathCache[k] = nil end
+        for k in pairs(_keyPathCache) do _keyPathCache[k] = nil end
+    end
+
+    local function PrewarmFontResolver()
+        if IsCombatLocked() then return false end
+        ClearFontCaches()
+        for key in pairs(FONT_REGISTRY) do
+            ResolveFontKeyPath(key, 14, "")
+            ResolveFontKeyPath(key, 14, "OUTLINE")
+            ResolveFontKeyPath(key, 14, "THICKOUTLINE")
+        end
+        return true
+    end
+
+    function _G.MSUF_NormalizeFontFlags(flags)
+        return NormalizeFontFlags(flags)
+    end
+
+    function _G.MSUF_NormalizeFontPath(path)
+        return NormalizeFontPath(path)
+    end
+
+    function _G.MSUF_FontPathMatches(requested, actual)
+        return FontPathEquals(requested, actual)
+    end
+
+    function _G.MSUF_FontPathEquals(requested, actual)
+        return FontPathEquals(requested, actual)
+    end
+
+    function _G.MSUF_FontLooksLikeBundledExpressway(_, path)
+        local pkey = FontPathKey(path)
+        return pkey and pkey:find("interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway", 1, true) ~= nil
+    end
+
+    function _G.MSUF_GetInternalFontPathCandidates(key, path)
+        local candidates = BuildCandidates(key, path)
+        return candidates
+    end
+
+    function _G.MSUF_GetInternalFontPrimaryPath(key)
+        local info = FONT_REGISTRY[NormalizeFontKey(key) or ""]
+        return info and info.paths and info.paths[1] or nil
+    end
+
+    function _G.MSUF_ResolveFontKeyPath(key, size, flags)
+        return ResolveFontKeyPath(key, size, flags)
+    end
+
+    function _G.MSUF_ClearResolvedFontPathCache()
+        ClearFontCaches()
+    end
+
+    function _G.MSUF_ResolveFontPath(path, size, flags, fontKey)
+        return ResolveFontPath(path, size, flags, fontKey)
+    end
+
+    function _G.MSUF_SetFontSafe(fs, path, size, flags, fontKey)
+        size = tonumber(size) or 12
+        if size <= 0 then size = 12 end
+        flags = NormalizeFontFlags(flags)
+
+        local candidates = BuildCandidates(fontKey, path)
+        local resolved = ResolveFontPath(path, size, flags, fontKey)
+        if resolved then
+            local seen = {}
+            local ordered = {}
+            AddUnique(ordered, seen, resolved)
+            for i = 1, #candidates do AddUnique(ordered, seen, candidates[i]) end
+            candidates = ordered
+        end
+
+        for i = 1, #candidates do
+            local p = candidates[i]
+            if TrySetFont(fs, p, size, flags) or (flags ~= "" and TrySetFont(fs, p, size, "")) then
+                return true, p, "registry"
+            end
+        end
+
+        return false, path, "failed"
+    end
+
+    function _G.MSUF_PrewarmFontVisualCache()
+        return PrewarmFontResolver()
+    end
+
+    function _G.MSUF_DebugFontProbe(key)
+        local fontKey = NormalizeFontKey(key) or key or "FRIZQT"
+        local requested = ResolveFontKeyPath(fontKey, 14, "")
+        local probe = GetProbeFS()
+        local ok, appliedPath, source = _G.MSUF_SetFontSafe(probe, requested, 14, "", fontKey)
+        local actual
+        if probe and type(probe.GetFont) == "function" then
+            local okGet, got = pcall(probe.GetFont, probe)
+            if okGet then actual = got end
+        end
+        return {
+            key = fontKey,
+            requested = requested,
+            ok = ok,
+            applied = appliedPath,
+            actual = actual,
+            source = source,
+            matches = FontPathEquals(appliedPath, actual),
+            candidates = BuildCandidates(fontKey, requested),
+        }
+    end
+
+    ns.Util = ns.Util or {}
+    ns.Util.ResolveFontPath = _G.MSUF_ResolveFontPath
+    ns.Util.SetFontSafe = _G.MSUF_SetFontSafe
+    ns.Util.ResolveFontKeyPath = _G.MSUF_ResolveFontKeyPath
+
+    if type(CreateFrame) == "function" then
+        local frame = CreateFrame("Frame")
+        frame:RegisterEvent("PLAYER_LOGIN")
+        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        frame:SetScript("OnEvent", function()
+            PrewarmFontResolver()
+        end)
+    end
+end
+
+-- Font pipeline v3: path-first, no visual guessing.
+-- A selected SharedMedia font is stored/resolved as the exact file path and is
+-- applied directly. Fallback is only used after SetFont itself rejects the path.
+do
+    local ADDON_FONT_BASE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\"
+    local FALLBACK_FONT = "Fonts\\FRIZQT___CYR.TTF"
+
+    local ALIAS_TO_PATH = {
+        FRIZQT = "Fonts\\FRIZQT___CYR.TTF",
+        ARIALN = "Fonts\\ARIALN.TTF",
+        MORPHEUS = "Fonts\\MORPHEUS_CYR.TTF",
+        SKURRI = "Fonts\\SKURRI_CYR.TTF",
+        EXPRESSWAY = ADDON_FONT_BASE .. "Expressway Regular.ttf",
+        EXPRESSWAY_BOLD = ADDON_FONT_BASE .. "Expressway Bold.ttf",
+        EXPRESSWAY_SEMIBOLD = ADDON_FONT_BASE .. "Expressway SemiBold.ttf",
+        EXPRESSWAY_EXTRABOLD = ADDON_FONT_BASE .. "Expressway ExtraBold.ttf",
+        EXPRESSWAY_CONDENSED_LIGHT = ADDON_FONT_BASE .. "Expressway Condensed Light.otf",
+
+        ["Friz Quadrata TT"] = "Fonts\\FRIZQT___CYR.TTF",
+        ["Friz Quadrata (default)"] = "Fonts\\FRIZQT___CYR.TTF",
+        ["Arial Narrow"] = "Fonts\\ARIALN.TTF",
+        ["Arial (default)"] = "Fonts\\ARIALN.TTF",
+        ["Morpheus"] = "Fonts\\MORPHEUS_CYR.TTF",
+        ["Morpheus (default)"] = "Fonts\\MORPHEUS_CYR.TTF",
+        ["Skurri"] = "Fonts\\SKURRI_CYR.TTF",
+        ["Skurri (default)"] = "Fonts\\SKURRI_CYR.TTF",
+        ["Expressway Regular (MSUF)"] = ADDON_FONT_BASE .. "Expressway Regular.ttf",
+        ["Expressway (MSUF)"] = ADDON_FONT_BASE .. "Expressway Regular.ttf",
+        ["Expressway Bold (MSUF)"] = ADDON_FONT_BASE .. "Expressway Bold.ttf",
+        ["Expressway SemiBold (MSUF)"] = ADDON_FONT_BASE .. "Expressway SemiBold.ttf",
+        ["Expressway ExtraBold (MSUF)"] = ADDON_FONT_BASE .. "Expressway ExtraBold.ttf",
+        ["Expressway Condensed Light (MSUF)"] = ADDON_FONT_BASE .. "Expressway Condensed Light.otf",
+    }
+
+    local function NormalizeFontPath(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        path = path:gsub("/", "\\")
+        if path:lower() == "interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway.ttf" then
+            return ADDON_FONT_BASE .. "Expressway Regular.ttf"
+        end
+        return path
+    end
+
+    local function IsPath(value)
+        if type(value) ~= "string" or value == "" then return false end
+        local lower = value:lower()
+        return value:find("\\", 1, true) ~= nil
+            or value:find("/", 1, true) ~= nil
+            or lower:match("%.ttf$") ~= nil
+            or lower:match("%.otf$") ~= nil
+    end
+
+    local function NormalizeFlags(flags)
+        if type(flags) ~= "string" then return "" end
+        flags = flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+        if flags == "NONE" then return "" end
+        return flags:gsub("%s*,%s*", ","):gsub(",+", ","):gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+    end
+
+    local function GetLSM()
+        local LSM = (ns and ns.LSM) or _G.MSUF_LSM
+        if not LSM and type(_G.LibStub) == "function" then
+            local ok, lib = pcall(_G.LibStub, "LibSharedMedia-3.0", true)
+            if ok then LSM = lib end
+        end
+        return LSM
+    end
+
+    local function FetchLSMFontPath(key)
+        if type(key) ~= "string" or key == "" then return nil end
+        local LSM = GetLSM()
+        if not LSM then return nil end
+        if type(LSM.HashTable) == "function" then
+            local fonts = LSM:HashTable("font")
+            local path = fonts and fonts[key]
+            if type(path) == "string" and path ~= "" then return NormalizeFontPath(path) end
+        end
+        if type(LSM.Fetch) == "function" then
+            local ok, path = pcall(LSM.Fetch, LSM, "font", key, true)
+            if ok and type(path) == "string" and path ~= "" then return NormalizeFontPath(path) end
+        end
+        return nil
+    end
+
+    local function ResolveFontKeyPath(value)
+        if IsPath(value) then return NormalizeFontPath(value) end
+        if type(value) ~= "string" or value == "" then return NormalizeFontPath(ALIAS_TO_PATH.FRIZQT) end
+        local normalized = type(_G.MSUF_NormalizeFontKey) == "function" and _G.MSUF_NormalizeFontKey(value) or value
+        if IsPath(normalized) then return NormalizeFontPath(normalized) end
+        return NormalizeFontPath(ALIAS_TO_PATH[normalized])
+            or NormalizeFontPath(ALIAS_TO_PATH[value])
+            or FetchLSMFontPath(normalized)
+            or FetchLSMFontPath(value)
+    end
+
+    local function ResolveFontPath(path, _, _, fontKey)
+        return NormalizeFontPath(path) or ResolveFontKeyPath(fontKey) or NormalizeFontPath(FALLBACK_FONT)
+    end
+
+    local function ApplyOne(fs, path, size, flags)
+        if not (fs and type(fs.SetFont) == "function" and type(path) == "string" and path ~= "") then return false end
+        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+        return ok and applied ~= false
+    end
+
+    local function SetFontSafe(fs, path, size, flags, fontKey)
+        size = tonumber(size) or 12
+        if size <= 0 then size = 12 end
+        flags = NormalizeFlags(flags)
+        local requested = ResolveFontPath(path, size, flags, fontKey)
+        if ApplyOne(fs, requested, size, flags) or (flags ~= "" and ApplyOne(fs, requested, size, "")) then
+            return true, requested, "requested"
+        end
+        local fallback = NormalizeFontPath(FALLBACK_FONT)
+        if fallback ~= requested and (ApplyOne(fs, fallback, size, flags) or (flags ~= "" and ApplyOne(fs, fallback, size, ""))) then
+            return true, fallback, "fallback"
+        end
+        return false, requested, "failed"
+    end
+
+    function _G.MSUF_NormalizeFontFlags(flags)
+        return NormalizeFlags(flags)
+    end
+
+    function _G.MSUF_NormalizeFontPath(path)
+        return NormalizeFontPath(path)
+    end
+
+    function _G.MSUF_FontPathEquals(a, b)
+        a, b = NormalizeFontPath(a), NormalizeFontPath(b)
+        return a ~= nil and b ~= nil and a:lower() == b:lower()
+    end
+    _G.MSUF_FontPathMatches = _G.MSUF_FontPathEquals
+
+    function _G.MSUF_ResolveFontKeyPath(key)
+        return ResolveFontKeyPath(key)
+    end
+
+    function _G.MSUF_ResolveFontPath(path, size, flags, fontKey)
+        return ResolveFontPath(path, size, flags, fontKey)
+    end
+
+    function _G.MSUF_SetFontSafe(fs, path, size, flags, fontKey)
+        return SetFontSafe(fs, path, size, flags, fontKey)
+    end
+
+    function _G.MSUF_ClearResolvedFontPathCache()
+    end
+
+    function _G.MSUF_PrewarmFontVisualCache()
+        return true
+    end
+
+    function _G.MSUF_GetInternalFontPrimaryPath(key)
+        return ResolveFontKeyPath(key)
+    end
+
+    function _G.MSUF_GetInternalFontPathCandidates(key, path)
+        return { ResolveFontPath(path, 14, "", key), NormalizeFontPath(FALLBACK_FONT) }
+    end
+
+    function _G.MSUF_DebugFontProbe(key)
+        if key == nil and _G.MSUF_DB and _G.MSUF_DB.general then
+            key = _G.MSUF_DB.general.fontKey
+        end
+        local requested = ResolveFontKeyPath(key)
+        local probe
+        if type(CreateFrame) == "function" then
+            local frame = CreateFrame("Frame")
+            if frame.Hide then frame:Hide() end
+            probe = frame.CreateFontString and frame:CreateFontString(nil, "OVERLAY")
+        end
+        local ok, applied, source = SetFontSafe(probe, requested, 14, "", key)
+        local actual
+        if probe and type(probe.GetFont) == "function" then
+            local okGet, got = pcall(probe.GetFont, probe)
+            if okGet then actual = got end
+        end
+        return {
+            key = key,
+            requested = requested,
+            ok = ok,
+            applied = applied,
+            actual = actual,
+            source = source,
+            lsm = FetchLSMFontPath(key),
+        }
+    end
+
+    ns.Util = ns.Util or {}
+    ns.Util.ResolveFontPath = _G.MSUF_ResolveFontPath
+    ns.Util.ResolveFontKeyPath = _G.MSUF_ResolveFontKeyPath
+    ns.Util.SetFontSafe = _G.MSUF_SetFontSafe
 end
 
 -- Shared Lib initialization (loaded BEFORE Options and Main)

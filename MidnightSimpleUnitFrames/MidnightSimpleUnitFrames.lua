@@ -1169,22 +1169,22 @@ local FONT_LIST = {
     {
         key  = "FRIZQT",
         name = "Friz Quadrata (default)",
-        path = "Fonts\\FRIZQT__.TTF",
+        path = "Fonts\\FRIZQT___CYR.TTF",
     },
 {
         key  = "ARIALN",
         name = "Arial (default)",
-        path = "Fonts\\ARIALN.TTF",
+        path = "Fonts\\ARHei.TTF",
     },
     {
         key  = "MORPHEUS",
         name = "Morpheus (default)",
-        path = "Fonts\\MORPHEUS.TTF",
+        path = "Fonts\\MORPHEUS_CYR.TTF",
     },
     {
         key  = "SKURRI",
         name = "Skurri (default)",
-        path = "Fonts\\SKURRI.TTF",
+        path = "Fonts\\SKURRI_CYR.TTF",
     },
 }
 do
@@ -1244,6 +1244,13 @@ ns.MSUF_NormalizeFontKey = MSUF_NormalizeFontKey
 local function MSUF_NormalizeFontKeyField(tbl)
     if type(tbl) ~= "table" then return end
     local normalized = MSUF_NormalizeFontKey(tbl.fontKey)
+    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
+    if type(resolveKeyPath) == "function" then
+        local resolved = resolveKeyPath(normalized)
+        if type(resolved) == "string" and resolved ~= "" then
+            normalized = resolved
+        end
+    end
     if normalized ~= tbl.fontKey then
         tbl.fontKey = normalized
     end
@@ -1468,8 +1475,10 @@ local function MSUF_GetFontPreviewObject(key)
         obj = CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
         MSUF_FontPreviewObjects[key] = obj
     end
-    local path = GetInternalFontPathByKey(key) or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
-    path = (_G.MSUF_ResolveFontPath or function(p) return p end)(path, 14, "")
+    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
+    local path = type(resolveKeyPath) == "function" and resolveKeyPath(key, 14, "") or nil
+    path = path or GetInternalFontPathByKey(key) or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
+    path = (_G.MSUF_ResolveFontPath or function(p) return p end)(path, 14, "", key)
     if path then
         local safeSet = _G.MSUF_SetFontSafe
         local ok
@@ -1520,6 +1529,11 @@ MSUF_DARK_TONES = {
 }
 function GetInternalFontPathByKey(key)
     if not key then  return nil end
+    local registryPath = _G.MSUF_GetInternalFontPrimaryPath
+    if type(registryPath) == "function" then
+        local p = registryPath(key)
+        if p then return p end
+    end
     local normalized = MSUF_NormalizeFontKey(key)
     for _, info in ipairs(FONT_LIST) do
         if info.key == key or info.key == normalized or info.name == key then
@@ -1532,12 +1546,17 @@ local function MSUF_IsInternalFontKey(key)
     return MSUF_FontKeyIsInternal(key)
 end
 local function MSUF_GetFontPathForKey(key)
+    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
+    if type(resolveKeyPath) == "function" then
+        local p = resolveKeyPath(key, 14, "")
+        if p then return p end
+    end
     local resolve = _G.MSUF_ResolveFontPath or function(path) return path end
     local internalPath = GetInternalFontPathByKey(key)
-    if internalPath then return resolve(internalPath, 14, "") end
+    if internalPath then return resolve(internalPath, 14, "", key) end
     local lsmPath = MSUF_FetchFontPathFromLSM(key)
-    if lsmPath then return resolve(lsmPath, 14, "") end
-    return resolve(FONT_LIST[1].path, 14, "")
+    if lsmPath then return resolve(lsmPath, 14, "", key) end
+    return resolve(FONT_LIST[1].path, 14, "", "FRIZQT")
 end
 _G.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
 ns.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
