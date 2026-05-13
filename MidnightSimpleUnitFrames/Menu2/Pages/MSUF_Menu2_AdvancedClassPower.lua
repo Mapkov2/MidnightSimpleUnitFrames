@@ -112,24 +112,44 @@ local function ApplyDetachedPowerBarOutline()
     ApplyDetachedPowerBar()
 end
 
+local function IsMSUFEditModeActive()
+    if type(_G.MSUF_IsMSUFEditModeActive) == "function" then return _G.MSUF_IsMSUFEditModeActive() and true or false end
+    local st = _G.MSUF_EditState
+    if type(st) == "table" and st.active ~= nil then return st.active == true end
+    local em2 = _G.MSUF_EM2
+    if em2 and em2.State and type(em2.State.IsActive) == "function" then return em2.State.IsActive() and true or false end
+    return _G.MSUF_UnitEditModeActive == true
+end
+
+local function IsEditModeCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
 local function BuildClassPower(ctx)
     local b = W.PageBuilder(ctx)
     local head = b:Header("Class Resources", "Native class-resource layout, visibility and text controls.", 64)
 
     local colors = T.Button(head, "Class Color", 112, 24)
+    if W.StyleTopActionButton then W.StyleTopActionButton(colors) end
     colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -20)
     colors:SetScript("OnClick", function() M.SelectPage("opt_colors") end)
 
-    local edit = T.Button(head, "MSUF Edit Mode", 136, 24)
+    local edit = T.Button(head, "MSUF Edit Mode", 128, 24)
+    if W.StyleTopActionButton then W.StyleTopActionButton(edit) end
     edit:SetPoint("RIGHT", colors, "LEFT", -10, 0)
     local function RefreshEditButton()
-        local st = _G.MSUF_EditState
-        local active = st and st.active
+        local active = IsMSUFEditModeActive()
         if edit.SetText then edit:SetText(active and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
+        if edit.SetActive then edit:SetActive(false) end
+        if edit.SetEnabled then edit:SetEnabled(active or not IsEditModeCombatLocked()) end
     end
     edit:SetScript("OnClick", function()
-        local st = _G.MSUF_EditState
-        local active = st and st.active
+        local active = IsMSUFEditModeActive()
+        if (not active) and IsEditModeCombatLocked() then
+            RefreshEditButton()
+            return
+        end
         local fn = _G.MSUF_SetMSUFEditModeDirect or _G.MSUF_SetEditMode
         if type(fn) == "function" then pcall(fn, not active) end
         RefreshEditButton()

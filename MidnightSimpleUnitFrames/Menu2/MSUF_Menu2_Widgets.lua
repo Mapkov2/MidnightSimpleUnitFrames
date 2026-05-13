@@ -337,6 +337,7 @@ local function StyleTopActionButton(btn)
     ApplyTopActionButtonVisual(btn)
     return btn
 end
+W.StyleTopActionButton = StyleTopActionButton
 
 function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     if not (builder and builder.Header) then return nil end
