@@ -239,35 +239,65 @@ local function NormalizeFontKey(key)
     return key
 end
 
+local function FontSelectionValue(key, path)
+    key = NormalizeFontKey(key)
+    local normalizePath = _G.MSUF_NormalizeFontPath
+    if type(normalizePath) == "function" then
+        path = normalizePath(path)
+        local direct = normalizePath(key)
+        if type(direct) == "string" and direct ~= "" and direct:find("\\", 1, true) then
+            return direct
+        end
+    end
+    if type(path) == "string" and path ~= "" then return path end
+    if type(key) == "string" and key ~= "" then
+        local resolveKeyPath = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+        if type(resolveKeyPath) == "function" then
+            local resolved = resolveKeyPath(key, 14, "")
+            if type(resolved) == "string" and resolved ~= "" then return resolved end
+        end
+    end
+    return key
+end
+
 local function FontValues(includeGlobalDefault)
     local out, used = {}, {}
     if includeGlobalDefault then
         out[#out + 1] = { value = "", text = "(Global Default)" }
         used[""] = true
     end
+    local usedKeys = {}
     for _, info in ipairs(_G.MSUF_FONT_LIST or _G.FONT_LIST or {}) do
         local key = NormalizeFontKey(info.key)
-        if key and not used[key] then
-            out[#out + 1] = { value = key, text = info.name or key, fontKey = key }
-            used[key] = true
+        local value = FontSelectionValue(key, info.path)
+        if value and not used[value] then
+            out[#out + 1] = { value = value, text = info.name or key, fontKey = key, fontPath = value }
+            used[value] = true
+            if key then usedKeys[key] = true end
         end
     end
     local LSM = (ns and ns.LSM) or _G.MSUF_LSM
     if LSM and type(LSM.List) == "function" then
         local names = LSM:List("font")
+        local hash = type(LSM.HashTable) == "function" and LSM:HashTable("font") or nil
         if type(names) == "table" then
             table.sort(names)
             for i = 1, #names do
-                local key = NormalizeFontKey(names[i])
-                if key and not used[key] then
-                    out[#out + 1] = { value = key, text = names[i], fontKey = key }
-                    used[key] = true
+                local name = names[i]
+                local key = NormalizeFontKey(name)
+                local path = type(hash) == "table" and hash[name] or nil
+                local value = FontSelectionValue(key, path)
+                if value and not used[value] and not usedKeys[key] then
+                    out[#out + 1] = { value = value, text = name, fontKey = key, fontPath = value }
+                    used[value] = true
+                    if key then usedKeys[key] = true end
                 end
             end
         end
     end
     if #out == 0 then
-        out[1] = { value = "FRIZQT", text = "Friz Quadrata", fontKey = "FRIZQT" }
+        local value = FontSelectionValue("FRIZQT", "Fonts\\FRIZQT___CYR.TTF")
+        out[1] = { value = value or "FRIZQT", text = "Friz Quadrata", fontKey = "FRIZQT", fontPath = value }
     end
     return out
 end
@@ -275,6 +305,9 @@ end
 local function ClearUFFontKeyOverrides()
     local db = DB()
     for key in pairs(UNIT_SCOPE_KEYS) do
+        if type(db[key]) == "table" then db[key].fontKey = nil end
+    end
+    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
         if type(db[key]) == "table" then db[key].fontKey = nil end
     end
 end
@@ -287,20 +320,21 @@ local function FontKeyGet()
         local db = DB()
         for i = 1, #(keys or {}) do
             local entry = db[keys[i]]
-            if entry and entry.fontKey ~= nil then return NormalizeFontKey(entry.fontKey) end
+            if entry and entry.fontKey ~= nil then return FontSelectionValue(entry.fontKey) end
         end
         return ""
     end
-    return NormalizeFontKey(ReadG("fontKey", "FRIZQT"))
+    return FontSelectionValue(ReadG("fontKey", "FRIZQT"))
 end
 
 local function FontKeySet(value)
     local scope = CurrentFontScope()
+    value = FontSelectionValue(value)
     if IsGFScope(scope) then
-        ScopeWrite(scope, "fontOverride", {}, "fontKey", NormalizeFontKey(value or ""))
+        ScopeWrite(scope, "fontOverride", {}, "fontKey", value or "")
         return
     end
-    G().fontKey = NormalizeFontKey(value or "FRIZQT")
+    G().fontKey = value or FontSelectionValue("FRIZQT", "Fonts\\FRIZQT___CYR.TTF")
     ClearUFFontKeyOverrides()
 end
 

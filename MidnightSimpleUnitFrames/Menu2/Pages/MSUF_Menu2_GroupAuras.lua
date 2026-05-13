@@ -13,6 +13,9 @@ local floor = math.floor
 local ceil = math.ceil
 local max = math.max
 local min = math.min
+local unpack = unpack or table.unpack
+
+local WHITE8X8 = "Interface\\Buttons\\WHITE8X8"
 
 local SCOPE_VALUES = GP.SCOPE_VALUES or {}
 local GROWTH_VALUES = GP.GROWTH_VALUES or {}
@@ -174,19 +177,256 @@ local function BuildGFAuras(ctx)
         buff = {
             enabledLabel = "Enable buffs", maxLabel = "Max icons", maxMax = 20,
             anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5,
-            filter = "RAID", height = 1030,
+            filter = "RAID", height = 1130,
         },
         debuff = {
             enabledLabel = "Enable debuffs", maxLabel = "Max icons", maxMax = 20,
             anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, layer = 6,
-            filter = "ALL", height = 1070, dispelBorder = true,
+            filter = "ALL", height = 1170, dispelBorder = true,
         },
         externals = {
             enabledLabel = "Enable defensives", maxLabel = "Max defensives", maxMax = 12,
             anchor = "CENTER", growth = "RIGHTDOWN", size = 28, perRow = 3, max = 2, spacing = 1, layer = 7,
-            height = 780,
+            height = 880,
         },
     }
+
+    local AURA_TEXT_PREVIEW_IDS = {
+        buff = { 774, 17, 139 },
+        debuff = { 589, 980, 172 },
+        externals = { 6940, 102342, 1022 },
+    }
+    local auraTextPreviewTexCache = {}
+
+    local function GeneralDBForAuraPreview()
+        _G.MSUF_DB = _G.MSUF_DB or {}
+        _G.MSUF_DB.general = _G.MSUF_DB.general or {}
+        return _G.MSUF_DB.general
+    end
+
+    local function ResolveAuraTextPreviewTexture(spellId)
+        local cached = auraTextPreviewTexCache[spellId]
+        if cached then return cached end
+        local tex
+        if C_Spell and C_Spell.GetSpellTexture then
+            tex = C_Spell.GetSpellTexture(spellId)
+        end
+        if not tex and GetSpellInfo then
+            local _, _, icon = GetSpellInfo(spellId)
+            tex = icon
+        end
+        tex = tex or "Interface\\Icons\\INV_Misc_QuestionMark"
+        auraTextPreviewTexCache[spellId] = tex
+        return tex
+    end
+
+    local function ResolveAuraTextPreviewFont(kind)
+        local gf = GF and GF()
+        local fontPath = (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
+        local fontFlags = (gf and gf.ResolveFontFlags and gf.ResolveFontFlags(kind)) or "OUTLINE"
+        return fontPath, fontFlags
+    end
+
+    local function ReadAuraTextPreviewColor(value, dr, dg, db)
+        if type(value) ~= "table" then return dr, dg, db, 1 end
+        local r = value.r or value[1]
+        local g = value.g or value[2]
+        local b = value.b or value[3]
+        if type(r) ~= "number" then r = dr end
+        if type(g) ~= "number" then g = dg end
+        if type(b) ~= "number" then b = db end
+        return r, g, b, value.a or value[4] or 1
+    end
+
+    local function AuraTextPreviewBaseTextColor()
+        local g = GeneralDBForAuraPreview()
+        if g.useCustomFontColor == true
+            and type(g.fontColorCustomR) == "number"
+            and type(g.fontColorCustomG) == "number"
+            and type(g.fontColorCustomB) == "number" then
+            return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB, 1
+        end
+        return 1, 1, 1, 1
+    end
+
+    local function AuraTextPreviewCooldownColor()
+        local g = GeneralDBForAuraPreview()
+        local br, bg, bb = AuraTextPreviewBaseTextColor()
+        local sr, sg, sb, sa = ReadAuraTextPreviewColor(g.aurasCooldownTextSafeColor, br, bg, bb)
+        if g.gfAurasCooldownTextUseBuckets == false then return sr, sg, sb, sa end
+
+        local warn = tonumber(g.gfAurasCooldownTextWarningSeconds) or 15
+        local urgent = tonumber(g.gfAurasCooldownTextUrgentSeconds) or 5
+        if urgent > warn then urgent = warn end
+
+        local remain = 3
+        if remain <= urgent then return ReadAuraTextPreviewColor(g.aurasCooldownTextUrgentColor, 1, 0.55, 0.10) end
+        if remain <= warn then return ReadAuraTextPreviewColor(g.aurasCooldownTextWarningColor, 1, 0.85, 0.20) end
+        return sr, sg, sb, sa
+    end
+
+    local function AuraTextPreviewStackColor()
+        local g = GeneralDBForAuraPreview()
+        return ReadAuraTextPreviewColor(g.aurasStackCountColor, 1, 1, 1)
+    end
+
+    local function CreateAuraTextPreview(parent, groupKey, mode, x, y, width)
+        local preview = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        preview:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        preview:SetSize(width, 62)
+        preview:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
+        preview:SetBackdropColor(0.018, 0.026, 0.052, 0.78)
+        preview:SetBackdropBorderColor(0.10, 0.18, 0.34, 0.82)
+
+        local stripe = preview:CreateTexture(nil, "ARTWORK")
+        stripe:SetPoint("LEFT", preview, "LEFT", 0, 0)
+        stripe:SetSize(2, 48)
+        if mode == "cooldown" then
+            stripe:SetColorTexture(0.95, 0.78, 0.22, 0.95)
+        else
+            stripe:SetColorTexture(0.42, 0.74, 1.00, 0.95)
+        end
+
+        local label = T.Font(preview, "GameFontDisableSmall", "Preview", T.colors.muted)
+        label:SetPoint("TOPLEFT", preview, "TOPLEFT", 10, -8)
+        label:SetJustifyH("LEFT")
+
+        local iconStartX = max(86, width - 144)
+        local textWidth = max(70, iconStartX - 24)
+        label:SetWidth(textWidth)
+
+        local state = T.Font(preview, "GameFontDisableSmall", "", T.colors.dim)
+        state:SetPoint("BOTTOMLEFT", preview, "BOTTOMLEFT", 10, 8)
+        state:SetJustifyH("LEFT")
+        state:SetWidth(textWidth)
+
+        local icons = {}
+        local iconIds = AURA_TEXT_PREVIEW_IDS[groupKey] or AURA_TEXT_PREVIEW_IDS.buff
+        for i = 1, 3 do
+            local icon = CreateFrame("Frame", nil, preview, "BackdropTemplate")
+            icon:SetPoint("LEFT", preview, "LEFT", iconStartX + (i - 1) * 46, 0)
+            icon:SetSize(34, 34)
+            icon:SetBackdrop({ edgeFile = WHITE8X8, edgeSize = 1 })
+            icon:SetBackdropBorderColor(0, 0, 0, 0.95)
+
+            local tex = icon:CreateTexture(nil, "ARTWORK")
+            tex:SetAllPoints(icon)
+            tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            tex:SetTexture(ResolveAuraTextPreviewTexture(iconIds[i]))
+            icon._tex = tex
+
+            local swipe = icon:CreateTexture(nil, "OVERLAY")
+            swipe:SetAllPoints(icon)
+            swipe:SetColorTexture(0, 0, 0, 0.28)
+            icon._swipe = swipe
+
+            local cd = icon:CreateFontString(nil, "OVERLAY")
+            icon._cdText = cd
+
+            local stack = icon:CreateFontString(nil, "OVERLAY")
+            icon._stackText = stack
+
+            icons[i] = icon
+        end
+
+        local function Refresh()
+            local cfg = AuraGroup(CurrentScope(), groupKey)
+            local kind = CurrentScope()
+            local fontPath, fontFlags = ResolveAuraTextPreviewFont(kind)
+            local rawIconSize = tonumber(cfg.size) or 20
+            local previewIconSize = floor(min(40, max(30, rawIconSize * 1.35)) + 0.5)
+            local scale = previewIconSize / max(1, rawIconSize)
+            local showCd = cfg.showCooldown ~= false
+            local showStacks = cfg.showStacks ~= false
+            local cdR, cdG, cdB, cdA = AuraTextPreviewCooldownColor()
+            local stR, stG, stB, stA = AuraTextPreviewStackColor()
+
+            if mode == "cooldown" then
+                state:SetText(showCd and "Cooldown text" or "Cooldown text off")
+                state:SetTextColor(showCd and T.colors.dim[1] or 0.48, showCd and T.colors.dim[2] or 0.50, showCd and T.colors.dim[3] or 0.58, showCd and 1 or 0.85)
+            else
+                state:SetText(showStacks and "Stack count" or "Stack count off")
+                state:SetTextColor(showStacks and T.colors.dim[1] or 0.48, showStacks and T.colors.dim[2] or 0.50, showStacks and T.colors.dim[3] or 0.58, showStacks and 1 or 0.85)
+            end
+
+            for i = 1, #icons do
+                local icon = icons[i]
+                icon:SetSize(previewIconSize, previewIconSize)
+                if icon._swipe then icon._swipe:SetShown(cfg.showCooldownSwipe ~= false and showCd) end
+
+                local cd = icon._cdText
+                if cd then
+                    if showCd then
+                        local cdSize = floor(((tonumber(cfg.cooldownSize) or 8) * scale) + 0.5)
+                        cd:SetFont(fontPath, max(6, cdSize), cfg.cooldownOutline or fontFlags)
+                        cd:SetText(i == 2 and "5" or "3")
+                        cd:SetTextColor(cdR, cdG, cdB, mode == "cooldown" and cdA or (cdA * 0.72))
+                        cd:ClearAllPoints()
+                        local anchor = cfg.cooldownAnchor or "CENTER"
+                        local ox = floor(((tonumber(cfg.cooldownOffsetX) or 0) * scale) + 0.5)
+                        local oy = floor(((tonumber(cfg.cooldownOffsetY) or 0) * scale) + 0.5)
+                        cd:SetPoint(anchor, icon, anchor, ox, oy)
+                        cd:Show()
+                    else
+                        cd:Hide()
+                    end
+                end
+
+                local stack = icon._stackText
+                if stack then
+                    if showStacks then
+                        local stSize = floor(((tonumber(cfg.stackSize) or 10) * scale) + 0.5)
+                        stack:SetFont(fontPath, max(6, stSize), cfg.stackOutline or fontFlags)
+                        stack:SetText(i == 2 and "3" or "2")
+                        stack:SetTextColor(stR, stG, stB, mode == "stack" and stA or (stA * 0.72))
+                        stack:ClearAllPoints()
+                        local anchor = cfg.stackAnchor or "BOTTOMRIGHT"
+                        local ox = floor(((tonumber(cfg.stackOffsetX) or 2) * scale) + 0.5)
+                        local oy = floor(((tonumber(cfg.stackOffsetY) or -2) * scale) + 0.5)
+                        stack:SetPoint(anchor, icon, anchor, ox, oy)
+                        stack:Show()
+                    else
+                        stack:Hide()
+                    end
+                end
+            end
+        end
+
+        preview.Refresh = Refresh
+        preview:HookScript("OnShow", Refresh)
+        M.AddRefresher(ctx, Refresh)
+        Refresh()
+        return preview
+    end
+
+    local function RefreshAuraTextPreviews(...)
+        for i = 1, select("#", ...) do
+            local preview = select(i, ...)
+            if preview and preview.Refresh then preview:Refresh() end
+        end
+    end
+
+    local function HookPreviewSlider(widget, ...)
+        local previews = { ... }
+        if widget and widget.HookScript then
+            widget:HookScript("OnValueChanged", function(self)
+                if self._msuf2Refreshing then return end
+                RefreshAuraTextPreviews(unpack(previews))
+            end)
+        end
+        return widget
+    end
+
+    local function HookPreviewDropdown(widget, ...)
+        local previews = { ... }
+        if not (widget and widget.SetOnValueChanged) then return widget end
+        local previous = widget._msuf2OnValueChanged
+        widget:SetOnValueChanged(function(value)
+            if previous then previous(value) end
+            RefreshAuraTextPreviews(unpack(previews))
+        end)
+        return widget
+    end
 
     local function AuraFilter()
         local gf = GF and GF()
@@ -327,16 +567,18 @@ local function BuildGFAuras(ctx)
 
         local showSwipe = BindNestedToggle(ctx, W.ToggleAt(section, "Show Cooldown Swipe", leftX, textY - 30, 220), function() return AuraGroup(CurrentScope(), groupKey) end, "showCooldownSwipe", true, "visual")
         local showCooldown = BindNestedToggle(ctx, W.ToggleAt(section, "Show Cooldown Text", leftX, textY - 62, 220), function() return AuraGroup(CurrentScope(), groupKey) end, "showCooldown", true, "visual")
+        local cooldownPreview = CreateAuraTextPreview(section, groupKey, "cooldown", leftX, textY - 94, leftW)
         local cooldownSize = BindNestedSlider(ctx, W.Slider(section, "Font size", 6, 24, 1, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "cooldownSize", groupKey == "externals" and 10 or 8, "font")
         local cooldownAnchor = BindNestedDropdown(ctx, W.Dropdown(section, "Anchor", AURA_POSITION_ANCHORS, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "cooldownAnchor", "CENTER", "geometry")
         local cooldownX = BindNestedSlider(ctx, W.Slider(section, "Offset X", -30, 30, 1, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "cooldownOffsetX", 0, "geometry")
         local cooldownY = BindNestedSlider(ctx, W.Slider(section, "Offset Y", -30, 30, 1, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "cooldownOffsetY", 0, "geometry")
-        W.MoveWidget(cooldownSize, section, leftX, textY - 106, leftW, "CENTER")
-        W.MoveWidget(cooldownAnchor, section, leftX, textY - 160, leftW, "LEFT")
-        W.MoveWidget(cooldownX, section, leftX, textY - 214, leftW, "CENTER")
-        W.MoveWidget(cooldownY, section, leftX, textY - 268, leftW, "CENTER")
+        W.MoveWidget(cooldownSize, section, leftX, textY - 176, leftW, "CENTER")
+        W.MoveWidget(cooldownAnchor, section, leftX, textY - 230, leftW, "LEFT")
+        W.MoveWidget(cooldownX, section, leftX, textY - 284, leftW, "CENTER")
+        W.MoveWidget(cooldownY, section, leftX, textY - 338, leftW, "CENTER")
         controls[#controls + 1] = showSwipe
         controls[#controls + 1] = showCooldown
+        controls[#controls + 1] = cooldownPreview
         controls[#controls + 1] = cooldownSize
         controls[#controls + 1] = cooldownAnchor
         controls[#controls + 1] = cooldownX
@@ -347,15 +589,25 @@ local function BuildGFAuras(ctx)
         cooldownChildren[#cooldownChildren + 1] = cooldownY
 
         local showStacks = BindNestedToggle(ctx, W.ToggleAt(section, "Show Stack Count", rightX, textY - 30, 220), function() return AuraGroup(CurrentScope(), groupKey) end, "showStacks", groupKey ~= "externals", "visual")
+        local stackPreview = CreateAuraTextPreview(section, groupKey, "stack", rightX, textY - 94, rightW)
         local stackSize = BindNestedSlider(ctx, W.Slider(section, "Font size", 6, 24, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "stackSize", 10, "font")
         local stackAnchor = BindNestedDropdown(ctx, W.Dropdown(section, "Anchor", AURA_POSITION_ANCHORS, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "stackAnchor", "BOTTOMRIGHT", "geometry")
         local stackX = BindNestedSlider(ctx, W.Slider(section, "Offset X", -30, 30, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "stackOffsetX", 2, "geometry")
         local stackY = BindNestedSlider(ctx, W.Slider(section, "Offset Y", -30, 30, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "stackOffsetY", -2, "geometry")
-        W.MoveWidget(stackSize, section, rightX, textY - 74, rightW, "CENTER")
-        W.MoveWidget(stackAnchor, section, rightX, textY - 128, rightW, "LEFT")
-        W.MoveWidget(stackX, section, rightX, textY - 182, rightW, "CENTER")
-        W.MoveWidget(stackY, section, rightX, textY - 236, rightW, "CENTER")
+        W.MoveWidget(stackSize, section, rightX, textY - 176, rightW, "CENTER")
+        W.MoveWidget(stackAnchor, section, rightX, textY - 230, rightW, "LEFT")
+        W.MoveWidget(stackX, section, rightX, textY - 284, rightW, "CENTER")
+        W.MoveWidget(stackY, section, rightX, textY - 338, rightW, "CENTER")
+        HookPreviewSlider(cooldownSize, cooldownPreview, stackPreview)
+        HookPreviewDropdown(cooldownAnchor, cooldownPreview, stackPreview)
+        HookPreviewSlider(cooldownX, cooldownPreview, stackPreview)
+        HookPreviewSlider(cooldownY, cooldownPreview, stackPreview)
+        HookPreviewSlider(stackSize, cooldownPreview, stackPreview)
+        HookPreviewDropdown(stackAnchor, cooldownPreview, stackPreview)
+        HookPreviewSlider(stackX, cooldownPreview, stackPreview)
+        HookPreviewSlider(stackY, cooldownPreview, stackPreview)
         controls[#controls + 1] = showStacks
+        controls[#controls + 1] = stackPreview
         controls[#controls + 1] = stackSize
         controls[#controls + 1] = stackAnchor
         controls[#controls + 1] = stackX

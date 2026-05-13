@@ -50,8 +50,16 @@ end
 
 local function SetValue(tbl, key, value, apply)
     if not tbl or tbl[key] == value then return end
-    tbl[key] = value
-    if type(apply) == "function" then apply() end
+    local function Write()
+        if tbl[key] == value then return false end
+        tbl[key] = value
+        if type(apply) == "function" then apply() end
+        return true
+    end
+    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+        return M.CaptureHistory(tostring(key), "advanced:" .. tostring(key), Write)
+    end
+    return Write()
 end
 
 local function DeepCopyTable(src)

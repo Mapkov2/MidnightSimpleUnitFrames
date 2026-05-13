@@ -21,6 +21,8 @@ T.media = T.media or {
     bgCharcoal = ADDON_PATH .. "Media\\Bars\\Charcoal.tga",
     logo = ADDON_PATH .. "Media\\MSUF_MinimapIcon.tga",
     navIcons = ADDON_PATH .. "Media\\msuf_nav_icons",
+    historyUndo = ADDON_PATH .. "Media\\msuf_history_undo_red.png",
+    historyRedo = ADDON_PATH .. "Media\\msuf_history_redo_green.png",
 }
 
 T.colors = {
@@ -562,6 +564,17 @@ local function ButtonVisual(btn, active, hover)
         btn._msuf2Label:SetTextColor(1, 1, 1, 1)
         return
     end
+    if btn._msuf2Success then
+        if active or hover then
+            fill:SetVertexColor(0.060, 0.380, 0.180, 0.98)
+            edge:SetVertexColor(0.220, 0.860, 0.420, 0.90)
+        else
+            fill:SetVertexColor(0.040, 0.280, 0.130, 0.95)
+            edge:SetVertexColor(0.140, 0.660, 0.310, 0.82)
+        end
+        btn._msuf2Label:SetTextColor(0.92, 1.00, 0.94, 1)
+        return
+    end
     if active then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
         local bg, br, tx = c.pillActive, c.pillEdgeActive, c.pillTextActive
@@ -647,6 +660,16 @@ function T.Button(parent, text, width, height)
     btn:SetScript("OnDisable", function(self)
         ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
     end)
+    btn:HookScript("OnClick", function(self)
+        if self._msuf2SkipHistoryCheckpoint then return end
+        local checkpoint = M and M.CheckpointHistory
+        if type(checkpoint) ~= "function" then return end
+        local label = self._msuf2HistoryLabel
+            or (self.GetText and self:GetText())
+            or "MSUF2 button"
+        if label == "" then label = "MSUF2 button" end
+        checkpoint(label, self._msuf2HistorySource or ("button:" .. tostring(self)))
+    end)
     ButtonVisual(btn, false, false)
     return btn
 end
@@ -661,6 +684,13 @@ end
 function T.SkinPrimaryButton(btn)
     if not btn then return btn end
     btn._msuf2Primary = true
+    btn:SetActive(false)
+    return btn
+end
+
+function T.SkinSuccessButton(btn)
+    if not btn then return btn end
+    btn._msuf2Success = true
     btn:SetActive(false)
     return btn
 end

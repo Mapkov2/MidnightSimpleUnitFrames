@@ -746,6 +746,13 @@ local function NormalizeFontField(conf)
     if type(key) ~= "string" or key == "" then return end
     local normalize = _G.MSUF_NormalizeFontKey or function(k) return GF_FONT_KEY_ALIASES[k] or k end
     local normalized = normalize(key)
+    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
+    if type(resolveKeyPath) == "function" then
+        local resolved = resolveKeyPath(normalized)
+        if type(resolved) == "string" and resolved ~= "" then
+            normalized = resolved
+        end
+    end
     if normalized ~= key then
         conf.fontKey = normalized
     end

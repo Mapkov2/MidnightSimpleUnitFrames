@@ -294,6 +294,13 @@ end
 local function MSUF_Defaults_NormalizeFontField(tbl)
     if type(tbl) ~= "table" then return end
     local normalized = MSUF_Defaults_NormalizeFontKey(tbl.fontKey)
+    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
+    if type(resolveKeyPath) == "function" then
+        local resolved = resolveKeyPath(normalized)
+        if type(resolved) == "string" and resolved ~= "" then
+            normalized = resolved
+        end
+    end
     if normalized ~= tbl.fontKey then
         tbl.fontKey = normalized
     end

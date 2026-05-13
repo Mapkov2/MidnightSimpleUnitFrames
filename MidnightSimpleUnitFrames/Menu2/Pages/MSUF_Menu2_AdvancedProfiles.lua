@@ -55,6 +55,13 @@ local function Trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function ShortLabel(value, limit)
+    value = Trim(value)
+    limit = tonumber(limit) or 28
+    if #value <= limit then return value end
+    return value:sub(1, limit - 3) .. "..."
+end
+
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = "None", text = "None" } end
@@ -97,6 +104,7 @@ local function EnsureProfilePopups()
             OnAccept = function(_, data)
                 if not (data and data.name) then return end
                 if type(_G.MSUF_ResetProfile) == "function" then pcall(_G.MSUF_ResetProfile, data.name) end
+                if M.ClearHistory then M.ClearHistory() end
                 if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true }) end
                 if type(data.after) == "function" then data.after() end
                 if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
@@ -118,6 +126,7 @@ local function EnsureProfilePopups()
             OnAccept = function(_, data)
                 if not (data and data.name) then return end
                 if type(_G.MSUF_DeleteProfile) == "function" then pcall(_G.MSUF_DeleteProfile, data.name) end
+                if M.ClearHistory then M.ClearHistory() end
                 if type(data.after) == "function" then data.after() end
             end,
         }
@@ -140,6 +149,7 @@ local function BuildProfiles(ctx)
     profileDrop:SetOnValueChanged(function(value)
         if value and value ~= "" and value ~= _G.MSUF_ActiveProfile and type(_G.MSUF_SwitchProfile) == "function" then
             pcall(_G.MSUF_SwitchProfile, value)
+            if M.ClearHistory then M.ClearHistory() end
         end
         M.RequestGeneralApply("MSUF2_PROFILE_SWITCH", { preview = true })
         RefreshAfterProfileChange(ctx)
@@ -155,6 +165,7 @@ local function BuildProfiles(ctx)
         if name and name ~= "" and type(_G.MSUF_CreateProfile) == "function" then
             pcall(_G.MSUF_CreateProfile, name)
             pcall(_G.MSUF_SwitchProfile, name)
+            if M.ClearHistory then M.ClearHistory() end
         end
         nameInput:SetText("")
         RefreshAfterProfileChange(ctx)
@@ -165,6 +176,7 @@ local function BuildProfiles(ctx)
         if name and name ~= "" and type(_G.MSUF_CopyProfile) == "function" then
             local ok, copied = pcall(_G.MSUF_CopyProfile, _G.MSUF_ActiveProfile or "Default", name)
             if ok and copied and type(_G.MSUF_SwitchProfile) == "function" then pcall(_G.MSUF_SwitchProfile, name) end
+            if M.ClearHistory then M.ClearHistory() end
             nameInput:SetText("")
             RefreshAfterProfileChange(ctx)
         end
@@ -176,6 +188,7 @@ local function BuildProfiles(ctx)
             _G.StaticPopup_Show("MSUF2_CONFIRM_RESET_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
         elseif type(_G.MSUF_ResetProfile) == "function" then
             pcall(_G.MSUF_ResetProfile, name)
+            if M.ClearHistory then M.ClearHistory() end
             RefreshAfterProfileChange(ctx)
         end
     end)
@@ -188,6 +201,7 @@ local function BuildProfiles(ctx)
             _G.StaticPopup_Show("MSUF2_CONFIRM_DELETE_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
         elseif type(_G.MSUF_DeleteProfile) == "function" then
             pcall(_G.MSUF_DeleteProfile, name)
+            if M.ClearHistory then M.ClearHistory() end
             RefreshAfterProfileChange(ctx)
         end
     end)
@@ -200,6 +214,34 @@ local function BuildProfiles(ctx)
     M.AddRefresher(ctx, function()
         local active = _G.MSUF_ActiveProfile or "Default"
         if delete.SetEnabled then delete:SetEnabled(active ~= "Default") end
+    end)
+
+    local history = b:CollapsibleSection("profiles_history", "Undo / Redo", 128, true)
+    W.Text(history, "Session history for MSUF2 option changes. Profile switches, imports, resets and deletes start a clean history.", 14, -34, contentW - 28, T.colors.muted)
+    local undo = T.Button(history, "< Undo", 180, 26)
+    T.SkinDangerButton(undo)
+    local redo = T.Button(history, "Redo >", 180, 26)
+    T.SkinSuccessButton(redo)
+    local state = W.Text(history, "", 14, -92, contentW - 28, T.colors.dim)
+    undo:SetPoint("TOPLEFT", history, "TOPLEFT", 14, -62)
+    redo:SetPoint("LEFT", undo, "RIGHT", 12, 0)
+    undo:SetScript("OnClick", function()
+        if M.Undo then M.Undo() end
+    end)
+    redo:SetScript("OnClick", function()
+        if M.Redo then M.Redo() end
+    end)
+    M.AddRefresher(ctx, function()
+        local s = M.GetHistoryState and M.GetHistoryState() or {}
+        if undo.SetEnabled then undo:SetEnabled(s.canUndo and true or false) end
+        if redo.SetEnabled then redo:SetEnabled(s.canRedo and true or false) end
+        undo:SetText(s.undoLabel and ("< Undo: " .. ShortLabel(s.undoLabel, 20)) or "< Undo")
+        redo:SetText(s.redoLabel and ("Redo: " .. ShortLabel(s.redoLabel, 20) .. " >") or "Redo >")
+        if s.canUndo or s.canRedo then
+            state:SetText(("Undo: %d   Redo: %d"):format(tonumber(s.undoCount) or 0, tonumber(s.redoCount) or 0))
+        else
+            state:SetText("No tracked MSUF2 changes in this session.")
+        end
     end)
 
     local specs = GetSpecMeta()
@@ -270,6 +312,7 @@ local function BuildProfiles(ctx)
         local text = blob:GetText()
         if text and text ~= "" and type(_G.MSUF_ImportFromString) == "function" then
             pcall(_G.MSUF_ImportFromString, text)
+            if M.ClearHistory then M.ClearHistory() end
             M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true })
             RefreshAfterProfileChange(ctx)
         end
@@ -279,6 +322,7 @@ local function BuildProfiles(ctx)
         local text = blob:GetText()
         if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
             pcall(_G.MSUF_ImportLegacyFromString, text)
+            if M.ClearHistory then M.ClearHistory() end
             M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true })
             RefreshAfterProfileChange(ctx)
         end
@@ -350,5 +394,5 @@ local function BuildModules(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("profiles", { title = "MSUF Profiles", build = BuildProfiles, version = 2 })
+M.RegisterPage("profiles", { title = "MSUF Profiles", build = BuildProfiles, version = 3 })
 M.RegisterPage("modules", { title = "MSUF Modules", build = BuildModules })

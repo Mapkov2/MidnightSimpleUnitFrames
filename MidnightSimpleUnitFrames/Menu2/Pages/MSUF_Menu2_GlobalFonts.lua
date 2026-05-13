@@ -224,9 +224,9 @@ local function ApplyPreviewFont(fs)
     local size = max(10, min(22, tonumber(FontScopeGet("fontSize", 14)) or 14))
     local flags = PreviewFontFlags()
     local path
-    local pathForKey = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+    local pathForKey = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
     if type(pathForKey) == "function" then
-        path = pathForKey(key)
+        path = pathForKey(key, size, flags)
     end
     if (not path or path == "") and key and key ~= "" then
         local fetch = _G.MSUF_FetchFontPathFromLSM or (ns and ns.MSUF_FetchFontPathFromLSM)
@@ -234,7 +234,7 @@ local function ApplyPreviewFont(fs)
     end
     path = path or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
     local resolve = _G.MSUF_ResolveFontPath
-    if type(resolve) == "function" then path = resolve(path, size, flags) end
+    if type(resolve) == "function" then path = resolve(path, size, flags, key) end
     local safeSet = _G.MSUF_SetFontSafe
     if type(safeSet) == "function" then
         safeSet(fs, path, size, flags, key)

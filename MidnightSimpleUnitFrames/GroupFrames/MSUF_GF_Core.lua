@@ -2521,6 +2521,9 @@ local function GF_PreviewsAllowed()
     if _G.MSUF_UnitEditModeActive == true then
         return true
     end
+    if _G.MSUF2_GFPagePreviewActive == true then
+        return true
+    end
     local panel = _G.MSUF_GFOptionsPanel
     if panel and panel.IsShown and panel:IsShown() then
         return true

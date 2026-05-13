@@ -240,6 +240,7 @@ local function RefreshGFPreview()
     if gf and type(gf.RefreshPreviewBox) == "function" then gf.RefreshPreviewBox() end
     if gf and type(gf.ResizePreviewContainer) == "function" then gf.ResizePreviewContainer() end
     if type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews() end
+    if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
 end
 
 local function Conf(kind)
@@ -308,10 +309,17 @@ local function QueueGF(kind, mode)
 end
 
 local function Set(kind, key, value, mode)
-    local conf = Conf(kind)
-    if conf[key] == value then return end
-    conf[key] = value
-    QueueGF(kind, mode or "visual")
+    local function Write()
+        local conf = Conf(kind)
+        if conf[key] == value then return false end
+        conf[key] = value
+        QueueGF(kind, mode or "visual")
+        return true
+    end
+    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+        return M.CaptureHistory("Group " .. tostring(key), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
+    end
+    return Write()
 end
 
 local function Bool(kind, key, default)
@@ -502,6 +510,7 @@ local function ScopeSection(ctx, builder)
         M.gfScope = kind or "party"
         local gf = GF()
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
+        if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
         if gf and type(gf.PreviewScopeChanged) == "function" then
             gf.PreviewScopeChanged()
         else
@@ -611,7 +620,11 @@ local function ScopeSection(ctx, builder)
                 _G.MSUF_EM2.State.Enter(key)
             end
         end
-        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshTop) else RefreshTop() end
+        local function RefreshAfterToggle()
+            RefreshTop()
+            if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshAfterToggle) else RefreshAfterToggle() end
     end)
 
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
