@@ -13,7 +13,7 @@
 -- Supported units: target, focus, targettarget, boss
 -- DB defaults live in Foundation/MSUF_Defaults.lua (canonical location).
 -- Frame creation lives in MidnightSimpleUnitFrames.lua (main build loop).
--- Options live in Options/MSUF_Options_Player.lua (eliteicon indicator spec entry).
+-- Menu controls live in Menu2 unit sections.
 
 local addonName, ns = ...
 ns = ns or _G.MSUF_NS or {}
@@ -131,6 +131,24 @@ function MSUF_UpdateEliteIcon(f)
     UpdateEliteIcon(f)
 end
 _G.MSUF_UpdateEliteIcon = MSUF_UpdateEliteIcon
--- Note: MSUF_RefreshEliteIconFrames is defined in Options/MSUF_Options_Player.lua
--- alongside MSUF_RefreshLeaderIconFrames / MSUF_RefreshRaidMarkerFrames, using
--- the same MSUF_GetUnitFrameToken / MSUF_RefreshFrames helpers.
+
+function MSUF_RefreshEliteIconFrames()
+    local each = _G.MSUF_ForEachUnitFrame
+    if type(each) == "function" then
+        each(function(frame)
+            if frame and frame.eliteIcon then
+                MSUF_ApplyEliteIconLayout(frame)
+            end
+        end)
+        return
+    end
+
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) ~= "table" then return end
+    for _, frame in pairs(frames) do
+        if frame and frame.eliteIcon then
+            MSUF_ApplyEliteIconLayout(frame)
+        end
+    end
+end
+_G.MSUF_RefreshEliteIconFrames = MSUF_RefreshEliteIconFrames

@@ -55,6 +55,19 @@ local FOOTER_H = 46
 local HDR_H    = 24
 local BODY_TOP = 28
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 local function FS(parent, size, color)
     local fs = parent:CreateFontString(nil, "OVERLAY")
     fs:SetFont(FONT, size or 12, "")
@@ -72,12 +85,7 @@ local function GetStep()
     return s
 end
 
-local function RefreshUFPreview(reason, unitKey)
-    local opt = _G.MSUF_UFOptions_RequestRefresh
-    if type(opt) == "function" then
-        opt(reason or "EM2_POPUP", unitKey)
-        return
-    end
+local function RefreshUFPreview(reason)
     local fn = _G.MSUF_UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "EM2_POPUP") end
 end
@@ -99,7 +107,7 @@ function Factory.Panel(name, width, visibleH, title)
 
     local titleFS = FS(pf, 15, C.title)
     titleFS:SetPoint("LEFT", pf, "TOPLEFT", PAD, -TITLE_H / 2)
-    titleFS:SetText(title or "Edit"); pf._titleFS = titleFS
+    titleFS:SetText(Tr(title or "Edit")); pf._titleFS = titleFS
 
     local closeBtn = CreateFrame("Button", nil, pf)
     closeBtn:SetSize(24, 24)
@@ -253,7 +261,7 @@ function Factory.Card(pf, anchorTo, text, yOff, defaultOpen)
 
     local title = FS(hdr, 12, C.title)
     title:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
-    title:SetText(text or "")
+    title:SetText(Tr(text or ""))
 
     local hint = FS(hdr, 10, C.muted)
     hint:SetPoint("RIGHT", hdr, "RIGHT", -10, 0)
@@ -286,7 +294,7 @@ function Factory.Card(pf, anchorTo, text, yOff, defaultOpen)
         else
             chevron:SetRotation(0)
             chevron:SetVertexColor(C.muted[1], C.muted[2], C.muted[3])
-            hint:SetText("click to expand")
+            hint:SetText(Tr("click to expand"))
         end
         card:RecalcHeight()
         -- Recalc parent scroll
@@ -358,13 +366,13 @@ function Factory.PairRow(pf, body, card, opts)
     else row:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0) end
     row:SetPoint("RIGHT", body, "RIGHT", 0, 0)
 
-    local l1 = FS(row, 11, C.muted); l1:SetPoint("LEFT", 0, 0); l1:SetText(l1t)
+    local l1 = FS(row, 11, C.muted); l1:SetPoint("LEFT", 0, 0); l1:SetText(Tr(l1t))
     local m1 = MakeStep(row, "-"); m1:SetPoint("LEFT", l1, "RIGHT", 4, 0)
     local b1 = MakeBox(row); b1:SetPoint("LEFT", m1, "RIGHT", 1)
     local p1 = MakeStep(row, "+"); p1:SetPoint("LEFT", b1, "RIGHT", 1)
     WireStepper(m1, b1, p1, cb)
 
-    local l2 = FS(row, 11, C.muted); l2:SetPoint("LEFT", p1, "RIGHT", 10, 0); l2:SetText(l2t)
+    local l2 = FS(row, 11, C.muted); l2:SetPoint("LEFT", p1, "RIGHT", 10, 0); l2:SetText(Tr(l2t))
     local m2 = MakeStep(row, "-"); m2:SetPoint("LEFT", l2, "RIGHT", 4, 0)
     local b2 = MakeBox(row); b2:SetPoint("LEFT", m2, "RIGHT", 1)
     local p2 = MakeStep(row, "+"); p2:SetPoint("LEFT", b2, "RIGHT", 1)
@@ -388,7 +396,7 @@ function Factory.SingleRow(pf, body, card, opts)
     row:SetPoint("RIGHT", body, "RIGHT", 0, 0)
 
     local label = FS(row, 11, C.muted)
-    label:SetPoint("LEFT", 0, 0); label:SetText(opts.label or "Value:")
+    label:SetPoint("LEFT", 0, 0); label:SetText(Tr(opts.label or "Value:"))
 
     local m = MakeStep(row, "-"); m:SetPoint("LEFT", label, "RIGHT", 6, 0)
     local box = MakeBox(row); box:SetPoint("LEFT", m, "RIGHT", 1)
@@ -413,7 +421,7 @@ function Factory.SizeAnchorRow(pf, body, card, opts)
     else row:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0) end
     row:SetPoint("RIGHT", body, "RIGHT", 0, 0)
 
-    local sl = FS(row, 11, C.muted); sl:SetPoint("LEFT", 0, 0); sl:SetText("Size:")
+    local sl = FS(row, 11, C.muted); sl:SetPoint("LEFT", 0, 0); sl:SetText(Tr("Size:"))
     local sm = MakeStep(row, "-"); sm:SetPoint("LEFT", sl, "RIGHT", 4, 0)
     local sb = MakeBox(row, 44); sb:SetPoint("LEFT", sm, "RIGHT", 1)
     local sp = MakeStep(row, "+"); sp:SetPoint("LEFT", sb, "RIGHT", 1)
@@ -427,7 +435,7 @@ function Factory.SizeAnchorRow(pf, body, card, opts)
     local dFS = FS(drop, 11, C.white); dFS:SetPoint("CENTER")
     drop.value = options[1] and options[1][1]
     function drop:SetValue(k) drop.value=k; if stateKey then pf[stateKey]=k end
-        for _,o in ipairs(options) do if o[1]==k then dFS:SetText(o[2]); return end end; dFS:SetText(tostring(k)) end
+        for _,o in ipairs(options) do if o[1]==k then dFS:SetText(Tr(o[2])); return end end; dFS:SetText(tostring(k)) end
     function drop:GetValue() return drop.value end
     drop:SetScript("OnMouseDown", function()
         local idx=1; for i,o in ipairs(options) do if o[1]==drop.value then idx=i; break end end
@@ -461,7 +469,7 @@ function Factory.CheckRow(pf, body, card, opts)
     ck:SetColorTexture(unpack(C.checkFill)); chk:SetCheckedTexture(ck)
 
     local lbl = FS(row, 12, C.white)
-    lbl:SetPoint("LEFT", chk, "RIGHT", 8, 0); lbl:SetText(opts.label or "")
+    lbl:SetPoint("LEFT", chk, "RIGHT", 8, 0); lbl:SetText(Tr(opts.label or ""))
     chk._label = lbl; chk.Text = lbl
 
     -- Dependent rows: grayed out when unchecked, enabled when checked
@@ -504,7 +512,7 @@ function Factory.FooterButtons(pf)
         brd:SetFrameLevel(max(0, b:GetFrameLevel()-1))
         brd:SetBackdrop({edgeFile=W8, edgeSize=1}); brd:SetBackdropBorderColor(unpack(C.btnEdge))
         local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(unpack(C.btnHover))
-        local fs = FS(b, 12, C.white); fs:SetPoint("CENTER"); fs:SetText(text)
+        local fs = FS(b, 12, C.white); fs:SetPoint("CENTER"); fs:SetText(Tr(text))
         b._label = fs; return b
     end
     local ok = MakeBtn("OK", 80); local cancel = MakeBtn("Cancel", 80)
@@ -537,7 +545,7 @@ function Factory.SelectRow(pf, body, card, opts)
     row:SetPoint("RIGHT", body, "RIGHT", 0, 0)
 
     local label = FS(row, 11, C.muted)
-    label:SetPoint("LEFT", 0, 0); label:SetText(opts.label or "Select:")
+    label:SetPoint("LEFT", 0, 0); label:SetText(Tr(opts.label or "Select:"))
 
     local btnW = opts.width or 140
     local btn = CreateFrame("Button", nil, row, "BackdropTemplate")
@@ -581,13 +589,13 @@ function Factory.SelectRow(pf, body, card, opts)
             local iBg = it:CreateTexture(nil, "BACKGROUND"); iBg:SetAllPoints()
             iBg:SetColorTexture(0, 0, 0, 0)
             local iFS = FS(it, 10, C.white); iFS:SetPoint("LEFT", 8, 0)
-            iFS:SetText(src.label or src.key)
+            iFS:SetText(Tr(src.label or src.key))
             it:SetScript("OnEnter", function() iBg:SetColorTexture(0.10, 0.20, 0.45, 0.25) end)
             it:SetScript("OnLeave", function() iBg:SetColorTexture(0, 0, 0, 0) end)
             it:SetScript("OnClick", function()
                 menu:Hide()
                 if stateKey then pf[stateKey] = src.key end
-                btnFS:SetText(src.label or src.key)
+                btnFS:SetText(Tr(src.label or src.key))
                 if cb then cb() end
             end)
             _builtBtns[i] = it
@@ -598,7 +606,7 @@ function Factory.SelectRow(pf, body, card, opts)
         if stateKey then pf[stateKey] = key end
         local list = ResolveItems()
         for _, src in ipairs(list) do
-            if src.key == key then btnFS:SetText(src.label or src.key); return end
+            if src.key == key then btnFS:SetText(Tr(src.label or src.key)); return end
         end
         btnFS:SetText(tostring(key or ""))
     end
@@ -645,7 +653,7 @@ function Factory.CopyDropdown(pf, body, card, opts)
     label:SetFont(FONT, 11, ""); label:SetShadowOffset(1, -1)
     label:SetTextColor(0.55, 0.62, 0.78, 0.85)
     label:SetPoint("LEFT", 4, 0)
-    label:SetText("Copy To")
+    label:SetText(Tr("Copy To"))
 
     local btn = CreateFrame("Button", nil, row)
     btn:SetSize(140, 20)
@@ -662,7 +670,7 @@ function Factory.CopyDropdown(pf, body, card, opts)
     local btnText = btn:CreateFontString(nil, "OVERLAY")
     btnText:SetFont(FONT, 10, ""); btnText:SetShadowOffset(1, -1)
     btnText:SetPoint("CENTER"); btnText:SetTextColor(0.75, 0.88, 1.00, 1)
-    btnText:SetText("Select...")
+    btnText:SetText(Tr("Select..."))
 
     local menu = CreateFrame("Frame", nil, UIParent)
     menu:SetFrameStrata("TOOLTIP"); menu:SetFrameLevel(950)
@@ -695,7 +703,7 @@ function Factory.CopyDropdown(pf, body, card, opts)
         itemFS:SetFont(FONT, 10, ""); itemFS:SetShadowOffset(1, -1)
         itemFS:SetPoint("LEFT", 8, 0)
         itemFS:SetTextColor(0.86, 0.92, 1.00, 0.90)
-        itemFS:SetText(src.label or src.key)
+        itemFS:SetText(Tr(src.label or src.key))
 
         item:SetScript("OnEnter", function()
             itemBg:SetColorTexture(0.10, 0.20, 0.45, 0.25)
@@ -707,9 +715,9 @@ function Factory.CopyDropdown(pf, body, card, opts)
         end)
         item:SetScript("OnClick", function()
             menu:Hide()
-            btnText:SetText(src.label or src.key)
+            btnText:SetText(Tr(src.label or src.key))
             if opts.onCopy then opts.onCopy(src.key) end
-            C_Timer.After(1.5, function() btnText:SetText("Select...") end)
+            C_Timer.After(1.5, function() btnText:SetText(Tr("Select...")) end)
         end)
     end
 
@@ -895,7 +903,7 @@ local function Sync()
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
     local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
     local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
-    if pf._titleFS then pf._titleFS:SetText(LABELS[key] or key or "") end
+    if pf._titleFS then pf._titleFS:SetText(Tr(LABELS[key] or key or "")) end
     S(pf.xBox,San(conf.offsetX,0)); S(pf.yBox,San(conf.offsetY,0))
     S(pf.wBox,conf.width or (pf.parent and pf.parent:GetWidth()) or 250)
     S(pf.hBox,conf.height or (pf.parent and pf.parent:GetHeight()) or 40)
@@ -1299,7 +1307,7 @@ local function Sync()
     local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
     local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
     local lbl=(u=="player" and "Player") or (u=="target" and "Target") or (u=="focus" and "Focus") or (u=="boss" and "Boss") or u
-    if pf._titleFS then pf._titleFS:SetText(lbl.." Castbar") end
+    if pf._titleFS then pf._titleFS:SetText(Tr(lbl) .. " " .. Tr("Castbar")) end
     if u=="boss" then
         S(pf.xBox,floor((g.bossCastbarOffsetX or 0)+0.5)); S(pf.yBox,floor((g.bossCastbarOffsetY or 0)+0.5))
         local widthValue = g.bossCastbarWidth or 176
@@ -1621,7 +1629,7 @@ local function Sync()
     local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
     local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
     local lbl=uk; if IsBoss(uk) then lbl="Boss "..(uk:match("%d+") or "1") end
-    if pf._titleFS then pf._titleFS:SetText(lbl.." Auras") end
+    if pf._titleFS then pf._titleFS:SetText(Tr(lbl) .. " " .. Tr("Auras")) end
     S(pf.spacingBox,V("spacing","spacing",2))
     S(pf.stSzBox,V("stackTextSize","stackTextSize",14)); S(pf.stXBox,V("stackTextOffsetX","stackTextOffsetX",0)); S(pf.stYBox,V("stackTextOffsetY","stackTextOffsetY",0))
     S(pf.cdSzBox,V("cooldownTextSize","cooldownTextSize",14)); S(pf.cdXBox,V("cooldownTextOffsetX","cooldownTextOffsetX",0)); S(pf.cdYBox,V("cooldownTextOffsetY","cooldownTextOffsetY",0))
@@ -1657,7 +1665,7 @@ local function Build()
     tHint:SetPoint("LEFT", tHintRow, "LEFT", 0, 0)
     tHint:SetPoint("RIGHT", tHintRow, "RIGHT", -4, 0)
     tHint:SetJustifyH("LEFT")
-    tHint:SetText("Blizzard renders cooldown/stack text for native Buffs and Debuffs. These text overlay fields only affect custom icons.")
+    tHint:SetText(Tr("Blizzard renders cooldown/stack text for native Buffs and Debuffs. These text overlay fields only affect custom icons."))
     tHint:Hide()
     pf._auraNativeHint = tHint
     tC._rowCount = tC._rowCount + 1

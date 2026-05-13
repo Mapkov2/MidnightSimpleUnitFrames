@@ -15,6 +15,24 @@
 
 local addonName, ns = ...
 ns = (rawget(_G, "MSUF_NS") or ns) or {}
+
+ns.MSUF_A2_L_RELOAD_COMBAT = "|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload."
+ns.MSUF_A2_L_RELOAD_UI = "Reload UI"
+ns.MSUF_A2_L_CANCEL = "Cancel"
+
+ns.MSUF_A2_RefreshLocaleText = function()
+    if type(ns.Translate) == "function" then
+        ns.MSUF_A2_L_RELOAD_COMBAT = ns.Translate("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")
+        ns.MSUF_A2_L_RELOAD_UI = ns.Translate("Reload UI")
+        ns.MSUF_A2_L_CANCEL = ns.Translate("Cancel")
+    end
+end
+
+ns.MSUF_A2_RefreshLocaleText()
+if type(ns.RegisterLocaleCallback) == "function" then
+    ns.RegisterLocaleCallback("MSUF_A2_Render", ns.MSUF_A2_RefreshLocaleText)
+end
+
 -- PERF LOCALS (Auras2 runtime)
 --  - Reduce global table lookups in high-frequency aura pipelines.
 --  - Secret-safe: localizing function references only (no value comparisons).
@@ -2083,7 +2101,7 @@ local function EnsureReloadPopup()
 
     local function DoReload()
         if _G.InCombatLockdown and _G.InCombatLockdown() then
-            print("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")
+            print(ns.MSUF_A2_L_RELOAD_COMBAT)
             return
         end
         if _G.ReloadUI then _G.ReloadUI() end
@@ -2092,9 +2110,9 @@ local function EnsureReloadPopup()
     local function MakeDialog(dialogKey, text, prevGlobalKey, cbGlobalKey, sharedField)
         if _G.StaticPopupDialogs[dialogKey] then return end
         _G.StaticPopupDialogs[dialogKey] = {
-            text = text,
-            button1 = "Reload UI",
-            button2 = "Cancel",
+            text = (ns.Translate and ns.Translate(text)) or text,
+            button1 = ns.MSUF_A2_L_RELOAD_UI,
+            button2 = ns.MSUF_A2_L_CANCEL,
             OnAccept = DoReload,
             OnCancel = function()
                 local prev = _G[prevGlobalKey]

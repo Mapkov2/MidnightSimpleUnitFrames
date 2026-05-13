@@ -413,8 +413,8 @@ local function LabelAt(parent, text, x, y, width, template, color)
     return W.LabelAt(parent, text, x, y, width, template, color)
 end
 
-local function DividerAt(parent, y)
-    return W.DividerAt(parent, y)
+local function DividerAt(parent, y, leftPad, rightPad)
+    return W.DividerAt(parent, y, leftPad, rightPad)
 end
 
 local function BindValueToggle(ctx, section, label, getValue, setValue)
@@ -675,38 +675,55 @@ local function BuildAuras(ctx)
     ToggleAt(ctx, master, "Show cooldown text", 200, -188, AuraShared, "showCooldownText", true, ApplyAuras)
     ToggleAt(ctx, master, "Dispel-type borders", 390, -144, AuraShared, "useDebuffTypeBorders", false, ApplyAuras)
 
-    local layout = b:CollapsibleSection("a2_layout", "Caps & Icons", 414, true)
-    local layoutCol1, layoutCol2, layoutCol3, layoutCol4 = 12, 252, 492, 732
-    local layoutSliderW = 220
-    local layoutDropdownW = 220
-    ScopedSliderAt(ctx, layout, "Max Buffs", layoutCol1, -24, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxBuffs", 8, ForceAuraCapsOverride, ApplyAuras)
-    ScopedSliderAt(ctx, layout, "Max Debuffs", layoutCol2, -24, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxDebuffs", 15, ForceAuraCapsOverride, ApplyAuras)
-    ScopedSliderAt(ctx, layout, "Icons per row", layoutCol3, -24, 1, 20, 1, layoutSliderW, function() return AuraCaps() end, "perRow", 11, ForceAuraCapsOverride, ApplyAuras)
-    ScopedSliderAt(ctx, layout, "Block spacing", layoutCol4, -24, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "splitSpacing", 0, ForceAuraCapsOverride, ApplyAuras)
-    DividerAt(layout, -98)
-    ScopedSliderAt(ctx, layout, "Icon size", layoutCol1, -118, 12, 64, 1, layoutSliderW, function() return AuraLayout() end, "iconSize", 26, ForceAuraLayoutOverride, ApplyAuras)
-    ScopedSliderAt(ctx, layout, "Spacing", layoutCol2, -118, 0, 12, 1, layoutSliderW, function() return AuraLayout() end, "spacing", 2, ForceAuraLayoutOverride, ApplyAuras)
-    ScopedDropdownAt(ctx, layout, "Row layout", layoutCol3, -118, {
+    local layout = b:CollapsibleSection("a2_layout", "Caps & Icons", 466, true)
+    local layoutW = layout._msuf2Width or ctx.width or 900
+    local layoutPad, layoutGap = 32, 26
+    local layoutColW = floor((layoutW - layoutPad * 2 - layoutGap * 3) / 4)
+    if layoutColW < 180 then layoutColW = 180 end
+    local layoutCol1 = layoutPad
+    local layoutCol2 = layoutCol1 + layoutColW + layoutGap
+    local layoutCol3 = layoutCol2 + layoutColW + layoutGap
+    local layoutCol4 = layoutCol3 + layoutColW + layoutGap
+    local layoutSliderW = max(196, min(250, layoutColW))
+    local layoutDropdownW = max(190, min(260, layoutColW))
+
+    LabelAt(layout, "Limits", layoutCol1, -38, layoutColW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(layout, "Density", layoutCol3, -38, layoutColW, "GameFontNormalSmall", T.colors.accent)
+    ScopedSliderAt(ctx, layout, "Max Buffs", layoutCol1, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxBuffs", 8, ForceAuraCapsOverride, ApplyAuras)
+    ScopedSliderAt(ctx, layout, "Max Debuffs", layoutCol2, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxDebuffs", 15, ForceAuraCapsOverride, ApplyAuras)
+    ScopedSliderAt(ctx, layout, "Icons per row", layoutCol3, -64, 1, 20, 1, layoutSliderW, function() return AuraCaps() end, "perRow", 11, ForceAuraCapsOverride, ApplyAuras)
+    ScopedSliderAt(ctx, layout, "Block spacing", layoutCol4, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "splitSpacing", 0, ForceAuraCapsOverride, ApplyAuras)
+
+    DividerAt(layout, -138, layoutPad, 32)
+    LabelAt(layout, "Icon Layout", layoutCol1, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(layout, "Rows", layoutCol3, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
+    ScopedSliderAt(ctx, layout, "Icon size", layoutCol1, -186, 12, 64, 1, layoutSliderW, function() return AuraLayout() end, "iconSize", 26, ForceAuraLayoutOverride, ApplyAuras)
+    ScopedSliderAt(ctx, layout, "Spacing", layoutCol2, -186, 0, 12, 1, layoutSliderW, function() return AuraLayout() end, "spacing", 2, ForceAuraLayoutOverride, ApplyAuras)
+    ScopedDropdownAt(ctx, layout, "Row layout", layoutCol3, -186, {
         { value = "SEPARATE", text = "Separate rows" },
         { value = "SINGLE", text = "Single row (Mixed)" },
     }, layoutDropdownW, function() return AuraCaps() end, "layoutMode", "SEPARATE", ForceAuraCapsOverride, ApplyAuras)
-    ScopedDropdownAt(ctx, layout, "Stack Anchor", layoutCol1, -204, AURA_STACK_ANCHORS, layoutDropdownW, function() return AuraCaps() end, "stackCountAnchor", "TOPRIGHT", ForceAuraCapsOverride, ApplyAuras)
-    ValueDropdownAt(ctx, layout, "Buff Growth", layoutCol2, -204, AURA_GROWTH, layoutDropdownW,
+    ScopedDropdownAt(ctx, layout, "Stack Anchor", layoutCol4, -186, AURA_STACK_ANCHORS, layoutDropdownW, function() return AuraCaps() end, "stackCountAnchor", "TOPRIGHT", ForceAuraCapsOverride, ApplyAuras)
+
+    DividerAt(layout, -260, layoutPad, 32)
+    LabelAt(layout, "Growth", layoutCol1, -282, layoutColW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(layout, "Wrapping & Sorting", layoutCol3, -282, layoutColW * 2 + layoutGap, "GameFontNormalSmall", T.colors.accent)
+    ValueDropdownAt(ctx, layout, "Buff Growth", layoutCol1, -308, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.buffGrowth or c.growth or "RIGHT" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().buffGrowth = v or "RIGHT"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Debuff Growth", layoutCol3, -204, AURA_GROWTH, layoutDropdownW,
+    ValueDropdownAt(ctx, layout, "Debuff Growth", layoutCol2, -308, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.debuffGrowth or c.growth or "RIGHT" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().debuffGrowth = v or "RIGHT"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Private Growth", layoutCol1, -288, AURA_GROWTH, layoutDropdownW,
+    ValueDropdownAt(ctx, layout, "Private Growth", layoutCol1, -392, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.privateGrowth or c.growth or "RIGHT" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().privateGrowth = v or "RIGHT"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Buff wrap rows", layoutCol2, -288, AURA_ROW_WRAP, layoutDropdownW,
+    ValueDropdownAt(ctx, layout, "Buff wrap rows", layoutCol3, -308, AURA_ROW_WRAP, layoutDropdownW,
         function() local c = AuraCaps(); return c.buffRowWrap or c.rowWrap or "DOWN" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().buffRowWrap = v or "DOWN"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Debuff wrap rows", layoutCol3, -288, AURA_ROW_WRAP, layoutDropdownW,
+    ValueDropdownAt(ctx, layout, "Debuff wrap rows", layoutCol4, -308, AURA_ROW_WRAP, layoutDropdownW,
         function() local c = AuraCaps(); return c.debuffRowWrap or c.rowWrap or "DOWN" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().debuffRowWrap = v or "DOWN"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Sort order", 12, -352, AURA_SORT_ORDER, 250,
+    ValueDropdownAt(ctx, layout, "Sort order", layoutCol3, -392, AURA_SORT_ORDER, layoutDropdownW * 2 + layoutGap,
         function()
             local c = AuraCaps()
             if type(c.sortOrder) == "number" then return c.sortOrder end
@@ -807,13 +824,13 @@ local function BuildAuras(ctx)
     end)
 
     local filters = b:CollapsibleSection("a2_filters", "Aura Filters & Sorting", 300, false)
-    LabelAt(filters, "Include", 12, -10, 140, "GameFontNormal", T.colors.text)
+    LabelAt(filters, "Include", 12, -10, 140, "GameFontNormal", T.colors.accent)
     ScopedToggleAt(ctx, filters, "Include boss buffs", 12, -34, AuraBuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras)
     ScopedToggleAt(ctx, filters, "Include boss debuffs", 12, -62, AuraDebuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras)
     ToggleAt(ctx, filters, "Show Sated/Exhaustion", 12, -90, AuraShared, "showSated", true, ApplyAuras)
     ScopedToggleAt(ctx, filters, "Include stealable buffs", 12, -118, AuraBuffFilters, "includeStealable", false, ForceAuraFilterOverride, ApplyAuras)
     ScopedToggleAt(ctx, filters, "Include dispellable debuffs", 12, -146, AuraDebuffFilters, "includeDispellable", false, ForceAuraFilterOverride, ApplyAuras)
-    LabelAt(filters, "Hard filters", 380, -10, 160, "GameFontNormal", T.colors.text)
+    LabelAt(filters, "Hard filters", 380, -10, 160, "GameFontNormal", T.colors.accent)
     ScopedToggleAt(ctx, filters, "Only show boss auras", 380, -34, AuraFilters, "onlyBossAuras", false, ForceAuraFilterOverride, ApplyAuras)
     ScopedToggleAt(ctx, filters, "Only show IMPORTANT buffs", 380, -62, AuraBuffFilters, "onlyImportant", false, ForceAuraFilterOverride, ApplyAuras)
     ScopedToggleAt(ctx, filters, "Only show IMPORTANT debuffs", 380, -90, AuraDebuffFilters, "onlyImportant", false, ForceAuraFilterOverride, ApplyAuras)
@@ -943,4 +960,4 @@ AdvancedPage.ScopedDropdownAt = ScopedDropdownAt
 AdvancedPage.TogglePillAt = TogglePillAt
 AdvancedPage.SetControlEnabled = SetControlEnabled
 
-M.RegisterPage("auras2", { title = "MSUF Unit Auras", build = BuildAuras, version = 5 })
+M.RegisterPage("auras2", { title = "MSUF Unit Auras", build = BuildAuras, version = 6 })

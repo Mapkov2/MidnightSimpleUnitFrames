@@ -1269,6 +1269,104 @@ local function EnsureLSMCallbacks()
     end)
 end
 
+-- Shared statusbar texture choices for Menu2 dropdowns.
+-- Returns LibSharedMedia entries with a texture path so the native dropdown can
+-- render a small statusbar preview for every texture.
+local FALLBACK_STATUSBAR_TEXTURES = {
+    { key = "Blizzard",      path = "Interface\\TargetingFrame\\UI-StatusBar" },
+    { key = "Solid",         path = "Interface\\Buttons\\WHITE8X8" },
+    { key = "Flat",          path = "Interface\\Buttons\\WHITE8x8" },
+    { key = "RaidHP",        path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
+    { key = "RaidPower",     path = "Interface\\RaidFrame\\Raid-Bar-Resource-Fill" },
+    { key = "Skills",        path = "Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar" },
+    { key = "Outline",       path = "Interface\\Tooltips\\UI-Tooltip-Background" },
+    { key = "TooltipBorder", path = "Interface\\Tooltips\\UI-Tooltip-Border" },
+    { key = "DialogBG",      path = "Interface\\DialogFrame\\UI-DialogBox-Background" },
+    { key = "Parchment",     path = "Interface\\AchievementFrame\\UI-Achievement-StatsBackground" },
+}
+
+local function GetStatusbarLSM()
+    local LSM = (ns and ns.LSM) or _G.MSUF_LSM
+    if not LSM and type(_G.LibStub) == "function" then
+        local ok, lib = pcall(_G.LibStub, "LibSharedMedia-3.0", true)
+        if ok then LSM = lib end
+    end
+    return LSM
+end
+
+local function FetchStatusbarTexture(lsm, key)
+    if type(key) ~= "string" or key == "" then return nil end
+    local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
+    if type(builtins) == "table" then
+        local texture = builtins[key]
+        if type(texture) == "string" and texture ~= "" then return texture end
+    end
+    for i = 1, #FALLBACK_STATUSBAR_TEXTURES do
+        local item = FALLBACK_STATUSBAR_TEXTURES[i]
+        if item.key == key then return item.path end
+    end
+    if key:find("\\", 1, true) or key:find("/", 1, true) then return key end
+    if lsm and type(lsm.Fetch) == "function" then
+        local ok, texture = pcall(lsm.Fetch, lsm, "statusbar", key, true)
+        if ok and type(texture) == "string" and texture ~= "" then return texture end
+    end
+    return nil
+end
+
+local function AddStatusbarItem(out, used, value, text, texture, translate)
+    if type(value) ~= "string" or value == "" or used[value] then return end
+    used[value] = true
+    out[#out + 1] = {
+        value = value,
+        text = text or value,
+        texture = texture,
+        translate = translate,
+    }
+end
+
+local function StatusBarTextureItems(followText)
+    local out, used = {}, {}
+    local lsm = GetStatusbarLSM()
+    if followText then
+        out[#out + 1] = { value = "", text = followText }
+        used[""] = true
+    end
+
+    for i = 1, #FALLBACK_STATUSBAR_TEXTURES do
+        local item = FALLBACK_STATUSBAR_TEXTURES[i]
+        AddStatusbarItem(out, used, item.key, item.key, item.path, false)
+    end
+
+    if lsm and type(lsm.List) == "function" then
+        local okList, names = pcall(lsm.List, lsm, "statusbar")
+        local hash
+        if type(lsm.HashTable) == "function" then
+            local okHash, h = pcall(lsm.HashTable, lsm, "statusbar")
+            if okHash and type(h) == "table" then hash = h end
+        end
+        if okList and type(names) == "table" then
+            table.sort(names, function(a, b)
+                return tostring(a):lower() < tostring(b):lower()
+            end)
+            for i = 1, #names do
+                local name = names[i]
+                if type(name) == "string" and name ~= "" then
+                    local texture = type(hash) == "table" and hash[name] or nil
+                    texture = texture or FetchStatusbarTexture(lsm, name)
+                    AddStatusbarItem(out, used, name, name, texture, false)
+                end
+            end
+        end
+    end
+
+    return out
+end
+
+ns.UI = ns.UI or {}
+ns.UI.StatusBarTextureItems = StatusBarTextureItems
+_G.MSUF_StatusBarTextureItems = StatusBarTextureItems
+_G.MSUF_RebuildStatusbarChoices = _G.MSUF_RebuildStatusbarChoices or function() end
+
 -- Bundled fonts (Media/Fonts)
 
 local function RegisterBundledFonts()

@@ -1561,6 +1561,30 @@ function GF.BuildFrameCache(f)
     c.rfEn    = conf.rangeFadeEnabled ~= false
     c.rfAlpha = conf.rangeFadeAlpha or 0.4
     c.offAlpha = conf.offlineAlpha or 0.5
+    c.hideOfflineEn = conf.hideOfflineEnabled == true
+    c.hideOfflineCombat = c.hideOfflineEn and conf.hideOfflineInCombat == true
+    c.hideOfflineDelay = c.hideOfflineEn and (tonumber(conf.hideOfflineDelay) or 0) or 0
+    if c.hideOfflineDelay < 0 then c.hideOfflineDelay = 0 end
+    c.hideOfflineActive = c.hideOfflineEn and (c.hideOfflineCombat or not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))) or false
+    f._msufGFOfflineConfigured = c.hideOfflineEn or nil
+    f._msufGFOfflineCombatAllowed = c.hideOfflineCombat or nil
+    f._msufGFOfflineActive = c.hideOfflineActive or nil
+    if c.hideOfflineEn then
+        GF._offlineHideAnyEnabled = true
+    else
+        if (f._msufGFOfflineHidden or f._msufGFOfflineHideTimer or f._msufGFOfflineKey or f._msufGFOfflineSince or f._msufGFOfflineHideDueAt)
+            and GF.ResetOfflineHiddenFrame
+        then
+            GF.ResetOfflineHiddenFrame(f)
+        end
+        if GF._offlineHideAnyEnabled and GF.RefreshOfflineHideEnabledFlag and not GF._offlineHideFlagRefreshQueued then
+            GF._offlineHideFlagRefreshQueued = true
+            _MSUF_ScheduleOnce("GF_OFFLINE_HIDE_FLAG_REFRESH", function()
+                GF._offlineHideFlagRefreshQueued = nil
+                if GF.RefreshOfflineHideEnabledFlag then GF.RefreshOfflineHideEnabledFlag() end
+            end)
+        end
+    end
     c.rfLayerMode = _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)
     c.hpBarAlpha = (GF.GetEffectiveHealthAlpha and GF.GetEffectiveHealthAlpha(kind, conf)) or tonumber(conf.hpBarAlpha) or 1
     if c.hpBarAlpha < 0 then c.hpBarAlpha = 0 elseif c.hpBarAlpha > 1 then c.hpBarAlpha = 1 end
@@ -1739,7 +1763,7 @@ function GF.BuildFrameCache(f)
     -- subscribe every raid button to UNIT_FLAGS: boss pulls and stealth/vanish
     -- transitions can flood it for the whole group.
     c.flagsEn      = false
-    c.connectionEn = c.statusTextEn or c.rfEn
+    c.connectionEn = c.statusTextEn or c.rfEn or c.hideOfflineActive
 
     -- Composite: does anything need UNIT_AURA?
     c.needAura = c.customAuraGrp or c.ciAura
@@ -2995,6 +3019,242 @@ local function ApplyPowerColor(f, unit)
 end
 
 ------------------------------------------------------------------------
+-- Offline box hiding
+-- hideOfflineEnabled gates the feature completely. When enabled, keep the
+-- normal offline state visible for N seconds, then hide the visual box until
+-- the unit reconnects. The secure click button remains owned by
+-- SecureGroupHeader; only non-secure visual children are hidden.
+------------------------------------------------------------------------
+do
+local function _GF_BumpOfflineToken(f)
+    local token = (f._msufGFOfflineHideToken or 0) + 1
+    f._msufGFOfflineHideToken = token
+    return token
+end
+
+local function _GF_CancelOfflineHideTimer(f)
+    local timer = f and f._msufGFOfflineHideTimer
+    if timer and timer.Cancel then
+        timer:Cancel()
+    end
+    if f then
+        f._msufGFOfflineHideTimer = nil
+        f._msufGFOfflineHideDueAt = nil
+    end
+end
+
+local function _GF_SetOfflineHidden(f, hidden)
+    if not f then return end
+    hidden = hidden and true or false
+    if f._msufGFOfflineHidden == hidden then return end
+    f._msufGFOfflineHidden = hidden or nil
+
+    if hidden then
+        GF._offlineHideRuntimeActive = true
+        if f.barGroup then f.barGroup:Hide() end
+        if f._msufGFHoverBorder then f._msufGFHoverBorder:Hide() end
+        if f._msufGFHighlightBorder then f._msufGFHighlightBorder:Hide() end
+        if f._msufGFDispelOverlay then f._msufGFDispelOverlay:Hide() end
+        if f._msufGFDebuffStripe then f._msufGFDebuffStripe:Hide() end
+        if GF.HideFrameAuras then GF.HideFrameAuras(f) end
+        if GF.HideSpellIndicators then GF.HideSpellIndicators(f) end
+        if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
+    else
+        if f.barGroup then f.barGroup:Show() end
+    end
+end
+
+local function _GF_ClearOfflineHiddenFrame(f)
+    if not f then return end
+    if not f._msufGFOfflineHidden and not f._msufGFOfflineKey
+        and not f._msufGFOfflineSince and not f._msufGFOfflineHideDueAt
+        and not f._msufGFOfflineHideTimer
+    then
+        return
+    end
+    _GF_CancelOfflineHideTimer(f)
+    _GF_BumpOfflineToken(f)
+    f._msufGFOfflineKey = nil
+    f._msufGFOfflineSince = nil
+    f._msufGFOfflineHideDueAt = nil
+    _GF_SetOfflineHidden(f, false)
+    if GF.RefreshOfflineHideRuntimeFlag then GF.RefreshOfflineHideRuntimeFlag() end
+end
+
+local function _GF_GetOfflineDelay(f, kind)
+    local c = f and f._c
+    local delay = c and c.hideOfflineDelay
+    if delay == nil and GF.GetConf then
+        local conf = GF.GetConf(kind or (f and f._msufGFKind) or "party")
+        delay = (conf and conf.hideOfflineEnabled == true) and conf.hideOfflineDelay or 0
+    end
+    delay = tonumber(delay) or 0
+    if delay < 0 then delay = 0 elseif delay > 120 then delay = 120 end
+    return delay
+end
+
+local function _GF_CanRunOfflineHideNow(f, kind)
+    if not (InCombatLockdown and InCombatLockdown()) then return true end
+    local c = f and f._c
+    if c then return c.hideOfflineCombat == true end
+    if GF.GetConf then
+        local conf = GF.GetConf(kind or (f and f._msufGFKind) or "party")
+        return conf and conf.hideOfflineEnabled == true and conf.hideOfflineInCombat == true or false
+    end
+    return false
+end
+
+local function _GF_ScheduleOfflineHide(f, unit, dueAt, remaining)
+    if not (f and dueAt) then return end
+    if not _GF_CanRunOfflineHideNow(f) then return end
+    if f._msufGFOfflineHideDueAt == dueAt then return end
+    _GF_CancelOfflineHideTimer(f)
+    local token = _GF_BumpOfflineToken(f)
+    f._msufGFOfflineHideDueAt = dueAt
+    remaining = tonumber(remaining) or 0
+    if remaining < 0 then remaining = 0 end
+    local function run()
+        if not f or f._msufGFOfflineHideToken ~= token then return end
+        f._msufGFOfflineHideTimer = nil
+        if not _GF_CanRunOfflineHideNow(f) then return end
+        if GF.UpdateOfflineHiddenFrame then GF.UpdateOfflineHiddenFrame(f, f.unit or unit, true) end
+    end
+    if C_Timer and C_Timer.NewTimer then
+        GF._offlineHideRuntimeActive = true
+        f._msufGFOfflineHideTimer = C_Timer.NewTimer(remaining, run)
+    else
+        GF._offlineHideRuntimeActive = true
+        _MSUF_ScheduleDelayOnce("GF_OFFLINE_HIDE:" .. tostring(f) .. ":" .. tostring(token), remaining, run)
+    end
+end
+
+function GF.UpdateOfflineHiddenFrame(f, unit, force)
+    if not f then return false end
+    local kind = f._msufGFKind or "party"
+    if not _GF_CanRunOfflineHideNow(f, kind) then return false end
+    if f._msufGFPreviewActive then
+        _GF_ClearOfflineHiddenFrame(f)
+        return false
+    end
+
+    unit = unit or f.unit
+    local delay = _GF_GetOfflineDelay(f, kind)
+    if delay <= 0 or not unit or not UnitExists(unit) then
+        _GF_ClearOfflineHiddenFrame(f)
+        return false
+    end
+
+    local connected = UnitIsConnected and UnitIsConnected(unit)
+    if issecretvalue and connected ~= nil and issecretvalue(connected) then connected = true end
+    if connected ~= false then
+        _GF_ClearOfflineHiddenFrame(f)
+        return false
+    end
+
+    local guidFn = _G.UnitGUID
+    local key = unit
+    if guidFn then
+        local guid = guidFn(unit)
+        if guid and not (issecretvalue and issecretvalue(guid)) then key = guid end
+    end
+
+    local now = (GetTime and GetTime()) or 0
+    if f._msufGFOfflineKey ~= key then
+        _GF_BumpOfflineToken(f)
+        f._msufGFOfflineKey = key
+        f._msufGFOfflineSince = now
+        f._msufGFOfflineHideDueAt = nil
+        _GF_SetOfflineHidden(f, false)
+    elseif not f._msufGFOfflineSince then
+        f._msufGFOfflineSince = now
+    end
+
+    local dueAt = (f._msufGFOfflineSince or now) + delay
+    if force == true or now >= dueAt then
+        f._msufGFOfflineHideDueAt = dueAt
+        _GF_SetOfflineHidden(f, true)
+        return true
+    end
+
+    _GF_SetOfflineHidden(f, false)
+    _GF_ScheduleOfflineHide(f, unit, dueAt, dueAt - now)
+    return false
+end
+
+GF.ResetOfflineHiddenFrame = _GF_ClearOfflineHiddenFrame
+
+function GF.RefreshOfflineHideEnabledFlag()
+    if not GF.GetConf then
+        GF._offlineHideAnyEnabled = false
+        return false
+    end
+    local party = GF.GetConf("party")
+    local raid = GF.GetConf("raid")
+    local mythic = GF.GetConf("mythicraid")
+    local enabled = (party and party.hideOfflineEnabled == true)
+        or (raid and raid.hideOfflineEnabled == true)
+        or (mythic and mythic.hideOfflineEnabled == true)
+    GF._offlineHideCombatAnyEnabled = ((party and party.hideOfflineEnabled == true and party.hideOfflineInCombat == true)
+        or (raid and raid.hideOfflineEnabled == true and raid.hideOfflineInCombat == true)
+        or (mythic and mythic.hideOfflineEnabled == true and mythic.hideOfflineInCombat == true)) or false
+    GF._offlineHideAnyEnabled = enabled or false
+    return GF._offlineHideAnyEnabled
+end
+
+local function _GF_ForEachOfflineFrame(fn)
+    if type(fn) ~= "function" then return end
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f then fn(f) end
+        end
+    elseif GF.frames then
+        for f in pairs(GF.frames) do fn(f) end
+    end
+end
+
+function GF.RefreshOfflineHideRuntimeFlag()
+    local active = false
+    _GF_ForEachOfflineFrame(function(f)
+        if f and (f._msufGFOfflineHidden or f._msufGFOfflineHideTimer or f._msufGFOfflineHideDueAt) then
+            active = true
+        end
+    end)
+    GF._offlineHideRuntimeActive = active or nil
+    return active
+end
+
+function GF.SuspendOfflineHideForCombat()
+    if not GF._offlineHideRuntimeActive then return end
+    _GF_ForEachOfflineFrame(function(f)
+        if f and not f._msufGFOfflineCombatAllowed
+            and (f._msufGFOfflineConfigured or f._msufGFOfflineHidden or f._msufGFOfflineHideTimer)
+        then
+            _GF_CancelOfflineHideTimer(f)
+            _GF_BumpOfflineToken(f)
+            _GF_SetOfflineHidden(f, false)
+            f._msufGFOfflineActive = nil
+        end
+    end)
+    if GF.RefreshOfflineHideRuntimeFlag then GF.RefreshOfflineHideRuntimeFlag() end
+end
+
+function GF.RefreshOfflineHiddenFrames()
+    if InCombatLockdown and InCombatLockdown() then return end
+    if not (GF.RefreshOfflineHideEnabledFlag and GF.RefreshOfflineHideEnabledFlag()) then return end
+    _GF_ForEachOfflineFrame(function(f)
+        if f and f.unit and UnitExists(f.unit) then
+            if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+            if f._msufGFOfflineActive and GF.UpdateOfflineHiddenFrame then
+                GF.UpdateOfflineHiddenFrame(f, f.unit)
+            end
+        end
+    end)
+end
+end
+
+------------------------------------------------------------------------
 -- Full update for a single frame (called on unit assignment + events)
 ------------------------------------------------------------------------
 local dispatchOverlays, dispatchIncomingHeal, dispatchAbsorb, dispatchHealAbsorb
@@ -3003,6 +3263,11 @@ local function UpdateAll(f, unit)
     if not f or not unit then return end
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
+    if f._msufGFOfflineActive and (_G.MSUF_InCombat ~= true or f._msufGFOfflineCombatAllowed)
+        and GF.UpdateOfflineHiddenFrame and GF.UpdateOfflineHiddenFrame(f, unit)
+    then
+        return
+    end
     GF.UpdateButton(f, unit)
     if _GF_ShouldApplyRangeOrFrameAlpha(f, c, f._msufGFKind or "party") then ApplyRangeFade(f, unit) end
     if c.needThreat then UpdateAggro(f, unit) end
@@ -4117,6 +4382,16 @@ local UNIT_DISPATCH = {
     UNIT_DISPLAYPOWER                 = dispatchDisplayPower,
     UNIT_NAME_UPDATE                  = dispatchName,
     UNIT_CONNECTION                   = function(f, u)
+        local wasOfflineHidden = f and f._msufGFOfflineHidden == true
+        if f and f._msufGFOfflineActive and (_G.MSUF_InCombat ~= true or f._msufGFOfflineCombatAllowed)
+            and GF.UpdateOfflineHiddenFrame and GF.UpdateOfflineHiddenFrame(f, u)
+        then
+            return
+        end
+        if wasOfflineHidden then
+            UpdateAll(f, u)
+            return
+        end
         local c = f._c
         if c and c.statusTextEn then UpdateStatusText(f, u) end
         if c and _GF_ShouldApplyRangeOrFrameAlpha(f, c, f._msufGFKind or "party") then ApplyRangeFade(f, u) end
@@ -4566,10 +4841,16 @@ do
 
     H.PLAYER_REGEN_DISABLED = function(_, event)
         _G.MSUF_InCombat = (event == "PLAYER_REGEN_DISABLED")
+        if event == "PLAYER_REGEN_DISABLED" and GF._offlineHideRuntimeActive and GF.SuspendOfflineHideForCombat then
+            GF.SuspendOfflineHideForCombat()
+        end
         if GF.RefreshGroupAlphas then
             GF.RefreshGroupAlphas()
         elseif GF.RefreshRangeFade then
             GF.RefreshRangeFade()
+        end
+        if event == "PLAYER_REGEN_ENABLED" and GF._offlineHideAnyEnabled and GF.RefreshOfflineHiddenFrames then
+            GF.RefreshOfflineHiddenFrames()
         end
     end
     H.PLAYER_REGEN_ENABLED = H.PLAYER_REGEN_DISABLED
@@ -4899,6 +5180,11 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
     if not f or not unit then return end
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
+    if f._msufGFOfflineActive and (_G.MSUF_InCombat ~= true or f._msufGFOfflineCombatAllowed)
+        and GF.UpdateOfflineHiddenFrame and GF.UpdateOfflineHiddenFrame(f, unit)
+    then
+        return
+    end
 
     -- Visual settings changed; avoid the legacy full UpdateAll unless the change
     -- actually needs max-health/power/layout-dependent recomputation. This keeps
@@ -4996,6 +5282,7 @@ _G.MSUF_GF_OnFrameRetire = function(f)
     -- Cancel + clear pending ready-check fade timer (closure captures `f`)
     if GF.CancelReadyCheckTimer then GF.CancelReadyCheckTimer(f) end
     _GF_StopDispelGlow(f)
+    if GF.ResetOfflineHiddenFrame then GF.ResetOfflineHiddenFrame(f) end
     if GF.HideFrameAuras then GF.HideFrameAuras(f) end
     if GF.RecycleFramePools then GF.RecycleFramePools(f) end
     if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(f) end

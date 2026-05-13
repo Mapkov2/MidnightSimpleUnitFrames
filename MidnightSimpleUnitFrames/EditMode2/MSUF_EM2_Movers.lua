@@ -16,6 +16,19 @@ local W8 = "Interface/Buttons/WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local round = function(n) return n + (2^52 + 2^51) - (2^52 + 2^51) end
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 local function T()
     return _G.MSUF_THEME or {
         bgR=0.08, bgG=0.09, bgB=0.10,
@@ -28,12 +41,7 @@ end
 local movers = {}
 local moverParent
 
-local function RefreshUFPreview(reason, unitKey)
-    local opt = _G.MSUF_UFOptions_RequestRefresh
-    if type(opt) == "function" then
-        opt(reason or "EM2_MOVERS", unitKey)
-        return
-    end
+local function RefreshUFPreview(reason)
     local fn = _G.MSUF_UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "EM2_MOVERS") end
 end
@@ -76,7 +84,7 @@ local function CreateMover(key, cfg)
 
     local label = mover:CreateFontString(nil, "OVERLAY")
     label:SetFont(FONT, 10, "OUTLINE"); label:SetPoint("CENTER")
-    label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(cfg.label or key)
+    label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(Tr(cfg.label or key))
     mover._label = label
 
     local coordFS = mover:CreateFontString(nil, "OVERLAY")
@@ -409,7 +417,7 @@ _G.MSUF_ResetCurrentEditUnit = function()
     elseif type(ApplyAllSettings) == "function" then ApplyAllSettings() end
 end
 
--- ── MSUF_UpdateEditModeInfo (called by Castbars, Options_Core, main) ─────
+-- ── MSUF_UpdateEditModeInfo (called by Castbars/main) ─────
 _G.MSUF_UpdateEditModeInfo = function()
     -- No-op: EM2 HUD handles display. Old GridFrame.infoText is gone.
 end
@@ -701,24 +709,6 @@ Edit.Transitions.SetMSUFEditModeDirect = _G.MSUF_SetMSUFEditModeDirect
 
 -- ── AnyEditMode listeners (registration handled in State.lua) ────────────
 
--- ── MSUF_EM_DropdownPreset (used by old Options code) ────────────────────
-_G.MSUF_EM_DropdownPreset = function(drop, width, placeholder)
-    if drop and UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(drop, width or 120) end
-    if drop and UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, placeholder or "Select...") end
-end
-
--- ── MSUF_EM_RegisterPopupDropdown (no-op, EM2 popups don't need layer management) ──
-_G.MSUF_EM_RegisterPopupDropdown = function() end
-
--- ── MSUF_EM_AddPopupTitleAndClose (no-op, EM2 popups use Factory.Panel) ──
-_G.MSUF_EM_AddPopupTitleAndClose = function() end
-
--- ── MSUF_EM_AddSectionHeader (no-op) ─────────────────────────────────────
-_G.MSUF_EM_AddSectionHeader = function() end
-
--- ── MSUF_EM_AddDivider (no-op) ──────────────────────────────────────────
-_G.MSUF_EM_AddDivider = function() end
-
 -- ── Castbar anchor toggle (detach/attach to unitframe) ──────────────────
 _G.MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or function(unit, anchored)
     if not unit then return end
@@ -774,7 +764,7 @@ _G.MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or fun
 end
 
 -- ── Anchor Picker Singleton ─────────────────────────────────────────────
--- Shared by Edit Mode (global anchor) and Options_Player (per-unit anchor).
+-- Shared by Edit Mode and Menu2 anchor pickers.
 -- Caller sets _G.MSUF_AnchorPicker._onPick = function(frameName) ... end
 -- before showing, to control where the picked name is written.
 if not _G.MSUF_EnsureAnchorPicker then
@@ -917,10 +907,16 @@ do
 
         ov:SetScript("OnShow", function(self)
             self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
-            self._info:SetText("Anchor Picker")
-            self._sub:SetText("|cffffffffHover a frame, then hold |r|cff55ff55CTRL + Left-Click|r|cffffffff to anchor.  |  Right-Click or Escape cancels.|r")
-            self._hover:SetText("Hover: no named frame found")
-            self._ctrlHint:SetText("CTRL: not held"); self._ctrlHint:SetTextColor(1, 0.3, 0.3)
+            self._lCtrlHeld = Tr("CTRL: held - click to anchor!")
+            self._lCtrlNotHeld = Tr("CTRL: not held")
+            self._lHoverNone = Tr("Hover: no named frame found")
+            self._lHoverFmt = Tr("Hover: %s")
+            self._lCtrlRequired = Tr("|cffff6060CTRL required:|r |cffffffffhold |r|cff55ff55CTRL + Left-Click|r|cffffffff to confirm the anchor target.|r")
+            self._lNoNamedFrame = Tr("|cffffcc33No named frame found under cursor.|r |cffffffffTry a different spot.|r")
+            self._info:SetText(Tr("Anchor Picker"))
+            self._sub:SetText(Tr("|cffffffffHover a frame, then hold |r|cff55ff55CTRL + Left-Click|r|cffffffff to anchor.  |  Right-Click or Escape cancels.|r"))
+            self._hover:SetText(self._lHoverNone)
+            self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(1, 0.3, 0.3)
             self._highlight:Hide()
             if self.RegisterEvent then self:RegisterEvent("GLOBAL_MOUSE_DOWN") end
         end)
@@ -931,27 +927,27 @@ do
         ov:SetScript("OnUpdate", function(self, elapsed)
             self._elapsed = (self._elapsed or 0) + elapsed; if self._elapsed < 0.03 then return end; self._elapsed = 0
             local cd = IsControlKeyDown and IsControlKeyDown()
-            if cd then self._ctrlHint:SetText("CTRL: held  —  click to anchor!"); self._ctrlHint:SetTextColor(0.2, 1, 0.2)
-            else self._ctrlHint:SetText("CTRL: not held"); self._ctrlHint:SetTextColor(1, 0.3, 0.3) end
+            if cd then self._ctrlHint:SetText(self._lCtrlHeld); self._ctrlHint:SetTextColor(0.2, 1, 0.2)
+            else self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(1, 0.3, 0.3) end
             local f, n = _GetNamed(); self._pickedFrame = f; self._pickedName = n
             if n then
-                self._hover:SetText("Hover: " .. n)
+                self._hover:SetText(string.format(self._lHoverFmt, n))
                 local l, b, w, h = _SafeGetRect(f)
                 if l then
                     self._highlight:ClearAllPoints(); self._highlight:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b); self._highlight:SetSize(w, h)
                     self._highlight:SetBackdropBorderColor(cd and 0 or 1, cd and 1 or 1, 0, cd and 0.95 or 0.6); self._highlight:Show()
                 else self._highlight:Hide() end
-            else self._hover:SetText("Hover: no named frame found"); self._highlight:Hide() end
+            else self._hover:SetText(self._lHoverNone); self._highlight:Hide() end
         end)
         ov:SetScript("OnEvent", function(self, event, button)
             if event ~= "GLOBAL_MOUSE_DOWN" then return end
             if button == "RightButton" then self:Hide(); return end
             if button ~= "LeftButton" then return end
             if not (IsControlKeyDown and IsControlKeyDown()) then
-                self._sub:SetText("|cffff6060CTRL required:|r |cffffffffhold |r|cff55ff55CTRL + Left-Click|r|cffffffff to confirm the anchor target.|r"); return
+                self._sub:SetText(self._lCtrlRequired); return
             end
             local n = self._pickedName
-            if not n or n == "" then self._sub:SetText("|cffffcc33No named frame found under cursor.|r |cffffffffTry a different spot.|r"); return end
+            if not n or n == "" then self._sub:SetText(self._lNoNamedFrame); return end
             if type(self._onPick) == "function" then self._onPick(n) end
             self:Hide()
         end)

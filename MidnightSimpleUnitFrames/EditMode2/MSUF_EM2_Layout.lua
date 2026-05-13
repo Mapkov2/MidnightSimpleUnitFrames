@@ -18,12 +18,7 @@ local floor = math.floor
 local max   = math.max
 local min   = math.min
 
-local function RefreshUFPreview(reason, unitKey)
-    local opt = _G.MSUF_UFOptions_RequestRefresh
-    if type(opt) == "function" then
-        opt(reason or "EM2_LAYOUT", unitKey)
-        return
-    end
+local function RefreshUFPreview(reason)
     local fn = _G.MSUF_UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "EM2_LAYOUT") end
 end

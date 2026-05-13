@@ -150,6 +150,9 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
 end
 _G.MSUF_NormalizePortraitRenderDB = MSUF_Defaults_NormalizePortraitRenderDB
 
+local MSUF_DEFAULT_BOSS_OFFSET_X = 360
+local MSUF_DEFAULT_BOSS_OFFSET_Y = 230
+
 -- Fresh-install overrides (applied only when the factory profile payload is seeded).
 -- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
@@ -214,6 +217,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     ForceFreshUnitframeScreenPosition(db.focus, 260, 135)
     ForceFreshUnitframeScreenPosition(db.pet, -260, 135)
     ForceFreshUnitframeScreenPosition(db.targettarget or db.tot, 260, 225)
+    ForceFreshUnitframeScreenPosition(db.boss, MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_party)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_raid)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_mythicraid)
@@ -1857,8 +1861,8 @@ local function fill(key, defaults)
     fill("boss", {
         width        = 180,
         height       = 30,
-        offsetX      = 507,
-        offsetY      = 309,
+        offsetX      = MSUF_DEFAULT_BOSS_OFFSET_X,
+        offsetY      = MSUF_DEFAULT_BOSS_OFFSET_Y,
         spacing      = -96,
         -- Layout mode: "VERTICAL_DOWN" | "VERTICAL_UP" | "HORIZONTAL_RIGHT" | "HORIZONTAL_LEFT"
         -- Kept invertBossOrder for one-shot migration (see below).

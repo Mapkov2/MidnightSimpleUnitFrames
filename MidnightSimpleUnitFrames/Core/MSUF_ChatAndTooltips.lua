@@ -2,12 +2,25 @@
 -- Thinking about just scrapping this if this causes more erros
 local addonName, ns = ...
 ns = ns or {}
+
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns.Translate) == "function" then return ns.Translate(text) end
+    local locale = ns.L or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 local MSUF_RESET_DEFAULTS = {
     player = { width=275, height=40, offsetX=-260, offsetY=80, showName=true, showHP=true, showPower=true },
     target = { width=275, height=40, offsetX= 260, offsetY=80, showName=true, showHP=true, showPower=true },
     focus  = { width=220, height=30, offsetX= 260, offsetY=135, showName=true, showHP=false, showPower=false },
     pet    = { width=220, height=30, offsetX=-260, offsetY=135, showName=true, showHP=false, showPower=false },
     targettarget = { width=220, height=30, offsetX=260, offsetY=225, showName=true, showHP=true, showPower=false },
+    boss   = { width=180, height=30, offsetX=360, offsetY=230, spacing=-96, bossLayoutMode="VERTICAL_DOWN", showName=true, showHP=true, showPower=false },
 }
 local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "pet", "targettarget", "boss" }
 local MSUF_FullResetPending = false
@@ -32,18 +45,18 @@ local function MSUF_DoFullReset(opts)
     opts = opts or {}
     local skipReload = (opts.skipReload == true)
     if InCombatLockdown and InCombatLockdown() then
-        print("|cffff0000MSUF:|r Cannot do FULL reset while in combat.")
+        print(Tr("|cffff0000MSUF:|r Cannot do FULL reset while in combat."))
          return
     end
     MSUF_DB = nil
     MSUF_GlobalDB = nil
     MSUF_ActiveProfile = nil
-    print("|cffff0000MSUF:|r FULL RESET executed  all MSUF profiles & settings deleted for this account.")
+    print(Tr("|cffff0000MSUF:|r FULL RESET executed - all MSUF profiles & settings deleted for this account."))
     if skipReload then
-        print("|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu  Advanced  Factory Reset.")
+        print(Tr("|cffffff00MSUF:|r Reset staged. Please type |cff00ff00/reload|r OR use: MSUF Menu > Advanced > Factory Reset."))
          return
     end
-    print("|cffffff00MSUF:|r Reloading UI to rebuild clean defaults...")
+    print(Tr("|cffffff00MSUF:|r Reloading UI to rebuild clean defaults..."))
 	-- NOTE: C_UI.Reload() is protected; addons may get ADDON_ACTION_BLOCKED.
 	-- ReloadUI() is the safe public API for addons.
 	if type(ReloadUI) == "function" then
@@ -53,16 +66,16 @@ local function MSUF_DoFullReset(opts)
 -- Expose for the Slash Menu (button click = hardware event, safe for ReloadUI)
 _G.MSUF_DoFullReset = MSUF_DoFullReset
 local function MSUF_PrintHelp()
-    print("|cff00ff00MSUF commands:|r")
-    print("  /msuf help      - Show this help.")
-    print("  /msuf reset     - Reset all MSUF frame positions and visibility to defaults.")
-    print("  /msuf fullreset - FULL factory reset (all profiles/settings).")
-    print("                   Confirm stages the reset; reload via /reload or MSUF Menu  Advanced  Factory Reset.")
-    print("  /msuf absorb    - Toggle showing total absorb amount in HP text.")
-    print("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry.")
-    print("  /rl             - Reload the UI.")
-    print("  /msufdbgpos     - Toggle position drift debugger (overlay + chat log).")
-    print("  !msuf help      - Print this help via chat (from your own character).")
+    print(Tr("|cff00ff00MSUF commands:|r"))
+    print(Tr("  /msuf help      - Show this help."))
+    print(Tr("  /msuf reset     - Reset all MSUF frame positions and visibility to defaults."))
+    print(Tr("  /msuf fullreset - FULL factory reset (all profiles/settings)."))
+    print(Tr("                   Confirm stages the reset; reload via /reload or MSUF Menu > Advanced > Factory Reset."))
+    print(Tr("  /msuf absorb    - Toggle showing total absorb amount in HP text."))
+    print(Tr("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry."))
+    print(Tr("  /rl             - Reload the UI."))
+    print(Tr("  /msufdbgpos     - Toggle position drift debugger (overlay + chat log)."))
+    print(Tr("  !msuf help      - Print this help via chat (from your own character)."))
  end
 -- Optional chat trigger: "!msuf help" (only from yourself)
 -- Midnight/Beta secret-safe: chat event args can become "secret" in combat.
@@ -155,17 +168,17 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
     if cmd == "fullreset" then
         if not MSUF_FullResetPending then
             MSUF_FullResetPending = true
-            print("|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account.")
-            print("|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset.")
-            print("|cffffcc00MSUF:|r Then click: MSUF Menu  Advanced  Factory Reset (or type /reload).")
+            print(Tr("|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & settings for this account."))
+            print(Tr("|cffffcc00MSUF:|r Type |cffffff00/msuf fullreset confirm|r to stage the reset."))
+            print(Tr("|cffffcc00MSUF:|r Then click: MSUF Menu > Advanced > Factory Reset (or type /reload)."))
              return
         end
         if msg ~= "fullreset confirm" then
             MSUF_FullResetPending = false
-            print("|cffffcc00MSUF:|r Full reset cancelled. If you still want it, type:")
+            print(Tr("|cffffcc00MSUF:|r Full reset cancelled. If you still want it, type:"))
             print("  /msuf fullreset")
             print("  /msuf fullreset confirm")
-            print("  (then /reload OR MSUF Menu  Advanced  Factory Reset)")
+            print(Tr("  (then /reload OR MSUF Menu > Advanced > Factory Reset)"))
              return
         end
         MSUF_FullResetPending = false
@@ -174,7 +187,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
     end
     if cmd == "reset" then
         if InCombatLockdown and InCombatLockdown() then
-            print("|cffff0000MSUF:|r Cannot reset while in combat.")
+            print(Tr("|cffff0000MSUF:|r Cannot reset while in combat."))
              return
         end
         if type(EnsureDB) == "function" then
@@ -204,7 +217,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
         if type(UpdateAllFonts) == "function" then
             UpdateAllFonts()
         end
-        print("|cff00ff00MSUF:|r Positions and visibility reset to defaults.")
+        print(Tr("|cff00ff00MSUF:|r Positions and visibility reset to defaults."))
          return
     end
     if cmd == "absorb" then
@@ -213,7 +226,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
         end
         local g = (type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
         if not g then
-            print("|cffff0000MSUF:|r DB not initialized.")
+            print(Tr("|cffff0000MSUF:|r DB not initialized."))
              return
         end
         g.showTotalAbsorbAmount = not g.showTotalAbsorbAmount
@@ -221,9 +234,9 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             ApplyAllSettings()
         end
         if g.showTotalAbsorbAmount then
-            print("|cff00ff00MSUF:|r Total absorb amount in HP text ENABLED.")
+            print(Tr("|cff00ff00MSUF:|r Total absorb amount in HP text ENABLED."))
         else
-            print("|cff00ff00MSUF:|r Total absorb amount in HP text DISABLED.")
+            print(Tr("|cff00ff00MSUF:|r Total absorb amount in HP text DISABLED."))
         end
          return
     end
@@ -231,7 +244,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
         if type(_G.MSUF_Analytics_HandleSlash) == "function" then
             _G.MSUF_Analytics_HandleSlash(msg:match("^%S+%s*(.-)%s*$") or "")
         else
-            print("|cffff0000MSUF:|r Analytics module not loaded.")
+            print(Tr("|cffff0000MSUF:|r Analytics module not loaded."))
         end
          return
     end
@@ -645,7 +658,7 @@ do
 
         local label = dh:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         label:SetPoint("TOP", dh, "TOP", 0, -2)
-        label:SetText("Drag or arrow keys to reposition")
+        label:SetText(Tr("Drag or arrow keys to reposition"))
         label:SetTextColor(0.4, 0.8, 1.0, 0.9)
         dh._label = label
 
@@ -685,11 +698,11 @@ do
         if not f then return end
 
         -- Fill with placeholder content so the user sees size/layout
-        if f.name  then f.name:SetText("Player Name")           end
-        if f.line2 then f.line2:SetText("Level 80 Human Paladin") end
-        if f.line3 then f.line3:SetText("Protection Paladin")     end
-        if f.line4 then f.line4:SetText("Alliance")               end
-        if f.line5 then f.line5:SetText("Stormwind City")         end
+        if f.name  then f.name:SetText(Tr("Player Name")) end
+        if f.line2 then f.line2:SetText(Tr("Level 80 Human Paladin")) end
+        if f.line3 then f.line3:SetText(Tr("Protection Paladin")) end
+        if f.line4 then f.line4:SetText(Tr("Alliance")) end
+        if f.line5 then f.line5:SetText(Tr("Stormwind City")) end
 
         -- Position (uses saved pos if available, else style default)
         MSUF_PositionPlayerInfoFrame(f)

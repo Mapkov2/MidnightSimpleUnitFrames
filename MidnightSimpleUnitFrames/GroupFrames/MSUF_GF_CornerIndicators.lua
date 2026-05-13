@@ -438,7 +438,7 @@ GF.CI_CATEGORIES = {
     { key = "custom", label = "Custom Spell"  },
 }
 
--- Filter choices for custom slot (exposed for Options UI)
+-- Filter choices for custom slot (exposed for Menu2)
 GF.CI_CUSTOM_FILTERS = {
     { key = "HELPFUL|PLAYER", label = "Buff (cast by me)",   secretSafe = true  },
     { key = "HELPFUL",        label = "Buff (any caster)",   secretSafe = false },
@@ -451,6 +451,3 @@ GF.CI_CUSTOM_MODES = {
     { key = "present", label = "Show when present" },
     { key = "missing", label = "Show when missing" },
 }
-
--- Legacy: kept for backward compatibility with old options UI
-GF.CI_CLASS_BUFF_NAME = nil

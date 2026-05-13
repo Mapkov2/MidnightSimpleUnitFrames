@@ -27,7 +27,6 @@ local C_Timer_NewTicker = C_Timer and C_Timer.NewTicker
 local FocusKickFrame
 local FocusKick_Hooked            = false
 local FocusKick_FocusCastBar
-local FocusKickOptionsInitialized = false
 
 local function FocusKick_StopTimeUpdater(frame)
     frame = frame or FocusKickFrame
@@ -42,10 +41,9 @@ local function FocusKick_StopTimeUpdater(frame)
 end
 
 ------------------------------------------------------
--- On-screen Preview state (Focus Kick Options only)
+-- On-screen preview state
 -- Forward-declared here so early helpers (font/apply) can access the same locals.
 ------------------------------------------------------
-local FocusKickOptionsPanelRef
 local FocusKickPreviewFrame
 local FocusKickPreviewEnabled = false
 local FocusKickPreviewSelected = false
@@ -770,49 +768,11 @@ local function FocusKick_UpdateMode()
 end
 
 ------------------------------------------------------
--- Simple local slider helper for this module
-------------------------------------------------------
-local function FocusKick_CreateSlider(globalName, label, parent, minVal, maxVal, step, x, y)
-    local slider = CreateFrame("Slider", globalName, parent, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    slider:SetMinMaxValues(minVal, maxVal)
-    slider:SetValueStep(step)
-    slider:SetObeyStepOnDrag(true)
-
-    local low  = _G[globalName .. "Low"]
-    local high = _G[globalName .. "High"]
-    local text = _G[globalName .. "Text"]
-
-    if low  then low:SetText(tostring(minVal)) end
-    if high then high:SetText(tostring(maxVal)) end
-    if text then text:SetText(label) end
-
-    -- Optional styling if MSUF_StyleSlider exists
-    if type(MSUF_StyleSlider) == "function" then
-        MSUF_StyleSlider(slider)
-    end
-
-    slider:SetWidth(260)
-
-    slider:SetScript("OnValueChanged", function(self, value)
-        if self.onValueChanged then
-            self:onValueChanged(value)
-        end
-    end)
-
-    return slider
-end
-
-------------------------------------------------------
--- Options: Focus tab integration
-------------------------------------------------------
-
-------------------------------------------------------
--- On-screen Preview (Focus Kick Options only)
+-- On-screen preview
 -- Session-only toggle: shows a draggable preview icon on UIParent.
--- Sync: DB <-> sliders <-> preview <-> runtime apply.
+-- Sync: DB <-> preview <-> runtime apply.
 ------------------------------------------------------
--- Cache slider min/max so drag can clamp even when options panel is closed.
+-- Clamp range mirrors the Menu2 sliders.
 local FocusKickPreviewMinX, FocusKickPreviewMaxX = -500, 500
 local FocusKickPreviewMinY, FocusKickPreviewMaxY = -500, 500
 
@@ -882,7 +842,7 @@ local function FocusKick_NudgePreview(dx, dy)
 
     FocusKick_UpdateAppearance()
     if MSUF_FocusKick_SyncPreviewFromDB then
-        MSUF_FocusKick_SyncPreviewFromDB(FocusKickOptionsPanelRef)
+        MSUF_FocusKick_SyncPreviewFromDB()
     end
     FocusKick_SelectPreview(true)
     return true
@@ -1002,7 +962,7 @@ local function FocusKick_EnsurePreviewFrame()
         FocusKick_EnsureDB()
         if not MSUF_DB or not MSUF_DB.general then
             if MSUF_FocusKick_SyncPreviewFromDB then
-                MSUF_FocusKick_SyncPreviewFromDB(FocusKickOptionsPanelRef)
+                MSUF_FocusKick_SyncPreviewFromDB()
             end
             return
         end
@@ -1011,7 +971,7 @@ local function FocusKick_EnsurePreviewFrame()
         local ux, uy = UIParent:GetCenter()
         if not px or not py or not ux or not uy then
             if MSUF_FocusKick_SyncPreviewFromDB then
-                MSUF_FocusKick_SyncPreviewFromDB(FocusKickOptionsPanelRef)
+                MSUF_FocusKick_SyncPreviewFromDB()
             end
             return
         end
@@ -1027,7 +987,7 @@ local function FocusKick_EnsurePreviewFrame()
 
         FocusKick_UpdateAppearance()
         if MSUF_FocusKick_SyncPreviewFromDB then
-            MSUF_FocusKick_SyncPreviewFromDB(FocusKickOptionsPanelRef)
+            MSUF_FocusKick_SyncPreviewFromDB()
         end
         FocusKick_SelectPreview(true)
     end)
@@ -1061,11 +1021,6 @@ local function FocusKick_SetPreviewEnabled(enabled)
         FocusKick_SelectPreview(false)
         FocusKickPreviewFrame:Hide()
         FocusKick_PrintSystem("Enable Focus Interrupt Tracker first to use the on-screen preview.")
-        if FocusKickOptionsPanelRef and FocusKickOptionsPanelRef._msufFocusKickPreviewCheck then
-            FocusKickOptionsPanelRef._msufSyncing = true
-            FocusKickOptionsPanelRef._msufFocusKickPreviewCheck:SetChecked(false)
-            FocusKickOptionsPanelRef._msufSyncing = false
-        end
         return
     end
 
@@ -1074,69 +1029,14 @@ local function FocusKick_SetPreviewEnabled(enabled)
         FocusKickPreviewFrame._msufFakeTimerAG:Play()
     end
     if MSUF_FocusKick_SyncPreviewFromDB then
-        MSUF_FocusKick_SyncPreviewFromDB(FocusKickOptionsPanelRef)
+        MSUF_FocusKick_SyncPreviewFromDB()
     end
 end
 
--- Central sync: DB <-> sliders <-> preview
-MSUF_FocusKick_SyncPreviewFromDB = function(panel)
+-- Central sync: DB <-> preview
+MSUF_FocusKick_SyncPreviewFromDB = function()
     FocusKick_EnsureDB()
     local gg = (MSUF_DB and MSUF_DB.general) or {}
-
-    if panel then
-        FocusKickOptionsPanelRef = panel
-        panel._msufSyncing = true
-
-        local cb = panel._msufFocusKickEnableCheck
-        if cb and cb.SetChecked then
-            cb:SetChecked(gg.enableFocusKickIcon and true or false)
-        end
-
-        local sx = panel._msufFocusKickSliderOffsetX
-        local sy = panel._msufFocusKickSliderOffsetY
-        local sw = panel._msufFocusKickSliderWidth
-        local sh = panel._msufFocusKickSliderHeight
-        local st = panel._msufFocusKickSliderTextSize
-
-        if sx and sx.SetValue then sx:SetValue(gg.focusKickIconOffsetX or 0) end
-        if sy and sy.SetValue then sy:SetValue(gg.focusKickIconOffsetY or 0) end
-        if sw and sw.SetValue then sw:SetValue(gg.focusKickIconWidth or 40) end
-        if sh and sh.SetValue then sh:SetValue(gg.focusKickIconHeight or 40) end
-        if st and st.SetValue then
-            local eff = FocusKick_GetDesiredTextSize(gg)
-            st:SetValue(eff)
-            if st._msufValueText then
-                st._msufValueText:SetText(tostring(eff))
-            end
-        end
-
-        -- Cache slider ranges for clamping (used by on-screen drag)
-        if sx and sx.GetMinMaxValues then
-            local a, b = sx:GetMinMaxValues()
-            FocusKickPreviewMinX, FocusKickPreviewMaxX = a or FocusKickPreviewMinX, b or FocusKickPreviewMaxX
-        end
-        if sy and sy.GetMinMaxValues then
-            local a, b = sy:GetMinMaxValues()
-            FocusKickPreviewMinY, FocusKickPreviewMaxY = a or FocusKickPreviewMinY, b or FocusKickPreviewMaxY
-        end
-
-        local pc = panel._msufFocusKickPreviewCheck
-        if pc and pc.SetChecked then
-            local canPreview = (gg.enableFocusKickIcon and true or false)
-            if canPreview then
-                pc:Enable()
-            else
-                pc:Disable()
-            end
-            if not canPreview then
-                pc:SetChecked(false)
-            else
-                pc:SetChecked(FocusKickPreviewEnabled and true or false)
-            end
-        end
-
-        panel._msufSyncing = false
-    end
 
     if FocusKickPreviewEnabled then
         FocusKick_EnsurePreviewFrame()
@@ -1206,10 +1106,13 @@ function MSUF_UpdateFocusKickIconOptions()
         FocusKick_UpdateAppearance()
         FocusKick_UpdateMode()
     end
+    if MSUF_FocusKick_SyncPreviewFromDB then
+        MSUF_FocusKick_SyncPreviewFromDB()
+    end
 end
 
 ------------------------------------------------------
--- Exports for castbar accordion UI (MSUF_Options_Castbars.lua)
+-- Exports for the Menu2 castbar page
 ------------------------------------------------------
 _G.MSUF_FocusKick_SetPreviewEnabled = FocusKick_SetPreviewEnabled
 _G.MSUF_FocusKick_IsPreviewEnabled  = function() return FocusKickPreviewEnabled end

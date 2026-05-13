@@ -144,6 +144,8 @@ local PARTY_DEFAULTS = {
     rangeFadeAlpha    = 0.4,
     rangeFadeLayerMode = "frame", -- frame / health
     offlineAlpha      = 0.5,
+    hideOfflineEnabled = false,
+    hideOfflineInCombat = false,
     hideOfflineDelay  = 0,
     -- Aggro border
     aggroEnabled      = true,

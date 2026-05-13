@@ -23,6 +23,22 @@ M.Tr = M.Tr or function(text)
     return key
 end
 
+local L_PROFILE, L_EDIT_ON, L_EDIT_OFF, L_EDIT_MODE_ON, L_EDIT_MODE_OFF, L_EDIT_MODE_OFF_COMBAT, L_IN_COMBAT, L_OUT_OF_COMBAT
+local function RefreshLocaleCache()
+    L_PROFILE = M.Tr("Profile:")
+    L_EDIT_ON = M.Tr("Edit: On")
+    L_EDIT_OFF = M.Tr("Edit: Off")
+    L_EDIT_MODE_ON = M.Tr("Edit Mode: On")
+    L_EDIT_MODE_OFF = M.Tr("Edit Mode: Off")
+    L_EDIT_MODE_OFF_COMBAT = M.Tr("Edit Mode: Off (Combat)")
+    L_IN_COMBAT = M.Tr("In Combat")
+    L_OUT_OF_COMBAT = M.Tr("Out of Combat")
+end
+RefreshLocaleCache()
+if type(ns.RegisterLocaleCallback) == "function" then
+    ns.RegisterLocaleCallback("MSUF_Menu2_Core", RefreshLocaleCache)
+end
+
 local T = M.Theme
 local W = M.Widgets
 
@@ -681,11 +697,11 @@ local function RefreshDashboardEditModeButton()
     local active = IsEditModeActive()
     local combatLocked = IsEditModeCombatLocked() and true or false
     if active then
-        btn:SetText(M.Tr("Edit Mode: On"))
+        btn:SetText(L_EDIT_MODE_ON)
     elseif combatLocked then
-        btn:SetText(M.Tr("Edit Mode: Off (Combat)"))
+        btn:SetText(L_EDIT_MODE_OFF_COMBAT)
     else
-        btn:SetText(M.Tr("Edit Mode: Off"))
+        btn:SetText(L_EDIT_MODE_OFF)
     end
 
     if btn.SetEnabled then btn:SetEnabled(active or not combatLocked) end
@@ -921,6 +937,8 @@ local SEARCH_STOP_WORDS = {
     ["or"] = true,
     please = true,
     pls = true,
+    setting = true,
+    settings = true,
     setup = true,
     thanks = true,
     the = true,
@@ -963,9 +981,15 @@ local SEARCH_STOP_WORDS = {
     finde = true,
     finden = true,
     bitte = true,
+    du = true,
     fuer = true,
     fur = true,
+    mal = true,
+    man = true,
+    mich = true,
+    mir = true,
     mit = true,
+    nur = true,
     und = true,
     oder = true,
 }
@@ -1034,9 +1058,9 @@ local SEARCH_QUERY_ALIASES = {
     reichweitencheck = { "range check", "range fade", "out of range", "distance check" },
     entfernung = { "distance", "range", "range fade", "out of range", "range check" },
     ausserhalb = { "out of range", "range fade", "range check" },
-    misc = { "miscellaneous", "global style", "range fade", "tooltips", "blizzard frames", "update intervals", "language" },
-    miscellaneous = { "misc", "global style", "range fade", "tooltips", "blizzard frames", "update intervals", "language" },
-    verschiedenes = { "misc", "miscellaneous", "global style", "range fade", "tooltips", "blizzard frames", "update intervals", "language" },
+    misc = { "miscellaneous", "global style", "tooltips", "blizzard frames", "update intervals", "language" },
+    miscellaneous = { "misc", "global style", "tooltips", "blizzard frames", "update intervals", "language" },
+    verschiedenes = { "misc", "miscellaneous", "global style", "tooltips", "blizzard frames", "update intervals", "language" },
 
     move = { "edit mode", "position", "positions", "drag", "x offset", "y offset", "anchor", "anchoring" },
     moving = { "edit mode", "position", "positions", "drag", "x offset", "y offset", "anchor", "anchoring" },
@@ -1143,7 +1167,7 @@ local SEARCH_QUERY_ALIASES = {
     cooldowns = { "cooldown", "cooldown text", "cooldown swipe", "aura timers", "interrupt ready" },
     absorb = { "absorbs", "absorb display", "heal prediction", "health" },
     absorbs = { "absorb", "absorb display", "heal prediction", "health" },
-    heal = { "heal prediction", "incoming heals", "health" },
+    heal = { "heal prediction", "incoming heals", "health", "healer" },
     aggro = { "threat", "aggro", "highlight borders", "indicators" },
     threat = { "aggro", "highlight borders", "indicators" },
 
@@ -1198,6 +1222,8 @@ local SEARCH_QUERY_ALIASES = {
     verankern = { "anchor", "anchoring", "position" },
     anker = { "anchor", "anchoring", "position" },
     koordinaten = { "x offset", "y offset", "position", "anchor" },
+    editmode = { "edit mode", "move", "drag", "position" },
+    loadconditions = { "load conditions", "visibility", "show", "hide" },
     breite = { "width", "size", "resize", "frame basics" },
     hoehe = { "height", "size", "resize", "frame basics" },
     groesse = { "size", "resize", "scale", "width", "height" },
@@ -1211,9 +1237,9 @@ local SEARCH_QUERY_ALIASES = {
     reihen = { "rows", "layout", "auras", "group frames" },
     rolle = { "role", "role icon", "sorting", "tank", "healer", "dps" },
     role = { "role icon", "sorting", "tank", "healer", "dps" },
+    groupnumber = { "group number", "indicators", "group frames" },
     tank = { "role icon", "group indicators", "sorting" },
     healer = { "role icon", "healer buffs", "group indicators" },
-    heal = { "heal prediction", "incoming heals", "health", "healer" },
     dps = { "role icon", "group indicators", "sorting" },
 
     healthbar = { "health bar", "health", "hp", "bar colors" },
@@ -1240,6 +1266,10 @@ local SEARCH_QUERY_ALIASES = {
     realm = { "realm names", "name shortening", "short names" },
     server = { "realm names", "name shortening", "short names" },
     truncate = { "name shortening", "short names", "max name length" },
+    nameshortening = { "name shortening", "short names", "truncate names", "realm names" },
+    healthtext = { "health text", "hp text", "text", "fonts" },
+    powertext = { "power text", "mana text", "text", "fonts" },
+    nametext = { "name text", "text", "fonts", "name shortening" },
 
     portrait = { "portraits", "portrait mode", "class icon", "2d portrait", "3d portrait" },
     portraits = { "portrait", "portrait mode", "class icon" },
@@ -1251,6 +1281,7 @@ local SEARCH_QUERY_ALIASES = {
     spell = { "spell name", "castbar", "auras", "spell id" },
     spellname = { "spell name", "castbar", "name shortening" },
     globalcooldown = { "gcd", "global cooldown", "castbar" },
+    interruptready = { "interrupt ready", "focus kick", "kick", "castbar" },
     kanal = { "channel", "channel ticks", "castbar" },
     kanalisieren = { "channel", "channel ticks", "castbar" },
     unterbrechen = { "interrupt", "kick", "focus kick", "interrupt ready" },
@@ -1288,7 +1319,6 @@ local SEARCH_QUERY_ALIASES = {
     dead = { "dead icon", "ghost", "status icons", "indicators" },
 
     profil = { "profile", "profiles", "import", "export" },
-    profile = { "profiles", "import", "export", "copy profile", "spec profiles", "wago" },
     importieren = { "import", "profiles", "wago", "profile string" },
     exportieren = { "export", "profiles", "profile string" },
     kopieren = { "copy profile", "profiles", "import", "export" },
@@ -1304,6 +1334,10 @@ local SEARCH_QUERY_ALIASES = {
     sounds = { "sound", "target sound", "target lost", "miscellaneous" },
     targetsound = { "target sound", "target lost", "sounds", "miscellaneous" },
     versioncheck = { "version check", "miscellaneous", "update intervals" },
+    menuscale = { "menu scale", "dashboard", "ui scale" },
+    uiscale = { "ui scale", "dashboard", "menu scale" },
+    unitauras = { "unit auras", "auras", "buffs", "debuffs" },
+    globalstyle = { "global style", "bars", "fonts", "colors", "castbar", "miscellaneous" },
     blizzardframes = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
     standardframes = { "default frames", "blizzard frames", "hide blizzard" },
 
@@ -2226,6 +2260,42 @@ local SEARCH_FAQ = {
         priority = 35,
     },
     {
+        label = "Where is the minimap icon setting?",
+        answer = "Open Global Style > Miscellaneous > Blizzard Frames and use Show MSUF minimap icon.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Blizzard Frames",
+        anchorText = "Blizzard Frames Show MSUF minimap icon minimap button addon compartment",
+        keywords = { "minimap", "minimap icon", "minimap button", "hide minimap icon", "show minimap icon", "addon compartment", "minikarte", "minimap symbol" },
+        priority = 185,
+    },
+    {
+        label = "Where are target sound settings?",
+        answer = "Open Global Style > Miscellaneous > Blizzard Frames and use Play sound on Target/Target Lost.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Blizzard Frames",
+        anchorText = "Blizzard Frames Play sound on Target Target Lost target sounds",
+        keywords = { "target sound", "target sounds", "target lost sound", "play sound", "sound on target", "sound target lost", "ziel sound", "sounds" },
+        priority = 170,
+    },
+    {
+        label = "Where are menu snap or menu behavior settings?",
+        answer = "Open Global Style > Miscellaneous > Menu behavior for edge snap and related menu behavior.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Menu behavior",
+        anchorText = "Menu behavior edge snap windows snap menu resize ui scale menu scale",
+        keywords = { "menu snap", "edge snap", "window snap", "menu behavior", "menu resize", "menu scale", "ui scale", "menu too big", "menu too small", "fenster einrasten" },
+        priority = 65,
+    },
+    {
+        label = "Where is Miscellaneous?",
+        answer = "Open Global Style > Miscellaneous for language, menu behavior, update intervals, tooltips, Blizzard frames, minimap icon, sounds, and range fade.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous",
+        anchorText = "Miscellaneous misc global style language menu behavior update intervals tooltips blizzard frames minimap sounds range fade",
+        keywords = { "misc", "miscellaneous", "where is misc", "where is miscellaneous", "global style misc", "global style miscellaneous", "verschiedenes", "allgemein", "sonstiges" },
+        priority = 260,
+    },
+    {
         label = "How do I change range fading?",
         answer = "Open Global Style > Miscellaneous and use the Range Fade section for affected units, alpha, and portrait fading.",
         pageKey = "opt_misc",
@@ -2239,8 +2309,8 @@ local SEARCH_FAQ = {
         answer = "Open Global Style > Miscellaneous > Range Fade. It controls target, focus, and boss out-of-range fading; group range fade is in Group Frames > Health & Text.",
         pageKey = "opt_misc",
         target = "Opens: Global Style > Miscellaneous > Range Fade",
-        anchorText = "Range Fade unit frame range check range checker distance check out of range alpha target focus boss miscellaneous misc",
-        keywords = { "unit frame range check", "unitframe range check", "unit frames range check", "range check unitframe", "range check unit frame", "range checker", "distance check", "distance checker", "out of range unit frame", "out of range frames", "target out of range", "focus out of range", "boss out of range", "target range fade", "focus range fade", "boss range fade", "reichweitencheck", "reichweite check", "entfernung check", "misc range", "misc range fade" },
+        anchorText = "Range Fade unit frame range check range checker distance check out of range alpha target focus boss",
+        keywords = { "unit frame range check", "unitframe range check", "unit frames range check", "range check unitframe", "range check unit frame", "range checker", "distance check", "distance checker", "out of range unit frame", "out of range frames", "target out of range", "focus out of range", "boss out of range", "target range fade", "focus range fade", "boss range fade", "reichweitencheck", "reichweite check", "entfernung check" },
         priority = 165,
     },
     {
@@ -2287,6 +2357,15 @@ local SEARCH_FAQ = {
         anchorText = "Frame Basics Enable hide show player target focus boss pet",
         keywords = { "hide unitframe", "show unitframe", "disable unitframe", "enable unitframe", "hide player frame", "hide target frame", "hide focus frame", "hide pet frame", "show player frame", "enable target frame", "disable boss frame" },
         priority = 30,
+    },
+    {
+        label = "Where are load conditions?",
+        answer = "Open the matching unit page and use Load Conditions to control when player, target, focus, boss, or pet frames are shown.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Load Conditions",
+        anchorText = "Load Conditions show hide visibility player target focus boss pet combat group instance",
+        keywords = { "load conditions", "visibility conditions", "show conditions", "hide conditions", "when to show frame", "when to hide frame", "frame visibility", "combat visibility", "instance visibility", "ladebedingungen", "sichtbarkeit" },
+        priority = 80,
     },
     {
         label = "Why is my player, target, focus, or pet frame gone?",
@@ -2503,6 +2582,15 @@ local SEARCH_FAQ = {
         anchorText = "Display click-through auras click through click cast gameplay targeting",
         keywords = { "clickthrough auras", "click-through auras", "click through auras", "auras block mouse", "can't click through buffs", "aura mouse", "click aura", "click cast not working", "mouse blocked by auras" },
         priority = 45,
+    },
+    {
+        label = "Where are optional modules or style modules?",
+        answer = "Open Modules > Style for optional style modules such as rounded unit frames and portrait decoration.",
+        pageKey = "modules",
+        target = "Opens: Modules > Style",
+        anchorText = "Modules Style rounded unitframes portrait decoration optional modules skins",
+        keywords = { "modules", "optional modules", "style modules", "rounded unitframes", "rounded frames", "portrait decoration", "portrait deco", "module style", "skins", "rounded", "rund" },
+        priority = 70,
     },
     {
         label = "How do I show party or raid frames while solo?",
@@ -3271,6 +3359,7 @@ local function BuildSearchPage(ctx)
         { "Range Check", "unit frame range check" },
         { "Misc", "where is miscellaneous" },
         { "Performance", "why is msuf lagging" },
+        { "Minimap", "where is the minimap icon setting" },
     }
     local buttonW = math.floor((width - 56) / 3)
     for i = 1, #shortcuts do
@@ -3998,16 +4087,16 @@ local function BuildWindow()
     function f:RefreshStatus()
         local profile = tostring(_G.MSUF_ActiveProfile or "Default")
         local edit = IsEditModeActive() and "On" or "Off"
-        sbProfile:SetText("|cff4a90d9" .. M.Tr("Profile:") .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r")
+        sbProfile:SetText("|cff4a90d9" .. L_PROFILE .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r")
         if edit == "On" then
-            sbEdit:SetText("|cff4ade80" .. M.Tr("Edit: On") .. "|r  |cff3a4a66\194\183|r")
+            sbEdit:SetText("|cff4ade80" .. L_EDIT_ON .. "|r  |cff3a4a66\194\183|r")
         else
-            sbEdit:SetText("|cff5a6a88" .. M.Tr("Edit: Off") .. "|r  |cff3a4a66\194\183|r")
+            sbEdit:SetText("|cff5a6a88" .. L_EDIT_OFF .. "|r  |cff3a4a66\194\183|r")
         end
         if _G.InCombatLockdown and _G.InCombatLockdown() then
-            sbCombat:SetText("|cffef4444" .. M.Tr("In Combat") .. "|r")
+            sbCombat:SetText("|cffef4444" .. L_IN_COMBAT .. "|r")
         else
-            sbCombat:SetText("|cff22c55e" .. M.Tr("Out of Combat") .. "|r")
+            sbCombat:SetText("|cff22c55e" .. L_OUT_OF_COMBAT .. "|r")
         end
         local ver = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
         if type(ver) == "string" and ver ~= "" then
@@ -4042,6 +4131,8 @@ local function BuildWindow()
         end
         if event == "PLAYER_REGEN_DISABLED" then
             CancelSearchBackgroundIndex()
+            f:RefreshStatus()
+            return
         elseif event == "PLAYER_REGEN_ENABLED" and M.activeKey == "search" then
             RefreshSearchResultsPage()
         end

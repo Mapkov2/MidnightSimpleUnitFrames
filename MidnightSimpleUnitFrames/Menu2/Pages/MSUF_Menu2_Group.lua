@@ -103,13 +103,19 @@ local GF_BAR_MODES = {
     { value = "CUSTOM", text = "Custom Color" },
 }
 
-local SIMPLE_TEXTURES = {
-    { value = "", text = "Follow Global Style" },
-    { value = "Blizzard", text = "Blizzard" },
-    { value = "Solid", text = "Solid" },
-    { value = "Flat", text = "Flat" },
-    { value = "MSUF Smooth v2", text = "MSUF Smooth v2" },
-}
+local function SIMPLE_TEXTURES()
+    local ui = ns and ns.UI
+    if ui and type(ui.StatusBarTextureItems) == "function" then
+        return ui.StatusBarTextureItems("Follow Global Style")
+    end
+    return {
+        { value = "", text = "Follow Global Style" },
+        { value = "Blizzard", text = "Blizzard", texture = "Interface\\TargetingFrame\\UI-StatusBar" },
+        { value = "Solid", text = "Solid", texture = "Interface\\Buttons\\WHITE8X8" },
+        { value = "Flat", text = "Flat", texture = "Interface\\Buttons\\WHITE8X8" },
+        { value = "MSUF Smooth v2", text = "MSUF Smooth v2", texture = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\Smoothv2.tga" },
+    }
+end
 
 local GF_ANCHOR_TO = {
     { value = "FREE", text = "Free (UIParent)" },
@@ -355,7 +361,7 @@ local GF_COPY_EXCLUDE = {
 }
 
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "General", keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
+    { key = "general", label = "General", keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineEnabled", "hideOfflineInCombat", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
     { key = "health", label = "Health & Bars", keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB", "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB", "barTexture", "barBgTexture", "powerHeight", "showPower", "showPowerText", "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter", "powerFontSize", "powerOffsetX", "powerOffsetY", "powerTextLayer", "powerSmoothFill", "powerShowTank", "powerShowHealer", "powerShowDamager", "healPredEnabled", "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha" } },
     { key = "text", label = "Text & Name", keys = { "showName", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY", "nameTextLayer", "nameColorMode", "nameColorR", "nameColorG", "nameColorB", "nameMaxChars", "nameNoEllipsis", "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter", "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer" } },
     { key = "font", label = "Font Override", keys = { "fontOverride", "fontKey", "fontOutline", "useGlobalFontColor", "fontR", "fontG", "fontB" } },
