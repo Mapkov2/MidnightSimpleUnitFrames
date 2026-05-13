@@ -132,8 +132,7 @@ local PARTY_DEFAULTS = {
     -- Name truncation
     nameMaxChars      = 0,     -- 0 = unlimited
     nameNoEllipsis    = false,
-    -- Fonts (nil = inherit global)
-    fontKey           = nil,
+    -- Font style/color (font family is global)
     fontOutline       = nil,
     useGlobalFontColor = true,
     fontR             = nil,
@@ -343,6 +342,7 @@ local PARTY_DEFAULTS = {
     -- Grid layout
     unitsPerColumn    = 5,
     maxColumns        = 1,
+    preserveRaidGroups = false,
     -- Role sort
     sortByRole        = false,
     roleOrder         = "TANK,HEALER,DAMAGER",
@@ -550,8 +550,75 @@ function GF.GetEffectivePowerHeight(kind, unit, role, conf)
     return (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (tonumber(conf and conf.powerHeight) or 0)
 end
 
+local function GetRaidGroupLayoutParts(conf)
+    local upc = math_floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
+    if upc < 1 then upc = 1 elseif upc > 40 then upc = 40 end
+    local primary = math_min(upc, 5)
+    local groups = math_floor((tonumber(conf and conf.maxColumns) or 8) + 0.5)
+    if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+    if type(GF.GetPreservedRaidGroupCount) == "function" then
+        groups = tonumber(GF.GetPreservedRaidGroupCount(conf)) or groups
+        if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+    end
+    local blockColumns = math_ceil(5 / primary)
+    if blockColumns < 1 then blockColumns = 1 end
+    return upc, primary, groups, blockColumns
+end
+
+function GF.GetPreservedRaidGridMetrics(kind, count)
+    local conf = GF.GetConf(kind)
+    local w, h, sp = GF.GetScaledFrameMetrics(kind)
+    local growth = conf.growth or "DOWN"
+    local upc, primary, maxGroups, blockColumns = GetRaidGroupLayoutParts(conf)
+
+    count = tonumber(count) or 0
+    local groups = (count > 0) and math_ceil(count / 5) or maxGroups
+    if groups < 1 then groups = 1 end
+    groups = math_min(maxGroups, groups)
+
+    local blockW, blockH
+    if growth == "DOWN" or growth == "UP" then
+        blockW = blockColumns * w + math_max(0, blockColumns - 1) * sp
+        blockH = primary      * h + math_max(0, primary - 1) * sp
+    else
+        blockW = primary      * w + math_max(0, primary - 1) * sp
+        blockH = blockColumns * h + math_max(0, blockColumns - 1) * sp
+    end
+
+    local totalW, totalH
+    if growth == "DOWN" or growth == "UP" then
+        totalW = groups * blockW + math_max(0, groups - 1) * sp
+        totalH = blockH
+    else
+        totalW = blockW
+        totalH = groups * blockH + math_max(0, groups - 1) * sp
+    end
+
+    local firstDX, firstDY = GF.GetHeaderOriginToFirstCenter(kind, w, h)
+    local dx, dy = firstDX, firstDY
+    if growth == "DOWN" then
+        dx = dx + (totalW - w) * 0.5
+        dy = dy - (totalH - h) * 0.5
+    elseif growth == "UP" then
+        dx = dx + (totalW - w) * 0.5
+        dy = dy + (totalH - h) * 0.5
+    elseif growth == "RIGHT" then
+        dx = dx + (totalW - w) * 0.5
+        dy = dy - (totalH - h) * 0.5
+    elseif growth == "LEFT" then
+        dx = dx - (totalW - w) * 0.5
+        dy = dy - (totalH - h) * 0.5
+    end
+
+    return dx, dy, totalW, totalH, w, h, sp, growth, upc, count, firstDX, firstDY, primary, groups, blockColumns, blockW, blockH
+end
+
 function GF.GetGridMetrics(kind, count)
     local conf = GF.GetConf(kind)
+    if IsRaidLikeKind(kind) and conf.preserveRaidGroups == true and GF.GetPreservedRaidGridMetrics then
+        return GF.GetPreservedRaidGridMetrics(kind, count)
+    end
+
     local w, h, sp = GF.GetScaledFrameMetrics(kind)
     local growth = conf.growth or "DOWN"
     local upc = conf.unitsPerColumn or 5
@@ -725,39 +792,11 @@ local function applyDefaults(dst, src)
     end
 end
 
-local GF_FONT_KEY_ALIASES = {
-    ["Friz Quadrata TT"]        = "FRIZQT",
-    ["Arial Narrow"]            = "ARIALN",
-    ["Morpheus"]                = "MORPHEUS",
-    ["Skurri"]                  = "SKURRI",
-    ["Friz Quadrata (default)"] = "FRIZQT",
-    ["Arial (default)"]         = "ARIALN",
-    ["Morpheus (default)"]      = "MORPHEUS",
-    ["Skurri (default)"]        = "SKURRI",
-    ["Expressway Regular (MSUF)"] = "EXPRESSWAY",
-    ["Expressway (MSUF)"]         = "EXPRESSWAY",
-    ["Expressway Bold (MSUF)"]    = "EXPRESSWAY_BOLD",
-    ["Expressway SemiBold (MSUF)"] = "EXPRESSWAY_SEMIBOLD",
-    ["Expressway ExtraBold (MSUF)"] = "EXPRESSWAY_EXTRABOLD",
-    ["Expressway Condensed Light (MSUF)"] = "EXPRESSWAY_CONDENSED_LIGHT",
-}
-
 local function NormalizeFontField(conf)
     if type(conf) ~= "table" then return end
-    local key = conf.fontKey
-    if type(key) ~= "string" or key == "" then return end
-    local normalize = _G.MSUF_NormalizeFontKey or function(k) return GF_FONT_KEY_ALIASES[k] or k end
-    local normalized = normalize(key)
-    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
-    if type(resolveKeyPath) == "function" then
-        local resolved = resolveKeyPath(normalized)
-        if type(resolved) == "string" and resolved ~= "" then
-            normalized = resolved
-        end
-    end
-    if normalized ~= key then
-        conf.fontKey = normalized
-    end
+    conf.fontKey = nil
+    conf.nameShortenOverride = nil
+    conf._msufGFNameTruncationOverride = nil
 end
 
 function GF.EnsureDB()
@@ -1023,7 +1062,7 @@ end
 ------------------------------------------------------------------------
 local LAYOUT_GEO_KEYS = {
     "width", "height", "spacing", "growth",
-    "unitsPerColumn", "maxColumns",
+    "unitsPerColumn", "maxColumns", "preserveRaidGroups",
     "point", "anchorPoint", "offsetX", "offsetY",
 }
 
@@ -1319,7 +1358,7 @@ function GF.ResolveHighlightTexture(lsmKey)
     return "Interface\\Buttons\\WHITE8x8"
 end
 
---- Resolve font path (falls through to global MSUF font)
+--- Resolve font path (global MSUF font family)
 --- Check if GF scope has font override active
 function GF.HasFontOverride(kind)
     local conf = GF.GetConf(kind)
@@ -1327,29 +1366,8 @@ function GF.HasFontOverride(kind)
 end
 
 function GF.ResolveFontPath(kind)
-    local conf = GF.GetConf(kind)
-    -- When override active: use GF-local fontKey
-    if conf.fontOverride then
-        local key = conf.fontKey
-        if key and key ~= "" then
-            local fn = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
-            if type(fn) == "function" then
-                local p = fn(key)
-                if p then return ResolveFontPathSafe(p, conf.nameFontSize or 12, GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "") end
-            end
-            local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-            if LSM then
-                local raw = _G.MSUF_GetRawLSMFontPath
-                local p = type(raw) == "function" and raw(LSM, key) or nil
-                if not p and type(LSM.HashTable) == "function" then
-                    local fonts = LSM:HashTable("font")
-                    p = fonts and fonts[key]
-                end
-                if p then return ResolveFontPathSafe(p, conf.nameFontSize or 12, GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "") end
-            end
-        end
-    end
-    -- Fallback: global font (shared with UF)
+    -- Font family is intentionally global. GF scopes may override style/color,
+    -- but never the font face.
     local db = _G.MSUF_DB
     local gKey = db and db.general and db.general.fontKey
     if gKey and gKey ~= "" then
@@ -1450,15 +1468,34 @@ function GF.ResolveNameColor(kind, classToken)
     return GF.ResolveFontColor(kind)
 end
 
---- Resolve name truncation (respects fontOverride)
---- Returns maxChars, noEllipsis
+--- Resolve name truncation
+--- Returns maxChars, noEllipsis, clipSide
 function GF.ResolveNameTruncation(kind)
     local conf = GF.GetConf(kind)
-    if conf.fontOverride then
-        return conf.nameMaxChars or 0, conf.nameNoEllipsis or false
+    local localMax = tonumber(conf.nameMaxChars) or 0
+
+    if conf.fontOverride == true then
+        local enabled = conf.nameShortenEnabled
+        if enabled == nil then enabled = localMax > 0 end
+        if enabled ~= true then
+            return 0, conf.nameNoEllipsis or false, conf.nameClipSide or "RIGHT"
+        end
+        if localMax <= 0 then localMax = 6 end
+        local side = conf.nameClipSide or "RIGHT"
+        if side ~= "LEFT" and side ~= "RIGHT" then side = "RIGHT" end
+        return localMax, conf.nameNoEllipsis or false, side
     end
-    -- No override: use defaults (unlimited)
-    return 0, false
+
+    local db = _G.MSUF_DB
+    local gen = db and db.general
+    if db and db.shortenNames == true then
+        local maxChars = tonumber(gen and gen.shortenNameMaxChars) or 6
+        local side = (gen and gen.shortenNameClipSide) or "LEFT"
+        if side ~= "LEFT" and side ~= "RIGHT" then side = "LEFT" end
+        return maxChars, (gen and gen.shortenNameShowDots == false) or false, side
+    end
+
+    return 0, false, "RIGHT"
 end
 
 ------------------------------------------------------------------------
@@ -1682,27 +1719,47 @@ function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit)
 end
 
 --- Truncate name string (UTF-8 aware when possible)
-function GF.TruncateName(name, maxChars, noEllipsis)
-    if not name or maxChars == nil or maxChars <= 0 then return name end
-    -- UTF-8 safe: count characters, not bytes
-    -- Each UTF-8 char starts with a byte that's NOT a continuation byte (10xxxxxx)
+function GF.TruncateName(name, maxChars, noEllipsis, clipSide)
+    maxChars = math_floor((tonumber(maxChars) or 0) + 0.5)
+    if not name or maxChars <= 0 then return name end
+    clipSide = (clipSide == "LEFT") and "LEFT" or "RIGHT"
+
+    local function NextByte(pos)
+        local b = string.byte(name, pos)
+        if not b then return pos + 1 end
+        if b < 128 then return pos + 1 end
+        if b < 224 then return pos + 2 end
+        if b < 240 then return pos + 3 end
+        return pos + 4
+    end
+
     local charCount = 0
     local bytePos = 1
     local nameLen = #name
+    while bytePos <= nameLen do
+        charCount = charCount + 1
+        bytePos = NextByte(bytePos)
+    end
+
+    if charCount <= maxChars then return name end
+
+    if clipSide == "LEFT" then
+        local skip = charCount - maxChars
+        bytePos = 1
+        for _ = 1, skip do
+            bytePos = NextByte(bytePos)
+        end
+        local truncated = string.sub(name, bytePos)
+        if noEllipsis then return truncated end
+        return ".." .. truncated
+    end
+
+    charCount = 0
+    bytePos = 1
     while bytePos <= nameLen and charCount < maxChars do
         charCount = charCount + 1
-        local b = string.byte(name, bytePos)
-        if b < 128 then
-            bytePos = bytePos + 1       -- ASCII: 1 byte
-        elseif b < 224 then
-            bytePos = bytePos + 2       -- 2-byte (Cyrillic, Latin Extended)
-        elseif b < 240 then
-            bytePos = bytePos + 3       -- 3-byte (CJK, etc.)
-        else
-            bytePos = bytePos + 4       -- 4-byte (Emoji, rare)
-        end
+        bytePos = NextByte(bytePos)
     end
-    if bytePos > nameLen then return name end  -- name fits
     local truncated = string.sub(name, 1, bytePos - 1)
     if noEllipsis then return truncated end
     return truncated .. ".."

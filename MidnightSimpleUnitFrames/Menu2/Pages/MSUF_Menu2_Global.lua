@@ -112,9 +112,14 @@ local POWER_BAR_SCOPE_UNITS = {
 }
 
 local function NormalizeScopeKey(scope)
-    scope = tostring(scope or "shared")
-    if scope == "party" then return "gf_party" end
-    if scope == "raid" or scope == "mythic" or scope == "mythicraid" then return "gf_raid" end
+    scope = tostring(scope or "shared"):lower()
+    scope = scope:gsub("%s+", "")
+    scope = scope:gsub("%-", "_")
+    if scope == "party" or scope == "groupparty" or scope == "group_party" or scope == "gfparty" then return "gf_party" end
+    if scope == "raid" or scope == "mythic" or scope == "mythicraid"
+        or scope == "groupraid" or scope == "group_raid" or scope == "gfraid" or scope == "gf_mythicraid" then
+        return "gf_raid"
+    end
     if scope == "" then return "shared" end
     return scope
 end
@@ -179,11 +184,19 @@ local function ScopeWrite(scope, flag, sharedTable, key, value)
 end
 
 local function CurrentFontScope()
-    return NormalizeScopeKey(ReadG("_fontScopeKey", "shared"))
+    local g = G()
+    local raw = g._fontScopeKey
+    local scope = NormalizeScopeKey(raw or "shared")
+    if raw ~= scope then g._fontScopeKey = scope end
+    return scope
 end
 
 local function CurrentBarsScope()
-    return NormalizeScopeKey(ReadG("hpPowerTextSelectedKey", "shared"))
+    local g = G()
+    local raw = g.hpPowerTextSelectedKey
+    local scope = NormalizeScopeKey(raw or "shared")
+    if raw ~= scope then g.hpPowerTextSelectedKey = scope end
+    return scope
 end
 
 local function IsGFScope(scope)
