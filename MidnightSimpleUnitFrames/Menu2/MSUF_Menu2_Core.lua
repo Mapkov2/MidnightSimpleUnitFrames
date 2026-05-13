@@ -108,27 +108,27 @@ local ALIASES = {
 }
 
 local SEARCH_KEYWORDS = {
-    home = "dashboard start support links quick navigation edit mode move drag frames unitframe unit frames reset positions ui scale menu scale profiles wago discord patreon github curseforge paypal",
-    uf_player = "unit frame unitframe player frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
-    uf_target = "unit frame unitframe target frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
-    uf_targettarget = "unit frame unitframe target of target tot frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
-    uf_focus = "unit frame unitframe focus frame basics enable disable hide show width height scale size health power portrait text castbar focus kick interrupt auras buffs debuffs range fade transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
-    uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power",
-    uf_pet = "unit frame unitframe pet frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
-    gf_layout = "group frames groupframes party raid mythic raid layout growth direction sorting role order frame scaling scale transparency alpha opacity anchoring anchor position move drag tooltip range fade preview show hide player solo enable width height spacing columns",
-    gf_bars = "group frames groupframes party raid health text power bar name hp text heal prediction absorb display range fade layout font size anchor offset opacity alpha smooth fill show power tank healer damage",
-    gf_auras = "group frames groupframes party raid buffs debuffs defensives externals text coloring private auras cooldown style aura utilities filter anchor icon size max buffs max debuffs custom buffs custom debuffs cooldown swipe masque pandemic dispel",
-    gf_indicators = "group frames groupframes party raid indicators status icons spell indicators corner indicators group number focus glow border dispel aggro threat role icon custom spells slots preview current show all marker raid marker ready check leader assist",
-    opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display highlight borders outline border aggro purge boss target glow bar colors background tint backdrop bg dark mode shared texture opacity alpha",
-    opt_fonts = "global style fonts font family size outline shadow color text readability name hp power health spell cooldown bigger smaller text size",
-    auras2 = "global style unit auras buffs debuffs icon size caps rows spacing sorting cooldown timer text tooltip private aura filter override dispel stealable only mine own buffs own debuffs pandemic reminders",
-    opt_castbar = "global style castbar textures outline shake fill direction empowered casts empower stages evoker augmentation devastation preservation hold release interrupt ready focus kick kick cooldown demon hunter demonhunter dh havoc vengeance devour consume magic disrupt counterspell pummel rebuke wind shear mind freeze skull bash muzzle spear hand strike counter shot quell silence name shortening latency spark channel ticks",
-    opt_colors = "global style colors class bar colors background backgrond backround bg backdrop tint opacity alpha unitframe colors npc type colors bar colors dispel castbar mouseover highlight gameplay superellipse color swatches portrait colors power colors font color",
-    opt_misc = "global style miscellaneous misc language localization localisation locale translation range fade out of range ui behavior tooltip tooltips combat settings general blizzard frames default frames hide blizzard disable blizzard update intervals performance",
-    classpower = "class resources combo points holy power soul shards chi maelstrom eclipse essence evoker runes runic power stagger brewmaster resource prediction auto hide detached power bar alternative mana behavior style quick actions",
-    gameplay = "gameplay combat crosshair click cast click cast clickthrough click-through focus target modifier mouseover interaction targeting spells mouse buttons keybind modifier ctrl shift alt",
-    modules = "modules style skins optional modules compatibility",
-    profiles = "profiles profile management spec profiles specialization auto switch create copy delete reset import export legacy import wago active profile",
+    home = "dashboard start support links quick navigation edit mode move drag frames unitframe unit frames reset positions ui scale menu scale profiles wago discord patreon github curseforge paypal slash command addon options minimap help recover support search",
+    uf_player = "unit frame unitframe player frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
+    uf_target = "unit frame unitframe target frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
+    uf_targettarget = "unit frame unitframe target of target tot frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
+    uf_focus = "unit frame unitframe focus frame basics enable disable hide show width height scale size health power portrait text castbar focus kick interrupt auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
+    uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade range check distance check out of range transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power",
+    uf_pet = "unit frame unitframe pet frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power",
+    gf_layout = "group frames groupframes party raid mythic raid layout growth direction sorting role order frame scaling scale transparency alpha opacity anchoring anchor position move drag tooltip range fade preview show hide player solo enable width height spacing columns rows sorting role group number visibility",
+    gf_bars = "group frames groupframes party raid health text power bar name hp text heal prediction absorb display range fade range check distance check out of range layout font size anchor offset opacity alpha smooth fill show power tank healer damage incoming heals shields debuff stripe dispel overlay",
+    gf_auras = "group frames groupframes party raid buffs debuffs defensives externals text coloring private auras cooldown style aura utilities filter anchor icon size max buffs max debuffs custom buffs custom debuffs cooldown swipe masque pandemic dispel own buffs hots healer buffs raid debuffs boss debuffs",
+    gf_indicators = "group frames groupframes party raid indicators status icons spell indicators corner indicators group number focus glow border dispel aggro threat role icon custom spells slots preview current show all marker raid marker ready check leader assist dead ghost offline afk dnd",
+    opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display highlight borders outline border aggro purge boss target glow bar colors background tint backdrop bg dark mode shared texture opacity alpha health texture power texture frame outline",
+    opt_fonts = "global style fonts font family size outline shadow color text readability name hp power health spell cooldown bigger smaller text size name shortening realm names truncate font color",
+    auras2 = "global style unit auras buffs debuffs icon size caps rows spacing sorting cooldown timer text tooltip private aura filter override dispel stealable only mine own buffs own debuffs pandemic reminders click through clickthrough aura position aura size",
+    opt_castbar = "global style castbar textures outline shake fill direction empowered casts empower stages evoker augmentation devastation preservation hold release interrupt ready focus kick kick cooldown demon hunter demonhunter dh havoc vengeance devour consume magic disrupt counterspell pummel rebuke wind shear mind freeze skull bash muzzle spear hand strike counter shot quell silence name shortening latency spark channel ticks gcd global cooldown boss castbar target castbar focus castbar player castbar",
+    opt_colors = "global style colors class bar colors background backgrond backround bg backdrop tint opacity alpha unitframe colors npc type colors bar colors dispel castbar mouseover highlight gameplay superellipse color swatches portrait colors power colors font color health color reaction color aura colors crosshair colors",
+    opt_misc = "global style miscellaneous misc language localization localisation locale translation range fade range check range checker distance check out of range unit frame range check ui behavior tooltip tooltips combat settings general blizzard frames default frames hide blizzard disable blizzard update intervals performance minimap minimap icon target sounds version check menu behavior snap edge snap",
+    classpower = "class resources combo points holy power soul shards chi maelstrom eclipse essence evoker runes runic power stagger brewmaster resource prediction auto hide detached power bar alternative mana behavior style quick actions class power resource bar alternate mana monk druid rogue paladin warlock death knight",
+    gameplay = "gameplay combat crosshair click cast click cast clickthrough click-through focus target modifier mouseover interaction targeting spells mouse buttons keybind modifier ctrl shift alt fadenkreuz melee range spell target sound target lost mouseover heal click casting",
+    modules = "modules style skins optional modules compatibility rounded unitframes portrait decoration minimap compartment addon compartment",
+    profiles = "profiles profile management spec profiles specialization auto switch create copy delete reset import export legacy import wago active profile share string profile string backup restore",
 }
 
 local function ClampNumber(value, minValue, maxValue, fallback)
@@ -843,12 +843,19 @@ local SEARCH_INPUT_DEBOUNCE_SEC = 0.10
 local SEARCH_MAX_RESULTS = 24
 local SEARCH_VISIBLE_RESULTS = 12
 local SEARCH_MIN_RESULT_SCORE = 40
+local SEARCH_MAX_RAW_WORDS = 12
+local SEARCH_MAX_QUERY_CLAUSES = 8
+local SEARCH_MAX_TERMS_PER_CLAUSE = 18
 local _searchRecords = nil
 local _searchRecordsDirty = true
 local _searchIndexing = false
 local _searchIndexQueue = nil
 local _searchInputSerial = 0
 local _searchRegistrySerial = 0
+local _searchAliasTypoKeys = nil
+local _searchAliasTypoCache = {}
+local _searchQueryClauseCacheNorm = nil
+local _searchQueryClauseCacheClauses = nil
 local _searchRegistry = {}
 local _searchRegistryByPage = {}
 M.searchRegistry = _searchRegistry
@@ -1010,6 +1017,26 @@ local SEARCH_QUERY_ALIASES = {
     opacity = { "alpha", "transparency", "fade", "background opacity", "in combat", "out of combat" },
     transparent = { "transparency", "alpha", "opacity", "fade" },
     transparency = { "alpha", "opacity", "fade", "background" },
+    fade = { "alpha", "opacity", "transparency", "range fade", "out of range" },
+    fades = { "fade", "alpha", "opacity", "range fade", "out of range" },
+    faded = { "fade", "alpha", "opacity", "range fade", "out of range" },
+    range = { "range fade", "out of range", "range alpha", "range check", "distance", "distance check" },
+    rangecheck = { "range check", "range fade", "out of range", "distance check", "unit frame range check", "out of range alpha", "range fade affects" },
+    rangechecker = { "range check", "range fade", "out of range", "distance check", "unit frame range check" },
+    distance = { "range", "range fade", "out of range", "range check", "distance check", "alpha" },
+    distancecheck = { "range check", "range fade", "out of range", "distance check", "unit frame range check" },
+    outofrange = { "out of range", "range fade", "range alpha", "range check", "distance" },
+    check = { "range check", "range fade", "out of range", "distance check", "ready check", "version check" },
+    checker = { "check", "range check", "range fade", "out of range" },
+    checking = { "check", "range check", "range fade", "out of range" },
+    reichweite = { "range", "range fade", "out of range", "range check", "distance" },
+    reichweiten = { "range", "range fade", "out of range", "range check", "distance" },
+    reichweitencheck = { "range check", "range fade", "out of range", "distance check" },
+    entfernung = { "distance", "range", "range fade", "out of range", "range check" },
+    ausserhalb = { "out of range", "range fade", "range check" },
+    misc = { "miscellaneous", "global style", "range fade", "tooltips", "blizzard frames", "update intervals", "language" },
+    miscellaneous = { "misc", "global style", "range fade", "tooltips", "blizzard frames", "update intervals", "language" },
+    verschiedenes = { "misc", "miscellaneous", "global style", "range fade", "tooltips", "blizzard frames", "update intervals", "language" },
 
     move = { "edit mode", "position", "positions", "drag", "x offset", "y offset", "anchor", "anchoring" },
     moving = { "edit mode", "position", "positions", "drag", "x offset", "y offset", "anchor", "anchoring" },
@@ -1137,6 +1164,176 @@ local SEARCH_QUERY_ALIASES = {
     menu = { "dashboard", "menu scale", "ui scale", "search", "support" },
     window = { "menu", "dashboard", "reset positions", "ui scale" },
     ui = { "ui scale", "menu scale", "dashboard" },
+
+    unit = { "unit frame", "unit frames", "unitframe", "frame basics" },
+    units = { "unit frame", "unit frames", "unitframe", "frame basics" },
+    einheit = { "unit", "unit frame", "unitframe" },
+    einheiten = { "unit", "unit frames", "unitframe" },
+    einheitenfenster = { "unit frame", "unitframe", "frames" },
+    spieler = { "player", "player frame", "playerframe" },
+    spielerframe = { "player frame", "playerframe", "unit frame" },
+    ziel = { "target", "target frame", "targetframe" },
+    zielframe = { "target frame", "targetframe", "unit frame" },
+    zielziel = { "target of target", "targettarget", "tot" },
+    tot = { "target of target", "targettarget", "target target" },
+    targettarget = { "target of target", "tot", "target target" },
+    fokus = { "focus", "focus frame", "focusframe", "focus kick" },
+    fokusframe = { "focus frame", "focusframe", "focus kick" },
+    begleiter = { "pet", "pet frame", "petframe" },
+    haustier = { "pet", "pet frame", "petframe" },
+
+    enable = { "show", "visible", "frame basics", "aktivieren" },
+    disable = { "hide", "hidden", "frame basics", "deaktivieren" },
+    visible = { "show", "enable", "sichtbar" },
+    aktivieren = { "enable", "show", "visible" },
+    deaktivieren = { "disable", "hide", "hidden" },
+    anzeigen = { "show", "visible", "enable" },
+    ausblenden = { "hide", "hidden", "disable" },
+    sichtbar = { "visible", "show", "enable" },
+    unsichtbar = { "invisible", "hidden", "alpha", "transparency" },
+    versteckt = { "hidden", "hide", "disable" },
+    verschieben = { "move", "drag", "position", "edit mode", "anchor" },
+    bewegen = { "move", "drag", "position", "edit mode" },
+    ziehen = { "drag", "move", "edit mode" },
+    verankern = { "anchor", "anchoring", "position" },
+    anker = { "anchor", "anchoring", "position" },
+    koordinaten = { "x offset", "y offset", "position", "anchor" },
+    breite = { "width", "size", "resize", "frame basics" },
+    hoehe = { "height", "size", "resize", "frame basics" },
+    groesse = { "size", "resize", "scale", "width", "height" },
+    skalierung = { "scale", "size", "frame scaling", "ui scale" },
+
+    layout = { "group frames", "frame basics", "growth", "sorting", "anchoring" },
+    sorting = { "sort", "role order", "group frames", "layout" },
+    sortierung = { "sorting", "role order", "group frames", "layout" },
+    growth = { "growth direction", "layout", "group frames" },
+    spalten = { "columns", "layout", "group frames" },
+    reihen = { "rows", "layout", "auras", "group frames" },
+    rolle = { "role", "role icon", "sorting", "tank", "healer", "dps" },
+    role = { "role icon", "sorting", "tank", "healer", "dps" },
+    tank = { "role icon", "group indicators", "sorting" },
+    healer = { "role icon", "healer buffs", "group indicators" },
+    heal = { "heal prediction", "incoming heals", "health", "healer" },
+    dps = { "role icon", "group indicators", "sorting" },
+
+    healthbar = { "health bar", "health", "hp", "bar colors" },
+    powerbar = { "power bar", "power", "mana", "class resources" },
+    lebensbalken = { "health bar", "health", "hp" },
+    energieleiste = { "power bar", "power", "mana" },
+    manabar = { "mana", "power bar", "power" },
+    color = { "colors", "bar colors", "unitframe colors", "class colors" },
+    colours = { "colors", "color", "bar colors" },
+    farbe = { "colors", "color", "bar colors", "class colors" },
+    farben = { "colors", "color", "bar colors", "class colors" },
+    klassfarbe = { "class color", "class colors", "health color" },
+    classcolor = { "class color", "class colors", "health color" },
+    reaction = { "reaction color", "npc type colors", "colors" },
+    npc = { "npc type colors", "reaction color", "colors" },
+    highlight = { "mouseover highlight", "highlight borders", "colors", "bars" },
+
+    fontsize = { "font size", "text size", "fonts", "text" },
+    textsize = { "text size", "font size", "fonts", "text" },
+    schrift = { "font", "fonts", "text", "font size" },
+    schriftart = { "font", "fonts", "font family" },
+    schriftgroesse = { "font size", "text size", "fonts" },
+    namen = { "names", "name text", "name shortening" },
+    realm = { "realm names", "name shortening", "short names" },
+    server = { "realm names", "name shortening", "short names" },
+    truncate = { "name shortening", "short names", "max name length" },
+
+    portrait = { "portraits", "portrait mode", "class icon", "2d portrait", "3d portrait" },
+    portraits = { "portrait", "portrait mode", "class icon" },
+    avatar = { "portrait", "portraits", "class icon" },
+    portraet = { "portrait", "portraits", "class icon" },
+    portraitdeko = { "portrait decoration", "modules", "style" },
+    castbalken = { "castbar", "cast bar", "casting" },
+    zauberbalken = { "castbar", "cast bar", "casting" },
+    spell = { "spell name", "castbar", "auras", "spell id" },
+    spellname = { "spell name", "castbar", "name shortening" },
+    globalcooldown = { "gcd", "global cooldown", "castbar" },
+    kanal = { "channel", "channel ticks", "castbar" },
+    kanalisieren = { "channel", "channel ticks", "castbar" },
+    unterbrechen = { "interrupt", "kick", "focus kick", "interrupt ready" },
+    fokuskick = { "focus kick", "interrupt", "kick", "castbar" },
+
+    stack = { "stacks", "aura stack count", "auras" },
+    stacks = { "stack", "aura stack count", "auras" },
+    stapel = { "stacks", "stack", "auras" },
+    cooldowntext = { "cooldown text", "timer", "auras" },
+    swipe = { "cooldown swipe", "auras", "cooldown" },
+    staerkungszauber = { "buffs", "buff", "auras" },
+    schwaechungszauber = { "debuffs", "debuff", "auras" },
+    zauber = { "spell", "auras", "castbar", "spell id" },
+    defensives = { "defensives", "externals", "group buffs", "auras" },
+    externals = { "defensives", "external cooldowns", "group buffs", "auras" },
+
+    gruppe = { "group frames", "groupframes", "party", "raid", "layout" },
+    gruppen = { "group frames", "groupframes", "party", "raid", "layout" },
+    gruppenrahmen = { "group frames", "groupframes", "party", "raid", "layout" },
+    gruppenfenster = { "group frames", "groupframes", "party", "raid", "layout" },
+    raidframe = { "raid frames", "raidframes", "group frames", "layout" },
+    partyframe = { "party frames", "partyframes", "group frames", "layout" },
+    schlachtzug = { "raid", "raid frames", "group frames" },
+    mythic = { "mythic raid", "raid", "group frames" },
+    readycheck = { "ready check", "status icons", "group indicators" },
+    bereitschaft = { "ready check", "status icons", "group indicators" },
+    statusicon = { "status icons", "indicators", "dead", "offline", "ready check" },
+    statusicons = { "status icons", "indicators", "dead", "offline", "ready check" },
+    marker = { "raid marker", "markers", "indicators" },
+    raidmarker = { "raid marker", "marker", "indicators" },
+    leader = { "leader icon", "status icons", "indicators" },
+    assist = { "assist icon", "status icons", "indicators" },
+    offline = { "offline icon", "status icons", "indicators" },
+    afk = { "afk icon", "status icons", "indicators" },
+    dead = { "dead icon", "ghost", "status icons", "indicators" },
+
+    profil = { "profile", "profiles", "import", "export" },
+    profile = { "profiles", "import", "export", "copy profile", "spec profiles", "wago" },
+    importieren = { "import", "profiles", "wago", "profile string" },
+    exportieren = { "export", "profiles", "profile string" },
+    kopieren = { "copy profile", "profiles", "import", "export" },
+    teilen = { "share profile", "export", "wago" },
+    backup = { "profiles", "export", "copy profile" },
+    restore = { "profiles", "import", "reset" },
+
+    minimap = { "minimap icon", "minimap button", "miscellaneous" },
+    minimapicon = { "minimap icon", "minimap button", "miscellaneous" },
+    minimapbutton = { "minimap icon", "minimap button", "miscellaneous" },
+    minikarte = { "minimap", "minimap icon", "miscellaneous" },
+    sound = { "sounds", "target sound", "target lost", "miscellaneous" },
+    sounds = { "sound", "target sound", "target lost", "miscellaneous" },
+    targetsound = { "target sound", "target lost", "sounds", "miscellaneous" },
+    versioncheck = { "version check", "miscellaneous", "update intervals" },
+    blizzardframes = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
+    standardframes = { "default frames", "blizzard frames", "hide blizzard" },
+
+    crosshair = { "combat crosshair", "gameplay", "melee range spell", "range check" },
+    fadenkreuz = { "crosshair", "combat crosshair", "gameplay", "melee range spell" },
+    melee = { "melee range spell", "crosshair", "range check" },
+    maus = { "mouse", "mouseover", "click cast", "targeting" },
+    maustaste = { "mouse buttons", "click cast", "targeting" },
+    klick = { "click", "click cast", "clickthrough", "targeting" },
+    klicken = { "click", "click cast", "clickthrough", "targeting" },
+    heilung = { "heal", "healer", "click cast", "mouseover" },
+    mouseoverheal = { "mouseover heal", "click cast", "healing" },
+
+    ruckelt = { "lag", "fps", "performance", "update intervals" },
+    haengt = { "lag", "fps", "performance", "update intervals" },
+    langsam = { "slow", "performance", "lag", "fps" },
+    cpu = { "performance", "update intervals", "auras", "cooldown" },
+    speicher = { "performance", "auras", "profiles" },
+    optimieren = { "performance", "update intervals", "auras", "fps" },
+    rounded = { "rounded unitframes", "modules", "style" },
+    roundedunitframes = { "rounded unitframes", "modules", "style" },
+    rund = { "rounded", "rounded unitframes", "modules" },
+    classpower = { "class resources", "power", "resource" },
+    klassenressourcen = { "class resources", "classpower", "resource" },
+    klassenressource = { "class resources", "classpower", "resource" },
+    combopoints = { "combo points", "class resources", "rogue" },
+    soulshards = { "soul shards", "class resources", "warlock" },
+    runen = { "runes", "runic power", "class resources" },
+    eclipse = { "eclipse", "class resources", "druid" },
+    stagger = { "stagger", "class resources", "brewmaster" },
 }
 
 local CONTROL_KIND_LABEL = {
@@ -1153,6 +1350,7 @@ local CONTROL_KIND_LABEL = {
 }
 
 local function AddSearchTermUnique(list, seen, term)
+    if #list >= SEARCH_MAX_TERMS_PER_CLAUSE then return end
     term = NormalizeSearchText(term)
     if term == "" or SEARCH_STOP_WORDS[term] or seen[term] then return end
     seen[term] = true
@@ -1163,18 +1361,36 @@ local function SearchRawWords(normalized)
     local raw = {}
     for word in tostring(normalized or ""):gmatch("%S+") do
         if not SEARCH_STOP_WORDS[word] then raw[#raw + 1] = word end
+        if #raw >= SEARCH_MAX_RAW_WORDS then break end
     end
     return raw
 end
 
 local SearchEditDistanceWithin
 
+local function SearchAliasTypoKeys()
+    if _searchAliasTypoKeys then return _searchAliasTypoKeys end
+    local keys = {}
+    for key in pairs(SEARCH_QUERY_ALIASES) do
+        if #key >= 5 then keys[#keys + 1] = key end
+    end
+    table.sort(keys, function(a, b)
+        if #a ~= #b then return #a < #b end
+        return a < b
+    end)
+    _searchAliasTypoKeys = keys
+    return keys
+end
+
 local function SearchAliasKeyForTypo(word)
     if not SearchEditDistanceWithin or #word < 5 then return nil end
+    if _searchAliasTypoCache[word] ~= nil then return _searchAliasTypoCache[word] or nil end
     local maxDistance = (#word >= 8) and 2 or 1
     local bestKey, bestDelta
-    for key in pairs(SEARCH_QUERY_ALIASES) do
-        if #key >= 5 and math.abs(#key - #word) <= maxDistance and SearchEditDistanceWithin(word, key, maxDistance) then
+    local keys = SearchAliasTypoKeys()
+    for i = 1, #keys do
+        local key = keys[i]
+        if math.abs(#key - #word) <= maxDistance and SearchEditDistanceWithin(word, key, maxDistance) then
             local delta = math.abs(#key - #word)
             if not bestKey or delta < bestDelta or (delta == bestDelta and #key < #bestKey) then
                 bestKey = key
@@ -1182,6 +1398,7 @@ local function SearchAliasKeyForTypo(word)
             end
         end
     end
+    _searchAliasTypoCache[word] = bestKey or false
     return bestKey
 end
 
@@ -1202,6 +1419,90 @@ local function SearchCanonicalWords(raw)
             i = i + 2
         elseif word == "cast" and nextWord == "bar" then
             words[#words + 1] = "castbar"
+            i = i + 2
+        elseif word == "health" and nextWord == "bar" then
+            words[#words + 1] = "healthbar"
+            i = i + 2
+        elseif word == "power" and nextWord == "bar" then
+            words[#words + 1] = "powerbar"
+            i = i + 2
+        elseif word == "class" and (nextWord == "resource" or nextWord == "resources" or nextWord == "power") then
+            words[#words + 1] = "classpower"
+            i = i + 2
+        elseif word == "click" and (nextWord == "cast" or nextWord == "casting") then
+            words[#words + 1] = "clickcast"
+            i = i + 2
+        elseif word == "click" and nextWord == "through" then
+            words[#words + 1] = "clickthrough"
+            i = i + 2
+        elseif word == "edit" and nextWord == "mode" then
+            words[#words + 1] = "editmode"
+            i = i + 2
+        elseif word == "load" and (nextWord == "condition" or nextWord == "conditions") then
+            words[#words + 1] = "loadconditions"
+            i = i + 2
+        elseif word == "ready" and nextWord == "check" then
+            words[#words + 1] = "readycheck"
+            i = i + 2
+        elseif word == "raid" and nextWord == "marker" then
+            words[#words + 1] = "raidmarker"
+            i = i + 2
+        elseif word == "group" and nextWord == "number" then
+            words[#words + 1] = "groupnumber"
+            i = i + 2
+        elseif word == "name" and nextWord == "shortening" then
+            words[#words + 1] = "nameshortening"
+            i = i + 2
+        elseif word == "global" and nextWord == "cooldown" then
+            words[#words + 1] = "globalcooldown"
+            i = i + 2
+        elseif word == "focus" and nextWord == "kick" then
+            words[#words + 1] = "fokuskick"
+            i = i + 2
+        elseif word == "interrupt" and nextWord == "ready" then
+            words[#words + 1] = "interruptready"
+            i = i + 2
+        elseif word == "minimap" and (nextWord == "icon" or nextWord == "button") then
+            words[#words + 1] = "minimapicon"
+            i = i + 2
+        elseif word == "menu" and nextWord == "scale" then
+            words[#words + 1] = "menuscale"
+            i = i + 2
+        elseif word == "ui" and nextWord == "scale" then
+            words[#words + 1] = "uiscale"
+            i = i + 2
+        elseif word == "target" and (nextWord == "sound" or nextWord == "sounds") then
+            words[#words + 1] = "targetsound"
+            i = i + 2
+        elseif word == "unit" and (nextWord == "aura" or nextWord == "auras") then
+            words[#words + 1] = "unitauras"
+            i = i + 2
+        elseif word == "global" and nextWord == "style" then
+            words[#words + 1] = "globalstyle"
+            i = i + 2
+        elseif word == "spell" and nextWord == "id" then
+            words[#words + 1] = "spellid"
+            i = i + 2
+        elseif word == "health" and nextWord == "text" then
+            words[#words + 1] = "healthtext"
+            i = i + 2
+        elseif word == "power" and nextWord == "text" then
+            words[#words + 1] = "powertext"
+            i = i + 2
+        elseif word == "name" and nextWord == "text" then
+            words[#words + 1] = "nametext"
+            i = i + 2
+        elseif word == "class" and nextWord == "color" then
+            words[#words + 1] = "classcolor"
+            i = i + 2
+        elseif word == "range" and (nextWord == "check" or nextWord == "checker" or nextWord == "checking") then
+            words[#words + 1] = "rangecheck"
+            i = i + 2
+        elseif word == "distance" and (nextWord == "check" or nextWord == "checker" or nextWord == "checking") then
+            words[#words + 1] = "distancecheck"
+            i = i + 2
+        elseif word == "out" and nextWord == "range" then
+            words[#words + 1] = "outofrange"
             i = i + 2
         elseif word == "unit" and (nextWord == "frame" or nextWord == "frames") then
             words[#words + 1] = "unitframe"
@@ -1237,10 +1538,14 @@ end
 
 local function BuildSearchQueryClauses(query)
     local normalized = NormalizeSearchText(query)
+    if normalized == _searchQueryClauseCacheNorm and _searchQueryClauseCacheClauses then
+        return normalized, _searchQueryClauseCacheClauses
+    end
     local raw = SearchRawWords(normalized)
     local words = SearchCanonicalWords(raw)
     local clauses = {}
     for i = 1, #words do
+        if #clauses >= SEARCH_MAX_QUERY_CLAUSES then break end
         local word = words[i]
         local terms, seen = {}, {}
         AddSearchTermUnique(terms, seen, word)
@@ -1259,6 +1564,8 @@ local function BuildSearchQueryClauses(query)
             clauses[#clauses + 1] = { word = word, terms = terms }
         end
     end
+    _searchQueryClauseCacheNorm = normalized
+    _searchQueryClauseCacheClauses = clauses
     return normalized, clauses
 end
 
@@ -1923,9 +2230,18 @@ local SEARCH_FAQ = {
         answer = "Open Global Style > Miscellaneous and use the Range Fade section for affected units, alpha, and portrait fading.",
         pageKey = "opt_misc",
         target = "Opens: Global Style > Miscellaneous > Range Fade",
-        anchorText = "Range Fade out of range range alpha distance fade portrait fading",
-        keywords = { "range fade", "out of range", "range alpha", "distance fade", "reichweite", "fade portrait", "frame fades", "out of range opacity" },
-        priority = 25,
+        anchorText = "Range Fade unit frame range check range checker distance check out of range range alpha distance fade portrait fading",
+        keywords = { "range fade", "range check", "range checker", "unit frame range check", "distance check", "out of range", "range alpha", "distance fade", "reichweite", "reichweitencheck", "entfernung", "fade portrait", "frame fades", "out of range opacity" },
+        priority = 45,
+    },
+    {
+        label = "Where is the unit frame range check?",
+        answer = "Open Global Style > Miscellaneous > Range Fade. It controls target, focus, and boss out-of-range fading; group range fade is in Group Frames > Health & Text.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Range Fade",
+        anchorText = "Range Fade unit frame range check range checker distance check out of range alpha target focus boss miscellaneous misc",
+        keywords = { "unit frame range check", "unitframe range check", "unit frames range check", "range check unitframe", "range check unit frame", "range checker", "distance check", "distance checker", "out of range unit frame", "out of range frames", "target out of range", "focus out of range", "boss out of range", "target range fade", "focus range fade", "boss range fade", "reichweitencheck", "reichweite check", "entfernung check", "misc range", "misc range fade" },
+        priority = 165,
     },
     {
         label = "How do I change language or translations?",
@@ -2076,9 +2392,18 @@ local SEARCH_FAQ = {
         answer = "Open Group Frames > Health & Text. It controls health colors, bars, power bar, text, heal prediction, dispel overlay, debuff stripe, and range fade.",
         pageKey = "gf_bars",
         target = "Opens: Group Frames > Health & Text",
-        anchorText = "Health Colors Bars Power Bar Text Heal Prediction Dispel Overlay Debuff Stripe Range Fade",
-        keywords = { "group health text", "raid health text", "party health text", "group power bar", "raid power bar", "party power bar", "heal prediction", "incoming heals", "dispel overlay", "debuff stripe", "group range fade" },
+        anchorText = "Health Colors Bars Power Bar Text Heal Prediction Dispel Overlay Debuff Stripe Range Fade group range check raid range check party range check",
+        keywords = { "group health text", "raid health text", "party health text", "group power bar", "raid power bar", "party power bar", "heal prediction", "incoming heals", "dispel overlay", "debuff stripe", "group range fade", "group range check", "raid range check", "party range check", "raid out of range", "party out of range", "range check raid frames" },
         priority = 55,
+    },
+    {
+        label = "Where is party or raid range check?",
+        answer = "Open Group Frames > Health & Text > Range Fade. That controls party and raid out-of-range fading.",
+        pageKey = "gf_bars",
+        target = "Opens: Group Frames > Health & Text > Range Fade",
+        anchorText = "Range Fade group frame range check raid range check party range check out of range alpha",
+        keywords = { "group range check", "group frame range check", "group frames range check", "raid range check", "raid frame range check", "raid frames range check", "party range check", "party frame range check", "party frames range check", "raid out of range", "party out of range", "group out of range", "range check raid frames", "range check party frames" },
+        priority = 140,
     },
     {
         label = "Where are absorb bars or heal prediction?",
@@ -2933,7 +3258,7 @@ local function BuildSearchPage(ctx)
         end
     end
 
-    local quick = b:Section("Support Search Examples", 122)
+    local quick = b:Section("Support Search Examples", 150)
     local shortcuts = {
         { "Move Frames", "where do I move my unitframe" },
         { "Background", "change my backgrond" },
@@ -2943,7 +3268,9 @@ local function BuildSearchPage(ctx)
         { "Castbar", "evoker castbar" },
         { "Buffs", "show only my buffs" },
         { "Blizzard", "hide blizzard frames" },
-        { "Range Fade", "out of range opacity" },
+        { "Range Check", "unit frame range check" },
+        { "Misc", "where is miscellaneous" },
+        { "Performance", "why is msuf lagging" },
     }
     local buttonW = math.floor((width - 56) / 3)
     for i = 1, #shortcuts do
