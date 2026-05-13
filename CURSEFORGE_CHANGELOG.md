@@ -27,7 +27,6 @@
 - Added a new Unit Frame preview workflow based on the Group Frame preview system.
 - Unit Frame layout, text, portraits, castbars, alpha behavior, status icons, and positioning can now be previewed and adjusted more comfortably from the menu.
 - Added direct MSUF Edit Mode access from Unit Frame pages.
-- Improved Boss Frame preview handling, including portrait refresh behavior when switching between real boss units and preview mode in the same session.
 - Improved Unit Frame name shortening and truncation behavior.
 - Improved portrait controls, including Blizzard class portrait support.
 - Improved font, text, power bar, castbar, and status icon controls.
@@ -60,12 +59,11 @@
 - Added locale audit tooling to make missing translations easier to catch.
 - Localized more menu labels, buttons, chat messages, tooltip text, help text, and recovery messages.
 
-## Important Fixes
+## Bug Fixes
 
 - Fixed an edge case where auras could remain visible after they had expired.
 - Fixed Blizzard class portrait mode when used together with class-colored portrait styling.
 - Fixed Blizzard class portrait atlas coordinates so class icons no longer crop or distort incorrectly.
-- Fixed Boss Frame preview portraits not appearing if a real boss had previously occupied that boss slot during the same session.
 - Fixed private aura handling and Blizzard private aura anchor issues.
 - Fixed mouseover highlight edge cases where borders could float, overlap text, or attach incorrectly.
 - Fixed long-standing font menu issues.
