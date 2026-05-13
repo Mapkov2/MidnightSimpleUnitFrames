@@ -454,7 +454,14 @@ local function BuildTopActions(ctx, builder, unit, label)
             local runBtn = MakePopupButton(copyPopup, "Copy Selected", 128, { 0.050, 0.125, 0.270, 0.98 }, { 0.170, 0.350, 0.610, 0.86 }, { 0.88, 0.96, 1, 1 }, { 0.060, 0.150, 0.320, 0.98 }, { 0.210, 0.420, 0.720, 0.90 })
             runBtn:SetPoint("BOTTOMRIGHT", copyPopup, "BOTTOMRIGHT", -14, 11)
             runBtn:SetScript("OnClick", function()
-                CopyUnitSettings(unit, NormalizeCopyDest(unit), copyScopes)
+                local function RunCopy()
+                    CopyUnitSettings(unit, NormalizeCopyDest(unit), copyScopes)
+                end
+                if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+                    M.CaptureHistory("Copy Unit Settings", "unit:copy:" .. tostring(unit), RunCopy)
+                else
+                    RunCopy()
+                end
                 copyPopup:Hide()
             end)
         end
@@ -580,12 +587,19 @@ local function BuildLayout(ctx, builder, unit)
         local overlay = type(ensure) == "function" and ensure()
         if not overlay then return end
         overlay._onPick = function(frameName)
-            local conf = GetConf(unit)
-            conf.anchorFrameName = frameName
-            conf.anchorToUnitframe = "GLOBAL"
-            ApplyAnchorChange()
-            if M.InvalidatePage then M.InvalidatePage(ctx.key) end
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            local function PickCustomAnchor()
+                local conf = GetConf(unit)
+                conf.anchorFrameName = frameName
+                conf.anchorToUnitframe = "GLOBAL"
+                ApplyAnchorChange()
+                if M.InvalidatePage then M.InvalidatePage(ctx.key) end
+                if M.SelectPage then M.SelectPage(ctx.key) end
+            end
+            if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+                M.CaptureHistory("Pick custom anchor", "unit:anchorPick:" .. tostring(unit), PickCustomAnchor)
+            else
+                PickCustomAnchor()
+            end
         end
         overlay:Show()
     end)
@@ -1483,14 +1497,22 @@ local function BuildStatus(ctx, builder, unit)
 
     local reset = W.Button(sec, "Reset selected", 150)
     PlaceButton(reset, rightX, -226, 150)
+    reset._msuf2SkipHistoryCheckpoint = true
     reset:SetScript("OnClick", function()
         local spec = CurrentStatusSpec(unit)
         if not spec then return end
-        local conf = GetConf(unit)
-        conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.size], conf[spec.layer] = nil, nil, nil, nil, nil
-        if spec.symbol then conf[spec.symbol] = nil end
-        RefreshStatusRuntime(unit, spec)
-        if M.SelectPage then M.SelectPage(ctx.key) end
+        local function ResetSelectedStatus()
+            local conf = GetConf(unit)
+            conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.size], conf[spec.layer] = nil, nil, nil, nil, nil
+            if spec.symbol then conf[spec.symbol] = nil end
+            RefreshStatusRuntime(unit, spec)
+            if M.SelectPage then M.SelectPage(ctx.key) end
+        end
+        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+            M.CaptureHistory("Reset: " .. tostring(spec.text or spec.value or "Status icon"), "status:reset:" .. tostring(unit) .. ":" .. tostring(spec.value), ResetSelectedStatus)
+        else
+            ResetSelectedStatus()
+        end
     end)
 
     local test = W.ToggleAt(sec, "Test mode", rightX, -142, rightW)

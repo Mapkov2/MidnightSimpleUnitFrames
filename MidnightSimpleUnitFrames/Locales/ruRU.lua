@@ -8,25 +8,18 @@
 -- This file is an immediate no-op unless the active locale is ruRU.
 -- ============================================================================
 local addonName, ns = ...
-
--- Fast exit for non-ruRU clients.
-local loc = (ns and ns.LOCALE) or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-if loc ~= "ruRU" then return end
-
 ns = ns or {}
-ns.LOCALE = loc
-ns.L = ns.L or (_G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
-end
-_G.MSUF_L = L
+local L = (ns.RegisterLocale and ns.RegisterLocale("ruRU")) or (ns.L or {})
 
 local T = {
     ["Open MSUF Menu"] = "Открыть меню MSUF",
     ["Edit Mode"] = "Режим редактирования",
     ["Exit MSUF Edit Mode"] = "Выйти из режима редактирования MSUF",
     ["Profiles"] = "Профили",
+    ["Language"] = "Язык",
+    ["Menu language"] = "Язык меню",
+    ["Follow Blizzard"] = "Как в Blizzard",
+    ["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Как в Blizzard использует язык клиента WoW. Ручной выбор влияет только на меню MSUF.",
     ["Snap to grid"] = "Привязка к сетке",
     ["On"] = "Вкл",
     ["Off"] = "Выкл",

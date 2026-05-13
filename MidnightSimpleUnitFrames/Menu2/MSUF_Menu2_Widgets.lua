@@ -973,6 +973,7 @@ end
 
 local function DropdownItemText(item)
     if type(item) ~= "table" then return Tr(tostring(item or "")) end
+    if item.translate == false then return tostring(item.text or item.label or DropdownItemValue(item) or "") end
     if item.text ~= nil then return Tr(item.text) end
     if item.label ~= nil then return Tr(item.label) end
     if item[1] ~= nil and item[2] ~= nil then return Tr(tostring(item[1])) end

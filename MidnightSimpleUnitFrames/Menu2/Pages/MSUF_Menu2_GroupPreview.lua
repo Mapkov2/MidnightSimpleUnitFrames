@@ -414,7 +414,22 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         if box.SetFocus then box:SetFocus() end
     end
 
-    local function SaveHandlePosition(handle)
+    local function HandleHistoryLabel(handle, action)
+        local label = handle and handle._label
+        local text = label and label.GetText and label:GetText()
+        if not text or text == "" then text = handle and handle._key or "Group preview" end
+        return tostring(action or "Move") .. ": " .. tostring(text)
+    end
+
+    local function CheckpointHandleHistory(handle, action)
+        if not (M and type(M.CheckpointHistory) == "function") then return end
+        M.CheckpointHistory(
+            HandleHistoryLabel(handle, action),
+            "groupPreview:" .. tostring(CurrentScope()) .. ":" .. tostring(handle and handle._key or "handle") .. ":" .. tostring(action or "move")
+        )
+    end
+
+    local function SaveHandlePosition(handle, action)
         if not (handle and box._mock) or handle._locked then return end
         local m = box._mock
         local mL, mT = m:GetLeft() or 0, m:GetTop() or 0
@@ -469,6 +484,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             gf.RefreshVisuals()
         end
         box:Refresh()
+        CheckpointHandleHistory(handle, action)
     end
 
     local function CreatePreviewHandle(key, sectionKey, color, label, width, height, locked)
@@ -507,7 +523,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end)
         handle:SetScript("OnDragStop", function(self)
             if self.StopMovingOrSizing then self:StopMovingOrSizing() end
-            SaveHandlePosition(self)
+            SaveHandlePosition(self, "Move")
         end)
         box._handles[key] = handle
         return handle
@@ -870,7 +886,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         if not point then return end
         handle:ClearAllPoints()
         handle:SetPoint(point, relativeTo, relativePoint, (xOfs or 0) + dx, (yOfs or 0) + dy)
-        SaveHandlePosition(handle)
+        SaveHandlePosition(handle, "Nudge")
     end)
 
     box:Refresh()

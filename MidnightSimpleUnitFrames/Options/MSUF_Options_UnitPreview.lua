@@ -1676,6 +1676,36 @@ local function CommitHandleMove(handle, reason)
     RefreshHandleSelectionVisuals(box)
 end
 
+local function MenuHistoryLabel(handle, action)
+    local label = handle and (handle._label or handle._key) or "Preview element"
+    return tostring(action or "Move") .. ": " .. tostring(label or "Preview element")
+end
+
+local function MenuHistorySource(handle, action)
+    local box = handle and handle._preview
+    return "unitPreview:" .. tostring(box and box.key or "unit") .. ":" .. tostring(handle and handle._key or "handle") .. ":" .. tostring(action or "move")
+end
+
+local function BeginMenuHistory(handle, action)
+    local h = _G.MSUF2
+    if not (h and type(h.BeginHistoryTransaction) == "function") then return false end
+    return h.BeginHistoryTransaction(MenuHistoryLabel(handle, action), MenuHistorySource(handle, action))
+end
+
+local function CommitMenuHistory()
+    local h = _G.MSUF2
+    if h and type(h.CommitHistoryTransaction) == "function" then return h.CommitHistoryTransaction() end
+    return false
+end
+
+local function CheckpointMenuHistory(handle, action)
+    local h = _G.MSUF2
+    if h and type(h.CheckpointHistory) == "function" then
+        return h.CheckpointHistory(MenuHistoryLabel(handle, action), MenuHistorySource(handle, action))
+    end
+    return false
+end
+
 local function WriteHandleOffsets(handle, x, y, reason)
     if not handle then return false end
     local box = handle._preview
@@ -1686,6 +1716,9 @@ local function WriteHandleOffsets(handle, x, y, reason)
     store[xKey] = RoundOffset(x)
     store[yKey] = RoundOffset(y)
     CommitHandleMove(handle, reason)
+    if not handle._msuf2PreviewHistoryTx then
+        CheckpointMenuHistory(handle, reason == "UNIT_PREVIEW_NUDGE" and "Nudge" or "Move")
+    end
     return true
 end
 
@@ -1799,6 +1832,7 @@ local function MakeHandle(preview, key, fields, label, color)
         self._lastDragX = nil
         self._lastDragY = nil
         self._dragging = true
+        self._msuf2PreviewHistoryTx = BeginMenuHistory(self, "Move")
         local cx, cy = GetCursorPosition()
         self._cursorX, self._cursorY = cx, cy
         preview.dragFrame._handle = self
@@ -1812,6 +1846,10 @@ local function MakeHandle(preview, key, fields, label, color)
             preview.dragFrame:SetScript("OnUpdate", nil)
             preview.dragFrame._handle = nil
             preview.dragFrame:Hide()
+        end
+        if self._msuf2PreviewHistoryTx then
+            self._msuf2PreviewHistoryTx = nil
+            CommitMenuHistory()
         end
         self._dragging = nil
         self._lastDragX = nil

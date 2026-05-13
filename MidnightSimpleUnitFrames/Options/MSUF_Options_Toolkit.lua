@@ -27,11 +27,10 @@ if not getmetatable(ns.L) then
 end
 
 local L = ns.L
-local isEn = (ns.LOCALE) == "enUS"
 
 function ns.TR(v)
     if type(v) ~= "string" then return v end
-    if isEn then return v end
+    if type(ns.Translate) == "function" then return ns.Translate(v) end
     return L[v] or v
 end
 

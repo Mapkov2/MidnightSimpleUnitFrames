@@ -632,8 +632,16 @@ local function BuildGFIndicators(ctx)
                         bestSlot, bestDist = slot, dist
                     end
                 end
-                InsertSpellAt(SpellIndicators(CurrentScope()), self._specKey, self._trackable, self._auraName, bestSlot)
-                QueueSpellIndicators(CurrentScope())
+                local currentKind = CurrentScope()
+                local function ReorderSpellIndicator()
+                    InsertSpellAt(SpellIndicators(currentKind), self._specKey, self._trackable, self._auraName, bestSlot)
+                    QueueSpellIndicators(currentKind)
+                end
+                if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+                    M.CaptureHistory("Spell Indicator Order", "group:spellOrder:" .. tostring(currentKind) .. ":" .. tostring(self._specKey), ReorderSpellIndicator)
+                else
+                    ReorderSpellIndicator()
+                end
                 if M.SelectPage then M.SelectPage(ctx.key) end
             end)
             tile:SetScript("OnMouseUp", function(self, button)
@@ -643,9 +651,16 @@ local function BuildGFIndicators(ctx)
                 end
                 local currentKind = CurrentScope()
                 if button == "RightButton" then
-                    local cfg = SpellConfigFor(currentKind, self._specKey, self._auraName, true)
-                    if cfg then cfg.enabled = cfg.enabled == false and true or false end
-                    QueueSpellIndicators(currentKind)
+                    local function ToggleSpellIndicator()
+                        local cfg = SpellConfigFor(currentKind, self._specKey, self._auraName, true)
+                        if cfg then cfg.enabled = cfg.enabled == false and true or false end
+                        QueueSpellIndicators(currentKind)
+                    end
+                    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+                        M.CaptureHistory("Toggle Spell Indicator", "group:spellToggle:" .. tostring(currentKind) .. ":" .. tostring(self._specKey) .. ":" .. tostring(self._auraName), ToggleSpellIndicator)
+                    else
+                        ToggleSpellIndicator()
+                    end
                 else
                     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
                     M.gfSpellIndicatorSelection[currentKind] = self._auraName

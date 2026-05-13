@@ -6,17 +6,12 @@
 -- ============================================================================
 local addonName, ns = ...
 
-local loc = (ns and ns.LOCALE) or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-if loc ~= "enGB" then return end
-
 ns = ns or {}
-ns.LOCALE = loc
-ns.L = ns.L or (_G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
-end
-_G.MSUF_L = L
+local L = (ns.RegisterLocale and ns.RegisterLocale("enGB")) or (ns.L or {})
 
 -- enGB uses enUS keys as fallback. Add British spelling overrides below:
 -- L["Color player names by class"] = "Colour player names by class"
+L["Language"] = "Language"
+L["Menu language"] = "Menu language"
+L["Follow Blizzard"] = "Follow Blizzard"
+L["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."

@@ -85,8 +85,10 @@ end
 T.Template = Template
 
 local ENGLISH_LOCALES = { enUS = true, enGB = true }
+local LOCALE_ORDER = { "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
 
 local function ActiveLocale()
+    if type(ns.GetEffectiveLocale) == "function" then return ns.GetEffectiveLocale() end
     return ns.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
 end
 
@@ -112,6 +114,11 @@ end
 
 local function Tr(text)
     if type(text) ~= "string" then return text end
+    if type(ns.Translate) == "function" then
+        local translated = ns.Translate(text)
+        TrackLocaleKey(text, translated ~= text)
+        return translated
+    end
     local locale = ns.L or _G.MSUF_L
     if type(locale) == "table" then
         local direct = rawget(locale, text)
@@ -132,6 +139,52 @@ local function Tr(text)
 end
 M.Tr = M.Tr or Tr
 T.Tr = M.Tr
+
+local function ClientLocale()
+    return (type(GetLocale) == "function" and GetLocale()) or ns.CLIENT_LOCALE or "enUS"
+end
+
+local function IsSupportedLocale(locale)
+    local supported = ns.SUPPORTED_LOCALES
+    return type(locale) == "string" and type(supported) == "table" and supported[locale] == true
+end
+
+function M.GetLocaleDropdownValues()
+    local names = ns.LOCALE_NAMES or {}
+    local values = {
+        { value = "auto", text = "Follow Blizzard" },
+    }
+    for i = 1, #LOCALE_ORDER do
+        local locale = LOCALE_ORDER[i]
+        values[#values + 1] = { value = locale, text = names[locale] or locale, translate = false }
+    end
+    return values
+end
+
+function M.GetLocaleSelection()
+    local g = M.GetGeneralDB and M.GetGeneralDB()
+    local selected = type(g) == "table" and g.menuLocale
+    if IsSupportedLocale(selected) then return selected end
+    return "auto"
+end
+
+function M.ResolveLocaleSelection(selection)
+    if IsSupportedLocale(selection) then return selection end
+    local locale = ClientLocale()
+    if IsSupportedLocale(locale) then return locale end
+    return "enUS"
+end
+
+function M.ApplyLocaleSelection(selection)
+    local selected = selection or M.GetLocaleSelection()
+    local locale = M.ResolveLocaleSelection(selected)
+    M.missingLocaleKeys = {}
+    if type(ns.SetLocale) == "function" then
+        return ns.SetLocale(locale), selected
+    end
+    ns.LOCALE = locale
+    return locale, selected
+end
 
 M.Format = M.Format or function(text, ...)
     local translated = M.Tr(text)

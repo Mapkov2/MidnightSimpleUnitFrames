@@ -55,13 +55,6 @@ local function Trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
-local function ShortLabel(value, limit)
-    value = Trim(value)
-    limit = tonumber(limit) or 28
-    if #value <= limit then return value end
-    return value:sub(1, limit - 3) .. "..."
-end
-
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = "None", text = "None" } end
@@ -216,34 +209,6 @@ local function BuildProfiles(ctx)
         if delete.SetEnabled then delete:SetEnabled(active ~= "Default") end
     end)
 
-    local history = b:CollapsibleSection("profiles_history", "Undo / Redo", 128, true)
-    W.Text(history, "Session history for MSUF2 option changes. Profile switches, imports, resets and deletes start a clean history.", 14, -34, contentW - 28, T.colors.muted)
-    local undo = T.Button(history, "< Undo", 180, 26)
-    T.SkinDangerButton(undo)
-    local redo = T.Button(history, "Redo >", 180, 26)
-    T.SkinSuccessButton(redo)
-    local state = W.Text(history, "", 14, -92, contentW - 28, T.colors.dim)
-    undo:SetPoint("TOPLEFT", history, "TOPLEFT", 14, -62)
-    redo:SetPoint("LEFT", undo, "RIGHT", 12, 0)
-    undo:SetScript("OnClick", function()
-        if M.Undo then M.Undo() end
-    end)
-    redo:SetScript("OnClick", function()
-        if M.Redo then M.Redo() end
-    end)
-    M.AddRefresher(ctx, function()
-        local s = M.GetHistoryState and M.GetHistoryState() or {}
-        if undo.SetEnabled then undo:SetEnabled(s.canUndo and true or false) end
-        if redo.SetEnabled then redo:SetEnabled(s.canRedo and true or false) end
-        undo:SetText(s.undoLabel and ("< Undo: " .. ShortLabel(s.undoLabel, 20)) or "< Undo")
-        redo:SetText(s.redoLabel and ("Redo: " .. ShortLabel(s.redoLabel, 20) .. " >") or "Redo >")
-        if s.canUndo or s.canRedo then
-            state:SetText(("Undo: %d   Redo: %d"):format(tonumber(s.undoCount) or 0, tonumber(s.redoCount) or 0))
-        else
-            state:SetText("No tracked MSUF2 changes in this session.")
-        end
-    end)
-
     local specs = GetSpecMeta()
     local specRows = max(1, math.ceil((#specs > 0 and #specs or 1) / 2))
     local spec = b:CollapsibleSection("profiles_specs", "Spec Profiles", 120 + (specRows * 58), true)
@@ -394,5 +359,5 @@ local function BuildModules(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("profiles", { title = "MSUF Profiles", build = BuildProfiles, version = 3 })
+M.RegisterPage("profiles", { title = "MSUF Profiles", build = BuildProfiles, version = 4 })
 M.RegisterPage("modules", { title = "MSUF Modules", build = BuildModules })

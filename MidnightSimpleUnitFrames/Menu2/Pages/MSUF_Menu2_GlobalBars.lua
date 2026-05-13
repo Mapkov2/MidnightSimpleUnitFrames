@@ -882,14 +882,21 @@ local function BuildBars(ctx)
         prioContainer:SetHeight(prioCount * (rowH + rowGap))
     end
     local function SavePriorityRows()
-        local sorted = {}
-        for i = 1, prioCount do sorted[i] = prioRows[i] end
-        table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
-        local order = {}
-        for i = 1, prioCount do order[i] = sorted[i].key end
-        SetPriorityOrder(order)
-        ApplyBars("MSUF2_HIGHLIGHT_PRIORITY_ORDER")
-        ApplyAllHighlightBorderRuntime()
+        local function WritePriorityRows()
+            local sorted = {}
+            for i = 1, prioCount do sorted[i] = prioRows[i] end
+            table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
+            local order = {}
+            for i = 1, prioCount do order[i] = sorted[i].key end
+            SetPriorityOrder(order)
+            ApplyBars("MSUF2_HIGHLIGHT_PRIORITY_ORDER")
+            ApplyAllHighlightBorderRuntime()
+        end
+        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+            M.CaptureHistory("Highlight Priority Order", "global:highlightPriorityOrder", WritePriorityRows)
+        else
+            WritePriorityRows()
+        end
     end
     local function SetPriorityRowsEnabled(enabled)
         enabled = enabled and true or false

@@ -8,25 +8,18 @@
 -- This file is an immediate no-op unless the active locale is itIT.
 -- ============================================================================
 local addonName, ns = ...
-
--- Fast exit for non-itIT clients.
-local loc = (ns and ns.LOCALE) or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-if loc ~= "itIT" then return end
-
 ns = ns or {}
-ns.LOCALE = loc
-ns.L = ns.L or (_G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
-end
-_G.MSUF_L = L
+local L = (ns.RegisterLocale and ns.RegisterLocale("itIT")) or (ns.L or {})
 
 local T = {
     ["Open MSUF Menu"] = "Apri menu MSUF",
     ["Edit Mode"] = "Modalità modifica",
     ["Exit MSUF Edit Mode"] = "Esci dalla modalità modifica MSUF",
     ["Profiles"] = "Profili",
+    ["Language"] = "Lingua",
+    ["Menu language"] = "Lingua menu",
+    ["Follow Blizzard"] = "Segui Blizzard",
+    ["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Segui Blizzard usa la lingua del client WoW. La scelta manuale riguarda solo i menu MSUF.",
     ["Snap to grid"] = "Allinea alla griglia",
     ["On"] = "Attivo",
     ["Off"] = "Inattivo",

@@ -125,6 +125,36 @@ local function BuildMisc(ctx)
         }
     end
 
+    local language = b:CollapsibleSection("misc_language", "Language", 146, true)
+    local languageW = language._msuf2Width or ctx.width or 720
+    local languageDropW = max(260, min(360, languageW - 70))
+    local languageDrop = W.Dropdown(language, "Menu language", function()
+        return (M.GetLocaleDropdownValues and M.GetLocaleDropdownValues()) or {
+            { value = "auto", text = "Follow Blizzard" },
+        }
+    end, languageDropW)
+    M.BindDropdown(ctx, languageDrop,
+        function()
+            return (M.GetLocaleSelection and M.GetLocaleSelection()) or "auto"
+        end,
+        function(value)
+            value = value or "auto"
+            SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false })
+            if M.ApplyLocaleSelection then M.ApplyLocaleSelection(value) end
+            local function RebuildLocalePages()
+                if M.InvalidatePage then M.InvalidatePage() end
+                if M.SelectPage then M.SelectPage("opt_misc") end
+            end
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, RebuildLocalePages)
+            else
+                RebuildLocalePages()
+            end
+        end)
+    W.MoveWidget(languageDrop, language, 30, -44, languageDropW, "LEFT")
+    local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
+    if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
+
     local unitInterval, castInterval, budget, urgent
     local updates = b:CollapsibleSection("misc_updates", "Update intervals", 402, true)
     local preset = W.Segment(updates, "Preset", {
@@ -340,4 +370,4 @@ local function BuildMisc(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 2 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 3 })

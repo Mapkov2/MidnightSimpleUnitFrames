@@ -5,13 +5,12 @@
 -- ============================================================================
 local addonName, ns = ...
 ns = ns or {}
-ns.LOCALE = ns.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-ns.L = ns.L or (_G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then setmetatable(L, { __index = function(t, k) return k end }) end
-_G.MSUF_L = L
-if ns.LOCALE ~= "enUS" then return end
+local L = (ns.RegisterLocale and ns.RegisterLocale("enUS")) or (ns.L or {})
 
 -- Put overrides here if you ever want to change wording without touching code.
 -- local T = { ["Old"] = "New" }
 -- for k, v in pairs(T) do L[k] = v end
+L["Language"] = "Language"
+L["Menu language"] = "Menu language"
+L["Follow Blizzard"] = "Follow Blizzard"
+L["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."

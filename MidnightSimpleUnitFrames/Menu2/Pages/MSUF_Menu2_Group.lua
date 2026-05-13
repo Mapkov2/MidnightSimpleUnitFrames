@@ -596,11 +596,18 @@ local function ScopeSection(ctx, builder)
         }
     end
     StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"].OnAccept = function()
-        local gf = GF()
-        if gf and type(gf.ResetAllToDefaults) == "function" and gf.ResetAllToDefaults() then
-            RefreshGFPreview()
-            RefreshContext(ctx)
-            print("|cffffd700MSUF:|r Group Frames reset to defaults.")
+        local function ResetAllGroupFrames()
+            local gf = GF()
+            if gf and type(gf.ResetAllToDefaults) == "function" and gf.ResetAllToDefaults() then
+                RefreshGFPreview()
+                RefreshContext(ctx)
+                print("|cffffd700MSUF:|r Group Frames reset to defaults.")
+            end
+        end
+        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+            M.CaptureHistory("Reset Group Frames", "group:resetAll", ResetAllGroupFrames)
+        else
+            ResetAllGroupFrames()
         end
     end
     reset:SetScript("OnClick", function()
@@ -674,8 +681,15 @@ local function ScopeSection(ctx, builder)
                 })
                 btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", tx, -58)
                 btn:SetScript("OnClick", function()
-                    if CopyGroupSettings(CurrentScope(), info.value, M.gfCopyScopes) then
-                        RefreshContext(ctx)
+                    local function RunCopy()
+                        if CopyGroupSettings(CurrentScope(), info.value, M.gfCopyScopes) then
+                            RefreshContext(ctx)
+                        end
+                    end
+                    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+                        M.CaptureHistory("Copy Group Settings", "group:copy:" .. tostring(CurrentScope()) .. ":" .. tostring(info.value), RunCopy)
+                    else
+                        RunCopy()
                     end
                     copyPopup:Hide()
                 end)
@@ -1064,14 +1078,22 @@ local function BuildRoleOrderRows(ctx, section, opts)
     end
 
     local function SaveOrder()
-        local ordered = {}
-        for i = 1, #rows do ordered[#ordered + 1] = rows[i] end
-        table.sort(ordered, function(a, b) return (a.slotIndex or 0) < (b.slotIndex or 0) end)
-        local parts = {}
-        for i = 1, #ordered do parts[#parts + 1] = ordered[i].key end
-        local conf = Conf(CurrentScope())
-        conf.roleOrder = table.concat(parts, ",")
-        QueueGF(CurrentScope(), "rebuild")
+        local kind = CurrentScope()
+        local function WriteOrder()
+            local ordered = {}
+            for i = 1, #rows do ordered[#ordered + 1] = rows[i] end
+            table.sort(ordered, function(a, b) return (a.slotIndex or 0) < (b.slotIndex or 0) end)
+            local parts = {}
+            for i = 1, #ordered do parts[#parts + 1] = ordered[i].key end
+            local conf = Conf(kind)
+            conf.roleOrder = table.concat(parts, ",")
+            QueueGF(kind, "rebuild")
+        end
+        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+            M.CaptureHistory("Role Priority Order", "group:roleOrder:" .. tostring(kind), WriteOrder)
+        else
+            WriteOrder()
+        end
     end
 
     local function LoadOrder()
