@@ -287,7 +287,7 @@ local function BuildTopActions(ctx, builder, unit, label)
 
     local function RefreshEditButton()
         local active = IsEditModeActive()
-        edit:SetText(active and "Exit Edit Mode" or "MSUF Edit Mode")
+        edit:SetText(active and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode"))
         edit:SetActive(false)
     end
 

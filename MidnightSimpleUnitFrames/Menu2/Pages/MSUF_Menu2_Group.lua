@@ -580,7 +580,7 @@ local function ScopeSection(ctx, builder)
             local info = SCOPE_VALUES[i]
             if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
         end
-        if edit.SetText then edit:SetText(IsEditModeActive() and "Exit Edit Mode" or "MSUF Edit Mode") end
+        if edit.SetText then edit:SetText(IsEditModeActive() and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
         hint:SetText("Editing " .. ScopeLabel(current) .. " " .. PageScopeHint())
     end
 
