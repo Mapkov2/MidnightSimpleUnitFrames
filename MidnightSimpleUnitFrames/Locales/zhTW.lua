@@ -12,6 +12,7 @@ ns = ns or {}
 local L = (ns.RegisterLocale and ns.RegisterLocale("zhTW")) or (ns.L or {})
 
 local T = {
+    ["Pips & Border"] = "點數與邊框",
     ["Open MSUF Menu"] = "開啟 MSUF 選單",
     ["Edit Mode"] = "編輯模式",
     ["Exit MSUF Edit Mode"] = "退出 MSUF 編輯模式",

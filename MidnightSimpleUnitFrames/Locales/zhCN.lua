@@ -13,6 +13,7 @@ local L = (ns.RegisterLocale and ns.RegisterLocale("zhCN")) or (ns.L or {})
 
 -- Add / edit translations below.
 local T = {
+    ["Pips & Border"] = "点数与边框",
     ["Open MSUF Menu"] = "打开 MSUF 菜单",
     ["Edit Mode"] = "编辑模式",
     ["Exit MSUF Edit Mode"] = "退出 MSUF 编辑模式",
