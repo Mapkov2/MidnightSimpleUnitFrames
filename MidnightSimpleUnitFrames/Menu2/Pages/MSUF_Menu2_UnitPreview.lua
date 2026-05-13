@@ -279,7 +279,7 @@ local function ShortenPreviewName(name, key, layoutConf)
     else
         maxChars = tonumber(g.shortenNameMaxChars) or 6
     end
-    maxChars = floor(max(2, min(64, maxChars)) + 0.5)
+    maxChars = floor(max(4, min(40, maxChars)) + 0.5)
     if #name <= maxChars then return name end
 
     local mode

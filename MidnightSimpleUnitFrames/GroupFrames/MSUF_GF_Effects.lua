@@ -5040,29 +5040,115 @@ local function _GF_IsHighlightEnabled()
     return true
 end
 
-local _hoverBdCache = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
-
-local function EnsureMouseoverHighlight(f)
-    if not _GF_IsHighlightEnabled() then return nil end
-    local hb = f._msufGFHoverBorder
-    if hb then
-        -- Already exists: just return it. Style is set at creation + config change.
-        return hb
+local function _GF_EnsureHoverLine(hb, key)
+    local lines = hb._msufGFHoverLines
+    if not lines then
+        lines = {}
+        hb._msufGFHoverLines = lines
     end
+    local t = lines[key]
+    if not t and hb.CreateTexture then
+        t = hb:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Buttons\\WHITE8x8")
+        lines[key] = t
+    end
+    return t
+end
+
+local function _GF_StyleMouseoverHighlight(f, hb)
+    if not (f and hb) then return end
     local kind = f._msufGFKind or "party"
     local sz = math_max(1, tonumber(HLVal(kind, "hlHoverSize")) or 1)
     local ofs = tonumber(HLVal(kind, "hlHoverOffset")) or 0
     local r, g, b = _GF_GetHighlightColor()
     local anchor = f.barGroup or f
+
+    if hb.SetBackdrop then hb:SetBackdrop(nil) end
+    if hb.SetClipsChildren then hb:SetClipsChildren(false) end
+
+    if hb._msufGFHoverOffset ~= ofs or hb._msufGFHoverSize ~= sz then
+        hb._msufGFHoverOffset = ofs
+        hb._msufGFHoverSize = sz
+        hb:ClearAllPoints()
+        hb:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, 0)
+        hb:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+    end
+
+    local ext = ofs + sz
+    local top = _GF_EnsureHoverLine(hb, "top")
+    local bottom = _GF_EnsureHoverLine(hb, "bottom")
+    local left = _GF_EnsureHoverLine(hb, "left")
+    local right = _GF_EnsureHoverLine(hb, "right")
+    if top then
+        top:ClearAllPoints()
+        top:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", -ext, ofs)
+        top:SetPoint("BOTTOMRIGHT", anchor, "TOPRIGHT", ext, ofs)
+        top:SetHeight(sz)
+        top:SetVertexColor(r, g, b, 0.7)
+        top:Show()
+    end
+    if bottom then
+        bottom:ClearAllPoints()
+        bottom:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -ext, -ofs)
+        bottom:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", ext, -ofs)
+        bottom:SetHeight(sz)
+        bottom:SetVertexColor(r, g, b, 0.7)
+        bottom:Show()
+    end
+    if left then
+        left:ClearAllPoints()
+        left:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -ofs, ext)
+        left:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMLEFT", -ofs, -ext)
+        left:SetWidth(sz)
+        left:SetVertexColor(r, g, b, 0.7)
+        left:Show()
+    end
+    if right then
+        right:ClearAllPoints()
+        right:SetPoint("TOPLEFT", anchor, "TOPRIGHT", ofs, ext)
+        right:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", ofs, -ext)
+        right:SetWidth(sz)
+        right:SetVertexColor(r, g, b, 0.7)
+        right:Show()
+    end
+
+    if hb.SetFrameLevel and anchor.GetFrameLevel then
+        local anchorLevel = anchor:GetFrameLevel() or 0
+        local wantLevel = anchorLevel + 3
+        local minTextLevel
+        local layers = { f.nameTextLayer, f.healthTextLayer, f.powerTextLayer, f.statusTextLayer }
+        for i = 1, #layers do
+            local layer = layers[i]
+            local level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+            if level and (not minTextLevel or level < minTextLevel) then
+                minTextLevel = level
+            end
+        end
+        if minTextLevel and wantLevel >= minTextLevel then
+            wantLevel = minTextLevel - 1
+        end
+        if wantLevel <= anchorLevel then
+            wantLevel = anchorLevel + 1
+        end
+        if hb._msufGFHoverLevel ~= wantLevel then
+            hb._msufGFHoverLevel = wantLevel
+            hb:SetFrameLevel(wantLevel)
+        end
+    end
+end
+GF.StyleMouseoverHighlight = _GF_StyleMouseoverHighlight
+
+local function EnsureMouseoverHighlight(f)
+    if not _GF_IsHighlightEnabled() then return nil end
+    local hb = f._msufGFHoverBorder
+    if hb then
+        _GF_StyleMouseoverHighlight(f, hb)
+        return hb
+    end
+    local anchor = f.barGroup or f
     hb = CreateFrame("Frame", nil, anchor, "BackdropTemplate")
-    hb:SetPoint("TOPLEFT", -ofs, ofs)
-    hb:SetPoint("BOTTOMRIGHT", ofs, -ofs)
-    hb:SetFrameLevel(anchor:GetFrameLevel() + 6)
     hb:EnableMouse(false)
-    _hoverBdCache.edgeSize = sz
-    hb:SetBackdrop(_hoverBdCache)
-    hb:SetBackdropBorderColor(r, g, b, 0.7)
-    hb:SetBackdropColor(0, 0, 0, 0)
+    _GF_StyleMouseoverHighlight(f, hb)
     hb:Hide()
     f._msufGFHoverBorder = hb
     return hb

@@ -229,7 +229,8 @@ end
 local RebuildActivePageForResize
 local RefreshWindowControls
 
-local SNAP_EDGE_PX = 34
+local SNAP_EDGE_PX = 24
+local SNAP_FRAME_EDGE_PX = 4
 local SNAP_SCREEN_MARGIN = 14
 local MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H = 286, 32
 
@@ -370,19 +371,15 @@ local function GetSlashMenuSnapLayout(frame)
     local frameRight = (frame.GetRight and frame:GetRight()) or cursorX
     local frameTop = (frame.GetTop and frame:GetTop()) or cursorY
     local frameBottom = (frame.GetBottom and frame:GetBottom()) or cursorY
-    local left = cursorX <= SNAP_EDGE_PX or frameLeft <= SNAP_EDGE_PX
-    local right = cursorX >= (screenW - SNAP_EDGE_PX) or frameRight >= (screenW - SNAP_EDGE_PX)
+    local left = cursorX <= SNAP_EDGE_PX or frameLeft <= SNAP_FRAME_EDGE_PX
+    local right = cursorX >= (screenW - SNAP_EDGE_PX) or frameRight >= (screenW - SNAP_FRAME_EDGE_PX)
     if left and right then
         right = cursorX >= (screenW * 0.5)
         left = not right
     end
 
-    local cursorTop = cursorY >= (screenH - SNAP_EDGE_PX)
-    local cursorBottom = cursorY <= SNAP_EDGE_PX
-    local edgeTop = cursorTop or frameTop >= (screenH - SNAP_EDGE_PX)
-    local edgeBottom = cursorBottom or frameBottom <= SNAP_EDGE_PX
-    local top = (left or right) and cursorTop or edgeTop
-    local bottom = (left or right) and cursorBottom or edgeBottom
+    local top = cursorY >= (screenH - SNAP_EDGE_PX) or frameTop >= (screenH - SNAP_FRAME_EDGE_PX)
+    local bottom = cursorY <= SNAP_EDGE_PX or frameBottom <= SNAP_FRAME_EDGE_PX
     if not (left or right or top or bottom) then return false end
     if bottom and not (left or right) then return false end
 

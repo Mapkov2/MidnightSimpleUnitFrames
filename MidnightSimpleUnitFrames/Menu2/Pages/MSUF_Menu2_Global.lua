@@ -313,27 +313,11 @@ local function ClearUFFontKeyOverrides()
 end
 
 local function FontKeyGet()
-    local scope = CurrentFontScope()
-    if IsGFScope(scope) then
-        if not ScopeHasOverride(scope, "fontOverride") then return "" end
-        local keys = ScopeDBKeys(scope)
-        local db = DB()
-        for i = 1, #(keys or {}) do
-            local entry = db[keys[i]]
-            if entry and entry.fontKey ~= nil then return FontSelectionValue(entry.fontKey) end
-        end
-        return ""
-    end
     return FontSelectionValue(ReadG("fontKey", "FRIZQT"))
 end
 
 local function FontKeySet(value)
-    local scope = CurrentFontScope()
     value = FontSelectionValue(value)
-    if IsGFScope(scope) then
-        ScopeWrite(scope, "fontOverride", {}, "fontKey", value or "")
-        return
-    end
     G().fontKey = value or FontSelectionValue("FRIZQT", "Fonts\\FRIZQT___CYR.TTF")
     ClearUFFontKeyOverrides()
 end

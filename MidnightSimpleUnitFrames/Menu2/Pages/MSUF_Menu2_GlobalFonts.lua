@@ -246,6 +246,24 @@ local function ApplyPreviewFont(fs)
     if fs.SetTextColor then fs:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
 end
 
+local function ApplyNameShortening(reason)
+    ApplyFonts(reason)
+    local scope = CurrentFontScope()
+    if IsGFScope(scope) then return end
+    if scope == "shared" then
+        for _, unit in ipairs({ "target", "targettarget", "focus", "pet", "boss" }) do
+            M.RequestUnitApply(unit, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
+        end
+    elseif UNIT_SCOPE_KEYS[scope] then
+        M.RequestUnitApply(scope, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
+    end
+end
+
+local function CurrentFontScopeCanEdit()
+    local scope = CurrentFontScope()
+    return scope == "shared" or ScopeHasOverride(scope, "fontOverride")
+end
+
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
@@ -330,12 +348,18 @@ local function BuildFonts(ctx)
 
     local font = b:CollapsibleSection("fonts_global_font", "Global Font", 146, true)
     local RefreshFontPreview
-    local fontDrop = W.Dropdown(font, "Font (SharedMedia)", function() return FontValues(IsGFScope(CurrentFontScope())) end, 340)
+    local fontDrop = W.Dropdown(font, "Font (SharedMedia)", function() return FontValues(false) end, 340)
+    local fontScopeInfo = W.Text(font, "Font family is global and can be changed in Shared scope.", 374, -42, ctx.width - 402, T.colors.muted)
+    if fontScopeInfo.SetShown then fontScopeInfo:SetShown(CurrentFontScope() ~= "shared") end
     local preview = W.Text(font, "AaBbCc 12345 - Midnight Simple Unit Frames", 14, -82, ctx.width - 56, T.colors.text)
     if preview.SetHeight then preview:SetHeight(28) end
     if preview.SetJustifyV then preview:SetJustifyV("MIDDLE") end
     RefreshFontPreview = function()
+        local sharedScope = CurrentFontScope() == "shared"
+        SetControlEnabled(fontDrop, sharedScope)
         if preview and preview.SetWidth then preview:SetWidth(ctx.width - 56) end
+        if fontScopeInfo and fontScopeInfo.SetShown then fontScopeInfo:SetShown(CurrentFontScope() ~= "shared") end
+        if fontScopeInfo and fontScopeInfo.SetWidth then fontScopeInfo:SetWidth(ctx.width - 402) end
         ApplyPreviewFont(preview)
     end
     M.BindDropdown(ctx, fontDrop,
@@ -348,15 +372,9 @@ local function BuildFonts(ctx)
             if RefreshFontPreview then RefreshFontPreview() end
         end)
     M.AddRefresher(ctx, RefreshFontPreview)
+    RefreshFontPreview()
 
-    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 212, true)
-    local fontSize = W.Slider(text, "Font size", 6, 32, 1, 300)
-    M.BindSlider(ctx, fontSize,
-        function() return tonumber(FontScopeGet("fontSize", 14)) or 14 end,
-        function(v)
-            FontScopeSet("fontSize", floor((tonumber(v) or 14) + 0.5), "MSUF2_FONT_SIZE")
-            ApplyFonts("MSUF2_FONT_SIZE")
-        end)
+    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 164, true)
 
     local outline = W.Segment(text, "Outline", {
         { value = "OUTLINE", text = "Outline" },
@@ -428,49 +446,119 @@ local function BuildFonts(ctx)
             FontScopeSet("colorPowerTextByType", v == "RESOURCE", "MSUF2_POWER_TEXT_COLOR")
             ApplyFonts("MSUF2_POWER_TEXT_COLOR")
         end)
+    local function RefreshScopedFontControls()
+        local scopeKey = CurrentFontScope()
+        local canEdit = CurrentFontScopeCanEdit()
+        local gfScope = IsGFScope(scopeKey)
+        SetControlEnabled(outline, canEdit)
+        SetControlEnabled(shadow, canEdit and not gfScope)
+        SetControlEnabled(nameColor, canEdit)
+        SetControlEnabled(npcColor, canEdit and not gfScope)
+        SetControlEnabled(powerColor, canEdit and not gfScope)
+    end
+    M.AddRefresher(ctx, RefreshScopedFontControls)
+    RefreshScopedFontControls()
 
-    local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 250, true)
-    local shorten = W.Toggle(names, "Shorten names")
-    M.BindToggle(ctx, shorten,
-        function()
-            if IsGFScope(CurrentFontScope()) then return false end
+    local nameScope = CurrentFontScope()
+    if IsGFScope(nameScope) then
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 170, true)
+        W.Text(names, "Group Frame Name Truncation", 14, -38, ctx.width - 28, T.colors.text)
+        names._msuf2CursorY = -68
+
+        local chars = W.Slider(names, "Name Max Chars", 0, 30, 1, 300)
+        chars:SetValueFormatter(function(v)
+            v = floor((tonumber(v) or 0) + 0.5)
+            return v == 0 and "Unlimited" or tostring(v)
+        end)
+        M.BindSlider(ctx, chars,
+            function()
+                return tonumber(ScopeRead(CurrentFontScope(), "fontOverride", {}, "nameMaxChars", 0)) or 0
+            end,
+            function(v)
+                ScopeWrite(CurrentFontScope(), "fontOverride", {}, "nameMaxChars", floor((tonumber(v) or 0) + 0.5))
+                ApplyFonts("MSUF2_GF_NAME_MAX")
+            end)
+
+        local noEllipsis = W.Toggle(names, "No Ellipsis (truncate without ..)")
+        M.BindToggle(ctx, noEllipsis,
+            function()
+                return ScopeRead(CurrentFontScope(), "fontOverride", {}, "nameNoEllipsis", false) and true or false
+            end,
+            function(v)
+                ScopeWrite(CurrentFontScope(), "fontOverride", {}, "nameNoEllipsis", v and true or false)
+                ApplyFonts("MSUF2_GF_NAME_ELLIPSIS")
+            end)
+        local function RefreshGFNameShorteningControls()
+            local canEdit = CurrentFontScopeCanEdit()
+            SetControlEnabled(chars, canEdit)
+            SetControlEnabled(noEllipsis, canEdit)
+        end
+        M.AddRefresher(ctx, RefreshGFNameShorteningControls)
+        RefreshGFNameShorteningControls()
+    elseif nameScope ~= "player" then
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 250, true)
+
+        local shorten, side, chars, noEllipsis
+        local function CanEditNameShortening()
+            return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())
+        end
+        local function NameShorteningEnabled()
             return FontScopeGet("shortenNames", false, "shortenNames") and true or false
-        end,
-        function(v)
-            if IsGFScope(CurrentFontScope()) then return end
-            FontScopeSet("shortenNames", v and true or false, "MSUF2_SHORTEN_NAMES", "shortenNames")
-            ApplyFonts("MSUF2_SHORTEN_NAMES")
-        end)
+        end
+        local function RefreshNameShorteningControls()
+            local canEdit = CanEditNameShortening()
+            local enabled = NameShorteningEnabled()
+            SetControlEnabled(shorten, canEdit)
+            SetControlEnabled(side, canEdit and enabled)
+            SetControlEnabled(chars, canEdit and enabled)
+            SetControlEnabled(noEllipsis, canEdit)
+        end
+        local function ApplyNameShorteningChange(reason, onlyWhenEnabled)
+            RefreshNameShorteningControls()
+            if (not onlyWhenEnabled) or NameShorteningEnabled() then
+                ApplyNameShortening(reason)
+            end
+        end
 
-    local side = W.Segment(names, "Clip side", {
-        { value = "LEFT", text = "Left" },
-        { value = "RIGHT", text = "Right" },
-    }, 260)
-    M.BindSegment(ctx, side,
-        function() return FontScopeGet("shortenNameClipSide", "LEFT") end,
-        function(v)
-            if IsGFScope(CurrentFontScope()) then return end
-            FontScopeSet("shortenNameClipSide", v or "LEFT", "MSUF2_SHORTEN_SIDE")
-            ApplyFonts("MSUF2_SHORTEN_SIDE")
-        end)
+        shorten = W.Toggle(names, "Shorten unit names (except Player)")
+        M.BindToggle(ctx, shorten,
+            function()
+                return NameShorteningEnabled()
+            end,
+            function(v)
+                FontScopeSet("shortenNames", v and true or false, "MSUF2_SHORTEN_NAMES", "shortenNames")
+                ApplyNameShorteningChange("MSUF2_SHORTEN_NAMES", false)
+            end)
 
-    local chars = W.Slider(names, "Max characters", 2, 64, 1, 300)
-    M.BindSlider(ctx, chars,
-        function() return tonumber(FontScopeGet("shortenNameMaxChars", 6)) or 6 end,
-        function(v)
-            if IsGFScope(CurrentFontScope()) then return end
-            FontScopeSet("shortenNameMaxChars", floor((tonumber(v) or 6) + 0.5), "MSUF2_SHORTEN_MAX")
-            ApplyFonts("MSUF2_SHORTEN_MAX")
-        end)
+        side = W.Segment(names, "Truncation style", {
+            { value = "LEFT", text = "Keep end (last letters)" },
+            { value = "RIGHT", text = "Keep start (first letters)" },
+        }, 430)
+        M.BindSegment(ctx, side,
+            function() return FontScopeGet("shortenNameClipSide", "LEFT") end,
+            function(v)
+                FontScopeSet("shortenNameClipSide", v or "LEFT", "MSUF2_SHORTEN_SIDE")
+                ApplyNameShorteningChange("MSUF2_SHORTEN_SIDE", true)
+            end)
 
-    local dots = W.Toggle(names, "Show ellipsis")
-    M.BindToggle(ctx, dots,
-        function() return FontScopeGet("shortenNameShowDots", true) and true or false end,
-        function(v)
-            if IsGFScope(CurrentFontScope()) then return end
-            FontScopeSet("shortenNameShowDots", v and true or false, "MSUF2_SHORTEN_DOTS")
-            ApplyFonts("MSUF2_SHORTEN_DOTS")
-        end)
+        chars = W.Slider(names, "Max name length", 6, 30, 1, 300)
+        M.BindSlider(ctx, chars,
+            function() return tonumber(FontScopeGet("shortenNameMaxChars", 6)) or 6 end,
+            function(v)
+                FontScopeSet("shortenNameMaxChars", floor((tonumber(v) or 6) + 0.5), "MSUF2_SHORTEN_MAX")
+                ApplyNameShorteningChange("MSUF2_SHORTEN_MAX", true)
+            end)
+
+        noEllipsis = W.Toggle(names, "No Ellipsis (truncate without ..)")
+        M.BindToggle(ctx, noEllipsis,
+            function() return not FontScopeGet("shortenNameShowDots", true) end,
+            function(v)
+                FontScopeSet("shortenNameShowDots", not (v and true or false), "MSUF2_SHORTEN_DOTS")
+                ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
+            end)
+        M.AddRefresher(ctx, RefreshNameShorteningControls)
+        RefreshNameShorteningControls()
+    end
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end

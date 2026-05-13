@@ -2809,6 +2809,14 @@ local function OnEvent(self, event, ...)
             GF._pendingVisibilityUpdate = nil
             GF.UpdateGroupVisibility()
         end
+        if GF._pendingRefreshGeometry then
+            GF._pendingRefreshGeometry = nil
+            if GF.RefreshGeometry then GF.RefreshGeometry() end
+        end
+        if GF._pendingRefreshVisuals then
+            GF._pendingRefreshVisuals = nil
+            if GF.RefreshVisuals then GF.RefreshVisuals() end
+        end
 
         -- EQoL pattern: refresh range fade on combat end.
         -- UNIT_IN_RANGE_UPDATE fires less frequently OOC;
