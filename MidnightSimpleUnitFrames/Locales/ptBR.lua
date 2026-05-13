@@ -339,6 +339,8 @@ local MSUF2_MENU_AUTO_ptBR = {
     ["Hide Categories"] = "Ocultar categorias",
     ["Hide Preview"] = "Ocultar visualização",
     ["Hide in client scene"] = "Esconder-se na cena do cliente",
+    ["Hide offline members"] = "Ocultar membros off-line",
+    ["Hide offline in combat"] = "Ocultar membros off-line em combate",
     ["Hide offline after"] = "Ocultar off-line depois",
     ["Highlight Borders"] = "Destacar bordas",
     ["Highlight Priority"] = "Prioridade de destaque",
@@ -1447,3 +1449,55 @@ for k, v in pairs(MSUF2_DIRECT_ptBR) do
     L[k] = v
 end
 -- MSUF2 direct text coverage END
+
+-- MSUF2 range-check search coverage BEGIN
+local MSUF2_RANGE_SEARCH_ptBR = {
+    ["group frame range check"] = "verificação de alcance dos quadros de grupo",
+    ["range check"] = "verificação de alcance",
+    ["unit frame range check"] = "verificação de alcance do quadro de unidade",
+    ["unitframe range check"] = "verificação de alcance do quadro de unidade",
+    ["where is miscellaneous"] = "onde ficam as opções diversas",
+    ["Where is party or raid range check?"] = "Onde fica a verificação de alcance de grupo ou raide?",
+    ["Where is the unit frame range check?"] = "Onde fica a verificação de alcance do quadro de unidade?",
+    ["why is msuf lagging"] = "por que o MSUF está travando",
+}
+for k, v in pairs(MSUF2_RANGE_SEARCH_ptBR) do
+    L[k] = v
+end
+-- MSUF2 range-check search coverage END
+
+-- MSUF2 menu search coverage BEGIN
+local MSUF2_MENU_SEARCH_ptBR = {
+    ["aura stack count"] = "contagem de acúmulos de aura",
+    ["channel ticks"] = "tiques de canalização",
+    ["class colors"] = "cores de classe",
+    ["click cast"] = "lançamento por clique",
+    ["edge snap"] = "encaixe nas bordas",
+    ["external cooldowns"] = "recargas externas",
+    ["global cooldown"] = "recarga global",
+    ["group indicators"] = "indicadores de grupo",
+    ["mana text"] = "texto de mana",
+    ["minimap button"] = "botão do minimapa",
+    ["minimap icon"] = "ícone do minimapa",
+    ["name text"] = "texto do nome",
+    ["Offline Members"] = "Membros offline",
+    ["optional modules"] = "módulos opcionais",
+    ["raid frames"] = "quadros de raide",
+    ["role order"] = "ordem de funções",
+    ["short names"] = "nomes curtos",
+    ["target lost"] = "alvo perdido",
+    ["target sound"] = "som do alvo",
+    ["target sounds"] = "sons do alvo",
+    ["visibility conditions"] = "condições de visibilidade",
+    ["Where are load conditions?"] = "Onde estão as condições de carregamento?",
+    ["Where are menu snap or menu behavior settings?"] = "Onde estão o encaixe ou comportamento do menu?",
+    ["Where are optional modules or style modules?"] = "Onde estão os módulos opcionais ou de estilo?",
+    ["Where are target sound settings?"] = "Onde estão as configurações de sons do alvo?",
+    ["Where is Miscellaneous?"] = "Onde está Miscelânea?",
+    ["where is the minimap icon setting"] = "onde está a configuração do ícone do minimapa",
+    ["Where is the minimap icon setting?"] = "Onde está a configuração do ícone do minimapa?",
+}
+for k, v in pairs(MSUF2_MENU_SEARCH_ptBR) do
+    L[k] = v
+end
+-- MSUF2 menu search coverage END

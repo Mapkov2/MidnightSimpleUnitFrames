@@ -407,6 +407,8 @@ local MSUF2_MENU_AUTO_koKR = {
     ["Hide Categories"] = "카테고리 숨기기",
     ["Hide Preview"] = "미리보기 숨기기",
     ["Hide in client scene"] = "클라이언트 장면에서 숨기기",
+    ["Hide offline members"] = "오프라인 구성원 숨기기",
+    ["Hide offline in combat"] = "전투 중 오프라인 구성원 숨기기",
     ["Hide offline after"] = "다음 시간 이후 오프라인 숨기기",
     ["Highlight Borders"] = "테두리 강조",
     ["Highlight Priority"] = "하이라이트 우선순위",
@@ -1481,3 +1483,55 @@ for k, v in pairs(MSUF2_DIRECT_koKR) do
     L[k] = v
 end
 -- MSUF2 direct text coverage END
+
+-- MSUF2 range-check search coverage BEGIN
+local MSUF2_RANGE_SEARCH_koKR = {
+    ["group frame range check"] = "그룹 프레임 거리 확인",
+    ["range check"] = "거리 확인",
+    ["unit frame range check"] = "유닛 프레임 거리 확인",
+    ["unitframe range check"] = "유닛 프레임 거리 확인",
+    ["where is miscellaneous"] = "기타는 어디에 있나요",
+    ["Where is party or raid range check?"] = "파티 또는 공격대 거리 확인은 어디에 있나요?",
+    ["Where is the unit frame range check?"] = "유닛 프레임 거리 확인은 어디에 있나요?",
+    ["why is msuf lagging"] = "MSUF가 왜 느린가요",
+}
+for k, v in pairs(MSUF2_RANGE_SEARCH_koKR) do
+    L[k] = v
+end
+-- MSUF2 range-check search coverage END
+
+-- MSUF2 menu search coverage BEGIN
+local MSUF2_MENU_SEARCH_koKR = {
+    ["aura stack count"] = "오라 중첩 수",
+    ["channel ticks"] = "정신 집중 틱",
+    ["class colors"] = "직업 색상",
+    ["click cast"] = "클릭 시전",
+    ["edge snap"] = "가장자리 맞춤",
+    ["external cooldowns"] = "외부 재사용 대기시간",
+    ["global cooldown"] = "전역 재사용 대기시간",
+    ["group indicators"] = "그룹 표시기",
+    ["mana text"] = "마나 글자",
+    ["minimap button"] = "미니맵 버튼",
+    ["minimap icon"] = "미니맵 아이콘",
+    ["name text"] = "이름 글자",
+    ["Offline Members"] = "오프라인 구성원",
+    ["optional modules"] = "선택 모듈",
+    ["raid frames"] = "공격대 프레임",
+    ["role order"] = "역할 순서",
+    ["short names"] = "짧은 이름",
+    ["target lost"] = "대상 잃음",
+    ["target sound"] = "대상 소리",
+    ["target sounds"] = "대상 소리",
+    ["visibility conditions"] = "표시 조건",
+    ["Where are load conditions?"] = "로드 조건은 어디에 있나요?",
+    ["Where are menu snap or menu behavior settings?"] = "메뉴 맞춤 또는 메뉴 동작 설정은 어디에 있나요?",
+    ["Where are optional modules or style modules?"] = "선택 모듈 또는 스타일 모듈은 어디에 있나요?",
+    ["Where are target sound settings?"] = "대상 소리 설정은 어디에 있나요?",
+    ["Where is Miscellaneous?"] = "기타 항목은 어디에 있나요?",
+    ["where is the minimap icon setting"] = "미니맵 아이콘 설정은 어디에 있나요",
+    ["Where is the minimap icon setting?"] = "미니맵 아이콘 설정은 어디에 있나요?",
+}
+for k, v in pairs(MSUF2_MENU_SEARCH_koKR) do
+    L[k] = v
+end
+-- MSUF2 menu search coverage END

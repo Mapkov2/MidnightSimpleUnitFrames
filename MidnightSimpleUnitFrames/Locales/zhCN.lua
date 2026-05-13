@@ -1307,6 +1307,8 @@ local MSUF2_MENU_AUTO_zhCN = {
     ["Hide Categories"] = "隐藏类别",
     ["Hide Preview"] = "隐藏预览",
     ["Hide in client scene"] = "隐藏在客户场景中",
+    ["Hide offline members"] = "隐藏离线成员",
+    ["Hide offline in combat"] = "战斗中隐藏离线成员",
     ["Hide offline after"] = "离线后隐藏",
     ["Highlight Borders"] = "突出显示边框",
     ["Highlight Priority"] = "突出显示优先级",
@@ -2173,3 +2175,55 @@ for k, v in pairs(MSUF2_DIRECT_zhCN) do
     L[k] = v
 end
 -- MSUF2 direct text coverage END
+
+-- MSUF2 range-check search coverage BEGIN
+local MSUF2_RANGE_SEARCH_zhCN = {
+    ["group frame range check"] = "队伍框体距离检测",
+    ["range check"] = "距离检测",
+    ["unit frame range check"] = "单位框体距离检测",
+    ["unitframe range check"] = "单位框体距离检测",
+    ["where is miscellaneous"] = "杂项在哪里",
+    ["Where is party or raid range check?"] = "队伍或团队距离检测在哪里？",
+    ["Where is the unit frame range check?"] = "单位框体距离检测在哪里？",
+    ["why is msuf lagging"] = "为什么 MSUF 卡顿",
+}
+for k, v in pairs(MSUF2_RANGE_SEARCH_zhCN) do
+    L[k] = v
+end
+-- MSUF2 range-check search coverage END
+
+-- MSUF2 menu search coverage BEGIN
+local MSUF2_MENU_SEARCH_zhCN = {
+    ["aura stack count"] = "光环层数",
+    ["channel ticks"] = "引导跳数",
+    ["class colors"] = "职业颜色",
+    ["click cast"] = "点击施法",
+    ["edge snap"] = "边缘吸附",
+    ["external cooldowns"] = "外部冷却",
+    ["global cooldown"] = "公共冷却",
+    ["group indicators"] = "队伍指示器",
+    ["mana text"] = "法力文字",
+    ["minimap button"] = "小地图按钮",
+    ["minimap icon"] = "小地图图标",
+    ["name text"] = "名称文字",
+    ["Offline Members"] = "离线成员",
+    ["optional modules"] = "可选模块",
+    ["raid frames"] = "团队框架",
+    ["role order"] = "职责顺序",
+    ["short names"] = "短名称",
+    ["target lost"] = "目标丢失",
+    ["target sound"] = "目标音效",
+    ["target sounds"] = "目标音效",
+    ["visibility conditions"] = "可见性条件",
+    ["Where are load conditions?"] = "加载条件在哪里？",
+    ["Where are menu snap or menu behavior settings?"] = "菜单吸附或菜单行为设置在哪里？",
+    ["Where are optional modules or style modules?"] = "可选模块或样式模块在哪里？",
+    ["Where are target sound settings?"] = "目标音效设置在哪里？",
+    ["Where is Miscellaneous?"] = "杂项在哪里？",
+    ["where is the minimap icon setting"] = "小地图图标设置在哪里",
+    ["Where is the minimap icon setting?"] = "小地图图标设置在哪里？",
+}
+for k, v in pairs(MSUF2_MENU_SEARCH_zhCN) do
+    L[k] = v
+end
+-- MSUF2 menu search coverage END
