@@ -830,9 +830,15 @@ function T.Button(parent, text, width, height)
     end
 
     btn.SetText = function(self, value)
-        self._msuf2SearchText = value or ""
-        if self._msuf2Label then self._msuf2Label._msuf2SearchText = value or "" end
-        self._msuf2Label:SetText(Tr(value or ""))
+        local raw = value or ""
+        local text = Tr(raw)
+        if self._msuf2RawText == raw and self._msuf2Label and self._msuf2Label:GetText() == text then
+            return
+        end
+        self._msuf2RawText = raw
+        self._msuf2SearchText = raw
+        if self._msuf2Label then self._msuf2Label._msuf2SearchText = raw end
+        self._msuf2Label:SetText(text)
         if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then
             M.RegisterSearchWidget(self, { label = value, kind = "button", anchor = self._msuf2Label })
         end
@@ -841,10 +847,15 @@ function T.Button(parent, text, width, height)
         return self._msuf2Label:GetText()
     end
     btn.SetActive = function(self, active)
-        self._msuf2Active = active and true or false
+        active = active and true or false
+        if self._msuf2Active == active then return end
+        self._msuf2Active = active
         ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
     end
     btn.SetEnabled = function(self, enabled)
+        enabled = enabled and true or false
+        if self._msuf2Enabled == enabled then return end
+        self._msuf2Enabled = enabled
         if enabled then
             if self.Enable then self:Enable() end
         else

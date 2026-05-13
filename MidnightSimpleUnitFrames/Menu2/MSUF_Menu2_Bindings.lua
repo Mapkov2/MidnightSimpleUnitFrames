@@ -19,7 +19,9 @@ local historyRestoring = false
 local historySessionActive = false
 local historySessionBaseSnapshot
 local historySessionSnapshot
+local historySessionDirty = false
 local historyTransaction
+local refreshQueued = false
 
 local UNIT_KEYS = {
     player = true,
@@ -184,10 +186,33 @@ local function SnapshotDB()
     return DeepCopy(M.EnsureDB())
 end
 
+local function CurrentHistorySnapshot()
+    if historySessionActive and type(historySessionSnapshot) == "table" then
+        return historySessionSnapshot
+    end
+    return SnapshotDB()
+end
+
+local function QueueMenuRefresh()
+    if refreshQueued then return end
+    refreshQueued = true
+    local function Run()
+        refreshQueued = false
+        if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then
+            M.Refresh()
+        end
+    end
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, Run)
+    else
+        Run()
+    end
+end
+
 local function NotifyHistoryChanged()
     if M.RefreshHistoryControls then pcall(M.RefreshHistoryControls) end
     if M.frame and M.frame.RefreshStatus then pcall(M.frame.RefreshStatus, M.frame) end
-    if M.Refresh then M.Refresh() end
+    QueueMenuRefresh()
 end
 
 local function PushHistory(label, source, before, after)
@@ -208,7 +233,10 @@ local function PushHistory(label, source, before, after)
     end
 
     WipeTable(M.historyRedo)
-    if historySessionActive then historySessionSnapshot = after end
+    if historySessionActive then
+        historySessionSnapshot = after
+        historySessionDirty = true
+    end
     NotifyHistoryChanged()
     return true
 end
@@ -228,7 +256,7 @@ local function ApplyHistorySnapshot(snapshot, reason)
     if type(snapshot) ~= "table" then return false end
     historyRestoring = true
     DeepReplace(M.EnsureDB(), snapshot)
-    if historySessionActive then historySessionSnapshot = SnapshotDB() end
+    if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
 
     M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
@@ -277,7 +305,6 @@ local function ApplyHistorySnapshot(snapshot, reason)
         if type(ns.GF.RefreshVisuals) == "function" then pcall(ns.GF.RefreshVisuals) end
     end
     if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
-    if historySessionActive then historySessionSnapshot = SnapshotDB() end
     RebuildActivePage()
     return true
 end
@@ -290,7 +317,7 @@ function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if historyDepth > 0 or historyRestoring then return fn() end
 
-    local before = SnapshotDB()
+    local before = CurrentHistorySnapshot()
     historyDepth = historyDepth + 1
     local ok, result = pcall(fn)
     historyDepth = historyDepth - 1
@@ -299,6 +326,7 @@ function M.CaptureHistory(label, source, fn)
         if type(handler) == "function" then handler(result) else print(result) end
         return nil
     end
+    if result == false then return result end
     PushHistory(label, source, before, SnapshotDB())
     return result
 end
@@ -310,8 +338,13 @@ function M.StartHistorySession()
     end
     historySessionActive = true
     historySessionBaseSnapshot = SnapshotDB()
-    historySessionSnapshot = DeepCopy(historySessionBaseSnapshot)
-    M.ClearHistory()
+    historySessionSnapshot = historySessionBaseSnapshot
+    historySessionDirty = false
+    M.historyUndo = M.historyUndo or {}
+    M.historyRedo = M.historyRedo or {}
+    WipeTable(M.historyUndo)
+    WipeTable(M.historyRedo)
+    NotifyHistoryChanged()
 end
 
 function M.EndHistorySession()
@@ -322,11 +355,12 @@ function M.EndHistorySession()
     end
     historySessionBaseSnapshot = nil
     historySessionSnapshot = nil
+    historySessionDirty = false
 end
 
 function M.CheckpointHistory(label, source)
     if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
-    local before = historySessionSnapshot or SnapshotDB()
+    local before = CurrentHistorySnapshot()
     local after = SnapshotDB()
     return PushHistory(label or "MSUF2 change", source or "menu:checkpoint", before, after)
 end
@@ -336,7 +370,7 @@ function M.BeginHistoryTransaction(label, source)
     historyTransaction = {
         label = label or "MSUF2 change",
         source = source or "menu:transaction",
-        before = SnapshotDB(),
+        before = CurrentHistorySnapshot(),
     }
     historyDepth = historyDepth + 1
     return true
@@ -372,7 +406,8 @@ function M.ClearHistory()
     WipeTable(M.historyRedo)
     if historySessionActive then
         historySessionBaseSnapshot = SnapshotDB()
-        historySessionSnapshot = DeepCopy(historySessionBaseSnapshot)
+        historySessionSnapshot = historySessionBaseSnapshot
+        historySessionDirty = false
     end
     NotifyHistoryChanged()
 end
@@ -385,7 +420,7 @@ function M.GetHistoryState()
     return {
         canUndo = undo ~= nil,
         canRedo = redo ~= nil,
-        canResetAll = historySessionActive and type(historySessionBaseSnapshot) == "table" and not DeepEqual(historySessionBaseSnapshot, M.EnsureDB()),
+        canResetAll = historySessionActive and type(historySessionBaseSnapshot) == "table" and historySessionDirty,
         undoLabel = undo and undo.label or nil,
         redoLabel = redo and redo.label or nil,
         undoCount = #M.historyUndo,
@@ -400,6 +435,7 @@ function M.Undo()
     if not entry then return false end
     M.historyRedo[#M.historyRedo + 1] = entry
     local ok = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO")
+    if ok and historySessionActive then historySessionDirty = #M.historyUndo > 0 end
     NotifyHistoryChanged()
     return ok
 end
@@ -411,6 +447,7 @@ function M.Redo()
     if not entry then return false end
     M.historyUndo[#M.historyUndo + 1] = entry
     local ok = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO")
+    if ok and historySessionActive then historySessionDirty = true end
     NotifyHistoryChanged()
     return ok
 end
@@ -561,6 +598,8 @@ function M.BindSlider(ctx, slider, getValue, setValue)
         if self._msuf2Step and self._msuf2Step >= 1 then
             value = math.floor(value + 0.5)
         end
+        local current = tonumber(getValue()) or 0
+        if math.abs(current - value) < 0.0001 then return end
         local label = WidgetHistoryLabel(ctx, self)
         M.CaptureHistory(label, WidgetHistorySource(ctx, self, label), function()
             setValue(value)
@@ -583,6 +622,10 @@ function M.BindSegment(ctx, segment, getValue, setValue)
     for i = 1, #(segment.buttons or {}) do
         local btn = segment.buttons[i]
         btn:SetScript("OnClick", function(self)
+            if getValue() == self._msuf2Value then
+                segment:SetValue(self._msuf2Value)
+                return
+            end
             local label = WidgetHistoryLabel(ctx, segment)
             M.CaptureHistory(label, WidgetHistorySource(ctx, segment, label), function()
                 setValue(self._msuf2Value)
@@ -598,6 +641,10 @@ end
 function M.BindDropdown(ctx, dropdown, getValue, setValue)
     if not dropdown then return end
     dropdown:SetOnValueChanged(function(value)
+        if type(getValue) == "function" and getValue() == value then
+            dropdown:SetValue(value)
+            return
+        end
         local label = WidgetHistoryLabel(ctx, dropdown)
         M.CaptureHistory(label, WidgetHistorySource(ctx, dropdown, label), function()
             setValue(value)
@@ -617,6 +664,7 @@ function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
     if not editBox then return end
     editBox._msuf2CommitOnBlur = commitOnBlur and true or false
     editBox:SetOnValueCommitted(function(value)
+        if tostring(getValue() or "") == tostring(value or "") then return end
         local label = WidgetHistoryLabel(ctx, editBox)
         M.CaptureHistory(label, WidgetHistorySource(ctx, editBox, label), function()
             setValue(value or "")
@@ -636,6 +684,16 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB)
         colorButton:SetRGB(r or 1, g or 1, b or 1)
     end
     colorButton:SetOnColorChanged(function(r, g, b)
+        if type(getRGB) == "function" then
+            local cr, cg, cb = getRGB()
+            if math.abs((cr or 1) - (r or 1)) < 0.0001
+                and math.abs((cg or 1) - (g or 1)) < 0.0001
+                and math.abs((cb or 1) - (b or 1)) < 0.0001
+            then
+                RefreshColor()
+                return
+            end
+        end
         local label = WidgetHistoryLabel(ctx, colorButton)
         M.CaptureHistory(label, WidgetHistorySource(ctx, colorButton, label), function()
             if type(setRGB) == "function" then setRGB(r, g, b) end

@@ -658,28 +658,50 @@ if type(_G.MSUF_InstallGlobalScaleGate) == "function" then
     _G.MSUF_InstallGlobalScaleGate()
 end
 
+local function ApplySavedScaleState(applyGlobalCVar)
+    ApplyMsufScale(GetSavedMsufScale())
+    local want = GetDesiredGlobalScaleFromDB()
+    if want then
+        if applyGlobalCVar then SetGlobalUiScale(want, true) end
+        EnsureGlobalUiScaleApplied(true)
+    end
+end
+
+local startupScaleApplyQueued
+local startupScaleNeedsGlobalCVar
+local function QueueStartupScaleApply(applyGlobalCVar)
+    startupScaleNeedsGlobalCVar = startupScaleNeedsGlobalCVar or applyGlobalCVar == true
+    if startupScaleApplyQueued then return end
+    startupScaleApplyQueued = true
+
+    local function flush()
+        local needsGlobalCVar = startupScaleNeedsGlobalCVar
+        startupScaleApplyQueued = nil
+        startupScaleNeedsGlobalCVar = nil
+        ApplySavedScaleState(needsGlobalCVar)
+    end
+
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, flush)
+    else
+        flush()
+    end
+end
+
 local scaleEvents = _G.CreateFrame and _G.CreateFrame("Frame")
 if scaleEvents then
     scaleEvents:RegisterEvent("PLAYER_LOGIN")
     scaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
     scaleEvents:RegisterEvent("DISPLAY_SIZE_CHANGED")
     scaleEvents:SetScript("OnEvent", function(_, event)
-        ApplyMsufScale(GetSavedMsufScale())
-        local want = GetDesiredGlobalScaleFromDB()
-        if want then
-            if event == "PLAYER_LOGIN" then SetGlobalUiScale(want, true) end
-            EnsureGlobalUiScaleApplied(true)
+        if event == "DISPLAY_SIZE_CHANGED" then
+            ApplySavedScaleState(false)
+        else
+            QueueStartupScaleApply(event == "PLAYER_LOGIN")
         end
     end)
 end
 
 if _G.C_Timer and _G.C_Timer.After then
-    _G.C_Timer.After(0, function()
-        ApplyMsufScale(GetSavedMsufScale())
-        local want = GetDesiredGlobalScaleFromDB()
-        if want then
-            SetGlobalUiScale(want, true)
-            EnsureGlobalUiScaleApplied(true)
-        end
-    end)
+    QueueStartupScaleApply(true)
 end

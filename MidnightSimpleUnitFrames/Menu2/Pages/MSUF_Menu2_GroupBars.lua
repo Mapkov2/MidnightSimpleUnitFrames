@@ -83,6 +83,7 @@ local BindNestedSlider = GP.BindNestedSlider
 local BindNestedDropdown = GP.BindNestedDropdown
 local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
+local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local function BuildGFBars(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -500,7 +501,12 @@ local function BuildGFBars(ctx)
         SetOptionEnabled(rangeToggle, true)
     end)
 
+    if type(ApplyScopeEnabledGate) == "function" then
+        M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)
+        ApplyScopeEnabledGate(ctx)
+    end
+
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 10 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 11 })
