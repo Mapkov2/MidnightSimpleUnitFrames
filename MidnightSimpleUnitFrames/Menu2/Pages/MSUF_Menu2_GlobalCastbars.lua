@@ -253,7 +253,7 @@ local function BuildCastbars(ctx)
     end
     local function PaintNameShorteningButton(hover)
         local enabled = NameShorteningEnabled()
-        if shorten.SetText then shorten:SetText(enabled and "On" or "Off") end
+        if shorten.SetText then shorten:SetText(enabled and M.Tr("On") or M.Tr("Off")) end
         local fill, edge = shorten._msuf2Fill, shorten._msuf2Edge
         if fill and edge then
             if enabled then

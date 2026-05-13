@@ -125,7 +125,7 @@ local function BuildClassPower(ctx)
     local function RefreshEditButton()
         local st = _G.MSUF_EditState
         local active = st and st.active
-        if edit.SetText then edit:SetText(active and "Exit Edit Mode" or "MSUF Edit Mode") end
+        if edit.SetText then edit:SetText(active and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
     end
     edit:SetScript("OnClick", function()
         local st = _G.MSUF_EditState
