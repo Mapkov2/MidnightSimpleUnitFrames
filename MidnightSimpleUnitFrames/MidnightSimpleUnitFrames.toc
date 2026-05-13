@@ -94,8 +94,6 @@ Auras2\MSUF_A2_EditMode.lua
 # ═══════════════════════════════════════════════════════════════
 Features\MidnightSimpleUnitFrames_Gameplay.lua
 Features\MSUF_Analytics.lua
-Features\MSUF_Search.lua
-Features\MidnightSimpleUnitFrames_SlashMenu.lua
 Features\MSUF_VersionCheck.lua
 
 # ═══════════════════════════════════════════════════════════════
@@ -151,24 +149,6 @@ GroupFrames\MSUF_GF_Masque.lua
 # ═══════════════════════════════════════════════════════════════
 # OPTIONS
 # ═══════════════════════════════════════════════════════════════
-Options\MSUF_Options_Toolkit.lua
-Options\MSUF_Options_Core.lua
-Options\MSUF_Options_Bars.lua
-Options\MSUF_Options_Castbars.lua
-Options\MSUF_Options_Profiles.lua
-Options\MSUF_Options_Colors.lua
-Options\MSUF_Options_ClassPower.lua
-Options\MSUF_Options_ClassPower_QuickSetup.lua
-Options\MSUF_Options_UnitPreview.lua
-Options\MSUF_Options_Player.lua
-Options\MSUF_Options_Auras.lua
-Options\MSUF_Options_Fonts.lua
-Options\MSUF_Options_Misc.lua
-Options\MSUF_Options_Portraits.lua
-Options\MSUF_Options_Gameplay.lua
-Options\MSUF_Options_GF.lua
-Options\MSUF_Options_GF_Auras.lua
-
 # MENU2
 Menu2\MSUF_Menu2_Support.lua
 Menu2\MSUF_Menu2_Theme.lua
@@ -176,6 +156,7 @@ Menu2\MSUF_Menu2_Widgets.lua
 Menu2\MSUF_Menu2_Bindings.lua
 Menu2\MSUF_Menu2_Core.lua
 Menu2\Pages\MSUF_Menu2_Unit.lua
+Menu2\Pages\MSUF_Menu2_UnitPreview.lua
 Menu2\Pages\MSUF_Menu2_UnitSections.lua
 Menu2\Pages\MSUF_Menu2_Global.lua
 Menu2\Pages\MSUF_Menu2_GlobalFonts.lua

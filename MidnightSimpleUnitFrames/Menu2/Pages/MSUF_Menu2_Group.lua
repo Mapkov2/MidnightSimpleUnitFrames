@@ -650,7 +650,7 @@ local function ScopeSection(ctx, builder)
                 copyPopup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
             end
 
-            local title = T.Font(copyPopup, "GameFontNormal", "", { 1.00, 0.82, 0.10, 1 })
+            local title = T.Font(copyPopup, "GameFontNormal", "", T.colors.accent)
             title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
             copyPopup._title = title
 
@@ -823,7 +823,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         section._msuf2CursorY = y - tileH - 40
     end
 
-    local label = T.Font(section, "GameFontNormalSmall", "Growth Direction", { 1.00, 0.82, 0.18, 1 })
+    local label = T.Font(section, "GameFontNormalSmall", "Growth Direction", T.colors.accent)
     label:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
 
     local holder = CreateFrame("Frame", nil, section)
@@ -944,7 +944,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         if not btn._arrow then
             btn._arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE") end
-            btn._arrow:SetTextColor(1.00, 0.82, 0.18, 0.95)
+            btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
         btn._arrow:SetText(info.arrow)
         btn._arrow:ClearAllPoints()

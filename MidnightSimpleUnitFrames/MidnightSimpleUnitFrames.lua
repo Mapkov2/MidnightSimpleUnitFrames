@@ -1595,12 +1595,6 @@ function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
     -- The Bars menu scope dropdown must only change when the user explicitly
     -- selects a unit via the scope dropdown itself.  Clicking a unitframe
     -- updates the spacer-selection indicator but never overrides the scope.
-    if not suppressUIRefresh and type(_G.MSUF_Options_RefreshHPSpacerControls) == "function" then
-        _G.MSUF_Options_RefreshHPSpacerControls()
-    end
-    if not suppressUIRefresh and type(_G.MSUF_Options_RefreshPowerSpacerControls) == "function" then
-        _G.MSUF_Options_RefreshPowerSpacerControls()
-    end
  end
 
 -- Alpha system moved to MSUF_Alpha.lua
@@ -6453,12 +6447,10 @@ end
     if type(MSUF_MakeBlizzardOptionsMovable) == "function" then
         C_Timer.After(0.5, MSUF_MakeBlizzardOptionsMovable)
     end
-    if _G.MSUF_RegisterOptionsCategoryLazy then
-        _G.MSUF_RegisterOptionsCategoryLazy()
-    elseif type(_G.CreateOptionsPanel) ~= "function" then
+    if type(_G.MSUF_OpenStandaloneOptionsWindow) ~= "function" and type(_G.MSUF2_Open) ~= "function" then
         if not _G.MSUF_OptionsPanelMissingWarned then
             _G.MSUF_OptionsPanelMissingWarned = true
-            print("|cffff0000MSUF:|r Options panel not loaded (CreateOptionsPanel missing). Check your .toc includes MSUF_Options_Core.lua.")
+            print("|cffff0000MSUF:|r Menu2 options are not loaded. Check your .toc includes Menu2/MSUF_Menu2_Core.lua.")
     end
     end
 	    if _G.MSUF_CheckAndRunFirstSetup then

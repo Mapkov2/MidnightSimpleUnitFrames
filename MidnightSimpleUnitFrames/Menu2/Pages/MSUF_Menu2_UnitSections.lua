@@ -36,6 +36,31 @@ local PORTRAIT_SHAPES = UP.PORTRAIT_SHAPES or {}
 local PORTRAIT_BORDERS = UP.PORTRAIT_BORDERS or {}
 local UF_COPY_CATEGORIES = UP.UF_COPY_CATEGORIES or {}
 
+local function PortraitClassStyleValues()
+    local PM = ns and ns.PortraitMedia
+    local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {
+        { value = "BLIZZARD", text = "Blizzard Class Icon" },
+    }
+    local values = {}
+    for i = 1, #opts do
+        local item = opts[i]
+        values[#values + 1] = {
+            value = item.value or item.key,
+            text = item.text or item.label or item.value or item.key,
+        }
+    end
+    return values
+end
+
+local function NormalizePortraitClassStyle(value)
+    local fn = _G.MSUF_NormalizePortraitClassStyleValue
+    if type(fn) == "function" then return fn(value) end
+    local PM = ns and ns.PortraitMedia
+    if PM and type(PM.NormalizeClassPack) == "function" then return PM.NormalizeClassPack(value) end
+    if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then return value end
+    return "BLIZZARD"
+end
+
 local GetConf = UP.GetConf
 local GetGeneral = UP.GetGeneral
 local GetBars = UP.GetBars
@@ -78,7 +103,8 @@ local function BuildPreview(ctx, builder, unit)
     local sec = builder:CollapsibleSection("preview", "Hide Preview", 352, true)
     if W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(sec, "Hide Preview", "Show Preview") end
 
-    if not ns.MSUF_Options_CreateUnitPreviewBox then
+    local createPreview = ns.MSUF_Menu2_CreateUnitPreviewBox
+    if not createPreview then
         W.Text(sec, "The shared unit preview module is not loaded.", 14, -42, ctx.width - 28, T.colors.muted)
         return
     end
@@ -99,7 +125,7 @@ local function BuildPreview(ctx, builder, unit)
     }
     panel._msufOpenUnitSection = function() end
 
-    local box = ns.MSUF_Options_CreateUnitPreviewBox(sec, panel, ctx.width - 28, 300)
+    local box = createPreview(sec, panel, ctx.width - 28, 300)
     box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -38)
     box:Show()
     if box.title and box.title.SetTextColor then
@@ -376,7 +402,7 @@ local function BuildTopActions(ctx, builder, unit, label)
             copyPopup:SetFrameLevel(120)
             copyPopup:EnableMouse(true)
 
-            local title = T.Font(copyPopup, "GameFontNormal", "", { 1.00, 0.82, 0.10, 1 })
+            local title = T.Font(copyPopup, "GameFontNormal", "", T.colors.accent)
             title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
             copyPopup._title = title
 
@@ -640,7 +666,7 @@ local function BuildText(ctx, builder, unit)
     local smallDropdownW = math.min(220, math.max(150, colW - 48))
     local RefreshTextControlState
 
-    W.Text(sec, "Font style is shared in |cffffd200Global Style > Fonts|r. Position can be adjusted here or dragged in |cffffd200Edit Mode|r.", 14, -38, sectionW - 210, T.colors.muted)
+    W.Text(sec, "Font style is shared in |cff38c7f0Global Style > Fonts|r. Position can be adjusted here or dragged in |cff38c7f0Edit Mode|r.", 14, -38, sectionW - 210, T.colors.muted)
     local scope = T.Font(sec, "GameFontDisableSmall", "Editing " .. UnitTopLabel(unit), T.colors.dim)
     scope:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -38)
     scope:SetJustifyH("RIGHT")
@@ -1062,7 +1088,7 @@ local function BuildAlpha(ctx, builder, unit)
 end
 
 local function BuildPortrait(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("portrait", "Portrait", 390, false)
+    local sec = builder:CollapsibleSection("portrait", "Portrait", 456, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local rightX = max(350, floor(sectionW * 0.50) + 8)
@@ -1075,6 +1101,7 @@ local function BuildPortrait(ctx, builder, unit)
     local function PlaceSlider(control, x, y, width)
         W.MoveWidget(control, sec, x, y, width or rightW, "CENTER")
     end
+    local RefreshPortraitControls
 
     local portrait = W.Segment(sec, "Portrait mode", {
         { value = "OFF", text = "Off" },
@@ -1083,13 +1110,19 @@ local function BuildPortrait(ctx, builder, unit)
     }, min(300, sectionW - 28))
     M.BindSegment(ctx, portrait,
         function() return NormalizePortrait(unit) end,
-        function(v) SetPortraitValue(unit, "portraitMode", v or "OFF", "MSUF2_PORTRAIT_MODE") end)
+        function(v)
+            SetPortraitValue(unit, "portraitMode", v or "OFF", "MSUF2_PORTRAIT_MODE")
+            if RefreshPortraitControls then RefreshPortraitControls() end
+        end)
 
     local render = W.Dropdown(sec, "Render", PORTRAIT_RENDER, 220)
     PlaceDropdown(render, leftX, -112, leftW)
     M.BindDropdown(ctx, render,
         function() return GetConf(unit).portraitRender or "2D" end,
-        function(v) SetPortraitValue(unit, "portraitRender", v or "2D", "MSUF2_PORTRAIT_RENDER") end)
+        function(v)
+            SetPortraitValue(unit, "portraitRender", v or "2D", "MSUF2_PORTRAIT_RENDER")
+            if RefreshPortraitControls then RefreshPortraitControls() end
+        end)
 
     local shape = W.Dropdown(sec, "Shape", PORTRAIT_SHAPES, 220)
     PlaceDropdown(shape, leftX, -184, leftW)
@@ -1115,17 +1148,57 @@ local function BuildPortrait(ctx, builder, unit)
         function() return ReadNumber(unit, "portraitOffsetY", 0) end,
         function(v) SetNumber(unit, "portraitOffsetY", v, "MSUF2_PORTRAIT_Y", { preview = true }) end)
 
+    local classStyle = W.Dropdown(sec, "Class portrait style", PortraitClassStyleValues, 220)
+    classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
+    PlaceDropdown(classStyle, rightX, -328, rightW)
+    M.BindDropdown(ctx, classStyle,
+        function() return NormalizePortraitClassStyle(GetConf(unit).portraitClassStyle or "BLIZZARD") end,
+        function(v) SetPortraitValue(unit, "portraitClassStyle", NormalizePortraitClassStyle(v), "MSUF2_PORTRAIT_CLASS_STYLE") end)
+
     local border = W.Dropdown(sec, "Border", PORTRAIT_BORDERS, 220)
     PlaceDropdown(border, leftX, -328, leftW)
     M.BindDropdown(ctx, border,
         function() return GetConf(unit).portraitBorderStyle or "NONE" end,
-        function(v) SetPortraitValue(unit, "portraitBorderStyle", v or "NONE", "MSUF2_PORTRAIT_BORDER") end)
+        function(v)
+            SetPortraitValue(unit, "portraitBorderStyle", v or "NONE", "MSUF2_PORTRAIT_BORDER")
+            if RefreshPortraitControls then RefreshPortraitControls() end
+        end)
 
     local borderSize = W.Slider(sec, "Border thickness", 1, 12, 1, 280)
     PlaceSlider(borderSize, rightX, -256, rightW)
     M.BindSlider(ctx, borderSize,
         function() return ReadNumber(unit, "portraitBorderThickness", 2) end,
         function(v) SetNumber(unit, "portraitBorderThickness", v, "MSUF2_PORTRAIT_BORDER_SIZE", { preview = true }) end)
+
+    local fillBorder = W.ToggleAt(sec, "Fill border into frame gap", leftX, -394, leftW)
+    M.BindToggle(ctx, fillBorder,
+        function() return ReadBool(unit, "portraitFillBorder", false) end,
+        function(v) SetPortraitValue(unit, "portraitFillBorder", v and true or false, "MSUF2_PORTRAIT_FILL_BORDER") end)
+
+    local portraitBg = W.ToggleAt(sec, "Portrait background", rightX, -394, rightW)
+    M.BindToggle(ctx, portraitBg,
+        function() return ReadBool(unit, "portraitBgEnabled", false) end,
+        function(v) SetPortraitValue(unit, "portraitBgEnabled", v and true or false, "MSUF2_PORTRAIT_BG") end)
+
+    RefreshPortraitControls = function()
+        local conf = GetConf(unit)
+        local active = NormalizePortrait(unit) ~= "OFF"
+        local classRender = active and ((conf.portraitRender or "2D") == "CLASS")
+        local hasBorder = active and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
+
+        SetControlEnabled(render, active)
+        SetControlEnabled(shape, active)
+        SetControlEnabled(size, active)
+        SetControlEnabled(x, active)
+        SetControlEnabled(y, active)
+        SetControlEnabled(border, active)
+        SetControlEnabled(borderSize, hasBorder)
+        SetControlEnabled(fillBorder, hasBorder)
+        SetControlEnabled(classStyle, classRender)
+        SetControlEnabled(portraitBg, active)
+    end
+    M.AddRefresher(ctx, RefreshPortraitControls)
+    RefreshPortraitControls()
 end
 
 local function BuildPower(ctx, builder, unit)

@@ -249,7 +249,7 @@ local function BuildGFLayout(ctx)
         function(v) return string.format("Manual Scale: %d%%", v) end)
     PlaceScaleSlider(manualScale, scaleLeftX, -100, scaleLeftW)
 
-    local autoLabel = T.Font(scale, "GameFontNormalSmall", "Auto Breakpoints", { 1.00, 0.82, 0.18, 1 })
+    local autoLabel = T.Font(scale, "GameFontNormalSmall", "Auto Breakpoints", T.colors.accent)
     autoLabel:SetPoint("TOPLEFT", scale, "TOPLEFT", scaleRightX, -54)
     autoLabel:SetWidth(scaleRightW)
 
@@ -280,7 +280,7 @@ local function BuildGFLayout(ctx)
         SetOptionEnabled(scaleOver25, autoOn)
         if autoLabel then
             if autoOn then
-                autoLabel:SetTextColor(1.00, 0.82, 0.18, 1)
+                autoLabel:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
                 autoLabel:SetAlpha(1)
             else
                 autoLabel:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)

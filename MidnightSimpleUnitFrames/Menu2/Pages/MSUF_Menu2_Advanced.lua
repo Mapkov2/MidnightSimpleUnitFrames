@@ -870,9 +870,9 @@ local function BuildAuras(ctx)
         if isBoss then
             ignoreLabel:SetText("|cff888888Not available for Boss frames|r")
         elseif isShared then
-            ignoreLabel:SetText("Editing: |cffffd200Shared (all units)|r")
+            ignoreLabel:SetText("Editing: |cff38c7f0Shared (all units)|r")
         else
-            ignoreLabel:SetText("Editing: |cffffd200" .. tostring(key:gsub("^%l", string.upper)) .. "|r")
+            ignoreLabel:SetText("Editing: |cff38c7f0" .. tostring(key:gsub("^%l", string.upper)) .. "|r")
         end
         SetControlEnabled(ignoreOverride, not isShared and not isBoss)
         local canEdit = (not isBoss) and (isShared or AurasUnit(key).overrideIgnore == true)

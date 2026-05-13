@@ -662,7 +662,7 @@ local function ButtonVisual(btn, active, hover)
     end
     if (not active) and btn._msuf2Override and edge then
         edge:SetVertexColor(0.96, 0.78, 0.24, 0.92)
-        btn._msuf2Label:SetTextColor(1.00, 0.92, 0.72, 1)
+        btn._msuf2Label:SetTextColor(c.accent[1], c.accent[2], c.accent[3], 1)
     end
 end
 
@@ -679,9 +679,19 @@ function T.Button(parent, text, width, height)
     label:SetPoint("RIGHT", -10, 0)
     label:SetJustifyH("LEFT")
     btn._msuf2Label = label
+    btn._msuf2SearchText = text or ""
+    label._msuf2SearchText = text or ""
+    if M and type(M.RegisterSearchWidget) == "function" and text and text ~= "" then
+        M.RegisterSearchWidget(btn, { label = text, kind = "button", anchor = label })
+    end
 
     btn.SetText = function(self, value)
+        self._msuf2SearchText = value or ""
+        if self._msuf2Label then self._msuf2Label._msuf2SearchText = value or "" end
         self._msuf2Label:SetText(Tr(value or ""))
+        if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then
+            M.RegisterSearchWidget(self, { label = value, kind = "button", anchor = self._msuf2Label })
+        end
     end
     btn.GetText = function(self)
         return self._msuf2Label:GetText()

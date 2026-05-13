@@ -109,12 +109,12 @@ local function BuildGFIndicators(ctx)
         return not (gen and gen.highlightEnabled == false)
     end
 
-    W.LabelAt(indicators, "Aggro / Dispel / Target Highlight", leftX, -42, 280, "GameFontNormalSmall", { 1.00, 0.82, 0.18, 1 })
-    local hlHint = W.Text(indicators, "Controlled from: |cffffd200Global Style > Bars|r > |cffffd200Outline & Highlight Border|r\nEnable/disable, colors, size, offset, priority - all in one place.", leftX, -64, indicatorsW - 60, T.colors.muted)
+    W.LabelAt(indicators, "Aggro / Dispel / Target Highlight", leftX, -42, 280, "GameFontNormalSmall", T.colors.accent)
+    local hlHint = W.Text(indicators, "Controlled from: |cff38c7f0Global Style > Bars|r > |cff38c7f0Outline & Highlight Border|r\nEnable/disable, colors, size, offset, priority - all in one place.", leftX, -64, indicatorsW - 60, T.colors.muted)
     if hlHint.SetWordWrap then hlHint:SetWordWrap(true) end
     W.DividerAt(indicators, -112, leftX, 30)
 
-    W.LabelAt(indicators, "Group Number", leftX, -140, 180, "GameFontNormalSmall", { 1.00, 0.82, 0.18, 1 })
+    W.LabelAt(indicators, "Group Number", leftX, -140, 180, "GameFontNormalSmall", T.colors.accent)
     local groupNumberToggle = BindScopeToggle(ctx, W.ToggleAt(indicators, "Show Group Number", leftX, -170, leftW), "showGroupNumber", false, "visual")
     local groupNumberSize = BindScopeSlider(ctx, W.Slider(indicators, "Size", 6, 24, 1, leftW), "groupNumberSize", 10, "font")
     local groupNumberAnchor = BindScopeDropdown(ctx, W.Dropdown(indicators, "Anchor", AURA_ANCHORS, leftW), "groupNumberAnchor", "BOTTOMRIGHT", "geometry")
@@ -125,8 +125,8 @@ local function BuildGFIndicators(ctx)
     W.MoveWidget(groupNumberX, indicators, leftX, -322, leftW, "CENTER")
     W.MoveWidget(groupNumberY, indicators, leftX, -376, leftW, "CENTER")
 
-    W.LabelAt(indicators, "Hover Highlight", rightX, -140, 180, "GameFontNormalSmall", { 1.00, 0.82, 0.18, 1 })
-    local hoverHint = W.Text(indicators, "Enable + color: |cffffd200Global Style > Colors|r > Mouseover Highlight", rightX, -162, rightW, T.colors.muted)
+    W.LabelAt(indicators, "Hover Highlight", rightX, -140, 180, "GameFontNormalSmall", T.colors.accent)
+    local hoverHint = W.Text(indicators, "Enable + color: |cff38c7f0Global Style > Colors|r > Mouseover Highlight", rightX, -162, rightW, T.colors.muted)
     local hoverSize = W.Slider(indicators, "Border Thickness", 1, 6, 1, rightW)
     M.BindSlider(ctx, hoverSize,
         function()
@@ -145,7 +145,7 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(hoverSize, indicators, rightX, -210, rightW, "CENTER")
 
-    W.LabelAt(indicators, "Focus Highlight", rightX, -274, 180, "GameFontNormalSmall", { 1.00, 0.82, 0.18, 1 })
+    W.LabelAt(indicators, "Focus Highlight", rightX, -274, 180, "GameFontNormalSmall", T.colors.accent)
     local focusToggle = BindScopeToggle(ctx, W.ToggleAt(indicators, "Enable Focus Glow", rightX, -304, rightW), "hlFocusEnabled", true, "visual")
     local focusHint = W.Text(indicators, "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -332, rightW, T.colors.muted)
     if focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
