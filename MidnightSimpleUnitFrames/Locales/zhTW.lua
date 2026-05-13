@@ -852,8 +852,8 @@ local MSUF2_HELPER_zhTW = {
     ["Boss range fade"] = "Boss範圍淡出",
     ["Boss target highlight"] = "老闆目標亮點",
     ["boss2"] = "老闆2",
-    ["Bottom"] = "底部",
     ["BOTTOM"] = "底部",
+    ["Bottom"] = "底部",
     ["Bottom Edge"] = "底邊",
     ["BOTTOMLEFT"] = "左下角",
     ["BOTTOMRIGHT"] = "右下角",
@@ -890,7 +890,7 @@ local MSUF2_HELPER_zhTW = {
     ["class colored names"] = "類別顏色名稱",
     ["Class portrait"] = "班級肖像",
     ["class resources"] = "班級資源",
-    ["Class Resources were enabled or disabled.\\n\\nA UI reload is required to fully apply this change.\\n\\nReload now?"] = "類別資源已啟用或停用。 \\n\\nA UI 需要重新載入才能完全套用此變更。 \\n\\n 現在重新載入嗎？",
+    ["Class Resources were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"] = "類別資源已啟用或停用。 \n\nA UI 需要重新載入才能完全套用此變更。 \n\n 立即重新載入嗎？",
     ["classpower"] = "階級權力",
     ["click casting"] = "點擊投射",
     ["click through"] = "點擊瀏覽",
@@ -922,7 +922,7 @@ local MSUF2_HELPER_zhTW = {
     ["cooldown text"] = "冷卻文字",
     ["Cooldown text size"] = "冷卻文字大小",
     ["Cooldowns"] = "冷卻時間",
-    ["Copy these settings to ALL unitframes?\\n\\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target."] = "將這些設定複製到所有單位幀？ \\n\\n這將覆蓋 Target 的 Player/Target/Focus/Boss/Pet/Target 上的現有設定。",
+    ["Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target."] = "將這些設定複製到所有單位幀？ \n\n這將覆蓋 Target 的 Player/Target/Focus/Boss/Pet/Target 上的現有設定。",
     ["Corner/Spell/Private"] = "角/Spell/Private",
     ["Create, switch, copy, delete, export and import profiles."] = "建立、切換、複製、刪除、匯出和匯入設定檔。",
     ["Cross"] = "克羅斯",
@@ -1215,7 +1215,7 @@ local MSUF2_HELPER_zhTW = {
     ["MSUF Focus"] = "MSUF 焦點",
     ["MSUF Pet"] = "MSUF 寵物",
     ["MSUF Player"] = "MSUF 玩家",
-    ["MSUF recommends reloading the UI to ensure all changes apply correctly.\\n\\nApply: %s\\n\\nReload now?"] = "MSUF 建議重新載入 UI 以確保所有變更正確應用。 \\n\\n應用：%s\\n\\n立即重新載入？",
+    ["MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"] = "MSUF 建議重新載入 UI 以確保所有變更正確應用。 \n\n應用：%s\n\n立即重新載入？",
     ["MSUF Smooth v2"] = "MSUF 平滑 v2",
     ["MSUF superellipse"] = "MSUF 超橢圓",
     ["MSUF Target"] = "MSUF 目標",
@@ -1259,8 +1259,8 @@ local MSUF2_HELPER_zhTW = {
     ["own buffs"] = "自己的愛好者",
     ["Pain"] = "疼痛",
     ["PALADIN"] = "聖騎士",
-    ["party"] = "聚會",
     ["Party"] = "派對",
+    ["party"] = "聚會",
     ["Patreon"] = "派特隆",
     ["PayPal"] = "貝寶",
     ["Per debuff type"] = "每個減益類型",
@@ -1305,14 +1305,14 @@ local MSUF2_HELPER_zhTW = {
     ["raid frames not showing"] = "突襲幀未顯示",
     ["raid health text"] = "突襲健康文本",
     ["Raid helpful"] = "突襲有幫助",
-    ["Raid marker"] = "襲擊標記",
     ["Raid Marker"] = "突襲標記",
+    ["Raid marker"] = "襲擊標記",
     ["Re-anchor Blizzard TotemFrame"] = "重新錨定 Blizzard TotemFrame",
     ["Reaction color"] = "反應顏色",
     ["Ready Check"] = "準備檢查",
     ["Regular"] = "常規",
     ["remove realm names"] = "刪除域名",
-    ["Reset all Group Frame settings to defaults?\\n\\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile."] = "將所有群組框架設定重設為預設值？ \\n\\n這將重置活動設定檔的派對、Raid 和 Mythic Raid 群組框架。",
+    ["Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile."] = "將所有群組框架設定重設為預設值？ \n\n這將重置活動設定檔的派對、Raid 和 Mythic Raid 群組框架。",
     ["reset movers"] = "重置搬運工",
     ["reset positions"] = "重置位置",
     ["Reset profile '%s' to defaults?"] = "將設定檔“%s”重設為預設值？",
@@ -1395,8 +1395,8 @@ local MSUF2_HELPER_zhTW = {
     ["Soul Fragments (Void Meta)"] = "灵魂碎片（虚空元）",
     ["Soul Shards"] = "靈魂碎片",
     ["Source of Magic"] = "魔法之源",
-    ["space"] = "空間",
     ["Space"] = "空間",
+    ["space"] = "空間",
     ["spacing"] = "間距",
     ["Spark extends beyond bar"] = "Spark 超越酒吧",
     ["spell name too long"] = "名字拼法太長",
@@ -1439,7 +1439,7 @@ local MSUF2_HELPER_zhTW = {
     ["Text X"] = "文字X",
     ["Text Y"] = "文字 Y",
     ["Thick Outline"] = "粗輪廓",
-    ["This changes how MSUF hides the Blizzard PlayerFrame.\\n\\nA UI reload is required."] = "這會改變 MSUF 隱藏 Blizzard PlayerFrame 的方式。 \\n\\nA UI 需要重新載入。",
+    ["This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required."] = "這會改變 MSUF 隱藏 Blizzard PlayerFrame 的方式。 \n\nA UI 需要重新載入。",
     ["Thorn"] = "荊棘",
     ["threat"] = "威脅",
     ["Tip of the Spear"] = "矛尖",
@@ -1514,9 +1514,21 @@ local MSUF2_HELPER_zhTW = {
     ["Why is text overlapping or in the wrong place?"] = "為什麼文字重疊或位於錯誤的位置？",
     ["width"] = "寬度",
     ["Z"] = "Z",
-    ["|cffb088f0MSUF Alpha Build|r\\n\\nThis is an early Alpha version.\\nPlease report bugs and share feedback on our Discord!\\n\\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF Alpha Build|r\\n\\n這是早期的 Alpha 版本。 \\n請回報錯誤並在我們的 Discord 上分享回饋！ \\n\\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
+    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF Alpha Build|r\n\n這是早期 Alpha 版本。 \n請回報錯誤並在我們的 Discord 上分享回饋！ \n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
 }
 for k, v in pairs(MSUF2_HELPER_zhTW) do
     L[k] = v
 end
 -- MSUF2 helper string coverage END
+
+-- MSUF2 direct text coverage BEGIN
+local MSUF2_DIRECT_zhTW = {
+    ["Edit Mode: Off"] = "編輯模式：關閉",
+    ["Edit Mode: Off (Combat)"] = "編輯模式：關閉（戰鬥）",
+    ["Edit Mode: On"] = "編輯模式：開",
+    ["Exit Edit Mode"] = "退出編輯模式",
+}
+for k, v in pairs(MSUF2_DIRECT_zhTW) do
+    L[k] = v
+end
+-- MSUF2 direct text coverage END

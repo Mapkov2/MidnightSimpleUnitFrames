@@ -1622,8 +1622,8 @@ local MSUF2_HELPER_zhCN = {
     ["Boss range fade"] = "Boss范围淡出",
     ["Boss target highlight"] = "老板目标亮点",
     ["boss2"] = "老板2",
-    ["Bottom"] = "底部",
     ["BOTTOM"] = "底部",
+    ["Bottom"] = "底部",
     ["Bottom Edge"] = "底边",
     ["BOTTOMLEFT"] = "左下角",
     ["BOTTOMRIGHT"] = "右下角",
@@ -1655,7 +1655,7 @@ local MSUF2_HELPER_zhCN = {
     ["class colored names"] = "类别颜色名称",
     ["Class portrait"] = "班级肖像",
     ["class resources"] = "班级资源",
-    ["Class Resources were enabled or disabled.\\n\\nA UI reload is required to fully apply this change.\\n\\nReload now?"] = "类资源已启用或禁用。\\n\\nA UI 需要重新加载才能完全应用此更改。\\n\\n 现在重新加载吗？",
+    ["Class Resources were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"] = "类资源已启用或禁用。\n\nA UI 需要重新加载才能完全应用此更改。\n\n 立即重新加载吗？",
     ["classpower"] = "阶级权力",
     ["click casting"] = "点击投射",
     ["click through"] = "点击浏览",
@@ -1917,7 +1917,7 @@ local MSUF2_HELPER_zhCN = {
     ["MSUF Focus"] = "MSUF 焦点",
     ["MSUF Pet"] = "MSUF 宠物",
     ["MSUF Player"] = "MSUF 玩家",
-    ["MSUF recommends reloading the UI to ensure all changes apply correctly.\\n\\nApply: %s\\n\\nReload now?"] = "MSUF 建议重新加载 UI 以确保所有更改正确应用。\\n\\n应用：%s\\n\\n立即重新加载？",
+    ["MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"] = "MSUF 建议重新加载 UI 以确保所有更改正确应用。\n\n应用：%s\n\n立即重新加载？",
     ["MSUF Smooth v2"] = "MSUF 平滑 v2",
     ["MSUF superellipse"] = "MSUF 超椭圆",
     ["MSUF Target"] = "MSUF 目标",
@@ -1952,8 +1952,8 @@ local MSUF2_HELPER_zhCN = {
     ["Override shared settings"] = "覆盖共享设置",
     ["own buffs"] = "自己的爱好者",
     ["PALADIN"] = "圣骑士",
-    ["party"] = "聚会",
     ["Party"] = "派对",
+    ["party"] = "聚会",
     ["Patreon"] = "帕特隆",
     ["PayPal"] = "贝宝",
     ["Per debuff type"] = "每个减益类型",
@@ -1991,14 +1991,14 @@ local MSUF2_HELPER_zhCN = {
     ["raid frames not showing"] = "突袭帧未显示",
     ["raid health text"] = "突袭健康文本",
     ["Raid helpful"] = "突袭有帮助",
-    ["Raid marker"] = "袭击标记",
     ["Raid Marker"] = "突袭标记",
+    ["Raid marker"] = "袭击标记",
     ["Re-anchor Blizzard TotemFrame"] = "重新锚定 Blizzard TotemFrame",
     ["Reaction color"] = "反应颜色",
     ["Ready Check"] = "准备检查",
     ["Regular"] = "常规",
     ["remove realm names"] = "删除域名",
-    ["Reset all Group Frame settings to defaults?\\n\\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile."] = "将所有组框架设置重置为默认值？\\n\\n这将重置活动配置文件的派对、Raid 和 Mythic Raid 组框架。",
+    ["Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile."] = "将所有组框架设置重置为默认值？\n\n这将重置活动配置文件的派对、Raid 和 Mythic Raid 组框架。",
     ["reset movers"] = "重置搬运工",
     ["reset positions"] = "重置位置",
     ["Reset profile '%s' to defaults?"] = "将配置文件“%s”重置为默认值？",
@@ -2052,8 +2052,8 @@ local MSUF2_HELPER_zhCN = {
     ["Soul Fragments"] = "灵魂碎片",
     ["Soul Fragments (Vengeance)"] = "灵魂碎片（复仇）",
     ["Soul Fragments (Void Meta)"] = "灵魂碎片（虚空元）",
-    ["space"] = "空间",
     ["Space"] = "空间",
+    ["space"] = "空间",
     ["spacing"] = "间距",
     ["Spark extends beyond bar"] = "Spark 超越酒吧",
     ["spell name too long"] = "名字拼写太长",
@@ -2086,7 +2086,7 @@ local MSUF2_HELPER_zhCN = {
     ["Text on detached bar"] = "分离栏上的文本",
     ["text overlapping"] = "文本重叠",
     ["Thick Outline"] = "粗轮廓",
-    ["This changes how MSUF hides the Blizzard PlayerFrame.\\n\\nA UI reload is required."] = "这会改变 MSUF 隐藏 Blizzard PlayerFrame 的方式。\\n\\nA UI 需要重新加载。",
+    ["This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required."] = "这会改变 MSUF 隐藏 Blizzard PlayerFrame 的方式。\n\nA UI 需要重新加载。",
     ["Thorn"] = "荆棘",
     ["threat"] = "威胁",
     ["Tip of the Spear"] = "矛尖",
@@ -2155,9 +2155,21 @@ local MSUF2_HELPER_zhCN = {
     ["Why is text overlapping or in the wrong place?"] = "为什么文本重叠或位于错误的位置？",
     ["width"] = "宽度",
     ["Z"] = "Z",
-    ["|cffb088f0MSUF Alpha Build|r\\n\\nThis is an early Alpha version.\\nPlease report bugs and share feedback on our Discord!\\n\\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF Alpha Build|r\\n\\n这是早期的 Alpha 版本。\\n请报告错误并在我们的 Discord 上分享反馈！\\n\\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
+    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF Alpha Build|r\n\n这是早期 Alpha 版本。\n请报告错误并在我们的 Discord 上分享反馈！\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
 }
 for k, v in pairs(MSUF2_HELPER_zhCN) do
     L[k] = v
 end
 -- MSUF2 helper string coverage END
+
+-- MSUF2 direct text coverage BEGIN
+local MSUF2_DIRECT_zhCN = {
+    ["Edit Mode: Off"] = "编辑模式：关闭",
+    ["Edit Mode: Off (Combat)"] = "编辑模式：关闭（战斗）",
+    ["Edit Mode: On"] = "编辑模式：开",
+    ["Exit Edit Mode"] = "退出编辑模式",
+}
+for k, v in pairs(MSUF2_DIRECT_zhCN) do
+    L[k] = v
+end
+-- MSUF2 direct text coverage END
