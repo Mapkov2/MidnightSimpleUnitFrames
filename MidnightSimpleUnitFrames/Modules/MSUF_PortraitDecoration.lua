@@ -187,8 +187,9 @@ end
 -- ────────────────────────────────────────────────────────────
 -- Shape TexCoord
 -- ────────────────────────────────────────────────────────────
-local function ApplyShapeTexCoord(portrait, shape, isRondo)
+local function ApplyShapeTexCoord(portrait, shape, isRondo, preserveTexCoord)
     if not portrait or not portrait.SetTexCoord then return end
+    if preserveTexCoord then return end
     if isRondo then portrait:SetTexCoord(0, 1, 0, 1); return end
     if shape == "CIRCLE" then
         portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -311,9 +312,12 @@ local function MSUF_ApplyPortraitDecoration(f, unit, conf, existsForPortrait)
 
     local shape = V(conf, "portraitShape", "SQUARE")
     local render = conf.portraitRender or "2D"
-    local isRondo = (render == "CLASS") and RONDO_PACKS[V(conf, "portraitClassStyle", "BLIZZARD")] or false
+    local classStyle = V(conf, "portraitClassStyle", "BLIZZARD")
+    local isClassRender = render == "CLASS"
+    local isRondo = isClassRender and RONDO_PACKS[classStyle] or false
+    local preserveClassAtlasCoords = isClassRender and not isRondo
 
-    ApplyShapeTexCoord(portrait, shape, isRondo)
+    ApplyShapeTexCoord(portrait, shape, isRondo, preserveClassAtlasCoords)
     ApplyBackground(d, conf, portrait)
 
     if isRondo then
