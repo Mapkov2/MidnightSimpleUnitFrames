@@ -99,6 +99,29 @@ local NormalizeAlphaMode = UP.NormalizeAlphaMode
 local AlphaModeValue = UP.AlphaModeValue
 local NormalizeBossLayoutMode = UP.NormalizeBossLayoutMode
 local UpdateLoadActive = UP.UpdateLoadActive
+
+local function ForEachPageControl(parent, callback)
+    if not (parent and parent.GetChildren and type(callback) == "function") then return end
+    local children = { parent:GetChildren() }
+    for i = 1, #children do
+        local child = children[i]
+        if child and child._msuf2ControlKind and not child._msuf2UnitFrameGateAlwaysEnabled then
+            callback(child)
+        end
+        ForEachPageControl(child, callback)
+    end
+end
+
+local function ApplyUnitFrameEnabledGate(ctx, unit)
+    local wrapper = ctx and ctx.wrapper
+    if not wrapper then return end
+    local enabled = ReadBool(unit, "enabled", true)
+    local gateKey = "unitFrameEnabled:" .. tostring(unit)
+    ForEachPageControl(wrapper, function(control)
+        W.SetControlGateEnabled(control, gateKey, enabled)
+    end)
+end
+
 local function BuildPreview(ctx, builder, unit)
     local sec = builder:CollapsibleSection("preview", "Hide Preview", 352, true)
     if W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(sec, "Hide Preview", "Show Preview") end
@@ -520,9 +543,13 @@ local function BuildBasics(ctx, builder, unit, label)
     local row1 = -42
 
     local enable = W.ToggleAt(sec, "Enable", x1, row1, labelW)
+    enable._msuf2UnitFrameGateAlwaysEnabled = true
     M.BindToggle(ctx, enable,
         function() return ReadBool(unit, "enabled", true) end,
-        function(v) SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true }) end)
+        function(v)
+            SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true })
+            if M.Refresh then M.Refresh(ctx) end
+        end)
 
     local reverse = W.ToggleAt(sec, "Reverse fill direction", x2, row1, labelW)
     M.BindToggle(ctx, reverse,
@@ -1017,10 +1044,12 @@ local function BuildInlineText(ctx, builder, unit)
 end
 
 local function BuildAlpha(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("transparency", "Transparency", 230, false)
+    local sec = builder:CollapsibleSection("transparency", "Transparency", 326, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 14
-    local rightX = math.max(340, floor(sectionW * 0.50) + 8)
+    local leftX = 32
+    local rightX = min(max(430, floor(sectionW * 0.52)), max(360, sectionW - 360))
+    local leftW = max(250, rightX - leftX - 42)
+    local rightW = max(250, sectionW - rightX - 32)
     local sliderW = math.min(300, math.max(220, floor((sectionW - 54) / 2)))
     local function PlaceSlider(control, x, y, width)
         W.MoveWidget(control, sec, x, y, width or sliderW, "CENTER")
@@ -1050,7 +1079,7 @@ local function BuildAlpha(ctx, builder, unit)
     end
 
     local inCombat = W.Slider(sec, "Alpha in combat", 0, 1, 0.05, 300)
-    PlaceSlider(inCombat, leftX, -154, sliderW)
+    PlaceSlider(inCombat, leftX, -258, sliderW)
     M.BindSlider(ctx, inCombat,
         function() return ReadAlphaValue(true) end,
         function(v)
@@ -1063,7 +1092,7 @@ local function BuildAlpha(ctx, builder, unit)
         end)
 
     local outCombat = W.Slider(sec, "Alpha out of combat", 0, 1, 0.05, 300)
-    PlaceSlider(outCombat, rightX, -154, sliderW)
+    PlaceSlider(outCombat, rightX, -258, sliderW)
     M.BindSlider(ctx, outCombat,
         function() return ReadAlphaValue(false) end,
         function(v)
@@ -1071,7 +1100,9 @@ local function BuildAlpha(ctx, builder, unit)
             SetNumber(unit, outKey, v, "MSUF2_ALPHA_OUT", { alpha = true, preview = true })
         end)
 
+    W.LabelAt(sec, "Behavior", leftX, -38, leftW, "GameFontNormalSmall", T.colors.accent)
     local sync = W.ToggleAt(sec, "Sync both", leftX, -42, 220)
+    W.MoveWidget(sync, sec, leftX, -64)
     M.BindToggle(ctx, sync,
         function() return ReadBool(unit, "alphaSync", false) end,
         function(v)
@@ -1083,7 +1114,9 @@ local function BuildAlpha(ctx, builder, unit)
             M.Refresh(ctx)
         end)
 
+    W.LabelAt(sec, "Protected Elements", rightX, -38, rightW, "GameFontNormalSmall", T.colors.accent)
     local exclude = W.ToggleAt(sec, "Keep text + portrait visible", rightX, -42, 250)
+    W.MoveWidget(exclude, sec, rightX, -64)
     M.BindToggle(ctx, exclude,
         function() return ReadBool(unit, "alphaExcludeTextPortrait", false) end,
         function(v)
@@ -1092,10 +1125,12 @@ local function BuildAlpha(ctx, builder, unit)
         end)
 
     local preserve = W.ToggleAt(sec, "Preserve HP color", rightX, -72, 220)
+    W.MoveWidget(preserve, sec, rightX, -94)
     M.BindToggle(ctx, preserve,
         function() return ReadBool(unit, "alphaPreserveHPColor", false) end,
         function(v) SetBool(unit, "alphaPreserveHPColor", v, "MSUF2_ALPHA_HP_COLOR", { alpha = true, preview = true }) end)
 
+    W.DividerAt(sec, -126, leftX, 32)
     local mode = W.Segment(sec, "Sliders affect", {
         { value = "foreground", text = "Foreground" },
         { value = "health", text = "Health" },
@@ -1103,11 +1138,12 @@ local function BuildAlpha(ctx, builder, unit)
     }, 420)
     if mode._msuf2Title then
         mode._msuf2Title:ClearAllPoints()
-        mode._msuf2Title:SetPoint("TOPLEFT", sec, "TOPLEFT", leftX, -82)
+        mode._msuf2Title:SetPoint("TOPLEFT", sec, "TOPLEFT", leftX, -148)
+        mode._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
     end
     mode:ClearAllPoints()
-    mode:SetPoint("TOPLEFT", sec, "TOPLEFT", leftX, -104)
-    mode:SetSize(math.min(520, sectionW - 28), 22)
+    mode:SetPoint("TOPLEFT", sec, "TOPLEFT", leftX, -170)
+    mode:SetSize(math.min(620, sectionW - leftX - 32), 22)
     do
         local buttons = mode.buttons or {}
         local count = #buttons
@@ -1120,6 +1156,8 @@ local function BuildAlpha(ctx, builder, unit)
             btn:SetSize(bw, 22)
         end
     end
+    W.DividerAt(sec, -210, leftX, 32)
+    W.LabelAt(sec, "Alpha Values", leftX, -232, leftW, "GameFontNormalSmall", T.colors.accent)
     M.BindSegment(ctx, mode,
         function() return NormalizeAlphaMode(GetConf(unit).alphaLayerMode) end,
         function(v)
@@ -1476,6 +1514,9 @@ local function BuildStatus(ctx, builder, unit)
     end
 
     local selector = W.Dropdown(sec, "Indicator", function() return StatusValues(unit) end, 260)
+    if selector._msuf2Title and selector._msuf2Title.SetTextColor then
+        selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
+    end
     PlaceDropdown(selector, leftX, -42, leftW)
     M.BindDropdown(ctx, selector,
         function()
@@ -1491,7 +1532,7 @@ local function BuildStatus(ctx, builder, unit)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
 
-    local previewLabel = W.LabelAt(sec, "Status Preview", rightX, -42, rightW, "GameFontNormalSmall", T.colors.text)
+    local previewLabel = W.LabelAt(sec, "Status Preview", rightX, -42, rightW, "GameFontNormalSmall", T.colors.accent)
 
     local midnight = W.ToggleAt(sec, "Use Midnight style", rightX, -112, rightW)
     M.BindToggle(ctx, midnight,
@@ -1781,6 +1822,10 @@ local function BuildUnitPage(info)
         BuildLoadConditions(ctx, builder, info.unit)
         BuildAlpha(ctx, builder, info.unit)
         BuildLayout(ctx, builder, info.unit)
+        M.AddRefresher(ctx, function()
+            ApplyUnitFrameEnabledGate(ctx, info.unit)
+        end)
+        ApplyUnitFrameEnabledGate(ctx, info.unit)
         ctx:SetContentHeight(math.abs(builder.y) + 42)
     end
 end
@@ -1789,6 +1834,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 15,
+        version = 18,
     })
 end

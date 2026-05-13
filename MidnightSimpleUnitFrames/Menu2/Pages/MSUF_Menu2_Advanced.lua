@@ -541,7 +541,12 @@ local function AuraHasOverride(key)
     if key == "shared" then return false end
     local a2 = AurasDB()
     local u = a2.perUnit and a2.perUnit[key]
-    return u and (u.overrideSharedLayout == true or u.overrideFilters == true) or false
+    return u and (
+        u.overrideSharedLayout == true
+        or u.overrideLayout == true
+        or u.overrideFilters == true
+        or u.overrideIgnore == true
+    ) or false
 end
 
 local function RefreshAurasPage(ctx)
@@ -555,21 +560,42 @@ local function BuildAuras(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Unit Auras", "Auras 2.0 display, filters, layout, timer text and reminders.", 72)
 
+    local sharedOnlyControls = {}
+    local filterOverrideControls = {}
+    local capsOverrideControls = {}
+    local layoutOverrideControls = {}
+
+    local function Track(list, control)
+        if list and control then list[#list + 1] = control end
+        return control
+    end
+
+    local function IsSharedScope()
+        return AuraScope() == "shared"
+    end
+
+    local function UnitOverrideEnabled(flag)
+        local scopeKey = AuraScope()
+        if scopeKey == "shared" then return true end
+        local u = AurasUnit(scopeKey)
+        return u and u[flag] == true
+    end
+
     local top = b:Section("Unit Auras", 148)
-    ToggleAt(ctx, top, "Enable Unit Auras", 12, -34, function() return AurasDB() end, "enabled", true, function()
+    Track(sharedOnlyControls, ToggleAt(ctx, top, "Enable Unit Auras", 12, -34, function() return AurasDB() end, "enabled", true, function()
         local a2 = AurasDB()
         if a2.enabled == false and type(_G.MSUF_A2_HardDisableAll) == "function" then pcall(_G.MSUF_A2_HardDisableAll) end
         ApplyAuras()
-    end)
-    ScopedToggleAt(ctx, top, "Enable filters", 200, -34, AuraFilters, "enabled", true, ForceAuraFilterOverride, ApplyAuras)
-    ToggleAt(ctx, top, "Preview in Edit Mode", 12, -58, AuraShared, "showInEditMode", true, ApplyAuras)
-    ToggleAt(ctx, top, "Enable Masque skinning", 200, -58, AuraShared, "masqueEnabled", false, ApplyAuras)
-    ToggleAt(ctx, top, "Hide Masque borders", 200, -82, AuraShared, "masqueHideBorder", false, ApplyAuras)
+    end))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, top, "Enable filters", 200, -34, AuraFilters, "enabled", true, ForceAuraFilterOverride, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, top, "Preview in Edit Mode", 12, -58, AuraShared, "showInEditMode", true, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, top, "Enable Masque skinning", 200, -58, AuraShared, "masqueEnabled", false, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, top, "Hide Masque borders", 200, -82, AuraShared, "masqueHideBorder", false, ApplyAuras))
     LabelAt(top, "Units", 12, -94, 180, "GameFontNormalSmall", T.colors.muted)
-    TogglePillAt(ctx, top, "Player", 12, -120, 90, function() return AurasDB() end, "showPlayer", false, ApplyAuras)
-    TogglePillAt(ctx, top, "Target", 108, -120, 90, function() return AurasDB() end, "showTarget", true, ApplyAuras)
-    TogglePillAt(ctx, top, "Focus", 204, -120, 90, function() return AurasDB() end, "showFocus", true, ApplyAuras)
-    TogglePillAt(ctx, top, "Boss 1-5", 300, -120, 96, function() return AurasDB() end, "showBoss", true, ApplyAuras)
+    Track(sharedOnlyControls, TogglePillAt(ctx, top, "Player", 12, -120, 90, function() return AurasDB() end, "showPlayer", false, ApplyAuras))
+    Track(sharedOnlyControls, TogglePillAt(ctx, top, "Target", 108, -120, 90, function() return AurasDB() end, "showTarget", true, ApplyAuras))
+    Track(sharedOnlyControls, TogglePillAt(ctx, top, "Focus", 204, -120, 90, function() return AurasDB() end, "showFocus", true, ApplyAuras))
+    Track(sharedOnlyControls, TogglePillAt(ctx, top, "Boss 1-5", 300, -120, 96, function() return AurasDB() end, "showBoss", true, ApplyAuras))
 
     local scope = b:Section("", 104)
     if scope.title then scope.title:Hide() end
@@ -599,9 +625,14 @@ local function BuildAuras(ctx)
         function(v)
             local s = AuraScope()
             if s == "shared" then return end
-            AurasUnit(s).overrideFilters = v and true or false
+            if v then
+                ForceAuraFilterOverride()
+            else
+                AurasUnit(s).overrideFilters = false
+            end
             ApplyAuras()
             RefreshScopeButtons()
+            RefreshAurasPage(ctx)
         end)
     local overrideCaps = ValueToggleAt(ctx, scope, "Override caps", 190, -48,
         function()
@@ -611,9 +642,31 @@ local function BuildAuras(ctx)
         function(v)
             local s = AuraScope()
             if s == "shared" then return end
-            AurasUnit(s).overrideSharedLayout = v and true or false
+            if v then
+                ForceAuraCapsOverride()
+            else
+                AurasUnit(s).overrideSharedLayout = false
+            end
             ApplyAuras()
             RefreshScopeButtons()
+            RefreshAurasPage(ctx)
+        end)
+    local overrideLayout = ValueToggleAt(ctx, scope, "Override layout", 370, -48,
+        function()
+            local s = AuraScope()
+            return s ~= "shared" and AurasUnit(s).overrideLayout == true
+        end,
+        function(v)
+            local s = AuraScope()
+            if s == "shared" then return end
+            if v then
+                ForceAuraLayoutOverride()
+            else
+                AurasUnit(s).overrideLayout = false
+            end
+            ApplyAuras()
+            RefreshScopeButtons()
+            RefreshAurasPage(ctx)
         end)
     local reset = T.Button(scope, "Reset", 76, 22)
     reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -10, -46)
@@ -625,8 +678,12 @@ local function BuildAuras(ctx)
             if type(u) == "table" then
                 u.overrideSharedLayout = false
                 u.layoutShared = nil
+                u.overrideLayout = false
+                u.layout = nil
                 u.overrideFilters = false
                 u.filters = nil
+                u.overrideIgnore = false
+                u.ignoreCats = nil
             end
         end
         ApplyAuras()
@@ -647,6 +704,7 @@ local function BuildAuras(ctx)
         local isShared = AuraScope() == "shared"
         SetControlEnabled(overrideFilters, not isShared)
         SetControlEnabled(overrideCaps, not isShared)
+        SetControlEnabled(overrideLayout, not isShared)
         RefreshScopeButtons()
     end)
 
@@ -654,26 +712,26 @@ local function BuildAuras(ctx)
     LabelAt(master, "|cff6EB5FFBuffs|r", 14, -12, 140)
     LabelAt(master, "|cff6EB5FFDebuffs|r", 200, -12, 140)
     LabelAt(master, "|cff6EB5FFBoss Heal Auras|r", 390, -12, 180)
-    ToggleAt(ctx, master, "Show Buffs", 12, -28, AuraShared, "showBuffs", true, ApplyAuras)
-    ScopedToggleAt(ctx, master, "Only my buffs", 12, -50, AuraBuffFilters, "onlyMine", false, ForceAuraFilterOverride, ApplyAuras)
-    ToggleAt(ctx, master, "Highlight own buffs", 12, -74, AuraShared, "highlightOwnBuffs", false, ApplyAuras)
-    ScopedToggleAt(ctx, master, "Hide permanent buffs", 12, -96, AuraFilters, "hidePermanent", false, ForceAuraFilterOverride, ApplyAuras)
-    ToggleAt(ctx, master, "Show Debuffs", 200, -28, AuraShared, "showDebuffs", true, ApplyAuras)
-    ScopedToggleAt(ctx, master, "Only my debuffs", 200, -50, AuraDebuffFilters, "onlyMine", false, ForceAuraFilterOverride, ApplyAuras)
-    ToggleAt(ctx, master, "Highlight own debuffs", 200, -74, AuraShared, "highlightOwnDebuffs", false, ApplyAuras)
-    ToggleAt(ctx, master, "Highlight own healer buffs", 390, -28, BossHealAuras, "highlightOwn", false, ApplyAuras)
-    ToggleAt(ctx, master, "Hide other healer buffs", 390, -50, BossHealAuras, "hideOthers", false, ApplyAuras)
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Show Buffs", 12, -28, AuraShared, "showBuffs", true, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, master, "Only my buffs", 12, -50, AuraBuffFilters, "onlyMine", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Highlight own buffs", 12, -74, AuraShared, "highlightOwnBuffs", false, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, master, "Hide permanent buffs", 12, -96, AuraFilters, "hidePermanent", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Show Debuffs", 200, -28, AuraShared, "showDebuffs", true, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, master, "Only my debuffs", 200, -50, AuraDebuffFilters, "onlyMine", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Highlight own debuffs", 200, -74, AuraShared, "highlightOwnDebuffs", false, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Highlight own healer buffs", 390, -28, BossHealAuras, "highlightOwn", false, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Hide other healer buffs", 390, -50, BossHealAuras, "hideOthers", false, ApplyAuras))
     DividerAt(master, -120)
     LabelAt(master, "|cff6EB5FFIcons|r", 14, -128, 140)
     LabelAt(master, "|cff6EB5FFCooldown|r", 200, -128, 140)
     LabelAt(master, "|cff6EB5FFBorders|r", 390, -128, 140)
-    ToggleAt(ctx, master, "Show tooltip", 12, -144, AuraShared, "showTooltip", true, ApplyAuras)
-    ToggleAt(ctx, master, "Show stack count", 12, -166, AuraShared, "showStackCount", true, ApplyAuras)
-    ToggleAt(ctx, master, "Click-through auras", 12, -188, AuraShared, "clickThroughAuras", false, ApplyAuras)
-    ToggleAt(ctx, master, "Show cooldown swipe", 200, -144, AuraShared, "showCooldownSwipe", true, ApplyAuras)
-    ToggleAt(ctx, master, "Swipe darkens on loss", 200, -166, AuraShared, "cooldownSwipeDarkenOnLoss", false, ApplyAuras)
-    ToggleAt(ctx, master, "Show cooldown text", 200, -188, AuraShared, "showCooldownText", true, ApplyAuras)
-    ToggleAt(ctx, master, "Dispel-type borders", 390, -144, AuraShared, "useDebuffTypeBorders", false, ApplyAuras)
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Show tooltip", 12, -144, AuraShared, "showTooltip", true, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Show stack count", 12, -166, AuraShared, "showStackCount", true, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Click-through auras", 12, -188, AuraShared, "clickThroughAuras", false, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Show cooldown swipe", 200, -144, AuraShared, "showCooldownSwipe", true, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Swipe darkens on loss", 200, -166, AuraShared, "cooldownSwipeDarkenOnLoss", false, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Show cooldown text", 200, -188, AuraShared, "showCooldownText", true, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, master, "Dispel-type borders", 390, -144, AuraShared, "useDebuffTypeBorders", false, ApplyAuras))
 
     local layout = b:CollapsibleSection("a2_layout", "Caps & Icons", 466, true)
     local layoutW = layout._msuf2Width or ctx.width or 900
@@ -689,41 +747,41 @@ local function BuildAuras(ctx)
 
     LabelAt(layout, "Limits", layoutCol1, -38, layoutColW, "GameFontNormalSmall", T.colors.accent)
     LabelAt(layout, "Density", layoutCol3, -38, layoutColW, "GameFontNormalSmall", T.colors.accent)
-    ScopedSliderAt(ctx, layout, "Max Buffs", layoutCol1, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxBuffs", 8, ForceAuraCapsOverride, ApplyAuras)
-    ScopedSliderAt(ctx, layout, "Max Debuffs", layoutCol2, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxDebuffs", 15, ForceAuraCapsOverride, ApplyAuras)
-    ScopedSliderAt(ctx, layout, "Icons per row", layoutCol3, -64, 1, 20, 1, layoutSliderW, function() return AuraCaps() end, "perRow", 11, ForceAuraCapsOverride, ApplyAuras)
-    ScopedSliderAt(ctx, layout, "Block spacing", layoutCol4, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "splitSpacing", 0, ForceAuraCapsOverride, ApplyAuras)
+    Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Max Buffs", layoutCol1, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxBuffs", 8, ForceAuraCapsOverride, ApplyAuras))
+    Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Max Debuffs", layoutCol2, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxDebuffs", 15, ForceAuraCapsOverride, ApplyAuras))
+    Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Icons per row", layoutCol3, -64, 1, 20, 1, layoutSliderW, function() return AuraCaps() end, "perRow", 11, ForceAuraCapsOverride, ApplyAuras))
+    Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Block spacing", layoutCol4, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "splitSpacing", 0, ForceAuraCapsOverride, ApplyAuras))
 
     DividerAt(layout, -138, layoutPad, 32)
     LabelAt(layout, "Icon Layout", layoutCol1, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
     LabelAt(layout, "Rows", layoutCol3, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
-    ScopedSliderAt(ctx, layout, "Icon size", layoutCol1, -186, 12, 64, 1, layoutSliderW, function() return AuraLayout() end, "iconSize", 26, ForceAuraLayoutOverride, ApplyAuras)
-    ScopedSliderAt(ctx, layout, "Spacing", layoutCol2, -186, 0, 12, 1, layoutSliderW, function() return AuraLayout() end, "spacing", 2, ForceAuraLayoutOverride, ApplyAuras)
-    ScopedDropdownAt(ctx, layout, "Row layout", layoutCol3, -186, {
+    Track(layoutOverrideControls, ScopedSliderAt(ctx, layout, "Icon size", layoutCol1, -186, 12, 64, 1, layoutSliderW, function() return AuraLayout() end, "iconSize", 26, ForceAuraLayoutOverride, ApplyAuras))
+    Track(layoutOverrideControls, ScopedSliderAt(ctx, layout, "Spacing", layoutCol2, -186, 0, 12, 1, layoutSliderW, function() return AuraLayout() end, "spacing", 2, ForceAuraLayoutOverride, ApplyAuras))
+    Track(capsOverrideControls, ScopedDropdownAt(ctx, layout, "Row layout", layoutCol3, -186, {
         { value = "SEPARATE", text = "Separate rows" },
         { value = "SINGLE", text = "Single row (Mixed)" },
-    }, layoutDropdownW, function() return AuraCaps() end, "layoutMode", "SEPARATE", ForceAuraCapsOverride, ApplyAuras)
-    ScopedDropdownAt(ctx, layout, "Stack Anchor", layoutCol4, -186, AURA_STACK_ANCHORS, layoutDropdownW, function() return AuraCaps() end, "stackCountAnchor", "TOPRIGHT", ForceAuraCapsOverride, ApplyAuras)
+    }, layoutDropdownW, function() return AuraCaps() end, "layoutMode", "SEPARATE", ForceAuraCapsOverride, ApplyAuras))
+    Track(capsOverrideControls, ScopedDropdownAt(ctx, layout, "Stack Anchor", layoutCol4, -186, AURA_STACK_ANCHORS, layoutDropdownW, function() return AuraCaps() end, "stackCountAnchor", "TOPRIGHT", ForceAuraCapsOverride, ApplyAuras))
 
     DividerAt(layout, -260, layoutPad, 32)
     LabelAt(layout, "Growth", layoutCol1, -282, layoutColW, "GameFontNormalSmall", T.colors.accent)
     LabelAt(layout, "Wrapping & Sorting", layoutCol3, -282, layoutColW * 2 + layoutGap, "GameFontNormalSmall", T.colors.accent)
-    ValueDropdownAt(ctx, layout, "Buff Growth", layoutCol1, -308, AURA_GROWTH, layoutDropdownW,
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Buff Growth", layoutCol1, -308, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.buffGrowth or c.growth or "RIGHT" end,
-        function(v) ForceAuraCapsOverride(); AuraCaps().buffGrowth = v or "RIGHT"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Debuff Growth", layoutCol2, -308, AURA_GROWTH, layoutDropdownW,
+        function(v) ForceAuraCapsOverride(); AuraCaps().buffGrowth = v or "RIGHT"; ApplyAuras() end))
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Debuff Growth", layoutCol2, -308, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.debuffGrowth or c.growth or "RIGHT" end,
-        function(v) ForceAuraCapsOverride(); AuraCaps().debuffGrowth = v or "RIGHT"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Private Growth", layoutCol1, -392, AURA_GROWTH, layoutDropdownW,
+        function(v) ForceAuraCapsOverride(); AuraCaps().debuffGrowth = v or "RIGHT"; ApplyAuras() end))
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Private Growth", layoutCol1, -392, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.privateGrowth or c.growth or "RIGHT" end,
-        function(v) ForceAuraCapsOverride(); AuraCaps().privateGrowth = v or "RIGHT"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Buff wrap rows", layoutCol3, -308, AURA_ROW_WRAP, layoutDropdownW,
+        function(v) ForceAuraCapsOverride(); AuraCaps().privateGrowth = v or "RIGHT"; ApplyAuras() end))
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Buff wrap rows", layoutCol3, -308, AURA_ROW_WRAP, layoutDropdownW,
         function() local c = AuraCaps(); return c.buffRowWrap or c.rowWrap or "DOWN" end,
-        function(v) ForceAuraCapsOverride(); AuraCaps().buffRowWrap = v or "DOWN"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Debuff wrap rows", layoutCol4, -308, AURA_ROW_WRAP, layoutDropdownW,
+        function(v) ForceAuraCapsOverride(); AuraCaps().buffRowWrap = v or "DOWN"; ApplyAuras() end))
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Debuff wrap rows", layoutCol4, -308, AURA_ROW_WRAP, layoutDropdownW,
         function() local c = AuraCaps(); return c.debuffRowWrap or c.rowWrap or "DOWN" end,
-        function(v) ForceAuraCapsOverride(); AuraCaps().debuffRowWrap = v or "DOWN"; ApplyAuras() end)
-    ValueDropdownAt(ctx, layout, "Sort order", layoutCol3, -392, AURA_SORT_ORDER, layoutDropdownW * 2 + layoutGap,
+        function(v) ForceAuraCapsOverride(); AuraCaps().debuffRowWrap = v or "DOWN"; ApplyAuras() end))
+    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Sort order", layoutCol3, -392, AURA_SORT_ORDER, layoutDropdownW * 2 + layoutGap,
         function()
             local c = AuraCaps()
             if type(c.sortOrder) == "number" then return c.sortOrder end
@@ -734,13 +792,13 @@ local function BuildAuras(ctx)
             ForceAuraCapsOverride()
             AuraCaps().sortOrder = tonumber(v) or 0
             ApplyAuras()
-        end)
+        end))
 
     local visual = b:CollapsibleSection("a2_text_coloring", "Text Coloring", 520, false)
     LabelAt(visual, "Cooldown Timer Text", 12, -10, 240, "GameFontNormal", T.colors.text)
     W.Text(visual, "Blizzard native timer text keeps aura countdowns cheap; MSUF only applies the configured colors.", 12, -34, 650, T.colors.muted)
-    ToggleAt(ctx, visual, "Use Blizzard timer text (max performance)", 12, -66, AuraShared, "useBlizzardTimerText", true, ApplyAuras)
-    ToggleAt(ctx, visual, "Color aura timers by remaining time", 12, -92, G, "aurasCooldownTextUseBuckets", true, ApplyAuras)
+    Track(sharedOnlyControls, ToggleAt(ctx, visual, "Use Blizzard timer text (max performance)", 12, -66, AuraShared, "useBlizzardTimerText", true, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, visual, "Color aura timers by remaining time", 12, -92, G, "aurasCooldownTextUseBuckets", true, ApplyAuras))
 
     local preview = T.Panel(visual, nil, { 0.030, 0.040, 0.070, 0.62 }, T.colors.borderSoft)
     preview:SetPoint("TOPLEFT", visual, "TOPLEFT", 12, -124)
@@ -774,18 +832,18 @@ local function BuildAuras(ctx)
         if samples[3].box.value then samples[3].box.value:SetTextColor(buckets and urgR or safeR, buckets and urgG or safeG, buckets and urgB or safeB, 1) end
     end)
 
-    ColorAt(ctx, visual, "Safe", 12, -226, G, "aurasCooldownTextSafeColor", 1, 1, 1, ApplyAuras)
-    ColorAt(ctx, visual, "Warning", 174, -226, G, "aurasCooldownTextWarningColor", 1, 0.85, 0.2, ApplyAuras)
-    ColorAt(ctx, visual, "Urgent", 336, -226, G, "aurasCooldownTextUrgentColor", 1, 0.55, 0.1, ApplyAuras)
-    ColorAt(ctx, visual, "Stack count", 498, -226, G, "aurasStackCountColor", 1, 1, 1, ApplyAuras)
-    SliderAt(ctx, visual, "Safe (seconds)", 12, -270, 0, 600, 1, 190, G, "aurasCooldownTextSafeSeconds", 60, ApplyAuras)
-    SliderAt(ctx, visual, "Warning (<=)", 272, -270, 0, 30, 1, 190, G, "aurasCooldownTextWarningSeconds", 15, ApplyAuras)
-    SliderAt(ctx, visual, "Urgent (<=)", 532, -270, 0, 15, 1, 150, G, "aurasCooldownTextUrgentSeconds", 5, ApplyAuras)
-    SliderAt(ctx, visual, "Cooldown text size", 12, -330, 6, 32, 1, 190, AuraShared, "cooldownTextSize", 14, ApplyAuras)
-    SliderAt(ctx, visual, "Stack text size", 272, -330, 6, 32, 1, 190, AuraShared, "stackTextSize", 14, ApplyAuras)
+    Track(sharedOnlyControls, ColorAt(ctx, visual, "Safe", 12, -226, G, "aurasCooldownTextSafeColor", 1, 1, 1, ApplyAuras))
+    Track(sharedOnlyControls, ColorAt(ctx, visual, "Warning", 174, -226, G, "aurasCooldownTextWarningColor", 1, 0.85, 0.2, ApplyAuras))
+    Track(sharedOnlyControls, ColorAt(ctx, visual, "Urgent", 336, -226, G, "aurasCooldownTextUrgentColor", 1, 0.55, 0.1, ApplyAuras))
+    Track(sharedOnlyControls, ColorAt(ctx, visual, "Stack count", 498, -226, G, "aurasStackCountColor", 1, 1, 1, ApplyAuras))
+    Track(sharedOnlyControls, SliderAt(ctx, visual, "Safe (seconds)", 12, -270, 0, 600, 1, 190, G, "aurasCooldownTextSafeSeconds", 60, ApplyAuras))
+    Track(sharedOnlyControls, SliderAt(ctx, visual, "Warning (<=)", 272, -270, 0, 30, 1, 190, G, "aurasCooldownTextWarningSeconds", 15, ApplyAuras))
+    Track(sharedOnlyControls, SliderAt(ctx, visual, "Urgent (<=)", 532, -270, 0, 15, 1, 150, G, "aurasCooldownTextUrgentSeconds", 5, ApplyAuras))
+    Track(layoutOverrideControls, ScopedSliderAt(ctx, visual, "Cooldown text size", 12, -330, 6, 32, 1, 190, function() return AuraLayout() end, "cooldownTextSize", 14, ForceAuraLayoutOverride, ApplyAuras))
+    Track(layoutOverrideControls, ScopedSliderAt(ctx, visual, "Stack text size", 272, -330, 6, 32, 1, 190, function() return AuraLayout() end, "stackTextSize", 14, ForceAuraLayoutOverride, ApplyAuras))
     DividerAt(visual, -392)
     LabelAt(visual, "Pandemic Window", 16, -408, 240, "GameFontNormal", T.colors.text)
-    ValueToggleAt(ctx, visual, "Enable Pandemic Window", 12, -436,
+    Track(sharedOnlyControls, ValueToggleAt(ctx, visual, "Enable Pandemic Window", 12, -436,
         function() return GetPandemicMode() ~= "OFF" end,
         function(v)
             if v then
@@ -795,7 +853,7 @@ local function BuildAuras(ctx)
                 if mode ~= "OFF" then M.lastPandemicMode = mode end
                 SetPandemicMode("OFF")
             end
-        end)
+        end))
     local pandemicDD = ValueDropdownAt(ctx, visual, "Mode", 284, -420, PANDEMIC_MODES, 150,
         function()
             local mode = GetPandemicMode()
@@ -803,44 +861,32 @@ local function BuildAuras(ctx)
         end,
         function(v) SetPandemicMode(v or "PULSE") end)
     W.Text(visual, "Best-effort: fixed 30% remaining-duration threshold for all auras. Color is configured in Global Style > Colors.", 12, -468, 650, T.colors.muted)
-    M.AddRefresher(ctx, function()
-        SetControlEnabled(pandemicDD, GetPandemicMode() ~= "OFF")
-    end)
 
     local private = b:CollapsibleSection("a2_private", "Private Auras", 168, false)
-    TogglePillAt(ctx, private, "Enabled", 12, -10, 90, AuraShared, "privateAurasEnabled", true, ApplyAuras)
+    Track(sharedOnlyControls, TogglePillAt(ctx, private, "Enabled", 12, -10, 90, AuraShared, "privateAurasEnabled", true, ApplyAuras))
     local privateShow = ToggleAt(ctx, private, "Show (Player)", 12, -40, AuraShared, "showPrivateAurasPlayer", true, ApplyAuras)
     local privateMax = SliderAt(ctx, private, "Max", 340, -34, 0, 12, 1, 150, AuraShared, "privateAuraMaxPlayer", 4, ApplyAuras)
     local privateBorder = SliderAt(ctx, private, "Border thickness", 520, -34, 0, 10, 0.5, 150, AuraShared, "privateAuraBorderScale", 3, ApplyAuras)
     local privateGrow = DropdownAt(ctx, private, "Grow Direction", 12, -92, AURA_GROWTH, 220, AuraShared, "privateGrowth", "RIGHT", ApplyAuras)
-    M.AddRefresher(ctx, function()
-        local shared = AuraShared()
-        local enabled = shared.privateAurasEnabled ~= false
-        local player = enabled and shared.showPrivateAurasPlayer == true
-        SetControlEnabled(privateShow, enabled)
-        SetControlEnabled(privateMax, player)
-        SetControlEnabled(privateBorder, player)
-        SetControlEnabled(privateGrow, enabled)
-    end)
 
     local filters = b:CollapsibleSection("a2_filters", "Aura Filters & Sorting", 300, false)
     LabelAt(filters, "Include", 12, -10, 140, "GameFontNormal", T.colors.accent)
-    ScopedToggleAt(ctx, filters, "Include boss buffs", 12, -34, AuraBuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Include boss debuffs", 12, -62, AuraDebuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras)
-    ToggleAt(ctx, filters, "Show Sated/Exhaustion", 12, -90, AuraShared, "showSated", true, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Include stealable buffs", 12, -118, AuraBuffFilters, "includeStealable", false, ForceAuraFilterOverride, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Include dispellable debuffs", 12, -146, AuraDebuffFilters, "includeDispellable", false, ForceAuraFilterOverride, ApplyAuras)
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Include boss buffs", 12, -34, AuraBuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Include boss debuffs", 12, -62, AuraDebuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(sharedOnlyControls, ToggleAt(ctx, filters, "Show Sated/Exhaustion", 12, -90, AuraShared, "showSated", true, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Include stealable buffs", 12, -118, AuraBuffFilters, "includeStealable", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Include dispellable debuffs", 12, -146, AuraDebuffFilters, "includeDispellable", false, ForceAuraFilterOverride, ApplyAuras))
     LabelAt(filters, "Hard filters", 380, -10, 160, "GameFontNormal", T.colors.accent)
-    ScopedToggleAt(ctx, filters, "Only show boss auras", 380, -34, AuraFilters, "onlyBossAuras", false, ForceAuraFilterOverride, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Only show IMPORTANT buffs", 380, -62, AuraBuffFilters, "onlyImportant", false, ForceAuraFilterOverride, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Only show IMPORTANT debuffs", 380, -90, AuraDebuffFilters, "onlyImportant", false, ForceAuraFilterOverride, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Dispel: Magic", 380, -118, AuraDebuffFilters, "dispelMagic", false, ForceAuraFilterOverride, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Dispel: Curse", 380, -146, AuraDebuffFilters, "dispelCurse", false, ForceAuraFilterOverride, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Dispel: Poison", 540, -118, AuraDebuffFilters, "dispelPoison", false, ForceAuraFilterOverride, ApplyAuras)
-    ScopedToggleAt(ctx, filters, "Dispel: Disease", 540, -146, AuraDebuffFilters, "dispelDisease", false, ForceAuraFilterOverride, ApplyAuras)
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Only show boss auras", 380, -34, AuraFilters, "onlyBossAuras", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Only show IMPORTANT buffs", 380, -62, AuraBuffFilters, "onlyImportant", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Only show IMPORTANT debuffs", 380, -90, AuraDebuffFilters, "onlyImportant", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Dispel: Magic", 380, -118, AuraDebuffFilters, "dispelMagic", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Dispel: Curse", 380, -146, AuraDebuffFilters, "dispelCurse", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Dispel: Poison", 540, -118, AuraDebuffFilters, "dispelPoison", false, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Dispel: Disease", 540, -146, AuraDebuffFilters, "dispelDisease", false, ForceAuraFilterOverride, ApplyAuras))
     DividerAt(filters, -178)
-    SliderAt(ctx, filters, "Sated threshold", 30, -202, 0, 600, 5, 200, AuraShared, "satedShowAtSeconds", 0, ApplyAuras)
-    ValueDropdownAt(ctx, filters, "Sort order", 380, -202, AURA_SORT_ORDER, 270,
+    Track(sharedOnlyControls, SliderAt(ctx, filters, "Sated threshold", 30, -202, 0, 600, 5, 200, AuraShared, "satedShowAtSeconds", 0, ApplyAuras))
+    Track(capsOverrideControls, ValueDropdownAt(ctx, filters, "Sort order", 380, -202, AURA_SORT_ORDER, 270,
         function()
             local c = AuraCaps()
             if type(c.sortOrder) == "number" then return c.sortOrder end
@@ -851,7 +897,7 @@ local function BuildAuras(ctx)
             ForceAuraCapsOverride()
             AuraCaps().sortOrder = tonumber(v) or 0
             ApplyAuras()
-        end)
+        end))
 
     local ignore = b:CollapsibleSection("a2_ignore", "Global Ignore List", 228, false)
     local ignoreLabel = LabelAt(ignore, "", 170, -10, 260, "GameFontHighlightSmall", T.colors.muted)
@@ -870,6 +916,7 @@ local function BuildAuras(ctx)
             end
             ApplyAuras()
             RefreshScopeButtons()
+            RefreshAurasPage(ctx)
         end)
     local ignoreControls = {}
     for i = 1, #AURA_IGNORE_CATEGORIES do
@@ -911,12 +958,29 @@ local function BuildAuras(ctx)
     end
     local expiry = SliderAt(ctx, reminders, "Expiry Warning", 12, -220, 0, 600, 5, 340, AuraShared, "reminderThreshold", 0, function() MarkReminderDirty(); ApplyAuras() end)
     local grow = DropdownAt(ctx, reminders, "Grow Direction", 500, -200, AURA_GROWTH, 190, AuraShared, "reminderGrowth", "RIGHT", function() MarkReminderDirty(); ApplyAuras() end)
+
     M.AddRefresher(ctx, function()
-        local enabled = AuraShared().showReminders ~= false
-        SetControlEnabled(remMaster, true)
-        for i = 1, #reminderControls do SetControlEnabled(reminderControls[i], enabled) end
-        SetControlEnabled(expiry, enabled)
-        SetControlEnabled(grow, enabled)
+        local sharedScope = IsSharedScope()
+        W.SetControlsEnabled(sharedOnlyControls, sharedScope)
+        W.SetControlsEnabled(filterOverrideControls, sharedScope or UnitOverrideEnabled("overrideFilters"))
+        W.SetControlsEnabled(capsOverrideControls, sharedScope or UnitOverrideEnabled("overrideSharedLayout"))
+        W.SetControlsEnabled(layoutOverrideControls, sharedScope or UnitOverrideEnabled("overrideLayout"))
+
+        SetControlEnabled(pandemicDD, sharedScope and GetPandemicMode() ~= "OFF")
+
+        local shared = AuraShared()
+        local privateEnabled = sharedScope and shared.privateAurasEnabled ~= false
+        local privatePlayer = privateEnabled and shared.showPrivateAurasPlayer == true
+        SetControlEnabled(privateShow, privateEnabled)
+        SetControlEnabled(privateMax, privatePlayer)
+        SetControlEnabled(privateBorder, privatePlayer)
+        SetControlEnabled(privateGrow, privateEnabled)
+
+        local remindersEnabled = sharedScope and shared.showReminders ~= false
+        SetControlEnabled(remMaster, sharedScope)
+        for i = 1, #reminderControls do SetControlEnabled(reminderControls[i], remindersEnabled) end
+        SetControlEnabled(expiry, remindersEnabled)
+        SetControlEnabled(grow, remindersEnabled)
     end)
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
@@ -960,4 +1024,4 @@ AdvancedPage.ScopedDropdownAt = ScopedDropdownAt
 AdvancedPage.TogglePillAt = TogglePillAt
 AdvancedPage.SetControlEnabled = SetControlEnabled
 
-M.RegisterPage("auras2", { title = "MSUF Unit Auras", build = BuildAuras, version = 6 })
+M.RegisterPage("auras2", { title = "MSUF Unit Auras", build = BuildAuras, version = 7 })

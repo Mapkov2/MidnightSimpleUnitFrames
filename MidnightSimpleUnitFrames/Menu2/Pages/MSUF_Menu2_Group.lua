@@ -246,7 +246,7 @@ local function RefreshGFPreview()
     if gf and type(gf.RefreshPreviewBox) == "function" then gf.RefreshPreviewBox() end
     if gf and type(gf.ResizePreviewContainer) == "function" then gf.ResizePreviewContainer() end
     if type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews() end
-    if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
+    if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey, true) end
 end
 
 local function Conf(kind)
@@ -449,12 +449,6 @@ local function ScopeSection(ctx, builder)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(builder.width, h)
     sec._msuf2Width = builder.width
-
-    local line = sec:CreateTexture(nil, "ARTWORK")
-    line:SetPoint("BOTTOMLEFT", sec, "BOTTOMLEFT", 0, 0)
-    line:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", 0, 0)
-    line:SetHeight(1)
-    line:SetColorTexture(0.22, 0.42, 0.70, 0.42)
 
     builder.y = builder.y - h - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
@@ -1543,6 +1537,29 @@ local function SetOptionsEnabled(controls, enabled)
     W.SetControlsEnabled(controls, enabled)
 end
 
+local function ForEachGroupPageControl(parent, callback)
+    if not (parent and parent.GetChildren and type(callback) == "function") then return end
+    local children = { parent:GetChildren() }
+    for i = 1, #children do
+        local child = children[i]
+        if child and child._msuf2ControlKind and not child._msuf2GroupFrameGateAlwaysEnabled then
+            callback(child)
+        end
+        ForEachGroupPageControl(child, callback)
+    end
+end
+
+local function ApplyScopeEnabledGate(ctx)
+    local wrapper = ctx and ctx.wrapper
+    if not wrapper then return end
+    local scope = CurrentScope()
+    local enabled = Bool(scope, "enabled", false)
+    local gateKey = "groupFrameEnabled"
+    ForEachGroupPageControl(wrapper, function(control)
+        W.SetControlGateEnabled(control, gateKey, enabled)
+    end)
+end
+
 GroupPage.SCOPE_VALUES = SCOPE_VALUES
 GroupPage.GROWTH_VALUES = GROWTH_VALUES
 GroupPage.HEALTH_MODES = HEALTH_MODES
@@ -1605,3 +1622,4 @@ GroupPage.BindNestedSlider = BindNestedSlider
 GroupPage.BindNestedDropdown = BindNestedDropdown
 GroupPage.SetOptionEnabled = SetOptionEnabled
 GroupPage.SetOptionsEnabled = SetOptionsEnabled
+GroupPage.ApplyScopeEnabledGate = ApplyScopeEnabledGate

@@ -500,10 +500,20 @@ local function SetTextEnabledColor(fontString, enabled)
     fontString:SetTextColor(c[1], c[2], c[3], c[4] or 1)
 end
 
--- Shared by all Menu2 pages so disabled dependent options do not drift visually.
-function W.SetControlEnabled(control, enabled)
+local function HasDisableGate(control)
+    local gates = control and control._msuf2DisableGates
+    if type(gates) ~= "table" then return false end
+    for _, disabled in pairs(gates) do
+        if disabled then return true end
+    end
+    return false
+end
+
+local function ApplyControlEnabled(control)
     if not control then return end
-    enabled = enabled and true or false
+    local enabled = (control._msuf2DesiredEnabled ~= false) and not HasDisableGate(control)
+    if control._msuf2AppliedEnabled == enabled then return end
+    control._msuf2AppliedEnabled = enabled
 
     SetEnabledState(control, enabled)
     if control._msuf2ControlKind == "slider" then
@@ -544,9 +554,35 @@ function W.SetControlEnabled(control, enabled)
     end
 end
 
+-- Shared by all Menu2 pages so disabled dependent options do not drift visually.
+function W.SetControlEnabled(control, enabled)
+    if not control then return end
+    control._msuf2DesiredEnabled = enabled and true or false
+    ApplyControlEnabled(control)
+end
+
+function W.SetControlGateEnabled(control, gateKey, enabled)
+    if not control then return end
+    gateKey = tostring(gateKey or "default")
+    control._msuf2DisableGates = control._msuf2DisableGates or {}
+    control._msuf2DisableGates[gateKey] = not (enabled and true or false)
+    if control._msuf2DesiredEnabled == nil then
+        local current = true
+        if control.IsEnabled then current = control:IsEnabled() and true or false end
+        control._msuf2DesiredEnabled = current
+    end
+    ApplyControlEnabled(control)
+end
+
 function W.SetControlsEnabled(controls, enabled)
     for i = 1, #(controls or {}) do
         W.SetControlEnabled(controls[i], enabled)
+    end
+end
+
+function W.SetControlsGateEnabled(controls, gateKey, enabled)
+    for i = 1, #(controls or {}) do
+        W.SetControlGateEnabled(controls[i], gateKey, enabled)
     end
 end
 
@@ -636,6 +672,7 @@ end
 function W.Button(section, label, width)
     local x, y = NextRow(section, 30)
     local btn = T.Button(section, Tr(label or ""), width or 160, 24)
+    btn._msuf2ControlKind = "button"
     RegisterSearchObject(btn, label, "button")
     btn:SetPoint("TOPLEFT", x, y)
     return btn

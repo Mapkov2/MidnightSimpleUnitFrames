@@ -92,6 +92,7 @@ local BindNestedSlider = GP.BindNestedSlider
 local BindNestedDropdown = GP.BindNestedDropdown
 local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
+local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local function BuildGFIndicators(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -1129,7 +1130,12 @@ local function BuildGFIndicators(ctx)
         end
     end)
 
+    if type(ApplyScopeEnabledGate) == "function" then
+        M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)
+        ApplyScopeEnabledGate(ctx)
+    end
+
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 10 })
+M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 11 })

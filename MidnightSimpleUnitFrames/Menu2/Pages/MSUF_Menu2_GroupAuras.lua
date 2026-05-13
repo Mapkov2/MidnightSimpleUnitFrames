@@ -85,6 +85,7 @@ local BindNestedSlider = GP.BindNestedSlider
 local BindNestedDropdown = GP.BindNestedDropdown
 local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
+local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -947,7 +948,12 @@ local function BuildGFAuras(ctx)
     BindNestedToggle(ctx, W.Toggle(utilities, "Sort by duration"), function() return AurasRoot(CurrentScope()) end, "sortByDuration", false, "visual")
     BindNestedToggle(ctx, W.Toggle(utilities, "Prefer player auras"), function() return AurasRoot(CurrentScope()) end, "preferPlayer", true, "visual")
 
+    if type(ApplyScopeEnabledGate) == "function" then
+        M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)
+        ApplyScopeEnabledGate(ctx)
+    end
+
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_auras", { title = "MSUF Group Buffs & Debuffs", build = BuildGFAuras, version = 11 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Buffs & Debuffs", build = BuildGFAuras, version = 12 })

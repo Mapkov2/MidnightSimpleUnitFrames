@@ -82,6 +82,7 @@ local BindNestedSlider = GP.BindNestedSlider
 local BindNestedDropdown = GP.BindNestedDropdown
 local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
+local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local function BuildGFLayout(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -98,6 +99,7 @@ local function BuildGFLayout(ctx)
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
     local enableGroup = BindScopeToggle(ctx, W.Toggle(general, "Enable group frames"), "enabled", false, "rebuild")
+    enableGroup._msuf2GroupFrameGateAlwaysEnabled = true
     local showPlayer = BindScopeToggle(ctx, W.Toggle(general, "Show player"), "showPlayer", true, "rebuild")
     local showSolo = BindScopeToggle(ctx, W.Toggle(general, "Show solo"), "showSolo", false, "rebuild")
     local reverseFill = BindScopeToggle(ctx, W.Toggle(general, "Reverse fill direction"), "reverseFill", false, "visual")
@@ -556,7 +558,12 @@ local function BuildGFLayout(ctx)
     M.AddRefresher(ctx, refreshTooltipState)
     refreshTooltipState()
 
+    if type(ApplyScopeEnabledGate) == "function" then
+        M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)
+        ApplyScopeEnabledGate(ctx)
+    end
+
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 12 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 13 })

@@ -1,0 +1,11 @@
+## Interface: 120000, 120001, 120005, 120007
+## Title: Midnight Simple Unit Frames - Profiler
+## Notes: Drop-in Lua profiler for Midnight Simple Unit Frames.
+## Author: Mapko
+## Version: 1.0.0
+## Category: Development Tools
+## LoadOnDemand: 1
+## SavedVariables: MSUF_ProfilerDB
+## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+
+MSUF_Profiler.lua

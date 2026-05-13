@@ -499,6 +499,16 @@ local function UpdateSearchPlaceholder(searchBox)
     end
 end
 
+local function CurrentMenuLocaleKey()
+    if type(ns.GetEffectiveLocale) == "function" then
+        local ok, locale = pcall(ns.GetEffectiveLocale)
+        if ok and locale then return tostring(locale) end
+    end
+    if ns.LOCALE then return tostring(ns.LOCALE) end
+    if type(_G.GetLocale) == "function" then return tostring(_G.GetLocale()) end
+    return ""
+end
+
 local function UpdateNav(key)
     if not M.navButtons then return end
     local group = M.navGroupForKey and M.navGroupForKey[key]
@@ -506,20 +516,23 @@ local function UpdateNav(key)
         M.navHeaderState[group] = true
         if M.nav and M.nav._msuf2NavReflow then M.nav:_msuf2NavReflow() end
     end
+    local localeKey = CurrentMenuLocaleKey()
+    local labelsDirty = M._msuf2NavLocaleKey ~= localeKey
+    M._msuf2NavLocaleKey = localeKey
     for pageKey, btn in pairs(M.navButtons) do
-        if btn._msuf2RawLabel and btn.SetText then
+        if labelsDirty and btn._msuf2RawLabel and btn.SetText then
             btn:SetText(M.Tr(btn._msuf2RawLabel))
         end
         if btn.SetActive then btn:SetActive(pageKey == key) end
     end
-    if M.navHeaders then
+    if labelsDirty and M.navHeaders then
         for _, btn in pairs(M.navHeaders) do
             if btn._msuf2RawLabel and btn.SetText then
                 btn:SetText(string.upper(M.Tr(btn._msuf2RawLabel)))
             end
         end
     end
-    if M.nav and M.nav.searchBox then
+    if labelsDirty and M.nav and M.nav.searchBox then
         UpdateSearchPlaceholder(M.nav.searchBox)
     end
 end
@@ -550,11 +563,17 @@ local function ApplyBossPagePreviewFallback(active, reason)
 end
 
 local IsEditModeActive
+local lastBossPreviewActive
+local lastBossPreviewFn
 
-local function SyncBossPagePreviewForKey(key)
+local function SyncBossPagePreviewForKey(key, force)
     local active = (key == "uf_boss")
         and M.frame and M.frame.IsShown and M.frame:IsShown()
     local fn = M.UnitPage and M.UnitPage.SetBossPagePreviewActive
+    if not force and lastBossPreviewActive == active and lastBossPreviewFn == fn then return end
+    lastBossPreviewActive = active
+    lastBossPreviewFn = fn
+
     if type(fn) == "function" then
         local ok = pcall(fn, active and true or false)
         if ok then
@@ -609,22 +628,41 @@ local function RestoreGFHeaders(gf)
     if gf and type(gf.UpdateGroupVisibility) == "function" then gf.UpdateGroupVisibility() end
 end
 
-local function SyncGroupPagePreviewForKey(key)
+local lastGFPreviewActive
+local lastGFPreviewKind
+local lastGFPreviewEditMode
+local lastGFPreviewRuntime
+
+local function SyncGroupPagePreviewForKey(key, force)
     local frameVisible = M.frame and M.frame.IsShown and M.frame:IsShown()
     local active = frameVisible and IsGroupPageKey(key)
     local gf = ns and ns.GF
     local kind = CurrentGFMenuScope()
+    local editMode = IsEditModeActive() and true or false
+    local hasRuntime = gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function"
+    if not force
+        and lastGFPreviewActive == active
+        and lastGFPreviewKind == kind
+        and lastGFPreviewEditMode == editMode
+        and lastGFPreviewRuntime == hasRuntime
+    then
+        return
+    end
+    lastGFPreviewActive = active
+    lastGFPreviewKind = kind
+    lastGFPreviewEditMode = editMode
+    lastGFPreviewRuntime = hasRuntime
 
     if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then
         _G.MSUF_GF_EM2_SetActivePreviewKind(active and kind or nil)
     end
 
-    if IsEditModeActive() then
+    if editMode then
         SetGFPagePreviewFlag(false)
         return
     end
 
-    if not (gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function") then
+    if not hasRuntime then
         SetGFPagePreviewFlag(active, kind)
         return
     end
@@ -3399,9 +3437,13 @@ function M.SelectPage(key)
         return true
     end
 
-    HideAllCachedPages()
-    SyncBossPagePreviewForKey(nil)
-    SyncGroupPagePreviewForKey(IsGroupPageKey(key) and key or nil)
+    local previousKey = M.activeKey
+    local previous = previousKey and M.cache and M.cache[previousKey]
+    if previous and previous.wrapper and previous.wrapper.Hide then
+        previous.wrapper:Hide()
+    else
+        HideAllCachedPages()
+    end
 
     local entry = BuildPageEntry(key, false)
     if not entry then return false end
