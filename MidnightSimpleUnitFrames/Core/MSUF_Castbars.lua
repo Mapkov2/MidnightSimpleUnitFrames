@@ -7,6 +7,20 @@ local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local string_format = string.format
 local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 local FONT_LIST = _G.MSUF_FONT_LIST
+
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 local ResolveFontPath = _G.MSUF_ResolveFontPath or function(path)
     if type(_G.MSUF_NormalizeFontPath) == "function" then
         return _G.MSUF_NormalizeFontPath(path)
@@ -637,9 +651,9 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
         local g       = MSUF_DB.general or {}
         local active  = g.castbarPlayerPreviewEnabled and true or false
         if active then
-            btn:SetText("Castbar Edit Mode: ON")
+            btn:SetText(Tr("Castbar Edit Mode: ON"))
         else
-            btn:SetText("Castbar Edit Mode: OFF")
+            btn:SetText(Tr("Castbar Edit Mode: OFF"))
     end
      end
     btn:SetScript("OnClick", function(self)
@@ -673,9 +687,9 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
     end
         g.castbarPlayerPreviewEnabled = not (g.castbarPlayerPreviewEnabled and true or false)
         if g.castbarPlayerPreviewEnabled then
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r drag player/target/focus castbars with the mouse.")
+            print(Tr("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r drag player/target/focus castbars with the mouse."))
         else
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cffff0000OFF|r.")
+            print(Tr("|cffffd700MSUF:|r Castbar Edit Mode |cffff0000OFF|r."))
     end
         if MSUF_UpdatePlayerCastbarPreview then
             MSUF_UpdatePlayerCastbarPreview()

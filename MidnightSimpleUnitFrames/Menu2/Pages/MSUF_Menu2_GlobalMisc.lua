@@ -285,8 +285,8 @@ local function BuildMisc(ctx)
     local rangeToggles = {}
     local bossExtras = {}
 
-    W.LabelAt(range, "Unit frames", rangeLeftX, -38, rangeLeftW, "GameFontNormalSmall", T.colors.text)
-    W.LabelAt(range, "Effect", rangeRightX, -38, rangeRightW, "GameFontNormalSmall", T.colors.text)
+    W.LabelAt(range, "Unit frames", rangeLeftX, -38, rangeLeftW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(range, "Effect", rangeRightX, -38, rangeRightW, "GameFontNormalSmall", T.colors.accent)
 
     for index, spec in ipairs({
         { unit = "target", key = "rangeFadeEnabled", label = "Target range fade" },
@@ -315,7 +315,7 @@ local function BuildMisc(ctx)
             end)
     end
 
-    W.LabelAt(range, "Boss children", rangeLeftX, -148, rangeLeftW, "GameFontNormalSmall", T.colors.text)
+    W.LabelAt(range, "Boss children", rangeLeftX, -148, rangeLeftW, "GameFontNormalSmall", T.colors.accent)
 
     local affects = W.Dropdown(range, "Range fade affects", {
         { value = "frame", text = "Frame" },
@@ -378,4 +378,4 @@ local function BuildMisc(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 4 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 5 })

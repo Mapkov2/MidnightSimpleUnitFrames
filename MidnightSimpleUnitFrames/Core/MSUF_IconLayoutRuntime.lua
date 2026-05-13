@@ -151,6 +151,35 @@ local function MSUF_ApplyRaidMarkerLayout(f)
     ns.Icons._layout.Apply(f.raidMarkerIcon, f, size, point, relPoint, ox, oy)
 end
 
+local function RefreshFrames(applyFn, fieldName)
+    if type(applyFn) ~= "function" then return end
+    local each = _G.MSUF_ForEachUnitFrame
+    if type(each) == "function" then
+        each(function(frame)
+            if frame and frame[fieldName] then
+                applyFn(frame)
+            end
+        end)
+        return
+    end
+
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) ~= "table" then return end
+    for _, frame in pairs(frames) do
+        if frame and frame[fieldName] then
+            applyFn(frame)
+        end
+    end
+end
+
+function _G.MSUF_RefreshLeaderIconFrames()
+    RefreshFrames(MSUF_ApplyLeaderIconLayout, "leaderIcon")
+end
+
+function _G.MSUF_RefreshRaidMarkerFrames()
+    RefreshFrames(MSUF_ApplyRaidMarkerLayout, "raidMarkerIcon")
+end
+
 _G.MSUF_ApplyLeaderIconLayout = MSUF_ApplyLeaderIconLayout
 _G.MSUF_ApplyRaidMarkerLayout = MSUF_ApplyRaidMarkerLayout
 ns.Icons.ApplyLeaderIconLayout = MSUF_ApplyLeaderIconLayout

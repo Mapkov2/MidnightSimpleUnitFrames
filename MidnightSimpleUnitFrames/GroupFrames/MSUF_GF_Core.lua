@@ -232,6 +232,7 @@ local function _GFInstallAttrHook(child)
             self._msufGFNameColorKey       = nil
             self._msufGFStatusState        = nil
             self._msufGFStatusDirty        = nil
+            if GF.ResetOfflineHiddenFrame then GF.ResetOfflineHiddenFrame(self) end
             -- Hide any visible stripe immediately so it doesn't bleed
             -- into the new occupant's frame for one render cycle.
             local stripe = self._msufGFDebuffStripe
@@ -1039,6 +1040,11 @@ function GF.UpdateButton(f, unit)
     if not f or not unit then return end
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
+    if f._msufGFOfflineActive and (_G.MSUF_InCombat ~= true or f._msufGFOfflineCombatAllowed)
+        and GF.UpdateOfflineHiddenFrame and GF.UpdateOfflineHiddenFrame(f, unit)
+    then
+        return
+    end
 
     if not UnitExists(unit) then
         if f.nameText then f.nameText:SetText("") end

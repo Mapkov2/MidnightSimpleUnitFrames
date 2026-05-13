@@ -717,7 +717,7 @@ local function BuildText(ctx, builder, unit)
     end
 
     local function SectionLabel(parent, text, x, y)
-        local fs = T.Font(parent, "GameFontNormalSmall", text, T.colors.text)
+        local fs = T.Font(parent, "GameFontNormalSmall", text, T.colors.accent)
         fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         return fs
     end
@@ -733,7 +733,7 @@ local function BuildText(ctx, builder, unit)
     end
 
     local function PreviewText(parent, text, x, y, width)
-        local label = W.Text(parent, "Preview", x, y, width, T.colors.dim)
+        local label = W.Text(parent, "Preview", x, y, width, T.colors.accent)
         local value = T.Font(parent, "GameFontNormalSmall", text, T.colors.text)
         value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 20)
         value:SetWidth(width or 220)
@@ -1400,7 +1400,7 @@ end
 local function BuildCastbar(ctx, builder, unit)
     local fields = CASTBAR_FIELDS[unit]
     if not fields then return end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", 116, false)
+    local sec = builder:CollapsibleSection("castbar", "Castbar", 136, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local rightX = math.max(340, sectionW - 236)
@@ -1789,6 +1789,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 14,
+        version = 15,
     })
 end

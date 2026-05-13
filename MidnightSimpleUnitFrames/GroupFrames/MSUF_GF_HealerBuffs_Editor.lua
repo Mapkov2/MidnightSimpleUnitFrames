@@ -23,6 +23,19 @@ local FAMILY_DATA = HB.FAMILY_DATA
 local FAMILY_BY_ID = HB.FAMILY_BY_ID
 local SPEC_PRESETS = HB.SPEC_PRESETS
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 ------------------------------------------------------------------------
 -- Editor frame (slash command accessible)
 ------------------------------------------------------------------------
@@ -207,7 +220,7 @@ local function CreateEditor()
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -12)
-    title:SetText("Healer Buff Placement")
+    title:SetText(Tr("Healer Buff Placement"))
 
     -- Close button
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
@@ -221,7 +234,7 @@ local function CreateEditor()
     enableCheck:SetSize(26, 26)
     enableCheck.text = enableCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     enableCheck.text:SetPoint("LEFT", enableCheck, "RIGHT", 4, 0)
-    enableCheck.text:SetText("Enable Healer Buff Indicators")
+    enableCheck.text:SetText(Tr("Enable Healer Buff Indicators"))
     enableCheck:SetScript("OnClick", function(self)
         local hbConf = HB.EnsureConf(f._kind)
         hbConf.enabled = self:GetChecked() == true
@@ -236,7 +249,7 @@ local function CreateEditor()
     presetCheck:SetSize(26, 26)
     presetCheck.text = presetCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     presetCheck.text:SetPoint("LEFT", presetCheck, "RIGHT", 4, 0)
-    presetCheck.text:SetText("Auto-detect from current spec")
+    presetCheck.text:SetText(Tr("Auto-detect from current spec"))
     presetCheck:SetScript("OnClick", function(self)
         local hbConf = HB.EnsureConf(f._kind)
         hbConf.useSpecPreset = self:GetChecked() == true
@@ -249,7 +262,7 @@ local function CreateEditor()
     -- Icon Size slider
     local sizeLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     sizeLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, yOff)
-    sizeLabel:SetText("Icon Size")
+    sizeLabel:SetText(Tr("Icon Size"))
     local sizeSlider = CreateFrame("Slider", nil, f, "OptionsSliderTemplate")
     sizeSlider:SetPoint("TOPLEFT", f, "TOPLEFT", 100, yOff - 2)
     sizeSlider:SetSize(180, 16)
@@ -267,7 +280,7 @@ local function CreateEditor()
     -- Spacing slider
     local spLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     spLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 16, yOff)
-    spLabel:SetText("Spacing")
+    spLabel:SetText(Tr("Spacing"))
     local spSlider = CreateFrame("Slider", nil, f, "OptionsSliderTemplate")
     spSlider:SetPoint("TOPLEFT", f, "TOPLEFT", 100, yOff - 2)
     spSlider:SetSize(180, 16)
@@ -285,7 +298,7 @@ local function CreateEditor()
     -- Slot container (scrollable list of families)
     local slotLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     slotLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 12, yOff)
-    slotLabel:SetText("Active Spell Indicators:")
+    slotLabel:SetText(Tr("Active Spell Indicators:"))
     yOff = yOff - 20
 
     local slotContainer = CreateFrame("Frame", nil, f)
@@ -297,12 +310,12 @@ local function CreateEditor()
     local addBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     addBtn:SetSize(120, 22)
     addBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 10)
-    addBtn:SetText("Add Spell...")
+    addBtn:SetText(Tr("Add Spell..."))
     addBtn:SetScript("OnClick", function()
         -- Simple: cycle through families, add first not-yet-added
         local hbConf = HB.EnsureConf(f._kind)
         if hbConf.useSpecPreset then
-            print("|cff888888MSUF:|r Switch to manual mode first (uncheck auto-detect)")
+            print(Tr("|cff888888MSUF:|r Switch to manual mode first (uncheck auto-detect)"))
             return
         end
         local existing = {}
@@ -315,21 +328,21 @@ local function CreateEditor()
                 return
             end
         end
-        print("|cff888888MSUF:|r All spell families already added")
+        print(Tr("|cff888888MSUF:|r All spell families already added"))
     end)
 
     -- Party/Raid toggle
     local toggleBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     toggleBtn:SetSize(80, 22)
     toggleBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
-    toggleBtn:SetText("Party")
+    toggleBtn:SetText(Tr("Party"))
     toggleBtn:SetScript("OnClick", function(self)
         if f._kind == "party" then
             f._kind = "raid"
-            self:SetText("Raid")
+            self:SetText(Tr("Raid"))
         else
             f._kind = "party"
-            self:SetText("Party")
+            self:SetText(Tr("Party"))
         end
         RefreshEditor()
     end)

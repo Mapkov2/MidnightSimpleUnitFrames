@@ -881,17 +881,43 @@ local function BuildGFAuras(ctx)
         end
     end)
 
-    local priv = b:CollapsibleSection("priv", "Private Auras", 390, false)
+    local priv = b:CollapsibleSection("priv", "Private Auras", 298, false)
     local privEnable = BindNestedToggle(ctx, W.Toggle(priv, "Enable private auras"), function() return PrivateAuras(CurrentScope()) end, "enabled", true, "visual")
+    local privMax = BindNestedSlider(ctx, W.Slider(priv, "Private aura max", 0, 12, 1, 300), function() return PrivateAuras(CurrentScope()) end, "max", 4, "visual")
+    local privSize = BindNestedSlider(ctx, W.Slider(priv, "Private aura size", 8, 64, 1, 300), function() return PrivateAuras(CurrentScope()) end, "size", 20, "geometry")
+    local privAnchor = BindNestedDropdown(ctx, W.Dropdown(priv, "Private aura anchor", AURA_ANCHORS, 220), function() return PrivateAuras(CurrentScope()) end, "anchor", "TOPRIGHT", "geometry")
+    local privX = BindNestedSlider(ctx, W.Slider(priv, "Private aura X", -100, 100, 1, 300), function() return PrivateAuras(CurrentScope()) end, "x", 0, "geometry")
+    local privY = BindNestedSlider(ctx, W.Slider(priv, "Private aura Y", -100, 100, 1, 300), function() return PrivateAuras(CurrentScope()) end, "y", 0, "geometry")
+    local privCountdown = BindNestedToggle(ctx, W.Toggle(priv, "Show countdown"), function() return PrivateAuras(CurrentScope()) end, "showCountdown", true, "visual")
+    local privNumbers = BindNestedToggle(ctx, W.Toggle(priv, "Show numbers"), function() return PrivateAuras(CurrentScope()) end, "showNumbers", false, "visual")
     local privControls = {
-        BindNestedSlider(ctx, W.Slider(priv, "Private aura max", 0, 12, 1, 300), function() return PrivateAuras(CurrentScope()) end, "max", 4, "visual"),
-        BindNestedSlider(ctx, W.Slider(priv, "Private aura size", 8, 64, 1, 300), function() return PrivateAuras(CurrentScope()) end, "size", 20, "geometry"),
-        BindNestedDropdown(ctx, W.Dropdown(priv, "Private aura anchor", AURA_ANCHORS, 220), function() return PrivateAuras(CurrentScope()) end, "anchor", "TOPRIGHT", "geometry"),
-        BindNestedSlider(ctx, W.Slider(priv, "Private aura X", -100, 100, 1, 300), function() return PrivateAuras(CurrentScope()) end, "x", 0, "geometry"),
-        BindNestedSlider(ctx, W.Slider(priv, "Private aura Y", -100, 100, 1, 300), function() return PrivateAuras(CurrentScope()) end, "y", 0, "geometry"),
-        BindNestedToggle(ctx, W.Toggle(priv, "Show countdown"), function() return PrivateAuras(CurrentScope()) end, "showCountdown", true, "visual"),
-        BindNestedToggle(ctx, W.Toggle(priv, "Show numbers"), function() return PrivateAuras(CurrentScope()) end, "showNumbers", false, "visual"),
+        privMax,
+        privSize,
+        privAnchor,
+        privX,
+        privY,
+        privCountdown,
+        privNumbers,
     }
+    local privW = priv._msuf2Width or ctx.width or 900
+    local privLeftX = 32
+    local privRightX = min(max(430, floor(privW * 0.52)), max(360, privW - 360))
+    local privLeftW = max(250, privRightX - privLeftX - 42)
+    local privRightW = max(250, privW - privRightX - 32)
+    local privControlW = max(260, min(320, privLeftW))
+    local privRightControlW = max(260, min(320, privRightW))
+    W.LabelAt(priv, "Display", privLeftX, -38, privLeftW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(priv, "Position", privRightX, -38, privRightW, "GameFontNormalSmall", T.colors.accent)
+    W.MoveWidget(privEnable, priv, privLeftX, -64)
+    W.MoveWidget(privMax, priv, privLeftX, -98, privControlW)
+    W.MoveWidget(privSize, priv, privLeftX, -150, privControlW)
+    W.MoveWidget(privAnchor, priv, privRightX, -64, privRightControlW)
+    W.MoveWidget(privX, priv, privRightX, -116, privRightControlW)
+    W.MoveWidget(privY, priv, privRightX, -168, privRightControlW)
+    W.DividerAt(priv, -222, privLeftX, 32)
+    W.LabelAt(priv, "Text", privLeftX, -240, privLeftW, "GameFontNormalSmall", T.colors.accent)
+    W.MoveWidget(privCountdown, priv, privLeftX, -266)
+    W.MoveWidget(privNumbers, priv, privRightX, -266)
     M.AddRefresher(ctx, function()
         SetOptionsEnabled(privControls, PrivateAuras(CurrentScope()).enabled ~= false)
         SetOptionEnabled(privEnable, true)
@@ -924,4 +950,4 @@ local function BuildGFAuras(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_auras", { title = "MSUF Group Buffs & Debuffs", build = BuildGFAuras, version = 10 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Buffs & Debuffs", build = BuildGFAuras, version = 11 })

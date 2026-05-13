@@ -32,6 +32,16 @@ local SI = GF.SpellIndicators or (_G.MSUF_GF_SpellIndicators)
 local W8 = "Interface\\Buttons\\WHITE8x8"
 local PREVIEW_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local translated = rawget(L, text)
+    if translated ~= nil then return translated end
+    return text
+end
+
 local function SetPreviewLabelFont(fs, size, flags)
     if not fs or not fs.SetFont then return end
     fs:SetFont(PREVIEW_TEXT_FONT, size or 9, flags or "")
@@ -40,9 +50,9 @@ local function SetPreviewLabelFont(fs, size, flags)
 end
 
 local function PreviewScopeLabel(kind)
-    if kind == "mythicraid" then return "Mythic Raid" end
-    if kind == "raid" then return "Raid" end
-    return "Party"
+    if kind == "mythicraid" then return Tr("Mythic Raid") end
+    if kind == "raid" then return Tr("Raid") end
+    return Tr("Party")
 end
 
 ------------------------------------------------------------------------
@@ -253,11 +263,11 @@ end
 local function UpdateCoordDisplay(key, anchor, offX, offY)
     if not _coordLabel then return end
     if not key then
-        _coordLabel:SetText("Click a handle to select - custom layers can be moved; Blizzard is locked")
+        _coordLabel:SetText(Tr("Click a handle to select - custom layers can be moved; Blizzard is locked"))
     elseif anchor == "LOCKED" then
-        _coordLabel:SetText((key or "?") .. "   locked: Blizzard controls native aura placement")
+        _coordLabel:SetText((key or "?") .. "   " .. Tr("locked: Blizzard controls native aura placement"))
     else
-        _coordLabel:SetText((key or "?") .. "   anchor: " .. (anchor or "?") .. "   x: " .. (offX or 0) .. "   y: " .. (offY or 0))
+        _coordLabel:SetText((key or "?") .. "   " .. string.format(Tr("anchor: %s"), (anchor or "?")) .. "   x: " .. (offX or 0) .. "   y: " .. (offY or 0))
     end
 end
 
@@ -602,17 +612,17 @@ local function CreateHandle(parent, key, sectionKey, w, h, colorKey)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(self._cfgKey or "?", 1, 1, 1)
             if IsHandleLocked(self) then
-                GameTooltip:AddLine("Locked: Blizzard controls native aura placement.", 0.7, 0.7, 0.7)
-                GameTooltip:AddLine("The preview shows where Blizzard-rendered auras can appear.", 0.4, 0.4, 0.5)
+                GameTooltip:AddLine(Tr("Locked: Blizzard controls native aura placement."), 0.7, 0.7, 0.7)
+                GameTooltip:AddLine(Tr("The preview shows where Blizzard-rendered auras can appear."), 0.4, 0.4, 0.5)
             elseif self._getCurrentAnchor then
                 local anc = self:_getCurrentAnchor() or "?"
-                GameTooltip:AddLine("Anchor: " .. anc, 0.7, 0.7, 0.7)
+                GameTooltip:AddLine(string.format(Tr("Anchor: %s"), anc), 0.7, 0.7, 0.7)
             end
             if self._sectionKey then
-                GameTooltip:AddLine("Section: " .. self._sectionKey, 0.5, 0.5, 0.6)
+                GameTooltip:AddLine(string.format(Tr("Section: %s"), self._sectionKey), 0.5, 0.5, 0.6)
             end
             if not IsHandleLocked(self) then
-                GameTooltip:AddLine("Drag to reposition. Arrow keys nudge by 1.", 0.4, 0.4, 0.5)
+                GameTooltip:AddLine(Tr("Drag to reposition. Arrow keys nudge by 1."), 0.4, 0.4, 0.5)
             end
             GameTooltip:Show()
         end
@@ -928,7 +938,7 @@ function GF.RefreshPreviewBox()
     local conf = GF.GetConf(kind)
     local m    = _mockFrame
     if _box and _box._previewTitle then
-        _box._previewTitle:SetText("Group Frame Preview - " .. PreviewScopeLabel(kind))
+        _box._previewTitle:SetText(Tr("Group Frame Preview") .. " - " .. PreviewScopeLabel(kind))
     end
 
     -- Size (aspect-faithful scaling — mirrors BuildMockFrame exactly).
@@ -1641,7 +1651,7 @@ local function BuildAuraGroupHandles(mockFrame)
 
     local nativeHandle = CreateHandle(mockFrame, "blizzard", "blizzrenderer", 56, 24, "blizzard")
     nativeHandle._label:SetPoint("BOTTOM", nativeHandle, "TOP", 0, 1)
-    nativeHandle._label:SetText("Blizzard locked")
+    nativeHandle._label:SetText(Tr("Blizzard locked"))
     nativeHandle._getAnchorFrame = function() return _mockFrame end
     nativeHandle._previewLocked = true
     nativeHandle._getCurrentAnchor = function()
@@ -1869,7 +1879,7 @@ end
 local function BuildPrivateAuraHandle(mockFrame)
     local handle = CreateHandle(mockFrame, "private", "priv", 16, 16, "private")
     handle._label:SetPoint("BOTTOM", handle, "TOP", 0, 1)
-    handle._label:SetText("Private")
+    handle._label:SetText(Tr("Private"))
     handle._onDragFinish = function(anchor, offX, offY)
         local kind = _getKind and _getKind() or "party"
         local conf = GF.GetConf(kind)
@@ -2923,14 +2933,14 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     local hdr = headerBar:CreateFontString(nil, "OVERLAY")
     SetPreviewLabelFont(hdr, 12, "")
     hdr:SetPoint("LEFT", headerBar, "LEFT", 10, 1)
-    hdr:SetText("Group Frame Preview - " .. PreviewScopeLabel(_getKind and _getKind() or "party"))
+    hdr:SetText(Tr("Group Frame Preview") .. " - " .. PreviewScopeLabel(_getKind and _getKind() or "party"))
     hdr:SetTextColor(0.92, 0.95, 1.00, 1)
     container._previewTitle = hdr
 
     local hint = headerBar:CreateFontString(nil, "OVERLAY")
     SetPreviewLabelFont(hint, 9, "")
     hint:SetPoint("LEFT", hdr, "RIGHT", 12, 0)
-    hint:SetText("click to configure - custom layers drag; Blizzard is locked")
+    hint:SetText(Tr("click to configure - custom layers drag; Blizzard is locked"))
     hint:SetTextColor(0.55, 0.58, 0.70, 0.85)
     container._previewHint = hint
 
@@ -2981,7 +2991,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
         local sHdr = sidebar:CreateFontString(nil, "OVERLAY")
         SetPreviewLabelFont(sHdr, 8, "")
         sHdr:SetPoint("TOP", sidebar, "TOP", 0, -4)
-        sHdr:SetText("LAYERS")
+        sHdr:SetText(Tr("LAYERS"))
         sHdr:SetTextColor(0.45, 0.50, 0.62, 0.82)
 
         local VIS_BTNS = {
@@ -3195,7 +3205,7 @@ function GF.CreatePreviewBox(parent, getKindFn, onSectionOpenFn)
     SetPreviewLabelFont(coord, 9, "")
     coord:SetPoint("LEFT", statusBar, "LEFT", 10, 0)
     coord:SetTextColor(1, 0.82, 0, 0.9)
-    coord:SetText("Click a handle to select - custom layers can be moved; Blizzard is locked")
+    coord:SetText(Tr("Click a handle to select - custom layers can be moved; Blizzard is locked"))
     _coordLabel = coord
 
     container:EnableKeyboard(true)

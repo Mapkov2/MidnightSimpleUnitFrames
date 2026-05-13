@@ -18,6 +18,7 @@ local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 local helpBtn, tutorialPanel, tourState
 local bgWidget, gridWidget
+local HelpText
 
 local R1_H    = 42
 local R2_H    = 34
@@ -59,7 +60,7 @@ local function SetTip(widget, text)
     if not widget or not text then return end
     widget:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -6)
-        GameTooltip:SetText(text, 1, 1, 1, 1, true)
+        GameTooltip:SetText(HelpText(text), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -72,7 +73,7 @@ local function MakeBtn(parent, text, w, h, fontSize, onClick)
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
     local label = MakeFS(btn, fontSize or 12, TH.textR, TH.textG, TH.textB, 0.92)
-    label:SetPoint("CENTER"); label:SetText(text)
+    label:SetPoint("CENTER"); label:SetText(HelpText(text))
     btn._label = label
     local dot = btn:CreateTexture(nil, "OVERLAY")
     dot:SetSize(w - 8, 2); dot:SetPoint("BOTTOM", btn, "BOTTOM", 0, 2)
@@ -146,7 +147,7 @@ local HELP_DEFAULTS = {
     ["Exit Edit Mode"]     = "Exit Edit Mode",
 }
 
-local function HelpText(key)
+function HelpText(key)
     if type(key) ~= "string" then return key end
     local value = type(L) == "table" and rawget(L, key) or nil
     if type(value) == "string" and value ~= "" and value ~= key then
@@ -566,7 +567,7 @@ local function EnsureHUD()
 
     local title = MakeFS(hudFrame, 11, TH.titleR, TH.titleG, TH.titleB, 0.50)
     title:SetPoint("LEFT", hudFrame, "LEFT", 14, 0)
-    title:SetText("EDIT MODE")
+    title:SetText(HelpText("EDIT MODE"))
 
     -- ── Prominent HELP button ──
     helpBtn = CreateFrame("Button", nil, hudFrame, "BackdropTemplate")
@@ -640,7 +641,7 @@ local function EnsureHUD()
         cf:EnableMouse(true)
         local msg = MakeFS(cf, 13, TH.textR, TH.textG, TH.textB, 1)
         msg:SetPoint("TOP", cf, "TOP", 0, -18)
-        msg:SetText("Discard all changes and exit?")
+        msg:SetText(HelpText("Discard all changes and exit?"))
         local function ConfBtn(text, xOff, onClick)
             local b = CreateFrame("Button", nil, cf)
             b:SetSize(90, 28)
@@ -650,7 +651,7 @@ local function EnsureHUD()
             brd:SetFrameLevel(max(0, b:GetFrameLevel()-1))
             brd:SetBackdrop({edgeFile=W8, edgeSize=1}); brd:SetBackdropBorderColor(0.10, 0.20, 0.42, 0.65)
             local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.06)
-            local fs = MakeFS(b, 12, TH.textR, TH.textG, TH.textB, 1); fs:SetPoint("CENTER"); fs:SetText(text)
+            local fs = MakeFS(b, 12, TH.textR, TH.textG, TH.textB, 1); fs:SetPoint("CENTER"); fs:SetText(HelpText(text))
             b:SetScript("OnClick", onClick); return b
         end
         ConfBtn("Yes, discard", -54, function() cf:Hide(); EM2.State.CancelAll() end)
@@ -827,10 +828,10 @@ end
 function HUD.RefreshUnitSelector() end
 
 function HUD.RefreshControls()
-    if alphaFS and EM2.Grid then alphaFS:SetText("BG " .. floor(EM2.Grid.GetBgAlpha() * 100 + 0.5) .. "%") end
+    if alphaFS and EM2.Grid then alphaFS:SetText(HelpText("BG") .. " " .. floor(EM2.Grid.GetBgAlpha() * 100 + 0.5) .. "%") end
     if stepFS and EM2.Grid then
         local enabled = not EM2.Grid.GetEnabled or EM2.Grid.GetEnabled()
-        stepFS:SetText("Grid " .. floor(EM2.Grid.GetGridStep()) .. "px")
+        stepFS:SetText(HelpText("Grid") .. " " .. floor(EM2.Grid.GetGridStep()) .. "px")
         if enabled then
             stepFS:SetTextColor(0.45, 0.95, 0.55, 0.95)
             if gridWidget and gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(0.05, 0.28, 0.10, 0.18) end

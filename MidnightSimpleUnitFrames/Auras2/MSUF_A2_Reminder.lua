@@ -34,6 +34,19 @@ local canaccessvalue = _G.canaccessvalue
 local issecretvalue = _G.issecretvalue
 local _hasCanaccessvalue = (type(canaccessvalue) == "function")
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 local function _GetIcon(spellId)
     if C_Spell_GetSpellTexture then
         local ok, tex = pcall(C_Spell_GetSpellTexture, spellId)
@@ -388,21 +401,21 @@ local function _AcquireGhost(container, index)
         GameTooltip:ClearLines()
         local r = self._result
         if self._isPreview then
-            GameTooltip:AddLine("Buff Reminder Preview", 0.4, 0.7, 1)
+            GameTooltip:AddLine(Tr("Buff Reminder Preview"), 0.4, 0.7, 1)
             GameTooltip:AddLine(r.provider.label, 1, 1, 1)
-            GameTooltip:AddLine("Click the mover to open position settings.", 0.7, 0.7, 0.7, true)
+            GameTooltip:AddLine(Tr("Click the mover to open position settings."), 0.7, 0.7, 0.7, true)
         elseif r.state == "EXPIRING" then
-            GameTooltip:AddLine("Expiring: " .. r.provider.label, 1, 0.6, 0.1)
-            GameTooltip:AddLine(_FormatTime(r.remaining) .. " remaining", 0.9, 0.9, 0.9)
+            GameTooltip:AddLine(format(Tr("Expiring: %s"), r.provider.label), 1, 0.6, 0.1)
+            GameTooltip:AddLine(format(Tr("%s remaining"), _FormatTime(r.remaining)), 0.9, 0.9, 0.9)
         else
-            GameTooltip:AddLine("Missing: " .. r.provider.label, 1, 0.3, 0.3)
+            GameTooltip:AddLine(format(Tr("Missing: %s"), r.provider.label), 1, 0.3, 0.3)
             if r.provider.providerClass == "ROGUE_SELF" then
-                GameTooltip:AddLine("Apply your poison!", 0.8, 0.8, 0.8, true)
+                GameTooltip:AddLine(Tr("Apply your poison!"), 0.8, 0.8, 0.8, true)
             else
                 local cls = r.provider.providerClass
                 local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]
                 local cName = color and color.colorStr and ("|c" .. color.colorStr .. cls .. "|r") or cls
-                GameTooltip:AddLine("A " .. cName .. " in your group can provide this.", 0.8, 0.8, 0.8, true)
+                GameTooltip:AddLine(format(Tr("A %s in your group can provide this."), cName), 0.8, 0.8, 0.8, true)
             end
         end
         GameTooltip:Show()
@@ -554,7 +567,7 @@ local function _EnsurePopup()
     -- Title
     local title = pf:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOP", 0, -12)
-    title:SetText("MSUF Edit  Player Reminders")
+    title:SetText(Tr("MSUF Edit - Player Reminders"))
     pf.title = title
 
     -- Close button
@@ -565,7 +578,7 @@ local function _EnsurePopup()
     -- Section header
     local header = pf:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     header:SetPoint("TOPLEFT", pf, "TOPLEFT", 16, -36)
-    header:SetText("Reminder Icons")
+    header:SetText(Tr("Reminder Icons"))
     header:SetTextColor(1, 0.82, 0, 1)
 
     -- Apply callback — reads all boxes, writes to DB, refreshes
@@ -609,15 +622,15 @@ local function _EnsurePopup()
     end
 
     -- Build numeric rows
-    pf._rowX = _CreateNumericRow(pf, "Offset X:", header, -10, Apply)
-    pf._rowY = _CreateNumericRow(pf, "Offset Y:", pf._rowX.label, -8, Apply)
-    pf._rowSize = _CreateNumericRow(pf, "Icon Size:", pf._rowY.label, -8, Apply)
-    pf._rowSpacing = _CreateNumericRow(pf, "Spacing:", pf._rowSize.label, -8, Apply)
+    pf._rowX = _CreateNumericRow(pf, Tr("Offset X:"), header, -10, Apply)
+    pf._rowY = _CreateNumericRow(pf, Tr("Offset Y:"), pf._rowX.label, -8, Apply)
+    pf._rowSize = _CreateNumericRow(pf, Tr("Icon Size:"), pf._rowY.label, -8, Apply)
+    pf._rowSpacing = _CreateNumericRow(pf, Tr("Spacing:"), pf._rowSize.label, -8, Apply)
 
     -- Step hint
     local stepHint = pf:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     stepHint:SetPoint("BOTTOM", pf, "BOTTOM", 0, 14)
-    stepHint:SetText("Hold Shift for \194\177 10 steps")
+    stepHint:SetText(Tr("Hold Shift for +/- 10 steps"))
     stepHint:SetTextColor(0.5, 0.5, 0.5, 0.8)
 
     pf:Hide()
@@ -726,7 +739,7 @@ function Reminder.EnsureMover(entry, unit, shared)
     lbl:SetPoint("LEFT", ico, "RIGHT", 6, 0)
     lbl:SetPoint("RIGHT", hdr, "RIGHT", -6, 0)
     lbl:SetJustifyH("LEFT")
-    lbl:SetText("Player Reminders")
+    lbl:SetText(Tr("Player Reminders"))
     lbl:SetTextColor(0.95, 0.95, 0.95, 0.92)
 
     mover:Hide()

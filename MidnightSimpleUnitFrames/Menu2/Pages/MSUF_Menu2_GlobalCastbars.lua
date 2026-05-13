@@ -370,8 +370,8 @@ local function BuildCastbars(ctx)
     local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 360, false)
     W.Text(kick, "Shows a colored indicator on castbars when your interrupt is ready or on cooldown.", 14, -38, ctx.width - 28, T.colors.muted)
     local kickLeftX, kickRightX = 14, 392
-    W.LabelAt(kick, "Castbars", kickLeftX, -70, 160, "GameFontNormalSmall", T.colors.muted)
-    W.LabelAt(kick, "Appearance", kickRightX, -70, 160, "GameFontNormalSmall", T.colors.muted)
+    W.LabelAt(kick, "Castbars", kickLeftX, -70, 160, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(kick, "Appearance", kickRightX, -70, 160, "GameFontNormalSmall", T.colors.accent)
     local syncKickReady
     for i, spec in ipairs({
         { "kickReadyShowTarget", "Show on Target castbar" },
@@ -411,7 +411,7 @@ local function BuildCastbars(ctx)
             if syncKickReady then syncKickReady() end
         end)
     local colorHint = W.Text(kick, "Ready / cooldown colors: Colors menu > Interrupt Ready Indicator", kickRightX, -228, 370, T.colors.muted)
-    W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.muted)
+    W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.accent)
     local anchor = W.Dropdown(kick, "Anchor", {
         { value = "RIGHT", text = "Right" },
         { value = "LEFT", text = "Left" },
@@ -445,4 +445,4 @@ local function BuildCastbars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 3 })
+M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 4 })

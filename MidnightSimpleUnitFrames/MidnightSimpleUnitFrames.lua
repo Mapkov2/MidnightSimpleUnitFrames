@@ -1093,6 +1093,28 @@ if not _G.MSUF_ApplyLevelIndicatorLayout then
         end
      end
 end
+function _G.MSUF_RefreshLevelIndicatorFrames()
+    local applyFn = _G.MSUF_ApplyLevelIndicatorLayout
+    if type(applyFn) ~= "function" then return end
+
+    local each = _G.MSUF_ForEachUnitFrame
+    if type(each) == "function" then
+        each(function(frame)
+            if frame and frame.levelText then
+                applyFn(frame)
+            end
+        end)
+        return
+    end
+
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) ~= "table" then return end
+    for _, frame in pairs(frames) do
+        if frame and frame.levelText then
+            applyFn(frame)
+        end
+    end
+end
 local MSUF_ECV_ANCHORS = {
     player       = { "RIGHT", "LEFT",  -20,   0 },
     target       = { "LEFT",  "RIGHT",  20,   0 },

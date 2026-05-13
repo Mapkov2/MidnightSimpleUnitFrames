@@ -15,6 +15,28 @@ local function Tr(text)
     return text
 end
 
+local L_PLAYER_CASTBAR_PREVIEW
+local L_TARGET_CASTBAR_PREVIEW
+local L_FOCUS_CASTBAR_PREVIEW
+local L_BOSS_CASTBAR_PREVIEW
+local L_TEST_CAST
+
+local function RefreshLocaleText()
+    L_PLAYER_CASTBAR_PREVIEW = Tr("Player castbar preview")
+    L_TARGET_CASTBAR_PREVIEW = Tr("Target castbar preview")
+    L_FOCUS_CASTBAR_PREVIEW = Tr("Focus castbar preview")
+    L_BOSS_CASTBAR_PREVIEW = Tr("Boss castbar preview")
+    L_TEST_CAST = Tr("Test Cast")
+end
+
+RefreshLocaleText()
+do
+    local ns = _G.MSUF_NS
+    if type(ns) == "table" and type(ns.RegisterLocaleCallback) == "function" then
+        ns.RegisterLocaleCallback("MSUF_CastbarPreviews", RefreshLocaleText)
+    end
+end
+
 local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
 end
@@ -114,7 +136,7 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
 
         if isPreview then
             if frame.castText then
-                MSUF_SetTextIfChanged(frame.castText, Tr("Player castbar preview"))
+                MSUF_SetTextIfChanged(frame.castText, L_PLAYER_CASTBAR_PREVIEW)
             end
             if frame.timeText then
                 MSUF_SetTextIfChanged(frame.timeText, "")
@@ -204,7 +226,7 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
     f.interruptFeedbackEndTime = nil
 
     if f.castText then
-        MSUF_SetTextIfChanged(f.castText, Tr("Test Cast"))
+        MSUF_SetTextIfChanged(f.castText, L_TEST_CAST)
     end
     if f.icon then
         f.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
@@ -396,7 +418,7 @@ local function _MSUF_SetSimpleCastbarTestMode(cfg, active, keepSetting)
     if MSUF_UpdateCastbarVisuals then MSUF_UpdateCastbarVisuals() end
 
     if f.castText and f.castText.SetText then
-        f.castText:SetText(Tr("Test Cast"))
+        f.castText:SetText(L_TEST_CAST)
         f.castText:Show()
         f.castText:SetAlpha(1)
     end
@@ -437,7 +459,7 @@ function _G.MSUF_SetTargetCastbarTestMode(active, keepSetting)
         previewName = "MSUF_TargetCastbarPreview",
         reanchorFn  = "MSUF_ReanchorTargetCastBar",
         showTimeKey = "showTargetCastTime",
-        label       = Tr("Target castbar preview"),
+        label       = L_TARGET_CASTBAR_PREVIEW,
     }, active, keepSetting)
 end
 
@@ -449,7 +471,7 @@ function _G.MSUF_SetFocusCastbarTestMode(active, keepSetting)
         previewName = "MSUF_FocusCastbarPreview",
         reanchorFn  = "MSUF_ReanchorFocusCastBar",
         showTimeKey = "showFocusCastTime",
-        label       = Tr("Focus castbar preview"),
+        label       = L_FOCUS_CASTBAR_PREVIEW,
     }, active, keepSetting)
 end
 
@@ -483,7 +505,7 @@ local function _MSUF_BossPreview_OnUpdate(self)
 
     -- Keep label stable even if other refreshes happen while editing.
     if self.castText and self.castText.GetText and self.castText.SetText then
-        local testLabel = Tr("Test Cast")
+        local testLabel = L_TEST_CAST
         if self.castText:GetText() ~= testLabel then
             self.castText:SetText(testLabel)
         end
@@ -569,7 +591,7 @@ function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
                 end
 
                 if f.castText and f.castText.SetText then
-                    f.castText:SetText(Tr("Boss castbar preview"))
+                    f.castText:SetText(L_BOSS_CASTBAR_PREVIEW)
                 end
                 if f.timeText and f.timeText.SetText then
                     f.timeText:SetText("")
@@ -611,7 +633,7 @@ function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
         end
 
         if f.castText and f.castText.SetText then
-        f.castText:SetText(Tr("Test Cast"))
+        f.castText:SetText(L_TEST_CAST)
         end
 
         -- IMPORTANT: Do NOT force-show the icon in test mode.
@@ -702,7 +724,7 @@ local function MSUF_CreatePlayerCastbarPreview()
         strata = "DIALOG",
         width  = w,
         height = h,
-        label  = Tr("Player castbar preview"),
+        label  = L_PLAYER_CASTBAR_PREVIEW,
         showIcon = true,
         showTime = true,
         bgAlpha = 0.8,
@@ -749,7 +771,7 @@ local function MSUF_CreateTargetCastbarPreview()
         strata = "DIALOG",
         width  = w,
         height = h,
-        label  = Tr("Target castbar preview"),
+        label  = L_TARGET_CASTBAR_PREVIEW,
         showIcon = true,
         showTime = true,
         bgAlpha = 0.8,
@@ -794,7 +816,7 @@ local function MSUF_CreateFocusCastbarPreview()
         strata = "DIALOG",
         width  = w,
         height = h,
-        label  = Tr("Focus castbar preview"),
+        label  = L_FOCUS_CASTBAR_PREVIEW,
         showIcon = true,
         showTime = true,
         bgAlpha = 0.8,

@@ -137,7 +137,7 @@ local function BuildClassPower(ctx)
     M.AddRefresher(ctx, RefreshEditButton)
     RefreshEditButton()
 
-    local display = b:CollapsibleSection("classpower_display", "Layout", 420, true)
+    local display = b:CollapsibleSection("classpower_display", "Layout", 268, true)
     local cpControls = {}
     local textControls = {}
     local dpbControls = {}
@@ -164,6 +164,20 @@ local function BuildClassPower(ctx)
     cpControls[#cpControls + 1] = cpX
     cpControls[#cpControls + 1] = cpY
     cpControls[#cpControls + 1] = cpLevel
+    local layoutWidth = ctx.width or 900
+    local layoutLeftX = 32
+    local layoutRightX = min(max(430, floor(layoutWidth * 0.52)), max(360, layoutWidth - 360))
+    local layoutLeftW = max(250, layoutRightX - layoutLeftX - 42)
+    local layoutRightW = max(250, layoutWidth - layoutRightX - 32)
+    LabelAt(display, "Bar", layoutLeftX, -38, layoutLeftW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(display, "Position", layoutRightX, -38, layoutRightW, "GameFontNormalSmall", T.colors.accent)
+    MoveWidget(cpEnable, display, layoutLeftX, -64)
+    MoveWidget(cpHeight, display, layoutLeftX, -98, 300)
+    MoveWidget(cpWidthMode, display, layoutLeftX, -150, 300)
+    MoveWidget(cpWidth, display, layoutLeftX, -202, 300)
+    MoveWidget(cpX, display, layoutRightX, -64, 300)
+    MoveWidget(cpY, display, layoutRightX, -116, 300)
+    MoveWidget(cpLevel, display, layoutRightX, -168, 300)
 
     local behavior = b:CollapsibleSection("classpower_behavior", "Behavior", 206, false)
     local cpAnchor = BindTableToggle(ctx, behavior, "Anchor to Essential Cooldown", Bars, "classPowerAnchorToCooldown", false, ApplyClassPower)
@@ -189,7 +203,7 @@ local function BuildClassPower(ctx)
     MoveWidget(cpShadow, behavior, behaviorRightX, -102)
     MoveWidget(cpPrediction, behavior, behaviorRightX, -134)
 
-    local visual = b:CollapsibleSection("classpower_visuals", "Style", 372, false)
+    local visual = b:CollapsibleSection("classpower_visuals", "Style", 420, false)
     local cpColor = BindTableToggle(ctx, visual, "Color by resource type", Bars, "classPowerColorByType", true, ApplyClassPower)
     local cpComboColor = BindTableDropdown(ctx, visual, "Combo point colors", {
         { value = "default", text = "Resource color" },
@@ -214,21 +228,34 @@ local function BuildClassPower(ctx)
     textControls[#textControls + 1] = cpTextX
     textControls[#textControls + 1] = cpTextY
     local styleWidth = ctx.width or 900
+    local styleLeftX = 32
     local styleMidX = min(max(360, floor(styleWidth * 0.36)), max(320, styleWidth - 650))
     local styleRightX = min(max(styleMidX + 300, floor(styleWidth * 0.66)), max(styleMidX + 270, styleWidth - 390))
-    MoveWidget(cpColor, visual, 14, -38)
-    MoveWidget(cpComboColor, visual, 14, -70, 282)
-    MoveWidget(cpFgTex, visual, 14, -124, 322)
-    MoveWidget(cpBgTex, visual, 14, -178, 322)
-    MoveWidget(cpFont, visual, styleMidX, -38, 268)
-    MoveWidget(cpTextX, visual, styleMidX, -90, 268)
-    MoveWidget(cpTextY, visual, styleMidX, -142, 268)
-    MoveWidget(cpBg, visual, styleRightX, -38, 286)
-    MoveWidget(cpFilled, visual, styleRightX, -90, 286)
-    MoveWidget(cpEmpty, visual, styleRightX, -142, 286)
-    MoveWidget(cpSeparator, visual, styleRightX, -194, 286)
-    MoveWidget(cpOutline, visual, styleRightX, -246, 286)
-    MoveWidget(cpGap, visual, styleRightX, -298, 286)
+    local styleLeftW = max(240, styleMidX - styleLeftX - 28)
+    local styleMidW = max(240, styleRightX - styleMidX - 28)
+    local styleRightW = max(240, styleWidth - styleRightX - 32)
+    local styleLeftControlW = max(260, min(322, styleMidX - styleLeftX - 20))
+    local styleMidControlW = max(240, min(286, styleRightX - styleMidX - 24))
+    local styleRightControlW = max(240, min(286, styleWidth - styleRightX - 36))
+    LabelAt(visual, "Resource", styleLeftX, -38, styleLeftW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(visual, "Text", styleMidX, -38, styleMidW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(visual, "Opacity", styleRightX, -38, styleRightW, "GameFontNormalSmall", T.colors.accent)
+    MoveWidget(cpColor, visual, styleLeftX, -64)
+    MoveWidget(cpComboColor, visual, styleLeftX, -96, styleLeftControlW)
+    LabelAt(visual, "Textures", styleLeftX, -158, styleLeftW, "GameFontNormalSmall", T.colors.accent)
+    MoveWidget(cpFgTex, visual, styleLeftX, -184, styleLeftControlW)
+    MoveWidget(cpBgTex, visual, styleLeftX, -238, styleLeftControlW)
+    MoveWidget(cpFont, visual, styleMidX, -64, styleMidControlW)
+    MoveWidget(cpTextX, visual, styleMidX, -116, styleMidControlW)
+    MoveWidget(cpTextY, visual, styleMidX, -168, styleMidControlW)
+    MoveWidget(cpBg, visual, styleRightX, -64, styleRightControlW)
+    MoveWidget(cpFilled, visual, styleRightX, -116, styleRightControlW)
+    MoveWidget(cpEmpty, visual, styleRightX, -168, styleRightControlW)
+    W.DividerAt(visual, -222, styleRightX, 32)
+    LabelAt(visual, "Pips & Border", styleRightX, -240, styleRightW, "GameFontNormalSmall", T.colors.accent)
+    MoveWidget(cpSeparator, visual, styleRightX, -266, styleRightControlW)
+    MoveWidget(cpOutline, visual, styleRightX, -318, styleRightControlW)
+    MoveWidget(cpGap, visual, styleRightX, -370, styleRightControlW)
 
     local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 170, false)
     local hideOOC = BindTableToggle(ctx, visibility, "Hide out of combat", Bars, "classPowerHideOOC", false, ApplyClassPower)
@@ -288,4 +315,4 @@ local function BuildClassPower(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 5 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 7 })
