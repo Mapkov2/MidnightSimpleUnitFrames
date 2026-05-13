@@ -96,14 +96,23 @@ local function HideSliderTemplateParts(slider)
         local isTexture = false
         if region and region.IsObjectType then isTexture = region:IsObjectType("Texture") and true or false end
         if (not isTexture) and region and region.GetObjectType then isTexture = (region:GetObjectType() == "Texture") end
-        if isTexture and region ~= thumb and region ~= slider._msufTrack and region ~= slider._msufFill then
+        if isTexture
+            and region ~= thumb
+            and region ~= slider._msufTrack
+            and region ~= slider._msufTrackTop
+            and region ~= slider._msufTrackBottom
+            and region ~= slider._msufFill
+            and region ~= slider._msufFillGlow
+            and region ~= slider._msufPeelTrack
+            and region ~= slider._msufPeelTrackFill
+        then
             if region.SetAlpha then region:SetAlpha(0) end
             if region.Hide then region:Hide() end
         end
     end
 
     local name = slider.GetName and slider:GetName()
-    for _, suffix in ipairs({ "Text", "Low", "High" }) do
+    for _, suffix in ipairs({ "Left", "Middle", "Right", "Text", "Low", "High" }) do
         local region = (name and _G[name .. suffix]) or slider[suffix]
         if region then
             if region.SetText then region:SetText("") end
@@ -276,12 +285,17 @@ function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     local edit = T.Button(head, "MSUF Edit Mode", 150, 24)
     RegisterSearchObject(edit, "MSUF Edit Mode", "button")
     edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
+    if edit._msuf2Label then
+        edit._msuf2Label:ClearAllPoints()
+        edit._msuf2Label:SetPoint("CENTER", edit, "CENTER", 0, 0)
+        edit._msuf2Label:SetJustifyH("CENTER")
+    end
     edit:SetScript("OnClick", ToggleMSUFEditMode)
 
     local function RefreshEditButton()
         local active = IsMSUFEditModeActive()
         local locked = IsEditModeCombatLocked() and true or false
-        if edit.SetText then edit:SetText("MSUF Edit Mode") end
+        if edit.SetText then edit:SetText(Tr("MSUF Edit Mode")) end
         if edit.SetActive then edit:SetActive(active) end
         if edit.SetEnabled then edit:SetEnabled(active or not locked) end
     end
@@ -492,6 +506,11 @@ function W.SetControlEnabled(control, enabled)
     enabled = enabled and true or false
 
     SetEnabledState(control, enabled)
+    if control._msuf2ControlKind == "slider" then
+        HideSliderTemplateParts(control)
+        if T.StyleSlider then T.StyleSlider(control) end
+        if control._msuf2UpdateFill then control:_msuf2UpdateFill() end
+    end
     if control.SetAlpha then control:SetAlpha(enabled and 1 or 0.45) end
     SetTextEnabledColor(control._msuf2Title, enabled)
     SetTextEnabledColor(control._msuf2Label, enabled)
@@ -643,12 +662,13 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     title:SetJustifyH("LEFT")
 
     sliderSerial = sliderSerial + 1
-    local slider = CreateFrame("Slider", "MSUF2NativeSlider" .. sliderSerial, section, "OptionsSliderTemplate")
+    local slider = CreateFrame("Slider", "MSUF2NativeSlider" .. sliderSerial, section)
     slider._msuf2Title = title
     slider._msuf2ControlKind = "slider"
     RegisterSearchObject(slider, label, "slider", { anchor = title })
     slider:SetPoint("TOPLEFT", x, y - 22)
     slider:SetSize(max(minTrackW, width - valueClusterW), 16)
+    if slider.EnableMouse then slider:EnableMouse(true) end
     slider:SetMinMaxValues(minVal or 0, maxVal or 1)
     slider:SetValueStep(step or 1)
     if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
@@ -690,7 +710,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local span = maxV - minV
         local pct = span > 0 and ((slider:GetValue() - minV) / span) or 0
         if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
-        fill:SetWidth(max(1, slider:GetWidth() * pct))
+        fill:SetWidth(max(1, max(1, slider:GetWidth() - 2) * pct))
     end
     slider._msuf2UpdateFill = UpdateFill
 
@@ -772,6 +792,12 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local amount = (tonumber(slider._msuf2Step) or 1) * StepMultiplier() * direction
         slider:SetValue(ClampToSlider((tonumber(slider:GetValue()) or 0) + amount))
     end
+
+    slider:EnableMouseWheel(true)
+    slider:SetScript("OnMouseWheel", function(_, delta)
+        if not delta or delta == 0 then return end
+        StepBy(delta > 0 and 1 or -1)
+    end)
 
     minus:SetScript("OnClick", function() StepBy(-1) end)
     plus:SetScript("OnClick", function() StepBy(1) end)

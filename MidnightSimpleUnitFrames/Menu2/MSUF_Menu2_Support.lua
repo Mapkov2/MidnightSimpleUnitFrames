@@ -613,7 +613,7 @@ end
 local function ResetStandaloneWindowGeometry(frame, silent)
     local g = EnsureGeneral()
     g.flashFullW = 900
-    g.flashFullH = 650
+    g.flashFullH = 700
     g.flashFullPoint = "CENTER"
     g.flashFullRelPoint = "CENTER"
     g.flashFullX = -60
@@ -623,7 +623,7 @@ local function ResetStandaloneWindowGeometry(frame, silent)
     g.flashFullXpx = -60 * uiScale
     g.flashFullYpx = 10 * uiScale
     g.msuf2WindowW = 900
-    g.msuf2WindowH = 650
+    g.msuf2WindowH = 700
     g.slashMenuScale = 1.0
 
     local win = frame or _G.MSUF_StandaloneOptionsWindow or (_G.MSUF2 and _G.MSUF2.frame)
@@ -633,7 +633,7 @@ local function ResetStandaloneWindowGeometry(frame, silent)
             scale = _G.MSUF2.GetEffectiveMenuScale(1.0)
         end
         if win.SetScale then pcall(win.SetScale, win, scale) end
-        if win.SetSize then pcall(win.SetSize, win, 900, 650) end
+        if win.SetSize then pcall(win.SetSize, win, 900, 700) end
         if win.ClearAllPoints then pcall(win.ClearAllPoints, win) end
         if win.SetPoint then pcall(win.SetPoint, win, "CENTER", _G.UIParent, "CENTER", -60, 10) end
     end

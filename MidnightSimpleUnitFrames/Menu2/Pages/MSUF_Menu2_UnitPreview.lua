@@ -1,5 +1,5 @@
 local addonName, addonNS = ...
-local ns = (_G.MSUF_NS) or addonNS or {}
+local ns = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = ns
 
 ns.L = ns.L or (_G.MSUF_L) or {}
@@ -20,6 +20,35 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local SYMBOL_MEDIA = MEDIA .. "Symbols\\"
+
+local Preview = ns.UFPreview or {}
+ns.UFPreview = Preview
+_G.MSUF_UFPreview = Preview
+
+local function MenuTheme()
+    local m = ns and ns.MSUF2
+    return m and m.Theme
+end
+
+local function ApplyPreviewBackdrop(frame, bg, border, fallback)
+    local T = MenuTheme()
+    if T and type(T.ApplyBackdrop) == "function" then
+        T.ApplyBackdrop(frame, bg, border)
+        return
+    end
+    if not (frame and frame.SetBackdrop) then return end
+    fallback = fallback or {}
+    frame:SetBackdrop(fallback.backdrop or {
+        bgFile = TEX_W8,
+        edgeFile = TEX_W8,
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    local b = bg or fallback.bg or { 0.035, 0.043, 0.058, 0.96 }
+    local e = border or fallback.border or { 0.19, 0.25, 0.34, 0.95 }
+    frame:SetBackdropColor(b[1], b[2], b[3], b[4] or 1)
+    frame:SetBackdropBorderColor(e[1], e[2], e[3], e[4] or 1)
+end
 
 local UNIT_KEYS = { "player", "target", "targettarget", "focus", "boss", "pet" }
 local UNIT_SET = { player = true, target = true, targettarget = true, focus = true, boss = true, pet = true }
@@ -1352,16 +1381,15 @@ local PREVIEW_LAYERS = {
 
 local function BuildPreview(parent, panel, width, height)
     local sideW = 72
+    local T = MenuTheme()
+    local colors = (T and T.colors) or {}
     local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     box:SetSize(width or 632, height or 228)
-    box:SetBackdrop({
-        bgFile = TEX_W8,
-        edgeFile = TEX_W8,
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
-    box:SetBackdropColor(0.035, 0.043, 0.058, 0.96)
-    box:SetBackdropBorderColor(0.19, 0.25, 0.34, 0.95)
+    ApplyPreviewBackdrop(
+        box,
+        colors.panel2 or { 0.035, 0.043, 0.058, 0.96 },
+        colors.border or { 0.19, 0.25, 0.34, 0.95 }
+    )
     box._msufStaticH = height or 228
     box._msufPanel = panel
 
@@ -1378,18 +1406,24 @@ local function BuildPreview(parent, panel, width, height)
     local canvas = CreateFrame("Frame", nil, box, "BackdropTemplate")
     canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(sideW + 18), 12)
-    canvas:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-    canvas:SetBackdropColor(0.01, 0.012, 0.018, 0.86)
-    canvas:SetBackdropBorderColor(1, 1, 1, 0.06)
+    ApplyPreviewBackdrop(
+        canvas,
+        { 0, 0, 0, 1 },
+        colors.borderSoft or { 1, 1, 1, 0.06 },
+        { backdrop = { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 }, bg = { 0.01, 0.012, 0.018, 0.86 } }
+    )
     if canvas.SetClipsChildren then canvas:SetClipsChildren(true) end
     box.canvas = canvas
 
     local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
     sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 6, 0)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
-    sidebar:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
-    sidebar:SetBackdropColor(0.025, 0.028, 0.04, 0.82)
-    sidebar:SetBackdropBorderColor(0.10, 0.13, 0.18, 0.65)
+    ApplyPreviewBackdrop(
+        sidebar,
+        colors.panel or { 0.025, 0.028, 0.04, 0.82 },
+        colors.borderSoft or { 0.10, 0.13, 0.18, 0.65 },
+        { backdrop = { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 } }
+    )
     box.sidebar = sidebar
 
     local sHdr = sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -2077,9 +2111,10 @@ function Preview.Refresh(box, reason)
     end
 
     local fr, fg, fb = FontColor()
-    local nameSize = S(tonumber(conf.nameFontSize) or 12); if nameSize < 7 then nameSize = 7 end
-    local hpSize = S(tonumber(conf.hpFontSize) or 12); if hpSize < 7 then hpSize = 7 end
-    local pwrSize = S(tonumber(conf.powerFontSize) or 12); if pwrSize < 7 then pwrSize = 7 end
+    local baseTextSize = tonumber(g.fontSize) or 14
+    local nameSize = S(tonumber(conf.nameFontSize) or tonumber(g.nameFontSize) or baseTextSize); if nameSize < 7 then nameSize = 7 end
+    local hpSize = S(tonumber(conf.hpFontSize) or tonumber(g.hpFontSize) or baseTextSize); if hpSize < 7 then hpSize = 7 end
+    local pwrSize = S(tonumber(conf.powerFontSize) or tonumber(g.powerFontSize) or baseTextSize); if pwrSize < 7 then pwrSize = 7 end
     mock.nameText:SetFont(FONT, nameSize, "OUTLINE")
     mock.totInlineSep:SetFont(FONT, nameSize, "OUTLINE")
     mock.totInlineText:SetFont(FONT, nameSize, "OUTLINE")
@@ -2444,3 +2479,5 @@ function ns.MSUF_Menu2_CreateUnitPreviewBox(parent, panel, width, height)
     local box = BuildPreview(parent, panel, width, height)
     return box
 end
+
+_G.MSUF_Menu2_CreateUnitPreviewBox = ns.MSUF_Menu2_CreateUnitPreviewBox
