@@ -39,6 +39,7 @@ local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 local PowerBarColor = _G.PowerBarColor
 local math_max = math.max
 local math_min = math.min
+local math_ceil = math.ceil
 local math_floor = math.floor
 local pairs = pairs
 local type = type
@@ -694,7 +695,7 @@ local function ApplyFonts(f, kind)
     local fontFlags = GF.ResolveFontFlags(kind)
     local fr, fg, fb = GF.ResolveFontColor(kind)
     local db = _G.MSUF_DB
-    local fontKey = (conf.fontOverride and conf.fontKey) or (db and db.general and db.general.fontKey)
+    local fontKey = db and db.general and db.general.fontKey
     local fScale = conf._resolvedFrameScale or 1
     local nameSize  = conf.nameFontSize or 12
     local hpSize    = conf.hpFontSize or 10
@@ -1074,9 +1075,9 @@ function GF.UpdateButton(f, unit)
     -- Name (with color mode + truncation)
     if f.nameText and conf.showName ~= false then
         local name = UnitName(unit) or ""
-        local maxC = conf.nameMaxChars or 0
+        local maxC, noEllipsis, clipSide = GF.ResolveNameTruncation(kind)
         if maxC > 0 then
-            name = GF.TruncateName(name, maxC, conf.nameNoEllipsis)
+            name = GF.TruncateName(name, maxC, noEllipsis, clipSide)
         end
         f.nameText:SetText(name)
         f.nameText:Show()
@@ -1409,12 +1410,215 @@ end
 ------------------------------------------------------------------------
 GF._previewAnchorFrame = GF._previewAnchorFrame or {}
 
+local GetDefaultCenter
+local RaidGroupAllowed
+
 local function IsRaidLikeKind(kind)
     return kind == "raid" or kind == "mythicraid"
 end
 
 local function GetLiveRaidKind()
     return (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
+end
+
+GF.raidGroupHeaders = GF.raidGroupHeaders or {}
+
+local function PreserveRaidGroups(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    return IsRaidLikeKind(kind) and conf and conf.preserveRaidGroups == true
+end
+
+local function GetPreservedRaidGroupCount(conf)
+    local groups = math_floor((tonumber(conf and conf.maxColumns) or 8) + 0.5)
+    if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+    if IsInRaid and IsInRaid() and GetNumGroupMembers and GetRaidRosterInfo then
+        local liveGroups = 0
+        local n = GetNumGroupMembers() or 0
+        for i = 1, n do
+            local subgroup = select(3, GetRaidRosterInfo(i))
+            subgroup = tonumber(subgroup) or 0
+            if subgroup > liveGroups then liveGroups = subgroup end
+        end
+        if liveGroups > groups then groups = liveGroups end
+        if groups > 8 then groups = 8 end
+    end
+    return groups
+end
+GF.GetPreservedRaidGroupCount = GetPreservedRaidGroupCount
+
+local function GetPreservedRaidPrimary(conf)
+    local upc = math_floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
+    if upc < 1 then upc = 1 elseif upc > 40 then upc = 40 end
+    local primary = math_min(upc, 5)
+    local columns = math_ceil(5 / primary)
+    if columns < 1 then columns = 1 end
+    return upc, primary, columns
+end
+
+local function GetPreservedRaidMetrics(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    local _, _, totalW, totalH, w, h, spacing, growth, _, _, _, _, primary, groups, blockColumns, blockW, blockH
+    if GF.GetPreservedRaidGridMetrics then
+        _, _, totalW, totalH, w, h, spacing, growth, _, _, _, _, primary, groups, blockColumns, blockW, blockH =
+            GF.GetPreservedRaidGridMetrics(kind, 5 * GetPreservedRaidGroupCount(conf))
+    end
+    if totalW then
+        return totalW, totalH, w, h, spacing, growth, primary, groups, blockColumns, blockW, blockH
+    end
+
+    w, h, spacing = GF.GetScaledFrameMetrics(kind)
+    growth = conf.growth or "DOWN"
+    local _, primaryFallback, columnsFallback = GetPreservedRaidPrimary(conf)
+    local groupsFallback = GetPreservedRaidGroupCount(conf)
+    if growth == "DOWN" or growth == "UP" then
+        blockW = columnsFallback * w + math_max(0, columnsFallback - 1) * spacing
+        blockH = primaryFallback * h + math_max(0, primaryFallback - 1) * spacing
+        totalW = groupsFallback * blockW + math_max(0, groupsFallback - 1) * spacing
+        totalH = blockH
+    else
+        blockW = primaryFallback * w + math_max(0, primaryFallback - 1) * spacing
+        blockH = columnsFallback * h + math_max(0, columnsFallback - 1) * spacing
+        totalW = blockW
+        totalH = groupsFallback * blockH + math_max(0, groupsFallback - 1) * spacing
+    end
+    return totalW, totalH, w, h, spacing, growth, primaryFallback, groupsFallback, columnsFallback, blockW, blockH
+end
+
+local function ForEachRaidHeader(fn)
+    if type(fn) ~= "function" then return end
+    local list = GF.raidGroupHeaders
+    if list then
+        for i = 1, #list do
+            local header = list[i]
+            if header then fn(header, i) end
+        end
+    end
+    local single = GF.headers and GF.headers.raid
+    if single and not single._msufRaidGroupIndex then
+        fn(single, nil)
+    end
+end
+
+local function AnyRaidHeader()
+    if GF.headers and GF.headers.raid then return true end
+    local list = GF.raidGroupHeaders
+    if list then
+        for i = 1, #list do
+            if list[i] then return true end
+        end
+    end
+    return false
+end
+
+local function HideRaidHeaders()
+    local container = GF.raidGroupContainer
+    if container then container:Hide() end
+    ForEachRaidHeader(function(header) header:Hide() end)
+end
+GF.HideRaidHeaders = HideRaidHeaders
+
+local function ShowRaidHeaders(kind)
+    local showKind = kind or GetLiveRaidKind()
+    local conf = GF.GetConf(showKind)
+    local preserve = PreserveRaidGroups(showKind, conf)
+    local container = GF.raidGroupContainer
+    if container then
+        if preserve then container:Show() else container:Hide() end
+    end
+    ForEachRaidHeader(function(header)
+        local groupIndex = header._msufRaidGroupIndex
+        if preserve and groupIndex and RaidGroupAllowed and not RaidGroupAllowed(conf, groupIndex) then
+            header:Hide()
+        else
+            header:Show()
+        end
+    end)
+end
+GF.ShowRaidHeaders = ShowRaidHeaders
+
+local function RetirePreservedRaidHeaders()
+    local list = GF.raidGroupHeaders
+    if list then
+        for i = 1, #list do
+            if list[i] then RetireHeader(list[i]) end
+            list[i] = nil
+        end
+    end
+    local container = GF.raidGroupContainer
+    if container then
+        container:Hide()
+        container:ClearAllPoints()
+        container:SetSize(0.001, 0.001)
+        container:SetParent(GetHiddenParent())
+    end
+    GF.raidGroupContainer = nil
+    if GF.headers and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then
+        GF.headers.raid = nil
+    end
+end
+
+local function PositionPreservedRaidHeaders(kind, headerOverride)
+    if InCombatLockdown() then return end
+    local conf = GF.GetConf(kind)
+    local totalW, totalH, _, _, spacing, growth, _, groups, _, blockW, blockH = GetPreservedRaidMetrics(kind, conf)
+    local container = GF.raidGroupContainer
+    if not container then return end
+
+    local cx, cy = conf.offsetX, conf.offsetY
+    if cx == nil or cy == nil then
+        cx, cy = GetDefaultCenter(kind)
+    end
+    local anchorFrame = GF.ResolveAnchorFrame(kind)
+    local pt = conf.anchorPoint or conf.point or "CENTER"
+    container:ClearAllPoints()
+    container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
+    container:SetPoint("CENTER", anchorFrame, pt, cx, cy)
+
+    local function PositionOne(header, groupIndex)
+        if not header then return end
+        groupIndex = groupIndex or header._msufRaidGroupIndex or 1
+        if groupIndex < 1 or groupIndex > groups then
+            header:Hide()
+            return
+        end
+
+        header:ClearAllPoints()
+        if growth == "DOWN" then
+            header:SetPoint("TOPLEFT", container, "TOPLEFT", (groupIndex - 1) * (blockW + spacing), 0)
+        elseif growth == "UP" then
+            header:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", (groupIndex - 1) * (blockW + spacing), 0)
+        elseif growth == "RIGHT" then
+            header:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -(groupIndex - 1) * (blockH + spacing))
+        elseif growth == "LEFT" then
+            header:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, -(groupIndex - 1) * (blockH + spacing))
+        else
+            header:SetPoint("TOPLEFT", container, "TOPLEFT", (groupIndex - 1) * (blockW + spacing), 0)
+        end
+    end
+
+    if headerOverride then
+        PositionOne(headerOverride)
+    else
+        local list = GF.raidGroupHeaders
+        for i = 1, groups do
+            PositionOne(list and list[i], i)
+        end
+    end
+end
+
+local function ScanRaidHeaders(kind, force)
+    local list = GF.raidGroupHeaders
+    if list and #list > 0 then
+        for i = 1, #list do
+            local header = list[i]
+            if header then
+                ScanHeaderChildren(header, kind, force)
+            end
+        end
+        return
+    end
+    local header = GF.headers and GF.headers.raid
+    if header then ScanHeaderChildren(header, kind, force) end
 end
 
 local _scheduledHeaderScans = {}
@@ -1429,15 +1633,16 @@ local function ScheduleHeaderChildScan(scope, delay, kind)
         _scheduledHeaderScans[key] = nil
         if InCombatLockdown() then return end
 
-        local header = GF.headers and GF.headers[scope]
-        if not header then return end
-
         local scanKind = kind
         if scope == "raid" then
-            scanKind = header._msufGFKind or GetLiveRaidKind()
+            scanKind = scanKind or GetLiveRaidKind()
+            ScanRaidHeaders(scanKind, true)
+            return
         else
             scanKind = "party"
         end
+        local header = GF.headers and GF.headers[scope]
+        if not header then return end
         ScanHeaderChildren(header, scanKind, true)
     end
 
@@ -1455,7 +1660,7 @@ function GF.UpdateAnyEnabledFlag()
     return GF._anyEnabled
 end
 
-local function GetDefaultCenter(kind)
+GetDefaultCenter = function(kind)
     return IsRaidLikeKind(kind) and -500 or -400, 0
 end
 
@@ -1508,6 +1713,9 @@ function GF.GetPositionCount(kind)
     local conf = GF.GetConf(kind)
     local upc = conf.unitsPerColumn or 5
     if IsRaidLikeKind(kind) then
+        if conf.preserveRaidGroups == true then
+            return 5 * (conf.maxColumns or 8)
+        end
         return upc * (conf.maxColumns or 8)
     end
     return upc
@@ -1553,6 +1761,10 @@ end
 
 function GF.SyncHeaderPosition(kind, countOverride, headerOverride)
     if InCombatLockdown() then return end
+    if PreserveRaidGroups(kind) then
+        PositionPreservedRaidHeaders(kind, headerOverride)
+        return
+    end
     local header = headerOverride or (GF.headers and GF.headers[kind])
     if not header then return end
     PositionHeaderFromGridCenter(kind, header, countOverride)
@@ -1758,6 +1970,184 @@ end
 ------------------------------------------------------------------------
 -- Raid header setup
 ------------------------------------------------------------------------
+RaidGroupAllowed = function(conf, groupIndex)
+    local gf = conf and conf.groupFilter
+    if type(gf) == "table" then
+        return gf[groupIndex] ~= false
+    end
+    if type(gf) == "string" and gf ~= "" then
+        local needle = tostring(groupIndex)
+        for token in gf:gmatch("[^,]+") do
+            token = token:match("^%s*(.-)%s*$")
+            if token == needle then return true end
+        end
+        return false
+    end
+    return true
+end
+
+local function ApplyPreservedRaidSort(header, conf)
+    local sortMode = conf.sortMode
+    if not sortMode then
+        sortMode = conf.sortByRole and "ROLE" or "INDEX"
+    end
+
+    if sortMode == "ROLE" or sortMode == "GROUP_ROLE" then
+        ApplyNativeRoleSort(header, conf)
+    elseif sortMode == "NAME" then
+        _GF_SetAttrIfChanged(header, "sortMethod", "NAME")
+        _GF_SetAttrIfChanged(header, "groupBy", nil)
+        _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+    else
+        ApplyIndexSort(header)
+    end
+end
+
+local function ApplyRaidGrowthAttributes(header, growth, spacing)
+    if growth == "DOWN" then
+        _GF_SetAttrIfChanged(header, "point", "TOP")
+        _GF_SetAttrIfChanged(header, "xOffset", 0)
+        _GF_SetAttrIfChanged(header, "yOffset", -spacing)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "LEFT")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
+    elseif growth == "UP" then
+        _GF_SetAttrIfChanged(header, "point", "BOTTOM")
+        _GF_SetAttrIfChanged(header, "xOffset", 0)
+        _GF_SetAttrIfChanged(header, "yOffset", spacing)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "LEFT")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
+    elseif growth == "RIGHT" then
+        _GF_SetAttrIfChanged(header, "point", "LEFT")
+        _GF_SetAttrIfChanged(header, "xOffset", spacing)
+        _GF_SetAttrIfChanged(header, "yOffset", 0)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "TOP")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
+    elseif growth == "LEFT" then
+        _GF_SetAttrIfChanged(header, "point", "RIGHT")
+        _GF_SetAttrIfChanged(header, "xOffset", -spacing)
+        _GF_SetAttrIfChanged(header, "yOffset", 0)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "TOP")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
+    end
+end
+
+local function SetupPreservedRaidHeaders(kind, conf)
+    if InCombatLockdown() then
+        GF._pendingRaidRefresh = true
+        return
+    end
+
+    local parent = _G.PetBattleFrameHider or UIParent
+    if GF.headers.raid and not GF.headers.raid._msufRaidGroupIndex then
+        RetireHeader(GF.headers.raid)
+        GF.headers.raid = nil
+    end
+
+    local container = GF.raidGroupContainer
+    if not container then
+        container = CreateFrame("Frame", "MSUF_GFRaidGroupContainer", parent)
+        container._msufGFKind = kind
+        container:SetClampedToScreen(true)
+        GF.raidGroupContainer = container
+    end
+    if container:GetParent() ~= parent then container:SetParent(parent) end
+    container._msufGFKind = kind
+    container:Hide()
+
+    local w, h, spacing = conf.width or 80, conf.height or 32, conf.spacing or 1
+    local growth = conf.growth or "DOWN"
+    if GF.GetScaledFrameMetrics then
+        w, h, spacing = GF.GetScaledFrameMetrics(kind)
+    elseif GF.ApplyFrameScale then
+        GF.ApplyFrameScale(kind)
+    end
+
+    local _, primary, blockColumns = GetPreservedRaidPrimary(conf)
+    local groupCount = GetPreservedRaidGroupCount(conf)
+    local headers = GF.raidGroupHeaders
+    for groupIndex = 1, groupCount do
+        local header = headers[groupIndex]
+        if header and GF._forceRecreateHeaders then
+            RetireHeader(header)
+            header = nil
+            headers[groupIndex] = nil
+        end
+        if not header then
+            GF._raidHeaderSerial = (GF._raidHeaderSerial or 0) + 1
+            local headerName = "MSUF_GFRaidHeader" .. GF._raidHeaderSerial .. "Group" .. groupIndex
+            header = CreateFrame("Frame", headerName, container, "SecureGroupHeaderTemplate")
+            header._msufRaidGroupIndex = groupIndex
+            header:SetClampedToScreen(true)
+            if header.SetClipsChildren then header:SetClipsChildren(false) end
+            header:Hide()
+            header:HookScript("OnShow", function(self)
+                if not InCombatLockdown() then
+                    local n = (self:GetAttribute("_msufLayoutNonce") or 0) + 1
+                    self:SetAttribute("_msufLayoutNonce", n)
+                end
+            end)
+            headers[groupIndex] = header
+        end
+
+        header._msufGFKind = kind
+        header._msufRaidGroupIndex = groupIndex
+        if header:GetParent() ~= container then header:SetParent(container) end
+        header:Hide()
+
+        _GF_SetAttrIfChanged(header, "showParty", false)
+        _GF_SetAttrIfChanged(header, "showRaid", true)
+        _GF_SetAttrIfChanged(header, "showPlayer", true)
+        _GF_SetAttrIfChanged(header, "showSolo", false)
+        _GF_SetAttrIfChanged(header, "maxColumns", blockColumns)
+        _GF_SetAttrIfChanged(header, "unitsPerColumn", primary)
+        _GF_SetAttrIfChanged(header, "template", GF_UNIT_BUTTON_TEMPLATE)
+        _GF_SetAttrIfChanged(header, "initial-width", w)
+        _GF_SetAttrIfChanged(header, "initial-height", h)
+        _GF_SetAttrIfChanged(header, "sortDir", "ASC")
+        _GF_SetAttrIfChanged(header, "groupFilter", tostring(groupIndex))
+        ApplyPreservedRaidSort(header, conf)
+        ApplyRaidGrowthAttributes(header, growth, spacing)
+
+        _initCfgNonce = _initCfgNonce + 1
+        local initCfg = string.format([[
+        self:ClearAllPoints()
+        self:SetWidth(%.3f)
+        self:SetHeight(%.3f)
+        self:SetAttribute('*type1', 'target')
+        self:SetAttribute('*type2', 'togglemenu')
+        RegisterUnitWatch(self)
+        -- nonce %d
+    ]], w, h, _initCfgNonce)
+        header:SetAttribute("initialConfigFunction", initCfg)
+    end
+
+    for groupIndex = groupCount + 1, #headers do
+        if headers[groupIndex] then
+            RetireHeader(headers[groupIndex])
+            headers[groupIndex] = nil
+        end
+    end
+
+    GF.headers.raid = headers[1]
+    PositionPreservedRaidHeaders(kind)
+    container:Show()
+    for groupIndex = 1, groupCount do
+        local header = headers[groupIndex]
+        if header then
+            if RaidGroupAllowed(conf, groupIndex) then
+                header:Show()
+                local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
+                header:SetAttribute("_msufLayoutNonce", nonce)
+            else
+                header:Hide()
+            end
+        end
+    end
+
+    ScheduleHeaderChildScan("raid", 0, kind)
+    ScheduleHeaderChildScan("raid", 0.05, kind)
+end
+
 local function SetupRaidHeader()
     if InCombatLockdown() then
         GF._pendingRaidRefresh = true
@@ -1767,6 +2157,12 @@ local function SetupRaidHeader()
     local kind = GetLiveRaidKind()
     local conf = GF.GetConf(kind)
     if not conf.enabled then return end
+
+    if PreserveRaidGroups(kind, conf) then
+        SetupPreservedRaidHeaders(kind, conf)
+        return
+    end
+    RetirePreservedRaidHeaders()
 
     local parent = _G.PetBattleFrameHider or UIParent
     local header = GF.headers.raid
@@ -2003,9 +2399,9 @@ function GF.ApplyPreviewData(f, index, kind)
     -- Name (with color + truncation)
     if f.nameText and conf.showName ~= false then
         local displayName = name
-        local maxC = conf.nameMaxChars or 0
+        local maxC, noEllipsis, clipSide = GF.ResolveNameTruncation(kind or "party")
         if maxC > 0 then
-            displayName = GF.TruncateName(displayName, maxC, conf.nameNoEllipsis)
+            displayName = GF.TruncateName(displayName, maxC, noEllipsis, clipSide)
         end
         f.nameText:SetText(displayName)
         f.nameText:Show()
@@ -2400,11 +2796,44 @@ local function GridPosition(baseX, baseY, i, w, h, spacing, growth, upc)
     return baseX, baseY
 end
 
+local function PreviewUsesPreservedRaidGroups(kind, conf)
+    return IsRaidLikeKind(kind) and conf and conf.preserveRaidGroups == true
+end
+
+local function SetPreservedPreviewPoint(frame, container, i, w, h, spacing, growth, primary, blockW, blockH)
+    primary = primary or 5
+    blockW = blockW or w
+    blockH = blockH or h
+    local groupIndex = math_floor((i - 1) / 5)
+    local withinGroup = (i - 1) % 5
+    local minor = math_floor(withinGroup / primary)
+    local major = withinGroup % primary
+
+    if growth == "DOWN" then
+        frame:SetPoint("TOPLEFT", container, "TOPLEFT",
+            groupIndex * (blockW + spacing) + minor * (w + spacing),
+            -major * (h + spacing))
+    elseif growth == "UP" then
+        frame:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT",
+            groupIndex * (blockW + spacing) + minor * (w + spacing),
+            major * (h + spacing))
+    elseif growth == "RIGHT" then
+        frame:SetPoint("TOPLEFT", container, "TOPLEFT",
+            major * (w + spacing),
+            -(groupIndex * (blockH + spacing) + minor * (h + spacing)))
+    elseif growth == "LEFT" then
+        frame:SetPoint("TOPRIGHT", container, "TOPRIGHT",
+            -major * (w + spacing),
+            -(groupIndex * (blockH + spacing) + minor * (h + spacing)))
+    end
+end
+
 function GF.ShowPreview(kind, count)
     kind = kind or "party"
     count = count or GetDefaultPreviewCount(kind)
     local conf = GF.GetConf(kind)
-    local _, _, totalW, totalH, w, h, spacing, growth, upc = GF.GetGridMetrics(kind, count)
+    local _, _, totalW, totalH, w, h, spacing, growth, upc, _, _, _, primary, _, _, blockW, blockH = GF.GetGridMetrics(kind, count)
+    local preservePreviewGroups = PreviewUsesPreservedRaidGroups(kind, conf)
     local key = kind
 
     GF._previewActive[key] = true
@@ -2481,18 +2910,22 @@ function GF.ShowPreview(kind, count)
         f:SetSize(w, h)
         f:ClearAllPoints()
 
-        -- Replicate SecureGroupHeader child layout (corner-anchored)
-        local row = (i - 1) % upc
-        local col = math_floor((i - 1) / upc)
+        if preservePreviewGroups then
+            SetPreservedPreviewPoint(f, container, i, w, h, spacing, growth, primary, blockW, blockH)
+        else
+            -- Replicate SecureGroupHeader child layout (corner-anchored)
+            local row = (i - 1) % upc
+            local col = math_floor((i - 1) / upc)
 
-        if growth == "DOWN" then
-            f:SetPoint("TOPLEFT", container, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
-        elseif growth == "UP" then
-            f:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
-        elseif growth == "RIGHT" then
-            f:SetPoint("TOPLEFT", container, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
-        elseif growth == "LEFT" then
-            f:SetPoint("TOPRIGHT", container, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
+            if growth == "DOWN" then
+                f:SetPoint("TOPLEFT", container, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
+            elseif growth == "UP" then
+                f:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
+            elseif growth == "RIGHT" then
+                f:SetPoint("TOPLEFT", container, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
+            elseif growth == "LEFT" then
+                f:SetPoint("TOPRIGHT", container, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
+            end
         end
 
         GF.ApplyPreviewData(f, i, kind)
@@ -2562,7 +2995,8 @@ function GF.RefreshPreviewLayout(kind)
     if not frames then return end
     local count = GetPreviewShownCount(kind)
     local conf = GF.GetConf(kind)
-    local _, _, totalW, totalH, w, h, spacing, growth, upc = GF.GetGridMetrics(kind, count)
+    local _, _, totalW, totalH, w, h, spacing, growth, upc, _, _, _, primary, _, _, blockW, blockH = GF.GetGridMetrics(kind, count)
+    local preservePreviewGroups = PreviewUsesPreservedRaidGroups(kind, conf)
 
     -- Update container position (grid center = stored offset)
     local container = GF._previewContainer and GF._previewContainer[kind]
@@ -2590,17 +3024,21 @@ function GF.RefreshPreviewLayout(kind)
             f:SetSize(w, h)
             if f.barGroup then f.barGroup:SetSize(w, h) end
             f:ClearAllPoints()
-            local row = (i - 1) % upc
-            local col = math_floor((i - 1) / upc)
             local c = container or UIParent
-            if growth == "DOWN" then
-                f:SetPoint("TOPLEFT", c, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
-            elseif growth == "UP" then
-                f:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
-            elseif growth == "RIGHT" then
-                f:SetPoint("TOPLEFT", c, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
-            elseif growth == "LEFT" then
-                f:SetPoint("TOPRIGHT", c, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
+            if preservePreviewGroups then
+                SetPreservedPreviewPoint(f, c, i, w, h, spacing, growth, primary, blockW, blockH)
+            else
+                local row = (i - 1) % upc
+                local col = math_floor((i - 1) / upc)
+                if growth == "DOWN" then
+                    f:SetPoint("TOPLEFT", c, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
+                elseif growth == "UP" then
+                    f:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
+                elseif growth == "RIGHT" then
+                    f:SetPoint("TOPLEFT", c, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
+                elseif growth == "LEFT" then
+                    f:SetPoint("TOPRIGHT", c, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
+                end
             end
         end
     end
@@ -2644,11 +3082,11 @@ function GF.RebuildAll()
     -- Raid: build once, show only in raid
     if raidConf.enabled then
         SetupRaidHeader()
-        if not inRaid and GF.headers.raid then
-            GF.headers.raid:Hide()
+        if not inRaid then
+            HideRaidHeaders()
         end
-    elseif GF.headers.raid then
-        GF.headers.raid:Hide()
+    else
+        HideRaidHeaders()
     end
 
     GF.DisableBlizzardFrames()
@@ -2671,8 +3109,7 @@ function GF.RebuildAll()
                 ScanHeaderChildren(hdr, kind, true)
             end
         end
-        local hdr = GF.headers.raid
-        if hdr then
+        ForEachRaidHeader(function(hdr)
             local kids = { hdr:GetChildren() }
             for ci = 1, #kids do
                 local ch = kids[ci]
@@ -2680,8 +3117,8 @@ function GF.RebuildAll()
                     ch._msufGFRegisteredUnit = nil
                 end
             end
-            ScanHeaderChildren(hdr, GetLiveRaidKind(), true)
-        end
+        end)
+        ScanRaidHeaders(GetLiveRaidKind(), true)
         GF.MarkAllDirty(GF.DIRTY_ALL)
     end)
 end
@@ -2729,14 +3166,14 @@ function GF.UpdateGroupVisibility()
     end
 
     -- Raid header
-    if GF.headers.raid then
+    if AnyRaidHeader() then
         if raidConf.enabled and inRaid then
-            GF.SyncHeaderPosition(raidKind, nil, GF.headers.raid)
-            GF.headers.raid:Show()
+            GF.SyncHeaderPosition(raidKind)
+            ShowRaidHeaders(raidKind)
             ScheduleHeaderChildScan("raid", 0, raidKind)
             ScheduleHeaderChildScan("raid", 0.5, raidKind)
         else
-            GF.headers.raid:Hide()
+            HideRaidHeaders()
         end
     end
 end
@@ -2799,7 +3236,7 @@ local function OnEvent(self, event, ...)
         end
         -- Force rebuild if headers don't exist (mid-combat /reload recovery)
         local needRebuild = GF._pendingRebuild
-        if not GF.headers.party and not GF.headers.raid then needRebuild = true end
+        if not GF.headers.party and not AnyRaidHeader() then needRebuild = true end
         if needRebuild then
             GF._pendingRebuild = nil
             GF.RebuildAll()

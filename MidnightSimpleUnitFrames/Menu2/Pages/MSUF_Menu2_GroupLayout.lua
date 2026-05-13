@@ -140,11 +140,18 @@ local function BuildGFLayout(ctx)
     BuildGrowthDirectionTiles(ctx, layout, { x = layoutRightX, y = -38, advanceCursor = false })
     local unitsSlider = BindScopeSlider(ctx, W.Slider(layout, "Units per column", 1, 40, 1, layoutSliderW), "unitsPerColumn", 5, "rebuild")
     local maxColumnsSlider = BindScopeSlider(ctx, W.Slider(layout, "Max columns", 1, 8, 1, layoutSliderW), "maxColumns", 8, "rebuild")
+    local preserveRaidGroups = BindScopeToggle(ctx, W.Toggle(layout, "Preserve raid groups"), "preserveRaidGroups", false, "rebuild")
     W.MoveWidget(widthSlider, layout, layoutLeftX, -58, layoutSliderW, "LEFT")
     W.MoveWidget(heightSlider, layout, layoutLeftX, -112, layoutSliderW, "LEFT")
     W.MoveWidget(spacingSlider, layout, layoutLeftX, -166, layoutSliderW, "LEFT")
     W.MoveWidget(unitsSlider, layout, layoutLeftX, -252, layoutSliderW, "LEFT")
     W.MoveWidget(maxColumnsSlider, layout, layoutLeftX, -306, layoutSliderW, "LEFT")
+    W.MoveWidget(preserveRaidGroups, layout, layoutLeftX, -360)
+    local function RefreshRaidGroupLayoutState()
+        SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
+    end
+    M.AddRefresher(ctx, RefreshRaidGroupLayoutState)
+    RefreshRaidGroupLayoutState()
 
     local sorting = b:CollapsibleSection("sorting", "Sorting", 300, false)
     local sortingW = sorting._msuf2Width or b.width or 720

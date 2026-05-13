@@ -350,7 +350,8 @@ function HideHeaders()
     if InCombatLockdown() then return end
     local gf = ns.GF; if not gf or not gf.headers then return end
     if gf.headers.party then gf.headers.party:Hide() end
-    if gf.headers.raid  then gf.headers.raid:Hide()  end
+    if type(gf.HideRaidHeaders) == "function" then gf.HideRaidHeaders()
+    elseif gf.headers.raid then gf.headers.raid:Hide() end
 end
 
 ------------------------------------------------------------------------
@@ -861,6 +862,9 @@ local function BuildGFPopup(mode)
             if upc then conf.unitsPerColumn = floor(max(1, min(40, upc)) + 0.5) end
             local mc = popup.mcBox and tonumber(popup.mcBox:GetText())
             if mc then conf.maxColumns = floor(max(1, min(8, mc)) + 0.5) end
+            if popup.preserveRaidGroupsCB then
+                conf.preserveRaidGroups = popup.preserveRaidGroupsCB:GetChecked() and true or false
+            end
         end
 
         -- Name
@@ -948,6 +952,7 @@ local function BuildGFPopup(mode)
         if isRaid then
             S(popup.upcBox, conf.unitsPerColumn or 5)
             S(popup.mcBox,  conf.maxColumns or 8)
+            SC(popup.preserveRaidGroupsCB, conf.preserveRaidGroups == true)
         end
 
         -- Name
@@ -1011,8 +1016,10 @@ local function BuildGFPopup(mode)
     local lSP = F.PairRow(popup, lB, lC, { label1="Spacing:", label2="PBar H:",
         key1="spacingBox", key2="pbhBox", onChanged=Apply })
     if isRaid then
-        F.PairRow(popup, lB, lC, { label1="Units/Col:", label2="Max Cols:",
+        local lRaid = F.PairRow(popup, lB, lC, { label1="Units/Col:", label2="Max Cols:",
             key1="upcBox", key2="mcBox", anchorTo=lSP, onChanged=Apply })
+        F.CheckRow(popup, lB, lC, { label="Preserve raid groups",
+            cbKey="preserveRaidGroupsCB", anchorTo=lRaid, onChanged=function() Apply() end })
     end
     lC:RecalcHeight()
 

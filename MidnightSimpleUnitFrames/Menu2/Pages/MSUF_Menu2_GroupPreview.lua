@@ -205,6 +205,30 @@ local GF_AURA_MOCK_ICON_IDS = {
     private = { 206151, 234153, 265178, 320141 },
 }
 
+local GF_AURA_GROWTH_TABLE = {
+    RIGHTDOWN = { px =  1, py =  0, sx =  0, sy = -1 },
+    RIGHTUP   = { px =  1, py =  0, sx =  0, sy =  1 },
+    LEFTDOWN  = { px = -1, py =  0, sx =  0, sy = -1 },
+    LEFTUP    = { px = -1, py =  0, sx =  0, sy =  1 },
+    DOWNRIGHT = { px =  0, py = -1, sx =  1, sy =  0 },
+    DOWNLEFT  = { px =  0, py = -1, sx = -1, sy =  0 },
+    UPRIGHT   = { px =  0, py =  1, sx =  1, sy =  0 },
+    UPLEFT    = { px =  0, py =  1, sx = -1, sy =  0 },
+    CENTER_H  = { px =  1, py =  0, sx =  0, sy = -1, centered = true },
+    CENTER_V  = { px =  0, py = -1, sx =  1, sy =  0, centered = true },
+}
+
+local function GFPreviewAuraGrowth(growth)
+    return GF_AURA_GROWTH_TABLE[growth] or GF_AURA_GROWTH_TABLE.RIGHTDOWN
+end
+
+local function GFPreviewInt(value, fallback, minValue, maxValue)
+    local n = floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
+    if minValue ~= nil and n < minValue then n = minValue end
+    if maxValue ~= nil and n > maxValue then n = maxValue end
+    return n
+end
+
 local gfMockSpellTextureCache = {}
 local function GFMockSpellTexture(spellId)
     local cached = gfMockSpellTextureCache[spellId]
@@ -263,6 +287,16 @@ local function GFPreviewHandleOffset(handle, anchorFrame, anchor)
     local ax = aL + aW * frac[1]
     local ay = aB + aH * frac[2]
     return GFPreviewRound(hx - ax), GFPreviewRound(hy - ay)
+end
+
+local function GFPreviewPointOffset(px, py, anchorFrame, anchor)
+    local frac = GF_PREVIEW_ANCHOR_FRAC[anchor]
+    if not (anchorFrame and frac) then return 0, 0 end
+    local aL, aB = anchorFrame:GetLeft() or 0, anchorFrame:GetBottom() or 0
+    local aW, aH = anchorFrame:GetWidth() or 1, anchorFrame:GetHeight() or 1
+    local ax = aL + aW * frac[1]
+    local ay = aB + aH * frac[2]
+    return GFPreviewRound((px or 0) - ax), GFPreviewRound((py or 0) - ay)
 end
 
 local function GFPreviewMockPowerHeight(kind, conf, zoom, frameScale)
@@ -432,13 +466,23 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local function SaveHandlePosition(handle, action)
         if not (handle and box._mock) or handle._locked then return end
         local m = box._mock
-        local mL, mT = m:GetLeft() or 0, m:GetTop() or 0
-        local mW, mH = max(1, m:GetWidth() or 1), max(1, m:GetHeight() or 1)
+        local anchorFrame = (handle._cfgGroup and handle._previewAnchorFrame) or m
+        local mL, mT = anchorFrame:GetLeft() or 0, anchorFrame:GetTop() or 0
+        local mW, mH = max(1, anchorFrame:GetWidth() or 1), max(1, anchorFrame:GetHeight() or 1)
         local hL, hT = handle:GetLeft() or 0, handle:GetTop() or 0
+        local hB = handle:GetBottom() or 0
         local hW, hH = handle:GetWidth() or 1, handle:GetHeight() or 1
-        local cx, cy = hL + hW * 0.5, hT - hH * 0.5
-        local anchor = GFPreviewResolveAnchor((cx - mL) / mW, (mT - cy) / mH)
-        local offX, offY = GFPreviewHandleOffset(handle, m, anchor)
+        local anchor, offX, offY
+        if handle._cfgGroup and handle._previewOriginX and handle._previewOriginY then
+            local px = hL + handle._previewOriginX
+            local py = hB + handle._previewOriginY
+            anchor = GFPreviewResolveAnchor((px - mL) / mW, (mT - py) / mH)
+            offX, offY = GFPreviewPointOffset(px, py, anchorFrame, anchor)
+        else
+            local cx, cy = hL + hW * 0.5, hT - hH * 0.5
+            anchor = GFPreviewResolveAnchor((cx - mL) / mW, (mT - cy) / mH)
+            offX, offY = GFPreviewHandleOffset(handle, m, anchor)
+        end
         local scale = handle._previewScale or m._previewScale or 1
         local cfgX, cfgY = GFPreviewOffsetToConfig(offX, scale), GFPreviewOffsetToConfig(offY, scale)
         local conf = Conf(CurrentScope())
@@ -664,7 +708,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local fontPath = (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
         local fontFlags = (gf and gf.ResolveFontFlags and gf.ResolveFontFlags(kind)) or "OUTLINE"
         local db = _G.MSUF_DB
-        local fontKey = (conf.fontOverride and conf.fontKey) or (db and db.general and db.general.fontKey)
+        local fontKey = db and db.general and db.general.fontKey
         local safeSetFont = _G.MSUF_SetFontSafe
         local function SetPreviewFont(fs, size)
             if not fs then return end
@@ -677,7 +721,14 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local fr, fg, fb = T.colors.text[1], T.colors.text[2], T.colors.text[3]
         if gf and gf.ResolveFontColor then fr, fg, fb = gf.ResolveFontColor(kind) end
         SetPreviewFont(mock._nameFS, max(6, GFPreviewScaleValue(conf.nameFontSize or 12, previewScale, 6)))
-        mock._nameFS:SetText(GF_PREVIEW_NAMES[5])
+        local previewName = GF_PREVIEW_NAMES[5]
+        if gf and gf.ResolveNameTruncation and gf.TruncateName then
+            local maxC, noEllipsis, clipSide = gf.ResolveNameTruncation(kind)
+            if maxC and maxC > 0 then
+                previewName = gf.TruncateName(previewName, maxC, noEllipsis, clipSide)
+            end
+        end
+        mock._nameFS:SetText(previewName)
         mock._nameFS:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
         mock._nameFS:ClearAllPoints()
         mock._nameFS:SetPoint("LEFT", mock._health, "LEFT", GFPreviewScaleValue(3, previewScale, 1), GFPreviewConfigToOffset(conf.nameOffsetY or 0, previewScale))
@@ -731,6 +782,102 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             end
         end
 
+        local auraDynamicScale = (gf and gf.GetPreviewDynamicScale and gf.GetPreviewDynamicScale(conf, kind)) or 1
+        local function LayoutAuraGroup(handle, groupKey, cfg, defaults)
+            cfg = cfg or {}
+            defaults = defaults or {}
+            local maxIcons = GFPreviewInt(cfg.max, defaults.max or 6, 0, 40)
+            local perRow = GFPreviewInt(cfg.perRow, defaults.perRow or maxIcons, 1, 40)
+            local rawSize = cfg.size or defaults.size or 16
+            local minSize = defaults.minSize or 8
+            local size = max(minSize, GFPreviewScaleValue(rawSize, previewScale * auraDynamicScale, minSize))
+            local spacing = max(0, GFPreviewScaleValue(cfg.spacing or defaults.spacing or 1, previewScale, 0))
+            local anchor = cfg.anchor or defaults.anchor or "CENTER"
+            if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
+            if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
+            local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
+            local gv = GFPreviewAuraGrowth(growth)
+            local effectiveAnchor = gv.centered and "CENTER" or anchor
+            local anchorTarget = (cfg.behindBar and mock._health) or mock
+            local anchorFrac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
+            local ids = GF_AURA_MOCK_ICON_IDS[groupKey] or GF_AURA_MOCK_ICON_IDS.debuff
+            local step = size + spacing
+
+            AddIconPool(handle, maxIcons)
+            handle._previewRects = handle._previewRects or {}
+
+            local minL, minB, maxR, maxT
+            for i = 1, maxIcons do
+                local left, bottom
+                if gv.centered then
+                    local totalPrimary = maxIcons * size + max(0, maxIcons - 1) * spacing
+                    local halfOfs = totalPrimary * 0.5
+                    local col = i - 1
+                    if gv.px ~= 0 then
+                        local cx = col * step - halfOfs + size * 0.5
+                        left, bottom = cx - size * 0.5, -size * 0.5
+                    else
+                        local cy = -(col * step - halfOfs) - size * 0.5
+                        left, bottom = -size * 0.5, cy - size * 0.5
+                    end
+                else
+                    local col = (i - 1) % perRow
+                    local row = floor((i - 1) / perRow)
+                    local ox = col * step * gv.px + row * step * gv.sx
+                    local oy = col * step * gv.py + row * step * gv.sy
+                    left = ox - anchorFrac[1] * size
+                    bottom = oy - anchorFrac[2] * size
+                end
+
+                local right, top = left + size, bottom + size
+                local rect = handle._previewRects[i] or {}
+                rect[1], rect[2] = left, bottom
+                handle._previewRects[i] = rect
+                minL = minL and min(minL, left) or left
+                minB = minB and min(minB, bottom) or bottom
+                maxR = maxR and max(maxR, right) or right
+                maxT = maxT and max(maxT, top) or top
+            end
+
+            if not minL then
+                minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5
+            end
+
+            local handleW = max(1, GFPreviewRound(maxR - minL))
+            local handleH = max(1, GFPreviewRound(maxT - minB))
+            local originX, originY = -minL, -minB
+            handle:SetSize(handleW, handleH)
+            handle._previewOriginX = originX
+            handle._previewOriginY = originY
+            handle._previewAnchorFrame = anchorTarget
+            handle._previewScale = previewScale
+            handle:ClearAllPoints()
+            handle:SetPoint(
+                "BOTTOMLEFT",
+                anchorTarget,
+                effectiveAnchor,
+                GFPreviewConfigToOffset(cfg.x or 0, previewScale) - originX,
+                GFPreviewConfigToOffset(cfg.y or 0, previewScale) - originY
+            )
+
+            for i = 1, maxIcons do
+                local tex = handle._icons and handle._icons[i]
+                local rect = handle._previewRects[i]
+                if tex and rect then
+                    tex:SetTexture(GFMockSpellTexture(ids[((i - 1) % #ids) + 1]))
+                    tex:SetSize(size, size)
+                    tex:ClearAllPoints()
+                    tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] - minL, rect[2] - minB)
+                    tex:Show()
+                end
+            end
+            for i = maxIcons + 1, #(handle._icons or {}) do
+                if handle._icons[i] then handle._icons[i]:Hide() end
+            end
+
+            return size
+        end
+
         local function LayoutBlizzardAuraBlock(handle, size)
             handle._icons = handle._icons or {}
             handle._tags = handle._tags or {}
@@ -774,21 +921,18 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local buffCfg = auras.buff or {}
         local debuffCfg = auras.debuff or {}
         local extCfg = auras.externals or {}
-        local auraSize = max(10, GFPreviewScaleValue(buffCfg.size or 16, previewScale, 8))
-        local debuffSize = max(10, GFPreviewScaleValue(debuffCfg.size or 16, previewScale, 8))
-        local extSize = max(14, GFPreviewScaleValue(extCfg.size or 22, previewScale, 10))
-
-        buffHandle:SetSize(auraSize * 3, auraSize * 2)
-        LayoutIconRow(buffHandle, "buff", 6, auraSize, 3)
-        LayoutHandle(buffHandle, buffCfg.anchor, buffCfg.x, buffCfg.y, "BOTTOMLEFT")
-
-        debuffHandle:SetSize(debuffSize * 3, debuffSize * 2)
-        LayoutIconRow(debuffHandle, "debuff", 6, debuffSize, 3)
-        LayoutHandle(debuffHandle, debuffCfg.anchor, debuffCfg.x, debuffCfg.y, "TOPRIGHT")
-
-        externHandle:SetSize(extSize * 2, extSize)
-        LayoutIconRow(externHandle, "externals", 2, extSize, 2)
-        LayoutHandle(externHandle, extCfg.anchor, extCfg.x, extCfg.y, "CENTER")
+        LayoutAuraGroup(buffHandle, "buff", buffCfg, {
+            anchor = "BOTTOMRIGHT", growth = "LEFTUP",
+            size = 22, perRow = 4, max = 6, spacing = 1, minSize = 8,
+        })
+        LayoutAuraGroup(debuffHandle, "debuff", debuffCfg, {
+            anchor = "TOPLEFT", growth = "RIGHTDOWN",
+            size = 20, perRow = 3, max = 6, spacing = 1, minSize = 8,
+        })
+        LayoutAuraGroup(externHandle, "externals", extCfg, {
+            anchor = "CENTER", growth = "RIGHTDOWN",
+            size = 28, perRow = 3, max = 2, spacing = 1, minSize = 8,
+        })
 
         local blizzSize = max(14, GFPreviewScaleValue(20, previewScale, 8))
         blizzHandle:SetSize(blizzSize * 5, blizzSize * 2)
@@ -817,9 +961,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         LayoutHandle(textHandle, conf.nameAnchor or "LEFT", conf.nameOffsetX or 0, conf.nameOffsetY or 0, "LEFT")
 
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
-        buffHandle:SetFrameLevel(baseLevel + 5)
-        debuffHandle:SetFrameLevel(baseLevel + 5)
-        externHandle:SetFrameLevel(baseLevel + 5)
+        buffHandle:SetFrameLevel(baseLevel + (tonumber(buffCfg.layer) or 5))
+        debuffHandle:SetFrameLevel(baseLevel + (tonumber(debuffCfg.layer) or 6))
+        externHandle:SetFrameLevel(baseLevel + (tonumber(extCfg.layer) or 7))
         blizzHandle:SetFrameLevel(baseLevel + 4)
         statusHandle:SetFrameLevel(baseLevel + (tonumber(conf.statusTextLayer) or 7))
         spellHandle:SetFrameLevel(baseLevel + 6)

@@ -264,6 +264,67 @@ local function CurrentFontScopeCanEdit()
     return scope == "shared" or ScopeHasOverride(scope, "fontOverride")
 end
 
+local function GFNameScopeGet(key, default)
+    local db = DB()
+    local keys = ScopeDBKeys(CurrentFontScope())
+    for i = 1, #(keys or {}) do
+        local entry = db[keys[i]]
+        if entry and entry[key] ~= nil then return entry[key] end
+    end
+    return default
+end
+
+local function GFNameScopeSet(key, value)
+    local db = DB()
+    local keys = ScopeDBKeys(CurrentFontScope())
+    for i = 1, #(keys or {}) do
+        local scopeKey = keys[i]
+        db[scopeKey] = db[scopeKey] or {}
+        db[scopeKey][key] = value
+        db[scopeKey].nameShortenOverride = nil
+        db[scopeKey]._msufGFNameTruncationOverride = nil
+    end
+end
+
+local function SharedNameShorteningEnabled()
+    return DB().shortenNames == true
+end
+
+local function SharedNameShorteningSide()
+    local g = G()
+    return (g and g.shortenNameClipSide) or "LEFT"
+end
+
+local function SharedNameShorteningMax()
+    local g = G()
+    return tonumber(g and g.shortenNameMaxChars) or 6
+end
+
+local function SharedNameShorteningNoEllipsis()
+    local g = G()
+    return not (g and g.shortenNameShowDots ~= false)
+end
+
+local function GFNameUsesLocalScope()
+    return IsGFScope(CurrentFontScope()) and ScopeHasOverride(CurrentFontScope(), "fontOverride")
+end
+
+local function SeedGFNameShorteningFromShared()
+    if not IsGFScope(CurrentFontScope()) then return end
+    if GFNameScopeGet("nameShortenEnabled", nil) == nil then
+        GFNameScopeSet("nameShortenEnabled", SharedNameShorteningEnabled())
+    end
+    if GFNameScopeGet("nameClipSide", nil) == nil then
+        GFNameScopeSet("nameClipSide", SharedNameShorteningSide())
+    end
+    if GFNameScopeGet("nameNoEllipsis", nil) == nil then
+        GFNameScopeSet("nameNoEllipsis", SharedNameShorteningNoEllipsis())
+    end
+    if (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then
+        GFNameScopeSet("nameMaxChars", SharedNameShorteningMax())
+    end
+end
+
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
@@ -286,6 +347,7 @@ local function BuildFonts(ctx)
         getValue = function() return CurrentFontScope() end,
         setValue = function(v)
             G()._fontScopeKey = NormalizeScopeKey(v)
+            if M.InvalidatePage then M.InvalidatePage(ctx.key) end
             if M.SelectPage then M.SelectPage(ctx.key) end
         end,
         hasOverride = function(value)
@@ -311,6 +373,7 @@ local function BuildFonts(ctx)
             local key = CurrentFontScope()
             if key ~= "shared" then
                 ScopeSetOverride(key, "fontOverride", v)
+                if v and IsGFScope(key) then SeedGFNameShorteningFromShared() end
                 ApplyFonts("MSUF2_FONT_OVERRIDE")
             end
             if M.SelectPage then M.SelectPage(ctx.key) end
@@ -461,37 +524,96 @@ local function BuildFonts(ctx)
 
     local nameScope = CurrentFontScope()
     if IsGFScope(nameScope) then
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 170, true)
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 236, true)
         W.Text(names, "Group Frame Name Truncation", 14, -38, ctx.width - 28, T.colors.text)
-        names._msuf2CursorY = -68
+        names._msuf2CursorY = -72
 
-        local chars = W.Slider(names, "Name Max Chars", 0, 30, 1, 300)
+        local shorten, side, chars, noEllipsis
+        local function RefreshGFNameShorteningUI()
+            if M.Refresh then M.Refresh(ctx) end
+        end
+
+        shorten = W.Toggle(names, "Shorten group names")
+        M.BindToggle(ctx, shorten,
+            function()
+                if GFNameUsesLocalScope() then
+                    return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false
+                end
+                return SharedNameShorteningEnabled()
+            end,
+            function(v)
+                if not GFNameUsesLocalScope() then return end
+                GFNameScopeSet("nameShortenEnabled", v and true or false)
+                if v and (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then
+                    GFNameScopeSet("nameMaxChars", SharedNameShorteningMax())
+                end
+                ApplyFonts("MSUF2_GF_NAME_SHORTEN")
+                RefreshGFNameShorteningUI()
+            end)
+
+        side = W.Segment(names, "Truncation style", {
+            { value = "LEFT", text = "Keep end (last letters)" },
+            { value = "RIGHT", text = "Keep start (first letters)" },
+        }, 430)
+        M.BindSegment(ctx, side,
+            function()
+                if GFNameUsesLocalScope() then
+                    return GFNameScopeGet("nameClipSide", "RIGHT")
+                end
+                return SharedNameShorteningSide()
+            end,
+            function(v)
+                if not GFNameUsesLocalScope() then return end
+                GFNameScopeSet("nameClipSide", v or "RIGHT")
+                ApplyFonts("MSUF2_GF_NAME_SHORTEN_SIDE")
+                RefreshGFNameShorteningUI()
+            end)
+
+        chars = W.Slider(names, "Max name length", 1, 30, 1, 300)
         chars:SetValueFormatter(function(v)
-            v = floor((tonumber(v) or 0) + 0.5)
-            return v == 0 and "Unlimited" or tostring(v)
+            return tostring(floor((tonumber(v) or 6) + 0.5))
         end)
         M.BindSlider(ctx, chars,
             function()
-                return tonumber(ScopeRead(CurrentFontScope(), "fontOverride", {}, "nameMaxChars", 0)) or 0
+                if GFNameUsesLocalScope() then
+                    return tonumber(GFNameScopeGet("nameMaxChars", 6)) or 6
+                end
+                return SharedNameShorteningMax()
             end,
             function(v)
-                ScopeWrite(CurrentFontScope(), "fontOverride", {}, "nameMaxChars", floor((tonumber(v) or 0) + 0.5))
+                if not GFNameUsesLocalScope() then return end
+                v = floor((tonumber(v) or 6) + 0.5)
+                GFNameScopeSet("nameMaxChars", v)
                 ApplyFonts("MSUF2_GF_NAME_MAX")
+                RefreshGFNameShorteningUI()
             end)
 
-        local noEllipsis = W.Toggle(names, "No Ellipsis (truncate without ..)")
+        noEllipsis = W.Toggle(names, "No Ellipsis (truncate without ..)")
         M.BindToggle(ctx, noEllipsis,
             function()
-                return ScopeRead(CurrentFontScope(), "fontOverride", {}, "nameNoEllipsis", false) and true or false
+                if GFNameUsesLocalScope() then
+                    return GFNameScopeGet("nameNoEllipsis", false) and true or false
+                end
+                return SharedNameShorteningNoEllipsis()
             end,
             function(v)
-                ScopeWrite(CurrentFontScope(), "fontOverride", {}, "nameNoEllipsis", v and true or false)
+                if not GFNameUsesLocalScope() then return end
+                GFNameScopeSet("nameNoEllipsis", v and true or false)
                 ApplyFonts("MSUF2_GF_NAME_ELLIPSIS")
+                RefreshGFNameShorteningUI()
             end)
         local function RefreshGFNameShorteningControls()
             local canEdit = CurrentFontScopeCanEdit()
-            SetControlEnabled(chars, canEdit)
-            SetControlEnabled(noEllipsis, canEdit)
+            local enabled
+            if GFNameUsesLocalScope() then
+                enabled = GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
+            else
+                enabled = SharedNameShorteningEnabled()
+            end
+            SetControlEnabled(shorten, canEdit)
+            SetControlEnabled(side, canEdit and enabled)
+            SetControlEnabled(chars, canEdit and enabled)
+            SetControlEnabled(noEllipsis, canEdit and enabled)
         end
         M.AddRefresher(ctx, RefreshGFNameShorteningControls)
         RefreshGFNameShorteningControls()
@@ -520,7 +642,7 @@ local function BuildFonts(ctx)
             end
         end
 
-        shorten = W.Toggle(names, "Shorten unit names (except Player)")
+        shorten = W.Toggle(names, nameScope == "shared" and "Shorten names (except Player)" or "Shorten unit names (except Player)")
         M.BindToggle(ctx, shorten,
             function()
                 return NameShorteningEnabled()

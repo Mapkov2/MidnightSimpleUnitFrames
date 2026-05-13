@@ -1719,12 +1719,12 @@ function GF.BuildFrameCache(f)
 
     -- Name display
     c.nameEn = conf.showName ~= false
-    c.nameMaxChars = conf.nameMaxChars or 0
-    c.nameNoEllipsis = conf.nameNoEllipsis
+    c.nameMaxChars, c.nameNoEllipsis, c.nameClipSide = GF.ResolveNameTruncation(kind)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     c.nameStyleKey = tostring(c.nameEn) .. "\001"
         .. tostring(c.nameMaxChars) .. "\001"
         .. tostring(c.nameNoEllipsis) .. "\001"
+        .. tostring(c.nameClipSide) .. "\001"
         .. tostring(conf.fontOverride) .. "\001"
         .. tostring(conf.useGlobalFontColor) .. "\001"
         .. tostring(conf.nameColorMode) .. "\001"
@@ -2693,7 +2693,7 @@ local function ApplyStatusTextStateLayout(f, conf, state)
     local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind)
     if fontPath and st.SetFont then
         local db = _G.MSUF_DB
-        local fontKey = (conf.fontOverride and conf.fontKey) or (db and db.general and db.general.fontKey)
+        local fontKey = db and db.general and db.general.fontKey
         if type(_G.MSUF_SetFontSafe) == "function" then
             _G.MSUF_SetFontSafe(st, fontPath, size, fontFlags or "", fontKey)
         else
@@ -4346,7 +4346,7 @@ local function dispatchName(f, unit)
     local name = UnitName(unit) or ""
     local maxC = (c and c.nameMaxChars) or 0
     if maxC > 0 then
-        name = GF.TruncateName(name, maxC, c and c.nameNoEllipsis)
+        name = GF.TruncateName(name, maxC, c and c.nameNoEllipsis, c and c.nameClipSide)
     end
 
     if f._msufGFNameText ~= name then

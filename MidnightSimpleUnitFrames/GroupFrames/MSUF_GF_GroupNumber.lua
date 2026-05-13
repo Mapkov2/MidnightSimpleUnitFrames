@@ -61,15 +61,12 @@ local VALID_ANCHORS = {
 }
 
 -- ---------------------------------------------------------------------------
--- Font & color resolution (matches MSUF GF font pattern: per-kind override,
--- global fallback). Mirrors what MSUF_Options_Fonts.lua reads/writes.
+-- Font & color resolution. Font family is global; GF scopes only affect
+-- style/color values.
 -- ---------------------------------------------------------------------------
-local function _ResolveFontPath(kindConf)
-    local key = kindConf and kindConf.fontKey
-    if type(key) ~= "string" or key == "" then
-        local g = _G.MSUF_DB and _G.MSUF_DB.general
-        key = (g and g.fontKey) or "FRIZQT"
-    end
+local function _ResolveFontPath()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local key = (g and g.fontKey) or "FRIZQT"
     local fn = _G.MSUF_GetFontPathForKey
     if type(fn) == "function" then
         local p = fn(key)
@@ -79,13 +76,9 @@ local function _ResolveFontPath(kindConf)
     return resolve("Fonts\\FRIZQT__.TTF", 12, "")
 end
 
-local function _ResolveFontKey(kindConf)
-    local key = kindConf and kindConf.fontKey
-    if type(key) ~= "string" or key == "" then
-        local g = _G.MSUF_DB and _G.MSUF_DB.general
-        key = (g and g.fontKey) or "FRIZQT"
-    end
-    return key
+local function _ResolveFontKey()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    return (g and g.fontKey) or "FRIZQT"
 end
 
 local function _ResolveOutline(kindConf)

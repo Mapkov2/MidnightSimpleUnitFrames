@@ -570,7 +570,7 @@ local function ApplyFonts(f, kind)
     local fontFlags  = GF.ResolveFontFlags(kind)
     local fr, fg, fb = GF.ResolveFontColor(kind)
     local db = _G.MSUF_DB
-    local fontKey = (conf.fontOverride and conf.fontKey) or (db and db.general and db.general.fontKey)
+    local fontKey = db and db.general and db.general.fontKey
     local fScale     = conf._resolvedFrameScale or 1
     local nameSize   = (conf.nameFontSize  or 12) * fScale
     local hpSize     = (conf.hpFontSize    or 10) * fScale
