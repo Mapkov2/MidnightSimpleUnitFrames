@@ -109,6 +109,36 @@ local function MSUF_Gameplay_GetNudgeStep()
     return 1
 end
 
+local function MSUF_Gameplay_CheckpointHistory(label, source)
+    local h = _G.MSUF2
+    local checkpoint = h and h.CheckpointHistory
+    if type(checkpoint) ~= "function" then return false end
+    local ok, result = pcall(checkpoint, label or "Gameplay position", source or "gameplay:position")
+    return ok and result or false
+end
+
+local function MSUF_Gameplay_BeginHistory(frame, label, source)
+    local h = _G.MSUF2
+    local begin = h and h.BeginHistoryTransaction
+    if not (frame and type(begin) == "function") then return false end
+    local ok, started = pcall(begin, label or "Gameplay position", source or "gameplay:position")
+    if ok and started then
+        frame._msufGameplayHistoryTransaction = true
+        return true
+    end
+    return false
+end
+
+local function MSUF_Gameplay_CommitHistory(frame)
+    if not (frame and frame._msufGameplayHistoryTransaction) then return false end
+    frame._msufGameplayHistoryTransaction = nil
+    local h = _G.MSUF2
+    local commit = h and h.CommitHistoryTransaction
+    if type(commit) ~= "function" then return false end
+    local ok, result = pcall(commit)
+    return ok and result or false
+end
+
 local function MSUF_Gameplay_SelectNudgeFrame(frame, selected)
     if selected and gameplayNudgeSelection and gameplayNudgeSelection ~= frame then
         MSUF_Gameplay_SelectNudgeFrame(gameplayNudgeSelection, false)
@@ -969,6 +999,7 @@ local function EnsureFirstDanceFrame()
                 p:MSUF_SyncFirstDanceOffsetSliders()
             end
             _ApplyFirstDanceLockState()
+            MSUF_Gameplay_CheckpointHistory("First Dance position", "gameplay:firstDance:position")
             return true
         end,
         function(self)
@@ -983,6 +1014,7 @@ local function EnsureFirstDanceFrame()
             if not (IsAltKeyDown and IsAltKeyDown()) then return end
         end
         MSUF_Gameplay_SelectNudgeFrame(self, true)
+        MSUF_Gameplay_BeginHistory(self, "First Dance position", "gameplay:firstDance:position")
         self._msufDragging = true
         self:StartMoving()
     end)
@@ -1005,6 +1037,7 @@ local function EnsureFirstDanceFrame()
         end
         MSUF_Gameplay_SelectNudgeFrame(self, true)
         _ApplyFirstDanceLockState()
+        MSUF_Gameplay_CommitHistory(self)
     end)
 
     -- Text mode elements
@@ -1291,6 +1324,7 @@ EnsureCombatStateText = function()
                 db.combatStateOffsetY = _MSUF_RoundInt((tonumber(db.combatStateOffsetY) or 80) + (dy or 0))
                 self:ClearAllPoints()
                 self:SetPoint("CENTER", UIParent, "CENTER", db.combatStateOffsetX, db.combatStateOffsetY)
+                MSUF_Gameplay_CheckpointHistory("Combat enter/leave position", "gameplay:combatState:position")
                 return true
             end,
             function(self)
@@ -1302,19 +1336,23 @@ EnsureCombatStateText = function()
             local gd = EnsureGameplayDefaults()
             if gd.lockCombatState then return end
             MSUF_Gameplay_SelectNudgeFrame(self, true)
+            MSUF_Gameplay_BeginHistory(self, "Combat enter/leave position", "gameplay:combatState:position")
             self:StartMoving()
         end)
 
         combatStateFrame:SetScript("OnDragStop", function(self)
             self:StopMovingOrSizing()
-        local x, y = self:GetCenter()
+            local x, y = self:GetCenter()
             local ux, uy = UIParent:GetCenter()
-            local dx = x - ux
-            local dy = y - uy
-            local db = EnsureGameplayDefaults()
-            db.combatStateOffsetX = dx
-            db.combatStateOffsetY = dy
+            if x and y and ux and uy then
+                local dx = x - ux
+                local dy = y - uy
+                local db = EnsureGameplayDefaults()
+                db.combatStateOffsetX = dx
+                db.combatStateOffsetY = dy
+            end
             MSUF_Gameplay_SelectNudgeFrame(self, true)
+            MSUF_Gameplay_CommitHistory(self)
         end)
     end
 
@@ -1896,6 +1934,7 @@ local function CreateCombatTimerFrame()
                 p:MSUF_SyncCombatTimerOffsetSliders()
             end
             ApplyLockState()
+            MSUF_Gameplay_CheckpointHistory("Combat timer position", "gameplay:combatTimer:position")
             return true
         end,
         function(self)
@@ -1914,6 +1953,7 @@ local function CreateCombatTimerFrame()
         end
 
         MSUF_Gameplay_SelectNudgeFrame(self, true)
+        MSUF_Gameplay_BeginHistory(self, "Combat timer position", "gameplay:combatTimer:position")
         self._msufDragging = true
         self:StartMoving()
     end)
@@ -1951,6 +1991,7 @@ local function CreateCombatTimerFrame()
         MSUF_Gameplay_SelectNudgeFrame(self, true)
         -- Re-apply click-through / ALT-to-drag state after the drag ends.
         ApplyLockState()
+        MSUF_Gameplay_CommitHistory(self)
     end)
 
     combatTimerText = combatFrame:CreateFontString(nil, "OVERLAY")
@@ -2944,6 +2985,7 @@ do
             self._msufDragLastOffX = self._msufDragStartOffX
             self._msufDragLastOffY = self._msufDragStartOffY
             self._msufDragging = true
+            MSUF_Gameplay_BeginHistory(self, "TotemFrame position", "gameplay:totems:position")
 
             self:SetScript("OnUpdate", function(frame)
                 if not frame._msufDragging then return end
@@ -2985,6 +3027,7 @@ do
             if opt and opt.MSUF_SyncTotemOffsetSliders then
                 opt:MSUF_SyncTotemOffsetSliders()
             end
+            MSUF_Gameplay_CommitHistory(self)
         end)
 
         MSUF_Gameplay_SetupArrowNudge(overlay,
@@ -3005,6 +3048,7 @@ do
                 if opt and opt.MSUF_SyncTotemOffsetSliders then
                     opt:MSUF_SyncTotemOffsetSliders()
                 end
+                MSUF_Gameplay_CheckpointHistory("TotemFrame position", "gameplay:totems:position")
                 return true
             end,
             function()

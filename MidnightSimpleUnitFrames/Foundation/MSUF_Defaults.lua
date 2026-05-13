@@ -408,7 +408,7 @@ if g.flashFullRelPoint == nil then g.flashFullRelPoint = "CENTER" end
 if g.flashFullX == nil then g.flashFullX = -60 end
 if g.flashFullY == nil then g.flashFullY = 10 end
 if g.flashFullW == nil then g.flashFullW = 900 end
-if g.flashFullH == nil then g.flashFullH = 650 end
+if g.flashFullH == nil then g.flashFullH = 700 end
 if g.flashFullXpx == nil then g.flashFullXpx = -60 end
 if g.flashFullYpx == nil then g.flashFullYpx = 10 end
 if g.tipCycleIndex == nil then
@@ -445,6 +445,9 @@ end
 -- Default OFF to preserve existing behavior.
 if g.colorPowerTextByType == nil then
     g.colorPowerTextByType = false
+end
+if g.slashMenuSnapEnabled == nil then
+    g.slashMenuSnapEnabled = true
 end
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false -- Default: Snap OFF
