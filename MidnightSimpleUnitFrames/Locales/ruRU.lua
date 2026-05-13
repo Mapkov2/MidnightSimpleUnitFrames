@@ -483,6 +483,8 @@ local MSUF2_MENU_AUTO_ruRU = {
     ["Hide Categories"] = "Скрыть категории",
     ["Hide Preview"] = "Скрыть предварительный просмотр",
     ["Hide in client scene"] = "Скрыть в клиентской сцене",
+    ["Hide offline members"] = "Скрывать офлайн-участников",
+    ["Hide offline in combat"] = "Скрывать офлайн-участников в бою",
     ["Hide offline after"] = "Скрыть офлайн после",
     ["Highlight Borders"] = "Выделить границы",
     ["Highlight Priority"] = "Выделить приоритет",
@@ -1526,3 +1528,55 @@ for k, v in pairs(MSUF2_DIRECT_ruRU) do
     L[k] = v
 end
 -- MSUF2 direct text coverage END
+
+-- MSUF2 range-check search coverage BEGIN
+local MSUF2_RANGE_SEARCH_ruRU = {
+    ["group frame range check"] = "проверка дистанции групповых фреймов",
+    ["range check"] = "проверка дистанции",
+    ["unit frame range check"] = "проверка дистанции фрейма юнита",
+    ["unitframe range check"] = "проверка дистанции фрейма юнита",
+    ["where is miscellaneous"] = "где находятся прочие настройки",
+    ["Where is party or raid range check?"] = "Где находится проверка дистанции группы или рейда?",
+    ["Where is the unit frame range check?"] = "Где находится проверка дистанции фрейма юнита?",
+    ["why is msuf lagging"] = "почему MSUF тормозит",
+}
+for k, v in pairs(MSUF2_RANGE_SEARCH_ruRU) do
+    L[k] = v
+end
+-- MSUF2 range-check search coverage END
+
+-- MSUF2 menu search coverage BEGIN
+local MSUF2_MENU_SEARCH_ruRU = {
+    ["aura stack count"] = "число стаков ауры",
+    ["channel ticks"] = "тики поддержания",
+    ["class colors"] = "цвета классов",
+    ["click cast"] = "заклинание по клику",
+    ["edge snap"] = "привязка к краям",
+    ["external cooldowns"] = "внешние кулдауны",
+    ["global cooldown"] = "глобальное восстановление",
+    ["group indicators"] = "индикаторы группы",
+    ["mana text"] = "текст маны",
+    ["minimap button"] = "кнопка миникарты",
+    ["minimap icon"] = "значок миникарты",
+    ["name text"] = "текст имени",
+    ["Offline Members"] = "Участники не в сети",
+    ["optional modules"] = "необязательные модули",
+    ["raid frames"] = "рейдовые фреймы",
+    ["role order"] = "порядок ролей",
+    ["short names"] = "короткие имена",
+    ["target lost"] = "цель потеряна",
+    ["target sound"] = "звук цели",
+    ["target sounds"] = "звуки цели",
+    ["visibility conditions"] = "условия видимости",
+    ["Where are load conditions?"] = "Где находятся условия загрузки?",
+    ["Where are menu snap or menu behavior settings?"] = "Где находятся настройки привязки или поведения меню?",
+    ["Where are optional modules or style modules?"] = "Где находятся необязательные модули или модули стиля?",
+    ["Where are target sound settings?"] = "Где находятся настройки звуков цели?",
+    ["Where is Miscellaneous?"] = "Где находится Разное?",
+    ["where is the minimap icon setting"] = "где находится настройка значка миникарты",
+    ["Where is the minimap icon setting?"] = "Где находится настройка значка миникарты?",
+}
+for k, v in pairs(MSUF2_MENU_SEARCH_ruRU) do
+    L[k] = v
+end
+-- MSUF2 menu search coverage END
