@@ -1171,15 +1171,6 @@ if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegi
         local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
         local registeredKey = normalizeFontKey(key)
         local needsFontRefresh = _g and normalizeFontKey(_g.fontKey) == registeredKey
-        if not needsFontRefresh and MSUF_DB then
-            for _, unitKey in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss" }) do
-                local u = MSUF_DB[unitKey]
-                if u and u.fontOverride and normalizeFontKey(u.fontKey) == registeredKey then
-                    needsFontRefresh = true
-                    break
-                end
-            end
-        end
         if needsFontRefresh then
             if not _MSUF_DeferredFontsPending then
                 _MSUF_DeferredFontsPending = true
@@ -1282,12 +1273,14 @@ end
 local function MSUF_NormalizeStoredFontKeys()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then return end
+    MSUF_NormalizeFontKeyField(db.general)
     for _, key in ipairs({
-        "general",
         "player", "target", "targettarget", "focus", "pet", "boss",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
-        MSUF_NormalizeFontKeyField(db[key])
+        if type(db[key]) == "table" then
+            db[key].fontKey = nil
+        end
     end
 end
 _G.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys

@@ -156,21 +156,8 @@ local function _MSUF_ApplyFontsToFrame(f)
     local hpSize    = (conf and conf.hpFontSize)    or S.globalHPSize
     local powerSize = (conf and conf.powerFontSize) or S.globalPowSize
 
-    local _origPath, _origPathSerial, _origFontKey, _origFontKeySet, _origFlags, _origShadow, _origCPT
+    local _origFlags, _origShadow, _origCPT
     if conf and conf.fontOverride then
-        if conf.fontKey ~= nil and conf.fontKey ~= "" then
-            local getFontPath = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
-            local cPath = type(getFontPath) == "function" and getFontPath(conf.fontKey) or nil
-            if cPath then
-                _origPath = S.path
-                _origPathSerial = S.pathSerial
-                _origFontKey = S.fontKey
-                _origFontKeySet = true
-                S.path = cPath
-                S.pathSerial = _MSUF_GetFontPathSerial(cPath)
-                S.fontKey = conf.fontKey
-            end
-        end
         local cNoOL = conf.noOutline
         local cBold = conf.boldText
         if cNoOL ~= nil or cBold ~= nil then
@@ -208,9 +195,6 @@ local function _MSUF_ApplyFontsToFrame(f)
     if f.powerTextPct then _MSUF_ApplyFontCached(f.powerTextPct, powerSize, pwSetColor, pCr, pCg, pCb) end
     if f.powerText then _MSUF_ApplyFontCached(f.powerText, powerSize, pwSetColor, pCr, pCg, pCb) end
 
-    if _origPath then S.path = _origPath end
-    if _origPathSerial then S.pathSerial = _origPathSerial end
-    if _origFontKeySet then S.fontKey = _origFontKey end
     if _origFlags then S.flags = _origFlags end
     if _origShadow ~= nil then S.useShadow = _origShadow end
     if _origCPT ~= nil then S.colorPowerByType = _origCPT end
