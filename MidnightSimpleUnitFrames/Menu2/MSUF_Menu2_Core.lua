@@ -45,6 +45,7 @@ local W = M.Widgets
 M.pages = M.pages or {}
 M.pageOrder = M.pageOrder or {}
 M.cache = M.cache or {}
+M._msuf2LayoutVersion = M._msuf2LayoutVersion or 0
 
 local floor = math.floor
 local max = math.max
@@ -246,6 +247,15 @@ local function WindowVisualScale(frame)
     return (frame:GetEffectiveScale() or uiScale) / uiScale
 end
 
+local function CursorPositionInUIParent()
+    local parent = _G.UIParent
+    if not (parent and parent.GetEffectiveScale and _G.GetCursorPosition) then return nil, nil end
+    local scale = parent:GetEffectiveScale() or 1
+    if scale == 0 then scale = 1 end
+    local x, y = _G.GetCursorPosition()
+    return (x or 0) / scale, (y or 0) / scale
+end
+
 local function CaptureWindowLayout(frame)
     if not (frame and frame.GetLeft and frame.GetTop and frame.GetWidth and frame.GetHeight) then return nil end
     return {
@@ -345,20 +355,13 @@ local function MinimizeSlashMenuWindow(frame)
     return true
 end
 
-local function ApplySlashMenuSnap(frame)
+local function GetSlashMenuSnapLayout(frame)
     if not (frame and IsSlashMenuSnapEnabled()) then return false end
     local parent = _G.UIParent
-    if not (parent and parent.GetWidth and parent.GetHeight and _G.GetCursorPosition) then return false end
+    if not (parent and parent.GetWidth and parent.GetHeight) then return false end
 
-    if frame._msuf2WindowState == "maximized" then
-        frame._msuf2WindowState = "normal"
-        frame._msuf2RestoreLayout = nil
-    end
-
-    local uiScale = parent.GetEffectiveScale and (parent:GetEffectiveScale() or 1) or 1
-    if uiScale == 0 then uiScale = 1 end
-    local cursorX, cursorY = _G.GetCursorPosition()
-    cursorX, cursorY = (cursorX or 0) / uiScale, (cursorY or 0) / uiScale
+    local cursorX, cursorY = CursorPositionInUIParent()
+    if not cursorX then return false end
 
     local screenW, screenH = parent:GetWidth() or 0, parent:GetHeight() or 0
     if screenW <= 0 or screenH <= 0 then return false end
@@ -367,19 +370,19 @@ local function ApplySlashMenuSnap(frame)
     local frameRight = (frame.GetRight and frame:GetRight()) or cursorX
     local frameTop = (frame.GetTop and frame:GetTop()) or cursorY
     local frameBottom = (frame.GetBottom and frame:GetBottom()) or cursorY
-
     local left = cursorX <= SNAP_EDGE_PX or frameLeft <= SNAP_EDGE_PX
     local right = cursorX >= (screenW - SNAP_EDGE_PX) or frameRight >= (screenW - SNAP_EDGE_PX)
-    local top = cursorY >= (screenH - SNAP_EDGE_PX) or frameTop >= (screenH - SNAP_EDGE_PX)
-    local bottom = cursorY <= SNAP_EDGE_PX or frameBottom <= SNAP_EDGE_PX
     if left and right then
         right = cursorX >= (screenW * 0.5)
         left = not right
     end
-    if top and bottom then
-        top = cursorY >= (screenH * 0.5)
-        bottom = not top
-    end
+
+    local cursorTop = cursorY >= (screenH - SNAP_EDGE_PX)
+    local cursorBottom = cursorY <= SNAP_EDGE_PX
+    local edgeTop = cursorTop or frameTop >= (screenH - SNAP_EDGE_PX)
+    local edgeBottom = cursorBottom or frameBottom <= SNAP_EDGE_PX
+    local top = (left or right) and cursorTop or edgeTop
+    local bottom = (left or right) and cursorBottom or edgeBottom
     if not (left or right or top or bottom) then return false end
     if bottom and not (left or right) then return false end
 
@@ -414,7 +417,32 @@ local function ApplySlashMenuSnap(frame)
     end
     if yTop > screenH - SNAP_SCREEN_MARGIN then yTop = screenH - SNAP_SCREEN_MARGIN end
 
-    ApplyWindowLayout(frame, { x = x, yTop = yTop, w = localW, h = localH }, true)
+    return {
+        x = x,
+        yTop = yTop,
+        w = localW,
+        h = localH,
+        visualW = visualW,
+        visualH = visualH,
+        scale = scale,
+        left = left,
+        right = right,
+        top = top,
+        bottom = bottom,
+    }
+end
+
+local function ApplySlashMenuSnap(frame)
+    local layout = frame and frame._msuf2LastSnapLayout or nil
+    if not layout then layout = GetSlashMenuSnapLayout(frame) end
+    if not layout then return false end
+
+    if frame._msuf2WindowState == "maximized" then
+        frame._msuf2WindowState = "normal"
+        frame._msuf2RestoreLayout = nil
+    end
+
+    ApplyWindowLayout(frame, layout, true)
     if RefreshWindowControls then RefreshWindowControls(frame) end
     return true
 end
@@ -435,7 +463,8 @@ function RebuildActivePageForResize(frame)
     local key = M.activeKey or "home"
     SaveWindowSize(frame)
     ApplyScrollMetrics()
-    if M.InvalidatePage then M.InvalidatePage() end
+    M._msuf2LayoutVersion = (M._msuf2LayoutVersion or 0) + 1
+    if M.InvalidatePage then M.InvalidatePage(key) end
     M.activeKey = nil
     if M.SelectPage and frame and frame:IsShown() then M.SelectPage(key) end
 end
@@ -800,7 +829,18 @@ local function BuildPageEntry(key, hidden)
 
     local spec = M.pages[key]
     local specVersion = spec and spec.version
+    local layoutVersion = M._msuf2LayoutVersion or 0
     local cached = M.cache and M.cache[key]
+    if cached and cached.layoutVersion ~= layoutVersion then
+        if M.InvalidatePage then
+            M.InvalidatePage(key)
+        else
+            if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
+            if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
+            M.cache[key] = nil
+        end
+        cached = nil
+    end
     if cached and specVersion and cached.version ~= specVersion then
         if M.InvalidatePage then
             M.InvalidatePage(key)
@@ -820,7 +860,7 @@ local function BuildPageEntry(key, hidden)
     wrapper:SetSize(CONTENT_W - 10, CONTENT_H)
     if hidden and wrapper.Hide then wrapper:Hide() end
 
-    local entry = { wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, hiddenBuild = hidden and true or false }
+    local entry = { wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, layoutVersion = layoutVersion, hiddenBuild = hidden and true or false }
     M.cache[key] = entry
 
     local ctx = CreateContext(key, wrapper, entry)
@@ -3997,18 +4037,25 @@ local function BuildWindow()
     ApplyWindowResizeBounds(f)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", function(self)
-        if self._msuf2WindowState == "maximized" then
-            self._msuf2WindowState = "normal"
-            self._msuf2RestoreLayout = nil
-            if RefreshWindowControls then RefreshWindowControls(self) end
+        if self._msuf2BeginWindowDrag then
+            self:_msuf2BeginWindowDrag()
+            return
         end
         self:StartMoving()
     end)
     f:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
+        if self._msuf2FinishWindowDrag then
+            self:_msuf2FinishWindowDrag(true)
+            return
+        end
+        if self.StopMovingOrSizing then self:StopMovingOrSizing() end
         ApplySlashMenuSnap(self)
     end)
     f:SetScript("OnSizeChanged", function(self)
+        if self._msuf2LiveResizing then
+            self._msuf2ResizeMetricsDirty = true
+            return
+        end
         RefreshWindowMetrics(self)
         ApplyScrollMetrics()
     end)
@@ -4045,6 +4092,184 @@ local function BuildWindow()
     minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
     f.minimizeButton = minimize
 
+    local function EnsureResizeProxy()
+        if f._msuf2ResizeProxy then return f._msuf2ResizeProxy end
+        local proxy = CreateFrame("Frame", nil, UIParent)
+        proxy:SetFrameStrata("DIALOG")
+        proxy:SetFrameLevel(f:GetFrameLevel() + 80)
+        proxy:Hide()
+
+        local fill = proxy:CreateTexture(nil, "BACKGROUND")
+        fill:SetAllPoints()
+        fill:SetColorTexture(T.colors.bg[1], T.colors.bg[2], T.colors.bg[3], 0.18)
+        proxy.fill = fill
+
+        local accent = T.colors.accent or { 0.22, 0.78, 0.94, 1 }
+        local function Edge(pointA, pointB, width, height)
+            local tex = proxy:CreateTexture(nil, "BORDER")
+            tex:SetColorTexture(accent[1], accent[2], accent[3], 0.72)
+            tex:SetPoint(unpack(pointA))
+            tex:SetPoint(unpack(pointB))
+            if width then tex:SetWidth(width) end
+            if height then tex:SetHeight(height) end
+            return tex
+        end
+        Edge({ "TOPLEFT", proxy, "TOPLEFT", 0, 0 }, { "TOPRIGHT", proxy, "TOPRIGHT", 0, 0 }, nil, 2)
+        Edge({ "BOTTOMLEFT", proxy, "BOTTOMLEFT", 0, 0 }, { "BOTTOMRIGHT", proxy, "BOTTOMRIGHT", 0, 0 }, nil, 2)
+        Edge({ "TOPLEFT", proxy, "TOPLEFT", 0, 0 }, { "BOTTOMLEFT", proxy, "BOTTOMLEFT", 0, 0 }, 2, nil)
+        Edge({ "TOPRIGHT", proxy, "TOPRIGHT", 0, 0 }, { "BOTTOMRIGHT", proxy, "BOTTOMRIGHT", 0, 0 }, 2, nil)
+
+        local label = T.Font(proxy, "GameFontDisableSmall", "", accent)
+        label:SetPoint("BOTTOMRIGHT", proxy, "TOPRIGHT", 0, 4)
+        label:SetJustifyH("RIGHT")
+        proxy.sizeLabel = label
+
+        f._msuf2ResizeProxy = proxy
+        return proxy
+    end
+
+    local function ShowWindowLayoutProxy(layout)
+        if not layout then return nil end
+        local scale = layout.scale or WindowVisualScale(f)
+        if scale <= 0 then scale = 1 end
+        local proxy = EnsureResizeProxy()
+        proxy:ClearAllPoints()
+        proxy:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
+        proxy:SetSize(layout.visualW or ((layout.w or WINDOW_W) * scale), layout.visualH or ((layout.h or WINDOW_H) * scale))
+        if proxy.sizeLabel then proxy.sizeLabel:SetText(string.format("%d x %d", layout.w or WINDOW_W, layout.h or WINDOW_H)) end
+        proxy:Show()
+        return proxy
+    end
+
+    local function HideWindowLayoutProxy()
+        local proxy = f._msuf2ResizeProxy
+        if proxy then proxy:Hide() end
+        f._msuf2SnapPreviewKey = nil
+    end
+
+    local FinishWindowDrag
+    local function UpdateSnapPreview()
+        if not f._msuf2DraggingWindow then return end
+        local layout = GetSlashMenuSnapLayout(f)
+        if not layout then
+            f._msuf2LastSnapLayout = nil
+            HideWindowLayoutProxy()
+            return
+        end
+
+        f._msuf2LastSnapLayout = layout
+        local key = floor((layout.x or 0) + 0.5) .. ":"
+            .. floor((layout.yTop or 0) + 0.5) .. ":"
+            .. floor((layout.w or 0) + 0.5) .. ":"
+            .. floor((layout.h or 0) + 0.5)
+        if key == f._msuf2SnapPreviewKey then return end
+        f._msuf2SnapPreviewKey = key
+        ShowWindowLayoutProxy(layout)
+    end
+
+    local function BeginWindowDrag()
+        if f._msuf2WindowState == "maximized" then
+            f._msuf2WindowState = "normal"
+            f._msuf2RestoreLayout = nil
+            if RefreshWindowControls then RefreshWindowControls(f) end
+        end
+        f._msuf2DraggingWindow = true
+        f._msuf2SnapPreviewKey = nil
+        f._msuf2LastSnapLayout = nil
+        f:StartMoving()
+        if IsSlashMenuSnapEnabled() then
+            f:SetScript("OnUpdate", UpdateSnapPreview)
+            UpdateSnapPreview()
+        end
+    end
+
+    FinishWindowDrag = function(applySnap)
+        f._msuf2DraggingWindow = nil
+        f:SetScript("OnUpdate", nil)
+        HideWindowLayoutProxy()
+        if f.StopMovingOrSizing then f:StopMovingOrSizing() end
+        if applySnap then ApplySlashMenuSnap(f) end
+        f._msuf2LastSnapLayout = nil
+    end
+
+    f._msuf2BeginWindowDrag = BeginWindowDrag
+    f._msuf2FinishWindowDrag = FinishWindowDrag
+
+    local FinishResizeProxy
+    local function UpdateResizeProxy()
+        local state = f._msuf2ResizeState
+        if not state then return end
+        if not f._msuf2FinishingResize and _G.IsMouseButtonDown and not _G.IsMouseButtonDown("LeftButton") then
+            if FinishResizeProxy then FinishResizeProxy(true) end
+            return
+        end
+        local cursorX, cursorY = CursorPositionInUIParent()
+        if not cursorX then return end
+        local scale = state.scale or 1
+        if scale <= 0 then scale = 1 end
+        local maxW, maxH = WindowMaxBounds()
+        local w = ClampNumber(state.startW + ((cursorX - state.cursorX) / scale), MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
+        local h = ClampNumber(state.startH + ((state.cursorY - cursorY) / scale), MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
+        if state.w == w and state.h == h then return end
+        state.w, state.h = w, h
+
+        ShowWindowLayoutProxy({ x = state.layout.x, yTop = state.layout.yTop, w = w, h = h, scale = scale })
+    end
+
+    local function BeginResizeProxy(button)
+        if button ~= "LeftButton" then return false end
+        local cursorX, cursorY = CursorPositionInUIParent()
+        local layout = CaptureWindowLayout(f)
+        if not (cursorX and layout) then return false end
+        f._msuf2LiveResizing = true
+        f._msuf2ResizeMetricsDirty = nil
+        f._msuf2WindowState = "normal"
+        f._msuf2RestoreLayout = nil
+        if RefreshWindowControls then RefreshWindowControls(f) end
+        f._msuf2ResizeState = {
+            cursorX = cursorX,
+            cursorY = cursorY,
+            startW = layout.w or WINDOW_W,
+            startH = layout.h or WINDOW_H,
+            layout = layout,
+            scale = WindowVisualScale(f),
+        }
+        local proxy = EnsureResizeProxy()
+        proxy:SetScript("OnUpdate", UpdateResizeProxy)
+        proxy:Show()
+        UpdateResizeProxy()
+        return true
+    end
+
+    FinishResizeProxy = function(apply)
+        local state = f._msuf2ResizeState
+        f._msuf2FinishingResize = true
+        if state then UpdateResizeProxy() end
+        local proxy = f._msuf2ResizeProxy
+        if proxy then
+            proxy:SetScript("OnUpdate", nil)
+            HideWindowLayoutProxy()
+        end
+        if not state then
+            f._msuf2LiveResizing = nil
+            f._msuf2ResizeMetricsDirty = nil
+            f._msuf2FinishingResize = nil
+            return
+        end
+
+        local w = state.w or state.startW
+        local h = state.h or state.startH
+        local changed = math.abs((w or state.startW) - state.startW) >= 1
+            or math.abs((h or state.startH) - state.startH) >= 1
+        f._msuf2ResizeState = nil
+        f._msuf2ResizeMetricsDirty = nil
+        if apply and changed then
+            ApplyWindowLayout(f, { x = state.layout.x, yTop = state.layout.yTop, w = w, h = h }, true)
+        end
+        f._msuf2LiveResizing = nil
+        f._msuf2FinishingResize = nil
+    end
+
     local grip = CreateFrame("Button", nil, f)
     grip:SetSize(18, 18)
     grip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 3)
@@ -4053,21 +4278,13 @@ local function BuildWindow()
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     grip:SetScript("OnMouseDown", function(_, button)
-        if button == "LeftButton" and f.StartSizing then
-            f._msuf2WindowState = "normal"
-            f._msuf2RestoreLayout = nil
-            if RefreshWindowControls then RefreshWindowControls(f) end
-            ApplyWindowResizeBounds(f)
-            f:StartSizing("BOTTOMRIGHT")
-        end
+        BeginResizeProxy(button)
     end)
     grip:SetScript("OnMouseUp", function()
-        if f.StopMovingOrSizing then f:StopMovingOrSizing() end
-        ClampWindowSize(f)
-        RebuildActivePageForResize(f)
+        FinishResizeProxy(true)
     end)
     grip:SetScript("OnHide", function()
-        if f.StopMovingOrSizing then f:StopMovingOrSizing() end
+        FinishResizeProxy(false)
     end)
     f.resizeGrip = grip
     CreateMinimizedBar(f)
@@ -4194,6 +4411,8 @@ local function BuildWindow()
         SyncGroupPagePreviewForKey(M.activeKey)
     end)
     f:SetScript("OnHide", function()
+        if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
+        if FinishResizeProxy then FinishResizeProxy(false) end
         CancelSearchBackgroundIndex()
         UnregisterStatusEvents()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end

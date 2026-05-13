@@ -279,24 +279,78 @@ function W.PageBuilder(ctx)
     return b
 end
 
+local TOP_ACTION_BUTTON_STYLE = {
+    bg = { 0.018, 0.028, 0.058, 0.95 },
+    border = { 0.082, 0.125, 0.245, 0.66 },
+    textColor = { 0.82, 0.90, 1.00, 1 },
+    hoverBg = { 0.026, 0.040, 0.078, 0.97 },
+    hoverBorder = { 0.125, 0.220, 0.430, 0.80 },
+    activeBg = { 0.018, 0.028, 0.058, 0.95 },
+    activeBorder = { 0.082, 0.125, 0.245, 0.66 },
+    activeTextColor = { 0.82, 0.90, 1.00, 1 },
+}
+
+local function ApplyTopActionButtonVisual(btn, hover)
+    local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
+    local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
+    local tx = btn._msuf2TopActive and btn._msuf2TopActiveText or btn._msuf2TopText
+    local mul = hover and 1.06 or 1
+    if btn._msuf2Fill then btn._msuf2Fill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 1) end
+    if btn._msuf2Edge then btn._msuf2Edge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 1) end
+    if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
+end
+
+local function StyleTopActionButton(btn)
+    local s = TOP_ACTION_BUTTON_STYLE
+    btn._msuf2TopActive = false
+    btn._msuf2TopBg = s.bg
+    btn._msuf2TopBorder = s.border
+    btn._msuf2TopText = s.textColor
+    btn._msuf2TopHoverBg = s.hoverBg
+    btn._msuf2TopHoverBorder = s.hoverBorder
+    btn._msuf2TopActiveBg = s.activeBg
+    btn._msuf2TopActiveBorder = s.activeBorder
+    btn._msuf2TopActiveText = s.activeTextColor
+    if btn._msuf2Label then
+        btn._msuf2Label:ClearAllPoints()
+        btn._msuf2Label:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        btn._msuf2Label:SetJustifyH("CENTER")
+        if btn._msuf2Label.SetShadowColor then btn._msuf2Label:SetShadowColor(0, 0, 0, 0.55) end
+        if btn._msuf2Label.SetShadowOffset then btn._msuf2Label:SetShadowOffset(1, -1) end
+    end
+    btn.SetActive = function(self, active)
+        self._msuf2TopActive = active and true or false
+        ApplyTopActionButtonVisual(self)
+    end
+    btn.SetEnabled = function(self, enabled)
+        if enabled then
+            if self.Enable then self:Enable() end
+        else
+            if self.Disable then self:Disable() end
+        end
+        ApplyTopActionButtonVisual(self)
+    end
+    btn:SetScript("OnEnter", function(self) ApplyTopActionButtonVisual(self, true) end)
+    btn:SetScript("OnLeave", function(self) ApplyTopActionButtonVisual(self) end)
+    btn:SetScript("OnEnable", function(self) ApplyTopActionButtonVisual(self) end)
+    btn:SetScript("OnDisable", function(self) ApplyTopActionButtonVisual(self) end)
+    ApplyTopActionButtonVisual(btn)
+    return btn
+end
+
 function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     if not (builder and builder.Header) then return nil end
     local head = builder:Header(title, subtitle, height or 72)
-    local edit = T.Button(head, "MSUF Edit Mode", 150, 24)
+    local edit = StyleTopActionButton(T.Button(head, "MSUF Edit Mode", 128, 24))
     RegisterSearchObject(edit, "MSUF Edit Mode", "button")
     edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
-    if edit._msuf2Label then
-        edit._msuf2Label:ClearAllPoints()
-        edit._msuf2Label:SetPoint("CENTER", edit, "CENTER", 0, 0)
-        edit._msuf2Label:SetJustifyH("CENTER")
-    end
     edit:SetScript("OnClick", ToggleMSUFEditMode)
 
     local function RefreshEditButton()
         local active = IsMSUFEditModeActive()
         local locked = IsEditModeCombatLocked() and true or false
-        if edit.SetText then edit:SetText(Tr("MSUF Edit Mode")) end
-        if edit.SetActive then edit:SetActive(active) end
+        if edit.SetText then edit:SetText(active and Tr("Exit Edit Mode") or Tr("MSUF Edit Mode")) end
+        if edit.SetActive then edit:SetActive(false) end
         if edit.SetEnabled then edit:SetEnabled(active or not locked) end
     end
 
@@ -393,6 +447,52 @@ local function ScopeButtonWidth(item)
     return math.max(54, math.min(96, 28 + (#text * 7)))
 end
 
+local function MeasureScopeOverrideLayout(values, opts)
+    opts = opts or {}
+    values = values or opts.values or {}
+    local centerY = opts.centerY or -28
+    local labelX = opts.labelX or 14
+    local labelW = opts.labelWidth or 64
+    local gap = opts.gap or 8
+    local buttonH = opts.buttonHeight or 24
+    local rowStep = opts.rowStep or (buttonH + 6)
+    local sectionW = opts.width or (opts.ctx and opts.ctx.width) or 720
+    local maxRight = opts.maxRight or (sectionW - 14)
+    local startX = opts.startX or (labelX + labelW + 8)
+    local x, y = startX, centerY
+    local rows = 1
+
+    for i = 1, #values do
+        local width = ScopeButtonWidth(values[i])
+        if x > startX and x + width > maxRight then
+            x = startX
+            y = y - rowStep
+            rows = rows + 1
+        end
+        x = x + width + gap
+    end
+
+    return {
+        rows = rows,
+        bottomY = y - math.floor(buttonH * 0.5 + 0.5),
+        centerY = centerY,
+        lastRowCenterY = y,
+        rowStep = rowStep,
+        buttonHeight = buttonH,
+        sectionWidth = sectionW,
+        maxRight = maxRight,
+        startX = startX,
+    }
+end
+
+function W.MeasureScopeOverrideBar(values, opts)
+    if type(values) == "table" and values.values and opts == nil then
+        opts = values
+        values = opts.values
+    end
+    return MeasureScopeOverrideLayout(values, opts)
+end
+
 function W.ScopeOverrideBar(ctx, section, opts)
     opts = opts or {}
     local values = opts.values or {}
@@ -404,6 +504,18 @@ function W.ScopeOverrideBar(ctx, section, opts)
     local sectionW = opts.width or section._msuf2Width or (ctx and ctx.width) or (section.GetWidth and section:GetWidth()) or 720
     local maxRight = opts.maxRight or (sectionW - 14)
     local startX = opts.startX or (labelX + labelW + 8)
+    local rowStep = opts.rowStep or (buttonH + 6)
+    local metrics = MeasureScopeOverrideLayout(values, {
+        centerY = centerY,
+        labelX = labelX,
+        labelWidth = labelW,
+        gap = gap,
+        buttonHeight = buttonH,
+        rowStep = rowStep,
+        width = sectionW,
+        maxRight = maxRight,
+        startX = startX,
+    })
 
     local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", Tr(opts.label or "Editing:"), opts.labelColor or T.colors.text)
     SetSearchText(label, opts.label or "Editing:")
@@ -416,10 +528,13 @@ function W.ScopeOverrideBar(ctx, section, opts)
     SetSearchTitle(bar, opts.label or "Editing:")
     RegisterSearchObject(bar, opts.label or "Editing:", "segment", { values = values })
     bar:SetPoint("TOPLEFT", section, "TOPLEFT", 0, 0)
-    bar:SetSize(sectionW, math.abs(centerY) + buttonH)
+    bar:SetSize(sectionW, math.abs(metrics.bottomY) + 6)
     bar.buttons = {}
     bar.values = values
     bar.label = label
+    bar._msuf2Rows = metrics.rows
+    bar._msuf2BottomY = metrics.bottomY
+    bar._msuf2LastRowCenterY = metrics.lastRowCenterY
 
     local x, y = startX, centerY
     for i = 1, #values do
@@ -427,7 +542,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
         local width = ScopeButtonWidth(item)
         if x > startX and x + width > maxRight then
             x = startX
-            y = y - (buttonH + 6)
+            y = y - rowStep
         end
         local btn = T.Button(section, Tr(item.text or item.label or item.value or ""), width, buttonH)
         RegisterSearchObject(btn, item.text or item.label or item.value or "", "button")
@@ -451,6 +566,9 @@ function W.ScopeOverrideBar(ctx, section, opts)
     function bar:GetValue()
         if type(opts.getValue) == "function" then return opts.getValue() end
         return opts.value
+    end
+    function bar:GetLayoutMetrics()
+        return metrics
     end
     function bar:Refresh()
         local value = self:GetValue()

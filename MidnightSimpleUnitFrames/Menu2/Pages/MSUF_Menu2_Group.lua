@@ -444,7 +444,8 @@ local function RefreshContext(ctx)
 end
 
 local function ScopeSection(ctx, builder)
-    local h = 72
+    local compactTop = (tonumber(builder.width) or 0) < 600
+    local h = compactTop and 104 or 72
     local sec = CreateFrame("Frame", nil, builder.parent)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(builder.width, h)
@@ -543,11 +544,12 @@ local function ScopeSection(ctx, builder)
         previous = btn
     end
 
-    local copy = MakeTopButton(sec, "Copy To", 86)
-    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, -10)
-    local edit = MakeTopButton(sec, "MSUF Edit Mode", 128)
+    local actionY = compactTop and -42 or -10
+    local copy = MakeTopButton(sec, "Copy To", compactTop and 82 or 86)
+    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
+    local edit = MakeTopButton(sec, "MSUF Edit Mode", compactTop and 118 or 128)
     edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
-    local reset = MakeTopButton(sec, "Reset All", 84, {
+    local reset = MakeTopButton(sec, "Reset All", compactTop and 78 or 84, {
         bg = { 0.070, 0.026, 0.034, 0.94 },
         border = { 0.340, 0.090, 0.110, 0.82 },
         textColor = { 1.00, 0.82, 0.82, 1 },
@@ -560,8 +562,8 @@ local function ScopeSection(ctx, builder)
     reset:SetPoint("RIGHT", edit, "LEFT", -8, 0)
 
     local hint = T.Font(sec, "GameFontDisableSmall", "", T.colors.dim)
-    hint:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -43)
-    hint:SetWidth(builder.width - 16)
+    hint:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, compactTop and -74 or -43)
+    hint:SetWidth(max(120, builder.width - 16))
     hint:SetJustifyH("LEFT")
 
     local function PageScopeHint()

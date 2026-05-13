@@ -262,10 +262,9 @@ local function BuildFonts(ctx)
         { value = "gf_raid", text = "Raid" },
     }
 
-    local scope = b:Section("", 128)
-    if scope.title then scope.title:Hide() end
-    local scopeSeg = W.ScopeOverrideBar(ctx, scope, {
+    local scopeOpts = {
         values = scopeValues,
+        width = ctx.width,
         getValue = function() return CurrentFontScope() end,
         setValue = function(v)
             G()._fontScopeKey = NormalizeScopeKey(v)
@@ -274,9 +273,17 @@ local function BuildFonts(ctx)
         hasOverride = function(value)
             return value ~= "shared" and ScopeHasOverride(value, "fontOverride")
         end,
-    })
+    }
+    local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(scopeValues, scopeOpts)
+    local scopeBottomY = (scopeMetrics and scopeMetrics.bottomY) or -40
+    local overrideY = math.min(-58, scopeBottomY - 18)
+    local hintY = overrideY - 34
 
-    local override = W.ToggleAt(scope, "Override shared settings", 14, -58, 220)
+    local scope = b:Section("", math.max(128, math.abs(hintY) + 34))
+    if scope.title then scope.title:Hide() end
+    local scopeSeg = W.ScopeOverrideBar(ctx, scope, scopeOpts)
+
+    local override = W.ToggleAt(scope, "Override shared settings", 14, overrideY, 220)
     M.BindToggle(ctx, override,
         function()
             local key = CurrentFontScope()
@@ -290,9 +297,9 @@ local function BuildFonts(ctx)
             end
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
-    local overrideInfo = W.Text(scope, "", 14, -58, ctx.width - 130, T.colors.text)
+    local overrideInfo = W.Text(scope, "", 14, overrideY, ctx.width - 130, T.colors.text)
     local reset = T.Button(scope, "Reset", 76, 22)
-    reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -14, -50)
+    reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -14, overrideY + 8)
     reset._msuf2Label:ClearAllPoints()
     reset._msuf2Label:SetPoint("CENTER", reset, "CENTER", 0, 0)
     reset._msuf2Label:SetJustifyH("CENTER")
@@ -304,7 +311,7 @@ local function BuildFonts(ctx)
         ApplyFonts("MSUF2_FONT_RESET_OVERRIDES")
         if M.SelectPage then M.SelectPage(ctx.key) end
     end)
-    local hint = W.Text(scope, "Shared baseline plus per-unit and group-frame font overrides.", 14, -92, ctx.width - 28, T.colors.muted)
+    local hint = W.Text(scope, "Shared baseline plus per-unit and group-frame font overrides.", 14, hintY, ctx.width - 28, T.colors.muted)
     M.AddRefresher(ctx, function()
         local current = CurrentFontScope()
         local active = {}
