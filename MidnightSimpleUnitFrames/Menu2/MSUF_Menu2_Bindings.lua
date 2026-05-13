@@ -13,7 +13,7 @@ local pendingAlpha
 local pendingCastbar
 local flushQueued = false
 
-local HISTORY_LIMIT = 100
+local HISTORY_LIMIT = 500
 local historyDepth = 0
 local historyRestoring = false
 local historySessionActive = false
@@ -197,23 +197,14 @@ local function PushHistory(label, source, before, after)
     M.historyRedo = M.historyRedo or {}
 
     local stack = M.historyUndo
-    local last = stack[#stack]
-    if last and last.source == source then
-        last.after = after
-        last.label = label or last.label
-        if DeepEqual(last.before, after) then
-            stack[#stack] = nil
-        end
-    else
-        stack[#stack + 1] = {
-            label = label or "MSUF2 change",
-            source = source,
-            before = before,
-            after = after,
-        }
-        while #stack > HISTORY_LIMIT do
-            table.remove(stack, 1)
-        end
+    stack[#stack + 1] = {
+        label = label or "MSUF2 change",
+        source = source,
+        before = before,
+        after = after,
+    }
+    while #stack > HISTORY_LIMIT do
+        table.remove(stack, 1)
     end
 
     WipeTable(M.historyRedo)
@@ -241,11 +232,52 @@ local function ApplyHistorySnapshot(snapshot, reason)
     historyRestoring = false
 
     M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
+    if ns and type(ns.MSUF_RequestGameplayApply) == "function" then
+        pcall(ns.MSUF_RequestGameplayApply)
+    elseif ns and type(ns.MSUF_ApplyGameplayVisuals) == "function" then
+        pcall(ns.MSUF_ApplyGameplayVisuals)
+    end
+    do
+        local db = M.EnsureDB()
+        local g = db and db.general
+        local ui = type(g) == "table" and type(g.UIScale) == "table" and g.UIScale or nil
+        if ui and ui.Enabled == true and type(_G.MSUF_SetGlobalUiScale) == "function" then
+            pcall(_G.MSUF_SetGlobalUiScale, tonumber(ui.Scale) or 1, true)
+        elseif ui and type(_G.MSUF_ResetGlobalUiScale) == "function" then
+            pcall(_G.MSUF_ResetGlobalUiScale, true)
+        end
+        if M.ApplyMenuFrameScale and M.frame then
+            pcall(M.ApplyMenuFrameScale, M.frame)
+        elseif M.GetEffectiveMenuScale and M.frame and M.frame.SetScale and type(g) == "table" then
+            pcall(M.frame.SetScale, M.frame, M.GetEffectiveMenuScale(g.slashMenuScale))
+        end
+    end
+    local auras = ns and ns.MSUF_Auras2
+    if auras and type(auras.RequestApply) == "function" then
+        pcall(auras.RequestApply)
+    elseif type(_G.MSUF_Auras2_RefreshAll) == "function" then
+        pcall(_G.MSUF_Auras2_RefreshAll)
+    end
+    CallGlobal("MSUF_A2_InvalidateCooldownTextCurve")
+    CallGlobal("MSUF_GF_InvalidateCooldownTextCurve")
+    CallGlobal("MSUF_A2_ForceCooldownTextRecolor")
+    CallGlobal("MSUF_GF_ForceCooldownTextRecolor")
+    CallGlobal("MSUF_RefreshAllIdentityColors")
+    CallGlobal("MSUF_RefreshAllPowerTextColors")
+    CallGlobal("MSUF_RefreshAllFrames")
+    CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
+    CallGlobal("MSUF_UpdateAllBarTextures")
+    CallGlobal("MSUF_UpdateCastbarVisuals_Immediate")
+    CallGlobal("MSUF_ClassPower_Refresh")
+    CallGlobal("MSUF_ClassPower_RefreshTextures")
+    CallGlobal("MSUF_PortraitDecoration_RefreshAll")
     if ns and ns.GF then
         if type(ns.GF.RebuildAll) == "function" then pcall(ns.GF.RebuildAll) end
         if type(ns.GF.RefreshPreviewLayout) == "function" then pcall(ns.GF.RefreshPreviewLayout) end
+        if type(ns.GF.RefreshVisuals) == "function" then pcall(ns.GF.RefreshVisuals) end
     end
     if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
+    if historySessionActive then historySessionSnapshot = SnapshotDB() end
     RebuildActivePage()
     return true
 end
@@ -508,6 +540,22 @@ end
 
 function M.BindSlider(ctx, slider, getValue, setValue)
     if not slider then return end
+    local function BeginSliderHistory(self)
+        if self._msuf2Refreshing or self._msuf2HistoryTransaction then return end
+        if not M.BeginHistoryTransaction then return end
+        local label = WidgetHistoryLabel(ctx, self)
+        if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label)) then
+            self._msuf2HistoryTransaction = true
+        end
+    end
+    local function CommitSliderHistory(self)
+        if not self._msuf2HistoryTransaction then return end
+        self._msuf2HistoryTransaction = nil
+        if M.CommitHistoryTransaction then M.CommitHistoryTransaction() end
+    end
+    slider:HookScript("OnMouseDown", BeginSliderHistory)
+    slider:HookScript("OnMouseUp", CommitSliderHistory)
+    slider:HookScript("OnHide", CommitSliderHistory)
     slider:HookScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
         if self._msuf2Step and self._msuf2Step >= 1 then

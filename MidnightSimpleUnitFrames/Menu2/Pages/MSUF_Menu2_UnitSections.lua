@@ -103,7 +103,7 @@ local function BuildPreview(ctx, builder, unit)
     local sec = builder:CollapsibleSection("preview", "Hide Preview", 352, true)
     if W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(sec, "Hide Preview", "Show Preview") end
 
-    local createPreview = ns.MSUF_Menu2_CreateUnitPreviewBox
+    local createPreview = ns.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox
     if not createPreview then
         W.Text(sec, "The shared unit preview module is not loaded.", 14, -42, ctx.width - 28, T.colors.muted)
         return
@@ -132,11 +132,6 @@ local function BuildPreview(ctx, builder, unit)
         local c = T.colors.accent
         box.title:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     end
-    local leftBorderCover = box:CreateTexture(nil, "OVERLAY", nil, 7)
-    leftBorderCover:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
-    leftBorderCover:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 0, 0)
-    leftBorderCover:SetWidth(2)
-    leftBorderCover:SetColorTexture(0.035, 0.043, 0.058, 1)
     panel.unitPreviewBox = box
 
     local function RefreshThisPreview(reason)
@@ -727,6 +722,16 @@ local function BuildText(ctx, builder, unit)
         return fs
     end
 
+    local function EffectiveTextSize(unitKey, generalKey)
+        local conf = GetConf(unit)
+        local value = tonumber(conf and conf[unitKey])
+        if value ~= nil then return value end
+        local g = GetGeneral()
+        value = tonumber(g and g[generalKey])
+        if value ~= nil then return value end
+        return tonumber(g and g.fontSize) or 14
+    end
+
     local function PreviewText(parent, text, x, y, width)
         local label = W.Text(parent, "Preview", x, y, width, T.colors.dim)
         local value = T.Font(parent, "GameFontNormalSmall", text, T.colors.text)
@@ -772,10 +777,10 @@ local function BuildText(ctx, builder, unit)
         function(v) SetNumber(unit, "nameOffsetY", v, "MSUF2_NAME_Y", { text = true, preview = true }) end)
 
     SectionLabel(nameTab, "Appearance", rightX, -82)
-    local nameSize = W.Slider(nameTab, "Size", 6, 32, 1, 260)
+    local nameSize = W.Slider(nameTab, "Size", 6, 48, 1, 260)
     PlaceSlider(nameTab, nameSize, rightX, -112, rightSliderW)
     M.BindSlider(ctx, nameSize,
-        function() return ReadNumber(unit, "nameFontSize", 12) end,
+        function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
         function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
 
     SectionLabel(hpTab, "HP Text", leftX, -4)
@@ -827,10 +832,10 @@ local function BuildText(ctx, builder, unit)
         function(v) SetNumber(unit, "hpOffsetY", v, "MSUF2_HP_Y", { text = true, preview = true }) end)
 
     SectionLabel(hpTab, "Appearance", rightX, -252)
-    local hpSize = W.Slider(hpTab, "Size", 6, 32, 1, 260)
+    local hpSize = W.Slider(hpTab, "Size", 6, 48, 1, 260)
     PlaceSlider(hpTab, hpSize, rightX, -282, rightSliderW)
     M.BindSlider(ctx, hpSize,
-        function() return ReadNumber(unit, "hpFontSize", 12) end,
+        function() return EffectiveTextSize("hpFontSize", "hpFontSize") end,
         function(v) SetNumber(unit, "hpFontSize", v, "MSUF2_HP_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
 
     SectionLabel(powerTab, "Power Text", leftX, -4)
@@ -877,10 +882,10 @@ local function BuildText(ctx, builder, unit)
         function(v) SetNumber(unit, "powerOffsetY", v, "MSUF2_POWER_Y", { text = true, preview = true }) end)
 
     SectionLabel(powerTab, "Appearance", rightX, -252)
-    local pSize = W.Slider(powerTab, "Size", 6, 32, 1, 260)
+    local pSize = W.Slider(powerTab, "Size", 6, 48, 1, 260)
     PlaceSlider(powerTab, pSize, rightX, -282, rightSliderW)
     M.BindSlider(ctx, pSize,
-        function() return ReadNumber(unit, "powerFontSize", 12) end,
+        function() return EffectiveTextSize("powerFontSize", "powerFontSize") end,
         function(v) SetNumber(unit, "powerFontSize", v, "MSUF2_POWER_TEXT_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
 
     SectionLabel(advancedTab, "Text Layers", leftX, -4)
@@ -1020,23 +1025,51 @@ local function BuildAlpha(ctx, builder, unit)
     local function PlaceSlider(control, x, y, width)
         W.MoveWidget(control, sec, x, y, width or sliderW, "CENTER")
     end
+    local function CurrentAlphaKeys()
+        if ReadBool(unit, "alphaExcludeTextPortrait", false) ~= true then
+            return "alphaInCombat", "alphaOutOfCombat"
+        end
+        local modeKey = NormalizeAlphaMode(GetConf(unit).alphaLayerMode)
+        if modeKey == "background" then
+            return "alphaBGInCombat", "alphaBGOutOfCombat"
+        elseif modeKey == "health" then
+            return "alphaHPInCombat", "alphaHPOutOfCombat"
+        end
+        return "alphaFGInCombat", "alphaFGOutOfCombat"
+    end
+    local function ReadAlphaValue(inCombatValue)
+        local conf = GetConf(unit)
+        local inKey, outKey = CurrentAlphaKeys()
+        local key = inCombatValue and inKey or outKey
+        local value = tonumber(conf and conf[key])
+        if value ~= nil then return value end
+        if key == "alphaHPInCombat" then value = tonumber(conf and conf.alphaFGInCombat)
+        elseif key == "alphaHPOutOfCombat" then value = tonumber(conf and conf.alphaFGOutOfCombat) end
+        if value ~= nil then return value end
+        return ReadNumber(unit, inCombatValue and "alphaInCombat" or "alphaOutOfCombat", 1)
+    end
 
     local inCombat = W.Slider(sec, "Alpha in combat", 0, 1, 0.05, 300)
     PlaceSlider(inCombat, leftX, -154, sliderW)
     M.BindSlider(ctx, inCombat,
-        function() return ReadNumber(unit, "alphaInCombat", 1) end,
+        function() return ReadAlphaValue(true) end,
         function(v)
-            SetNumber(unit, "alphaInCombat", v, "MSUF2_ALPHA_IN", { alpha = true, preview = true })
+            local inKey, outKey = CurrentAlphaKeys()
+            SetNumber(unit, inKey, v, "MSUF2_ALPHA_IN", { alpha = true, preview = true })
             if ReadBool(unit, "alphaSync", false) then
-                SetNumber(unit, "alphaOutOfCombat", v, "MSUF2_ALPHA_SYNC", { alpha = true, preview = true })
+                SetNumber(unit, outKey, v, "MSUF2_ALPHA_SYNC", { alpha = true, preview = true })
+                M.Refresh(ctx)
             end
         end)
 
     local outCombat = W.Slider(sec, "Alpha out of combat", 0, 1, 0.05, 300)
     PlaceSlider(outCombat, rightX, -154, sliderW)
     M.BindSlider(ctx, outCombat,
-        function() return ReadNumber(unit, "alphaOutOfCombat", 1) end,
-        function(v) SetNumber(unit, "alphaOutOfCombat", v, "MSUF2_ALPHA_OUT", { alpha = true, preview = true }) end)
+        function() return ReadAlphaValue(false) end,
+        function(v)
+            local _, outKey = CurrentAlphaKeys()
+            SetNumber(unit, outKey, v, "MSUF2_ALPHA_OUT", { alpha = true, preview = true })
+        end)
 
     local sync = W.ToggleAt(sec, "Sync both", leftX, -42, 220)
     M.BindToggle(ctx, sync,
@@ -1044,14 +1077,19 @@ local function BuildAlpha(ctx, builder, unit)
         function(v)
             SetBool(unit, "alphaSync", v, "MSUF2_ALPHA_SYNC_TOGGLE", { alpha = true, preview = true })
             if v then
-                SetNumber(unit, "alphaOutOfCombat", ReadNumber(unit, "alphaInCombat", 1), "MSUF2_ALPHA_SYNC_VALUE", { alpha = true, preview = true })
+                local _, outKey = CurrentAlphaKeys()
+                SetNumber(unit, outKey, ReadAlphaValue(true), "MSUF2_ALPHA_SYNC_VALUE", { alpha = true, preview = true })
             end
+            M.Refresh(ctx)
         end)
 
     local exclude = W.ToggleAt(sec, "Keep text + portrait visible", rightX, -42, 250)
     M.BindToggle(ctx, exclude,
         function() return ReadBool(unit, "alphaExcludeTextPortrait", false) end,
-        function(v) SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true }) end)
+        function(v)
+            SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true })
+            M.Refresh(ctx)
+        end)
 
     local preserve = W.ToggleAt(sec, "Preserve HP color", rightX, -72, 220)
     M.BindToggle(ctx, preserve,
@@ -1084,7 +1122,10 @@ local function BuildAlpha(ctx, builder, unit)
     end
     M.BindSegment(ctx, mode,
         function() return NormalizeAlphaMode(GetConf(unit).alphaLayerMode) end,
-        function(v) M.SetUnitValue(unit, "alphaLayerMode", AlphaModeValue(v), "MSUF2_ALPHA_LAYER", { alpha = true, preview = true }) end)
+        function(v)
+            M.SetUnitValue(unit, "alphaLayerMode", AlphaModeValue(v), "MSUF2_ALPHA_LAYER", { alpha = true, preview = true })
+            M.Refresh(ctx)
+        end)
 end
 
 local function BuildPortrait(ctx, builder, unit)

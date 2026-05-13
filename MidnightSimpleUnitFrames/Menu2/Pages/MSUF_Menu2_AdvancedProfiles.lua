@@ -355,7 +355,6 @@ local function BuildModules(ctx)
             end
         end)
     BindTableToggle(ctx, style, "Rounded unitframes", G, "roundedUnitframes", false, function() CallGlobal("MSUF_ApplyModules") end)
-    BindTableToggle(ctx, style, "Portrait decoration", G, "portraitDecorationEnabled", false, function() CallGlobal("MSUF_ApplyModules") end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 

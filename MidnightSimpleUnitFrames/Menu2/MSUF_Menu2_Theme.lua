@@ -445,19 +445,163 @@ function T.AttachNavIcon(btn, navKey, isChild)
     end
 end
 
+local function HideNativeSliderTexture(region, keep)
+    if not region or region == keep then return end
+    if region.SetAlpha then region:SetAlpha(0) end
+    if region.Hide then region:Hide() end
+end
+
+local function HideNativeSliderParts(slider)
+    if not slider then return end
+    local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
+    local keep = {}
+    local function Keep(region)
+        if region then keep[region] = true end
+    end
+    Keep(thumb)
+    Keep(slider._msufTrack)
+    Keep(slider._msufTrackTop)
+    Keep(slider._msufTrackBottom)
+    Keep(slider._msufFill)
+    Keep(slider._msufFillGlow)
+    Keep(slider._msufPeelTrack)
+    Keep(slider._msufPeelTrackFill)
+
+    if slider.GetRegions then
+        local regions = { slider:GetRegions() }
+        for i = 1, #regions do
+            local region = regions[i]
+            local isTexture = false
+            if region and region.IsObjectType then isTexture = region:IsObjectType("Texture") and true or false end
+            if (not isTexture) and region and region.GetObjectType then isTexture = region:GetObjectType() == "Texture" end
+            if isTexture and not keep[region] then HideNativeSliderTexture(region) end
+        end
+    end
+
+    local name = slider.GetName and slider:GetName()
+    if name and _G then
+        for _, suffix in ipairs({ "Left", "Middle", "Right", "Text", "Low", "High" }) do
+            HideNativeSliderTexture(_G[name .. suffix])
+        end
+    end
+end
+
+local function SetSliderTextureColor(texture, r, g, b, a)
+    if not texture then return end
+    if texture.SetColorTexture then
+        texture:SetColorTexture(r, g, b, a)
+    else
+        texture:SetTexture("Interface\\Buttons\\WHITE8X8")
+        if texture.SetVertexColor then texture:SetVertexColor(r, g, b, a) end
+    end
+end
+
 function T.StyleSlider(slider)
     if not slider then return end
-    local UI = ns and ns.UI
-    local style = (_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI and UI.StyleSlider)
-    if type(style) == "function" then
-        pcall(style, slider)
-        return
+    slider.__msufPeelSliderSkinned = true
+    slider._msuf2SliderStyled = true
+
+    if slider.SetOrientation then slider:SetOrientation("HORIZONTAL") end
+    if slider.SetThumbTexture and slider.GetThumbTexture and not slider:GetThumbTexture() then
+        slider:SetThumbTexture(T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8")
     end
+    HideNativeSliderParts(slider)
+
+    if not slider._msufTrack and slider.CreateTexture then
+        local track = slider:CreateTexture(nil, "BACKGROUND", nil, 1)
+        track:SetPoint("LEFT", slider, "LEFT", 0, 0)
+        track:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
+        track:SetHeight(8)
+        slider._msufTrack = track
+
+        local top = slider:CreateTexture(nil, "BORDER", nil, 1)
+        top:SetPoint("LEFT", track, "LEFT", 0, 0)
+        top:SetPoint("RIGHT", track, "RIGHT", 0, 0)
+        top:SetPoint("TOP", track, "TOP", 0, 0)
+        top:SetHeight(1)
+        slider._msufTrackTop = top
+
+        local bottom = slider:CreateTexture(nil, "BORDER", nil, 1)
+        bottom:SetPoint("LEFT", track, "LEFT", 0, 0)
+        bottom:SetPoint("RIGHT", track, "RIGHT", 0, 0)
+        bottom:SetPoint("BOTTOM", track, "BOTTOM", 0, 0)
+        bottom:SetHeight(1)
+        slider._msufTrackBottom = bottom
+
+        local fill = slider:CreateTexture(nil, "ARTWORK", nil, 1)
+        fill:SetPoint("LEFT", slider, "LEFT", 1, 0)
+        fill:SetHeight(4)
+        slider._msufFill = fill
+
+        local glow = slider:CreateTexture(nil, "OVERLAY", nil, 1)
+        glow:SetPoint("LEFT", fill, "LEFT", 0, 0)
+        glow:SetPoint("RIGHT", fill, "RIGHT", 0, 0)
+        glow:SetHeight(8)
+        slider._msufFillGlow = glow
+    end
+
+    local enabled = not (slider.IsEnabled and not slider:IsEnabled())
+    local hovered = slider._msuf2SliderHovered and true or false
+    local alpha = enabled and 1 or 0.45
+    local accent = T.colors.accent
+    local edge = T.colors.border or T.colors.borderSoft
+
+    if slider._msufTrack then
+        SetSliderTextureColor(slider._msufTrack, 0.035, 0.043, 0.078, 0.98 * alpha)
+        if slider._msufTrack.Show then slider._msufTrack:Show() end
+    end
+    if slider._msufTrackTop then
+        SetSliderTextureColor(slider._msufTrackTop, edge[1], edge[2], edge[3], (hovered and 0.95 or 0.70) * alpha)
+        slider._msufTrackTop:Show()
+    end
+    if slider._msufTrackBottom then
+        SetSliderTextureColor(slider._msufTrackBottom, edge[1], edge[2], edge[3], 0.40 * alpha)
+        slider._msufTrackBottom:Show()
+    end
+    if slider._msufFill then
+        SetSliderTextureColor(slider._msufFill, accent[1], accent[2], accent[3], (hovered and 0.95 or 0.78) * alpha)
+        if slider._msufFill.Show then slider._msufFill:Show() end
+    end
+    if slider._msufFillGlow then
+        SetSliderTextureColor(slider._msufFillGlow, accent[1], accent[2], accent[3], (hovered and 0.18 or 0.10) * alpha)
+        slider._msufFillGlow:Show()
+    end
+
+    local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
+    if thumb then
+        thumb:SetTexture(T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8")
+        thumb:SetTexCoord(0, 1, 0, 1)
+        thumb:SetSize(18, 18)
+        if thumb.SetVertexColor then thumb:SetVertexColor(accent[1], accent[2], accent[3], alpha) end
+        if thumb.SetAlpha then thumb:SetAlpha(alpha) end
+        if thumb.Show then thumb:Show() end
+    end
+
+    if slider.HookScript and not slider._msuf2SliderStyleHooks then
+        slider._msuf2SliderStyleHooks = true
+        slider:HookScript("OnEnter", function(self)
+            self._msuf2SliderHovered = true
+            T.StyleSlider(self)
+        end)
+        slider:HookScript("OnLeave", function(self)
+            self._msuf2SliderHovered = nil
+            T.StyleSlider(self)
+        end)
+        slider:HookScript("OnSizeChanged", function(self)
+            if self._msuf2UpdateFill then self:_msuf2UpdateFill() end
+        end)
+    end
+
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function()
-            local UI2 = ns and ns.UI
-            local later = (_G and _G.MSUF_StyleSlider) or (ns and ns.MSUF_StyleSlider) or (UI2 and UI2.StyleSlider)
-            if type(later) == "function" then pcall(later, slider) end
+            if not slider then return end
+            slider.__msufPeelSliderSkinned = true
+            HideNativeSliderParts(slider)
+            if slider._msufTrack and slider._msufTrack.Show then slider._msufTrack:Show() end
+            if slider._msufTrackTop and slider._msufTrackTop.Show then slider._msufTrackTop:Show() end
+            if slider._msufTrackBottom and slider._msufTrackBottom.Show then slider._msufTrackBottom:Show() end
+            if slider._msufFill and slider._msufFill.Show then slider._msufFill:Show() end
+            if slider._msufFillGlow and slider._msufFillGlow.Show then slider._msufFillGlow:Show() end
         end)
     end
 end
@@ -758,7 +902,245 @@ function T.SkinSuccessButton(btn)
     return btn
 end
 
+local function CloseButtonVisual(btn, hover, down)
+    if not btn then return end
+    local fill = btn._msuf2CloseFill
+    local edge = btn._msuf2CloseEdge
+    local lineA = btn._msuf2CloseLineA
+    local lineB = btn._msuf2CloseLineB
+    local label = btn._msuf2CloseFallback
+    local alpha = (btn.IsEnabled and not btn:IsEnabled()) and 0.42 or 1
+
+    if fill and fill.SetVertexColor then
+        if down then
+            fill:SetVertexColor(0.310, 0.050, 0.070, 0.98 * alpha)
+        elseif hover then
+            fill:SetVertexColor(0.230, 0.045, 0.065, 0.96 * alpha)
+        else
+            fill:SetVertexColor(0.075, 0.080, 0.125, 0.92 * alpha)
+        end
+    end
+    if edge and edge.SetVertexColor then
+        if hover or down then
+            edge:SetVertexColor(T.colors.danger[1], T.colors.danger[2], T.colors.danger[3], 0.96 * alpha)
+        else
+            edge:SetVertexColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.78 * alpha)
+        end
+    end
+
+    local lr, lg, lb = 1.00, hover and 0.88 or 0.72, hover and 0.86 or 0.78
+    if lineA and lineA.SetVertexColor then lineA:SetVertexColor(lr, lg, lb, alpha) end
+    if lineB and lineB.SetVertexColor then lineB:SetVertexColor(lr, lg, lb, alpha) end
+    if label and label.SetTextColor then label:SetTextColor(lr, lg, lb, alpha) end
+end
+
 function T.CloseButton(parent)
-    local btn = CreateFrame("Button", nil, parent, "UIPanelCloseButton")
+    local btn = CreateFrame("Button", nil, parent)
+    btn:SetSize(24, 24)
+
+    local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Close", 2, "BACKGROUND", "BORDER")
+    btn._msuf2CloseFill = fill
+    btn._msuf2CloseEdge = edge
+
+    local lineA = btn:CreateTexture(nil, "ARTWORK")
+    lineA:SetTexture("Interface\\Buttons\\WHITE8X8")
+    lineA:SetSize(12, 2)
+    lineA:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    local lineB = btn:CreateTexture(nil, "ARTWORK")
+    lineB:SetTexture("Interface\\Buttons\\WHITE8X8")
+    lineB:SetSize(12, 2)
+    lineB:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    if lineA.SetRotation and lineB.SetRotation then
+        lineA:SetRotation(math.pi * 0.25)
+        lineB:SetRotation(-math.pi * 0.25)
+    else
+        lineA:Hide()
+        lineB:Hide()
+        local fallback = T.Font(btn, "GameFontHighlightSmall", "x", T.colors.danger)
+        fallback:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        btn._msuf2CloseFallback = fallback
+    end
+    btn._msuf2CloseLineA = lineA
+    btn._msuf2CloseLineB = lineB
+
+    btn:SetScript("OnEnter", function(self)
+        self._msuf2CloseHover = true
+        CloseButtonVisual(self, true, self._msuf2CloseDown)
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self._msuf2CloseHover = nil
+        self._msuf2CloseDown = nil
+        CloseButtonVisual(self, false, false)
+    end)
+    btn:SetScript("OnMouseDown", function(self)
+        self._msuf2CloseDown = true
+        CloseButtonVisual(self, self._msuf2CloseHover, true)
+    end)
+    btn:SetScript("OnMouseUp", function(self)
+        self._msuf2CloseDown = nil
+        CloseButtonVisual(self, self._msuf2CloseHover, false)
+    end)
+    btn:SetScript("OnEnable", function(self)
+        CloseButtonVisual(self, self._msuf2CloseHover, self._msuf2CloseDown)
+    end)
+    btn:SetScript("OnDisable", function(self)
+        CloseButtonVisual(self, false, false)
+    end)
+
+    CloseButtonVisual(btn, false, false)
     return btn
+end
+
+local function ClampScrollValue(value, maxValue)
+    value = tonumber(value) or 0
+    maxValue = tonumber(maxValue) or 0
+    if value < 0 then return 0 end
+    if value > maxValue then return maxValue end
+    return value
+end
+
+local function PixelBarTexture(texture)
+    if not texture then return texture end
+    texture:SetTexture("Interface\\Buttons\\WHITE8X8")
+    if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(true) end
+    if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
+    return texture
+end
+
+function T.StyleScrollFrame(scroll, anchor)
+    if not scroll or scroll._msuf2ScrollStyled then return scroll and scroll._msuf2ScrollBar end
+    scroll._msuf2ScrollStyled = true
+
+    local parent = anchor or (scroll.GetParent and scroll:GetParent()) or scroll
+    local bar = CreateFrame("Slider", nil, parent)
+    bar:SetOrientation("VERTICAL")
+    bar:SetWidth(10)
+    bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 6, -8)
+    bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 6, 8)
+    bar:SetMinMaxValues(0, 1)
+    bar:SetValueStep(1)
+    if bar.SetObeyStepOnDrag then bar:SetObeyStepOnDrag(false) end
+    if bar.EnableMouse then bar:EnableMouse(true) end
+    if bar.SetFrameLevel and scroll.GetFrameLevel then bar:SetFrameLevel(scroll:GetFrameLevel() + 8) end
+
+    local track = PixelBarTexture(bar:CreateTexture(nil, "BACKGROUND"))
+    track:SetPoint("TOP", bar, "TOP", 0, 0)
+    track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
+    track:SetWidth(2)
+    track:SetColorTexture(0.025, 0.030, 0.060, 0.82)
+    bar._msuf2Track = track
+
+    local trackEdge = PixelBarTexture(bar:CreateTexture(nil, "BORDER"))
+    trackEdge:SetPoint("TOPLEFT", track, "TOPRIGHT", 1, 0)
+    trackEdge:SetPoint("BOTTOMLEFT", track, "BOTTOMRIGHT", 1, 0)
+    trackEdge:SetWidth(1)
+    trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.38)
+    bar._msuf2TrackEdge = trackEdge
+
+    local thumbBase = { 0.240, 0.300, 0.430 }
+    local thumbHover = { 0.320, 0.420, 0.560 }
+
+    local thumb = PixelBarTexture(bar:CreateTexture(nil, "OVERLAY"))
+    thumb:SetSize(5, 42)
+    thumb:SetColorTexture(thumbBase[1], thumbBase[2], thumbBase[3], 0.72)
+    bar:SetThumbTexture(thumb)
+    bar._msuf2Thumb = thumb
+
+    local function Paint(hover)
+        local shown = bar.IsShown and bar:IsShown()
+        local alpha = shown and 1 or 0
+        if track then track:SetColorTexture(0.025, 0.030, 0.060, (hover and 0.98 or 0.82) * alpha) end
+        if trackEdge then trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], (hover and 0.62 or 0.38) * alpha) end
+        if thumb and thumb.SetColorTexture then
+            local c = hover and thumbHover or thumbBase
+            thumb:SetColorTexture(c[1], c[2], c[3], (hover and 0.90 or 0.68) * alpha)
+        end
+    end
+
+    local rawSetVerticalScroll = scroll.SetVerticalScroll
+    local function Refresh()
+        local child = scroll.GetScrollChild and scroll:GetScrollChild()
+        local childH = (child and child.GetHeight and child:GetHeight()) or 0
+        local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
+        local maxScroll = math.max(0, childH - frameH)
+        scroll._msuf2MaxScroll = maxScroll
+
+        if maxScroll <= 1 or frameH <= 0 then
+            if rawSetVerticalScroll and (scroll:GetVerticalScroll() or 0) ~= 0 then
+                rawSetVerticalScroll(scroll, 0)
+            end
+            bar._msuf2Refreshing = true
+            bar:SetValue(0)
+            bar._msuf2Refreshing = nil
+            bar:Hide()
+            return
+        end
+
+        bar:Show()
+        bar:SetMinMaxValues(0, maxScroll)
+        local visibleRatio = frameH / math.max(childH, 1)
+        local thumbH = math.floor(math.max(34, math.min(frameH, frameH * visibleRatio)) + 0.5)
+        if thumb and thumb.SetHeight then thumb:SetHeight(thumbH) end
+
+        local offset = ClampScrollValue(scroll:GetVerticalScroll() or 0, maxScroll)
+        if offset ~= (scroll:GetVerticalScroll() or 0) and rawSetVerticalScroll then
+            rawSetVerticalScroll(scroll, offset)
+        end
+        bar._msuf2Refreshing = true
+        bar:SetValue(offset)
+        bar._msuf2Refreshing = nil
+        Paint(bar._msuf2Hover)
+    end
+
+    scroll._msuf2RefreshScrollBar = Refresh
+    scroll.SetVerticalScroll = function(self, offset)
+        local maxScroll = self._msuf2MaxScroll
+        if maxScroll == nil then
+            local child = self.GetScrollChild and self:GetScrollChild()
+            local childH = (child and child.GetHeight and child:GetHeight()) or 0
+            local frameH = (self.GetHeight and self:GetHeight()) or 0
+            maxScroll = math.max(0, childH - frameH)
+        end
+        rawSetVerticalScroll(self, ClampScrollValue(offset, maxScroll))
+        if self._msuf2RefreshScrollBar then self:_msuf2RefreshScrollBar() end
+    end
+
+    local function ScrollBy(delta)
+        if not delta or delta == 0 then return end
+        local step = 64
+        if IsShiftKeyDown and IsShiftKeyDown() then step = 180 end
+        if IsControlKeyDown and IsControlKeyDown() then step = math.max(step, (scroll.GetHeight and scroll:GetHeight()) or step) end
+        scroll:SetVerticalScroll((scroll:GetVerticalScroll() or 0) - delta * step)
+    end
+
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
+    local wheelChild = scroll.GetScrollChild and scroll:GetScrollChild()
+    if wheelChild and wheelChild.EnableMouseWheel then
+        wheelChild:EnableMouseWheel(true)
+        wheelChild:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
+    end
+    bar:EnableMouseWheel(true)
+    bar:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
+    bar:SetScript("OnEnter", function(self)
+        self._msuf2Hover = true
+        Paint(true)
+    end)
+    bar:SetScript("OnLeave", function(self)
+        self._msuf2Hover = nil
+        Paint(false)
+    end)
+    bar:SetScript("OnValueChanged", function(self, value)
+        if self._msuf2Refreshing then return end
+        local maxScroll = scroll._msuf2MaxScroll or 0
+        if rawSetVerticalScroll then rawSetVerticalScroll(scroll, ClampScrollValue(value, maxScroll)) end
+        Refresh()
+    end)
+    scroll:HookScript("OnScrollRangeChanged", Refresh)
+    scroll:HookScript("OnSizeChanged", Refresh)
+    if bar.HookScript then bar:HookScript("OnShow", function() Paint(bar._msuf2Hover) end) end
+
+    Refresh()
+    scroll._msuf2ScrollBar = bar
+    return bar
 end
