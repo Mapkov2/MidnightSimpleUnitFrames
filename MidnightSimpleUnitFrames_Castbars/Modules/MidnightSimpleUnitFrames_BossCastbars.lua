@@ -6,6 +6,19 @@ ns = ns or {}
 local MAX_BOSS = _G.MSUF_MAX_BOSS_FRAMES or 5
 local ResolveFontPath = _G.MSUF_ResolveFontPath or function(path) return path end
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 -- Forward declarations
 local BossCastbar_Start
 local BossCastbar_Stop
@@ -1658,7 +1671,7 @@ local function MSUF_CreateBossCastbarPreview(index)
 
 	local castText = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     castText:SetJustifyH("LEFT")
-    castText:SetText("Boss castbar preview")
+    castText:SetText(Tr("Boss castbar preview"))
     f.castText = castText
 
 	local timeText = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")

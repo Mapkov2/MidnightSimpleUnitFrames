@@ -9,6 +9,7 @@
 ## LoadOnDemand: 1
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## X-Wago-ID: XKq9aoKy
+## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
 
 Castbars\MSUF_CastbarRegistry.lua
 Castbars\MSUF_CastbarStyle.lua
