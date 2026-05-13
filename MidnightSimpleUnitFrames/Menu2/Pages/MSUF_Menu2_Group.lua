@@ -452,7 +452,7 @@ end
 
 local function ScopeSection(ctx, builder)
     local compactTop = (tonumber(builder.width) or 0) < 600
-    local h = compactTop and 104 or 72
+    local h = compactTop and 72 or 40
     local sec = CreateFrame("Frame", nil, builder.parent)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(builder.width, h)
@@ -568,21 +568,6 @@ local function ScopeSection(ctx, builder)
     })
     reset:SetPoint("RIGHT", edit, "LEFT", -8, 0)
 
-    local hint = T.Font(sec, "GameFontDisableSmall", "", T.colors.dim)
-    hint:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, compactTop and -74 or -43)
-    hint:SetWidth(max(120, builder.width - 16))
-    hint:SetJustifyH("LEFT")
-
-    local function PageScopeHint()
-        local labels = {
-            gf_layout = "layout",
-            gf_bars = "health & text",
-            gf_auras = "buffs & debuffs",
-            gf_indicators = "indicators",
-        }
-        return labels[ctx and ctx.key] or "layout"
-    end
-
     local function RefreshTop()
         local current = CurrentScope()
         for i = 1, #SCOPE_VALUES do
@@ -590,7 +575,6 @@ local function ScopeSection(ctx, builder)
             if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
         end
         if edit.SetText then edit:SetText(IsEditModeActive() and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
-        hint:SetText("Editing " .. ScopeLabel(current) .. " " .. PageScopeHint())
     end
 
     if not StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] then
