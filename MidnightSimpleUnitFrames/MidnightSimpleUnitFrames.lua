@@ -352,6 +352,7 @@ ns.UF.Unitframe_OnEnter = ns.UF.Unitframe_OnEnter or function(self)
         end
         if enabled then
             if self.UpdateHighlightColor then self:UpdateHighlightColor() end
+            if _G.MSUF_FixHighlightForFrame then _G.MSUF_FixHighlightForFrame(self) end
             hb:Show()
         else
             hb:Hide()
@@ -5652,6 +5653,9 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         if _G.MSUF_ApplyPowerBarBorder then
             _G.MSUF_ApplyPowerBarBorder(pb)
         end
+        if _G.MSUF_FixHighlightForFrame then
+            _G.MSUF_FixHighlightForFrame(f)
+        end
         f._msufPowerBarLayoutInitialized = true
         f._msufPowerBarLayoutDirty = nil
         return
@@ -5665,10 +5669,6 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     f._msufBarOutlineThickness = -1
     f._msufBarOutlineBottomIsPower = nil
     f._msufHighlightBottomIsPower = nil
-    -- Re-anchor mouseover highlight (it was set up at init and doesn't auto-update)
-    if _G.MSUF_FixHighlightForFrame then
-        _G.MSUF_FixHighlightForFrame(f)
-    end
     local hb = f.hpBar
     hb:ClearAllPoints()
     hb:SetPoint('TOPLEFT', f, 'TOPLEFT', 2, -2)
@@ -5722,6 +5722,10 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
     end
     if _G.MSUF_ApplyPowerBarBorder then
         _G.MSUF_ApplyPowerBarBorder(pb)
+    end
+    -- Re-anchor mouseover highlight after HP/power bars have their final points.
+    if _G.MSUF_FixHighlightForFrame then
+        _G.MSUF_FixHighlightForFrame(f)
     end
 
     -- FIX: Force border system refresh after layout completes.
@@ -5973,9 +5977,10 @@ local function CreateSimpleUnitFrame(unit)
     -- NOTE: Unitframe events are now registered centrally by MSUF_UnitframeCore.lua.
     if _G.MSUF_UFCore_AttachFrame then _G.MSUF_UFCore_AttachFrame(f) end
     f:EnableMouse(true)
-        local highlight = ns.UF.MakeFrame(f, "highlightBorder", "Frame", "self", (BackdropTemplateMixin and "BackdropTemplate") or nil)
-    highlight:SetPoint("TOPLEFT", f, "TOPLEFT", -1, 1)
-    highlight:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 1, -1)
+    local highlight = ns.UF.MakeFrame(f, "highlightBorder", "Frame", "self", (BackdropTemplateMixin and "BackdropTemplate") or nil)
+    highlight:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+    highlight:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+    highlight._msufHoverEdgeSize = 1
     do
         local baseLevel = 0
         if f.GetFrameLevel then baseLevel = f:GetFrameLevel() or 0 end
@@ -5983,10 +5988,13 @@ local function CreateSimpleUnitFrame(unit)
             local hb = f.hpBar:GetFrameLevel() or 0
             if hb > baseLevel then baseLevel = hb end
     end
-        highlight:SetFrameLevel(baseLevel + 10)
+        highlight:SetFrameLevel(baseLevel + 2)
     end
     highlight:EnableMouse(false)
     highlight:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    if _G.MSUF_FixHighlightForFrame then
+        _G.MSUF_FixHighlightForFrame(f)
+    end
     highlight:Hide()
     f.UpdateHighlightColor = ns.UF.UpdateHighlightColor
     f:SetScript("OnEnter", ns.UF.Unitframe_OnEnter)
