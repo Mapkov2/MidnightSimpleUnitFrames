@@ -310,6 +310,41 @@ local function MSUF_Defaults_NormalizeFontField(tbl)
     end
 end
 
+local function MSUF_Defaults_HasScopedFontOverrideValue(scope)
+    if type(scope) ~= "table" then return false end
+    if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
+    if scope.textBackdrop ~= nil or scope.colorPowerTextByType ~= nil then return true end
+    if scope.nameClassColor ~= nil or scope.npcNameRed ~= nil then return true end
+    if scope.useGlobalFontColor == false then return true end
+    if scope.fontR ~= nil or scope.fontG ~= nil or scope.fontB ~= nil then return true end
+    local mode = scope.nameColorMode
+    if mode ~= nil and mode ~= "" and mode ~= "DEFAULT" then return true end
+    if scope.nameShortenEnabled ~= nil then return true end
+    if (tonumber(scope.nameMaxChars) or 0) > 0 then return true end
+    if scope.nameClipSide ~= nil or scope.nameNoEllipsis == true then return true end
+    if scope.shortenNames ~= nil or scope.shortenNameMaxChars ~= nil then return true end
+    if scope.shortenNameClipSide ~= nil or scope.shortenNameFrontMaskPx ~= nil then return true end
+    if scope.shortenNameShowDots ~= nil then return true end
+    return false
+end
+
+local function MSUF_Defaults_ClearScopedFontKeys()
+    for _, key in ipairs({
+        "player", "target", "targettarget", "tot", "focus", "pet", "boss",
+        "gf_party", "gf_raid", "gf_mythicraid",
+    }) do
+        local scope = MSUF_DB and MSUF_DB[key]
+        if type(scope) == "table" then
+            scope.fontKey = nil
+            scope.nameShortenOverride = nil
+            scope._msufGFNameTruncationOverride = nil
+            if scope.fontOverride == true and not MSUF_Defaults_HasScopedFontOverrideValue(scope) then
+                scope.fontOverride = false
+            end
+        end
+    end
+end
+
 function MSUF_EnsureDB_Heavy()
     if not MSUF_DB then
         MSUF_DB = {}
@@ -1997,6 +2032,7 @@ local function fill(key, defaults)
     }) do
         MSUF_Defaults_NormalizeFontField(MSUF_DB[key])
     end
+    MSUF_Defaults_ClearScopedFontKeys()
     if g._msufUFLocalFontKeyMigration_v407 ~= true then
         for _, key in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss" }) do
             local u = MSUF_DB[key]
@@ -2005,6 +2041,9 @@ local function fill(key, defaults)
             end
         end
         g._msufUFLocalFontKeyMigration_v407 = true
+    end
+    if g._msufSharedGlobalFontFamilyMigration_v501 ~= true then
+        g._msufSharedGlobalFontFamilyMigration_v501 = true
     end
     MSUF_DB_LastHeavyRun = MSUF_DB
  end
