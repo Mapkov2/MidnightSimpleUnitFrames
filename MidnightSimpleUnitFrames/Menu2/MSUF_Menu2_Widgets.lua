@@ -734,6 +734,10 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider:_msuf2SetLayoutWidth(width)
 
     local function FormatValue(value)
+        if type(slider._msuf2ValueFormatter) == "function" then
+            local ok, text = pcall(slider._msuf2ValueFormatter, value, slider)
+            if ok and text ~= nil then return tostring(text) end
+        end
         local st = step or 1
         if st < 1 then
             return string.format("%.2f", value)
@@ -741,6 +745,10 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         return tostring(floor(value + 0.5))
     end
     slider._msuf2FormatValue = FormatValue
+    function slider:SetValueFormatter(fn)
+        self._msuf2ValueFormatter = (type(fn) == "function") and fn or nil
+        if not self._msuf2Editing then edit:SetText(FormatValue(self:GetValue())) end
+    end
 
     slider:HookScript("OnValueChanged", function(self, value)
         UpdateFill()
@@ -848,7 +856,41 @@ end
 local dropdownFrame, dropdownScroll, dropdownChild, dropdownOwner, dropdownSlider
 local dropdownRows = {}
 local DROPDOWN_ROW_H = 22
+local DROPDOWN_SCROLLBAR_W = 10
 local CloseDropdown
+
+local function PixelBarTexture(texture)
+    if not texture then return texture end
+    texture:SetTexture("Interface\\Buttons\\WHITE8X8")
+    if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(true) end
+    if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
+    return texture
+end
+
+local function PaintDropdownScrollbar(hover)
+    local bar = dropdownSlider
+    if not bar then return end
+
+    local shown = bar.IsShown and bar:IsShown()
+    local alpha = shown and 1 or 0
+    local track = bar._msuf2Track
+    local edge = bar._msuf2TrackEdge
+    local thumb = bar._msuf2Thumb
+    local soft = T.colors.borderSoft or T.colors.border or { 0.12, 0.14, 0.26 }
+    local thumbBase = bar._msuf2ThumbBase or { 0.240, 0.300, 0.430 }
+    local thumbHover = bar._msuf2ThumbHover or { 0.320, 0.420, 0.560 }
+
+    if track and track.SetColorTexture then
+        track:SetColorTexture(0.025, 0.030, 0.060, (hover and 0.98 or 0.82) * alpha)
+    end
+    if edge and edge.SetColorTexture then
+        edge:SetColorTexture(soft[1], soft[2], soft[3], (hover and 0.62 or 0.38) * alpha)
+    end
+    if thumb and thumb.SetColorTexture then
+        local c = hover and thumbHover or thumbBase
+        thumb:SetColorTexture(c[1], c[2], c[3], (hover and 0.90 or 0.68) * alpha)
+    end
+end
 
 local function SetDropdownOwnerMouseWheel(owner, enabled)
     if owner and owner._msuf2DropdownWheelManaged and owner.EnableMouseWheel then
@@ -992,7 +1034,7 @@ local function EnsureDropdownFrame()
 
     dropdownScroll = CreateFrame("ScrollFrame", "MSUF2NativeDropdownScroll", dropdownFrame)
     dropdownScroll:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 2, -2)
-    dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -22, 2)
+    dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -18, 2)
     dropdownScroll:EnableMouseWheel(true)
     dropdownScroll:SetScript("OnMouseWheel", function(self, delta)
         local nextScroll = (self:GetVerticalScroll() or 0) - (delta or 0) * DROPDOWN_ROW_H * 3
@@ -1004,27 +1046,50 @@ local function EnsureDropdownFrame()
 
     dropdownSlider = CreateFrame("Slider", nil, dropdownFrame)
     dropdownSlider:SetOrientation("VERTICAL")
-    dropdownSlider:SetWidth(14)
+    dropdownSlider:SetWidth(DROPDOWN_SCROLLBAR_W)
     dropdownSlider:SetMinMaxValues(0, 1)
     dropdownSlider:SetValueStep(1)
     if dropdownSlider.SetObeyStepOnDrag then dropdownSlider:SetObeyStepOnDrag(false) end
-    dropdownSlider:SetPoint("TOPRIGHT", dropdownFrame, "TOPRIGHT", -5, -6)
-    dropdownSlider:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -5, 6)
-    local track = dropdownSlider:CreateTexture(nil, "BACKGROUND")
+    if dropdownSlider.EnableMouse then dropdownSlider:EnableMouse(true) end
+    dropdownSlider:SetPoint("TOPRIGHT", dropdownFrame, "TOPRIGHT", -6, -8)
+    dropdownSlider:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -6, 8)
+    local track = PixelBarTexture(dropdownSlider:CreateTexture(nil, "BACKGROUND"))
     track:SetPoint("TOP", dropdownSlider, "TOP", 0, 0)
     track:SetPoint("BOTTOM", dropdownSlider, "BOTTOM", 0, 0)
-    track:SetWidth(4)
-    track:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.75)
-    local thumb = dropdownSlider:CreateTexture(nil, "OVERLAY")
-    thumb:SetTexture(T.media and T.media.superellipse or "Interface\\Buttons\\WHITE8X8")
-    thumb:SetSize(12, 34)
-    thumb:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
+    track:SetWidth(2)
+    dropdownSlider._msuf2Track = track
+    local trackEdge = PixelBarTexture(dropdownSlider:CreateTexture(nil, "BORDER"))
+    trackEdge:SetPoint("TOPLEFT", track, "TOPRIGHT", 1, 0)
+    trackEdge:SetPoint("BOTTOMLEFT", track, "BOTTOMRIGHT", 1, 0)
+    trackEdge:SetWidth(1)
+    dropdownSlider._msuf2TrackEdge = trackEdge
+    local thumb = PixelBarTexture(dropdownSlider:CreateTexture(nil, "OVERLAY"))
+    thumb:SetSize(5, 34)
     dropdownSlider:SetThumbTexture(thumb)
+    dropdownSlider._msuf2Thumb = thumb
+    dropdownSlider._msuf2ThumbBase = { 0.240, 0.300, 0.430 }
+    dropdownSlider._msuf2ThumbHover = { 0.320, 0.420, 0.560 }
     dropdownSlider:SetScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
         if dropdownScroll then dropdownScroll:SetVerticalScroll(value or 0) end
+        PaintDropdownScrollbar(self._msuf2Hover)
+    end)
+    dropdownSlider:SetScript("OnEnter", function(self)
+        self._msuf2Hover = true
+        PaintDropdownScrollbar(true)
+    end)
+    dropdownSlider:SetScript("OnLeave", function(self)
+        self._msuf2Hover = nil
+        PaintDropdownScrollbar(false)
+    end)
+    dropdownSlider:EnableMouseWheel(true)
+    dropdownSlider:SetScript("OnMouseWheel", function(_, delta)
+        if dropdownScroll then
+            SetDropdownScroll((dropdownScroll:GetVerticalScroll() or 0) - (delta or 0) * DROPDOWN_ROW_H * 3)
+        end
     end)
     dropdownSlider:Hide()
+    PaintDropdownScrollbar(false)
 
     dropdownFrame:EnableMouseWheel(true)
     dropdownFrame:SetScript("OnMouseWheel", function(_, delta)
@@ -1244,14 +1309,19 @@ local function OpenDropdown(owner, valuesTable)
     local totalHeight = #valuesTable * DROPDOWN_ROW_H
     local needsScroll = #valuesTable > visible
 
-    dropdownFrame:SetSize(rowWidth + (needsScroll and 22 or 4), listHeight)
+    dropdownFrame:SetSize(rowWidth + (needsScroll and 18 or 4), listHeight)
     dropdownChild:SetSize(rowWidth, totalHeight)
     dropdownScroll:ClearAllPoints()
     dropdownScroll:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 2, -2)
-    dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", needsScroll and -20 or -2, 2)
+    dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", needsScroll and -16 or -2, 2)
     if dropdownSlider then
         dropdownSlider:SetShown(needsScroll)
         dropdownSlider:SetMinMaxValues(0, math.max(0, totalHeight - (listHeight - 4)))
+        local visibleRatio = (listHeight - 4) / math.max(totalHeight, 1)
+        local thumbH = floor(max(34, min(listHeight - 16, (listHeight - 4) * visibleRatio)) + 0.5)
+        local thumb = dropdownSlider._msuf2Thumb
+        if thumb and thumb.SetHeight then thumb:SetHeight(thumbH) end
+        PaintDropdownScrollbar(dropdownSlider._msuf2Hover)
     end
 
     local selectedIndex = 1
@@ -1284,6 +1354,7 @@ local function OpenDropdown(owner, valuesTable)
         local sr, sg, sb, sa = DropdownItemSwatch(item)
         if icon then
             row._msuf2Icon:SetTexture(icon)
+            row._msuf2Icon:SetTexCoord(0, 1, 0, 1)
             row._msuf2Icon:SetVertexColor(1, 1, 1, 1)
             row._msuf2Icon:Show()
             row._msuf2Swatch:Hide()
@@ -1364,6 +1435,10 @@ function W.Dropdown(section, label, values, width)
     btn._msuf2Swatch:SetPoint("CENTER", btn._msuf2SwatchBorder, "CENTER", 0, 0)
     btn._msuf2Swatch:SetSize(12, 12)
     btn._msuf2Swatch:Hide()
+    btn._msuf2Icon = btn:CreateTexture(nil, "ARTWORK")
+    btn._msuf2Icon:SetPoint("LEFT", btn, "LEFT", 10, 0)
+    btn._msuf2Icon:SetSize(80, 12)
+    btn._msuf2Icon:Hide()
 
     local function ResolveValues(self)
         local valuesTable = self.values
@@ -1403,8 +1478,20 @@ function W.Dropdown(section, label, values, width)
                 break
             end
         end
+        local icon = DropdownItemIcon(selectedItem)
         local sr, sg, sb, sa = DropdownItemSwatch(selectedItem)
-        if sr then
+        if icon then
+            self._msuf2Icon:SetTexture(icon)
+            self._msuf2Icon:SetTexCoord(0, 1, 0, 1)
+            self._msuf2Icon:SetVertexColor(1, 1, 1, 1)
+            self._msuf2Icon:Show()
+            self._msuf2Swatch:Hide()
+            self._msuf2SwatchBorder:Hide()
+            self._msuf2Label:ClearAllPoints()
+            self._msuf2Label:SetPoint("LEFT", self, "LEFT", 100, 0)
+            self._msuf2Label:SetPoint("RIGHT", self, "RIGHT", -26, 0)
+        elseif sr then
+            self._msuf2Icon:Hide()
             self._msuf2Swatch:SetColorTexture(sr, sg, sb, sa or 1)
             self._msuf2Swatch:Show()
             self._msuf2SwatchBorder:Show()
@@ -1412,6 +1499,7 @@ function W.Dropdown(section, label, values, width)
             self._msuf2Label:SetPoint("LEFT", self, "LEFT", 34, 0)
             self._msuf2Label:SetPoint("RIGHT", self, "RIGHT", -26, 0)
         else
+            self._msuf2Icon:Hide()
             self._msuf2Swatch:Hide()
             self._msuf2SwatchBorder:Hide()
             self._msuf2Label:ClearAllPoints()
