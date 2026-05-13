@@ -1037,6 +1037,7 @@ local function BuildInlineText(ctx, builder, unit)
             local conf = GetConf("targettarget")
             conf.totInlineSeparator = (v ~= nil and tostring(v) ~= "") and tostring(v) or " "
             M.RequestUnitApply("target", "MSUF2_TOT_INLINE_SEPARATOR", { text = true, preview = true })
+            M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_SEPARATOR", { text = true, preview = true })
             Call("MSUF_ToTInline_RequestRefresh", "MSUF2_TOT_INLINE_SEPARATOR")
             Call("MSUF_UpdateTargetToTInlineNow")
             Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_SEPARATOR")

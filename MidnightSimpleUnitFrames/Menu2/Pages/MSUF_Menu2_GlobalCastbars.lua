@@ -239,41 +239,20 @@ local function BuildCastbars(ctx)
 
     local text = b:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false)
     local textLeftX, textRightX = 14, 392
-    W.LabelAt(text, "Spell name shortening", textLeftX, -42, 240)
-    local shorten = T.Button(text, "", 116, 24)
-    shorten:SetPoint("TOPLEFT", text, "TOPLEFT", textLeftX, -64)
-    if shorten._msuf2Label then
-        shorten._msuf2Label:ClearAllPoints()
-        shorten._msuf2Label:SetPoint("CENTER", shorten, "CENTER", 0, 0)
-        shorten._msuf2Label:SetJustifyH("CENTER")
-    end
+    local shorten = W.Toggle(text, "Spell name shortening")
+    W.MoveWidget(shorten, text, textLeftX, -42)
     local syncNameShortening
     local function NameShorteningEnabled()
         return (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1
     end
-    local function PaintNameShorteningButton(hover)
-        local enabled = NameShorteningEnabled()
-        if shorten.SetText then shorten:SetText(enabled and M.Tr("On") or M.Tr("Off")) end
-        local fill, edge = shorten._msuf2Fill, shorten._msuf2Edge
-        if fill and edge then
-            if enabled then
-                fill:SetVertexColor(0.060, 0.360, 0.150, hover and 0.98 or 0.92)
-                edge:SetVertexColor(0.240, 0.820, 0.460, hover and 0.95 or 0.82)
-            else
-                fill:SetVertexColor(0.360, 0.055, 0.075, hover and 0.98 or 0.92)
-                edge:SetVertexColor(0.880, 0.280, 0.280, hover and 0.95 or 0.82)
-            end
-        end
-        if shorten._msuf2Label then shorten._msuf2Label:SetTextColor(1, 1, 1, 1) end
-    end
-    shorten:SetScript("OnClick", function()
-        local nextValue = NameShorteningEnabled() and 0 or 1
-        SetG("castbarSpellNameShortening", nextValue, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
-        ApplyCastbars("MSUF2_CASTBAR_NAME_SHORTEN")
-        if syncNameShortening then syncNameShortening() end
-    end)
-    shorten:SetScript("OnEnter", function() PaintNameShorteningButton(true) end)
-    shorten:SetScript("OnLeave", function() PaintNameShorteningButton(false) end)
+    M.BindToggle(ctx, shorten,
+        NameShorteningEnabled,
+        function(v)
+            local nextValue = v and 1 or 0
+            SetG("castbarSpellNameShortening", nextValue, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
+            ApplyCastbars("MSUF2_CASTBAR_NAME_SHORTEN")
+            if syncNameShortening then syncNameShortening() end
+        end)
 
     local maxLen = W.Slider(text, "Max name length", 6, 30, 1, 300)
     W.MoveWidget(maxLen, text, textRightX, -42, 320)
@@ -286,7 +265,6 @@ local function BuildCastbars(ctx)
         function() return tonumber(ReadG("castbarSpellNameReservedSpace", 8)) or 8 end,
         function(v) SetG("castbarSpellNameReservedSpace", floor((tonumber(v) or 8) + 0.5), "MSUF2_CASTBAR_NAME_RESERVED", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_NAME_RESERVED") end)
     syncNameShortening = function()
-        PaintNameShorteningButton(false)
         SetControlsEnabled({ maxLen, reserved }, NameShorteningEnabled())
     end
     M.AddRefresher(ctx, syncNameShortening)
@@ -351,7 +329,7 @@ local function BuildCastbars(ctx)
     local resetFocus = W.Button(focusKick, "Reset Position", 150)
     W.MoveWidget(resetFocus, focusKick, focusLeftX, -258)
     resetFocus:SetScript("OnClick", function()
-        SetG("focusKickIconOffsetX", 0, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
+        SetG("focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
         SetG("focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
         Call("MSUF_UpdateFocusKickIconOptions")
         if ctx.refreshers then

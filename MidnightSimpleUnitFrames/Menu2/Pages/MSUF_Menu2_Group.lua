@@ -281,6 +281,13 @@ local function FlushGF()
     pendingGF.geometry = nil
     pendingGF.visual = nil
     pendingGF.font = nil
+    if InCombatLockdown and InCombatLockdown() then
+        if rebuild and type(gf.RebuildAll) == "function" then gf.RebuildAll() end
+        if geometry then gf._pendingRefreshGeometry = true end
+        if font or visual then gf._pendingRefreshVisuals = true end
+        RefreshGFPreview()
+        return
+    end
     if rebuild and type(gf.RebuildAll) == "function" then
         gf.RebuildAll()
         RefreshGFPreview()
@@ -364,7 +371,7 @@ local GF_COPY_CATEGORIES = {
     { key = "general", label = "General", keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineEnabled", "hideOfflineInCombat", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
     { key = "health", label = "Health & Bars", keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB", "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB", "barTexture", "barBgTexture", "powerHeight", "showPower", "showPowerText", "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter", "powerFontSize", "powerOffsetX", "powerOffsetY", "powerTextLayer", "powerSmoothFill", "powerShowTank", "powerShowHealer", "powerShowDamager", "healPredEnabled", "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha" } },
     { key = "text", label = "Text & Name", keys = { "showName", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY", "nameTextLayer", "nameColorMode", "nameColorR", "nameColorG", "nameColorB", "nameMaxChars", "nameNoEllipsis", "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter", "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer" } },
-    { key = "font", label = "Font Override", keys = { "fontOverride", "fontKey", "fontOutline", "useGlobalFontColor", "fontR", "fontG", "fontB" } },
+    { key = "font", label = "Font Override", keys = { "fontOverride", "fontOutline", "useGlobalFontColor", "fontR", "fontG", "fontB" } },
     { key = "border", label = "Background & Opacity", keys = { "bgR", "bgG", "bgB", "bgA", "hpBarAlpha", "hpBgAlpha", "hpTextIgnoreAlpha", "alphaPreserveHPColor" } },
     { key = "range", label = "Range Fade", keys = { "rangeFadeEnabled", "rangeFadeAlpha", "rangeFadeLayerMode", "offlineAlpha", "alphaPreserveHPColor" } },
     { key = "indicators", label = "Indicators & Status Icons", keys = { "showGroupNumber", "groupNumberSize", "groupNumberAnchor", "groupNumberX", "groupNumberY", "iconStyle", "useMidnightIcons", "statusText", "statusTextSize", "statusTextAnchor", "statusOffsetX", "statusOffsetY", "statusTextLayer", "statusGhostText", "statusGhostTextSize", "statusGhostTextAnchor", "statusGhostOffsetX", "statusGhostOffsetY", "statusGhostTextLayer", "statusAFKText", "statusAFKTextSize", "statusAFKTextAnchor", "statusAFKOffsetX", "statusAFKOffsetY", "statusAFKTextLayer" }, prefix = { "si_", "statusIcon", "indicator" } },

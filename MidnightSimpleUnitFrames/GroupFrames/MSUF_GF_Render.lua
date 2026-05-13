@@ -12,6 +12,7 @@ if not GF then return end
 local issecretvalue = _G.issecretvalue
 local C_Timer = _G.C_Timer
 local CreateFrame = _G.CreateFrame
+local InCombatLockdown = _G.InCombatLockdown
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
 local UnitHealth = _G.UnitHealth
@@ -1525,6 +1526,13 @@ end
 ------------------------------------------------------------------------
 function GF.MarkAllDirty(bits)
     bits = bits or DIRTY_ALL
+    if InCombatLockdown and InCombatLockdown() then
+        if band(bits, bor(DIRTY_GEOMETRY, DIRTY_LAYOUT)) ~= 0 then
+            GF._pendingRefreshGeometry = true
+        end
+        GF._pendingRefreshVisuals = true
+        return
+    end
 
     -- OOC Options path: one coalesced full refresh. This preserves exact live
     -- feedback for legacy option widgets while combat/runtime remains granular.
@@ -1571,6 +1579,10 @@ end
 -- Use for Options "Apply" when user expects instant feedback.
 ------------------------------------------------------------------------
 function GF.RefreshVisuals()
+    if InCombatLockdown and InCombatLockdown() then
+        GF._pendingRefreshVisuals = true
+        return
+    end
     if not _cachedUpdateAll then
         local fn = _G.MSUF_GF_UpdateAll
         if type(fn) == "function" then _cachedUpdateAll = fn end
@@ -1635,6 +1647,10 @@ function GF.RefreshColors()
 end
 
 function GF.RefreshGeometry()
+    if InCombatLockdown and InCombatLockdown() then
+        GF._pendingRefreshGeometry = true
+        return
+    end
     GF.MarkAllDirty(bor(DIRTY_GEOMETRY, DIRTY_LAYOUT))
 end
 
