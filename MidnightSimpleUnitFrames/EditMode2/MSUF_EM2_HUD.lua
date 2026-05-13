@@ -8,6 +8,7 @@ local HUD = {}; EM2.HUD = HUD
 local L     = (ns and ns.L) or _G.MSUF_L or setmetatable({}, { __index = function(_, k) return k end })
 local FONT  = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local W8    = "Interface/Buttons/WHITE8X8"
+local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
 local floor, max, min = math.floor, math.max, math.min
 
 local hudFrame, row2Frame
@@ -79,6 +80,18 @@ local function MakeBtn(parent, text, w, h, fontSize, onClick)
     btn._dot = dot
     if onClick then btn:SetScript("OnClick", onClick) end
     return btn
+end
+
+local function AttachHistoryIcon(btn, texturePath)
+    if not btn then return end
+    if btn._label then btn._label:Hide() end
+    if btn._dot then btn._dot:Hide() end
+    local icon = btn:CreateTexture(nil, "ARTWORK", nil, 5)
+    icon:SetTexture(texturePath)
+    icon:SetSize(17, 17)
+    icon:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    btn._historyIcon = icon
+    return icon
 end
 
 local function MakeSep(parent, h)
@@ -733,21 +746,21 @@ local function EnsureHUD()
     c2:SetSize(1, BTN_H2); c2:SetPoint("CENTER", row2Frame, "CENTER", 0, 0)
     local r2 = {}
 
-    undoBtn = MakeBtn(c2, "Undo", 52, BTN_H2, 11, function()
+    undoBtn = MakeBtn(c2, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
     end)
-    undoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
-    undoBtn._dot:Hide()
+    _G.MSUF_EditModeUndoBtn = undoBtn
+    AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
     SetTip(undoBtn, "Undo last position change.")
     r2[#r2+1] = undoBtn
 
-    redoBtn = MakeBtn(c2, "Redo", 52, BTN_H2, 11, function()
+    redoBtn = MakeBtn(c2, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
     end)
-    redoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
-    redoBtn._dot:Hide()
+    _G.MSUF_EditModeRedoBtn = redoBtn
+    AttachHistoryIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png")
     SetTip(redoBtn, "Redo last undone change.")
     r2[#r2+1] = redoBtn
 
@@ -805,13 +818,11 @@ function HUD.RefreshControls()
     end
     local canUndo = EM2.Undo and EM2.Undo.CanUndo() or false
     local canRedo = EM2.Undo and EM2.Undo.CanRedo() or false
-    if undoBtn and undoBtn._label then
-        if canUndo then undoBtn._label:SetTextColor(TH.textR, TH.textG, TH.textB, 1)
-        else undoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.35) end
+    if undoBtn and undoBtn._historyIcon then
+        undoBtn._historyIcon:SetAlpha(canUndo and 1 or 0.35)
     end
-    if redoBtn and redoBtn._label then
-        if canRedo then redoBtn._label:SetTextColor(TH.textR, TH.textG, TH.textB, 1)
-        else redoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.35) end
+    if redoBtn and redoBtn._historyIcon then
+        redoBtn._historyIcon:SetAlpha(canRedo and 1 or 0.35)
     end
 end
 

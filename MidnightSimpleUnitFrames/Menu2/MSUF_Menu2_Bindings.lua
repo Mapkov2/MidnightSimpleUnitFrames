@@ -17,7 +17,9 @@ local HISTORY_LIMIT = 100
 local historyDepth = 0
 local historyRestoring = false
 local historySessionActive = false
+local historySessionBaseSnapshot
 local historySessionSnapshot
+local historyTransaction
 
 local UNIT_KEYS = {
     player = true,
@@ -183,6 +185,7 @@ local function SnapshotDB()
 end
 
 local function NotifyHistoryChanged()
+    if M.RefreshHistoryControls then pcall(M.RefreshHistoryControls) end
     if M.frame and M.frame.RefreshStatus then pcall(M.frame.RefreshStatus, M.frame) end
     if M.Refresh then M.Refresh() end
 end
@@ -268,21 +271,65 @@ function M.CaptureHistory(label, source, fn)
 end
 
 function M.StartHistorySession()
+    if historyTransaction then
+        historyTransaction = nil
+        historyDepth = math.max(0, historyDepth - 1)
+    end
     historySessionActive = true
-    historySessionSnapshot = SnapshotDB()
+    historySessionBaseSnapshot = SnapshotDB()
+    historySessionSnapshot = DeepCopy(historySessionBaseSnapshot)
     M.ClearHistory()
 end
 
 function M.EndHistorySession()
     historySessionActive = false
+    if historyTransaction then
+        historyTransaction = nil
+        historyDepth = math.max(0, historyDepth - 1)
+    end
+    historySessionBaseSnapshot = nil
     historySessionSnapshot = nil
 end
 
 function M.CheckpointHistory(label, source)
-    if historyDepth > 0 or historyRestoring or not historySessionActive then return false end
+    if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
     local before = historySessionSnapshot or SnapshotDB()
     local after = SnapshotDB()
     return PushHistory(label or "MSUF2 change", source or "menu:checkpoint", before, after)
+end
+
+function M.BeginHistoryTransaction(label, source)
+    if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
+    historyTransaction = {
+        label = label or "MSUF2 change",
+        source = source or "menu:transaction",
+        before = SnapshotDB(),
+    }
+    historyDepth = historyDepth + 1
+    return true
+end
+
+function M.CommitHistoryTransaction()
+    local tx = historyTransaction
+    if not tx then return false end
+    historyTransaction = nil
+    historyDepth = math.max(0, historyDepth - 1)
+    return PushHistory(tx.label, tx.source, tx.before, SnapshotDB())
+end
+
+function M.CancelHistoryTransaction()
+    if not historyTransaction then return false end
+    historyTransaction = nil
+    historyDepth = math.max(0, historyDepth - 1)
+    NotifyHistoryChanged()
+    return true
+end
+
+function M.ResetHistorySession()
+    if not historySessionActive or type(historySessionBaseSnapshot) ~= "table" then return false end
+    local ok = ApplyHistorySnapshot(historySessionBaseSnapshot, "MSUF2_HISTORY_RESET_SESSION")
+    if ok then M.ClearHistory() end
+    return ok
 end
 
 function M.ClearHistory()
@@ -290,7 +337,10 @@ function M.ClearHistory()
     M.historyRedo = M.historyRedo or {}
     WipeTable(M.historyUndo)
     WipeTable(M.historyRedo)
-    if historySessionActive then historySessionSnapshot = SnapshotDB() end
+    if historySessionActive then
+        historySessionBaseSnapshot = SnapshotDB()
+        historySessionSnapshot = DeepCopy(historySessionBaseSnapshot)
+    end
     NotifyHistoryChanged()
 end
 
@@ -302,6 +352,7 @@ function M.GetHistoryState()
     return {
         canUndo = undo ~= nil,
         canRedo = redo ~= nil,
+        canResetAll = historySessionActive and type(historySessionBaseSnapshot) == "table" and not DeepEqual(historySessionBaseSnapshot, M.EnsureDB()),
         undoLabel = undo and undo.label or nil,
         redoLabel = redo and redo.label or nil,
         undoCount = #M.historyUndo,

@@ -8,25 +8,18 @@
 -- This file is an immediate no-op unless the active locale is ptBR.
 -- ============================================================================
 local addonName, ns = ...
-
--- Fast exit for non-ptBR clients.
-local loc = (ns and ns.LOCALE) or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-if loc ~= "ptBR" then return end
-
 ns = ns or {}
-ns.LOCALE = loc
-ns.L = ns.L or (_G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
-end
-_G.MSUF_L = L
+local L = (ns.RegisterLocale and ns.RegisterLocale("ptBR")) or (ns.L or {})
 
 local T = {
     ["Open MSUF Menu"] = "Abrir menu MSUF",
     ["Edit Mode"] = "Modo edição",
     ["Exit MSUF Edit Mode"] = "Sair do modo edição MSUF",
     ["Profiles"] = "Perfis",
+    ["Language"] = "Idioma",
+    ["Menu language"] = "Idioma do menu",
+    ["Follow Blizzard"] = "Seguir Blizzard",
+    ["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Seguir Blizzard usa o idioma do cliente WoW. A seleção manual afeta apenas os menus do MSUF.",
     ["Snap to grid"] = "Ajustar à grade",
     ["On"] = "Ligado",
     ["Off"] = "Desligado",

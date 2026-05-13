@@ -4,25 +4,18 @@
 -- Perf note:
 -- This file is an immediate no-op unless the active locale is esES.
 local addonName, ns = ...
-
--- Fast exit for non-esES clients.
-local loc = (ns and ns.LOCALE) or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-if loc ~= "esES" then return end
-
 ns = ns or {}
-ns.LOCALE = loc
-ns.L = ns.L or (_G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
-end
-_G.MSUF_L = L
+local L = (ns.RegisterLocale and ns.RegisterLocale("esES")) or (ns.L or {})
 
 local T = {
     ["Open MSUF Menu"] = "Abrir menú MSUF",
     ["Edit Mode"] = "Modo edición",
     ["Exit MSUF Edit Mode"] = "Salir del modo edición MSUF",
     ["Profiles"] = "Perfiles",
+    ["Language"] = "Idioma",
+    ["Menu language"] = "Idioma del menú",
+    ["Follow Blizzard"] = "Seguir Blizzard",
+    ["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Seguir Blizzard usa el idioma del cliente de WoW. La selección manual solo afecta a los menús de MSUF.",
     ["Snap to grid"] = "Ajustar a la cuadrícula",
     ["On"] = "Activo",
     ["Off"] = "Inactivo",

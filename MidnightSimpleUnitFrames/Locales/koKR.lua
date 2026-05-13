@@ -8,25 +8,18 @@
 -- This file is an immediate no-op unless the active locale is koKR.
 -- ============================================================================
 local addonName, ns = ...
-
--- Fast exit for non-koKR clients.
-local loc = (ns and ns.LOCALE) or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-if loc ~= "koKR" then return end
-
 ns = ns or {}
-ns.LOCALE = loc
-ns.L = ns.L or (_G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
-end
-_G.MSUF_L = L
+local L = (ns.RegisterLocale and ns.RegisterLocale("koKR")) or (ns.L or {})
 
 local T = {
     ["Open MSUF Menu"] = "MSUF 메뉴 열기",
     ["Edit Mode"] = "편집 모드",
     ["Exit MSUF Edit Mode"] = "MSUF 편집 모드 종료",
     ["Profiles"] = "프로필",
+    ["Language"] = "언어",
+    ["Menu language"] = "메뉴 언어",
+    ["Follow Blizzard"] = "블리자드 따르기",
+    ["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "블리자드 따르기는 WoW 클라이언트 언어를 사용합니다. 수동 선택은 MSUF 메뉴에만 적용됩니다.",
     ["Snap to grid"] = "격자에 맞추기",
     ["On"] = "켜기",
     ["Off"] = "끄기",

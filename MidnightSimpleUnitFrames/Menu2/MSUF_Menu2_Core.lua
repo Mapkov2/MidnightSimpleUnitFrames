@@ -8,6 +8,10 @@ _G.MSUF2 = M
 M.Tr = M.Tr or function(text)
     if text == nil then return "" end
     local key = tostring(text)
+    if type(ns.Translate) == "function" then
+        local translated = ns.Translate(key)
+        if translated ~= nil then return translated end
+    end
     if type(ns.TR) == "function" then
         local translated = ns.TR(key)
         if translated ~= nil then return translated end
@@ -120,7 +124,7 @@ local SEARCH_KEYWORDS = {
     auras2 = "global style unit auras buffs debuffs icon size caps rows spacing sorting cooldown tooltip private aura filter override",
     opt_castbar = "global style castbar textures outline shake fill direction empowered casts interrupt ready focus kick name shortening latency spark channel ticks",
     opt_colors = "global style colors class bar colors background tint unitframe colors npc type colors bar colors dispel castbar mouseover highlight gameplay superellipse color swatches",
-    opt_misc = "global style miscellaneous misc range fade ui behavior tooltip combat settings general",
+    opt_misc = "global style miscellaneous misc language localization localisation locale translation range fade ui behavior tooltip combat settings general",
     classpower = "class resources combo points holy power soul shards chi maelstrom eclipse essence runes stagger resource prediction auto hide detached power bar alternative mana behavior style quick actions",
     gameplay = "gameplay combat crosshair click cast focus target modifier mouseover interaction targeting spells",
     modules = "modules style skins optional modules compatibility",
@@ -255,7 +259,20 @@ local function UpdateNav(key)
         if M.nav and M.nav._msuf2NavReflow then M.nav:_msuf2NavReflow() end
     end
     for pageKey, btn in pairs(M.navButtons) do
+        if btn._msuf2RawLabel and btn.SetText then
+            btn:SetText(M.Tr(btn._msuf2RawLabel))
+        end
         if btn.SetActive then btn:SetActive(pageKey == key) end
+    end
+    if M.navHeaders then
+        for _, btn in pairs(M.navHeaders) do
+            if btn._msuf2RawLabel and btn.SetText then
+                btn:SetText(string.upper(M.Tr(btn._msuf2RawLabel)))
+            end
+        end
+    end
+    if M.nav and M.nav.searchBox and M.nav.searchBox.Instructions then
+        M.nav.searchBox.Instructions:SetText(M.Tr("Search settings..."))
     end
 end
 
@@ -976,10 +993,11 @@ function M.SelectPage(key)
 end
 
 local function CreateNavButton(parent, key, label, indent)
-    local btn = T.Button(parent, label, NAV_W - 24 - (indent or 0), NAV_BUTTON_H)
+    local btn = T.Button(parent, M.Tr(label), NAV_W - 24 - (indent or 0), NAV_BUTTON_H)
     btn:SetScript("OnClick", function() M.SelectPage(key) end)
     btn._msuf2SkipHistoryCheckpoint = true
     btn._msuf2NavIndent = indent or 0
+    btn._msuf2RawLabel = label
     if T.AttachNavIcon then T.AttachNavIcon(btn, key, (indent or 0) > 0) end
     M.navButtons[key] = btn
     return btn
@@ -1006,7 +1024,11 @@ local function HistoryTooltipText(kind)
     local label = (kind == "undo") and s.undoLabel or s.redoLabel
     local canUse = (kind == "undo") and s.canUndo or s.canRedo
     if canUse and label then
-        return M.Format("%s\nUndo: %d   Redo: %d", ShortLabel(label, 36), tonumber(s.undoCount) or 0, tonumber(s.redoCount) or 0)
+        local text = M.Format("%s\nUndo: %d   Redo: %d", ShortLabel(label, 36), tonumber(s.undoCount) or 0, tonumber(s.redoCount) or 0)
+        if kind == "undo" and s.canResetAll then
+            text = text .. "\n" .. M.Tr("Shift-click: reset all MSUF2 menu changes from this open session.")
+        end
+        return text
     end
     return M.Format("No %s action in this MSUF2 menu session.\nUndo: %d   Redo: %d",
         kind == "undo" and "undo" or "redo",
@@ -1023,7 +1045,7 @@ local function CreateHistoryControls(parent)
     undo._msuf2SkipHistoryCheckpoint = true
     undo._msuf2HistorySource = "history:undo"
     undo._msuf2HistoryLabel = "Undo"
-    undo:SetPoint("LEFT", row, "LEFT", 26, 0)
+    undo:SetPoint("LEFT", row, "LEFT", 9, 0)
     if undo._msuf2Label then undo._msuf2Label:Hide() end
     local undoIcon = undo:CreateTexture(nil, "ARTWORK", nil, 5)
     undoIcon:SetTexture(T.media.historyUndo)
@@ -1031,7 +1053,11 @@ local function CreateHistoryControls(parent)
     undoIcon:SetPoint("CENTER", undo, "CENTER", 0, 0)
     undo._msuf2HistoryIcon = undoIcon
     undo:SetScript("OnClick", function()
-        if M.Undo then M.Undo() end
+        if _G.IsShiftKeyDown and _G.IsShiftKeyDown() and M.ResetHistorySession then
+            M.ResetHistorySession()
+        elseif M.Undo then
+            M.Undo()
+        end
     end)
 
     local redo = T.Button(row, "", 62, 22)
@@ -1069,9 +1095,10 @@ local function CreateHistoryControls(parent)
         local s = M.GetHistoryState and M.GetHistoryState() or {}
         local canUndo = s.canUndo and true or false
         local canRedo = s.canRedo and true or false
-        if controls.undo and controls.undo.SetEnabled then controls.undo:SetEnabled(canUndo) end
+        local canResetAll = s.canResetAll and true or false
+        if controls.undo and controls.undo.SetEnabled then controls.undo:SetEnabled(canUndo or canResetAll) end
         if controls.redo and controls.redo.SetEnabled then controls.redo:SetEnabled(canRedo) end
-        if controls.undo and controls.undo._msuf2HistoryIcon then controls.undo._msuf2HistoryIcon:SetAlpha(canUndo and 1 or 0.34) end
+        if controls.undo and controls.undo._msuf2HistoryIcon then controls.undo._msuf2HistoryIcon:SetAlpha((canUndo or canResetAll) and 1 or 0.34) end
         if controls.redo and controls.redo._msuf2HistoryIcon then controls.redo._msuf2HistoryIcon:SetAlpha(canRedo and 1 or 0.34) end
     end
 
@@ -1177,6 +1204,7 @@ local function BuildNav(parent)
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
             local btn = T.Button(parent, string.upper(M.Tr(item.header)), NAV_W - 24, NAV_BUTTON_H)
             btn._msuf2NavHeaderId = id
+            btn._msuf2RawLabel = item.header
             btn._msuf2Label:ClearAllPoints()
             btn._msuf2Label:SetPoint("LEFT", 24, 0)
             btn._msuf2Label:SetPoint("RIGHT", -8, 0)
@@ -1198,7 +1226,7 @@ local function BuildNav(parent)
             created[#created + 1] = { kind = "header", id = id, button = btn }
         elseif item.key then
             local indent = item.group and 12 or 0
-            local btn = CreateNavButton(parent, item.key, M.Tr(item.label), indent)
+            local btn = CreateNavButton(parent, item.key, item.label, indent)
             if item.group then M.navGroupForKey[item.key] = item.group end
             created[#created + 1] = { kind = "page", group = item.group, button = btn }
             if item.key == "profiles" then
@@ -1220,19 +1248,20 @@ local function BuildNav(parent)
                     btn._msuf2NavArrow:SetVertexColor(0.45, 0.55, 0.72, 1)
                 end
                 y = y - NAV_BUTTON_STEP
-            elseif not item.group or M.navHeaderState[item.group] then
-                btn:Show()
-                btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", parent, "TOPLEFT", 12 + (btn._msuf2NavIndent or 0), y)
-                y = y - NAV_BUTTON_STEP
             elseif item.kind == "history" then
                 local frame = item.frame
                 frame:Show()
                 frame:ClearAllPoints()
                 frame:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, y - 2)
                 y = y - 32
+            elseif not item.group or M.navHeaderState[item.group] then
+                btn:Show()
+                btn:ClearAllPoints()
+                btn:SetPoint("TOPLEFT", parent, "TOPLEFT", 12 + (btn._msuf2NavIndent or 0), y)
+                y = y - NAV_BUTTON_STEP
             else
-                btn:Hide()
+                if btn then btn:Hide() end
+                if item.frame then item.frame:Hide() end
             end
         end
         if M.RefreshHistoryControls then M.RefreshHistoryControls() end
@@ -1407,6 +1436,7 @@ local function BuildWindow()
         SyncGroupPagePreviewForKey(M.activeKey)
     end)
     f:SetScript("OnShow", function(self)
+        if M.StartHistorySession then M.StartHistorySession() end
         RegisterStatusEvents()
         EnsureEditModeUIHook()
         if self.RefreshStatus then self:RefreshStatus() end
@@ -1416,6 +1446,7 @@ local function BuildWindow()
     f:SetScript("OnHide", function()
         UnregisterStatusEvents()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
+        if M.EndHistorySession then M.EndHistorySession() end
         SyncBossPagePreviewForKey(nil)
         SyncGroupPagePreviewForKey(nil)
     end)
@@ -1887,6 +1918,7 @@ end
 M.GetEffectiveMenuScale = EffectiveMenuScale
 
 function M.Open(pageKey)
+    if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
     local f = BuildWindow()
     ApplyMenuFrameScale(f)
     f:Show()

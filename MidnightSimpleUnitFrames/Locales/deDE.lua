@@ -1,10 +1,8 @@
 -- Midnight Simple Unit Frames - German (deDE)
 -- Contributor note: Translate UI strings by adding entries to this file.
 local addonName, ns = ...
-if not ns then ns = {} end
-if not ns.L then ns.L = {} end
-if not GetLocale or GetLocale() ~= "deDE" then return end
-local L = ns.L
+ns = ns or {}
+local L = (ns.RegisterLocale and ns.RegisterLocale("deDE")) or (ns.L or {})
 
 L["Absorb bar anchoring"] = "Absorptionsbalken-Verankerung"
 L["Absorb bar texture (SharedMedia)"] = "Textur des Absorptionsbalkens (SharedMedia)"
@@ -22,6 +20,10 @@ L["Bar background texture"] = "Hintergrundtextur des Balkens"
 L["Bar texture (SharedMedia)"] = "Balkentextur (SharedMedia)"
 L["Behavior"] = "Verhalten"
 L["Block spacing"] = "Block-Abstand"
+L["Language"] = "Sprache"
+L["Menu language"] = "Menüsprache"
+L["Follow Blizzard"] = "Blizzard folgen"
+L["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Blizzard folgen nutzt die WoW-Clientsprache. Manuelle Auswahl betrifft nur MSUF-Menüs."
 L["Border & Text Options"] = "Rahmen- & Textoptionen"
 L["Border thickness"] = "Rahmendicke"
 L["Cancel"] = "Abbrechen"

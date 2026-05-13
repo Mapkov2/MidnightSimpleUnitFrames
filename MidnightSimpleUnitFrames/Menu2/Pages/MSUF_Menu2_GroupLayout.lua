@@ -451,10 +451,18 @@ local function BuildGFLayout(ctx)
 
     customBox:SetScript("OnEnterPressed", function(self)
         local value = self:GetText() or ""
-        local conf = Conf(CurrentScope())
-        conf.anchorToFrame = (value ~= "") and value or nil
+        local kind = CurrentScope()
+        local function CommitCustomAnchor()
+            local conf = Conf(kind)
+            conf.anchorToFrame = (value ~= "") and value or nil
+            QueueGF(kind, "rebuild")
+        end
+        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+            M.CaptureHistory("Set Group Anchor", "group:anchorCustom:" .. tostring(kind), CommitCustomAnchor)
+        else
+            CommitCustomAnchor()
+        end
         self:ClearFocus()
-        QueueGF(CurrentScope(), "rebuild")
     end)
     customBox:SetScript("OnEscapePressed", function(self)
         RefreshCustomAnchorBox()
@@ -471,10 +479,18 @@ local function BuildGFLayout(ctx)
         local overlay = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker() or nil
         if not overlay then return end
         overlay._onPick = function(frameName)
-            local conf = Conf(CurrentScope())
-            conf.anchorToFrame = frameName
-            customBox:SetText(frameName or "")
-            QueueGF(CurrentScope(), "rebuild")
+            local kind = CurrentScope()
+            local function PickGroupAnchor()
+                local conf = Conf(kind)
+                conf.anchorToFrame = frameName
+                customBox:SetText(frameName or "")
+                QueueGF(kind, "rebuild")
+            end
+            if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+                M.CaptureHistory("Pick Group Anchor", "group:anchorPick:" .. tostring(kind), PickGroupAnchor)
+            else
+                PickGroupAnchor()
+            end
         end
         overlay:Show()
     end)

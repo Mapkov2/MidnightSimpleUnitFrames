@@ -8,25 +8,18 @@
 -- This file is an immediate no-op unless the active locale is zhTW.
 -- ============================================================================
 local addonName, ns = ...
-
--- Fast exit for non-zhTW clients.
-local loc = (ns and ns.LOCALE) or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-if loc ~= "zhTW" then return end
-
 ns = ns or {}
-ns.LOCALE = loc
-ns.L = ns.L or (_G.MSUF_L) or {}
-local L = ns.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(t, k) return k end })
-end
-_G.MSUF_L = L
+local L = (ns.RegisterLocale and ns.RegisterLocale("zhTW")) or (ns.L or {})
 
 local T = {
     ["Open MSUF Menu"] = "開啟 MSUF 選單",
     ["Edit Mode"] = "編輯模式",
     ["Exit MSUF Edit Mode"] = "退出 MSUF 編輯模式",
     ["Profiles"] = "設定檔",
+    ["Language"] = "語言",
+    ["Menu language"] = "選單語言",
+    ["Follow Blizzard"] = "跟隨暴雪",
+    ["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "跟隨暴雪會使用 WoW 用戶端語言。手動選擇只影響 MSUF 選單。",
     ["Snap to grid"] = "對齊格線",
     ["On"] = "開",
     ["Off"] = "關",
