@@ -1,56 +1,96 @@
-# Midnight Simple Unit Frames - 5.0 Beta 3
+# Midnight Simple Unit Frames 5.0
 
-## Added
+## Highlights
 
-- Added the new Menu2 options system and loaded it from the main addon TOC.
-- Added `Menu2/MSUF_Menu2_Support.lua`.
-- Added `Menu2/Pages/MSUF_Menu2_UnitPreview.lua` by moving the old unit preview options page into Menu2.
-- Added a Menu2 dashboard with Quick Navigation, Active Profile, UI Scale, Wago Profiles, and Advanced recovery sections.
-- Added Menu2 window controls for resizing, minimizing, maximizing/restoring, closing, saved window size, and edge snapping.
-- Added a Menu2 search page with searchable controls, aliases, fuzzy matching, typo handling, and FAQ entries.
-- Added Menu2 undo/redo history support with sessions, checkpoints, transactions, undo/redo stacks, and history buttons.
-- Added undo/redo icon assets:
-  - `Media/msuf_history_undo_red.png`
-  - `Media/msuf_history_redo_green.png`
-- Added `/rl` as a Reload UI slash command.
-- Added a locale audit script at `tools/audit-locales.ps1`.
-- Added Menu2 localization entries for deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, and zhTW.
-- Added an Edit Mode grid on/off setting with `Grid.GetEnabled`, `Grid.SetEnabled`, and `Grid.ToggleEnabled`.
-- Added left-click grid toggling to the Edit Mode HUD grid control.
-- Added `editModeGridEnabled = true` to Edit Mode defaults.
+- Rebuilt the MSUF options menu into a next-generation version of the existing menu experience.
+- The menu keeps the familiar MSUF identity, but now feels more modern, polished, faster, and easier to navigate.
+- Added a new dashboard, improved page structure, better search, smoother scrolling, window resizing, minimize/maximize controls, and Windows-style edge snapping.
+- Added full Undo / Redo support for menu changes, including buttons, sliders, toggles, dropdowns, color controls, copy actions, reset actions, and preview edits.
+- Added direct MSUF Edit Mode access from the menu for both Group Frames and Unit Frames.
+- Added the same advanced preview system for Unit Frames that Group Frames already use, making layout, text, portraits, castbars, and positioning much easier to adjust directly from the menu.
+- Added full localization for every WoW-supported locale:
+  `enUS`, `enGB`, `deDE`, `esES`, `esMX`, `frFR`, `itIT`, `koKR`, `ptBR`, `ruRU`, `zhCN`, `zhTW`.
 
-## Changed
+## Menu & Options
 
-- Updated the main addon TOC version from `5.0 Beta 2` to `5.0 Beta 3`.
-- Updated the Castbars TOC interface list to include `120000`, `120001`, `120005`, and `120007`.
-- Replaced the old options file stack in the main TOC with Menu2 page files.
-- Updated the font menu to use the shared font resolver/safe font application path.
-- Updated internal font defaults and font path resolution in `MidnightSimpleUnitFrames.lua`, `Foundation/MSUF_Libs.lua`, and group-frame font handling.
-- Added per-scope font controls in the Menu2 Fonts page for shared, unit, and group-frame font settings.
-- Updated Menu2 scaling helpers for MSUF frame scale, global UI scale, menu scale, and Blizzard UI scale restore/disable handling.
-- Updated the Edit Mode HUD help/tour text and fallback handling.
-- Updated Edit Mode undo/redo HUD buttons to use the new icon assets.
-- Updated gameplay positioning code to create Menu2 history checkpoints/transactions for moved gameplay elements, including Combat Enter/Leave text, TotemFrame preview, and The First Dance tracker.
-- Updated the Menu2 Unit Auras layout controls to use wider columns and reduce clipping.
-- Updated several Menu2 labels/buttons to use localization via `M.Tr`.
-- Updated Edit Mode grid rendering with safer canvas size fallback, resize rebuilds, dynamic visibility, shadow textures, and delayed rebuild after showing the grid.
-- Changed the Edit Mode grid frame strata from `BACKGROUND` to `LOW`.
-- Changed the default Edit Mode background opacity from `0.5` to `0.75`.
-- Updated the Edit Mode grid HUD tooltip/help text to mention click-to-toggle.
-- Added enabled/disabled coloring to the Edit Mode grid HUD control.
-- Updated the anchor picker overlay with a styled top instruction panel, outlined instruction text, and clearer CTRL/no-frame warning messages.
+- Replaced the old options stack with the new modular Menu2 system.
+- Added new dedicated pages for Unit Frames, Group Frames, Global Style, Fonts, Bars, Castbars, Gameplay, Class Power, Profiles, Layout, Auras, Indicators, and previews.
+- Added a searchable menu with aliases, fuzzy matching, typo handling, and built-in FAQ-style navigation help.
+- Added better profile management, Wago profile access, import/export tools, and recovery/reset actions.
+- Added menu window controls for resizing, minimizing, maximizing/restoring, closing, saved window size, and edge snapping.
+- Improved menu scaling, UI scale handling, scroll behavior, and layout consistency.
+- Improved clipping and spacing across advanced, class power, castbar, group, unit, and font pages.
+- Added `/rl` as a Reload UI shortcut.
 
-## Fixed
+## Unit Frames
 
-- Fixed class portrait atlas texture coordinates for non-Rondo class portraits by preserving existing atlas texcoords.
-- Fixed Edit Mode guided tour/help fallback behavior so raw locale keys are not shown.
-- Fixed Menu2 clipping/layout issues in advanced, class power, castbar, group, and unit pages.
-- Fixed safer drag-stop handling for Combat Enter/Leave text position saving.
+- Added a new Unit Frame preview workflow based on the Group Frame preview system.
+- Unit Frame layout, text, portraits, castbars, alpha behavior, status icons, and positioning can now be previewed and adjusted more comfortably from the menu.
+- Added direct MSUF Edit Mode access from Unit Frame pages.
+- Improved Boss Frame preview handling, including portrait refresh behavior when switching between real boss units and preview mode in the same session.
+- Improved Unit Frame name shortening and truncation behavior.
+- Improved portrait controls, including Blizzard class portrait support.
+- Improved font, text, power bar, castbar, and status icon controls.
+- Improved mouseover highlight behavior so borders stay attached correctly and no longer overlap text incorrectly.
 
-## Removed
+## Group Frames
 
-- Removed the old standalone search/slash menu files from the main TOC:
-  - `Features/MSUF_Search.lua`
-  - `Features/MidnightSimpleUnitFrames_SlashMenu.lua`
-- Removed the old options file stack from the main TOC.
-- Removed `Foundation/MSUF_Presets.lua`.
+- Improved Group Frame range checking with a safer `UnitInRange` based path.
+- Improved Group Frame menu structure with dedicated pages for Layout, Health & Text, Buffs & Debuffs, Indicators, and Preview.
+- Improved Group Frame preview behavior and editing workflow.
+- Improved Group Frame font handling and name truncation.
+- Improved Group Frame mouseover highlight behavior.
+- Improved Group Frame aura configuration, private aura handling, healer buffs, indicators, and layout controls.
+- Removed obsolete Group Frame bridge code.
+
+## Edit Mode
+
+- Added menu-driven Edit Mode access for Unit Frames and Group Frames.
+- Improved Edit Mode anchoring and frame positioning behavior.
+- Added improved snap handling with visual guide lines while dragging.
+- Added grid toggle support in the Edit Mode HUD.
+- Improved Edit Mode help text, guided tour behavior, tooltips, and visual feedback.
+- Improved Undo / Redo buttons in Edit Mode with new history icons.
+- Improved tracking of drag, nudge, popup, castbar, aura, and unit-frame position changes.
+
+## Localization
+
+- Added full Menu2 localization coverage for all supported WoW languages.
+- Moved runtime localization to a colder path for better performance.
+- Added locale audit tooling to make missing translations easier to catch.
+- Localized more menu labels, buttons, chat messages, tooltip text, help text, and recovery messages.
+
+## Important Fixes
+
+- Fixed an edge case where auras could remain visible after they had expired.
+- Fixed Blizzard class portrait mode when used together with class-colored portrait styling.
+- Fixed Blizzard class portrait atlas coordinates so class icons no longer crop or distort incorrectly.
+- Fixed Boss Frame preview portraits not appearing if a real boss had previously occupied that boss slot during the same session.
+- Fixed private aura handling and Blizzard private aura anchor issues.
+- Fixed mouseover highlight edge cases where borders could float, overlap text, or attach incorrectly.
+- Fixed long-standing font menu issues.
+- Fixed castbar spell name shortening behavior.
+- Fixed several menu snapping, clipping, and layout edge cases.
+- Fixed Edit Mode guided tour fallback behavior so raw locale keys are no longer shown.
+- Fixed safer drag-stop handling for gameplay elements such as Combat Enter/Leave text.
+
+## Improvements
+
+- Improved font resolution, SharedMedia fallback handling, and safe font application.
+- Added per-scope font controls for shared, unit-frame, and group-frame fonts.
+- Improved Castbar preview handling and castbar load paths.
+- Improved Gameplay options and their integration into the new menu.
+- Improved Focus Interrupt Tracker preview handling.
+- Improved Elite / Rare icon refresh behavior.
+- Improved Addon Compartment and Minimap Button behavior.
+- Improved UI scale, MSUF scale, and menu scale handling.
+- Improved reset and recovery flows for profiles and positions.
+- Updated TOC/interface support for current WoW versions.
+
+## Cleanup
+
+- Removed the old options system from the TOC.
+- Removed old options files and legacy slash/search menu files.
+- Removed unused presets.
+- Removed obsolete bridge code.
+- Removed temporary profiler files.
