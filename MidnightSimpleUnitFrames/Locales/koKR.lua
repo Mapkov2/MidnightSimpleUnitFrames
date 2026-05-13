@@ -12,6 +12,7 @@ ns = ns or {}
 local L = (ns.RegisterLocale and ns.RegisterLocale("koKR")) or (ns.L or {})
 
 local T = {
+    ["Pips & Border"] = "표시점 및 테두리",
     ["Open MSUF Menu"] = "MSUF 메뉴 열기",
     ["Edit Mode"] = "편집 모드",
     ["Exit MSUF Edit Mode"] = "MSUF 편집 모드 종료",

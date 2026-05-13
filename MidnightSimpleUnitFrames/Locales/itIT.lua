@@ -12,6 +12,7 @@ ns = ns or {}
 local L = (ns.RegisterLocale and ns.RegisterLocale("itIT")) or (ns.L or {})
 
 local T = {
+    ["Pips & Border"] = "Indicatori e bordo",
     ["Open MSUF Menu"] = "Apri menu MSUF",
     ["Edit Mode"] = "Modalità modifica",
     ["Exit MSUF Edit Mode"] = "Esci dalla modalità modifica MSUF",

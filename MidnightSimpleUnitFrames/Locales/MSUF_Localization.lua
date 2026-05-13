@@ -5,7 +5,8 @@
 --   - ns.L: active translation table with fallback to the key itself.
 --   - ns.LOCALE: active menu locale string.
 --   - ns.AddLocale(locale, dict): register translations for any supported locale.
---   - ns.SetLocale(locale): switch menus independently from the Blizzard client.
+--   - ns.SetLocale(locale): switch menus independently from the Blizzard client;
+--     combat requests are deferred until PLAYER_REGEN_ENABLED.
 --
 -- Translator workflow:
 --   - Add translations in the matching Locales/<locale>.lua file.
@@ -76,6 +77,7 @@ EnsureFallback(L)
 
 ns.LocaleRegistry = ns.LocaleRegistry or {}
 ns.LocaleProxies = ns.LocaleProxies or {}
+ns.LocaleCallbacks = ns.LocaleCallbacks or {}
 
 local function Registry(locale)
     if not ns.SUPPORTED_LOCALES[locale or ""] then locale = "enUS" end
@@ -92,6 +94,41 @@ local function RebuildActiveLocale()
         end
     end
     EnsureFallback(L)
+end
+
+local function NormalizeLocale(locale)
+    if not ns.SUPPORTED_LOCALES[locale or ""] then locale = CLIENT_LOCALE end
+    if not ns.SUPPORTED_LOCALES[locale or ""] then locale = "enUS" end
+    return locale
+end
+
+local function InCombat()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function ApplyLocale(locale)
+    ns.LOCALE = NormalizeLocale(locale)
+    RebuildActiveLocale()
+    for _, callback in pairs(ns.LocaleCallbacks) do
+        if type(callback) == "function" then
+            pcall(callback, ns.LOCALE)
+        end
+    end
+    return ns.LOCALE
+end
+
+local LocaleApplyFrame
+local function EnsureLocaleApplyFrame()
+    if LocaleApplyFrame or type(CreateFrame) ~= "function" then return end
+    LocaleApplyFrame = CreateFrame("Frame")
+    LocaleApplyFrame:SetScript("OnEvent", function(self, event)
+        if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        local pending = ns.PendingLocale
+        ns.PendingLocale = nil
+        if pending then ApplyLocale(pending) end
+    end)
 end
 
 function ns.RegisterLocale(locale)
@@ -117,11 +154,22 @@ function ns.GetEffectiveLocale()
 end
 
 function ns.SetLocale(locale)
-    if not ns.SUPPORTED_LOCALES[locale or ""] then locale = CLIENT_LOCALE end
-    if not ns.SUPPORTED_LOCALES[locale or ""] then locale = "enUS" end
-    ns.LOCALE = locale
-    RebuildActiveLocale()
-    return ns.LOCALE
+    locale = NormalizeLocale(locale)
+    if InCombat() then
+        ns.PendingLocale = locale
+        EnsureLocaleApplyFrame()
+        if LocaleApplyFrame then
+            LocaleApplyFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        end
+        return ns.LOCALE
+    end
+    ns.PendingLocale = nil
+    return ApplyLocale(locale)
+end
+
+function ns.RegisterLocaleCallback(key, callback)
+    if type(key) ~= "string" or type(callback) ~= "function" then return end
+    ns.LocaleCallbacks[key] = callback
 end
 
 function ns.Translate(text)
