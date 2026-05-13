@@ -310,10 +310,9 @@ local function BuildBars(ctx)
         { value = "gf_raid", text = "Raid" },
     }
 
-    local scope = b:Section("", 128)
-    if scope.title then scope.title:Hide() end
-    local scopeSeg = W.ScopeOverrideBar(ctx, scope, {
+    local scopeOpts = {
         values = scopeValues,
+        width = ctx.width,
         getValue = function() return CurrentBarsScope() end,
         setValue = function(v)
             G().hpPowerTextSelectedKey = NormalizeScopeKey(v)
@@ -324,8 +323,16 @@ local function BuildBars(ctx)
         hasOverride = function(value)
             return value ~= "shared" and ScopeHasOverride(value, "hlOverride")
         end,
-    })
-    local override = W.ToggleAt(scope, "Override shared settings", 14, -58, 220)
+    }
+    local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(scopeValues, scopeOpts)
+    local scopeBottomY = (scopeMetrics and scopeMetrics.bottomY) or -40
+    local overrideY = math.min(-58, scopeBottomY - 18)
+    local hintY = overrideY - 34
+
+    local scope = b:Section("", math.max(128, math.abs(hintY) + 42))
+    if scope.title then scope.title:Hide() end
+    local scopeSeg = W.ScopeOverrideBar(ctx, scope, scopeOpts)
+    local override = W.ToggleAt(scope, "Override shared settings", 14, overrideY, 220)
     M.BindToggle(ctx, override,
         function()
             local key = CurrentBarsScope()
@@ -340,9 +347,9 @@ local function BuildBars(ctx)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
 
-    local overrideInfo = W.Text(scope, "", 14, -58, ctx.width - 130, T.colors.text)
+    local overrideInfo = W.Text(scope, "", 14, overrideY, ctx.width - 130, T.colors.text)
     local reset = T.Button(scope, "Reset", 76, 22)
-    reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -14, -50)
+    reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -14, overrideY + 8)
     reset._msuf2Label:ClearAllPoints()
     reset._msuf2Label:SetPoint("CENTER", reset, "CENTER", 0, 0)
     reset._msuf2Label:SetJustifyH("CENTER")
@@ -355,7 +362,7 @@ local function BuildBars(ctx)
         if M.SelectPage then M.SelectPage(ctx.key) end
     end)
 
-    local hint = W.Text(scope, "Group Frames inherit Shared textures and gradients by default. Raid also applies to Mythic Raid.", 14, -92, ctx.width - 28, T.colors.muted)
+    local hint = W.Text(scope, "Group Frames inherit Shared textures and gradients by default. Raid also applies to Mythic Raid.", 14, hintY, ctx.width - 28, T.colors.muted)
     M.AddRefresher(ctx, function()
         local current = CurrentBarsScope()
         local active = {}
@@ -376,10 +383,12 @@ local function BuildBars(ctx)
         hint:SetWidth(ctx.width - 28)
     end)
 
-    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", 214, true)
+    local compactTextures = (ctx.width or 720) < 560
+    local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 326 or 214, true)
     local leftX, topY = 14, -42
-    local rightX = math.max(340, math.floor((ctx.width or 720) * 0.50))
-    local leftW = math.min(300, math.max(220, rightX - 48))
+    local rightX = compactTextures and leftX or math.max(340, math.floor((ctx.width or 720) * 0.50))
+    local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
+    local gradientY = compactTextures and (topY - 126) or topY
 
     local barTexture = W.Dropdown(textures, "Bar textures (SharedMedia)", function() return TextureValues(nil) end, 280)
     if barTexture._msuf2Title then
@@ -413,12 +422,12 @@ local function BuildBars(ctx)
         end)
 
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", "Gradient", T.colors.muted)
-    gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, topY)
+    gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
     local RefreshGradientControls
     local function SyncGradientControls()
         if RefreshGradientControls then RefreshGradientControls() end
     end
-    local hpGradient = W.ToggleAt(textures, "HP bar gradient", rightX, topY - 24, 180)
+    local hpGradient = W.ToggleAt(textures, "HP bar gradient", rightX, gradientY - 24, compactTextures and 150 or 180)
     M.BindToggle(ctx, hpGradient,
         function() return GradientScopeGet("enableGradient", true) ~= false end,
         function(v)
@@ -427,7 +436,7 @@ local function BuildBars(ctx)
             ApplyGradientRuntime("MSUF2_HP_GRADIENT")
             SyncGradientControls()
         end)
-    local powerGradient = W.ToggleAt(textures, "Power bar gradient", rightX, topY - 54, 190)
+    local powerGradient = W.ToggleAt(textures, "Power bar gradient", rightX, gradientY - 54, compactTextures and 170 or 190)
     M.BindToggle(ctx, powerGradient,
         function() return GradientScopeGet("enablePowerGradient", false) == true end,
         function(v)
@@ -439,12 +448,12 @@ local function BuildBars(ctx)
     local strength = W.Slider(textures, "Gradient strength", 0, 1, 0.05, 220)
     if strength._msuf2Title then
         strength._msuf2Title:ClearAllPoints()
-        strength._msuf2Title:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, topY - 90)
-        strength._msuf2Title:SetWidth(220)
+        strength._msuf2Title:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY - 90)
+        strength._msuf2Title:SetWidth(compactTextures and leftW or 220)
     end
     strength:ClearAllPoints()
-    strength:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, topY - 112)
-    strength:SetWidth(220)
+    strength:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY - 112)
+    strength:SetWidth(compactTextures and math.min(leftW, 300) or 220)
     if strength._msuf2UpdateFill then strength:_msuf2UpdateFill() end
     M.BindSlider(ctx, strength,
         function() return tonumber(GradientScopeGet("gradientStrength", 0.45)) or 0.45 end,
@@ -454,9 +463,9 @@ local function BuildBars(ctx)
             ApplyGradientRuntime("MSUF2_GRADIENT_STRENGTH")
         end)
 
-    local padX = math.min(rightX + 238, (ctx.width or 720) - 104)
+    local padX = compactTextures and math.min(rightX + 210, (ctx.width or 720) - 104) or math.min(rightX + 238, (ctx.width or 720) - 104)
     local pad = T.Panel(textures, nil, { 0.020, 0.024, 0.046, 0.55 }, T.colors.borderSoft)
-    pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, topY - 18)
+    pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, gradientY - 18)
     pad:SetSize(84, 64)
     local center = pad:CreateTexture(nil, "ARTWORK")
     center:SetPoint("CENTER", pad, "CENTER", 0, 0)

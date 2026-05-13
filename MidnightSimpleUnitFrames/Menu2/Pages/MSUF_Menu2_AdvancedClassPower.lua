@@ -137,7 +137,9 @@ local function BuildClassPower(ctx)
     M.AddRefresher(ctx, RefreshEditButton)
     RefreshEditButton()
 
-    local display = b:CollapsibleSection("classpower_display", "Layout", 268, true)
+    local layoutWidth = ctx.width or 900
+    local compactLayout = layoutWidth < 620
+    local display = b:CollapsibleSection("classpower_display", "Layout", compactLayout and 444 or 268, true)
     local cpControls = {}
     local textControls = {}
     local dpbControls = {}
@@ -164,20 +166,21 @@ local function BuildClassPower(ctx)
     cpControls[#cpControls + 1] = cpX
     cpControls[#cpControls + 1] = cpY
     cpControls[#cpControls + 1] = cpLevel
-    local layoutWidth = ctx.width or 900
     local layoutLeftX = 32
-    local layoutRightX = min(max(430, floor(layoutWidth * 0.52)), max(360, layoutWidth - 360))
-    local layoutLeftW = max(250, layoutRightX - layoutLeftX - 42)
-    local layoutRightW = max(250, layoutWidth - layoutRightX - 32)
+    local layoutRightX = compactLayout and layoutLeftX or min(max(430, floor(layoutWidth * 0.52)), max(360, layoutWidth - 360))
+    local layoutLeftW = compactLayout and max(250, layoutWidth - layoutLeftX - 32) or max(250, layoutRightX - layoutLeftX - 42)
+    local layoutRightW = compactLayout and layoutLeftW or max(250, layoutWidth - layoutRightX - 32)
+    local layoutControlW = compactLayout and max(250, min(320, layoutWidth - layoutLeftX - 42)) or 300
+    local positionTopY = compactLayout and -266 or -64
     LabelAt(display, "Bar", layoutLeftX, -38, layoutLeftW, "GameFontNormalSmall", T.colors.accent)
-    LabelAt(display, "Position", layoutRightX, -38, layoutRightW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(display, "Position", layoutRightX, compactLayout and -240 or -38, layoutRightW, "GameFontNormalSmall", T.colors.accent)
     MoveWidget(cpEnable, display, layoutLeftX, -64)
-    MoveWidget(cpHeight, display, layoutLeftX, -98, 300)
-    MoveWidget(cpWidthMode, display, layoutLeftX, -150, 300)
-    MoveWidget(cpWidth, display, layoutLeftX, -202, 300)
-    MoveWidget(cpX, display, layoutRightX, -64, 300)
-    MoveWidget(cpY, display, layoutRightX, -116, 300)
-    MoveWidget(cpLevel, display, layoutRightX, -168, 300)
+    MoveWidget(cpHeight, display, layoutLeftX, -98, layoutControlW)
+    MoveWidget(cpWidthMode, display, layoutLeftX, -150, layoutControlW)
+    MoveWidget(cpWidth, display, layoutLeftX, -202, layoutControlW)
+    MoveWidget(cpX, display, layoutRightX, positionTopY, layoutControlW)
+    MoveWidget(cpY, display, layoutRightX, positionTopY - 52, layoutControlW)
+    MoveWidget(cpLevel, display, layoutRightX, positionTopY - 104, layoutControlW)
 
     local behavior = b:CollapsibleSection("classpower_behavior", "Behavior", 206, false)
     local cpAnchor = BindTableToggle(ctx, behavior, "Anchor to Essential Cooldown", Bars, "classPowerAnchorToCooldown", false, ApplyClassPower)
