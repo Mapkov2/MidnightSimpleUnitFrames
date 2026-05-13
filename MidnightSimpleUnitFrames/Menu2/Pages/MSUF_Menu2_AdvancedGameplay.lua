@@ -56,9 +56,49 @@ local function ApplyGameplay()
     end
 end
 
+local function IsMSUFEditModeActive()
+    if type(_G.MSUF_IsMSUFEditModeActive) == "function" then return _G.MSUF_IsMSUFEditModeActive() and true or false end
+    local st = _G.MSUF_EditState
+    if type(st) == "table" and st.active ~= nil then return st.active == true end
+    local em2 = _G.MSUF_EM2
+    if em2 and em2.State and type(em2.State.IsActive) == "function" then return em2.State.IsActive() and true or false end
+    return _G.MSUF_UnitEditModeActive == true
+end
+
+local function IsEditModeCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
 local function BuildGameplay(ctx)
     local b = W.PageBuilder(ctx)
-    b:Header("Midnight Simple Unit Frames - Gameplay", "Here are several gameplay enhancement options you can toggle on or off.", 74)
+    local head = b:Header("Midnight Simple Unit Frames - Gameplay", "Here are several gameplay enhancement options you can toggle on or off.", 74)
+
+    local edit = T.Button(head, "MSUF Edit Mode", 128, 24)
+    if W.StyleTopActionButton then W.StyleTopActionButton(edit) end
+    edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -20)
+    local function RefreshEditButton()
+        local active = IsMSUFEditModeActive()
+        if edit.SetText then edit:SetText(active and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
+        if edit.SetActive then edit:SetActive(false) end
+        if edit.SetEnabled then edit:SetEnabled(active or not IsEditModeCombatLocked()) end
+    end
+    edit:SetScript("OnClick", function()
+        local active = IsMSUFEditModeActive()
+        if (not active) and IsEditModeCombatLocked() then
+            RefreshEditButton()
+            return
+        end
+        local fn = _G.MSUF_SetMSUFEditModeDirect or _G.MSUF_SetEditMode
+        if type(fn) == "function" then pcall(fn, not active) end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, RefreshEditButton)
+        else
+            RefreshEditButton()
+        end
+    end)
+    M.AddRefresher(ctx, RefreshEditButton)
+    RefreshEditButton()
 
     local disabledRefresh
     local previewRefresh
