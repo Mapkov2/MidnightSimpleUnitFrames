@@ -176,10 +176,16 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if f._msufPortraitDirty then
         local now = (F.GetTime and F.GetTime()) or 0
         local nextAt = tonumber(f._msufPortraitNextAt) or 0
-        if (now >= nextAt) and not _budgetUsed then
-            local bossPreview = f.isBoss and MSUF_BossTestMode and not existsForPortrait
+        local bossPreview = f.isBoss and MSUF_BossTestMode and not existsForPortrait
+        if not bossPreview then
+            f._msufBossPreviewPortraitMode = nil
+            f._msufBossPreviewPortraitRender = nil
+            f._msufBossPreviewPortraitStyle = nil
+        end
+        if bossPreview or ((now >= nextAt) and not _budgetUsed) then
             if bossPreview then
                 ApplyBossPreviewPortraitTexture(portrait, conf, render)
+                f._msufPortraitLastGuid = nil
             elseif render == "CLASS" then
                 ApplyClassPortraitTexture(portrait, unit, conf, existsForPortrait)
             else
@@ -192,8 +198,10 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
             end
             f._msufPortraitDirty = nil
             f._msufPortraitNextAt = now + PORTRAIT_MIN_INTERVAL
-            _budgetUsed = true
-            ResetBudgetNextFrame()
+            if not bossPreview then
+                _budgetUsed = true
+                ResetBudgetNextFrame()
+            end
         else
             SchedulePortraitRetry(f, nextAt, now)
             ResetBudgetNextFrame()

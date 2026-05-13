@@ -4494,8 +4494,22 @@ end
             if _G.MSUF_UpdateBossPortraitLayout then
                 _G.MSUF_UpdateBossPortraitLayout(self, conf)
             end
-            self._msufPortraitDirty = true
-            self._msufPortraitNextAt = 0
+            local portraitMode = conf.portraitMode or "OFF"
+            local portraitRender = (conf.portraitRender == "CLASS") and "CLASS" or "2D"
+            local portraitStyle = conf.portraitClassStyle or "BLIZZARD"
+            local portraitHidden = self.portrait.IsShown and (not self.portrait:IsShown())
+            if self._msufBossPreviewPortraitMode ~= portraitMode
+                or self._msufBossPreviewPortraitRender ~= portraitRender
+                or self._msufBossPreviewPortraitStyle ~= portraitStyle
+                or portraitHidden
+                or self._msufPortraitDirty
+            then
+                self._msufBossPreviewPortraitMode = portraitMode
+                self._msufBossPreviewPortraitRender = portraitRender
+                self._msufBossPreviewPortraitStyle = portraitStyle
+                self._msufPortraitDirty = true
+                self._msufPortraitNextAt = 0
+            end
             local fnP = _UF.Portrait or _G.MSUF_MaybeUpdatePortrait
             if type(fnP) == "function" then
                 fnP(self, unit, conf, false)
@@ -4975,6 +4989,9 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
                 if f.SetAlpha then f:SetAlpha(1) end
                 if f.EnableMouse then f:EnableMouse(true) end
             else
+                f._msufBossPreviewPortraitMode = nil
+                f._msufBossPreviewPortraitRender = nil
+                f._msufBossPreviewPortraitStyle = nil
                 if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
                     MSUF_ApplyUnitVisibilityDriver(f, false)
                 end
@@ -5002,6 +5019,21 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
             _G.MSUF_UpdateBossCastbarPreview()
         end
     end
+end
+
+function _G.MSUF_SyncBossUnitframePreviewWithUnitEdit(reason)
+    if _msuf_inCombat then return end
+
+    local editState = _G.MSUF_EditState
+    local editActive = (_G.MSUF_UnitEditModeActive == true)
+        or (type(editState) == "table" and editState.active == true)
+
+    local editPreviewActive = editActive
+        and (_G.MSUF_UnitPreviewActive == true or _G.MSUF_PreviewTestMode == true)
+    local pagePreviewActive = (_G.MSUF2_BossUnitframePreviewActive == true)
+    local active = (editPreviewActive or pagePreviewActive) and true or false
+
+    _G.MSUF_ApplyBossUnitframePreviewState(active, reason or "MSUF_BOSS_PREVIEW_SYNC")
 end
 
 local function MSUF_ApplyUnitFrameKey_Immediate(key)
