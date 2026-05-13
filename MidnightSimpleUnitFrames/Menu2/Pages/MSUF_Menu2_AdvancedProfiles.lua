@@ -82,8 +82,27 @@ local function RefreshAfterProfileChange(ctx)
     if M.Refresh then M.Refresh(ctx) end
 end
 
+local function PrintProfileMessage(color, message)
+    print((color or "|cffffd700") .. "MSUF:|r " .. tostring(message or ""))
+end
+
 local function EnsureProfilePopups()
     if not _G.StaticPopupDialogs then return end
+
+    if not _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT then
+        _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT = {
+            text = "Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?",
+            button1 = _G.RELOAD or "Reload",
+            button2 = _G.CANCEL or "Not now",
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function()
+                if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+            end,
+        }
+    end
 
     if not _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
         _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE = {
@@ -123,6 +142,48 @@ local function EnsureProfilePopups()
                 if type(data.after) == "function" then data.after() end
             end,
         }
+    end
+end
+
+local function ShowImportReloadPrompt()
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        PrintProfileMessage("|cffffd700", "Profile imported. Reload after combat with /reload.")
+        return
+    end
+    if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT then
+        _G.StaticPopup_Show("MSUF2_IMPORT_RELOAD_PROMPT")
+        return
+    end
+    if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+        _G.MSUF_ShowReloadRecommendedPopup("Profile import")
+    else
+        PrintProfileMessage("|cffffd700", "Profile imported. Reload the UI with /reload.")
+    end
+end
+
+local function ReloadAfterNewProfileImport(profileName)
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        PrintProfileMessage("|cffffd700", "Imported profile '" .. tostring(profileName) .. "'. Reload after combat with /reload.")
+        return
+    end
+    if type(_G.ReloadUI) == "function" then
+        _G.ReloadUI()
+    else
+        PrintProfileMessage("|cffffd700", "Imported profile '" .. tostring(profileName) .. "'. Reload the UI with /reload.")
+    end
+end
+
+local function ProfileExists(name)
+    local gdb = _G.MSUF_GlobalDB
+    local profiles = type(gdb) == "table" and gdb.profiles or nil
+    return type(profiles) == "table" and profiles[name] ~= nil
+end
+
+local function DeleteCreatedProfile(name)
+    local gdb = _G.MSUF_GlobalDB
+    local profiles = type(gdb) == "table" and gdb.profiles or nil
+    if type(profiles) == "table" then
+        profiles[name] = nil
     end
 end
 
@@ -250,7 +311,7 @@ local function BuildProfiles(ctx)
         end
     end
 
-    local io = b:CollapsibleSection("profiles_io", "Export / Import", 286, false)
+    local io = b:CollapsibleSection("profiles_io", "Export / Import", 356, false)
     local exportKind = W.Dropdown(io, "Export kind", {
         { value = "all", text = "Full profile" },
         { value = "unitframe", text = "Unitframes" },
@@ -273,14 +334,107 @@ local function BuildProfiles(ctx)
         end
     end)
     local import = T.Button(io, "Import into current", 160, 24)
-    import:SetScript("OnClick", function()
+    local importCreateNew = W.Toggle(io, "Import and create new profile")
+    local importProfileName = W.TextInput(io, "New profile name", 260)
+    importProfileName._msuf2CommitOnBlur = false
+
+    local function ImportIntoCurrent()
         local text = blob:GetText()
-        if text and text ~= "" and type(_G.MSUF_ImportFromString) == "function" then
-            pcall(_G.MSUF_ImportFromString, text)
-            if M.ClearHistory then M.ClearHistory() end
-            M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true })
-            RefreshAfterProfileChange(ctx)
+        if not (text and text ~= "") then
+            PrintProfileMessage("|cffff0000", "Import failed (empty string).")
+            return false
         end
+        if type(_G.MSUF_ImportFromString) ~= "function" then
+            PrintProfileMessage("|cffff0000", "Import failed: profile import API is not available.")
+            return false
+        end
+        local ok, imported = pcall(_G.MSUF_ImportFromString, text)
+        if not ok then
+            PrintProfileMessage("|cffff0000", "Import failed: " .. tostring(imported))
+            return false
+        end
+        if imported ~= true then
+            return false
+        end
+        if M.ClearHistory then M.ClearHistory() end
+        M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true })
+        RefreshAfterProfileChange(ctx)
+        ShowImportReloadPrompt()
+        return true
+    end
+
+    local function ImportIntoNewProfile(rawName)
+        local text = blob:GetText()
+        if not (text and text ~= "") then
+            PrintProfileMessage("|cffff0000", "Import failed (empty string).")
+            return false
+        end
+        local name = Trim(rawName or importProfileName:GetText())
+        if not (name and name ~= "") then
+            PrintProfileMessage("|cffff0000", "Enter a new profile name first.")
+            return false
+        end
+        if ProfileExists(name) then
+            PrintProfileMessage("|cffff0000", "Profile '" .. name .. "' already exists.")
+            return false
+        end
+        if type(_G.MSUF_CreateProfile) ~= "function"
+            or type(_G.MSUF_SwitchProfile) ~= "function"
+            or type(_G.MSUF_ImportFromString) ~= "function"
+        then
+            PrintProfileMessage("|cffff0000", "Import failed: profile API is not available.")
+            return false
+        end
+
+        local previous = _G.MSUF_ActiveProfile or "Default"
+        pcall(_G.MSUF_CreateProfile, name)
+        if not ProfileExists(name) then
+            PrintProfileMessage("|cffff0000", "Import failed: could not create profile '" .. name .. "'.")
+            return false
+        end
+        local previousExists = ProfileExists(previous)
+
+        pcall(_G.MSUF_SwitchProfile, name)
+        if _G.MSUF_ActiveProfile ~= name then
+            if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
+            DeleteCreatedProfile(name)
+            PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '" .. name .. "'.")
+            return false
+        end
+
+        local ok, imported = pcall(_G.MSUF_ImportFromString, text)
+        if not ok or imported ~= true then
+            if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
+            DeleteCreatedProfile(name)
+            PrintProfileMessage("|cffff0000", ok and "Import failed." or ("Import failed: " .. tostring(imported)))
+            RefreshAfterProfileChange(ctx)
+            return false
+        end
+
+        if M.ClearHistory then M.ClearHistory() end
+        M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true })
+        RefreshAfterProfileChange(ctx)
+        importProfileName:SetText("")
+        ReloadAfterNewProfileImport(name)
+        return true
+    end
+
+    import:SetScript("OnClick", function()
+        if M.profileImportCreateNew == true then
+            ImportIntoNewProfile()
+        else
+            ImportIntoCurrent()
+        end
+    end)
+    importProfileName:SetOnValueCommitted(function(value)
+        if M.profileImportCreateNew == true then
+            ImportIntoNewProfile(value)
+        end
+    end)
+    importCreateNew:SetScript("OnClick", function(self)
+        M.profileImportCreateNew = not (M.profileImportCreateNew == true)
+        self:SetChecked(M.profileImportCreateNew == true)
+        if M.Refresh then M.Refresh(ctx) end
     end)
     local legacy = T.Button(io, "Legacy Import", 132, 24)
     legacy:SetScript("OnClick", function()
@@ -308,6 +462,19 @@ local function BuildProfiles(ctx)
     import:SetPoint("LEFT", export, "RIGHT", 10, 0)
     legacy:SetPoint("LEFT", import, "RIGHT", 10, 0)
     wago:SetPoint("TOPLEFT", io, "TOPLEFT", ioActionX, -104)
+    MoveWidget(importCreateNew, io, ioActionX, -144)
+    MoveWidget(importProfileName, io, ioActionX, -178, 260)
+    M.AddRefresher(ctx, function()
+        local createNew = M.profileImportCreateNew == true
+        importCreateNew:SetChecked(createNew)
+        if import.SetText then
+            import:SetText(createNew and "Import new profile" or "Import into current")
+        end
+        W.SetControlShown(importProfileName, createNew)
+        if not createNew and importProfileName.HasFocus and importProfileName:HasFocus() then
+            importProfileName:ClearFocus()
+        end
+    end)
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
@@ -358,5 +525,5 @@ local function BuildModules(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("profiles", { title = "MSUF Profiles", build = BuildProfiles, version = 4 })
+M.RegisterPage("profiles", { title = "MSUF Profiles", build = BuildProfiles, version = 5 })
 M.RegisterPage("modules", { title = "MSUF Modules", build = BuildModules })
