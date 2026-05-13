@@ -245,6 +245,7 @@ local function ApplyHistorySnapshot(snapshot, reason)
         if type(ns.GF.RebuildAll) == "function" then pcall(ns.GF.RebuildAll) end
         if type(ns.GF.RefreshPreviewLayout) == "function" then pcall(ns.GF.RefreshPreviewLayout) end
     end
+    if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
     RebuildActivePage()
     return true
 end
@@ -467,6 +468,7 @@ function M.SetGeneralValue(key, value, reason, opts)
     local g = M.GetGeneralDB()
     if g[key] == value then return false end
     g[key] = value
+    if key == "menuLocale" and M.ApplyLocaleSelection then M.ApplyLocaleSelection(value) end
     M.RequestGeneralApply(reason or ("MSUF2_" .. tostring(key)), opts)
     return true
 end

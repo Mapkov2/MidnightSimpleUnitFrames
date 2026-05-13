@@ -490,7 +490,7 @@ local function CreateContext(key, wrapper, entry)
         height = math.max(CONTENT_H, tonumber(height) or CONTENT_H)
         entry.height = height
         if wrapper.SetHeight then wrapper:SetHeight(height) end
-        if M.scrollChild and M.scrollChild.SetHeight then M.scrollChild:SetHeight(height) end
+        if not entry.hiddenBuild and M.scrollChild and M.scrollChild.SetHeight then M.scrollChild:SetHeight(height) end
     end
     function ctx:AddRefresher(fn)
         M.AddRefresher(ctx, fn)
@@ -504,6 +504,56 @@ local function BuildPlaceholderPage(ctx, requestedKey)
     W.Text(sec, "This native page is not implemented yet.", 14, -42, ctx.width - 28, T.colors.muted)
     W.Text(sec, M.Format("Requested page: %s", tostring(requestedKey or "unknown")), 14, -68, ctx.width - 28, T.colors.dim)
     ctx:SetContentHeight(210)
+end
+
+local ClearSearchRegistryPage
+
+local function BuildPageEntry(key, hidden)
+    if not M.scrollChild then return nil end
+    key = ALIASES[key or ""] or key or "home"
+
+    local spec = M.pages[key]
+    local specVersion = spec and spec.version
+    local cached = M.cache and M.cache[key]
+    if cached and specVersion and cached.version ~= specVersion then
+        if M.InvalidatePage then
+            M.InvalidatePage(key)
+        else
+            if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
+            if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
+            M.cache[key] = nil
+        end
+        cached = nil
+    end
+    if cached then return cached end
+
+    ClearSearchRegistryPage(key)
+
+    local wrapper = CreateFrame("Frame", nil, M.scrollChild)
+    wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
+    wrapper:SetSize(CONTENT_W - 10, CONTENT_H)
+    if hidden and wrapper.Hide then wrapper:Hide() end
+
+    local entry = { wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, hiddenBuild = hidden and true or false }
+    M.cache[key] = entry
+
+    local ctx = CreateContext(key, wrapper, entry)
+    local prevBuildKey = M._msuf2SearchBuildKey
+    M._msuf2SearchBuildKey = key
+    if spec and type(spec.build) == "function" then
+        local ok, result = pcall(spec.build, ctx)
+        if ok and tonumber(result) then
+            ctx:SetContentHeight(result)
+        elseif not ok then
+            entry.buildError = tostring(result or "unknown error")
+        end
+    else
+        BuildPlaceholderPage(ctx, key)
+    end
+    M._msuf2SearchBuildKey = prevBuildKey
+
+    if hidden and wrapper.Hide then wrapper:Hide() end
+    return entry
 end
 
 local function TrimText(text)
@@ -521,6 +571,10 @@ end
 local function NormalizeSearchText(text)
     text = tostring(text or "")
     text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    text = text:gsub("\195\132", "ae"):gsub("\195\164", "ae")
+    text = text:gsub("\195\150", "oe"):gsub("\195\182", "oe")
+    text = text:gsub("\195\156", "ue"):gsub("\195\188", "ue")
+    text = text:gsub("\195\159", "ss")
     text = text:gsub("[/\\_%-%.:;,%(%)]", " ")
     text = string.lower(text)
     text = text:gsub("[^%w%s]+", " ")
@@ -528,9 +582,16 @@ local function NormalizeSearchText(text)
     return TrimText(text)
 end
 
+local function DisplaySearchText(text)
+    text = tostring(text or "")
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    text = text:gsub("%s+", " ")
+    return TrimText(text)
+end
+
 local function AddSearchText(parts, text)
     if text == nil then return end
-    text = tostring(text)
+    text = DisplaySearchText(text)
     if text == "" then return end
     parts[#parts + 1] = text
     local translated = M.Tr(text)
@@ -543,86 +604,585 @@ local function AddRawSearchText(parts, text)
     if text ~= "" then parts[#parts + 1] = text end
 end
 
-local function CollectCachedPageText(frame, parts, depth)
-    if not frame or depth > 5 then return end
-    if frame.GetRegions then
-        local regions = { frame:GetRegions() }
-        for i = 1, #regions do
-            local region = regions[i]
-            if region and region.GetObjectType and region:GetObjectType() == "FontString" and region.GetText then
-                AddSearchText(parts, region:GetText())
-            end
+local MIN_SEARCH_QUERY_LEN = 2
+local SEARCH_TEXT_MAX_LEN = 170
+local SEARCH_BACKGROUND_STEP_SEC = 0.03
+local _searchRecords = nil
+local _searchRecordsDirty = true
+local _searchIndexing = false
+local _searchIndexQueue = nil
+local _searchRegistrySerial = 0
+local _searchRegistry = {}
+local _searchRegistryByPage = {}
+M.searchRegistry = _searchRegistry
+
+local function MarkSearchIndexDirty()
+    _searchRecordsDirty = true
+end
+
+local function SearchCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function CancelSearchBackgroundIndex()
+    _searchIndexing = false
+    _searchIndexQueue = nil
+end
+
+local SEARCH_NOISE_TEXT = {
+    [""] = true,
+    ["x"] = true,
+    ["+"] = true,
+    ["-"] = true,
+    ["<"] = true,
+    [">"] = true,
+    ["|"] = true,
+}
+
+local SEARCH_STOP_WORDS = {
+    a = true,
+    an = true,
+    ["and"] = true,
+    are = true,
+    can = true,
+    ["do"] = true,
+    does = true,
+    ["for"] = true,
+    how = true,
+    i = true,
+    ["in"] = true,
+    is = true,
+    it = true,
+    my = true,
+    ["not"] = true,
+    of = true,
+    on = true,
+    ["or"] = true,
+    the = true,
+    to = true,
+    why = true,
+    with = true,
+    wie = true,
+    kann = true,
+    ich = true,
+    ist = true,
+    sind = true,
+    das = true,
+    die = true,
+    der = true,
+    den = true,
+    dem = true,
+    ein = true,
+    eine = true,
+    einer = true,
+    mein = true,
+    meine = true,
+    nicht = true,
+    warum = true,
+    wo = true,
+    was = true,
+    fuer = true,
+    fur = true,
+    mit = true,
+    und = true,
+    oder = true,
+}
+
+local CONTROL_KIND_LABEL = {
+    faq = "FAQ",
+    toggle = "Toggle",
+    slider = "Slider",
+    dropdown = "Dropdown",
+    segment = "Choice",
+    textinput = "Text Input",
+    color = "Color",
+}
+
+local function IsSearchableDisplayText(text)
+    text = DisplaySearchText(text)
+    if text == "" or #text > SEARCH_TEXT_MAX_LEN then return false end
+    local normalized = NormalizeSearchText(text)
+    if normalized == "" or SEARCH_NOISE_TEXT[normalized] then return false end
+    if #normalized < 2 then return false end
+    return true
+end
+
+local function FontStringText(region)
+    if not (region and region.GetObjectType and region:GetObjectType() == "FontString") then return nil end
+    local raw = region._msuf2SearchText
+    local text = raw
+    if text == nil and region.GetText then text = region:GetText() end
+    text = DisplaySearchText(text)
+    if text == "" then return nil end
+    return text
+end
+
+local function SearchValueText(item)
+    if type(item) == "table" then
+        return item.text or item.label or item.name or item.title or item.value or item.key
+    end
+    return item
+end
+
+local function AddValuesSearchText(parts, values)
+    if type(values) == "function" then
+        return
+    end
+    if type(values) ~= "table" then return end
+    local limit = math.min(#values, 120)
+    for i = 1, limit do
+        local item = values[i]
+        AddSearchText(parts, SearchValueText(item))
+        if type(item) == "table" then
+            AddSearchText(parts, item.tooltip)
+            AddSearchText(parts, item.desc or item.description)
         end
     end
-    if frame.GetChildren then
-        local children = { frame:GetChildren() }
-        for i = 1, #children do
-            CollectCachedPageText(children[i], parts, depth + 1)
+    local extra = 0
+    for key, item in pairs(values) do
+        if type(key) ~= "number" or key < 1 or key > #values then
+            AddSearchText(parts, key)
+            AddSearchText(parts, SearchValueText(item))
+            if type(item) == "table" then
+                AddSearchText(parts, item.tooltip)
+                AddSearchText(parts, item.desc or item.description)
+            end
+            extra = extra + 1
+            if extra >= 40 then break end
         end
     end
 end
 
-local function BuildSearchRecords()
-    local groupLabels = {}
+local function SearchSectionTitle(frame)
+    if not frame then return nil end
+    local entry = frame._msuf2CollapsibleEntry
+    if entry and entry.label then
+        local text = FontStringText(entry.label)
+        if IsSearchableDisplayText(text) then return text end
+    end
+    if frame.title then
+        local text = FontStringText(frame.title)
+        if IsSearchableDisplayText(text) then return text end
+    end
+    if IsSearchableDisplayText(frame._msuf2SearchTitle) then return DisplaySearchText(frame._msuf2SearchTitle) end
+    return nil
+end
+
+local function SectionPathForAnchor(anchor, pageTitle)
+    local path, seen = {}, {}
+    local parent = anchor and anchor.GetParent and anchor:GetParent()
+    local pageNorm = NormalizeSearchText(pageTitle or "")
+    while parent do
+        local title = SearchSectionTitle(parent)
+        local norm = NormalizeSearchText(title or "")
+        if norm ~= "" and norm ~= pageNorm and not seen[norm] then
+            seen[norm] = true
+            table.insert(path, 1, title)
+        end
+        parent = parent.GetParent and parent:GetParent() or nil
+    end
+    return path
+end
+
+local function SearchHint(pageInfo, anchor)
+    local parts, seen = {}, {}
+    local function Add(text)
+        text = DisplaySearchText(text)
+        local norm = NormalizeSearchText(text)
+        if norm ~= "" and not seen[norm] then
+            seen[norm] = true
+            parts[#parts + 1] = text
+        end
+    end
+    Add(pageInfo.group)
+    Add(pageInfo.label or pageInfo.title)
+    local sections = SectionPathForAnchor(anchor, pageInfo.title or pageInfo.label)
+    for i = 1, #sections do Add(sections[i]) end
+    return table.concat(parts, " > ")
+end
+
+local function BuildSearchPageInfos()
+    local groupLabels, navInfo = {}, {}
     for i = 1, #NAV do
         local item = NAV[i]
         if item.header then groupLabels[item.id or item.header] = item.header end
     end
 
-    local records, seen = {}, {}
-    local function AddRecord(key, label, group)
+    local infos, seen = {}, {}
+    local function AddPageInfo(key, label, group)
         if not key or key == "search" or seen[key] then return end
         seen[key] = true
         local spec = M.pages[key]
-        local parts = {}
-        AddSearchText(parts, label or key)
-        AddSearchText(parts, group)
-        if spec then AddSearchText(parts, spec.title) end
-        AddRawSearchText(parts, SEARCH_KEYWORDS[key])
-        local cached = M.cache and M.cache[key]
-        if cached and cached.wrapper then CollectCachedPageText(cached.wrapper, parts, 1) end
-
-        local displayLabel = M.Tr(label or (spec and spec.title) or key)
-        local displayGroup = group and M.Tr(group) or ""
-        local displayTitle = M.Tr((spec and spec.title) or label or key)
-        local haystack = NormalizeSearchText(table.concat(parts, " "))
-        records[#records + 1] = {
+        local info = {
             key = key,
-            label = displayLabel,
-            group = displayGroup,
-            title = displayTitle,
-            labelNorm = NormalizeSearchText(displayLabel),
-            groupNorm = NormalizeSearchText(displayGroup),
-            titleNorm = NormalizeSearchText(displayTitle),
-            haystack = haystack,
+            label = M.Tr(label or (spec and spec.title) or key),
+            group = group and M.Tr(group) or "",
+            title = M.Tr((spec and spec.title) or label or key),
         }
+        infos[#infos + 1] = info
+        navInfo[key] = info
     end
 
     for i = 1, #NAV do
         local item = NAV[i]
         if item.key then
-            AddRecord(item.key, item.label, item.group and groupLabels[item.group] or nil)
+            AddPageInfo(item.key, item.label, item.group and groupLabels[item.group] or nil)
         end
     end
     for i = 1, #(M.pageOrder or {}) do
         local key = M.pageOrder[i]
         local spec = M.pages[key]
-        AddRecord(key, spec and spec.title or key, nil)
+        AddPageInfo(key, spec and spec.title or key, nil)
     end
+    return infos, navInfo
+end
+
+ClearSearchRegistryPage = function(pageKey)
+    if not pageKey then return end
+    local ids = _searchRegistryByPage[pageKey]
+    if ids then
+        for i = 1, #ids do
+            _searchRegistry[ids[i]] = nil
+        end
+        _searchRegistryByPage[pageKey] = nil
+        MarkSearchIndexDirty()
+    end
+end
+
+local function CopyStaticSearchValues(values)
+    if type(values) == "function" or type(values) ~= "table" then return nil end
+    local out, count = {}, 0
+    local limit = math.min(#values, 80)
+    for i = 1, limit do
+        local item = values[i]
+        local text = SearchValueText(item)
+        if text ~= nil then
+            count = count + 1
+            out[count] = text
+        end
+    end
+    local extra = 0
+    for key, item in pairs(values) do
+        if type(key) ~= "number" or key < 1 or key > #values then
+            count = count + 1
+            out[count] = key
+            local text = SearchValueText(item)
+            if text ~= nil then
+                count = count + 1
+                out[count] = text
+            end
+            extra = extra + 1
+            if extra >= 30 then break end
+        end
+    end
+    return count > 0 and out or nil
+end
+
+function M.RegisterSearchWidget(widget, meta)
+    if not widget or type(meta) ~= "table" then return end
+    local pageKey = meta.pageKey or M._msuf2SearchBuildKey or M.activeKey
+    if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
+
+    local label = DisplaySearchText(meta.label or meta.title or meta.text or widget._msuf2SearchText or widget._msuf2SearchTitle)
+    if not IsSearchableDisplayText(label) then return end
+
+    local id = widget._msuf2SearchRegistryId
+    if not id or widget._msuf2SearchRegistryPage ~= pageKey or not _searchRegistry[id] then
+        _searchRegistrySerial = _searchRegistrySerial + 1
+        id = pageKey .. ":" .. tostring(_searchRegistrySerial)
+        widget._msuf2SearchRegistryId = id
+        widget._msuf2SearchRegistryPage = pageKey
+        _searchRegistryByPage[pageKey] = _searchRegistryByPage[pageKey] or {}
+        _searchRegistryByPage[pageKey][#_searchRegistryByPage[pageKey] + 1] = id
+    end
+
+    _searchRegistry[id] = {
+        id = id,
+        pageKey = pageKey,
+        label = label,
+        kind = meta.kind or widget._msuf2ControlKind or "control",
+        anchor = meta.anchor or widget._msuf2Title or widget._msuf2Label or widget,
+        values = CopyStaticSearchValues(meta.values or widget.values),
+        keywords = meta.keywords,
+        help = meta.help or meta.description,
+    }
+    MarkSearchIndexDirty()
+end
+
+local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, kind, extraParts)
+    label = DisplaySearchText(label)
+    if not IsSearchableDisplayText(label) then return end
+
+    local hint = SearchHint(pageInfo, anchor)
+    local parts = {}
+    AddSearchText(parts, label)
+    AddSearchText(parts, hint)
+    AddSearchText(parts, pageInfo.label)
+    AddSearchText(parts, pageInfo.group)
+    AddSearchText(parts, pageInfo.title)
+    AddRawSearchText(parts, SEARCH_KEYWORDS[pageInfo.key])
+    if extraParts then
+        for i = 1, #extraParts do AddSearchText(parts, extraParts[i]) end
+    end
+
+    local recordId = table.concat({
+        tostring(pageInfo.key or ""),
+        tostring(kind or ""),
+        tostring(anchor or ""),
+        NormalizeSearchText(label),
+        NormalizeSearchText(hint),
+    }, "\031")
+    if seenRecords[recordId] then return end
+    seenRecords[recordId] = true
+
+    local displayHint = DisplaySearchText(hint)
+    local labelNorm = NormalizeSearchText(label)
+    local titleNorm = NormalizeSearchText(pageInfo.title or pageInfo.label or "")
+    local groupNorm = NormalizeSearchText(pageInfo.group or "")
+    local hintNorm = NormalizeSearchText(displayHint)
+    local record = {
+        key = pageInfo.key,
+        label = label,
+        group = pageInfo.group or "",
+        title = pageInfo.title or pageInfo.label or "",
+        hint = displayHint,
+        kind = kind or "text",
+        anchor = anchor,
+        labelNorm = labelNorm,
+        groupNorm = groupNorm,
+        titleNorm = titleNorm,
+        hintNorm = hintNorm,
+        haystack = NormalizeSearchText(table.concat(parts, " ")),
+        order = #records + 1,
+    }
+    records[#records + 1] = record
+    return record
+end
+
+local SEARCH_FAQ = {
+    {
+        label = "Why are boss frames not visible?",
+        answer = "Boss frames normally appear only during boss encounters. Enable Boss Frames and use Edit Mode or Boss Preview to test them outside combat.",
+        pageKey = "uf_boss",
+        keywords = { "boss frames not visible", "boss frames hidden", "why boss not show", "warum sehe ich boss frames nicht", "bossframes weg", "boss preview", "boss frames anzeigen", "boss frames sichtbar", "boss frames show" },
+    },
+    {
+        label = "How do I move frames?",
+        answer = "Open MSUF Edit Mode, select the frame, then drag it or adjust the X/Y position controls.",
+        pageKey = "home",
+        keywords = { "move frames", "drag frames", "position", "verschieben", "frames bewegen", "edit mode", "x offset", "y offset" },
+    },
+    {
+        label = "How do I change portraits?",
+        answer = "Open the unit page, then use the Portrait section for mode, render type, shape, size, offset, and border.",
+        pageKey = "uf_player",
+        keywords = { "portrait", "portraits", "avatar", "face", "bild", "portraet", "portrait mode", "portrait shape", "class icon" },
+    },
+    {
+        label = "How do I change castbars?",
+        answer = "Use the unit page for per-unit castbar toggles and Global Style > Castbar for shared textures, direction, GCD, text, and interrupt options.",
+        pageKey = "opt_castbar",
+        keywords = { "castbar", "cast bar", "gcd", "interrupt", "focus kick", "channel ticks", "zauberleiste", "castbar texture" },
+    },
+    {
+        label = "How do I change colors?",
+        answer = "Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars.",
+        pageKey = "opt_colors",
+        keywords = { "colors", "colours", "farbe", "farben", "class color", "reaction color", "bar color", "background color" },
+    },
+    {
+        label = "How do I change fonts and text?",
+        answer = "Global Style > Fonts controls shared font settings. Unit pages contain per-unit name, health, and power text position and pattern settings.",
+        pageKey = "opt_fonts",
+        keywords = { "font", "fonts", "text", "schrift", "name text", "hp text", "power text", "text size", "outline" },
+    },
+    {
+        label = "How do I import, export, or switch profiles?",
+        answer = "Open Profiles for active profile, spec auto-switching, import/export strings, legacy imports, and reset options.",
+        pageKey = "profiles",
+        keywords = { "profile", "profiles", "import", "export", "wago", "copy profile", "reset profile", "profil", "spec profile" },
+    },
+    {
+        label = "How do I configure group frames?",
+        answer = "Use Group Frames pages: Layout for size/growth/sorting, Health & Text for bars/text, Buffs & Debuffs for auras, and Indicators for status icons.",
+        pageKey = "gf_layout",
+        keywords = { "group frames", "party", "raid", "mythic raid", "gruppe", "raid frames", "layout", "growth", "sorting" },
+    },
+    {
+        label = "How do I configure buffs and debuffs?",
+        answer = "Unit Auras controls unitframe auras. Group Buffs & Debuffs controls group-frame aura layout, filtering, cooldowns, and private auras.",
+        pageKey = "auras2",
+        keywords = { "buff", "buffs", "debuff", "debuffs", "auras", "aura", "private aura", "cooldown", "filter" },
+    },
+    {
+        label = "Why is something not updating immediately?",
+        answer = "Some layout changes rebuild frames, while visual changes apply instantly. If needed, close and reopen the menu or reload after large profile/import changes.",
+        pageKey = "opt_misc",
+        keywords = { "not updating", "does not update", "refresh", "reload", "apply", "changes not showing", "aktualisiert nicht" },
+    },
+    {
+        label = "How do I disable Blizzard unit frames?",
+        answer = "Open Global Style > Miscellaneous and use the Blizzard frame toggles.",
+        pageKey = "opt_misc",
+        keywords = { "blizzard frames", "disable blizzard", "hide blizzard", "playerframe", "default frames", "standard frames" },
+    },
+    {
+        label = "How do I change range fading?",
+        answer = "Open Global Style > Miscellaneous and use the Range Fade section for affected units, alpha, and portrait fading.",
+        pageKey = "opt_misc",
+        keywords = { "range fade", "out of range", "range alpha", "distance fade", "reichweite", "fade portrait" },
+    },
+}
+
+local function BuildSearchRecords()
+    local pageInfos, pageInfoByKey = BuildSearchPageInfos()
+
+    local records, seenRecords = {}, {}
+    for i = 1, #pageInfos do
+        local info = pageInfos[i]
+        local pageParts = {}
+        AddSearchText(pageParts, info.group)
+        AddSearchText(pageParts, info.title)
+        AddRawSearchText(pageParts, SEARCH_KEYWORDS[info.key])
+        AddSearchRecord(records, seenRecords, info, info.label or info.title or info.key, nil, "page", pageParts)
+    end
+
+    for _, entry in pairs(_searchRegistry) do
+        local info = pageInfoByKey[entry.pageKey] or {
+            key = entry.pageKey,
+            label = entry.pageKey,
+            title = entry.pageKey,
+            group = "",
+        }
+        local extra = {}
+        AddValuesSearchText(extra, entry.values)
+        if type(entry.keywords) == "string" then
+            AddSearchText(extra, entry.keywords)
+        elseif type(entry.keywords) == "table" then
+            for i = 1, #entry.keywords do AddSearchText(extra, entry.keywords[i]) end
+        end
+        AddSearchText(extra, entry.help)
+        local rec = AddSearchRecord(records, seenRecords, info, entry.label, entry.anchor, entry.kind or "control", extra)
+        if rec then
+            rec.answer = entry.help
+        end
+    end
+
+    for i = 1, #SEARCH_FAQ do
+        local faq = SEARCH_FAQ[i]
+        local pageKey = faq.pageKey or "home"
+        local info = pageInfoByKey[pageKey] or { key = pageKey, label = "FAQ", title = "FAQ", group = "" }
+        local extra = { faq.answer }
+        for k = 1, #(faq.keywords or {}) do extra[#extra + 1] = faq.keywords[k] end
+        local rec = AddSearchRecord(records, seenRecords, info, faq.label, nil, "faq", extra)
+        if rec then
+            rec.answer = faq.answer
+            rec.faq = true
+        end
+    end
+
     return records
 end
 
-local function SearchPages(query)
+local SearchPages
+
+local function RefreshSearchResultsPage()
+    if M.activeKey ~= "search" then return end
+    local query = TrimText(M.searchQuery or "")
+    if query == "" or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then return end
+    M.searchResults = nil
+    M.searchResultsQuery = nil
+    M.searchResults = SearchPages(query)
+    M.searchResultsQuery = query
+    if M.InvalidatePage then M.InvalidatePage("search") end
+    if M.SelectPage then M.SelectPage("search") end
+end
+
+local function FinishSearchBackgroundIndex()
+    _searchIndexing = false
+    _searchIndexQueue = nil
+    local query = TrimText(M.searchQuery or "")
+    local shouldRefresh = M.activeKey == "search" and query ~= "" and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    if shouldRefresh and _searchRecordsDirty then
+        _searchRecords = BuildSearchRecords()
+        _searchRecordsDirty = false
+    end
+    if shouldRefresh then RefreshSearchResultsPage() end
+end
+
+local function StartSearchBackgroundIndex()
+    if _searchIndexing then return end
+    if SearchCombatLocked() then return end
+    if not (_G.C_Timer and _G.C_Timer.After) then return end
+    if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
+    if not M.scrollChild then return end
+
+    local pageInfos = BuildSearchPageInfos()
+    local queue = {}
+    for i = 1, #pageInfos do
+        local info = pageInfos[i]
+        local cached = M.cache and M.cache[info.key]
+        if info.key ~= "search" and not (cached and cached.wrapper) then
+            queue[#queue + 1] = info.key
+        end
+    end
+    if #queue == 0 then return end
+
+    _searchIndexing = true
+    _searchIndexQueue = queue
+
+    local function Step()
+        if not _searchIndexing then return end
+        if SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then
+            CancelSearchBackgroundIndex()
+            return
+        end
+
+        local key = table.remove(_searchIndexQueue, 1)
+        if key then
+            BuildPageEntry(key, true)
+            MarkSearchIndexDirty()
+        end
+
+        if _searchIndexQueue and #_searchIndexQueue > 0 then
+            _G.C_Timer.After(SEARCH_BACKGROUND_STEP_SEC, Step)
+        else
+            FinishSearchBackgroundIndex()
+        end
+    end
+
+    _G.C_Timer.After(0, Step)
+end
+
+local function GetSearchRecords()
+    if _searchIndexing and _searchRecords then
+        return _searchRecords
+    end
+    if not _searchRecords or _searchRecordsDirty then
+        _searchRecords = BuildSearchRecords()
+        _searchRecordsDirty = false
+    end
+    StartSearchBackgroundIndex()
+    return _searchRecords
+end
+
+function SearchPages(query)
     query = TrimText(query)
+    if SearchCombatLocked() then
+        CancelSearchBackgroundIndex()
+        return {}
+    end
     local normalized = NormalizeSearchText(query)
     local words = {}
     for word in normalized:gmatch("%S+") do
-        words[#words + 1] = word
+        if not SEARCH_STOP_WORDS[word] then words[#words + 1] = word end
     end
     if #words == 0 then return {} end
+    if #normalized < MIN_SEARCH_QUERY_LEN then return {} end
 
     local results = {}
-    local records = BuildSearchRecords()
+    local records = GetSearchRecords()
     for i = 1, #records do
         local rec = records[i]
         local haystack = rec.haystack or ""
@@ -638,18 +1198,24 @@ local function SearchPages(query)
             if rec.labelNorm:sub(1, #word) == word or rec.titleNorm:sub(1, #word) == word then score = score + 90 end
             if rec.labelNorm:find(word, 1, true) then score = score + 70 end
             if rec.titleNorm:find(word, 1, true) then score = score + 55 end
+            if rec.hintNorm and rec.hintNorm:find(word, 1, true) then score = score + 45 end
             if rec.groupNorm:find(word, 1, true) then score = score + 35 end
             score = score + 10
         end
         if matched then
             if rec.labelNorm == normalized or rec.titleNorm == normalized then score = score + 260 end
             if rec.labelNorm:sub(1, #normalized) == normalized then score = score + 130 end
+            if rec.kind == "faq" then score = score + 75 end
+            if rec.kind ~= "page" then score = score + 45 end
+            if rec.kind == "slider" or rec.kind == "dropdown" or rec.kind == "toggle" then score = score + 25 end
             rec.score = score
             results[#results + 1] = rec
         end
     end
     table.sort(results, function(a, b)
         if a.score ~= b.score then return a.score > b.score end
+        if (a.hint or "") ~= (b.hint or "") then return tostring(a.hint or "") < tostring(b.hint or "") end
+        if (a.order or 0) ~= (b.order or 0) then return (a.order or 0) < (b.order or 0) end
         return tostring(a.label) < tostring(b.label)
     end)
     return results
@@ -668,7 +1234,7 @@ local function SearchWords(query)
     local normalized = NormalizeSearchText(query)
     local words = {}
     for word in normalized:gmatch("%S+") do
-        words[#words + 1] = word
+        if not SEARCH_STOP_WORDS[word] then words[#words + 1] = word end
     end
     return normalized, words
 end
@@ -727,10 +1293,12 @@ local function CollectSearchAnchorCandidates(frame, out, depth)
     end
 end
 
-local function FindSearchAnchor(pageKey, query, fallback)
+local function FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
     local entry = M.cache and M.cache[pageKey]
     local wrapper = entry and entry.wrapper
     if not wrapper then return nil end
+    if preferredAnchor and preferredAnchor.GetTop then return preferredAnchor end
+
     local candidates = {}
     CollectSearchAnchorCandidates(wrapper, candidates, 1)
 
@@ -830,6 +1398,10 @@ local function HighlightSearchAnchor(wrapper, region)
 end
 
 local function RunSoon(fn)
+    if SearchCombatLocked() then
+        fn()
+        return
+    end
     if _G.C_Timer and _G.C_Timer.After then
         _G.C_Timer.After(0, fn)
     else
@@ -837,13 +1409,13 @@ local function RunSoon(fn)
     end
 end
 
-local function ScrollToSearchAnchor(pageKey, query, fallback)
+local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor)
     if M.activeKey ~= pageKey then return end
     local entry = M.cache and M.cache[pageKey]
     local wrapper = entry and entry.wrapper
     if not wrapper then return end
 
-    local region = FindSearchAnchor(pageKey, query, fallback)
+    local region = FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
     if not region then return end
     local opened = OpenAnchorCollapsibles(region)
     local function finish()
@@ -856,19 +1428,21 @@ local function ScrollToSearchAnchor(pageKey, query, fallback)
     if opened then RunSoon(finish) else finish() end
 end
 
-local function OpenSearchTarget(pageKey, query, fallback)
+local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor)
     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
     M.SelectPage(pageKey)
-    RunSoon(function() ScrollToSearchAnchor(pageKey, query, fallback) end)
+    RunSoon(function() ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor) end)
 end
 
 local function BuildSearchPage(ctx)
     local root = ctx.wrapper
     local width = ctx.width
     local query = TrimText(M.searchQuery or "")
-    local results = M.searchResults
+    local combatLocked = SearchCombatLocked() and true or false
+    local queryReady = not combatLocked and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    local results = M.searchResults or {}
     if M.searchResultsQuery ~= query then
-        results = SearchPages(query)
+        results = combatLocked and {} or SearchPages(query)
         M.searchResults = results
         M.searchResultsQuery = query
     end
@@ -878,37 +1452,61 @@ local function BuildSearchPage(ctx)
 
     local maxVisible = 32
     local visible = math.min(#results, maxVisible)
-    local columns = width >= 760 and 2 or 1
+    local hasFAQ = false
+    for i = 1, visible do
+        if results[i] and results[i].kind == "faq" then
+            hasFAQ = true
+            break
+        end
+    end
+    local columns = (hasFAQ and 1) or (width >= 760 and 2 or 1)
     local gap = 12
     local colW = math.floor((width - 24 - gap * (columns - 1)) / columns)
+    local rowH = hasFAQ and 46 or 30
+    local resultTopY = _searchIndexing and -88 or -70
     local rows = math.max(3, math.ceil(math.max(visible, 1) / columns))
-    local sectionH = math.max(160, 74 + rows * 30)
+    local sectionH = math.max(160, 74 + rows * rowH + (_searchIndexing and 18 or 0))
     local sec = b:Section("Search Results", sectionH)
 
-    if query == "" then
+    if combatLocked then
+        W.Text(sec, "Search is paused in combat.", 14, -44, width - 28, T.colors.muted)
+        W.Text(sec, "MSUF2 does not build or refresh the search index during combat.", 14, -70, width - 28, T.colors.dim)
+    elseif query == "" then
         W.Text(sec, "Start typing to search every MSUF2 menu page.", 14, -44, width - 28, T.colors.muted)
+    elseif not queryReady then
+        W.Text(sec, M.Format("Type at least %d characters to search.", MIN_SEARCH_QUERY_LEN), 14, -44, width - 28, T.colors.muted)
     elseif #results == 0 then
         W.Text(sec, M.Format("No results for \"%s\".", query), 14, -44, width - 28, T.colors.muted)
-        W.Text(sec, "Try a page name like bars, profiles, auras, castbar, colors, group, or target.", 14, -70, width - 28, T.colors.dim)
+        W.Text(sec, _searchIndexing and "Still indexing menu pages..." or "Try a page name like bars, profiles, auras, castbar, colors, group, or target.", 14, -70, width - 28, T.colors.dim)
     else
         W.Text(sec, M.Format("%d result(s). Press Enter to open the first match.", #results), 14, -44, width - 28, T.colors.muted)
+        if _searchIndexing then
+            W.Text(sec, "Indexing more menu pages in the background.", 14, -62, width - 28, T.colors.dim)
+        end
         for i = 1, visible do
             local rec = results[i]
             local col = (i - 1) % columns
             local row = math.floor((i - 1) / columns)
             local x = 14 + col * (colW + gap)
-            local y = -70 - row * 30
-            local text = rec.group ~= "" and (rec.group .. " > " .. rec.label) or rec.label
+            local y = resultTopY - row * rowH
+            local kind = CONTROL_KIND_LABEL[rec.kind or ""] or (rec.kind == "page" and "Page") or nil
+            local prefix = rec.hint ~= "" and rec.hint or rec.group
+            local text = prefix ~= "" and (ShortLabel(prefix, 42) .. " > " .. ShortLabel(rec.label, 38)) or rec.label
+            if kind and rec.kind ~= "text" then text = text .. " [" .. kind .. "]" end
             local btn = T.Button(sec, text, colW, 22)
             btn:SetPoint("TOPLEFT", sec, "TOPLEFT", x, y)
             local pageKey = rec.key
             local fallback = rec.title or rec.label
+            local anchor = rec.anchor
             btn:SetScript("OnClick", function()
-                OpenSearchTarget(pageKey, query, fallback)
+                OpenSearchTarget(pageKey, query, fallback, anchor)
             end)
+            if rec.kind == "faq" and rec.answer then
+                W.Text(sec, ShortLabel(rec.answer, 126), x + 8, y - 24, colW - 16, T.colors.dim)
+            end
         end
         if #results > maxVisible then
-            W.Text(sec, M.Format("Showing first %d matches. Keep typing to narrow the list.", maxVisible), 14, -70 - rows * 30, width - 28, T.colors.dim)
+            W.Text(sec, M.Format("Showing first %d matches. Keep typing to narrow the list.", maxVisible), 14, resultTopY - rows * rowH, width - 28, T.colors.dim)
         end
     end
 
@@ -958,22 +1556,9 @@ function M.SelectPage(key)
     SyncBossPagePreviewForKey(nil)
     SyncGroupPagePreviewForKey(IsGroupPageKey(key) and key or nil)
 
-    local entry = M.cache[key]
-    if not entry then
-        local wrapper = CreateFrame("Frame", nil, M.scrollChild)
-        wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
-        wrapper:SetSize(CONTENT_W - 10, CONTENT_H)
-        entry = { wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion }
-        M.cache[key] = entry
-
-        local ctx = CreateContext(key, wrapper, entry)
-        if spec and type(spec.build) == "function" then
-            local ok, result = pcall(spec.build, ctx)
-            if ok and tonumber(result) then ctx:SetContentHeight(result) end
-        else
-            BuildPlaceholderPage(ctx, key)
-        end
-    end
+    local entry = BuildPageEntry(key, false)
+    if not entry then return false end
+    entry.hiddenBuild = false
 
     M.activeKey = key
     if M.frame then M.frame._msufCurrentKey = key end
@@ -1135,13 +1720,16 @@ local function BuildNav(parent)
     search:SetScript("OnTextChanged", function(self)
         if self._msuf2SearchInternal then return end
         local query = TrimText(self:GetText() or "")
+        local combatLocked = SearchCombatLocked() and true or false
         M.searchQuery = query
-        M.searchResults = SearchPages(query)
+        M.searchResults = combatLocked and {} or SearchPages(query)
         M.searchResultsQuery = query
         if query ~= "" then
             if M.activeKey ~= "search" then M.searchReturnKey = M.activeKey or M.searchReturnKey or "home" end
-            M.InvalidatePage("search")
-            M.SelectPage("search")
+            if M.activeKey ~= "search" or not combatLocked then
+                M.InvalidatePage("search")
+                M.SelectPage("search")
+            end
         elseif M.activeKey == "search" then
             M.InvalidatePage("search")
             M.SelectPage(M.searchReturnKey or "home")
@@ -1158,7 +1746,7 @@ local function BuildNav(parent)
         M.searchResultsQuery = query
         if M.searchResults and M.searchResults[1] then
             local first = M.searchResults[1]
-            OpenSearchTarget(first.key, query, first.title or first.label)
+            OpenSearchTarget(first.key, query, first.title or first.label, first.anchor)
         else
             OpenSearchResults(query)
         end
@@ -1426,10 +2014,15 @@ local function BuildWindow()
         status:UnregisterEvent("PLAYER_ENTERING_WORLD")
         status:UnregisterEvent("PLAYER_DIFFICULTY_CHANGED")
     end
-    status:SetScript("OnEvent", function()
+    status:SetScript("OnEvent", function(_, event)
         if not (f and f:IsShown()) then
             UnregisterStatusEvents()
             return
+        end
+        if event == "PLAYER_REGEN_DISABLED" then
+            CancelSearchBackgroundIndex()
+        elseif event == "PLAYER_REGEN_ENABLED" and M.activeKey == "search" then
+            RefreshSearchResultsPage()
         end
         f:RefreshStatus()
         if M.Refresh then M.Refresh() end
@@ -1444,6 +2037,7 @@ local function BuildWindow()
         SyncGroupPagePreviewForKey(M.activeKey)
     end)
     f:SetScript("OnHide", function()
+        CancelSearchBackgroundIndex()
         UnregisterStatusEvents()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
         if M.EndHistorySession then M.EndHistorySession() end
@@ -1936,6 +2530,8 @@ end
 
 function M.InvalidatePage(key)
     if key then
+        if key ~= "search" then MarkSearchIndexDirty() end
+        ClearSearchRegistryPage(key)
         local entry = M.cache[key]
         if entry and entry.wrapper then
             entry.wrapper:Hide()
@@ -1943,6 +2539,7 @@ function M.InvalidatePage(key)
         end
         M.cache[key] = nil
     else
+        MarkSearchIndexDirty()
         for k in pairs(M.cache) do M.InvalidatePage(k) end
     end
 end

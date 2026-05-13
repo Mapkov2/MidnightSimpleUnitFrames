@@ -113,7 +113,7 @@ local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen
         if solo then
             self._bg:SetColorTexture(0.20, 0.14, 0.02, 0.75)
             self._stripe:SetColorTexture(1.00, 0.82, 0.18, 1)
-            self._label:SetTextColor(1.00, 0.92, 0.62, 1)
+            self._label:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
         elseif active and visible then
             local bg, tx = T.colors.pillActive, T.colors.pillTextActive
             self._bg:SetColorTexture(bg[1], bg[2], bg[3], bg[4] or 1)

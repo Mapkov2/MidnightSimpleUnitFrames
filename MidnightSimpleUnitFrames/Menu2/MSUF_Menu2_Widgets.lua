@@ -26,6 +26,27 @@ local function Tr(text)
     return text
 end
 
+local function SetSearchText(object, text)
+    if object and text ~= nil then object._msuf2SearchText = text end
+    return object
+end
+
+local function SetSearchTitle(object, text)
+    if object and text ~= nil then object._msuf2SearchTitle = text end
+    return object
+end
+
+local function RegisterSearchObject(object, label, kind, opts)
+    SetSearchText(object, label)
+    if object and type(M.RegisterSearchWidget) == "function" then
+        opts = opts or {}
+        opts.label = opts.label or label
+        opts.kind = opts.kind or kind
+        M.RegisterSearchWidget(object, opts)
+    end
+    return object
+end
+
 local function IsMSUFEditModeActive()
     local st = rawget(_G, "MSUF_EditState")
     if type(st) == "table" and st.active ~= nil then
@@ -121,6 +142,8 @@ function W.PageBuilder(ctx)
 
     function b:Section(title, height)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+        SetSearchTitle(section, title)
+        RegisterSearchObject(section, title, "section")
         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         section:SetSize(self.width, height or 120)
         section._msuf2CursorY = -38
@@ -128,6 +151,7 @@ function W.PageBuilder(ctx)
         section._msuf2Width = self.width
 
         local fs = T.Font(section, "GameFontNormal", Tr(title or ""), T.colors.text)
+        SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 14, -12)
         section.title = fs
 
@@ -146,10 +170,13 @@ function W.PageBuilder(ctx)
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
 
         local outer = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+        SetSearchTitle(outer, title)
+        RegisterSearchObject(outer, title, "section")
         outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         outer:SetSize(self.width, headerH + (open and (height or 120) or 0))
 
         local header = CreateFrame("Button", nil, outer)
+        SetSearchTitle(header, title)
         header:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, 0)
         header:SetPoint("TOPRIGHT", outer, "TOPRIGHT", 0, 0)
         header:SetHeight(headerH)
@@ -166,6 +193,7 @@ function W.PageBuilder(ctx)
         arrow:SetTexture(T.media.collapseArrow)
 
         local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text)
+        SetSearchText(label, title)
         label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
         label:SetPoint("RIGHT", header, "RIGHT", -140, 0)
         label:SetJustifyH("LEFT")
@@ -175,6 +203,7 @@ function W.PageBuilder(ctx)
         hint:SetJustifyH("RIGHT")
 
         local body = CreateFrame("Frame", nil, outer)
+        SetSearchTitle(body, title)
         body:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -headerH)
         body:SetSize(self.width, height or 120)
         body._msuf2CursorY = -38
@@ -209,12 +238,17 @@ function W.PageBuilder(ctx)
 
     function b:Header(title, subtitle, height)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.border)
+        SetSearchTitle(section, title)
+        RegisterSearchObject(section, title, "section")
         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         section:SetSize(self.width, height or 78)
         local fs = T.Font(section, "GameFontNormalLarge", Tr(title or ""), T.colors.text)
+        SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 14, -12)
+        section.title = fs
         if subtitle and subtitle ~= "" then
             local sub = T.Font(section, "GameFontDisableSmall", Tr(subtitle), T.colors.muted)
+            SetSearchText(sub, subtitle)
             sub:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -6)
             sub:SetWidth(self.width - 28)
             sub:SetJustifyH("LEFT")
@@ -240,6 +274,7 @@ function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     if not (builder and builder.Header) then return nil end
     local head = builder:Header(title, subtitle, height or 72)
     local edit = T.Button(head, "MSUF Edit Mode", 150, 24)
+    RegisterSearchObject(edit, "MSUF Edit Mode", "button")
     edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
     edit:SetScript("OnClick", ToggleMSUFEditMode)
 
@@ -280,10 +315,12 @@ end
 
 local function CreateToggle(section, label, x, y, labelWidth)
     local btn = CreateFrame("CheckButton", nil, section, "UICheckButtonTemplate")
+    btn._msuf2ControlKind = "toggle"
     btn:SetPoint("TOPLEFT", x, y)
     btn:SetSize(24, 24)
 
     btn._msuf2Label = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    SetSearchText(btn._msuf2Label, label)
     btn._msuf2Label:SetPoint("LEFT", btn, "RIGHT", 6, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
     if labelWidth then btn._msuf2Label:SetWidth(labelWidth) end
@@ -309,11 +346,14 @@ local function CreateToggle(section, label, x, y, labelWidth)
     end)
     btn._msuf2LabelHit = labelHit
     btn:SetChecked(false)
+    RegisterSearchObject(btn, label, "toggle", { anchor = btn._msuf2Label })
     return btn
 end
 
 function W.Text(parent, text, x, y, width, color)
     local fs = T.Font(parent, "GameFontHighlightSmall", Tr(text or ""), color or T.colors.muted)
+    SetSearchText(fs, text)
+    RegisterSearchObject(fs, text, "text")
     fs:SetPoint("TOPLEFT", x or 0, y or 0)
     fs:SetWidth(width or 300)
     fs:SetJustifyH("LEFT")
@@ -352,11 +392,15 @@ function W.ScopeOverrideBar(ctx, section, opts)
     local startX = opts.startX or (labelX + labelW + 8)
 
     local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", Tr(opts.label or "Editing:"), opts.labelColor or T.colors.text)
+    SetSearchText(label, opts.label or "Editing:")
+    RegisterSearchObject(label, opts.label or "Editing:", "text")
     label:SetPoint("LEFT", section, "TOPLEFT", labelX, centerY)
     label:SetWidth(labelW)
     label:SetJustifyH("LEFT")
 
     local bar = CreateFrame("Frame", nil, section)
+    SetSearchTitle(bar, opts.label or "Editing:")
+    RegisterSearchObject(bar, opts.label or "Editing:", "segment", { values = values })
     bar:SetPoint("TOPLEFT", section, "TOPLEFT", 0, 0)
     bar:SetSize(sectionW, math.abs(centerY) + buttonH)
     bar.buttons = {}
@@ -372,6 +416,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
             y = y - (buttonH + 6)
         end
         local btn = T.Button(section, Tr(item.text or item.label or item.value or ""), width, buttonH)
+        RegisterSearchObject(btn, item.text or item.label or item.value or "", "button")
         btn:SetPoint("LEFT", section, "TOPLEFT", x, y)
         btn._msuf2Value = item.value
         btn._msuf2BaseWidth = width
@@ -552,6 +597,8 @@ end
 
 function W.LabelAt(parent, text, x, y, width, template, color)
     local fs = T.Font(parent, template or "GameFontNormalSmall", Tr(text or ""), color or T.colors.text)
+    SetSearchText(fs, text)
+    RegisterSearchObject(fs, text, "text")
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
     fs:SetWidth(width or 180)
     fs:SetJustifyH("LEFT")
@@ -570,6 +617,7 @@ end
 function W.Button(section, label, width)
     local x, y = NextRow(section, 30)
     local btn = T.Button(section, Tr(label or ""), width or 160, 24)
+    RegisterSearchObject(btn, label, "button")
     btn:SetPoint("TOPLEFT", x, y)
     return btn
 end
@@ -589,6 +637,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         if width > maxSliderW then width = maxSliderW end
     end
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(width)
     title:SetJustifyH("LEFT")
@@ -597,6 +646,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     local slider = CreateFrame("Slider", "MSUF2NativeSlider" .. sliderSerial, section, "OptionsSliderTemplate")
     slider._msuf2Title = title
     slider._msuf2ControlKind = "slider"
+    RegisterSearchObject(slider, label, "slider", { anchor = title })
     slider:SetPoint("TOPLEFT", x, y - 22)
     slider:SetSize(max(minTrackW, width - valueClusterW), 16)
     slider:SetMinMaxValues(minVal or 0, maxVal or 1)
@@ -611,6 +661,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
 
     local function StepButton(text)
         local btn = T.Button(section, text, 18, 20)
+        SetSearchText(btn, text)
         btn._msuf2Label:ClearAllPoints()
         btn._msuf2Label:SetPoint("CENTER", btn, "CENTER", 0, 0)
         btn._msuf2Label:SetJustifyH("CENTER")
@@ -731,9 +782,11 @@ end
 function W.Segment(section, label, values, width)
     local x, y = NextRow(section, 48)
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
+    SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
 
     local holder = CreateFrame("Frame", nil, section)
+    RegisterSearchObject(holder, label, "segment", { anchor = title, values = values })
     holder:SetPoint("TOPLEFT", x, y - 22)
     holder:SetSize(width or 360, 22)
     holder._msuf2ControlKind = "segment"
@@ -747,6 +800,7 @@ function W.Segment(section, label, values, width)
     for i = 1, count do
         local item = holder.values[i]
         local btn = T.Button(holder, item.text or tostring(item.value), bw, 22)
+        RegisterSearchObject(btn, item.text or item.label or item.value or "", "button")
         btn:SetPoint("LEFT", holder, "LEFT", (i - 1) * (bw + gap), 0)
         btn._msuf2Value = item.value
         holder.buttons[i] = btn
@@ -1255,9 +1309,11 @@ end
 function W.Dropdown(section, label, values, width)
     local x, y = NextRow(section, 48)
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
 
     local btn = T.Button(section, "", width or 240, 22)
+    RegisterSearchObject(btn, label, "dropdown", { anchor = title, values = values })
     btn._msuf2Title = title
     btn._msuf2ControlKind = "dropdown"
     btn._msuf2DropdownWheelManaged = true
@@ -1300,6 +1356,14 @@ function W.Dropdown(section, label, values, width)
 
     function btn:SetValues(nextValues)
         self.values = nextValues or {}
+        if type(M.RegisterSearchWidget) == "function" then
+            M.RegisterSearchWidget(self, {
+                label = self._msuf2SearchText,
+                kind = "dropdown",
+                anchor = self._msuf2Title,
+                values = self.values,
+            })
+        end
         self:SetValue(self.value)
     end
     function btn:SetValue(value)
@@ -1367,11 +1431,15 @@ end
 
 function W.StatCard(parent, label, value, x, y, width)
     local card = T.Panel(parent, nil, T.colors.panel2, T.colors.borderSoft)
+    SetSearchTitle(card, label)
+    RegisterSearchObject(card, label, "text", { values = { value } })
     card:SetPoint("TOPLEFT", x or 0, y or 0)
     card:SetSize(width or 170, 56)
     local l = T.Font(card, "GameFontDisableSmall", Tr(label or ""), T.colors.muted)
+    SetSearchText(l, label)
     l:SetPoint("TOPLEFT", 12, -10)
     local v = T.Font(card, "GameFontNormal", Tr(value or ""), T.colors.text)
+    SetSearchText(v, value)
     v:SetPoint("TOPLEFT", 12, -30)
     card.valueText = v
     return card
@@ -1389,11 +1457,13 @@ function W.TextInput(section, label, width)
     local x, y = NextRow(section, 50)
     width = width or 260
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
 
     local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
     edit._msuf2Title = title
     edit._msuf2ControlKind = "textinput"
+    RegisterSearchObject(edit, label, "textinput", { anchor = title })
     edit:SetPoint("TOPLEFT", x, y - 22)
     edit:SetSize(width, 22)
     edit:SetAutoFocus(false)
@@ -1419,12 +1489,14 @@ end
 function W.Color(section, label)
     local x, y = NextRow(section, 34)
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(230)
 
     local btn = CreateFrame("Button", nil, section)
     btn._msuf2Title = title
     btn._msuf2ControlKind = "color"
+    RegisterSearchObject(btn, label, "color", { anchor = title })
     btn:SetPoint("TOPLEFT", x + 250, y + 2)
     btn:SetSize(44, 18)
     btn._msuf2Swatch, btn._msuf2Edge = T.CreateSuperellipseLayers(btn, "_msuf2Color", 1, "ARTWORK", "OVERLAY")
