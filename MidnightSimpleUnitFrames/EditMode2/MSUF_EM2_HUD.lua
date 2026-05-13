@@ -118,7 +118,7 @@ local HELP_DEFAULTS = {
     EM_HELP_DRAG    = "Hold the left mouse button on a mover overlay and drag it. The live frame follows the mover, and the X/Y readout below the overlay shows the current screen offset. Release the button to commit the position.",
     EM_HELP_NUDGE   = "Arrow keys move the active target. Priority is: selected preview handle, open castbar popup, open aura popup, then the currently selected unit frame. Step size: 1 px, Shift = 5 px, Ctrl = 10 px, Alt = current grid step.",
     EM_HELP_POPUP   = "Left-click a mover without dragging to open its edit popup. Unit popups edit frame size, position, text anchors, detached power settings, and copy-to-unit options. Castbar and aura movers open their own focused popups.",
-    EM_HELP_SNAP    = "The grid is visual guidance. Scroll the |cff60a5ffGrid ##px|r control to change spacing. |cff60a5ffSnap|r is separate: when enabled, dragged movers snap to the screen center or to edges/centers of other visible movers, with orange guide lines.",
+    EM_HELP_SNAP    = "The grid is visual guidance. Left-click |cff60a5ffGrid ##px|r to toggle grid lines on or off; scroll it to change spacing. |cff60a5ffSnap|r is separate: when enabled, dragged movers snap to the screen center or to edges/centers of other visible movers, with orange guide lines.",
     EM_HELP_OPACITY = "Scroll the |cff60a5ffBG ##%|r control to change only the Edit Mode background overlay opacity. It does not change unitframe alpha or saved frame visibility.",
     EM_HELP_PREVIEW = "|cff60a5ffPreview|r toggles placeholder unit data for missing target, focus, target-of-target, pet, boss, and castbar previews while Edit Mode is active. |cff60a5ffAuras|r toggles aura preview icons and aura mover boxes.",
     EM_HELP_UNDO    = "|cff60a5ffUndo|r and |cff60a5ffRedo|r restore recent Edit Mode changes captured before drags, nudges, and popup edits. |cff60a5ffCancel All|r asks for confirmation, restores the snapshot from before Edit Mode was entered, then exits.",
@@ -782,17 +782,26 @@ local function EnsureHUD()
 
     do
         local f = CreateFrame("Frame", nil, c2)
-        f:SetSize(80, BTN_H2); f:EnableMouseWheel(true)
+        f:SetSize(80, BTN_H2); f:EnableMouse(true); f:EnableMouseWheel(true)
         gridWidget = f
+        local stateBg = f:CreateTexture(nil, "BACKGROUND")
+        stateBg:SetAllPoints()
+        stateBg:SetColorTexture(0, 0, 0, 0)
+        f._stateBg = stateBg
         stepFS = MakeFS(f, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
         stepFS:SetPoint("CENTER")
         local hl = f:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.04)
+        f:SetScript("OnMouseUp", function(_, button)
+            if button ~= "LeftButton" or not EM2.Grid or not EM2.Grid.ToggleEnabled then return end
+            EM2.Grid.ToggleEnabled()
+            HUD.RefreshControls()
+        end)
         f:SetScript("OnMouseWheel", function(_, d)
             if not EM2.Grid then return end
             EM2.Grid.SetGridStep(max(4, min(80, EM2.Grid.GetGridStep() + d * 4)))
             HUD.RefreshControls()
         end)
-        SetTip(f, "Grid step size.\nScroll to adjust.")
+        SetTip(f, "Left-click to toggle grid lines.\nScroll to adjust spacing.")
         r2[#r2+1] = f
     end
 
@@ -819,7 +828,17 @@ function HUD.RefreshUnitSelector() end
 
 function HUD.RefreshControls()
     if alphaFS and EM2.Grid then alphaFS:SetText("BG " .. floor(EM2.Grid.GetBgAlpha() * 100 + 0.5) .. "%") end
-    if stepFS and EM2.Grid then stepFS:SetText("Grid " .. floor(EM2.Grid.GetGridStep()) .. "px") end
+    if stepFS and EM2.Grid then
+        local enabled = not EM2.Grid.GetEnabled or EM2.Grid.GetEnabled()
+        stepFS:SetText("Grid " .. floor(EM2.Grid.GetGridStep()) .. "px")
+        if enabled then
+            stepFS:SetTextColor(0.45, 0.95, 0.55, 0.95)
+            if gridWidget and gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(0.05, 0.28, 0.10, 0.18) end
+        else
+            stepFS:SetTextColor(0.95, 0.38, 0.38, 0.95)
+            if gridWidget and gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(0.34, 0.06, 0.06, 0.20) end
+        end
+    end
     if snapToggle and EM2.Snap then SetActive(snapToggle, EM2.Snap.IsEnabled()) end
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
     if cdmBtn then

@@ -455,6 +455,9 @@ end
     if g.editModeGridStep == nil then
         g.editModeGridStep = 20
     end
+    if g.editModeGridEnabled == nil then
+        g.editModeGridEnabled = true
+    end
 if g.editModeSnapEnabled == nil then
     g.editModeSnapEnabled = false
 end
@@ -551,7 +554,7 @@ do
     end
 end
     if g.editModeBgAlpha == nil or type(g.editModeBgAlpha) ~= "number" then
-        g.editModeBgAlpha = 0.5
+        g.editModeBgAlpha = 0.75
     else
         if g.editModeBgAlpha < 0.1 then
             g.editModeBgAlpha = 0.1

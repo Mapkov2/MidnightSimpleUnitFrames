@@ -877,10 +877,36 @@ do
         if ov.SetPropagateKeyboardInput then ov:SetPropagateKeyboardInput(true) end
         ov:Hide(); ov._onPick = nil
         local bg = ov:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.12)
-        local info = ov:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-        info:SetPoint("TOP", ov, "TOP", 0, -28); info:SetJustifyH("CENTER"); ov._info = info
-        local sub = ov:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        sub:SetPoint("TOP", info, "BOTTOM", 0, -10); sub:SetJustifyH("CENTER"); ov._sub = sub
+        local topPanel = CreateFrame("Frame", nil, ov, "BackdropTemplate")
+        topPanel:SetPoint("TOP", ov, "TOP", 0, -92)
+        topPanel:SetSize(760, 58)
+        topPanel:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        topPanel:SetBackdropColor(0.01, 0.015, 0.025, 0.96)
+        topPanel:SetBackdropBorderColor(1, 0.82, 0, 0.75)
+        ov._topPanel = topPanel
+        local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+        local info = topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        info:SetPoint("TOP", topPanel, "TOP", 0, -8)
+        info:SetJustifyH("CENTER")
+        info:SetFont(font, 15, "OUTLINE")
+        info:SetTextColor(1.00, 0.88, 0.22, 1)
+        info:SetShadowColor(0, 0, 0, 1)
+        info:SetShadowOffset(1, -1)
+        ov._info = info
+        local sub = topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        sub:SetPoint("TOP", info, "BOTTOM", 0, -8)
+        sub:SetJustifyH("CENTER")
+        sub:SetWidth(720)
+        sub:SetFont(font, 12, "OUTLINE")
+        sub:SetTextColor(1, 1, 1, 1)
+        sub:SetShadowColor(0, 0, 0, 1)
+        sub:SetShadowOffset(1, -1)
+        ov._sub = sub
         local hover = ov:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         hover:SetPoint("BOTTOMLEFT", ov, "BOTTOMLEFT", 24, 24); hover:SetTextColor(0.9, 0.9, 0.9); ov._hover = hover
         local ctrl = ov:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -892,7 +918,7 @@ do
         ov:SetScript("OnShow", function(self)
             self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
             self._info:SetText("Anchor Picker")
-            self._sub:SetText("Hover over any frame, then CTRL + Left-Click to anchor.  |  Right-Click or Escape to cancel.")
+            self._sub:SetText("|cffffffffHover a frame, then hold |r|cff55ff55CTRL + Left-Click|r|cffffffff to anchor.  |  Right-Click or Escape cancels.|r")
             self._hover:SetText("Hover: no named frame found")
             self._ctrlHint:SetText("CTRL: not held"); self._ctrlHint:SetTextColor(1, 0.3, 0.3)
             self._highlight:Hide()
@@ -922,10 +948,10 @@ do
             if button == "RightButton" then self:Hide(); return end
             if button ~= "LeftButton" then return end
             if not (IsControlKeyDown and IsControlKeyDown()) then
-                self._sub:SetText("|cffff5555You must hold CTRL|r while left-clicking to confirm the anchor target."); return
+                self._sub:SetText("|cffff6060CTRL required:|r |cffffffffhold |r|cff55ff55CTRL + Left-Click|r|cffffffff to confirm the anchor target.|r"); return
             end
             local n = self._pickedName
-            if not n or n == "" then self._sub:SetText("No named frame found under cursor. Try a different spot."); return end
+            if not n or n == "" then self._sub:SetText("|cffffcc33No named frame found under cursor.|r |cffffffffTry a different spot.|r"); return end
             if type(self._onPick) == "function" then self._onPick(n) end
             self:Hide()
         end)
