@@ -60,6 +60,7 @@ local function MSUF_PrintHelp()
     print("                   Confirm stages the reset; reload via /reload or MSUF Menu  Advanced  Factory Reset.")
     print("  /msuf absorb    - Toggle showing total absorb amount in HP text.")
     print("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry.")
+    print("  /rl             - Reload the UI.")
     print("  /msufdbgpos     - Toggle position drift debugger (overlay + chat log).")
     print("  !msuf help      - Print this help via chat (from your own character).")
  end
@@ -237,6 +238,12 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
     -- Unknown
     MSUF_PrintHelp()
  end
+SLASH_MSUFRELOADUI1 = "/rl"
+SlashCmdList["MSUFRELOADUI"] = function()
+    if type(ReloadUI) == "function" then
+        ReloadUI()
+    end
+end
 local MSUF_PlayerInfoFrame
 local function MSUF_GetPlayerInfoFrame()
     if MSUF_PlayerInfoFrame then
