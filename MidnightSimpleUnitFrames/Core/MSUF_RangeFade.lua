@@ -1,10 +1,10 @@
 -- MSUF RangeFade v4 — Minimal C-API overhead
 -- Architecture:
 --   Target:
---     Friendly: target/unit/range events → 1× range check on event (0 polling)
---     Enemy:    1 spell registered with EnableSpellRangeCheck
---               → SPELL_RANGE_CHECK_UPDATE fires only for THAT spell (1 event/change)
---     Dead:     1 res spell registered → same mechanism
+--     Friendly: registered helpful spell(s) + IsSpellInRange target scan
+--     Enemy:    registered harmful spell + IsSpellInRange target scan
+--     Dead:     registered res spell if available
+--               → SPELL_RANGE_CHECK_UPDATE updates only the small active set
 --   Focus:
 --     Friendly: UNIT_IN_RANGE_UPDATE event (0 polling)
 --     Enemy:    Ticker 0.5s combat / 2.0s OOC → 1× IsSpellInRange
@@ -13,7 +13,7 @@
 --     Only active during encounters.
 -- Old R41z0r engine cost: 512 EnableSpellRangeCheck registrations → 100-500
 -- SPELL_RANGE_CHECK_UPDATE events/sec → EventBus dispatch per event
--- New cost: 1 EnableSpellRangeCheck registration → 1 event on actual change
+-- New cost: small target spell set → event on actual range state change
 -- Secret-safe: IsSpellInRange NOT secret (Unhalted). Only UnitInRange +
 --              CheckInteractDistance need issecretvalue guards.
 
@@ -26,6 +26,7 @@ do
     local C_SpellBook = _G.C_SpellBook
     local IsSpellInSpellBook = (C_SpellBook and C_SpellBook.IsSpellInSpellBook) or nil
     local EnableSpellRangeCheck = (C_Spell and C_Spell.EnableSpellRangeCheck) or nil
+    local GetSpellIDForSpellIdentifier = (C_Spell and C_Spell.GetSpellIDForSpellIdentifier) or nil
     local IsSpellInRange = (C_Spell and C_Spell.IsSpellInRange) or nil
     local UnitExists = _G.UnitExists
     local UnitInRange = _G.UnitInRange
@@ -79,7 +80,7 @@ do
         WARRIOR={3411},
     }
 
-    local _pEnemy, _pRes, _pFriendly = nil, nil, nil
+    local _pEnemy, _pRes, _pFriendly, _pTargetFriendly = nil, nil, nil, nil
     local _targetFriendlyActive = {}
 
     local function WipeTable(t)
@@ -121,7 +122,7 @@ do
         _pEnemy    = PickFirst(ENEMY_SPELLS[playerClass])
         _pRes      = PickFirst(RES_SPELLS[playerClass])
         _pFriendly = PickFirst(FRIENDLY_SPELLS[playerClass])
-        BuildActiveSpellSet(TARGET_FRIENDLY_SPELLS[playerClass], _targetFriendlyActive)
+        _pTargetFriendly = BuildActiveSpellSet(TARGET_FRIENDLY_SPELLS[playerClass], _targetFriendlyActive)
     end
 
     -- ══════════════════════════════════════════════════════════════
@@ -309,7 +310,7 @@ do
     end
 
     -- ══════════════════════════════════════════════════════════════
-    -- TARGET: Event-driven with 1 registered spell (replaces R41z0r)
+    -- TARGET: EQoL-style registered spell range state
     -- ══════════════════════════════════════════════════════════════
     local CheckFriendlyTarget
     do
@@ -381,10 +382,13 @@ do
 
     end
 
-    local _targetRegisteredSpell = nil
-    local _targetIsEnemy = false
+    local _targetRegisteredSpells = {}
+    local _targetWantedSpells = {}
+    local _targetSpellStates = {}
+    local _targetNumChecked = 0
+    local _targetNumInRange = 0
     local _targetEvtFrame = nil
-    local _targetDeadState = nil
+    local TargetRefreshSpellState
 
     local function TargetGetConf()
         local db = _G.MSUF_DB
@@ -394,39 +398,160 @@ do
         return t
     end
 
-    local function TargetUnregisterSpell()
-        if _targetRegisteredSpell and EnableSpellRangeCheck then
-            EnableSpellRangeCheck(_targetRegisteredSpell, false)
-            _targetRegisteredSpell = nil
+    local function TargetResolveSpellID(spellIdentifier)
+        local id = tonumber(spellIdentifier)
+        if not id and GetSpellIDForSpellIdentifier then
+            id = GetSpellIDForSpellIdentifier(spellIdentifier)
         end
+        return id
+    end
+
+    local function TargetClearSpellStates()
+        WipeTable(_targetSpellStates)
+        _targetNumChecked = 0
+        _targetNumInRange = 0
+    end
+
+    local function TargetRemoveSpellState(spellID)
+        local old = _targetSpellStates[spellID]
+        if old == nil then return false end
+        _targetSpellStates[spellID] = nil
+        _targetNumChecked = _targetNumChecked - 1
+        if old == true then _targetNumInRange = _targetNumInRange - 1 end
+        if _targetNumChecked < 0 then _targetNumChecked = 0 end
+        if _targetNumInRange < 0 then _targetNumInRange = 0 end
+        return true
+    end
+
+    local function TargetSetSpellState(spellID, inRange)
+        local newState = (inRange == true)
+        local old = _targetSpellStates[spellID]
+        if old == nil then
+            _targetSpellStates[spellID] = newState
+            _targetNumChecked = _targetNumChecked + 1
+            if newState then _targetNumInRange = _targetNumInRange + 1 end
+            return true
+        end
+        if old == newState then return false end
+        _targetSpellStates[spellID] = newState
+        if old == true then _targetNumInRange = _targetNumInRange - 1 end
+        if newState then _targetNumInRange = _targetNumInRange + 1 end
+        if _targetNumInRange < 0 then _targetNumInRange = 0 end
+        return true
+    end
+
+    local function TargetUnregisterSpell()
+        if EnableSpellRangeCheck then
+            for spellID in pairs(_targetRegisteredSpells) do
+                EnableSpellRangeCheck(spellID, false)
+            end
+        end
+        WipeTable(_targetRegisteredSpells)
+        TargetClearSpellStates()
     end
 
     local function TargetRegisterSpell(spellID)
         if not spellID or not EnableSpellRangeCheck then return end
-        if _targetRegisteredSpell == spellID then return end
-        TargetUnregisterSpell()
-        _targetRegisteredSpell = spellID
+        if _targetRegisteredSpells[spellID] then return end
+        _targetRegisteredSpells[spellID] = true
         EnableSpellRangeCheck(spellID, true)
     end
 
-    -- SPELL_RANGE_CHECK_UPDATE handler: fires ONLY for our 1 registered spell
-    local function OnTargetSpellRange(event, spellIdentifier, isInRange, checksRange)
-        local conf = TargetGetConf()
-        if not conf then ClearMul("target", "target"); return end
-        if not UnitExists("target") then ClearMul("target", "target"); return end
-        -- isInRange is NOT secret (per Unhalted). Direct test.
-        if checksRange then
-            local result = (isInRange == true or isInRange == 1) and true or false
-            ApplyMul(GetFrame("target"), "target", "target", conf, result)
-        end
+    local function TargetUnitRangeFallback()
+        if not UnitInRange then return nil end
+        local inR, checked = UnitInRange("target")
+        if issecretvalue and (issecretvalue(inR) or issecretvalue(checked)) then return nil end
+        if checked == true then return inR and true or false end
+        return nil
     end
 
-    -- UNIT_IN_RANGE_UPDATE handler (friendly target)
-    local function OnTargetFriendlyRange(_, event, arg1)
-        if arg1 and arg1 ~= "target" then return end
+    local function TargetRecomputeRange(conf)
+        if not conf or not UnitExists("target") then
+            TargetClearSpellStates()
+            ClearMul("target", "target")
+            return
+        end
+        local inRange
+        if _targetNumChecked > 0 then
+            inRange = (_targetNumInRange > 0)
+        else
+            inRange = TargetUnitRangeFallback()
+            if inRange == nil then inRange = true end
+        end
+        ApplyMul(GetFrame("target"), "target", "target", conf, inRange)
+    end
+
+    local function TargetBuildWantedSpells()
+        WipeTable(_targetWantedSpells)
+        local friendly = _pTargetFriendly or _pFriendly
+        if friendly then _targetWantedSpells[friendly] = true end
+        if _pEnemy then _targetWantedSpells[_pEnemy] = true end
+        if _pRes then _targetWantedSpells[_pRes] = true end
+    end
+
+    local function TargetUpdateSpells()
         local conf = TargetGetConf()
-        if not conf then ClearMul("target", "target"); return end
-        ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
+        if not conf then
+            TargetUnregisterSpell()
+            ClearMul("target", "target")
+            return false
+        end
+        TargetBuildWantedSpells()
+        for spellID in pairs(_targetRegisteredSpells) do
+            if not _targetWantedSpells[spellID] then
+                if EnableSpellRangeCheck then EnableSpellRangeCheck(spellID, false) end
+                _targetRegisteredSpells[spellID] = nil
+                TargetRemoveSpellState(spellID)
+            end
+        end
+        for spellID in pairs(_targetWantedSpells) do
+            TargetRegisterSpell(spellID)
+        end
+        return true
+    end
+
+    TargetRefreshSpellState = function()
+        local conf = TargetGetConf()
+        if not conf or not UnitExists("target") then
+            TargetClearSpellStates()
+            ClearMul("target", "target")
+            return
+        end
+        TargetUpdateSpells()
+        TargetClearSpellStates()
+        if IsSpellInRange then
+            for spellID in pairs(_targetRegisteredSpells) do
+                local inRange = IsSpellInRange(spellID, "target")
+                if inRange ~= nil then
+                    TargetSetSpellState(spellID, inRange == true)
+                end
+            end
+        end
+        TargetRecomputeRange(conf)
+    end
+
+    -- EQoL-style target range update: registered spell states drive target
+    -- alpha; target/unit events only refresh the immediate spell scan.
+    local function OnTargetSpellRange(event, spellIdentifier, isInRange, checksRange)
+        local conf = TargetGetConf()
+        if not conf or not UnitExists("target") then
+            TargetClearSpellStates()
+            ClearMul("target", "target")
+            return
+        end
+        local spellID = TargetResolveSpellID(spellIdentifier)
+        if not spellID or not _targetRegisteredSpells[spellID] then return end
+        if checksRange then
+            TargetSetSpellState(spellID, isInRange == true)
+        else
+            TargetRemoveSpellState(spellID)
+        end
+        TargetRecomputeRange(conf)
+    end
+
+    local function OnTargetUnitEvent(_, event, unit)
+        if unit and unit ~= "target" then return end
+        TargetRefreshSpellState()
     end
 
     local function EnsureTargetEvtFrame()
@@ -434,82 +559,37 @@ do
         _targetEvtFrame = CreateFrame("Frame")
     end
 
+    local function RegisterTargetUnitEvents()
+        EnsureTargetEvtFrame()
+        _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
+        _targetEvtFrame:RegisterUnitEvent("UNIT_NAME_UPDATE", "target")
+        _targetEvtFrame:RegisterUnitEvent("UNIT_CONNECTION", "target")
+        _targetEvtFrame:RegisterUnitEvent("UNIT_FACTION", "target")
+        _targetEvtFrame:RegisterUnitEvent("UNIT_FLAGS", "target")
+        _targetEvtFrame:SetScript("OnEvent", OnTargetUnitEvent)
+    end
+
+    local function UnregisterTargetUnitEvents()
+        if not _targetEvtFrame then return end
+        _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
+        _targetEvtFrame:UnregisterEvent("UNIT_NAME_UPDATE")
+        _targetEvtFrame:UnregisterEvent("UNIT_CONNECTION")
+        _targetEvtFrame:UnregisterEvent("UNIT_FACTION")
+        _targetEvtFrame:UnregisterEvent("UNIT_FLAGS")
+        _targetEvtFrame:SetScript("OnEvent", nil)
+    end
+
     local function TargetClassifyAndWire()
         local conf = TargetGetConf()
         if not conf or not UnitExists("target") then
-            _targetDeadState = nil
-            TargetUnregisterSpell()
+            TargetClearSpellStates()
             ClearMul("target", "target")
-            if _targetEvtFrame then
-                _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
-                _targetEvtFrame:SetScript("OnEvent", nil)
-            end
+            UnregisterTargetUnitEvents()
             return
         end
+        RegisterTargetUnitEvents()
+        TargetRefreshSpellState()
 
-        -- PERF: Fast-path for party/raid members (the common case when clicking GF).
-        -- UnitInRange returns (inRange, checked); checked==true means party/raid member.
-        -- Skips: UnitCanAttack, UnitIsDeadOrGhost, spell registration, ticker setup.
-        if UnitInRange then
-            local inR, checked = UnitInRange("target")
-            if not issecretvalue or not issecretvalue(checked) then
-                if checked == true then
-                    _targetIsEnemy = false
-                    _targetDeadState = false
-                    TargetUnregisterSpell()
-                    EnsureTargetEvtFrame()
-                    _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
-                    _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
-                    ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
-                    return
-                end
-            end
-        end
-
-        EnsureTargetEvtFrame()
-        _targetIsEnemy = (UnitCanAttack and UnitCanAttack("player", "target")) and true or false
-        _targetDeadState = (UnitIsDeadOrGhost and UnitIsDeadOrGhost("target")) and true or false
-
-        if _targetIsEnemy then
-            -- Enemy: register 1 spell for SPELL_RANGE_CHECK_UPDATE
-            _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
-            local spell = _pEnemy
-            if _targetDeadState then spell = _pRes end
-            if spell then
-                TargetRegisterSpell(spell)
-            else
-                TargetUnregisterSpell()
-            end
-            -- Also do an immediate check
-            ApplyMul(GetFrame("target"), "target", "target", conf, CheckEnemy("target"))
-        else
-            -- Friendly path
-            TargetUnregisterSpell()
-
-            -- Check if target is a party/raid member (UnitInRange works → event-driven)
-            local isPartyMember = false
-            if UnitInRange then
-                local _, checked = UnitInRange("target")
-                if not issecretvalue or not issecretvalue(checked) then
-                    isPartyMember = (checked == true)
-                end
-            end
-
-            if isPartyMember then
-                -- Party member: UNIT_IN_RANGE_UPDATE fires reliably
-                _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
-                _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
-            else
-                -- Non-party friendly (NPC, non-group player):
-                -- stay strictly event-driven: immediate target/name/unit events
-                -- plus UNIT_IN_RANGE_UPDATE if Blizzard supplies it for this unit.
-                _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
-                _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
-            end
-
-            -- Immediate check
-            ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
-        end
     end
 
     -- ══════════════════════════════════════════════════════════════
@@ -522,12 +602,8 @@ do
         local bus = _G.MSUF_EventBus_Register
         if type(bus) ~= "function" then return end
 
-        -- 1 event for our 1 registered spell (was: 100-500 events for 512 spells)
-        bus("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE", function(event, spellIdentifier, isInRange, checksRange)
-            if _targetIsEnemy then
-                OnTargetSpellRange(event, spellIdentifier, isInRange, checksRange)
-            end
-        end)
+        -- Event for the small registered target spell set.
+        bus("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE", OnTargetSpellRange)
 
         do
             local _qRF
@@ -541,48 +617,14 @@ do
             _state["target"] = nil
             TargetClassifyAndWire()
         end)
-        bus("UNIT_FLAGS", "MSUF_RANGEFADE", function(_, unit)
-            if unit ~= "target" then return end
-            if not UnitExists("target") then
-                if _targetDeadState ~= nil then
-                    _targetDeadState = nil
-                    _state["target"] = nil
-                    TargetClassifyAndWire()
-                end
-                return
-            end
-            local isDead = (UnitIsDeadOrGhost and UnitIsDeadOrGhost("target")) and true or false
-            if isDead ~= _targetDeadState then
-                _targetDeadState = isDead
-                _state["target"] = nil
-                TargetClassifyAndWire()
-            end
-        end)
-        local function RefreshTargetUnitState(_, unit)
-            if unit ~= "target" then return end
-            _state["target"] = nil
-            TargetClassifyAndWire()
-        end
-        bus("UNIT_NAME_UPDATE", "MSUF_RANGEFADE", RefreshTargetUnitState)
-        bus("UNIT_CONNECTION", "MSUF_RANGEFADE", RefreshTargetUnitState)
-        bus("UNIT_FACTION", "MSUF_RANGEFADE", RefreshTargetUnitState)
         -- SPELLS_CHANGED coalescing: can fire 800+/sec in combat.
         -- Defer to next frame to process once regardless of fire count.
         local _tgtSpellsDirty = false
         local function _FlushTargetSpellsChanged()
             _tgtSpellsDirty = false
             RebuildPrimaries()
-            if _targetIsEnemy and UnitExists("target") then
-                local spell = _pEnemy
-                if UnitIsDeadOrGhost and UnitIsDeadOrGhost("target") then spell = _pRes end
-                if spell ~= _targetRegisteredSpell then
-                    TargetRegisterSpell(spell)
-                end
-            elseif UnitExists("target") then
-                local conf = TargetGetConf()
-                if conf then
-                    ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
-                end
+            if UnitExists("target") then
+                TargetClassifyAndWire()
             end
         end
         bus("SPELLS_CHANGED", "MSUF_RANGEFADE", function()
@@ -617,10 +659,6 @@ do
         unreg("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE")
         unreg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE")
         unreg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE")
-        unreg("UNIT_FLAGS", "MSUF_RANGEFADE")
-        unreg("UNIT_NAME_UPDATE", "MSUF_RANGEFADE")
-        unreg("UNIT_CONNECTION", "MSUF_RANGEFADE")
-        unreg("UNIT_FACTION", "MSUF_RANGEFADE")
         unreg("SPELLS_CHANGED", "MSUF_RANGEFADE")
         unreg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE")
         unreg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE")
@@ -643,17 +681,11 @@ do
     end
 
     function _G.MSUF_RangeFade_ApplyCurrent(force)
-        local conf = TargetGetConf()
-        if conf and UnitExists("target") then
-            if _targetIsEnemy then
-                ApplyMul(GetFrame("target"), "target", "target", conf, CheckEnemy("target"))
-            else
-                ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
-            end
-        end
+        TargetRefreshSpellState()
     end
 
     function _G.MSUF_RangeFade_Reset()
+        TargetClearSpellStates()
         _state["target"] = nil
         _mulT.target = 1
         -- Re-apply on next target event
@@ -663,10 +695,7 @@ do
         TargetUnregisterSpell()
         UnwireTargetEvents()
         ClearMul("target", "target")
-        if _targetEvtFrame then
-            _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
-            _targetEvtFrame:SetScript("OnEvent", nil)
-        end
+        UnregisterTargetUnitEvents()
     end
 
     function _G.MSUF_RangeFade_EvaluateActive(force)
@@ -681,6 +710,7 @@ do
         else
             TargetUnregisterSpell()
             UnwireTargetEvents()
+            UnregisterTargetUnitEvents()
             ClearMul("target", "target")
         end
     end
