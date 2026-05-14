@@ -577,7 +577,7 @@ local function ScopeSection(ctx, builder)
 
     if not StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] then
         StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] = {
-            text = "Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile.",
+            text = "Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically.",
             button1 = YES or "Yes",
             button2 = NO or "No",
             timeout = 0,

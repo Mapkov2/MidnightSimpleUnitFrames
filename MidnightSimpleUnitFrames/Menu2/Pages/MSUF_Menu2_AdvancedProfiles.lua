@@ -106,7 +106,7 @@ local function EnsureProfilePopups()
 
     if not _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
         _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE = {
-            text = "Reset profile '%s' to defaults?",
+            text = "Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected.",
             button1 = YES or "Yes",
             button2 = NO or "No",
             timeout = 0,
@@ -189,7 +189,10 @@ end
 
 local function BuildProfiles(ctx)
     local b = W.PageBuilder(ctx)
-    b:Header("Profiles", "Create, switch, copy, delete, export and import profiles.", 64)
+    local head = b:Header("Profiles", "Create, switch, copy, delete, export and import profiles.", 64)
+    if W.CreatePageResetButton then
+        W.CreatePageResetButton(ctx, head, nil, { width = 118, text = "Reset Profile", y = -20 })
+    end
     EnsureProfilePopups()
 
     local contentW = ctx.width or 920
@@ -237,6 +240,10 @@ local function BuildProfiles(ctx)
     end)
     local reset = T.Button(current, "Reset current profile", 170, 24)
     reset:SetScript("OnClick", function()
+        if M.ShowPageResetConfirm then
+            M.ShowPageResetConfirm("profiles")
+            return
+        end
         local name = _G.MSUF_ActiveProfile or "Default"
         if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
             _G.StaticPopup_Show("MSUF2_CONFIRM_RESET_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
@@ -481,7 +488,10 @@ end
 
 local function BuildModules(ctx)
     local b = W.PageBuilder(ctx)
-    b:Header("Modules", "Optional MSUF style and visual modules.", 64)
+    local head = b:Header("Modules", "Optional MSUF style and visual modules.", 64)
+    if W.CreatePageResetButton then
+        W.CreatePageResetButton(ctx, head, nil, { width = 88, y = -20 })
+    end
     local style = b:CollapsibleSection("modules_style", "Style", 230, true)
     local enable = W.Toggle(style, "Enable MSUF Style")
     M.BindToggle(ctx, enable,

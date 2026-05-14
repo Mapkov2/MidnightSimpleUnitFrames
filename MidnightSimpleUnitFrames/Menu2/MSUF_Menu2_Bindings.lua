@@ -542,6 +542,732 @@ function M.SetGeneralValue(key, value, reason, opts)
     return true
 end
 
+local UNIT_PAGE_RESETS = {
+    uf_player = { unit = "player", label = "Player" },
+    uf_target = { unit = "target", label = "Target" },
+    uf_targettarget = { unit = "targettarget", label = "Target of Target" },
+    uf_focus = { unit = "focus", label = "Focus" },
+    uf_boss = { unit = "boss", label = "Boss Frames" },
+    uf_pet = { unit = "pet", label = "Pet" },
+}
+
+local UNIT_CASTBAR_GENERAL_KEYS = {
+    player = { "enablePlayerCastbar", "showPlayerCastTime", "castbarPlayerShowIcon", "castbarPlayerShowSpellName" },
+    target = { "enableTargetCastbar", "showTargetCastTime", "castbarTargetShowIcon", "castbarTargetShowSpellName" },
+    focus = { "enableFocusCastbar", "showFocusCastTime", "castbarFocusShowIcon", "castbarFocusShowSpellName" },
+}
+
+local PAGE_RESET_INFO = {
+    gf_layout = {
+        label = "Group Frames",
+        kind = "group",
+        summary = "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions",
+    },
+    gf_bars = {
+        label = "Group Frames",
+        kind = "group",
+        summary = "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions",
+    },
+    gf_auras = {
+        label = "Group Frames",
+        kind = "group",
+        summary = "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions",
+    },
+    gf_indicators = {
+        label = "Group Frames",
+        kind = "group",
+        summary = "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions",
+    },
+    opt_bars = {
+        label = "Bars",
+        kind = "bars",
+        summary = "shared bar textures, gradients, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides",
+    },
+    opt_fonts = {
+        label = "Fonts",
+        kind = "fonts",
+        summary = "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides",
+    },
+    auras2 = {
+        label = "Unit Auras",
+        kind = "auras",
+        summary = "Auras 2.0 shared settings, per-unit aura overrides, filters, caps, layout, timer text and reminders",
+    },
+    opt_castbar = {
+        label = "Castbar",
+        kind = "castbar",
+        summary = "global castbar behavior, textures, GCD, boss castbar and interrupt indicator settings",
+    },
+    opt_colors = {
+        label = "Colors",
+        kind = "colors",
+        summary = "frame colors, class/NPC colors, power colors, castbar colors, aura colors and gameplay color settings",
+    },
+    opt_misc = {
+        label = "Miscellaneous",
+        kind = "misc",
+        summary = "language/menu behavior, update pacing, tooltips, Blizzard-frame handling, minimap icon, sounds and range-fade settings",
+    },
+    classpower = {
+        label = "Class Resources",
+        kind = "classpower",
+        summary = "class-resource layout, behavior, style, auto-hide, detached power bar and alternative mana settings",
+    },
+    gameplay = {
+        label = "Gameplay",
+        kind = "gameplay",
+        summary = "gameplay enhancement settings such as combat text, crosshair and click-cast behavior",
+    },
+    modules = {
+        label = "Modules",
+        kind = "modules",
+        summary = "optional style/module settings such as MSUF Style, dropdown style and rounded unitframes",
+    },
+    profiles = {
+        label = "Profiles",
+        kind = "profile",
+        summary = "the entire active profile",
+    },
+}
+
+for pageKey, info in pairs(UNIT_PAGE_RESETS) do
+    PAGE_RESET_INFO[pageKey] = {
+        label = info.label,
+        kind = "unit",
+        unit = info.unit,
+        summary = info.label .. " unit-frame settings, including layout, text, portrait, power, status icons, transparency, load conditions and this unit's castbar toggles",
+    }
+end
+
+local BARS_GENERAL_KEYS = {
+    barTexture = true,
+    barBackgroundTexture = true,
+    enableGradient = true,
+    enablePowerGradient = true,
+    gradientStrength = true,
+    gradientDirection = true,
+    gradientDirRight = true,
+    gradientDirLeft = true,
+    gradientDirUp = true,
+    gradientDirDown = true,
+    showSelfHealPrediction = true,
+    absorbBarTexture = true,
+    healAbsorbBarTexture = true,
+    bossTargetOutlineMode = true,
+    bossTargetHighlightEnabled = true,
+    highlightPrioEnabled = true,
+    highlightPrioOrder = true,
+}
+
+local BARS_SCOPE_KEYS = {
+    hlOverride = true,
+    hpPowerTextOverride = true,
+    absorbTextMode = true,
+    absorbAnchorMode = true,
+    absorbBarOpacity = true,
+    healAbsorbBarOpacity = true,
+    barOutlineThickness = true,
+    highlightBorderThickness = true,
+    hlAggroSize = true,
+    aggroOutlineMode = true,
+    dispelOutlineMode = true,
+    purgeOutlineMode = true,
+    hlDispelGlowEnabled = true,
+    hlDispelGlowStyle = true,
+    hlDispelGlowLines = true,
+    hlDispelGlowFrequency = true,
+    hlDispelGlowThickness = true,
+    hlPrioEnabled = true,
+    hlPrioOrder = true,
+    enableGradient = true,
+    enablePowerGradient = true,
+    gradientStrength = true,
+    gradientDirection = true,
+    gradientDirRight = true,
+    gradientDirLeft = true,
+    gradientDirUp = true,
+    gradientDirDown = true,
+    powerSmoothFill = true,
+}
+
+local BARS_TABLE_KEYS = {
+    barOutlineThickness = true,
+    smoothPowerBar = true,
+    realtimePowerText = true,
+}
+
+local FONT_GENERAL_KEYS = {
+    fontKey = true,
+    boldText = true,
+    noOutline = true,
+    textBackdrop = true,
+    nameClassColor = true,
+    npcNameRed = true,
+    colorPowerTextByType = true,
+}
+
+local FONT_SCOPE_KEYS = {
+    fontOverride = true,
+    fontKey = true,
+    boldText = true,
+    noOutline = true,
+    textBackdrop = true,
+    nameClassColor = true,
+    npcNameRed = true,
+    colorPowerTextByType = true,
+    fontOutline = true,
+    useGlobalFontColor = true,
+    fontR = true,
+    fontG = true,
+    fontB = true,
+    nameColorMode = true,
+    nameShortenEnabled = true,
+    nameClipSide = true,
+    nameMaxChars = true,
+    nameNoEllipsis = true,
+    shortenNames = true,
+    shortenNameClipSide = true,
+    shortenNameMaxChars = true,
+    shortenNameShowDots = true,
+}
+
+local FONT_ROOT_KEYS = {
+    shortenNames = true,
+    shortenNameClipSide = true,
+    shortenNameMaxChars = true,
+    shortenNameShowDots = true,
+}
+
+local MISC_GENERAL_KEYS = {
+    menuLocale = true,
+    slashMenuSnapEnabled = true,
+    miscUpdatesPreset = true,
+    frameUpdateInterval = true,
+    castbarUpdateInterval = true,
+    ufcoreFlushBudgetMs = true,
+    ufcoreUrgentMaxPerFlush = true,
+    showWelcomeMessage = true,
+    versionCheckEnabled = true,
+    disableUnitInfoTooltips = true,
+    unitInfoTooltipStyle = true,
+    disableBlizzardUnitFrames = true,
+    hardKillBlizzardPlayerFrame = true,
+    showMinimapIcon = true,
+    playTargetSelectLostSounds = true,
+    rangeFadePortrait = true,
+}
+
+local MISC_UNIT_KEYS = {
+    rangeFadeEnabled = true,
+    rangeFadeCastbar = true,
+    rangeFadeAuras = true,
+    rangeFadeLayerMode = true,
+    rangeFadeAlpha = true,
+}
+
+local CASTBAR_GENERAL_KEYS = {
+    showGCDBar = true,
+    showGCDBarTime = true,
+    showGCDBarSpell = true,
+    empowerColorStages = true,
+    enableFocusKickIcon = true,
+    focusKickIconWidth = true,
+    focusKickIconHeight = true,
+    focusKickTextSize = true,
+    focusKickIconOffsetX = true,
+    focusKickIconOffsetY = true,
+    kickReadyShowTarget = true,
+    kickReadyShowFocus = true,
+    kickReadyShowBoss = true,
+    kickReadyStyle = true,
+    kickReadySize = true,
+    kickReadyAutoSize = true,
+    kickReadyAnchor = true,
+    kickReadyOffsetX = true,
+    kickReadyOffsetY = true,
+}
+
+local CASTBAR_EXCLUDED_KEYS = {
+    castbarUpdateInterval = true,
+}
+
+local MODULES_GENERAL_KEYS = {
+    styleEnabled = true,
+    dropdownStyleMode = true,
+    roundedUnitframes = true,
+}
+
+local COLOR_GENERAL_KEYS = {
+    highlightEnabled = true,
+    playerCastbarOverrideEnabled = true,
+    playerCastbarOverrideMode = true,
+    npcTypeTarget = true,
+    npcTypeFocus = true,
+    npcTypeBoss = true,
+    npcTypeToT = true,
+}
+
+local COLOR_GAMEPLAY_KEYS = {
+    combatStateColorSync = true,
+}
+
+local COLOR_BARS_KEYS = {
+    classPowerComboPointColorMode = true,
+}
+
+local AURAS_GENERAL_PREFIXES = {
+    "auras",
+}
+
+local AURAS_SHARED_COLOR_KEYS = {
+    pandemicR = true,
+    pandemicG = true,
+    pandemicB = true,
+}
+
+local function StartsWith(value, prefix)
+    return type(value) == "string" and type(prefix) == "string" and value:sub(1, #prefix) == prefix
+end
+
+local function AnyPrefix(key, prefixes)
+    if type(key) ~= "string" then return false end
+    for i = 1, #(prefixes or {}) do
+        if StartsWith(key, prefixes[i]) then return true end
+    end
+    return false
+end
+
+local function ResetTableToDefaults(dst, src)
+    if type(dst) ~= "table" then return end
+    for key in pairs(dst) do
+        dst[key] = nil
+    end
+    if type(src) ~= "table" then return end
+    for key, value in pairs(src) do
+        dst[key] = DeepCopy(value)
+    end
+end
+
+local function ReplaceRootTable(db, defaults, key)
+    if type(db) ~= "table" then return end
+    db[key] = db[key] or {}
+    ResetTableToDefaults(db[key], type(defaults) == "table" and defaults[key] or nil)
+end
+
+local function ResetKeySet(dst, src, keys)
+    if type(dst) ~= "table" or type(keys) ~= "table" then return end
+    for key in pairs(keys) do
+        if type(src) == "table" and src[key] ~= nil then
+            dst[key] = DeepCopy(src[key])
+        else
+            dst[key] = nil
+        end
+    end
+end
+
+local function ResetFilteredKeys(dst, src, filter)
+    if type(dst) ~= "table" or type(filter) ~= "function" then return end
+    for key in pairs(dst) do
+        if filter(key) then
+            dst[key] = nil
+        end
+    end
+    if type(src) ~= "table" then return end
+    for key, value in pairs(src) do
+        if filter(key) then
+            dst[key] = DeepCopy(value)
+        end
+    end
+end
+
+local function ResetRootFiltered(db, defaults, rootKey, filter)
+    if type(db) ~= "table" then return end
+    db[rootKey] = db[rootKey] or {}
+    ResetFilteredKeys(db[rootKey], type(defaults) == "table" and defaults[rootKey] or nil, filter)
+end
+
+local function ResetUnitFiltered(db, defaults, unit, filter)
+    if type(db) ~= "table" or type(unit) ~= "string" then return end
+    db[unit] = db[unit] or {}
+    ResetFilteredKeys(db[unit], type(defaults) == "table" and defaults[unit] or nil, filter)
+end
+
+local function EnsureTargetTargetAlias(db)
+    if type(db) == "table" and type(db.targettarget) == "table" then
+        db.tot = db.targettarget
+    end
+end
+
+local function IsColorKey(key)
+    if type(key) ~= "string" then return false end
+    if COLOR_GENERAL_KEYS[key] == true then return true end
+    local lower = string.lower(key)
+    if lower:find("color", 1, true) then return true end
+    if lower == "barmode" or lower == "darkmode" or lower == "darkbartone" or lower == "darkbgbrightness" then return true end
+    if lower == "useclasscolors" or lower == "enablegradient" or lower == "gradientstrength" then return true end
+    if lower == "fontcolor" or lower == "highlightcolor" or lower == "usecustomfontcolor" then return true end
+    if lower == "nameclasscolor" or lower == "npcnamered" then return true end
+    local last = lower:sub(-1)
+    if last == "r" or last == "g" or last == "b" or last == "a" then
+        if lower:find("color", 1, true)
+            or lower:find("font", 1, true)
+            or lower:find("bg", 1, true)
+            or lower:find("border", 1, true)
+            or lower:find("outline", 1, true)
+            or lower:find("gradient", 1, true)
+            or lower:find("castbar", 1, true)
+        then
+            return true
+        end
+        if lower == "fontcolorcustomr" or lower == "fontcolorcustomg" or lower == "fontcolorcustomb" then return true end
+    end
+    return false
+end
+
+local function IsCastbarKey(key)
+    if type(key) ~= "string" then return false end
+    if CASTBAR_EXCLUDED_KEYS[key] == true then return false end
+    if CASTBAR_GENERAL_KEYS[key] == true then return true end
+    local lower = string.lower(key)
+    if lower:find("castbar", 1, true) then return true end
+    if lower:find("bosscast", 1, true) then return true end
+    if lower:find("empower", 1, true) then return true end
+    if lower == "enableplayercastbar" or lower == "enabletargetcastbar" or lower == "enablefocuscastbar" then return true end
+    if lower == "castbarupdateinterval" then return true end
+    if lower:find("spellnamefontsize", 1, true) or lower:find("timefontsize", 1, true) then return true end
+    return false
+end
+
+local function IsClassPowerBarsKey(key)
+    if type(key) ~= "string" then return false end
+    return StartsWith(key, "classPower")
+        or StartsWith(key, "detachedPowerBar")
+        or StartsWith(key, "altMana")
+        or key == "showClassPower"
+        or key == "showChargedComboPoints"
+        or key == "runeShowTime"
+        or key == "showEleMaelstrom"
+        or key == "showEbonMight"
+        or key == "showShadowMana"
+        or key == "showAltMana"
+        or key == "classPowerComboPointColorMode"
+end
+
+local function IsBarsGeneralKey(key)
+    return BARS_GENERAL_KEYS[key] == true or BARS_SCOPE_KEYS[key] == true
+end
+
+local function IsBarsScopeKey(key)
+    return BARS_SCOPE_KEYS[key] == true
+end
+
+local function IsFontScopeKey(key)
+    return FONT_SCOPE_KEYS[key] == true
+end
+
+local function IsGameplayColorKey(key)
+    return COLOR_GAMEPLAY_KEYS[key] == true or IsColorKey(key)
+end
+
+local function ResetAurasSharedColors(db, defaults)
+    if type(db) ~= "table" then return end
+    db.auras2 = db.auras2 or {}
+    db.auras2.shared = db.auras2.shared or {}
+    local src = type(defaults) == "table" and type(defaults.auras2) == "table" and defaults.auras2.shared or nil
+    ResetKeySet(db.auras2.shared, src, AURAS_SHARED_COLOR_KEYS)
+end
+
+local function FactoryDefaults()
+    local create = (type(ns) == "table" and ns.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
+    if type(create) ~= "function" then return nil end
+    local ok, defaults = pcall(create)
+    if ok and type(defaults) == "table" then return defaults end
+    return nil
+end
+
+local function ResetUnitPage(db, defaults, unit)
+    ReplaceRootTable(db, defaults, unit)
+    if unit == "targettarget" then EnsureTargetTargetAlias(db) end
+    local castbarKeys = UNIT_CASTBAR_GENERAL_KEYS[unit]
+    if castbarKeys then
+        db.general = db.general or {}
+        local src = type(defaults) == "table" and defaults.general or nil
+        for i = 1, #castbarKeys do
+            local key = castbarKeys[i]
+            db.general[key] = type(src) == "table" and DeepCopy(src[key]) or nil
+        end
+    end
+end
+
+local function ResetGroupFrames(db, defaults)
+    local gf = ns and ns.GF
+    if gf and type(gf.ResetAllToDefaults) == "function" then
+        return gf.ResetAllToDefaults()
+    end
+    ReplaceRootTable(db, defaults, "gf_party")
+    ReplaceRootTable(db, defaults, "gf_raid")
+    ReplaceRootTable(db, defaults, "gf_mythicraid")
+    return true
+end
+
+local function ResetBarsPage(db, defaults)
+    ResetRootFiltered(db, defaults, "general", IsBarsGeneralKey)
+    ResetRootFiltered(db, defaults, "bars", function(key) return BARS_TABLE_KEYS[key] == true end)
+    for _, key in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid", "gf_mythicraid" }) do
+        ResetUnitFiltered(db, defaults, key, IsBarsScopeKey)
+    end
+    EnsureTargetTargetAlias(db)
+end
+
+local function ResetFontsPage(db, defaults)
+    ResetRootFiltered(db, defaults, "general", function(key) return FONT_GENERAL_KEYS[key] == true end)
+    ResetKeySet(db, defaults, FONT_ROOT_KEYS)
+    for _, key in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid", "gf_mythicraid" }) do
+        ResetUnitFiltered(db, defaults, key, IsFontScopeKey)
+    end
+    EnsureTargetTargetAlias(db)
+end
+
+local function ResetAurasPage(db, defaults)
+    ReplaceRootTable(db, defaults, "auras2")
+    ResetRootFiltered(db, defaults, "general", function(key) return AnyPrefix(key, AURAS_GENERAL_PREFIXES) end)
+end
+
+local function ResetCastbarPage(db, defaults)
+    ResetRootFiltered(db, defaults, "general", function(key)
+        return CASTBAR_GENERAL_KEYS[key] == true or (IsCastbarKey(key) and not IsColorKey(key))
+    end)
+end
+
+local function ResetColorsPage(db, defaults)
+    ResetRootFiltered(db, defaults, "general", IsColorKey)
+    ReplaceRootTable(db, defaults, "classColors")
+    ReplaceRootTable(db, defaults, "npcColors")
+    ResetRootFiltered(db, defaults, "gameplay", IsGameplayColorKey)
+    ResetRootFiltered(db, defaults, "bars", function(key) return COLOR_BARS_KEYS[key] == true end)
+    ResetAurasSharedColors(db, defaults)
+end
+
+local function ResetMiscPage(db, defaults)
+    ResetRootFiltered(db, defaults, "general", function(key) return MISC_GENERAL_KEYS[key] == true end)
+    for _, key in ipairs({ "target", "focus", "boss" }) do
+        ResetUnitFiltered(db, defaults, key, function(unitKey) return MISC_UNIT_KEYS[unitKey] == true end)
+    end
+end
+
+local function ResetClassPowerPage(db, defaults)
+    ResetRootFiltered(db, defaults, "bars", IsClassPowerBarsKey)
+end
+
+local function ResetGameplayPage(db, defaults)
+    ReplaceRootTable(db, defaults, "gameplay")
+end
+
+local function ResetModulesPage(db, defaults)
+    ResetRootFiltered(db, defaults, "general", function(key) return MODULES_GENERAL_KEYS[key] == true end)
+end
+
+local function ApplyAfterPageReset(pageKey, info)
+    local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
+    if info and info.unit and M.RequestUnitApply then
+        M.RequestUnitApply(info.unit, reason, { preview = true, text = true, power = true, alpha = true, castbar = true })
+    end
+    if M.RequestGeneralApply then
+        M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true })
+    end
+
+    if info and info.kind == "gameplay" then
+        if ns and type(ns.MSUF_RequestGameplayApply) == "function" then
+            pcall(ns.MSUF_RequestGameplayApply)
+        elseif ns and type(ns.MSUF_ApplyGameplayVisuals) == "function" then
+            pcall(ns.MSUF_ApplyGameplayVisuals)
+        end
+    end
+
+    local auras = ns and ns.MSUF_Auras2
+    if info and (info.kind == "auras" or info.kind == "colors") then
+        if auras and type(auras.RequestApply) == "function" then
+            pcall(auras.RequestApply)
+        elseif type(_G.MSUF_Auras2_RefreshAll) == "function" then
+            pcall(_G.MSUF_Auras2_RefreshAll)
+        end
+        CallGlobal("MSUF_A2_InvalidateCooldownTextCurve")
+        CallGlobal("MSUF_A2_ForceCooldownTextRecolor")
+    end
+
+    if info and (info.kind == "group" or info.kind == "bars" or info.kind == "fonts" or info.kind == "colors") then
+        local gf = ns and ns.GF
+        if gf then
+            if type(gf.InvalidateConfCache) == "function" then pcall(gf.InvalidateConfCache) end
+            if type(gf.RefreshVisuals) == "function" then pcall(gf.RefreshVisuals) end
+            if type(gf.RebuildAll) == "function" then pcall(gf.RebuildAll) end
+            if type(gf.RequestAuraRefresh) == "function" then pcall(gf.RequestAuraRefresh) end
+        end
+    end
+
+    if info and info.kind == "classpower" then
+        CallGlobal("MSUF_ClassPower_Refresh")
+        CallGlobal("MSUF_ClassPower_RefreshTextures")
+        CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
+    end
+
+    if info and info.kind == "modules" then
+        CallGlobal("MSUF_ApplyModules")
+    end
+
+    CallGlobal("MSUF_UpdateAllFonts_Immediate")
+    CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
+    CallGlobal("MSUF_UpdateAllBarTextures")
+    CallGlobal("MSUF_UpdateCastbarVisuals_Immediate")
+    CallGlobal("MSUF_UpdateCastbarVisuals")
+    CallGlobal("MSUF_RefreshAllIdentityColors")
+    CallGlobal("MSUF_RefreshAllPowerTextColors")
+    CallGlobal("MSUF_RefreshAllUnitAlphas")
+    CallGlobal("MSUF_RefreshAllFrames")
+    CallGlobal("MSUF_PortraitDecoration_RefreshAll")
+
+    if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
+    if M.ApplyMenuFrameScale and M.frame then pcall(M.ApplyMenuFrameScale, M.frame) end
+
+    if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
+        M.InvalidatePage(pageKey)
+        M.activeKey = nil
+        M.SelectPage(pageKey)
+    else
+        QueueMenuRefresh()
+    end
+end
+
+local function ResetProfilePage()
+    local name = _G.MSUF_ActiveProfile or "Default"
+    if type(_G.MSUF_ResetProfile) ~= "function" then return false end
+    pcall(_G.MSUF_ResetProfile, name)
+    if M.ClearHistory then M.ClearHistory() end
+    ApplyAfterPageReset("profiles", PAGE_RESET_INFO.profiles)
+    if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+        _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
+    end
+    return true
+end
+
+local function ResetPageImpl(pageKey)
+    local info = PAGE_RESET_INFO[pageKey or ""]
+    if not info then return false end
+    if info.kind == "profile" then
+        return ResetProfilePage()
+    end
+
+    local defaults = FactoryDefaults()
+    if type(defaults) ~= "table" then
+        print("|cffff0000MSUF:|r Reset failed: factory defaults are not available yet.")
+        return false
+    end
+
+    local db = M.EnsureDB()
+    if info.kind == "unit" then
+        ResetUnitPage(db, defaults, info.unit)
+    elseif info.kind == "group" then
+        ResetGroupFrames(db, defaults)
+    elseif info.kind == "bars" then
+        ResetBarsPage(db, defaults)
+    elseif info.kind == "fonts" then
+        ResetFontsPage(db, defaults)
+    elseif info.kind == "auras" then
+        ResetAurasPage(db, defaults)
+    elseif info.kind == "castbar" then
+        ResetCastbarPage(db, defaults)
+    elseif info.kind == "colors" then
+        ResetColorsPage(db, defaults)
+    elseif info.kind == "misc" then
+        ResetMiscPage(db, defaults)
+    elseif info.kind == "classpower" then
+        ResetClassPowerPage(db, defaults)
+    elseif info.kind == "gameplay" then
+        ResetGameplayPage(db, defaults)
+    elseif info.kind == "modules" then
+        ResetModulesPage(db, defaults)
+    else
+        return false
+    end
+
+    EnsureTargetTargetAlias(db)
+    ApplyAfterPageReset(pageKey, info)
+    print("|cffffd700MSUF:|r " .. tostring(info.label or pageKey) .. " reset to defaults.")
+    return true
+end
+
+function M.PageHasReset(pageKey)
+    return PAGE_RESET_INFO[pageKey or ""] ~= nil
+end
+
+function M.GetPageResetInfo(pageKey)
+    return PAGE_RESET_INFO[pageKey or ""]
+end
+
+function M.BuildPageResetWarning(pageKey)
+    local info = PAGE_RESET_INFO[pageKey or ""]
+    if not info then return nil end
+    local title = info.label or ((M.pages and M.pages[pageKey] and M.pages[pageKey].title) or pageKey or "this menu")
+    title = M.Tr and M.Tr(title) or title
+    if info.kind == "profile" then
+        local profileName = _G.MSUF_ActiveProfile or "Default"
+        return string.format(
+            "Reset %s to defaults?\n\nThis resets the entire active profile '%s' to the current MSUF factory defaults. Every menu in that profile will be affected.",
+            tostring(title),
+            tostring(profileName)
+        )
+    end
+    return string.format(
+        "Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically.",
+        tostring(title),
+        tostring(info.summary or title)
+    )
+end
+
+function M.ResetPageToDefaults(pageKey)
+    local info = PAGE_RESET_INFO[pageKey or ""]
+    if not info then return false end
+    if info.kind == "profile" then
+        return ResetPageImpl(pageKey)
+    end
+    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+        return M.CaptureHistory("Reset " .. tostring(info.label or pageKey), "page:reset:" .. tostring(pageKey), function()
+            return ResetPageImpl(pageKey)
+        end)
+    end
+    return ResetPageImpl(pageKey)
+end
+
+function M.ShowPageResetConfirm(pageKey)
+    if not M.PageHasReset(pageKey) then return false end
+    local message = M.BuildPageResetWarning(pageKey)
+    if not message then return false end
+    if not _G.StaticPopupDialogs then
+        return M.ResetPageToDefaults(pageKey)
+    end
+    if not _G.StaticPopupDialogs.MSUF2_PAGE_RESET_CONFIRM then
+        _G.StaticPopupDialogs.MSUF2_PAGE_RESET_CONFIRM = {
+            text = "%s",
+            button1 = _G.YES or "Yes",
+            button2 = _G.NO or "No",
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function(_, data)
+                if data and data.pageKey then
+                    M.ResetPageToDefaults(data.pageKey)
+                end
+            end,
+        }
+    end
+    if _G.StaticPopup_Show then
+        _G.StaticPopup_Show("MSUF2_PAGE_RESET_CONFIRM", message, nil, { pageKey = pageKey })
+        return true
+    end
+    return M.ResetPageToDefaults(pageKey)
+end
+
 function M.AddRefresher(ctx, fn)
     if not (ctx and type(fn) == "function") then return end
     ctx.refreshers[#ctx.refreshers + 1] = fn

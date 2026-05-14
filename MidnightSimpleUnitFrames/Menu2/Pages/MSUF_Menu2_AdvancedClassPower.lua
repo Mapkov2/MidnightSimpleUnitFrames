@@ -138,6 +138,9 @@ local function BuildClassPower(ctx)
     local edit = T.Button(head, "MSUF Edit Mode", 128, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(edit) end
     edit:SetPoint("RIGHT", colors, "LEFT", -10, 0)
+    if W.CreatePageResetButton then
+        W.CreatePageResetButton(ctx, head, edit, { width = 88 })
+    end
     local function RefreshEditButton()
         local active = IsMSUFEditModeActive()
         if edit.SetText then edit:SetText(active and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end

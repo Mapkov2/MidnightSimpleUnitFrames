@@ -290,6 +290,17 @@ local TOP_ACTION_BUTTON_STYLE = {
     activeTextColor = { 0.82, 0.90, 1.00, 1 },
 }
 
+local TOP_DANGER_BUTTON_STYLE = {
+    bg = { 0.070, 0.026, 0.034, 0.94 },
+    border = { 0.340, 0.090, 0.110, 0.82 },
+    textColor = { 1.00, 0.82, 0.82, 1 },
+    hoverBg = { 0.090, 0.035, 0.045, 0.96 },
+    hoverBorder = { 0.420, 0.120, 0.140, 0.90 },
+    activeBg = { 0.070, 0.026, 0.034, 0.94 },
+    activeBorder = { 0.340, 0.090, 0.110, 0.82 },
+    activeTextColor = { 1.00, 0.82, 0.82, 1 },
+}
+
 local function ApplyTopActionButtonVisual(btn, hover)
     local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
     local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
@@ -300,8 +311,8 @@ local function ApplyTopActionButtonVisual(btn, hover)
     if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
 end
 
-local function StyleTopActionButton(btn)
-    local s = TOP_ACTION_BUTTON_STYLE
+local function StyleTopButton(btn, style)
+    local s = style or TOP_ACTION_BUTTON_STYLE
     btn._msuf2TopActive = false
     btn._msuf2TopBg = s.bg
     btn._msuf2TopBorder = s.border
@@ -337,7 +348,35 @@ local function StyleTopActionButton(btn)
     ApplyTopActionButtonVisual(btn)
     return btn
 end
+
+local function StyleTopActionButton(btn)
+    return StyleTopButton(btn, TOP_ACTION_BUTTON_STYLE)
+end
 W.StyleTopActionButton = StyleTopActionButton
+
+local function StyleTopDangerButton(btn)
+    return StyleTopButton(btn, TOP_DANGER_BUTTON_STYLE)
+end
+W.StyleTopDangerButton = StyleTopDangerButton
+
+function W.CreatePageResetButton(ctx, parent, anchor, opts)
+    opts = opts or {}
+    local key = ctx and ctx.key
+    if not (M.PageHasReset and M.PageHasReset(key)) then return nil end
+    local label = opts.text or "Reset All"
+    local btn = StyleTopDangerButton(T.Button(parent, label, opts.width or 88, opts.height or 24))
+    btn._msuf2SkipHistoryCheckpoint = true
+    if anchor then
+        btn:SetPoint("RIGHT", anchor, "LEFT", -(opts.gap or 8), opts.offsetY or 0)
+    else
+        btn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", opts.x or -14, opts.y or -14)
+    end
+    btn:SetScript("OnClick", function()
+        if M.ShowPageResetConfirm then M.ShowPageResetConfirm(key) end
+    end)
+    RegisterSearchObject(btn, label, "button")
+    return btn
+end
 
 function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     if not (builder and builder.Header) then return nil end
@@ -346,6 +385,7 @@ function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     RegisterSearchObject(edit, "MSUF Edit Mode", "button")
     edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
     edit:SetScript("OnClick", ToggleMSUFEditMode)
+    W.CreatePageResetButton(ctx, head, edit, { width = 88 })
 
     local function RefreshEditButton()
         local active = IsMSUFEditModeActive()
