@@ -580,7 +580,7 @@ local function BuildGFAuras(ctx)
         local rightX = max(430, min(520, floor(sectionW * 0.50)))
         local leftW = max(270, min(340, rightX - leftX - 70))
         local rightW = max(280, min(360, sectionW - rightX - 42))
-        local controls, cooldownChildren, stackChildren, drChildren = {}, {}, {}, {}
+        local controls, cooldownChildren, stackChildren = {}, {}, {}
 
         local enable = BindNestedToggle(ctx, W.ToggleAt(section, def.enabledLabel, leftX, -44, 190), function() return AuraGroup(CurrentScope(), groupKey) end, "enabled", true, "visual")
 
@@ -697,60 +697,15 @@ local function BuildGFAuras(ctx)
         stackChildren[#stackChildren + 1] = stackX
         stackChildren[#stackChildren + 1] = stackY
 
-        local showDR
-        local drNativeHint
-        if groupKey == "externals" then
-            local drTextY = textY - 398
-            W.DividerAt(section, drTextY + 20, leftX, 12)
-            W.LabelAt(section, "External DR", leftX, drTextY, 180, "GameFontNormalSmall", T.colors.accent)
-            drNativeHint = W.Text(section, "Custom only: turn off Use Blizzard: Defensives.", leftX + 92, drTextY, 420, T.colors.muted)
-            drNativeHint:Hide()
-            showDR = BindNestedToggle(ctx, W.ToggleAt(section, "Show DR %", leftX, drTextY - 30, 220), function() return AuraGroup(CurrentScope(), groupKey) end, "showDR", false, "visual")
-            local drSize = BindNestedSlider(ctx, W.Slider(section, "Font size", 6, 24, 1, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "drSize", 9, "font")
-            local drAnchor = BindNestedDropdown(ctx, W.Dropdown(section, "Anchor", AURA_POSITION_ANCHORS, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "drAnchor", "TOPLEFT", "geometry")
-            local drX = BindNestedSlider(ctx, W.Slider(section, "Offset X", -30, 30, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "drOffsetX", 1, "geometry")
-            local drY = BindNestedSlider(ctx, W.Slider(section, "Offset Y", -30, 30, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "drOffsetY", -1, "geometry")
-            W.MoveWidget(drSize, section, leftX, drTextY - 78, leftW, "CENTER")
-            W.MoveWidget(drAnchor, section, rightX, drTextY - 30, rightW, "LEFT")
-            W.MoveWidget(drX, section, rightX, drTextY - 84, rightW, "CENTER")
-            W.MoveWidget(drY, section, rightX, drTextY - 138, rightW, "CENTER")
-            controls[#controls + 1] = showDR
-            controls[#controls + 1] = drSize
-            controls[#controls + 1] = drAnchor
-            controls[#controls + 1] = drX
-            controls[#controls + 1] = drY
-            drChildren[#drChildren + 1] = drSize
-            drChildren[#drChildren + 1] = drAnchor
-            drChildren[#drChildren + 1] = drX
-            drChildren[#drChildren + 1] = drY
-        end
-
         M.AddRefresher(ctx, function()
             local cfg = AuraGroup(CurrentScope(), groupKey)
             local groupEnabled = cfg.enabled ~= false
-            local nativeExternal = false
-            if groupKey == "externals" then
-                local gf = GF and GF()
-                if gf and type(gf.IsBlizzardAuraTypeEnabled) == "function" and type(gf.GetConf) == "function" then
-                    nativeExternal = gf.IsBlizzardAuraTypeEnabled(gf.GetConf(CurrentScope()), "externals") == true
-                else
-                    local root = AurasRoot(CurrentScope())
-                    local types = root and root.blizzardTypes
-                    local renderer = root and root.renderer
-                    nativeExternal = root and root.enabled ~= false
-                        and (renderer == nil or renderer == "BLIZZARD")
-                        and (type(types) ~= "table" or types.externals ~= false)
-                end
-            end
             SetOptionsEnabled(controls, groupEnabled)
             SetOptionsEnabled(cooldownChildren, groupEnabled and cfg.showCooldown ~= false)
             SetOptionsEnabled(stackChildren, groupEnabled and cfg.showStacks ~= false)
-            SetOptionsEnabled(drChildren, groupEnabled and cfg.showDR == true and not nativeExternal)
             SetOptionEnabled(enable, true)
             SetOptionEnabled(showCooldown, groupEnabled)
             SetOptionEnabled(showStacks, groupEnabled)
-            if showDR then SetOptionEnabled(showDR, groupEnabled and not nativeExternal) end
-            if drNativeHint then drNativeHint:SetShown(nativeExternal) end
         end)
     end
 

@@ -1602,8 +1602,6 @@ local function MakeExternalsDefaults()
         cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
         showStacks = false, stackAnchor = "BOTTOMRIGHT",
         stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
-        showDR = false, drAnchor = "TOPLEFT",
-        drOffsetX = 1, drOffsetY = -1, drSize = 9, drOutline = "OUTLINE",
     }
 end
 local function MakePrivateAuraDefaults()
