@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.1 Beta 1 - 2026-05-14
+## 5.1 Beta 2 - 2026-05-14
 
 ### New Features
 - Group Frame aura renderer split: Blizzard/native or MSUF custom.
@@ -9,7 +9,7 @@
 - Group Frame aura preview with custom layers plus locked Blizzard/native layer.
 - Custom defensive aura group controls for placement, size, growth, spacing, cooldown, and stacks.
 - Page-level reset support across menus.
-- Release tooling for GitHub, Wago, CurseForge, and package builds.
+- Release tooling for GitHub, Wago, CurseForge, package builds, and manual publishing.
 
 ### Changes / Improvements
 - Disabled Group Frames now stop their MSUF feature work and hand control back to Blizzard frames.
@@ -19,6 +19,10 @@
 - Range fade and target range checks are more performant.
 - Aura2 reminder/range refresh behavior does less idle work.
 - Group Frame preview better matches custom aura text, cooldown, stack, dispel, private, and Blizzard aura paths.
+- Group Frame preview font rendering improved.
+- Locale coverage updated for all 5.1 Beta 1 Group Aura / Blizzard Renderer strings.
+- CurseForge release flow now uses auto-packaging with fixed package roots.
+- Release publishing workflow hardened.
 
 ### Removed
 - Removed experimental external `DR %` before Beta 1.
@@ -31,4 +35,5 @@
 - Fixed Blizzard/native aura preview implying draggable custom placement.
 - Fixed Group Frame border/highlight preview behavior.
 - Fixed Absorb Bar Test Mode.
+- Fixed permanent buff toggle behavior.
 - Fixed release package metadata/workflow issues.
