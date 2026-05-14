@@ -84,6 +84,8 @@ jobs:
         env:
           CURSEFORGE_PACKAGE_TOKEN: ${{ secrets.CURSEFORGE_PACKAGE_TOKEN }}
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           $token = $env:CURSEFORGE_PACKAGE_TOKEN
           if ([string]::IsNullOrWhiteSpace($token)) {
@@ -102,6 +104,34 @@ jobs:
           $projectId = $projectIdMatch.Matches[0].Groups[1].Value
           $escapedToken = [System.Uri]::EscapeDataString($token)
           $uri = "https://www.curseforge.com/api/projects/$projectId/package?token=$escapedToken"
+          $headSha = (git rev-parse HEAD).Trim()
+          $repoParts = $env:GITHUB_REPOSITORY -split '/', 2
+          $repoName = $repoParts[1]
 
-          Invoke-RestMethod -Method Post -Uri $uri -Body "" | Out-Null
-          Write-Host "Triggered CurseForge packager for project $projectId."
+          $payload = @{
+            ref = "refs/tags/$env:RELEASE_VERSION"
+            before = "0000000000000000000000000000000000000000"
+            after = $headSha
+            created = $true
+            deleted = $false
+            repository = @{
+              name = $repoName
+              full_name = $env:GITHUB_REPOSITORY
+              html_url = "https://github.com/$env:GITHUB_REPOSITORY"
+              clone_url = "https://github.com/$env:GITHUB_REPOSITORY.git"
+              owner = @{
+                name = $env:GITHUB_REPOSITORY_OWNER
+                login = $env:GITHUB_REPOSITORY_OWNER
+              }
+            }
+            pusher = @{
+              name = $env:GITHUB_REPOSITORY_OWNER
+            }
+          } | ConvertTo-Json -Depth 8 -Compress
+
+          $headers = @{
+            "X-GitHub-Event" = "push"
+            "User-Agent" = "GitHub-Hookshot/msuf-actions"
+          }
+          Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -ContentType "application/x-www-form-urlencoded" -Body @{ payload = $payload } | Out-Null
+          Write-Host "Triggered CurseForge packager for project $projectId on tag $env:RELEASE_VERSION ($headSha)."
