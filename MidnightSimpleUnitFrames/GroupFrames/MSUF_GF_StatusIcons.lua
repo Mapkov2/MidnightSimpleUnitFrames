@@ -168,11 +168,11 @@ function GF.UpdateRaidMarker(f, unit)
     end
     local idx = GetRaidTargetIndex(unit)
     if idx then
-        if f.raidIcon._msufGFRaidMarkerIndex ~= idx then
-            f.raidIcon._msufGFRaidMarkerIndex = idx
-            f.raidIcon._msufGFCachedTexture = nil
-            SetRaidTargetIconTexture(f.raidIcon, idx)
-        end
+        -- Midnight/Beta can return a secret number here. Do not cache
+        -- or compare it in Lua; hand it directly to the C-side helper.
+        f.raidIcon._msufGFRaidMarkerIndex = nil
+        f.raidIcon._msufGFCachedTexture = nil
+        SetRaidTargetIconTexture(f.raidIcon, idx)
         IconShow(f.raidIcon)
     else
         IconHide(f.raidIcon)
