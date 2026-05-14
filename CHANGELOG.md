@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.1 Beta 2 - 2026-05-14
+## 5.1 Beta 3 - 2026-05-14
 
 ### Performance (Stage 1 micro-optimizations)
 - **`UFCore_FlushTask`**: `Core._flushSettingsCacheSerial` is now set each flush tick, activating the
