@@ -1929,3 +1929,17 @@ for k, v in pairs(MSUF2_MENU_SEARCH_frFR) do
     L[k] = v
 end
 -- MSUF2 menu search coverage END
+
+-- MSUF 5.1 Beta 1
+L["Blizzard Aura Layering"] = "Couches des auras Blizzard"
+L["Blizzard renders these icons on MSUF's container. If icons appear behind frames, raise the container strata or frame level."] = "Blizzard affiche ces icônes dans le conteneur MSUF. Si les icônes apparaissent derrière les cadres, augmentez la strate ou le niveau du conteneur."
+L["Icon size: %d"] = "Taille d'icône : %d"
+L["Buff max: %d"] = "Buffs max : %d"
+L["Debuff max: %d"] = "Debuffs max : %d"
+L["Layering"] = "Couches"
+L["Container Strata"] = "Strate du conteneur"
+L["Container level: +%d"] = "Niveau du conteneur : +%d"
+L["Private Aura Layer Fix"] = "Correction de couche des auras privées"
+L["Defensives"] = "Défensifs"
+L["Enable defensives"] = "Activer les défensifs"
+L["Max defensives"] = "Défensifs max"

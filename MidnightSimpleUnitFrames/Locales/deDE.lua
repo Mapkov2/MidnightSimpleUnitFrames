@@ -1116,6 +1116,7 @@ local MSUF2_HELPER_deDE = {
     ["Hide Masque borders"] = "Masque-Ränder ausblenden",
     ["Hide other healer buffs"] = "Verstecke andere Heiler-Buffs",
     ["Hide permanent buffs"] = "Permanente Buffs ausblenden",
+    ["Hides buffs with no duration. Debuffs are never hidden by this option.\n\nThis filter is applied out of combat only. Target/Focus APIs may still show permanent buffs during combat due to API limitations."] = "Blendet Buffs ohne Dauer aus. Debuffs werden von dieser Option nie ausgeblendet.\n\nDieser Filter wird nur ausserhalb des Kampfes angewendet. Ziel-/Fokus-APIs koennen permanente Buffs im Kampf wegen API-Einschraenkungen weiterhin anzeigen.",
     ["hide player in party"] = "Verstecke den Spieler in der Gruppe",
     ["Highlight & Aggro"] = "Highlight & Aggro",
     ["highlight borders"] = "Grenzen hervorheben",
@@ -1635,3 +1636,17 @@ for k, v in pairs(MSUF2_MENU_SEARCH_deDE) do
     L[k] = v
 end
 -- MSUF2 menu search coverage END
+
+-- MSUF 5.1 Beta 1
+L["Blizzard Aura Layering"] = "Blizzard-Aura-Ebenen"
+L["Blizzard renders these icons on MSUF's container. If icons appear behind frames, raise the container strata or frame level."] = "Blizzard rendert diese Symbole im MSUF-Container. Wenn Symbole hinter Frames erscheinen, erhöhe Container-Strata oder Frame-Level."
+L["Icon size: %d"] = "Symbolgröße: %d"
+L["Buff max: %d"] = "Max. Buffs: %d"
+L["Debuff max: %d"] = "Max. Debuffs: %d"
+L["Layering"] = "Ebenen"
+L["Container Strata"] = "Container-Strata"
+L["Container level: +%d"] = "Container-Level: +%d"
+L["Private Aura Layer Fix"] = "Private-Aura-Ebenenfix"
+L["Defensives"] = "Defensives"
+L["Enable defensives"] = "Defensives aktivieren"
+L["Max defensives"] = "Max. Defensives"

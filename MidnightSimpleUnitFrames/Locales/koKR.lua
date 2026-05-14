@@ -1536,3 +1536,17 @@ for k, v in pairs(MSUF2_MENU_SEARCH_koKR) do
     L[k] = v
 end
 -- MSUF2 menu search coverage END
+
+-- MSUF 5.1 Beta 1
+L["Blizzard Aura Layering"] = "Blizzard 오라 레이어"
+L["Blizzard renders these icons on MSUF's container. If icons appear behind frames, raise the container strata or frame level."] = "Blizzard가 이 아이콘을 MSUF 컨테이너에 렌더링합니다. 아이콘이 프레임 뒤에 보이면 컨테이너 strata 또는 프레임 레벨을 올리세요."
+L["Icon size: %d"] = "아이콘 크기: %d"
+L["Buff max: %d"] = "버프 최대: %d"
+L["Debuff max: %d"] = "디버프 최대: %d"
+L["Layering"] = "레이어"
+L["Container Strata"] = "컨테이너 Strata"
+L["Container level: +%d"] = "컨테이너 레벨: +%d"
+L["Private Aura Layer Fix"] = "비공개 오라 레이어 수정"
+L["Defensives"] = "생존기"
+L["Enable defensives"] = "생존기 활성화"
+L["Max defensives"] = "생존기 최대"

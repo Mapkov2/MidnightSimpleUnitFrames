@@ -1587,3 +1587,17 @@ for k, v in pairs(MSUF2_MENU_SEARCH_zhTW) do
     L[k] = v
 end
 -- MSUF2 menu search coverage END
+
+-- MSUF 5.1 Beta 1
+L["Blizzard Aura Layering"] = "暴雪光環層級"
+L["Blizzard renders these icons on MSUF's container. If icons appear behind frames, raise the container strata or frame level."] = "暴雪會在 MSUF 容器中渲染這些圖示。如果圖示顯示在框架後方，請提高容器層級或框架層級。"
+L["Icon size: %d"] = "圖示大小：%d"
+L["Buff max: %d"] = "增益最大：%d"
+L["Debuff max: %d"] = "減益最大：%d"
+L["Layering"] = "層級"
+L["Container Strata"] = "容器層級"
+L["Container level: +%d"] = "容器等級：+%d"
+L["Private Aura Layer Fix"] = "私人光環層級修正"
+L["Defensives"] = "減傷"
+L["Enable defensives"] = "啟用減傷"
+L["Max defensives"] = "減傷最大"
