@@ -593,12 +593,8 @@ local function HealthColor(key, data)
     local cache = SettingsCache()
     local mode = (cache and cache.barMode) or g.barMode or "dark"
     if mode == "gradient" then
-        local resolve = ns and ns.Bars and ns.Bars._ResolveGradientValue
         local enabled = cache and cache.healthGradientEnabled
-        if enabled == nil then enabled = g.enableGradient ~= false end
-        if type(resolve) == "function" then
-            enabled = resolve({ msufConfigKey = key }, "enableGradient", true) ~= false
-        end
+        if enabled == nil then enabled = g.enableHealthGradient ~= false end
         if not enabled then mode = "class" end
     end
     data = data or UNIT_DATA.player

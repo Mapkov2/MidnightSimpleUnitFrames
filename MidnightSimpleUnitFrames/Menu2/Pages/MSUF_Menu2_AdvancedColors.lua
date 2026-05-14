@@ -578,7 +578,7 @@ local function BuildColors(ctx)
             ApplyColors()
         end)
     SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyColors)
-    local gradientToggle = BindTableToggle(ctx, appearance, "Enable health gradient", G, "enableGradient", true, ApplyColors)
+    local gradientToggle = BindTableToggle(ctx, appearance, "Enable health gradient", G, "enableHealthGradient", true, ApplyColors)
     MoveWidget(gradientToggle, appearance, 360, -158)
 
     local unit = b:CollapsibleSection("colors_unit", "Unitframe Colors", 230, false)

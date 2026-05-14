@@ -382,7 +382,7 @@ local function _GF_ApplyGradientToBar(bar, conf, gen, isPower)
     if isPower then
         if _GF_GradientValue(conf, gen, "enablePowerGradient", false) ~= true then strength = 0 end
     else
-        if _GF_GradientValue(conf, gen, "enableGradient", true) == false then strength = 0 end
+        if _GF_GradientValue(conf, gen, "enableGradient", false) ~= true then strength = 0 end
     end
     if strength <= 0 then
         local grads = bar._msufGFGrads

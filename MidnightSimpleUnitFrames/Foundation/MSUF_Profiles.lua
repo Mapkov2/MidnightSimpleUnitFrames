@@ -670,7 +670,7 @@ local function MSUF_IsColorKey(k)
     if lk:find("color", 1, true) then  return true end
     -- Global theme/mode keys
     if lk == "barmode" or lk == "darkmode" or lk == "darkbartone" or lk == "darkbgbrightness" then  return true end
-    if lk == "useclasscolors" or lk == "enablegradient" or lk == "gradientstrength" then  return true end
+    if lk == "useclasscolors" or lk == "enablehealthgradient" or lk == "gradientstrength" then  return true end
     -- Font/Highlight naming
     if lk == "fontcolor" or lk == "highlightcolor" or lk == "usecustomfontcolor" then  return true end
     if lk == "nameclasscolor" or lk == "npcnamered" then  return true end

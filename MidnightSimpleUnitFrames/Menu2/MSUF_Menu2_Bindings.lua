@@ -947,7 +947,7 @@ local function IsColorKey(key)
     local lower = string.lower(key)
     if lower:find("color", 1, true) then return true end
     if lower == "barmode" or lower == "darkmode" or lower == "darkbartone" or lower == "darkbgbrightness" then return true end
-    if lower == "useclasscolors" or lower == "enablegradient" or lower == "gradientstrength" then return true end
+    if lower == "useclasscolors" or lower == "enablehealthgradient" or lower == "gradientstrength" then return true end
     if lower == "fontcolor" or lower == "highlightcolor" or lower == "usecustomfontcolor" then return true end
     if lower == "nameclasscolor" or lower == "npcnamered" then return true end
     local last = lower:sub(-1)

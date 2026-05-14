@@ -533,19 +533,37 @@ function GF.RefreshGroupBorders(kind)
     GF.RefreshPreviewGroupBorder("mythicraid")
 end
 
+-- PERF (Stage 1): Pre-built per-kind callbacks — created once on first call, reused thereafter.
+-- MSUF_ScheduleOnce deduplicates by key, replacing the old _groupBorderRefreshQueued table.
+-- Saves one closure allocation + one table write per GROUP_ROSTER_UPDATE burst call.
+local _GF_BorderFlushFn  = {}  -- [normalizedKind] = function (built once)
+local _GF_BorderSchedKey = {}  -- [normalizedKind] = schedKey string (built once)
+
 function GF.QueueGroupBorderRefresh(kind)
+    local k = kind or "_all"
+    local fn = _GF_BorderFlushFn[k]
+    if not fn then
+        fn = function() if GF.RefreshGroupBorders then GF.RefreshGroupBorders(kind) end end
+        _GF_BorderFlushFn[k]  = fn
+        _GF_BorderSchedKey[k] = "GF_BORDER_REFRESH_" .. k
+    end
+    local schedOnce = _G.MSUF_ScheduleOnce
+    if schedOnce then
+        schedOnce(_GF_BorderSchedKey[k], fn)
+        return
+    end
+    -- Fallback when MSUF_Scheduler is not yet available (early-init only).
     GF._groupBorderRefreshQueued = GF._groupBorderRefreshQueued or {}
-    local key = kind or "_all"
-    if GF._groupBorderRefreshQueued[key] then return end
-    GF._groupBorderRefreshQueued[key] = true
+    if GF._groupBorderRefreshQueued[k] then return end
+    GF._groupBorderRefreshQueued[k] = true
     if C_Timer and type(C_Timer.After) == "function" then
         C_Timer.After(0, function()
-            GF._groupBorderRefreshQueued[key] = nil
+            GF._groupBorderRefreshQueued[k] = nil
             if GF.RefreshGroupBorders then GF.RefreshGroupBorders(kind) end
         end)
-    elseif GF.RefreshGroupBorders then
-        GF._groupBorderRefreshQueued[key] = nil
-        GF.RefreshGroupBorders(kind)
+    else
+        GF._groupBorderRefreshQueued[k] = nil
+        if GF.RefreshGroupBorders then GF.RefreshGroupBorders(kind) end
     end
 end
 

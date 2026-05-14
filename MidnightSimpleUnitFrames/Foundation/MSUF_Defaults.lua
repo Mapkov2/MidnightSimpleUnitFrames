@@ -540,7 +540,10 @@ end
         g.barBgMatchHPColor = false
     end
     if g.enableGradient == nil then
-        g.enableGradient = true
+        g.enableGradient = false
+    end
+    if g.enableHealthGradient == nil then
+        g.enableHealthGradient = true
     end
     if g.enablePowerGradient == nil then
         g.enablePowerGradient = false

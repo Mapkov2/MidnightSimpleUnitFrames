@@ -294,7 +294,8 @@ local function CollectSessionSnapshot(target)
 
     SafeSwitch(target, "Style_ClassColors", general.useClassColors ~= false)
     SafeSwitch(target, "Style_DarkMode", general.darkMode == true)
-    SafeSwitch(target, "Style_Gradient", general.enableGradient ~= false)
+    SafeSwitch(target, "Style_Gradient", general.enableGradient == true)
+    SafeSwitch(target, "Style_HealthGradient", general.enableHealthGradient ~= false)
     local uiScale = (type(general.UIScale) == "table") and general.UIScale or nil
     SafeSwitch(target, "Style_GlobalScalingDisabled", not (uiScale and uiScale.Enabled == true))
     SafeCounter(target, "Profiles_Count", CountProfiles())

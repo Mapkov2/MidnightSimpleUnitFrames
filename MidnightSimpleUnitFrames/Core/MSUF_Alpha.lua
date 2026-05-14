@@ -346,6 +346,10 @@ end
 
 local function _AlphaNearlyEqual(a, b)
     if type(a) ~= "number" or type(b) ~= "number" then return false end
+    -- Secret-safe: GetAlpha()/GetStatusBarColor() return secret values when execution
+    -- is tainted. type() reports "number" but arithmetic/comparison raise an error.
+    -- Return false (mismatch) so the caller falls through to SetAlpha — safe re-apply.
+    if issecretvalue and (issecretvalue(a) or issecretvalue(b)) then return false end
     local d = a - b
     if d < 0 then d = -d end
     return d <= 0.001
@@ -453,7 +457,8 @@ end
 
 local function MSUF_Alpha_SetFlat(frame, a)
     local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-    if cur == nil then
+    -- Secret-safe: GetAlpha() returns secret under tainted execution; arithmetic would crash.
+    if cur == nil or (issecretvalue and issecretvalue(cur)) then
         frame:SetAlpha(a)
     else
         local d = cur - a
@@ -607,7 +612,9 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
 
     if frame.SetAlpha then
         local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
-        if cur == nil then
+        -- Secret-safe: GetAlpha() can return a secret value under tainted execution.
+        -- If secret or nil, conservatively call SetAlpha(1) — layered mode owns per-layer alpha.
+        if cur == nil or (issecretvalue and issecretvalue(cur)) then
             frame:SetAlpha(1)
         else
             local d = cur - 1
@@ -754,8 +761,11 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
             frame._msufAlphaBaseLayerMode = staticLayerMode
             frame._msufAlphaBasePreserveHPColor = staticPreserveHPColor == true
             MSUF_Alpha_ApplyLayered(frame, staticA, staticB, staticLayerMode, staticPreserveHPColor)
-            if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
-                frame:SetAlpha(0.35)
+            if isEditMode then
+                local curA = frame:GetAlpha()
+                if not (issecretvalue and issecretvalue(curA)) and (curA or 0) < 0.35 then
+                    frame:SetAlpha(0.35)
+                end
             end
             return
         end
@@ -799,8 +809,11 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
                 if rangeHealthMode and frame._msufAlphaSupportsLayered then
                     MSUF_Alpha_ApplyLayered(frame, alphaFG * m, alphaBG, "health", preserveHPColor, 1)
                     MSUF_Alpha_SetTextAlpha(frame, 1)
-                    if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
-                        frame:SetAlpha(0.35)
+                    if isEditMode then
+                        local curA = frame:GetAlpha()
+                        if not (issecretvalue and issecretvalue(curA)) and (curA or 0) < 0.35 then
+                            frame:SetAlpha(0.35)
+                        end
                     end
                     return
                 else
@@ -813,8 +826,11 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode, preserveHPColor,
             _AlphaShouldRangeFadePortrait() and rangeMul or 1)
         MSUF_Alpha_SetTextAlpha(frame, rangeMul)
-        if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
-            frame:SetAlpha(0.35)
+        if isEditMode then
+            local curA = frame:GetAlpha()
+            if not (issecretvalue and issecretvalue(curA)) and (curA or 0) < 0.35 then
+                frame:SetAlpha(0.35)
+            end
         end
         return
     end
@@ -847,8 +863,11 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
 
     if rangeMul < 1 and _AlphaRangeFadeUsesHealth(conf) and frame._msufAlphaSupportsLayered then
         MSUF_Alpha_ApplyLayered(frame, a * rangeMul, a, "health", false, 1)
-        if isEditMode and (frame:GetAlpha() or 0) < 0.35 then
-            frame:SetAlpha(0.35)
+        if isEditMode then
+            local curA = frame:GetAlpha()
+            if not (issecretvalue and issecretvalue(curA)) and (curA or 0) < 0.35 then
+                frame:SetAlpha(0.35)
+            end
         end
         return
     end

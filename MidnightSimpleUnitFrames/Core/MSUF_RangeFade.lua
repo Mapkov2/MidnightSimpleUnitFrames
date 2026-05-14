@@ -333,15 +333,19 @@ do
         end
 
         local function TargetUnitInFriendlySpellsRange(unit)
+            -- PERF (Stage 2): Compute once at function entry; both CheckInteractDistance
+            -- fallback paths shared the same InCombatLockdown() call previously duplicated.
+            -- `InCombatLockdown and ICL()` preserves nil-safety for the rare env without it.
+            local inCombat = InCombatLockdown and InCombatLockdown()
             if not next(_targetFriendlyActive) then
-                if CheckInteractDistance and (not InCombatLockdown or not InCombatLockdown()) then
+                if CheckInteractDistance and not inCombat then
                     return CheckInteractDistance(unit, 4)
                 end
                 return nil
             end
 
             local spellRange = TargetUnitSpellRange(unit, _targetFriendlyActive)
-            if (not spellRange or spellRange == 1) and CheckInteractDistance and (not InCombatLockdown or not InCombatLockdown()) then
+            if (not spellRange or spellRange == 1) and CheckInteractDistance and not inCombat then
                 local interactDistance = CheckInteractDistance(unit, 4)
                 if NotSecret(interactDistance) then
                     return interactDistance

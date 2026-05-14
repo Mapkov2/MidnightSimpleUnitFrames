@@ -256,7 +256,7 @@ local function BuildBars(ctx)
     end
 
     local function ApplyGradientRuntime(reason)
-        if (GradientScopeGet("enableGradient", true) ~= false) or (GradientScopeGet("enablePowerGradient", false) == true) then
+        if (GradientScopeGet("enableGradient", false) == true) or (GradientScopeGet("enablePowerGradient", false) == true) then
             local strength = tonumber(GradientScopeGet("gradientStrength", nil))
             if not (strength and strength > 0) then GradientScopeSet("gradientStrength", 0.45) end
         end
@@ -429,7 +429,7 @@ local function BuildBars(ctx)
     end
     local hpGradient = W.ToggleAt(textures, "HP bar gradient", rightX, gradientY - 24, compactTextures and 150 or 180)
     M.BindToggle(ctx, hpGradient,
-        function() return GradientScopeGet("enableGradient", true) ~= false end,
+        function() return GradientScopeGet("enableGradient", false) == true end,
         function(v)
             GradientScopeSet("enableGradient", v and true or false)
             ApplyBars("MSUF2_HP_GRADIENT")
@@ -495,7 +495,7 @@ local function BuildBars(ctx)
         local current = CurrentGradientDirectionsForScope()
         local controlsActive = GradientControlsActive()
         local sharedActive = SharedBarsControlsActive()
-        local valueControlsActive = controlsActive and ((GradientScopeGet("enableGradient", true) ~= false) or (GradientScopeGet("enablePowerGradient", false) == true))
+        local valueControlsActive = controlsActive and ((GradientScopeGet("enableGradient", false) == true) or (GradientScopeGet("enablePowerGradient", false) == true))
         SetControlEnabled(barTexture, sharedActive)
         SetControlEnabled(bgTexture, sharedActive)
         SetControlEnabled(hpGradient, controlsActive)

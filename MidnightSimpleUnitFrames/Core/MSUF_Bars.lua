@@ -518,7 +518,7 @@ local function MSUF_ApplyBarGradient(frameOrTex, isPower)
     if isPower then
         enabled = (_MSUF_ResolveGradientValue(frameOrTex, "enablePowerGradient", false) == true)
     else
-        enabled = (_MSUF_ResolveGradientValue(frameOrTex, "enableGradient", true) ~= false)
+        enabled = (_MSUF_ResolveGradientValue(frameOrTex, "enableGradient", false) == true)
     end
     if not enabled then strength = 0 end
     -- Allow applying to a standalone texture (used by some indicators).
