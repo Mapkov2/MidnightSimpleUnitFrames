@@ -307,6 +307,9 @@ local function BuildTopActions(ctx, builder, unit, label)
 
     local edit = MakeTopButton(sec, "MSUF Edit Mode", 128, false, TOP_ACTION_STYLE)
     edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
+    if W.CreatePageResetButton then
+        W.CreatePageResetButton(ctx, sec, edit, { width = 88 })
+    end
 
     local function RefreshEditButton()
         local active = IsEditModeActive()
