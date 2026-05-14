@@ -1,13 +1,14 @@
-package-as: AddOns
+package-as: MidnightSimpleUnitFrames
 enable-nolib-creation: no
 
 move-folders:
-  AddOns/MidnightSimpleUnitFrames: MidnightSimpleUnitFrames
-  AddOns/MidnightSimpleUnitFrames_Castbars: MidnightSimpleUnitFrames_Castbars
+  MidnightSimpleUnitFrames/MidnightSimpleUnitFrames: MidnightSimpleUnitFrames
+  MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Castbars: MidnightSimpleUnitFrames_Castbars
 
 ignore:
   - .github
   - .idea
+  - CHANGELOG.md
   - dist
   - tools
   - README.md
