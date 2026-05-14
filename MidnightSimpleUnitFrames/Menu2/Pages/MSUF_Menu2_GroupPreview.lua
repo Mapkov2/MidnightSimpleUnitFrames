@@ -12,6 +12,24 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 
+local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
+local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
+local LAYER_TEXT_OFF = { 0.30, 0.30, 0.36, 0.55 }
+local LAYER_TEXT_HIGHLIGHT = { 0.90, 0.92, 1.00, 1.00 }
+
+local function SetFSColor(fs, color)
+    if fs and fs.SetTextColor and color then
+        fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+    end
+end
+
+local function LayerFont(parent, text, color)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    fs:SetText((M.Tr and M.Tr(text or "")) or (text or ""))
+    SetFSColor(fs, color or LAYER_TEXT_ON)
+    return fs
+end
+
 local function GroupPage()
     M.GroupPage = M.GroupPage or {}
     return M.GroupPage
@@ -101,7 +119,7 @@ local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen
     btn._stripe:SetPoint("LEFT", btn, "LEFT", 0, 0)
     btn._stripe:SetSize(2, 12)
     btn._stripe:SetColorTexture(color[1], color[2], color[3], 1)
-    btn._label = T.Font(btn, "GameFontDisableSmall", label, T.colors.muted)
+    btn._label = LayerFont(btn, label, LAYER_TEXT_ON)
     btn._label:SetPoint("LEFT", btn, "LEFT", 6, 0)
     btn._label:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
     btn._label:SetJustifyH("LEFT")
@@ -113,20 +131,19 @@ local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen
         if solo then
             self._bg:SetColorTexture(0.20, 0.14, 0.02, 0.75)
             self._stripe:SetColorTexture(1.00, 0.82, 0.18, 1)
-            self._label:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
+            SetFSColor(self._label, LAYER_TEXT_HIGHLIGHT)
         elseif active and visible then
-            local bg, tx = T.colors.pillActive, T.colors.pillTextActive
+            local bg = T.colors.pillActive
             self._bg:SetColorTexture(bg[1], bg[2], bg[3], bg[4] or 1)
-            self._label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
+            SetFSColor(self._label, LAYER_TEXT_HIGHLIGHT)
             self._stripe:SetAlpha(1)
         elseif not visible then
             self._bg:SetColorTexture(0.02, 0.02, 0.03, 0.45)
             self._stripe:SetColorTexture(0.16, 0.16, 0.20, 0.45)
-            self._label:SetTextColor(0.38, 0.40, 0.48, 0.70)
+            SetFSColor(self._label, LAYER_TEXT_OFF)
         else
             self._bg:SetColorTexture(0.020, 0.024, 0.046, 0.85)
-            local tx = T.colors.pillText or T.colors.muted
-            self._label:SetTextColor(tx[1], tx[2], tx[3], 0.95)
+            SetFSColor(self._label, LAYER_TEXT_ON)
             self._stripe:SetAlpha(1)
         end
     end
@@ -347,7 +364,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
     layers:SetSize(78, 218)
     box._layers = layers
-    local layersTitle = T.Font(layers, "GameFontDisableSmall", "LAYERS", T.colors.dim)
+    local layersTitle = LayerFont(layers, "LAYERS", LAYER_HEADER_COLOR)
     layersTitle:SetPoint("TOPLEFT", layers, "TOPLEFT", 10, -10)
 
     M.gfPreviewLayerVisible = M.gfPreviewLayerVisible or {

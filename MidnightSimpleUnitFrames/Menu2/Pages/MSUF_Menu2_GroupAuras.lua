@@ -17,6 +17,18 @@ local unpack = unpack or table.unpack
 
 local WHITE8X8 = "Interface\\Buttons\\WHITE8X8"
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    local fn = M.Tr or ns.TR or ns.Translate
+    if type(fn) == "function" then
+        local translated = fn(text)
+        if translated ~= nil then return translated end
+    end
+    local locale = ns.L or _G.MSUF_L
+    if type(locale) == "table" and locale[text] ~= nil then return locale[text] end
+    return text
+end
+
 local SCOPE_VALUES = GP.SCOPE_VALUES or {}
 local GROWTH_VALUES = GP.GROWTH_VALUES or {}
 local HEALTH_MODES = GP.HEALTH_MODES or {}
@@ -138,8 +150,8 @@ local function BuildGFAuras(ctx)
         widget:HookScript("OnEnter", function(self)
             if not _G.GameTooltip then return end
             _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            _G.GameTooltip:AddLine("Blizzard Aura Layering", 1, 1, 1)
-            _G.GameTooltip:AddLine("Blizzard renders these icons on MSUF's container. If icons appear behind frames, raise the container strata or frame level.", 0.72, 0.76, 0.86, true)
+            _G.GameTooltip:AddLine(Tr("Blizzard Aura Layering"), 1, 1, 1)
+            _G.GameTooltip:AddLine(Tr("Blizzard renders these icons on MSUF's container. If icons appear behind frames, raise the container strata or frame level."), 0.72, 0.76, 0.86, true)
             _G.GameTooltip:Show()
         end)
         widget:HookScript("OnLeave", function()
@@ -172,15 +184,15 @@ local function BuildGFAuras(ctx)
     PlaceDropdown(rendererMode, 14, -96, 180, true)
 
     local iconSize = BindRendererSlider(W.Slider(renderer, "", 8, 80, 1, 260), function() return AurasRoot(CurrentScope()) end, "blizzardIconSize", 20, "geometry",
-        function(v) return string.format("Icon size: %d", v) end)
+        function(v) return string.format(Tr("Icon size: %d"), v) end)
     PlaceSlider(iconSize, 14, -156, 260)
 
     local buffMax = BindRendererSlider(W.Slider(renderer, "", 0, 20, 1, 260), function() return AuraGroup(CurrentScope(), "buff") end, "max", 6, "visual",
-        function(v) return string.format("Buff max: %d", v) end)
+        function(v) return string.format(Tr("Buff max: %d"), v) end)
     PlaceSlider(buffMax, 14, -208, 260)
 
     local debuffMax = BindRendererSlider(W.Slider(renderer, "", 0, 20, 1, 260), function() return AuraGroup(CurrentScope(), "debuff") end, "max", 3, "visual",
-        function(v) return string.format("Debuff max: %d", v) end)
+        function(v) return string.format(Tr("Debuff max: %d"), v) end)
     PlaceSlider(debuffMax, 14, -260, 260)
 
     local routingLabel = W.Text(renderer, "Rendered by Blizzard", 350, -82, 330, T.colors.text)
@@ -211,7 +223,7 @@ local function BuildGFAuras(ctx)
     local function RefreshContainerLevelLabel(value)
         value = value or tonumber(GetAuraOption("blizzardContainerFrameLevel", 1)) or 1
         if containerLevel._msuf2Title then
-            containerLevel._msuf2Title:SetText(string.format("Container level: +%d", value))
+            containerLevel._msuf2Title:SetText(string.format(Tr("Container level: +%d"), value))
         end
     end
     containerLevel:HookScript("OnValueChanged", function(self, value)
@@ -561,8 +573,8 @@ local function BuildGFAuras(ctx)
             if cat.tooltip then
                 toggle:SetScript("OnEnter", function(self)
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:AddLine(cat.label or cat.key, 1, 1, 1)
-                    GameTooltip:AddLine(cat.tooltip, 0.7, 0.7, 0.7, true)
+                    GameTooltip:AddLine(Tr(cat.label or cat.key), 1, 1, 1)
+                    GameTooltip:AddLine(Tr(cat.tooltip), 0.7, 0.7, 0.7, true)
                     GameTooltip:Show()
                 end)
                 toggle:SetScript("OnLeave", function() GameTooltip:Hide() end)
