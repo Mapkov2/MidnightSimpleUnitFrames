@@ -2,6 +2,31 @@
 
 ## 5.1 Beta 2 - 2026-05-14
 
+### Performance (Stage 1 micro-optimizations)
+- **`UFCore_FlushTask`**: `Core._flushSettingsCacheSerial` is now set each flush tick, activating the
+  per-flush-cycle fast path in `UFCore_GetSettingsCache`. Previously the fast path was dead code
+  (serial never set), so every `GetSettingsCache()` call re-ran 4 table-ref comparisons.
+- **Health color gradient hot path**: `enableHealthGradient` is now snapped into file-scope locals
+  during `UFCore_RefreshSettingsCache`. `_HealthValueFast` and `Elements.Health.Update` read one
+  precomputed boolean instead of calling a per-frame DB/cache resolver.
+- **`GF.QueueGroupBorderRefresh`**: Pre-built stable closures per `kind` (created once on first call).
+  Switched primary dispatch to `MSUF_ScheduleOnce` (key-based dedup). Eliminates one new closure
+  allocation + `GF._groupBorderRefreshQueued` table write per `GROUP_ROSTER_UPDATE` burst call.
+- **Health color gradient checks**: `UFCore_RefreshFrameInvariantFlags` and
+  `UFCore_RefreshHealthBarColorFast` also use the file-scope snapshot, so all UFCore gradient-color
+  gates avoid per-frame DB resolution.
+- **`TargetUnitInFriendlySpellsRange`**: `InCombatLockdown()` hoisted to function entry;
+  eliminates the redundant `not InCombatLockdown or` nil-check pattern at both usage sites.
+
+### Bugfixes
+- **`MSUF_Alpha.lua` — secret-value arithmetic crash** (3111× spam): `GetAlpha()` and
+  `GetStatusBarColor()` return secret values when WoW execution is tainted. The alpha diff
+  functions (`_AlphaNearlyEqual`, `MSUF_Alpha_SetFlat`, `MSUF_Alpha_ApplyLayered`) and four
+  EditMode minimum-alpha comparisons all performed arithmetic/comparison on these values,
+  crashing with "attempt to perform arithmetic on a secret number value". All sites now use
+  `issecretvalue` guards before arithmetic; on secret input the functions fall through to
+  `SetAlpha` (safe conservative re-apply) rather than attempting comparison.
+
 ### New Features
 - Group Frame aura renderer split: Blizzard/native or MSUF custom.
 - Per-type Blizzard routing for buffs, debuffs, dispels, defensives, and private auras.
@@ -33,6 +58,9 @@
 - Fixed disabled Group Frames still running feature updates.
 - Fixed protected menu/edit operations being possible in combat.
 - Fixed Blizzard/native aura preview implying draggable custom placement.
+- Fixed Group Frame menu/Edit Mode preview hiding real raid/mythic raid frames after closing.
+- Fixed Group Frame range fade being skipped by runtime gating.
+- Fixed health color gradient toggle also enabling the HP bar overlay gradient.
 - Fixed Group Frame border/highlight preview behavior.
 - Fixed Absorb Bar Test Mode.
 - Fixed permanent buff toggle behavior.

@@ -5591,5 +5591,5 @@ _G.MSUF_GF_DispatchOverlays = dispatchOverlays
 _G.MSUF_GF_ApplyPowerColor = ApplyPowerColor
 _G.MSUF_GF_OnEvent         = GF_OnEvent
 -- Exported diagnostic helper. Do not wire this into health/power hotpaths
--- without Perfy and visual regression validation.
+-- without profiling and visual regression validation.
 _G.MSUF_GF_PixelSnap       = _GF_PixelSnappedSetValue
