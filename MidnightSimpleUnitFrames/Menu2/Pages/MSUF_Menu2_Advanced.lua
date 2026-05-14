@@ -468,6 +468,29 @@ local function ColorAt(ctx, section, label, x, y, getTable, key, defaultR, defau
     return MoveWidget(BindTableColor(ctx, section, label, getTable, key, defaultR, defaultG, defaultB, apply), section, x, y)
 end
 
+local function AddTooltip(widget, title, body)
+    if not widget then return widget end
+    local function ShowTooltip(self)
+        if not _G.GameTooltip then return end
+        _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if title and title ~= "" then _G.GameTooltip:AddLine(M.Tr and M.Tr(title) or title, 1, 1, 1) end
+        if body and body ~= "" then _G.GameTooltip:AddLine(M.Tr and M.Tr(body) or body, 0.72, 0.76, 0.86, true) end
+        _G.GameTooltip:Show()
+    end
+    local function HideTooltip()
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+    end
+    if widget.HookScript then
+        widget:HookScript("OnEnter", ShowTooltip)
+        widget:HookScript("OnLeave", HideTooltip)
+    end
+    if widget._msuf2LabelHit and widget._msuf2LabelHit.HookScript then
+        widget._msuf2LabelHit:HookScript("OnEnter", ShowTooltip)
+        widget._msuf2LabelHit:HookScript("OnLeave", HideTooltip)
+    end
+    return widget
+end
+
 local function ScopedToggleAt(ctx, section, label, x, y, getTable, key, default, beforeSet, afterSet)
     return ValueToggleAt(ctx, section, label, x, y,
         function() return BoolValue(getTable(), key, default) end,
@@ -770,10 +793,11 @@ local function BuildAuras(ctx)
     LabelAt(master, "|cff6EB5FFBuffs|r", displayCol1, -12, displayCol1W)
     LabelAt(master, "|cff6EB5FFDebuffs|r", displayCol2, -12, displayCol2W)
     LabelAt(master, "|cff6EB5FFBoss Heal Auras|r", displayCol3, bossLabelY, displayCol3W)
+    local hidePermanentTooltip = "Hides buffs with no duration. Debuffs are never hidden by this option.\n\nThis filter is applied out of combat only. Target/Focus APIs may still show permanent buffs during combat due to API limitations."
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Show Buffs", displayCol1 - 2, -28, AuraShared, "showBuffs", true, ApplyAuras), displayCol1W))
     Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, master, "Only my buffs", displayCol1 - 2, -50, AuraBuffFilters, "onlyMine", false, ForceAuraFilterOverride, ApplyAuras), displayCol1W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Highlight own buffs", displayCol1 - 2, -74, AuraShared, "highlightOwnBuffs", false, ApplyAuras), displayCol1W))
-    Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, master, "Hide permanent buffs", displayCol1 - 2, -96, AuraFilters, "hidePermanent", false, ForceAuraFilterOverride, ApplyAuras), displayCol1W))
+    Track(filterOverrideControls, AddTooltip(FitInlineToggle(ScopedToggleAt(ctx, master, "Hide permanent buffs", displayCol1 - 2, -96, AuraFilters, "hidePermanent", false, ForceAuraFilterOverride, ApplyAuras), displayCol1W), "Hide permanent buffs", hidePermanentTooltip))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Show Debuffs", displayCol2 - 2, -28, AuraShared, "showDebuffs", true, ApplyAuras), displayCol2W))
     Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, master, "Only my debuffs", displayCol2 - 2, -50, AuraDebuffFilters, "onlyMine", false, ForceAuraFilterOverride, ApplyAuras), displayCol2W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Highlight own debuffs", displayCol2 - 2, -74, AuraShared, "highlightOwnDebuffs", false, ApplyAuras), displayCol2W))

@@ -376,11 +376,14 @@ function Filters.EnsureSharedFilters(a2, shared)
         shared.filters = sf
     end
 
+    local legacyMigrated = sf._msufA2_sharedFiltersMigrated_v1 == true
     Filters.NormalizeFilters(sf, shared, "_msufA2_sharedFiltersMigrated_v1")
 
     -- Compatibility: some Options builds still toggle shared.hidePermanent directly.
-    -- Mirror that value into shared.filters.hidePermanent so the runtime filter respects the UI.
-    if shared.hidePermanent ~= nil and sf.hidePermanent ~= shared.hidePermanent then
+    -- Mirror that value only during the one-time migration. After that, the
+    -- canonical value is shared.filters.hidePermanent and the legacy flag is
+    -- derived from it below.
+    if not legacyMigrated and shared.hidePermanent ~= nil and sf.hidePermanent ~= shared.hidePermanent then
         sf.hidePermanent = (shared.hidePermanent == true)
     end
 
