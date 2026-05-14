@@ -23,6 +23,27 @@ local function RefreshUFPreview(reason)
     if type(fn) == "function" then fn(reason or "EM2_LAYOUT") end
 end
 
+local function IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if InCombatLockdown and InCombatLockdown() then return true end
+    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
+end
+
+local function BlockConfigCombatLocked()
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+        return _G.MSUF_BlockConfigCombatLocked() and true or false
+    end
+    if IsConfigCombatLocked() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        end
+        return true
+    end
+    return false
+end
+
 -- Theme (read from MSUF_THEME, fall back to Midnight defaults)
 local function T()
     return _G.MSUF_THEME or {
@@ -762,7 +783,7 @@ end
 
 local function NudgeTarget(dx, dy)
     if not EM2.State or not EM2.State.IsActive() then return end
-    if InCombatLockdown and InCombatLockdown() then return end
+    if BlockConfigCombatLocked() then return end
     local db = _G.MSUF_DB
     if not db then return end
     local s = GetStep()
@@ -924,7 +945,7 @@ function Nudge.Enable()
         end
     end
 
-    if InCombatLockdown and InCombatLockdown() then
+    if IsConfigCombatLocked() then
         owner.__msufPendingClear = false
         owner:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
@@ -936,7 +957,7 @@ end
 
 function Nudge.Disable()
     if not owner then return end
-    if InCombatLockdown and InCombatLockdown() then
+    if IsConfigCombatLocked() then
         owner.__msufPendingClear = true
         owner:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
@@ -1055,7 +1076,7 @@ local function OnUpdate(self, elapsed)
         -- ═══════════════════════════════════════════════════════════════
 
         local bar = d.bar
-        if bar and not InCombatLockdown() then
+        if bar and not IsConfigCombatLocked() then
             local anchor = d.anchor
             local conf = d.conf
 
@@ -1248,7 +1269,7 @@ function Ticker.EndDrag()
         if d.isGroupFrame and d.conf then
             d.conf.offsetX = round(cx - d.screenW * 0.5)
             d.conf.offsetY = round(cy - d.screenH * 0.5)
-            if d.bar and not InCombatLockdown() then
+            if d.bar and not IsConfigCombatLocked() then
                 pcall(function()
                     d.bar._msufDragActive = false
                     d.bar:ClearAllPoints()

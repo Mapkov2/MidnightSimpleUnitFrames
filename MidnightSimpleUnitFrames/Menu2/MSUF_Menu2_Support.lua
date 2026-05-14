@@ -21,6 +21,28 @@ local function Print(msg)
     end
 end
 
+local function IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return true end
+    return (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false
+end
+
+local function ShowConfigCombatLockMessage()
+    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+        _G.MSUF_ShowConfigCombatLockMessage()
+    else
+        Print("Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
+    end
+end
+
+local function BlockConfigCombatLocked(silent)
+    if not IsConfigCombatLocked() then return false end
+    if not silent then ShowConfigCombatLockMessage() end
+    return true
+end
+
 local function EnsureGeneral()
     if type(_G.EnsureDB) == "function" then pcall(_G.EnsureDB) end
     _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
@@ -95,8 +117,7 @@ end
 local pendingReloadRecommendedLabel
 
 function _G.MSUF_ShowReloadRecommendedPopup(label)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-        Print("Reload recommended, but the popup cannot be shown in combat.")
+    if BlockConfigCombatLocked(false) then
         return
     end
     if not _G.StaticPopupDialogs then return end
@@ -431,8 +452,7 @@ local function RestoreBlizzardUiScaleOnce()
 end
 
 local function RestoreBlizzardUiScale(silent)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-        if not silent then Print("Cannot restore Blizzard UI scale in combat.") end
+    if BlockConfigCombatLocked(silent) then
         return false
     end
 
@@ -509,7 +529,7 @@ local function SetGlobalUiScale(scale, silent)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         pendingGlobalScale = scale
         if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
-        if not silent then Print("Cannot change global UI scale in combat. Will apply after combat.") end
+        if not silent then ShowConfigCombatLockMessage() end
         return
     end
 
@@ -524,7 +544,7 @@ ResetGlobalUiScale = function(silent)
         pendingDisableScaling = true
         pendingGlobalScale = nil
         if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
-        if not silent then Print("Cannot disable global UI scale in combat. Will apply after combat.") end
+        if not silent then ShowConfigCombatLockMessage() end
         return false
     end
 
@@ -589,7 +609,7 @@ local function SetScalingDisabled(disable, silent)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         pendingDisableScaling = true
         if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
-        if not silent then Print("Global UI scale will disable after combat. MSUF frame and menu scaling are unchanged.") end
+        if not silent then ShowConfigCombatLockMessage() end
         return
     end
     ResetGlobalUiScale(true)

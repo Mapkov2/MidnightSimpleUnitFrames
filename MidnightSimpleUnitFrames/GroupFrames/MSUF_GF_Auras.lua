@@ -1319,6 +1319,8 @@ do
         f:RegisterEvent("PLAYER_REGEN_ENABLED")
         f:RegisterEvent("PLAYER_ENTERING_WORLD")
         f:SetScript("OnEvent", function()
+            if GF.UpdateAnyEnabledFlag then GF.UpdateAnyEnabledFlag() end
+            if GF._anyEnabled == false then return end
             if _gfCdTextMgr and _gfCdTextMgr.count and _gfCdTextMgr.count > 0 then
                 GF.ForceCooldownTextRecolor()
             end
@@ -3470,18 +3472,23 @@ local function _DoAuraOptionsRefresh()
         end)
     elseif GF.frames then
         for f in pairs(GF.frames) do
-            if f and GF.BuildFrameCache then GF.BuildFrameCache(f) end
-            if f and f.unit and GF.RegisterUnitEvents then GF.RegisterUnitEvents(f, f.unit) end
-            if f and f.unit and UnitExists(f.unit) then
-                GF.UpdateFrameAuras(f, f.unit)
-                local c = f._c
-                if c and c.paEn and GF.ApplyPrivateAuras then
-                    GF.ApplyPrivateAuras(f, f.unit)
-                elseif GF.ClearPrivateAuras then
-                    GF.ClearPrivateAuras(f)
+            if GF.IsFrameRuntimeEnabled and not GF.IsFrameRuntimeEnabled(f, f and f._msufGFKind) then
+                if f and GF.HideFrameAuras then GF.HideFrameAuras(f) end
+                if f and GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
+            else
+                if f and GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                if f and f.unit and GF.RegisterUnitEvents then GF.RegisterUnitEvents(f, f.unit) end
+                if f and f.unit and UnitExists(f.unit) then
+                    GF.UpdateFrameAuras(f, f.unit)
+                    local c = f._c
+                    if c and c.paEn and GF.ApplyPrivateAuras then
+                        GF.ApplyPrivateAuras(f, f.unit)
+                    elseif GF.ClearPrivateAuras then
+                        GF.ClearPrivateAuras(f)
+                    end
+                elseif f then
+                    GF.HideFrameAuras(f)
                 end
-            elseif f then
-                GF.HideFrameAuras(f)
             end
         end
     end

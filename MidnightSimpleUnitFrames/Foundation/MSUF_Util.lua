@@ -484,6 +484,46 @@ if not _G.MSUF_IsInAnyEditMode then
     end
 end
 
+do
+    local _lastConfigCombatMessage = 0
+
+    if type(_G.MSUF_IsConfigCombatLocked) ~= "function" then
+        function _G.MSUF_IsConfigCombatLocked()
+            if InCombatLockdown and InCombatLockdown() then return true end
+            local uac = _G.UnitAffectingCombat
+            if type(uac) == "function" and uac("player") then return true end
+            return false
+        end
+    end
+
+    if type(_G.MSUF_ShowConfigCombatLockMessage) ~= "function" then
+        function _G.MSUF_ShowConfigCombatLockMessage()
+            local now = (GetTime and GetTime()) or 0
+            if now > 0 and (now - _lastConfigCombatMessage) < 1.25 then return end
+            _lastConfigCombatMessage = now
+
+            local msg = "|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."
+            local tr = ns and ns.Translate
+            if type(tr) == "function" then msg = tr(msg) or msg end
+            if _G.UIErrorsFrame and _G.UIErrorsFrame.AddMessage then
+                _G.UIErrorsFrame:AddMessage(msg, 1, 0.82, 0.1)
+            end
+            if print then print(msg) end
+        end
+    end
+
+    if type(_G.MSUF_BlockConfigCombatLocked) ~= "function" then
+        function _G.MSUF_BlockConfigCombatLocked()
+            local locked = _G.MSUF_IsConfigCombatLocked and _G.MSUF_IsConfigCombatLocked()
+            if locked then
+                if _G.MSUF_ShowConfigCombatLockMessage then _G.MSUF_ShowConfigCombatLockMessage() end
+                return true
+            end
+            return false
+        end
+    end
+end
+
 -- Global helper: restore UIPanelButtonTemplate pieces if another skin/hide pass removed them.
 -- This is defensive and safe to call repeatedly; it only touches obvious regions (Left/Middle/Right/Normal/Font).
 if not _G.MSUF_ForceShowUIPanelButtonPieces then

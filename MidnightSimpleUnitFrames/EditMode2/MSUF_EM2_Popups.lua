@@ -90,6 +90,25 @@ local function RefreshUFPreview(reason)
     if type(fn) == "function" then fn(reason or "EM2_POPUP") end
 end
 
+local function BlockConfigCombatLocked()
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+        return _G.MSUF_BlockConfigCombatLocked() and true or false
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        end
+        return true
+    end
+    if UnitAffectingCombat and UnitAffectingCombat("player") then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        end
+        return true
+    end
+    return false
+end
+
 -- Panel
 function Factory.Panel(name, width, visibleH, title)
     width = width or PW; visibleH = visibleH or 540
@@ -102,7 +121,10 @@ function Factory.Panel(name, width, visibleH, title)
     pf:SetBackdropColor(unpack(C.panelBg)); pf:SetBackdropBorderColor(unpack(C.panelEdge))
     pf:EnableMouse(true); pf:SetMovable(true); pf:SetClampedToScreen(true)
     pf:RegisterForDrag("LeftButton")
-    pf:SetScript("OnDragStart", function(s) if not InCombatLockdown() then s:StartMoving() end end)
+    pf:SetScript("OnDragStart", function(s)
+        if BlockConfigCombatLocked() then return end
+        s:StartMoving()
+    end)
     pf:SetScript("OnDragStop", function(s) s:StopMovingOrSizing() end)
 
     local titleFS = FS(pf, 15, C.title)
@@ -845,7 +867,7 @@ local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 th
 local pf
 
 local function Apply()
-    if InCombatLockdown and InCombatLockdown() then return end
+    if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit then return end
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
     if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
@@ -1062,7 +1084,7 @@ local function Build()
 end
 
 local UnitPopup = {}; EM2.UnitPopup = UnitPopup
-function UnitPopup.Open(u, parent) if InCombatLockdown and InCombatLockdown() then return end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show() end
+function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); return true end
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end
@@ -1202,7 +1224,7 @@ local function ReanchorCastbarUnit(u)
     if type(_G[ra])=="function" then _G[ra]() end
 end
 local function ApplyWidthSource()
-    if InCombatLockdown and InCombatLockdown() then return end
+    if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit then return end
     local g = EG(); if not g then return end
     local u = pf.unit
@@ -1221,7 +1243,7 @@ local function ApplyWidthSource()
 end
 
 local function Apply()
-    if InCombatLockdown and InCombatLockdown() then return end
+    if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit then return end; local g=EG(); if not g then return end; local u=pf.unit
     if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("castbar", u) end
     if u=="boss" then
@@ -1494,10 +1516,10 @@ local function Build()
 end
 
 local CastPopup = {}; EM2.CastPopup = CastPopup
-function CastPopup.Open(u, parent) if InCombatLockdown and InCombatLockdown() then return end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); SetTest(u, true)
+function CastPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); SetTest(u, true)
     pf:SetScript("OnHide", function()
         if pf.unit and not _G.MSUF_UnitPreviewActive then SetTest(pf.unit, false) end
-    end) end
+    end); return true end
 function CastPopup.Close() if pf then
     if pf.unit and not _G.MSUF_UnitPreviewActive then SetTest(pf.unit, false) end
     pf:Hide() end end
@@ -1559,7 +1581,7 @@ local function ApplyNativePopupState()
 end
 
 local function Apply()
-    if InCombatLockdown and InCombatLockdown() then return end
+    if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit then return end; local a2=A2(); if not a2 then return end
     a2.shared=a2.shared or {}; a2.perUnit=a2.perUnit or {}; local uk=pf.unit
     if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("aura", uk) end
@@ -1710,7 +1732,7 @@ local function Build()
 end
 
 local AuraPopup = {}; EM2.AuraPopup = AuraPopup
-function AuraPopup.Open(u, parent) if InCombatLockdown and InCombatLockdown() then return end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show() end
+function AuraPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); return true end
 function AuraPopup.Close() if pf then pf:Hide() end end
 function AuraPopup.IsOpen() return pf and pf:IsShown() or false end
 function AuraPopup.Sync() if pf and pf:IsShown() then Sync() end end

@@ -104,6 +104,22 @@ local active      = false
 local unitKey     = nil
 local combatFrame = nil
 
+local function IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if InCombatLockdown and InCombatLockdown() then return true end
+    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
+end
+
+local function ShowConfigCombatLockMessage()
+    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+        _G.MSUF_ShowConfigCombatLockMessage()
+    elseif print then
+        print("|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
+    end
+end
+
 -- Legacy global sync (contract with 30+ external files)
 local function SyncLegacy()
     _G.MSUF_UnitEditModeActive = active
@@ -241,6 +257,11 @@ end
 
 -- ENTER Edit Mode
 function State.Enter(key)
+    if IsConfigCombatLocked() then
+        ShowConfigCombatLockMessage()
+        return false
+    end
+
     if active then
         -- Already active: just switch unit
         if key then
@@ -250,9 +271,6 @@ function State.Enter(key)
         end
         return
     end
-
-    if InCombatLockdown and InCombatLockdown() then return end
-    if UnitAffectingCombat and UnitAffectingCombat("player") then return end
     if not EnsureDB() then return end
 
     active  = true
@@ -428,6 +446,7 @@ function State.EnsureCombatListener()
     combatFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" and active then
             State.Exit("combat")
+            ShowConfigCombatLockMessage()
         end
     end)
 end

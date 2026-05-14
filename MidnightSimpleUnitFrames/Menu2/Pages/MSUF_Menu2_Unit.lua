@@ -663,7 +663,11 @@ local function CopyUnitSettings(unit, target, scopes)
 end
 
 local function ToggleEditMode(unit)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        return
+    end
     local active = (_G.MSUF_IsMSUFEditModeActive and _G.MSUF_IsMSUFEditModeActive()) or _G.MSUF_UnitEditModeActive
     if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
         _G.MSUF_SetMSUFEditModeDirect(not active, CanonUnitKey(unit))

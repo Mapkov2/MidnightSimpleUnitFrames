@@ -829,6 +829,33 @@ function T.Button(parent, text, width, height)
         M.RegisterSearchWidget(btn, { label = text, kind = "button", anchor = label })
     end
 
+    local rawSetScript = btn.SetScript
+    btn.SetScript = function(self, scriptType, handler)
+        if scriptType == "OnClick" and type(handler) == "function" then
+            local wrapped = function(...)
+                if not self._msuf2AllowCombatClick then
+                    local blocked = false
+                    if M and type(M.BlockCombatAction) == "function" then
+                        blocked = M.BlockCombatAction() and true or false
+                    elseif type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+                        blocked = _G.MSUF_BlockConfigCombatLocked() and true or false
+                    elseif (_G.InCombatLockdown and _G.InCombatLockdown())
+                        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+                    then
+                        blocked = true
+                        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+                            _G.MSUF_ShowConfigCombatLockMessage()
+                        end
+                    end
+                    if blocked then return end
+                end
+                return handler(...)
+            end
+            return rawSetScript(self, scriptType, wrapped)
+        end
+        return rawSetScript(self, scriptType, handler)
+    end
+
     btn.SetText = function(self, value)
         local raw = value or ""
         local text = Tr(raw)
