@@ -67,9 +67,8 @@ jobs:
             throw "No release zip found in dist."
           }
 
-          $publishArgs = @("-Version", $env:RELEASE_VERSION, "-ZipPath", $zip.FullName)
           if ($env:RELEASE_IS_PRERELEASE -eq "true") {
-            $publishArgs += "-Prerelease"
+            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ZipPath $zip.FullName -Prerelease
+          } else {
+            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ZipPath $zip.FullName
           }
-
-          ./tools/publish-wago.ps1 @publishArgs
