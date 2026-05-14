@@ -1640,6 +1640,10 @@ local function EnsureBlizzardAuraDefaults(auras)
     if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
     if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
     if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+    if auras.blizzardContainerStrata == nil then auras.blizzardContainerStrata = "AUTO" end
+    if auras.blizzardContainerFrameLevel == nil then auras.blizzardContainerFrameLevel = 1 end
+    if auras.blizzardPrivateLayerFix == nil then auras.blizzardPrivateLayerFix = true end
+    if auras.blizzardPrivateLayerOffset == nil then auras.blizzardPrivateLayerOffset = 1 end
     auras.blizzardContainerAnchor = "FRAME"
     auras.blizzardContainerX = 0
     auras.blizzardContainerY = 0
