@@ -1576,12 +1576,11 @@ local function GetAuraMockStackColor()
     return ReadAuraMockColor(g and g.aurasStackCountColor, 1, 1, 1)
 end
 
-------------------------------------------------------------------------
--- Apply cooldown + stack text to a single mock icon. Reads the same
--- gcfg keys the real aura pipeline uses so the options sliders provide
--- live visual feedback on the mock frame.
--- `showText` gates whether the text layer is rendered. Cooldown and stack
--- text still obey the group's own showCooldown/showStacks settings.
+-- Apply cooldown, stack and external DR text to a single mock icon. Reads
+-- the same gcfg keys the real aura pipeline uses so the options sliders
+-- provide live visual feedback on the mock frame.
+-- `showText` gates cooldown/stack text only; external DR is its own feature
+-- and follows showDR like the live renderer.
 ------------------------------------------------------------------------
 local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
     if not ic or not gcfg then return end
@@ -1592,8 +1591,6 @@ local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
     if not showText then
         if ic._cdText  then ic._cdText:Hide()  end
         if ic._stkText then ic._stkText:Hide() end
-        if ic._drText  then ic._drText:Hide()  end
-        return
     end
 
     local fontPath, fontFlags = GetAuraMockFont(kind)
@@ -1601,76 +1598,87 @@ local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
     local showCd = gcfg.showCooldown ~= false
     local showSt = gcfg.showStacks ~= false
 
-    local cdTarget = ic._cdPreviewFrame
-    if not cdTarget then
-        cdTarget = CreateFrame("Frame", nil, ic)
-        cdTarget:EnableMouse(false)
-        ic._cdPreviewFrame = cdTarget
-    end
-    cdTarget:ClearAllPoints()
-    cdTarget:SetAllPoints(ic)
+    if showText then
+        local cdTarget = ic._cdPreviewFrame
+        if not cdTarget then
+            cdTarget = CreateFrame("Frame", nil, ic)
+            cdTarget:EnableMouse(false)
+            ic._cdPreviewFrame = cdTarget
+        end
+        cdTarget:ClearAllPoints()
+        cdTarget:SetAllPoints(ic)
 
-    -- Cooldown text: same settings as live GF auras, scaled with the mock frame.
-    local cd = ic._cdText
-    if not cd then
-        cd = ic:CreateFontString(nil, "OVERLAY")
-        ic._cdText = cd
-    end
-    if showCd then
-        local cdFlags = gcfg.cooldownOutline or fontFlags
-        local cdSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownSize or 8, frameScale, 6)))
-        if cd.SetFont then cd:SetFont(fontPath, cdSize, cdFlags) end
-        cd:SetText(AURA_MOCK_CD_TEXT)
-        cd:SetTextColor(GetAuraMockCooldownColor())
-        cd:ClearAllPoints()
-        local cdAnchor = gcfg.cooldownAnchor or "CENTER"
-        local cdOX = LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownOffsetX or 0, frameScale))
-        local cdOY = LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownOffsetY or 0, frameScale))
-        cd:SetPoint(cdAnchor, cdTarget, cdAnchor, cdOX, cdOY)
-        cd:Show()
-    else
-        cd:Hide()
-    end
+        -- Cooldown text: same settings as live GF auras, scaled with the mock frame.
+        local cd = ic._cdText
+        if not cd then
+            cd = ic:CreateFontString(nil, "OVERLAY")
+            ic._cdText = cd
+        end
+        if showCd then
+            local cdFlags = gcfg.cooldownOutline or fontFlags
+            local cdSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownSize or 8, frameScale, 6)))
+            if cd.SetFont then cd:SetFont(fontPath, cdSize, cdFlags) end
+            cd:SetText(AURA_MOCK_CD_TEXT)
+            cd:SetTextColor(GetAuraMockCooldownColor())
+            cd:ClearAllPoints()
+            local cdAnchor = gcfg.cooldownAnchor or "CENTER"
+            local cdOX = LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownOffsetX or 0, frameScale))
+            local cdOY = LiveToPreviewValue(ScaleFrameValue(gcfg.cooldownOffsetY or 0, frameScale))
+            cd:SetPoint(cdAnchor, cdTarget, cdAnchor, cdOX, cdOY)
+            cd:Show()
+        else
+            cd:Hide()
+        end
 
-    -- Stack count text: same settings as live GF auras, scaled with the mock frame.
-    local st = ic._stkText
-    if not st then
-        st = ic:CreateFontString(nil, "OVERLAY")
-        ic._stkText = st
-    end
-    if showSt then
-        local stFlags = gcfg.stackOutline or fontFlags
-        local stSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.stackSize or 10, frameScale, 6)))
-        if st.SetFont then st:SetFont(fontPath, stSize, stFlags) end
-        st:SetText(AURA_MOCK_STACK_TEXT)
-        st:SetTextColor(GetAuraMockStackColor())
-        st:ClearAllPoints()
-        local stAnchor = gcfg.stackAnchor or "BOTTOMRIGHT"
-        local stOX = LiveToPreviewValue(ScaleFrameValue(gcfg.stackOffsetX or -1, frameScale))
-        local stOY = LiveToPreviewValue(ScaleFrameValue(gcfg.stackOffsetY or 1, frameScale))
-        st:SetPoint(stAnchor, ic, stAnchor, stOX, stOY)
-        st:Show()
-    else
-        st:Hide()
+        -- Stack count text: same settings as live GF auras, scaled with the mock frame.
+        local st = ic._stkText
+        if not st then
+            st = ic:CreateFontString(nil, "OVERLAY")
+            ic._stkText = st
+        end
+        if showSt then
+            local stFlags = gcfg.stackOutline or fontFlags
+            local stSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.stackSize or 10, frameScale, 6)))
+            if st.SetFont then st:SetFont(fontPath, stSize, stFlags) end
+            st:SetText(AURA_MOCK_STACK_TEXT)
+            st:SetTextColor(GetAuraMockStackColor())
+            st:ClearAllPoints()
+            local stAnchor = gcfg.stackAnchor or "BOTTOMRIGHT"
+            local stOX = LiveToPreviewValue(ScaleFrameValue(gcfg.stackOffsetX or -1, frameScale))
+            local stOY = LiveToPreviewValue(ScaleFrameValue(gcfg.stackOffsetY or 1, frameScale))
+            st:SetPoint(stAnchor, ic, stAnchor, stOX, stOY)
+            st:Show()
+        else
+            st:Hide()
+        end
     end
 
     local dr = ic._drText
     if not dr then
         dr = ic:CreateFontString(nil, "OVERLAY")
+        if dr.SetDrawLayer then dr:SetDrawLayer("OVERLAY", 3) end
+        if dr.SetJustifyH then dr:SetJustifyH("LEFT") end
         ic._drText = dr
     end
+    ic.drText = dr
     if gcfg.showDR == true then
-        local drFlags = gcfg.drOutline or fontFlags
-        local drSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.drSize or 9, frameScale, 6)))
-        if dr.SetFont then dr:SetFont(fontPath, drSize, drFlags) end
-        dr:SetText("75%")
-        dr:SetTextColor(GetAuraMockBaseCooldownColor())
-        dr:ClearAllPoints()
-        local drAnchor = gcfg.drAnchor or "TOPLEFT"
-        local drOX = LiveToPreviewValue(ScaleFrameValue(gcfg.drOffsetX or 1, frameScale))
-        local drOY = LiveToPreviewValue(ScaleFrameValue(gcfg.drOffsetY or -1, frameScale))
-        dr:SetPoint(drAnchor, ic, drAnchor, drOX, drOY)
-        dr:Show()
+        local applied = false
+        if type(GF.ApplyExternalDRPreview) == "function" then
+            applied = GF.ApplyExternalDRPreview(ic, gcfg, frameScale, 75, tonumber(previewScale) or GetPreviewZoom())
+        end
+        if not applied then
+            local drFlags = gcfg.drOutline or fontFlags
+            local drSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.drSize or 9, frameScale, 6)))
+            if dr.SetFont then dr:SetFont(fontPath, drSize, drFlags) end
+            dr:SetText("75%")
+            dr:SetTextColor(GetAuraMockBaseCooldownColor())
+            dr:ClearAllPoints()
+            local drAnchor = gcfg.drAnchor or "TOPLEFT"
+            local drOX = LiveToPreviewValue(ScaleFrameValue(gcfg.drOffsetX or 1, frameScale))
+            local drOY = LiveToPreviewValue(ScaleFrameValue(gcfg.drOffsetY or -1, frameScale))
+            dr:SetPoint(drAnchor, ic, drAnchor, drOX, drOY)
+            dr:Show()
+        end
     else
         dr:Hide()
     end
@@ -2474,11 +2482,12 @@ function GF.RefreshPreviewHandles()
                 h._blizzTags = tagPool
                 local poolIndex = 1
                 local function PlaceEntry(entry, x, y, cellSize)
-                    local tex = pool[poolIndex]
+                    local idx = poolIndex
+                    local tex = pool[idx]
                     if not tex then
                         tex = h:CreateTexture(nil, "ARTWORK")
                         tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                        pool[poolIndex] = tex
+                        pool[idx] = tex
                     end
                     local iconIDs = AURA_GRP_ICON_IDS[entry.kind] or AURA_GRP_ICON_IDS.debuff
                     local spellId = iconIDs[((entry.seq - 1) % #iconIDs) + 1]
@@ -2491,11 +2500,11 @@ function GF.RefreshPreviewHandles()
                     tex:SetVertexColor(1, 1, 1, 0.92)
                     tex:Show()
 
-                    local tag = tagPool[poolIndex]
+                    local tag = tagPool[idx]
                     if not tag then
                         tag = h:CreateFontString(nil, "OVERLAY")
                         tag:SetFont("Fonts\\FRIZQT__.TTF", 6, "OUTLINE")
-                        tagPool[poolIndex] = tag
+                        tagPool[idx] = tag
                     end
                     if entry.tag then
                         local tc = entry.tagColor or { 1, 1, 1 }
@@ -2507,7 +2516,8 @@ function GF.RefreshPreviewHandles()
                     else
                         tag:Hide()
                     end
-                    poolIndex = poolIndex + 1
+
+                    poolIndex = idx + 1
                 end
                 local function PlaceGrid(entries, startX, startY, cellSize, cols)
                     if #entries <= 0 then return end
@@ -2544,6 +2554,9 @@ function GF.RefreshPreviewHandles()
                     h._label:SetTextColor(0.36, 0.62, 0.95, 0.95)
                 end
                 h:SetShown(_visToggles.blizzard ~= false)
+                if extOn and extCfg and extCfg.showDR == true and _coordLabel then
+                    _coordLabel:SetText(Tr("DR % is custom Defensives only - disable Use Blizzard: Defensives."))
+                end
             end
         end
     end
