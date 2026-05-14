@@ -342,6 +342,33 @@ local function SyncAuraIconGeometry(icon, size)
     return changed
 end
 
+local function SetStackTextIfChanged(fs, text)
+    if not fs then return end
+    if issecretvalue and issecretvalue(text) then
+        fs._msufGFStackText = nil
+        fs:SetText(text)
+        return
+    end
+    if fs._msufGFStackText ~= text then
+        fs._msufGFStackText = text
+        fs:SetText(text)
+    end
+end
+
+local function SetStackShownIfChanged(fs, shown)
+    if not fs then return end
+    shown = shown and true or false
+    if fs._msufGFStackShown == shown then return end
+    fs._msufGFStackShown = shown
+    if shown then fs:Show() else fs:Hide() end
+end
+
+local function ClearStackText(fs)
+    if not fs then return end
+    SetStackTextIfChanged(fs, "")
+    SetStackShownIfChanged(fs, false)
+end
+
 local function AcquireAuraIcon(parent, size)
     if _iconRecyclerN > 0 then
         local icon = _iconRecycler[_iconRecyclerN]
@@ -353,8 +380,18 @@ local function AcquireAuraIcon(parent, size)
         if icon.texture then icon.texture:SetTexCoord(0, 1, 0, 1); icon.texture:SetDesaturated(false) end
         if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(icon) end
         icon._msufGF_cdDurationObj = nil
-        if icon.cooldown then icon.cooldown._msufGF_cdDurationObj = nil; icon.cooldown:Clear(); if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end end
-        if icon.count then icon.count:SetText(""); icon.count:Hide() end
+        icon._msufGF_cdCleared = true
+        if icon.cooldown then
+            icon.cooldown._msufGF_cdDurationObj = nil
+            if icon.cooldown._msufGFCdAuraTime ~= false and icon.cooldown.SetUseAuraDisplayTime then
+                icon.cooldown._msufGFCdAuraTime = false
+                icon.cooldown:SetUseAuraDisplayTime(false)
+            end
+            icon.cooldown._msufGF_cdCleared = true
+            icon.cooldown:Clear()
+            if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end
+        end
+        ClearStackText(icon.count)
         -- Defensive: ensure tracking fields are clean (Recycle clears them, but
         -- belt-and-braces in case future code paths feed the recycler differently).
         icon._msufAuraID       = nil
@@ -500,8 +537,7 @@ local function CreateAuraIcon(parent, size)
     count:SetDrawLayer("OVERLAY", 2)
     count:SetJustifyH("RIGHT")
     count:SetTextColor(1, 1, 1, 1)
-    count:SetText("")
-    count:Hide()
+    ClearStackText(count)
     icon.count = count
 
     icon:SetBackdrop({
@@ -641,30 +677,31 @@ end
 -- transitions (most aura updates re-enter ApplyCooldown but keep the
 -- same on/off state). Cheap when state is steady.
 ------------------------------------------------------------------------
+local function ClearCooldownIfNeeded(ic, cd)
+    if not cd then return end
+    if ic._msufGF_cdCleared and cd._msufGF_cdCleared then return end
+    ic._msufGF_cdDurationObj = nil
+    cd._msufGF_cdDurationObj = nil
+    if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
+    if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
+        cd._msufGFCdAuraTime = false
+        cd:SetUseAuraDisplayTime(false)
+    end
+    cd:Clear()
+    ic._msufGF_cdCleared = true
+    cd._msufGF_cdCleared = true
+end
+
 local function ApplyCooldown(ic, unit, auraInstanceID, showCooldown, showText)
     local cd = ic.cooldown
     if not cd then return end
     if not showCooldown then
-        ic._msufGF_cdDurationObj = nil
-        cd._msufGF_cdDurationObj = nil
-        if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
-        if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
-            cd._msufGFCdAuraTime = false
-            cd:SetUseAuraDisplayTime(false)
-        end
-        cd:Clear()
+        ClearCooldownIfNeeded(ic, cd)
         return
     end
     if not _apisBound then BindAPIs() end
     if not _getDuration or not auraInstanceID then
-        ic._msufGF_cdDurationObj = nil
-        cd._msufGF_cdDurationObj = nil
-        if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
-        if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
-            cd._msufGFCdAuraTime = false
-            cd:SetUseAuraDisplayTime(false)
-        end
-        cd:Clear()
+        ClearCooldownIfNeeded(ic, cd)
         return
     end
     local obj = _getDuration(unit, auraInstanceID)
@@ -672,6 +709,8 @@ local function ApplyCooldown(ic, unit, auraInstanceID, showCooldown, showText)
         local fn = cd.SetCooldownFromDurationObject
         if fn then
             fn(cd, obj)
+            ic._msufGF_cdCleared = nil
+            cd._msufGF_cdCleared = nil
             ic._msufGF_cdDurationObj = obj
             cd._msufGF_cdDurationObj = obj
             cd._msufCooldownFontStringDirty = true
@@ -683,14 +722,7 @@ local function ApplyCooldown(ic, unit, auraInstanceID, showCooldown, showText)
             return
         end
     end
-    if cd._msufGFCdAuraTime ~= false and cd.SetUseAuraDisplayTime then
-        cd._msufGFCdAuraTime = false
-        cd:SetUseAuraDisplayTime(false)
-    end
-    ic._msufGF_cdDurationObj = nil
-    cd._msufGF_cdDurationObj = nil
-    if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
-    cd:Clear()
+    ClearCooldownIfNeeded(ic, cd)
 end
 
 ------------------------------------------------------------------------
@@ -699,7 +731,7 @@ end
 local function ApplyStacks(ic, unit, auraInstanceID, applications, showStacks, cfg)
     local fs = ic.count
     if not fs then return end
-    if not showStacks then fs:SetText(""); fs:Hide(); return end
+    if not showStacks then ClearStackText(fs); return end
 
     -- EQoL pattern: use GetAuraApplicationDisplayCount for display (handles secrets C-side)
     if not _apisBound then BindAPIs() end
@@ -707,8 +739,8 @@ local function ApplyStacks(ic, unit, auraInstanceID, applications, showStacks, c
         local display = _getStackCount(unit, auraInstanceID, 2, 99)
         if display ~= nil then
             -- SetText accepts secret values natively (C-side renders)
-            fs:SetText(display)
-            fs:Show()
+            SetStackTextIfChanged(fs, display)
+            SetStackShownIfChanged(fs, true)
             return
         end
     end
@@ -716,13 +748,19 @@ local function ApplyStacks(ic, unit, auraInstanceID, applications, showStacks, c
     -- Fallback: direct applications field
     if applications ~= nil then
         if issecretvalue and issecretvalue(applications) then
-            fs:SetText("?"); fs:Show(); return
+            SetStackTextIfChanged(fs, "?")
+            SetStackShownIfChanged(fs, true)
+            return
         end
         local n = tonumber(applications)
-        if n and n >= 2 then fs:SetText(n); fs:Show(); return end
+        if n and n >= 2 then
+            SetStackTextIfChanged(fs, n)
+            SetStackShownIfChanged(fs, true)
+            return
+        end
     end
 
-    fs:SetText(""); fs:Hide()
+    ClearStackText(fs)
 end
 
 ------------------------------------------------------------------------
@@ -3390,8 +3428,8 @@ do
                 if ic then
                     ic.texture:SetTexture(MOCK_BUFFS[i])
                     ic.texture:Show()
-                    if ic.cooldown then ic.cooldown:Clear() end
-                    if ic.count then ic.count:SetText(""); ic.count:Hide() end
+                    if ic.cooldown then ClearCooldownIfNeeded(ic, ic.cooldown) end
+                    ClearStackText(ic.count)
                     ic:SetBackdropBorderColor(0, 0, 0, 1)
                     PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv, maxShow)
                     ic:Show()
@@ -3428,8 +3466,8 @@ do
                 if ic then
                     ic.texture:SetTexture(MOCK_DEBUFFS[i])
                     ic.texture:Show()
-                    if ic.cooldown then ic.cooldown:Clear() end
-                    if ic.count then ic.count:SetText(""); ic.count:Hide() end
+                    if ic.cooldown then ClearCooldownIfNeeded(ic, ic.cooldown) end
+                    ClearStackText(ic.count)
                     local disp = MOCK_DISPELS[i]
                     local showDisp = debCfg.showDispelBorder ~= false
                     if disp and showDisp then
@@ -3474,8 +3512,8 @@ do
                 if ic then
                     ic.texture:SetTexture(MOCK_EXTERNALS[i])
                     ic.texture:Show()
-                    if ic.cooldown then ic.cooldown:Clear() end
-                    if ic.count then ic.count:SetText(""); ic.count:Hide() end
+                    if ic.cooldown then ClearCooldownIfNeeded(ic, ic.cooldown) end
+                    ClearStackText(ic.count)
                     ic:SetBackdropBorderColor(0, 0, 0, 1)
                     PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv, maxShow)
                     ic:Show()

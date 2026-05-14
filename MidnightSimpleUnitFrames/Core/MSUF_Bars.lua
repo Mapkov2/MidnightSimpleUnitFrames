@@ -701,7 +701,10 @@ end
 local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     local bar = isHeal and self and self.healAbsorbBar or self and self.absorbBar
     local api = isHeal and UnitGetTotalHealAbsorbs or UnitGetTotalAbsorbs
-    if not self or not bar or type(api) ~= 'function' then  return end
+    if not self or not bar then  return end
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(self) or _G.MSUF_AbsorbTextureTestMode
+    if not absorbTestMode and type(api) ~= 'function' then  return end
     -- P0: Cache anchor-mode applier (defined later in this file, resolves once on first call)
     if not _cachedApplyAbsorbAnchorMode then
         _cachedApplyAbsorbAnchorMode = _G.MSUF_ApplyAbsorbAnchorMode
@@ -714,13 +717,11 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
         if not MSUF_DB then EnsureDB() end
         MSUF_ApplyAbsorbOverlayColor(bar, unit)
         local enableBar = _MSUF_ResolveAbsorbDisplay(unit)
-        if not enableBar then
+        if not enableBar and not absorbTestMode then
             MSUF_ResetBarZero(bar, true)
              return
     end
     end
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(self) or _G.MSUF_AbsorbTextureTestMode
     if absorbTestMode then
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(isHeal and 15 or 25)
@@ -741,6 +742,97 @@ local function MSUF_UpdateAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorb
 local function MSUF_UpdateHealAbsorbBar(self, unit, maxHP)  return MSUF_UpdateAbsorbBars(self, unit, maxHP, true) end
     _G.MSUF_UpdateAbsorbBar = _G.MSUF_UpdateAbsorbBar or MSUF_UpdateAbsorbBar
     _G.MSUF_UpdateHealAbsorbBar = _G.MSUF_UpdateHealAbsorbBar or MSUF_UpdateHealAbsorbBar
+
+local function _MSUF_NormalizeAbsorbTestScope(scope)
+    scope = tostring(scope or "shared"):lower()
+    if scope == "" then return "shared" end
+    if scope == "gf_party" or scope == "groupparty" or scope == "group_party" then return "party" end
+    if scope == "gf_raid" or scope == "gf_mythicraid" or scope == "mythicraid"
+        or scope == "groupraid" or scope == "group_raid" then
+        return "raid"
+    end
+    return scope
+end
+
+local function _MSUF_FrameMatchesAbsorbTestScope(frame, kind)
+    if not _G.MSUF_AbsorbTextureTestMode then return false end
+    local scope = _MSUF_NormalizeAbsorbTestScope(_G.MSUF_AbsorbTextureTestScope)
+    if scope == "shared" then return true end
+
+    kind = _MSUF_NormalizeAbsorbTestScope(kind or (frame and frame._msufGFKind))
+    local unit = frame and frame.unit
+    local configKey = frame and (frame.msufConfigKey or frame._msufConfigKey or frame.unitKey)
+
+    if scope == "party" then
+        return kind == "party" or (type(unit) == "string" and unit:sub(1, 5) == "party")
+    end
+    if scope == "raid" then
+        return kind == "raid" or kind == "mythicraid" or (type(unit) == "string" and unit:sub(1, 4) == "raid")
+    end
+    if scope == "boss" then
+        return configKey == "boss" or (type(unit) == "string" and unit:sub(1, 4) == "boss")
+    end
+    return unit == scope or configKey == scope
+end
+
+_G.MSUF_ShouldShowAbsorbTextureTest = _G.MSUF_ShouldShowAbsorbTextureTest or function(frame, kind)
+    return _MSUF_FrameMatchesAbsorbTestScope(frame, kind)
+end
+
+_G.MSUF_SetAbsorbTextureTestMode = _G.MSUF_SetAbsorbTextureTestMode or function(enabled, scope)
+    _G.MSUF_AbsorbTextureTestMode = enabled and true or false
+    _G.MSUF_AbsorbTextureTestScope = enabled and _MSUF_NormalizeAbsorbTestScope(scope) or nil
+end
+
+_G.MSUF_ClearAbsorbTextureTestMode = _G.MSUF_ClearAbsorbTextureTestMode or function()
+    _G.MSUF_AbsorbTextureTestMode = false
+    _G.MSUF_AbsorbTextureTestScope = nil
+end
+
+local function _MSUF_RefreshAbsorbTestUnitFrame(frame)
+    if not frame or frame._msufGFBuilt or frame._msufGFKind or not frame.hpBar then return end
+    local unit = frame.unit
+    if not unit then return end
+    if ns.Bars and ns.Bars.ApplyHealthBars then
+        ns.Bars.ApplyHealthBars(frame, unit)
+    elseif ns.UF and ns.UF.RequestUpdate then
+        ns.UF.RequestUpdate(frame, true, false, "AbsorbTextureTest")
+    end
+end
+
+_G.MSUF_Bars_RefreshAbsorbTextureTestPreview = function()
+    if type(_G.MSUF_UpdateAbsorbBarTextures) == "function" then
+        _G.MSUF_UpdateAbsorbBarTextures()
+    end
+
+    local seen = {}
+    local function refresh(frame)
+        if frame and not seen[frame] then
+            seen[frame] = true
+            _MSUF_RefreshAbsorbTestUnitFrame(frame)
+        end
+    end
+
+    local each = _G.MSUF_ForEachUnitFrame
+    if type(each) == "function" then
+        each(refresh)
+    else
+        local frames = _G.MSUF_UnitFrames
+        if type(frames) == "table" then
+            for _, frame in pairs(frames) do refresh(frame) end
+        end
+    end
+    refresh(_G.MSUF_player)
+    refresh(_G.MSUF_target)
+    refresh(_G.MSUF_focus)
+    refresh(_G.MSUF_targettarget or _G.MSUF_tot)
+    refresh(_G.MSUF_pet)
+    for i = 1, 8 do refresh(_G["MSUF_boss" .. i]) end
+
+    if type(_G.MSUF_GF_RefreshOverlays) == "function" then
+        _G.MSUF_GF_RefreshOverlays()
+    end
+end
 
     -- Absorb / Heal-Absorb anchoring modes
     -- 1/2: legacy (edge-anchored) with reverse-fill swap

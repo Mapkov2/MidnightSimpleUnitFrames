@@ -39,10 +39,13 @@ local tonumber        = tonumber
 local string_match    = string.match
 local string_format   = string.format
 local math_floor      = math.floor
+local select          = select
 local UnitIsUnit      = UnitIsUnit
 local IsInRaid        = IsInRaid
 local GetRaidRosterInfo = GetRaidRosterInfo
 local InCombatLockdown = InCombatLockdown
+local bitlib          = bit or bit32
+local bit_band        = bitlib and bitlib.band
 
 -- ---------------------------------------------------------------------------
 -- Defaults: mirror the slider/dropdown defaults declared in MSUF_Options_GF.lua
@@ -439,6 +442,21 @@ _InvalidateAll = function(invalAnchor, invalFont)
     end
 end
 
+local function _HasAnyDirtyBit(bits, ...)
+    if type(bits) ~= "number" then return true end
+    for i = 1, select("#", ...) do
+        local flag = select(i, ...)
+        if type(flag) == "number" then
+            if bit_band then
+                if bit_band(bits, flag) ~= 0 then return true end
+            elseif bits % (flag + flag) >= flag then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- ---------------------------------------------------------------------------
 -- API hooks. Idempotent under repeated _Init attempts (deferral path).
 -- ---------------------------------------------------------------------------
@@ -470,15 +488,22 @@ local function _Init()
         end
     end
 
-    -- MarkAllDirty: any layout flag → invalidate anchor cache
+    -- MarkAllDirty: only layout/geometry/font bits affect group-number paint.
     if type(GF.MarkAllDirty) == "function" then
         local orig = GF.MarkAllDirty
         GF.MarkAllDirty = function(level, ...)
             orig(level, ...)
-            -- Conservative: invalidate anchor on every dirty mark. The
-            -- coalesced scheduler keeps the cost to one walk per tick.
-            _RequestInvalidate(true, false)
-            _Schedule()
+            local bits = (type(level) == "number") and level or (GF.DIRTY_ALL or 0x3F)
+            local anchorDirty = _HasAnyDirtyBit(bits, GF.DIRTY_GEOMETRY or 0x01, GF.DIRTY_LAYOUT or 0x20)
+            local fontDirty = _HasAnyDirtyBit(bits, GF.DIRTY_FONT or 0x04)
+            if bits == (GF.DIRTY_ALL or 0x3F) then
+                anchorDirty = true
+                fontDirty = true
+            end
+            if anchorDirty or fontDirty then
+                _RequestInvalidate(anchorDirty, fontDirty)
+                _Schedule()
+            end
         end
     end
 
