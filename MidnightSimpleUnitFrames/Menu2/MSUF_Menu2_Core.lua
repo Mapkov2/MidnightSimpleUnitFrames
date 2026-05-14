@@ -661,6 +661,14 @@ local lastGFPreviewEditMode
 local lastGFPreviewRuntime
 
 local function SyncGroupPagePreviewForKey(key, force)
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        SetGFPagePreviewFlag(false)
+        if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then
+            _G.MSUF_GF_EM2_SetActivePreviewKind(nil)
+        end
+        return
+    end
+
     local frameVisible = M.frame and M.frame.IsShown and M.frame:IsShown()
     local active = frameVisible and IsGroupPageKey(key)
     local gf = ns and ns.GF
@@ -3459,6 +3467,7 @@ local function BuildSearchPage(ctx)
 end
 
 function M.SelectPage(key)
+    if M.BlockCombatAction and M.BlockCombatAction() then return false end
     key = ALIASES[key or ""] or key or "home"
     local spec = M.pages[key]
     local cached = M.cache[key]
@@ -4388,7 +4397,8 @@ local function BuildWindow()
         end
         if event == "PLAYER_REGEN_DISABLED" then
             CancelSearchBackgroundIndex()
-            f:RefreshStatus()
+            if M.BlockCombatAction then M.BlockCombatAction() end
+            HideSlashMenuAndMinibar(f)
             return
         elseif event == "PLAYER_REGEN_ENABLED" and M.activeKey == "search" then
             RefreshSearchResultsPage()
@@ -4398,6 +4408,10 @@ local function BuildWindow()
         SyncGroupPagePreviewForKey(M.activeKey)
     end)
     f:SetScript("OnShow", function(self)
+        if M.BlockCombatAction and M.BlockCombatAction() then
+            self:Hide()
+            return
+        end
         self._msuf2Minimized = nil
         if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
         if M.StartHistorySession then M.StartHistorySession() end
@@ -4466,6 +4480,7 @@ local function BuildDashboard(ctx)
     local editMode = AddButton(tip, "Edit Mode: Off", 14, -64, actionW, 24, function()
         local active = IsEditModeActive()
         if (not active) and IsEditModeCombatLocked() then
+            if M.BlockCombatAction then M.BlockCombatAction() end
             RefreshDashboardEditModeButton()
             if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
             return
@@ -4889,6 +4904,7 @@ M.GetEffectiveMenuScale = EffectiveMenuScale
 M.ApplyMenuFrameScale = ApplyMenuFrameScale
 
 function M.Open(pageKey)
+    if M.BlockCombatAction and M.BlockCombatAction() then return false end
     if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
     local f = BuildWindow()
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
@@ -4896,9 +4912,14 @@ function M.Open(pageKey)
     ApplyMenuFrameScale(f)
     f:Show()
     M.SelectPage(pageKey or M.activeKey or "home")
+    return true
 end
 
 function M.Toggle(pageKey)
+    if M.BlockCombatAction and M.BlockCombatAction() then
+        HideSlashMenuAndMinibar(M.frame)
+        return false
+    end
     local f = BuildWindow()
     if M.minimizedBar and M.minimizedBar.IsShown and M.minimizedBar:IsShown() then
         M.Open(pageKey or M.activeKey or "home")
@@ -4909,6 +4930,7 @@ function M.Toggle(pageKey)
     else
         M.Open(pageKey)
     end
+    return true
 end
 
 function M.InvalidatePage(key)
@@ -4941,6 +4963,20 @@ _G.MSUF_SwitchMirrorPage = function(pageKey) return M.SelectPage(pageKey or "hom
 _G.MSUF_GetCurrentMirrorPage = function() return M.activeKey or "home" end
 _G.MSUF_GetMirrorPages = function() return M.pages end
 
+do
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_REGEN_DISABLED")
+    f:SetScript("OnEvent", function()
+        local win = M.frame
+        local bar = M.minimizedBar
+        local visible = (win and win.IsShown and win:IsShown())
+            or (bar and bar.IsShown and bar:IsShown())
+        if not visible then return end
+        if M.BlockCombatAction then M.BlockCombatAction() end
+        HideSlashMenuAndMinibar(win)
+    end)
+end
+
 SLASH_MSUF2OPTIONS1 = "/msuf"
 SlashCmdList["MSUF2OPTIONS"] = function(msg)
     msg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -4955,6 +4991,7 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         return
     end
     if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" then
+        if cmd ~= "help" and M.BlockCombatAction and M.BlockCombatAction() then return end
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
             pcall(_G.SlashCmdList["MIDNIGHTSUF"], msg)
         end

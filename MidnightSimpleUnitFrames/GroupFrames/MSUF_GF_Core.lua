@@ -264,6 +264,11 @@ local function _GFInstallAttrHook(child)
             -- frame has been built by GF_InitButton (otherwise the
             -- visual subsystems are nil-bound).
             if self._msufGFBuilt and self._msufGFRegisteredUnit ~= value then
+                if GF.IsFrameRuntimeEnabled and not GF.IsFrameRuntimeEnabled(self, self._msufGFKind) then
+                    if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(self) end
+                    self._msufGFRegisteredUnit = nil
+                    return
+                end
                 self._msufGFRegisteredUnit = value
                 -- Fresh SecureGroupHeader children can receive their unit token
                 -- after the initial button build pass. Re-apply layout/font here
@@ -285,6 +290,7 @@ GF._InstallAttrHook = _GFInstallAttrHook
 RegisterTrackedFrame = function(f, kind)
     if not f then return end
     GF.frames[f] = kind
+    GF._disabledRuntimeCleanSig = nil
     if f._msufGFFrameListIndex then return end
     local list = GF.frameList
     local idx = #list + 1
@@ -295,6 +301,7 @@ end
 UnregisterTrackedFrame = function(f)
     if not f then return end
     GF.frames[f] = nil
+    GF._disabledRuntimeCleanSig = nil
 
     local idx = f._msufGFFrameListIndex
     if not idx then return end
@@ -312,13 +319,35 @@ UnregisterTrackedFrame = function(f)
     f._msufGFFrameListIndex = nil
 end
 
-function GF.ForEachFrame(fn)
+function GF.IsKindEnabled(kind)
+    kind = kind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    return conf and conf.enabled == true
+end
+
+function GF.IsFrameRuntimeEnabled(f, frameKind)
+    if f and f._msufGFPreviewActive then return true end
+    return GF.IsKindEnabled(frameKind or (f and f._msufGFKind) or "party")
+end
+
+function GF.ForEachFrame(fn, includeDisabled)
     if type(fn) ~= "function" then return end
     local list = GF.frameList
-    for i = 1, #list do
-        local f = list[i]
-        if f then
-            fn(f, f._msufGFKind or GF.frames[f])
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                local frameKind = f._msufGFKind or GF.frames[f]
+                if includeDisabled or GF.IsFrameRuntimeEnabled(f, frameKind) then
+                    fn(f, frameKind)
+                end
+            end
+        end
+    elseif GF.frames then
+        for f, frameKind in pairs(GF.frames) do
+            if f and (includeDisabled or GF.IsFrameRuntimeEnabled(f, frameKind)) then
+                fn(f, frameKind)
+            end
         end
     end
 end
@@ -1276,6 +1305,7 @@ end
 function GF.UpdateButton(f, unit)
     if not f or not unit then return end
     local kind = f._msufGFKind or "party"
+    if GF.IsKindEnabled and not f._msufGFPreviewActive and not GF.IsKindEnabled(kind) then return end
     local conf = GF.GetConf(kind)
     if f._msufGFOfflineActive and (_G.MSUF_InCombat ~= true or f._msufGFOfflineCombatAllowed)
         and GF.UpdateOfflineHiddenFrame and GF.UpdateOfflineHiddenFrame(f, unit)
@@ -1545,6 +1575,10 @@ end
 
 local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
     if not header then return end
+    if GF.IsKindEnabled and not GF.IsKindEnabled(kind) then
+        if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime(kind, false) end
+        return
+    end
     -- Throttle normal GROUP_ROSTER_UPDATE bursts, but never throttle the
     -- explicit post-layout repair scans. The repair scans are what normalize
     -- the first/player child after SecureGroupHeader finishes its own pass.
@@ -1810,12 +1844,21 @@ local function HideRaidHeaders()
     local container = GF.raidGroupContainer
     if container then container:Hide() end
     ForEachRaidHeader(function(header) header:Hide() end)
+    if GF.DeactivateKindRuntime then
+        local visual = not (InCombatLockdown and InCombatLockdown())
+        GF.DeactivateKindRuntime("raid", visual)
+        GF.DeactivateKindRuntime("mythicraid", visual)
+    end
 end
 GF.HideRaidHeaders = HideRaidHeaders
 
 local function ShowRaidHeaders(kind)
     local showKind = kind or GetLiveRaidKind()
     local conf = GF.GetConf(showKind)
+    if not (conf and conf.enabled == true) then
+        HideRaidHeaders()
+        return
+    end
     local preserve = PreserveRaidGroups(showKind, conf)
     local container = GF.raidGroupContainer
     if container then
@@ -1932,10 +1975,18 @@ local function ScheduleHeaderChildScan(scope, delay, kind)
         local scanKind = kind
         if scope == "raid" then
             scanKind = scanKind or GetLiveRaidKind()
+            if GF.IsKindEnabled and not GF.IsKindEnabled(scanKind) then
+                if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime(scanKind, false) end
+                return
+            end
             ScanRaidHeaders(scanKind, true)
             return
         else
             scanKind = "party"
+        end
+        if GF.IsKindEnabled and not GF.IsKindEnabled(scanKind) then
+            if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime(scanKind, false) end
+            return
         end
         local header = GF.headers and GF.headers[scope]
         if not header then return end
@@ -1952,8 +2003,77 @@ end
 function GF.UpdateAnyEnabledFlag()
     local partyConf = GF.GetConf("party")
     local raidConf = GF.GetConf(GetLiveRaidKind())
-    GF._anyEnabled = ((partyConf and partyConf.enabled) or (raidConf and raidConf.enabled)) and true or false
+    GF._anyEnabled = ((partyConf and partyConf.enabled == true) or (raidConf and raidConf.enabled == true)) and true or false
     return GF._anyEnabled
+end
+
+local function ClearKindFrameRuntime(f, visual)
+    if not f then return end
+    if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(f) end
+    if GF._RetireFromDirty then GF._RetireFromDirty(f) end
+    f._msufGFFullPending = nil
+    f._msufGFRegUnit = nil
+    f._msufGFRegBits = nil
+    f._msufGFRosterGUID = nil
+    f._msufGFRosterUnit = nil
+    f._msufGFRosterRole = nil
+    f._msufGFRosterLeaderState = nil
+    f._msufGFIsTarget = nil
+    f._msufGFIsFocus = nil
+
+    if visual then
+        if GF.HideFrameAuras then GF.HideFrameAuras(f) end
+        if GF.HideSpellIndicators then GF.HideSpellIndicators(f) end
+        if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
+        local hideHB = _G.MSUF_GF_HB_HideFrame
+        if type(hideHB) == "function" then hideHB(f) end
+        local gn = f._msufGroupNumberFS or f.groupNumberText
+        if gn then gn:SetText(""); gn:Hide() end
+        if f.statusIndicatorText then f.statusIndicatorText:SetText(""); f.statusIndicatorText:Hide() end
+        if f.roleIcon then f.roleIcon:Hide() end
+        if f.raidIcon then f.raidIcon:Hide() end
+        if f.leaderIcon then f.leaderIcon:Hide() end
+        if f.assistIcon then f.assistIcon:Hide() end
+        if f.readyCheckIcon then f.readyCheckIcon:Hide() end
+        if f.summonIcon then f.summonIcon:Hide() end
+        if f.resurrectIcon then f.resurrectIcon:Hide() end
+        if f.phaseIcon then f.phaseIcon:Hide() end
+        if f._msufGFHighlightBorder then f._msufGFHighlightBorder:Hide() end
+        if f._msufGFTargetBorder then f._msufGFTargetBorder:Hide() end
+        if f._msufGFDebuffStripe then f._msufGFDebuffStripe:Hide() end
+        if f.barGroup then f.barGroup:Hide() end
+        if f.Hide then f:Hide() end
+    end
+end
+
+function GF.DeactivateKindRuntime(kind, visual)
+    if not kind then return end
+    GF._disabledRuntimeCleanSig = nil
+    GF.ForEachFrame(function(f, frameKind)
+        if frameKind == kind then
+            ClearKindFrameRuntime(f, visual ~= false)
+        end
+    end, true)
+end
+
+function GF.DeactivateDisabledKinds(visual)
+    local visualOn = visual ~= false
+    local listCount = GF.frameList and #GF.frameList or 0
+    local sig = tostring(GF.IsKindEnabled("party")) .. "|"
+        .. tostring(GF.IsKindEnabled("raid")) .. "|"
+        .. tostring(GF.IsKindEnabled("mythicraid")) .. "|"
+        .. tostring(visualOn) .. "|"
+        .. tostring(listCount)
+    if GF._disabledRuntimeCleanSig == sig then return end
+
+    local seen = {}
+    GF.ForEachFrame(function(_, frameKind)
+        if frameKind and not seen[frameKind] and not GF.IsKindEnabled(frameKind) then
+            seen[frameKind] = true
+            GF.DeactivateKindRuntime(frameKind, visualOn)
+        end
+    end, true)
+    GF._disabledRuntimeCleanSig = sig
 end
 
 GetDefaultCenter = function(kind)
@@ -2624,6 +2744,9 @@ local function HideFrameLocked(frame)
     if not frame then return end
     if frame._msufGFHidden then return end
     frame._msufGFHidden = true
+    if frame.GetParent and not frame._msufGFOriginalParent then
+        frame._msufGFOriginalParent = frame:GetParent()
+    end
     local hp = GetHiddenParent()
     if frame.SetParent then frame:SetParent(hp) end
     if not frame._msufGFHideHooked then
@@ -2642,6 +2765,16 @@ local function HideFrameLocked(frame)
     end
 end
 
+local function RestoreFrameLocked(frame)
+    if not frame or not frame._msufGFHidden then return end
+    frame._msufGFHidden = nil
+    local parent = frame._msufGFOriginalParent or UIParent
+    if not InCombatLockdown() then
+        if frame.SetParent then frame:SetParent(parent) end
+        if frame.Show then frame:Show() end
+    end
+end
+
 function GF.DisableBlizzardFrames()
     if InCombatLockdown() then
         GF._pendingBlizzardDisable = true
@@ -2649,15 +2782,24 @@ function GF.DisableBlizzardFrames()
     end
     local partyConf = GF.GetConf("party")
     local raidConf  = GF.GetConf(GetLiveRaidKind())
-    if partyConf.enabled then
+    if partyConf.enabled == true then
         HideFrameLocked(_G.PartyFrame)
         HideFrameLocked(_G.CompactPartyFrame)
         HideFrameLocked(_G.CompactPartyFrameTitle)
+    else
+        RestoreFrameLocked(_G.PartyFrame)
+        RestoreFrameLocked(_G.CompactPartyFrame)
+        RestoreFrameLocked(_G.CompactPartyFrameTitle)
     end
-    if raidConf.enabled then
+    if raidConf.enabled == true then
         HideFrameLocked(_G.CompactRaidFrameContainer)
         if _G.CompactRaidFrameManager_SetSetting then
             _G.CompactRaidFrameManager_SetSetting("IsShown", "0")
+        end
+    else
+        RestoreFrameLocked(_G.CompactRaidFrameContainer)
+        if _G.CompactRaidFrameManager_SetSetting then
+            _G.CompactRaidFrameManager_SetSetting("IsShown", "1")
         end
     end
 end
@@ -2665,11 +2807,7 @@ end
 function GF.RestoreBlizzardFrames()
     -- Undo reparenting
     for _, name in pairs({ "PartyFrame", "CompactPartyFrame", "CompactPartyFrameTitle", "CompactRaidFrameContainer" }) do
-        local f = _G[name]
-        if f and f._msufGFHidden then
-            f._msufGFHidden = nil
-            if f.SetParent and not InCombatLockdown() then f:SetParent(UIParent) end
-        end
+        RestoreFrameLocked(_G[name])
     end
 end
 
@@ -3359,6 +3497,9 @@ end
 
 function GF.RebuildAll()
     if InCombatLockdown() then
+        GF.UpdateAnyEnabledFlag()
+        if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(false) end
+        if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
         GF._pendingRebuild = true
         return
     end
@@ -3367,11 +3508,12 @@ function GF.RebuildAll()
     local raidKind = GetLiveRaidKind()
     local raidConf  = GF.GetConf(raidKind)
     GF.UpdateAnyEnabledFlag()
+    if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
 
     local inRaid = IsInRaid and IsInRaid() or false
 
     -- Party: build once, show only outside raid
-    if partyConf.enabled then
+    if partyConf.enabled == true then
         SetupPartyHeader()
         if inRaid and GF.headers.party then
             GF.headers.party:Hide()
@@ -3381,7 +3523,7 @@ function GF.RebuildAll()
     end
 
     -- Raid: build once, show only in raid
-    if raidConf.enabled then
+    if raidConf.enabled == true then
         SetupRaidHeader()
         if not inRaid then
             HideRaidHeaders()
@@ -3407,17 +3549,20 @@ function GF.RebuildAll()
         -- Force event re-registration (picks up aura/dispel toggle changes)
         for _, kind in pairs({"party"}) do
             local hdr = GF.headers[kind]
-            if hdr then
+            if hdr and GF.IsKindEnabled(kind) then
                 ClearBuiltRegisteredUnits(hdr:GetChildren())
                 ScanHeaderChildren(hdr, kind, true)
             end
         end
-        ForEachRaidHeader(function(hdr)
-            ClearBuiltRegisteredUnits(hdr:GetChildren())
-        end)
-        ScanRaidHeaders(GetLiveRaidKind(), true)
+        if GF.IsKindEnabled(GetLiveRaidKind()) then
+            ForEachRaidHeader(function(hdr)
+                ClearBuiltRegisteredUnits(hdr:GetChildren())
+            end)
+            ScanRaidHeaders(GetLiveRaidKind(), true)
+        end
         GF.MarkAllDirty(GF.DIRTY_ALL)
         if GF.RefreshGroupBorders then GF.RefreshGroupBorders() end
+        if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
     end)
 end
 
@@ -3443,6 +3588,8 @@ end
 function GF.UpdateGroupVisibility()
     if InCombatLockdown() then
         GF._pendingVisibilityUpdate = true
+        GF.UpdateAnyEnabledFlag()
+        if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(false) end
         return
     end
     local inRaid = IsInRaid and IsInRaid() or false
@@ -3453,19 +3600,20 @@ function GF.UpdateGroupVisibility()
 
     -- Party header
     if GF.headers.party then
-        if partyConf.enabled and not inRaid then
+        if partyConf.enabled == true and not inRaid then
             GF.SyncHeaderPosition("party")
             GF.headers.party:Show()
             ScheduleHeaderChildScan("party", 0, "party")
             ScheduleHeaderChildScan("party", 0.5, "party")
         else
             GF.headers.party:Hide()
+            if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime("party", true) end
         end
     end
 
     -- Raid header
     if AnyRaidHeader() then
-        if raidConf.enabled and inRaid then
+        if raidConf.enabled == true and inRaid then
             GF.SyncHeaderPosition(raidKind)
             ShowRaidHeaders(raidKind)
             ScheduleHeaderChildScan("raid", 0, raidKind)
@@ -3474,6 +3622,9 @@ function GF.UpdateGroupVisibility()
             HideRaidHeaders()
         end
     end
+    if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
+    if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+    if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
 end
 
 local _gfVisibilityQueued = false
@@ -3507,12 +3658,23 @@ local function OnEvent(self, event, ...)
         local partyConf = GF.GetConf("party")
         local raidConf  = GF.GetConf(GetLiveRaidKind())
         GF.UpdateAnyEnabledFlag()
-        if partyConf.enabled or raidConf.enabled then
+        if partyConf.enabled == true or raidConf.enabled == true then
             GF.RebuildAll()
+        else
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
         end
         GF_UpdateDifficultyCache()
 
     elseif event == "GROUP_ROSTER_UPDATE" then
+        GF.UpdateAnyEnabledFlag()
+        if not GF._anyEnabled then
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(not (InCombatLockdown and InCombatLockdown())) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+            return
+        end
         -- Switch party/raid visibility + rescan children
         GF_RequestGroupVisibility()
 
@@ -3531,6 +3693,17 @@ local function OnEvent(self, event, ...)
         if GF._pendingBlizzardDisable then
             GF._pendingBlizzardDisable = nil
             GF.DisableBlizzardFrames()
+        end
+        GF.UpdateAnyEnabledFlag()
+        if not GF._anyEnabled then
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+            GF._pendingRebuild = nil
+            GF._pendingVisibilityUpdate = nil
+            GF._pendingRefreshGeometry = nil
+            GF._pendingRefreshVisuals = nil
+            return
         end
         -- Force rebuild if headers don't exist (mid-combat /reload recovery)
         local needRebuild = GF._pendingRebuild
@@ -3577,7 +3750,7 @@ local function OnEvent(self, event, ...)
         local partyConf = GF.GetConf("party")
         local raidConf  = GF.GetConf(GetLiveRaidKind())
         GF.UpdateAnyEnabledFlag()
-        if partyConf.enabled or raidConf.enabled then
+        if partyConf.enabled == true or raidConf.enabled == true then
             -- Only recreate headers on actual zone transitions (not /reload).
             -- /reload creates everything fresh anyway, no C-side state bug.
             if not isLogin and not isReload then
@@ -3598,6 +3771,10 @@ local function OnEvent(self, event, ...)
                     GF_UpdateDifficultyCache()
                 end
             end)
+        else
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(not (InCombatLockdown and InCombatLockdown())) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
         end
     elseif event == "PLAYER_DIFFICULTY_CHANGED" then
         local sig = GF_DifficultySignature()
@@ -3605,6 +3782,14 @@ local function OnEvent(self, event, ...)
             return
         end
         GF._lastDifficultySig = sig
+        GF.UpdateAnyEnabledFlag()
+        if not GF._anyEnabled then
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(not (InCombatLockdown and InCombatLockdown())) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+            GF_UpdateDifficultyCache()
+            return
+        end
 
         if InCombatLockdown() then
             GF._pendingRebuild = true

@@ -86,6 +86,26 @@ local function PrintProfileMessage(color, message)
     print((color or "|cffffd700") .. "MSUF:|r " .. tostring(message or ""))
 end
 
+local function BlockCombatAction()
+    if M.BlockCombatAction then return M.BlockCombatAction() and true or false end
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+        return _G.MSUF_BlockConfigCombatLocked() and true or false
+    end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        end
+        return true
+    end
+    if _G.UnitAffectingCombat and _G.UnitAffectingCombat("player") then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        end
+        return true
+    end
+    return false
+end
+
 local function EnsureProfilePopups()
     if not _G.StaticPopupDialogs then return end
 
@@ -114,6 +134,7 @@ local function EnsureProfilePopups()
             hideOnEscape = true,
             preferredIndex = 3,
             OnAccept = function(_, data)
+                if BlockCombatAction() then return end
                 if not (data and data.name) then return end
                 if type(_G.MSUF_ResetProfile) == "function" then pcall(_G.MSUF_ResetProfile, data.name) end
                 if M.ClearHistory then M.ClearHistory() end
@@ -136,6 +157,7 @@ local function EnsureProfilePopups()
             hideOnEscape = true,
             preferredIndex = 3,
             OnAccept = function(_, data)
+                if BlockCombatAction() then return end
                 if not (data and data.name) then return end
                 if type(_G.MSUF_DeleteProfile) == "function" then pcall(_G.MSUF_DeleteProfile, data.name) end
                 if M.ClearHistory then M.ClearHistory() end
@@ -204,6 +226,10 @@ local function BuildProfiles(ctx)
         profileDrop:SetValues(ProfileValues(false))
     end
     profileDrop:SetOnValueChanged(function(value)
+        if BlockCombatAction() then
+            profileDrop:SetValue(_G.MSUF_ActiveProfile or "Default")
+            return
+        end
         if value and value ~= "" and value ~= _G.MSUF_ActiveProfile and type(_G.MSUF_SwitchProfile) == "function" then
             pcall(_G.MSUF_SwitchProfile, value)
             if M.ClearHistory then M.ClearHistory() end
@@ -218,6 +244,7 @@ local function BuildProfiles(ctx)
     local nameInput = W.TextInput(current, "New / target profile name", 260)
     local create = T.Button(current, "Create profile", 150, 24)
     create:SetScript("OnClick", function()
+        if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
         if name and name ~= "" and type(_G.MSUF_CreateProfile) == "function" then
             pcall(_G.MSUF_CreateProfile, name)
@@ -229,6 +256,7 @@ local function BuildProfiles(ctx)
     end)
     local copy = T.Button(current, "Copy current to name", 170, 24)
     copy:SetScript("OnClick", function()
+        if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
         if name and name ~= "" and type(_G.MSUF_CopyProfile) == "function" then
             local ok, copied = pcall(_G.MSUF_CopyProfile, _G.MSUF_ActiveProfile or "Default", name)
@@ -240,6 +268,7 @@ local function BuildProfiles(ctx)
     end)
     local reset = T.Button(current, "Reset current profile", 170, 24)
     reset:SetScript("OnClick", function()
+        if BlockCombatAction() then return end
         if M.ShowPageResetConfirm then
             M.ShowPageResetConfirm("profiles")
             return
@@ -256,6 +285,7 @@ local function BuildProfiles(ctx)
     local delete = T.Button(current, "Delete current profile", 170, 24)
     T.SkinDangerButton(delete)
     delete:SetScript("OnClick", function()
+        if BlockCombatAction() then return end
         local name = _G.MSUF_ActiveProfile or "Default"
         if name == "Default" then return end
         if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE then
@@ -346,6 +376,7 @@ local function BuildProfiles(ctx)
     importProfileName._msuf2CommitOnBlur = false
 
     local function ImportIntoCurrent()
+        if BlockCombatAction() then return false end
         local text = blob:GetText()
         if not (text and text ~= "") then
             PrintProfileMessage("|cffff0000", "Import failed (empty string).")
@@ -371,6 +402,7 @@ local function BuildProfiles(ctx)
     end
 
     local function ImportIntoNewProfile(rawName)
+        if BlockCombatAction() then return false end
         local text = blob:GetText()
         if not (text and text ~= "") then
             PrintProfileMessage("|cffff0000", "Import failed (empty string).")
@@ -439,12 +471,17 @@ local function BuildProfiles(ctx)
         end
     end)
     importCreateNew:SetScript("OnClick", function(self)
+        if BlockCombatAction() then
+            self:SetChecked(M.profileImportCreateNew == true)
+            return
+        end
         M.profileImportCreateNew = not (M.profileImportCreateNew == true)
         self:SetChecked(M.profileImportCreateNew == true)
         if M.Refresh then M.Refresh(ctx) end
     end)
     local legacy = T.Button(io, "Legacy Import", 132, 24)
     legacy:SetScript("OnClick", function()
+        if BlockCombatAction() then return end
         local text = blob:GetText()
         if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
             pcall(_G.MSUF_ImportLegacyFromString, text)

@@ -282,13 +282,13 @@ local function _AnyEnabled()
     local GF = NS and NS.GF
     if not GF or not GF.GetConf then return false end
     local party = GF.GetConf("party")
-    if party and party.showGroupNumber == true then return true end
+    if party and party.enabled == true and party.showGroupNumber == true then return true end
     local raidKind = (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
     local raid = GF.GetConf(raidKind)
-    if raid and raid.showGroupNumber == true then return true end
+    if raid and raid.enabled == true and raid.showGroupNumber == true then return true end
     if raidKind ~= "raid" then
         raid = GF.GetConf("raid")
-        if raid and raid.showGroupNumber == true then return true end
+        if raid and raid.enabled == true and raid.showGroupNumber == true then return true end
     end
     return false
 end
@@ -360,7 +360,7 @@ local function _RefreshAll()
             if type(f) == "table" and f.unit then
                 local kind = f._msufGFKind or "party"
                 local conf = GF.GetConf(kind)
-                if conf then _UpdateFrame(f, conf) end
+                if conf and (conf.enabled == true or f._msufGFPreviewActive) then _UpdateFrame(f, conf) end
             end
         end
     else
@@ -368,7 +368,7 @@ local function _RefreshAll()
             if type(f) == "table" and f.unit then
                 local kind = f._msufGFKind or "party"
                 local conf = GF.GetConf(kind)
-                if conf then _UpdateFrame(f, conf) end
+                if conf and (conf.enabled == true or f._msufGFPreviewActive) then _UpdateFrame(f, conf) end
             end
         end
     end

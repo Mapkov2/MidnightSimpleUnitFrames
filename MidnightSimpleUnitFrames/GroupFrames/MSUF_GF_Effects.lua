@@ -9,6 +9,8 @@ _G.MSUF_NS = ns
 local GF = ns.GF
 if not GF then return end
 
+local _RuntimeEnabledForFrame
+
 local issecretvalue = _G.issecretvalue
 local InCombatLockdown = _G.InCombatLockdown
 local UnitExists = _G.UnitExists
@@ -1280,6 +1282,7 @@ do
         if not GF.GetConf then return true end
         local conf = GF.GetConf(kind)
         if not conf then return false end
+        if conf.enabled ~= true then return false end
         if conf.rangeFadeEnabled ~= false then return true end
         local frameAlpha = _GF_GetFrameAlpha(kind, conf)
         return type(frameAlpha) == "number" and frameAlpha < 0.999
@@ -1358,7 +1361,7 @@ do
         if list then
             for i = 1, #list do
                 local f = list[i]
-                if f then
+                if f and _RuntimeEnabledForFrame(f) then
                     if GF.BuildFrameCache then GF.BuildFrameCache(f) end
                     local hadState = _GF_FrameHasRangeFadeState(f)
                     if featureEnabled or hadState then
@@ -1376,7 +1379,7 @@ do
             end
         else
             for f in pairs(frames) do
-                if f then
+                if f and _RuntimeEnabledForFrame(f) then
                     if GF.BuildFrameCache then GF.BuildFrameCache(f) end
                     local hadState = _GF_FrameHasRangeFadeState(f)
                     if featureEnabled or hadState then
@@ -1404,7 +1407,7 @@ function GF.RefreshGroupAlphas()
         if list then
             for i = 1, #list do
                 local f = list[i]
-                if f then
+                if f and _RuntimeEnabledForFrame(f) then
                     local kind = f._msufGFKind or "party"
                     if GF.BuildFrameCache then GF.BuildFrameCache(f) end
                     if GF.ApplyHealthBarAlpha then GF.ApplyHealthBarAlpha(f, kind) end
@@ -1419,7 +1422,7 @@ function GF.RefreshGroupAlphas()
             end
         else
             for f in pairs(frames) do
-                if f then
+                if f and _RuntimeEnabledForFrame(f) then
                     local kind = f._msufGFKind or "party"
                     if GF.BuildFrameCache then GF.BuildFrameCache(f) end
                     if GF.ApplyHealthBarAlpha then GF.ApplyHealthBarAlpha(f, kind) end
@@ -3131,6 +3134,7 @@ local function _GF_GetOfflineDelay(f, kind)
 end
 
 local function _GF_CanRunOfflineHideNow(f, kind)
+    if f and not _RuntimeEnabledForFrame(f) then return false end
     if not (InCombatLockdown and InCombatLockdown()) then return true end
     local c = f and f._c
     if c then return c.hideOfflineCombat == true end
@@ -3167,6 +3171,10 @@ end
 
 function GF.UpdateOfflineHiddenFrame(f, unit, force)
     if not f then return false end
+    if not _RuntimeEnabledForFrame(f) then
+        _GF_ClearOfflineHiddenFrame(f)
+        return false
+    end
     local kind = f._msufGFKind or "party"
     if not _GF_CanRunOfflineHideNow(f, kind) then return false end
     if f._msufGFPreviewActive then
@@ -3228,12 +3236,12 @@ function GF.RefreshOfflineHideEnabledFlag()
     local party = GF.GetConf("party")
     local raid = GF.GetConf("raid")
     local mythic = GF.GetConf("mythicraid")
-    local enabled = (party and party.hideOfflineEnabled == true)
-        or (raid and raid.hideOfflineEnabled == true)
-        or (mythic and mythic.hideOfflineEnabled == true)
-    GF._offlineHideCombatAnyEnabled = ((party and party.hideOfflineEnabled == true and party.hideOfflineInCombat == true)
-        or (raid and raid.hideOfflineEnabled == true and raid.hideOfflineInCombat == true)
-        or (mythic and mythic.hideOfflineEnabled == true and mythic.hideOfflineInCombat == true)) or false
+    local enabled = (party and party.enabled == true and party.hideOfflineEnabled == true)
+        or (raid and raid.enabled == true and raid.hideOfflineEnabled == true)
+        or (mythic and mythic.enabled == true and mythic.hideOfflineEnabled == true)
+    GF._offlineHideCombatAnyEnabled = ((party and party.enabled == true and party.hideOfflineEnabled == true and party.hideOfflineInCombat == true)
+        or (raid and raid.enabled == true and raid.hideOfflineEnabled == true and raid.hideOfflineInCombat == true)
+        or (mythic and mythic.enabled == true and mythic.hideOfflineEnabled == true and mythic.hideOfflineInCombat == true)) or false
     GF._offlineHideAnyEnabled = enabled or false
     return GF._offlineHideAnyEnabled
 end
@@ -3244,10 +3252,12 @@ local function _GF_ForEachOfflineFrame(fn)
     if list then
         for i = 1, #list do
             local f = list[i]
-            if f then fn(f) end
+            if f and _RuntimeEnabledForFrame(f) then fn(f) end
         end
     elseif GF.frames then
-        for f in pairs(GF.frames) do fn(f) end
+        for f in pairs(GF.frames) do
+            if _RuntimeEnabledForFrame(f) then fn(f) end
+        end
     end
 end
 
@@ -3307,6 +3317,7 @@ end
 
 local function UpdateAll(f, unit)
     if not f or not unit then return end
+    if not _RuntimeEnabledForFrame(f) then return end
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
     if f._msufGFOfflineActive and (_G.MSUF_InCombat ~= true or f._msufGFOfflineCombatAllowed)
@@ -4477,7 +4488,18 @@ local UNIT_DISPATCH = {
 -- UNIT_MAXHEALTH → full path (calc + bar + overlays + text)
 -- UNIT_HEAL_PREDICTION/ABSORB → overlays only
 ------------------------------------------------------------------------
+_RuntimeEnabledForFrame = function(f)
+    if not f then return false end
+    if f._msufGFPreviewActive then return true end
+    local kind = f._msufGFKind or (GF.frames and GF.frames[f]) or "party"
+    return not (GF.IsKindEnabled and not GF.IsKindEnabled(kind))
+end
+
 local function GF_OnEvent(self, event, unit, ...)
+    if not _RuntimeEnabledForFrame(self) then
+        if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(self) end
+        return
+    end
     local u = self.unit
     if not u then return end
     -- PERF: unified hash-table dispatch. The prior hot-path if-elseif chain
@@ -4499,6 +4521,13 @@ end
 function GF.RegisterUnitEvents(f, unit)
     if not (f and unit) then return end
     f._msufGFFullPending = nil
+
+    if not _RuntimeEnabledForFrame(f) then
+        if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(f) end
+        f._msufGFRegUnit = nil
+        f._msufGFRegBits = nil
+        return
+    end
 
     if not f._c then GF.BuildFrameCache(f) end
     local c = f._c
@@ -4621,6 +4650,7 @@ local _gfFocusFrame  = nil -- the frame whose unit was last "focus"
 local _gfRosterPending = false
 local function _gfRosterFlushFrame(f, gmap)
     if not f then return end
+    if not _RuntimeEnabledForFrame(f) then return end
 
     local u = f.unit
     if not (u and UnitExists(u)) then
@@ -4797,20 +4827,49 @@ end
 function GF._AnyGroupConfFlag(key)
     if not key or not GF.GetConf then return false end
     local party = GF.GetConf("party")
-    if party and party[key] ~= false then return true end
+    if party and party.enabled == true and party[key] ~= false then return true end
     local raidKind = (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
     local raid = GF.GetConf(raidKind)
-    if raid and raid[key] ~= false then return true end
+    if raid and raid.enabled == true and raid[key] ~= false then return true end
     if raidKind ~= "raid" then
         raid = GF.GetConf("raid")
-        if raid and raid[key] ~= false then return true end
+        if raid and raid.enabled == true and raid[key] ~= false then return true end
     end
     return false
 end
 
 do
     local _globalEventBits
+    local _baseEventsActive
     local _globalEventSyncQueued = false
+    local BASE_EVENTS = {
+        "PLAYER_FOCUS_CHANGED",
+        "GROUP_ROSTER_UPDATE",
+        "SPELLS_CHANGED",
+        "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+        "PLAYER_TALENT_UPDATE",
+        "TRAIT_CONFIG_UPDATED",
+        "PLAYER_ENTERING_WORLD",
+        "BARBER_SHOP_OPEN",
+        "BARBER_SHOP_CLOSE",
+        "PLAYER_REGEN_DISABLED",
+        "PLAYER_REGEN_ENABLED",
+    }
+
+    local function SetBaseEvents(active)
+        active = active and true or false
+        if active == _baseEventsActive then return end
+        for i = 1, #BASE_EVENTS do
+            local ev = BASE_EVENTS[i]
+            if active then
+                _globalFrame:RegisterEvent(ev)
+            else
+                _globalFrame:UnregisterEvent(ev)
+            end
+        end
+        _baseEventsActive = active
+    end
+
     local function _DoSyncGroupGlobalEvents()
         _globalEventSyncQueued = false
         if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
@@ -4825,11 +4884,23 @@ do
     function GF.SyncGroupGlobalEvents()
         if not _globalFrame then return end
 
-        local ready = GF._AnyGroupConfFlag("readyCheckIcon")
-        local raidMarker = GF._AnyGroupConfFlag("raidMarker")
-        local leader = GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon")
-        local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
-        local flags = showAFK or showDND or showDead or showGhost
+        local anyEnabled = true
+        if GF.UpdateAnyEnabledFlag then
+            anyEnabled = GF.UpdateAnyEnabledFlag() and true or false
+        elseif GF._anyEnabled == false then
+            anyEnabled = false
+        end
+
+        SetBaseEvents(anyEnabled)
+
+        local ready, raidMarker, leader, flags = false, false, false, false
+        if anyEnabled then
+            ready = GF._AnyGroupConfFlag("readyCheckIcon")
+            raidMarker = GF._AnyGroupConfFlag("raidMarker")
+            leader = GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon")
+            local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
+            flags = showAFK or showDND or showDead or showGhost
+        end
 
         local bits = 0
         if ready then bits = bits + 1 end
@@ -4882,9 +4953,14 @@ do
     local function _ForEachFrame(cb, ...)
         local list = GF.frameList
         if list then
-            for i = 1, #list do cb(list[i], ...) end
+            for i = 1, #list do
+                local f = list[i]
+                if _RuntimeEnabledForFrame(f) then cb(f, ...) end
+            end
         else
-            for f in pairs(GF.frames) do cb(f, ...) end
+            for f in pairs(GF.frames) do
+                if _RuntimeEnabledForFrame(f) then cb(f, ...) end
+            end
         end
     end
 
@@ -5055,17 +5131,6 @@ do
     end
 end
 
-_globalFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
-_globalFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
-_globalFrame:RegisterEvent("SPELLS_CHANGED")
-_globalFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-_globalFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
-_globalFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
-_globalFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-_globalFrame:RegisterEvent("BARBER_SHOP_OPEN")
-_globalFrame:RegisterEvent("BARBER_SHOP_CLOSE")
-_globalFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-_globalFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 GF.SyncGroupGlobalEvents()
 _globalFrame:SetScript("OnEvent", GF._OnGlobalEvent)
 
@@ -5470,11 +5535,11 @@ local function _GF_ForEachLiveGroupFrame(fn)
     if list then
         for i = 1, #list do
             local f = list[i]
-            if f and f._msufIsGroupFrame then fn(f) end
+            if f and f._msufIsGroupFrame and _RuntimeEnabledForFrame(f) then fn(f) end
         end
     elseif GF.frames then
         for f in pairs(GF.frames) do
-            if f and f._msufIsGroupFrame then fn(f) end
+            if f and f._msufIsGroupFrame and _RuntimeEnabledForFrame(f) then fn(f) end
         end
     end
 end

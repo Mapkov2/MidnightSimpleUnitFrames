@@ -26,6 +26,13 @@ local tonumber = tonumber
 local math_max = math.max
 local math_floor = math.floor
 
+local function RuntimeEnabledForFrame(f)
+    if not f then return false end
+    if f._msufGFPreviewActive then return true end
+    local kind = f._msufGFKind or (GF.frames and GF.frames[f]) or "party"
+    return not (GF.IsKindEnabled and not GF.IsKindEnabled(kind))
+end
+
 local MSUF_BETTER_BLIZZARD_TEXTURE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\BetterBlizzard.blp"
 local UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B = 34/255, 34/255, 34/255
 local _unhaltedTextureChecked, _unhaltedTexture
@@ -1449,7 +1456,7 @@ function GF._FlushDirty()
             _dirtyBits[f] = nil
             _queued[f] = nil
 
-            if bits then
+            if bits and RuntimeEnabledForFrame(f) then
                 anyFlushed = true
                 ApplyVisuals(f, bits)
                 if f._msufGFPreviewActive then
@@ -1523,6 +1530,7 @@ end
 ------------------------------------------------------------------------
 function GF.MarkDirty(f, bits)
     if not f then return end
+    if not RuntimeEnabledForFrame(f) then return end
     bits = bits or DIRTY_ALL
     local prev = _dirtyBits[f] or 0
     _dirtyBits[f] = bor(prev, bits)
@@ -1548,6 +1556,8 @@ end
 function GF.MarkAllDirty(bits)
     bits = bits or DIRTY_ALL
     if InCombatLockdown and InCombatLockdown() then
+        if GF.UpdateAnyEnabledFlag then GF.UpdateAnyEnabledFlag() end
+        if GF._anyEnabled == false then return end
         if band(bits, bor(DIRTY_GEOMETRY, DIRTY_LAYOUT)) ~= 0 then
             GF._pendingRefreshGeometry = true
         end
@@ -1566,7 +1576,7 @@ function GF.MarkAllDirty(bits)
     if list then
         for i = 1, #list do
             local f = list[i]
-            if f then
+            if f and RuntimeEnabledForFrame(f) then
                 local prev = _dirtyBits[f] or 0
                 _dirtyBits[f] = bor(prev, bits)
                 _Enqueue(f)
@@ -1574,9 +1584,11 @@ function GF.MarkAllDirty(bits)
         end
     else
         for f in pairs(GF.frames) do
-            local prev = _dirtyBits[f] or 0
-            _dirtyBits[f] = bor(prev, bits)
-            _Enqueue(f)
+            if RuntimeEnabledForFrame(f) then
+                local prev = _dirtyBits[f] or 0
+                _dirtyBits[f] = bor(prev, bits)
+                _Enqueue(f)
+            end
         end
     end
     -- Also mark preview frames
@@ -1601,6 +1613,8 @@ end
 ------------------------------------------------------------------------
 function GF.RefreshVisuals()
     if InCombatLockdown and InCombatLockdown() then
+        if GF.UpdateAnyEnabledFlag then GF.UpdateAnyEnabledFlag() end
+        if GF._anyEnabled == false then return end
         GF._pendingRefreshVisuals = true
         return
     end
@@ -1612,7 +1626,7 @@ function GF.RefreshVisuals()
     if list then
         for i = 1, #list do
             local f = list[i]
-            if f then
+            if f and RuntimeEnabledForFrame(f) then
                 ApplyVisuals(f, DIRTY_ALL)
                 if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
                     if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
@@ -1621,9 +1635,11 @@ function GF.RefreshVisuals()
         end
     else
         for f in pairs(GF.frames) do
-            ApplyVisuals(f, DIRTY_ALL)
-            if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
-                if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+            if RuntimeEnabledForFrame(f) then
+                ApplyVisuals(f, DIRTY_ALL)
+                if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
+                    if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+                end
             end
         end
     end
@@ -1711,6 +1727,7 @@ do
     if type(origInit) == "function" then
         _G.MSUF_GF_InitButton = function(f, kind)
             origInit(f, kind)
+            if not RuntimeEnabledForFrame(f) then return end
             ApplyVisuals(f, DIRTY_ALL)
         end
     end

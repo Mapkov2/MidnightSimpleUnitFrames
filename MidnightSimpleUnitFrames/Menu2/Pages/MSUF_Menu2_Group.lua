@@ -606,7 +606,11 @@ local function ScopeSection(ctx, builder)
     end)
 
     edit:SetScript("OnClick", function()
-        if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+        if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return end
+        if _G.InCombatLockdown and _G.InCombatLockdown() then
+            if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+            return
+        end
         local active = IsEditModeActive()
         local key = "gf_" .. CurrentScope()
         if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then

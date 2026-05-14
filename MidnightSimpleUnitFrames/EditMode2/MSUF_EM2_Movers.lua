@@ -46,6 +46,27 @@ local function RefreshUFPreview(reason)
     if type(fn) == "function" then fn(reason or "EM2_MOVERS") end
 end
 
+local function IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if InCombatLockdown and InCombatLockdown() then return true end
+    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
+end
+
+local function BlockConfigCombatLocked()
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+        return _G.MSUF_BlockConfigCombatLocked() and true or false
+    end
+    if IsConfigCombatLocked() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        end
+        return true
+    end
+    return false
+end
+
 local function SyncMoverToFrame(mover, frame)
     if not frame then return end
     local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
@@ -122,7 +143,7 @@ local function CreateMover(key, cfg)
 
     -- Drag → delegate to Ticker
     mover:SetScript("OnDragStart", function(self)
-        if InCombatLockdown and InCombatLockdown() then return end
+        if BlockConfigCombatLocked() then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         self._dragging = true
         self._coordFS:Show()
@@ -375,7 +396,7 @@ end
 
 -- ── MSUF_MakeBlizzardOptionsMovable ──────────────────────────────────────
 _G.MSUF_MakeBlizzardOptionsMovable = function()
-    if InCombatLockdown and InCombatLockdown() then return end
+    if BlockConfigCombatLocked() then return false end
     local frame = _G.SettingsPanel or _G.InterfaceOptionsFrame
     if not frame then return end
     if frame.MSUF_Movable then return end
@@ -389,7 +410,7 @@ _G.MSUF_MakeBlizzardOptionsMovable = function()
     drag:EnableMouse(true)
     drag:RegisterForDrag("LeftButton")
     drag:SetScript("OnDragStart", function(self)
-        if InCombatLockdown and InCombatLockdown() then return end
+        if BlockConfigCombatLocked() then return end
         local p = self:GetParent()
         if p and p.StartMoving then p:StartMoving() end
     end)
@@ -485,9 +506,14 @@ end
 -- ── MSUF_SetMSUFEditModeDirect (THE primary entry point) ─────────────────
 _G.MSUF_SetMSUFEditModeDirect = function(active, unitKey)
     if not EM2.State then return end
-    if active and InCombatLockdown and InCombatLockdown() then return end
+    if active and type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return false end
+    if active and IsConfigCombatLocked() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        return false
+    end
     if active then EM2.State.Enter(unitKey)
     else EM2.State.Exit("direct") end
+    return true
 end
 
 -- ── MSUF_SetMSUFEditModeFromBlizzard ─────────────────────────────────────
@@ -507,7 +533,7 @@ local PREVIEW_UNITS = { "target", "focus", "targettarget", "pet" }
 
 _G.MSUF_EM2_ReforcePreviewFrames = function()
     if not _G.MSUF_PreviewTestMode then return end
-    if InCombatLockdown and InCombatLockdown() then return end
+    if IsConfigCombatLocked() then return end
     local UpdateFn = _G.UpdateSimpleUnitFrame
     for _, uk in ipairs(PREVIEW_UNITS) do
         local frame = _G["MSUF_" .. uk]
@@ -535,7 +561,7 @@ _G.MSUF_SyncAllUnitPreviews = function()
     local editOn = EM2.State and EM2.State.IsActive()
     local want = active and editOn
 
-    if InCombatLockdown and InCombatLockdown() then return end
+    if IsConfigCombatLocked() then return end
 
     -- Set preview flag (core visibility driver reads this)
     _G.MSUF_PreviewTestMode = want
@@ -906,6 +932,10 @@ do
         hl:SetBackdropBorderColor(0, 1, 0, 0.95); hl:Hide(); ov._highlight = hl
 
         ov:SetScript("OnShow", function(self)
+            if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then
+                self:Hide()
+                return
+            end
             self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
             self._lCtrlHeld = Tr("CTRL: held - click to anchor!")
             self._lCtrlNotHeld = Tr("CTRL: not held")
@@ -919,9 +949,11 @@ do
             self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(1, 0.3, 0.3)
             self._highlight:Hide()
             if self.RegisterEvent then self:RegisterEvent("GLOBAL_MOUSE_DOWN") end
+            if self.RegisterEvent then self:RegisterEvent("PLAYER_REGEN_DISABLED") end
         end)
         ov:SetScript("OnHide", function(self)
             if self.UnregisterEvent then self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end
+            if self.UnregisterEvent then self:UnregisterEvent("PLAYER_REGEN_DISABLED") end
             self._pickedFrame = nil; self._pickedName = nil; self._highlight:Hide()
         end)
         ov:SetScript("OnUpdate", function(self, elapsed)
@@ -940,6 +972,11 @@ do
             else self._hover:SetText(self._lHoverNone); self._highlight:Hide() end
         end)
         ov:SetScript("OnEvent", function(self, event, button)
+            if event == "PLAYER_REGEN_DISABLED" then
+                if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+                self:Hide()
+                return
+            end
             if event ~= "GLOBAL_MOUSE_DOWN" then return end
             if button == "RightButton" then self:Hide(); return end
             if button ~= "LeftButton" then return end

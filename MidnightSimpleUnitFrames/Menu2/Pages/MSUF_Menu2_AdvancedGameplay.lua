@@ -89,6 +89,7 @@ local function BuildGameplay(ctx)
     edit:SetScript("OnClick", function()
         local active = IsMSUFEditModeActive()
         if (not active) and IsEditModeCombatLocked() then
+            if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
             RefreshEditButton()
             return
         end

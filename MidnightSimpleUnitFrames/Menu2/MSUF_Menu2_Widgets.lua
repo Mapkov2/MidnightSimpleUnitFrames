@@ -78,7 +78,10 @@ end
 
 local function ToggleMSUFEditMode()
     local active = IsMSUFEditModeActive()
-    if (not active) and IsEditModeCombatLocked() then return end
+    if (not active) and IsEditModeCombatLocked() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        return
+    end
     local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
     if type(fn) == "function" then
         pcall(fn, not active)
@@ -1460,6 +1463,10 @@ local function DropdownRow(index)
     row._msuf2FontPreview = fontPreview
 
     row:SetScript("OnClick", function(self)
+        if M.BlockCombatAction and M.BlockCombatAction() then
+            CloseDropdown()
+            return
+        end
         local owner = self._msuf2Owner
         local value = self._msuf2Value
         if owner then
@@ -1714,6 +1721,10 @@ function W.Dropdown(section, label, values, width)
 
     btn:EnableMouseWheel(false)
     btn:SetScript("OnClick", function(self)
+        if M.BlockCombatAction and M.BlockCombatAction() then
+            CloseDropdown()
+            return
+        end
         if dropdownOwner == self and dropdownFrame and dropdownFrame:IsShown() then
             CloseDropdown()
             return

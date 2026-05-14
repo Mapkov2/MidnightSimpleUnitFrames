@@ -640,6 +640,10 @@ do
     local origUpdateButton = GF.UpdateButton
     if type(origUpdateButton) == "function" then
         GF.UpdateButton = function(f, unit)
+            if GF.IsFrameRuntimeEnabled and not GF.IsFrameRuntimeEnabled(f, f and f._msufGFKind) then
+                if f then HB.HideFrame(f) end
+                return
+            end
             origUpdateButton(f, unit)
             if f._msufIsGroupFrame and unit and UnitExists(unit) and not f._msufGFPreviewActive then
                 local kind = f._msufGFKind or "party"
@@ -662,6 +666,8 @@ do
     ef:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     ef:RegisterEvent("PLAYER_TALENT_UPDATE")
     ef:SetScript("OnEvent", function()
+        if GF.UpdateAnyEnabledFlag then GF.UpdateAnyEnabledFlag() end
+        if GF._anyEnabled == false then return end
         _cachedSpecId = nil
         GF.ForEachFrame(function(f, kind)
             if f.unit and UnitExists(f.unit) then

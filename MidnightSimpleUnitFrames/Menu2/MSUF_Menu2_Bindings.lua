@@ -67,6 +67,38 @@ local function CallGlobal(name, ...)
     return false
 end
 
+local function IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return true end
+    return (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false
+end
+
+function M.IsConfigCombatLocked()
+    return IsConfigCombatLocked()
+end
+
+function M.ShowConfigCombatLockMessage()
+    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+        _G.MSUF_ShowConfigCombatLockMessage()
+    elseif print then
+        print("|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
+    end
+end
+
+function M.BlockCombatAction()
+    if not IsConfigCombatLocked() then return false end
+    M.ShowConfigCombatLockMessage()
+    return true
+end
+
+local function BlockCombatAndRefresh(ctx)
+    if not M.BlockCombatAction() then return false end
+    if M.Refresh then M.Refresh(ctx) end
+    return true
+end
+
 local function FlushApply()
     flushQueued = false
 
@@ -315,6 +347,7 @@ end
 
 function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
+    if M.BlockCombatAction() then return false end
     if historyDepth > 0 or historyRestoring then return fn() end
 
     local before = CurrentHistorySnapshot()
@@ -332,6 +365,7 @@ function M.CaptureHistory(label, source, fn)
 end
 
 function M.StartHistorySession()
+    if IsConfigCombatLocked() then return false end
     if historyTransaction then
         historyTransaction = nil
         historyDepth = math.max(0, historyDepth - 1)
@@ -359,6 +393,7 @@ function M.EndHistorySession()
 end
 
 function M.CheckpointHistory(label, source)
+    if M.BlockCombatAction() then return false end
     if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
     local before = CurrentHistorySnapshot()
     local after = SnapshotDB()
@@ -366,6 +401,7 @@ function M.CheckpointHistory(label, source)
 end
 
 function M.BeginHistoryTransaction(label, source)
+    if M.BlockCombatAction() then return false end
     if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
     historyTransaction = {
         label = label or "MSUF2 change",
@@ -393,6 +429,7 @@ function M.CancelHistoryTransaction()
 end
 
 function M.ResetHistorySession()
+    if M.BlockCombatAction() then return false end
     if not historySessionActive or type(historySessionBaseSnapshot) ~= "table" then return false end
     local ok = ApplyHistorySnapshot(historySessionBaseSnapshot, "MSUF2_HISTORY_RESET_SESSION")
     if ok then M.ClearHistory() end
@@ -429,6 +466,7 @@ function M.GetHistoryState()
 end
 
 function M.Undo()
+    if M.BlockCombatAction() then return false end
     M.historyUndo = M.historyUndo or {}
     M.historyRedo = M.historyRedo or {}
     local entry = table.remove(M.historyUndo)
@@ -441,6 +479,7 @@ function M.Undo()
 end
 
 function M.Redo()
+    if M.BlockCombatAction() then return false end
     M.historyUndo = M.historyUndo or {}
     M.historyRedo = M.historyRedo or {}
     local entry = table.remove(M.historyRedo)
@@ -472,6 +511,7 @@ local function WidgetHistorySource(ctx, widget, suffix)
 end
 
 function M.RequestUnitApply(unit, reason, opts)
+    if M.BlockCombatAction() then return false end
     unit = (unit == "tot") and "targettarget" or unit
     if not UNIT_KEYS[unit] then return end
     M.CheckpointHistory(reason or ("MSUF2_" .. tostring(unit)), "apply:unit:" .. tostring(unit) .. ":" .. tostring(reason or "change"))
@@ -496,6 +536,7 @@ function M.RequestUnitApply(unit, reason, opts)
 end
 
 function M.SetUnitValue(unit, key, value, reason, opts)
+    if M.BlockCombatAction() then return false end
     if historyDepth == 0 and not historyRestoring then
         return M.CaptureHistory(tostring(key), "unit:" .. tostring(unit) .. ":" .. tostring(key), function()
             return M.SetUnitValue(unit, key, value, reason, opts)
@@ -509,6 +550,7 @@ function M.SetUnitValue(unit, key, value, reason, opts)
 end
 
 function M.RequestGeneralApply(reason, opts)
+    if M.BlockCombatAction() then return false end
     M.CheckpointHistory(reason or "MSUF2_GENERAL", "apply:general:" .. tostring(reason or "change"))
     if not pendingGeneral then pendingGeneral = {} end
     pendingGeneral.reason = reason or pendingGeneral.reason or "MSUF2_GENERAL"
@@ -529,6 +571,7 @@ function M.RequestGeneralApply(reason, opts)
 end
 
 function M.SetGeneralValue(key, value, reason, opts)
+    if M.BlockCombatAction() then return false end
     if historyDepth == 0 and not historyRestoring then
         return M.CaptureHistory(tostring(key), "general:" .. tostring(key), function()
             return M.SetGeneralValue(key, value, reason, opts)
@@ -1225,6 +1268,7 @@ function M.BuildPageResetWarning(pageKey)
 end
 
 function M.ResetPageToDefaults(pageKey)
+    if M.BlockCombatAction() then return false end
     local info = PAGE_RESET_INFO[pageKey or ""]
     if not info then return false end
     if info.kind == "profile" then
@@ -1239,6 +1283,7 @@ function M.ResetPageToDefaults(pageKey)
 end
 
 function M.ShowPageResetConfirm(pageKey)
+    if M.BlockCombatAction() then return false end
     if not M.PageHasReset(pageKey) then return false end
     local message = M.BuildPageResetWarning(pageKey)
     if not message then return false end
@@ -1289,6 +1334,7 @@ end
 function M.BindToggle(ctx, widget, getValue, setValue)
     if not widget then return end
     widget:SetScript("OnClick", function(self)
+        if BlockCombatAndRefresh(ctx) then return end
         local nextValue = not (getValue() and true or false)
         local label = WidgetHistoryLabel(ctx, self)
         M.CaptureHistory(label, WidgetHistorySource(ctx, self, label), function()
@@ -1304,6 +1350,7 @@ end
 function M.BindSlider(ctx, slider, getValue, setValue)
     if not slider then return end
     local function BeginSliderHistory(self)
+        if BlockCombatAndRefresh(ctx) then return end
         if self._msuf2Refreshing or self._msuf2HistoryTransaction then return end
         if not M.BeginHistoryTransaction then return end
         local label = WidgetHistoryLabel(ctx, self)
@@ -1321,6 +1368,7 @@ function M.BindSlider(ctx, slider, getValue, setValue)
     slider:HookScript("OnHide", CommitSliderHistory)
     slider:HookScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
+        if BlockCombatAndRefresh(ctx) then return end
         if self._msuf2Step and self._msuf2Step >= 1 then
             value = math.floor(value + 0.5)
         end
@@ -1348,6 +1396,7 @@ function M.BindSegment(ctx, segment, getValue, setValue)
     for i = 1, #(segment.buttons or {}) do
         local btn = segment.buttons[i]
         btn:SetScript("OnClick", function(self)
+            if BlockCombatAndRefresh(ctx) then return end
             if getValue() == self._msuf2Value then
                 segment:SetValue(self._msuf2Value)
                 return
@@ -1367,6 +1416,10 @@ end
 function M.BindDropdown(ctx, dropdown, getValue, setValue)
     if not dropdown then return end
     dropdown:SetOnValueChanged(function(value)
+        if BlockCombatAndRefresh(ctx) then
+            if type(getValue) == "function" then dropdown:SetValue(getValue()) end
+            return
+        end
         if type(getValue) == "function" and getValue() == value then
             dropdown:SetValue(value)
             return
@@ -1390,6 +1443,7 @@ function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
     if not editBox then return end
     editBox._msuf2CommitOnBlur = commitOnBlur and true or false
     editBox:SetOnValueCommitted(function(value)
+        if BlockCombatAndRefresh(ctx) then return end
         if tostring(getValue() or "") == tostring(value or "") then return end
         local label = WidgetHistoryLabel(ctx, editBox)
         M.CaptureHistory(label, WidgetHistorySource(ctx, editBox, label), function()
@@ -1410,6 +1464,10 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB)
         colorButton:SetRGB(r or 1, g or 1, b or 1)
     end
     colorButton:SetOnColorChanged(function(r, g, b)
+        if BlockCombatAndRefresh(ctx) then
+            RefreshColor()
+            return
+        end
         if type(getRGB) == "function" then
             local cr, cg, cb = getRGB()
             if math.abs((cr or 1) - (r or 1)) < 0.0001
