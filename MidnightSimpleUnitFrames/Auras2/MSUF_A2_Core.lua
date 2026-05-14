@@ -260,41 +260,43 @@ local function _DecodeSpellId(data)
 end
 
 -- Build flat ignore hashtable from enabled category keys.
--- PERF: Caches result via generation counter. Only rebuilds when
--- Cache.InvalidateIgnoreHash() is called (Options toggle).
+-- PERF: Caches per category table. Shared + per-unit overrides can coexist
+-- without rebuilding on every frame or leaking one unit's hash into another.
 -- Zero allocation on steady-state (no string building, no table.concat).
-local _ignoreHashPool = {}  -- reusable table
-local _ignoreHashValid = false
-local _ignoreHashAny = false
+local _ignoreHashPools = setmetatable({}, { __mode = "k" })
+local _ignoreHashValid = setmetatable({}, { __mode = "k" })
 
 function Cache.BuildIgnoreHash(enabledCats)
     if not enabledCats then return nil end
     -- PERF: return cached result if still valid
-    if _ignoreHashValid then
-        return _ignoreHashAny and _ignoreHashPool or nil
+    local hash = _ignoreHashPools[enabledCats]
+    if hash and _ignoreHashValid[enabledCats] then
+        return hash._any and hash or nil
     end
-    _ignoreHashValid = true
-    local hash = _ignoreHashPool
+    if not hash then
+        hash = {}
+        _ignoreHashPools[enabledCats] = hash
+    end
     wipe(hash)
-    local any = false
+    hash._any = false
     for catKey, enabled in next, enabledCats do
         if enabled == true then
             local spells = _IGNORE_CAT_SPELLS[catKey]
             if spells then
                 for sid in next, spells do
                     hash[sid] = true
-                    any = true
+                    hash._any = true
                 end
             end
         end
     end
-    _ignoreHashAny = any
-    return any and hash or nil
+    _ignoreHashValid[enabledCats] = true
+    return hash._any and hash or nil
 end
 
 -- Invalidate ignore hash cache (called when user changes ignore settings)
 function Cache.InvalidateIgnoreHash()
-    _ignoreHashValid = false
+    wipe(_ignoreHashValid)
 end
 
 -- Per-unit state

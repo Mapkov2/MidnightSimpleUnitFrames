@@ -709,6 +709,44 @@ local function EnsureMockPowerBar(f, kind, conf)
     return power
 end
 
+local function RefreshMockGroupBorder(f, conf, previewScale)
+    if not f then return end
+    local border = f._groupBorderPreview
+    if not border then
+        border = CreateFrame("Frame", nil, f, "BackdropTemplate")
+        border:EnableMouse(false)
+        f._groupBorderPreview = border
+    end
+    if not conf or conf.groupBorderEnabled ~= true then
+        border:Hide()
+        return
+    end
+
+    local scale = tonumber(previewScale) or 1
+    if scale <= 0 then scale = 1 end
+    local size = floor(((tonumber(conf.groupBorderSize) or 1) * scale) + 0.5)
+    if size < 1 then size = 1 elseif size > 24 then size = 24 end
+    local pad = floor(((tonumber(conf.groupBorderPadding) or 2) * scale) + 0.5)
+    if pad < 0 then pad = 0 elseif pad > 96 then pad = 96 end
+
+    if border._msufPreviewGBSize ~= size then
+        border._msufPreviewGBSize = size
+        border:SetBackdrop({ edgeFile = W8, edgeSize = size })
+        border:SetBackdropColor(0, 0, 0, 0)
+    end
+    border:SetBackdropBorderColor(
+        tonumber(conf.groupBorderR) or 0.38,
+        tonumber(conf.groupBorderG) or 0.68,
+        tonumber(conf.groupBorderB) or 1.00,
+        tonumber(conf.groupBorderA) or 0.95
+    )
+    border:SetFrameLevel((f.GetFrameLevel and f:GetFrameLevel() or 0) + 14)
+    border:ClearAllPoints()
+    border:SetPoint("TOPLEFT", f, "TOPLEFT", -pad, pad)
+    border:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", pad, -pad)
+    border:Show()
+end
+
 local function BuildMockFrame(parent)
     local kind = _getKind and _getKind() or "party"
     local conf = GF.GetConf(kind)
@@ -744,6 +782,7 @@ local function BuildMockFrame(parent)
         insets = { left = inset, right = inset, top = inset, bottom = inset } })
     f:SetBackdropColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
     f:SetBackdropBorderColor(conf.borderR or 0, conf.borderG or 0, conf.borderB or 0, conf.borderA or 1)
+    RefreshMockGroupBorder(f, conf, rawToMock)
 
     local health = CreateFrame("StatusBar", nil, f)
     health:SetStatusBarTexture(GF.ResolveBarTexture(kind))
@@ -969,6 +1008,7 @@ function GF.RefreshPreviewBox()
     -- Background
     m:SetBackdropColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
     m:SetBackdropBorderColor(conf.borderR or 0, conf.borderG or 0, conf.borderB or 0, conf.borderA or 1)
+    RefreshMockGroupBorder(m, conf, rawToMock)
     if m._healthBg then
         m._healthBg:SetVertexColor(conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, conf.bgA or 0.85)
     end
@@ -1552,6 +1592,7 @@ local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
     if not showText then
         if ic._cdText  then ic._cdText:Hide()  end
         if ic._stkText then ic._stkText:Hide() end
+        if ic._drText  then ic._drText:Hide()  end
         return
     end
 
@@ -1611,6 +1652,27 @@ local function ApplyMockIconText(ic, gcfg, kind, showText, previewScale)
         st:Show()
     else
         st:Hide()
+    end
+
+    local dr = ic._drText
+    if not dr then
+        dr = ic:CreateFontString(nil, "OVERLAY")
+        ic._drText = dr
+    end
+    if gcfg.showDR == true then
+        local drFlags = gcfg.drOutline or fontFlags
+        local drSize = max(6, LiveToPreviewValue(ScaleFrameValue(gcfg.drSize or 9, frameScale, 6)))
+        if dr.SetFont then dr:SetFont(fontPath, drSize, drFlags) end
+        dr:SetText("75%")
+        dr:SetTextColor(GetAuraMockBaseCooldownColor())
+        dr:ClearAllPoints()
+        local drAnchor = gcfg.drAnchor or "TOPLEFT"
+        local drOX = LiveToPreviewValue(ScaleFrameValue(gcfg.drOffsetX or 1, frameScale))
+        local drOY = LiveToPreviewValue(ScaleFrameValue(gcfg.drOffsetY or -1, frameScale))
+        dr:SetPoint(drAnchor, ic, drAnchor, drOX, drOY)
+        dr:Show()
+    else
+        dr:Hide()
     end
 end
 

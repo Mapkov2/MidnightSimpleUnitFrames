@@ -43,6 +43,7 @@ local math_ceil = math.ceil
 local math_floor = math.floor
 local pairs = pairs
 local type = type
+local tonumber = tonumber
 local tostring = tostring
 local select = select
 local GetTime = _G.GetTime
@@ -319,6 +320,200 @@ function GF.ForEachFrame(fn)
         if f then
             fn(f, f._msufGFKind or GF.frames[f])
         end
+    end
+end
+
+------------------------------------------------------------------------
+-- Group block border
+------------------------------------------------------------------------
+GF.groupBorders = GF.groupBorders or {}
+GF.previewGroupBorders = GF.previewGroupBorders or {}
+
+local function EnsureGroupBorder(kind)
+    local borders = GF.groupBorders
+    local border = borders[kind]
+    if border then return border end
+
+    border = CreateFrame("Frame", "MSUF_GFGroupBorder_" .. tostring(kind), UIParent, "BackdropTemplate")
+    border:EnableMouse(false)
+    border:SetFrameStrata("MEDIUM")
+    border:SetFrameLevel(1)
+    border:Hide()
+    borders[kind] = border
+    return border
+end
+
+local function EnsurePreviewGroupBorder(kind, parent)
+    local borders = GF.previewGroupBorders
+    local border = borders[kind]
+    if not border then
+        border = CreateFrame("Frame", "MSUF_GFPreviewGroupBorder_" .. tostring(kind), parent or UIParent, "BackdropTemplate")
+        border:EnableMouse(false)
+        border:SetFrameStrata("MEDIUM")
+        border:Hide()
+        borders[kind] = border
+    elseif parent and border:GetParent() ~= parent then
+        border:SetParent(parent)
+    end
+    return border
+end
+
+local function ApplyGroupBorderStyle(border, conf, size)
+    if border._msufGBSize ~= size then
+        border._msufGBSize = size
+        border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = size })
+        border:SetBackdropColor(0, 0, 0, 0)
+    end
+    border:SetBackdropBorderColor(
+        tonumber(conf.groupBorderR) or 0.38,
+        tonumber(conf.groupBorderG) or 0.68,
+        tonumber(conf.groupBorderB) or 1.00,
+        tonumber(conf.groupBorderA) or 0.95
+    )
+end
+
+function GF.RefreshGroupBorder(kind)
+    kind = kind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    local border = EnsureGroupBorder(kind)
+    if not conf or conf.groupBorderEnabled ~= true then
+        border:Hide()
+        return
+    end
+
+    local left, right, top, bottom
+    local uiScale = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if uiScale == 0 then uiScale = 1 end
+
+    GF.ForEachFrame(function(f, frameKind)
+        local unit = f and f.unit
+        if frameKind == kind and type(unit) == "string" and unit ~= ""
+            and UnitExists and UnitExists(unit)
+            and f.IsVisible and f:IsVisible()
+            and not f._msufGFPreviewActive then
+            local box = f.barGroup or f
+            if box and box.GetLeft then
+                local l, r, t, b = box:GetLeft(), box:GetRight(), box:GetTop(), box:GetBottom()
+                if l and r and t and b then
+                    local boxScale = (box.GetEffectiveScale and box:GetEffectiveScale()) or uiScale
+                    local ratio = boxScale / uiScale
+                    l, r, t, b = l * ratio, r * ratio, t * ratio, b * ratio
+                    left = left and math_min(left, l) or l
+                    right = right and math_max(right, r) or r
+                    top = top and math_max(top, t) or t
+                    bottom = bottom and math_min(bottom, b) or b
+                end
+            end
+        end
+    end)
+
+    if not left or not right or not top or not bottom or right <= left or top <= bottom then
+        border:Hide()
+        return
+    end
+
+    local size = math_floor((tonumber(conf.groupBorderSize) or 1) + 0.5)
+    if size < 1 then size = 1 elseif size > 12 then size = 12 end
+    local pad = math_floor((tonumber(conf.groupBorderPadding) or 2) + 0.5)
+    if pad < 0 then pad = 0 elseif pad > 40 then pad = 40 end
+
+    ApplyGroupBorderStyle(border, conf, size)
+    border:ClearAllPoints()
+    border:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left - pad, bottom - pad)
+    border:SetSize((right - left) + pad * 2, (top - bottom) + pad * 2)
+    border:Show()
+end
+
+function GF.RefreshPreviewGroupBorder(kind)
+    kind = kind or "party"
+    local container = GF._previewContainer and GF._previewContainer[kind]
+    local conf = GF.GetConf and GF.GetConf(kind)
+    if not conf or conf.groupBorderEnabled ~= true
+        or not (GF._previewActive and GF._previewActive[kind])
+        or not container or not container.IsShown or not container:IsShown() then
+        local border = GF.previewGroupBorders and GF.previewGroupBorders[kind]
+        if border then border:Hide() end
+        return
+    end
+
+    local border = EnsurePreviewGroupBorder(kind, container)
+
+    local cL, cB = container:GetLeft(), container:GetBottom()
+    if not cL or not cB then
+        border:Hide()
+        return
+    end
+    local containerScale = (container.GetEffectiveScale and container:GetEffectiveScale()) or 1
+    if containerScale == 0 then containerScale = 1 end
+
+    local left, right, top, bottom
+    local frames = GF._previewFrames and GF._previewFrames[kind]
+    if frames then
+        for i = 1, #frames do
+            local f = frames[i]
+            if f and f._msufGFIsPreviewFrame and f.IsShown and f:IsShown() then
+                local box = f.barGroup or f
+                local l, r, t, b = box:GetLeft(), box:GetRight(), box:GetTop(), box:GetBottom()
+                if l and r and t and b then
+                    local boxScale = (box.GetEffectiveScale and box:GetEffectiveScale()) or containerScale
+                    l = ((l * boxScale) - (cL * containerScale)) / containerScale
+                    r = ((r * boxScale) - (cL * containerScale)) / containerScale
+                    t = ((t * boxScale) - (cB * containerScale)) / containerScale
+                    b = ((b * boxScale) - (cB * containerScale)) / containerScale
+                    left = left and math_min(left, l) or l
+                    right = right and math_max(right, r) or r
+                    top = top and math_max(top, t) or t
+                    bottom = bottom and math_min(bottom, b) or b
+                end
+            end
+        end
+    end
+
+    if not left or not right or not top or not bottom or right <= left or top <= bottom then
+        border:Hide()
+        return
+    end
+
+    local size = math_floor((tonumber(conf.groupBorderSize) or 1) + 0.5)
+    if size < 1 then size = 1 elseif size > 12 then size = 12 end
+    local pad = math_floor((tonumber(conf.groupBorderPadding) or 2) + 0.5)
+    if pad < 0 then pad = 0 elseif pad > 40 then pad = 40 end
+
+    ApplyGroupBorderStyle(border, conf, size)
+    border:SetFrameLevel((container.GetFrameLevel and container:GetFrameLevel() or 0) + 40)
+    border:ClearAllPoints()
+    border:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", left - pad, bottom - pad)
+    border:SetSize((right - left) + pad * 2, (top - bottom) + pad * 2)
+    border:Show()
+end
+
+function GF.RefreshGroupBorders(kind)
+    if kind then
+        GF.RefreshGroupBorder(kind)
+        GF.RefreshPreviewGroupBorder(kind)
+        return
+    end
+    GF.RefreshGroupBorder("party")
+    GF.RefreshGroupBorder("raid")
+    GF.RefreshGroupBorder("mythicraid")
+    GF.RefreshPreviewGroupBorder("party")
+    GF.RefreshPreviewGroupBorder("raid")
+    GF.RefreshPreviewGroupBorder("mythicraid")
+end
+
+function GF.QueueGroupBorderRefresh(kind)
+    GF._groupBorderRefreshQueued = GF._groupBorderRefreshQueued or {}
+    local key = kind or "_all"
+    if GF._groupBorderRefreshQueued[key] then return end
+    GF._groupBorderRefreshQueued[key] = true
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(0, function()
+            GF._groupBorderRefreshQueued[key] = nil
+            if GF.RefreshGroupBorders then GF.RefreshGroupBorders(kind) end
+        end)
+    elseif GF.RefreshGroupBorders then
+        GF._groupBorderRefreshQueued[key] = nil
+        GF.RefreshGroupBorders(kind)
     end
 end
 
@@ -1495,6 +1690,7 @@ local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
     if not inCombat and GF.SyncHeaderPosition then
         GF.SyncHeaderPosition(kind, nil, header)
     end
+    if GF.QueueGroupBorderRefresh then GF.QueueGroupBorderRefresh(kind) end
 end
 
 local function ScanHeaderChildren(header, kind, force)
@@ -1863,11 +2059,13 @@ function GF.SyncHeaderPosition(kind, countOverride, headerOverride)
     if InCombatLockdown() then return end
     if PreserveRaidGroups(kind) then
         PositionPreservedRaidHeaders(kind, headerOverride)
+        if GF.QueueGroupBorderRefresh then GF.QueueGroupBorderRefresh(kind) end
         return
     end
     local header = headerOverride or (GF.headers and GF.headers[kind])
     if not header then return end
     PositionHeaderFromGridCenter(kind, header, countOverride)
+    if GF.QueueGroupBorderRefresh then GF.QueueGroupBorderRefresh(kind) end
 end
 
 ------------------------------------------------------------------------
@@ -3037,6 +3235,7 @@ function GF.ShowPreview(kind, count)
             frames[i]:Hide()
         end
     end
+    if GF.RefreshPreviewGroupBorder then GF.RefreshPreviewGroupBorder(kind) end
 end
 
 function GF.HidePreview(kind)
@@ -3054,6 +3253,7 @@ function GF.HidePreview(kind)
     end
     local container = GF._previewContainer and GF._previewContainer[kind]
     if container then container:Hide() end
+    if GF.RefreshPreviewGroupBorder then GF.RefreshPreviewGroupBorder(kind) end
 end
 
 local function GF_PreviewsAllowed()
@@ -3142,6 +3342,7 @@ function GF.RefreshPreviewLayout(kind)
             end
         end
     end
+    if GF.RefreshPreviewGroupBorder then GF.RefreshPreviewGroupBorder(kind) end
 end
 
 ------------------------------------------------------------------------
@@ -3216,6 +3417,7 @@ function GF.RebuildAll()
         end)
         ScanRaidHeaders(GetLiveRaidKind(), true)
         GF.MarkAllDirty(GF.DIRTY_ALL)
+        if GF.RefreshGroupBorders then GF.RefreshGroupBorders() end
     end)
 end
 

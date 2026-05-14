@@ -1314,16 +1314,12 @@ local function RenderUnit(entry)
                 cfg.bossHealHideOthers = (bha.hideOthers == true)
             end
         end
-        -- Global Ignore List (reads from shared, per-unit overridable, boss excluded)
-        if _IS_BOSS[unit] then
-            cfg.ignoreCats = nil
-        else
-            local cats = shared.ignoreCats
-            if pu and pu.overrideIgnore == true and type(pu.ignoreCats) == "table" then
-                cats = pu.ignoreCats
-            end
-            cfg.ignoreCats = (cats) and cats or nil
+        -- Global Ignore List (shared for boss frames, per-unit overridable elsewhere)
+        local cats = shared.ignoreCats
+        if pu and pu.overrideIgnore == true and type(pu.ignoreCats) == "table" then
+            cats = pu.ignoreCats
         end
+        cfg.ignoreCats = (cats) and cats or nil
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)

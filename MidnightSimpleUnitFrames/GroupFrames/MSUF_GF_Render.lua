@@ -1643,6 +1643,7 @@ function GF.RefreshVisuals()
     end
     -- Options panel preview (drag-to-position mock frame)
     if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+    if GF.RefreshGroupBorders then GF.RefreshGroupBorders() end
 end
 
 ------------------------------------------------------------------------

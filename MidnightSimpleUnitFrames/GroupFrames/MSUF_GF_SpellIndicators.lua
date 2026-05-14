@@ -946,7 +946,7 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
             end
         end
         SetShownIfChanged(ind, true)
-    elseif cfg.missing and isPreview then
+    elseif cfg.missing then
         if itype == "icon" then
             local sk = _isMultiMode and (_auraSpecMap[auraName] or specKey) or specKey
             SetTextureIfChanged(ind.texture, SI.GetAuraIcon(sk, auraName))
@@ -964,7 +964,7 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
             end
             if ind.previewText then
                 ApplyPreviewTextStyle(ind.previewText, cfg, displaySize, true)
-                SetCountTextIfChanged(ind.previewText, "9")
+                SetCountTextIfChanged(ind.previewText, isPreview and "9" or "0")
                 SetShownIfChanged(ind.previewText, true)
             end
         elseif itype == "square" or itype == "bar" then
@@ -1602,6 +1602,8 @@ local function MakeExternalsDefaults()
         cooldownOffsetX = 0, cooldownOffsetY = 0, cooldownSize = 10, cooldownOutline = "OUTLINE",
         showStacks = false, stackAnchor = "BOTTOMRIGHT",
         stackOffsetX = 2, stackOffsetY = -2, stackSize = 10, stackOutline = "OUTLINE",
+        showDR = false, drAnchor = "TOPLEFT",
+        drOffsetX = 1, drOffsetY = -1, drSize = 9, drOutline = "OUTLINE",
     }
 end
 local function MakePrivateAuraDefaults()
