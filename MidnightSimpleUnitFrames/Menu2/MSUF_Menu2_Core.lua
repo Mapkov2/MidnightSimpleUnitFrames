@@ -646,7 +646,7 @@ local function HideGFHeaders(gf)
     if _G.InCombatLockdown and _G.InCombatLockdown() then return end
     if not (gf and gf.headers) then return end
     if gf.headers.party then gf.headers.party:Hide() end
-    if type(gf.HideRaidHeaders) == "function" then gf.HideRaidHeaders()
+    if type(gf.HideRaidHeaders) == "function" then gf.HideRaidHeaders(true)
     elseif gf.headers.raid then gf.headers.raid:Hide() end
 end
 

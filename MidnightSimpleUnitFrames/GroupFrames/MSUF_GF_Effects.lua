@@ -1267,33 +1267,6 @@ end
 
 local ApplyRangeFade
 do
-    local _gfRangeFadeMayNeedReset = false
-
-    local function _GF_FrameHasRangeFadeState(f)
-        if not f then return false end
-        if f._msufGFRangeFadeUnit ~= nil then return true end
-        if f._msufGFHealthAlphaDynamic then return true end
-        if f._msufGFHealthAlphaMul ~= nil then return true end
-        if type(f._msufGFHealthAlphaBool) ~= "nil" then return true end
-        return false
-    end
-
-    local function _GF_ConfigNeedsRangeRefresh(kind)
-        if not GF.GetConf then return true end
-        local conf = GF.GetConf(kind)
-        if not conf then return false end
-        if conf.enabled ~= true then return false end
-        if conf.rangeFadeEnabled ~= false then return true end
-        local frameAlpha = _GF_GetFrameAlpha(kind, conf)
-        return type(frameAlpha) == "number" and frameAlpha < 0.999
-    end
-
-    local function _GF_AnyRangeRefreshFeatureEnabled()
-        return _GF_ConfigNeedsRangeRefresh("party")
-            or _GF_ConfigNeedsRangeRefresh("raid")
-            or _GF_ConfigNeedsRangeRefresh("mythicraid")
-    end
-
     ApplyRangeFade = function(f, unit, inRange)
         local c = f._c
         local kind = f._msufGFKind or "party"
@@ -1310,7 +1283,6 @@ do
             if f.SetAlpha then f:SetAlpha(frameAlpha) end
             return
         end
-        _gfRangeFadeMayNeedReset = true
         local fadeAlpha = (c and c.rfAlpha) or (conf and conf.rangeFadeAlpha) or 0.4
         local hpMode = ((c and c.rfLayerMode) or (conf and _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)) or "frame") == "health"
 
@@ -1350,53 +1322,45 @@ do
             end
         end
     end
+end
 
-    function GF.RefreshRangeFade()
-        local frames = GF.frames
-        if not frames then return end
-        local featureEnabled = _GF_AnyRangeRefreshFeatureEnabled()
-        if not featureEnabled and not _gfRangeFadeMayNeedReset then return end
-        local stillNeedsReset = false
-        local list = GF.frameList
-        if list then
-            for i = 1, #list do
-                local f = list[i]
-                if f and _RuntimeEnabledForFrame(f) then
-                    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
-                    local hadState = _GF_FrameHasRangeFadeState(f)
-                    if featureEnabled or hadState then
-                        local unit = f.unit
-                        if unit and UnitExists(unit) then
-                            ApplyRangeFade(f, unit)
-                        else
-                            f._msufGFRangeFadeUnit = nil
-                            _ClearHealthRangeFade(f, f._msufGFKind or "party")
-                            _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
-                        end
-                        if _GF_FrameHasRangeFadeState(f) then stillNeedsReset = true end
-                    end
-                end
-            end
-        else
-            for f in pairs(frames) do
-                if f and _RuntimeEnabledForFrame(f) then
-                    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
-                    local hadState = _GF_FrameHasRangeFadeState(f)
-                    if featureEnabled or hadState then
-                        local unit = f.unit
-                        if unit and UnitExists(unit) then
-                            ApplyRangeFade(f, unit)
-                        else
-                            f._msufGFRangeFadeUnit = nil
-                            _ClearHealthRangeFade(f, f._msufGFKind or "party")
-                            _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
-                        end
-                        if _GF_FrameHasRangeFadeState(f) then stillNeedsReset = true end
-                    end
+function GF.RefreshRangeFade()
+    local frames = GF.frames
+    if not frames then return end
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                local unit = f.unit
+                if unit and UnitExists(unit) then
+                    ApplyRangeFade(f, unit)
+                else
+                    f._msufGFRangeFadeUnit = nil
+                    f._msufGFRangeFadeApplied = nil
+                    f._msufGFRangeFadeLastBool = nil
+                    _ClearHealthRangeFade(f, f._msufGFKind or "party")
+                    _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
                 end
             end
         end
-        _gfRangeFadeMayNeedReset = stillNeedsReset
+    else
+        for f in pairs(frames) do
+            if f then
+                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                local unit = f.unit
+                if unit and UnitExists(unit) then
+                    ApplyRangeFade(f, unit)
+                else
+                    f._msufGFRangeFadeUnit = nil
+                    f._msufGFRangeFadeApplied = nil
+                    f._msufGFRangeFadeLastBool = nil
+                    _ClearHealthRangeFade(f, f._msufGFKind or "party")
+                    _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
+                end
+            end
+        end
     end
 end
 
@@ -4491,6 +4455,9 @@ local UNIT_DISPATCH = {
 _RuntimeEnabledForFrame = function(f)
     if not f then return false end
     if f._msufGFPreviewActive then return true end
+    if f.unit and UnitExists and UnitExists(f.unit) and f.IsVisible and f:IsVisible() then
+        return true
+    end
     local kind = f._msufGFKind or (GF.frames and GF.frames[f]) or "party"
     return not (GF.IsKindEnabled and not GF.IsKindEnabled(kind))
 end

@@ -29,6 +29,9 @@ local math_floor = math.floor
 local function RuntimeEnabledForFrame(f)
     if not f then return false end
     if f._msufGFPreviewActive then return true end
+    if f.unit and UnitExists and UnitExists(f.unit) and f.IsVisible and f:IsVisible() then
+        return true
+    end
     local kind = f._msufGFKind or (GF.frames and GF.frames[f]) or "party"
     return not (GF.IsKindEnabled and not GF.IsKindEnabled(kind))
 end

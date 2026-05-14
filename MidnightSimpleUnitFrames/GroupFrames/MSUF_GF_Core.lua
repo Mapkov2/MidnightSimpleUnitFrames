@@ -327,6 +327,9 @@ end
 
 function GF.IsFrameRuntimeEnabled(f, frameKind)
     if f and f._msufGFPreviewActive then return true end
+    if f and f.unit and UnitExists and UnitExists(f.unit) and f.IsVisible and f:IsVisible() then
+        return true
+    end
     return GF.IsKindEnabled(frameKind or (f and f._msufGFKind) or "party")
 end
 
@@ -1840,11 +1843,12 @@ local function AnyRaidHeader()
     return false
 end
 
-local function HideRaidHeaders()
+local function HideRaidHeaders(preserveRuntime)
     local container = GF.raidGroupContainer
     if container then container:Hide() end
     ForEachRaidHeader(function(header) header:Hide() end)
-    if GF.DeactivateKindRuntime then
+    -- Preview hides the secure headers only; real visibility changes still clear child runtime.
+    if not preserveRuntime and GF.DeactivateKindRuntime then
         local visual = not (InCombatLockdown and InCombatLockdown())
         GF.DeactivateKindRuntime("raid", visual)
         GF.DeactivateKindRuntime("mythicraid", visual)
