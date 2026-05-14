@@ -35,10 +35,15 @@ jobs:
         shell: pwsh
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          CURSEFORGE_PACKAGE_TOKEN: ${{ secrets.CURSEFORGE_PACKAGE_TOKEN }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
         run: |
           $missing = @()
           if ([string]::IsNullOrWhiteSpace($env:WAGO_API_TOKEN)) {
             $missing += "secret WAGO_API_TOKEN"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:CURSEFORGE_PACKAGE_TOKEN) -and [string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
+            $missing += "secret CURSEFORGE_PACKAGE_TOKEN"
           }
           if ($missing.Count -gt 0) {
             throw "Missing release publishing config: $($missing -join ', ')"
@@ -73,3 +78,30 @@ jobs:
           } else {
             ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ZipPath $zip.FullName
           }
+
+      - name: Trigger CurseForge packager
+        shell: pwsh
+        env:
+          CURSEFORGE_PACKAGE_TOKEN: ${{ secrets.CURSEFORGE_PACKAGE_TOKEN }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        run: |
+          $token = $env:CURSEFORGE_PACKAGE_TOKEN
+          if ([string]::IsNullOrWhiteSpace($token)) {
+            $token = $env:CF_API_KEY
+          }
+          if ([string]::IsNullOrWhiteSpace($token)) {
+            throw "CURSEFORGE_PACKAGE_TOKEN is missing."
+          }
+
+          $tocPath = "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
+          $projectIdMatch = Select-String -Path $tocPath -Pattern '^##\s+X-Curse-Project-ID:\s*(\d+)\s*$' | Select-Object -First 1
+          if (-not $projectIdMatch) {
+            throw "X-Curse-Project-ID is missing in $tocPath."
+          }
+
+          $projectId = $projectIdMatch.Matches[0].Groups[1].Value
+          $escapedToken = [System.Uri]::EscapeDataString($token)
+          $uri = "https://www.curseforge.com/api/projects/$projectId/package?token=$escapedToken"
+
+          Invoke-RestMethod -Method Post -Uri $uri -Body "" | Out-Null
+          Write-Host "Triggered CurseForge packager for project $projectId."
