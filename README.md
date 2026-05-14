@@ -28,3 +28,22 @@ Lightweight, minimal **unitframes + castbars + auras** for World of Warcraft, wi
 ### Profiles & Import / Export
 - Profile system for quickly switching setups
 - Import/Export via copy-paste strings (supports **legacy** formats and newer formats)
+
+## Packaging
+
+The checked-in TOC files intentionally use `## Version: Developer Build`.
+Release packages patch the copied TOC files only, so GitHub checkouts stay marked as developer builds.
+
+Create a local release ZIP with:
+
+```powershell
+.\tools\package-release.ps1 -Version 5.021
+```
+
+If Windows blocks local scripts, use:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-release.ps1 -Version 5.021
+```
+
+If `-Version` is omitted, the script uses `VERSION`. GitHub Actions uses the pushed tag name and strips a leading `v` for the TOC version.
