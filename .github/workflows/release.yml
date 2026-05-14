@@ -15,12 +15,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build AddOns zip
+        shell: pwsh
         run: |
-          mkdir -p dist/AddOns
-          cp -R MidnightSimpleUnitFrames dist/AddOns/
-          cp -R MidnightSimpleUnitFrames_Castbars dist/AddOns/
-          cd dist
-          zip -r MSUF-${GITHUB_REF_NAME}.zip AddOns
+          ./tools/package-release.ps1 -Version $env:GITHUB_REF_NAME
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2

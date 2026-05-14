@@ -87,7 +87,8 @@ local function BuildTooltip(tt)
     local version = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
         and _G.C_AddOns.GetAddOnMetadata(addonName, "Version")
     if type(version) == "string" and version ~= "" then
-        tt:AddLine("v" .. version, 0.6, 0.6, 0.6)
+        local displayVersion = version:match("^%d") and ("v" .. version) or version
+        tt:AddLine(displayVersion, 0.6, 0.6, 0.6)
     end
 
     tt:AddLine(" ")
