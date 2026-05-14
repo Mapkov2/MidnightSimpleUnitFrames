@@ -295,12 +295,10 @@ local function FlushGF()
     end
     if geometry then
         if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry() end
-        if type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty(gf.DIRTY_LAYOUT or 32) end
     end
     if font and type(gf.RefreshFonts) == "function" then gf.RefreshFonts() end
     if visual then
         if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals() end
-        if type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty(gf.DIRTY_VISUAL or 2) end
     end
     RefreshGFPreview()
 end

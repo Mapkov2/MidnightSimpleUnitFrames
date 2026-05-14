@@ -4357,7 +4357,7 @@ local function BuildWindow()
         end
         local ver = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
         if type(ver) == "string" and ver ~= "" then
-            sbVersion:SetText((ver:sub(1, 1) == "v") and ver or ("v" .. ver))
+            sbVersion:SetText(ver:match("^%d") and ("v" .. ver) or ver)
         else
             sbVersion:SetText("v5.0 Beta 1")
         end
@@ -4804,7 +4804,8 @@ local function BuildDashboard(ctx)
     end
     local aboutText = M.Tr("by Mapko")
     if type(aboutVer) == "string" and aboutVer ~= "" then
-        aboutText = M.Format("v%s  -  by Mapko  -  with help from R41z0r", aboutVer)
+        local displayVersion = aboutVer:match("^%d") and ("v" .. aboutVer) or aboutVer
+        aboutText = M.Format("%s  -  by Mapko  -  with help from R41z0r", displayVersion)
     end
     local about = T.Font(wago, "GameFontDisableSmall", aboutText, T.colors.muted)
     about:SetPoint("BOTTOMLEFT", support, "TOPLEFT", 0, 4)

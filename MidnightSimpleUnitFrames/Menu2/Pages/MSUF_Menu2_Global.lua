@@ -597,12 +597,19 @@ local function SetAbsorbTextureTest(enabled)
 end
 
 local function ClearAbsorbTextureTest()
+    local wasEnabled = _G.MSUF_AbsorbTextureTestMode and true or false
     if type(_G.MSUF_ClearAbsorbTextureTestMode) == "function" then
         _G.MSUF_ClearAbsorbTextureTestMode()
-    elseif _G.MSUF_AbsorbTextureTestMode then
+    elseif wasEnabled then
         _G.MSUF_AbsorbTextureTestMode = false
         _G.MSUF_AbsorbTextureTestScope = nil
-        ApplyBars("MSUF2_ABSORB_TEST_CLEAR")
+    end
+    if wasEnabled then
+        if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
+            _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
+        else
+            ApplyBars("MSUF2_ABSORB_TEST_CLEAR")
+        end
     end
 end
 
