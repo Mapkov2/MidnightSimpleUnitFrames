@@ -43,6 +43,14 @@ local CI_SLOT_VALUES = GP.CI_SLOT_VALUES or {}
 local CI_SLOT_DEFAULTS = GP.CI_SLOT_DEFAULTS or {}
 local DISPEL_OVERLAY_STYLES = GP.DISPEL_OVERLAY_STYLES or {}
 local DEBUFF_STRIPE_EDGES = GP.DEBUFF_STRIPE_EDGES or {}
+local BLIZZARD_CONTAINER_STRATA = {
+    { value = "AUTO", text = "Auto (Frame)" },
+    { value = "BACKGROUND", text = "BACKGROUND" },
+    { value = "LOW", text = "LOW" },
+    { value = "MEDIUM", text = "MEDIUM" },
+    { value = "HIGH", text = "HIGH" },
+    { value = "DIALOG", text = "DIALOG" },
+}
 
 local GF = GP.GF
 local RefreshGFPreview = GP.RefreshGFPreview
@@ -91,7 +99,7 @@ local function BuildGFAuras(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
 
-    local renderer = b:CollapsibleSection("blizzrenderer", "Blizzard Renderer", 456, false)
+    local renderer = b:CollapsibleSection("blizzrenderer", "Blizzard Renderer", 590, false)
     W.Text(renderer, "Renderer path: Blizzard is the default native aura block. Checked types below are rendered by Blizzard; unchecked types use MSUF Custom groups. Custom mode disables the native block completely. Blizzard controls final native aura placement; MSUF only shows an approximate locked preview.", 14, -38, 620, T.colors.muted)
 
     local function PlaceDropdown(dropdown, x, y, width, hideTitle)
@@ -125,6 +133,41 @@ local function BuildGFAuras(ctx)
         return widget
     end
 
+    local function AddLayerTooltip(widget)
+        if not (widget and widget.HookScript) then return end
+        widget:HookScript("OnEnter", function(self)
+            if not _G.GameTooltip then return end
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            _G.GameTooltip:AddLine("Blizzard Aura Layering", 1, 1, 1)
+            _G.GameTooltip:AddLine("Blizzard renders these icons on MSUF's container. If icons appear behind frames, raise the container strata or frame level.", 0.72, 0.76, 0.86, true)
+            _G.GameTooltip:Show()
+        end)
+        widget:HookScript("OnLeave", function()
+            if _G.GameTooltip then _G.GameTooltip:Hide() end
+        end)
+    end
+
+    local function ApplyBlizzardLayering(forceReapply)
+        local gf = GF and GF()
+        if gf and type(gf.ApplyBlizzardAuraContainerLayering) == "function" then
+            gf.ApplyBlizzardAuraContainerLayering(CurrentScope(), forceReapply == true)
+        end
+        RefreshGFPreview()
+    end
+
+    local function GetAuraOption(key, default)
+        local root = AurasRoot(CurrentScope())
+        if root[key] == nil then return default end
+        return root[key]
+    end
+
+    local function SetAuraOption(key, value, forceReapply)
+        local root = AurasRoot(CurrentScope())
+        if root[key] == value then return end
+        root[key] = value
+        ApplyBlizzardLayering(forceReapply)
+    end
+
     local rendererMode = BindNestedDropdown(ctx, W.Dropdown(renderer, "", GF_RENDERERS, 180), function() return AurasRoot(CurrentScope()) end, "renderer", "BLIZZARD", "rebuild")
     PlaceDropdown(rendererMode, 14, -96, 180, true)
 
@@ -152,17 +195,53 @@ local function BuildGFAuras(ctx)
     local orgMode = BindNestedDropdown(ctx, W.Dropdown(renderer, "", GF_AURA_ORG, 260), function() return AurasRoot(CurrentScope()) end, "blizzardOrganizationType", "default", "geometry")
     PlaceDropdown(orgMode, 350, -314, 260, true)
 
+    local layerLabel = W.Text(renderer, "Layering", 14, -324, 240, T.colors.text)
+    local layerHint = W.Text(renderer, "Blizzard renders on MSUF's container. If icons appear behind frames, raise the container strata or frame level.", 14, -344, 300, T.colors.muted)
+    local strataMode = W.Dropdown(renderer, "Container Strata", BLIZZARD_CONTAINER_STRATA, 180)
+    M.BindDropdown(ctx, strataMode,
+        function() return GetAuraOption("blizzardContainerStrata", "AUTO") end,
+        function(value) SetAuraOption("blizzardContainerStrata", value or "AUTO", false) end)
+    PlaceDropdown(strataMode, 14, -398, 180, false)
+    AddLayerTooltip(strataMode)
+
+    local containerLevel = W.Slider(renderer, "", 0, 30, 1, 260)
+    M.BindSlider(ctx, containerLevel,
+        function() return tonumber(GetAuraOption("blizzardContainerFrameLevel", 1)) or 1 end,
+        function(value) SetAuraOption("blizzardContainerFrameLevel", floor((tonumber(value) or 1) + 0.5), false) end)
+    local function RefreshContainerLevelLabel(value)
+        value = value or tonumber(GetAuraOption("blizzardContainerFrameLevel", 1)) or 1
+        if containerLevel._msuf2Title then
+            containerLevel._msuf2Title:SetText(string.format("Container level: +%d", value))
+        end
+    end
+    containerLevel:HookScript("OnValueChanged", function(self, value)
+        if self._msuf2Refreshing then return end
+        RefreshContainerLevelLabel(floor((tonumber(value) or 1) + 0.5))
+    end)
+    M.AddRefresher(ctx, RefreshContainerLevelLabel)
+    RefreshContainerLevelLabel()
+    PlaceSlider(containerLevel, 14, -452, 260)
+    AddLayerTooltip(containerLevel)
+
+    local privateLayerFix = W.ToggleAt(renderer, "Private Aura Layer Fix", 14, -512, 190)
+    M.BindToggle(ctx, privateLayerFix,
+        function() return GetAuraOption("blizzardPrivateLayerFix", true) ~= false end,
+        function(value) SetAuraOption("blizzardPrivateLayerFix", value and true or false, true) end)
+    AddLayerTooltip(privateLayerFix)
+
     local posLabel = W.Text(renderer, "Blizzard Position", 350, -362, 240, T.colors.text)
     local posHint = W.Text(renderer, "Locked by Blizzard. MSUF can pass the native renderer settings above, but cannot drag or set the native block position. The preview marks the Blizzard-owned area and enabled aura types; exact placement is decided by Blizzard at runtime.", 350, -382, 330, T.colors.muted)
 
     M.AddRefresher(ctx, function()
         local native = (AurasRoot(CurrentScope()).renderer or "BLIZZARD") ~= "CUSTOM"
-        SetOptionsEnabled({ buffChk, debuffChk, dispelChk, extChk, cdTextChk, privateChk, iconSize, buffMax, debuffMax, orgMode }, native)
+        SetOptionsEnabled({ buffChk, debuffChk, dispelChk, extChk, cdTextChk, privateChk, iconSize, buffMax, debuffMax, orgMode, strataMode, containerLevel, privateLayerFix }, native)
         SetOptionEnabled(rendererMode, true)
         local c = native and T.colors.text or T.colors.dim
         routingLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         orgLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        layerLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         posLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        layerHint:SetTextColor((native and T.colors.muted or T.colors.dim)[1], (native and T.colors.muted or T.colors.dim)[2], (native and T.colors.muted or T.colors.dim)[3], native and 1 or 0.75)
         posHint:SetTextColor((native and T.colors.muted or T.colors.dim)[1], (native and T.colors.muted or T.colors.dim)[2], (native and T.colors.muted or T.colors.dim)[3], native and 1 or 0.75)
     end)
 
