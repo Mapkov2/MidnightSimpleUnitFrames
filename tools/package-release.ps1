@@ -90,7 +90,6 @@ $releaseVersion = Normalize-Version -RawVersion $Version
 $fileVersion = $releaseVersion -replace '[\\/:*?"<>|]', '-'
 $outputPath = Resolve-InRepoPath -Path $OutputDir
 $stagePath = Join-Path $outputPath "package"
-$addonsPath = Join-Path $stagePath "AddOns"
 
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
 
@@ -98,20 +97,25 @@ if (Test-Path -LiteralPath $stagePath) {
     Remove-Item -LiteralPath $stagePath -Recurse -Force
 }
 
-New-Item -ItemType Directory -Force -Path $addonsPath | Out-Null
+New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
 
-Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames") -Destination $addonsPath -Recurse -Force
-Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_Castbars") -Destination $addonsPath -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames") -Destination $stagePath -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_Castbars") -Destination $stagePath -Recurse -Force
 
-Set-TocVersion -TocPath (Join-Path $addonsPath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc") -TocVersion $releaseVersion
-Set-TocVersion -TocPath (Join-Path $addonsPath "MidnightSimpleUnitFrames_Castbars/MidnightSimpleUnitFrames_Castbars.toc") -TocVersion $releaseVersion
+Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc") -TocVersion $releaseVersion
+Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames_Castbars/MidnightSimpleUnitFrames_Castbars.toc") -TocVersion $releaseVersion
 
 $zipPath = Join-Path $outputPath "MSUF-$fileVersion.zip"
 if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }
 
-Compress-Archive -LiteralPath $addonsPath -DestinationPath $zipPath -Force
+$packageItems = Get-ChildItem -LiteralPath $stagePath
+if (-not $packageItems) {
+    throw "No files staged for packaging."
+}
+
+$packageItems | Compress-Archive -DestinationPath $zipPath -Force
 
 if (-not $KeepStaging) {
     Remove-Item -LiteralPath $stagePath -Recurse -Force

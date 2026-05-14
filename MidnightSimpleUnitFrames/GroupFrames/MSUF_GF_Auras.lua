@@ -1609,6 +1609,48 @@ do
         SetDRTextIfChanged(ic.drText, text)
         SetDRShownIfChanged(ic.drText, true)
     end
+
+    do
+        local _previewDRCfg = {}
+
+        function GF.ApplyExternalDRPreview(icon, gcfg, frameScale, value, previewZoom)
+            if not icon then return false end
+            if not (gcfg and gcfg.showDR == true) then
+                ClearExternalDR(icon)
+                return false
+            end
+
+            if not icon.drText and icon.CreateFontString then
+                local owner = icon._msufOverlay or icon
+                local fs = owner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                fs:SetDrawLayer("OVERLAY", 3)
+                fs:SetJustifyH("LEFT")
+                fs:SetTextColor(1, 1, 1, 1)
+                icon.drText = fs
+            end
+
+            local gFont, gFlags = ResolveGlobalFont()
+            local baseR, baseG, baseB, baseA = ResolveCooldownBaseColor()
+            local layoutCfg = gcfg
+            local layoutScale = frameScale or 1
+            local zoom = tonumber(previewZoom)
+            if zoom and zoom > 0 and zoom ~= 1 then
+                _previewDRCfg.drSize = ScaleFrameValue(ScaleFrameValue((gcfg and gcfg.drSize) or 9, layoutScale, 6), zoom, 6)
+                _previewDRCfg.drOutline = gcfg and gcfg.drOutline
+                _previewDRCfg.drAnchor = (gcfg and gcfg.drAnchor) or "TOPLEFT"
+                _previewDRCfg.drOffsetX = ScaleFrameValue(ScaleFrameValue((gcfg and gcfg.drOffsetX) or 1, layoutScale), zoom)
+                _previewDRCfg.drOffsetY = ScaleFrameValue(ScaleFrameValue((gcfg and gcfg.drOffsetY) or -1, layoutScale), zoom)
+                layoutCfg = _previewDRCfg
+                layoutScale = 1
+            end
+            ApplyExternalDRLayout(icon, layoutCfg, gFont, ((gcfg and gcfg.drOutline) or gFlags or "OUTLINE"), baseR, baseG, baseB, baseA, layoutScale)
+
+            local amount = tonumber(value) or tonumber(gcfg.previewDR) or 75
+            SetDRTextIfChanged(icon.drText, tostring(math_floor(amount + 0.5)) .. "%")
+            SetDRShownIfChanged(icon.drText, true)
+            return true
+        end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -3675,6 +3717,7 @@ do
                     ic.texture:Show()
                     if ic.cooldown then ClearCooldownIfNeeded(ic, ic.cooldown) end
                     ClearStackText(ic.count)
+                    ClearExternalDR(ic)
                     ic:SetBackdropBorderColor(0, 0, 0, 1)
                     PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv, maxShow)
                     ic:Show()
@@ -3713,6 +3756,7 @@ do
                     ic.texture:Show()
                     if ic.cooldown then ClearCooldownIfNeeded(ic, ic.cooldown) end
                     ClearStackText(ic.count)
+                    ClearExternalDR(ic)
                     local disp = MOCK_DISPELS[i]
                     local showDisp = debCfg.showDispelBorder ~= false
                     if disp and showDisp then
@@ -3759,6 +3803,11 @@ do
                     ic.texture:Show()
                     if ic.cooldown then ClearCooldownIfNeeded(ic, ic.cooldown) end
                     ClearStackText(ic.count)
+                    if GF.ApplyExternalDRPreview then
+                        GF.ApplyExternalDRPreview(ic, extCfg, frameScale, (i == 1) and 75 or 40)
+                    else
+                        ClearExternalDR(ic)
+                    end
                     ic:SetBackdropBorderColor(0, 0, 0, 1)
                     PositionIcon(ic, anchor, container, i, perRow, size, spacing, gv, maxShow)
                     ic:Show()

@@ -1,9 +1,9 @@
 name: MSUF
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types:
+      - published
 
 permissions:
   contents: write
@@ -11,15 +11,55 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ github.event.release.tag_name }}
+      RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Build AddOns zip
         shell: pwsh
         run: |
-          ./tools/package-release.ps1 -Version $env:GITHUB_REF_NAME
+          ./tools/package-release.ps1 -Version $env:RELEASE_VERSION
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
+          body_path: CHANGELOG.md
+
+      - name: Upload to Wago
+        shell: pwsh
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        run: |
+          $zip = Get-ChildItem -Path dist -Filter "*.zip" | Select-Object -First 1
+          if (-not $zip) {
+            throw "No release zip found in dist."
+          }
+
+          $publishArgs = @("-Version", $env:RELEASE_VERSION, "-ZipPath", $zip.FullName)
+          if ($env:RELEASE_IS_PRERELEASE -eq "true") {
+            $publishArgs += "-Prerelease"
+          }
+
+          ./tools/publish-wago.ps1 @publishArgs
+
+      - name: Upload to CurseForge
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_PROJECT_ID: ${{ vars.CF_PROJECT_ID }}
+          CF_GAME_VERSION_IDS: ${{ vars.CF_GAME_VERSION_IDS }}
+        run: |
+          $zip = Get-ChildItem -Path dist -Filter "*.zip" | Select-Object -First 1
+          if (-not $zip) {
+            throw "No release zip found in dist."
+          }
+
+          $publishArgs = @("-Version", $env:RELEASE_VERSION, "-ZipPath", $zip.FullName)
+          if ($env:RELEASE_IS_PRERELEASE -eq "true") {
+            $publishArgs += "-Prerelease"
+          }
+
+          ./tools/publish-curseforge.ps1 @publishArgs
