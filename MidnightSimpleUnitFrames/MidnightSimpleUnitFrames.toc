@@ -3,10 +3,11 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: Developer Build
+## Version: @project-version@
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics
+## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
 ## X-Website: https://discord.gg/JQnhZXnTAK
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB

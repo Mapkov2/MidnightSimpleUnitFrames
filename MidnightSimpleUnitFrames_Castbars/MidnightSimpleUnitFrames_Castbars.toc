@@ -2,12 +2,13 @@
 ## Title: Midnight Simple UnitFrames - Castbars
 ## Notes: Castbar LoD for MSUF
 ## Author: Mapko 
-## Version: Developer Build
+## Version: @project-version@
 ## Category: Combat
 ## Dependencies: MidnightSimpleUnitFrames
 ## OptionalDeps:
 ## LoadOnDemand: 1
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
 
