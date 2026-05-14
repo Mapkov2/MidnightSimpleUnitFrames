@@ -1,7 +1,7 @@
 -- MSUF RangeFade v4 — Minimal C-API overhead
 -- Architecture:
 --   Target:
---     Friendly: UNIT_IN_RANGE_UPDATE event → 1× UnitInRange (0 polling)
+--     Friendly: target/unit/range events → 1× range check on event (0 polling)
 --     Enemy:    1 spell registered with EnableSpellRangeCheck
 --               → SPELL_RANGE_CHECK_UPDATE fires only for THAT spell (1 event/change)
 --     Dead:     1 res spell registered → same mechanism
@@ -434,47 +434,11 @@ do
         _targetEvtFrame = CreateFrame("Frame")
     end
 
-    local _targetFriendlyTicker = nil
-
-    local function StopTargetFriendlyTicker()
-        _targetFriendlyTicker = nil
-    end
-
-    local function TargetFriendlyLoopStep()
-        local loop = _targetFriendlyTicker
-        if not loop then return end
-        local c = TargetGetConf()
-        if not c or not UnitExists("target") then
-            StopTargetFriendlyTicker()
-            ClearMul("target", "target")
-            return
-        end
-        ApplyMul(GetFrame("target"), "target", "target", c, CheckFriendlyTarget("target"))
-        if _targetFriendlyTicker == loop and C_Timer_After then
-            C_Timer_After(0.25, loop.step)
-        elseif _targetFriendlyTicker == loop then
-            _targetFriendlyTicker = nil
-        end
-    end
-
-    local function StartTargetFriendlyLoop()
-        if _targetFriendlyTicker or not C_Timer_After then return end
-        local loop = {}
-        loop.step = function()
-            if _targetFriendlyTicker == loop then
-                TargetFriendlyLoopStep()
-            end
-        end
-        _targetFriendlyTicker = loop
-        C_Timer_After(1.0, loop.step)
-    end
-
     local function TargetClassifyAndWire()
         local conf = TargetGetConf()
         if not conf or not UnitExists("target") then
             _targetDeadState = nil
             TargetUnregisterSpell()
-            StopTargetFriendlyTicker()
             ClearMul("target", "target")
             if _targetEvtFrame then
                 _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
@@ -496,7 +460,6 @@ do
                     EnsureTargetEvtFrame()
                     _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
                     _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
-                    StartTargetFriendlyLoop()
                     ApplyMul(GetFrame("target"), "target", "target", conf, CheckFriendlyTarget("target"))
                     return
                 end
@@ -510,7 +473,6 @@ do
         if _targetIsEnemy then
             -- Enemy: register 1 spell for SPELL_RANGE_CHECK_UPDATE
             _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
-            StopTargetFriendlyTicker()
             local spell = _pEnemy
             if _targetDeadState then spell = _pRes end
             if spell then
@@ -537,15 +499,12 @@ do
                 -- Party member: UNIT_IN_RANGE_UPDATE fires reliably
                 _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
                 _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
-                StartTargetFriendlyLoop()
             else
                 -- Non-party friendly (NPC, non-group player):
-                -- UNIT_IN_RANGE_UPDATE won't fire. Use target-only ticker with
-                -- IsSpellInRange / CheckInteractDistance fallback.
-                _targetEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE")
-                _targetEvtFrame:SetScript("OnEvent", nil)
-                StopTargetFriendlyTicker()
-                StartTargetFriendlyLoop()
+                -- stay strictly event-driven: immediate target/name/unit events
+                -- plus UNIT_IN_RANGE_UPDATE if Blizzard supplies it for this unit.
+                _targetEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "target")
+                _targetEvtFrame:SetScript("OnEvent", OnTargetFriendlyRange)
             end
 
             -- Immediate check
@@ -599,6 +558,14 @@ do
                 TargetClassifyAndWire()
             end
         end)
+        local function RefreshTargetUnitState(_, unit)
+            if unit ~= "target" then return end
+            _state["target"] = nil
+            TargetClassifyAndWire()
+        end
+        bus("UNIT_NAME_UPDATE", "MSUF_RANGEFADE", RefreshTargetUnitState)
+        bus("UNIT_CONNECTION", "MSUF_RANGEFADE", RefreshTargetUnitState)
+        bus("UNIT_FACTION", "MSUF_RANGEFADE", RefreshTargetUnitState)
         -- SPELLS_CHANGED coalescing: can fire 800+/sec in combat.
         -- Defer to next frame to process once regardless of fire count.
         local _tgtSpellsDirty = false
@@ -651,6 +618,9 @@ do
         unreg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE")
         unreg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE")
         unreg("UNIT_FLAGS", "MSUF_RANGEFADE")
+        unreg("UNIT_NAME_UPDATE", "MSUF_RANGEFADE")
+        unreg("UNIT_CONNECTION", "MSUF_RANGEFADE")
+        unreg("UNIT_FACTION", "MSUF_RANGEFADE")
         unreg("SPELLS_CHANGED", "MSUF_RANGEFADE")
         unreg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE")
         unreg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE")
@@ -686,13 +656,11 @@ do
     function _G.MSUF_RangeFade_Reset()
         _state["target"] = nil
         _mulT.target = 1
-        StopTargetFriendlyTicker()
         -- Re-apply on next target event
     end
 
     function _G.MSUF_RangeFade_Shutdown()
         TargetUnregisterSpell()
-        StopTargetFriendlyTicker()
         UnwireTargetEvents()
         ClearMul("target", "target")
         if _targetEvtFrame then
@@ -712,7 +680,6 @@ do
             TargetClassifyAndWire()
         else
             TargetUnregisterSpell()
-            StopTargetFriendlyTicker()
             UnwireTargetEvents()
             ClearMul("target", "target")
         end

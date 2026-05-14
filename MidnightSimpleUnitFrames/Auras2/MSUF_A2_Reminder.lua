@@ -762,6 +762,18 @@ function Reminder.EnsureMover(entry, unit, shared)
         if Reminder.SyncPopup then Reminder.SyncPopup() end
     end
 
+    local function ReminderDragUpdate(self)
+        if not self._isDragging then
+            self:SetScript("OnUpdate", nil)
+            return
+        end
+        local cx, cy = _GetCursorScaled()
+        local dx = cx - (self._dragStartCX or cx)
+        local dy = cy - (self._dragStartCY or cy)
+        if (dx * dx + dy * dy) > 4 then _dragged = true end
+        ApplyDrag(self, dx, dy)
+    end
+
     mover:SetScript("OnMouseDown", function(self, button)
         if button ~= "LeftButton" then return end
         if InCombatLockdown() then return end
@@ -779,20 +791,13 @@ function Reminder.EnsureMover(entry, unit, shared)
         self._dragStartCX = cx
         self._dragStartCY = cy
         self._isDragging = true
-    end)
-
-    mover:SetScript("OnUpdate", function(self)
-        if not self._isDragging then return end
-        local cx, cy = _GetCursorScaled()
-        local dx = cx - (self._dragStartCX or cx)
-        local dy = cy - (self._dragStartCY or cy)
-        if (dx * dx + dy * dy) > 4 then _dragged = true end
-        ApplyDrag(self, dx, dy)
+        self:SetScript("OnUpdate", ReminderDragUpdate)
     end)
 
     mover:SetScript("OnMouseUp", function(self, button)
         if button ~= "LeftButton" then return end
         self._isDragging = false
+        self:SetScript("OnUpdate", nil)
         if not _G.MSUF__UndoRestoring then
             local ac = _G.MSUF_EM_UndoAfterChange
             if type(ac) == "function" then ac("aura", "player") end
