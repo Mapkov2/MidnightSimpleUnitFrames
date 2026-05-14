@@ -2085,6 +2085,42 @@ function GF.GetBlizzardAuraIconSize(conf, scale, frameScale)
     return ScaleFrameValue(raw, (scale or 1) * (frameScale or 1), 8)
 end
 
+local function BuildBlizzardLayerConfig(auras)
+    auras = auras or _EMPTY_AURA_CFG
+    return {
+        containerStrata = auras.blizzardContainerStrata or "AUTO",
+        containerFrameLevel = auras.blizzardContainerFrameLevel,
+        privateLayerFix = auras.blizzardPrivateLayerFix ~= false,
+        privateLayerOffset = auras.blizzardPrivateLayerOffset or 1,
+    }
+end
+
+function GF.GetBlizzardAuraLayerConfig(conf)
+    return BuildBlizzardLayerConfig(conf and conf.auras)
+end
+
+local _blizzardLayerEventFrame
+local function QueueBlizzardLayeringAfterCombat(kind, forceReapply)
+    GF._pendingBlizzardAuraLayering = GF._pendingBlizzardAuraLayering or {}
+    local key = kind or "_all"
+    GF._pendingBlizzardAuraLayering[key] = GF._pendingBlizzardAuraLayering[key] or (forceReapply and true or false)
+    if forceReapply then GF._pendingBlizzardAuraLayering[key] = true end
+
+    if not _blizzardLayerEventFrame then
+        _blizzardLayerEventFrame = CreateFrame("Frame")
+        _blizzardLayerEventFrame:SetScript("OnEvent", function(self)
+            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            local pending = GF._pendingBlizzardAuraLayering
+            GF._pendingBlizzardAuraLayering = nil
+            if not pending then return end
+            for pendingKind, pendingForce in pairs(pending) do
+                GF.ApplyBlizzardAuraContainerLayering(pendingKind ~= "_all" and pendingKind or nil, pendingForce)
+            end
+        end)
+    end
+    _blizzardLayerEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+
 local function ClearOneBlizzardAuraContainer(container)
     local Native = GetNativeAuraAPI()
     if Native and container then
@@ -2241,6 +2277,11 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
         iconOffsetX = iconOffsetX,
         iconOffsetY = iconOffsetY,
     }
+    local layerCfg = BuildBlizzardLayerConfig(auras)
+    cfg.containerStrata = layerCfg.containerStrata
+    cfg.containerFrameLevel = layerCfg.containerFrameLevel
+    cfg.privateLayerFix = layerCfg.privateLayerFix
+    cfg.privateLayerOffset = layerCfg.privateLayerOffset
 
     local effectiveUnit = Native.ResolveUnitToken and Native.ResolveUnitToken(unit) or unit
     local desiredSig = Native.Signature and Native.Signature(effectiveUnit, cfg)
@@ -2249,7 +2290,18 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
         and (not desiredSig or container._msufNativeAuraSignature == desiredSig)
     if ready then
         if Native.ApplyFrameStrata then
-            Native.ApplyFrameStrata(container, parent, levelParent)
+            Native.ApplyFrameStrata(container, parent, levelParent, cfg)
+        end
+        if Native.EnsurePrivateAuraHost then
+            if cfg.privateAuras ~= false and cfg.privateLayerFix ~= false then
+                if Native.EnsurePrivateAuraHostForConfig then
+                    Native.EnsurePrivateAuraHostForConfig(container, effectiveUnit, cfg)
+                else
+                    Native.EnsurePrivateAuraHost(container, effectiveUnit, { config = cfg })
+                end
+            elseif Native.ClearPrivateAuraHost then
+                Native.ClearPrivateAuraHost(container)
+            end
         end
         container:Show()
         return {
@@ -2270,6 +2322,48 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
         externals = applied and renderExt,
         privateAuras = applied and renderPrivate,
     }
+end
+
+function GF.ApplyBlizzardAuraContainerLayering(kind, forceReapply)
+    local Native = GetNativeAuraAPI()
+    if not (Native and GF.ForEachFrame) then return end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        QueueBlizzardLayeringAfterCombat(kind, forceReapply)
+        return
+    end
+
+    GF.ForEachFrame(function(f, frameKind)
+        if kind and frameKind ~= kind then return end
+        local container = f and f._msufGFNativeAuras
+        if not container then return end
+        local conf = GF.GetConf and GF.GetConf(frameKind)
+        if not (conf and conf.auras) then return end
+        local unit = f._msufGFRegisteredUnit or (f.GetAttribute and f:GetAttribute("unit"))
+        if forceReapply and unit and GF.UpdateBlizzardAuraContainer then
+            GF.UpdateBlizzardAuraContainer(f, unit, conf, GetDynamicScale(conf), GetFrameScale(frameKind, conf), { isFullUpdate = true })
+            return
+        end
+        local parent = f.statusIconLayer or f.barGroup or f
+        local layerCfg = BuildBlizzardLayerConfig(conf.auras)
+        if Native.ApplyFrameStrata then
+            Native.ApplyFrameStrata(container, parent, parent, layerCfg)
+        end
+        if Native.EnsurePrivateAuraHost then
+            local types = GF.EnsureBlizzardAuraTypes(conf)
+            local paCfg = conf.privateAuras or _EMPTY_AURA_CFG
+            local privateOn = Native.TypeEnabled(types, "privateAuras", true) and paCfg.enabled ~= false
+            if privateOn and layerCfg.privateLayerFix ~= false then
+                if Native.EnsurePrivateAuraHostForConfig then
+                    Native.EnsurePrivateAuraHostForConfig(container, unit or frameKind, layerCfg)
+                else
+                    Native.EnsurePrivateAuraHost(container, unit or frameKind, { config = layerCfg })
+                end
+            elseif Native.ClearPrivateAuraHost then
+                Native.ClearPrivateAuraHost(container)
+            end
+        end
+        container:Show()
+    end)
 end
 
 ------------------------------------------------------------------------

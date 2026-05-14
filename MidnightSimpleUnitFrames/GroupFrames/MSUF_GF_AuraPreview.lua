@@ -2376,7 +2376,35 @@ function GF.RefreshPreviewHandles()
                 h:SetSize(w, hh)
                 h:ClearAllPoints()
                 h:SetPoint(anchor, _mockFrame, anchor, offX, offY)
-                h:SetFrameLevel(_mockFrame:GetFrameLevel() + 10)
+                local Native = ns and ns.MSUF_AuraNative
+                local layerCfg = {
+                    containerStrata = auras.blizzardContainerStrata or "AUTO",
+                    containerFrameLevel = auras.blizzardContainerFrameLevel,
+                    privateLayerFix = auras.blizzardPrivateLayerFix ~= false,
+                    privateLayerOffset = auras.blizzardPrivateLayerOffset or 1,
+                }
+                if Native and Native.ApplyBlizzardAuraContainerLayer then
+                    if Native.ApplyBlizzardAuraContainerLayerForConfig then
+                        Native.ApplyBlizzardAuraContainerLayerForConfig(h, kind, layerCfg, _mockFrame, _mockFrame)
+                    else
+                        Native.ApplyBlizzardAuraContainerLayer(h, kind, {
+                            config = layerCfg,
+                            parent = _mockFrame,
+                            levelParent = _mockFrame,
+                        })
+                    end
+                    if privateOn and layerCfg.privateLayerFix ~= false and Native.EnsurePrivateAuraHost then
+                        if Native.EnsurePrivateAuraHostForConfig then
+                            Native.EnsurePrivateAuraHostForConfig(h, kind, layerCfg)
+                        else
+                            Native.EnsurePrivateAuraHost(h, kind, { config = layerCfg })
+                        end
+                    elseif Native.ClearPrivateAuraHost then
+                        Native.ClearPrivateAuraHost(h)
+                    end
+                else
+                    h:SetFrameLevel(_mockFrame:GetFrameLevel() + 10)
+                end
 
                 local pool = h._blizzIcons or {}
                 h._blizzIcons = pool
