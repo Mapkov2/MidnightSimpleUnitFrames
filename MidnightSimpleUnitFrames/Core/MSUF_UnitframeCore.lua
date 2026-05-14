@@ -221,6 +221,7 @@ local function UFCore_RefreshSettingsCache(reason)
         mode = (g and g.useClassColors and "class") or (g and g.darkMode and "dark") or "dark"
     end
     cache.barMode = mode
+    cache.healthGradientEnabled = (not g) or (g.enableGradient ~= false)
 
     -- NPC Color Mode: "reaction" (default) or "type" (classification-based)
     -- Force "reaction" outside 5-man instances → zero overhead in raids/solo.
@@ -475,10 +476,48 @@ local function InitUnitFlags(f)
     f._msufUnitFlagsInited = true
 end
 
+local function UFCore_NormalizeGradientUnitKey(unit)
+    if not unit then return nil end
+    if unit == "tot" or unit == "targetoftarget" then return "targettarget" end
+    local bossFn = _G.MSUF_GetBossIndexFromToken
+    if bossFn and bossFn(unit) then return "boss" end
+    return unit
+end
+
+local function UFCore_GradientKeyActive(db, key)
+    return db and db.hlOverride == true and db.gradientOverride == true
+        and db.gradientOverrideVersion == 2
+        and type(db.gradientOverrideKeys) == "table"
+        and db.gradientOverrideKeys[key] == true
+end
+
+local function UFCore_HealthGradientEnabled(frame)
+    local bars = addon and addon.Bars
+    local resolve = bars and bars._ResolveGradientValue
+    if type(resolve) == "function" then
+        return resolve(frame, "enableGradient", true) ~= false
+    end
+
+    local db = _G.MSUF_DB
+    local g = db and db.general
+    if frame and db then
+        local key = frame.msufConfigKey or frame._msufConfigKey or frame.unitKey or frame.unit
+        key = UFCore_NormalizeGradientUnitKey(key)
+        local u = key and db[key]
+        if UFCore_GradientKeyActive(u, "enableGradient") and u.enableGradient ~= nil then
+            return u.enableGradient ~= false
+        end
+    end
+    return (not g) or (g.enableGradient ~= false)
+end
+
 local function UFCore_RefreshFrameInvariantFlags(f, cache)
     if not f then return end
     cache = cache or UFCore_GetSettingsCache()
     local mode = (cache and cache.barMode) or "dark"
+    if mode == "gradient" and not UFCore_HealthGradientEnabled(f) then
+        mode = "class"
+    end
 
     local staticHealthColor = false
     if mode == "dark" or mode == "unified" then
@@ -1047,6 +1086,9 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
 
     -- Bar mode (authoritative): read from file-scope local (synced in RefreshSettingsCache)
     local mode = _ufcBarMode
+    if mode == "gradient" and not UFCore_HealthGradientEnabled(frame) then
+        mode = "class"
+    end
 
     local barR, barG, barB
 
@@ -1163,7 +1205,7 @@ Elements.Health = {
         -- Color refresh is only needed on explicit unit swap/show (visual queue) or
         -- when a reaction/flag event marked it dirty.
         -- EXCEPTION: gradient mode is HP-derived and must update every health tick.
-        if f._msufVisualQueuedUFCore or f._msufHealthColorDirty or _ufcBarModeIsGradient then
+        if f._msufVisualQueuedUFCore or f._msufHealthColorDirty or (_ufcBarModeIsGradient and UFCore_HealthGradientEnabled(f)) then
             f._msufHealthColorDirty = nil
             UFCore_RefreshHealthBarColorFast(f, conf)
         end
@@ -2219,7 +2261,7 @@ local function _HealthValueFast(f)
     -- Mirrors GF dispatchHealthLean gradient handling. Calc is created in
     -- MSUF_Bars.HealthCalcUpdate on UNIT_MAXHEALTH; nil-guard skips silently
     -- on rare cold-start race (next MAXHEALTH event creates it).
-    if _ufcBarModeIsGradient then
+    if _ufcBarModeIsGradient and UFCore_HealthGradientEnabled(f) then
         local calc = f._msufHealthCalc
         if calc and _ufcGradientCurve then
             UnitGetDetailedHealPrediction(f.unit, "player", calc)

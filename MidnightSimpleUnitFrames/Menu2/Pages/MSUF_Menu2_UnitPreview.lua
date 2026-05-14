@@ -592,6 +592,15 @@ local function HealthColor(key, data)
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
     local cache = SettingsCache()
     local mode = (cache and cache.barMode) or g.barMode or "dark"
+    if mode == "gradient" then
+        local resolve = ns and ns.Bars and ns.Bars._ResolveGradientValue
+        local enabled = cache and cache.healthGradientEnabled
+        if enabled == nil then enabled = g.enableGradient ~= false end
+        if type(resolve) == "function" then
+            enabled = resolve({ msufConfigKey = key }, "enableGradient", true) ~= false
+        end
+        if not enabled then mode = "class" end
+    end
     data = data or UNIT_DATA.player
     if mode == "class" then
         if data.isPet and cache and cache.petFrameColorEnabled then
