@@ -1715,29 +1715,46 @@ local function MarkAllDirty(delay)
     _ForEachDirtyUnit(true, _MarkDirtyEachUnit)
 end
 
--- Combat-leave guard: tear down + rebuild all private aura anchors.
--- Engine-managed private aura visuals can survive encounter cleanup if the engine
--- fails to remove stale anchor state, leaving ghost icons stuck on frames.
--- Forcing a PrivateClear → MarkAllDirty cycle on PLAYER_REGEN_ENABLED
--- guarantees a clean slate; PrivateRebuild runs on the next RenderUnit pass
--- because _lastPrivateGen was reset.
+-- Combat-leave guard: tear down private aura anchors only when there is private
+-- state to clear. Engine-managed private aura visuals can survive encounter
+-- cleanup, but a broad aura redraw on every PLAYER_REGEN_ENABLED is wasteful
+-- when no private anchors were active.
 API._OnCombatLeave = function()
     _FlushPendingRemoveIDs()
-    for _, entry in pairs(AurasByUnit) do
-        if entry then
+
+    local Store = API.Store
+    local CM = API.Cache
+    local needsCacheAll = false
+    local function hasPrivateAuraState(entry)
+        if not entry then return false end
+        if type(entry._privateAnchorIDs) == "table" then return true end
+        if entry._privUnit or entry._privToken or entry._privSize or entry._privMax then return true end
+        if entry.private and entry.private.IsShown and entry.private:IsShown() then return true end
+        local slots = entry._privateSlots
+        if type(slots) == "table" then
+            for i = 1, #slots do
+                local slot = slots[i]
+                if slot and slot.IsShown and slot:IsShown() then return true end
+            end
+        end
+        return false
+    end
+
+    for unit, entry in pairs(AurasByUnit) do
+        if hasPrivateAuraState(entry) then
             PrivateClear(entry)
             entry._lastPrivateGen = nil
+            if Store and Store.InvalidateUnit then Store.InvalidateUnit(unit) end
+            if CM and CM.Invalidate then
+                CM.Invalidate(unit)
+            else
+                needsCacheAll = true
+            end
+            MarkDirty(unit, 0)
         end
     end
-    local Store = API.Store
-    if Store and Store.InvalidateUnit then
-        _storeInvalidateEachUnit = Store.InvalidateUnit
-        _ForEachDirtyUnit(true, _InvalidateStoreEachUnit)
-        _storeInvalidateEachUnit = nil
-    end
-    local CM = API.Cache
-    if CM and CM.InvalidateAll then CM.InvalidateAll() end
-    MarkAllDirty(0)
+
+    if needsCacheAll and CM and CM.InvalidateAll then CM.InvalidateAll() end
 end
 
 local function RefreshAll()

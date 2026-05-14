@@ -1265,6 +1265,32 @@ end
 
 local ApplyRangeFade
 do
+    local _gfRangeFadeMayNeedReset = false
+
+    local function _GF_FrameHasRangeFadeState(f)
+        if not f then return false end
+        if f._msufGFRangeFadeUnit ~= nil then return true end
+        if f._msufGFHealthAlphaDynamic then return true end
+        if f._msufGFHealthAlphaMul ~= nil then return true end
+        if type(f._msufGFHealthAlphaBool) ~= "nil" then return true end
+        return false
+    end
+
+    local function _GF_ConfigNeedsRangeRefresh(kind)
+        if not GF.GetConf then return true end
+        local conf = GF.GetConf(kind)
+        if not conf then return false end
+        if conf.rangeFadeEnabled ~= false then return true end
+        local frameAlpha = _GF_GetFrameAlpha(kind, conf)
+        return type(frameAlpha) == "number" and frameAlpha < 0.999
+    end
+
+    local function _GF_AnyRangeRefreshFeatureEnabled()
+        return _GF_ConfigNeedsRangeRefresh("party")
+            or _GF_ConfigNeedsRangeRefresh("raid")
+            or _GF_ConfigNeedsRangeRefresh("mythicraid")
+    end
+
     ApplyRangeFade = function(f, unit, inRange)
         local c = f._c
         local kind = f._msufGFKind or "party"
@@ -1281,6 +1307,7 @@ do
             if f.SetAlpha then f:SetAlpha(frameAlpha) end
             return
         end
+        _gfRangeFadeMayNeedReset = true
         local fadeAlpha = (c and c.rfAlpha) or (conf and conf.rangeFadeAlpha) or 0.4
         local hpMode = ((c and c.rfLayerMode) or (conf and _NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode)) or "frame") == "health"
 
@@ -1320,45 +1347,53 @@ do
             end
         end
     end
-end
 
-function GF.RefreshRangeFade()
-    local frames = GF.frames
-    if not frames then return end
-    local list = GF.frameList
-    if list then
-        for i = 1, #list do
-            local f = list[i]
-            if f then
-                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
-                local unit = f.unit
-                if unit and UnitExists(unit) then
-                    ApplyRangeFade(f, unit)
-                else
-                    f._msufGFRangeFadeUnit = nil
-                    f._msufGFRangeFadeApplied = nil
-                    f._msufGFRangeFadeLastBool = nil
-                    _ClearHealthRangeFade(f, f._msufGFKind or "party")
-                    _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
+    function GF.RefreshRangeFade()
+        local frames = GF.frames
+        if not frames then return end
+        local featureEnabled = _GF_AnyRangeRefreshFeatureEnabled()
+        if not featureEnabled and not _gfRangeFadeMayNeedReset then return end
+        local stillNeedsReset = false
+        local list = GF.frameList
+        if list then
+            for i = 1, #list do
+                local f = list[i]
+                if f then
+                    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                    local hadState = _GF_FrameHasRangeFadeState(f)
+                    if featureEnabled or hadState then
+                        local unit = f.unit
+                        if unit and UnitExists(unit) then
+                            ApplyRangeFade(f, unit)
+                        else
+                            f._msufGFRangeFadeUnit = nil
+                            _ClearHealthRangeFade(f, f._msufGFKind or "party")
+                            _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
+                        end
+                        if _GF_FrameHasRangeFadeState(f) then stillNeedsReset = true end
+                    end
+                end
+            end
+        else
+            for f in pairs(frames) do
+                if f then
+                    if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+                    local hadState = _GF_FrameHasRangeFadeState(f)
+                    if featureEnabled or hadState then
+                        local unit = f.unit
+                        if unit and UnitExists(unit) then
+                            ApplyRangeFade(f, unit)
+                        else
+                            f._msufGFRangeFadeUnit = nil
+                            _ClearHealthRangeFade(f, f._msufGFKind or "party")
+                            _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
+                        end
+                        if _GF_FrameHasRangeFadeState(f) then stillNeedsReset = true end
+                    end
                 end
             end
         end
-    else
-        for f in pairs(frames) do
-            if f then
-                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
-                local unit = f.unit
-                if unit and UnitExists(unit) then
-                    ApplyRangeFade(f, unit)
-                else
-                    f._msufGFRangeFadeUnit = nil
-                    f._msufGFRangeFadeApplied = nil
-                    f._msufGFRangeFadeLastBool = nil
-                    _ClearHealthRangeFade(f, f._msufGFKind or "party")
-                    _GF_ApplyFrameAlpha(f, f._msufGFKind or "party")
-                end
-            end
-        end
+        _gfRangeFadeMayNeedReset = stillNeedsReset
     end
 end
 
@@ -1374,6 +1409,7 @@ function GF.RefreshGroupAlphas()
                     if GF.BuildFrameCache then GF.BuildFrameCache(f) end
                     if GF.ApplyHealthBarAlpha then GF.ApplyHealthBarAlpha(f, kind) end
                     if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, kind) end
+                    if GF.ApplyBackgroundAlpha then GF.ApplyBackgroundAlpha(f, kind) end
                     if f.unit and UnitExists(f.unit) then
                         ApplyRangeFade(f, f.unit)
                     else
@@ -1388,6 +1424,7 @@ function GF.RefreshGroupAlphas()
                     if GF.BuildFrameCache then GF.BuildFrameCache(f) end
                     if GF.ApplyHealthBarAlpha then GF.ApplyHealthBarAlpha(f, kind) end
                     if GF.ApplyPowerBarAlpha then GF.ApplyPowerBarAlpha(f, kind) end
+                    if GF.ApplyBackgroundAlpha then GF.ApplyBackgroundAlpha(f, kind) end
                     if f.unit and UnitExists(f.unit) then
                         ApplyRangeFade(f, f.unit)
                     else
@@ -1397,10 +1434,10 @@ function GF.RefreshGroupAlphas()
             end
         end
     end
-    local bits = 0
-    if GF.DIRTY_COLOR then bits = bits + GF.DIRTY_COLOR end
-    if GF.DIRTY_BORDER then bits = bits + GF.DIRTY_BORDER end
-    if bits > 0 and GF.MarkAllDirty then GF.MarkAllDirty(bits) end
+    -- Runtime alpha transitions are already applied above. Do not dirty the
+    -- visual pipeline here: in combat, MarkAllDirty promotes to a post-combat
+    -- RefreshVisuals fan-out, turning alpha-only state changes into full
+    -- frame/aura refreshes.
 end
 
 local function _GF_ShouldApplyRangeOrFrameAlpha(f, c, kind)
@@ -3259,6 +3296,15 @@ end
 ------------------------------------------------------------------------
 local dispatchOverlays, dispatchIncomingHeal, dispatchAbsorb, dispatchHealAbsorb
 local _GF_DispatchOverlaysFromCalc
+
+local function _GF_ShouldShowAbsorbTextureTestForFrame(f)
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    if type(testFn) == "function" then
+        return testFn(f, f and f._msufGFKind) and true or false
+    end
+    return _G.MSUF_AbsorbTextureTestMode and true or false
+end
+
 local function UpdateAll(f, unit)
     if not f or not unit then return end
     local c = f._c
@@ -3323,7 +3369,12 @@ local function UpdateAll(f, unit)
     end
     UpdateTargetIndicator(f, unit)
     if c.statusTextEn or f._msufGFStatusState ~= 0 then UpdateStatusText(f, unit) end
-    if c.healPredEn then dispatchOverlays(f, unit) end
+    local absorbTestMode = _GF_ShouldShowAbsorbTextureTestForFrame(f)
+    local wasAbsorbTestMode = f._msufGFAbsorbTestActive
+    if c.healPredEn or absorbTestMode or wasAbsorbTestMode then
+        dispatchOverlays(f, unit)
+        if wasAbsorbTestMode and not absorbTestMode then f._msufGFAbsorbTestActive = nil end
+    end
     if c.roleStateEn or (f.roleIcon and f.roleIcon:IsShown()) then UpdateRoleIcon(f, unit) end
     if c.raidMarkerEn or (f.raidIcon and f.raidIcon:IsShown()) then UpdateRaidMarker(f, unit) end
     if c.leaderEn
@@ -3758,9 +3809,12 @@ local function dispatchHealthFull(f, unit)
         ihBar:SetValue(0)
         if ihBar:IsShown() then ihBar:Hide() end
     end
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
-    if calc and not absorbTestMode then
+    local absorbTestMode = _GF_ShouldShowAbsorbTextureTestForFrame(f)
+    local wasAbsorbTestMode = f._msufGFAbsorbTestActive
+    if absorbTestMode or wasAbsorbTestMode then
+        _GF_DispatchOverlaysFromCalc(f, unit, calc, hp, hpMax)
+        if wasAbsorbTestMode and not absorbTestMode then f._msufGFAbsorbTestActive = nil end
+    elseif calc then
         if ihBar then
             if c.healPredEn ~= false then
                 local v = calc:GetIncomingHeals()
@@ -3784,7 +3838,7 @@ local function dispatchHealthFull(f, unit)
                 else if haBar:IsShown() then haBar:Hide() end end
             else if haBar:IsShown() then haBar:Hide() end end
         end
-    elseif not calc then
+    else
         _GF_DispatchOverlaysFromCalc(f, unit, nil, hp, hpMax)
     end
 
@@ -4058,9 +4112,9 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
         return
     end
     -- Test mode: fixed values (same as main UF preview)
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    local absorbTestMode = _GF_ShouldShowAbsorbTextureTestForFrame(f)
     if absorbTestMode then
+        f._msufGFAbsorbTestActive = true
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(20)
         if not bar:IsShown() then bar:Show() end
@@ -4103,9 +4157,9 @@ dispatchAbsorb = function(f, unit, calc, hpMax)
     local bar = f.absorbBar
     if not bar then return end
     -- Test mode: fixed values, no unit/secret dependency (same as main UF)
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    local absorbTestMode = _GF_ShouldShowAbsorbTextureTestForFrame(f)
     if absorbTestMode then
+        f._msufGFAbsorbTestActive = true
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(25)
         if not bar:IsShown() then bar:Show() end
@@ -4142,9 +4196,9 @@ end
 dispatchHealAbsorb = function(f, unit, calc, hpMax)
     local bar = f.healAbsorbBar
     if not bar then return end
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    local absorbTestMode = _GF_ShouldShowAbsorbTextureTestForFrame(f)
     if absorbTestMode then
+        f._msufGFAbsorbTestActive = true
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(15)
         if not bar:IsShown() then bar:Show() end
@@ -5457,16 +5511,18 @@ _G.MSUF_GF_GlobalEventFrame     = _globalFrame
 --- Called from Bars options when test mode or absorb settings change.
 _G.MSUF_GF_RefreshOverlays = function()
     if not GF.frames then return end
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
     _GF_ForEachLiveGroupFrame(function(f)
         _GF_ApplyAbsorbAnchor(f)
         local u = f.unit
         if u then
+            local wasAbsorbTestMode = f._msufGFAbsorbTestActive
             dispatchOverlays(f, u)
-        elseif (type(testFn) == "function" and testFn(f, f._msufGFKind)) or (_G.MSUF_AbsorbTextureTestMode and type(testFn) ~= "function") then
+            if wasAbsorbTestMode and not _GF_ShouldShowAbsorbTextureTestForFrame(f) then f._msufGFAbsorbTestActive = nil end
+        elseif _GF_ShouldShowAbsorbTextureTestForFrame(f) or f._msufGFAbsorbTestActive then
             dispatchIncomingHeal(f, nil)
             dispatchAbsorb(f, nil)
             dispatchHealAbsorb(f, nil)
+            if not _GF_ShouldShowAbsorbTextureTestForFrame(f) then f._msufGFAbsorbTestActive = nil end
         end
     end)
     if GF._previewFrames then
@@ -5477,11 +5533,14 @@ _G.MSUF_GF_RefreshOverlays = function()
                     _GF_ApplyAbsorbAnchor(pf)
                     local u = pf.unit or pf._msufGFPreviewUnit
                     if u then
+                        local wasAbsorbTestMode = pf._msufGFAbsorbTestActive
                         dispatchOverlays(pf, u)
-                    elseif (type(testFn) == "function" and testFn(pf, pf._msufGFKind)) or (_G.MSUF_AbsorbTextureTestMode and type(testFn) ~= "function") then
+                        if wasAbsorbTestMode and not _GF_ShouldShowAbsorbTextureTestForFrame(pf) then pf._msufGFAbsorbTestActive = nil end
+                    elseif _GF_ShouldShowAbsorbTextureTestForFrame(pf) or pf._msufGFAbsorbTestActive then
                         dispatchIncomingHeal(pf, nil)
                         dispatchAbsorb(pf, nil)
                         dispatchHealAbsorb(pf, nil)
+                        if not _GF_ShouldShowAbsorbTextureTestForFrame(pf) then pf._msufGFAbsorbTestActive = nil end
                     end
                 end
             end
@@ -5499,4 +5558,6 @@ _G.MSUF_GF_DispatchAura    = dispatchAura
 _G.MSUF_GF_DispatchOverlays = dispatchOverlays
 _G.MSUF_GF_ApplyPowerColor = ApplyPowerColor
 _G.MSUF_GF_OnEvent         = GF_OnEvent
+-- Exported diagnostic helper. Do not wire this into health/power hotpaths
+-- without Perfy and visual regression validation.
 _G.MSUF_GF_PixelSnap       = _GF_PixelSnappedSetValue

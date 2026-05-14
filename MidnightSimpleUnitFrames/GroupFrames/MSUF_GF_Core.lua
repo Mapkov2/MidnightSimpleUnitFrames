@@ -233,6 +233,7 @@ local function _GFInstallAttrHook(child)
             self._msufGFNameColorKey       = nil
             self._msufGFStatusState        = nil
             self._msufGFStatusDirty        = nil
+            if GF.ResetStatusIconCaches then GF.ResetStatusIconCaches(self) end
             if GF.ResetOfflineHiddenFrame then GF.ResetOfflineHiddenFrame(self) end
             -- Hide any visible stripe immediately so it doesn't bleed
             -- into the new occupant's frame for one render cycle.
@@ -341,11 +342,18 @@ GF.UnregisterUnitEvents = GF.UnregisterUnitEvents or noop
 -- frame is briefly out of sync, and the late scans below still repair the real
 -- child size out of combat.
 ------------------------------------------------------------------------
-local function AnchorVisualRootToSlot(f, kind, w, h)
+local function AnchorVisualRootToSlot(f, kind, w, h, force)
     if not f or not f.barGroup then return end
     local conf = GF.GetConf(kind)
     local growth = (conf and conf.growth) or "DOWN"
     local bg = f.barGroup
+
+    if not force and bg._msufGFSlotW == w and bg._msufGFSlotH == h and bg._msufGFSlotGrowth == growth then
+        return
+    end
+    bg._msufGFSlotW = w
+    bg._msufGFSlotH = h
+    bg._msufGFSlotGrowth = growth
 
     bg:ClearAllPoints()
     bg:SetSize(w, h)
@@ -1034,6 +1042,39 @@ local function ApplyPowerColor(f, unit)
     f.power:SetStatusBarColor(r, g, b, 1)
 end
 
+local function _GF_CoreIconShow(icon)
+    if icon and icon.IsShown and not icon:IsShown() then icon:Show() end
+end
+
+local function _GF_CoreIconHide(icon)
+    if icon and icon.IsShown and icon:IsShown() then icon:Hide() end
+end
+
+local function _GF_CoreIconSetTexture(icon, texture)
+    if not icon or icon._msufGFCachedTexture == texture then return end
+    icon._msufGFCachedTexture = texture
+    icon:SetTexture(texture)
+end
+
+local function _GF_CoreIconSetTexCoord(icon, l, r, t, b)
+    if not icon then return end
+    if icon._msufGFTexL == l and icon._msufGFTexR == r
+        and icon._msufGFTexT == t and icon._msufGFTexB == b
+    then
+        return
+    end
+    icon._msufGFTexL = l
+    icon._msufGFTexR = r
+    icon._msufGFTexT = t
+    icon._msufGFTexB = b
+    icon:SetTexCoord(l, r, t, b)
+end
+
+local function _GF_CoreIconSetTextureAndCoords(icon, texture, l, r, t, b)
+    _GF_CoreIconSetTexture(icon, texture)
+    if l ~= nil then _GF_CoreIconSetTexCoord(icon, l, r, t, b) end
+end
+
 ------------------------------------------------------------------------
 -- Update all visuals for a unit (called on roster change + events)
 ------------------------------------------------------------------------
@@ -1198,17 +1239,16 @@ function GF.UpdateButton(f, unit)
             if role and role ~= "NONE" then
                 local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
                 if tex then
-                    f.roleIcon:SetTexture(tex)
-                    f.roleIcon:SetTexCoord(l, r, t, b)
-                    f.roleIcon:Show()
+                    _GF_CoreIconSetTextureAndCoords(f.roleIcon, tex, l, r, t, b)
+                    _GF_CoreIconShow(f.roleIcon)
                 else
-                    f.roleIcon:Hide()
+                    _GF_CoreIconHide(f.roleIcon)
                 end
             else
-                f.roleIcon:Hide()
+                _GF_CoreIconHide(f.roleIcon)
             end
         else
-            f.roleIcon:Hide()
+            _GF_CoreIconHide(f.roleIcon)
         end
     end
 
@@ -1217,13 +1257,19 @@ function GF.UpdateButton(f, unit)
         if conf.raidMarker ~= false then
             local idx = GetRaidTargetIndex(unit)
             if idx then
-                SetRaidTargetIconTexture(f.raidIcon, idx)
-                f.raidIcon:Show()
+                if f.raidIcon._msufGFRaidMarkerIndex ~= idx then
+                    f.raidIcon._msufGFRaidMarkerIndex = idx
+                    f.raidIcon._msufGFCachedTexture = nil
+                    SetRaidTargetIconTexture(f.raidIcon, idx)
+                end
+                _GF_CoreIconShow(f.raidIcon)
             else
-                f.raidIcon:Hide()
+                _GF_CoreIconHide(f.raidIcon)
+                f.raidIcon._msufGFRaidMarkerIndex = nil
             end
         else
-            f.raidIcon:Hide()
+            _GF_CoreIconHide(f.raidIcon)
+            f.raidIcon._msufGFRaidMarkerIndex = nil
         end
     end
 
@@ -1233,14 +1279,13 @@ function GF.UpdateButton(f, unit)
             local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
             if isLeader then
                 local tex, l, r, t, b = GF.GetLeaderTexture(kind)
-                f.leaderIcon:SetTexture(tex)
-                f.leaderIcon:SetTexCoord(l, r, t, b)
-                f.leaderIcon:Show()
+                _GF_CoreIconSetTextureAndCoords(f.leaderIcon, tex, l, r, t, b)
+                _GF_CoreIconShow(f.leaderIcon)
             else
-                f.leaderIcon:Hide()
+                _GF_CoreIconHide(f.leaderIcon)
             end
         else
-            f.leaderIcon:Hide()
+            _GF_CoreIconHide(f.leaderIcon)
         end
     end
 
@@ -1251,14 +1296,13 @@ function GF.UpdateButton(f, unit)
             local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
             if isAssist and not isLeader then
                 local tex, l, r, t, b = GF.GetAssistTexture(kind)
-                f.assistIcon:SetTexture(tex)
-                f.assistIcon:SetTexCoord(l, r, t, b)
-                f.assistIcon:Show()
+                _GF_CoreIconSetTextureAndCoords(f.assistIcon, tex, l, r, t, b)
+                _GF_CoreIconShow(f.assistIcon)
             else
-                f.assistIcon:Hide()
+                _GF_CoreIconHide(f.assistIcon)
             end
         else
-            f.assistIcon:Hide()
+            _GF_CoreIconHide(f.assistIcon)
         end
     end
 end
@@ -1266,7 +1310,45 @@ end
 ------------------------------------------------------------------------
 -- Scan header children and init them
 ------------------------------------------------------------------------
-local function ScanHeaderChildren(header, kind, force)
+local function _SetFrameSizeIfChanged(frame, w, h)
+    if not frame then return end
+    local cw = frame.GetWidth and frame:GetWidth()
+    local ch = frame.GetHeight and frame:GetHeight()
+    if cw ~= w then frame:SetWidth(w) end
+    if ch ~= h then frame:SetHeight(h) end
+end
+
+local function _SetShownIfChanged(frame, shown)
+    if not frame then return end
+    shown = shown and true or false
+    if frame.IsShown and frame:IsShown() == shown then return end
+    if shown then frame:Show() else frame:Hide() end
+end
+
+local function _AnchorTwoPointIfChanged(frame, owner, key, tlx, tly, brx, bry, force)
+    if not frame or not owner then return end
+    if not force
+        and frame._msufGFScanAnchorOwner == owner
+        and frame._msufGFScanAnchorKey == key
+        and frame._msufGFScanTLX == tlx
+        and frame._msufGFScanTLY == tly
+        and frame._msufGFScanBRX == brx
+        and frame._msufGFScanBRY == bry
+    then
+        return
+    end
+    frame._msufGFScanAnchorOwner = owner
+    frame._msufGFScanAnchorKey = key
+    frame._msufGFScanTLX = tlx
+    frame._msufGFScanTLY = tly
+    frame._msufGFScanBRX = brx
+    frame._msufGFScanBRY = bry
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", owner, "TOPLEFT", tlx, tly)
+    frame:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", brx, bry)
+end
+
+local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
     if not header then return end
     -- Throttle normal GROUP_ROSTER_UPDATE bursts, but never throttle the
     -- explicit post-layout repair scans. The repair scans are what normalize
@@ -1283,11 +1365,10 @@ local function ScanHeaderChildren(header, kind, force)
         w, h = GF.GetScaledFrameMetrics(kind)
     end
 
-    -- GetChildren() is more reliable than GetAttribute("child"..i) for SecureGroupHeader
-    local children = { header:GetChildren() }
     local firstMeasured = false
-    for ci = 1, #children do
-        local child = children[ci]
+    local childCount = select("#", ...)
+    for ci = 1, childCount do
+        local child = select(ci, ...)
         -- Install OnAttributeChanged hook on every child BEFORE filtering by
         -- unit attribute. Children whose unit isn't set yet (secure code
         -- hasn't ticked) will get registered the moment the secure system
@@ -1306,37 +1387,33 @@ local function ScanHeaderChildren(header, kind, force)
             child._msufGFKind = kind
             child.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ("gf_" .. tostring(kind))
             local unit = child:GetAttribute("unit") or child.unit
-            -- Force size on every scan (no diff-gate).
+            -- Keep child slot size aligned with configured metrics.
             -- Use SetWidth + SetHeight separately (SetSize can be ignored when
             -- SecureGroupHeader has set conflicting anchor points on children).
             if not inCombat then
-                child:SetWidth(w)
-                child:SetHeight(h)
+                _SetFrameSizeIfChanged(child, w, h)
 
                 -- Clear any backdrop on child frame itself
                 -- (SecureUnitButtonTemplate may inherit BackdropTemplate in WoW 12.0)
-                if child.SetBackdrop then
+                if child.SetBackdrop and not child._msufGFChildBackdropCleared then
                     child:SetBackdrop(nil)
+                    child._msufGFChildBackdropCleared = true
                 end
 
                 -- Re-anchor the visual root to configured slot metrics.
                 -- Do not SetAllPoints(child): the protected child can be the
                 -- stale part; the visual bars must remain normalized.
-                AnchorVisualRootToSlot(child, kind, w, h)
+                AnchorVisualRootToSlot(child, kind, w, h, force)
 
                 -- borderFrame
                 if child._msufGFBorderFrame then
-                    child._msufGFBorderFrame:ClearAllPoints()
-                    child._msufGFBorderFrame:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", 0, 0)
-                    child._msufGFBorderFrame:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", 0, 0)
+                    _AnchorTwoPointIfChanged(child._msufGFBorderFrame, child.barGroup or child, "border", 0, 0, 0, 0, force)
                 end
 
                 -- highlightBorder
                 if child._msufGFHighlightBorder then
                     local hofs = child._msufGFHighlightBorder._msufHLOfs or 0
-                    child._msufGFHighlightBorder:ClearAllPoints()
-                    child._msufGFHighlightBorder:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", -hofs, hofs)
-                    child._msufGFHighlightBorder:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", hofs, -hofs)
+                    _AnchorTwoPointIfChanged(child._msufGFHighlightBorder, child.barGroup or child, "highlight", -hofs, hofs, hofs, -hofs, force)
                 end
 
                 -- health bar
@@ -1345,22 +1422,36 @@ local function ScanHeaderChildren(header, kind, force)
                 local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, unit, nil, conf))
                     or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
                 if child.health then
-                    child.health:ClearAllPoints()
-                    child.health:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", inset, -inset)
-                    child.health:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", -inset, powerH > 0 and (powerH + inset) or inset)
+                    _AnchorTwoPointIfChanged(child.health, child.barGroup or child, "health", inset, -inset, -inset, powerH > 0 and (powerH + inset) or inset, force)
                 end
 
                 -- power bar
                 if child.power then
-                    child.power:ClearAllPoints()
-                    child.power:SetPoint("BOTTOMLEFT", child.barGroup or child, "BOTTOMLEFT", inset, inset)
-                    child.power:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", -inset, inset)
+                    local owner = child.barGroup or child
+                    if force
+                        or child.power._msufGFScanAnchorOwner ~= owner
+                        or child.power._msufGFScanAnchorKey ~= "power"
+                        or child.power._msufGFScanTLX ~= inset
+                        or child.power._msufGFScanTLY ~= inset
+                        or child.power._msufGFScanBRX ~= -inset
+                        or child.power._msufGFScanBRY ~= inset
+                    then
+                        child.power._msufGFScanAnchorOwner = owner
+                        child.power._msufGFScanAnchorKey = "power"
+                        child.power._msufGFScanTLX = inset
+                        child.power._msufGFScanTLY = inset
+                        child.power._msufGFScanBRX = -inset
+                        child.power._msufGFScanBRY = inset
+                        child.power:ClearAllPoints()
+                        child.power:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", inset, inset)
+                        child.power:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", -inset, inset)
+                    end
                     if powerH > 0 then
-                        child.power:SetHeight(powerH)
-                        child.power:Show()
+                        if child.power.GetHeight and child.power:GetHeight() ~= powerH then child.power:SetHeight(powerH) end
+                        _SetShownIfChanged(child.power, true)
                     else
-                        child.power:SetHeight(0.001)
-                        child.power:Hide()
+                        if child.power.GetHeight and child.power:GetHeight() ~= 0.001 then child.power:SetHeight(0.001) end
+                        _SetShownIfChanged(child.power, false)
                     end
                 end
             end
@@ -1399,10 +1490,19 @@ local function ScanHeaderChildren(header, kind, force)
             end
         end
     end
+
     -- After measuring delta, reposition header
     if not inCombat and GF.SyncHeaderPosition then
         GF.SyncHeaderPosition(kind, nil, header)
     end
+end
+
+local function ScanHeaderChildren(header, kind, force)
+    if not header then return end
+    -- GetChildren() is more reliable than GetAttribute("child"..i) for
+    -- SecureGroupHeader. Forwarding varargs avoids allocating a temporary
+    -- child table on every roster/header scan.
+    return _ScanHeaderChildrenVarargs(header, kind, force, header:GetChildren())
 end
 
 ------------------------------------------------------------------------
@@ -3094,29 +3194,25 @@ function GF.RebuildAll()
     GF.RefreshPreviewLayout("raid")
     GF.RefreshPreviewLayout("mythicraid")
     -- Deferred: after SecureGroupHeader repositions children, re-apply visuals (geometry, bars, text)
+    local function ClearBuiltRegisteredUnits(...)
+        for ci = 1, select("#", ...) do
+            local ch = select(ci, ...)
+            if ch and ch._msufGFBuilt then
+                ch._msufGFRegisteredUnit = nil
+            end
+        end
+    end
     C_Timer.After(0.05, function()
         -- Force event re-registration (picks up aura/dispel toggle changes)
         for _, kind in pairs({"party"}) do
             local hdr = GF.headers[kind]
             if hdr then
-                local kids = { hdr:GetChildren() }
-                for ci = 1, #kids do
-                    local ch = kids[ci]
-                    if ch and ch._msufGFBuilt then
-                        ch._msufGFRegisteredUnit = nil
-                    end
-                end
+                ClearBuiltRegisteredUnits(hdr:GetChildren())
                 ScanHeaderChildren(hdr, kind, true)
             end
         end
         ForEachRaidHeader(function(hdr)
-            local kids = { hdr:GetChildren() }
-            for ci = 1, #kids do
-                local ch = kids[ci]
-                if ch and ch._msufGFBuilt then
-                    ch._msufGFRegisteredUnit = nil
-                end
-            end
+            ClearBuiltRegisteredUnits(hdr:GetChildren())
         end)
         ScanRaidHeaders(GetLiveRaidKind(), true)
         GF.MarkAllDirty(GF.DIRTY_ALL)
@@ -3257,8 +3353,13 @@ local function OnEvent(self, event, ...)
 
         -- EQoL pattern: refresh range fade on combat end.
         -- UNIT_IN_RANGE_UPDATE fires less frequently OOC;
-        -- sweep all frames to ensure correct alpha after combat.
+        -- sweep all frames to ensure correct alpha after combat. The Effects
+        -- helper gates the broad walk when range/dynamic alpha is fully off.
         C_Timer.After(0.1, function()
+            if GF.RefreshRangeFade then
+                GF.RefreshRangeFade()
+                return
+            end
             local updateRange = _G.MSUF_GF_UpdateRange
             if not updateRange then return end
             GF.ForEachFrame(function(f)

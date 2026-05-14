@@ -147,7 +147,7 @@ local DIRTY_GEOMETRY = 0x01   -- size, powerHeight
 local DIRTY_TEXTURE  = 0x02   -- bar texture / background
 local DIRTY_FONT     = 0x04   -- font path / size / outline / color
 local DIRTY_COLOR    = 0x08   -- health color mode, bg, power color
-local DIRTY_BORDER   = 0x10   -- border enable / size / color, aggro/target border style
+local DIRTY_BORDER   = 0x10   -- border paint/color/state, aggro/target border style
 local DIRTY_LAYOUT   = 0x20   -- text anchors, icon positions
 local DIRTY_ALL      = 0x3F
 
@@ -502,6 +502,20 @@ local function ApplyBackgroundTint(f, kind)
     end
 end
 
+local function ApplyBackgroundAlpha(f, kind)
+    if not f then return end
+    local conf = GF.GetConf(kind)
+    if not conf then return end
+    local layerA = GetGFBackgroundAlpha(kind, conf)
+    if f.barGroup and f.barGroup.SetBackdropColor then
+        f.barGroup:SetBackdropColor(
+            conf.bgR or 0.1, conf.bgG or 0.1,
+            conf.bgB or 0.1, (conf.bgA or 0.85) * layerA)
+    end
+    ApplyBackgroundTint(f, kind)
+end
+GF.ApplyBackgroundAlpha = ApplyBackgroundAlpha
+
 ------------------------------------------------------------------------
 -- Apply: frame border (backdrop bg + edge)
 -- Reuses shared tables to avoid allocation per-call
@@ -554,10 +568,17 @@ local function ApplyEffectBorderStyles(f, kind)
 
     local hb = f._msufGFHighlightBorder
     if hb then
-        hb:ClearAllPoints()
-        hb:SetPoint("TOPLEFT", -hlOfs, hlOfs)
-        hb:SetPoint("BOTTOMRIGHT", hlOfs, -hlOfs)
-        hb:SetFrameLevel(hlLay == "ABOVE_BORDER" and baseLvl + 8 or baseLvl + 3)
+        local wantLevel = hlLay == "ABOVE_BORDER" and baseLvl + 8 or baseLvl + 3
+        if hb._msufGFStyleOfs ~= hlOfs then
+            hb._msufGFStyleOfs = hlOfs
+            hb:ClearAllPoints()
+            hb:SetPoint("TOPLEFT", -hlOfs, hlOfs)
+            hb:SetPoint("BOTTOMRIGHT", hlOfs, -hlOfs)
+        end
+        if hb._msufGFStyleLevel ~= wantLevel then
+            hb._msufGFStyleLevel = wantLevel
+            hb:SetFrameLevel(wantLevel)
+        end
     end
 end
 
@@ -1346,7 +1367,7 @@ end
 local function ApplyVisuals(f, bits)
     if not f then return end
     local kind = f._msufGFKind or "party"
-    local needGeometry = (band(bits, DIRTY_GEOMETRY) ~= 0) or (band(bits, DIRTY_BORDER) ~= 0)
+    local needGeometry = (band(bits, DIRTY_GEOMETRY) ~= 0)
 
     if needGeometry then
         ApplyGeometry(f, kind)
