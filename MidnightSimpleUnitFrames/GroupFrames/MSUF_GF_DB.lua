@@ -107,6 +107,14 @@ local PARTY_DEFAULTS = {
     borderG           = 0,
     borderB           = 0,
     borderA           = 1,
+    -- Optional visual border around the whole group block.
+    groupBorderEnabled = false,
+    groupBorderSize    = 1,
+    groupBorderPadding = 2,
+    groupBorderR       = 0.38,
+    groupBorderG       = 0.68,
+    groupBorderB       = 1.00,
+    groupBorderA       = 0.95,
     -- Text: 3-slot system (replaces showHP boolean)
     showName          = true,
     showHPText        = true,

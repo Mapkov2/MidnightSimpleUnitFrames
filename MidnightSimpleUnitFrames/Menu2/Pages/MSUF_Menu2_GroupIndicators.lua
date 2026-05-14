@@ -98,7 +98,7 @@ local function BuildGFIndicators(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
 
-    local indicators = b:CollapsibleSection("indicators", "Indicators", 468, true)
+    local indicators = b:CollapsibleSection("indicators", "Indicators", 650, true)
     local indicatorsW = indicators._msuf2Width or ctx.width or 720
     local leftX = 30
     local rightX = max(430, min(520, floor(indicatorsW * 0.50)))
@@ -168,8 +168,31 @@ local function BuildGFIndicators(ctx)
     W.MoveWidget(focusSize, indicators, rightX, -384, rightW, "CENTER")
     W.MoveWidget(focusColor, indicators, rightX, -438, rightW)
 
+    W.LabelAt(indicators, "Group Border", leftX, -430, 180, "GameFontNormalSmall", T.colors.accent)
+    local groupBorderToggle = BindScopeToggle(ctx, W.ToggleAt(indicators, "Show Group Border", leftX, -460, leftW), "groupBorderEnabled", false, "visual")
+    local groupBorderSize = BindScopeSlider(ctx, W.Slider(indicators, "Border Thickness", 1, 12, 1, leftW), "groupBorderSize", 1, "visual")
+    local groupBorderPadding = BindScopeSlider(ctx, W.Slider(indicators, "Padding", 0, 40, 1, leftW), "groupBorderPadding", 2, "visual")
+    local groupBorderColor = W.Color(indicators, "Group Border Color")
+    M.BindColor(ctx, groupBorderColor,
+        function()
+            return Num(CurrentScope(), "groupBorderR", 0.38),
+                Num(CurrentScope(), "groupBorderG", 0.68),
+                Num(CurrentScope(), "groupBorderB", 1.00)
+        end,
+        function(r, g, bcol)
+            local conf = Conf(CurrentScope())
+            conf.groupBorderR = r
+            conf.groupBorderG = g
+            conf.groupBorderB = bcol
+            QueueGF(CurrentScope(), "visual")
+        end)
+    W.MoveWidget(groupBorderSize, indicators, leftX, -504, leftW, "CENTER")
+    W.MoveWidget(groupBorderPadding, indicators, leftX, -558, leftW, "CENTER")
+    W.MoveWidget(groupBorderColor, indicators, leftX, -614, leftW)
+
     local groupNumberControls = { groupNumberSize, groupNumberAnchor, groupNumberX, groupNumberY }
     local focusControls = { focusSize, focusColor }
+    local groupBorderControls = { groupBorderSize, groupBorderPadding, groupBorderColor }
     M.AddRefresher(ctx, function()
         local groupNumberEnabled = Bool(CurrentScope(), "showGroupNumber", false)
         SetOptionsEnabled(groupNumberControls, groupNumberEnabled)
@@ -185,6 +208,10 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(focusToggle, true)
         local focusColorText = focusEnabled and T.colors.muted or T.colors.dim
         focusHint:SetTextColor(focusColorText[1], focusColorText[2], focusColorText[3], focusEnabled and 1 or 0.70)
+
+        local groupBorderEnabled = Bool(CurrentScope(), "groupBorderEnabled", false)
+        SetOptionsEnabled(groupBorderControls, groupBorderEnabled)
+        SetOptionEnabled(groupBorderToggle, true)
     end)
 
     local sicons = b:CollapsibleSection("sicons", "Status Icons", 444, false)

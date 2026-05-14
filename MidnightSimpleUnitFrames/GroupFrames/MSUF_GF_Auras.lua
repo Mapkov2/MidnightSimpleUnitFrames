@@ -369,6 +369,10 @@ local function ClearStackText(fs)
     SetStackShownIfChanged(fs, false)
 end
 
+local ClearExternalDR
+local ApplyExternalDRLayout
+local ApplyExternalDRText
+
 local function AcquireAuraIcon(parent, size)
     if _iconRecyclerN > 0 then
         local icon = _iconRecycler[_iconRecyclerN]
@@ -392,6 +396,7 @@ local function AcquireAuraIcon(parent, size)
             if icon.cooldown.SetDrawBling then icon.cooldown:SetDrawBling(false) end
         end
         ClearStackText(icon.count)
+        ClearExternalDR(icon)
         -- Defensive: ensure tracking fields are clean (Recycle clears them, but
         -- belt-and-braces in case future code paths feed the recycler differently).
         icon._msufAuraID       = nil
@@ -418,6 +423,7 @@ local function RecycleAuraIcon(icon)
     icon:Hide()
     icon:ClearAllPoints()
     if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(icon) end
+    ClearExternalDR(icon)
     icon._msufGF_cdDurationObj = nil
     if icon.cooldown then icon.cooldown._msufGF_cdDurationObj = nil end
     -- Clear tracking fields so a future Acquire onto a different frame
@@ -540,6 +546,14 @@ local function CreateAuraIcon(parent, size)
     ClearStackText(count)
     icon.count = count
 
+    local drText = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    drText:SetPoint("TOPLEFT", overlay, "TOPLEFT", 1, -1)
+    drText:SetDrawLayer("OVERLAY", 3)
+    drText:SetJustifyH("LEFT")
+    drText:SetTextColor(1, 1, 1, 1)
+    drText:Hide()
+    icon.drText = drText
+
     icon:SetBackdrop({
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
@@ -599,6 +613,7 @@ local function HidePool(pool, startIdx)
         local ic = pool[i]
         if ic then
             if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
+            ClearExternalDR(ic)
             ic._msufGF_cdDurationObj = nil
             if ic.cooldown then ic.cooldown._msufGF_cdDurationObj = nil end
             ic:Hide()
@@ -1477,6 +1492,120 @@ local function ApplyStackLayout(ic, gcfg, gFont, wantFlags, frameScale)
         ic._msufGFStkColorB = sb
         ic._msufGFStkColorA = sa
         fs:SetTextColor(sr, sg, sb, sa)
+    end
+end
+
+do
+    local function SetDRTextIfChanged(fs, text)
+        if not fs then return end
+        if fs._msufGFDRText ~= text then
+            fs._msufGFDRText = text
+            fs:SetText(text)
+        end
+    end
+
+    local function SetDRShownIfChanged(fs, shown)
+        if not fs then return end
+        shown = shown and true or false
+        if fs._msufGFDRShown == shown then return end
+        fs._msufGFDRShown = shown
+        if shown then fs:Show() else fs:Hide() end
+    end
+
+    local function ClearDRText(fs)
+        if not fs then return end
+        SetDRTextIfChanged(fs, "")
+        SetDRShownIfChanged(fs, false)
+    end
+
+    local function ReadExternalDRPoints(aura)
+        local points = aura and aura.points
+        if points == nil then return nil end
+        if _hasCanaccessvalue then
+            if canaccessvalue(points) ~= true then return nil end
+        elseif issecretvalue and issecretvalue(points) == true then
+            return nil
+        end
+
+        if type(points) ~= "table" then return nil end
+        local value = points[1]
+        if value == nil then return nil end
+        if _hasCanaccessvalue then
+            if canaccessvalue(value) ~= true then return nil end
+        elseif issecretvalue and issecretvalue(value) == true then
+            return nil
+        end
+        return tonumber(value)
+    end
+
+    local function FormatExternalDRText(aura)
+        local value = ReadExternalDRPoints(aura)
+        if value == nil then return nil end
+        return tostring(math_floor(value + 0.5)) .. "%"
+    end
+
+    ClearExternalDR = function(icon)
+        if not icon then return end
+        ClearDRText(icon.drText)
+    end
+
+    ApplyExternalDRLayout = function(ic, gcfg, gFont, wantFlags, baseR, baseG, baseB, baseA, frameScale)
+        local fs = ic and ic.drText
+        if not fs then return end
+
+        local size = ScaleFrameValue((gcfg and gcfg.drSize) or 9, frameScale or 1, 6)
+        local flags = (gcfg and gcfg.drOutline) or wantFlags or "OUTLINE"
+        local anchor = (gcfg and gcfg.drAnchor) or "TOPLEFT"
+        local ox = ScaleFrameValue((gcfg and gcfg.drOffsetX) or 1, frameScale or 1)
+        local oy = ScaleFrameValue((gcfg and gcfg.drOffsetY) or -1, frameScale or 1)
+
+        if ic._msufGFDRSize ~= size or ic._msufGFDRFont ~= gFont or ic._msufGFDRFlags ~= flags then
+            if gFont and fs.SetFont then
+                local g = _G.MSUF_DB and _G.MSUF_DB.general
+                if type(_G.MSUF_SetFontSafe) == "function" then
+                    _G.MSUF_SetFontSafe(fs, gFont, size, flags, (g and g.fontKey) or "FRIZQT")
+                else
+                    fs:SetFont(gFont, size, flags)
+                end
+            end
+            ic._msufGFDRSize = size
+            ic._msufGFDRFont = gFont
+            ic._msufGFDRFlags = flags
+        end
+
+        if ic._msufGFDRAnchor ~= anchor or ic._msufGFDROX ~= ox or ic._msufGFDROY ~= oy then
+            ic._msufGFDRAnchor = anchor
+            ic._msufGFDROX = ox
+            ic._msufGFDROY = oy
+            fs:ClearAllPoints()
+            fs:SetPoint(anchor, ic, anchor, ox, oy)
+        end
+
+        if ic._msufGFDRColorR ~= baseR or ic._msufGFDRColorG ~= baseG
+            or ic._msufGFDRColorB ~= baseB or ic._msufGFDRColorA ~= baseA then
+            ic._msufGFDRColorR = baseR
+            ic._msufGFDRColorG = baseG
+            ic._msufGFDRColorB = baseB
+            ic._msufGFDRColorA = baseA
+            fs:SetTextColor(baseR or 1, baseG or 1, baseB or 1, baseA or 1)
+        end
+    end
+
+    ApplyExternalDRText = function(ic, aura, showDR)
+        if not ic then return end
+        if not showDR then
+            ClearExternalDR(ic)
+            return
+        end
+
+        local text = FormatExternalDRText(aura)
+        if not text then
+            ClearExternalDR(ic)
+            return
+        end
+
+        SetDRTextIfChanged(ic.drText, text)
+        SetDRShownIfChanged(ic.drText, true)
     end
 end
 
@@ -2483,6 +2612,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local showCdSwipe = WantsCooldownSwipe(gcfg)
     local showCdVisual = showCdText or showCdSwipe
     local showStk = (gcfg.showStacks ~= false)
+    local showDR = isExt and gcfg.showDR == true
     local step = iconSize + spacing
     local topDispel = nil
     local topDispelColor = nil
@@ -2510,6 +2640,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA = ResolveCooldownBaseColor()
     local _styleCdFlags  = gcfg.cooldownOutline or _styleGFlags or "OUTLINE"
     local _styleStkFlags = gcfg.stackOutline    or _styleGFlags or "OUTLINE"
+    local _styleDRFlags  = gcfg.drOutline       or _styleGFlags or "OUTLINE"
 
     local startIndex = sourceCache and 1 or 2
     local endIndex = sourceCache and orderCount or slotCount
@@ -2590,6 +2721,12 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                             ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA, frameScale)
                             ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags, frameScale)
                             ApplyStacks(ic, unit, aid, aura.applications, showStk, gcfg)
+                            if showDR then
+                                ApplyExternalDRLayout(ic, gcfg, _styleGFont, _styleDRFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA, frameScale)
+                                ApplyExternalDRText(ic, aura, true)
+                            else
+                                ClearExternalDR(ic)
+                            end
                             if isHarmful then
                                 ApplyDispelBorder(ic, unit, aid, aura.dispelName, true, showDisp)
                             elseif not ic._msufBorderBlack then
@@ -2618,6 +2755,12 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                             ApplyCooldownFont(ic, gcfg, _styleGFont, _styleCdFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA, frameScale)
                             ApplyStackLayout(ic, gcfg, _styleGFont, _styleStkFlags, frameScale)
                             ApplyStacks(ic, unit, aid, aura.applications, showStk, gcfg)
+                            if showDR then
+                                ApplyExternalDRLayout(ic, gcfg, _styleGFont, _styleDRFlags, _styleBaseR, _styleBaseG, _styleBaseB, _styleBaseA, frameScale)
+                                ApplyExternalDRText(ic, aura, true)
+                            else
+                                ClearExternalDR(ic)
+                            end
 
                             if isHarmful then
                                 ApplyDispelBorder(ic, unit, aid, aura.dispelName, true, showDisp)
@@ -2701,6 +2844,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
         local ic = pool[j]
         if ic then
             if _GF_UnregisterCooldownTextIcon then _GF_UnregisterCooldownTextIcon(ic) end
+            ClearExternalDR(ic)
             ic._msufGF_cdDurationObj = nil
             if ic.cooldown then ic.cooldown._msufGF_cdDurationObj = nil end
             if ic:IsShown() then ic:Hide() end
