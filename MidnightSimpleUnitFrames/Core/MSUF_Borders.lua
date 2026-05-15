@@ -9,6 +9,38 @@ local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local issecretvalue = _G.issecretvalue
 
+local _FRIENDLY_DISPEL_CLASS = {
+    DRUID = true,
+    EVOKER = true,
+    MAGE = true,
+    MONK = true,
+    PALADIN = true,
+    PRIEST = true,
+    SHAMAN = true,
+    WARLOCK = true,
+    DEMONHUNTER = true,
+    HUNTER = true,
+}
+local _playerFriendlyDispelCapable
+
+local function PlayerMayFriendlyDispel()
+    if _playerFriendlyDispelCapable ~= nil then
+        return _playerFriendlyDispelCapable
+    end
+
+    local _, class = UnitClass and UnitClass("player")
+    if not class then
+        return true
+    end
+
+    _playerFriendlyDispelCapable = (_FRIENDLY_DISPEL_CLASS[class] == true)
+    return _playerFriendlyDispelCapable
+end
+
+local function ClearFriendlyDispelCapabilityCache()
+    _playerFriendlyDispelCapable = nil
+end
+
 -- From main file (exported to _G)
 local MSUF_ForEachUnitFrame = _G.MSUF_ForEachUnitFrame
 local MSUF_GetDesiredBarBorderThicknessAndStamp = _G.MSUF_GetDesiredBarBorderThicknessAndStamp
@@ -1016,7 +1048,7 @@ do
         local canAssist = UnitCanAssist and UnitCanAssist("player", unit)
         local canAttack = UnitCanAttack and UnitCanAttack("player", unit)
         local dispelAid, dispelType
-        if dispelEnabled and canAssist then
+        if dispelEnabled and canAssist and PlayerMayFriendlyDispel() then
             dispelOn, dispelAid, dispelType = HasDispellableDebuff(unit)
         end
 
@@ -1056,6 +1088,15 @@ do
     local _dispelAuraUnitsN = 0
     local _dispelAuraFlushQueued = false
     local _dispelAuraWant = false
+    local function WantsDispelAuraEvents(g)
+        if not g then return false end
+        if g.purgeOutlineMode == 1 then return true end
+        if g.dispelOutlineMode == 1 then return PlayerMayFriendlyDispel() end
+        return false
+    end
+
+    local ApplyDispelOutlineEventRegistration
+
     local function FlushDispelAuraUnits()
         _dispelAuraFlushQueued = false
         for i = 1, _dispelAuraUnitsN do
@@ -1099,13 +1140,15 @@ do
 
         -- Init / safety clear so state is correct without requiring Edit Mode / manual refresh.
         if event == "PLAYER_ENTERING_WORLD" then
+            ClearFriendlyDispelCapabilityCache()
+            ApplyDispelOutlineEventRegistration()
             _G.MSUF_RefreshDispelOutlineStates(true)
             return
         end
     end)
-    local function ApplyDispelOutlineEventRegistration()
+    ApplyDispelOutlineEventRegistration = function()
         local g = MSUF_DB and MSUF_DB.general
-        local want = (g and (g.dispelOutlineMode == 1 or g.purgeOutlineMode == 1)) and true or false
+        local want = WantsDispelAuraEvents(g)
         _dispelAuraWant = want
 
         if want then

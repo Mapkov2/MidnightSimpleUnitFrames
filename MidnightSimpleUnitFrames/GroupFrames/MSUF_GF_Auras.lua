@@ -2074,6 +2074,47 @@ function GF.IsBlizzardAuraTypeEnabled(conf, key)
     return type(types) ~= "table" or types[key] ~= false
 end
 
+function GF.GetBlizzardAuraTypeFlags(conf)
+    if not GF.IsAuraRendererBlizzard(conf) then
+        return false, false, false, false, false
+    end
+
+    local auras = conf and conf.auras
+    if not auras or auras.enabled == false then
+        return false, false, false, false, false
+    end
+
+    local types = GF.EnsureBlizzardAuraTypes(conf)
+    local Native = GetNativeAuraAPI()
+    if Native and Native.Supported and not Native.Supported() then
+        return false, false, false, false, false
+    end
+
+    local function TypeEnabled(key)
+        if Native and Native.TypeEnabled then
+            return Native.TypeEnabled(types, key, true)
+        end
+        return type(types) ~= "table" or types[key] ~= false
+    end
+
+    local privateAuras = TypeEnabled("privateAuras")
+    local pa = conf and conf.privateAuras
+    if pa and pa.enabled == false then
+        privateAuras = false
+    end
+
+    local dispels = TypeEnabled("dispels")
+    if conf and conf.dispelEnabled == false then
+        dispels = false
+    end
+
+    return TypeEnabled("buffs"),
+        TypeEnabled("debuffs"),
+        dispels,
+        TypeEnabled("externals"),
+        privateAuras
+end
+
 function GF.GetBlizzardAuraIconSize(conf, scale, frameScale)
     local auras = conf and conf.auras
     local raw = auras and tonumber(auras.blizzardIconSize)

@@ -484,6 +484,14 @@ local function HLVal(kind, key)
     return nil
 end
 
+local function HLValCached(conf, gen, key)
+    if conf.hlOverride and conf[key] ~= nil then return conf[key] end
+    if gen and gen[key] ~= nil then return gen[key] end
+    local fb = _HL_FALLBACK[key]
+    if fb and conf[fb] ~= nil then return conf[fb] end
+    return nil
+end
+
 ------------------------------------------------------------------------
 -- Range fade uses the same UnitInRange-only path as EQoL group frames.
 ------------------------------------------------------------------------
@@ -1473,6 +1481,11 @@ local function HLColor(key, fallback)
     return fallback
 end
 
+local function HLColorCached(gen, key, fallback)
+    if gen and gen[key] ~= nil then return gen[key] end
+    return fallback
+end
+
 ------------------------------------------------------------------------
 -- Per-frame settings cache (cold-path build, hot-path read)
 -- Eliminates GF.GetConf + key reads from every UNIT_HEALTH/POWER event.
@@ -1481,6 +1494,7 @@ end
 function GF.BuildFrameCache(f)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local c = f._c
     if not c then c = {}; f._c = c end
     f._msufGFStatusLayoutState = nil
@@ -1605,13 +1619,22 @@ function GF.BuildFrameCache(f)
     local auraMasterOn = c.aurasOn == true
 
     local pa = conf.privateAuras
-    c.nativeBlizzardBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs") == true
-    c.nativeBlizzardDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs") == true
-    c.nativeBlizzardExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals") == true
-    c.nativeBlizzardDispels = _GF_IsBlizzardDispelRendererActive(conf)
-    c.nativeBlizzardPrivate = GF.IsBlizzardAuraTypeEnabled
-        and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras") == true
-        and pa and pa.enabled ~= false
+    if GF.GetBlizzardAuraTypeFlags then
+        local nativeBuffs, nativeDebuffs, nativeDispels, nativeExt, nativePrivate = GF.GetBlizzardAuraTypeFlags(conf)
+        c.nativeBlizzardBuffs = nativeBuffs == true
+        c.nativeBlizzardDebuffs = nativeDebuffs == true
+        c.nativeBlizzardExt = nativeExt == true
+        c.nativeBlizzardDispels = nativeDispels == true
+        c.nativeBlizzardPrivate = nativePrivate == true and pa and pa.enabled ~= false
+    else
+        c.nativeBlizzardBuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "buffs") == true
+        c.nativeBlizzardDebuffs = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "debuffs") == true
+        c.nativeBlizzardExt = GF.IsBlizzardAuraTypeEnabled and GF.IsBlizzardAuraTypeEnabled(conf, "externals") == true
+        c.nativeBlizzardDispels = _GF_IsBlizzardDispelRendererActive(conf)
+        c.nativeBlizzardPrivate = GF.IsBlizzardAuraTypeEnabled
+            and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras") == true
+            and pa and pa.enabled ~= false
+    end
 
     -- Dispel overlay (color wash on health bar)
     c.doEn    = auraMasterOn and conf.dispelOverlayEnabled == true and not c.nativeBlizzardDispels
@@ -1632,27 +1655,27 @@ function GF.BuildFrameCache(f)
     c.dsB     = conf.debuffStripeColorB or 0.20
 
     -- Highlight border (pre-resolve HLVal)
-    c.aggroEn   = HLVal(kind, "hlAggroEnabled") ~= false
-    c.aggroMode = HLVal(kind, "hlAggroMode") or "ALL"
-    c.dispelEn  = auraMasterOn and HLVal(kind, "hlDispelEnabled") ~= false and not c.nativeBlizzardDispels
-    c.targetEn  = HLVal(kind, "hlTargetEnabled") ~= false
+    c.aggroEn   = HLValCached(conf, gen, "hlAggroEnabled") ~= false
+    c.aggroMode = HLValCached(conf, gen, "hlAggroMode") or "ALL"
+    c.dispelEn  = auraMasterOn and HLValCached(conf, gen, "hlDispelEnabled") ~= false and not c.nativeBlizzardDispels
+    c.targetEn  = HLValCached(conf, gen, "hlTargetEnabled") ~= false
     c.focusEn   = conf.hlFocusEnabled ~= false
-    c.aggroSize = HLVal(kind, "hlAggroSize") or 2
-    c.aggroOfs = HLVal(kind, "hlAggroOffset") or 0
-    c.aggroTex = HLVal(kind, "hlAggroTexture")
-    c.aggroLayer = HLVal(kind, "hlAggroLayer") or "DEFAULT"
-    c.aggroR = HLColor("hlAggroColorR", 1)
-    c.aggroG = HLColor("hlAggroColorG", 0.55)
-    c.aggroB = HLColor("hlAggroColorB", 0)
+    c.aggroSize = HLValCached(conf, gen, "hlAggroSize") or 2
+    c.aggroOfs = HLValCached(conf, gen, "hlAggroOffset") or 0
+    c.aggroTex = HLValCached(conf, gen, "hlAggroTexture")
+    c.aggroLayer = HLValCached(conf, gen, "hlAggroLayer") or "DEFAULT"
+    c.aggroR = HLColorCached(gen, "hlAggroColorR", 1)
+    c.aggroG = HLColorCached(gen, "hlAggroColorG", 0.55)
+    c.aggroB = HLColorCached(gen, "hlAggroColorB", 0)
 
     -- Target color (pre-resolve HLColor)
-    c.tgtSize = HLVal(kind, "hlTargetSize") or 2
-    c.tgtOfs = HLVal(kind, "hlTargetOffset") or 0
-    c.tgtTex = HLVal(kind, "hlTargetTexture")
-    c.tgtLayer = HLVal(kind, "hlTargetLayer") or "DEFAULT"
-    c.tgtR = HLColor("hlTargetColorR", 1)
-    c.tgtG = HLColor("hlTargetColorG", 1)
-    c.tgtB = HLColor("hlTargetColorB", 1)
+    c.tgtSize = HLValCached(conf, gen, "hlTargetSize") or 2
+    c.tgtOfs = HLValCached(conf, gen, "hlTargetOffset") or 0
+    c.tgtTex = HLValCached(conf, gen, "hlTargetTexture")
+    c.tgtLayer = HLValCached(conf, gen, "hlTargetLayer") or "DEFAULT"
+    c.tgtR = HLColorCached(gen, "hlTargetColorR", 1)
+    c.tgtG = HLColorCached(gen, "hlTargetColorG", 1)
+    c.tgtB = HLColorCached(gen, "hlTargetColorB", 1)
 
     -- Focus color
     c.focSize = conf.hlFocusSize or 2
