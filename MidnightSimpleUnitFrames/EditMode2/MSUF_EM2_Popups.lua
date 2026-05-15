@@ -1265,7 +1265,11 @@ local function Apply()
         if pf.iconSizeBox then local sz=tonumber(pf.iconSizeBox:GetText()); if sz then g.bossCastIconSize=floor(max(6,min(128,sz))+0.5) end end
         if pf.timeSizeBox then local sz=tonumber(pf.timeSizeBox:GetText()); if sz then g.bossCastTimeFontSize=floor(max(6,min(72,sz))+0.5) end end
         if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then _G.MSUF_UpdateCastbarWidthSourceSync(g, u) end
-        if type(_G.MSUF_UpdateBossCastbarPreview)=="function" then _G.MSUF_UpdateBossCastbarPreview() end
+        if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+            and type(_G.MSUF_UpdateBossCastbarPreview)=="function"
+        then
+            _G.MSUF_UpdateBossCastbarPreview()
+        end
         RefreshWidthSourceControls(g, u, false)
     else
         local pre=GP(u); if not pre then return end; local dx,dy=GD(u)

@@ -762,9 +762,10 @@ ns.Bars.Spec.health = ns.Bars.Spec.health or function(frame, unit)
     end
     -- 12.0: Unified calculator update — one C-side call for health + absorbs + prediction.
     -- Test mode path still uses legacy ApplyHealthBars for faked values.
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestActive = (_G.MSUF_AbsorbTextureTestMode == true) and not _G.MSUF_InCombat
+    local testFn = absorbTestActive and _G.MSUF_ShouldShowAbsorbTextureTest or nil
     if (type(testFn) == "function" and testFn(frame))
-        or (_G.MSUF_AbsorbTextureTestMode and type(testFn) ~= "function" and not _G.MSUF_InCombat) then
+        or (absorbTestActive and type(testFn) ~= "function") then
         local maxHP = (F.UnitHealthMax and F.UnitHealthMax(unit)) or 1
         local hp = (F.UnitHealth and F.UnitHealth(unit)) or 0
         ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
@@ -913,8 +914,9 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
         if setHealth then setHealth(frame, frame.hpBar, hp) else frame.hpBar:SetValue(hp) end
     end
     -- Test mode: show faked absorb values.
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(frame) or (_G.MSUF_AbsorbTextureTestMode and not _G.MSUF_InCombat)
+    local absorbTestActive = (_G.MSUF_AbsorbTextureTestMode == true) and not _G.MSUF_InCombat
+    local testFn = absorbTestActive and _G.MSUF_ShouldShowAbsorbTextureTest or nil
+    local absorbTestMode = type(testFn) == "function" and testFn(frame) or (absorbTestActive and type(testFn) ~= "function")
     local wasTestMode = frame._msufAbsorbTestActive
     if absorbTestMode then
         frame._msufAbsorbTestActive = true
@@ -5107,7 +5109,9 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
         if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
             _G.MSUF_ApplyBossCastbarPositionSetting()
         end
-        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+            and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+        then
             _G.MSUF_UpdateBossCastbarPreview()
         end
     end
@@ -5378,7 +5382,9 @@ _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or funct
     if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
         _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
     end
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+    then
         _G.MSUF_UpdateBossCastbarPreview()
     end
     if _G.MSUF_EnsureStatusIndicatorTicker then
@@ -5436,7 +5442,9 @@ function MSUF_CommitApplyDirty()
         if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
             _G.MSUF_ApplyBossCastbarPositionSetting()
         end
-        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+            and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+        then
             _G.MSUF_UpdateBossCastbarPreview()
     end
         -- Keep the castbar position popup synced if it is currently open.

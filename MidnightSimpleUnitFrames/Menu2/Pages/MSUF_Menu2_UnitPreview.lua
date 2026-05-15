@@ -1693,8 +1693,11 @@ local function BuildPreview(parent, panel, width, height)
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
     box:SetScript("OnEvent", function(_, event)
-        if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+        if event == "PLAYER_REGEN_ENABLED" then
             Preview.RequestRefresh("COMBAT_ALPHA")
+        elseif event == "PLAYER_REGEN_DISABLED" then
+            box._refreshReason = nil
+            box._refreshQueued = nil
         end
     end)
 
@@ -2462,6 +2465,7 @@ function Preview.RequestRefresh(reason)
 end
 
 _G.MSUF_UFPreview_RequestRefresh = function(reason)
+    if PreviewInCombat() then return end
     Preview.RequestRefresh(reason)
 end
 
@@ -2517,7 +2521,9 @@ InstallPreviewHooks = function()
         if type(fn) == "function" and type(hooksecurefunc) == "function" then
             if not hookedNames[name] then
                 hookedNames[name] = true
-                hooksecurefunc(name, function() Preview.RequestRefresh(name) end)
+                hooksecurefunc(name, function()
+                    if not PreviewInCombat() then Preview.RequestRefresh(name) end
+                end)
             end
         end
     end

@@ -153,7 +153,9 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
         if _G.MSUF_ApplyBossCastbarTimeSetting then
             _G.MSUF_ApplyBossCastbarTimeSetting()
     end
-        if _G.MSUF_UpdateBossCastbarPreview then
+        if not (_G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false))
+            and _G.MSUF_UpdateBossCastbarPreview
+        then
             _G.MSUF_UpdateBossCastbarPreview()
     end
         if type(MSUF_SyncCastbarPositionPopup) == "function" then
@@ -733,7 +735,9 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             if _G.MSUF_ApplyBossCastbarPositionSetting then
                 _G.MSUF_ApplyBossCastbarPositionSetting()
             end
-            if _G.MSUF_UpdateBossCastbarPreview then
+            if not (_G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false))
+                and _G.MSUF_UpdateBossCastbarPreview
+            then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
     end
@@ -750,7 +754,9 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             if _G.MSUF_ApplyBossCastbarPositionSetting then
                 _G.MSUF_ApplyBossCastbarPositionSetting()
             end
-            if _G.MSUF_UpdateBossCastbarPreview then
+            if not (_G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false))
+                and _G.MSUF_UpdateBossCastbarPreview
+            then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
             if _G.MSUF_SetupBossCastbarPreviewEditMode then

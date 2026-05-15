@@ -88,7 +88,7 @@ local _editModeActive = false
 local _editModeCheckAt = 0
 
 local function IsEditModeActive()
-    if _inCombat then return false end
+    if _inCombat or _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return false end
     local now = GetTime()
     if now < _editModeCheckAt then return _editModeActive end
     _editModeCheckAt = now + 0.10
@@ -1243,7 +1243,7 @@ local function RenderUnit(entry)
     end
 
     local unit = entry.unit
-    local isEditActive = (not _inCombat) and IsEditModeActive() or false
+    local isEditActive = (not _inCombat and _G.MSUF_InCombat ~= true) and IsEditModeActive() or false
 
     -- Reuse DB from scan-limits path if available, otherwise fetch now
     if not a2 or not shared then
@@ -1390,7 +1390,7 @@ local function RenderUnit(entry)
     entry._lastPrivateGen = gen
 
     -- Edit Mode: show/hide movers (skip entirely in combat)
-    if not _inCombat then
+    if not _inCombat and _G.MSUF_InCombat ~= true then
         if EditMode then
             if EditMode.ShowMovers then EditMode.ShowMovers(entry) end
             -- Reminder mover
@@ -1986,7 +1986,7 @@ API.UpdateUnitAnchor = function(unit)
     local entry = AurasByUnit[unit]
     if not entry then return end
     local a2, shared = GetAuras2DB()
-    if shared then UpdateAnchor(entry, shared, (not _inCombat) and IsEditModeActive() or false) end
+    if shared then UpdateAnchor(entry, shared, (not _inCombat and _G.MSUF_InCombat ~= true) and IsEditModeActive() or false) end
 end
 
 API.ApplyEventRegistration = API.ApplyEventRegistration or function()

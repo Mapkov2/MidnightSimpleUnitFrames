@@ -567,7 +567,9 @@ function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
     end
 
     -- Make sure previews exist/are positioned before we try to drive a dummy cast.
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+    then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 
@@ -1151,13 +1153,47 @@ local function _DoBossPreviewRefresh()
         _pendingPostCombatRefresh = true
         return
     end
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+    then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 end
 
+local _bossPreviewEventsRegistered = false
+local _bossPreviewEvents = {
+    "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+    "ENCOUNTER_START",
+    "ENCOUNTER_END",
+    "PLAYER_ENTERING_WORLD",
+    "GROUP_ROSTER_UPDATE",
+}
+
+local function _SetBossPreviewEvents(active)
+    if active then
+        if _bossPreviewEventsRegistered then return end
+        _bossPreviewEventsRegistered = true
+        for i = 1, #_bossPreviewEvents do
+            MSUF_EventBus_Register(_bossPreviewEvents[i], "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+        end
+        return
+    end
+    if not _bossPreviewEventsRegistered then return end
+    _bossPreviewEventsRegistered = false
+    if type(MSUF_EventBus_Unregister) ~= "function" then return end
+    for i = 1, #_bossPreviewEvents do
+        MSUF_EventBus_Unregister(_bossPreviewEvents[i], "MSUF_BOSS_PREVIEW")
+    end
+end
+
+local function _OnBossPreviewCombatStart()
+    _pendingPostCombatRefresh = true
+    _SetBossPreviewEvents(false)
+end
+
 -- Replay deferred refresh after combat ends, if any event was dropped.
 local function _OnBossPreviewCombatEnd()
+    _SetBossPreviewEvents(true)
     if not _pendingPostCombatRefresh then return end
     _pendingPostCombatRefresh = false
     if type(_G.MSUF_RefreshBossPreview) == "function" then
@@ -1279,14 +1315,11 @@ if not _G.MSUF_BossPreviewEventDriver then
         _ScheduleBossPreviewRefresh()
     end
 
-    MSUF_EventBus_Register("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("ENCOUNTER_START",                "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("ENCOUNTER_END",                  "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("PLAYER_ENTERING_WORLD",          "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("GROUP_ROSTER_UPDATE",            "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+    _SetBossPreviewEvents(not _BossPreviewCombatLockdown())
 
     -- Replay channel: fires once after combat ends, only if any event was
     -- deferred during combat. Stable callback ref.
+    MSUF_EventBus_Register("PLAYER_REGEN_DISABLED",          "MSUF_BOSS_PREVIEW_COMBAT_START", _OnBossPreviewCombatStart)
     MSUF_EventBus_Register("PLAYER_REGEN_ENABLED",           "MSUF_BOSS_PREVIEW_COMBAT_END", _OnBossPreviewCombatEnd)
 end
 
@@ -1508,7 +1541,9 @@ function MSUF_UpdatePlayerCastbarPreview()
         if MSUF_FocusCastbarPreview then
             MSUF_FocusCastbarPreview:Hide()
         end
-if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+then
     _G.MSUF_UpdateBossCastbarPreview()
 elseif _G.MSUF_BossCastbarPreview then
     _G.MSUF_BossCastbarPreview:Hide()
@@ -1601,7 +1636,9 @@ end
     elseif MSUF_FocusCastbarPreview then
         MSUF_FocusCastbarPreview:Hide()
     end
-if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+then
     _G.MSUF_UpdateBossCastbarPreview()
     MSUF_SetupBossCastbarPreviewEditMode()
 end

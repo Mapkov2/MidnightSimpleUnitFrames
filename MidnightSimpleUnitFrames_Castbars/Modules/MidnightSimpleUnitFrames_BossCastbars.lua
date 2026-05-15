@@ -247,7 +247,9 @@ local function ApplyBossCastbarTimeSetting()
         end
     end
 -- Keep Castbar-Edit-Mode preview in sync (if present)
-if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+then
     _G.MSUF_UpdateBossCastbarPreview()
 end
 end
@@ -1514,7 +1516,9 @@ local function ApplyBossCastbarPositionSetting()
         end
     end
 -- Keep Castbar-Edit-Mode preview in sync (if present)
-if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+then
     _G.MSUF_UpdateBossCastbarPreview()
 end
 end
@@ -1996,7 +2000,9 @@ function _G.MSUF_SetBossCastbarsEnabled(enabled)
         _G.MSUF_UpdateCastbarVisuals()
     end
 -- Keep Castbar-Edit-Mode preview in sync (if present)
-if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+then
     _G.MSUF_UpdateBossCastbarPreview()
 end
 end

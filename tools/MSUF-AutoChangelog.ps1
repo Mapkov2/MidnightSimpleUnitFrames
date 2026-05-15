@@ -578,6 +578,127 @@ function Convert-MarkdownToAutoGroups {
     return $groups
 }
 
+function Format-FriendlySentence {
+    param([AllowNull()][string]$Text)
+
+    $value = if ($null -eq $Text) { "" } else { $Text.Trim() }
+    if ($value -eq "") { return "" }
+    $value = $value -replace '\s+', ' '
+    $value = $value.Trim().TrimEnd(".")
+    if ($value.Length -gt 0) {
+        $value = $value.Substring(0, 1).ToUpperInvariant() + $value.Substring(1)
+    }
+    return ($value + ".")
+}
+
+function Get-FriendlyScopeText {
+    param([AllowNull()][string]$Scope)
+
+    $s = if ($null -eq $Scope) { "" } else { $Scope.ToLowerInvariant() }
+    if ($s -match 'menu|dashboard') { return "menu and dashboard" }
+    if ($s -match 'group frame') { return "Group Frames" }
+    if ($s -match 'unit aura|aura2') { return "auras" }
+    if ($s -match 'interrupt') { return "Interrupt Ready" }
+    if ($s -match 'unit text') { return "unit text" }
+    if ($s -match 'border|outline') { return "borders and outlines" }
+    if ($s -match 'bar|power') { return "bars and power bars" }
+    if ($s -match 'profile') { return "profiles" }
+    if ($s -match 'core|runtime|foundation') { return "unit frame runtime" }
+    if ($s -match 'tool|release|doc') { return "release tooling" }
+    return "addon behavior"
+}
+
+function Convert-AutoBulletToFriendlyText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Bullet,
+        [Parameter(Mandatory = $true)][string]$Category
+    )
+
+    $text = $Bullet.Trim()
+    if ($text -eq "") { return "" }
+
+    $text = $text -replace '\*\*', ''
+    $text = $text -replace '\s+\((?:working tree|[0-9a-f]{6,40}|[^)]*;)[^)]*\)\.?$', ''
+    $text = $text.Trim().TrimEnd(".")
+
+    $scope = ""
+    $body = $text
+    if ($text -match '^([^:]+):\s*(.+)$') {
+        $scope = $Matches[1].Trim()
+        $body = $Matches[2].Trim()
+    }
+
+    $body = $body -replace '(?i)^(updated|added|removed|renamed)\s+', ''
+    $body = $body -replace '(?i)^(some\s+)?user friendly stuff$', 'menu and dashboard usability'
+    $body = $body -replace '(?i)^class color background$', 'class color background handling'
+    $body = $body.Trim().TrimEnd(".")
+
+    $scopeText = Get-FriendlyScopeText $scope
+    $haystack = (($scope + " " + $body) -replace '\s+', ' ').ToLowerInvariant()
+
+    if ($haystack -match 'class color background') {
+        return Format-FriendlySentence "Improved class color background handling across unit and group frames"
+    }
+    if ($haystack -match 'user friendly|usability|menu and dashboard usability') {
+        return Format-FriendlySentence "Improved menu and dashboard wording, layout, and everyday usability"
+    }
+    if ($haystack -match 'combat gating|protected') {
+        return Format-FriendlySentence "Improved combat safety for protected UI changes"
+    }
+    if ($haystack -match 'range fade|highlight') {
+        return Format-FriendlySentence "Improved Group Frame range fade and highlight behavior"
+    }
+    if ($haystack -match 'aura|reminder') {
+        return Format-FriendlySentence "Improved aura and reminder behavior"
+    }
+    if ($haystack -match 'profile|export|import') {
+        return Format-FriendlySentence "Improved profile import and export handling"
+    }
+    if ($haystack -match 'changelog|release notes') {
+        return Format-FriendlySentence "Updated the release notes shown in the in-game dashboard"
+    }
+
+    if ($Category -eq "Performance") {
+        return Format-FriendlySentence "Improved performance for $scopeText"
+    }
+    if ($Category -eq "Bugfixes") {
+        if ($body -match '(?i)^fixed\s+') {
+            return Format-FriendlySentence $body
+        }
+        return Format-FriendlySentence "Fixed issues affecting $scopeText"
+    }
+    if ($Category -eq "Release / Tooling") {
+        return Format-FriendlySentence "Improved release tooling and changelog generation"
+    }
+    if ($Category -eq "Documentation") {
+        return Format-FriendlySentence "Updated documentation and release notes"
+    }
+
+    if ($body -match '(?i)^(improved|fixed|added|removed|updated)\s+') {
+        return Format-FriendlySentence $body
+    }
+    if ($body -ne "" -and $body -notmatch '(?i)^(addon behavior|behavior)$') {
+        return Format-FriendlySentence ("Improved " + $body)
+    }
+
+    return Format-FriendlySentence "Improved $scopeText"
+}
+
+function Convert-AutoGroupsToFriendlyGroups {
+    param([Parameter(Mandatory = $true)]$Groups)
+
+    $friendly = New-AutoGroupMap
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($title in $SectionOrder) {
+        if (-not $Groups.Contains($title)) { continue }
+        foreach ($bullet in $Groups[$title]) {
+            $text = Convert-AutoBulletToFriendlyText -Bullet "$bullet" -Category $title
+            Add-AutoBulletToGroup -Groups $friendly -Seen $seen -Title $title -Bullet $text
+        }
+    }
+    return $friendly
+}
+
 function Get-EditableAutoChangelogGroups {
     $generated = Get-AutoChangelogGroups
     if (-not $KeepExistingAutoEntries) { return $generated }
@@ -1185,18 +1306,19 @@ function Start-AutoChangelogGui {
     $summaryBox.Multiline = $true
     $summaryBox.ReadOnly = $true
     $summaryBox.ScrollBars = "Vertical"
-    $summaryBox.Text = "Changelog title is the only release section written, for example 5.2. Source ref is only the commit range base and should usually be the previous tag. Generate Editor fills editable Markdown; Write Edited writes exactly those managed auto blocks."
+    $summaryBox.Text = "Changelog title is the only release section written, for example 5.2. Generate Editor fills editable Markdown from repo changes. Make Friendly converts technical entries into user-facing release notes. Write Edited writes exactly those managed auto blocks."
     $form.Controls.Add($summaryBox)
 
-    $previewButton = New-AutoButton "Generate Editor" 16 270 135 32
-    $writeEditedButton = New-AutoButton "Write Edited" 161 270 115 32
-    $runButton = New-AutoButton "Run Once" 286 270 95 32
-    $startWatchButton = New-AutoButton "Start Watch" 391 270 105 32
-    $stopWatchButton = New-AutoButton "Stop Watch" 506 270 105 32
+    $previewButton = New-AutoButton "Generate Editor" 16 270 125 32
+    $makeFriendlyButton = New-AutoButton "Make Friendly" 151 270 115 32
+    $writeEditedButton = New-AutoButton "Write Edited" 276 270 105 32
+    $runButton = New-AutoButton "Run Once" 391 270 85 32
+    $startWatchButton = New-AutoButton "Start Watch" 486 270 100 32
+    $stopWatchButton = New-AutoButton "Stop Watch" 596 270 100 32
     $stopWatchButton.Enabled = $false
-    $statusButton = New-AutoButton "Git Status" 621 270 90 32
-    $openButton = New-AutoButton "Open CHANGELOG.md" 721 270 145 32
-    $closeButton = New-AutoButton "Close" 876 270 120 32
+    $statusButton = New-AutoButton "Git Status" 706 270 85 32
+    $openButton = New-AutoButton "Open CHANGELOG.md" 801 270 135 32
+    $closeButton = New-AutoButton "Close" 946 270 70 32
 
     New-AutoLabel "Editable auto changelog Markdown" 16 318 240 | Out-Null
     $editBox = New-Object System.Windows.Forms.TextBox
@@ -1237,6 +1359,7 @@ function Start-AutoChangelogGui {
         $stopWatchButton.Enabled = $Watching
         $runButton.Enabled = -not $Watching
         $previewButton.Enabled = -not $Watching
+        $makeFriendlyButton.Enabled = -not $Watching
         $writeEditedButton.Enabled = -not $Watching
     }
 
@@ -1313,6 +1436,28 @@ function Start-AutoChangelogGui {
             } else {
                 Write-AutoLog ("Editor loaded: " + $count + " entries.")
             }
+        } catch {
+            Write-AutoLog ("ERROR: " + $_.Exception.Message)
+            [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Auto Changelog", "OK", "Error") | Out-Null
+        }
+    })
+
+    $makeFriendlyButton.Add_Click({
+        try {
+            Set-SettingsFromUi
+            $groups = if ([string]::IsNullOrWhiteSpace($editBox.Text)) {
+                Resolve-SourceRefFromUi | Out-Null
+                Get-EditableAutoChangelogGroups
+            } else {
+                Convert-MarkdownToAutoGroups -Markdown $editBox.Text
+            }
+
+            $friendly = Convert-AutoGroupsToFriendlyGroups -Groups $groups
+            $editBox.Text = Convert-AutoGroupsToMarkdown -Groups $friendly
+
+            $count = 0
+            foreach ($title in $SectionOrder) { $count += $friendly[$title].Count }
+            Write-AutoLog ("Converted editor entries to user-friendly changelog text (" + $count + " entries).")
         } catch {
             Write-AutoLog ("ERROR: " + $_.Exception.Message)
             [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Auto Changelog", "OK", "Error") | Out-Null

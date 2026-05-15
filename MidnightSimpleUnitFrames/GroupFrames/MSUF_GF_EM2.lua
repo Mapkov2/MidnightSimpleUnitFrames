@@ -439,6 +439,11 @@ end
 
 local function EnterEditMode()
     if _em2Active then return end
+    local gf = ns.GF
+    if gf and gf._em2UpdateGroupVisibilityWrapper then
+        gf.UpdateGroupVisibility = gf._em2UpdateGroupVisibilityWrapper
+        _G.MSUF_GF_UpdateGroupVisibility = gf.UpdateGroupVisibility
+    end
     _em2Active = true
     SyncAllContainers()
     HideHeaders()
@@ -453,6 +458,10 @@ local function ExitEditMode()
     -- see _em2Active=false and skip their ShowPreviewOnly() branch.
     _em2Active = false
     _previewShownByEM2 = false
+    if gf._origUpdateGroupVisibility then
+        gf.UpdateGroupVisibility = gf._origUpdateGroupVisibility
+        _G.MSUF_GF_UpdateGroupVisibility = gf.UpdateGroupVisibility
+    end
 
     -- Hide preview frames
     DisablePreviewMouse(false)
@@ -755,11 +764,11 @@ do
         local origUGV = gf.UpdateGroupVisibility
         if type(origUGV) == "function" then
             gf._origUpdateGroupVisibility = origUGV
-            gf.UpdateGroupVisibility = function(...)
+            gf._em2UpdateGroupVisibilityWrapper = function(...)
                 if _em2Active then return end
                 origUGV(...)
             end
-            _G.MSUF_GF_UpdateGroupVisibility = gf.UpdateGroupVisibility
+            _G.MSUF_GF_UpdateGroupVisibility = origUGV
         end
     end)
 end

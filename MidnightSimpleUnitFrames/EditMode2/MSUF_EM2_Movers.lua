@@ -42,6 +42,7 @@ local movers = {}
 local moverParent
 
 local function RefreshUFPreview(reason)
+    if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
     local fn = _G.MSUF_UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "EM2_MOVERS") end
 end
@@ -720,7 +721,9 @@ _G.MSUF_SyncCastbarEditModeWithUnitEdit = function()
     if _G.MSUF_UpdateFocusCastbarPreview then
         _G.MSUF_UpdateFocusCastbarPreview()
     end
-    if _G.MSUF_UpdateBossCastbarPreview then
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and _G.MSUF_UpdateBossCastbarPreview
+    then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 end

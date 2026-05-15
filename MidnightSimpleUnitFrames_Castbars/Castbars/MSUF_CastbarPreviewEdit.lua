@@ -189,7 +189,10 @@ local function MSUF_SetCastbarPreviewNudgeTarget(frame, kind, cfg)
                 local rf = cfg.reanchorFunc and _G[cfg.reanchorFunc]
                 if type(rf) == "function" then rf() end
                 if type(MSUF_UpdateCastbarVisuals) == "function" then MSUF_UpdateCastbarVisuals() end
-                if kind == "boss" and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                if kind == "boss"
+                    and not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+                    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+                then
                     _G.MSUF_UpdateBossCastbarPreview()
                 end
                 if type(MSUF_SyncCastbarPositionPopup) == "function" then
@@ -329,7 +332,9 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
                     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
                         _G.MSUF_ApplyBossCastbarPositionSetting()
                     end
-                    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+                        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+                    then
                         _G.MSUF_UpdateBossCastbarPreview()
                     end
                     if type(MSUF_SyncBossCastbarSliders) == "function" then
@@ -375,7 +380,10 @@ end
                     rf()
                 end
 
-                if kind == "boss" and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+                if kind == "boss"
+                    and not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+                    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+                then
                     _G.MSUF_UpdateBossCastbarPreview()
                 end
             end

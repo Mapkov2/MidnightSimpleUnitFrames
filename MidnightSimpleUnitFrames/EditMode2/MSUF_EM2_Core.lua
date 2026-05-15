@@ -364,7 +364,9 @@ function State.Exit(source)
     if _G.MSUF_SyncAllUnitPreviews then
         _G.MSUF_SyncAllUnitPreviews()
     end
-    if _G.MSUF_UpdateBossCastbarPreview then
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and _G.MSUF_UpdateBossCastbarPreview
+    then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 

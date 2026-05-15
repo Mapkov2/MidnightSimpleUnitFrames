@@ -510,6 +510,7 @@ end
 
 function GF.RefreshPreviewGroupBorder(kind)
     kind = kind or "party"
+    if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
     local container = GF._previewContainer and GF._previewContainer[kind]
     local conf = GF.GetConf and GF.GetConf(kind)
     if not conf or conf.groupBorderEnabled ~= true
@@ -572,17 +573,21 @@ function GF.RefreshPreviewGroupBorder(kind)
 end
 
 function GF.RefreshGroupBorders(kind)
+    local previewActive = not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and GF._previewActive
     if kind then
         GF.RefreshGroupBorder(kind)
-        GF.RefreshPreviewGroupBorder(kind)
+        if previewActive and previewActive[kind] then GF.RefreshPreviewGroupBorder(kind) end
         return
     end
     GF.RefreshGroupBorder("party")
     GF.RefreshGroupBorder("raid")
     GF.RefreshGroupBorder("mythicraid")
-    GF.RefreshPreviewGroupBorder("party")
-    GF.RefreshPreviewGroupBorder("raid")
-    GF.RefreshPreviewGroupBorder("mythicraid")
+    if previewActive then
+        if previewActive.party then GF.RefreshPreviewGroupBorder("party") end
+        if previewActive.raid then GF.RefreshPreviewGroupBorder("raid") end
+        if previewActive.mythicraid then GF.RefreshPreviewGroupBorder("mythicraid") end
+    end
 end
 
 -- PERF (Stage 1): Pre-built per-kind callbacks — created once on first call, reused thereafter.
@@ -3474,7 +3479,11 @@ function GF.ShowPreview(kind, count)
             frames[i]:Hide()
         end
     end
-    if GF.RefreshPreviewGroupBorder then GF.RefreshPreviewGroupBorder(kind) end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and GF.RefreshPreviewGroupBorder
+    then
+        GF.RefreshPreviewGroupBorder(kind)
+    end
 end
 
 function GF.HidePreview(kind)
@@ -3492,7 +3501,11 @@ function GF.HidePreview(kind)
     end
     local container = GF._previewContainer and GF._previewContainer[kind]
     if container then container:Hide() end
-    if GF.RefreshPreviewGroupBorder then GF.RefreshPreviewGroupBorder(kind) end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and GF.RefreshPreviewGroupBorder
+    then
+        GF.RefreshPreviewGroupBorder(kind)
+    end
 end
 
 local function GF_PreviewsAllowed()
@@ -3581,7 +3594,11 @@ function GF.RefreshPreviewLayout(kind)
             end
         end
     end
-    if GF.RefreshPreviewGroupBorder then GF.RefreshPreviewGroupBorder(kind) end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and GF.RefreshPreviewGroupBorder
+    then
+        GF.RefreshPreviewGroupBorder(kind)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -3856,24 +3873,6 @@ local function OnEvent(self, event, ...)
             GF._pendingRefreshVisuals = nil
             if GF.RefreshVisuals then GF.RefreshVisuals() end
         end
-
-        -- EQoL pattern: refresh range fade on combat end.
-        -- UNIT_IN_RANGE_UPDATE fires less frequently OOC;
-        -- sweep all frames to ensure correct alpha after combat. The Effects
-        -- helper gates the broad walk when range/dynamic alpha is fully off.
-        C_Timer.After(0.1, function()
-            if GF.RefreshRangeFade then
-                GF.RefreshRangeFade()
-                return
-            end
-            local updateRange = _G.MSUF_GF_UpdateRange
-            if not updateRange then return end
-            GF.ForEachFrame(function(f)
-                if f.unit and f:IsVisible() then
-                    updateRange(f, f.unit)
-                end
-            end)
-        end)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local isLogin, isReload = ...

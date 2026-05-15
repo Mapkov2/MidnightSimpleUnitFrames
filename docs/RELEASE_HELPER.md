@@ -99,6 +99,11 @@ exactly those managed auto blocks into the selected release section. Use
 **Run Once** when you want to skip manual edits and write the generated entries
 directly.
 
+Use **Make Friendly** after generating entries when you want release-note text
+for users instead of commit-style bullets. It removes hashes and file paths,
+maps technical areas to addon-facing wording, and leaves the result in the
+editor so you can still adjust it before **Write Edited**.
+
 For a `5.2` changelog, set **Changelog title** to `5.2`. The source ref should
 normally be the previous real Git tag, for example `v5.1`, not `v5.2`. If the
 source ref accidentally matches the target version and does not exist as a Git

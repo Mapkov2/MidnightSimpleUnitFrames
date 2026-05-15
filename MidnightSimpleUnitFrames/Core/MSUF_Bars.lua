@@ -766,9 +766,11 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     local bar = isHeal and self and self.healAbsorbBar or self and self.absorbBar
     local api = isHeal and UnitGetTotalHealAbsorbs or UnitGetTotalAbsorbs
     if not self or not bar then  return end
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestActive = (_G.MSUF_AbsorbTextureTestMode == true)
+        and not (_G.MSUF_InCombat or (InCombatLockdown and InCombatLockdown()))
+    local testFn = absorbTestActive and _G.MSUF_ShouldShowAbsorbTextureTest or nil
     local absorbTestMode = type(testFn) == "function" and testFn(self)
-        or (_G.MSUF_AbsorbTextureTestMode and not (_G.MSUF_InCombat or (InCombatLockdown and InCombatLockdown())))
+        or (absorbTestActive and type(testFn) ~= "function")
     if not absorbTestMode and type(api) ~= 'function' then  return end
     -- P0: Cache anchor-mode applier (defined later in this file, resolves once on first call)
     if not _cachedApplyAbsorbAnchorMode then
