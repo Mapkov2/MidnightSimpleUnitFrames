@@ -6328,6 +6328,71 @@ local function MSUF_EnsureTargetToTInlineFS(targetFrame)
     targetFrame._msufToTInlineSep = sep
     targetFrame._msufToTInlineText = txt
  end
+local MSUF_TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
+local MSUF_TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
+local MSUF_TOT_INLINE_PRESET_SEPARATOR = {
+    [" "] = true,
+    ["-"] = true,
+    ["/"] = true,
+    ["\\"] = true,
+    ["|"] = true,
+    ["<"] = true,
+    [">"] = true,
+    ["~"] = true,
+    [":"] = true,
+}
+local function MSUF_TruncateUtf8Chars(value, maxChars)
+    value = tostring(value or "")
+    maxChars = tonumber(maxChars) or 0
+    if maxChars <= 0 or value == "" then return "" end
+
+    local bytePos = 1
+    local valueLen = #value
+    local chars = 0
+    while bytePos <= valueLen and chars < maxChars do
+        local b = string.byte(value, bytePos)
+        if not b then break end
+        if b < 128 then
+            bytePos = bytePos + 1
+        elseif b < 224 then
+            bytePos = bytePos + 2
+        elseif b < 240 then
+            bytePos = bytePos + 3
+        else
+            bytePos = bytePos + 4
+        end
+        chars = chars + 1
+    end
+    return string.sub(value, 1, bytePos - 1)
+end
+local function MSUF_CleanToTInlineCustomSeparator(value)
+    value = tostring(value or ""):gsub("[%c]", " ")
+    return MSUF_TruncateUtf8Chars(value, MSUF_TOT_INLINE_CUSTOM_SEPARATOR_MAX)
+end
+local MSUF_ToTInlineSanitizedConf
+local MSUF_ToTInlineSanitizedSeparator
+local MSUF_ToTInlineSanitizedCustom
+local function MSUF_SanitizeToTInlineConf(conf)
+    if not conf then return end
+    local separator = conf.totInlineSeparator
+    local custom = conf.totInlineCustomSeparator
+    if MSUF_ToTInlineSanitizedConf == conf
+        and MSUF_ToTInlineSanitizedSeparator == separator
+        and MSUF_ToTInlineSanitizedCustom == custom
+    then
+        return
+    end
+
+    conf.totInlineCustomSeparator = MSUF_CleanToTInlineCustomSeparator(custom)
+    if separator ~= MSUF_TOT_INLINE_CUSTOM_SEPARATOR and not MSUF_TOT_INLINE_PRESET_SEPARATOR[separator] then
+        conf.totInlineCustomSeparator = MSUF_CleanToTInlineCustomSeparator(separator)
+        conf.totInlineSeparator = MSUF_TOT_INLINE_CUSTOM_SEPARATOR
+    end
+
+    MSUF_ToTInlineSanitizedConf = conf
+    MSUF_ToTInlineSanitizedSeparator = conf.totInlineSeparator
+    MSUF_ToTInlineSanitizedCustom = conf.totInlineCustomSeparator
+end
 function MSUF_RuntimeUpdateTargetToTInline(targetFrame)
     if not targetFrame or not targetFrame.nameText then  return end
     if not MSUF_DB then EnsureDB() end
@@ -6344,6 +6409,10 @@ function MSUF_RuntimeUpdateTargetToTInline(targetFrame)
     if type(MSUF_DB.targettarget.totInlineSeparator) ~= "string" or MSUF_DB.targettarget.totInlineSeparator == "" then
         MSUF_DB.targettarget.totInlineSeparator = "|"
     end
+    if MSUF_DB.targettarget.totInlineCustomSeparator == nil and type(MSUF_DB.target) == "table" and type(MSUF_DB.target.totInlineCustomSeparator) == "string" then
+        MSUF_DB.targettarget.totInlineCustomSeparator = MSUF_DB.target.totInlineCustomSeparator
+    end
+    MSUF_SanitizeToTInlineConf(MSUF_DB.targettarget)
     MSUF_EnsureTargetToTInlineFS(targetFrame)
     local totConf = MSUF_DB.targettarget
     ns.Text.RenderToTInline(targetFrame, totConf)

@@ -870,6 +870,19 @@ end
      return MSUF_GetNPCReactionColor(kind)
  end
 
+ local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
+
+ local function _ResolveToTInlineSeparator(conf)
+    local token = conf and conf.totInlineSeparator
+    if token == TOT_INLINE_CUSTOM_SEPARATOR then
+        token = conf and conf.totInlineCustomSeparator
+        if type(token) ~= "string" or token == "" then token = " " end
+    elseif type(token) ~= "string" or token == "" then
+        token = "|"
+    end
+    return token
+ end
+
  function ns.Text.RenderToTInline(targetFrame, totConf)
     if not targetFrame or not targetFrame.nameText then  return end
     local sep = targetFrame._msufToTInlineSep
@@ -881,8 +894,7 @@ end
         ns.Util.SetShown(txt, false)
          return
     end
-    local sepToken = (totConf and totConf.totInlineSeparator) or "|"
-    if type(sepToken) ~= "string" or sepToken == "" then sepToken = "|" end
+    local sepToken = _ResolveToTInlineSeparator(totConf)
     sep:SetText(" " .. sepToken .. " ")
     -- Match target name font (no secret ops).
     local font, size, flags = targetFrame.nameText:GetFont()

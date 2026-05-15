@@ -1874,6 +1874,7 @@ local function fill(key, defaults)
     -- Target-of-Target inline-in-Target separator token (rendered with spaces around it).
     -- Keep the default as the legacy behavior (" | ") by storing the token "|".
     if MSUF_DB.targettarget.totInlineSeparator == nil then MSUF_DB.targettarget.totInlineSeparator = "|" end
+    if MSUF_DB.targettarget.totInlineCustomSeparator == nil then MSUF_DB.targettarget.totInlineCustomSeparator = "" end
     for k, v in pairs(textDefaults) do
         if MSUF_DB.targettarget[k] == nil then MSUF_DB.targettarget[k] = v end
     end

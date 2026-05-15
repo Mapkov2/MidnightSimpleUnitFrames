@@ -15,6 +15,7 @@ local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
 local math_min, math_max, math_floor = math.min, math.max, math.floor
 local string_format, string_match, string_sub = string.format, string.match, string.sub
+local string_byte, string_gsub = string.byte, string.gsub
 local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
@@ -1531,6 +1532,61 @@ local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
     desired[ev] = true
 end
 
+local UFCORE_TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
+local UFCORE_TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
+local UFCORE_TOT_INLINE_PRESET_SEPARATOR = {
+    [" "] = true,
+    ["-"] = true,
+    ["/"] = true,
+    ["\\"] = true,
+    ["|"] = true,
+    ["<"] = true,
+    [">"] = true,
+    ["~"] = true,
+    [":"] = true,
+}
+
+local function UFCore_TruncateUtf8Chars(value, maxChars)
+    value = tostring(value or "")
+    maxChars = tonumber(maxChars) or 0
+    if maxChars <= 0 or value == "" then return "" end
+
+    local bytePos = 1
+    local valueLen = #value
+    local chars = 0
+    while bytePos <= valueLen and chars < maxChars do
+        local b = string_byte(value, bytePos)
+        if not b then break end
+        if b < 128 then
+            bytePos = bytePos + 1
+        elseif b < 224 then
+            bytePos = bytePos + 2
+        elseif b < 240 then
+            bytePos = bytePos + 3
+        else
+            bytePos = bytePos + 4
+        end
+        chars = chars + 1
+    end
+    return string_sub(value, 1, bytePos - 1)
+end
+
+local function UFCore_CleanToTInlineCustomSeparator(value)
+    value = string_gsub(tostring(value or ""), "[%c]", " ")
+    return UFCore_TruncateUtf8Chars(value, UFCORE_TOT_INLINE_CUSTOM_SEPARATOR_MAX)
+end
+
+local function UFCore_ResolveToTInlineSeparator(conf)
+    local token = conf and conf.totInlineSeparator
+    if token == UFCORE_TOT_INLINE_CUSTOM_SEPARATOR then
+        token = conf and conf.totInlineCustomSeparator
+        if type(token) ~= "string" or token == "" then token = " " end
+    elseif type(token) ~= "string" or token == "" then
+        token = "|"
+    end
+    return token
+end
+
 -- Ensure the targettarget DB node exists even when the ToT unitframe is disabled.
 -- This is required so "ToT inline in target name" works immediately without ever enabling the ToT frame.
 function UFCore_GetTargetToTInlineConf()
@@ -1580,6 +1636,17 @@ function UFCore_GetTargetToTInlineConf()
         end
         if type(tt.totInlineSeparator) ~= "string" or tt.totInlineSeparator == "" then
             tt.totInlineSeparator = "|"
+        end
+        if tt.totInlineCustomSeparator == nil then
+            local t = db.target
+            if type(t) == "table" and type(t.totInlineCustomSeparator) == "string" then
+                tt.totInlineCustomSeparator = t.totInlineCustomSeparator
+            end
+        end
+        tt.totInlineCustomSeparator = UFCore_CleanToTInlineCustomSeparator(tt.totInlineCustomSeparator)
+        if tt.totInlineSeparator ~= UFCORE_TOT_INLINE_CUSTOM_SEPARATOR and not UFCORE_TOT_INLINE_PRESET_SEPARATOR[tt.totInlineSeparator] then
+            tt.totInlineCustomSeparator = UFCore_CleanToTInlineCustomSeparator(tt.totInlineSeparator)
+            tt.totInlineSeparator = UFCORE_TOT_INLINE_CUSTOM_SEPARATOR
         end
 
         if tt.showToTInTargetName == nil then
@@ -1640,8 +1707,7 @@ function UFCore_UpdateToTInline(f)
     -- Separator token (stored in DB; render with spaces around it, legacy-style).
     do
         local conf = UFCore_GetTargetToTInlineConf()
-        local token = (conf and conf.totInlineSeparator) or "|"
-        if type(token) ~= "string" or token == "" then token = "|" end
+        local token = UFCore_ResolveToTInlineSeparator(conf)
         _SetText(f._msufToTInlineSep, " " .. token .. " ")
     end
 
