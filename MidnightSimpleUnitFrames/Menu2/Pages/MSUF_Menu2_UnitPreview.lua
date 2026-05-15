@@ -250,11 +250,45 @@ local function TextScopeGet(key, field, defaultValue)
 end
 
 local TOTINLINE_SEP_VALID = {
-    ["."] = true, ["-"] = true, ["/"] = true, ["\\"] = true, ["|"] = true,
+    [" "] = true, ["."] = true, ["-"] = true, ["/"] = true, ["\\"] = true, ["|"] = true,
     ["<<<"] = true, [">>>"] = true, ["||"] = true, ["--"] = true,
-    [">"] = true, ["<"] = true,
+    [">"] = true, ["<"] = true, ["~"] = true, [":"] = true,
 }
-local function ToTInlineSeparator(v)
+local TOTINLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
+local TOTINLINE_CUSTOM_SEPARATOR_MAX = 5
+local function TruncateUtf8Chars(value, maxChars)
+    value = tostring(value or "")
+    maxChars = tonumber(maxChars) or 0
+    if maxChars <= 0 or value == "" then return "" end
+
+    local bytePos = 1
+    local valueLen = #value
+    local chars = 0
+    while bytePos <= valueLen and chars < maxChars do
+        local b = string.byte(value, bytePos)
+        if not b then break end
+        if b < 128 then
+            bytePos = bytePos + 1
+        elseif b < 224 then
+            bytePos = bytePos + 2
+        elseif b < 240 then
+            bytePos = bytePos + 3
+        else
+            bytePos = bytePos + 4
+        end
+        chars = chars + 1
+    end
+    return string.sub(value, 1, bytePos - 1)
+end
+local function CleanToTInlineCustomSeparator(v)
+    v = tostring(v or ""):gsub("[%c]", " ")
+    return TruncateUtf8Chars(v, TOTINLINE_CUSTOM_SEPARATOR_MAX)
+end
+local function ToTInlineSeparator(v, custom)
+    if v == TOTINLINE_CUSTOM_SEPARATOR then
+        local token = CleanToTInlineCustomSeparator(custom)
+        return token ~= "" and token or " "
+    end
     if type(v) ~= "string" or v == "" or not TOTINLINE_SEP_VALID[v] then return "|" end
     return v
 end
@@ -2159,7 +2193,7 @@ function Preview.Refresh(box, reason)
         local totConf = (_G.MSUF_DB and _G.MSUF_DB.targettarget) or {}
         local showInline = key == "target" and conf.showName ~= false and totConf.showToTInTargetName == true
         if showInline then
-            local sep = ToTInlineSeparator(totConf.totInlineSeparator)
+            local sep = ToTInlineSeparator(totConf.totInlineSeparator, totConf.totInlineCustomSeparator)
             local totData = UNIT_DATA.targettarget or { name = "Target" }
             mock.totInlineSep:SetText(sep ~= "" and sep or " ")
             mock.totInlineText:SetText(ShortenPreviewName(totData.name, "targettarget", conf))

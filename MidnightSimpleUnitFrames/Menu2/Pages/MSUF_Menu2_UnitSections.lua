@@ -36,6 +36,59 @@ local PORTRAIT_SHAPES = UP.PORTRAIT_SHAPES or {}
 local PORTRAIT_BORDERS = UP.PORTRAIT_BORDERS or {}
 local UF_COPY_CATEGORIES = UP.UF_COPY_CATEGORIES or {}
 
+local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
+local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
+local TOT_INLINE_SEPARATOR_VALUES = {}
+local TOT_INLINE_SEPARATOR_OPTIONS = {}
+for i = 1, #SEPARATORS do
+    local item = SEPARATORS[i]
+    local value = item and item.value
+    TOT_INLINE_SEPARATOR_OPTIONS[#TOT_INLINE_SEPARATOR_OPTIONS + 1] = item
+    if value ~= nil then
+        TOT_INLINE_SEPARATOR_VALUES[value == "" and " " or value] = true
+    end
+end
+TOT_INLINE_SEPARATOR_OPTIONS[#TOT_INLINE_SEPARATOR_OPTIONS + 1] = { value = TOT_INLINE_CUSTOM_SEPARATOR, text = "Custom" }
+
+local function TruncateUtf8Chars(value, maxChars)
+    value = tostring(value or "")
+    maxChars = tonumber(maxChars) or 0
+    if maxChars <= 0 or value == "" then return "" end
+
+    local bytePos = 1
+    local valueLen = #value
+    local chars = 0
+    while bytePos <= valueLen and chars < maxChars do
+        local b = string.byte(value, bytePos)
+        if not b then break end
+        if b < 128 then
+            bytePos = bytePos + 1
+        elseif b < 224 then
+            bytePos = bytePos + 2
+        elseif b < 240 then
+            bytePos = bytePos + 3
+        else
+            bytePos = bytePos + 4
+        end
+        chars = chars + 1
+    end
+    return string.sub(value, 1, bytePos - 1)
+end
+
+local function CleanToTInlineCustomSeparator(value)
+    value = tostring(value or ""):gsub("[%c]", " ")
+    return TruncateUtf8Chars(value, TOT_INLINE_CUSTOM_SEPARATOR_MAX)
+end
+
+local function ToTInlineSeparatorDropdownValue(conf)
+    local token = conf and conf.totInlineSeparator
+    if token == TOT_INLINE_CUSTOM_SEPARATOR then return TOT_INLINE_CUSTOM_SEPARATOR end
+    if type(token) == "string" and token ~= "" then
+        return TOT_INLINE_SEPARATOR_VALUES[token] and (token == " " and "" or token) or TOT_INLINE_CUSTOM_SEPARATOR
+    end
+    return "|"
+end
+
 local function PortraitClassStyleValues()
     local PM = ns and ns.PortraitMedia
     local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {
@@ -1018,7 +1071,12 @@ local function BuildInlineText(ctx, builder, unit)
     if unit ~= "target" then return end
 
     local sec = builder:CollapsibleSection("inline_text", "Inline Text", 164, false)
-    W.Text(sec, "Target of Target inline text is shown on the Target frame name line.", 14, -38, ctx.width - 28, T.colors.muted)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    local rightX = math.max(260, floor(sectionW * 0.52))
+    local rightW = math.min(220, math.max(140, sectionW - rightX - 28))
+    local RefreshInlineControlState
+
+    W.Text(sec, "Target of Target inline text is shown on the Target frame name line.", 14, -38, sectionW - 28, T.colors.muted)
     sec._msuf2CursorY = -72
 
     local show = W.Toggle(sec, "Show Target of Target text inline")
@@ -1031,20 +1089,63 @@ local function BuildInlineText(ctx, builder, unit)
             M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE", { text = true, preview = true })
             Call("MSUF_UpdateTargetToTInlineNow")
             Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE")
+            if RefreshInlineControlState then RefreshInlineControlState() end
         end)
 
-    local sep = W.Dropdown(sec, "Inline separator", SEPARATORS, 170)
+    local sep = W.Dropdown(sec, "Inline separator", TOT_INLINE_SEPARATOR_OPTIONS, 170)
     M.BindDropdown(ctx, sep,
-        function() return GetConf("targettarget").totInlineSeparator or "|" end,
+        function() return ToTInlineSeparatorDropdownValue(GetConf("targettarget")) end,
         function(v)
             local conf = GetConf("targettarget")
-            conf.totInlineSeparator = (v ~= nil and tostring(v) ~= "") and tostring(v) or " "
+            if v == TOT_INLINE_CUSTOM_SEPARATOR then
+                conf.totInlineSeparator = TOT_INLINE_CUSTOM_SEPARATOR
+                conf.totInlineCustomSeparator = CleanToTInlineCustomSeparator(conf.totInlineCustomSeparator)
+            else
+                conf.totInlineSeparator = (v ~= nil and tostring(v) ~= "") and tostring(v) or " "
+            end
             M.RequestUnitApply("target", "MSUF2_TOT_INLINE_SEPARATOR", { text = true, preview = true })
             M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_SEPARATOR", { text = true, preview = true })
             Call("MSUF_ToTInline_RequestRefresh", "MSUF2_TOT_INLINE_SEPARATOR")
             Call("MSUF_UpdateTargetToTInlineNow")
             Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_SEPARATOR")
+            if RefreshInlineControlState then RefreshInlineControlState() end
         end)
+
+    local customSep = W.TextInput(sec, "Custom separator", rightW)
+    W.MoveWidget(customSep, sec, rightX, -102, rightW)
+    if customSep.SetMaxLetters then customSep:SetMaxLetters(TOT_INLINE_CUSTOM_SEPARATOR_MAX) end
+    M.BindTextInput(ctx, customSep,
+        function()
+            local conf = GetConf("targettarget")
+            local token = conf and conf.totInlineSeparator
+            if token ~= TOT_INLINE_CUSTOM_SEPARATOR and type(token) == "string" and token ~= "" and not TOT_INLINE_SEPARATOR_VALUES[token] then
+                return CleanToTInlineCustomSeparator(token)
+            end
+            return CleanToTInlineCustomSeparator(conf and conf.totInlineCustomSeparator)
+        end,
+        function(v)
+            local conf = GetConf("targettarget")
+            local token = conf and conf.totInlineSeparator
+            local isCustom = token == TOT_INLINE_CUSTOM_SEPARATOR
+                or (type(token) == "string" and token ~= "" and not TOT_INLINE_SEPARATOR_VALUES[token])
+            conf.totInlineCustomSeparator = CleanToTInlineCustomSeparator(v)
+            if isCustom then
+                conf.totInlineSeparator = TOT_INLINE_CUSTOM_SEPARATOR
+                M.RequestUnitApply("target", "MSUF2_TOT_INLINE_CUSTOM_SEPARATOR", { text = true, preview = true })
+                M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_CUSTOM_SEPARATOR", { text = true, preview = true })
+                Call("MSUF_ToTInline_RequestRefresh", "MSUF2_TOT_INLINE_CUSTOM_SEPARATOR")
+                Call("MSUF_UpdateTargetToTInlineNow")
+                Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_CUSTOM_SEPARATOR")
+            end
+        end,
+        true)
+
+    RefreshInlineControlState = function()
+        local isCustom = ToTInlineSeparatorDropdownValue(GetConf("targettarget")) == TOT_INLINE_CUSTOM_SEPARATOR
+        SetControlEnabled(customSep, isCustom)
+    end
+    M.AddRefresher(ctx, RefreshInlineControlState)
+    RefreshInlineControlState()
 end
 
 local function BuildAlpha(ctx, builder, unit)
