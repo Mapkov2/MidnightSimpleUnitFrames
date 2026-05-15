@@ -144,6 +144,16 @@ local _providerMinRem  = {}
 
 local _getPlayerAuraBySpellID, _getUnitAuraBySpellID, _auraLookupBound
 
+local function _ProviderWanted(idx, reminders)
+    local p = _PROVIDERS[idx]
+    if not p then return false end
+    if reminders and reminders[p.key] == false then return false end
+    if p.providerClass == "ROGUE_SELF" then
+        return _playerClass == "ROGUE"
+    end
+    return _presentClasses[p.providerClass] == true
+end
+
 local function _BindAuraLookups()
     if _auraLookupBound then return end
     local CUA = C_UnitAuras or _G.C_UnitAuras
@@ -185,21 +195,23 @@ local function _AddProviderAura(idx, data, threshold)
     end
 end
 
-local function _ScanPlayerAurasDirect(threshold)
+local function _ScanPlayerAurasDirect(threshold, reminders)
     _BindAuraLookups()
     if not _getPlayerAuraBySpellID and not _getUnitAuraBySpellID then return false end
     for i = 1, _providerCount do
-        local spells = _PROVIDERS[i].satisfiedBy
-        for sid in next, spells do
-            local data
-            if _getPlayerAuraBySpellID then
-                data = _getPlayerAuraBySpellID(sid)
-            end
-            if not data and _getUnitAuraBySpellID then
-                data = _getUnitAuraBySpellID("player", sid)
-            end
-            if data then
-                _AddProviderAura(i, data, threshold)
+        if _ProviderWanted(i, reminders) then
+            local spells = _PROVIDERS[i].satisfiedBy
+            for sid in next, spells do
+                local data
+                if _getPlayerAuraBySpellID then
+                    data = _getPlayerAuraBySpellID(sid)
+                end
+                if not data and _getUnitAuraBySpellID then
+                    data = _getUnitAuraBySpellID("player", sid)
+                end
+                if data then
+                    _AddProviderAura(i, data, threshold)
+                end
             end
         end
     end
@@ -226,9 +238,7 @@ function Reminder.MarkDirty()
     _lastResultSig = ""  -- force re-render
 end
 
-local function _ScanPlayerAuras(threshold)
-    if _ScanPlayerAurasDirect(threshold) then return true end
-
+local function _ScanPlayerAurasCached(threshold, reminders)
     local Cache = API.Cache
     local s = Cache._units and Cache._units.player
     if not s or not s.all then return false end
@@ -239,12 +249,17 @@ local function _ScanPlayerAuras(threshold)
         if not sid or sid == 0 then sid = _DecodeSpellId(data) end
         if sid and sid ~= 0 then
             local idx = lookup[sid]
-            if idx then
+            if idx and _ProviderWanted(idx, reminders) then
                 _AddProviderAura(idx, data, thr)
             end
         end
     end
     return true
+end
+
+local function _ScanPlayerAuras(threshold, reminders)
+    if _ScanPlayerAurasCached(threshold, reminders) then return true end
+    return _ScanPlayerAurasDirect(threshold, reminders)
 end
 
 -- Build compact result signature (zero-alloc via reusable buffer)
@@ -303,32 +318,24 @@ local function _ComputeMissing(reminders, threshold, isPreview)
         _providerMinRem[i] = nil
     end
 
-    if not _ScanPlayerAuras(thr) then
+    if not _ScanPlayerAuras(thr, reminders) then
         _lastEpoch = -1
         return true
     end
 
     for i = 1, _providerCount do
         local p = _PROVIDERS[i]
-        if not reminders or reminders[p.key] ~= false then
-            local shouldCheck = false
-            if p.providerClass == "ROGUE_SELF" then
-                shouldCheck = (_playerClass == "ROGUE")
-            else
-                shouldCheck = (_presentClasses[p.providerClass] == true)
-            end
-            if shouldCheck then
-                if not _providerHasBuff[i] then
+        if _ProviderWanted(i, reminders) then
+            if not _providerHasBuff[i] then
+                _resultCount = _resultCount + 1
+                local r = _results[_resultCount]
+                r.provider = p; r.state = "MISSING"; r.remaining = nil
+            elseif thr > 0 then
+                local rem = _providerMinRem[i]
+                if rem and rem < thr then
                     _resultCount = _resultCount + 1
                     local r = _results[_resultCount]
-                    r.provider = p; r.state = "MISSING"; r.remaining = nil
-                elseif thr > 0 then
-                    local rem = _providerMinRem[i]
-                    if rem and rem < thr then
-                        _resultCount = _resultCount + 1
-                        local r = _results[_resultCount]
-                        r.provider = p; r.state = "EXPIRING"; r.remaining = rem
-                    end
+                    r.provider = p; r.state = "EXPIRING"; r.remaining = rem
                 end
             end
         end
