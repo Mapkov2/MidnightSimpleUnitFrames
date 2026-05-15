@@ -1347,14 +1347,39 @@ function GF.RefreshPreviewBox()
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
         local gfDbKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
         local gfDb = _G.MSUF_DB and _G.MSUF_DB[gfDbKey]
+        local function outlineModeToEnabled(mode)
+            if mode == nil then return nil end
+            if mode == true or mode == false then return mode end
+            local n = tonumber(mode)
+            if n ~= nil then return n == 1 end
+            return nil
+        end
+        local function outlineModeKey(key)
+            if key == "hlAggroEnabled" then return "aggroOutlineMode" end
+            if key == "hlDispelEnabled" then return "dispelOutlineMode" end
+            return nil
+        end
         local function resolveHL(key, fallback)
-            if gfDb and gfDb.hlOverride and gfDb[key] ~= nil then return gfDb[key] end
-            if gen and gen[key] ~= nil then return gen[key] end
+            local modeKey = outlineModeKey(key)
+            if gfDb and gfDb.hlOverride then
+                if gfDb[key] ~= nil then return gfDb[key] end
+                if modeKey then
+                    local enabled = outlineModeToEnabled(gfDb[modeKey])
+                    if enabled ~= nil then return enabled end
+                end
+            end
+            if gen then
+                if gen[key] ~= nil then return gen[key] end
+                if modeKey then
+                    local enabled = outlineModeToEnabled(gen[modeKey])
+                    if enabled ~= nil then return enabled end
+                end
+            end
             return fallback
         end
 
-        local aggroEn  = resolveHL("hlAggroEnabled",  conf.aggroHighlight)
-        local targetEn = resolveHL("hlTargetEnabled", conf.targetHighlight)
+        local aggroEn  = resolveHL("hlAggroEnabled",  conf.aggroEnabled)
+        local targetEn = resolveHL("hlTargetEnabled", conf.targetIndicator)
         local hlEn = (aggroEn ~= false) or (targetEn ~= false)
         if hlEn then
             local sz  = max(1, tonumber(resolveHL("hlAggroSize", (gen and gen.highlightBorderThickness) or 2)) or 2)

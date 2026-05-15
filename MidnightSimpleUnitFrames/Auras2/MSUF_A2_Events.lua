@@ -976,10 +976,9 @@ end
                     if not _refsBound then BindCachedRefs() end
                     local forceRescan = true
                     if not _unitAuraRescanQueued[unit] and infoIsTable and not updateInfo.isFullUpdate then
-                        local a = updateInfo.addedAuras
-                        local r = updateInfo.removedAuraInstanceIDs
-                        local u = updateInfo.updatedAuraInstanceIDs
-                        forceRescan = (a and a[5] ~= nil) or (r and r[5] ~= nil) or (u and u[9] ~= nil)
+                        -- Delta payloads are already handled incrementally by Cache.OnUnitAura.
+                        -- Do not collapse larger-but-valid deltas into render-time FullScan.
+                        forceRescan = false
                     end
                     if forceRescan then
                         local invalid = _cachedInvalidUnit
@@ -1016,14 +1015,7 @@ end
                     if not _refsBound then BindCachedRefs() end
                     local forceRescan = (_unitAuraRescanQueued[unit] == true)
                     if (not forceRescan) and infoIsTable then
-                        if updateInfo.isFullUpdate then
-                            forceRescan = true
-                        else
-                            local a = updateInfo.addedAuras
-                            local r = updateInfo.removedAuraInstanceIDs
-                            local u = updateInfo.updatedAuraInstanceIDs
-                            forceRescan = (a and a[5] ~= nil) or (r and r[5] ~= nil) or (u and u[9] ~= nil)
-                        end
+                        forceRescan = (updateInfo.isFullUpdate == true)
                     end
 
                     if forceRescan then

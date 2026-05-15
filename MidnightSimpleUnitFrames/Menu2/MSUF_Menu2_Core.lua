@@ -4460,42 +4460,96 @@ end
 local function BuildDashboardChangelog(parent, cardWidth)
     local data = GetBundledChangelog()
     local left, right = 14, 14
-    local bodyW = max(120, (cardWidth or 420) - left - right - 20)
+    local top = -130
+    local headerH = 42
+    local contentW = max(120, (cardWidth or 420) - left - right)
+    local scrollW = max(80, (cardWidth or 420) - left - 44)
 
-    local divider = parent:CreateTexture(nil, "BORDER")
-    divider:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -132)
-    divider:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -right, -132)
-    divider:SetHeight(1)
-    divider:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.42)
+    local function RawFont(parentFrame, template, text, color, bump)
+        local fs = parentFrame:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
+        if T.StyleFontString then
+            T.StyleFontString(fs, color or T.colors.muted, bump or 0)
+        elseif color and fs.SetTextColor then
+            fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+        end
+        fs:SetText(tostring(text or ""))
+        return fs
+    end
 
-    local title = T.Font(parent, "GameFontNormal", "Latest Changelog", T.colors.text)
-    title:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -146)
+    local line = parent:CreateTexture(nil, "BORDER")
+    line:SetPoint("TOPLEFT", parent, "TOPLEFT", left, top + 4)
+    line:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -right, top + 4)
+    line:SetHeight(1)
+    line:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.38)
+
+    local header = CreateFrame("Button", nil, parent)
+    header:SetPoint("TOPLEFT", parent, "TOPLEFT", left, top)
+    header:SetSize(contentW, headerH)
+
+    local headerBg = header:CreateTexture(nil, "BACKGROUND")
+    headerBg:SetAllPoints()
+    headerBg:SetColorTexture(0.030, 0.038, 0.074, 0.58)
+
+    local headerEdge = header:CreateTexture(nil, "BORDER")
+    headerEdge:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
+    headerEdge:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
+    headerEdge:SetHeight(1)
+    headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.44)
+
+    local hover = header:CreateTexture(nil, "HIGHLIGHT")
+    hover:SetAllPoints()
+    hover:SetColorTexture(1, 1, 1, 0.035)
+
+    local arrow = header:CreateTexture(nil, "OVERLAY")
+    arrow:SetSize(10, 10)
+    arrow:SetPoint("LEFT", header, "LEFT", 8, 0)
+    arrow:SetTexture(T.media.collapseArrow)
+
+    local title = T.Font(header, "GameFontNormal", "Release Notes", T.colors.text)
+    title:SetPoint("TOPLEFT", header, "TOPLEFT", 24, -8)
+    title:SetPoint("RIGHT", header, "RIGHT", -72, 0)
     title:SetJustifyH("LEFT")
-    title:SetWidth(bodyW)
 
-    local subtitleText = data and (data.rangeLabel or data.currentVersion or "") or "No release notes bundled with this build."
-    local subtitle = T.Font(parent, "GameFontDisableSmall", subtitleText, T.colors.dim)
-    subtitle:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -168)
+    local current = data and (data.currentVersion or (data.entries[1] and data.entries[1].version)) or nil
+    local range = data and (data.rangeLabel or current or "") or "No release notes bundled with this build."
+    local subtitle = RawFont(header, "GameFontDisableSmall", range, T.colors.dim, 0)
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+    subtitle:SetPoint("RIGHT", header, "RIGHT", -72, 0)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetWidth(bodyW)
 
-    if not data then return end
+    local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
+    hint:SetPoint("RIGHT", header, "RIGHT", -8, 0)
+    hint:SetJustifyH("RIGHT")
+
+    local summary = RawFont(parent, "GameFontHighlightSmall", "", T.colors.muted, 0)
+    summary:SetPoint("TOPLEFT", parent, "TOPLEFT", left + 24, top - headerH - 8)
+    summary:SetWidth(max(80, contentW - 28))
+    summary:SetJustifyH("LEFT")
+    if summary.SetWordWrap then summary:SetWordWrap(true) end
+
+    if not data then
+        header:EnableMouse(false)
+        hint:SetText("")
+        summary:SetText("No release notes bundled with this build.")
+        if arrow.SetVertexColor then arrow:SetVertexColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.55) end
+        return
+    end
 
     local scroll = CreateFrame("ScrollFrame", nil, parent)
-    scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -192)
-    scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -34, 58)
+    scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", left + 2, top - headerH - 12)
+    scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -34, 70)
 
     local child = CreateFrame("Frame", nil, scroll)
-    child:SetSize(bodyW, 1)
+    child:SetSize(scrollW, 1)
     scroll:SetScrollChild(child)
 
     local y = -2
-    local function AddLine(text, fontObject, color, indent, gap)
+    local function AddText(text, fontObject, color, indent, gap)
         local rawText = tostring(text or "")
-        local fs = T.Font(child, fontObject or "GameFontHighlightSmall", "", color or T.colors.muted)
+        local fs = RawFont(child, fontObject or "GameFontHighlightSmall", rawText, color or T.colors.muted, 0)
         indent = indent or 0
         fs:SetPoint("TOPLEFT", child, "TOPLEFT", indent, y)
-        fs:SetWidth(max(40, bodyW - indent))
+        fs:SetWidth(max(40, scrollW - indent - 2))
         fs:SetJustifyH("LEFT")
         if fs.SetWordWrap then fs:SetWordWrap(true) end
         if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(true) end
@@ -4506,27 +4560,34 @@ local function BuildDashboardChangelog(parent, cardWidth)
         return fs
     end
 
+    local function AddBullet(text)
+        local dot = child:CreateTexture(nil, "ARTWORK")
+        dot:SetSize(3, 3)
+        dot:SetPoint("TOPLEFT", child, "TOPLEFT", 8, y - 6)
+        dot:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.82)
+        return AddText(text, "GameFontHighlightSmall", T.colors.muted, 18, 5)
+    end
+
     local entries = data.entries
-    local maxEntries = min(#entries, 2)
+    local maxEntries = min(#entries, 1)
     for entryIndex = 1, maxEntries do
         local entry = entries[entryIndex]
         if type(entry) == "table" then
-            if entryIndex > 1 then y = y - 8 end
             local version = tostring(entry.version or "")
             local date = tostring(entry.date or "")
             local heading = (date ~= "" and (version .. " - " .. date)) or version
-            AddLine(heading, "GameFontNormalSmall", entryIndex == 1 and T.colors.accent or T.colors.title, 0, 5)
+            AddText(heading, "GameFontNormalSmall", T.colors.accent, 0, 8)
 
             local sections = entry.sections
             if type(sections) == "table" then
                 for sectionIndex = 1, #sections do
                     local section = sections[sectionIndex]
                     if type(section) == "table" and type(section.bullets) == "table" and #section.bullets > 0 then
-                        AddLine(tostring(section.title or ""), "GameFontDisableSmall", T.colors.accent2, 0, 2)
+                        if sectionIndex > 1 then y = y - 3 end
+                        AddText(tostring(section.title or ""), "GameFontNormalSmall", T.colors.accent2, 0, 4)
                         for bulletIndex = 1, #section.bullets do
-                            AddLine("- " .. tostring(section.bullets[bulletIndex] or ""), "GameFontHighlightSmall", T.colors.muted, 8, 4)
+                            AddBullet(tostring(section.bullets[bulletIndex] or ""))
                         end
-                        y = y - 2
                     end
                 end
             end
@@ -4535,7 +4596,52 @@ local function BuildDashboardChangelog(parent, cardWidth)
 
     child:SetHeight(max(1, math.abs(y) + 8))
     if T.StyleScrollFrame then T.StyleScrollFrame(scroll, parent) end
-    if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+
+    local latest = entries[1]
+    local sectionCount = 0
+    if latest and type(latest.sections) == "table" then sectionCount = #latest.sections end
+    local currentLabel = current or "Latest build"
+    summary:SetText(M.Format("%s  -  %d sections. Click to view the bundled release notes.", currentLabel, sectionCount))
+
+    local open = M.dashboardChangelogOpen == true
+    local function PaintHeader(isOpen)
+        if arrow.SetRotation then arrow:SetRotation(isOpen and (math.pi * 0.5) or 0) end
+        if arrow.SetVertexColor then
+            local c = isOpen and T.colors.accent or T.colors.accent2
+            arrow:SetVertexColor(c[1], c[2], c[3], 0.95)
+        end
+        if headerBg.SetColorTexture then
+            if isOpen then
+                headerBg:SetColorTexture(0.036, 0.050, 0.092, 0.72)
+            else
+                headerBg:SetColorTexture(0.030, 0.038, 0.074, 0.58)
+            end
+        end
+        hint:SetText(isOpen and "Hide" or "View")
+    end
+    local function RefreshOpenState()
+        M.dashboardChangelogOpen = open
+        scroll:SetShown(open)
+        summary:SetShown(not open)
+        PaintHeader(open)
+        if open then
+            if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+        elseif scroll._msuf2ScrollBar then
+            scroll._msuf2ScrollBar:Hide()
+        end
+    end
+
+    header:SetScript("OnClick", function()
+        open = not open
+        RefreshOpenState()
+    end)
+    header:SetScript("OnEnter", function()
+        if headerBg.SetColorTexture then headerBg:SetColorTexture(0.042, 0.058, 0.106, 0.78) end
+    end)
+    header:SetScript("OnLeave", function()
+        PaintHeader(open)
+    end)
+    RefreshOpenState()
 end
 
 local function BuildDashboard(ctx)
@@ -4983,7 +5089,7 @@ local function BuildDashboard(ctx)
 end
 
 M.RegisterPage("search", { title = "Search", build = BuildSearchPage, version = 1 })
-M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard, version = 4 })
+M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard, version = 5 })
 
 local function ApplyMenuFrameScale(frame)
     if not (frame and frame.SetScale) then return end

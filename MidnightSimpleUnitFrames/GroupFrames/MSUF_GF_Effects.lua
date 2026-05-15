@@ -454,7 +454,7 @@ end
 
 ------------------------------------------------------------------------
 -- Highlight value resolver: Bars hl* keys → old GF conf key fallback
--- Bars system uses hlAggroEnabled, hlAggroColorR, etc.
+-- Bars system uses hlAggroEnabled/aggroOutlineMode, hlAggroColorR, etc.
 -- Old GF DB uses aggroEnabled, aggroR, etc.
 -- Single-pass resolution: conf.hlOverride → general → conf[fallback]
 ------------------------------------------------------------------------
@@ -471,13 +471,39 @@ local _HL_FALLBACK = {
     hlTargetColorB  = "targetB",
 }
 
+local _HL_OUTLINE_MODE = {
+    hlAggroEnabled  = "aggroOutlineMode",
+    hlDispelEnabled = "dispelOutlineMode",
+}
+
+local function OutlineModeToEnabled(mode)
+    if mode == nil then return nil end
+    if mode == true or mode == false then return mode end
+    local n = tonumber(mode)
+    if n ~= nil then return n == 1 end
+    return nil
+end
+
 local function HLVal(kind, key)
     local conf = GF.GetConf(kind)
     -- Priority 1: GF-local override
-    if conf.hlOverride and conf[key] ~= nil then return conf[key] end
+    local modeKey = _HL_OUTLINE_MODE[key]
+    if conf.hlOverride then
+        if conf[key] ~= nil then return conf[key] end
+        if modeKey then
+            local enabled = OutlineModeToEnabled(conf[modeKey])
+            if enabled ~= nil then return enabled end
+        end
+    end
     -- Priority 2: global general (always fresh — 2 table lookups)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if gen and gen[key] ~= nil then return gen[key] end
+    if gen then
+        if gen[key] ~= nil then return gen[key] end
+        if modeKey then
+            local enabled = OutlineModeToEnabled(gen[modeKey])
+            if enabled ~= nil then return enabled end
+        end
+    end
     -- Priority 3: legacy GF conf fallback
     local fb = _HL_FALLBACK[key]
     if fb and conf[fb] ~= nil then return conf[fb] end
@@ -485,8 +511,21 @@ local function HLVal(kind, key)
 end
 
 local function HLValCached(conf, gen, key)
-    if conf.hlOverride and conf[key] ~= nil then return conf[key] end
-    if gen and gen[key] ~= nil then return gen[key] end
+    local modeKey = _HL_OUTLINE_MODE[key]
+    if conf.hlOverride then
+        if conf[key] ~= nil then return conf[key] end
+        if modeKey then
+            local enabled = OutlineModeToEnabled(conf[modeKey])
+            if enabled ~= nil then return enabled end
+        end
+    end
+    if gen then
+        if gen[key] ~= nil then return gen[key] end
+        if modeKey then
+            local enabled = OutlineModeToEnabled(gen[modeKey])
+            if enabled ~= nil then return enabled end
+        end
+    end
     local fb = _HL_FALLBACK[key]
     if fb and conf[fb] ~= nil then return conf[fb] end
     return nil

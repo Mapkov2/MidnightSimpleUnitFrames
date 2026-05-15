@@ -105,6 +105,14 @@ function ns.Text.ClearField(self, field)
     if not fs then  return end
     ns.Text.Clear(fs, true)
  end
+local function _MSUF_ClearHpPctField(self)
+    if not self then return end
+    local field = self.hpTextPct
+    local token = field or false
+    if self._msufHpPctCleared == token then return end
+    ns.Text.ClearField(self, "hpTextPct")
+    self._msufHpPctCleared = token
+end
 -- Patch O: central text renderers (HP/Power/Pct/ToT inline) - secret-safe (no string compares)
 function ns.Text._SepToken(raw, fallback)
     -- Accept legacy/malformed values (e.g. false) safely.
@@ -321,7 +329,7 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     if not self or not self.hpText then  return end
     if not show then
         ns.Text.Set(self.hpText, "", false)
-        ns.Text.ClearField(self, "hpTextPct")
+        _MSUF_ClearHpPctField(self)
         self._msufLastRenderPct = nil
         return
     end
@@ -329,10 +337,11 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     local spec = self._msufTextSpec or ns.Text.EnsureSpec(self)
     local hpMode = spec.hpMode
     local sep = spec.hpSep
+    local hpNeedsPct = spec.hpNeedsPct
     local hpText = self.hpText
     if hpMode == "NONE" then
         ns.Text.Set(hpText, "", false)
-        ns.Text.ClearField(self, "hpTextPct")
+        _MSUF_ClearHpPctField(self)
         return
     end
     local h = hpStr or ""
@@ -349,7 +358,7 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
         end
     end
 
-    local hpPctStr = (hasPct and _MSUF_HpModeUsesPercent(hpMode)) and _MSUF_PctToStr1D(hpPct) or nil
+    local hpPctStr = (hasPct and hpNeedsPct) and _MSUF_PctToStr1D(hpPct) or nil
 
     local split = hasPct and spec.hpSplitEnabled or false
     if split and hpPctStr then
@@ -359,17 +368,18 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
         self._msufLastPctS = hpPctStr
         ns.Text.Set(hpText, _MSUF_AppendAbsorb(mainText, absorbText, absorbStyle), true)
         ns.Text.Set(self.hpTextPct, hpPctStr, true)
+        self._msufHpPctCleared = nil
         return
     end
 
-    ns.Text.ClearField(self, "hpTextPct")
+    _MSUF_ClearHpPctField(self)
 
-    if not hasPct and _MSUF_HpModeUsesPercent(hpMode) then
+    if not hasPct and hpNeedsPct then
         ns.Text.Set(hpText, _MSUF_AppendAbsorb(h, absorbText, absorbStyle), true)
         return
     end
 
-    if _MSUF_HpModeUsesPercent(hpMode) and not hpPctStr then
+    if hpNeedsPct and not hpPctStr then
         self._msufLastH = nil
         _MSUF_SetHpSecret(hpText, hpMode, h, hpPct, sep, absorbText, absorbStyle, maxText)
         return

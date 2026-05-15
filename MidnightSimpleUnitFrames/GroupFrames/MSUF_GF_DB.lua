@@ -1303,11 +1303,37 @@ end
 --- Resolve a unified highlight value with scope override support.
 --- GF-local (gf_party/gf_raid) can override general.hl* keys via hlOverride=true.
 --- Falls through to MSUF_DB.general.hl* baseline.
+local _HL_OUTLINE_MODE_KEYS = {
+    hlAggroEnabled  = "aggroOutlineMode",
+    hlDispelEnabled = "dispelOutlineMode",
+}
+
+local function OutlineModeToEnabled(mode)
+    if mode == nil then return nil end
+    if mode == true or mode == false then return mode end
+    local n = tonumber(mode)
+    if n ~= nil then return n == 1 end
+    return nil
+end
+
 function GF.GetHighlightVal(kind, key)
     local conf = GF.GetConf(kind)
-    if conf.hlOverride and conf[key] ~= nil then return conf[key] end
+    local modeKey = _HL_OUTLINE_MODE_KEYS[key]
+    if conf.hlOverride then
+        if conf[key] ~= nil then return conf[key] end
+        if modeKey then
+            local enabled = OutlineModeToEnabled(conf[modeKey])
+            if enabled ~= nil then return enabled end
+        end
+    end
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if gen and gen[key] ~= nil then return gen[key] end
+    if gen then
+        if gen[key] ~= nil then return gen[key] end
+        if modeKey then
+            local enabled = OutlineModeToEnabled(gen[modeKey])
+            if enabled ~= nil then return enabled end
+        end
+    end
     return nil
 end
 

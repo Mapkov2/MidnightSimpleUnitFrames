@@ -112,6 +112,7 @@ local function BuildBars(ctx)
         local refreshBorder = _G.MSUF_GF_RefreshBorder
         if refreshBorder and GF.frames then
             for frame in pairs(GF.frames) do
+                if GF.BuildFrameCache then GF.BuildFrameCache(frame) end
                 refreshBorder(frame, frame.unit)
             end
         elseif GF.RefreshVisuals then
