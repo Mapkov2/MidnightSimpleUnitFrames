@@ -363,7 +363,7 @@ local function BuildFonts(ctx)
     if scope.title then scope.title:Hide() end
     local scopeSeg = W.ScopeOverrideBar(ctx, scope, scopeOpts)
 
-    local override = W.ToggleAt(scope, "Override shared settings", 14, overrideY, 220)
+    local override = W.ToggleAt(scope, "Use custom settings for this scope", 14, overrideY, 260)
     M.BindToggle(ctx, override,
         function()
             local key = CurrentFontScope()
@@ -405,6 +405,13 @@ local function BuildFonts(ctx)
         overrideInfo:SetShown(shared)
         reset:SetShown(shared and #active > 0)
         overrideInfo:SetText("|cffffffffOverrides:|r " .. (#active > 0 and table.concat(active, ", ") or "None"))
+        if shared then
+            hint:SetText("Shared font settings are the baseline for units and group frames.")
+        elseif ScopeHasOverride(current, "fontOverride") then
+            hint:SetText("This scope is using custom font settings. Shared changes will not affect it until the override is reset.")
+        else
+            hint:SetText("This scope follows Shared font settings. Turn on custom settings here only when this scope needs different fonts.")
+        end
         scopeSeg:Refresh()
         hint:SetWidth(ctx.width - 28)
     end)

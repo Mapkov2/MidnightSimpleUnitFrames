@@ -671,7 +671,7 @@ local function BuildAuras(ctx)
     local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(AURA_SCOPES, scopeOpts)
     local scopeBottomY = (scopeMetrics and scopeMetrics.bottomY) or -32
     local overrideY = min(-48, scopeBottomY - 16)
-    local overridePos, overrideBottomY = FlowTopLeft({ 168, 150, 168, 76 }, 10, overrideY, contentW - 10, 10, 30, 24)
+    local overridePos, overrideBottomY = FlowTopLeft({ 168, 150, 168, 118 }, 10, overrideY, contentW - 10, 10, 30, 24)
     local summaryY = overrideBottomY - 12
 
     local scope = b:Section("", max(104, abs(summaryY) + 24))
@@ -682,7 +682,7 @@ local function BuildAuras(ctx)
     end
     M.AddRefresher(ctx, RefreshScopeButtons)
 
-    local overrideFilters = FitInlineToggle(ValueToggleAt(ctx, scope, "Override filters", overridePos[1].x, overridePos[1].y,
+    local overrideFilters = FitInlineToggle(ValueToggleAt(ctx, scope, "Custom filters", overridePos[1].x, overridePos[1].y,
         function()
             local s = AuraScope()
             return s ~= "shared" and AurasUnit(s).overrideFilters == true
@@ -699,7 +699,7 @@ local function BuildAuras(ctx)
             RefreshScopeButtons()
             RefreshAurasPage(ctx)
         end), overridePos[1].width)
-    local overrideCaps = FitInlineToggle(ValueToggleAt(ctx, scope, "Override caps", overridePos[2].x, overridePos[2].y,
+    local overrideCaps = FitInlineToggle(ValueToggleAt(ctx, scope, "Custom caps", overridePos[2].x, overridePos[2].y,
         function()
             local s = AuraScope()
             return s ~= "shared" and AurasUnit(s).overrideSharedLayout == true
@@ -716,7 +716,7 @@ local function BuildAuras(ctx)
             RefreshScopeButtons()
             RefreshAurasPage(ctx)
         end), overridePos[2].width)
-    local overrideLayout = FitInlineToggle(ValueToggleAt(ctx, scope, "Override layout", overridePos[3].x, overridePos[3].y,
+    local overrideLayout = FitInlineToggle(ValueToggleAt(ctx, scope, "Custom layout", overridePos[3].x, overridePos[3].y,
         function()
             local s = AuraScope()
             return s ~= "shared" and AurasUnit(s).overrideLayout == true
@@ -733,7 +733,7 @@ local function BuildAuras(ctx)
             RefreshScopeButtons()
             RefreshAurasPage(ctx)
         end), overridePos[3].width)
-    local reset = T.Button(scope, "Reset", 76, 22)
+    local reset = T.Button(scope, "Reset Overrides", 118, 22)
     reset:SetPoint("TOPLEFT", scope, "TOPLEFT", overridePos[4].x, overridePos[4].y + 1)
     reset:SetScript("OnClick", function()
         local a2 = AurasDB()
@@ -761,12 +761,19 @@ local function BuildAuras(ctx)
             local spec = AURA_SCOPES[i]
             if AuraHasOverride(spec.value) then active[#active + 1] = spec.text end
         end
-        if #active == 0 then
-            summary:SetText("|cff9aa0a6No unit overrides active.|r")
-        else
-            summary:SetText("|cffffffffOverrides active:|r " .. table.concat(active, ", "))
-        end
         local isShared = AuraScope() == "shared"
+        if isShared and #active == 0 then
+            summary:SetText("|cff9aa0a6No unit overrides active.|r")
+        elseif isShared then
+            summary:SetText("|cffffffffOverrides active:|r " .. table.concat(active, ", "))
+        else
+            local selected = AuraScope()
+            if AuraHasOverride(selected) then
+                summary:SetText("|cffffffffThis unit uses custom aura settings.|r Shared changes will not affect overridden parts until Reset Overrides is used.")
+            else
+                summary:SetText("|cff9aa0a6This unit follows Shared aura settings. Enable custom filters, caps, or layout only when this unit needs different auras.|r")
+            end
+        end
         SetControlEnabled(overrideFilters, not isShared)
         SetControlEnabled(overrideCaps, not isShared)
         SetControlEnabled(overrideLayout, not isShared)

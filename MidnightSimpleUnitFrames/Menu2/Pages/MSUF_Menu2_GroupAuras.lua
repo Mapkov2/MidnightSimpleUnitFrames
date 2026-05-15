@@ -111,8 +111,8 @@ local function BuildGFAuras(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
 
-    local renderer = b:CollapsibleSection("blizzrenderer", "Blizzard Renderer", 590, false)
-    W.Text(renderer, "Renderer path: Blizzard is the default native aura block. Checked types below are rendered by Blizzard; unchecked types use MSUF Custom groups. Custom mode disables the native block completely. Dispel Glow is ignored only for Group Frame scopes that use Blizzard rendering; Unit Frames and Custom Group Frames still use it.", 14, -38, 620, T.colors.muted)
+    local renderer = b:CollapsibleSection("blizzrenderer", "Aura Display Mode", 590, false)
+    W.Text(renderer, "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. Dispel Glow is unavailable only for Group Frame scopes where Blizzard controls the aura layer.", 14, -38, 620, T.colors.muted)
 
     local function PlaceDropdown(dropdown, x, y, width, hideTitle)
         if dropdown._msuf2Title then
@@ -151,7 +151,21 @@ local function BuildGFAuras(ctx)
             if not _G.GameTooltip then return end
             _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             _G.GameTooltip:AddLine(Tr("Blizzard Aura Layering"), 1, 1, 1)
-            _G.GameTooltip:AddLine(Tr("Blizzard renders these icons on MSUF's container. If icons appear behind frames, raise the container strata or frame level."), 0.72, 0.76, 0.86, true)
+            _G.GameTooltip:AddLine(Tr("Blizzard draws these icons on MSUF's frame container. If icons appear behind frames, adjust the advanced layering controls."), 0.72, 0.76, 0.86, true)
+            _G.GameTooltip:Show()
+        end)
+        widget:HookScript("OnLeave", function()
+            if _G.GameTooltip then _G.GameTooltip:Hide() end
+        end)
+    end
+
+    local function AddAuraTooltip(widget, title, text)
+        if not (widget and widget.HookScript) then return end
+        widget:HookScript("OnEnter", function(self)
+            if not _G.GameTooltip then return end
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            _G.GameTooltip:AddLine(Tr(title or ""), 1, 1, 1)
+            if text and text ~= "" then _G.GameTooltip:AddLine(Tr(text), 0.72, 0.76, 0.86, true) end
             _G.GameTooltip:Show()
         end)
         widget:HookScript("OnLeave", function()
@@ -182,6 +196,7 @@ local function BuildGFAuras(ctx)
 
     local rendererMode = BindNestedDropdown(ctx, W.Dropdown(renderer, "", GF_RENDERERS, 180), function() return AurasRoot(CurrentScope()) end, "renderer", "BLIZZARD", "rebuild")
     PlaceDropdown(rendererMode, 14, -96, 180, true)
+    AddAuraTooltip(rendererMode, "Aura Display Mode", "Blizzard mode uses WoW placement and cannot be dragged. MSUF Custom mode gives MSUF full positioning and styling control. If the preview marks an aura area as Blizzard-owned, MSUF can show the area but cannot drag that native aura block.")
 
     local iconSize = BindRendererSlider(W.Slider(renderer, "", 8, 80, 1, 260), function() return AurasRoot(CurrentScope()) end, "blizzardIconSize", 20, "geometry",
         function(v) return string.format(Tr("Icon size: %d"), v) end)
@@ -195,21 +210,21 @@ local function BuildGFAuras(ctx)
         function(v) return string.format(Tr("Debuff max: %d"), v) end)
     PlaceSlider(debuffMax, 14, -260, 260)
 
-    local routingLabel = W.Text(renderer, "Rendered by Blizzard", 350, -82, 330, T.colors.text)
+    local routingLabel = W.Text(renderer, "Aura types handled by Blizzard", 350, -82, 330, T.colors.text)
     local buffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Buffs", 350, -112, 140), function() return AurasRoot(CurrentScope()).blizzardTypes end, "buffs", true, "rebuild")
     local debuffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Debuffs", 350, -172, 140), function() return AurasRoot(CurrentScope()).blizzardTypes end, "debuffs", true, "rebuild")
     local dispelChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Dispels", 350, -232, 140), function() return AurasRoot(CurrentScope()).blizzardTypes end, "dispels", true, "rebuild")
     local extChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Defensives", 520, -112, 150), function() return AurasRoot(CurrentScope()).blizzardTypes end, "externals", true, "rebuild")
     local cdTextChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Blizzard Cooldown Text", 520, -172, 150), function() return AurasRoot(CurrentScope()) end, "blizzardShowCooldownText", true, "visual")
-    local privateChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Private", 520, -232, 150), function() return AurasRoot(CurrentScope()).blizzardTypes end, "privateAuras", true, "rebuild")
+    local privateChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Private Auras", 520, -232, 190), function() return AurasRoot(CurrentScope()).blizzardTypes end, "privateAuras", true, "rebuild")
 
     local orgLabel = W.Text(renderer, "Organization", 350, -292, 240, T.colors.text)
     local orgMode = BindNestedDropdown(ctx, W.Dropdown(renderer, "", GF_AURA_ORG, 260), function() return AurasRoot(CurrentScope()) end, "blizzardOrganizationType", "default", "geometry")
     PlaceDropdown(orgMode, 350, -314, 260, true)
 
-    local layerLabel = W.Text(renderer, "Layering", 14, -324, 240, T.colors.text)
-    local layerHint = W.Text(renderer, "Blizzard renders on MSUF's container. If icons appear behind frames, raise the container strata or frame level.", 14, -344, 300, T.colors.muted)
-    local strataMode = W.Dropdown(renderer, "Container Strata", BLIZZARD_CONTAINER_STRATA, 180)
+    local layerLabel = W.Text(renderer, "Advanced Layering", 14, -324, 240, T.colors.text)
+    local layerHint = W.Text(renderer, "Only adjust this if Blizzard-controlled aura icons appear behind other frames.", 14, -344, 300, T.colors.muted)
+    local strataMode = W.Dropdown(renderer, "Aura Layer Strata", BLIZZARD_CONTAINER_STRATA, 180)
     M.BindDropdown(ctx, strataMode,
         function() return GetAuraOption("blizzardContainerStrata", "AUTO") end,
         function(value) SetAuraOption("blizzardContainerStrata", value or "AUTO", false) end)
@@ -223,7 +238,7 @@ local function BuildGFAuras(ctx)
     local function RefreshContainerLevelLabel(value)
         value = value or tonumber(GetAuraOption("blizzardContainerFrameLevel", 1)) or 1
         if containerLevel._msuf2Title then
-            containerLevel._msuf2Title:SetText(string.format(Tr("Container level: +%d"), value))
+            containerLevel._msuf2Title:SetText(string.format(Tr("Frame level offset: +%d"), value))
         end
     end
     containerLevel:HookScript("OnValueChanged", function(self, value)
@@ -235,14 +250,14 @@ local function BuildGFAuras(ctx)
     PlaceSlider(containerLevel, 14, -452, 260)
     AddLayerTooltip(containerLevel)
 
-    local privateLayerFix = W.ToggleAt(renderer, "Private Aura Layer Fix", 14, -512, 190)
+    local privateLayerFix = W.ToggleAt(renderer, "Keep private auras above frames", 14, -512, 230)
     M.BindToggle(ctx, privateLayerFix,
         function() return GetAuraOption("blizzardPrivateLayerFix", true) ~= false end,
         function(value) SetAuraOption("blizzardPrivateLayerFix", value and true or false, true) end)
     AddLayerTooltip(privateLayerFix)
 
-    local posLabel = W.Text(renderer, "Blizzard Position", 350, -362, 240, T.colors.text)
-    local posHint = W.Text(renderer, "Locked by Blizzard. MSUF can pass the native renderer settings above, but cannot drag or set the native block position. The preview marks the Blizzard-owned area and enabled aura types; exact placement is decided by Blizzard at runtime.", 350, -382, 330, T.colors.muted)
+    local posLabel = W.Text(renderer, "Blizzard-Controlled Position", 350, -362, 260, T.colors.text)
+    local posHint = W.Text(renderer, "Blizzard controls this aura block, so MSUF cannot drag it. Switch to MSUF Custom mode if you want full positioning control. The preview marks the Blizzard-owned area.", 350, -382, 330, T.colors.muted)
 
     M.AddRefresher(ctx, function()
         local native = (AurasRoot(CurrentScope()).renderer or "BLIZZARD") ~= "CUSTOM"

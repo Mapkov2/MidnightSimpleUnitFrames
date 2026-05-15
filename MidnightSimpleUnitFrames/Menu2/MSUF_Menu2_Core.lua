@@ -4668,8 +4668,29 @@ local function BuildDashboard(ctx)
         return btn
     end
 
+    local function AddDashboardTooltip(frame, title, text)
+        if not (frame and frame.HookScript) then return end
+        frame:HookScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(M.Tr(title or ""), 1, 1, 1)
+            if text and text ~= "" then GameTooltip:AddLine(M.Tr(text), 0.85, 0.85, 0.85, true) end
+            GameTooltip:Show()
+        end)
+        frame:HookScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+    end
+
     local tip = Card("Dashboard", x0, y, width, 98)
-    W.Text(tip, "Tip: Quick reset: If something feels off, try /msuf reset for frame positions.", 14, -42, width - 28, T.colors.muted)
+    local tipText = "Tip: Quick reset: If something feels off, try /msuf reset for frame positions."
+    if type(_G.MSUF_GetNextTip) == "function" then
+        local ok, text, index, count = pcall(_G.MSUF_GetNextTip)
+        if ok and type(text) == "string" and text ~= "" then
+            tipText = M.Format("Tip %d/%d: %s", tonumber(index) or 1, tonumber(count) or 1, text)
+        end
+    end
+    W.Text(tip, tipText, 14, -42, width - 28, T.colors.muted)
     local actionW = math.floor((width - 40) / 2)
     local editMode = AddButton(tip, "Edit Mode: Off", 14, -64, actionW, 24, function()
         local active = IsEditModeActive()
@@ -4686,36 +4707,40 @@ local function BuildDashboard(ctx)
         if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
     end)
     M.dashboardEditModeButton = editMode
+    AddDashboardTooltip(editMode, "MSUF Edit Mode", "Drag frames to move them. Some preview handles can be selected; Blizzard-controlled aura blocks cannot be dragged.")
     if T.SkinPrimaryButton then T.SkinPrimaryButton(editMode) end
     RefreshDashboardEditModeButton()
     M.AddRefresher(ctx, RefreshDashboardEditModeButton)
-    local reset = AddButton(tip, "Reset Positions", 26 + actionW, -64, actionW, 24, function()
+    local reset = AddButton(tip, "Reset Frame Positions", 26 + actionW, -64, actionW, 24, function()
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
             pcall(_G.SlashCmdList["MIDNIGHTSUF"], "reset")
         end
     end)
     T.SkinDangerButton(reset)
+    AddDashboardTooltip(reset, "Reset Frame Positions", "Resets frame positions only. It does not delete profiles or reset menu settings.")
 
     y = y - 110
-    local quick = Card("Quick Navigation", x0, y, colW, 108)
-    W.Text(quick, "Jump into the most-used MSUF sections.", 14, -36, colW - 28, T.colors.muted)
+    local quick = Card("Start Here", x0, y, colW, 142)
+    W.Text(quick, "Recommended first steps for a clean setup.", 14, -36, colW - 28, T.colors.muted)
     local qW = math.floor((colW - 40) / 2)
-    AddButton(quick, "Colors", 14, -62, qW, 20, function() M.SelectPage("opt_colors") end)
-    AddButton(quick, "Gameplay", 26 + qW, -62, qW, 20, function() M.SelectPage("gameplay") end)
+    AddButton(quick, "Player Frame", 14, -62, qW, 20, function() M.SelectPage("uf_player") end)
+    AddButton(quick, "Group Frames", 26 + qW, -62, qW, 20, function() M.SelectPage("gf_layout") end)
     AddButton(quick, "Unit Auras", 14, -88, qW, 20, function() M.SelectPage("auras2") end)
-    AddButton(quick, "Class Resources", 26 + qW, -88, qW, 20, function() M.SelectPage("classpower") end)
+    AddButton(quick, "Profiles", 26 + qW, -88, qW, 20, function() M.SelectPage("profiles") end)
+    AddButton(quick, "Colors", 14, -114, qW, 20, function() M.SelectPage("opt_colors") end)
+    AddButton(quick, "Gameplay", 26 + qW, -114, qW, 20, function() M.SelectPage("gameplay") end)
 
-    local profile = Card("Active Profile", x0 + colW + gap, y, colW, 108)
+    local profile = Card("Active Profile", x0 + colW + gap, y, colW, 142)
     local prof = tostring(_G.MSUF_ActiveProfile or "Default")
     local pText = T.Font(profile, "GameFontNormalLarge", prof, T.colors.text)
     pText:SetPoint("TOPLEFT", profile, "TOPLEFT", 14, -40)
-    W.Text(profile, "Use the Profiles page for switching, export and import.", 14, -68, colW - 140, T.colors.muted)
+    W.Text(profile, "Use Profiles to switch, copy, export, or safely test settings before changing your main setup.", 14, -68, colW - 140, T.colors.muted)
     AddButton(profile, "Manage", colW - 114, -34, 100, 22, function() M.SelectPage("profiles") end)
     M.AddRefresher(ctx, function()
         pText:SetText(tostring(_G.MSUF_ActiveProfile or "Default"))
     end)
 
-    y = y - 120
+    y = y - 154
     local scaleCardH = 448
     local scale = Card("UI Scale", x0, y, colW, scaleCardH)
     local wago = Card("Wago Profiles", x0 + colW + gap, y, colW, scaleCardH)
@@ -5065,20 +5090,20 @@ local function BuildDashboard(ctx)
 
     y = y - (scaleCardH + 12)
     local advanced = Card("Advanced", x0, y, width, 76)
-    W.Text(advanced, "Fast access to recovery and support tools.", 14, -34, width - 28, T.colors.muted)
+    W.Text(advanced, "Fast access to recovery and support tools. Factory reset affects all MSUF settings.", 14, -34, width - 28, T.colors.muted)
     AddButton(advanced, "Print Help", 14, -54, 100, 20, function()
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
             pcall(_G.SlashCmdList["MIDNIGHTSUF"], "help")
         end
     end)
-    local factory = AddButton(advanced, "Factory Reset", 122, -54, 112, 20, function()
+    local factory = AddButton(advanced, "Factory Reset All", 122, -54, 136, 20, function()
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
             pcall(_G.SlashCmdList["MIDNIGHTSUF"], "fullreset confirm")
         end
     end)
     T.SkinDangerButton(factory)
-    AddButton(advanced, "Profiles", 242, -54, 100, 20, function() M.SelectPage("profiles") end)
-    AddButton(advanced, "Discord", 350, -54, 100, 20, function()
+    AddButton(advanced, "Profiles", 266, -54, 100, 20, function() M.SelectPage("profiles") end)
+    AddButton(advanced, "Discord", 374, -54, 100, 20, function()
         if type(_G.MSUF_ShowCopyLink) == "function" then
             _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/JQnhZXnTAK")
         end

@@ -659,8 +659,9 @@ local function DarkMatchHPColor(r, g, b, cache)
     return Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0)
 end
 
-local function HealthBackgroundColor(hr, hg, hb)
+local function HealthBackgroundColor(hr, hg, hb, data)
     local cache = SettingsCache()
+    local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
     local r, g, b, a
     if cache then
         r, g, b, a = cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA
@@ -668,7 +669,9 @@ local function HealthBackgroundColor(hr, hg, hb)
         r, g, b, a = _G.MSUF_GetBarBackgroundTintRGBA()
     end
     r, g, b, a = Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0), Clamp01(a, 0.9)
-    if cache and cache.barBgMatchHPColor then
+    if ((cache and cache.barBgClassColor) or ((not cache) and gen and gen.barBgClassColor)) and data and data.isPlayer then
+        r, g, b = ClassColor(data.class)
+    elseif (cache and cache.barBgMatchHPColor) or ((not cache) and gen and gen.barBgMatchHPColor) then
         r, g, b = DarkMatchHPColor(hr, hg, hb, cache)
     end
     a = a * Clamp01(cache and cache.barBackgroundAlpha, 0.9)
@@ -2072,7 +2075,7 @@ function Preview.Refresh(box, reason)
     mock.hp:SetPoint("BOTTOMLEFT", mock.hpBG, "BOTTOMLEFT", 0, 0)
     mock.hp:SetWidth(max(1, (sw - S(4)) * data.hp))
     local hr, hg, hb = HealthColor(key, data)
-    local hbr, hbg, hbb, hba = HealthBackgroundColor(hr, hg, hb)
+    local hbr, hbg, hbb, hba = HealthBackgroundColor(hr, hg, hb, data)
     mock.hpBG:SetVertexColor(hbr, hbg, hbb, hba)
     mock.hp:SetVertexColor(hr, hg, hb, 1)
     if powerOn then

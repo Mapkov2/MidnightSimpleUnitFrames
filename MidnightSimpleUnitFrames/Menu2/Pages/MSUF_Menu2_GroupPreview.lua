@@ -204,6 +204,16 @@ local GF_PREVIEW_CLASSES = {
     "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",
 }
 
+local function PreviewClassColor(classToken, dr, dg, db)
+    if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
+        local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(classToken)
+        if r then return r, g, b end
+    end
+    local c = classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+    if c then return c.r, c.g, c.b end
+    return dr or 0.06, dg or 0.06, db or 0.07
+end
+
 local GF_PREVIEW_NAMES = {
     "Thrall", "Jaina", "Sylvanas", "Anduin", "Tyrande", "Arthas",
     "Garrosh", "Yrel", "Vol'jin", "Chen", "Malfurion", "Illidan", "Alexstrasza",
@@ -796,15 +806,20 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         mock._health:ClearAllPoints()
         mock._health:SetPoint("TOPLEFT", mock, "TOPLEFT", inset, -inset)
         mock._health:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, powerH > 0 and (powerH + inset) or inset)
+        local cls = GF_PREVIEW_CLASSES[((kind == "party" and 5 or 2) % #GF_PREVIEW_CLASSES) + 1]
         local hr, hg, hb = PreviewHealthColor(conf, 3)
         if gf and gf.ResolveNameColor then
-            local cls = GF_PREVIEW_CLASSES[((kind == "party" and 5 or 2) % #GF_PREVIEW_CLASSES) + 1]
             local rr, rg, rb = gf.ResolveNameColor(kind, cls)
             hr, hg, hb = rr or hr, rg or hg, rb or hb
         end
         mock._health:SetStatusBarColor(hr, hg, hb, tonumber(conf.hpBarAlpha) or 1)
         mock._healthBg:SetTexture(bgTex)
-        mock._healthBg:SetVertexColor(conf.bgR or 0.06, conf.bgG or 0.06, conf.bgB or 0.07, conf.hpBgAlpha or conf.bgA or 0.85)
+        local hbr, hbg, hbb = conf.bgR or 0.06, conf.bgG or 0.06, conf.bgB or 0.07
+        local gen = _G.MSUF_DB and _G.MSUF_DB.general
+        if gen and gen.barBgClassColor then
+            hbr, hbg, hbb = PreviewClassColor(cls, hbr, hbg, hbb)
+        end
+        mock._healthBg:SetVertexColor(hbr, hbg, hbb, conf.hpBgAlpha or conf.bgA or 0.85)
 
         mock._healPred:ClearAllPoints()
         mock._healPred:SetPoint("TOPLEFT", mock._health, "TOPRIGHT", -1, 0)

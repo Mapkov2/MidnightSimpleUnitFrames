@@ -148,14 +148,20 @@ function _G.MSUF_ShowReloadRecommendedPopup(label)
 end
 
 local copyLinkPopup
+local copyLinkPopupSerial = 0
 
 local function EnsureCopyLinkPopup()
-    if copyLinkPopup then return copyLinkPopup end
     if not _G.CreateFrame then return nil end
+    if copyLinkPopup then
+        copyLinkPopup:Hide()
+        copyLinkPopup = nil
+    end
+    copyLinkPopupSerial = copyLinkPopupSerial + 1
 
-    local frame = _G.CreateFrame("Frame", "MSUF_CopyLinkPopup", _G.UIParent, "BackdropTemplate")
+    local frame = _G.CreateFrame("Frame", "MSUF_CopyLinkPopup" .. tostring(copyLinkPopupSerial), _G.UIParent, "BackdropTemplate")
     frame:SetSize(420, 150)
-    frame:SetFrameStrata("DIALOG")
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetFrameLevel(100)
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:SetMovable(true)
@@ -186,6 +192,7 @@ local function EnsureCopyLinkPopup()
     hint:SetTextColor(0.90, 0.90, 0.90, 1)
 
     local editBox = _G.CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    editBox:EnableMouse(true)
     editBox:SetAutoFocus(false)
     editBox:SetSize(360, 32)
     editBox:SetPoint("TOP", hint, "BOTTOM", 0, -10)
@@ -195,10 +202,14 @@ local function EnsureCopyLinkPopup()
     frame._msufEditBox = editBox
 
     local ok = _G.CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    ok:EnableMouse(true)
+    ok:Enable()
     ok:SetSize(120, 24)
     ok:SetPoint("BOTTOM", frame, "BOTTOM", 0, 12)
     ok:SetText(_G.OKAY or "Okay")
+    ok:RegisterForClicks("LeftButtonUp")
     ok:SetScript("OnClick", function() frame:Hide() end)
+    frame._msufOkButton = ok
     if type(_G.MSUF_SkinButton) == "function" then pcall(_G.MSUF_SkinButton, ok) end
 
     frame:SetScript("OnShow", function(self)
@@ -214,6 +225,7 @@ local function EnsureCopyLinkPopup()
             self._msufEditBox:SetText("")
             self._msufEditBox:ClearFocus()
         end
+        if copyLinkPopup == self then copyLinkPopup = nil end
         self._msufTitle = nil
         self._msufUrl = nil
     end)
@@ -226,12 +238,20 @@ end
 function _G.MSUF_ShowCopyLink(title, url)
     local frame = EnsureCopyLinkPopup()
     if not frame then return end
+    if frame.SetFrameStrata then frame:SetFrameStrata("FULLSCREEN_DIALOG") end
+    if frame.SetFrameLevel then frame:SetFrameLevel(100) end
     frame._msufTitle = tostring(title or "Link")
     frame._msufUrl = tostring(url or "")
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
     frame:Show()
     if frame.Raise then frame:Raise() end
+    if frame._msufEditBox and frame._msufEditBox.EnableMouse then frame._msufEditBox:EnableMouse(true) end
+    if frame._msufEditBox and frame._msufEditBox.SetFocus then frame._msufEditBox:SetFocus() end
+    if frame._msufEditBox and frame._msufEditBox.HighlightText then frame._msufEditBox:HighlightText() end
+    if frame._msufOkButton and frame._msufOkButton.EnableMouse then frame._msufOkButton:EnableMouse(true) end
+    if frame._msufOkButton and frame._msufOkButton.Enable then frame._msufOkButton:Enable() end
+    if frame._msufOkButton and frame._msufOkButton.Raise then frame._msufOkButton:Raise() end
 end
 
 do

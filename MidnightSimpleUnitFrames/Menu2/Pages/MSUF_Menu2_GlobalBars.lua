@@ -374,7 +374,7 @@ local function BuildBars(ctx)
     local scope = b:Section("", math.max(128, math.abs(hintY) + 42))
     if scope.title then scope.title:Hide() end
     local scopeSeg = W.ScopeOverrideBar(ctx, scope, scopeOpts)
-    local override = W.ToggleAt(scope, "Override shared settings", 14, overrideY, 220)
+    local override = W.ToggleAt(scope, "Use custom settings for this scope", 14, overrideY, 260)
     M.BindToggle(ctx, override,
         function()
             local key = CurrentBarsScope()
@@ -420,6 +420,13 @@ local function BuildBars(ctx)
             overrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(active, ", "))
         else
             overrideInfo:SetText("|cffffffffOverrides:|r None")
+        end
+        if shared then
+            hint:SetText("Group Frames inherit Shared textures and gradients by default. Raid also applies to Mythic Raid.")
+        elseif ScopeHasOverride(current, "hlOverride") then
+            hint:SetText("This scope is using custom bar settings. Shared changes will not affect it until the override is reset.")
+        else
+            hint:SetText("This scope follows Shared bar settings. Turn on custom settings here only when this scope needs different bars.")
         end
         scopeSeg:Refresh()
         hint:SetWidth(ctx.width - 28)

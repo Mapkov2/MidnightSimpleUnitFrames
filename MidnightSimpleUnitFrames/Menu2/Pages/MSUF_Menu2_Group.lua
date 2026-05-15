@@ -512,6 +512,31 @@ local function ScopeSection(ctx, builder)
         return _G.MSUF_UnitEditModeActive == true
     end
 
+    local function AddScopeTooltip(frame, title, text)
+        if not (frame and frame.HookScript) then return end
+        frame:HookScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(M.Tr(title or ""), 1, 1, 1)
+            if text and text ~= "" then GameTooltip:AddLine(M.Tr(text), 0.85, 0.85, 0.85, true) end
+            GameTooltip:Show()
+        end)
+        frame:HookScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+    end
+
+    local function ScopeTooltipText(kind)
+        if kind == "party" then
+            return "Use this scope for normal 5-player party layouts."
+        elseif kind == "raid" then
+            return "Use this scope for flexible raid layouts. Mythic Raid has its own scope."
+        elseif kind == "mythicraid" then
+            return "Use this scope for 20-player Mythic Raid layouts."
+        end
+        return ""
+    end
+
     local function SelectScope(kind)
         M.gfScope = kind or "party"
         local gf = GF()
@@ -545,6 +570,7 @@ local function ScopeSection(ctx, builder)
             btn:SetPoint("LEFT", editing, "RIGHT", 8, 2)
         end
         btn:SetScript("OnClick", function() SelectScope(info.value) end)
+        AddScopeTooltip(btn, ScopeShortLabel(info.value), ScopeTooltipText(info.value))
         scopeBtns[info.value] = btn
         previous = btn
     end
@@ -554,7 +580,7 @@ local function ScopeSection(ctx, builder)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
     local edit = MakeTopButton(sec, "MSUF Edit Mode", compactTop and 118 or 128)
     edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
-    local reset = MakeTopButton(sec, "Reset All", compactTop and 78 or 84, {
+    local reset = MakeTopButton(sec, "Reset Scopes", compactTop and 94 or 104, {
         bg = { 0.070, 0.026, 0.034, 0.94 },
         border = { 0.340, 0.090, 0.110, 0.82 },
         textColor = { 1.00, 0.82, 0.82, 1 },
@@ -565,6 +591,8 @@ local function ScopeSection(ctx, builder)
         activeTextColor = { 1.00, 0.82, 0.82, 1 },
     })
     reset:SetPoint("RIGHT", edit, "LEFT", -8, 0)
+    AddScopeTooltip(reset, "Reset Scopes", "Resets Party, Raid, and Mythic Raid Group Frame settings for the active profile.")
+    AddScopeTooltip(edit, "MSUF Edit Mode", "Drag frames to move them. Group aura handles can be selected in previews; Blizzard-controlled aura blocks cannot be dragged.")
 
     local function RefreshTop()
         local current = CurrentScope()

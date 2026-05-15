@@ -149,7 +149,7 @@ local function EnsureProfilePopups()
 
     if not _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE then
         _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE = {
-            text = "Delete profile '%s'?",
+            text = "Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first.",
             button1 = DELETE or "Delete",
             button2 = CANCEL or "Cancel",
             timeout = 0,
@@ -213,12 +213,26 @@ local function BuildProfiles(ctx)
     local b = W.PageBuilder(ctx)
     local head = b:Header("Profiles", "Create, switch, copy, delete, export and import profiles.", 64)
     if W.CreatePageResetButton then
-        W.CreatePageResetButton(ctx, head, nil, { width = 118, text = "Reset Profile", y = -20 })
+        W.CreatePageResetButton(ctx, head, nil, { width = 164, text = "Reset Current Profile", y = -20 })
     end
     EnsureProfilePopups()
 
     local contentW = ctx.width or 920
     local rightX = min(max(420, floor(contentW * 0.52)), max(360, contentW - 390))
+
+    local function AddProfileTooltip(frame, title, text)
+        if not (frame and frame.HookScript) then return end
+        frame:HookScript("OnEnter", function(self)
+            if not _G.GameTooltip then return end
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            _G.GameTooltip:AddLine(tostring(title or ""), 1, 1, 1)
+            if text and text ~= "" then _G.GameTooltip:AddLine(tostring(text), 0.85, 0.85, 0.85, true) end
+            _G.GameTooltip:Show()
+        end)
+        frame:HookScript("OnLeave", function()
+            if _G.GameTooltip then _G.GameTooltip:Hide() end
+        end)
+    end
 
     local current = b:CollapsibleSection("profiles_management", "Profile Management", 208, true)
     local profileDrop = W.Dropdown(current, "Active profile", {}, 260)
@@ -370,8 +384,10 @@ local function BuildProfiles(ctx)
             if ok and type(value) == "string" then blob:SetText(value); blob:HighlightText() end
         end
     end)
-    local import = T.Button(io, "Import into current", 160, 24)
+    local import = T.Button(io, "Import to current profile", 180, 24)
+    AddProfileTooltip(import, "Import to current profile", "Applies the import string to the active profile. Export or copy your profile first if you want an easy backup.")
     local importCreateNew = W.Toggle(io, "Import and create new profile")
+    AddProfileTooltip(importCreateNew, "Import and create new profile", "Creates a separate profile before importing so you can test the import without changing your current profile.")
     local importProfileName = W.TextInput(io, "New profile name", 260)
     importProfileName._msuf2CommitOnBlur = false
 
@@ -479,7 +495,7 @@ local function BuildProfiles(ctx)
         self:SetChecked(M.profileImportCreateNew == true)
         if M.Refresh then M.Refresh(ctx) end
     end)
-    local legacy = T.Button(io, "Legacy Import", 132, 24)
+    local legacy = T.Button(io, "Import Legacy", 132, 24)
     legacy:SetScript("OnClick", function()
         if BlockCombatAction() then return end
         local text = blob:GetText()
@@ -508,11 +524,12 @@ local function BuildProfiles(ctx)
     wago:SetPoint("TOPLEFT", io, "TOPLEFT", ioActionX, -104)
     MoveWidget(importCreateNew, io, ioActionX, -144)
     MoveWidget(importProfileName, io, ioActionX, -178, 260)
+    W.Text(io, "Importing to the current profile changes the active profile. To test safely, enable new-profile import or copy/export your profile first.", ioActionX, -218, max(260, contentW - ioActionX - 28), T.colors.muted)
     M.AddRefresher(ctx, function()
         local createNew = M.profileImportCreateNew == true
         importCreateNew:SetChecked(createNew)
         if import.SetText then
-            import:SetText(createNew and "Import new profile" or "Import into current")
+            import:SetText(createNew and "Import new profile" or "Import to current profile")
         end
         W.SetControlShown(importProfileName, createNew)
         if not createNew and importProfileName.HasFocus and importProfileName:HasFocus() then
