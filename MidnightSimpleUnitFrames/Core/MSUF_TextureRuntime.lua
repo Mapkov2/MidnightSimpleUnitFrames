@@ -77,7 +77,7 @@ local function _Iter_ApplyAllBarTex(f)
     _ApplyTexCached(f.hpBar, S.texHP)
     _ApplyTexCached(f.absorbBar, S.texAbs)
     _ApplyTexCached(f.healAbsorbBar, S.texHeal)
-    _ApplyTexCached(f.selfHealPredBar, S.texHP)
+    _ApplyTexCached(f.incomingHealBar or f.selfHealPredBar, S.texHP)
     if S.applyBg then S.applyBg(f) end
 
     local pbTex = S.texHP

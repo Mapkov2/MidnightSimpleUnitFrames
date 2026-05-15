@@ -1496,6 +1496,16 @@ local function UFCore_IsAbsorbBarEnabledForFrame(f, conf)
     return true
 end
 
+local function UFCore_IsHealPredictionEnabled()
+    local db = _G.MSUF_DB or UFCore_EnsureDBOnce()
+    local g = db and db.general
+    if g then
+        if g.showSelfHealPrediction ~= nil then return g.showSelfHealPrediction == true end
+        if g.enableHealPrediction ~= nil then return g.enableHealPrediction ~= false end
+    end
+    return false
+end
+
 local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
     ev = UFCORE_EVENT_ALIAS[ev] or ev
     if (unsupported and unsupported[ev]) then return end
@@ -1515,8 +1525,8 @@ local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
         if not UFCore_IsAbsorbBarEnabledForFrame(f, conf) then return end
     end
     if ev == "UNIT_HEAL_PREDICTION" then
-        local g = MSUF_DB and MSUF_DB.general
-        if g and g.showSelfHealPrediction == false then return end
+        if not UFCore_IsHealPredictionEnabled() then return end
+        if not (f.incomingHealBar or f.selfHealPredBar) then return end
     end
     desired[ev] = true
 end
@@ -2446,12 +2456,17 @@ local function _HealAbsorbValueFast(f)
     _RefreshAbsorbTextFast(f, hp, nil)
 end
 
--- UNIT_HEAL_PREDICTION: only self-heal prediction bar
+-- UNIT_HEAL_PREDICTION: incoming heal prediction overlay only
 local function _HealPredValueFast(f)
-    local spb = f.selfHealPredBar
+    local spb = f and (f.incomingHealBar or f.selfHealPredBar)
     if not spb then return end
+    if not UFCore_IsHealPredictionEnabled() then
+        if spb.SetValue then spb:SetValue(0) end
+        if spb.Hide then spb:Hide() end
+        return
+    end
     local calc = f._msufHealthCalc
-    if not calc then
+    if not calc or not UnitGetDetailedHealPrediction then
         if _HealthFullFast then _HealthFullFast(f) end
         return
     end
@@ -2460,8 +2475,9 @@ local function _HealPredValueFast(f)
     UnitGetDetailedHealPrediction(unit, "player", calc)
     local maxHP = calc:GetMaximumHealth()
     local hp = calc:GetCurrentHealth()
-    -- Delegate to existing self-heal prediction function
-    local fn = _G.MSUF_UpdateSelfHealPrediction
+    -- Delegate to the bars backend so fast events and full health updates stay identical.
+    local bars = addon and addon.Bars
+    local fn = (bars and bars._UpdateSelfHealPrediction) or _G.MSUF_UpdateSelfHealPrediction
     if fn then fn(f, unit, maxHP, hp, calc) end
     local bar = f.hpBar
     if bar then UFCore_SetHealthBarValue(f, bar, hp) end

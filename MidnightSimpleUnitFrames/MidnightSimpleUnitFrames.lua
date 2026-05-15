@@ -813,7 +813,7 @@ _G.MSUF_RefreshPlayerPowerBar = function()
         pf._msufPwrTextConf = nil    -- forces config re-read (mode may differ)
     end
 end
--- Player self-heal prediction (own incoming heals only).
+-- Incoming heal prediction.
 -- Implemented as a behind-the-HP statusbar so the additional segment only appears past current HP.
 
 -- Self-heal prediction system moved to MSUF_SelfHealPred.lua
@@ -825,8 +825,9 @@ function ns.Bars.ResetHealthAndOverlays(frame, clearAbsorbs)
     if type(syncMissing) == "function" then
         syncMissing(frame, 1, 1)
     end
-    if frame.selfHealPredBar then
-        MSUF_ResetBarZero(frame.selfHealPredBar, true)
+    local healPredBar = frame.incomingHealBar or frame.selfHealPredBar
+    if healPredBar then
+        MSUF_ResetBarZero(healPredBar, true)
     end
     if clearAbsorbs then
         MSUF_ResetBarZero(frame.absorbBar, true)
@@ -5837,13 +5838,15 @@ _G.MSUF_ApplyPowerBarEmbedLayout_All = function()
  end
 
 local function _CreateSelfHealPredBar(f, hpBar)
-    -- Own-heals-only prediction segment (player incoming heals only).
-    -- Secret-safe: no arithmetic/comparisons on heal values.
+    if not f or not hpBar or f.selfHealPredBar or f.incomingHealBar then return end
+    -- Incoming heal prediction segment. Keep the old selfHealPred names as
+    -- aliases because texture/reverse-fill runtime code still references them.
     local clip = _G.CreateFrame("Frame", nil, hpBar)
     clip:SetAllPoints(hpBar)
     if clip.SetClipsChildren then clip:SetClipsChildren(true) end
     clip:SetFrameLevel(hpBar:GetFrameLevel() + 1)
     f.selfHealPredClip = clip
+    f.incomingHealClip = clip
     local bar = _G.CreateFrame("StatusBar", nil, clip)
     bar:SetStatusBarTexture(MSUF_GetBarTexture())
     bar:SetMinMaxValues(0, 1)
@@ -5853,6 +5856,7 @@ local function _CreateSelfHealPredBar(f, hpBar)
     bar:SetStatusBarColor(0.0, 1.0, 0.4, 0.35)
     bar:Hide()
     f.selfHealPredBar = bar
+    f.incomingHealBar = bar
     if hpBar and hpBar.GetReverseFill and bar.SetReverseFill then
         local rf = hpBar:GetReverseFill()
         if rf ~= nil then bar:SetReverseFill(rf and true or false) end
@@ -5943,9 +5947,7 @@ local function CreateSimpleUnitFrame(unit)
         f.hpGradient = grads and grads.right or nil
     end
     ns.Bars._ApplyHPGradient(f)
-    if unit == "player" then
-        _CreateSelfHealPredBar(f, hpBar)
-    end
+    _CreateSelfHealPredBar(f, hpBar)
     f.absorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 2, MSUF_GetAbsorbOverlayColor(), true)
     f.healAbsorbBar = MSUF_CreateOverlayStatusBar(f, hpBar, hpBar:GetFrameLevel() + 3, MSUF_GetHealAbsorbOverlayColor(), false)
     ns.Bars.SetOverlayBarTexture(f.absorbBar, MSUF_GetAbsorbBarTexture)
@@ -6188,14 +6190,21 @@ end
         _G.MSUF_Auras2_RefreshAll()
     end
 
--- Player self-heal prediction: request a Player frame update when heal prediction changes
--- (this can change without UNIT_HEALTH firing).
+-- Heal prediction: refresh UnitFrame event registration when prediction toggles
+-- change, and keep a small player event bridge for legacy update paths.
 -- MAX performance path: register UNIT_* directly with RegisterUnitEvent (oUF-style).
 -- Secret-safe: no comparisons/arithmetic on potential secret values.
 if type(_G.MSUF_RefreshSelfHealPredUnitEvent) ~= "function" then
     _G.MSUF_RefreshSelfHealPredUnitEvent = function()
         local g = (MSUF_DB and MSUF_DB.general) or nil
-        local want = (g and g.showSelfHealPrediction) and true or false
+        local want = false
+        if g then
+            if g.showSelfHealPrediction ~= nil then
+                want = g.showSelfHealPrediction == true
+            elseif g.enableHealPrediction ~= nil then
+                want = g.enableHealPrediction ~= false
+            end
+        end
 
         local fr = _G.MSUF_SelfHealPredUnitFrame
         if not fr and not want then return end
@@ -6213,7 +6222,15 @@ if type(_G.MSUF_RefreshSelfHealPredUnitEvent) ~= "function" then
                 if isSecret and isSecret(unit) then return end
                 if unit ~= "player" then return end
                 local gg = (MSUF_DB and MSUF_DB.general) or nil
-                if not (gg and gg.showSelfHealPrediction) then return end
+                local enabled = false
+                if gg then
+                    if gg.showSelfHealPrediction ~= nil then
+                        enabled = gg.showSelfHealPrediction == true
+                    elseif gg.enableHealPrediction ~= nil then
+                        enabled = gg.enableHealPrediction ~= false
+                    end
+                end
+                if not enabled then return end
                 local uf = UnitFrames and UnitFrames.player
                 if not uf or (uf.IsShown and not uf:IsShown()) then return end
                 local req = ns and ns.UF and ns.UF.RequestUpdate
@@ -6234,6 +6251,10 @@ if type(_G.MSUF_RefreshSelfHealPredUnitEvent) ~= "function" then
                 fr:UnregisterEvent("UNIT_HEAL_PREDICTION")
                 fr._msufReg = false
             end
+        end
+        local refreshEvents = _G.MSUF_UFCore_RefreshAllUnitEvents
+        if type(refreshEvents) == "function" then
+            refreshEvents(true)
         end
     end
 end
