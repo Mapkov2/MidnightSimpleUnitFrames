@@ -293,9 +293,11 @@ local function MSUF_FixHighlightForFrame(frame)
     -- Safety: if the unitframe hides while hovered, also hide the highlight
     if not hb.MSUF_hideHooked and hooksecurefunc and frame.Hide then
         hb.MSUF_hideHooked = true
+        local hideHighlight = hb.Hide
+        local isHighlightShown = hb.IsShown
         hooksecurefunc(frame, "Hide", function()
-            if hb and hb.Hide then
-                hb:Hide()
+            if hideHighlight and (not isHighlightShown or isHighlightShown(hb)) then
+                hideHighlight(hb)
             end
         end)
     end
