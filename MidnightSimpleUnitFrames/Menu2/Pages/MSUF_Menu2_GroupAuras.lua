@@ -112,7 +112,7 @@ local function BuildGFAuras(ctx)
     M.GroupPreview.Add(ctx, b)
 
     local renderer = b:CollapsibleSection("blizzrenderer", "Blizzard Renderer", 590, false)
-    W.Text(renderer, "Renderer path: Blizzard is the default native aura block. Checked types below are rendered by Blizzard; unchecked types use MSUF Custom groups. Custom mode disables the native block completely. Blizzard controls final native aura placement; MSUF only shows an approximate locked preview.", 14, -38, 620, T.colors.muted)
+    W.Text(renderer, "Renderer path: Blizzard is the default native aura block. Checked types below are rendered by Blizzard; unchecked types use MSUF Custom groups. Custom mode disables the native block completely. Dispel Glow is ignored only for Group Frame scopes that use Blizzard rendering; Unit Frames and Custom Group Frames still use it.", 14, -38, 620, T.colors.muted)
 
     local function PlaceDropdown(dropdown, x, y, width, hideTitle)
         if dropdown._msuf2Title then

@@ -261,7 +261,7 @@ local PARTY_DEFAULTS = {
     alphaHPInCombat      = 1,
     alphaHPOutOfCombat   = 1,
     alphaPreserveHPColor = false,
-    -- Health prediction overlays: NO defaults here — falls through to global Bars settings
+    -- Group Frame heal prediction is owned by Group Frames > Health & Bars.
     -- (absorbEnabled, healAbsorbEnabled, healPredEnabled are resolved at runtime)
     -- Tooltip
     tooltipMode           = "ALWAYS",  -- ALWAYS / OOC / MODIFIER / NEVER
@@ -858,10 +858,6 @@ function GF.EnsureDB()
         if conf.healAbsorbEnabled == true and not conf._absorbMigrated then
             conf.healAbsorbEnabled = nil
         end
-        if conf.healPredEnabled == true and not conf._healPredMigrated then
-            conf.healPredEnabled = nil
-            conf._healPredMigrated = true
-        end
         -- Remove absorb keys that shadow general when hlOverride is off
         if not conf.hlOverride then
             conf.absorbEnabled = nil
@@ -1167,11 +1163,6 @@ function GF.IsHealPredictionEnabled(kind, conf)
     conf = conf or GF.GetConf(kind)
     if conf and conf.healPredEnabled ~= nil then
         return conf.healPredEnabled == true
-    end
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if gen then
-        if gen.showSelfHealPrediction ~= nil then return gen.showSelfHealPrediction == true end
-        if gen.enableHealPrediction ~= nil then return gen.enableHealPrediction ~= false end
     end
     return false
 end

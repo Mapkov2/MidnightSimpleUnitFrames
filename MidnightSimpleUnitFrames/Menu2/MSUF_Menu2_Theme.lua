@@ -875,18 +875,23 @@ function T.Button(parent, text, width, height)
     end
     btn.SetActive = function(self, active)
         active = active and true or false
-        if self._msuf2Active == active then return end
-        self._msuf2Active = active
+        if self._msuf2Active ~= active then
+            self._msuf2Active = active
+        end
+        ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
+    end
+    btn.RefreshVisual = function(self)
         ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
     end
     btn.SetEnabled = function(self, enabled)
         enabled = enabled and true or false
-        if self._msuf2Enabled == enabled then return end
-        self._msuf2Enabled = enabled
-        if enabled then
-            if self.Enable then self:Enable() end
-        else
-            if self.Disable then self:Disable() end
+        if self._msuf2Enabled ~= enabled then
+            self._msuf2Enabled = enabled
+            if enabled then
+                if self.Enable then self:Enable() end
+            else
+                if self.Disable then self:Disable() end
+            end
         end
         ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
     end

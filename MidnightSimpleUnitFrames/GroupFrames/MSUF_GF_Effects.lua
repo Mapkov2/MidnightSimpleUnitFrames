@@ -767,7 +767,12 @@ local _gfGlowColor = { 0, 0, 0, 1 }
 
 local function _GF_StartDispelGlow(f, r, g, b)
     local kind = f._msufGFKind or "party"
-    if not LCG or not HLVal(kind, "hlDispelGlowEnabled") then
+    local blizzardOwnsThisScope = false
+    local blocksGlow = _G.MSUF_GroupBlizzardAuraRenderingBlocksDispelGlow
+    if type(blocksGlow) == "function" then
+        blizzardOwnsThisScope = blocksGlow(kind) == true
+    end
+    if not LCG or blizzardOwnsThisScope or not HLVal(kind, "hlDispelGlowEnabled") then
         f._msufGFDispelGlowActive = nil
         local offAnchor = f._msufGFDispelGlowAnchor
         f._msufGFDispelGlowAnchor = nil
@@ -1824,7 +1829,7 @@ function GF.BuildFrameCache(f)
 
     -- Raid debuffs
 
-    -- Heal prediction (GF override -> global Bars toggle -> default off)
+    -- Heal prediction (Group Frame menu -> default off)
     c.healPredEn = (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf)) or false
 
     -- Absorb: independently gated from heal prediction

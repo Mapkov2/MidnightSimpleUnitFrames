@@ -43,6 +43,7 @@ local ScopeRead = GP.ScopeRead
 local ScopeWrite = GP.ScopeWrite
 local CurrentFontScope = GP.CurrentFontScope
 local CurrentBarsScope = GP.CurrentBarsScope
+local IsGFScope = GP.IsGFScope
 local IsTextScopeKey = GP.IsTextScopeKey
 local BarsFlagForKey = GP.BarsFlagForKey
 local FontScopeGet = GP.FontScopeGet
@@ -65,6 +66,10 @@ local PriorityAllowed = GP.PriorityAllowed
 local PriorityOrder = GP.PriorityOrder
 local PriorityColor = GP.PriorityColor
 local SetPriorityOrder = GP.SetPriorityOrder
+local HasGroupBlizzardRendererConflict = GP.HasGroupBlizzardRendererConflict
+local GroupBlizzardRendererConflictText = GP.GroupBlizzardRendererConflictText
+local NotifyDispelGlowBlizzardConflict = GP.NotifyDispelGlowBlizzardConflict
+local StopGroupDispelGlowForBlizzardConflict = GP.StopGroupDispelGlowForBlizzardConflict
 local RefreshBorderTestModes = GP.RefreshBorderTestModes
 local SetAbsorbTextureTest = GP.SetAbsorbTextureTest
 local ClearAbsorbTextureTest = GP.ClearAbsorbTextureTest
@@ -80,6 +85,12 @@ local function BuildBars(ctx)
 
     local function SharedBarsControlsActive()
         return CurrentBarsScope() == "shared"
+    end
+
+    local function CurrentBarsScopeIsGroupFrame()
+        local scope = CurrentBarsScope()
+        if type(IsGFScope) == "function" then return IsGFScope(scope) end
+        return scope == "gf_party" or scope == "gf_raid"
     end
 
     local function ScopedBarsControlsActive()
@@ -156,6 +167,9 @@ local function BuildBars(ctx)
         if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
             _G.MSUF_SetDispelBorderTestMode(true, BorderTestScope())
         end
+        if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+            _G.MSUF_SetPurgeBorderTestMode(true, BorderTestScope())
+        end
     end
 
     local function ApplyBossTargetBorderRuntime()
@@ -167,6 +181,27 @@ local function BuildBars(ctx)
         ApplyAggroBorderRuntime()
         ApplyDispelPurgeBorderRuntime()
         ApplyBossTargetBorderRuntime()
+    end
+
+    local function CurrentGroupGlowBlocked()
+        local scope = CurrentBarsScope()
+        if scope ~= "gf_party" and scope ~= "gf_raid" then return false end
+        return type(HasGroupBlizzardRendererConflict) == "function" and HasGroupBlizzardRendererConflict(scope) == true
+    end
+
+    local function GlowConflictTextForCurrentScope()
+        if type(GroupBlizzardRendererConflictText) ~= "function" then return nil end
+        local scope = CurrentBarsScope()
+        if scope == "gf_party" or scope == "gf_raid" then
+            return GroupBlizzardRendererConflictText(scope)
+        end
+        return GroupBlizzardRendererConflictText("shared")
+    end
+
+    local function StopGroupGlowForCurrentConflict()
+        if type(StopGroupDispelGlowForBlizzardConflict) == "function" then
+            StopGroupDispelGlowForBlizzardConflict(CurrentBarsScope())
+        end
     end
 
     local function GradientKeyActive(entry, key)
@@ -559,14 +594,20 @@ local function BuildBars(ctx)
         end)
     W.MoveWidget(absorbAnchor, absorb, absorbLeftX, -124, absorbLeftW, "LEFT")
 
-    local selfHeal = W.ToggleAt(absorb, "Heal prediction", absorbLeftX, -186, absorbLeftW)
+    local selfHeal = W.ToggleAt(absorb, "UnitFrame heal prediction", absorbLeftX, -186, absorbLeftW)
     M.BindToggle(ctx, selfHeal,
-        function() return ReadGBool("showSelfHealPrediction", true) end,
+        function()
+            if CurrentBarsScopeIsGroupFrame() then return false end
+            return ReadGBool("showSelfHealPrediction", true)
+        end,
         function(v)
+            if CurrentBarsScopeIsGroupFrame() then return end
             SetGBool("showSelfHealPrediction", v, "MSUF2_SELF_HEAL", { preview = true })
             Call("MSUF_RefreshSelfHealPredUnitEvent")
             ApplyBars("MSUF2_SELF_HEAL")
         end)
+    local selfHealGroupHint = W.Text(absorb, "Group Frame heal prediction is controlled in Group Frames > Health & Bars.", absorbLeftX + 30, -212, absorbLeftW + 80, T.colors.muted)
+    selfHealGroupHint:Hide()
 
     local absorbOpacity = W.Slider(absorb, "Absorb bar opacity", 0, 1, 0.05, absorbLeftW)
     M.BindSlider(ctx, absorbOpacity,
@@ -624,6 +665,7 @@ local function BuildBars(ctx)
         local showBar = mode == 2 or mode == 3
         local scopedActive = ScopedBarsControlsActive()
         local sharedActive = SharedBarsControlsActive()
+        local groupScope = CurrentBarsScopeIsGroupFrame()
         SetControlEnabled(absorbMode, scopedActive)
         SetControlEnabled(absorbAnchor, scopedActive and showBar)
         SetControlEnabled(absorbTex, sharedActive and showBar)
@@ -631,7 +673,8 @@ local function BuildBars(ctx)
         SetControlEnabled(absorbTest, showBar)
         SetControlEnabled(absorbOpacity, scopedActive and showBar)
         SetControlEnabled(healAbsorbOpacity, scopedActive and showBar)
-        SetControlEnabled(selfHeal, sharedActive and mode ~= 1)
+        SetControlEnabled(selfHeal, (not groupScope) and sharedActive and mode ~= 1)
+        if groupScope then selfHealGroupHint:Show() else selfHealGroupHint:Hide() end
     end)
 
     local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 126, false)
@@ -674,7 +717,11 @@ local function BuildBars(ctx)
     M.BindDropdown(ctx, aggro,
         function() return tonumber(BarScopeGet("aggroOutlineMode", 1)) or 1 end,
         function(v)
-            BarScopeSet("aggroOutlineMode", tonumber(v) or 1, "MSUF2_AGGRO_BORDER")
+            local value = tonumber(v) or 1
+            BarScopeSet("aggroOutlineMode", value, "MSUF2_AGGRO_BORDER")
+            if value ~= 1 and _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then
+                _G.MSUF_SetAggroBorderTestMode(false)
+            end
             ApplyBars("MSUF2_AGGRO_BORDER")
             ApplyAggroBorderRuntime()
         end)
@@ -684,7 +731,11 @@ local function BuildBars(ctx)
     M.BindDropdown(ctx, dispelBorder,
         function() return tonumber(BarScopeGet("dispelOutlineMode", 1)) or 1 end,
         function(v)
-            BarScopeSet("dispelOutlineMode", tonumber(v) or 1, "MSUF2_DISPEL_BORDER")
+            local value = tonumber(v) or 1
+            BarScopeSet("dispelOutlineMode", value, "MSUF2_DISPEL_BORDER")
+            if value ~= 1 and _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+                _G.MSUF_SetDispelBorderTestMode(false)
+            end
             ApplyBars("MSUF2_DISPEL_BORDER")
             ApplyDispelPurgeBorderRuntime()
         end)
@@ -694,7 +745,11 @@ local function BuildBars(ctx)
     M.BindDropdown(ctx, purge,
         function() return tonumber(BarScopeGet("purgeOutlineMode", 0)) or 0 end,
         function(v)
-            BarScopeSet("purgeOutlineMode", tonumber(v) or 0, "MSUF2_PURGE_BORDER")
+            local value = tonumber(v) or 0
+            BarScopeSet("purgeOutlineMode", value, "MSUF2_PURGE_BORDER")
+            if value ~= 1 and _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+                _G.MSUF_SetPurgeBorderTestMode(false)
+            end
             ApplyBars("MSUF2_PURGE_BORDER")
             ApplyDispelPurgeBorderRuntime()
         end)
@@ -710,6 +765,9 @@ local function BuildBars(ctx)
             local value = tonumber(v) or 1
             SetG("bossTargetOutlineMode", value, "MSUF2_BOSS_TARGET_BORDER", { preview = true })
             SetGBool("bossTargetHighlightEnabled", value == 1, "MSUF2_BOSS_TARGET_BORDER", { preview = true })
+            if value ~= 1 and _G.MSUF_BossTargetBorderTestMode and type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then
+                _G.MSUF_SetBossTargetBorderTestMode(false)
+            end
             ApplyBars("MSUF2_BOSS_TARGET_BORDER")
             ApplyBossTargetBorderRuntime()
         end)
@@ -718,11 +776,29 @@ local function BuildBars(ctx)
     local bossSharedHint = W.Text(highlights, "Boss target border is a shared boss-frame setting.", hlLeftX, -360, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
 
+    local function AggroBorderOn()
+        return tonumber(BarScopeGet("aggroOutlineMode", 1)) == 1
+    end
+
+    local function DispelBorderOn()
+        return tonumber(BarScopeGet("dispelOutlineMode", 1)) == 1
+    end
+
+    local function PurgeBorderOn()
+        return tonumber(BarScopeGet("purgeOutlineMode", 0)) == 1
+    end
+
+    local function BossTargetBorderOn()
+        local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
+        return (tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback) == 1
+    end
+
     W.LabelAt(highlights, "Preview", hlRightX, -42, hlRightW, "GameFontNormalSmall", T.colors.accent)
     local aggroTest = W.ToggleAt(highlights, "Test aggro border", hlRightX, -72, hlRightW)
     M.BindToggle(ctx, aggroTest,
         function() return _G.MSUF_AggroBorderTestMode and true or false end,
         function(v)
+            if v and not AggroBorderOn() then M.Refresh(ctx); return end
             if type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(v and true or false, BorderTestScope()) end
         end)
     aggroTest:HookScript("OnHide", function(self)
@@ -736,6 +812,7 @@ local function BuildBars(ctx)
     M.BindToggle(ctx, dispelTest,
         function() return _G.MSUF_DispelBorderTestMode and true or false end,
         function(v)
+            if v and not DispelBorderOn() then M.Refresh(ctx); return end
             if type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(v and true or false, BorderTestScope()) end
         end)
     dispelTest:HookScript("OnHide", function(self)
@@ -764,7 +841,8 @@ local function BuildBars(ctx)
     M.BindToggle(ctx, purgeTest,
         function() return _G.MSUF_PurgeBorderTestMode and true or false end,
         function(v)
-            if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(v and true or false) end
+            if v and not PurgeBorderOn() then M.Refresh(ctx); return end
+            if type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(v and true or false, BorderTestScope()) end
         end)
     purgeTest:HookScript("OnHide", function(self)
         if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
@@ -777,6 +855,7 @@ local function BuildBars(ctx)
     M.BindToggle(ctx, bossTargetTest,
         function() return _G.MSUF_BossTargetBorderTestMode and true or false end,
         function(v)
+            if v and not BossTargetBorderOn() then M.Refresh(ctx); return end
             if type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then _G.MSUF_SetBossTargetBorderTestMode(v and true or false) end
         end)
     bossTargetTest:HookScript("OnHide", function(self)
@@ -788,10 +867,21 @@ local function BuildBars(ctx)
 
     W.DividerAt(highlights, -288, hlRightX, 42)
     W.LabelAt(highlights, "Dispel Glow", hlRightX, -314, hlRightW, "GameFontNormalSmall", T.colors.accent)
-    local enabled = W.ToggleAt(highlights, "Dispel glow effect", hlRightX, -344, hlRightW)
+    local glowConflictHint = W.Text(highlights, "", hlRightX, -336, hlRightW, { 1.00, 0.72, 0.25, 1 })
+    if glowConflictHint.SetWordWrap then glowConflictHint:SetWordWrap(true) end
+    local enabled = W.ToggleAt(highlights, "Dispel glow effect", hlRightX, -382, hlRightW)
     M.BindToggle(ctx, enabled,
-        function() return BarScopeGet("hlDispelGlowEnabled", true) ~= false end,
+        function()
+            if CurrentGroupGlowBlocked() then return false end
+            return BarScopeGet("hlDispelGlowEnabled", true) ~= false
+        end,
         function(v)
+            if v and CurrentGroupGlowBlocked() then
+                if type(NotifyDispelGlowBlizzardConflict) == "function" then NotifyDispelGlowBlizzardConflict(CurrentBarsScope()) end
+                StopGroupGlowForCurrentConflict()
+                M.Refresh(ctx)
+                return
+            end
             BarScopeSet("hlDispelGlowEnabled", v and true or false, "MSUF2_DISPEL_GLOW")
             ApplyBars("MSUF2_DISPEL_GLOW")
             ApplyDispelPurgeBorderRuntime()
@@ -808,7 +898,7 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_DISPEL_STYLE")
             ApplyDispelPurgeBorderRuntime()
         end)
-    W.MoveWidget(style, highlights, hlRightX, -392, hlRightW, "LEFT")
+    W.MoveWidget(style, highlights, hlRightX, -430, hlRightW, "LEFT")
 
     local lines = W.Slider(highlights, "Glow lines / particles", 2, 16, 1, hlRightW)
     M.BindSlider(ctx, lines,
@@ -818,7 +908,7 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_DISPEL_GLOW_LINES")
             ApplyDispelPurgeBorderRuntime()
         end)
-    W.MoveWidget(lines, highlights, hlRightX, -446, hlRightW, "LEFT")
+    W.MoveWidget(lines, highlights, hlRightX, -484, hlRightW, "LEFT")
 
     local speed = W.Slider(highlights, "Glow speed", 0.05, 1, 0.05, hlRightW)
     M.BindSlider(ctx, speed,
@@ -828,7 +918,7 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_DISPEL_GLOW_SPEED")
             ApplyDispelPurgeBorderRuntime()
         end)
-    W.MoveWidget(speed, highlights, hlRightX, -500, hlRightW, "LEFT")
+    W.MoveWidget(speed, highlights, hlRightX, -538, hlRightW, "LEFT")
 
     local thickness = W.Slider(highlights, "Glow thickness (Pixel)", 1, 5, 1, hlRightW)
     M.BindSlider(ctx, thickness,
@@ -838,24 +928,52 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_DISPEL_THICKNESS")
             ApplyDispelPurgeBorderRuntime()
         end)
-    W.MoveWidget(thickness, highlights, hlRightX, -554, hlRightW, "LEFT")
+    W.MoveWidget(thickness, highlights, hlRightX, -592, hlRightW, "LEFT")
 
     M.AddRefresher(ctx, function()
         local scopedActive = ScopedBarsControlsActive()
         local sharedActive = SharedBarsControlsActive()
-        local glowOn = BarScopeGet("hlDispelGlowEnabled", true) ~= false
+        local aggroOn = AggroBorderOn()
+        local dispelOn = DispelBorderOn()
+        local purgeOn = PurgeBorderOn()
+        local bossTargetOn = BossTargetBorderOn()
+        if _G.MSUF_AggroBorderTestMode and not aggroOn and type(_G.MSUF_SetAggroBorderTestMode) == "function" then
+            _G.MSUF_SetAggroBorderTestMode(false)
+        end
+        if _G.MSUF_DispelBorderTestMode and not dispelOn and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
+            _G.MSUF_SetDispelBorderTestMode(false)
+        end
+        if _G.MSUF_PurgeBorderTestMode and not purgeOn and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+            _G.MSUF_SetPurgeBorderTestMode(false)
+        end
+        if _G.MSUF_BossTargetBorderTestMode and (not sharedActive or not bossTargetOn) and type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then
+            _G.MSUF_SetBossTargetBorderTestMode(false)
+        end
+        local groupGlowBlocked = CurrentGroupGlowBlocked()
+        if groupGlowBlocked then StopGroupGlowForCurrentConflict() end
+        local glowOn = (not groupGlowBlocked) and BarScopeGet("hlDispelGlowEnabled", true) ~= false
         local pixelGlow = NormalizeGlowStyle(BarScopeGet("hlDispelGlowStyle", "PIXEL")) == "PIXEL"
+        local conflictText = GlowConflictTextForCurrentScope()
+        if conflictText then
+            glowConflictHint:SetText(conflictText)
+            glowConflictHint:Show()
+            local color = groupGlowBlocked and { 1.00, 0.55, 0.20, 1 } or T.colors.muted
+            glowConflictHint:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+        else
+            glowConflictHint:SetText("")
+            glowConflictHint:Hide()
+        end
         SetControlEnabled(highlight, scopedActive)
         SetControlEnabled(aggro, scopedActive)
         SetControlEnabled(dispelBorder, scopedActive)
         SetControlEnabled(purge, scopedActive)
         SetControlEnabled(bossTarget, sharedActive)
-        SetControlEnabled(aggroTest, scopedActive)
-        SetControlEnabled(dispelTest, scopedActive)
-        SetControlEnabled(dispelType, scopedActive)
-        SetControlEnabled(purgeTest, scopedActive)
-        SetControlEnabled(bossTargetTest, sharedActive)
-        SetControlEnabled(enabled, scopedActive)
+        SetControlEnabled(aggroTest, scopedActive and aggroOn)
+        SetControlEnabled(dispelTest, scopedActive and dispelOn)
+        SetControlEnabled(dispelType, scopedActive and dispelOn)
+        SetControlEnabled(purgeTest, scopedActive and purgeOn)
+        SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
+        SetControlEnabled(enabled, scopedActive and not groupGlowBlocked)
         SetControlEnabled(style, scopedActive and glowOn)
         SetControlEnabled(lines, scopedActive and glowOn)
         SetControlEnabled(speed, scopedActive and glowOn)

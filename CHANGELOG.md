@@ -31,8 +31,15 @@
   lookup work, and prefer cached player aura data before falling back to direct API scans.
 - **Hover highlight hide hook**: Unitframe highlight cleanup avoids redundant `Hide()` calls when the
   highlight is already hidden.
+- **Unit Frame heal prediction**: Heal prediction now uses the same incoming-heal overlay path across
+  Unit Frames, supports non-player Unit Frames, and hides early when the feature is disabled.
 
 <!-- MSUF-AUTO-CHANGELOG:Performance:START -->
+- **Unit Text, General**: Hp text performance update (3e6bb7e; Core/MSUF_Text.lua, MidnightSimpleUnitFrames.lua).
+- **Core Runtime**: Range fade performance update for dead/ghost (70e9233; Core/MSUF_RangeFade.lua).
+- **Unit Auras, Group Frames**: Aura performance update (1a71199; Auras2/MSUF_A2_Reminder.lua, GroupFrames/MSUF_GF_Effects.lua).
+- **Unit Auras, Core Runtime**: Performance update (5e6023e; Auras2/MSUF_A2_Core.lua, Auras2/MSUF_A2_Render.lua, Core/MSUF_RangeFade.lua +1 more).
+- **Borders / Outlines**: Updated border and outline behavior (working tree; MSUF_Borders.lua).
 - **Borders / Outlines, Group Frames**: Performance fixes (9efb3ae; Core/MSUF_Borders.lua, GroupFrames/MSUF_GF_Auras.lua, GroupFrames/MSUF_GF_Effects.lua).
 - **Borders / Outlines, Group Frames, General**: Performance and click casting changes (b15ea1f; Core/MSUF_Borders.lua, GroupFrames/MSUF_GF_Core.lua, GroupFrames/MSUF_GF_Effects.lua +1 more).
 - **Core Runtime**: More performance (7f9d951; Core/MSUF_ColorsCore.lua).
@@ -41,22 +48,16 @@
 - **Interrupt Ready**: Performance for interrupt ready (cb53217; Modules/MSUF_InterruptReady.lua).
 - **Unit Auras, Group Frames**: Aura performance (f3019b1; Auras2/MSUF_A2_Events.lua, GroupFrames/MSUF_GF_Effects.lua).
 - **Unit Auras, Unit Text, Group Frames**: Performance stuff and bugfixes for highlight border (0fedb27; Auras2/MSUF_A2_Events.lua, Core/MSUF_Text.lua, GroupFrames/MSUF_GF_AuraPreview.lua +4 more).
-- **Unit Text, General**: Hp text performance update (3e6bb7e; Core/MSUF_Text.lua, MidnightSimpleUnitFrames.lua).
-- **Core Runtime**: Range fade performance update for dead/ghost (70e9233; Core/MSUF_RangeFade.lua).
-- **Unit Auras, Group Frames**: Aura performance update (1a71199; Auras2/MSUF_A2_Reminder.lua, GroupFrames/MSUF_GF_Effects.lua).
-- **Unit Auras**: Updated Aura2 event, reminder, or aura handling (working tree; MSUF_A2_Core.lua).
-- **Unit Auras**: Updated Aura2 event, reminder, or aura handling (working tree; MSUF_A2_Render.lua).
-- **Core Runtime**: Updated core runtime behavior (working tree; MSUF_RangeFade.lua).
-- **Core Runtime**: Updated core runtime behavior (working tree; MSUF_UnitframeCore.lua).
-- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_AuraPreview.lua).
-- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_Core.lua).
-- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_DB.lua).
-- **Group Frames**: Updated Group Frame effects, range fade, or highlight behavior (working tree; MSUF_GF_Effects.lua).
-- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_Render.lua).
 - **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GlobalBars.lua).
-- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupPreview.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Global.lua).
+- **Group Frames**: Updated Group Frame effects, range fade, or highlight behavior (working tree; MSUF_GF_Effects.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupAuras.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Group.lua).
+- **Bars / Power Bars**: Updated bar and power bar behavior (working tree; MSUF_Bars.lua).
+- **Core Runtime**: Updated core runtime behavior (working tree; MSUF_UnitframeCore.lua).
 - **General**: Updated addon behavior (working tree; MidnightSimpleUnitFrames.lua).
-- **Unit Auras, Core Runtime**: Performance update (5e6023e; Auras2/MSUF_A2_Core.lua, Auras2/MSUF_A2_Render.lua, Core/MSUF_RangeFade.lua +1 more).
+- **Core Runtime**: Updated core runtime behavior (working tree; MSUF_TextureRuntime.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Theme.lua).
 <!-- MSUF-AUTO-CHANGELOG:Performance:END -->
 
 ### Bugfixes
@@ -78,8 +79,15 @@
 - Fixed the dashboard MSUF UI scale Apply button so the scale is applied live immediately.
 - Fixed global MSUF scale collection so Group Frames are only included when their own scale mode is
   `manual` or `auto`.
+- Fixed Group Frame Dispel Glow continuing to show when the selected Group Frame scope uses Blizzard's
+  native aura renderer.
+- Fixed highlight preview toggles so aggro, dispel, purge, and boss-target border tests respect the
+  current Bars scope and disabled outline modes.
+- Restored combat-safe Group Frame range-fade alpha targeting while keeping the visual bar group as
+  the out-of-combat alpha target.
 
 <!-- MSUF-AUTO-CHANGELOG:Bugfixes:START -->
+- **Group Frames, Menu / Dashboard, General**: Bugfixes to bars menu highlight border (bd147d2; GroupFrames/MSUF_GF_AuraPreview.lua, GroupFrames/MSUF_GF_Core.lua, GroupFrames/MSUF_GF_DB.lua +4 more).
 - **Group Frames**: Clique casting fix (35e8576; GroupFrames/MSUF_GF_Core.lua, GroupFrames/MSUF_GF_Effects.lua).
 - **Bars / Power Bars, Borders / Outlines**: FIXED outline mode for detached powerbar (4056b81; Core/MSUF_Bars.lua, Core/MSUF_Borders.lua).
 - **Menu / Dashboard**: Fixed live apply button for unitframe scaling (ae83a6a; Menu2/MSUF_Menu2_Core.lua, Menu2/MSUF_Menu2_Support.lua).
@@ -91,23 +99,29 @@
   build in a readable, collapsible in-game release notes panel, including beta builds.
 
 <!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
-- **Unit Text**: Only render the powertext that your actually using (9c199d2; Core/MSUF_Text.lua).
-- **Group Frames**: Better range check (7c33fe4; GroupFrames/MSUF_GF_Effects.lua).
-- **Foundation**: Changelog stuff (b8c1a80; Foundation/MSUF_Libs.lua).
 - **Group Frames**: This should out of combat range check (63794c0; GroupFrames/MSUF_GF_Core.lua).
 - **Core Runtime, Group Frames**: RANGE fade (4d8d353; Core/MSUF_RangeFade.lua, GroupFrames/MSUF_GF_Effects.lua).
 - **General**: Better coloring in addon folder (2c11245; MidnightSimpleUnitFrames_Castbars/MidnightSimpleUnitFrames_Castbars.toc).
-- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupPreview.lua).
 - **Menu / Dashboard**: Better group frame preview highlight (2ecceff; Menu2/Pages/MSUF_Menu2_GroupPreview.lua).
+- **Unit Text**: Only render the powertext that your actually using (9c199d2; Core/MSUF_Text.lua).
+- **Group Frames**: Better range check (7c33fe4; GroupFrames/MSUF_GF_Effects.lua).
+- **Foundation**: Changelog stuff (b8c1a80; Foundation/MSUF_Libs.lua).
 <!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
 
 ### Release / Tooling
+- Added the release helper scripts/UI for preparing release notes, package builds, GitHub releases,
+  Wago updates, and CurseForge publishing from one workflow.
+- Added `tools/MSUF-AutoChangelog.ps1` / `.cmd` to refresh managed changelog blocks from commits and
+  current working-tree changes, with optional in-game changelog regeneration.
+- Added `tools/update-addon-changelog.ps1` to generate the bundled in-game changelog data from
+  `CHANGELOG.md`.
 - CurseForge publishing now uses `BigWigsMods/packager` directly from the release workflow.
 - Release channel resolution now maps alpha/beta/prerelease tags to the correct Wago stability and
   CurseForge release type.
 - CurseForge API secrets can be provided as either `CF_API_KEY` or `CURSEFORGE`.
 - Release zips now use the full addon name (`MidnightSimpleUnitFrames<version>.zip`) instead of the
   short `MSUF-<version>.zip` name.
+- Fixed the release workflow tag trigger and helper tag push behavior for beta release tags.
 
 ### Documentation
 - Added `docs/PERFY_WORKFLOW.md` with the current Perfy trace workflow, validation rules, and known

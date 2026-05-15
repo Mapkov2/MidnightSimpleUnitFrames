@@ -569,6 +569,95 @@ local function SetPriorityOrder(order)
     end
 end
 
+local GF_RENDERER_CONFLICT_SCOPES = {
+    { kind = "party", db = "gf_party", label = "Party" },
+    { kind = "raid", db = "gf_raid", label = "Raid" },
+    { kind = "mythicraid", db = "gf_mythicraid", label = "Mythic Raid" },
+}
+
+local function GroupScopeUsesBlizzardRenderer(info)
+    local gf = ns and ns.GF
+    local conf = gf and gf.GetConf and gf.GetConf(info.kind)
+    if not conf then
+        local db = DB()
+        conf = db and db[info.db]
+    end
+    if not conf then return false end
+    if gf and type(gf.GetBlizzardAuraTypeFlags) == "function" then
+        local buffs, debuffs, dispels, externals, privateAuras = gf.GetBlizzardAuraTypeFlags(conf)
+        return buffs or debuffs or dispels or externals or privateAuras
+    end
+    local auras = conf.auras
+    if not auras or auras.enabled == false then return false end
+    return (auras.renderer or "BLIZZARD") ~= "CUSTOM"
+end
+
+local function GroupBlizzardRendererActiveForKind(kind)
+    kind = tostring(kind or ""):lower()
+    if kind == "gf_party" then kind = "party" end
+    if kind == "gf_raid" then kind = "raid" end
+    if kind == "gf_mythicraid" then kind = "mythicraid" end
+    for i = 1, #GF_RENDERER_CONFLICT_SCOPES do
+        local info = GF_RENDERER_CONFLICT_SCOPES[i]
+        if info.kind == kind or info.db == kind then
+            return GroupScopeUsesBlizzardRenderer(info)
+        end
+    end
+    return false
+end
+
+local function GroupBlizzardRendererConflictLabels(scope)
+    scope = NormalizeScopeKey(scope or "shared")
+    local labels = {}
+    for i = 1, #GF_RENDERER_CONFLICT_SCOPES do
+        local info = GF_RENDERER_CONFLICT_SCOPES[i]
+        if scope == "gf_party" and info.db ~= "gf_party" then
+            -- skip
+        elseif scope == "gf_raid" and info.db == "gf_party" then
+            -- skip
+        elseif scope ~= "shared" and scope ~= "gf_party" and scope ~= "gf_raid" then
+            -- UnitFrame scopes are not blocked by GroupFrame Blizzard rendering.
+        elseif GroupScopeUsesBlizzardRenderer(info) then
+            labels[#labels + 1] = info.label
+        end
+    end
+    return labels
+end
+
+local function HasGroupBlizzardRendererConflict(scope)
+    return #GroupBlizzardRendererConflictLabels(scope) > 0
+end
+
+local function GroupBlizzardRendererConflictText(scope)
+    scope = NormalizeScopeKey(scope or "shared")
+    local labels = GroupBlizzardRendererConflictLabels(scope)
+    if #labels == 0 then return nil end
+    if scope == "gf_party" or scope == "gf_raid" then
+        return "Dispel Glow is unavailable for this Group Frame scope while Blizzard owns its aura layer (" .. table.concat(labels, ", ") .. "). Switch Group Frames > Auras > Renderer to Custom for that scope to use glow."
+    end
+    return "Unit Frames and Custom Group Frames can still use Dispel Glow. Only Group Frames using Blizzard aura rendering (" .. table.concat(labels, ", ") .. ") ignore glow until their renderer is set to Custom."
+end
+
+local function NotifyDispelGlowBlizzardConflict(scope)
+    local text = GroupBlizzardRendererConflictText(scope)
+    if print and text then print("|cffffd700MSUF:|r " .. text) end
+end
+
+local function StopGroupDispelGlowForBlizzardConflict(scope)
+    if not HasGroupBlizzardRendererConflict(scope) then return false end
+    local gf = ns and ns.GF
+    local stopGlow = _G.MSUF_GF_StopDispelGlow
+    if gf and gf.frames and type(stopGlow) == "function" then
+        for frame in pairs(gf.frames) do
+            local kind = frame and frame._msufGFKind
+            if GroupBlizzardRendererActiveForKind(kind) then
+                stopGlow(frame)
+            end
+        end
+    end
+    return true
+end
+
 local function RefreshBorderTestModes()
     local scope = CurrentBarsScope()
     if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" then scope = "raid" end
@@ -577,6 +666,9 @@ local function RefreshBorderTestModes()
     end
     if _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then
         _G.MSUF_SetAggroBorderTestMode(true, scope)
+    end
+    if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
+        _G.MSUF_SetPurgeBorderTestMode(true, scope)
     end
 end
 
@@ -726,6 +818,12 @@ GlobalPage.PriorityAllowed = PriorityAllowed
 GlobalPage.PriorityOrder = PriorityOrder
 GlobalPage.PriorityColor = PriorityColor
 GlobalPage.SetPriorityOrder = SetPriorityOrder
+GlobalPage.GroupBlizzardRendererConflictLabels = GroupBlizzardRendererConflictLabels
+GlobalPage.GroupBlizzardRendererActiveForKind = GroupBlizzardRendererActiveForKind
+GlobalPage.HasGroupBlizzardRendererConflict = HasGroupBlizzardRendererConflict
+GlobalPage.GroupBlizzardRendererConflictText = GroupBlizzardRendererConflictText
+GlobalPage.NotifyDispelGlowBlizzardConflict = NotifyDispelGlowBlizzardConflict
+GlobalPage.StopGroupDispelGlowForBlizzardConflict = StopGroupDispelGlowForBlizzardConflict
 GlobalPage.RefreshBorderTestModes = RefreshBorderTestModes
 GlobalPage.SetAbsorbTextureTest = SetAbsorbTextureTest
 GlobalPage.ClearAbsorbTextureTest = ClearAbsorbTextureTest
@@ -735,3 +833,7 @@ GlobalPage.SetControlsEnabled = SetControlsEnabled
 GlobalPage.ApplyFonts = ApplyFonts
 GlobalPage.ApplyBars = ApplyBars
 GlobalPage.ApplyCastbars = ApplyCastbars
+
+_G.MSUF_HasGroupBlizzardAuraRenderingConflict = HasGroupBlizzardRendererConflict
+_G.MSUF_GroupBlizzardAuraRenderingBlocksDispelGlow = GroupBlizzardRendererActiveForKind
+_G.MSUF_StopGroupDispelGlowForBlizzardRendererConflict = StopGroupDispelGlowForBlizzardConflict

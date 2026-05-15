@@ -1484,6 +1484,10 @@ local function BindNestedToggle(ctx, widget, getTable, key, default, mode)
             if tbl[key] == (v and true or false) then return end
             tbl[key] = v and true or false
             QueueGF(CurrentScope(), mode or "visual")
+            local gp = M.GlobalPage
+            if gp and type(gp.StopGroupDispelGlowForBlizzardConflict) == "function" then
+                gp.StopGroupDispelGlowForBlizzardConflict(CurrentScope())
+            end
             if ctx and ctx.refreshers then
                 for i = 1, #ctx.refreshers do
                     local fn = ctx.refreshers[i]
@@ -1520,6 +1524,10 @@ local function BindNestedDropdown(ctx, widget, getTable, key, default, mode)
             local tbl = getTable()
             tbl[key] = v or default
             QueueGF(CurrentScope(), mode or "visual")
+            local gp = M.GlobalPage
+            if gp and type(gp.StopGroupDispelGlowForBlizzardConflict) == "function" then
+                gp.StopGroupDispelGlowForBlizzardConflict(CurrentScope())
+            end
         end)
     return widget
 end
