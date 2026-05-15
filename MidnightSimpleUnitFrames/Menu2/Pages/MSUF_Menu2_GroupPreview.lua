@@ -334,6 +334,85 @@ local function GFPreviewMockPowerHeight(kind, conf, zoom, frameScale)
     return GFPreviewRound(livePowerH * (tonumber(zoom) or 1))
 end
 
+local function GFPreviewHandleText(handle)
+    if not handle then return "Group preview" end
+    local label = handle._label
+    local text = label and label.GetText and label:GetText()
+    if text and text ~= "" then return text end
+    return handle._key or "Group preview"
+end
+
+local function GFPreviewHandleOffsets(handle)
+    if not handle then return nil end
+    local conf = Conf(CurrentScope()) or {}
+    if handle._cfgGroup then
+        local auras = conf.auras or {}
+        local cfg = auras[handle._cfgGroup] or {}
+        return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
+    elseif handle._cfgStatus then
+        return conf.statusTextAnchor, tonumber(conf.statusOffsetX) or 0, tonumber(conf.statusOffsetY) or 0
+    elseif handle._cfgPrivate then
+        local cfg = conf.privateAuras or {}
+        return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
+    elseif handle._cfgSpell then
+        local cfg = conf.spellIndicators and (conf.spellIndicators.placed or conf.spellIndicators) or {}
+        return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
+    elseif handle._cfgText then
+        return conf.nameAnchor, tonumber(conf.nameOffsetX) or 0, tonumber(conf.nameOffsetY) or 0
+    end
+    return nil
+end
+
+local function GFPreviewUpdateHint(box, handle)
+    if not (box and box._hint) then return end
+    if not handle then
+        box._hint:SetText("click layers to hide - drag custom handles - arrows nudge selected")
+        return
+    end
+    local anchor, x, y = GFPreviewHandleOffsets(handle)
+    if anchor then
+        box._hint:SetText(string.format("%s   %s   x: %d   y: %d   arrows nudge, Shift=5, Ctrl=10",
+            GFPreviewHandleText(handle), tostring(anchor or "CENTER"), GFPreviewRound(x or 0), GFPreviewRound(y or 0)))
+    else
+        box._hint:SetText(string.format("%s   arrows nudge, Shift=5, Ctrl=10", GFPreviewHandleText(handle)))
+    end
+end
+
+local function GFPreviewNudgeStep()
+    if IsControlKeyDown and IsControlKeyDown() then return 10 end
+    if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
+    return 1
+end
+
+local function GFPreviewRefreshHandleSelection(box)
+    if not box then return end
+    local selected = box._selectedHandle
+    if selected and selected.IsShown and not selected:IsShown() then
+        selected = nil
+        box._selectedHandle = nil
+    end
+    local handles = box._handleList or {}
+    for i = 1, #handles do
+        local handle = handles[i]
+        if handle then
+            local color = handle._color or { 0.7, 0.8, 1.0 }
+            local isSelected = handle == selected
+            local isHover = handle._hovering == true
+            if handle._selectFill then
+                handle._selectFill:SetColorTexture(color[1], color[2], color[3], isSelected and 0.22 or (isHover and 0.14 or 0))
+            end
+            if handle._selectBorder then
+                handle._selectBorder:SetShown(isSelected or isHover)
+                handle._selectBorder:SetBackdropBorderColor(color[1], color[2], color[3], isSelected and 1 or 0.72)
+            end
+            if handle.SetBackdropBorderColor then
+                handle:SetBackdropBorderColor(color[1], color[2], color[3], isSelected and 1 or (isHover and 0.85 or (handle._locked and 0.55 or 0.95)))
+            end
+        end
+    end
+    GFPreviewUpdateHint(box, selected)
+end
+
 local function CreateNativeGFPreview(parent, ctx, onOpen)
     local width = (ctx.width or 720) - 28
     local box = T.Panel(parent, nil, T.colors.panel2, T.colors.border)
@@ -348,6 +427,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     box._title = title
     local hint = T.Font(box, "GameFontDisableSmall", "click layers to hide - drag custom handles - arrows nudge selected", T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
+    box._hint = hint
 
     local stage = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34)
@@ -455,20 +535,16 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     box._selectedHandle = nil
     box._handles = {}
+    box._handleList = {}
 
     local function SelectHandle(handle)
-        if box._selectedHandle and box._selectedHandle._selectTex then
-            box._selectedHandle._selectTex:Hide()
-        end
         box._selectedHandle = handle
-        if handle and handle._selectTex then handle._selectTex:Show() end
         if box.SetFocus then box:SetFocus() end
+        GFPreviewRefreshHandleSelection(box)
     end
 
     local function HandleHistoryLabel(handle, action)
-        local label = handle and handle._label
-        local text = label and label.GetText and label:GetText()
-        if not text or text == "" then text = handle and handle._key or "Group preview" end
+        local text = GFPreviewHandleText(handle)
         return tostring(action or "Move") .. ": " .. tostring(text)
     end
 
@@ -545,6 +621,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             gf.RefreshVisuals()
         end
         box:Refresh()
+        GFPreviewRefreshHandleSelection(box)
         CheckpointHandleHistory(handle, action)
     end
 
@@ -562,17 +639,45 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         handle._locked = locked and true or false
         handle._color = color
 
-        local selectTex = handle:CreateTexture(nil, "OVERLAY", nil, 7)
-        selectTex:SetAllPoints()
-        selectTex:SetColorTexture(1, 0.82, 0, 0.18)
-        selectTex:Hide()
-        handle._selectTex = selectTex
+        local selectFill = handle:CreateTexture(nil, "OVERLAY", nil, 6)
+        selectFill:SetAllPoints()
+        selectFill:SetColorTexture(color[1], color[2], color[3], 0)
+        handle._selectFill = selectFill
+
+        local selectBorder = CreateFrame("Frame", nil, handle, T.Template())
+        selectBorder:SetPoint("TOPLEFT", handle, "TOPLEFT", -2, 2)
+        selectBorder:SetPoint("BOTTOMRIGHT", handle, "BOTTOMRIGHT", 2, -2)
+        selectBorder:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
+        selectBorder:SetBackdropColor(0, 0, 0, 0)
+        selectBorder:SetBackdropBorderColor(color[1], color[2], color[3], 1)
+        selectBorder:Hide()
+        handle._selectBorder = selectBorder
 
         local fs = T.Font(handle, "GameFontDisableSmall", label or key, { color[1], color[2], color[3], 0.95 })
         fs:SetPoint("BOTTOM", handle, "TOP", 0, 1)
         fs:SetJustifyH("CENTER")
         handle._label = fs
 
+        handle:SetScript("OnEnter", function(self)
+            self._hovering = true
+            GFPreviewRefreshHandleSelection(box)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(GFPreviewHandleText(self), 1, 1, 1)
+                if self._locked then
+                    GameTooltip:AddLine("This preview layer follows Blizzard/native placement and is locked.", 0.82, 0.82, 0.82, true)
+                else
+                    GameTooltip:AddLine("Drag this preview element to adjust the same placement offsets used by Group Frames.", 0.82, 0.82, 0.82, true)
+                    GameTooltip:AddLine("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.", 0.55, 0.62, 0.72, true)
+                end
+                GameTooltip:Show()
+            end
+        end)
+        handle:SetScript("OnLeave", function(self)
+            self._hovering = nil
+            GFPreviewRefreshHandleSelection(box)
+            if GameTooltip then GameTooltip:Hide() end
+        end)
         handle:SetScript("OnClick", function(self)
             SelectHandle(self)
             if type(onOpen) == "function" then onOpen(self._sectionKey) end
@@ -586,7 +691,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if self.StopMovingOrSizing then self:StopMovingOrSizing() end
             SaveHandlePosition(self, "Move")
         end)
+        handle:HookScript("OnHide", function(self)
+            if box._selectedHandle == self then SelectHandle(nil) end
+        end)
         box._handles[key] = handle
+        box._handleList[#box._handleList + 1] = handle
         return handle
     end
 
@@ -1014,6 +1123,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         if self._selectedHandle and self._selectedHandle.IsShown and not self._selectedHandle:IsShown() then
             SelectHandle(nil)
         end
+        GFPreviewRefreshHandleSelection(self)
     end
 
     box:EnableKeyboard(true)
@@ -1045,9 +1155,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
         local point, relativeTo, relativePoint, xOfs, yOfs = handle:GetPoint(1)
         if not point then return end
+        local step = GFPreviewNudgeStep()
         handle:ClearAllPoints()
-        handle:SetPoint(point, relativeTo, relativePoint, (xOfs or 0) + dx, (yOfs or 0) + dy)
+        handle:SetPoint(point, relativeTo, relativePoint, (xOfs or 0) + (dx * step), (yOfs or 0) + (dy * step))
         SaveHandlePosition(handle, "Nudge")
+        GFPreviewRefreshHandleSelection(self)
     end)
 
     box:Refresh()
