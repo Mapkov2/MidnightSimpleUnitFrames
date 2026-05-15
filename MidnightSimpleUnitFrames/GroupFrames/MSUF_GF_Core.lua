@@ -155,6 +155,45 @@ GF._eventFrame = GF._eventFrame or nil
 GF._previewActive = GF._previewActive or {}
 
 ------------------------------------------------------------------------
+-- Click-cast compatibility
+------------------------------------------------------------------------
+local function _GF_CallCliqueMethod(clique, methodName, ...)
+    local method = clique and clique[methodName]
+    if type(method) ~= "function" then return false end
+    local ok = pcall(method, clique, ...)
+    return ok == true
+end
+
+function GF.RegisterClickCastFrame(f, refreshEnterLeave)
+    if not (f and f.RegisterForClicks) then return end
+
+    local cc = _G.ClickCastFrames
+    if type(cc) ~= "table" then
+        cc = {}
+        _G.ClickCastFrames = cc
+    end
+    cc[f] = true
+
+    local clique = _G.Clique
+    if type(clique) ~= "table" or type(clique.ccframes) ~= "table" then return end
+
+    _GF_CallCliqueMethod(clique, "RegisterUnitFrame", f)
+
+    -- Clique key bindings depend on secure OnEnter/OnLeave wrappers. Group
+    -- frame effects install those scripts after the base button is built, so
+    -- refresh the wrappers once scripts are in their final position.
+    if not refreshEnterLeave or (InCombatLockdown and InCombatLockdown()) then return end
+    if clique.ccframes and clique.ccframes[f] then
+        if type(clique.UnwrapOnEnterOnLeave) == "function" and type(clique.WrapOnEnterOnLeave) == "function" then
+            _GF_CallCliqueMethod(clique, "UnwrapOnEnterOnLeave", f)
+            _GF_CallCliqueMethod(clique, "WrapOnEnterOnLeave", f)
+        elseif type(clique.ApplyAttributes) == "function" then
+            _GF_CallCliqueMethod(clique, "ApplyAttributes")
+        end
+    end
+end
+
+------------------------------------------------------------------------
 -- Auto-register child frames with _G.MSUF_UnitFrames whenever the
 -- SecureGroupHeader assigns/changes their `unit` attribute.
 --
@@ -923,9 +962,8 @@ local function BuildFrameHierarchy(f, kind)
     hlBorder:Hide()
     f._msufGFHighlightBorder = hlBorder
 
-    -- ClickCast integration
-    _G.ClickCastFrames = _G.ClickCastFrames or {}
-    _G.ClickCastFrames[f] = true
+    -- ClickCast integration; effects refresh this after OnEnter/OnLeave are set.
+    if GF.RegisterClickCastFrame then GF.RegisterClickCastFrame(f, false) end
 
     -- Unit menu
     f.menu = function(btn)

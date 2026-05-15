@@ -5338,6 +5338,7 @@ if type(_origInit) == "function" then
         -- Add tooltip scripts
         f:SetScript("OnEnter", OnEnter)
         f:SetScript("OnLeave", OnLeave)
+        if GF.RegisterClickCastFrame then GF.RegisterClickCastFrame(f, true) end
         -- GF frames do NOT use the main Alpha module.
         -- Range fade is handled exclusively by ApplyRangeFade → SetAlphaFromBoolean.
         -- The Alpha module (MSUF_ApplyUnitAlpha) would override SetAlphaFromBoolean
