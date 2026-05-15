@@ -10,8 +10,8 @@ performance changes.
 - Build Perfy packages as zips in `C:\Users\Marco\Downloads`.
 - Do not add permanent Perfy packaging scripts to the repo.
 - Do not use repo `.ps1` files for Perfy packaging.
-- Use the already working Perfy zip as the base package:
-  `C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_fixed.zip`
+- Use the last known broad Perfy zip as the instrumentation reference:
+  `C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_5.1_zero_menu_overhead.zip`
 - Keep the addon shape identical to a real install: include
   `MidnightSimpleUnitFrames` and `MidnightSimpleUnitFrames_Castbars`.
 - Overlay direction is always one-way: repo/source files go into the extracted
@@ -24,28 +24,42 @@ performance changes.
   over all Lua files before giving it to Marco.
 - Never ship a zip with unbalanced Perfy enter/leave instrumentation.
 
-## Current Known Good Base
+## Current Known Good Broad Workflow
 
-The current base zip is:
+The current broad reference zip is:
 
 ```text
-C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_fixed.zip
+C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_5.1_zero_menu_overhead.zip
 ```
 
-It contains:
+Use it as a reference for the Perfy hook and for the list of Lua files that are
+safe to instrument broadly. Do not copy its addon source files back into the
+repo or into the final build after repo files have been overlaid.
+
+The expected broad shape is:
 
 - `MidnightSimpleUnitFrames\MSUF_PerfyHook.lua`
-- `MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.toc` with
-  `MSUF_PerfyHook.lua`
-- Core addon files
-- Castbars addon files
+- 142 Lua files in the generated package
+- 112 Lua files containing `Perfy_Trace`: 111 directly instrumented addon files
+  plus `MSUF_PerfyHook.lua`
+- both top-level addon folders:
+  `MidnightSimpleUnitFrames` and `MidnightSimpleUnitFrames_Castbars`
 
-Known important fix in that base:
+Current output names:
+
+```text
+C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_5.2_broad_current.zip
+C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_latest.zip
+```
+
+Known important instrumentation exclusions:
 
 - Do not instrument `_msuf_probeNum` in
   `MidnightSimpleUnitFrames_Castbars/Castbars/MSUF_CastbarDriver.lua`.
   That helper intentionally errors inside `pcall`, so instrumenting it creates
   enter/leave imbalance.
+- Do not instrument `MSUF_PerfyHook.lua` itself with the direct function
+  instrumenter. It already contains explicit semantic Perfy hooks.
 
 ## Core File Changes Required For A Trace
 
@@ -228,31 +242,52 @@ error.
 - Instrumented Lua files require Perfy to be installed and loaded. The hook file
   is safe without Perfy, but direct `Perfy_Trace(...)` calls are not.
 
-## Build A New Perfy Test Zip
+## Build A New Broad Perfy Test Zip
 
-1. Start from the working base zip, not from scratch.
+1. Start from the current repo as the source of addon files.
 
-2. Extract it to a temporary Downloads folder, for example:
+Copy the repo's current addon folders to a temporary Downloads build folder:
 
 ```text
 C:\Users\Marco\Downloads\MSUF_PerfyBuild_YYYYMMDD_HHMMSS
 ```
 
-3. Overlay changed repo files into the extracted addon tree.
-
-Use repo paths as the source and the extracted zip paths as the destination.
-Example for changed files:
+The repo is always the source:
 
 ```text
-MidnightSimpleUnitFrames/Core/MSUF_Borders.lua
-MidnightSimpleUnitFrames/GroupFrames/MSUF_GF_Auras.lua
-MidnightSimpleUnitFrames/GroupFrames/MSUF_GF_Effects.lua
+repo\MidnightSimpleUnitFrames              -> build\MidnightSimpleUnitFrames
+repo\MidnightSimpleUnitFrames_Castbars     -> build\MidnightSimpleUnitFrames_Castbars
 ```
 
-4. Instrument the overlaid Lua files in the temporary build folder.
+2. Read the broad reference zip only for:
+
+- `MidnightSimpleUnitFrames\MSUF_PerfyHook.lua`
+- the list of Lua files that already contain `Perfy_Trace`
+
+The reference currently marks 112 files with `Perfy_Trace`; exclude the hook
+itself and instrument the remaining 111 repo-derived build files.
+
+3. Patch the generated build TOC, not the repo TOC.
+
+Verify the generated build TOC contains:
+
+```text
+## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics, Perfy
+MSUF_PerfyHook.lua
+```
+
+4. Instrument the build files in the temporary build folder.
 
 Use a temporary inline script or one-off command. Do not save a Perfy packaging
-script into the repo.
+script into the repo. The broad instrumenter must:
+
+- track anonymous callback functions as stack blocks, even when they do not get
+  labels, so `return` inside `table.sort(... function(...) ... end)` is not
+  assigned to the outer named function
+- insert `Enter` only after complete multi-line function signatures
+- insert `Leave` before standalone, semicolon, and one-line branch returns
+- skip `_msuf_probeNum`
+- skip `MSUF_PerfyHook.lua`
 
 5. Validate syntax:
 
@@ -267,20 +302,21 @@ foreach ($file in $luaFiles) {
 Expected result after the current base:
 
 ```text
-luac ok: 141 files
+luac ok: 142 files
 ```
 
-6. Compress both top-level addon folders:
+6. Compress both top-level addon folders from inside the temporary build root:
 
 ```text
 MidnightSimpleUnitFrames
 MidnightSimpleUnitFrames_Castbars
 ```
 
-Recommended output name:
+Current output names:
 
 ```text
-C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_<change-name>.zip
+C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_5.2_broad_current.zip
+C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_latest.zip
 ```
 
 7. Verify the finished zip contains these entries:
@@ -291,7 +327,28 @@ MidnightSimpleUnitFrames\MSUF_PerfyHook.lua
 MidnightSimpleUnitFrames_Castbars\MidnightSimpleUnitFrames_Castbars.toc
 ```
 
-8. Delete temporary build folders after the final zip is valid.
+And verify:
+
+```text
+luaFiles=142
+perfyTraceFiles=112
+tocHasPerfyOptionalDep=True
+tocLoadsHook=True
+hasHook=True
+```
+
+8. Check the repo after building.
+
+The normal repo must stay clean of Perfy artifacts:
+
+```powershell
+rg -n "Perfy_Trace|Perfy_GetTime|MSUF_PerfyHook" MidnightSimpleUnitFrames MidnightSimpleUnitFrames_Castbars tools .github CHANGELOG.md README.md VERSION
+```
+
+Expected result: no matches. Documentation examples in this file are the only
+allowed repo matches when searching `docs`.
+
+9. Delete temporary build folders after the final zip is valid.
 
 ## Instrumentation Rules
 
