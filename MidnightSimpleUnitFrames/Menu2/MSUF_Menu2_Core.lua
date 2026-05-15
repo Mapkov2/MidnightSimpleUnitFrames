@@ -4706,6 +4706,9 @@ local function BuildDashboard(ctx)
         local scaleValue = PendingMsufScale()
         g.msufUiScale = scaleValue
         pendingMsufScale = nil
+        if type(_G.MSUF_ApplyMsufScale) == "function" then
+            pcall(_G.MSUF_ApplyMsufScale, scaleValue)
+        end
         M.RequestGeneralApply("MSUF2_DASH_SCALE", { preview = true, applyAll = false })
         if type(_G.ApplyAllSettings) == "function" then pcall(_G.ApplyAllSettings) end
         RefreshMsufScale()

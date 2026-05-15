@@ -268,10 +268,32 @@ local UI_SCALE_1080 = 768 / 1080
 local UI_SCALE_1440 = 768 / 1440
 local UI_SCALE_4K = 768 / 2160
 
+local function IsGroupFrameUnitKey(unitKey)
+    if type(unitKey) ~= "string" then return false end
+    return unitKey:sub(1, 5) == "party" or unitKey:sub(1, 4) == "raid"
+end
+
+local function IsGroupFrameScaleEnabled(frame, unitKey)
+    if not (frame and (frame._msufGFBuilt or frame._msufGFKind or IsGroupFrameUnitKey(unitKey))) then
+        return true
+    end
+
+    local kind = frame._msufGFKind
+    if not kind and IsGroupFrameUnitKey(unitKey) then
+        kind = unitKey:sub(1, 4) == "raid" and "raid" or "party"
+    end
+
+    local gf = ns and ns.GF
+    local conf = gf and type(gf.GetConf) == "function" and gf.GetConf(kind) or nil
+    local mode = conf and conf.frameScaleMode or "off"
+    return mode == "manual" or mode == "auto"
+end
+
 local function CollectMsufScaleFrames()
     local frames, seen = {}, {}
-    local function add(frame)
+    local function add(frame, unitKey)
         if not frame or seen[frame] then return end
+        if not IsGroupFrameScaleEnabled(frame, unitKey) then return end
         if type(frame) == "table" and type(frame.SetScale) == "function" then
             seen[frame] = true
             frames[#frames + 1] = frame
@@ -279,7 +301,7 @@ local function CollectMsufScaleFrames()
     end
 
     if type(_G.MSUF_UnitFrames) == "table" then
-        for _, frame in pairs(_G.MSUF_UnitFrames) do add(frame) end
+        for unitKey, frame in pairs(_G.MSUF_UnitFrames) do add(frame, unitKey) end
     end
     add(_G.MSUF_PlayerCastbar)
     add(_G.MSUF_TargetCastbar)
