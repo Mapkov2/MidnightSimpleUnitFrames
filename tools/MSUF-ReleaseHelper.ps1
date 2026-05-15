@@ -623,7 +623,8 @@ function Update-AutoChangelogFromRepo {
         [Parameter(Mandatory = $true)][string]$DisplayVersion,
         [AllowNull()][string]$BaseRef,
         [AllowNull()][string]$ReleaseDate,
-        [bool]$CreateMissingRelease = $true
+        [bool]$CreateMissingRelease = $true,
+        [bool]$KeepExistingAutoEntries = $false
     )
 
     if (-not (Test-Path -LiteralPath $AutoChangelogScript)) {
@@ -636,6 +637,9 @@ function Update-AutoChangelogFromRepo {
     }
     if ($CreateMissingRelease) {
         $args += "-CreateMissingRelease"
+    }
+    if ($KeepExistingAutoEntries) {
+        $args += "-KeepExistingAutoEntries"
     }
     if (-not [string]::IsNullOrWhiteSpace($BaseRef)) {
         $args += @("-BaseRef", $BaseRef)
@@ -762,6 +766,13 @@ $lastTagButton.Add_Click({
     }
 })
 $form.Controls.Add($lastTagButton)
+
+$keepAutoBox = New-Object System.Windows.Forms.CheckBox
+$keepAutoBox.Text = "Keep old auto entries"
+$keepAutoBox.Checked = $false
+$keepAutoBox.Location = New-Object System.Drawing.Point(465, 74)
+$keepAutoBox.Size = New-Object System.Drawing.Size(180, 24)
+$form.Controls.Add($keepAutoBox)
 
 $perfBox = New-TextArea "Performance (one bullet per line)" 16 108 490 90
 $bugBox = New-TextArea "Bugfixes (one bullet per line)" 526 108 490 90
@@ -892,7 +903,7 @@ $autoChangelogButton.Add_Click({
         if ($date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "Date must be YYYY-MM-DD." }
         $baseRef = $baseRefBox.Text.Trim()
 
-        Update-AutoChangelogFromRepo -DisplayVersion $display -BaseRef $baseRef -ReleaseDate $date -CreateMissingRelease $true
+        Update-AutoChangelogFromRepo -DisplayVersion $display -BaseRef $baseRef -ReleaseDate $date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked
         $section = Find-ChangelogSection -ReleaseTag $tag -DisplayVersion $display
         $mdBox.Text = $section.Markdown
         Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null

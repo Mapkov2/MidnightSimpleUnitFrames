@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.2 - 2026-05-15
+
+### Changes / Improvements
+
+<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
+- **Core Runtime, Foundation, Group Frames**: Class color background (3c023d2; Core/MSUF_BarBackgroundRuntime.lua, Core/MSUF_ColorsCore.lua, Core/MSUF_UnitframeCore.lua +2 more).
+- **Menu / Dashboard**: Some user friendly stuff (f4430da; Menu2/MSUF_Menu2_Core.lua, Menu2/MSUF_Menu2_Support.lua, Menu2/Pages/MSUF_Menu2_Advanced.lua +9 more).
+- **Unit Auras, Bars / Power Bars, Borders / Outlines**: Better combat gating for (37613f2; Auras2/MSUF_A2_Reminder.lua, Core/MSUF_Bars.lua, Core/MSUF_Borders.lua +19 more).
+<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
+
 ## 5.1 - 2026-05-15
 
 ### Highlights

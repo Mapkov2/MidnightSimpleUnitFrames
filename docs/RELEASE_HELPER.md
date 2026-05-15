@@ -76,16 +76,34 @@ Use it to set:
 
 - **Changelog title**: the exact `##` release heading to update
 - **Date**: the date used when the release section has to be created
-- **Since ref**: the previous tag or commit used as the Git range start
+- **Source ref**: the previous tag or commit used as the Git range start;
+  this is only the source for generated bullets, while **Changelog title**
+  remains the only release section written
 - **Create missing release**: inserts a new `## <version> - <date>` section
   below `# Changelog` when the selected title does not exist yet
-- **Regenerate addon changelog**: updates the in-game changelog Lua file too
+- **Keep old auto entries**: keeps existing `MSUF-AUTO-CHANGELOG` bullets and
+  merges new entries into them; leave it off to replace old generated bullets
+- **Regenerate addon changelog**: updates the in-game changelog Lua file too;
+  this is enabled by default in the standalone UI so the dashboard changelog
+  follows `CHANGELOG.md`
 - **Include tooling/docs**: includes release tooling, docs, and workflow changes
 - **Poll seconds / Debounce seconds**: controls the background watcher timing
 
 The UI provides helpers for the latest `CHANGELOG.md` section, the `VERSION`
-file, the last Git tag, a non-writing preview, one-shot updates, and a managed
-watch mode.
+file, the last Git tag, editable generated Markdown, one-shot updates, and a
+managed watch mode.
+
+Use **Generate Editor** to fill the Markdown editor from the current repository
+changes. Edit the generated bullets there, then use **Write Edited** to write
+exactly those managed auto blocks into the selected release section. Use
+**Run Once** when you want to skip manual edits and write the generated entries
+directly.
+
+For a `5.2` changelog, set **Changelog title** to `5.2`. The source ref should
+normally be the previous real Git tag, for example `v5.1`, not `v5.2`. If the
+source ref accidentally matches the target version and does not exist as a Git
+ref yet, the tool falls back to the latest existing tag and still writes only
+the `5.2` section.
 
 The auto changelog ignores `CHANGELOG.md`, the generated in-game changelog, docs,
 workflow files, and release helper/tooling changes by default, so user-facing
@@ -98,6 +116,11 @@ tools\MSUF-AutoChangelog.cmd -Watch -RegenerateAddonChangelog
 
 Add `-CreateMissingRelease -DisplayVersion "5.2" -ReleaseDate "2026-05-15"`
 when the command-line watcher should create a new release section automatically.
+By default, old managed auto entries in that section are replaced. Add
+`-KeepExistingAutoEntries` only when you want to keep and merge them.
+Managed auto blocks in other release sections are cleaned up automatically, so
+generating `5.2` does not leave stale generated `5.2` bullets under older
+sections.
 
 The release tag can be tag-friendly, for example:
 

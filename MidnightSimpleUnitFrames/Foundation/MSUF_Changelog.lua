@@ -13,42 +13,11 @@ local data = {
             date = "2026-05-15",
             sections = {
                 {
-                    title = "Performance",
-                    bullets = {
-                        "Unit Auras: Updated Aura2 event, reminder, or aura handling (working tree; MSUF_A2_Reminder.lua).",
-                        "Bars / Power Bars: Updated bar and power bar behavior (working tree; MSUF_Bars.lua).",
-                        "Borders / Outlines: Updated border and outline behavior (working tree; MSUF_Borders.lua).",
-                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_Castbars.lua).",
-                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_Castbars_LoDStub.lua).",
-                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_ColorsCore.lua).",
-                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_Portraits.lua).",
-                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_StatusIndicators.lua).",
-                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_UnitframeCore.lua).",
-                        "General: Updated addon behavior (working tree; MSUF_EM2_Movers.lua).",
-                        "Group Frames: Updated Group Frame effects, range fade, or highlight behavior (working tree; MSUF_GF_Effects.lua).",
-                        "Group Frames: Updated Group Frame behavior (working tree; MSUF_GF_Render.lua).",
-                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Core.lua).",
-                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Global.lua).",
-                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_UnitPreview.lua).",
-                        "General: Updated addon behavior (working tree; MidnightSimpleUnitFrames.lua).",
-                        "Interrupt Ready: Updated Interrupt Ready behavior (working tree; MSUF_InterruptReady.lua).",
-                        "General: Updated addon behavior (working tree; MSUF_CastbarPreviews.lua).",
-                        "General: Updated addon behavior (working tree; MidnightSimpleUnitFrames_BossCastbars.lua).",
-                    },
-                },
-                {
-                    title = "Bugfixes",
-                    bullets = {
-                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Unit.lua).",
-                        "General: Updated addon behavior (working tree; MSUF_CastbarAnchors.lua).",
-                    },
-                },
-                {
                     title = "Changes / Improvements",
                     bullets = {
                         "Core Runtime, Foundation, Group Frames: Class color background (3c023d2; Core/MSUF_BarBackgroundRuntime.lua, Core/MSUF_ColorsCore.lua, Core/MSUF_UnitframeCore.lua +2 more).",
                         "Menu / Dashboard: Some user friendly stuff (f4430da; Menu2/MSUF_Menu2_Core.lua, Menu2/MSUF_Menu2_Support.lua, Menu2/Pages/MSUF_Menu2_Advanced.lua +9 more).",
-                        "General: Updated addon behavior (working tree; MSUF_BossPreviewTextHook.lua).",
+                        "Unit Auras, Bars / Power Bars, Borders / Outlines: Better combat gating for (37613f2; Auras2/MSUF_A2_Reminder.lua, Core/MSUF_Bars.lua, Core/MSUF_Borders.lua +19 more).",
                     },
                 },
             },

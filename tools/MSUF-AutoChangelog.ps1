@@ -10,6 +10,7 @@ param(
     [switch]$RegenerateAddonChangelog,
     [switch]$IncludeTooling,
     [switch]$CreateMissingRelease,
+    [switch]$KeepExistingAutoEntries,
     [int]$PollSeconds = 2,
     [int]$DebounceSeconds = 3
 )
@@ -100,6 +101,37 @@ function Get-DefaultBaseRef {
     }
 
     return ""
+}
+
+function Test-GitRefExists {
+    param([AllowNull()][string]$Ref)
+
+    if ([string]::IsNullOrWhiteSpace($Ref)) { return $false }
+    Push-Location $RepoRoot
+    try {
+        $null = & git rev-parse --verify --quiet "$($Ref.Trim())^{commit}" 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        Pop-Location
+    }
+}
+
+function Get-EffectiveBaseRef {
+    $base = if ([string]::IsNullOrWhiteSpace($BaseRef)) { Get-DefaultBaseRef } else { $BaseRef.Trim() }
+    if ([string]::IsNullOrWhiteSpace($base)) { return "" }
+    if (Test-GitRefExists $base) { return $base }
+
+    $targetKey = Normalize-VersionKey $DisplayVersion
+    if ($targetKey -ne "" -and (Normalize-VersionKey $base) -eq $targetKey) {
+        $fallback = Get-DefaultBaseRef
+        if (-not [string]::IsNullOrWhiteSpace($fallback) -and (Test-GitRefExists $fallback)) {
+            Write-AutoLog "Since ref '$base' is the target version, not an existing Git ref. Writing only '$DisplayVersion' and using '$fallback' as commit range base."
+            $script:BaseRef = $fallback
+            return $fallback
+        }
+    }
+
+    throw "Since ref '$base' does not exist as a Git tag, branch, or commit. Use the previous release tag, the Last tag button, or clear it with All history. The changelog target is still '$DisplayVersion'."
 }
 
 function Test-IsAutoIgnoredPath {
@@ -265,7 +297,7 @@ function Add-CommitChangesToGroups {
         [Parameter(Mandatory = $true)]$Seen
     )
 
-    $base = if ([string]::IsNullOrWhiteSpace($BaseRef)) { Get-DefaultBaseRef } else { $BaseRef.Trim() }
+    $base = Get-EffectiveBaseRef
     $range = if ([string]::IsNullOrWhiteSpace($base)) { "HEAD" } else { "$base..HEAD" }
 
     Push-Location $RepoRoot
@@ -489,6 +521,87 @@ function Merge-AutoGroups {
     return $merged
 }
 
+function Convert-AutoGroupsToMarkdown {
+    param([Parameter(Mandatory = $true)]$Groups)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($title in $SectionOrder) {
+        $items = if ($Groups.Contains($title)) { $Groups[$title] } else { @() }
+        $lines.Add("### $title")
+        $lines.Add("")
+        foreach ($item in $items) {
+            if (-not [string]::IsNullOrWhiteSpace("$item")) {
+                $lines.Add("- $item")
+            }
+        }
+        $lines.Add("")
+    }
+    return (($lines.ToArray() -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
+function Convert-MarkdownToAutoGroups {
+    param([AllowNull()][string]$Markdown)
+
+    $groups = New-AutoGroupMap
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    $currentTitle = "Changes / Improvements"
+    $lastList = $groups[$currentTitle]
+
+    if ([string]::IsNullOrWhiteSpace($Markdown)) { return $groups }
+
+    foreach ($line in ([regex]::Split($Markdown, "\r?\n"))) {
+        if ($line -match '^\s*###\s+(.+?)\s*$') {
+            $mapped = Get-SectionTitleFromMarkerKey (Get-MarkerKey $Matches[1].Trim())
+            $currentTitle = if ($mapped) { $mapped } else { "Changes / Improvements" }
+            $lastList = $groups[$currentTitle]
+            continue
+        }
+
+        if ($line -match '^\s*-\s+(.+?)\s*$') {
+            Add-AutoBulletToGroup -Groups $groups -Seen $seen -Title $currentTitle -Bullet $Matches[1].Trim()
+            $lastList = $groups[$currentTitle]
+            continue
+        }
+
+        if ($lastList.Count -gt 0 -and $line -match '^\s{2,}(.+?)\s*$') {
+            $lastList[$lastList.Count - 1] = ($lastList[$lastList.Count - 1] + " " + $Matches[1].Trim()).Trim()
+            continue
+        }
+
+        $trimmed = $line.Trim()
+        if ($trimmed -ne "" -and $trimmed -notmatch '^<!--') {
+            Add-AutoBulletToGroup -Groups $groups -Seen $seen -Title $currentTitle -Bullet $trimmed
+            $lastList = $groups[$currentTitle]
+        }
+    }
+
+    return $groups
+}
+
+function Get-EditableAutoChangelogGroups {
+    $generated = Get-AutoChangelogGroups
+    if (-not $KeepExistingAutoEntries) { return $generated }
+
+    $fullPath = Resolve-RepoPath $ChangelogPath
+    if (-not (Test-Path -LiteralPath $fullPath)) { return $generated }
+
+    $content = Get-Content -LiteralPath $fullPath -Raw
+    $lines = [regex]::Split($content, "\r?\n")
+    if ($lines.Count -gt 0 -and $lines[$lines.Count - 1] -eq "") {
+        $lines = [string[]]$lines[0..($lines.Count - 2)]
+    }
+
+    try {
+        $bounds = Find-ReleaseBounds -Lines $lines -WantedVersion $DisplayVersion
+    } catch {
+        return $generated
+    }
+
+    $releaseLines = if ($bounds.End -gt $bounds.Start) { [string[]]$lines[$bounds.Start..($bounds.End - 1)] } else { @($lines[$bounds.Start]) }
+    $existing = Get-ExistingAutoBlocks -Lines $releaseLines
+    return (Merge-AutoGroups -Existing $existing -Generated $generated)
+}
+
 function Remove-AutoBlocks {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
 
@@ -511,6 +624,48 @@ function Remove-AutoBlocks {
         }
         $out.Add($line)
     }
+    return [string[]]$out.ToArray()
+}
+
+function Remove-EmptyMarkdownSections {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
+
+    $out = New-Object System.Collections.Generic.List[string]
+    $i = 0
+    while ($i -lt $Lines.Count) {
+        $line = $Lines[$i]
+        if ($line -match '^###\s+') {
+            $start = $i
+            $end = $Lines.Count
+            for ($j = $i + 1; $j -lt $Lines.Count; $j++) {
+                if ($Lines[$j] -match '^###\s+|^##\s+') {
+                    $end = $j
+                    break
+                }
+            }
+
+            $hasContent = $false
+            for ($j = $start + 1; $j -lt $end; $j++) {
+                if (-not [string]::IsNullOrWhiteSpace($Lines[$j])) {
+                    $hasContent = $true
+                    break
+                }
+            }
+
+            if ($hasContent) {
+                for ($j = $start; $j -lt $end; $j++) {
+                    $out.Add($Lines[$j])
+                }
+            }
+
+            $i = $end
+            continue
+        }
+
+        $out.Add($line)
+        $i++
+    }
+
     return [string[]]$out.ToArray()
 }
 
@@ -695,13 +850,22 @@ function Update-ChangelogAutoBlocks {
         $bounds = Find-ReleaseBounds -Lines $lines -WantedVersion $DisplayVersion
         Write-AutoLog "Created new CHANGELOG.md section for $($bounds.Version)."
     }
-    $before = if ($bounds.Start -gt 0) { [string[]]$lines[0..($bounds.Start - 1)] } else { @() }
     $releaseLines = if ($bounds.End -gt $bounds.Start) { [string[]]$lines[$bounds.Start..($bounds.End - 1)] } else { @($lines[$bounds.Start]) }
+
+    if ($KeepExistingAutoEntries) {
+        $existingGroups = Get-ExistingAutoBlocks -Lines $releaseLines
+        $mergedGroups = Merge-AutoGroups -Existing $existingGroups -Generated $Groups
+    } else {
+        $mergedGroups = $Groups
+    }
+
+    $lines = Remove-AutoBlocks -Lines $lines
+    $lines = Remove-EmptyMarkdownSections -Lines $lines
+    $bounds = Find-ReleaseBounds -Lines $lines -WantedVersion $DisplayVersion
+    $before = if ($bounds.Start -gt 0) { [string[]]$lines[0..($bounds.Start - 1)] } else { @() }
+    $cleanReleaseLines = if ($bounds.End -gt $bounds.Start) { [string[]]$lines[$bounds.Start..($bounds.End - 1)] } else { @($lines[$bounds.Start]) }
     $after = if ($bounds.End -lt $lines.Count) { [string[]]$lines[$bounds.End..($lines.Count - 1)] } else { @() }
 
-    $existingGroups = Get-ExistingAutoBlocks -Lines $releaseLines
-    $mergedGroups = Merge-AutoGroups -Existing $existingGroups -Generated $Groups
-    $cleanReleaseLines = Remove-AutoBlocks -Lines $releaseLines
     $releaseList = New-Object System.Collections.Generic.List[string]
     foreach ($line in $cleanReleaseLines) { $releaseList.Add($line) }
 
@@ -715,6 +879,7 @@ function Update-ChangelogAutoBlocks {
     foreach ($line in $compressedReleaseLines) { $releaseList.Add($line) }
 
     $updated = @($before) + [string[]]$releaseList.ToArray() + @($after)
+    $updated = Compress-BlankLines -Lines ([string[]]$updated)
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
     [System.IO.File]::WriteAllText($fullPath, (($updated -join $newline).TrimEnd() + $newline), $utf8NoBom)
     return $bounds.Version
@@ -746,6 +911,25 @@ function Invoke-AutoChangelogUpdate {
     $version = Update-ChangelogAutoBlocks -Groups $groups
     Update-AddonChangelog -Version $version
     Write-AutoLog "Updated CHANGELOG.md auto blocks for $version ($count entries)."
+}
+
+function Invoke-EditedAutoChangelogUpdate {
+    param([AllowNull()][string]$Markdown)
+
+    $groups = Convert-MarkdownToAutoGroups -Markdown $Markdown
+    $count = 0
+    foreach ($title in $SectionOrder) { $count += $groups[$title].Count }
+
+    $previousKeep = $KeepExistingAutoEntries
+    $script:KeepExistingAutoEntries = $false
+    try {
+        $version = Update-ChangelogAutoBlocks -Groups $groups
+    } finally {
+        $script:KeepExistingAutoEntries = $previousKeep
+    }
+
+    Update-AddonChangelog -Version $version
+    Write-AutoLog "Updated CHANGELOG.md auto blocks from edited text for $version ($count entries)."
 }
 
 function Get-RepoChangeSignature {
@@ -822,6 +1006,7 @@ function Set-AutoChangelogSettings {
         [AllowNull()][string]$VersionDate,
         [AllowNull()][string]$GitBaseRef,
         [bool]$CreateMissingSection,
+        [bool]$KeepExistingEntries,
         [bool]$RegenerateAddon,
         [bool]$IncludeReleaseTooling,
         [int]$PollEverySeconds,
@@ -846,6 +1031,7 @@ function Set-AutoChangelogSettings {
     }
     $script:BaseRef = if ([string]::IsNullOrWhiteSpace($GitBaseRef)) { "" } else { $GitBaseRef.Trim() }
     $script:CreateMissingRelease = [bool]$CreateMissingSection
+    $script:KeepExistingAutoEntries = [bool]$KeepExistingEntries
     $script:RegenerateAddonChangelog = [bool]$RegenerateAddon
     $script:IncludeTooling = [bool]$IncludeReleaseTooling
     $script:PollSeconds = [Math]::Max(1, $PollEverySeconds)
@@ -871,8 +1057,8 @@ function Start-AutoChangelogGui {
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "MSUF Auto Changelog"
     $form.StartPosition = "CenterScreen"
-    $form.Size = New-Object System.Drawing.Size(920, 690)
-    $form.MinimumSize = New-Object System.Drawing.Size(820, 620)
+    $form.Size = New-Object System.Drawing.Size(1040, 880)
+    $form.MinimumSize = New-Object System.Drawing.Size(960, 760)
 
     $tips = New-Object System.Windows.Forms.ToolTip
     $tips.AutoPopDelay = 12000
@@ -923,9 +1109,9 @@ function Start-AutoChangelogGui {
     $dateBox = New-AutoTextBox 695 16 100 $initialReleaseDate
     $tips.SetToolTip($dateBox, "Date for a newly created release section. Use YYYY-MM-DD or leave empty.")
 
-    New-AutoLabel "Since ref" 16 54 120 | Out-Null
+    New-AutoLabel "Source ref" 16 54 120 | Out-Null
     $baseRefBox = New-AutoTextBox 145 52 230 $initialBaseRef
-    $tips.SetToolTip($baseRefBox, "Git ref used as the start of the commit range. Usually the previous release tag.")
+    $tips.SetToolTip($baseRefBox, "Existing Git ref used as the start of the commit range. This is usually the previous release tag, not the changelog target.")
 
     $lastTagButton = New-AutoButton "Last tag" 385 49 90 28
     $tips.SetToolTip($lastTagButton, "Detect the latest reachable Git tag.")
@@ -939,7 +1125,10 @@ function Start-AutoChangelogGui {
 
     $regenBox = New-Object System.Windows.Forms.CheckBox
     $regenBox.Text = "Regenerate addon changelog"
-    $regenBox.Checked = [bool]$RegenerateAddonChangelog
+    $regenBox.Checked = $true
+    if ($PSBoundParameters.ContainsKey("RegenerateAddonChangelog")) {
+        $regenBox.Checked = [bool]$RegenerateAddonChangelog
+    }
     $regenBox.Location = New-Object System.Drawing.Point(525, 86)
     $regenBox.Size = New-Object System.Drawing.Size(210, 24)
     $tips.SetToolTip($regenBox, "Also update MidnightSimpleUnitFrames\\Foundation\\MSUF_Changelog.lua.")
@@ -982,27 +1171,47 @@ function Start-AutoChangelogGui {
     $tips.SetToolTip($createMissingBox, "If the selected changelog title does not exist, create it at the top of CHANGELOG.md.")
     $form.Controls.Add($createMissingBox)
 
+    $keepExistingBox = New-Object System.Windows.Forms.CheckBox
+    $keepExistingBox.Text = "Keep old auto entries"
+    $keepExistingBox.Checked = [bool]$KeepExistingAutoEntries
+    $keepExistingBox.Location = New-Object System.Drawing.Point(720, 122)
+    $keepExistingBox.Size = New-Object System.Drawing.Size(175, 24)
+    $tips.SetToolTip($keepExistingBox, "Merge existing MSUF-AUTO-CHANGELOG entries with the new generated entries. Leave off to replace old auto entries.")
+    $form.Controls.Add($keepExistingBox)
+
     $summaryBox = New-Object System.Windows.Forms.TextBox
     $summaryBox.Location = New-Object System.Drawing.Point(16, 164)
-    $summaryBox.Size = New-Object System.Drawing.Size(880, 88)
+    $summaryBox.Size = New-Object System.Drawing.Size(1000, 88)
     $summaryBox.Multiline = $true
     $summaryBox.ReadOnly = $true
     $summaryBox.ScrollBars = "Vertical"
-    $summaryBox.Text = "Run once writes managed auto blocks into the selected CHANGELOG.md release section. If enabled, a missing release section is created first. Watch keeps doing the same after Git changes settle. Preview shows generated entries without writing."
+    $summaryBox.Text = "Changelog title is the only release section written, for example 5.2. Source ref is only the commit range base and should usually be the previous tag. Generate Editor fills editable Markdown; Write Edited writes exactly those managed auto blocks."
     $form.Controls.Add($summaryBox)
 
-    $previewButton = New-AutoButton "Preview Entries" 16 270 130 32
-    $runButton = New-AutoButton "Run Once" 156 270 110 32
-    $startWatchButton = New-AutoButton "Start Watch" 276 270 115 32
-    $stopWatchButton = New-AutoButton "Stop Watch" 401 270 110 32
+    $previewButton = New-AutoButton "Generate Editor" 16 270 135 32
+    $writeEditedButton = New-AutoButton "Write Edited" 161 270 115 32
+    $runButton = New-AutoButton "Run Once" 286 270 95 32
+    $startWatchButton = New-AutoButton "Start Watch" 391 270 105 32
+    $stopWatchButton = New-AutoButton "Stop Watch" 506 270 105 32
     $stopWatchButton.Enabled = $false
-    $statusButton = New-AutoButton "Git Status" 521 270 100 32
-    $openButton = New-AutoButton "Open CHANGELOG.md" 631 270 150 32
-    $closeButton = New-AutoButton "Close" 791 270 105 32
+    $statusButton = New-AutoButton "Git Status" 621 270 90 32
+    $openButton = New-AutoButton "Open CHANGELOG.md" 721 270 145 32
+    $closeButton = New-AutoButton "Close" 876 270 120 32
+
+    New-AutoLabel "Editable auto changelog Markdown" 16 318 240 | Out-Null
+    $editBox = New-Object System.Windows.Forms.TextBox
+    $editBox.Location = New-Object System.Drawing.Point(16, 340)
+    $editBox.Size = New-Object System.Drawing.Size(1000, 190)
+    $editBox.Multiline = $true
+    $editBox.ScrollBars = "Vertical"
+    $editBox.AcceptsReturn = $true
+    $editBox.AcceptsTab = $true
+    $tips.SetToolTip($editBox, "Generate entries here, edit the bullets, then use Write Edited to write these auto blocks.")
+    $form.Controls.Add($editBox)
 
     $script:AutoLogBox = New-Object System.Windows.Forms.TextBox
-    $script:AutoLogBox.Location = New-Object System.Drawing.Point(16, 318)
-    $script:AutoLogBox.Size = New-Object System.Drawing.Size(880, 300)
+    $script:AutoLogBox.Location = New-Object System.Drawing.Point(16, 560)
+    $script:AutoLogBox.Size = New-Object System.Drawing.Size(1000, 250)
     $script:AutoLogBox.Multiline = $true
     $script:AutoLogBox.ScrollBars = "Vertical"
     $script:AutoLogBox.ReadOnly = $true
@@ -1015,6 +1224,7 @@ function Start-AutoChangelogGui {
             -VersionDate $dateBox.Text `
             -GitBaseRef $baseRefBox.Text `
             -CreateMissingSection $createMissingBox.Checked `
+            -KeepExistingEntries $keepExistingBox.Checked `
             -RegenerateAddon $regenBox.Checked `
             -IncludeReleaseTooling $toolingBox.Checked `
             -PollEverySeconds ([int]$pollBox.Value) `
@@ -1027,6 +1237,18 @@ function Start-AutoChangelogGui {
         $stopWatchButton.Enabled = $Watching
         $runButton.Enabled = -not $Watching
         $previewButton.Enabled = -not $Watching
+        $writeEditedButton.Enabled = -not $Watching
+    }
+
+    function Resolve-SourceRefFromUi {
+        $entered = $baseRefBox.Text.Trim()
+        $effective = Get-EffectiveBaseRef
+        if (-not [string]::IsNullOrWhiteSpace($entered) -and $effective -ne $entered) {
+            $baseRefBox.Text = $effective
+            $script:BaseRef = $effective
+            Write-AutoLog ("Source ref updated to existing Git ref: " + $effective)
+        }
+        return $effective
     }
 
     $timer = New-Object System.Windows.Forms.Timer
@@ -1059,7 +1281,7 @@ function Start-AutoChangelogGui {
     $lastTagButton.Add_Click({
         try {
             $baseRefBox.Text = Get-DefaultBaseRef
-            Write-AutoLog ("Since ref set to: " + $baseRefBox.Text)
+            Write-AutoLog ("Source ref set to: " + $baseRefBox.Text)
         } catch {
             Write-AutoLog ("ERROR: " + $_.Exception.Message)
         }
@@ -1067,15 +1289,17 @@ function Start-AutoChangelogGui {
 
     $clearBaseButton.Add_Click({
         $baseRefBox.Text = ""
-        Write-AutoLog "Since ref cleared; commit range will use full history."
+        Write-AutoLog "Source ref cleared; commit range will use full history."
     })
 
     $previewButton.Add_Click({
         try {
             Set-SettingsFromUi
-            $groups = Get-AutoChangelogGroups
+            Resolve-SourceRefFromUi | Out-Null
+            $groups = Get-EditableAutoChangelogGroups
+            $editBox.Text = Convert-AutoGroupsToMarkdown -Groups $groups
             $count = 0
-            Write-AutoLog "----- Preview generated entries -----"
+            Write-AutoLog "----- Editable generated entries -----"
             foreach ($title in $SectionOrder) {
                 if ($groups[$title].Count -eq 0) { continue }
                 Write-AutoLog ("### " + $title)
@@ -1085,13 +1309,27 @@ function Start-AutoChangelogGui {
                 }
             }
             if ($count -eq 0) {
-                Write-AutoLog "No entries generated for the selected settings."
+                Write-AutoLog "No entries generated for the selected settings; you can still type entries into the editor."
             } else {
-                Write-AutoLog ("Preview complete: " + $count + " entries.")
+                Write-AutoLog ("Editor loaded: " + $count + " entries.")
             }
         } catch {
             Write-AutoLog ("ERROR: " + $_.Exception.Message)
             [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Auto Changelog", "OK", "Error") | Out-Null
+        }
+    })
+
+    $writeEditedButton.Add_Click({
+        if ($script:AutoGuiBusy) { return }
+        $script:AutoGuiBusy = $true
+        try {
+            Set-SettingsFromUi
+            Invoke-EditedAutoChangelogUpdate -Markdown $editBox.Text
+        } catch {
+            Write-AutoLog ("ERROR: " + $_.Exception.Message)
+            [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Auto Changelog", "OK", "Error") | Out-Null
+        } finally {
+            $script:AutoGuiBusy = $false
         }
     })
 
@@ -1100,6 +1338,7 @@ function Start-AutoChangelogGui {
         $script:AutoGuiBusy = $true
         try {
             Set-SettingsFromUi
+            Resolve-SourceRefFromUi | Out-Null
             Invoke-AutoChangelogUpdate
         } catch {
             Write-AutoLog ("ERROR: " + $_.Exception.Message)
@@ -1113,6 +1352,7 @@ function Start-AutoChangelogGui {
         if ($script:AutoGuiBusy) { return }
         try {
             Set-SettingsFromUi
+            Resolve-SourceRefFromUi | Out-Null
             $timer.Interval = [Math]::Max(1, [int]$pollBox.Value) * 1000
             $signature = Get-RepoChangeSignature
             if ($signature -ne $script:AutoGuiPendingSignature) {
@@ -1141,14 +1381,15 @@ function Start-AutoChangelogGui {
     $startWatchButton.Add_Click({
         try {
             Set-SettingsFromUi
+            $effectiveBaseRef = Resolve-SourceRefFromUi
             $script:AutoGuiPendingSignature = $null
             $script:AutoGuiPendingSince = Get-Date
             $script:AutoGuiLastWrittenSignature = $null
             $timer.Interval = [Math]::Max(1, [int]$pollBox.Value) * 1000
             $timer.Start()
             Set-WatchControls -Watching $true
-            $shownBaseRef = if ([string]::IsNullOrWhiteSpace($script:BaseRef)) { "full history" } else { $script:BaseRef }
-            Write-AutoLog ("Watching repository changes for " + $script:DisplayVersion + ". Base ref: " + $shownBaseRef)
+            $shownBaseRef = if ([string]::IsNullOrWhiteSpace($effectiveBaseRef)) { "full history" } else { $effectiveBaseRef }
+            Write-AutoLog ("Watching repository changes for changelog section " + $script:DisplayVersion + ". Source ref: " + $shownBaseRef)
         } catch {
             Write-AutoLog ("ERROR: " + $_.Exception.Message)
             [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Auto Changelog", "OK", "Error") | Out-Null
@@ -1222,7 +1463,10 @@ if (-not $Watch) {
 }
 
 Write-AutoLog "Watching repository changes. Press Ctrl+C to stop."
-Write-AutoLog "Base ref: $(if ([string]::IsNullOrWhiteSpace($BaseRef)) { Get-DefaultBaseRef } else { $BaseRef })"
+$startupBaseRef = Get-EffectiveBaseRef
+if (-not [string]::IsNullOrWhiteSpace($startupBaseRef)) { $script:BaseRef = $startupBaseRef }
+Write-AutoLog "Target changelog section: $DisplayVersion"
+Write-AutoLog "Source ref: $(if ([string]::IsNullOrWhiteSpace($startupBaseRef)) { "full history" } else { $startupBaseRef })"
 
 $pendingSignature = $null
 $pendingSince = Get-Date
