@@ -3096,6 +3096,17 @@ function _G.MSUF_MarkExternalAnchorForReanchor()
     _G.MSUF_CDMBridgeDirty = true
 end
 
+function _G.MSUF_OnCDMExtensionChanged()
+    _G.MSUF_CDMBridgeDirty = true
+    if _G.MSUF_CDMBridgeFlushScheduled then return end
+    _G.MSUF_CDMBridgeFlushScheduled = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, _G.MSUF_FlushCDMBridgeRefresh)
+    else
+        _G.MSUF_FlushCDMBridgeRefresh()
+    end
+end
+
 function _G.MSUF_HookExternalAnchorForReanchor(frame)
     return false
 end
