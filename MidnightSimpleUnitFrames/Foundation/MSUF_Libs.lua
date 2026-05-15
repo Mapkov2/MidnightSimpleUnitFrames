@@ -1234,6 +1234,7 @@ local function TryInitLSM()
 end
 
 local _MSUF_StatusbarMediaRefreshPending = false
+local _MSUF_StatusbarMediaRefreshFrame
 
 local function RunStatusbarMediaRefresh()
     _MSUF_StatusbarMediaRefreshPending = false
@@ -1269,13 +1270,57 @@ local function RunStatusbarMediaRefresh()
     end
 end
 
+local function IsCombatLocked()
+    return (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) and true or false
+end
+
+local function EnsureStatusbarMediaRefreshFrame()
+    if _MSUF_StatusbarMediaRefreshFrame or type(_G.CreateFrame) ~= "function" then
+        return _MSUF_StatusbarMediaRefreshFrame
+    end
+    local frame = _G.CreateFrame("Frame")
+    frame:SetScript("OnEvent", function(self, event)
+        if event ~= "PLAYER_REGEN_ENABLED" then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        if _MSUF_StatusbarMediaRefreshPending then
+            if IsCombatLocked() then
+                self:RegisterEvent("PLAYER_REGEN_ENABLED")
+            else
+                RunStatusbarMediaRefresh()
+            end
+        end
+    end)
+    _MSUF_StatusbarMediaRefreshFrame = frame
+    return frame
+end
+
+local function FlushStatusbarMediaRefresh()
+    if IsCombatLocked() then
+        local frame = EnsureStatusbarMediaRefreshFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+    end
+    RunStatusbarMediaRefresh()
+end
+
 local function ScheduleStatusbarMediaRefresh()
     if _MSUF_StatusbarMediaRefreshPending then return end
     _MSUF_StatusbarMediaRefreshPending = true
-    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        _G.C_Timer.After(0, RunStatusbarMediaRefresh)
+    if IsCombatLocked() then
+        local frame = EnsureStatusbarMediaRefreshFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+    end
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("LSM_STATUSBAR_MEDIA_REFRESH", FlushStatusbarMediaRefresh)
+    elseif _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, FlushStatusbarMediaRefresh)
     else
-        RunStatusbarMediaRefresh()
+        FlushStatusbarMediaRefresh()
     end
 end
 

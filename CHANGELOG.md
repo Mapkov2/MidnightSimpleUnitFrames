@@ -8,30 +8,53 @@
   per player class/race and refreshed on login.
 - **Dispel / purge aura filtering**: Incremental `UNIT_AURA` updates now skip queue work when the
   changed aura data cannot affect the active friendly-dispel or purge outline state.
+- **Aura2 incremental updates**: Empty `UNIT_AURA` payloads are ignored early, while valid
+  incremental aura deltas are processed through the cached aura update path instead of forcing a full
+  invalidation scan during coalesced update bursts.
 - **Group Frame cache build**: Blizzard aura type flags are resolved in one pass and stored in the
   per-frame cache, avoiding repeated renderer/type checks during frame cache rebuilds.
 - **Group Frame highlight cache**: Highlight border values and colors are pre-resolved from group and
   general settings during cache build instead of re-running fallback lookups in hot paths.
 - **Group Frame status text cache**: AFK, DND, dead, and ghost visibility flags are now cached per
   frame and reused by status text updates.
+- **Group Frame range fade refresh**: Range fade resyncs are now queued through one delayed refresh
+  for relevant spell, talent, spec, trait, world-entry, and combat-state events instead of running
+  extra out-of-combat polling work.
+- **Power text renderer**: Power text now reads and formats only the values required by the selected
+  display mode. Raw/component diff guards also include mode, separator, and split settings to avoid
+  stale skips after option changes.
+- **Health percent text**: HP percent text clearing now happens only when needed and uses the
+  precomputed text-spec requirement instead of repeatedly resolving the percent mode in hot paths.
+- **Interrupt Ready colors**: Ready, cooldown, and outline colors now reuse cached `ColorMixin`
+  objects per configured RGBA value instead of allocating new color objects during refreshes.
 - **Aura2 reminders**: Reminder scans now ignore disabled or irrelevant provider classes before aura
   lookup work, and prefer cached player aura data before falling back to direct API scans.
 - **Hover highlight hide hook**: Unitframe highlight cleanup avoids redundant `Hide()` calls when the
   highlight is already hidden.
 
 ### Bugfixes
+- Fixed friendly dispel / purge capability detection using the correct class and race tokens, so aura
+  outline event gating no longer misdetects player capabilities.
+- Fixed profile exports falling back to raw Lua table strings when a dirty runtime profile contains
+  non-serializable transient values. Normal successful exports keep the existing `MSUF3:` format.
 - Fixed Clique / Blizzard click-casting registration for Group Frames. Frames are registered after
   tooltip `OnEnter` / `OnLeave` scripts are installed so Clique can wrap the final handlers.
 - Fixed preview Group Frames being added to the click-casting registry.
 - Fixed detached power bar outline mode. Detached power bars now use a dedicated outline path and no
   longer depend on the normal embedded power bar border logic.
+- Fixed Group Frame highlight and outline resolution for the newer aggro/dispel outline mode settings,
+  including global settings and per-group overrides.
+- Fixed Group Frame aura preview fallback settings for aggro and target highlight indicators so the
+  preview matches runtime behavior more closely.
+- Fixed Global Bars live apply for Group Frames by rebuilding the frame cache before refreshing
+  borders and highlight state.
 - Fixed the dashboard MSUF UI scale Apply button so the scale is applied live immediately.
 - Fixed global MSUF scale collection so Group Frames are only included when their own scale mode is
   `manual` or `auto`.
 
 ### Changes / Improvements
 - Dashboard Wago Profiles now shows the bundled changelog from the previous release to the current
-  build in a readable in-game release notes panel, including beta builds.
+  build in a readable, collapsible in-game release notes panel, including beta builds.
 
 ### Release / Tooling
 - CurseForge publishing now uses `BigWigsMods/packager` directly from the release workflow.
