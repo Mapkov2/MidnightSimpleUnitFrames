@@ -318,6 +318,84 @@ local function _ApplyUFBarBorderTint(self, showTint, r, g, b)
     end
 end
 
+local function MSUF_ReadDetachedPowerBarBorder(self)
+    local unitKey = self and (self.msufConfigKey or self.unit)
+    local readEnabled = _G.MSUF_ReadUnitPowerBarBorderEnabled
+    local readSize = _G.MSUF_ReadUnitPowerBarBorderThickness
+    local barsDB = MSUF_DB and MSUF_DB.bars
+
+    local enabled
+    if type(readEnabled) == "function" then
+        enabled = readEnabled(unitKey)
+    else
+        enabled = barsDB and (barsDB.powerBarBorderEnabled == true) or false
+    end
+
+    local thickness
+    if type(readSize) == "function" then
+        thickness = readSize(unitKey)
+    else
+        thickness = barsDB and tonumber(barsDB.powerBarBorderThickness or barsDB.powerBarBorderSize) or 1
+    end
+    local detachedOverride = barsDB and barsDB.detachedPowerBarOutline
+    if detachedOverride ~= nil then
+        local override = tonumber(detachedOverride)
+        if override ~= nil then thickness = override end
+    end
+    thickness = tonumber(thickness) or 1
+    if thickness < 0 then thickness = 0 elseif thickness > 6 then thickness = 6 end
+    return enabled == true, thickness
+end
+
+local function MSUF_ApplyDetachedPowerBarOutline(self)
+    local pb = self and self.targetPowerBar
+    local outline = self and self._msufDetachedPBOutline
+    if not (self and pb and self._msufPowerBarDetached and pb.IsShown and pb:IsShown()) then
+        if outline then outline:Hide() end
+        return
+    end
+
+    local enabled, thickness = MSUF_ReadDetachedPowerBarBorder(self)
+    if not enabled or thickness <= 0 then
+        if outline then outline:Hide() end
+        return
+    end
+
+    if not outline then
+        local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
+        outline = F.CreateFrame("Frame", nil, pb, template)
+        outline:EnableMouse(false)
+        self._msufDetachedPBOutline = outline
+        outline._msufLastEdgeSize = -1
+        outline._msufLastFrameLevel = -1
+    end
+
+    local frameLevel = (pb.GetFrameLevel and pb:GetFrameLevel() or 0) + 2
+    if outline._msufLastFrameLevel ~= frameLevel and outline.SetFrameLevel then
+        outline:SetFrameLevel(frameLevel)
+        outline._msufLastFrameLevel = frameLevel
+    end
+
+    local snap = _G.MSUF_Snap
+    local edge = (type(snap) == "function") and snap(outline, thickness) or thickness
+    if outline._msufLastEdgeSize ~= edge then
+        outline:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
+        outline:SetBackdropBorderColor(0, 0, 0, 1)
+        outline._msufLastEdgeSize = edge
+        outline._msufDetachedPBStamp = nil
+    end
+
+    local stamp = tostring(edge) .. ":" .. tostring(frameLevel)
+    if outline._msufDetachedPBStamp ~= stamp then
+        outline:ClearAllPoints()
+        outline:SetPoint("TOPLEFT", pb, "TOPLEFT", -edge, edge)
+        outline:SetPoint("BOTTOMRIGHT", pb, "BOTTOMRIGHT", edge, -edge)
+        outline._msufDetachedPBStamp = stamp
+    end
+    outline:Show()
+end
+_G.MSUF_ApplyDetachedPowerBarOutline = MSUF_ApplyDetachedPowerBarOutline
+
 
 -- Sub-function: apply the normal black bar outline.
 local function MSUF_ApplyBarOutline(self, thickness, o)
@@ -328,6 +406,7 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
         self._msufBarOutlineThickness = 0
         self._msufBarOutlineEdgeSize = 0
         self._msufBarOutlineBottomIsPower = false
+        MSUF_ApplyDetachedPowerBarOutline(self)
         return
     end
     if not o then
@@ -384,39 +463,7 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
         f:SetBackdropBorderColor(0, 0, 0, 1)
     end
 
-    -- Detached power bar: apply its own outline frame.
-    -- Uses its own thickness setting (detachedPowerBarOutline) so the user
-    -- can match class power outline independently from the main frame outline.
-    if pb and pbDetached and pb.IsShown and pb:IsShown() then
-        local dpbO = self._msufDetachedPBOutline
-        if not dpbO then
-            local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
-            dpbO = F.CreateFrame("Frame", nil, pb, template)
-            dpbO:EnableMouse(false)
-            dpbO:SetFrameLevel((pb.GetFrameLevel and pb:GetFrameLevel() or 0) + 2)
-            self._msufDetachedPBOutline = dpbO
-            dpbO._msufLastEdgeSize = -1
-        end
-        local barsDB = MSUF_DB and MSUF_DB.bars
-        local dpbThick = (barsDB and tonumber(barsDB.detachedPowerBarOutline)) or thickness
-        if dpbThick < 0 then dpbThick = 0 elseif dpbThick > 6 then dpbThick = 6 end
-        if dpbThick <= 0 then
-            dpbO:Hide()
-        else
-            local dpbEdge = (type(snap) == "function") and snap(dpbO, dpbThick) or dpbThick
-            if dpbO._msufLastEdgeSize ~= dpbEdge then
-                dpbO:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = dpbEdge })
-                dpbO:SetBackdropBorderColor(0, 0, 0, 1)
-                dpbO._msufLastEdgeSize = dpbEdge
-            end
-            dpbO:ClearAllPoints()
-            dpbO:SetPoint("TOPLEFT", pb, "TOPLEFT", -dpbEdge, dpbEdge)
-            dpbO:SetPoint("BOTTOMRIGHT", pb, "BOTTOMRIGHT", dpbEdge, -dpbEdge)
-            dpbO:Show()
-        end
-    elseif self._msufDetachedPBOutline then
-        self._msufDetachedPBOutline:Hide()
-    end
+    MSUF_ApplyDetachedPowerBarOutline(self)
 end
 
 -- Sub-function: create/update highlight overlay frame for aggro/dispel/purge.
@@ -1148,23 +1195,91 @@ do
         end
     end
 
+    local function AuraDataMayAffectFriendlyDispel(aura)
+        if type(aura) ~= "table" then return true end
+
+        local dn = aura.dispelName
+        if issecretvalue and issecretvalue(dn) then return true end
+        if type(dn) == "string" then
+            return dn ~= "" and dn ~= "None"
+        end
+
+        local harmful = aura.isHarmful
+        if issecretvalue and issecretvalue(harmful) then return true end
+        if harmful == true then return true end
+        if harmful == false then return false end
+
+        return true
+    end
+
+    local function UpdateInfoMayAffectFriendlyDispel(unit, updateInfo)
+        if type(updateInfo) ~= "table" or updateInfo.isFullUpdate then return true end
+
+        local added = updateInfo.addedAuras
+        if added then
+            for i = 1, #added do
+                if AuraDataMayAffectFriendlyDispel(added[i]) then return true end
+            end
+        end
+
+        local updated = updateInfo.updatedAuraInstanceIDs
+        if updated and #updated > 0 then return true end
+
+        local removed = updateInfo.removedAuraInstanceIDs
+        if removed and #removed > 0 then
+            local uf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit]
+            return uf and (uf._msufDispelOutlineOn or uf._msufDispelAuraID ~= nil) or false
+        end
+
+        return false
+    end
+
+    local function AuraDataMayAffectPurge(aura)
+        if type(aura) ~= "table" then return true end
+
+        local helpful = aura.isHelpful
+        if issecretvalue and issecretvalue(helpful) then return true end
+        if helpful == true then return true end
+        if helpful == false then return false end
+
+        local harmful = aura.isHarmful
+        if issecretvalue and issecretvalue(harmful) then return true end
+        if harmful == true then return false end
+
+        return true
+    end
+
+    local function UpdateInfoMayAffectPurge(updateInfo)
+        if type(updateInfo) ~= "table" or updateInfo.isFullUpdate then return true end
+
+        local added = updateInfo.addedAuras
+        if added then
+            for i = 1, #added do
+                if AuraDataMayAffectPurge(added[i]) then return true end
+            end
+        end
+
+        local removed = updateInfo.removedAuraInstanceIDs
+        if removed and #removed > 0 then return true end
+
+        local updated = updateInfo.updatedAuraInstanceIDs
+        if updated and #updated > 0 then return true end
+
+        return false
+    end
+
     f:SetScript("OnEvent", function(_, event, unit, updateInfo)
         if event == "UNIT_AURA" then
             if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
             if not _dispelAuraWant or _dispelAuraQueued[unit] then return end
-            local relevant = false
+            local shouldQueue = false
             if _friendlyDispelAuraWant and UnitCanAssist and UnitCanAssist("player", unit) then
-                relevant = true
-            elseif _purgeAuraWant and unit ~= "player" and UnitCanAttack and UnitCanAttack("player", unit) then
-                relevant = true
+                shouldQueue = UpdateInfoMayAffectFriendlyDispel(unit, updateInfo)
             end
-            if not relevant then return end
-            if type(updateInfo) == "table" and not updateInfo.isFullUpdate then
-                local a = updateInfo.addedAuras
-                local r = updateInfo.removedAuraInstanceIDs
-                local u = updateInfo.updatedAuraInstanceIDs
-                if (not a or #a == 0) and (not r or #r == 0) and (not u or #u == 0) then return end
+            if not shouldQueue and _purgeAuraWant and unit ~= "player" and UnitCanAttack and UnitCanAttack("player", unit) then
+                shouldQueue = UpdateInfoMayAffectPurge(updateInfo)
             end
+            if not shouldQueue then return end
             QueueDispelAuraUnit(unit)
             return
         end

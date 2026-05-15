@@ -626,9 +626,16 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
     local size = (type(readSize) == "function") and readSize(unitKey) or (bdb and tonumber(bdb.powerBarBorderThickness or bdb.powerBarBorderSize) or 1)
     if type(size) ~= 'number' then size = 1 end
     if size < 0 then size = 0 elseif size > 10 then size = 10 end
-    -- Detached power bars use the outline system in MSUF_Borders so they can
-    -- share the detached bar outline controls.
     local detached = parentUF and parentUF._msufPowerBarDetached
+    if detached then
+        local border = bar._msufPowerBorder
+        if border and border.Hide then border:Hide() end
+        local applyDetached = _G.MSUF_ApplyDetachedPowerBarOutline
+        if type(applyDetached) == "function" then
+            applyDetached(parentUF)
+        end
+        return
+    end
     local border = bar._msufPowerBorder
     if not border then
         local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
@@ -640,8 +647,8 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
     local frameLevel = (bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 2
     local snap = _G.MSUF_Snap
     local edge = (type(snap) == "function") and snap(border, size) or size
-    local stamp = (enabled and 1 or 0) .. ":" .. (detached and 1 or 0) .. ":" .. (barShown and 1 or 0) .. ":" .. edge .. ":" .. frameLevel
-    if not enabled or detached or not barShown or edge <= 0 then
+    local stamp = (enabled and 1 or 0) .. ":" .. (barShown and 1 or 0) .. ":" .. edge .. ":" .. frameLevel
+    if not enabled or not barShown or edge <= 0 then
         if border._msufPowerBorderStamp ~= stamp or (border.IsShown and border:IsShown()) then
             if border.Hide then border:Hide() end
             border._msufPowerBorderStamp = stamp
