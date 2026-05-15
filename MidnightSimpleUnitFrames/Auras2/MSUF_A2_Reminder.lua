@@ -245,13 +245,22 @@ local function _ScanPlayerAurasCached(threshold, reminders)
     local thr = threshold
     local lookup = _spellToProvider
     for _, data in next, s.all do
-        local sid = data._msufA2_sid
-        if not sid or sid == 0 then sid = _DecodeSpellId(data) end
-        if sid and sid ~= 0 then
-            local idx = lookup[sid]
-            if idx and _ProviderWanted(idx, reminders) then
-                _AddProviderAura(idx, data, thr)
+        local idx = data._msufA2_remProvider
+        if idx == nil then
+            local sid = data._msufA2_sid
+            if sid == nil then
+                sid = _DecodeSpellId(data)
+                data._msufA2_sid = sid or 0
             end
+            if sid and sid ~= 0 then
+                idx = lookup[sid] or false
+            else
+                idx = false
+            end
+            data._msufA2_remProvider = idx
+        end
+        if idx and _ProviderWanted(idx, reminders) then
+            _AddProviderAura(idx, data, thr)
         end
     end
     return true

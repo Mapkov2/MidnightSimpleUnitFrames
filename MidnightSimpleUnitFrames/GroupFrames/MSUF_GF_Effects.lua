@@ -1261,7 +1261,8 @@ local function _GF_GetFrameAlpha(kind, conf)
 end
 
 local function _GF_ApplyFrameAlpha(f, kind, conf)
-    local target = (f and f.barGroup) or f
+    local inCombat = InCombatLockdown and InCombatLockdown()
+    local target = (not inCombat and f and f.barGroup) or f
     if target and target.SetAlpha then
         local c = f._c
         local a = c and c.frameAlpha
@@ -1328,7 +1329,8 @@ do
         if (c and not c.rfEn) or (conf and conf.rangeFadeEnabled == false) then
             f._msufGFRangeFadeUnit = nil
             _ClearHealthRangeFade(f, kind)
-            local target = (f and f.barGroup) or f
+            local inCombat = InCombatLockdown and InCombatLockdown()
+            local target = (not inCombat and f and f.barGroup) or f
             if target and target.SetAlpha then target:SetAlpha(frameAlpha) end
             return
         end
@@ -1341,7 +1343,8 @@ do
             if not inGroup and not inRaid then
                 f._msufGFRangeFadeUnit = nil
                 _ClearHealthRangeFade(f, kind)
-                local target = (f and f.barGroup) or f
+                local inCombat = InCombatLockdown and InCombatLockdown()
+                local target = (not inCombat and f and f.barGroup) or f
                 if target and target.SetAlpha then target:SetAlpha(frameAlpha) end
                 return
             end
@@ -1355,7 +1358,8 @@ do
                 _ApplyHealthRangeFade(f, kind, nil, offA, offA)
             else
                 _ClearHealthRangeFade(f, kind)
-                local target = (f and f.barGroup) or f
+                local inCombat = InCombatLockdown and InCombatLockdown()
+                local target = (not inCombat and f and f.barGroup) or f
                 if target and target.SetAlpha then target:SetAlpha(frameAlpha * offA) end
             end
             return
@@ -1369,7 +1373,8 @@ do
             if hpMode then
                 _ApplyHealthRangeFade(f, kind, inRange, fadeAlpha)
             else
-                local target = (f and f.barGroup) or f
+                local inCombat = InCombatLockdown and InCombatLockdown()
+                local target = (not inCombat and f and f.barGroup) or f
                 if target and target.SetAlphaFromBoolean then
                     target:SetAlphaFromBoolean(inRange, frameAlpha, frameAlpha * fadeAlpha)
                 elseif target and target.SetAlpha then
@@ -1391,7 +1396,6 @@ function GF.RefreshRangeFade()
         for i = 1, #list do
             local f = list[i]
             if f then
-                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
                 local unit = f.unit
                 if unit and UnitExists(unit) then
                     ApplyRangeFade(f, unit)
@@ -1407,7 +1411,6 @@ function GF.RefreshRangeFade()
     else
         for f in pairs(frames) do
             if f then
-                if GF.BuildFrameCache then GF.BuildFrameCache(f) end
                 local unit = f.unit
                 if unit and UnitExists(unit) then
                     ApplyRangeFade(f, unit)
@@ -2858,28 +2861,62 @@ local function UpdateStatusText(f, unit, forceAway)
     if connected == false and showDead and deadTextEnabled then
         newState = 1
     else
-        -- Secret-safe (12.0): UnitIsDeadOrGhost may return secret booleans for
-        -- non-self units. Guard via issecretvalue; treat secret as "alive" so
-        -- we fall through to AFK/DND check.
-        local dog = UnitIsDeadOrGhost(unit)
-        if issecretvalue and issecretvalue(dog) then dog = false end
-        if dog then
-            local ghost = UnitIsGhost and UnitIsGhost(unit)
-            if issecretvalue and ghost and issecretvalue(ghost) then ghost = false end
-            if ghost then
-                if showGhost and ghostTextEnabled then
-                    newState = 3
-                elseif not showGhost and showDead and deadTextEnabled then
-                    newState = 2
-                end
-            elseif showDead and deadTextEnabled then
+        -- Secret-safe (12.0): UnitIsDeadOrGhost can return secret booleans for
+        -- non-self units. Prefer the more specific APIs and use HP==0 as a
+        -- final non-secret fallback so dead group members do not look alive
+        -- after both players are dead and range data starts updating again.
+        local ghost = false
+        if UnitIsGhost then
+            local g = UnitIsGhost(unit)
+            if not (issecretvalue and issecretvalue(g)) and g then ghost = true end
+        end
+
+        local isDead = false
+        local unitIsDead = _G.UnitIsDead
+        if unitIsDead then
+            local d = unitIsDead(unit)
+            if not (issecretvalue and issecretvalue(d)) and d then isDead = true end
+        end
+        if not isDead and UnitIsDeadOrGhost then
+            local dog = UnitIsDeadOrGhost(unit)
+            if not (issecretvalue and issecretvalue(dog)) and dog then isDead = true end
+        end
+        if not isDead and UnitHealth then
+            local hp = UnitHealth(unit)
+            if not (issecretvalue and issecretvalue(hp)) and hp == 0 then isDead = true end
+        end
+
+        if ghost then
+            if showGhost and ghostTextEnabled then
+                newState = 3
+            elseif not showGhost and showDead and deadTextEnabled then
                 newState = 2
             end
+        elseif isDead and showDead and deadTextEnabled then
+            newState = 2
         else
             if awayTextEnabled and (showAFK or showDND) then
                 local getAway = _G.MSUF_GetCachedAwayStatus
                 if getAway then
-                    local away = getAway(unit, showAFK, showDND, forceAway == true)
+                    local force = forceAway == true
+                    local rev = ns and ns._msufAwayRevision or 0
+                    local away
+                    if not force
+                        and f._msufGFAwayStatusUnit == unit
+                        and f._msufGFAwayStatusRev == rev
+                        and f._msufGFAwayStatusAFK == showAFK
+                        and f._msufGFAwayStatusDND == showDND
+                    then
+                        away = f._msufGFAwayStatusFlags or 0
+                    end
+                    if away == nil then
+                        away = getAway(unit, showAFK, showDND, force)
+                        f._msufGFAwayStatusUnit = unit
+                        f._msufGFAwayStatusRev = rev
+                        f._msufGFAwayStatusAFK = showAFK
+                        f._msufGFAwayStatusDND = showDND
+                        f._msufGFAwayStatusFlags = away or 0
+                    end
                     if showAFK and (away == 1 or away == 3) then
                         newState = 4
                     elseif showDND and (away == 2 or away == 3) then
@@ -2914,30 +2951,36 @@ local function UpdateStatusText(f, unit, forceAway)
 
     if newState == 0 then
         f._msufGFStatusLayoutState = nil
+        if st.SetIgnoreParentAlpha then st:SetIgnoreParentAlpha(false) end
         st:SetText("")
         st:Hide()
         _GF_RestoreHealthText(f, conf)
     elseif newState == 1 then
+        if st.SetIgnoreParentAlpha then st:SetIgnoreParentAlpha(true) end
         st:SetText("OFFLINE")
         st:SetTextColor(0.6, 0.6, 0.6, 1)
         st:Show()
         _GF_HideHealthText(f)
     elseif newState == 2 then
+        if st.SetIgnoreParentAlpha then st:SetIgnoreParentAlpha(true) end
         st:SetText("DEAD")
         st:SetTextColor(1, 1, 1, 1)
         st:Show()
         _GF_HideHealthText(f)
     elseif newState == 3 then
+        if st.SetIgnoreParentAlpha then st:SetIgnoreParentAlpha(true) end
         st:SetText("GHOST")
         st:SetTextColor(1, 1, 1, 1)
         st:Show()
         _GF_HideHealthText(f)
     elseif newState == 4 then
+        if st.SetIgnoreParentAlpha then st:SetIgnoreParentAlpha(false) end
         st:SetText("AFK")
         st:SetTextColor(1, 0.6, 0, 1)
         st:Show()
         _GF_HideHealthText(f)
     elseif newState == 5 then
+        if st.SetIgnoreParentAlpha then st:SetIgnoreParentAlpha(false) end
         st:SetText("DND")
         st:SetTextColor(1, 0.6, 0, 1)
         st:Show()
@@ -3667,6 +3710,13 @@ local function dispatchHealthLean(f, unit)
     local secretHP = iss and iss(hp)
     if not secretHP then
         if f._msufGFLastHealthValue == hp then
+            if c and c.statusTextEn and hp == 0 then
+                local state = f._msufGFStatusState or 0
+                if not (state == 1 or state == 2 or state == 3) then
+                    f._msufGFStatusDirty = true
+                    _gfMarkTextDirty(f)
+                end
+            end
             return
         end
         f._msufGFLastHealthValue = hp
@@ -4520,7 +4570,21 @@ local UNIT_DISPATCH = {
             UpdateStatusText(f, u, true)
         end
     end,
-    UNIT_IN_RANGE_UPDATE              = function(f, u, inRange) ApplyRangeFade(f, u, inRange) end,
+    UNIT_IN_RANGE_UPDATE              = function(f, u, inRange)
+        local c = f._c
+        if c and c.statusTextEn then
+            local state = f._msufGFStatusState or 0
+            if state ~= 0 then
+                UpdateStatusText(f, u)
+            elseif UnitHealth then
+                local hp = UnitHealth(u)
+                if not (issecretvalue and issecretvalue(hp)) and hp == 0 then
+                    UpdateStatusText(f, u)
+                end
+            end
+        end
+        ApplyRangeFade(f, u, inRange)
+    end,
     UNIT_AURA                         = function(f, u, updateInfo)
         dispatchAura(f, u, updateInfo)
     end,
