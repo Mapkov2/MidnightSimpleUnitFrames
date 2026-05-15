@@ -174,6 +174,28 @@ local function _MSUF_HpModeUsesPercent(mode)
         or mode == "PERCENTCURMAX"
 end
 
+local function _MSUF_HpModeUsesCurrent(mode)
+    mode = ns.Text.NormalizeHpTextMode(mode)
+    return not (mode == "NONE"
+        or mode == "PERCENT"
+        or mode == "MAX"
+        or mode == "DEFICIT"
+        or mode == "MAXPERCENT"
+        or mode == "PERCENTMAX")
+end
+
+local function _MSUF_HpModeUsesMax(mode)
+    mode = ns.Text.NormalizeHpTextMode(mode)
+    return mode == "MAX"
+        or mode == "CURMAX"
+        or mode == "MAXCUR"
+        or mode == "CURMAXPERCENT"
+        or mode == "PERCENTMAXCUR"
+        or mode == "MAXPERCENT"
+        or mode == "PERCENTMAX"
+        or mode == "PERCENTCURMAX"
+end
+
 local function _MSUF_HpModeCanSplit(mode)
     mode = ns.Text.NormalizeHpTextMode(mode)
     return mode == "CURPERCENT"
@@ -374,6 +396,32 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
 
     _MSUF_ClearHpPctField(self)
 
+    if not absorbText then
+        if hpMode == "CURRENT" and not _MSUF_IsSecret(h) then
+            if h == self._msufLastH and self._msufLastPctS == nil then return end
+            self._msufLastH = h
+            self._msufLastPctS = nil
+            ns.Text.Set(hpText, h, true)
+            return
+        elseif hpPctStr then
+            local mainText
+            if hpMode == "PERCENT" then
+                mainText = hpPctStr
+            elseif hpMode == "CURPERCENT" and not _MSUF_IsSecret(h) then
+                mainText = h .. sep .. hpPctStr
+            elseif hpMode == "PERCENTCUR" and not _MSUF_IsSecret(h) then
+                mainText = hpPctStr .. sep .. h
+            end
+            if mainText then
+                if mainText == self._msufLastH and hpPctStr == self._msufLastPctS then return end
+                self._msufLastH = mainText
+                self._msufLastPctS = hpPctStr
+                ns.Text.Set(hpText, mainText, true)
+                return
+            end
+        end
+    end
+
     if not hasPct and hpNeedsPct then
         ns.Text.Set(hpText, _MSUF_AppendAbsorb(h, absorbText, absorbStyle), true)
         return
@@ -540,6 +588,9 @@ function ns.Text.EnsureSpec(self)
     -- _ShouldSplitHP on every RenderHpMode (10-50×/s per unit). Config changes
     -- invalidate the spec via _msufTextSpec = nil, so the cached value stays correct.
     local hpNeedsPct = _MSUF_HpModeUsesPercent(hpMode)
+    local hpNeedsCurrent = _MSUF_HpModeUsesCurrent(hpMode)
+    local hpNeedsMax = _MSUF_HpModeUsesMax(hpMode)
+    local hpNeedsDeficit = (hpMode == "DEFICIT")
     local hpSplitEnabled = false
     if self.hpTextPct and _MSUF_HpModeCanSplit(hpMode) then
         local splitOn = (eff and eff.hpTextSpacerEnabled)
@@ -564,6 +615,9 @@ function ns.Text.EnsureSpec(self)
         hpSpacerConf = eff,
         hpSpacerG = g,
         hpNeedsPct = hpNeedsPct,
+        hpNeedsCurrent = hpNeedsCurrent,
+        hpNeedsMax = hpNeedsMax,
+        hpNeedsDeficit = hpNeedsDeficit,
         hpSplitEnabled = hpSplitEnabled,
         pMode = pMode,
         pSep = ns.Text._SepToken(rawPSep, rawHpSep),

@@ -3880,19 +3880,31 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
         ns.Text.RenderHpMode(self, false)
          return
     end
-    local hpStr = MSUF_NumberToTextFast(hp)
+    local spec = self._msufTextSpec
+    if not spec and ns.Text and ns.Text.EnsureSpec then
+        spec = ns.Text.EnsureSpec(self)
+    end
+    local hpNeedsCurrent = not spec or spec.hpNeedsCurrent ~= false
+    local hpNeedsMax = not spec or spec.hpNeedsMax == true
+    local hpNeedsPct = not spec or spec.hpNeedsPct == true
+    local hpStr = hpNeedsCurrent and MSUF_NumberToTextFast(hp) or nil
     -- PERF: Cache hpMax + hpMaxStr — hpMax only changes on UNIT_MAXHEALTH (~0.5/s)
     -- but UNIT_HEALTH fires 10-50×/s. Saves UnitHealthMax + NumberToTextFast per tick.
     -- _msufAbsorbTextDirty is already set on UNIT_MAXHEALTH by FrameOnEvent.
     local absorbTextDirty = self._msufAbsorbTextDirty == true
-    local hpMaxStr = self._msufCachedHpMaxStr
-    if not hpMaxStr or absorbTextDirty then
-        local hpMax = UnitHealthMax(unit)
-        hpMaxStr = MSUF_NumberToTextFast(hpMax)
-        self._msufCachedHpMaxStr = hpMaxStr
+    local hpMaxStr
+    if hpNeedsMax then
+        hpMaxStr = self._msufCachedHpMaxStr
+        if not hpMaxStr or absorbTextDirty then
+            local hpMax = UnitHealthMax(unit)
+            hpMaxStr = MSUF_NumberToTextFast(hpMax)
+            self._msufCachedHpMaxStr = hpMaxStr
+        end
+    elseif absorbTextDirty then
+        self._msufCachedHpMaxStr = nil
     end
-    local hpPct = MSUF_GetUnitHealthPercent(unit)
-    local hasPct = (type(hpPct) == "number")
+    local hpPct = hpNeedsPct and MSUF_GetUnitHealthPercent(unit) or nil
+    local hasPct = hpNeedsPct and (type(hpPct) == "number") or false
     local absorbText, absorbStyle = nil, nil
     -- PERF: Cache absorb text display flag per-frame. Invalidated when cachedConfig is cleared
     -- (config change). Most users have absorb text disabled → skip all absorb work entirely.
@@ -3945,7 +3957,7 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
         self._msufAbsorbTextDirty = false
     end
     ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, nil, absorbText, absorbStyle,
-        self._msufCachedHpMaxStr)
+        hpMaxStr)
  end
 function _G.MSUF_ApplyBossTestHpPreviewText(self, conf)
     if not self or not self.hpText then  return end
