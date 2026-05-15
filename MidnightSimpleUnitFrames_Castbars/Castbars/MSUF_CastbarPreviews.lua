@@ -1193,7 +1193,7 @@ end
 
 -- Replay deferred refresh after combat ends, if any event was dropped.
 local function _OnBossPreviewCombatEnd()
-    _SetBossPreviewEvents(true)
+    _SetBossPreviewEvents(_BossPreviewActiveConfig() ~= nil)
     if not _pendingPostCombatRefresh then return end
     _pendingPostCombatRefresh = false
     if type(_G.MSUF_RefreshBossPreview) == "function" then
@@ -1305,6 +1305,7 @@ if not _G.MSUF_BossPreviewEventDriver then
         -- allocations/min and 1234 redundant deferred refreshes/min.
         if _BossPreviewCombatLockdown() then
             _pendingPostCombatRefresh = true
+            _SetBossPreviewEvents(false)
             return
         end
 
@@ -1315,7 +1316,7 @@ if not _G.MSUF_BossPreviewEventDriver then
         _ScheduleBossPreviewRefresh()
     end
 
-    _SetBossPreviewEvents(not _BossPreviewCombatLockdown())
+    _SetBossPreviewEvents((not _BossPreviewCombatLockdown()) and _BossPreviewActiveConfig() ~= nil)
 
     -- Replay channel: fires once after combat ends, only if any event was
     -- deferred during combat. Stable callback ref.
@@ -1329,6 +1330,8 @@ if not _G.MSUF_BossPreviewApplyHooked and type(hooksecurefunc) == "function" the
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
         hooksecurefunc("MSUF_ApplyBossCastbarPositionSetting", function()
             if _BossPreviewCombatLockdown() then return end
+            EnsureDB()
+            _SetBossPreviewEvents(_BossPreviewActiveConfig() ~= nil)
             if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
@@ -1338,6 +1341,8 @@ if not _G.MSUF_BossPreviewApplyHooked and type(hooksecurefunc) == "function" the
     if type(_G.MSUF_ApplyBossCastbarsEnabled) == "function" then
         hooksecurefunc("MSUF_ApplyBossCastbarsEnabled", function()
             if _BossPreviewCombatLockdown() then return end
+            EnsureDB()
+            _SetBossPreviewEvents(_BossPreviewActiveConfig() ~= nil)
             if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
                 _G.MSUF_UpdateBossCastbarPreview()
             end

@@ -532,6 +532,7 @@ do
 
     -- Active bar count — replaces `not next(active)` hash lookups.
     local activeCount = 0
+    local activeHighFreq = 0
 
     -- Monotonic clock accumulated from engine elapsed — avoids GetTimePreciseSec in heavy path.
     local _monoClock = 0
@@ -539,8 +540,21 @@ do
     local function ManagerOnUpdate(self, elapsed)
         local active = self.active
         if activeCount <= 0 then
+            self._msufTickAccum = 0
             self:Hide()
             return
+        end
+
+        if activeHighFreq <= 0 then
+            local acc = (self._msufTickAccum or 0) + (elapsed or 0)
+            if acc < 0.02 then
+                self._msufTickAccum = acc
+                return
+            end
+            elapsed = acc
+            self._msufTickAccum = 0
+        else
+            self._msufTickAccum = 0
         end
 
         _monoClock = _monoClock + elapsed
@@ -694,9 +708,19 @@ do
             frame._msufRemaining = (rem > 0) and rem or 0
         end
 
+        local highFreq = frame.isEmpower == true
+        local wasActive = MSUF_CastbarManager.active[frame] == true
+        local wasHighFreq = frame._msufManagerHighFreq == true
+        if wasActive and wasHighFreq ~= highFreq then
+            activeHighFreq = activeHighFreq + (highFreq and 1 or -1)
+            if activeHighFreq < 0 then activeHighFreq = 0 end
+        end
+        frame._msufManagerHighFreq = highFreq or nil
+
         -- Only add to active set if not already present.
-        if not MSUF_CastbarManager.active[frame] then
+        if not wasActive then
             activeCount = activeCount + 1
+            if highFreq then activeHighFreq = activeHighFreq + 1 end
             MSUF_CastbarManager.active[frame] = true
         end
 
@@ -731,6 +755,10 @@ do
             MSUF_CastbarManager.active[frame] = nil
             activeCount = activeCount - 1
             if activeCount < 0 then activeCount = 0 end
+            if frame._msufManagerHighFreq then
+                activeHighFreq = activeHighFreq - 1
+                if activeHighFreq < 0 then activeHighFreq = 0 end
+            end
         end
 
         frame._msufNextTick = nil
@@ -742,6 +770,7 @@ do
         frame._msufRemaining = nil
         frame._msufGlowIn = nil
         frame._msufCastTimeWasEnabled = nil
+        frame._msufManagerHighFreq = nil
 
         frame._msufInUnregister = nil
 

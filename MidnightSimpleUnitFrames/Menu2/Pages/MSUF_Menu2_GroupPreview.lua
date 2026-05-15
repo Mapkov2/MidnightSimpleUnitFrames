@@ -352,6 +352,47 @@ local function GFPreviewHandleText(handle)
     return handle._key or "Group preview"
 end
 
+local GF_STATUS_PREVIEW_FALLBACK_SPECS = {
+    { value = "roleIcon", text = "Role Icon", enabled = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1 },
+    { value = "leaderIcon", text = "Leader", enabled = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
+    { value = "assistIcon", text = "Assist", enabled = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
+    { value = "raidMarker", text = "Raid Marker", enabled = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 3 },
+    { value = "readyCheckIcon", text = "Ready Check", enabled = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
+    { value = "summonIcon", text = "Summon", enabled = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
+    { value = "resurrectIcon", text = "Resurrect", enabled = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
+    { value = "phaseIcon", text = "Phase", enabled = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultLayer = 3 },
+    { value = "statusText", text = "Dead Text", enabled = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusOffsetX", y = "statusOffsetY", layer = "statusTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
+    { value = "statusGhostText", text = "Ghost Text", enabled = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", x = "statusGhostOffsetX", y = "statusGhostOffsetY", layer = "statusGhostTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
+    { value = "statusAFKText", text = "AFK / DND Text", enabled = "statusAFKText", size = "statusAFKTextSize", anchor = "statusAFKTextAnchor", x = "statusAFKOffsetX", y = "statusAFKOffsetY", layer = "statusAFKTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
+}
+
+local function GFPreviewStatusSpecs()
+    local gp = GroupPage()
+    if type(gp.GF_STATUS_ICON_SPECS) == "table" then return gp.GF_STATUS_ICON_SPECS end
+    return GF_STATUS_PREVIEW_FALLBACK_SPECS
+end
+
+local function GFPreviewCurrentStatusSpec()
+    local specs = GFPreviewStatusSpecs()
+    local selected = M.gfStatusIconSelection or "roleIcon"
+    for i = 1, #specs do
+        if specs[i].value == selected then return specs[i] end
+    end
+    return specs[1]
+end
+
+local function GFPreviewStatusSpecIsText(spec)
+    local v = spec and spec.value
+    return v == "statusText" or v == "statusGhostText" or v == "statusAFKText"
+end
+
+local function GFPreviewStatusText(spec)
+    local v = spec and spec.value
+    if v == "statusGhostText" then return "GHOST" end
+    if v == "statusAFKText" then return "AFK" end
+    return "DEAD"
+end
+
 local function GFPreviewHandleOffsets(handle)
     if not handle then return nil end
     local conf = Conf(CurrentScope()) or {}
@@ -360,7 +401,8 @@ local function GFPreviewHandleOffsets(handle)
         local cfg = auras[handle._cfgGroup] or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
     elseif handle._cfgStatus then
-        return conf.statusTextAnchor, tonumber(conf.statusOffsetX) or 0, tonumber(conf.statusOffsetY) or 0
+        local spec = GFPreviewCurrentStatusSpec()
+        return conf[spec.anchor] or spec.defaultAnchor, tonumber(conf[spec.x]) or 0, tonumber(conf[spec.y]) or 0
     elseif handle._cfgPrivate then
         local cfg = conf.privateAuras or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
@@ -409,14 +451,14 @@ local function GFPreviewRefreshHandleSelection(box)
             local isSelected = handle == selected
             local isHover = handle._hovering == true
             if handle._selectFill then
-                handle._selectFill:SetColorTexture(color[1], color[2], color[3], isSelected and 0.22 or (isHover and 0.14 or 0))
+                handle._selectFill:SetColorTexture(color[1], color[2], color[3], isHover and 0.14 or 0)
             end
             if handle._selectBorder then
                 handle._selectBorder:SetShown(isSelected or isHover)
-                handle._selectBorder:SetBackdropBorderColor(color[1], color[2], color[3], isSelected and 1 or 0.72)
+                handle._selectBorder:SetBackdropBorderColor(color[1], color[2], color[3], isSelected and 0.70 or 0.72)
             end
             if handle.SetBackdropBorderColor then
-                handle:SetBackdropBorderColor(color[1], color[2], color[3], isSelected and 1 or (isHover and 0.85 or (handle._locked and 0.55 or 0.95)))
+                handle:SetBackdropBorderColor(color[1], color[2], color[3], isSelected and 0.70 or (isHover and 0.85 or (handle._locked and 0.55 or 0.95)))
             end
         end
     end
@@ -509,9 +551,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock:SetBackdropColor(0.08, 0.08, 0.09, 0.92)
     mock:SetBackdropBorderColor(0.0, 0.0, 0.0, 1)
     mock:EnableMouse(true)
-    mock:SetScript("OnMouseDown", function()
-        if type(onOpen) == "function" then onOpen("general") end
-    end)
     box._mock = mock
 
     mock._health = CreateFrame("StatusBar", nil, mock)
@@ -597,9 +636,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             conf.auras[handle._cfgGroup].x = cfgX
             conf.auras[handle._cfgGroup].y = cfgY
         elseif handle._cfgStatus then
-            conf.statusTextAnchor = anchor
-            conf.statusOffsetX = cfgX
-            conf.statusOffsetY = cfgY
+            local spec = GFPreviewCurrentStatusSpec()
+            conf[spec.anchor] = anchor
+            conf[spec.x] = cfgX
+            conf[spec.y] = cfgY
         elseif handle._cfgPrivate then
             conf.privateAuras = conf.privateAuras or {}
             conf.privateAuras.anchor = anchor
@@ -690,16 +730,23 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end)
         handle:SetScript("OnClick", function(self)
             SelectHandle(self)
-            if type(onOpen) == "function" then onOpen(self._sectionKey) end
         end)
         handle:SetScript("OnDragStart", function(self)
             SelectHandle(self)
             if self._locked then return end
+            self._dragging = true
             if self.StartMoving then self:StartMoving() end
+            GFPreviewRefreshHandleSelection(box)
         end)
         handle:SetScript("OnDragStop", function(self)
+            local wasDragging = self._dragging == true
+            self._dragging = nil
             if self.StopMovingOrSizing then self:StopMovingOrSizing() end
-            SaveHandlePosition(self, "Move")
+            if wasDragging then
+                SaveHandlePosition(self, "Move")
+            else
+                GFPreviewRefreshHandleSelection(box)
+            end
         end)
         handle:HookScript("OnHide", function(self)
             if box._selectedHandle == self then SelectHandle(nil) end
@@ -735,6 +782,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     local statusHandle = CreatePreviewHandle("status", "sicons", { 0.80, 0.67, 0.20 }, "", 78, 28, false)
     statusHandle._cfgStatus = true
+    statusHandle._statusTex = statusHandle:CreateTexture(nil, "ARTWORK")
+    statusHandle._statusTex:SetPoint("TOPLEFT", statusHandle, "TOPLEFT", 0, 0)
+    statusHandle._statusTex:SetPoint("BOTTOMRIGHT", statusHandle, "BOTTOMRIGHT", 0, 0)
+    statusHandle._statusTex:Hide()
     statusHandle._statusText = T.Font(statusHandle, "GameFontHighlightLarge", "DEAD", { 1, 1, 1, 1 })
     statusHandle._statusText:SetPoint("CENTER")
 
@@ -1080,11 +1131,61 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         LayoutBlizzardAuraBlock(blizzHandle, blizzSize)
         LayoutHandle(blizzHandle, "CENTER", 0, 0, "CENTER")
 
-        statusHandle:SetSize(max(42, GFPreviewScaleValue(conf.statusTextSize or 14, previewScale, 12) * 4), max(18, GFPreviewScaleValue(conf.statusTextSize or 14, previewScale, 12) + 8))
-        if statusHandle._statusText and statusHandle._statusText.SetFont then
-            SetPreviewFont(statusHandle._statusText, max(12, GFPreviewScaleValue(conf.statusTextSize or 14, previewScale, 10)))
+        local statusSpec = GFPreviewCurrentStatusSpec()
+        local statusIsText = GFPreviewStatusSpecIsText(statusSpec)
+        local statusRawSize = tonumber(conf[statusSpec.size]) or tonumber(statusSpec.defaultSize) or 14
+        local statusSize = GFPreviewScaleValue(statusRawSize, previewScale, statusIsText and 10 or 8)
+        if statusHandle._label and statusHandle._label.SetText then
+            statusHandle._label:SetText(statusSpec.text or "Status")
         end
-        LayoutHandle(statusHandle, conf.statusTextAnchor, conf.statusOffsetX, conf.statusOffsetY, "CENTER")
+        if statusIsText then
+            statusHandle:SetSize(max(42, statusSize * 4), max(18, statusSize + 8))
+            if statusHandle._statusText and statusHandle._statusText.SetFont then
+                SetPreviewFont(statusHandle._statusText, max(12, statusSize))
+            end
+            if statusHandle._statusText then
+                statusHandle._statusText:SetText(GFPreviewStatusText(statusSpec))
+                statusHandle._statusText:ClearAllPoints()
+                statusHandle._statusText:SetPoint("CENTER", statusHandle, "CENTER", 0, 0)
+                statusHandle._statusText:Show()
+            end
+            if statusHandle._statusTex then statusHandle._statusTex:Hide() end
+        else
+            statusSize = max(8, statusSize)
+            statusHandle:SetSize(statusSize, statusSize)
+            if statusHandle._statusText then statusHandle._statusText:Hide() end
+            local tex = statusHandle._statusTex
+            if tex then
+                local path, l, r, t, b
+                l, r, t, b = 0, 1, 0, 1
+                if statusSpec.value == "roleIcon" and gf and gf.GetRoleTexture then
+                    path, l, r, t, b = gf.GetRoleTexture(kind, GF_PREVIEW_ROLE)
+                elseif statusSpec.value == "leaderIcon" and gf and gf.GetLeaderTexture then
+                    path, l, r, t, b = gf.GetLeaderTexture(kind)
+                elseif statusSpec.value == "assistIcon" and gf and gf.GetAssistTexture then
+                    path, l, r, t, b = gf.GetAssistTexture(kind)
+                elseif statusSpec.value == "raidMarker" then
+                    path = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
+                    l, r, t, b = 0, 0.25, 0, 0.25
+                elseif statusSpec.value == "readyCheckIcon" then
+                    path = "Interface\\RaidFrame\\ReadyCheck-Ready"
+                elseif statusSpec.value == "summonIcon" then
+                    path = "Interface\\RaidFrame\\Raid-Icon-SummonPending"
+                elseif statusSpec.value == "resurrectIcon" then
+                    path = "Interface\\RaidFrame\\Raid-Icon-Rez"
+                elseif statusSpec.value == "phaseIcon" then
+                    path = "Interface\\TargetingFrame\\UI-PhasingIcon"
+                end
+                if path then tex:SetTexture(path) end
+                tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
+                tex:SetVertexColor(1, 1, 1, 1)
+                tex:ClearAllPoints()
+                tex:SetPoint("TOPLEFT", statusHandle, "TOPLEFT", 0, 0)
+                tex:SetPoint("BOTTOMRIGHT", statusHandle, "BOTTOMRIGHT", 0, 0)
+                tex:Show()
+            end
+        end
+        LayoutHandle(statusHandle, conf[statusSpec.anchor], conf[statusSpec.x], conf[statusSpec.y], statusSpec.defaultAnchor or "CENTER")
 
         local spellSize = max(14, GFPreviewScaleValue(20, previewScale, 10))
         spellHandle:SetSize(spellSize, spellSize)
@@ -1106,7 +1207,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         debuffHandle:SetFrameLevel(baseLevel + (tonumber(debuffCfg.layer) or 6))
         externHandle:SetFrameLevel(baseLevel + (tonumber(extCfg.layer) or 7))
         blizzHandle:SetFrameLevel(baseLevel + 4)
-        statusHandle:SetFrameLevel(baseLevel + (tonumber(conf.statusTextLayer) or 7))
+        statusHandle:SetFrameLevel(baseLevel + (tonumber(conf[statusSpec.layer]) or tonumber(statusSpec.defaultLayer) or 7))
         spellHandle:SetFrameLevel(baseLevel + 6)
         privateHandle:SetFrameLevel(baseLevel + 6)
         textHandle:SetFrameLevel(baseLevel + (tonumber(conf.nameTextLayer) or 6))
@@ -1117,7 +1218,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         debuffHandle:SetShown(aurasEnabled and customRenderer and LayerOn("debuff"))
         externHandle:SetShown(aurasEnabled and customRenderer and LayerOn("externals"))
         blizzHandle:SetShown(aurasEnabled and not customRenderer and LayerOn("blizzard"))
-        statusHandle:SetShown(conf.statusText ~= false and LayerOn("status"))
+        statusHandle:SetShown(conf[statusSpec.enabled] ~= false and LayerOn("status"))
         spellHandle:SetShown((focus == "si" or (conf.spellIndicators and conf.spellIndicators.enabled ~= false)) and LayerOn("si"))
         privateHandle:SetShown(pa.enabled ~= false and LayerOn("private"))
         textHandle:SetShown(showText)

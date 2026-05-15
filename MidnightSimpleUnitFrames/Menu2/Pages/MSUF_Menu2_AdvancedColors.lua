@@ -480,9 +480,12 @@ local function BuildColors(ctx)
         ApplyColors()
     end)
 
-    local classColors = b:CollapsibleSection("colors_classes", "Class Bar Colors", 190, false)
-    LabelAt(classColors, "Choose an override bar color per class.", 12, -8, 540, "GameFontHighlightSmall", T.colors.muted)
     local tokens = GetClassTokens()
+    local classRows = max(1, floor((#tokens + 3) / 4))
+    local classResetY = -36 - (classRows * 36)
+    local classHeight = max(190, math.abs(classResetY) + 48)
+    local classColors = b:CollapsibleSection("colors_classes", "Class Bar Colors", classHeight, false)
+    LabelAt(classColors, "Choose an override bar color per class.", 12, -8, 540, "GameFontHighlightSmall", T.colors.muted)
     local classW = classColors._msuf2Width or ctx.width or 720
     local classColW = max(142, floor((classW - 24) / 4))
     local classLabelW = max(76, min(112, classColW - 62))
@@ -506,7 +509,7 @@ local function BuildColors(ctx)
                 if type(api.SetClassColor) == "function" then pcall(api.SetClassColor, token, r, g, c) else ApplyColors() end
             end, classLabelW, 44)
     end
-    ButtonAt(classColors, "Reset all class colors", 12, -154, 190, function()
+    ButtonAt(classColors, "Reset all class colors", 12, classResetY, 190, function()
         local fn = ColorAPI().ResetAllClassColors
         if type(fn) == "function" then pcall(fn) else DB().classColors = nil end
         ApplyColors()
