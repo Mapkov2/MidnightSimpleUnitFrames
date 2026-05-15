@@ -131,7 +131,13 @@ local function BuildBars(ctx)
 
     local function ApplyOutlineRuntime()
         Call("MSUF_ApplyBarOutlineThickness_All")
-        RefreshGroupFrameVisuals()
+        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        if GF and type(GF.RefreshOutlineGeometry) == "function" then
+            GF.RefreshOutlineGeometry()
+        else
+            Call("MSUF_GF_RefreshOutlineGeometry")
+            RefreshGroupFrameVisuals()
+        end
     end
 
     local function ApplyAggroBorderRuntime()

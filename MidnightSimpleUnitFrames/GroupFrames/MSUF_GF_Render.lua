@@ -533,6 +533,28 @@ GF.ApplyBackgroundAlpha = ApplyBackgroundAlpha
 local _bgOnlyBd = { bgFile = "Interface\\Buttons\\WHITE8x8" }
 local _borderBd = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
 
+local function ApplyFrameBorderLevel(f, border)
+    if not (f and border and border.SetFrameLevel) then return end
+    local anchor = f.barGroup or f
+    local anchorLevel = anchor and anchor.GetFrameLevel and anchor:GetFrameLevel() or 0
+    local wantLevel = anchorLevel + 3
+    local minTextLevel
+    local layers = { f.nameTextLayer, f.healthTextLayer, f.powerTextLayer, f.statusTextLayer }
+    for i = 1, #layers do
+        local layer = layers[i]
+        local level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+        if level and (not minTextLevel or level < minTextLevel) then
+            minTextLevel = level
+        end
+    end
+    if minTextLevel and wantLevel >= minTextLevel then wantLevel = minTextLevel - 1 end
+    if wantLevel <= anchorLevel then wantLevel = anchorLevel + 1 end
+    if border._msufGFFrameBorderLevel ~= wantLevel then
+        border._msufGFFrameBorderLevel = wantLevel
+        border:SetFrameLevel(wantLevel)
+    end
+end
+
 local function ApplyFrameBorder(f, kind)
     local conf = GF.GetConf(kind)
     local bg = f.barGroup
@@ -548,6 +570,7 @@ local function ApplyFrameBorder(f, kind)
     if bf then
         local borderSize = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2
         if fScale ~= 1 then borderSize = ScaleValue(borderSize, fScale, 0) end
+        ApplyFrameBorderLevel(f, bf)
         if borderSize > 0 then
             _borderBd.edgeSize = borderSize
             bf:SetBackdrop(_borderBd)
@@ -856,21 +879,34 @@ local function EnsurePreserveMissingHP(f, kind)
         f._msufGFMissingHPBg = bg
     end
 
-    bg:ClearAllPoints()
-    bg:SetAllPoints(h)
+    if bg._msufGFMissingAnchor ~= h then
+        bg:ClearAllPoints()
+        bg:SetAllPoints(h)
+        bg._msufGFMissingAnchor = h
+    end
     if bg.SetFrameLevel and h.GetFrameLevel then
         local lvl = (h:GetFrameLevel() or 1) - 1
         if lvl < 0 then lvl = 0 end
-        bg:SetFrameLevel(lvl)
+        if bg._msufGFMissingLevel ~= lvl then
+            bg:SetFrameLevel(lvl)
+            bg._msufGFMissingLevel = lvl
+        end
     end
     local tex = ResolveUnhaltedTexture() or GF.ResolveBarBgTexture(kind)
     if tex and bg._msufGFMissingBgTex ~= tex then
         bg:SetStatusBarTexture(tex)
         bg._msufGFMissingBgTex = tex
     end
-    bg:SetStatusBarColor(UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1)
+    if bg._msufGFMissingColorSet ~= true then
+        bg:SetStatusBarColor(UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1)
+        bg._msufGFMissingColorSet = true
+    end
     if bg.SetReverseFill and h.GetReverseFill then
-        bg:SetReverseFill(not h:GetReverseFill())
+        local rev = not h:GetReverseFill()
+        if bg._msufGFMissingReverse ~= rev then
+            bg:SetReverseFill(rev)
+            bg._msufGFMissingReverse = rev
+        end
     end
     return bg
 end
@@ -878,12 +914,22 @@ end
 local function SyncPreserveMissingHP(f, kind, hp, hpMax)
     if not f or not f.health then return end
     kind = kind or f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    local preserve = conf and conf.alphaPreserveHPColor == true
-    if f.healthBg and f.healthBg.SetAlpha then f.healthBg:SetAlpha(preserve and 0 or 1) end
-    if f._msufBehindBarBg and f._msufBehindBarBg.SetAlpha then f._msufBehindBarBg:SetAlpha(preserve and 0 or 1) end
+    local c = f._c
+    local preserve
+    if c and c.alphaPreserveHPColor ~= nil then
+        preserve = c.alphaPreserveHPColor == true
+    else
+        local conf = GF.GetConf(kind)
+        preserve = conf and conf.alphaPreserveHPColor == true
+    end
+    if f._msufGFPreserveAlphaState ~= preserve then
+        f._msufGFPreserveAlphaState = preserve
+        if f.healthBg and f.healthBg.SetAlpha then f.healthBg:SetAlpha(preserve and 0 or 1) end
+        if f._msufBehindBarBg and f._msufBehindBarBg.SetAlpha then f._msufBehindBarBg:SetAlpha(preserve and 0 or 1) end
+    end
     if not preserve then
-        HidePreserveMissingHP(f)
+        if f._msufGFMissingHPBg then HidePreserveMissingHP(f) end
+        f._msufGFMissingValue, f._msufGFMissingMax = nil, nil
         return
     end
 
@@ -897,10 +943,15 @@ local function SyncPreserveMissingHP(f, kind, hp, hpMax)
     end
 
     local missing
-    if unit and _G.UnitHealthMissing then
+    local iss = issecretvalue
+    local comparable = type(hpMax) == "number" and type(hp) == "number"
+        and not (iss and (iss(hpMax) or iss(hp)))
+    if comparable then
+        missing = hpMax - hp
+        if missing < 0 then missing = 0 end
+    elseif unit and _G.UnitHealthMissing then
         missing = _G.UnitHealthMissing(unit, true)
-    end
-    if missing == nil then
+    else
         if hp == nil and unit and UnitHealth then hp = UnitHealth(unit) end
         if type(hpMax) == "number" and type(hp) == "number" then
             missing = hpMax - hp
@@ -908,9 +959,23 @@ local function SyncPreserveMissingHP(f, kind, hp, hpMax)
         end
     end
 
-    bg:SetMinMaxValues(0, hpMax or 1)
-    bg:SetValue(missing or 0)
-    bg:Show()
+    local maxValue = hpMax or 1
+    if not (iss and iss(maxValue)) and bg._msufGFMissingMax ~= maxValue then
+        bg:SetMinMaxValues(0, maxValue)
+        bg._msufGFMissingMax = maxValue
+    elseif iss and iss(maxValue) then
+        bg:SetMinMaxValues(0, maxValue)
+        bg._msufGFMissingMax = nil
+    end
+    local value = missing or 0
+    if not (iss and iss(value)) and bg._msufGFMissingValue ~= value then
+        bg:SetValue(value)
+        bg._msufGFMissingValue = value
+    elseif iss and iss(value) then
+        bg:SetValue(value)
+        bg._msufGFMissingValue = nil
+    end
+    if not bg:IsShown() then bg:Show() end
 end
 GF.SyncPreserveMissingHP = SyncPreserveMissingHP
 

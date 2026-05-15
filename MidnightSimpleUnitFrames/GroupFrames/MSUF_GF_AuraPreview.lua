@@ -1362,17 +1362,29 @@ function GF.RefreshPreviewBox()
         local function resolveHL(key, fallback)
             local modeKey = outlineModeKey(key)
             if gfDb and gfDb.hlOverride then
-                if gfDb[key] ~= nil then return gfDb[key] end
                 if modeKey then
                     local enabled = outlineModeToEnabled(gfDb[modeKey])
                     if enabled ~= nil then return enabled end
                 end
+                if gfDb[key] ~= nil then
+                    if modeKey then
+                        local enabled = outlineModeToEnabled(gfDb[key])
+                        if enabled ~= nil then return enabled end
+                    end
+                    return gfDb[key]
+                end
             end
             if gen then
-                if gen[key] ~= nil then return gen[key] end
                 if modeKey then
                     local enabled = outlineModeToEnabled(gen[modeKey])
                     if enabled ~= nil then return enabled end
+                end
+                if gen[key] ~= nil then
+                    if modeKey then
+                        local enabled = outlineModeToEnabled(gen[key])
+                        if enabled ~= nil then return enabled end
+                    end
+                    return gen[key]
                 end
             end
             return fallback

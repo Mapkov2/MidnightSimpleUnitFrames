@@ -488,46 +488,79 @@ local function HLVal(kind, key)
     local conf = GF.GetConf(kind)
     -- Priority 1: GF-local override
     local modeKey = _HL_OUTLINE_MODE[key]
-    if conf.hlOverride then
-        if conf[key] ~= nil then return conf[key] end
-        if modeKey then
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if modeKey then
+        if conf.hlOverride then
             local enabled = OutlineModeToEnabled(conf[modeKey])
             if enabled ~= nil then return enabled end
+            if conf[key] ~= nil then
+                enabled = OutlineModeToEnabled(conf[key])
+                if enabled ~= nil then return enabled end
+                return conf[key]
+            end
         end
-    end
-    -- Priority 2: global general (always fresh — 2 table lookups)
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if gen then
-        if gen[key] ~= nil then return gen[key] end
-        if modeKey then
+        if gen then
             local enabled = OutlineModeToEnabled(gen[modeKey])
             if enabled ~= nil then return enabled end
+            if gen[key] ~= nil then
+                enabled = OutlineModeToEnabled(gen[key])
+                if enabled ~= nil then return enabled end
+                return gen[key]
+            end
         end
+    elseif conf.hlOverride then
+        if conf[key] ~= nil then return conf[key] end
+    end
+    if not modeKey and gen then
+        if gen[key] ~= nil then return gen[key] end
     end
     -- Priority 3: legacy GF conf fallback
     local fb = _HL_FALLBACK[key]
-    if fb and conf[fb] ~= nil then return conf[fb] end
+    if fb and conf[fb] ~= nil then
+        if modeKey then
+            local enabled = OutlineModeToEnabled(conf[fb])
+            if enabled ~= nil then return enabled end
+        end
+        return conf[fb]
+    end
     return nil
 end
 
 local function HLValCached(conf, gen, key)
     local modeKey = _HL_OUTLINE_MODE[key]
-    if conf.hlOverride then
-        if conf[key] ~= nil then return conf[key] end
-        if modeKey then
+    if modeKey then
+        if conf.hlOverride then
             local enabled = OutlineModeToEnabled(conf[modeKey])
             if enabled ~= nil then return enabled end
+            if conf[key] ~= nil then
+                enabled = OutlineModeToEnabled(conf[key])
+                if enabled ~= nil then return enabled end
+                return conf[key]
+            end
         end
-    end
-    if gen then
-        if gen[key] ~= nil then return gen[key] end
-        if modeKey then
+        if gen then
             local enabled = OutlineModeToEnabled(gen[modeKey])
             if enabled ~= nil then return enabled end
+            if gen[key] ~= nil then
+                enabled = OutlineModeToEnabled(gen[key])
+                if enabled ~= nil then return enabled end
+                return gen[key]
+            end
         end
+    elseif conf.hlOverride then
+        if conf[key] ~= nil then return conf[key] end
+    end
+    if not modeKey and gen then
+        if gen[key] ~= nil then return gen[key] end
     end
     local fb = _HL_FALLBACK[key]
-    if fb and conf[fb] ~= nil then return conf[fb] end
+    if fb and conf[fb] ~= nil then
+        if modeKey then
+            local enabled = OutlineModeToEnabled(conf[fb])
+            if enabled ~= nil then return enabled end
+        end
+        return conf[fb]
+    end
     return nil
 end
 
@@ -1797,6 +1830,9 @@ function GF.BuildFrameCache(f)
     -- Absorb: independently gated from heal prediction
     c.absorbEn = _GF_IsAbsorbEnabled(kind)
     c.healAbsorbEn = conf.healAbsorbEnabled ~= false
+    c.healPredEventEn = c.healPredEn and f.incomingHealBar ~= nil
+    c.absorbEventEn = c.absorbEn and f.absorbBar ~= nil and UnitGetTotalAbsorbs ~= nil
+    c.healAbsorbEventEn = c.healAbsorbEn and f.healAbsorbBar ~= nil and UnitGetTotalHealAbsorbs ~= nil
 
     -- Name display
     c.nameEn = conf.showName ~= false
@@ -1870,9 +1906,9 @@ function GF.BuildFrameCache(f)
     if c.summonEn   then evBits = evBits + 32   end
     if c.resEn      then evBits = evBits + 64   end
     if c.phaseEn    then evBits = evBits + 128  end
-    if c.healPredEn then evBits = evBits + 256  end
-    if c.absorbEn   then evBits = evBits + 512  end
-    if c.healAbsorbEn and not c.absorbEn then evBits = evBits + 1024 end
+    if c.healPredEventEn then evBits = evBits + 256  end
+    if c.absorbEventEn   then evBits = evBits + 512  end
+    if c.healAbsorbEventEn then evBits = evBits + 1024 end
     if c.powFrequent then evBits = evBits + 2048 end
     if c.connectionEn then evBits = evBits + 4096 end
     if c.flagsEn then evBits = evBits + 8192 end
@@ -3730,7 +3766,7 @@ local function dispatchHealthLean(f, unit)
     else
         bar:SetValue(hp)
     end
-    if GF.SyncPreserveMissingHP then
+    if c and (c.alphaPreserveHPColor or f._msufGFMissingHPBg or f._msufGFPreserveAlphaState == true) and GF.SyncPreserveMissingHP then
         GF.SyncPreserveMissingHP(f, f._msufGFKind or "party", hp, f._msufGFCachedHpMax)
     end
 
@@ -3965,6 +4001,47 @@ end
 -- OVERLAY-ONLY PATH: UNIT_HEAL_PREDICTION / UNIT_ABSORB / UNIT_HEAL_ABSORB
 -- Calculator → overlay bars ONLY. No HP bar, no text, no color.
 ------------------------------------------------------------------------
+function GF._ClearOverlayBar(bar)
+    if not bar then return end
+    if bar._msufGFOverlayMax ~= 1 then
+        bar:SetMinMaxValues(0, 1)
+        bar._msufGFOverlayMax = 1
+    end
+    if bar._msufGFOverlayValue ~= 0 then
+        bar:SetValue(0)
+        bar._msufGFOverlayValue = 0
+    end
+    if bar:IsShown() then bar:Hide() end
+end
+
+function GF._SetOverlayBarValue(bar, hpMax, value)
+    if not bar then return end
+    if value == nil then
+        if bar:IsShown() then bar:Hide() end
+        bar._msufGFOverlayValue = nil
+        return
+    end
+
+    local iss = issecretvalue
+    local maxValue = hpMax or 1
+    if iss and iss(maxValue) then
+        bar:SetMinMaxValues(0, maxValue)
+        bar._msufGFOverlayMax = nil
+    elseif bar._msufGFOverlayMax ~= maxValue then
+        bar:SetMinMaxValues(0, maxValue)
+        bar._msufGFOverlayMax = maxValue
+    end
+
+    if iss and iss(value) then
+        bar:SetValue(value)
+        bar._msufGFOverlayValue = nil
+    elseif bar._msufGFOverlayValue ~= value then
+        bar:SetValue(value)
+        bar._msufGFOverlayValue = value
+    end
+    if not bar:IsShown() then bar:Show() end
+end
+
 local function dispatchOverlaysOnly(f, unit)
     if not f.health then return end
 
@@ -3972,10 +4049,17 @@ local function dispatchOverlaysOnly(f, unit)
     if not c then return end
 
     local ihBar = f.incomingHealBar
-    if ihBar and c.healPredEn == false then
-        ihBar:SetMinMaxValues(0, 1)
-        ihBar:SetValue(0)
-        if ihBar:IsShown() then ihBar:Hide() end
+    local abBar = f.absorbBar
+    local haBar = f.healAbsorbBar
+    local ihEnabled = ihBar and c.healPredEn ~= false
+    local abEnabled = abBar and c.absorbEn
+    local haEnabled = haBar and c.healAbsorbEn ~= false
+    if ihBar and not ihEnabled then GF._ClearOverlayBar(ihBar) end
+
+    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
+    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    if not (ihEnabled or abEnabled or haEnabled or absorbTestMode or f._msufGFAbsorbTestActive) then
+        return
     end
 
     -- PERF: Same-frame dedup. UNIT_HEAL_PREDICTION + UNIT_ABSORB_AMOUNT_CHANGED
@@ -3999,26 +4083,16 @@ local function dispatchOverlaysOnly(f, unit)
     UnitGetDetailedHealPrediction(unit, "player", calc)
     local hpMax = f._msufGFCachedHpMax or calc:GetMaximumHealth()
 
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
     if absorbTestMode then return end
 
-    if ihBar and c.healPredEn ~= false then
-        local v = calc:GetIncomingHeals()
-        if v ~= nil then ihBar:SetMinMaxValues(0, hpMax); ihBar:SetValue(v); if not ihBar:IsShown() then ihBar:Show() end
-        else if ihBar:IsShown() then ihBar:Hide() end end
+    if ihEnabled then
+        GF._SetOverlayBarValue(ihBar, hpMax, calc:GetIncomingHeals())
     end
-    local abBar = f.absorbBar
-    if abBar and c.absorbEn then
-        local v = calc:GetTotalDamageAbsorbs()
-        if v ~= nil then abBar:SetMinMaxValues(0, hpMax); abBar:SetValue(v); if not abBar:IsShown() then abBar:Show() end
-        else if abBar:IsShown() then abBar:Hide() end end
+    if abEnabled then
+        GF._SetOverlayBarValue(abBar, hpMax, calc:GetTotalDamageAbsorbs())
     end
-    local haBar = f.healAbsorbBar
-    if haBar and c.healAbsorbEn ~= false then
-        local v = calc:GetTotalHealAbsorbs()
-        if v ~= nil then haBar:SetMinMaxValues(0, hpMax); haBar:SetValue(v); if not haBar:IsShown() then haBar:Show() end
-        else if haBar:IsShown() then haBar:Hide() end end
+    if haEnabled then
+        GF._SetOverlayBarValue(haBar, hpMax, calc:GetTotalHealAbsorbs())
     end
 end
 
@@ -4724,21 +4798,14 @@ function GF.RegisterUnitEvents(f, unit)
     if c.phaseEn then
         f:RegisterUnitEvent("UNIT_PHASE", unit); regTbl["UNIT_PHASE"] = true
     end
-    if c.healPredEn then
+    if c.healPredEventEn then
         f:RegisterUnitEvent("UNIT_HEAL_PREDICTION", unit); regTbl["UNIT_HEAL_PREDICTION"] = true
     end
-    if c.absorbEn then
-        if UnitGetTotalAbsorbs then
-            f:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_ABSORB_AMOUNT_CHANGED"] = true
-        end
-        if UnitGetTotalHealAbsorbs then
-            f:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"] = true
-        end
-    elseif c.healAbsorbEn then
-        -- Heal absorb enabled independently of shield absorb bar
-        if UnitGetTotalHealAbsorbs then
-            f:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"] = true
-        end
+    if c.absorbEventEn then
+        f:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_ABSORB_AMOUNT_CHANGED"] = true
+    end
+    if c.healAbsorbEventEn then
+        f:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"] = true
     end
 
     f:SetScript("OnEvent", GF_OnEvent)

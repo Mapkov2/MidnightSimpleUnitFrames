@@ -680,6 +680,20 @@ function GF.SetFrameLayerLevel(frame, owner, layer, fallback)
     frame:SetFrameLevel(GF.GetFrameLayerLevel(owner, layer, fallback))
 end
 
+local function GetFrameOutlineInset(kind, conf)
+    local raw
+    if GF.GetBarOutlineThickness then
+        raw = GF.GetBarOutlineThickness(kind)
+    elseif conf and conf.borderEnabled == true then
+        raw = conf.borderSize or 1
+    else
+        raw = 0
+    end
+    local inset = math_max(0, tonumber(raw) or 0)
+    if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 0) end
+    return inset
+end
+
 ------------------------------------------------------------------------
 -- Frame hierarchy builder (EQoL pattern)
 ------------------------------------------------------------------------
@@ -698,8 +712,7 @@ local function BuildFrameHierarchy(f, kind)
     end
     local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
         or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
-    local inset  = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
-    if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
+    local inset = GetFrameOutlineInset(kind, conf)
 
     -- barGroup — visual container (bgFile-only, EQoL pattern)
     -- Edge tiling on SetAllPoints frames causes TexCoord crash during
@@ -720,12 +733,11 @@ local function BuildFrameHierarchy(f, kind)
     borderFrame:SetFrameLevel(barGroup:GetFrameLevel() + 1)
     borderFrame:EnableMouse(false)
     f._msufGFBorderFrame = borderFrame
-    if conf.borderEnabled then
-        local edgeSz = math_max(1, conf.borderSize or 1)
-        if GF.ScaleFrameValue then edgeSz = GF.ScaleFrameValue(kind, edgeSz, 1) end
+    if inset > 0 then
+        local edgeSz = inset
         borderFrame:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edgeSz })
         borderFrame:SetBackdropColor(0, 0, 0, 0)
-        borderFrame:SetBackdropBorderColor(conf.borderR or 0, conf.borderG or 0, conf.borderB or 0, conf.borderA or 1)
+        borderFrame:SetBackdropBorderColor(0, 0, 0, 1)
     else
         borderFrame:SetBackdrop(nil)
         borderFrame:Hide()
@@ -1718,8 +1730,7 @@ local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
                 end
 
                 -- health bar
-                local inset = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
-                if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
+                local inset = GetFrameOutlineInset(kind, conf)
                 local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, unit, nil, conf))
                     or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
                 if child.health then
@@ -3660,6 +3671,32 @@ function GF.RebuildAll()
     end)
 end
 
+function GF.RefreshOutlineGeometry()
+    if InCombatLockdown() then
+        GF._pendingRefreshGeometry = true
+        GF._pendingRefreshVisuals = true
+        MarkPostCombatHeaderRecovery()
+        return
+    end
+    if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+
+    local partyHeader = GF.headers and GF.headers.party
+    if partyHeader and GF.IsKindEnabled("party") then
+        ScanHeaderChildren(partyHeader, "party", true)
+    end
+
+    local raidKind = GetLiveRaidKind()
+    if GF.IsKindEnabled(raidKind) then
+        ScanRaidHeaders(raidKind, true)
+    end
+
+    if GF.RefreshVisuals then
+        GF.RefreshVisuals()
+    elseif GF.MarkAllDirty then
+        GF.MarkAllDirty((GF.DIRTY_GEOMETRY or 0x01) + (GF.DIRTY_BORDER or 0x10) + (GF.DIRTY_LAYOUT or 0x20))
+    end
+end
+
 local function GF_DifficultySignature()
     local liveKind = GetLiveRaidKind()
     local _, instanceType, difficultyID = GetInstanceInfo and GetInstanceInfo()
@@ -3929,6 +3966,7 @@ _G.MSUF_GF_HidePreview      = GF.HidePreview
 _G.MSUF_GF_RebuildAll        = GF.RebuildAll
 _G.MSUF_GF_RefreshAll        = GF.RefreshAll
 _G.MSUF_GF_Refresh           = GF.Refresh
+_G.MSUF_GF_RefreshOutlineGeometry = GF.RefreshOutlineGeometry
 _G.MSUF_GF_RefreshPreviewLayout = GF.RefreshPreviewLayout
 _G.MSUF_GF_DisableBlizzard   = GF.DisableBlizzardFrames
 _G.MSUF_GF_RestoreBlizzard   = GF.RestoreBlizzardFrames

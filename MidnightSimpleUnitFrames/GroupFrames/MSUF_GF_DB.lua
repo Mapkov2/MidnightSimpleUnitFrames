@@ -1319,19 +1319,31 @@ end
 function GF.GetHighlightVal(kind, key)
     local conf = GF.GetConf(kind)
     local modeKey = _HL_OUTLINE_MODE_KEYS[key]
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if conf.hlOverride then
-        if conf[key] ~= nil then return conf[key] end
         if modeKey then
             local enabled = OutlineModeToEnabled(conf[modeKey])
             if enabled ~= nil then return enabled end
         end
+        if conf[key] ~= nil then
+            if modeKey then
+                local enabled = OutlineModeToEnabled(conf[key])
+                if enabled ~= nil then return enabled end
+            end
+            return conf[key]
+        end
     end
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if gen then
-        if gen[key] ~= nil then return gen[key] end
         if modeKey then
             local enabled = OutlineModeToEnabled(gen[modeKey])
             if enabled ~= nil then return enabled end
+        end
+        if gen[key] ~= nil then
+            if modeKey then
+                local enabled = OutlineModeToEnabled(gen[key])
+                if enabled ~= nil then return enabled end
+            end
+            return gen[key]
         end
     end
     return nil
@@ -1351,7 +1363,7 @@ function GF.GetBarOutlineThickness(kind)
     local t = tonumber(raw)
     if type(t) ~= "number" then t = 2 end
     t = math_floor(t + 0.5)
-    if t < 0 then t = 0 elseif t > 6 then t = 6 end
+    if t < 0 then t = 0 elseif t > 8 then t = 8 end
     return t
 end
 

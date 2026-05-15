@@ -41,6 +41,22 @@
 - **Interrupt Ready**: Performance for interrupt ready (cb53217; Modules/MSUF_InterruptReady.lua).
 - **Unit Auras, Group Frames**: Aura performance (f3019b1; Auras2/MSUF_A2_Events.lua, GroupFrames/MSUF_GF_Effects.lua).
 - **Unit Auras, Unit Text, Group Frames**: Performance stuff and bugfixes for highlight border (0fedb27; Auras2/MSUF_A2_Events.lua, Core/MSUF_Text.lua, GroupFrames/MSUF_GF_AuraPreview.lua +4 more).
+- **Unit Text, General**: Hp text performance update (3e6bb7e; Core/MSUF_Text.lua, MidnightSimpleUnitFrames.lua).
+- **Core Runtime**: Range fade performance update for dead/ghost (70e9233; Core/MSUF_RangeFade.lua).
+- **Unit Auras, Group Frames**: Aura performance update (1a71199; Auras2/MSUF_A2_Reminder.lua, GroupFrames/MSUF_GF_Effects.lua).
+- **Unit Auras**: Updated Aura2 event, reminder, or aura handling (working tree; MSUF_A2_Core.lua).
+- **Unit Auras**: Updated Aura2 event, reminder, or aura handling (working tree; MSUF_A2_Render.lua).
+- **Core Runtime**: Updated core runtime behavior (working tree; MSUF_RangeFade.lua).
+- **Core Runtime**: Updated core runtime behavior (working tree; MSUF_UnitframeCore.lua).
+- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_AuraPreview.lua).
+- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_Core.lua).
+- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_DB.lua).
+- **Group Frames**: Updated Group Frame effects, range fade, or highlight behavior (working tree; MSUF_GF_Effects.lua).
+- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_Render.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GlobalBars.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupPreview.lua).
+- **General**: Updated addon behavior (working tree; MidnightSimpleUnitFrames.lua).
+- **Unit Auras, Core Runtime**: Performance update (5e6023e; Auras2/MSUF_A2_Core.lua, Auras2/MSUF_A2_Render.lua, Core/MSUF_RangeFade.lua +1 more).
 <!-- MSUF-AUTO-CHANGELOG:Performance:END -->
 
 ### Bugfixes
@@ -78,6 +94,11 @@
 - **Unit Text**: Only render the powertext that your actually using (9c199d2; Core/MSUF_Text.lua).
 - **Group Frames**: Better range check (7c33fe4; GroupFrames/MSUF_GF_Effects.lua).
 - **Foundation**: Changelog stuff (b8c1a80; Foundation/MSUF_Libs.lua).
+- **Group Frames**: This should out of combat range check (63794c0; GroupFrames/MSUF_GF_Core.lua).
+- **Core Runtime, Group Frames**: RANGE fade (4d8d353; Core/MSUF_RangeFade.lua, GroupFrames/MSUF_GF_Effects.lua).
+- **General**: Better coloring in addon folder (2c11245; MidnightSimpleUnitFrames_Castbars/MidnightSimpleUnitFrames_Castbars.toc).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupPreview.lua).
+- **Menu / Dashboard**: Better group frame preview highlight (2ecceff; Menu2/Pages/MSUF_Menu2_GroupPreview.lua).
 <!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
 
 ### Release / Tooling

@@ -934,7 +934,7 @@ local function MSUF_GetDesiredBarBorderThicknessAndStamp(frameOrUnit)
         thickness = tonumber(thickness) or 0
         thickness = math_floor(thickness + 0.5)
         if thickness < 0 then thickness = 0 end
-        if thickness > 6 then thickness = 6 end
+        if thickness > 8 then thickness = 8 end
         cache = cache or {}
         cache.stamp = stamp
         cache.thickness = thickness
@@ -3892,18 +3892,38 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     -- but UNIT_HEALTH fires 10-50×/s. Saves UnitHealthMax + NumberToTextFast per tick.
     -- _msufAbsorbTextDirty is already set on UNIT_MAXHEALTH by FrameOnEvent.
     local absorbTextDirty = self._msufAbsorbTextDirty == true
+    local hpMaxValue
     local hpMaxStr
+    if hpNeedsMax or hpNeedsPct then
+        hpMaxValue = self._msufCachedHpMaxValue
+        if hpMaxValue == nil or absorbTextDirty then
+            hpMaxValue = UnitHealthMax(unit)
+            self._msufCachedHpMaxValue = hpMaxValue
+        end
+    elseif absorbTextDirty then
+        self._msufCachedHpMaxValue = nil
+    end
     if hpNeedsMax then
         hpMaxStr = self._msufCachedHpMaxStr
         if not hpMaxStr or absorbTextDirty then
-            local hpMax = UnitHealthMax(unit)
-            hpMaxStr = MSUF_NumberToTextFast(hpMax)
+            hpMaxStr = MSUF_NumberToTextFast(hpMaxValue)
             self._msufCachedHpMaxStr = hpMaxStr
         end
     elseif absorbTextDirty then
         self._msufCachedHpMaxStr = nil
     end
-    local hpPct = hpNeedsPct and MSUF_GetUnitHealthPercent(unit) or nil
+    local hpPct
+    if hpNeedsPct then
+        local isv = _MSUF_issecretvalue
+        if type(hp) == "number" and type(hpMaxValue) == "number"
+            and not (isv and (isv(hp) or isv(hpMaxValue)))
+            and hpMaxValue > 0
+        then
+            hpPct = (hp / hpMaxValue) * 100
+        else
+            hpPct = MSUF_GetUnitHealthPercent(unit)
+        end
+    end
     local hasPct = hpNeedsPct and (type(hpPct) == "number") or false
     local absorbText, absorbStyle = nil, nil
     -- PERF: Cache absorb text display flag per-frame. Invalidated when cachedConfig is cleared
