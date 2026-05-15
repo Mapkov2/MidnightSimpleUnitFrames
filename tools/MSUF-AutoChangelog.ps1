@@ -168,6 +168,15 @@ function Convert-CommitSubjectToText {
     return $text
 }
 
+function Test-IsIgnoredCommitSubject {
+    param([AllowNull()][string]$Subject)
+
+    if ([string]::IsNullOrWhiteSpace($Subject)) { return $false }
+    $text = $Subject.ToLowerInvariant()
+    if ($text -match 'release helper|msuf-releasehelper|auto changelog|updated changelog|changelog only') { return $true }
+    return $false
+}
+
 function Get-PathDescription {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -261,6 +270,7 @@ function Add-CommitChangesToGroups {
             $hash = $parts[0]
             $short = $parts[1]
             $subject = $parts[2]
+            if (Test-IsIgnoredCommitSubject $subject) { continue }
             $paths = [string[]]@(Get-CommitPaths $hash)
             if ($paths.Count -eq 0) { continue }
 
@@ -368,6 +378,10 @@ function Remove-AutoBlocks {
     $out = New-Object System.Collections.Generic.List[string]
     $skip = $false
     foreach ($line in $Lines) {
+        if ($line -match '^\s*<!--\s*MSUF-AUTO-CHANGELOG:\s*-->\s*$') {
+            $skip = -not $skip
+            continue
+        }
         if ($line -match '^\s*<!--\s*MSUF-AUTO-CHANGELOG:[^:]+:START\s*-->\s*$') {
             $skip = $true
             continue
@@ -389,11 +403,32 @@ function Get-MarkerKey {
     return ([regex]::Replace($Title, '[^A-Za-z0-9]+', '-')).Trim('-')
 }
 
+function Compress-BlankLines {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
+
+    $out = New-Object System.Collections.Generic.List[string]
+    $blankCount = 0
+    foreach ($line in $Lines) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            $blankCount++
+            if ($blankCount -le 1) {
+                $out.Add("")
+            }
+            continue
+        }
+
+        $blankCount = 0
+        $out.Add($line)
+    }
+
+    return [string[]]$out.ToArray()
+}
+
 function Insert-AutoBlock {
     param(
-        [Parameter(Mandatory = $true)][System.Collections.Generic.List[string]]$Lines,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][System.Collections.Generic.List[string]]$Lines,
         [Parameter(Mandatory = $true)][string]$Title,
-        [Parameter(Mandatory = $true)][string[]]$Bullets
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Bullets
     )
 
     if ($Bullets.Count -eq 0) { return }
@@ -435,11 +470,11 @@ function Insert-AutoBlock {
     if ($insert -gt 0 -and $Lines[$insert - 1].Trim() -ne "") {
         $block.Add("")
     }
-    $block.Add("<!-- MSUF-AUTO-CHANGELOG:$marker:START -->")
+    $block.Add("<!-- MSUF-AUTO-CHANGELOG:${marker}:START -->")
     foreach ($bullet in $Bullets) {
         $block.Add("- $bullet")
     }
-    $block.Add("<!-- MSUF-AUTO-CHANGELOG:$marker:END -->")
+    $block.Add("<!-- MSUF-AUTO-CHANGELOG:${marker}:END -->")
     $block.Add("")
 
     $Lines.InsertRange($insert, [string[]]$block.ToArray())
@@ -506,6 +541,10 @@ function Update-ChangelogAutoBlocks {
         $items = [string[]]$Groups[$title].ToArray()
         Insert-AutoBlock -Lines $releaseList -Title $title -Bullets $items
     }
+
+    $compressedReleaseLines = Compress-BlankLines -Lines ([string[]]$releaseList.ToArray())
+    $releaseList.Clear()
+    foreach ($line in $compressedReleaseLines) { $releaseList.Add($line) }
 
     $updated = @($before) + [string[]]$releaseList.ToArray() + @($after)
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
