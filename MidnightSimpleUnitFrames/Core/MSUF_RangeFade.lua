@@ -464,6 +464,14 @@ do
         EnableSpellRangeCheck(spellID, true)
     end
 
+    local function TargetUnitInRangeFallback()
+        if not UnitInRange then return nil end
+        local inR, checked = UnitInRange("target")
+        if issecretvalue and (issecretvalue(inR) or issecretvalue(checked)) then return nil end
+        if checked == true then return inR and true or false end
+        return nil
+    end
+
     local function TargetUnitRangeFallback()
         local canAttack = UnitCanAttack and UnitCanAttack("player", "target")
         if issecretvalue and issecretvalue(canAttack) then canAttack = nil end
@@ -477,11 +485,7 @@ do
             return CheckFriendlyTarget("target")
         end
 
-        if not UnitInRange then return nil end
-        local inR, checked = UnitInRange("target")
-        if issecretvalue and (issecretvalue(inR) or issecretvalue(checked)) then return nil end
-        if checked == true then return inR and true or false end
-        return nil
+        return TargetUnitInRangeFallback()
     end
 
     local function TargetRecomputeRange(conf)
@@ -490,14 +494,24 @@ do
             ClearMul("target", "target")
             return
         end
-        local inRange = TargetUnitRangeFallback()
-        if inRange ~= nil then
-            -- Direct target scan wins on target/unit refreshes; the registered
-            -- spell states remain useful for cheap SPELL_RANGE_CHECK_UPDATE deltas.
-        elseif _targetNumChecked > 0 then
-            inRange = (_targetNumInRange > 0)
+        local inRange
+        if InCombatLockdown and InCombatLockdown() then
+            if _targetNumChecked > 0 then
+                inRange = (_targetNumInRange > 0)
+            else
+                inRange = TargetUnitInRangeFallback()
+                if inRange == nil then inRange = true end
+            end
         else
-            inRange = true
+            inRange = TargetUnitRangeFallback()
+            if inRange ~= nil then
+                -- Direct target scan wins out of combat; the registered spell
+                -- states remain useful for cheap SPELL_RANGE_CHECK_UPDATE deltas.
+            elseif _targetNumChecked > 0 then
+                inRange = (_targetNumInRange > 0)
+            else
+                inRange = true
+            end
         end
         ApplyMul(GetFrame("target"), "target", "target", conf, inRange)
     end
