@@ -4449,6 +4449,95 @@ local function BuildWindow()
     return f
 end
 
+local function GetBundledChangelog()
+    local data = (type(ns) == "table" and ns.MSUF_Changelog) or _G.MSUF_Changelog
+    if type(data) ~= "table" or type(data.entries) ~= "table" or type(data.entries[1]) ~= "table" then
+        return nil
+    end
+    return data
+end
+
+local function BuildDashboardChangelog(parent, cardWidth)
+    local data = GetBundledChangelog()
+    local left, right = 14, 14
+    local bodyW = max(120, (cardWidth or 420) - left - right - 20)
+
+    local divider = parent:CreateTexture(nil, "BORDER")
+    divider:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -132)
+    divider:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -right, -132)
+    divider:SetHeight(1)
+    divider:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.42)
+
+    local title = T.Font(parent, "GameFontNormal", "Latest Changelog", T.colors.text)
+    title:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -146)
+    title:SetJustifyH("LEFT")
+    title:SetWidth(bodyW)
+
+    local subtitleText = data and (data.rangeLabel or data.currentVersion or "") or "No release notes bundled with this build."
+    local subtitle = T.Font(parent, "GameFontDisableSmall", subtitleText, T.colors.dim)
+    subtitle:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -168)
+    subtitle:SetJustifyH("LEFT")
+    subtitle:SetWidth(bodyW)
+
+    if not data then return end
+
+    local scroll = CreateFrame("ScrollFrame", nil, parent)
+    scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", left, -192)
+    scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -34, 58)
+
+    local child = CreateFrame("Frame", nil, scroll)
+    child:SetSize(bodyW, 1)
+    scroll:SetScrollChild(child)
+
+    local y = -2
+    local function AddLine(text, fontObject, color, indent, gap)
+        local rawText = tostring(text or "")
+        local fs = T.Font(child, fontObject or "GameFontHighlightSmall", "", color or T.colors.muted)
+        indent = indent or 0
+        fs:SetPoint("TOPLEFT", child, "TOPLEFT", indent, y)
+        fs:SetWidth(max(40, bodyW - indent))
+        fs:SetJustifyH("LEFT")
+        if fs.SetWordWrap then fs:SetWordWrap(true) end
+        if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(true) end
+        fs:SetText(rawText)
+        local h = (fs.GetStringHeight and fs:GetStringHeight()) or 0
+        if h < 10 then h = 12 end
+        y = y - h - (gap or 4)
+        return fs
+    end
+
+    local entries = data.entries
+    local maxEntries = min(#entries, 2)
+    for entryIndex = 1, maxEntries do
+        local entry = entries[entryIndex]
+        if type(entry) == "table" then
+            if entryIndex > 1 then y = y - 8 end
+            local version = tostring(entry.version or "")
+            local date = tostring(entry.date or "")
+            local heading = (date ~= "" and (version .. " - " .. date)) or version
+            AddLine(heading, "GameFontNormalSmall", entryIndex == 1 and T.colors.accent or T.colors.title, 0, 5)
+
+            local sections = entry.sections
+            if type(sections) == "table" then
+                for sectionIndex = 1, #sections do
+                    local section = sections[sectionIndex]
+                    if type(section) == "table" and type(section.bullets) == "table" and #section.bullets > 0 then
+                        AddLine(tostring(section.title or ""), "GameFontDisableSmall", T.colors.accent2, 0, 2)
+                        for bulletIndex = 1, #section.bullets do
+                            AddLine("- " .. tostring(section.bullets[bulletIndex] or ""), "GameFontHighlightSmall", T.colors.muted, 8, 4)
+                        end
+                        y = y - 2
+                    end
+                end
+            end
+        end
+    end
+
+    child:SetHeight(max(1, math.abs(y) + 8))
+    if T.StyleScrollFrame then T.StyleScrollFrame(scroll, parent) end
+    if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+end
+
 local function BuildDashboard(ctx)
     local root = ctx.wrapper
     local width = ctx.width
@@ -4787,6 +4876,7 @@ local function BuildDashboard(ctx)
     if browse._msuf2Label then browse._msuf2Label:SetFontObject("GameFontNormal") end
     if T.SkinPrimaryButton then T.SkinPrimaryButton(browse) end
     W.Text(wago, "Copies the Wago link so you can open it in your browser.", 14, -106, colW - 28, T.colors.muted)
+    BuildDashboardChangelog(wago, colW)
 
     local function AddIconTooltip(frame, title, text)
         if type(_G.MSUF_AddTooltip) == "function" then
@@ -4893,7 +4983,7 @@ local function BuildDashboard(ctx)
 end
 
 M.RegisterPage("search", { title = "Search", build = BuildSearchPage, version = 1 })
-M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard, version = 3 })
+M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard, version = 4 })
 
 local function ApplyMenuFrameScale(frame)
     if not (frame and frame.SetScale) then return end

@@ -74,6 +74,7 @@ jobs:
       - name: Build AddOns zip
         shell: pwsh
         run: |
+          ./tools/update-addon-changelog.ps1 -Version $env:RELEASE_VERSION
           ./tools/package-release.ps1 -Version $env:RELEASE_VERSION
 
       - name: Upload to GitHub Release

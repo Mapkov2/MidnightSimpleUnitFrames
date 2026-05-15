@@ -29,7 +29,14 @@
 - Fixed global MSUF scale collection so Group Frames are only included when their own scale mode is
   `manual` or `auto`.
 
+### Changes / Improvements
+- Dashboard Wago Profiles now shows the bundled changelog from the previous release to the current
+  build in a readable in-game release notes panel, including beta builds.
+
 ### Release / Tooling
+- Added `tools/MSUF-ReleaseHelper.ps1` and a Windows `.cmd` launcher for a guided release flow:
+  changelog entry, bundled in-game changelog generation, local zip build, optional commit/tag/push,
+  and GitHub workflow dispatch.
 - CurseForge publishing now uses `BigWigsMods/packager` directly from the release workflow.
 - Release channel resolution now maps alpha/beta/prerelease tags to the correct Wago stability and
   CurseForge release type.
@@ -60,7 +67,7 @@
   eliminates the redundant `not InCombatLockdown or` nil-check pattern at both usage sites.
 
 ### Bugfixes
-- **`MSUF_Alpha.lua` — secret-value arithmetic crash** (3111× spam): `GetAlpha()` and
+- **`MSUF_Alpha.lua` - secret-value arithmetic crash** (3111x spam): `GetAlpha()` and
   `GetStatusBarColor()` return secret values when WoW execution is tainted. The alpha diff
   functions (`_AlphaNearlyEqual`, `MSUF_Alpha_SetFlat`, `MSUF_Alpha_ApplyLayered`) and four
   EditMode minimum-alpha comparisons all performed arithmetic/comparison on these values,

@@ -102,6 +102,13 @@ New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
 Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames") -Destination $stagePath -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_Castbars") -Destination $stagePath -Recurse -Force
 
+$changelogGenerator = Join-Path $RepoRoot "tools/update-addon-changelog.ps1"
+if (Test-Path -LiteralPath $changelogGenerator) {
+    & $changelogGenerator `
+        -Version $releaseVersion `
+        -OutputPath (Join-Path $stagePath "MidnightSimpleUnitFrames/Foundation/MSUF_Changelog.lua")
+}
+
 Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc") -TocVersion $releaseVersion
 Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames_Castbars/MidnightSimpleUnitFrames_Castbars.toc") -TocVersion $releaseVersion
 

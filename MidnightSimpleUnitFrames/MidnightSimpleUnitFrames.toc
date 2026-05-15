@@ -48,6 +48,7 @@ Locales\MSUF_RuntimeLocalization.lua
 # FOUNDATION
 # ═══════════════════════════════════════════════════════════════
 Foundation\MSUF_Util.lua
+Foundation\MSUF_Changelog.lua
 Foundation\MSUF_Transitions.lua
 Foundation\MSUF_Defaults.lua
 Foundation\MSUF_Profiles.lua
