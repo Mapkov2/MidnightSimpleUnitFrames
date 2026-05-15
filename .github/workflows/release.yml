@@ -106,4 +106,4 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
         with:
-          args: -g retail -m .pkgmeta -n "{package-name}-{project-version}:MSUF {project-version}"
+          args: -g retail -m .pkgmeta -n "{package-name}{project-version}:MSUF {project-version}"
