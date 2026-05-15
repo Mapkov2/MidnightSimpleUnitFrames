@@ -372,6 +372,111 @@ function Get-AutoChangelogGroups {
     return $groups
 }
 
+function New-AutoGroupMap {
+    $groups = [ordered]@{}
+    foreach ($title in $SectionOrder) {
+        $groups[$title] = New-Object System.Collections.Generic.List[string]
+    }
+    return $groups
+}
+
+function Get-SectionTitleFromMarkerKey {
+    param([AllowNull()][string]$MarkerKey)
+
+    if ([string]::IsNullOrWhiteSpace($MarkerKey)) { return $null }
+    foreach ($title in $SectionOrder) {
+        if ((Get-MarkerKey $title) -eq $MarkerKey.Trim()) {
+            return $title
+        }
+    }
+    return $null
+}
+
+function Add-AutoBulletToGroup {
+    param(
+        [Parameter(Mandatory = $true)]$Groups,
+        [Parameter(Mandatory = $true)]$Seen,
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Bullet
+    )
+
+    $target = if ($Groups.Contains($Title)) { $Title } else { "Changes / Improvements" }
+    $text = $Bullet.Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return }
+
+    $key = ($target + "|" + $text).ToLowerInvariant()
+    if ($Seen.Contains($key)) { return }
+    [void]$Seen.Add($key)
+    $Groups[$target].Add($text)
+}
+
+function Get-ExistingAutoBlocks {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
+
+    $groups = New-AutoGroupMap
+    $currentTitle = $null
+    $currentHeading = $null
+    $lastList = $null
+
+    foreach ($line in $Lines) {
+        if ($line -match '^###\s+(.+?)\s*$') {
+            $currentHeading = $Matches[1].Trim()
+        }
+
+        if ($line -match '^\s*<!--\s*MSUF-AUTO-CHANGELOG:\s*-->\s*$') {
+            $currentTitle = if ($currentTitle) { $null } else { $currentHeading }
+            $lastList = if ($currentTitle -and $groups.Contains($currentTitle)) { ,$groups[$currentTitle] } else { $null }
+            continue
+        }
+
+        if ($line -match '^\s*<!--\s*MSUF-AUTO-CHANGELOG:([^:>]+):START\s*-->\s*$') {
+            $currentTitle = Get-SectionTitleFromMarkerKey $Matches[1]
+            $lastList = if ($currentTitle -and $groups.Contains($currentTitle)) { ,$groups[$currentTitle] } else { $null }
+            continue
+        }
+
+        if ($line -match '^\s*<!--\s*MSUF-AUTO-CHANGELOG:[^:>]+:END\s*-->\s*$') {
+            $currentTitle = $null
+            $lastList = $null
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($currentTitle) -or $null -eq $lastList) { continue }
+
+        if ($line -match '^\s*-\s+(.+?)\s*$') {
+            $lastList.Add($Matches[1].Trim())
+            continue
+        }
+
+        if ($lastList.Count -gt 0 -and $line -match '^\s{2,}(.+?)\s*$') {
+            $lastList[$lastList.Count - 1] = ($lastList[$lastList.Count - 1] + " " + $Matches[1].Trim()).Trim()
+        }
+    }
+
+    return $groups
+}
+
+function Merge-AutoGroups {
+    param(
+        [Parameter(Mandatory = $true)]$Existing,
+        [Parameter(Mandatory = $true)]$Generated
+    )
+
+    $merged = New-AutoGroupMap
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+
+    foreach ($title in $SectionOrder) {
+        foreach ($bullet in $Existing[$title]) {
+            Add-AutoBulletToGroup -Groups $merged -Seen $seen -Title $title -Bullet $bullet
+        }
+        foreach ($bullet in $Generated[$title]) {
+            Add-AutoBulletToGroup -Groups $merged -Seen $seen -Title $title -Bullet $bullet
+        }
+    }
+
+    return $merged
+}
+
 function Remove-AutoBlocks {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
 
@@ -533,12 +638,14 @@ function Update-ChangelogAutoBlocks {
     $releaseLines = if ($bounds.End -gt $bounds.Start) { [string[]]$lines[$bounds.Start..($bounds.End - 1)] } else { @($lines[$bounds.Start]) }
     $after = if ($bounds.End -lt $lines.Count) { [string[]]$lines[$bounds.End..($lines.Count - 1)] } else { @() }
 
+    $existingGroups = Get-ExistingAutoBlocks -Lines $releaseLines
+    $mergedGroups = Merge-AutoGroups -Existing $existingGroups -Generated $Groups
     $cleanReleaseLines = Remove-AutoBlocks -Lines $releaseLines
     $releaseList = New-Object System.Collections.Generic.List[string]
     foreach ($line in $cleanReleaseLines) { $releaseList.Add($line) }
 
     foreach ($title in $SectionOrder) {
-        $items = [string[]]$Groups[$title].ToArray()
+        $items = [string[]]$mergedGroups[$title].ToArray()
         Insert-AutoBlock -Lines $releaseList -Title $title -Bullets $items
     }
 

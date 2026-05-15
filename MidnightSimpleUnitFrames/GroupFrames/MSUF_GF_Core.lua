@@ -154,6 +154,11 @@ if type(_G.MSUF_UnitFrames) ~= "table" then _G.MSUF_UnitFrames = {} end
 GF._eventFrame = GF._eventFrame or nil
 GF._previewActive = GF._previewActive or {}
 
+local function MarkPostCombatHeaderRecovery()
+    GF._pendingRebuild = true
+    GF._pendingVisibilityUpdate = true
+end
+
 ------------------------------------------------------------------------
 -- Click-cast compatibility
 ------------------------------------------------------------------------
@@ -304,7 +309,13 @@ local function _GFInstallAttrHook(child)
             -- transitions from inactive → active. Only valid once the
             -- frame has been built by GF_InitButton (otherwise the
             -- visual subsystems are nil-bound).
-            if self._msufGFBuilt and self._msufGFRegisteredUnit ~= value then
+            if not self._msufGFBuilt then
+                if InCombatLockdown and InCombatLockdown() then
+                    MarkPostCombatHeaderRecovery()
+                end
+                return
+            end
+            if self._msufGFRegisteredUnit ~= value then
                 if GF.IsFrameRuntimeEnabled and not GF.IsFrameRuntimeEnabled(self, self._msufGFKind) then
                     if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(self) end
                     self._msufGFRegisteredUnit = nil
@@ -1669,7 +1680,7 @@ local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
         if child and child.GetAttribute and child:GetAttribute("unit") ~= nil then
             if not child._msufGFBuilt then
                 if inCombat then
-                    GF._pendingRebuild = true
+                    MarkPostCombatHeaderRecovery()
                     break
                 end
                 _G.MSUF_GF_InitButton(child, kind)
@@ -2032,7 +2043,10 @@ local function ScheduleHeaderChildScan(scope, delay, kind)
 
     local function run()
         _scheduledHeaderScans[key] = nil
-        if InCombatLockdown() then return end
+        if InCombatLockdown() then
+            MarkPostCombatHeaderRecovery()
+            return
+        end
 
         local scanKind = kind
         if scope == "raid" then
@@ -2442,6 +2456,10 @@ local function SetupPartyHeader()
     local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
     header:SetAttribute("_msufLayoutNonce", nonce)
 
+    -- Try the first build immediately; delayed scans still catch secure
+    -- children whose unit token is assigned on the next tick.
+    ScanHeaderChildren(header, "party", true)
+
     -- Deferred child scan (children created async after Show)
     ScheduleHeaderChildScan("party", 0, "party")
     ScheduleHeaderChildScan("party", 0.05, "party")
@@ -2624,6 +2642,8 @@ local function SetupPreservedRaidHeaders(kind, conf)
         end
     end
 
+    ScanRaidHeaders(kind, true)
+
     ScheduleHeaderChildScan("raid", 0, kind)
     ScheduleHeaderChildScan("raid", 0.05, kind)
 end
@@ -2795,6 +2815,10 @@ local function SetupRaidHeader()
     local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
     header:SetAttribute("_msufLayoutNonce", nonce)
 
+    -- Try the first build immediately; delayed scans still catch secure
+    -- children whose unit token is assigned on the next tick.
+    ScanHeaderChildren(header, kind, true)
+
     ScheduleHeaderChildScan("raid", 0, kind)
     ScheduleHeaderChildScan("raid", 0.05, kind)
 end
@@ -2856,7 +2880,11 @@ function GF.DisableBlizzardFrames()
     if raidConf.enabled == true then
         HideFrameLocked(_G.CompactRaidFrameContainer)
         if _G.CompactRaidFrameManager_SetSetting then
-            _G.CompactRaidFrameManager_SetSetting("IsShown", "0")
+            -- Keep Blizzard's saved raid visibility enabled. MSUF hides the
+            -- container at runtime, but an in-combat reload needs Blizzard
+            -- frames as the only legal fallback until custom secure headers
+            -- can be rebuilt.
+            _G.CompactRaidFrameManager_SetSetting("IsShown", "1")
         end
     else
         RestoreFrameLocked(_G.CompactRaidFrameContainer)
@@ -3562,7 +3590,7 @@ function GF.RebuildAll()
         GF.UpdateAnyEnabledFlag()
         if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(false) end
         if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
-        GF._pendingRebuild = true
+        MarkPostCombatHeaderRecovery()
         return
     end
     GF.HideOrphanedPreviews()
@@ -3608,6 +3636,10 @@ function GF.RebuildAll()
         end
     end
     C_Timer.After(0.05, function()
+        if InCombatLockdown() then
+            MarkPostCombatHeaderRecovery()
+            return
+        end
         -- Force event re-registration (picks up aura/dispel toggle changes)
         for _, kind in pairs({"party"}) do
             local hdr = GF.headers[kind]
@@ -3831,6 +3863,8 @@ local function OnEvent(self, event, ...)
                     GF.RebuildAll()
                     GF._forceRecreateHeaders = nil
                     GF_UpdateDifficultyCache()
+                else
+                    MarkPostCombatHeaderRecovery()
                 end
             end)
         else
@@ -3854,8 +3888,7 @@ local function OnEvent(self, event, ...)
         end
 
         if InCombatLockdown() then
-            GF._pendingRebuild = true
-            GF._pendingVisibilityUpdate = true
+            MarkPostCombatHeaderRecovery()
         else
             local oldKind = GF._lastDifficultyLiveKind
             local switched = false
