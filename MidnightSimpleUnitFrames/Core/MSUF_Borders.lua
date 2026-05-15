@@ -34,7 +34,11 @@ local function PlayerMayFriendlyDispel()
         return _playerFriendlyDispelCapable
     end
 
-    local _, class = UnitClass and UnitClass("player")
+    local class
+    if UnitClass then
+        local _, classToken = UnitClass("player")
+        class = classToken
+    end
     if not class then
         return true
     end
@@ -48,12 +52,20 @@ local function PlayerMayPurge()
         return _playerPurgeCapable
     end
 
-    local _, class = UnitClass and UnitClass("player")
+    local class
+    if UnitClass then
+        local _, classToken = UnitClass("player")
+        class = classToken
+    end
     if not class then
         return true
     end
 
-    local _, race = UnitRace and UnitRace("player")
+    local race
+    if UnitRace then
+        local _, raceToken = UnitRace("player")
+        race = raceToken
+    end
     _playerPurgeCapable = (_PURGE_CLASS[class] == true) or (race == "BloodElf")
     return _playerPurgeCapable
 end
