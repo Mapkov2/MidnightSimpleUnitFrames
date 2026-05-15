@@ -1261,13 +1261,14 @@ local function _GF_GetFrameAlpha(kind, conf)
 end
 
 local function _GF_ApplyFrameAlpha(f, kind, conf)
-    if f and f.SetAlpha then
+    local target = (f and f.barGroup) or f
+    if target and target.SetAlpha then
         local c = f._c
         local a = c and c.frameAlpha
         if type(a) ~= "number" then
             a = _GF_GetFrameAlpha(kind, conf or GF.GetConf(kind))
         end
-        f:SetAlpha(a)
+        target:SetAlpha(a)
     end
 end
 
@@ -1327,7 +1328,8 @@ do
         if (c and not c.rfEn) or (conf and conf.rangeFadeEnabled == false) then
             f._msufGFRangeFadeUnit = nil
             _ClearHealthRangeFade(f, kind)
-            if f.SetAlpha then f:SetAlpha(frameAlpha) end
+            local target = (f and f.barGroup) or f
+            if target and target.SetAlpha then target:SetAlpha(frameAlpha) end
             return
         end
         local fadeAlpha = (c and c.rfAlpha) or (conf and conf.rangeFadeAlpha) or 0.4
@@ -1339,7 +1341,8 @@ do
             if not inGroup and not inRaid then
                 f._msufGFRangeFadeUnit = nil
                 _ClearHealthRangeFade(f, kind)
-                if f.SetAlpha then f:SetAlpha(frameAlpha) end
+                local target = (f and f.barGroup) or f
+                if target and target.SetAlpha then target:SetAlpha(frameAlpha) end
                 return
             end
         end
@@ -1352,7 +1355,8 @@ do
                 _ApplyHealthRangeFade(f, kind, nil, offA, offA)
             else
                 _ClearHealthRangeFade(f, kind)
-                if f.SetAlpha then f:SetAlpha(frameAlpha * offA) end
+                local target = (f and f.barGroup) or f
+                if target and target.SetAlpha then target:SetAlpha(frameAlpha * offA) end
             end
             return
         end
@@ -1364,8 +1368,16 @@ do
         if type(inRange) ~= "nil" then
             if hpMode then
                 _ApplyHealthRangeFade(f, kind, inRange, fadeAlpha)
-            elseif f.SetAlphaFromBoolean then
-                f:SetAlphaFromBoolean(inRange, frameAlpha, frameAlpha * fadeAlpha)
+            else
+                local target = (f and f.barGroup) or f
+                if target and target.SetAlphaFromBoolean then
+                    target:SetAlphaFromBoolean(inRange, frameAlpha, frameAlpha * fadeAlpha)
+                elseif target and target.SetAlpha then
+                    local boolValue = _UnsecretBool(inRange)
+                    if type(boolValue) ~= "nil" then
+                        target:SetAlpha((boolValue and frameAlpha) or (frameAlpha * fadeAlpha))
+                    end
+                end
             end
         end
     end

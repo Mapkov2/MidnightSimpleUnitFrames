@@ -31,6 +31,7 @@ do
     local UnitExists = _G.UnitExists
     local UnitInRange = _G.UnitInRange
     local UnitCanAttack = _G.UnitCanAttack
+    local UnitCanAssist = _G.UnitCanAssist
     local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
     local UnitIsPlayer = _G.UnitIsPlayer
     local UnitPhaseReason = _G.UnitPhaseReason
@@ -43,11 +44,13 @@ do
     local playerClass = select(2, _G.UnitClass("player"))
 
     local ENEMY_SPELLS = {
-        DEATHKNIGHT={49576,47541}, DEMONHUNTER={185123,183752},
-        DRUID={8921,5176}, EVOKER={362969}, HUNTER={75,466930},
-        MAGE={116,133}, MONK={117952,115546}, PALADIN={20473,20271},
-        PRIEST={585,8092}, ROGUE={185565,36554}, SHAMAN={188196,8042},
-        WARLOCK={686,232670}, WARRIOR={355,100},
+        DEATHKNIGHT={49576,47541}, DEMONHUNTER={278326,185123,183752,204021},
+        DRUID={8921,5176,339,6795,33786,22568}, EVOKER={362969}, HUNTER={75},
+        MAGE={2139,44614,118,116,133,44425}, MONK={115546,117952,115078,100780},
+        PALADIN={20271,20473,853,35395,62124,183218},
+        PRIEST={589,8092,585}, ROGUE={36554,185565,185763,2094,921},
+        SHAMAN={8042,188196,370,117014,73899}, WARLOCK={234153,198590,232670,686,5782},
+        WARRIOR={355,100,5246},
     }
     local RES_SPELLS = {
         DEATHKNIGHT={61999}, DRUID={50769,20484}, EVOKER={361227},
@@ -68,15 +71,15 @@ do
         DEATHKNIGHT={47541},
         DEMONHUNTER={},
         DRUID={8936,774,88423,2782},
-        EVOKER={361469,355913,360823},
+        EVOKER={355913,361469,360823},
         HUNTER={},
         MAGE={1459,475},
-        MONK={116670,115450},
-        PALADIN={19750,85673,4987,213644},
-        PRIEST={2061,17,21562,527},
-        ROGUE={57934,36554,921},
+        MONK={116670,115450,115546},
+        PALADIN={85673,19750,4987,213644},
+        PRIEST={17,2061,21562,527},
+        ROGUE={36554,921,57934},
         SHAMAN={8004,188070,546},
-        WARLOCK={20707,5697},
+        WARLOCK={5697,20707},
         WARRIOR={3411},
     }
 
@@ -462,6 +465,18 @@ do
     end
 
     local function TargetUnitRangeFallback()
+        local canAttack = UnitCanAttack and UnitCanAttack("player", "target")
+        if issecretvalue and issecretvalue(canAttack) then canAttack = nil end
+        if canAttack == true then
+            return CheckEnemy("target")
+        end
+
+        local canAssist = UnitCanAssist and UnitCanAssist("player", "target")
+        if issecretvalue and issecretvalue(canAssist) then canAssist = nil end
+        if canAssist == true then
+            return CheckFriendlyTarget("target")
+        end
+
         if not UnitInRange then return nil end
         local inR, checked = UnitInRange("target")
         if issecretvalue and (issecretvalue(inR) or issecretvalue(checked)) then return nil end
@@ -475,12 +490,14 @@ do
             ClearMul("target", "target")
             return
         end
-        local inRange
-        if _targetNumChecked > 0 then
+        local inRange = TargetUnitRangeFallback()
+        if inRange ~= nil then
+            -- Direct target scan wins on target/unit refreshes; the registered
+            -- spell states remain useful for cheap SPELL_RANGE_CHECK_UPDATE deltas.
+        elseif _targetNumChecked > 0 then
             inRange = (_targetNumInRange > 0)
         else
-            inRange = TargetUnitRangeFallback()
-            if inRange == nil then inRange = true end
+            inRange = true
         end
         ApplyMul(GetFrame("target"), "target", "target", conf, inRange)
     end
@@ -680,6 +697,11 @@ do
         TargetClassifyAndWire()
     end
 
+    function _G.MSUF_RangeFade_OnTargetChanged()
+        _state["target"] = nil
+        TargetClassifyAndWire()
+    end
+
     function _G.MSUF_RangeFade_OnEvent_SpellRangeUpdate(spellIdentifier, isInRange, checksRange)
         -- Handled internally via EventBus now
     end
@@ -690,9 +712,7 @@ do
 
     function _G.MSUF_RangeFade_Reset()
         TargetClearSpellStates()
-        _state["target"] = nil
-        _mulT.target = 1
-        -- Re-apply on next target event
+        ClearMul("target", "target")
     end
 
     function _G.MSUF_RangeFade_Shutdown()
