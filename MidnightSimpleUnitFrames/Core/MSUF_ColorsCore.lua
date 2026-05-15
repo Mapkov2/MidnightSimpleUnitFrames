@@ -553,7 +553,23 @@ end
 
 -- ── Bar BG Match HP ──
 local function GetBarBgMatchHP() return (_general() or {}).barBgMatchHPColor and true or false end
-local function SetBarBgMatchHP(v) local g = _general(); if g then g.barBgMatchHPColor = v and true or false; PushVisualUpdates() end end
+local function SetBarBgMatchHP(v)
+    local g = _general()
+    if g then
+        g.barBgMatchHPColor = v and true or false
+        if v then g.barBgClassColor = false end
+        PushVisualUpdates()
+    end
+end
+local function GetBarBgClassColor() return (_general() or {}).barBgClassColor and true or false end
+local function SetBarBgClassColor(v)
+    local g = _general()
+    if g then
+        g.barBgClassColor = v and true or false
+        if v then g.barBgMatchHPColor = false end
+        PushVisualUpdates()
+    end
+end
 
 -- ── NPC Colors ──
 local NPC_TYPE_KEYS = { "npcBoss", "npcMiniboss", "npcCaster", "npcMelee", "npcRegular" }
@@ -652,6 +668,8 @@ ns._colorsAPI = {
     ResetClassBarBgColor            = ResetClassBarBgColor,
     GetBarBgMatchHP                 = GetBarBgMatchHP,
     SetBarBgMatchHP                 = SetBarBgMatchHP,
+    GetBarBgClassColor              = GetBarBgClassColor,
+    SetBarBgClassColor              = SetBarBgClassColor,
     GetNPCColor                     = GetNPCColor,
     SetNPCColor                     = SetNPCColor,
     ResetAllNPCColors               = ResetAllNPCColors,

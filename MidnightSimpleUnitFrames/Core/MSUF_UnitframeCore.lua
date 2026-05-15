@@ -274,6 +274,7 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.darkBgCustomColor = (g and g.darkBgCustomColor) and true or false
     cache.darkBgBrightness = UFCore_Clamp01(g and g.darkBgBrightness, 1)
     cache.barBgMatchHPColor = (g and g.barBgMatchHPColor) and true or false
+    cache.barBgClassColor = (g and g.barBgClassColor) and true or false
     cache.powerBarBgMatchHPColor = ((g and g.powerBarBgMatchHPColor) or (bars and bars.powerBarBgMatchBarColor)) and true or false
     cache.anyBarBackgroundTracksHPColor = (cache.barBgMatchHPColor or cache.powerBarBgMatchHPColor) and true or false
 
@@ -938,6 +939,11 @@ local function UFCore_UpdateIdentityFast(frame, conf)
         if (showName == true) or (conf and conf.showLevelIndicator == true) then
             _UpdateIdentityColors(frame)
         end
+    end
+    local cache = UFCore_GetSettingsCache()
+    if cache and cache.barBgClassColor then
+        local fnBg = _G.MSUF_ApplyBarBackgroundVisual
+        if type(fnBg) == "function" then fnBg(frame) end
     end
 
     return true

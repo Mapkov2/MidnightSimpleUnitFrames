@@ -539,6 +539,11 @@ end
     if g.barBgMatchHPColor == nil then
         g.barBgMatchHPColor = false
     end
+    -- If enabled, the HP background uses the unit's class color while the HP
+    -- foreground can stay in Dark/Unified/Gradient mode.
+    if g.barBgClassColor == nil then
+        g.barBgClassColor = false
+    end
     if g.enableGradient == nil then
         g.enableGradient = false
     end

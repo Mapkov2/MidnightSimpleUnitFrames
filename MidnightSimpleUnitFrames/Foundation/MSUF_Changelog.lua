@@ -5,13 +5,23 @@ ns = ns or {}
 
 local data = {
     currentVersion = "5.1",
-    previousVersion = "5.0.21",
-    rangeLabel = "5.0.21 -> 5.1",
+    previousVersion = "",
+    rangeLabel = "5.1",
     entries = {
         {
             version = "5.1",
             date = "2026-05-15",
             sections = {
+                {
+                    title = "What Changed For Users",
+                    bullets = {
+                        "Existing profiles are kept; 5.1 does not force a new layout or preset.",
+                        "Group Frames can now use Blizzard-controlled auras or MSUF custom auras.",
+                        "Disabled MSUF Group Frames hand control back to Blizzard party and raid frames.",
+                        "Target-of-Target inline text has more separator options, including a custom separator field.",
+                        "Most changes apply automatically; review Group Frame auras only if you want to change how auras are displayed.",
+                    },
+                },
                 {
                     title = "Highlights",
                     bullets = {
@@ -68,6 +78,19 @@ local data = {
                         "Interrupt Ready colors reuse cached color objects instead of allocating new ones during refreshes.",
                         "Aura2 reminder scans skip disabled or irrelevant provider classes earlier and prefer cached player aura data.",
                         "Hover highlight cleanup avoids redundant Hide() calls when the highlight is already hidden.",
+                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_BarBackgroundRuntime.lua).",
+                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_ColorsCore.lua).",
+                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_UnitframeCore.lua).",
+                        "Foundation: Updated addon behavior (working tree; MSUF_Defaults.lua).",
+                        "Group Frames: Updated Group Frame behavior (working tree; MSUF_GF_Render.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Core.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Advanced.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GlobalBars.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Group.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupAuras.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupPreview.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_UnitPreview.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Support.lua).",
                     },
                 },
                 {
@@ -98,6 +121,10 @@ local data = {
                         "Fixed Absorb Bar Test Mode.",
                         "Fixed permanent buff toggle behavior.",
                         "Fixed Unit Frame heal prediction across Unit Frames and disabled states.",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_AdvancedColors.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_AdvancedProfiles.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GlobalFonts.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupLayout.lua).",
                     },
                 },
             },

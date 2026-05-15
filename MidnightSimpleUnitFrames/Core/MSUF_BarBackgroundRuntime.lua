@@ -8,6 +8,7 @@ _G.MSUF_NS = ns
 ns.Bars = ns.Bars or {}
 
 local type, tonumber = type, tonumber
+local UnitClass, UnitExists, UnitIsPlayer = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer
 
 local function EnsureDBSafe()
     if not _G.MSUF_DB and type(_G.EnsureDB) == "function" then
@@ -151,6 +152,31 @@ ns.Bars._MatchHPColor = function(frame, gen, cache, defR, defG, defB)
     return MSUF_Clamp01(fr), MSUF_Clamp01(fg), MSUF_Clamp01(fb)
 end
 
+ns.Bars._ClassBackgroundColor = function(frame, defR, defG, defB)
+    if not frame then return defR, defG, defB end
+    local unit = frame.unit
+    if not unit or (UnitExists and not UnitExists(unit)) then return defR, defG, defB end
+    if UnitIsPlayer and not UnitIsPlayer(unit) then return defR, defG, defB end
+
+    local _, classToken
+    if UnitClass then _, classToken = UnitClass(unit) end
+    if not classToken then return defR, defG, defB end
+
+    local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
+    if type(fastClass) == "function" then
+        local r, g, b = fastClass(classToken)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return MSUF_Clamp01(r), MSUF_Clamp01(g), MSUF_Clamp01(b)
+        end
+    end
+
+    local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+    if color then
+        return MSUF_Clamp01(color.r), MSUF_Clamp01(color.g), MSUF_Clamp01(color.b)
+    end
+    return defR, defG, defB
+end
+
 local _CachedGetCache
 local function _MSUF_ResolveGetCache()
     if _CachedGetCache then return _CachedGetCache end
@@ -181,7 +207,9 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
         r, gg, b, a = MSUF_GetBarBackgroundTintRGBA()
     end
 
-    if (cache and cache.barBgMatchHPColor or (gen and gen.barBgMatchHPColor)) and frame.hpBar and frame.hpBar.GetStatusBarColor then
+    if (cache and cache.barBgClassColor) or (gen and gen.barBgClassColor) then
+        r, gg, b = ns.Bars._ClassBackgroundColor(frame, r, gg, b)
+    elseif (cache and cache.barBgMatchHPColor or (gen and gen.barBgMatchHPColor)) and frame.hpBar and frame.hpBar.GetStatusBarColor then
         r, gg, b = ns.Bars._MatchHPColor(frame, gen, cache, r, gg, b)
     end
 

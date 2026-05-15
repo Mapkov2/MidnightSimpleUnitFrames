@@ -15,6 +15,8 @@ local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
+local UnitGUID = _G.UnitGUID
+local UnitIsPlayer = _G.UnitIsPlayer
 local UnitHealth = _G.UnitHealth
 local UnitHealthMax = _G.UnitHealthMax
 local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
@@ -434,6 +436,8 @@ ApplyGradient = function(f, kind)
     if f.power  then _GF_ApplyGradientToBar(f.power,  conf, gen, true)  end
 end
 
+local ResolveClassColor
+
 ------------------------------------------------------------------------
 -- Apply: bar background tint (missing-health / missing-power background)
 --
@@ -455,11 +459,48 @@ local function ApplyBackgroundTint(f, kind)
     local r = conf.bgR or 0.1
     local g = conf.bgG or 0.1
     local b = conf.bgB or 0.1
+    local hr, hg, hb = r, g, b
     local a = conf.bgA or 0.85
     local hpBgA = conf.hpBgAlpha or a
     local layerA = GetGFBackgroundAlpha(kind, conf)
     local effA = a * layerA
     local effHpBgA = hpBgA * layerA
+
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen and gen.barBgClassColor then
+        local cls
+        if f.unit and UnitExists and UnitExists(f.unit) then
+            local guid = UnitGUID and UnitGUID(f.unit) or f.unit
+            if f._msufGFClassBgGuid == guid then
+                cls = f._msufGFClassBgClass
+            elseif UnitClass and ((not UnitIsPlayer) or UnitIsPlayer(f.unit)) then
+                local _
+                _, cls = UnitClass(f.unit)
+                f._msufGFClassBgGuid = guid
+                f._msufGFClassBgClass = cls
+            else
+                f._msufGFClassBgGuid = guid
+                f._msufGFClassBgClass = nil
+            end
+        else
+            f._msufGFClassBgGuid = nil
+            f._msufGFClassBgClass = nil
+            cls = f._msufGFPreviewClass
+        end
+        if ResolveClassColor then
+            local rev = _G.MSUF_ColorStyleRevision or 0
+            local cr, cg, cb
+            if f._msufGFClassBgColorToken == cls and f._msufGFClassBgColorRev == rev then
+                cr, cg, cb = f._msufGFClassBgR, f._msufGFClassBgG, f._msufGFClassBgB
+            else
+                cr, cg, cb = ResolveClassColor(cls)
+                f._msufGFClassBgColorToken = cls
+                f._msufGFClassBgColorRev = rev
+                f._msufGFClassBgR, f._msufGFClassBgG, f._msufGFClassBgB = cr, cg, cb
+            end
+            if cr then hr, hg, hb = cr, cg, cb end
+        end
+    end
 
     -- Detect if any aura group uses behind-bar
     local auras = conf.auras
@@ -481,9 +522,9 @@ local function ApplyBackgroundTint(f, kind)
         local bbBg = f._msufBehindBarBg
         bbBg:SetAllPoints(f.health)
         bbBg:SetTexture(GF.ResolveBarBgTexture(kind))
-        if f._msufBBgR ~= r or f._msufBBgG ~= g or f._msufBBgB ~= b or f._msufBBgA ~= effHpBgA then
-            f._msufBBgR, f._msufBBgG, f._msufBBgB, f._msufBBgA = r, g, b, effHpBgA
-            bbBg:SetVertexColor(r, g, b, effHpBgA)
+        if f._msufBBgR ~= hr or f._msufBBgG ~= hg or f._msufBBgB ~= hb or f._msufBBgA ~= effHpBgA then
+            f._msufBBgR, f._msufBBgG, f._msufBBgB, f._msufBBgA = hr, hg, hb, effHpBgA
+            bbBg:SetVertexColor(hr, hg, hb, effHpBgA)
         end
         bbBg:Show()
         f._msufBehindBarActive = true
@@ -495,10 +536,10 @@ local function ApplyBackgroundTint(f, kind)
             f._msufBehindBarActive = nil
         end
         if f.healthBg then
-            if f._msufGFCachedHBgR ~= r or f._msufGFCachedHBgG ~= g
-               or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= effHpBgA then
-                f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, effHpBgA
-                f.healthBg:SetVertexColor(r, g, b, effHpBgA)
+            if f._msufGFCachedHBgR ~= hr or f._msufGFCachedHBgG ~= hg
+               or f._msufGFCachedHBgB ~= hb or f._msufGFCachedHBgA ~= effHpBgA then
+                f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = hr, hg, hb, effHpBgA
+                f.healthBg:SetVertexColor(hr, hg, hb, effHpBgA)
             end
         end
     end
@@ -742,7 +783,7 @@ end
 -- Resolve bar color for a class token (shared by live + preview)
 -- Respects global Colors menu custom class color overrides.
 ------------------------------------------------------------------------
-local function ResolveClassColor(cls)
+ResolveClassColor = function(cls)
     if not cls then return nil end
     local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
     if type(fastClass) == "function" then
@@ -1455,6 +1496,7 @@ local function ApplyVisuals(f, bits)
     end
     if band(bits, DIRTY_COLOR) ~= 0 then
         ApplyHealthColor(f, kind, f.unit)
+        ApplyBackgroundTint(f, kind)
         ApplyOverlayColors(f)
         ApplyHealthBarAlpha(f, kind)
         ApplyPowerBarAlpha(f, kind)
