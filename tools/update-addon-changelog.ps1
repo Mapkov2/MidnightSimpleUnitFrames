@@ -3,6 +3,7 @@ param(
     [string]$ChangelogPath = "CHANGELOG.md",
     [string]$OutputPath = "MidnightSimpleUnitFrames/Foundation/MSUF_Changelog.lua",
     [string]$Version,
+    [string]$PreviousVersion,
     [int]$ReleaseCount = 2
 )
 
@@ -160,7 +161,13 @@ for ($i = $startIndex; $i -lt $releases.Count -and $selected.Count -lt $ReleaseC
 }
 
 $currentVersion = $selected[0].version
-$previousVersion = if ($selected.Count -gt 1) { $selected[1].version } else { "" }
+$previousVersion = if (-not [string]::IsNullOrWhiteSpace($PreviousVersion)) {
+    Convert-ToAsciiText $PreviousVersion
+} elseif ($selected.Count -gt 1) {
+    $selected[1].version
+} else {
+    ""
+}
 $rangeLabel = if (-not [string]::IsNullOrWhiteSpace($previousVersion)) {
     "$previousVersion -> $currentVersion"
 } else {

@@ -1299,8 +1299,7 @@ local function _GF_GetFrameAlpha(kind, conf)
 end
 
 local function _GF_ApplyFrameAlpha(f, kind, conf)
-    local inCombat = InCombatLockdown and InCombatLockdown()
-    local target = (not inCombat and f and f.barGroup) or f
+    local target = (f and f.barGroup) or f
     if target and target.SetAlpha then
         local c = f._c
         local a = c and c.frameAlpha
@@ -1367,8 +1366,7 @@ do
         if (c and not c.rfEn) or (conf and conf.rangeFadeEnabled == false) then
             f._msufGFRangeFadeUnit = nil
             _ClearHealthRangeFade(f, kind)
-            local inCombat = InCombatLockdown and InCombatLockdown()
-            local target = (not inCombat and f and f.barGroup) or f
+            local target = (f and f.barGroup) or f
             if target and target.SetAlpha then target:SetAlpha(frameAlpha) end
             return
         end
@@ -1381,8 +1379,7 @@ do
             if not inGroup and not inRaid then
                 f._msufGFRangeFadeUnit = nil
                 _ClearHealthRangeFade(f, kind)
-                local inCombat = InCombatLockdown and InCombatLockdown()
-                local target = (not inCombat and f and f.barGroup) or f
+                local target = (f and f.barGroup) or f
                 if target and target.SetAlpha then target:SetAlpha(frameAlpha) end
                 return
             end
@@ -1396,8 +1393,7 @@ do
                 _ApplyHealthRangeFade(f, kind, nil, offA, offA)
             else
                 _ClearHealthRangeFade(f, kind)
-                local inCombat = InCombatLockdown and InCombatLockdown()
-                local target = (not inCombat and f and f.barGroup) or f
+                local target = (f and f.barGroup) or f
                 if target and target.SetAlpha then target:SetAlpha(frameAlpha * offA) end
             end
             return
@@ -1411,8 +1407,7 @@ do
             if hpMode then
                 _ApplyHealthRangeFade(f, kind, inRange, fadeAlpha)
             else
-                local inCombat = InCombatLockdown and InCombatLockdown()
-                local target = (not inCombat and f and f.barGroup) or f
+                local target = (f and f.barGroup) or f
                 if target and target.SetAlphaFromBoolean then
                     target:SetAlphaFromBoolean(inRange, frameAlpha, frameAlpha * fadeAlpha)
                 elseif target and target.SetAlpha then
@@ -5030,6 +5025,52 @@ function GF._AnyGroupConfFlag(key)
     return false
 end
 
+function GF._RangeFadeWanted()
+    if GF._anyEnabled == false then return false end
+    if IsInGroup and IsInRaid then
+        local inGroup = IsInGroup()
+        local inRaid = IsInRaid()
+        if not inGroup and not inRaid then return false end
+    end
+    return GF._AnyGroupConfFlag("rangeFadeEnabled") == true
+end
+
+function GF._StopRangeFadeCombatPulse()
+    GF._rangeCombatPulse = nil
+end
+
+function GF._RangeFadeCombatPulseStep(token)
+    if GF._rangeCombatPulse ~= token then return end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown())) then
+        GF._StopRangeFadeCombatPulse()
+        return
+    end
+    if not GF._RangeFadeWanted() then
+        GF._StopRangeFadeCombatPulse()
+        return
+    end
+    if GF.RefreshRangeFade then GF.RefreshRangeFade() end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(GF._rangeCombatPulseInterval or 0.50, function()
+            GF._RangeFadeCombatPulseStep(token)
+        end)
+    else
+        GF._StopRangeFadeCombatPulse()
+    end
+end
+
+function GF._EnsureRangeFadeCombatPulse()
+    if GF._rangeCombatPulse then return end
+    if not (C_Timer and C_Timer.After) then return end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown())) then return end
+    if not GF._RangeFadeWanted() then return end
+    local token = {}
+    GF._rangeCombatPulse = token
+    C_Timer.After(GF._rangeCombatPulseInterval or 0.50, function()
+        GF._RangeFadeCombatPulseStep(token)
+    end)
+end
+
 do
     local _globalEventBits
     local _baseEventsActive
@@ -5163,6 +5204,9 @@ do
 
     H.PLAYER_REGEN_DISABLED = function(_, event)
         _G.MSUF_InCombat = (event == "PLAYER_REGEN_DISABLED")
+        if event == "PLAYER_REGEN_ENABLED" and GF._StopRangeFadeCombatPulse then
+            GF._StopRangeFadeCombatPulse()
+        end
         if event == "PLAYER_REGEN_DISABLED" and GF._offlineHideRuntimeActive and GF.SuspendOfflineHideForCombat then
             GF.SuspendOfflineHideForCombat()
         end
@@ -5170,6 +5214,9 @@ do
             GF.RefreshGroupAlphas()
         elseif GF.RefreshRangeFade then
             GF.RefreshRangeFade()
+        end
+        if event == "PLAYER_REGEN_DISABLED" and GF._EnsureRangeFadeCombatPulse then
+            GF._EnsureRangeFadeCombatPulse()
         end
         if event == "PLAYER_REGEN_ENABLED" and GF._offlineHideAnyEnabled and GF.RefreshOfflineHiddenFrames then
             GF.RefreshOfflineHiddenFrames()
@@ -5180,6 +5227,11 @@ do
     do
         local function RefreshRangeFadeDelayed()
             if GF.RefreshRangeFade then GF.RefreshRangeFade() end
+            if (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+                and GF._EnsureRangeFadeCombatPulse
+            then
+                GF._EnsureRangeFadeCombatPulse()
+            end
         end
         local function QueueRangeRefresh()
             _MSUF_ScheduleDelayOnce("GF_RANGE_REFRESH", 0.05, RefreshRangeFadeDelayed)
