@@ -1,5 +1,46 @@
 # Changelog
 
+## 5.1 Beta 4 - 2026-05-15
+
+### Performance
+- **Dispel / purge outline event gating**: Aura outline updates now only register and queue when the
+  current player can actually friendly-dispel or purge. Friendly dispel and purge capability are cached
+  per player class/race and refreshed on login.
+- **Dispel / purge aura filtering**: Incremental `UNIT_AURA` updates now skip queue work when the
+  changed aura data cannot affect the active friendly-dispel or purge outline state.
+- **Group Frame cache build**: Blizzard aura type flags are resolved in one pass and stored in the
+  per-frame cache, avoiding repeated renderer/type checks during frame cache rebuilds.
+- **Group Frame highlight cache**: Highlight border values and colors are pre-resolved from group and
+  general settings during cache build instead of re-running fallback lookups in hot paths.
+- **Group Frame status text cache**: AFK, DND, dead, and ghost visibility flags are now cached per
+  frame and reused by status text updates.
+- **Aura2 reminders**: Reminder scans now ignore disabled or irrelevant provider classes before aura
+  lookup work, and prefer cached player aura data before falling back to direct API scans.
+- **Hover highlight hide hook**: Unitframe highlight cleanup avoids redundant `Hide()` calls when the
+  highlight is already hidden.
+
+### Bugfixes
+- Fixed Clique / Blizzard click-casting registration for Group Frames. Frames are registered after
+  tooltip `OnEnter` / `OnLeave` scripts are installed so Clique can wrap the final handlers.
+- Fixed preview Group Frames being added to the click-casting registry.
+- Fixed detached power bar outline mode. Detached power bars now use a dedicated outline path and no
+  longer depend on the normal embedded power bar border logic.
+- Fixed the dashboard MSUF UI scale Apply button so the scale is applied live immediately.
+- Fixed global MSUF scale collection so Group Frames are only included when their own scale mode is
+  `manual` or `auto`.
+
+### Release / Tooling
+- CurseForge publishing now uses `BigWigsMods/packager` directly from the release workflow.
+- Release channel resolution now maps alpha/beta/prerelease tags to the correct Wago stability and
+  CurseForge release type.
+- CurseForge API secrets can be provided as either `CF_API_KEY` or `CURSEFORGE`.
+- Release zips now use the full addon name (`MidnightSimpleUnitFrames<version>.zip`) instead of the
+  short `MSUF-<version>.zip` name.
+
+### Documentation
+- Added `docs/PERFY_WORKFLOW.md` with the current Perfy trace workflow, validation rules, and known
+  instrumentation pitfalls for future performance passes.
+
 ## 5.1 Beta 3 - 2026-05-14
 
 ### Performance (Stage 1 micro-optimizations)
