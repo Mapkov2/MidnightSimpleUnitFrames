@@ -444,7 +444,7 @@ function Cache.FullScan(unit)
     s.changed = true
     s.epoch = s.epoch + 1
     s.structureChanged = true
-    if s.updatedIDs then wipe(s.updatedIDs) end
+    s.updatedIDs = nil
     local _st = API.Store; if _st and _st._epochs then _st._epochs[unit] = s.epoch end
     local slotsN = _PackSlots(_getSlots(unit, HELPFUL, 40))
     for i = 2, slotsN do
@@ -573,7 +573,11 @@ function Cache.OnUnitAura(unit, updateInfo)
         -- update-only → FilterAndSort can skip full rescan and reuse previous output.
         if hasAdd or hasRem then
             s.structureChanged = true
-            if updatedIDs then wipe(updatedIDs) end
+            -- A structural delta can keep the visible count unchanged
+            -- (remove one aura, add another). Do not leave an empty
+            -- updatedIDs table behind, or RenderUnit may treat the pass as
+            -- update-only and skip committing the changed icon slots.
+            s.updatedIDs = nil
         end
         -- PERF: Inlined Store epoch tracking (was separate Store.OnUnitAura wrapper)
         local _st = API.Store; if _st and _st._epochs then _st._epochs[unit] = s.epoch end
@@ -587,7 +591,7 @@ function Cache.Invalidate(unit)
         s.changed = true
         s.epoch = s.epoch + 1
         s.structureChanged = true
-        if s.updatedIDs then wipe(s.updatedIDs) end
+        s.updatedIDs = nil
         s._lastFilterGen = nil
         s._lastNB = nil
         s._lastND = nil
@@ -599,7 +603,7 @@ function Cache.InvalidateAll()
         s.changed = true
         s.epoch = s.epoch + 1
         s.structureChanged = true
-        if s.updatedIDs then wipe(s.updatedIDs) end
+        s.updatedIDs = nil
         -- Clear fast-path filter cache: options changes (Important, OnlyMine,
         -- Caps, IgnoreList, etc.) must force a full re-filter on next
         -- FilterAndSort, even when no aura add/remove occurred.
