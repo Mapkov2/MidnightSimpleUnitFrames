@@ -463,6 +463,22 @@ local function _MSUF_PowerModeAllowsSplit(mode)
     return (mode == "CURPERCENT" or mode == "CURMAXPERCENT")
 end
 
+local function _MSUF_PowerModeNeeds(pMode)
+    -- pMode is already normalized by EnsureSpec.
+    if pMode == "CURRENT" then
+        return true, false, false
+    elseif pMode == "MAX" then
+        return false, true, false
+    elseif pMode == "CURMAX" then
+        return true, true, false
+    elseif pMode == "PERCENT" then
+        return false, false, true
+    elseif pMode == "CURMAXPERCENT" then
+        return true, true, true
+    end
+    return true, false, true
+end
+
 -- Unified per-frame text config spec. Built once, cached on frame._msufTextSpec.
 -- Replaces separate _msufHpTextConf (htc) and _msufPwrTextConf (ptc) caches.
 -- Invalidated: set frame._msufTextSpec = nil on config change / profile switch.
@@ -619,6 +635,7 @@ function ns.Text.RenderPowerText(self)
     local pMode = spec.pMode
     local powerSep = spec.pSep
     local colorByType = spec.pColorByType
+    local needCur, needMax, needPct = _MSUF_PowerModeNeeds(pMode)
 
     -- PERF: Reuse pType/cur/max/pct from DIRECT_APPLY handler if same frame.
     -- This keeps the text 1:1 in sync with the bar fast-path.
@@ -647,19 +664,21 @@ function ns.Text.RenderPowerText(self)
     -- Shadow Priest: class power shows Insanity → main bar + text show Mana
     if self._msufIsPlayer and _G.MSUF_ShadowManaActive then pType = 0 end
     if pType ~= nil then
-        if curValue == nil then
+        if needCur and curValue == nil then
             curValue = UnitPower and UnitPower(unit, pType)
         end
-        if maxValue == nil then
+        if needMax and maxValue == nil then
             maxValue = UnitPowerMax and UnitPowerMax(unit, pType)
         end
     else
-        curValue = UnitPower and UnitPower(unit)
-        maxValue = UnitPowerMax and UnitPowerMax(unit)
+        if needCur then curValue = UnitPower and UnitPower(unit) end
+        if needMax then maxValue = UnitPowerMax and UnitPowerMax(unit) end
     end
+    if not needCur then curValue = nil end
+    if not needMax then maxValue = nil end
     -- Percent: pass-through UnitPowerPercent (more accurate than recomputing).
     -- Secret-safe: == nil is a reference check (never taints). type() on API returns is forbidden.
-    if powerPct == nil then
+    if needPct and powerPct == nil then
         local fn = _MSUF_UnitPowerPercent
         if fn then
             local curve = _MSUF_PwrScaleTo100 or true
@@ -667,6 +686,7 @@ function ns.Text.RenderPowerText(self)
             if powerPct == nil then powerPct = nil end  -- no-op, kept for clarity
         end
     end
+    if not needPct then powerPct = nil end
 
     -- PERF P0: Raw-value diff guard. Skip ALL textification + string work when
     -- raw power values are unchanged (most frequent case: energy/mana hasn't
@@ -680,22 +700,33 @@ function ns.Text.RenderPowerText(self)
         if curValue == self._msufRawPwrC
            and maxValue == self._msufRawPwrM
            and powerPct == self._msufRawPwrP
+           and pMode == self._msufRawPwrMode
+           and powerSep == self._msufRawPwrSep
+           and spec.pSplitEnabled == self._msufRawPwrSplit
         then
             return
         end
         self._msufRawPwrC = curValue
         self._msufRawPwrM = maxValue
         self._msufRawPwrP = powerPct
+        self._msufRawPwrMode = pMode
+        self._msufRawPwrSep = powerSep
+        self._msufRawPwrSplit = spec.pSplitEnabled
     else
         -- Secret value: invalidate raw cache; fall through to text-level guard.
         self._msufRawPwrC = nil
         self._msufRawPwrM = nil
         self._msufRawPwrP = nil
+        self._msufRawPwrMode = nil
+        self._msufRawPwrSep = nil
+        self._msufRawPwrSplit = nil
     end
 
-    local curText = _MSUF_TextifyValue(curValue)
-    local maxText = _MSUF_TextifyValue(maxValue)
-    local pctText = _MSUF_TextifyPercent(powerPct)
+    local curText = needCur and _MSUF_TextifyValue(curValue) or nil
+    local maxText = needMax and _MSUF_TextifyValue(maxValue) or nil
+    local pctText = needPct and _MSUF_TextifyPercent(powerPct) or nil
+    local hasPct = (pctText ~= nil)
+    local splitAllowed = (self.powerTextPct ~= nil) and hasPct and spec.pSplitEnabled or false
 
     -- PERF: Component-level diff guard. Skip string concat + SetText if all
     -- abbreviated components are unchanged. Saves 3-5 string allocations per call.
@@ -705,19 +736,30 @@ function ns.Text.RenderPowerText(self)
     local _secretMax = _MSUF_IsSecret(maxText)
     local _secretPct = _MSUF_IsSecret(pctText)
     if not _secretCur and not _secretMax and not _secretPct then
-        if curText == self._msufLastPwrC and maxText == self._msufLastPwrM and pctText == self._msufLastPwrP then return end
+        if curText == self._msufLastPwrC
+           and maxText == self._msufLastPwrM
+           and pctText == self._msufLastPwrP
+           and pMode == self._msufLastPwrMode
+           and powerSep == self._msufLastPwrSep
+           and splitAllowed == self._msufLastPwrSplit
+        then
+            return
+        end
         self._msufLastPwrC = curText
         self._msufLastPwrM = maxText
         self._msufLastPwrP = pctText
+        self._msufLastPwrMode = pMode
+        self._msufLastPwrSep = powerSep
+        self._msufLastPwrSplit = splitAllowed
     else
         -- Secret: invalidate cache so next non-secret call re-renders
         self._msufLastPwrC = nil
         self._msufLastPwrM = nil
         self._msufLastPwrP = nil
+        self._msufLastPwrMode = nil
+        self._msufLastPwrSep = nil
+        self._msufLastPwrSplit = nil
     end
-
-    local hasPct = (pctText ~= nil)
-    local splitAllowed = (self.powerTextPct ~= nil) and hasPct and spec.pSplitEnabled or false
 
     local mainText, sideText = _MSUF_FormatPowerByMode(pMode, curText, maxText, pctText, powerSep, powerSep, splitAllowed)
 
