@@ -1913,6 +1913,7 @@ end
 function Preview.Refresh(box, reason)
     box = box or Preview.active
     if not box or not box:IsShown() then return end
+    if PreviewInCombat() then return end
     local panel = box._msufPanel
     local key = CurrentPanelKey(panel)
     local conf, g = UnitDB(key)
@@ -2436,6 +2437,11 @@ end
 function Preview.RequestRefresh(reason)
     local box = Preview.active
     if not box or not box:IsShown() then return end
+    if PreviewInCombat() then
+        box._refreshReason = nil
+        box._refreshQueued = nil
+        return
+    end
     if InstallPreviewHooks then InstallPreviewHooks() end
     if reason == "OPTIONS_APPLY_DB_IMMEDIATE" then
         box._refreshQueued = nil

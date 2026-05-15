@@ -46,6 +46,10 @@ end
 -- can appear missing (unanchored/off-screen).
 local UnitFrames = _G.MSUF_UnitFrames
 
+local function MSUF_CastbarTestCombatLocked()
+    return _G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
+end
+
 local function MSUF_HideBlizzardPlayerCastbar()
     EnsureDB()
     local frames = {}
@@ -82,6 +86,7 @@ end
 
 function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
     EnsureDB()
+    if active and MSUF_CastbarTestCombatLocked() then active = false end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
 
@@ -272,6 +277,11 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
         if not self.MSUF_testMode or not self.statusBar then
             return
         end
+        if MSUF_CastbarTestCombatLocked() then
+            self.MSUF_testMode = nil
+            self:SetScript("OnUpdate", nil)
+            return
+        end
         local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
         local d = self.MSUF_testDuration or 4.0
         if d <= 0 then d = 4.0 end
@@ -329,6 +339,11 @@ end
 -- Cluster E: Shared OnUpdate for simple preview dummy casts (Target, Focus).
 local function _MSUF_SimplePreview_OnUpdate(self)
     if not self or not self._msufTestActive then return end
+    if MSUF_CastbarTestCombatLocked() then
+        self._msufTestActive = nil
+        self:SetScript("OnUpdate", nil)
+        return
+    end
 
     local now = GetTime()
     local elapsed = now - (self.MSUF_testStart or now)
@@ -360,6 +375,7 @@ end
 
 local function _MSUF_SetSimpleCastbarTestMode(cfg, active, keepSetting)
     EnsureDB()
+    if active and MSUF_CastbarTestCombatLocked() then active = false end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
 
@@ -480,6 +496,11 @@ end
 -- Cluster E: Named OnUpdate for Boss preview dummy casts (avoids per-frame closure allocation).
 local function _MSUF_BossPreview_OnUpdate(self)
     if not self or not self.MSUF_bossTestMode then return end
+    if MSUF_CastbarTestCombatLocked() then
+        self.MSUF_bossTestMode = nil
+        self:SetScript("OnUpdate", nil)
+        return
+    end
 
     local now = GetTime()
     local elapsed = now - (self.MSUF_testStart or now)
@@ -528,6 +549,7 @@ end
 
 function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
     EnsureDB()
+    if active and MSUF_CastbarTestCombatLocked() then active = false end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
 
@@ -1125,6 +1147,10 @@ end
 -- The hooksecurefunc on MSUF_UpdateBossCastbarPreview will trigger Setup
 -- automatically; we do NOT call Setup explicitly any more (was double-work).
 local function _DoBossPreviewRefresh()
+    if _BossPreviewCombatLockdown() then
+        _pendingPostCombatRefresh = true
+        return
+    end
     if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
         _G.MSUF_UpdateBossCastbarPreview()
     end
@@ -1140,6 +1166,10 @@ local function _OnBossPreviewCombatEnd()
 end
 
 local function _ScheduleBossPreviewRefresh()
+    if _BossPreviewCombatLockdown() then
+        _pendingPostCombatRefresh = true
+        return
+    end
     -- Coalesce via MSUF Scheduler. Multiple events in same frame collapse
     -- to one refresh. Stable callback ref -- no per-event closure alloc.
     if _G.MSUF_ScheduleOnce then
@@ -1265,6 +1295,7 @@ if not _G.MSUF_BossPreviewApplyHooked and type(hooksecurefunc) == "function" the
 
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
         hooksecurefunc("MSUF_ApplyBossCastbarPositionSetting", function()
+            if _BossPreviewCombatLockdown() then return end
             if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
@@ -1273,6 +1304,7 @@ if not _G.MSUF_BossPreviewApplyHooked and type(hooksecurefunc) == "function" the
 
     if type(_G.MSUF_ApplyBossCastbarsEnabled) == "function" then
         hooksecurefunc("MSUF_ApplyBossCastbarsEnabled", function()
+            if _BossPreviewCombatLockdown() then return end
             if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
                 _G.MSUF_UpdateBossCastbarPreview()
             end

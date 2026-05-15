@@ -130,7 +130,7 @@ local function CreateMover(key, cfg)
 
     -- Hide label when preview is active (preview frame already shows unit name)
     function mover:UpdateLabelVisibility()
-        if _G.MSUF_PreviewTestMode and not self._dragging then
+        if _G.MSUF_PreviewTestMode and not (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) and not self._dragging then
             self._label:Hide()
             self._bg:SetColorTexture(0, 0, 0, 0)
             self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.25)
@@ -561,7 +561,11 @@ _G.MSUF_SyncAllUnitPreviews = function()
     local editOn = EM2.State and EM2.State.IsActive()
     local want = active and editOn
 
-    if IsConfigCombatLocked() then return end
+    if IsConfigCombatLocked() then
+        _G.MSUF_PreviewTestMode = false
+        _G.MSUF_BossTestMode = false
+        return
+    end
 
     -- Set preview flag (core visibility driver reads this)
     _G.MSUF_PreviewTestMode = want
@@ -630,8 +634,10 @@ do
 
     local function ScheduleReforce(delay)
         if not _G.MSUF_PreviewTestMode then return end
+        if IsConfigCombatLocked() then return end
         C_Timer.After(delay, function()
             if not _G.MSUF_PreviewTestMode then return end
+            if IsConfigCombatLocked() then return end
             if _G.MSUF_EM2_ReforcePreviewFrames then
                 _G.MSUF_EM2_ReforcePreviewFrames()
             end

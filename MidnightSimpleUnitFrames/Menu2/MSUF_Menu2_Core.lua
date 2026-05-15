@@ -577,8 +577,11 @@ local function BossPagePreviewInCombat()
 end
 
 local function ApplyBossPagePreviewFallback(active, reason)
+    if BossPagePreviewInCombat() then
+        _G.MSUF2_BossUnitframePreviewActive = nil
+        return
+    end
     _G.MSUF2_BossUnitframePreviewActive = active and true or nil
-    if BossPagePreviewInCombat() then return end
     if type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
         _G.MSUF_ApplyBossUnitframePreviewState(active and true or false, reason or "MSUF2_BOSS_PAGE")
         return
@@ -595,6 +598,11 @@ local lastBossPreviewFn
 local function SyncBossPagePreviewForKey(key, force)
     local active = (key == "uf_boss")
         and M.frame and M.frame.IsShown and M.frame:IsShown()
+    if BossPagePreviewInCombat() then
+        _G.MSUF2_BossUnitframePreviewActive = nil
+        lastBossPreviewActive = nil
+        return
+    end
     local fn = M.UnitPage and M.UnitPage.SetBossPagePreviewActive
     if not force and lastBossPreviewActive == active and lastBossPreviewFn == fn then return end
     lastBossPreviewActive = active

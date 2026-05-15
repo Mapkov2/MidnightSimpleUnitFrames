@@ -2287,7 +2287,7 @@ local function UpdateAggro(f, unit)
     local c = f._c
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
 
-    local testMode = _G.MSUF_AggroBorderTestMode
+    local testMode = (_G.MSUF_BorderTestModesActive == true) and _G.MSUF_AggroBorderTestMode
     -- Scope filtering
     if testMode then
         local testScope = _G.MSUF_AggroBorderTestScope or "shared"
@@ -2439,7 +2439,7 @@ function GF._UpdateDispel(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf and GF.GetConf(kind)
 
-    local testMode = _G.MSUF_DispelBorderTestMode
+    local testMode = (_G.MSUF_BorderTestModesActive == true) and _G.MSUF_DispelBorderTestMode
     -- Scope filtering: if test scope doesn't match this frame's kind, ignore test mode
     if testMode then
         local testScope = _G.MSUF_DispelBorderTestScope or "shared"
@@ -3440,11 +3440,13 @@ local dispatchOverlays, dispatchIncomingHeal, dispatchAbsorb, dispatchHealAbsorb
 local _GF_DispatchOverlaysFromCalc
 
 local function _GF_ShouldShowAbsorbTextureTestForFrame(f)
+    if not _G.MSUF_AbsorbTextureTestMode then return false end
+    if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then return false end
     local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
     if type(testFn) == "function" then
         return testFn(f, f and f._msufGFKind) and true or false
     end
-    return _G.MSUF_AbsorbTextureTestMode and true or false
+    return true
 end
 
 local function UpdateAll(f, unit)
@@ -4056,8 +4058,7 @@ local function dispatchOverlaysOnly(f, unit)
     local haEnabled = haBar and c.healAbsorbEn ~= false
     if ihBar and not ihEnabled then GF._ClearOverlayBar(ihBar) end
 
-    local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(f, f._msufGFKind) or _G.MSUF_AbsorbTextureTestMode
+    local absorbTestMode = _GF_ShouldShowAbsorbTextureTestForFrame(f)
     if not (ihEnabled or abEnabled or haEnabled or absorbTestMode or f._msufGFAbsorbTestActive) then
         return
     end
@@ -5087,6 +5088,8 @@ do
         "BARBER_SHOP_CLOSE",
         "PLAYER_REGEN_DISABLED",
         "PLAYER_REGEN_ENABLED",
+        "UNIT_OTHER_PARTY_CHANGED",
+        "UNIT_CTR_OPTIONS",
     }
 
     local function SetBaseEvents(active)
@@ -5241,6 +5244,8 @@ do
         H.PLAYER_TALENT_UPDATE = QueueRangeRefresh
         H.TRAIT_CONFIG_UPDATED = QueueRangeRefresh
         H.PLAYER_ENTERING_WORLD = QueueRangeRefresh
+        H.UNIT_OTHER_PARTY_CHANGED = QueueRangeRefresh
+        H.UNIT_CTR_OPTIONS = QueueRangeRefresh
     end
 
     H.PLAYER_FOCUS_CHANGED = function()
@@ -5611,7 +5616,7 @@ local function UpdateHighlight(f, unit)
     UpdateAggro(f, unit)
     local c = f._c
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
-    local dispelTest = _G.MSUF_DispelBorderTestMode == true
+    local dispelTest = _G.MSUF_BorderTestModesActive == true and _G.MSUF_DispelBorderTestMode == true
     if c and c.nativeBlizzardDispels and not dispelTest then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
     elseif dispelTest or (c and c.dispelScan and GF._playerCanDispel) then

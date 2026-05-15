@@ -36,6 +36,71 @@ local CreateFrame, GetTime = CreateFrame, GetTime
 -- P0: issecretvalue upvalue for event handlers (secret-safe unit filtering)
 local _MSUF_issecretvalue = _G.issecretvalue
 local _msuf_inCombat = false        -- P0: cached combat state (no C-call in hot paths)
+
+local function MSUF_OptionsApplyCombatLocked()
+    return _msuf_inCombat == true
+        or _G.MSUF_InCombat == true
+        or ((InCombatLockdown and InCombatLockdown()) and true or false)
+end
+
+local function MSUF_ClearRuntimeTestModesForCombat()
+    if type(_G.MSUF_ClearAbsorbTextureTestMode) == "function" then
+        _G.MSUF_ClearAbsorbTextureTestMode()
+    else
+        _G.MSUF_AbsorbTextureTestMode = false
+        _G.MSUF_AbsorbTextureTestScope = nil
+    end
+
+    if type(_G.MSUF_ClearBorderTestModesForCombat) == "function" then
+        _G.MSUF_ClearBorderTestModesForCombat()
+    else
+        _G.MSUF_AggroBorderTestMode = false
+        _G.MSUF_DispelBorderTestMode = false
+        _G.MSUF_PurgeBorderTestMode = false
+        _G.MSUF_BossTargetBorderTestMode = false
+        _G.MSUF_BorderTestModesActive = false
+    end
+
+    _G.MSUF_UnitPreviewActive = false
+    _G.MSUF_PreviewTestMode = false
+    _G.MSUF2_BossUnitframePreviewActive = false
+    _G.MSUF_BossTestMode = false
+    MSUF_BossTestMode = false
+
+    for _, fnName in ipairs({
+        "MSUF_SetPlayerCastbarTestMode",
+        "MSUF_SetTargetCastbarTestMode",
+        "MSUF_SetFocusCastbarTestMode",
+        "MSUF_SetBossCastbarTestMode",
+    }) do
+        local fn = rawget(_G, fnName)
+        if type(fn) == "function" then
+            fn(false, true)
+        end
+    end
+
+    for _, frameName in ipairs({
+        "MSUF_PlayerCastbar", "MSUF_PlayerCastbarPreview",
+        "MSUF_TargetCastbarPreview", "MSUF_FocusCastbarPreview",
+        "MSUF_BossCastbarPreview",
+    }) do
+        local f = rawget(_G, frameName)
+        if f and f.SetScript and (f.MSUF_testMode or f._msufTestActive or f.MSUF_bossTestMode) then
+            f.MSUF_testMode = nil
+            f._msufTestActive = nil
+            f.MSUF_bossTestMode = nil
+            f:SetScript("OnUpdate", nil)
+        end
+    end
+    for i = 2, 12 do
+        local f = rawget(_G, "MSUF_BossCastbarPreview" .. i)
+        if f and f.SetScript and f.MSUF_bossTestMode then
+            f.MSUF_bossTestMode = nil
+            f:SetScript("OnUpdate", nil)
+        end
+    end
+end
+_G.MSUF_ClearRuntimeTestModesForCombat = MSUF_ClearRuntimeTestModesForCombat
 -- P0: Snapshot PowerBarColor at load time. Blizzard mutates entries during
 -- gameplay (Eclipse changes LUNAR_POWER color). MSUF reads the frozen snapshot
 -- so the power bar color stays stable. User overrides (Colors panel) checked first.
@@ -63,6 +128,8 @@ do
     _p0Frame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
             _msuf_inCombat = true
+            _G.MSUF_InCombat = true
+            MSUF_ClearRuntimeTestModesForCombat()
         else
             -- PLAYER_REGEN_ENABLED or PLAYER_ENTERING_WORLD: sync once with C-API
             _msuf_inCombat = ((InCombatLockdown and InCombatLockdown())
@@ -696,7 +763,8 @@ ns.Bars.Spec.health = ns.Bars.Spec.health or function(frame, unit)
     -- 12.0: Unified calculator update — one C-side call for health + absorbs + prediction.
     -- Test mode path still uses legacy ApplyHealthBars for faked values.
     local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    if (type(testFn) == "function" and testFn(frame)) or (_G.MSUF_AbsorbTextureTestMode and type(testFn) ~= "function") then
+    if (type(testFn) == "function" and testFn(frame))
+        or (_G.MSUF_AbsorbTextureTestMode and type(testFn) ~= "function" and not _G.MSUF_InCombat) then
         local maxHP = (F.UnitHealthMax and F.UnitHealthMax(unit)) or 1
         local hp = (F.UnitHealth and F.UnitHealth(unit)) or 0
         ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
@@ -846,7 +914,7 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
     end
     -- Test mode: show faked absorb values.
     local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(frame) or _G.MSUF_AbsorbTextureTestMode
+    local absorbTestMode = type(testFn) == "function" and testFn(frame) or (_G.MSUF_AbsorbTextureTestMode and not _G.MSUF_InCombat)
     local wasTestMode = frame._msufAbsorbTestActive
     if absorbTestMode then
         frame._msufAbsorbTestActive = true
@@ -1090,7 +1158,7 @@ if not _G.MSUF_ApplyLevelIndicatorLayout then
             conf = MSUF_DB.tot
     end
         MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
-        if f.isBoss and MSUF_BossTestMode and ns.Text and ns.Text.ApplyBossTestLevel then
+        if f.isBoss and MSUF_BossTestMode and not _msuf_inCombat and ns.Text and ns.Text.ApplyBossTestLevel then
             ns.Text.ApplyBossTestLevel(f, conf)
         end
      end
@@ -1672,15 +1740,15 @@ end
     local rsd = _G.RegisterStateDriver
     local usd = _G.UnregisterStateDriver
     if type(rsd) ~= "function" or type(usd) ~= "function" then  return end
-    if not forceShow and frame.isBoss and MSUF_BossTestMode then
+    if not forceShow and frame.isBoss and MSUF_BossTestMode and not _msuf_inCombat then
         forceShow = true
     end
-    if not forceShow and not frame.isBoss and not frame._msufIsPlayer and _G.MSUF_PreviewTestMode then
+    if not forceShow and not frame.isBoss and not frame._msufIsPlayer and _G.MSUF_PreviewTestMode and not _msuf_inCombat then
         forceShow = true
     end
     local forced = (forceShow and true or false)
     local driverToApply = forced and "show" or drv
-    if forced and frame.isBoss and MSUF_BossTestMode then
+    if forced and frame.isBoss and MSUF_BossTestMode and not _msuf_inCombat then
         driverToApply = "[combat] hide; show"
     end
     if frame._msufVisibilityForced == forced and frame._msufVisibilityAppliedDriver == driverToApply then
@@ -3461,7 +3529,7 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
                     f._msufLastHpValue = nil
                     ns.UF.RequestUpdate(f, true, false, "HPSpacer")
                 end
-            elseif f.isBoss and MSUF_BossTestMode then
+            elseif f.isBoss and MSUF_BossTestMode and not _msuf_inCombat then
                 _G.MSUF_ApplyBossTestHpPreviewText(f, conf)
             end
     end
@@ -4472,11 +4540,9 @@ end
 end
     ns.Bars._ApplyReverseFillBars(self, conf)
     local didPowerBarSync = false
-    if self.isBoss and MSUF_BossTestMode then
-        if not _msuf_inCombat then
-            self:Show()
-            if _UF.Alpha then _UF.Alpha(self, key) end
-    end
+    if self.isBoss and MSUF_BossTestMode and not _msuf_inCombat then
+        self:Show()
+        if _UF.Alpha then _UF.Alpha(self, key) end
     if self.bg then
         MSUF_ApplyBarBackgroundVisual(self)
     end
@@ -4567,11 +4633,9 @@ if self.powerText then
     end
 -- ── Preview Test Mode (non-boss, non-player, no unit) ──────────────────
 -- Mirrors BossTestMode block above. Full control over bars/text/visibility.
-if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and not exists then
-    if not _msuf_inCombat then
-        self:Show()
-        if _UF.Alpha then _UF.Alpha(self, key) end
-    end
+if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and not _msuf_inCombat and not exists then
+    self:Show()
+    if _UF.Alpha then _UF.Alpha(self, key) end
     if self.bg then
         MSUF_ApplyBarBackgroundVisual(self)
     end
@@ -4946,7 +5010,7 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     f.showPowerText = showPower
     if unit == "player" then
         f:Show()
-    elseif MSUF_UnitEditModeActive or (f.isBoss and MSUF_BossTestMode) then
+    elseif (not _msuf_inCombat) and (MSUF_UnitEditModeActive or (f.isBoss and MSUF_BossTestMode)) then
         f:Show()
     else
         if F.UnitExists and F.UnitExists(unit) then
@@ -4986,10 +5050,12 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
     if not MSUF_DB then EnsureDB() end
     if _msuf_inCombat then
         MSUF_BossTestMode = false
+        _G.MSUF_BossTestMode = false
         return
     end
     active = active and true or false
     MSUF_BossTestMode = active
+    _G.MSUF_BossTestMode = active
 
     local conf = (MSUF_DB and MSUF_DB.boss) or {}
     local anyFrame = false
@@ -5048,13 +5114,13 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
 end
 
 function _G.MSUF_SyncBossUnitframePreviewWithUnitEdit(reason)
-    if _msuf_inCombat then return end
+    if MSUF_OptionsApplyCombatLocked() then return end
 
     local editState = _G.MSUF_EditState
     local editActive = (_G.MSUF_UnitEditModeActive == true)
         or (type(editState) == "table" and editState.active == true)
 
-    local editPreviewActive = editActive
+    local editPreviewActive = editActive and not _msuf_inCombat
         and (_G.MSUF_UnitPreviewActive == true or _G.MSUF_PreviewTestMode == true)
     local pagePreviewActive = (_G.MSUF2_BossUnitframePreviewActive == true)
     local active = (editPreviewActive or pagePreviewActive) and true or false
@@ -5063,6 +5129,16 @@ function _G.MSUF_SyncBossUnitframePreviewWithUnitEdit(reason)
 end
 
 local function MSUF_ApplyUnitFrameKey_Immediate(key)
+    if not key then return end
+    if MSUF_OptionsApplyCombatLocked() then
+        _G.MSUF_UnitFrameApplyState = _G.MSUF_UnitFrameApplyState or { dirty = {}, queued = false }
+        _G.MSUF_UnitFrameApplyState.dirty[key] = true
+        _G.MSUF_UnitFrameApplyState.queued = true
+        if type(MSUF_EventBus_Register) == "function" then
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY", MSUF_OnRegenEnabled_ApplyDirty)
+        end
+        return
+    end
     if not MSUF_DB then EnsureDB() end
     local conf = MSUF_DB[key]
     if not conf then  return end
@@ -5124,6 +5200,13 @@ function MSUF_MarkUnitFrameDirty(key)
 function MSUF_ApplyDirtyUnitFrames()
     local st = _G.MSUF_UnitFrameApplyState
     if not st or not st.dirty then  return end
+    if MSUF_OptionsApplyCombatLocked() then
+        st.queued = true
+        if type(MSUF_EventBus_Register) == "function" then
+            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY", MSUF_OnRegenEnabled_ApplyDirty)
+        end
+        return
+    end
     if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
         st.queued = true
          return
@@ -5153,6 +5236,50 @@ _G.MSUF_ApplyCommitState = _G.MSUF_ApplyCommitState or {
     tickers = false,
     bossPreview = false,
 }
+local MSUF_APPLY_ALL_KEYS = { "player", "target", "focus", "targettarget", "pet", "boss" }
+local function MSUF_RegisterApplyDirtyAfterCombat()
+    if type(MSUF_EventBus_Register) == "function" then
+        MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY", MSUF_OnRegenEnabled_ApplyDirty)
+    end
+end
+local function MSUF_RegisterApplyCommitAfterCombat()
+    if type(MSUF_EventBus_Register) == "function" then
+        MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT", MSUF_OnRegenEnabled_ApplyCommit)
+    end
+end
+local function MSUF_QueueUnitFrameApplyAfterCombat(markAll)
+    _G.MSUF_UnitFrameApplyState = _G.MSUF_UnitFrameApplyState or { dirty = {}, queued = false }
+    local stUF = _G.MSUF_UnitFrameApplyState
+    if markAll then
+        for i = 1, #MSUF_APPLY_ALL_KEYS do
+            stUF.dirty[MSUF_APPLY_ALL_KEYS[i]] = true
+        end
+    end
+    stUF.queued = true
+    MSUF_RegisterApplyDirtyAfterCombat()
+end
+local function MSUF_QueueApplyCommitAfterCombat()
+    local st = _G.MSUF_ApplyCommitState
+    if st then
+        st.pending = false
+        st.queued = true
+    end
+    MSUF_RegisterApplyCommitAfterCombat()
+end
+local function MSUF_QueueApplyAllAfterCombat()
+    MSUF_QueueUnitFrameApplyAfterCombat(true)
+    local st = _G.MSUF_ApplyCommitState
+    if st then
+        st.pending = false
+        st.queued = true
+        st.fonts = true
+        st.bars = true
+        st.castbars = true
+        st.tickers = true
+        st.bossPreview = true
+    end
+    MSUF_RegisterApplyCommitAfterCombat()
+end
 local function MSUF_CommitApplyDirty_Scheduled()
     local st = _G.MSUF_ApplyCommitState
     if st then
@@ -5163,6 +5290,10 @@ local function MSUF_CommitApplyDirty_Scheduled()
 local function MSUF_ScheduleApplyCommit()
     local st = _G.MSUF_ApplyCommitState
     if not st or st.pending then return end
+    if MSUF_OptionsApplyCombatLocked() then
+        MSUF_QueueApplyCommitAfterCombat()
+        return
+    end
     st.pending = true
     if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", MSUF_CommitApplyDirty_Scheduled) else C_Timer.After(0, MSUF_CommitApplyDirty_Scheduled) end
  end
@@ -5203,14 +5334,12 @@ function ApplyAllSettings()
 _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or function(key)
     if not key then  return end
     MSUF_MarkUnitFrameDirty(key)
-    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+    if MSUF_OptionsApplyCombatLocked() or (_G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked()) then
         local stUF = _G.MSUF_UnitFrameApplyState
         if stUF then
             stUF.queued = true
     end
-        if type(MSUF_EventBus_Register) == "function" then
-            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY", MSUF_OnRegenEnabled_ApplyDirty)
-    end
+        MSUF_RegisterApplyDirtyAfterCombat()
          return
     end
     if MSUF_ApplyUnitFrameKey_Immediate then
@@ -5223,26 +5352,8 @@ _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or
  end
 _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or function()
     if not MSUF_DB then EnsureDB() end
-    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
-        local keys = { "player", "target", "focus", "targettarget", "pet", "boss" }
-        _G.MSUF_UnitFrameApplyState = _G.MSUF_UnitFrameApplyState or { dirty = {}, queued = false }
-        for i = 1, #keys do
-            _G.MSUF_UnitFrameApplyState.dirty[keys[i]] = true
-        end
-        _G.MSUF_UnitFrameApplyState.queued = true
-        local st = _G.MSUF_ApplyCommitState
-        if st then
-            st.queued = true
-            st.fonts = true
-            st.bars = true
-            st.castbars = true
-            st.tickers = true
-            st.bossPreview = true
-        end
-        if type(MSUF_EventBus_Register) == "function" then
-            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY", MSUF_OnRegenEnabled_ApplyDirty)
-            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT", MSUF_OnRegenEnabled_ApplyCommit)
-        end
+    if MSUF_OptionsApplyCombatLocked() or (_G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked()) then
+        MSUF_QueueApplyAllAfterCombat()
         return
     end
     -- Keep UnitframeCore caches + event masks in sync so settings apply immediately
@@ -5290,11 +5401,8 @@ end
 function MSUF_CommitApplyDirty()
     local st = _G.MSUF_ApplyCommitState
     if not st then  return end
-    if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
-        st.queued = true
-        if type(MSUF_EventBus_Register) == "function" then
-            MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT", MSUF_OnRegenEnabled_ApplyCommit)
-    end
+    if MSUF_OptionsApplyCombatLocked() or (_G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked()) then
+        MSUF_QueueApplyCommitAfterCombat()
          return
     end
         MSUF_ApplyDirtyUnitFrames()    if st.fonts then

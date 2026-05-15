@@ -961,7 +961,8 @@ function MSUF_ReanchorBossCastBar()
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
         _G.MSUF_ApplyBossCastbarPositionSetting()
     end
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if not (_G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false))
+        and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
         _G.MSUF_UpdateBossCastbarPreview()
     end
     if type(MSUF_SyncBossCastbarSliders) == "function" then

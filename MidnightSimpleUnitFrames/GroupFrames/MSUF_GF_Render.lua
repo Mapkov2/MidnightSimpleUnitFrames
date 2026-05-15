@@ -969,6 +969,12 @@ local function SyncPreserveMissingHP(f, kind, hp, hpMax)
         if f._msufBehindBarBg and f._msufBehindBarBg.SetAlpha then f._msufBehindBarBg:SetAlpha(preserve and 0 or 1) end
     end
     if not preserve then
+        if f._msufGFPreserveAlphaState == false
+            and not f._msufGFMissingHPBg
+            and f._msufGFMissingValue == nil
+            and f._msufGFMissingMax == nil then
+            return
+        end
         if f._msufGFMissingHPBg then HidePreserveMissingHP(f) end
         f._msufGFMissingValue, f._msufGFMissingMax = nil, nil
         return

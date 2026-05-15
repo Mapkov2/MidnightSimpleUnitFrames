@@ -134,7 +134,7 @@ local function _PushVisualUpdates_Flush()
     if type(reinit) == "function" then reinit() end
 
     -- Live-update highlight border colors during test mode (zero cost when no test active).
-    if _G.MSUF_AggroBorderTestMode or _G.MSUF_DispelBorderTestMode or _G.MSUF_PurgeBorderTestMode or _G.MSUF_BossTargetBorderTestMode then
+    if _G.MSUF_BorderTestModesActive == true then
         local applyAll = _G.MSUF_ApplyBarOutlineThickness_All
         if type(applyAll) == "function" then applyAll() end
     end

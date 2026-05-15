@@ -8,6 +8,37 @@ F.CreateFrame = F.CreateFrame or CreateFrame
 local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local issecretvalue = _G.issecretvalue
+local InCombatLockdown = _G.InCombatLockdown
+
+local function _MSUF_TestModeCombatLocked()
+    return _G.MSUF_InCombat == true or ((InCombatLockdown and InCombatLockdown()) and true or false)
+end
+
+local function _MSUF_RefreshBorderTestModesActive()
+    local active = (not _MSUF_TestModeCombatLocked())
+        and (_G.MSUF_AggroBorderTestMode == true
+            or _G.MSUF_DispelBorderTestMode == true
+            or _G.MSUF_PurgeBorderTestMode == true
+            or _G.MSUF_BossTargetBorderTestMode == true)
+    _G.MSUF_BorderTestModesActive = active and true or false
+    return _G.MSUF_BorderTestModesActive
+end
+
+local function _MSUF_EnableBorderTestMode(active)
+    if active and _MSUF_TestModeCombatLocked() then
+        return false
+    end
+    return active and true or false
+end
+
+_G.MSUF_ClearBorderTestModesForCombat = _G.MSUF_ClearBorderTestModesForCombat or function()
+    _G.MSUF_AggroBorderTestMode = false
+    _G.MSUF_DispelBorderTestMode = false
+    _G.MSUF_PurgeBorderTestMode = false
+    _G.MSUF_BossTargetBorderTestMode = false
+    _G.MSUF_BorderTestModesActive = false
+end
+_G.MSUF_RefreshBorderTestModesActive = _G.MSUF_RefreshBorderTestModesActive or _MSUF_RefreshBorderTestModesActive
 
 local _FRIENDLY_DISPEL_CLASS = {
     DRUID = true,
@@ -686,7 +717,8 @@ MSUF_ApplyRareVisuals = function(self)
     local cfg = _RefreshBorderSettingsForFrame(self)
 
     -- Aggro state detection (target/focus/boss only).
-    local aggroTest = _G.MSUF_AggroBorderTestMode and true or false
+    local borderTestsActive = _G.MSUF_BorderTestModesActive == true
+    local aggroTest = borderTestsActive and _G.MSUF_AggroBorderTestMode and true or false
     if aggroTest then
         local testScope = _G.MSUF_AggroBorderTestScope or "shared"
         local u = self.unit
@@ -722,7 +754,7 @@ MSUF_ApplyRareVisuals = function(self)
     -- Dispel state detection.
     local dispel = false
     do
-        local test = (_G.MSUF_DispelBorderTestMode) and true or false
+        local test = borderTestsActive and (_G.MSUF_DispelBorderTestMode and true or false) or false
         -- Scope filtering for test mode
         if test then
             local testScope = _G.MSUF_DispelBorderTestScope or "shared"
@@ -747,7 +779,7 @@ MSUF_ApplyRareVisuals = function(self)
     -- Purge state detection.
     local purge = false
     do
-        local test = (_G.MSUF_PurgeBorderTestMode) and true or false
+        local test = borderTestsActive and (_G.MSUF_PurgeBorderTestMode and true or false) or false
         if test then
             local testScope = _G.MSUF_PurgeBorderTestScope or "shared"
             local u = self.unit
@@ -773,7 +805,7 @@ MSUF_ApplyRareVisuals = function(self)
         if type(u) == "string" and u:sub(1, 4) == "boss" then
             local idx = tonumber(u:sub(5))
             if idx and idx >= 1 and idx <= 5 then
-                local test = (_G.MSUF_BossTargetBorderTestMode) and true or false
+                local test = borderTestsActive and (_G.MSUF_BossTargetBorderTestMode and true or false) or false
                 local wantBossTarget = (cfg.bossTargetOutlineMode == 1) or test
                 if wantBossTarget then
                     bossTarget = test or (self._msufBossTargetHLOn == true)
@@ -843,8 +875,10 @@ _G.MSUF_ApplyBarOutlineThickness_All = _G.MSUF_ApplyBarOutlineThickness_All or f
 end
 
 _G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active, scope)
+    active = _MSUF_EnableBorderTestMode(active)
     _G.MSUF_AggroBorderTestMode = active and true or false
     _G.MSUF_AggroBorderTestScope = scope or "shared"
+    _MSUF_RefreshBorderTestModesActive()
     local testScope = _G.MSUF_AggroBorderTestScope
     local isShared = (testScope == "shared")
     local isGF = (testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid")
@@ -882,8 +916,10 @@ end
 -- This does NOT change the DB or aura filters; it only affects the outline highlight rendering.
 -- scope: "shared" = all frames, "player"/"target"/etc = that UF only, "party"/"raid" = GF only
 _G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active, scope)
+    active = _MSUF_EnableBorderTestMode(active)
     _G.MSUF_DispelBorderTestMode = active and true or false
     _G.MSUF_DispelBorderTestScope = scope or "shared"
+    _MSUF_RefreshBorderTestModesActive()
     local testScope = _G.MSUF_DispelBorderTestScope
     local isShared = (testScope == "shared")
     local isGF = (testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid")
@@ -943,8 +979,10 @@ end
 
 -- Options-only: Test mode to force the purge border on while the Settings panel is open.
 _G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(active, scope)
+    active = _MSUF_EnableBorderTestMode(active)
     _G.MSUF_PurgeBorderTestMode = active and true or false
     _G.MSUF_PurgeBorderTestScope = scope or "shared"
+    _MSUF_RefreshBorderTestModesActive()
     local testScope = _G.MSUF_PurgeBorderTestScope
     local isShared = (testScope == "shared")
     local isGF = (testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid")
@@ -1019,7 +1057,9 @@ end
 
 -- Options-only: Test mode to force the boss-target border on while the Settings panel is open.
 _G.MSUF_SetBossTargetBorderTestMode = _G.MSUF_SetBossTargetBorderTestMode or function(active)
+    active = _MSUF_EnableBorderTestMode(active)
     _G.MSUF_BossTargetBorderTestMode = active and true or false
+    _MSUF_RefreshBorderTestModesActive()
     local frames = _G.MSUF_UnitFrames
     local fn = _G.MSUF_RefreshRareBarVisuals
     if type(fn) ~= "function" or not frames then return end
@@ -1053,7 +1093,8 @@ do
         local uf = frames and frames[u]
         if not uf or uf.unit ~= u then return end
         local cfg = _RefreshBorderSettingsForFrame(uf)
-        if not (_G.MSUF_AggroBorderTestMode or (cfg and cfg.aggroOutlineMode == 1)) then
+        local aggroTestActive = _G.MSUF_BorderTestModesActive == true and _G.MSUF_AggroBorderTestMode == true
+        if not (aggroTestActive or (cfg and cfg.aggroOutlineMode == 1)) then
             if uf._msufAggroOutlineOn then
                 uf._msufAggroOutlineOn = nil
                 local fn = _G.MSUF_RefreshRareBarVisuals
@@ -1062,7 +1103,7 @@ do
             return
         end
 
-        if not _G.MSUF_AggroBorderTestMode then
+        if not aggroTestActive then
             local on = false
             if UnitThreatSituation then
                 local raw = UnitThreatSituation("player", u)
@@ -1503,7 +1544,8 @@ do
             do
                 local _qDTgt, _qDFoc
                 local function ForceVisualTest()
-                    return _G.MSUF_DispelBorderTestMode == true or _G.MSUF_PurgeBorderTestMode == true
+                    return _G.MSUF_BorderTestModesActive == true
+                        and (_G.MSUF_DispelBorderTestMode == true or _G.MSUF_PurgeBorderTestMode == true)
                 end
                 local function _flushDTgt()
                     _qDTgt = nil

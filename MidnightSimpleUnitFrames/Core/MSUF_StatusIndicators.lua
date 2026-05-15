@@ -17,6 +17,7 @@ local tostring = _G.tostring
 local select   = _G.select
 local IsInInstance = _G.IsInInstance
 local issecretvalue = _G.issecretvalue
+local InCombatLockdown = _G.InCombatLockdown
 local UnitGUID = _G.UnitGUID
 local UnitIsAFK = _G.UnitIsAFK
 local UnitIsDND = _G.UnitIsDND
@@ -34,6 +35,15 @@ if not unpack then
     local tbl = _G.table
     unpack = tbl and tbl.unpack
 end
+
+local function _MSUF_StatusIconsTestActive(conf, generalConf)
+    if _G.MSUF_InCombat == true or ((InCombatLockdown and InCombatLockdown()) and true or false) then
+        return false
+    end
+    return ((generalConf and generalConf.stateIconsTestMode == true)
+        or (conf and conf.stateIconsTestMode == true)) and true or false
+end
+
 -- Status text DB (AFK/DND/DEAD/GHOST/OFFLINE)
 if type(_G.MSUF_GetStatusIndicatorDB) ~= "function" then
     -- PERF: Avoid per-call table allocations. This can be hit during very early load
@@ -636,7 +646,7 @@ local function _MSUF_UpdateStatusIcons(frame)
     -- Cache invalidated when cachedConfig is cleared (config change).
     local sic = frame._msufStatusIconsConf
     if not sic then
-        local testMode = ((g and g.stateIconsTestMode == true) or (conf and conf.stateIconsTestMode == true)) and true or false
+        local testMode = _MSUF_StatusIconsTestActive(conf, g)
         local showCombat = _MSUF_ReadBool(conf, g, "showCombatStateIndicator", false)
         local showRest = false
         if frame._msufIsPlayer then
@@ -690,6 +700,9 @@ local function _MSUF_UpdateStatusIcons(frame)
     end
 
     local testMode = sic.testMode
+    if testMode and (_G.MSUF_InCombat == true or ((InCombatLockdown and InCombatLockdown()) and true or false)) then
+        testMode = false
+    end
     -- Symbol textures (apply once per config, not per call)
     local combatIcon = frame.combatStateIndicatorIcon
     local restIcon = frame.restingIndicatorIcon
@@ -853,7 +866,7 @@ function MSUF_UpdateStatusIndicatorForFrame(frame)
     local showDead  = sc.showDead
     local showGhost = sc.showGhost
     local txt = ""
-    local testMode = ((generalConf and generalConf.stateIconsTestMode == true) or (textConf and textConf.stateIconsTestMode == true)) and true or false
+    local testMode = _MSUF_StatusIconsTestActive(textConf, generalConf)
     if testMode and showDead then
         txt = "DEAD"
     elseif unit and UnitExists and UnitExists(unit) then
@@ -1017,6 +1030,9 @@ do
         return (g and g.stateIconsTestMode == true) or false
     end
     function _G.MSUF_SetStatusIconsTestMode(enabled, reason)
+        if enabled and (_G.MSUF_InCombat == true or ((InCombatLockdown and InCombatLockdown()) and true or false)) then
+            enabled = false
+        end
         if _G.EnsureDB then _G.EnsureDB() end
         local db = _G.MSUF_DB
         if not db then  return end

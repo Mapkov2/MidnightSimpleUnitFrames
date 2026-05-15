@@ -14,6 +14,7 @@ local UnitGetTotalHealAbsorbs = UnitGetTotalHealAbsorbs
 local UnitGetDetailedHealPrediction = UnitGetDetailedHealPrediction
 local UnitGetIncomingHeals = UnitGetIncomingHeals
 local CreateUnitHealPredictionCalculator = CreateUnitHealPredictionCalculator
+local InCombatLockdown = InCombatLockdown
 
 -- P0: Cache boss token resolver once (called per absorb display resolve)
 local _MSUF_GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
@@ -766,7 +767,8 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     local api = isHeal and UnitGetTotalHealAbsorbs or UnitGetTotalAbsorbs
     if not self or not bar then  return end
     local testFn = _G.MSUF_ShouldShowAbsorbTextureTest
-    local absorbTestMode = type(testFn) == "function" and testFn(self) or _G.MSUF_AbsorbTextureTestMode
+    local absorbTestMode = type(testFn) == "function" and testFn(self)
+        or (_G.MSUF_AbsorbTextureTestMode and not (_G.MSUF_InCombat or (InCombatLockdown and InCombatLockdown())))
     if not absorbTestMode and type(api) ~= 'function' then  return end
     -- P0: Cache anchor-mode applier (defined later in this file, resolves once on first call)
     if not _cachedApplyAbsorbAnchorMode then
@@ -819,6 +821,7 @@ end
 
 local function _MSUF_FrameMatchesAbsorbTestScope(frame, kind)
     if not _G.MSUF_AbsorbTextureTestMode then return false end
+    if _G.MSUF_InCombat or (InCombatLockdown and InCombatLockdown()) then return false end
     local scope = _MSUF_NormalizeAbsorbTestScope(_G.MSUF_AbsorbTextureTestScope)
     if scope == "shared" then return true end
 
@@ -843,6 +846,11 @@ _G.MSUF_ShouldShowAbsorbTextureTest = _G.MSUF_ShouldShowAbsorbTextureTest or fun
 end
 
 _G.MSUF_SetAbsorbTextureTestMode = _G.MSUF_SetAbsorbTextureTestMode or function(enabled, scope)
+    if enabled and (_G.MSUF_InCombat or (InCombatLockdown and InCombatLockdown())) then
+        _G.MSUF_AbsorbTextureTestMode = false
+        _G.MSUF_AbsorbTextureTestScope = nil
+        return
+    end
     _G.MSUF_AbsorbTextureTestMode = enabled and true or false
     _G.MSUF_AbsorbTextureTestScope = enabled and _MSUF_NormalizeAbsorbTestScope(scope) or nil
 end

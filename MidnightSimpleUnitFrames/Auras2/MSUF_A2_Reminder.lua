@@ -141,6 +141,11 @@ end
 
 local _providerHasBuff = {}
 local _providerMinRem  = {}
+local _wantedProviders = {}
+local _wantedRosterGen = -1
+local _wantedReminderSig = nil
+local _wantedAny = false
+local _lastWantedSig = nil
 
 local _getPlayerAuraBySpellID, _getUnitAuraBySpellID, _auraLookupBound
 
@@ -152,6 +157,35 @@ local function _ProviderWanted(idx, reminders)
         return _playerClass == "ROGUE"
     end
     return _presentClasses[p.providerClass] == true
+end
+
+local function _BuildReminderWantedSig(reminders)
+    if not reminders then return "" end
+    local sig = ""
+    for i = 1, _providerCount do
+        local p = _PROVIDERS[i]
+        if reminders[p.key] == false then
+            sig = sig .. i .. ","
+        end
+    end
+    return sig
+end
+
+local function _RefreshWantedProviders(reminders)
+    local sig = _BuildReminderWantedSig(reminders)
+    if _wantedRosterGen == _rosterGen and _wantedReminderSig == sig then
+        return _wantedProviders, _wantedAny, sig
+    end
+
+    _wantedRosterGen = _rosterGen
+    _wantedReminderSig = sig
+    _wantedAny = false
+    for i = 1, _providerCount do
+        local wanted = _ProviderWanted(i, reminders)
+        _wantedProviders[i] = wanted and true or false
+        if wanted then _wantedAny = true end
+    end
+    return _wantedProviders, _wantedAny, sig
 end
 
 local function _BindAuraLookups()
@@ -195,11 +229,11 @@ local function _AddProviderAura(idx, data, threshold)
     end
 end
 
-local function _ScanPlayerAurasDirect(threshold, reminders)
+local function _ScanPlayerAurasDirect(threshold, wanted)
     _BindAuraLookups()
     if not _getPlayerAuraBySpellID and not _getUnitAuraBySpellID then return false end
     for i = 1, _providerCount do
-        if _ProviderWanted(i, reminders) then
+        if wanted[i] then
             local spells = _PROVIDERS[i].satisfiedBy
             for sid in next, spells do
                 local data
@@ -235,10 +269,11 @@ local _lastRenderEdit   = -1  -- -1 = never rendered
 -- Called from Options when user toggles reminder checkboxes / threshold
 function Reminder.MarkDirty()
     _lastEpoch = -1      -- force rescan
+    _lastWantedSig = nil -- force rescan if reminder toggles changed without aura changes
     _lastResultSig = ""  -- force re-render
 end
 
-local function _ScanPlayerAurasCached(threshold, reminders)
+local function _ScanPlayerAurasCached(threshold, wanted)
     local Cache = API.Cache
     local s = Cache._units and Cache._units.player
     if not s or not s.all then return false end
@@ -259,16 +294,16 @@ local function _ScanPlayerAurasCached(threshold, reminders)
             end
             data._msufA2_remProvider = idx
         end
-        if idx and _ProviderWanted(idx, reminders) then
+        if idx and wanted[idx] then
             _AddProviderAura(idx, data, thr)
         end
     end
     return true
 end
 
-local function _ScanPlayerAuras(threshold, reminders)
-    if _ScanPlayerAurasCached(threshold, reminders) then return true end
-    return _ScanPlayerAurasDirect(threshold, reminders)
+local function _ScanPlayerAuras(threshold, wanted)
+    if _ScanPlayerAurasCached(threshold, wanted) then return true end
+    return _ScanPlayerAurasDirect(threshold, wanted)
 end
 
 -- Build compact result signature (zero-alloc via reusable buffer)
@@ -303,9 +338,12 @@ local function _ComputeMissing(reminders, threshold, isPreview)
     end
 
     -- PERF: No provider class in group → nothing can be missing, skip scan
-    if not _anyProviderInGroup then
+    local wanted, wantedAny, wantedSig = _RefreshWantedProviders(reminders)
+
+    if not _anyProviderInGroup or not wantedAny then
         local changed = (_resultCount ~= 0)
         _resultCount = 0
+        _lastWantedSig = wantedSig
         return changed
     end
 
@@ -313,12 +351,13 @@ local function _ComputeMissing(reminders, threshold, isPreview)
     local Cache = API.Cache
     local epoch = Cache and Cache.GetEpoch and Cache.GetEpoch("player") or 0
     local rGen = _rosterGen
-    if epoch == _lastEpoch and rGen == _lastRosterGen then
+    if epoch == _lastEpoch and rGen == _lastRosterGen and wantedSig == _lastWantedSig then
         -- Nothing changed since last scan → _results still valid
         return false
     end
     _lastEpoch = epoch
     _lastRosterGen = rGen
+    _lastWantedSig = wantedSig
 
     -- Reset (fixed-size, no wipe)
     _resultCount = 0
@@ -327,14 +366,14 @@ local function _ComputeMissing(reminders, threshold, isPreview)
         _providerMinRem[i] = nil
     end
 
-    if not _ScanPlayerAuras(thr, reminders) then
+    if not _ScanPlayerAuras(thr, wanted) then
         _lastEpoch = -1
         return true
     end
 
     for i = 1, _providerCount do
         local p = _PROVIDERS[i]
-        if _ProviderWanted(i, reminders) then
+        if wanted[i] then
             if not _providerHasBuff[i] then
                 _resultCount = _resultCount + 1
                 local r = _results[_resultCount]

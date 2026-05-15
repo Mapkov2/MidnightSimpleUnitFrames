@@ -890,7 +890,7 @@ end
 local function UFCore_UpdateIdentityFast(frame, conf)
     if not frame then return false end
     -- Boss test mode relies on the legacy renderer for fake labels.
-    if frame.isBoss and _G.MSUF_BossTestMode then
+    if frame.isBoss and _G.MSUF_BossTestMode and _G.MSUF_InCombat ~= true then
         return false
     end
 

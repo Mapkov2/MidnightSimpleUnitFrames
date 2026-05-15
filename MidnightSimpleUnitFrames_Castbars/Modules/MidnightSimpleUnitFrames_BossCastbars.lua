@@ -1906,6 +1906,9 @@ end
 
 
 function _G.MSUF_UpdateBossCastbarPreview()
+    if _G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false) then
+        return
+    end
     EnsureDBSafe()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 

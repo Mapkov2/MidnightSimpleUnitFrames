@@ -176,7 +176,7 @@ local function UpdatePortraitIfNeeded(f, unit, conf, existsForPortrait)
     if f._msufPortraitDirty then
         local now = (F.GetTime and F.GetTime()) or 0
         local nextAt = tonumber(f._msufPortraitNextAt) or 0
-        local bossPreview = f.isBoss and MSUF_BossTestMode and not existsForPortrait
+        local bossPreview = f.isBoss and MSUF_BossTestMode and not _G.MSUF_InCombat and not existsForPortrait
         if not bossPreview then
             f._msufBossPreviewPortraitMode = nil
             f._msufBossPreviewPortraitRender = nil

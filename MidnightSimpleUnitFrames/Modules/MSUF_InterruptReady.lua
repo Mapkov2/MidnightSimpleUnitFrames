@@ -521,12 +521,14 @@ local _refreshTickerArmed = false
 local _TickerStep -- forward decl
 
 -- Single repaint entry point. Style-aware.
-local function _PaintFrame(frame, readyBool)
-    local cfg = _GetCfg()
+local function _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
+    cfg = cfg or _GetCfg()
     if not cfg then return end
 
-    local style = _GetStyle(cfg)
-    local readyMixin, cdMixin = _ResolveColorPair(cfg)
+    style = style or _GetStyle(cfg)
+    if not readyMixin or not cdMixin then
+        readyMixin, cdMixin = _ResolveColorPair(cfg)
+    end
 
     -- rawNI: the secret-tagged "notInterruptible" value from the engine
     -- state (originally from UnitCastingInfo's notInterruptible field). Set
@@ -575,16 +577,16 @@ local function _PaintFrame(frame, readyBool)
         -- For the border, we compose colour rather than alpha so the
         -- user's normal outline remains visible during non-interruptible
         -- casts (just without our tint).
-        local userMixin = _GetUserOutlineMixin()
+        userMixin = userMixin or _GetUserOutlineMixin()
         local r, g, b, a = _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
         _TintCastbarOutline(frame, r, g, b, a)
     end
 end
 
-local function RefreshFrame(frame, state)
+local function RefreshFrame(frame, state, cfg, readyBool, style, readyMixin, cdMixin, userMixin)
     if not frame then return end
 
-    local cfg = _GetCfg()
+    cfg = cfg or _GetCfg()
     if not cfg then _HideIndicator(frame); return end
 
     local unit = frame.unit
@@ -621,8 +623,8 @@ local function RefreshFrame(frame, state)
 
     if not _state.spellID then Resolve() end
 
-    local readyBool = _GetReadyBoolSecret()
-    _PaintFrame(frame, readyBool)
+    if readyBool == nil then readyBool = _GetReadyBoolSecret() end
+    _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
 
     -- Make sure the global ticker is running so the indicator repaints when
     -- the interrupt cooldown ends (SPELL_UPDATE_COOLDOWN does not always
@@ -637,15 +639,19 @@ end
 function _TickerStep()
     _refreshTickerArmed = false
 
+    local cfg = _GetCfg()
+    if not cfg or not _AnyShowEnabled(cfg) then return end
+    local readyBool = _GetReadyBoolSecret()
+    local style = _GetStyle(cfg)
+    local readyMixin, cdMixin = _ResolveColorPair(cfg)
+    local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
     local anyActive = false
     for frame in pairs(_registeredFrames) do
         if frame.MSUF_castActive == true
            and not (frame.isNotInterruptible == true)
            and _CastAllowsKickIndicator(frame) then
-            local cfg = _GetCfg()
             if cfg and frame.unit and _ShowOnUnit(cfg, frame.unit) then
-                local readyBool = _GetReadyBoolSecret()
-                _PaintFrame(frame, readyBool)
+                _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
                 anyActive = true
             end
         end
@@ -667,13 +673,17 @@ local function RefreshActiveCooldownFrames()
     local cfg = _GetCfg()
     if not cfg or not _AnyShowEnabled(cfg) then return end
 
+    local readyBool = _GetReadyBoolSecret()
+    local style = _GetStyle(cfg)
+    local readyMixin, cdMixin = _ResolveColorPair(cfg)
+    local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
     local didRefresh = false
     for frame in pairs(_registeredFrames) do
         if frame.MSUF_castActive == true
            and not (frame.isNotInterruptible == true)
            and _CastAllowsKickIndicator(frame)
            and frame.unit and _ShowOnUnit(cfg, frame.unit) then
-            RefreshFrame(frame, nil)
+            RefreshFrame(frame, nil, cfg, readyBool, style, readyMixin, cdMixin, userMixin)
             didRefresh = true
         end
     end

@@ -687,6 +687,13 @@ end
 
 local function SyncBossPagePreview()
     local active = (_G.MSUF2_BossUnitframePreviewActive == true)
+    if BossPagePreviewInCombat() then
+        if active then
+            _G.MSUF2_BossUnitframePreviewActive = nil
+            bossPagePreviewPendingCleanup = true
+        end
+        return
+    end
     if not BossPagePreviewInCombat() and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
         _G.MSUF_ApplyBossUnitframePreviewState(active, active and "MSUF2_BOSS_PAGE" or "MSUF2_BOSS_PAGE_OFF")
         return
@@ -717,9 +724,15 @@ end
 
 local function SetBossPagePreviewActive(active)
     active = active and true or false
+    if active and BossPagePreviewInCombat() then
+        _G.MSUF2_BossUnitframePreviewActive = nil
+        bossPagePreviewPendingCleanup = nil
+        if bossPagePreviewEvents then bossPagePreviewEvents:UnregisterAllEvents() end
+        return
+    end
     local current = _G.MSUF2_BossUnitframePreviewActive == true
     if current == active then
-        if active then SyncBossPagePreview() end
+        if active and not BossPagePreviewInCombat() then SyncBossPagePreview() end
         return
     end
 
@@ -734,6 +747,7 @@ local function SetBossPagePreviewActive(active)
         bossPagePreviewPendingCleanup = true
         events:UnregisterEvent("PLAYER_REGEN_DISABLED")
         events:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
     else
         bossPagePreviewPendingCleanup = nil
         events:UnregisterAllEvents()

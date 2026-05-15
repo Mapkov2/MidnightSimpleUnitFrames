@@ -659,6 +659,9 @@ local function StopGroupDispelGlowForBlizzardConflict(scope)
 end
 
 local function RefreshBorderTestModes()
+    if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then
+        return
+    end
     local scope = CurrentBarsScope()
     if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" then scope = "raid" end
     if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
@@ -673,6 +676,9 @@ local function RefreshBorderTestModes()
 end
 
 local function SetAbsorbTextureTest(enabled)
+    if enabled and (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then
+        enabled = false
+    end
     local scope = CurrentBarsScope()
     if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" then scope = "raid" end
     if type(_G.MSUF_SetAbsorbTextureTestMode) == "function" then

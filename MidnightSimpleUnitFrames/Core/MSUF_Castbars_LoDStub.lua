@@ -349,7 +349,14 @@ end
 -- unconditionally, so these wrappers will be replaced automatically after load.
 
 local _BossPreviewStubWrapper
+local function _CastbarPreviewCombatLocked()
+    return _G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
+end
 local function _BossPreviewStubCallReal()
+    if _CastbarPreviewCombatLocked() then
+        _G.MSUF__BossPreviewStubGuard = false
+        return
+    end
     local fn = rawget(_G, "MSUF_UpdateBossCastbarPreview")
     if type(fn) == "function" and fn ~= _BossPreviewStubWrapper then
         fn()
@@ -375,6 +382,7 @@ end
 
 if type(_G.MSUF_ReanchorTargetCastBar) ~= "function" then
     _BossPreviewStubWrapper = function()
+        if _CastbarPreviewCombatLocked() then return end
         _EnsureDB()
         local g = _GetGeneral()
 
@@ -416,6 +424,7 @@ end
 if type(_G.MSUF_SetBossCastbarTestMode) ~= "function" then
     local wrapper
     wrapper = function(active, keepSetting)
+        if _CastbarPreviewCombatLocked() then return end
         if not _ShouldLoadForBoss() then return end
         _G.MSUF_EnsureCastbarsLoaded("boss_testmode")
         local fn = rawget(_G, "MSUF_SetBossCastbarTestMode")
