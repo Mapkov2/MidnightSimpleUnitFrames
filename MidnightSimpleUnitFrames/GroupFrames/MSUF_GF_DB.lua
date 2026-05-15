@@ -262,7 +262,10 @@ local PARTY_DEFAULTS = {
     alphaHPOutOfCombat   = 1,
     alphaPreserveHPColor = false,
     -- Group Frame heal prediction is owned by Group Frames > Health & Bars.
-    -- (absorbEnabled, healAbsorbEnabled, healPredEnabled are resolved at runtime)
+    -- Older profiles with no GF-specific value are seeded from the legacy
+    -- global UnitFrame heal prediction toggle in GF.EnsureDB().
+    healPredEnabled      = false,
+    -- (absorbEnabled, healAbsorbEnabled are resolved at runtime)
     -- Tooltip
     tooltipMode           = "ALWAYS",  -- ALWAYS / OOC / MODIFIER / NEVER
     tooltipModifier       = "ALT",     -- ALT / CTRL / SHIFT
@@ -789,6 +792,21 @@ local function RemoveGroupPetFrameConfig(conf)
     end
 end
 
+local function ResolveLegacyHealPredictionEnabled()
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if type(gen) ~= "table" then return false end
+    if gen.showSelfHealPrediction ~= nil then return gen.showSelfHealPrediction == true end
+    if gen.enableHealPrediction ~= nil then return gen.enableHealPrediction ~= false end
+    return false
+end
+
+local function MigrateHealPredictionOwnership(conf)
+    if type(conf) ~= "table" then return end
+    if conf.healPredEnabled == nil then
+        conf.healPredEnabled = ResolveLegacyHealPredictionEnabled()
+    end
+end
+
 ------------------------------------------------------------------------
 -- DB init
 ------------------------------------------------------------------------
@@ -836,6 +854,9 @@ function GF.EnsureDB()
     RemoveGroupPetFrameConfig(db.gf_party)
     RemoveGroupPetFrameConfig(db.gf_raid)
     RemoveGroupPetFrameConfig(db.gf_mythicraid)
+    MigrateHealPredictionOwnership(db.gf_party)
+    MigrateHealPredictionOwnership(db.gf_raid)
+    MigrateHealPredictionOwnership(db.gf_mythicraid)
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
     applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
@@ -1164,7 +1185,7 @@ function GF.IsHealPredictionEnabled(kind, conf)
     if conf and conf.healPredEnabled ~= nil then
         return conf.healPredEnabled == true
     end
-    return false
+    return ResolveLegacyHealPredictionEnabled()
 end
 
 ------------------------------------------------------------------------
