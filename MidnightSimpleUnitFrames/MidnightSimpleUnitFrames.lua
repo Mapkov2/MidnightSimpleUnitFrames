@@ -16,6 +16,34 @@ if type(_G.ClickCastFrames) ~= "table" then _G.ClickCastFrames = {} end
 local MSUF_ClickCastFrames = _G.ClickCastFrames
 ns.ClickCastEnabled = true
 
+ns.UF.CallCliqueMethod = ns.UF.CallCliqueMethod or function(clique, methodName, ...)
+    local method = clique and clique[methodName]
+    if type(method) ~= "function" then return false end
+    local ok = pcall(method, clique, ...)
+    return ok == true
+end
+
+ns.UF.RegisterClickCastFrame = ns.UF.RegisterClickCastFrame or function(f, refreshEnterLeave)
+    if not (f and f.RegisterForClicks) then return end
+
+    MSUF_ClickCastFrames[f] = true
+
+    local clique = _G.Clique
+    if type(clique) ~= "table" or type(clique.ccframes) ~= "table" then return end
+
+    ns.UF.CallCliqueMethod(clique, "RegisterUnitFrame", f)
+
+    if not refreshEnterLeave or (_G.InCombatLockdown and _G.InCombatLockdown()) then return end
+    if clique.ccframes and clique.ccframes[f] then
+        if type(clique.UnwrapOnEnterOnLeave) == "function" and type(clique.WrapOnEnterOnLeave) == "function" then
+            ns.UF.CallCliqueMethod(clique, "UnwrapOnEnterOnLeave", f)
+            ns.UF.CallCliqueMethod(clique, "WrapOnEnterOnLeave", f)
+        elseif type(clique.ApplyAttributes) == "function" then
+            ns.UF.CallCliqueMethod(clique, "ApplyAttributes")
+        end
+    end
+end
+
 -- PERF LOCALS (core runtime)
 --  - Reduce global table lookups in high-frequency event/render paths.
 --  - Secret-safe: localizing function references only (no value comparisons).
@@ -6179,7 +6207,7 @@ local function CreateSimpleUnitFrame(unit)
     -- Clique / click-casting: register AFTER OnEnter/OnLeave are set.
     -- Clique wraps these scripts; if we register before they exist, Clique
     -- has nothing to wrap and our later SetScript overwrites its hooks.
-    MSUF_ClickCastFrames[f] = true
+    ns.UF.RegisterClickCastFrame(f, true)
     if f.targetPowerBar and f.hpBar then
         MSUF_ApplyPowerBarEmbedLayout(f)
     end
