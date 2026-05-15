@@ -5127,6 +5127,13 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
             end
         end
     end
+
+    if not active and not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+    then
+        _G.MSUF_UpdateBossCastbarPreview()
+    end
+
     if active and not anyFrame and C_Timer and C_Timer.After then
         C_Timer.After(0, function()
             if _G.MSUF2_BossUnitframePreviewActive == true and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then

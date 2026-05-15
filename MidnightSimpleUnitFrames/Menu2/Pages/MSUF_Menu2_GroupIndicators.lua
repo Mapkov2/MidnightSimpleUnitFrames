@@ -256,26 +256,28 @@ local function BuildGFIndicators(ctx)
         end)
 
     W.LabelAt(sicons, "Status Preview", siconRightX, -42, siconRightW, "GameFontNormalSmall", T.colors.accent)
-    local previewCurrent = W.Button(sicons, "Current", 118)
+    local previewCurrent = W.Button(sicons, "Preview current", 142)
     previewCurrent:SetScript("OnClick", function()
         local gf = GF()
+        if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
         if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode("current") end
         if gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(CurrentGFStatusSpec().value) end
-        QueueGF(CurrentScope(), "visual")
+        if RefreshGFPreview then RefreshGFPreview() end
     end)
     previewCurrent:ClearAllPoints()
     previewCurrent:SetPoint("TOPLEFT", sicons, "TOPLEFT", siconRightX, -66)
-    previewCurrent:SetSize(118, 24)
+    previewCurrent:SetSize(142, 24)
 
-    local previewAll = W.Button(sicons, "Show All", 118)
+    local previewAll = W.Button(sicons, "Show all", 112)
     previewAll:SetScript("OnClick", function()
         local gf = GF()
+        if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
         if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode("all") end
-        QueueGF(CurrentScope(), "visual")
+        if RefreshGFPreview then RefreshGFPreview() end
     end)
     previewAll:ClearAllPoints()
     previewAll:SetPoint("LEFT", previewCurrent, "RIGHT", 10, 0)
-    previewAll:SetSize(118, 24)
+    previewAll:SetSize(112, 24)
 
     local statusReset = W.Button(sicons, "Reset selected", 160)
     statusReset:SetScript("OnClick", function()

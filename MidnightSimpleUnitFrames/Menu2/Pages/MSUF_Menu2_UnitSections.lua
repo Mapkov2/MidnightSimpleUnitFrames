@@ -1897,9 +1897,15 @@ end
 local function BuildUnitPage(info)
     return function(ctx)
         if info.unit == "boss" and ctx and ctx.wrapper then
+            local function BossPagePreviewShouldBeActive()
+                return M.frame and M.frame.IsShown and M.frame:IsShown()
+                    and M.activeKey == "uf_boss"
+                    and ctx.wrapper and ctx.wrapper.IsShown and ctx.wrapper:IsShown()
+            end
+
             ctx.wrapper:HookScript("OnShow", function()
                 if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then
-                    M.UnitPage.SetBossPagePreviewActive(true)
+                    M.UnitPage.SetBossPagePreviewActive(BossPagePreviewShouldBeActive())
                 end
             end)
             ctx.wrapper:HookScript("OnHide", function()
@@ -1909,11 +1915,11 @@ local function BuildUnitPage(info)
             end)
             M.AddRefresher(ctx, function()
                 if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then
-                    M.UnitPage.SetBossPagePreviewActive(ctx.wrapper:IsShown())
+                    M.UnitPage.SetBossPagePreviewActive(BossPagePreviewShouldBeActive())
                 end
             end)
             if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then
-                M.UnitPage.SetBossPagePreviewActive(true)
+                M.UnitPage.SetBossPagePreviewActive(BossPagePreviewShouldBeActive())
             end
         end
 

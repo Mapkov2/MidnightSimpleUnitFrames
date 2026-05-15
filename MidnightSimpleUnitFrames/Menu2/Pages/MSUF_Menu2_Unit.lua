@@ -733,6 +733,7 @@ local function SetBossPagePreviewActive(active)
     local current = _G.MSUF2_BossUnitframePreviewActive == true
     if current == active then
         if active and not BossPagePreviewInCombat() then SyncBossPagePreview() end
+        if not active and _G.MSUF_BossTestMode == true and not BossPagePreviewInCombat() then SyncBossPagePreview() end
         return
     end
 

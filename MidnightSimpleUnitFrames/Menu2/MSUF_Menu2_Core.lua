@@ -604,7 +604,8 @@ local function SyncBossPagePreviewForKey(key, force)
         return
     end
     local fn = M.UnitPage and M.UnitPage.SetBossPagePreviewActive
-    if not force and lastBossPreviewActive == active and lastBossPreviewFn == fn then return end
+    local globalActive = (_G.MSUF2_BossUnitframePreviewActive == true)
+    if not force and lastBossPreviewActive == active and lastBossPreviewFn == fn and globalActive == (active == true) then return end
     lastBossPreviewActive = active
     lastBossPreviewFn = fn
 
@@ -4437,6 +4438,8 @@ local function BuildWindow()
         UnregisterStatusEvents()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
         if M.EndHistorySession then M.EndHistorySession() end
+        M.dashboardChangelogOpen = false
+        lastBossPreviewActive = nil
         SyncBossPagePreviewForKey(nil)
         SyncGroupPagePreviewForKey(nil)
     end)

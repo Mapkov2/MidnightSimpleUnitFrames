@@ -2977,6 +2977,10 @@ end
 
 function GF.SetStatusPreviewMode(mode)
     _statusPreviewShowAll = (mode == "all")
+    if _statusPreviewShowAll then
+        SelectHandle(nil, true)
+    end
+    if GF.SetPreviewFocus then GF.SetPreviewFocus("sicons") end
     if GF.RefreshPreviewHandles then GF.RefreshPreviewHandles() end
 end
 
