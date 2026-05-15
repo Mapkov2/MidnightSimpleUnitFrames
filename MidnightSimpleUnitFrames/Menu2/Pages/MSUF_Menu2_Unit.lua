@@ -97,6 +97,7 @@ local RESTED_SYMBOLS = {
     { value = "DEFAULT", text = "Default" },
     { value = "rested_moonzzz", text = "Moon (3 z)" },
     { value = "rested_moonzzzz", text = "Moon (4 z)" },
+    { value = "rested_sleep_zzzz", text = "Sleep ZzzZ" },
     { value = "rested_zzz_compact", text = "Compact Zzz" },
     { value = "rested_zzz_diag", text = "Diagonal Zzz" },
     { value = "rested_zzz_stack", text = "Stacked Zzz" },
