@@ -1,5 +1,5 @@
 ## Interface: 120000, 120001, 120005, 120007
-## Title: Midnight Simple UnitFrames - Castbars
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames - Castbars|r
 ## Notes: Castbar LoD for MSUF
 ## Author: Mapko 
 ## Version: @project-version@

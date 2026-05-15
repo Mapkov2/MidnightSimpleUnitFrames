@@ -1,5 +1,5 @@
 ## Interface: 120000, 120001, 120005, 120007
-## Title: Midnight Simple Unit Frames
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
