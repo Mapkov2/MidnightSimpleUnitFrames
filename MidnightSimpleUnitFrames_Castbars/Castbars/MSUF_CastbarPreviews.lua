@@ -1,5 +1,5 @@
--- Castbars/MSUF_CastbarPreviews.lua
--- Zero combat path — only used in MSUF Edit Mode.
+﻿-- Castbars/MSUF_CastbarPreviews.lua
+-- Zero combat path â€” only used in MSUF Edit Mode.
 
 local function Tr(text)
     if type(text) ~= "string" then return text end
@@ -1074,9 +1074,9 @@ end
     end
 end
 
--- ════════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- Boss Preview shared helpers (4.22 Beta hotfix)
--- ════════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- Module-scope helpers used by Setup/Refresh paths. Defined ONCE at file
 -- load (no per-call closure allocation), and used as stable references to
 -- C_Timer.After / Scheduler.ScheduleOnce so neither path produces garbage
@@ -1087,7 +1087,7 @@ end
 -- the preview during combat does nothing visible -- so we skip everything
 -- for 0 overhead and replay once at PLAYER_REGEN_ENABLED if any event was
 -- dropped. This kills the entire 20/sec burst path during boss combat.
--- ════════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 local _pendingPostCombatRefresh = false
 
@@ -1276,9 +1276,9 @@ end
 if not _G.MSUF_BossPreviewEventDriver then
     _G.MSUF_BossPreviewEventDriver = true
 
-    -- ────────────────────────────────────────────────────────────────────
+    -- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     -- MSUF_RefreshBossPreview (4.22 Beta hotfix)
-    -- ────────────────────────────────────────────────────────────────────
+    -- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     -- Original trace (60s boss + 40-man raid) showed this handler firing
     -- 1234x at 20/sec, allocating a fresh closure per call into C_Timer.After
     -- (~1.2k closures/min) and double-calling Setup (once via hooksecurefunc,
@@ -1296,7 +1296,7 @@ if not _G.MSUF_BossPreviewEventDriver then
     --  4. Removed the explicit Setup call in the deferred body (the
     --     hooksecurefunc on Update calls it; was duplicate work).
     --  5. Removed `(MSUF_DB and MSUF_DB.general) or {}` allocation pattern.
-    -- ────────────────────────────────────────────────────────────────────
+    -- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function MSUF_RefreshBossPreview(event, ...)
         -- Combat fast-path: ~50ns C-call + 1 bool test, then return.

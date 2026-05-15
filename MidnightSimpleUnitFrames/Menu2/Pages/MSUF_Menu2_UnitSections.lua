@@ -1233,7 +1233,11 @@ local function BuildAlpha(ctx, builder, unit)
     W.MoveWidget(preserve, sec, rightX, -94)
     M.BindToggle(ctx, preserve,
         function() return ReadBool(unit, "alphaPreserveHPColor", false) end,
-        function(v) SetBool(unit, "alphaPreserveHPColor", v, "MSUF2_ALPHA_HP_COLOR", { alpha = true, preview = true }) end)
+        function(v)
+            v = v and true or false
+            SetBool(unit, "alphaPreserveHPColor", v, "MSUF2_ALPHA_HP_COLOR", { alpha = true, preview = true })
+            if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
+        end)
 
     W.DividerAt(sec, -126, leftX, 32)
     local mode = W.Segment(sec, "Sliders affect", {

@@ -14,6 +14,12 @@ performance changes.
   `C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_fixed.zip`
 - Keep the addon shape identical to a real install: include
   `MidnightSimpleUnitFrames` and `MidnightSimpleUnitFrames_Castbars`.
+- Overlay direction is always one-way: repo/source files go into the extracted
+  Downloads Perfy build. Never copy files from an extracted Perfy build or
+  Perfy zip back into the repo.
+- The normal beta repo must never contain `MSUF_PerfyHook.lua`, `Perfy_Trace`,
+  or direct Perfy dependencies. Only the generated Downloads zip may contain
+  those trace hooks.
 - Validate every generated Perfy zip by extracting it and running `luac -p`
   over all Lua files before giving it to Marco.
 - Never ship a zip with unbalanced Perfy enter/leave instrumentation.

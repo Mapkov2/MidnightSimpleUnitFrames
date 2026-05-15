@@ -1,4 +1,4 @@
-local addonName, ns = ...
+﻿local addonName, ns = ...
 ns = ns or {}
 
 -- Legacy font resolver disabled. The authoritative registry-based pipeline below
@@ -1114,7 +1114,18 @@ do
 
     local function ApplyOne(fs, path, size, flags)
         if not (fs and type(fs.SetFont) == "function" and type(path) == "string" and path ~= "") then return false end
+        if fs._msufSafeFontPath == path
+            and fs._msufSafeFontSize == size
+            and fs._msufSafeFontFlags == flags
+        then
+            return true
+        end
         local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+        if ok and applied ~= false then
+            fs._msufSafeFontPath = path
+            fs._msufSafeFontSize = size
+            fs._msufSafeFontFlags = flags
+        end
         return ok and applied ~= false
     end
 
@@ -1123,12 +1134,40 @@ do
         if size <= 0 then size = 12 end
         flags = NormalizeFlags(flags)
         local requested = ResolveFontPath(path, size, flags, fontKey)
+        if fs and fs._msufSafeFontRequestPath == requested
+            and fs._msufSafeFontRequestSize == size
+            and fs._msufSafeFontRequestFlags == flags
+        then
+            return true, fs._msufSafeFontAppliedPath or requested, fs._msufSafeFontSource or "cached"
+        end
+
         if ApplyOne(fs, requested, size, flags) or (flags ~= "" and ApplyOne(fs, requested, size, "")) then
+            if fs then
+                fs._msufSafeFontRequestPath = requested
+                fs._msufSafeFontRequestSize = size
+                fs._msufSafeFontRequestFlags = flags
+                fs._msufSafeFontAppliedPath = requested
+                fs._msufSafeFontSource = "requested"
+            end
             return true, requested, "requested"
         end
         local fallback = NormalizeFontPath(FALLBACK_FONT)
         if fallback ~= requested and (ApplyOne(fs, fallback, size, flags) or (flags ~= "" and ApplyOne(fs, fallback, size, ""))) then
+            if fs then
+                fs._msufSafeFontRequestPath = requested
+                fs._msufSafeFontRequestSize = size
+                fs._msufSafeFontRequestFlags = flags
+                fs._msufSafeFontAppliedPath = fallback
+                fs._msufSafeFontSource = "fallback"
+            end
             return true, fallback, "fallback"
+        end
+        if fs then
+            fs._msufSafeFontRequestPath = nil
+            fs._msufSafeFontRequestSize = nil
+            fs._msufSafeFontRequestFlags = nil
+            fs._msufSafeFontAppliedPath = nil
+            fs._msufSafeFontSource = nil
         end
         return false, requested, "failed"
     end

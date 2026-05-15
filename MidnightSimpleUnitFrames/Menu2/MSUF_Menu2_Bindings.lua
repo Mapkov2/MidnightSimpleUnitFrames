@@ -59,6 +59,45 @@ function M.GetGeneralDB()
     return db.general, db
 end
 
+function M.ShowPreserveHPColorWarning()
+    local g = M.GetGeneralDB()
+    if g.hidePreserveHPColorWarning == true then return false end
+
+    local message = "Preserve HP color can replace the selected health bar texture with an internal preserve texture.\n\nSome colored or pre-gradient bar textures may look flat, dark, or different while this option is enabled."
+    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
+        if print then
+            print("|cffffd700MSUF:|r Preserve HP color may not work correctly with some bar textures.")
+        end
+        return false
+    end
+
+    if not _G.StaticPopupDialogs.MSUF2_PRESERVE_HP_COLOR_WARNING then
+        _G.StaticPopupDialogs.MSUF2_PRESERVE_HP_COLOR_WARNING = {
+            text = "%s",
+            button1 = _G.OKAY or "OK",
+            button2 = "Don't show again",
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = false,
+            preferredIndex = 3,
+            OnCancel = function()
+                local gen = M.GetGeneralDB()
+                gen.hidePreserveHPColorWarning = true
+            end,
+        }
+    end
+
+    _G.StaticPopup_Show("MSUF2_PRESERVE_HP_COLOR_WARNING", message)
+    return true
+end
+
+function M.WarnPreserveHPColorIfNeeded(enabled)
+    if enabled == true then
+        return M.ShowPreserveHPColorWarning()
+    end
+    return false
+end
+
 local function CallGlobal(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then

@@ -1,4 +1,4 @@
--- MSUF_Castbars.lua
+﻿-- MSUF_Castbars.lua
 
 local addonName, ns = ...
 
@@ -202,7 +202,7 @@ local MSUF_PositionTargetCastbarPreview          = _G.MSUF_PositionTargetCastbar
 local MSUF_PositionFocusCastbarPreview           = _G.MSUF_PositionFocusCastbarPreview
 local MSUF_SetupBossCastbarPreviewEditMode       = _G.MSUF_SetupBossCastbarPreviewEditMode
 -- NOTE: MSUF_RegisterCastbar / MSUF_UnregisterCastbar are defined IN this file
--- (inside the bootstrap do-block below). No local alias here â€” they must write to _G.
+-- (inside the bootstrap do-block below). No local alias here Ã¢â‚¬â€ they must write to _G.
 local MSUF_CreatePlayerCastbarPreview            = _G.MSUF_CreatePlayerCastbarPreview
 local MSUF_CreateTargetCastbarPreview            = _G.MSUF_CreateTargetCastbarPreview
 local MSUF_CreateFocusCastbarPreview             = _G.MSUF_CreateFocusCastbarPreview
@@ -302,11 +302,11 @@ function MSUF_InitSafePlayerCastbar()
             local tick = frame.empowerStageTicks[i]
             if not tick then
                 tick = statusBar:CreateTexture(nil, "OVERLAY")
-                tick:SetColorTexture(1, 1, 1, 0.8) -- dÃƒÂ¼nne helle Linie
+                tick:SetColorTexture(1, 1, 1, 0.8) -- dÃƒÆ’Ã‚Â¼nne helle Linie
                 frame.empowerStageTicks[i] = tick
             end
 
-            tick:SetSize(3, barHeight)  -- 2 px breit, volle HÃƒÂ¶he
+            tick:SetSize(3, barHeight)  -- 2 px breit, volle HÃƒÆ’Ã‚Â¶he
             tick:Hide()                 -- Standard: versteckt, nur bei Empower sichtbar
         end
 
@@ -530,11 +530,11 @@ do
         _HeavyUpdate = _G.MSUF_UpdateCastbarFrame
     end)
 
-    -- Active bar count — replaces `not next(active)` hash lookups.
+    -- Active bar count â€” replaces `not next(active)` hash lookups.
     local activeCount = 0
     local activeHighFreq = 0
 
-    -- Monotonic clock accumulated from engine elapsed — avoids GetTimePreciseSec in heavy path.
+    -- Monotonic clock accumulated from engine elapsed â€” avoids GetTimePreciseSec in heavy path.
     local _monoClock = 0
 
     local function ManagerOnUpdate(self, elapsed)
@@ -594,7 +594,7 @@ do
                 if rem < 0 then rem = 0 end
                 frame._msufRemaining = rem
 
-                -- Fast-path completion: cast done — immediately cleanup.
+                -- Fast-path completion: cast done â€” immediately cleanup.
                 -- Eliminates ~6 wasted ticks waiting for heavy path to notice.
                 if rem <= 0.001 then
                     if frame.SetSucceeded then
@@ -612,7 +612,7 @@ do
 
                     -- Heavy path: only needed for CHANNELS (hard-stop safety + haste markers).
                     -- Non-channeled casts: fast path handles completion + time text fully.
-                    -- GlowFade inlined here — avoids entering the expensive heavy path just for cosmetics.
+                    -- GlowFade inlined here â€” avoids entering the expensive heavy path just for cosmetics.
                     if frame.MSUF_isChanneled then
                         if rem < 1.0 then
                             local cd = frame._msufHeavyIn
@@ -649,7 +649,7 @@ do
                 end
             else
                 -- Non-fast bars (GCD, empower, no timeText, no remaining):
-                -- always need heavy path — it drives everything.
+                -- always need heavy path â€” it drives everything.
                 local cd = frame._msufHeavyIn
                 if cd then
                     cd = cd - elapsed
@@ -670,7 +670,7 @@ do
         end
     end
 
-    -- OnUpdate is toggled via OnShow/OnHide — guarantees zero idle CPU.
+    -- OnUpdate is toggled via OnShow/OnHide â€” guarantees zero idle CPU.
     manager:SetScript("OnShow", function(self)
         self:SetScript("OnUpdate", ManagerOnUpdate)
     end)
@@ -780,8 +780,8 @@ do
     end
 
     -- Secret-safe + cached update: time text and empower stage handling. StatusBar:SetTimerDuration animates the bar.
-    -- `monoClock` = manager's monotonic elapsed accumulator (for relative timing — no C-call).
-    -- `now` = wall clock — only computed when API drift correction actually needs it.
+    -- `monoClock` = manager's monotonic elapsed accumulator (for relative timing â€” no C-call).
+    -- `now` = wall clock â€” only computed when API drift correction actually needs it.
     function MSUF_UpdateCastbarFrame(frame, dt, now, monoClock)
         if not frame or not frame.statusBar then
             return
@@ -838,7 +838,7 @@ do
                 end
             end
 
-            -- oUF-style elapsed accumulator — eliminates GetTimePreciseSec per tick.
+            -- oUF-style elapsed accumulator â€” eliminates GetTimePreciseSec per tick.
             local dur = frame.MSUF_gcdDur or 0
             if dur <= 0 then
                 if _GCDStop then _GCDStop(frame) end
@@ -881,7 +881,7 @@ do
                     frame.statusBar:SetMinMaxValues(0, dur)
                 end
             end
-            -- 12.0: C-engine animates bar via SetTimerDuration → no per-tick SetValue.
+            -- 12.0: C-engine animates bar via SetTimerDuration â†’ no per-tick SetValue.
             -- Fallback for pre-12.0 or missing API: manual SetValue.
             if not frame._msufGcdTimerDriven then
                 if frame.statusBar.SetValue then
@@ -1018,7 +1018,7 @@ do
         end
         -- Hard-stop safety: only needed for CHANNELED casts (refresh gaps can cause false "no channel").
         -- Non-channeled casts have triple redundancy: fast-path rem<=0, OnHide hook, remNum<=0.001 safety.
-        -- Uses monotonic clock (mc) for relative timing — no GetTimePreciseSec needed.
+        -- Uses monotonic clock (mc) for relative timing â€” no GetTimePreciseSec needed.
         if frame.MSUF_isChanneled then
             local nxt = frame._msufHardStopNext
             if (not nxt) or (mc >= nxt) then

@@ -1,4 +1,4 @@
--- Core/MSUF_Alpha.lua  Unit frame alpha / layered transparency system
+﻿-- Core/MSUF_Alpha.lua  Unit frame alpha / layered transparency system
 -- Extracted from MidnightSimpleUnitFrames.lua (Phase 2 file split)
 -- Loads AFTER MidnightSimpleUnitFrames.lua in the TOC.
 local addonName, ns = ...
@@ -72,9 +72,9 @@ do
         return (db and key) and db[key] or nil
     end
     local function _Clamp01(a)
-        if type(a) ~= "number" then  return 1 end
-        if a < 0 then  return 0 end
-        if a > 1 then  return 1 end
+        if type(a) ~= "number" then return 1 end
+        if a < 0 then return 0 end
+        if a > 1 then return 1 end
          return a
     end
     if not _G.MSUF_Alpha_IsLayeredModeEnabled then
@@ -86,14 +86,14 @@ do
     if not _G.MSUF_Alpha_GetLayerMode then
         function _G.MSUF_Alpha_GetLayerMode(key)
             local conf = _Alpha_GetConf(key)
-            if not conf then  return "foreground" end
+            if not conf then return "foreground" end
             return _AlphaNormalizeLayerMode(conf.alphaLayerMode)
         end
     end
     if not _G.MSUF_Alpha_GetAlphaInCombat then
         function _G.MSUF_Alpha_GetAlphaInCombat(key)
             local conf = _Alpha_GetConf(key)
-            if not conf then  return 1 end
+            if not conf then return 1 end
             local a = tonumber(conf.alphaFGInCombat) or tonumber(conf.alphaInCombat) or 1
             return _Clamp01(a)
         end
@@ -101,7 +101,7 @@ do
     if not _G.MSUF_Alpha_GetAlphaOOC then
         function _G.MSUF_Alpha_GetAlphaOOC(key)
             local conf = _Alpha_GetConf(key)
-            if not conf then  return 1 end
+            if not conf then return 1 end
             local sync = conf.alphaSyncBoth
             if sync == nil then sync = conf.alphaSync end
             if sync then
@@ -115,7 +115,7 @@ do
     if not _G.MSUF_Alpha_GetBgAlphaInCombat then
         function _G.MSUF_Alpha_GetBgAlphaInCombat(key)
             local conf = _Alpha_GetConf(key)
-            if not conf then  return 1 end
+            if not conf then return 1 end
             local a = tonumber(conf.alphaBGInCombat) or tonumber(conf.alphaInCombat) or 1
             return _Clamp01(a)
         end
@@ -123,7 +123,7 @@ do
     if not _G.MSUF_Alpha_GetBgAlphaOOC then
         function _G.MSUF_Alpha_GetBgAlphaOOC(key)
             local conf = _Alpha_GetConf(key)
-            if not conf then  return 1 end
+            if not conf then return 1 end
             local sync = conf.alphaSyncBoth
             if sync == nil then sync = conf.alphaSync end
             if sync then
@@ -136,7 +136,7 @@ do
     end
 end
 -- ---------------------------------------------------------------------------
--- Layered alpha helpers — public API stays intact, hot path is optimized below.
+-- Layered alpha helpers â€” public API stays intact, hot path is optimized below.
 -- ---------------------------------------------------------------------------
 local function _SetTexAlpha(tex, a)
     if tex then tex:SetAlpha(a) end
@@ -348,7 +348,7 @@ local function _AlphaNearlyEqual(a, b)
     if type(a) ~= "number" or type(b) ~= "number" then return false end
     -- Secret-safe: GetAlpha()/GetStatusBarColor() return secret values when execution
     -- is tainted. type() reports "number" but arithmetic/comparison raise an error.
-    -- Return false (mismatch) so the caller falls through to SetAlpha — safe re-apply.
+    -- Return false (mismatch) so the caller falls through to SetAlpha â€” safe re-apply.
     if issecretvalue and (issecretvalue(a) or issecretvalue(b)) then return false end
     local d = a - b
     if d < 0 then d = -d end
@@ -517,6 +517,16 @@ local function MSUF_Alpha_GetStaticMode(frame, conf)
     return nil
 end
 
+local function _AlphaIsTrivialFlat(conf)
+    if not conf or conf.loadCondActive == true or conf.rangeFadeEnabled == true then return false end
+    if conf.alphaExcludeTextPortrait == true then return false end
+    local aIn = _AlphaClamp01(tonumber(conf.alphaInCombat) or 1)
+    local sync = conf.alphaSyncBoth
+    if sync == nil then sync = conf.alphaSync end
+    local aOut = sync and aIn or _AlphaClamp01(tonumber(conf.alphaOutOfCombat) or 1)
+    return aIn == 1 and aOut == 1
+end
+
 local function MSUF_Alpha_ClearBaseCache(frame)
     if not frame then return end
     frame._msufAlphaBaseMode = nil
@@ -528,6 +538,7 @@ local function MSUF_Alpha_ClearBaseCache(frame)
     frame._msufAlphaBasePreserveHPColor = nil
     frame._msufAlphaLayeredFastValid = nil
     frame._msufAlphaLayeredFastHits = nil
+    frame._msufAlphaTrivialReady = nil
 end
 
 local function MSUF_Alpha_ResetLayered(frame)
@@ -613,7 +624,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     if frame.SetAlpha then
         local cur = frame.GetAlpha and (frame:GetAlpha() or 1) or nil
         -- Secret-safe: GetAlpha() can return a secret value under tainted execution.
-        -- If secret or nil, conservatively call SetAlpha(1) — layered mode owns per-layer alpha.
+        -- If secret or nil, conservatively call SetAlpha(1) â€” layered mode owns per-layer alpha.
         if cur == nil or (issecretvalue and issecretvalue(cur)) then
             frame:SetAlpha(1)
         else
@@ -734,6 +745,25 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         MSUF_Alpha_SetFlat(frame, 1)
         return
     end
+
+    if (not isEditMode) and _AlphaIsTrivialFlat(conf) then
+        frame._msufAlphaBaseMode = "flat"
+        frame._msufAlphaBaseKey = key
+        frame._msufAlphaBaseA = 1
+        frame._msufAlphaBaseFG = nil
+        frame._msufAlphaBaseBG = nil
+        frame._msufAlphaBaseLayerMode = nil
+        frame._msufAlphaBasePreserveHPColor = nil
+        if frame._msufAlphaLayeredMode then
+            MSUF_Alpha_ResetLayered(frame)
+        end
+        if not frame._msufAlphaTrivialReady then
+            MSUF_Alpha_SetFlat(frame, 1)
+            frame._msufAlphaTrivialReady = true
+        end
+        return
+    end
+    frame._msufAlphaTrivialReady = nil
 
     if MSUF_Alpha_UseLiteRuntime() then
         local staticMode, staticA, staticB, staticLayerMode, staticPreserveHPColor = MSUF_Alpha_GetStaticMode(frame, conf)
@@ -958,7 +988,7 @@ end
 function _G.MSUF_RefreshAllUnitAlphas()
     EnsureDB()
     local UnitFrames = _G.MSUF_UnitFrames
-    if not UnitFrames then  return end
+    if not UnitFrames then return end
     local ApplyUnitAlpha = _G.MSUF_ApplyUnitAlpha
     if type(ApplyUnitAlpha) ~= "function" then  return end
     for unitKey, f in pairs(UnitFrames) do
@@ -1018,12 +1048,15 @@ function _G.MSUF_RefreshCombatUnitAlphas()
 
     local didAny = false
     for unitKey, f in pairs(UnitFrames) do
-        local conf = (MSUF_DB and unitKey) and MSUF_DB[unitKey] or nil
+        local cfgKey = f and (f.msufConfigKey
+            or (GetConfigKeyForUnit and GetConfigKeyForUnit(f.unit or unitKey))
+            or unitKey)
+        local conf = (MSUF_DB and cfgKey) and MSUF_DB[cfgKey] or nil
         if conf and _MSUF_ConfWantsCombatAlphaSwap(conf) then
             didAny = true
             if f and f.SetAlpha then
-                if not f.msufConfigKey then f.msufConfigKey = unitKey end
-                ApplyUnitAlpha(f, unitKey)
+                if not f.msufConfigKey then f.msufConfigKey = cfgKey end
+                ApplyUnitAlpha(f, cfgKey)
             end
         end
     end

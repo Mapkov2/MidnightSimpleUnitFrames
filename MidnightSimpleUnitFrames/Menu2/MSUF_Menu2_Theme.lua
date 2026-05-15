@@ -298,7 +298,7 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
         fill.M:SetPoint("TOPLEFT", fill.L, "TOPRIGHT", 0, 0)
         fill.M:SetPoint("BOTTOMRIGHT", fill.R, "BOTTOMLEFT", 0, 0)
 
-        local bInset = math.max(1, p - 1)
+        local bInset = math.max(0, p - 1)
         local borderInnerW = math.max(1, w - bInset * 2)
         local borderInnerH = math.max(1, h2 - bInset * 2)
         local borderCapW = math.min(math.floor(borderInnerH * 0.5 + 0.5), math.floor(borderInnerW * 0.5))

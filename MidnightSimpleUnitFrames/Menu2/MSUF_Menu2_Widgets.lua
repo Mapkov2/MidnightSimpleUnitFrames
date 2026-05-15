@@ -1820,7 +1820,7 @@ function W.Color(section, label)
     RegisterSearchObject(btn, label, "color", { anchor = title })
     btn:SetPoint("TOPLEFT", x + 250, y + 2)
     btn:SetSize(44, 18)
-    btn._msuf2Swatch, btn._msuf2Edge = T.CreateSuperellipseLayers(btn, "_msuf2Color", 1, "ARTWORK", "OVERLAY")
+    btn._msuf2Swatch, btn._msuf2Edge = T.CreateSuperellipseLayers(btn, "_msuf2Color", 1, "ARTWORK", "ARTWORK")
     btn._msuf2Edge:SetVertexColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.75)
 
     function btn:SetRGB(r, g, b)

@@ -1,4 +1,4 @@
--- MSUF_A2_Render.lua — Render + Masque + CooldownText (consolidated)
+﻿-- MSUF_A2_Render.lua â€” Render + Masque + CooldownText (consolidated)
 
 -- MSUF_A2_Render.lua
 
@@ -157,7 +157,7 @@ local A2_SHARED_DEFAULTS = {
 
 local A2_GROWTH_OK = {RIGHT=true,LEFT=true,UP=true,DOWN=true}
 local A2_ROWWRAP_OK = {DOWN=true,UP=true}
--- LayoutMode (SINGLE vs SEPARATE) permanently deprecated — runtime always uses separate groups.
+-- LayoutMode (SINGLE vs SEPARATE) permanently deprecated â€” runtime always uses separate groups.
 local A2_STACKANCHOR_OK = {TOPRIGHT=true,TOPLEFT=true,BOTTOMRIGHT=true,BOTTOMLEFT=true}
 
 -- DefaultKV + Clamp: on API._Render (avoids 200-local limit)
@@ -367,15 +367,17 @@ local function StopFlushDriver()
     _flushDriver:Hide()
 end
 
-local function FlushDriverOnUpdate()
+local function FlushDriverOnUpdate(_, elapsed)
     local at = _flushNextAt
     if not at then StopFlushDriver(); return end
-    local now = GetTime()
-    if now >= at then
+    at = at - (elapsed or 0)
+    if at <= 0 then
         _flushNextAt = nil
         if Flush then
             Flush()
         end
+    else
+        _flushNextAt = at
     end
 end
 
@@ -387,7 +389,7 @@ local function ScheduleFlush(delay)
         if delay == 0 then
             _flushNextAt = 0  -- immediate (next OnUpdate)
         else
-            local at = GetTime() + delay
+            local at = delay
             if not _flushNextAt or at < _flushNextAt then
                 _flushNextAt = at
             end
@@ -396,19 +398,19 @@ local function ScheduleFlush(delay)
     end
 
     -- Start driver
-    _flushNextAt = (delay == 0) and 0 or (GetTime() + delay)
+    _flushNextAt = delay
     _flushDriverActive = true
     _flushDriver:Show()
     _flushDriver:SetScript("OnUpdate", FlushDriverOnUpdate)
 end
 
 -- MarkDirty (public entry point for scheduling unit updates)
--- PERF: Inlined DirtyAdd + ScheduleFlush — was 3 function calls, now 0.
+-- PERF: Inlined DirtyAdd + ScheduleFlush â€” was 3 function calls, now 0.
 
 local function MarkDirty(unit, delay)
     if not unit then return end
 
-    -- PERF: Single table lookup dedupe (hottest check — runs on every UNIT_AURA)
+    -- PERF: Single table lookup dedupe (hottest check â€” runs on every UNIT_AURA)
     if DirtyMark[unit] == DirtyGen then
         if delay == 0 and _flushDriverActive and _flushNextAt and _flushNextAt > 0 then
             _flushNextAt = 0
@@ -429,13 +431,13 @@ local function MarkDirty(unit, delay)
         if delay == 0 then
             _flushNextAt = 0
         else
-            local at = GetTime() + delay
+            local at = delay
             if not _flushNextAt or at < _flushNextAt then
                 _flushNextAt = at
             end
         end
     else
-        _flushNextAt = (delay == 0) and 0 or (GetTime() + delay)
+        _flushNextAt = delay
         _flushDriverActive = true
         _flushDriver:Show()
         _flushDriver:SetScript("OnUpdate", FlushDriverOnUpdate)
@@ -480,7 +482,7 @@ local function EnsureAttached(unit)
     private:SetPoint("BOTTOMLEFT", buffs, "TOPLEFT", 0, 0)
     private:Hide()
 
-    -- Reminder container (player-only, but create for all — hidden by default)
+    -- Reminder container (player-only, but create for all â€” hidden by default)
     local reminder = CreateFrame("Frame", nil, anchor)
     reminder:SetSize(1, 1)
     reminder:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
@@ -494,7 +496,7 @@ local function EnsureAttached(unit)
         -- Force cache re-scan for THIS unit.  Boss adds can spawn with
         -- pre-existing auras long after the initial INSTANCE_ENCOUNTER_ENGAGE_UNIT
         -- already created an empty cache entry.  Without the invalidation,
-        -- FilterAndSort sees the stale empty entry and skips FullScan → 0 auras.
+        -- FilterAndSort sees the stale empty entry and skips FullScan â†’ 0 auras.
         local Store = API.Store
         if Store and Store.InvalidateUnit then
             Store.InvalidateUnit(_hookUnit)
@@ -539,7 +541,7 @@ local function ResolveUnitConfig(unit, a2, shared)
     local growth = shared.growth or "RIGHT"
     local rowWrap = shared.rowWrap or "DOWN"
     local stackCountAnchor = shared.stackCountAnchor or "TOPRIGHT"
-    -- Sort order (caps level — per-unit overridable via layoutShared)
+    -- Sort order (caps level â€” per-unit overridable via layoutShared)
     -- Falls back to shared.filters.sortOrder for backward compatibility.
     local sf = shared.filters
     local sortOrder = shared.sortOrder
@@ -571,11 +573,11 @@ local function ResolveUnitConfig(unit, a2, shared)
         if ls.stackCountAnchor and A2_STACKANCHOR_OK[ls.stackCountAnchor] then stackCountAnchor = ls.stackCountAnchor end
         if type(ls.sortOrder) == "number" then sortOrder = ls.sortOrder end
     end
-    -- Resolve per-type fallback: nil → growth
+    -- Resolve per-type fallback: nil â†’ growth
     if not buffGrowth or not A2_GROWTH_OK[buffGrowth] then buffGrowth = growth end
     if not debuffGrowth or not A2_GROWTH_OK[debuffGrowth] then debuffGrowth = growth end
     if not privateGrowth or not A2_GROWTH_OK[privateGrowth] then privateGrowth = growth end
-    -- Resolve per-type rowWrap fallback: nil → rowWrap
+    -- Resolve per-type rowWrap fallback: nil â†’ rowWrap
     if not buffRowWrap or not A2_ROWWRAP_OK[buffRowWrap] then buffRowWrap = rowWrap end
     if not debuffRowWrap or not A2_ROWWRAP_OK[debuffRowWrap] then debuffRowWrap = rowWrap end
 
@@ -819,7 +821,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     privateGrowth = (privateGrowth and A2_GROWTH_OK[privateGrowth]) and privateGrowth or "RIGHT"
     local vertical = (privateGrowth == "UP" or privateGrowth == "DOWN")
 
-    -- PERF: Zero-alloc diff check (replaces 6× string concat + comparison)
+    -- PERF: Zero-alloc diff check (replaces 6Ã— string concat + comparison)
     if entry._privUnit == unit
        and entry._privToken == effectiveToken
        and entry._privSize == privateIconSize
@@ -890,10 +892,10 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
             -- 12.0.5 REQUIRED FIELD: isContainer
             -- Without this, AddPrivateAuraAnchor throws:
             --   bad argument #2 to '?' (Current Field: [isContainer])
-            -- We use false (same as Plater) → one anchor = one aura index.
+            -- We use false (same as Plater) â†’ one anchor = one aura index.
             -- isContainer=true is a future path where Blizzard manages the
             -- entire aura list within a single parent frame and (per R41z0r)
-            -- displays dispel-type colors natively — but the args shape for
+            -- displays dispel-type colors natively â€” but the args shape for
             -- that mode is not yet publicly documented, so we stay with
             -- the slot-per-aura model for now.
             isContainer = false,
@@ -1366,7 +1368,7 @@ local function RenderUnit(entry)
         EditMode.EnsureMovers(entry, unit, shared, iconSize, spacing)
     end
     -- Reminder mover (player-only, created by Reminder module)
-    -- PERF: Zero overhead when reminders disabled — no mover creation.
+    -- PERF: Zero overhead when reminders disabled â€” no mover creation.
     local ReminderMod = API.Reminder
     if isEditActive and unit == "player" and shared and shared.showReminders ~= false
        and ReminderMod and ReminderMod.EnsureMover then
@@ -1493,7 +1495,7 @@ local function RenderUnit(entry)
     local commitUpdatedOnly = updatedAuraIDs and entry._lastA2CommitGen == gen and not countsChanged and not isEditActive and not showTest
 
     -- CommitIcon: debuffs
-    -- PERF: Inlined AcquireIcon fast path — pool[i] hit skips function call.
+    -- PERF: Inlined AcquireIcon fast path â€” pool[i] hit skips function call.
     -- Full AcquireIcon only for pool miss (icon creation, rare after warmup).
     if debuffCount > 0 then
         local list = entry._debuffList
@@ -1606,7 +1608,7 @@ local function RenderUnit(entry)
     end
 
     -- Buff Reminders: ghost icons for missing group buffs (player only).
-    -- PERF: Zero overhead when disabled or non-player — no function call at all.
+    -- PERF: Zero overhead when disabled or non-player â€” no function call at all.
     if unit == "player" and shared and shared.showReminders ~= false then
         local ReminderMod = API.Reminder
         if ReminderMod and ReminderMod.Render then
@@ -1618,12 +1620,12 @@ end
 -- Flush
 
 -- PERF: Budget cap for aura flush. Shared with UFCore for combined frame budget.
--- Own cap: 350μs. Shared total: 700μs (UFCore 350 + A2 350 max).
--- In practice UFCore uses 50-200μs → A2 gets 500-650μs on most frames.
--- Spiky frames (UFCore near cap): A2 gets min 150μs = enough for 1 unit.
+-- Own cap: 350Î¼s. Shared total: 700Î¼s (UFCore 350 + A2 350 max).
+-- In practice UFCore uses 50-200Î¼s â†’ A2 gets 500-650Î¼s on most frames.
+-- Spiky frames (UFCore near cap): A2 gets min 150Î¼s = enough for 1 unit.
 local _A2_FLUSH_BUDGET_US = 350  -- own cap (microseconds)
 local _A2_SHARED_BUDGET_US = 700 -- combined MSUF budget per frame
-local _A2_MIN_BUDGET_US = 150    -- minimum budget (always process ≥1 unit)
+local _A2_MIN_BUDGET_US = 150    -- minimum budget (always process â‰¥1 unit)
 local _debugprofilestop = debugprofilestop  -- microsecond timer (nil if unavailable)
 
 Flush = function()
@@ -1670,7 +1672,7 @@ Flush = function()
         local unit = list[i]
         local entry = AurasByUnit[unit]
 
-        -- Fast path: entry already attached with valid frame â†’ skip FindUnitFrame
+        -- Fast path: entry already attached with valid frame Ã¢â€ â€™ skip FindUnitFrame
         if entry and entry.frame then
             RenderUnit(entry)
             if clearAuraRescanQueued then clearAuraRescanQueued(unit) end
@@ -2048,7 +2050,7 @@ local function MSUF_A2_FastCall(fn, ...)
 end
 
 local API = ns and ns.MSUF_Auras2
-if not API then  return end
+if not API then return end
 
 API.Masque = API.Masque or {}
 local MasqueMod = API.Masque
@@ -2075,7 +2077,7 @@ local function IsMasqueLoaded()
 end
 
 local function GetMasqueLib()
-    if MSQ_LIB ~= nil then  return MSQ_LIB end
+    if MSQ_LIB ~= nil then return MSQ_LIB end
     if not LibStub then MSQ_LIB = false;  return nil end
     local ok, lib = MSUF_A2_FastCall(LibStub, "Masque", true)
     if ok and lib then
@@ -2092,10 +2094,10 @@ local function EnsureMasqueGroup()
          return MSQ_GROUP
     end
 
-    if not IsMasqueLoaded() then  return nil end
+    if not IsMasqueLoaded() then return nil end
 
     local lib = GetMasqueLib()
-    if not lib then  return nil end
+    if not lib then return nil end
 
     local ok, group = MSUF_A2_FastCall(lib.Group, lib, "Midnight Simple Unit Frames", "Auras 2.0")
     if ok and group then
@@ -2110,7 +2112,7 @@ end
 -- Reload popup (legacy UX used by Options)
 
 local function EnsureReloadPopup()
-    if not _G.StaticPopupDialogs then  return end
+    if not _G.StaticPopupDialogs then return end
 
     local function DoReload()
         if _G.InCombatLockdown and _G.InCombatLockdown() then
@@ -2157,7 +2159,7 @@ EnsureReloadPopup()
 -- Overlay sync + border detection (Masque-safe)
 
 local function SyncIconOverlayLevels(icon)
-    if not icon then  return end
+    if not icon then return end
 
     -- One-time sync after Masque registration: ensure MSUF overlays
     -- (countFrame, dispel border) sit above any Masque skin layers.
@@ -2181,7 +2183,7 @@ end
 -- Regions + registration (MSA pattern: Icon/Cooldown/Count only, no Normal/Border)
 
 local function EnsureMasqueRegions(btn)
-    if not btn then  return end
+    if not btn then return end
 
     if not btn._msufMasqueRegions then
         btn._msufMasqueRegions = {}
@@ -2203,11 +2205,11 @@ local _lastReskinCount = -1  -- Count at last ReSkin; -1 forces initial reskin
 local function ReskinNow()
     RESKIN_QUEUED = false
     local g = MSQ_GROUP or _G.MSUF_MasqueAuras2
-    if not g then  return end
+    if not g then return end
 
     -- Skip ReSkin if button count hasn't changed since last reskin
     -- (icon textures/cooldowns don't need it, only structural adds/removes)
-    if _masqueButtonCount == _lastReskinCount then  return end
+    if _masqueButtonCount == _lastReskinCount then return end
     _lastReskinCount = _masqueButtonCount
 
     -- Masque uses ReSkin() (case varies across versions / forks)
@@ -2221,7 +2223,7 @@ local function ReskinNow()
  end
 
 local function RequestReskin()
-    if RESKIN_QUEUED then  return end
+    if RESKIN_QUEUED then return end
     RESKIN_QUEUED = true
     if _G.C_Timer and _G.C_Timer.After then
         _G.C_Timer.After(0, ReskinNow)
@@ -2232,13 +2234,13 @@ local function RequestReskin()
  end
 
 local function AddButton(btn, shared)
-    if not btn then  return false end
+    if not btn then return false end
     if not (shared and shared.masqueEnabled == true) then
          return false
     end
 
     local g = EnsureMasqueGroup()
-    if not g then  return false end
+    if not g then return false end
 
     EnsureMasqueRegions(btn)
 
@@ -2261,7 +2263,7 @@ local function AddButton(btn, shared)
 end
 
 local function RemoveButton(btn)
-    if not btn then  return end
+    if not btn then return end
     local g = MSQ_GROUP or _G.MSUF_MasqueAuras2
     if not g then
         btn.MSUF_MasqueAdded = false
@@ -2276,7 +2278,7 @@ local function RemoveButton(btn)
  end
 
 local function IsEnabled(shared)
-    if not (shared and shared.masqueEnabled == true) then  return false end
+    if not (shared and shared.masqueEnabled == true) then return false end
     return EnsureMasqueGroup() ~= nil
 end
 
@@ -2839,8 +2841,8 @@ local function EnsureMgr()
         -- value comparisons (safety > colors until the next tick).
         local secretNoDetector = (secretsActive and not isv)
 
-        -- Step 6 perf: per-icon secret check uses isv(r) â€” ONE C-call per evaluated
-        -- icon instead of the original 4Ã— C_Secrets.IsSecret(r/g/b/a).
+        -- Step 6 perf: per-icon secret check uses isv(r) Ã¢â‚¬â€ ONE C-call per evaluated
+        -- icon instead of the original 4Ãƒâ€” C_Secrets.IsSecret(r/g/b/a).
         -- Only r is checked: if r is secret from GetRGBA(), g/b/a from the same
         -- Color object will be too. Icons in skip (NORMAL/SAFE bucket) don't reach
         -- the evaluation path at all, reducing total calls to ~5-8 per tick.
@@ -2944,7 +2946,7 @@ local function EnsureMgr()
                         -- Set per-icon skip for stable buckets.
                         -- (bucket identification is best-effort for skip/wantFast only;
                         --  if Color precision causes a mismatch, bucket defaults to 3
-                        --  which gives a conservative 2s skip â€” safe and still beneficial.)
+                        --  which gives a conservative 2s skip Ã¢â‚¬â€ safe and still beneficial.)
                         if iconSecret then
                             icon._msufA2_cdSkipUntil = nil -- secret: re-evaluate each tick
                         elseif bucket == 4 then

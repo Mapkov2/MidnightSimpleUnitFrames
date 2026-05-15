@@ -1,4 +1,4 @@
--- MSUF_GF_SpellIndicators.lua - Group Frames: Per-Spell Indicator Engine
+﻿-- MSUF_GF_SpellIndicators.lua - Group Frames: Per-Spell Indicator Engine
 -- Tracks player-cast healer HoTs on party/raid members.
 -- 2-tier: placed indicators (icon/square/bar/number) + frame effects (healthtint/border/glow/pulse/namecolor/framealpha).
 -- Uses proven HealerBuffs scan pattern (HELPFUL filter, spellId lookup).
@@ -45,17 +45,18 @@ local _siBestSlots = {
 local _defaultFrameColor = { 1, 1, 1, 1 }
 
 ------------------------------------------------------------------------
--- Compiled lookup: spellId → auraName (rebuilt on spec change)
+-- Compiled lookup: spellId â†’ auraName (rebuilt on spec change)
 ------------------------------------------------------------------------
 local _compiledSpec
 local _compiledMultiKey
 local _reverseLookup
 local _nameLookup
-local _auraSpecMap = {} -- auraName → specKey (multi-spec config routing)
+local _auraSpecMap = {} -- auraName â†’ specKey (multi-spec config routing)
 local _isMultiMode = false
 local _siConfigRev = 1
 local _specConfigListCache = setmetatable({}, { __mode = "k" })
 local _multiSpecListCache = setmetatable({}, { __mode = "k" })
+local _siCachedKind, _siCachedRev, _siCachedConf, _siCachedCfg
 
 local function InvalidateRuntimeCaches()
     _siConfigRev = _siConfigRev + 1
@@ -177,8 +178,15 @@ end
 -- Config helpers
 ------------------------------------------------------------------------
 local function GetSIConfig(kind)
+    if kind == _siCachedKind and _siCachedRev == _siConfigRev then
+        return _siCachedCfg
+    end
     local conf = GF.GetConf(kind)
-    return conf and conf.spellIndicators
+    _siCachedKind = kind
+    _siCachedRev = _siConfigRev
+    _siCachedConf = conf
+    _siCachedCfg = conf and conf.spellIndicators or nil
+    return _siCachedCfg
 end
 
 local function ResolveSpec(siCfg)
@@ -1108,7 +1116,7 @@ end
 -- Reset / Apply frame effects
 ------------------------------------------------------------------------
 local function ResetFrameEffects(f)
-    -- Clear health bar color override → restore normal health color
+    -- Clear health bar color override â†’ restore normal health color
     local hadHealthTint = f._msufSIHealthColorR
     f._msufSIHealthColorR = nil
     f._msufSIHealthColorG = nil
@@ -1140,7 +1148,7 @@ local function ResetFrameEffects(f)
         f._msufSINameColorG = nil
         f._msufSINameColorB = nil
         f._msufSINameColorA = nil
-        -- Restore configured name color (CLASS/CUSTOM/DEFAULT — not hardcoded white)
+        -- Restore configured name color (CLASS/CUSTOM/DEFAULT â€” not hardcoded white)
         local kind = f._msufGFKind or "party"
         local unit = f.unit
         local classToken
@@ -1164,7 +1172,7 @@ local function ApplyFrameEffect(f, auraName, cfg, auraData)
 
     if cfg.type == "healthtint" then
         -- Full bar color override (not a tint overlay)
-        -- Sets _msufSIHealthColorR/G/B on frame → ApplyHealthColor in Effects respects it
+        -- Sets _msufSIHealthColorR/G/B on frame â†’ ApplyHealthColor in Effects respects it
         if f.health then
             f._msufSIHealthColorR = c[1]
             f._msufSIHealthColorG = c[2]

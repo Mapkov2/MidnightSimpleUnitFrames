@@ -1,4 +1,4 @@
--- MSUF_InterruptReady.lua
+﻿-- MSUF_InterruptReady.lua
 -- =============================================================================
 -- Single source of truth for the player's interrupt spell + readiness state.
 -- Provides:
@@ -13,14 +13,14 @@
 --
 -- Architecture:
 --   * Class+spec hard-coded interrupt table (mirrors MidnightFocusInterrupt's
---     INTERRUPT_BY_CLASS — proven correct for 12.0.5 / Midnight, including
---     Rogue Kick 1766). Class identity is the source of truth — no
+--     INTERRUPT_BY_CLASS â€” proven correct for 12.0.5 / Midnight, including
+--     Rogue Kick 1766). Class identity is the source of truth â€” no
 --     IsSpellKnown / actionbar guessing games.
 --   * Cooldown read via C_Spell.GetSpellCooldownDuration(id):IsZero(). Returns
 --     a plain boolean even when the underlying duration object is opaque,
 --     so it is always safe to use in Lua-side logic.
 --   * Color via C_CurveUtil.EvaluateColorFromBoolean and visibility via
---     SetAlphaFromBoolean — both accept secret booleans cleanly.
+--     SetAlphaFromBoolean â€” both accept secret booleans cleanly.
 --   * Per-frame C_Timer.After(remaining + 0.05, refresh) for the CD-end repaint
 --     so the indicator turns green the moment Kick comes off cooldown without
 --     waiting for SPELL_UPDATE_COOLDOWN to retrigger.
@@ -94,28 +94,57 @@ local _registeredFrames = {}
 -- Helpers
 -- =============================================================================
 
+local _cfgRef, _cfgShowTarget, _cfgShowFocus, _cfgShowBoss, _cfgAnyShow
+local _BOSS_UNITS = {
+    boss1 = true, boss2 = true, boss3 = true, boss4 = true,
+    boss5 = true, boss6 = true, boss7 = true, boss8 = true,
+}
+
+local function _RefreshCfgCache(g)
+    if not g then
+        _cfgRef, _cfgShowTarget, _cfgShowFocus, _cfgShowBoss, _cfgAnyShow = nil, nil, nil, nil, false
+        return nil
+    end
+
+    local showTarget = g.kickReadyShowTarget == true
+    local showFocus = g.kickReadyShowFocus == true
+    local showBoss = g.kickReadyShowBoss == true
+    if g ~= _cfgRef
+        or showTarget ~= _cfgShowTarget
+        or showFocus ~= _cfgShowFocus
+        or showBoss ~= _cfgShowBoss
+    then
+        _cfgRef = g
+        _cfgShowTarget = showTarget
+        _cfgShowFocus = showFocus
+        _cfgShowBoss = showBoss
+        _cfgAnyShow = showTarget or showFocus or showBoss
+    end
+    return g
+end
+
 local function _GetCfg()
     -- The Castbar Options menu writes the kickReady* keys into MSUF_DB.general
-    -- (via its local `G()` accessor). Read from the same place — DO NOT use
+    -- (via its local `G()` accessor). Read from the same place â€” DO NOT use
     -- MSUF_DB.castbarVisuals here, otherwise the toggles will never apply.
     local db = _G.MSUF_DB
     if not db then return nil end
-    return db.general
+    return _RefreshCfgCache(db.general)
 end
 
 local function _AnyShowEnabled(cfg)
     if not cfg then return false end
-    return cfg.kickReadyShowTarget == true
-        or cfg.kickReadyShowFocus  == true
-        or cfg.kickReadyShowBoss   == true
+    if cfg ~= _cfgRef then _RefreshCfgCache(cfg) end
+    return _cfgAnyShow == true
 end
 
 local function _ShowOnUnit(cfg, unit)
     if not cfg or not unit then return false end
-    if unit == "target" then return cfg.kickReadyShowTarget == true end
-    if unit == "focus"  then return cfg.kickReadyShowFocus  == true end
-    if type(unit) == "string" and unit:sub(1, 4) == "boss" then
-        return cfg.kickReadyShowBoss == true
+    if cfg ~= _cfgRef then _RefreshCfgCache(cfg) end
+    if unit == "target" then return _cfgShowTarget == true end
+    if unit == "focus" then return _cfgShowFocus == true end
+    if _cfgShowBoss == true and type(unit) == "string" then
+        return _BOSS_UNITS[unit] == true or unit:sub(1, 4) == "boss"
     end
     return false
 end
@@ -178,7 +207,7 @@ end
 --   * C_CurveUtil.EvaluateColorFromBoolean(b, trueMixin, falseMixin)
 --   * SetShownSafe / SetEnabledFromBoolean (where applicable)
 --
--- Returns nil if the spell isn't resolved yet — callers must guard.
+-- Returns nil if the spell isn't resolved yet â€” callers must guard.
 
 local function _GetReadyBoolSecret()
     local id = _state.spellID
@@ -187,7 +216,7 @@ local function _GetReadyBoolSecret()
 
     local dur = C_Spell.GetSpellCooldownDuration(id)
     if not dur or not dur.IsZero then return nil end
-    return dur:IsZero()  -- secret bool — DO NOT compare in Lua
+    return dur:IsZero()  -- secret bool â€” DO NOT compare in Lua
 end
 
 -- =============================================================================
@@ -225,7 +254,7 @@ end
 -- =============================================================================
 -- Style "border" (default): tint the castbar's own outline (frame._msufOutline)
 --   green when the player's interrupt is ready, red when on cooldown. The
---   castbar's normal fill colors from the Color menu remain untouched —
+--   castbar's normal fill colors from the Color menu remain untouched â€”
 --   only the outline edges flip color while an interruptible cast is active
 --   and the unit is in scope.
 --
@@ -249,7 +278,7 @@ local function _CreateBox(frame)
     box:SetFrameLevel(parent:GetFrameLevel() + 5)
     box:Hide()
 
-    -- Single solid fill texture — the box IS the indicator (no icon).
+    -- Single solid fill texture â€” the box IS the indicator (no icon).
     local fill = box:CreateTexture(nil, "OVERLAY", nil, 7)
     fill:SetTexture("Interface\\Buttons\\WHITE8x8")
     fill:SetAllPoints(box)
@@ -302,7 +331,7 @@ end
 --   MSUF_DB.general.kickReadyColor    = { ["1"]=r, ["2"]=g, ["3"]=b }   (default green)
 --   MSUF_DB.general.kickNotReadyColor = { ["1"]=r, ["2"]=g, ["3"]=b }   (default red)
 -- These are written by MSUF_Options_Colors.lua and are the same swatches the
--- user sees under "Interrupt Ready Indicator" in the Colors menu — keeping
+-- user sees under "Interrupt Ready Indicator" in the Colors menu â€” keeping
 -- the indicator visually independent from the castbar fill colors.
 --
 -- Returns ColorMixins cached by the actual DB values. Live edits still
@@ -335,7 +364,7 @@ end
 -- Read the user's configured castbar outline color (the same RGBA that
 -- MSUF_ApplyCastbarOutline writes onto the four edge textures) and return
 -- it as a cached ColorMixin. Used as the "no tint" target when composing
--- via EvaluateColorFromBoolean — when the cast is non-interruptible the
+-- via EvaluateColorFromBoolean â€” when the cast is non-interruptible the
 -- edge textures end up with this exact colour, so the user sees their
 -- normal castbar outline rather than our green/red indicator.
 local function _GetUserOutlineMixin()
@@ -409,7 +438,7 @@ end
 local function _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
     -- Plain-only fallback when the C-side selector or our two indicator
     -- mixins are missing. Cannot test readyBool here (would taint), so we
-    -- bias toward cooldown — readyBool's nil-vs-not is decided later via
+    -- bias toward cooldown â€” readyBool's nil-vs-not is decided later via
     -- C_CurveUtil only when it's safe to do so.
     if not (C_CurveUtil and C_CurveUtil.EvaluateColorFromBoolean) or not readyMixin or not cdMixin then
         if cdMixin and cdMixin.GetRGBA then
@@ -419,7 +448,7 @@ local function _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
     end
 
     -- Step 1: indicator colour (ready / cooldown). readyBool is passed
-    -- straight to C — never observed in Lua.
+    -- straight to C â€” never observed in Lua.
     local indicator = C_CurveUtil.EvaluateColorFromBoolean(readyBool, readyMixin, cdMixin)
 
     -- Step 2 (optional): non-interruptible gate. When rawNI is provided we
@@ -514,7 +543,7 @@ local function ApplyLayout(frame)
 end
 
 -- =============================================================================
--- Per-frame repaint (color + visibility per style) — secret-safe
+-- Per-frame repaint (color + visibility per style) â€” secret-safe
 -- =============================================================================
 
 local _refreshTickerArmed = false
@@ -535,7 +564,7 @@ local function _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, us
     -- in MSUF_CastbarDriver Cast() as `frame._msufApiNotInterruptibleRaw`.
     --
     -- Why we need it here:
-    --   `frame.isNotInterruptible` (plain bool) is event-driven only —
+    --   `frame.isNotInterruptible` (plain bool) is event-driven only â€”
     --   UNIT_SPELLCAST_NOT_INTERRUPTIBLE doesn't reliably fire for casts
     --   that are non-interruptible from the start (e.g. boss spells with
     --   permanent shield), so the upstream RefreshFrame gate doesn't catch
@@ -561,8 +590,8 @@ local function _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, us
             box:Show()
 
             -- Secret-safe visibility gate: when rawNI is true (secret or
-            -- plain), alpha goes to 0 → invisible; when false, alpha 1
-            -- → fully visible. The C-side helper accepts secret booleans.
+            -- plain), alpha goes to 0 â†’ invisible; when false, alpha 1
+            -- â†’ fully visible. The C-side helper accepts secret booleans.
             if rawNI ~= nil and box.SetAlphaFromBoolean then
                 box:SetAlphaFromBoolean(rawNI, 0, 1)
             else
@@ -724,7 +753,7 @@ local function _InstallOutlineHook()
         if not frame or not _registeredFrames[frame] then return end
         if frame.MSUF_castActive ~= true then return end
         -- Plain-bool fast path: if the event-driven flag is already set,
-        -- skip the C-side composition entirely — the user's colour from
+        -- skip the C-side composition entirely â€” the user's colour from
         -- the original ApplyCastbarOutline call is already correct.
         if frame.isNotInterruptible == true then return end
         if not _CastAllowsKickIndicator(frame) then
@@ -775,7 +804,7 @@ end
 _eventFrame:SetScript("OnEvent", _HandleEvent)
 
 -- Always-on events (cheap; only Resolve() runs on most of them, and only
--- once per fire — Resolve is O(1) table lookup).
+-- once per fire â€” Resolve is O(1) table lookup).
 _eventFrame:RegisterEvent("PLAYER_LOGIN")
 _eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 _eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
@@ -835,7 +864,7 @@ function _G.MSUF_KickReady_IsReady()
     -- For a Lua-safe color decision, call MSUF_KickReady_EvaluateColor(ready)
     -- and apply via :SetVertexColor(c:GetRGBA()).
     --
-    -- /dump on the return value is fine — the host renderer doesn't compare.
+    -- /dump on the return value is fine â€” the host renderer doesn't compare.
     if not _state.spellID then Resolve() end
     return _GetReadyBoolSecret()
 end
@@ -875,7 +904,7 @@ function _G.MSUF_KickReady_EvaluateColor(readyBool)
     return _cooldownColorMixin or { GetRGBA = function() return COOLDOWN_COLOR.r, COOLDOWN_COLOR.g, COOLDOWN_COLOR.b, 1 end }
 end
 
--- Diagnostic dump — readable via /dump MSUF_KickReady_Debug()
+-- Diagnostic dump â€” readable via /dump MSUF_KickReady_Debug()
 function _G.MSUF_KickReady_Debug()
     if not _state.resolved then Resolve() end
 
@@ -886,7 +915,7 @@ function _G.MSUF_KickReady_Debug()
     local key  = spec and SPEC_OVERRIDE[spec] or "DEFAULT"
 
     -- Note: we deliberately do NOT call _GetReadyBoolSecret() here and
-    -- include its result, because /dump renders the value via tostring() —
+    -- include its result, because /dump renders the value via tostring() â€”
     -- which on some clients/dev tools may attempt comparisons internally.
     -- The taint-safe info that's actionable for diagnosis is the spell ID,
     -- spec, and event/registration state. Use the dot's visible color

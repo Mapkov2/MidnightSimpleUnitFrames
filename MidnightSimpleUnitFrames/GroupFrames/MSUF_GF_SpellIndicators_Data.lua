@@ -1,4 +1,4 @@
--- MSUF_GF_SpellIndicators_Data.lua — Spell data for Group Frames Spell Indicators
+﻿-- MSUF_GF_SpellIndicators_Data.lua â€” Spell data for Group Frames Spell Indicators
 -- Per-spec trackable spells, spell IDs, icon textures, default configs.
 -- Secret aura classifications. Zero runtime cost (cold-path only).
 -- Midnight 12.0
@@ -13,7 +13,7 @@ local SI = {}
 GF.SpellIndicators = SI
 
 ------------------------------------------------------------------------
--- Spec map (CLASS_SPECNUM → specKey)
+-- Spec map (CLASS_SPECNUM â†’ specKey)
 ------------------------------------------------------------------------
 SI.SpecMap = {
     DRUID_4     = "RestorationDruid",
@@ -101,7 +101,7 @@ SI.AltSpellIDs = {
 }
 
 ------------------------------------------------------------------------
--- Secret spell IDs (Phase 2 fingerprinting — spellId unreadable for
+-- Secret spell IDs (Phase 2 fingerprinting â€” spellId unreadable for
 -- other players' casts, matched by localized aura name instead)
 ------------------------------------------------------------------------
 SI.SecretSpellIDs = {
@@ -192,7 +192,7 @@ SI.IconTextures = {
 
 ------------------------------------------------------------------------
 -- Trackable auras per spec (ordered for UI display)
--- secret = true → spellId unreadable in combat, frame effects only in Phase 1
+-- secret = true â†’ spellId unreadable in combat, frame effects only in Phase 1
 ------------------------------------------------------------------------
 SI.TrackableAuras = {
     PreservationEvoker = {
@@ -312,7 +312,7 @@ SI.SpecDefaults = {
 }
 
 ------------------------------------------------------------------------
--- Build reverse lookup: spellId → { specKey, auraName }
+-- Build reverse lookup: spellId â†’ { specKey, auraName }
 -- Called once per spec change, result cached.
 ------------------------------------------------------------------------
 function SI.BuildReverseLookup(specKey)
@@ -340,15 +340,22 @@ function SI.BuildReverseLookup(specKey)
 end
 
 ------------------------------------------------------------------------
--- Resolve current player spec → specKey
+-- Resolve current player spec â†’ specKey
 ------------------------------------------------------------------------
+local _cachedClassToken, _cachedSpecIdx, _cachedSpecKey
 function SI.GetPlayerSpec()
     local _, classToken = UnitClass("player")
     if not classToken then return nil end
     local specIdx = GetSpecialization and GetSpecialization()
     if not specIdx then return nil end
+    if classToken == _cachedClassToken and specIdx == _cachedSpecIdx then
+        return _cachedSpecKey
+    end
     local key = classToken .. "_" .. specIdx
-    return SI.SpecMap[key]
+    _cachedClassToken = classToken
+    _cachedSpecIdx = specIdx
+    _cachedSpecKey = SI.SpecMap[key]
+    return _cachedSpecKey
 end
 
 ------------------------------------------------------------------------

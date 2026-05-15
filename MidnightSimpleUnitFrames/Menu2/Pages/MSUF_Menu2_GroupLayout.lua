@@ -396,7 +396,11 @@ local function BuildGFLayout(ctx)
     local preserveHP = W.ToggleAt(transparency, "Preserve HP color", transRightX, -128, transRightW)
     M.BindToggle(ctx, preserveHP,
         function() return Bool(CurrentScope(), "alphaPreserveHPColor", false) end,
-        function(v) Set(CurrentScope(), "alphaPreserveHPColor", v and true or false, "visual") end)
+        function(v)
+            v = v and true or false
+            Set(CurrentScope(), "alphaPreserveHPColor", v, "visual")
+            if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
+        end)
 
     local textIgnore = W.ToggleAt(transparency, "Text ignores HP opacity", transLeftX, -184, transLeftW)
     M.BindToggle(ctx, textIgnore,

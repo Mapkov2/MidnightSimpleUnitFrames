@@ -848,6 +848,48 @@ local function PositionFromAnchor(frame, anchor, x, y, target, size)
     else frame:SetPoint("CENTER", target, "TOPLEFT", x + size * 0.5, y - size * 0.5) end
 end
 
+local function ResolveRuntimeIconLayoutAnchor(anchor, allowCenter)
+    if allowCenter and anchor == "CENTER" then return "CENTER", "CENTER" end
+    if anchor == "TOPRIGHT" then return "RIGHT", "TOPRIGHT" end
+    if anchor == "BOTTOMLEFT" then return "LEFT", "BOTTOMLEFT" end
+    if anchor == "BOTTOMRIGHT" then return "RIGHT", "BOTTOMRIGHT" end
+    return "LEFT", "TOPLEFT"
+end
+
+local function PositionRuntimeLayoutIconPreview(frame, anchor, x, y, target, allowCenter)
+    if not frame or not target then return end
+    frame:ClearAllPoints()
+    local point, relPoint = ResolveRuntimeIconLayoutAnchor(tostring(anchor or "TOPLEFT"), allowCenter)
+    frame:SetPoint(point, target, relPoint, tonumber(x) or 0, tonumber(y) or 0)
+end
+
+local function PositionStatusCornerPreview(frame, anchor, x, y, target, pad)
+    if not frame or not target then return end
+    frame:ClearAllPoints()
+    anchor = tostring(anchor or "TOPLEFT")
+    x = tonumber(x) or 0
+    y = tonumber(y) or 0
+    pad = tonumber(pad) or 2
+    if anchor == "CENTER" then
+        frame:SetPoint("CENTER", target, "CENTER", x, y)
+    elseif anchor == "TOPRIGHT" then
+        frame:SetPoint("TOPRIGHT", target, "TOPRIGHT", -pad + x, -pad + y)
+    elseif anchor == "BOTTOMLEFT" then
+        frame:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", pad + x, pad + y)
+    elseif anchor == "BOTTOMRIGHT" then
+        frame:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", -pad + x, pad + y)
+    else
+        frame:SetPoint("TOPLEFT", target, "TOPLEFT", pad + x, -pad + y)
+    end
+end
+
+local function PositionSameAnchorPreview(frame, anchor, x, y, target)
+    if not frame or not target then return end
+    frame:ClearAllPoints()
+    anchor = tostring(anchor or "CENTER")
+    frame:SetPoint(anchor, target, anchor, tonumber(x) or 0, tonumber(y) or 0)
+end
+
 local function PositionLevelPreview(frame, anchor, x, y, mock, gap)
     if not frame or not mock then return end
     frame:ClearAllPoints()
@@ -860,7 +902,7 @@ local function PositionLevelPreview(frame, anchor, x, y, mock, gap)
     elseif anchor == "NAMERIGHT" and mock.nameText then
         frame:SetPoint("LEFT", mock.nameText, "RIGHT", gap + x, y)
     else
-        PositionFromAnchor(frame, anchor, x, y, mock.textFrame or mock, frame.GetWidth and frame:GetWidth() or 14)
+        PositionSameAnchorPreview(frame, anchor, x, y, mock.textFrame or mock)
     end
 end
 
@@ -1080,11 +1122,12 @@ local function RefreshHandleSelectionVisuals(box)
                 if isSel then h._selBorder:Show() else h._selBorder:Hide() end
             end
             local c = h._color or { 0.7, 0.8, 1.0 }
+            local isDrag = h._dragging == true
             if h.tex then
-                h.tex:SetColorTexture(c[1], c[2], c[3], isSel and 0.24 or (isHover and 0.15 or 0))
+                h.tex:SetColorTexture(c[1], c[2], c[3], isDrag and 0.18 or (isHover and 0.14 or 0))
             end
             if h.edge then
-                h.edge:SetColorTexture(c[1], c[2], c[3], isSel and 0.92 or (isHover and 0.58 or 0))
+                h.edge:SetColorTexture(c[1], c[2], c[3], isDrag and 0.18 or (isHover and 0.08 or 0))
             end
             if h.SetAlpha then h:SetAlpha(1) end
         end
@@ -1246,10 +1289,26 @@ local function MakeHandle(preview, key, fields, label, color)
     h._key = key
     h._preview = preview
     h._color = color
-    h._selBorder = h:CreateTexture(nil, "OVERLAY", nil, 7)
-    h._selBorder:SetPoint("TOPLEFT", h, "TOPLEFT", -2, 2)
-    h._selBorder:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 2, -2)
-    h._selBorder:SetColorTexture(0.30, 0.58, 0.95, 0.48)
+    h._selBorder = CreateFrame("Frame", nil, h)
+    h._selBorder:SetPoint("TOPLEFT", h, "TOPLEFT", -1, 1)
+    h._selBorder:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 1, -1)
+    for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+        local line = h._selBorder:CreateTexture(nil, "OVERLAY")
+        line:SetColorTexture(0.30, 0.58, 0.95, 0.70)
+        h._selBorder[side] = line
+    end
+    h._selBorder.top:SetPoint("TOPLEFT")
+    h._selBorder.top:SetPoint("TOPRIGHT")
+    h._selBorder.top:SetHeight(1)
+    h._selBorder.bottom:SetPoint("BOTTOMLEFT")
+    h._selBorder.bottom:SetPoint("BOTTOMRIGHT")
+    h._selBorder.bottom:SetHeight(1)
+    h._selBorder.left:SetPoint("TOPLEFT")
+    h._selBorder.left:SetPoint("BOTTOMLEFT")
+    h._selBorder.left:SetWidth(1)
+    h._selBorder.right:SetPoint("TOPRIGHT")
+    h._selBorder.right:SetPoint("BOTTOMRIGHT")
+    h._selBorder.right:SetWidth(1)
     h._selBorder:Hide()
     h:SetScript("OnEnter", function(self)
         self._hovering = true
@@ -1397,6 +1456,24 @@ local function SetPreviewIconTexture(icon, spec, conf, g, key, data)
     end
 end
 
+local function ResolveStatusPreviewAnchor(spec, conf, g)
+    if not spec then return "TOPLEFT" end
+    conf = conf or {}
+    g = g or {}
+    local anchor = spec.anchor and (conf[spec.anchor] or g[spec.anchor]) or nil
+    if anchor == nil then
+        if spec.id == "statusCombat" then
+            anchor = conf.combatStateIndicatorPos or g.combatStateIndicatorPos
+        elseif spec.id == "statusResting" then
+            anchor = conf.combatStateIndicatorAnchor or g.combatStateIndicatorAnchor
+                or conf.combatStateIndicatorPos or g.combatStateIndicatorPos
+        elseif spec.id == "statusIncomingRes" then
+            anchor = conf.incomingResIndicatorPos or g.incomingResIndicatorPos
+        end
+    end
+    return anchor or spec.defaultAnchor or "TOPLEFT"
+end
+
 local STATUS_PREVIEW = {
     { id = "raidmarker", show = "showRaidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerOffsetX", y = "raidMarkerOffsetY", defaultSize = 18, defaultAnchor = "TOPLEFT", defaultX = 16, defaultY = 3, text = "8", color = { 1, 0.82, 0.05 }, label = "Raid marker", refresh = "MSUF_RefreshRaidMarkerFrames" },
     { id = "leader", show = "showLeaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconOffsetX", y = "leaderIconOffsetY", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultX = 0, defaultY = 3, text = "L", color = { 0.95, 0.82, 0.20 }, label = "Leader icon", refresh = "MSUF_RefreshLeaderIconFrames", allowed = function(k) return k == "player" or k == "target" end },
@@ -1405,7 +1482,7 @@ local STATUS_PREVIEW = {
     { id = "statusText", show = "statusTextEnabled", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusTextOffsetX", y = "statusTextOffsetY", defaultSize = 16, defaultAnchor = "CENTER", defaultX = 0, defaultY = 0, text = "DEAD", color = { 0.68, 0.70, 0.74 }, label = "Dead text", refresh = "MSUF_RequestStatusTextRefresh" },
     { id = "statusCombat", show = "showCombatStateIndicator", size = "combatStateIndicatorSize", anchor = "combatStateIndicatorAnchor", x = "combatStateIndicatorOffsetX", y = "combatStateIndicatorOffsetY", defaultSize = 18, defaultAnchor = "TOPLEFT", defaultX = 0, defaultY = 0, text = "C", color = { 1.0, 0.22, 0.16 }, label = "Combat icon", refresh = "MSUF_RequestStatusCombatIndicatorRefresh", allowed = function(k) return k == "player" or k == "target" end },
     { id = "statusResting", show = "showRestingIndicator", size = "restedStateIndicatorSize", anchor = "restedStateIndicatorAnchor", x = "restedStateIndicatorOffsetX", y = "restedStateIndicatorOffsetY", defaultSize = 18, defaultAnchor = "TOPLEFT", defaultX = 0, defaultY = 0, text = "Z", color = { 0.34, 0.62, 1.0 }, label = "Rested icon", refresh = "MSUF_RequestStatusRestingIndicatorRefresh", defaultShow = false, allowed = function(k) return k == "player" end },
-    { id = "statusIncomingRes", show = "showIncomingResIndicator", size = "incomingResIndicatorSize", anchor = "incomingResIndicatorAnchor", x = "incomingResIndicatorOffsetX", y = "incomingResIndicatorOffsetY", defaultSize = 18, defaultAnchor = "TOPLEFT", defaultX = 0, defaultY = 0, text = "+", color = { 0.22, 1.0, 0.56 }, label = "Incoming Rez icon", refresh = "MSUF_RequestStatusIncomingResIndicatorRefresh", allowed = function(k) return k == "player" or k == "target" end },
+    { id = "statusIncomingRes", show = "showIncomingResIndicator", size = "incomingResIndicatorSize", anchor = "incomingResIndicatorAnchor", x = "incomingResIndicatorOffsetX", y = "incomingResIndicatorOffsetY", defaultSize = 18, defaultAnchor = "TOPRIGHT", defaultX = 0, defaultY = 0, text = "+", color = { 0.22, 1.0, 0.56 }, label = "Incoming Rez icon", refresh = "MSUF_RequestStatusIncomingResIndicatorRefresh", allowed = function(k) return k == "player" or k == "target" end },
 }
 
 local PREVIEW_LAYERS = {
@@ -2395,6 +2472,9 @@ function Preview.Refresh(box, reason)
             if icon.SetFrameLevel then icon:SetFrameLevel(baseLevel + 20) end
             SetPreviewIconTexture(icon, spec, conf, g, key, data)
             if spec.id == "level" then
+                local anchor = ResolveStatusPreviewAnchor(spec, conf, g)
+                local x = S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0)
+                local y = S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0)
                 if icon.txt then
                     icon.txt:SetFont(FONT, max(7, sz), "OUTLINE")
                     icon.txt:ClearAllPoints()
@@ -2404,7 +2484,21 @@ function Preview.Refresh(box, reason)
                 local textW = icon.txt and icon.txt.GetStringWidth and icon.txt:GetStringWidth() or sz
                 local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
                 icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
-                PositionLevelPreview(icon, conf[spec.anchor] or g[spec.anchor] or spec.defaultAnchor, S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0), S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0), mock, S(6))
+                PositionLevelPreview(icon, anchor, x, y, mock, S(6))
+            elseif spec.id == "statusText" then
+                local anchor = ResolveStatusPreviewAnchor(spec, conf, g)
+                local x = S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0)
+                local y = S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0)
+                if icon.txt then
+                    icon.txt:SetFont(FONT, max(7, sz), "OUTLINE")
+                    icon.txt:ClearAllPoints()
+                    icon.txt:SetPoint("CENTER")
+                    icon.txt:SetJustifyH("CENTER")
+                end
+                local textW = icon.txt and icon.txt.GetStringWidth and icon.txt:GetStringWidth() or sz
+                local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
+                icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
+                PositionSameAnchorPreview(icon, anchor, x, y, mock.hpBG or mock)
             else
                 icon:SetSize(sz, sz)
                 if icon.txt then
@@ -2413,7 +2507,18 @@ function Preview.Refresh(box, reason)
                     icon.txt:SetPoint("CENTER")
                     icon.txt:SetJustifyH("CENTER")
                 end
-                PositionFromAnchor(icon, conf[spec.anchor] or g[spec.anchor] or spec.defaultAnchor, S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0), S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0), mock, sz)
+                local anchor = ResolveStatusPreviewAnchor(spec, conf, g)
+                local x = S(tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0)
+                local y = S(tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0)
+                if spec.id == "raidmarker" then
+                    PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, true)
+                elseif spec.id == "leader" or spec.id == "elite" then
+                    PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, false)
+                elseif spec.id == "statusCombat" or spec.id == "statusResting" or spec.id == "statusIncomingRes" then
+                    PositionStatusCornerPreview(icon, anchor, x, y, mock, S(2))
+                else
+                    PositionFromAnchor(icon, anchor, x, y, mock, sz)
+                end
             end
             handle:SetSize(max(18, icon:GetWidth() + 8), max(18, icon:GetHeight() + 8))
             PlaceHandle(handle, icon)
