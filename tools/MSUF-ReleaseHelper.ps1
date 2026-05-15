@@ -65,7 +65,9 @@ function Invoke-External {
 
     Write-ReleaseLog ("> " + $FilePath + " " + ($Arguments -join " "))
     Push-Location $RepoRoot
+    $previousErrorActionPreference = $ErrorActionPreference
     try {
+        $ErrorActionPreference = "Continue"
         $output = & $FilePath @Arguments 2>&1
         $exit = if ($LASTEXITCODE -ne $null) { [int]$LASTEXITCODE } else { 0 }
         foreach ($line in $output) {
@@ -75,6 +77,7 @@ function Invoke-External {
             throw "Command failed with exit code $exit`: $FilePath"
         }
     } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
         Pop-Location
     }
 }
@@ -409,7 +412,7 @@ function New-GitCommitChangelogMarkdown {
         [AllowNull()][string]$BaseRef
     )
 
-    $commits = Get-GitCommitsForChangelog -BaseRef $BaseRef
+    $commits = @(Get-GitCommitsForChangelog -BaseRef $BaseRef)
     if ($commits.Count -eq 0) {
         throw "No commits found for changelog range '$BaseRef..HEAD'."
     }
@@ -546,7 +549,7 @@ function Build-ReleaseZip {
 }
 
 function Test-GitCleanEnough {
-    $status = & git status --porcelain 2>$null
+    $status = @(git status --porcelain 2>$null)
     if ($LASTEXITCODE -ne 0) { throw "git status failed. Is this a git repository?" }
     return [string[]]$status
 }
@@ -555,7 +558,7 @@ function Commit-AllChanges {
     param([Parameter(Mandatory = $true)][string]$ReleaseTag)
 
     Invoke-External "git" @("add", "-A")
-    $status = Test-GitCleanEnough
+    $status = @(Test-GitCleanEnough)
     if ($status.Count -eq 0) {
         Write-ReleaseLog "No staged changes to commit."
         return
@@ -973,7 +976,7 @@ $statusButton.Location = New-Object System.Drawing.Point(880, 542)
 $statusButton.Size = New-Object System.Drawing.Size(75, 32)
 $statusButton.Add_Click({
     try {
-        $status = Test-GitCleanEnough
+        $status = @(Test-GitCleanEnough)
         if ($status.Count -eq 0) {
             Write-ReleaseLog "Git worktree is clean."
         } else {
