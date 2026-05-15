@@ -132,12 +132,337 @@ function New-ChangelogBody {
     return $body
 }
 
+function Get-ChangelogSections {
+    if (-not (Test-Path -LiteralPath $ChangelogPath)) {
+        throw "CHANGELOG.md not found: $ChangelogPath"
+    }
+
+    $lines = [regex]::Split((Get-Content -LiteralPath $ChangelogPath -Raw), "\r?\n")
+    $sections = @()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^##\s+(.+?)(?:\s+-\s+(\d{4}-\d{2}-\d{2}))?\s*$') {
+            $version = $Matches[1].Trim()
+            $date = if ($Matches.ContainsKey(2) -and -not [string]::IsNullOrWhiteSpace($Matches[2])) { $Matches[2].Trim() } else { "" }
+            $start = $i
+            $end = $lines.Count
+            for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+                if ($lines[$j] -match '^##\s+') {
+                    $end = $j
+                    break
+                }
+            }
+
+            $sectionLines = if ($end -gt $start) { $lines[$start..($end - 1)] } else { @($lines[$start]) }
+            $sections += [pscustomobject]@{
+                Version = $version
+                Date = $date
+                Start = $start
+                End = $end
+                Lines = [string[]]$sectionLines
+                Markdown = (($sectionLines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+            }
+        }
+    }
+    return [object[]]$sections
+}
+
+function Find-ChangelogSection {
+    param(
+        [AllowNull()][string]$ReleaseTag,
+        [AllowNull()][string]$DisplayVersion
+    )
+
+    $sections = Get-ChangelogSections
+    if ($sections.Count -eq 0) { throw "No release sections found in CHANGELOG.md." }
+
+    $tagKey = Normalize-VersionKey $ReleaseTag
+    $displayKey = Normalize-VersionKey $DisplayVersion
+    foreach ($section in $sections) {
+        $key = Normalize-VersionKey $section.Version
+        if (($tagKey -ne "" -and $key -eq $tagKey) -or ($displayKey -ne "" -and $key -eq $displayKey)) {
+            return $section
+        }
+    }
+
+    return $sections[0]
+}
+
+function Convert-MarkdownSectionToReleaseInput {
+    param([Parameter(Mandatory = $true)][string]$Markdown)
+
+    $lines = [regex]::Split($Markdown.Trim(), "\r?\n")
+    if ($lines.Count -eq 0) { throw "Markdown changelog text is empty." }
+
+    $display = $null
+    $date = $null
+    $bodyStart = 0
+    if ($lines[0] -match '^##\s+(.+?)(?:\s+-\s+(\d{4}-\d{2}-\d{2}))?\s*$') {
+        $display = $Matches[1].Trim()
+        $date = if ($Matches.ContainsKey(2) -and -not [string]::IsNullOrWhiteSpace($Matches[2])) { $Matches[2].Trim() } else { $null }
+        $bodyStart = 1
+    }
+
+    while ($bodyStart -lt $lines.Count -and $lines[$bodyStart].Trim() -eq "") {
+        $bodyStart++
+    }
+
+    $body = if ($bodyStart -lt $lines.Count) { [string[]]$lines[$bodyStart..($lines.Count - 1)] } else { @() }
+    while ($body.Count -gt 0 -and $body[$body.Count - 1].Trim() -eq "") {
+        if ($body.Count -eq 1) { $body = @(); break }
+        $body = [string[]]$body[0..($body.Count - 2)]
+    }
+
+    if ($body.Count -eq 0) { throw "Markdown changelog text has no section body." }
+    return [pscustomobject]@{
+        Display = $display
+        Date = $date
+        Body = [string[]]$body
+    }
+}
+
+function Convert-ChangelogBodyToFieldMap {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$BodyLines)
+
+    $map = @{
+        Performance = New-Object System.Collections.Generic.List[string]
+        Bugfixes = New-Object System.Collections.Generic.List[string]
+        Changes = New-Object System.Collections.Generic.List[string]
+        Tooling = New-Object System.Collections.Generic.List[string]
+        Docs = New-Object System.Collections.Generic.List[string]
+    }
+
+    $current = "Changes"
+    $lastList = $map[$current]
+    for ($i = 0; $i -lt $BodyLines.Count; $i++) {
+        $line = $BodyLines[$i]
+        if ($line -match '^###\s+(.+?)\s*$') {
+            $title = $Matches[1].Trim()
+            if ($title -match '(?i)performance|perf') {
+                $current = "Performance"
+            } elseif ($title -match '(?i)bug|fix') {
+                $current = "Bugfixes"
+            } elseif ($title -match '(?i)release|tool|workflow|package|publish') {
+                $current = "Tooling"
+            } elseif ($title -match '(?i)doc') {
+                $current = "Docs"
+            } else {
+                $current = "Changes"
+            }
+            $lastList = $map[$current]
+            continue
+        }
+
+        if ($line -match '^\s*-\s+(.+?)\s*$') {
+            $lastList = $map[$current]
+            $lastList.Add($Matches[1].Trim())
+            continue
+        }
+
+        if ($lastList.Count -gt 0 -and $line -match '^\s{2,}(.+?)\s*$') {
+            $lastList[$lastList.Count - 1] = ($lastList[$lastList.Count - 1] + " " + $Matches[1].Trim()).Trim()
+        }
+    }
+
+    return $map
+}
+
+function Get-DefaultGitBaseRef {
+    Push-Location $RepoRoot
+    try {
+        $tag = (& git describe --tags --abbrev=0 HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($tag)) {
+            return $tag.Trim()
+        }
+
+        $root = (& git rev-list --max-parents=0 HEAD 2>$null | Select-Object -First 1)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($root)) {
+            return $root.Trim()
+        }
+    } finally {
+        Pop-Location
+    }
+
+    return ""
+}
+
+function Get-ChangeArea {
+    param([AllowNull()][string]$Path)
+
+    $p = ($Path -replace '\\', '/')
+    if ([string]::IsNullOrWhiteSpace($p)) { return "General" }
+    if ($p -match '^\.github/|^tools/|^docs/|^CHANGELOG\.md$|MSUF_Changelog\.lua$') { return "Release / Tooling" }
+    if ($p -match 'MSUF_ReleaseHelper|update-addon-changelog|package-release|publish-') { return "Release / Tooling" }
+    if ($p -match 'MidnightSimpleUnitFrames\.toc$|\.pkgmeta$') { return "Addon Metadata" }
+    if ($p -match '/Menu2/') { return "Menu / Dashboard" }
+    if ($p -match '/Auras2/') { return "Unit Auras" }
+    if ($p -match '/GroupFrames/') { return "Group Frames" }
+    if ($p -match '/Modules/MSUF_InterruptReady\.lua$') { return "Interrupt Ready" }
+    if ($p -match '/MidnightSimpleUnitFrames\.lua$') { return "Core Runtime" }
+    if ($p -match '/Core/MSUF_Text\.lua$') { return "Unit Text" }
+    if ($p -match '/Core/MSUF_Borders\.lua$') { return "Borders / Outlines" }
+    if ($p -match '/Core/MSUF_Bars\.lua$') { return "Bars / Power Bars" }
+    if ($p -match '/Core/') { return "Core Runtime" }
+    if ($p -match '/Foundation/') { return "Foundation" }
+    if ($p -match '/Features/') { return "Features" }
+    return "General"
+}
+
+function Get-CommitCategory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Subject,
+        [Parameter(Mandatory = $true)][string[]]$Paths
+    )
+
+    $subjectText = $Subject.ToLowerInvariant()
+    $pathText = (($Paths | ForEach-Object { $_.ToLowerInvariant() }) -join " ")
+    if ($pathText -match '(^| )docs/|release_helper|releasehelper|update-addon-changelog|package-release|publish-|\.github|changelog|msuf_changelog|\.toc') {
+        return "Release / Tooling"
+    }
+    if ($subjectText -match 'doc|readme|workflow doc') {
+        return "Documentation"
+    }
+    if ($subjectText -match 'perf|performance|optim|cache|hot path|fast|less work') {
+        return "Performance"
+    }
+    if ($subjectText -match 'fix|fixed|bug|crash|taint|error|broken') {
+        return "Bugfixes"
+    }
+    return "Changes / Improvements"
+}
+
+function Convert-CommitSubjectToText {
+    param([AllowNull()][string]$Subject)
+
+    $text = if ($null -eq $Subject) { "" } else { $Subject.Trim() }
+    if ($text -eq "") { return "Updated addon behavior" }
+    $text = $text -replace '\s+', ' '
+    if ($text.Length -gt 0) {
+        $text = $text.Substring(0, 1).ToUpperInvariant() + $text.Substring(1)
+    }
+    return $text
+}
+
+function Get-GitCommitsForChangelog {
+    param([AllowNull()][string]$BaseRef)
+
+    Push-Location $RepoRoot
+    try {
+        $range = if ([string]::IsNullOrWhiteSpace($BaseRef)) { "HEAD" } else { "$BaseRef..HEAD" }
+        $commitLines = & git log --reverse --format="%H`t%h`t%s" $range 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "git log failed for range '$range': $($commitLines -join ' ')"
+        }
+
+        $commits = @()
+        foreach ($line in $commitLines) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split "`t", 3
+            if ($parts.Count -lt 3) { continue }
+            $hash = $parts[0]
+            $short = $parts[1]
+            $subject = $parts[2]
+
+            $nameStatus = & git show --format= --name-status $hash 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "git show failed for $short`: $($nameStatus -join ' ')"
+            }
+
+            $paths = @()
+            foreach ($entry in $nameStatus) {
+                if ([string]::IsNullOrWhiteSpace($entry)) { continue }
+                $cols = $entry -split "`t"
+                if ($cols.Count -ge 3 -and $cols[0] -match '^R|^C') {
+                    $paths += $cols[2]
+                } elseif ($cols.Count -ge 2) {
+                    $paths += $cols[1]
+                }
+            }
+
+            $paths = @($paths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+            $areas = @($paths | ForEach-Object { Get-ChangeArea $_ } | Select-Object -Unique)
+            if ($areas.Count -eq 0) { $areas = @("General") }
+            $category = Get-CommitCategory -Subject $subject -Paths $paths
+
+            $commits += [pscustomobject]@{
+                Hash = $hash
+                ShortHash = $short
+                Subject = $subject
+                Text = Convert-CommitSubjectToText $subject
+                Paths = [string[]]$paths
+                Areas = [string[]]$areas
+                Category = $category
+            }
+        }
+
+        return [object[]]$commits
+    } finally {
+        Pop-Location
+    }
+}
+
+function New-GitCommitChangelogMarkdown {
+    param(
+        [Parameter(Mandatory = $true)][string]$ReleaseTag,
+        [Parameter(Mandatory = $true)][string]$DisplayVersion,
+        [Parameter(Mandatory = $true)][string]$ReleaseDate,
+        [AllowNull()][string]$BaseRef
+    )
+
+    $commits = Get-GitCommitsForChangelog -BaseRef $BaseRef
+    if ($commits.Count -eq 0) {
+        throw "No commits found for changelog range '$BaseRef..HEAD'."
+    }
+
+    $groups = [ordered]@{
+        "Performance" = New-Object System.Collections.Generic.List[string]
+        "Bugfixes" = New-Object System.Collections.Generic.List[string]
+        "Changes / Improvements" = New-Object System.Collections.Generic.List[string]
+        "Release / Tooling" = New-Object System.Collections.Generic.List[string]
+        "Documentation" = New-Object System.Collections.Generic.List[string]
+    }
+
+    foreach ($commit in $commits) {
+        $areas = @($commit.Areas)
+        $paths = @($commit.Paths)
+        $scope = (($areas | Select-Object -First 3) -join ", ")
+        if ([string]::IsNullOrWhiteSpace($scope)) { $scope = "General" }
+
+        $pathText = ""
+        if ($paths.Count -gt 0) {
+            $shown = @($paths | Select-Object -First 3)
+            $pathText = "; " + (($shown | ForEach-Object { $_ -replace '^MidnightSimpleUnitFrames/', '' }) -join ", ")
+            if ($paths.Count -gt 3) { $pathText += (" +" + ($paths.Count - 3) + " more") }
+        }
+
+        $bullet = "{0}: {1} ({2}{3})." -f $scope, $commit.Text, $commit.ShortHash, $pathText
+        if (-not $groups.Contains($commit.Category)) {
+            $groups["Changes / Improvements"].Add($bullet)
+        } else {
+            $groups[$commit.Category].Add($bullet)
+        }
+    }
+
+    $lines = @("## $DisplayVersion - $ReleaseDate", "")
+    foreach ($title in $groups.Keys) {
+        $items = $groups[$title]
+        if ($items.Count -eq 0) { continue }
+        $lines += "### $title"
+        $lines += ""
+        foreach ($item in $items) {
+            $lines += "- $item"
+        }
+        $lines += ""
+    }
+
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
 function Update-ChangelogFile {
     param(
         [Parameter(Mandatory = $true)][string]$ReleaseTag,
         [Parameter(Mandatory = $true)][string]$DisplayVersion,
         [Parameter(Mandatory = $true)][string]$ReleaseDate,
-        [Parameter(Mandatory = $true)][string[]]$BodyLines
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$BodyLines
     )
 
     if (-not (Test-Path -LiteralPath $ChangelogPath)) {
@@ -276,7 +601,7 @@ function Start-LocalPreparation {
         [Parameter(Mandatory = $true)][string]$ReleaseTag,
         [Parameter(Mandatory = $true)][string]$DisplayVersion,
         [Parameter(Mandatory = $true)][string]$ReleaseDate,
-        [Parameter(Mandatory = $true)][string[]]$BodyLines,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$BodyLines,
         [Parameter(Mandatory = $true)][string]$OutputDir,
         [bool]$BuildZip = $true
     )
@@ -302,8 +627,8 @@ $script:LogBox = $null
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "MSUF Release Helper"
 $form.StartPosition = "CenterScreen"
-$form.Size = New-Object System.Drawing.Size(1040, 780)
-$form.MinimumSize = New-Object System.Drawing.Size(900, 680)
+$form.Size = New-Object System.Drawing.Size(1040, 930)
+$form.MinimumSize = New-Object System.Drawing.Size(900, 820)
 
 function New-Label {
     param([string]$Text, [int]$X, [int]$Y, [int]$W = 120)
@@ -391,19 +716,65 @@ $workflowBox.Location = New-Object System.Drawing.Point(850, 46)
 $workflowBox.Size = New-Object System.Drawing.Size(170, 24)
 $form.Controls.Add($workflowBox)
 
-$perfBox = New-TextArea "Performance (one bullet per line)" 16 82 490 90
-$bugBox = New-TextArea "Bugfixes (one bullet per line)" 526 82 490 90
-$changeBox = New-TextArea "Changes / Improvements" 16 202 490 75
-$toolBox = New-TextArea "Release / Tooling" 526 202 490 75
-$docBox = New-TextArea "Documentation" 16 307 1000 58
+New-Label "Since ref" 16 76 | Out-Null
+$baseRefBox = New-TextBox 130 74 220 (Get-DefaultGitBaseRef)
+$lastTagButton = New-Object System.Windows.Forms.Button
+$lastTagButton.Text = "Last tag"
+$lastTagButton.Location = New-Object System.Drawing.Point(360, 72)
+$lastTagButton.Size = New-Object System.Drawing.Size(90, 26)
+$lastTagButton.Add_Click({
+    try {
+        $baseRefBox.Text = Get-DefaultGitBaseRef
+        Write-ReleaseLog ("Since ref set to " + $baseRefBox.Text)
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+    }
+})
+$form.Controls.Add($lastTagButton)
+
+$perfBox = New-TextArea "Performance (one bullet per line)" 16 108 490 90
+$bugBox = New-TextArea "Bugfixes (one bullet per line)" 526 108 490 90
+$changeBox = New-TextArea "Changes / Improvements" 16 228 490 75
+$toolBox = New-TextArea "Release / Tooling" 526 228 490 75
+$docBox = New-TextArea "Documentation" 16 333 1000 58
+$mdBox = New-TextArea "Markdown changelog from repo" 16 420 1000 92
+
+$useMarkdownBox = New-Object System.Windows.Forms.CheckBox
+$useMarkdownBox.Text = "Use Markdown text as release source"
+$useMarkdownBox.Checked = $false
+$useMarkdownBox.Location = New-Object System.Drawing.Point(760, 420)
+$useMarkdownBox.Size = New-Object System.Drawing.Size(260, 22)
+$form.Controls.Add($useMarkdownBox)
 
 $script:LogBox = New-Object System.Windows.Forms.TextBox
-$script:LogBox.Location = New-Object System.Drawing.Point(16, 474)
-$script:LogBox.Size = New-Object System.Drawing.Size(1000, 220)
+$script:LogBox.Location = New-Object System.Drawing.Point(16, 620)
+$script:LogBox.Size = New-Object System.Drawing.Size(1000, 244)
 $script:LogBox.Multiline = $true
 $script:LogBox.ScrollBars = "Vertical"
 $script:LogBox.ReadOnly = $true
 $form.Controls.Add($script:LogBox)
+
+function Convert-StringListToText {
+    param($List)
+    if (-not $List -or $List.Count -eq 0) { return "" }
+    return (($List | ForEach-Object { "$_" }) -join [Environment]::NewLine)
+}
+
+function Set-UiFromMarkdown {
+    param([Parameter(Mandatory = $true)][string]$Markdown)
+
+    $parsed = Convert-MarkdownSectionToReleaseInput -Markdown $Markdown
+    if (-not [string]::IsNullOrWhiteSpace($parsed.Display)) { $displayBox.Text = $parsed.Display }
+    if (-not [string]::IsNullOrWhiteSpace($parsed.Date)) { $dateBox.Text = $parsed.Date }
+
+    $map = Convert-ChangelogBodyToFieldMap -BodyLines $parsed.Body
+    $perfBox.Text = Convert-StringListToText $map.Performance
+    $bugBox.Text = Convert-StringListToText $map.Bugfixes
+    $changeBox.Text = Convert-StringListToText $map.Changes
+    $toolBox.Text = Convert-StringListToText $map.Tooling
+    $docBox.Text = Convert-StringListToText $map.Docs
+    return $parsed
+}
 
 function Read-UiRelease {
     $tag = Normalize-ReleaseVersion $tagBox.Text
@@ -413,7 +784,16 @@ function Read-UiRelease {
     if ($date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "Date must be YYYY-MM-DD." }
     $output = $outBox.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($output)) { $output = "dist" }
-    $body = New-ChangelogBody -Performance $perfBox.Text -Bugfixes $bugBox.Text -Changes $changeBox.Text -Tooling $toolBox.Text -Docs $docBox.Text
+
+    if ($useMarkdownBox.Checked) {
+        if ([string]::IsNullOrWhiteSpace($mdBox.Text)) { throw "Markdown changelog text is empty." }
+        $parsed = Convert-MarkdownSectionToReleaseInput -Markdown $mdBox.Text
+        if (-not [string]::IsNullOrWhiteSpace($parsed.Display)) { $display = $parsed.Display }
+        if (-not [string]::IsNullOrWhiteSpace($parsed.Date)) { $date = $parsed.Date }
+        $body = $parsed.Body
+    } else {
+        $body = New-ChangelogBody -Performance $perfBox.Text -Bugfixes $bugBox.Text -Changes $changeBox.Text -Tooling $toolBox.Text -Docs $docBox.Text
+    }
 
     return [pscustomobject]@{
         Tag = $tag
@@ -425,10 +805,69 @@ function Read-UiRelease {
     }
 }
 
+$loadRepoButton = New-Object System.Windows.Forms.Button
+$loadRepoButton.Text = "Load CHANGELOG.md"
+$loadRepoButton.Location = New-Object System.Drawing.Point(16, 542)
+$loadRepoButton.Size = New-Object System.Drawing.Size(145, 32)
+$loadRepoButton.Add_Click({
+    try {
+        $section = Find-ChangelogSection -ReleaseTag $tagBox.Text -DisplayVersion $displayBox.Text
+        $mdBox.Text = $section.Markdown
+        Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
+        $useMarkdownBox.Checked = $true
+        Write-ReleaseLog ("Loaded CHANGELOG.md section: " + $section.Version)
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+    }
+})
+$form.Controls.Add($loadRepoButton)
+
+$loadCommitsButton = New-Object System.Windows.Forms.Button
+$loadCommitsButton.Text = "Load Git Commits"
+$loadCommitsButton.Location = New-Object System.Drawing.Point(170, 542)
+$loadCommitsButton.Size = New-Object System.Drawing.Size(145, 32)
+$loadCommitsButton.Add_Click({
+    try {
+        $tag = Normalize-ReleaseVersion $tagBox.Text
+        $display = $displayBox.Text.Trim()
+        if ([string]::IsNullOrWhiteSpace($display)) { $display = Convert-TagToDisplayVersion $tag }
+        $date = $dateBox.Text.Trim()
+        if ($date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "Date must be YYYY-MM-DD." }
+        $baseRef = $baseRefBox.Text.Trim()
+
+        $markdown = New-GitCommitChangelogMarkdown -ReleaseTag $tag -DisplayVersion $display -ReleaseDate $date -BaseRef $baseRef
+        $mdBox.Text = $markdown
+        Set-UiFromMarkdown -Markdown $markdown | Out-Null
+        $useMarkdownBox.Checked = $true
+        Write-ReleaseLog ("Generated changelog draft from git commits: " + ($(if ($baseRef) { $baseRef } else { "initial history" }) + "..HEAD"))
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+    }
+})
+$form.Controls.Add($loadCommitsButton)
+
+$fillFieldsButton = New-Object System.Windows.Forms.Button
+$fillFieldsButton.Text = "Map Markdown"
+$fillFieldsButton.Location = New-Object System.Drawing.Point(324, 542)
+$fillFieldsButton.Size = New-Object System.Drawing.Size(125, 32)
+$fillFieldsButton.Add_Click({
+    try {
+        if ([string]::IsNullOrWhiteSpace($mdBox.Text)) { throw "Markdown changelog text is empty." }
+        Set-UiFromMarkdown -Markdown $mdBox.Text | Out-Null
+        Write-ReleaseLog "Mapped Markdown text into changelog fields."
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+    }
+})
+$form.Controls.Add($fillFieldsButton)
+
 $previewButton = New-Object System.Windows.Forms.Button
 $previewButton.Text = "Preview Changelog"
-$previewButton.Location = New-Object System.Drawing.Point(16, 396)
-$previewButton.Size = New-Object System.Drawing.Size(150, 32)
+$previewButton.Location = New-Object System.Drawing.Point(458, 542)
+$previewButton.Size = New-Object System.Drawing.Size(125, 32)
 $previewButton.Add_Click({
     try {
         $r = Read-UiRelease
@@ -443,8 +882,8 @@ $form.Controls.Add($previewButton)
 
 $prepButton = New-Object System.Windows.Forms.Button
 $prepButton.Text = "Update Files + Build"
-$prepButton.Location = New-Object System.Drawing.Point(180, 396)
-$prepButton.Size = New-Object System.Drawing.Size(160, 32)
+$prepButton.Location = New-Object System.Drawing.Point(592, 542)
+$prepButton.Size = New-Object System.Drawing.Size(145, 32)
 $prepButton.Add_Click({
     try {
         $r = Read-UiRelease
@@ -459,8 +898,8 @@ $form.Controls.Add($prepButton)
 
 $publishButton = New-Object System.Windows.Forms.Button
 $publishButton.Text = "GitHub Release"
-$publishButton.Location = New-Object System.Drawing.Point(354, 396)
-$publishButton.Size = New-Object System.Drawing.Size(145, 32)
+$publishButton.Location = New-Object System.Drawing.Point(746, 542)
+$publishButton.Size = New-Object System.Drawing.Size(125, 32)
 $publishButton.Add_Click({
     try {
         $r = Read-UiRelease
@@ -487,8 +926,8 @@ $form.Controls.Add($publishButton)
 
 $statusButton = New-Object System.Windows.Forms.Button
 $statusButton.Text = "Git Status"
-$statusButton.Location = New-Object System.Drawing.Point(514, 396)
-$statusButton.Size = New-Object System.Drawing.Size(110, 32)
+$statusButton.Location = New-Object System.Drawing.Point(880, 542)
+$statusButton.Size = New-Object System.Drawing.Size(75, 32)
 $statusButton.Add_Click({
     try {
         $status = Test-GitCleanEnough
@@ -506,8 +945,8 @@ $form.Controls.Add($statusButton)
 
 $closeButton = New-Object System.Windows.Forms.Button
 $closeButton.Text = "Close"
-$closeButton.Location = New-Object System.Drawing.Point(906, 396)
-$closeButton.Size = New-Object System.Drawing.Size(110, 32)
+$closeButton.Location = New-Object System.Drawing.Point(963, 542)
+$closeButton.Size = New-Object System.Drawing.Size(53, 32)
 $closeButton.Add_Click({ $form.Close() })
 $form.Controls.Add($closeButton)
 
