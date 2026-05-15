@@ -4461,7 +4461,7 @@ local function BuildDashboardChangelog(parent, cardWidth)
     local data = GetBundledChangelog()
     local left, right = 14, 14
     local top = -130
-    local headerH = 42
+    local headerH = 48
     local contentW = max(120, (cardWidth or 420) - left - right)
     local scrollW = max(80, (cardWidth or 420) - left - 44)
 
@@ -4488,7 +4488,7 @@ local function BuildDashboardChangelog(parent, cardWidth)
 
     local headerBg = header:CreateTexture(nil, "BACKGROUND")
     headerBg:SetAllPoints()
-    headerBg:SetColorTexture(0.030, 0.038, 0.074, 0.58)
+    headerBg:SetColorTexture(0, 0, 0, 0)
 
     local headerEdge = header:CreateTexture(nil, "BORDER")
     headerEdge:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
@@ -4498,27 +4498,27 @@ local function BuildDashboardChangelog(parent, cardWidth)
 
     local hover = header:CreateTexture(nil, "HIGHLIGHT")
     hover:SetAllPoints()
-    hover:SetColorTexture(1, 1, 1, 0.035)
+    hover:SetColorTexture(1, 1, 1, 0.025)
 
     local arrow = header:CreateTexture(nil, "OVERLAY")
     arrow:SetSize(10, 10)
-    arrow:SetPoint("LEFT", header, "LEFT", 8, 0)
+    arrow:SetPoint("TOPRIGHT", header, "TOPRIGHT", -54, -9)
     arrow:SetTexture(T.media.collapseArrow)
 
     local title = T.Font(header, "GameFontNormal", "Release Notes", T.colors.text)
-    title:SetPoint("TOPLEFT", header, "TOPLEFT", 24, -8)
-    title:SetPoint("RIGHT", header, "RIGHT", -72, 0)
+    title:SetPoint("TOPLEFT", header, "TOPLEFT", 0, -3)
+    title:SetPoint("RIGHT", header, "RIGHT", -92, 0)
     title:SetJustifyH("LEFT")
 
     local current = data and (data.currentVersion or (data.entries[1] and data.entries[1].version)) or nil
     local range = data and (data.rangeLabel or current or "") or "No release notes bundled with this build."
     local subtitle = RawFont(header, "GameFontDisableSmall", range, T.colors.dim, 0)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
-    subtitle:SetPoint("RIGHT", header, "RIGHT", -72, 0)
+    subtitle:SetPoint("RIGHT", header, "RIGHT", -8, 0)
     subtitle:SetJustifyH("LEFT")
 
     local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
-    hint:SetPoint("RIGHT", header, "RIGHT", -8, 0)
+    hint:SetPoint("TOPRIGHT", header, "TOPRIGHT", -8, -5)
     hint:SetJustifyH("RIGHT")
 
     local summary = RawFont(parent, "GameFontHighlightSmall", "", T.colors.muted, 0)
@@ -4611,11 +4611,10 @@ local function BuildDashboardChangelog(parent, cardWidth)
             arrow:SetVertexColor(c[1], c[2], c[3], 0.95)
         end
         if headerBg.SetColorTexture then
-            if isOpen then
-                headerBg:SetColorTexture(0.036, 0.050, 0.092, 0.72)
-            else
-                headerBg:SetColorTexture(0.030, 0.038, 0.074, 0.58)
-            end
+            headerBg:SetColorTexture(0, 0, 0, 0)
+        end
+        if headerEdge.SetColorTexture then
+            headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], isOpen and 0.58 or 0.34)
         end
         hint:SetText(isOpen and "Hide" or "View")
     end
@@ -4636,7 +4635,7 @@ local function BuildDashboardChangelog(parent, cardWidth)
         RefreshOpenState()
     end)
     header:SetScript("OnEnter", function()
-        if headerBg.SetColorTexture then headerBg:SetColorTexture(0.042, 0.058, 0.106, 0.78) end
+        if headerBg.SetColorTexture then headerBg:SetColorTexture(1, 1, 1, 0.025) end
     end)
     header:SetScript("OnLeave", function()
         PaintHeader(open)

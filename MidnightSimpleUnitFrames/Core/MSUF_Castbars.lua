@@ -8,6 +8,12 @@ local string_format = string.format
 local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 local FONT_LIST = _G.MSUF_FONT_LIST
 
+local function CurrentLSM()
+    local lsm = (ns and ns.LSM) or _G.MSUF_LSM or LSM
+    if lsm then LSM = lsm end
+    return lsm
+end
+
 local function Tr(text)
     if type(text) ~= "string" then return text end
     if type(ns) == "table" and type(ns.Translate) == "function" then
@@ -251,28 +257,38 @@ function MSUF_GetCastbarTexture()
     end
     local function TryResolve(key)
         if type(key) ~= "string" or key == "" then
-             return nil
+             return nil, true
         end
         local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
         if type(builtins) == "table" then
             local t = builtins[key]
             if type(t) == "string" and t ~= "" then
-                 return t
+                 return t, true
             end
         end
         if key:find("\\") or key:find("/") then
-             return key
+             return key, true
         end
-        if LSM and LSM.Fetch then
-            local tex = LSM:Fetch("statusbar", key)
+        local lsm = CurrentLSM()
+        if lsm and lsm.Fetch then
+            local tex = lsm:Fetch("statusbar", key, true)
             if tex and tex ~= "" then
-                 return tex
+                 return tex, true
             end
         end
-         return nil
+         return nil, false
     end
-    local tex = TryResolve(castKey) or TryResolve(barKey) or "Interface\\TARGETINGFRAME\\UI-StatusBar"
-    cache[ck] = tex
+    local tex, castResolved = TryResolve(castKey)
+    local cacheable = castResolved
+    if not tex then
+        local barTex, barResolved = TryResolve(barKey)
+        tex = barTex
+        cacheable = cacheable and barResolved
+    end
+    tex = tex or "Interface\\TARGETINGFRAME\\UI-StatusBar"
+    if cacheable then
+        cache[ck] = tex
+    end
      return tex
 end
 _G.MSUF_GetCastbarTexture = MSUF_GetCastbarTexture
@@ -503,6 +519,28 @@ function MSUF_UpdateCastbarFillDirection()
  end
 -- PERF: Result cache — key→texture mapping never changes during runtime.
 local _resolveTexCache = {}
+function MSUF_ClearResolvedStatusbarTextureCache()
+    _resolveTexCache = {}
+
+    local castbarCache = _G.MSUF_CastbarTextureCache
+    if type(castbarCache) == "table" then
+        for key in pairs(castbarCache) do
+            castbarCache[key] = nil
+        end
+    end
+
+    local dpb = ns and ns.Bars and ns.Bars._DetachedPowerBarTextures
+    if dpb then
+        dpb.fgK = false
+        dpb.fgC = nil
+        dpb.bgK = false
+        dpb.bgC = nil
+    end
+
+    CurrentLSM()
+end
+_G.MSUF_ClearResolvedStatusbarTextureCache = MSUF_ClearResolvedStatusbarTextureCache
+
 function MSUF_ResolveStatusbarTextureKey(key)
     if type(key) ~= "string" or key == "" then
         return "Interface\\TargetingFrame\\UI-StatusBar"
@@ -511,24 +549,35 @@ function MSUF_ResolveStatusbarTextureKey(key)
     if cached then return cached end
 
     local result
+    local cacheable = false
     local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
     if type(builtins) == "table" then
         local t = builtins[key]
         if type(t) == "string" and t ~= "" then
             result = t
+            cacheable = true
         end
     end
     if not result then
         if key:find("\\") or key:find("/") then
             result = key
-        elseif LSM and type(LSM.Fetch) == "function" then
-            local tex = LSM:Fetch("statusbar", key, true)
-            if tex then result = tex end
+            cacheable = true
+        else
+            local lsm = CurrentLSM()
+            if lsm and type(lsm.Fetch) == "function" then
+                local tex = lsm:Fetch("statusbar", key, true)
+                if tex then
+                    result = tex
+                    cacheable = true
+                end
+            end
         end
     end
-    result = result or "Interface\\TargetingFrame\\UI-StatusBar"
-    _resolveTexCache[key] = result
-    return result
+    if result then
+        if cacheable then _resolveTexCache[key] = result end
+        return result
+    end
+    return "Interface\\TargetingFrame\\UI-StatusBar"
 end
 _G.MSUF_ResolveStatusbarTextureKey = MSUF_ResolveStatusbarTextureKey
 _G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {

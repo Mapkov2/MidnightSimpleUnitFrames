@@ -1233,6 +1233,52 @@ local function TryInitLSM()
     return false
 end
 
+local _MSUF_StatusbarMediaRefreshPending = false
+
+local function RunStatusbarMediaRefresh()
+    _MSUF_StatusbarMediaRefreshPending = false
+
+    if type(_G.MSUF_ClearResolvedStatusbarTextureCache) == "function" then
+        pcall(_G.MSUF_ClearResolvedStatusbarTextureCache)
+    end
+
+    local updateBars = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures or _G.UpdateAllBarTextures
+    if type(updateBars) == "function" then pcall(updateBars) end
+
+    if type(_G.MSUF_UpdateAbsorbBarTextures) == "function" then
+        pcall(_G.MSUF_UpdateAbsorbBarTextures)
+    end
+
+    local updateCastbars = _G.MSUF_UpdateCastbarTextures_Immediate or _G.MSUF_UpdateCastbarTextures
+    if type(updateCastbars) == "function" then pcall(updateCastbars) end
+
+    if type(_G.MSUF_ClassPower_RefreshTextures) == "function" then
+        pcall(_G.MSUF_ClassPower_RefreshTextures)
+    end
+
+    local gf = (_G.MSUF_NS and _G.MSUF_NS.GF) or (ns and ns.GF)
+    if gf then
+        if type(gf.InvalidateConfCache) == "function" then pcall(gf.InvalidateConfCache) end
+        if type(gf.RefreshVisuals) == "function" then
+            pcall(gf.RefreshVisuals)
+        elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then
+            pcall(_G.MSUF_GF_RefreshOverlays)
+        end
+    elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then
+        pcall(_G.MSUF_GF_RefreshOverlays)
+    end
+end
+
+local function ScheduleStatusbarMediaRefresh()
+    if _MSUF_StatusbarMediaRefreshPending then return end
+    _MSUF_StatusbarMediaRefreshPending = true
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, RunStatusbarMediaRefresh)
+    else
+        RunStatusbarMediaRefresh()
+    end
+end
+
 local function EnsureLSMCallbacks()
     local LSM = ns.LSM
     if not LSM then return end
@@ -1265,6 +1311,7 @@ local function EnsureLSMCallbacks()
             if _G.MSUF_RebuildStatusbarChoices then
                 _G.MSUF_RebuildStatusbarChoices()
             end
+            ScheduleStatusbarMediaRefresh()
         end
     end)
 end

@@ -169,9 +169,44 @@ do
         end
          return nil
     end
-    local function EncodeCompactTable(tbl)
-        local E = GetEncodingUtil()
-        if not E then  return nil end
+    local function IsSecretRuntimeValue(value)
+        local isSecret = _G.issecretvalue
+        if type(isSecret) ~= "function" then
+            return false
+        end
+        local ok, secret = pcall(isSecret, value)
+        return ok and secret == true
+    end
+    local function CompactSerializableCopy(value, seen)
+        if IsSecretRuntimeValue(value) then
+            return nil
+        end
+        local tv = type(value)
+        if tv == "nil" or tv == "number" or tv == "string" or tv == "boolean" then
+            return value
+        end
+        if tv ~= "table" then
+            return nil
+        end
+        seen = seen or {}
+        if seen[value] then
+            return nil
+        end
+        seen[value] = true
+        local out = {}
+        for k, v in pairs(value) do
+            local kt = type(k)
+            if kt == "number" or kt == "string" or kt == "boolean" then
+                local safeValue = CompactSerializableCopy(v, seen)
+                if safeValue ~= nil then
+                    out[k] = safeValue
+                end
+            end
+        end
+        seen[value] = nil
+        return out
+    end
+    local function TryEncodeCompactPayload(E, tbl)
         local ok1, bin = pcall(E.SerializeCBOR, tbl)
         if not ok1 or type(bin) ~= "string" then  return nil end
         -- Prefer smaller strings when compression exists.
@@ -179,6 +214,19 @@ do
         local ok2, b64 = pcall(E.EncodeBase64, payload)
         if not ok2 or type(b64) ~= "string" then  return nil end
         return "MSUF3:" .. b64
+    end
+    local function EncodeCompactTable(tbl)
+        local E = GetEncodingUtil()
+        if not E then  return nil end
+        local compact = TryEncodeCompactPayload(E, tbl)
+        if compact then  return compact end
+        -- Some dirty runtime profiles can contain transient values that cannot
+        -- be CBOR-encoded. Drop those the same way the Lua fallback would.
+        local safe = CompactSerializableCopy(tbl)
+        if safe then
+            return TryEncodeCompactPayload(E, safe)
+        end
+        return nil
     end
     local function TryDecodeCompactString(str)
         if type(str) ~= "string" then  return nil end
