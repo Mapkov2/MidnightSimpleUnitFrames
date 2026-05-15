@@ -592,7 +592,8 @@ function Start-GitHubWorkflow {
 
     $gh = Get-Command gh -ErrorAction SilentlyContinue
     if (-not $gh) {
-        throw "GitHub CLI (gh) is not installed or not in PATH."
+        Write-ReleaseLog "GitHub CLI (gh) is not installed or not in PATH; manual workflow dispatch skipped."
+        return
     }
 
     Invoke-External "gh" @("auth", "status")
@@ -961,7 +962,13 @@ $publishButton.Add_Click({
         if ($commitBox.Checked) { Commit-AllChanges -ReleaseTag $r.Tag }
         if ($tagCreateBox.Checked) { Create-ReleaseTag -ReleaseTag $r.Tag }
         if ($pushBox.Checked) { Push-ReleaseTag -ReleaseTag $r.Tag }
-        if ($workflowBox.Checked) { Start-GitHubWorkflow -ReleaseTag $r.Tag -Prerelease $r.Prerelease }
+        if ($workflowBox.Checked) {
+            if ($pushBox.Checked) {
+                Write-ReleaseLog "GitHub Actions release workflow will start from the pushed release tag."
+            } else {
+                Start-GitHubWorkflow -ReleaseTag $r.Tag -Prerelease $r.Prerelease
+            }
+        }
         Write-ReleaseLog "GitHub release step complete."
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)

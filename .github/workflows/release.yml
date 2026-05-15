@@ -1,7 +1,11 @@
 name: MSUF
-run-name: Publish ${{ github.event.release.tag_name || inputs.tag_name }}
+run-name: Publish ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
 
 on:
+  push:
+    tags:
+      - "[0-9]*"
+      - "v[0-9]*"
   release:
     types:
       - published
@@ -24,12 +28,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.tag_name }}
+      RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
       RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease || inputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name || inputs.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
           fetch-depth: 0
 
       - name: Validate publishing config
