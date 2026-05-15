@@ -205,6 +205,21 @@ local function _EnsureColorMixins()
     _cooldownColorMixin = _G.CreateColor(COOLDOWN_COLOR.r, COOLDOWN_COLOR.g, COOLDOWN_COLOR.b, COOLDOWN_COLOR.a)
 end
 
+local _cachedReadyR, _cachedReadyG, _cachedReadyB
+local _cachedCdR, _cachedCdG, _cachedCdB
+local _cachedReadyColorMixin, _cachedCooldownColorMixin
+local _cachedOutlineR, _cachedOutlineG, _cachedOutlineB, _cachedOutlineA
+local _cachedOutlineColorMixin
+
+local function _ReadKickColor(g, key, dr, dg, db)
+    local c = g and g[key]
+    if type(c) ~= "table" then return dr, dg, db end
+    local r = tonumber(c["1"]) or tonumber(c[1]) or dr
+    local gx = tonumber(c["2"]) or tonumber(c[2]) or dg
+    local b = tonumber(c["3"]) or tonumber(c[3]) or db
+    return r, gx, b
+end
+
 -- =============================================================================
 -- Indicator: two visual styles
 -- =============================================================================
@@ -290,9 +305,8 @@ end
 -- user sees under "Interrupt Ready Indicator" in the Colors menu — keeping
 -- the indicator visually independent from the castbar fill colors.
 --
--- Returns plain ColorMixins built fresh per call, so live edits to the
--- Colors menu propagate immediately on the next repaint without any
--- explicit invalidation hook.
+-- Returns ColorMixins cached by the actual DB values. Live edits still
+-- propagate on the next repaint because changed RGB values miss the cache.
 local function _ResolveColorPair(_)
     _EnsureColorMixins()
 
@@ -301,25 +315,26 @@ local function _ResolveColorPair(_)
         return _readyColorMixin, _cooldownColorMixin
     end
 
-    local function _readKickColor(key, dr, dg, db)
-        local c = g[key]
-        if type(c) ~= "table" then return dr, dg, db end
-        local r = tonumber(c["1"]) or tonumber(c[1]) or dr
-        local gx = tonumber(c["2"]) or tonumber(c[2]) or dg
-        local b = tonumber(c["3"]) or tonumber(c[3]) or db
-        return r, gx, b
+    -- Defaults match the Colors-menu defaults (green / red).
+    local rr, rg, rb = _ReadKickColor(g, "kickReadyColor",    0, 1, 0)
+    local cr, cg, cb = _ReadKickColor(g, "kickNotReadyColor", 1, 0, 0)
+
+    if _cachedReadyColorMixin
+       and rr == _cachedReadyR and rg == _cachedReadyG and rb == _cachedReadyB
+       and cr == _cachedCdR and cg == _cachedCdG and cb == _cachedCdB then
+        return _cachedReadyColorMixin, _cachedCooldownColorMixin
     end
 
-    -- Defaults match the Colors-menu defaults (green / red).
-    local rr, rg, rb = _readKickColor("kickReadyColor",    0, 1, 0)
-    local cr, cg, cb = _readKickColor("kickNotReadyColor", 1, 0, 0)
-
-    return _G.CreateColor(rr, rg, rb, 1), _G.CreateColor(cr, cg, cb, 1)
+    _cachedReadyR, _cachedReadyG, _cachedReadyB = rr, rg, rb
+    _cachedCdR, _cachedCdG, _cachedCdB = cr, cg, cb
+    _cachedReadyColorMixin = _G.CreateColor(rr, rg, rb, 1)
+    _cachedCooldownColorMixin = _G.CreateColor(cr, cg, cb, 1)
+    return _cachedReadyColorMixin, _cachedCooldownColorMixin
 end
 
 -- Read the user's configured castbar outline color (the same RGBA that
 -- MSUF_ApplyCastbarOutline writes onto the four edge textures) and return
--- it as a fresh ColorMixin. Used as the "no tint" target when composing
+-- it as a cached ColorMixin. Used as the "no tint" target when composing
 -- via EvaluateColorFromBoolean — when the cast is non-interruptible the
 -- edge textures end up with this exact colour, so the user sees their
 -- normal castbar outline rather than our green/red indicator.
@@ -330,7 +345,15 @@ local function _GetUserOutlineMixin()
     local gg = (g and tonumber(g.castbarBorderG)) or 0
     local b  = (g and tonumber(g.castbarBorderB)) or 0
     local a  = (g and tonumber(g.castbarBorderA)) or 1
-    return _G.CreateColor(r, gg, b, a)
+    if _cachedOutlineColorMixin
+       and r == _cachedOutlineR and gg == _cachedOutlineG
+       and b == _cachedOutlineB and a == _cachedOutlineA then
+        return _cachedOutlineColorMixin
+    end
+
+    _cachedOutlineR, _cachedOutlineG, _cachedOutlineB, _cachedOutlineA = r, gg, b, a
+    _cachedOutlineColorMixin = _G.CreateColor(r, gg, b, a)
+    return _cachedOutlineColorMixin
 end
 
 local function _RefreshRawNotInterruptible(frame)
