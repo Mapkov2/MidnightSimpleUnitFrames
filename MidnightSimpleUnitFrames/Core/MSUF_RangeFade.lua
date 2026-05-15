@@ -803,6 +803,15 @@ do
         _focusEvtFrame:SetScript("OnEvent", OnFocusFriendlyRange)
     end
 
+    local function HasAnyBossRangeFrame()
+        local frames = _G.MSUF_UnitFrames
+        if not frames then return false end
+        for i = 1, 5 do
+            if frames[_bossUnits[i]] then return true end
+        end
+        return false
+    end
+
     local function StopTicker()
         _ticker = nil
         _tickRate = 0
@@ -826,7 +835,7 @@ do
         end
 
         local bossConf = db and db.boss
-        if bossConf and bossConf.rangeFadeEnabled == true then
+        if bossConf and bossConf.rangeFadeEnabled == true and HasAnyBossRangeFrame() then
             local frames = _G.MSUF_UnitFrames
             for i = 1, 5 do
                 local unit = _bossUnits[i]
@@ -950,11 +959,16 @@ do
     end
 
     function HasActiveBossRangeUnit()
+        if _G.MSUF_UnitEditModeActive == true then return false end
+        local db = _G.MSUF_DB
+        local conf = db and db.boss
+        if not conf or conf.rangeFadeEnabled ~= true or UseLiteFBRuntime() then return false end
+        if not HasAnyBossRangeFrame() then return false end
         local frames = _G.MSUF_UnitFrames
         for i = 1, 5 do
             local unit = _bossUnits[i]
             local f = frames and frames[unit]
-            if f and f.IsShown and f:IsShown() and UnitExists(unit) then
+            if f and f.IsShown and f:IsShown() and UnitExists and UnitExists(unit) then
                 return true
             end
         end
@@ -997,10 +1011,21 @@ do
         end)
     end
 
+    local function RefreshEnemyFocusBossRange(burstDuration)
+        if _G.MSUF_UnitEditModeActive == true then return end
+        SyncTicker()
+        if NeedsPoll() then
+            if burstDuration then RequestBurst(burstDuration) end
+            CheckEnemyUnits()
+        elseif _ticker then
+            CheckEnemyUnits()
+        end
+    end
+
     local function IsTrackedFBUnit(unit)
         local db = _G.MSUF_DB
         local focusOn = db and db.focus and db.focus.rangeFadeEnabled == true and not UseLiteFBRuntime()
-        local bossOn  = db and db.boss  and db.boss.rangeFadeEnabled  == true and not UseLiteFBRuntime()
+        local bossOn  = db and db.boss  and db.boss.rangeFadeEnabled  == true and not UseLiteFBRuntime() and HasAnyBossRangeFrame()
         if unit == "focus" then return focusOn and true or false end
         if unit == "boss1" or unit == "boss2" or unit == "boss3" or unit == "boss4" or unit == "boss5" then
             return bossOn and true or false
@@ -1012,7 +1037,7 @@ do
         if UseLiteFBRuntime() then return false end
         local db = _G.MSUF_DB
         if db and db.focus and db.focus.rangeFadeEnabled == true then return true end
-        if db and db.boss  and db.boss.rangeFadeEnabled  == true then return true end
+        if db and db.boss  and db.boss.rangeFadeEnabled  == true and HasAnyBossRangeFrame() then return true end
         return false
     end
 
@@ -1024,6 +1049,7 @@ do
     local _fbEvtFrame = nil
     local _fbEvents = {}
     local _fbSpellsDirty = false
+    local RefreshFBEventLifecycle
     local function EnsureFBEventFrame()
         if _fbEvtFrame then return _fbEvtFrame end
         local ef = CreateFrame("Frame")
@@ -1055,6 +1081,9 @@ do
                 if NeedsPoll() or _ticker then
                     CheckEnemyUnits()
                 end
+            elseif event == "PLAYER_TARGET_CHANGED" or event == "SPELL_UPDATE_COOLDOWN" then
+                if not NeedsPoll() and not _ticker then return end
+                RefreshEnemyFocusBossRange(nil)
             elseif event == "PLAYER_FOCUS_CHANGED" then
                 _state["focus"] = nil
                 ClassifyFocus()
@@ -1068,6 +1097,7 @@ do
                         ClearMul("focus", "focus")
                     end
                 end
+                if RefreshFBEventLifecycle then RefreshFBEventLifecycle() end
                 SyncTicker()
                 if NeedsPoll() then
                     RequestBurst(_BURST_DURATION)
@@ -1075,6 +1105,7 @@ do
                 end
             elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
                 for i = 1, 5 do _state[_bossUnits[i]] = nil end
+                if RefreshFBEventLifecycle then RefreshFBEventLifecycle() end
                 SyncTicker()
                 if NeedsPoll() then
                     RequestBurst(_BURST_DURATION)
@@ -1082,7 +1113,7 @@ do
                 end
             elseif event == "UNIT_FLAGS" or event == "UNIT_CONNECTION"
                 or event == "UNIT_PHASE" or event == "UNIT_TARGETABLE_CHANGED"
-                or event == "UNIT_FACTION" then
+                or event == "UNIT_FACTION" or event == "UNIT_TARGET" then
                 local unit = arg1
                 if not IsTrackedFBUnit(unit) then return end
                 _state[unit] = nil
@@ -1092,6 +1123,7 @@ do
                         EnsureFocusEvtFrame()
                         _focusEvtFrame:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", "focus")
                         OnFocusFriendlyRange(nil, event, "focus")
+                        if RefreshFBEventLifecycle then RefreshFBEventLifecycle() end
                         SyncTicker()
                         return
                     else
@@ -1101,6 +1133,7 @@ do
                         end
                     end
                 end
+                if RefreshFBEventLifecycle then RefreshFBEventLifecycle() end
                 SyncTicker()
                 if NeedsPoll() then
                     RequestBurst(0.80)
@@ -1117,6 +1150,7 @@ do
                 end
                 RebuildPrimaries()
                 for k in pairs(_state) do _state[k] = nil end
+                if RefreshFBEventLifecycle then RefreshFBEventLifecycle() end
                 SyncTicker()
                 if NeedsPoll() or _ticker then
                     if NeedsPoll() then
@@ -1193,10 +1227,10 @@ do
         _fbEvents[event] = mask
     end
 
-    local function RefreshFBEventLifecycle()
+    RefreshFBEventLifecycle = function()
         local db = _G.MSUF_DB
         local focusOn = db and db.focus and db.focus.rangeFadeEnabled == true and not UseLiteFBRuntime()
-        local bossOn  = db and db.boss  and db.boss.rangeFadeEnabled  == true and not UseLiteFBRuntime()
+        local bossOn  = db and db.boss  and db.boss.rangeFadeEnabled  == true and not UseLiteFBRuntime() and HasAnyBossRangeFrame()
 
         if not focusOn and not bossOn then
             if _fbEvtFrame then
@@ -1206,12 +1240,18 @@ do
             return false, false
         end
 
+        local focusEnemyOn = focusOn and _focusIsEnemy and UnitExists and UnitExists("focus")
+        local bossActiveOn = bossOn and HasActiveBossRangeUnit()
+        local immediateOn = focusEnemyOn or bossActiveOn
+
         -- shared polling/reactivity events only when at least one FB feature is on
         SetFBEvent("PLAYER_REGEN_DISABLED", true)
         SetFBEvent("PLAYER_REGEN_ENABLED", true)
         SetFBEvent("PLAYER_STARTED_MOVING", true)
         SetFBEvent("PLAYER_STOPPED_MOVING", true)
+        SetFBEvent("PLAYER_TARGET_CHANGED", immediateOn)
         SetFBEvent("SPELLS_CHANGED", true)
+        SetFBEvent("SPELL_UPDATE_COOLDOWN", immediateOn)
         SetFBEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", true)
         SetFBEvent("PLAYER_TALENT_UPDATE", true)
         SetFBEvent("TRAIT_CONFIG_UPDATED", true)
@@ -1221,6 +1261,7 @@ do
         SetFBUnitEvent("UNIT_PHASE", focusOn, bossOn)
         SetFBUnitEvent("UNIT_TARGETABLE_CHANGED", focusOn, bossOn)
         SetFBUnitEvent("UNIT_FACTION", focusOn, bossOn)
+        SetFBUnitEvent("UNIT_TARGET", focusEnemyOn, bossOn)
 
         -- focus-only lifecycle
         SetFBEvent("PLAYER_FOCUS_CHANGED", focusOn)
@@ -1263,6 +1304,7 @@ do
                 if _focusEvtFrame then _focusEvtFrame:UnregisterEvent("UNIT_IN_RANGE_UPDATE") end
                 ClearMul("focus", "focus")
             end
+            focusOn, bossOn = RefreshFBEventLifecycle()
             if not bossOn then
                 for i = 1, 5 do ClearMul(_bossUnits[i], "boss") end
             end

@@ -612,6 +612,8 @@ function Core.InvalidateAllFrameConfigs()
             -- PERF: Invalidate per-frame combat hot-path caches (absorb text, HP/power text config, status config).
             f._msufCachedShowAbsorbText = nil
             f._msufAbsorbTextDirty = true
+            f._msufCachedHpMaxValue = nil
+            f._msufCachedHpMaxStr = nil
             f._msufCachedAbsorbText = nil
             f._msufCachedAbsorbStyle = nil
             f._msufPwrTextConf = nil

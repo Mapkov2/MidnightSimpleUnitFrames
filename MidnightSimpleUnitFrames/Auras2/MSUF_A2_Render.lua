@@ -1564,10 +1564,10 @@ local function RenderUnit(entry)
         -- Player edit mode: debuff layout already handled by preview path.
     elseif customDebuffs then
         -- Numeric stamp: eliminates 13 string allocs per type per render call.
-        local debuffLayoutStamp = debuffCount * 100000007 + debuffIconSize * 10000019 + spacing * 100003 + perRow * 10007 + (_DIR_HASH[debuffGrowth] or 0) * 1009 + (_DIR_HASH[debuffRowWrap] or 0) * 101 + gen
+        local debuffLayoutStamp = debuffCount * 100000007 + debuffIconSize * 10000019 + spacing * 100003 + perRow * 10007 + (_DIR_HASH[debuffGrowth] or 0) * 1009 + (_DIR_HASH[debuffRowWrap] or 0) * 101
         if entry._msufA2_lastDebuffLayoutStamp ~= debuffLayoutStamp then
             entry._msufA2_lastDebuffLayoutStamp = debuffLayoutStamp
-            _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, debuffRowWrap, gen)
+            _LayoutIcons(entry.debuffs, debuffCount, debuffIconSize, spacing, perRow, debuffGrowth, debuffRowWrap, debuffLayoutStamp)
         end
         if debuffCount ~= lastDebuffCount then
             _HideUnused(entry.debuffs, debuffCount + 1)
@@ -1580,10 +1580,10 @@ local function RenderUnit(entry)
     end
 
     if customBuffs then
-        local buffLayoutStamp = buffCount * 100000007 + buffIconSize * 10000019 + spacing * 100003 + perRow * 10007 + (_DIR_HASH[buffGrowth] or 0) * 1009 + (_DIR_HASH[buffRowWrap] or 0) * 101 + gen
+        local buffLayoutStamp = buffCount * 100000007 + buffIconSize * 10000019 + spacing * 100003 + perRow * 10007 + (_DIR_HASH[buffGrowth] or 0) * 1009 + (_DIR_HASH[buffRowWrap] or 0) * 101
         if entry._msufA2_lastBuffLayoutStamp ~= buffLayoutStamp then
             entry._msufA2_lastBuffLayoutStamp = buffLayoutStamp
-            _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, buffRowWrap, gen)
+            _LayoutIcons(entry.buffs, buffCount, buffIconSize, spacing, perRow, buffGrowth, buffRowWrap, buffLayoutStamp)
         end
         if buffCount ~= lastBuffCount then
             _HideUnused(entry.buffs, buffCount + 1)

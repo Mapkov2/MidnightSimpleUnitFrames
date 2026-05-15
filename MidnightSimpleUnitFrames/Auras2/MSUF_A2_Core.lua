@@ -760,6 +760,39 @@ end
 -- cfg.sortOrder:
 --   0 or nil: Pure cache iteration (ZERO C API calls) — fastest path
 --   1-6:      C++ sorted via GetAuraSlots, cache provides enrichment
+local function PrepareFilterConfig(cfg, cfgGen)
+    if cfg._msufA2FilterPrepGen == cfgGen and cfg._msufA2FilterPrepIgnoreCats == cfg.ignoreCats then
+        return
+    end
+    cfg._msufA2FilterPrepGen = cfgGen
+    cfg._msufA2FilterPrepIgnoreCats = cfg.ignoreCats
+
+    cfg._maxBuffs  = cfg.maxBuffs or 12
+    cfg._maxDebuffs = cfg.maxDebuffs or 12
+    cfg._buffsOnlyMine    = cfg.buffsOnlyMine
+    cfg._debuffsOnlyMine  = cfg.debuffsOnlyMine
+    cfg._hidePermanent    = cfg.hidePermanentBuffs
+    cfg._onlyBoss         = cfg.onlyBossAuras
+    cfg._onlyImpBuffs     = cfg.onlyImportantBuffs
+    cfg._onlyImpDebuffs   = cfg.onlyImportantDebuffs
+    cfg._useMergeBuffs    = cfg.buffsOnlyMine and cfg.buffsIncludeBoss
+    cfg._useMergeDebuffs  = cfg.debuffsOnlyMine and cfg.debuffsIncludeBoss
+    cfg._hideOtherBossHealAuras = (cfg.bossHealHideOthers == true)
+    cfg._showSated = (cfg.showSated ~= false)
+    local satedThr = cfg.satedShowAtSeconds
+    cfg._satedShowAt = (type(satedThr) == "number" and satedThr > 0) and satedThr or 0
+    cfg._checkSated = (cfg._showSated ~= true) or (cfg._satedShowAt > 0)
+
+    local ic = cfg.ignoreCats
+    cfg._ignoreHash = (type(ic) == "table" and next(ic) ~= nil) and Cache.BuildIgnoreHash(ic) or nil
+    cfg._noFilters = not cfg._ignoreHash and not cfg._checkSated and not cfg._onlyBoss
+        and not cfg._buffsOnlyMine and not cfg._debuffsOnlyMine
+        and not cfg._hidePermanent and not cfg._onlyImpBuffs and not cfg._onlyImpDebuffs
+        and not cfg._useMergeBuffs and not cfg._useMergeDebuffs
+        and not cfg._hideOtherBossHealAuras
+    cfg._sortOrder = cfg.sortOrder or cfg.capsSortOrder or 0
+end
+
 function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     if not _apisBound then BindAPIs() end
     BindDoesExpire()
@@ -783,40 +816,20 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     s.structureChanged = false
 
     -- Pre-compute config flags (avoid repeated table lookups in inner loop)
-    local maxBuffs  = cfg.maxBuffs or 12
-    local maxDebuffs = cfg.maxDebuffs or 12
-    cfg._buffsOnlyMine    = cfg.buffsOnlyMine
-    cfg._debuffsOnlyMine  = cfg.debuffsOnlyMine
-    cfg._hidePermanent    = cfg.hidePermanentBuffs
-    cfg._onlyBoss         = cfg.onlyBossAuras
-    cfg._onlyImpBuffs     = cfg.onlyImportantBuffs
-    cfg._onlyImpDebuffs   = cfg.onlyImportantDebuffs
-    cfg._useMergeBuffs    = cfg.buffsOnlyMine and cfg.buffsIncludeBoss
-    cfg._useMergeDebuffs  = cfg.debuffsOnlyMine and cfg.debuffsIncludeBoss
-    cfg._hideOtherBossHealAuras = (cfg.bossHealHideOthers == true)
+    PrepareFilterConfig(cfg, cfgGen)
+    local maxBuffs  = cfg._maxBuffs
+    local maxDebuffs = cfg._maxDebuffs
     -- Sated/Exhaustion runtime flags (from shared, not filters)
-    cfg._showSated = (cfg.showSated ~= false)
-    local _satedThr = cfg.satedShowAtSeconds
-    cfg._satedShowAt = (type(_satedThr) == "number" and _satedThr > 0) and _satedThr or 0
     -- PERF: _checkSated = false means sated code is COMPLETELY skipped in FilterAura.
     -- Only active when sated is hidden OR threshold is set (actual filtering work to do).
-    cfg._checkSated = (cfg._showSated ~= true) or (cfg._satedShowAt > 0)
     -- Global Ignore List: ZERO overhead when no categories enabled.
     -- Only call BuildIgnoreHash if ignoreCats table exists and is non-empty.
-    local ic = cfg.ignoreCats
-    cfg._ignoreHash = (type(ic) == "table" and next(ic) ~= nil) and Cache.BuildIgnoreHash(ic) or nil
 
     local secretsNow = cfg._hidePermanent and SecretsActive() or false
     local now = GetTime()  -- PERF: cache once, passed to FilterAura
 
     -- PERF: Pre-computed "no filters active" flag — single boolean check in FilterAura
     -- covers ~90% of default configurations where all filters are off.
-    cfg._noFilters = not cfg._ignoreHash and not cfg._checkSated and not cfg._onlyBoss
-        and not cfg._buffsOnlyMine and not cfg._debuffsOnlyMine
-        and not cfg._hidePermanent and not cfg._onlyImpBuffs and not cfg._onlyImpDebuffs
-        and not cfg._useMergeBuffs and not cfg._useMergeDebuffs
-        and not cfg._hideOtherBossHealAuras
-
     -- Localize for inner loop
     local lIsFiltered = _isFiltered
     local lDoesExpire = _doesExpire
@@ -829,7 +842,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     local bossBufScratch = cfg._useMergeBuffs and _mergedBossBuffScratch or nil
     local bossDebScratch = cfg._useMergeDebuffs and _mergedBossDebuffScratch or nil
 
-    local sortOrder = cfg.sortOrder or cfg.capsSortOrder or 0
+    local sortOrder = cfg._sortOrder
 
     -- PERF: Hoist _noFilters gate out of FilterAura.
     -- FilterAura() line 613: `if cfg._noFilters then return true end` — so when
