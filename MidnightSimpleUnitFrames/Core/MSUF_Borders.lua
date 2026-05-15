@@ -17,11 +17,17 @@ local _FRIENDLY_DISPEL_CLASS = {
     PALADIN = true,
     PRIEST = true,
     SHAMAN = true,
-    WARLOCK = true,
+}
+local _PURGE_CLASS = {
     DEMONHUNTER = true,
     HUNTER = true,
+    MAGE = true,
+    PRIEST = true,
+    SHAMAN = true,
+    WARLOCK = true,
 }
 local _playerFriendlyDispelCapable
+local _playerPurgeCapable
 
 local function PlayerMayFriendlyDispel()
     if _playerFriendlyDispelCapable ~= nil then
@@ -37,8 +43,24 @@ local function PlayerMayFriendlyDispel()
     return _playerFriendlyDispelCapable
 end
 
+local function PlayerMayPurge()
+    if _playerPurgeCapable ~= nil then
+        return _playerPurgeCapable
+    end
+
+    local _, class = UnitClass and UnitClass("player")
+    if not class then
+        return true
+    end
+
+    local _, race = UnitRace and UnitRace("player")
+    _playerPurgeCapable = (_PURGE_CLASS[class] == true) or (race == "BloodElf")
+    return _playerPurgeCapable
+end
+
 local function ClearFriendlyDispelCapabilityCache()
     _playerFriendlyDispelCapable = nil
+    _playerPurgeCapable = nil
 end
 
 -- From main file (exported to _G)
@@ -1055,7 +1077,7 @@ do
         -- Purge: sentinel frames handle rendering via SetAlpha with secret values.
         -- Secret constraints prevent boolean tracking ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â sentinels ARE the border.
         -- Purge participates in highlight priority only via test mode.
-        if purgeEnabled and canAttack and unit ~= "player" then
+        if purgeEnabled and canAttack and unit ~= "player" and PlayerMayPurge() then
             UpdatePurgeSentinels(uf, unit, cfg)
         else
             HideAllPurgeSentinels(uf)
@@ -1088,11 +1110,13 @@ do
     local _dispelAuraUnitsN = 0
     local _dispelAuraFlushQueued = false
     local _dispelAuraWant = false
-    local function WantsDispelAuraEvents(g)
+    local _friendlyDispelAuraWant = false
+    local _purgeAuraWant = false
+    local function ResolveDispelAuraEventWants(g)
         if not g then return false end
-        if g.purgeOutlineMode == 1 then return true end
-        if g.dispelOutlineMode == 1 then return PlayerMayFriendlyDispel() end
-        return false
+        local purge = (g.purgeOutlineMode == 1 and PlayerMayPurge()) and true or false
+        local friendlyDispel = (g.dispelOutlineMode == 1 and PlayerMayFriendlyDispel()) and true or false
+        return (purge or friendlyDispel), friendlyDispel, purge
     end
 
     local ApplyDispelOutlineEventRegistration
@@ -1128,6 +1152,13 @@ do
         if event == "UNIT_AURA" then
             if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
             if not _dispelAuraWant or _dispelAuraQueued[unit] then return end
+            local relevant = false
+            if _friendlyDispelAuraWant and UnitCanAssist and UnitCanAssist("player", unit) then
+                relevant = true
+            elseif _purgeAuraWant and unit ~= "player" and UnitCanAttack and UnitCanAttack("player", unit) then
+                relevant = true
+            end
+            if not relevant then return end
             if type(updateInfo) == "table" and not updateInfo.isFullUpdate then
                 local a = updateInfo.addedAuras
                 local r = updateInfo.removedAuraInstanceIDs
@@ -1148,8 +1179,10 @@ do
     end)
     ApplyDispelOutlineEventRegistration = function()
         local g = MSUF_DB and MSUF_DB.general
-        local want = WantsDispelAuraEvents(g)
+        local want, friendlyDispelWant, purgeWant = ResolveDispelAuraEventWants(g)
         _dispelAuraWant = want
+        _friendlyDispelAuraWant = friendlyDispelWant
+        _purgeAuraWant = purgeWant
 
         if want then
             if not f:IsEventRegistered("PLAYER_ENTERING_WORLD") then

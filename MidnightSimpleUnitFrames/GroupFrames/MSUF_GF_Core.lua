@@ -157,6 +157,10 @@ GF._previewActive = GF._previewActive or {}
 ------------------------------------------------------------------------
 -- Click-cast compatibility
 ------------------------------------------------------------------------
+if type(_G.ClickCastFrames) ~= "table" then _G.ClickCastFrames = {} end
+local _GF_ClickCastFrames = _G.ClickCastFrames
+GF.ClickCastEnabled = true
+
 local function _GF_CallCliqueMethod(clique, methodName, ...)
     local method = clique and clique[methodName]
     if type(method) ~= "function" then return false end
@@ -164,15 +168,11 @@ local function _GF_CallCliqueMethod(clique, methodName, ...)
     return ok == true
 end
 
-function GF.RegisterClickCastFrame(f, refreshEnterLeave)
+local function _GF_RegisterClickCastFrame(f, refreshEnterLeave)
     if not (f and f.RegisterForClicks) then return end
+    if f._msufGFIsPreviewFrame or f._msufGFPreviewActive then return end
 
-    local cc = _G.ClickCastFrames
-    if type(cc) ~= "table" then
-        cc = {}
-        _G.ClickCastFrames = cc
-    end
-    cc[f] = true
+    _GF_ClickCastFrames[f] = true
 
     local clique = _G.Clique
     if type(clique) ~= "table" or type(clique.ccframes) ~= "table" then return end
@@ -192,6 +192,8 @@ function GF.RegisterClickCastFrame(f, refreshEnterLeave)
         end
     end
 end
+
+GF.RegisterClickCastFrame = _GF_RegisterClickCastFrame
 
 ------------------------------------------------------------------------
 -- Auto-register child frames with _G.MSUF_UnitFrames whenever the
@@ -963,7 +965,7 @@ local function BuildFrameHierarchy(f, kind)
     f._msufGFHighlightBorder = hlBorder
 
     -- ClickCast integration; effects refresh this after OnEnter/OnLeave are set.
-    if GF.RegisterClickCastFrame then GF.RegisterClickCastFrame(f, false) end
+    if not f._msufGFIsPreviewFrame then GF.RegisterClickCastFrame(f, false) end
 
     -- Unit menu
     f.menu = function(btn)

@@ -9,12 +9,12 @@ ns.Icons  = ns.Icons  or {}
 ns.Util   = ns.Util   or {}
 ns.Cache  = ns.Cache  or {}
 ns.Compat = ns.Compat or {}
--- Clique / click-casting integration
--- Initialize the global table early so compliant addons (Clique etc.) can
--- discover our frames regardless of load order.  This is safe and does
--- nothing on its own — it just enables Clique to come along later and
--- pick up the frames for registration.
-if not ClickCastFrames then ClickCastFrames = {} end
+-- Blizzard/Clique click-casting discovery.
+-- This table is a one-time frame registry, not a runtime poller. Keep it
+-- present so Blizzard's click-casting and Clique can discover MSUF frames.
+if type(_G.ClickCastFrames) ~= "table" then _G.ClickCastFrames = {} end
+local MSUF_ClickCastFrames = _G.ClickCastFrames
+ns.ClickCastEnabled = true
 
 -- PERF LOCALS (core runtime)
 --  - Reduce global table lookups in high-frequency event/render paths.
@@ -6027,7 +6027,7 @@ local function CreateSimpleUnitFrame(unit)
     -- Clique / click-casting: register AFTER OnEnter/OnLeave are set.
     -- Clique wraps these scripts; if we register before they exist, Clique
     -- has nothing to wrap and our later SetScript overwrites its hooks.
-    ClickCastFrames[f] = true
+    MSUF_ClickCastFrames[f] = true
     if f.targetPowerBar and f.hpBar then
         MSUF_ApplyPowerBarEmbedLayout(f)
     end

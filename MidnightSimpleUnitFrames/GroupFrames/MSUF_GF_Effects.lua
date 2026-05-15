@@ -1771,10 +1771,15 @@ function GF.BuildFrameCache(f)
     -- Status/icons: pre-resolve event/update consumers. Disabled features should
     -- not receive events and should not be called from shared dispatch paths.
     local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
-    c.statusTextEn = ((showDead and conf.statusText ~= false)
-        or (showGhost and conf.statusGhostText ~= false)
-        or ((showAFK or showDND) and conf.statusAFKText ~= false))
-    c.statusAwayEn = (showAFK or showDND) and conf.statusAFKText ~= false
+    c.statusShowAFK = showAFK
+    c.statusShowDND = showDND
+    c.statusShowDead = showDead
+    c.statusShowGhost = showGhost
+    c.statusDeadTextEn = showDead and conf.statusText ~= false
+    c.statusGhostTextEn = showGhost and conf.statusGhostText ~= false
+    c.statusAwayTextEn = (showAFK or showDND) and conf.statusAFKText ~= false
+    c.statusTextEn = c.statusDeadTextEn or c.statusGhostTextEn or c.statusAwayTextEn
+    c.statusAwayEn = c.statusAwayTextEn
     c.roleIconEn   = conf.roleIcon ~= false
     c.powerRoleGated = c.hasPowerElement and ((not c.powTank) or (not c.powHealer) or (not c.powDPS))
     c.roleStateEn  = c.roleIconEn or c.powerRoleGated
@@ -2767,10 +2772,20 @@ local function UpdateStatusText(f, unit, forceAway)
         end
         return
     end
-    local showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
-    local deadTextEnabled = IsStatusTextStateEnabled(conf, 2)
-    local ghostTextEnabled = IsStatusTextStateEnabled(conf, 3)
-    local awayTextEnabled = IsStatusTextStateEnabled(conf, 4)
+    local showAFK, showDND, showDead, showGhost
+    local deadTextEnabled, ghostTextEnabled, awayTextEnabled
+    if c then
+        showAFK, showDND = c.statusShowAFK, c.statusShowDND
+        showDead, showGhost = c.statusShowDead, c.statusShowGhost
+        deadTextEnabled = c.statusDeadTextEn
+        ghostTextEnabled = c.statusGhostTextEn
+        awayTextEnabled = c.statusAwayTextEn
+    else
+        showAFK, showDND, showDead, showGhost = GF.GetStatusIndicatorFlags()
+        deadTextEnabled = IsStatusTextStateEnabled(conf, 2)
+        ghostTextEnabled = IsStatusTextStateEnabled(conf, 3)
+        awayTextEnabled = IsStatusTextStateEnabled(conf, 4)
+    end
 
     if not unit or not UnitExists(unit) then
         if f._msufGFStatusState ~= 0 then
@@ -5338,7 +5353,7 @@ if type(_origInit) == "function" then
         -- Add tooltip scripts
         f:SetScript("OnEnter", OnEnter)
         f:SetScript("OnLeave", OnLeave)
-        if GF.RegisterClickCastFrame then GF.RegisterClickCastFrame(f, true) end
+        if GF.ClickCastEnabled then GF.RegisterClickCastFrame(f, true) end
         -- GF frames do NOT use the main Alpha module.
         -- Range fade is handled exclusively by ApplyRangeFade → SetAlphaFromBoolean.
         -- The Alpha module (MSUF_ApplyUnitAlpha) would override SetAlphaFromBoolean
