@@ -44,6 +44,8 @@ local data = {
                     title = "Release / Tooling",
                     bullets = {
                         "Added tools/MSUF-ReleaseHelper.ps1 and a Windows .cmd launcher for a guided release flow: changelog entry, bundled in-game changelog generation, local zip build, optional commit/tag/push, and GitHub workflow dispatch.",
+                        "Release Helper can now load the matching CHANGELOG.md section from the repo, display it as Markdown, and map known headings into the structured changelog fields.",
+                        "Release Helper can generate a changelog draft from Git commits since a selected ref, using commit subjects and changed files to categorize entries and show affected addon areas.",
                         "CurseForge publishing now uses BigWigsMods/packager directly from the release workflow.",
                         "Release channel resolution now maps alpha/beta/prerelease tags to the correct Wago stability and CurseForge release type.",
                         "CurseForge API secrets can be provided as either CF_API_KEY or CURSEFORGE.",

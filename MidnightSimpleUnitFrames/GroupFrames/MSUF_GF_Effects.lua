@@ -4857,8 +4857,14 @@ do
         "PLAYER_ENTERING_WORLD",
         "BARBER_SHOP_OPEN",
         "BARBER_SHOP_CLOSE",
+        "PLAYER_STARTED_MOVING",
+        "PLAYER_STOPPED_MOVING",
         "PLAYER_REGEN_DISABLED",
         "PLAYER_REGEN_ENABLED",
+        "UNIT_CONNECTION",
+        "PARTY_MEMBER_ENABLE",
+        "PARTY_MEMBER_DISABLE",
+        "RAID_ROSTER_UPDATE",
     }
 
     local function SetBaseEvents(active)
@@ -4897,6 +4903,11 @@ do
         end
 
         SetBaseEvents(anyEnabled)
+        if anyEnabled then
+            if GF._EnsureRangeFadeOOCLoop then GF._EnsureRangeFadeOOCLoop() end
+        elseif GF._StopRangeFadeOOCLoop then
+            GF._StopRangeFadeOOCLoop()
+        end
 
         local ready, raidMarker, leader, flags = false, false, false, false
         if anyEnabled then
@@ -4971,11 +4982,108 @@ do
 
     local H = {}
 
+    -- EQoL uses the Blizzard group-frame range signal directly:
+    -- UnitInRange(unit) -> frame:SetAlphaFromBoolean(inRange, 1, faded).
+    -- WoW can under-fire UNIT_IN_RANGE_UPDATE while out of combat, so keep a
+    -- very light OOC resync alive only when group range fade is actually used.
+    GF._rangeOOCInterval = GF._rangeOOCInterval or 1.0
+    GF._rangeBurstDelays = GF._rangeBurstDelays or { 0, 0.05, 0.15, 0.35, 0.75 }
+    GF._rangeBurstSerial = GF._rangeBurstSerial or 0
+
+    GF._RangeFadeWanted = function()
+        if GF._anyEnabled == false then return false end
+        if IsInGroup and IsInRaid then
+            local inGroup = IsInGroup()
+            local inRaid = IsInRaid()
+            if not inGroup and not inRaid then return false end
+        end
+        if GF._AnyGroupConfFlag then
+            return GF._AnyGroupConfFlag("rangeFadeEnabled") == true
+        end
+        return true
+    end
+
+    GF._RefreshRangeFadeNow = function()
+        if not GF._RangeFadeWanted() then return false end
+        local refresh = GF.RefreshRangeFade
+        if type(refresh) ~= "function" then return false end
+        refresh()
+        return true
+    end
+
+    GF._StopRangeFadeOOCLoop = function()
+        GF._rangeOOCLoop = nil
+        GF._rangeBurstQueued = nil
+        GF._rangeBurstSerial = (GF._rangeBurstSerial or 0) + 1
+    end
+
+    GF._RangeFadeOOCStep = function(loop)
+        if GF._rangeOOCLoop ~= loop then return end
+        if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then
+            GF._StopRangeFadeOOCLoop()
+            return
+        end
+        if not GF._RefreshRangeFadeNow() then
+            GF._StopRangeFadeOOCLoop()
+            return
+        end
+        C_Timer.After(GF._rangeOOCInterval or 1.0, function() GF._RangeFadeOOCStep(loop) end)
+    end
+
+    GF._EnsureRangeFadeOOCLoop = function()
+        if GF._rangeOOCLoop or not (C_Timer and C_Timer.After) then return end
+        if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
+        if not GF._RangeFadeWanted() then return end
+        local loop = {}
+        GF._rangeOOCLoop = loop
+        C_Timer.After(GF._rangeOOCInterval or 1.0, function() GF._RangeFadeOOCStep(loop) end)
+    end
+
+    GF._QueueRangeRefreshBurst = function()
+        if not GF._RangeFadeWanted() then
+            GF._StopRangeFadeOOCLoop()
+            return
+        end
+        if not (C_Timer and C_Timer.After) then
+            GF._RefreshRangeFadeNow()
+            return
+        end
+        if GF._rangeBurstQueued then
+            GF._EnsureRangeFadeOOCLoop()
+            return
+        end
+        GF._rangeBurstQueued = true
+        GF._rangeBurstSerial = (GF._rangeBurstSerial or 0) + 1
+        local serial = GF._rangeBurstSerial
+        local delays = GF._rangeBurstDelays
+        for i = 1, #delays do
+            local delay = delays[i]
+            _MSUF_ScheduleDelayOnce("GF_RANGE_REFRESH_BURST:" .. serial .. ":" .. i, delay, function()
+                if serial == GF._rangeBurstSerial then
+                    GF._RefreshRangeFadeNow()
+                    if i == #delays then
+                        GF._rangeBurstQueued = nil
+                    end
+                end
+            end)
+        end
+        GF._EnsureRangeFadeOOCLoop()
+    end
+
+    GF._QueueRangeRefreshBurstOOC = function()
+        if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
+        GF._QueueRangeRefreshBurst()
+    end
+
     -- Events that don't need per-frame iteration: assign anonymous handlers
     -- directly into the dispatch table (no per-handler local).
 
     H.PLAYER_REGEN_DISABLED = function(_, event)
-        _G.MSUF_InCombat = (event == "PLAYER_REGEN_DISABLED")
+        local inCombat = (event == "PLAYER_REGEN_DISABLED")
+        _G.MSUF_InCombat = inCombat
+        if inCombat then
+            GF._StopRangeFadeOOCLoop()
+        end
         if event == "PLAYER_REGEN_DISABLED" and GF._offlineHideRuntimeActive and GF.SuspendOfflineHideForCombat then
             GF.SuspendOfflineHideForCombat()
         end
@@ -4987,22 +5095,22 @@ do
         if event == "PLAYER_REGEN_ENABLED" and GF._offlineHideAnyEnabled and GF.RefreshOfflineHiddenFrames then
             GF.RefreshOfflineHiddenFrames()
         end
+        if not inCombat then
+            GF._QueueRangeRefreshBurst()
+        end
     end
     H.PLAYER_REGEN_ENABLED = H.PLAYER_REGEN_DISABLED
 
-    do
-        local function RefreshRangeFadeDelayed()
-            if GF.RefreshRangeFade then GF.RefreshRangeFade() end
-        end
-        local function QueueRangeRefresh()
-            _MSUF_ScheduleDelayOnce("GF_RANGE_REFRESH", 0.05, RefreshRangeFadeDelayed)
-        end
-        H.SPELLS_CHANGED = QueueRangeRefresh
-        H.ACTIVE_PLAYER_SPECIALIZATION_CHANGED = QueueRangeRefresh
-        H.PLAYER_TALENT_UPDATE = QueueRangeRefresh
-        H.TRAIT_CONFIG_UPDATED = QueueRangeRefresh
-        H.PLAYER_ENTERING_WORLD = QueueRangeRefresh
-    end
+    H.SPELLS_CHANGED = GF._QueueRangeRefreshBurst
+    H.ACTIVE_PLAYER_SPECIALIZATION_CHANGED = GF._QueueRangeRefreshBurst
+    H.PLAYER_TALENT_UPDATE = GF._QueueRangeRefreshBurst
+    H.TRAIT_CONFIG_UPDATED = GF._QueueRangeRefreshBurst
+    H.PLAYER_ENTERING_WORLD = GF._QueueRangeRefreshBurst
+    H.PLAYER_STARTED_MOVING = GF._QueueRangeRefreshBurstOOC
+    H.PLAYER_STOPPED_MOVING = GF._QueueRangeRefreshBurstOOC
+    H.UNIT_CONNECTION = GF._QueueRangeRefreshBurst
+    H.PARTY_MEMBER_ENABLE = GF._QueueRangeRefreshBurst
+    H.PARTY_MEMBER_DISABLE = GF._QueueRangeRefreshBurst
 
     H.PLAYER_FOCUS_CHANGED = function()
         local oldFocus = _gfFocusFrame
@@ -5034,7 +5142,9 @@ do
             _gfFocusFrame  = nil
             _MSUF_ScheduleOnce("GF_ROSTER_FLUSH", _gfRosterFlush)
         end
+        GF._QueueRangeRefreshBurst()
     end
+    H.RAID_ROSTER_UPDATE = H.GROUP_ROSTER_UPDATE
 
     -- READY_CHECK / READY_CHECK_CONFIRM / READY_CHECK_FINISHED share one
     -- handler. The per-frame CB closes over UpdateReadyCheck and is freed

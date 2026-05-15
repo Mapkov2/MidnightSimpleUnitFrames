@@ -963,13 +963,35 @@ end
                 if unit == "target" and Events._targetSwapQueued then return end
 
                 local now = GetTime()
+                local infoIsTable = (type(updateInfo) == "table")
+                if infoIsTable and not updateInfo.isFullUpdate then
+                    local a = updateInfo.addedAuras
+                    local r = updateInfo.removedAuraInstanceIDs
+                    local u = updateInfo.updatedAuraInstanceIDs
+                    if (not a or a[1] == nil) and (not r or r[1] == nil) and (not u or u[1] == nil) then return end
+                end
+
                 local nextAt = _unitAuraPending[unit]
                 if nextAt and now < nextAt then
                     if not _refsBound then BindCachedRefs() end
-                    local invalid = _cachedInvalidUnit
-                    if invalid and not _unitAuraRescanQueued[unit] then
-                        _unitAuraRescanQueued[unit] = true
-                        invalid(unit)
+                    local forceRescan = true
+                    if not _unitAuraRescanQueued[unit] and infoIsTable and not updateInfo.isFullUpdate then
+                        local a = updateInfo.addedAuras
+                        local r = updateInfo.removedAuraInstanceIDs
+                        local u = updateInfo.updatedAuraInstanceIDs
+                        forceRescan = (a and a[5] ~= nil) or (r and r[5] ~= nil) or (u and u[9] ~= nil)
+                    end
+                    if forceRescan then
+                        local invalid = _cachedInvalidUnit
+                        if invalid and not _unitAuraRescanQueued[unit] then
+                            _unitAuraRescanQueued[unit] = true
+                            invalid(unit)
+                        end
+                    else
+                        local onAura = _cachedOnUnitAura
+                        if onAura then
+                            onAura(unit, updateInfo)
+                        end
                     end
                     -- Correctness guard: refresh/removal deltas can arrive inside
                     -- the coalesce window after the previous render already ran.
@@ -977,14 +999,6 @@ end
                     -- delayed flush when delay == 0, so force the render forward.
                     MarkDirty(unit, 0)
                     return
-                end
-
-                local infoIsTable = (type(updateInfo) == "table")
-                if infoIsTable and not updateInfo.isFullUpdate then
-                    local a = updateInfo.addedAuras
-                    local r = updateInfo.removedAuraInstanceIDs
-                    local u = updateInfo.updatedAuraInstanceIDs
-                    if (not a or a[1] == nil) and (not r or r[1] == nil) and (not u or u[1] == nil) then return end
                 end
 
                 if not ShouldScheduleLiveRenderFast(unit, self, now) then
