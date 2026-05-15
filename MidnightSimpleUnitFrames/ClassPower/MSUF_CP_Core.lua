@@ -185,58 +185,55 @@ builders.LAYOUT = function(E)
         local tickW = tonumber(b.classPowerTickWidth) or 1
         if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
 
-        local outlineThick = tonumber(b.classPowerOutline) or 1
-        if outlineThick < 0 then outlineThick = 0 elseif outlineThick > 4 then outlineThick = 4 end
         local snap = _G.MSUF_Snap
-        local outlineEdge = (outlineThick > 0 and type(snap) == "function") and snap(CP.container, outlineThick) or outlineThick
-        if not outlineEdge or outlineEdge < 0 then outlineEdge = 0 end
-        local outlinePad = outlineEdge * 2
 
         local widthMode = b.classPowerWidthMode or "player"
-        local outerW
+        local userW
 
         local cdmName = CPConst.CDM_FRAMES[widthMode]
         if cdmName then
             local cachedW = (layoutCache and tonumber(layoutCache["width:" .. cdmName])) or tonumber(CP.container._msufStableWidth)
             if inLockdown and cachedW and cachedW >= 30 then
-                outerW = cachedW
+                userW = cachedW
             else
                 local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
                 if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() then
                     local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
                     if type(cdmWidthFn) == "function" then
-                        outerW = cdmWidthFn(cdmFrame, CP.container)
+                        userW = cdmWidthFn(cdmFrame, CP.container)
                     end
                 end
             end
-            if not outerW or outerW < 30 then
-                outerW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
-                if outerW < 30 then
+            if not userW or userW < 30 then
+                userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
+                if userW < 30 then
                     local playerConf = MSUF_DB and MSUF_DB.player
-                    outerW = ((playerConf and tonumber(playerConf.width)) or 275)
+                    userW = ((playerConf and tonumber(playerConf.width)) or 275)
                 end
-                outerW = outerW - 4
+                userW = userW - 4
             end
         elseif widthMode == "custom" then
-            outerW = tonumber(b.classPowerWidth) or 0
-            if outerW < 30 then
-                outerW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
-                if outerW < 30 then
+            userW = tonumber(b.classPowerWidth) or 0
+            if userW < 30 then
+                userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
+                if userW < 30 then
                     local playerConf = MSUF_DB and MSUF_DB.player
-                    outerW = ((playerConf and tonumber(playerConf.width)) or 275)
+                    userW = ((playerConf and tonumber(playerConf.width)) or 275)
                 end
-                outerW = outerW - 4
+                userW = userW - 4
             end
         else
-            outerW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
-            if outerW < 30 then
+            userW = (playerFrame and playerFrame.GetWidth and math_floor(playerFrame:GetWidth() + 0.5)) or 0
+            if userW < 30 then
                 local playerConf = MSUF_DB and MSUF_DB.player
-                outerW = ((playerConf and tonumber(playerConf.width)) or 275)
+                userW = ((playerConf and tonumber(playerConf.width)) or 275)
             end
-            outerW = outerW - 4
+            userW = userW - 4
         end
-        local userW = outerW - outlinePad
-        if userW < 1 then userW = 1 end
+        if type(snap) == "function" then
+            userW = snap(CP.container, userW)
+        end
+        if not userW or userW < 1 then userW = 1 end
 
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
@@ -285,26 +282,27 @@ builders.LAYOUT = function(E)
                 elseif type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
                     _G.MSUF_ScheduleLateAnchorReanchor()
                 end
-                CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX + outlineEdge, -(2 - oY) - outlineEdge)
+                CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
                 CP.container._msufDirectCooldownAnchor = nil
                 CP.container._msufHardLockPoint = nil
             end
         else
-            CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX + outlineEdge, -(2 - oY) - outlineEdge)
+            CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
             CP.container._msufDirectCooldownAnchor = nil
             CP.container._msufHardLockPoint = nil
         end
         CP.container._msufLayoutInitialized = true
-        CP.container._msufStableWidth = outerW
-        CP.container._msufStableContentWidth = userW
+        CP.container._msufStableWidth = userW
         CP._layoutDirty = nil
         _G.MSUF_ClassPowerLayoutDirty = nil
-        if not inLockdown and layoutCache and cdmName and outerW and outerW >= 30 then
-            layoutCache["width:" .. cdmName] = math_floor(outerW + 0.5)
+        if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
+            layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
 
-        if outlineEdge > 0 then
-            local edge = outlineEdge
+        local outlineThick = tonumber(b.classPowerOutline) or 1
+        if outlineThick < 0 then outlineThick = 0 elseif outlineThick > 4 then outlineThick = 4 end
+
+        if outlineThick > 0 then
             if not CP._outline then
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
                 local ol = CreateFrame("Frame", nil, CP.container, tpl)
@@ -312,18 +310,23 @@ builders.LAYOUT = function(E)
                 CP._outline = ol
                 CP._outlineEdge = -1
             end
-            -- Frame level above bars (bars inherit container+1, outline must be higher)
-            CP._outline:SetFrameLevel(CP.container:GetFrameLevel() + 3)
-            if CP._outlineEdge ~= edge then
-                CP._outline:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edge })
-                CP._outline:SetBackdropColor(0, 0, 0, 0)
-                CP._outline:SetBackdropBorderColor(0, 0, 0, 1)
-                CP._outlineEdge = edge
+            local edge = (type(snap) == "function") and snap(CP._outline, outlineThick) or outlineThick
+            if not edge or edge <= 0 then
+                CP._outline:Hide()
+            else
+                -- Frame level above bars (bars inherit container+1, outline must be higher)
+                CP._outline:SetFrameLevel(CP.container:GetFrameLevel() + 3)
+                if CP._outlineEdge ~= edge then
+                    CP._outline:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edge })
+                    CP._outline:SetBackdropColor(0, 0, 0, 0)
+                    CP._outline:SetBackdropBorderColor(0, 0, 0, 1)
+                    CP._outlineEdge = edge
+                end
+                CP._outline:ClearAllPoints()
+                CP._outline:SetPoint("TOPLEFT", CP.container, "TOPLEFT", -edge, edge)
+                CP._outline:SetPoint("BOTTOMRIGHT", CP.container, "BOTTOMRIGHT", edge, -edge)
+                CP._outline:Show()
             end
-            CP._outline:ClearAllPoints()
-            CP._outline:SetPoint("TOPLEFT", CP.container, "TOPLEFT", -edge, edge)
-            CP._outline:SetPoint("BOTTOMRIGHT", CP.container, "BOTTOMRIGHT", edge, -edge)
-            CP._outline:Show()
         else
             if CP._outline then CP._outline:Hide() end
         end
@@ -408,7 +411,7 @@ builders.LAYOUT = function(E)
         if conf and conf.powerBarDetached == true then
             if conf.detachedPowerBarSyncClassPower == true then
                 if not inLockdown then
-                    conf.detachedPowerBarWidth = math_floor(outerW + 0.5)
+                    conf.detachedPowerBarWidth = math_floor(userW + 0.5)
                 end
                 needPBRefresh = true
             end

@@ -126,20 +126,421 @@ local function IsEditModeCombatLocked()
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
 
+local QUICK_SETUP_FLAG = "quickSetupClassBarOffered"
+local QUICK_CP_HEIGHT = 4
+local QUICK_DPB_HEIGHT = 6
+local QUICK_DPB_GAP = 2
+local QUICK_CDM_GAP = 2
+local QUICK_FALLBACK_Y_FRAC = 0.60
+
+local QUICK_BARS_KEYS = {
+    "showClassPower",
+    "classPowerShowText",
+    "classPowerAnchorToCooldown",
+    "classPowerWidthMode",
+    "showEleMaelstrom",
+    "showEbonMight",
+    "showChargedComboPoints",
+    "runeShowTime",
+    "runeShowTimeText",
+    "classPowerOffsetX",
+    "classPowerOffsetY",
+    "classPowerOutline",
+    "detachedPowerBarWidthMode",
+    "detachedPowerBarOutline",
+}
+
+local QUICK_PLAYER_KEYS = {
+    "powerBarDetached",
+    "detachedPowerBarSyncClassPower",
+    "detachedPowerBarAnchorToClassPower",
+    "detachedPowerBarTextOnBar",
+    "detachedPowerBarOffsetX",
+    "detachedPowerBarOffsetY",
+    "hpPowerTextOverride",
+    "hpTextMode",
+    "powerTextMode",
+    "hpTextSeparator",
+    "powerTextSeparator",
+    "hpTextSpacerEnabled",
+    "hpTextSpacerX",
+    "powerTextSpacerEnabled",
+    "powerTextSpacerX",
+    "absorbTextMode",
+    "absorbAnchorMode",
+    "hpTextAnchor",
+    "powerTextAnchor",
+}
+
+local quickSetupUndoSnapshot
+local quickSetupFirstRunChecked = false
+
+local function QuickTr(text)
+    return (M.Tr and M.Tr(text)) or text
+end
+
+local function QuickCopyValue(value)
+    if type(value) ~= "table" then return value end
+    if type(DeepCopyTable) == "function" then return DeepCopyTable(value) end
+    if type(CopyTable) == "function" then return CopyTable(value) end
+    local out = {}
+    for k, v in pairs(value) do out[k] = QuickCopyValue(v) end
+    return out
+end
+
+local function QuickSnapshot()
+    local db = M.EnsureDB()
+    local snap = { bars = {}, player = {} }
+    local bars = db.bars or {}
+    local player = db.player or {}
+    for i = 1, #QUICK_BARS_KEYS do
+        local key = QUICK_BARS_KEYS[i]
+        snap.bars[key] = QuickCopyValue(bars[key])
+    end
+    for i = 1, #QUICK_PLAYER_KEYS do
+        local key = QUICK_PLAYER_KEYS[i]
+        snap.player[key] = QuickCopyValue(player[key])
+    end
+    return snap
+end
+
+local function QuickRestore(snap)
+    if type(snap) ~= "table" then return end
+    local db = M.EnsureDB()
+    db.bars = db.bars or {}
+    db.player = db.player or {}
+    if type(snap.bars) == "table" then
+        for i = 1, #QUICK_BARS_KEYS do
+            local key = QUICK_BARS_KEYS[i]
+            db.bars[key] = QuickCopyValue(snap.bars[key])
+        end
+    end
+    if type(snap.player) == "table" then
+        for i = 1, #QUICK_PLAYER_KEYS do
+            local key = QUICK_PLAYER_KEYS[i]
+            db.player[key] = QuickCopyValue(snap.player[key])
+        end
+    end
+end
+
+local function QuickGetVisibleCDM()
+    local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
+        or _G.EssentialCooldownViewer
+    if ecv and ecv.IsShown and ecv:IsShown() and ecv.GetHeight and ecv.GetCenter then
+        local h = ecv:GetHeight()
+        if type(h) == "number" and h > 0 then return ecv end
+    end
+    return nil
+end
+
+local function QuickPlayerFrame()
+    return (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player) or _G.MSUF_player
+end
+
+local function QuickClassPowerVisible()
+    local c = _G.MSUF_ClassPowerContainer
+    return c and c.IsShown and c:IsShown()
+end
+
+local function QuickCalcCPAboveCDM(ecv)
+    local bars = Bars()
+    local player = M.EnsureDB().player or {}
+    local cpH = tonumber(bars.classPowerHeight) or QUICK_CP_HEIGHT
+    local dpbH = tonumber(player.detachedPowerBarHeight) or QUICK_DPB_HEIGHT
+    local ecvH = (ecv and ecv.GetHeight and ecv:GetHeight()) or 0
+    return {
+        cpOffsetX = 0,
+        cpOffsetY = math.ceil(ecvH + QUICK_CDM_GAP + cpH + QUICK_DPB_GAP + dpbH),
+        dpbOffsetX = 0,
+        dpbOffsetY = -QUICK_DPB_GAP,
+        anchorCPtoCDM = true,
+        anchorDPBtoCP = true,
+    }
+end
+
+local function QuickCalcDPBAboveCDMNoCP(ecv)
+    local player = M.EnsureDB().player or {}
+    local dpbH = tonumber(player.detachedPowerBarHeight) or QUICK_DPB_HEIGHT
+    local fallback = {
+        cpOffsetX = 0, cpOffsetY = 0,
+        dpbOffsetX = 0, dpbOffsetY = -QUICK_DPB_GAP,
+        anchorCPtoCDM = true, anchorDPBtoCP = true,
+    }
+    local pf = QuickPlayerFrame()
+    if not (pf and pf.GetLeft and pf.GetBottom and pf.GetEffectiveScale and ecv and ecv.GetCenter and ecv.GetTop and ecv.GetWidth) then
+        return fallback
+    end
+    local pfLeft, pfBottom = pf:GetLeft(), pf:GetBottom()
+    if not (pfLeft and pfBottom) then return fallback end
+    local pfScale = (pf.GetEffectiveScale and pf:GetEffectiveScale()) or 1
+    local ecvScale = (ecv.GetEffectiveScale and ecv:GetEffectiveScale()) or 1
+    if pfScale <= 0 then pfScale = 1 end
+    if ecvScale <= 0 then ecvScale = 1 end
+
+    local ecvCenterX = (select(1, ecv:GetCenter()) or 0) * ecvScale
+    local ecvTop = (ecv:GetTop() or 0) * ecvScale
+    local ecvWidth = (ecv:GetWidth() or 200) * ecvScale
+    local targetLeft = ecvCenterX - (ecvWidth * 0.5)
+    local targetTop = ecvTop + QUICK_CDM_GAP * pfScale + dpbH * pfScale
+
+    return {
+        cpOffsetX = 0,
+        cpOffsetY = 0,
+        dpbOffsetX = floor((targetLeft - pfLeft * pfScale) / pfScale + 0.5),
+        dpbOffsetY = floor((targetTop - pfBottom * pfScale) / pfScale + 0.5),
+        anchorCPtoCDM = true,
+        anchorDPBtoCP = false,
+    }
+end
+
+local function QuickCalcScreenCenter()
+    local fallback = {
+        cpOffsetX = 0, cpOffsetY = 0,
+        dpbOffsetX = 0, dpbOffsetY = -QUICK_DPB_GAP,
+        anchorCPtoCDM = false, anchorDPBtoCP = true,
+    }
+    local pf = QuickPlayerFrame()
+    if not (pf and pf.GetLeft and pf.GetTop and pf.GetWidth and pf.GetEffectiveScale) then return fallback end
+    local pfLeft, pfTop, pfW = pf:GetLeft(), pf:GetTop(), pf:GetWidth()
+    if not (pfLeft and pfTop and pfW) then return fallback end
+    local pfScale = (pf:GetEffectiveScale()) or 1
+    if pfScale <= 0 then pfScale = 1 end
+    local uip = UIParent
+    local uipScale = (uip and uip.GetEffectiveScale and uip:GetEffectiveScale()) or 1
+    if uipScale <= 0 then uipScale = 1 end
+    local screenW = (uip and uip.GetWidth and uip:GetWidth()) or 1920
+    local screenH = (uip and uip.GetHeight and uip:GetHeight()) or 1080
+    local cpW = floor((pfW or 275) + 0.5)
+    if cpW < 30 then cpW = 275 end
+    return {
+        cpOffsetX = floor((screenW * uipScale * 0.5) / pfScale - pfLeft - 2 - cpW * 0.5 + 0.5),
+        cpOffsetY = floor((screenH * uipScale * QUICK_FALLBACK_Y_FRAC) / pfScale - pfTop + 2 + 0.5),
+        dpbOffsetX = 0,
+        dpbOffsetY = -QUICK_DPB_GAP,
+        anchorCPtoCDM = false,
+        anchorDPBtoCP = true,
+    }
+end
+
+local function QuickApplyPhase1(offsets)
+    local db = M.EnsureDB()
+    db.bars = db.bars or {}
+    db.player = db.player or {}
+    local bars = db.bars
+    local player = db.player
+    local general = db.general or {}
+
+    bars.showClassPower = true
+    bars.classPowerShowText = true
+    bars.classPowerAnchorToCooldown = offsets.anchorCPtoCDM and true or false
+    bars.classPowerWidthMode = "cooldown"
+    bars.detachedPowerBarWidthMode = "cooldown"
+    bars.showEleMaelstrom = true
+    bars.showEbonMight = true
+    bars.showChargedComboPoints = true
+    bars.runeShowTime = true
+    bars.runeShowTimeText = true
+    bars.classPowerOffsetX = offsets.cpOffsetX
+    bars.classPowerOffsetY = offsets.cpOffsetY
+    bars.classPowerOutline = 1
+    bars.detachedPowerBarOutline = 1
+
+    player.powerBarDetached = true
+    player.detachedPowerBarSyncClassPower = offsets.anchorDPBtoCP and true or false
+    player.detachedPowerBarAnchorToClassPower = offsets.anchorDPBtoCP and true or false
+    player.detachedPowerBarTextOnBar = true
+    player.detachedPowerBarOffsetX = offsets.dpbOffsetX
+    player.detachedPowerBarOffsetY = offsets.dpbOffsetY
+    player.hpPowerTextOverride = true
+
+    if player.hpTextMode == nil then player.hpTextMode = general.hpTextMode end
+    if player.powerTextMode == nil then player.powerTextMode = general.powerTextMode end
+    if player.hpTextSeparator == nil then player.hpTextSeparator = general.hpTextSeparator end
+    if player.powerTextSeparator == nil then player.powerTextSeparator = general.powerTextSeparator or general.hpTextSeparator end
+    if player.hpTextSpacerEnabled == nil then player.hpTextSpacerEnabled = general.hpTextSpacerEnabled end
+    if player.hpTextSpacerX == nil then player.hpTextSpacerX = general.hpTextSpacerX end
+    if player.powerTextSpacerEnabled == nil then player.powerTextSpacerEnabled = general.powerTextSpacerEnabled end
+    if player.powerTextSpacerX == nil then player.powerTextSpacerX = general.powerTextSpacerX end
+    if player.absorbTextMode == nil then player.absorbTextMode = general.absorbTextMode end
+    if player.absorbAnchorMode == nil then player.absorbAnchorMode = general.absorbAnchorMode end
+    if player.hpTextAnchor == nil then player.hpTextAnchor = general.hpTextAnchor end
+    if player.powerTextAnchor == nil then player.powerTextAnchor = general.powerTextAnchor end
+    player.powerTextMode = "CURRENT"
+end
+
+local function QuickApplyPhase2NoCP(offsets)
+    local db = M.EnsureDB()
+    db.player = db.player or {}
+    local player = db.player
+    player.detachedPowerBarSyncClassPower = offsets.anchorDPBtoCP and true or false
+    player.detachedPowerBarAnchorToClassPower = offsets.anchorDPBtoCP and true or false
+    player.detachedPowerBarOffsetX = offsets.dpbOffsetX
+    player.detachedPowerBarOffsetY = offsets.dpbOffsetY
+end
+
+local function QuickRefreshAll(reason)
+    ApplyClassPower()
+    ApplyDetachedPowerBarOutline()
+    CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, false, true, reason or "ClassPowerQuickSetup")
+end
+
+local function QuickMarkOffered()
+    local db = M.EnsureDB()
+    db.general = db.general or {}
+    db.general[QUICK_SETUP_FLAG] = true
+end
+
+local function QuickWasOffered()
+    local db = M.EnsureDB()
+    return db.general and db.general[QUICK_SETUP_FLAG] == true
+end
+
+local function QuickEnsurePopups()
+    if not _G.StaticPopupDialogs then return end
+    if not _G.StaticPopupDialogs.MSUF2_CLASSPOWER_QUICK_RESULT then
+        _G.StaticPopupDialogs.MSUF2_CLASSPOWER_QUICK_RESULT = {
+            text = "%s",
+            button1 = OKAY,
+            button2 = QuickTr("Undo"),
+            OnAccept = function() quickSetupUndoSnapshot = nil end,
+            OnCancel = function()
+                if quickSetupUndoSnapshot then
+                    QuickRestore(quickSetupUndoSnapshot)
+                    quickSetupUndoSnapshot = nil
+                    QuickRefreshAll("ClassPowerQuickSetupUndo")
+                end
+            end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = false,
+            preferredIndex = 3,
+        }
+    end
+    if not _G.StaticPopupDialogs.MSUF2_CLASSPOWER_QUICK_OFFER then
+        _G.StaticPopupDialogs.MSUF2_CLASSPOWER_QUICK_OFFER = {
+            text = QuickTr("Welcome to Class Resources!\n\n"
+                .. "Would you like to automatically set up a\n"
+                .. "detached Class Bar positioned above your\n"
+                .. "Essential Cooldowns?\n\n"
+                .. "This configures class resources, power bar,\n"
+                .. "anchoring and width matching in one click.\n\n"
+                .. "You can always run this later via the\n"
+                .. "|cff00ff00Quick Setup: Class Bar|r button below."),
+            button1 = QuickTr("Setup Now"),
+            button2 = QuickTr("Not Now"),
+            OnAccept = function()
+                QuickMarkOffered()
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(0.05, function()
+                        if _G.MSUF2_ClassPowerQuickSetup then _G.MSUF2_ClassPowerQuickSetup() end
+                    end)
+                elseif _G.MSUF2_ClassPowerQuickSetup then
+                    _G.MSUF2_ClassPowerQuickSetup()
+                end
+            end,
+            OnCancel = QuickMarkOffered,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            showAlert = true,
+        }
+    end
+end
+
+local function ExecuteQuickSetup()
+    QuickEnsurePopups()
+    QuickMarkOffered()
+    local ecv = QuickGetVisibleCDM()
+    local offsets = ecv and QuickCalcCPAboveCDM(ecv) or QuickCalcScreenCenter()
+
+    quickSetupUndoSnapshot = QuickSnapshot()
+    QuickApplyPhase1(offsets)
+    ApplyClassPower()
+
+    local popupText
+    if ecv and not QuickClassPowerVisible() then
+        QuickApplyPhase2NoCP(QuickCalcDPBAboveCDMNoCP(ecv))
+        popupText = "Quick Setup applied!\n\nPower Bar is positioned above\nEssential Cooldowns.\n\nYour spec has no class resource bar.\nIf you respec, it will appear automatically.\n\nUse Edit Mode for fine-tuning."
+    elseif ecv then
+        popupText = "Quick Setup applied!\n\nClass Power + Power Bar are now\npositioned above Essential Cooldowns.\n\nUse Edit Mode for fine-tuning."
+    else
+        popupText = "Quick Setup applied!\n\nClass Power + Power Bar are detached\nand positioned at screen center.\n\nEssential Cooldowns not detected.\nEnable it for automatic anchoring.\n\nUse Edit Mode for fine-tuning."
+    end
+
+    QuickRefreshAll("ClassPowerQuickSetup")
+    if StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_RESULT", QuickTr(popupText)) end
+end
+
+_G.MSUF2_ClassPowerQuickSetup = ExecuteQuickSetup
+_G.MSUF_QuickSetup_ResetFirstRun = function()
+    local db = M.EnsureDB()
+    db.general = db.general or {}
+    db.general[QUICK_SETUP_FLAG] = nil
+    quickSetupFirstRunChecked = false
+end
+
+local function MaybeOfferQuickSetup()
+    if quickSetupFirstRunChecked or QuickWasOffered() then return end
+    quickSetupFirstRunChecked = true
+    QuickEnsurePopups()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.15, function()
+            if not QuickWasOffered() and StaticPopup_Show then
+                StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_OFFER")
+            end
+        end)
+    elseif StaticPopup_Show then
+        StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_OFFER")
+    end
+end
+
 local function BuildClassPower(ctx)
     local b = W.PageBuilder(ctx)
-    local head = b:Header("Class Resources", "Native class-resource layout, visibility and text controls.", 64)
+    local head = b:Header("Class Resources", "Native class-resource layout, visibility and text controls.", 94)
 
     local colors = T.Button(head, "Class Color", 112, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(colors) end
-    colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -20)
+    colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
     colors:SetScript("OnClick", function() M.SelectPage("opt_colors") end)
 
     local edit = T.Button(head, "MSUF Edit Mode", 128, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(edit) end
     edit:SetPoint("RIGHT", colors, "LEFT", -10, 0)
+
+    local quickSetup = T.Button(head, "Quick Setup: Class Bar", 158, 24)
+    if W.StyleTopActionButton then W.StyleTopActionButton(quickSetup) end
+    quickSetup:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -54)
+    quickSetup:SetScript("OnClick", ExecuteQuickSetup)
+    quickSetup:SetScript("OnEnter", function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine(QuickTr("Quick Setup: Detached Class Bar"), 1, 1, 1)
+        GameTooltip:AddLine(QuickTr("One-click setup for a ready-to-use class bar:"), 0.85, 0.85, 0.85, true)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(QuickTr("Detaches power bar from unit frame"), 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(QuickTr("Positions class bar ABOVE Essential Cooldowns"), 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(QuickTr("Match width: Essential Cooldowns"), 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(QuickTr("Syncs & anchors power bar to class resources"), 0.7, 0.7, 0.7, true)
+        GameTooltip:AddLine(" ")
+        local ecv = QuickGetVisibleCDM()
+        if ecv and QuickClassPowerVisible() then
+            GameTooltip:AddLine(QuickTr("CDM + Class Power detected"), 0.3, 0.9, 0.3)
+        elseif ecv then
+            GameTooltip:AddLine(QuickTr("CDM detected (no class resource for this spec)"), 0.9, 0.8, 0.3)
+        else
+            GameTooltip:AddLine(QuickTr("CDM not visible - will center on screen"), 0.9, 0.7, 0.3)
+        end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(QuickTr("Click to apply. Undo available in popup."), 0.5, 0.8, 0.5)
+        GameTooltip:Show()
+    end)
+    quickSetup:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
     if W.CreatePageResetButton then
-        W.CreatePageResetButton(ctx, head, edit, { width = 88 })
+        W.CreatePageResetButton(ctx, head, quickSetup, { width = 88 })
     end
     local function RefreshEditButton()
         local active = IsMSUFEditModeActive()
@@ -338,6 +739,7 @@ local function BuildClassPower(ctx)
         SetControlEnabled(altManaToggle, true)
         SetControlEnabled(cpEnable, true)
     end)
+    MaybeOfferQuickSetup()
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
