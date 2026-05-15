@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $ChangelogPath = Join-Path $RepoRoot "CHANGELOG.md"
 $AddonChangelogScript = Join-Path $RepoRoot "tools/update-addon-changelog.ps1"
+$AutoChangelogScript = Join-Path $RepoRoot "tools/MSUF-AutoChangelog.ps1"
 $PackageScript = Join-Path $RepoRoot "tools/package-release.ps1"
 $script:LogBox = $null
 
@@ -613,6 +614,24 @@ function Start-LocalPreparation {
     }
 }
 
+function Update-AutoChangelogFromRepo {
+    param(
+        [Parameter(Mandatory = $true)][string]$DisplayVersion,
+        [AllowNull()][string]$BaseRef
+    )
+
+    if (-not (Test-Path -LiteralPath $AutoChangelogScript)) {
+        throw "Missing auto changelog tool: $AutoChangelogScript"
+    }
+
+    $args = @("-DisplayVersion", $DisplayVersion, "-RegenerateAddonChangelog")
+    if (-not [string]::IsNullOrWhiteSpace($BaseRef)) {
+        $args += @("-BaseRef", $BaseRef)
+    }
+
+    Invoke-PowerShellScript $AutoChangelogScript $args
+}
+
 if ($NoGui) {
     Write-ReleaseLog "NoGui mode is only a syntax/load check for this helper."
     return
@@ -847,6 +866,30 @@ $loadCommitsButton.Add_Click({
     }
 })
 $form.Controls.Add($loadCommitsButton)
+
+$autoChangelogButton = New-Object System.Windows.Forms.Button
+$autoChangelogButton.Text = "Auto Changelog"
+$autoChangelogButton.Location = New-Object System.Drawing.Point(16, 580)
+$autoChangelogButton.Size = New-Object System.Drawing.Size(145, 32)
+$autoChangelogButton.Add_Click({
+    try {
+        $tag = Normalize-ReleaseVersion $tagBox.Text
+        $display = $displayBox.Text.Trim()
+        if ([string]::IsNullOrWhiteSpace($display)) { $display = Convert-TagToDisplayVersion $tag }
+        $baseRef = $baseRefBox.Text.Trim()
+
+        Update-AutoChangelogFromRepo -DisplayVersion $display -BaseRef $baseRef
+        $section = Find-ChangelogSection -ReleaseTag $tag -DisplayVersion $display
+        $mdBox.Text = $section.Markdown
+        Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
+        $useMarkdownBox.Checked = $true
+        Write-ReleaseLog ("Auto changelog updated from repo changes for " + $display)
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+    }
+})
+$form.Controls.Add($autoChangelogButton)
 
 $fillFieldsButton = New-Object System.Windows.Forms.Button
 $fillFieldsButton.Text = "Map Markdown"

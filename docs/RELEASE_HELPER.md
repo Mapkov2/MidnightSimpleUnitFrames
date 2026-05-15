@@ -57,6 +57,20 @@ build the section from the structured text areas instead.
 Use **Map Markdown** after editing the Markdown field manually if you want to
 re-fill the structured text areas from that Markdown.
 
+Use **Auto Changelog** to update the selected release section directly from the
+current repository state. It reads commits from **Since ref** to `HEAD`, adds
+working-tree changes, writes managed auto blocks into `CHANGELOG.md`, regenerates
+`MidnightSimpleUnitFrames\Foundation\MSUF_Changelog.lua`, then reloads the
+section into the helper UI.
+
+The auto changelog ignores `CHANGELOG.md`, the generated in-game changelog, docs,
+workflow files, and release helper/tooling changes by default, so user-facing
+release notes stay focused on addon behavior. For a background watcher, run:
+
+```text
+tools\MSUF-AutoChangelog.cmd
+```
+
 The release tag can be tag-friendly, for example:
 
 ```text
