@@ -105,7 +105,7 @@ Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_Castbars")
 Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc") -TocVersion $releaseVersion
 Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames_Castbars/MidnightSimpleUnitFrames_Castbars.toc") -TocVersion $releaseVersion
 
-$zipPath = Join-Path $outputPath "MSUF-$fileVersion.zip"
+$zipPath = Join-Path $outputPath "MidnightSimpleUnitFrames$fileVersion.zip"
 if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }
