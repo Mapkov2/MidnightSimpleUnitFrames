@@ -127,6 +127,13 @@ local data = {
                         "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupLayout.lua).",
                     },
                 },
+                {
+                    title = "Changes / Improvements",
+                    bullets = {
+                        "Core Runtime, Foundation, Group Frames: Class color background (3c023d2; Core/MSUF_BarBackgroundRuntime.lua, Core/MSUF_ColorsCore.lua, Core/MSUF_UnitframeCore.lua +2 more).",
+                        "Menu / Dashboard: Some user friendly stuff (f4430da; Menu2/MSUF_Menu2_Core.lua, Menu2/MSUF_Menu2_Support.lua, Menu2/Pages/MSUF_Menu2_Advanced.lua +9 more).",
+                    },
+                },
             },
         },
     },

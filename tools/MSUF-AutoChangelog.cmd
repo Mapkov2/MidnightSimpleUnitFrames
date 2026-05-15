@@ -1,3 +1,7 @@
 @echo off
 setlocal
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0MSUF-AutoChangelog.ps1" -Watch -RegenerateAddonChangelog %*
+if "%~1"=="" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0MSUF-AutoChangelog.ps1" -Gui
+) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0MSUF-AutoChangelog.ps1" %*
+)

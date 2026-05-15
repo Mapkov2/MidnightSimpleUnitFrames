@@ -621,7 +621,9 @@ function Start-LocalPreparation {
 function Update-AutoChangelogFromRepo {
     param(
         [Parameter(Mandatory = $true)][string]$DisplayVersion,
-        [AllowNull()][string]$BaseRef
+        [AllowNull()][string]$BaseRef,
+        [AllowNull()][string]$ReleaseDate,
+        [bool]$CreateMissingRelease = $true
     )
 
     if (-not (Test-Path -LiteralPath $AutoChangelogScript)) {
@@ -629,6 +631,12 @@ function Update-AutoChangelogFromRepo {
     }
 
     $args = @("-DisplayVersion", $DisplayVersion, "-RegenerateAddonChangelog")
+    if (-not [string]::IsNullOrWhiteSpace($ReleaseDate)) {
+        $args += @("-ReleaseDate", $ReleaseDate)
+    }
+    if ($CreateMissingRelease) {
+        $args += "-CreateMissingRelease"
+    }
     if (-not [string]::IsNullOrWhiteSpace($BaseRef)) {
         $args += @("-BaseRef", $BaseRef)
     }
@@ -880,9 +888,11 @@ $autoChangelogButton.Add_Click({
         $tag = Normalize-ReleaseVersion $tagBox.Text
         $display = $displayBox.Text.Trim()
         if ([string]::IsNullOrWhiteSpace($display)) { $display = Convert-TagToDisplayVersion $tag }
+        $date = $dateBox.Text.Trim()
+        if ($date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "Date must be YYYY-MM-DD." }
         $baseRef = $baseRefBox.Text.Trim()
 
-        Update-AutoChangelogFromRepo -DisplayVersion $display -BaseRef $baseRef
+        Update-AutoChangelogFromRepo -DisplayVersion $display -BaseRef $baseRef -ReleaseDate $date -CreateMissingRelease $true
         $section = Find-ChangelogSection -ReleaseTag $tag -DisplayVersion $display
         $mdBox.Text = $section.Markdown
         Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null

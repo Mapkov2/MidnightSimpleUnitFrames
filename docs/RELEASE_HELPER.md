@@ -61,15 +61,43 @@ Use **Auto Changelog** to update the selected release section directly from the
 current repository state. It reads commits from **Since ref** to `HEAD`, adds
 working-tree changes, writes managed auto blocks into `CHANGELOG.md`, regenerates
 `MidnightSimpleUnitFrames\Foundation\MSUF_Changelog.lua`, then reloads the
-section into the helper UI.
+section into the helper UI. If the selected version does not exist yet, it
+creates a new release section using the selected date.
 
-The auto changelog ignores `CHANGELOG.md`, the generated in-game changelog, docs,
-workflow files, and release helper/tooling changes by default, so user-facing
-release notes stay focused on addon behavior. For a background watcher, run:
+## Auto Changelog UI
+
+The standalone auto changelog launcher opens a smaller UI:
 
 ```text
 tools\MSUF-AutoChangelog.cmd
 ```
+
+Use it to set:
+
+- **Changelog title**: the exact `##` release heading to update
+- **Date**: the date used when the release section has to be created
+- **Since ref**: the previous tag or commit used as the Git range start
+- **Create missing release**: inserts a new `## <version> - <date>` section
+  below `# Changelog` when the selected title does not exist yet
+- **Regenerate addon changelog**: updates the in-game changelog Lua file too
+- **Include tooling/docs**: includes release tooling, docs, and workflow changes
+- **Poll seconds / Debounce seconds**: controls the background watcher timing
+
+The UI provides helpers for the latest `CHANGELOG.md` section, the `VERSION`
+file, the last Git tag, a non-writing preview, one-shot updates, and a managed
+watch mode.
+
+The auto changelog ignores `CHANGELOG.md`, the generated in-game changelog, docs,
+workflow files, and release helper/tooling changes by default, so user-facing
+release notes stay focused on addon behavior. For the old command-line watcher,
+run:
+
+```text
+tools\MSUF-AutoChangelog.cmd -Watch -RegenerateAddonChangelog
+```
+
+Add `-CreateMissingRelease -DisplayVersion "5.2" -ReleaseDate "2026-05-15"`
+when the command-line watcher should create a new release section automatically.
 
 The release tag can be tag-friendly, for example:
 
