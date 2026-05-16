@@ -146,6 +146,7 @@ function W.PageBuilder(ctx)
             entry.outer:SetHeight(entry.headerHeight + (open and entry.contentHeight or 0))
             entry.body:SetShown(open)
             T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
+            if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
             y = y - entry.outer:GetHeight() - 8
         end
         self.y = y
@@ -206,12 +207,9 @@ function W.PageBuilder(ctx)
 
         local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text)
         SetSearchText(label, title)
-        label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
-        label:SetPoint("RIGHT", header, "RIGHT", -140, 0)
         label:SetJustifyH("LEFT")
 
         local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
-        hint:SetPoint("RIGHT", header, "RIGHT", -12, 0)
         hint:SetJustifyH("RIGHT")
 
         local body = CreateFrame("Frame", nil, outer)
@@ -225,6 +223,8 @@ function W.PageBuilder(ctx)
         local entry = {
             outer = outer,
             header = header,
+            headerBg = headerBg,
+            headerHover = headerHover,
             body = body,
             arrow = arrow,
             label = label,
@@ -234,6 +234,22 @@ function W.PageBuilder(ctx)
             contentHeight = height or 120,
             stateKey = stateKey,
         }
+        local function RefreshHeaderLayout()
+            local headerW = (header.GetWidth and header:GetWidth()) or self.width or 240
+            local reserve = math.max(72, math.min(110, math.floor(headerW * 0.34 + 0.5)))
+            if not entry._msuf2ManualHintLayout then
+                hint:ClearAllPoints()
+                hint:SetPoint("RIGHT", header, "RIGHT", -12, 0)
+                hint:SetWidth(reserve)
+                hint:SetJustifyH("RIGHT")
+
+                label:ClearAllPoints()
+                label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
+                label:SetPoint("RIGHT", hint, "LEFT", -8, 0)
+                label:SetJustifyH("LEFT")
+            end
+        end
+        entry._msuf2RefreshLayout = RefreshHeaderLayout
         outer._msuf2CollapsibleEntry = entry
         body._msuf2CollapsibleEntry = entry
         self.collapsibles[#self.collapsibles + 1] = entry
@@ -242,8 +258,10 @@ function W.PageBuilder(ctx)
             M.accordionState[stateKey] = entry.open
             self:RelayoutCollapsibles()
         end)
+        header:HookScript("OnSizeChanged", RefreshHeaderLayout)
 
         self.y = self.y - outer:GetHeight() - 8
+        RefreshHeaderLayout()
         self:RelayoutCollapsibles()
         return body
     end

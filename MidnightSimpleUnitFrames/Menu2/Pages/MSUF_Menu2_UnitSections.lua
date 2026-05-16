@@ -248,10 +248,13 @@ local function BuildPreview(ctx, builder, unit)
 end
 
 local function BuildTopActions(ctx, builder, unit, label)
+    local compactTop = (tonumber(builder.width) or 0) < 600
+    local sectionH = compactTop and 72 or 30
     local sec = CreateFrame("Frame", nil, builder.parent)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
-    sec:SetSize(builder.width, 30)
-    builder.y = builder.y - 38
+    sec:SetSize(builder.width, sectionH)
+    sec._msuf2Width = builder.width
+    builder.y = builder.y - sectionH - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
 
     local line = sec:CreateTexture(nil, "ARTWORK")
@@ -343,7 +346,7 @@ local function BuildTopActions(ctx, builder, unit, label)
     end
 
     local editing = T.Font(sec, "GameFontNormalSmall", "Editing:", { 0.72, 0.82, 1.00, 1 })
-    editing:SetPoint("LEFT", sec, "LEFT", 8, 2)
+    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, compactTop and -15 or -6)
 
     local unitPill = MakeTopButton(sec, UnitTopLabel(unit), UnitTopPillWidth(unit), true, {
         bg = { 0.030, 0.045, 0.092, 0.94 },
@@ -355,16 +358,17 @@ local function BuildTopActions(ctx, builder, unit, label)
         activeBorder = { 0.205, 0.390, 0.820, 0.92 },
         activeTextColor = { 0.94, 0.98, 1.00, 1 },
     })
-    unitPill:SetPoint("LEFT", editing, "RIGHT", 8, 2)
+    unitPill:SetPoint("LEFT", editing, "RIGHT", 8, 0)
     unitPill:EnableMouse(false)
 
-    local copy = MakeTopButton(sec, "Copy To", 86, false, TOP_ACTION_STYLE)
-    copy:SetPoint("RIGHT", sec, "RIGHT", -8, 2)
+    local actionY = compactTop and -42 or -2
+    local copy = MakeTopButton(sec, "Copy To", compactTop and 82 or 86, false, TOP_ACTION_STYLE)
+    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
 
-    local edit = MakeTopButton(sec, "MSUF Edit Mode", 128, false, TOP_ACTION_STYLE)
+    local edit = MakeTopButton(sec, "MSUF Edit Mode", compactTop and 118 or 128, false, TOP_ACTION_STYLE)
     edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
     if W.CreatePageResetButton then
-        W.CreatePageResetButton(ctx, sec, edit, { width = 88 })
+        W.CreatePageResetButton(ctx, sec, edit, { width = compactTop and 84 or 88 })
     end
 
     local function RefreshEditButton()
@@ -590,7 +594,7 @@ local function BuildTopActions(ctx, builder, unit, label)
 end
 
 local function BuildBasics(ctx, builder, unit, label)
-    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 72, false)
+    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 104, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 24
     local colW = math.floor((sectionW - 28 - (gap * 2)) / 3)
@@ -620,11 +624,118 @@ local function BuildBasics(ctx, builder, unit, label)
         function() return ReadBool(unit, "smoothFill", true) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end)
 
+    local sectionEntry = sec and sec._msuf2CollapsibleEntry
+    local badge
+    local badgeFill
+    local badgeEdge
+    local badgeLabel
+    if sectionEntry and sectionEntry.header then
+        sectionEntry._msuf2ManualHintLayout = true
+        badge = CreateFrame("Frame", nil, sectionEntry.header)
+        badge:SetSize(42, 18)
+        badge:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -10, 0)
+        badgeFill, badgeEdge = T.CreateSuperellipseLayers(badge, "_msuf2DisabledBadge", 1, "ARTWORK", "ARTWORK")
+        badgeLabel = T.Font(badge, "GameFontNormalSmall", "OFF", { 1.00, 0.86, 0.74, 1 })
+        badgeLabel:SetPoint("CENTER", badge, "CENTER", 0, 0)
+        badge:Hide()
+
+        if sectionEntry.label then
+            sectionEntry.label:ClearAllPoints()
+            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 6, 0)
+            sectionEntry.label:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -170, 0)
+            sectionEntry.label:SetJustifyH("LEFT")
+        end
+        if sectionEntry.hint then
+            sectionEntry.hint:ClearAllPoints()
+            sectionEntry.hint:SetPoint("RIGHT", badge, "LEFT", -10, 0)
+            sectionEntry.hint:SetWidth(110)
+            sectionEntry.hint:SetJustifyH("RIGHT")
+        end
+    end
+
+    local notice = CreateFrame("Frame", nil, sec)
+    notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
+    notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -70)
+    notice:SetHeight(24)
+    notice._msuf2UnitFrameGateAlwaysEnabled = true
+    local noticeBg = notice:CreateTexture(nil, "BACKGROUND")
+    noticeBg:SetAllPoints()
+    noticeBg:SetColorTexture(0.150, 0.084, 0.038, 0.34)
+    local noticeEdge = notice:CreateTexture(nil, "BORDER")
+    noticeEdge:SetPoint("TOPLEFT", notice, "TOPLEFT", 0, 0)
+    noticeEdge:SetPoint("TOPRIGHT", notice, "TOPRIGHT", 0, 0)
+    noticeEdge:SetHeight(1)
+    noticeEdge:SetColorTexture(0.72, 0.36, 0.18, 0.65)
+    local noticeBottom = notice:CreateTexture(nil, "BORDER")
+    noticeBottom:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 0, 0)
+    noticeBottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
+    noticeBottom:SetHeight(1)
+    noticeBottom:SetColorTexture(0.40, 0.22, 0.10, 0.55)
+
+    local unitLabel = label or UnitTopLabel(unit)
+    local noticeText = T.Font(notice, "GameFontDisableSmall", "", { 0.92, 0.82, 0.72, 1 })
+    noticeText:SetPoint("LEFT", notice, "LEFT", 10, 0)
+    noticeText:SetPoint("RIGHT", notice, "RIGHT", -122, 0)
+    noticeText:SetJustifyH("LEFT")
+    noticeText:SetText(unitLabel .. " frame is disabled and will not appear.")
+
+    local enableNow = W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, "Enable", 92, 20)) or T.Button(notice, "Enable", 92, 20)
+    enableNow:SetPoint("RIGHT", notice, "RIGHT", -2, 0)
+    enableNow._msuf2UnitFrameGateAlwaysEnabled = true
+    enableNow:SetScript("OnClick", function()
+        SetBool(unit, "enabled", true, "MSUF2_FRAME_ENABLED", { preview = true })
+        if M.Refresh then M.Refresh(ctx) end
+    end)
+    notice:Hide()
+
+    local function RefreshBasicsState()
+        if not sectionEntry then return end
+        T.ApplyCollapseVisual(sectionEntry.arrow, sectionEntry.hint, sectionEntry.open)
+
+        local on = ReadBool(unit, "enabled", true)
+        if sectionEntry.headerBg then
+            if on then
+                sectionEntry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
+            else
+                sectionEntry.headerBg:SetColorTexture(0.090, 0.072, 0.050, 0.56)
+            end
+        end
+        if sectionEntry.label and sectionEntry.label.SetTextColor then
+            if on then
+                sectionEntry.label:SetTextColor(T.colors.text[1], T.colors.text[2], T.colors.text[3], T.colors.text[4] or 1)
+            else
+                sectionEntry.label:SetTextColor(0.92, 0.88, 0.82, 1)
+            end
+        end
+        if badge then
+            badge:SetShown(not on)
+            if not on and badgeFill and badgeEdge then
+                badgeFill:SetVertexColor(0.240, 0.104, 0.060, 0.94)
+                badgeEdge:SetVertexColor(0.620, 0.240, 0.140, 0.80)
+            end
+        end
+        if sectionEntry.hint then
+            if on then
+                sectionEntry.hint:SetText(sectionEntry.open and "" or M.Tr("click to expand"))
+                sectionEntry.hint:SetTextColor(0.45, 0.52, 0.65, 1)
+            else
+                sectionEntry.hint:SetText(M.Tr("Frame disabled"))
+                sectionEntry.hint:SetTextColor(0.78, 0.68, 0.56, 1)
+            end
+        end
+        if sectionEntry.arrow and sectionEntry.arrow.SetVertexColor and not on then
+            sectionEntry.arrow:SetVertexColor(0.92, 0.62, 0.22, 1)
+        end
+    end
+    if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
+
     local function RefreshBasicsEnabled()
         local on = ReadBool(unit, "enabled", true)
         SetControlEnabled(enable, true)
         SetControlEnabled(reverse, on)
         SetControlEnabled(smooth, on)
+        notice:SetShown(not on)
+        RefreshBasicsState()
     end
     M.AddRefresher(ctx, RefreshBasicsEnabled)
     RefreshBasicsEnabled()

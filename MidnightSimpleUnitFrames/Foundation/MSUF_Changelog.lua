@@ -17,6 +17,13 @@ local data = {
                     bullets = {
                         "Improved performance for Group Frames.",
                         "Improved performance for menu and dashboard.",
+                        "Improved menu preview handling so test mode is cleaned up when leaving the menu.",
+                    },
+                },
+                {
+                    title = "Bugfixes",
+                    bullets = {
+                        "Improved Group Frame spell indicators and tracked cooldown display.",
                     },
                 },
                 {
@@ -24,6 +31,21 @@ local data = {
                     bullets = {
                         "Improved Not tracking long raidbuffs anymore in group frames.",
                         "Improved Turn off test mode if you leave main menu.",
+                        "Improved menu preview handling so test mode is cleaned up when leaving the menu.",
+                    },
+                },
+                {
+                    title = "Release / Tooling",
+                    bullets = {
+                        "Improved Group Frame range, highlight, and visibility behavior.",
+                        "Improved release tooling and changelog generation.",
+                    },
+                },
+                {
+                    title = "Documentation",
+                    bullets = {
+                        "Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.",
+                        "Improved Group Frame range, highlight, and visibility behavior.",
                     },
                 },
             },
