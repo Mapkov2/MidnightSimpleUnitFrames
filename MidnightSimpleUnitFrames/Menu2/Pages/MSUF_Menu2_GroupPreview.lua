@@ -2011,6 +2011,16 @@ local function AddGFPreview(ctx, builder)
     local box = CreateNativeGFPreview(body, ctx, OpenGFSection)
     box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -12)
     box:Show()
+    if W and W.AttachPinnedPreview then
+        W.AttachPinnedPreview(body, box, {
+            stateKey = "groupFramePreview",
+            title = box._title,
+            hint = box._hint,
+            left = 14,
+            right = 14,
+            top = -8,
+        })
+    end
     local function RefreshThisPreview()
         if box and box.Refresh and box:IsShown() then box:Refresh() end
     end
