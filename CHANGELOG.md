@@ -20,6 +20,12 @@
 - Improved text positioning options for unit frames and group frames.
 - Improved text container movement controls.
 
+<!-- MSUF-AUTO-CHANGELOG:Performance:START -->
+- Fixed buff auras not updating in certain edge cases.
+- Added more text positioning options for unit and group frames.
+- Improved text container movement controls.
+<!-- MSUF-AUTO-CHANGELOG:Performance:END -->
+
 ### Bugfixes
 
 - Fixed additional Midnight beta combat restrictions by avoiding unsafe updates while combat lockdown is active.
@@ -32,6 +38,13 @@
 - Stopped long raid buffs from being tracked incorrectly in Group Frames.
 - Cleaned up menu test mode when leaving the menu.
 - Reverted the window enable/disable warning to only show the current window state.
+
+<!-- MSUF-AUTO-CHANGELOG:Bugfixes:START -->
+- Added support for spell indicators and Blizzard rendering at the same time.
+- Stopped tracking long raid buffs in Group Frames.
+- Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.
+- Fixed Group Frame mouseover behavior.
+<!-- MSUF-AUTO-CHANGELOG:Bugfixes:END -->
 
 ### Changes / Improvements
 
@@ -54,6 +67,15 @@
 - Improved Edit Mode mover and popup behavior.
 - Updated bundled changelog support so the in-game dashboard can show the 5.2 Beta notes.
 - Prepared the addon for the 5.2 Beta release.
+
+<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
+- Added class-colored bar background support across unit and group frames.
+- Improved tooltip compatibility with other addons.
+- Made click-casting on unit frames more robust.
+- Added the new rested logo.
+- Cleaned up menu test mode when leaving the menu.
+- Reverted back to just showing the state of a window enable disable warning.
+<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
 
 ### Release / Tooling
 
