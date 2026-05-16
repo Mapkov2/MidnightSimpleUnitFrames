@@ -580,13 +580,23 @@ local function ApplyFrameBorderLevel(f, border)
     local anchorLevel = anchor and anchor.GetFrameLevel and anchor:GetFrameLevel() or 0
     local wantLevel = anchorLevel + 3
     local minTextLevel
-    local layers = { f.nameTextLayer, f.healthTextLayer, f.powerTextLayer, f.statusTextLayer }
-    for i = 1, #layers do
-        local layer = layers[i]
-        local level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
-        if level and (not minTextLevel or level < minTextLevel) then
-            minTextLevel = level
-        end
+    local layer = f.nameTextLayer
+    local level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+    if level then minTextLevel = level end
+    layer = f.healthTextLayer
+    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+    if level and (not minTextLevel or level < minTextLevel) then
+        minTextLevel = level
+    end
+    layer = f.powerTextLayer
+    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+    if level and (not minTextLevel or level < minTextLevel) then
+        minTextLevel = level
+    end
+    layer = f.statusTextLayer
+    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+    if level and (not minTextLevel or level < minTextLevel) then
+        minTextLevel = level
     end
     if minTextLevel and wantLevel >= minTextLevel then wantLevel = minTextLevel - 1 end
     if wantLevel <= anchorLevel then wantLevel = anchorLevel + 1 end
@@ -602,10 +612,22 @@ local function ApplyFrameBorder(f, kind)
     if not bg then return end
     local fScale = conf._resolvedFrameScale or 1
 
-    bg:SetBackdrop(_bgOnlyBd)
-    bg:SetBackdropColor(
-        conf.bgR or 0.1, conf.bgG or 0.1,
-        conf.bgB or 0.1, (conf.bgA or 0.85) * GetGFBackgroundAlpha(kind, conf))
+    if bg._msufGFBackdropKind ~= "bg" then
+        bg:SetBackdrop(_bgOnlyBd)
+        bg._msufGFBackdropKind = "bg"
+        bg._msufGFBackdropR = nil
+    end
+    local br = conf.bgR or 0.1
+    local bgc = conf.bgG or 0.1
+    local bb = conf.bgB or 0.1
+    local ba = (conf.bgA or 0.85) * GetGFBackgroundAlpha(kind, conf)
+    if bg._msufGFBackdropR ~= br or bg._msufGFBackdropG ~= bgc
+        or bg._msufGFBackdropB ~= bb or bg._msufGFBackdropA ~= ba
+    then
+        bg:SetBackdropColor(br, bgc, bb, ba)
+        bg._msufGFBackdropR, bg._msufGFBackdropG = br, bgc
+        bg._msufGFBackdropB, bg._msufGFBackdropA = bb, ba
+    end
 
     local bf = f._msufGFBorderFrame
     if bf then
@@ -613,13 +635,16 @@ local function ApplyFrameBorder(f, kind)
         if fScale ~= 1 then borderSize = ScaleValue(borderSize, fScale, 0) end
         ApplyFrameBorderLevel(f, bf)
         if borderSize > 0 then
-            _borderBd.edgeSize = borderSize
-            bf:SetBackdrop(_borderBd)
-            bf:SetBackdropColor(0, 0, 0, 0)
-            bf:SetBackdropBorderColor(0, 0, 0, 1)
-            bf:Show()
+            if bf._msufGFBorderSize ~= borderSize then
+                bf._msufGFBorderSize = borderSize
+                _borderBd.edgeSize = borderSize
+                bf:SetBackdrop(_borderBd)
+                bf:SetBackdropColor(0, 0, 0, 0)
+                bf:SetBackdropBorderColor(0, 0, 0, 1)
+            end
+            if not bf:IsShown() then bf:Show() end
         else
-            bf:Hide()
+            if bf:IsShown() then bf:Hide() end
         end
     end
 end

@@ -2,18 +2,11 @@
 
 ## 5.2 Beta 3 - 2026-05-16
 
-### Bugfixes
+### Performance
 
-<!-- MSUF-AUTO-CHANGELOG:Bugfixes:START -->
-- Improved Group Frame spell indicators and tracked cooldown display.
-- Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.
-<!-- MSUF-AUTO-CHANGELOG:Bugfixes:END -->
-
-### Changes / Improvements
-
-<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
-- Improved menu preview handling so test mode is cleaned up when leaving the menu.
-<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
+<!-- MSUF-AUTO-CHANGELOG:Performance:START -->
+- Improved class-colored bar backgrounds across unit and group frames.
+<!-- MSUF-AUTO-CHANGELOG:Performance:END -->
 
 ## 5.2 Beta 2 - 2026-05-16
 

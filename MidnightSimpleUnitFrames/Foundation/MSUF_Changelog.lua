@@ -13,16 +13,9 @@ local data = {
             date = "2026-05-16",
             sections = {
                 {
-                    title = "Bugfixes",
+                    title = "Performance",
                     bullets = {
-                        "Improved Group Frame spell indicators and tracked cooldown display.",
-                        "Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.",
-                    },
-                },
-                {
-                    title = "Changes / Improvements",
-                    bullets = {
-                        "Improved menu preview handling so test mode is cleaned up when leaving the menu.",
+                        "Improved class-colored bar backgrounds across unit and group frames.",
                     },
                 },
             },
