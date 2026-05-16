@@ -78,6 +78,50 @@ function Normalize-VersionKey {
     return ($v.ToLowerInvariant() -replace '[^a-z0-9]+', '')
 }
 
+function Get-PrereleaseVersionInfo {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+
+    $v = $Value.Trim()
+    $v = $v -replace '^refs/tags/', ''
+    $v = $v -replace '^v(?=\d)', ''
+    if ($v -notmatch '^(?<base>\d+(?:\.\d+)*)[\s._-]*(?<channel>alpha|beta|rc|pre)(?:[\s._-]*(?<number>\d+))?\s*$') {
+        return $null
+    }
+
+    $hasNumber = -not [string]::IsNullOrWhiteSpace($Matches["number"])
+    $number = if ($hasNumber) { [int]$Matches["number"] } else { $null }
+
+    return [pscustomobject]@{
+        BaseKey   = Normalize-VersionKey $Matches["base"]
+        Channel   = $Matches["channel"].ToLowerInvariant()
+        HasNumber = $hasNumber
+        Number    = $number
+    }
+}
+
+function Test-IsPrereleaseCarrySource {
+    param(
+        [AllowNull()][string]$SourceVersion,
+        [AllowNull()][string]$TargetVersion
+    )
+
+    $source = Get-PrereleaseVersionInfo $SourceVersion
+    $target = Get-PrereleaseVersionInfo $TargetVersion
+    if ($null -eq $source -or $null -eq $target) { return $false }
+    if ($source.BaseKey -ne $target.BaseKey) { return $false }
+    if ($source.Channel -ne $target.Channel) { return $false }
+    if ((Normalize-VersionKey $SourceVersion) -eq (Normalize-VersionKey $TargetVersion)) { return $false }
+
+    if ($target.HasNumber) {
+        if ($source.HasNumber) { return ($source.Number -lt $target.Number) }
+        return $true
+    }
+
+    return $source.HasNumber
+}
+
 function Convert-PathForGit {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -521,6 +565,93 @@ function Merge-AutoGroups {
     return $merged
 }
 
+function Get-AutoGroupEntryCount {
+    param([Parameter(Mandatory = $true)]$Groups)
+
+    $count = 0
+    foreach ($title in $SectionOrder) {
+        if ($Groups.Contains($title)) {
+            $count += $Groups[$title].Count
+        }
+    }
+    return $count
+}
+
+function Get-ChangelogReleaseSections {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
+
+    $sections = New-Object System.Collections.Generic.List[object]
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -notmatch '^##\s+(.+?)(?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*$') { continue }
+
+        $version = $Matches[1].Trim()
+        $end = $Lines.Count
+        for ($j = $i + 1; $j -lt $Lines.Count; $j++) {
+            if ($Lines[$j] -match '^##\s+') {
+                $end = $j
+                break
+            }
+        }
+
+        $sections.Add([pscustomobject]@{
+            Start   = $i
+            End     = $end
+            Version = $version
+        })
+    }
+
+    return [object[]]$sections.ToArray()
+}
+
+function Get-ReleaseLinesFromBounds {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines,
+        [Parameter(Mandatory = $true)]$Bounds
+    )
+
+    if ($Bounds.End -gt $Bounds.Start) {
+        return [string[]]$Lines[$Bounds.Start..($Bounds.End - 1)]
+    }
+    return @($Lines[$Bounds.Start])
+}
+
+function Get-CarriedPrereleaseAutoGroups {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines,
+        [Parameter(Mandatory = $true)][string]$TargetVersion
+    )
+
+    $carried = New-AutoGroupMap
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($section in Get-ChangelogReleaseSections -Lines $Lines) {
+        if (-not (Test-IsPrereleaseCarrySource -SourceVersion $section.Version -TargetVersion $TargetVersion)) {
+            continue
+        }
+
+        $sectionLines = Get-ReleaseLinesFromBounds -Lines $Lines -Bounds $section
+        $groups = Get-ExistingAutoBlocks -Lines $sectionLines
+        foreach ($title in $SectionOrder) {
+            foreach ($bullet in $groups[$title]) {
+                Add-AutoBulletToGroup -Groups $carried -Seen $seen -Title $title -Bullet $bullet
+            }
+        }
+    }
+
+    return $carried
+}
+
+function Get-KeepExistingAutoGroups {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines,
+        [Parameter(Mandatory = $true)]$Bounds
+    )
+
+    $releaseLines = Get-ReleaseLinesFromBounds -Lines $Lines -Bounds $Bounds
+    $existingGroups = Get-ExistingAutoBlocks -Lines $releaseLines
+    $carriedGroups = Get-CarriedPrereleaseAutoGroups -Lines $Lines -TargetVersion $Bounds.Version
+    return (Merge-AutoGroups -Existing $existingGroups -Generated $carriedGroups)
+}
+
 function Convert-AutoGroupsToMarkdown {
     param([Parameter(Mandatory = $true)]$Groups)
 
@@ -718,8 +849,7 @@ function Get-EditableAutoChangelogGroups {
         return $generated
     }
 
-    $releaseLines = if ($bounds.End -gt $bounds.Start) { [string[]]$lines[$bounds.Start..($bounds.End - 1)] } else { @($lines[$bounds.Start]) }
-    $existing = Get-ExistingAutoBlocks -Lines $releaseLines
+    $existing = Get-KeepExistingAutoGroups -Lines $lines -Bounds $bounds
     return (Merge-AutoGroups -Existing $existing -Generated $generated)
 }
 
@@ -971,11 +1101,16 @@ function Update-ChangelogAutoBlocks {
         $bounds = Find-ReleaseBounds -Lines $lines -WantedVersion $DisplayVersion
         Write-AutoLog "Created new CHANGELOG.md section for $($bounds.Version)."
     }
-    $releaseLines = if ($bounds.End -gt $bounds.Start) { [string[]]$lines[$bounds.Start..($bounds.End - 1)] } else { @($lines[$bounds.Start]) }
-
     if ($KeepExistingAutoEntries) {
+        $releaseLines = Get-ReleaseLinesFromBounds -Lines $lines -Bounds $bounds
         $existingGroups = Get-ExistingAutoBlocks -Lines $releaseLines
-        $mergedGroups = Merge-AutoGroups -Existing $existingGroups -Generated $Groups
+        $carriedGroups = Get-CarriedPrereleaseAutoGroups -Lines $lines -TargetVersion $bounds.Version
+        $carriedCount = Get-AutoGroupEntryCount -Groups $carriedGroups
+        if ($carriedCount -gt 0) {
+            Write-AutoLog "Carried $carriedCount old auto entries from earlier $($bounds.Version) prerelease sections."
+        }
+        $keptGroups = Merge-AutoGroups -Existing $existingGroups -Generated $carriedGroups
+        $mergedGroups = Merge-AutoGroups -Existing $keptGroups -Generated $Groups
     } else {
         $mergedGroups = $Groups
     }
@@ -1297,7 +1432,7 @@ function Start-AutoChangelogGui {
     $keepExistingBox.Checked = [bool]$KeepExistingAutoEntries
     $keepExistingBox.Location = New-Object System.Drawing.Point(720, 122)
     $keepExistingBox.Size = New-Object System.Drawing.Size(175, 24)
-    $tips.SetToolTip($keepExistingBox, "Merge existing MSUF-AUTO-CHANGELOG entries with the new generated entries. Leave off to replace old auto entries.")
+    $tips.SetToolTip($keepExistingBox, "Merge existing auto entries and carry older Alpha/Beta/RC/Pre entries from the same version line. Leave off to replace old auto entries.")
     $form.Controls.Add($keepExistingBox)
 
     $summaryBox = New-Object System.Windows.Forms.TextBox

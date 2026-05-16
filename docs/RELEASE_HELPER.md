@@ -109,7 +109,9 @@ Use it to set:
 - **Create missing release**: inserts a new `## <version> - <date>` section
   below `# Changelog` when the selected title does not exist yet
 - **Keep old auto entries**: keeps existing `MSUF-AUTO-CHANGELOG` bullets and
-  merges new entries into them; leave it off to replace old generated bullets
+  merges new entries into them; for prereleases such as `5.2 Beta 2` or
+  `5.2 Alpha 2`, it also carries older auto bullets from the same version line
+  and channel; leave it off to replace old generated bullets
 - **Regenerate addon changelog**: updates the in-game changelog Lua file too;
   this is enabled by default in the standalone UI so the dashboard changelog
   follows `CHANGELOG.md`
@@ -149,7 +151,10 @@ tools\MSUF-AutoChangelog.cmd -Watch -RegenerateAddonChangelog
 Add `-CreateMissingRelease -DisplayVersion "5.2" -ReleaseDate "2026-05-15"`
 when the command-line watcher should create a new release section automatically.
 By default, old managed auto entries in that section are replaced. Add
-`-KeepExistingAutoEntries` only when you want to keep and merge them.
+`-KeepExistingAutoEntries` only when you want to keep and merge them. For
+numbered prereleases, the keep mode carries older same-channel auto entries,
+for example from `5.2 Beta 1` into `5.2 Beta 2` or from `5.2 Alpha 1` into
+`5.2 Alpha 2`.
 Managed auto blocks in other release sections are cleaned up automatically, so
 generating `5.2` does not leave stale generated `5.2` bullets under older
 sections.

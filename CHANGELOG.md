@@ -17,6 +17,7 @@
 - **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_DB.lua).
 - **Group Frames, Menu / Dashboard**: Massive rework of spell indicators now performant and gated between speces (9443f77; GroupFrames/MSUF_GF_Effects.lua, GroupFrames/MSUF_GF_SpellIndicators.lua, Menu2/Pages/MSUF_Menu2_GroupIndicators.lua).
 - **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Widgets.lua).
+- **Foundation, Group Frames, Menu / Dashboard**: Added coalescence and some other menu stuff (6642696; Foundation/MSUF_Defaults.lua, GroupFrames/MSUF_GF_Auras.lua, GroupFrames/MSUF_GF_Effects.lua +3 more).
 <!-- MSUF-AUTO-CHANGELOG:Performance:END -->
 
 ### Bugfixes
@@ -42,6 +43,9 @@
 - **Menu / Dashboard**: Made it possible that group preview is pinned so scrolling is way easier (b594bdc; Menu2/MSUF_Menu2_Widgets.lua, Menu2/Pages/MSUF_Menu2_GroupPreview.lua, Menu2/Pages/MSUF_Menu2_UnitSections.lua).
 - **Group Frames**: Massively improved spell indicator. For exmaple PI tracking is back (a3724e7; GroupFrames/MSUF_GF_Effects.lua, GroupFrames/MSUF_GF_SpellIndicators.lua, GroupFrames/MSUF_GF_SpellIndicators_Data.lua).
 - **Menu / Dashboard**: Some stuff (ec459a1; Menu2/MSUF_Menu2_Widgets.lua, Menu2/Pages/MSUF_Menu2_GroupPreview.lua, Menu2/Pages/MSUF_Menu2_UnitSections.lua).
+- **Menu / Dashboard**: Made pinning possible (4095725; Menu2/MSUF_Menu2_Widgets.lua, Menu2/Pages/MSUF_Menu2_GroupPreview.lua, Menu2/Pages/MSUF_Menu2_UnitSections.lua).
+- **Unit Auras, Core Runtime, General**: Added better tooltip support for other addons. Ex. TipTac (084598a; Auras2/MSUF_A2_Core.lua, Core/MSUF_ChatAndTooltips.lua, MidnightSimpleUnitFrames.lua).
+- **Group Frames**: Better pass through (40ed3a9; GroupFrames/MSUF_GF_Auras.lua).
 <!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
 
 ## 5.2 Beta - 2026-05-16
