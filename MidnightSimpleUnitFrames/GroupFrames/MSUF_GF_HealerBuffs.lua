@@ -581,10 +581,21 @@ local function FrameWantsHealerBuffs(f, kind, conf)
     return not (si and si.enabled)
 end
 
+local function AnyHealerBuffsEnabled()
+    if type(GF.GetConf) ~= "function" then return true end
+    local party = GF.GetConf("party")
+    local raid = GF.GetConf("raid")
+    if not party or not raid then return true end
+    return (party.healerBuffs and party.healerBuffs.enabled == true)
+        or (raid.healerBuffs and raid.healerBuffs.enabled == true)
+end
+
+local _installRuntimeHooks = AnyHealerBuffsEnabled()
+
 ------------------------------------------------------------------------
 -- Hook into UNIT_AURA coalescing (from Effects.lua)
 ------------------------------------------------------------------------
-do
+if _installRuntimeHooks then
     local origUpdateDispel = GF._UpdateDispel
     if type(origUpdateDispel) == "function" then
         GF._UpdateDispel = function(f, unit)
@@ -604,7 +615,7 @@ end
 ------------------------------------------------------------------------
 -- Hook into full refresh
 ------------------------------------------------------------------------
-do
+if _installRuntimeHooks then
     local origUpdateButton = GF.UpdateButton
     if type(origUpdateButton) == "function" then
         GF.UpdateButton = function(f, unit)
@@ -629,7 +640,7 @@ end
 ------------------------------------------------------------------------
 -- Spec change listener (re-compile on spec swap)
 ------------------------------------------------------------------------
-do
+if _installRuntimeHooks then
     local ef = CreateFrame("Frame")
     ef:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     ef:RegisterEvent("PLAYER_TALENT_UPDATE")

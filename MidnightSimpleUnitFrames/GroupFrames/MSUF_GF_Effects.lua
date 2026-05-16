@@ -3986,13 +3986,20 @@ end
 function GF._SetOverlayBarValue(bar, hpMax, value)
     if not bar then return end
     if value == nil then
-        if bar:IsShown() then bar:Hide() end
-        bar._msufGFOverlayValue = nil
+        GF._ClearOverlayBar(bar)
         return
     end
 
     local iss = issecretvalue
     local maxValue = hpMax or 1
+    if not (iss and iss(value)) then
+        local n = tonumber(value) or 0
+        if n <= 0 then
+            GF._ClearOverlayBar(bar)
+            return
+        end
+    end
+
     if iss and iss(maxValue) then
         bar:SetMinMaxValues(0, maxValue)
         bar._msufGFOverlayMax = nil

@@ -521,6 +521,9 @@ function Cache.OnUnitAura(unit, updateInfo)
             if entry then
                 local fresh = _getByAid and _getByAid(unit, aid)
                 if fresh then
+                    local oldHelpful = entry._msufIsHelpful
+                    local oldOwn = entry._msufIsPlayerAura
+                    local oldBossFlag = ReadBossFlag(entry)
                     -- PERF: Lightweight update — only mutable fields (duration/stacks/raid).
                     -- Saves 8 field writes vs full _AuraCopyFields on the hottest path.
                     _AuraCopyFieldsUpdate(entry, fresh)
@@ -531,6 +534,16 @@ function Cache.OnUnitAura(unit, updateInfo)
                     -- the saving (~0.1µs/call) is far less than the risk of
                     -- onlyBoss/merge filter failure from stale cache.
                     entry._msufA2_bossFlag = nil
+                    local newHelpful = ClassifyHelpful(unit, aid)
+                    local newOwn = ClassifyPlayer(unit, aid, newHelpful)
+                    entry._msufIsHelpful = newHelpful
+                    entry._msufIsPlayerAura = newOwn
+                    -- Blizzard can report filter/classification changes as an
+                    -- update-only delta. If membership changed, force a normal
+                    -- filter pass instead of reusing the previous visible list.
+                    if oldHelpful ~= newHelpful or oldOwn ~= newOwn or oldBossFlag ~= ReadBossFlag(entry) then
+                        hasAdd = true
+                    end
                     if not updatedIDs then
                         updatedIDs = {}
                         s.updatedIDs = updatedIDs
@@ -1339,6 +1352,7 @@ local _fast_ApplyStacks
 local _fast_ApplyOwnHighlight
 local _fast_ApplyDispelBorder
 local _fast_ApplyPandemic
+local _RefreshDynamicIfNeeded
 
 --  Cached shared.* flags (resolve once per configGen, not per icon)
 local _sharedFlagsGen   = -1
@@ -1874,6 +1888,9 @@ function Icons.HideUnused(container, fromIndex)
                 if lc then lc.aid = nil end
                 icon._msufA2_lastTexAid = nil
                 icon._msufA2_timerRev = nil
+                icon._msufA2_dynRev = nil
+                icon._msufA2_dynGen = nil
+                icon._msufA2_dynAnchor = nil
             end
         end
     end
@@ -2038,6 +2055,9 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         icon._msufA2_lastOwnHelpful = nil
         icon._msufA2_lastDispelAid = nil
         icon._msufA2_forceOwnBuffHighlight = nil
+        icon._msufA2_dynRev = nil
+        icon._msufA2_dynGen = nil
+        icon._msufA2_dynAnchor = nil
         if icon._msufDispelBorder then icon._msufDispelBorder:Hide() end
         if icon._msufPandemic then icon._msufPandemic:Hide() end
         return false
@@ -2055,10 +2075,16 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
         and last.forceOwnBuffHighlight == forceOwnBuffHighlight
     then
         -- Same aura, same config. Only refresh timer + stacks (values may have changed).
-        -- Timer/stacks always read fresh from C API for correctness.
+        -- Timer/stacks refresh only when the aura cache revision changes. The
+        -- revision is our own plain value, so this avoids secret-value compares
+        -- while still updating on real UNIT_AURA deltas.
         icon._msufAura = aura
-        _fast_RefreshTimer(icon, unit, aid, shared, aura)
-        _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
+        if _RefreshDynamicIfNeeded then
+            _RefreshDynamicIfNeeded(icon, unit, aid, shared, stackCountAnchor, aura, gen)
+        else
+            _fast_RefreshTimer(icon, unit, aid, shared, aura)
+            _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
+        end
         return true
     end
 
@@ -2123,6 +2149,9 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
 
     -- 3. Stack count
     _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
+    icon._msufA2_dynRev = aura and aura._msufA2_updateRev or nil
+    icon._msufA2_dynGen = gen
+    icon._msufA2_dynAnchor = stackCountAnchor or "TOPRIGHT"
 
     -- 4. Own-aura highlight (same effective state rarely changes across full commits)
     local ownHelpfulKey = ((isOwn and 1) or 0) * 4
@@ -2850,6 +2879,25 @@ _fast_ApplyOwnHighlight = Icons._ApplyOwnHighlight
 _fast_ApplyDispelBorder = Icons._ApplyDispelBorder
 _fast_ApplyPandemic     = Icons._ApplyPandemic
 
+_RefreshDynamicIfNeeded = function(icon, unit, aid, shared, stackCountAnchor, aura, gen)
+    local auraRev = aura and aura._msufA2_updateRev
+    local anchor = stackCountAnchor or "TOPRIGHT"
+    if auraRev
+        and icon._msufA2_dynRev == auraRev
+        and icon._msufA2_dynGen == gen
+        and icon._msufA2_dynAnchor == anchor
+    then
+        if _showPandemic then _fast_ApplyPandemic(icon) end
+        return
+    end
+
+    _fast_RefreshTimer(icon, unit, aid, shared, aura)
+    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
+    icon._msufA2_dynRev = auraRev
+    icon._msufA2_dynGen = gen
+    icon._msufA2_dynAnchor = anchor
+end
+
 -- Refresh all assigned icons (fast path: timer + stacks only)
 -- Called when aura membership hasn't changed but values may have
 
@@ -2885,8 +2933,7 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
                     end
                     -- PERF: Use stored aura ref for cached duration/stacks
                     local aura = icon._msufAura
-                    _fast_RefreshTimer(icon, unit, aid, shared, aura)
-                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
+                    _RefreshDynamicIfNeeded(icon, unit, aid, shared, stackCountAnchor, aura, gen)
                 end
             end
         end
@@ -2905,8 +2952,7 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
                         ResolveTextConfig(icon, unit, shared, gen)
                     end
                     local aura = icon._msufAura
-                    _fast_RefreshTimer(icon, unit, aid, shared, aura)
-                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
+                    _RefreshDynamicIfNeeded(icon, unit, aid, shared, stackCountAnchor, aura, gen)
                 end
             end
         end
@@ -2925,8 +2971,7 @@ function Icons.RefreshAssignedIcons(entry, unit, shared, stackCountAnchor)
                         ResolveTextConfig(icon, unit, shared, gen)
                     end
                     local aura = icon._msufAura
-                    _fast_RefreshTimer(icon, unit, aid, shared, aura)
-                    _fast_ApplyStacks(icon, unit, aid, shared, stackCountAnchor, aura)
+                    _RefreshDynamicIfNeeded(icon, unit, aid, shared, stackCountAnchor, aura, gen)
                 end
             end
         end

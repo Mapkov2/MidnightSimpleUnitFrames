@@ -955,7 +955,13 @@ end
                 -- P3: Boss UNIT_AURA gate — single table + bool check, ~0 cost.
                 -- Skips Store update + MarkDirty for boss slots outside encounters.
                 -- Cache is fully invalidated on INSTANCE_ENCOUNTER_ENGAGE_UNIT anyway.
-                if _IS_BOSS_UNIT[unit] and not _bossEncounterActive then return end
+                if _IS_BOSS_UNIT[unit] and not _bossEncounterActive then
+                    -- Some Midnight boss slots become targetable and start
+                    -- producing aura deltas before INSTANCE_ENCOUNTER_ENGAGE_UNIT.
+                    -- Keep empty-slot spam gated, but do not drop real boss auras.
+                    if not (UnitExists and UnitExists(unit)) then return end
+                    _bossEncounterActive = true
+                end
 
                 -- During a target swap, ignore target deltas completely.
                 -- They can belong to the outgoing target or be partial updates for
@@ -1132,6 +1138,9 @@ function Events.Init()
         -- immediately — without waiting for the player to interact.
         if event == "UNIT_TARGETABLE_CHANGED" then
             if arg1 and _IS_BOSS_UNIT[arg1] then
+                if UnitExists and UnitExists(arg1) then
+                    _bossEncounterActive = true
+                end
                 if not _refsBound then BindCachedRefs() end
                 local inv = _cachedInvalidUnit
                 ClearLiveRenderVisibility(arg1)
