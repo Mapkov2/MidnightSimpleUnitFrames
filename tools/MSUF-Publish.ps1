@@ -274,7 +274,8 @@ function Find-ChangelogSection {
 function Convert-MarkdownSectionToReleaseInput {
     param([Parameter(Mandatory = $true)][string]$Markdown)
 
-    $lines = [string[]]([regex]::Split($Markdown.Trim(), "\r?\n"))
+    $cleanMarkdown = Remove-AutoChangelogMarkersFromMarkdown -Markdown $Markdown
+    $lines = [string[]]([regex]::Split($cleanMarkdown.Trim(), "\r?\n"))
     if ($lines.Count -eq 0) { throw "Markdown changelog text is empty." }
 
     $display = $null
@@ -308,6 +309,22 @@ function Convert-MarkdownSectionToReleaseInput {
         Date = $date
         Body = [string[]]$body
     }
+}
+
+function Remove-AutoChangelogMarkersFromMarkdown {
+    param([AllowNull()][string]$Markdown)
+
+    if ([string]::IsNullOrWhiteSpace($Markdown)) { return "" }
+
+    $clean = New-Object System.Collections.Generic.List[string]
+    foreach ($line in ([regex]::Split($Markdown, "\r?\n"))) {
+        if ($line -match '^\s*<!--\s*MSUF-AUTO-CHANGELOG(?::[^>]*)?\s*-->\s*$') {
+            continue
+        }
+        $clean.Add($line)
+    }
+
+    return (($clean.ToArray() -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
 }
 
 function Convert-ChangelogBodyToFieldMap {
@@ -1202,7 +1219,8 @@ function Convert-StringListToText {
 function Set-UiFromMarkdown {
     param([Parameter(Mandatory = $true)][string]$Markdown)
 
-    $parsed = Convert-MarkdownSectionToReleaseInput -Markdown $Markdown
+    $cleanMarkdown = Remove-AutoChangelogMarkersFromMarkdown -Markdown $Markdown
+    $parsed = Convert-MarkdownSectionToReleaseInput -Markdown $cleanMarkdown
     if (-not [string]::IsNullOrWhiteSpace($parsed.Display)) { $displayBox.Text = $parsed.Display }
     if (-not [string]::IsNullOrWhiteSpace($parsed.Date)) { $dateBox.Text = $parsed.Date }
 
@@ -1285,8 +1303,9 @@ function Sync-AutoChangelogSource {
     $baseRef = $baseRefBox.Text.Trim()
     Update-AutoChangelogFromRepo -DisplayVersion $meta.Display -BaseRef $baseRef -SinceHours ([int]$sinceHoursBox.Value) -ReleaseDate $meta.Date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked -IncludePrereleaseAutoEntries $includePrereleaseBox.Checked -ReleaseLineScan $releaseLineBox.Checked -FilterJunk $junkFilterBox.Checked
     $section = Find-ChangelogSection -ReleaseTag $meta.Tag -DisplayVersion $meta.Display
-    $mdBox.Text = $section.Markdown
-    Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
+    $editableMarkdown = Remove-AutoChangelogMarkersFromMarkdown -Markdown $section.Markdown
+    $mdBox.Text = $editableMarkdown
+    Set-UiFromMarkdown -Markdown $editableMarkdown | Out-Null
     $useMarkdownBox.Checked = $true
     Write-ReleaseLog ("Auto changelog refreshed for " + $Reason + ": " + $section.Version)
 }
@@ -1295,8 +1314,9 @@ function Sync-DashboardFromShownMarkdown {
     $r = Read-UiRelease
     Start-LocalPreparation -ReleaseTag $r.Tag -DisplayVersion $r.Display -ReleaseDate $r.Date -BodyLines $r.Body -OutputDir $r.OutputDir -BuildZip $false
     $section = Find-ChangelogSection -ReleaseTag $r.Tag -DisplayVersion $r.Display
-    $mdBox.Text = $section.Markdown
-    Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
+    $editableMarkdown = Remove-AutoChangelogMarkersFromMarkdown -Markdown $section.Markdown
+    $mdBox.Text = $editableMarkdown
+    Set-UiFromMarkdown -Markdown $editableMarkdown | Out-Null
     $useMarkdownBox.Checked = $true
     Write-ReleaseLog ("Dashboard changelog updated from shown Markdown: " + $section.Version)
 }
@@ -1308,8 +1328,9 @@ $loadRepoButton.Size = New-Object System.Drawing.Size(150, 32)
 $loadRepoButton.Add_Click({
     try {
         $section = Find-ChangelogSection -ReleaseTag $tagBox.Text -DisplayVersion $displayBox.Text
-        $mdBox.Text = $section.Markdown
-        Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
+        $editableMarkdown = Remove-AutoChangelogMarkersFromMarkdown -Markdown $section.Markdown
+        $mdBox.Text = $editableMarkdown
+        Set-UiFromMarkdown -Markdown $editableMarkdown | Out-Null
         $useMarkdownBox.Checked = $true
         Write-ReleaseLog ("Loaded CHANGELOG.md section: " + $section.Version)
     } catch {

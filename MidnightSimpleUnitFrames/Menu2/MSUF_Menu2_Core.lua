@@ -5569,6 +5569,7 @@ function M.InvalidatePage(key)
     if key then
         if key ~= "search" then MarkSearchIndexDirty() end
         ClearSearchRegistryPage(key)
+        if key == "home" then M.dashboardEditModeButton = nil end
         local entry = M.cache[key]
         if entry and entry.wrapper then
             entry.wrapper:Hide()
