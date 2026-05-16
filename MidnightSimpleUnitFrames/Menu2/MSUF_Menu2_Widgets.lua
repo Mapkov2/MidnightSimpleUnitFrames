@@ -1021,7 +1021,7 @@ function W.AttachPinnedPreview(body, box, opts)
     M._pinnedPreviews = M._pinnedPreviews or {}
     for i = #M._pinnedPreviews, 1, -1 do
         local r = M._pinnedPreviews[i]
-        if r and r.stateKey == stateKey then
+        if r and r.box == box then  -- same box = this exact page was rebuilt, replace its record
             if r.restore then r.restore() end
             table.remove(M._pinnedPreviews, i)
         end
