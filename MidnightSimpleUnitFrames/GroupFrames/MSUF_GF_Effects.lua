@@ -1740,7 +1740,13 @@ function GF.BuildFrameCache(f)
 
     -- Aura dispatch
     c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and not c.nativeBlizzardDispels
-    c.siEn       = auraMasterOn and conf.spellIndicators and conf.spellIndicators.enabled == true
+    local siRuntimeActive = false
+    if auraMasterOn and conf.spellIndicators and conf.spellIndicators.enabled == true then
+        local siActiveFn = GF.SpellIndicatorsRuntimeActive
+        siRuntimeActive = type(siActiveFn) == "function"
+            and siActiveFn(kind, conf.spellIndicators) == true
+    end
+    c.siEn       = siRuntimeActive
     c.healerBuffsEn = auraMasterOn and conf.healerBuffs and conf.healerBuffs.enabled == true and not c.siEn
     local customBuffs = auraMasterOn and auras.buff and auras.buff.enabled ~= false and not c.nativeBlizzardBuffs
     local customDebuffs = auraMasterOn and auras.debuff and auras.debuff.enabled ~= false and not c.nativeBlizzardDebuffs

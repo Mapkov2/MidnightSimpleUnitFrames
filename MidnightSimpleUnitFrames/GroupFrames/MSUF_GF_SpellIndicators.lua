@@ -212,6 +212,112 @@ local function ResolveSpec(siCfg)
     return spec
 end
 
+local function ResolveRuntimeSpec(siCfg, playerSpec)
+    if not (siCfg and siCfg.enabled == true) then return nil end
+    playerSpec = playerSpec or SI.GetPlayerSpec()
+    if not playerSpec then return nil end
+
+    local spec = siCfg.spec or "auto"
+    if spec == "auto" then return playerSpec end
+    if spec == "multi" then
+        local ms = siCfg.multiSpecs
+        return (ms and ms[playerSpec] == true) and playerSpec or nil
+    end
+    return (spec == playerSpec) and spec or nil
+end
+
+local function SpecConfigHasRuntimeWork(siCfg, specKey)
+    if not (siCfg and specKey and SI.TrackableAuras and SI.TrackableAuras[specKey]) then return false end
+
+    local specCfg = siCfg.specs and siCfg.specs[specKey]
+    if not specCfg then
+        return SI.SpecDefaults and SI.SpecDefaults[specKey] ~= nil
+    end
+
+    local sawEntry = false
+    for _, auraCfg in pairs(specCfg) do
+        sawEntry = true
+        if type(auraCfg) == "table" and auraCfg.enabled ~= false then
+            return true
+        end
+    end
+    if not sawEntry then
+        return SI.SpecDefaults and SI.SpecDefaults[specKey] ~= nil
+    end
+    return false
+end
+
+local _runtimeActiveCache = setmetatable({}, { __mode = "k" })
+
+function SI.IsRuntimeActive(kind, siCfg)
+    if not (siCfg and siCfg.enabled == true) then return false end
+
+    local playerSpec = SI.GetPlayerSpec()
+    if not playerSpec then return false end
+
+    local cached = _runtimeActiveCache[siCfg]
+    if cached
+        and cached.rev == _siConfigRev
+        and cached.playerSpec == playerSpec
+        and cached.spec == siCfg.spec
+        and cached.multiSpecs == siCfg.multiSpecs
+    then
+        return cached.active
+    end
+
+    local specKey = ResolveRuntimeSpec(siCfg, playerSpec)
+    local active = specKey and SpecConfigHasRuntimeWork(siCfg, specKey) or false
+    _runtimeActiveCache[siCfg] = {
+        rev = _siConfigRev,
+        playerSpec = playerSpec,
+        spec = siCfg.spec,
+        multiSpecs = siCfg.multiSpecs,
+        active = active and true or false,
+    }
+    return active and true or false
+end
+
+GF.SpellIndicatorsRuntimeActive = function(kind, siCfg)
+    return SI.IsRuntimeActive(kind, siCfg)
+end
+
+do
+    local specFrame = CreateFrame and CreateFrame("Frame")
+    if specFrame then
+        local function RefreshRuntimeState()
+            InvalidateRuntimeCaches()
+            if InCombatLockdown and InCombatLockdown() then
+                if GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_AURAS or GF.DIRTY_ALL or 0x3F) end
+                return
+            end
+
+            if GF.ForEachFrame and GF.BuildFrameCache and GF.RegisterUnitEvents then
+                GF.ForEachFrame(function(f)
+                    if f and f._msufIsGroupFrame then
+                        GF.BuildFrameCache(f)
+                        if f.unit then GF.RegisterUnitEvents(f, f.unit) end
+                        if f._c and not f._c.siEn and GF.HideSpellIndicators then
+                            GF.HideSpellIndicators(f)
+                        end
+                    end
+                end)
+            elseif GF.MarkAllDirty then
+                GF.MarkAllDirty(GF.DIRTY_AURAS or GF.DIRTY_ALL or 0x3F)
+            end
+        end
+
+        specFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        specFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        specFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+        specFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
+        specFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
+        specFrame:SetScript("OnEvent", function(_, event, unit)
+            if event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then return end
+            RefreshRuntimeState()
+        end)
+    end
+end
+
 ------------------------------------------------------------------------
 -- Auto-populate defaults for a spec (one-time, cold path)
 ------------------------------------------------------------------------
@@ -335,8 +441,9 @@ local function UnitIsPlayerUnit(unit)
     return _UnsecretBool(UnitIsUnit(unit, "player")) == true
 end
 
-local _linkedTargetIDSetCache = {}
 local _linkedTooltipCache = {}
+local _linkedSourceAuraCache = {}
+local _linkedTargetIDSetCache = {}
 
 local function GetLinkedTargetIDSet(specKey, auraName, rule)
     local key = specKey .. ":" .. auraName
@@ -372,34 +479,68 @@ local function FindHelpfulAuraBySpellID(unit, spellID)
     return nil
 end
 
-local function FindHelpfulAuraBySpellIDSet(unit, idSet)
-    if not (unit and idSet) then return nil end
-    for i = 1, 40 do
-        local aura = SIQueryAuraDataByIndex(unit, i, "HELPFUL")
-        if not aura then break end
-        local sid = aura.spellId
-        if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
-            sid = tonumber(sid)
-            if sid and idSet[sid] then return aura end
+local function MatchLinkedTargetAuraByID(spellID, specKey, siCfg)
+    if not (spellID and SI.LinkedAuraRules) then return nil end
+
+    if specKey ~= "multi" then
+        local rules = SI.LinkedAuraRules[specKey]
+        if not rules then return nil end
+        for auraName, rule in pairs(rules) do
+            if _scanOnlyOwnByAura[auraName] ~= nil then
+                local targetIDs = GetLinkedTargetIDSet(specKey, auraName, rule)
+                if targetIDs and targetIDs[spellID] then return auraName end
+            end
+        end
+        return nil
+    end
+
+    local specs, specCount = GetMultiSpecList(siCfg)
+    if not specs then return nil end
+
+    local matched
+    for i = 1, specCount do
+        local sk = specs[i]
+        local rules = SI.LinkedAuraRules[sk]
+        if rules then
+            for auraName, rule in pairs(rules) do
+                if _scanOnlyOwnByAura[auraName] ~= nil then
+                    local targetIDs = GetLinkedTargetIDSet(sk, auraName, rule)
+                    if targetIDs and targetIDs[spellID] then
+                        if matched and matched ~= auraName then return nil end
+                        matched = auraName
+                    end
+                end
+            end
         end
     end
-    return nil
+    return matched
 end
 
-local function LinkedTooltipMatchesUnit(unit, sourceAura, rule)
-    if not C_TooltipInfo then C_TooltipInfo = _G.C_TooltipInfo end
-    if not (unit and sourceAura and sourceAura.auraInstanceID and C_TooltipInfo and C_TooltipInfo.GetUnitAura) then
-        return false
+local function FindPlayerSourceAuraCached(spellID)
+    if not spellID then return nil end
+    local now = GetTime and GetTime() or 0
+    local cached = _linkedSourceAuraCache[spellID]
+    if cached and (now - (cached.time or 0)) < 0.05 then
+        return cached.aura
     end
+    local aura = FindHelpfulAuraBySpellID("player", spellID)
+    _linkedSourceAuraCache[spellID] = {
+        aura = aura,
+        time = now,
+    }
+    return aura
+end
 
-    local unitName = UnitName and UnitName(unit)
-    if not unitName or unitName == "" then return false end
-
+local function ResolveLinkedTooltipTargetName(sourceAura, rule)
+    if not C_TooltipInfo then C_TooltipInfo = _G.C_TooltipInfo end
+    if not (sourceAura and sourceAura.auraInstanceID and C_TooltipInfo and C_TooltipInfo.GetUnitAura) then
+        return nil
+    end
     local cacheKey = tostring(rule and rule.sourceSpellID or "") .. ":" .. tostring(sourceAura.auraInstanceID)
     local now = GetTime and GetTime() or 0
     local cached = _linkedTooltipCache[cacheKey]
     if cached and (now - (cached.time or 0)) < 0.25 then
-        return cached.targetName == unitName
+        return cached.targetName
     end
 
     local auraIndex
@@ -411,24 +552,41 @@ local function LinkedTooltipMatchesUnit(unit, sourceAura, rule)
             break
         end
     end
-    if not auraIndex then return false end
+    if not auraIndex then return nil end
 
     local tooltip = C_TooltipInfo.GetUnitAura("player", auraIndex, "HELPFUL")
     local lines = tooltip and tooltip.lines
-    if type(lines) ~= "table" then return false end
+    if type(lines) ~= "table" then return nil end
 
     for i = 1, #lines do
         local text = lines[i] and lines[i].leftText
-        if text and text:find(unitName, 1, true) then
-            _linkedTooltipCache[cacheKey] = {
-                targetName = unitName,
-                time = now,
-            }
-            return true
+        if text and UnitName then
+            for p = 1, 4 do
+                local partyUnit = "party" .. p
+                local partyName = UnitExists(partyUnit) and UnitName(partyUnit)
+                if partyName and partyName ~= "" and text:find(partyName, 1, true) then
+                    _linkedTooltipCache[cacheKey] = {
+                        targetName = partyName,
+                        time = now,
+                    }
+                    return partyName
+                end
+            end
+            for r = 1, 40 do
+                local raidUnit = "raid" .. r
+                local raidName = UnitExists(raidUnit) and UnitName(raidUnit)
+                if raidName and raidName ~= "" and text:find(raidName, 1, true) then
+                    _linkedTooltipCache[cacheKey] = {
+                        targetName = raidName,
+                        time = now,
+                    }
+                    return raidName
+                end
+            end
         end
     end
 
-    return false
+    return nil
 end
 
 local function MakeLinkedAuraData(sourceAura, auraName, rule)
@@ -450,13 +608,11 @@ local function ApplyLinkedAurasForSpec(unit, specKey)
 
     for auraName, rule in pairs(rules) do
         if not _scanResults[auraName] and _scanOnlyOwnByAura[auraName] ~= nil then
-            local idSet = GetLinkedTargetIDSet(specKey, auraName, rule)
-            local targetAura = FindHelpfulAuraBySpellIDSet(unit, idSet)
-            if targetAura then
-                _scanResults[auraName] = targetAura
-            elseif not UnitIsPlayerUnit(unit) then
-                local sourceAura = FindHelpfulAuraBySpellID("player", rule and rule.sourceSpellID)
-                if sourceAura and LinkedTooltipMatchesUnit(unit, sourceAura, rule) then
+            if not UnitIsPlayerUnit(unit) then
+                local sourceAura = FindPlayerSourceAuraCached(rule and rule.sourceSpellID)
+                local targetName = sourceAura and ResolveLinkedTooltipTargetName(sourceAura, rule)
+                local unitName = targetName and UnitName and UnitName(unit)
+                if unitName and unitName == targetName then
                     _scanResults[auraName] = MakeLinkedAuraData(sourceAura, auraName, rule)
                 end
             end
@@ -484,12 +640,22 @@ local function NeedsLinkedAuraScan(siCfg, specKey)
         local specs, specCount = GetMultiSpecList(siCfg)
         if not specs then return false end
         for i = 1, specCount do
-            if SI.LinkedAuraRules[specs[i]] then return true end
+            local rules = SI.LinkedAuraRules[specs[i]]
+            if rules then
+                for auraName in pairs(rules) do
+                    if _scanOnlyOwnByAura[auraName] ~= nil then return true end
+                end
+            end
         end
         return false
     end
 
-    return SI.LinkedAuraRules[specKey] ~= nil
+    local rules = SI.LinkedAuraRules[specKey]
+    if not rules then return false end
+    for auraName in pairs(rules) do
+        if _scanOnlyOwnByAura[auraName] ~= nil then return true end
+    end
+    return false
 end
 
 local function SecretFilterPasses(unit, auraInstanceID, filter)
@@ -562,33 +728,38 @@ local function MatchSecretAuraSignature(unit, aura, specKey, siCfg)
         end
     end
 
-    local signature = MakeSecretSignature(unit, aura)
-    if not signature then return nil end
-
     if specKey ~= "multi" then
         local lookup = GetSecretSignatureLookup(specKey)
+        if not lookup then return nil end
+        local signature = MakeSecretSignature(unit, aura)
+        if not signature then return nil end
         return lookup and NormalizeSecretMatch(specKey, lookup[signature], unit) or nil
     end
 
     local specs, specCount = GetMultiSpecList(siCfg)
     if not specs then return nil end
 
+    local signature
     local matched
     for i = 1, specCount do
         local lookup = GetSecretSignatureLookup(specs[i])
-        local auraName = lookup and NormalizeSecretMatch(specs[i], lookup[signature], unit)
-        if auraName then
-            if matched and matched ~= auraName then
-                return nil
+        if lookup then
+            signature = signature or MakeSecretSignature(unit, aura)
+            if not signature then return nil end
+            local auraName = NormalizeSecretMatch(specs[i], lookup[signature], unit)
+            if auraName then
+                if matched and matched ~= auraName then
+                    return nil
+                end
+                matched = auraName
             end
-            matched = auraName
         end
     end
     return matched
 end
 
 local function MatchSelfOnlyAura(unit, aura, specKey, siCfg)
-    if not (SI.SelfOnlySpellIDs and UnitIsPlayerUnit(unit) and aura) then return nil end
+    if not (SI.SelfOnlySpellIDs and aura) then return nil end
     local sid = aura.spellId
     if sid == nil or (issecretvalue and issecretvalue(sid)) then return nil end
     sid = tonumber(sid)
@@ -596,7 +767,9 @@ local function MatchSelfOnlyAura(unit, aura, specKey, siCfg)
 
     if specKey ~= "multi" then
         local selfOnly = SI.SelfOnlySpellIDs[specKey]
-        return selfOnly and selfOnly[sid] or nil
+        local auraName = selfOnly and selfOnly[sid]
+        if not auraName then return nil end
+        return UnitIsPlayerUnit(unit) and auraName or nil
     end
 
     local specs, specCount = GetMultiSpecList(siCfg)
@@ -613,7 +786,7 @@ local function MatchSelfOnlyAura(unit, aura, specKey, siCfg)
             matched = auraName
         end
     end
-    return matched
+    return matched and UnitIsPlayerUnit(unit) and matched or nil
 end
 
 local _scanResults = {}
@@ -672,12 +845,22 @@ local function NeedsSecretSignatureScan(siCfg, specKey)
         local specs, specCount = GetMultiSpecList(siCfg)
         if not specs then return false end
         for i = 1, specCount do
-            if SI.SecretAuraInfo[specs[i]] then return true end
+            local info = SI.SecretAuraInfo[specs[i]]
+            if info then
+                for auraName in pairs(info) do
+                    if _scanOnlyOwnByAura[auraName] ~= nil then return true end
+                end
+            end
         end
         return false
     end
 
-    return SI.SecretAuraInfo[specKey] ~= nil
+    local info = SI.SecretAuraInfo[specKey]
+    if not info then return false end
+    for auraName in pairs(info) do
+        if _scanOnlyOwnByAura[auraName] ~= nil then return true end
+    end
+    return false
 end
 
 local function NeedsSelfOnlyScan(siCfg, specKey)
@@ -686,12 +869,22 @@ local function NeedsSelfOnlyScan(siCfg, specKey)
         local specs, specCount = GetMultiSpecList(siCfg)
         if not specs then return false end
         for i = 1, specCount do
-            if SI.SelfOnlySpellIDs[specs[i]] then return true end
+            local selfOnly = SI.SelfOnlySpellIDs[specs[i]]
+            if selfOnly then
+                for _, auraName in pairs(selfOnly) do
+                    if _scanOnlyOwnByAura[auraName] ~= nil then return true end
+                end
+            end
         end
         return false
     end
 
-    return SI.SelfOnlySpellIDs[specKey] ~= nil
+    local selfOnly = SI.SelfOnlySpellIDs[specKey]
+    if not selfOnly then return false end
+    for _, auraName in pairs(selfOnly) do
+        if _scanOnlyOwnByAura[auraName] ~= nil then return true end
+    end
+    return false
 end
 
 local function ScanAuraSlots(unit, filter, fromPlayerFilter, specKey, siCfg)
@@ -703,11 +896,19 @@ local function ScanAuraSlots(unit, filter, fromPlayerFilter, specKey, siCfg)
             local matched
             local matchedBySignature = false
             local matchedBySelfOnly = false
+            local matchedByLinkedTarget = false
             -- Secret-safety guard + tag-strip: secret-tagged integers need
             -- tonumber() before use as hash key (Midnight 12.0 semantics).
             if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
                 sid = tonumber(sid)
-                if sid then matched = _reverseLookup[sid] end
+                if sid then
+                    matched = _reverseLookup[sid]
+                    local linkedTargetMatched = MatchLinkedTargetAuraByID(sid, specKey, siCfg)
+                    if linkedTargetMatched then
+                        matched = linkedTargetMatched
+                        matchedByLinkedTarget = true
+                    end
+                end
             end
             if not matched and _nameLookup then
                 local aName = aura.name
@@ -726,7 +927,7 @@ local function ScanAuraSlots(unit, filter, fromPlayerFilter, specKey, siCfg)
             end
             if matched and not _scanResults[matched] then
                 local onlyOwn = _scanOnlyOwnByAura[matched]
-                if onlyOwn ~= nil and (fromPlayerFilter or onlyOwn == false or matchedBySignature or matchedBySelfOnly) then
+                if onlyOwn ~= nil and (fromPlayerFilter or onlyOwn == false or matchedBySignature or matchedBySelfOnly or matchedByLinkedTarget) then
                     _scanResults[matched] = aura
                 end
             end
@@ -798,7 +999,7 @@ function GF.SpellIndicatorsUnitAuraRelevant(f, unit, kind, updateInfo)
     local siCfg = GetSIConfig(kind or (f and f._msufGFKind) or "party")
     if not siCfg or not siCfg.enabled then return false end
 
-    local specKey = ResolveSpec(siCfg)
+    local specKey = ResolveRuntimeSpec(siCfg)
     if not specKey then return false end
     CompileLookup(specKey, siCfg)
 
@@ -1758,7 +1959,7 @@ function GF.UpdateSpellIndicators(f, unit)
     local siCfg = GetSIConfig(kind)
     if not siCfg or not siCfg.enabled then GF.HideSpellIndicators(f); return end
 
-    local specKey = ResolveSpec(siCfg)
+    local specKey = ResolveRuntimeSpec(siCfg)
     if not specKey then GF.HideSpellIndicators(f); return end
 
     CompileLookup(specKey, siCfg)

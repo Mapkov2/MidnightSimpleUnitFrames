@@ -622,7 +622,7 @@ local function BuildGFIndicators(ctx)
             tile:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:AddLine(info.display or info.name, 1, 1, 1)
-                if info.secret then GameTooltip:AddLine(Tr("Secret aura (name-matched)"), 0.72, 0.62, 0.95) end
+                if info.secret then GameTooltip:AddLine(Tr("Secret aura (name/fingerprint matched)"), 0.72, 0.62, 0.95) end
                 GameTooltip:AddLine(Tr("Left-click to configure"), 0.75, 0.78, 0.86)
                 GameTooltip:AddLine(Tr("Right-click to toggle"), 0.55, 0.82, 0.55)
                 GameTooltip:AddLine(Tr("Drag to reorder"), 0.55, 0.70, 0.95)
