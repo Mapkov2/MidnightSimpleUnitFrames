@@ -204,16 +204,6 @@ local function BuildPreview(ctx, builder, unit)
     local box = createPreview(sec, panel, ctx.width - 28, 300)
     box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -38)
     box:Show()
-    if W.AttachPinnedPreview then
-        W.AttachPinnedPreview(sec, box, {
-            stateKey = "unitFramePreview",
-            title = box.title,
-            hint = box.hint,
-            left = 14,
-            right = 14,
-            top = -8,
-        })
-    end
     if box.title and box.title.SetTextColor then
         local c = T.colors.accent
         box.title:SetTextColor(c[1], c[2], c[3], c[4] or 1)
