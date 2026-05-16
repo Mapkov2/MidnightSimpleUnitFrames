@@ -5449,8 +5449,16 @@ end
 ------------------------------------------------------------------------
 local _tooltipPendingToken = 0 -- invalidates deferred tooltip callbacks
 local _tooltipTarget  -- frame awaiting tooltip
+local _Debug = ns and ns.Debug
+
+local function DebugHover(message, ...)
+    if _Debug and type(_Debug.PrintGFHover) == "function" then
+        _Debug.PrintGFHover(message, ...)
+    end
+end
 
 local function OnEnter(f)
+    DebugHover("GF OnEnter frame=%s unit=%s kind=%s", tostring(f and f:GetName() or "<anon>"), tostring(f and f.unit or "nil"), tostring(f and f._msufGFKind or "party"))
     -- Mouseover highlight
     local hb = EnsureMouseoverHighlight(f)
     if hb then hb:Show() end
@@ -5461,19 +5469,44 @@ local function OnEnter(f)
     if not f.unit or not UnitExists(f.unit) then return end
     local conf = GF.GetConf(f._msufGFKind or "party")
     local mode = conf.tooltipMode or "ALWAYS"
-    if mode == "NEVER" then return end
-    if mode == "OOC" and InCombatLockdown() then return end
+    if mode == "NEVER" then
+        DebugHover("GF tooltip blocked frame=%s reason=mode-never", tostring(f and f:GetName() or "<anon>"))
+        return
+    end
+    if mode == "OOC" and InCombatLockdown() then
+        DebugHover("GF tooltip blocked frame=%s reason=in-combat-ooc-mode", tostring(f and f:GetName() or "<anon>"))
+        return
+    end
     if mode == "MODIFIER" then
         local mod = conf.tooltipModifier or "ALT"
-        if mod == "ALT"   and not IsAltKeyDown()     then return end
-        if mod == "CTRL"  and not IsControlKeyDown()  then return end
-        if mod == "SHIFT" and not IsShiftKeyDown()    then return end
+        if mod == "ALT"   and not IsAltKeyDown() then
+            DebugHover("GF tooltip blocked frame=%s reason=alt-not-held", tostring(f and f:GetName() or "<anon>"))
+            return
+        end
+        if mod == "CTRL"  and not IsControlKeyDown() then
+            DebugHover("GF tooltip blocked frame=%s reason=ctrl-not-held", tostring(f and f:GetName() or "<anon>"))
+            return
+        end
+        if mod == "SHIFT" and not IsShiftKeyDown() then
+            DebugHover("GF tooltip blocked frame=%s reason=shift-not-held", tostring(f and f:GetName() or "<anon>"))
+            return
+        end
     end
     local token = _tooltipPendingToken
     C_Timer.After(0.15, function()
-        if _tooltipPendingToken ~= token then return end
-        if _tooltipTarget ~= f then return end
-        if not f.unit or not UnitExists(f.unit) then return end
+        if _tooltipPendingToken ~= token then
+            DebugHover("GF tooltip canceled frame=%s reason=token-changed", tostring(f and f:GetName() or "<anon>"))
+            return
+        end
+        if _tooltipTarget ~= f then
+            DebugHover("GF tooltip canceled frame=%s reason=target-changed", tostring(f and f:GetName() or "<anon>"))
+            return
+        end
+        if not f.unit or not UnitExists(f.unit) then
+            DebugHover("GF tooltip canceled frame=%s reason=unit-gone", tostring(f and f:GetName() or "<anon>"))
+            return
+        end
+        DebugHover("GF tooltip firing frame=%s unit=%s", tostring(f and f:GetName() or "<anon>"), tostring(f and f.unit or "nil"))
         local tips = ns and ns.Tooltips
         if tips and type(tips.ShowUnit) == "function" then
             tips.ShowUnit(f, f.unit)
@@ -5487,6 +5520,7 @@ local function OnEnter(f)
 end
 
 local function OnLeave(f)
+    DebugHover("GF OnLeave frame=%s unit=%s kind=%s", tostring(f and f:GetName() or "<anon>"), tostring(f and f.unit or "nil"), tostring(f and f._msufGFKind or "party"))
     -- Cancel pending tooltip
     _tooltipPendingToken = _tooltipPendingToken + 1
     _tooltipTarget = nil

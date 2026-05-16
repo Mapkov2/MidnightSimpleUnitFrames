@@ -14,6 +14,26 @@ local function Tr(text)
     return text
 end
 
+ns.Debug = ns.Debug or {}
+local Debug = ns.Debug
+
+Debug.IsGFHoverEnabled = Debug.IsGFHoverEnabled or function()
+    return Debug.gfHover == true
+end
+
+Debug.PrintGFHover = Debug.PrintGFHover or function(message, ...)
+    if Debug.gfHover ~= true then return end
+    local prefix = "|cff7aa2f7MSUF GFDBG|r "
+    if select("#", ...) > 0 then
+        local ok, formatted = pcall(string.format, message, ...)
+        if ok then
+            print(prefix .. formatted)
+            return
+        end
+    end
+    print(prefix .. tostring(message))
+end
+
 local MSUF_RESET_DEFAULTS = {
     player = { width=275, height=40, offsetX=-260, offsetY=80, showName=true, showHP=true, showPower=true },
     target = { width=275, height=40, offsetX= 260, offsetY=80, showName=true, showHP=true, showPower=true },
@@ -73,6 +93,7 @@ local function MSUF_PrintHelp()
     print(Tr("                   Confirm stages the reset; reload via /reload or MSUF Menu > Advanced > Factory Reset."))
     print(Tr("  /msuf absorb    - Toggle showing total absorb amount in HP text."))
     print(Tr("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry."))
+    print(Tr("  /msuf gfhoverdebug on|off|status - Debug group-frame hover + tooltip paths."))
     print(Tr("  /rl             - Reload the UI."))
     print(Tr("  /msufdbgpos     - Toggle position drift debugger (overlay + chat log)."))
     print(Tr("  !msuf help      - Print this help via chat (from your own character)."))
@@ -247,6 +268,24 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             print(Tr("|cffff0000MSUF:|r Analytics module not loaded."))
         end
          return
+    end
+    if cmd == "gfhoverdebug" then
+        local arg = msg:match("^%S+%s*(.-)%s*$") or ""
+        arg = arg:gsub("^%s+", ""):gsub("%s+$", "")
+        if arg == "" or arg == "toggle" then
+            Debug.gfHover = not (Debug.gfHover == true)
+        elseif arg == "on" then
+            Debug.gfHover = true
+        elseif arg == "off" then
+            Debug.gfHover = false
+        elseif arg == "status" then
+            -- no-op, only print below
+        else
+            print(Tr("|cffff0000MSUF:|r Usage: /msuf gfhoverdebug on|off|status"))
+            return
+        end
+        print(string.format("|cff7aa2f7MSUF|r: Group-frame hover debug is %s.", Debug.gfHover == true and "|cff73dacaON|r" or "|cfff7768eOFF|r"))
+        return
     end
     -- Unknown
     MSUF_PrintHelp()

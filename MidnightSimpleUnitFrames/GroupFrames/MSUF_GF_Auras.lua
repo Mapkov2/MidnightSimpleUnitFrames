@@ -36,6 +36,13 @@ local _PADLOCK_ICON = 134400
 local _GF_RegisterCooldownTextIcon
 local _GF_UnregisterCooldownTextIcon
 local _GF_TouchCooldownTextIcon
+local _Debug = ns.Debug
+
+local function DebugHover(message, ...)
+    if _Debug and type(_Debug.PrintGFHover) == "function" then
+        _Debug.PrintGFHover(message, ...)
+    end
+end
 
 ------------------------------------------------------------------------
 -- Class-based dispel detection (set once at load)
@@ -478,25 +485,6 @@ function GF.RecycleFramePools(f)
     if GF.ClearFrameAuraCache then GF.ClearFrameAuraCache(f) end
 end
 
-local function ApplyAuraClickPassThrough(frame, allowHover)
-    if not frame then return end
-
-    if frame.SetPropagateMouseClicks then
-        frame:SetPropagateMouseClicks(true)
-    end
-    if frame.SetMouseClickEnabled then
-        frame:SetMouseClickEnabled(false)
-    end
-    if frame.SetMouseMotionEnabled then
-        frame:SetMouseMotionEnabled(allowHover == true)
-    elseif frame.EnableMouse then
-        frame:EnableMouse(allowHover == true)
-        if frame.RegisterForClicks then
-            frame:RegisterForClicks()
-        end
-    end
-end
-
 local function IsAuraTooltipAllowed(owner)
     if not owner then return false end
     local kind = owner._msufGFKind or "party"
@@ -528,52 +516,30 @@ local function IsAuraTooltipAllowed(owner)
     return true
 end
 
-local function ApplyNativeAuraChildrenPassThrough(root, owner)
-    if not (root and root.GetChildren) then return end
-
-    local children = { root:GetChildren() }
-    for i = 1, #children do
-        local child = children[i]
-        if child then
-            child._msufGFOwner = owner or child._msufGFOwner
-            if child.SetPropagateMouseClicks then
-                child:SetPropagateMouseClicks(true)
-            end
-            if child.SetMouseClickEnabled then
-                child:SetMouseClickEnabled(false)
-            elseif child.RegisterForClicks then
-                child:RegisterForClicks()
-            end
-            if child.HookScript and not child._msufGFAuraTooltipGateHooked then
-                child._msufGFAuraTooltipGateHooked = true
-                child:HookScript("OnEnter", function(self)
-                    if IsAuraTooltipAllowed(self._msufGFOwner) then return end
-                    if GameTooltip and not GameTooltip:IsForbidden() then
-                        GameTooltip:Hide()
-                    end
-                end)
-                child:HookScript("OnLeave", function(self)
-                    if GameTooltip and not GameTooltip:IsForbidden() and GameTooltip:IsOwned(self) then
-                        GameTooltip:Hide()
-                    end
-                end)
-            end
-            ApplyNativeAuraChildrenPassThrough(child, owner)
-        end
-    end
-end
-
 local function CreateAuraIcon(parent, size)
     local icon = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     icon:SetSize(size, size)
 
     -- Tooltip: hover only, clicks pass through to unit frame beneath
-    ApplyAuraClickPassThrough(icon, true)
+    if icon.SetMouseMotionEnabled then
+        icon:SetMouseMotionEnabled(true)
+        icon:SetMouseClickEnabled(false)
+    else
+        icon:EnableMouse(true)
+    end
     icon:SetScript("OnEnter", function(self)
-        if not IsAuraTooltipAllowed(self._msufGFOwner) then return end
+        local owner = self._msufGFOwner
+        if not IsAuraTooltipAllowed(owner) then
+            DebugHover("Aura OnEnter blocked unit=%s kind=%s filter=%s aura=%s", tostring(self._msufUnit or "nil"), tostring(owner and owner._msufGFKind or "party"), tostring(self._msufFilter or "HELPFUL"), tostring(self._msufAuraID or "nil"))
+            return
+        end
         local unit = self._msufUnit
         local aid  = self._msufAuraID
-        if not unit or not aid then return end
+        if not unit or not aid then
+            DebugHover("Aura OnEnter missing-data unit=%s filter=%s aura=%s", tostring(unit or "nil"), tostring(self._msufFilter or "HELPFUL"), tostring(aid or "nil"))
+            return
+        end
+        DebugHover("Aura OnEnter unit=%s kind=%s filter=%s aura=%s", tostring(unit), tostring(owner and owner._msufGFKind or "party"), tostring(self._msufFilter or "HELPFUL"), tostring(aid))
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
         if self._msufFilter == "HARMFUL" and GameTooltip.SetUnitDebuffByAuraInstanceID then
             GameTooltip:SetUnitDebuffByAuraInstanceID(unit, aid)
@@ -585,6 +551,7 @@ local function CreateAuraIcon(parent, size)
         GameTooltip:Show()
     end)
     icon:SetScript("OnLeave", function(self)
+        DebugHover("Aura OnLeave unit=%s filter=%s aura=%s", tostring(self._msufUnit or "nil"), tostring(self._msufFilter or "HELPFUL"), tostring(self._msufAuraID or "nil"))
         if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
     end)
 
@@ -599,7 +566,6 @@ local function CreateAuraIcon(parent, size)
     cd:SetDrawSwipe(true)
     cd:SetReverse(false)
     cd:SetHideCountdownNumbers(true)
-    ApplyAuraClickPassThrough(cd, false)
     -- Prevent end-of-cooldown bling/flash (common source of unwanted blinking)
     if cd.SetDrawBling then cd:SetDrawBling(false) end
     icon.cooldown = cd
@@ -611,7 +577,6 @@ local function CreateAuraIcon(parent, size)
     overlay:SetAllPoints(icon)
     overlay:SetFrameStrata(cd:GetFrameStrata())
     overlay:SetFrameLevel(cd:GetFrameLevel() + 5)
-    ApplyAuraClickPassThrough(overlay, false)
     icon._msufOverlay = overlay
 
     local count = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -2305,7 +2270,8 @@ local function EnsureBlizzardAuraContainer(f, parent)
     local container = f._msufGFNativeAuras
     if not container then
         container = CreateFrame("Frame", nil, parent or f)
-        ApplyAuraClickPassThrough(container, false)
+        container:EnableMouse(false)
+        if container.SetMouseClickEnabled then container:SetMouseClickEnabled(false) end
         f._msufGFNativeAuras = container
     elseif parent and container.GetParent and container:GetParent() ~= parent then
         container:SetParent(parent)
@@ -2427,10 +2393,6 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
                 Native.ClearPrivateAuraHost(container)
             end
         end
-        ApplyNativeAuraChildrenPassThrough(container, f)
-        if container._msufPrivateAuraHost then
-            ApplyNativeAuraChildrenPassThrough(container._msufPrivateAuraHost, f)
-        end
         container:Show()
         return {
             buffs = renderBuffs,
@@ -2442,10 +2404,6 @@ function GF.UpdateBlizzardAuraContainer(f, unit, conf, scale, frameScale, update
     end
 
     local applied = Native.Apply(container, unit, cfg, parent, levelParent)
-    ApplyNativeAuraChildrenPassThrough(container, f)
-    if container._msufPrivateAuraHost then
-        ApplyNativeAuraChildrenPassThrough(container._msufPrivateAuraHost, f)
-    end
 
     return {
         buffs = applied and renderBuffs,
