@@ -33,6 +33,15 @@ function Normalize-ReleaseVersion {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+        $number = ""
+        if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+            $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        }
+        return ($base + "-" + $Matches["channel"].ToLowerInvariant() + $number)
+    }
     $v = $v -replace '(?i)\s+alpha\s*(\d*)', '-alpha$1'
     $v = $v -replace '(?i)\s+beta\s*(\d*)', '-beta$1'
     $v = $v -replace '(?i)\s+rc\s*(\d*)', '-rc$1'
@@ -64,7 +73,30 @@ function Normalize-VersionKey {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+        $number = ""
+        if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+            $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+        }
+        return ($base + $Matches["channel"].ToLowerInvariant() + $number)
+    }
     return ($v.ToLowerInvariant() -replace '[^a-z0-9]+', '')
+}
+
+function Get-PrereleaseFallbackKey {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return "" }
+    $v = $Value.Trim()
+    $v = $v -replace '^refs/tags/', ''
+    $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        return Normalize-VersionKey ($base + " " + $Matches["channel"] + " " + $Matches["number"])
+    }
+    return ""
 }
 
 function Convert-TagToDisplayVersion {
@@ -229,7 +261,14 @@ function Find-ChangelogSection {
         }
     }
 
-    return $sections[0]
+    $fallbackKeys = @((Get-PrereleaseFallbackKey $ReleaseTag), (Get-PrereleaseFallbackKey $DisplayVersion)) | Where-Object { $_ } | Select-Object -Unique
+    foreach ($section in $sections) {
+        if ($fallbackKeys -contains (Normalize-VersionKey $section.Version)) {
+            return $section
+        }
+    }
+
+    throw "Could not find CHANGELOG.md section for '$ReleaseTag' / '$DisplayVersion'."
 }
 
 function Convert-MarkdownSectionToReleaseInput {

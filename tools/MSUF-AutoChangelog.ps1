@@ -79,6 +79,15 @@ function Normalize-VersionKey {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+        $number = ""
+        if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+            $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+        }
+        return ($base + $Matches["channel"].ToLowerInvariant() + $number)
+    }
     return ($v.ToLowerInvariant() -replace '[^a-z0-9]+', '')
 }
 
@@ -133,18 +142,18 @@ function Get-PrereleaseVersionInfo {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
-    if ($v -notmatch '^(?<base>\d+(?:\.\d+)*)[\s._-]*(?<channel>alpha|beta|rc|pre)(?:[\s._-]*(?<number>\d+))?\s*$') {
+    if ($v -notmatch '^(?<base>\d+(?:\.\d+)*)[\s._-]*(?<channel>alpha|beta|rc|pre)(?:[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
         return $null
     }
 
     $hasNumber = -not [string]::IsNullOrWhiteSpace($Matches["number"])
-    $number = if ($hasNumber) { [int]$Matches["number"] } else { $null }
+    $numberParts = if ($hasNumber) { [int[]]($Matches["number"] -split '\.' | ForEach-Object { [int]$_ }) } else { $null }
 
     return [pscustomobject]@{
-        BaseKey   = Normalize-VersionKey $Matches["base"]
-        Channel   = $Matches["channel"].ToLowerInvariant()
-        HasNumber = $hasNumber
-        Number    = $number
+        BaseKey     = Normalize-VersionKey $Matches["base"]
+        Channel     = $Matches["channel"].ToLowerInvariant()
+        HasNumber   = $hasNumber
+        NumberParts = $numberParts
     }
 }
 
@@ -162,7 +171,7 @@ function Test-IsPrereleaseCarrySource {
     if ((Normalize-VersionKey $SourceVersion) -eq (Normalize-VersionKey $TargetVersion)) { return $false }
 
     if ($target.HasNumber) {
-        if ($source.HasNumber) { return ($source.Number -lt $target.Number) }
+        if ($source.HasNumber) { return ((Compare-VersionNumberParts -Left $source.NumberParts -Right $target.NumberParts) -lt 0) }
         return $true
     }
 
@@ -1632,6 +1641,16 @@ function Convert-TagToDisplayVersion {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+        $number = ""
+        if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+            $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
+        }
+        $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
+        return ($base + " " + $channel + $number).Trim()
+    }
     $v = $v -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
     $v = $v -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
     $v = $v -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'

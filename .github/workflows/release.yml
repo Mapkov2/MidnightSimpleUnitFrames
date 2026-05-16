@@ -74,11 +74,25 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($releaseName)) {
             $displayVersion = $tag -replace '^refs/tags/', ''
             $displayVersion = $displayVersion -replace '^v(?=\d)', ''
-            $displayVersion = $displayVersion -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
-            $displayVersion = $displayVersion -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
-            $displayVersion = $displayVersion -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
-            $displayVersion = $displayVersion -replace '[-_]+', ' '
-            $displayVersion = ($displayVersion -replace '\s+', ' ').Trim()
+            if ($displayVersion -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) {
+                $displayVersion = $base
+              } else {
+                $number = ""
+                if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+                  $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
+                }
+                $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
+                $displayVersion = ($base + " " + $channel + $number).Trim()
+              }
+            } else {
+              $displayVersion = $displayVersion -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
+              $displayVersion = $displayVersion -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
+              $displayVersion = $displayVersion -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
+              $displayVersion = $displayVersion -replace '[-_]+', ' '
+              $displayVersion = ($displayVersion -replace '\s+', ' ').Trim()
+            }
             $releaseName = "MSUF $displayVersion"
           }
           $releaseName = ($releaseName -replace '[\r\n]+', ' ').Trim()
@@ -117,12 +131,43 @@ jobs:
             $v = $value.Trim()
             $v = $v -replace '^refs/tags/', ''
             $v = $v -replace '^v(?=\d)', ''
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+              $number = ""
+              if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+                $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+              }
+              return ($base + $Matches["channel"].ToLowerInvariant() + $number)
+            }
             return (($v.ToLowerInvariant()) -replace '[^a-z0-9]+', '')
+          }
+
+          function Get-PrereleaseFallbackKey([string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
+            $v = $value.Trim()
+            $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '^v(?=\d)', ''
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              return Normalize-Key ($base + " " + $Matches["channel"] + " " + $Matches["number"])
+            }
+            return ""
           }
 
           function Convert-TagToDisplay([string]$tag) {
             $display = $tag -replace '^refs/tags/', ''
             $display = $display -replace '^v(?=\d)', ''
+            if ($display -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+              $number = ""
+              if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+                $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
+              }
+              $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
+              return ($base + " " + $channel + $number).Trim()
+            }
             $display = $display -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
             $display = $display -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
             $display = $display -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
@@ -133,7 +178,12 @@ jobs:
 
           $tag = $env:RELEASE_VERSION
           $display = Convert-TagToDisplay $tag
-          $wanted = @((Normalize-Key $tag), (Normalize-Key $display)) | Where-Object { $_ } | Select-Object -Unique
+          $wanted = @(
+            (Normalize-Key $tag),
+            (Normalize-Key $display),
+            (Get-PrereleaseFallbackKey $tag),
+            (Get-PrereleaseFallbackKey $display)
+          ) | Where-Object { $_ } | Select-Object -Unique
           $lines = [regex]::Split((Get-Content -LiteralPath "CHANGELOG.md" -Raw), "\r?\n")
           $start = -1
           $end = $lines.Count

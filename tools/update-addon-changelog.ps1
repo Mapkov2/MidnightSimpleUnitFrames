@@ -45,7 +45,30 @@ function Normalize-VersionKey {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+        $number = ""
+        if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+            $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+        }
+        return ($base + $Matches["channel"].ToLowerInvariant() + $number)
+    }
     return ($v.ToLowerInvariant() -replace '[^a-z0-9]+', '')
+}
+
+function Get-PrereleaseFallbackKey {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return "" }
+    $v = $Value.Trim()
+    $v = $v -replace '^refs/tags/', ''
+    $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        return Normalize-VersionKey ($base + " " + $Matches["channel"] + " " + $Matches["number"])
+    }
+    return ""
 }
 
 function Convert-ToAsciiText {
@@ -147,10 +170,23 @@ if ($releases.Count -eq 0) {
 $startIndex = 0
 $versionKey = Normalize-VersionKey $Version
 if ($versionKey -ne "") {
+    $foundVersion = $false
     for ($i = 0; $i -lt $releases.Count; $i++) {
         if ((Normalize-VersionKey $releases[$i].version) -eq $versionKey) {
             $startIndex = $i
+            $foundVersion = $true
             break
+        }
+    }
+    if (-not $foundVersion) {
+        $fallbackKey = Get-PrereleaseFallbackKey $Version
+        if ($fallbackKey -ne "") {
+            for ($i = 0; $i -lt $releases.Count; $i++) {
+                if ((Normalize-VersionKey $releases[$i].version) -eq $fallbackKey) {
+                    $startIndex = $i
+                    break
+                }
+            }
         }
     }
 }

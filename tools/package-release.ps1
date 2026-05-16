@@ -58,6 +58,15 @@ function Normalize-Version {
     $value = $RawVersion.Trim()
     $value = $value -replace '^refs/tags/', ''
     $value = $value -replace '^v(?=\d)', ''
+    if ($value -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+        $number = ""
+        if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+            $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        }
+        return ($base + "-" + $Matches["channel"].ToLowerInvariant() + $number)
+    }
 
     if ([string]::IsNullOrWhiteSpace($value)) {
         throw "Version cannot be empty."
