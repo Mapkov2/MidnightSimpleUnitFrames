@@ -805,6 +805,12 @@ local function BuildText(ctx, builder, unit)
         return fs
     end
 
+    local function ReadSlot(unitKey, slotKey, legacyKey, fallback)
+        local value = ReadText(unitKey, slotKey, nil)
+        if value == nil or value == "" then value = ReadText(unitKey, legacyKey, fallback) end
+        return value or fallback
+    end
+
     local function EffectiveTextSize(unitKey, generalKey)
         local conf = GetConf(unit)
         local value = tonumber(conf and conf[unitKey])
@@ -878,25 +884,31 @@ local function BuildText(ctx, builder, unit)
         end)
 
     SectionLabel(hpTab, "Content", leftX, -82)
-    local hpMode = W.Dropdown(hpTab, "Pattern", HP_MODES, 260)
-    PlaceDropdown(hpTab, hpMode, leftX, -112, dropdownW)
-    M.BindDropdown(ctx, hpMode,
-        function() return ReadText(unit, "hpTextMode", "CURPERCENT") end,
-        function(v) SetText(unit, "hpTextMode", v or "CURPERCENT", "MSUF2_HP_MODE") end)
+    local hpLeft = W.Dropdown(hpTab, "Left", HP_MODES, 260)
+    PlaceDropdown(hpTab, hpLeft, leftX, -112, dropdownW)
+    M.BindDropdown(ctx, hpLeft,
+        function() return ReadSlot(unit, "textLeft", "hpTextMode", "NONE") end,
+        function(v) SetText(unit, "textLeft", v or "NONE", "MSUF2_HP_LEFT") end)
 
-    local hpAnchor = W.Dropdown(hpTab, "Anchor", TEXT_ANCHORS, 210)
-    PlaceDropdown(hpTab, hpAnchor, leftX, -166, smallDropdownW)
-    M.BindDropdown(ctx, hpAnchor,
-        function() return ReadText(unit, "hpTextAnchor", "RIGHT") end,
-        function(v) SetText(unit, "hpTextAnchor", v or "RIGHT", "MSUF2_HP_ANCHOR") end)
+    local hpCenter = W.Dropdown(hpTab, "Center", HP_MODES, 260)
+    PlaceDropdown(hpTab, hpCenter, leftX, -166, dropdownW)
+    M.BindDropdown(ctx, hpCenter,
+        function() return ReadSlot(unit, "textCenter", "hpTextMode", "NONE") end,
+        function(v) SetText(unit, "textCenter", v or "NONE", "MSUF2_HP_CENTER") end)
+
+    local hpRight = W.Dropdown(hpTab, "Right", HP_MODES, 260)
+    PlaceDropdown(hpTab, hpRight, leftX, -220, dropdownW)
+    M.BindDropdown(ctx, hpRight,
+        function() return ReadSlot(unit, "textRight", "hpTextMode", "CURPERCENT") end,
+        function(v) SetText(unit, "textRight", v or "NONE", "MSUF2_HP_RIGHT") end)
 
     local hpSep = W.Dropdown(hpTab, "Delimiter", SEPARATORS, 160)
-    PlaceDropdown(hpTab, hpSep, leftX, -220, smallDropdownW)
+    PlaceDropdown(hpTab, hpSep, leftX, -274, smallDropdownW)
     M.BindDropdown(ctx, hpSep,
         function() return ReadText(unit, "hpTextSeparator", "") end,
         function(v) SetText(unit, "hpTextSeparator", v or "", "MSUF2_HP_SEPARATOR") end)
 
-    local hpReverse = W.ToggleAt(hpTab, "Reverse order", leftX, -274, colW - 60)
+    local hpReverse = W.ToggleAt(hpTab, "Reverse order", leftX, -328, colW - 60)
     M.BindToggle(ctx, hpReverse,
         function() return ReadText(unit, "hpTextReverse", false) == true end,
         function(v) SetText(unit, "hpTextReverse", v and true or false, "MSUF2_HP_REVERSE") end)
@@ -933,20 +945,26 @@ local function BuildText(ctx, builder, unit)
         end)
 
     SectionLabel(powerTab, "Content", leftX, -82)
-    local pMode = W.Dropdown(powerTab, "Pattern", POWER_MODES, 260)
-    PlaceDropdown(powerTab, pMode, leftX, -112, dropdownW)
-    M.BindDropdown(ctx, pMode,
-        function() return ReadText(unit, "powerTextMode", "CURPERCENT") end,
-        function(v) SetText(unit, "powerTextMode", v or "CURPERCENT", "MSUF2_POWER_TEXT_MODE") end)
+    local pLeft = W.Dropdown(powerTab, "Left", POWER_MODES, 260)
+    PlaceDropdown(powerTab, pLeft, leftX, -112, dropdownW)
+    M.BindDropdown(ctx, pLeft,
+        function() return ReadSlot(unit, "powerTextLeft", "powerTextMode", "NONE") end,
+        function(v) SetText(unit, "powerTextLeft", v or "NONE", "MSUF2_POWER_TEXT_LEFT") end)
 
-    local pAnchor = W.Dropdown(powerTab, "Anchor", TEXT_ANCHORS, 210)
-    PlaceDropdown(powerTab, pAnchor, leftX, -166, smallDropdownW)
-    M.BindDropdown(ctx, pAnchor,
-        function() return ReadText(unit, "powerTextAnchor", "RIGHT") end,
-        function(v) SetText(unit, "powerTextAnchor", v or "RIGHT", "MSUF2_POWER_TEXT_ANCHOR") end)
+    local pCenter = W.Dropdown(powerTab, "Center", POWER_MODES, 260)
+    PlaceDropdown(powerTab, pCenter, leftX, -166, dropdownW)
+    M.BindDropdown(ctx, pCenter,
+        function() return ReadSlot(unit, "powerTextCenter", "powerTextMode", "NONE") end,
+        function(v) SetText(unit, "powerTextCenter", v or "NONE", "MSUF2_POWER_TEXT_CENTER") end)
+
+    local pRight = W.Dropdown(powerTab, "Right", POWER_MODES, 260)
+    PlaceDropdown(powerTab, pRight, leftX, -220, dropdownW)
+    M.BindDropdown(ctx, pRight,
+        function() return ReadSlot(unit, "powerTextRight", "powerTextMode", "CURPERCENT") end,
+        function(v) SetText(unit, "powerTextRight", v or "NONE", "MSUF2_POWER_TEXT_RIGHT") end)
 
     local pSep = W.Dropdown(powerTab, "Delimiter", SEPARATORS, 160)
-    PlaceDropdown(powerTab, pSep, leftX, -220, smallDropdownW)
+    PlaceDropdown(powerTab, pSep, leftX, -274, smallDropdownW)
     M.BindDropdown(ctx, pSep,
         function() return ReadText(unit, "powerTextSeparator", ReadText(unit, "hpTextSeparator", "")) end,
         function(v) SetText(unit, "powerTextSeparator", v or "", "MSUF2_POWER_TEXT_SEPARATOR") end)
@@ -993,38 +1011,6 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "powerTextLayer", 2) end,
         function(v) SetNumber(unit, "powerTextLayer", v, "MSUF2_POWER_TEXT_LAYER_ADV", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
 
-    SectionLabel(advancedTab, "Text Spacing", rightX, -4)
-    local spacingHint = W.Text(advancedTab, "Optional split spacing for two-part HP or Power patterns.", rightX, -28, rightW, T.colors.dim)
-    if spacingHint and spacingHint.SetWordWrap then spacingHint:SetWordWrap(true) end
-
-    local hpSpacer = W.ToggleAt(advancedTab, "HP spacer", rightX, -82, rightW)
-    M.BindToggle(ctx, hpSpacer,
-        function() return ReadText(unit, "hpTextSpacerEnabled", false) == true end,
-        function(v)
-            SetText(unit, "hpTextSpacerEnabled", v and true or false, "MSUF2_HP_TEXT_SPACER")
-            if RefreshTextControlState then RefreshTextControlState() end
-        end)
-
-    local hpSpacerX = W.Slider(advancedTab, "HP spacer X", 0, 1000, 1, 260)
-    PlaceSlider(advancedTab, hpSpacerX, rightX, -124, rightSliderW)
-    M.BindSlider(ctx, hpSpacerX,
-        function() return tonumber(ReadText(unit, "hpTextSpacerX", 140)) or 140 end,
-        function(v) SetText(unit, "hpTextSpacerX", floor((tonumber(v) or 140) + 0.5), "MSUF2_HP_TEXT_SPACER_X") end)
-
-    local powerSpacer = W.ToggleAt(advancedTab, "Power spacer", rightX, -198, rightW)
-    M.BindToggle(ctx, powerSpacer,
-        function() return ReadText(unit, "powerTextSpacerEnabled", false) == true end,
-        function(v)
-            SetText(unit, "powerTextSpacerEnabled", v and true or false, "MSUF2_POWER_TEXT_SPACER")
-            if RefreshTextControlState then RefreshTextControlState() end
-        end)
-
-    local powerSpacerX = W.Slider(advancedTab, "Power spacer X", 0, 1000, 1, 260)
-    PlaceSlider(advancedTab, powerSpacerX, rightX, -240, rightSliderW)
-    M.BindSlider(ctx, powerSpacerX,
-        function() return tonumber(ReadText(unit, "powerTextSpacerX", 140)) or 140 end,
-        function(v) SetText(unit, "powerTextSpacerX", floor((tonumber(v) or 140) + 0.5), "MSUF2_POWER_TEXT_SPACER_X") end)
-
     RefreshTextControlState = function()
         local tab = CurrentTextTab()
         for key, frame in pairs(tabFrames) do
@@ -1042,26 +1028,24 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(nameY, nameOn)
         SetControlEnabled(advNameLayer, nameOn)
         SetControlEnabled(showHPText, true)
-        SetControlEnabled(hpMode, hpOn)
-        SetControlEnabled(hpAnchor, hpOn)
+        SetControlEnabled(hpLeft, hpOn)
+        SetControlEnabled(hpCenter, hpOn)
+        SetControlEnabled(hpRight, hpOn)
         SetControlEnabled(hpSep, hpOn)
         SetControlEnabled(hpReverse, hpOn)
         SetControlEnabled(hpSize, hpOn)
         SetControlEnabled(hpX, hpOn)
         SetControlEnabled(hpY, hpOn)
         SetControlEnabled(advHpLayer, hpOn)
-        SetControlEnabled(hpSpacer, hpOn)
-        SetControlEnabled(hpSpacerX, hpOn and ReadText(unit, "hpTextSpacerEnabled", false) == true)
         SetControlEnabled(showPowerText, true)
-        SetControlEnabled(pMode, powerOn)
-        SetControlEnabled(pAnchor, powerOn)
+        SetControlEnabled(pLeft, powerOn)
+        SetControlEnabled(pCenter, powerOn)
+        SetControlEnabled(pRight, powerOn)
         SetControlEnabled(pSep, powerOn)
         SetControlEnabled(pSize, powerOn)
         SetControlEnabled(pX, powerOn)
         SetControlEnabled(pY, powerOn)
         SetControlEnabled(advPowerLayer, powerOn)
-        SetControlEnabled(powerSpacer, powerOn)
-        SetControlEnabled(powerSpacerX, powerOn and ReadText(unit, "powerTextSpacerEnabled", false) == true)
     end
     M.AddRefresher(ctx, RefreshTextControlState)
     RefreshTextControlState()
