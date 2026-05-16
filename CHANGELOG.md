@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.2 Beta 6 - 2026-05-16
+## 5.2-beta7 - 2026-05-16
 
 ### Performance
 
@@ -10,6 +10,7 @@
 - Improved text container movement controls.
 - Potential fix for bug with boss frame debuffs.
 - Performance in interrupt module.
+- Restored old behavior for auras.
 <!-- MSUF-AUTO-CHANGELOG:Performance:END -->
 
 ### Bugfixes
@@ -21,6 +22,7 @@
 - Fixed Group Frame mouseover behavior.
 - Fixed some stuff with pinned preview.
 - Pinned now fixed.
+- Added option to show either or different role icons in group.
 <!-- MSUF-AUTO-CHANGELOG:Bugfixes:END -->
 
 ### Changes / Improvements
@@ -34,7 +36,10 @@
 - Reverted back to just showing the state of a window enable disable warning.
 - Mini refactor of group frame effects file.
 - Title clean up.
+- Improved new rested logo.
 <!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
+
+## 5.2 Beta 6 - 2026-05-16
 
 ## 5.2 Beta 5 - 2026-05-16
 
