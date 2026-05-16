@@ -34,13 +34,6 @@ local UnitThreatSituation = _G.UnitThreatSituation
 local C_Timer = _G.C_Timer
 local GetTime = _G.GetTime
 
-local UpdateRoleIcon = GF.UpdateRoleIcon
-local UpdateRaidMarker = GF.UpdateRaidMarker
-local UpdateLeaderIcon = GF.UpdateLeaderIcon
-local UpdateReadyCheck = GF.UpdateReadyCheck
-local UpdateSummonIcon = GF.UpdateSummonIcon
-local UpdateResurrectIcon = GF.UpdateResurrectIcon
-local UpdatePhaseIcon = GF.UpdatePhaseIcon
 local function UpdateGroupNumber(f)
     local fn = GF.UpdateGroupNumberFrame
     if fn then return fn(f) end
@@ -313,10 +306,6 @@ local function _BuildSlotFns(c)
     -- Flag: any slot needs fallback (unknown mode)
     c.anySlowText = (c.tlOn and not c.tlFn) or (c.tcOn and not c.tcFn) or (c.trOn and not c.trFn) or false
 end
-local pairs = pairs
-local type = type
-local tonumber = tonumber
-local tostring = tostring
 local IsAltKeyDown     = _G.IsAltKeyDown
 local IsControlKeyDown = _G.IsControlKeyDown
 local IsShiftKeyDown   = _G.IsShiftKeyDown
@@ -3495,17 +3484,17 @@ local function UpdateAll(f, unit)
         dispatchOverlays(f, unit)
         if wasAbsorbTestMode and not absorbTestMode then f._msufGFAbsorbTestActive = nil end
     end
-    if c.roleStateEn or (f.roleIcon and f.roleIcon:IsShown()) then UpdateRoleIcon(f, unit) end
-    if c.raidMarkerEn or (f.raidIcon and f.raidIcon:IsShown()) then UpdateRaidMarker(f, unit) end
+    if c.roleStateEn or (f.roleIcon and f.roleIcon:IsShown()) then GF.UpdateRoleIcon(f, unit) end
+    if c.raidMarkerEn or (f.raidIcon and f.raidIcon:IsShown()) then GF.UpdateRaidMarker(f, unit) end
     if c.leaderEn
         or (f.leaderIcon and f.leaderIcon:IsShown())
         or (f.assistIcon and f.assistIcon:IsShown())
     then
-        UpdateLeaderIcon(f, unit)
+        GF.UpdateLeaderIcon(f, unit)
     end
-    if c.summonEn or (f.summonIcon and f.summonIcon:IsShown()) then UpdateSummonIcon(f, unit) end
-    if c.resEn or (f.resurrectIcon and f.resurrectIcon:IsShown()) then UpdateResurrectIcon(f, unit) end
-    if c.phaseEn or (f.phaseIcon and f.phaseIcon:IsShown()) then UpdatePhaseIcon(f, unit) end
+    if c.summonEn or (f.summonIcon and f.summonIcon:IsShown()) then GF.UpdateSummonIcon(f, unit) end
+    if c.resEn or (f.resurrectIcon and f.resurrectIcon:IsShown()) then GF.UpdateResurrectIcon(f, unit) end
+    if c.phaseEn or (f.phaseIcon and f.phaseIcon:IsShown()) then GF.UpdatePhaseIcon(f, unit) end
     if c.groupNumberEn
         or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
         or (f.groupNumberText and f.groupNumberText:IsShown())
@@ -4655,8 +4644,8 @@ local UNIT_DISPATCH = {
     end,
     UNIT_THREAT_SITUATION_UPDATE      = function(f, u) UpdateAggro(f, u) end,
     UNIT_THREAT_LIST_UPDATE           = function(f, u) UpdateAggro(f, u) end,
-    INCOMING_SUMMON_CHANGED           = function(f, u) UpdateSummonIcon(f, u); UpdateResurrectIcon(f, u) end,
-    INCOMING_RESURRECT_CHANGED        = function(f, u) UpdateResurrectIcon(f, u) end,
+    INCOMING_SUMMON_CHANGED           = function(f, u) GF.UpdateSummonIcon(f, u); GF.UpdateResurrectIcon(f, u) end,
+    INCOMING_RESURRECT_CHANGED        = function(f, u) GF.UpdateResurrectIcon(f, u) end,
     -- UNIT_PHASE still does a full refresh for phase icon and
     -- name resolution (Unknown â†’ real). A full refresh is the only correct
     -- path; CTR/party-change events only refresh range fade.
@@ -4886,8 +4875,8 @@ local function _gfRosterFlushFrame(f, gmap)
     if sameRosterUnit then
         -- Same button/unit after a roster event: skip full visual refresh.
         -- Role, leader/assist and group-number metadata can still change.
-        if roleChanged then UpdateRoleIcon(f, u) end
-        if leaderChanged then UpdateLeaderIcon(f, u) end
+        if roleChanged then GF.UpdateRoleIcon(f, u) end
+        if leaderChanged then GF.UpdateLeaderIcon(f, u) end
         if (c and c.groupNumberEn)
             or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
             or (f.groupNumberText and f.groupNumberText:IsShown())
@@ -4899,9 +4888,9 @@ local function _gfRosterFlushFrame(f, gmap)
         ApplyHealthColorWithAlpha(f, f._msufGFKind or "party", u)
         ApplyPowerColor(f, u)
         if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, u) end
-        if c and c.roleStateEn then UpdateRoleIcon(f, u) end
-        if c and c.raidMarkerEn then UpdateRaidMarker(f, u) end
-        if c and c.leaderEn then UpdateLeaderIcon(f, u) end
+        if c and c.roleStateEn then GF.UpdateRoleIcon(f, u) end
+        if c and c.raidMarkerEn then GF.UpdateRaidMarker(f, u) end
+        if c and c.leaderEn then GF.UpdateLeaderIcon(f, u) end
         if (c and c.groupNumberEn)
             or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
             or (f.groupNumberText and f.groupNumberText:IsShown())
@@ -5200,12 +5189,12 @@ do
     end
 
     -- READY_CHECK / READY_CHECK_CONFIRM / READY_CHECK_FINISHED share one
-    -- handler. The per-frame CB closes over UpdateReadyCheck and is freed
+    -- handler. The per-frame CB calls GF.UpdateReadyCheck and is freed
     -- when this nested do/end ends.
     do
         local function CB(f, event)
             local c = f and f._c
-            if c and c.readyEn and f.unit then UpdateReadyCheck(f, f.unit, event) end
+            if c and c.readyEn and f.unit then GF.UpdateReadyCheck(f, f.unit, event) end
         end
         local h = function(_, event)
             if not GF._AnyGroupConfFlag("readyCheckIcon") then return end
@@ -5219,7 +5208,7 @@ do
     do
         local function CB(f)
             local c = f and f._c
-            if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then UpdateRaidMarker(f, f.unit) end
+            if c and c.raidMarkerEn and f.unit and UnitExists(f.unit) then GF.UpdateRaidMarker(f, f.unit) end
         end
         H.RAID_TARGET_UPDATE = function()
             if not GF._AnyGroupConfFlag("raidMarker") then return end
@@ -5230,7 +5219,7 @@ do
     do
         local function CB(f)
             local c = f and f._c
-            if c and c.leaderEn and f.unit and UnitExists(f.unit) then UpdateLeaderIcon(f, f.unit) end
+            if c and c.leaderEn and f.unit and UnitExists(f.unit) then GF.UpdateLeaderIcon(f, f.unit) end
         end
         H.PARTY_LEADER_CHANGED = function()
             if not (GF._AnyGroupConfFlag("leaderIcon") or GF._AnyGroupConfFlag("assistIcon")) then return end
@@ -5630,14 +5619,14 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
         -- Group Frame Fonts > Name Shortening without reintroducing aura scans.
         dispatchName(f, unit)
         if c and (c.statusTextEn or f._msufGFStatusState ~= 0) then UpdateStatusText(f, unit) end
-        if c and (c.roleStateEn or (f.roleIcon and f.roleIcon:IsShown())) then UpdateRoleIcon(f, unit) end
-        if c and (c.raidMarkerEn or (f.raidIcon and f.raidIcon:IsShown())) then UpdateRaidMarker(f, unit) end
+        if c and (c.roleStateEn or (f.roleIcon and f.roleIcon:IsShown())) then GF.UpdateRoleIcon(f, unit) end
+        if c and (c.raidMarkerEn or (f.raidIcon and f.raidIcon:IsShown())) then GF.UpdateRaidMarker(f, unit) end
         if c and (
             c.leaderEn
             or (f.leaderIcon and f.leaderIcon:IsShown())
             or (f.assistIcon and f.assistIcon:IsShown())
         ) then
-            UpdateLeaderIcon(f, unit)
+            GF.UpdateLeaderIcon(f, unit)
         end
         if (c and c.groupNumberEn)
             or (f._msufGroupNumberFS and f._msufGroupNumberFS:IsShown())
