@@ -634,6 +634,55 @@ local function IsGroupPageKey(key)
     return GF_PAGE_KEYS[key or ""] == true
 end
 
+local function ResetStatusIndicatorTestModeOnMenuExit()
+    if type(M.EnsureDB) ~= "function" then return false end
+
+    local db = M.EnsureDB()
+    if type(db) ~= "table" then return false end
+
+    local changed = false
+    local generalChanged = false
+    db.general = (type(db.general) == "table") and db.general or {}
+    if db.general.stateIconsTestMode == true then
+        db.general.stateIconsTestMode = false
+        changed = true
+        generalChanged = true
+    end
+
+    local unitsToApply = {}
+    local seenUnits = {}
+    local unitPages = M.UnitPage and M.UnitPage.UNIT_PAGES
+    if type(unitPages) == "table" then
+        for _, page in pairs(unitPages) do
+            local unit = page and page.unit
+            if unit == "tot" then unit = "targettarget" end
+            if unit and not seenUnits[unit] then
+                seenUnits[unit] = true
+                local unitConf = db[unit]
+                if type(unitConf) == "table" and unitConf.stateIconsTestMode == true then
+                    unitConf.stateIconsTestMode = false
+                    changed = true
+                    unitsToApply[#unitsToApply + 1] = unit
+                elseif generalChanged then
+                    unitsToApply[#unitsToApply + 1] = unit
+                end
+            end
+        end
+    end
+
+    if not changed then return false end
+    if type(M.RequestUnitApply) ~= "function" then return true end
+
+    for i = 1, #unitsToApply do
+        M.RequestUnitApply(unitsToApply[i], "MSUF2_STATUS_TEST_MENU_EXIT", {
+            notify = false,
+            preview = false,
+        })
+    end
+
+    return true
+end
+
 local function CurrentGFMenuScope()
     local scope = M.gfScope
     if scope == "party" or scope == "raid" or scope == "mythicraid" then return scope end
@@ -4438,6 +4487,7 @@ local function BuildWindow()
         UnregisterStatusEvents()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
         if M.EndHistorySession then M.EndHistorySession() end
+        ResetStatusIndicatorTestModeOnMenuExit()
         M.dashboardChangelogOpen = false
         lastBossPreviewActive = nil
         SyncBossPagePreviewForKey(nil)

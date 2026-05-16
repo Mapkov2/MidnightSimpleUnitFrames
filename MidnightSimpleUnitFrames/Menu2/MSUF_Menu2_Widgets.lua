@@ -976,6 +976,10 @@ function W.AttachPinnedPreview(body, box, opts)
 
     pinBtn:SetScript("OnClick", function()
         M.previewPinState[stateKey] = not PinEnabled()
+        if not PinEnabled() then
+            pinned = true  -- force Restore() to run fully even if state drifted
+            Restore()
+        end
         ApplyPinnedState()
     end)
     pinBtn:SetScript("OnEnter", function(self)
