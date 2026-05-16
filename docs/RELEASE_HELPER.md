@@ -71,6 +71,9 @@ The GitHub workflow builds the zip again from the pushed tag, creates/updates
 the GitHub release, uploads the zip, then publishes to Wago and CurseForge.
 Tags containing `alpha`, `beta`, `rc`, or `pre` are marked as GitHub
 pre-releases and are not promoted as the latest stable GitHub release.
+Before uploading, the workflow extracts only the matching `CHANGELOG.md`
+release section into `dist/RELEASE_NOTES.md`, so GitHub receives the current
+version notes instead of the complete changelog file.
 
 The workflow requires the repository secrets:
 
@@ -91,6 +94,8 @@ Use **Since ref** plus **Draft from Git** to generate a changelog draft from
 the commits after that ref up to `HEAD`. The helper reads each commit subject,
 checks the changed files, assigns the entry to a changelog category, and includes
 the short commit hash plus the most relevant files in the generated bullet.
+For normal releases, prefer **Auto Changelog** because it uses the newer scanner
+that reads commits, patch text, and working-tree changes into user-facing notes.
 
 Keep **Use shown notes as release source** enabled when you want to preserve
 the loaded Markdown section exactly. Disable it when you want the helper to
@@ -127,6 +132,10 @@ Use it to set:
   merges new entries into them; for prereleases such as `5.2 Beta 2` or
   `5.2 Alpha 2`, it also carries older auto bullets from the same version line
   and channel; leave it off to replace old generated bullets
+- **Include prerelease logs**: for a final release such as `5.2`, carries
+  managed auto bullets from matching `5.2 Alpha`, `5.2 Beta`, `5.2 RC`, or
+  `5.2 Pre` sections into the final release notes, then adds the newly
+  generated release changes
 - **Regenerate addon changelog**: updates the in-game changelog Lua file too;
   this is enabled by default in the standalone UI so the dashboard changelog
   follows `CHANGELOG.md`
@@ -147,6 +156,11 @@ Use **Make Friendly** after generating entries when you want release-note text
 for users instead of commit-style bullets. It removes hashes and file paths,
 maps technical areas to addon-facing wording, and leaves the result in the
 editor so you can still adjust it before **Write Edited**.
+
+The auto generator scans the selected Git commit range, the changed files in
+each commit, the actual patch text, and current working-tree changes. Generated
+entries are deduplicated into user-facing release notes instead of plain commit
+lists with hashes and file paths.
 
 For a `5.2` changelog, set **Changelog title** to `5.2`. The source ref should
 normally be the previous real Git tag, for example `v5.1`, not `v5.2`. If the
@@ -170,6 +184,10 @@ By default, old managed auto entries in that section are replaced. Add
 numbered prereleases, the keep mode carries older same-channel auto entries,
 for example from `5.2 Beta 1` into `5.2 Beta 2` or from `5.2 Alpha 1` into
 `5.2 Alpha 2`.
+Add `-IncludePrereleaseAutoEntries` for a final release section such as `5.2`
+when the release notes should include all managed auto entries from matching
+`5.2 Beta 1`, `5.2 Beta 2`, and other same-version prerelease sections plus the
+new release changes from the selected Git range.
 Managed auto blocks in other release sections are cleaned up automatically, so
 generating `5.2` does not leave stale generated `5.2` bullets under older
 sections.

@@ -709,7 +709,8 @@ function Update-AutoChangelogFromRepo {
         [AllowNull()][string]$BaseRef,
         [AllowNull()][string]$ReleaseDate,
         [bool]$CreateMissingRelease = $true,
-        [bool]$KeepExistingAutoEntries = $false
+        [bool]$KeepExistingAutoEntries = $false,
+        [bool]$IncludePrereleaseAutoEntries = $false
     )
 
     if (-not (Test-Path -LiteralPath $AutoChangelogScript)) {
@@ -725,6 +726,9 @@ function Update-AutoChangelogFromRepo {
     }
     if ($KeepExistingAutoEntries) {
         $args += "-KeepExistingAutoEntries"
+    }
+    if ($IncludePrereleaseAutoEntries) {
+        $args += "-IncludePrereleaseAutoEntries"
     }
     if (-not [string]::IsNullOrWhiteSpace($BaseRef)) {
         $args += @("-BaseRef", $BaseRef)
@@ -983,6 +987,13 @@ $keepAutoBox.Location = New-Object System.Drawing.Point(465, 74)
 $keepAutoBox.Size = New-Object System.Drawing.Size(165, 24)
 $form.Controls.Add($keepAutoBox)
 
+$includePrereleaseBox = New-Object System.Windows.Forms.CheckBox
+$includePrereleaseBox.Text = "Include prerelease logs"
+$includePrereleaseBox.Checked = $false
+$includePrereleaseBox.Location = New-Object System.Drawing.Point(465, 98)
+$includePrereleaseBox.Size = New-Object System.Drawing.Size(170, 24)
+$form.Controls.Add($includePrereleaseBox)
+
 New-Label "Release branch" 645 76 95 | Out-Null
 $branchBox = New-Object System.Windows.Forms.ComboBox
 $branchBox.Location = New-Object System.Drawing.Point(745, 74)
@@ -1129,7 +1140,7 @@ function Sync-AutoChangelogSource {
 
     $meta = Read-UiReleaseMetadata
     $baseRef = $baseRefBox.Text.Trim()
-    Update-AutoChangelogFromRepo -DisplayVersion $meta.Display -BaseRef $baseRef -ReleaseDate $meta.Date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked
+    Update-AutoChangelogFromRepo -DisplayVersion $meta.Display -BaseRef $baseRef -ReleaseDate $meta.Date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked -IncludePrereleaseAutoEntries $includePrereleaseBox.Checked
     $section = Find-ChangelogSection -ReleaseTag $meta.Tag -DisplayVersion $meta.Display
     $mdBox.Text = $section.Markdown
     Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null

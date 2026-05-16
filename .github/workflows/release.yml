@@ -109,13 +109,65 @@ jobs:
           ./tools/update-addon-changelog.ps1 -Version $env:RELEASE_VERSION
           ./tools/package-release.ps1 -Version $env:RELEASE_VERSION
 
+      - name: Write GitHub release notes
+        shell: pwsh
+        run: |
+          function Normalize-Key([string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
+            $v = $value.Trim()
+            $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '^v(?=\d)', ''
+            return (($v.ToLowerInvariant()) -replace '[^a-z0-9]+', '')
+          }
+
+          function Convert-TagToDisplay([string]$tag) {
+            $display = $tag -replace '^refs/tags/', ''
+            $display = $display -replace '^v(?=\d)', ''
+            $display = $display -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
+            $display = $display -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
+            $display = $display -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
+            $display = $display -replace '(?i)[\-_]?pre[\-_.]?(\d+)', ' Pre $1'
+            $display = $display -replace '[-_]+', ' '
+            return (($display -replace '\s+', ' ').Trim())
+          }
+
+          $tag = $env:RELEASE_VERSION
+          $display = Convert-TagToDisplay $tag
+          $wanted = @((Normalize-Key $tag), (Normalize-Key $display)) | Where-Object { $_ } | Select-Object -Unique
+          $lines = [regex]::Split((Get-Content -LiteralPath "CHANGELOG.md" -Raw), "\r?\n")
+          $start = -1
+          $end = $lines.Count
+
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^##\s+(.+?)(?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*$') {
+              if ($wanted -contains (Normalize-Key $Matches[1])) {
+                $start = $i
+                for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+                  if ($lines[$j] -match '^##\s+') {
+                    $end = $j
+                    break
+                  }
+                }
+                break
+              }
+            }
+          }
+
+          if ($start -lt 0) {
+            throw "Could not find CHANGELOG.md section for release '$tag' ('$display')."
+          }
+
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
+          $notes = [string[]]$lines[$start..($end - 1)]
+          [System.IO.File]::WriteAllText("dist/RELEASE_NOTES.md", (($notes -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
           name: ${{ steps.channel.outputs.release_name }}
           files: dist/*.zip
-          body_path: CHANGELOG.md
+          body_path: dist/RELEASE_NOTES.md
           fail_on_unmatched_files: true
           overwrite_files: true
           prerelease: ${{ steps.channel.outputs.release_is_prerelease }}
