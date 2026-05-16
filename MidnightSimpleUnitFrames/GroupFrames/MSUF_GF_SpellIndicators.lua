@@ -398,6 +398,33 @@ local function ScanUnit(unit, kind, siCfg, specKey)
     end
 end
 
+local function SpecConfigHasFrameEffects(siCfg, specKey)
+    local specList, auraCount = GetSpecConfigList(siCfg, specKey)
+    if not specList then return false end
+    for i = 1, auraCount do
+        local cfg = specList[i] and specList[i].cfg
+        local frame = cfg and cfg.enabled ~= false and cfg.frame
+        if frame and frame.type and frame.type ~= "none" then return true end
+    end
+    return false
+end
+
+local function NeedsAmbiguousAddedAuraScan(siCfg, specKey)
+    if not siCfg or not specKey then return false end
+    if specKey == "multi" then
+        local specs, specCount = GetMultiSpecList(siCfg)
+        if not specs then return false end
+        for i = 1, specCount do
+            local sk = specs[i]
+            if SI.SecretSpellIDs and SI.SecretSpellIDs[sk] then return true end
+            if SpecConfigHasFrameEffects(siCfg, sk) then return true end
+        end
+        return false
+    end
+    if SI.SecretSpellIDs and SI.SecretSpellIDs[specKey] then return true end
+    return SpecConfigHasFrameEffects(siCfg, specKey)
+end
+
 function GF.SpellIndicatorsUnitAuraRelevant(f, unit, kind, updateInfo)
     if not updateInfo or updateInfo.isFullUpdate then return true end
 
@@ -410,21 +437,29 @@ function GF.SpellIndicatorsUnitAuraRelevant(f, unit, kind, updateInfo)
 
     local added = updateInfo.addedAuras
     if added then
+        local ambiguousAddedAura = false
         for i = 1, #added do
             local aura = added[i]
             if aura then
                 local sid = aura.spellId
-                if sid ~= nil and not (issecretvalue and issecretvalue(sid)) then
+                if sid ~= nil and issecretvalue and issecretvalue(sid) then
+                    ambiguousAddedAura = true
+                elseif sid ~= nil then
                     sid = tonumber(sid)
                     if sid and _reverseLookup and _reverseLookup[sid] then return true end
                 end
-                if _nameLookup then
-                    local auraName = aura.name
-                    if auraName ~= nil and not (issecretvalue and issecretvalue(auraName)) and _nameLookup[auraName] then
+                local auraName = aura.name
+                if auraName ~= nil and issecretvalue and issecretvalue(auraName) then
+                    ambiguousAddedAura = true
+                elseif _nameLookup and auraName ~= nil then
+                    if _nameLookup[auraName] then
                         return true
                     end
                 end
             end
+        end
+        if ambiguousAddedAura and NeedsAmbiguousAddedAuraScan(siCfg, specKey) then
+            return true
         end
     end
 
