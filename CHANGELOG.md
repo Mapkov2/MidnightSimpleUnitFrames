@@ -1,5 +1,40 @@
 # Changelog
 
+## 5.2 Beta 2 - 2026-05-16
+
+### Performance
+
+<!-- MSUF-AUTO-CHANGELOG:Performance:START -->
+- **Core Runtime**: Updated core runtime behavior (working tree; MSUF_FontRuntime.lua).
+- **Unit Text**: Updated unit text rendering (working tree; MSUF_Text.lua).
+- **General**: Updated addon behavior (working tree; MSUF_EM2_Popups.lua).
+- **Foundation**: Updated addon behavior (working tree; MSUF_Defaults.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Global.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupPreview.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_UnitPreview.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_UnitSections.lua).
+- **General**: Updated addon behavior (working tree; MidnightSimpleUnitFrames.lua).
+<!-- MSUF-AUTO-CHANGELOG:Performance:END -->
+
+### Bugfixes
+
+<!-- MSUF-AUTO-CHANGELOG:Bugfixes:START -->
+- **Unit Auras**: Fixed buff auras not updating in certain edge cases (6f0fd9f; Auras2/MSUF_A2_Core.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_AdvancedClassPower.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Unit.lua).
+- **Menu / Dashboard**: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupIndicators.lua).
+- **Group Frames**: Updated Group Frame behavior (working tree; MSUF_GF_SpellIndicators_Data.lua).
+<!-- MSUF-AUTO-CHANGELOG:Bugfixes:END -->
+
+### Changes / Improvements
+
+<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
+- **Core Runtime**: Updated core runtime behavior (working tree; MSUF_Alpha.lua).
+- **Menu / Dashboard**: Way better preview for GF UF menu (5b792da; Menu2/Pages/MSUF_Menu2_UnitPreview.lua, Menu2/Pages/MSUF_Menu2_UnitSections.lua).
+<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
+
+## 5.2 Beta - 2026-05-16
+
 ## 5.2 Beta 1 - 2026-05-15
 
 ### Performance

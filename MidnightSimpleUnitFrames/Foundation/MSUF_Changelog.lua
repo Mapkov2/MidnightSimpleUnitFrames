@@ -4,48 +4,51 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.2 Beta 1",
-    previousVersion = "",
-    rangeLabel = "5.2 Beta 1",
+    currentVersion = "5.2 Beta 2",
+    previousVersion = "5.2 Beta",
+    rangeLabel = "5.2 Beta -> 5.2 Beta 2",
     entries = {
         {
-            version = "5.2 Beta 1",
-            date = "2026-05-15",
+            version = "5.2 Beta 2",
+            date = "2026-05-16",
             sections = {
                 {
                     title = "Performance",
                     bullets = {
-                        "Improved combat-aware update handling across auras, power bars, borders, castbars, portraits, status indicators, unit frames, and group frames.",
-                        "Reduced unnecessary refresh work during combat, menu preview updates, aura rendering, and group frame effects.",
-                        "Improved preview update behavior for unit frames, group frames, and castbars so menu changes feel smoother.",
-                        "Restored and polished the one-click installer flow.",
+                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_FontRuntime.lua).",
+                        "Unit Text: Updated unit text rendering (working tree; MSUF_Text.lua).",
+                        "General: Updated addon behavior (working tree; MSUF_EM2_Popups.lua).",
+                        "Foundation: Updated addon behavior (working tree; MSUF_Defaults.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Global.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupPreview.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_UnitPreview.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_UnitSections.lua).",
+                        "General: Updated addon behavior (working tree; MidnightSimpleUnitFrames.lua).",
                     },
                 },
                 {
                     title = "Bugfixes",
                     bullets = {
-                        "Fixed several group frame, aura preview, and menu issues that could cause inconsistent previews or stale UI state.",
-                        "Fixed additional Midnight beta combat restrictions by avoiding unsafe updates while combat lockdown is active.",
-                        "Improved aura reminder, border, castbar, status icon, and interrupt-ready handling for safer beta behavior.",
-                        "Made click-casting on unit frames more reliable.",
+                        "Unit Auras: Fixed buff auras not updating in certain edge cases (6f0fd9f; Auras2/MSUF_A2_Core.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_AdvancedClassPower.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_Unit.lua).",
+                        "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_GroupIndicators.lua).",
+                        "Group Frames: Updated Group Frame behavior (working tree; MSUF_GF_SpellIndicators_Data.lua).",
                     },
                 },
                 {
                     title = "Changes / Improvements",
                     bullets = {
-                        "Added class-colored bar background support across unit frames and group frames.",
-                        "Added the new Rested symbol for both Classic and Midnight-style rested indicators.",
-                        "Improved the menu and dashboard experience with clearer, more user-friendly behavior.",
-                        "Improved unit frame and group frame previews so layout, colors, castbars, and aura changes are easier to verify before applying.",
-                        "Improved advanced color, global, profile, group layout, group aura, group indicator, and unit settings pages.",
-                        "Improved Class Power setup and brought back the one-click installer.",
-                        "Improved group frame rendering, spell indicators, aura previews, and range/highlight behavior.",
-                        "Improved castbar preview behavior, boss castbar preview text, and castbar anchoring.",
-                        "Improved Edit Mode mover and popup behavior.",
-                        "Updated bundled changelog support so the in-game dashboard can show the 5.2 Beta 1 notes.",
-                        "Prepared the addon for the 5.2 Beta 1 release.",
+                        "Core Runtime: Updated core runtime behavior (working tree; MSUF_Alpha.lua).",
+                        "Menu / Dashboard: Way better preview for GF UF menu (5b792da; Menu2/Pages/MSUF_Menu2_UnitPreview.lua, Menu2/Pages/MSUF_Menu2_UnitSections.lua).",
                     },
                 },
+            },
+        },
+        {
+            version = "5.2 Beta",
+            date = "2026-05-16",
+            sections = {
             },
         },
     },

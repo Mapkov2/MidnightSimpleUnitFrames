@@ -1094,12 +1094,6 @@ end
     if g.powerTextSeparator == nil then
         g.powerTextSeparator = g.hpTextSeparator
     end
-    if g.hpTextSpacerEnabled == nil then
-        g.hpTextSpacerEnabled = false
-    end
-    if g.hpTextSpacerX == nil then
-        g.hpTextSpacerX = 140
-    end
     -- Bar settings scope: always default to Shared so users edit globally first.
     if g.hpPowerTextSelectedKey == nil then
         g.hpPowerTextSelectedKey = "shared"
@@ -1139,62 +1133,6 @@ end
     end
     -- Which unit's portrait settings are currently shown in the Portraits menu (UI state only).
     -- Moved from positional tabs to scope dropdown (Bars pattern).
-    -- Which unit's HP spacer settings are currently shown/edited in the Bars menu.
-    -- This is purely a UI selection state (does not change gameplay behavior).
-    if g.hpSpacerSelectedUnitKey == nil then
-        g.hpSpacerSelectedUnitKey = "player"
-    end
-    if g.hpSpacerSelectedUnitKey == "tot" then
-        g.hpSpacerSelectedUnitKey = "targettarget"
-    end
-    -- HP spacer is now per-unit (Step 4). Keep legacy general.* values as fallback,
-    -- but migrate them into per-unit fields once (without overwriting per-unit edits).
-    local legacyHpSpacerEnabled = g.hpTextSpacerEnabled
-    local legacyHpSpacerX = g.hpTextSpacerX
-    for _, unitKey in ipairs({"player","target","focus","targettarget","pet","boss"}) do
-        MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
-        local u = MSUF_DB[unitKey]
-        if u.hpTextSpacerEnabled == nil and legacyHpSpacerEnabled ~= nil then
-            u.hpTextSpacerEnabled = legacyHpSpacerEnabled
-        end
-        if u.hpTextSpacerX == nil and legacyHpSpacerX ~= nil then
-            u.hpTextSpacerX = legacyHpSpacerX
-        end
-        if u.hpTextSpacerEnabled == nil then
-            u.hpTextSpacerEnabled = false
-        end
-        if u.hpTextSpacerX == nil then
-            u.hpTextSpacerX = 140
-        end
-    end
-    -- Power text spacer (per-unit; matches HP spacer behavior)
-    if g.powerTextSpacerEnabled == nil then
-        g.powerTextSpacerEnabled = false
-    end
-    if g.powerTextSpacerX == nil then
-        g.powerTextSpacerX = 140
-    end
-    do
-        local legacyEnabled = g.powerTextSpacerEnabled
-        local legacyX = g.powerTextSpacerX
-        for _, unitKey in ipairs({"player","target","focus","targettarget","pet","boss"}) do
-            local u = MSUF_DB[unitKey]
-            if type(u) == "table" then
-                if u.powerTextSpacerEnabled == nil and legacyEnabled ~= nil then
-                    u.powerTextSpacerEnabled = legacyEnabled
-                end
-                if u.powerTextSpacerX == nil and legacyX ~= nil then
-                    u.powerTextSpacerX = legacyX
-                end
-                if u.powerTextSpacerEnabled == nil then
-                    u.powerTextSpacerEnabled = false
-                end
-                if u.powerTextSpacerX == nil then
-                    u.powerTextSpacerX = 140
-                end
-            end
-        end
-    end
 
     -- Power text mode: migrate legacy modes to EQoL-style keys.
     local function _MSUF_MigratePowerMode(v)
@@ -1234,16 +1172,16 @@ end
         g.hpTextMode = _MSUF_MigrateHpMode(g.hpTextMode) or "CURPERCENT"
         local defaults = {
             hpTextMode = g.hpTextMode or "CURPERCENT",
+            textLeft = "NONE",
+            textCenter = "NONE",
+            textRight = g.hpTextMode or "CURPERCENT",
             hpTextReverse = (g.hpTextReverse == true),
             powerTextMode = g.powerTextMode or "CURPERCENT",
+            powerTextLeft = "NONE",
+            powerTextCenter = "NONE",
+            powerTextRight = g.powerTextMode or "CURPERCENT",
             hpTextSeparator = (g.hpTextSeparator ~= nil) and g.hpTextSeparator or "-",
             powerTextSeparator = (g.powerTextSeparator ~= nil) and g.powerTextSeparator or ((g.hpTextSeparator ~= nil) and g.hpTextSeparator or "-"),
-            hpTextSpacerEnabled = (g.hpTextSpacerEnabled == true),
-            hpTextSpacerX = tonumber(g.hpTextSpacerX) or 140,
-            powerTextSpacerEnabled = (g.powerTextSpacerEnabled == true),
-            powerTextSpacerX = tonumber(g.powerTextSpacerX) or 140,
-            hpTextAnchor = g.hpTextAnchor or "RIGHT",
-            powerTextAnchor = g.powerTextAnchor or "RIGHT",
             nameTextLayer = tonumber(g.nameTextLayer) or 5,
             hpTextLayer = tonumber(g.hpTextLayer) or tonumber(g.textLayer) or 5,
             powerTextLayer = tonumber(g.powerTextLayer) or 2,
@@ -1253,10 +1191,33 @@ end
             local u = MSUF_DB[unitKey]
             if type(u) == "table" then
                 for field, fallback in pairs(defaults) do
-                    if u[field] == nil then u[field] = fallback end
+                    if field ~= "textLeft" and field ~= "textCenter" and field ~= "textRight"
+                        and field ~= "powerTextLeft" and field ~= "powerTextCenter" and field ~= "powerTextRight"
+                        and u[field] == nil
+                    then
+                        u[field] = fallback
+                    end
                 end
                 u.hpTextMode = _MSUF_MigrateHpMode(u.hpTextMode) or defaults.hpTextMode
                 u.powerTextMode = _MSUF_MigratePowerMode(u.powerTextMode) or defaults.powerTextMode
+                if u.textLeft == nil and u.textCenter == nil and u.textRight == nil then
+                    u.textLeft = "NONE"
+                    u.textCenter = "NONE"
+                    u.textRight = u.hpTextMode or defaults.textRight
+                else
+                    if u.textLeft == nil then u.textLeft = defaults.textLeft end
+                    if u.textCenter == nil then u.textCenter = defaults.textCenter end
+                    if u.textRight == nil then u.textRight = defaults.textRight end
+                end
+                if u.powerTextLeft == nil and u.powerTextCenter == nil and u.powerTextRight == nil then
+                    u.powerTextLeft = "NONE"
+                    u.powerTextCenter = "NONE"
+                    u.powerTextRight = u.powerTextMode or defaults.powerTextRight
+                else
+                    if u.powerTextLeft == nil then u.powerTextLeft = defaults.powerTextLeft end
+                    if u.powerTextCenter == nil then u.powerTextCenter = defaults.powerTextCenter end
+                    if u.powerTextRight == nil then u.powerTextRight = defaults.powerTextRight end
+                end
                 u.hpPowerTextOverride = nil
             end
         end
@@ -1789,6 +1750,12 @@ local function fill(key, defaults)
         hpOffsetY     = -4,
         powerOffsetX  = -4,
         powerOffsetY  = 4,
+        textLeft      = "NONE",
+        textCenter    = "NONE",
+        textRight     = "CURPERCENT",
+        powerTextLeft   = "NONE",
+        powerTextCenter = "NONE",
+        powerTextRight  = "CURPERCENT",
         nameTextLayer = 5,
         hpTextLayer = 5,
         powerTextLayer = 2,

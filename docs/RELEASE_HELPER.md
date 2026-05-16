@@ -8,9 +8,34 @@ tools\MSUF-ReleaseHelper.cmd
 
 The helper is a small WinForms release UI for the normal MSUF release flow.
 
+## Quick Flow
+
+Start the helper, check the release data at the top, then use the numbered
+buttons:
+
+1. **Auto Changelog** writes the selected changelog section from repo changes.
+2. **Build ZIP** updates files and creates the local package in `dist`.
+3. **Publish** updates files again, commits, tags, pushes, and lets GitHub
+   Actions publish the release.
+
+Pick **Full release** for a stable release. Pick **Beta / prerelease** for
+alpha, beta, RC, or test releases. The publish confirmation shows the selected
+release type, display name, and exact steps before anything is pushed.
+Prereleases must use a tag containing `alpha`, `beta`, `rc`, or `pre`; full
+releases must use a stable tag without those words.
+
+Use **VERSION** to reload the tag from the repository `VERSION` file. The
+**Anzeigename** field is the human-readable changelog title, for example
+`5.2 Beta 1`, while **Version / tag** is the tag/package version, for example
+`5.2-beta1`.
+
+The detailed action checkboxes are hidden by default. Use **Advanced actions**
+only when you need to change whether Publish builds, commits, tags, pushes, or
+queues the workflow.
+
 ## Local Prep
 
-Use **Update Files + Build** to:
+Use **Build ZIP** to:
 
 - insert or replace the selected release section in `CHANGELOG.md`
 - regenerate `MidnightSimpleUnitFrames\Foundation\MSUF_Changelog.lua`
@@ -20,12 +45,14 @@ This does not push or publish anything.
 
 ## GitHub Release
 
-Use **GitHub Release** only after reviewing the selected checkboxes:
+Use **Publish** after checking the confirmation dialog. By default it runs the
+normal release profile:
 
 - **Commit all changes** runs `git add -A` and creates `Release <tag>`
 - **Create tag** creates an annotated tag
 - **Push** pushes `HEAD` and the tag to `origin`
-- **Run GitHub workflow** queues `.github/workflows/release.yml`
+- **Run GitHub workflow** publishes through `.github/workflows/release.yml`;
+  with **Push** enabled, the tag push starts it, otherwise the helper dispatches it
 
 The GitHub workflow builds the zip again from the pushed tag, creates/updates
 the GitHub release, uploads the zip, then publishes to Wago and CurseForge.

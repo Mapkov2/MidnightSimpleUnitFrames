@@ -880,11 +880,9 @@ local function Apply()
     if pf.nameSizeBox then local sz=tonumber(pf.nameSizeBox:GetText()); if sz then conf.nameFontSize=floor(max(6,min(48,sz))+0.5) end end
     if pf.hpShowCB then conf.showHP=pf.hpShowCB:GetChecked() and true or false end
     conf.hpOffsetX=San(pf.hpXBox and tonumber(pf.hpXBox:GetText()),0); conf.hpOffsetY=San(pf.hpYBox and tonumber(pf.hpYBox:GetText()),0)
-    if pf._msufHPAnchorVal then conf.hpTextAnchor=pf._msufHPAnchorVal end
     if pf.hpSizeBox then local sz=tonumber(pf.hpSizeBox:GetText()); if sz then conf.hpFontSize=floor(max(6,min(48,sz))+0.5) end end
     if pf.powerShowCB then conf.showPower=pf.powerShowCB:GetChecked() and true or false end
     conf.powerOffsetX=San(pf.powerXBox and tonumber(pf.powerXBox:GetText()),0); conf.powerOffsetY=San(pf.powerYBox and tonumber(pf.powerYBox:GetText()),0)
-    if pf._msufPowerAnchorVal then conf.powerTextAnchor=pf._msufPowerAnchorVal end
     if pf.powerSizeBox then local sz=tonumber(pf.powerSizeBox:GetText()); if sz then conf.powerFontSize=floor(max(6,min(48,sz))+0.5) end end
     if pf.detachCB and (pf.unit=="player" or pf.unit=="target" or pf.unit=="focus") then
         conf.powerBarDetached=pf.detachCB:GetChecked() and true or false
@@ -938,13 +936,9 @@ local function Sync()
     SC(pf.hpShowCB, conf.showHP~=false)
     S(pf.hpXBox,conf.hpOffsetX or 0); S(pf.hpYBox,conf.hpOffsetY or 0)
     S(pf.hpSizeBox,conf.hpFontSize or g.hpFontSize or g.fontSize or 14)
-    pf._msufHPAnchorVal=conf.hpTextAnchor or "RIGHT"
-    if pf.hpAnchorDrop then pf.hpAnchorDrop:SetValue(pf._msufHPAnchorVal) end
     SC(pf.powerShowCB, conf.showPower~=false)
     S(pf.powerXBox,conf.powerOffsetX or 0); S(pf.powerYBox,conf.powerOffsetY or 0)
     S(pf.powerSizeBox,conf.powerFontSize or g.powerFontSize or g.fontSize or 14)
-    pf._msufPowerAnchorVal=conf.powerTextAnchor or "RIGHT"
-    if pf.powerAnchorDrop then pf.powerAnchorDrop:SetValue(pf._msufPowerAnchorVal) end
     SC(pf.detachCB,conf.powerBarDetached); SC(pf.syncCPCB,conf.detachedPowerBarSyncClassPower)
     SC(pf.anchorCPCB,conf.detachedPowerBarAnchorToClassPower); SC(pf.textOnBarCB,conf.detachedPowerBarTextOnBar)
     S(pf.dpbWBox,conf.detachedPowerBarWidth or 150); S(pf.dpbHBox,conf.detachedPowerBarHeight or 6)
@@ -982,7 +976,7 @@ local function Build()
     local hC, hB = F.Card(pf, nC, "HP", -6, true)
     local hShow = F.CheckRow(pf, hB, hC, { label="Show HP", cbKey="hpShowCB", onChanged=function() Apply() end })
     local hXY = F.PairRow(pf, hB, hC, { label1="X:", label2="Y:", key1="hpXBox", key2="hpYBox", anchorTo=hShow, onChanged=Apply })
-    local hSA = F.SizeAnchorRow(pf, hB, hC, { sizeKey="hpSizeBox", anchorKey="hpAnchorDrop", stateKey="_msufHPAnchorVal", options=ANCH, anchorTo=hXY, onChanged=Apply })
+    local hSA = F.SingleRow(pf, hB, hC, { label="Size:", boxKey="hpSizeBox", anchorTo=hXY, onChanged=Apply })
     hC:RecalcHeight()
     pf.hpShowCB:SetDependentRows(hXY, hSA)
 
@@ -990,7 +984,7 @@ local function Build()
     local pC, pB = F.Card(pf, hC, "Power", -6, true)
     local pShow = F.CheckRow(pf, pB, pC, { label="Show Power", cbKey="powerShowCB", onChanged=function() Apply() end })
     local pXY = F.PairRow(pf, pB, pC, { label1="X:", label2="Y:", key1="powerXBox", key2="powerYBox", anchorTo=pShow, onChanged=Apply })
-    local pSA = F.SizeAnchorRow(pf, pB, pC, { sizeKey="powerSizeBox", anchorKey="powerAnchorDrop", stateKey="_msufPowerAnchorVal", options=ANCH, anchorTo=pXY, onChanged=Apply })
+    local pSA = F.SingleRow(pf, pB, pC, { label="Size:", boxKey="powerSizeBox", anchorTo=pXY, onChanged=Apply })
     pC:RecalcHeight()
     pf.powerShowCB:SetDependentRows(pXY, pSA)
 

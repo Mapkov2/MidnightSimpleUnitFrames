@@ -476,8 +476,12 @@ local function MSUF_Alpha_SetTextAlpha(frame, a)
 
     local o = frame.nameText; if o and o.SetAlpha then o:SetAlpha(a) end
     o = frame.levelText; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.hpTextLeft; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.hpTextCenter; if o and o.SetAlpha then o:SetAlpha(a) end
     o = frame.hpText; if o and o.SetAlpha then o:SetAlpha(a) end
     o = frame.hpTextPct; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.powerTextLeft; if o and o.SetAlpha then o:SetAlpha(a) end
+    o = frame.powerTextCenter; if o and o.SetAlpha then o:SetAlpha(a) end
     o = frame.powerText; if o and o.SetAlpha then o:SetAlpha(a) end
     o = frame.powerTextPct; if o and o.SetAlpha then o:SetAlpha(a) end
     o = frame.statusIndicatorText; if o and o.SetAlpha then o:SetAlpha(a) end

@@ -224,7 +224,7 @@ ns.Util.SetShown = ns.Util.SetShown or function(obj, show)
 ns.Util.Offset = ns.Util.Offset or function(v, default)  return (v == nil) and default or v end
 
 -- Patch: ensure this helper exists before any core code needs it.
--- Used by text-layout + spacer logic. Must be available during core init.
+-- Used by text-layout helpers. Must be available during core init.
 if _G and type(_G.MSUF_NormalizeTextLayoutUnitKey) ~= "function" then
     function _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, defaultKey)
         if unitKey == nil then return defaultKey or "player" end
@@ -390,8 +390,12 @@ function ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, f
 local MSUF_UF_TEXT_CREATE_DEFS = {
     { key = "nameText",      template = "GameFontHighlight",      justify = "LEFT",  a = 1 },
     { key = "levelText",     template = "GameFontHighlightSmall", justify = "LEFT",  a = 1,   hide = true },
+    { key = "hpTextLeft",    template = "GameFontHighlightSmall", justify = "LEFT",  a = 0.9, hide = true },
+    { key = "hpTextCenter",  template = "GameFontHighlightSmall", justify = "CENTER", a = 0.9, hide = true },
     { key = "hpText",        template = "GameFontHighlightSmall", justify = "RIGHT", a = 0.9 },
     { key = "hpTextPct",     template = "GameFontHighlightSmall", justify = "RIGHT", a = 0.9, hide = true },
+    { key = "powerTextLeft", template = "GameFontHighlightSmall", justify = "LEFT",  a = 0.9, hide = true },
+    { key = "powerTextCenter", template = "GameFontHighlightSmall", justify = "CENTER", a = 0.9, hide = true },
     { key = "powerTextPct",  template = "GameFontHighlightSmall", justify = "RIGHT", a = 0.9, hide = true },
     { key = "powerText",     template = "GameFontHighlightSmall", justify = "RIGHT", a = 0.9 },
 }
@@ -409,18 +413,9 @@ function ns.UF.EnsureTextObjects(f, fontPath, flags, fr, fg, fb)
             if d.hide then fs:SetText(""); fs:Hide() end
     end
     end
+    f.hpTextRight = f.hpText
+    f.powerTextRight = f.powerText
  end
-ns.UF.HpSpacerSelect_OnMouseDown = ns.UF.HpSpacerSelect_OnMouseDown or function(self, button)
-    -- Selection is driven primarily by the Bars menu dropdown. This click helper only runs while the MSUF settings UI is open.
-    local p = _G.MSUF_OptionsPanel
-    if not (p and p.IsShown and p:IsShown()) then  return end
-    if button and button ~= "LeftButton" then  return end
-    local k = self and (self.msufConfigKey or self._msufConfigKey or self._msufUnitKey or self.unitKey) or nil
-    if k and type(_G.MSUF_SetHpSpacerSelectedUnitKey) == "function" then
-        _G.MSUF_SetHpSpacerSelectedUnitKey(k)
-    end
- end
-
 ns.UF.UpdateHighlightColor = ns.UF.UpdateHighlightColor or function(self)
     if not self then  return end
     if not MSUF_DB then EnsureDB() end
@@ -1701,19 +1696,6 @@ local function GetConfigKeyForUnit(unit)
      return nil
 end
 _G.MSUF_GetConfigKeyForUnit = GetConfigKeyForUnit
-function _G.MSUF_SetHpSpacerSelectedUnitKey(unitKey, suppressUIRefresh)
-    if not MSUF_DB then EnsureDB() end
-    MSUF_DB.general = MSUF_DB.general or {}
-    local g = MSUF_DB.general
-    local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, "player")
-    g.hpSpacerSelectedUnitKey = k
-
-    -- Do NOT sync hpPowerTextSelectedKey here.
-    -- The Bars menu scope dropdown must only change when the user explicitly
-    -- selects a unit via the scope dropdown itself.  Clicking a unitframe
-    -- updates the spacer-selection indicator but never overrides the scope.
- end
-
 -- Alpha system moved to MSUF_Alpha.lua
 
 -- Castbar preview toggle moved to MSUF_Castbars.lua
@@ -2015,6 +1997,12 @@ local function _Iter_RefreshPowerColor(f)
         if f.powerText then
             f.powerText._msufColorRev = nil
         end
+        if f.powerTextLeft then
+            f.powerTextLeft._msufColorRev = nil
+        end
+        if f.powerTextCenter then
+            f.powerTextCenter._msufColorRev = nil
+        end
         if f.powerTextPct then
             f.powerTextPct._msufColorRev = nil
         end
@@ -2037,6 +2025,12 @@ local function _Iter_RefreshPowerColor(f)
             local fr, fg, fb = S.fr, S.fg, S.fb
             if f.powerText.SetTextColor then
                 f.powerText:SetTextColor(fr, fg, fb, 1)
+            end
+            if f.powerTextLeft and f.powerTextLeft.SetTextColor then
+                f.powerTextLeft:SetTextColor(fr, fg, fb, 1)
+            end
+            if f.powerTextCenter and f.powerTextCenter.SetTextColor then
+                f.powerTextCenter:SetTextColor(fr, fg, fb, 1)
             end
             if f.powerTextPct and f.powerTextPct.SetTextColor then
                 f.powerTextPct:SetTextColor(fr, fg, fb, 1)
@@ -3159,102 +3153,6 @@ local function MSUF_MeasureTextWidth(templateFS, sampleText)
     return w
 end
 
-local function MSUF_GetApproxPercentTextWidth(templateFS)
-    return MSUF_MeasureTextWidth(templateFS, "100.0%")
-end
-
-local function MSUF_GetApproxHpFullTextWidth(templateFS)
-    return MSUF_MeasureTextWidth(templateFS, "999.9M")
-end
-local MSUF_SPACER_SCALE  = 1.15
-local MSUF_SPACER_MAXCAP = 2000
--- Shared spacer-max calculation (DRY: HP + Power were ~95% identical).
--- spec = { offsetKey, pctKey, pctFallbackKey, fullKey, fullFallbackKey, modeKey, globalModeKey }
-local function _MSUF_GetSpacerMaxForUnitKey(unitKey, spec)
-    if not MSUF_DB then EnsureDB() end
-    local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey)
-    local frameName = (k == "boss") and "MSUF_boss1" or ("MSUF_" .. k)
-    local f = _G[frameName]
-    local tf = f and f.textFrame
-    local w = 0
-    if f and f.GetWidth then
-        w = f:GetWidth() or 0
-    elseif tf and tf.GetWidth then
-        w = tf:GetWidth() or 0
-    end
-    w = tonumber(w) or 0
-    if w <= 0 then
-        local confFallback = MSUF_DB[k]
-        w = tonumber(confFallback and confFallback.width) or tonumber(MSUF_DB.general and MSUF_DB.general.frameWidth) or 0
-    end
-    local g = MSUF_DB.general or {}
-    local conf = MSUF_DB[k] or {}
-    local xOff = ns.Util.Offset(conf[spec.offsetKey], -4)
-    local leftPad = 8
-    local pctW = 0
-    local pctObj = f and f[spec.pctKey]
-    if not pctObj and spec.pctFallbackKey then pctObj = f and f[spec.pctFallbackKey] end
-    if pctObj then
-        pctW = MSUF_GetApproxPercentTextWidth(pctObj)
-    end
-    local mode = (conf and conf[spec.modeKey]) or g[spec.globalModeKey] or "FULL_PLUS_PERCENT"
-    if spec.modeKey == "hpTextMode" and type(_G.MSUF_NormalizeHpTextMode) == "function" then
-        mode = _G.MSUF_NormalizeHpTextMode(mode)
-    elseif spec.modeKey == "powerTextMode" and type(_G.MSUF_NormalizePowerTextMode) == "function" then
-        mode = _G.MSUF_NormalizePowerTextMode(mode)
-    end
-    local movingW = pctW
-    if mode == "FULL_PLUS_PERCENT" or mode == "CURPERCENT" or mode == "CURMAXPERCENT" or mode == "MAXPERCENT" then
-        local fullObj = f and f[spec.fullKey]
-        if not fullObj and spec.fullFallbackKey then fullObj = f and f[spec.fullFallbackKey] end
-        if fullObj then
-            movingW = MSUF_GetApproxHpFullTextWidth(fullObj)
-        else
-            movingW = 0
-    end
-    end
-    local maxSpacer = (tonumber(w) or 0) + (tonumber(xOff) or 0) - (leftPad + (tonumber(movingW) or 0))
-    maxSpacer = tonumber(maxSpacer) or 0
-    if maxSpacer < 0 then maxSpacer = 0 end
-    maxSpacer = maxSpacer * MSUF_SPACER_SCALE
-    maxSpacer = math_floor(maxSpacer + 0.5)
-    if maxSpacer > MSUF_SPACER_MAXCAP then maxSpacer = MSUF_SPACER_MAXCAP end
-     return maxSpacer
-end
-local _MSUF_HP_SPACER_SPEC = {
-    offsetKey = "hpOffsetX", pctKey = "hpTextPct", pctFallbackKey = nil,
-    fullKey = "hpText", fullFallbackKey = "hpTextPct",
-    modeKey = "hpTextMode", globalModeKey = "hpTextMode",
-}
-local _MSUF_PWR_SPACER_SPEC = {
-    offsetKey = "powerOffsetX", pctKey = "powerTextPct", pctFallbackKey = "powerText",
-    fullKey = "powerText", fullFallbackKey = "powerTextPct",
-    modeKey = "powerTextMode", globalModeKey = "powerTextMode",
-}
-function _G.MSUF_GetHPSpacerMaxForUnitKey(unitKey)
-    return _MSUF_GetSpacerMaxForUnitKey(unitKey, _MSUF_HP_SPACER_SPEC)
-end
-function _G.MSUF_GetPowerSpacerMaxForUnitKey(unitKey)
-    return _MSUF_GetSpacerMaxForUnitKey(unitKey, _MSUF_PWR_SPACER_SPEC)
-end
-local MSUF_TEXT_LAYOUT_HP  = { full="hpText",    pct="hpTextPct",    point="TOPRIGHT",    relPoint="TOPRIGHT",
-    xKey="hpOffsetX",    yKey="hpOffsetY",    defX=-4, defY=-4, spacerOn="hpTextSpacerEnabled",    spacerX="hpTextSpacerX",    maxFn=_G.MSUF_GetHPSpacerMaxForUnitKey,    limitMode=false }
-local MSUF_TEXT_LAYOUT_PWR = { full="powerText", pct="powerTextPct", point="BOTTOMRIGHT", relPoint="BOTTOMRIGHT",
-    xKey="powerOffsetX", yKey="powerOffsetY", defX=-4, defY= 4, spacerOn="powerTextSpacerEnabled", spacerX="powerTextSpacerX", maxFn=_G.MSUF_GetPowerSpacerMaxForUnitKey, limitMode=true }
--- Resolve a text anchor setting ("RIGHT"/"LEFT"/"CENTER") into layout params.
--- isTop: true for HP (top row), false for Power (bottom row)
-local function MSUF_ResolveTextAnchor(anchor, isTop)
-    if anchor == "LEFT" then
-        local pt = isTop and "TOPLEFT" or "BOTTOMLEFT"
-        return pt, pt, 4, "LEFT", 1    -- defX, justifyH, spacerSign (+1 = grow right)
-    elseif anchor == "CENTER" then
-        local pt = isTop and "TOP" or "BOTTOM"
-        return pt, pt, 0, "CENTER", 1  -- spacer grows right from center
-    else -- "RIGHT" (default)
-        local pt = isTop and "TOPRIGHT" or "BOTTOMRIGHT"
-        return pt, pt, -4, "RIGHT", -1 -- spacerSign (-1 = grow left)
-    end
-end
 local function MSUF_ResolveNameAnchor(anchor, x)
     x = tonumber(x) or 0
     if anchor == "RIGHT" then
@@ -3263,24 +3161,6 @@ local function MSUF_ResolveNameAnchor(anchor, x)
         return "TOP", "TOP", x, "CENTER"
     end
     return "TOPLEFT", "TOPLEFT", x, "LEFT"
-end
-local function MSUF_TextLayout_GetSpacer(key, udb, g, hasPct, spec)
-    if not hasPct then return false, 0 end
-    -- One-time seed: make Shared spacers start like Player (if Shared keys are missing).
-    if g and _G.MSUF_TextSpacersSeeded ~= true then
-        local p = (MSUF_DB and MSUF_DB.player) or nil
-        if p then
-            if g.hpTextSpacerEnabled == nil and p.hpTextSpacerEnabled ~= nil then g.hpTextSpacerEnabled = p.hpTextSpacerEnabled end
-            if g.hpTextSpacerX == nil and p.hpTextSpacerX ~= nil then g.hpTextSpacerX = p.hpTextSpacerX end
-            if g.powerTextSpacerEnabled == nil and p.powerTextSpacerEnabled ~= nil then g.powerTextSpacerEnabled = p.powerTextSpacerEnabled end
-            if g.powerTextSpacerX == nil and p.powerTextSpacerX ~= nil then g.powerTextSpacerX = p.powerTextSpacerX end
-        end
-        _G.MSUF_TextSpacersSeeded = true
-    end
-    local on = ((udb and udb[spec.spacerOn] == true) or (not udb and g and g[spec.spacerOn] == true)) or false
-    local x  = (udb and tonumber(udb[spec.spacerX])) or ((g and tonumber(g[spec.spacerX])) or 0)
-    local max = (key and spec.maxFn and spec.maxFn(key)) or 0
-    return on, ns.Text.ClampSpacerValue(x, max, on)
 end
 local function MSUF_ClampTextLayer(v, fallback)
     v = math_floor((tonumber(v) or fallback or 0) + 0.5)
@@ -3331,9 +3211,13 @@ local function MSUF_EnsureUnitTextLayers(f, tf, nameLayer, hpLayer, powerLayer)
     if f.nameText and nl and (not f._msufNameClipFrame or f.nameText:GetParent() ~= f._msufNameClipFrame) then
         MSUF_SetTextParentIfNeeded(f.nameText, nl)
     end
+    MSUF_SetTextParentIfNeeded(f.hpTextLeft, hl)
+    MSUF_SetTextParentIfNeeded(f.hpTextCenter, hl)
     MSUF_SetTextParentIfNeeded(f.hpText, hl)
     MSUF_SetTextParentIfNeeded(f.hpTextPct, hl)
     if not (f._msufPowerBarDetached and f.targetPowerBar) then
+        MSUF_SetTextParentIfNeeded(f.powerTextLeft, pl)
+        MSUF_SetTextParentIfNeeded(f.powerTextCenter, pl)
         MSUF_SetTextParentIfNeeded(f.powerText, pl)
         MSUF_SetTextParentIfNeeded(f.powerTextPct, pl)
     end
@@ -3367,6 +3251,84 @@ local function MSUF_TextLayout_ApplyGroup(f, tf, conf, spec, mode, hasPct, on, e
         if anchorJustify and pctObj and pctObj.SetJustifyH then pctObj:SetJustifyH(anchorJustify) end
     end
  end
+local function MSUF_NormalizeHpLayoutMode(mode)
+    if type(_G.MSUF_NormalizeHpTextMode) == "function" then
+        return _G.MSUF_NormalizeHpTextMode(mode)
+    end
+    if mode == nil then return "CURPERCENT" end
+    if mode == "FULL_ONLY" then return "CURRENT" end
+    if mode == "PERCENT_ONLY" then return "PERCENT" end
+    if mode == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
+    if mode == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
+    return mode
+end
+local function MSUF_NormalizePowerLayoutMode(mode)
+    if type(_G.MSUF_NormalizePowerTextMode) == "function" then
+        return _G.MSUF_NormalizePowerTextMode(mode)
+    end
+    if mode == nil then return "CURPERCENT" end
+    if mode == "FULL_SLASH_MAX" then return "CURMAX" end
+    if mode == "FULL_ONLY" then return "CURRENT" end
+    if mode == "PERCENT_ONLY" then return "PERCENT" end
+    if mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" then return "CURPERCENT" end
+    return mode
+end
+local function MSUF_ReverseHpLayoutMode(mode)
+    local rev = {
+        FULL_PLUS_PERCENT = "PERCENTCUR", PERCENT_PLUS_FULL = "CURPERCENT",
+        CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
+        CURMAX = "MAXCUR", MAXCUR = "CURMAX",
+        CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
+        MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
+        PERCENTCURMAX = "CURMAXPERCENT",
+    }
+    return rev[mode] or mode
+end
+local function MSUF_TextLayout_HasSlots(udb, g, leftKey, centerKey, rightKey)
+    return (udb and (udb[leftKey] ~= nil or udb[centerKey] ~= nil or udb[rightKey] ~= nil))
+        or (g and (g[leftKey] ~= nil or g[centerKey] ~= nil or g[rightKey] ~= nil))
+end
+local function MSUF_TextLayout_ReadRaw(udb, g, key, fallback)
+    local value = udb and udb[key]
+    if value == nil and g then value = g[key] end
+    if value == nil or value == "" then value = fallback end
+    return value
+end
+local function MSUF_TextLayout_ReadSlot(udb, g, key, fallback, normalizer)
+    local value = MSUF_TextLayout_ReadRaw(udb, g, key, fallback or "NONE")
+    if normalizer then value = normalizer(value) end
+    return value or fallback or "NONE"
+end
+local function MSUF_TextLayout_ResolveSlots(udb, g, leftKey, centerKey, rightKey, legacyKey, fallbackRight, normalizer, reverse)
+    local left, center, right
+    if MSUF_TextLayout_HasSlots(udb, g, leftKey, centerKey, rightKey) then
+        left = MSUF_TextLayout_ReadSlot(udb, g, leftKey, "NONE", normalizer)
+        center = MSUF_TextLayout_ReadSlot(udb, g, centerKey, "NONE", normalizer)
+        right = MSUF_TextLayout_ReadSlot(udb, g, rightKey, fallbackRight or "NONE", normalizer)
+    else
+        local legacy = (udb and udb[legacyKey]) or (g and g[legacyKey]) or fallbackRight or "NONE"
+        left, center, right = "NONE", "NONE", normalizer and normalizer(legacy) or legacy
+    end
+    if reverse then
+        left = MSUF_ReverseHpLayoutMode(left)
+        center = MSUF_ReverseHpLayoutMode(center)
+        right = MSUF_ReverseHpLayoutMode(right)
+    end
+    return left, center, right
+end
+local function MSUF_TextLayout_Place(fs, parent, point, relPoint, x, y, justify)
+    if not (fs and parent) then return end
+    fs:ClearAllPoints()
+    fs:SetPoint(point, parent, relPoint, x or 0, y or 0)
+    if fs.SetJustifyH then fs:SetJustifyH(justify or "CENTER") end
+end
+local function MSUF_TextLayout_ReparentPower(f, parent)
+    if not (f and parent) then return end
+    MSUF_SetTextParentIfNeeded(f.powerTextLeft, parent)
+    MSUF_SetTextParentIfNeeded(f.powerTextCenter, parent)
+    MSUF_SetTextParentIfNeeded(f.powerText, parent)
+    MSUF_SetTextParentIfNeeded(f.powerTextPct, parent)
+end
 local function ApplyTextLayout(f, conf)
     if not f or not f.textFrame or not conf then return end
     local tf = f.textFrame
@@ -3380,36 +3342,15 @@ local function ApplyTextLayout(f, conf)
     local hpLayer = MSUF_TextLayerValue(udb, g, "hpTextLayer", 5)
     local powerLayer = MSUF_TextLayerValue(udb, g, "powerTextLayer", 2)
     MSUF_EnsureUnitTextLayers(f, tf, nameLayer, hpLayer, powerLayer)
-    local hpMode = (udb and udb.hpTextMode) or (g and g.hpTextMode) or "FULL_PLUS_PERCENT"
-    if type(_G.MSUF_NormalizeHpTextMode) == "function" then hpMode = _G.MSUF_NormalizeHpTextMode(hpMode) end
-    do
-        local hpReverse = (udb and udb.hpTextReverse)
-        if hpReverse == nil and g then hpReverse = g.hpTextReverse end
-        if hpReverse then
-            local rev = {
-                FULL_PLUS_PERCENT = "PERCENTCUR", PERCENT_PLUS_FULL = "CURPERCENT",
-                CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
-                CURMAX = "MAXCUR", MAXCUR = "CURMAX",
-                CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
-                MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
-                PERCENTCURMAX = "CURMAXPERCENT",
-            }
-            hpMode = rev[hpMode] or hpMode
-        end
-    end
-    local pMode  = (udb and udb.powerTextMode) or (g and g.powerTextMode) or "FULL_PLUS_PERCENT"
-    if type(_G.MSUF_NormalizePowerTextMode) == "function" then pMode = _G.MSUF_NormalizePowerTextMode(pMode) end
-    -- Text anchors: per-unit  general  default RIGHT (no override gate; set per-unit via EditMode popup)
-    local hpAnchor    = (udb and udb.hpTextAnchor)    or (g and g.hpTextAnchor)    or "RIGHT"
-    local powerAnchor = (udb and udb.powerTextAnchor) or (g and g.powerTextAnchor) or "RIGHT"
     local nameAnchor  = (udb and udb.nameTextAnchor)  or "LEFT"
-    local hpPt, hpRelPt, hpDefX, hpJustify, hpSign       = MSUF_ResolveTextAnchor(hpAnchor, true)
-    local pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign   = MSUF_ResolveTextAnchor(powerAnchor, false)
-    local hpHasPct = (f[MSUF_TEXT_LAYOUT_HP.pct] ~= nil)
-    local pHasPct  = (f[MSUF_TEXT_LAYOUT_PWR.pct] ~= nil)
-    local spacerDB = udb
-    local hpOn, hpEff = MSUF_TextLayout_GetSpacer(key, spacerDB, g, hpHasPct, MSUF_TEXT_LAYOUT_HP)
-    local pOn,  pEff  = MSUF_TextLayout_GetSpacer(key, spacerDB, g, pHasPct,  MSUF_TEXT_LAYOUT_PWR)
+    local hpReverse = (udb and udb.hpTextReverse)
+    if hpReverse == nil and g then hpReverse = g.hpTextReverse end
+    local hpLeftMode, hpCenterMode, hpRightMode = MSUF_TextLayout_ResolveSlots(
+        udb, g, "textLeft", "textCenter", "textRight", "hpTextMode", "CURPERCENT",
+        MSUF_NormalizeHpLayoutMode, hpReverse)
+    local pLeftMode, pCenterMode, pRightMode = MSUF_TextLayout_ResolveSlots(
+        udb, g, "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextMode", "CURPERCENT",
+        MSUF_NormalizePowerLayoutMode, false)
     local hX = ns.Util.Offset(conf.hpOffsetX,    -4)
     local hY = ns.Util.Offset(conf.hpOffsetY,    -4)
     local pX = ns.Util.Offset(conf.powerOffsetX, -4)
@@ -3426,7 +3367,12 @@ local function ApplyTextLayout(f, conf)
     if _textOnBarActive then
         pbW = math_floor((f.targetPowerBar.GetWidth and f.targetPowerBar:GetWidth() or 0) + 0.5)
     end
-    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, hpHasPct, hpOn, hpEff, wUsed, (key or ""), (hpMode or ""), pHasPct, pOn, pEff, (pMode or ""), (hpAnchor or ""), (powerAnchor or ""), (nameAnchor or ""), nameLayer, hpLayer, powerLayer, (f._msufPowerBarDetached and 1 or 0), (_textOnBarActive and 1 or 0), pbW) then return end
+    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, wUsed, (key or ""),
+        (hpLeftMode or ""), (hpCenterMode or ""), (hpRightMode or ""),
+        (pLeftMode or ""), (pCenterMode or ""), (pRightMode or ""),
+        (nameAnchor or ""), nameLayer, hpLayer, powerLayer,
+        (f._msufPowerBarDetached and 1 or 0), (_textOnBarActive and 1 or 0), pbW)
+    then return end
     f._msufTextLayoutStamp = 1
     if f.nameText then
         local namePt, nameRelPt, nameDefX, nameJustify = MSUF_ResolveNameAnchor(nameAnchor, nX)
@@ -3437,12 +3383,13 @@ local function ApplyTextLayout(f, conf)
         f._msufNameClipSideApplied, f._msufNameClipReservedRight, f._msufNameClipTextStamp, f._msufNameClipAnchorStamp, f._msufClampStamp = nil, nil, nil, nil, nil
     end
     if f.levelText and f.nameText then MSUF_ApplyLevelIndicatorLayout_Internal(f, conf) end
-    -- HP group uses hpMode (shifts pct side for any non FULL_PLUS_PERCENT, matching legacy behavior).
-    MSUF_TextLayout_ApplyGroup(f, tf, conf, MSUF_TEXT_LAYOUT_HP,  hpMode, hpHasPct, hpOn, hpEff, hpPt, hpRelPt, hpDefX, hpJustify, hpSign)
+    MSUF_TextLayout_Place(f.hpTextLeft, tf, "TOPLEFT", "TOPLEFT", 4 + hX, hY, "LEFT")
+    MSUF_TextLayout_Place(f.hpTextCenter, tf, "TOP", "TOP", hX, hY, "CENTER")
+    MSUF_TextLayout_Place(f.hpText, tf, "TOPRIGHT", "TOPRIGHT", -4 + hX, hY, "RIGHT")
+    MSUF_TextLayout_Place(f.hpTextPct, tf, "TOPRIGHT", "TOPRIGHT", -4 + hX, hY, "RIGHT")
     -- Power text: anchor to detached power bar when option enabled.
     -- FontStrings render at their parent's frame level, so we must reparent
     -- them to an overlay frame on the power bar to keep text on top.
-    local pwrTF = tf
     if _textOnBarActive then
         local pb = f.targetPowerBar
         -- Create/reuse text overlay frame on the power bar (high frame level)
@@ -3456,57 +3403,22 @@ local function ApplyTextLayout(f, conf)
         ov:SetAllPoints(pb)
         ov:SetFrameLevel((pb.GetFrameLevel and pb:GetFrameLevel() or 0) + 5)
         ov:Show()
-        -- Reparent power text FontStrings to the overlay
-        local fullObj = f[MSUF_TEXT_LAYOUT_PWR.full]
-        local pctObj  = f[MSUF_TEXT_LAYOUT_PWR.pct]
-        if fullObj and fullObj.SetParent then fullObj:SetParent(ov) end
-        if pctObj  and pctObj.SetParent  then pctObj:SetParent(ov) end
-        pwrTF = pb
-        -- Dynamic anchoring: center text on the bar so it stays correct
-        -- regardless of bar width.  No manual offset adjustment needed.
-        if fullObj then
-            fullObj:ClearAllPoints()
-            fullObj:SetPoint("CENTER", pb, "CENTER", 0, 0)
-            if fullObj.SetJustifyH then fullObj:SetJustifyH("CENTER") end
-            if fullObj.SetJustifyV then fullObj:SetJustifyV("MIDDLE") end
-        end
-        if pHasPct and pctObj then
-            pctObj:ClearAllPoints()
-            if pMode == "FULL_PLUS_PERCENT" or pMode == "PERCENT_PLUS_FULL" or pMode == "CURPERCENT" or pMode == "CURMAXPERCENT" then
-                -- Dual text: full left of center, pct right of center.
-                -- 15 % of bar width keeps spacing proportional; clamp 4â€“60 px.
-                -- Reuse pbW from stamp (already math_floor'd), zero extra C API calls.
-                local gap = math_floor((pbW > 0 and pbW or 60) * 0.15 + 0.5)
-                if gap < 4 then gap = 4 elseif gap > 60 then gap = 60 end
-                if fullObj then
-                    fullObj:ClearAllPoints()
-                    fullObj:SetPoint("CENTER", pb, "CENTER", -gap, 0)
-                    if fullObj.SetJustifyH then fullObj:SetJustifyH("RIGHT") end
-                end
-                pctObj:SetPoint("CENTER", pb, "CENTER", gap, 0)
-                if pctObj.SetJustifyH then pctObj:SetJustifyH("LEFT") end
-            else
-                -- Single pct text: centered
-                pctObj:SetPoint("CENTER", pb, "CENTER", 0, 0)
-                if pctObj.SetJustifyH then pctObj:SetJustifyH("CENTER") end
-            end
-            if pctObj.SetJustifyV then pctObj:SetJustifyV("MIDDLE") end
-        end
+        MSUF_TextLayout_ReparentPower(f, ov)
+        MSUF_TextLayout_Place(f.powerTextLeft, pb, "LEFT", "LEFT", 2 + pX, pY, "LEFT")
+        MSUF_TextLayout_Place(f.powerTextCenter, pb, "CENTER", "CENTER", pX, pY, "CENTER")
+        MSUF_TextLayout_Place(f.powerText, pb, "RIGHT", "RIGHT", -2 + pX, pY, "RIGHT")
+        MSUF_TextLayout_Place(f.powerTextPct, pb, "RIGHT", "RIGHT", -2 + pX, pY, "RIGHT")
     else
         -- Restore power text back to textFrame if previously reparented
         if f._msufDPBTextOverlay then
             f._msufDPBTextOverlay:Hide()
         end
-        local fullObj = f[MSUF_TEXT_LAYOUT_PWR.full]
-        local pctObj  = f[MSUF_TEXT_LAYOUT_PWR.pct]
         local pwrParent = f._msufPowerTextLayer or tf
-        if fullObj and fullObj.GetParent and fullObj:GetParent() ~= pwrParent then
-            fullObj:SetParent(pwrParent)
-        end
-        if pctObj and pctObj.GetParent and pctObj:GetParent() ~= pwrParent then
-            pctObj:SetParent(pwrParent)
-        end
-        MSUF_TextLayout_ApplyGroup(f, pwrTF, conf, MSUF_TEXT_LAYOUT_PWR, pMode,  pHasPct,  pOn,  pEff, pwrPt, pwrRelPt, pwrDefX, pwrJustify, pwrSign)
+        MSUF_TextLayout_ReparentPower(f, pwrParent)
+        MSUF_TextLayout_Place(f.powerTextLeft, tf, "BOTTOMLEFT", "BOTTOMLEFT", 4 + pX, pY, "LEFT")
+        MSUF_TextLayout_Place(f.powerTextCenter, tf, "BOTTOM", "BOTTOM", pX, pY, "CENTER")
+        MSUF_TextLayout_Place(f.powerText, tf, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + pX, pY, "RIGHT")
+        MSUF_TextLayout_Place(f.powerTextPct, tf, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + pX, pY, "RIGHT")
     end
  end
 function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
@@ -3545,7 +3457,7 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
             ApplyTextLayout(f, conf)
     end
             MSUF_ClampNameWidth(f, conf)
-        -- IMPORTANT: Spacer changes do not necessarily trigger a UNIT_HEALTH event.
+        -- IMPORTANT: text option changes do not necessarily trigger a UNIT_HEALTH event.
         if conf.showHP ~= nil then
             f.showHPText = (conf.showHP ~= false)
     end
@@ -3570,7 +3482,7 @@ function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
                     _G.MSUF_ApplyBossTestHpPreviewText(f, conf)
                 else
                     f._msufLastHpValue = nil
-                    ns.UF.RequestUpdate(f, true, false, "HPSpacer")
+                    ns.UF.RequestUpdate(f, true, false, "TextLayout")
                 end
             elseif f.isBoss and MSUF_BossTestMode and not _msuf_inCombat then
                 _G.MSUF_ApplyBossTestHpPreviewText(f, conf)
@@ -4117,8 +4029,12 @@ local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
     ns.Bars.ResetHealthAndOverlays(self, clearAbsorbs)
     if self.nameText then self.nameText:SetText("") end
     MSUF_ClearText(self.levelText, true)
-    if self.hpText then self.hpText:SetText("") end
+    MSUF_ClearText(self.hpTextLeft, true)
+    MSUF_ClearText(self.hpTextCenter, true)
+    MSUF_ClearText(self.hpText, true)
     ns.Text.ClearField(self, "hpTextPct")
+    MSUF_ClearText(self.powerTextLeft, true)
+    MSUF_ClearText(self.powerTextCenter, true)
     MSUF_ClearText(self.powerText, true)
     ns.Text.ClearField(self, "powerTextPct")
  end
@@ -4656,9 +4572,13 @@ end
         _UF.BossPrev(self, conf)
     else
         MSUF_SetTextIfChanged(self.hpText, "")
+        MSUF_ClearText(self.hpTextLeft, true)
+        MSUF_ClearText(self.hpTextCenter, true)
     ns.Text.ClearField(self, "hpTextPct")
     end
     ns.Util.SetShown(self.hpText, show)
+    ns.Util.SetShown(self.hpTextLeft, show and self.hpTextLeft and self.hpTextLeft:GetText() ~= "")
+    ns.Util.SetShown(self.hpTextCenter, show and self.hpTextCenter and self.hpTextCenter:GetText() ~= "")
 end
 if self.powerText then
             local showPower = self.showPowerText
@@ -4667,8 +4587,12 @@ if self.powerText then
             end
             if showPower then
                 MSUF_SetTextIfChanged(self.powerText, "40 / 100")
+                MSUF_ClearText(self.powerTextLeft, true)
+                MSUF_ClearText(self.powerTextCenter, true)
             else
                 MSUF_SetTextIfChanged(self.powerText, "")
+                MSUF_ClearText(self.powerTextLeft, true)
+                MSUF_ClearText(self.powerTextCenter, true)
             end
             ns.Util.SetShown(self.powerText, showPower)
     end
@@ -4753,8 +4677,12 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
         local showHP = (self.showHPText ~= false)
         if showHP then
             MSUF_SetTextIfChanged(self.hpText, "73% 123.4k")
+            MSUF_ClearText(self.hpTextLeft, true)
+            MSUF_ClearText(self.hpTextCenter, true)
         else
             MSUF_SetTextIfChanged(self.hpText, "")
+            MSUF_ClearText(self.hpTextLeft, true)
+            MSUF_ClearText(self.hpTextCenter, true)
             ns.Text.ClearField(self, "hpTextPct")
         end
         ns.Util.SetShown(self.hpText, showHP)
@@ -4764,8 +4692,12 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
         local showPwr = (self.showPowerText ~= false)
         if showPwr then
             MSUF_SetTextIfChanged(self.powerText, "52% 65")
+            MSUF_ClearText(self.powerTextLeft, true)
+            MSUF_ClearText(self.powerTextCenter, true)
         else
             MSUF_SetTextIfChanged(self.powerText, "")
+            MSUF_ClearText(self.powerTextLeft, true)
+            MSUF_ClearText(self.powerTextCenter, true)
         end
         ns.Util.SetShown(self.powerText, showPwr)
     end
@@ -6085,10 +6017,6 @@ local function CreateSimpleUnitFrame(unit)
     f:SetAttribute("unit", unit)
     f:SetAttribute("*type1", "target")
     f:SetAttribute("*type2", "togglemenu")
-    if not f._msufHpSpacerSelectHooked then
-        f._msufHpSpacerSelectHooked = true
-        f:HookScript("OnMouseDown", ns.UF.HpSpacerSelect_OnMouseDown)
-    end
     local bg = ns.UF.MakeTex(f, "bg", "self", "BACKGROUND")
     bg:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -2); bg:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
     bg:SetTexture("Interface\\Buttons\\WHITE8x8")

@@ -331,10 +331,10 @@ local COPY_PORTRAIT_FIELDS = {
 
 local COPY_TEXT_FIELDS = {
     "nameTextAnchor", "nameOffsetX", "nameOffsetY", "nameFontSize",
-    "hpTextAnchor", "hpOffsetX", "hpOffsetY", "hpFontSize",
-    "hpTextMode", "hpTextReverse", "hpTextSeparator", "hpTextSpacerEnabled", "hpTextSpacerX",
-    "powerTextAnchor", "powerOffsetX", "powerOffsetY", "powerFontSize",
-    "powerTextMode", "powerTextSeparator", "powerTextSpacerEnabled", "powerTextSpacerX",
+    "hpOffsetX", "hpOffsetY", "hpFontSize",
+    "hpTextMode", "textLeft", "textCenter", "textRight", "hpTextReverse", "hpTextSeparator",
+    "powerOffsetX", "powerOffsetY", "powerFontSize",
+    "powerTextMode", "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextSeparator",
     "nameTextLayer", "hpTextLayer", "powerTextLayer",
 }
 

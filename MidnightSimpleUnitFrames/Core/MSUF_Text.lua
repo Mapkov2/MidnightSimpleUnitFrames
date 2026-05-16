@@ -53,20 +53,10 @@ function ns.Text.Set(fs, text, show)
  end
 ns.Text._msufPatchE = ns.Text._msufPatchE or { version = "E1" }
 -- Secret-safe: numeric clamps only; no text comparisons.
-ns.Text._msufPatchG = ns.Text._msufPatchG or { version = "G1" }
-function ns.Text.ClampSpacerValue(value, maxValue, enabled)
-    if not enabled then  return 0 end
-    local v = tonumber(value) or 0
-    if v < 0 then v = 0 end
-    local m = tonumber(maxValue) or 0
-    if m < 0 then m = 0 end
-    if v > m then v = m end
-     return v
-end
 _G.MSUF_TEXTLAYOUT_VALID_KEYS = _G.MSUF_TEXTLAYOUT_VALID_KEYS or { player=true, target=true, focus=true, targettarget=true, pet=true, boss=true }
 function _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, fallbackKey)
     local k = unitKey
-    if not k or k == "" then local _g = MSUF_DB and MSUF_DB.general; k = fallbackKey or (_g and _g.hpSpacerSelectedUnitKey) or "player" end
+    if not k or k == "" then k = fallbackKey or "player" end
     if k == "tot" then k = "targettarget" end
     -- Perf: avoid pattern matching in hot layout paths.
     if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(k) then k = "boss" end
@@ -113,6 +103,33 @@ local function _MSUF_ClearHpPctField(self)
     ns.Text.ClearField(self, "hpTextPct")
     self._msufHpPctCleared = token
 end
+local function _MSUF_ClearTextField(self, field)
+    if self and field then
+        ns.Text.ClearField(self, field)
+    end
+end
+local function _MSUF_ClearHpSlots(self)
+    _MSUF_ClearTextField(self, "hpTextLeft")
+    _MSUF_ClearTextField(self, "hpTextCenter")
+    _MSUF_ClearTextField(self, "hpText")
+    _MSUF_ClearHpPctField(self)
+    if self then
+        self._msufLastRenderPct = nil
+        self._msufLastH = nil
+        self._msufLastPctS = nil
+    end
+end
+local function _MSUF_ClearPowerSlots(self)
+    _MSUF_ClearTextField(self, "powerTextLeft")
+    _MSUF_ClearTextField(self, "powerTextCenter")
+    _MSUF_ClearTextField(self, "powerText")
+    ns.Text.ClearField(self, "powerTextPct")
+    self._msufPwrPctCleared = true
+    self._msufRawPwrC, self._msufRawPwrM, self._msufRawPwrP = nil, nil, nil
+    self._msufRawPwrMode, self._msufRawPwrSep = nil, nil
+    self._msufLastPwrC, self._msufLastPwrM, self._msufLastPwrP = nil, nil, nil
+    self._msufLastPwrMode, self._msufLastPwrSep = nil, nil
+end
 -- Patch O: central text renderers (HP/Power/Pct/ToT inline) - secret-safe (no string compares)
 function ns.Text._SepToken(raw, fallback)
     -- Accept legacy/malformed values (e.g. false) safely.
@@ -127,16 +144,6 @@ function ns.Text._SepToken(raw, fallback)
          return " "
     end
     return " " .. sep .. " "
-end
-function ns.Text._ShouldSplitHP(self, conf, g, hpMode)
-    if not self or not self.hpTextPct then  return false end
-    hpMode = (ns.Text.NormalizeHpTextMode and ns.Text.NormalizeHpTextMode(hpMode)) or hpMode
-    if hpMode ~= "CURPERCENT" and hpMode ~= "PERCENTCUR" then  return false end
-    local on = (conf and conf.hpTextSpacerEnabled == true) or (not conf and g and g.hpTextSpacerEnabled == true)
-    if not on then  return false end
-    local x = (conf and tonumber(conf.hpTextSpacerX)) or (g and tonumber(g.hpTextSpacerX)) or 0
-    x = tonumber(x) or 0
-    return (x > 0)
 end
 -- HP mode format dispatcher. Mirrors _MSUF_FormatPowerByMode pattern.
 -- Returns mainText. hpPctStr may be nil (secret percent → caller handles).
@@ -196,17 +203,6 @@ local function _MSUF_HpModeUsesMax(mode)
         or mode == "PERCENTCURMAX"
 end
 
-local function _MSUF_HpModeCanSplit(mode)
-    mode = ns.Text.NormalizeHpTextMode(mode)
-    return mode == "CURPERCENT"
-        or mode == "PERCENTCUR"
-        or mode == "CURMAXPERCENT"
-        or mode == "PERCENTMAXCUR"
-        or mode == "MAXPERCENT"
-        or mode == "PERCENTMAX"
-        or mode == "PERCENTCURMAX"
-end
-
 local function _MSUF_HpMissingText(self)
     if not (UnitHealthMissing and self and self.unit) then return nil end
     local missing = UnitHealthMissing(self.unit)
@@ -220,17 +216,6 @@ local function _MSUF_HpMissingText(self)
     local txt = abbr and abbr(missing) or (not isSecret and tostring(missing) or nil)
     if txt == nil or txt == "" then return "" end
     return "-" .. txt
-end
-
-local function _MSUF_HpMainForSplit(mode, h, maxText, sep)
-    if mode == "CURMAXPERCENT" or mode == "PERCENTCURMAX" then
-        return h .. sep .. (maxText or "")
-    elseif mode == "PERCENTMAXCUR" then
-        return (maxText or "") .. sep .. h
-    elseif mode == "MAXPERCENT" or mode == "PERCENTMAX" then
-        return maxText or ""
-    end
-    return h
 end
 
 local function _MSUF_FormatHpByMode(mode, h, maxText, deficitText, hpPctStr, sep)
@@ -350,95 +335,62 @@ end
 function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle, hpMaxStr, hpDeficitStr)
     if not self or not self.hpText then  return end
     if not show then
-        ns.Text.Set(self.hpText, "", false)
-        _MSUF_ClearHpPctField(self)
+        _MSUF_ClearHpSlots(self)
         self._msufLastRenderPct = nil
         return
     end
 
     local spec = self._msufTextSpec or ns.Text.EnsureSpec(self)
-    local hpMode = spec.hpMode
-    local sep = spec.hpSep
-    local hpNeedsPct = spec.hpNeedsPct
-    local hpText = self.hpText
-    if hpMode == "NONE" then
-        ns.Text.Set(hpText, "", false)
-        _MSUF_ClearHpPctField(self)
+    local hpLeftMode = spec.hpLeftMode or "NONE"
+    local hpCenterMode = spec.hpCenterMode or "NONE"
+    local hpRightMode = spec.hpRightMode or spec.hpMode or "CURPERCENT"
+    if hpLeftMode == "NONE" and hpCenterMode == "NONE" and hpRightMode == "NONE" then
+        _MSUF_ClearHpSlots(self)
         return
     end
+
+    local sep = spec.hpSep
     local h = hpStr or ""
     local maxText = hpMaxStr or ""
-    local deficitText = (hpMode == "DEFICIT") and (_MSUF_HpMissingText(self) or hpDeficitStr) or nil
-
-    if hpMode == "PERCENT" and hasPct and not absorbText then
-        local iss = _MSUF_issecret
-        if not (iss and iss(hpPct)) then
-            if self._msufLastRenderPct == hpPct then return end
-            self._msufLastRenderPct = hpPct
-        else
-            self._msufLastRenderPct = nil
+    local hpPctStr = (hasPct and spec.hpNeedsPct) and _MSUF_PctToStr1D(hpPct) or nil
+    local absorbField
+    if absorbText then
+        if hpRightMode ~= "NONE" then
+            absorbField = "right"
+        elseif hpCenterMode ~= "NONE" then
+            absorbField = "center"
+        elseif hpLeftMode ~= "NONE" then
+            absorbField = "left"
         end
-    end
-
-    local hpPctStr = (hasPct and hpNeedsPct) and _MSUF_PctToStr1D(hpPct) or nil
-
-    local split = hasPct and spec.hpSplitEnabled or false
-    if split and hpPctStr then
-        local mainText = _MSUF_HpMainForSplit(hpMode, h, maxText, sep)
-        if not absorbText and not _MSUF_IsSecret(mainText) and mainText == self._msufLastH and hpPctStr == self._msufLastPctS then return end
-        if _MSUF_IsSecret(mainText) or absorbText then self._msufLastH = nil else self._msufLastH = mainText end
-        self._msufLastPctS = hpPctStr
-        ns.Text.Set(hpText, _MSUF_AppendAbsorb(mainText, absorbText, absorbStyle), true)
-        ns.Text.Set(self.hpTextPct, hpPctStr, true)
-        self._msufHpPctCleared = nil
-        return
     end
 
     _MSUF_ClearHpPctField(self)
-
-    if not absorbText then
-        if hpMode == "CURRENT" and not _MSUF_IsSecret(h) then
-            if h == self._msufLastH and self._msufLastPctS == nil then return end
-            self._msufLastH = h
-            self._msufLastPctS = nil
-            ns.Text.Set(hpText, h, true)
-            return
-        elseif hpPctStr then
-            local mainText
-            if hpMode == "PERCENT" then
-                mainText = hpPctStr
-            elseif hpMode == "CURPERCENT" and not _MSUF_IsSecret(h) then
-                mainText = h .. sep .. hpPctStr
-            elseif hpMode == "PERCENTCUR" and not _MSUF_IsSecret(h) then
-                mainText = hpPctStr .. sep .. h
-            end
-            if mainText then
-                if mainText == self._msufLastH and hpPctStr == self._msufLastPctS then return end
-                self._msufLastH = mainText
-                self._msufLastPctS = hpPctStr
-                ns.Text.Set(hpText, mainText, true)
-                return
-            end
-        end
-    end
-
-    if not hasPct and hpNeedsPct then
-        ns.Text.Set(hpText, _MSUF_AppendAbsorb(h, absorbText, absorbStyle), true)
-        return
-    end
-
-    if hpNeedsPct and not hpPctStr then
-        self._msufLastH = nil
-        _MSUF_SetHpSecret(hpText, hpMode, h, hpPct, sep, absorbText, absorbStyle, maxText)
-        return
-    end
-
-    local mainText = _MSUF_FormatHpByMode(hpMode, h, maxText, deficitText, hpPctStr, sep)
-    if not absorbText and not _MSUF_IsSecret(mainText) and mainText == self._msufLastH and hpPctStr == self._msufLastPctS then return end
-    if _MSUF_IsSecret(mainText) or absorbText then self._msufLastH = nil else self._msufLastH = mainText end
+    self._msufLastH = nil
     self._msufLastPctS = hpPctStr
 
-    ns.Text.Set(hpText, _MSUF_AppendAbsorb(mainText, absorbText, absorbStyle), true)
+    local function RenderSlot(fs, mode, fieldKey)
+        if not fs or mode == "NONE" then
+            if fs then ns.Text.Set(fs, "", false) end
+            return
+        end
+        local slotAbsorb = (absorbField == fieldKey) and absorbText or nil
+        if not hasPct and _MSUF_HpModeUsesPercent(mode) then
+            ns.Text.Set(fs, _MSUF_AppendAbsorb(h, slotAbsorb, absorbStyle), true)
+            return
+        end
+        if _MSUF_HpModeUsesPercent(mode) and spec.hpNeedsPct and not hpPctStr then
+            _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, slotAbsorb, absorbStyle, maxText)
+            return
+        end
+        local text
+        local deficitText = (mode == "DEFICIT") and (_MSUF_HpMissingText(self) or hpDeficitStr) or nil
+        text = _MSUF_FormatHpByMode(mode, h, maxText, deficitText, hpPctStr, sep)
+        ns.Text.Set(fs, _MSUF_AppendAbsorb(text or "", slotAbsorb, absorbStyle), true)
+    end
+
+    RenderSlot(self.hpTextLeft, hpLeftMode, "left")
+    RenderSlot(self.hpTextCenter, hpCenterMode, "center")
+    RenderSlot(self.hpText, hpRightMode, "right")
  end
 -- PERF: Cache function refs + constants at file scope (called 50-200x/sec in combat).
 local _MSUF_UnitPowerPercent = (type(UnitPowerPercent) == "function") and UnitPowerPercent or nil
@@ -516,14 +468,11 @@ local function _MSUF_TextifyPercent(percentValue)
     return _MSUF_PCT_CACHE[pctInt] or (tostring(pctInt) .. "%")
 end
 
-local function _MSUF_PowerModeAllowsSplit(mode)
-    mode = ns.Text.NormalizePowerTextMode(mode)
-    return (mode == "CURPERCENT" or mode == "CURMAXPERCENT")
-end
-
 local function _MSUF_PowerModeNeeds(pMode)
     -- pMode is already normalized by EnsureSpec.
-    if pMode == "CURRENT" then
+    if pMode == "NONE" then
+        return false, false, false
+    elseif pMode == "CURRENT" then
         return true, false, false
     elseif pMode == "MAX" then
         return false, true, false
@@ -537,6 +486,36 @@ local function _MSUF_PowerModeNeeds(pMode)
     return true, false, true
 end
 
+local function _MSUF_TextHasSlots(eff, g, leftKey, centerKey, rightKey)
+    return (eff and (eff[leftKey] ~= nil or eff[centerKey] ~= nil or eff[rightKey] ~= nil))
+        or (g and (g[leftKey] ~= nil or g[centerKey] ~= nil or g[rightKey] ~= nil))
+end
+
+local function _MSUF_TextReadSlotMode(eff, g, key, fallback, normalizer)
+    local value = eff and eff[key]
+    if value == nil and g then value = g[key] end
+    if value == nil or value == "" then value = fallback or "NONE" end
+    if normalizer then value = normalizer(value) end
+    return value or fallback or "NONE"
+end
+
+local function _MSUF_TextReadLegacyMode(eff, g, key, fallback, normalizer)
+    local value = (eff and eff[key]) or (g and g[key]) or fallback or "NONE"
+    if normalizer then value = normalizer(value) end
+    return value or fallback or "NONE"
+end
+
+local function _MSUF_TextReverseHp(mode)
+    return _MSUF_HP_REVERSE_MAP[mode] or mode
+end
+
+local function _MSUF_PowerNeedsForSlots(leftMode, centerMode, rightMode)
+    local c1, m1, p1 = _MSUF_PowerModeNeeds(leftMode)
+    local c2, m2, p2 = _MSUF_PowerModeNeeds(centerMode)
+    local c3, m3, p3 = _MSUF_PowerModeNeeds(rightMode)
+    return c1 or c2 or c3, m1 or m2 or m3, p1 or p2 or p3
+end
+
 -- Unified per-frame text config spec. Built once, cached on frame._msufTextSpec.
 -- Replaces separate _msufHpTextConf (htc) and _msufPwrTextConf (ptc) caches.
 -- Invalidated: set frame._msufTextSpec = nil on config change / profile switch.
@@ -548,16 +527,34 @@ function ns.Text.EnsureSpec(self)
     local udb = (key and MSUF_DB and MSUF_DB[key]) or nil
     local eff = (self.cachedConfig or udb) or nil
     -- HP
-    local hpMode = (eff and eff.hpTextMode) or g.hpTextMode or "FULL_PLUS_PERCENT"
-    hpMode = ns.Text.NormalizeHpTextMode(hpMode)
+    local legacyHpMode = _MSUF_TextReadLegacyMode(eff, g, "hpTextMode", "CURPERCENT", ns.Text.NormalizeHpTextMode)
     local hpReverse = (eff and eff.hpTextReverse)
     if hpReverse == nil then hpReverse = g.hpTextReverse end
-    if hpReverse then hpMode = _MSUF_HP_REVERSE_MAP[hpMode] or hpMode end
+    local hpLeftMode, hpCenterMode, hpRightMode
+    if _MSUF_TextHasSlots(eff, g, "textLeft", "textCenter", "textRight") then
+        hpLeftMode = _MSUF_TextReadSlotMode(eff, g, "textLeft", "NONE", ns.Text.NormalizeHpTextMode)
+        hpCenterMode = _MSUF_TextReadSlotMode(eff, g, "textCenter", "NONE", ns.Text.NormalizeHpTextMode)
+        hpRightMode = _MSUF_TextReadSlotMode(eff, g, "textRight", "CURPERCENT", ns.Text.NormalizeHpTextMode)
+    else
+        hpLeftMode, hpCenterMode, hpRightMode = "NONE", "NONE", legacyHpMode
+    end
+    if hpReverse then
+        hpLeftMode = _MSUF_TextReverseHp(hpLeftMode)
+        hpCenterMode = _MSUF_TextReverseHp(hpCenterMode)
+        hpRightMode = _MSUF_TextReverseHp(hpRightMode)
+    end
     local hpSepRaw = (eff and eff.hpTextSeparator)
     if hpSepRaw == nil then hpSepRaw = g.hpTextSeparator end
     -- Power
-    local rawPMode = (eff and eff.powerTextMode) or g.powerTextMode
-    local pMode = ns.Text.NormalizePowerTextMode(rawPMode)
+    local legacyPMode = _MSUF_TextReadLegacyMode(eff, g, "powerTextMode", "CURPERCENT", ns.Text.NormalizePowerTextMode)
+    local pLeftMode, pCenterMode, pRightMode
+    if _MSUF_TextHasSlots(eff, g, "powerTextLeft", "powerTextCenter", "powerTextRight") then
+        pLeftMode = _MSUF_TextReadSlotMode(eff, g, "powerTextLeft", "NONE", ns.Text.NormalizePowerTextMode)
+        pCenterMode = _MSUF_TextReadSlotMode(eff, g, "powerTextCenter", "NONE", ns.Text.NormalizePowerTextMode)
+        pRightMode = _MSUF_TextReadSlotMode(eff, g, "powerTextRight", "CURPERCENT", ns.Text.NormalizePowerTextMode)
+    else
+        pLeftMode, pCenterMode, pRightMode = "NONE", "NONE", legacyPMode
+    end
     local rawPSep
     if eff then
         rawPSep = eff.powerTextSeparator
@@ -566,66 +563,41 @@ function ns.Text.EnsureSpec(self)
     if rawPSep == nil then rawPSep = g.powerTextSeparator end
     local rawHpSep = (eff and eff.hpTextSeparator)
     if rawHpSep == nil then rawHpSep = g.hpTextSeparator end
-    -- Power split
-    local pSplitEnabled = false
-    if self.powerTextPct and _MSUF_PowerModeAllowsSplit(pMode) then
-        local splitOn = (eff and eff.powerTextSpacerEnabled)
-        if splitOn == nil then splitOn = g.powerTextSpacerEnabled end
-        splitOn = (splitOn == true)
-        if splitOn then
-            local splitX = eff and tonumber(eff.powerTextSpacerX)
-            if splitX == nil then splitX = tonumber(g.powerTextSpacerX) end
-            splitX = splitX or 0
-            splitX = tonumber(splitX) or 0
-            if splitX > 0 and key and type(_G.MSUF_GetPowerSpacerMaxForUnitKey) == "function" then
-                local maxP = tonumber(_G.MSUF_GetPowerSpacerMaxForUnitKey(key)) or 0
-                if splitX > maxP then splitX = maxP end
-            end
-            pSplitEnabled = (splitX > 0)
-        end
-    end
+    -- Aggregate needs across the three independent Power text slots.
+    local pNeedsCur, pNeedsMax, pNeedsPct = _MSUF_PowerNeedsForSlots(pLeftMode, pCenterMode, pRightMode)
     -- PERF: HP split — precompute once per spec build to avoid calling
     -- _ShouldSplitHP on every RenderHpMode (10-50×/s per unit). Config changes
     -- invalidate the spec via _msufTextSpec = nil, so the cached value stays correct.
-    local hpNeedsPct = _MSUF_HpModeUsesPercent(hpMode)
-    local hpNeedsCurrent = _MSUF_HpModeUsesCurrent(hpMode)
-    local hpNeedsMax = _MSUF_HpModeUsesMax(hpMode)
-    local hpNeedsDeficit = (hpMode == "DEFICIT")
-    local hpSplitEnabled = false
-    if self.hpTextPct and _MSUF_HpModeCanSplit(hpMode) then
-        local splitOn = (eff and eff.hpTextSpacerEnabled)
-        if splitOn == nil then splitOn = g.hpTextSpacerEnabled end
-        splitOn = (splitOn == true)
-        if splitOn then
-            local hpSplitX = eff and tonumber(eff.hpTextSpacerX)
-            if hpSplitX == nil then hpSplitX = tonumber(g.hpTextSpacerX) end
-            hpSplitX = hpSplitX or 0
-            hpSplitX = tonumber(hpSplitX) or 0
-            hpSplitEnabled = (hpSplitX > 0)
-        end
-    end
+    local hpNeedsPct = _MSUF_HpModeUsesPercent(hpLeftMode) or _MSUF_HpModeUsesPercent(hpCenterMode) or _MSUF_HpModeUsesPercent(hpRightMode)
+    local hpNeedsCurrent = _MSUF_HpModeUsesCurrent(hpLeftMode) or _MSUF_HpModeUsesCurrent(hpCenterMode) or _MSUF_HpModeUsesCurrent(hpRightMode)
+    local hpNeedsMax = _MSUF_HpModeUsesMax(hpLeftMode) or _MSUF_HpModeUsesMax(hpCenterMode) or _MSUF_HpModeUsesMax(hpRightMode)
+    local hpNeedsDeficit = (hpLeftMode == "DEFICIT" or hpCenterMode == "DEFICIT" or hpRightMode == "DEFICIT")
     -- Per-unit font override: resolve colorPowerTextByType per frame
     local _pColorByType = (g.colorPowerTextByType == true)
     if udb and udb.fontOverride and udb.colorPowerTextByType ~= nil then
         _pColorByType = (udb.colorPowerTextByType == true)
     end
     spec = {
-        hpMode = hpMode,
+        hpMode = hpRightMode,
+        hpLeftMode = hpLeftMode,
+        hpCenterMode = hpCenterMode,
+        hpRightMode = hpRightMode,
         hpSep = ns.Text._SepToken(hpSepRaw, nil),
-        hpSpacerConf = eff,
-        hpSpacerG = g,
         hpNeedsPct = hpNeedsPct,
         hpNeedsCurrent = hpNeedsCurrent,
         hpNeedsMax = hpNeedsMax,
         hpNeedsDeficit = hpNeedsDeficit,
-        hpSplitEnabled = hpSplitEnabled,
-        pMode = pMode,
+        pMode = pRightMode,
+        pLeftMode = pLeftMode,
+        pCenterMode = pCenterMode,
+        pRightMode = pRightMode,
+        pModesStamp = tostring(pLeftMode or "NONE") .. "|" .. tostring(pCenterMode or "NONE") .. "|" .. tostring(pRightMode or "NONE"),
         pSep = ns.Text._SepToken(rawPSep, rawHpSep),
+        pNeedsCur = pNeedsCur,
+        pNeedsMax = pNeedsMax,
+        pNeedsPct = pNeedsPct,
         pColorByType = _pColorByType,
-        pSplitEnabled = pSplitEnabled,
         useOverride = false,
-        hpAnchor = (udb and udb.hpTextAnchor) or g.hpTextAnchor or "RIGHT",
-        powerAnchor = (udb and udb.powerTextAnchor) or g.powerTextAnchor or "RIGHT",
         nameAnchor = (udb and udb.nameTextAnchor) or "LEFT",
     }
     self._msufTextSpec = spec
@@ -689,17 +661,28 @@ function ns.Text.RenderPowerText(self)
     local showPower = self.showPowerText
     if showPower == nil then showPower = true end
     if not showPower then
-        ns.Text.Set(self.powerText, "", false)
-        ns.Text.ClearField(self, "powerTextPct")
+        _MSUF_ClearPowerSlots(self)
         return
     end
 
     -- PERF: Inlined EnsureSpec fast path
     local spec = self._msufTextSpec or ns.Text.EnsureSpec(self)
-    local pMode = spec.pMode
+    local pLeftMode = spec.pLeftMode or "NONE"
+    local pCenterMode = spec.pCenterMode or "NONE"
+    local pRightMode = spec.pRightMode or spec.pMode or "CURPERCENT"
+    if pLeftMode == "NONE" and pCenterMode == "NONE" and pRightMode == "NONE" then
+        _MSUF_ClearPowerSlots(self)
+        return
+    end
+    local pModesStamp = spec.pModesStamp or (tostring(pLeftMode) .. "|" .. tostring(pCenterMode) .. "|" .. tostring(pRightMode))
     local powerSep = spec.pSep
     local colorByType = spec.pColorByType
-    local needCur, needMax, needPct = _MSUF_PowerModeNeeds(pMode)
+    local needCur = spec.pNeedsCur
+    local needMax = spec.pNeedsMax
+    local needPct = spec.pNeedsPct
+    if needCur == nil or needMax == nil or needPct == nil then
+        needCur, needMax, needPct = _MSUF_PowerNeedsForSlots(pLeftMode, pCenterMode, pRightMode)
+    end
 
     -- PERF: Reuse pType/cur/max/pct from DIRECT_APPLY handler if same frame.
     -- This keeps the text 1:1 in sync with the bar fast-path.
@@ -764,18 +747,16 @@ function ns.Text.RenderPowerText(self)
         if curValue == self._msufRawPwrC
            and maxValue == self._msufRawPwrM
            and powerPct == self._msufRawPwrP
-           and pMode == self._msufRawPwrMode
+           and pModesStamp == self._msufRawPwrMode
            and powerSep == self._msufRawPwrSep
-           and spec.pSplitEnabled == self._msufRawPwrSplit
         then
             return
         end
         self._msufRawPwrC = curValue
         self._msufRawPwrM = maxValue
         self._msufRawPwrP = powerPct
-        self._msufRawPwrMode = pMode
+        self._msufRawPwrMode = pModesStamp
         self._msufRawPwrSep = powerSep
-        self._msufRawPwrSplit = spec.pSplitEnabled
     else
         -- Secret value: invalidate raw cache; fall through to text-level guard.
         self._msufRawPwrC = nil
@@ -783,14 +764,11 @@ function ns.Text.RenderPowerText(self)
         self._msufRawPwrP = nil
         self._msufRawPwrMode = nil
         self._msufRawPwrSep = nil
-        self._msufRawPwrSplit = nil
     end
 
     local curText = needCur and _MSUF_TextifyValue(curValue) or nil
     local maxText = needMax and _MSUF_TextifyValue(maxValue) or nil
     local pctText = needPct and _MSUF_TextifyPercent(powerPct) or nil
-    local hasPct = (pctText ~= nil)
-    local splitAllowed = (self.powerTextPct ~= nil) and hasPct and spec.pSplitEnabled or false
 
     -- PERF: Component-level diff guard. Skip string concat + SetText if all
     -- abbreviated components are unchanged. Saves 3-5 string allocations per call.
@@ -803,18 +781,16 @@ function ns.Text.RenderPowerText(self)
         if curText == self._msufLastPwrC
            and maxText == self._msufLastPwrM
            and pctText == self._msufLastPwrP
-           and pMode == self._msufLastPwrMode
+           and pModesStamp == self._msufLastPwrMode
            and powerSep == self._msufLastPwrSep
-           and splitAllowed == self._msufLastPwrSplit
         then
             return
         end
         self._msufLastPwrC = curText
         self._msufLastPwrM = maxText
         self._msufLastPwrP = pctText
-        self._msufLastPwrMode = pMode
+        self._msufLastPwrMode = pModesStamp
         self._msufLastPwrSep = powerSep
-        self._msufLastPwrSplit = splitAllowed
     else
         -- Secret: invalidate cache so next non-secret call re-renders
         self._msufLastPwrC = nil
@@ -822,16 +798,21 @@ function ns.Text.RenderPowerText(self)
         self._msufLastPwrP = nil
         self._msufLastPwrMode = nil
         self._msufLastPwrSep = nil
-        self._msufLastPwrSplit = nil
     end
 
-    local mainText, sideText = _MSUF_FormatPowerByMode(pMode, curText, maxText, pctText, powerSep, powerSep, splitAllowed)
+    local function RenderPowerSlot(fs, mode)
+        if not fs or mode == "NONE" then
+            if fs then ns.Text.Set(fs, "", false) end
+            return
+        end
+        local text = _MSUF_FormatPowerByMode(mode, curText, maxText, pctText, powerSep, powerSep, false)
+        ns.Text.Set(fs, text or "", true)
+    end
 
-    ns.Text.Set(self.powerText, mainText or "", true)
-    if sideText ~= nil and self.powerTextPct then
-        ns.Text.Set(self.powerTextPct, sideText, true)
-        self._msufPwrPctCleared = nil
-    elseif not self._msufPwrPctCleared then
+    RenderPowerSlot(self.powerTextLeft, pLeftMode)
+    RenderPowerSlot(self.powerTextCenter, pCenterMode)
+    RenderPowerSlot(self.powerText, pRightMode)
+    if not self._msufPwrPctCleared then
         -- PERF: Gate ClearField — skip if already cleared (saves ~1.6ms/trace).
         ns.Text.ClearField(self, "powerTextPct")
         self._msufPwrPctCleared = true
@@ -974,7 +955,10 @@ function ns.Text.ApplyPowerTextColorByType(self, unit, enabled)
     if not fn then  return end
     local pr, pg, pb = fn(pType, pTok)
     if not pr then  return end
+    if self.powerTextLeft and self.powerTextLeft.SetTextColor then self.powerTextLeft:SetTextColor(pr, pg, pb, 1) end
+    if self.powerTextCenter and self.powerTextCenter.SetTextColor then self.powerTextCenter:SetTextColor(pr, pg, pb, 1) end
     self.powerText:SetTextColor(pr, pg, pb, 1)
+    if self.powerTextPct and self.powerTextPct.SetTextColor then self.powerTextPct:SetTextColor(pr, pg, pb, 1) end
     self._msufPTColorByPower = true
     self._msufPTColorType = pType
     self._msufPTColorTok = pTok

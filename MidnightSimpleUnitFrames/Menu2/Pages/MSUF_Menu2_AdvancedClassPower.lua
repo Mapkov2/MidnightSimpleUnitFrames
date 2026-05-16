@@ -159,17 +159,17 @@ local QUICK_PLAYER_KEYS = {
     "detachedPowerBarOffsetY",
     "hpPowerTextOverride",
     "hpTextMode",
+    "textLeft",
+    "textCenter",
+    "textRight",
     "powerTextMode",
+    "powerTextLeft",
+    "powerTextCenter",
+    "powerTextRight",
     "hpTextSeparator",
     "powerTextSeparator",
-    "hpTextSpacerEnabled",
-    "hpTextSpacerX",
-    "powerTextSpacerEnabled",
-    "powerTextSpacerX",
     "absorbTextMode",
     "absorbAnchorMode",
-    "hpTextAnchor",
-    "powerTextAnchor",
 }
 
 local quickSetupUndoSnapshot
@@ -355,17 +355,24 @@ local function QuickApplyPhase1(offsets)
 
     if player.hpTextMode == nil then player.hpTextMode = general.hpTextMode end
     if player.powerTextMode == nil then player.powerTextMode = general.powerTextMode end
+    if player.textLeft == nil and player.textCenter == nil and player.textRight == nil then
+        player.textLeft = "NONE"
+        player.textCenter = "NONE"
+        player.textRight = player.hpTextMode or general.hpTextMode or "CURPERCENT"
+    end
+    if player.powerTextLeft == nil and player.powerTextCenter == nil and player.powerTextRight == nil then
+        player.powerTextLeft = "NONE"
+        player.powerTextCenter = "NONE"
+        player.powerTextRight = player.powerTextMode or general.powerTextMode or "CURPERCENT"
+    end
     if player.hpTextSeparator == nil then player.hpTextSeparator = general.hpTextSeparator end
     if player.powerTextSeparator == nil then player.powerTextSeparator = general.powerTextSeparator or general.hpTextSeparator end
-    if player.hpTextSpacerEnabled == nil then player.hpTextSpacerEnabled = general.hpTextSpacerEnabled end
-    if player.hpTextSpacerX == nil then player.hpTextSpacerX = general.hpTextSpacerX end
-    if player.powerTextSpacerEnabled == nil then player.powerTextSpacerEnabled = general.powerTextSpacerEnabled end
-    if player.powerTextSpacerX == nil then player.powerTextSpacerX = general.powerTextSpacerX end
     if player.absorbTextMode == nil then player.absorbTextMode = general.absorbTextMode end
     if player.absorbAnchorMode == nil then player.absorbAnchorMode = general.absorbAnchorMode end
-    if player.hpTextAnchor == nil then player.hpTextAnchor = general.hpTextAnchor end
-    if player.powerTextAnchor == nil then player.powerTextAnchor = general.powerTextAnchor end
     player.powerTextMode = "CURRENT"
+    player.powerTextLeft = "NONE"
+    player.powerTextCenter = "CURRENT"
+    player.powerTextRight = "NONE"
 end
 
 local function QuickApplyPhase2NoCP(offsets)

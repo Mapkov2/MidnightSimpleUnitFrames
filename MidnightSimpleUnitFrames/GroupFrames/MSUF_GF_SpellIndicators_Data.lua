@@ -21,6 +21,8 @@ SI.SpecMap = {
     PRIEST_1    = "DisciplinePriest",
     PRIEST_2    = "HolyPriest",
     PALADIN_1   = "HolyPaladin",
+    PALADIN_2   = "ProtectionPaladin",
+    PALADIN_3   = "RetributionPaladin",
     EVOKER_2    = "PreservationEvoker",
     EVOKER_3    = "AugmentationEvoker",
     MONK_2      = "MistweaverMonk",
@@ -35,6 +37,8 @@ SI.SpecInfo = {
     MistweaverMonk      = { display = "Mistweaver Monk",      class = "MONK"    },
     RestorationShaman   = { display = "Restoration Shaman",   class = "SHAMAN"  },
     HolyPaladin         = { display = "Holy Paladin",         class = "PALADIN" },
+    ProtectionPaladin   = { display = "Protection Paladin",   class = "PALADIN" },
+    RetributionPaladin  = { display = "Retribution Paladin",  class = "PALADIN" },
 }
 
 ------------------------------------------------------------------------
@@ -89,6 +93,14 @@ SI.SpellIDs = {
         EternalFlame    = 156322,
         Dawnlight       = 431381,
     },
+    ProtectionPaladin = {
+        BlessingOfProtection = 1022,
+        BlessingOfSacrifice  = 6940,
+    },
+    RetributionPaladin = {
+        BlessingOfProtection = 1022,
+        BlessingOfSacrifice  = 6940,
+    },
 }
 
 -- Alternate spell IDs (same aura, different ID)
@@ -110,6 +122,8 @@ SI.SecretSpellIDs = {
     HolyPriest        = { GuardianSpirit = 47788 },
     MistweaverMonk    = { LifeCocoon = 116849 },
     HolyPaladin       = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940 },
+    ProtectionPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940 },
+    RetributionPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940 },
 }
 
 ------------------------------------------------------------------------
@@ -249,6 +263,14 @@ SI.TrackableAuras = {
         { name = "BlessingOfProtection", display = "Blessing of Protection", color = {0.94, 0.82, 0.31}, secret = true },
         { name = "BlessingOfSacrifice",  display = "Blessing of Sacrifice",  color = {0.94, 0.50, 0.50}, secret = true },
     },
+    ProtectionPaladin = {
+        { name = "BlessingOfProtection", display = "Blessing of Protection", color = {0.94, 0.82, 0.31}, secret = true },
+        { name = "BlessingOfSacrifice",  display = "Blessing of Sacrifice",  color = {0.94, 0.50, 0.50}, secret = true },
+    },
+    RetributionPaladin = {
+        { name = "BlessingOfProtection", display = "Blessing of Protection", color = {0.94, 0.82, 0.31}, secret = true },
+        { name = "BlessingOfSacrifice",  display = "Blessing of Sacrifice",  color = {0.94, 0.50, 0.50}, secret = true },
+    },
 }
 
 ------------------------------------------------------------------------
@@ -308,6 +330,15 @@ SI.SpecDefaults = {
         EternalFlame  = { placed = { type = "icon", anchor = "BOTTOMLEFT", x = 1, y = 1, size = 20 } },
         Dawnlight     = { placed = { type = "square", anchor = "BOTTOM", x = 0, y = 3, size = 9 } },
         BlessingOfProtection = { frame = { type = "border", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
+        BlessingOfSacrifice  = { frame = { type = "border", color = {0.94, 0.50, 0.50, 1}, priority = 2 } },
+    },
+    ProtectionPaladin = {
+        BlessingOfProtection = { frame = { type = "border", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
+        BlessingOfSacrifice  = { frame = { type = "border", color = {0.94, 0.50, 0.50, 1}, priority = 2 } },
+    },
+    RetributionPaladin = {
+        BlessingOfProtection = { frame = { type = "border", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
+        BlessingOfSacrifice  = { frame = { type = "border", color = {0.94, 0.50, 0.50, 1}, priority = 2 } },
     },
 }
 

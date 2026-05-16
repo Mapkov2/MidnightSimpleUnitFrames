@@ -92,16 +92,16 @@ local UNIT_SCOPE_KEYS = {
 
 local TEXT_SCOPE_KEYS = {
     hpTextMode = true,
+    textLeft = true,
+    textCenter = true,
+    textRight = true,
     hpTextReverse = true,
     hpTextSeparator = true,
-    hpTextSpacerEnabled = true,
-    hpTextSpacerX = true,
-    hpTextAnchor = true,
     powerTextMode = true,
+    powerTextLeft = true,
+    powerTextCenter = true,
+    powerTextRight = true,
     powerTextSeparator = true,
-    powerTextSpacerEnabled = true,
-    powerTextSpacerX = true,
-    powerTextAnchor = true,
 }
 
 local POWER_BAR_SCOPE_UNITS = {

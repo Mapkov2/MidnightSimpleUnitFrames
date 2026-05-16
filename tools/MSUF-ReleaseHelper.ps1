@@ -57,6 +57,22 @@ function Convert-TagToDisplayVersion {
     return ($v -replace '\s+', ' ').Trim()
 }
 
+function Get-RepoVersionText {
+    $versionPath = Join-Path $RepoRoot "VERSION"
+    if (-not (Test-Path -LiteralPath $versionPath)) { return "" }
+
+    $line = Get-Content -LiteralPath $versionPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($line)) { return "" }
+    return $line.Trim()
+}
+
+function Test-PrereleaseVersion {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $true }
+    return ($Value -match '(?i)(alpha|beta|rc|pre)')
+}
+
 function Invoke-External {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -665,6 +681,10 @@ $form.StartPosition = "CenterScreen"
 $form.Size = New-Object System.Drawing.Size(1040, 930)
 $form.MinimumSize = New-Object System.Drawing.Size(900, 820)
 
+$defaultTag = Get-RepoVersionText
+if ([string]::IsNullOrWhiteSpace($defaultTag)) { $defaultTag = "5.1-beta4" }
+$defaultDisplay = Convert-TagToDisplayVersion $defaultTag
+
 function New-Label {
     param([string]$Text, [int]$X, [int]$Y, [int]$W = 120)
     $label = New-Object System.Windows.Forms.Label
@@ -699,19 +719,50 @@ function New-TextArea {
     return $box
 }
 
-New-Label "Release tag" 16 16 | Out-Null
-$tagBox = New-TextBox 130 14 180 "5.1-beta4"
-New-Label "Changelog title" 330 16 | Out-Null
-$displayBox = New-TextBox 450 14 190 "5.1 Beta 4"
-New-Label "Date" 660 16 50 | Out-Null
-$dateBox = New-TextBox 710 14 105 (Get-Date -Format "yyyy-MM-dd")
+New-Label "Version / tag" 16 16 | Out-Null
+$tagBox = New-TextBox 130 14 165 $defaultTag
+$versionButton = New-Object System.Windows.Forms.Button
+$versionButton.Text = "VERSION"
+$versionButton.Location = New-Object System.Drawing.Point(305, 12)
+$versionButton.Size = New-Object System.Drawing.Size(76, 26)
+$form.Controls.Add($versionButton)
+
+New-Label "Anzeigename" 395 16 90 | Out-Null
+$displayBox = New-TextBox 495 14 190 $defaultDisplay
+New-Label "Date" 700 16 40 | Out-Null
+$dateBox = New-TextBox 745 14 90 (Get-Date -Format "yyyy-MM-dd")
 
 $preBox = New-Object System.Windows.Forms.CheckBox
 $preBox.Text = "Prerelease / beta"
-$preBox.Checked = $true
-$preBox.Location = New-Object System.Drawing.Point(835, 14)
+$preBox.Checked = Test-PrereleaseVersion $defaultTag
+$preBox.Location = New-Object System.Drawing.Point(16, 868)
 $preBox.Size = New-Object System.Drawing.Size(160, 24)
+$preBox.Visible = $false
 $form.Controls.Add($preBox)
+
+$releaseTypeGroup = New-Object System.Windows.Forms.GroupBox
+$releaseTypeGroup.Text = "Release type"
+$releaseTypeGroup.Location = New-Object System.Drawing.Point(850, 6)
+$releaseTypeGroup.Size = New-Object System.Drawing.Size(166, 66)
+$form.Controls.Add($releaseTypeGroup)
+
+$fullReleaseRadio = New-Object System.Windows.Forms.RadioButton
+$fullReleaseRadio.Text = "Full release"
+$fullReleaseRadio.Location = New-Object System.Drawing.Point(10, 18)
+$fullReleaseRadio.Size = New-Object System.Drawing.Size(130, 20)
+$releaseTypeGroup.Controls.Add($fullReleaseRadio)
+
+$preReleaseRadio = New-Object System.Windows.Forms.RadioButton
+$preReleaseRadio.Text = "Beta / prerelease"
+$preReleaseRadio.Location = New-Object System.Drawing.Point(10, 40)
+$preReleaseRadio.Size = New-Object System.Drawing.Size(145, 20)
+$releaseTypeGroup.Controls.Add($preReleaseRadio)
+
+if ($preBox.Checked) {
+    $preReleaseRadio.Checked = $true
+} else {
+    $fullReleaseRadio.Checked = $true
+}
 
 New-Label "Output dir" 16 48 | Out-Null
 $outBox = New-TextBox 130 46 220 "dist"
@@ -719,37 +770,113 @@ $outBox = New-TextBox 130 46 220 "dist"
 $buildBox = New-Object System.Windows.Forms.CheckBox
 $buildBox.Text = "Build local zip"
 $buildBox.Checked = $true
-$buildBox.Location = New-Object System.Drawing.Point(370, 46)
-$buildBox.Size = New-Object System.Drawing.Size(130, 24)
+$buildBox.Location = New-Object System.Drawing.Point(510, 46)
+$buildBox.Size = New-Object System.Drawing.Size(112, 24)
+$buildBox.Visible = $false
 $form.Controls.Add($buildBox)
 
 $commitBox = New-Object System.Windows.Forms.CheckBox
 $commitBox.Text = "Commit all changes"
-$commitBox.Checked = $false
-$commitBox.Location = New-Object System.Drawing.Point(510, 46)
-$commitBox.Size = New-Object System.Drawing.Size(150, 24)
+$commitBox.Checked = $true
+$commitBox.Location = New-Object System.Drawing.Point(620, 46)
+$commitBox.Size = New-Object System.Drawing.Size(145, 24)
+$commitBox.Visible = $false
 $form.Controls.Add($commitBox)
 
 $tagCreateBox = New-Object System.Windows.Forms.CheckBox
 $tagCreateBox.Text = "Create tag"
-$tagCreateBox.Checked = $false
-$tagCreateBox.Location = New-Object System.Drawing.Point(670, 46)
-$tagCreateBox.Size = New-Object System.Drawing.Size(100, 24)
+$tagCreateBox.Checked = $true
+$tagCreateBox.Location = New-Object System.Drawing.Point(765, 46)
+$tagCreateBox.Size = New-Object System.Drawing.Size(88, 24)
+$tagCreateBox.Visible = $false
 $form.Controls.Add($tagCreateBox)
 
 $pushBox = New-Object System.Windows.Forms.CheckBox
 $pushBox.Text = "Push"
-$pushBox.Checked = $false
-$pushBox.Location = New-Object System.Drawing.Point(780, 46)
-$pushBox.Size = New-Object System.Drawing.Size(70, 24)
+$pushBox.Checked = $true
+$pushBox.Location = New-Object System.Drawing.Point(855, 46)
+$pushBox.Size = New-Object System.Drawing.Size(60, 24)
+$pushBox.Visible = $false
 $form.Controls.Add($pushBox)
 
 $workflowBox = New-Object System.Windows.Forms.CheckBox
 $workflowBox.Text = "Run GitHub workflow"
-$workflowBox.Checked = $false
-$workflowBox.Location = New-Object System.Drawing.Point(850, 46)
-$workflowBox.Size = New-Object System.Drawing.Size(170, 24)
+$workflowBox.Checked = $true
+$workflowBox.Location = New-Object System.Drawing.Point(915, 46)
+$workflowBox.Size = New-Object System.Drawing.Size(122, 24)
+$workflowBox.Visible = $false
 $form.Controls.Add($workflowBox)
+
+$advancedButton = New-Object System.Windows.Forms.Button
+$advancedButton.Text = "Advanced actions"
+$advancedButton.Location = New-Object System.Drawing.Point(370, 44)
+$advancedButton.Size = New-Object System.Drawing.Size(130, 28)
+$form.Controls.Add($advancedButton)
+
+$flowLabel = New-Object System.Windows.Forms.Label
+$flowLabel.Text = "Flow: 1 Auto Changelog, 2 Build ZIP, 3 Publish."
+$flowLabel.Location = New-Object System.Drawing.Point(510, 49)
+$flowLabel.Size = New-Object System.Drawing.Size(330, 20)
+$form.Controls.Add($flowLabel)
+
+$script:AdvancedActionsVisible = $false
+function Set-AdvancedActionVisibility {
+    param([bool]$Visible)
+
+    $script:AdvancedActionsVisible = $Visible
+    $buildBox.Visible = $Visible
+    $commitBox.Visible = $Visible
+    $tagCreateBox.Visible = $Visible
+    $pushBox.Visible = $Visible
+    $workflowBox.Visible = $Visible
+    $flowLabel.Visible = -not $Visible
+    $advancedButton.Text = if ($Visible) { "Hide advanced" } else { "Advanced actions" }
+}
+
+$advancedButton.Add_Click({
+    Set-AdvancedActionVisibility (-not $script:AdvancedActionsVisible)
+})
+
+$fullReleaseRadio.Add_CheckedChanged({
+    if ($fullReleaseRadio.Checked) { $preBox.Checked = $false }
+})
+
+$preReleaseRadio.Add_CheckedChanged({
+    if ($preReleaseRadio.Checked) { $preBox.Checked = $true }
+})
+
+$versionButton.Add_Click({
+    try {
+        $version = Get-RepoVersionText
+        if ([string]::IsNullOrWhiteSpace($version)) { throw "VERSION file is missing or empty." }
+        $tagBox.Text = $version
+        $displayBox.Text = Convert-TagToDisplayVersion $version
+        if (Test-PrereleaseVersion $version) {
+            $preReleaseRadio.Checked = $true
+        } else {
+            $fullReleaseRadio.Checked = $true
+        }
+        Write-ReleaseLog ("Release data loaded from VERSION: " + $version)
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+    }
+})
+
+$tagBox.Add_Leave({
+    try {
+        if ([string]::IsNullOrWhiteSpace($displayBox.Text)) {
+            $displayBox.Text = Convert-TagToDisplayVersion $tagBox.Text
+        }
+        if (Test-PrereleaseVersion $tagBox.Text) {
+            $preReleaseRadio.Checked = $true
+        } else {
+            $fullReleaseRadio.Checked = $true
+        }
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+    }
+})
 
 New-Label "Since ref" 16 76 | Out-Null
 $baseRefBox = New-TextBox 130 74 220 (Get-DefaultGitBaseRef)
@@ -822,6 +949,13 @@ function Read-UiRelease {
     $tag = Normalize-ReleaseVersion $tagBox.Text
     $display = $displayBox.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($display)) { $display = Convert-TagToDisplayVersion $tag }
+    $isPrereleaseTag = Test-PrereleaseVersion $tag
+    if ($preBox.Checked -and -not $isPrereleaseTag) {
+        throw "Beta / prerelease publishing needs a prerelease tag such as 5.2-beta1, 5.2-alpha1, or 5.2-rc1."
+    }
+    if (-not $preBox.Checked -and $isPrereleaseTag) {
+        throw "Full release publishing needs a stable tag without alpha, beta, rc, or pre in the name."
+    }
     $date = $dateBox.Text.Trim()
     if ($date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "Date must be YYYY-MM-DD." }
     $output = $outBox.Text.Trim()
@@ -848,7 +982,7 @@ function Read-UiRelease {
 }
 
 $loadRepoButton = New-Object System.Windows.Forms.Button
-$loadRepoButton.Text = "Load CHANGELOG.md"
+$loadRepoButton.Text = "Load Notes"
 $loadRepoButton.Location = New-Object System.Drawing.Point(16, 542)
 $loadRepoButton.Size = New-Object System.Drawing.Size(145, 32)
 $loadRepoButton.Add_Click({
@@ -866,7 +1000,7 @@ $loadRepoButton.Add_Click({
 $form.Controls.Add($loadRepoButton)
 
 $loadCommitsButton = New-Object System.Windows.Forms.Button
-$loadCommitsButton.Text = "Load Git Commits"
+$loadCommitsButton.Text = "Draft from Git"
 $loadCommitsButton.Location = New-Object System.Drawing.Point(170, 542)
 $loadCommitsButton.Size = New-Object System.Drawing.Size(145, 32)
 $loadCommitsButton.Add_Click({
@@ -891,7 +1025,7 @@ $loadCommitsButton.Add_Click({
 $form.Controls.Add($loadCommitsButton)
 
 $autoChangelogButton = New-Object System.Windows.Forms.Button
-$autoChangelogButton.Text = "Auto Changelog"
+$autoChangelogButton.Text = "1 Auto Changelog"
 $autoChangelogButton.Location = New-Object System.Drawing.Point(16, 580)
 $autoChangelogButton.Size = New-Object System.Drawing.Size(145, 32)
 $autoChangelogButton.Add_Click({
@@ -933,7 +1067,7 @@ $fillFieldsButton.Add_Click({
 $form.Controls.Add($fillFieldsButton)
 
 $previewButton = New-Object System.Windows.Forms.Button
-$previewButton.Text = "Preview Changelog"
+$previewButton.Text = "Preview Notes"
 $previewButton.Location = New-Object System.Drawing.Point(458, 542)
 $previewButton.Size = New-Object System.Drawing.Size(125, 32)
 $previewButton.Add_Click({
@@ -949,7 +1083,7 @@ $previewButton.Add_Click({
 $form.Controls.Add($previewButton)
 
 $prepButton = New-Object System.Windows.Forms.Button
-$prepButton.Text = "Update Files + Build"
+$prepButton.Text = "2 Build ZIP"
 $prepButton.Location = New-Object System.Drawing.Point(592, 542)
 $prepButton.Size = New-Object System.Drawing.Size(145, 32)
 $prepButton.Add_Click({
@@ -965,14 +1099,21 @@ $prepButton.Add_Click({
 $form.Controls.Add($prepButton)
 
 $publishButton = New-Object System.Windows.Forms.Button
-$publishButton.Text = "GitHub Release"
+$publishButton.Text = "3 Publish"
 $publishButton.Location = New-Object System.Drawing.Point(746, 542)
 $publishButton.Size = New-Object System.Drawing.Size(125, 32)
 $publishButton.Add_Click({
     try {
         $r = Read-UiRelease
+        $releaseKind = if ($r.Prerelease) { "Beta / prerelease" } else { "Full release" }
+        $steps = @("update changelog files")
+        if ($buildBox.Checked) { $steps += "build local ZIP" }
+        if ($commitBox.Checked) { $steps += "commit all changes" }
+        if ($tagCreateBox.Checked) { $steps += "create annotated tag" }
+        if ($pushBox.Checked) { $steps += "push HEAD and tag" }
+        if ($workflowBox.Checked) { $steps += "publish through GitHub Actions" }
         $confirm = [System.Windows.Forms.MessageBox]::Show(
-            "This can commit, tag, push, and queue the GitHub release workflow depending on the selected checkboxes.`n`nContinue?",
+            "Publish $($r.Tag) as $releaseKind.`nDisplay name: $($r.Display)`n`nSteps:`n- $($steps -join "`n- ")`n`nContinue?",
             "MSUF Release Helper",
             "YesNo",
             "Warning"

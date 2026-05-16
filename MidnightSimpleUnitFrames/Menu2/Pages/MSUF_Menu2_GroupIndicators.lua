@@ -259,6 +259,7 @@ local function BuildGFIndicators(ctx)
     local previewCurrent = W.Button(sicons, "Preview current", 142)
     previewCurrent:SetScript("OnClick", function()
         local gf = GF()
+        M.gfStatusPreviewMode = "current"
         if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
         if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode("current") end
         if gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(CurrentGFStatusSpec().value) end
@@ -271,6 +272,7 @@ local function BuildGFIndicators(ctx)
     local previewAll = W.Button(sicons, "Show all", 112)
     previewAll:SetScript("OnClick", function()
         local gf = GF()
+        M.gfStatusPreviewMode = "all"
         if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
         if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode("all") end
         if RefreshGFPreview then RefreshGFPreview() end
@@ -694,6 +696,7 @@ local function BuildGFIndicators(ctx)
                 else
                     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
                     M.gfSpellIndicatorSelection[currentKind] = self._auraName
+                    if RefreshGFPreview then RefreshGFPreview() end
                 end
                 if M.SelectPage then M.SelectPage(ctx.key) end
             end)
@@ -708,6 +711,7 @@ local function BuildGFIndicators(ctx)
         function(value)
             M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
             M.gfSpellIndicatorSelection[CurrentScope()] = value
+            if RefreshGFPreview then RefreshGFPreview() end
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
     W.MoveWidget(auraDrop, spells, siRightX, -228, siRightW, "LEFT")
