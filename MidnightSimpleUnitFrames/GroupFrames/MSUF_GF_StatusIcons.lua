@@ -145,6 +145,13 @@ function GF.UpdateRoleIcon(f, unit)
     GF._UpdatePowerRoleVisibility(f, unit)
 
     if role and role ~= "NONE" then
+        if (role == "TANK"    and conf.roleIconShowTank   == false) or
+           (role == "HEALER"  and conf.roleIconShowHealer == false) or
+           (role == "DAMAGER" and conf.roleIconShowDPS    == false) then
+            IconHide(f.roleIcon)
+            GF._UpdatePowerRoleVisibility(f, unit)
+            return
+        end
         local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
         if tex then
             IconSetTextureAndCoords(f.roleIcon, tex, l, r, t, b)

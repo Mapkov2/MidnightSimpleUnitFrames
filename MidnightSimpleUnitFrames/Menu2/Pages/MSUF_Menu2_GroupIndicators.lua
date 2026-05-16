@@ -267,6 +267,19 @@ local function BuildGFIndicators(ctx)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
 
+    -- Role filter group: only visible when Role Icon indicator is selected
+    local roleFilterGroup = CreateFrame("Frame", nil, sicons)
+    roleFilterGroup:SetPoint("TOPLEFT", sicons, "TOPLEFT", 0, -294)
+    roleFilterGroup:SetSize((siconLeftW + siconLeftX + 10), 60)
+
+    W.LabelAt(roleFilterGroup, "Show for:", siconLeftX, -8, siconLeftW, "GameFontNormalSmall", T.colors.accent)
+
+    local rfColW   = floor(siconLeftW / 3)
+    local rfLabelW = rfColW - 30  -- subtract checkbox(24) + gap(6) so hit areas don't overlap the next column
+    local rfTank   = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "Tank",   siconLeftX,              -26, rfLabelW), "roleIconShowTank",   true, "visual")
+    local rfHealer = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "Healer", siconLeftX + rfColW,     -26, rfLabelW), "roleIconShowHealer", true, "visual")
+    local rfDPS    = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "DPS",    siconLeftX + rfColW * 2, -26, rfLabelW), "roleIconShowDPS",    true, "visual")
+
     W.LabelAt(sicons, "Status Preview", siconRightX, -42, siconRightW, "GameFontNormalSmall", T.colors.accent)
     local previewCurrent = W.Button(sicons, "Preview current", 142)
     previewCurrent:SetScript("OnClick", function()
@@ -388,6 +401,13 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(previewCurrent, spec ~= nil)
         SetOptionEnabled(previewAll, true)
         SetOptionEnabled(midnightStyle, true)
+        local isRoleIcon = spec.value == "roleIcon"
+        roleFilterGroup:SetShown(isRoleIcon)
+        if isRoleIcon then
+            SetOptionEnabled(rfTank,   enabled)
+            SetOptionEnabled(rfHealer, enabled)
+            SetOptionEnabled(rfDPS,    enabled)
+        end
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(sicons, nil) end
     end
     M.AddRefresher(ctx, RefreshStatusIconState)
