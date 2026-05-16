@@ -198,16 +198,7 @@ local function BuildGFLayout(ctx)
     W.MoveWidget(preserveRaidGroups, layout, layoutLeftX, -360)
     local function RefreshRaidGroupLayoutState()
         SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
-        if type(SetSectionHeaderStatus) == "function" then
-            local hint
-            if CurrentScope() ~= "party" and Bool(CurrentScope(), "preserveRaidGroups", false) then
-                hint = "preserve raid groups"
-            end
-            SetSectionHeaderStatus(layout, hint and {
-                hint = hint,
-                hintColor = { 0.45, 0.52, 0.65, 1 },
-            } or nil)
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(layout, nil) end
     end
     M.AddRefresher(ctx, RefreshRaidGroupLayoutState)
     RefreshRaidGroupLayoutState()
@@ -278,12 +269,7 @@ local function BuildGFLayout(ctx)
             if roleRows.Refresh then roleRows.Refresh() end
             if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(enabled) end
         end
-        if type(SetSectionHeaderStatus) == "function" then
-            SetSectionHeaderStatus(sorting, enabled and {
-                hint = "role sorting active",
-                hintColor = { 0.45, 0.52, 0.65, 1 },
-            } or nil)
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(sorting, nil) end
     end
     M.AddRefresher(ctx, refreshSortingControls)
     refreshSortingControls()
@@ -394,18 +380,7 @@ local function BuildGFLayout(ctx)
             end
         end
         if scaleHint then scaleHint:SetAlpha((manualOn or autoOn) and 1 or 0.55) end
-        if type(SetSectionHeaderStatus) == "function" then
-            local hint = nil
-            if autoOn then
-                hint = "auto scale by group size"
-            elseif manualOn then
-                hint = "manual scale"
-            end
-            SetSectionHeaderStatus(scale, hint and {
-                hint = hint,
-                hintColor = { 0.45, 0.52, 0.65, 1 },
-            } or nil)
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(scale, nil) end
     end
     M.AddRefresher(ctx, RefreshScalingState)
     RefreshScalingState()
@@ -636,19 +611,7 @@ local function BuildGFLayout(ctx)
     M.AddRefresher(ctx, RefreshCustomAnchorBox)
     local function RefreshAnchorHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
-        local target = Conf(CurrentScope()).anchorToFrame
-        local hint
-        if IsStandardAnchorTarget(target) then
-            if target and target ~= "" and target ~= "FREE" and target ~= "player" then
-                hint = "anchored to " .. tostring(target)
-            end
-        else
-            hint = "custom anchor: " .. tostring(target)
-        end
-        SetSectionHeaderStatus(anchor, hint and {
-            hint = hint,
-            hintColor = { 0.45, 0.52, 0.65, 1 },
-        } or nil)
+        SetSectionHeaderStatus(anchor, nil)
     end
     M.AddRefresher(ctx, RefreshAnchorHeader)
     RefreshAnchorHeader()
@@ -677,13 +640,7 @@ local function BuildGFLayout(ctx)
     W.MoveWidget(tooltipModifier, tooltip, tooltipRightX, -54, tooltipRightW, "LEFT")
     refreshTooltipState = function()
         SetOptionEnabled(tooltipModifier, Val(CurrentScope(), "tooltipMode", "ALWAYS") == "MODIFIER")
-        if type(SetSectionHeaderStatus) == "function" then
-            local mode = Val(CurrentScope(), "tooltipMode", "ALWAYS")
-            SetSectionHeaderStatus(tooltip, mode ~= "ALWAYS" and {
-                hint = TooltipModeHint(mode),
-                hintColor = { 0.45, 0.52, 0.65, 1 },
-            } or nil)
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(tooltip, nil) end
     end
     M.AddRefresher(ctx, refreshTooltipState)
     refreshTooltipState()

@@ -388,19 +388,7 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(previewCurrent, spec ~= nil)
         SetOptionEnabled(previewAll, true)
         SetOptionEnabled(midnightStyle, true)
-        if type(SetSectionHeaderStatus) == "function" then
-            local label = (spec and (spec.text or spec.label or spec.value)) or "selected indicator"
-            if enabled then
-                SetSectionHeaderStatus(sicons, nil)
-            else
-                SetSectionHeaderStatus(sicons, {
-                    hint = "selected indicator off",
-                    hintColor = { 0.90, 0.84, 0.76, 1 },
-                    bg = { 0.105, 0.082, 0.052, 0.44 },
-                    arrowColor = { 0.88, 0.62, 0.22, 1 },
-                })
-            end
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(sicons, nil) end
     end
     M.AddRefresher(ctx, RefreshStatusIconState)
     RefreshStatusIconState()
@@ -1033,17 +1021,7 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(framePriority, hasFrame)
         SetOptionEnabled(frameAlpha, hasFrame and (frameKind == "healthtint" or frameKind == "pulse"))
         SetOptionEnabled(frameThickness, hasFrame and (frameKind == "border" or frameKind == "glow"))
-        if type(SetSectionHeaderStatus) == "function" then
-            local enabled = SpellIndicators(CurrentScope()).enabled == true
-            if enabled then
-                SetSectionHeaderStatus(spells, hasSpell and nil or {
-                    hint = "no spell selected",
-                    hintColor = HeaderHintColor(),
-                })
-            else
-                SetSectionHeaderStatus(spells, nil)
-            end
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(spells, nil) end
     end
     M.AddRefresher(ctx, RefreshSpellIndicatorState)
     RefreshSpellIndicatorState()
@@ -1209,21 +1187,7 @@ local function BuildGFIndicators(ctx)
             customStatus:SetText(M.Format("%s is set to %s. Set Selected Slot Indicator to Custom Spell to activate this editor.", slotLabel, tostring(category or "none")))
             customStatus:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.90)
         end
-        if type(SetSectionHeaderStatus) == "function" then
-            if enabled then
-                SetSectionHeaderStatus(corners, showCustom and {
-                    hint = slotLabel .. " custom spell",
-                    hintColor = HeaderHintColor(),
-                } or nil)
-            else
-                SetSectionHeaderStatus(corners, {
-                    hint = "corner indicators off",
-                    hintColor = { 0.90, 0.84, 0.76, 1 },
-                    bg = { 0.105, 0.082, 0.052, 0.44 },
-                    arrowColor = { 0.88, 0.62, 0.22, 1 },
-                })
-            end
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(corners, nil) end
     end
     M.AddRefresher(ctx, RefreshCornerIndicatorState)
     RefreshCornerIndicatorState()

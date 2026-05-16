@@ -275,12 +275,7 @@ local function BuildGFAuras(ctx)
         posLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         layerHint:SetTextColor((native and T.colors.muted or T.colors.dim)[1], (native and T.colors.muted or T.colors.dim)[2], (native and T.colors.muted or T.colors.dim)[3], native and 1 or 0.75)
         posHint:SetTextColor((native and T.colors.muted or T.colors.dim)[1], (native and T.colors.muted or T.colors.dim)[2], (native and T.colors.muted or T.colors.dim)[3], native and 1 or 0.75)
-        if type(SetSectionHeaderStatus) == "function" then
-            SetSectionHeaderStatus(renderer, (not native) and {
-                hint = "MSUF Custom mode",
-                hintColor = HeaderHintColor(),
-            } or nil)
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(renderer, nil) end
     end
     M.AddRefresher(ctx, RefreshRendererState)
     RefreshRendererState()
@@ -750,18 +745,7 @@ local function BuildGFAuras(ctx)
             SetOptionEnabled(enable, true)
             SetOptionEnabled(showCooldown, groupEnabled)
             SetOptionEnabled(showStacks, groupEnabled)
-            if type(SetSectionHeaderStatus) == "function" then
-                if groupEnabled then
-                    SetSectionHeaderStatus(section, nil)
-                else
-                    SetSectionHeaderStatus(section, {
-                        hint = string.lower(title) .. " off",
-                        hintColor = { 0.90, 0.84, 0.76, 1 },
-                        bg = { 0.105, 0.082, 0.052, 0.44 },
-                        arrowColor = { 0.88, 0.62, 0.22, 1 },
-                    })
-                end
-            end
+            if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(section, nil) end
         end
         M.AddRefresher(ctx, RefreshAuraGroupState)
         RefreshAuraGroupState()
@@ -1021,18 +1005,7 @@ local function BuildGFAuras(ctx)
             if sample.value then sample.value:SetTextColor(r, g, bcol, alpha) end
             if sample.box and sample.box.SetAlpha then sample.box:SetAlpha(customIcons and 1 or 0.45) end
         end
-        if type(SetSectionHeaderStatus) == "function" then
-            if customIcons then
-                SetSectionHeaderStatus(textcolor, nil)
-            else
-                SetSectionHeaderStatus(textcolor, {
-                    hint = "only for custom aura icons",
-                    hintColor = { 0.90, 0.84, 0.76, 1 },
-                    bg = { 0.105, 0.082, 0.052, 0.44 },
-                    arrowColor = { 0.88, 0.62, 0.22, 1 },
-                })
-            end
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(textcolor, nil) end
     end
     M.AddRefresher(ctx, RefreshTextColorState)
     RefreshTextColorState()
@@ -1081,15 +1054,7 @@ local function BuildGFAuras(ctx)
     local function RefreshPrivateAuraState()
         SetOptionsEnabled(privControls, PrivateAuras(CurrentScope()).enabled ~= false)
         SetOptionEnabled(privEnable, true)
-        if type(SetSectionHeaderStatus) == "function" then
-            local enabled = PrivateAuras(CurrentScope()).enabled ~= false
-            SetSectionHeaderStatus(priv, enabled and nil or {
-                hint = "private auras off",
-                hintColor = { 0.90, 0.84, 0.76, 1 },
-                bg = { 0.105, 0.082, 0.052, 0.44 },
-                arrowColor = { 0.88, 0.62, 0.22, 1 },
-            })
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(priv, nil) end
     end
     M.AddRefresher(ctx, RefreshPrivateAuraState)
     RefreshPrivateAuraState()
@@ -1118,10 +1083,7 @@ local function BuildGFAuras(ctx)
     BindNestedToggle(ctx, W.Toggle(style, "Dynamic icon scale"), function() return AurasRoot(CurrentScope()) end, "dynamicScale", false, "geometry")
     local function RefreshStyleHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
-        SetSectionHeaderStatus(style, Bool(CurrentScope(), "masqueEnabled", false) and {
-            hint = "masque skin active",
-            hintColor = HeaderHintColor(),
-        } or nil)
+        SetSectionHeaderStatus(style, nil)
     end
     M.AddRefresher(ctx, RefreshStyleHeader)
     RefreshStyleHeader()
@@ -1136,11 +1098,7 @@ local function BuildGFAuras(ctx)
     BindNestedToggle(ctx, W.Toggle(utilities, "Prefer player auras"), function() return AurasRoot(CurrentScope()) end, "preferPlayer", true, "visual")
     local function RefreshUtilityHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
-        local auraRoot = AurasRoot(CurrentScope())
-        SetSectionHeaderStatus(utilities, (auraRoot and auraRoot.sortByDuration) and {
-            hint = "sorted by duration",
-            hintColor = HeaderHintColor(),
-        } or nil)
+        SetSectionHeaderStatus(utilities, nil)
     end
     M.AddRefresher(ctx, RefreshUtilityHeader)
     RefreshUtilityHeader()

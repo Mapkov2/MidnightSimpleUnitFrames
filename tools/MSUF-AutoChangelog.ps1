@@ -13,6 +13,8 @@ param(
     [switch]$CreateMissingRelease,
     [switch]$KeepExistingAutoEntries,
     [switch]$IncludePrereleaseAutoEntries,
+    [switch]$ReleaseLineScan,
+    [switch]$NoJunkFilter,
     [int]$PollSeconds = 2,
     [int]$DebounceSeconds = 3
 )
@@ -78,6 +80,49 @@ function Normalize-VersionKey {
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
     return ($v.ToLowerInvariant() -replace '[^a-z0-9]+', '')
+}
+
+function Get-VersionNumberParts {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+    $v = $Value.Trim()
+    $v = $v -replace '^refs/tags/', ''
+    $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)') {
+        return [int[]]($Matches["base"] -split '\.' | ForEach-Object { [int]$_ })
+    }
+    return $null
+}
+
+function Compare-VersionNumberParts {
+    param(
+        [AllowNull()][int[]]$Left,
+        [AllowNull()][int[]]$Right
+    )
+
+    if ($null -eq $Left -and $null -eq $Right) { return 0 }
+    if ($null -eq $Left) { return -1 }
+    if ($null -eq $Right) { return 1 }
+    $max = [Math]::Max($Left.Count, $Right.Count)
+    for ($i = 0; $i -lt $max; $i++) {
+        $l = if ($i -lt $Left.Count) { $Left[$i] } else { 0 }
+        $r = if ($i -lt $Right.Count) { $Right[$i] } else { 0 }
+        if ($l -lt $r) { return -1 }
+        if ($l -gt $r) { return 1 }
+    }
+    return 0
+}
+
+function Test-IsStableVersionTagName {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    $v = $Value.Trim()
+    $v = $v -replace '^refs/tags/', ''
+    $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '(?i)(alpha|beta|rc|pre)') { return $false }
+    return ($v -match '^\d+(?:\.\d+)*$')
 }
 
 function Get-PrereleaseVersionInfo {
@@ -185,6 +230,57 @@ function Test-GitRefExists {
     }
 }
 
+function Resolve-GitTagLikeRef {
+    param([AllowNull()][string]$Ref)
+
+    if ([string]::IsNullOrWhiteSpace($Ref)) { return "" }
+    $wanted = Normalize-VersionKey $Ref
+    if ($wanted -eq "") { return "" }
+
+    Push-Location $RepoRoot
+    try {
+        $tags = @(& git tag --list 2>$null)
+        if ($LASTEXITCODE -ne 0) { return "" }
+        foreach ($tag in $tags) {
+            if ((Normalize-VersionKey $tag) -eq $wanted) {
+                return $tag
+            }
+        }
+    } finally {
+        Pop-Location
+    }
+    return ""
+}
+
+function Get-PreviousStableTagForVersion {
+    param([AllowNull()][string]$Version)
+
+    $targetParts = Get-VersionNumberParts $Version
+    if ($null -eq $targetParts) { return "" }
+
+    $bestTag = ""
+    $bestParts = $null
+    Push-Location $RepoRoot
+    try {
+        $tags = @(& git tag --list 2>$null)
+        if ($LASTEXITCODE -ne 0) { return "" }
+        foreach ($tag in $tags) {
+            if (-not (Test-IsStableVersionTagName $tag)) { continue }
+            $parts = Get-VersionNumberParts $tag
+            if ($null -eq $parts) { continue }
+            if ((Compare-VersionNumberParts -Left $parts -Right $targetParts) -ge 0) { continue }
+            if ($bestTag -eq "" -or (Compare-VersionNumberParts -Left $parts -Right $bestParts) -gt 0) {
+                $bestTag = $tag
+                $bestParts = $parts
+            }
+        }
+    } finally {
+        Pop-Location
+    }
+
+    return $bestTag
+}
+
 function Get-EffectiveSinceHours {
     if ($SinceHours -lt 0) { throw "Since hours must be 0 or between 1 and 100." }
     if ($SinceHours -gt 100) { throw "Since hours must be between 1 and 100." }
@@ -192,11 +288,26 @@ function Get-EffectiveSinceHours {
 }
 
 function Get-EffectiveBaseRef {
+    if ($ReleaseLineScan) {
+        $releaseBase = Get-PreviousStableTagForVersion $DisplayVersion
+        if (-not [string]::IsNullOrWhiteSpace($releaseBase)) {
+            $script:BaseRef = $releaseBase
+            return $releaseBase
+        }
+    }
+
     if ((Get-EffectiveSinceHours) -gt 0) { return "" }
 
     $base = if ([string]::IsNullOrWhiteSpace($BaseRef)) { Get-DefaultBaseRef } else { $BaseRef.Trim() }
     if ([string]::IsNullOrWhiteSpace($base)) { return "" }
     if (Test-GitRefExists $base) { return $base }
+
+    $resolvedTag = Resolve-GitTagLikeRef $base
+    if (-not [string]::IsNullOrWhiteSpace($resolvedTag) -and (Test-GitRefExists $resolvedTag)) {
+        Write-AutoLog "Source ref '$base' resolved to Git tag '$resolvedTag'."
+        $script:BaseRef = $resolvedTag
+        return $resolvedTag
+    }
 
     $targetKey = Normalize-VersionKey $DisplayVersion
     if ($targetKey -ne "" -and (Normalize-VersionKey $base) -eq $targetKey) {
@@ -266,6 +377,9 @@ function Get-ChangeCategory {
     if ($IncludeTooling -and $pathText -match '(^| )\.github/|(^| )tools/|pkgmeta|\.toc|publish-|package-release|workflow|changelog') {
         return "Release / Tooling"
     }
+    if ($haystack -match 'class.?color|classcolor|barbackground|bar background') {
+        return "Changes / Improvements"
+    }
     if ($haystack -match 'perf|performance|optim|cache|hot path|fast|less work|skip|coalesce|throttle|debounce|allocation') {
         return "Performance"
     }
@@ -283,6 +397,33 @@ function Convert-CommitSubjectToText {
     $text = $text -replace '^\s*(feat|fix|perf|docs|chore|refactor|test)(\(.+?\))?:\s*', ''
     $text = $text -replace '\s+', ' '
     $text = $text.Trim().TrimEnd(".")
+    $lower = $text.ToLowerInvariant()
+    if ($lower -eq "better combat gating for" -or $lower -eq "more combat gating") {
+        $text = "Improved combat safety for protected UI updates"
+    } elseif ($lower -eq "robuster click casting on unitframe") {
+        $text = "Made click-casting on unit frames more robust"
+    } elseif ($lower -match '^way more text options') {
+        $text = "Added more text positioning options for unit and group frames"
+    } elseif ($lower -match '^more clearer container movement') {
+        $text = "Improved text container movement controls"
+    } elseif ($lower -match '^better preview for gf/ uf') {
+        $text = "Improved Group Frame and Unit Frame previews"
+    } elseif ($lower -match '^made it possible to use spell indicator') {
+        $text = "Added support for spell indicators and Blizzard rendering at the same time"
+    } elseif ($lower -match '^not tracking these anymore') {
+        $text = "Stopped tracking long raid buffs in Group Frames"
+    } elseif ($lower -match '^turn off test mode') {
+        $text = "Cleaned up menu test mode when leaving the menu"
+    } elseif ($lower -match '^new rested logo') {
+        $text = "Added the new rested logo"
+    } else {
+        $text = $text -replace '(?i)\bmore clearer\b', 'clearer'
+        $text = $text -replace '(?i)\bspeces\b', 'specs'
+        $text = $text -replace '(?i)\bexmaple\b', 'example'
+        $text = $text -replace '(?i)\bunitframe\b', 'unit frame'
+        $text = $text -replace '(?i)\bgroupframe\b', 'group frame'
+        $text = $text -replace '(?i)\bund\b', 'and'
+    }
     if ($text.Length -gt 0) {
         $text = $text.Substring(0, 1).ToUpperInvariant() + $text.Substring(1)
     }
@@ -293,9 +434,20 @@ function Test-IsIgnoredCommitSubject {
     param([AllowNull()][string]$Subject)
 
     if ([string]::IsNullOrWhiteSpace($Subject)) { return $false }
+    if ($NoJunkFilter) { return $false }
     $text = $Subject.ToLowerInvariant()
     if ($text -match 'release helper|msuf-releasehelper|auto changelog|updated changelog|changelog only') { return $true }
+    if ($text -match '^(release|ready for|prepared|prepare|changelog)\b') { return $true }
+    if ($text -match '^(some stuff|stuff|fixed some stuff|changelog stuff|lots of updates|merging some fixes)$') { return $true }
     return $false
+}
+
+function Test-IsGenericChangeSubject {
+    param([AllowNull()][string]$Subject)
+
+    if ([string]::IsNullOrWhiteSpace($Subject)) { return $true }
+    $text = (Convert-CommitSubjectToText $Subject).Trim().TrimEnd(".").ToLowerInvariant()
+    return ($text -match '^(updated addon behavior|some stuff|fixed some stuff|changelog stuff|changelog|lots of updates|stuff|merging some fixes)$')
 }
 
 function Get-PathDescription {
@@ -347,13 +499,48 @@ function Get-UserFacingChangeText {
     $scope = if ($areas.Count -gt 0) { (($areas | Select-Object -First 2) -join ", ") } else { "addon behavior" }
     $scopeText = Get-FriendlyScopeText $scope
 
-    if ($haystack -match 'class.?color|classcolor|barbackground|bar background') {
-        return "Improved class-colored bar backgrounds across unit and group frames."
-    }
+    $cleanSubject = Convert-CommitSubjectToText $subjectText
+    $cleanSubject = $cleanSubject -replace '\s*\([^)]*\)\s*$', ''
+    $cleanSubject = $cleanSubject.Trim().TrimEnd(".")
+    $genericSubject = Test-IsGenericChangeSubject $subjectText
+
     if ($haystack -match 'long.?raid.?buff|raid.?buff|ignorelong|longbuff') {
         return "Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly."
     }
-    if ($haystack -match 'test.?mode|preview.?mode') {
+    if ($haystack -match 'mouseover.*group frame|group frame.*mouseover') {
+        return "Fixed Group Frame mouseover behavior."
+    }
+    if ($haystack -match 'tooltip|tiptac') {
+        return "Improved tooltip compatibility with other addons."
+    }
+    if ($haystack -match 'class.?color|classcolor|barbackground|bar background') {
+        return "Added class-colored bar background support across unit and group frames."
+    }
+
+    if (-not $genericSubject) {
+        return (Format-FriendlySentence $cleanSubject)
+    }
+
+    if ($pathText -match '/Menu2/Pages/MSUF_Menu2_UnitSections\.lua') {
+        return "Improved menu section layout and option handling."
+    }
+    if ($pathText -match '/Menu2/') {
+        return "Improved menu and dashboard usability."
+    }
+    if ($pathText -match '/GroupFrames/MSUF_GF_Effects\.lua') {
+        return "Improved Group Frame range, highlight, and visual effect behavior."
+    }
+    if ($pathText -match '/GroupFrames/MSUF_GF_Auras\.lua|/GroupFrames/MSUF_GF_Aura') {
+        return "Improved Group Frame aura handling."
+    }
+    if ($pathText -match '/Auras2/') {
+        return "Improved unit aura updates and rendering."
+    }
+    if ($pathText -match '/Core/MSUF_ChatAndTooltips\.lua') {
+        return "Improved chat and tooltip integration."
+    }
+
+    if ($haystack -match 'test.?mode') {
         return "Improved menu preview handling so test mode is cleaned up when leaving the menu."
     }
     if ($haystack -match 'spell.?indicator|external.*cooldown|blessing|power infusion|\bpi\b') {
@@ -361,9 +548,6 @@ function Get-UserFacingChangeText {
     }
     if ($haystack -match 'pin|pinned|scroll|preview') {
         return "Improved menu previews so layouts are easier to inspect and adjust."
-    }
-    if ($haystack -match 'tooltip|tiptac') {
-        return "Improved tooltip compatibility with other addons."
     }
     if ($haystack -match 'container|font|text option|font runtime|unit text') {
         return "Improved text and container controls for unit and group frames."
@@ -382,13 +566,6 @@ function Get-UserFacingChangeText {
     }
     if ($haystack -match 'dashboard|menu|options|settings') {
         return "Improved menu and dashboard usability."
-    }
-
-    $cleanSubject = Convert-CommitSubjectToText $subjectText
-    $cleanSubject = $cleanSubject -replace '\s*\([^)]*\)\s*$', ''
-    $cleanSubject = $cleanSubject.Trim().TrimEnd(".")
-    if ($cleanSubject -ne "" -and $cleanSubject -notmatch '^(updated addon behavior|some stuff|changelog stuff)$') {
-        return (Format-FriendlySentence $cleanSubject)
     }
 
     if ($Category -eq "Performance") {
@@ -416,9 +593,10 @@ function Add-GroupedBullet {
 
     $target = if ($Groups.Contains($Category)) { $Category } else { "Changes / Improvements" }
     $key = $Bullet.ToLowerInvariant()
-    if ($Seen.Contains($key)) { return }
+    if ($Seen.Contains($key)) { return $false }
     [void]$Seen.Add($key)
     $Groups[$target].Add($Bullet)
+    return $true
 }
 
 function Get-CommitPaths {
@@ -459,7 +637,7 @@ function Add-CommitChangesToGroups {
         [Parameter(Mandatory = $true)]$Seen
     )
 
-    $hours = Get-EffectiveSinceHours
+    $hours = if ($ReleaseLineScan) { 0 } else { Get-EffectiveSinceHours }
     $base = Get-EffectiveBaseRef
     $range = if ($hours -gt 0) { "HEAD --since=$hours hours" } elseif ([string]::IsNullOrWhiteSpace($base)) { "HEAD" } else { "$base..HEAD" }
 
@@ -474,21 +652,52 @@ function Add-CommitChangesToGroups {
             throw "git log failed for range '$range': $($commitLines -join ' ')"
         }
 
+        $scannedCommits = 0
+        $usedCommits = 0
+        $junkCommits = 0
+        $addedEntries = 0
         foreach ($line in $commitLines) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             $parts = $line -split "`t", 3
             if ($parts.Count -lt 3) { continue }
+            $scannedCommits++
             $hash = $parts[0]
             $short = $parts[1]
             $subject = $parts[2]
-            if (Test-IsIgnoredCommitSubject $subject) { continue }
+            if (Test-IsIgnoredCommitSubject $subject) {
+                $junkCommits++
+                continue
+            }
             $paths = [string[]]@(Get-CommitPaths $hash)
             if ($paths.Count -eq 0) { continue }
+            $usedCommits++
             $diff = Get-CommitDiffText $hash
-            $category = Get-ChangeCategory -Subject $subject -Paths $paths -Context $diff
-            $bullet = Get-UserFacingChangeText -Subject $subject -Paths $paths -DiffText $diff -Category $category
-            Add-GroupedBullet -Groups $Groups -Seen $Seen -Category $category -Bullet $bullet
+            if ((Test-IsGenericChangeSubject $subject) -and $paths.Count -gt 1) {
+                $areaBuckets = [ordered]@{}
+                foreach ($path in $paths) {
+                    $area = Get-ChangeArea $path
+                    if (-not $areaBuckets.Contains($area)) {
+                        $areaBuckets[$area] = New-Object System.Collections.Generic.List[string]
+                    }
+                    $areaBuckets[$area].Add($path)
+                }
+                foreach ($area in $areaBuckets.Keys) {
+                    $areaPaths = [string[]]$areaBuckets[$area].ToArray()
+                    $category = Get-ChangeCategory -Subject $subject -Paths $areaPaths -Context $diff
+                    $bullet = Get-UserFacingChangeText -Subject $subject -Paths $areaPaths -DiffText $diff -Category $category
+                    if (Add-GroupedBullet -Groups $Groups -Seen $Seen -Category $category -Bullet $bullet) {
+                        $addedEntries++
+                    }
+                }
+            } else {
+                $category = Get-ChangeCategory -Subject $subject -Paths $paths -Context $diff
+                $bullet = Get-UserFacingChangeText -Subject $subject -Paths $paths -DiffText $diff -Category $category
+                if (Add-GroupedBullet -Groups $Groups -Seen $Seen -Category $category -Bullet $bullet) {
+                    $addedEntries++
+                }
+            }
         }
+        Write-AutoLog "Scanned $scannedCommits commits from $range; filtered $junkCommits junk commits, used $usedCommits addon commits, and added $addedEntries unique entries."
     } finally {
         Pop-Location
     }
@@ -560,7 +769,7 @@ function Add-WorkingTreeChangesToGroups {
         } else {
             Get-PathDescription -Path $path -StatusCode ([string]$entry.Code) -DiffText $diff
         }
-        Add-GroupedBullet -Groups $Groups -Seen $Seen -Category $category -Bullet $bullet
+        [void](Add-GroupedBullet -Groups $Groups -Seen $Seen -Category $category -Bullet $bullet)
     }
 }
 
@@ -661,6 +870,49 @@ function Get-ExistingAutoBlocks {
     return $groups
 }
 
+function Get-ExistingReleaseNoteGroups {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines)
+
+    $groups = New-AutoGroupMap
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    $currentTitle = $null
+    $lastTitle = $null
+
+    foreach ($line in $Lines) {
+        if ($line -match '^\s*<!--\s*MSUF-AUTO-CHANGELOG:[^:>]+:START\s*-->\s*$') {
+            continue
+        }
+        if ($line -match '^\s*<!--\s*MSUF-AUTO-CHANGELOG:[^:>]+:END\s*-->\s*$') {
+            continue
+        }
+        if ($line -match '^\s*<!--') { continue }
+
+        if ($line -match '^###\s+(.+?)\s*$') {
+            $heading = $Matches[1].Trim()
+            $mapped = Get-SectionTitleFromMarkerKey (Get-MarkerKey $heading)
+            $currentTitle = if ($mapped) { $mapped } else { "Changes / Improvements" }
+            $lastTitle = $currentTitle
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($currentTitle)) { continue }
+
+        if ($line -match '^\s*-\s+(.+?)\s*$') {
+            $bullet = $Matches[1].Trim()
+            Add-AutoBulletToGroup -Groups $groups -Seen $seen -Title $currentTitle -Bullet $bullet
+            $lastTitle = $currentTitle
+            continue
+        }
+
+        if ($lastTitle -and $groups[$lastTitle].Count -gt 0 -and $line -match '^\s{2,}(.+?)\s*$') {
+            $items = $groups[$lastTitle]
+            $items[$items.Count - 1] = ($items[$items.Count - 1] + " " + $Matches[1].Trim()).Trim()
+        }
+    }
+
+    return $groups
+}
+
 function Merge-AutoGroups {
     param(
         [Parameter(Mandatory = $true)]$Existing,
@@ -746,7 +998,7 @@ function Get-CarriedPrereleaseAutoGroups {
         }
 
         $sectionLines = Get-ReleaseLinesFromBounds -Lines $Lines -Bounds $section
-        $groups = Get-ExistingAutoBlocks -Lines $sectionLines
+        $groups = Get-ExistingReleaseNoteGroups -Lines $sectionLines
         foreach ($title in $SectionOrder) {
             foreach ($bullet in $groups[$title]) {
                 Add-AutoBulletToGroup -Groups $carried -Seen $seen -Title $title -Bullet $bullet
@@ -771,7 +1023,7 @@ function Get-CarriedFinalReleaseAutoGroups {
         }
 
         $sectionLines = Get-ReleaseLinesFromBounds -Lines $Lines -Bounds $section
-        $groups = Get-ExistingAutoBlocks -Lines $sectionLines
+        $groups = Get-ExistingReleaseNoteGroups -Lines $sectionLines
         foreach ($title in $SectionOrder) {
             foreach ($bullet in $groups[$title]) {
                 Add-AutoBulletToGroup -Groups $carried -Seen $seen -Title $title -Bullet $bullet
@@ -1257,7 +1509,7 @@ function Update-ChangelogAutoBlocks {
         $carriedGroups = Get-CarriedPrereleaseAutoGroups -Lines $lines -TargetVersion $bounds.Version
         $carriedCount = Get-AutoGroupEntryCount -Groups $carriedGroups
         if ($carriedCount -gt 0) {
-            Write-AutoLog "Carried $carriedCount old auto entries from earlier $($bounds.Version) prerelease sections."
+            Write-AutoLog "Carried $carriedCount old entries from earlier $($bounds.Version) prerelease sections."
         }
         $keptGroups = Merge-AutoGroups -Existing $existingGroups -Generated $carriedGroups
         $mergedGroups = Merge-AutoGroups -Existing $keptGroups -Generated $Groups
@@ -1268,7 +1520,7 @@ function Update-ChangelogAutoBlocks {
         $releaseGroups = Get-CarriedFinalReleaseAutoGroups -Lines $lines -TargetVersion $bounds.Version
         $releaseCount = Get-AutoGroupEntryCount -Groups $releaseGroups
         if ($releaseCount -gt 0) {
-            Write-AutoLog "Included $releaseCount old auto entries from earlier prerelease sections for final release $($bounds.Version)."
+            Write-AutoLog "Included $releaseCount old entries from earlier prerelease sections for final release $($bounds.Version)."
         }
         $mergedGroups = Merge-AutoGroups -Existing $releaseGroups -Generated $mergedGroups
     }
@@ -1426,6 +1678,8 @@ function Set-AutoChangelogSettings {
         [bool]$CreateMissingSection,
         [bool]$KeepExistingEntries,
         [bool]$IncludePrereleaseEntries,
+        [bool]$UseReleaseLineScan,
+        [bool]$UseJunkFilter,
         [bool]$RegenerateAddon,
         [bool]$IncludeReleaseTooling,
         [int]$PollEverySeconds,
@@ -1456,6 +1710,8 @@ function Set-AutoChangelogSettings {
     $script:CreateMissingRelease = [bool]$CreateMissingSection
     $script:KeepExistingAutoEntries = [bool]$KeepExistingEntries
     $script:IncludePrereleaseAutoEntries = [bool]$IncludePrereleaseEntries
+    $script:ReleaseLineScan = [bool]$UseReleaseLineScan
+    $script:NoJunkFilter = -not [bool]$UseJunkFilter
     $script:RegenerateAddonChangelog = [bool]$RegenerateAddon
     $script:IncludeTooling = [bool]$IncludeReleaseTooling
     $script:PollSeconds = [Math]::Max(1, $PollEverySeconds)
@@ -1533,9 +1789,9 @@ function Start-AutoChangelogGui {
     $dateBox = New-AutoTextBox 695 16 100 $initialReleaseDate
     $tips.SetToolTip($dateBox, "Date for a newly created release section. Use YYYY-MM-DD or leave empty.")
 
-    New-AutoLabel "Source ref" 16 54 120 | Out-Null
+    New-AutoLabel "From version/tag" 16 54 120 | Out-Null
     $baseRefBox = New-AutoTextBox 145 52 230 $initialBaseRef
-    $tips.SetToolTip($baseRefBox, "Existing Git ref used as the start of the commit range. This is usually the previous release tag, not the changelog target.")
+    $tips.SetToolTip($baseRefBox, "Existing Git tag, branch, or commit used as the start of the scan, for example v5.1 or v5.2-beta1.")
 
     $lastTagButton = New-AutoButton "Last tag" 385 49 90 28
     $tips.SetToolTip($lastTagButton, "Detect the latest reachable Git tag.")
@@ -1616,10 +1872,29 @@ function Start-AutoChangelogGui {
     $includePrereleaseBox = New-Object System.Windows.Forms.CheckBox
     $includePrereleaseBox.Text = "Include prerelease logs"
     $includePrereleaseBox.Checked = [bool]$IncludePrereleaseAutoEntries
-    $includePrereleaseBox.Location = New-Object System.Drawing.Point(720, 146)
-    $includePrereleaseBox.Size = New-Object System.Drawing.Size(210, 24)
+    $includePrereleaseBox.Location = New-Object System.Drawing.Point(810, 146)
+    $includePrereleaseBox.Size = New-Object System.Drawing.Size(205, 24)
     $tips.SetToolTip($includePrereleaseBox, "For a final release such as 5.1, include managed auto entries from 5.1 Alpha/Beta/RC/Pre sections.")
     $form.Controls.Add($includePrereleaseBox)
+
+    $releaseLineBox = New-Object System.Windows.Forms.CheckBox
+    $releaseLineBox.Text = "Release line scan"
+    $releaseLineBox.Checked = if ($PSBoundParameters.ContainsKey("ReleaseLineScan")) { [bool]$ReleaseLineScan } else { $true }
+    $releaseLineBox.Location = New-Object System.Drawing.Point(525, 146)
+    $releaseLineBox.Size = New-Object System.Drawing.Size(175, 24)
+    $tips.SetToolTip($releaseLineBox, "Scan from the previous stable tag for this version line, for example v5.1 -> 5.2 Beta 4. This is the easiest full release changelog mode.")
+    $form.Controls.Add($releaseLineBox)
+
+    $junkFilterBox = New-Object System.Windows.Forms.CheckBox
+    $junkFilterBox.Text = "Filter junk"
+    $junkFilterBox.Checked = -not [bool]$NoJunkFilter
+    $junkFilterBox.Location = New-Object System.Drawing.Point(525, 146)
+    $junkFilterBox.Size = New-Object System.Drawing.Size(120, 24)
+    $tips.SetToolTip($junkFilterBox, "Skip release/prepared/changelog/some stuff style commits while still scanning the real code changes.")
+    $form.Controls.Add($junkFilterBox)
+
+    $releaseLineBox.Location = New-Object System.Drawing.Point(650, 146)
+    $releaseLineBox.Size = New-Object System.Drawing.Size(160, 24)
 
     $summaryBox = New-Object System.Windows.Forms.TextBox
     $summaryBox.Location = New-Object System.Drawing.Point(16, 178)
@@ -1627,19 +1902,19 @@ function Start-AutoChangelogGui {
     $summaryBox.Multiline = $true
     $summaryBox.ReadOnly = $true
     $summaryBox.ScrollBars = "Vertical"
-    $summaryBox.Text = "Changelog title is the only release section written, for example 5.2. Generate Editor scans commits, patches, and working-tree changes into user-facing notes. Write Edited writes exactly those managed auto blocks."
+    $summaryBox.Text = "Normal workflow: keep Release line scan on, then use Generate Preview or Generate + Write. It scans the full version line from the previous stable tag, code patches, old prerelease notes, and working-tree changes."
     $form.Controls.Add($summaryBox)
 
-    $previewButton = New-AutoButton "Generate Editor" 16 270 125 32
+    $previewButton = New-AutoButton "Generate Preview" 16 270 125 32
     $makeFriendlyButton = New-AutoButton "Make Friendly" 151 270 115 32
     $writeEditedButton = New-AutoButton "Write Edited" 276 270 105 32
-    $runButton = New-AutoButton "Run Once" 391 270 85 32
-    $startWatchButton = New-AutoButton "Start Watch" 486 270 100 32
-    $stopWatchButton = New-AutoButton "Stop Watch" 596 270 100 32
+    $runButton = New-AutoButton "Generate + Write" 391 270 115 32
+    $startWatchButton = New-AutoButton "Start Watch" 516 270 100 32
+    $stopWatchButton = New-AutoButton "Stop Watch" 626 270 100 32
     $stopWatchButton.Enabled = $false
-    $statusButton = New-AutoButton "Git Status" 706 270 85 32
-    $openButton = New-AutoButton "Open CHANGELOG.md" 801 270 135 32
-    $closeButton = New-AutoButton "Close" 946 270 70 32
+    $statusButton = New-AutoButton "Git Status" 736 270 85 32
+    $openButton = New-AutoButton "Open CHANGELOG.md" 831 270 120 32
+    $closeButton = New-AutoButton "Close" 961 270 55 32
 
     New-AutoLabel "Editable auto changelog Markdown" 16 318 240 | Out-Null
     $editBox = New-Object System.Windows.Forms.TextBox
@@ -1670,6 +1945,8 @@ function Start-AutoChangelogGui {
             -CreateMissingSection $createMissingBox.Checked `
             -KeepExistingEntries $keepExistingBox.Checked `
             -IncludePrereleaseEntries $includePrereleaseBox.Checked `
+            -UseReleaseLineScan $releaseLineBox.Checked `
+            -UseJunkFilter $junkFilterBox.Checked `
             -RegenerateAddon $regenBox.Checked `
             -IncludeReleaseTooling $toolingBox.Checked `
             -PollEverySeconds ([int]$pollBox.Value) `
@@ -1687,6 +1964,18 @@ function Start-AutoChangelogGui {
     }
 
     function Resolve-SourceRefFromUi {
+        if ($releaseLineBox.Checked) {
+            $releaseBase = Get-PreviousStableTagForVersion $displayBox.Text
+            if ([string]::IsNullOrWhiteSpace($releaseBase)) {
+                throw "Could not find a previous stable tag for release line '$($displayBox.Text)'."
+            }
+            $baseRefBox.Text = $releaseBase
+            $sinceHoursBox.Value = 0
+            $script:BaseRef = $releaseBase
+            $script:SinceHours = 0
+            Write-AutoLog ("Release line scan uses previous stable tag: " + $releaseBase)
+            return $releaseBase
+        }
         if ((Get-EffectiveSinceHours) -gt 0) {
             Write-AutoLog ("Using commits from the last " + $script:SinceHours + " hours; Since ref is ignored.")
             return ""
@@ -1703,6 +1992,20 @@ function Start-AutoChangelogGui {
 
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = [Math]::Max(1, [int]$pollBox.Value) * 1000
+
+    $sinceHoursBox.Add_ValueChanged({
+        if ([int]$sinceHoursBox.Value -gt 0 -and $releaseLineBox.Checked) {
+            $releaseLineBox.Checked = $false
+            Write-AutoLog "Since hours selected; Release line scan disabled."
+        }
+    })
+
+    $releaseLineBox.Add_CheckedChanged({
+        if ($releaseLineBox.Checked -and [int]$sinceHoursBox.Value -gt 0) {
+            $sinceHoursBox.Value = 0
+            Write-AutoLog "Release line scan enabled; Since hours reset to 0."
+        }
+    })
 
     $latestButton.Add_Click({
         try {
@@ -1935,7 +2238,7 @@ if (-not $Watch) {
 }
 
 Write-AutoLog "Watching repository changes. Press Ctrl+C to stop."
-$startupHours = Get-EffectiveSinceHours
+$startupHours = if ($ReleaseLineScan) { 0 } else { Get-EffectiveSinceHours }
 $startupBaseRef = if ($startupHours -gt 0) { "" } else { Get-EffectiveBaseRef }
 if (-not [string]::IsNullOrWhiteSpace($startupBaseRef)) { $script:BaseRef = $startupBaseRef }
 Write-AutoLog "Target changelog section: $DisplayVersion"

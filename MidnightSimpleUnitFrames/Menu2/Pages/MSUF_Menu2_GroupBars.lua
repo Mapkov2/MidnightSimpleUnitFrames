@@ -173,12 +173,7 @@ local function BuildGFBars(ctx)
         else
             colorHint:Hide()
         end
-        if type(SetSectionHeaderStatus) == "function" then
-            SetSectionHeaderStatus(hcolor, ((m == "CLASS" or m == "GRADIENT") and {
-                hint = HealthModeHint(m),
-                hintColor = HeaderHintColor(),
-            }) or nil)
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(hcolor, nil) end
     end
     M.AddRefresher(ctx, RefreshHealthColorState)
     RefreshHealthColorState()
@@ -215,23 +210,7 @@ local function BuildGFBars(ctx)
     W.MoveWidget(showDamager, power, powerRightX, -156)
     local function RefreshPowerHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
-        local roles = 0
-        if Bool(CurrentScope(), "powerShowTank", true) then roles = roles + 1 end
-        if Bool(CurrentScope(), "powerShowHealer", true) then roles = roles + 1 end
-        if Bool(CurrentScope(), "powerShowDamager", false) then roles = roles + 1 end
-        if roles == 0 then
-            SetSectionHeaderStatus(power, {
-                hint = "hidden for all roles",
-                hintColor = { 0.90, 0.84, 0.76, 1 },
-                bg = { 0.105, 0.082, 0.052, 0.44 },
-                arrowColor = { 0.88, 0.62, 0.22, 1 },
-            })
-            return
-        end
-        SetSectionHeaderStatus(power, (roles == 1) and {
-            hint = "power shown for 1 role",
-            hintColor = HeaderHintColor(),
-        } or nil)
+        SetSectionHeaderStatus(power, nil)
     end
     M.AddRefresher(ctx, RefreshPowerHeader)
     RefreshPowerHeader()
@@ -578,18 +557,7 @@ local function BuildGFBars(ctx)
         SetOptionEnabled(showName, true)
         SetOptionEnabled(showHP, true)
         SetOptionEnabled(powerText, true)
-        if type(SetSectionHeaderStatus) == "function" then
-            if tab == "power" and not IsPowerTextEnabled() then
-                SetSectionHeaderStatus(text, {
-                    hint = "power text off",
-                    hintColor = { 0.90, 0.84, 0.76, 1 },
-                    bg = { 0.105, 0.082, 0.052, 0.44 },
-                    arrowColor = { 0.88, 0.62, 0.22, 1 },
-                })
-            else
-                SetSectionHeaderStatus(text, nil)
-            end
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(text, nil) end
     end
     M.AddRefresher(ctx, refreshTextControls)
     refreshTextControls()
@@ -623,15 +591,7 @@ local function BuildGFBars(ctx)
     local function RefreshDispelState()
         SetOptionsEnabled({ dispelStyle, dispelCurrent, dispelAlpha }, Bool(CurrentScope(), "dispelOverlayEnabled", true))
         SetOptionEnabled(dispelToggle, true)
-        if type(SetSectionHeaderStatus) == "function" then
-            local enabled = Bool(CurrentScope(), "dispelOverlayEnabled", true)
-            SetSectionHeaderStatus(dispel, enabled and nil or {
-                hint = "dispel overlay off",
-                hintColor = { 0.90, 0.84, 0.76, 1 },
-                bg = { 0.105, 0.082, 0.052, 0.44 },
-                arrowColor = { 0.88, 0.62, 0.22, 1 },
-            })
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(dispel, nil) end
     end
     M.AddRefresher(ctx, RefreshDispelState)
     RefreshDispelState()
@@ -650,13 +610,7 @@ local function BuildGFBars(ctx)
     local function RefreshStripeState()
         SetOptionsEnabled({ stripeEdge, stripeHeight, stripeAlpha }, Bool(CurrentScope(), "debuffStripeEnabled", false))
         SetOptionEnabled(stripeToggle, true)
-        if type(SetSectionHeaderStatus) == "function" then
-            local enabled = Bool(CurrentScope(), "debuffStripeEnabled", false)
-            SetSectionHeaderStatus(stripe, enabled and {
-                hint = "debuff stripe active",
-                hintColor = HeaderHintColor(),
-            } or nil)
-        end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(stripe, nil) end
     end
     M.AddRefresher(ctx, RefreshStripeState)
     RefreshStripeState()

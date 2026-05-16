@@ -109,6 +109,30 @@ function Invoke-PowerShellScript {
     Invoke-External $exe (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath) + $Arguments)
 }
 
+function Quote-ProcessArgument {
+    param([AllowNull()][string]$Value)
+
+    if ($null -eq $Value) { return '""' }
+    $escaped = $Value -replace '\\(?=\\*")', '$0$0'
+    $escaped = $escaped -replace '"', '\"'
+    if ($escaped -match '[\s"]') { return '"' + $escaped + '"' }
+    return $escaped
+}
+
+function Start-PowerShellScriptWindow {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [string[]]$Arguments = @()
+    )
+
+    $exe = (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source
+    if ([string]::IsNullOrWhiteSpace($exe)) { $exe = "powershell" }
+    $processArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath) + $Arguments
+    $argumentLine = (($processArgs | ForEach-Object { Quote-ProcessArgument $_ }) -join " ")
+    Write-ReleaseLog ("> open " + $ScriptPath + " " + ($Arguments -join " "))
+    Start-Process -FilePath $exe -ArgumentList $argumentLine -WorkingDirectory $RepoRoot | Out-Null
+}
+
 function Convert-BoxTextToSection {
     param(
         [Parameter(Mandatory = $true)][string]$Title,
@@ -721,7 +745,9 @@ function Update-AutoChangelogFromRepo {
         [AllowNull()][string]$ReleaseDate,
         [bool]$CreateMissingRelease = $true,
         [bool]$KeepExistingAutoEntries = $false,
-        [bool]$IncludePrereleaseAutoEntries = $false
+        [bool]$IncludePrereleaseAutoEntries = $false,
+        [bool]$ReleaseLineScan = $false,
+        [bool]$FilterJunk = $true
     )
 
     if (-not (Test-Path -LiteralPath $AutoChangelogScript)) {
@@ -746,6 +772,12 @@ function Update-AutoChangelogFromRepo {
     }
     if ($IncludePrereleaseAutoEntries) {
         $args += "-IncludePrereleaseAutoEntries"
+    }
+    if ($ReleaseLineScan) {
+        $args += "-ReleaseLineScan"
+    }
+    if (-not $FilterJunk) {
+        $args += "-NoJunkFilter"
     }
     if (-not [string]::IsNullOrWhiteSpace($BaseRef)) {
         $args += @("-BaseRef", $BaseRef)
@@ -1026,6 +1058,20 @@ $includePrereleaseBox.Location = New-Object System.Drawing.Point(465, 98)
 $includePrereleaseBox.Size = New-Object System.Drawing.Size(170, 24)
 $form.Controls.Add($includePrereleaseBox)
 
+$releaseLineBox = New-Object System.Windows.Forms.CheckBox
+$releaseLineBox.Text = "Release line scan"
+$releaseLineBox.Checked = $true
+$releaseLineBox.Location = New-Object System.Drawing.Point(465, 122)
+$releaseLineBox.Size = New-Object System.Drawing.Size(170, 24)
+$form.Controls.Add($releaseLineBox)
+
+$junkFilterBox = New-Object System.Windows.Forms.CheckBox
+$junkFilterBox.Text = "Filter junk"
+$junkFilterBox.Checked = $true
+$junkFilterBox.Location = New-Object System.Drawing.Point(585, 122)
+$junkFilterBox.Size = New-Object System.Drawing.Size(120, 20)
+$form.Controls.Add($junkFilterBox)
+
 New-Label "Release branch" 645 76 95 | Out-Null
 $branchBox = New-Object System.Windows.Forms.ComboBox
 $branchBox.Location = New-Object System.Drawing.Point(745, 74)
@@ -1057,6 +1103,20 @@ $scanBranchesButton.Add_Click({
     }
 })
 $form.Controls.Add($scanBranchesButton)
+
+$sinceHoursBox.Add_ValueChanged({
+    if ([int]$sinceHoursBox.Value -gt 0 -and $releaseLineBox.Checked) {
+        $releaseLineBox.Checked = $false
+        Write-ReleaseLog "Since hours selected; Release line scan disabled."
+    }
+})
+
+$releaseLineBox.Add_CheckedChanged({
+    if ($releaseLineBox.Checked -and [int]$sinceHoursBox.Value -gt 0) {
+        $sinceHoursBox.Value = 0
+        Write-ReleaseLog "Release line scan enabled; Since hours reset to 0."
+    }
+})
 
 $perfBox = New-TextArea "Performance (one bullet per line)" 16 156 530 86
 $bugBox = New-TextArea "Bugfixes (one bullet per line)" 586 156 530 86
@@ -1172,12 +1232,34 @@ function Sync-AutoChangelogSource {
 
     $meta = Read-UiReleaseMetadata
     $baseRef = $baseRefBox.Text.Trim()
-    Update-AutoChangelogFromRepo -DisplayVersion $meta.Display -BaseRef $baseRef -SinceHours ([int]$sinceHoursBox.Value) -ReleaseDate $meta.Date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked -IncludePrereleaseAutoEntries $includePrereleaseBox.Checked
+    Update-AutoChangelogFromRepo -DisplayVersion $meta.Display -BaseRef $baseRef -SinceHours ([int]$sinceHoursBox.Value) -ReleaseDate $meta.Date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked -IncludePrereleaseAutoEntries $includePrereleaseBox.Checked -ReleaseLineScan $releaseLineBox.Checked -FilterJunk $junkFilterBox.Checked
     $section = Find-ChangelogSection -ReleaseTag $meta.Tag -DisplayVersion $meta.Display
     $mdBox.Text = $section.Markdown
     Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
     $useMarkdownBox.Checked = $true
     Write-ReleaseLog ("Auto changelog refreshed for " + $Reason + ": " + $section.Version)
+}
+
+function Open-AutoChangelogUiFromReleaseHelper {
+    $meta = Read-UiReleaseMetadata
+    $baseRef = $baseRefBox.Text.Trim()
+    $args = @(
+        "-Gui",
+        "-DisplayVersion", $meta.Display,
+        "-BaseRef", $baseRef,
+        "-SinceHours", ([string][int]$sinceHoursBox.Value),
+        "-ReleaseDate", $meta.Date,
+        "-CreateMissingRelease",
+        "-RegenerateAddonChangelog"
+    )
+
+    if ($keepAutoBox.Checked) { $args += "-KeepExistingAutoEntries" }
+    if ($includePrereleaseBox.Checked) { $args += "-IncludePrereleaseAutoEntries" }
+    if ($releaseLineBox.Checked) { $args += "-ReleaseLineScan" }
+    if (-not $junkFilterBox.Checked) { $args += "-NoJunkFilter" }
+
+    Start-PowerShellScriptWindow -ScriptPath $AutoChangelogScript -Arguments $args
+    Write-ReleaseLog ("Opened Auto Changelog UI for " + $meta.Display + ". Use Generate Preview and Write Edited there, then Load Notes here.")
 }
 
 $loadRepoButton = New-Object System.Windows.Forms.Button
@@ -1226,7 +1308,7 @@ $loadCommitsButton.Add_Click({
 $form.Controls.Add($loadCommitsButton)
 
 $autoChangelogButton = New-Object System.Windows.Forms.Button
-$autoChangelogButton.Text = "1 Auto Changelog"
+$autoChangelogButton.Text = "1 Generate Changelog"
 $autoChangelogButton.Location = New-Object System.Drawing.Point(16, 628)
 $autoChangelogButton.Size = New-Object System.Drawing.Size(150, 32)
 $autoChangelogButton.Add_Click({
@@ -1238,6 +1320,20 @@ $autoChangelogButton.Add_Click({
     }
 })
 $form.Controls.Add($autoChangelogButton)
+
+$openAutoChangelogButton = New-Object System.Windows.Forms.Button
+$openAutoChangelogButton.Text = "Open Auto UI"
+$openAutoChangelogButton.Location = New-Object System.Drawing.Point(176, 628)
+$openAutoChangelogButton.Size = New-Object System.Drawing.Size(150, 32)
+$openAutoChangelogButton.Add_Click({
+    try {
+        Open-AutoChangelogUiFromReleaseHelper
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+    }
+})
+$form.Controls.Add($openAutoChangelogButton)
 
 $fillFieldsButton = New-Object System.Windows.Forms.Button
 $fillFieldsButton.Text = "Map Markdown"

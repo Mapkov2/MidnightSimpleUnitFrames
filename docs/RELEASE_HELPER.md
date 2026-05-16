@@ -13,7 +13,7 @@ The helper is a small WinForms release UI for the normal MSUF release flow.
 Start the helper, check the release data at the top, then use the numbered
 buttons:
 
-1. **Auto Changelog** writes the selected changelog section from repo changes.
+1. **Generate Changelog** writes the selected changelog section from repo changes.
 2. **Build ZIP** updates files and creates the local package in `dist`.
 3. **Publish** updates files again, commits, tags, pushes, and lets GitHub
    Actions publish the release.
@@ -22,6 +22,15 @@ By default, **Auto Changelog before Build/Publish** is enabled. That means
 **Build ZIP** and **Publish** refresh the auto changelog first, load that
 section into the notes field, and use those shown notes as the release source.
 Turn it off only when you intentionally want to release manually edited notes.
+Use **Open Auto UI** when you want to open the full Auto Changelog editor from
+inside the Release Helper. It passes the current version, changelog title, date,
+source ref, hours, release-line scan, prerelease, keep-old, and junk-filter
+settings into the Auto Changelog window.
+Keep **Release line scan** enabled for normal releases and betas. It scans from
+the previous stable tag for the selected version line, for example `v5.1` to
+`5.2 Beta 4`, so early beta commits are not missed. Set **Since hours** only
+when you intentionally want a time window; doing that disables release-line
+mode.
 
 Pick **Full release** for a stable release. Pick **Beta / prerelease** for
 alpha, beta, RC, or test releases. The publish confirmation shows the selected
@@ -114,6 +123,16 @@ changes, writes managed auto blocks into `CHANGELOG.md`, regenerates
 section into the helper UI. If the selected version does not exist yet, it
 creates a new release section using the selected date. **Since hours** uses `0`
 as off, so the helper falls back to **Since ref**.
+With **Release line scan** enabled, it ignores **Since ref** and **Since hours**
+and uses the previous stable tag automatically. This is the recommended
+one-click workflow.
+Use **Filter junk** to skip commits whose subjects are only release prep,
+changelog maintenance, `some stuff`, or similar low-signal text.
+
+Use **Open Auto UI** next to **Generate Changelog** when you want to review and
+edit the generated Auto Changelog in the dedicated editor before continuing.
+After writing from that window, click **Load Notes** in the Release Helper so
+the updated `CHANGELOG.md` section is loaded back into the release notes box.
 
 ## Auto Changelog UI
 
@@ -132,16 +151,21 @@ Use it to set:
   remains the only release section written
 - **Hours**: `0` uses **Source ref**; `1` to `100` generates from commits made
   in the last N hours plus current working-tree changes
+- **Release line scan**: recommended default; scans the whole version line from
+  the previous stable tag, then also merges matching older prerelease notes
+- **Filter junk**: skips release prep, changelog-only, `prepared`, and
+  `some stuff` commits before generating user-facing notes
 - **Create missing release**: inserts a new `## <version> - <date>` section
   below `# Changelog` when the selected title does not exist yet
 - **Keep old auto entries**: keeps existing `MSUF-AUTO-CHANGELOG` bullets and
   merges new entries into them; for prereleases such as `5.2 Beta 2` or
-  `5.2 Alpha 2`, it also carries older auto bullets from the same version line
-  and channel; leave it off to replace old generated bullets
+  `5.2 Alpha 2`, it also carries older auto or manually written bullets from
+  the same version line and channel; leave it off to replace old generated
+  bullets
 - **Include prerelease logs**: for a final release such as `5.2`, carries
-  managed auto bullets from matching `5.2 Alpha`, `5.2 Beta`, `5.2 RC`, or
-  `5.2 Pre` sections into the final release notes, then adds the newly
-  generated release changes
+  managed auto bullets and manually written bullets from matching `5.2 Alpha`,
+  `5.2 Beta`, `5.2 RC`, or `5.2 Pre` sections into the final release notes,
+  then adds the newly generated release changes
 - **Regenerate addon changelog**: updates the in-game changelog Lua file too;
   this is enabled by default in the standalone UI so the dashboard changelog
   follows `CHANGELOG.md`

@@ -359,10 +359,7 @@ local function BuildPreview(ctx, builder, unit)
     end
 
     local function RefreshPreviewState()
-        SetSectionHeaderStatus(sec, IsEditModeActive() and {
-            hint = M.Tr("drag in preview"),
-            hintColor = { 0.40, 0.80, 0.98, 1 },
-        } or nil)
+        SetSectionHeaderStatus(sec, nil)
         if box:IsShown() then RefreshThisPreview("MSUF2_UNIT_PAGE") end
     end
     local entry = sec and sec._msuf2CollapsibleEntry
@@ -759,24 +756,26 @@ local function BuildBasics(ctx, builder, unit, label)
     if sectionEntry and sectionEntry.header then
         sectionEntry._msuf2ManualHintLayout = true
         badge = CreateFrame("Frame", nil, sectionEntry.header)
-        badge:SetSize(42, 18)
-        badge:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -10, 0)
+        badge:SetSize(116, 18)
         badgeFill, badgeEdge = T.CreateSuperellipseLayers(badge, "_msuf2DisabledBadge", 1, "ARTWORK", "ARTWORK")
-        badgeLabel = T.Font(badge, "GameFontNormalSmall", "OFF", { 1.00, 0.86, 0.74, 1 })
+        badgeLabel = T.Font(badge, "GameFontDisableSmall", "Frame disabled", { 1.00, 0.86, 0.74, 1 })
         badgeLabel:SetPoint("CENTER", badge, "CENTER", 0, 0)
+        badgeLabel:SetWidth(104)
+        badgeLabel:SetJustifyH("CENTER")
         badge:Hide()
 
+        if sectionEntry.hint then
+            sectionEntry.hint:ClearAllPoints()
+            sectionEntry.hint:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -12, 0)
+            sectionEntry.hint:SetWidth(110)
+            sectionEntry.hint:SetJustifyH("RIGHT")
+        end
+        badge:SetPoint("RIGHT", sectionEntry.hint, "LEFT", -8, 0)
         if sectionEntry.label then
             sectionEntry.label:ClearAllPoints()
             sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 6, 0)
-            sectionEntry.label:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -170, 0)
+            sectionEntry.label:SetPoint("RIGHT", badge, "LEFT", -10, 0)
             sectionEntry.label:SetJustifyH("LEFT")
-        end
-        if sectionEntry.hint then
-            sectionEntry.hint:ClearAllPoints()
-            sectionEntry.hint:SetPoint("RIGHT", badge, "LEFT", -10, 0)
-            sectionEntry.hint:SetWidth(110)
-            sectionEntry.hint:SetJustifyH("RIGHT")
         end
     end
 
@@ -846,7 +845,7 @@ local function BuildBasics(ctx, builder, unit, label)
                 sectionEntry.hint:SetText(sectionEntry.open and "" or M.Tr("click to expand"))
                 sectionEntry.hint:SetTextColor(0.45, 0.52, 0.65, 1)
             else
-                sectionEntry.hint:SetText(M.Tr("Frame disabled"))
+                sectionEntry.hint:SetText(M.Tr("OFF"))
                 sectionEntry.hint:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4])
             end
         end
@@ -969,16 +968,7 @@ local function BuildLayout(ctx, builder, unit)
         local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
         current:SetText("Current custom anchor: " .. (custom ~= "" and custom or "none"))
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
-        local hint = nil
-        if custom ~= "" then
-            hint = "Custom anchor"
-        else
-            local target = conf.anchorToUnitframe
-            if target == "player" or target == "target" or target == "targettarget" or target == "focus" or target == "pet" then
-                hint = "Anchored to " .. UnitTopLabel(target)
-            end
-        end
-        SetSectionHeaderStatus(sec, { hint = hint, hintColor = { 0.58, 0.68, 0.82, 1 } })
+        SetSectionHeaderStatus(sec, nil)
     end
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then entry._msuf2RefreshState = RefreshLayoutState end
@@ -1756,17 +1746,7 @@ local function BuildPortrait(ctx, builder, unit)
         SetControlEnabled(classStyle, classRender)
         SetControlEnabled(portraitBg, active)
 
-        if not active then
-            SetSectionHeaderStatus(sec, {
-                hint = "Portrait off",
-                hintColor = WARNING_HINT,
-                bg = WARNING_BG,
-                labelColor = { 0.92, 0.88, 0.82, 1 },
-                arrowColor = WARNING_ARROW,
-            })
-        else
-            SetSectionHeaderStatus(sec, nil)
-        end
+        SetSectionHeaderStatus(sec, nil)
     end
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then entry._msuf2RefreshState = RefreshPortraitControls end
@@ -1936,21 +1916,10 @@ local function BuildPower(ctx, builder, unit)
         if not powerOn then
             powerNotice:SetMessage(UnitTopLabel(unit) .. " power bar is hidden. Turn it on to configure size, embed, or detached settings.", "warning")
             powerNotice:Show()
-            SetSectionHeaderStatus(sec, {
-                hint = "Power bar off",
-                hintColor = WARNING_HINT,
-                bg = WARNING_BG,
-                labelColor = { 0.92, 0.88, 0.82, 1 },
-                arrowColor = WARNING_ARROW,
-            })
         else
             powerNotice:Hide()
-            if detachedOn then
-                SetSectionHeaderStatus(sec, { hint = "Detached", hintColor = { 0.58, 0.68, 0.82, 1 } })
-            else
-                SetSectionHeaderStatus(sec, nil)
-            end
         end
+        SetSectionHeaderStatus(sec, nil)
     end
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then entry._msuf2RefreshState = RefreshPowerEnabled end
@@ -2017,17 +1986,10 @@ local function BuildCastbar(ctx, builder, unit)
         if not on then
             castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is disabled. Turn it on to adjust time, interrupt, icon, and text behavior.", "warning")
             castbarNotice:Show()
-            SetSectionHeaderStatus(sec, {
-                hint = "Castbar off",
-                hintColor = WARNING_HINT,
-                bg = WARNING_BG,
-                labelColor = { 0.92, 0.88, 0.82, 1 },
-                arrowColor = WARNING_ARROW,
-            })
         else
             castbarNotice:Hide()
-            SetSectionHeaderStatus(sec, nil)
         end
+        SetSectionHeaderStatus(sec, nil)
     end
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then entry._msuf2RefreshState = RefreshCastbarEnabled end
@@ -2261,17 +2223,7 @@ local function BuildStatus(ctx, builder, unit)
         SetControlEnabled(layer, isEnabled)
         SetControlEnabled(reset, spec ~= nil)
 
-        if spec and not isEnabled then
-            SetSectionHeaderStatus(sec, {
-                hint = "Selected indicator off",
-                hintColor = WARNING_HINT,
-                bg = WARNING_BG,
-                labelColor = { 0.92, 0.88, 0.82, 1 },
-                arrowColor = WARNING_ARROW,
-            })
-        else
-            SetSectionHeaderStatus(sec, nil)
-        end
+        SetSectionHeaderStatus(sec, nil)
     end
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then entry._msuf2RefreshState = RefreshStatusSectionState end
@@ -2307,11 +2259,7 @@ local function BuildLoadConditions(ctx, builder, unit)
         for i = 1, #LOAD_CONDITIONS do
             if ReadBool(unit, LOAD_CONDITIONS[i].key, false) then activeCount = activeCount + 1 end
         end
-        if activeCount > 0 then
-            SetSectionHeaderStatus(sec, { hint = tostring(activeCount) .. " active", hintColor = { 0.58, 0.68, 0.82, 1 } })
-        else
-            SetSectionHeaderStatus(sec, nil)
-        end
+        SetSectionHeaderStatus(sec, nil)
     end
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then entry._msuf2RefreshState = RefreshLoadConditionState end

@@ -2016,14 +2016,7 @@ local function AddGFPreview(ctx, builder)
     box:Show()
     local function RefreshThisPreview()
         if type(SetSectionHeaderStatus) == "function" then
-            local editActive = false
-            if type(_G.MSUF_IsMSUFEditModeActive) == "function" then
-                editActive = _G.MSUF_IsMSUFEditModeActive() and true or false
-            end
-            SetSectionHeaderStatus(body, editActive and {
-                hint = "drag in preview",
-                hintColor = { 0.40, 0.80, 0.98, 1 },
-            } or nil)
+            SetSectionHeaderStatus(body, nil)
         end
         if box and box.Refresh and box:IsShown() then box:Refresh() end
     end
