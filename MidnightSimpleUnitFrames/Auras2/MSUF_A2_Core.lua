@@ -1768,7 +1768,11 @@ icon.countFrame = countFrame
         if not unit or not aid then return end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
         -- Secret-safe: SetUnitAuraByAuraInstanceID handles secrets internally
-        if GameTooltip.SetUnitAuraByAuraInstanceID then
+        if self._msufFilter == "HARMFUL" and GameTooltip.SetUnitDebuffByAuraInstanceID then
+            GameTooltip:SetUnitDebuffByAuraInstanceID(unit, aid)
+        elseif GameTooltip.SetUnitBuffByAuraInstanceID then
+            GameTooltip:SetUnitBuffByAuraInstanceID(unit, aid)
+        elseif GameTooltip.SetUnitAuraByAuraInstanceID then
             GameTooltip:SetUnitAuraByAuraInstanceID(unit, aid, self._msufFilter or "HELPFUL")
         end
         GameTooltip:Show()

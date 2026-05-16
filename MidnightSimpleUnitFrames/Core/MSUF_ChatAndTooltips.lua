@@ -304,28 +304,125 @@ local function MSUF_GetPlayerInfoFrame()
     MSUF_PlayerInfoFrame = f
      return f
 end
-local function MSUF_PositionPlayerInfoFrame(frame)
-    EnsureDB()
-    local g = MSUF_DB.general or {}
+ns.Tooltips = ns.Tooltips or {}
+local Tooltips = ns.Tooltips
 
-    -- Custom position from Edit Mode drag takes priority over style-based positioning.
+local TOOLTIP_PROVIDER_GAME = "GAME"
+local TOOLTIP_PROVIDER_MSUF = "MSUF"
+local TOOLTIP_ANCHOR_EXTERNAL = "EXTERNAL"
+local TOOLTIP_ANCHOR_FIXED = "FIXED"
+local TOOLTIP_ANCHOR_CURSOR = "CURSOR"
+
+local function MSUF_GetTooltipGeneral()
+    EnsureDB()
+    local db = (type(MSUF_DB) == "table") and MSUF_DB or nil
+    db = db or {}
+    db.general = db.general or {}
+    return db.general
+end
+
+local function MSUF_NormalizeTooltipSettings(g)
+    if type(g) ~= "table" then
+        g = MSUF_GetTooltipGeneral()
+    end
+
+    local provider = g.unitTooltipProvider
+    if provider ~= TOOLTIP_PROVIDER_GAME and provider ~= TOOLTIP_PROVIDER_MSUF then
+        provider = (g.disableUnitInfoTooltips == false) and TOOLTIP_PROVIDER_MSUF or TOOLTIP_PROVIDER_GAME
+        g.unitTooltipProvider = provider
+    end
+
+    local anchor = g.unitTooltipAnchor
+    if anchor ~= TOOLTIP_ANCHOR_EXTERNAL and anchor ~= TOOLTIP_ANCHOR_FIXED and anchor ~= TOOLTIP_ANCHOR_CURSOR then
+        local legacyStyle = (g.unitInfoTooltipStyle == "modern") and TOOLTIP_ANCHOR_CURSOR or TOOLTIP_ANCHOR_FIXED
+        if provider == TOOLTIP_PROVIDER_MSUF then
+            anchor = legacyStyle
+        elseif type(g.tooltipPosX) == "number" and type(g.tooltipPosY) == "number" then
+            anchor = TOOLTIP_ANCHOR_FIXED
+        elseif g.unitInfoTooltipStyle == "modern" then
+            anchor = TOOLTIP_ANCHOR_CURSOR
+        elseif g.disableUnitInfoTooltips == true then
+            anchor = TOOLTIP_ANCHOR_FIXED
+        else
+            anchor = TOOLTIP_ANCHOR_EXTERNAL
+        end
+        g.unitTooltipAnchor = anchor
+    end
+
+    if provider == TOOLTIP_PROVIDER_MSUF and anchor == TOOLTIP_ANCHOR_EXTERNAL then
+        anchor = TOOLTIP_ANCHOR_FIXED
+        g.unitTooltipAnchor = anchor
+    end
+
+    g.disableUnitInfoTooltips = (provider ~= TOOLTIP_PROVIDER_MSUF)
+    g.unitInfoTooltipStyle = (anchor == TOOLTIP_ANCHOR_CURSOR) and "modern" or "classic"
+
+    return provider, anchor
+end
+
+local function MSUF_ApplyTooltipFixedPoint(frame, g, defaultOffsetY)
+    if not frame then return end
+    frame:ClearAllPoints()
     local cx = g.tooltipPosX
     local cy = g.tooltipPosY
     if type(cx) == "number" and type(cy) == "number" then
-        frame:ClearAllPoints()
         frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx, cy)
-        return
+    else
+        frame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -16, defaultOffsetY or 16)
+    end
+end
+
+local function MSUF_AnchorGameTooltip(owner, g, anchor)
+    local gt = _G.GameTooltip
+    if not gt or gt:IsForbidden() then return nil end
+
+    if anchor == TOOLTIP_ANCHOR_CURSOR then
+        gt:SetOwner(UIParent, "ANCHOR_CURSOR", 0, -100)
+    elseif anchor == TOOLTIP_ANCHOR_FIXED then
+        gt:SetOwner(UIParent, "ANCHOR_NONE")
+        MSUF_ApplyTooltipFixedPoint(gt, g, 16)
+    else
+        if type(_G.GameTooltip_SetDefaultAnchor) == "function" then
+            _G.GameTooltip_SetDefaultAnchor(gt, owner or UIParent)
+        elseif owner then
+            gt:SetOwner(owner, "ANCHOR_RIGHT")
+        else
+            gt:SetOwner(UIParent, "ANCHOR_NONE")
+        end
     end
 
-    local style = g.unitInfoTooltipStyle or "classic"
-    frame:ClearAllPoints()
-    if style == "modern" and GetCursorPosition and UIParent then
+    return gt
+end
+
+local function MSUF_ClearTrackedGameTooltip(owner, force)
+    local gt = _G.GameTooltip
+    if not gt or gt:IsForbidden() then return end
+    if (not force) and gt._msufUnitTooltipOwner and gt._msufUnitTooltipOwner ~= owner then return end
+    gt._msufUnitTooltipOwner = nil
+    gt._msufUnitTooltipUnit = nil
+    gt:Hide()
+end
+
+if _G.GameTooltip and (not _G.GameTooltip._msufTooltipTrackingHooked) then
+    _G.GameTooltip._msufTooltipTrackingHooked = true
+    _G.GameTooltip:HookScript("OnHide", function(tip)
+        tip._msufUnitTooltipOwner = nil
+        tip._msufUnitTooltipUnit = nil
+    end)
+end
+
+local function MSUF_PositionPlayerInfoFrame(frame)
+    local g = MSUF_GetTooltipGeneral()
+    local _, anchor = MSUF_NormalizeTooltipSettings(g)
+
+    if anchor == TOOLTIP_ANCHOR_CURSOR and GetCursorPosition and UIParent then
+        frame:ClearAllPoints()
         local x, y = GetCursorPosition()
         local scale = UIParent:GetEffectiveScale() or 1
         x, y = x / scale, y / scale
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x - 130, y - 150)
     else
-        frame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -16, 180)
+        MSUF_ApplyTooltipFixedPoint(frame, g, 180)
     end
  end
 -- Tooltip helpers (unified; keeps behavior, reduces copy/paste)
@@ -429,86 +526,76 @@ local function MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc)
     MSUF_PositionPlayerInfoFrame(f)
     f:Show()
  end
-local function MSUF_UnitInfo_ShowTargetLike(unit, fallbackName)
+local function MSUF_ShowUnitInfoTooltip(unit, fallbackName)
     local f = MSUF_GetPlayerInfoFrame()
     if not UnitExists(unit) then
         f:Hide()
          return
     end
-    local level      = UnitLevel(unit)
-    local isPlayer   = UnitIsPlayer(unit)
+
+    if unit == "pet" then
+        local name = UnitName(unit) or fallbackName or "Pet"
+        local level = UnitLevel(unit)
+        local creatureType = UnitCreatureType(unit)
+        local line2 = ""
+        local n = tonumber(level)
+        if n and n > 0 then
+            line2 = string.format("Level %d", n)
+        end
+        MSUF_UnitInfo_ShowFrame(f, name, line2, creatureType or "", "", MSUF_UnitInfo_GetLocationText())
+        return
+    end
+
+    local level = UnitLevel(unit)
+    local isPlayer = UnitIsPlayer(unit)
     local race, classLoc, faction, isPVP
     if isPlayer then
-        race     = UnitRace(unit)
+        race = UnitRace(unit)
         classLoc = select(1, UnitClass(unit))
-        faction  = UnitFactionGroup(unit)
-        isPVP    = UnitIsPVP(unit)
+        faction = UnitFactionGroup(unit)
+        isPVP = UnitIsPVP(unit)
     end
+
     local nameLine = MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     local line2 = isPlayer and MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
-                    or MSUF_UnitInfo_BuildLine2_NPC(level, UnitClassification(unit))
+        or MSUF_UnitInfo_BuildLine2_NPC(level, UnitClassification(unit))
     local line3 = isPlayer and (classLoc or "") or (UnitCreatureType(unit) or "")
     local line4 = isPlayer and MSUF_UnitInfo_BuildLine4(faction, isPVP) or ""
-    local loc   = MSUF_UnitInfo_GetLocationText()
-    MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc)
- end
-function MSUF_ShowPlayerInfoTooltip()
-    local f = MSUF_GetPlayerInfoFrame()
-    if not UnitExists("player") then
-        f:Hide()
-         return
-    end
-    local level    = UnitLevel("player")
-    local race     = UnitRace("player")
-    local classLoc = select(1, UnitClass("player"))
-    local faction  = UnitFactionGroup("player")
-    local isPVP    = UnitIsPVP("player")
-    local specName
-    if GetSpecialization and GetSpecializationInfo then
-        local specIndex = GetSpecialization()
-        if specIndex then
-            local _, sName = GetSpecializationInfo(specIndex, nil, nil, nil, UnitSex("player"))
-            specName = sName
+
+    if unit == "player" then
+        local specName
+        if GetSpecialization and GetSpecializationInfo then
+            local specIndex = GetSpecialization()
+            if specIndex then
+                local _, sName = GetSpecializationInfo(specIndex, nil, nil, nil, UnitSex("player"))
+                specName = sName
+            end
+        end
+        if specName and classLoc then
+            line3 = string.format("%s %s", specName, classLoc)
+        elseif specName then
+            line3 = specName
         end
     end
-    local nameLine = MSUF_UnitInfo_BuildNameLine("player", "Player", true)
-    local line2    = MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
-    local line3 = ""
-    if specName and classLoc then
-        line3 = string.format("%s %s", specName, classLoc)
-    elseif specName then
-        line3 = specName
-    end
-    local line4 = MSUF_UnitInfo_BuildLine4(faction, isPVP)
-    local loc   = MSUF_UnitInfo_GetLocationText()
-    MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc)
+
+    MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, MSUF_UnitInfo_GetLocationText())
+ end
+function MSUF_ShowPlayerInfoTooltip()
+    MSUF_ShowUnitInfoTooltip("player", "Player")
  end
 function MSUF_ShowTargetInfoTooltip()
-    MSUF_UnitInfo_ShowTargetLike("target", "Target")
+    MSUF_ShowUnitInfoTooltip("target", "Target")
  end
 function MSUF_ShowFocusInfoTooltip()
-    MSUF_UnitInfo_ShowTargetLike("focus", "Focus")
+    MSUF_ShowUnitInfoTooltip("focus", "Focus")
  end
 function MSUF_ShowTargetTargetInfoTooltip()
-    MSUF_UnitInfo_ShowTargetLike("targettarget", "Target of Target")
+    MSUF_ShowUnitInfoTooltip("targettarget", "Target of Target")
  end
 function MSUF_ShowPetInfoTooltip()
-    local f = MSUF_GetPlayerInfoFrame()
-    if not UnitExists("pet") then
-        f:Hide()
-         return
-    end
-    local name         = UnitName("pet") or "Pet"
-    local level        = UnitLevel("pet")
-    local creatureType = UnitCreatureType("pet")
-    local loc          = MSUF_UnitInfo_GetLocationText()
-    local line2 = ""
-    local n = tonumber(level)
-    if n and n > 0 then
-        line2 = string.format("Level %d", n)
-    end
-    MSUF_UnitInfo_ShowFrame(f, name, line2, creatureType or "", "", loc)
+    MSUF_ShowUnitInfoTooltip("pet", "Pet")
  end
+_G.MSUF_ShowUnitInfoTooltip = MSUF_ShowUnitInfoTooltip
 function MSUF_HidePlayerInfoTooltip()
     if MSUF_PlayerInfoFrame then
         -- If the Edit Mode tooltip preview is active, restore the preview
@@ -523,6 +610,41 @@ function MSUF_HidePlayerInfoTooltip()
         MSUF_PlayerInfoFrame:Hide()
     end
  end
+Tooltips.GetGeneral = Tooltips.GetGeneral or MSUF_GetTooltipGeneral
+Tooltips.Normalize = Tooltips.Normalize or MSUF_NormalizeTooltipSettings
+Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
+    if not unit or not UnitExists(unit) then return false end
+    local g = MSUF_GetTooltipGeneral()
+    local provider, anchor = MSUF_NormalizeTooltipSettings(g)
+    if opts and opts.provider == TOOLTIP_PROVIDER_MSUF then
+        provider = TOOLTIP_PROVIDER_MSUF
+    end
+    if opts and opts.anchor then
+        anchor = opts.anchor
+        if provider == TOOLTIP_PROVIDER_MSUF and anchor == TOOLTIP_ANCHOR_EXTERNAL then
+            anchor = TOOLTIP_ANCHOR_FIXED
+        end
+    end
+
+    if provider == TOOLTIP_PROVIDER_MSUF then
+        MSUF_ClearTrackedGameTooltip(owner, true)
+        MSUF_ShowUnitInfoTooltip(unit, opts and opts.fallbackName)
+        return true
+    end
+
+    MSUF_HidePlayerInfoTooltip()
+    local gt = MSUF_AnchorGameTooltip(owner, g, anchor)
+    if not gt or type(gt.SetUnit) ~= "function" then return false end
+    gt._msufUnitTooltipOwner = owner
+    gt._msufUnitTooltipUnit = unit
+    gt:SetUnit(unit)
+    gt:Show()
+    return true
+end
+Tooltips.HideUnit = Tooltips.HideUnit or function(owner)
+    MSUF_HidePlayerInfoTooltip()
+    MSUF_ClearTrackedGameTooltip(owner)
+end
 -- [8c6] Removed legacy Options UI relayout functions (Player/Bars).
 -- These were dead/duplicate layout builders superseded by MSUF_Options_Core.lua.
 if not _G.MSUF_SetBlizzardEditModeFromMSUF then

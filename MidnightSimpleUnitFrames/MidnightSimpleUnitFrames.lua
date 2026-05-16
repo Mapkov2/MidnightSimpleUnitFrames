@@ -448,35 +448,28 @@ ns.UF.Unitframe_OnEnter = ns.UF.Unitframe_OnEnter or function(self)
             hb:Hide()
         end
     end
-    if g.disableUnitInfoTooltips then
-        if GameTooltip and self.unit and F.UnitExists and F.UnitExists(self.unit) then
-            if (g.unitInfoTooltipStyle or "classic") == "modern" then GameTooltip:SetOwner(UIParent, "ANCHOR_CURSOR", 0, -100)
-            else
-                GameTooltip:SetOwner(UIParent, "ANCHOR_NONE"); GameTooltip:ClearAllPoints()
-                -- Use custom position from Edit Mode drag if available
-                local cx = g.tooltipPosX
-                local cy = g.tooltipPosY
-                if type(cx) == "number" and type(cy) == "number" then
-                    GameTooltip:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx, cy)
-                else
-                    GameTooltip:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -16, 16)
-                end
-            end
-            GameTooltip:SetUnit(self.unit); GameTooltip:Show()
-    end
-         return
-    end
     local u = self.unit
-    local fnName = u and MSUF_UNIT_TIP_FUNCS and MSUF_UNIT_TIP_FUNCS[u]
-    if fnName and F.UnitExists and F.UnitExists(u) and _G[fnName] then return (_G[fnName])() end
-    if u and string.sub(u, 1, 4) == "boss" and F.UnitExists and F.UnitExists(u) and type(MSUF_ShowBossInfoTooltip) == "function" then MSUF_ShowBossInfoTooltip(u) end
- end
+    if not (u and F.UnitExists and F.UnitExists(u)) then return end
+    local tips = ns.Tooltips
+    if tips and type(tips.ShowUnit) == "function" then
+        tips.ShowUnit(self, u)
+        return
+    end
+    if GameTooltip then
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetUnit(u)
+        GameTooltip:Show()
+    end
+end
 ns.UF.Unitframe_OnLeave = ns.UF.Unitframe_OnLeave or function(self)
     if self and self.highlightBorder then self.highlightBorder:Hide() end
-    local u = self and self.unit
-    if u and ((MSUF_UNIT_TIP_FUNCS and MSUF_UNIT_TIP_FUNCS[u]) or string.sub(u, 1, 4) == "boss") and type(MSUF_HidePlayerInfoTooltip) == "function" then MSUF_HidePlayerInfoTooltip() end
-    if GameTooltip and GameTooltip.Hide then GameTooltip:Hide() end
- end
+    local tips = ns.Tooltips
+    if tips and type(tips.HideUnit) == "function" then
+        tips.HideUnit(self)
+    elseif GameTooltip and GameTooltip.Hide then
+        GameTooltip:Hide()
+    end
+end
 function ns.UF.HideLeaderAndRaidMarker(self)
     if not self then return end
     ns.Util.SetShown(self.leaderIcon, false)
