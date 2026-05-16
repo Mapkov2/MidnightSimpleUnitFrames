@@ -12,6 +12,7 @@ $AddonChangelogScript = Join-Path $RepoRoot "tools/update-addon-changelog.ps1"
 $AutoChangelogScript = Join-Path $RepoRoot "tools/MSUF-AutoChangelog.ps1"
 $PackageScript = Join-Path $RepoRoot "tools/package-release.ps1"
 $script:LogBox = $null
+$script:AppTitle = "MSUF Publish"
 
 function Write-ReleaseLog {
     param([AllowNull()][string]$Message)
@@ -109,30 +110,6 @@ function Invoke-PowerShellScript {
     Invoke-External $exe (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath) + $Arguments)
 }
 
-function Quote-ProcessArgument {
-    param([AllowNull()][string]$Value)
-
-    if ($null -eq $Value) { return '""' }
-    $escaped = $Value -replace '\\(?=\\*")', '$0$0'
-    $escaped = $escaped -replace '"', '\"'
-    if ($escaped -match '[\s"]') { return '"' + $escaped + '"' }
-    return $escaped
-}
-
-function Start-PowerShellScriptWindow {
-    param(
-        [Parameter(Mandatory = $true)][string]$ScriptPath,
-        [string[]]$Arguments = @()
-    )
-
-    $exe = (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source
-    if ([string]::IsNullOrWhiteSpace($exe)) { $exe = "powershell" }
-    $processArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath) + $Arguments
-    $argumentLine = (($processArgs | ForEach-Object { Quote-ProcessArgument $_ }) -join " ")
-    Write-ReleaseLog ("> open " + $ScriptPath + " " + ($Arguments -join " "))
-    Start-Process -FilePath $exe -ArgumentList $argumentLine -WorkingDirectory $RepoRoot | Out-Null
-}
-
 function Convert-BoxTextToSection {
     param(
         [Parameter(Mandatory = $true)][string]$Title,
@@ -181,7 +158,7 @@ function Get-ChangelogSections {
         throw "CHANGELOG.md not found: $ChangelogPath"
     }
 
-    $lines = [regex]::Split((Get-Content -LiteralPath $ChangelogPath -Raw), "\r?\n")
+    $lines = [string[]]([regex]::Split((Get-Content -LiteralPath $ChangelogPath -Raw), "\r?\n"))
     $sections = @()
     for ($i = 0; $i -lt $lines.Count; $i++) {
         if ($lines[$i] -match '^##\s+(.+?)(?:\s+-\s+(\d{4}-\d{2}-\d{2}))?\s*$') {
@@ -216,7 +193,7 @@ function Find-ChangelogSection {
         [AllowNull()][string]$DisplayVersion
     )
 
-    $sections = Get-ChangelogSections
+    $sections = [object[]]@(Get-ChangelogSections)
     if ($sections.Count -eq 0) { throw "No release sections found in CHANGELOG.md." }
 
     $tagKey = Normalize-VersionKey $ReleaseTag
@@ -234,7 +211,7 @@ function Find-ChangelogSection {
 function Convert-MarkdownSectionToReleaseInput {
     param([Parameter(Mandatory = $true)][string]$Markdown)
 
-    $lines = [regex]::Split($Markdown.Trim(), "\r?\n")
+    $lines = [string[]]([regex]::Split($Markdown.Trim(), "\r?\n"))
     if ($lines.Count -eq 0) { throw "Markdown changelog text is empty." }
 
     $display = $null
@@ -250,13 +227,19 @@ function Convert-MarkdownSectionToReleaseInput {
         $bodyStart++
     }
 
-    $body = if ($bodyStart -lt $lines.Count) { [string[]]$lines[$bodyStart..($lines.Count - 1)] } else { @() }
+    $body = if ($bodyStart -lt $lines.Count) { [string[]]@($lines[$bodyStart..($lines.Count - 1)]) } else { [string[]]@() }
     while ($body.Count -gt 0 -and $body[$body.Count - 1].Trim() -eq "") {
-        if ($body.Count -eq 1) { $body = @(); break }
-        $body = [string[]]$body[0..($body.Count - 2)]
+        if ($body.Count -eq 1) { $body = [string[]]@(); break }
+        $body = [string[]]@($body[0..($body.Count - 2)])
     }
 
     if ($body.Count -eq 0) { throw "Markdown changelog text has no section body." }
+    if (($body | Where-Object { $_ -match '^#\s+Changelog\s*$' } | Select-Object -First 1)) {
+        throw "The Markdown box contains '# Changelog' inside the release body. Click Load Notes or Scan Changelog again, then edit only the selected release section."
+    }
+    if (($body | Where-Object { $_ -match '^##\s+' } | Select-Object -First 1)) {
+        throw "The Markdown box contains another release heading inside this release. Keep only one release section in the Markdown box."
+    }
     return [pscustomobject]@{
         Display = $display
         Date = $date
@@ -798,10 +781,10 @@ Add-Type -AssemblyName System.Drawing
 $script:LogBox = $null
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "MSUF Release Helper"
+$form.Text = $script:AppTitle
 $form.StartPosition = "CenterScreen"
-$form.Size = New-Object System.Drawing.Size(1140, 980)
-$form.MinimumSize = New-Object System.Drawing.Size(1120, 900)
+$form.Size = New-Object System.Drawing.Size(1140, 1040)
+$form.MinimumSize = New-Object System.Drawing.Size(1120, 940)
 
 $defaultTag = Get-RepoVersionText
 if ([string]::IsNullOrWhiteSpace($defaultTag)) { $defaultTag = "5.1-beta4" }
@@ -943,9 +926,9 @@ $advancedButton.Size = New-Object System.Drawing.Size(130, 28)
 $form.Controls.Add($advancedButton)
 
 $flowLabel = New-Object System.Windows.Forms.Label
-$flowLabel.Text = "Flow: 1 Auto Changelog, 2 Build ZIP, 3 Publish."
+$flowLabel.Text = "Flow: 1 Scan Changelog, 2 Dashboard, 3 Build ZIP, 4 Publish."
 $flowLabel.Location = New-Object System.Drawing.Point(695, 49)
-$flowLabel.Size = New-Object System.Drawing.Size(250, 20)
+$flowLabel.Size = New-Object System.Drawing.Size(420, 20)
 $form.Controls.Add($flowLabel)
 
 $script:AdvancedActionsVisible = $false
@@ -985,7 +968,7 @@ $versionButton.Add_Click({
         Write-ReleaseLog ("Release data loaded from VERSION: " + $version)
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
 
@@ -1099,7 +1082,7 @@ $scanBranchesButton.Add_Click({
         Write-ReleaseLog ("Scanned origin branches: " + $branches.Count)
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
 $form.Controls.Add($scanBranchesButton)
@@ -1123,11 +1106,11 @@ $bugBox = New-TextArea "Bugfixes (one bullet per line)" 586 156 530 86
 $changeBox = New-TextArea "Changes / Improvements" 16 272 530 72
 $toolBox = New-TextArea "Release / Tooling" 586 272 530 72
 $docBox = New-TextArea "Documentation" 16 374 1100 54
-$mdBox = New-TextArea "Markdown changelog from repo" 16 462 1100 92
+$mdBox = New-TextArea "Step 2: edit release Markdown here" 16 462 1100 190
 
 $autoSourceBox = New-Object System.Windows.Forms.CheckBox
-$autoSourceBox.Text = "Auto Changelog before Build/Publish"
-$autoSourceBox.Checked = $true
+$autoSourceBox.Text = "Auto-scan before Build/Publish"
+$autoSourceBox.Checked = $false
 $autoSourceBox.Location = New-Object System.Drawing.Point(590, 462)
 $autoSourceBox.Size = New-Object System.Drawing.Size(260, 22)
 $form.Controls.Add($autoSourceBox)
@@ -1140,8 +1123,8 @@ $useMarkdownBox.Size = New-Object System.Drawing.Size(260, 22)
 $form.Controls.Add($useMarkdownBox)
 
 $script:LogBox = New-Object System.Windows.Forms.TextBox
-$script:LogBox.Location = New-Object System.Drawing.Point(16, 704)
-$script:LogBox.Size = New-Object System.Drawing.Size(1100, 218)
+$script:LogBox.Location = New-Object System.Drawing.Point(16, 792)
+$script:LogBox.Size = New-Object System.Drawing.Size(1100, 190)
 $script:LogBox.Multiline = $true
 $script:LogBox.ScrollBars = "Vertical"
 $script:LogBox.ReadOnly = $true
@@ -1240,31 +1223,19 @@ function Sync-AutoChangelogSource {
     Write-ReleaseLog ("Auto changelog refreshed for " + $Reason + ": " + $section.Version)
 }
 
-function Open-AutoChangelogUiFromReleaseHelper {
-    $meta = Read-UiReleaseMetadata
-    $baseRef = $baseRefBox.Text.Trim()
-    $args = @(
-        "-Gui",
-        "-DisplayVersion", $meta.Display,
-        "-BaseRef", $baseRef,
-        "-SinceHours", ([string][int]$sinceHoursBox.Value),
-        "-ReleaseDate", $meta.Date,
-        "-CreateMissingRelease",
-        "-RegenerateAddonChangelog"
-    )
-
-    if ($keepAutoBox.Checked) { $args += "-KeepExistingAutoEntries" }
-    if ($includePrereleaseBox.Checked) { $args += "-IncludePrereleaseAutoEntries" }
-    if ($releaseLineBox.Checked) { $args += "-ReleaseLineScan" }
-    if (-not $junkFilterBox.Checked) { $args += "-NoJunkFilter" }
-
-    Start-PowerShellScriptWindow -ScriptPath $AutoChangelogScript -Arguments $args
-    Write-ReleaseLog ("Opened Auto Changelog UI for " + $meta.Display + ". Use Generate Preview and Write Edited there, then Load Notes here.")
+function Sync-DashboardFromShownMarkdown {
+    $r = Read-UiRelease
+    Start-LocalPreparation -ReleaseTag $r.Tag -DisplayVersion $r.Display -ReleaseDate $r.Date -BodyLines $r.Body -OutputDir $r.OutputDir -BuildZip $false
+    $section = Find-ChangelogSection -ReleaseTag $r.Tag -DisplayVersion $r.Display
+    $mdBox.Text = $section.Markdown
+    Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
+    $useMarkdownBox.Checked = $true
+    Write-ReleaseLog ("Dashboard changelog updated from shown Markdown: " + $section.Version)
 }
 
 $loadRepoButton = New-Object System.Windows.Forms.Button
 $loadRepoButton.Text = "Load Notes"
-$loadRepoButton.Location = New-Object System.Drawing.Point(16, 590)
+$loadRepoButton.Location = New-Object System.Drawing.Point(16, 690)
 $loadRepoButton.Size = New-Object System.Drawing.Size(150, 32)
 $loadRepoButton.Add_Click({
     try {
@@ -1275,15 +1246,16 @@ $loadRepoButton.Add_Click({
         Write-ReleaseLog ("Loaded CHANGELOG.md section: " + $section.Version)
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
 $form.Controls.Add($loadRepoButton)
 
 $loadCommitsButton = New-Object System.Windows.Forms.Button
 $loadCommitsButton.Text = "Draft from Git"
-$loadCommitsButton.Location = New-Object System.Drawing.Point(176, 590)
+$loadCommitsButton.Location = New-Object System.Drawing.Point(176, 690)
 $loadCommitsButton.Size = New-Object System.Drawing.Size(150, 32)
+$loadCommitsButton.Visible = $false
 $loadCommitsButton.Add_Click({
     try {
         $tag = Normalize-ReleaseVersion $tagBox.Text
@@ -1302,42 +1274,42 @@ $loadCommitsButton.Add_Click({
         Write-ReleaseLog ("Generated changelog draft from git commits: " + $rangeText)
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
 $form.Controls.Add($loadCommitsButton)
 
 $autoChangelogButton = New-Object System.Windows.Forms.Button
-$autoChangelogButton.Text = "1 Generate Changelog"
-$autoChangelogButton.Location = New-Object System.Drawing.Point(16, 628)
+$autoChangelogButton.Text = "1 Scan Changelog"
+$autoChangelogButton.Location = New-Object System.Drawing.Point(16, 728)
 $autoChangelogButton.Size = New-Object System.Drawing.Size(150, 32)
 $autoChangelogButton.Add_Click({
     try {
         Sync-AutoChangelogSource -Reason "manual refresh"
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
 $form.Controls.Add($autoChangelogButton)
 
-$openAutoChangelogButton = New-Object System.Windows.Forms.Button
-$openAutoChangelogButton.Text = "Open Auto UI"
-$openAutoChangelogButton.Location = New-Object System.Drawing.Point(176, 628)
-$openAutoChangelogButton.Size = New-Object System.Drawing.Size(150, 32)
-$openAutoChangelogButton.Add_Click({
+$dashboardButton = New-Object System.Windows.Forms.Button
+$dashboardButton.Text = "2 Dashboard"
+$dashboardButton.Location = New-Object System.Drawing.Point(176, 728)
+$dashboardButton.Size = New-Object System.Drawing.Size(150, 32)
+$dashboardButton.Add_Click({
     try {
-        Open-AutoChangelogUiFromReleaseHelper
+        Sync-DashboardFromShownMarkdown
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
-$form.Controls.Add($openAutoChangelogButton)
+$form.Controls.Add($dashboardButton)
 
 $fillFieldsButton = New-Object System.Windows.Forms.Button
 $fillFieldsButton.Text = "Map Markdown"
-$fillFieldsButton.Location = New-Object System.Drawing.Point(336, 590)
+$fillFieldsButton.Location = New-Object System.Drawing.Point(336, 690)
 $fillFieldsButton.Size = New-Object System.Drawing.Size(135, 32)
 $fillFieldsButton.Add_Click({
     try {
@@ -1346,14 +1318,14 @@ $fillFieldsButton.Add_Click({
         Write-ReleaseLog "Mapped Markdown text into changelog fields."
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
 $form.Controls.Add($fillFieldsButton)
 
 $previewButton = New-Object System.Windows.Forms.Button
 $previewButton.Text = "Preview Notes"
-$previewButton.Location = New-Object System.Drawing.Point(481, 590)
+$previewButton.Location = New-Object System.Drawing.Point(176, 690)
 $previewButton.Size = New-Object System.Drawing.Size(135, 32)
 $previewButton.Add_Click({
     try {
@@ -1368,8 +1340,8 @@ $previewButton.Add_Click({
 $form.Controls.Add($previewButton)
 
 $prepButton = New-Object System.Windows.Forms.Button
-$prepButton.Text = "2 Build ZIP"
-$prepButton.Location = New-Object System.Drawing.Point(626, 590)
+$prepButton.Text = "3 Build ZIP"
+$prepButton.Location = New-Object System.Drawing.Point(336, 728)
 $prepButton.Size = New-Object System.Drawing.Size(150, 32)
 $prepButton.Add_Click({
     try {
@@ -1381,14 +1353,14 @@ $prepButton.Add_Click({
         Write-ReleaseLog "Local release preparation complete."
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
 $form.Controls.Add($prepButton)
 
 $publishButton = New-Object System.Windows.Forms.Button
-$publishButton.Text = "3 Publish"
-$publishButton.Location = New-Object System.Drawing.Point(786, 590)
+$publishButton.Text = "4 Publish"
+$publishButton.Location = New-Object System.Drawing.Point(496, 728)
 $publishButton.Size = New-Object System.Drawing.Size(135, 32)
 $publishButton.Add_Click({
     try {
@@ -1404,7 +1376,7 @@ $publishButton.Add_Click({
         if ($workflowBox.Checked) { $steps += "publish through GitHub Actions" }
         $confirm = [System.Windows.Forms.MessageBox]::Show(
             "Publish $($meta.Tag) as $releaseKind.`nChangelog title: $($meta.Display)`nRelease name: $($meta.ReleaseName)`nBranch: $($meta.Branch)`n`nSteps:`n- $($steps -join "`n- ")`n`nContinue?",
-            "MSUF Release Helper",
+            $script:AppTitle,
             "YesNo",
             "Warning"
         )
@@ -1428,15 +1400,15 @@ $publishButton.Add_Click({
         Write-ReleaseLog "GitHub release step complete."
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, $script:AppTitle, "OK", "Error") | Out-Null
     }
 })
 $form.Controls.Add($publishButton)
 
 $statusButton = New-Object System.Windows.Forms.Button
-$statusButton.Text = "Git Status"
-$statusButton.Location = New-Object System.Drawing.Point(931, 590)
-$statusButton.Size = New-Object System.Drawing.Size(85, 32)
+$statusButton.Text = "5 Git Status"
+$statusButton.Location = New-Object System.Drawing.Point(641, 728)
+$statusButton.Size = New-Object System.Drawing.Size(120, 32)
 $statusButton.Add_Click({
     try {
         $status = @(Test-GitCleanEnough)
@@ -1454,10 +1426,10 @@ $form.Controls.Add($statusButton)
 
 $closeButton = New-Object System.Windows.Forms.Button
 $closeButton.Text = "Close"
-$closeButton.Location = New-Object System.Drawing.Point(1026, 590)
+$closeButton.Location = New-Object System.Drawing.Point(1026, 728)
 $closeButton.Size = New-Object System.Drawing.Size(90, 32)
 $closeButton.Add_Click({ $form.Close() })
 $form.Controls.Add($closeButton)
 
-Write-ReleaseLog "Ready. Fill changelog sections, preview, then update/build or publish."
+Write-ReleaseLog "Ready. Normal flow: 1 Scan Changelog, edit Markdown, 2 Dashboard, 3 Build ZIP, 4 Publish."
 [void]$form.ShowDialog()
