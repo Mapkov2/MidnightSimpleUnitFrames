@@ -114,6 +114,20 @@ local function MarkDirty(unit, delay)
     end
 end
 
+local function UnitAuraDeltaNeedsRescan(updateInfo)
+    if type(updateInfo) ~= "table" then return true end
+    if updateInfo.isFullUpdate then return true end
+
+    local added = updateInfo.addedAuras
+    local removed = updateInfo.removedAuraInstanceIDs
+    local updated = updateInfo.updatedAuraInstanceIDs
+
+    return (added and added[5] ~= nil)
+        or (removed and removed[5] ~= nil)
+        or (updated and updated[9] ~= nil)
+        or false
+end
+
 -- PERF: Epoch counter for rapid-click deduplication.
 -- Each target change increments the epoch. The deferred render checks if its epoch
 -- still matches — if a newer click arrived, the outdated FullScan is skipped entirely.
@@ -980,23 +994,10 @@ end
                 local nextAt = _unitAuraPending[unit]
                 if nextAt and now < nextAt then
                     if not _refsBound then BindCachedRefs() end
-                    local forceRescan = true
-                    if not _unitAuraRescanQueued[unit] and infoIsTable and not updateInfo.isFullUpdate then
-                        -- Delta payloads are already handled incrementally by Cache.OnUnitAura.
-                        -- Do not collapse larger-but-valid deltas into render-time FullScan.
-                        forceRescan = false
-                    end
-                    if forceRescan then
-                        local invalid = _cachedInvalidUnit
-                        if invalid and not _unitAuraRescanQueued[unit] then
-                            _unitAuraRescanQueued[unit] = true
-                            invalid(unit)
-                        end
-                    else
-                        local onAura = _cachedOnUnitAura
-                        if onAura then
-                            onAura(unit, updateInfo)
-                        end
+                    local invalid = _cachedInvalidUnit
+                    if invalid and not _unitAuraRescanQueued[unit] then
+                        _unitAuraRescanQueued[unit] = true
+                        invalid(unit)
                     end
                     -- Correctness guard: refresh/removal deltas can arrive inside
                     -- the coalesce window after the previous render already ran.
@@ -1020,8 +1021,8 @@ end
                 do
                     if not _refsBound then BindCachedRefs() end
                     local forceRescan = (_unitAuraRescanQueued[unit] == true)
-                    if (not forceRescan) and infoIsTable then
-                        forceRescan = (updateInfo.isFullUpdate == true)
+                    if not forceRescan then
+                        forceRescan = UnitAuraDeltaNeedsRescan(updateInfo)
                     end
 
                     if forceRescan then
