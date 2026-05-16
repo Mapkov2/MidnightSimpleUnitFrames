@@ -4,16 +4,10 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.1 Beta 4",
-    previousVersion = "5.2 Beta 4",
-    rangeLabel = "5.2 Beta 4 -> 5.1 Beta 4",
+    currentVersion = "5.2 Beta 4",
+    previousVersion = "5.1 Beta 4",
+    rangeLabel = "5.1 Beta 4 -> 5.2 Beta 4",
     entries = {
-        {
-            version = "5.1 Beta 4",
-            date = "2026-05-16",
-            sections = {
-            },
-        },
         {
             version = "5.2 Beta 4",
             date = "2026-05-16",
@@ -91,6 +85,12 @@ local data = {
                         "Added performance workflow documentation.",
                     },
                 },
+            },
+        },
+        {
+            version = "5.1 Beta 4",
+            date = "2026-05-16",
+            sections = {
             },
         },
     },
