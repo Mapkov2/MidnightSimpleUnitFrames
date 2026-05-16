@@ -64,30 +64,31 @@ local MENU_BASE_SCALE = 1.08
 
 local NAV = {
     { key = "home", label = "Dashboard" },
-    { header = "Unit Frames", id = "unitframes", defaultOpen = true },
+    { header = "Frames", id = "unitframes", defaultOpen = true },
     { key = "uf_player", label = "Player", group = "unitframes" },
     { key = "uf_target", label = "Target", group = "unitframes" },
-    { key = "uf_targettarget", label = "Target of Target", group = "unitframes" },
-    { key = "uf_focus", label = "Focus", group = "unitframes" },
     { key = "uf_boss", label = "Boss Frames", group = "unitframes" },
+    { key = "uf_focus", label = "Focus", group = "unitframes" },
     { key = "uf_pet", label = "Pet", group = "unitframes" },
+    { key = "uf_targettarget", label = "Target of Target", group = "unitframes" },
     { header = "Group Frames", id = "groupframes", defaultOpen = true },
     { key = "gf_layout", label = "Layout", group = "groupframes" },
     { key = "gf_bars", label = "Health & Text", group = "groupframes" },
-    { key = "gf_auras", label = "Buffs & Debuffs", group = "groupframes" },
     { key = "gf_indicators", label = "Indicators", group = "groupframes" },
-    { header = "Global Style", id = "globalstyle", defaultOpen = true },
+    { key = "gf_auras", label = "Buffs & Debuffs", group = "groupframes" },
+    { header = "Auras", id = "auras", defaultOpen = true },
+    { key = "auras2", label = "Unit Auras", group = "auras" },
+    { header = "Appearance", id = "globalstyle", defaultOpen = true },
     { key = "opt_bars", label = "Bars", group = "globalstyle" },
-    { key = "opt_fonts", label = "Fonts", group = "globalstyle" },
-    { key = "auras2", label = "Unit Auras", group = "globalstyle" },
-    { key = "opt_castbar", label = "Castbar", group = "globalstyle" },
+    { key = "opt_castbar", label = "Castbars", group = "globalstyle" },
     { key = "opt_colors", label = "Colors", group = "globalstyle" },
+    { key = "opt_fonts", label = "Fonts", group = "globalstyle" },
     { key = "opt_misc", label = "Miscellaneous", group = "globalstyle" },
     { key = "classpower", label = "Class Resources" },
     { key = "gameplay", label = "Gameplay" },
-    { header = "Modules", id = "modules", defaultOpen = false },
-    { key = "modules", label = "Style", group = "modules" },
     { key = "profiles", label = "Profiles" },
+    { header = "Advanced", id = "modules", defaultOpen = false },
+    { key = "modules", label = "Modules", group = "modules" },
 }
 
 local ALIASES = {
@@ -4518,10 +4519,11 @@ local function GetBundledChangelog()
     return data
 end
 
-local function BuildDashboardChangelog(parent, cardWidth)
+local function BuildDashboardChangelog(parent, cardWidth, opts)
+    opts = opts or {}
     local data = GetBundledChangelog()
     local left, right = 14, 14
-    local top = -130
+    local top = opts.top or -130
     local headerH = 48
     local contentW = max(120, (cardWidth or 420) - left - right)
     local scrollW = max(80, (cardWidth or 420) - left - 44)
@@ -4566,7 +4568,7 @@ local function BuildDashboardChangelog(parent, cardWidth)
     arrow:SetPoint("TOPRIGHT", header, "TOPRIGHT", -54, -9)
     arrow:SetTexture(T.media.collapseArrow)
 
-    local title = T.Font(header, "GameFontNormal", "Release Notes", T.colors.text)
+    local title = T.Font(header, "GameFontNormal", opts.title or "Changelog", T.colors.text)
     title:SetPoint("TOPLEFT", header, "TOPLEFT", 0, -3)
     title:SetPoint("RIGHT", header, "RIGHT", -92, 0)
     title:SetJustifyH("LEFT")
@@ -4598,7 +4600,7 @@ local function BuildDashboardChangelog(parent, cardWidth)
 
     local scroll = CreateFrame("ScrollFrame", nil, parent)
     scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", left + 2, top - headerH - 12)
-    scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -34, 70)
+    scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -34, opts.bottom or 70)
 
     local child = CreateFrame("Frame", nil, scroll)
     child:SetSize(scrollW, 1)
@@ -4662,7 +4664,7 @@ local function BuildDashboardChangelog(parent, cardWidth)
     local sectionCount = 0
     if latest and type(latest.sections) == "table" then sectionCount = #latest.sections end
     local currentLabel = current or "Latest build"
-    summary:SetText(M.Format("%s  -  %d sections. Click to view the bundled release notes.", currentLabel, sectionCount))
+    summary:SetText(M.Format("%s  -  %d sections. Click to view the bundled changelog.", currentLabel, sectionCount))
 
     local open = M.dashboardChangelogOpen == true
     local function PaintHeader(isOpen)
@@ -5173,8 +5175,314 @@ local function BuildDashboard(ctx)
     ctx:SetContentHeight(math.abs(y) + 100)
 end
 
+local function BuildDashboardUX(ctx)
+    local root = ctx.wrapper
+    local width = ctx.width or 760
+    local x0, y0, gap = 12, -12, 16
+    local layoutW = max(1, width - x0)
+    local sideBySide = layoutW >= 760
+    local sideW = sideBySide and min(330, max(300, math.floor(layoutW * 0.31))) or layoutW
+    local mainW = sideBySide and (layoutW - sideW - gap) or layoutW
+    local sideX = sideBySide and (x0 + mainW + gap) or x0
+
+    local function Card(parent, title, x, y, w, h, bg, border)
+        local card = T.Panel(parent or root, nil, bg or T.colors.panel2, border or T.colors.cardBorder or T.colors.borderSoft)
+        card:SetPoint("TOPLEFT", parent or root, "TOPLEFT", x, y)
+        card:SetSize(w, h)
+        if title and title ~= "" then
+            local label = T.Font(card, "GameFontNormal", title, T.colors.text)
+            label:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -14)
+            card._msuf2Title = label
+        end
+        return card
+    end
+
+    local function Button(parent, text, x, y, w, h, onClick, skin)
+        local btn = T.Button(parent, text, w, h or 24)
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        if btn._msuf2Label then
+            btn._msuf2Label:ClearAllPoints()
+            btn._msuf2Label:SetPoint("CENTER", btn, "CENTER", 0, 0)
+            btn._msuf2Label:SetJustifyH("CENTER")
+        end
+        if skin == "primary" and T.SkinPrimaryButton then T.SkinPrimaryButton(btn) end
+        if skin == "danger" and T.SkinDangerButton then T.SkinDangerButton(btn) end
+        if onClick then btn:SetScript("OnClick", onClick) end
+        return btn
+    end
+
+    local function Kicker(parent, text, x, y, color)
+        local fs = T.Font(parent, "GameFontDisableSmall", string.upper(M.Tr(text or "")), color or T.colors.accent)
+        fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 16, y or -14)
+        return fs
+    end
+
+    local function Pill(parent, text, x, y, w, color)
+        local pill = T.Panel(parent, nil, { 0.055, 0.070, 0.135, 0.92 }, { 0.160, 0.220, 0.430, 0.70 })
+        pill:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        pill:SetSize(w or 82, 20)
+        local label = T.Font(pill, "GameFontDisableSmall", text or "", color or T.colors.muted)
+        label:SetPoint("CENTER", pill, "CENTER", 0, 0)
+        label:SetJustifyH("CENTER")
+        pill._msuf2Label = label
+        return pill
+    end
+
+    local function AddTooltip(frame, title, text)
+        if not (frame and frame.HookScript) then return end
+        frame:HookScript("OnEnter", function(self)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(M.Tr(title or ""), 1, 1, 1)
+            if text and text ~= "" then GameTooltip:AddLine(M.Tr(text), 0.85, 0.85, 0.85, true) end
+            GameTooltip:Show()
+        end)
+        frame:HookScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+    end
+
+    local function Select(pageKey)
+        if M.SelectPage then M.SelectPage(pageKey) end
+    end
+
+    local function ToggleEditMode()
+        local active = IsEditModeActive()
+        if (not active) and IsEditModeCombatLocked() then
+            if M.BlockCombatAction then M.BlockCombatAction() end
+            RefreshDashboardEditModeButton()
+            if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
+            return
+        end
+        if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
+            _G.MSUF_SetMSUFEditModeDirect(not active)
+        end
+        RefreshDashboardEditModeButton()
+        if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
+    end
+
+    local function CopyWagoLink()
+        if type(_G.MSUF_ShowCopyLink) == "function" then
+            _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf")
+        end
+    end
+
+    local function ExportBackup()
+        local fn = _G.MSUF_ExportSelectionToString
+        if type(fn) == "function" then
+            local ok, value = pcall(fn, "all")
+            if ok and type(value) == "string" and value ~= "" and type(_G.MSUF_ShowCopyLink) == "function" then
+                _G.MSUF_ShowCopyLink("MSUF Profile Backup", value)
+                return
+            end
+        end
+        Select("profiles")
+    end
+
+    local function Percent(value, fallback)
+        return math.floor(((tonumber(value) or fallback or 1) * 100) + 0.5)
+    end
+
+    local function Clamp(v, minV, maxV)
+        v = tonumber(v) or minV
+        if v < minV then return minV end
+        if v > maxV then return maxV end
+        return v
+    end
+
+    local function HasMovedFramesInEditMode()
+        local g = M.GetGeneralDB and M.GetGeneralDB()
+        if type(g) == "table" and g.hasMovedFramesInEditMode == true then return true end
+        local st = rawget(_G, "MSUF_EditState")
+        return type(st) == "table" and st.hasMovedFramesInEditMode == true
+    end
+
+    local header = Card(root, "Dashboard", x0, y0, layoutW, 92, { 0.055, 0.070, 0.145, 0.82 }, T.colors.border)
+    local actionX = layoutW - 456
+    W.Text(header, "A calmer setup command center: start with movement, frames, group frames, or a safe profile import.", 16, -42, max(80, actionX - 34), T.colors.muted)
+    local edit = Button(header, "Edit frames", actionX, -31, 126, 28, ToggleEditMode, "primary")
+    M.dashboardEditModeButton = edit
+    AddTooltip(edit, "MSUF Edit Mode", "Drag frames to move them before tuning detailed settings.")
+    RefreshDashboardEditModeButton()
+    M.AddRefresher(ctx, RefreshDashboardEditModeButton)
+    Button(header, "Import profile", actionX + 140, -31, 136, 28, function() Select("profiles") end)
+    local reset = Button(header, "Reset positions...", actionX + 290, -31, 150, 28, function()
+        if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
+            pcall(_G.SlashCmdList["MIDNIGHTSUF"], "reset")
+        end
+    end, "danger")
+    AddTooltip(reset, "Reset Frame Positions", "Resets frame positions only. Profiles and menu settings stay intact.")
+
+    local mainTop = y0 - 108
+    local hero = Card(root, "", x0, mainTop, mainW, 238, { 0.030, 0.105, 0.155, 0.88 }, { 0.110, 0.335, 0.485, 0.88 })
+    Kicker(hero, "Recommended Start", 18, -22)
+    local heroTitle = T.Font(hero, "GameFontNormalLarge", "Build your unit frames in three clean steps.", T.colors.text)
+    heroTitle:SetPoint("TOPLEFT", hero, "TOPLEFT", 18, -52)
+    heroTitle:SetWidth(mainW - 36)
+    W.Text(hero, "Move frames first, tune the player frame, then configure group frames and auras. Advanced controls stay available without competing with the first-run path.", 18, -88, mainW - 36, T.colors.muted)
+    if mainW >= 560 then
+        Button(hero, "Edit frames", 18, -140, 104, 28, ToggleEditMode, "primary")
+        Button(hero, "Set up Player", 134, -140, 118, 28, function() Select("uf_player") end)
+        Button(hero, "Set up Group Frames", 264, -140, 156, 28, function() Select("gf_layout") end)
+        Button(hero, "Import safely", 432, -140, 116, 28, function() Select("profiles") end)
+    else
+        local actionW = math.floor((mainW - 48) / 2)
+        Button(hero, "Edit frames", 18, -136, actionW, 26, ToggleEditMode, "primary")
+        Button(hero, "Set up Player", 30 + actionW, -136, actionW, 26, function() Select("uf_player") end)
+        Button(hero, "Group Frames", 18, -168, actionW, 26, function() Select("gf_layout") end)
+        Button(hero, "Import safely", 30 + actionW, -168, actionW, 26, function() Select("profiles") end)
+    end
+
+    local featureTop = mainTop - 254
+    local stackFeatures = mainW < 560
+    local featureW = stackFeatures and mainW or math.floor((mainW - gap * 2) / 3)
+    local function Feature(index, title, body, icon, pageKey)
+        local x = stackFeatures and x0 or (x0 + ((index - 1) * (featureW + gap)))
+        local y = stackFeatures and (featureTop - ((index - 1) * (142 + gap))) or featureTop
+        local card = Card(root, "", x, y, featureW, 142)
+        local ic = T.Font(card, "GameFontNormalLarge", icon, T.colors.accent)
+        ic:SetPoint("TOPLEFT", card, "TOPLEFT", 18, -20)
+        local label = T.Font(card, "GameFontNormal", title, T.colors.text)
+        label:SetPoint("TOPLEFT", card, "TOPLEFT", 18, -58)
+        W.Text(card, body, 18, -86, featureW - 36, T.colors.muted)
+        card:EnableMouse(true)
+        card:SetScript("OnMouseUp", function() Select(pageKey) end)
+    end
+    Feature(1, "Unit Frames", "Player, target, focus, pet, and boss frame setup with one preview language.", "U", "uf_player")
+    Feature(2, "Group Frames", "Party, Raid, and Mythic scopes with visible summaries.", "G", "gf_layout")
+    Feature(3, "Auras", "Shared defaults plus per-unit overrides explained inline.", "A", "auras2")
+
+    local featureBlockBottom = featureTop - (stackFeatures and ((142 * 3) + (gap * 2)) or 142)
+    local sideTop = sideBySide and mainTop or (featureBlockBottom - 16)
+    local profile = Card(root, "Active profile", sideX, sideTop, sideW, 108)
+    local pText = T.Font(profile, "GameFontDisableSmall", "", T.colors.muted)
+    pText:SetPoint("TOPLEFT", profile, "TOPLEFT", 16, -38)
+    pText:SetWidth(sideW - 86)
+    Pill(profile, "Safe", sideW - 56, -26, 42, T.colors.ok)
+    Button(profile, "Manage", 16, -66, 70, 22, function() Select("profiles") end)
+    Button(profile, "Export backup", 94, -66, 104, 22, ExportBackup)
+    Button(profile, "Duplicate", sideW - 98, -66, 82, 22, function() Select("profiles") end)
+    local function RefreshProfileCard()
+        pText:SetText(M.Format("%s - manual profile", tostring(_G.MSUF_ActiveProfile or "Default")))
+    end
+    RefreshProfileCard()
+    M.AddRefresher(ctx, RefreshProfileCard)
+
+    local wagoTop = sideTop - 124
+    local wago = Card(root, "Wago profile hub", sideX, wagoTop, sideW, 164, { 0.040, 0.080, 0.125, 0.92 }, { 0.140, 0.320, 0.430, 0.82 })
+    W.Text(wago, "Browse shared MSUF imports, copy a backup first, then import on the Profiles page.", 16, -40, sideW - 32, T.colors.muted)
+    Button(wago, "Browse Wago profiles", 16, -78, sideW - 32, 30, CopyWagoLink, "primary")
+    Button(wago, "Backup current profile", 16, -116, math.floor((sideW - 40) / 2), 24, ExportBackup)
+    Button(wago, "Import safely", 24 + math.floor((sideW - 40) / 2), -116, math.floor((sideW - 40) / 2), 24, function() Select("profiles") end)
+    AddTooltip(wago, "Wago profile imports", "The Wago button opens a copyable search link. Importing stays on the Profiles page so backup and new-profile import are visible.")
+
+    local checklistTop = wagoTop - 180
+    local checklist = Card(root, "Setup checklist", sideX, checklistTop, sideW, 236)
+    W.Text(checklist, "Useful for first-run orientation.", 16, -38, sideW - 32, T.colors.muted)
+    local function Row(i, title, body, state, color, onClick, iconText)
+        local row = Card(checklist, "", 16, -68 - ((i - 1) * 56), sideW - 32, 48, { 0.080, 0.095, 0.170, 0.72 }, T.colors.borderSoft)
+        Pill(row, iconText or (i < 3 and "OK" or "!"), 10, -14, 28, color or T.colors.ok)
+        local label = T.Font(row, "GameFontNormal", title, T.colors.text)
+        label:SetPoint("TOPLEFT", row, "TOPLEFT", 48, -9)
+        W.Text(row, body, 48, -28, sideW - 132, T.colors.muted)
+        Pill(row, state, sideW - 86, -14, 54, color or T.colors.ok)
+        row:EnableMouse(true)
+        row:SetScript("OnMouseUp", onClick)
+    end
+    local movedFrames = HasMovedFramesInEditMode()
+    Row(1, "Profile ready", "Active profile is loaded.", "done", T.colors.ok, function() Select("profiles") end)
+    Row(2, "Preview available", "Use pages to tune frames.", "done", T.colors.ok, function() Select("uf_player") end)
+    Row(3, "Move frames", "Recommended before detail tuning.", movedFrames and "done" or "start", movedFrames and T.colors.ok or T.colors.accent2, ToggleEditMode, movedFrames and "OK" or "!")
+
+    local previewTop = checklistTop - 252
+    local preview = Card(root, "", sideX, previewTop, sideW, 150)
+    Kicker(preview, "Live preview", 16, -18)
+    local stage = T.Panel(preview, nil, { 0.015, 0.020, 0.038, 0.96 }, { 0.075, 0.105, 0.190, 0.75 })
+    stage:SetPoint("TOPLEFT", preview, "TOPLEFT", 0, -48)
+    stage:SetPoint("BOTTOMRIGHT", preview, "BOTTOMRIGHT", 0, 0)
+    local sample = CreateFrame("Frame", nil, stage, T.Template and T.Template() or nil)
+    sample:SetSize(max(190, sideW - 92), 44)
+    sample:SetPoint("CENTER", stage, "CENTER", 0, 0)
+    if sample.SetBackdrop then
+        sample:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
+        sample:SetBackdropColor(0.68, 0.64, 0.22, 0.96)
+        sample:SetBackdropBorderColor(1.00, 0.08, 0.12, 1)
+    end
+    local sampleName = T.Font(sample, "GameFontNormal", "Player", { 1, 1, 1, 1 })
+    sampleName:SetPoint("LEFT", sample, "LEFT", 12, 0)
+    local sampleHp = T.Font(sample, "GameFontNormal", "720.0k - 72%", { 1, 1, 1, 1 })
+    sampleHp:SetPoint("RIGHT", sample, "RIGHT", -10, 0)
+
+    local recoveryTop = sideBySide and (featureBlockBottom - 16) or (previewTop - 166)
+    local recoveryW = sideBySide and mainW or layoutW
+    local recoveryOpen = M.dashboardRecoveryOpen == true
+    local recoveryH = recoveryOpen and 392 or 42
+    local recovery = Card(root, "", x0, recoveryTop, recoveryW, recoveryH, { 0.030, 0.040, 0.078, 0.86 }, T.colors.borderSoft)
+    local head = CreateFrame("Button", nil, recovery)
+    head:SetPoint("TOPLEFT", recovery, "TOPLEFT", 0, 0)
+    head:SetPoint("TOPRIGHT", recovery, "TOPRIGHT", 0, 0)
+    head:SetHeight(42)
+    local arrow = head:CreateTexture(nil, "OVERLAY")
+    arrow:SetTexture(T.media.collapseArrow)
+    arrow:SetSize(10, 10)
+    arrow:SetPoint("LEFT", head, "LEFT", 16, 0)
+    if arrow.SetRotation then arrow:SetRotation(recoveryOpen and (math.pi * 0.5) or 0) end
+    local recTitle = T.Font(head, "GameFontNormal", "Display & recovery", T.colors.text)
+    recTitle:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
+    local g = M.GetGeneralDB and M.GetGeneralDB() or {}
+    if recoveryW >= 520 then
+        Pill(head, M.Format("Menu %d%%", Percent(g.slashMenuScale, 1)), recoveryW - 312, -11, 84)
+        Pill(head, M.Format("Frames %d%%", Percent(g.msufUiScale, 1)), recoveryW - 220, -11, 92)
+        Pill(head, "Factory reset hidden", recoveryW - 120, -11, 106, T.colors.accent2)
+    end
+    head:SetScript("OnClick", function()
+        M.dashboardRecoveryOpen = not recoveryOpen
+        M.InvalidatePage("home")
+        M.SelectPage("home")
+    end)
+
+    if recoveryOpen then
+        local function ApplyMsufScale(delta)
+            local db = M.GetGeneralDB()
+            local scaleValue = Clamp((tonumber(db.msufUiScale) or 1) + delta, 0.25, 1.5)
+            db.msufUiScale = scaleValue
+            if type(_G.MSUF_ApplyMsufScale) == "function" then pcall(_G.MSUF_ApplyMsufScale, scaleValue) end
+            if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_SCALE_QUICK", { preview = true, applyAll = false }) end
+            if type(_G.ApplyAllSettings) == "function" then pcall(_G.ApplyAllSettings) end
+        end
+        local function ApplyMenuScale(delta)
+            local db = M.GetGeneralDB()
+            local scaleValue = Clamp((tonumber(db.slashMenuScale) or 1) + delta, 0.25, 1.5)
+            db.slashMenuScale = scaleValue
+            if M.frame and M.frame.SetScale then M.frame:SetScale(EffectiveMenuScale(scaleValue)) end
+        end
+        W.Text(recovery, "Scale quick fixes, reset tools, Wago access, support links, and the bundled changelog live here.", 16, -60, recoveryW - 32, T.colors.muted)
+        local row2 = recoveryW < 700
+        local row3 = recoveryW < 520
+        Button(recovery, "Frames -", 16, -94, 78, 22, function() ApplyMsufScale(-0.05) end)
+        Button(recovery, "Frames +", 104, -94, 78, 22, function() ApplyMsufScale(0.05) end)
+        Button(recovery, "Menu -", 202, -94, 72, 22, function() ApplyMenuScale(-0.05) end)
+        Button(recovery, "Menu +", 284, -94, 72, 22, function() ApplyMenuScale(0.05) end)
+        Button(recovery, "Wago Profiles", row2 and 16 or 376, row2 and -126 or -94, 112, 22, CopyWagoLink, "primary")
+        Button(recovery, "Print Help", row2 and 138 or 498, row2 and -126 or -94, 86, 22, function()
+            if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then pcall(_G.SlashCmdList["MIDNIGHTSUF"], "help") end
+        end)
+        Button(recovery, "Discord", row2 and 234 or 594, row2 and -126 or -94, 80, 22, function()
+            if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/JQnhZXnTAK") end
+        end)
+        Button(recovery, "Factory Reset All", row3 and 16 or (recoveryW - 152), row3 and -154 or -126, 136, 22, function()
+            if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then pcall(_G.SlashCmdList["MIDNIGHTSUF"], "fullreset confirm") end
+        end, "danger")
+        BuildDashboardChangelog(recovery, recoveryW, { title = "Changelog", top = row2 and -184 or -156, bottom = 18 })
+    end
+
+    local bottom = recoveryTop - recoveryH
+    if sideBySide then bottom = min(bottom, previewTop - 150) end
+    ctx:SetContentHeight(math.abs(bottom) + 42)
+end
+
 M.RegisterPage("search", { title = "Search", build = BuildSearchPage, version = 1 })
-M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboard, version = 5 })
+M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboardUX, version = 6 })
 
 local function ApplyMenuFrameScale(frame)
     if not (frame and frame.SetScale) then return end

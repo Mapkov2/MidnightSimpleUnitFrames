@@ -1266,6 +1266,13 @@ function Ticker.EndDrag()
     local moved = abs(cx - d.startCX) > 0.5 or abs(cy - d.startCY) > 0.5
 
     if moved then
+        if type(MSUF_DB) == "table" then
+            MSUF_DB.general = MSUF_DB.general or {}
+            MSUF_DB.general.hasMovedFramesInEditMode = true
+        end
+        if type(_G.MSUF_EditState) == "table" then
+            _G.MSUF_EditState.hasMovedFramesInEditMode = true
+        end
         if d.isGroupFrame and d.conf then
             d.conf.offsetX = round(cx - d.screenW * 0.5)
             d.conf.offsetY = round(cy - d.screenH * 0.5)
