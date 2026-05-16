@@ -72,7 +72,7 @@ end
 
 local function BuildGameplay(ctx)
     local b = W.PageBuilder(ctx)
-    local head = b:Header("Midnight Simple Unit Frames - Gameplay", "Here are several gameplay enhancement options you can toggle on or off.", 74)
+    local head = b:Header("Gameplay", "Here are several gameplay enhancement options you can toggle on or off.", 74)
 
     local edit = T.Button(head, "MSUF Edit Mode", 128, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(edit) end
