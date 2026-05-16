@@ -4954,24 +4954,34 @@ local function BuildDashboardUX(ctx)
         return false
     end
 
-    local header = Card(root, "Dashboard", x0, y0, layoutW, 92, { 0.055, 0.070, 0.145, 0.82 }, T.colors.border)
-    local actionX = layoutW - 456
-    W.Text(header, "A calmer setup command center: start with movement, frames, group frames, or a safe profile import.", 16, -42, max(80, actionX - 34), T.colors.muted)
-    local edit = Button(header, "Edit frames", actionX, -31, 126, 28, ToggleEditMode, "primary")
+    local compactHeader = layoutW < 620
+    local tinyHeader = layoutW < 430
+    local headerH = tinyHeader and 184 or (compactHeader and 150 or 92)
+    local header = Card(root, "Dashboard", x0, y0, layoutW, headerH, { 0.055, 0.070, 0.145, 0.82 }, T.colors.border)
+    local actionX = compactHeader and 16 or max(16, layoutW - 456)
+    local textW = compactHeader and (layoutW - 32) or max(110, actionX - 34)
+    W.Text(header, "A calmer setup command center: start with movement, frames, group frames, or a safe profile import.", 16, -42, textW, T.colors.muted)
+    local editW = tinyHeader and (layoutW - 32) or (compactHeader and floor((layoutW - 48) / 2) or 126)
+    local importW = editW
+    local resetW = tinyHeader and (layoutW - 32) or (compactHeader and (layoutW - 32) or 150)
+    local actionY = compactHeader and -86 or -31
+    local edit = Button(header, "Edit frames", actionX, actionY, editW, 28, ToggleEditMode, "primary")
     M.dashboardEditModeButton = edit
     AddTooltip(edit, "MSUF Edit Mode", "Drag frames to move them before tuning detailed settings.")
     RefreshDashboardEditModeButton()
     M.AddRefresher(ctx, RefreshDashboardEditModeButton)
-    Button(header, "Import profile", actionX + 140, -31, 136, 28, function() Select("profiles") end)
-    local reset = Button(header, "Reset positions...", actionX + 290, -31, 150, 28, function()
+    Button(header, "Import profile", tinyHeader and actionX or (actionX + editW + 12), tinyHeader and (actionY - 36) or actionY, importW, 28, function() Select("profiles") end)
+    local reset = Button(header, "Reset positions...", compactHeader and actionX or (actionX + editW + importW + 24), tinyHeader and (actionY - 72) or (compactHeader and (actionY - 36) or actionY), resetW, 28, function()
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
             pcall(_G.SlashCmdList["MIDNIGHTSUF"], "reset")
         end
     end, "danger")
     AddTooltip(reset, "Reset Frame Positions", "Resets frame positions only. Profiles and menu settings stay intact.")
 
-    local mainTop = y0 - 108
-    local hero = Card(root, "", x0, mainTop, mainW, 238, { 0.030, 0.105, 0.155, 0.88 }, { 0.110, 0.335, 0.485, 0.88 })
+    local mainTop = y0 - headerH - 16
+    local tinyHero = mainW < 390
+    local heroH = tinyHero and 316 or (mainW < 560 and 252 or 238)
+    local hero = Card(root, "", x0, mainTop, mainW, heroH, { 0.030, 0.105, 0.155, 0.88 }, { 0.110, 0.335, 0.485, 0.88 })
     Kicker(hero, "Recommended Start", 18, -22)
     local heroTitle = T.Font(hero, "GameFontNormalLarge", M.Tr("Build your unit frames in three clean steps."), T.colors.text)
     heroTitle:SetPoint("TOPLEFT", hero, "TOPLEFT", 18, -52)
@@ -4982,15 +4992,20 @@ local function BuildDashboardUX(ctx)
         Button(hero, "Set up Player", 134, -140, 118, 28, function() Select("uf_player") end)
         Button(hero, "Set up Group Frames", 264, -140, 156, 28, function() Select("gf_layout") end)
         Button(hero, "Import safely", 432, -140, 116, 28, function() Select("profiles") end)
+    elseif tinyHero then
+        Button(hero, "Edit frames", 18, -136, mainW - 36, 26, ToggleEditMode, "primary")
+        Button(hero, "Set up Player", 18, -168, mainW - 36, 26, function() Select("uf_player") end)
+        Button(hero, "Group Frames", 18, -200, mainW - 36, 26, function() Select("gf_layout") end)
+        Button(hero, "Import safely", 18, -232, mainW - 36, 26, function() Select("profiles") end)
     else
-        local actionW = math.floor((mainW - 48) / 2)
+        local actionW = max(96, math.floor((mainW - 48) / 2))
         Button(hero, "Edit frames", 18, -136, actionW, 26, ToggleEditMode, "primary")
         Button(hero, "Set up Player", 30 + actionW, -136, actionW, 26, function() Select("uf_player") end)
         Button(hero, "Group Frames", 18, -168, actionW, 26, function() Select("gf_layout") end)
         Button(hero, "Import safely", 30 + actionW, -168, actionW, 26, function() Select("profiles") end)
     end
 
-    local featureTop = mainTop - 254
+    local featureTop = mainTop - heroH - 16
     local stackFeatures = mainW < 560
     local featureW = stackFeatures and mainW or math.floor((mainW - gap * 2) / 3)
     local function Feature(index, title, body, icon, pageKey)
@@ -5129,6 +5144,9 @@ local function BuildDashboardUX(ctx)
     head:SetPoint("TOPLEFT", recovery, "TOPLEFT", 0, 0)
     head:SetPoint("TOPRIGHT", recovery, "TOPRIGHT", 0, 0)
     head:SetHeight(42)
+    local headHover = head:CreateTexture(nil, "BACKGROUND")
+    headHover:SetAllPoints()
+    headHover:SetColorTexture(0, 0, 0, 0)
     local arrow = head:CreateTexture(nil, "OVERLAY")
     arrow:SetTexture(T.media.collapseArrow)
     arrow:SetSize(10, 10)
@@ -5144,6 +5162,12 @@ local function BuildDashboardUX(ctx)
         M.dashboardRecoveryOpen = not recoveryOpen
         M.InvalidatePage("home")
         M.SelectPage("home")
+    end)
+    head:SetScript("OnEnter", function()
+        if headHover.SetColorTexture then headHover:SetColorTexture(1, 1, 1, 0.025) end
+    end)
+    head:SetScript("OnLeave", function()
+        if headHover.SetColorTexture then headHover:SetColorTexture(0, 0, 0, 0) end
     end)
 
     if recoveryOpen then
@@ -5173,6 +5197,9 @@ local function BuildDashboardUX(ctx)
     scaleHead:SetPoint("TOPLEFT", scaling, "TOPLEFT", 0, 0)
     scaleHead:SetPoint("TOPRIGHT", scaling, "TOPRIGHT", 0, 0)
     scaleHead:SetHeight(42)
+    local scaleHeadHover = scaleHead:CreateTexture(nil, "BACKGROUND")
+    scaleHeadHover:SetAllPoints()
+    scaleHeadHover:SetColorTexture(0, 0, 0, 0)
     local scaleArrow = scaleHead:CreateTexture(nil, "OVERLAY")
     scaleArrow:SetTexture(T.media.collapseArrow)
     scaleArrow:SetSize(10, 10)
@@ -5191,6 +5218,12 @@ local function BuildDashboardUX(ctx)
         M.dashboardScalingOpen = not scalingOpen
         M.InvalidatePage("home")
         M.SelectPage("home")
+    end)
+    scaleHead:SetScript("OnEnter", function()
+        if scaleHeadHover.SetColorTexture then scaleHeadHover:SetColorTexture(1, 1, 1, 0.025) end
+    end)
+    scaleHead:SetScript("OnLeave", function()
+        if scaleHeadHover.SetColorTexture then scaleHeadHover:SetColorTexture(0, 0, 0, 0) end
     end)
 
     if scalingOpen then
