@@ -33,8 +33,28 @@ function Normalize-ReleaseVersion {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
+    $v = $v -replace '(?i)\s+alpha\s*(\d*)', '-alpha$1'
+    $v = $v -replace '(?i)\s+beta\s*(\d*)', '-beta$1'
+    $v = $v -replace '(?i)\s+rc\s*(\d*)', '-rc$1'
+    $v = $v -replace '(?i)\s+pre\s*(\d*)', '-pre$1'
+    $v = $v -replace '\s+', '-'
+    $v = $v -replace '_+', '-'
+    $v = $v.ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($v)) { throw "Release version/tag cannot be empty." }
     return $v
+}
+
+function Assert-GitTagName {
+    param([Parameter(Mandatory = $true)][string]$Tag)
+
+    if ($Tag -match '\s') {
+        throw "Release tag cannot contain spaces. Use a tag like 5.2-beta4."
+    }
+
+    $result = & git check-ref-format --allow-onelevel $Tag 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Invalid Git tag '$Tag'. Use a tag like 5.2-beta4. $($result -join ' ')"
+    }
 }
 
 function Normalize-VersionKey {
@@ -55,7 +75,11 @@ function Convert-TagToDisplayVersion {
     $v = $v -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
     $v = $v -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
     $v = $v -replace '[-_]+', ' '
-    return ($v -replace '\s+', ' ').Trim()
+    $display = ($v -replace '\s+', ' ').Trim()
+    if ($display.Length -gt 0) {
+        return ((Get-Culture).TextInfo.ToTitleCase($display.ToLowerInvariant()) -replace '\bRc\b', 'RC')
+    }
+    return $display
 }
 
 function Get-RepoVersionText {
@@ -1154,6 +1178,11 @@ function Set-UiFromMarkdown {
 
 function Read-UiReleaseMetadata {
     $tag = Normalize-ReleaseVersion $tagBox.Text
+    Assert-GitTagName -Tag $tag
+    if ($tagBox.Text -ne $tag) {
+        Write-ReleaseLog ("Normalized release tag to " + $tag)
+        $tagBox.Text = $tag
+    }
     $display = $displayBox.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($display)) { $display = Convert-TagToDisplayVersion $tag }
     $isPrereleaseTag = Test-PrereleaseVersion $tag

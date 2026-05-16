@@ -42,6 +42,8 @@ those words.
 
 Use **VERSION** to reload the tag from the repository `VERSION` file.
 **Version / tag** is the package tag, for example `5.2-beta1`.
+If you accidentally enter a friendly title such as `5.2 Beta 4`, MSUF Publish
+normalizes it to a Git-safe tag such as `5.2-beta4` before publishing.
 **Changelog title** is the heading written to `CHANGELOG.md`, for example
 `5.2 Beta 1`.
 **Release name** is the public upload/release display name, for example
