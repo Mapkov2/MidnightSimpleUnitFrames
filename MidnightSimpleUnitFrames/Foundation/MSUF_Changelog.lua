@@ -24,6 +24,7 @@ local data = {
                     title = "Bugfixes",
                     bullets = {
                         "Improved Group Frame spell indicators and tracked cooldown display.",
+                        "Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.",
                     },
                 },
                 {
@@ -46,6 +47,7 @@ local data = {
                     bullets = {
                         "Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.",
                         "Improved Group Frame range, highlight, and visibility behavior.",
+                        "Improved class-colored bar backgrounds across unit and group frames.",
                     },
                 },
             },

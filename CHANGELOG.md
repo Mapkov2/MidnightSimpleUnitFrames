@@ -14,6 +14,7 @@
 
 <!-- MSUF-AUTO-CHANGELOG:Bugfixes:START -->
 - Improved Group Frame spell indicators and tracked cooldown display.
+- Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.
 <!-- MSUF-AUTO-CHANGELOG:Bugfixes:END -->
 
 ### Changes / Improvements
@@ -36,6 +37,7 @@
 <!-- MSUF-AUTO-CHANGELOG:Documentation:START -->
 - Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.
 - Improved Group Frame range, highlight, and visibility behavior.
+- Improved class-colored bar backgrounds across unit and group frames.
 <!-- MSUF-AUTO-CHANGELOG:Documentation:END -->
 
 ## 5.2 Beta 2 - 2026-05-16
