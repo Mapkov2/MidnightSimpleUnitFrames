@@ -7,6 +7,8 @@ _G.MSUF2 = M
 
 local T = M.Theme
 local W = M.Widgets
+local GP = M.GroupPage or {}
+local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
 
 local floor = math.floor
 local max = math.max
@@ -2006,14 +2008,27 @@ function M.RefreshGFNativePreviews()
 end
 
 local function AddGFPreview(ctx, builder)
-    local body = builder:CollapsibleSection("gf_preview_native", "Hide Preview", 326, true)
+    local body = builder:CollapsibleSection("gf_preview_native", "Hide Preview", 362, true)
     if W and W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(body, "Hide Preview", "Show Preview") end
+    W.Text(body, "Preview updates live here. Enter MSUF Edit Mode to drag the group container. Blizzard-controlled aura blocks can be previewed but not dragged.", 14, -38, (body._msuf2Width or 720) - 28, T.colors.muted)
     local box = CreateNativeGFPreview(body, ctx, OpenGFSection)
-    box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -12)
+    box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -48)
     box:Show()
     local function RefreshThisPreview()
+        if type(SetSectionHeaderStatus) == "function" then
+            local editActive = false
+            if type(_G.MSUF_IsMSUFEditModeActive) == "function" then
+                editActive = _G.MSUF_IsMSUFEditModeActive() and true or false
+            end
+            SetSectionHeaderStatus(body, editActive and {
+                hint = "drag in preview",
+                hintColor = { 0.40, 0.80, 0.98, 1 },
+            } or nil)
+        end
         if box and box.Refresh and box:IsShown() then box:Refresh() end
     end
+    local entry = body and body._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = RefreshThisPreview end
     RefreshThisPreview()
     if body.HookScript then
         body:HookScript("OnShow", RefreshThisPreview)

@@ -84,6 +84,21 @@ local BindNestedDropdown = GP.BindNestedDropdown
 local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
+local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+
+local function HeaderHintColor()
+    return { 0.45, 0.52, 0.65, 1 }
+end
+
+local function HealthModeHint(mode)
+    if not mode or mode == "GLOBAL" then return "follows global style" end
+    if mode == "CLASS" then return "class-colored health bars" end
+    if mode == "GRADIENT" then return "health gradient active" end
+    if mode == "CUSTOM" then return "custom health color" end
+    if mode == "dark" then return "dark bar style" end
+    if mode == "unified" then return "unified bar style" end
+    return tostring(mode)
+end
 local function BuildGFBars(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -144,7 +159,7 @@ local function BuildGFBars(ctx)
             end
             QueueGF(CurrentScope(), "visual")
         end)
-    M.AddRefresher(ctx, function()
+    local function RefreshHealthColorState()
         local conf = Conf(CurrentScope())
         local m = conf.gfBarMode
         local editable = (m == "dark" or m == "unified" or m == "CUSTOM")
@@ -158,7 +173,19 @@ local function BuildGFBars(ctx)
         else
             colorHint:Hide()
         end
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            SetSectionHeaderStatus(hcolor, ((m == "CLASS" or m == "GRADIENT") and {
+                hint = HealthModeHint(m),
+                hintColor = HeaderHintColor(),
+            }) or nil)
+        end
+    end
+    M.AddRefresher(ctx, RefreshHealthColorState)
+    RefreshHealthColorState()
+    do
+        local entry = hcolor and hcolor._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshHealthColorState end
+    end
 
     local bars = b:CollapsibleSection("bars", "Bars  (Custom)", 206, false)
     BindScopeDropdown(ctx, W.Dropdown(bars, "Foreground Texture", SIMPLE_TEXTURES, 280), "barTexture", "", "visual")
@@ -186,6 +213,32 @@ local function BuildGFBars(ctx)
     W.MoveWidget(showTank, power, powerRightX, -88)
     W.MoveWidget(showHealer, power, powerRightX, -122)
     W.MoveWidget(showDamager, power, powerRightX, -156)
+    local function RefreshPowerHeader()
+        if type(SetSectionHeaderStatus) ~= "function" then return end
+        local roles = 0
+        if Bool(CurrentScope(), "powerShowTank", true) then roles = roles + 1 end
+        if Bool(CurrentScope(), "powerShowHealer", true) then roles = roles + 1 end
+        if Bool(CurrentScope(), "powerShowDamager", false) then roles = roles + 1 end
+        if roles == 0 then
+            SetSectionHeaderStatus(power, {
+                hint = "hidden for all roles",
+                hintColor = { 0.92, 0.78, 0.66, 1 },
+                bg = { 0.130, 0.072, 0.040, 0.50 },
+                arrowColor = { 0.92, 0.58, 0.26, 1 },
+            })
+            return
+        end
+        SetSectionHeaderStatus(power, (roles == 1) and {
+            hint = "power shown for 1 role",
+            hintColor = HeaderHintColor(),
+        } or nil)
+    end
+    M.AddRefresher(ctx, RefreshPowerHeader)
+    RefreshPowerHeader()
+    do
+        local entry = power and power._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshPowerHeader end
+    end
 
     local text = b:CollapsibleSection("text", "Text", 760, false)
     local textW = text._msuf2Width or b.width or 720
@@ -525,13 +578,40 @@ local function BuildGFBars(ctx)
         SetOptionEnabled(showName, true)
         SetOptionEnabled(showHP, true)
         SetOptionEnabled(powerText, true)
+        if type(SetSectionHeaderStatus) == "function" then
+            if tab == "power" and not IsPowerTextEnabled() then
+                SetSectionHeaderStatus(text, {
+                    hint = "power text off",
+                    hintColor = { 0.92, 0.78, 0.66, 1 },
+                    bg = { 0.130, 0.072, 0.040, 0.50 },
+                    arrowColor = { 0.92, 0.58, 0.26, 1 },
+                })
+            else
+                SetSectionHeaderStatus(text, nil)
+            end
+        end
     end
     M.AddRefresher(ctx, refreshTextControls)
     refreshTextControls()
+    do
+        local entry = text and text._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = refreshTextControls end
+    end
 
     local healpred = b:CollapsibleSection("healpred", "Heal Prediction", 120, false)
     BindScopeToggle(ctx, W.Toggle(healpred, "Heal Prediction Overlay"), "healPredEnabled", false, "visual")
     W.Text(healpred, "Shows incoming heals as a lighter overlay on the health bar.", 14, -74, ctx.width - 28, T.colors.muted)
+    local function RefreshHealPredHeader()
+        if type(SetSectionHeaderStatus) ~= "function" then return end
+        local enabled = Bool(CurrentScope(), "healPredEnabled", false)
+        SetSectionHeaderStatus(healpred, nil)
+    end
+    M.AddRefresher(ctx, RefreshHealPredHeader)
+    RefreshHealPredHeader()
+    do
+        local entry = healpred and healpred._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshHealPredHeader end
+    end
 
     local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", 284, false)
     local dispelToggle = BindScopeToggle(ctx, W.Toggle(dispel, "Enable Dispel Overlay"), "dispelOverlayEnabled", true, "visual")
@@ -540,10 +620,25 @@ local function BuildGFBars(ctx)
     local dispelStyle = BindScopeDropdown(ctx, W.Dropdown(dispel, "Overlay style", DISPEL_OVERLAY_STYLES, 220), "dispelOverlayStyle", "FULL", "visual")
     local dispelCurrent = BindScopeToggle(ctx, W.Toggle(dispel, "Show on current health only"), "dispelOverlayOnHealth", true, "visual")
     local dispelAlpha = BindScopeSlider(ctx, W.Slider(dispel, "Overlay opacity", 0.05, 1, 0.05, 300), "dispelOverlayAlpha", 0.35, "visual")
-    M.AddRefresher(ctx, function()
+    local function RefreshDispelState()
         SetOptionsEnabled({ dispelStyle, dispelCurrent, dispelAlpha }, Bool(CurrentScope(), "dispelOverlayEnabled", true))
         SetOptionEnabled(dispelToggle, true)
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            local enabled = Bool(CurrentScope(), "dispelOverlayEnabled", true)
+            SetSectionHeaderStatus(dispel, enabled and nil or {
+                hint = "dispel overlay off",
+                hintColor = { 0.92, 0.78, 0.66, 1 },
+                bg = { 0.130, 0.072, 0.040, 0.50 },
+                arrowColor = { 0.92, 0.58, 0.26, 1 },
+            })
+        end
+    end
+    M.AddRefresher(ctx, RefreshDispelState)
+    RefreshDispelState()
+    do
+        local entry = dispel and dispel._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshDispelState end
+    end
 
     local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 276, false)
     local stripeToggle = BindScopeToggle(ctx, W.Toggle(stripe, "Enable Debuff Stripe"), "debuffStripeEnabled", false, "visual")
@@ -552,10 +647,23 @@ local function BuildGFBars(ctx)
     local stripeEdge = BindScopeDropdown(ctx, W.Dropdown(stripe, "Stripe edge", DEBUFF_STRIPE_EDGES, 220), "debuffStripeEdge", "BOTTOM", "visual")
     local stripeHeight = BindScopeSlider(ctx, W.Slider(stripe, "Stripe height", 1, 8, 1, 300), "debuffStripeHeight", 3, "visual")
     local stripeAlpha = BindScopeSlider(ctx, W.Slider(stripe, "Stripe opacity", 0.10, 1, 0.05, 300), "debuffStripeAlpha", 0.60, "visual")
-    M.AddRefresher(ctx, function()
+    local function RefreshStripeState()
         SetOptionsEnabled({ stripeEdge, stripeHeight, stripeAlpha }, Bool(CurrentScope(), "debuffStripeEnabled", false))
         SetOptionEnabled(stripeToggle, true)
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            local enabled = Bool(CurrentScope(), "debuffStripeEnabled", false)
+            SetSectionHeaderStatus(stripe, enabled and {
+                hint = "debuff stripe active",
+                hintColor = HeaderHintColor(),
+            } or nil)
+        end
+    end
+    M.AddRefresher(ctx, RefreshStripeState)
+    RefreshStripeState()
+    do
+        local entry = stripe and stripe._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshStripeState end
+    end
 
     local range = b:CollapsibleSection("range", "Range Fade", 190, false)
     local rangeToggle = BindScopeToggle(ctx, W.Toggle(range, "Enable Range Fade"), "rangeFadeEnabled", false, "visual")
@@ -622,10 +730,19 @@ local function BuildGFBars(ctx)
         function(v) return string.format("Offline Alpha: %.0f%%", (tonumber(v) or 0) * 100) end)
     PlaceRangeSlider(offlineAlpha, rangeRightX, -108, rangeRightWidth)
 
-    M.AddRefresher(ctx, function()
+    local function RefreshRangeState()
         SetOptionsEnabled({ rangeMode, rangeAlpha, offlineAlpha }, Bool(CurrentScope(), "rangeFadeEnabled", false))
         SetOptionEnabled(rangeToggle, true)
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            SetSectionHeaderStatus(range, nil)
+        end
+    end
+    M.AddRefresher(ctx, RefreshRangeState)
+    RefreshRangeState()
+    do
+        local entry = range and range._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshRangeState end
+    end
 
     if type(ApplyScopeEnabledGate) == "function" then
         M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)

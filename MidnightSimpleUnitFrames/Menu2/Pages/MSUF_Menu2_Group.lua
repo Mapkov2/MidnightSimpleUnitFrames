@@ -448,6 +448,103 @@ local function RefreshContext(ctx)
     end
 end
 
+local function SetSectionHeaderStatus(sec, opts)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if not entry then return end
+
+    T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open)
+    if entry.headerBg and entry.headerBg.SetColorTexture then
+        entry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
+    end
+    if entry.label and entry.label.SetTextColor and T.colors and T.colors.text then
+        local c = T.colors.text
+        entry.label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+    end
+
+    opts = opts or {}
+    if opts.bg and entry.headerBg and entry.headerBg.SetColorTexture then
+        local bg = opts.bg
+        entry.headerBg:SetColorTexture(bg[1] or 0.060, bg[2] or 0.070, bg[3] or 0.130, bg[4] or 0.48)
+    end
+    if opts.labelColor and entry.label and entry.label.SetTextColor then
+        local c = opts.labelColor
+        entry.label:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+    end
+    if opts.arrowColor and entry.arrow and entry.arrow.SetVertexColor then
+        local c = opts.arrowColor
+        entry.arrow:SetVertexColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+    end
+    if entry.hint and entry.hint.SetText then
+        if opts.hint ~= nil then
+            entry.hint:SetText(opts.hint)
+            if opts.hintColor and entry.hint.SetTextColor then
+                local c = opts.hintColor
+                entry.hint:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+            end
+        else
+            entry.hint:SetText(entry.open and "" or "click to expand")
+        end
+    end
+end
+
+local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
+    local notice = CreateFrame("Frame", nil, sec)
+    notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, topY)
+    notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, topY)
+    notice:SetHeight(24)
+    notice._msuf2GroupFrameGateAlwaysEnabled = true
+
+    local bg = notice:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
+    local top = notice:CreateTexture(nil, "BORDER")
+    top:SetPoint("TOPLEFT", notice, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", notice, "TOPRIGHT", 0, 0)
+    top:SetHeight(1)
+    top:SetColorTexture(0.16, 0.34, 0.66, 0.55)
+    local bottom = notice:CreateTexture(nil, "BORDER")
+    bottom:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
+    bottom:SetHeight(1)
+    bottom:SetColorTexture(0.10, 0.20, 0.38, 0.48)
+
+    local text = T.Font(notice, "GameFontDisableSmall", "", T.colors.dim)
+    text:SetPoint("LEFT", notice, "LEFT", 10, 0)
+    text:SetJustifyH("LEFT")
+
+    local button
+    if buttonLabel and buttonLabel ~= "" then
+        button = (W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, buttonLabel, buttonWidth or 92, 20))) or T.Button(notice, buttonLabel, buttonWidth or 92, 20)
+        button:SetPoint("RIGHT", notice, "RIGHT", -2, 0)
+        button._msuf2GroupFrameGateAlwaysEnabled = true
+        text:SetPoint("RIGHT", notice, "RIGHT", -(buttonWidth or 92) - 18, 0)
+    else
+        text:SetPoint("RIGHT", notice, "RIGHT", -10, 0)
+    end
+
+    function notice:SetTone(kind)
+        if kind == "warning" then
+            bg:SetColorTexture(0.150, 0.084, 0.038, 0.34)
+            top:SetColorTexture(0.72, 0.36, 0.18, 0.65)
+            bottom:SetColorTexture(0.40, 0.22, 0.10, 0.55)
+            if text.SetTextColor then text:SetTextColor(0.92, 0.82, 0.72, 1) end
+        else
+            bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
+            top:SetColorTexture(0.16, 0.34, 0.66, 0.55)
+            bottom:SetColorTexture(0.10, 0.20, 0.38, 0.48)
+            if text.SetTextColor then text:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1) end
+        end
+    end
+
+    function notice:SetMessage(message, tone)
+        self:SetTone(tone)
+        text:SetText(tostring(message or ""))
+    end
+
+    notice:Hide()
+    return notice, text, button
+end
+
 local function ScopeSection(ctx, builder)
     local compactTop = (tonumber(builder.width) or 0) < 600
     local h = compactTop and 72 or 40
@@ -1654,3 +1751,5 @@ GroupPage.BindNestedDropdown = BindNestedDropdown
 GroupPage.SetOptionEnabled = SetOptionEnabled
 GroupPage.SetOptionsEnabled = SetOptionsEnabled
 GroupPage.ApplyScopeEnabledGate = ApplyScopeEnabledGate
+GroupPage.SetSectionHeaderStatus = SetSectionHeaderStatus
+GroupPage.CreateSectionNotice = CreateSectionNotice

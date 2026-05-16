@@ -236,7 +236,7 @@ function W.PageBuilder(ctx)
         }
         local function RefreshHeaderLayout()
             local headerW = (header.GetWidth and header:GetWidth()) or self.width or 240
-            local reserve = math.max(72, math.min(110, math.floor(headerW * 0.34 + 0.5)))
+            local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
             if not entry._msuf2ManualHintLayout then
                 hint:ClearAllPoints()
                 hint:SetPoint("RIGHT", header, "RIGHT", -12, 0)

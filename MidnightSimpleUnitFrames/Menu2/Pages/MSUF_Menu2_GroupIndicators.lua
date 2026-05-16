@@ -93,6 +93,11 @@ local BindNestedDropdown = GP.BindNestedDropdown
 local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
+local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+
+local function HeaderHintColor()
+    return { 0.45, 0.52, 0.65, 1 }
+end
 local function BuildGFIndicators(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -193,7 +198,7 @@ local function BuildGFIndicators(ctx)
     local groupNumberControls = { groupNumberSize, groupNumberAnchor, groupNumberX, groupNumberY }
     local focusControls = { focusSize, focusColor }
     local groupBorderControls = { groupBorderSize, groupBorderPadding, groupBorderColor }
-    M.AddRefresher(ctx, function()
+    local function RefreshIndicatorsState()
         local groupNumberEnabled = Bool(CurrentScope(), "showGroupNumber", false)
         SetOptionsEnabled(groupNumberControls, groupNumberEnabled)
         SetOptionEnabled(groupNumberToggle, true)
@@ -212,7 +217,14 @@ local function BuildGFIndicators(ctx)
         local groupBorderEnabled = Bool(CurrentScope(), "groupBorderEnabled", false)
         SetOptionsEnabled(groupBorderControls, groupBorderEnabled)
         SetOptionEnabled(groupBorderToggle, true)
-    end)
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(indicators, nil) end
+    end
+    M.AddRefresher(ctx, RefreshIndicatorsState)
+    RefreshIndicatorsState()
+    do
+        local entry = indicators and indicators._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshIndicatorsState end
+    end
 
     local sicons = b:CollapsibleSection("sicons", "Status Icons", 444, false)
     local siconW = sicons._msuf2Width or ctx.width or 720
@@ -364,7 +376,7 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(statusLayer, sicons, siconRightX, -394, siconRightW, "LEFT")
 
-    M.AddRefresher(ctx, function()
+    local function RefreshStatusIconState()
         local spec = CurrentGFStatusSpec()
         local enabled = Bool(CurrentScope(), spec.enabled, true)
         SetOptionEnabled(statusSize, enabled)
@@ -376,7 +388,26 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(previewCurrent, spec ~= nil)
         SetOptionEnabled(previewAll, true)
         SetOptionEnabled(midnightStyle, true)
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            local label = (spec and (spec.text or spec.label or spec.value)) or "selected indicator"
+            if enabled then
+                SetSectionHeaderStatus(sicons, nil)
+            else
+                SetSectionHeaderStatus(sicons, {
+                    hint = "selected indicator off",
+                    hintColor = { 0.92, 0.78, 0.66, 1 },
+                    bg = { 0.130, 0.072, 0.040, 0.50 },
+                    arrowColor = { 0.92, 0.58, 0.26, 1 },
+                })
+            end
+        end
+    end
+    M.AddRefresher(ctx, RefreshStatusIconState)
+    RefreshStatusIconState()
+    do
+        local entry = sicons and sicons._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshStatusIconState end
+    end
 
     local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 824, false)
     local siW = spells._msuf2Width or ctx.width or 720
@@ -966,7 +997,7 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(placedCooldownSize, spells, siRightX, -754, siRightW, "LEFT")
 
-    M.AddRefresher(ctx, function()
+    local function RefreshSpellIndicatorState()
         EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
         RefreshSpellTiles()
         local multi = SpellIndicators(CurrentScope()).spec == "multi"
@@ -1002,7 +1033,24 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(framePriority, hasFrame)
         SetOptionEnabled(frameAlpha, hasFrame and (frameKind == "healthtint" or frameKind == "pulse"))
         SetOptionEnabled(frameThickness, hasFrame and (frameKind == "border" or frameKind == "glow"))
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            local enabled = SpellIndicators(CurrentScope()).enabled == true
+            if enabled then
+                SetSectionHeaderStatus(spells, hasSpell and nil or {
+                    hint = "no spell selected",
+                    hintColor = HeaderHintColor(),
+                })
+            else
+                SetSectionHeaderStatus(spells, nil)
+            end
+        end
+    end
+    M.AddRefresher(ctx, RefreshSpellIndicatorState)
+    RefreshSpellIndicatorState()
+    do
+        local entry = spells and spells._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshSpellIndicatorState end
+    end
 
     local corners = b:CollapsibleSection("ci", "Corner Indicators", 620, false)
     local cornerW = corners._msuf2Width or ctx.width or 720
@@ -1137,7 +1185,7 @@ local function BuildGFIndicators(ctx)
     local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506, rightW, T.colors.dim)
     if customHelp.SetWordWrap then customHelp:SetWordWrap(true) end
 
-    M.AddRefresher(ctx, function()
+    local function RefreshCornerIndicatorState()
         local slot = CurrentCISlot()
         local category = Val(CurrentScope(), "ciSlot" .. slot, CI_SLOT_DEFAULTS[slot] or "none")
         local showCustom = category == "custom"
@@ -1161,7 +1209,28 @@ local function BuildGFIndicators(ctx)
             customStatus:SetText(M.Format("%s is set to %s. Set Selected Slot Indicator to Custom Spell to activate this editor.", slotLabel, tostring(category or "none")))
             customStatus:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.90)
         end
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            if enabled then
+                SetSectionHeaderStatus(corners, showCustom and {
+                    hint = slotLabel .. " custom spell",
+                    hintColor = HeaderHintColor(),
+                } or nil)
+            else
+                SetSectionHeaderStatus(corners, {
+                    hint = "corner indicators off",
+                    hintColor = { 0.92, 0.78, 0.66, 1 },
+                    bg = { 0.130, 0.072, 0.040, 0.50 },
+                    arrowColor = { 0.92, 0.58, 0.26, 1 },
+                })
+            end
+        end
+    end
+    M.AddRefresher(ctx, RefreshCornerIndicatorState)
+    RefreshCornerIndicatorState()
+    do
+        local entry = corners and corners._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshCornerIndicatorState end
+    end
 
     if type(ApplyScopeEnabledGate) == "function" then
         M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)

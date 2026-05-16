@@ -83,6 +83,23 @@ local BindNestedDropdown = GP.BindNestedDropdown
 local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
+local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+local CreateSectionNotice = GP.CreateSectionNotice
+
+local function ScopeLabel()
+    local scope = CurrentScope() or "party"
+    for i = 1, #SCOPE_VALUES do
+        local info = SCOPE_VALUES[i]
+        if info and info.value == scope then return info.text or scope end
+    end
+    return tostring(scope)
+end
+
+local function TooltipModeHint(mode)
+    if mode == "OFF" then return "tooltip hidden" end
+    if mode == "MODIFIER" then return "hold modifier to show" end
+    return "tooltip always visible"
+end
 local function BuildGFLayout(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -122,14 +139,44 @@ local function BuildGFLayout(ctx)
     W.MoveWidget(hideOfflineEnabled, general, generalLeftX, -240)
     W.MoveWidget(hideOfflineCombat, general, generalRightX, -240)
     W.MoveWidget(hideOffline, general, generalLeftX, -274, offlineSliderW, "LEFT")
+    local generalNotice, _, generalNoticeButton = CreateSectionNotice and CreateSectionNotice(general, -304, "Enable Scope", 104)
+    if generalNoticeButton then
+        generalNoticeButton:SetScript("OnClick", function()
+            Set(CurrentScope(), "enabled", true, "rebuild")
+        end)
+    end
 
     local function RefreshHideOfflineState()
         local enabled = Bool(CurrentScope(), "hideOfflineEnabled", false)
         SetOptionEnabled(hideOfflineCombat, enabled)
         SetOptionEnabled(hideOffline, enabled)
+        if type(SetSectionHeaderStatus) == "function" then
+            local scopeEnabled = Bool(CurrentScope(), "enabled", false)
+            if not scopeEnabled then
+                SetSectionHeaderStatus(general, {
+                    hint = "scope disabled",
+                    hintColor = { 0.92, 0.78, 0.66, 1 },
+                    bg = { 0.130, 0.072, 0.040, 0.50 },
+                    arrowColor = { 0.92, 0.58, 0.26, 1 },
+                })
+            else
+                SetSectionHeaderStatus(general, nil)
+            end
+        end
+        if generalNotice then
+            local scopeEnabled = Bool(CurrentScope(), "enabled", false)
+            generalNotice:SetShown(not scopeEnabled)
+            if not scopeEnabled then
+                generalNotice:SetMessage(ScopeLabel() .. " group frames are disabled. Blizzard frames stay in control.", "warning")
+            end
+        end
     end
     M.AddRefresher(ctx, RefreshHideOfflineState)
     RefreshHideOfflineState()
+    do
+        local entry = general and general._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshHideOfflineState end
+    end
 
     local layout = b:CollapsibleSection("layout", "Layout", 450, false)
     local layoutW = layout._msuf2Width or b.width or 720
@@ -151,9 +198,23 @@ local function BuildGFLayout(ctx)
     W.MoveWidget(preserveRaidGroups, layout, layoutLeftX, -360)
     local function RefreshRaidGroupLayoutState()
         SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
+        if type(SetSectionHeaderStatus) == "function" then
+            local hint
+            if CurrentScope() ~= "party" and Bool(CurrentScope(), "preserveRaidGroups", false) then
+                hint = "preserve raid groups"
+            end
+            SetSectionHeaderStatus(layout, hint and {
+                hint = hint,
+                hintColor = { 0.45, 0.52, 0.65, 1 },
+            } or nil)
+        end
     end
     M.AddRefresher(ctx, RefreshRaidGroupLayoutState)
     RefreshRaidGroupLayoutState()
+    do
+        local entry = layout and layout._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshRaidGroupLayoutState end
+    end
 
     local sorting = b:CollapsibleSection("sorting", "Sorting", 300, false)
     local sortingW = sorting._msuf2Width or b.width or 720
@@ -217,8 +278,19 @@ local function BuildGFLayout(ctx)
             if roleRows.Refresh then roleRows.Refresh() end
             if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(enabled) end
         end
+        if type(SetSectionHeaderStatus) == "function" then
+            SetSectionHeaderStatus(sorting, enabled and {
+                hint = "role sorting active",
+                hintColor = { 0.45, 0.52, 0.65, 1 },
+            } or nil)
+        end
     end
     M.AddRefresher(ctx, refreshSortingControls)
+    refreshSortingControls()
+    do
+        local entry = sorting and sorting._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = refreshSortingControls end
+    end
 
     local scale = b:CollapsibleSection("scaling", "Frame Scaling", 380, false)
     local scaleW = scale._msuf2Width or b.width or 720
@@ -322,9 +394,25 @@ local function BuildGFLayout(ctx)
             end
         end
         if scaleHint then scaleHint:SetAlpha((manualOn or autoOn) and 1 or 0.55) end
+        if type(SetSectionHeaderStatus) == "function" then
+            local hint = nil
+            if autoOn then
+                hint = "auto scale by group size"
+            elseif manualOn then
+                hint = "manual scale"
+            end
+            SetSectionHeaderStatus(scale, hint and {
+                hint = hint,
+                hintColor = { 0.45, 0.52, 0.65, 1 },
+            } or nil)
+        end
     end
     M.AddRefresher(ctx, RefreshScalingState)
     RefreshScalingState()
+    do
+        local entry = scale and scale._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshScalingState end
+    end
 
     local transparency = b:CollapsibleSection("border", "Transparency", 310, false)
     local transparencyW = transparency._msuf2Width or b.width or 720
@@ -546,6 +634,28 @@ local function BuildGFLayout(ctx)
     end)
 
     M.AddRefresher(ctx, RefreshCustomAnchorBox)
+    local function RefreshAnchorHeader()
+        if type(SetSectionHeaderStatus) ~= "function" then return end
+        local target = Conf(CurrentScope()).anchorToFrame
+        local hint
+        if IsStandardAnchorTarget(target) then
+            if target and target ~= "" and target ~= "FREE" and target ~= "player" then
+                hint = "anchored to " .. tostring(target)
+            end
+        else
+            hint = "custom anchor: " .. tostring(target)
+        end
+        SetSectionHeaderStatus(anchor, hint and {
+            hint = hint,
+            hintColor = { 0.45, 0.52, 0.65, 1 },
+        } or nil)
+    end
+    M.AddRefresher(ctx, RefreshAnchorHeader)
+    RefreshAnchorHeader()
+    do
+        local entry = anchor and anchor._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshAnchorHeader end
+    end
 
     local tooltip = b:CollapsibleSection("tooltip", "Tooltip", 150, false)
     local tooltipW = tooltip._msuf2Width or b.width or 720
@@ -567,9 +677,20 @@ local function BuildGFLayout(ctx)
     W.MoveWidget(tooltipModifier, tooltip, tooltipRightX, -54, tooltipRightW, "LEFT")
     refreshTooltipState = function()
         SetOptionEnabled(tooltipModifier, Val(CurrentScope(), "tooltipMode", "ALWAYS") == "MODIFIER")
+        if type(SetSectionHeaderStatus) == "function" then
+            local mode = Val(CurrentScope(), "tooltipMode", "ALWAYS")
+            SetSectionHeaderStatus(tooltip, mode ~= "ALWAYS" and {
+                hint = TooltipModeHint(mode),
+                hintColor = { 0.45, 0.52, 0.65, 1 },
+            } or nil)
+        end
     end
     M.AddRefresher(ctx, refreshTooltipState)
     refreshTooltipState()
+    do
+        local entry = tooltip and tooltip._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = refreshTooltipState end
+    end
 
     if type(ApplyScopeEnabledGate) == "function" then
         M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)

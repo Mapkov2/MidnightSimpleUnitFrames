@@ -106,6 +106,11 @@ local BindNestedDropdown = GP.BindNestedDropdown
 local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
+local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+
+local function HeaderHintColor()
+    return { 0.45, 0.52, 0.65, 1 }
+end
 local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -259,7 +264,7 @@ local function BuildGFAuras(ctx)
     local posLabel = W.Text(renderer, "Blizzard-Controlled Position", 350, -362, 260, T.colors.text)
     local posHint = W.Text(renderer, "Blizzard controls this aura block, so MSUF cannot drag it. Switch to MSUF Custom mode if you want full positioning control. The preview marks the Blizzard-owned area.", 350, -382, 330, T.colors.muted)
 
-    M.AddRefresher(ctx, function()
+    local function RefreshRendererState()
         local native = (AurasRoot(CurrentScope()).renderer or "BLIZZARD") ~= "CUSTOM"
         SetOptionsEnabled({ buffChk, debuffChk, dispelChk, extChk, cdTextChk, privateChk, iconSize, buffMax, debuffMax, orgMode, strataMode, containerLevel, privateLayerFix }, native)
         SetOptionEnabled(rendererMode, true)
@@ -270,7 +275,19 @@ local function BuildGFAuras(ctx)
         posLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         layerHint:SetTextColor((native and T.colors.muted or T.colors.dim)[1], (native and T.colors.muted or T.colors.dim)[2], (native and T.colors.muted or T.colors.dim)[3], native and 1 or 0.75)
         posHint:SetTextColor((native and T.colors.muted or T.colors.dim)[1], (native and T.colors.muted or T.colors.dim)[2], (native and T.colors.muted or T.colors.dim)[3], native and 1 or 0.75)
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            SetSectionHeaderStatus(renderer, (not native) and {
+                hint = "MSUF Custom mode",
+                hintColor = HeaderHintColor(),
+            } or nil)
+        end
+    end
+    M.AddRefresher(ctx, RefreshRendererState)
+    RefreshRendererState()
+    do
+        local entry = renderer and renderer._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshRendererState end
+    end
 
     local AURA_POSITION_ANCHORS = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
     local AURA_GROWTH_VALUES = (#SPELL_GROWTH_VALUES > 0 and SPELL_GROWTH_VALUES) or {
@@ -724,7 +741,7 @@ local function BuildGFAuras(ctx)
         stackChildren[#stackChildren + 1] = stackX
         stackChildren[#stackChildren + 1] = stackY
 
-        M.AddRefresher(ctx, function()
+        local function RefreshAuraGroupState()
             local cfg = AuraGroup(CurrentScope(), groupKey)
             local groupEnabled = cfg.enabled ~= false
             SetOptionsEnabled(controls, groupEnabled)
@@ -733,7 +750,25 @@ local function BuildGFAuras(ctx)
             SetOptionEnabled(enable, true)
             SetOptionEnabled(showCooldown, groupEnabled)
             SetOptionEnabled(showStacks, groupEnabled)
-        end)
+            if type(SetSectionHeaderStatus) == "function" then
+                if groupEnabled then
+                    SetSectionHeaderStatus(section, nil)
+                else
+                    SetSectionHeaderStatus(section, {
+                        hint = string.lower(title) .. " off",
+                        hintColor = { 0.92, 0.78, 0.66, 1 },
+                        bg = { 0.130, 0.072, 0.040, 0.50 },
+                        arrowColor = { 0.92, 0.58, 0.26, 1 },
+                    })
+                end
+            end
+        end
+        M.AddRefresher(ctx, RefreshAuraGroupState)
+        RefreshAuraGroupState()
+        do
+            local entry = section and section._msuf2CollapsibleEntry
+            if entry then entry._msuf2RefreshState = RefreshAuraGroupState end
+        end
     end
 
     BuildAuraGroupSection("buff", "Buffs")
@@ -960,7 +995,7 @@ local function BuildGFAuras(ctx)
 
     local textColorControls = { colorByTime, safeColor, warningColor, urgentColor, resetColors, safeSeconds, warningSeconds, urgentSeconds }
     local bucketControls = { warningColor, urgentColor, warningSeconds, urgentSeconds }
-    M.AddRefresher(ctx, function()
+    local function RefreshTextColorState()
         local customIcons = HasCustomIconAuraGroups()
         local bucketsOn = GeneralDB().gfAurasCooldownTextUseBuckets ~= false
         SetOptionsEnabled(textColorControls, customIcons)
@@ -986,7 +1021,25 @@ local function BuildGFAuras(ctx)
             if sample.value then sample.value:SetTextColor(r, g, bcol, alpha) end
             if sample.box and sample.box.SetAlpha then sample.box:SetAlpha(customIcons and 1 or 0.45) end
         end
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            if customIcons then
+                SetSectionHeaderStatus(textcolor, nil)
+            else
+                SetSectionHeaderStatus(textcolor, {
+                    hint = "only for custom aura icons",
+                    hintColor = { 0.92, 0.78, 0.66, 1 },
+                    bg = { 0.130, 0.072, 0.040, 0.50 },
+                    arrowColor = { 0.92, 0.58, 0.26, 1 },
+                })
+            end
+        end
+    end
+    M.AddRefresher(ctx, RefreshTextColorState)
+    RefreshTextColorState()
+    do
+        local entry = textcolor and textcolor._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshTextColorState end
+    end
 
     local priv = b:CollapsibleSection("priv", "Private Auras", 298, false)
     local privEnable = BindNestedToggle(ctx, W.Toggle(priv, "Enable private auras"), function() return PrivateAuras(CurrentScope()) end, "enabled", true, "visual")
@@ -1025,10 +1078,25 @@ local function BuildGFAuras(ctx)
     W.LabelAt(priv, "Text", privLeftX, -240, privLeftW, "GameFontNormalSmall", T.colors.accent)
     W.MoveWidget(privCountdown, priv, privLeftX, -266)
     W.MoveWidget(privNumbers, priv, privRightX, -266)
-    M.AddRefresher(ctx, function()
+    local function RefreshPrivateAuraState()
         SetOptionsEnabled(privControls, PrivateAuras(CurrentScope()).enabled ~= false)
         SetOptionEnabled(privEnable, true)
-    end)
+        if type(SetSectionHeaderStatus) == "function" then
+            local enabled = PrivateAuras(CurrentScope()).enabled ~= false
+            SetSectionHeaderStatus(priv, enabled and nil or {
+                hint = "private auras off",
+                hintColor = { 0.92, 0.78, 0.66, 1 },
+                bg = { 0.130, 0.072, 0.040, 0.50 },
+                arrowColor = { 0.92, 0.58, 0.26, 1 },
+            })
+        end
+    end
+    M.AddRefresher(ctx, RefreshPrivateAuraState)
+    RefreshPrivateAuraState()
+    do
+        local entry = priv and priv._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshPrivateAuraState end
+    end
 
     local style = b:CollapsibleSection("masque", "Cooldown Style", 166, false)
     BindScopeToggle(ctx, W.Toggle(style, "Cooldown darkens on loss"), "cooldownSwipeDarkenOnLoss", false, "visual")
@@ -1048,11 +1116,38 @@ local function BuildGFAuras(ctx)
             end
         end)
     BindNestedToggle(ctx, W.Toggle(style, "Dynamic icon scale"), function() return AurasRoot(CurrentScope()) end, "dynamicScale", false, "geometry")
+    local function RefreshStyleHeader()
+        if type(SetSectionHeaderStatus) ~= "function" then return end
+        SetSectionHeaderStatus(style, Bool(CurrentScope(), "masqueEnabled", false) and {
+            hint = "masque skin active",
+            hintColor = HeaderHintColor(),
+        } or nil)
+    end
+    M.AddRefresher(ctx, RefreshStyleHeader)
+    RefreshStyleHeader()
+    do
+        local entry = style and style._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshStyleHeader end
+    end
 
     local utilities = b:CollapsibleSection("autil", "Aura Utilities", 180, false)
     BindNestedToggle(ctx, W.Toggle(utilities, "Show tooltip on auras"), function() return AurasRoot(CurrentScope()) end, "showTooltip", true, "visual")
     BindNestedToggle(ctx, W.Toggle(utilities, "Sort by duration"), function() return AurasRoot(CurrentScope()) end, "sortByDuration", false, "visual")
     BindNestedToggle(ctx, W.Toggle(utilities, "Prefer player auras"), function() return AurasRoot(CurrentScope()) end, "preferPlayer", true, "visual")
+    local function RefreshUtilityHeader()
+        if type(SetSectionHeaderStatus) ~= "function" then return end
+        local auraRoot = AurasRoot(CurrentScope())
+        SetSectionHeaderStatus(utilities, (auraRoot and auraRoot.sortByDuration) and {
+            hint = "sorted by duration",
+            hintColor = HeaderHintColor(),
+        } or nil)
+    end
+    M.AddRefresher(ctx, RefreshUtilityHeader)
+    RefreshUtilityHeader()
+    do
+        local entry = utilities and utilities._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshUtilityHeader end
+    end
 
     if type(ApplyScopeEnabledGate) == "function" then
         M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)

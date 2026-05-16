@@ -202,11 +202,15 @@ local function SetSectionHeaderStatus(sec, opts)
         local c = opts.arrowColor
         entry.arrow:SetVertexColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
     end
-    if opts.hint and entry.hint and entry.hint.SetText then
-        entry.hint:SetText(opts.hint)
-        if opts.hintColor and entry.hint.SetTextColor then
-            local c = opts.hintColor
-            entry.hint:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+    if entry.hint and entry.hint.SetText then
+        if opts.hint ~= nil then
+            entry.hint:SetText(opts.hint)
+            if opts.hintColor and entry.hint.SetTextColor then
+                local c = opts.hintColor
+                entry.hint:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+            end
+        else
+            entry.hint:SetText(entry.open and "" or M.Tr("click to expand"))
         end
     end
 end
@@ -346,10 +350,10 @@ local function BuildPreview(ctx, builder, unit)
     end
 
     local function RefreshPreviewState()
-        SetSectionHeaderStatus(sec, {
-            hint = IsEditModeActive() and M.Tr("drag in preview") or M.Tr("enter Edit Mode to drag"),
-            hintColor = IsEditModeActive() and { 0.40, 0.80, 0.98, 1 } or { 0.45, 0.52, 0.65, 1 },
-        })
+        SetSectionHeaderStatus(sec, IsEditModeActive() and {
+            hint = M.Tr("drag in preview"),
+            hintColor = { 0.40, 0.80, 0.98, 1 },
+        } or nil)
         if box:IsShown() then RefreshThisPreview("MSUF2_UNIT_PAGE") end
     end
     local entry = sec and sec._msuf2CollapsibleEntry
@@ -956,7 +960,7 @@ local function BuildLayout(ctx, builder, unit)
         local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
         current:SetText("Current custom anchor: " .. (custom ~= "" and custom or "none"))
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
-        local hint = "Global anchor"
+        local hint = nil
         if custom ~= "" then
             hint = "Custom anchor"
         else
@@ -1751,10 +1755,6 @@ local function BuildPortrait(ctx, builder, unit)
                 labelColor = { 0.92, 0.88, 0.82, 1 },
                 arrowColor = { 0.92, 0.62, 0.22, 1 },
             })
-        elseif classRender then
-            SetSectionHeaderStatus(sec, { hint = "Class portrait style active", hintColor = { 0.58, 0.68, 0.82, 1 } })
-        elseif hasBorder then
-            SetSectionHeaderStatus(sec, { hint = "Border enabled", hintColor = { 0.58, 0.68, 0.82, 1 } })
         else
             SetSectionHeaderStatus(sec, nil)
         end
@@ -1937,7 +1937,7 @@ local function BuildPower(ctx, builder, unit)
         else
             powerNotice:Hide()
             if detachedOn then
-                SetSectionHeaderStatus(sec, { hint = "Detached from frame", hintColor = { 0.58, 0.68, 0.82, 1 } })
+                SetSectionHeaderStatus(sec, { hint = "Detached", hintColor = { 0.58, 0.68, 0.82, 1 } })
             else
                 SetSectionHeaderStatus(sec, nil)
             end
@@ -2260,8 +2260,6 @@ local function BuildStatus(ctx, builder, unit)
                 labelColor = { 0.92, 0.88, 0.82, 1 },
                 arrowColor = { 0.92, 0.62, 0.22, 1 },
             })
-        elseif spec then
-            SetSectionHeaderStatus(sec, { hint = spec.text or spec.value or "Indicator", hintColor = { 0.58, 0.68, 0.82, 1 } })
         else
             SetSectionHeaderStatus(sec, nil)
         end
@@ -2303,7 +2301,7 @@ local function BuildLoadConditions(ctx, builder, unit)
         if activeCount > 0 then
             SetSectionHeaderStatus(sec, { hint = tostring(activeCount) .. " active", hintColor = { 0.78, 0.68, 0.56, 1 } })
         else
-            SetSectionHeaderStatus(sec, { hint = "Always visible", hintColor = { 0.58, 0.68, 0.82, 1 } })
+            SetSectionHeaderStatus(sec, nil)
         end
     end
     local entry = sec and sec._msuf2CollapsibleEntry
