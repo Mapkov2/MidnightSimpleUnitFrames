@@ -934,11 +934,12 @@ local _gfFlushDirtyAuras
 local function SpellIndicatorsNeedRefresh(f, updateInfo)
     if not updateInfo or updateInfo.isFullUpdate then return true end
 
+    if GF.SpellIndicatorsUnitAuraRelevant then
+        return GF.SpellIndicatorsUnitAuraRelevant(f, f and f.unit, f and f._msufGFKind or "party", updateInfo)
+    end
+
     local added = updateInfo.addedAuras
     if added and #added > 0 then
-        if GF.SpellIndicatorsUnitAuraRelevant then
-            return GF.SpellIndicatorsUnitAuraRelevant(f, f and f.unit, f and f._msufGFKind or "party", updateInfo)
-        end
         return true
     end
 
@@ -1741,15 +1742,16 @@ function GF.BuildFrameCache(f)
     c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and not c.nativeBlizzardDispels
     c.siEn       = auraMasterOn and conf.spellIndicators and conf.spellIndicators.enabled == true
     c.healerBuffsEn = auraMasterOn and conf.healerBuffs and conf.healerBuffs.enabled == true and not c.siEn
+    local customBuffs = auraMasterOn and auras.buff and auras.buff.enabled ~= false and not c.nativeBlizzardBuffs
+    local customDebuffs = auraMasterOn and auras.debuff and auras.debuff.enabled ~= false and not c.nativeBlizzardDebuffs
+    local customExt = auraMasterOn and auras.externals and auras.externals.enabled ~= false and not c.nativeBlizzardExt
+    local customDispels = auraMasterOn and c.dispelScan and GF._playerCanDispel
+
     c.nativeBlizzardAuras = c.aurasOn and (
                    c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs
                    or c.nativeBlizzardExt or c.nativeBlizzardDispels
                    or c.nativeBlizzardPrivate)
-    c.customAuraGrp = c.aurasOn and (
-                   (auras.debuff and auras.debuff.enabled ~= false and not c.nativeBlizzardDebuffs) or
-                   (auras.buff and auras.buff.enabled ~= false and not c.nativeBlizzardBuffs) or
-                   (auras.externals and auras.externals.enabled ~= false and not c.nativeBlizzardExt) or
-                   (c.dispelScan and GF._playerCanDispel))
+    c.customAuraGrp = customBuffs or customDebuffs or customExt or customDispels
     c.anyAuraGrp = c.nativeBlizzardAuras or c.customAuraGrp
     c.nativeBlizzardAuraOnly = c.nativeBlizzardAuras and not c.customAuraGrp
     c.auraCacheSig = nil
@@ -2629,7 +2631,7 @@ local function UpdateTargetIndicator(f, unit)
         return
     end
 
-    local isTarget = UnitIsUnit and UnitIsUnit(unit, "target")
+    local isTarget = UnitIsUnit and _UnsecretBool(UnitIsUnit(unit, "target")) == true
     if isTarget then
         _applyHighlightBorderStyle(border, nil,
             c.tgtSize or 2,
@@ -4764,7 +4766,7 @@ function GF.RegisterUnitEvents(f, unit)
     end
     if powerEvents then
         f:RegisterUnitEvent("UNIT_POWER_UPDATE", unit);  regTbl["UNIT_POWER_UPDATE"] = true
-        if c.powFrequent and UnitIsUnit and UnitIsUnit(unit, "player") then
+        if c.powFrequent and UnitIsUnit and _UnsecretBool(UnitIsUnit(unit, "player")) == true then
             f:RegisterUnitEvent("UNIT_POWER_FREQUENT", unit); regTbl["UNIT_POWER_FREQUENT"] = true
         end
         f:RegisterUnitEvent("UNIT_MAXPOWER", unit);      regTbl["UNIT_MAXPOWER"] = true
@@ -5264,9 +5266,12 @@ do
     do
         local function CB(f, changedUnit)
             local c = f and f._c
-            if c and c.statusTextEn and f.unit and UnitExists(f.unit)
-                and (f.unit == changedUnit or (UnitIsUnit and UnitIsUnit(f.unit, changedUnit)))
-            then
+            if not (c and c.statusTextEn and f.unit and UnitExists(f.unit)) then return end
+            local sameUnit = (f.unit == changedUnit)
+            if not sameUnit and UnitIsUnit then
+                sameUnit = _UnsecretBool(UnitIsUnit(f.unit, changedUnit)) == true
+            end
+            if sameUnit then
                 UpdateStatusText(f, f.unit, true)
             end
         end
