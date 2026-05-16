@@ -2,14 +2,6 @@
 
 ## 5.2 Beta 3 - 2026-05-16
 
-### Performance
-
-<!-- MSUF-AUTO-CHANGELOG:Performance:START -->
-- Improved performance for Group Frames.
-- Improved performance for menu and dashboard.
-- Improved menu preview handling so test mode is cleaned up when leaving the menu.
-<!-- MSUF-AUTO-CHANGELOG:Performance:END -->
-
 ### Bugfixes
 
 <!-- MSUF-AUTO-CHANGELOG:Bugfixes:START -->
@@ -20,25 +12,8 @@
 ### Changes / Improvements
 
 <!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
-- Improved Not tracking long raidbuffs anymore in group frames.
-- Improved Turn off test mode if you leave main menu.
 - Improved menu preview handling so test mode is cleaned up when leaving the menu.
 <!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
-
-### Release / Tooling
-
-<!-- MSUF-AUTO-CHANGELOG:Release-Tooling:START -->
-- Improved Group Frame range, highlight, and visibility behavior.
-- Improved release tooling and changelog generation.
-<!-- MSUF-AUTO-CHANGELOG:Release-Tooling:END -->
-
-### Documentation
-
-<!-- MSUF-AUTO-CHANGELOG:Documentation:START -->
-- Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly.
-- Improved Group Frame range, highlight, and visibility behavior.
-- Improved class-colored bar backgrounds across unit and group frames.
-<!-- MSUF-AUTO-CHANGELOG:Documentation:END -->
 
 ## 5.2 Beta 2 - 2026-05-16
 
