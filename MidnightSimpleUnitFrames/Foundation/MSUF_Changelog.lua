@@ -5,8 +5,8 @@ ns = ns or {}
 
 local data = {
     currentVersion = "5.2",
-    previousVersion = "5.2-beta7",
-    rangeLabel = "5.2-beta7 -> 5.2",
+    previousVersion = "",
+    rangeLabel = "5.2",
     entries = {
         {
             version = "5.2",
@@ -82,12 +82,6 @@ local data = {
                         "Cleaned up titles.",
                     },
                 },
-            },
-        },
-        {
-            version = "5.2-beta7",
-            date = "2026-05-16",
-            sections = {
             },
         },
     },
