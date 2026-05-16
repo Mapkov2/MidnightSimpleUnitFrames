@@ -732,7 +732,7 @@ local function BuildLayout(ctx, builder, unit)
 end
 
 local function BuildText(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("text", "Text", 560, false)
+    local sec = builder:CollapsibleSection("text", "Text", 760, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 24
     local rightX = math.max(430, floor(sectionW * 0.52))
@@ -770,6 +770,27 @@ local function BuildText(ctx, builder, unit)
         local key = M.unitTextTabSelection[unit] or "name"
         if key ~= "name" and key ~= "hp" and key ~= "power" and key ~= "advanced" then key = "name" end
         return key
+    end
+    M.unitTextSlotSelection = M.unitTextSlotSelection or {}
+    local function CurrentSlot(kind)
+        local unitSlots = M.unitTextSlotSelection[unit]
+        local slot = unitSlots and unitSlots[kind] or "center"
+        if slot ~= "left" and slot ~= "center" and slot ~= "right" then slot = "center" end
+        return slot
+    end
+    local function SetCurrentSlot(kind, slot)
+        M.unitTextSlotSelection[unit] = M.unitTextSlotSelection[unit] or {}
+        M.unitTextSlotSelection[unit][kind] = slot or "center"
+    end
+    local function SlotOffsetKeys(kind)
+        local slot = CurrentSlot(kind)
+        local prefix
+        if kind == "hp" then
+            prefix = (slot == "left" and "hpTextLeft") or (slot == "right" and "hpTextRight") or "hpTextCenter"
+        else
+            prefix = (slot == "left" and "powerTextLeft") or (slot == "right" and "powerTextRight") or "powerTextCenter"
+        end
+        return prefix .. "OffsetX", prefix .. "OffsetY"
     end
 
     local tabs = W.Segment(sec, "Text area", tabValues, math.min(520, sectionW - 48))
@@ -926,9 +947,47 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "hpOffsetY", -4) end,
         function(v) SetNumber(unit, "hpOffsetY", v, "MSUF2_HP_Y", { text = true, preview = true }) end)
 
-    SectionLabel(hpTab, "Appearance", rightX, -252)
+    SectionLabel(hpTab, "Selected Slot", rightX, -232)
+    local hpSlot = W.Segment(hpTab, "Slot", {
+        { value = "left", text = "Left" },
+        { value = "center", text = "Center" },
+        { value = "right", text = "Right" },
+    }, rightSliderW)
+    W.MoveWidget(hpSlot, hpTab, rightX, -262, rightSliderW, "LEFT")
+    M.BindSegment(ctx, hpSlot,
+        function() return CurrentSlot("hp") end,
+        function(v)
+            SetCurrentSlot("hp", v)
+            M.Refresh(ctx)
+        end)
+
+    local hpSlotX = W.Slider(hpTab, "Slot X", -300, 300, 1, 260)
+    PlaceSlider(hpTab, hpSlotX, rightX, -316, rightSliderW)
+    M.BindSlider(ctx, hpSlotX,
+        function()
+            local xKey = SlotOffsetKeys("hp")
+            return ReadNumber(unit, xKey, 0)
+        end,
+        function(v)
+            local xKey = SlotOffsetKeys("hp")
+            SetNumber(unit, xKey, v, "MSUF2_HP_SLOT_X", { text = true, preview = true })
+        end)
+
+    local hpSlotY = W.Slider(hpTab, "Slot Y", -300, 300, 1, 260)
+    PlaceSlider(hpTab, hpSlotY, rightX, -374, rightSliderW)
+    M.BindSlider(ctx, hpSlotY,
+        function()
+            local _, yKey = SlotOffsetKeys("hp")
+            return ReadNumber(unit, yKey, 0)
+        end,
+        function(v)
+            local _, yKey = SlotOffsetKeys("hp")
+            SetNumber(unit, yKey, v, "MSUF2_HP_SLOT_Y", { text = true, preview = true })
+        end)
+
+    SectionLabel(hpTab, "Appearance", rightX, -456)
     local hpSize = W.Slider(hpTab, "Size", 6, 48, 1, 260)
-    PlaceSlider(hpTab, hpSize, rightX, -282, rightSliderW)
+    PlaceSlider(hpTab, hpSize, rightX, -486, rightSliderW)
     M.BindSlider(ctx, hpSize,
         function() return EffectiveTextSize("hpFontSize", "hpFontSize") end,
         function(v) SetNumber(unit, "hpFontSize", v, "MSUF2_HP_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
@@ -982,9 +1041,47 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "powerOffsetY", 4) end,
         function(v) SetNumber(unit, "powerOffsetY", v, "MSUF2_POWER_Y", { text = true, preview = true }) end)
 
-    SectionLabel(powerTab, "Appearance", rightX, -252)
+    SectionLabel(powerTab, "Selected Slot", rightX, -232)
+    local pSlot = W.Segment(powerTab, "Slot", {
+        { value = "left", text = "Left" },
+        { value = "center", text = "Center" },
+        { value = "right", text = "Right" },
+    }, rightSliderW)
+    W.MoveWidget(pSlot, powerTab, rightX, -262, rightSliderW, "LEFT")
+    M.BindSegment(ctx, pSlot,
+        function() return CurrentSlot("power") end,
+        function(v)
+            SetCurrentSlot("power", v)
+            M.Refresh(ctx)
+        end)
+
+    local pSlotX = W.Slider(powerTab, "Slot X", -300, 300, 1, 260)
+    PlaceSlider(powerTab, pSlotX, rightX, -316, rightSliderW)
+    M.BindSlider(ctx, pSlotX,
+        function()
+            local xKey = SlotOffsetKeys("power")
+            return ReadNumber(unit, xKey, 0)
+        end,
+        function(v)
+            local xKey = SlotOffsetKeys("power")
+            SetNumber(unit, xKey, v, "MSUF2_POWER_SLOT_X", { text = true, preview = true })
+        end)
+
+    local pSlotY = W.Slider(powerTab, "Slot Y", -300, 300, 1, 260)
+    PlaceSlider(powerTab, pSlotY, rightX, -374, rightSliderW)
+    M.BindSlider(ctx, pSlotY,
+        function()
+            local _, yKey = SlotOffsetKeys("power")
+            return ReadNumber(unit, yKey, 0)
+        end,
+        function(v)
+            local _, yKey = SlotOffsetKeys("power")
+            SetNumber(unit, yKey, v, "MSUF2_POWER_SLOT_Y", { text = true, preview = true })
+        end)
+
+    SectionLabel(powerTab, "Appearance", rightX, -456)
     local pSize = W.Slider(powerTab, "Size", 6, 48, 1, 260)
-    PlaceSlider(powerTab, pSize, rightX, -282, rightSliderW)
+    PlaceSlider(powerTab, pSize, rightX, -486, rightSliderW)
     M.BindSlider(ctx, pSize,
         function() return EffectiveTextSize("powerFontSize", "powerFontSize") end,
         function(v) SetNumber(unit, "powerFontSize", v, "MSUF2_POWER_TEXT_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
@@ -1036,6 +1133,9 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(hpSize, hpOn)
         SetControlEnabled(hpX, hpOn)
         SetControlEnabled(hpY, hpOn)
+        SetControlEnabled(hpSlot, hpOn)
+        SetControlEnabled(hpSlotX, hpOn)
+        SetControlEnabled(hpSlotY, hpOn)
         SetControlEnabled(advHpLayer, hpOn)
         SetControlEnabled(showPowerText, true)
         SetControlEnabled(pLeft, powerOn)
@@ -1045,6 +1145,9 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(pSize, powerOn)
         SetControlEnabled(pX, powerOn)
         SetControlEnabled(pY, powerOn)
+        SetControlEnabled(pSlot, powerOn)
+        SetControlEnabled(pSlotX, powerOn)
+        SetControlEnabled(pSlotY, powerOn)
         SetControlEnabled(advPowerLayer, powerOn)
     end
     M.AddRefresher(ctx, RefreshTextControlState)

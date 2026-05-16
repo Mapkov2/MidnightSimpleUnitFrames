@@ -3355,6 +3355,18 @@ local function ApplyTextLayout(f, conf)
     local hY = ns.Util.Offset(conf.hpOffsetY,    -4)
     local pX = ns.Util.Offset(conf.powerOffsetX, -4)
     local pY = ns.Util.Offset(conf.powerOffsetY,  4)
+    local hLeftX = ns.Util.Offset(conf.hpTextLeftOffsetX, 0)
+    local hLeftY = ns.Util.Offset(conf.hpTextLeftOffsetY, 0)
+    local hCenterX = ns.Util.Offset(conf.hpTextCenterOffsetX, 0)
+    local hCenterY = ns.Util.Offset(conf.hpTextCenterOffsetY, 0)
+    local hRightX = ns.Util.Offset(conf.hpTextRightOffsetX, 0)
+    local hRightY = ns.Util.Offset(conf.hpTextRightOffsetY, 0)
+    local pLeftX = ns.Util.Offset(conf.powerTextLeftOffsetX, 0)
+    local pLeftY = ns.Util.Offset(conf.powerTextLeftOffsetY, 0)
+    local pCenterX = ns.Util.Offset(conf.powerTextCenterOffsetX, 0)
+    local pCenterY = ns.Util.Offset(conf.powerTextCenterOffsetY, 0)
+    local pRightX = ns.Util.Offset(conf.powerTextRightOffsetX, 0)
+    local pRightY = ns.Util.Offset(conf.powerTextRightOffsetY, 0)
     local wUsed = (f and f.GetWidth and f:GetWidth()) or 0
     if (not wUsed or wUsed == 0) and tf and tf.GetWidth then wUsed = tf:GetWidth() or 0 end
     if (not wUsed or wUsed == 0) and conf then wUsed = tonumber(conf.width) or wUsed end
@@ -3367,7 +3379,10 @@ local function ApplyTextLayout(f, conf)
     if _textOnBarActive then
         pbW = math_floor((f.targetPowerBar.GetWidth and f.targetPowerBar:GetWidth() or 0) + 0.5)
     end
-    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY, wUsed, (key or ""),
+    if not ns.Cache.StampChanged(f, "TextLayout", tf, nX, nY, hX, hY, pX, pY,
+        hLeftX, hLeftY, hCenterX, hCenterY, hRightX, hRightY,
+        pLeftX, pLeftY, pCenterX, pCenterY, pRightX, pRightY,
+        wUsed, (key or ""),
         (hpLeftMode or ""), (hpCenterMode or ""), (hpRightMode or ""),
         (pLeftMode or ""), (pCenterMode or ""), (pRightMode or ""),
         (nameAnchor or ""), nameLayer, hpLayer, powerLayer,
@@ -3383,10 +3398,10 @@ local function ApplyTextLayout(f, conf)
         f._msufNameClipSideApplied, f._msufNameClipReservedRight, f._msufNameClipTextStamp, f._msufNameClipAnchorStamp, f._msufClampStamp = nil, nil, nil, nil, nil
     end
     if f.levelText and f.nameText then MSUF_ApplyLevelIndicatorLayout_Internal(f, conf) end
-    MSUF_TextLayout_Place(f.hpTextLeft, tf, "TOPLEFT", "TOPLEFT", 4 + hX, hY, "LEFT")
-    MSUF_TextLayout_Place(f.hpTextCenter, tf, "TOP", "TOP", hX, hY, "CENTER")
-    MSUF_TextLayout_Place(f.hpText, tf, "TOPRIGHT", "TOPRIGHT", -4 + hX, hY, "RIGHT")
-    MSUF_TextLayout_Place(f.hpTextPct, tf, "TOPRIGHT", "TOPRIGHT", -4 + hX, hY, "RIGHT")
+    MSUF_TextLayout_Place(f.hpTextLeft, tf, "TOPLEFT", "TOPLEFT", 4 + hX + hLeftX, hY + hLeftY, "LEFT")
+    MSUF_TextLayout_Place(f.hpTextCenter, tf, "TOP", "TOP", hX + hCenterX, hY + hCenterY, "CENTER")
+    MSUF_TextLayout_Place(f.hpText, tf, "TOPRIGHT", "TOPRIGHT", -4 + hX + hRightX, hY + hRightY, "RIGHT")
+    MSUF_TextLayout_Place(f.hpTextPct, tf, "TOPRIGHT", "TOPRIGHT", -4 + hX + hRightX, hY + hRightY, "RIGHT")
     -- Power text: anchor to detached power bar when option enabled.
     -- FontStrings render at their parent's frame level, so we must reparent
     -- them to an overlay frame on the power bar to keep text on top.
@@ -3404,10 +3419,10 @@ local function ApplyTextLayout(f, conf)
         ov:SetFrameLevel((pb.GetFrameLevel and pb:GetFrameLevel() or 0) + 5)
         ov:Show()
         MSUF_TextLayout_ReparentPower(f, ov)
-        MSUF_TextLayout_Place(f.powerTextLeft, pb, "LEFT", "LEFT", 2 + pX, pY, "LEFT")
-        MSUF_TextLayout_Place(f.powerTextCenter, pb, "CENTER", "CENTER", pX, pY, "CENTER")
-        MSUF_TextLayout_Place(f.powerText, pb, "RIGHT", "RIGHT", -2 + pX, pY, "RIGHT")
-        MSUF_TextLayout_Place(f.powerTextPct, pb, "RIGHT", "RIGHT", -2 + pX, pY, "RIGHT")
+        MSUF_TextLayout_Place(f.powerTextLeft, pb, "LEFT", "LEFT", 2 + pX + pLeftX, pY + pLeftY, "LEFT")
+        MSUF_TextLayout_Place(f.powerTextCenter, pb, "CENTER", "CENTER", pX + pCenterX, pY + pCenterY, "CENTER")
+        MSUF_TextLayout_Place(f.powerText, pb, "RIGHT", "RIGHT", -2 + pX + pRightX, pY + pRightY, "RIGHT")
+        MSUF_TextLayout_Place(f.powerTextPct, pb, "RIGHT", "RIGHT", -2 + pX + pRightX, pY + pRightY, "RIGHT")
     else
         -- Restore power text back to textFrame if previously reparented
         if f._msufDPBTextOverlay then
@@ -3415,10 +3430,10 @@ local function ApplyTextLayout(f, conf)
         end
         local pwrParent = f._msufPowerTextLayer or tf
         MSUF_TextLayout_ReparentPower(f, pwrParent)
-        MSUF_TextLayout_Place(f.powerTextLeft, tf, "BOTTOMLEFT", "BOTTOMLEFT", 4 + pX, pY, "LEFT")
-        MSUF_TextLayout_Place(f.powerTextCenter, tf, "BOTTOM", "BOTTOM", pX, pY, "CENTER")
-        MSUF_TextLayout_Place(f.powerText, tf, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + pX, pY, "RIGHT")
-        MSUF_TextLayout_Place(f.powerTextPct, tf, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + pX, pY, "RIGHT")
+        MSUF_TextLayout_Place(f.powerTextLeft, tf, "BOTTOMLEFT", "BOTTOMLEFT", 4 + pX + pLeftX, pY + pLeftY, "LEFT")
+        MSUF_TextLayout_Place(f.powerTextCenter, tf, "BOTTOM", "BOTTOM", pX + pCenterX, pY + pCenterY, "CENTER")
+        MSUF_TextLayout_Place(f.powerText, tf, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + pX + pRightX, pY + pRightY, "RIGHT")
+        MSUF_TextLayout_Place(f.powerTextPct, tf, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + pX + pRightX, pY + pRightY, "RIGHT")
     end
  end
 function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)

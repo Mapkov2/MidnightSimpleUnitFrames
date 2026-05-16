@@ -1263,6 +1263,19 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
                 p._msufUFStatusSet("selected", handle._key)
             end
         end
+        if handle._key == "hpLeft" or handle._key == "hpCenter" or handle._key == "hpRight" then
+            M.unitTextTabSelection = M.unitTextTabSelection or {}
+            M.unitTextSlotSelection = M.unitTextSlotSelection or {}
+            M.unitTextTabSelection[box.key or "player"] = "hp"
+            M.unitTextSlotSelection[box.key or "player"] = M.unitTextSlotSelection[box.key or "player"] or {}
+            M.unitTextSlotSelection[box.key or "player"].hp = (handle._key == "hpLeft" and "left") or (handle._key == "hpRight" and "right") or "center"
+        elseif handle._key == "powerLeft" or handle._key == "powerCenter" or handle._key == "powerRight" then
+            M.unitTextTabSelection = M.unitTextTabSelection or {}
+            M.unitTextSlotSelection = M.unitTextSlotSelection or {}
+            M.unitTextTabSelection[box.key or "player"] = "power"
+            M.unitTextSlotSelection[box.key or "player"] = M.unitTextSlotSelection[box.key or "player"] or {}
+            M.unitTextSlotSelection[box.key or "player"].power = (handle._key == "powerLeft" and "left") or (handle._key == "powerRight" and "right") or "center"
+        end
         if not skipSectionOpen and p and type(p._msufOpenUnitSection) == "function" then
             p._msufOpenUnitSection(fields.section or "text")
         end
@@ -1806,7 +1819,13 @@ local function BuildPreview(parent, panel, width, height)
 
     box.handleName = MakeHandle(box, "name", { x = "nameOffsetX", y = "nameOffsetY", defaultX = 4, defaultY = -4, text = true, section = "text" }, "Name text", { 0.30, 0.66, 1.0 })
     box.handleHP = MakeHandle(box, "hp", { x = "hpOffsetX", y = "hpOffsetY", defaultX = -4, defaultY = -4, text = true, section = "text" }, "HP text", { 0.25, 0.90, 0.42 })
+    box.handleHPLeft = MakeHandle(box, "hpLeft", { x = "hpTextLeftOffsetX", y = "hpTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP left text", { 0.25, 0.90, 0.42 })
+    box.handleHPCenter = MakeHandle(box, "hpCenter", { x = "hpTextCenterOffsetX", y = "hpTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP center text", { 0.25, 0.90, 0.42 })
+    box.handleHPRight = MakeHandle(box, "hpRight", { x = "hpTextRightOffsetX", y = "hpTextRightOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP right text", { 0.25, 0.90, 0.42 })
     box.handlePower = MakeHandle(box, "power", { x = "powerOffsetX", y = "powerOffsetY", defaultX = -4, defaultY = 4, text = true, section = "text" }, "Power text", { 0.95, 0.72, 0.18 })
+    box.handlePowerLeft = MakeHandle(box, "powerLeft", { x = "powerTextLeftOffsetX", y = "powerTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power left text", { 0.95, 0.72, 0.18 })
+    box.handlePowerCenter = MakeHandle(box, "powerCenter", { x = "powerTextCenterOffsetX", y = "powerTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power center text", { 0.95, 0.72, 0.18 })
+    box.handlePowerRight = MakeHandle(box, "powerRight", { x = "powerTextRightOffsetX", y = "powerTextRightOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power right text", { 0.95, 0.72, 0.18 })
     box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true, section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
     box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "power" }, "Detached power bar", { 0.95, 0.72, 0.18 })
     box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", { 0.20, 0.90, 0.85 })
@@ -1938,6 +1957,9 @@ local function ApplyPreviewLayerVisibility(box)
         SetShownSafe(mock.hpText, false)
         SetShownSafe(mock.hpTextPct, false)
         SetShownSafe(box.handleHP, false)
+        SetShownSafe(box.handleHPLeft, false)
+        SetShownSafe(box.handleHPCenter, false)
+        SetShownSafe(box.handleHPRight, false)
     end
     if not powerTextOn then
         SetShownSafe(mock.powerTextLeft, false)
@@ -1945,6 +1967,9 @@ local function ApplyPreviewLayerVisibility(box)
         SetShownSafe(mock.powerText, false)
         SetShownSafe(mock.powerTextPct, false)
         SetShownSafe(box.handlePower, false)
+        SetShownSafe(box.handlePowerLeft, false)
+        SetShownSafe(box.handlePowerCenter, false)
+        SetShownSafe(box.handlePowerRight, false)
     end
     if not portraitOn then
         SetShownSafe(mock.portrait, false)
@@ -2439,23 +2464,35 @@ function Preview.Refresh(box, reason)
 
     local hpOX = S(tonumber(conf.hpOffsetX) or -4)
     local hpOY = S(tonumber(conf.hpOffsetY) or -4)
-    PlacePreviewSlot(mock.hpTextLeft, mock.textFrame, "TOPLEFT", "TOPLEFT", S(4) + hpOX, hpOY, "LEFT")
-    PlacePreviewSlot(mock.hpTextCenter, mock.textFrame, "TOP", "TOP", hpOX, hpOY, "CENTER")
-    PlacePreviewSlot(mock.hpText, mock.textFrame, "TOPRIGHT", "TOPRIGHT", -S(4) + hpOX, hpOY, "RIGHT")
-    PlacePreviewSlot(mock.hpTextPct, mock.textFrame, "TOPRIGHT", "TOPRIGHT", -S(4) + hpOX, hpOY, "RIGHT")
+    local hpLeftOX = S(tonumber(conf.hpTextLeftOffsetX) or 0)
+    local hpLeftOY = S(tonumber(conf.hpTextLeftOffsetY) or 0)
+    local hpCenterOX = S(tonumber(conf.hpTextCenterOffsetX) or 0)
+    local hpCenterOY = S(tonumber(conf.hpTextCenterOffsetY) or 0)
+    local hpRightOX = S(tonumber(conf.hpTextRightOffsetX) or 0)
+    local hpRightOY = S(tonumber(conf.hpTextRightOffsetY) or 0)
+    PlacePreviewSlot(mock.hpTextLeft, mock.textFrame, "TOPLEFT", "TOPLEFT", S(4) + hpOX + hpLeftOX, hpOY + hpLeftOY, "LEFT")
+    PlacePreviewSlot(mock.hpTextCenter, mock.textFrame, "TOP", "TOP", hpOX + hpCenterOX, hpOY + hpCenterOY, "CENTER")
+    PlacePreviewSlot(mock.hpText, mock.textFrame, "TOPRIGHT", "TOPRIGHT", -S(4) + hpOX + hpRightOX, hpOY + hpRightOY, "RIGHT")
+    PlacePreviewSlot(mock.hpTextPct, mock.textFrame, "TOPRIGHT", "TOPRIGHT", -S(4) + hpOX + hpRightOX, hpOY + hpRightOY, "RIGHT")
 
     local pOX = S(tonumber(conf.powerOffsetX) or -4)
     local pOY = S(tonumber(conf.powerOffsetY) or 4)
+    local pLeftOX = S(tonumber(conf.powerTextLeftOffsetX) or 0)
+    local pLeftOY = S(tonumber(conf.powerTextLeftOffsetY) or 0)
+    local pCenterOX = S(tonumber(conf.powerTextCenterOffsetX) or 0)
+    local pCenterOY = S(tonumber(conf.powerTextCenterOffsetY) or 0)
+    local pRightOX = S(tonumber(conf.powerTextRightOffsetX) or 0)
+    local pRightOY = S(tonumber(conf.powerTextRightOffsetY) or 0)
     if detachedPower and conf.detachedPowerBarTextOnBar == true and mock.detachedPower:IsShown() then
-        PlacePreviewSlot(mock.powerTextLeft, mock.detachedPower, "LEFT", "LEFT", S(2) + pOX, pOY, "LEFT")
-        PlacePreviewSlot(mock.powerTextCenter, mock.detachedPower, "CENTER", "CENTER", pOX, pOY, "CENTER")
-        PlacePreviewSlot(mock.powerText, mock.detachedPower, "RIGHT", "RIGHT", -S(2) + pOX, pOY, "RIGHT")
-        PlacePreviewSlot(mock.powerTextPct, mock.detachedPower, "RIGHT", "RIGHT", -S(2) + pOX, pOY, "RIGHT")
+        PlacePreviewSlot(mock.powerTextLeft, mock.detachedPower, "LEFT", "LEFT", S(2) + pOX + pLeftOX, pOY + pLeftOY, "LEFT")
+        PlacePreviewSlot(mock.powerTextCenter, mock.detachedPower, "CENTER", "CENTER", pOX + pCenterOX, pOY + pCenterOY, "CENTER")
+        PlacePreviewSlot(mock.powerText, mock.detachedPower, "RIGHT", "RIGHT", -S(2) + pOX + pRightOX, pOY + pRightOY, "RIGHT")
+        PlacePreviewSlot(mock.powerTextPct, mock.detachedPower, "RIGHT", "RIGHT", -S(2) + pOX + pRightOX, pOY + pRightOY, "RIGHT")
     else
-        PlacePreviewSlot(mock.powerTextLeft, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", S(4) + pOX, pOY, "LEFT")
-        PlacePreviewSlot(mock.powerTextCenter, mock.textFrame, "BOTTOM", "BOTTOM", pOX, pOY, "CENTER")
-        PlacePreviewSlot(mock.powerText, mock.textFrame, "BOTTOMRIGHT", "BOTTOMRIGHT", -S(4) + pOX, pOY, "RIGHT")
-        PlacePreviewSlot(mock.powerTextPct, mock.textFrame, "BOTTOMRIGHT", "BOTTOMRIGHT", -S(4) + pOX, pOY, "RIGHT")
+        PlacePreviewSlot(mock.powerTextLeft, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", S(4) + pOX + pLeftOX, pOY + pLeftOY, "LEFT")
+        PlacePreviewSlot(mock.powerTextCenter, mock.textFrame, "BOTTOM", "BOTTOM", pOX + pCenterOX, pOY + pCenterOY, "CENTER")
+        PlacePreviewSlot(mock.powerText, mock.textFrame, "BOTTOMRIGHT", "BOTTOMRIGHT", -S(4) + pOX + pRightOX, pOY + pRightOY, "RIGHT")
+        PlacePreviewSlot(mock.powerTextPct, mock.textFrame, "BOTTOMRIGHT", "BOTTOMRIGHT", -S(4) + pOX + pRightOX, pOY + pRightOY, "RIGHT")
     end
 
     if hasPortrait then
@@ -2713,22 +2750,27 @@ function Preview.Refresh(box, reason)
     if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, { mock.nameText, mock.totInlineSep, mock.totInlineText }, 3) then
         PlaceHandle(box.handleName, mock.nameText)
     end
-    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleHP, canvas, { mock.hpTextLeft, mock.hpTextCenter, mock.hpText }, 3) then
-        if not ((mock.hpTextLeft and mock.hpTextLeft:IsShown()) or (mock.hpTextCenter and mock.hpTextCenter:IsShown()) or (mock.hpText and mock.hpText:IsShown())) then
-            box.handleHP:Hide()
-        else
-        box.handleHP:SetSize(max(46, mock.hpText:GetStringWidth() + 10), max(18, mock.hpText:GetStringHeight() + 6))
-        PlaceHandle(box.handleHP, mock.hpText)
+    if box.handleHP then box.handleHP:Hide() end
+    if box.handlePower then box.handlePower:Hide() end
+    local function PlaceTextSlotHandle(handle, region)
+        if not handle then return end
+        if not (region and region.IsShown and region:IsShown()) then
+            handle:Hide()
+            return
+        end
+        local w = (region.GetStringWidth and region:GetStringWidth()) or region:GetWidth() or 36
+        local h = (region.GetStringHeight and region:GetStringHeight()) or region:GetHeight() or 12
+        handle:SetSize(max(26, w + 10), max(18, h + 6))
+        if not UnitPreviewText.PlaceHandleAroundRegions(handle, canvas, { region }, 3) then
+            PlaceHandle(handle, region)
         end
     end
-    if not UnitPreviewText.PlaceHandleAroundRegions(box.handlePower, canvas, { mock.powerTextLeft, mock.powerTextCenter, mock.powerText }, 3) then
-        if not ((mock.powerTextLeft and mock.powerTextLeft:IsShown()) or (mock.powerTextCenter and mock.powerTextCenter:IsShown()) or (mock.powerText and mock.powerText:IsShown())) then
-            box.handlePower:Hide()
-        else
-        box.handlePower:SetSize(max(46, mock.powerText:GetStringWidth() + 10), max(18, mock.powerText:GetStringHeight() + 6))
-        PlaceHandle(box.handlePower, mock.powerText)
-        end
-    end
+    PlaceTextSlotHandle(box.handleHPLeft, mock.hpTextLeft)
+    PlaceTextSlotHandle(box.handleHPCenter, mock.hpTextCenter)
+    PlaceTextSlotHandle(box.handleHPRight, mock.hpText)
+    PlaceTextSlotHandle(box.handlePowerLeft, mock.powerTextLeft)
+    PlaceTextSlotHandle(box.handlePowerCenter, mock.powerTextCenter)
+    PlaceTextSlotHandle(box.handlePowerRight, mock.powerText)
     ApplyPreviewLayerVisibility(box)
     ApplyPreviewTransparency(box, conf)
     RefreshHandleSelectionVisuals(box)

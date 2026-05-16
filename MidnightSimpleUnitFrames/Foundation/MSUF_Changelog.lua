@@ -24,6 +24,7 @@ local data = {
                         "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_UnitPreview.lua).",
                         "Menu / Dashboard: Updated menu, dashboard, or live apply behavior (working tree; MSUF_Menu2_UnitSections.lua).",
                         "General: Updated addon behavior (working tree; MidnightSimpleUnitFrames.lua).",
+                        "Group Frames: Updated Group Frame behavior (working tree; MSUF_GF_DB.lua).",
                     },
                 },
                 {
@@ -41,6 +42,7 @@ local data = {
                     bullets = {
                         "Core Runtime: Updated core runtime behavior (working tree; MSUF_Alpha.lua).",
                         "Menu / Dashboard: Way better preview for GF UF menu (5b792da; Menu2/Pages/MSUF_Menu2_UnitPreview.lua, Menu2/Pages/MSUF_Menu2_UnitSections.lua).",
+                        "Core Runtime, Unit Text, General: More text options and better text preview (2dd1510; Core/MSUF_Alpha.lua, Core/MSUF_FontRuntime.lua, Core/MSUF_Text.lua +9 more).",
                     },
                 },
             },

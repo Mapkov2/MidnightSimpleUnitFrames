@@ -536,15 +536,35 @@ local function GFPreviewCurrentTextKind()
     return "name"
 end
 
-local function GFPreviewTextOffsetKeys(kind)
-    if kind == "hp" then return "hpOffsetX", "hpOffsetY" end
-    if kind == "power" then return "powerOffsetX", "powerOffsetY" end
+local function GFPreviewTextOffsetKeys(kind, slot)
+    if kind == "hp" then
+        if slot == "left" then return "hpTextLeftOffsetX", "hpTextLeftOffsetY" end
+        if slot == "center" then return "hpTextCenterOffsetX", "hpTextCenterOffsetY" end
+        if slot == "right" then return "hpTextRightOffsetX", "hpTextRightOffsetY" end
+        return "hpOffsetX", "hpOffsetY"
+    end
+    if kind == "power" then
+        if slot == "left" then return "powerTextLeftOffsetX", "powerTextLeftOffsetY" end
+        if slot == "center" then return "powerTextCenterOffsetX", "powerTextCenterOffsetY" end
+        if slot == "right" then return "powerTextRightOffsetX", "powerTextRightOffsetY" end
+        return "powerOffsetX", "powerOffsetY"
+    end
     return "nameOffsetX", "nameOffsetY"
 end
 
-local function GFPreviewTextLabel(kind)
-    if kind == "hp" then return "HP Text" end
-    if kind == "power" then return "Power Text" end
+local function GFPreviewTextLabel(kind, slot)
+    if kind == "hp" then
+        if slot == "left" then return "HP Left Text" end
+        if slot == "center" then return "HP Center Text" end
+        if slot == "right" then return "HP Right Text" end
+        return "HP Text"
+    end
+    if kind == "power" then
+        if slot == "left" then return "Power Left Text" end
+        if slot == "center" then return "Power Center Text" end
+        if slot == "right" then return "Power Right Text" end
+        return "Power Text"
+    end
     return "Name Text"
 end
 
@@ -617,8 +637,9 @@ local function GFPreviewHandleOffsets(handle)
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
     elseif handle._cfgText then
         local kind = handle._cfgTextKind or GFPreviewCurrentTextKind()
-        local xKey, yKey = GFPreviewTextOffsetKeys(kind)
-        return (kind == "name" and (conf.nameAnchor or "LEFT") or GFPreviewTextLabel(kind)), tonumber(conf[xKey]) or 0, tonumber(conf[yKey]) or 0
+        local slot = handle._cfgTextSlot
+        local xKey, yKey = GFPreviewTextOffsetKeys(kind, slot)
+        return (kind == "name" and (conf.nameAnchor or "LEFT") or GFPreviewTextLabel(kind, slot)), tonumber(conf[xKey]) or 0, tonumber(conf[yKey]) or 0
     end
     return nil
 end
@@ -842,6 +863,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         if handle and handle._cfgTextKind then
             M.gfTextTabSelection = M.gfTextTabSelection or {}
             M.gfTextTabSelection[CurrentScope()] = handle._cfgTextKind
+            if handle._cfgTextSlot then
+                M.gfTextSlotSelection = M.gfTextSlotSelection or {}
+                M.gfTextSlotSelection[CurrentScope()] = M.gfTextSlotSelection[CurrentScope()] or {}
+                M.gfTextSlotSelection[CurrentScope()][handle._cfgTextKind] = handle._cfgTextSlot
+            end
         end
         GFPreviewRefreshHandleSelection(box)
     end
@@ -875,7 +901,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local conf = Conf(CurrentScope())
         if not conf then return false end
         local kind = handle._cfgTextKind or GFPreviewCurrentTextKind()
-        local xKey, yKey = GFPreviewTextOffsetKeys(kind)
+        local xKey, yKey = GFPreviewTextOffsetKeys(kind, handle._cfgTextSlot)
         conf[xKey] = GFPreviewRound(x or 0)
         conf[yKey] = GFPreviewRound(y or 0)
         RefreshGroupPreviewAfterMove()
@@ -1161,10 +1187,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     privateHandle._cfgPrivate = true
     AddIconPool(privateHandle, 3)
 
-    local function ConfigureTextHandle(handle, kind)
+    local function ConfigureTextHandle(handle, kind, slot)
         if not handle then return end
         handle._cfgText = true
         handle._cfgTextKind = kind
+        handle._cfgTextSlot = slot
+        handle._previewText = GFPreviewTextLabel(kind, slot)
         if handle.SetBackdropColor then handle:SetBackdropColor(0, 0, 0, 0) end
         if handle.SetBackdropBorderColor then
             local color = handle._color or { 0.55, 0.78, 0.95 }
@@ -1175,10 +1203,18 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     local nameTextHandle = CreatePreviewHandle("nameText", "text", { 0.30, 0.66, 1.00 }, "NAME", 74, 18, false)
     ConfigureTextHandle(nameTextHandle, "name")
-    local hpTextHandle = CreatePreviewHandle("hpText", "text", { 0.25, 0.90, 0.42 }, "HP", 74, 18, false)
-    ConfigureTextHandle(hpTextHandle, "hp")
-    local powerTextHandle = CreatePreviewHandle("powerText", "text", { 0.95, 0.72, 0.18 }, "POWER", 74, 18, false)
-    ConfigureTextHandle(powerTextHandle, "power")
+    local hpLeftTextHandle = CreatePreviewHandle("hpTextLeft", "text", { 0.25, 0.90, 0.42 }, "HP L", 74, 18, false)
+    ConfigureTextHandle(hpLeftTextHandle, "hp", "left")
+    local hpCenterTextHandle = CreatePreviewHandle("hpTextCenter", "text", { 0.25, 0.90, 0.42 }, "HP C", 74, 18, false)
+    ConfigureTextHandle(hpCenterTextHandle, "hp", "center")
+    local hpRightTextHandle = CreatePreviewHandle("hpTextRight", "text", { 0.25, 0.90, 0.42 }, "HP R", 74, 18, false)
+    ConfigureTextHandle(hpRightTextHandle, "hp", "right")
+    local powerLeftTextHandle = CreatePreviewHandle("powerTextLeft", "text", { 0.95, 0.72, 0.18 }, "PWR L", 74, 18, false)
+    ConfigureTextHandle(powerLeftTextHandle, "power", "left")
+    local powerCenterTextHandle = CreatePreviewHandle("powerTextCenter", "text", { 0.95, 0.72, 0.18 }, "PWR C", 74, 18, false)
+    ConfigureTextHandle(powerCenterTextHandle, "power", "center")
+    local powerRightTextHandle = CreatePreviewHandle("powerTextRight", "text", { 0.95, 0.72, 0.18 }, "PWR R", 74, 18, false)
+    ConfigureTextHandle(powerRightTextHandle, "power", "right")
 
     local footer = T.Font(box, "GameFontDisableSmall", "Click a handle to select - drag custom layers - arrow keys nudge selected; Blizzard is locked", T.colors.muted)
     footer:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
@@ -1386,9 +1422,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local hoy = GFPreviewConfigToOffset(conf.hpOffsetY or 0, previewScale)
         local hpTextOn = showText and conf.showHPText ~= false
         local hpModes = {
-            { fs = mock._hpLeftFS, mode = conf.textLeft or "NONE", point = "LEFT", rel = "LEFT", x = pad3 + hox, justify = "LEFT" },
-            { fs = mock._hpCenterFS, mode = conf.textCenter or "NONE", point = "CENTER", rel = "CENTER", x = hox, justify = "CENTER" },
-            { fs = mock._hpRightFS, mode = conf.textRight or "NONE", point = "RIGHT", rel = "RIGHT", x = -pad3 + hox, justify = "RIGHT" },
+            { fs = mock._hpLeftFS, mode = conf.textLeft or "NONE", point = "LEFT", rel = "LEFT", x = pad3 + hox + GFPreviewConfigToOffset(conf.hpTextLeftOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextLeftOffsetY or 0, previewScale), justify = "LEFT" },
+            { fs = mock._hpCenterFS, mode = conf.textCenter or "NONE", point = "CENTER", rel = "CENTER", x = hox + GFPreviewConfigToOffset(conf.hpTextCenterOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextCenterOffsetY or 0, previewScale), justify = "CENTER" },
+            { fs = mock._hpRightFS, mode = conf.textRight or "NONE", point = "RIGHT", rel = "RIGHT", x = -pad3 + hox + GFPreviewConfigToOffset(conf.hpTextRightOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextRightOffsetY or 0, previewScale), justify = "RIGHT" },
         }
         local fakeHP, fakeMax = 720000, 1000000
         for i = 1, #hpModes do
@@ -1397,7 +1433,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             SetPreviewFont(fs, hpSize)
             fs:SetTextColor(fr or 1, fg or 1, fb or 1, 0.9)
             fs:ClearAllPoints()
-            fs:SetPoint(spec.point, mock._health, spec.rel, spec.x, hoy)
+            fs:SetPoint(spec.point, mock._health, spec.rel, spec.x, spec.y)
             fs:SetJustifyH(spec.justify)
             fs._msufPreviewJustifyH = spec.justify
             if gf and gf.FormatHealthText then
@@ -1415,9 +1451,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local showPowerText = showText
         if gf and gf.IsPowerTextEnabled then showPowerText = showText and gf.IsPowerTextEnabled(kind, conf) end
         local powerModes = {
-            { fs = mock._powerLeftFS, mode = conf.powerTextLeft or "NONE", point = "LEFT", rel = "LEFT", x = pad2 + pox, justify = "LEFT" },
-            { fs = mock._powerCenterFS, mode = conf.powerTextCenter or "NONE", point = "CENTER", rel = "CENTER", x = pox, justify = "CENTER" },
-            { fs = mock._powerRightFS, mode = conf.powerTextRight or "NONE", point = "RIGHT", rel = "RIGHT", x = -pad2 + pox, justify = "RIGHT" },
+            { fs = mock._powerLeftFS, mode = conf.powerTextLeft or "NONE", point = "LEFT", rel = "LEFT", x = pad2 + pox + GFPreviewConfigToOffset(conf.powerTextLeftOffsetX or 0, previewScale), y = poy + GFPreviewConfigToOffset(conf.powerTextLeftOffsetY or 0, previewScale), justify = "LEFT" },
+            { fs = mock._powerCenterFS, mode = conf.powerTextCenter or "NONE", point = "CENTER", rel = "CENTER", x = pox + GFPreviewConfigToOffset(conf.powerTextCenterOffsetX or 0, previewScale), y = poy + GFPreviewConfigToOffset(conf.powerTextCenterOffsetY or 0, previewScale), justify = "CENTER" },
+            { fs = mock._powerRightFS, mode = conf.powerTextRight or "NONE", point = "RIGHT", rel = "RIGHT", x = -pad2 + pox + GFPreviewConfigToOffset(conf.powerTextRightOffsetX or 0, previewScale), y = poy + GFPreviewConfigToOffset(conf.powerTextRightOffsetY or 0, previewScale), justify = "RIGHT" },
         }
         local fakePow, fakePowMax = 70, 100
         for i = 1, #powerModes do
@@ -1426,7 +1462,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             SetPreviewFont(fs, pwrSize)
             fs:SetTextColor(fr or 1, fg or 1, fb or 1, 0.9)
             fs:ClearAllPoints()
-            fs:SetPoint(spec.point, powerTextAnchor, spec.rel, spec.x, poy)
+            fs:SetPoint(spec.point, powerTextAnchor, spec.rel, spec.x, spec.y)
             fs:SetJustifyH(spec.justify)
             fs._msufPreviewJustifyH = spec.justify
             if gf and gf.FormatPowerText then
@@ -1755,17 +1791,21 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         LayoutHandle(privateHandle, pa.anchor, pa.x, pa.y, "TOPRIGHT")
 
         nameTextHandle._previewScale = previewScale
-        hpTextHandle._previewScale = previewScale
-        powerTextHandle._previewScale = previewScale
+        hpLeftTextHandle._previewScale = previewScale
+        hpCenterTextHandle._previewScale = previewScale
+        hpRightTextHandle._previewScale = previewScale
+        powerLeftTextHandle._previewScale = previewScale
+        powerCenterTextHandle._previewScale = previewScale
+        powerRightTextHandle._previewScale = previewScale
         if not GFPreviewPlaceHandleAroundRegions(nameTextHandle, mock, { mock._nameFS }, 3) then
             nameTextHandle:Hide()
         end
-        if not GFPreviewPlaceHandleAroundRegions(hpTextHandle, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then
-            hpTextHandle:Hide()
-        end
-        if not GFPreviewPlaceHandleAroundRegions(powerTextHandle, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then
-            powerTextHandle:Hide()
-        end
+        if not GFPreviewPlaceHandleAroundRegions(hpLeftTextHandle, mock, { mock._hpLeftFS }, 3) then hpLeftTextHandle:Hide() end
+        if not GFPreviewPlaceHandleAroundRegions(hpCenterTextHandle, mock, { mock._hpCenterFS }, 3) then hpCenterTextHandle:Hide() end
+        if not GFPreviewPlaceHandleAroundRegions(hpRightTextHandle, mock, { mock._hpRightFS }, 3) then hpRightTextHandle:Hide() end
+        if not GFPreviewPlaceHandleAroundRegions(powerLeftTextHandle, mock, { mock._powerLeftFS }, 3) then powerLeftTextHandle:Hide() end
+        if not GFPreviewPlaceHandleAroundRegions(powerCenterTextHandle, mock, { mock._powerCenterFS }, 3) then powerCenterTextHandle:Hide() end
+        if not GFPreviewPlaceHandleAroundRegions(powerRightTextHandle, mock, { mock._powerRightFS }, 3) then powerRightTextHandle:Hide() end
 
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
         buffHandle:SetFrameLevel(baseLevel + (tonumber(buffCfg.layer) or 5))
@@ -1782,8 +1822,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         spellHandle:SetFrameLevel(baseLevel + 6)
         privateHandle:SetFrameLevel(baseLevel + 6)
         nameTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.nameTextLayer) or 6))
-        hpTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
-        powerTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
+        hpLeftTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
+        hpCenterTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
+        hpRightTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
+        powerLeftTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
+        powerCenterTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
+        powerRightTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
 
         buffHandle:SetShown(aurasEnabled and customRenderer and LayerOn("buff"))
         debuffHandle:SetShown(aurasEnabled and customRenderer and LayerOn("debuff"))
@@ -1809,8 +1853,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         spellHandle:SetAlpha((selectedSpellCfg and selectedSpellCfg.enabled == false) and (LayerAlpha("si") * 0.45) or LayerAlpha("si"))
         privateHandle:SetAlpha(LayerAlpha("private"))
         nameTextHandle:SetAlpha(LayerAlpha("text"))
-        hpTextHandle:SetAlpha(LayerAlpha("text"))
-        powerTextHandle:SetAlpha(LayerAlpha("text"))
+        hpLeftTextHandle:SetAlpha(LayerAlpha("text"))
+        hpCenterTextHandle:SetAlpha(LayerAlpha("text"))
+        hpRightTextHandle:SetAlpha(LayerAlpha("text"))
+        powerLeftTextHandle:SetAlpha(LayerAlpha("text"))
+        powerCenterTextHandle:SetAlpha(LayerAlpha("text"))
+        powerRightTextHandle:SetAlpha(LayerAlpha("text"))
 
         for i = 1, #self._layerButtons do
             local btn = self._layerButtons[i]

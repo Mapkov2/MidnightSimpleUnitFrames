@@ -1220,6 +1220,12 @@ local function ApplyTextLayout(f, kind)
     -- 3-slot health text
     local hox = ScaleValue(conf.hpOffsetX or 0, fScale)
     local hoy = ScaleValue(conf.hpOffsetY or 0, fScale)
+    local hlx = ScaleValue(conf.hpTextLeftOffsetX or 0, fScale)
+    local hly = ScaleValue(conf.hpTextLeftOffsetY or 0, fScale)
+    local hcx = ScaleValue(conf.hpTextCenterOffsetX or 0, fScale)
+    local hcy = ScaleValue(conf.hpTextCenterOffsetY or 0, fScale)
+    local hrx = ScaleValue(conf.hpTextRightOffsetX or 0, fScale)
+    local hry = ScaleValue(conf.hpTextRightOffsetY or 0, fScale)
     local hpTextOn = conf.showHPText ~= false
     local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
     local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
@@ -1227,19 +1233,19 @@ local function ApplyTextLayout(f, kind)
 
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
-        f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", pad3 + hox, hoy)
+        f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", pad3 + hox + hlx, hoy + hly)
         f.textLeftFS:SetJustifyH("LEFT")
         if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:SetText(""); f.textLeftFS:Hide() end
     end
     if f.textCenterFS then
         f.textCenterFS:ClearAllPoints()
-        f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", hox, hoy)
+        f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", hox + hcx, hoy + hcy)
         f.textCenterFS:SetJustifyH("CENTER")
         if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
     end
     if f.textRightFS then
         f.textRightFS:ClearAllPoints()
-        f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + hox, hoy)
+        f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + hox + hrx, hoy + hry)
         f.textRightFS:SetJustifyH("RIGHT")
         if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:SetText(""); f.textRightFS:Hide() end
     end
@@ -1282,6 +1288,12 @@ local function ApplyTextLayout(f, kind)
     -- 3-slot power text
     local pox = ScaleValue(conf.powerOffsetX or 0, fScale)
     local poy = ScaleValue(conf.powerOffsetY or 0, fScale)
+    local plx = ScaleValue(conf.powerTextLeftOffsetX or 0, fScale)
+    local ply = ScaleValue(conf.powerTextLeftOffsetY or 0, fScale)
+    local pcx = ScaleValue(conf.powerTextCenterOffsetX or 0, fScale)
+    local pcy = ScaleValue(conf.powerTextCenterOffsetY or 0, fScale)
+    local prx = ScaleValue(conf.powerTextRightOffsetX or 0, fScale)
+    local pry = ScaleValue(conf.powerTextRightOffsetY or 0, fScale)
     local effectivePowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
         or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
         or ScaleValue(conf.powerHeight or 6, fScale, 0))
@@ -1293,19 +1305,19 @@ local function ApplyTextLayout(f, kind)
 
     if f.powerTextLeftFS then
         f.powerTextLeftFS:ClearAllPoints()
-        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", pad2 + pox, poy)
+        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", pad2 + pox + plx, poy + ply)
         f.powerTextLeftFS:SetJustifyH("LEFT")
         if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
     end
     if f.powerTextCenterFS then
         f.powerTextCenterFS:ClearAllPoints()
-        f.powerTextCenterFS:SetPoint("CENTER", powerTextAnchor, "CENTER", pox, poy)
+        f.powerTextCenterFS:SetPoint("CENTER", powerTextAnchor, "CENTER", pox + pcx, poy + pcy)
         f.powerTextCenterFS:SetJustifyH("CENTER")
         if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end
     end
     if f.powerTextRightFS then
         f.powerTextRightFS:ClearAllPoints()
-        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -pad2 + pox, poy)
+        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -pad2 + pox + prx, poy + pry)
         f.powerTextRightFS:SetJustifyH("RIGHT")
         if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
     end
