@@ -488,6 +488,9 @@ end
 if g.slashMenuSnapEnabled == nil then
     g.slashMenuSnapEnabled = true
 end
+if g.hideAdvancedMenu == nil then
+    g.hideAdvancedMenu = true
+end
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false -- Default: Snap OFF
     end

@@ -190,13 +190,21 @@ local function BuildMisc(ctx)
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
 
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 118, true)
+    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 158, true)
     local menuSnap = W.Toggle(menuBehavior, "Enable Windows-style edge snap for this menu")
     M.BindToggle(ctx, menuSnap,
         function() return ReadGBool("slashMenuSnapEnabled", true) end,
         function(v) SetGBool("slashMenuSnapEnabled", v, "MSUF2_MENU_SNAP", { preview = false, applyAll = false, notify = false }) end)
     local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, (menuBehavior._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
     if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
+    local advancedHidden = W.Toggle(menuBehavior, "Hide Advanced menu section")
+    M.BindToggle(ctx, advancedHidden,
+        function() return ReadGBool("hideAdvancedMenu", true) end,
+        function(v)
+            SetGBool("hideAdvancedMenu", v, "MSUF2_ADVANCED_MENU_VISIBILITY", { preview = false, applyAll = false, notify = false })
+            if M.RefreshAdvancedNavVisibility then M.RefreshAdvancedNavVisibility() end
+        end)
+    W.MoveWidget(advancedHidden, menuBehavior, 14, -118, 280, "LEFT")
 
     local unitInterval, castInterval, budget, urgent
     local updates = b:CollapsibleSection("misc_updates", "Update intervals", 402, true)
