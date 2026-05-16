@@ -823,6 +823,7 @@ local FONT_ROOT_KEYS = {
 local MISC_GENERAL_KEYS = {
     menuLocale = true,
     slashMenuSnapEnabled = true,
+    hideAdvancedMenu = true,
     miscUpdatesPreset = true,
     frameUpdateInterval = true,
     castbarUpdateInterval = true,
