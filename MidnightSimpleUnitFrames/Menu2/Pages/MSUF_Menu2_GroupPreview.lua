@@ -865,7 +865,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     box._selectedHandle = nil
     box._handles = {}
     box._handleList = {}
+    local dragBounds = UIParent or box
     box._dragFrame = CreateFrame("Frame", nil, box)
+    box._dragFrame:SetAllPoints(dragBounds)
+    box._dragFrame:EnableMouse(true)
+    if box._dragFrame.SetFrameStrata then box._dragFrame:SetFrameStrata("TOOLTIP") end
     box._dragFrame:Hide()
 
     local function SelectHandle(handle)
@@ -1021,6 +1025,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             GFPreviewRefreshHandleSelection(box)
         end
     end
+    box._dragFrame:SetScript("OnMouseUp", function(_, button)
+        StopHandleDrag(nil, button)
+    end)
 
     local function UpdateHandleDrag(df)
         local handle = df and df._handle
@@ -1143,7 +1150,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end)
         handle:SetScript("OnClick", function(self)
             SelectHandle(self)
-            if self._sectionKey and onOpen then onOpen(self._sectionKey) end
         end)
         handle:SetScript("OnMouseDown", StartHandleDrag)
         handle:SetScript("OnMouseUp", StopHandleDrag)
@@ -1236,11 +1242,23 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     ConfigureTextHandle(powerCenterTextHandle, "power", "center")
     local powerRightTextHandle = CreatePreviewHandle("powerTextRight", "text", { 0.95, 0.72, 0.18 }, "PWR R", 74, 18, false)
     ConfigureTextHandle(powerRightTextHandle, "power", "right")
+    box._textHandles = {
+        name = nameTextHandle,
+        hpGroup = hpTextHandle,
+        hpLeft = hpLeftTextHandle,
+        hpCenter = hpCenterTextHandle,
+        hpRight = hpRightTextHandle,
+        powerGroup = powerTextHandle,
+        powerLeft = powerLeftTextHandle,
+        powerCenter = powerCenterTextHandle,
+        powerRight = powerRightTextHandle,
+    }
 
     local footer = T.Font(box, "GameFontDisableSmall", "Click a handle to select - drag custom layers - arrow keys nudge selected; Blizzard is locked", T.colors.muted)
     footer:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
 
     function box:Refresh()
+        local textHandles = self._textHandles or {}
         local kind = CurrentScope()
         local label = PreviewScopeLabel(kind)
         local conf = Conf(kind)
@@ -1811,43 +1829,43 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         LayoutIconRow(privateHandle, "private", 3, privateSize, 3)
         LayoutHandle(privateHandle, pa.anchor, pa.x, pa.y, "TOPRIGHT")
 
-        nameTextHandle._previewScale = previewScale
-        hpTextHandle._previewScale = previewScale
-        hpLeftTextHandle._previewScale = previewScale
-        hpCenterTextHandle._previewScale = previewScale
-        hpRightTextHandle._previewScale = previewScale
-        powerTextHandle._previewScale = previewScale
-        powerLeftTextHandle._previewScale = previewScale
-        powerCenterTextHandle._previewScale = previewScale
-        powerRightTextHandle._previewScale = previewScale
-        if not GFPreviewPlaceHandleAroundRegions(nameTextHandle, mock, { mock._nameFS }, 3) then
-            nameTextHandle:Hide()
+        textHandles.name._previewScale = previewScale
+        textHandles.hpGroup._previewScale = previewScale
+        textHandles.hpLeft._previewScale = previewScale
+        textHandles.hpCenter._previewScale = previewScale
+        textHandles.hpRight._previewScale = previewScale
+        textHandles.powerGroup._previewScale = previewScale
+        textHandles.powerLeft._previewScale = previewScale
+        textHandles.powerCenter._previewScale = previewScale
+        textHandles.powerRight._previewScale = previewScale
+        if not GFPreviewPlaceHandleAroundRegions(textHandles.name, mock, { mock._nameFS }, 3) then
+            textHandles.name:Hide()
         end
         if GFPreviewTextMovesTogether(kind, "hp") then
-            hpLeftTextHandle:Hide()
-            hpCenterTextHandle:Hide()
-            hpRightTextHandle:Hide()
-            if not GFPreviewPlaceHandleAroundRegions(hpTextHandle, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then
-                hpTextHandle:Hide()
+            textHandles.hpLeft:Hide()
+            textHandles.hpCenter:Hide()
+            textHandles.hpRight:Hide()
+            if not GFPreviewPlaceHandleAroundRegions(textHandles.hpGroup, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then
+                textHandles.hpGroup:Hide()
             end
         else
-            hpTextHandle:Hide()
-            if not GFPreviewPlaceHandleAroundRegions(hpLeftTextHandle, mock, { mock._hpLeftFS }, 3) then hpLeftTextHandle:Hide() end
-            if not GFPreviewPlaceHandleAroundRegions(hpCenterTextHandle, mock, { mock._hpCenterFS }, 3) then hpCenterTextHandle:Hide() end
-            if not GFPreviewPlaceHandleAroundRegions(hpRightTextHandle, mock, { mock._hpRightFS }, 3) then hpRightTextHandle:Hide() end
+            textHandles.hpGroup:Hide()
+            if not GFPreviewPlaceHandleAroundRegions(textHandles.hpLeft, mock, { mock._hpLeftFS }, 3) then textHandles.hpLeft:Hide() end
+            if not GFPreviewPlaceHandleAroundRegions(textHandles.hpCenter, mock, { mock._hpCenterFS }, 3) then textHandles.hpCenter:Hide() end
+            if not GFPreviewPlaceHandleAroundRegions(textHandles.hpRight, mock, { mock._hpRightFS }, 3) then textHandles.hpRight:Hide() end
         end
         if GFPreviewTextMovesTogether(kind, "power") then
-            powerLeftTextHandle:Hide()
-            powerCenterTextHandle:Hide()
-            powerRightTextHandle:Hide()
-            if not GFPreviewPlaceHandleAroundRegions(powerTextHandle, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then
-                powerTextHandle:Hide()
+            textHandles.powerLeft:Hide()
+            textHandles.powerCenter:Hide()
+            textHandles.powerRight:Hide()
+            if not GFPreviewPlaceHandleAroundRegions(textHandles.powerGroup, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then
+                textHandles.powerGroup:Hide()
             end
         else
-            powerTextHandle:Hide()
-            if not GFPreviewPlaceHandleAroundRegions(powerLeftTextHandle, mock, { mock._powerLeftFS }, 3) then powerLeftTextHandle:Hide() end
-            if not GFPreviewPlaceHandleAroundRegions(powerCenterTextHandle, mock, { mock._powerCenterFS }, 3) then powerCenterTextHandle:Hide() end
-            if not GFPreviewPlaceHandleAroundRegions(powerRightTextHandle, mock, { mock._powerRightFS }, 3) then powerRightTextHandle:Hide() end
+            textHandles.powerGroup:Hide()
+            if not GFPreviewPlaceHandleAroundRegions(textHandles.powerLeft, mock, { mock._powerLeftFS }, 3) then textHandles.powerLeft:Hide() end
+            if not GFPreviewPlaceHandleAroundRegions(textHandles.powerCenter, mock, { mock._powerCenterFS }, 3) then textHandles.powerCenter:Hide() end
+            if not GFPreviewPlaceHandleAroundRegions(textHandles.powerRight, mock, { mock._powerRightFS }, 3) then textHandles.powerRight:Hide() end
         end
 
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
@@ -1864,15 +1882,15 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
         spellHandle:SetFrameLevel(baseLevel + 6)
         privateHandle:SetFrameLevel(baseLevel + 6)
-        nameTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.nameTextLayer) or 6))
-        hpTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
-        hpLeftTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
-        hpCenterTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
-        hpRightTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
-        powerTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
-        powerLeftTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
-        powerCenterTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
-        powerRightTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
+        textHandles.name:SetFrameLevel(baseLevel + (tonumber(conf.nameTextLayer) or 6))
+        textHandles.hpGroup:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
+        textHandles.hpLeft:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
+        textHandles.hpCenter:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
+        textHandles.hpRight:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
+        textHandles.powerGroup:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
+        textHandles.powerLeft:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
+        textHandles.powerCenter:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
+        textHandles.powerRight:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
 
         buffHandle:SetShown(aurasEnabled and customRenderer and LayerOn("buff"))
         debuffHandle:SetShown(aurasEnabled and customRenderer and LayerOn("debuff"))
@@ -1897,15 +1915,15 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
         spellHandle:SetAlpha((selectedSpellCfg and selectedSpellCfg.enabled == false) and (LayerAlpha("si") * 0.45) or LayerAlpha("si"))
         privateHandle:SetAlpha(LayerAlpha("private"))
-        nameTextHandle:SetAlpha(LayerAlpha("text"))
-        hpTextHandle:SetAlpha(LayerAlpha("text"))
-        hpLeftTextHandle:SetAlpha(LayerAlpha("text"))
-        hpCenterTextHandle:SetAlpha(LayerAlpha("text"))
-        hpRightTextHandle:SetAlpha(LayerAlpha("text"))
-        powerTextHandle:SetAlpha(LayerAlpha("text"))
-        powerLeftTextHandle:SetAlpha(LayerAlpha("text"))
-        powerCenterTextHandle:SetAlpha(LayerAlpha("text"))
-        powerRightTextHandle:SetAlpha(LayerAlpha("text"))
+        textHandles.name:SetAlpha(LayerAlpha("text"))
+        textHandles.hpGroup:SetAlpha(LayerAlpha("text"))
+        textHandles.hpLeft:SetAlpha(LayerAlpha("text"))
+        textHandles.hpCenter:SetAlpha(LayerAlpha("text"))
+        textHandles.hpRight:SetAlpha(LayerAlpha("text"))
+        textHandles.powerGroup:SetAlpha(LayerAlpha("text"))
+        textHandles.powerLeft:SetAlpha(LayerAlpha("text"))
+        textHandles.powerCenter:SetAlpha(LayerAlpha("text"))
+        textHandles.powerRight:SetAlpha(LayerAlpha("text"))
 
         for i = 1, #self._layerButtons do
             local btn = self._layerButtons[i]

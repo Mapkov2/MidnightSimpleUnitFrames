@@ -96,10 +96,12 @@ SI.SpellIDs = {
     ProtectionPaladin = {
         BlessingOfProtection = 1022,
         BlessingOfSacrifice  = 6940,
+        BlessingOfFreedom    = 1044,
     },
     RetributionPaladin = {
         BlessingOfProtection = 1022,
         BlessingOfSacrifice  = 6940,
+        BlessingOfFreedom    = 1044,
     },
 }
 
@@ -121,9 +123,9 @@ SI.SecretSpellIDs = {
     DisciplinePriest  = { PainSuppression = 33206 },
     HolyPriest        = { GuardianSpirit = 47788 },
     MistweaverMonk    = { LifeCocoon = 116849 },
-    HolyPaladin       = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940 },
-    ProtectionPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940 },
-    RetributionPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940 },
+    HolyPaladin       = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044 },
+    ProtectionPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044 },
+    RetributionPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044 },
 }
 
 ------------------------------------------------------------------------
@@ -202,6 +204,7 @@ SI.IconTextures = {
     EternalFlame    = 135433,
     BlessingOfProtection = 135964,
     BlessingOfSacrifice  = 135966,
+    BlessingOfFreedom    = 135968,
 }
 
 ------------------------------------------------------------------------
@@ -262,14 +265,17 @@ SI.TrackableAuras = {
         { name = "Dawnlight",            display = "Dawnlight",             color = {1.00, 0.85, 0.40} },
         { name = "BlessingOfProtection", display = "Blessing of Protection", color = {0.94, 0.82, 0.31}, secret = true },
         { name = "BlessingOfSacrifice",  display = "Blessing of Sacrifice",  color = {0.94, 0.50, 0.50}, secret = true },
+        { name = "BlessingOfFreedom",    display = "Blessing of Freedom",    color = {0.47, 0.77, 1.00}, secret = true },
     },
     ProtectionPaladin = {
         { name = "BlessingOfProtection", display = "Blessing of Protection", color = {0.94, 0.82, 0.31}, secret = true },
         { name = "BlessingOfSacrifice",  display = "Blessing of Sacrifice",  color = {0.94, 0.50, 0.50}, secret = true },
+        { name = "BlessingOfFreedom",    display = "Blessing of Freedom",    color = {0.47, 0.77, 1.00}, secret = true },
     },
     RetributionPaladin = {
         { name = "BlessingOfProtection", display = "Blessing of Protection", color = {0.94, 0.82, 0.31}, secret = true },
         { name = "BlessingOfSacrifice",  display = "Blessing of Sacrifice",  color = {0.94, 0.50, 0.50}, secret = true },
+        { name = "BlessingOfFreedom",    display = "Blessing of Freedom",    color = {0.47, 0.77, 1.00}, secret = true },
     },
 }
 
@@ -331,14 +337,17 @@ SI.SpecDefaults = {
         Dawnlight     = { placed = { type = "square", anchor = "BOTTOM", x = 0, y = 3, size = 9 } },
         BlessingOfProtection = { frame = { type = "border", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
         BlessingOfSacrifice  = { frame = { type = "border", color = {0.94, 0.50, 0.50, 1}, priority = 2 } },
+        BlessingOfFreedom    = { frame = { type = "border", color = {0.47, 0.77, 1.00, 1}, priority = 3 } },
     },
     ProtectionPaladin = {
         BlessingOfProtection = { frame = { type = "border", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
         BlessingOfSacrifice  = { frame = { type = "border", color = {0.94, 0.50, 0.50, 1}, priority = 2 } },
+        BlessingOfFreedom    = { frame = { type = "border", color = {0.47, 0.77, 1.00, 1}, priority = 3 } },
     },
     RetributionPaladin = {
         BlessingOfProtection = { frame = { type = "border", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
         BlessingOfSacrifice  = { frame = { type = "border", color = {0.94, 0.50, 0.50, 1}, priority = 2 } },
+        BlessingOfFreedom    = { frame = { type = "border", color = {0.47, 0.77, 1.00, 1}, priority = 3 } },
     },
 }
 
