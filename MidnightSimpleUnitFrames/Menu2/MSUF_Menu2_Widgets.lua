@@ -239,8 +239,9 @@ function W.PageBuilder(ctx)
             local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
             if not entry._msuf2ManualHintLayout then
                 hint:ClearAllPoints()
-                hint:SetPoint("RIGHT", header, "RIGHT", -12, 0)
-                hint:SetWidth(reserve)
+                hint:SetPoint("TOPRIGHT", header, "TOPRIGHT", -12, -1)
+                hint:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -12, 1)
+                hint:SetPoint("LEFT", header, "RIGHT", -(12 + reserve), 0)
                 hint:SetJustifyH("RIGHT")
 
                 label:ClearAllPoints()

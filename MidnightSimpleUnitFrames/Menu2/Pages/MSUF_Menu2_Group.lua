@@ -12,6 +12,12 @@ local floor = math.floor
 local ceil = math.ceil
 local max = math.max
 local min = math.min
+local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
+local WARNING_BG = { 0.105, 0.082, 0.052, 0.44 }
+local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
+local WARNING_NOTICE_BG = { 0.105, 0.082, 0.052, 0.34 }
+local WARNING_NOTICE_TOP = { 0.48, 0.36, 0.20, 0.55 }
+local WARNING_NOTICE_BOTTOM = { 0.28, 0.21, 0.12, 0.48 }
 
 local SCOPE_VALUES = {
     { value = "party", text = "Party" },
@@ -524,10 +530,10 @@ local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
 
     function notice:SetTone(kind)
         if kind == "warning" then
-            bg:SetColorTexture(0.150, 0.084, 0.038, 0.34)
-            top:SetColorTexture(0.72, 0.36, 0.18, 0.65)
-            bottom:SetColorTexture(0.40, 0.22, 0.10, 0.55)
-            if text.SetTextColor then text:SetTextColor(0.92, 0.82, 0.72, 1) end
+            bg:SetColorTexture(WARNING_NOTICE_BG[1], WARNING_NOTICE_BG[2], WARNING_NOTICE_BG[3], WARNING_NOTICE_BG[4])
+            top:SetColorTexture(WARNING_NOTICE_TOP[1], WARNING_NOTICE_TOP[2], WARNING_NOTICE_TOP[3], WARNING_NOTICE_TOP[4])
+            bottom:SetColorTexture(WARNING_NOTICE_BOTTOM[1], WARNING_NOTICE_BOTTOM[2], WARNING_NOTICE_BOTTOM[3], WARNING_NOTICE_BOTTOM[4])
+            if text.SetTextColor then text:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4]) end
         else
             bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
             top:SetColorTexture(0.16, 0.34, 0.66, 0.55)

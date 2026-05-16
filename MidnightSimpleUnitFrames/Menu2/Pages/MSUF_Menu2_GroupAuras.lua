@@ -756,9 +756,9 @@ local function BuildGFAuras(ctx)
                 else
                     SetSectionHeaderStatus(section, {
                         hint = string.lower(title) .. " off",
-                        hintColor = { 0.92, 0.78, 0.66, 1 },
-                        bg = { 0.130, 0.072, 0.040, 0.50 },
-                        arrowColor = { 0.92, 0.58, 0.26, 1 },
+                        hintColor = { 0.90, 0.84, 0.76, 1 },
+                        bg = { 0.105, 0.082, 0.052, 0.44 },
+                        arrowColor = { 0.88, 0.62, 0.22, 1 },
                     })
                 end
             end
@@ -1027,9 +1027,9 @@ local function BuildGFAuras(ctx)
             else
                 SetSectionHeaderStatus(textcolor, {
                     hint = "only for custom aura icons",
-                    hintColor = { 0.92, 0.78, 0.66, 1 },
-                    bg = { 0.130, 0.072, 0.040, 0.50 },
-                    arrowColor = { 0.92, 0.58, 0.26, 1 },
+                    hintColor = { 0.90, 0.84, 0.76, 1 },
+                    bg = { 0.105, 0.082, 0.052, 0.44 },
+                    arrowColor = { 0.88, 0.62, 0.22, 1 },
                 })
             end
         end
@@ -1085,9 +1085,9 @@ local function BuildGFAuras(ctx)
             local enabled = PrivateAuras(CurrentScope()).enabled ~= false
             SetSectionHeaderStatus(priv, enabled and nil or {
                 hint = "private auras off",
-                hintColor = { 0.92, 0.78, 0.66, 1 },
-                bg = { 0.130, 0.072, 0.040, 0.50 },
-                arrowColor = { 0.92, 0.58, 0.26, 1 },
+                hintColor = { 0.90, 0.84, 0.76, 1 },
+                bg = { 0.105, 0.082, 0.052, 0.44 },
+                arrowColor = { 0.88, 0.62, 0.22, 1 },
             })
         end
     end

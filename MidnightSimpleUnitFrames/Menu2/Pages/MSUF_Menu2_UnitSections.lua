@@ -38,6 +38,15 @@ local UF_COPY_CATEGORIES = UP.UF_COPY_CATEGORIES or {}
 
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
 local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
+local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
+local WARNING_BG = { 0.105, 0.082, 0.052, 0.44 }
+local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
+local WARNING_NOTICE_BG = { 0.105, 0.082, 0.052, 0.34 }
+local WARNING_NOTICE_TOP = { 0.48, 0.36, 0.20, 0.55 }
+local WARNING_NOTICE_BOTTOM = { 0.28, 0.21, 0.12, 0.48 }
+local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
+local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
+local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
 local TOT_INLINE_SEPARATOR_VALUES = {}
 local TOT_INLINE_SEPARATOR_OPTIONS = {}
 for i = 1, #SEPARATORS do
@@ -252,10 +261,10 @@ local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
 
     function notice:SetTone(kind)
         if kind == "warning" then
-            bg:SetColorTexture(0.150, 0.084, 0.038, 0.34)
-            top:SetColorTexture(0.72, 0.36, 0.18, 0.65)
-            bottom:SetColorTexture(0.40, 0.22, 0.10, 0.55)
-            if text.SetTextColor then text:SetTextColor(0.92, 0.82, 0.72, 1) end
+            bg:SetColorTexture(WARNING_NOTICE_BG[1], WARNING_NOTICE_BG[2], WARNING_NOTICE_BG[3], WARNING_NOTICE_BG[4])
+            top:SetColorTexture(WARNING_NOTICE_TOP[1], WARNING_NOTICE_TOP[2], WARNING_NOTICE_TOP[3], WARNING_NOTICE_TOP[4])
+            bottom:SetColorTexture(WARNING_NOTICE_BOTTOM[1], WARNING_NOTICE_BOTTOM[2], WARNING_NOTICE_BOTTOM[3], WARNING_NOTICE_BOTTOM[4])
+            if text.SetTextColor then text:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4]) end
         else
             bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
             top:SetColorTexture(0.16, 0.34, 0.66, 0.55)
@@ -778,17 +787,17 @@ local function BuildBasics(ctx, builder, unit, label)
     notice._msuf2UnitFrameGateAlwaysEnabled = true
     local noticeBg = notice:CreateTexture(nil, "BACKGROUND")
     noticeBg:SetAllPoints()
-    noticeBg:SetColorTexture(0.150, 0.084, 0.038, 0.34)
+    noticeBg:SetColorTexture(WARNING_NOTICE_BG[1], WARNING_NOTICE_BG[2], WARNING_NOTICE_BG[3], WARNING_NOTICE_BG[4])
     local noticeEdge = notice:CreateTexture(nil, "BORDER")
     noticeEdge:SetPoint("TOPLEFT", notice, "TOPLEFT", 0, 0)
     noticeEdge:SetPoint("TOPRIGHT", notice, "TOPRIGHT", 0, 0)
     noticeEdge:SetHeight(1)
-    noticeEdge:SetColorTexture(0.72, 0.36, 0.18, 0.65)
+    noticeEdge:SetColorTexture(WARNING_NOTICE_TOP[1], WARNING_NOTICE_TOP[2], WARNING_NOTICE_TOP[3], WARNING_NOTICE_TOP[4])
     local noticeBottom = notice:CreateTexture(nil, "BORDER")
     noticeBottom:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 0, 0)
     noticeBottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
     noticeBottom:SetHeight(1)
-    noticeBottom:SetColorTexture(0.40, 0.22, 0.10, 0.55)
+    noticeBottom:SetColorTexture(WARNING_NOTICE_BOTTOM[1], WARNING_NOTICE_BOTTOM[2], WARNING_NOTICE_BOTTOM[3], WARNING_NOTICE_BOTTOM[4])
 
     local unitLabel = label or UnitTopLabel(unit)
     local noticeText = T.Font(notice, "GameFontDisableSmall", "", { 0.92, 0.82, 0.72, 1 })
@@ -815,7 +824,7 @@ local function BuildBasics(ctx, builder, unit, label)
             if on then
                 sectionEntry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
             else
-                sectionEntry.headerBg:SetColorTexture(0.090, 0.072, 0.050, 0.56)
+                sectionEntry.headerBg:SetColorTexture(WARNING_HEADER_BG[1], WARNING_HEADER_BG[2], WARNING_HEADER_BG[3], WARNING_HEADER_BG[4])
             end
         end
         if sectionEntry.label and sectionEntry.label.SetTextColor then
@@ -828,8 +837,8 @@ local function BuildBasics(ctx, builder, unit, label)
         if badge then
             badge:SetShown(not on)
             if not on and badgeFill and badgeEdge then
-                badgeFill:SetVertexColor(0.240, 0.104, 0.060, 0.94)
-                badgeEdge:SetVertexColor(0.620, 0.240, 0.140, 0.80)
+                badgeFill:SetVertexColor(WARNING_BADGE_FILL[1], WARNING_BADGE_FILL[2], WARNING_BADGE_FILL[3], WARNING_BADGE_FILL[4])
+                badgeEdge:SetVertexColor(WARNING_BADGE_EDGE[1], WARNING_BADGE_EDGE[2], WARNING_BADGE_EDGE[3], WARNING_BADGE_EDGE[4])
             end
         end
         if sectionEntry.hint then
@@ -838,11 +847,11 @@ local function BuildBasics(ctx, builder, unit, label)
                 sectionEntry.hint:SetTextColor(0.45, 0.52, 0.65, 1)
             else
                 sectionEntry.hint:SetText(M.Tr("Frame disabled"))
-                sectionEntry.hint:SetTextColor(0.78, 0.68, 0.56, 1)
+                sectionEntry.hint:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4])
             end
         end
         if sectionEntry.arrow and sectionEntry.arrow.SetVertexColor and not on then
-            sectionEntry.arrow:SetVertexColor(0.92, 0.62, 0.22, 1)
+                sectionEntry.arrow:SetVertexColor(WARNING_ARROW[1], WARNING_ARROW[2], WARNING_ARROW[3], WARNING_ARROW[4])
         end
     end
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
@@ -1750,10 +1759,10 @@ local function BuildPortrait(ctx, builder, unit)
         if not active then
             SetSectionHeaderStatus(sec, {
                 hint = "Portrait off",
-                hintColor = { 0.78, 0.68, 0.56, 1 },
-                bg = { 0.090, 0.072, 0.050, 0.50 },
+                hintColor = WARNING_HINT,
+                bg = WARNING_BG,
                 labelColor = { 0.92, 0.88, 0.82, 1 },
-                arrowColor = { 0.92, 0.62, 0.22, 1 },
+                arrowColor = WARNING_ARROW,
             })
         else
             SetSectionHeaderStatus(sec, nil)
@@ -1929,10 +1938,10 @@ local function BuildPower(ctx, builder, unit)
             powerNotice:Show()
             SetSectionHeaderStatus(sec, {
                 hint = "Power bar off",
-                hintColor = { 0.78, 0.68, 0.56, 1 },
-                bg = { 0.090, 0.072, 0.050, 0.50 },
+                hintColor = WARNING_HINT,
+                bg = WARNING_BG,
                 labelColor = { 0.92, 0.88, 0.82, 1 },
-                arrowColor = { 0.92, 0.62, 0.22, 1 },
+                arrowColor = WARNING_ARROW,
             })
         else
             powerNotice:Hide()
@@ -2010,10 +2019,10 @@ local function BuildCastbar(ctx, builder, unit)
             castbarNotice:Show()
             SetSectionHeaderStatus(sec, {
                 hint = "Castbar off",
-                hintColor = { 0.78, 0.68, 0.56, 1 },
-                bg = { 0.090, 0.072, 0.050, 0.50 },
+                hintColor = WARNING_HINT,
+                bg = WARNING_BG,
                 labelColor = { 0.92, 0.88, 0.82, 1 },
-                arrowColor = { 0.92, 0.62, 0.22, 1 },
+                arrowColor = WARNING_ARROW,
             })
         else
             castbarNotice:Hide()
@@ -2255,10 +2264,10 @@ local function BuildStatus(ctx, builder, unit)
         if spec and not isEnabled then
             SetSectionHeaderStatus(sec, {
                 hint = "Selected indicator off",
-                hintColor = { 0.78, 0.68, 0.56, 1 },
-                bg = { 0.090, 0.072, 0.050, 0.50 },
+                hintColor = WARNING_HINT,
+                bg = WARNING_BG,
                 labelColor = { 0.92, 0.88, 0.82, 1 },
-                arrowColor = { 0.92, 0.62, 0.22, 1 },
+                arrowColor = WARNING_ARROW,
             })
         else
             SetSectionHeaderStatus(sec, nil)
@@ -2299,7 +2308,7 @@ local function BuildLoadConditions(ctx, builder, unit)
             if ReadBool(unit, LOAD_CONDITIONS[i].key, false) then activeCount = activeCount + 1 end
         end
         if activeCount > 0 then
-            SetSectionHeaderStatus(sec, { hint = tostring(activeCount) .. " active", hintColor = { 0.78, 0.68, 0.56, 1 } })
+            SetSectionHeaderStatus(sec, { hint = tostring(activeCount) .. " active", hintColor = { 0.58, 0.68, 0.82, 1 } })
         else
             SetSectionHeaderStatus(sec, nil)
         end

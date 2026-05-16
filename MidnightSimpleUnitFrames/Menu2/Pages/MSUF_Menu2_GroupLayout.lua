@@ -155,9 +155,9 @@ local function BuildGFLayout(ctx)
             if not scopeEnabled then
                 SetSectionHeaderStatus(general, {
                     hint = "scope disabled",
-                    hintColor = { 0.92, 0.78, 0.66, 1 },
-                    bg = { 0.130, 0.072, 0.040, 0.50 },
-                    arrowColor = { 0.92, 0.58, 0.26, 1 },
+                    hintColor = { 0.90, 0.84, 0.76, 1 },
+                    bg = { 0.105, 0.082, 0.052, 0.44 },
+                    arrowColor = { 0.88, 0.62, 0.22, 1 },
                 })
             else
                 SetSectionHeaderStatus(general, nil)
