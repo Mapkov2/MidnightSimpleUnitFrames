@@ -242,6 +242,9 @@ local function BuildPreview(ctx, builder, unit)
     M.AddRefresher(ctx, function()
         if box:IsShown() then RefreshThisPreview("MSUF2_UNIT_PAGE") end
     end)
+    if W and W.AttachPinnedPreview then
+        W.AttachPinnedPreview(sec, box, { stateKey = "unitFramePreview", title = box.title, hint = box.hint, left = 14, right = 14, top = -8 })
+    end
 end
 
 local function BuildTopActions(ctx, builder, unit, label)

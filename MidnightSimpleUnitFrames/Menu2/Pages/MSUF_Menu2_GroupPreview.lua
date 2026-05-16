@@ -2023,6 +2023,9 @@ local function AddGFPreview(ctx, builder)
     end
     M._gfNativePreviews[#M._gfNativePreviews + 1] = box
     M.AddRefresher(ctx, RefreshThisPreview)
+    if W and W.AttachPinnedPreview then
+        W.AttachPinnedPreview(body, box, { stateKey = "groupFramePreview", title = box._title, hint = box._hint, left = 14, right = 14, top = -8 })
+    end
 end
 
 
