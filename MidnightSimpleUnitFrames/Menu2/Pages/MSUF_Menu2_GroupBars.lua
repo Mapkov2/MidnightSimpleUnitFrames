@@ -229,6 +229,36 @@ local function BuildGFBars(ctx)
     local hpSliderW = min(310, max(230, textRightW))
     local textDropW = min(310, max(220, textLeftW))
 
+    local function TextModeExampleStr(mode, delim, isPower)
+        local cur     = isPower and "100"  or "12,450"
+        local max_    = isPower and "100"  or "15,000"
+        local pct     = isPower and "100%" or "83%"
+        local deficit = isPower and "0"    or "-2,550"
+        if mode == "PERCENT"        then return pct
+        elseif mode == "CURRENT"    then return cur
+        elseif mode == "MAX"        then return max_
+        elseif mode == "DEFICIT"    then return deficit
+        elseif mode == "CURMAX"     then return cur  .. delim .. max_
+        elseif mode == "CURPERCENT" then return cur  .. delim .. pct
+        elseif mode == "CURMAXPERCENT"  then return cur  .. delim .. max_ .. delim .. pct
+        elseif mode == "MAXPERCENT"     then return max_ .. delim .. pct
+        elseif mode == "PERCENTCUR"     then return pct  .. delim .. cur
+        elseif mode == "PERCENTMAX"     then return pct  .. delim .. max_
+        elseif mode == "PERCENTCURMAX"  then return pct  .. delim .. cur  .. delim .. max_
+        end
+        return nil
+    end
+
+    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower)
+        local slots = reverse and { rightMode, centerMode, leftMode } or { leftMode, centerMode, rightMode }
+        local parts = {}
+        for _, mode in ipairs(slots) do
+            local ex = TextModeExampleStr(mode, delim, isPower)
+            if ex then parts[#parts + 1] = ex end
+        end
+        return #parts > 0 and table.concat(parts, "  ") or "(none)"
+    end
+
     local hint = W.Text(text, "Font style is shared in Global Style > Fonts. Position can be adjusted here or dragged in Edit Mode.", 14, -38, textW - 210, { 0.60, 0.75, 1.00, 1 })
     if hint.SetWordWrap then hint:SetWordWrap(true) end
     local scopeLabel = T.Font(text, "GameFontDisableSmall", "", T.colors.dim)
@@ -385,7 +415,7 @@ local function BuildGFBars(ctx)
     PlaceSlider(nameTab, nameSize, textRightX, -112, hpSliderW)
 
     SectionLabel(hpTab, "HP Text", textLeftX, -4)
-    PreviewText(hpTab, "630.0k / 100%", textRightX, -4, textRightW)
+    local hpPreviewLabel = PreviewText(hpTab, "", textRightX, -4, textRightW)
 
     local showHP = BindScopeToggle(ctx, W.Toggle(hpTab, "Show HP Text"), "showHPText", true, "font")
     W.MoveWidget(showHP, hpTab, textLeftX, -34)
@@ -457,7 +487,7 @@ local function BuildGFBars(ctx)
     PlaceSlider(hpTab, healthSize, textRightX, -536, hpSliderW)
 
     SectionLabel(powerTab, "Power Text", textLeftX, -4)
-    PreviewText(powerTab, "100 Energy", textRightX, -4, textRightW)
+    local powerPreviewLabel = PreviewText(powerTab, "", textRightX, -4, textRightW)
 
     local powerText = W.Toggle(powerTab, "Show Power Text")
     M.BindToggle(ctx, powerText,
@@ -557,6 +587,19 @@ local function BuildGFBars(ctx)
         SetOptionEnabled(showName, true)
         SetOptionEnabled(showHP, true)
         SetOptionEnabled(powerText, true)
+        local kind = CurrentScope()
+        if hpPreviewLabel then
+            local delim = Val(kind, "textDelimiter", " / ")
+            hpPreviewLabel:SetText(BuildTextPreviewStr(
+                Val(kind, "textLeft", "NONE"), Val(kind, "textCenter", "PERCENT"), Val(kind, "textRight", "NONE"),
+                delim, Bool(kind, "hpTextReverse", false), false))
+        end
+        if powerPreviewLabel then
+            local delim = Val(kind, "powerTextDelimiter", " / ")
+            powerPreviewLabel:SetText(BuildTextPreviewStr(
+                Val(kind, "powerTextLeft", "NONE"), Val(kind, "powerTextCenter", "PERCENT"), Val(kind, "powerTextRight", "NONE"),
+                delim, false, true))
+        end
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(text, nil) end
     end
     M.AddRefresher(ctx, refreshTextControls)

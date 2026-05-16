@@ -1510,7 +1510,7 @@ local function BuildInlineText(ctx, builder, unit)
 end
 
 local function BuildAlpha(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("transparency", "Transparency", 326, false)
+    local sec = builder:CollapsibleSection("transparency", "Transparency", 346, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 32
     local rightX = min(max(430, floor(sectionW * 0.52)), max(360, sectionW - 360))
@@ -1545,7 +1545,7 @@ local function BuildAlpha(ctx, builder, unit)
     end
 
     local inCombat = W.Slider(sec, "Alpha in combat", 0, 1, 0.05, 300)
-    PlaceSlider(inCombat, leftX, -258, sliderW)
+    PlaceSlider(inCombat, leftX, -276, sliderW)
     M.BindSlider(ctx, inCombat,
         function() return ReadAlphaValue(true) end,
         function(v)
@@ -1558,7 +1558,7 @@ local function BuildAlpha(ctx, builder, unit)
         end)
 
     local outCombat = W.Slider(sec, "Alpha out of combat", 0, 1, 0.05, 300)
-    PlaceSlider(outCombat, rightX, -258, sliderW)
+    PlaceSlider(outCombat, rightX, -276, sliderW)
     M.BindSlider(ctx, outCombat,
         function() return ReadAlphaValue(false) end,
         function(v)
@@ -1602,9 +1602,9 @@ local function BuildAlpha(ctx, builder, unit)
 
     W.DividerAt(sec, -126, leftX, 32)
     local mode = W.Segment(sec, "Sliders affect", {
-        { value = "foreground", text = "Foreground" },
-        { value = "health", text = "Health" },
-        { value = "background", text = "Background" },
+        { value = "foreground", text = "Frame" },
+        { value = "health", text = "HP Bar" },
+        { value = "background", text = "Backdrop" },
     }, 420)
     if mode._msuf2Title then
         mode._msuf2Title:ClearAllPoints()
@@ -1626,8 +1626,10 @@ local function BuildAlpha(ctx, builder, unit)
             btn:SetSize(bw, 22)
         end
     end
-    W.DividerAt(sec, -210, leftX, 32)
-    W.LabelAt(sec, "Alpha Values", leftX, -232, leftW, "GameFontNormalSmall", T.colors.accent)
+    local alphaLayerHint = W.Text(sec, "Frame: all bars & text  ·  HP Bar: health bar only  ·  Backdrop: frame background", leftX, -196, math.min(620, sectionW - leftX - 32), T.colors.dim)
+    if alphaLayerHint and alphaLayerHint.SetWordWrap then alphaLayerHint:SetWordWrap(false) end
+    W.DividerAt(sec, -228, leftX, 32)
+    W.LabelAt(sec, "Alpha Values", leftX, -250, leftW, "GameFontNormalSmall", T.colors.accent)
     M.BindSegment(ctx, mode,
         function() return NormalizeAlphaMode(GetConf(unit).alphaLayerMode) end,
         function(v)

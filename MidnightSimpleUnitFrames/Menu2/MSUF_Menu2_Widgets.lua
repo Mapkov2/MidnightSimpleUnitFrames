@@ -952,8 +952,8 @@ function W.AttachPinnedPreview(body, box, opts)
     end
 
     local function BodyVisible()
-        return (not body.IsShown or body:IsShown())
-            and (not box.IsShown or box:IsShown())
+        -- IsVisible checks the full ancestor chain; IsShown only checks the frame itself
+        return (not body.IsVisible or body:IsVisible())
             and (not scroll.IsShown or scroll:IsShown())
     end
 

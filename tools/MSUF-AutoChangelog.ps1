@@ -91,6 +91,20 @@ function Normalize-VersionKey {
     return ($v.ToLowerInvariant() -replace '[^a-z0-9]+', '')
 }
 
+function Get-PrereleaseFallbackKey {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return "" }
+    $v = $Value.Trim()
+    $v = $v -replace '^refs/tags/', ''
+    $v = $v -replace '^v(?=\d)', ''
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        return Normalize-VersionKey ($base + " " + $Matches["channel"] + " " + $Matches["number"])
+    }
+    return ""
+}
+
 function Get-VersionNumberParts {
     param([AllowNull()][string]$Value)
 
@@ -1413,14 +1427,17 @@ function Find-ReleaseBounds {
     )
 
     $wantedKey = Normalize-VersionKey $WantedVersion
+    $fallbackKey = Get-PrereleaseFallbackKey $WantedVersion
     $firstRelease = $null
+    $fallbackRelease = $null
     for ($i = 0; $i -lt $Lines.Count; $i++) {
         if ($Lines[$i] -match '^##\s+(.+?)(?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*$') {
             $version = $Matches[1].Trim()
             if ($null -eq $firstRelease) {
                 $firstRelease = [pscustomobject]@{ Start = $i; Version = $version }
             }
-            if ($wantedKey -eq "" -or (Normalize-VersionKey $version) -eq $wantedKey) {
+            $versionKey = Normalize-VersionKey $version
+            if ($wantedKey -eq "" -or $versionKey -eq $wantedKey) {
                 $end = $Lines.Count
                 for ($j = $i + 1; $j -lt $Lines.Count; $j++) {
                     if ($Lines[$j] -match '^##\s+') {
@@ -1430,7 +1447,22 @@ function Find-ReleaseBounds {
                 }
                 return [pscustomobject]@{ Start = $i; End = $end; Version = $version }
             }
+            if ($null -eq $fallbackRelease -and $fallbackKey -ne "" -and $versionKey -eq $fallbackKey) {
+                $end = $Lines.Count
+                for ($j = $i + 1; $j -lt $Lines.Count; $j++) {
+                    if ($Lines[$j] -match '^##\s+') {
+                        $end = $j
+                        break
+                    }
+                }
+                $fallbackRelease = [pscustomobject]@{ Start = $i; End = $end; Version = $version }
+            }
         }
+    }
+
+    if ($null -ne $fallbackRelease) {
+        Write-AutoLog "Using base prerelease changelog section '$($fallbackRelease.Version)' for patch release '$WantedVersion'."
+        return $fallbackRelease
     }
 
     if ($null -ne $firstRelease -and $wantedKey -eq "") {

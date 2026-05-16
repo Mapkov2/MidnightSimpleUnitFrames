@@ -389,7 +389,7 @@ local function BuildGFLayout(ctx)
         if entry then entry._msuf2RefreshState = RefreshScalingState end
     end
 
-    local transparency = b:CollapsibleSection("border", "Transparency", 310, false)
+    local transparency = b:CollapsibleSection("border", "Transparency", 328, false)
     local transparencyW = transparency._msuf2Width or b.width or 720
     local transLeftX = 32
     local transRightX = min(max(470, floor(transparencyW * 0.54)), max(380, transparencyW - 380))
@@ -397,16 +397,18 @@ local function BuildGFLayout(ctx)
     local transRightW = max(280, min(360, transparencyW - transRightX - 38))
     local tHint = W.Text(transparency, "Outline border thickness is configured in\nGlobal Style > Bars > Outline & Highlight Border.", transLeftX, -38, transLeftW, { 0.60, 0.75, 1.00, 1 })
     if tHint.SetWordWrap then tHint:SetWordWrap(true) end
+    local alphaGuide = W.Text(transparency, "Backdrop = frame  ·  HP Fill = health bar  ·  HP Track = empty bar area", transLeftX, -80, transparencyW - transLeftX - 32, T.colors.dim)
+    if alphaGuide and alphaGuide.SetWordWrap then alphaGuide:SetWordWrap(false) end
 
     local bgColor = W.Color(transparency, "Background Color")
     if bgColor._msuf2Title then
         bgColor._msuf2Title:ClearAllPoints()
-        bgColor._msuf2Title:SetPoint("TOPLEFT", transparency, "TOPLEFT", transLeftX, -100)
+        bgColor._msuf2Title:SetPoint("TOPLEFT", transparency, "TOPLEFT", transLeftX, -118)
         bgColor._msuf2Title:SetWidth(120)
         bgColor._msuf2Title:SetJustifyH("LEFT")
     end
     bgColor:ClearAllPoints()
-    bgColor:SetPoint("TOPLEFT", transparency, "TOPLEFT", transLeftX + 138, -98)
+    bgColor:SetPoint("TOPLEFT", transparency, "TOPLEFT", transLeftX + 138, -116)
     bgColor:SetSize(34, 16)
     M.BindColor(ctx, bgColor,
         function()
@@ -449,14 +451,14 @@ local function BuildGFLayout(ctx)
     end
 
     local bgAlpha = BindTransparencySlider(W.Slider(transparency, "", 0, 1, 0.05, transLeftW), "bgA", 0.85,
-        function(v) return string.format("Background Alpha: %.0f%%", (tonumber(v) or 0) * 100) end)
-    PlaceTransparencySlider(bgAlpha, transLeftX, -130, transLeftW)
+        function(v) return string.format("Backdrop: %.0f%%", (tonumber(v) or 0) * 100) end)
+    PlaceTransparencySlider(bgAlpha, transLeftX, -148, transLeftW)
 
     local hpFg = BindTransparencySlider(W.Slider(transparency, "", 0.3, 1, 0.05, transRightW), "hpBarAlpha", 1,
-        function(v) return string.format("HP Bar Foreground: %.0f%%", (tonumber(v) or 0) * 100) end)
-    PlaceTransparencySlider(hpFg, transRightX, -82, transRightW)
+        function(v) return string.format("HP Fill: %.0f%%", (tonumber(v) or 0) * 100) end)
+    PlaceTransparencySlider(hpFg, transRightX, -100, transRightW)
 
-    local preserveHP = W.ToggleAt(transparency, "Preserve HP color", transRightX, -128, transRightW)
+    local preserveHP = W.ToggleAt(transparency, "Preserve HP color", transRightX, -146, transRightW)
     M.BindToggle(ctx, preserveHP,
         function() return Bool(CurrentScope(), "alphaPreserveHPColor", false) end,
         function(v)
@@ -465,7 +467,7 @@ local function BuildGFLayout(ctx)
             if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
         end)
 
-    local textIgnore = W.ToggleAt(transparency, "Text ignores HP opacity", transLeftX, -184, transLeftW)
+    local textIgnore = W.ToggleAt(transparency, "Text ignores HP opacity", transLeftX, -202, transLeftW)
     M.BindToggle(ctx, textIgnore,
         function() return Bool(CurrentScope(), "hpTextIgnoreAlpha", true) end,
         function(v) Set(CurrentScope(), "hpTextIgnoreAlpha", v and true or false, "visual") end)
@@ -486,15 +488,15 @@ local function BuildGFLayout(ctx)
     local function RefreshHPBgLabel()
         if hpBg and hpBg._msuf2Title then
             local conf = Conf(CurrentScope())
-            hpBg._msuf2Title:SetText(string.format("HP Background: %.0f%%", (tonumber(conf.hpBgAlpha) or tonumber(conf.bgA) or 0.85) * 100))
+            hpBg._msuf2Title:SetText(string.format("HP Track: %.0f%%", (tonumber(conf.hpBgAlpha) or tonumber(conf.bgA) or 0.85) * 100))
         end
     end
     hpBg:HookScript("OnValueChanged", function(_, value)
-        if hpBg._msuf2Title then hpBg._msuf2Title:SetText(string.format("HP Background: %.0f%%", (tonumber(value) or 0) * 100)) end
+        if hpBg._msuf2Title then hpBg._msuf2Title:SetText(string.format("HP Track: %.0f%%", (tonumber(value) or 0) * 100)) end
     end)
     M.AddRefresher(ctx, RefreshHPBgLabel)
     RefreshHPBgLabel()
-    PlaceTransparencySlider(hpBg, transRightX, -176, transRightW)
+    PlaceTransparencySlider(hpBg, transRightX, -194, transRightW)
 
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
 
