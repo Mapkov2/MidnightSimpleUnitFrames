@@ -1,28 +1,30 @@
 # Changelog
 
+## 5.2 Beta 3 - 2026-05-16
+
+### Performance
+
+<!-- MSUF-AUTO-CHANGELOG:Performance:START -->
+- Improved performance for Group Frames.
+- Improved performance for menu and dashboard.
+<!-- MSUF-AUTO-CHANGELOG:Performance:END -->
+
+### Changes / Improvements
+
+<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
+- Improved Not tracking long raidbuffs anymore in group frames.
+- Improved Turn off test mode if you leave main menu.
+<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
+
 ## 5.2 Beta 2 - 2026-05-16
 
 ### Performance
 
 - Group Frames, Menu / Dashboard: Massive rework of spell indicators now performant and gated between speces (9443f77; GroupFrames/MSUF_GF_Effects.lua, GroupFrames/MSUF_GF_SpellIndicators.lua, Menu2/Pages/MSUF_Menu2_GroupIndicators.lua).
 
-<!-- MSUF-AUTO-CHANGELOG:Performance:START -->
-- Improved performance for unit frame runtime.
-- Improved performance for unit text.
-- Improved performance for addon behavior.
-- Improved performance for menu and dashboard.
-- Improved performance for Group Frames.
-<!-- MSUF-AUTO-CHANGELOG:Performance:END -->
-
 ### Bugfixes
 
 - Unit Auras: Fixed buff auras not updating in certain edge cases (6f0fd9f; Auras2/MSUF_A2_Core.lua).
-
-<!-- MSUF-AUTO-CHANGELOG:Bugfixes:START -->
-- Improved aura and reminder behavior.
-- Fixed issues affecting menu and dashboard.
-- Fixed issues affecting Group Frames.
-<!-- MSUF-AUTO-CHANGELOG:Bugfixes:END -->
 
 ### Changes / Improvements
 
@@ -36,22 +38,6 @@
 - Unit Auras, Core Runtime: Added better tooltip support for other addons. Ex. TipTac (084598a; Auras2/MSUF_A2_Core.lua, Core/MSUF_ChatAndTooltips.lua, MidnightSimpleUnitFrames.lua).
 - Foundation, Group Frames, Menu / Dashboard: Added coalescence and some other menu stuff (6642696; Foundation/MSUF_Defaults.lua, GroupFrames/MSUF_GF_Auras.lua, GroupFrames/MSUF_GF_Effects.lua +3 more).
 - Group Frames: Better pass through (40ed3a9; GroupFrames/MSUF_GF_Auras.lua).
-
-<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
-- Improved core runtime behavior.
-- Improved Way better preview for GF UF menu.
-- Improved More text options and better text preview.
-- Improved Way more text options for unitframe and groupframe. Can move now 3 container via x und y.
-- Improved More clearer container movement of text in ux . Together or individuell.
-- Improved Made it possible to use spell indicator and blizzard rendering at the same time.
-- Improved blessing of freedom.
-- Improved Made it possible that group preview is pinned so scrolling is way easier.
-- Improved Massively improved spell indicator. For exmaple PI tracking is back.
-- Improved Some stuff.
-- Improved Made pinning possible.
-- Improved aura and reminder behavior.
-- Improved Better pass through.
-<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
 
 ### Release / Tooling
 

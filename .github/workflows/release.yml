@@ -20,6 +20,10 @@ on:
         required: true
         default: false
         type: boolean
+      release_name:
+        description: Display name for GitHub, Wago, and CurseForge
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -30,6 +34,7 @@ jobs:
     env:
       RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
       RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease || inputs.prerelease }}
+      RELEASE_NAME_INPUT: ${{ github.event.release.name || inputs.release_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,6 +64,24 @@ jobs:
         run: |
           $tag = $env:RELEASE_VERSION
           $isPrerelease = $env:RELEASE_IS_PRERELEASE -eq "true" -or $tag -match '(?i)(alpha|beta|rc|pre)'
+          $releaseName = $env:RELEASE_NAME_INPUT
+          if ([string]::IsNullOrWhiteSpace($releaseName)) {
+            $tagSubject = git for-each-ref "refs/tags/$tag" --format='%(contents:subject)' 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($tagSubject)) {
+              $releaseName = $tagSubject.Trim()
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($releaseName)) {
+            $displayVersion = $tag -replace '^refs/tags/', ''
+            $displayVersion = $displayVersion -replace '^v(?=\d)', ''
+            $displayVersion = $displayVersion -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
+            $displayVersion = $displayVersion -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
+            $displayVersion = $displayVersion -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
+            $displayVersion = $displayVersion -replace '[-_]+', ' '
+            $displayVersion = ($displayVersion -replace '\s+', ' ').Trim()
+            $releaseName = "MSUF $displayVersion"
+          }
+          $releaseName = ($releaseName -replace '[\r\n]+', ' ').Trim()
 
           if ($tag -match '(?i)alpha') {
             $wagoStability = "alpha"
@@ -74,9 +97,11 @@ jobs:
           "RELEASE_IS_PRERELEASE=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
           "WAGO_STABILITY=$wagoStability" >> $env:GITHUB_ENV
           "CF_RELEASE_TYPE=$curseForgeType" >> $env:GITHUB_ENV
+          "RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
           "release_is_prerelease=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "github_make_latest=$(if ($isPrerelease) { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
-          Write-Host "Release $tag uses Wago stability '$wagoStability' and CurseForge type '$curseForgeType'."
+          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
+          Write-Host "Release $tag uses name '$releaseName', Wago stability '$wagoStability', and CurseForge type '$curseForgeType'."
 
       - name: Build AddOns zip
         shell: pwsh
@@ -88,6 +113,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
+          name: ${{ steps.channel.outputs.release_name }}
           files: dist/*.zip
           body_path: CHANGELOG.md
           fail_on_unmatched_files: true
@@ -106,9 +132,9 @@ jobs:
           }
 
           if ($env:RELEASE_IS_PRERELEASE -eq "true") {
-            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ZipPath $zip.FullName -Stability $env:WAGO_STABILITY -Prerelease
+            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ReleaseName $env:RELEASE_NAME -ZipPath $zip.FullName -Stability $env:WAGO_STABILITY -Prerelease
           } else {
-            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ZipPath $zip.FullName -Stability $env:WAGO_STABILITY
+            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ReleaseName $env:RELEASE_NAME -ZipPath $zip.FullName -Stability $env:WAGO_STABILITY
           }
 
       - name: Upload to CurseForge
@@ -116,4 +142,4 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
         with:
-          args: -g retail -m .pkgmeta -n "{package-name}{project-version}:MSUF {project-version}"
+          args: -g retail -m .pkgmeta -n "{package-name}{project-version}:${{ steps.channel.outputs.release_name }}"

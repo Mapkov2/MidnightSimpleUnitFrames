@@ -29,10 +29,13 @@ release type, display name, and exact steps before anything is pushed.
 Prereleases must use a tag containing `alpha`, `beta`, `rc`, or `pre`; full
 releases must use a stable tag without those words.
 
-Use **VERSION** to reload the tag from the repository `VERSION` file. The
-**Anzeigename** field is the human-readable changelog title, for example
-`5.2 Beta 1`, while **Version / tag** is the tag/package version, for example
-`5.2-beta1`.
+Use **VERSION** to reload the tag from the repository `VERSION` file.
+**Changelog title** is only the heading written to `CHANGELOG.md`, for example
+`5.2 Beta 1`. **Release name** is the public upload/release display name used
+for GitHub, Wago, and CurseForge, for example `MSUF 5.2 Beta 1`. Avoid `:` in
+the release name because the CurseForge packager uses it as an internal
+separator.
+**Version / tag** is the tag/package version, for example `5.2-beta1`.
 
 Use **Scan** next to **Release branch** to read branches from `origin`, then
 select the branch you want to release from. Publish only continues when the
