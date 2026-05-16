@@ -328,14 +328,10 @@ function Test-IsAutoIgnoredPath {
     $p = Convert-PathForGit "$Path"
     if ([string]::IsNullOrWhiteSpace($p)) { return $true }
 
+    if ($p -match '^\.github/|^tools/|^docs/') { return $true }
     if ($p -eq "CHANGELOG.md") { return $true }
     if ($p -eq "MidnightSimpleUnitFrames/Foundation/MSUF_Changelog.lua") { return $true }
-    if ($p -match '^tools/MSUF-AutoChangelog\.(ps1|cmd)$') { return $true }
-
-    if (-not $IncludeTooling) {
-        if ($p -match '^\.github/|^tools/|^docs/') { return $true }
-        if ($p -match '\.pkgmeta$|MidnightSimpleUnitFrames\.toc$') { return $true }
-    }
+    if ($p -match '\.pkgmeta$|MidnightSimpleUnitFrames\.toc$') { return $true }
 
     return $false
 }
@@ -373,10 +369,6 @@ function Get-ChangeCategory {
     $contextText = if ($null -eq $Context) { "" } else { $Context.ToLowerInvariant() }
     $haystack = "$subjectText $pathText $contextText"
 
-    if ($IncludeTooling -and $pathText -match '(^| )docs/') { return "Documentation" }
-    if ($IncludeTooling -and $pathText -match '(^| )\.github/|(^| )tools/|pkgmeta|\.toc|publish-|package-release|workflow|changelog') {
-        return "Release / Tooling"
-    }
     if ($haystack -match 'class.?color|classcolor|barbackground|bar background') {
         return "Changes / Improvements"
     }
@@ -1824,14 +1816,6 @@ function Start-AutoChangelogGui {
     $tips.SetToolTip($regenBox, "Also update MidnightSimpleUnitFrames\\Foundation\\MSUF_Changelog.lua.")
     $form.Controls.Add($regenBox)
 
-    $toolingBox = New-Object System.Windows.Forms.CheckBox
-    $toolingBox.Text = "Include tooling/docs"
-    $toolingBox.Checked = [bool]$IncludeTooling
-    $toolingBox.Location = New-Object System.Drawing.Point(745, 86)
-    $toolingBox.Size = New-Object System.Drawing.Size(150, 24)
-    $tips.SetToolTip($toolingBox, "Include docs, workflow, packaging, and tool changes in generated notes.")
-    $form.Controls.Add($toolingBox)
-
     New-AutoLabel "Poll seconds" 16 126 120 | Out-Null
     $pollBox = New-Object System.Windows.Forms.NumericUpDown
     $pollBox.Location = New-Object System.Drawing.Point(145, 124)
@@ -1948,7 +1932,7 @@ function Start-AutoChangelogGui {
             -UseReleaseLineScan $releaseLineBox.Checked `
             -UseJunkFilter $junkFilterBox.Checked `
             -RegenerateAddon $regenBox.Checked `
-            -IncludeReleaseTooling $toolingBox.Checked `
+            -IncludeReleaseTooling $false `
             -PollEverySeconds ([int]$pollBox.Value) `
             -DebounceEverySeconds ([int]$debounceBox.Value)
     }

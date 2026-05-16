@@ -69,6 +69,9 @@ it into the Markdown box.
 **Scan Changelog** is the normal changelog generator. It reads commits, changed
 files, patch text, and working-tree changes, filters junk commits, and creates
 user-facing release notes instead of raw commit lists.
+Changes to `tools`, `.github`, `docs`, `.pkgmeta`, `CHANGELOG.md`, generated
+dashboard changelog data, and TOC metadata are hard-filtered out and never land
+in the main MSUF addon changelog.
 
 **Dashboard** is the direct sync button for the in-game dashboard changelog.
 Use it after editing the Markdown box when you want exactly that text in
@@ -88,8 +91,11 @@ Tags containing `alpha`, `beta`, `rc`, or `pre` are marked as GitHub
 pre-releases and are not promoted as the latest stable GitHub release.
 
 Before uploading, the workflow extracts only the matching `CHANGELOG.md`
-release section into `dist/RELEASE_NOTES.md`, so GitHub receives the current
-version notes instead of the complete changelog file.
+release section into `dist/RELEASE_NOTES.md`, so GitHub and Wago receive the
+current version notes instead of the complete changelog file. It also writes
+`dist/RELEASE_NOTES_CF.html` for CurseForge, because CurseForge handles uploaded
+changelogs more reliably as explicit HTML than as raw Markdown in its WYSIWYG
+editor.
 
 The workflow requires the repository secrets:
 

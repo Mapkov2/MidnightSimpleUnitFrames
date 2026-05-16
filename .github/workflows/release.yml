@@ -157,9 +157,60 @@ jobs:
             throw "Could not find CHANGELOG.md section for release '$tag' ('$display')."
           }
 
+          function Close-List {
+            if ($script:InList) {
+              $script:HtmlLines += "</ul>"
+              $script:InList = $false
+            }
+          }
+
+          function Add-HtmlLine([string]$line) {
+            $trimmed = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) {
+              Close-List
+              return
+            }
+
+            if ($trimmed -match '^###\s+(.+?)\s*$') {
+              Close-List
+              $script:HtmlLines += ("<h3>" + [System.Net.WebUtility]::HtmlEncode($Matches[1].Trim()) + "</h3>")
+              return
+            }
+
+            if ($trimmed -match '^##\s+(.+?)(?:\s+-\s+(\d{4}-\d{2}-\d{2}))?\s*$') {
+              Close-List
+              $title = [System.Net.WebUtility]::HtmlEncode($Matches[1].Trim())
+              if ($Matches.ContainsKey(2) -and -not [string]::IsNullOrWhiteSpace($Matches[2])) {
+                $title += " - " + [System.Net.WebUtility]::HtmlEncode($Matches[2].Trim())
+              }
+              $script:HtmlLines += ("<h2>" + $title + "</h2>")
+              return
+            }
+
+            if ($trimmed -match '^\-\s+(.+?)\s*$') {
+              if (-not $script:InList) {
+                $script:HtmlLines += "<ul>"
+                $script:InList = $true
+              }
+              $script:HtmlLines += ("<li>" + [System.Net.WebUtility]::HtmlEncode($Matches[1].Trim()) + "</li>")
+              return
+            }
+
+            Close-List
+            $script:HtmlLines += ("<p>" + [System.Net.WebUtility]::HtmlEncode($trimmed) + "</p>")
+          }
+
           New-Item -ItemType Directory -Force -Path "dist" | Out-Null
           $notes = [string[]]$lines[$start..($end - 1)]
           [System.IO.File]::WriteAllText("dist/RELEASE_NOTES.md", (($notes -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+
+          $script:HtmlLines = @()
+          $script:InList = $false
+          foreach ($line in $notes) {
+            Add-HtmlLine $line
+          }
+          Close-List
+          [System.IO.File]::WriteAllText("dist/RELEASE_NOTES_CF.html", (($script:HtmlLines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
