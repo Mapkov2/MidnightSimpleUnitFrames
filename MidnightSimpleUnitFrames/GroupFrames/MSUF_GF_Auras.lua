@@ -499,7 +499,11 @@ local function CreateAuraIcon(parent, size)
         local aid  = self._msufAuraID
         if not unit or not aid then return end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
-        if GameTooltip.SetUnitAuraByAuraInstanceID then
+        if self._msufFilter == "HARMFUL" and GameTooltip.SetUnitDebuffByAuraInstanceID then
+            GameTooltip:SetUnitDebuffByAuraInstanceID(unit, aid)
+        elseif GameTooltip.SetUnitBuffByAuraInstanceID then
+            GameTooltip:SetUnitBuffByAuraInstanceID(unit, aid)
+        elseif GameTooltip.SetUnitAuraByAuraInstanceID then
             GameTooltip:SetUnitAuraByAuraInstanceID(unit, aid, self._msufFilter or "HELPFUL")
         end
         GameTooltip:Show()

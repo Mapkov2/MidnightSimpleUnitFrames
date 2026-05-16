@@ -78,6 +78,41 @@ local SetAbsorbTextureTest = GP.SetAbsorbTextureTest
 local ClearAbsorbTextureTest = GP.ClearAbsorbTextureTest
 local NormalizeGlowStyle = GP.NormalizeGlowStyle
 local SetControlEnabled = GP.SetControlEnabled
+
+local function ReadTooltipProvider()
+    local provider = ReadG("unitTooltipProvider", nil)
+    if provider == "MSUF" then return "MSUF" end
+    if provider == "GAME" then return "GAME" end
+    return ReadGBool("disableUnitInfoTooltips", true) and "GAME" or "MSUF"
+end
+
+local function ReadTooltipAnchor()
+    local anchor = ReadG("unitTooltipAnchor", nil)
+    if anchor == "EXTERNAL" or anchor == "FIXED" or anchor == "CURSOR" then
+        return anchor
+    end
+    if ReadTooltipProvider() == "MSUF" then
+        return (ReadG("unitInfoTooltipStyle", "classic") == "modern") and "CURSOR" or "FIXED"
+    end
+    if ReadG("unitInfoTooltipStyle", "classic") == "modern" then
+        return "CURSOR"
+    end
+    return "FIXED"
+end
+
+local function WriteTooltipSettings(provider, anchor)
+    provider = (provider == "MSUF") and "MSUF" or "GAME"
+    if anchor ~= "FIXED" and anchor ~= "CURSOR" and anchor ~= "EXTERNAL" then
+        anchor = "EXTERNAL"
+    end
+    if provider == "MSUF" and anchor == "EXTERNAL" then
+        anchor = "FIXED"
+    end
+    SetG("unitTooltipProvider", provider, "MSUF2_TOOLTIP_PROVIDER", { preview = false })
+    SetG("unitTooltipAnchor", anchor, "MSUF2_TOOLTIP_ANCHOR", { preview = false })
+    SetGBool("disableUnitInfoTooltips", provider ~= "MSUF", "MSUF2_TOOLTIPS", { preview = false })
+    SetG("unitInfoTooltipStyle", (anchor == "CURSOR") and "modern" or "classic", "MSUF2_TOOLTIP_STYLE", { preview = false })
+end
 local SetControlsEnabled = GP.SetControlsEnabled
 local ApplyFonts = GP.ApplyFonts
 local ApplyBars = GP.ApplyBars
@@ -226,18 +261,22 @@ local function BuildMisc(ctx)
         function() return ReadGBool("versionCheckEnabled", true) end,
         function(v) SetGBool("versionCheckEnabled", v, "MSUF2_VERSION_CHECK", { preview = false }) end)
 
-    local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 166, false)
-    local disable = W.Toggle(tooltips, "Disable MSUF unitframe tooltips")
-    M.BindToggle(ctx, disable,
-        function() return ReadGBool("disableUnitInfoTooltips", false) end,
-        function(v) SetGBool("disableUnitInfoTooltips", v, "MSUF2_TOOLTIPS", { preview = false }) end)
-    local tooltipStyle = W.Dropdown(tooltips, "MSUF unitframe tooltip position", {
-        { value = "classic", text = "Blizzard Classic" },
-        { value = "modern", text = "Modern (under cursor)" },
+    local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 216, false)
+    local tooltipProvider = W.Dropdown(tooltips, "Tooltip source", {
+        { value = "GAME", text = "GameTooltip (addon-compatible)" },
+        { value = "MSUF", text = "MSUF custom panel" },
     }, 240)
-    M.BindDropdown(ctx, tooltipStyle,
-        function() return ReadG("unitInfoTooltipStyle", "classic") end,
-        function(v) SetG("unitInfoTooltipStyle", v or "classic", "MSUF2_TOOLTIP_STYLE", { preview = false }) end)
+    M.BindDropdown(ctx, tooltipProvider,
+        function() return ReadTooltipProvider() end,
+        function(v) WriteTooltipSettings(v, ReadTooltipAnchor()) end)
+    local tooltipAnchor = W.Dropdown(tooltips, "Tooltip anchor", {
+        { value = "EXTERNAL", text = "Addon / Blizzard controlled" },
+        { value = "FIXED", text = "MSUF fixed position" },
+        { value = "CURSOR", text = "MSUF cursor" },
+    }, 240)
+    M.BindDropdown(ctx, tooltipAnchor,
+        function() return ReadTooltipAnchor() end,
+        function(v) WriteTooltipSettings(ReadTooltipProvider(), v) end)
 
     local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 190, false)
     local blizzUF = W.Toggle(blizzard, "Disable Blizzard unitframes")

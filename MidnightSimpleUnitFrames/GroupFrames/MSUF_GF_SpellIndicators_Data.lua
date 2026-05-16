@@ -20,6 +20,7 @@ SI.SpecMap = {
     SHAMAN_3    = "RestorationShaman",
     PRIEST_1    = "DisciplinePriest",
     PRIEST_2    = "HolyPriest",
+    PRIEST_3    = "ShadowPriest",
     PALADIN_1   = "HolyPaladin",
     PALADIN_2   = "ProtectionPaladin",
     PALADIN_3   = "RetributionPaladin",
@@ -34,6 +35,7 @@ SI.SpecInfo = {
     RestorationDruid    = { display = "Restoration Druid",    class = "DRUID"   },
     DisciplinePriest    = { display = "Discipline Priest",    class = "PRIEST"  },
     HolyPriest          = { display = "Holy Priest",          class = "PRIEST"  },
+    ShadowPriest        = { display = "Shadow Priest",        class = "PRIEST"  },
     MistweaverMonk      = { display = "Mistweaver Monk",      class = "MONK"    },
     RestorationShaman   = { display = "Restoration Shaman",   class = "SHAMAN"  },
     HolyPaladin         = { display = "Holy Paladin",         class = "PALADIN" },
@@ -89,11 +91,15 @@ SI.SpellIDs = {
         PrayerOfMending = 41635,
         PowerInfusion   = 10060,
     },
+    ShadowPriest = {
+        PowerInfusion   = 10060,
+    },
     MistweaverMonk = {
         RenewingMist    = 119611,
         EnvelopingMist  = 124682,
         SoothingMist    = 115175,
         AspectOfHarmony = 450769,
+        Coalescence     = 1292922,
         StrengthOfTheBlackOx = 443113,
     },
     RestorationShaman = {
@@ -170,6 +176,7 @@ SI.SecretSpellIDs = {
     RestorationDruid  = { IronBark = 102342 },
     DisciplinePriest  = { PainSuppression = 33206, PowerInfusion = 10060 },
     HolyPriest        = { GuardianSpirit = 47788, PowerInfusion = 10060 },
+    ShadowPriest      = { PowerInfusion = 10060 },
     MistweaverMonk    = { LifeCocoon = 116849, StrengthOfTheBlackOx = 443113 },
     HolyPaladin       = { BlessingOfProtection = 1022, HolyArmaments = 432502, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044 },
     ProtectionPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044 },
@@ -197,6 +204,9 @@ SI.SecretAuraInfo = {
     HolyPriest = {
         GuardianSpirit = { signature = "1:1:1:0" },
         PowerInfusion  = { signature = "1:0:0:1" },
+    },
+    ShadowPriest = {
+        PowerInfusion = { signature = "1:0:0:1" },
     },
     MistweaverMonk = {
         LifeCocoon           = { signature = "1:1:1:0" },
@@ -298,6 +308,7 @@ SI.IconTextures = {
     EnvelopingMist  = 775461,
     SoothingMist    = 606550,
     AspectOfHarmony = 5927638,
+    Coalescence     = "Interface\\Icons\\ability_monk_effuse",
     LifeCocoon      = 627485,
     StrengthOfTheBlackOx = 615340,
     -- Restoration Shaman
@@ -371,11 +382,15 @@ SI.TrackableAuras = {
         { name = "GuardianSpirit",  display = "Guardian Spirit",  color = {0.94, 0.50, 0.50}, secret = true },
         { name = "PowerInfusion",   display = "Power Infusion",   color = {0.94, 0.82, 0.31}, secret = true },
     },
+    ShadowPriest = {
+        { name = "PowerInfusion", display = "Power Infusion", color = {0.94, 0.82, 0.31}, secret = true },
+    },
     MistweaverMonk = {
         { name = "RenewingMist",   display = "Renewing Mist",   color = {0.56, 0.93, 0.56} },
         { name = "EnvelopingMist", display = "Enveloping Mist", color = {0.31, 0.76, 0.97} },
         { name = "SoothingMist",   display = "Soothing Mist",   color = {0.47, 0.87, 0.47} },
         { name = "AspectOfHarmony", display = "Aspect of Harmony", color = {0.81, 0.58, 0.93} },
+        { name = "Coalescence",    display = "Coalescence",     color = {0.31, 0.76, 0.97} },
         { name = "LifeCocoon",     display = "Life Cocoon",     color = {0.31, 0.76, 0.97}, secret = true },
         { name = "StrengthOfTheBlackOx", display = "Strength of the Black Ox", color = {0.40, 0.77, 0.74}, secret = true },
     },
@@ -440,6 +455,10 @@ SI.SpecDefaults = {
         GuardianSpirit  = { frame = { type = "border",  color = {0.94, 0.50, 0.50, 1}, priority = 1 } },
         PowerInfusion   = { frame = { type = "glow",    color = {0.94, 0.82, 0.31, 1}, priority = 2 } },
     },
+    ShadowPriest = {
+        PowerInfusion = { placed = { type = "icon", anchor = "TOPRIGHT", x = -1, y = -1, size = 22 },
+                          frame = { type = "glow", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
+    },
     PreservationEvoker = {
         Echo         = { placed = { type = "icon", anchor = "TOPLEFT",    x = 1, y = -1, size = 22 },
                          frame = { type = "namecolor", color = {0.31, 0.76, 0.97, 1}, priority = 5 } },
@@ -450,6 +469,7 @@ SI.SpecDefaults = {
         Lifebind     = { placed = { type = "square", anchor = "CENTER",   x = 0, y = 0, size = 11 } },
         TimeDilation = { frame = { type = "border", color = {0.94, 0.82, 0.31, 1}, priority = 1 } },
         Rewind       = { frame = { type = "glow", color = {0.74, 0.85, 0.40, 1}, priority = 2 } },
+        DreamFlight  = { frame = { type = "glow", color = {0.81, 0.58, 0.93, 1}, priority = 3 } },
         VerdantEmbrace = { placed = { type = "square", anchor = "CENTER", x = 12, y = 0, size = 10 } },
     },
     AugmentationEvoker = {
@@ -469,6 +489,7 @@ SI.SpecDefaults = {
         EnvelopingMist = { placed = { type = "icon", anchor = "TOPRIGHT",   x = -1, y = -1, size = 22 } },
         SoothingMist   = { placed = { type = "icon", anchor = "BOTTOMLEFT", x = 1, y = 1, size = 20 } },
         AspectOfHarmony = { placed = { type = "square", anchor = "BOTTOMRIGHT", x = -3, y = 3, size = 9 } },
+        Coalescence    = { placed = { type = "icon", anchor = "BOTTOM", x = 0, y = 1, size = 20 } },
         LifeCocoon     = { frame = { type = "border", color = {0.31, 0.76, 0.97, 1}, priority = 1 } },
         StrengthOfTheBlackOx = { frame = { type = "border", color = {0.40, 0.77, 0.74, 1}, priority = 2 } },
     },

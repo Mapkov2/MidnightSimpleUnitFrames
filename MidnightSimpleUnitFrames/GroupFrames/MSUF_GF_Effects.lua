@@ -5474,25 +5474,12 @@ local function OnEnter(f)
         if _tooltipPendingToken ~= token then return end
         if _tooltipTarget ~= f then return end
         if not f.unit or not UnitExists(f.unit) then return end
-        if _G.GameTooltip and not _G.GameTooltip:IsForbidden() then
+        local tips = ns and ns.Tooltips
+        if tips and type(tips.ShowUnit) == "function" then
+            tips.ShowUnit(f, f.unit)
+        elseif _G.GameTooltip and not _G.GameTooltip:IsForbidden() then
             local gt = _G.GameTooltip
-            local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-            if g.disableUnitInfoTooltips then
-                if (g.unitInfoTooltipStyle or "classic") == "modern" then
-                    gt:SetOwner(_G.UIParent, "ANCHOR_CURSOR", 0, -100)
-                else
-                    gt:SetOwner(_G.UIParent, "ANCHOR_NONE")
-                    gt:ClearAllPoints()
-                    local cx, cy = g.tooltipPosX, g.tooltipPosY
-                    if type(cx) == "number" and type(cy) == "number" then
-                        gt:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", cx, cy)
-                    else
-                        gt:SetPoint("BOTTOMRIGHT", _G.UIParent, "BOTTOMRIGHT", -16, 16)
-                    end
-                end
-            else
-                gt:SetOwner(f, "ANCHOR_RIGHT")
-            end
+            gt:SetOwner(f, "ANCHOR_RIGHT")
             gt:SetUnit(f.unit)
             gt:Show()
         end
@@ -5506,7 +5493,10 @@ local function OnLeave(f)
     -- Hide highlight
     if f._msufGFHoverBorder then f._msufGFHoverBorder:Hide() end
     -- Hide tooltip
-    if _G.GameTooltip and not _G.GameTooltip:IsForbidden() then
+    local tips = ns and ns.Tooltips
+    if tips and type(tips.HideUnit) == "function" then
+        tips.HideUnit(f)
+    elseif _G.GameTooltip and not _G.GameTooltip:IsForbidden() then
         _G.GameTooltip:Hide()
     end
 end

@@ -756,12 +756,51 @@ end
     if g.ufcoreUrgentMaxPerFlush == nil or type(g.ufcoreUrgentMaxPerFlush) ~= "number" then
         g.ufcoreUrgentMaxPerFlush = 10
     end
+    local hadLegacyTooltipDisable = (g.disableUnitInfoTooltips ~= nil)
+    local hadLegacyTooltipStyle = (g.unitInfoTooltipStyle ~= nil)
+    local hadTooltipProvider = (g.unitTooltipProvider ~= nil)
+    local hadTooltipAnchor = (g.unitTooltipAnchor ~= nil)
     if g.disableUnitInfoTooltips == nil then
         g.disableUnitInfoTooltips = true
     end
     if g.unitInfoTooltipStyle == nil then
         g.unitInfoTooltipStyle = "classic"
     end
+    if (not hadTooltipProvider) and (not hadTooltipAnchor)
+        and (not hadLegacyTooltipDisable) and (not hadLegacyTooltipStyle)
+        and g.tooltipPosX == nil and g.tooltipPosY == nil then
+        g.unitTooltipProvider = "GAME"
+        g.unitTooltipAnchor = "EXTERNAL"
+    end
+    if g.unitTooltipProvider == nil then
+        if g.disableUnitInfoTooltips == false then
+            g.unitTooltipProvider = "MSUF"
+        else
+            g.unitTooltipProvider = "GAME"
+        end
+    elseif g.unitTooltipProvider ~= "GAME" and g.unitTooltipProvider ~= "MSUF" then
+        g.unitTooltipProvider = "GAME"
+    end
+    if g.unitTooltipAnchor == nil then
+        if g.unitTooltipProvider == "MSUF" then
+            g.unitTooltipAnchor = (g.unitInfoTooltipStyle == "modern") and "CURSOR" or "FIXED"
+        elseif (type(g.tooltipPosX) == "number") and (type(g.tooltipPosY) == "number") then
+            g.unitTooltipAnchor = "FIXED"
+        elseif g.unitInfoTooltipStyle == "modern" then
+            g.unitTooltipAnchor = "CURSOR"
+        elseif g.disableUnitInfoTooltips == true then
+            g.unitTooltipAnchor = "FIXED"
+        else
+            g.unitTooltipAnchor = "EXTERNAL"
+        end
+    elseif g.unitTooltipAnchor ~= "EXTERNAL" and g.unitTooltipAnchor ~= "FIXED" and g.unitTooltipAnchor ~= "CURSOR" then
+        g.unitTooltipAnchor = "EXTERNAL"
+    end
+    if g.unitTooltipProvider == "MSUF" and g.unitTooltipAnchor == "EXTERNAL" then
+        g.unitTooltipAnchor = "FIXED"
+    end
+    g.disableUnitInfoTooltips = (g.unitTooltipProvider ~= "MSUF")
+    g.unitInfoTooltipStyle = (g.unitTooltipAnchor == "CURSOR") and "modern" or "classic"
     -- Tooltip custom position (set via Edit Mode drag).
     -- nil / false = use default style-based positioning (classic/modern).
     -- When set, these are BOTTOMLEFT-relative pixel coordinates on UIParent.
