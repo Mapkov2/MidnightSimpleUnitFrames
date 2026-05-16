@@ -570,6 +570,58 @@ function Test-GitCleanEnough {
     return [string[]]$status
 }
 
+function Get-GitCurrentBranch {
+    Push-Location $RepoRoot
+    try {
+        $branch = (& git symbolic-ref --quiet --short HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($branch)) {
+            return $branch.Trim()
+        }
+    } finally {
+        Pop-Location
+    }
+
+    return ""
+}
+
+function Get-GitHubReleaseBranches {
+    Push-Location $RepoRoot
+    try {
+        $lines = & git ls-remote --heads origin 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not scan origin branches: $($lines -join ' ')"
+        }
+
+        $branches = @()
+        foreach ($line in $lines) {
+            if ($line -match 'refs/heads/(.+?)\s*$') {
+                $branches += $Matches[1].Trim()
+            }
+        }
+
+        return [string[]]@($branches | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+    } finally {
+        Pop-Location
+    }
+}
+
+function Assert-ReleaseBranch {
+    param([AllowNull()][string]$ReleaseBranch)
+
+    if ([string]::IsNullOrWhiteSpace($ReleaseBranch)) {
+        throw "Select the GitHub branch that should be released."
+    }
+
+    $current = Get-GitCurrentBranch
+    if ([string]::IsNullOrWhiteSpace($current)) {
+        throw "Current checkout is detached. Checkout '$ReleaseBranch' before publishing."
+    }
+
+    if ($current -ne $ReleaseBranch) {
+        throw "Selected release branch is '$ReleaseBranch', but the current checkout is '$current'. Checkout '$ReleaseBranch' before publishing."
+    }
+}
+
 function Commit-AllChanges {
     param([Parameter(Mandatory = $true)][string]$ReleaseTag)
 
@@ -594,16 +646,21 @@ function Create-ReleaseTag {
 }
 
 function Push-ReleaseTag {
-    param([Parameter(Mandatory = $true)][string]$ReleaseTag)
+    param(
+        [Parameter(Mandatory = $true)][string]$ReleaseTag,
+        [Parameter(Mandatory = $true)][string]$ReleaseBranch
+    )
 
-    Invoke-External "git" @("push", "origin", "HEAD")
+    Assert-ReleaseBranch -ReleaseBranch $ReleaseBranch
+    Invoke-External "git" @("push", "origin", ("HEAD:refs/heads/" + $ReleaseBranch))
     Invoke-External "git" @("push", "origin", $ReleaseTag)
 }
 
 function Start-GitHubWorkflow {
     param(
         [Parameter(Mandatory = $true)][string]$ReleaseTag,
-        [Parameter(Mandatory = $true)][bool]$Prerelease
+        [Parameter(Mandatory = $true)][bool]$Prerelease,
+        [AllowNull()][string]$ReleaseBranch
     )
 
     $gh = Get-Command gh -ErrorAction SilentlyContinue
@@ -613,7 +670,12 @@ function Start-GitHubWorkflow {
     }
 
     Invoke-External "gh" @("auth", "status")
-    Invoke-External "gh" @("workflow", "run", "release.yml", "-f", "tag_name=$ReleaseTag", "-f", ("prerelease=" + $Prerelease.ToString().ToLowerInvariant()))
+    $args = @("workflow", "run", "release.yml")
+    if (-not [string]::IsNullOrWhiteSpace($ReleaseBranch)) {
+        $args += @("--ref", $ReleaseBranch)
+    }
+    $args += @("-f", "tag_name=$ReleaseTag", "-f", ("prerelease=" + $Prerelease.ToString().ToLowerInvariant()))
+    Invoke-External "gh" $args
     Write-ReleaseLog "GitHub release workflow queued for $ReleaseTag."
 }
 
@@ -684,6 +746,7 @@ $form.MinimumSize = New-Object System.Drawing.Size(900, 820)
 $defaultTag = Get-RepoVersionText
 if ([string]::IsNullOrWhiteSpace($defaultTag)) { $defaultTag = "5.1-beta4" }
 $defaultDisplay = Convert-TagToDisplayVersion $defaultTag
+$defaultBranch = Get-GitCurrentBranch
 
 function New-Label {
     param([string]$Text, [int]$X, [int]$Y, [int]$W = 120)
@@ -898,8 +961,40 @@ $keepAutoBox = New-Object System.Windows.Forms.CheckBox
 $keepAutoBox.Text = "Keep old auto entries"
 $keepAutoBox.Checked = $false
 $keepAutoBox.Location = New-Object System.Drawing.Point(465, 74)
-$keepAutoBox.Size = New-Object System.Drawing.Size(180, 24)
+$keepAutoBox.Size = New-Object System.Drawing.Size(165, 24)
 $form.Controls.Add($keepAutoBox)
+
+New-Label "Release branch" 645 76 95 | Out-Null
+$branchBox = New-Object System.Windows.Forms.ComboBox
+$branchBox.Location = New-Object System.Drawing.Point(745, 74)
+$branchBox.Size = New-Object System.Drawing.Size(165, 22)
+$branchBox.DropDownStyle = "DropDown"
+$branchBox.Text = $defaultBranch
+$form.Controls.Add($branchBox)
+
+$scanBranchesButton = New-Object System.Windows.Forms.Button
+$scanBranchesButton.Text = "Scan"
+$scanBranchesButton.Location = New-Object System.Drawing.Point(920, 72)
+$scanBranchesButton.Size = New-Object System.Drawing.Size(96, 26)
+$scanBranchesButton.Add_Click({
+    try {
+        $branches = @(Get-GitHubReleaseBranches)
+        $branchBox.Items.Clear()
+        foreach ($branch in $branches) {
+            [void]$branchBox.Items.Add($branch)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($defaultBranch) -and $branches -contains $defaultBranch) {
+            $branchBox.Text = $defaultBranch
+        } elseif ($branches.Count -gt 0 -and [string]::IsNullOrWhiteSpace($branchBox.Text)) {
+            $branchBox.Text = $branches[0]
+        }
+        Write-ReleaseLog ("Scanned origin branches: " + $branches.Count)
+    } catch {
+        Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
+    }
+})
+$form.Controls.Add($scanBranchesButton)
 
 $perfBox = New-TextArea "Performance (one bullet per line)" 16 108 490 90
 $bugBox = New-TextArea "Bugfixes (one bullet per line)" 526 108 490 90
@@ -908,9 +1003,16 @@ $toolBox = New-TextArea "Release / Tooling" 526 228 490 75
 $docBox = New-TextArea "Documentation" 16 333 1000 58
 $mdBox = New-TextArea "Markdown changelog from repo" 16 420 1000 92
 
+$autoSourceBox = New-Object System.Windows.Forms.CheckBox
+$autoSourceBox.Text = "Auto Changelog before Build/Publish"
+$autoSourceBox.Checked = $true
+$autoSourceBox.Location = New-Object System.Drawing.Point(500, 420)
+$autoSourceBox.Size = New-Object System.Drawing.Size(260, 22)
+$form.Controls.Add($autoSourceBox)
+
 $useMarkdownBox = New-Object System.Windows.Forms.CheckBox
-$useMarkdownBox.Text = "Use Markdown text as release source"
-$useMarkdownBox.Checked = $false
+$useMarkdownBox.Text = "Use shown notes as release source"
+$useMarkdownBox.Checked = $true
 $useMarkdownBox.Location = New-Object System.Drawing.Point(760, 420)
 $useMarkdownBox.Size = New-Object System.Drawing.Size(260, 22)
 $form.Controls.Add($useMarkdownBox)
@@ -945,7 +1047,7 @@ function Set-UiFromMarkdown {
     return $parsed
 }
 
-function Read-UiRelease {
+function Read-UiReleaseMetadata {
     $tag = Normalize-ReleaseVersion $tagBox.Text
     $display = $displayBox.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($display)) { $display = Convert-TagToDisplayVersion $tag }
@@ -960,6 +1062,22 @@ function Read-UiRelease {
     if ($date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "Date must be YYYY-MM-DD." }
     $output = $outBox.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($output)) { $output = "dist" }
+    $branch = $branchBox.Text.Trim()
+
+    return [pscustomobject]@{
+        Tag = $tag
+        Display = $display
+        Date = $date
+        OutputDir = $output
+        Branch = $branch
+        Prerelease = $preBox.Checked
+    }
+}
+
+function Read-UiRelease {
+    $meta = Read-UiReleaseMetadata
+    $display = $meta.Display
+    $date = $meta.Date
 
     if ($useMarkdownBox.Checked) {
         if ([string]::IsNullOrWhiteSpace($mdBox.Text)) { throw "Markdown changelog text is empty." }
@@ -972,13 +1090,27 @@ function Read-UiRelease {
     }
 
     return [pscustomobject]@{
-        Tag = $tag
+        Tag = $meta.Tag
         Display = $display
         Date = $date
-        OutputDir = $output
+        OutputDir = $meta.OutputDir
+        Branch = $meta.Branch
         Body = $body
-        Prerelease = $preBox.Checked
+        Prerelease = $meta.Prerelease
     }
+}
+
+function Sync-AutoChangelogSource {
+    param([string]$Reason = "release")
+
+    $meta = Read-UiReleaseMetadata
+    $baseRef = $baseRefBox.Text.Trim()
+    Update-AutoChangelogFromRepo -DisplayVersion $meta.Display -BaseRef $baseRef -ReleaseDate $meta.Date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked
+    $section = Find-ChangelogSection -ReleaseTag $meta.Tag -DisplayVersion $meta.Display
+    $mdBox.Text = $section.Markdown
+    Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
+    $useMarkdownBox.Checked = $true
+    Write-ReleaseLog ("Auto changelog refreshed for " + $Reason + ": " + $section.Version)
 }
 
 $loadRepoButton = New-Object System.Windows.Forms.Button
@@ -1030,19 +1162,7 @@ $autoChangelogButton.Location = New-Object System.Drawing.Point(16, 580)
 $autoChangelogButton.Size = New-Object System.Drawing.Size(145, 32)
 $autoChangelogButton.Add_Click({
     try {
-        $tag = Normalize-ReleaseVersion $tagBox.Text
-        $display = $displayBox.Text.Trim()
-        if ([string]::IsNullOrWhiteSpace($display)) { $display = Convert-TagToDisplayVersion $tag }
-        $date = $dateBox.Text.Trim()
-        if ($date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "Date must be YYYY-MM-DD." }
-        $baseRef = $baseRefBox.Text.Trim()
-
-        Update-AutoChangelogFromRepo -DisplayVersion $display -BaseRef $baseRef -ReleaseDate $date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked
-        $section = Find-ChangelogSection -ReleaseTag $tag -DisplayVersion $display
-        $mdBox.Text = $section.Markdown
-        Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
-        $useMarkdownBox.Checked = $true
-        Write-ReleaseLog ("Auto changelog updated from repo changes for " + $display)
+        Sync-AutoChangelogSource -Reason "manual refresh"
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
         [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null
@@ -1088,6 +1208,9 @@ $prepButton.Location = New-Object System.Drawing.Point(592, 542)
 $prepButton.Size = New-Object System.Drawing.Size(145, 32)
 $prepButton.Add_Click({
     try {
+        if ($autoSourceBox.Checked) {
+            Sync-AutoChangelogSource -Reason "Build ZIP"
+        }
         $r = Read-UiRelease
         Start-LocalPreparation -ReleaseTag $r.Tag -DisplayVersion $r.Display -ReleaseDate $r.Date -BodyLines $r.Body -OutputDir $r.OutputDir -BuildZip $buildBox.Checked
         Write-ReleaseLog "Local release preparation complete."
@@ -1104,31 +1227,37 @@ $publishButton.Location = New-Object System.Drawing.Point(746, 542)
 $publishButton.Size = New-Object System.Drawing.Size(125, 32)
 $publishButton.Add_Click({
     try {
-        $r = Read-UiRelease
-        $releaseKind = if ($r.Prerelease) { "Beta / prerelease" } else { "Full release" }
+        $meta = Read-UiReleaseMetadata
+        Assert-ReleaseBranch -ReleaseBranch $meta.Branch
+        $releaseKind = if ($meta.Prerelease) { "Beta / prerelease" } else { "Full release" }
         $steps = @("update changelog files")
+        if ($autoSourceBox.Checked) { $steps = @("refresh Auto Changelog from repo") + $steps }
         if ($buildBox.Checked) { $steps += "build local ZIP" }
         if ($commitBox.Checked) { $steps += "commit all changes" }
         if ($tagCreateBox.Checked) { $steps += "create annotated tag" }
-        if ($pushBox.Checked) { $steps += "push HEAD and tag" }
+        if ($pushBox.Checked) { $steps += ("push HEAD to origin/" + $meta.Branch + " and push tag") }
         if ($workflowBox.Checked) { $steps += "publish through GitHub Actions" }
         $confirm = [System.Windows.Forms.MessageBox]::Show(
-            "Publish $($r.Tag) as $releaseKind.`nDisplay name: $($r.Display)`n`nSteps:`n- $($steps -join "`n- ")`n`nContinue?",
+            "Publish $($meta.Tag) as $releaseKind.`nDisplay name: $($meta.Display)`nBranch: $($meta.Branch)`n`nSteps:`n- $($steps -join "`n- ")`n`nContinue?",
             "MSUF Release Helper",
             "YesNo",
             "Warning"
         )
         if ($confirm -ne "Yes") { return }
 
+        if ($autoSourceBox.Checked) {
+            Sync-AutoChangelogSource -Reason "Publish"
+        }
+        $r = Read-UiRelease
         Start-LocalPreparation -ReleaseTag $r.Tag -DisplayVersion $r.Display -ReleaseDate $r.Date -BodyLines $r.Body -OutputDir $r.OutputDir -BuildZip $buildBox.Checked
         if ($commitBox.Checked) { Commit-AllChanges -ReleaseTag $r.Tag }
         if ($tagCreateBox.Checked) { Create-ReleaseTag -ReleaseTag $r.Tag }
-        if ($pushBox.Checked) { Push-ReleaseTag -ReleaseTag $r.Tag }
+        if ($pushBox.Checked) { Push-ReleaseTag -ReleaseTag $r.Tag -ReleaseBranch $r.Branch }
         if ($workflowBox.Checked) {
             if ($pushBox.Checked) {
                 Write-ReleaseLog "GitHub Actions release workflow will start from the pushed release tag."
             } else {
-                Start-GitHubWorkflow -ReleaseTag $r.Tag -Prerelease $r.Prerelease
+                Start-GitHubWorkflow -ReleaseTag $r.Tag -Prerelease $r.Prerelease -ReleaseBranch $r.Branch
             }
         }
         Write-ReleaseLog "GitHub release step complete."

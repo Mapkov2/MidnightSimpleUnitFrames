@@ -18,6 +18,11 @@ buttons:
 3. **Publish** updates files again, commits, tags, pushes, and lets GitHub
    Actions publish the release.
 
+By default, **Auto Changelog before Build/Publish** is enabled. That means
+**Build ZIP** and **Publish** refresh the auto changelog first, load that
+section into the notes field, and use those shown notes as the release source.
+Turn it off only when you intentionally want to release manually edited notes.
+
 Pick **Full release** for a stable release. Pick **Beta / prerelease** for
 alpha, beta, RC, or test releases. The publish confirmation shows the selected
 release type, display name, and exact steps before anything is pushed.
@@ -28,6 +33,11 @@ Use **VERSION** to reload the tag from the repository `VERSION` file. The
 **Anzeigename** field is the human-readable changelog title, for example
 `5.2 Beta 1`, while **Version / tag** is the tag/package version, for example
 `5.2-beta1`.
+
+Use **Scan** next to **Release branch** to read branches from `origin`, then
+select the branch you want to release from. Publish only continues when the
+current checkout is on that selected branch, then pushes explicitly to
+`origin/<branch>` and tags that commit.
 
 The detailed action checkboxes are hidden by default. Use **Advanced actions**
 only when you need to change whether Publish builds, commits, tags, pushes, or
@@ -50,12 +60,14 @@ normal release profile:
 
 - **Commit all changes** runs `git add -A` and creates `Release <tag>`
 - **Create tag** creates an annotated tag
-- **Push** pushes `HEAD` and the tag to `origin`
+- **Push** pushes `HEAD` to the selected `origin/<branch>` and pushes the tag
 - **Run GitHub workflow** publishes through `.github/workflows/release.yml`;
   with **Push** enabled, the tag push starts it, otherwise the helper dispatches it
 
 The GitHub workflow builds the zip again from the pushed tag, creates/updates
 the GitHub release, uploads the zip, then publishes to Wago and CurseForge.
+Tags containing `alpha`, `beta`, `rc`, or `pre` are marked as GitHub
+pre-releases and are not promoted as the latest stable GitHub release.
 
 The workflow requires the repository secrets:
 
@@ -67,17 +79,17 @@ The workflow requires the repository secrets:
 Each text area accepts one bullet per line. Lines that already start with `- `
 are kept as-is; all other non-empty lines are converted into markdown bullets.
 
-Use **Load CHANGELOG.md** to read the matching release section from the repo.
+Use **Load Notes** to read the matching release section from the repo.
 The helper matches the release tag or changelog title, falls back to the latest
 section, shows that full section as Markdown, and maps known headings into the
 structured input fields.
 
-Use **Since ref** plus **Load Git Commits** to generate a changelog draft from
+Use **Since ref** plus **Draft from Git** to generate a changelog draft from
 the commits after that ref up to `HEAD`. The helper reads each commit subject,
 checks the changed files, assigns the entry to a changelog category, and includes
 the short commit hash plus the most relevant files in the generated bullet.
 
-Keep **Use Markdown text as release source** enabled when you want to preserve
+Keep **Use shown notes as release source** enabled when you want to preserve
 the loaded Markdown section exactly. Disable it when you want the helper to
 build the section from the structured text areas instead.
 

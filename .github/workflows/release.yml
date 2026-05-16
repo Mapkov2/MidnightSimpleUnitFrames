@@ -54,6 +54,7 @@ jobs:
           }
 
       - name: Resolve release channel
+        id: channel
         shell: pwsh
         run: |
           $tag = $env:RELEASE_VERSION
@@ -73,6 +74,8 @@ jobs:
           "RELEASE_IS_PRERELEASE=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
           "WAGO_STABILITY=$wagoStability" >> $env:GITHUB_ENV
           "CF_RELEASE_TYPE=$curseForgeType" >> $env:GITHUB_ENV
+          "release_is_prerelease=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "github_make_latest=$(if ($isPrerelease) { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
           Write-Host "Release $tag uses Wago stability '$wagoStability' and CurseForge type '$curseForgeType'."
 
       - name: Build AddOns zip
@@ -89,6 +92,8 @@ jobs:
           body_path: CHANGELOG.md
           fail_on_unmatched_files: true
           overwrite_files: true
+          prerelease: ${{ steps.channel.outputs.release_is_prerelease }}
+          make_latest: ${{ steps.channel.outputs.github_make_latest }}
 
       - name: Upload to Wago
         shell: pwsh
