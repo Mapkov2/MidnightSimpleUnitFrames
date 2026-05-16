@@ -219,6 +219,7 @@ local function BuildGFBars(ctx)
         return key
     end
     M.gfTextSlotSelection = M.gfTextSlotSelection or {}
+    M.gfTextMoveTogether = M.gfTextMoveTogether or {}
     local function CurrentSlot(kind)
         local scope = CurrentScope()
         local byScope = M.gfTextSlotSelection[scope]
@@ -240,6 +241,18 @@ local function BuildGFBars(ctx)
             prefix = (slot == "left" and "powerTextLeft") or (slot == "right" and "powerTextRight") or "powerTextCenter"
         end
         return prefix .. "OffsetX", prefix .. "OffsetY"
+    end
+    local function MoveTogether(kind)
+        local scope = CurrentScope()
+        local byScope = M.gfTextMoveTogether[scope]
+        local value = byScope and byScope[kind]
+        if value == nil then return true end
+        return value == true
+    end
+    local function SetMoveTogether(kind, value)
+        local scope = CurrentScope()
+        M.gfTextMoveTogether[scope] = M.gfTextMoveTogether[scope] or {}
+        M.gfTextMoveTogether[scope][kind] = value ~= false
     end
 
     local function ScopeDisplayName()
@@ -364,12 +377,20 @@ local function BuildGFBars(ctx)
     PlaceSlider(hpTab, healthY, textRightX, -170, hpSliderW)
 
     SectionLabel(hpTab, "Selected Slot", textRightX, -232)
+    local hpMoveTogether = W.ToggleAt(hpTab, "Move text as one group", textRightX, -262, hpSliderW)
+    M.BindToggle(ctx, hpMoveTogether,
+        function() return MoveTogether("hp") end,
+        function(v)
+            SetMoveTogether("hp", v)
+            if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
+            M.Refresh(ctx)
+        end)
     local hpSlot = W.Segment(hpTab, "Slot", {
         { value = "left", text = "Left" },
         { value = "center", text = "Center" },
         { value = "right", text = "Right" },
     }, hpSliderW)
-    W.MoveWidget(hpSlot, hpTab, textRightX, -262, hpSliderW, "LEFT")
+    W.MoveWidget(hpSlot, hpTab, textRightX, -304, hpSliderW, "LEFT")
     M.BindSegment(ctx, hpSlot,
         function() return CurrentSlot("hp") end,
         function(v)
@@ -377,7 +398,7 @@ local function BuildGFBars(ctx)
             M.Refresh(ctx)
         end)
     local hpSlotX = W.Slider(hpTab, "Slot X", -100, 100, 1, hpSliderW)
-    PlaceSlider(hpTab, hpSlotX, textRightX, -316, hpSliderW)
+    PlaceSlider(hpTab, hpSlotX, textRightX, -366, hpSliderW)
     M.BindSlider(ctx, hpSlotX,
         function()
             local xKey = SlotOffsetKeys("hp")
@@ -388,7 +409,7 @@ local function BuildGFBars(ctx)
             Set(CurrentScope(), xKey, v, "geometry")
         end)
     local hpSlotY = W.Slider(hpTab, "Slot Y", -100, 100, 1, hpSliderW)
-    PlaceSlider(hpTab, hpSlotY, textRightX, -374, hpSliderW)
+    PlaceSlider(hpTab, hpSlotY, textRightX, -424, hpSliderW)
     M.BindSlider(ctx, hpSlotY,
         function()
             local _, yKey = SlotOffsetKeys("hp")
@@ -399,9 +420,9 @@ local function BuildGFBars(ctx)
             Set(CurrentScope(), yKey, v, "geometry")
         end)
 
-    SectionLabel(hpTab, "Appearance", textRightX, -456)
+    SectionLabel(hpTab, "Appearance", textRightX, -506)
     local healthSize = BindScopeSlider(ctx, W.Slider(hpTab, "Size", 6, 48, 1, hpSliderW), "hpFontSize", 10, "font")
-    PlaceSlider(hpTab, healthSize, textRightX, -486, hpSliderW)
+    PlaceSlider(hpTab, healthSize, textRightX, -536, hpSliderW)
 
     SectionLabel(powerTab, "Power Text", textLeftX, -4)
     PreviewText(powerTab, "100 Energy", textRightX, -4, textRightW)
@@ -432,12 +453,20 @@ local function BuildGFBars(ctx)
     PlaceSlider(powerTab, powerY, textRightX, -170, hpSliderW)
 
     SectionLabel(powerTab, "Selected Slot", textRightX, -232)
+    local powerMoveTogether = W.ToggleAt(powerTab, "Move text as one group", textRightX, -262, hpSliderW)
+    M.BindToggle(ctx, powerMoveTogether,
+        function() return MoveTogether("power") end,
+        function(v)
+            SetMoveTogether("power", v)
+            if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
+            M.Refresh(ctx)
+        end)
     local powerSlot = W.Segment(powerTab, "Slot", {
         { value = "left", text = "Left" },
         { value = "center", text = "Center" },
         { value = "right", text = "Right" },
     }, hpSliderW)
-    W.MoveWidget(powerSlot, powerTab, textRightX, -262, hpSliderW, "LEFT")
+    W.MoveWidget(powerSlot, powerTab, textRightX, -304, hpSliderW, "LEFT")
     M.BindSegment(ctx, powerSlot,
         function() return CurrentSlot("power") end,
         function(v)
@@ -445,7 +474,7 @@ local function BuildGFBars(ctx)
             M.Refresh(ctx)
         end)
     local powerSlotX = W.Slider(powerTab, "Slot X", -100, 100, 1, hpSliderW)
-    PlaceSlider(powerTab, powerSlotX, textRightX, -316, hpSliderW)
+    PlaceSlider(powerTab, powerSlotX, textRightX, -366, hpSliderW)
     M.BindSlider(ctx, powerSlotX,
         function()
             local xKey = SlotOffsetKeys("power")
@@ -456,7 +485,7 @@ local function BuildGFBars(ctx)
             Set(CurrentScope(), xKey, v, "geometry")
         end)
     local powerSlotY = W.Slider(powerTab, "Slot Y", -100, 100, 1, hpSliderW)
-    PlaceSlider(powerTab, powerSlotY, textRightX, -374, hpSliderW)
+    PlaceSlider(powerTab, powerSlotY, textRightX, -424, hpSliderW)
     M.BindSlider(ctx, powerSlotY,
         function()
             local _, yKey = SlotOffsetKeys("power")
@@ -467,9 +496,9 @@ local function BuildGFBars(ctx)
             Set(CurrentScope(), yKey, v, "geometry")
         end)
 
-    SectionLabel(powerTab, "Appearance", textRightX, -456)
+    SectionLabel(powerTab, "Appearance", textRightX, -506)
     local powerSize = BindScopeSlider(ctx, W.Slider(powerTab, "Size", 6, 48, 1, hpSliderW), "powerFontSize", 9, "font")
-    PlaceSlider(powerTab, powerSize, textRightX, -486, hpSliderW)
+    PlaceSlider(powerTab, powerSize, textRightX, -536, hpSliderW)
 
     SectionLabel(advancedTab, "Text Layers", textLeftX, -4)
     local layerHint = W.Text(advancedTab, "Controls draw order when text overlaps bars, icons, or indicators.", textLeftX, -28, textLeftW, T.colors.dim)
@@ -489,8 +518,10 @@ local function BuildGFBars(ctx)
         if tabs and tabs.SetValue then tabs:SetValue(tab) end
         scopeLabel:SetText("Editing " .. ScopeDisplayName())
         SetOptionsEnabled({ nameSize, nameAnchor, nameX, nameY, nameLayer }, Bool(CurrentScope(), "showName", true))
-        SetOptionsEnabled({ healthLeft, healthCenter, healthRight, healthDelimiter, reverseHP, healthSize, healthX, healthY, hpSlot, hpSlotX, hpSlotY, hpLayer }, Bool(CurrentScope(), "showHPText", true))
-        SetOptionsEnabled({ powerLeft, powerCenter, powerRight, powerDelimiter, powerSize, powerX, powerY, powerSlot, powerSlotX, powerSlotY, powerLayer }, IsPowerTextEnabled())
+        SetOptionsEnabled({ healthLeft, healthCenter, healthRight, healthDelimiter, reverseHP, healthSize, healthX, healthY, hpMoveTogether, hpLayer }, Bool(CurrentScope(), "showHPText", true))
+        SetOptionsEnabled({ hpSlot, hpSlotX, hpSlotY }, Bool(CurrentScope(), "showHPText", true) and not MoveTogether("hp"))
+        SetOptionsEnabled({ powerLeft, powerCenter, powerRight, powerDelimiter, powerSize, powerX, powerY, powerMoveTogether, powerLayer }, IsPowerTextEnabled())
+        SetOptionsEnabled({ powerSlot, powerSlotX, powerSlotY }, IsPowerTextEnabled() and not MoveTogether("power"))
         SetOptionEnabled(showName, true)
         SetOptionEnabled(showHP, true)
         SetOptionEnabled(powerText, true)

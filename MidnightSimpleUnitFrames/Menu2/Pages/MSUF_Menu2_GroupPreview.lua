@@ -568,6 +568,20 @@ local function GFPreviewTextLabel(kind, slot)
     return "Name Text"
 end
 
+local function GFPreviewTextMovesTogether(scope, kind)
+    local byScope = M.gfTextMoveTogether and M.gfTextMoveTogether[scope or CurrentScope()]
+    local value = byScope and byScope[kind]
+    if value == nil then return true end
+    return value == true
+end
+
+local function GFPreviewSetTextMoveTogether(scope, kind, value)
+    scope = scope or CurrentScope()
+    M.gfTextMoveTogether = M.gfTextMoveTogether or {}
+    M.gfTextMoveTogether[scope] = M.gfTextMoveTogether[scope] or {}
+    M.gfTextMoveTogether[scope][kind] = value ~= false
+end
+
 local function GFPreviewPlaceHandleAroundRegions(handle, parent, regions, pad)
     if not (handle and parent and parent.GetLeft and regions) then return false end
     pad = tonumber(pad) or 3
@@ -864,9 +878,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             M.gfTextTabSelection = M.gfTextTabSelection or {}
             M.gfTextTabSelection[CurrentScope()] = handle._cfgTextKind
             if handle._cfgTextSlot then
+                GFPreviewSetTextMoveTogether(CurrentScope(), handle._cfgTextKind, false)
                 M.gfTextSlotSelection = M.gfTextSlotSelection or {}
                 M.gfTextSlotSelection[CurrentScope()] = M.gfTextSlotSelection[CurrentScope()] or {}
                 M.gfTextSlotSelection[CurrentScope()][handle._cfgTextKind] = handle._cfgTextSlot
+            elseif handle._cfgTextKind == "hp" or handle._cfgTextKind == "power" then
+                GFPreviewSetTextMoveTogether(CurrentScope(), handle._cfgTextKind, true)
             end
         end
         GFPreviewRefreshHandleSelection(box)
@@ -1203,12 +1220,16 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     local nameTextHandle = CreatePreviewHandle("nameText", "text", { 0.30, 0.66, 1.00 }, "NAME", 74, 18, false)
     ConfigureTextHandle(nameTextHandle, "name")
+    local hpTextHandle = CreatePreviewHandle("hpText", "text", { 0.25, 0.90, 0.42 }, "HP", 74, 18, false)
+    ConfigureTextHandle(hpTextHandle, "hp")
     local hpLeftTextHandle = CreatePreviewHandle("hpTextLeft", "text", { 0.25, 0.90, 0.42 }, "HP L", 74, 18, false)
     ConfigureTextHandle(hpLeftTextHandle, "hp", "left")
     local hpCenterTextHandle = CreatePreviewHandle("hpTextCenter", "text", { 0.25, 0.90, 0.42 }, "HP C", 74, 18, false)
     ConfigureTextHandle(hpCenterTextHandle, "hp", "center")
     local hpRightTextHandle = CreatePreviewHandle("hpTextRight", "text", { 0.25, 0.90, 0.42 }, "HP R", 74, 18, false)
     ConfigureTextHandle(hpRightTextHandle, "hp", "right")
+    local powerTextHandle = CreatePreviewHandle("powerText", "text", { 0.95, 0.72, 0.18 }, "POWER", 74, 18, false)
+    ConfigureTextHandle(powerTextHandle, "power")
     local powerLeftTextHandle = CreatePreviewHandle("powerTextLeft", "text", { 0.95, 0.72, 0.18 }, "PWR L", 74, 18, false)
     ConfigureTextHandle(powerLeftTextHandle, "power", "left")
     local powerCenterTextHandle = CreatePreviewHandle("powerTextCenter", "text", { 0.95, 0.72, 0.18 }, "PWR C", 74, 18, false)
@@ -1791,21 +1812,43 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         LayoutHandle(privateHandle, pa.anchor, pa.x, pa.y, "TOPRIGHT")
 
         nameTextHandle._previewScale = previewScale
+        hpTextHandle._previewScale = previewScale
         hpLeftTextHandle._previewScale = previewScale
         hpCenterTextHandle._previewScale = previewScale
         hpRightTextHandle._previewScale = previewScale
+        powerTextHandle._previewScale = previewScale
         powerLeftTextHandle._previewScale = previewScale
         powerCenterTextHandle._previewScale = previewScale
         powerRightTextHandle._previewScale = previewScale
         if not GFPreviewPlaceHandleAroundRegions(nameTextHandle, mock, { mock._nameFS }, 3) then
             nameTextHandle:Hide()
         end
-        if not GFPreviewPlaceHandleAroundRegions(hpLeftTextHandle, mock, { mock._hpLeftFS }, 3) then hpLeftTextHandle:Hide() end
-        if not GFPreviewPlaceHandleAroundRegions(hpCenterTextHandle, mock, { mock._hpCenterFS }, 3) then hpCenterTextHandle:Hide() end
-        if not GFPreviewPlaceHandleAroundRegions(hpRightTextHandle, mock, { mock._hpRightFS }, 3) then hpRightTextHandle:Hide() end
-        if not GFPreviewPlaceHandleAroundRegions(powerLeftTextHandle, mock, { mock._powerLeftFS }, 3) then powerLeftTextHandle:Hide() end
-        if not GFPreviewPlaceHandleAroundRegions(powerCenterTextHandle, mock, { mock._powerCenterFS }, 3) then powerCenterTextHandle:Hide() end
-        if not GFPreviewPlaceHandleAroundRegions(powerRightTextHandle, mock, { mock._powerRightFS }, 3) then powerRightTextHandle:Hide() end
+        if GFPreviewTextMovesTogether(kind, "hp") then
+            hpLeftTextHandle:Hide()
+            hpCenterTextHandle:Hide()
+            hpRightTextHandle:Hide()
+            if not GFPreviewPlaceHandleAroundRegions(hpTextHandle, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then
+                hpTextHandle:Hide()
+            end
+        else
+            hpTextHandle:Hide()
+            if not GFPreviewPlaceHandleAroundRegions(hpLeftTextHandle, mock, { mock._hpLeftFS }, 3) then hpLeftTextHandle:Hide() end
+            if not GFPreviewPlaceHandleAroundRegions(hpCenterTextHandle, mock, { mock._hpCenterFS }, 3) then hpCenterTextHandle:Hide() end
+            if not GFPreviewPlaceHandleAroundRegions(hpRightTextHandle, mock, { mock._hpRightFS }, 3) then hpRightTextHandle:Hide() end
+        end
+        if GFPreviewTextMovesTogether(kind, "power") then
+            powerLeftTextHandle:Hide()
+            powerCenterTextHandle:Hide()
+            powerRightTextHandle:Hide()
+            if not GFPreviewPlaceHandleAroundRegions(powerTextHandle, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then
+                powerTextHandle:Hide()
+            end
+        else
+            powerTextHandle:Hide()
+            if not GFPreviewPlaceHandleAroundRegions(powerLeftTextHandle, mock, { mock._powerLeftFS }, 3) then powerLeftTextHandle:Hide() end
+            if not GFPreviewPlaceHandleAroundRegions(powerCenterTextHandle, mock, { mock._powerCenterFS }, 3) then powerCenterTextHandle:Hide() end
+            if not GFPreviewPlaceHandleAroundRegions(powerRightTextHandle, mock, { mock._powerRightFS }, 3) then powerRightTextHandle:Hide() end
+        end
 
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
         buffHandle:SetFrameLevel(baseLevel + (tonumber(buffCfg.layer) or 5))
@@ -1822,9 +1865,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         spellHandle:SetFrameLevel(baseLevel + 6)
         privateHandle:SetFrameLevel(baseLevel + 6)
         nameTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.nameTextLayer) or 6))
+        hpTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
         hpLeftTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
         hpCenterTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
         hpRightTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
+        powerTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
         powerLeftTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
         powerCenterTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
         powerRightTextHandle:SetFrameLevel(baseLevel + (tonumber(conf.powerTextLayer) or 6))
@@ -1853,9 +1898,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         spellHandle:SetAlpha((selectedSpellCfg and selectedSpellCfg.enabled == false) and (LayerAlpha("si") * 0.45) or LayerAlpha("si"))
         privateHandle:SetAlpha(LayerAlpha("private"))
         nameTextHandle:SetAlpha(LayerAlpha("text"))
+        hpTextHandle:SetAlpha(LayerAlpha("text"))
         hpLeftTextHandle:SetAlpha(LayerAlpha("text"))
         hpCenterTextHandle:SetAlpha(LayerAlpha("text"))
         hpRightTextHandle:SetAlpha(LayerAlpha("text"))
+        powerTextHandle:SetAlpha(LayerAlpha("text"))
         powerLeftTextHandle:SetAlpha(LayerAlpha("text"))
         powerCenterTextHandle:SetAlpha(LayerAlpha("text"))
         powerRightTextHandle:SetAlpha(LayerAlpha("text"))

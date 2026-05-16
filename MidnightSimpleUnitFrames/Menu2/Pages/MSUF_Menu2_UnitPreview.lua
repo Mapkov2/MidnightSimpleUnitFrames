@@ -1127,6 +1127,23 @@ local function ReadHandleOffsets(handle)
     return x, y, xKey, yKey
 end
 
+local function UnitPreviewTextMovesTogether(unitKey, kind)
+    local m = _G.MSUF2
+    local byUnit = m and m.unitTextMoveTogether and m.unitTextMoveTogether[unitKey or "player"]
+    local value = byUnit and byUnit[kind]
+    if value == nil then return true end
+    return value == true
+end
+
+local function UnitPreviewSetTextMoveTogether(unitKey, kind, value)
+    local m = _G.MSUF2
+    if not m then return end
+    unitKey = unitKey or "player"
+    m.unitTextMoveTogether = m.unitTextMoveTogether or {}
+    m.unitTextMoveTogether[unitKey] = m.unitTextMoveTogether[unitKey] or {}
+    m.unitTextMoveTogether[unitKey][kind] = value ~= false
+end
+
 local function UpdateHandleHint(box, handle)
     if not box or not box.hint then return end
     if not handle then
@@ -1257,24 +1274,35 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
     if handle then
         local p = box._msufPanel
         local fields = handle._fields or {}
+        local menu = _G.MSUF2
         if fields.statusRefresh then
             Preview.selectedStatusId = NormalizeStatusPreviewId(handle._key)
             if not skipSectionOpen and p and type(p._msufUFStatusSet) == "function" then
                 p._msufUFStatusSet("selected", handle._key)
             end
         end
-        if handle._key == "hpLeft" or handle._key == "hpCenter" or handle._key == "hpRight" then
-            M.unitTextTabSelection = M.unitTextTabSelection or {}
-            M.unitTextSlotSelection = M.unitTextSlotSelection or {}
-            M.unitTextTabSelection[box.key or "player"] = "hp"
-            M.unitTextSlotSelection[box.key or "player"] = M.unitTextSlotSelection[box.key or "player"] or {}
-            M.unitTextSlotSelection[box.key or "player"].hp = (handle._key == "hpLeft" and "left") or (handle._key == "hpRight" and "right") or "center"
-        elseif handle._key == "powerLeft" or handle._key == "powerCenter" or handle._key == "powerRight" then
-            M.unitTextTabSelection = M.unitTextTabSelection or {}
-            M.unitTextSlotSelection = M.unitTextSlotSelection or {}
-            M.unitTextTabSelection[box.key or "player"] = "power"
-            M.unitTextSlotSelection[box.key or "player"] = M.unitTextSlotSelection[box.key or "player"] or {}
-            M.unitTextSlotSelection[box.key or "player"].power = (handle._key == "powerLeft" and "left") or (handle._key == "powerRight" and "right") or "center"
+        if menu and (handle._key == "hpLeft" or handle._key == "hpCenter" or handle._key == "hpRight") then
+            UnitPreviewSetTextMoveTogether(box.key, "hp", false)
+            menu.unitTextTabSelection = menu.unitTextTabSelection or {}
+            menu.unitTextSlotSelection = menu.unitTextSlotSelection or {}
+            menu.unitTextTabSelection[box.key or "player"] = "hp"
+            menu.unitTextSlotSelection[box.key or "player"] = menu.unitTextSlotSelection[box.key or "player"] or {}
+            menu.unitTextSlotSelection[box.key or "player"].hp = (handle._key == "hpLeft" and "left") or (handle._key == "hpRight" and "right") or "center"
+        elseif menu and handle._key == "hp" then
+            UnitPreviewSetTextMoveTogether(box.key, "hp", true)
+            menu.unitTextTabSelection = menu.unitTextTabSelection or {}
+            menu.unitTextTabSelection[box.key or "player"] = "hp"
+        elseif menu and (handle._key == "powerLeft" or handle._key == "powerCenter" or handle._key == "powerRight") then
+            UnitPreviewSetTextMoveTogether(box.key, "power", false)
+            menu.unitTextTabSelection = menu.unitTextTabSelection or {}
+            menu.unitTextSlotSelection = menu.unitTextSlotSelection or {}
+            menu.unitTextTabSelection[box.key or "player"] = "power"
+            menu.unitTextSlotSelection[box.key or "player"] = menu.unitTextSlotSelection[box.key or "player"] or {}
+            menu.unitTextSlotSelection[box.key or "player"].power = (handle._key == "powerLeft" and "left") or (handle._key == "powerRight" and "right") or "center"
+        elseif menu and handle._key == "power" then
+            UnitPreviewSetTextMoveTogether(box.key, "power", true)
+            menu.unitTextTabSelection = menu.unitTextTabSelection or {}
+            menu.unitTextTabSelection[box.key or "player"] = "power"
         end
         if not skipSectionOpen and p and type(p._msufOpenUnitSection) == "function" then
             p._msufOpenUnitSection(fields.section or "text")
@@ -2750,8 +2778,6 @@ function Preview.Refresh(box, reason)
     if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, { mock.nameText, mock.totInlineSep, mock.totInlineText }, 3) then
         PlaceHandle(box.handleName, mock.nameText)
     end
-    if box.handleHP then box.handleHP:Hide() end
-    if box.handlePower then box.handlePower:Hide() end
     local function PlaceTextSlotHandle(handle, region)
         if not handle then return end
         if not (region and region.IsShown and region:IsShown()) then
@@ -2765,12 +2791,42 @@ function Preview.Refresh(box, reason)
             PlaceHandle(handle, region)
         end
     end
-    PlaceTextSlotHandle(box.handleHPLeft, mock.hpTextLeft)
-    PlaceTextSlotHandle(box.handleHPCenter, mock.hpTextCenter)
-    PlaceTextSlotHandle(box.handleHPRight, mock.hpText)
-    PlaceTextSlotHandle(box.handlePowerLeft, mock.powerTextLeft)
-    PlaceTextSlotHandle(box.handlePowerCenter, mock.powerTextCenter)
-    PlaceTextSlotHandle(box.handlePowerRight, mock.powerText)
+    if UnitPreviewTextMovesTogether(key, "hp") then
+        SetShownSafe(box.handleHPLeft, false)
+        SetShownSafe(box.handleHPCenter, false)
+        SetShownSafe(box.handleHPRight, false)
+        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleHP, canvas, { mock.hpTextLeft, mock.hpTextCenter, mock.hpText }, 3) then
+            if not ((mock.hpTextLeft and mock.hpTextLeft:IsShown()) or (mock.hpTextCenter and mock.hpTextCenter:IsShown()) or (mock.hpText and mock.hpText:IsShown())) then
+                box.handleHP:Hide()
+            else
+                box.handleHP:SetSize(max(46, mock.hpText:GetStringWidth() + 10), max(18, mock.hpText:GetStringHeight() + 6))
+                PlaceHandle(box.handleHP, mock.hpText)
+            end
+        end
+    else
+        if box.handleHP then box.handleHP:Hide() end
+        PlaceTextSlotHandle(box.handleHPLeft, mock.hpTextLeft)
+        PlaceTextSlotHandle(box.handleHPCenter, mock.hpTextCenter)
+        PlaceTextSlotHandle(box.handleHPRight, mock.hpText)
+    end
+    if UnitPreviewTextMovesTogether(key, "power") then
+        SetShownSafe(box.handlePowerLeft, false)
+        SetShownSafe(box.handlePowerCenter, false)
+        SetShownSafe(box.handlePowerRight, false)
+        if not UnitPreviewText.PlaceHandleAroundRegions(box.handlePower, canvas, { mock.powerTextLeft, mock.powerTextCenter, mock.powerText }, 3) then
+            if not ((mock.powerTextLeft and mock.powerTextLeft:IsShown()) or (mock.powerTextCenter and mock.powerTextCenter:IsShown()) or (mock.powerText and mock.powerText:IsShown())) then
+                box.handlePower:Hide()
+            else
+                box.handlePower:SetSize(max(46, mock.powerText:GetStringWidth() + 10), max(18, mock.powerText:GetStringHeight() + 6))
+                PlaceHandle(box.handlePower, mock.powerText)
+            end
+        end
+    else
+        if box.handlePower then box.handlePower:Hide() end
+        PlaceTextSlotHandle(box.handlePowerLeft, mock.powerTextLeft)
+        PlaceTextSlotHandle(box.handlePowerCenter, mock.powerTextCenter)
+        PlaceTextSlotHandle(box.handlePowerRight, mock.powerText)
+    end
     ApplyPreviewLayerVisibility(box)
     ApplyPreviewTransparency(box, conf)
     RefreshHandleSelectionVisuals(box)
