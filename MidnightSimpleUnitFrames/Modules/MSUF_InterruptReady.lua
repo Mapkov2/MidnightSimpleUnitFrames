@@ -89,6 +89,8 @@ local _state = {
 -- Track every MSUF castbar frame that has had ApplyLayout() called, so
 -- RefreshAll() (and global cooldown sweeps) can iterate them cheaply.
 local _registeredFrames = {}
+local _activeFrames = {}
+local _activeFrameCount = 0
 
 -- =============================================================================
 -- Helpers
@@ -495,12 +497,26 @@ local function _RegisterFrame(frame)
     _registeredFrames[frame] = true
 end
 
+local function _MarkActiveFrame(frame)
+    if not frame or _activeFrames[frame] then return end
+    _activeFrames[frame] = true
+    _activeFrameCount = _activeFrameCount + 1
+end
+
+local function _MarkInactiveFrame(frame)
+    if not frame or not _activeFrames[frame] then return end
+    _activeFrames[frame] = nil
+    _activeFrameCount = _activeFrameCount - 1
+    if _activeFrameCount < 0 then _activeFrameCount = 0 end
+end
+
 -- Public: create / reposition the indicator on `frame`. Called from
 -- MSUF_Castbars.lua after every visuals update. Cheap, idempotent.
 -- Hide all visual side-effects on a frame (used when feature off, unit out
 -- of scope, no cast, or cast not interruptible). Idempotent.
 local function _HideIndicator(frame)
     if not frame then return end
+    _MarkInactiveFrame(frame)
     if frame.kickReadyBox then frame.kickReadyBox:Hide() end
     _RestoreCastbarOutline(frame)
 end
@@ -653,6 +669,7 @@ local function RefreshFrame(frame, state, cfg, readyBool, style, readyMixin, cdM
     if not _state.spellID then Resolve() end
 
     if readyBool == nil then readyBool = _GetReadyBoolSecret() end
+    _MarkActiveFrame(frame)
     _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
 
     -- Make sure the global ticker is running so the indicator repaints when
@@ -670,20 +687,28 @@ function _TickerStep()
 
     local cfg = _GetCfg()
     if not cfg or not _AnyShowEnabled(cfg) then return end
+    if _activeFrameCount <= 0 then return end
     local readyBool = _GetReadyBoolSecret()
     local style = _GetStyle(cfg)
     local readyMixin, cdMixin = _ResolveColorPair(cfg)
     local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
     local anyActive = false
-    for frame in pairs(_registeredFrames) do
+    local frame = next(_activeFrames)
+    while frame do
+        local nextFrame = next(_activeFrames, frame)
         if frame.MSUF_castActive == true
            and not (frame.isNotInterruptible == true)
            and _CastAllowsKickIndicator(frame) then
             if cfg and frame.unit and _ShowOnUnit(cfg, frame.unit) then
                 _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
                 anyActive = true
+            else
+                _HideIndicator(frame)
             end
+        else
+            _HideIndicator(frame)
         end
+        frame = nextFrame
     end
 
     if anyActive and C_Timer and C_Timer.After then
@@ -707,14 +732,19 @@ local function RefreshActiveCooldownFrames()
     local readyMixin, cdMixin = _ResolveColorPair(cfg)
     local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
     local didRefresh = false
-    for frame in pairs(_registeredFrames) do
+    local frame = next(_activeFrames)
+    while frame do
+        local nextFrame = next(_activeFrames, frame)
         if frame.MSUF_castActive == true
            and not (frame.isNotInterruptible == true)
            and _CastAllowsKickIndicator(frame)
            and frame.unit and _ShowOnUnit(cfg, frame.unit) then
             RefreshFrame(frame, nil, cfg, readyBool, style, readyMixin, cdMixin, userMixin)
             didRefresh = true
+        else
+            _HideIndicator(frame)
         end
+        frame = nextFrame
     end
     return didRefresh
 end
