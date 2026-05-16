@@ -175,13 +175,119 @@ local function ApplyUnitFrameEnabledGate(ctx, unit)
     end)
 end
 
+local function SetSectionHeaderStatus(sec, opts)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if not entry then return end
+
+    T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open)
+
+    if entry.headerBg and entry.headerBg.SetColorTexture then
+        entry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
+    end
+    if entry.label and entry.label.SetTextColor and T and T.colors and T.colors.text then
+        local c = T.colors.text
+        entry.label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+    end
+
+    opts = opts or {}
+    if opts.bg and entry.headerBg and entry.headerBg.SetColorTexture then
+        local bg = opts.bg
+        entry.headerBg:SetColorTexture(bg[1] or 0.060, bg[2] or 0.070, bg[3] or 0.130, bg[4] or 0.48)
+    end
+    if opts.labelColor and entry.label and entry.label.SetTextColor then
+        local c = opts.labelColor
+        entry.label:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+    end
+    if opts.arrowColor and entry.arrow and entry.arrow.SetVertexColor then
+        local c = opts.arrowColor
+        entry.arrow:SetVertexColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+    end
+    if opts.hint and entry.hint and entry.hint.SetText then
+        entry.hint:SetText(opts.hint)
+        if opts.hintColor and entry.hint.SetTextColor then
+            local c = opts.hintColor
+            entry.hint:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+        end
+    end
+end
+
+local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
+    local notice = CreateFrame("Frame", nil, sec)
+    notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, topY)
+    notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, topY)
+    notice:SetHeight(24)
+    notice._msuf2UnitFrameGateAlwaysEnabled = true
+
+    local bg = notice:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
+    local top = notice:CreateTexture(nil, "BORDER")
+    top:SetPoint("TOPLEFT", notice, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", notice, "TOPRIGHT", 0, 0)
+    top:SetHeight(1)
+    top:SetColorTexture(0.16, 0.34, 0.66, 0.55)
+    local bottom = notice:CreateTexture(nil, "BORDER")
+    bottom:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
+    bottom:SetHeight(1)
+    bottom:SetColorTexture(0.10, 0.20, 0.38, 0.48)
+
+    local text = T.Font(notice, "GameFontDisableSmall", "", T.colors.dim)
+    text:SetPoint("LEFT", notice, "LEFT", 10, 0)
+    text:SetJustifyH("LEFT")
+
+    local button
+    if buttonLabel and buttonLabel ~= "" then
+        button = (W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, buttonLabel, buttonWidth or 92, 20))) or T.Button(notice, buttonLabel, buttonWidth or 92, 20)
+        button:SetPoint("RIGHT", notice, "RIGHT", -2, 0)
+        button._msuf2UnitFrameGateAlwaysEnabled = true
+        text:SetPoint("RIGHT", notice, "RIGHT", -(buttonWidth or 92) - 18, 0)
+    else
+        text:SetPoint("RIGHT", notice, "RIGHT", -10, 0)
+    end
+
+    function notice:SetTone(kind)
+        if kind == "warning" then
+            bg:SetColorTexture(0.150, 0.084, 0.038, 0.34)
+            top:SetColorTexture(0.72, 0.36, 0.18, 0.65)
+            bottom:SetColorTexture(0.40, 0.22, 0.10, 0.55)
+            if text.SetTextColor then text:SetTextColor(0.92, 0.82, 0.72, 1) end
+        else
+            bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
+            top:SetColorTexture(0.16, 0.34, 0.66, 0.55)
+            bottom:SetColorTexture(0.10, 0.20, 0.38, 0.48)
+            if text.SetTextColor then text:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1) end
+        end
+    end
+
+    function notice:SetMessage(message, tone)
+        self:SetTone(tone)
+        text:SetText(tostring(message or ""))
+    end
+
+    notice:Hide()
+    return notice, text, button
+end
+
 local function BuildPreview(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("preview", "Hide Preview", 352, true)
+    local sec = builder:CollapsibleSection("preview", "Hide Preview", 378, true)
     if W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(sec, "Hide Preview", "Show Preview") end
+
+    local previewNote = "Preview updates live here. Use MSUF Edit Mode to drag and place frames."
+    if unit == "pet" then
+        previewNote = previewNote .. " Pet frames only appear in game while you have an active pet."
+    elseif unit == "focus" then
+        previewNote = previewNote .. " Focus frames only appear when a focus unit exists."
+    elseif unit == "targettarget" then
+        previewNote = previewNote .. " Target of Target only appears when your target has a target."
+    elseif unit == "boss" then
+        previewNote = previewNote .. " Boss frames only appear during encounters with boss units."
+    end
+    W.Text(sec, previewNote, 14, -38, ctx.width - 28, T.colors.muted)
 
     local createPreview = ns.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox
     if not createPreview then
-        W.Text(sec, "The shared unit preview module is not loaded.", 14, -42, ctx.width - 28, T.colors.muted)
+        W.Text(sec, "The shared unit preview module is not loaded.", 14, -70, ctx.width - 28, T.colors.muted)
         return
     end
 
@@ -201,8 +307,8 @@ local function BuildPreview(ctx, builder, unit)
     }
     panel._msufOpenUnitSection = function() end
 
-    local box = createPreview(sec, panel, ctx.width - 28, 300)
-    box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -38)
+    local box = createPreview(sec, panel, ctx.width - 28, 292)
+    box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
     box:Show()
     if box.title and box.title.SetTextColor then
         local c = T.colors.accent
@@ -239,9 +345,17 @@ local function BuildPreview(ctx, builder, unit)
         end)
     end
 
-    M.AddRefresher(ctx, function()
+    local function RefreshPreviewState()
+        SetSectionHeaderStatus(sec, {
+            hint = IsEditModeActive() and M.Tr("drag in preview") or M.Tr("enter Edit Mode to drag"),
+            hintColor = IsEditModeActive() and { 0.40, 0.80, 0.98, 1 } or { 0.45, 0.52, 0.65, 1 },
+        })
         if box:IsShown() then RefreshThisPreview("MSUF2_UNIT_PAGE") end
-    end)
+    end
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = RefreshPreviewState end
+    M.AddRefresher(ctx, RefreshPreviewState)
+    RefreshPreviewState()
     if W and W.AttachPinnedPreview then
         W.AttachPinnedPreview(sec, box, { stateKey = "unitFramePreview", title = box.title, hint = box.hint, left = 14, right = 14, top = -8 })
     end
@@ -837,12 +951,26 @@ local function BuildLayout(ctx, builder, unit)
     current:SetPoint("RIGHT", sec, "RIGHT", -14, 0)
     current:SetJustifyH("LEFT")
 
-    M.AddRefresher(ctx, function()
+    local function RefreshLayoutState()
         local conf = GetConf(unit)
         local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
         current:SetText("Current custom anchor: " .. (custom ~= "" and custom or "none"))
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
-    end)
+        local hint = "Global anchor"
+        if custom ~= "" then
+            hint = "Custom anchor"
+        else
+            local target = conf.anchorToUnitframe
+            if target == "player" or target == "target" or target == "targettarget" or target == "focus" or target == "pet" then
+                hint = "Anchored to " .. UnitTopLabel(target)
+            end
+        end
+        SetSectionHeaderStatus(sec, { hint = hint, hintColor = { 0.58, 0.68, 0.82, 1 } })
+    end
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = RefreshLayoutState end
+    M.AddRefresher(ctx, RefreshLayoutState)
+    RefreshLayoutState()
 end
 
 local function BuildText(ctx, builder, unit)
@@ -1614,7 +1742,25 @@ local function BuildPortrait(ctx, builder, unit)
         SetControlEnabled(fillBorder, hasBorder)
         SetControlEnabled(classStyle, classRender)
         SetControlEnabled(portraitBg, active)
+
+        if not active then
+            SetSectionHeaderStatus(sec, {
+                hint = "Portrait off",
+                hintColor = { 0.78, 0.68, 0.56, 1 },
+                bg = { 0.090, 0.072, 0.050, 0.50 },
+                labelColor = { 0.92, 0.88, 0.82, 1 },
+                arrowColor = { 0.92, 0.62, 0.22, 1 },
+            })
+        elseif classRender then
+            SetSectionHeaderStatus(sec, { hint = "Class portrait style active", hintColor = { 0.58, 0.68, 0.82, 1 } })
+        elseif hasBorder then
+            SetSectionHeaderStatus(sec, { hint = "Border enabled", hintColor = { 0.58, 0.68, 0.82, 1 } })
+        else
+            SetSectionHeaderStatus(sec, nil)
+        end
     end
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = RefreshPortraitControls end
     M.AddRefresher(ctx, RefreshPortraitControls)
     RefreshPortraitControls()
 end
@@ -1641,6 +1787,14 @@ local function BuildPower(ctx, builder, unit)
     local function AddDetachedControl(control)
         detachedControls[#detachedControls + 1] = control
         return AddPowerControl(control)
+    end
+
+    local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, -118, "Show Power", 104)
+    if powerNoticeButton then
+        powerNoticeButton:SetScript("OnClick", function()
+            SetBool(unit, "showPowerBar", true, "MSUF2_POWER_SHOW", { power = true, preview = true })
+            if RefreshPowerEnabled then RefreshPowerEnabled() end
+        end)
     end
 
     local show = W.ToggleAt(sec, "Show power bar", leftX, -42, leftW)
@@ -1769,7 +1923,28 @@ local function BuildPower(ctx, builder, unit)
         for i = 1, #detachedControls do SetControlEnabled(detachedControls[i], detachedOn) end
         SetControlEnabled(borderSize, powerOn and ReadBool(unit, "powerBarBorderEnabled", GetBars().powerBarBorderEnabled == true))
         SetControlEnabled(show, true)
+
+        if not powerOn then
+            powerNotice:SetMessage(UnitTopLabel(unit) .. " power bar is hidden. Turn it on to configure size, embed, or detached settings.", "warning")
+            powerNotice:Show()
+            SetSectionHeaderStatus(sec, {
+                hint = "Power bar off",
+                hintColor = { 0.78, 0.68, 0.56, 1 },
+                bg = { 0.090, 0.072, 0.050, 0.50 },
+                labelColor = { 0.92, 0.88, 0.82, 1 },
+                arrowColor = { 0.92, 0.62, 0.22, 1 },
+            })
+        else
+            powerNotice:Hide()
+            if detachedOn then
+                SetSectionHeaderStatus(sec, { hint = "Detached from frame", hintColor = { 0.58, 0.68, 0.82, 1 } })
+            else
+                SetSectionHeaderStatus(sec, nil)
+            end
+        end
     end
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = RefreshPowerEnabled end
     M.AddRefresher(ctx, RefreshPowerEnabled)
     RefreshPowerEnabled()
 end
@@ -1777,7 +1952,7 @@ end
 local function BuildCastbar(ctx, builder, unit)
     local fields = CASTBAR_FIELDS[unit]
     if not fields then return end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", 136, false)
+    local sec = builder:CollapsibleSection("castbar", "Castbar", 164, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local rightX = math.max(340, sectionW - 236)
@@ -1786,6 +1961,13 @@ local function BuildCastbar(ctx, builder, unit)
 
     local enabledLabel = (unit == "boss") and "Enable boss castbars" or ("Enable " .. UnitTopLabel(unit):lower() .. " castbar")
     local timeLabel = (unit == "boss") and "Show boss cast time" or ("Show " .. UnitTopLabel(unit):lower() .. " cast time")
+    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(sec, -130, "Enable", 88)
+    if castbarNoticeButton then
+        castbarNoticeButton:SetScript("OnClick", function()
+            SetGeneralBool(fields.enable, true, "MSUF2_CASTBAR_ENABLE", { castbar = true, preview = true })
+            if RefreshCastbarEnabled then RefreshCastbarEnabled() end
+        end)
+    end
 
     local enabled = W.ToggleAt(sec, enabledLabel, leftX, -42, 240)
     M.BindToggle(ctx, enabled,
@@ -1822,7 +2004,24 @@ local function BuildCastbar(ctx, builder, unit)
         SetControlEnabled(icon, on)
         SetControlEnabled(text, on)
         SetControlEnabled(enabled, true)
+
+        if not on then
+            castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is disabled. Turn it on to adjust time, interrupt, icon, and text behavior.", "warning")
+            castbarNotice:Show()
+            SetSectionHeaderStatus(sec, {
+                hint = "Castbar off",
+                hintColor = { 0.78, 0.68, 0.56, 1 },
+                bg = { 0.090, 0.072, 0.050, 0.50 },
+                labelColor = { 0.92, 0.88, 0.82, 1 },
+                arrowColor = { 0.92, 0.62, 0.22, 1 },
+            })
+        else
+            castbarNotice:Hide()
+            SetSectionHeaderStatus(sec, nil)
+        end
     end
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = RefreshCastbarEnabled end
     M.AddRefresher(ctx, RefreshCastbarEnabled)
     RefreshCastbarEnabled()
 end
@@ -2030,7 +2229,7 @@ local function BuildStatus(ctx, builder, unit)
         Call("MSUF_UFPreview_SetStatusPreviewMode", "all")
     end)
 
-    M.AddRefresher(ctx, function()
+    local function RefreshStatusSectionState()
         local spec = CurrentStatusSpec(unit)
         local hasSymbol = spec and spec.symbol
         local showStateStyle = hasSymbol and true or false
@@ -2052,7 +2251,25 @@ local function BuildStatus(ctx, builder, unit)
         SetControlEnabled(y, isEnabled)
         SetControlEnabled(layer, isEnabled)
         SetControlEnabled(reset, spec ~= nil)
-    end)
+
+        if spec and not isEnabled then
+            SetSectionHeaderStatus(sec, {
+                hint = "Selected indicator off",
+                hintColor = { 0.78, 0.68, 0.56, 1 },
+                bg = { 0.090, 0.072, 0.050, 0.50 },
+                labelColor = { 0.92, 0.88, 0.82, 1 },
+                arrowColor = { 0.92, 0.62, 0.22, 1 },
+            })
+        elseif spec then
+            SetSectionHeaderStatus(sec, { hint = spec.text or spec.value or "Indicator", hintColor = { 0.58, 0.68, 0.82, 1 } })
+        else
+            SetSectionHeaderStatus(sec, nil)
+        end
+    end
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = RefreshStatusSectionState end
+    M.AddRefresher(ctx, RefreshStatusSectionState)
+    RefreshStatusSectionState()
 end
 
 local function BuildLoadConditions(ctx, builder, unit)
@@ -2077,6 +2294,22 @@ local function BuildLoadConditions(ctx, builder, unit)
                 M.RequestUnitApply(unit, "MSUF2_LOAD_CONDITION", { preview = true })
             end)
     end
+
+    local function RefreshLoadConditionState()
+        local activeCount = 0
+        for i = 1, #LOAD_CONDITIONS do
+            if ReadBool(unit, LOAD_CONDITIONS[i].key, false) then activeCount = activeCount + 1 end
+        end
+        if activeCount > 0 then
+            SetSectionHeaderStatus(sec, { hint = tostring(activeCount) .. " active", hintColor = { 0.78, 0.68, 0.56, 1 } })
+        else
+            SetSectionHeaderStatus(sec, { hint = "Always visible", hintColor = { 0.58, 0.68, 0.82, 1 } })
+        end
+    end
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = RefreshLoadConditionState end
+    M.AddRefresher(ctx, RefreshLoadConditionState)
+    RefreshLoadConditionState()
 end
 
 local function BuildBossLayout(ctx, builder, unit)

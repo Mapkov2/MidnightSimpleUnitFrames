@@ -363,12 +363,20 @@ function Convert-CommitSubjectToText {
 }
 
 function Get-GitCommitsForChangelog {
-    param([AllowNull()][string]$BaseRef)
+    param(
+        [AllowNull()][string]$BaseRef,
+        [int]$SinceHours = 0
+    )
 
     Push-Location $RepoRoot
     try {
-        $range = if ([string]::IsNullOrWhiteSpace($BaseRef)) { "HEAD" } else { "$BaseRef..HEAD" }
-        $commitLines = & git log --reverse --format="%H`t%h`t%s" $range 2>&1
+        if ($SinceHours -lt 0 -or $SinceHours -gt 100) { throw "Since hours must be 0 or between 1 and 100." }
+        $range = if ($SinceHours -gt 0) { "HEAD --since=$SinceHours hours" } elseif ([string]::IsNullOrWhiteSpace($BaseRef)) { "HEAD" } else { "$BaseRef..HEAD" }
+        $commitLines = if ($SinceHours -gt 0) {
+            & git log --reverse --format="%H`t%h`t%s" "--since=$SinceHours hours ago" HEAD 2>&1
+        } else {
+            & git log --reverse --format="%H`t%h`t%s" $range 2>&1
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "git log failed for range '$range': $($commitLines -join ' ')"
         }
@@ -425,12 +433,14 @@ function New-GitCommitChangelogMarkdown {
         [Parameter(Mandatory = $true)][string]$ReleaseTag,
         [Parameter(Mandatory = $true)][string]$DisplayVersion,
         [Parameter(Mandatory = $true)][string]$ReleaseDate,
-        [AllowNull()][string]$BaseRef
+        [AllowNull()][string]$BaseRef,
+        [int]$SinceHours = 0
     )
 
-    $commits = @(Get-GitCommitsForChangelog -BaseRef $BaseRef)
+    $commits = @(Get-GitCommitsForChangelog -BaseRef $BaseRef -SinceHours $SinceHours)
     if ($commits.Count -eq 0) {
-        throw "No commits found for changelog range '$BaseRef..HEAD'."
+        $rangeText = if ($SinceHours -gt 0) { "the last $SinceHours hours" } else { "$BaseRef..HEAD" }
+        throw "No commits found for changelog range '$rangeText'."
     }
 
     $groups = [ordered]@{
@@ -707,6 +717,7 @@ function Update-AutoChangelogFromRepo {
     param(
         [Parameter(Mandatory = $true)][string]$DisplayVersion,
         [AllowNull()][string]$BaseRef,
+        [int]$SinceHours = 0,
         [AllowNull()][string]$ReleaseDate,
         [bool]$CreateMissingRelease = $true,
         [bool]$KeepExistingAutoEntries = $false,
@@ -726,6 +737,12 @@ function Update-AutoChangelogFromRepo {
     }
     if ($KeepExistingAutoEntries) {
         $args += "-KeepExistingAutoEntries"
+    }
+    if ($SinceHours -lt 0 -or $SinceHours -gt 100) {
+        throw "Since hours must be 0 or between 1 and 100."
+    }
+    if ($SinceHours -gt 0) {
+        $args += @("-SinceHours", "$SinceHours")
     }
     if ($IncludePrereleaseAutoEntries) {
         $args += "-IncludePrereleaseAutoEntries"
@@ -980,6 +997,21 @@ $lastTagButton.Add_Click({
 })
 $form.Controls.Add($lastTagButton)
 
+New-Label "Since hours" 16 102 | Out-Null
+$sinceHoursBox = New-Object System.Windows.Forms.NumericUpDown
+$sinceHoursBox.Location = New-Object System.Drawing.Point(130, 100)
+$sinceHoursBox.Size = New-Object System.Drawing.Size(70, 22)
+$sinceHoursBox.Minimum = 0
+$sinceHoursBox.Maximum = 100
+$sinceHoursBox.Value = 0
+$form.Controls.Add($sinceHoursBox)
+
+$sinceHoursHint = New-Object System.Windows.Forms.Label
+$sinceHoursHint.Text = "0 = Since ref"
+$sinceHoursHint.Location = New-Object System.Drawing.Point(210, 102)
+$sinceHoursHint.Size = New-Object System.Drawing.Size(120, 20)
+$form.Controls.Add($sinceHoursHint)
+
 $keepAutoBox = New-Object System.Windows.Forms.CheckBox
 $keepAutoBox.Text = "Keep old auto entries"
 $keepAutoBox.Checked = $false
@@ -1140,7 +1172,7 @@ function Sync-AutoChangelogSource {
 
     $meta = Read-UiReleaseMetadata
     $baseRef = $baseRefBox.Text.Trim()
-    Update-AutoChangelogFromRepo -DisplayVersion $meta.Display -BaseRef $baseRef -ReleaseDate $meta.Date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked -IncludePrereleaseAutoEntries $includePrereleaseBox.Checked
+    Update-AutoChangelogFromRepo -DisplayVersion $meta.Display -BaseRef $baseRef -SinceHours ([int]$sinceHoursBox.Value) -ReleaseDate $meta.Date -CreateMissingRelease $true -KeepExistingAutoEntries $keepAutoBox.Checked -IncludePrereleaseAutoEntries $includePrereleaseBox.Checked
     $section = Find-ChangelogSection -ReleaseTag $meta.Tag -DisplayVersion $meta.Display
     $mdBox.Text = $section.Markdown
     Set-UiFromMarkdown -Markdown $section.Markdown | Out-Null
@@ -1178,12 +1210,14 @@ $loadCommitsButton.Add_Click({
         $date = $dateBox.Text.Trim()
         if ($date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "Date must be YYYY-MM-DD." }
         $baseRef = $baseRefBox.Text.Trim()
+        $hours = [int]$sinceHoursBox.Value
 
-        $markdown = New-GitCommitChangelogMarkdown -ReleaseTag $tag -DisplayVersion $display -ReleaseDate $date -BaseRef $baseRef
+        $markdown = New-GitCommitChangelogMarkdown -ReleaseTag $tag -DisplayVersion $display -ReleaseDate $date -BaseRef $baseRef -SinceHours $hours
         $mdBox.Text = $markdown
         Set-UiFromMarkdown -Markdown $markdown | Out-Null
         $useMarkdownBox.Checked = $true
-        Write-ReleaseLog ("Generated changelog draft from git commits: " + ($(if ($baseRef) { $baseRef } else { "initial history" }) + "..HEAD"))
+        $rangeText = if ($hours -gt 0) { "last $hours hours" } else { ($(if ($baseRef) { $baseRef } else { "initial history" }) + "..HEAD") }
+        Write-ReleaseLog ("Generated changelog draft from git commits: " + $rangeText)
     } catch {
         Write-ReleaseLog ("ERROR: " + $_.Exception.Message)
         [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "MSUF Release Helper", "OK", "Error") | Out-Null

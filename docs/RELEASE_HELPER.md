@@ -94,6 +94,8 @@ Use **Since ref** plus **Draft from Git** to generate a changelog draft from
 the commits after that ref up to `HEAD`. The helper reads each commit subject,
 checks the changed files, assigns the entry to a changelog category, and includes
 the short commit hash plus the most relevant files in the generated bullet.
+Set **Since hours** to `1` through `100` when the draft should use recent commits
+from that time window instead of **Since ref**.
 For normal releases, prefer **Auto Changelog** because it uses the newer scanner
 that reads commits, patch text, and working-tree changes into user-facing notes.
 
@@ -105,11 +107,13 @@ Use **Map Markdown** after editing the Markdown field manually if you want to
 re-fill the structured text areas from that Markdown.
 
 Use **Auto Changelog** to update the selected release section directly from the
-current repository state. It reads commits from **Since ref** to `HEAD`, adds
-working-tree changes, writes managed auto blocks into `CHANGELOG.md`, regenerates
+current repository state. It reads commits from **Since ref** to `HEAD`, or from
+the last **Since hours** when that value is `1` to `100`, adds working-tree
+changes, writes managed auto blocks into `CHANGELOG.md`, regenerates
 `MidnightSimpleUnitFrames\Foundation\MSUF_Changelog.lua`, then reloads the
 section into the helper UI. If the selected version does not exist yet, it
-creates a new release section using the selected date.
+creates a new release section using the selected date. **Since hours** uses `0`
+as off, so the helper falls back to **Since ref**.
 
 ## Auto Changelog UI
 
@@ -126,6 +130,8 @@ Use it to set:
 - **Source ref**: the previous tag or commit used as the Git range start;
   this is only the source for generated bullets, while **Changelog title**
   remains the only release section written
+- **Hours**: `0` uses **Source ref**; `1` to `100` generates from commits made
+  in the last N hours plus current working-tree changes
 - **Create missing release**: inserts a new `## <version> - <date>` section
   below `# Changelog` when the selected title does not exist yet
 - **Keep old auto entries**: keeps existing `MSUF-AUTO-CHANGELOG` bullets and
@@ -179,6 +185,8 @@ tools\MSUF-AutoChangelog.cmd -Watch -RegenerateAddonChangelog
 
 Add `-CreateMissingRelease -DisplayVersion "5.2" -ReleaseDate "2026-05-15"`
 when the command-line watcher should create a new release section automatically.
+Add `-SinceHours 24` to generate from the last 24 hours instead of the selected
+source ref; valid values are `1` to `100`, while `0` disables hour mode.
 By default, old managed auto entries in that section are replaced. Add
 `-KeepExistingAutoEntries` only when you want to keep and merge them. For
 numbered prereleases, the keep mode carries older same-channel auto entries,

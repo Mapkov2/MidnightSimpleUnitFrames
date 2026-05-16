@@ -3,6 +3,7 @@ param(
     [string]$ChangelogPath = "CHANGELOG.md",
     [string]$DisplayVersion,
     [string]$BaseRef,
+    [int]$SinceHours = 0,
     [string]$ReleaseDate = (Get-Date -Format "yyyy-MM-dd"),
     [switch]$Gui,
     [switch]$NoGui,
@@ -184,7 +185,15 @@ function Test-GitRefExists {
     }
 }
 
+function Get-EffectiveSinceHours {
+    if ($SinceHours -lt 0) { throw "Since hours must be 0 or between 1 and 100." }
+    if ($SinceHours -gt 100) { throw "Since hours must be between 1 and 100." }
+    return $SinceHours
+}
+
 function Get-EffectiveBaseRef {
+    if ((Get-EffectiveSinceHours) -gt 0) { return "" }
+
     $base = if ([string]::IsNullOrWhiteSpace($BaseRef)) { Get-DefaultBaseRef } else { $BaseRef.Trim() }
     if ([string]::IsNullOrWhiteSpace($base)) { return "" }
     if (Test-GitRefExists $base) { return $base }
@@ -406,7 +415,7 @@ function Add-GroupedBullet {
     )
 
     $target = if ($Groups.Contains($Category)) { $Category } else { "Changes / Improvements" }
-    $key = ($target + "|" + $Bullet).ToLowerInvariant()
+    $key = $Bullet.ToLowerInvariant()
     if ($Seen.Contains($key)) { return }
     [void]$Seen.Add($key)
     $Groups[$target].Add($Bullet)
@@ -450,12 +459,17 @@ function Add-CommitChangesToGroups {
         [Parameter(Mandatory = $true)]$Seen
     )
 
+    $hours = Get-EffectiveSinceHours
     $base = Get-EffectiveBaseRef
-    $range = if ([string]::IsNullOrWhiteSpace($base)) { "HEAD" } else { "$base..HEAD" }
+    $range = if ($hours -gt 0) { "HEAD --since=$hours hours" } elseif ([string]::IsNullOrWhiteSpace($base)) { "HEAD" } else { "$base..HEAD" }
 
     Push-Location $RepoRoot
     try {
-        $commitLines = & git log --reverse --format="%H`t%h`t%s" $range 2>&1
+        $commitLines = if ($hours -gt 0) {
+            & git log --reverse --format="%H`t%h`t%s" "--since=$hours hours ago" HEAD 2>&1
+        } else {
+            & git log --reverse --format="%H`t%h`t%s" $range 2>&1
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "git log failed for range '$range': $($commitLines -join ' ')"
         }
@@ -1408,6 +1422,7 @@ function Set-AutoChangelogSettings {
         [Parameter(Mandatory = $true)][string]$VersionTitle,
         [AllowNull()][string]$VersionDate,
         [AllowNull()][string]$GitBaseRef,
+        [int]$GitSinceHours,
         [bool]$CreateMissingSection,
         [bool]$KeepExistingEntries,
         [bool]$IncludePrereleaseEntries,
@@ -1434,6 +1449,10 @@ function Set-AutoChangelogSettings {
         throw "Release date must be empty or YYYY-MM-DD."
     }
     $script:BaseRef = if ([string]::IsNullOrWhiteSpace($GitBaseRef)) { "" } else { $GitBaseRef.Trim() }
+    if ($GitSinceHours -lt 0 -or $GitSinceHours -gt 100) {
+        throw "Since hours must be 0 or between 1 and 100."
+    }
+    $script:SinceHours = $GitSinceHours
     $script:CreateMissingRelease = [bool]$CreateMissingSection
     $script:KeepExistingAutoEntries = [bool]$KeepExistingEntries
     $script:IncludePrereleaseAutoEntries = [bool]$IncludePrereleaseEntries
@@ -1523,6 +1542,16 @@ function Start-AutoChangelogGui {
 
     $clearBaseButton = New-AutoButton "All history" 485 49 90 28
     $tips.SetToolTip($clearBaseButton, "Clear Since ref so the tool reads all commits up to HEAD.")
+
+    New-AutoLabel "Hours" 590 54 45 | Out-Null
+    $sinceHoursBox = New-Object System.Windows.Forms.NumericUpDown
+    $sinceHoursBox.Location = New-Object System.Drawing.Point(640, 52)
+    $sinceHoursBox.Size = New-Object System.Drawing.Size(55, 22)
+    $sinceHoursBox.Minimum = 0
+    $sinceHoursBox.Maximum = 100
+    $sinceHoursBox.Value = [Math]::Min(100, [Math]::Max(0, $SinceHours))
+    $tips.SetToolTip($sinceHoursBox, "0 uses Since ref. 1-100 generates from commits made in the last N hours.")
+    $form.Controls.Add($sinceHoursBox)
 
     New-AutoLabel "Changelog file" 16 90 120 | Out-Null
     $changelogBox = New-AutoTextBox 145 88 360 $ChangelogPath
@@ -1637,6 +1666,7 @@ function Start-AutoChangelogGui {
             -VersionTitle $displayBox.Text `
             -VersionDate $dateBox.Text `
             -GitBaseRef $baseRefBox.Text `
+            -GitSinceHours ([int]$sinceHoursBox.Value) `
             -CreateMissingSection $createMissingBox.Checked `
             -KeepExistingEntries $keepExistingBox.Checked `
             -IncludePrereleaseEntries $includePrereleaseBox.Checked `
@@ -1657,6 +1687,10 @@ function Start-AutoChangelogGui {
     }
 
     function Resolve-SourceRefFromUi {
+        if ((Get-EffectiveSinceHours) -gt 0) {
+            Write-AutoLog ("Using commits from the last " + $script:SinceHours + " hours; Since ref is ignored.")
+            return ""
+        }
         $entered = $baseRefBox.Text.Trim()
         $effective = Get-EffectiveBaseRef
         if (-not [string]::IsNullOrWhiteSpace($entered) -and $effective -ne $entered) {
@@ -1901,10 +1935,11 @@ if (-not $Watch) {
 }
 
 Write-AutoLog "Watching repository changes. Press Ctrl+C to stop."
-$startupBaseRef = Get-EffectiveBaseRef
+$startupHours = Get-EffectiveSinceHours
+$startupBaseRef = if ($startupHours -gt 0) { "" } else { Get-EffectiveBaseRef }
 if (-not [string]::IsNullOrWhiteSpace($startupBaseRef)) { $script:BaseRef = $startupBaseRef }
 Write-AutoLog "Target changelog section: $DisplayVersion"
-Write-AutoLog "Source ref: $(if ([string]::IsNullOrWhiteSpace($startupBaseRef)) { "full history" } else { $startupBaseRef })"
+Write-AutoLog "Source range: $(if ($startupHours -gt 0) { "last $startupHours hours" } elseif ([string]::IsNullOrWhiteSpace($startupBaseRef)) { "full history" } else { $startupBaseRef })"
 
 $pendingSignature = $null
 $pendingSince = Get-Date
