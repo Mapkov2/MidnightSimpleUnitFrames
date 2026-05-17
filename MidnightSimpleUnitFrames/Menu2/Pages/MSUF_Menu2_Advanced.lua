@@ -709,6 +709,18 @@ local function BuildAuras(ctx)
         return u and u[flag] == true
     end
 
+    local function AuraScopeLabel()
+        local scopeKey = AuraScope()
+        for i = 1, #AURA_SCOPES do
+            local spec = AURA_SCOPES[i]
+            if spec.value == scopeKey then
+                local text = spec.text or scopeKey
+                return (M.Tr and M.Tr(text)) or text
+            end
+        end
+        return tostring(scopeKey or "")
+    end
+
     local unitPillPos, unitPillBottomY = FlowTopLeft({ 90, 90, 90, 96 }, 12, -120, contentW - 14, 6, 28, 22)
     local top = b:Section("Unit Auras", max(148, abs(unitPillBottomY) + 14))
     local function ApplyUnitAuraEnabled()
@@ -873,7 +885,9 @@ local function BuildAuras(ctx)
     local lowerToggleY = lowerLabelY - 16
     local borderLabelY = compactDisplay and (lowerLabelY - 88) or lowerLabelY
     local borderToggleY = borderLabelY - 16
-    local masterH = compactDisplay and max(244, abs(borderToggleY - 24) + 18) or 244
+    local displayHintY = borderToggleY - 70
+    local displayBaseH = compactDisplay and max(244, abs(borderToggleY - 24) + 18) or 244
+    local masterH = max(displayBaseH, abs(displayHintY) + 58)
 
     local master = b:CollapsibleSection("a2_display", "Display", masterH, true)
     LabelAt(master, "|cff6EB5FFBuffs|r", displayCol1, -12, displayCol1W)
@@ -900,6 +914,20 @@ local function BuildAuras(ctx)
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Swipe darkens on loss", displayCol2 - 2, lowerToggleY - 22, AuraShared, "cooldownSwipeDarkenOnLoss", false, ApplyAuras), displayCol2W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Show cooldown text", displayCol2 - 2, lowerToggleY - 44, AuraShared, "showCooldownText", true, ApplyAuras), displayCol2W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Dispel-type borders", displayCol3 - 2, borderToggleY, AuraShared, "useDebuffTypeBorders", false, ApplyAuras), displayCol3W))
+    local displayScopeHint = W.Text(master, "Player-only buff hiding uses Custom caps and Max Buffs 0 because Show Buffs is shared.", 14, displayHintY, contentW - 28, T.colors.muted)
+    if displayScopeHint.SetWordWrap then displayScopeHint:SetWordWrap(true) end
+    if displayScopeHint.SetHeight then displayScopeHint:SetHeight(52) end
+    M.AddRefresher(ctx, function()
+        local scopeKey = AuraScope()
+        local scopeName = AuraScopeLabel()
+        if scopeKey == "shared" then
+            displayScopeHint:SetText(M.Tr("Need to hide buffs only for one unit? Select that unit above, enable Custom caps, then set Caps & Icons > Max Buffs to 0."))
+        elseif UnitOverrideEnabled("overrideSharedLayout") then
+            displayScopeHint:SetText(M.Format("Editing %s caps. Use Caps & Icons > Max Buffs = 0 to hide buffs only for this unit; Max Debuffs = 0 hides debuffs.", scopeName))
+        else
+            displayScopeHint:SetText(M.Format("Show Buffs is shared and stays locked while editing %s. Enable Custom caps, then set Caps & Icons > Max Buffs to 0 to hide buffs only for this unit.", scopeName))
+        end
+    end)
 
     local layout = b:CollapsibleSection("a2_layout", "Caps & Icons", 466, true)
     local layoutW = layout._msuf2Width or ctx.width or 900

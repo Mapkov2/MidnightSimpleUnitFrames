@@ -435,6 +435,11 @@ local SEARCH_QUERY_ALIASES = {
     turn = { "enable", "disable", "show", "hide", "enabled", "disabled", "visible", "hidden" },
     off = { "disable", "hide", "disabled", "hidden" },
     onoff = { "enable", "disable", "show", "hide", "enabled", "disabled" },
+    greyed = { "disabled", "locked", "shared setting", "unit auras", "custom caps", "max buffs", "max debuffs" },
+    grayed = { "disabled", "locked", "shared setting", "unit auras", "custom caps", "max buffs", "max debuffs" },
+    showbuffs = { "show buffs", "unit auras", "display", "shared setting", "custom caps", "max buffs" },
+    maxbuffs = { "max buffs", "buff cap", "caps & icons", "hide buffs", "custom caps" },
+    customcaps = { "custom caps", "caps & icons", "max buffs", "max debuffs", "unit override" },
     positioning = { "position", "positions", "move", "edit mode", "x offset", "y offset", "anchor", "anchoring" },
 
     background = { "bar background tint", "background tint", "background opacity", "background alpha", "backdrop", "bg", "bar colors", "transparency", "alpha", "unitframe colors" },
@@ -640,7 +645,7 @@ local SEARCH_QUERY_ALIASES = {
     blizzard = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
     default = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
     unlock = { "edit mode", "move", "drag", "frames unlocked", "lock frames" },
-    locked = { "edit mode", "move", "drag", "frames locked", "lock frames" },
+    locked = { "edit mode", "move", "drag", "frames locked", "lock frames", "disabled", "shared setting", "custom caps" },
     solo = { "show solo", "show player solo", "party frames solo", "group frames" },
     self = { "player", "show player", "hide player", "party frames" },
     tooltip = { "tooltips", "unitframe tooltips", "mouseover tooltip" },
@@ -679,6 +684,9 @@ local SEARCH_QUERY_ALIASES = {
     deaktivieren = { "disable", "hide", "hidden" },
     anzeigen = { "show", "visible", "enable" },
     ausblenden = { "hide", "hidden", "disable" },
+    abschalten = { "disable", "hide", "hidden" },
+    ausgegraut = { "disabled", "locked", "shared setting", "custom caps", "unit auras" },
+    grau = { "disabled", "locked", "shared setting" },
     sichtbar = { "visible", "show", "enable" },
     unsichtbar = { "invisible", "hidden", "alpha", "transparency" },
     versteckt = { "hidden", "hide", "disable" },
@@ -937,6 +945,15 @@ local function SearchCanonicalWords(raw)
             i = i + 2
         elseif word == "power" and nextWord == "bar" then
             words[#words + 1] = "powerbar"
+            i = i + 2
+        elseif word == "show" and nextWord == "buffs" then
+            words[#words + 1] = "showbuffs"
+            i = i + 2
+        elseif word == "max" and nextWord == "buffs" then
+            words[#words + 1] = "maxbuffs"
+            i = i + 2
+        elseif word == "custom" and nextWord == "caps" then
+            words[#words + 1] = "customcaps"
             i = i + 2
         elseif (word == "smooth" or word == "soft" or word == "fluid") and nextWord == "fill" then
             words[#words + 1] = "smoothfill"
@@ -2008,6 +2025,63 @@ local SEARCH_FAQ = {
         anchorText = "Caps & Icons Max Buffs Max Debuffs Icon size rows spacing filters",
         keywords = { "too many buffs", "too many debuffs", "too many auras", "aura spam", "buff spam", "debuff spam", "max buffs", "max debuffs", "aura cap", "icon size", "aura rows" },
         priority = 55,
+    },
+    {
+        label = "How do I turn off player buffs only?",
+        answer = "Open Unit Auras, select Player, enable Custom caps, then set Caps & Icons > Max Buffs to 0. Show Buffs is a shared master toggle, so it is locked outside Shared.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Player > Custom caps > Caps & Icons > Max Buffs",
+        anchorText = "Unit Auras Player Custom caps Display Show Buffs greyed out locked Caps & Icons Max Buffs set to 0 hide player buffs only",
+        keywords = {
+            "how do i turn off player buffs only its greyed out when editing player auras",
+            "how do i turn off player buffs only",
+            "player buffs greyed out",
+            "player buffs grayed out",
+            "show buffs greyed out player auras",
+            "show buffs grayed out player auras",
+            "turn off buffs only player",
+            "disable player buffs only",
+            "hide player buffs only",
+            "remove player buffs only",
+            "player aura buffs disabled",
+            "player auras show buffs locked",
+            "custom caps max buffs 0 player",
+            "max buffs 0 player",
+            "buffs nur beim spieler ausblenden",
+            "spieler buffs ausblenden",
+            "spieler buffs deaktivieren",
+            "spieler buffs ausgegraut",
+            "spieler auren buffs ausgegraut",
+            "show buffs spieler ausgegraut",
+            "max buffs 0 spieler",
+            "desactivar buffs jugador",
+            "ocultar buffs jugador",
+            "buffs jugador gris",
+            "auras jugador buffs gris",
+            "desactiver buffs joueur",
+            "masquer buffs joueur",
+            "buffs joueur grise",
+            "auras joueur buffs grise",
+            "disattivare buff giocatore",
+            "nascondere buff giocatore",
+            "buff giocatore grigio",
+            "desativar buffs jogador",
+            "ocultar buffs jogador",
+            "buffs jogador cinza",
+            "как отключить баффы игрока",
+            "баффы игрока серые",
+            "ауры игрока баффы серые",
+            "플레이어 버프 끄기",
+            "플레이어 버프 비활성화",
+            "플레이어 오라 버프 회색",
+            "关闭玩家增益",
+            "玩家增益灰色",
+            "玩家光环增益灰色",
+            "關閉玩家增益",
+            "玩家增益灰色",
+            "玩家光環增益灰色",
+        },
+        priority = 720,
     },
     {
         label = "Where are private auras?",
