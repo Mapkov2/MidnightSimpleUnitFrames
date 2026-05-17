@@ -45,36 +45,15 @@ jobs:
       - name: Validate publishing config
         shell: pwsh
         env:
-          MSUF_RELEASE_KEY: ${{ secrets.MSUF_RELEASE_KEY }}
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
           CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
         run: |
-          function Normalize-ReleaseTag([string]$value) {
-            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
-            $v = $value.Trim()
-            $v = $v -replace '^refs/tags/', ''
-            $v = $v -replace '^v(?=\d)', ''
-            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
-              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
-              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
-              $number = ""
-              if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
-                $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
-              }
-              return ($base + "-" + $Matches["channel"].ToLowerInvariant() + $number)
-            }
-            return $v
-          }
-
           $expectedRepository = "Mapkov2/MidnightSimpleUnitFrames"
           if ($env:GITHUB_REPOSITORY -ne $expectedRepository) {
             throw "Publishing is only allowed from '$expectedRepository'. Current repository is '$($env:GITHUB_REPOSITORY)'."
           }
 
           $missing = @()
-          if ([string]::IsNullOrWhiteSpace($env:MSUF_RELEASE_KEY)) {
-            $missing += "secret MSUF_RELEASE_KEY"
-          }
           if ([string]::IsNullOrWhiteSpace($env:WAGO_API_TOKEN)) {
             $missing += "secret WAGO_API_TOKEN"
           }
@@ -83,35 +62,6 @@ jobs:
           }
           if ($missing.Count -gt 0) {
             throw "Missing release publishing config: $($missing -join ', ')"
-          }
-
-          $tag = Normalize-ReleaseTag $env:RELEASE_VERSION
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            throw "Release version/tag is empty."
-          }
-
-          $tagMessage = @(git for-each-ref "refs/tags/$tag" --format='%(contents)' 2>$null)
-          if ($LASTEXITCODE -ne 0 -or $tagMessage.Count -eq 0) {
-            throw "Release tag '$tag' must exist locally as an annotated tag created by MSUF Publish."
-          }
-
-          $match = [regex]::Match(($tagMessage -join [Environment]::NewLine), '(?im)^MSUF-Release-Token:\s*(?<token>[0-9a-f]+)\s*$')
-          if (-not $match.Success) {
-            throw "Release tag '$tag' is missing the MSUF release authorization token."
-          }
-
-          $hmac = [System.Security.Cryptography.HMACSHA256]::new()
-          try {
-            $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($env:MSUF_RELEASE_KEY)
-            $payload = $expectedRepository + "|" + $tag
-            $expectedToken = ([System.BitConverter]::ToString($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload)))).Replace("-", "").ToLowerInvariant()
-          } finally {
-            $hmac.Dispose()
-          }
-
-          $actualToken = $match.Groups["token"].Value.Trim().ToLowerInvariant()
-          if ($actualToken -ne $expectedToken) {
-            throw "Release tag '$tag' failed MSUF release authorization."
           }
 
       - name: Resolve release channel
