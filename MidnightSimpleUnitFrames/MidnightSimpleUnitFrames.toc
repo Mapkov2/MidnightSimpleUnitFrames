@@ -105,6 +105,7 @@ Features\MSUF_VersionCheck.lua
 Core\MSUF_BarBackgroundRuntime.lua
 Core\MSUF_IconLayoutRuntime.lua
 MidnightSimpleUnitFrames.lua
+Core\MSUF_SwapRecolor.lua
 Core\MSUF_FontRuntime.lua
 Core\MSUF_TextureRuntime.lua
 Features\MidnightSimpleUnitFrames_DebugPos.lua

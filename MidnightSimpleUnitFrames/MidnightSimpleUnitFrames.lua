@@ -1137,6 +1137,22 @@ local function MSUF_RaidGroupNameAllowedForKey(key)
     key = MSUF_NormalizeUnitKeyForDB(key)
     return key == "player" or key == "target" or key == "targettarget" or key == "focus"
 end
+local function MSUF_NormalizeRaidGroupNameAnchor(anchor)
+    if anchor == "NAMELEFT" or anchor == "NAMERIGHT"
+        or anchor == "TOPLEFT" or anchor == "TOPRIGHT"
+        or anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT"
+        or anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM"
+        or anchor == "LEFT" or anchor == "RIGHT" then
+        return anchor
+    end
+    return "NAMERIGHT"
+end
+local function MSUF_RaidGroupNamePreviewText(conf)
+    local style = conf and conf.raidGroupNameStyle
+    if style == "BRACKET" then return "[2]" end
+    if style == "NONE" then return "2" end
+    return "(2)"
+end
 local function MSUF_ResolveFrameDBKey(f)
     local key = f and (f.unitKey or f.unit or f.msufConfigKey)
     return MSUF_NormalizeUnitKeyForDB(key or "player") or "player"
@@ -1149,13 +1165,26 @@ local function MSUF_ApplyRaidGroupNameLayout_Internal(f, conf)
     if layer == nil then layer = tonumber(g.nameTextLayer) end
     layer = math_floor((layer or 5) + 0.5)
     if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
+    local anchor = MSUF_NormalizeRaidGroupNameAnchor(conf.raidGroupNameAnchor or g.raidGroupNameAnchor)
+    local x = (type(conf.raidGroupNameOffsetX) == "number") and conf.raidGroupNameOffsetX
+        or ((type(g.raidGroupNameOffsetX) == "number") and g.raidGroupNameOffsetX or 3)
+    local y = (type(conf.raidGroupNameOffsetY) == "number") and conf.raidGroupNameOffsetY
+        or ((type(g.raidGroupNameOffsetY) == "number") and g.raidGroupNameOffsetY or 0)
     local anchorTo = f.nameText
     if f._msufNameClipFrame and f._msufNameClipFrame.IsShown and f._msufNameClipFrame:IsShown() then
         anchorTo = f._msufNameClipFrame
     end
-    if not ns.Cache.StampChanged(f, "RaidGroupNameLayout", anchorTo, layer) then return end
+    f._msufRaidGroupNameAnchor = anchor
+    if not ns.Cache.StampChanged(f, "RaidGroupNameLayout", anchorTo, layer, anchor, x, y) then return end
     f.raidGroupNameText:ClearAllPoints()
-    f.raidGroupNameText:SetPoint("LEFT", anchorTo, "RIGHT", 3, 0)
+    if anchor == "NAMERIGHT" then
+        f.raidGroupNameText:SetPoint("LEFT", anchorTo, "RIGHT", x, y)
+    elseif anchor == "NAMELEFT" then
+        f.raidGroupNameText:SetPoint("RIGHT", anchorTo, "LEFT", x, y)
+    else
+        local af = f.textFrame or f
+        f.raidGroupNameText:SetPoint(anchor, af, anchor, x, y)
+    end
     if f.raidGroupNameText.SetJustifyH then f.raidGroupNameText:SetJustifyH("LEFT") end
     if f.raidGroupNameText.SetJustifyV then f.raidGroupNameText:SetJustifyV("MIDDLE") end
 end
@@ -1179,6 +1208,7 @@ local function MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
         or ((type(g.levelIndicatorAnchor) == "string") and g.levelIndicatorAnchor or "NAMERIGHT")
     local layer = (ns.Icons and ns.Icons._layout and ns.Icons._layout.Layer and ns.Icons._layout.Layer(conf, g, "levelIndicatorLayer", 7)) or 7
     local raidGroupShown = f.raidGroupNameText and f.raidGroupNameText.IsShown and f.raidGroupNameText:IsShown()
+        and f._msufRaidGroupNameAnchor == "NAMERIGHT"
     f._msufLevelAnchor = anchor
     if not ns.Cache.StampChanged(f, "LevelLayout", anchor, lx, ly, layer, raidGroupShown and 1 or 0) then return end
     if ns.Icons and ns.Icons._layout then
@@ -3424,6 +3454,9 @@ local function ApplyTextLayout(f, conf)
         f._msufNameClipSideApplied, f._msufNameClipReservedRight, f._msufNameClipTextStamp, f._msufNameClipAnchorStamp, f._msufClampStamp = nil, nil, nil, nil, nil
     end
     if f.raidGroupNameText and f.nameText then MSUF_ApplyRaidGroupNameLayout_Internal(f, conf) end
+    if f._msufIsTarget and _G.MSUF_UFCore_ReanchorTargetToTInline then
+        _G.MSUF_UFCore_ReanchorTargetToTInline(f)
+    end
     if f.levelText and f.nameText then MSUF_ApplyLevelIndicatorLayout_Internal(f, conf) end
     MSUF_TextLayout_Place(f.hpTextLeft, tf, "TOPLEFT", "TOPLEFT", 4 + hX + hLeftX, hY + hLeftY, "LEFT")
     MSUF_TextLayout_Place(f.hpTextCenter, tf, "TOP", "TOP", hX + hCenterX, hY + hCenterY, "CENTER")
@@ -3651,7 +3684,8 @@ function MSUF_ClampNameWidth(f, conf)
     -- Fixed reservations (secret-safe; never derived from unit names)
     local reservedRight = 0
     local raidGroupShown = false
-    if f.raidGroupNameText and f.raidGroupNameText.IsShown and f.raidGroupNameText:IsShown() then
+    if f.raidGroupNameText and f.raidGroupNameText.IsShown and f.raidGroupNameText:IsShown()
+        and f._msufRaidGroupNameAnchor == "NAMERIGHT" then
         reservedRight = reservedRight + 24
         raidGroupShown = true
     end
@@ -4184,10 +4218,11 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
     if self.raidGroupNameText and self.raidGroupNameText.SetText then
         local showRG = (conf and conf.showRaidGroupInName == true) and MSUF_RaidGroupNameAllowedForKey(key or self.msufConfigKey or self.unit)
         if showRG then
+            local rgText = MSUF_RaidGroupNamePreviewText(conf)
             if type(MSUF_SetTextIfChanged) == "function" then
-                MSUF_SetTextIfChanged(self.raidGroupNameText, "(2)")
+                MSUF_SetTextIfChanged(self.raidGroupNameText, rgText)
             else
-                self.raidGroupNameText:SetText("(2)")
+                self.raidGroupNameText:SetText(rgText)
             end
         else
             if type(MSUF_SetTextIfChanged) == "function" then
@@ -4722,10 +4757,10 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
         ns.Util.SetShown(self.nameText, showN)
     end
     if self.raidGroupNameText then
-        local showRG = (conf and conf.showRaidGroupInName == true) and (self.showName ~= false)
+        local showRG = (conf and conf.showRaidGroupInName == true)
             and MSUF_RaidGroupNameAllowedForKey(self.msufConfigKey or unit or self.unit)
         if showRG then
-            MSUF_SetTextIfChanged(self.raidGroupNameText, "(2)")
+            MSUF_SetTextIfChanged(self.raidGroupNameText, MSUF_RaidGroupNamePreviewText(conf))
         else
             MSUF_SetTextIfChanged(self.raidGroupNameText, "")
         end
@@ -6827,112 +6862,19 @@ do
     ns.Text.ClearText        = ns.Text.ClearText        or MSUF_ClearText
 end
 
--- Swap Recolor Driver (event-only, ultra cheap)
--- Fixes: HP bar color/gradient/background sticking after target/focus/ToT swap.
--- This bypasses rare/heavy-visual gating by forcing the HeavyVisual step once
--- per swap event (coalesced next frame). No layout, no full refresh.
-do
-    -- Force a one-shot HeavyVisual pass for the given frame/unit.
-    -- Exposed globally so other files/modules may reuse it if needed.
-    _G.MSUF_ForceReapplyHPBarColor = _G.MSUF_ForceReapplyHPBarColor or function(frame, unit)
-        if not (frame and unit and frame.hpBar) then return end
-        local key = frame.msufConfigKey
-        local flags = _G.MSUF_UnitTokenChanged
-        if not flags then
-            flags = {}
-            _G.MSUF_UnitTokenChanged = flags
-        end
-        if key then
-            flags[key] = true -- consumed inside MSUF_UFStep_HeavyVisual
-        end
-        frame._msufHeavyVisualNextAt = 0 -- allow immediate run
-        -- Call the local HeavyVisual step directly (no layout / no other steps)
-        MSUF_UFStep_HeavyVisual(frame, unit, key)
+-- Swap Recolor hook. The event driver lives in Core/MSUF_SwapRecolor.lua; this
+-- tiny bridge stays here because it needs the local MSUF_UFStep_HeavyVisual.
+_G.MSUF_ForceReapplyHPBarColor = _G.MSUF_ForceReapplyHPBarColor or function(frame, unit)
+    if not (frame and unit and frame.hpBar) then return end
+    local key = frame.msufConfigKey
+    local flags = _G.MSUF_UnitTokenChanged
+    if not flags then
+        flags = {}
+        _G.MSUF_UnitTokenChanged = flags
     end
-
-    -- PERF: Track which units actually need recolor (avoid recoloring all 3 on every change)
-    local _swapDirtyTarget, _swapDirtyToT, _swapDirtyFocus = false, false, false
-
-    local function _MSUF_SwapRecolor_Do()
-        local dt, dtt, df = _swapDirtyTarget, _swapDirtyToT, _swapDirtyFocus
-        _swapDirtyTarget, _swapDirtyToT, _swapDirtyFocus = false, false, false
-        if dt then
-            local f = _G.MSUF_target
-            if f and f.unit == "target" then
-                _G.MSUF_ForceReapplyHPBarColor(f, "target")
-            end
-        end
-        if dtt then
-            local tot = _G.MSUF_targettarget
-            if tot and tot.unit == "targettarget" then
-                _G.MSUF_ForceReapplyHPBarColor(tot, "targettarget")
-            end
-        end
-        if df then
-            local fo = _G.MSUF_focus
-            if fo and fo.unit == "focus" then
-                _G.MSUF_ForceReapplyHPBarColor(fo, "focus")
-            end
-        end
+    if key then
+        flags[key] = true -- consumed inside MSUF_UFStep_HeavyVisual
     end
-
-    local _msufSwapRecolorPendingDriver = nil
-    local function _MSUF_SwapRecolor_Flush()
-        local driver = _msufSwapRecolorPendingDriver
-        _msufSwapRecolorPendingDriver = nil
-        if driver then
-            driver._msufSwapRecolorQueued = false
-        end
-        _MSUF_SwapRecolor_Do()
-    end
-
-    local function _MSUF_SwapRecolor_Schedule(driver)
-        if driver._msufSwapRecolorQueued then return end
-        driver._msufSwapRecolorQueued = true
-        if C_Timer and C_Timer.After then
-            _msufSwapRecolorPendingDriver = driver
-            C_Timer.After(0, _MSUF_SwapRecolor_Flush)
-        else
-            driver._msufSwapRecolorQueued = false
-            _MSUF_SwapRecolor_Do()
-        end
-    end
-
-    local function _MSUF_SwapRecolor_OnTargetChanged()
-        _swapDirtyTarget = true
-        _swapDirtyToT = true
-        local d = _G.MSUF_SwapRecolorDriver
-        if d then _MSUF_SwapRecolor_Schedule(d) end
-    end
-    local function _MSUF_SwapRecolor_OnFocusChanged()
-        _swapDirtyFocus = true
-        local d = _G.MSUF_SwapRecolorDriver
-        if d then _MSUF_SwapRecolor_Schedule(d) end
-    end
-
-    _G.MSUF_SwapRecolor_OnUnitTargetChanged = _G.MSUF_SwapRecolor_OnUnitTargetChanged or function()
-        _swapDirtyToT = true
-        local d = _G.MSUF_SwapRecolorDriver
-        if d then _MSUF_SwapRecolor_Schedule(d) end
-    end
-
-    _G.MSUF_EnsureSwapRecolorDriver = _G.MSUF_EnsureSwapRecolorDriver or function()
-        if _G.MSUF_SwapRecolorDriver then return _G.MSUF_SwapRecolorDriver end
-        local d = CreateFrame("Frame", "MSUF_SwapRecolorDriver", UIParent)
-        d._msufSwapRecolorQueued = false
-        -- PLAYER_TARGET_CHANGED/PLAYER_FOCUS_CHANGED come through EventBus.
-        -- UNIT_TARGET is already owned by UFCore; it calls
-        -- MSUF_SwapRecolor_OnUnitTargetChanged only when ToT work is active.
-        _G.MSUF_SwapRecolorDriver = d
-
-        MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_SWAP_RECOLOR", _MSUF_SwapRecolor_OnTargetChanged)
-        MSUF_EventBus_Register("PLAYER_FOCUS_CHANGED", "MSUF_SWAP_RECOLOR_FOCUS", _MSUF_SwapRecolor_OnFocusChanged)
-
-        return d
-    end
-end
-
--- Start the driver immediately (safe: does nothing until frames exist).
-if _G.MSUF_EnsureSwapRecolorDriver then
-    _G.MSUF_EnsureSwapRecolorDriver()
+    frame._msufHeavyVisualNextAt = 0 -- allow immediate run
+    MSUF_UFStep_HeavyVisual(frame, unit, key)
 end
