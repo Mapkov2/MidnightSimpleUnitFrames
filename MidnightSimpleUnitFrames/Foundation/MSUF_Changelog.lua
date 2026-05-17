@@ -4,12 +4,12 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.3 Beta",
+    currentVersion = "5.3 Beta 1",
     previousVersion = "5.2",
-    rangeLabel = "5.2 -> 5.3 Beta",
+    rangeLabel = "5.2 -> 5.3 Beta 1",
     entries = {
         {
-            version = "5.3 Beta",
+            version = "5.3 Beta 1",
             date = "2026-05-17",
             sections = {
                 {

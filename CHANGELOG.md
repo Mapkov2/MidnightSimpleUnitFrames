@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.3 Beta - 2026-05-17
+## 5.3 Beta 1 - 2026-05-17
 
 ### Performance
 - Improved performance for bar background rendering, text updates, and interrupt-ready handling.
