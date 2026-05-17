@@ -381,14 +381,23 @@ local function _Iter_ResetBorderOnScale(uf)
 end
 
 -- Aggro outline indicator: reuse the bar-outline border and recolor/thicken it
--- when the player has full aggro on target/focus/boss frames.
+-- when the player has threat on player/target/focus/boss frames.
 local function MSUF_IsAggroOutlineUnit(unit)
+    if unit == "player" then return true end
     if unit == "target" or unit == "focus" then return true end
     if type(unit) == "string" and unit:sub(1, 4) == "boss" then
         local n = tonumber(unit:sub(5))
         if n and n >= 1 and n <= 5 then return true end
     end
     return false
+end
+
+local function MSUF_GetAggroThreatSituation(unit)
+    if not UnitThreatSituation then return nil end
+    if unit == "player" then
+        return UnitThreatSituation("player")
+    end
+    return UnitThreatSituation("player", unit)
 end
 local _UF_DISPEL_INDEX_BY_NAME = { Magic = 1, Curse = 2, Disease = 3, Poison = 4, Bleed = 5, None = 0 }
 
@@ -779,7 +788,7 @@ MSUF_ApplyRareVisuals = function(self)
     if not self or not self.unit then  return end
     local cfg = _RefreshBorderSettingsForFrame(self)
 
-    -- Aggro state detection (target/focus/boss only).
+    -- Aggro state detection.
     local borderTestsActive = _G.MSUF_BorderTestModesActive == true
     local aggroTest = borderTestsActive and _G.MSUF_AggroBorderTestMode and true or false
     if aggroTest then
@@ -796,8 +805,8 @@ MSUF_ApplyRareVisuals = function(self)
     if wantAggro then
         if aggroTest then
             threat = true
-        elseif UnitThreatSituation then
-            local raw = UnitThreatSituation("player", self.unit)
+        else
+            local raw = MSUF_GetAggroThreatSituation(self.unit)
             if raw ~= nil then
                 local iss = _G.issecretvalue
                 if iss and iss(raw) then
@@ -949,6 +958,7 @@ _G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(acti
     local frames = _G.MSUF_UnitFrames
     if type(fn) == "function" and frames then
         if isShared then
+            local p = frames.player; if p and p.unit == "player" then fn(p) end
             local t = frames.target; if t and t.unit == "target" then fn(t) end
             local f = frames.focus; if f and f.unit == "focus" then fn(f) end
             for i = 1, 5 do local b = frames["boss" .. i]; if b and b.unit == ("boss" .. i) then fn(b) end end
@@ -1140,7 +1150,11 @@ end
 
 -- Aggro outline event driver (event-only, no OnUpdate)
 do
+    local aggroPlayerEventsWanted = false
+
     local function AnyAggroOutlineEnabled()
+        aggroPlayerEventsWanted = _OutlineModeEnabledForUnit("player", "aggroOutlineMode", "hlAggroEnabled")
+        if aggroPlayerEventsWanted then return true end
         if _OutlineModeEnabledForUnit("target", "aggroOutlineMode", "hlAggroEnabled") then return true end
         if _OutlineModeEnabledForUnit("focus", "aggroOutlineMode", "hlAggroEnabled") then return true end
         for i = 1, 5 do
@@ -1167,8 +1181,8 @@ do
 
         if not aggroTestActive then
             local on = false
-            if UnitThreatSituation then
-                local raw = UnitThreatSituation("player", u)
+            do
+                local raw = MSUF_GetAggroThreatSituation(u)
                 if raw ~= nil then
                     if issecretvalue and issecretvalue(raw) then return end
                     on = (raw == 3) and true or false
@@ -1182,10 +1196,22 @@ do
         if type(fn) == "function" then fn(uf) end
     end
 
+    local function RefreshAllAggroOutlineUnits()
+        RefreshAggroForUnit("player")
+        RefreshAggroForUnit("target")
+        RefreshAggroForUnit("focus")
+        for i = 1, 5 do
+            RefreshAggroForUnit("boss" .. i)
+        end
+    end
+
     -- UNIT_THREAT_* stay on dedicated frame (EventBus rejects UNIT_* events)
     local ef = F.CreateFrame("Frame")
     ef:SetScript("OnEvent", function(_, event, unit)
         RefreshAggroForUnit(unit)
+        if unit ~= "player" and aggroPlayerEventsWanted then
+            RefreshAggroForUnit("player")
+        end
     end)
     local function ApplyAggroOutlineEventRegistration()
         local want = AnyAggroOutlineEnabled()
@@ -1199,7 +1225,11 @@ do
             end
             do
                 local _qTgt, _qFoc
-                local function _flushTgt() _qTgt = nil; RefreshAggroForUnit("target") end
+                local function _flushTgt()
+                    _qTgt = nil
+                    RefreshAggroForUnit("target")
+                    if aggroPlayerEventsWanted then RefreshAggroForUnit("player") end
+                end
                 local function _flushFoc() _qFoc = nil; RefreshAggroForUnit("focus") end
                 MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_AGGRO_OUTLINE", function()
                     if not _qTgt then _qTgt = true; if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("BORDER_AGGRO_TARGET", _flushTgt) else C_Timer.After(0, _flushTgt) end end
@@ -1209,6 +1239,7 @@ do
                 end)
             end
         else
+            aggroPlayerEventsWanted = false
             if ef:IsEventRegistered("UNIT_THREAT_SITUATION_UPDATE") then
                 ef:UnregisterEvent("UNIT_THREAT_SITUATION_UPDATE")
             end
@@ -1220,6 +1251,7 @@ do
                 MSUF_EventBus_Unregister("PLAYER_FOCUS_CHANGED", "MSUF_AGGRO_OUTLINE")
             end
         end
+        RefreshAllAggroOutlineUnits()
     end
 
     _G.MSUF_AggroOutline_ApplyEventRegistration = ApplyAggroOutlineEventRegistration
