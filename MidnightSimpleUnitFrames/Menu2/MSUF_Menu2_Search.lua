@@ -110,6 +110,28 @@ local function UpdateSearchPlaceholder(searchBox)
     end
 end
 
+local SEARCH_TEXT_FOLDS = {
+    ["\195\128"] = "a", ["\195\129"] = "a", ["\195\130"] = "a", ["\195\131"] = "a", ["\195\133"] = "a",
+    ["\195\160"] = "a", ["\195\161"] = "a", ["\195\162"] = "a", ["\195\163"] = "a", ["\195\165"] = "a",
+    ["\195\135"] = "c", ["\195\167"] = "c",
+    ["\195\136"] = "e", ["\195\137"] = "e", ["\195\138"] = "e", ["\195\139"] = "e",
+    ["\195\168"] = "e", ["\195\169"] = "e", ["\195\170"] = "e", ["\195\171"] = "e",
+    ["\195\140"] = "i", ["\195\141"] = "i", ["\195\142"] = "i", ["\195\143"] = "i",
+    ["\195\172"] = "i", ["\195\173"] = "i", ["\195\174"] = "i", ["\195\175"] = "i",
+    ["\195\145"] = "n", ["\195\177"] = "n",
+    ["\195\146"] = "o", ["\195\147"] = "o", ["\195\148"] = "o", ["\195\149"] = "o",
+    ["\195\178"] = "o", ["\195\179"] = "o", ["\195\180"] = "o", ["\195\181"] = "o",
+    ["\195\153"] = "u", ["\195\154"] = "u", ["\195\155"] = "u",
+    ["\195\185"] = "u", ["\195\186"] = "u", ["\195\187"] = "u",
+}
+
+local SEARCH_UTF_PUNCTUATION = {
+    "\194\160", -- nbsp
+    "\226\128\152", "\226\128\153", "\226\128\156", "\226\128\157",
+    "\226\128\147", "\226\128\148", "\226\128\166",
+    "\227\128\129", "\227\128\130",
+    "\239\188\129", "\239\188\140", "\239\188\154", "\239\188\155", "\239\188\159",
+}
 
 local function NormalizeSearchText(text)
     text = tostring(text or "")
@@ -118,9 +140,14 @@ local function NormalizeSearchText(text)
     text = text:gsub("\195\150", "oe"):gsub("\195\182", "oe")
     text = text:gsub("\195\156", "ue"):gsub("\195\188", "ue")
     text = text:gsub("\195\159", "ss")
+    for from, to in pairs(SEARCH_TEXT_FOLDS) do text = text:gsub(from, to) end
+    for i = 1, #SEARCH_UTF_PUNCTUATION do text = text:gsub(SEARCH_UTF_PUNCTUATION[i], " ") end
+    text = text:gsub("[\240-\244][\128-\191][\128-\191][\128-\191]", " ")
     text = text:gsub("[/\\_%-%.:;,%(%)]", " ")
     text = string.lower(text)
-    text = text:gsub("[^%w%s]+", " ")
+    text = text:gsub("[\001-\031\127]", " ")
+    -- Preserve non-ASCII letters so native localized FAQ keywords can match.
+    text = text:gsub("[!\"#$%%&'%*%+<=>%?%@%[%]%^`{|}~]+", " ")
     text = text:gsub("%s+", " ")
     return TrimText(text)
 end
@@ -264,6 +291,15 @@ local SEARCH_STOP_WORDS = {
     dumb = true,
     stupid = true,
     plsfix = true,
+    s = true,
+    see = true,
+    image = true,
+    screenshot = true,
+    happening = true,
+    here = true,
+    still = true,
+    even = true,
+    though = true,
     wie = true,
     kann = true,
     ich = true,
@@ -299,6 +335,12 @@ local SEARCH_STOP_WORDS = {
     mir = true,
     mit = true,
     nur = true,
+    noch = true,
+    immer = true,
+    aus = true,
+    obwohl = true,
+    trotzdem = true,
+    werden = true,
     und = true,
     oder = true,
 }
@@ -422,6 +464,16 @@ local SEARCH_QUERY_ALIASES = {
     leben = { "health", "hp", "health bar", "health text" },
     name = { "name text", "text", "font", "name shortening" },
     names = { "name text", "text", "font", "name shortening" },
+    shorten = { "name shortening", "short names", "truncate names", "max name length" },
+    shortened = { "name shortening", "short names", "truncate names", "max name length" },
+    shortens = { "name shortening", "short names", "truncate names", "max name length" },
+    shortening = { "name shortening", "short names", "truncate names", "max name length" },
+    truncated = { "name shortening", "short names", "truncate names", "max name length" },
+    override = { "custom settings", "font override", "scope override", "group frame override", "shared changes" },
+    overrides = { "custom settings", "font override", "scope override", "group frame override", "shared changes" },
+    fontoverride = { "font override", "custom font settings", "name shortening", "shared changes" },
+    scopeoverride = { "scope override", "font override", "custom settings", "shared changes" },
+    groupoverride = { "group frame override", "font override", "group frames", "name shortening" },
     text = { "font", "fonts", "name text", "health text", "power text", "spell name" },
     font = { "fonts", "text", "font size", "outline", "shadow" },
     fonts = { "font", "text", "font size", "outline", "shadow" },
@@ -586,6 +638,13 @@ local SEARCH_QUERY_ALIASES = {
     schriftart = { "font", "fonts", "font family" },
     schriftgroesse = { "font size", "text size", "fonts" },
     namen = { "names", "name text", "name shortening" },
+    kuerzen = { "name shortening", "short names", "truncate names", "max name length" },
+    gekuerzt = { "name shortening", "short names", "truncate names", "max name length" },
+    namenskuerzung = { "name shortening", "short names", "truncate names", "max name length" },
+    namenskurzung = { "name shortening", "short names", "truncate names", "max name length" },
+    kuerzung = { "name shortening", "short names", "truncate names", "max name length" },
+    ueberschreiben = { "override", "font override", "custom settings" },
+    ueberschreibung = { "override", "font override", "custom settings" },
     realm = { "realm names", "name shortening", "short names" },
     server = { "realm names", "name shortening", "short names" },
     truncate = { "name shortening", "short names", "max name length" },
@@ -1923,6 +1982,57 @@ local SEARCH_FAQ = {
         anchorText = "Name Shortening names too long max name length castbar spell name shortening",
         keywords = { "name too long", "names too long", "shorten names", "name shortening", "long names", "cut names", "truncate names", "player name too long", "target name too long" },
         priority = 45,
+    },
+    {
+        label = "Why are group names still shortened when name shortening is off?",
+        answer = "Global Style > Fonts has Shared settings plus per-scope font overrides. If Party or Raid uses custom font settings, its Name Shortening can stay enabled even when Shared is off. Select Party/Raid in Fonts or reset the font override.",
+        pageKey = "opt_fonts",
+        target = "Opens: Global Style > Fonts > Name Shortening / scope override",
+        anchorText = "Name Shortening Use custom settings for this scope Overrides Party Raid group frame name truncation font override shared changes",
+        keywords = {
+            "see image not sure whats happening here",
+            "name shortening off but group names still shortened",
+            "shorten names disabled but names still cut",
+            "group names still shortened",
+            "party names still shortened",
+            "raid names still shortened",
+            "group frame name truncation override",
+            "group frame font override name shortening",
+            "shared name shortening does not affect party raid",
+            "getting confused with overrides",
+            "no group frame override",
+            "namen werden gekuerzt obwohl namenskuerzung aus",
+            "namenskuerzung aus aber gruppennamen gekuerzt",
+            "gruppenframe override namenskuerzung",
+            "raid override namenskuerzung",
+            "acortar nombres desactivado pero los nombres siguen acortados",
+            "abreviar nombres desactivado pero nombres cortados",
+            "marcos de grupo anulacion nombres",
+            "sobrescritura de marcos de grupo nombres",
+            "raccourcissement des noms desactive mais noms encore raccourcis",
+            "noms raccourcis malgre option desactivee",
+            "remplacement cadres de groupe noms",
+            "abbreviazione nomi disattivata ma nomi ancora abbreviati",
+            "nomi gruppo abbreviati override",
+            "encurtar nomes desativado mas nomes ainda encurtados",
+            "quadros de grupo substituicao nomes",
+            "сокращение имен отключено но имена сокращаются",
+            "сокращение имён выключено но имена сокращаются",
+            "оверрайд рамок группы сокращение имен",
+            "переопределение рамок группы имена",
+            "이름 줄이기 꺼짐인데 이름이 줄어듦",
+            "이름 줄이기 꺼짐 이름 줄어듦",
+            "그룹 프레임 재정의 이름 줄이기",
+            "名字缩短关闭但仍然缩短",
+            "姓名缩短关闭但仍然缩短",
+            "团队框架覆盖名字缩短",
+            "小队框架覆盖名字缩短",
+            "名字縮短關閉但仍然縮短",
+            "姓名縮短關閉但仍然縮短",
+            "團隊框架覆蓋名字縮短",
+            "隊伍框架覆蓋名字縮短",
+        },
+        priority = 650,
     },
     {
         label = "Where do I make the menu bigger or smaller?",

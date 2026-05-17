@@ -341,6 +341,20 @@ local function BuildFonts(ctx)
         { value = "gf_raid", text = "Raid" },
     }
 
+    local function ActiveFontOverrideLabels(filter)
+        local active = {}
+        for i = 1, #scopeValues do
+            local item = scopeValues[i]
+            if item.value ~= "shared"
+                and ScopeHasOverride(item.value, "fontOverride")
+                and (not filter or filter(item.value))
+            then
+                active[#active + 1] = M.Tr(item.text or "")
+            end
+        end
+        return active
+    end
+
     local scopeOpts = {
         values = scopeValues,
         width = ctx.width,
@@ -395,20 +409,18 @@ local function BuildFonts(ctx)
     local hint = W.Text(scope, "Shared baseline plus per-unit and group-frame font overrides.", 14, hintY, ctx.width - 28, T.colors.muted)
     M.AddRefresher(ctx, function()
         local current = CurrentFontScope()
-        local active = {}
-        for i = 1, #scopeValues do
-            local item = scopeValues[i]
-            if item.value ~= "shared" and ScopeHasOverride(item.value, "fontOverride") then
-                active[#active + 1] = M.Tr(item.text or "")
-            end
-        end
+        local active = ActiveFontOverrideLabels()
         local shared = current == "shared"
         W.SetControlShown(override, not shared)
         overrideInfo:SetShown(shared)
         reset:SetShown(shared and #active > 0)
         overrideInfo:SetText("|cffffffff" .. M.Tr("Overrides:") .. "|r " .. (#active > 0 and table.concat(active, ", ") or M.Tr("None")))
         if shared then
-            hint:SetText("Shared font settings are the baseline for units and group frames.")
+            if #active > 0 then
+                hint:SetText("Shared font settings are the baseline. Active overrides keep their own font and name-shortening settings.")
+            else
+                hint:SetText("Shared font settings are the baseline for units and group frames.")
+            end
         elseif ScopeHasOverride(current, "fontOverride") then
             hint:SetText("This scope is using custom font settings. Shared changes will not affect it until the override is reset.")
         else
@@ -533,7 +545,7 @@ local function BuildFonts(ctx)
 
     local nameScope = CurrentFontScope()
     if IsGFScope(nameScope) then
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 236, true)
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 322, true)
         W.Text(names, "Group Frame Name Truncation", 14, -38, ctx.width - 28, T.colors.text)
         names._msuf2CursorY = -72
 
@@ -611,6 +623,10 @@ local function BuildFonts(ctx)
                 ApplyFonts("MSUF2_GF_NAME_ELLIPSIS")
                 RefreshGFNameShorteningUI()
             end)
+        local scopeNoticeY = (names._msuf2CursorY or -228) - 8
+        local scopeNotice = W.Text(names, "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted)
+        if scopeNotice.SetWordWrap then scopeNotice:SetWordWrap(true) end
+        if scopeNotice.SetHeight then scopeNotice:SetHeight(44) end
         local function RefreshGFNameShorteningControls()
             local canEdit = CurrentFontScopeCanEdit()
             local enabled
@@ -623,13 +639,18 @@ local function BuildFonts(ctx)
             SetControlEnabled(side, canEdit and enabled)
             SetControlEnabled(chars, canEdit and enabled)
             SetControlEnabled(noEllipsis, canEdit and enabled)
+            if GFNameUsesLocalScope() then
+                scopeNotice:SetText("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
+            else
+                scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation.")
+            end
         end
         M.AddRefresher(ctx, RefreshGFNameShorteningControls)
         RefreshGFNameShorteningControls()
     elseif nameScope ~= "player" then
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 250, true)
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 294, true)
 
-        local shorten, side, chars, noEllipsis
+        local shorten, side, chars, noEllipsis, scopeNotice
         local function CanEditNameShortening()
             return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())
         end
@@ -643,6 +664,23 @@ local function BuildFonts(ctx)
             SetControlEnabled(side, canEdit and enabled)
             SetControlEnabled(chars, canEdit and enabled)
             SetControlEnabled(noEllipsis, canEdit)
+            if scopeNotice then
+                local current = CurrentFontScope()
+                if current == "shared" then
+                    local active = ActiveFontOverrideLabels()
+                    if #active > 0 then
+                        scopeNotice:SetText("|cffffd200" .. M.Tr("Font overrides active:") .. "|r "
+                            .. table.concat(active, ", ")
+                            .. ". Shared name-shortening changes do not affect those scopes.")
+                    else
+                        scopeNotice:SetText("Shared name shortening affects all non-player unit names and group frames unless a scope has custom font settings.")
+                    end
+                elseif ScopeHasOverride(current, "fontOverride") then
+                    scopeNotice:SetText("This scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
+                else
+                    scopeNotice:SetText("This scope follows Shared name shortening. Turn on custom settings above only when this scope needs different names.")
+                end
+            end
         end
         local function ApplyNameShorteningChange(reason, onlyWhenEnabled)
             RefreshNameShorteningControls()
@@ -687,6 +725,10 @@ local function BuildFonts(ctx)
                 FontScopeSet("shortenNameShowDots", not (v and true or false), "MSUF2_SHORTEN_DOTS")
                 ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
             end)
+        local scopeNoticeY = (names._msuf2CursorY or -194) - 8
+        scopeNotice = W.Text(names, "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted)
+        if scopeNotice.SetWordWrap then scopeNotice:SetWordWrap(true) end
+        if scopeNotice.SetHeight then scopeNotice:SetHeight(44) end
         M.AddRefresher(ctx, RefreshNameShorteningControls)
         RefreshNameShorteningControls()
     end
