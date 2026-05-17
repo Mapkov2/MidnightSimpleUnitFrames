@@ -1270,10 +1270,10 @@ local function BuildBars(ctx)
         bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)
 
-    local priority = b:CollapsibleSection("bars_priority", "Highlight Priority", 326, false)
+    local priority = b:CollapsibleSection("bars_priority", "Highlight Priority", 350, false)
     local priorityCardW = min(360, max(260, (priority._msuf2Width or ctx.width or 720) - 40))
-    local priorityCard = W.ControlCard(priority, "Priority Order", nil, 20, -38, priorityCardW, 274)
-    local prio = W.ToggleAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
+    local priorityCard = W.ControlCard(priority, "Priority Order", nil, 20, -38, priorityCardW, 296)
+    local prio = W.SwitchAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
     M.BindToggle(ctx, prio,
         function() return BarScopeGet("hlPrioEnabled", false) == true end,
         function(v)

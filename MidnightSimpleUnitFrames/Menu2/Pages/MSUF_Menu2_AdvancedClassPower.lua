@@ -647,7 +647,7 @@ local function BuildClassPower(ctx)
     MoveWidget(cpShadow, behavior, behaviorRightX, -102)
     MoveWidget(cpPrediction, behavior, behaviorRightX, -134)
 
-    local visual = b:CollapsibleSection("classpower_visuals", "Style", 420, false)
+    local visual = b:CollapsibleSection("classpower_visuals", "Style", 452, false)
     local cpColor = BindTableToggle(ctx, visual, "Color by resource type", Bars, "classPowerColorByType", true, ApplyClassPower)
     local cpComboColor = BindTableDropdown(ctx, visual, "Combo point colors", {
         { value = "default", text = "Resource color" },
@@ -684,7 +684,7 @@ local function BuildClassPower(ctx)
     W.ControlCard(visual, "Resource & Textures", nil, styleLeftX - 14, -38, styleLeftW + 28, 238)
     W.ControlCard(visual, "Text", nil, styleMidX - 14, -38, styleMidW + 28, 184)
     W.ControlCard(visual, "Opacity", nil, styleRightX - 14, -38, styleRightW + 28, 176)
-    W.ControlCard(visual, "Pips & Border", nil, styleRightX - 14, -222, styleRightW + 28, 178)
+    W.ControlCard(visual, "Pips & Border", nil, styleRightX - 14, -222, styleRightW + 28, 210)
     MoveWidget(cpColor, visual, styleLeftX, -64)
     MoveWidget(cpComboColor, visual, styleLeftX, -96, styleLeftControlW)
     MoveWidget(cpFgTex, visual, styleLeftX, -184, styleLeftControlW)
@@ -699,17 +699,18 @@ local function BuildClassPower(ctx)
     MoveWidget(cpOutline, visual, styleRightX, -318, styleRightControlW)
     MoveWidget(cpGap, visual, styleRightX, -370, styleRightControlW)
 
-    local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 170, false)
-    W.ControlCard(visibility, "Auto-Hide Rules", nil, 14, -38, min(560, (visibility._msuf2Width or ctx.width or 900) - 28), 100)
-    visibility._msuf2CursorY = -66
-    local hideOOC = BindTableToggle(ctx, visibility, "Hide out of combat", Bars, "classPowerHideOOC", false, ApplyClassPower)
-    local hideFull = BindTableToggle(ctx, visibility, "Hide when full", Bars, "classPowerHideWhenFull", false, ApplyClassPower)
-    local hideEmpty = BindTableToggle(ctx, visibility, "Hide when empty", Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
+    local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 196, false)
+    local visibilityW = min(560, (visibility._msuf2Width or ctx.width or 900) - 28)
+    W.ControlCard(visibility, "Auto-Hide Rules", nil, 14, -38, visibilityW, 134)
+    local hideOOC = SwitchAt(ctx, visibility, "Hide out of combat", 32, -64, visibilityW - 48, Bars, "classPowerHideOOC", false, ApplyClassPower)
+    local hideFull = SwitchAt(ctx, visibility, "Hide when full", 32, -96, visibilityW - 48, Bars, "classPowerHideWhenFull", false, ApplyClassPower)
+    local hideEmpty = SwitchAt(ctx, visibility, "Hide when empty", 32, -128, visibilityW - 48, Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
     for _, control in ipairs({ hideOOC, hideFull, hideEmpty }) do cpControls[#cpControls + 1] = control end
 
-    local dpb = b:CollapsibleSection("classpower_detached_power", "Detached Power Bar", 352, false)
-    W.ControlCard(dpb, "Detached Power Bar", "Only applies when power bar is detached.", 14, -38, min(620, (dpb._msuf2Width or ctx.width or 900) - 28), 254)
-    dpb._msuf2CursorY = -92
+    local dpb = b:CollapsibleSection("classpower_detached_power", "Detached Power Bar", 382, false)
+    local dpbCardW = min(620, (dpb._msuf2Width or ctx.width or 900) - 28)
+    local dpbControlW = min(360, dpbCardW - 64)
+    W.ControlCard(dpb, "Detached Power Bar", "Only applies when power bar is detached.", 14, -38, dpbCardW, 284)
     local dpbMode = W.Dropdown(dpb, "Width mode", {
         { value = "manual", text = "Manual" },
         { value = "cooldown", text = "Essential Cooldowns" },
@@ -725,14 +726,21 @@ local function BuildClassPower(ctx)
     local dpbFg = BindTableDropdown(ctx, dpb, "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, Bars, "detachedPowerBarTexture", "", ApplyDetachedPowerBar)
     local dpbBg = BindTableDropdown(ctx, dpb, "Background texture", function() return TextureValues("Use foreground texture") end, 300, Bars, "detachedPowerBarBgTexture", "", ApplyDetachedPowerBar)
     local dpbOutline = BindTableSlider(ctx, dpb, "Power bar outline", 0, 6, 1, 300, Bars, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline)
+    MoveWidget(dpbMode, dpb, 32, -100, dpbControlW, "LEFT")
+    MoveWidget(dpbFg, dpb, 32, -154, dpbControlW, "LEFT")
+    MoveWidget(dpbBg, dpb, 32, -208, dpbControlW, "LEFT")
+    MoveWidget(dpbOutline, dpb, 32, -262, dpbControlW, "LEFT")
     for _, control in ipairs({ dpbMode, dpbFg, dpbBg, dpbOutline }) do dpbControls[#dpbControls + 1] = control end
 
-    local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana Bar", 276, false)
-    W.ControlCard(altMana, "Alternative Mana Bar", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, min(620, (altMana._msuf2Width or ctx.width or 900) - 28), 204)
-    altMana._msuf2CursorY = -92
-    local altManaToggle = BindTableToggle(ctx, altMana, "Show mana bar (dual resource)", Bars, "showAltMana", false, ApplyClassPower)
+    local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana Bar", 306, false)
+    local altManaCardW = min(620, (altMana._msuf2Width or ctx.width or 900) - 28)
+    local altManaControlW = min(360, altManaCardW - 64)
+    W.ControlCard(altMana, "Alternative Mana Bar", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, altManaCardW, 234)
+    local altManaToggle = SwitchAt(ctx, altMana, "Show mana bar (dual resource)", 32, -98, altManaControlW, Bars, "showAltMana", false, ApplyClassPower)
     local altManaHeight = BindTableSlider(ctx, altMana, "Height", 2, 30, 1, 300, Bars, "altManaHeight", 4, ApplyClassPower)
     local altManaY = BindTableSlider(ctx, altMana, "Y offset", -50, 50, 1, 300, Bars, "altManaOffsetY", -2, ApplyClassPower)
+    MoveWidget(altManaHeight, altMana, 32, -138, altManaControlW, "LEFT")
+    MoveWidget(altManaY, altMana, 32, -192, altManaControlW, "LEFT")
     altManaControls[#altManaControls + 1] = altManaHeight
     altManaControls[#altManaControls + 1] = altManaY
 

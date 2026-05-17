@@ -378,6 +378,85 @@ local function BuildGFBars(ctx)
         return scope:sub(1, 1):upper() .. scope:sub(2)
     end
 
+    local function OptionText(values, value)
+        value = value or ""
+        for i = 1, #(values or {}) do
+            local item = values[i]
+            if item and item.value == value then
+                return item.text or item.label or tostring(value)
+            end
+        end
+        return tostring(value)
+    end
+
+    local function BadgeValue(value)
+        return tostring(value or ""):gsub("%s*/%s*", " + ")
+    end
+
+    local function BadgeNumber(value)
+        value = tonumber(value) or 0
+        if value == floor(value) then return tostring(floor(value)) end
+        return string.format("%.1f", value)
+    end
+
+    local function TextSlotSummary(kind)
+        local scope = CurrentScope()
+        local slots
+        if kind == "power" then
+            slots = {
+                { "right", "powerTextRight", "CURPERCENT" },
+                { "center", "powerTextCenter", "NONE" },
+                { "left", "powerTextLeft", "NONE" },
+            }
+        else
+            slots = {
+                { "right", "textRight", "NONE" },
+                { "center", "textCenter", "PERCENT" },
+                { "left", "textLeft", "NONE" },
+            }
+        end
+
+        for i = 1, #slots do
+            local slot = slots[i]
+            local value = Val(scope, slot[2], slot[3])
+            if value and value ~= "NONE" then
+                local slotText = slot[1]:sub(1, 1):upper() .. slot[1]:sub(2)
+                return slotText .. ": " .. BadgeValue(OptionText(TEXT_MODES, value))
+            end
+        end
+        return "No slot text"
+    end
+
+    local function UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
+        if not W.SetCollapsibleBadges then return end
+        local scope = CurrentScope()
+        if tab == "hp" then
+            W.SetCollapsibleBadges(text, {
+                { text = hpOn and "Shown" or "Hidden", kind = hpOn and "ok" or "muted" },
+                { text = TextSlotSummary("hp"), kind = hpOn and "info" or "muted" },
+                { text = "X " .. BadgeNumber(Val(scope, "hpOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "hpOffsetY", 0)), kind = hpOn and "accent" or "muted" },
+            })
+        elseif tab == "power" then
+            W.SetCollapsibleBadges(text, {
+                { text = powerOn and "Shown" or "Hidden", kind = powerOn and "ok" or "muted" },
+                { text = TextSlotSummary("power"), kind = powerOn and "info" or "muted" },
+                { text = "X " .. BadgeNumber(Val(scope, "powerOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "powerOffsetY", 0)), kind = powerOn and "accent" or "muted" },
+            })
+        elseif tab == "advanced" then
+            W.SetCollapsibleBadges(text, {
+                { text = "Name " .. BadgeNumber(Val(scope, "nameTextLayer", 5)), kind = nameOn and "info" or "muted" },
+                { text = "HP " .. BadgeNumber(Val(scope, "textLayer", 5)), kind = hpOn and "info" or "muted" },
+                { text = "Power " .. BadgeNumber(Val(scope, "powerTextLayer", 2)), kind = powerOn and "info" or "muted" },
+            })
+        else
+            W.SetCollapsibleBadges(text, {
+                { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
+                { text = BadgeValue(OptionText(ANCHORS, Val(scope, "nameAnchor", "LEFT"))), kind = nameOn and "info" or "muted" },
+                { text = "X " .. BadgeNumber(Val(scope, "nameOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "nameOffsetY", 0)), kind = nameOn and "accent" or "muted" },
+            })
+        end
+    end
+
     local tabs = W.Segment(text, "Text area", tabValues, min(520, textW - 48))
     W.MoveWidget(tabs, text, 20, -68, min(520, textW - 48), "LEFT")
 
@@ -619,16 +698,19 @@ local function BuildGFBars(ctx)
 
     refreshTextControls = function()
         local tab = CurrentTextTab()
+        local nameOn = Bool(CurrentScope(), "showName", true)
+        local hpOn = Bool(CurrentScope(), "showHPText", true)
+        local powerOn = IsPowerTextEnabled()
         for key, frame in pairs(tabFrames) do
             frame:SetShown(key == tab)
         end
         if tabs and tabs.SetValue then tabs:SetValue(tab) end
         scopeLabel:SetText(M.Format(M.Tr("Editing %s"), ScopeDisplayName()))
-        SetOptionsEnabled({ nameSize, nameAnchor, nameX, nameY, nameLayer }, Bool(CurrentScope(), "showName", true))
-        SetOptionsEnabled({ healthLeft, healthCenter, healthRight, healthDelimiter, reverseHP, healthSize, healthX, healthY, hpMoveTogether, hpLayer }, Bool(CurrentScope(), "showHPText", true))
-        SetOptionsEnabled({ hpSlot, hpSlotX, hpSlotY }, Bool(CurrentScope(), "showHPText", true) and not MoveTogether("hp"))
-        SetOptionsEnabled({ powerLeft, powerCenter, powerRight, powerDelimiter, powerSize, powerX, powerY, powerMoveTogether, powerLayer }, IsPowerTextEnabled())
-        SetOptionsEnabled({ powerSlot, powerSlotX, powerSlotY }, IsPowerTextEnabled() and not MoveTogether("power"))
+        SetOptionsEnabled({ nameSize, nameAnchor, nameX, nameY, nameLayer }, nameOn)
+        SetOptionsEnabled({ healthLeft, healthCenter, healthRight, healthDelimiter, reverseHP, healthSize, healthX, healthY, hpMoveTogether, hpLayer }, hpOn)
+        SetOptionsEnabled({ hpSlot, hpSlotX, hpSlotY }, hpOn and not MoveTogether("hp"))
+        SetOptionsEnabled({ powerLeft, powerCenter, powerRight, powerDelimiter, powerSize, powerX, powerY, powerMoveTogether, powerLayer }, powerOn)
+        SetOptionsEnabled({ powerSlot, powerSlotX, powerSlotY }, powerOn and not MoveTogether("power"))
         SetOptionEnabled(showName, true)
         SetOptionEnabled(showHP, true)
         SetOptionEnabled(powerText, true)
@@ -645,6 +727,7 @@ local function BuildGFBars(ctx)
                 Val(kind, "powerTextLeft", "NONE"), Val(kind, "powerTextCenter", "PERCENT"), Val(kind, "powerTextRight", "NONE"),
                 delim, false, true))
         end
+        UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(text, nil) end
     end
     M.AddRefresher(ctx, refreshTextControls)

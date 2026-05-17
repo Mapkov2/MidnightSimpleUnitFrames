@@ -798,7 +798,8 @@ local function BuildColors(ctx)
         for i = 1, #typeControls do SetControlEnabled(typeControls[i], not single) end
     end)
 
-    local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 520, false)
+    local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 544, false)
+    local castW = castbar._msuf2Width or ctx.width or 720
     ColorValueAt(ctx, castbar, "Interruptible cast color", 12, -10,
         function() return ApiRGB("GetInterruptibleCastColor", 0, 0.9, 0.8) end,
         function(r, g, c) ApiSetRGB("SetInterruptibleCastColor", r, g, c); ApplyCastbarColors() end)
@@ -826,13 +827,23 @@ local function BuildColors(ctx)
             ApplyCastbarColors()
         end)
     LabelAt(castbar, "Player castbar override", 12, -134, 260, "GameFontNormal", T.colors.text)
-    local overrideColor = ColorValueAt(ctx, castbar, "Custom color", 360, -190,
+    local overrideModeX, overrideModeW = 300, 190
+    local overrideColorX = min(max(overrideModeX + overrideModeW + 36, floor(castW * 0.56)), castW - 236)
+    local overrideColorLabelW = max(120, min(168, castW - overrideColorX - 76))
+    local overrideColorY = -154
+    if overrideColorX < overrideModeX + overrideModeW + 24 then
+        overrideColorX = overrideModeX
+        overrideColorY = -210
+        overrideColorLabelW = max(120, min(230, castW - overrideColorX - 76))
+    end
+    local overrideColor = ColorValueAt(ctx, castbar, "Custom color", overrideColorX, overrideColorY,
         function() return ApiRGB("GetPlayerCastbarOverrideColor", 0, 0.6, 1) end,
-        function(r, g, c) ApiSetRGB("SetPlayerCastbarOverrideColor", r, g, c); ApplyCastbarColors() end)
-    local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", 300, -154, {
+        function(r, g, c) ApiSetRGB("SetPlayerCastbarOverrideColor", r, g, c); ApplyCastbarColors() end,
+        overrideColorLabelW)
+    local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", overrideModeX, -154, {
         { value = "CLASS", text = "Class color" },
         { value = "CUSTOM", text = "Custom color" },
-    }, 160,
+    }, overrideModeW,
         function()
             local fn = ColorAPI().GetPlayerCastbarOverrideMode
             if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end

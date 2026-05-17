@@ -239,8 +239,7 @@ local function BuildCastbars(ctx)
 
     local text = b:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false)
     local textLeftX, textRightX = 14, 392
-    local shorten = W.Toggle(text, "Spell name shortening")
-    W.MoveWidget(shorten, text, textLeftX, -42)
+    local shorten = W.SwitchAt(text, "Spell name shortening", textLeftX, -42, 260)
     local syncNameShortening
     local function NameShorteningEnabled()
         return (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1
@@ -271,7 +270,8 @@ local function BuildCastbars(ctx)
     syncNameShortening()
 
     local focusKick = b:CollapsibleSection("castbar_focus_kick", "Focus Kick", 326, false)
-    W.Text(focusKick, "Track interrupts on your focus without showing the focus castbar.", 14, -38, ctx.width - 28, T.colors.muted)
+    local focusHint = W.Text(focusKick, "Track interrupts on your focus without showing the focus castbar.", 14, -38, (focusKick._msuf2Width or ctx.width or 720) - 28, T.colors.muted)
+    if focusHint and focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     focusKick._msuf2CursorY = -68
     local focusLeftX, focusRightX = 14, 392
     local syncFocusKick

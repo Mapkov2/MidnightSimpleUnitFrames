@@ -886,17 +886,21 @@ local function BuildGFAuras(ctx)
         return widget
     end
 
-    local textcolor = b:CollapsibleSection("textcolor", "Text Coloring", 370, false)
+    local textcolor = b:CollapsibleSection("textcolor", "Text Coloring", 400, false)
     local textW = textcolor._msuf2Width or b.width or 720
     local leftX = 30
-    local rightX = max(430, min(520, floor(textW * 0.50)))
-    local leftW = max(280, min(340, rightX - leftX - 70))
-    local rightW = max(300, min(360, textW - rightX - 42))
-    W.ControlCardBackdrop(textcolor, leftX - 14, -38, leftW + 28, 286)
-    W.ControlCardBackdrop(textcolor, rightX - 14, -100, rightW + 28, 260)
+    local textGap = 56
+    local rightW = min(340, max(220, floor(textW * 0.36)))
+    local leftW = min(380, max(280, textW - leftX - textGap - rightW - 14))
+    local rightX = leftX + leftW + textGap
+    if rightX + rightW + 14 > textW then
+        rightW = max(220, textW - rightX - 14)
+    end
+    W.ControlCardBackdrop(textcolor, leftX - 14, -38, leftW + 28, 304)
+    W.ControlCardBackdrop(textcolor, rightX - 14, -100, rightW + 28, 282)
 
     W.LabelAt(textcolor, "Cooldown Timer Text", leftX, -42, 220, "GameFontNormalSmall", T.colors.accent)
-    local info = W.Text(textcolor, "MSUF timer coloring only applies to custom aura icons. Blizzard-rendered cooldown text can be shown or hidden per group, but not recolored here.", leftX, -64, textW - 60, T.colors.muted)
+    local info = W.Text(textcolor, "MSUF timer coloring only applies to custom aura icons. Blizzard-rendered cooldown text can be shown or hidden per group, but not recolored here.", leftX, -64, leftW, T.colors.muted)
     if info.SetWordWrap then info:SetWordWrap(true) end
 
     local colorByTime = BindGeneralToggle(W.ToggleAt(textcolor, "Color aura timers by remaining time", leftX, -112, leftW), "gfAurasCooldownTextUseBuckets", true)
@@ -1078,10 +1082,12 @@ local function BuildGFAuras(ctx)
         if entry then entry._msuf2RefreshState = RefreshPrivateAuraState end
     end
 
-    local style = b:CollapsibleSection("masque", "Cooldown Style", 166, false)
-    W.ControlCardBackdrop(style, 20, -38, min((style._msuf2Width or ctx.width or 720) - 40, 560), 104)
-    BindScopeToggle(ctx, W.Toggle(style, "Cooldown darkens on loss"), "cooldownSwipeDarkenOnLoss", false, "visual")
-    M.BindToggle(ctx, W.Toggle(style, "Masque skin"),
+    local style = b:CollapsibleSection("masque", "Cooldown Style", 196, false)
+    local styleW = min((style._msuf2Width or ctx.width or 720) - 40, 560)
+    W.ControlCardBackdrop(style, 20, -38, styleW, 134)
+    BindScopeToggle(ctx, W.SwitchAt(style, "Cooldown darkens on loss", 36, -62, styleW - 64), "cooldownSwipeDarkenOnLoss", false, "visual")
+    local masqueSkin = W.SwitchAt(style, "Masque skin", 36, -94, styleW - 64)
+    M.BindToggle(ctx, masqueSkin,
         function() return Bool(CurrentScope(), "masqueEnabled", false) end,
         function(v)
             Set(CurrentScope(), "masqueEnabled", v and true or false, "visual")
@@ -1096,7 +1102,7 @@ local function BuildGFAuras(ctx)
                 end
             end
         end)
-    BindNestedToggle(ctx, W.Toggle(style, "Dynamic icon scale"), function() return AurasRoot(CurrentScope()) end, "dynamicScale", false, "geometry")
+    BindNestedToggle(ctx, W.SwitchAt(style, "Dynamic icon scale", 36, -126, styleW - 64), function() return AurasRoot(CurrentScope()) end, "dynamicScale", false, "geometry")
     local function RefreshStyleHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
         SetSectionHeaderStatus(style, nil)
@@ -1108,11 +1114,12 @@ local function BuildGFAuras(ctx)
         if entry then entry._msuf2RefreshState = RefreshStyleHeader end
     end
 
-    local utilities = b:CollapsibleSection("autil", "Aura Utilities", 180, false)
-    W.ControlCardBackdrop(utilities, 20, -38, min((utilities._msuf2Width or ctx.width or 720) - 40, 560), 104)
-    BindNestedToggle(ctx, W.Toggle(utilities, "Show tooltip on auras"), function() return AurasRoot(CurrentScope()) end, "showTooltip", true, "visual")
-    BindNestedToggle(ctx, W.Toggle(utilities, "Sort by duration"), function() return AurasRoot(CurrentScope()) end, "sortByDuration", false, "visual")
-    BindNestedToggle(ctx, W.Toggle(utilities, "Prefer player auras"), function() return AurasRoot(CurrentScope()) end, "preferPlayer", true, "visual")
+    local utilities = b:CollapsibleSection("autil", "Aura Utilities", 196, false)
+    local utilitiesW = min((utilities._msuf2Width or ctx.width or 720) - 40, 560)
+    W.ControlCardBackdrop(utilities, 20, -38, utilitiesW, 134)
+    BindNestedToggle(ctx, W.SwitchAt(utilities, "Show tooltip on auras", 36, -62, utilitiesW - 64), function() return AurasRoot(CurrentScope()) end, "showTooltip", true, "visual")
+    BindNestedToggle(ctx, W.SwitchAt(utilities, "Sort by duration", 36, -94, utilitiesW - 64), function() return AurasRoot(CurrentScope()) end, "sortByDuration", false, "visual")
+    BindNestedToggle(ctx, W.SwitchAt(utilities, "Prefer player auras", 36, -126, utilitiesW - 64), function() return AurasRoot(CurrentScope()) end, "preferPlayer", true, "visual")
     local function RefreshUtilityHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
         SetSectionHeaderStatus(utilities, nil)
