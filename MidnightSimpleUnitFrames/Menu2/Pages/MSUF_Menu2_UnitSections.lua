@@ -1696,16 +1696,16 @@ local function BuildInlineText(ctx, builder, unit)
 end
 
 local function BuildAlpha(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("transparency", "Transparency", 370, false)
+    local sec = builder:CollapsibleSection("transparency", "Transparency", 328, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 32
-    local rightX = min(max(430, floor(sectionW * 0.52)), max(360, sectionW - 360))
-    local leftW = max(250, rightX - leftX - 42)
-    local rightW = max(250, sectionW - rightX - 32)
-    local sliderW = math.min(300, math.max(220, floor((sectionW - 54) / 2)))
-    local function PlaceSlider(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or sliderW, "CENTER")
-    end
+    local transGap = 16
+    local transLeftX = 20
+    local transInnerW = max(320, sectionW - 40)
+    local transLeftW = floor((transInnerW - transGap) * 0.48)
+    local transRightX = transLeftX + transLeftW + transGap
+    local transRightW = transInnerW - transLeftW - transGap
+    local opacityCard = W.ControlCard(sec, "Frame opacity", "Fade the unit frame in and out of combat.", transLeftX, -38, transLeftW, 250)
+    local layerCard = W.ControlCard(sec, "Layer fade", "Keep text and portrait visible while fading one layer.", transRightX, -38, transRightW, 250)
     local function CurrentAlphaKeys()
         if ReadBool(unit, "alphaExcludeTextPortrait", false) ~= true then
             return "alphaInCombat", "alphaOutOfCombat"
@@ -1730,31 +1730,47 @@ local function BuildAlpha(ctx, builder, unit)
         return ReadNumber(unit, inCombatValue and "alphaInCombat" or "alphaOutOfCombat", 1)
     end
 
-    local inCombat = W.Slider(sec, "Alpha in combat", 0, 1, 0.05, 300)
-    PlaceSlider(inCombat, leftX, -298, sliderW)
-    M.BindSlider(ctx, inCombat,
-        function() return ReadAlphaValue(true) end,
-        function(v)
-            local inKey, outKey = CurrentAlphaKeys()
-            SetNumber(unit, inKey, v, "MSUF2_ALPHA_IN", { alpha = true, preview = true })
-            if ReadBool(unit, "alphaSync", false) then
-                SetNumber(unit, outKey, v, "MSUF2_ALPHA_SYNC", { alpha = true, preview = true })
-                M.Refresh(ctx)
+    local function AlphaLabel(label, value)
+        return string.format("%s: %.0f%%", label, (tonumber(value) or 0) * 100)
+    end
+    local function BindAlphaSlider(widget, inCombatValue, label)
+        M.BindSlider(ctx, widget,
+            function() return ReadAlphaValue(inCombatValue) end,
+            function(v)
+                if inCombatValue then
+                    local inKey, outKey = CurrentAlphaKeys()
+                    SetNumber(unit, inKey, v, "MSUF2_ALPHA_IN", { alpha = true, preview = true })
+                    if ReadBool(unit, "alphaSync", false) then
+                        SetNumber(unit, outKey, v, "MSUF2_ALPHA_SYNC", { alpha = true, preview = true })
+                        M.Refresh(ctx)
+                    end
+                else
+                    local _, outKey = CurrentAlphaKeys()
+                    SetNumber(unit, outKey, v, "MSUF2_ALPHA_OUT", { alpha = true, preview = true })
+                end
+            end)
+        local function RefreshLabel()
+            if widget and widget._msuf2Title then
+                widget._msuf2Title:SetText(AlphaLabel(label, ReadAlphaValue(inCombatValue)))
+            end
+        end
+        widget:HookScript("OnValueChanged", function(_, value)
+            if widget and widget._msuf2Title then
+                widget._msuf2Title:SetText(AlphaLabel(label, value))
             end
         end)
+        M.AddRefresher(ctx, RefreshLabel)
+        RefreshLabel()
+        return widget
+    end
 
-    local outCombat = W.Slider(sec, "Alpha out of combat", 0, 1, 0.05, 300)
-    PlaceSlider(outCombat, rightX, -298, sliderW)
-    M.BindSlider(ctx, outCombat,
-        function() return ReadAlphaValue(false) end,
-        function(v)
-            local _, outKey = CurrentAlphaKeys()
-            SetNumber(unit, outKey, v, "MSUF2_ALPHA_OUT", { alpha = true, preview = true })
-        end)
+    local inCombat = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), true, "In combat")
+    W.MoveWidget(inCombat, opacityCard, 16, -62, transLeftW - 58, "LEFT")
 
-    W.LabelAt(sec, "Behavior", leftX, -38, leftW, "GameFontNormalSmall", T.colors.accent)
-    local sync = W.ToggleAt(sec, "Sync both", leftX, -42, 220)
-    W.MoveWidget(sync, sec, leftX, -64)
+    local outCombat = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), false, "Out of combat")
+    W.MoveWidget(outCombat, opacityCard, 16, -130, transLeftW - 58, "LEFT")
+
+    local sync = W.ToggleAt(opacityCard, "Sync both", 16, -194, transLeftW - 32)
     M.BindToggle(ctx, sync,
         function() return ReadBool(unit, "alphaSync", false) end,
         function(v)
@@ -1766,9 +1782,7 @@ local function BuildAlpha(ctx, builder, unit)
             M.Refresh(ctx)
         end)
 
-    W.LabelAt(sec, "Layer Fade", rightX, -38, rightW, "GameFontNormalSmall", T.colors.accent)
-    local exclude = W.ToggleAt(sec, "Keep text + portrait visible", rightX, -42, 250)
-    W.MoveWidget(exclude, sec, rightX, -64)
+    local exclude = W.ToggleAt(layerCard, "Keep text + portrait visible", 16, -62, transRightW - 32)
     M.BindToggle(ctx, exclude,
         function() return ReadBool(unit, "alphaExcludeTextPortrait", false) end,
         function(v)
@@ -1776,30 +1790,12 @@ local function BuildAlpha(ctx, builder, unit)
             M.Refresh(ctx)
         end)
 
-    local preserve = W.ToggleAt(sec, "Preserve HP color", rightX, -72, 220)
-    W.MoveWidget(preserve, sec, rightX, -94)
-    M.BindToggle(ctx, preserve,
-        function() return ReadBool(unit, "alphaPreserveHPColor", false) end,
-        function(v)
-            v = v and true or false
-            SetBool(unit, "alphaPreserveHPColor", v, "MSUF2_ALPHA_HP_COLOR", { alpha = true, preview = true })
-            if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
-        end)
-
-    W.DividerAt(sec, -126, leftX, 32)
-    local mode = W.Segment(sec, "Layer to fade", {
+    local mode = W.Segment(layerCard, "Layer to fade", {
         { value = "foreground", text = "Bars" },
         { value = "health", text = "HP Bar" },
         { value = "background", text = "Backdrop" },
-    }, 420)
-    if mode._msuf2Title then
-        mode._msuf2Title:ClearAllPoints()
-        mode._msuf2Title:SetPoint("TOPLEFT", sec, "TOPLEFT", leftX, -148)
-        mode._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
-    end
-    mode:ClearAllPoints()
-    mode:SetPoint("TOPLEFT", sec, "TOPLEFT", leftX, -170)
-    mode:SetSize(math.min(620, sectionW - leftX - 32), 22)
+    }, transRightW - 32)
+    W.MoveWidget(mode, layerCard, 16, -108, transRightW - 32, "LEFT")
     do
         local buttons = mode.buttons or {}
         local count = #buttons
@@ -1812,12 +1808,18 @@ local function BuildAlpha(ctx, builder, unit)
             btn:SetSize(bw, 22)
         end
     end
-    local alphaLayerHint = W.Text(sec, "", leftX, -196, math.min(620, sectionW - leftX - 32), T.colors.dim)
-    if alphaLayerHint and alphaLayerHint.SetWordWrap then alphaLayerHint:SetWordWrap(false) end
-    local alphaLayerDetail = W.Text(sec, "", leftX, -214, math.min(620, sectionW - leftX - 32), T.colors.dim)
-    if alphaLayerDetail and alphaLayerDetail.SetWordWrap then alphaLayerDetail:SetWordWrap(false) end
-    W.DividerAt(sec, -250, leftX, 32)
-    W.LabelAt(sec, "Alpha Values", leftX, -272, leftW, "GameFontNormalSmall", T.colors.accent)
+
+    local preserve = W.ToggleAt(layerCard, "Preserve HP color", 16, -172, transRightW - 32)
+    M.BindToggle(ctx, preserve,
+        function() return ReadBool(unit, "alphaPreserveHPColor", false) end,
+        function(v)
+            v = v and true or false
+            SetBool(unit, "alphaPreserveHPColor", v, "MSUF2_ALPHA_HP_COLOR", { alpha = true, preview = true })
+            if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
+        end)
+
+    local alphaLayerHint = W.Text(layerCard, "", 16, -210, transRightW - 32, T.colors.dim)
+    if alphaLayerHint and alphaLayerHint.SetWordWrap then alphaLayerHint:SetWordWrap(true) end
     M.BindSegment(ctx, mode,
         function() return NormalizeAlphaMode(GetConf(unit).alphaLayerMode) end,
         function(v)
@@ -1830,17 +1832,11 @@ local function BuildAlpha(ctx, builder, unit)
         SetControlEnabled(preserve, layered)
         if layered then
             if alphaLayerHint and alphaLayerHint.SetText then
-                alphaLayerHint:SetText(M.Tr("Layer fade is active. Sliders fade the selected layer; text and portrait stay visible."))
-            end
-            if alphaLayerDetail and alphaLayerDetail.SetText then
-                alphaLayerDetail:SetText(M.Tr("Bars = health + power. HP Bar = health only. Backdrop = frame background."))
+                alphaLayerHint:SetText(M.Tr("Bars = health + power. HP Bar = health only. Backdrop = frame background."))
             end
         else
             if alphaLayerHint and alphaLayerHint.SetText then
-                alphaLayerHint:SetText(M.Tr("Sliders currently fade the whole frame: bars, text, portrait, and backdrop."))
-            end
-            if alphaLayerDetail and alphaLayerDetail.SetText then
-                alphaLayerDetail:SetText(M.Tr("Turn on Keep text + portrait visible to fade only the selected layer."))
+                alphaLayerHint:SetText(M.Tr("Layer fade off: sliders fade bars, text, portrait, and backdrop together."))
             end
         end
     end
