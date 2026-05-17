@@ -27,7 +27,7 @@ local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 
 local InCombatLockdown = _G.InCombatLockdown
 
-local BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A = 0.10, 0.22, 0.44, 0.78
+local BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A = 0, 0, 0, 1
 local ACTIVE_BORDER_A = 1.00
 
 local forceDisabled = false
@@ -43,16 +43,7 @@ local function IsCombatLocked()
 end
 
 local function ResolveBaseEdgeColor()
-    local br, bgc, bb, ba = BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A
-    local theme = _G.MSUF_THEME
-    if theme and theme.edgeR then
-        br, bgc, bb, ba = theme.edgeR or br, theme.edgeG or bgc, theme.edgeB or bb, theme.edgeA or ba
-        br = math.min(1, (br or 0) * 1.20)
-        bgc = math.min(1, (bgc or 0) * 1.20)
-        bb = math.min(1, (bb or 0) * 1.15)
-        ba = math.min(1, (ba or 0) + 0.05)
-    end
-    return br, bgc, bb, ba
+    return BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A
 end
 
 local function DeferApply()
@@ -125,6 +116,59 @@ local function ResolveMouseoverEdgeColor()
         end
     end
     return 1, 1, 1, 0.72
+end
+
+local function ClampEdgeSize(value, fallback, maxValue)
+    local n = tonumber(value)
+    if n == nil then n = tonumber(fallback) or 0 end
+    n = math.floor(n + 0.5)
+    if n < 0 then n = 0 end
+    maxValue = tonumber(maxValue) or 8
+    if n > maxValue then n = maxValue end
+    return n
+end
+
+local function RoundedEdgeLayoutPad(thickness, fallback)
+    -- The rounded edge asset is a fixed stroke; large offsets distort the corners.
+    local pad = ClampEdgeSize(thickness, fallback, 30)
+    if pad > 2 then pad = 2 end
+    return pad
+end
+
+local function ResolveUnitOutlineThickness(f)
+    local get = _G.MSUF_GetDesiredBarBorderThicknessAndStamp
+    local thickness
+    if type(get) == "function" then
+        thickness = select(1, get(f))
+    end
+    if thickness == nil then
+        local bars = BarsDB()
+        thickness = bars and bars.barOutlineThickness or 1
+    end
+    return ClampEdgeSize(thickness, 0, 8)
+end
+
+local function LayoutRoundedEdge(edge, anchor, thickness, padOverride)
+    if not (edge and anchor) then return false end
+    local pad = padOverride and ClampEdgeSize(padOverride, 1, 8) or RoundedEdgeLayoutPad(thickness, 1)
+    if pad <= 0 then
+        edge:Hide()
+        return false
+    end
+    if edge._msufRUFEdgeLayoutReady and edge._msufRUFEdgeAnchor == anchor and edge._msufRUFEdgePad == pad then
+        return true
+    end
+    if IsCombatLocked() then
+        DeferApply()
+        return edge._msufRUFEdgeLayoutReady == true
+    end
+    edge:ClearAllPoints()
+    edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -pad, pad)
+    edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", pad, -pad)
+    edge._msufRUFEdgeLayoutReady = true
+    edge._msufRUFEdgeAnchor = anchor
+    edge._msufRUFEdgePad = pad
+    return true
 end
 
 -- Optional edge shell (kept for cleanup/backward compatibility; disabled by default).
@@ -241,17 +285,7 @@ local function SE_ApplyShellVisuals(f, enabled)
         return
     end
 
-    -- Border tint: reuse MSUF theme if present, otherwise a subtle blueish edge.
-    local br, bgc, bb, ba = BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A
-    local theme = _G.MSUF_THEME
-    if theme and theme.edgeR then
-        br, bgc, bb, ba = theme.edgeR or br, theme.edgeG or bgc, theme.edgeB or bb, theme.edgeA or ba
-        -- Slightly brighter than the frame border.
-        br = math.min(1, (br or 0) * 1.25)
-        bgc = math.min(1, (bgc or 0) * 1.25)
-        bb = math.min(1, (bb or 0) * 1.18)
-        ba = math.min(1, (ba or 0) + 0.05)
-    end
+    local br, bgc, bb, ba = ResolveBaseEdgeColor()
 
     shell.border:SetVertexColor(br, bgc, bb, ba)
 
@@ -458,6 +492,77 @@ local function SetRoundedEdgeTexture(edge)
     end
 end
 
+local function HideRoundedEdgeStack(owner, baseEdge, poolKey)
+    if baseEdge then baseEdge:Hide() end
+    local stack = owner and owner[poolKey]
+    if type(stack) ~= "table" then return end
+    for i = 2, #stack do
+        local edge = stack[i]
+        if edge and edge.Hide then edge:Hide() end
+    end
+end
+
+local function ShowRoundedEdgeStack(owner, baseEdge, poolKey)
+    local stack = owner and owner[poolKey]
+    if type(stack) ~= "table" then
+        if baseEdge then baseEdge:Show() end
+        return
+    end
+    local count = ClampEdgeSize(stack._msufCount, 1, 8)
+    for i = 1, count do
+        local edge = (i == 1) and baseEdge or stack[i]
+        if edge and edge.Show then edge:Show() end
+    end
+end
+
+local function SetRoundedEdgeStackColor(owner, baseEdge, poolKey, r, g, b, a)
+    if baseEdge and baseEdge.SetVertexColor then baseEdge:SetVertexColor(r, g, b, a) end
+    local stack = owner and owner[poolKey]
+    if type(stack) ~= "table" then return end
+    for i = 2, #stack do
+        local edge = stack[i]
+        if edge and edge.SetVertexColor then edge:SetVertexColor(r, g, b, a) end
+    end
+end
+
+local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness, poolKey, maskedKey, layer, subLevel)
+    if not (owner and parent and baseEdge and anchor) then return false end
+    local count = ClampEdgeSize(thickness, 0, 8)
+    if count <= 0 then
+        HideRoundedEdgeStack(owner, baseEdge, poolKey)
+        return false
+    end
+
+    local stack = owner[poolKey]
+    if not stack then
+        stack = {}
+        owner[poolKey] = stack
+    end
+    stack[1] = baseEdge
+    stack._msufCount = count
+
+    for i = 1, count do
+        local edge = (i == 1) and baseEdge or stack[i]
+        if not edge then
+            if not CanCreateRoundedRegion(edge) then return false end
+            edge = parent:CreateTexture(nil, layer, nil, subLevel or 0)
+            SE_SnapOff(edge)
+            stack[i] = edge
+        end
+        ClearMaskForTexture(owner, maskedKey, edge)
+        SetRoundedEdgeTexture(edge)
+        if not LayoutRoundedEdge(edge, anchor, i, i) then return false end
+        edge:Show()
+    end
+
+    for i = count + 1, #stack do
+        local edge = stack[i]
+        if edge and edge.Hide then edge:Hide() end
+    end
+
+    return true
+end
+
 local function ResolveUnitEdgeColor(f)
     local key = f and tonumber(f._msufHighlightActiveKey or f._msufHighlightColorKey) or 0
     if key and key ~= 0 then
@@ -469,46 +574,60 @@ local function ResolveUnitEdgeColor(f)
     return ResolveBaseEdgeColor()
 end
 
-local function ApplyUnitRoundedEdge(f, enabled)
+local function ResolveUnitEdgeThickness(f, active, activeThickness)
+    if active then
+        return ClampEdgeSize(activeThickness, 2, 30)
+    end
+    return ResolveUnitOutlineThickness(f)
+end
+
+local function ApplyUnitRoundedEdge(f, enabled, active, activeThickness)
     if not f then return end
     local edge = f._msufRUF_Edge
     if not enabled then
-        if edge then edge:Hide() end
+        HideRoundedEdgeStack(f, edge, "_msufRUF_EdgeStack")
         return
     end
     local anchor = f.bg or f
+    local thickness = ResolveUnitEdgeThickness(f, active, activeThickness)
     if not edge then
         if not CanCreateRoundedRegion(edge) then return end
         edge = f:CreateTexture(nil, "BACKGROUND", nil, -7)
         SE_SnapOff(edge)
         f._msufRUF_Edge = edge
     end
-    ClearMaskForTexture(f, "_msufRUF_MaskedTextures", edge)
-    SetRoundedEdgeTexture(edge)
-    edge:ClearAllPoints()
-    edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -1, 1)
-    edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 1, -1)
+    if thickness <= 0 and not active then
+        HideRoundedEdgeStack(f, edge, "_msufRUF_EdgeStack")
+        return edge
+    end
+    if not ApplyRoundedEdgeStack(f, f, edge, anchor, thickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return edge end
     local r, g, b, a = ResolveUnitEdgeColor(f)
-    edge:SetVertexColor(r, g, b, a)
-    edge:Show()
+    SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", r, g, b, a)
+    return edge
 end
 
-local function SetUnitRoundedEdgeColor(f, active, r, g, b, a)
+local function SetUnitRoundedEdgeColor(f, active, r, g, b, a, thickness)
     if not f then return false end
     local edge = f._msufRUF_Edge
     if not edge then
         if IsCombatLocked() then return false end
-        ApplyUnitRoundedEdge(f, true)
+        ApplyUnitRoundedEdge(f, true, active, thickness)
         edge = f._msufRUF_Edge
     end
     if not edge then return false end
+    local resolvedThickness = ResolveUnitEdgeThickness(f, active, thickness)
+    if resolvedThickness <= 0 and not active then
+        HideRoundedEdgeStack(f, edge, "_msufRUF_EdgeStack")
+        return true
+    end
     if active then
-        edge:SetVertexColor(r or 1, g or 1, b or 1, a or ACTIVE_BORDER_A)
+        if not ApplyRoundedEdgeStack(f, f, edge, f.bg or f, resolvedThickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
+        SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", r or 1, g or 1, b or 1, a or ACTIVE_BORDER_A)
     else
         local br, bgc, bb, ba = ResolveBaseEdgeColor()
-        edge:SetVertexColor(br, bgc, bb, ba)
+        if not ApplyRoundedEdgeStack(f, f, edge, f.bg or f, resolvedThickness, "_msufRUF_EdgeStack", "_msufRUF_MaskedTextures", "BACKGROUND", -7) then return false end
+        SetRoundedEdgeStackColor(f, edge, "_msufRUF_EdgeStack", br, bgc, bb, ba)
     end
-    edge:Show()
     return true
 end
 
@@ -522,7 +641,9 @@ local function HandleUnitHighlightChanged(f, hlKey, r, g, b, cfg)
         f._msufHighlightOutline:Hide()
     end
     f._msufRoundedHighlightGlowAnchor = active and f or nil
-    return SetUnitRoundedEdgeColor(f, active, r, g, b, active and ((cfg and cfg.highlightBorderAlpha) or ACTIVE_BORDER_A) or nil)
+    return SetUnitRoundedEdgeColor(f, active, r, g, b,
+        active and ((cfg and cfg.highlightBorderAlpha) or ACTIVE_BORDER_A) or nil,
+        active and (cfg and cfg.highlightBorderThickness) or nil)
 end
 
 local function ApplyUnitRoundedHoverEdge(f, enabled)
@@ -543,12 +664,12 @@ local function ApplyUnitRoundedHoverEdge(f, enabled)
 
     ClearMaskForTexture(f, "_msufRUF_MaskedTextures", edge)
     SetRoundedEdgeTexture(edge)
-    edge:ClearAllPoints()
-    edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -1, 1)
-    edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 1, -1)
+    local thickness = ResolveUnitOutlineThickness(f)
+    if thickness < 1 then thickness = 1 end
+    ApplyRoundedEdgeStack(f, f, edge, anchor, thickness, "_msufRUF_HoverEdgeStack", "_msufRUF_MaskedTextures", "OVERLAY", 7)
     local r, g, b, a = ResolveMouseoverEdgeColor()
-    edge:SetVertexColor(r, g, b, a)
-    edge:Hide()
+    SetRoundedEdgeStackColor(f, edge, "_msufRUF_HoverEdgeStack", r, g, b, a)
+    HideRoundedEdgeStack(f, edge, "_msufRUF_HoverEdgeStack")
     return edge
 end
 
@@ -563,12 +684,51 @@ local function HandleUnitMouseover(f, active)
         edge = ApplyUnitRoundedHoverEdge(f, true)
     end
     if edge then
-        if active then edge:Show() else edge:Hide() end
+        if active then
+            ShowRoundedEdgeStack(f, edge, "_msufRUF_HoverEdgeStack")
+        else
+            HideRoundedEdgeStack(f, edge, "_msufRUF_HoverEdgeStack")
+        end
     end
     return true
 end
 
+local function ResolveDetachedPowerEdgeThickness(f)
+    if not (f and f._msufPowerBarDetached and f.targetPowerBar) then return 0 end
+    local bars = BarsDB()
+    local raw = bars and bars.detachedPowerBarOutline
+    if raw == nil then raw = ResolveUnitOutlineThickness(f) end
+    return ClampEdgeSize(raw, 0, 8)
+end
+
+local function ApplyDetachedPowerRoundedEdge(f, enabled)
+    if not f then return nil end
+    local edge = f._msufRUF_DetachedPowerEdge
+    if not enabled then
+        HideRoundedEdgeStack(f, edge, "_msufRUF_DetachedPowerEdgeStack")
+        return edge
+    end
+
+    local pb = f.targetPowerBar
+    local thickness = ResolveDetachedPowerEdgeThickness(f)
+    if not (pb and thickness > 0) then
+        HideRoundedEdgeStack(f, edge, "_msufRUF_DetachedPowerEdgeStack")
+        return edge
+    end
+    if not edge then
+        if not CanCreateRoundedRegion(edge) then return nil end
+        edge = pb:CreateTexture(nil, "OVERLAY", nil, 6)
+        SE_SnapOff(edge)
+        f._msufRUF_DetachedPowerEdge = edge
+    end
+    if not ApplyRoundedEdgeStack(f, pb, edge, pb, thickness, "_msufRUF_DetachedPowerEdgeStack", "_msufRUF_MaskedTextures", "OVERLAY", 6) then return edge end
+    local r, g, b, a = ResolveBaseEdgeColor()
+    SetRoundedEdgeStackColor(f, edge, "_msufRUF_DetachedPowerEdgeStack", r, g, b, a)
+    return edge
+end
+
 local ApplyGroupRoundedEdge
+local ResolveGroupOutlineThickness
 
 local function ResolveGroupEdgeColor(f)
     local r, g, b, a = ResolveBaseEdgeColor()
@@ -585,18 +745,41 @@ local function ResolveGroupEdgeColor(f)
     return r, g, b, a
 end
 
+local function ResolveGroupEdgeThickness(f)
+    local active = f and f._msufGFHighlightBorder or nil
+    if active and active._msufHLActivePrio then
+        return ClampEdgeSize(active._msufHLEdgeSz or active._msufHLOfs, 2, 30)
+    end
+    if f and f._msufRUF_GroupMouseoverActive then
+        local t = ResolveGroupOutlineThickness and ResolveGroupOutlineThickness(f) or 1
+        if t < 1 then t = 1 end
+        return t
+    end
+    return ResolveGroupOutlineThickness and ResolveGroupOutlineThickness(f) or 1
+end
+
 local function SetGroupRoundedEdgeColor(f)
     if not f then return false end
     local edge = f._msufRGF_Edge
+    local thickness = ResolveGroupEdgeThickness(f)
+    local active = (f._msufRUF_GroupMouseoverActive == true)
+        or (f._msufGFHighlightBorder and f._msufGFHighlightBorder._msufHLActivePrio)
+    if not edge and thickness <= 0 and not active then
+        return true
+    end
     if not edge then
         if IsCombatLocked() then return false end
         ApplyGroupRoundedEdge(f, true)
         edge = f._msufRGF_Edge
     end
     if not edge then return false end
+    if thickness <= 0 and not active then
+        HideRoundedEdgeStack(f, edge, "_msufRGF_EdgeStack")
+        return true
+    end
+    if not ApplyRoundedEdgeStack(f, f.barGroup or f, edge, f.barGroup or f, thickness, "_msufRGF_EdgeStack", "_msufRGF_MaskedTextures", "BACKGROUND", -8) then return false end
     local r, g, b, a = ResolveGroupEdgeColor(f)
-    edge:SetVertexColor(r, g, b, a)
-    edge:Show()
+    SetRoundedEdgeStackColor(f, edge, "_msufRGF_EdgeStack", r, g, b, a)
     return true
 end
 
@@ -604,25 +787,28 @@ ApplyGroupRoundedEdge = function(f, enabled)
     if not f then return end
     local edge = f._msufRGF_Edge
     if not enabled then
-        if edge then edge:Hide() end
+        HideRoundedEdgeStack(f, edge, "_msufRGF_EdgeStack")
         return
     end
     local anchor = f.barGroup or f
     local parent = f.barGroup or f
+    local thickness = ResolveGroupEdgeThickness(f)
+    local active = (f._msufRUF_GroupMouseoverActive == true)
+        or (f._msufGFHighlightBorder and f._msufGFHighlightBorder._msufHLActivePrio)
     if not edge then
         if not CanCreateRoundedRegion(edge) then return end
         edge = parent:CreateTexture(nil, "BACKGROUND", nil, -8)
         SE_SnapOff(edge)
         f._msufRGF_Edge = edge
     end
-    ClearMaskForTexture(f, "_msufRGF_MaskedTextures", edge)
-    SetRoundedEdgeTexture(edge)
-    edge:ClearAllPoints()
-    edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -1, 1)
-    edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 1, -1)
+    if thickness <= 0 and not active then
+        HideRoundedEdgeStack(f, edge, "_msufRGF_EdgeStack")
+        return edge
+    end
+    if not ApplyRoundedEdgeStack(f, parent, edge, anchor, thickness, "_msufRGF_EdgeStack", "_msufRGF_MaskedTextures", "BACKGROUND", -8) then return edge end
     local r, g, b, a = ResolveGroupEdgeColor(f)
-    edge:SetVertexColor(r, g, b, a)
-    edge:Show()
+    SetRoundedEdgeStackColor(f, edge, "_msufRGF_EdgeStack", r, g, b, a)
+    return edge
 end
 
 -- Suppress square outlines/borders while rounded masking is active.
@@ -645,6 +831,9 @@ local function SuppressNativeOutlineNow(f)
     local pbo = pb and pb._msufPowerBorder
     if RoundedPowerBarsEnabled() and pbo and pbo.Hide then
         pbo:Hide()
+    end
+    if RoundedPowerBarsEnabled() and f._msufDetachedPBOutline and f._msufDetachedPBOutline.Hide then
+        f._msufDetachedPBOutline:Hide()
     end
 
     -- Hover highlight border (square): keep feature, but suppress it while rounding is enabled.
@@ -672,6 +861,19 @@ local function ResolveGroupKind(f, kind)
     if kind then return kind end
     local GF = ResolveGF()
     return (f and f._msufGFKind) or (GF and GF.frames and GF.frames[f]) or "party"
+end
+
+ResolveGroupOutlineThickness = function(f)
+    local GF = ResolveGF()
+    local kind = ResolveGroupKind(f)
+    local thickness
+    if GF and type(GF.GetBarOutlineThickness) == "function" then
+        thickness = GF.GetBarOutlineThickness(kind)
+    end
+    if GF and type(GF.ScaleFrameValue) == "function" then
+        thickness = GF.ScaleFrameValue(kind, thickness or 0, 0)
+    end
+    return ClampEdgeSize(thickness, 0, 8)
 end
 
 local function ResolveGroupBackdropColor(f, kind)
@@ -837,6 +1039,7 @@ local function ApplyToUnitFrame(f)
         ClearAllMasks(f)
         ApplyUnitRoundedEdge(f, false)
         ApplyUnitRoundedHoverEdge(f, false)
+        ApplyDetachedPowerRoundedEdge(f, false)
         -- Restore the original square outline behavior immediately (0 regression when disabled).
         if SUPPRESS_NATIVE_OUTLINE then
             local fnStatic = _G.MSUF_RefreshStaticUnitFrameOutlines
@@ -857,6 +1060,7 @@ local function ApplyToUnitFrame(f)
     ClearAllMasks(f)
     ApplyUnitRoundedEdge(f, true)
     ApplyUnitRoundedHoverEdge(f, RoundedMouseoverEnabled())
+    ApplyDetachedPowerRoundedEdge(f, roundPower)
 
     -- Frame/background (inner rect) – this is what users perceive as the unitframe silhouette.
     if f.bg then
@@ -889,6 +1093,10 @@ local function ApplyToUnitFrame(f)
     if f.healAbsorbBar and type(f.healAbsorbBar.GetStatusBarTexture) == "function" then
         local t = f.healAbsorbBar:GetStatusBarTexture()
         if t then MaskTexture(f, t, f.healAbsorbBar or f.hpBar) end
+    end
+    MaskStatusBarFill(f, f.incomingHealBar or f.selfHealPredBar)
+    if f.selfHealPredBar ~= f.incomingHealBar then
+        MaskStatusBarFill(f, f.selfHealPredBar)
     end
 
     if roundPower then
@@ -1079,11 +1287,13 @@ local function HookOnce()
     if SUPPRESS_NATIVE_OUTLINE then
         _G.MSUF_RoundedUF_OnRareVisualsRefreshed = function(frame)
             if frame and RoundedUnitFramesEnabled() then
-                HandleUnitHighlightChanged(frame, frame._msufHighlightActiveKey or frame._msufHighlightColorKey or 0,
-                    frame._msufHighlightOutlineR, frame._msufHighlightOutlineG, frame._msufHighlightOutlineB)
                 if not IsCombatLocked() then
                     SuppressNativeOutlineNow(frame)
+                    ApplyUnitRoundedEdge(frame, true)
+                    ApplyUnitRoundedHoverEdge(frame, RoundedMouseoverEnabled())
                 end
+                HandleUnitHighlightChanged(frame, frame._msufHighlightActiveKey or frame._msufHighlightColorKey or 0,
+                    frame._msufHighlightOutlineR, frame._msufHighlightOutlineG, frame._msufHighlightOutlineB)
             end
         end
     end

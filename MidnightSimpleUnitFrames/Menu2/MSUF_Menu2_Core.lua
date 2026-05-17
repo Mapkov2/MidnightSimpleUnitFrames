@@ -2289,16 +2289,18 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         return fs
     end
 
-    local function AddBullet(text)
+    local function AddBullet(text, dotColor, textColor)
+        dotColor = dotColor or T.colors.accent
+        textColor = textColor or T.colors.muted
         local dot = child:CreateTexture(nil, "ARTWORK")
         dot:SetSize(3, 3)
         dot:SetPoint("TOPLEFT", child, "TOPLEFT", 8, y - 6)
-        dot:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.82)
-        return AddText(text, "GameFontHighlightSmall", T.colors.muted, 18, 5)
+        dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.88)
+        return AddText(text, "GameFontHighlightSmall", textColor, 18, 5)
     end
 
     local entries = data.entries
-    local maxEntries = min(#entries, 1)
+    local maxEntries = min(#entries, 3)
     for entryIndex = 1, maxEntries do
         local entry = entries[entryIndex]
         if type(entry) == "table" then
@@ -2313,9 +2315,15 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
                     local section = sections[sectionIndex]
                     if type(section) == "table" and type(section.bullets) == "table" and #section.bullets > 0 then
                         if sectionIndex > 1 then y = y - 3 end
-                        AddText(tostring(section.title or ""), "GameFontNormalSmall", T.colors.accent2, 0, 4)
+                        local sectionTitle = tostring(section.title or "")
+                        local isHighlights = sectionTitle == "Highlights"
+                        AddText(sectionTitle, "GameFontNormalSmall", isHighlights and T.colors.accent or T.colors.accent2, 0, 4)
                         for bulletIndex = 1, #section.bullets do
-                            AddBullet(tostring(section.bullets[bulletIndex] or ""))
+                            AddBullet(
+                                tostring(section.bullets[bulletIndex] or ""),
+                                isHighlights and T.colors.accent2 or nil,
+                                isHighlights and T.colors.text or nil
+                            )
                         end
                     end
                 end

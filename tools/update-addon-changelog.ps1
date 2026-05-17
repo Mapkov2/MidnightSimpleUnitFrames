@@ -4,7 +4,7 @@ param(
     [string]$OutputPath = "MidnightSimpleUnitFrames/Foundation/MSUF_Changelog.lua",
     [string]$Version,
     [string]$PreviousVersion,
-    [int]$ReleaseCount = 2
+    [int]$ReleaseCount = 3
 )
 
 Set-StrictMode -Version Latest
@@ -200,7 +200,7 @@ $currentVersion = $selected[0].version
 $previousVersion = if (-not [string]::IsNullOrWhiteSpace($PreviousVersion)) {
     Convert-ToAsciiText $PreviousVersion
 } elseif ($selected.Count -gt 1) {
-    $selected[1].version
+    $selected[$selected.Count - 1].version
 } else {
     ""
 }
