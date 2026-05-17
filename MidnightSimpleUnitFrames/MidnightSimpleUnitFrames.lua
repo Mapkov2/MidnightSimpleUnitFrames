@@ -969,6 +969,21 @@ function ns.Bars.ApplyHealthBars(frame, unit, maxHP, hp)
         frame.hpBar:SetMinMaxValues(0, 100)
         frame.hpBar:SetValue(60)
     end
+    local wasHealPredTestMode = frame._msufHealPredTestActive
+    local healPredTestEnabled = false
+    if absorbTestMode and ns.Bars._IsHealPredictionEnabled and ns.Bars._IsHealPredictionEnabled() then
+        local setHealPredTest = ns.Bars._SetSelfHealPredictionTestValue
+        if type(setHealPredTest) == "function" then
+            frame._msufHealPredTestActive = true
+            healPredTestEnabled = true
+            setHealPredTest(frame, 100, 18)
+        end
+    end
+    if wasHealPredTestMode and not healPredTestEnabled then
+        frame._msufHealPredTestActive = nil
+        local hideHealPred = ns.Bars._HideSelfHealPrediction
+        if type(hideHealPred) == "function" then hideHealPred(frame) end
+    end
     if frame.absorbBar and (absorbTestMode or wasTestMode) then
         ns.Bars._UpdateAbsorbBar(frame, unit, absorbTestMode and 100 or maxHP)
     end
@@ -3732,6 +3747,41 @@ local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
 -- When a unitframe has no unit (or is disabled) we still want a persistent, simple preview
 -- so it can be positioned/edited. This is intentionally a "dark bar" placeholder and
 -- must never run in combat.
+local function MSUF_ApplyUnitframePreviewOverlays(self, unit, maxHP)
+    if not (self and self.hpBar) then return end
+    maxHP = tonumber(maxHP) or 100
+    if maxHP <= 0 then maxHP = 100 end
+
+    local healPredEnabled = ns.Bars._IsHealPredictionEnabled and ns.Bars._IsHealPredictionEnabled()
+    if healPredEnabled and type(ns.Bars._SetSelfHealPredictionTestValue) == "function" then
+        ns.Bars._SetSelfHealPredictionTestValue(self, maxHP, maxHP * 0.18)
+    elseif type(ns.Bars._HideSelfHealPrediction) == "function" then
+        ns.Bars._HideSelfHealPrediction(self)
+    end
+
+    local absorbEnabled = true
+    if type(ns.Bars._ResolveAbsorbDisplay) == "function" then
+        absorbEnabled = ns.Bars._ResolveAbsorbDisplay(unit or self.unit)
+    end
+    if self.absorbBar then
+        if absorbEnabled then
+            local applyAnchor = _G.MSUF_ApplyAbsorbAnchorMode
+            if type(applyAnchor) == "function" then applyAnchor(self) end
+            if type(ns.Bars._ApplyAbsorbOverlayColor) == "function" then
+                ns.Bars._ApplyAbsorbOverlayColor(self.absorbBar, unit or self.unit)
+            end
+            self.absorbBar:SetMinMaxValues(0, maxHP)
+            self.absorbBar:SetValue(maxHP * 0.25)
+            if self.absorbBar.Show then self.absorbBar:Show() end
+        else
+            MSUF_ResetBarZero(self.absorbBar, true)
+        end
+    end
+    if self.healAbsorbBar then
+        MSUF_ResetBarZero(self.healAbsorbBar, true)
+    end
+end
+
 local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
     if not self or self.isBoss then return end
     if _msuf_inCombat then return end
@@ -3781,6 +3831,7 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
             ns.Bars._ApplyHPGradient(self.hpGradient)
         end
     end
+    MSUF_ApplyUnitframePreviewOverlays(self, key or self.unit, 1)
 
     -- Show a fake power bar + fake power text so offsets can be edited.
     local pb = self.targetPowerBar or self.powerBar
@@ -4318,6 +4369,7 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
         if self.hpGradients then ns.Bars._ApplyHPGradient(self)
         elseif self.hpGradient then ns.Bars._ApplyHPGradient(self.hpGradient) end
     end
+    MSUF_ApplyUnitframePreviewOverlays(self, key or self.msufConfigKey or self.unit, 1)
     -- Power bar
     local pb = self.targetPowerBar or self.powerBar
     if pb then
@@ -6099,6 +6151,17 @@ if type(_G.MSUF_RefreshSelfHealPredUnitEvent) ~= "function" then
             if fr._msufReg then
                 fr:UnregisterEvent("UNIT_HEAL_PREDICTION")
                 fr._msufReg = false
+            end
+        end
+        if UnitFrames then
+            local hideHealPred = ns and ns.Bars and ns.Bars._HideSelfHealPrediction
+            for _, uf in pairs(UnitFrames) do
+                if uf and (uf.incomingHealBar or uf.selfHealPredBar) then
+                    uf._msufHealPredEnCached = want and true or false
+                    if not want and type(hideHealPred) == "function" then
+                        hideHealPred(uf)
+                    end
+                end
             end
         end
         local refreshEvents = _G.MSUF_UFCore_RefreshAllUnitEvents

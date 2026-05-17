@@ -281,6 +281,7 @@ local PARTY_DEFAULTS = {
     -- Older profiles with no GF-specific value are seeded from the legacy
     -- global UnitFrame heal prediction toggle in GF.EnsureDB().
     healPredEnabled      = false,
+    healPredAnchorMode   = 3,
     -- (absorbEnabled, healAbsorbEnabled are resolved at runtime)
     -- Tooltip
     tooltipMode           = "ALWAYS",  -- ALWAYS / OOC / MODIFIER / NEVER

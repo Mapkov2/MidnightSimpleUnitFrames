@@ -1302,6 +1302,9 @@ end
     if g.showSelfHealPrediction == nil then
         g.showSelfHealPrediction = false
     end
+    if g.healPredAnchorMode == nil then
+        g.healPredAnchorMode = 3
+    end
 
     -- Absorb display dropdown stores a mode; keep runtime flags in sync on load.
     if g.absorbTextMode ~= nil then

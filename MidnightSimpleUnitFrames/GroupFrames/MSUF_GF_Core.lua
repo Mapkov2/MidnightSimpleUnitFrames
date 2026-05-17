@@ -3061,10 +3061,11 @@ function GF.ApplyPreviewData(f, index, kind)
         if tex and tex.SetAlpha then tex:SetAlpha(alpha) end
     end
     if f.incomingHealBar then
+        if GF._ApplyHealPredAnchor then GF._ApplyHealPredAnchor(f) end
         local hpEnabled = (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(f._msufGFKind or "party", conf)) or false
         if hpEnabled ~= false then
             f.incomingHealBar:SetMinMaxValues(0, 100)
-            f.incomingHealBar:SetValue(math_min(hpVal + 20, 100))
+            f.incomingHealBar:SetValue(math_min(20, math_max(0, 100 - hpVal)))
             local r, g, b = 0.0, 1.0, 0.4
             if gen then
                 if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
@@ -3089,7 +3090,9 @@ function GF.ApplyPreviewData(f, index, kind)
         end
     end
     -- Absorb anchoring: SetReverseFill from absorbAnchorMode (per-GF → general)
-    if absorbBarVisible or (f.healAbsorbBar and conf.healAbsorbEnabled ~= false) then
+    if GF._ApplyAbsorbAnchor then
+        GF._ApplyAbsorbAnchor(f)
+    elseif absorbBarVisible or (f.healAbsorbBar and conf.healAbsorbEnabled ~= false) then
         local anchorMode = tonumber(_pResolve("absorbAnchorMode")) or 2
         local absorbReverse, healReverse
         if anchorMode == 1 then
@@ -3102,7 +3105,6 @@ function GF.ApplyPreviewData(f, index, kind)
         end
         if f.absorbBar and f.absorbBar.SetReverseFill then f.absorbBar:SetReverseFill(absorbReverse and true or false) end
         if f.healAbsorbBar and f.healAbsorbBar.SetReverseFill then f.healAbsorbBar:SetReverseFill(healReverse and true or false) end
-        if f.incomingHealBar and f.incomingHealBar.SetReverseFill then f.incomingHealBar:SetReverseFill(false) end
     end
     if f.absorbBar and absorbBarVisible then
         f.absorbBar:SetMinMaxValues(0, 100)

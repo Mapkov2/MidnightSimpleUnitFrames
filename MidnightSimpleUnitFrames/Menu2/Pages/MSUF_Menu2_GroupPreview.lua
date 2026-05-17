@@ -542,6 +542,11 @@ local function GFPreviewApplyRounded(mock, conf, powerOn, edgeSize)
     local healthTexMask = GFPreviewEnsureRoundedMask(mock, "health", mock._health, healthTex)
     local healPredMask = GFPreviewEnsureRoundedMask(mock, "healPred", mock._healPred, healPredTex)
     local absorbMask = GFPreviewEnsureRoundedMask(mock, "absorb", mock._absorb, absorbTex)
+    local healPredMode = tonumber(conf and conf.healPredAnchorMode) or 3
+    if healPredMode < 1 or healPredMode > 5 then healPredMode = 3 end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local absorbMode = tonumber((conf and conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
+    if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
     local powerBgMask = (powerOn and GFPreviewRoundedPowerEnabled()) and GFPreviewEnsureRoundedMask(mock, "power", mock._power, mock._powerBg) or nil
     local powerTexMask = (powerOn and GFPreviewRoundedPowerEnabled()) and GFPreviewEnsureRoundedMask(mock, "power", mock._power, powerTex) or nil
     if not (bodyMask and healthBgMask and healthTexMask) then
@@ -555,8 +560,8 @@ local function GFPreviewApplyRounded(mock, conf, powerOn, edgeSize)
     GFPreviewSetMask(mock, mock._roundedBg, bodyMask)
     GFPreviewSetMask(mock, mock._healthBg, healthBgMask)
     GFPreviewSetMask(mock, healthTex, healthTexMask)
-    GFPreviewSetMask(mock, healPredTex, healPredMask)
-    GFPreviewSetMask(mock, absorbTex, absorbMask)
+    GFPreviewSetMask(mock, healPredTex, healPredMode == 4 and nil or healPredMask)
+    GFPreviewSetMask(mock, absorbTex, absorbMode == 4 and nil or absorbMask)
     GFPreviewSetMask(mock, mock._powerBg, powerBgMask)
     GFPreviewSetMask(mock, powerTex, powerTexMask)
 
@@ -1563,6 +1568,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local cls = GF_PREVIEW_CLASSES[((kind == "party" and 5 or 2) % #GF_PREVIEW_CLASSES) + 1]
         local hr, hg, hb = PreviewHealthColor(conf, 0.72, cls)
         mock._health:SetStatusBarColor(hr, hg, hb, tonumber(conf.hpBarAlpha) or 1)
+        local hpReverse = conf.reverseFill == true
+        if mock._health.SetReverseFill then mock._health:SetReverseFill(hpReverse) end
         mock._healthBg:SetTexture(bgTex)
         local hbr, hbg, hbb = conf.bgR or 0.06, conf.bgG or 0.06, conf.bgB or 0.07
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
@@ -1571,16 +1578,68 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
         mock._healthBg:SetVertexColor(hbr, hbg, hbb, conf.hpBgAlpha or conf.bgA or 0.85)
 
+        local hpTex = mock._health.GetStatusBarTexture and mock._health:GetStatusBarTexture()
+        local healPredMode = tonumber(conf.healPredAnchorMode) or 3
+        if healPredMode < 1 or healPredMode > 5 then healPredMode = 3 end
+        local healPredShown = (conf.healPredEnabled == true) or (conf.healPrediction == true)
         mock._healPred:ClearAllPoints()
-        mock._healPred:SetPoint("TOPLEFT", mock._health, "TOPRIGHT", -1, 0)
-        mock._healPred:SetPoint("BOTTOM", mock._health, "BOTTOM", 0, 0)
-        mock._healPred:SetWidth(max(1, mockW * 0.12))
-        mock._healPred:SetShown(conf.healPrediction ~= false)
+        if (healPredMode == 3 or healPredMode == 4) and hpTex then
+            if hpReverse then
+                mock._healPred:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
+                mock._healPred:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
+                if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill(true) end
+            else
+                mock._healPred:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
+                mock._healPred:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
+                if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill(false) end
+            end
+            mock._healPred:SetWidth(max(1, mockW * 0.12))
+            mock._healPred:SetValue(1)
+        else
+            mock._healPred:SetAllPoints(mock._health)
+            if mock._healPred.SetReverseFill then
+                mock._healPred:SetReverseFill((healPredMode == 1) and false or ((healPredMode == 5) and not hpReverse or true))
+            end
+            mock._healPred:SetValue(0.12)
+        end
+        mock._healPred:SetShown(healPredShown)
 
         mock._absorb:ClearAllPoints()
-        mock._absorb:SetPoint("TOPRIGHT", mock._health, "TOPRIGHT", 0, 0)
-        mock._absorb:SetPoint("BOTTOM", mock._health, "BOTTOM", 0, 0)
-        mock._absorb:SetWidth(max(1, mockW * 0.08))
+        local absorbMode = tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
+        if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
+        local absorbTextMode = (conf.hlOverride and conf.absorbTextMode ~= nil) and conf.absorbTextMode or (gen and gen.absorbTextMode)
+        absorbTextMode = tonumber(absorbTextMode)
+        local absorbShown
+        if absorbTextMode then
+            absorbShown = (absorbTextMode == 2 or absorbTextMode == 3)
+        else
+            local enableAbsorbBar = (conf.hlOverride and conf.enableAbsorbBar ~= nil) and conf.enableAbsorbBar or (gen and gen.enableAbsorbBar)
+            absorbShown = enableAbsorbBar ~= false
+        end
+        local absorbAnchorTex = hpTex or mock._health
+        if healPredShown and (healPredMode == 3 or healPredMode == 4) and mock._healPred.GetStatusBarTexture then
+            absorbAnchorTex = mock._healPred:GetStatusBarTexture() or absorbAnchorTex
+        end
+        local absorbFollows = (absorbMode == 3 or absorbMode == 4) and absorbAnchorTex
+        if absorbFollows then
+            if hpReverse then
+                mock._absorb:SetPoint("TOPRIGHT", absorbAnchorTex, "TOPLEFT", 0, 0)
+                mock._absorb:SetPoint("BOTTOMRIGHT", absorbAnchorTex, "BOTTOMLEFT", 0, 0)
+                if mock._absorb.SetReverseFill then mock._absorb:SetReverseFill(true) end
+            else
+                mock._absorb:SetPoint("TOPLEFT", absorbAnchorTex, "TOPRIGHT", 0, 0)
+                mock._absorb:SetPoint("BOTTOMLEFT", absorbAnchorTex, "BOTTOMRIGHT", 0, 0)
+                if mock._absorb.SetReverseFill then mock._absorb:SetReverseFill(false) end
+            end
+        else
+            mock._absorb:SetAllPoints(mock._health)
+            if mock._absorb.SetReverseFill then
+                mock._absorb:SetReverseFill((absorbMode == 1) and false or ((absorbMode == 5) and not hpReverse or true))
+            end
+        end
+        if absorbFollows then mock._absorb:SetWidth(max(1, mockW * 0.08)) end
+        mock._absorb:SetValue(absorbFollows and 1 or 0.08)
+        mock._absorb:SetShown(absorbShown)
 
         if powerH > 0 then
             mock._power:SetStatusBarTexture(barTex)

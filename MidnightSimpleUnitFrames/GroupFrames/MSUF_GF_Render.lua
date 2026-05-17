@@ -1464,7 +1464,7 @@ local function ApplyOverlayColors(f)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local kind = f._msufGFKind or "party"
     -- Incoming heal (heal prediction) — colors from general (shared)
-    if f.incomingHealBar then
+    if f.incomingHealBar and f._c and f._c.healPredEn == true then
         local r, g, b = 0.0, 1.0, 0.4
         if gen then
             if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
@@ -1515,6 +1515,9 @@ local function ApplyOverlayColors(f)
     -- change, power-row toggle). ApplyOverlayColors fires on DIRTY_COLOR; width
     -- updates from DIRTY_GEOMETRY/DIRTY_LAYOUT are caught by the unconditional
     -- call added in ApplyVisuals below.
+    if f._c and f._c.healPredEn == true and GF._ApplyHealPredAnchor then
+        GF._ApplyHealPredAnchor(f)
+    end
     if GF._ApplyAbsorbAnchor then
         GF._ApplyAbsorbAnchor(f)
     end
@@ -1559,6 +1562,9 @@ local function ApplyVisuals(f, bits)
     -- Absorb anchor: ensure mode 4 overflow and mode 3 clipping track hpBar
     -- width changes from DIRTY_GEOMETRY / DIRTY_LAYOUT (not just DIRTY_COLOR
     -- via ApplyOverlayColors). Internal diff-gate short-circuits no-ops at ~2μs.
+    if f._c and f._c.healPredEn == true and GF._ApplyHealPredAnchor then
+        GF._ApplyHealPredAnchor(f)
+    end
     if GF._ApplyAbsorbAnchor then
         GF._ApplyAbsorbAnchor(f)
     end

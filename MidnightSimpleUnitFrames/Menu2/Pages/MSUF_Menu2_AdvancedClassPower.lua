@@ -171,6 +171,7 @@ local QUICK_PLAYER_KEYS = {
     "powerTextSeparator",
     "absorbTextMode",
     "absorbAnchorMode",
+    "healPredAnchorMode",
 }
 
 local quickSetupUndoSnapshot
@@ -370,6 +371,7 @@ local function QuickApplyPhase1(offsets)
     if player.powerTextSeparator == nil then player.powerTextSeparator = general.powerTextSeparator or general.hpTextSeparator end
     if player.absorbTextMode == nil then player.absorbTextMode = general.absorbTextMode end
     if player.absorbAnchorMode == nil then player.absorbAnchorMode = general.absorbAnchorMode end
+    if player.healPredAnchorMode == nil then player.healPredAnchorMode = general.healPredAnchorMode end
     player.powerTextMode = "CURRENT"
     player.powerTextLeft = "NONE"
     player.powerTextCenter = "CURRENT"

@@ -338,7 +338,7 @@ local function ResolvePowerBarColor(powerToken)
 end
 
 -- Forward declarations (defined later in file)
-local _GF_IsAbsorbEnabled
+local _GF_IsAbsorbEnabled, _GF_ResolveHealPredAnchorMode, _GF_ApplyHealPredAnchor, _GF_ApplyAbsorbAnchor
 
 ------------------------------------------------------------------------
 -- HealPredictionCalculator: 1 API call replaces separate
@@ -1795,6 +1795,16 @@ function GF.BuildFrameCache(f)
 
     -- Heal prediction (Group Frame menu -> default off)
     c.healPredEn = (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf)) or false
+    c.healPredAnchorMode = c.healPredEn and _GF_ResolveHealPredAnchorMode(kind, conf) or nil
+    if not c.healPredEn then
+        local ihBar = f.incomingHealBar
+        if ihBar and ihBar.IsShown and ihBar:IsShown() then
+            ihBar:SetMinMaxValues(0, 1)
+            ihBar:SetValue(0)
+            ihBar:Hide()
+            if _GF_ApplyAbsorbAnchor then _GF_ApplyAbsorbAnchor(f) end
+        end
+    end
 
     -- Absorb: independently gated from heal prediction
     c.absorbEn = _GF_IsAbsorbEnabled(kind)
@@ -3939,12 +3949,7 @@ local function dispatchHealthFull(f, unit)
     UpdateStatusText(f, unit)
 
     -- Overlays from calculator
-    local ihBar = f.incomingHealBar
-    if ihBar and c and c.healPredEn == false then
-        ihBar:SetMinMaxValues(0, 1)
-        ihBar:SetValue(0)
-        if ihBar:IsShown() then ihBar:Hide() end
-    end
+    local ihBar = (c and c.healPredEn == true) and f.incomingHealBar or nil
     local absorbTestMode = (_G.MSUF_AbsorbTextureTestMode == true)
         and _G.MSUF_InCombat ~= true
         and not (_G.InCombatLockdown and _G.InCombatLockdown())
@@ -3955,11 +3960,14 @@ local function dispatchHealthFull(f, unit)
         if wasAbsorbTestMode and not absorbTestMode then f._msufGFAbsorbTestActive = nil end
     elseif calc then
         if ihBar then
-            if c.healPredEn ~= false then
-                local v = calc:GetIncomingHeals()
-                if v ~= nil then ihBar:SetMinMaxValues(0, hpMax); ihBar:SetValue(v); if not ihBar:IsShown() then ihBar:Show() end
-                else if ihBar:IsShown() then ihBar:Hide() end end
-            else ihBar:SetMinMaxValues(0, 1); ihBar:SetValue(0); if ihBar:IsShown() then ihBar:Hide() end end
+            if _GF_ApplyHealPredAnchor then _GF_ApplyHealPredAnchor(f) end
+            local wasShown = ihBar.IsShown and ihBar:IsShown()
+            local v = calc:GetIncomingHeals()
+            if v ~= nil then ihBar:SetMinMaxValues(0, hpMax); ihBar:SetValue(v); if not ihBar:IsShown() then ihBar:Show() end
+            else if ihBar:IsShown() then ihBar:Hide() end end
+            if (wasShown and not ihBar:IsShown()) or ((not wasShown) and ihBar:IsShown()) then
+                _GF_ApplyAbsorbAnchor(f)
+            end
         end
         local abBar = f.absorbBar
         if abBar then
@@ -4044,14 +4052,12 @@ local function dispatchOverlaysOnly(f, unit)
     local c = f._c
     if not c then return end
 
-    local ihBar = f.incomingHealBar
+    local ihBar = (c.healPredEn == true) and f.incomingHealBar or nil
     local abBar = f.absorbBar
     local haBar = f.healAbsorbBar
-    local ihEnabled = ihBar and c.healPredEn ~= false
+    local ihEnabled = ihBar ~= nil
     local abEnabled = abBar and c.absorbEn
     local haEnabled = haBar and c.healAbsorbEn ~= false
-    if ihBar and not ihEnabled then GF._ClearOverlayBar(ihBar) end
-
     local absorbTestMode = (_G.MSUF_AbsorbTextureTestMode == true)
         and _G.MSUF_InCombat ~= true
         and not (_G.InCombatLockdown and _G.InCombatLockdown())
@@ -4084,7 +4090,12 @@ local function dispatchOverlaysOnly(f, unit)
     if absorbTestMode then return end
 
     if ihEnabled then
+        if _GF_ApplyHealPredAnchor then _GF_ApplyHealPredAnchor(f) end
+        local wasShown = ihBar.IsShown and ihBar:IsShown()
         GF._SetOverlayBarValue(ihBar, hpMax, calc:GetIncomingHeals())
+        if (wasShown and not ihBar:IsShown()) or ((not wasShown) and ihBar:IsShown()) then
+            _GF_ApplyAbsorbAnchor(f)
+        end
     end
     if abEnabled then
         GF._SetOverlayBarValue(abBar, hpMax, calc:GetTotalDamageAbsorbs())
@@ -4129,6 +4140,122 @@ _GF_IsAbsorbEnabled = function(kind)
     return true
 end
 
+local function _GF_NormalizeAnchorMode(value, fallback)
+    local mode = tonumber(value) or fallback
+    if mode < 1 or mode > 5 then mode = fallback end
+    return mode
+end
+
+_GF_ResolveHealPredAnchorMode = function(kind, conf)
+    if conf and conf.healPredAnchorMode ~= nil then
+        return _GF_NormalizeAnchorMode(conf.healPredAnchorMode, 3)
+    end
+    return _GF_NormalizeAnchorMode(_GF_GetAbsorbSetting(kind, "healPredAnchorMode"), 3)
+end
+
+local function _GF_AnchorModeFollowsHP(mode)
+    return mode == 3 or mode == 4
+end
+
+local function _GF_GetOrCreateHealPredClip(f, hpBar)
+    local clip = f and f._msufGFHealPredFollowClip
+    if not clip then
+        clip = CreateFrame("Frame", nil, hpBar)
+        clip:SetAllPoints(hpBar)
+        if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+        f._msufGFHealPredFollowClip = clip
+    else
+        if clip.GetParent and clip:GetParent() ~= hpBar then clip:SetParent(hpBar) end
+        clip:ClearAllPoints()
+        clip:SetAllPoints(hpBar)
+    end
+    if clip.SetFrameLevel and hpBar.GetFrameLevel then
+        clip:SetFrameLevel(hpBar:GetFrameLevel() + 1)
+    end
+    return clip
+end
+
+_GF_ApplyHealPredAnchor = function(f)
+    local bar = f and f.incomingHealBar
+    local hpBar = f and f.health
+    if not (bar and hpBar) then return end
+    local c = f._c
+    local kind = f._msufGFKind or "party"
+    local mode = (c and c.healPredAnchorMode) or _GF_ResolveHealPredAnchorMode(kind, GF.GetConf and GF.GetConf(kind))
+    local hpReverse = hpBar.GetReverseFill and hpBar:GetReverseFill() and true or false
+
+    if not _GF_AnchorModeFollowsHP(mode) then
+        local reverse
+        if mode == 1 then
+            reverse = false
+        elseif mode == 5 then
+            reverse = not hpReverse
+        else
+            reverse = true
+        end
+
+        if bar._msufGFHealPredAnchorStamp == mode
+            and bar._msufGFHealPredFollowActive ~= true
+            and (mode ~= 5 or bar._msufGFHealPredRF == hpReverse)
+        then
+            return
+        end
+
+        bar._msufGFHealPredAnchorStamp = mode
+        bar._msufGFHealPredFollowActive = nil
+        bar._msufGFHealPredRF = (mode == 5) and hpReverse or nil
+        bar._msufGFHealPredTex = nil
+        bar._msufGFHealPredW = nil
+
+        if f._msufGFHealPredFollowClip then f._msufGFHealPredFollowClip:Hide() end
+        if bar.GetParent and bar:GetParent() ~= hpBar then bar:SetParent(hpBar) end
+        bar:ClearAllPoints()
+        bar:SetAllPoints(hpBar)
+        if bar.SetReverseFill then bar:SetReverseFill(reverse and true or false) end
+        if bar.SetFrameLevel and hpBar.GetFrameLevel then bar:SetFrameLevel(hpBar:GetFrameLevel() + 1) end
+        return
+    end
+
+    if not hpBar.GetStatusBarTexture then return end
+    local hpTex = hpBar:GetStatusBarTexture()
+    if not hpTex then return end
+    local w = hpBar.GetWidth and hpBar:GetWidth() or nil
+    local isOverflow = (mode == 4)
+    local clip = _GF_GetOrCreateHealPredClip(f, hpBar)
+    local parent = isOverflow and (f.barGroup or f) or clip
+    if isOverflow then clip:Hide() else clip:Show() end
+
+    if bar._msufGFHealPredAnchorStamp == mode
+        and bar._msufGFHealPredFollowActive == true
+        and bar._msufGFHealPredRF == hpReverse
+        and bar._msufGFHealPredTex == hpTex
+        and bar._msufGFHealPredW == w
+        and (not bar.GetParent or bar:GetParent() == parent)
+    then
+        return
+    end
+
+    bar._msufGFHealPredAnchorStamp = mode
+    bar._msufGFHealPredFollowActive = true
+    bar._msufGFHealPredRF = hpReverse
+    bar._msufGFHealPredTex = hpTex
+    bar._msufGFHealPredW = w
+
+    if parent and bar.GetParent and bar:GetParent() ~= parent then bar:SetParent(parent) end
+    bar:ClearAllPoints()
+    if hpReverse then
+        bar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
+        bar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
+        if bar.SetReverseFill then bar:SetReverseFill(true) end
+    else
+        bar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
+        bar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
+        if bar.SetReverseFill then bar:SetReverseFill(false) end
+    end
+    if w and w > 0 then bar:SetWidth(w) end
+    if bar.SetFrameLevel and hpBar.GetFrameLevel then bar:SetFrameLevel(hpBar:GetFrameLevel() + 1) end
+end
+
 ------------------------------------------------------------------------
 -- Absorb anchoring: apply SetReverseFill based on general.absorbAnchorMode
 -- Mode 1: left anchor (fill Lâ†’R)   absorbReverse=false
@@ -4137,7 +4264,7 @@ end
 -- Mode 4: follow HP edge + overflow (extends beyond bar)
 -- Mode 5: reverse from max         absorbReverse=true (normal HP bar)
 ------------------------------------------------------------------------
-local function _GF_ApplyAbsorbAnchor(f)
+_GF_ApplyAbsorbAnchor = function(f)
     if not f or not f.health then return end
     local kind = f._msufGFKind or "party"
     local mode = tonumber(_GF_GetAbsorbSetting(kind, "absorbAnchorMode")) or 2
@@ -4151,14 +4278,33 @@ local function _GF_ApplyAbsorbAnchor(f)
         if not hpTex then mode = 2 -- fallback
         else
             local w = hpBar:GetWidth()
+            local absorbAnchorTex = hpTex
+            local absorbChained = nil
+            local ihBar = f.incomingHealBar
+            if ihBar and ihBar.IsShown and ihBar:IsShown() and f._c and f._c.healPredEn == true then
+                local healMode = (f._c and f._c.healPredAnchorMode)
+                    or _GF_ResolveHealPredAnchorMode(kind, GF.GetConf and GF.GetConf(kind))
+                if _GF_AnchorModeFollowsHP(healMode) then
+                    local ihTex = ihBar.GetStatusBarTexture and ihBar:GetStatusBarTexture()
+                    if ihTex then
+                        absorbAnchorTex = ihTex
+                        absorbChained = true
+                    end
+                end
+            end
             if f._msufGFAbsorbAnchorStamp == mode and f._msufGFAbsorbFollowActive
-               and f._msufGFAbsorbFollowRF == hpReverse and f._msufGFAbsorbFollowW == w then
+               and f._msufGFAbsorbFollowRF == hpReverse
+               and f._msufGFAbsorbFollowW == w
+               and f._msufGFAbsorbFollowAnchorTex == absorbAnchorTex
+               and f._msufGFAbsorbFollowChained == absorbChained then
                 return
             end
             f._msufGFAbsorbAnchorStamp = mode
             f._msufGFAbsorbFollowActive = true
             f._msufGFAbsorbFollowRF = hpReverse
             f._msufGFAbsorbFollowW = w
+            f._msufGFAbsorbFollowAnchorTex = absorbAnchorTex
+            f._msufGFAbsorbFollowChained = absorbChained
 
             local isOverflow = (mode == 4)
 
@@ -4184,12 +4330,12 @@ local function _GF_ApplyAbsorbAnchor(f)
                 end
                 f.absorbBar:ClearAllPoints()
                 if hpReverse then
-                    f.absorbBar:SetPoint("TOPRIGHT", hpTex, "TOPLEFT", 0, 0)
-                    f.absorbBar:SetPoint("BOTTOMRIGHT", hpTex, "BOTTOMLEFT", 0, 0)
+                    f.absorbBar:SetPoint("TOPRIGHT", absorbAnchorTex, "TOPLEFT", 0, 0)
+                    f.absorbBar:SetPoint("BOTTOMRIGHT", absorbAnchorTex, "BOTTOMLEFT", 0, 0)
                     f.absorbBar:SetReverseFill(true)
                 else
-                    f.absorbBar:SetPoint("TOPLEFT", hpTex, "TOPRIGHT", 0, 0)
-                    f.absorbBar:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
+                    f.absorbBar:SetPoint("TOPLEFT", absorbAnchorTex, "TOPRIGHT", 0, 0)
+                    f.absorbBar:SetPoint("BOTTOMLEFT", absorbAnchorTex, "BOTTOMRIGHT", 0, 0)
                     f.absorbBar:SetReverseFill(false)
                 end
                 if w and w > 0 then f.absorbBar:SetWidth(w) end
@@ -4267,12 +4413,11 @@ local function _GF_ApplyAbsorbAnchor(f)
     if f.healAbsorbBar and f.healAbsorbBar.SetReverseFill then
         f.healAbsorbBar:SetReverseFill(healReverse and true or false)
     end
-    if f.incomingHealBar and f.incomingHealBar.SetReverseFill then
-        f.incomingHealBar:SetReverseFill(false)
-    end
     f._msufGFAbsorbAnchorStamp = mode
     f._msufGFAbsorbFollowRF    = (mode == 5) and hpReverse or nil
     f._msufGFAbsorbFollowW     = nil
+    f._msufGFAbsorbFollowAnchorTex = nil
+    f._msufGFAbsorbFollowChained = nil
 end
 ------------------------------------------------------------------------
 local function _GF_ReadOverlayColor(keyR, keyG, keyB, defR, defG, defB, defA)
@@ -4286,17 +4431,34 @@ local function _GF_ReadOverlayColor(keyR, keyG, keyB, defR, defG, defB, defA)
     return defR, defG, defB, defA
 end
 
+local function _GF_HideIncomingHealBar(f, bar)
+    if not bar then return end
+    local wasShown = bar:IsShown()
+    bar:Hide()
+    if wasShown then _GF_ApplyAbsorbAnchor(f) end
+end
+
+local function _GF_ShowIncomingHealBar(f, bar)
+    if not bar then return end
+    if not bar:IsShown() then
+        bar:Show()
+        _GF_ApplyAbsorbAnchor(f)
+    end
+end
+
 dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
     local bar = f.incomingHealBar
     if not bar then return end
     -- PERF: use pre-cached healPredEn from BuildFrameCache (was GF.GetConf + DB read per call)
     local c = f._c
-    if c and c.healPredEn == false then
-        bar:SetMinMaxValues(0, 1)
-        bar:SetValue(0)
-        if bar:IsShown() then bar:Hide() end
+    if not (c and c.healPredEn == true) then
+        if bar:IsShown() then
+            GF._ClearOverlayBar(bar)
+            _GF_ApplyAbsorbAnchor(f)
+        end
         return
     end
+    if _GF_ApplyHealPredAnchor then _GF_ApplyHealPredAnchor(f) end
     -- Test mode: fixed values (same as main UF preview)
     local absorbTestMode = (_G.MSUF_AbsorbTextureTestMode == true)
         and _G.MSUF_InCombat ~= true
@@ -4306,10 +4468,10 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
         f._msufGFAbsorbTestActive = true
         bar:SetMinMaxValues(0, 100)
         bar:SetValue(20)
-        if not bar:IsShown() then bar:Show() end
+        _GF_ShowIncomingHealBar(f, bar)
         return
     end
-    if not unit or not UnitExists(unit) then if bar:IsShown() then bar:Hide() end; return end
+    if not unit or not UnitExists(unit) then _GF_HideIncomingHealBar(f, bar); return end
     if not hpMax then
         hpMax = (calc and calc.GetMaximumHealth) and calc:GetMaximumHealth() or UnitHealthMax(unit)
     end
@@ -4319,11 +4481,11 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
     elseif UnitGetIncomingHeals then
         val = UnitGetIncomingHeals(unit)
     end
-    if val == nil then if bar:IsShown() then bar:Hide() end; return end
+    if val == nil then _GF_HideIncomingHealBar(f, bar); return end
     local valSecret = issecretvalue and issecretvalue(val)
     if not valSecret then
         local n = tonumber(val) or 0
-        if n <= 0 then if bar:IsShown() then bar:Hide() end; return end
+        if n <= 0 then _GF_HideIncomingHealBar(f, bar); return end
         local hpMaxSecret = issecretvalue and issecretvalue(hpMax)
         if not hpMaxSecret then
             if not hp then
@@ -4339,7 +4501,7 @@ dispatchIncomingHeal = function(f, unit, calc, hp, hpMax)
     end
     bar:SetMinMaxValues(0, hpMax)
     bar:SetValue(val)
-    if not bar:IsShown() then bar:Show() end
+    _GF_ShowIncomingHealBar(f, bar)
 end
 
 dispatchAbsorb = function(f, unit, calc, hpMax)
@@ -4428,7 +4590,11 @@ dispatchHealAbsorb = function(f, unit, calc, hpMax)
 end
 
 _GF_DispatchOverlaysFromCalc = function(f, unit, calc, hp, hpMax)
-    dispatchIncomingHeal(f, unit, calc, hp, hpMax)
+    local c = f and f._c
+    local ihBar = f and f.incomingHealBar
+    if ihBar and ((c and c.healPredEn == true) or (ihBar.IsShown and ihBar:IsShown())) then
+        dispatchIncomingHeal(f, unit, calc, hp, hpMax)
+    end
     dispatchAbsorb(f, unit, calc, hpMax)
     dispatchHealAbsorb(f, unit, calc, hpMax)
 end
@@ -5802,6 +5968,8 @@ _G.MSUF_GF_RefreshOverlays = function()
         and _G.MSUF_InCombat ~= true
         and not (_G.InCombatLockdown and _G.InCombatLockdown())
     _GF_ForEachLiveGroupFrame(function(f)
+        local c = f and f._c
+        if c and c.healPredEn == true and _GF_ApplyHealPredAnchor then _GF_ApplyHealPredAnchor(f) end
         _GF_ApplyAbsorbAnchor(f)
         local u = f.unit
         if u then
@@ -5820,6 +5988,8 @@ _G.MSUF_GF_RefreshOverlays = function()
             for i = 1, #list do
                 local pf = list[i]
                 if pf then
+                    local c = pf._c
+                    if c and c.healPredEn == true and _GF_ApplyHealPredAnchor then _GF_ApplyHealPredAnchor(pf) end
                     _GF_ApplyAbsorbAnchor(pf)
                     local u = pf.unit or pf._msufGFPreviewUnit
                     if u then
@@ -5838,6 +6008,7 @@ _G.MSUF_GF_RefreshOverlays = function()
     end
 end
 GF._ApplyHealthColor      = ApplyHealthColorWithAlpha
+GF._ApplyHealPredAnchor   = _GF_ApplyHealPredAnchor
 GF._ApplyAbsorbAnchor     = _GF_ApplyAbsorbAnchor
 GF._ReadOverlayColor      = _GF_ReadOverlayColor
 

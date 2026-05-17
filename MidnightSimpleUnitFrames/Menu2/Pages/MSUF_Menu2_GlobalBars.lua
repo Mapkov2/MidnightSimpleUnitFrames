@@ -761,7 +761,7 @@ local function BuildBars(ctx)
     end
     M.AddRefresher(ctx, RefreshGradientControls)
 
-    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 336, true)
+    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 390, true)
     local absorbW = absorb._msuf2Width or ctx.width or 720
     local absorbLeftX = 30
     local absorbRightX = max(430, min(560, floor(absorbW * 0.52)))
@@ -819,6 +819,23 @@ local function BuildBars(ctx)
     local selfHealGroupHint = W.Text(absorb, "Group Frame heal prediction is controlled in Group Frames > Health & Bars.", absorbLeftX + 30, -212, absorbLeftW + 80, T.colors.muted)
     selfHealGroupHint:Hide()
 
+    local healPredAnchor = W.Dropdown(absorb, "Heal prediction anchoring", {
+        { value = 1, text = "Anchor to left side" },
+        { value = 2, text = "Anchor to right side" },
+        { value = 3, text = "Follow HP bar" },
+        { value = 4, text = "Follow HP bar (overflow)" },
+        { value = 5, text = "Reverse from max" },
+    }, absorbLeftW)
+    M.BindDropdown(ctx, healPredAnchor,
+        function() return tonumber(BarScopeGet("healPredAnchorMode", 3)) or 3 end,
+        function(v)
+            BarScopeSet("healPredAnchorMode", tonumber(v) or 3, "MSUF2_HEALPRED_ANCHOR")
+            Call("MSUF_InvalidateAbsorbCache")
+            ApplyBars("MSUF2_HEALPRED_ANCHOR")
+            RefreshGroupFrameVisuals()
+        end)
+    W.MoveWidget(healPredAnchor, absorb, absorbLeftX, -240, absorbLeftW, "LEFT")
+
     local absorbOpacity = W.Slider(absorb, "Absorb bar opacity", 0, 1, 0.05, absorbLeftW)
     M.BindSlider(ctx, absorbOpacity,
         function() return tonumber(BarScopeGet("absorbBarOpacity", 0.75)) or 0.75 end,
@@ -828,7 +845,7 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_ABSORB_OPACITY")
             RefreshGroupFrameVisuals()
         end)
-    W.MoveWidget(absorbOpacity, absorb, absorbLeftX, -240, absorbLeftW, "LEFT")
+    W.MoveWidget(absorbOpacity, absorb, absorbLeftX, -294, absorbLeftW, "LEFT")
 
     W.LabelAt(absorb, "Textures", absorbRightX, -42, absorbRightW, "GameFontNormalSmall", T.colors.accent)
     local absorbTex = W.Dropdown(absorb, "Absorb bar texture (SharedMedia)", function() return TextureValues("Use foreground texture") end, absorbRightW)
@@ -868,7 +885,7 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_HEAL_ABSORB_OPACITY")
             RefreshGroupFrameVisuals()
         end)
-    W.MoveWidget(healAbsorbOpacity, absorb, absorbRightX, -240, absorbRightW, "LEFT")
+    W.MoveWidget(healAbsorbOpacity, absorb, absorbRightX, -294, absorbRightW, "LEFT")
 
     M.AddRefresher(ctx, function()
         local mode = tonumber(BarScopeGet("absorbTextMode", 2)) or 2
@@ -884,6 +901,7 @@ local function BuildBars(ctx)
         SetControlEnabled(absorbOpacity, scopedActive and showBar)
         SetControlEnabled(healAbsorbOpacity, scopedActive and showBar)
         SetControlEnabled(selfHeal, (not groupScope) and sharedActive and mode ~= 1)
+        SetControlEnabled(healPredAnchor, (not groupScope) and scopedActive and mode ~= 1 and ReadGBool("showSelfHealPrediction", true))
         if groupScope then selfHealGroupHint:Show() else selfHealGroupHint:Hide() end
     end)
 

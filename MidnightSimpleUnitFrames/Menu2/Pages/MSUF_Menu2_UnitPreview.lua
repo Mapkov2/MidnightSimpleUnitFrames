@@ -798,6 +798,76 @@ local function SetTex(region, tex)
     if region and region.SetTexture then region:SetTexture(tex or TEX_W8) end
 end
 
+local function NormalizePreviewAnchorMode(value, fallback)
+    local mode = tonumber(value) or fallback or 3
+    if mode < 1 or mode > 5 then mode = fallback or 3 end
+    return mode
+end
+
+local function UnitPreviewBarOverrideEnabled(conf)
+    return conf and (conf.hlOverride == true or conf.hpPowerTextOverride == true)
+end
+
+local function PreviewHealPredictionEnabled(g)
+    if g then
+        if g.showSelfHealPrediction ~= nil then return g.showSelfHealPrediction == true end
+        if g.enableHealPrediction ~= nil then return g.enableHealPrediction ~= false end
+    end
+    return false
+end
+
+local function PreviewResolveHealPredAnchorMode(conf, g)
+    if UnitPreviewBarOverrideEnabled(conf) and conf.healPredAnchorMode ~= nil then
+        return NormalizePreviewAnchorMode(conf.healPredAnchorMode, 3)
+    end
+    return NormalizePreviewAnchorMode(g and g.healPredAnchorMode, 3)
+end
+
+local function PreviewResolveAbsorbAnchorMode(conf, g)
+    if UnitPreviewBarOverrideEnabled(conf) and conf.absorbAnchorMode ~= nil then
+        return NormalizePreviewAnchorMode(conf.absorbAnchorMode, 2)
+    end
+    return NormalizePreviewAnchorMode(g and g.absorbAnchorMode, 2)
+end
+
+local function PreviewAbsorbBarEnabled(conf, g)
+    local mode
+    if UnitPreviewBarOverrideEnabled(conf) and conf.absorbTextMode ~= nil then
+        mode = tonumber(conf.absorbTextMode)
+    end
+    if mode == nil and g then mode = tonumber(g.absorbTextMode) end
+    if mode then return mode == 2 or mode == 3 end
+    return not (g and g.enableAbsorbBar == false)
+end
+
+local function PreviewOverlayWidth(areaW, frac)
+    return max(1, floor((tonumber(areaW) or 1) * (tonumber(frac) or 0.1) + 0.5))
+end
+
+local function LayoutUnitPreviewOverlay(tex, hpBG, hpFill, mode, frac, hpReverse, followAnchor, areaW)
+    if not (tex and hpBG and hpFill) then return end
+    mode = NormalizePreviewAnchorMode(mode, 3)
+    tex:ClearAllPoints()
+    tex:SetWidth(PreviewOverlayWidth(areaW, frac))
+    if mode == 3 or mode == 4 then
+        local anchor = followAnchor or hpFill
+        if hpReverse then
+            tex:SetPoint("TOPRIGHT", anchor, "TOPLEFT", 0, 0)
+            tex:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMLEFT", 0, 0)
+        else
+            tex:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 0, 0)
+            tex:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 0, 0)
+        end
+    elseif mode == 1 or (mode == 5 and hpReverse) then
+        tex:SetPoint("TOPLEFT", hpBG, "TOPLEFT", 0, 0)
+        tex:SetPoint("BOTTOMLEFT", hpBG, "BOTTOMLEFT", 0, 0)
+    else
+        tex:SetPoint("TOPRIGHT", hpBG, "TOPRIGHT", 0, 0)
+        tex:SetPoint("BOTTOMRIGHT", hpBG, "BOTTOMRIGHT", 0, 0)
+    end
+    tex:Show()
+end
+
 local function MakeFS(parent, layer, size)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY")
     fs:SetFont(FONT, size or 12, "OUTLINE")
@@ -1767,6 +1837,12 @@ local function BuildPreview(parent, panel, width, height)
     mock.hpBG:SetColorTexture(0, 0, 0, 0.82)
     mock.hp = mock:CreateTexture(nil, "ARTWORK")
     SetTex(mock.hp, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+    mock.healPred = mock:CreateTexture(nil, "ARTWORK")
+    mock.healPred:SetTexture(TEX_W8)
+    mock.healPred:SetVertexColor(0, 1, 0.4, 0.55)
+    mock.absorb = mock:CreateTexture(nil, "ARTWORK")
+    mock.absorb:SetTexture(TEX_W8)
+    mock.absorb:SetVertexColor(0.55, 0.70, 1, 0.58)
     mock.powerBG = mock:CreateTexture(nil, "BACKGROUND")
     mock.powerBG:SetTexture(TEX_W8)
     mock.powerBG:SetColorTexture(0, 0, 0, 0.9)
@@ -2163,9 +2239,16 @@ local function ApplyPreviewRounded(box, key, powerOn, outlineThickness)
     local bodyMask = EnsurePreviewRoundedMask(mock, "body", mock, mock.roundedBg)
     local hpBgMask = EnsurePreviewRoundedMask(mock, "health", mock.hpBG, mock.hpBG)
     local hpMask = EnsurePreviewRoundedMask(mock, "health", mock.hpBG, mock.hp)
+    local healPredMask = EnsurePreviewRoundedMask(mock, "healPred", mock.hpBG, mock.healPred)
+    local absorbMask = EnsurePreviewRoundedMask(mock, "absorb", mock.hpBG, mock.absorb)
+    local conf, g = UnitDB(key)
+    local healPredMode = PreviewResolveHealPredAnchorMode(conf, g)
+    local absorbMode = PreviewResolveAbsorbAnchorMode(conf, g)
     PreviewSetMask(mock, mock.roundedBg, bodyMask)
     PreviewSetMask(mock, mock.hpBG, hpBgMask)
     PreviewSetMask(mock, mock.hp, hpMask)
+    PreviewSetMask(mock, mock.healPred, healPredMode == 4 and nil or healPredMask)
+    PreviewSetMask(mock, mock.absorb, absorbMode == 4 and nil or absorbMask)
 
     local powerBgMask = (powerOn and PreviewRoundedPowerBarsEnabled()) and EnsurePreviewRoundedMask(mock, "power", mock.powerBG, mock.powerBG) or nil
     local powerMask = (powerOn and PreviewRoundedPowerBarsEnabled()) and EnsurePreviewRoundedMask(mock, "power", mock.powerBG, mock.power) or nil
@@ -2229,6 +2312,10 @@ local function ApplyPreviewLayerVisibility(box)
     end
     SetShownSafe(mock.hpBG, bodyOn)
     SetShownSafe(mock.hp, bodyOn)
+    if not bodyOn then
+        SetShownSafe(mock.healPred, false)
+        SetShownSafe(mock.absorb, false)
+    end
 
     if not powerOn then
         SetShownSafe(mock.powerBG, false)
@@ -2394,6 +2481,8 @@ local function ApplyPreviewTransparency(box, conf)
         SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or alpha.bg)
     end
     SetRegionAlpha(mock.hp, alpha.flat and alpha.frame or alpha.hp)
+    SetRegionAlpha(mock.healPred, alpha.flat and alpha.frame or alpha.hp)
+    SetRegionAlpha(mock.absorb, alpha.flat and alpha.frame or alpha.hp)
     SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or alpha.bg)
     SetRegionAlpha(mock.power, alpha.flat and alpha.frame or alpha.power)
     SetRegionAlpha(mock.classPower, alpha.flat and alpha.frame or alpha.power)
@@ -2584,9 +2673,40 @@ function Preview.Refresh(box, reason)
     mock.hpBG:SetPoint("TOPLEFT", mock, "TOPLEFT", S(2), -S(2))
     mock.hpBG:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -S(2), powerOn and (S(3) + powerH) or S(2))
     mock.hp:ClearAllPoints()
-    mock.hp:SetPoint("TOPLEFT", mock.hpBG, "TOPLEFT", 0, 0)
-    mock.hp:SetPoint("BOTTOMLEFT", mock.hpBG, "BOTTOMLEFT", 0, 0)
-    mock.hp:SetWidth(max(1, (sw - S(4)) * data.hp))
+    local hpReverse = conf.reverseFillBars == true
+    if hpReverse then
+        mock.hp:SetPoint("TOPRIGHT", mock.hpBG, "TOPRIGHT", 0, 0)
+        mock.hp:SetPoint("BOTTOMRIGHT", mock.hpBG, "BOTTOMRIGHT", 0, 0)
+    else
+        mock.hp:SetPoint("TOPLEFT", mock.hpBG, "TOPLEFT", 0, 0)
+        mock.hp:SetPoint("BOTTOMLEFT", mock.hpBG, "BOTTOMLEFT", 0, 0)
+    end
+    local hpAreaW = max(1, sw - S(4))
+    local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
+    mock.hp:SetWidth(max(1, hpAreaW * hpFrac))
+    local healPredMode = PreviewResolveHealPredAnchorMode(conf, g)
+    local absorbMode = PreviewResolveAbsorbAnchorMode(conf, g)
+    local healPredShown = PreviewHealPredictionEnabled(g)
+    local absorbShown = PreviewAbsorbBarEnabled(conf, g)
+    local healPredFrac = ((healPredMode == 3) and min(0.14, max(0.02, 1 - hpFrac))) or 0.14
+    if healPredShown then
+        local r = tonumber(g and g.healPredColorR) or 0
+        local gg = tonumber(g and g.healPredColorG) or 1
+        local b = tonumber(g and g.healPredColorB) or 0.4
+        mock.healPred:SetVertexColor(r, gg, b, 0.55)
+        LayoutUnitPreviewOverlay(mock.healPred, mock.hpBG, mock.hp, healPredMode, healPredFrac, hpReverse, nil, hpAreaW)
+    else
+        mock.healPred:Hide()
+    end
+    if absorbShown then
+        local absorbAnchor = nil
+        if healPredShown and (healPredMode == 3 or healPredMode == 4) and (absorbMode == 3 or absorbMode == 4) then
+            absorbAnchor = mock.healPred
+        end
+        LayoutUnitPreviewOverlay(mock.absorb, mock.hpBG, mock.hp, absorbMode, 0.10, hpReverse, absorbAnchor, hpAreaW)
+    else
+        mock.absorb:Hide()
+    end
     local hr, hg, hb = HealthColor(key, data)
     local hbr, hbg, hbb, hba = HealthBackgroundColor(hr, hg, hb, data)
     mock.hpBG:SetVertexColor(hbr, hbg, hbb, hba)
