@@ -333,7 +333,7 @@ local function BuildMisc(ctx)
             if v then Call("MSUF_TargetSoundDriver_Ensure") end
         end)
 
-    local range = b:CollapsibleSection("misc_range_fade", "Range Fade", 260, false)
+    local range = b:CollapsibleSection("misc_range_fade", "Range Fade", 310, false)
     local rangeW = range._msuf2Width or ctx.width or 720
     local rangeLeftX = 30
     local rangeRightX = max(430, floor(rangeW * 0.50))
@@ -342,8 +342,17 @@ local function BuildMisc(ctx)
     local rangeToggles = {}
     local bossExtras = {}
 
-    W.LabelAt(range, "Unit frames", rangeLeftX, -38, rangeLeftW, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(range, "Effect", rangeRightX, -38, rangeRightW, "GameFontNormalSmall", T.colors.accent)
+    local rangeMaster = W.SwitchAt(range, "Enable Range Fade", rangeLeftX, -36, 220)
+    M.BindToggle(ctx, rangeMaster,
+        function() return ReadGBool("rangeFadeEnabled", true) end,
+        function(v)
+            SetGBool("rangeFadeEnabled", v, "MSUF2_RANGE_FADE_MASTER", { alpha = true, preview = true })
+            RefreshRangeFadeRuntime()
+            Call("MSUF_RefreshAllUnitAlphas")
+        end)
+
+    W.LabelAt(range, "Unit frames", rangeLeftX, -74, rangeLeftW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(range, "Effect", rangeRightX, -74, rangeRightW, "GameFontNormalSmall", T.colors.accent)
 
     for index, spec in ipairs({
         { unit = "target", key = "rangeFadeEnabled", label = "Target range fade" },
@@ -353,7 +362,7 @@ local function BuildMisc(ctx)
         { unit = "boss", key = "rangeFadeAuras", label = "Boss auras range fade" },
     }) do
         local toggle = W.Toggle(range, spec.label)
-        local y = (index <= 3) and (-66 - (index - 1) * 32) or (-174 - (index - 4) * 32)
+        local y = (index <= 3) and (-102 - (index - 1) * 32) or (-222 - (index - 4) * 32)
         W.MoveWidget(toggle, range, rangeLeftX, y)
         if index <= 3 then
             rangeToggles[#rangeToggles + 1] = toggle
@@ -372,7 +381,7 @@ local function BuildMisc(ctx)
             end)
     end
 
-    W.LabelAt(range, "Boss children", rangeLeftX, -148, rangeLeftW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(range, "Boss children", rangeLeftX, -194, rangeLeftW, "GameFontNormalSmall", T.colors.accent)
 
     local affects = W.Dropdown(range, "Range fade affects", {
         { value = "frame", text = "Frame" },
@@ -391,7 +400,7 @@ local function BuildMisc(ctx)
             RefreshRangeFadeRuntime()
             M.RequestGeneralApply("MSUF2_RANGE_FADE_LAYER", { alpha = true, preview = true, applyAll = false })
         end)
-    W.MoveWidget(affects, range, rangeRightX, -66, rangeRightW, "LEFT")
+    W.MoveWidget(affects, range, rangeRightX, -102, rangeRightW, "LEFT")
 
     local alpha = W.Slider(range, "Out of range alpha", 0, 60, 5, rangeRightW)
     M.BindSlider(ctx, alpha,
@@ -409,7 +418,7 @@ local function BuildMisc(ctx)
             RefreshRangeFadeRuntime()
             M.RequestGeneralApply("MSUF2_RANGE_FADE_ALPHA", { alpha = true, preview = true, applyAll = false })
         end)
-    W.MoveWidget(alpha, range, rangeRightX, -120, rangeRightW, "CENTER")
+    W.MoveWidget(alpha, range, rangeRightX, -156, rangeRightW, "CENTER")
 
     local portrait = W.Toggle(range, "Fade portrait too")
     M.BindToggle(ctx, portrait,
@@ -419,20 +428,21 @@ local function BuildMisc(ctx)
             RefreshRangeFadeRuntime()
             Call("MSUF_RefreshAllUnitAlphas")
         end)
-    W.MoveWidget(portrait, range, rangeRightX, -176)
+    W.MoveWidget(portrait, range, rangeRightX, -212)
 
-    local rangeHint = W.Text(range, "HP Bar only fades the health layer; Frame fades the full unit frame.", rangeRightX, -210, rangeRightW, T.colors.muted)
+    local rangeHint = W.Text(range, "HP Bar only fades the health layer; Frame fades the full unit frame.", rangeRightX, -246, rangeRightW, T.colors.muted)
     if rangeHint.SetWordWrap then rangeHint:SetWordWrap(true) end
     M.AddRefresher(ctx, function()
-        local anyEnabled = Unit("target").rangeFadeEnabled == true
+        local masterEnabled = ReadGBool("rangeFadeEnabled", true)
+        local anyEnabled = masterEnabled and (Unit("target").rangeFadeEnabled == true
             or Unit("focus").rangeFadeEnabled == true
-            or Unit("boss").rangeFadeEnabled == true
+            or Unit("boss").rangeFadeEnabled == true)
         SetControlsEnabled({ affects, alpha, portrait }, anyEnabled)
-        SetControlsEnabled(rangeToggles, true)
-        SetControlsEnabled(bossExtras, Unit("boss").rangeFadeEnabled == true)
+        SetControlsEnabled(rangeToggles, masterEnabled)
+        SetControlsEnabled(bossExtras, masterEnabled and Unit("boss").rangeFadeEnabled == true)
     end)
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 5 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 6 })

@@ -753,7 +753,45 @@ ns.MSUF_UpdateAllFonts = ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts
 -- ==========================================================================
 do
     local tooltipDragHandle          -- overlay frame (lazy-created)
+    local tooltipSettingsHandle      -- click-through-to-settings frame for non-draggable states
     local tooltipEditPreviewActive = false
+
+    local function MSUF_Tooltip_IsSettingsOnlyPreview()
+        local g = MSUF_GetTooltipGeneral()
+        local provider, anchor = MSUF_NormalizeTooltipSettings(g)
+        return provider == TOOLTIP_PROVIDER_GAME and anchor == TOOLTIP_ANCHOR_EXTERNAL
+    end
+
+    local function MSUF_Tooltip_OpenTooltipSettings()
+        if not MSUF_Tooltip_IsSettingsOnlyPreview() then return end
+
+        local menu = _G.MSUF2
+        if menu and type(menu.Open) == "function" then
+            menu.Open("opt_misc")
+        elseif type(_G.MSUF2_Open) == "function" then
+            _G.MSUF2_Open("opt_misc")
+        elseif type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
+            _G.MSUF_OpenStandaloneOptionsWindow("opt_misc")
+        elseif type(_G.MSUF_OpenPage) == "function" then
+            _G.MSUF_OpenPage("opt_misc")
+        end
+
+        local function OpenSection()
+            menu = _G.MSUF2
+            local search = menu and menu.Search
+            if search and type(search.OpenTarget) == "function" then
+                search.OpenTarget("opt_misc", "Unitframe tooltips", "Unitframe tooltips", "Unitframe tooltips")
+            elseif type(_G.MSUF_OpenPage) == "function" then
+                _G.MSUF_OpenPage("opt_misc")
+            end
+        end
+
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, OpenSection)
+        else
+            OpenSection()
+        end
+    end
 
     -- ---- persistence -------------------------------------------------------
     local function MSUF_Tooltip_SavePosition(frame)
@@ -864,6 +902,31 @@ do
         return dh
     end
 
+    local function MSUF_Tooltip_EnsureSettingsHandle(parent)
+        if tooltipSettingsHandle then
+            if tooltipSettingsHandle:GetParent() ~= parent then
+                tooltipSettingsHandle:SetParent(parent)
+            end
+            tooltipSettingsHandle:SetAllPoints(parent)
+            return tooltipSettingsHandle
+        end
+
+        local h = CreateFrame("Button", "MSUF_TooltipSettingsHandle", parent)
+        h:SetAllPoints(parent)
+        h:EnableMouse(true)
+        h:RegisterForClicks("LeftButtonUp")
+        h:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 10)
+
+        local hover = h:CreateTexture(nil, "HIGHLIGHT")
+        hover:SetAllPoints()
+        hover:SetColorTexture(0.2, 0.6, 1.0, 0.08)
+        h._hover = hover
+
+        h:SetScript("OnClick", MSUF_Tooltip_OpenTooltipSettings)
+        tooltipSettingsHandle = h
+        return h
+    end
+
     -- ---- Edit Mode enter/exit ----------------------------------------------
     local function MSUF_Tooltip_ShowEditPreview()
         local f = MSUF_GetPlayerInfoFrame()
@@ -890,7 +953,12 @@ do
             f:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -16, 16)
             f:Show()
             f._msufEditPreviewActive = true
+            MSUF_Tooltip_EnsureSettingsHandle(f):Show()
             return
+        end
+
+        if tooltipSettingsHandle then
+            tooltipSettingsHandle:Hide()
         end
 
         -- Fill with placeholder content so the user sees size/layout
@@ -917,6 +985,9 @@ do
     local function MSUF_Tooltip_HideEditPreview()
         if tooltipDragHandle then
             tooltipDragHandle:Hide()
+        end
+        if tooltipSettingsHandle then
+            tooltipSettingsHandle:Hide()
         end
         tooltipEditPreviewActive = false
         -- Hide the tooltip preview (but not if a real tooltip is being shown outside edit mode).

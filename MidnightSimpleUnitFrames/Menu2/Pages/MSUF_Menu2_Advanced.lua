@@ -644,7 +644,46 @@ local function RefreshAurasPage(ctx)
     end
 end
 
+local AURAS_BUILD_DEPS = {
+    M = M, W = W, T = T, ns = ns,
+    floor = floor, abs = abs, max = max, min = min,
+    BoolValue = BoolValue, SetValue = SetValue, G = G,
+    ApplyAuras = ApplyAuras, AurasDB = AurasDB, AurasUnit = AurasUnit,
+    AuraScope = AuraScope, AuraShared = AuraShared, AuraLayout = AuraLayout,
+    AuraCaps = AuraCaps, AuraFilters = AuraFilters, AuraBuffFilters = AuraBuffFilters,
+    AuraDebuffFilters = AuraDebuffFilters, BossHealAuras = BossHealAuras,
+    AuraIgnoreCats = AuraIgnoreCats, AuraReminders = AuraReminders,
+    ForceAuraLayoutOverride = ForceAuraLayoutOverride, ForceAuraCapsOverride = ForceAuraCapsOverride,
+    ForceAuraFilterOverride = ForceAuraFilterOverride, ForceAuraIgnoreOverride = ForceAuraIgnoreOverride,
+    MarkReminderDirty = MarkReminderDirty, SetControlEnabled = SetControlEnabled,
+    FlowTopLeft = FlowTopLeft, FitInlineToggle = FitInlineToggle,
+    GetPandemicMode = GetPandemicMode, SetPandemicMode = SetPandemicMode,
+    AuraHasOverride = AuraHasOverride, RefreshAurasPage = RefreshAurasPage,
+    AURA_SCOPES = AURA_SCOPES, AURA_GROWTH = AURA_GROWTH, AURA_ROW_WRAP = AURA_ROW_WRAP,
+    AURA_STACK_ANCHORS = AURA_STACK_ANCHORS, AURA_IGNORE_CATEGORIES = AURA_IGNORE_CATEGORIES,
+    AURA_REMINDERS = AURA_REMINDERS, AURA_SORT_ORDER = AURA_SORT_ORDER,
+    PANDEMIC_MODES = PANDEMIC_MODES,
+}
+
 local function BuildAuras(ctx)
+    local deps = AURAS_BUILD_DEPS
+    local M, W, T, ns = deps.M, deps.W, deps.T, deps.ns
+    local floor, abs, max, min = deps.floor, deps.abs, deps.max, deps.min
+    local BoolValue, SetValue, G = deps.BoolValue, deps.SetValue, deps.G
+    local ApplyAuras, AurasDB, AurasUnit = deps.ApplyAuras, deps.AurasDB, deps.AurasUnit
+    local AuraScope, AuraShared, AuraLayout, AuraCaps = deps.AuraScope, deps.AuraShared, deps.AuraLayout, deps.AuraCaps
+    local AuraFilters, AuraBuffFilters, AuraDebuffFilters = deps.AuraFilters, deps.AuraBuffFilters, deps.AuraDebuffFilters
+    local BossHealAuras, AuraIgnoreCats, AuraReminders = deps.BossHealAuras, deps.AuraIgnoreCats, deps.AuraReminders
+    local ForceAuraLayoutOverride, ForceAuraCapsOverride = deps.ForceAuraLayoutOverride, deps.ForceAuraCapsOverride
+    local ForceAuraFilterOverride, ForceAuraIgnoreOverride = deps.ForceAuraFilterOverride, deps.ForceAuraIgnoreOverride
+    local MarkReminderDirty, SetControlEnabled = deps.MarkReminderDirty, deps.SetControlEnabled
+    local FlowTopLeft, FitInlineToggle = deps.FlowTopLeft, deps.FitInlineToggle
+    local GetPandemicMode, SetPandemicMode = deps.GetPandemicMode, deps.SetPandemicMode
+    local AuraHasOverride, RefreshAurasPage = deps.AuraHasOverride, deps.RefreshAurasPage
+    local AURA_SCOPES, AURA_GROWTH, AURA_ROW_WRAP = deps.AURA_SCOPES, deps.AURA_GROWTH, deps.AURA_ROW_WRAP
+    local AURA_STACK_ANCHORS, AURA_IGNORE_CATEGORIES = deps.AURA_STACK_ANCHORS, deps.AURA_IGNORE_CATEGORIES
+    local AURA_REMINDERS, AURA_SORT_ORDER, PANDEMIC_MODES = deps.AURA_REMINDERS, deps.AURA_SORT_ORDER, deps.PANDEMIC_MODES
+
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Unit Auras", "Auras 2.0 display, filters, layout, timer text and reminders.", 72)
     local contentW = max(320, tonumber(ctx and ctx.width) or 720)
@@ -677,16 +716,16 @@ local function BuildAuras(ctx)
         if a2.enabled == false and type(_G.MSUF_A2_HardDisableAll) == "function" then pcall(_G.MSUF_A2_HardDisableAll) end
         ApplyAuras()
     end
-    local enableUnitAuras = W.SwitchAt(top, "Unit Auras", 12, -34, 160)
+    local enableUnitAuras = W.SwitchAt(top, "Enable Unit Auras", 12, -34, 160)
     M.BindToggle(ctx, enableUnitAuras,
         function() return BoolValue(AurasDB(), "enabled", true) end,
         function(v)
             SetValue(AurasDB(), "enabled", v and true or false, ApplyUnitAuraEnabled)
         end)
     Track(sharedOnlyControls, enableUnitAuras)
-    Track(filterOverrideControls, ScopedSwitchAt(ctx, top, "Filters", 230, -34, 160, AuraFilters, "enabled", true, ForceAuraFilterOverride, ApplyAuras))
+    Track(filterOverrideControls, ScopedSwitchAt(ctx, top, "Enable filters", 230, -34, 160, AuraFilters, "enabled", true, ForceAuraFilterOverride, ApplyAuras))
     Track(sharedOnlyControls, ToggleAt(ctx, top, "Preview in Edit Mode", 12, -58, AuraShared, "showInEditMode", true, ApplyAuras))
-    Track(sharedOnlyControls, SwitchAt(ctx, top, "Masque skinning", 230, -58, 220, AuraShared, "masqueEnabled", false, ApplyAuras))
+    Track(sharedOnlyControls, SwitchAt(ctx, top, "Enable Masque skinning", 230, -58, 220, AuraShared, "masqueEnabled", false, ApplyAuras))
     Track(sharedOnlyControls, ToggleAt(ctx, top, "Hide Masque borders", 200, -82, AuraShared, "masqueHideBorder", false, ApplyAuras))
     LabelAt(top, "Units", 12, -94, 180, "GameFontNormalSmall", T.colors.muted)
     Track(sharedOnlyControls, TogglePillAt(ctx, top, "Player", unitPillPos[1].x, unitPillPos[1].y, unitPillPos[1].width, function() return AurasDB() end, "showPlayer", false, ApplyAuras))
@@ -972,7 +1011,7 @@ local function BuildAuras(ctx)
     Track(layoutOverrideControls, ScopedSliderAt(ctx, visual, "Stack text size", 272, -330, 6, 32, 1, 190, function() return AuraLayout() end, "stackTextSize", 14, ForceAuraLayoutOverride, ApplyAuras))
     DividerAt(visual, -392)
     LabelAt(visual, "Pandemic Window", 16, -408, 240, "GameFontNormal", T.colors.text)
-    Track(sharedOnlyControls, ValueSwitchAt(ctx, visual, "Pandemic Window", 12, -436, 240,
+    Track(sharedOnlyControls, ValueSwitchAt(ctx, visual, "Enable Pandemic Window", 12, -436, 240,
         function() return GetPandemicMode() ~= "OFF" end,
         function(v)
             if v then
@@ -992,7 +1031,7 @@ local function BuildAuras(ctx)
     W.Text(visual, "Best-effort: fixed 30% remaining-duration threshold for all auras. Color is configured in Global Style > Colors.", 12, -468, 650, T.colors.muted)
 
     local private = b:CollapsibleSection("a2_private", "Private Auras", 168, false)
-    Track(sharedOnlyControls, TogglePillAt(ctx, private, "Enabled", 12, -10, 90, AuraShared, "privateAurasEnabled", true, ApplyAuras))
+    Track(sharedOnlyControls, SwitchAt(ctx, private, "Enable Private Auras", 12, -10, 220, AuraShared, "privateAurasEnabled", true, ApplyAuras))
     local privateShow = ToggleAt(ctx, private, "Show (Player)", 12, -40, AuraShared, "showPrivateAurasPlayer", true, ApplyAuras)
     local privateMax = SliderAt(ctx, private, "Max", 340, -34, 0, 12, 1, 150, AuraShared, "privateAuraMaxPlayer", 4, ApplyAuras)
     local privateBorder = SliderAt(ctx, private, "Border thickness", 520, -34, 0, 10, 0.5, 150, AuraShared, "privateAuraBorderScale", 3, ApplyAuras)
@@ -1077,7 +1116,7 @@ local function BuildAuras(ctx)
 
     local reminders = b:CollapsibleSection("a2_reminders", "Buff Reminders", 310, false)
     W.Text(reminders, "Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover.", 12, -6, 620, T.colors.muted)
-    local remMaster = SwitchAt(ctx, reminders, "Buff Reminders", 12, -28, 220, AuraShared, "showReminders", true, function() MarkReminderDirty(); ApplyAuras() end)
+    local remMaster = SwitchAt(ctx, reminders, "Enable Buff Reminders", 12, -28, 220, AuraShared, "showReminders", true, function() MarkReminderDirty(); ApplyAuras() end)
     local reminderControls = {}
     for i = 1, #AURA_REMINDERS do
         local spec = AURA_REMINDERS[i]

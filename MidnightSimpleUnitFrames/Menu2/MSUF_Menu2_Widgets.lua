@@ -602,10 +602,14 @@ function W.ToggleAt(section, label, x, y, labelWidth)
 end
 
 function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
+    local switchW, switchH = 35, 18
+    local knobSize = 14
+    local knobPad = 2
+
     local btn = CreateFrame("CheckButton", nil, section)
     btn._msuf2ControlKind = "toggle"
     btn:SetPoint("TOPLEFT", x or 14, y or -38)
-    btn:SetSize(48, 24)
+    btn:SetSize(switchW, switchH)
 
     local edge = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
     edge:SetTexture((T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
@@ -627,7 +631,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     local knob = btn:CreateTexture(nil, "OVERLAY")
     knob:SetTexture((T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
     knob:SetTexCoord(0, 1, 0, 1)
-    knob:SetSize(20, 20)
+    knob:SetSize(knobSize, knobSize)
     if knob.SetSnapToPixelGrid then knob:SetSnapToPixelGrid(false) end
     if knob.SetTexelSnappingBias then knob:SetTexelSnappingBias(0) end
     btn._msuf2SwitchKnob = knob
@@ -660,7 +664,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
             knob:ClearAllPoints()
             knob:SetTexture((T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
             knob:SetTexCoord(0, 1, 0, 1)
-            knob:SetPoint(checked and "RIGHT" or "LEFT", self, checked and "RIGHT" or "LEFT", checked and -2 or 2, 0)
+            knob:SetPoint(checked and "RIGHT" or "LEFT", self, checked and "RIGHT" or "LEFT", checked and -knobPad or knobPad, 0)
             knob:SetVertexColor(kb[1], kb[2], kb[3], (kb[4] or 1) * alpha)
             if knob.SetAlpha then knob:SetAlpha(alpha) end
         end

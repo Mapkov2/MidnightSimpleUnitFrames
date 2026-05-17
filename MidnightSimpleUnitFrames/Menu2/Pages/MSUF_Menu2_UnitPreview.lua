@@ -245,6 +245,11 @@ local function SeedTextFromGeneral(db)
     if db.nameTextLayer == nil then db.nameTextLayer = 5 end
     if db.hpTextLayer == nil then db.hpTextLayer = 5 end
     if db.powerTextLayer == nil then db.powerTextLayer = 2 end
+    if db.showRaidGroupInName == nil then db.showRaidGroupInName = false end
+    if db.raidGroupNameAnchor == nil then db.raidGroupNameAnchor = "NAMERIGHT" end
+    if db.raidGroupNameOffsetX == nil then db.raidGroupNameOffsetX = 3 end
+    if db.raidGroupNameOffsetY == nil then db.raidGroupNameOffsetY = 0 end
+    if db.raidGroupNameStyle == nil then db.raidGroupNameStyle = "PAREN" end
     db.hpPowerTextOverride = nil
 end
 
@@ -1870,6 +1875,7 @@ local function BuildPreview(parent, panel, width, height)
     end
 
     box.handleName = MakeHandle(box, "name", { x = "nameOffsetX", y = "nameOffsetY", defaultX = 4, defaultY = -4, text = true, section = "text" }, "Name text", { 0.30, 0.66, 1.0 })
+    box.handleRaidGroupName = MakeHandle(box, "raidgroupname", { x = "raidGroupNameOffsetX", y = "raidGroupNameOffsetY", defaultX = 3, defaultY = 0, statusRefresh = "MSUF_RefreshRaidGroupNameFrames", section = "status" }, "Raid group", { 0.45, 0.70, 1.0 })
     box.handleHP = MakeHandle(box, "hp", { x = "hpOffsetX", y = "hpOffsetY", defaultX = -4, defaultY = -4, text = true, section = "text" }, "HP text", { 0.25, 0.90, 0.42 })
     box.handleHPLeft = MakeHandle(box, "hpLeft", { x = "hpTextLeftOffsetX", y = "hpTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP left text", { 0.25, 0.90, 0.42 })
     box.handleHPCenter = MakeHandle(box, "hpCenter", { x = "hpTextCenterOffsetX", y = "hpTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP center text", { 0.25, 0.90, 0.42 })
@@ -1881,7 +1887,7 @@ local function BuildPreview(parent, panel, width, height)
     box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true, section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
     box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "power" }, "Detached power bar", { 0.95, 0.72, 0.18 })
     box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", { 0.20, 0.90, 0.85 })
-    box.statusHandles = {}
+    box.statusHandles = { raidgroupname = box.handleRaidGroupName }
     for i = 1, #STATUS_PREVIEW do
         local spec = STATUS_PREVIEW[i]
         box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0, statusRefresh = spec.refresh, section = "status" }, spec.label, spec.color)
@@ -1999,7 +2005,6 @@ local function ApplyPreviewLayerVisibility(box)
     end
     if not nameOn then
         SetShownSafe(mock.nameText, false)
-        SetShownSafe(mock.raidGroupNameText, false)
         SetShownSafe(mock.totInlineSep, false)
         SetShownSafe(mock.totInlineText, false)
         SetShownSafe(box.handleName, false)
@@ -2034,6 +2039,7 @@ local function ApplyPreviewLayerVisibility(box)
     end
     if not statusOn then
         for _, icon in pairs(mock.icons or {}) do SetShownSafe(icon, false) end
+        SetShownSafe(mock.raidGroupNameText, false)
         for _, handle in pairs(box.statusHandles or {}) do SetShownSafe(handle, false) end
     end
     SetShownSafe(mock.bounds, boundsOn)
@@ -2493,7 +2499,10 @@ function Preview.Refresh(box, reason)
     mock.powerText:SetText(FormatMode(powerRightMode, pCur, pMax, powerPctValue, powerSepRaw, true))
     mock.powerTextPct:SetText("")
     mock.nameText:SetShown(conf.showName ~= false)
+    local raidGroupAnchor = D.NormalizeRaidGroupNameAnchor(conf.raidGroupNameAnchor)
+    local raidGroupNeedsName = raidGroupAnchor == "NAMERIGHT" or raidGroupAnchor == "NAMELEFT"
     local showRaidGroupName = conf.showRaidGroupInName == true and D.PreviewRaidGroupNameAllowed(key)
+        and ((conf.showName ~= false) or not raidGroupNeedsName)
     mock.raidGroupNameText:SetShown(showRaidGroupName)
     mock.totInlineSep:Hide()
     mock.totInlineText:Hide()
@@ -2513,7 +2522,6 @@ function Preview.Refresh(box, reason)
     mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S(tonumber(conf.nameOffsetY) or -4))
     mock.nameText:SetJustifyH(njust)
     mock.raidGroupNameText:ClearAllPoints()
-    local raidGroupAnchor = D.NormalizeRaidGroupNameAnchor(conf.raidGroupNameAnchor)
     local raidGroupX = S(tonumber(conf.raidGroupNameOffsetX) or 3)
     local raidGroupY = S(tonumber(conf.raidGroupNameOffsetY) or 0)
     if raidGroupAnchor == "NAMERIGHT" then
@@ -2811,6 +2819,9 @@ function Preview.Refresh(box, reason)
             handle:Hide()
         end
     end
+    if showRaidGroupName then
+        statusLayerAvailable = true
+    end
 
     box.layerAvailable = {
         body = true,
@@ -2829,14 +2840,11 @@ function Preview.Refresh(box, reason)
     end
 
     local nameHandleW = mock.nameText:GetStringWidth() + 10
-    if mock.raidGroupNameText and mock.raidGroupNameText:IsShown() then
-        nameHandleW = nameHandleW + mock.raidGroupNameText:GetStringWidth() + S(4)
-    end
     if mock.totInlineSep and mock.totInlineSep:IsShown() then
         nameHandleW = nameHandleW + mock.totInlineSep:GetStringWidth() + mock.totInlineText:GetStringWidth() + S(8)
     end
     box.handleName:SetSize(max(46, nameHandleW), max(18, mock.nameText:GetStringHeight() + 6))
-    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, { mock.nameText, mock.raidGroupNameText, mock.totInlineSep, mock.totInlineText }, 3) then
+    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, { mock.nameText, mock.totInlineSep, mock.totInlineText }, 3) then
         PlaceHandle(box.handleName, mock.nameText)
     end
     local function PlaceTextSlotHandle(handle, region)
@@ -2852,6 +2860,7 @@ function Preview.Refresh(box, reason)
             PlaceHandle(handle, region)
         end
     end
+    PlaceTextSlotHandle(box.handleRaidGroupName, mock.raidGroupNameText)
     if UnitPreviewTextMovesTogether(key, "hp") then
         SetShownSafe(box.handleHPLeft, false)
         SetShownSafe(box.handleHPCenter, false)

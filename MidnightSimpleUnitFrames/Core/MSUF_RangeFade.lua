@@ -147,6 +147,12 @@ do
         return (general and general.perfLiteRangeFadeFB == true) and true or false
     end
 
+    local function RangeFadeGloballyEnabled()
+        local db = _G.MSUF_DB
+        local general = db and db.general
+        return not (general and general.rangeFadeEnabled == false)
+    end
+
     -- Frame resolver: one canonical lookup per unit token.
     -- Target lives at _G.MSUF_target. Focus/Boss live in MSUF_UnitFrames.
     local function GetFrame(unit)
@@ -398,6 +404,7 @@ do
     local TargetRefreshSpellState
 
     local function TargetGetConf()
+        if not RangeFadeGloballyEnabled() then return nil end
         local db = _G.MSUF_DB
         local t = db and db.target
         if not t or t.rangeFadeEnabled ~= true then return nil end
@@ -739,7 +746,7 @@ do
     function _G.MSUF_RangeFade_EvaluateActive(force)
         local db = _G.MSUF_DB
         local t = db and db.target
-        local want = (t and t.rangeFadeEnabled == true)
+        local want = RangeFadeGloballyEnabled() and (t and t.rangeFadeEnabled == true)
         if _G.MSUF_UnitEditModeActive == true then want = false end
         if want then
             RebuildPrimaries()
@@ -790,6 +797,7 @@ do
 
     local function OnFocusFriendlyRange(_, event, arg1)
         if arg1 and arg1 ~= "focus" then return end
+        if not RangeFadeGloballyEnabled() then ClearMul("focus", "focus"); return end
         local db = _G.MSUF_DB
         local conf = db and db.focus
         if not conf or conf.rangeFadeEnabled ~= true then ClearMul("focus", "focus"); return end
@@ -820,6 +828,7 @@ do
 
     local function RebuildPollList()
         _pollCount = 0
+        if not RangeFadeGloballyEnabled() then return end
         if _G.MSUF_UnitEditModeActive == true then return end
 
         local db = _G.MSUF_DB
@@ -893,6 +902,7 @@ do
     end
 
     function HasActiveEnemyFocusRangeUnit()
+        if not RangeFadeGloballyEnabled() then return false end
         if _G.MSUF_UnitEditModeActive == true then return false end
         local db = _G.MSUF_DB
         local conf = db and db.focus
@@ -959,6 +969,7 @@ do
     end
 
     function HasActiveBossRangeUnit()
+        if not RangeFadeGloballyEnabled() then return false end
         if _G.MSUF_UnitEditModeActive == true then return false end
         local db = _G.MSUF_DB
         local conf = db and db.boss
@@ -978,6 +989,7 @@ do
     -- Smart-sleep: only run ticker when enemy units need polling.
     -- Friendly focus = event-driven → no ticker needed.
     function NeedsPoll()
+        if not RangeFadeGloballyEnabled() then return false end
         if _G.MSUF_UnitEditModeActive == true then return false end
         if _pollCount > 0 then return true end
         if HasActiveEnemyFocusRangeUnit() then return true end
@@ -997,6 +1009,7 @@ do
     end
 
     function RequestBurst(duration)
+        if not RangeFadeGloballyEnabled() then return end
         if _G.MSUF_UnitEditModeActive == true then return end
         if not NeedsPoll() then return end
         duration = tonumber(duration) or _BURST_DURATION
@@ -1012,6 +1025,12 @@ do
     end
 
     local function RefreshEnemyFocusBossRange(burstDuration)
+        if not RangeFadeGloballyEnabled() then
+            StopTicker()
+            ClearMul("focus", "focus")
+            for i = 1, 5 do ClearMul(_bossUnits[i], "boss") end
+            return
+        end
         if _G.MSUF_UnitEditModeActive == true then return end
         SyncTicker()
         if NeedsPoll() then
@@ -1023,6 +1042,7 @@ do
     end
 
     local function IsTrackedFBUnit(unit)
+        if not RangeFadeGloballyEnabled() then return false end
         local db = _G.MSUF_DB
         local focusOn = db and db.focus and db.focus.rangeFadeEnabled == true and not UseLiteFBRuntime()
         local bossOn  = db and db.boss  and db.boss.rangeFadeEnabled  == true and not UseLiteFBRuntime() and HasAnyBossRangeFrame()
@@ -1034,6 +1054,7 @@ do
     end
 
     local function RangeFadeFBWanted()
+        if not RangeFadeGloballyEnabled() then return false end
         if UseLiteFBRuntime() then return false end
         local db = _G.MSUF_DB
         if db and db.focus and db.focus.rangeFadeEnabled == true then return true end
@@ -1228,6 +1249,14 @@ do
     end
 
     RefreshFBEventLifecycle = function()
+        if not RangeFadeGloballyEnabled() then
+            if _fbEvtFrame then
+                _fbEvtFrame:UnregisterAllEvents()
+            end
+            for k in pairs(_fbEvents) do _fbEvents[k] = nil end
+            return false, false
+        end
+
         local db = _G.MSUF_DB
         local focusOn = db and db.focus and db.focus.rangeFadeEnabled == true and not UseLiteFBRuntime()
         local bossOn  = db and db.boss  and db.boss.rangeFadeEnabled  == true and not UseLiteFBRuntime() and HasAnyBossRangeFrame()
@@ -1278,6 +1307,8 @@ do
     end
 
     function _G.MSUF_RangeFadeFB_Reset()
+        ClearMul("focus", "focus")
+        for i = 1, 5 do ClearMul(_bossUnits[i], "boss") end
         for k in pairs(_state) do _state[k] = nil end
         _pollCount = 0
         _mulT.focus = 1

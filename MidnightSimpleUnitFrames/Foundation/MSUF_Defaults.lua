@@ -463,6 +463,9 @@ end
 if g.showMinimapIcon == nil then
     g.showMinimapIcon = true
 end
+if g.rangeFadeEnabled == nil then
+    g.rangeFadeEnabled = true
+end
 if g.rangeFadePortrait == nil then
     g.rangeFadePortrait = false
 end
@@ -1355,6 +1358,21 @@ end
     end
     if g.levelIndicatorLayer == nil then
         g.levelIndicatorLayer = 7
+    end
+    if g.showRaidGroupInName == nil then
+        g.showRaidGroupInName = false
+    end
+    if g.raidGroupNameAnchor == nil then
+        g.raidGroupNameAnchor = 'NAMERIGHT'
+    end
+    if g.raidGroupNameOffsetX == nil then
+        g.raidGroupNameOffsetX = 3
+    end
+    if g.raidGroupNameOffsetY == nil then
+        g.raidGroupNameOffsetY = 0
+    end
+    if g.raidGroupNameStyle == nil then
+        g.raidGroupNameStyle = 'PAREN'
     end
     -- Misc -> Indicators
     if g.showIncomingResIndicator == nil then

@@ -154,8 +154,18 @@ local function _AlphaShouldRangeFadePortrait()
     return (g and g.rangeFadePortrait == true) and true or false
 end
 
+local function _AlphaRangeFadeGloballyEnabled()
+    local db = MSUF_DB
+    local g = db and db.general
+    return not (g and g.rangeFadeEnabled == false)
+end
+
+local function _AlphaUnitRangeFadeEnabled(conf)
+    return conf and conf.rangeFadeEnabled == true and _AlphaRangeFadeGloballyEnabled()
+end
+
 local function _AlphaRangeFadeUsesHealth(conf)
-    return conf and _AlphaNormalizeLayerMode(conf.rangeFadeLayerMode) == "health"
+    return _AlphaUnitRangeFadeEnabled(conf) and _AlphaNormalizeLayerMode(conf.rangeFadeLayerMode) == "health"
 end
 
 local function _AlphaSetPortraitAlpha(frame, a)
@@ -498,7 +508,7 @@ end
 
 local function MSUF_Alpha_GetStaticMode(frame, conf)
     if not conf or conf.loadCondActive == true then return nil end
-    if conf.rangeFadeEnabled == true then return nil end
+    if _AlphaUnitRangeFadeEnabled(conf) then return nil end
 
     local sync = conf.alphaSyncBoth
     if sync == nil then sync = conf.alphaSync end
@@ -528,7 +538,7 @@ local function MSUF_Alpha_GetStaticMode(frame, conf)
 end
 
 local function _AlphaIsTrivialFlat(conf)
-    if not conf or conf.loadCondActive == true or conf.rangeFadeEnabled == true then return false end
+    if not conf or conf.loadCondActive == true or _AlphaUnitRangeFadeEnabled(conf) then return false end
     if conf.alphaExcludeTextPortrait == true then return false end
     local aIn = _AlphaClamp01(tonumber(conf.alphaInCombat) or 1)
     local sync = conf.alphaSyncBoth
@@ -840,7 +850,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
         local rangeMul = 1
         local rangeHealthMode = _AlphaRangeFadeUsesHealth(conf)
         local rfT = _rfMulTable
-        if rfT then
+        if rfT and _AlphaRangeFadeGloballyEnabled() then
             local m = rfT[key] or rfT[unit]
             if m and m < 1 then
                 if m < 0 then m = 0 end
@@ -893,7 +903,7 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
 
     local rangeMul = 1
     local rfT = _rfMulTable
-    if rfT then
+    if rfT and _AlphaRangeFadeGloballyEnabled() then
         local m = rfT[key] or rfT[unit]
         if m and m < 1 then
             if m < 0 then m = 0 end
@@ -957,6 +967,7 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
     local m = tonumber(mul)
     if type(m) ~= "number" then m = 1 end
     if m < 0 then m = 0 elseif m > 1 then m = 1 end
+    if not _AlphaRangeFadeGloballyEnabled() then m = 1 end
 
     local rangeHealthMode = _AlphaRangeFadeUsesHealth(conf)
     if frame._msufAlphaBaseMode == "layered" and frame._msufAlphaSupportsLayered then

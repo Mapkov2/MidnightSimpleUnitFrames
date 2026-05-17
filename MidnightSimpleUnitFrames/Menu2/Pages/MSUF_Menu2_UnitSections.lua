@@ -1018,7 +1018,7 @@ local function BuildText(ctx, builder, unit)
     end
     local function NamePreviewText()
         local text = sampleNames[unit] or UnitTopLabel(unit)
-        if RaidGroupNameAllowed(unit) and ReadBool(unit, "showRaidGroupInName", false) then
+        if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then
             text = text .. " " .. RaidGroupNamePreviewValue()
         end
         return text
@@ -1199,7 +1199,7 @@ local function BuildText(ctx, builder, unit)
             })
         else
             local anchor = BadgeValue(OptionText(TEXT_ANCHORS, ReadText(unit, "nameTextAnchor", "LEFT")))
-            if RaidGroupNameAllowed(unit) and ReadBool(unit, "showRaidGroupInName", false) then
+            if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then
                 anchor = anchor .. " + Group"
             end
             W.SetCollapsibleBadges(sec, {
@@ -1260,17 +1260,6 @@ local function BuildText(ctx, builder, unit)
     M.BindSlider(ctx, nameSize,
         function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
         function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
-
-    local showRaidGroupInName
-    if RaidGroupNameAllowed(unit) then
-        showRaidGroupInName = SwitchOrToggle(nameTab, "Raid group in name", rightX, -170, rightSliderW)
-        M.BindToggle(ctx, showRaidGroupInName,
-            function() return ReadBool(unit, "showRaidGroupInName", false) end,
-            function(v)
-                SetText(unit, "showRaidGroupInName", v and true or false, "MSUF2_RAID_GROUP_NAME")
-                if RefreshTextControlState then RefreshTextControlState() end
-            end)
-    end
 
     SectionLabel(hpTab, "HP Text", leftX, -4)
     PreviewText(hpTab, "630.0k - 63%", rightX, -4, rightW)
@@ -1562,7 +1551,6 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(nameSize, nameOn)
         SetControlEnabled(nameX, nameOn)
         SetControlEnabled(nameY, nameOn)
-        if showRaidGroupInName then SetControlEnabled(showRaidGroupInName, nameOn) end
         SetControlEnabled(advNameLayer, nameOn)
         SetControlEnabled(showHPText, true)
         SetControlEnabled(hpLeft, hpOn)
@@ -2128,7 +2116,7 @@ local function BuildCastbar(ctx, builder, unit)
     local textX = rightX + 86
     local RefreshCastbarEnabled
 
-    local enabledLabel = (unit == "boss") and "Boss castbars" or (UnitTopLabel(unit) .. " castbar")
+    local enabledLabel = "Enable Castbar"
     local timeLabel = (unit == "boss") and "Show boss cast time" or ("Show " .. UnitTopLabel(unit):lower() .. " cast time")
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(sec, -130, "Enable", 88)
     if castbarNoticeButton then
@@ -2488,12 +2476,32 @@ local function BuildStatus(ctx, builder, unit)
         "show all", "all indicators", "preview all", "all status icons",
     })
 
+    local function LayoutStatusControls(inlineName)
+        if inlineName then
+            PlaceDropdown(raidGroupStyle, rightX, -42, rightW)
+            PlaceDropdown(anchor, leftX, -184, leftW)
+            PlaceSlider(x, leftX, -256, leftW)
+            PlaceSlider(y, rightX, -256, rightW)
+            PlaceButton(reset, rightX, -112, min(220, rightW))
+            return
+        end
+        PlaceDropdown(symbol, rightX, -184, rightW)
+        PlaceDropdown(raidGroupStyle, rightX, -184, 180)
+        PlaceSlider(size, leftX, -154, leftW)
+        PlaceDropdown(anchor, leftX, -226, leftW)
+        PlaceSlider(x, leftX, -298, leftW)
+        PlaceSlider(y, rightX, -298, rightW)
+        PlaceSlider(layer, leftX, -370, leftW)
+        PlaceButton(reset, rightX, -226, 150)
+    end
+
     local function RefreshStatusSectionState()
         local spec = CurrentStatusSpec(unit)
         local inlineName = spec and spec.inlineName == true
         local hasSymbol = spec and spec.symbol
         local showStateStyle = hasSymbol and true or false
         local showTestMode = spec and spec.statusRuntime and true or false
+        LayoutStatusControls(inlineName)
         if W.SetControlShown then
             W.SetControlShown(midnight, showStateStyle)
             W.SetControlShown(symbol, hasSymbol)
@@ -2504,7 +2512,7 @@ local function BuildStatus(ctx, builder, unit)
             W.SetControlShown(x, true)
             W.SetControlShown(y, true)
             W.SetControlShown(layer, not inlineName)
-            W.SetControlShown(reset, not inlineName)
+            W.SetControlShown(reset, spec ~= nil)
             W.SetControlShown(previewLabel, not inlineName)
             W.SetControlShown(current, not inlineName)
             W.SetControlShown(all, not inlineName)
@@ -2518,7 +2526,7 @@ local function BuildStatus(ctx, builder, unit)
             if x then x:SetShown(true) end
             if y then y:SetShown(true) end
             if layer then layer:SetShown(not inlineName) end
-            if reset then reset:SetShown(not inlineName) end
+            if reset then reset:SetShown(spec ~= nil) end
             if previewLabel then previewLabel:SetShown(not inlineName) end
             if current then current:SetShown(not inlineName) end
             if all then all:SetShown(not inlineName) end
@@ -2531,7 +2539,7 @@ local function BuildStatus(ctx, builder, unit)
         SetControlEnabled(x, isEnabled)
         SetControlEnabled(y, isEnabled)
         SetControlEnabled(layer, (not inlineName) and isEnabled)
-        SetControlEnabled(reset, spec ~= nil and not inlineName)
+        SetControlEnabled(reset, spec ~= nil)
 
         SetSectionHeaderStatus(sec, nil)
     end

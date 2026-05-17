@@ -840,6 +840,7 @@ local MISC_GENERAL_KEYS = {
     hardKillBlizzardPlayerFrame = true,
     showMinimapIcon = true,
     playTargetSelectLostSounds = true,
+    rangeFadeEnabled = true,
     rangeFadePortrait = true,
 }
 
