@@ -2315,7 +2315,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     end
 
     local entries = data.entries
-    local maxEntries = min(#entries, 3)
+    local maxEntries = min(#entries, 4)
     for entryIndex = 1, maxEntries do
         local entry = entries[entryIndex]
         if type(entry) == "table" then

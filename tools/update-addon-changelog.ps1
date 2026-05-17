@@ -4,7 +4,7 @@ param(
     [string]$OutputPath = "MidnightSimpleUnitFrames/Foundation/MSUF_Changelog.lua",
     [string]$Version,
     [string]$PreviousVersion,
-    [int]$ReleaseCount = 3
+    [int]$ReleaseCount = 4
 )
 
 Set-StrictMode -Version Latest

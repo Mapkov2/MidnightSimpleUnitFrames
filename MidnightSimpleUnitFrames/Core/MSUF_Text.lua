@@ -260,67 +260,117 @@ local function _MSUF_AppendAbsorb(text, absorbText, absorbStyle)
     if absorbStyle == "PAREN" then return text .. " (" .. absorbText .. ")" end
     return text .. " " .. absorbText
 end
--- Secret-percent fallback (rare: <0.1% of calls). Uses C-side SetFormattedText.
-local function _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, absorbText, absorbStyle, maxText)
+local _MSUF_HP_SECRET_KIND = {
+    CURRENT = 0,
+    PERCENT = 1,
+    PERCENTCUR = 2,
+    CURMAXPERCENT = 3,
+    PERCENTMAXCUR = 4,
+    MAXPERCENT = 5,
+    PERCENTMAX = 6,
+    PERCENTCURMAX = 7,
+    CURPERCENT = 8,
+}
+
+local function _MSUF_BuildHpSecretFmt(mode, sep)
     mode = ns.Text.NormalizeHpTextMode(mode)
+    sep = sep or " "
+    local kind = _MSUF_HP_SECRET_KIND[mode] or 8
+    local base
+    if kind == 0 then
+        base = nil
+    elseif kind == 1 then
+        base = "%.1f%%"
+    elseif kind == 2 then
+        base = "%.1f%%" .. sep .. "%s"
+    elseif kind == 3 then
+        base = "%s" .. sep .. "%s" .. sep .. "%.1f%%"
+    elseif kind == 4 then
+        base = "%.1f%%" .. sep .. "%s" .. sep .. "%s"
+    elseif kind == 5 then
+        base = "%s" .. sep .. "%.1f%%"
+    elseif kind == 6 then
+        base = "%.1f%%" .. sep .. "%s"
+    elseif kind == 7 then
+        base = "%.1f%%" .. sep .. "%s" .. sep .. "%s"
+    else
+        base = "%s" .. sep .. "%.1f%%"
+    end
+    return {
+        mode = mode,
+        sep = sep,
+        kind = kind,
+        base = base,
+        space = base and (base .. " %s") or nil,
+        paren = base and (base .. " (%s)") or nil,
+    }
+end
+
+-- Secret-percent fallback (rare: <0.1% of calls). Uses C-side SetFormattedText.
+local function _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, absorbText, absorbStyle, maxText, secretFmt)
+    local fmt = secretFmt
+    if not fmt then
+        fmt = _MSUF_BuildHpSecretFmt(mode, sep)
+    end
+    local kind = fmt.kind
     maxText = maxText or ""
-    if mode == "CURRENT" then
+    if kind == 0 then
         ns.Text.Set(fs, _MSUF_AppendAbsorb(h, absorbText, absorbStyle), true)
-    elseif mode == "PERCENT" then
+    elseif kind == 1 then
+        local outFmt = absorbText and ((absorbStyle == "PAREN") and fmt.paren or fmt.space) or fmt.base
         if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sfx, hpPct, absorbText)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%.1f%%", hpPct)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct)
         end
-    elseif mode == "PERCENTCUR" then
+    elseif kind == 2 then
+        local outFmt = absorbText and ((absorbStyle == "PAREN") and fmt.paren or fmt.space) or fmt.base
         if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s" .. sfx, hpPct, h, absorbText)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, h, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s", hpPct, h)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, h)
         end
-    elseif mode == "CURMAXPERCENT" then
+    elseif kind == 3 then
+        local outFmt = absorbText and ((absorbStyle == "PAREN") and fmt.paren or fmt.space) or fmt.base
         if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. "%s" .. sep .. "%.1f%%" .. sfx, h, maxText, hpPct, absorbText)
+            ns.Text.SetFormatted(fs, true, outFmt, h, maxText, hpPct, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. "%s" .. sep .. "%.1f%%", h, maxText, hpPct)
+            ns.Text.SetFormatted(fs, true, outFmt, h, maxText, hpPct)
         end
-    elseif mode == "PERCENTMAXCUR" then
+    elseif kind == 4 then
+        local outFmt = absorbText and ((absorbStyle == "PAREN") and fmt.paren or fmt.space) or fmt.base
         if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s" .. sep .. "%s" .. sfx, hpPct, maxText, h, absorbText)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, maxText, h, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s" .. sep .. "%s", hpPct, maxText, h)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, maxText, h)
         end
-    elseif mode == "MAXPERCENT" then
+    elseif kind == 5 then
+        local outFmt = absorbText and ((absorbStyle == "PAREN") and fmt.paren or fmt.space) or fmt.base
         if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. "%.1f%%" .. sfx, maxText, hpPct, absorbText)
+            ns.Text.SetFormatted(fs, true, outFmt, maxText, hpPct, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. "%.1f%%", maxText, hpPct)
+            ns.Text.SetFormatted(fs, true, outFmt, maxText, hpPct)
         end
-    elseif mode == "PERCENTMAX" then
+    elseif kind == 6 then
+        local outFmt = absorbText and ((absorbStyle == "PAREN") and fmt.paren or fmt.space) or fmt.base
         if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s" .. sfx, hpPct, maxText, absorbText)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, maxText, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s", hpPct, maxText)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, maxText)
         end
-    elseif mode == "PERCENTCURMAX" then
+    elseif kind == 7 then
+        local outFmt = absorbText and ((absorbStyle == "PAREN") and fmt.paren or fmt.space) or fmt.base
         if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s" .. sep .. "%s" .. sfx, hpPct, h, maxText, absorbText)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, h, maxText, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%.1f%%" .. sep .. "%s" .. sep .. "%s", hpPct, h, maxText)
+            ns.Text.SetFormatted(fs, true, outFmt, hpPct, h, maxText)
         end
     else
+        local outFmt = absorbText and ((absorbStyle == "PAREN") and fmt.paren or fmt.space) or fmt.base
         if absorbText then
-            local sfx = (absorbStyle == "PAREN") and " (%s)" or " %s"
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. "%.1f%%" .. sfx, h, hpPct, absorbText)
+            ns.Text.SetFormatted(fs, true, outFmt, h, hpPct, absorbText)
         else
-            ns.Text.SetFormatted(fs, true, "%s" .. sep .. "%.1f%%", h, hpPct)
+            ns.Text.SetFormatted(fs, true, outFmt, h, hpPct)
         end
     end
 end
@@ -350,18 +400,18 @@ local function _MSUF_PctToStr1D(pct)
     end
     return _string_format("%.1f%%", pct)
 end
-local function _MSUF_RenderHpSlot(self, fs, mode, fieldKey, absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr)
+local function _MSUF_RenderHpSlot(self, fs, mode, fieldKey, absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr, slotNeedsPct, secretFmt)
     if not fs or mode == "NONE" then
         if fs then ns.Text.Set(fs, "", false) end
         return
     end
     local slotAbsorb = (absorbField == fieldKey) and absorbText or nil
-    if not hasPct and _MSUF_HpModeUsesPercent(mode) then
+    if not hasPct and slotNeedsPct then
         ns.Text.Set(fs, _MSUF_AppendAbsorb(h, slotAbsorb, absorbStyle), true)
         return
     end
-    if _MSUF_HpModeUsesPercent(mode) and spec.hpNeedsPct and not hpPctStr then
-        _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, slotAbsorb, absorbStyle, maxText)
+    if slotNeedsPct and not hpPctStr then
+        _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, slotAbsorb, absorbStyle, maxText, secretFmt)
         return
     end
     local deficitText = (mode == "DEFICIT") and (_MSUF_HpMissingText(self) or hpDeficitStr) or nil
@@ -404,9 +454,9 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     self._msufLastH = nil
     self._msufLastPctS = hpPctStr
 
-    _MSUF_RenderHpSlot(self, self.hpTextLeft, hpLeftMode, "left", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr)
-    _MSUF_RenderHpSlot(self, self.hpTextCenter, hpCenterMode, "center", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr)
-    _MSUF_RenderHpSlot(self, self.hpText, hpRightMode, "right", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr)
+    _MSUF_RenderHpSlot(self, self.hpTextLeft, hpLeftMode, "left", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr, spec.hpLeftNeedsPct, spec.hpLeftSecretFmt)
+    _MSUF_RenderHpSlot(self, self.hpTextCenter, hpCenterMode, "center", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr, spec.hpCenterNeedsPct, spec.hpCenterSecretFmt)
+    _MSUF_RenderHpSlot(self, self.hpText, hpRightMode, "right", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr, spec.hpRightNeedsPct, spec.hpRightSecretFmt)
  end
 -- PERF: Cache function refs + constants at file scope (called 50-200x/sec in combat).
 local _MSUF_UnitPowerPercent = (type(UnitPowerPercent) == "function") and UnitPowerPercent or nil
@@ -579,12 +629,16 @@ function ns.Text.EnsureSpec(self)
     if rawPSep == nil then rawPSep = g.powerTextSeparator end
     local rawHpSep = (eff and eff.hpTextSeparator)
     if rawHpSep == nil then rawHpSep = g.hpTextSeparator end
+    local hpSep = ns.Text._SepToken(hpSepRaw, nil)
     -- Aggregate needs across the three independent Power text slots.
     local pNeedsCur, pNeedsMax, pNeedsPct = _MSUF_PowerNeedsForSlots(pLeftMode, pCenterMode, pRightMode)
     -- PERF: HP split — precompute once per spec build to avoid calling
     -- _ShouldSplitHP on every RenderHpMode (10-50×/s per unit). Config changes
     -- invalidate the spec via _msufTextSpec = nil, so the cached value stays correct.
-    local hpNeedsPct = _MSUF_HpModeUsesPercent(hpLeftMode) or _MSUF_HpModeUsesPercent(hpCenterMode) or _MSUF_HpModeUsesPercent(hpRightMode)
+    local hpLeftNeedsPct = _MSUF_HpModeUsesPercent(hpLeftMode)
+    local hpCenterNeedsPct = _MSUF_HpModeUsesPercent(hpCenterMode)
+    local hpRightNeedsPct = _MSUF_HpModeUsesPercent(hpRightMode)
+    local hpNeedsPct = hpLeftNeedsPct or hpCenterNeedsPct or hpRightNeedsPct
     local hpNeedsCurrent = _MSUF_HpModeUsesCurrent(hpLeftMode) or _MSUF_HpModeUsesCurrent(hpCenterMode) or _MSUF_HpModeUsesCurrent(hpRightMode)
     local hpNeedsMax = _MSUF_HpModeUsesMax(hpLeftMode) or _MSUF_HpModeUsesMax(hpCenterMode) or _MSUF_HpModeUsesMax(hpRightMode)
     local hpNeedsDeficit = (hpLeftMode == "DEFICIT" or hpCenterMode == "DEFICIT" or hpRightMode == "DEFICIT")
@@ -598,7 +652,13 @@ function ns.Text.EnsureSpec(self)
         hpLeftMode = hpLeftMode,
         hpCenterMode = hpCenterMode,
         hpRightMode = hpRightMode,
-        hpSep = ns.Text._SepToken(hpSepRaw, nil),
+        hpSep = hpSep,
+        hpLeftNeedsPct = hpLeftNeedsPct,
+        hpCenterNeedsPct = hpCenterNeedsPct,
+        hpRightNeedsPct = hpRightNeedsPct,
+        hpLeftSecretFmt = hpLeftNeedsPct and _MSUF_BuildHpSecretFmt(hpLeftMode, hpSep) or nil,
+        hpCenterSecretFmt = hpCenterNeedsPct and _MSUF_BuildHpSecretFmt(hpCenterMode, hpSep) or nil,
+        hpRightSecretFmt = hpRightNeedsPct and _MSUF_BuildHpSecretFmt(hpRightMode, hpSep) or nil,
         hpNeedsPct = hpNeedsPct,
         hpNeedsCurrent = hpNeedsCurrent,
         hpNeedsMax = hpNeedsMax,

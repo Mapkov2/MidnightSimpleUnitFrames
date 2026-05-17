@@ -3014,11 +3014,11 @@ end
 -- duplicate UnitHealth/UnitHealthMax C-calls. nil/omitted â†’ fetch as before.
 ------------------------------------------------------------------------
 local function ApplyHealthColor(f, kind, unit, hp, hpMax)
-    if not f.health then return end
+    if not f.health then return false end
     if f._msufSIHealthColorR then
         f.health:SetStatusBarColor(f._msufSIHealthColorR, f._msufSIHealthColorG, f._msufSIHealthColorB, 1)
         f._msufGFHCStamp = nil
-        return
+        return true
     end
     local c = f._c
     if not c then GF.BuildFrameCache(f); c = f._c end
@@ -3028,29 +3028,31 @@ local function ApplyHealthColor(f, kind, unit, hp, hpMax)
         if f._msufGFHCStamp ~= "dark" then
             f._msufGFHCStamp = "dark"
             f.health:SetStatusBarColor(c.darkR, c.darkG, c.darkB, 1)
+            return true
         end
-        return
+        return false
     end
     if mode == "unified" then
         if f._msufGFHCStamp ~= "unified" then
             f._msufGFHCStamp = "unified"
             f.health:SetStatusBarColor(c.unifiedR, c.unifiedG, c.unifiedB, 1)
+            return true
         end
-        return
+        return false
     end
     if mode == "CLASS" and unit then
         local cls = f._msufGFClass
         if not cls then local _; _, cls = UnitClass(unit); f._msufGFClass = cls end
         if cls then
-            if f._msufGFHCStamp == cls then return end
+            if f._msufGFHCStamp == cls then return false end
             f._msufGFHCStamp = cls
             local fn = c.classFn
             if type(fn) == "function" then
                 local r, g, b = fn(cls)
-                if r then f.health:SetStatusBarColor(r, g, b, 1); return end
+                if r then f.health:SetStatusBarColor(r, g, b, 1); return true end
             end
             local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[cls]
-            if cc then f.health:SetStatusBarColor(cc.r, cc.g, cc.b, 1); return end
+            if cc then f.health:SetStatusBarColor(cc.r, cc.g, cc.b, 1); return true end
         end
     end
     if mode == "GRADIENT" and unit then
@@ -3067,7 +3069,7 @@ local function ApplyHealthColor(f, kind, unit, hp, hpMax)
                 f._msufGFGradGQ = nil
                 f.health:SetStatusBarColor(r, g, b, 1)
                 f._msufGFHCStamp = "gradient"
-                return
+                return true
             end
         end
         -- Fallback: Lua-side (non-secret values only). Reuse caller-provided
@@ -3079,8 +3081,9 @@ local function ApplyHealthColor(f, kind, unit, hp, hpMax)
             if f._msufGFHCStamp ~= "grad_secret" then
                 f._msufGFHCStamp = "grad_secret"
                 f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+                return true
             end
-            return
+            return false
         end
         local hpN, hpMaxN = tonumber(hp), tonumber(hpMax)
         if hpN and hpMaxN and hpMaxN > 0 then
@@ -3093,26 +3096,32 @@ local function ApplyHealthColor(f, kind, unit, hp, hpMax)
                 f._msufGFGradRQ = rQ
                 f._msufGFGradGQ = gQ
                 f.health:SetStatusBarColor(r, g, 0, 1)
+                return true
             end
         else
             if f._msufGFHCStamp ~= "grad_default" then
                 f._msufGFHCStamp = "grad_default"
                 f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+                return true
             end
         end
-        return
+        return false
     end
     if f._msufGFHCStamp ~= "custom" then
         f._msufGFHCStamp = "custom"
         f.health:SetStatusBarColor(c.customR, c.customG, c.customB, 1)
+        return true
     end
+    return false
 end
 
-local function ApplyHealthAlphaAfterColor(f, kind)
+local function ApplyHealthAlphaAfterColor(f, kind, colorChanged)
     if not f or not f.health or not GF.ApplyHealthBarAlpha then return end
     kind = kind or f._msufGFKind or "party"
     if f._msufGFHealthAlphaDynamic == true then
         GF.ApplyHealthBarAlpha(f, kind)
+        f._msufGFHealthAlphaLast = nil
+        f._msufGFHealthAlphaPreserveLast = nil
         return
     end
     local c = f._c
@@ -3129,13 +3138,21 @@ local function ApplyHealthAlphaAfterColor(f, kind)
         preserve = conf and conf.alphaPreserveHPColor == true
     end
     if alpha < 0.999 or preserve then
+        if not colorChanged and f._msufGFHealthAlphaLast == alpha and f._msufGFHealthAlphaPreserveLast == preserve then
+            return
+        end
         GF.ApplyHealthBarAlpha(f, kind)
+        f._msufGFHealthAlphaLast = alpha
+        f._msufGFHealthAlphaPreserveLast = preserve
+    else
+        f._msufGFHealthAlphaLast = nil
+        f._msufGFHealthAlphaPreserveLast = nil
     end
 end
 
 local function ApplyHealthColorWithAlpha(f, kind, unit, hp, hpMax)
-    ApplyHealthColor(f, kind, unit, hp, hpMax)
-    ApplyHealthAlphaAfterColor(f, kind)
+    local colorChanged = ApplyHealthColor(f, kind, unit, hp, hpMax)
+    ApplyHealthAlphaAfterColor(f, kind, colorChanged)
 end
 
 ------------------------------------------------------------------------

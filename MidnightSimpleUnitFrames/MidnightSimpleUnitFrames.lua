@@ -3589,6 +3589,68 @@ local function MSUF_NumberToTextFast(v)
     if abbr then return abbr(v) end
     return tostring(v)
 end
+local function MSUF_ClearHpTextFastSignature(self)
+    self._msufHpTextFastReady = nil
+    self._msufHpTextFastSpec = nil
+    self._msufHpTextFastH = nil
+    self._msufHpTextFastMax = nil
+    self._msufHpTextFastPctKey = nil
+    self._msufHpTextFastHasPct = nil
+    self._msufHpTextFastAbsorb = nil
+    self._msufHpTextFastAbsorbStyle = nil
+    self._msufHpTextFastShowAbsorb = nil
+end
+local function MSUF_HpPctFastKey(pct)
+    local isv = _MSUF_issecretvalue
+    if pct == nil or (isv and isv(pct)) or type(pct) ~= "number" then return nil end
+    return math_floor(pct * 10 + 0.5)
+end
+local function MSUF_HpTextFastComparable(v)
+    local isv = _MSUF_issecretvalue
+    return not (v ~= nil and isv and isv(v))
+end
+local function MSUF_ShouldSkipHpTextFastRender(self, spec, hpStr, hpPct, hasPct, hpMaxStr, absorbText, absorbStyle, showAbsorb)
+    if not self or not spec then return false end
+    if spec.hpNeedsDeficit == true then return false end
+    if not MSUF_HpTextFastComparable(hpStr)
+        or not MSUF_HpTextFastComparable(hpMaxStr)
+        or not MSUF_HpTextFastComparable(absorbText)
+    then
+        return false
+    end
+
+    local pctKey
+    if hasPct then
+        pctKey = MSUF_HpPctFastKey(hpPct)
+        if pctKey == nil and spec.hpNeedsPct == true then return false end
+    elseif spec.hpNeedsPct == true then
+        return false
+    end
+
+    if self._msufHpTextFastReady
+        and self._msufHpTextFastSpec == spec
+        and self._msufHpTextFastH == hpStr
+        and self._msufHpTextFastMax == hpMaxStr
+        and self._msufHpTextFastPctKey == pctKey
+        and self._msufHpTextFastHasPct == hasPct
+        and self._msufHpTextFastAbsorb == absorbText
+        and self._msufHpTextFastAbsorbStyle == absorbStyle
+        and self._msufHpTextFastShowAbsorb == showAbsorb
+    then
+        return true
+    end
+
+    self._msufHpTextFastReady = true
+    self._msufHpTextFastSpec = spec
+    self._msufHpTextFastH = hpStr
+    self._msufHpTextFastMax = hpMaxStr
+    self._msufHpTextFastPctKey = pctKey
+    self._msufHpTextFastHasPct = hasPct
+    self._msufHpTextFastAbsorb = absorbText
+    self._msufHpTextFastAbsorbStyle = absorbStyle
+    self._msufHpTextFastShowAbsorb = showAbsorb
+    return false
+end
 -- Icon layout runtime moved to Core/MSUF_IconLayoutRuntime.lua.
 -- 12.0: UFCore now resolves directly to ns.Bars.HealthCalcUpdate. Thin compat wrapper.
 local _cachedSpecHealth = nil
@@ -3604,6 +3666,7 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     local unit = self.unit
     local conf = self.cachedConfig
     if self.showHPText == false or hp == nil then
+        MSUF_ClearHpTextFastSignature(self)
         ns.Text.RenderHpMode(self, false)
          return
     end
@@ -3702,6 +3765,11 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
         absorbStyle = self._msufCachedAbsorbStyle
     elseif absorbTextDirty then
         self._msufAbsorbTextDirty = false
+    end
+    if MSUF_ShouldSkipHpTextFastRender(self, spec, hpStr, hpPct, hasPct, hpMaxStr, absorbText,
+        absorbStyle, showAbsorbCached)
+    then
+        return
     end
     ns.Text.RenderHpMode(self, true, hpStr, hpPct, hasPct, conf, nil, absorbText, absorbStyle,
         hpMaxStr)
