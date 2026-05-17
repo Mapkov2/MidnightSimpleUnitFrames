@@ -3206,11 +3206,15 @@ local function BuildDashboardUX(ctx)
     })
 
     local supportTop = changelogTop - changelogH - 10
-    local supportH = (recoveryW < 560) and 106 or 78
+    local supportCompact = recoveryW < 560
+    local supportH = supportCompact and 116 or 78
     local support = Card(root, "", x0, supportTop, recoveryW, supportH, { 0.030, 0.040, 0.078, 0.86 }, T.colors.borderSoft)
     local supportTitle = T.Font(support, "GameFontNormal", M.Tr("Support MSUF Development"), T.colors.text)
     supportTitle:SetPoint("TOPLEFT", support, "TOPLEFT", 16, -16)
-    W.Text(support, "If MSUF helps your UI, support links are one click away.", 16, -42, max(160, recoveryW - 230), T.colors.muted)
+    local supportTextW = max(160, recoveryW - (supportCompact and 32 or 230))
+    local supportDesc = W.Text(support, "If MSUF helps your UI, support links are one click away.", 16, -42, supportTextW, T.colors.muted)
+    if supportDesc.SetWordWrap then supportDesc:SetWordWrap(true) end
+    if supportDesc.SetNonSpaceWrap then supportDesc:SetNonSpaceWrap(true) end
 
     local aboutVer
     if _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function" then
@@ -3221,7 +3225,22 @@ local function BuildDashboardUX(ctx)
         local displayVersion = aboutVer:match("^%d") and ("v" .. aboutVer) or aboutVer
         aboutText = M.Format(M.Tr("%s  -  by Mapko with the help from R41z0r"), displayVersion)
     end
-    W.Text(support, aboutText, 16, -62, max(160, recoveryW - 230), T.colors.muted)
+    local supportDescH = (supportDesc.GetStringHeight and supportDesc:GetStringHeight()) or 0
+    if supportDescH < 12 then supportDescH = 12 end
+    local aboutY = -42 - supportDescH - 5
+    local supportAbout = W.Text(support, aboutText, 16, aboutY, supportTextW, T.colors.muted)
+    if supportAbout.SetWordWrap then supportAbout:SetWordWrap(true) end
+    if supportAbout.SetNonSpaceWrap then supportAbout:SetNonSpaceWrap(true) end
+
+    local supportAboutH = (supportAbout.GetStringHeight and supportAbout:GetStringHeight()) or 0
+    if supportAboutH < 12 then supportAboutH = 12 end
+    local supportTextBottom = math.abs(aboutY - supportAboutH)
+    if supportCompact then
+        supportH = max(supportH, floor(supportTextBottom + 24 + 24))
+    else
+        supportH = max(supportH, floor(supportTextBottom + 14))
+    end
+    support:SetHeight(supportH)
 
     local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local supportLinks = {
@@ -3232,7 +3251,7 @@ local function BuildDashboardUX(ctx)
     }
     local iconRow = CreateFrame("Frame", nil, support)
     iconRow:SetSize(160, 24)
-    if recoveryW < 560 then
+    if supportCompact then
         iconRow:SetPoint("BOTTOMLEFT", support, "BOTTOMLEFT", 16, 12)
     else
         iconRow:SetPoint("RIGHT", support, "RIGHT", -16, 0)
