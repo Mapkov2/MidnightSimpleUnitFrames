@@ -608,8 +608,12 @@ local function BuildTopActions(ctx, builder, unit, label)
         if not copyPopup then
             copyPopup = MakeCopyPanel(UIParent)
             copyPopup:SetSize(420, 276)
-            copyPopup:SetFrameStrata("DIALOG")
-            copyPopup:SetFrameLevel(120)
+            if M.ApplyMenuFramePriority then
+                M.ApplyMenuFramePriority(copyPopup, M.MENU_POPUP_FRAME_LEVEL or 120)
+            else
+                copyPopup:SetFrameStrata("FULLSCREEN_DIALOG")
+                copyPopup:SetFrameLevel(120)
+            end
             copyPopup:EnableMouse(true)
 
             local title = T.Font(copyPopup, "GameFontNormal", "", T.colors.accent)

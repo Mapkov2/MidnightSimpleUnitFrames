@@ -767,8 +767,12 @@ local function ScopeSection(ctx, builder)
         if not copyPopup then
             copyPopup = CreateFrame("Frame", nil, UIParent, T.Template and T.Template() or nil)
             copyPopup:SetSize(430, 334)
-            copyPopup:SetFrameStrata("DIALOG")
-            copyPopup:SetFrameLevel(120)
+            if M.ApplyMenuFramePriority then
+                M.ApplyMenuFramePriority(copyPopup, M.MENU_POPUP_FRAME_LEVEL or 120)
+            else
+                copyPopup:SetFrameStrata("FULLSCREEN_DIALOG")
+                copyPopup:SetFrameLevel(120)
+            end
             copyPopup:EnableMouse(true)
             if copyPopup.SetBackdrop then
                 copyPopup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })

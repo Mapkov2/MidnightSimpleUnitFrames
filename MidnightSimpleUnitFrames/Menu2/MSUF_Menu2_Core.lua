@@ -61,6 +61,21 @@ local CONTENT_H = WINDOW_H - 74
 local NAV_BUTTON_H = 20
 local NAV_BUTTON_STEP = 23
 local MENU_BASE_SCALE = 1.08
+local MENU_FRAME_STRATA = "FULLSCREEN_DIALOG"
+local MENU_FRAME_LEVEL = 40
+local MENU_POPUP_FRAME_LEVEL = 120
+
+local function ApplyMenuFramePriority(frame, level)
+    if not frame then return end
+    if frame.SetFrameStrata then frame:SetFrameStrata(MENU_FRAME_STRATA) end
+    if frame.SetFrameLevel then frame:SetFrameLevel(level or MENU_FRAME_LEVEL) end
+    if frame.SetToplevel then frame:SetToplevel(true) end
+end
+
+M.ApplyMenuFramePriority = ApplyMenuFramePriority
+M.MENU_FRAME_STRATA = MENU_FRAME_STRATA
+M.MENU_FRAME_LEVEL = MENU_FRAME_LEVEL
+M.MENU_POPUP_FRAME_LEVEL = MENU_POPUP_FRAME_LEVEL
 
 local NAV = {
     { key = "home", label = "Dashboard" },
@@ -345,6 +360,7 @@ local function RestoreMinimizedSlashMenu(frame)
     if not frame then return false end
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     frame._msuf2Minimized = nil
+    ApplyMenuFramePriority(frame)
     frame:Show()
     if RefreshWindowControls then RefreshWindowControls(frame) end
     return true
@@ -363,6 +379,7 @@ local function MinimizeSlashMenuWindow(frame)
     if M.minimizedBar.title and frame.title and frame.title.GetText then
         M.minimizedBar.title:SetText(frame.title:GetText() or "MSUF Menu")
     end
+    ApplyMenuFramePriority(M.minimizedBar)
     M.minimizedBar:Show()
     frame:Hide()
     return true
@@ -1621,7 +1638,7 @@ local function CreateMinimizedBar(frame)
     local bar = T.Panel(UIParent, "MSUF2_MinimizedWindow", T.colors.bg, T.colors.border)
     bar:SetSize(MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H)
     bar:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 18, 18)
-    bar:SetFrameStrata("DIALOG")
+    ApplyMenuFramePriority(bar)
     bar:EnableMouse(true)
     bar:SetMovable(true)
     if bar.SetClampedToScreen then bar:SetClampedToScreen(true) end
@@ -1661,7 +1678,7 @@ local function BuildWindow()
     _G.MSUF_StandaloneOptionsWindow = f
     f:SetSize(WINDOW_W, WINDOW_H)
     f:SetPoint("CENTER", UIParent, "CENTER", -60, 10)
-    f:SetFrameStrata("DIALOG")
+    ApplyMenuFramePriority(f)
     f:EnableMouse(true)
     f:SetMovable(true)
     if f.SetResizable then f:SetResizable(true) end
@@ -1727,8 +1744,9 @@ local function BuildWindow()
     local function EnsureResizeProxy()
         if f._msuf2ResizeProxy then return f._msuf2ResizeProxy end
         local proxy = CreateFrame("Frame", nil, UIParent)
-        proxy:SetFrameStrata("DIALOG")
+        proxy:SetFrameStrata(MENU_FRAME_STRATA)
         proxy:SetFrameLevel(f:GetFrameLevel() + 80)
+        if proxy.SetToplevel then proxy:SetToplevel(true) end
         proxy:Hide()
 
         local fill = proxy:CreateTexture(nil, "BACKGROUND")
@@ -2037,6 +2055,7 @@ local function BuildWindow()
             self:Hide()
             return
         end
+        ApplyMenuFramePriority(self)
         self._msuf2Minimized = nil
         if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
         if M.StartHistorySession then M.StartHistorySession() end
@@ -3191,6 +3210,7 @@ function M.Open(pageKey)
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     f._msuf2Minimized = nil
     ApplyMenuFrameScale(f)
+    ApplyMenuFramePriority(f)
     f:Show()
     M.SelectPage(pageKey or M.activeKey or "home")
     return true
