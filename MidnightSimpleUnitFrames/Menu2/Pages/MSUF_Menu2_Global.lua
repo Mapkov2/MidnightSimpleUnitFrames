@@ -85,6 +85,7 @@ local UNIT_SCOPE_KEYS = {
     player = true,
     target = true,
     targettarget = true,
+    focustarget = true,
     focus = true,
     pet = true,
     boss = true,
@@ -116,6 +117,7 @@ local function NormalizeScopeKey(scope)
     scope = scope:gsub("%s+", "")
     scope = scope:gsub("%-", "_")
     if scope == "party" or scope == "groupparty" or scope == "group_party" or scope == "gfparty" then return "gf_party" end
+    if scope == "focus_target" or scope == "focustargettarget" then return "focustarget" end
     if scope == "raid" or scope == "mythic" or scope == "mythicraid"
         or scope == "groupraid" or scope == "group_raid" or scope == "gfraid" or scope == "gf_mythicraid" then
         return "gf_raid"

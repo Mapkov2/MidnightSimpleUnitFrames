@@ -230,6 +230,7 @@ if _G and type(_G.MSUF_NormalizeTextLayoutUnitKey) ~= "function" then
         if unitKey == nil then return defaultKey or "player" end
         if unitKey == "shared" then return defaultKey or "player" end
         if unitKey == "tot" or unitKey == "targetoftarget" then return "targettarget" end
+        if unitKey == "focus_target" or unitKey == "focustargettarget" then return "focustarget" end
         if unitKey == "boss1" or unitKey == "boss2" or unitKey == "boss3" or unitKey == "boss4" or unitKey == "boss5" then return "boss" end
         return unitKey
     end
@@ -350,6 +351,21 @@ end
 function ns.UF.IsDisabled(conf)
     return (conf and conf.enabled == false) and true or false
 end
+
+local function MSUF_IsBossUnitframePreviewActive()
+    if _msuf_inCombat then return false end
+    if not MSUF_BossTestMode then return false end
+    if _G.MSUF2_BossUnitframePreviewActive == true then return true end
+
+    local editState = _G.MSUF_EditState
+    local editActive = (_G.MSUF_UnitEditModeActive == true)
+        or (type(editState) == "table" and editState.active == true)
+    if not editActive then return false end
+
+    return (_G.MSUF_UnitPreviewActive == true or _G.MSUF_PreviewTestMode == true)
+end
+_G.MSUF_IsBossUnitframePreviewActive = MSUF_IsBossUnitframePreviewActive
+
 function ns.UF.ResolveKeyAndConf(self, unit, db)
     local key = self and self.msufConfigKey
     if not key then
@@ -365,7 +381,7 @@ function ns.UF.ResolveKeyAndConf(self, unit, db)
 end
 function ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, fb)
     if not f then return end
-    local isStatusUnit = (unit == "player" or unit == "target" or unit == "focus" or unit == "pet" or unit == "targettarget" or unit == "tot")
+    local isStatusUnit = (unit == "player" or unit == "target" or unit == "focus" or unit == "focustarget" or unit == "pet" or unit == "targettarget" or unit == "tot")
         or (type(unit) == "string" and unit:match("^boss"))
     if not isStatusUnit then return end
     local g = (MSUF_DB and MSUF_DB.general) or nil
@@ -444,15 +460,9 @@ ns.UF.Unitframe_OnEnter = ns.UF.Unitframe_OnEnter or function(self)
         if enabled then
             local roundedHandled = false
             if _G.MSUF_RoundedUF_Active == true and self._msufRUF_SuppressMouseover == true then
-                local roundedEdge = self._msufRUF_HoverEdge
-                if roundedEdge then
-                    roundedEdge:Show()
-                    roundedHandled = true
-                else
-                    local roundedHover = _G.MSUF_RoundedUF_OnUnitMouseover
-                    if type(roundedHover) == "function" then
-                        roundedHandled = roundedHover(self, true) and true or false
-                    end
+                local roundedHover = _G.MSUF_RoundedUF_OnUnitMouseover
+                if type(roundedHover) == "function" then
+                    roundedHandled = roundedHover(self, true) and true or false
                 end
             end
             if roundedHandled then
@@ -481,13 +491,8 @@ ns.UF.Unitframe_OnEnter = ns.UF.Unitframe_OnEnter or function(self)
 end
 ns.UF.Unitframe_OnLeave = ns.UF.Unitframe_OnLeave or function(self)
     if _G.MSUF_RoundedUF_Active == true and self and self._msufRUF_SuppressMouseover == true then
-        local roundedEdge = self._msufRUF_HoverEdge
-        if roundedEdge then
-            roundedEdge:Hide()
-        else
-            local roundedHover = _G.MSUF_RoundedUF_OnUnitMouseover
-            if type(roundedHover) == "function" then roundedHover(self, false) end
-        end
+        local roundedHover = _G.MSUF_RoundedUF_OnUnitMouseover
+        if type(roundedHover) == "function" then roundedHover(self, false) end
     end
     if self and self.highlightBorder then self.highlightBorder:Hide() end
     local tips = ns.Tooltips
@@ -505,13 +510,13 @@ function ns.UF.HideLeaderAndRaidMarker(self)
 function ns.UF.HandleDisabledFrame(self, conf)
     if not ns.UF.IsDisabled(conf) then return false end
 
-    if self and self.isBoss and _G.MSUF2_BossUnitframePreviewActive == true
-        and MSUF_BossTestMode and not _msuf_inCombat then
+    if self and self.isBoss and MSUF_IsBossUnitframePreviewActive() then
         return false
     end
 
     -- In MSUF Edit Mode, keep a persistent preview for frames that are disabled,
-    -- so they can still be positioned/edited. Boss frames remain hard-hidden when disabled.
+    -- so they can still be positioned/edited. Boss frames use the shared boss
+    -- preview gate above and remain hard-hidden outside preview/test mode.
     if MSUF_UnitEditModeActive and (not _msuf_inCombat) and self and not self.isBoss then
         local fn = _G.MSUF_ApplyUnitframeEditPreview
         if type(fn) == "function" then
@@ -657,6 +662,7 @@ local function MSUF_EnsureUnitFlags(f)
     f._msufIsPlayer = (u == "player")
     f._msufIsTarget = (u == "target")
     f._msufIsFocus  = (u == "focus")
+    f._msufIsFocusTarget = (u == "focustarget")
     f._msufIsPet    = (u == "pet")
     f._msufIsToT    = (u == "targettarget")
     -- Perf: avoid pattern matching.
@@ -666,7 +672,7 @@ local function MSUF_EnsureUnitFlags(f)
  end
 _G.MSUF_EnsureUnitFlags = MSUF_EnsureUnitFlags
 local function MSUF_IsTargetLikeFrame(f)
-    return (f and (f.isBoss or f._msufIsPlayer or f._msufIsTarget or f._msufIsFocus)) and true or false
+    return (f and (f.isBoss or f._msufIsPlayer or f._msufIsTarget or f._msufIsFocus or f._msufIsFocusTarget)) and true or false
 end
 local function MSUF_ResetBarZero(bar, hide)
     if not bar then return end
@@ -978,7 +984,7 @@ end
 local MSUF_BarBorderCache = { stamp = nil, thickness = 0, byScope = {} }
 local MSUF_BarBorderScopeIds = {
     shared = 0, player = 1, target = 2, focus = 3,
-    targettarget = 4, pet = 5, boss = 6, party = 7, raid = 8,
+    targettarget = 4, focustarget = 5, pet = 6, boss = 7, party = 8, raid = 9,
 }
 local function MSUF_GetBarBorderStyleId(style)
     if style == "THICK" then return 2 end
@@ -1161,7 +1167,7 @@ local function MSUF_NormalizeUnitKeyForDB(key)
 end
 local function MSUF_RaidGroupNameAllowedForKey(key)
     key = MSUF_NormalizeUnitKeyForDB(key)
-    return key == "player" or key == "target" or key == "targettarget" or key == "focus"
+    return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
 end
 local function MSUF_NormalizeRaidGroupNameAnchor(anchor)
     if anchor == "NAMELEFT" or anchor == "NAMERIGHT"
@@ -1326,10 +1332,13 @@ end
 
 -- Bar background runtime moved to Core/MSUF_BarBackgroundRuntime.lua.
 local function GetConfigKeyForUnit(unit)
+    if unit == "tot" then unit = "targettarget" end
+    if unit == "focus_target" or unit == "focustargettarget" then unit = "focustarget" end
     if unit == "player"
         or unit == "target"
         or unit == "focus"
         or unit == "targettarget"
+        or unit == "focustarget"
         or unit == "pet"
     then
          return unit
@@ -1355,6 +1364,8 @@ local function MSUF_GetVisibilityDriverForUnit(unit)
          return "[@target,exists] show; hide"
     elseif unit == "focus" then
          return "[@focus,exists] show; hide"
+    elseif unit == "focustarget" then
+         return "[@focustarget,exists] show; hide"
     elseif unit == "pet" then
          return "[@pet,exists] show; hide"
     elseif unit == "targettarget" then
@@ -1375,15 +1386,16 @@ else
     confKey = frame.unit
 end
 local conf = (type(MSUF_DB) == "table" and confKey and MSUF_DB[confKey]) or nil
-if ns.UF.IsDisabled(conf) then
+local focusTargetDisabled = frame.unit == "focustarget"
+    and type(_G.MSUF_IsFocusTargetEffectiveEnabled) == "function"
+    and not _G.MSUF_IsFocusTargetEffectiveEnabled()
+if ns.UF.IsDisabled(conf) or focusTargetDisabled then
     -- In MSUF Edit Mode, keep disabled frames editable by allowing forceShow previews.
-    -- Boss frames remain hard-hidden when disabled (see Boss preview invariants).
-    local allowBossPagePreview = frame and frame.isBoss
-        and _G.MSUF2_BossUnitframePreviewActive == true
-        and MSUF_BossTestMode
-        and not _msuf_inCombat
+    -- Boss frames use their dedicated preview gate, shared by Edit Mode and the
+    -- Boss menu on-screen preview.
+    local allowBossPreview = frame and frame.isBoss and MSUF_IsBossUnitframePreviewActive()
     if not ((forceShow and MSUF_UnitEditModeActive and (not _msuf_inCombat) and frame and not frame.isBoss)
-        or allowBossPagePreview) then
+        or allowBossPreview) then
         ns.UF.ForceVisibilityHidden(frame)
         return
     end
@@ -1533,6 +1545,8 @@ local function MSUF_GetUnitLabelForKey(key)
          return "Target"
     elseif key == "targettarget" then
          return "Target of Target"
+    elseif key == "focustarget" then
+         return "Focus Target"
     elseif key == "focus" then
          return "Focus"
     elseif key == "pet" then
@@ -2604,6 +2618,7 @@ MSUF_ForceReanchorAllUnitFrames_Once = function(refreshConfig)
         "target",
         "targettarget",
         "focus",
+        "focustarget",
         "pet",
         "boss1", "boss2", "boss3", "boss4", "boss5", "boss6", "boss7", "boss8",
     }
@@ -4668,6 +4683,13 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
         end
         MSUF_ApplyUnitVisibilityDriver(f, (MSUF_UnitEditModeActive and true or false))
     end
+    local focusTargetInactive = unit == "focustarget"
+        and type(_G.MSUF_IsFocusTargetEffectiveEnabled) == "function"
+        and not _G.MSUF_IsFocusTargetEffectiveEnabled()
+    if focusTargetInactive and not (MSUF_UnitEditModeActive and not _msuf_inCombat) then
+        if f.Hide then f:Hide() end
+        return
+    end
     local w = tonumber(conf.width)  or (f.GetWidth and f:GetWidth())  or 275
     local h = tonumber(conf.height) or (f.GetHeight and f:GetHeight()) or 40
     conf.width, conf.height = w, h
@@ -4734,6 +4756,16 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
         return
     end
     active = active and true or false
+    if not active then
+        local editState = _G.MSUF_EditState
+        local editActive = (_G.MSUF_UnitEditModeActive == true)
+            or (type(editState) == "table" and editState.active == true)
+        local editPreviewActive = editActive
+            and (_G.MSUF_UnitPreviewActive == true or _G.MSUF_PreviewTestMode == true)
+        if editPreviewActive or _G.MSUF2_BossUnitframePreviewActive == true then
+            active = true
+        end
+    end
     MSUF_BossTestMode = active
     _G.MSUF_BossTestMode = active
 
@@ -4851,21 +4883,24 @@ local function MSUF_ApplyUnitFrameKey_Immediate(key)
 	    end
     if ns.UF.IsDisabled(conf) then
         if MSUF_UnitEditModeActive and (not _msuf_inCombat) and key ~= "boss" then
-            if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "pet" then
+            if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "pet" then
                 _MSUF_PreviewUnitFrame(key, conf)
             end
             return
         end
-        if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "pet" then
+        if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "pet" then
             _MSUF_HideUnitFrame(key)
         elseif key == "boss" then
             for i = 1, MSUF_MAX_BOSS_FRAMES do
                 _MSUF_HideUnitFrame("boss" .. i)
             end
         end
+        if (key == "focus" or key == "focustarget") and type(_G.MSUF_RefreshFocusTargetLifecycle) == "function" then
+            _G.MSUF_RefreshFocusTargetLifecycle("ApplyUnitFrameKeyDisabled")
+        end
         return
     end
-    if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "pet" then
+    if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "pet" then
         _MSUF_ApplyToUnitFrame(key, conf)
     elseif key == "boss" then
         for i = 1, MSUF_MAX_BOSS_FRAMES do
@@ -4878,6 +4913,9 @@ local function MSUF_ApplyUnitFrameKey_Immediate(key)
         MSUF_ReanchorTargetCastBar()
     elseif key == "focus" and MSUF_ReanchorFocusCastBar then
         MSUF_ReanchorFocusCastBar()
+    end
+    if (key == "focus" or key == "focustarget") and type(_G.MSUF_RefreshFocusTargetLifecycle) == "function" then
+        _G.MSUF_RefreshFocusTargetLifecycle("ApplyUnitFrameKey")
     end
  end
 _G.MSUF_ApplyUnitFrameKey_Immediate = MSUF_ApplyUnitFrameKey_Immediate
@@ -4925,7 +4963,7 @@ _G.MSUF_ApplyCommitState = _G.MSUF_ApplyCommitState or {
     tickers = false,
     bossPreview = false,
 }
-local MSUF_APPLY_ALL_KEYS = { "player", "target", "focus", "targettarget", "pet", "boss" }
+local MSUF_APPLY_ALL_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
 local function MSUF_RegisterApplyDirtyAfterCombat()
     if type(MSUF_EventBus_Register) == "function" then
         MSUF_EventBus_Register("PLAYER_REGEN_ENABLED", "MSUF_APPLY_DIRTY", MSUF_OnRegenEnabled_ApplyDirty)
@@ -5013,6 +5051,7 @@ function MSUF_ApplyAllSettings()
     MSUF_MarkUnitFrameDirty("target")
     MSUF_MarkUnitFrameDirty("focus")
     MSUF_MarkUnitFrameDirty("targettarget")
+    MSUF_MarkUnitFrameDirty("focustarget")
     MSUF_MarkUnitFrameDirty("pet")
     MSUF_MarkUnitFrameDirty("boss")
     st.fonts = true
@@ -5057,6 +5096,7 @@ _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or funct
     MSUF_ApplyUnitFrameKey_Immediate("target")
     MSUF_ApplyUnitFrameKey_Immediate("focus")
     MSUF_ApplyUnitFrameKey_Immediate("targettarget")
+    MSUF_ApplyUnitFrameKey_Immediate("focustarget")
     MSUF_ApplyUnitFrameKey_Immediate("pet")
     MSUF_ApplyUnitFrameKey_Immediate("boss")
     local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or _G.MSUF_UpdateAllFonts
@@ -5379,6 +5419,7 @@ local MSUF_UNIT_CREATE_DEFS = {
     target =      { w = 275, h = 40, showName = true,  showHP = true,  showPower = true,  isBoss = false, startHidden = false },
     focus =       { w = 220, h = 30, showName = true,  showHP = false, showPower = false, isBoss = false, startHidden = false },
     targettarget ={ w = 220, h = 30, showName = true,  showHP = true,  showPower = false, isBoss = false, startHidden = false },
+    focustarget = { w = 180, h = 30, showName = true,  showHP = true,  showPower = false, isBoss = false, startHidden = false },
     pet =         { w = 220, h = 30, showName = true,  showHP = true,  showPower = true,  isBoss = false, startHidden = false },
 }
 local MSUF_UNIT_CREATE_DEF_BOSS = { w = 220, h = 30, showName = true, showHP = true, showPower = true, isBoss = true, startHidden = true }
@@ -5387,6 +5428,7 @@ local MSUF_UNIT_TIP_FUNCS = {
     target = "MSUF_ShowTargetInfoTooltip",
     focus = "MSUF_ShowFocusInfoTooltip",
     targettarget = "MSUF_ShowTargetTargetInfoTooltip",
+    focustarget = "MSUF_ShowFocusTargetInfoTooltip",
     pet = "MSUF_ShowPetInfoTooltip",
 }
 local function MSUF_IsClassPowerAnchorUsable(cpContainer)
@@ -5971,9 +6013,13 @@ if ns and ns.MSUF_CreateSecureTargetAuraHeaders then
     end
 
 end
-    CreateSimpleUnitFrame("targettarget")
     CreateSimpleUnitFrame("focus")
+    CreateSimpleUnitFrame("targettarget")
+    CreateSimpleUnitFrame("focustarget")
     CreateSimpleUnitFrame("pet")
+    if type(_G.MSUF_RefreshFocusTargetLifecycle) == "function" then
+        _G.MSUF_RefreshFocusTargetLifecycle("PLAYER_LOGIN")
+    end
     for i = 1, MSUF_MAX_BOSS_FRAMES do
         CreateSimpleUnitFrame("boss" .. i)
     end

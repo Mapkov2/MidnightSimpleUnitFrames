@@ -42,6 +42,7 @@ local SEARCH_KEYWORDS = {
     uf_player = "unit frame unitframe player frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level player level anchor level position level layer",
     uf_target = "unit frame unitframe target frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level target level anchor level position level layer",
     uf_targettarget = "unit frame unitframe target of target tot frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level target of target level anchor level position level layer",
+    uf_focustarget = "unit frame unitframe focus target focus target frame focustarget ft frame basics enable disable hide show width height scale size health portrait text range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp status icons status indicators indicator selected indicator level level indicator level text show level focus target level anchor level position level layer child focus frame",
     uf_focus = "unit frame unitframe focus frame basics enable disable hide show width height scale size health power portrait text castbar focus kick interrupt auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level focus level anchor level position level layer",
     uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade range check distance check out of range transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level boss level anchor level position level layer",
     uf_pet = "unit frame unitframe pet frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level pet level anchor level position level layer",
@@ -482,13 +483,14 @@ local SEARCH_QUERY_ALIASES = {
     positions = { "position", "move", "edit mode", "x offset", "y offset", "anchor", "anchoring", "reset positions" },
     anchor = { "anchoring", "position", "move", "attach", "global anchor", "custom anchor" },
     anchoring = { "anchor", "position", "move", "attach", "global anchor", "custom anchor" },
-    unitframe = { "unit frame", "unit frames", "player frame", "target frame", "focus frame", "boss frame", "frame basics", "anchoring", "edit mode" },
-    unitframes = { "unit frame", "unit frames", "player frame", "target frame", "focus frame", "boss frame", "frame basics", "anchoring", "edit mode" },
+    unitframe = { "unit frame", "unit frames", "player frame", "target frame", "focus frame", "focus target frame", "boss frame", "frame basics", "anchoring", "edit mode" },
+    unitframes = { "unit frame", "unit frames", "player frame", "target frame", "focus frame", "focus target frame", "boss frame", "frame basics", "anchoring", "edit mode" },
     unitfram = { "unitframe", "unit frame", "unit frames", "frame basics", "anchoring", "edit mode" },
     unitfrme = { "unitframe", "unit frame", "unit frames", "frame basics", "anchoring", "edit mode" },
     player = { "player frame", "playerframe" },
     target = { "target frame", "targetframe" },
     focus = { "focus frame", "focusframe" },
+    focustarget = { "focus target frame", "focus target", "ft frame" },
     pet = { "pet frame", "petframe" },
     fram = { "frame", "unit frame", "frames", "frame basics" },
     frame = { "unit frame", "frames", "unitframe", "frame basics" },
@@ -496,6 +498,7 @@ local SEARCH_QUERY_ALIASES = {
     playerframe = { "player frame", "move player frame", "drag player frame", "player position", "unit frame", "frame basics", "anchoring", "edit mode" },
     targetframe = { "target frame", "move target frame", "drag target frame", "target position", "unit frame", "frame basics", "anchoring", "edit mode" },
     focusframe = { "focus frame", "move focus frame", "drag focus frame", "focus position", "unit frame", "frame basics", "anchoring", "edit mode", "focus kick" },
+    focustargetframe = { "focus target frame", "move focus target frame", "drag focus target frame", "focus target position", "unit frame", "frame basics", "anchoring", "edit mode" },
     petframe = { "pet frame", "move pet frame", "drag pet frame", "pet position", "unit frame", "frame basics", "anchoring", "edit mode" },
     bossframe = { "boss frame", "boss frames", "unit frame", "boss layout" },
     bossframes = { "boss frame", "boss frames", "unit frame", "boss layout", "boss preview" },
@@ -694,6 +697,9 @@ local SEARCH_QUERY_ALIASES = {
     zielziel = { "target of target", "targettarget", "tot" },
     tot = { "target of target", "targettarget", "target target" },
     targettarget = { "target of target", "tot", "target target" },
+    fokusziel = { "focus target", "focustarget", "focus target frame" },
+    focusziel = { "focus target", "focustarget", "focus target frame" },
+    ft = { "focus target", "focustarget", "focus target frame" },
     fokus = { "focus", "focus frame", "focusframe", "focus kick" },
     fokusframe = { "focus frame", "focusframe", "focus kick" },
     begleiter = { "pet", "pet frame", "petframe" },
@@ -1103,6 +1109,15 @@ local function SearchCanonicalWords(raw)
         elseif word == "focus" and nextWord == "frame" then
             words[#words + 1] = "focusframe"
             i = i + 2
+        elseif word == "focus" and nextWord == "target" then
+            words[#words + 1] = "focustarget"
+            local thirdWord = raw[i + 2]
+            if thirdWord == "frame" then
+                words[#words + 1] = "focustargetframe"
+                i = i + 3
+            else
+                i = i + 2
+            end
         elseif word == "pet" and nextWord == "frame" then
             words[#words + 1] = "petframe"
             i = i + 2
@@ -1995,6 +2010,15 @@ local SEARCH_FAQ = {
         target = "Opens: Target of Target > Frame Basics",
         anchorText = "Frame Basics Target of Target ToT Enable Text Anchoring",
         keywords = { "target of target", "tot", "targettarget", "target target", "where is tot", "tot missing", "show target of target", "enable tot", "target of target frame" },
+        priority = 45,
+    },
+    {
+        label = "Where is Focus Target?",
+        answer = "Open Focus Target. Use Frame Basics to enable it; it only appears when Focus is enabled and your focus has a target.",
+        pageKey = "uf_focustarget",
+        target = "Opens: Focus Target > Frame Basics",
+        anchorText = "Frame Basics Focus Target Enable Text Anchoring",
+        keywords = { "focus target", "focustarget", "focus target frame", "ft frame", "where is focus target", "focus target missing", "show focus target", "enable focus target" },
         priority = 45,
     },
     {

@@ -27,6 +27,7 @@ local UNIT_KEYS = {
     player = true,
     target = true,
     targettarget = true,
+    focustarget = true,
     focus = true,
     pet = true,
     boss = true,
@@ -49,6 +50,7 @@ end
 function M.GetUnitDB(unit)
     local db = M.EnsureDB()
     unit = (unit == "tot") and "targettarget" or unit
+    unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
     if not UNIT_KEYS[unit] then unit = "player" end
     db[unit] = db[unit] or {}
     return db[unit], db
@@ -553,6 +555,7 @@ end
 function M.RequestUnitApply(unit, reason, opts)
     if M.BlockCombatAction() then return false end
     unit = (unit == "tot") and "targettarget" or unit
+    unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
     if not UNIT_KEYS[unit] then return end
     M.CheckpointHistory(reason or ("MSUF2_" .. tostring(unit)), "apply:unit:" .. tostring(unit) .. ":" .. tostring(reason or "change"))
     pendingUnits[unit] = true
@@ -629,6 +632,7 @@ local UNIT_PAGE_RESETS = {
     uf_player = { unit = "player", label = "Player" },
     uf_target = { unit = "target", label = "Target" },
     uf_targettarget = { unit = "targettarget", label = "Target of Target" },
+    uf_focustarget = { unit = "focustarget", label = "Focus Target" },
     uf_focus = { unit = "focus", label = "Focus" },
     uf_boss = { unit = "boss", label = "Boss Frames" },
     uf_pet = { unit = "pet", label = "Pet" },
@@ -1109,7 +1113,7 @@ end
 local function ResetBarsPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", IsBarsGeneralKey)
     ResetRootFiltered(db, defaults, "bars", function(key) return BARS_TABLE_KEYS[key] == true end)
-    for _, key in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid", "gf_mythicraid" }) do
+    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "gf_party", "gf_raid", "gf_mythicraid" }) do
         ResetUnitFiltered(db, defaults, key, IsBarsScopeKey)
     end
     EnsureTargetTargetAlias(db)
@@ -1118,7 +1122,7 @@ end
 local function ResetFontsPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return FONT_GENERAL_KEYS[key] == true end)
     ResetKeySet(db, defaults, FONT_ROOT_KEYS)
-    for _, key in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss", "gf_party", "gf_raid", "gf_mythicraid" }) do
+    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "gf_party", "gf_raid", "gf_mythicraid" }) do
         ResetUnitFiltered(db, defaults, key, IsFontScopeKey)
     end
     EnsureTargetTargetAlias(db)

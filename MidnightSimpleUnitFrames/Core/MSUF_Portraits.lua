@@ -233,7 +233,7 @@ local function MaybeUpdatePortrait(f, unit, conf, existsForPortrait)
         need = true
     end
 
-    local doGuidGate = (unit == "target" or unit == "focus" or unit == "targettarget")
+    local doGuidGate = (unit == "target" or unit == "focus" or unit == "focustarget" or unit == "targettarget")
         or (unit ~= "player" and type(unit) == "string" and unit:sub(1, 4) == "boss")
     if existsForPortrait and doGuidGate then
         local guid = (F.UnitGUID and F.UnitGUID(unit)) or nil
@@ -308,7 +308,7 @@ end
 _G.MSUF_Portraits_SyncVisibility = SyncPortraitVisibility
 
 local function ForcePortraitRefresh()
-    local keys = { "player", "target", "focus", "pet", "targettarget" }
+    local keys = { "player", "target", "focus", "focustarget", "pet", "targettarget" }
     for _, k in ipairs(keys) do
         local f = _G["MSUF_" .. k]
         if f then f._msufPortraitDirty = true; f._msufPortraitNextAt = 0 end

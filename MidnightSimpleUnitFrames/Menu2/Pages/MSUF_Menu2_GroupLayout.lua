@@ -572,7 +572,7 @@ local function BuildGFLayout(ctx)
 
     local function IsStandardAnchorTarget(value)
         return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
-            or value == "targettarget" or value == "focus"
+            or value == "targettarget" or value == "focustarget" or value == "focus"
     end
 
     local function RefreshCustomAnchorBox()

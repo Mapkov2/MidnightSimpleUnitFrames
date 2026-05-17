@@ -128,6 +128,7 @@ local GF_ANCHOR_TO = {
     { value = "player", text = "Player Frame" },
     { value = "target", text = "Target Frame" },
     { value = "targettarget", text = "Target of Target" },
+    { value = "focustarget", text = "Focus Target" },
     { value = "focus", text = "Focus Frame" },
 }
 

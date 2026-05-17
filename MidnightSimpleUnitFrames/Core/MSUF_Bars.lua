@@ -916,6 +916,7 @@ _G.MSUF_Bars_RefreshAbsorbTextureTestPreview = function()
     refresh(_G.MSUF_target)
     refresh(_G.MSUF_focus)
     refresh(_G.MSUF_targettarget or _G.MSUF_tot)
+    refresh(_G.MSUF_focustarget)
     refresh(_G.MSUF_pet)
     for i = 1, 8 do refresh(_G["MSUF_boss" .. i]) end
 

@@ -138,7 +138,7 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
     if g and g.portraitClassStyle ~= nil then
         g.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(g.portraitClassStyle)
     end
-    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focus", "pet", "boss" }) do
+    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }) do
         local u = db[unitKey]
         if type(u) == "table" and u.portraitRender ~= nil then
             u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
@@ -205,6 +205,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     end
     EnsureUnitAlphaDefaults(db.target)
     EnsureUnitAlphaDefaults(db.focus)
+    EnsureUnitAlphaDefaults(db.focustarget)
     EnsureUnitAlphaDefaults(db.pet)
     EnsureUnitAlphaDefaults(db.boss)
     EnsureUnitAlphaDefaults(db.targettarget)
@@ -215,6 +216,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     ForceFreshUnitframeScreenPosition(db.player, -260, 80)
     ForceFreshUnitframeScreenPosition(db.target, 260, 80)
     ForceFreshUnitframeScreenPosition(db.focus, 260, 135)
+    ForceFreshUnitframeScreenPosition(db.focustarget, 260, 180)
     ForceFreshUnitframeScreenPosition(db.pet, -260, 135)
     ForceFreshUnitframeScreenPosition(db.targettarget or db.tot, 260, 225)
     ForceFreshUnitframeScreenPosition(db.boss, MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y)
@@ -341,7 +343,7 @@ end
 
 local function MSUF_Defaults_ClearScopedFontKeys()
     for _, key in ipairs({
-        "player", "target", "targettarget", "tot", "focus", "pet", "boss",
+        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         local scope = MSUF_DB and MSUF_DB[key]
@@ -366,7 +368,7 @@ function MSUF_EnsureDB_Heavy()
     local g = MSUF_DB.general
     MSUF_Defaults_NormalizePortraitRenderDB(MSUF_DB)
     local legacyPortraitOverrideState = false
-    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focus", "pet", "boss" }) do
+    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }) do
         local u = MSUF_DB[unitKey]
         if type(u) == "table" and u.portraitDecoOverride ~= nil then
             legacyPortraitOverrideState = true
@@ -1201,7 +1203,7 @@ end
     end
 
     g.powerTextMode = _MSUF_MigratePowerMode(g.powerTextMode)
-    for _, unitKey in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+    for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","boss"}) do
         local u = MSUF_DB[unitKey]
         if type(u) == "table" then
             u.powerTextMode = _MSUF_MigratePowerMode(u.powerTextMode)
@@ -1254,7 +1256,7 @@ end
             hpTextLayer = tonumber(g.hpTextLayer) or tonumber(g.textLayer) or 5,
             powerTextLayer = tonumber(g.powerTextLayer) or 2,
         }
-        for _, unitKey in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+        for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","boss"}) do
             MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
             local u = MSUF_DB[unitKey]
             if type(u) == "table" then
@@ -1435,7 +1437,7 @@ end
         g.showRaidMarker = true
     end
     local legacyShowRaidMarker = g.showRaidMarker
-    for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+    for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet","boss"}) do
         MSUF_DB[key] = MSUF_DB[key] or {}
         if MSUF_DB[key].showRaidMarker == nil and legacyShowRaidMarker ~= nil then
             MSUF_DB[key].showRaidMarker = legacyShowRaidMarker
@@ -1448,7 +1450,7 @@ local legacyRaidMarkerOffsetX = g.raidMarkerOffsetX
 local legacyRaidMarkerOffsetY = g.raidMarkerOffsetY
 local legacyRaidMarkerAnchor  = g.raidMarkerAnchor
 local legacyRaidMarkerSize    = g.raidMarkerSize
-for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
+for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet","boss"}) do
     MSUF_DB[key] = MSUF_DB[key] or {}
     local conf = MSUF_DB[key]
     if conf.raidMarkerOffsetX == nil and legacyRaidMarkerOffsetX ~= nil then
@@ -1484,7 +1486,7 @@ for _, key in ipairs({"player","target","focus","targettarget","pet","boss"}) do
     if conf.raidMarkerLayer == nil then conf.raidMarkerLayer = 7 end
 end
 -- Elite / Rare icon defaults (per-unit)
-for _, key in ipairs({"target","focus","targettarget","boss"}) do
+for _, key in ipairs({"target","focus","targettarget","focustarget","boss"}) do
     MSUF_DB[key] = MSUF_DB[key] or {}
     local u = MSUF_DB[key]
     if u.showEliteIcon    == nil then u.showEliteIcon    = true       end
@@ -1965,6 +1967,22 @@ local function fill(key, defaults)
     for k, v in pairs(textDefaults) do
         if MSUF_DB.targettarget[k] == nil then MSUF_DB.targettarget[k] = v end
     end
+    fill("focustarget", {
+        enabled   = false,
+        width     = 180,
+        height    = 30,
+        offsetX   = 260,
+        offsetY   = 180,
+        showName  = true,
+        showLevelIndicator = true,
+        showHP    = true,
+        showPower = false,
+        -- Focus Target is a lightweight child-style frame: no castbar or auras.
+        reverseFillBars = false,
+    })
+    for k, v in pairs(textDefaults) do
+        if MSUF_DB.focustarget[k] == nil then MSUF_DB.focustarget[k] = v end
+    end
     fill("pet", {
         width     = 220,
         height    = 30,
@@ -2050,7 +2068,7 @@ local function fill(key, defaults)
             end
         end
     end
-    for _, unitKey in ipairs({"player", "target", "targettarget", "focus", "pet", "boss"}) do
+    for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "boss"}) do
         MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
         local u = MSUF_DB[unitKey]
         if u.enabled == nil then
@@ -2118,14 +2136,14 @@ local function fill(key, defaults)
     g._msufPortraitPerUnitMigrated_v4324 = true
     for _, key in ipairs({
         "general",
-        "player", "target", "targettarget", "focus", "pet", "boss",
+        "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         MSUF_Defaults_NormalizeFontField(MSUF_DB[key])
     end
     MSUF_Defaults_ClearScopedFontKeys()
     if g._msufUFLocalFontKeyMigration_v407 ~= true then
-        for _, key in ipairs({ "player", "target", "targettarget", "focus", "pet", "boss" }) do
+        for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
             local u = MSUF_DB[key]
             if type(u) == "table" then
                 u.fontKey = nil

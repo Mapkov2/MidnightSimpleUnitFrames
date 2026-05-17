@@ -806,7 +806,7 @@ function Popups.Open(key, anchorFrame)
     local pType = cfg and cfg.popupType
 
     if not pType then
-        if key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "pet" or key:match("^boss%d") then
+        if key == "player" or key == "target" or key == "focus" or key == "focustarget" or key == "targettarget" or key == "pet" or key:match("^boss%d") then
             pType = "unit"
         end
     end
@@ -866,8 +866,9 @@ local max, min = math.max, math.min
 local function DB() return _G.MSUF_DB end
 local function Conf(k) local db=DB(); return db and db[k] end
 local function CK(u) if not u then return nil end; if u=="targettarget" or u=="tot" then return "targettarget" end
+    if u=="focustarget" or u=="focus_target" or u=="focustargettarget" then return "focustarget" end
     if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(u) then return "boss" end; return u end
-local LABELS = { player="Player", target="Target", focus="Focus", targettarget="ToT", pet="Pet", boss="Boss" }
+local LABELS = { player="Player", target="Target", focus="Focus", focustarget="Focus Target", targettarget="ToT", pet="Pet", boss="Boss" }
 local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 then v=d or 0 end; return floor(v+0.5) end
 local pf
 
@@ -941,7 +942,7 @@ local function Sync()
     SC(pf.hpShowCB, conf.showHP~=false)
     S(pf.hpXBox,conf.hpOffsetX or 0); S(pf.hpYBox,conf.hpOffsetY or 0)
     S(pf.hpSizeBox,conf.hpFontSize or g.hpFontSize or g.fontSize or 14)
-    SC(pf.powerShowCB, conf.showPower~=false)
+    SC(pf.powerShowCB, (key ~= "focustarget" and conf.showPower ~= false) or conf.showPower == true)
     S(pf.powerXBox,conf.powerOffsetX or 0); S(pf.powerYBox,conf.powerOffsetY or 0)
     S(pf.powerSizeBox,conf.powerFontSize or g.powerFontSize or g.fontSize or 14)
     SC(pf.detachCB,conf.powerBarDetached); SC(pf.syncCPCB,conf.detachedPowerBarSyncClassPower)
@@ -1012,6 +1013,7 @@ local function Build()
         { key = "player", label = "Player" },
         { key = "target", label = "Target" },
         { key = "focus",  label = "Focus"  },
+        { key = "focustarget", label = "Focus Target" },
         { key = "targettarget", label = "ToT" },
         { key = "pet",    label = "Pet"    },
         { key = "boss",   label = "Boss"   },

@@ -521,8 +521,8 @@ end
 
 function EM.EnsureMovers(entry, unit, shared, iconSize, spacing)
     if not entry or not unit then return end
-    -- Skip pet/ToT (no aura editing for these)
-    if unit == "pet" or unit == "targettarget" then return end
+    -- Skip lightweight child frames that do not support aura editing.
+    if unit == "pet" or unit == "targettarget" or unit == "focustarget" then return end
 
     local base = UnitLabel(unit)
     CreateMover(entry, unit, "buff",    base .. " Buffs")
@@ -600,9 +600,9 @@ end
 
 function EM.ShowMovers(entry)
     if not entry then return end
-    -- Skip pet/ToT aura movers (not useful for editing)
+    -- Skip lightweight child frames that do not support aura editing.
     local u = entry.unit
-    if u == "pet" or u == "targettarget" then return end
+    if u == "pet" or u == "targettarget" or u == "focustarget" then return end
     if entry.editMoverBuff then
         entry.editMoverBuff:Show()
     end
@@ -893,6 +893,19 @@ local function ClearPreviewsForEntry(entry)
     entry._msufA2_previewActive = nil
  end
 
+local function HideUnsupportedAuraPreviewEntry(entry)
+    if not entry then return end
+    ClearPreviewsForEntry(entry)
+    if API.EditMode and API.EditMode.HideMovers then
+        API.EditMode.HideMovers(entry)
+    end
+    if entry.buffs then entry.buffs:Hide() end
+    if entry.debuffs then entry.debuffs:Hide() end
+    if entry.mixed then entry.mixed:Hide() end
+    if entry.private then entry.private:Hide() end
+    if entry.anchor then entry.anchor:Hide() end
+end
+
 local function ClearAllPreviews()
     local AurasByUnit = GetAurasByUnit()
     if not AurasByUnit then  return end
@@ -920,22 +933,16 @@ local function RenderEntryPreview(entry, unit, shared, isEditActive, cfg)
         return false, false
     end
 
-    -- Skip aura previews for pet and targettarget
-    if unit == "pet" or unit == "targettarget" then
-        if entry._msufA2_previewActive then
-            if API.ClearPreviewsForEntry then API.ClearPreviewsForEntry(entry)
-            else entry._msufA2_previewActive = nil end
-        end
+    -- Skip aura previews for lightweight child frames that do not support auras.
+    if unit == "pet" or unit == "targettarget" or unit == "focustarget" then
+        HideUnsupportedAuraPreviewEntry(entry)
         return false, false
     end
 
     -- Skip aura previews for units that don't have auras enabled
     local DB = API and API.DB
     if DB and DB.UnitEnabledCached and DB.UnitEnabledCached(unit) ~= true then
-        if entry._msufA2_previewActive then
-            if API.ClearPreviewsForEntry then API.ClearPreviewsForEntry(entry)
-            else entry._msufA2_previewActive = nil end
-        end
+        HideUnsupportedAuraPreviewEntry(entry)
         return false, false
     end
 

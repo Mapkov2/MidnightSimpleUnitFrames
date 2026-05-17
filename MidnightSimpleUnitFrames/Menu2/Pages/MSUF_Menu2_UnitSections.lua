@@ -298,6 +298,8 @@ local function BuildPreview(ctx, builder, unit)
         previewNote = previewNote .. " Focus frames only appear when a focus unit exists."
     elseif unit == "targettarget" then
         previewNote = previewNote .. " Target of Target only appears when your target has a target."
+    elseif unit == "focustarget" then
+        previewNote = previewNote .. " Focus Target only appears when Focus is enabled and your focus has a target."
     elseif unit == "boss" then
         previewNote = previewNote .. " Boss frames only appear during encounters with boss units."
     end
@@ -631,11 +633,11 @@ local function BuildTopActions(ctx, builder, unit, label)
             destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
 
             copyPopup._targetBtns = {}
-            local order = { "player", "target", "targettarget", "focus", "boss", "pet", "all" }
-            local widths = { player = 56, target = 56, targettarget = 46, focus = 54, boss = 52, pet = 46, all = 46 }
+            local order = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet", "all" }
+            local widths = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, all = 38 }
             copyPopup._targetOrder = order
             copyPopup._targetWidths = widths
-            local shortLabel = { targettarget = "ToT", boss = "Boss", all = "All" }
+            local shortLabel = { targettarget = "ToT", focustarget = "FT", boss = "Boss", all = "All" }
             local x = 16
             for i = 1, #order do
                 local key = order[i]
@@ -817,6 +819,9 @@ local function BuildBasics(ctx, builder, unit, label)
     enableNow:SetPoint("RIGHT", notice, "RIGHT", -2, 0)
     enableNow._msuf2UnitFrameGateAlwaysEnabled = true
     enableNow:SetScript("OnClick", function()
+        if unit == "focustarget" and not ReadBool("focus", "enabled", true) then
+            SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true })
+        end
         SetBool(unit, "enabled", true, "MSUF2_FRAME_ENABLED", { preview = true })
         if M.Refresh then M.Refresh(ctx) end
     end)
@@ -826,7 +831,9 @@ local function BuildBasics(ctx, builder, unit, label)
         if not sectionEntry then return end
         T.ApplyCollapseVisual(sectionEntry.arrow, sectionEntry.hint, sectionEntry.open)
 
-        local on = ReadBool(unit, "enabled", true)
+        local ownOn = ReadBool(unit, "enabled", true)
+        local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
+        local on = ownOn and not parentOff
         if sectionEntry.headerBg then
             if on then
                 sectionEntry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
@@ -864,11 +871,20 @@ local function BuildBasics(ctx, builder, unit, label)
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
 
     local function RefreshBasicsEnabled()
-        local on = ReadBool(unit, "enabled", true)
+        local ownOn = ReadBool(unit, "enabled", true)
+        local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
+        local on = ownOn and not parentOff
         SetControlEnabled(enable, true)
-        SetControlEnabled(reverse, on)
-        SetControlEnabled(smooth, on)
-        notice:SetShown(not on)
+        SetControlEnabled(reverse, ownOn)
+        SetControlEnabled(smooth, ownOn)
+        if parentOff then
+            noticeText:SetText("Focus Target follows the Focus frame. Enable Focus to show it.")
+            if enableNow.SetText then enableNow:SetText("Enable Focus") end
+        else
+            noticeText:SetText(unitLabel .. " frame is disabled and will not appear.")
+            if enableNow.SetText then enableNow:SetText("Enable") end
+        end
+        notice:SetShown(not ownOn or parentOff)
         RefreshBasicsState()
     end
     M.AddRefresher(ctx, RefreshBasicsEnabled)
@@ -882,6 +898,7 @@ local function BuildLayout(ctx, builder, unit)
         { value = "player", text = "Player frame" },
         { value = "target", text = "Target frame" },
         { value = "targettarget", text = "Target of Target frame" },
+        { value = "focustarget", text = "Focus Target frame" },
         { value = "focus", text = "Focus frame" },
         { value = "pet", text = "Pet frame" },
     }
@@ -906,7 +923,7 @@ local function BuildLayout(ctx, builder, unit)
         local conf = GetConf(unit)
         if type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then return "__CUSTOM" end
         local v = conf.anchorToUnitframe
-        if v == "player" or v == "target" or v == "targettarget" or v == "focus" or v == "pet" then return v end
+        if v == "player" or v == "target" or v == "targettarget" or v == "focustarget" or v == "focus" or v == "pet" then return v end
         return "GLOBAL"
     end
     local function ApplyAnchorChange()
@@ -1017,12 +1034,13 @@ local function BuildText(ctx, builder, unit)
         player = "Mapko",
         target = "Astral Warden",
         targettarget = "Moonlit Tank",
+        focustarget = "Marked Add",
         focus = "Voidcaller",
         boss = "Boss Preview",
         pet = "Companion",
     }
     local function RaidGroupNameAllowed(unitKey)
-        return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focus"
+        return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focustarget" or unitKey == "focus"
     end
     local function RaidGroupNamePreviewValue()
         local style = ReadText(unit, "raidGroupNameStyle", "PAREN")
@@ -1404,7 +1422,7 @@ local function BuildText(ctx, builder, unit)
 
     local showPowerText = W.SwitchAt(powerContent, "Show Power Text", cardW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, showPowerText,
-        function() return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget") end,
+        function() return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget") end,
         function(v)
             SetBool(unit, "showPower", v, "MSUF2_SHOW_POWER_TEXT", { text = true, preview = true })
             if RefreshTextControlState then RefreshTextControlState() end
@@ -1555,7 +1573,7 @@ local function BuildText(ctx, builder, unit)
 
         local nameOn = ReadBool(unit, "showName", true)
         local hpOn = ReadBool(unit, "showHP", true)
-        local powerOn = ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget")
+        local powerOn = ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget")
         if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         SetControlEnabled(showNameText, true)

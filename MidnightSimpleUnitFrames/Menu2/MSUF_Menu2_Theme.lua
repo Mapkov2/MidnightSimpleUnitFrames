@@ -64,7 +64,7 @@ T.fontBump = T.fontBump or 1
 
 T.navIconGrid = {
     home = { 0, 0 },
-    uf_player = { 1, 0 }, uf_target = { 3, 0 }, uf_targettarget = { 2, 0 },
+    uf_player = { 1, 0 }, uf_target = { 3, 0 }, uf_targettarget = { 2, 0 }, uf_focustarget = { 2, 0 },
     uf_focus = { 2, 0 }, uf_boss = { 6, 2 }, uf_pet = { 6, 0 },
     opt_bars = { 7, 0 }, opt_fonts = { 0, 1 }, auras2 = { 3, 1 },
     opt_castbar = { 2, 1 }, opt_misc = { 4, 2 }, opt_colors = { 4, 1 },
@@ -75,7 +75,7 @@ T.navIconGrid = {
 
 T.navIconColors = {
     home = { 0.30, 0.60, 1.00 },
-    uf_player = { 0.40, 0.78, 0.98 }, uf_target = { 0.40, 0.78, 0.98 }, uf_targettarget = { 0.40, 0.78, 0.98 },
+    uf_player = { 0.40, 0.78, 0.98 }, uf_target = { 0.40, 0.78, 0.98 }, uf_targettarget = { 0.40, 0.78, 0.98 }, uf_focustarget = { 0.40, 0.78, 0.98 },
     uf_focus = { 0.40, 0.78, 0.98 }, uf_boss = { 0.40, 0.78, 0.98 }, uf_pet = { 0.40, 0.78, 0.98 },
     opt_bars = { 0.88, 0.74, 0.36 }, opt_fonts = { 0.88, 0.74, 0.36 }, auras2 = { 0.88, 0.74, 0.36 },
     opt_castbar = { 0.88, 0.74, 0.36 }, opt_misc = { 0.88, 0.74, 0.36 }, opt_colors = { 0.88, 0.74, 0.36 },

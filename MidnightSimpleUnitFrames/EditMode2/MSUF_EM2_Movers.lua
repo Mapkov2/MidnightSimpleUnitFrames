@@ -301,6 +301,7 @@ local function RegisterAll()
         { key = "target",       label = "Target",           order = 20 },
         { key = "focus",        label = "Focus",            order = 30 },
         { key = "targettarget", label = "Target of Target", order = 40 },
+        { key = "focustarget",  label = "Focus Target",     order = 45 },
         { key = "pet",          label = "Pet",              order = 50 },
     }
 
@@ -541,7 +542,7 @@ end
 _G.MSUF_UnitPreviewActive = false
 _G.MSUF_PreviewTestMode = false
 
-local PREVIEW_UNITS = { "target", "focus", "targettarget", "pet" }
+local PREVIEW_UNITS = { "target", "focus", "focustarget", "targettarget", "pet" }
 
 _G.MSUF_EM2_ReforcePreviewFrames = function()
     if not _G.MSUF_PreviewTestMode then return end

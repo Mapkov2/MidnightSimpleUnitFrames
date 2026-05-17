@@ -461,7 +461,7 @@ local function SetAllPortraitRGB(prefix, r, g, b)
     local db = DB()
     db.general = db.general or {}
     db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, g, b
-    for _, key in ipairs({ "player", "target", "focus", "targettarget", "pet", "boss" }) do
+    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
         db[key] = db[key] or {}
         db[key][prefix .. "R"], db[key][prefix .. "G"], db[key][prefix .. "B"] = r, g, b
     end

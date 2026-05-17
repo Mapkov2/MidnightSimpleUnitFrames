@@ -375,7 +375,7 @@ local function _MSUF_GetStatusTextConfig(frame, db)
             key = "target"
         elseif type(unit) == "string" and unit:match("^boss") then
             key = "boss"
-        elseif unit == "focus" or unit == "pet" or unit == "targettarget" or unit == "tot" then
+        elseif unit == "focus" or unit == "focustarget" or unit == "pet" or unit == "targettarget" or unit == "tot" then
             key = (unit == "tot") and "targettarget" or unit
         end
     end

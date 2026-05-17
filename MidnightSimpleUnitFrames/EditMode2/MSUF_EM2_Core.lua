@@ -210,7 +210,7 @@ function State.SetPopupOpen(open)
 end
 
 -- Global snapshot for Cancel All (restore pre-edit-mode state)
-local SNAPSHOT_KEYS = {"player","target","focus","targettarget","pet","boss","general","auras2"}
+local SNAPSHOT_KEYS = {"player","target","focus","focustarget","targettarget","pet","boss","general","auras2"}
 local _snapshot = nil
 
 local function GetDeepCopy()
@@ -305,16 +305,27 @@ function State.Enter(key)
         _G.MSUF_EnableArrowKeyNudge(true)
     end
 
+    -- Preview must be active before the apply pipeline queues its boss sync.
+    _G.MSUF_UnitPreviewActive = true
+
     -- Visibility drivers: ApplyAllSettings checks MSUF_UnitEditModeActive internally
     ApplyAllSettingsSafe()
 
-    -- Preview: auto-enable all frames AFTER pipeline settles (async commit)
-    _G.MSUF_UnitPreviewActive = true
-    C_Timer.After(0.1, function()
+    local function SyncUnitPreviewsAfterEnter()
         if not (EM2.State and EM2.State.IsActive()) then return end
         if _G.MSUF_SyncAllUnitPreviews then
             _G.MSUF_SyncAllUnitPreviews()
         end
+    end
+
+    -- Preview: enable immediately, then re-sync after async apply/layout settles.
+    SyncUnitPreviewsAfterEnter()
+    C_Timer.After(0, SyncUnitPreviewsAfterEnter)
+    C_Timer.After(0.1, function()
+        SyncUnitPreviewsAfterEnter()
+    end)
+    C_Timer.After(0.25, function()
+        SyncUnitPreviewsAfterEnter()
     end)
 
     -- Undo transaction

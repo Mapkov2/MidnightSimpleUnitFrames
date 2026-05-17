@@ -200,7 +200,7 @@ _RefreshAll()
 -- Runs once on PLAYER_ENTERING_WORLD after MSUF_DB is guaranteed to exist.
 do
     local _bootDone = false
-    local _UNIT_KEYS = { "player", "target", "focus", "pet", "boss", "targettarget" }
+    local _UNIT_KEYS = { "player", "target", "focus", "focustarget", "pet", "boss", "targettarget" }
     local bootFrame = CreateFrame("Frame")
     bootFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     bootFrame:SetScript("OnEvent", function(self)

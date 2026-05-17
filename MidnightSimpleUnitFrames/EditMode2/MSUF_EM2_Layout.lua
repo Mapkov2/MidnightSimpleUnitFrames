@@ -1001,6 +1001,7 @@ local ECV_ANCHORS = {
     target       = { "LEFT",  "RIGHT",  20,   0 },
     focus        = { "TOP",   "LEFT",    0,   0 },
     targettarget = { "TOP",   "RIGHT",   0, -40 },
+    focustarget  = { "TOP",   "RIGHT",   0,  40 },
 }
 
 local function PointXY(fr, p)

@@ -148,7 +148,7 @@ local function MSUF_NormalizeStoredFontKeys()
     if type(db) ~= "table" then return end
     MSUF_NormalizeFontKeyField(db.general)
     for _, key in ipairs({
-        "player", "target", "targettarget", "focus", "pet", "boss",
+        "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         if type(db[key]) == "table" then

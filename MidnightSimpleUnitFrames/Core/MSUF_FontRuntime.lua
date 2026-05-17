@@ -230,6 +230,7 @@ local function UpdateAllFonts(onlyKey)
     local colorPowerByType = (g.colorPowerTextByType == true)
 
     if onlyKey == "tot" or onlyKey == "targetoftarget" then onlyKey = "targettarget" end
+    if onlyKey == "focus_target" or onlyKey == "focustargettarget" then onlyKey = "focustarget" end
     if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(onlyKey) then onlyKey = "boss" end
 
     local pathKey = tostring(path) .. "|" .. tostring(flags) .. "|" .. tostring(fr) .. "|" .. tostring(fg) .. "|" .. tostring(fb)

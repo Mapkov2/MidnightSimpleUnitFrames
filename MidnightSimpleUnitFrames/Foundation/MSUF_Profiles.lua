@@ -782,7 +782,7 @@ local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     alphaHPOutOfCombat = 1,
     alphaPreserveHPColor = false,
 }
-local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focus", "pet", "boss" }
+local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
 local function MSUF_IsUnitframeAlphaKey(key)
     return (type(key) == "string") and (MSUF_UNITFRAME_ALPHA_KEYS[key] == true)
 end

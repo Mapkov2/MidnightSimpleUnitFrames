@@ -77,6 +77,7 @@ Media\MSUF_Media.lua
 Core\MSUF_ProfileIO.lua
 Core\MSUF_ChatAndTooltips.lua
 Core\MSUF_StatusIndicators.lua
+Core\MSUF_FocusTargetRuntime.lua
 Core\MSUF_UnitframeCore.lua
 Core\MSUF_RangeFade.lua
 Core\MSUF_ColorsCore.lua

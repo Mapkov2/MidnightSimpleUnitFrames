@@ -10,7 +10,7 @@
 --   eliteIconOffsetY     number   default 2
 --   eliteIconLayer       number   1-10 draw order, default 7
 --
--- Supported units: target, focus, targettarget, boss
+-- Supported units: target, focus, targettarget, focustarget, boss
 -- DB defaults live in Foundation/MSUF_Defaults.lua (canonical location).
 -- Frame creation lives in MidnightSimpleUnitFrames.lua (main build loop).
 -- Menu controls live in Menu2 unit sections.
@@ -27,7 +27,7 @@ local ATLAS_SILVER = "nameplates-icon-elite-silver"  -- rare / rareelite
 -- Units that can show the elite icon (player/pet are never elite NPCs).
 -- Exposed via ns so MidnightSimpleUnitFrames.lua can reference it without
 -- an addon-global that may collide with other addons.
-local VALID_UNITS = { target = true, focus = true, targettarget = true, boss = true }
+local VALID_UNITS = { target = true, focus = true, targettarget = true, focustarget = true, boss = true }
 ns.MSUF_EliteValidUnits = VALID_UNITS
 
 local floor = math.floor

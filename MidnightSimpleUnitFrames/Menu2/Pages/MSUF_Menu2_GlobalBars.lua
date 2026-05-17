@@ -13,6 +13,11 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 
+local ROUNDED_PREVIEW_WHITE8 = "Interface\\Buttons\\WHITE8X8"
+local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
+local ROUNDED_PREVIEW_MASK = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_4x.tga"
+local ROUNDED_PREVIEW_EDGE = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_edge_4x.tga"
+
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
 local TEXT_SCOPE_KEYS = GP.TEXT_SCOPE_KEYS or {}
 local POWER_BAR_SCOPE_UNITS = GP.POWER_BAR_SCOPE_UNITS or {}
@@ -258,6 +263,125 @@ local function BuildBars(ctx)
         })
     end
 
+    local function SnapPreviewRegion(region)
+        if not region then return end
+        if region.SetSnapToPixelGrid then region:SetSnapToPixelGrid(false) end
+        if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
+    end
+
+    local function MaskRoundedPreviewTexture(sample, key, tex)
+        if not (sample and tex and tex.AddMaskTexture and sample.CreateMaskTexture) then return end
+        sample._msuf2RoundedPreviewMasks = sample._msuf2RoundedPreviewMasks or {}
+        local mask = sample._msuf2RoundedPreviewMasks[key]
+        if not mask then
+            mask = sample:CreateMaskTexture(nil, "ARTWORK")
+            SnapPreviewRegion(mask)
+            sample._msuf2RoundedPreviewMasks[key] = mask
+        end
+        mask:ClearAllPoints()
+        mask:SetTexture(ROUNDED_PREVIEW_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints(sample)
+        if sample._msuf2RoundedPreviewMasked and sample._msuf2RoundedPreviewMasked[tex] == mask then return end
+        sample._msuf2RoundedPreviewMasked = sample._msuf2RoundedPreviewMasked or {}
+        local old = sample._msuf2RoundedPreviewMasked[tex]
+        if old and tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, old) end
+        if pcall(tex.AddMaskTexture, tex, mask) then
+            sample._msuf2RoundedPreviewMasked[tex] = mask
+        end
+    end
+
+    local function CreateRoundedTexturePreview(parent, x, y, width)
+        width = max(320, floor((tonumber(width) or 560) + 0.5))
+        local card = W.ControlCard(parent, "Preview", nil, x, y, width, 88)
+        if not card then return nil end
+
+        local sampleW = min(440, max(280, width - 44))
+        local sampleH = 46
+        local powerH = 8
+        local sample = CreateFrame("Frame", nil, card)
+        sample:SetPoint("TOPLEFT", card, "TOPLEFT", 18, -38)
+        sample:SetSize(sampleW, sampleH)
+        card._msuf2RoundedPreviewSample = sample
+
+        local bg = sample:CreateTexture(nil, "BACKGROUND", nil, -7)
+        bg:SetTexture(ROUNDED_PREVIEW_WHITE8)
+        bg:SetAllPoints(sample)
+        bg:SetColorTexture(0.015, 0.020, 0.032, 0.96)
+        SnapPreviewRegion(bg)
+        sample._previewBg = bg
+
+        local healthBg = sample:CreateTexture(nil, "BORDER", nil, -1)
+        healthBg:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
+        healthBg:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerH)
+        healthBg:SetColorTexture(0.060, 0.070, 0.075, 1)
+        sample._previewHealthBg = healthBg
+
+        local health = sample:CreateTexture(nil, "ARTWORK", nil, 1)
+        health:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
+        health:SetSize(floor(sampleW * 0.78 + 0.5), sampleH - powerH)
+        health:SetColorTexture(0.70, 0.69, 0.30, 0.94)
+        sample._previewHealth = health
+
+        local powerBg = sample:CreateTexture(nil, "ARTWORK", nil, 2)
+        powerBg:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", 0, 0)
+        powerBg:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, 0)
+        powerBg:SetHeight(powerH)
+        powerBg:SetColorTexture(0.090, 0.055, 0.115, 1)
+        sample._previewPowerBg = powerBg
+
+        local power = sample:CreateTexture(nil, "ARTWORK", nil, 3)
+        power:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", 0, 0)
+        power:SetSize(floor(sampleW * 0.66 + 0.5), powerH)
+        power:SetColorTexture(0.62, 0.12, 0.78, 1)
+        sample._previewPower = power
+
+        local gloss = sample:CreateTexture(nil, "ARTWORK", nil, 4)
+        gloss:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
+        gloss:SetPoint("BOTTOMRIGHT", sample, "RIGHT", 0, -1)
+        gloss:SetColorTexture(1, 1, 1, 0.045)
+        sample._previewGloss = gloss
+
+        local name = T.Font(sample, "GameFontHighlightSmall", "Mapkotwo", T.colors.text)
+        name:SetPoint("LEFT", sample, "LEFT", 10, 4)
+        name:SetWidth(floor(sampleW * 0.42))
+        name:SetJustifyH("LEFT")
+        if name.SetShadowOffset then name:SetShadowOffset(1, -1) end
+
+        local value = T.Font(sample, "GameFontHighlightSmall", "404K - 100.0%", T.colors.text)
+        value:SetPoint("RIGHT", sample, "RIGHT", -10, 4)
+        value:SetWidth(floor(sampleW * 0.50))
+        value:SetJustifyH("RIGHT")
+        if value.SetShadowOffset then value:SetShadowOffset(1, -1) end
+
+        for key, tex in pairs({
+            bg = bg,
+            healthBg = healthBg,
+            health = health,
+            powerBg = powerBg,
+            power = power,
+            gloss = gloss,
+        }) do
+            MaskRoundedPreviewTexture(sample, key, tex)
+        end
+
+        sample._msuf2RoundedPreviewEdges = {}
+        for i = 1, 2 do
+            local edge = sample:CreateTexture(nil, "OVERLAY", nil, 6)
+            edge:SetTexture(ROUNDED_PREVIEW_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            edge:SetPoint("TOPLEFT", sample, "TOPLEFT", -i, i)
+            edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", i, -i)
+            edge:SetVertexColor(0, 0, 0, 1)
+            SnapPreviewRegion(edge)
+            sample._msuf2RoundedPreviewEdges[i] = edge
+        end
+
+        function card:RefreshRoundedPreview()
+            sample:SetAlpha((ReadB("roundedFramesEnabled", false) == true) and 1 or 0.62)
+        end
+        card:RefreshRoundedPreview()
+        return card
+    end
+
     local function CurrentGroupGlowBlocked()
         local scope = CurrentBarsScope()
         if scope ~= "gf_party" and scope ~= "gf_raid" then return false end
@@ -421,6 +545,7 @@ local function BuildBars(ctx)
         { value = "player", text = "Player" },
         { value = "target", text = "Target" },
         { value = "targettarget", text = "ToT" },
+        { value = "focustarget", text = "Focus Target" },
         { value = "focus", text = "Focus" },
         { value = "pet", text = "Pet" },
         { value = "boss", text = "Boss" },
@@ -775,14 +900,14 @@ local function BuildBars(ctx)
         SetControlEnabled(outlineSlider, ScopedBarsControlsActive())
     end)
 
-    local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 188, true)
+    local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 246, true)
     local roundLeftX = 30
     local roundRightX = 330
     local roundW = 250
     RegisterRoundedSearch(rounded, "Rounded Texture", {
         "rounded section", "rounded menu", "rounded options", "where rounded frames", "wo rounded frames",
     }, "Open this section to enable or disable rounded frame textures and its per-surface toggles.", "section")
-    local roundMaster = W.ToggleAt(rounded, "Rounded frame texture", roundLeftX, -52, roundW)
+    local roundMaster = W.SwitchAt(rounded, "Rounded frame texture", roundLeftX, -52, roundW)
     M.BindToggle(ctx, roundMaster,
         function() return ReadB("roundedFramesEnabled", false) == true end,
         function(v) SetRoundedBool("roundedFramesEnabled", v, true) end)
@@ -822,9 +947,15 @@ local function BuildBars(ctx)
         "rounded mouseover", "rounded hover", "rounded hover border", "mouseover rounded",
         "mouseover highlight rounded", "mouseover abgerundet", "hover abgerundet",
     }, "Enable or disable rounded mouseover highlight edges.")
+    local roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -154, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
+    RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview", {
+        "rounded preview", "rounded example", "rounded image", "rounded frame preview",
+        "preview rounded frames", "rounded frames aussehen", "vorschau abgerundete frames",
+    }, "Shows a small preview of the rounded frame texture style.", "preview")
     M.AddRefresher(ctx, function()
         local active = ReadB("roundedFramesEnabled", false) == true
         SetControlsEnabled({ roundUnits, roundGroups, roundPower, roundMouseover }, active)
+        if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end
     end)
 
     local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 626, true)

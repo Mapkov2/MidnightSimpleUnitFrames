@@ -14,6 +14,7 @@ local UNIT_PAGES = {
     uf_player = { unit = "player", title = "MSUF Player", label = "Player" },
     uf_target = { unit = "target", title = "MSUF Target", label = "Target" },
     uf_targettarget = { unit = "targettarget", title = "MSUF Target of Target", label = "Target of Target" },
+    uf_focustarget = { unit = "focustarget", title = "MSUF Focus Target", label = "Focus Target" },
     uf_focus = { unit = "focus", title = "MSUF Focus", label = "Focus" },
     uf_pet = { unit = "pet", title = "MSUF Pet", label = "Pet" },
     uf_boss = { unit = "boss", title = "MSUF Boss Frames", label = "Boss" },
@@ -163,7 +164,7 @@ local STATUS_CONTROLS = {
     },
     {
         value = "raidgroupname", text = "Raid Group",
-        allowed = function(unit) return unit == "player" or unit == "target" or unit == "targettarget" or unit == "focus" end,
+        allowed = function(unit) return unit == "player" or unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "focus" end,
         show = "showRaidGroupInName", defaultShow = false,
         size = "nameFontSize", defaultSize = 14,
         anchor = "raidGroupNameAnchor", defaultAnchor = "NAMERIGHT", anchors = RAID_GROUP_NAME_ANCHORS,
@@ -175,7 +176,7 @@ local STATUS_CONTROLS = {
     },
     {
         value = "eliteicon", text = "Elite / Rare",
-        allowed = function(unit) return unit == "target" or unit == "focus" or unit == "targettarget" or unit == "boss" end,
+        allowed = function(unit) return unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" or unit == "boss" end,
         show = "showEliteIcon", defaultShow = true,
         size = "eliteIconSize", defaultSize = 20,
         anchor = "eliteIconAnchor", defaultAnchor = "TOPRIGHT", anchors = STATUS_CORNER_ANCHORS,
@@ -431,6 +432,7 @@ local UNIT_COPY_TARGETS = {
     { value = "player", text = "Player" },
     { value = "target", text = "Target" },
     { value = "targettarget", text = "Target of Target" },
+    { value = "focustarget", text = "Focus Target" },
     { value = "focus", text = "Focus" },
     { value = "pet", text = "Pet" },
     { value = "boss", text = "Boss Frames" },
@@ -449,6 +451,7 @@ local function UnitTopLabel(unit)
         player = "Player",
         target = "Target",
         targettarget = "Target of Target",
+        focustarget = "Focus Target",
         focus = "Focus",
         boss = "Boss Frames",
         pet = "Pet",
@@ -457,6 +460,7 @@ end
 
 local function UnitTopPillWidth(unit)
     if unit == "targettarget" then return 116 end
+    if unit == "focustarget" then return 104 end
     if unit == "boss" then return 92 end
     if unit == "target" then return 62 end
     if unit == "focus" then return 58 end
@@ -468,6 +472,7 @@ local UNIT_KEY_SET = {
     player = true,
     target = true,
     targettarget = true,
+    focustarget = true,
     focus = true,
     pet = true,
     boss = true,
@@ -477,6 +482,7 @@ local function CanonUnitKey(key)
     if type(key) ~= "string" then return key end
     key = key:lower()
     if key == "tot" or key == "targetoftarget" or key == "target_of_target" then return "targettarget" end
+    if key == "focus_target" or key == "focustargettarget" then return "focustarget" end
     if key:match("^boss") then return "boss" end
     return key
 end
@@ -587,7 +593,7 @@ end
 local function EnsureCopyDialog()
     if not StaticPopupDialogs or StaticPopupDialogs.MSUF2_COPY_TO_ALL_CONFIRM then return end
     StaticPopupDialogs.MSUF2_COPY_TO_ALL_CONFIRM = {
-        text = "Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target.",
+        text = "Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target.",
         button1 = YES or "Yes",
         button2 = NO or "No",
         OnAccept = function(_, data)

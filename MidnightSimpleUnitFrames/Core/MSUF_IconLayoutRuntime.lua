@@ -22,7 +22,7 @@ local function GetConfigKeyForUnitSafe(unit)
     if type(fn) == "function" then
         return fn(unit)
     end
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "pet" then
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "focustarget" or unit == "targettarget" or unit == "pet" then
         return unit
     end
     local bossIndex = _G.MSUF_GetBossIndexFromToken

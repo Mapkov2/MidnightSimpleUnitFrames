@@ -58,11 +58,12 @@ function ns.Text.Set(fs, text, show)
  end
 ns.Text._msufPatchE = ns.Text._msufPatchE or { version = "E1" }
 -- Secret-safe: numeric clamps only; no text comparisons.
-_G.MSUF_TEXTLAYOUT_VALID_KEYS = _G.MSUF_TEXTLAYOUT_VALID_KEYS or { player=true, target=true, focus=true, targettarget=true, pet=true, boss=true }
+_G.MSUF_TEXTLAYOUT_VALID_KEYS = _G.MSUF_TEXTLAYOUT_VALID_KEYS or { player=true, target=true, focus=true, targettarget=true, focustarget=true, pet=true, boss=true }
 function _G.MSUF_NormalizeTextLayoutUnitKey(unitKey, fallbackKey)
     local k = unitKey
     if not k or k == "" then k = fallbackKey or "player" end
     if k == "tot" then k = "targettarget" end
+    if k == "focus_target" or k == "focustargettarget" then k = "focustarget" end
     -- Perf: avoid pattern matching in hot layout paths.
     if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(k) then k = "boss" end
     if not _G.MSUF_TEXTLAYOUT_VALID_KEYS[k] then k = "player" end

@@ -389,7 +389,7 @@ local function InvalidateByKey(key)
 end
 
 local function InvalidateAll()
-    for _, k in ipairs({ "player", "target", "focus", "pet", "targettarget" }) do
+    for _, k in ipairs({ "player", "target", "focus", "focustarget", "pet", "targettarget" }) do
         InvalidateByKey(k)
     end
     InvalidateByKey("boss")
@@ -413,6 +413,7 @@ end
 
 local function SyncFocusTimer()
     SyncUnitSafe("focus")
+    SyncUnitSafe("focustarget")
 end
 
 local function SyncPetTimer()
@@ -443,7 +444,7 @@ do
         local db = _G.MSUF_DB
         if db then
             local allOff = true
-            for _, k in ipairs({"player","target","focus","pet","targettarget","boss"}) do
+            for _, k in ipairs({"player","target","focus","focustarget","pet","targettarget","boss"}) do
                 local c = db[k]
                 if c and (c.portraitMode or "OFF") ~= "OFF" then allOff = false; break end
             end
@@ -457,7 +458,7 @@ do
             InvalidateByKey("target"); InvalidateByKey("targettarget")
             SchedulePortraitTimer(0, "PortraitDecoration.Timer.SyncTarget", SyncTargetTimer)
         elseif event == "PLAYER_FOCUS_CHANGED" then
-            InvalidateByKey("focus")
+            InvalidateByKey("focus"); InvalidateByKey("focustarget")
             SchedulePortraitTimer(0, "PortraitDecoration.Timer.SyncFocus", SyncFocusTimer)
         elseif event == "UNIT_PET" then
             InvalidateByKey("pet")
@@ -505,7 +506,7 @@ end
 _G.MSUF_PortraitDecoration_SyncUnit = SyncDecorationUnit
 
 local function RefreshAllDecoration()
-    for _, k in ipairs({"player","target","focus","pet","targettarget"}) do
+    for _, k in ipairs({"player","target","focus","focustarget","pet","targettarget"}) do
         _G.MSUF_PortraitDecoration_SyncUnit(k)
     end
     _G.MSUF_PortraitDecoration_SyncUnit("boss")

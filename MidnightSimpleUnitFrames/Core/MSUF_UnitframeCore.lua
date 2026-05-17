@@ -475,6 +475,7 @@ local function InitUnitFlags(f)
     f._msufIsPlayer = (u == "player")
     f._msufIsTarget = (u == "target")
     f._msufIsFocus  = (u == "focus")
+    f._msufIsFocusTarget = (u == "focustarget")
     f._msufIsPet    = (u == "pet")
     f._msufIsToT    = (u == "targettarget")
     -- Perf: avoid pattern matching.
@@ -773,6 +774,8 @@ function Core.AnyRaidGroupNameEnabled()
     if conf and conf.showRaidGroupInName == true then return true end
     conf = db.focus
     if conf and conf.showRaidGroupInName == true then return true end
+    conf = db.focustarget
+    if conf and conf.showRaidGroupInName == true then return true end
     conf = db.targettarget
     if conf and conf.showRaidGroupInName == true then return true end
     return false
@@ -783,7 +786,8 @@ function Core.IsRaidGroupNameUnitAllowed(unit, frame)
     local key = frame and (frame.msufConfigKey or frame.unitKey) or unit
     key = key or unit
     if key == "tot" then key = "targettarget" end
-    return key == "player" or key == "target" or key == "targettarget" or key == "focus"
+    if key == "focus_target" or key == "focustargettarget" then key = "focustarget" end
+    return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
 end
 _G.MSUF_UFCore_IsRaidGroupNameUnitAllowed = Core.IsRaidGroupNameUnitAllowed
 
@@ -1493,7 +1497,7 @@ Elements.Portrait = {
         -- as "static" or only update once per unit swap.
         -- Player + Boss: static portraits (only touch when explicitly dirty or settings/layout changed).
         -- Target/Focus: update portrait texture only once per swap (handled via GUID change in the main UF update path).
-        if (unit == "player" or unit == "target" or unit == "focus" or unit == "pet" or unit == "targettarget" or f.isBoss) and (not f._msufPortraitDirty) then
+        if (unit == "player" or unit == "target" or unit == "focus" or unit == "focustarget" or unit == "pet" or unit == "targettarget" or f.isBoss) and (not f._msufPortraitDirty) then
             local mode = conf.portraitMode or "OFF"
             local render = conf.portraitRender
             if render ~= "CLASS" then
@@ -1985,6 +1989,12 @@ end
 
     -- Disabled frames don't need any unit events.
     if conf and conf.enabled == false then
+        return 0, conf
+    end
+    if f._msufIsFocusTarget
+        and type(_G.MSUF_IsFocusTargetEffectiveEnabled) == "function"
+        and not _G.MSUF_IsFocusTargetEffectiveEnabled()
+    then
         return 0, conf
     end
 
@@ -3712,6 +3722,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         DirectIndicatorUnit("player")
         DirectIndicatorUnit("target")
         DirectIndicatorUnit("focus")
+        DirectIndicatorUnit("focustarget")
         if event == "GROUP_ROSTER_UPDATE" then
             Core.QueueRaidGroupNameRefresh(event)
         end
@@ -3724,6 +3735,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         DirectIndicatorUnit("target")
         DirectIndicatorUnit("focus")
         DirectIndicatorUnit("targettarget")
+        DirectIndicatorUnit("focustarget")
         return
     end
 

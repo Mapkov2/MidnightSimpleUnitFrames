@@ -56,9 +56,10 @@ local MSUF_RESET_DEFAULTS = {
     focus  = { width=220, height=30, offsetX= 260, offsetY=135, showName=true, showHP=false, showPower=false },
     pet    = { width=220, height=30, offsetX=-260, offsetY=135, showName=true, showHP=false, showPower=false },
     targettarget = { width=220, height=30, offsetX=260, offsetY=225, showName=true, showHP=true, showPower=false },
+    focustarget = { width=180, height=30, offsetX=260, offsetY=180, showName=true, showHP=true, showPower=false },
     boss   = { width=180, height=30, offsetX=360, offsetY=230, spacing=-96, bossLayoutMode="VERTICAL_DOWN", showName=true, showHP=true, showPower=false },
 }
-local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "pet", "targettarget", "boss" }
+local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "focustarget", "pet", "targettarget", "boss" }
 local MSUF_FullResetPending = false
 local function MSUF_ResetPositionAnchorsToScreen()
     if type(MSUF_DB) ~= "table" then return end
@@ -641,6 +642,9 @@ function MSUF_ShowFocusInfoTooltip()
  end
 function MSUF_ShowTargetTargetInfoTooltip()
     MSUF_ShowUnitInfoTooltip("targettarget", "Target of Target")
+ end
+function MSUF_ShowFocusTargetInfoTooltip()
+    MSUF_ShowUnitInfoTooltip("focustarget", "Focus Target")
  end
 function MSUF_ShowPetInfoTooltip()
     MSUF_ShowUnitInfoTooltip("pet", "Pet")

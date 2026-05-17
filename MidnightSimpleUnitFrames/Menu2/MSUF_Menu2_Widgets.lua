@@ -788,6 +788,7 @@ local function ScopeButtonWidth(item)
     local text = tostring(Tr((item and (item.text or item.label)) or value or ""))
     if value == "shared" then return 72 end
     if value == "targettarget" then return 58 end
+    if value == "focustarget" then return 92 end
     if text == "Boss 1" or text == "Boss 2" or text == "Boss 3" or text == "Boss 4" or text == "Boss 5" then return 74 end
     return math.max(54, math.min(96, 28 + (#text * 7)))
 end
