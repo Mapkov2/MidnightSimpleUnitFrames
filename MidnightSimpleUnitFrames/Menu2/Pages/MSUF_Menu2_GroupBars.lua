@@ -262,6 +262,7 @@ local function BuildGFBars(ctx)
     end
 
     local text = b:CollapsibleSection("text", "Text", 620, false)
+    text._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local textW = text._msuf2Width or b.width or 720
     local textLeftX = 24
     local textCardW = min(520, max(360, textW - 48))

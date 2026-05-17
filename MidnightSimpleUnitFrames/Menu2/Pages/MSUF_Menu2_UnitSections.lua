@@ -986,6 +986,7 @@ end
 
 local function BuildText(ctx, builder, unit)
     local sec = builder:CollapsibleSection("text", "Text", 620, false)
+    sec._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 24
     local cardW = math.min(520, math.max(360, sectionW - 48))

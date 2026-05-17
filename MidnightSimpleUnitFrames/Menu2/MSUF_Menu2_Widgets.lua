@@ -251,22 +251,27 @@ function W.PageBuilder(ctx)
                 local badges = entry._msuf2Badges
                 if badges and #badges > 0 then
                     local right = -12
+                    local hasVisibleBadge = false
                     for i = #badges, 1, -1 do
                         local badge = badges[i]
                         if badge and badge.IsShown and badge:IsShown() then
+                            hasVisibleBadge = true
                             local bw = (badge.GetWidth and badge:GetWidth()) or 0
                             badge:ClearAllPoints()
                             badge:SetPoint("RIGHT", header, "RIGHT", right, 0)
                             right = right - bw - 6
                         end
                     end
-                    if hint.Hide then hint:Hide() end
 
-                    label:ClearAllPoints()
-                    label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
-                    label:SetPoint("RIGHT", header, "RIGHT", right - 8, 0)
-                    label:SetJustifyH("LEFT")
-                    return
+                    if hasVisibleBadge then
+                        if hint.Hide then hint:Hide() end
+
+                        label:ClearAllPoints()
+                        label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
+                        label:SetPoint("RIGHT", header, "RIGHT", right - 8, 0)
+                        label:SetJustifyH("LEFT")
+                        return
+                    end
                 end
 
                 if hint.Show then hint:Show() end
@@ -505,6 +510,8 @@ function W.SetCollapsibleBadges(section, specs)
 
     entry._msuf2Badges = entry._msuf2Badges or {}
     specs = specs or {}
+    local onlyWhenOpen = section._msuf2CollapsibleBadgesOnlyWhenOpen == true
+        or entry._msuf2CollapsibleBadgesOnlyWhenOpen == true
 
     for i = 1, #specs do
         local spec = specs[i] or {}
@@ -538,7 +545,11 @@ function W.SetCollapsibleBadges(section, specs)
             local c = style.border
             badge._msuf2Edge:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
         end
-        badge:SetShown(text ~= "")
+        local shown = text ~= ""
+        if shown and (onlyWhenOpen or spec.onlyWhenOpen == true) then
+            shown = entry.open == true
+        end
+        badge:SetShown(shown)
     end
 
     for i = #specs + 1, #entry._msuf2Badges do
