@@ -1255,7 +1255,10 @@ Elements.Power = {
             local pb = f.targetPowerBar or f.powerBar
             afterBottomIsPower = (f._msufPowerBarReserved == true) or (pb and pb.IsShown and pb:IsShown()) or false
             if beforeBottomIsPower ~= afterBottomIsPower then
-                if (f and (f._msufBarOutlineThickness or 0) > 0) and type(_G.MSUF_QueueUnitframeVisual) == "function" then
+                local hl = f and f._msufHighlightOutline
+                local hasRuntimeBorder = f and (f._msufAggroOutlineOn or f._msufDispelOutlineOn or f._msufPurgeOutlineOn or f._msufBossTargetHLOn or _G.MSUF_BorderTestModesActive == true
+                    or (hl and hl.IsShown and hl:IsShown()))
+                if hasRuntimeBorder and type(_G.MSUF_QueueUnitframeVisual) == "function" then
                     _G.MSUF_QueueUnitframeVisual(f)
                 end
             end

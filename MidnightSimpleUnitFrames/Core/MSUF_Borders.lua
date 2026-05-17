@@ -342,16 +342,17 @@ local function _OutlineModeEnabledForUnit(unit, key, legacyKey)
 end
 
 local _borderIterState = {}
+local MSUF_ApplyRareVisuals
+local MSUF_RefreshStaticUnitFrameOutlines
 
 local function _Iter_SyncBorderStamps(uf)
     if not uf or not uf.unit then return end
-    local thickness, stamp = 0, 0
+    local stamp = 0
     local get = MSUF_GetDesiredBarBorderThicknessAndStamp
     if type(get) == "function" then
-        thickness, stamp = get(uf)
+        stamp = select(2, get(uf))
     end
     uf._msufBarBorderStamp = stamp
-    uf._msufBarOutlineThickness = thickness
     uf._msufBarOutlineEdgeSize = -1
     uf._msufHighlightEdgeSize = -1
     uf._msufHighlightColorKey = -1
@@ -359,21 +360,26 @@ local function _Iter_SyncBorderStamps(uf)
     local pb = uf.targetPowerBar
     local pbDetached = uf._msufPowerBarDetached
     uf._msufBarOutlineBottomIsPower = (pb and not pbDetached and pb.IsShown and pb:IsShown()) and true or false
-    local apply = _G.MSUF_RefreshRareBarVisuals
-    if type(apply) == "function" then apply(uf) end
+    if type(MSUF_RefreshStaticUnitFrameOutlines) == "function" then
+        MSUF_RefreshStaticUnitFrameOutlines(uf)
+    end
 end
 
 local function _Iter_ResetBorderOnScale(uf)
     if uf and uf.unit then
         uf._msufBarBorderStamp = nil
         uf._msufBarOutlineEdgeSize = -1
-        if _G.MSUF_QueueUnitframeVisual then
-            _G.MSUF_QueueUnitframeVisual(uf)
+        uf._msufHighlightEdgeSize = -1
+        uf._msufHighlightColorKey = -1
+        if type(MSUF_RefreshStaticUnitFrameOutlines) == "function" then
+            MSUF_RefreshStaticUnitFrameOutlines(uf)
+        end
+        if type(MSUF_ApplyRareVisuals) == "function" then
+            MSUF_ApplyRareVisuals(uf)
         end
     end
 end
 
-local MSUF_ApplyRareVisuals
 -- Aggro outline indicator: reuse the bar-outline border and recolor/thicken it
 -- when the player has full aggro on target/focus/boss frames.
 local function MSUF_IsAggroOutlineUnit(unit)
@@ -490,40 +496,56 @@ local function MSUF_ReadDetachedPowerBarBorder(self)
     local readSize = _G.MSUF_ReadUnitPowerBarBorderThickness
     local barsDB = MSUF_DB and MSUF_DB.bars
 
-    local enabled
+    local thickness
+    local powerBorderEnabled
     if type(readEnabled) == "function" then
-        enabled = readEnabled(unitKey)
+        powerBorderEnabled = readEnabled(unitKey) == true
     else
-        enabled = barsDB and (barsDB.powerBarBorderEnabled == true) or false
+        powerBorderEnabled = barsDB and (barsDB.powerBarBorderEnabled == true) or false
     end
 
-    local thickness
-    if type(readSize) == "function" then
-        thickness = readSize(unitKey)
+    if powerBorderEnabled then
+        if type(readSize) == "function" then
+            thickness = readSize(unitKey)
+        else
+            thickness = barsDB and tonumber(barsDB.powerBarBorderThickness or barsDB.powerBarBorderSize) or 1
+        end
     else
-        thickness = barsDB and tonumber(barsDB.powerBarBorderThickness or barsDB.powerBarBorderSize) or 1
+        local detachedOverride = barsDB and barsDB.detachedPowerBarOutline
+        if detachedOverride ~= nil then
+            local override = tonumber(detachedOverride)
+            if override ~= nil then thickness = override end
+        end
     end
-    local detachedOverride = barsDB and barsDB.detachedPowerBarOutline
-    if detachedOverride ~= nil then
-        local override = tonumber(detachedOverride)
-        if override ~= nil then thickness = override end
+
+    if thickness == nil and type(MSUF_GetDesiredBarBorderThicknessAndStamp) == "function" then
+        thickness = select(1, MSUF_GetDesiredBarBorderThicknessAndStamp(self))
     end
+
     thickness = tonumber(thickness) or 1
     if thickness < 0 then thickness = 0 elseif thickness > 6 then thickness = 6 end
-    return enabled == true, thickness
+    return thickness > 0, thickness
 end
+
+local function MSUF_HideDetachedPowerBarOutline(self)
+    local outline = self and self._msufDetachedPBOutline
+    if outline then
+        outline:Hide()
+    end
+end
+_G.MSUF_HideDetachedPowerBarOutline = MSUF_HideDetachedPowerBarOutline
 
 local function MSUF_ApplyDetachedPowerBarOutline(self)
     local pb = self and self.targetPowerBar
     local outline = self and self._msufDetachedPBOutline
     if not (self and pb and self._msufPowerBarDetached and pb.IsShown and pb:IsShown()) then
-        if outline then outline:Hide() end
+        MSUF_HideDetachedPowerBarOutline(self)
         return
     end
 
     local enabled, thickness = MSUF_ReadDetachedPowerBarBorder(self)
     if not enabled or thickness <= 0 then
-        if outline then outline:Hide() end
+        MSUF_HideDetachedPowerBarOutline(self)
         return
     end
 
@@ -632,6 +654,32 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
     MSUF_ApplyDetachedPowerBarOutline(self)
 end
 
+MSUF_RefreshStaticUnitFrameOutlines = function(self)
+    if not self or not self.unit then return end
+    if self.border then
+        self.border:Hide()
+    end
+
+    local thickness, stamp = 0, 0
+    if type(MSUF_GetDesiredBarBorderThicknessAndStamp) == "function" then
+        thickness, stamp = MSUF_GetDesiredBarBorderThicknessAndStamp(self)
+    end
+    thickness = tonumber(thickness) or 0
+    self._msufBarBorderStamp = stamp
+
+    MSUF_ApplyBarOutline(self, thickness, self._msufBarOutline)
+
+    local pb = self.targetPowerBar or self.powerBar
+    local applyPowerBorder = _G.MSUF_ApplyPowerBarBorder
+    if pb and type(applyPowerBorder) == "function" then
+        applyPowerBorder(pb)
+    end
+
+    local fnR = _G.MSUF_RoundedUF_OnRareVisualsRefreshed
+    if fnR then fnR(self) end
+end
+_G.MSUF_RefreshStaticUnitFrameOutlines = MSUF_RefreshStaticUnitFrameOutlines
+
 -- Sub-function: create/update highlight overlay frame for aggro/dispel/purge.
 local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
     local hlFrame = self._msufHighlightOutline
@@ -705,15 +753,6 @@ end
 
 MSUF_ApplyRareVisuals = function(self)
     if not self or not self.unit then  return end
-    if self.border then
-        self.border:Hide()
-    end
-    local baseThickness = 0
-    if type(MSUF_GetDesiredBarBorderThicknessAndStamp) == "function" then
-        baseThickness = select(1, MSUF_GetDesiredBarBorderThicknessAndStamp(self))
-    end
-    baseThickness = tonumber(baseThickness) or 0
-
     local cfg = _RefreshBorderSettingsForFrame(self)
 
     -- Aggro state detection (target/focus/boss only).
@@ -813,9 +852,6 @@ MSUF_ApplyRareVisuals = function(self)
             end
         end
     end
-
-    -- Apply the normal black outline.
-    MSUF_ApplyBarOutline(self, baseThickness, self._msufBarOutline)
 
     -- Resolve highlight priority: Dispel > Aggro > Purge > Boss Target (default), or custom order.
     local hlKey = 0

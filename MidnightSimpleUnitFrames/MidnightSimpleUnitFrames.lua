@@ -803,9 +803,7 @@ local function _MSUF_Bars_HidePower(bar, hardReset)
     if not bar then return true end
     bar:SetScript("OnUpdate", nil)
     bar:Hide()
-    if _G.MSUF_ApplyPowerBarBorder then
-        _G.MSUF_ApplyPowerBarBorder(bar)
-    elseif bar._msufPowerBorder and bar._msufPowerBorder.Hide then
+    if bar._msufPowerBorder and bar._msufPowerBorder.Hide then
         bar._msufPowerBorder:Hide()
     end
     if hardReset then MSUF_ResetBarZero(bar, true) end
@@ -872,9 +870,6 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     end
 
     bar:Show()
-    if _G.MSUF_ApplyPowerBarBorder then
-        _G.MSUF_ApplyPowerBarBorder(bar)
-    end
      return true
 end
 ns.Bars.Spec.power_pct = ns.Bars.Spec.power_pct or function(frame, unit, barsConf, isBoss, isPlayer, isTarget, isFocus)
@@ -4294,31 +4289,25 @@ local function MSUF_UFStep_SyncTargetPower(self, unit, barsConf, isPlayer, isTar
   if MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus) then  return true end
    return false
 end
-local function MSUF_UFStep_Border(self)
-        do
-            if self.border then
-                self.border:Hide()
-            end
-            local thickness, stamp = MSUF_GetDesiredBarBorderThicknessAndStamp(self)
-            local pb = self.targetPowerBar
-            local pbDetached = self._msufPowerBarDetached
-            local bottomIsPower = (pb and not pbDetached and pb.IsShown and pb:IsShown()) and true or false
-            local need = false
-            if self._msufBarBorderStamp ~= stamp then
-                self._msufBarBorderStamp = stamp
-                need = true
-            end
-            if self._msufBarOutlineThickness ~= thickness then
-                need = true
-            end
-            if self._msufBarOutlineBottomIsPower ~= bottomIsPower then
-                need = true
-            end
-            if need and _UF.QueueVis then
-                _UF.QueueVis(self)
-            end
+local function MSUF_FrameHasRuntimeBorderState(self)
+    if not self then return false end
+    if self._msufAggroOutlineOn or self._msufDispelOutlineOn or self._msufPurgeOutlineOn or self._msufBossTargetHLOn then
+        return true
     end
- end
+    if _G.MSUF_BorderTestModesActive == true then
+        return true
+    end
+    local hl = self._msufHighlightOutline
+    return (hl and hl.IsShown and hl:IsShown()) and true or false
+end
+
+local function MSUF_UFStep_Border(self)
+    if not MSUF_FrameHasRuntimeBorderState(self) then return end
+    local fn = _G.MSUF_RefreshRareBarVisuals
+    if type(fn) == "function" then
+        fn(self)
+    end
+end
 local function MSUF_UFStep_NameLevelLeaderRaid(self, unit, conf, g)
     ns.Text.ApplyName(self, unit)
     ns.Text.ApplyLevel(self, unit, conf)
@@ -4801,7 +4790,7 @@ end
         local pbDetached = self._msufPowerBarDetached
         local pbWanted = (pb ~= nil) and not pbDetached and (self._msufPowerBarReserved or (pb.IsShown and pb:IsShown()))
         local bottomIsPower = pbWanted and true or false
-        if self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false) then
+        if MSUF_FrameHasRuntimeBorderState(self) and self._msufHighlightBottomIsPower ~= (bottomIsPower and true or false) then
             self._msufNeedsBorderVisual = true
     end
     end
@@ -4983,6 +4972,12 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     f:SetSize(w, h)
     if f.targetPowerBar then
         MSUF_ApplyPowerBarEmbedLayout(f)
+    end
+    do
+        local fnStaticOutlines = _G.MSUF_RefreshStaticUnitFrameOutlines
+        if type(fnStaticOutlines) == "function" then
+            fnStaticOutlines(f)
+        end
     end
     ns.Bars._ApplyReverseFillBars(f, conf)
     local showName  = (conf.showName  ~= false)
@@ -5890,13 +5885,15 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         _G.MSUF_FixHighlightForFrame(f)
     end
 
-    -- FIX: Force border system refresh after layout completes.
-    -- Border stamps were invalidated above (thickness/bottomIsPower = -1/nil) but no
-    -- visual refresh was triggered â€” the outline stayed stale until a manual menu touch.
-    -- Direct call (cold path: EditMode / config apply, never combat hot path).
-    local fnVis = _G.MSUF_RefreshRareBarVisuals
-    if type(fnVis) == "function" then
-        fnVis(f)
+    -- Cold styling refresh after layout changes. Static outlines/borders are
+    -- intentionally kept out of the power/health update path.
+    local fnStaticOutlines = _G.MSUF_RefreshStaticUnitFrameOutlines
+    if type(fnStaticOutlines) == "function" then
+        fnStaticOutlines(f)
+    end
+    local fnRare = _G.MSUF_RefreshRareBarVisuals
+    if type(fnRare) == "function" then
+        fnRare(f)
     end
     f._msufPowerBarLayoutInitialized = true
     f._msufPowerBarLayoutDirty = nil
@@ -5919,8 +5916,9 @@ _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey = function(unitKey, refreshPower)
         if refreshPower and _G.MSUF_UFCore_UpdatePowerBarFast then
             _G.MSUF_UFCore_UpdatePowerBarFast(fr)
         end
-        if _G.MSUF_ApplyPowerBarBorder then
-            _G.MSUF_ApplyPowerBarBorder(fr.targetPowerBar)
+        local fnStaticOutlines = _G.MSUF_RefreshStaticUnitFrameOutlines
+        if type(fnStaticOutlines) == "function" then
+            fnStaticOutlines(fr)
         end
     end
     if unitKey == "boss" then

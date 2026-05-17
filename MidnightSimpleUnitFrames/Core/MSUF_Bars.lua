@@ -687,9 +687,15 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
     if detached then
         local border = bar._msufPowerBorder
         if border and border.Hide then border:Hide() end
-        local applyDetached = _G.MSUF_ApplyDetachedPowerBarOutline
-        if type(applyDetached) == "function" then
-            applyDetached(parentUF)
+
+        -- Detached power bar outline is pure styling. Keep it out of the
+        -- power update path; cold visual/layout passes apply the outline.
+        local barShown = (not bar.IsShown) or bar:IsShown()
+        if not barShown then
+            local hideDetached = _G.MSUF_HideDetachedPowerBarOutline
+            if type(hideDetached) == "function" then
+                hideDetached(parentUF)
+            end
         end
         return
     end
@@ -737,11 +743,16 @@ function _G.MSUF_ApplyPowerBarBorder(bar)
 function _G.MSUF_ApplyPowerBarBorder_All()
     local frames = _G.MSUF_UnitFrames
     if type(frames) ~= 'table' then  return end
+    local applyStatic = _G.MSUF_RefreshStaticUnitFrameOutlines
     for _, f in pairs(frames) do
-        local bar = f and (f.targetPowerBar or f.powerBar)
-        if bar then
-            _G.MSUF_ApplyPowerBarBorder(bar)
-    end
+        if f and type(applyStatic) == "function" then
+            applyStatic(f)
+        else
+            local bar = f and (f.targetPowerBar or f.powerBar)
+            if bar then
+                _G.MSUF_ApplyPowerBarBorder(bar)
+            end
+        end
     end
  end
 local function MSUF_PreCreateHPGradients(hpBar)
