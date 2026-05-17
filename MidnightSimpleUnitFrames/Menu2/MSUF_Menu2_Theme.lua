@@ -1048,58 +1048,6 @@ local function ClampScrollValue(value, maxValue)
     return value
 end
 
-local SCROLL_EDGE_BOUNCE_OFFSET = 16
-local SCROLL_EDGE_BOUNCE_PULL = 0.055
-local SCROLL_EDGE_BOUNCE_RELEASE = 0.165
-
-local function CreateScrollEdgeBounce(child, offsetY)
-    if not (child and child.CreateAnimationGroup) then return nil end
-    local group = child:CreateAnimationGroup()
-
-    local pull = group:CreateAnimation("Translation")
-    pull:SetOrder(1)
-    pull:SetOffset(0, offsetY)
-    pull:SetDuration(SCROLL_EDGE_BOUNCE_PULL)
-    if pull.SetSmoothing then pull:SetSmoothing("OUT") end
-
-    local release = group:CreateAnimation("Translation")
-    release:SetOrder(2)
-    release:SetOffset(0, -offsetY)
-    release:SetDuration(SCROLL_EDGE_BOUNCE_RELEASE)
-    if release.SetSmoothing then release:SetSmoothing("OUT") end
-
-    return group
-end
-
-local function StopScrollEdgeBounce(scroll)
-    local child = scroll and scroll.GetScrollChild and scroll:GetScrollChild()
-    if not child then return end
-    local top = child._msuf2ScrollBounceTop
-    local bottom = child._msuf2ScrollBounceBottom
-    if top and top.IsPlaying and top:IsPlaying() and top.Stop then top:Stop() end
-    if bottom and bottom.IsPlaying and bottom:IsPlaying() and bottom.Stop then bottom:Stop() end
-end
-
-local function PlayScrollEdgeBounce(scroll, direction)
-    local child = scroll and scroll.GetScrollChild and scroll:GetScrollChild()
-    if not child then return end
-
-    local key = direction > 0 and "_msuf2ScrollBounceBottom" or "_msuf2ScrollBounceTop"
-    local otherKey = direction > 0 and "_msuf2ScrollBounceTop" or "_msuf2ScrollBounceBottom"
-    local other = child[otherKey]
-    if other and other.IsPlaying and other:IsPlaying() and other.Stop then other:Stop() end
-
-    local group = child[key]
-    if not group then
-        local offsetY = (direction > 0) and SCROLL_EDGE_BOUNCE_OFFSET or -SCROLL_EDGE_BOUNCE_OFFSET
-        group = CreateScrollEdgeBounce(child, offsetY)
-        child[key] = group
-    end
-    if not (group and group.Play) then return end
-    if group.IsPlaying and group:IsPlaying() then return end
-    group:Play()
-end
-
 local function PixelBarTexture(texture)
     if not texture then return texture end
     texture:SetTexture("Interface\\Buttons\\WHITE8X8")
@@ -1211,30 +1159,7 @@ function T.StyleScrollFrame(scroll, anchor)
         local step = 64
         if IsShiftKeyDown and IsShiftKeyDown() then step = 180 end
         if IsControlKeyDown and IsControlKeyDown() then step = math.max(step, (scroll.GetHeight and scroll:GetHeight()) or step) end
-        local current = (scroll:GetVerticalScroll() or 0)
-        local maxScroll = scroll._msuf2MaxScroll
-        if maxScroll == nil then
-            local child = scroll.GetScrollChild and scroll:GetScrollChild()
-            local childH = (child and child.GetHeight and child:GetHeight()) or 0
-            local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
-            maxScroll = math.max(0, childH - frameH)
-        end
-        local target = current - delta * step
-        local edgeDirection = nil
-        if maxScroll > 1 then
-            if target < 0 then
-                edgeDirection = -1
-            elseif target > maxScroll then
-                edgeDirection = 1
-            end
-        end
-
-        scroll:SetVerticalScroll(target)
-        if edgeDirection then
-            PlayScrollEdgeBounce(scroll, edgeDirection)
-        else
-            StopScrollEdgeBounce(scroll)
-        end
+        scroll:SetVerticalScroll((scroll:GetVerticalScroll() or 0) - delta * step)
     end
 
     scroll:EnableMouseWheel(true)
