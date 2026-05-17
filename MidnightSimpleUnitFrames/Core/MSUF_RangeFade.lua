@@ -202,6 +202,12 @@ do
         return false
     end
 
+    _G.MSUF_MarkRangeFadeAlphaRepair = function(f)
+        if f and (f._msufAlphaBaseMode == "layered" or f._msufAlphaLayeredMode) then
+            f._msufRangeFadeAlphaRepairNeeded = true
+        end
+    end
+
     local function ResolveFadeAlpha(conf)
         local a = (conf and tonumber(conf.rangeFadeAlpha)) or 0.6
         -- Misc exposes this as remaining out-of-range alpha: 0% = hidden,
@@ -213,15 +219,29 @@ do
     local function ApplyMul(f, unit, confKey, conf, inRange)
         local prev = _state[unit]
         if inRange == prev then
-            -- StatusBar:SetStatusBarColor can reset the bar texture alpha while
-            -- range state is unchanged. Repair only layered frames; flat alpha
-            -- is unaffected and stays on the cheap no-op path.
+            -- StatusBar:SetStatusBarColor can reset layered texture alpha while
+            -- range state is unchanged. Do not repair every range poll; most
+            -- color paths already reapply immediately. Keep an explicit dirty
+            -- flag plus a low-frequency safety check for unmarked callers.
             if f and (f._msufAlphaBaseMode == "layered" or f._msufAlphaLayeredMode) then
+                if f._msufRangeFadeAlphaRepairNeeded ~= true then
+                    local n = (f._msufRangeFadeAlphaRepairTick or 0) + 1
+                    if n < 16 then
+                        f._msufRangeFadeAlphaRepairTick = n
+                        return false
+                    end
+                end
+                f._msufRangeFadeAlphaRepairNeeded = nil
+                f._msufRangeFadeAlphaRepairTick = 0
                 ReapplyCurrentAlpha(f, unit, confKey)
             end
             return false
         end
         _state[unit] = inRange
+        if f then
+            f._msufRangeFadeAlphaRepairNeeded = nil
+            f._msufRangeFadeAlphaRepairTick = 0
+        end
         local a = 1
         if inRange == false then
             a = ResolveFadeAlpha(conf)

@@ -981,11 +981,15 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
         if rangeHealthMode and m < 1 then
             MSUF_Alpha_ApplyLayered(frame, fg * m, bg, "health", preserveHPColor, 1)
             MSUF_Alpha_SetTextAlpha(frame, 1)
+            frame._msufRangeFadeAlphaRepairNeeded = nil
+            frame._msufRangeFadeAlphaRepairTick = 0
             return true
         end
         MSUF_Alpha_ApplyLayered(frame, fg * m, bg * m, mode, preserveHPColor,
             _AlphaShouldRangeFadePortrait() and m or 1)
         MSUF_Alpha_SetTextAlpha(frame, m)
+        frame._msufRangeFadeAlphaRepairNeeded = nil
+        frame._msufRangeFadeAlphaRepairTick = 0
         return true
     end
 
@@ -994,6 +998,8 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
         if type(a) ~= "number" then return false end
         if rangeHealthMode and m < 1 and frame._msufAlphaSupportsLayered then
             MSUF_Alpha_ApplyLayered(frame, a * m, a, "health", false, 1)
+            frame._msufRangeFadeAlphaRepairNeeded = nil
+            frame._msufRangeFadeAlphaRepairTick = 0
             return true
         end
         a = a * m
@@ -1001,6 +1007,8 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
             MSUF_Alpha_ResetLayered(frame)
         end
         MSUF_Alpha_SetFlat(frame, a)
+        frame._msufRangeFadeAlphaRepairNeeded = nil
+        frame._msufRangeFadeAlphaRepairTick = 0
         return true
     end
 
