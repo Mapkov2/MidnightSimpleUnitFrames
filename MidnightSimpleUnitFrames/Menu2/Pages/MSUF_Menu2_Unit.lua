@@ -593,7 +593,7 @@ end
 local function EnsureCopyDialog()
     if not StaticPopupDialogs or StaticPopupDialogs.MSUF2_COPY_TO_ALL_CONFIRM then return end
     StaticPopupDialogs.MSUF2_COPY_TO_ALL_CONFIRM = {
-        text = "Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target.",
+        text = M.Tr("Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target."),
         button1 = YES or "Yes",
         button2 = NO or "No",
         OnAccept = function(_, data)

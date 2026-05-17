@@ -62,7 +62,7 @@ function Read-RuntimeLocalePairs {
 
     $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
 
-    foreach ($match in [regex]::Matches($text, ('AddMissing\("' + [regex]::Escape($Locale) + '"\s*,\s*\{(?<body>.*?)\r?\n\}\)'), 'Singleline')) {
+    foreach ($match in [regex]::Matches($text, ('(?:AddMissing|SetLocale)\("' + [regex]::Escape($Locale) + '"\s*,\s*\{(?<body>.*?)\r?\n\}\)'), 'Singleline')) {
         $body = $match.Groups["body"].Value
         $bodyPairs = Read-LocalePairsFromText $body
         foreach ($key in $bodyPairs.Keys) { $pairs[$key] = $bodyPairs[$key] }
@@ -72,7 +72,7 @@ function Read-RuntimeLocalePairs {
     foreach ($tableMatch in [regex]::Matches($text, 'local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{(?<body>.*?)\r?\n\}', 'Singleline')) {
         $tableBlocks[$tableMatch.Groups[1].Value] = $tableMatch.Groups["body"].Value
     }
-    foreach ($aliasMatch in [regex]::Matches($text, ('AddMissing\("' + [regex]::Escape($Locale) + '"\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)'))) {
+    foreach ($aliasMatch in [regex]::Matches($text, ('(?:AddMissing|SetLocale)\("' + [regex]::Escape($Locale) + '"\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)'))) {
         $name = $aliasMatch.Groups[1].Value
         if ($tableBlocks.ContainsKey($name)) {
             $bodyPairs = Read-LocalePairsFromText $tableBlocks[$name]
@@ -167,7 +167,7 @@ foreach ($locale in $locales) {
     $runtimePairs = Read-RuntimeLocalePairs $runtimeLocalePath $locale
     foreach ($key in $runtimePairs.Keys) { $pairs[$key] = $runtimePairs[$key] }
     $missing = @($sortedKeys | Where-Object { -not $pairs.ContainsKey($_) })
-    $identical = @($sortedKeys | Where-Object { $pairs.ContainsKey($_) -and $pairs[$_] -eq $_ })
+    $identical = @($sortedKeys | Where-Object { $pairs.ContainsKey($_) -and $pairs[$_] -ceq $_ })
 
     Write-Host ("{0}: entries={1} missing={2} identical={3}" -f $locale, $pairs.Count, $missing.Count, $identical.Count)
     if ($Examples -gt 0 -and $missing.Count -gt 0) {

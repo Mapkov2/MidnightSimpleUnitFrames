@@ -2285,8 +2285,11 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     scroll:SetScrollChild(child)
 
     local y = -2
-    local function AddText(text, fontObject, color, indent, gap)
+    local function AddText(text, fontObject, color, indent, gap, translate)
         local rawText = tostring(text or "")
+        if translate and type(M.Tr) == "function" then
+            rawText = M.Tr(rawText)
+        end
         local fs = RawFont(child, fontObject or "GameFontHighlightSmall", rawText, color or T.colors.muted, 0)
         indent = indent or 0
         fs:SetPoint("TOPLEFT", child, "TOPLEFT", indent, y)
@@ -2308,7 +2311,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         dot:SetSize(3, 3)
         dot:SetPoint("TOPLEFT", child, "TOPLEFT", 8, y - 6)
         dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.88)
-        return AddText(text, "GameFontHighlightSmall", textColor, 18, 5)
+        return AddText(text, "GameFontHighlightSmall", textColor, 18, 5, true)
     end
 
     local entries = data.entries
@@ -2329,7 +2332,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
                         if sectionIndex > 1 then y = y - 3 end
                         local sectionTitle = tostring(section.title or "")
                         local isHighlights = sectionTitle == "Highlights"
-                        AddText(sectionTitle, "GameFontNormalSmall", isHighlights and T.colors.accent or T.colors.accent2, 0, 4)
+                        AddText(sectionTitle, "GameFontNormalSmall", isHighlights and T.colors.accent or T.colors.accent2, 0, 4, true)
                         for bulletIndex = 1, #section.bullets do
                             AddBullet(
                                 tostring(section.bullets[bulletIndex] or ""),
