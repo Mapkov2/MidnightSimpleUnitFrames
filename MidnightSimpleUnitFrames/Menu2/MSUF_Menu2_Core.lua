@@ -1128,12 +1128,27 @@ local function CreateNavButton(parent, key, label, indent)
     local btn = T.Button(parent, M.Tr(label), NAV_W - 38 - (indent or 0), NAV_BUTTON_H)
     btn:SetScript("OnClick", function() M.SelectPage(key) end)
     btn._msuf2SkipHistoryCheckpoint = true
+    btn._msuf2NavItem = true
     btn._msuf2NavIndent = indent or 0
     btn._msuf2RawLabel = label
     if T.AttachNavIcon then T.AttachNavIcon(btn, key, (indent or 0) > 0) end
     M.AttachNavTooltip(btn, label, M.navHelp and M.navHelp[key])
     M.navButtons[key] = btn
+    if btn.RefreshVisual then btn:RefreshVisual() end
     return btn
+end
+
+local function ApplyNavHeaderVisual(btn, open)
+    if not btn then return end
+    local arrow = btn._msuf2NavArrow
+    if arrow then
+        if arrow.SetRotation then arrow:SetRotation(open and (math.pi * 0.5) or 0) end
+        if arrow.SetVertexColor then
+            local c = open and T.colors.navArrowOpen or T.colors.navArrowClosed
+            arrow:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+        end
+    end
+    if btn.RefreshVisual then btn:RefreshVisual() end
 end
 
 local function AttachNavHoverGrow(btn)
@@ -1460,18 +1475,17 @@ local function BuildNav(parent)
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
             local btn = T.Button(list, string.upper(M.Tr(item.header)), NAV_W - 38, NAV_BUTTON_H)
+            btn._msuf2NavHeader = true
             btn._msuf2NavHeaderId = id
             btn._msuf2RawLabel = item.header
             btn._msuf2Label:ClearAllPoints()
             btn._msuf2Label:SetPoint("LEFT", 24, 0)
             btn._msuf2Label:SetPoint("RIGHT", -8, 0)
             btn._msuf2Label:SetJustifyH("LEFT")
-            btn._msuf2Label:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.88)
             local arrow = btn:CreateTexture(nil, "OVERLAY")
             arrow:SetSize(10, 10)
             arrow:SetPoint("LEFT", btn, "LEFT", 5, 0)
             arrow:SetTexture(T.media.collapseArrow)
-            arrow:SetVertexColor(0.45, 0.55, 0.72, 1)
             btn._msuf2NavArrow = arrow
             btn:SetScript("OnClick", function(self)
                 local groupId = self._msuf2NavHeaderId
@@ -1480,6 +1494,7 @@ local function BuildNav(parent)
             end)
             btn._msuf2SkipHistoryCheckpoint = true
             AttachNavHoverGrow(btn)
+            ApplyNavHeaderVisual(btn, M.navHeaderState[id])
             M.navHeaders[id] = btn
             created[#created + 1] = { kind = "header", id = id, button = btn }
         elseif item.key then
@@ -1506,10 +1521,7 @@ local function BuildNav(parent)
                 btn:Show()
                 btn:ClearAllPoints()
                 btn:SetPoint("TOPLEFT", list, "TOPLEFT", 12, y)
-                if btn._msuf2NavArrow then
-                    btn._msuf2NavArrow:SetRotation(M.navHeaderState[item.id] and (math.pi * 0.5) or 0)
-                    btn._msuf2NavArrow:SetVertexColor(0.45, 0.55, 0.72, 1)
-                end
+                ApplyNavHeaderVisual(btn, M.navHeaderState[item.id])
                 y = y - NAV_BUTTON_STEP
             elseif item.kind == "history" then
                 local frame = item.frame

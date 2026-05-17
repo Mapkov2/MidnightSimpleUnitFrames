@@ -58,6 +58,19 @@ T.colors = {
     pillEdgeActive = { 0.200, 0.340, 0.800, 0.85 },
     pillText = { 0.800, 0.880, 1.000, 0.94 },
     pillTextActive = { 0.920, 0.960, 1.000, 1.00 },
+    navPillBase = { 0.085, 0.115, 0.220, 0.92 },
+    navPillBaseSolid = { 0.095, 0.125, 0.240, 0.94 },
+    navPillHover = { 0.115, 0.155, 0.310, 0.96 },
+    navPillActive = { 0.255, 0.395, 0.960, 0.99 },
+    navPillEdge = { 0.160, 0.210, 0.410, 0.48 },
+    navPillEdgeHover = { 0.270, 0.420, 0.880, 0.72 },
+    navPillEdgeActive = { 0.430, 0.600, 1.000, 0.88 },
+    navText = { 0.840, 0.900, 1.000, 0.96 },
+    navTextActive = { 0.970, 0.990, 1.000, 1.00 },
+    navHeaderText = { 0.680, 0.780, 1.000, 0.96 },
+    navHeaderHover = { 0.780, 0.860, 1.000, 1.00 },
+    navArrowOpen = { 1.000, 0.760, 0.250, 1.00 },
+    navArrowClosed = { 1.000, 0.560, 0.060, 1.00 },
 }
 
 T.fontBump = T.fontBump or 1
@@ -803,6 +816,13 @@ local function ButtonVisual(btn, active, hover)
         btn._msuf2Label:SetTextColor(0.50, 0.52, 0.58, 0.95)
         return
     end
+    if btn._msuf2NavHeader then
+        fill:SetVertexColor(0, 0, 0, 0)
+        edge:SetVertexColor(0, 0, 0, 0)
+        local tx = hover and (c.navHeaderHover or c.navHeaderText) or c.navHeaderText
+        btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
+        return
+    end
     if btn._msuf2Danger then
         if active or hover then
             fill:SetVertexColor(0.180, 0.040, 0.065, 0.97)
@@ -834,6 +854,37 @@ local function ButtonVisual(btn, active, hover)
             edge:SetVertexColor(0.140, 0.660, 0.310, 0.82)
         end
         btn._msuf2Label:SetTextColor(0.92, 1.00, 0.94, 1)
+        return
+    end
+    if btn._msuf2NavItem then
+        if active then
+            if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
+            local bg, br, tx = c.navPillActive, c.navPillEdgeActive, c.navTextActive
+            fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+            edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
+            btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
+            if btn._msuf2NavIcon then btn._msuf2NavIcon:SetVertexColor(0.96, 0.99, 1.00, 1.00) end
+        elseif hover then
+            if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
+            local bg, br, tx = c.navPillHover, c.navPillEdgeHover, c.navText
+            fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+            edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
+            btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], 1)
+            if btn._msuf2NavIcon and btn._msuf2NavIconColor then
+                local ic = btn._msuf2NavIconColor
+                btn._msuf2NavIcon:SetVertexColor(ic[1], ic[2], ic[3], 0.88)
+            end
+        else
+            if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
+            local bg, br, tx = btn._msuf2SolidPill and c.navPillBaseSolid or c.navPillBase, c.navPillEdge, c.navText
+            fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+            edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
+            btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
+            if btn._msuf2NavIcon and btn._msuf2NavIconColor then
+                local ic = btn._msuf2NavIconColor
+                btn._msuf2NavIcon:SetVertexColor(ic[1], ic[2], ic[3], 0.64)
+            end
+        end
         return
     end
     if active then
