@@ -730,6 +730,28 @@ Core._raidGroupNameText = Core._raidGroupNameText or {
     [1] = "(1)", [2] = "(2)", [3] = "(3)", [4] = "(4)",
     [5] = "(5)", [6] = "(6)", [7] = "(7)", [8] = "(8)",
 }
+Core._raidGroupNameTextByStyle = Core._raidGroupNameTextByStyle or {
+    PAREN = Core._raidGroupNameText,
+    BRACKET = { [1] = "[1]", [2] = "[2]", [3] = "[3]", [4] = "[4]", [5] = "[5]", [6] = "[6]", [7] = "[7]", [8] = "[8]" },
+    NONE = { [1] = "1", [2] = "2", [3] = "3", [4] = "4", [5] = "5", [6] = "6", [7] = "7", [8] = "8" },
+}
+
+function Core.NormalizeRaidGroupNameStyle(conf)
+    local style = conf and conf.raidGroupNameStyle
+    if style == nil then
+        local db = _G.MSUF_DB
+        local g = db and db.general
+        style = g and g.raidGroupNameStyle
+    end
+    if style == "BRACKET" or style == "NONE" then return style end
+    return "PAREN"
+end
+
+function Core.GetRaidGroupNameText(subgroup, conf)
+    local style = Core.NormalizeRaidGroupNameStyle(conf)
+    local t = Core._raidGroupNameTextByStyle[style] or Core._raidGroupNameText
+    return t[subgroup], style
+end
 
 function Core.IsRaidGroupNameEnabled(conf)
     if conf and conf.showRaidGroupInName ~= nil then
@@ -814,6 +836,10 @@ function Core.RefreshRaidGroupNameLayout(frame, conf)
     if levelLayout then
         levelLayout(frame)
     end
+    local reanchorToTInline = _G.MSUF_UFCore_ReanchorTargetToTInline
+    if reanchorToTInline and frame and frame._msufIsTarget then
+        reanchorToTInline(frame)
+    end
 end
 
 function Core.UpdateRaidGroupNameForFrame(frame, unit, conf, showName, exists)
@@ -821,15 +847,15 @@ function Core.UpdateRaidGroupNameForFrame(frame, unit, conf, showName, exists)
     if not fs then return false end
 
     conf = conf or GetFrameConf(frame)
-    showName = (showName ~= false)
     if exists == nil and unit then
         exists = UnitExists and UnitExists(unit)
     end
 
-    if not (showName and exists and Core.IsRaidGroupNameUnitAllowed(unit or frame.unit, frame) and Core.IsRaidGroupNameEnabled(conf)) then
+    if not (exists and Core.IsRaidGroupNameUnitAllowed(unit or frame.unit, frame) and Core.IsRaidGroupNameEnabled(conf)) then
         local changed = frame._msufRaidGroupNameVisible == true
         frame._msufRaidGroupNameVisible = false
         frame._msufRaidGroupNameSubgroup = nil
+        frame._msufRaidGroupNameStyle = nil
         if changed then
             _SetText(fs, "")
             _SetShown(fs, false)
@@ -841,11 +867,15 @@ function Core.UpdateRaidGroupNameForFrame(frame, unit, conf, showName, exists)
     end
 
     local subgroup = Core.ResolveRaidSubgroupForUnit(unit or frame.unit)
-    local text = subgroup and Core._raidGroupNameText[subgroup] or nil
+    local text, style
+    if subgroup then
+        text, style = Core.GetRaidGroupNameText(subgroup, conf)
+    end
     if not text then
         local changed = frame._msufRaidGroupNameVisible == true
         frame._msufRaidGroupNameVisible = false
         frame._msufRaidGroupNameSubgroup = nil
+        frame._msufRaidGroupNameStyle = nil
         if changed then
             _SetText(fs, "")
             _SetShown(fs, false)
@@ -856,9 +886,12 @@ function Core.UpdateRaidGroupNameForFrame(frame, unit, conf, showName, exists)
         return changed
     end
 
-    local changed = frame._msufRaidGroupNameVisible ~= true or frame._msufRaidGroupNameSubgroup ~= subgroup
+    local changed = frame._msufRaidGroupNameVisible ~= true
+        or frame._msufRaidGroupNameSubgroup ~= subgroup
+        or frame._msufRaidGroupNameStyle ~= style
     frame._msufRaidGroupNameVisible = true
     frame._msufRaidGroupNameSubgroup = subgroup
+    frame._msufRaidGroupNameStyle = style
     if changed then
         _SetText(fs, text)
         _SetShown(fs, true)
@@ -2330,7 +2363,12 @@ function UFCore_EnsureToTInlineWidgets(f, conf)
     tt:SetDrawLayer("OVERLAY", 7)
 
     sep:ClearAllPoints()
-    sep:SetPoint("LEFT", name, "RIGHT", 0, 0)
+    local inlineAnchor = name
+    if f.raidGroupNameText and f.raidGroupNameText.IsShown and f.raidGroupNameText:IsShown()
+        and f._msufRaidGroupNameAnchor == "NAMERIGHT" then
+        inlineAnchor = f.raidGroupNameText
+    end
+    sep:SetPoint("LEFT", inlineAnchor, "RIGHT", 0, 0)
 
     tt:ClearAllPoints()
     tt:SetPoint("LEFT", sep, "RIGHT", 0, 0)
@@ -2347,6 +2385,14 @@ function UFCore_EnsureToTInlineWidgets(f, conf)
 end
 
 -- ── Swap defer coalescing (unit swap visual refresh) ──
+function _G.MSUF_UFCore_ReanchorTargetToTInline(f)
+    if not (f and f._msufIsTarget and f._msufToTInlineSep and f._msufToTInlineText) then return end
+    local conf = UFCore_GetTargetToTInlineConf()
+    if conf and conf.showToTInTargetName then
+        UFCore_EnsureToTInlineWidgets(f, conf)
+    end
+end
+
 Core.RunNextFrame = Core.RunNextFrame or _G.MSUF_RunNextFrame or function(fn)
     if type(fn) ~= "function" then return end
     if _G.C_Timer and _G.C_Timer.After then
@@ -3316,8 +3362,8 @@ local function QueueUnit(unit, urgent, mask, reason)
     MarkUnit(unit, mask or MASK_UNIT_SWAP, urgent, reason or "GLOBAL")
 end
 
-function Core.QueueRaidGroupNameRefresh(reason)
-    if not Core.AnyRaidGroupNameEnabled() then return end
+function Core.QueueRaidGroupNameRefresh(reason, force)
+    if not force and not Core.AnyRaidGroupNameEnabled() then return end
     if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then
         Core._raidGroupNameRefreshDeferred = true
         return
@@ -3328,6 +3374,10 @@ function Core.QueueRaidGroupNameRefresh(reason)
             Core.MarkDirty(f, DIRTY_IDENTITY, true, reason or "RAID_GROUP_NAME")
         end
     end
+end
+
+function _G.MSUF_RefreshRaidGroupNameFrames()
+    Core.QueueRaidGroupNameRefresh("RAID_GROUP_NAME_CONFIG", true)
 end
 
 -- Coalesced boss engage refresh (INSTANCE_ENCOUNTER_ENGAGE_UNIT can burst on pull).

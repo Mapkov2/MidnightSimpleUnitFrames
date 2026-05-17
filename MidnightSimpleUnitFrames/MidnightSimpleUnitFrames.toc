@@ -104,6 +104,7 @@ Features\MSUF_VersionCheck.lua
 # ═══════════════════════════════════════════════════════════════
 Core\MSUF_BarBackgroundRuntime.lua
 Core\MSUF_IconLayoutRuntime.lua
+Core\MSUF_FontRegistry.lua
 MidnightSimpleUnitFrames.lua
 Core\MSUF_SwapRecolor.lua
 Core\MSUF_FontRuntime.lua

@@ -1,4 +1,4 @@
-﻿local addonName, ns = ...
+local addonName, ns = ...
 ns = ns or {}
 _G.MSUF_NS = ns
 ns.Core   = ns.Core   or {}
@@ -777,7 +777,7 @@ ns.Bars.Spec.health = ns.Bars.Spec.health or function(frame, unit)
         ns.Bars.ResetHealthAndOverlays(frame, true)
          return 0, 1, false
     end
-    -- 12.0: Unified calculator update â€” one C-side call for health + absorbs + prediction.
+    -- 12.0: Unified calculator update — one C-side call for health + absorbs + prediction.
     -- Test mode path still uses legacy ApplyHealthBars for faked values.
     local absorbTestActive = (_G.MSUF_AbsorbTextureTestMode == true)
         and not (_G.MSUF_InCombat or (InCombatLockdown and InCombatLockdown()))
@@ -826,7 +826,7 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     if pType == nil then return _MSUF_Bars_HidePower(bar, false) end
 
     -- Ele Shaman: when Maelstrom is shown as class power, main bar shows Mana.
-    -- Flag set by MSUF_ClassPower FullRefresh â€” zero-cost boolean check.
+    -- Flag set by MSUF_ClassPower FullRefresh — zero-cost boolean check.
     if isPlayer and _G.MSUF_EleMaelstromActive then
         pType = 0   -- Enum.PowerType.Mana
         pTok  = "MANA"
@@ -837,7 +837,7 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
         pType = 19  -- Enum.PowerType.Essence
         pTok  = "ESSENCE"
     end
-    -- Shadow Priest: class power shows Insanity â†’ main bar shows Mana.
+    -- Shadow Priest: class power shows Insanity → main bar shows Mana.
     if isPlayer and _G.MSUF_ShadowManaActive then
         pType = 0   -- Enum.PowerType.Mana
         pTok  = "MANA"
@@ -846,9 +846,9 @@ local function _MSUF_Bars_SyncPower(frame, bar, unit, barsConf, isBoss, isPlayer
     ns.Bars.ApplyPowerBarVisual(frame, bar, pType, pTok)
     bar:SetScript("OnUpdate", nil)
 
-    -- Smooth interpolation ONLY for player frame â€” target/focus/boss always snap.
+    -- Smooth interpolation ONLY for player frame — target/focus/boss always snap.
     -- SECRET-SAFE: UnitPower/UnitPowerMax may return secret values in 12.0.
-    -- Never call type()/tonumber()/comparisons on these â€” pass directly to C-side
+    -- Never call type()/tonumber()/comparisons on these — pass directly to C-side
     -- SetMinMaxValues/SetValue which handle secrets natively.
     local cur = UnitPower(unit, pType)
     local mx  = UnitPowerMax(unit, pType)
@@ -1295,442 +1295,7 @@ MSUF_EditModeSizing = false
 if type(MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
     MSUF_SyncBossUnitframePreviewWithUnitEdit()
 end
-local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
-_G.MSUF_OnLSMReady = function(lsm)
-    LSM = lsm
- end
--- P1: pending guard â€” prevents double-schedule from rapid LSM callbacks
-local _MSUF_DeferredFontsPending = false
-local function _MSUF_DeferredUpdateAllFonts()
-    _MSUF_DeferredFontsPending = false
-    if UpdateAllFonts then UpdateAllFonts() end
-end
-if LSM and not _G.MSUF_LSM_CallbacksRegistered and not MSUF_LSM_FontCallbackRegistered then
-    MSUF_LSM_FontCallbackRegistered = true
-    LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
-        if mediatype ~= "font" then  return end
-        if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
-            _G.MSUF_ClearResolvedFontPathCache()
-        end
-        if MSUF_RebuildFontChoices then
-            MSUF_RebuildFontChoices()
-        end
-        local _g = MSUF_DB and MSUF_DB.general
-        local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
-        local registeredKey = normalizeFontKey(key)
-        local needsFontRefresh = _g and normalizeFontKey(_g.fontKey) == registeredKey
-        if needsFontRefresh then
-            if not _MSUF_DeferredFontsPending then
-                _MSUF_DeferredFontsPending = true
-                if _G.MSUF_ScheduleOnce then _G.MSUF_ScheduleOnce("UF_FONTS_DEFERRED_UPDATE", _MSUF_DeferredUpdateAllFonts) else C_Timer.After(0, _MSUF_DeferredUpdateAllFonts) end
-            end
-    end
-     end)
-end
-local FONT_LIST = {
-    {
-        key  = "FRIZQT",
-        name = "Friz Quadrata (default)",
-        path = "Fonts\\FRIZQT___CYR.TTF",
-    },
-{
-        key  = "ARIALN",
-        name = "Arial (default)",
-        path = "Fonts\\ARHei.TTF",
-    },
-    {
-        key  = "MORPHEUS",
-        name = "Morpheus (default)",
-        path = "Fonts\\MORPHEUS_CYR.TTF",
-    },
-    {
-        key  = "SKURRI",
-        name = "Skurri (default)",
-        path = "Fonts\\SKURRI_CYR.TTF",
-    },
-}
-do
-    local base = "Interface\\AddOns\\" .. tostring(addonName) .. "\\Media\\Fonts\\"
-    local bundled = {
-        { key = "EXPRESSWAY",                 name = "Expressway Regular (MSUF)",          file = "Expressway Regular.ttf" },
-        { key = "EXPRESSWAY_BOLD",            name = "Expressway Bold (MSUF)",             file = "Expressway Bold.ttf" },
-        { key = "EXPRESSWAY_SEMIBOLD",        name = "Expressway SemiBold (MSUF)",         file = "Expressway SemiBold.ttf" },
-        { key = "EXPRESSWAY_EXTRABOLD",       name = "Expressway ExtraBold (MSUF)",        file = "Expressway ExtraBold.ttf" },
-        { key = "EXPRESSWAY_CONDENSED_LIGHT", name = "Expressway Condensed Light (MSUF)",  file = "Expressway Condensed Light.otf" },
-    }
-    local function HasFontKey(list, key)
-        if type(key) ~= "string" or key == "" then return false end
-        if not list then return false end
-        for i = 1, #list do
-            local t = list[i]
-            if t and t.key == key then
-                 return true
-            end
-    end
-         return false
-    end
-    for _, info in ipairs(bundled) do
-        if not HasFontKey(FONT_LIST, info.key) then
-            table.insert(FONT_LIST, {
-                key  = info.key,
-                name = info.name,
-                path = base .. info.file,
-            })
-    end
-    end
-end
-_G.MSUF_FONT_LIST = _G.MSUF_FONT_LIST or FONT_LIST
-local MSUF_INTERNAL_LSM_FONT_KEYS = {
-    ["Friz Quadrata TT"]        = "FRIZQT",
-    ["Arial Narrow"]            = "ARIALN",
-    ["Morpheus"]                = "MORPHEUS",
-    ["Skurri"]                  = "SKURRI",
-    ["Friz Quadrata (default)"] = "FRIZQT",
-    ["Arial (default)"]         = "ARIALN",
-    ["Morpheus (default)"]      = "MORPHEUS",
-    ["Skurri (default)"]        = "SKURRI",
-    ["Expressway Regular (MSUF)"] = "EXPRESSWAY",
-    ["Expressway (MSUF)"]         = "EXPRESSWAY",
-    ["Expressway Bold (MSUF)"]    = "EXPRESSWAY_BOLD",
-    ["Expressway SemiBold (MSUF)"] = "EXPRESSWAY_SEMIBOLD",
-    ["Expressway ExtraBold (MSUF)"] = "EXPRESSWAY_EXTRABOLD",
-    ["Expressway Condensed Light (MSUF)"] = "EXPRESSWAY_CONDENSED_LIGHT",
-}
-
-local function MSUF_NormalizeFontKey(key)
-    if type(key) ~= "string" or key == "" then return key end
-    return MSUF_INTERNAL_LSM_FONT_KEYS[key] or key
-end
-_G.MSUF_NormalizeFontKey = MSUF_NormalizeFontKey
-ns.MSUF_NormalizeFontKey = MSUF_NormalizeFontKey
-local function MSUF_NormalizeFontKeyField(tbl)
-    if type(tbl) ~= "table" then return end
-    local normalized = MSUF_NormalizeFontKey(tbl.fontKey)
-    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
-    if type(resolveKeyPath) == "function" then
-        local resolved = resolveKeyPath(normalized)
-        if type(resolved) == "string" and resolved ~= "" then
-            normalized = resolved
-        end
-    end
-    if normalized ~= tbl.fontKey then
-        tbl.fontKey = normalized
-    end
-end
-
-local function MSUF_NormalizeStoredFontKeys()
-    local db = _G.MSUF_DB
-    if type(db) ~= "table" then return end
-    MSUF_NormalizeFontKeyField(db.general)
-    for _, key in ipairs({
-        "player", "target", "targettarget", "focus", "pet", "boss",
-        "gf_party", "gf_raid", "gf_mythicraid",
-    }) do
-        if type(db[key]) == "table" then
-            db[key].fontKey = nil
-        end
-    end
-end
-_G.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys
-ns.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys
-MSUF_NormalizeStoredFontKeys()
-
-local MSUF_FONT_COLORS = {
-    white     = {1.0, 1.0, 1.0},
-    black     = {0.0, 0.0, 0.0},
-    red       = {1.0, 0.0, 0.0},
-    green     = {0.0, 1.0, 0.0},
-    blue      = {0.0, 0.0, 1.0},
-    yellow    = {1.0, 1.0, 0.0},
-    cyan      = {0.0, 1.0, 1.0},
-    magenta   = {1.0, 0.0, 1.0},
-    orange    = {1.0, 0.5, 0.0},
-    purple    = {0.6, 0.0, 0.8},
-    pink      = {1.0, 0.6, 0.8},
-    turquoise = {0.0, 0.9, 0.8},
-    grey      = {0.5, 0.5, 0.5},
-    brown     = {0.6, 0.3, 0.1},
-    gold      = {1.0, 0.85, 0.1},
-}
-ns.MSUF_FONT_COLORS = MSUF_FONT_COLORS
-_G.MSUF_FONT_COLORS = _G.MSUF_FONT_COLORS or MSUF_FONT_COLORS
-MSUF_GetNPCReactionColor = function(kind)
-    local defaultR, defaultG, defaultB
-    if kind == "friendly" then
-        defaultR, defaultG, defaultB = 0, 1, 0           --
-    elseif kind == "neutral" then
-        defaultR, defaultG, defaultB = 1, 1, 0           -- gelb
-    elseif kind == "enemy" then
-        defaultR, defaultG, defaultB = 0.85, 0.10, 0.10  -- rot
-    elseif kind == "dead" then
-        defaultR, defaultG, defaultB = 0.4, 0.4, 0.4     -- grau (tote NPCs)
-    else
-        defaultR, defaultG, defaultB = 1, 1, 1
-    end
-    if not EnsureDB then
-         return defaultR, defaultG, defaultB
-    end
-    if not MSUF_DB then EnsureDB() end
-    MSUF_DB.npcColors = MSUF_DB.npcColors or {}
-    local t = MSUF_DB.npcColors[kind]
-    if t and t.r and t.g and t.b then
-        return t.r, t.g, t.b
-    end
-     return defaultR, defaultG, defaultB
-end
-MSUF_GetClassBarColor = function(classToken)
-    local defaultR, defaultG, defaultB = 0, 1, 0
-    if not classToken then
-         return defaultR, defaultG, defaultB
-    end
-    if not MSUF_DB then EnsureDB() end
-    MSUF_DB.classColors = MSUF_DB.classColors or {}
-    local override = MSUF_DB.classColors[classToken]
-    if override and override.r and override.g and override.b then
-        return override.r, override.g, override.b
-    end
-    if type(override) == "string" and MSUF_FONT_COLORS and MSUF_FONT_COLORS[override] then
-        local c = MSUF_FONT_COLORS[override]
-        return c[1], c[2], c[3]
-    end
-    local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken]
-    if color then
-        return color.r, color.g, color.b
-    end
-     return defaultR, defaultG, defaultB
-end
-local function MSUF_GetPowerBarColor(powerType, powerToken)
-    if not powerToken or powerToken == "" then
-         return nil
-    end
-    if not EnsureDB then
-         return nil
-    end
-    if not MSUF_DB then EnsureDB() end
-    local g = MSUF_DB.general
-    local ov = g and g.powerColorOverrides
-    local c = (ov) and ov[powerToken] or nil
-    -- Aug Evoker: Essence is in power bar but user may set color via Class Power colors
-    if type(c) ~= "table" and _G.MSUF_AugEvokerActive and powerToken == "ESSENCE" then
-        local cpOv = g and g.classPowerColorOverrides
-        c = (cpOv) and cpOv[powerToken] or nil
-    end
-    if type(c) ~= "table" then
-         return nil
-    end
-    local r, gg, b
-    if type(c.r) == "number" and type(c.g) == "number" and type(c.b) == "number" then
-        r, gg, b = c.r, c.g, c.b
-    else
-        r, gg, b = c[1], c[2], c[3]
-    end
-    if type(r) == "number" and type(gg) == "number" and type(b) == "number" then
-         return r, gg, b
-    end
-     return nil
-end
-_G.MSUF_GetPowerBarColor = MSUF_GetPowerBarColor
-local function MSUF_GetResolvedPowerColor(powerType, powerToken)
-    if type(MSUF_GetPowerBarColor) == "function" then
-        local r, g, b = MSUF_GetPowerBarColor(powerType, powerToken)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-             return r, g, b
-    end
-    end
-    local snap = ns._PBCSnap
-    if type(powerToken) == "string" and snap[powerToken] then
-        local c = snap[powerToken]
-        return c.r, c.g, c.b
-    end
-    if type(powerType) == "number" and snap[powerType] then
-        local c = snap[powerType]
-        return c.r, c.g, c.b
-    end
-    local pbc = _G.PowerBarColor
-    if type(powerToken) == "string" and pbc and pbc[powerToken] then
-        local c = pbc[powerToken]
-        local r = c.r or c[1]
-        local g = c.g or c[2]
-        local b = c.b or c[3]
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-             return r, g, b
-    end
-    end
-    if type(powerType) == "number" and pbc and pbc[powerType] then
-        local c = pbc[powerType]
-        local r = c.r or c[1]
-        local g = c.g or c[2]
-        local b = c.b or c[3]
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-             return r, g, b
-    end
-    end
-     return nil
-end
-_G.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
-ns.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
-local function MSUF_GetConfiguredFontColor()
-    if not MSUF_DB then EnsureDB() end
-    local g = MSUF_DB.general or {}
-    if g.useCustomFontColor and g.fontColorCustomR and g.fontColorCustomG and g.fontColorCustomB then
-        return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
-    end
-    local key   = (g.fontColor or "white"):lower()
-    local color = MSUF_FONT_COLORS[key] or MSUF_FONT_COLORS.white
-    return color[1], color[2], color[3]
-end
-ns.MSUF_GetConfiguredFontColor = MSUF_GetConfiguredFontColor
-local MSUF_FontPreviewObjects = {}
-local MSUF_FontPreviewObjectCount = 0
-local function MSUF_GetRawLSMFontPath(lsm, key)
-    if type(key) ~= "string" or key == "" then return nil end
-    if lsm and type(lsm.HashTable) == "function" then
-        local fonts = lsm:HashTable("font")
-        local p = fonts and fonts[key]
-        if type(p) == "string" and p ~= "" then return p end
-    end
-    return nil
-end
-
-local function MSUF_FontKeyIsInternal(key)
-    if type(key) ~= "string" or key == "" then return false end
-    local normalized = MSUF_NormalizeFontKey(key)
-    for _, info in ipairs(FONT_LIST) do
-        if info.key == key or info.key == normalized or info.name == key then
-            return true
-        end
-    end
-    return false
-end
-
-local function MSUF_FetchFontPathFromLSM(key)
-    if type(key) ~= "string" or key == "" then return nil end
-    if MSUF_FontKeyIsInternal(key) then return nil end
-    local lsm = LSM or (ns and ns.LSM) or _G.MSUF_LSM
-    if not lsm then return nil end
-
-    local lsmKey = MSUF_NormalizeFontKey(key)
-    local p = MSUF_GetRawLSMFontPath(lsm, lsmKey)
-    if type(p) == "string" and p ~= "" then return p end
-    if lsmKey ~= key then
-        p = MSUF_GetRawLSMFontPath(lsm, key)
-        if type(p) == "string" and p ~= "" then return p end
-    end
-
-    if type(lsm.Fetch) == "function" then
-        p = lsm:Fetch("font", lsmKey, true)
-        if type(p) == "string" and p ~= "" then return p end
-        if lsmKey ~= key then
-            p = lsm:Fetch("font", key, true)
-            if type(p) == "string" and p ~= "" then return p end
-        end
-    end
-
-    return nil
-end
-
-local function MSUF_GetFontPreviewObject(key)
-    if not key or key == "" then
-        return GameFontHighlightSmall
-    end
-    local obj = MSUF_FontPreviewObjects[key]
-    if not obj then
-        MSUF_FontPreviewObjectCount = MSUF_FontPreviewObjectCount + 1
-        obj = CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
-        MSUF_FontPreviewObjects[key] = obj
-    end
-    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
-    local path = type(resolveKeyPath) == "function" and resolveKeyPath(key, 14, "") or nil
-    path = path or GetInternalFontPathByKey(key) or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
-    path = (_G.MSUF_ResolveFontPath or function(p) return p end)(path, 14, "", key)
-    if path then
-        local safeSet = _G.MSUF_SetFontSafe
-        local ok
-        if type(safeSet) == "function" then
-            ok = safeSet(obj, path, 14, "", key)
-        else
-            local applied
-            ok, applied = pcall(obj.SetFont, obj, path, 14, "")
-            ok = ok and applied ~= false
-        end
-        if (not ok) and FONT_LIST[1] and FONT_LIST[1].path then
-            local fallback = (_G.MSUF_ResolveFontPath or function(p) return p end)(FONT_LIST[1].path, 14, "")
-            if type(safeSet) == "function" then
-                safeSet(obj, fallback, 14, "", "FRIZQT")
-            else
-                pcall(obj.SetFont, obj, fallback, 14, "")
-            end
-        end
-    end
-     return obj
-end
-ns.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
-_G.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject
-local function MSUF_GetColorFromKey(key, fallbackColor)
-    if type(key) ~= "string" then
-        if fallbackColor then
-             return fallbackColor
-    end
-        return CreateColor(1, 1, 1, 1)
-    end
-    local normalized = string.lower(key)
-    local rgb = MSUF_FONT_COLORS[normalized]
-    if rgb then
-        local r, g, b = rgb[1], rgb[2], rgb[3]
-        return CreateColor(r or 1, g or 1, b or 1, 1)
-    end
-    if fallbackColor then
-         return fallbackColor
-    end
-    return CreateColor(1, 1, 1, 1)
-end
-ns.MSUF_GetColorFromKey = MSUF_GetColorFromKey
-_G.MSUF_GetColorFromKey = MSUF_GetColorFromKey
-MSUF_DARK_TONES = {
-    black    = {0.0, 0.0, 0.0},
-    darkgray = {0.08, 0.08, 0.08},
-    softgray = {0.16, 0.16, 0.16},
-}
-function GetInternalFontPathByKey(key)
-    if not key then return nil end
-    local registryPath = _G.MSUF_GetInternalFontPrimaryPath
-    if type(registryPath) == "function" then
-        local p = registryPath(key)
-        if p then return p end
-    end
-    local normalized = MSUF_NormalizeFontKey(key)
-    for _, info in ipairs(FONT_LIST) do
-        if info.key == key or info.key == normalized or info.name == key then
-            return info.path
-    end
-    end
-     return nil
-end
-local function MSUF_IsInternalFontKey(key)
-    return MSUF_FontKeyIsInternal(key)
-end
-local function MSUF_GetFontPathForKey(key)
-    local resolveKeyPath = _G.MSUF_ResolveFontKeyPath
-    if type(resolveKeyPath) == "function" then
-        local p = resolveKeyPath(key, 14, "")
-        if p then return p end
-    end
-    local resolve = _G.MSUF_ResolveFontPath or function(path) return path end
-    local internalPath = GetInternalFontPathByKey(key)
-    if internalPath then return resolve(internalPath, 14, "", key) end
-    local lsmPath = MSUF_FetchFontPathFromLSM(key)
-    if lsmPath then return resolve(lsmPath, 14, "", key) end
-    return resolve(FONT_LIST[1].path, 14, "", "FRIZQT")
-end
-_G.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
-ns.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
-_G.MSUF_IsInternalFontKey = MSUF_IsInternalFontKey
-ns.MSUF_IsInternalFontKey = MSUF_IsInternalFontKey
-_G.MSUF_FetchFontPathFromLSM = MSUF_FetchFontPathFromLSM
-ns.MSUF_FetchFontPathFromLSM = MSUF_FetchFontPathFromLSM
-_G.MSUF_GetRawLSMFontPath = MSUF_GetRawLSMFontPath
-ns.MSUF_GetRawLSMFontPath = MSUF_GetRawLSMFontPath
-
+-- Font registry moved to Core\MSUF_FontRegistry.lua
 -- Castbar utilities moved to MSUF_Castbars.lua
 
 -- Bar background runtime moved to Core/MSUF_BarBackgroundRuntime.lua.
@@ -2924,7 +2489,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
         local baseY = conf.offsetY or 0
         local x, y = baseX, baseY
         if mode == "HORIZONTAL_RIGHT" then
-            -- boss1 at anchor, subsequent to the right. spacing is negative by default â†’ invert for rightward travel.
+            -- boss1 at anchor, subsequent to the right. spacing is negative by default → invert for rightward travel.
             x = baseX + step * -spacing
         elseif mode == "HORIZONTAL_LEFT" then
             x = baseX + step * spacing
@@ -3994,8 +3559,8 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     local hpNeedsMax = not spec or spec.hpNeedsMax == true
     local hpNeedsPct = not spec or spec.hpNeedsPct == true
     local hpStr = hpNeedsCurrent and MSUF_NumberToTextFast(hp) or nil
-    -- PERF: Cache hpMax + hpMaxStr â€” hpMax only changes on UNIT_MAXHEALTH (~0.5/s)
-    -- but UNIT_HEALTH fires 10-50Ã—/s. Saves UnitHealthMax + NumberToTextFast per tick.
+    -- PERF: Cache hpMax + hpMaxStr — hpMax only changes on UNIT_MAXHEALTH (~0.5/s)
+    -- but UNIT_HEALTH fires 10-50×/s. Saves UnitHealthMax + NumberToTextFast per tick.
     -- _msufAbsorbTextDirty is already set on UNIT_MAXHEALTH by FrameOnEvent.
     local absorbTextDirty = self._msufAbsorbTextDirty == true
     local hpMaxValue
@@ -4033,7 +3598,7 @@ function _G.MSUF_UFCore_UpdateHpTextFast(self, hp)
     local hasPct = hpNeedsPct and (type(hpPct) == "number") or false
     local absorbText, absorbStyle = nil, nil
     -- PERF: Cache absorb text display flag per-frame. Invalidated when cachedConfig is cleared
-    -- (config change). Most users have absorb text disabled â†’ skip all absorb work entirely.
+    -- (config change). Most users have absorb text disabled → skip all absorb work entirely.
     local showAbsorbCached = self._msufCachedShowAbsorbText
     if showAbsorbCached == nil then
         local g = MSUF_DB and MSUF_DB.general or {}
@@ -4443,7 +4008,7 @@ local function MSUF_UFStep_Finalize(self, hp, didPowerBarSync)
     -- Coalesce within the same millisecond-bucket (approx "per-flush" when multiple updates burst)
     local now = GetTime()
     local nowMs = math_floor(now * 1000)
-    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ short keys on small table)
+    -- Text state sub-table: reduces hash lookups on the frame object (10 long-key writes ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ short keys on small table)
     local ts = self._msufTS
     if not ts then ts = {}; self._msufTS = ts end
     -- HP text: force when layout/toggle changed, otherwise rate-limit
@@ -4694,7 +4259,7 @@ if self.powerText then
     end
          return
     end
--- â”€â”€ Preview Test Mode (non-boss, non-player, no unit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- ── Preview Test Mode (non-boss, non-player, no unit) ──────────────────
 -- Mirrors BossTestMode block above. Full control over bars/text/visibility.
 if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and not _msuf_inCombat and not exists then
     self:Show()
@@ -4834,7 +4399,7 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
             self.raidMarkerIcon:Hide()
         end
     end
-    -- Status indicators (combat, rest, rez icons â€” live-apply config changes)
+    -- Status indicators (combat, rest, rez icons — live-apply config changes)
     if type(MSUF_UpdateStatusIndicatorForFrame) == "function" then
         MSUF_UpdateStatusIndicatorForFrame(self)
     end
@@ -5110,9 +4675,9 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
     PositionUnitFrame(f, unit)
     if f.portrait then
         MSUF_UpdateBossPortraitLayout(f, conf)
-        -- Force full portrait render â€” layout alone only positions the widget
-        -- but doesn't set the texture. MaybeUpdatePortrait â†’ global UpdatePortraitIfNeeded
-        -- â†’ hooksecurefunc fires PortraitDecoration (offsets, borders, size override).
+        -- Force full portrait render — layout alone only positions the widget
+        -- but doesn't set the texture. MaybeUpdatePortrait → global UpdatePortraitIfNeeded
+        -- → hooksecurefunc fires PortraitDecoration (offsets, borders, size override).
         f._msufPortraitDirty = true
         f._msufPortraitNextAt = 0
         local fnP = _G.MSUF_MaybeUpdatePortrait
@@ -5863,7 +5428,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         local conf = (key and MSUF_DB and MSUF_DB[key]) or nil
         if conf and conf.powerBarDetached == true then
             detached = true
-            -- Manual width: DB â†’ actual unit frame width â†’ 250
+            -- Manual width: DB → actual unit frame width → 250
             local fW = (f and f.GetWidth and math_floor(f:GetWidth() + 0.5)) or 0
             if fW < 30 then fW = math_floor((conf.width or 250) + 0.5) end
             dW = tonumber(conf.detachedPowerBarWidth) or fW
@@ -5889,7 +5454,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
                         dW = cachedW
                     else
                         local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
-                    -- Scale-compensated width (Sensei pattern): convert CDM coords â†’ our bar coords
+                    -- Scale-compensated width (Sensei pattern): convert CDM coords → our bar coords
                         if cdm and cdm.IsShown and cdm:IsShown() then
                             local scaledW = _G.MSUF_CDM_GetScaledWidth and _G.MSUF_CDM_GetScaledWidth(cdm, pb)
                             if scaledW and scaledW >= 30 then dW = scaledW end
@@ -5953,7 +5518,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         if pb.SetFrameLevel and f.GetFrameLevel then
             pb:SetFrameLevel((f:GetFrameLevel() or 0) + dLevel)
         end
-        -- Anchor to class power container (MRB energyâ†’combo pattern) or to unit frame
+        -- Anchor to class power container (MRB energy→combo pattern) or to unit frame
         if anchorToCP then
             local cpContainer = _G["MSUF_ClassPowerContainer"]
             if MSUF_IsClassPowerAnchorUsable(cpContainer) then
