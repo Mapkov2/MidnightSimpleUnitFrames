@@ -1610,6 +1610,10 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(pSlotY, powerOn and not MoveTogether("power"))
         SetControlEnabled(advPowerLayer, powerOn)
     end
+    do
+        local entry = sec and sec._msuf2CollapsibleEntry
+        if entry then entry._msuf2RefreshState = RefreshTextControlState end
+    end
     M.AddRefresher(ctx, RefreshTextControlState)
     RefreshTextControlState()
 end
