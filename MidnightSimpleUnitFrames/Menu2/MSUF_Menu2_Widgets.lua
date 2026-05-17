@@ -36,6 +36,15 @@ local function SetSearchTitle(object, text)
     return object
 end
 
+local function PlaceBackdropFrameBehindControls(frame, parent)
+    if not (frame and frame.SetFrameLevel) then return end
+    local parentLevel = 0
+    if parent and parent.GetFrameLevel then
+        parentLevel = tonumber(parent:GetFrameLevel()) or 0
+    end
+    frame:SetFrameLevel(max(0, parentLevel))
+end
+
 local function RegisterSearchObject(object, label, kind, opts)
     SetSearchText(object, label)
     if object and type(M.RegisterSearchWidget) == "function" then
@@ -603,6 +612,7 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     RegisterSearchObject(card, title, "section")
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
     card:SetSize(width, height)
+    PlaceBackdropFrameBehindControls(card, parent)
     card._msuf2Width = width
     card._msuf2ContentX = 16
     card._msuf2CursorY = -52
@@ -638,6 +648,7 @@ function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     local card = T.Panel(parent, nil, bg or { 0.018, 0.026, 0.052, 0.86 }, border or T.colors.cardBorder or T.colors.borderSoft)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     card:SetSize(width, height)
+    PlaceBackdropFrameBehindControls(card, parent)
     card._msuf2Width = width
     card._msuf2DecorativeBackdrop = true
     if card.EnableMouse then card:EnableMouse(false) end
@@ -953,7 +964,37 @@ end
 local function ApplyControlEnabled(control)
     if not control then return end
     local enabled = (control._msuf2DesiredEnabled ~= false) and not HasDisableGate(control)
-    if control._msuf2AppliedEnabled == enabled then return end
+    if control._msuf2AppliedEnabled == enabled then
+        SetEnabledState(control, enabled)
+        if control.SetAlpha then control:SetAlpha(enabled and 1 or 0.45) end
+        SetTextEnabledColor(control._msuf2Title, enabled)
+        SetTextEnabledColor(control._msuf2Label, enabled)
+        if control._msuf2RefreshSwitchVisual then control:_msuf2RefreshSwitchVisual() end
+        if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse then
+            control._msuf2LabelHit:EnableMouse(enabled)
+        end
+        local edit = control.editBox or control.__MSUF_valueBox
+        if edit then
+            SetEnabledState(edit, enabled)
+            if edit.SetAlpha then edit:SetAlpha(enabled and 1 or 0.45) end
+        end
+        if control._msuf2StepButtons then
+            for i = 1, #control._msuf2StepButtons do
+                local btn = control._msuf2StepButtons[i]
+                SetEnabledState(btn, enabled)
+                if btn.SetAlpha then btn:SetAlpha(enabled and 1 or 0.45) end
+            end
+        end
+        if control.buttons then
+            for i = 1, #control.buttons do
+                local btn = control.buttons[i]
+                SetEnabledState(btn, enabled)
+                if btn.SetAlpha then btn:SetAlpha(enabled and 1 or 0.45) end
+            end
+        end
+        if control._msuf2UpdateFill then control:_msuf2UpdateFill() end
+        return
+    end
     control._msuf2AppliedEnabled = enabled
 
     SetEnabledState(control, enabled)
@@ -965,6 +1006,7 @@ local function ApplyControlEnabled(control)
     if control.SetAlpha then control:SetAlpha(enabled and 1 or 0.45) end
     SetTextEnabledColor(control._msuf2Title, enabled)
     SetTextEnabledColor(control._msuf2Label, enabled)
+    if control._msuf2RefreshSwitchVisual then control:_msuf2RefreshSwitchVisual() end
 
     if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse then
         control._msuf2LabelHit:EnableMouse(enabled)

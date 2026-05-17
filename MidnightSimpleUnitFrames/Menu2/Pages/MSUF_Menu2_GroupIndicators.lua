@@ -123,6 +123,7 @@ local function BuildGFIndicators(ctx)
 
     local groupNumberCard = W.ControlCard(indicators, "Group Number", "Small group index label on each frame.", leftX, -148, leftW, 246)
     local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"), "showGroupNumber", false, "visual")
+    groupNumberToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupNumberSize = BindScopeSlider(ctx, W.Slider(groupNumberCard, "Size", 6, 24, 1, leftW), "groupNumberSize", 10, "font")
     local groupNumberAnchor = BindScopeDropdown(ctx, W.Dropdown(groupNumberCard, "Anchor", AURA_ANCHORS, leftW), "groupNumberAnchor", "BOTTOMRIGHT", "geometry")
     local groupNumberX = BindScopeSlider(ctx, W.Slider(groupNumberCard, "X Offset", -100, 100, 1, leftW), "groupNumberX", -2, "geometry")
@@ -154,6 +155,7 @@ local function BuildGFIndicators(ctx)
 
     local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -294, rightW, 190)
     local focusToggle = BindScopeToggle(ctx, W.SwitchAt(focusCard, "Focus Highlight", rightW - 62, -24, 0, "HIDDEN"), "hlFocusEnabled", true, "visual")
+    focusToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local focusHint = focusCard and focusCard.subtitle
     if focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     local focusSize = BindScopeSlider(ctx, W.Slider(focusCard, "Border Thickness", 1, 6, 1, rightW), "hlFocusSize", 2, "visual")
@@ -176,6 +178,7 @@ local function BuildGFIndicators(ctx)
 
     local groupBorderCard = W.ControlCard(indicators, "Group Border", "Optional border around the full group frame.", leftX, -412, leftW, 202)
     local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(groupBorderCard, "Group Border", leftW - 62, -24, 0, "HIDDEN"), "groupBorderEnabled", false, "visual")
+    groupBorderToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupBorderSize = BindScopeSlider(ctx, W.Slider(groupBorderCard, "Border Thickness", 1, 12, 1, leftW), "groupBorderSize", 1, "visual")
     local groupBorderPadding = BindScopeSlider(ctx, W.Slider(groupBorderCard, "Padding", 0, 40, 1, leftW), "groupBorderPadding", 2, "visual")
     local groupBorderColor = W.Color(groupBorderCard, "Group Border Color")
@@ -261,6 +264,7 @@ local function BuildGFIndicators(ctx)
     W.MoveWidget(statusSelector, selectedCard, 16, -54, siconLeftW - 32, "LEFT")
 
     local statusEnabled = W.SwitchAt(selectedCard, "Enabled", siconLeftW - 62, -24, 0, "HIDDEN")
+    statusEnabled._msuf2GroupFrameGateAlwaysEnabled = true
     M.BindToggle(ctx, statusEnabled,
         function()
             local spec = CurrentGFStatusSpec()
@@ -405,6 +409,7 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(previewCurrent, spec ~= nil)
         SetOptionEnabled(previewAll, true)
         SetOptionEnabled(midnightStyle, true)
+        SetOptionEnabled(statusEnabled, true)
         local isRoleIcon = spec.value == "roleIcon"
         roleFilterGroup:SetShown(isRoleIcon)
         if isRoleIcon then
@@ -483,6 +488,7 @@ local function BuildGFIndicators(ctx)
 
     local RefreshSpellIndicatorState
     local siEnable = W.SwitchAt(spells, Tr("Spell Indicators"), siLeftX, -72, siLeftW)
+    siEnable._msuf2GroupFrameGateAlwaysEnabled = true
     M.BindToggle(ctx, siEnable,
         function() return SpellIndicators(CurrentScope()).enabled == true end,
         function(value)
@@ -537,7 +543,7 @@ local function BuildGFIndicators(ctx)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
 
-    W.LabelAt(spells, Tr("Tracked Spells"), siLeftX, -166, siLeftW, "GameFontNormalSmall", T.colors.accent)
+    local trackedSpellsLabel = W.LabelAt(spells, Tr("Tracked Spells"), siLeftX, -166, siLeftW, "GameFontNormalSmall", T.colors.accent)
     local spellTileHint = W.Text(spells, Tr("Left-click configures, right-click toggles, drag to sort."), siLeftX, -187, siLeftW, T.colors.muted)
 
     local spellTiles = CreateFrame("Frame", nil, spells, "BackdropTemplate")
@@ -602,19 +608,33 @@ local function BuildGFIndicators(ctx)
 
     local function RefreshSpellTiles()
         local kind = CurrentScope()
+        local indicatorsOn = SpellIndicators(kind).enabled == true
         local si = SpellIndicatorRuntime()
         local specKey = EffectiveSpellSpec(kind)
         if specKey then EnsureSpellDefaults(kind, specKey) end
         local siCfg = SpellIndicators(kind)
         local trackable = specKey and GetOrderedTrackable(si, siCfg, specKey)
         local selected = CurrentSpellAura(kind)
+        if spellTiles.SetAlpha then spellTiles:SetAlpha(indicatorsOn and 1 or 0.45) end
+        if trackedSpellsLabel and trackedSpellsLabel.SetTextColor then
+            local c = indicatorsOn and T.colors.accent or T.colors.dim
+            trackedSpellsLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        end
 
         for i = 1, #spellTiles._tiles do spellTiles._tiles[i]:Hide() end
         if not trackable or #trackable == 0 then
             spellTileHint:SetText(Tr("No spells for current spec."))
+            if spellTileHint.SetTextColor then
+                local c = indicatorsOn and T.colors.muted or T.colors.dim
+                spellTileHint:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+            end
             return
         end
         spellTileHint:SetText(Tr("Left-click configures, right-click toggles, drag to sort."))
+        if spellTileHint.SetTextColor then
+            local c = indicatorsOn and T.colors.muted or T.colors.dim
+            spellTileHint:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        end
 
         for i = 1, #trackable do
             local info = trackable[i]
@@ -653,6 +673,7 @@ local function BuildGFIndicators(ctx)
 
             local auraCfg = SpellConfigFor(kind, specKey, info.name, false)
             local disabled = auraCfg and auraCfg.enabled == false
+            local tileEnabled = indicatorsOn and not disabled
             local selectedTile = info.name == selected
             local c = info.color or { 0.55, 0.65, 0.85 }
 
@@ -661,15 +682,16 @@ local function BuildGFIndicators(ctx)
             else
                 tile.icon:SetTexture(136243)
             end
-            tile.icon:SetDesaturated(disabled)
-            tile.icon:SetAlpha(disabled and 0.35 or 1)
+            tile:EnableMouse(indicatorsOn)
+            tile.icon:SetDesaturated(not tileEnabled)
+            tile.icon:SetAlpha(tileEnabled and 1 or 0.35)
             tile.label:SetText(info.display or info.name)
-            tile.label:SetTextColor(disabled and 0.45 or 0.92, disabled and 0.45 or 0.92, disabled and 0.45 or 0.92, 1)
+            tile.label:SetTextColor(tileEnabled and 0.92 or 0.45, tileEnabled and 0.92 or 0.45, tileEnabled and 0.92 or 0.45, 1)
             tile:SetBackdropBorderColor(
-                selectedTile and 0.38 or (c[1] * 0.62),
-                selectedTile and 0.66 or (c[2] * 0.62),
-                selectedTile and 1.00 or (c[3] * 0.62),
-                selectedTile and 1.00 or 0.82
+                (indicatorsOn and selectedTile) and 0.38 or (c[1] * 0.42),
+                (indicatorsOn and selectedTile) and 0.66 or (c[2] * 0.42),
+                (indicatorsOn and selectedTile) and 1.00 or (c[3] * 0.42),
+                indicatorsOn and ((selectedTile and 1.00) or 0.82) or 0.45
             )
 
             tile:SetScript("OnEnter", function(self)
@@ -730,6 +752,7 @@ local function BuildGFIndicators(ctx)
                 if M.SelectPage then M.SelectPage(ctx.key) end
             end)
             tile:SetScript("OnMouseUp", function(self, button)
+                if SpellIndicators(CurrentScope()).enabled ~= true then return end
                 if self._dragged then
                     self._dragged = false
                     return
@@ -1083,6 +1106,7 @@ local function BuildGFIndicators(ctx)
 
     W.LabelAt(corners, "Global", leftX, -42, leftW, "GameFontNormalSmall", T.colors.accent)
     local ciEnable = BindScopeToggle(ctx, W.SwitchAt(corners, "Corner Indicators", leftX, -72, leftW), "ciEnabled", true, "visual")
+    ciEnable._msuf2GroupFrameGateAlwaysEnabled = true
     local ciSize = BindScopeSlider(ctx, W.Slider(corners, "Icon Size", 4, 24, 1, leftW), "ciSize", 8, "visual")
     local ciAlpha = W.Slider(corners, "Alpha", 10, 100, 5, leftW)
     M.BindSlider(ctx, ciAlpha,

@@ -637,6 +637,7 @@ local function BuildGFAuras(ctx)
         end
 
         local enable = BindNestedToggle(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), function() return AuraGroup(CurrentScope(), groupKey) end, "enabled", true, "visual")
+        enable._msuf2GroupFrameGateAlwaysEnabled = true
 
         local anchor = BindNestedDropdown(ctx, W.Dropdown(section, "Anchor", AURA_POSITION_ANCHORS, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "anchor", def.anchor, "geometry")
         local growth = BindNestedDropdown(ctx, W.Dropdown(section, "Growth", AURA_GROWTH_VALUES, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "growth", def.growth, "geometry")
@@ -1053,6 +1054,7 @@ local function BuildGFAuras(ctx)
         privNumbers,
     }
     local privEnable = BindNestedToggle(ctx, W.SwitchAt(priv, "Private Auras", privLeftX, -64, privControlW), function() return PrivateAuras(CurrentScope()) end, "enabled", true, "visual")
+    privEnable._msuf2GroupFrameGateAlwaysEnabled = true
     W.LabelAt(priv, "Display", privLeftX, -38, privLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(priv, "Position", privRightX, -38, privRightW, "GameFontNormalSmall", T.colors.accent)
     W.MoveWidget(privMax, priv, privLeftX, -98, privControlW)
