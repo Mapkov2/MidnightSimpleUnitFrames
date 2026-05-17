@@ -28,8 +28,9 @@ local DRAW_MODULE_BORDER = false
 local SUPPRESS_NATIVE_OUTLINE = true
 
 local function EnsureDB()
-    if _G.EnsureDB then
-        _G.EnsureDB()
+    local ensureDB = _G.MSUF_EnsureDB
+    if ensureDB then
+        ensureDB()
     end
 end
 local function IsEnabled()

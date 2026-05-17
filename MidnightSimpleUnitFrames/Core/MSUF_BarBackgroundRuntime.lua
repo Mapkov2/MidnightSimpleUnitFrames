@@ -11,8 +11,8 @@ local type, tonumber = type, tonumber
 local UnitClass, UnitExists, UnitIsPlayer = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer
 
 local function EnsureDBSafe()
-    if not _G.MSUF_DB and type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
+    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
+        (_G.MSUF_EnsureDB)()
     end
 end
 

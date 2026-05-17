@@ -15,6 +15,16 @@ local max = math.max
 local W8 = "Interface/Buttons/WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local round = function(n) return n + (2^52 + 2^51) - (2^52 + 2^51) end
+local function ApplySettingsForKeySafe(key)
+    local fn = _G.MSUF_ApplySettingsForKey
+    if type(fn) == "function" then fn(key); return true end
+    return false
+end
+local function ApplyAllSettingsSafe()
+    local fn = _G.MSUF_ApplyAllSettings
+    if type(fn) == "function" then fn(); return true end
+    return false
+end
 
 local function Tr(text)
     if type(text) ~= "string" then return text end
@@ -435,8 +445,9 @@ _G.MSUF_ResetCurrentEditUnit = function()
         db.general.anchorToCooldown = false
         db.general.anchorName = "UIParent"
     end
-    if type(ApplySettingsForKey) == "function" then ApplySettingsForKey(key)
-    elseif type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+    if not ApplySettingsForKeySafe(key) then
+        ApplyAllSettingsSafe()
+    end
 end
 
 -- ── MSUF_UpdateEditModeInfo (called by Castbars/main) ─────
@@ -535,7 +546,7 @@ local PREVIEW_UNITS = { "target", "focus", "targettarget", "pet" }
 _G.MSUF_EM2_ReforcePreviewFrames = function()
     if not _G.MSUF_PreviewTestMode then return end
     if IsConfigCombatLocked() then return end
-    local UpdateFn = _G.UpdateSimpleUnitFrame
+    local UpdateFn = _G.MSUF_UpdateSimpleUnitFrame
     for _, uk in ipairs(PREVIEW_UNITS) do
         local frame = _G["MSUF_" .. uk]
             or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[uk])
@@ -583,7 +594,7 @@ _G.MSUF_SyncAllUnitPreviews = function()
         _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
     end
 
-    local UpdateFn = _G.UpdateSimpleUnitFrame
+    local UpdateFn = _G.MSUF_UpdateSimpleUnitFrame
     for _, uk in ipairs(PREVIEW_UNITS) do
         local frame = _G["MSUF_" .. uk]
             or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[uk])
@@ -653,11 +664,13 @@ do
 
     local function InstallPipelineHooks()
         if _hooksInstalled then return end
-        if type(_G.ApplyAllSettings) ~= "function" then return end
+        if type(_G.MSUF_ApplyAllSettings) ~= "function" then return end
         _hooksInstalled = true
 
         -- Pipeline entry points (async commit → 0.12s settle)
+        SafeHook("MSUF_ApplyAllSettings", 0.12)
         SafeHook("ApplyAllSettings", 0.12)
+        SafeHook("MSUF_ApplySettingsForKey", 0.12)
         SafeHook("ApplySettingsForKey", 0.12)
 
         -- Font updates (direct overwrite → 0.05s)

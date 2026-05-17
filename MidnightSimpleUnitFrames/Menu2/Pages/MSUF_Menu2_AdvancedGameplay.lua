@@ -37,6 +37,7 @@ local DividerAt = AP.DividerAt
 local BindValueToggle = AP.BindValueToggle
 local BindValueSlider = AP.BindValueSlider
 local ToggleAt = AP.ToggleAt
+local SwitchAt = AP.SwitchAt
 local ValueToggleAt = AP.ValueToggleAt
 local SliderAt = AP.SliderAt
 local ValueSliderAt = AP.ValueSliderAt
@@ -241,7 +242,7 @@ local function BuildGameplay(ctx)
 
     -- Old order: Combat Timer, Combat Enter/Leave, Class-specific toggles, Combat Crosshair.
     local timer = b:CollapsibleSection("gameplay_timer", "Combat Timer", 430, true)
-    local timerEnable = ToggleAt(ctx, timer, "Enable in-combat timer", 14, -40, Gameplay, "enableCombatTimer", false, ApplyGameplayUI)
+    local timerEnable = SwitchAt(ctx, timer, "Combat Timer", 14, -40, 230, Gameplay, "enableCombatTimer", false, ApplyGameplayUI)
     local timerAnchor = DropdownAt(ctx, timer, "Anchor", 320, -40, anchorValues, 160, Gameplay, "combatTimerAnchor", "none", ApplyGameplayUI)
     Add(timerControls, timerAnchor)
     Add(timerControls, SliderAt(ctx, timer, "Timer size", 14, -94, 10, 64, 1, 270, Gameplay, "combatFontSize", 24, ApplyGameplayUI))
@@ -253,7 +254,7 @@ local function BuildGameplay(ctx)
     LabelAt(timer, "Colors are configured in Colors > Gameplay.", 14, -312, 520, "GameFontDisableSmall", T.colors.muted)
 
     local state = b:CollapsibleSection("gameplay_state", "Combat Enter/Leave", 340, false)
-    local stateEnable = ToggleAt(ctx, state, "Show combat enter/leave text", 14, -40, Gameplay, "enableCombatStateText", false, ApplyGameplayUI)
+    local stateEnable = SwitchAt(ctx, state, "Combat Enter/Leave", 14, -40, 270, Gameplay, "enableCombatStateText", false, ApplyGameplayUI)
     Add(stateControls, ToggleAt(ctx, state, "Lock position", 360, -40, Gameplay, "lockCombatState", false, ApplyGameplayUI))
     local enterInput = MoveWidget(W.TextInput(state, "Enter text", 220), state, 14, -86)
     M.BindTextInput(ctx, enterInput,
@@ -286,7 +287,7 @@ local function BuildGameplay(ctx)
     local isRogue = classToken == "ROGUE"
     LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", 14, -38, 360, "GameFontNormalSmall", T.colors.text)
     LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", 14, -60, 520, "GameFontDisableSmall", T.colors.muted)
-    local totemEnable = ToggleAt(ctx, classSec, "Re-anchor Blizzard TotemFrame", 14, -92, Gameplay, "enablePlayerTotems", false, ApplyGameplayUI)
+    local totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 14, -92, 300, Gameplay, "enablePlayerTotems", false, ApplyGameplayUI)
     local previewBtn = T.Button(classSec, "Preview", 120, 22)
     previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 14, -128)
     previewBtn:SetScript("OnClick", function()
@@ -319,7 +320,7 @@ local function BuildGameplay(ctx)
     DividerAt(classSec, -330)
     LabelAt(classSec, "Rogue: First Dance tracker", 14, -354, 360, "GameFontNormalSmall", T.colors.text)
     LabelAt(classSec, "Optional helper. Shows a 6s timer after leaving combat.", 14, -376, 520, "GameFontDisableSmall", T.colors.muted)
-    local firstDanceEnable = ToggleAt(ctx, classSec, "Track 'The First Dance' (6s after leaving combat)", 14, -410, Gameplay, "enableFirstDanceTimer", false, ApplyGameplayUI)
+    local firstDanceEnable = SwitchAt(ctx, classSec, "First Dance tracker", 14, -410, 340, Gameplay, "enableFirstDanceTimer", false, ApplyGameplayUI)
     Add(firstDanceControls, ToggleAt(ctx, classSec, "Lock position", 390, -410, Gameplay, "lockFirstDance", false, ApplyGameplayUI))
     Add(firstDanceControls, ToggleAt(ctx, classSec, "Click-through (ALT to drag when unlocked)", 14, -444, Gameplay, "firstDanceClickThrough", false, ApplyGameplayUI))
     Add(firstDanceControls, ToggleAt(ctx, classSec, "Show as icon with cooldown swipe", 14, -478, Gameplay, "firstDanceShowIcon", true, ApplyGameplayUI))
@@ -329,7 +330,7 @@ local function BuildGameplay(ctx)
     Add(firstDanceControls, SliderAt(ctx, classSec, "Y offset", 14, -608, -800, 800, 1, 250, Gameplay, "firstDanceOffsetY", 80, ApplyGameplayUI))
 
     local cross = b:CollapsibleSection("gameplay_crosshair", "Combat Crosshair", 560, false)
-    local crossEnable = ToggleAt(ctx, cross, "Show green combat crosshair under player (in combat)", 14, -40, Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI)
+    local crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", 14, -40, 390, Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI)
     local rangeToggle = ToggleAt(ctx, cross, "Crosshair: color by melee range to target (green=in range, red=out)", 14, -74, Gameplay, "enableCombatCrosshairMeleeRangeColor", false, ApplyGameplayUI)
     LabelAt(cross, "Uses the spell selected below.", 38, -104, 420, "GameFontDisableSmall", T.colors.muted)
     noSpellWarn = LabelAt(cross, "No melee range spell selected - Crosshair will not work.", 38, -126, 520, "GameFontNormalSmall", { 1, 0.55, 0.1, 1 })

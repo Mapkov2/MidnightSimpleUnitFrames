@@ -1,10 +1,16 @@
-﻿-- Core/MSUF_Alpha.lua  Unit frame alpha / layered transparency system
+-- Core/MSUF_Alpha.lua  Unit frame alpha / layered transparency system
 -- Extracted from MidnightSimpleUnitFrames.lua (Phase 2 file split)
 -- Loads AFTER MidnightSimpleUnitFrames.lua in the TOC.
 local addonName, ns = ...
 local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber = type, tonumber
 local issecretvalue = _G.issecretvalue
+local function MSUF_Alpha_EnsureDB()
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        ensureDB()
+    end
+end
 
 local function _AlphaNormalizeLayerMode(mode)
     if mode == true or mode == 1 or mode == "background" then
@@ -17,7 +23,7 @@ local function _AlphaNormalizeLayerMode(mode)
 end
 
 function _G.MSUF_GetDesiredUnitAlpha(key)
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_Alpha_EnsureDB() end
     local conf = key and MSUF_DB and MSUF_DB[key]
     if not conf then
          return 1
@@ -66,7 +72,7 @@ do
     local function _Alpha_GetConf(key)
         local db = MSUF_DB
         if not db then
-            EnsureDB()
+            MSUF_Alpha_EnsureDB()
             db = MSUF_DB
         end
         return (db and key) and db[key] or nil
@@ -671,7 +677,7 @@ local _rfMulTable = _G.MSUF_RangeFadeMul
 
 function _G.MSUF_ApplyUnitAlpha(frame, key)
     local db = MSUF_DB
-    if not db then EnsureDB(); db = MSUF_DB end
+    if not db then MSUF_Alpha_EnsureDB(); db = MSUF_DB end
     if not frame or not frame.SetAlpha then return end
     -- GF frames handle alpha exclusively via SetAlphaFromBoolean (range fade).
     -- Calling SetAlpha here would override the secret-based range alpha.
@@ -921,7 +927,7 @@ end
 
 function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
     if not frame or not frame.SetAlpha then return false end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_Alpha_EnsureDB() end
     local conf = (MSUF_DB and key) and MSUF_DB[key] or nil
     if ns and ns.UF and ns.UF.IsDisabled and ns.UF.IsDisabled(conf) then return false end
     if _G.MSUF_UnitEditModeActive == true then return false end
@@ -990,7 +996,7 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
     return false
 end
 function _G.MSUF_RefreshAllUnitAlphas()
-    EnsureDB()
+    MSUF_Alpha_EnsureDB()
     local UnitFrames = _G.MSUF_UnitFrames
     if not UnitFrames then return end
     local ApplyUnitAlpha = _G.MSUF_ApplyUnitAlpha
@@ -1044,7 +1050,7 @@ end
 -- Fast combat-only alpha refresh:
 -- On combat toggles, only refresh frames whose configured alpha differs in/out-of-combat.
 function _G.MSUF_RefreshCombatUnitAlphas()
-    EnsureDB()
+    MSUF_Alpha_EnsureDB()
     local UnitFrames = _G.MSUF_UnitFrames
     if not UnitFrames then return false end
     local ApplyUnitAlpha = _G.MSUF_ApplyUnitAlpha

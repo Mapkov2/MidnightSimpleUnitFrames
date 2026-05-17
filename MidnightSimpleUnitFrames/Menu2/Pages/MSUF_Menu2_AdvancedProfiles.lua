@@ -551,7 +551,7 @@ local function BuildModules(ctx)
         W.CreatePageResetButton(ctx, head, nil, { width = 88, y = -20 })
     end
     local style = b:CollapsibleSection("modules_style", "Style", 230, true)
-    local enable = W.Toggle(style, "Enable MSUF Style")
+    local enable = W.SwitchAt(style, "MSUF Style", 14, -38, 220)
     M.BindToggle(ctx, enable,
         function()
             if type(_G.MSUF_StyleIsEnabled) == "function" then
@@ -565,6 +565,7 @@ local function BuildModules(ctx)
             G().styleEnabled = v and true or false
             CallGlobal("MSUF_ApplyModules")
         end)
+    style._msuf2CursorY = -82
     local dropdownMode = W.Dropdown(style, "Dropdown style", {
         { text = "MSUF superellipse", value = "msuf" },
         { text = "Blizzard legacy", value = "old" },

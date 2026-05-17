@@ -1,4 +1,4 @@
-﻿local addonName, ns = ...
+local addonName, ns = ...
 ns = ns or {}
 
 -- Legacy font resolver disabled. The authoritative registry-based pipeline below
@@ -1282,7 +1282,7 @@ local function RunStatusbarMediaRefresh()
         pcall(_G.MSUF_ClearResolvedStatusbarTextureCache)
     end
 
-    local updateBars = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures or _G.UpdateAllBarTextures
+    local updateBars = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures
     if type(updateBars) == "function" then pcall(updateBars) end
 
     if type(_G.MSUF_UpdateAbsorbBarTextures) == "function" then
@@ -1382,12 +1382,12 @@ local function EnsureLSMCallbacks()
             if _G.MSUF_DB and _G.MSUF_DB.general and normalizeFontKey(_G.MSUF_DB.general.fontKey) == normalizeFontKey(key) then
                 if _G.C_Timer and _G.C_Timer.After then
                     _G.C_Timer.After(0, function()
-                        if _G.UpdateAllFonts then
-                            _G.UpdateAllFonts()
+                        if _G.MSUF_UpdateAllFonts then
+                            _G.MSUF_UpdateAllFonts()
                         end
                     end)
-                elseif _G.UpdateAllFonts then
-                    _G.UpdateAllFonts()
+                elseif _G.MSUF_UpdateAllFonts then
+                    _G.MSUF_UpdateAllFonts()
                 end
             end
 
@@ -1760,8 +1760,9 @@ do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function()
-        if _G.EnsureDB then
-            _G.EnsureDB()
+        local ensureDB = _G.MSUF_EnsureDB
+        if ensureDB then
+            ensureDB()
         end
 
         local g = _G.MSUF_DB and _G.MSUF_DB.general or nil
@@ -1785,8 +1786,9 @@ do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function()
-        if _G.EnsureDB then
-            _G.EnsureDB()
+        local ensureDB = _G.MSUF_EnsureDB
+        if ensureDB then
+            ensureDB()
         end
 
         local g = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil

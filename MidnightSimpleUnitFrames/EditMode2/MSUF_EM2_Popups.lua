@@ -18,6 +18,11 @@ local max, min = math.max, math.min
 local W8 = "Interface/Buttons/WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local CHEVRON = "Interface\\ChatFrame\\ChatFrameExpandArrow"
+local function ApplyAllSettingsSafe()
+    local fn = _G.MSUF_ApplyAllSettings
+    if type(fn) == "function" then fn(); return true end
+    return false
+end
 
 local C = {
     -- Match MSUF_THEME: bg=0.03/0.05/0.12, edge=0.10/0.20/0.45
@@ -904,7 +909,7 @@ local function Apply()
         pf.parent:SetSize(conf.width, conf.height)
     end
     local md=_G.MSUF_UFCore_MarkDirty; if type(md)=="function" and pf.parent then md(pf.parent, nil, true, "EM2:UnitPopup")
-    elseif type(_G.UpdateSimpleUnitFrame)=="function" and pf.parent then _G.UpdateSimpleUnitFrame(pf.parent) end
+    elseif type(_G.MSUF_UpdateSimpleUnitFrame)=="function" and pf.parent then (_G.MSUF_UpdateSimpleUnitFrame)(pf.parent) end
     -- Full layout re-apply (power bar embed, text anchors, borders, etc.)
     if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
     if type(_G.MSUF_ForceTextLayoutForUnitKey)=="function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
@@ -1032,7 +1037,7 @@ local function Build()
                 end
             end
             -- Apply + resync
-            if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+            ApplyAllSettingsSafe()
             if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
             RefreshUFPreview("EM2_UNIT_POPUP_COPY", CK(pf.unit))
             C_Timer.After(0.1, function() Sync() end)
@@ -1065,7 +1070,7 @@ local function Build()
         if pf.MSUF_prev and pf.MSUF_prev.key then
             local conf=Conf(pf.MSUF_prev.key)
             if conf then for k,v in pairs(pf.MSUF_prev) do if k~="key" then conf[k]=v end end
-                if type(ApplyAllSettings)=="function" then ApplyAllSettings() end
+                ApplyAllSettingsSafe()
                 if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
                 RefreshUFPreview("EM2_UNIT_POPUP_CANCEL", pf.MSUF_prev.key)
             end
@@ -1490,7 +1495,7 @@ local function Build()
             if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("castbar", targetKey) end
             WriteCastbarSettings(targetKey, r)
             if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-            if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+            ApplyAllSettingsSafe()
             RefreshUFPreview("EM2_CASTBAR_POPUP_COPY", targetKey)
             C_Timer.After(0.1, function() Sync() end)
         end,
@@ -1502,7 +1507,7 @@ local function Build()
     cancel:SetScript("OnClick", function()
         RestoreCast(pf._castSnap)
         if type(_G.MSUF_UpdateCastbarVisuals)=="function" then _G.MSUF_UpdateCastbarVisuals() end
-        if type(ApplyAllSettings)=="function" then ApplyAllSettings() end
+        ApplyAllSettingsSafe()
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
         RefreshUFPreview("EM2_CASTBAR_POPUP_CANCEL", pf and pf.unit)
         pf:Hide()

@@ -275,8 +275,7 @@ local function BuildCastbars(ctx)
     focusKick._msuf2CursorY = -68
     local focusLeftX, focusRightX = 14, 392
     local syncFocusKick
-    local focusEnable = W.Toggle(focusKick, "Enable focus interrupt tracker")
-    W.MoveWidget(focusEnable, focusKick, focusLeftX, -74)
+    local focusEnable = W.SwitchAt(focusKick, "Focus interrupt tracker", focusLeftX, -74, 260)
     M.BindToggle(ctx, focusEnable,
         function() return ReadGBool("enableFocusKickIcon", false) end,
         function(v)

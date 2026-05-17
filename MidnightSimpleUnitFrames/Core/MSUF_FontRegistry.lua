@@ -16,7 +16,7 @@ end
 local deferredFontsPending = false
 local function DeferredUpdateAllFonts()
     deferredFontsPending = false
-    if G.UpdateAllFonts then G.UpdateAllFonts() end
+    if G.MSUF_UpdateAllFonts then G.MSUF_UpdateAllFonts() end
 end
 
 if LSM and not G.MSUF_LSM_CallbacksRegistered and not G.MSUF_LSM_FontCallbackRegistered then
@@ -193,10 +193,10 @@ G.MSUF_GetNPCReactionColor = function(kind)
     else
         defaultR, defaultG, defaultB = 1, 1, 1
     end
-    if not G.EnsureDB then
+    if not G.MSUF_EnsureDB then
         return defaultR, defaultG, defaultB
     end
-    if not G.MSUF_DB then G.EnsureDB() end
+    if not G.MSUF_DB then G.MSUF_EnsureDB() end
     G.MSUF_DB.npcColors = G.MSUF_DB.npcColors or {}
     local t = G.MSUF_DB.npcColors[kind]
     if t and t.r and t.g and t.b then
@@ -210,7 +210,7 @@ G.MSUF_GetClassBarColor = function(classToken)
     if not classToken then
         return defaultR, defaultG, defaultB
     end
-    if not G.MSUF_DB then G.EnsureDB() end
+    if not G.MSUF_DB then G.MSUF_EnsureDB() end
     G.MSUF_DB.classColors = G.MSUF_DB.classColors or {}
     local override = G.MSUF_DB.classColors[classToken]
     if override and override.r and override.g and override.b then
@@ -231,10 +231,10 @@ local function MSUF_GetPowerBarColor(powerType, powerToken)
     if not powerToken or powerToken == "" then
         return nil
     end
-    if not G.EnsureDB then
+    if not G.MSUF_EnsureDB then
         return nil
     end
-    if not G.MSUF_DB then G.EnsureDB() end
+    if not G.MSUF_DB then G.MSUF_EnsureDB() end
     local g = G.MSUF_DB.general
     local ov = g and g.powerColorOverrides
     local c = ov and ov[powerToken] or nil
@@ -303,7 +303,7 @@ G.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
 ns.MSUF_GetResolvedPowerColor = MSUF_GetResolvedPowerColor
 
 local function MSUF_GetConfiguredFontColor()
-    if not G.MSUF_DB then G.EnsureDB() end
+    if not G.MSUF_DB then G.MSUF_EnsureDB() end
     local g = G.MSUF_DB.general or {}
     if g.useCustomFontColor and g.fontColorCustomR and g.fontColorCustomG and g.fontColorCustomB then
         return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
@@ -377,7 +377,7 @@ local function MSUF_GetFontPreviewObject(key)
     end
     local resolveKeyPath = G.MSUF_ResolveFontKeyPath
     local path = type(resolveKeyPath) == "function" and resolveKeyPath(key, 14, "") or nil
-    path = path or G.GetInternalFontPathByKey(key) or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
+    path = path or G.MSUF_GetInternalFontPathByKey(key) or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
     path = (G.MSUF_ResolveFontPath or function(p) return p end)(path, 14, "", key)
     if path then
         local safeSet = G.MSUF_SetFontSafe
@@ -430,7 +430,7 @@ G.MSUF_DARK_TONES = {
     softgray = { 0.16, 0.16, 0.16 },
 }
 
-function G.GetInternalFontPathByKey(key)
+function G.MSUF_GetInternalFontPathByKey(key)
     if not key then return nil end
     local registryPath = G.MSUF_GetInternalFontPrimaryPath
     if type(registryPath) == "function" then
@@ -445,6 +445,7 @@ function G.GetInternalFontPathByKey(key)
     end
     return nil
 end
+G.GetInternalFontPathByKey = G.GetInternalFontPathByKey or G.MSUF_GetInternalFontPathByKey
 
 local function MSUF_IsInternalFontKey(key)
     return MSUF_FontKeyIsInternal(key)
@@ -457,7 +458,7 @@ local function MSUF_GetFontPathForKey(key)
         if p then return p end
     end
     local resolve = G.MSUF_ResolveFontPath or function(path) return path end
-    local internalPath = G.GetInternalFontPathByKey(key)
+    local internalPath = G.MSUF_GetInternalFontPathByKey(key)
     if internalPath then return resolve(internalPath, 14, "", key) end
     local lsmPath = MSUF_FetchFontPathFromLSM(key)
     if lsmPath then return resolve(lsmPath, 14, "", key) end

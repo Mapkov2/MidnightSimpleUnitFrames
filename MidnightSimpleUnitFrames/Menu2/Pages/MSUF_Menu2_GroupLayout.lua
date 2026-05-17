@@ -115,14 +115,13 @@ local function BuildGFLayout(ctx)
 
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
-    local enableGroup = BindScopeToggle(ctx, W.Toggle(general, "Enable MSUF group frames"), "enabled", false, "rebuild")
+    local enableGroup = BindScopeToggle(ctx, W.SwitchAt(general, "MSUF group frames", generalLeftX, -64, generalLeftW), "enabled", false, "rebuild")
     enableGroup._msuf2GroupFrameGateAlwaysEnabled = true
     local showPlayer = BindScopeToggle(ctx, W.Toggle(general, "Show player"), "showPlayer", true, "rebuild")
     local showSolo = BindScopeToggle(ctx, W.Toggle(general, "Show while solo"), "showSolo", false, "rebuild")
     local reverseFill = BindScopeToggle(ctx, W.Toggle(general, "Reverse fill direction"), "reverseFill", false, "visual")
     local smoothFill = BindScopeToggle(ctx, W.Toggle(general, "Smooth health fill"), "smoothFill", true, "visual")
     local hideClient = BindScopeToggle(ctx, W.Toggle(general, "Hide during client scene"), "hideInClientScene", true, "visual")
-    W.MoveWidget(enableGroup, general, generalLeftX, -64)
     W.MoveWidget(showPlayer, general, generalLeftX, -94)
     W.MoveWidget(showSolo, general, generalLeftX, -124)
     W.MoveWidget(smoothFill, general, generalRightX, -64)
@@ -133,10 +132,9 @@ local function BuildGFLayout(ctx)
 
     W.DividerAt(general, -196, generalLeftX, 32)
     W.LabelAt(general, "Offline Members", generalLeftX, -214, generalLeftW, "GameFontNormalSmall", T.colors.accent)
-    local hideOfflineEnabled = BindScopeToggle(ctx, W.Toggle(general, "Hide offline members"), "hideOfflineEnabled", false, "visual")
+    local hideOfflineEnabled = BindScopeToggle(ctx, W.SwitchAt(general, "Offline Members", generalLeftX, -240, generalLeftW), "hideOfflineEnabled", false, "visual")
     local hideOfflineCombat = BindScopeToggle(ctx, W.Toggle(general, "Hide offline in combat"), "hideOfflineInCombat", false, "visual")
     local hideOffline = BindScopeSlider(ctx, W.Slider(general, "Hide offline after", 0, 120, 1, offlineSliderW), "hideOfflineDelay", 0, "visual")
-    W.MoveWidget(hideOfflineEnabled, general, generalLeftX, -240)
     W.MoveWidget(hideOfflineCombat, general, generalRightX, -240)
     W.MoveWidget(hideOffline, general, generalLeftX, -274, offlineSliderW, "LEFT")
     local generalNotice, _, generalNoticeButton = CreateSectionNotice and CreateSectionNotice(general, -304, "Enable Scope", 104)
@@ -285,31 +283,39 @@ local function BuildGFLayout(ctx)
     local scaleLeftW = max(280, min(360, scaleRightX - scaleLeftX - 70))
     local scaleRightW = max(280, min(360, scaleW - scaleRightX - 38))
     local RefreshScalingState
-    local scaleMode = W.Dropdown(scale, "Scale Mode", {
-        { value = "off", text = "Off (100%)" },
-        { value = "auto", text = "Auto (by group size)" },
-        { value = "manual", text = "Manual" },
-    }, scaleLeftW)
-    M.BindDropdown(ctx, scaleMode,
-        function() return Val(CurrentScope(), "frameScaleMode", "off") end,
+    M._msuf2LastGroupScaleMode = M._msuf2LastGroupScaleMode or {}
+    local scaleEnabled = W.SwitchAt(scale, "Frame scaling", scaleLeftX, -54, 140)
+    M.BindToggle(ctx, scaleEnabled,
+        function() return Val(CurrentScope(), "frameScaleMode", "off") ~= "off" end,
         function(v)
-            Set(CurrentScope(), "frameScaleMode", v or "off", "rebuild")
+            local scopeKey = CurrentScope()
+            if v then
+                Set(scopeKey, "frameScaleMode", M._msuf2LastGroupScaleMode[scopeKey] or "manual", "rebuild")
+            else
+                local mode = Val(scopeKey, "frameScaleMode", "off")
+                if mode == "manual" or mode == "auto" then M._msuf2LastGroupScaleMode[scopeKey] = mode end
+                Set(scopeKey, "frameScaleMode", "off", "rebuild")
+            end
             if RefreshScalingState then RefreshScalingState() end
         end)
 
-    local function PlaceDropdown(control, x, y, width)
-        if not control then return end
-        width = width or 220
-        control:ClearAllPoints()
-        control:SetPoint("TOPLEFT", scale, "TOPLEFT", x, y)
-        control:SetSize(width, 22)
-        if control._msuf2Title then
-            control._msuf2Title:ClearAllPoints()
-            control._msuf2Title:SetPoint("LEFT", control, "RIGHT", 8, 0)
-            control._msuf2Title:SetJustifyH("LEFT")
-            control._msuf2Title:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
-        end
-    end
+    local scaleMode = W.Segment(scale, "Scale Mode", {
+        { value = "manual", text = "Manual" },
+        { value = "auto", text = "Auto" },
+    }, min(220, scaleLeftW))
+    W.MoveWidget(scaleMode, scale, scaleLeftX + 172, -54, min(220, scaleLeftW))
+    M.BindSegment(ctx, scaleMode,
+        function()
+            local mode = Val(CurrentScope(), "frameScaleMode", "off")
+            return mode == "auto" and "auto" or "manual"
+        end,
+        function(v)
+            local scopeKey = CurrentScope()
+            local mode = (v == "auto") and "auto" or "manual"
+            M._msuf2LastGroupScaleMode[scopeKey] = mode
+            Set(scopeKey, "frameScaleMode", mode, "rebuild")
+            if RefreshScalingState then RefreshScalingState() end
+        end)
 
     local function PlaceScaleSlider(control, x, y, width)
         W.MoveWidget(control, scale, x, y, width or 220, "LEFT")
@@ -336,10 +342,9 @@ local function BuildGFLayout(ctx)
         return widget
     end
 
-    PlaceDropdown(scaleMode, scaleLeftX, -54, scaleLeftW)
     local manualScale = BindScaleSlider(W.Slider(scale, "", 50, 150, 5, scaleLeftW), "frameScaleManual", 100,
         function(v) return string.format("Manual Scale: %d%%", v) end)
-    PlaceScaleSlider(manualScale, scaleLeftX, -100, scaleLeftW)
+    PlaceScaleSlider(manualScale, scaleLeftX, -132, scaleLeftW)
 
     local autoLabel = T.Font(scale, "GameFontNormalSmall", "Auto Breakpoints", T.colors.accent)
     autoLabel:SetPoint("TOPLEFT", scale, "TOPLEFT", scaleRightX, -54)
@@ -358,13 +363,16 @@ local function BuildGFLayout(ctx)
         function(v) return string.format("26+ players: %d%%", v) end)
     PlaceScaleSlider(scaleOver25, scaleRightX, -250, scaleRightW)
 
-    local scaleHint = W.Text(scale, "Scales frame size, fonts, and icons proportionally.\nBuff/debuff positions stay relative to their anchors.", scaleLeftX, -154, scaleLeftW, T.colors.dim)
+    local scaleHint = W.Text(scale, "Scales frame size, fonts, and icons proportionally.\nBuff/debuff positions stay relative to their anchors.", scaleLeftX, -186, scaleLeftW, T.colors.dim)
     if scaleHint.SetWordWrap then scaleHint:SetWordWrap(true) end
 
     RefreshScalingState = function()
         local mode = Val(CurrentScope(), "frameScaleMode", "off")
+        local scalingOn = mode ~= "off"
         local manualOn = mode == "manual"
         local autoOn = mode == "auto"
+        SetOptionEnabled(scaleEnabled, true)
+        SetOptionEnabled(scaleMode, scalingOn)
         SetOptionEnabled(manualScale, manualOn)
         SetOptionEnabled(scaleAt10, autoOn)
         SetOptionEnabled(scaleAt20, autoOn)

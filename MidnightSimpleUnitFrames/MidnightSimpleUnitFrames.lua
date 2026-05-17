@@ -419,7 +419,7 @@ function ns.UF.EnsureTextObjects(f, fontPath, flags, fr, fg, fb)
  end
 ns.UF.UpdateHighlightColor = ns.UF.UpdateHighlightColor or function(self)
     if not self then  return end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or {}; local hr, hg, hb = 1, 1, 1; local hc = g.highlightColor
     if type(hc) == "table" then hr, hg, hb = hc[1] or 1, hc[2] or 1, hc[3] or 1
     else
@@ -432,7 +432,7 @@ ns.UF.UpdateHighlightColor = ns.UF.UpdateHighlightColor or function(self)
  end
 ns.UF.Unitframe_OnEnter = ns.UF.Unitframe_OnEnter or function(self)
     if not self then  return end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or {}
     local hb = self.highlightBorder
     if hb then
@@ -1341,7 +1341,7 @@ end
 local function MSUF_ApplyUnitVisibilityDriver(frame, forceShow)
     if not frame or not frame.unit then return end
     if frame.unit == "player" then return end
-if not MSUF_DB then EnsureDB() end
+if not MSUF_DB then MSUF_EnsureDB() end
 local confKey
 if frame.isBoss or (_G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(frame.unit)) then
     confKey = "boss"
@@ -1530,7 +1530,7 @@ local function MSUF_UpdateNameColor(frame)
 
     local g = (cache and cache.generalRef) or ((MSUF_DB and MSUF_DB.general) or nil)
     if not g then
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_EnsureDB() end
         g = (MSUF_DB and MSUF_DB.general) or nil
     end
 
@@ -2384,7 +2384,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
     if inLockdown and initialized then return end
     local conf = refreshConfig and nil or f.cachedConfig
     if not conf then
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_EnsureDB() end
         conf = MSUF_DB and MSUF_DB[key]
         f.cachedConfig = conf
     end
@@ -3062,7 +3062,7 @@ local function ApplyTextLayout(f, conf)
     end
  end
 function _G.MSUF_ForceTextLayoutForUnitKey(unitKey)
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local k = _G.MSUF_NormalizeTextLayoutUnitKey(unitKey)
     local function ApplyForFrame(f)
         if not f then return end
@@ -3694,7 +3694,7 @@ local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
 local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
     if not self or self.isBoss then return end
     if _msuf_inCombat then return end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     g = g or ((MSUF_DB and MSUF_DB.general) or {})
 
     if self.Show then self:Show() end
@@ -4078,7 +4078,7 @@ local function _MSUF_ShouldRunStaticVisualPass(self, key, exists)
     return _MSUF_IsVisualLiveApplyContext() and (not _msuf_inCombat)
 end
 
-function UpdateSimpleUnitFrame(self)
+function MSUF_UpdateSimpleUnitFrame(self)
         -- P0: _UF.Alpha / Portrait / EditPrev pre-resolved at PLAYER_LOGIN.
         -- Zero per-call overhead (was: 3 branches + 3 _G hash lookups per frame update).
         local _flushSerial = _G.MSUF_UFCORE_FLUSH_SERIAL  -- cache once per call
@@ -4098,7 +4098,7 @@ function UpdateSimpleUnitFrame(self)
         end
 
         if not db then
-            if not MSUF_DB then EnsureDB() end
+            if not MSUF_DB then MSUF_EnsureDB() end
             db = MSUF_DB
         end
 
@@ -4135,6 +4135,7 @@ local key, conf = ns.UF.ResolveKeyAndConf(self, unit, db)
 if ns.UF.HandleDisabledFrame(self, conf) then
      return
 end
+_G.UpdateSimpleUnitFrame = _G.UpdateSimpleUnitFrame or MSUF_UpdateSimpleUnitFrame
 if conf then
     local sn = (conf.showName  ~= false)
     local sh = (conf.showHP    ~= false)
@@ -4700,7 +4701,7 @@ local function _MSUF_ApplyToUnitFrame(unit, conf)
 end
 
 function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     if _msuf_inCombat then
         MSUF_BossTestMode = false
         _G.MSUF_BossTestMode = false
@@ -4727,8 +4728,8 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
                     MSUF_ApplyUnitVisibilityDriver(f, true)
                 end
                 _MSUF_ApplyToUnitFrame(unit, conf)
-                if type(UpdateSimpleUnitFrame) == "function" then
-                    UpdateSimpleUnitFrame(f)
+                if type(MSUF_UpdateSimpleUnitFrame) == "function" then
+                    MSUF_UpdateSimpleUnitFrame(f)
                 end
                 if f.Show then f:Show() end
                 if f.SetAlpha then f:SetAlpha(1) end
@@ -4740,8 +4741,8 @@ function _G.MSUF_ApplyBossUnitframePreviewState(active, reason)
                 if type(MSUF_ApplyUnitVisibilityDriver) == "function" then
                     MSUF_ApplyUnitVisibilityDriver(f, false)
                 end
-                if type(UpdateSimpleUnitFrame) == "function" and F.UnitExists and F.UnitExists(unit) then
-                    UpdateSimpleUnitFrame(f)
+                if type(MSUF_UpdateSimpleUnitFrame) == "function" and F.UnitExists and F.UnitExists(unit) then
+                    MSUF_UpdateSimpleUnitFrame(f)
                 elseif f.Hide then
                     f:Hide()
                 end
@@ -4801,7 +4802,7 @@ local function MSUF_ApplyUnitFrameKey_Immediate(key)
         end
         return
     end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local conf = MSUF_DB[key]
     if not conf then return end
     if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
@@ -4968,7 +4969,7 @@ function MSUF_OnRegenEnabled_ApplyCommit(event)
     end
     MSUF_EventBus_Unregister("PLAYER_REGEN_ENABLED", "MSUF_APPLY_COMMIT")
  end
-function ApplySettingsForKey(key)
+function MSUF_ApplySettingsForKey(key)
     if not key then return end
     MSUF_MarkUnitFrameDirty(key)
     local st = _G.MSUF_ApplyCommitState
@@ -4977,7 +4978,9 @@ function ApplySettingsForKey(key)
     end
     MSUF_ScheduleApplyCommit()
  end
-function ApplyAllSettings()
+_G.ApplySettingsForKey = _G.ApplySettingsForKey or MSUF_ApplySettingsForKey
+
+function MSUF_ApplyAllSettings()
     local st = _G.MSUF_ApplyCommitState
     if not st then return end
     MSUF_MarkUnitFrameDirty("player")
@@ -4991,8 +4994,9 @@ function ApplyAllSettings()
     st.castbars = true
     st.tickers = true
     st.bossPreview = true
-    MSUF_ScheduleApplyCommit()
+     MSUF_ScheduleApplyCommit()
  end
+_G.ApplyAllSettings = _G.ApplyAllSettings or MSUF_ApplyAllSettings
 _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or function(key)
     if not key then  return end
     MSUF_MarkUnitFrameDirty(key)
@@ -5013,7 +5017,7 @@ _G.MSUF_ApplySettingsForKey_Immediate = _G.MSUF_ApplySettingsForKey_Immediate or
     end
  end
 _G.MSUF_ApplyAllSettings_Immediate = _G.MSUF_ApplyAllSettings_Immediate or function()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     if MSUF_OptionsApplyCombatLocked() or (_G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked()) then
         MSUF_QueueApplyAllAfterCombat()
         return
@@ -5156,7 +5160,7 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         self._msufSavedClickAttrs = nil
      end
     local function _GetConfAndKey()
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_EnsureDB() end
         local key = GetConfigKeyForUnit(unit)
         local conf = key and MSUF_DB and MSUF_DB[key]
          return key, conf
@@ -5377,7 +5381,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         ns.Cache.ClearStamp(f, "PBEmbedLayout")
          return
     end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local b = (MSUF_DB and MSUF_DB.bars) or {}
     local unit = f.unit
     local key = f.msufConfigKey
@@ -5669,7 +5673,7 @@ local function _CreateClassificationText(f, textFrame, conf, fontPath, flags, fr
 end
 
 local function CreateSimpleUnitFrame(unit)
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local key  = GetConfigKeyForUnit(unit)
     local conf = key and MSUF_DB[key] or {}
     local f = F.CreateFrame("Button", "MSUF_" .. unit, UIParent, "BackdropTemplate,SecureUnitButtonTemplate,PingableUnitFrameTemplate")
@@ -5863,7 +5867,7 @@ do
         _msufHadTarget = F.UnitExists and F.UnitExists("target") or false
      end
     local function MSUF_TargetSoundDriver_OnTargetChanged()
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_EnsureDB() end
         local g = (MSUF_DB and MSUF_DB.general) or {}
         local hasTarget = (F.UnitExists and F.UnitExists("target")) or false
         local hadTarget = _msufHadTarget
@@ -5919,7 +5923,7 @@ do
 end
 MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_STARTUP", function(event)
     MSUF_InitProfiles()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     do
         local g = (MSUF_DB and MSUF_DB.general) or {}
         if g.playTargetSelectLostSounds == true and _G.MSUF_TargetSoundDriver_Ensure then
@@ -6168,7 +6172,7 @@ local function MSUF_SanitizeToTInlineConf(conf)
 end
 function MSUF_RuntimeUpdateTargetToTInline(targetFrame)
     if not targetFrame or not targetFrame.nameText then return end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     if not MSUF_DB then return end
     if type(MSUF_DB.targettarget) ~= "table" then
         MSUF_DB.targettarget = {}
@@ -6290,7 +6294,7 @@ end
 if _G.MSUF_ApplyAllSettings_Immediate then
     _G.MSUF_ApplyAllSettings_Immediate()
 else
-    ApplyAllSettings()
+    MSUF_ApplyAllSettings()
 end
 -- P0: Pre-resolve split-module function refs for UpdateSimpleUnitFrame.
 -- After PLAYER_LOGIN all Core/ files have loaded. Eliminates branches

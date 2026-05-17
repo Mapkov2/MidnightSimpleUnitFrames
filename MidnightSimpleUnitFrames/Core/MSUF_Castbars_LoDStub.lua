@@ -24,8 +24,9 @@ local function _Load(addonName)
 end
 
 local function _EnsureDB()
-    if type(EnsureDB) == "function" then
-        EnsureDB()
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        ensureDB()
     end
 end
 
@@ -493,7 +494,7 @@ do
     }
 
     local function _GetPlayerCastbarDB()
-        if type(EnsureDB) == "function" then EnsureDB() end
+        _EnsureDB()
         if not MSUF_DB then return nil end
         MSUF_DB.player = MSUF_DB.player or {}
         MSUF_DB.player.castbar = MSUF_DB.player.castbar or {}

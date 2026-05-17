@@ -37,7 +37,9 @@ local DividerAt = AP.DividerAt
 local BindValueToggle = AP.BindValueToggle
 local BindValueSlider = AP.BindValueSlider
 local ToggleAt = AP.ToggleAt
+local SwitchAt = AP.SwitchAt
 local ValueToggleAt = AP.ValueToggleAt
+local ValueSwitchAt = AP.ValueSwitchAt
 local SliderAt = AP.SliderAt
 local ValueSliderAt = AP.ValueSliderAt
 local DropdownAt = AP.DropdownAt
@@ -602,8 +604,7 @@ local function BuildColors(ctx)
             ApplyColors()
         end)
     SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyColors)
-    local gradientToggle = BindTableToggle(ctx, appearance, "Enable health gradient", G, "enableHealthGradient", true, ApplyColors)
-    MoveWidget(gradientToggle, appearance, 360, -158)
+    SwitchAt(ctx, appearance, "Health Gradient", 360, -158, 230, G, "enableHealthGradient", true, ApplyColors)
 
     local unit = b:CollapsibleSection("colors_unit", "Unitframe Colors", 230, false)
     for i = 1, #COLOR_DATA.NPC_ROWS do
@@ -655,7 +656,7 @@ local function BuildColors(ctx)
             if type(fn) == "function" then pcall(fn, v) else G().npcTypeColorText = v and true or false end
             ApplyColors()
         end)
-    local npcMaster = ValueToggleAt(ctx, npcType, "Enable NPC Type Colors (Boss / Caster / Melee ...)", 12, -10,
+    local npcMaster = ValueSwitchAt(ctx, npcType, "NPC Type Colors", 12, -10, 260,
         function()
             local fn = ColorAPI().GetNPCColorMode
             if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v == "type" end end
@@ -828,7 +829,7 @@ local function BuildColors(ctx)
     local overrideColor = ColorValueAt(ctx, castbar, "Custom color", 360, -190,
         function() return ApiRGB("GetPlayerCastbarOverrideColor", 0, 0.6, 1) end,
         function(r, g, c) ApiSetRGB("SetPlayerCastbarOverrideColor", r, g, c); ApplyCastbarColors() end)
-    local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", 190, -154, {
+    local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", 300, -154, {
         { value = "CLASS", text = "Class color" },
         { value = "CUSTOM", text = "Custom color" },
     }, 160,
@@ -842,7 +843,7 @@ local function BuildColors(ctx)
             if type(fn) == "function" then pcall(fn, v) else G().playerCastbarOverrideMode = v end
             ApplyCastbarColors()
         end)
-    local overrideEnable = ValueToggleAt(ctx, castbar, "Enable Player override", 12, -154,
+    local overrideEnable = ValueSwitchAt(ctx, castbar, "Player override", 12, -154, 260,
         function()
             local fn = ColorAPI().GetPlayerCastbarOverrideEnabled
             if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
@@ -883,10 +884,9 @@ local function BuildColors(ctx)
 
     local highlight = b:CollapsibleSection("colors_highlight", "Mouseover Highlight", 210, false)
     local highlightColor = ColorValueAt(ctx, highlight, "Mouseover highlight color", 12, -48, HighlightRGB, SetHighlightRGB)
-    local highlightEnabled = BindTableToggle(ctx, highlight, "Enable mouseover highlight", G, "highlightEnabled", true, function()
+    local highlightEnabled = SwitchAt(ctx, highlight, "Mouseover Highlight", 12, -10, 260, G, "highlightEnabled", true, function()
         SetHighlightRGB(HighlightRGB())
     end)
-    MoveWidget(highlightEnabled, highlight, 12, -10)
     ColorValueAt(ctx, highlight, "Boss target highlight color", 12, -104,
         function() return TableRGB(G(), "bossTargetHighlightColor", 1, 0.82, 0) end,
         function(r, g, c)

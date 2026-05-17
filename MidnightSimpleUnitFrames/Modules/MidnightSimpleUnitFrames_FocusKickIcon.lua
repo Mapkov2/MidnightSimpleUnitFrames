@@ -52,9 +52,10 @@ local FocusKickPreviewSelected = false
 -- DB defaults
 ------------------------------------------------------
 local function FocusKick_EnsureDB()
-    if not EnsureDB then return end
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) ~= "function" then return end
 
-    EnsureDB()
+    ensureDB()
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
 

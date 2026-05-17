@@ -10,6 +10,11 @@ local FONT  = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local W8    = "Interface/Buttons/WHITE8X8"
 local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
 local floor, max, min = math.floor, math.max, math.min
+local function ApplyAllSettingsSafe()
+    local fn = _G.MSUF_ApplyAllSettings
+    if type(fn) == "function" then fn(); return true end
+    return false
+end
 
 local hudFrame, row2Frame
 local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
@@ -717,7 +722,7 @@ local function EnsureHUD()
         db.general = db.general or {}
         db.general.anchorToCooldown = not (db.general.anchorToCooldown and true or false)
         SetActive(cdmBtn, db.general.anchorToCooldown)
-        if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+        ApplyAllSettingsSafe()
         C_Timer.After(0.1, function()
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             if _G.MSUF_EM2_ReforcePreviewFrames then _G.MSUF_EM2_ReforcePreviewFrames() end
@@ -735,7 +740,7 @@ local function EnsureHUD()
             db.general.anchorName = frameName
             db.general.anchorToCooldown = false
             SetActive(cdmBtn, false)
-            if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+            ApplyAllSettingsSafe()
             C_Timer.After(0.1, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             end)

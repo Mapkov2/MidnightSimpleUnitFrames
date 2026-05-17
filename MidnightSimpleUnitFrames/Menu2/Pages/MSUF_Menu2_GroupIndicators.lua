@@ -121,7 +121,7 @@ local function BuildGFIndicators(ctx)
     W.DividerAt(indicators, -112, leftX, 30)
 
     W.LabelAt(indicators, "Group Number", leftX, -140, 180, "GameFontNormalSmall", T.colors.accent)
-    local groupNumberToggle = BindScopeToggle(ctx, W.ToggleAt(indicators, "Show Group Number", leftX, -170, leftW), "showGroupNumber", false, "visual")
+    local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(indicators, "Group Number", leftX, -170, leftW), "showGroupNumber", false, "visual")
     local groupNumberSize = BindScopeSlider(ctx, W.Slider(indicators, "Size", 6, 24, 1, leftW), "groupNumberSize", 10, "font")
     local groupNumberAnchor = BindScopeDropdown(ctx, W.Dropdown(indicators, "Anchor", AURA_ANCHORS, leftW), "groupNumberAnchor", "BOTTOMRIGHT", "geometry")
     local groupNumberX = BindScopeSlider(ctx, W.Slider(indicators, "X Offset", -100, 100, 1, leftW), "groupNumberX", -2, "geometry")
@@ -152,7 +152,7 @@ local function BuildGFIndicators(ctx)
     W.MoveWidget(hoverSize, indicators, rightX, -210, rightW, "CENTER")
 
     W.LabelAt(indicators, "Focus Highlight", rightX, -274, 180, "GameFontNormalSmall", T.colors.accent)
-    local focusToggle = BindScopeToggle(ctx, W.ToggleAt(indicators, "Enable Focus Glow", rightX, -304, rightW), "hlFocusEnabled", true, "visual")
+    local focusToggle = BindScopeToggle(ctx, W.SwitchAt(indicators, "Focus Highlight", rightX, -304, rightW), "hlFocusEnabled", true, "visual")
     local focusHint = W.Text(indicators, "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -332, rightW, T.colors.muted)
     if focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     local focusSize = BindScopeSlider(ctx, W.Slider(indicators, "Border Thickness", 1, 6, 1, rightW), "hlFocusSize", 2, "visual")
@@ -174,7 +174,7 @@ local function BuildGFIndicators(ctx)
     W.MoveWidget(focusColor, indicators, rightX, -438, rightW)
 
     W.LabelAt(indicators, "Group Border", leftX, -430, 180, "GameFontNormalSmall", T.colors.accent)
-    local groupBorderToggle = BindScopeToggle(ctx, W.ToggleAt(indicators, "Show Group Border", leftX, -460, leftW), "groupBorderEnabled", false, "visual")
+    local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(indicators, "Group Border", leftX, -460, leftW), "groupBorderEnabled", false, "visual")
     local groupBorderSize = BindScopeSlider(ctx, W.Slider(indicators, "Border Thickness", 1, 12, 1, leftW), "groupBorderSize", 1, "visual")
     local groupBorderPadding = BindScopeSlider(ctx, W.Slider(indicators, "Padding", 0, 40, 1, leftW), "groupBorderPadding", 2, "visual")
     local groupBorderColor = W.Color(indicators, "Group Border Color")
@@ -255,7 +255,7 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(statusSelector, sicons, siconLeftX, -198, siconLeftW, "LEFT")
 
-    local statusEnabled = W.ToggleAt(sicons, "Enabled", siconLeftX, -260, siconLeftW)
+    local statusEnabled = W.SwitchAt(sicons, "Enabled", siconLeftX, -260, siconLeftW)
     M.BindToggle(ctx, statusEnabled,
         function()
             local spec = CurrentGFStatusSpec()
@@ -469,7 +469,7 @@ local function BuildGFIndicators(ctx)
     end
 
     W.LabelAt(spells, Tr("Spell Set"), siLeftX, -42, siLeftW, "GameFontNormalSmall", T.colors.accent)
-    local siEnable = W.ToggleAt(spells, Tr("Enable Spell Indicators"), siLeftX, -72, siLeftW)
+    local siEnable = W.SwitchAt(spells, Tr("Spell Indicators"), siLeftX, -72, siLeftW)
     M.BindToggle(ctx, siEnable,
         function() return SpellIndicators(CurrentScope()).enabled == true end,
         function(value)
@@ -755,7 +755,7 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(auraDrop, spells, siRightX, -228, siRightW, "LEFT")
 
-    local spellEnabled = W.ToggleAt(spells, Tr("Enabled"), siRightX, -288, siRightW)
+    local spellEnabled = W.SwitchAt(spells, Tr("Enabled"), siRightX, -288, siRightW)
     M.BindToggle(ctx, spellEnabled,
         function()
             local cfg = CurrentSpellConfig(CurrentScope(), false)
@@ -1058,7 +1058,7 @@ local function BuildGFIndicators(ctx)
     local rightW = max(330, min(440, cornerW - rightX - 42))
 
     W.LabelAt(corners, "Global", leftX, -42, leftW, "GameFontNormalSmall", T.colors.accent)
-    local ciEnable = BindScopeToggle(ctx, W.ToggleAt(corners, "Enable corner indicators", leftX, -72, leftW), "ciEnabled", true, "visual")
+    local ciEnable = BindScopeToggle(ctx, W.SwitchAt(corners, "Corner Indicators", leftX, -72, leftW), "ciEnabled", true, "visual")
     local ciSize = BindScopeSlider(ctx, W.Slider(corners, "Icon Size", 4, 24, 1, leftW), "ciSize", 8, "visual")
     local ciAlpha = W.Slider(corners, "Alpha", 10, 100, 5, leftW)
     M.BindSlider(ctx, ciAlpha,

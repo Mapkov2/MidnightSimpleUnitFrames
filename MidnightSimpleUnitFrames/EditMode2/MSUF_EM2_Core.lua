@@ -179,9 +179,20 @@ end
 
 local function EnsureDB()
     if _G.MSUF_DB then return true end
-    local fn = _G.EnsureDB
+    local fn = _G.MSUF_EnsureDB
     if type(fn) == "function" then fn(); return _G.MSUF_DB ~= nil end
-    if ns and type(ns.EnsureDB) == "function" then ns.EnsureDB(); return _G.MSUF_DB ~= nil end
+    local nsEnsureDB = ns and (ns.MSUF_EnsureDB or ns.EnsureDB)
+    if type(nsEnsureDB) == "function" then nsEnsureDB(); return _G.MSUF_DB ~= nil end
+    return false
+end
+local function ApplyAllSettingsSafe()
+    local fn = _G.MSUF_ApplyAllSettings
+    if type(fn) == "function" then fn(); return true end
+    return false
+end
+local function ApplySettingsForKeySafe(key)
+    local fn = _G.MSUF_ApplySettingsForKey
+    if type(fn) == "function" then fn(key); return true end
     return false
 end
 -- Public read-only accessors
@@ -295,9 +306,7 @@ function State.Enter(key)
     end
 
     -- Visibility drivers: ApplyAllSettings checks MSUF_UnitEditModeActive internally
-    if type(ApplyAllSettings) == "function" then
-        ApplyAllSettings()
-    end
+    ApplyAllSettingsSafe()
 
     -- Preview: auto-enable all frames AFTER pipeline settles (async commit)
     _G.MSUF_UnitPreviewActive = true
@@ -355,9 +364,7 @@ function State.Exit(source)
     end
 
     -- Visibility drivers restore
-    if type(ApplyAllSettings) == "function" then
-        ApplyAllSettings()
-    end
+    ApplyAllSettingsSafe()
 
     -- Preview: disable all previews, restore visibility
     _G.MSUF_UnitPreviewActive = false
@@ -418,8 +425,8 @@ function State.CancelAll()
         local applyImm = _G.MSUF_ApplyAllSettings_Immediate
         if type(applyImm) == "function" then
             applyImm()
-        elseif type(ApplyAllSettings) == "function" then
-            ApplyAllSettings()
+        else
+            ApplyAllSettingsSafe()
         end
 
         -- Belt-and-suspenders: force SetPoint on every unit frame with
@@ -429,7 +436,7 @@ function State.CancelAll()
         end
     else
         -- Snapshot was unavailable — best-effort exit.
-        if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+        ApplyAllSettingsSafe()
     end
 
     _G.MSUF_UnitPreviewActive = false
@@ -524,12 +531,12 @@ local function RestoreState(snap)
     if snap.category == "unit" then
         db[snap.key] = db[snap.key] or {}
         DeepRestore(db[snap.key], snap.data)
-        if type(ApplySettingsForKey) == "function" then ApplySettingsForKey(snap.key) end
+        ApplySettingsForKeySafe(snap.key)
     elseif snap.category == "castbar" then
         db.general = db.general or {}
         DeepRestore(db.general, snap.data)
         if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-        if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+        ApplyAllSettingsSafe()
     elseif snap.category == "aura" then
         db.auras2 = db.auras2 or {}
         DeepRestore(db.auras2, snap.data)

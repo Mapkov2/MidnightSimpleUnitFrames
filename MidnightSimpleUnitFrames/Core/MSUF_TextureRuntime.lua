@@ -24,8 +24,8 @@ local function Export(key, fn, aliasKey, forceAlias)
 end
 
 local function EnsureDBSafe()
-    if not _G.MSUF_DB and type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
+    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
+        (_G.MSUF_EnsureDB)()
     end
 end
 
@@ -160,7 +160,7 @@ if not _G.MSUF_UpdateAllBarTextures_Immediate then
         if st then st.bars = true end
         ScheduleApplyCommit()
     end
-    _G.UpdateAllBarTextures = _G.MSUF_UpdateAllBarTextures
+    _G.UpdateAllBarTextures = _G.UpdateAllBarTextures or _G.MSUF_UpdateAllBarTextures
 end
 
 if ns then

@@ -1476,8 +1476,8 @@ local function RefreshSharedFlags(shared, gen)
     _useDispelBorders = (shared and shared.useDebuffTypeBorders == true) or false
     _clickThrough     = (shared and shared.clickThroughAuras == true) or false
     _showTooltip      = (shared and shared.showTooltip == true) or false
-    _G._msufA2_clickThrough = _clickThrough
-    _G._msufA2_showTooltip  = _showTooltip
+    _G.MSUF_A2_ClickThrough = _clickThrough
+    _G.MSUF_A2_ShowTooltip  = _showTooltip
     _masqueEnabled    = (shared and shared.masqueEnabled == true) or false
     -- Pandemic mode: "OFF"/"BORDER"/"PULSE"/"GLOW" → numeric (0/1/2/3)
     -- Migration: old boolean showPandemic=true → PULSE
@@ -1592,7 +1592,10 @@ end
 local function GetAuras2DB()
     local api = ns and ns.MSUF_Auras2
     if api and api.GetDB then return api.GetDB() end
-    if not _G.MSUF_DB then if type(EnsureDB) == "function" then EnsureDB() end end
+    if not _G.MSUF_DB then
+        local ensureDB = _G.MSUF_EnsureDB
+        if type(ensureDB) == "function" then ensureDB() end
+    end
     local a2 = _G.MSUF_DB and _G.MSUF_DB.auras2
     return a2, a2 and a2.shared
 end
@@ -1907,12 +1910,12 @@ end
 -- Config generation counter: MUST be declared before LayoutIcons and BumpConfigGen
 -- so Lua 5.1 captures it as a proper upvalue (not a global nil reference).
 local _configGen = 0
-_G._msufA2_configGen = _configGen
+_G.MSUF_A2_ConfigGen = _configGen
 local _bindingsDone = false
 
 function Icons.BumpConfigGen()
     _configGen = _configGen + 1
-    _G._msufA2_configGen = _configGen
+    _G.MSUF_A2_ConfigGen = _configGen
     _bindingsDone = false  -- re-bind on next commit (picks up late-loaded modules)
     _fastPathBound = false -- re-bind fast paths
     _sharedFlagsGen = -1   -- force shared flags refresh
@@ -3012,16 +3015,16 @@ local _PREVIEW_DEBUFF_TEXTURES = {
 local _PREVIEW_BUFF_TEX_N = #_PREVIEW_BUFF_TEXTURES
 local _PREVIEW_DEBUFF_TEX_N = #_PREVIEW_DEBUFF_TEXTURES
 -- Export for MSUF_A2_EditMode.lua (file-scope locals are invisible across files)
-_G._PREVIEW_BUFF_TEXTURES  = _PREVIEW_BUFF_TEXTURES
-_G._PREVIEW_DEBUFF_TEXTURES = _PREVIEW_DEBUFF_TEXTURES
-_G._PREVIEW_BUFF_TEX_N     = _PREVIEW_BUFF_TEX_N
-_G._PREVIEW_DEBUFF_TEX_N   = _PREVIEW_DEBUFF_TEX_N
+_G.MSUF_A2_PREVIEW_BUFF_TEXTURES  = _PREVIEW_BUFF_TEXTURES
+_G.MSUF_A2_PREVIEW_DEBUFF_TEXTURES = _PREVIEW_DEBUFF_TEXTURES
+_G.MSUF_A2_PREVIEW_BUFF_TEX_N     = _PREVIEW_BUFF_TEX_N
+_G.MSUF_A2_PREVIEW_DEBUFF_TEX_N   = _PREVIEW_DEBUFF_TEX_N
 
 -- Cooldown durations per preview slot (varying so they don't all tick together)
 local _PREVIEW_CD_DURATIONS = { 12, 18, 8, 25, 15, 10, 20, 30, 6, 22, 14, 9 }
 local _PREVIEW_CD_DUR_N = #_PREVIEW_CD_DURATIONS
-_G._PREVIEW_CD_DURATIONS = _PREVIEW_CD_DURATIONS
-_G._PREVIEW_CD_DUR_N     = _PREVIEW_CD_DUR_N
+_G.MSUF_A2_PREVIEW_CD_DURATIONS = _PREVIEW_CD_DURATIONS
+_G.MSUF_A2_PREVIEW_CD_DUR_N     = _PREVIEW_CD_DUR_N
 
 -- Pandemic window ticker (100ms)
 -- Re-evaluates pandemic pulsing border for all visible icons so the glow
@@ -3146,7 +3149,7 @@ function Apply.ApplyFontsFromGlobal()
     -- Bump configGen so ResolveTextConfig cache is invalidated and new
     -- font values from shared.stackTextSize / cooldownTextSize take effect.
     _configGen = _configGen + 1
-    _G._msufA2_configGen = _configGen
+    _G.MSUF_A2_ConfigGen = _configGen
     _sharedFlagsGen = -1
 
     -- Resolve global MSUF font family (path + flags) and flush the file-scope cache

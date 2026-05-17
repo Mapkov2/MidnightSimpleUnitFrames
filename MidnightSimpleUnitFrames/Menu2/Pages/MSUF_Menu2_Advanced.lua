@@ -81,6 +81,14 @@ local function BindTableToggle(ctx, section, label, getTable, key, default, appl
     return toggle
 end
 
+local function BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
+    local toggle = W.SwitchAt(section, label, x, y, labelWidth)
+    M.BindToggle(ctx, toggle,
+        function() return BoolValue(getTable(), key, default) end,
+        function(v) SetValue(getTable(), key, v and true or false, apply) end)
+    return toggle
+end
+
 local function BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply)
     local slider = W.Slider(section, label, minVal, maxVal, step, width or 300)
     M.BindSlider(ctx, slider,
@@ -428,6 +436,14 @@ local function BindValueToggle(ctx, section, label, getValue, setValue)
     return toggle
 end
 
+local function BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
+    local toggle = W.SwitchAt(section, label, x, y, labelWidth)
+    M.BindToggle(ctx, toggle,
+        function() return getValue() and true or false end,
+        function(v) setValue(v and true or false) end)
+    return toggle
+end
+
 local function BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue)
     local slider = W.Slider(section, label, minVal, maxVal, step, width or 160)
     M.BindSlider(ctx, slider,
@@ -444,8 +460,16 @@ local function ToggleAt(ctx, section, label, x, y, getTable, key, default, apply
     return MoveWidget(BindTableToggle(ctx, section, label, getTable, key, default, apply), section, x, y)
 end
 
+local function SwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
+    return BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
+end
+
 local function ValueToggleAt(ctx, section, label, x, y, getValue, setValue)
     return MoveWidget(BindValueToggle(ctx, section, label, getValue, setValue), section, x, y)
+end
+
+local function ValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
+    return BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
 end
 
 local function SliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getTable, key, default, apply)
@@ -493,6 +517,15 @@ end
 
 local function ScopedToggleAt(ctx, section, label, x, y, getTable, key, default, beforeSet, afterSet)
     return ValueToggleAt(ctx, section, label, x, y,
+        function() return BoolValue(getTable(), key, default) end,
+        function(v)
+            if type(beforeSet) == "function" then beforeSet() end
+            SetValue(getTable(), key, v and true or false, afterSet)
+        end)
+end
+
+local function ScopedSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, beforeSet, afterSet)
+    return ValueSwitchAt(ctx, section, label, x, y, labelWidth,
         function() return BoolValue(getTable(), key, default) end,
         function(v)
             if type(beforeSet) == "function" then beforeSet() end
@@ -639,14 +672,21 @@ local function BuildAuras(ctx)
 
     local unitPillPos, unitPillBottomY = FlowTopLeft({ 90, 90, 90, 96 }, 12, -120, contentW - 14, 6, 28, 22)
     local top = b:Section("Unit Auras", max(148, abs(unitPillBottomY) + 14))
-    Track(sharedOnlyControls, ToggleAt(ctx, top, "Enable Unit Auras", 12, -34, function() return AurasDB() end, "enabled", true, function()
+    local function ApplyUnitAuraEnabled()
         local a2 = AurasDB()
         if a2.enabled == false and type(_G.MSUF_A2_HardDisableAll) == "function" then pcall(_G.MSUF_A2_HardDisableAll) end
         ApplyAuras()
-    end))
-    Track(filterOverrideControls, ScopedToggleAt(ctx, top, "Enable filters", 200, -34, AuraFilters, "enabled", true, ForceAuraFilterOverride, ApplyAuras))
+    end
+    local enableUnitAuras = W.SwitchAt(top, "Unit Auras", 12, -34, 160)
+    M.BindToggle(ctx, enableUnitAuras,
+        function() return BoolValue(AurasDB(), "enabled", true) end,
+        function(v)
+            SetValue(AurasDB(), "enabled", v and true or false, ApplyUnitAuraEnabled)
+        end)
+    Track(sharedOnlyControls, enableUnitAuras)
+    Track(filterOverrideControls, ScopedSwitchAt(ctx, top, "Filters", 230, -34, 160, AuraFilters, "enabled", true, ForceAuraFilterOverride, ApplyAuras))
     Track(sharedOnlyControls, ToggleAt(ctx, top, "Preview in Edit Mode", 12, -58, AuraShared, "showInEditMode", true, ApplyAuras))
-    Track(sharedOnlyControls, ToggleAt(ctx, top, "Enable Masque skinning", 200, -58, AuraShared, "masqueEnabled", false, ApplyAuras))
+    Track(sharedOnlyControls, SwitchAt(ctx, top, "Masque skinning", 230, -58, 220, AuraShared, "masqueEnabled", false, ApplyAuras))
     Track(sharedOnlyControls, ToggleAt(ctx, top, "Hide Masque borders", 200, -82, AuraShared, "masqueHideBorder", false, ApplyAuras))
     LabelAt(top, "Units", 12, -94, 180, "GameFontNormalSmall", T.colors.muted)
     Track(sharedOnlyControls, TogglePillAt(ctx, top, "Player", unitPillPos[1].x, unitPillPos[1].y, unitPillPos[1].width, function() return AurasDB() end, "showPlayer", false, ApplyAuras))
@@ -932,7 +972,7 @@ local function BuildAuras(ctx)
     Track(layoutOverrideControls, ScopedSliderAt(ctx, visual, "Stack text size", 272, -330, 6, 32, 1, 190, function() return AuraLayout() end, "stackTextSize", 14, ForceAuraLayoutOverride, ApplyAuras))
     DividerAt(visual, -392)
     LabelAt(visual, "Pandemic Window", 16, -408, 240, "GameFontNormal", T.colors.text)
-    Track(sharedOnlyControls, ValueToggleAt(ctx, visual, "Enable Pandemic Window", 12, -436,
+    Track(sharedOnlyControls, ValueSwitchAt(ctx, visual, "Pandemic Window", 12, -436, 240,
         function() return GetPandemicMode() ~= "OFF" end,
         function(v)
             if v then
@@ -1037,7 +1077,7 @@ local function BuildAuras(ctx)
 
     local reminders = b:CollapsibleSection("a2_reminders", "Buff Reminders", 310, false)
     W.Text(reminders, "Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover.", 12, -6, 620, T.colors.muted)
-    local remMaster = ToggleAt(ctx, reminders, "Enable Buff Reminders", 12, -28, AuraShared, "showReminders", true, function() MarkReminderDirty(); ApplyAuras() end)
+    local remMaster = SwitchAt(ctx, reminders, "Buff Reminders", 12, -28, 220, AuraShared, "showReminders", true, function() MarkReminderDirty(); ApplyAuras() end)
     local reminderControls = {}
     for i = 1, #AURA_REMINDERS do
         local spec = AURA_REMINDERS[i]
@@ -1087,6 +1127,7 @@ AdvancedPage.NumValue = NumValue
 AdvancedPage.SetValue = SetValue
 AdvancedPage.DeepCopyTable = DeepCopyTable
 AdvancedPage.BindTableToggle = BindTableToggle
+AdvancedPage.BindTableSwitchAt = BindTableSwitchAt
 AdvancedPage.BindTableSlider = BindTableSlider
 AdvancedPage.BindTableDropdown = BindTableDropdown
 AdvancedPage.BindValueDropdown = BindValueDropdown
@@ -1099,15 +1140,19 @@ AdvancedPage.MoveWidget = MoveWidget
 AdvancedPage.LabelAt = LabelAt
 AdvancedPage.DividerAt = DividerAt
 AdvancedPage.BindValueToggle = BindValueToggle
+AdvancedPage.BindValueSwitchAt = BindValueSwitchAt
 AdvancedPage.BindValueSlider = BindValueSlider
 AdvancedPage.ToggleAt = ToggleAt
+AdvancedPage.SwitchAt = SwitchAt
 AdvancedPage.ValueToggleAt = ValueToggleAt
+AdvancedPage.ValueSwitchAt = ValueSwitchAt
 AdvancedPage.SliderAt = SliderAt
 AdvancedPage.ValueSliderAt = ValueSliderAt
 AdvancedPage.DropdownAt = DropdownAt
 AdvancedPage.ValueDropdownAt = ValueDropdownAt
 AdvancedPage.ColorAt = ColorAt
 AdvancedPage.ScopedToggleAt = ScopedToggleAt
+AdvancedPage.ScopedSwitchAt = ScopedSwitchAt
 AdvancedPage.ScopedSliderAt = ScopedSliderAt
 AdvancedPage.ScopedDropdownAt = ScopedDropdownAt
 AdvancedPage.TogglePillAt = TogglePillAt

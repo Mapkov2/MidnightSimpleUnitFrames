@@ -315,7 +315,8 @@ local function BuildBars(ctx)
             for _, frame in pairs(frames) do
                 if frame and frame.unit and frame.hpBar then
                     frame._msufHeavyVisualNextAt = 0
-                    if _G.UpdateSimpleUnitFrame then _G.UpdateSimpleUnitFrame(frame) end
+                    local update = _G.MSUF_UpdateSimpleUnitFrame
+                    if update then update(frame) end
                     if _G.MSUF_UFCore_UpdatePowerBarFast then _G.MSUF_UFCore_UpdatePowerBarFast(frame) end
                     if ns.Bars and ns.Bars._ApplyHPGradient then
                         if frame.hpGradients then

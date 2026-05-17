@@ -197,8 +197,9 @@ local function SanitizeMetricPart(value)
 end
 
 local function EnsureMSUFDB()
-    if type(_G.EnsureDB) == "function" then
-        pcall(_G.EnsureDB)
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        pcall(ensureDB)
     end
 
     local db = _G.MSUF_DB

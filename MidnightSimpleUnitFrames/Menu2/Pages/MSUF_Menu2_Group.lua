@@ -373,7 +373,7 @@ local GF_COPY_EXCLUDE = {
 
 local GF_COPY_CATEGORIES = {
     { key = "general", label = "General", keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "preserveRaidGroups", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineEnabled", "hideOfflineInCombat", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
-    { key = "health", label = "Health & Bars", keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB", "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB", "barTexture", "barBgTexture", "powerHeight", "showPower", "showPowerText", "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter", "powerFontSize", "powerOffsetX", "powerOffsetY", "powerTextLayer", "powerSmoothFill", "powerShowTank", "powerShowHealer", "powerShowDamager", "healPredEnabled", "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha" } },
+    { key = "health", label = "Health & Bars", keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB", "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB", "barTexture", "barBgTexture", "powerBarEnabled", "powerHeight", "showPower", "showPowerText", "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter", "powerFontSize", "powerOffsetX", "powerOffsetY", "powerTextLayer", "powerSmoothFill", "powerShowTank", "powerShowHealer", "powerShowDamager", "healPredEnabled", "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha" } },
     { key = "text", label = "Text & Name", keys = { "showName", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY", "nameTextLayer", "nameColorMode", "nameColorR", "nameColorG", "nameColorB", "nameShortenEnabled", "nameClipSide", "nameMaxChars", "nameNoEllipsis", "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter", "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer" } },
     { key = "font", label = "Font Override", keys = { "fontOverride", "fontOutline", "useGlobalFontColor", "fontR", "fontG", "fontB" } },
     { key = "border", label = "Background & Opacity", keys = { "bgR", "bgG", "bgB", "bgA", "hpBarAlpha", "hpBgAlpha", "hpTextIgnoreAlpha", "alphaPreserveHPColor" } },
@@ -830,17 +830,9 @@ local function ScopeSection(ctx, builder)
                 local cat = GF_COPY_CATEGORIES[i]
                 local col = (i > 6) and 1 or 0
                 local row = (i - 1) % 6
-                local cb = CreateFrame("CheckButton", nil, copyPopup, "UICheckButtonTemplate")
-                cb:SetSize(20, 20)
-                cb:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16 + col * 205, -110 - row * 23)
+                local cb = W.SwitchAt(copyPopup, cat.label, 16 + col * 205, -110 - row * 28, 150)
                 cb:SetChecked(M.gfCopyScopes[cat.key] == true)
                 cb:SetScript("OnClick", function(self) M.gfCopyScopes[cat.key] = self:GetChecked() and true or false end)
-                if T.StyleCheckmark then T.StyleCheckmark(cb) end
-                local fs = cb.Text or cb.text
-                if fs then
-                    fs:SetText(cat.label)
-                    if T.StyleFontString then T.StyleFontString(fs, T.colors.text, 0) end
-                end
                 copyPopup._checks[i] = cb
             end
 

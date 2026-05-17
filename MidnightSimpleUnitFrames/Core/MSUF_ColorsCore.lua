@@ -11,7 +11,7 @@ ns = ns or {}
 ------------------------------------------------------
 -- Local shortcuts (core only — no UI-framework refs)
 ------------------------------------------------------
-local EnsureDB              = _G.EnsureDB
+local EnsureDB              = _G.MSUF_EnsureDB
 local RAID_CLASS_COLORS     = RAID_CLASS_COLORS
 local C_Timer               = C_Timer
 local hooksecurefunc        = hooksecurefunc
@@ -101,7 +101,7 @@ local function _PushVisualUpdates_Flush()
         ns.GF.RebuildDispelColorCurve()
     end
 
-    local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts
+    local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts
     if type(fnFonts) == "function" then
         fnFonts()
     end

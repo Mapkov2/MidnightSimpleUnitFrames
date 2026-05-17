@@ -23,8 +23,8 @@ local function Export(key, fn, aliasKey, forceAlias)
 end
 
 local function EnsureDBSafe()
-    if not _G.MSUF_DB and type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
+    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
+        (_G.MSUF_EnsureDB)()
     end
 end
 
@@ -318,7 +318,7 @@ if not _G.MSUF_UpdateAllFonts_Immediate then
         end
         ScheduleApplyCommit()
     end
-    _G.UpdateAllFonts = _G.MSUF_UpdateAllFonts
+    _G.UpdateAllFonts = _G.UpdateAllFonts or _G.MSUF_UpdateAllFonts
 end
 
 ns.Fonts.UpdateAllFonts = UpdateAllFonts

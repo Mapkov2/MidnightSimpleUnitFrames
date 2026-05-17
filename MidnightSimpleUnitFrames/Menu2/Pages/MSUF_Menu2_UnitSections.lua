@@ -49,6 +49,11 @@ local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
 local TOT_INLINE_SEPARATOR_VALUES = {}
 local TOT_INLINE_SEPARATOR_OPTIONS = {}
+local RAID_GROUP_NAME_STYLES = {
+    { value = "PAREN", text = "(2)" },
+    { value = "BRACKET", text = "[2]" },
+    { value = "NONE", text = "2" },
+}
 for i = 1, #SEPARATORS do
     local item = SEPARATORS[i]
     local value = item and item.value
@@ -311,8 +316,8 @@ local function BuildPreview(ctx, builder, unit)
     panel._msufAPI = {
         ApplySettingsForKey = function(key)
             key = key or unit
-            if type(_G.ApplySettingsForKey) == "function" then
-                _G.ApplySettingsForKey(key)
+            if type(_G.MSUF_ApplySettingsForKey) == "function" then
+                _G.MSUF_ApplySettingsForKey(key)
             else
                 Call("MSUF_ApplySettingsForKey_Immediate", key)
             end
@@ -648,19 +653,11 @@ local function BuildTopActions(ctx, builder, unit, label)
             for i, cat in ipairs(UF_COPY_CATEGORIES) do
                 local col = (i > 5) and 1 or 0
                 local row = (i - 1) % 5
-                local cb = CreateFrame("CheckButton", nil, copyPopup, "UICheckButtonTemplate")
-                cb:SetSize(20, 20)
-                cb:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16 + col * 198, -110 - row * 24)
+                local cb = W.SwitchAt(copyPopup, cat.label, 16 + col * 198, -110 - row * 28, 140)
                 cb:SetChecked(copyScopes[cat.key] == true)
                 cb:SetScript("OnClick", function(self)
                     copyScopes[cat.key] = self:GetChecked() and true or false
                 end)
-                if T.StyleCheckmark then T.StyleCheckmark(cb) end
-                local fs = cb.Text or cb.text
-                if fs then
-                    fs:SetText(cat.label)
-                    if T.StyleFontString then T.StyleFontString(fs, T.colors.text, 0) end
-                end
                 copyPopup._checks[i] = cb
             end
 
@@ -729,7 +726,7 @@ local function BuildBasics(ctx, builder, unit, label)
     local labelW = math.max(104, colW - 34)
     local row1 = -42
 
-    local enable = W.ToggleAt(sec, "Enable", x1, row1, labelW)
+    local enable = W.SwitchAt(sec, "Enable", x1, row1, labelW)
     enable._msuf2UnitFrameGateAlwaysEnabled = true
     M.BindToggle(ctx, enable,
         function() return ReadBool(unit, "enabled", true) end,
@@ -1013,10 +1010,16 @@ local function BuildText(ctx, builder, unit)
     local function RaidGroupNameAllowed(unitKey)
         return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focus"
     end
+    local function RaidGroupNamePreviewValue()
+        local style = ReadText(unit, "raidGroupNameStyle", "PAREN")
+        if style == "BRACKET" then return "[2]" end
+        if style == "NONE" then return "2" end
+        return "(2)"
+    end
     local function NamePreviewText()
         local text = sampleNames[unit] or UnitTopLabel(unit)
         if RaidGroupNameAllowed(unit) and ReadBool(unit, "showRaidGroupInName", false) then
-            text = text .. " (2)"
+            text = text .. " " .. RaidGroupNamePreviewValue()
         end
         return text
     end
@@ -1118,7 +1121,6 @@ local function BuildText(ctx, builder, unit)
     end
 
     local function SwitchOrToggle(parent, label, x, y, labelWidth)
-        if W.SwitchAt then return W.SwitchAt(parent, label, x, y, labelWidth) end
         return W.ToggleAt(parent, label, x, y, labelWidth)
     end
 
@@ -1216,7 +1218,7 @@ local function BuildText(ctx, builder, unit)
     SectionLabel(nameTab, "Name", leftX, -4)
     local _, namePreviewValue = PreviewText(nameTab, NamePreviewText(), rightX, -4, rightW)
 
-    local showNameText = SwitchOrToggle(nameTab, "Show Name", leftX, -34, colW - 60)
+    local showNameText = W.SwitchAt(nameTab, "Show Name", leftX, -34, colW - 60)
     M.BindToggle(ctx, showNameText,
         function() return ReadBool(unit, "showName", true) end,
         function(v)
@@ -1273,7 +1275,7 @@ local function BuildText(ctx, builder, unit)
     SectionLabel(hpTab, "HP Text", leftX, -4)
     PreviewText(hpTab, "630.0k - 63%", rightX, -4, rightW)
 
-    local showHPText = SwitchOrToggle(hpTab, "Show HP Text", leftX, -34, colW - 60)
+    local showHPText = W.SwitchAt(hpTab, "Show HP Text", leftX, -34, colW - 60)
     M.BindToggle(ctx, showHPText,
         function() return ReadBool(unit, "showHP", true) end,
         function(v)
@@ -1395,7 +1397,7 @@ local function BuildText(ctx, builder, unit)
     SectionLabel(powerTab, "Power Text", leftX, -4)
     PreviewText(powerTab, "100 Energy", rightX, -4, rightW)
 
-    local showPowerText = SwitchOrToggle(powerTab, "Show Power Text", leftX, -34, colW - 60)
+    local showPowerText = W.SwitchAt(powerTab, "Show Power Text", leftX, -34, colW - 60)
     M.BindToggle(ctx, showPowerText,
         function() return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget") end,
         function(v)
@@ -1820,15 +1822,34 @@ local function BuildPortrait(ctx, builder, unit)
     end
     local RefreshPortraitControls
 
-    local portrait = W.Segment(sec, "Portrait mode", {
-        { value = "OFF", text = "Off" },
+    M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
+    local portraitEnable = W.SwitchAt(sec, "Portrait", leftX, -42, leftW)
+    M.BindToggle(ctx, portraitEnable,
+        function() return NormalizePortrait(unit) ~= "OFF" end,
+        function(v)
+            if v then
+                SetPortraitValue(unit, "portraitMode", M._msuf2LastPortraitSide[unit] or "LEFT", "MSUF2_PORTRAIT_MODE")
+            else
+                local mode = NormalizePortrait(unit)
+                if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastPortraitSide[unit] = mode end
+                SetPortraitValue(unit, "portraitMode", "OFF", "MSUF2_PORTRAIT_MODE")
+            end
+            if RefreshPortraitControls then RefreshPortraitControls() end
+        end)
+
+    local portrait = W.Segment(sec, "Position", {
         { value = "LEFT", text = "Left" },
         { value = "RIGHT", text = "Right" },
-    }, min(300, sectionW - 28))
+    }, min(220, rightW))
+    W.MoveWidget(portrait, sec, rightX, -42, min(220, rightW))
     M.BindSegment(ctx, portrait,
-        function() return NormalizePortrait(unit) end,
+        function()
+            local mode = NormalizePortrait(unit)
+            return mode == "RIGHT" and "RIGHT" or "LEFT"
+        end,
         function(v)
-            SetPortraitValue(unit, "portraitMode", v or "OFF", "MSUF2_PORTRAIT_MODE")
+            M._msuf2LastPortraitSide[unit] = v == "RIGHT" and "RIGHT" or "LEFT"
+            SetPortraitValue(unit, "portraitMode", v or "LEFT", "MSUF2_PORTRAIT_MODE")
             if RefreshPortraitControls then RefreshPortraitControls() end
         end)
 
@@ -1903,6 +1924,8 @@ local function BuildPortrait(ctx, builder, unit)
         local classRender = active and ((conf.portraitRender or "2D") == "CLASS")
         local hasBorder = active and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
 
+        SetControlEnabled(portraitEnable, true)
+        SetControlEnabled(portrait, active)
         SetControlEnabled(render, active)
         SetControlEnabled(shape, active)
         SetControlEnabled(size, active)
@@ -1954,7 +1977,7 @@ local function BuildPower(ctx, builder, unit)
         end)
     end
 
-    local show = W.ToggleAt(sec, "Show power bar", leftX, -42, leftW)
+    local show = W.SwitchAt(sec, "Show power bar", leftX, -42, leftW)
     M.BindToggle(ctx, show,
         function() return ReadBool(unit, "showPowerBar", true) end,
         function(v)
@@ -2105,7 +2128,7 @@ local function BuildCastbar(ctx, builder, unit)
     local textX = rightX + 86
     local RefreshCastbarEnabled
 
-    local enabledLabel = (unit == "boss") and "Enable boss castbars" or ("Enable " .. UnitTopLabel(unit):lower() .. " castbar")
+    local enabledLabel = (unit == "boss") and "Boss castbars" or (UnitTopLabel(unit) .. " castbar")
     local timeLabel = (unit == "boss") and "Show boss cast time" or ("Show " .. UnitTopLabel(unit):lower() .. " cast time")
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(sec, -130, "Enable", 88)
     if castbarNoticeButton then
@@ -2115,7 +2138,7 @@ local function BuildCastbar(ctx, builder, unit)
         end)
     end
 
-    local enabled = W.ToggleAt(sec, enabledLabel, leftX, -42, 240)
+    local enabled = W.SwitchAt(sec, enabledLabel, leftX, -42, 240)
     M.BindToggle(ctx, enabled,
         function() return ReadGeneralBool(fields.enable, true) end,
         function(v)
@@ -2242,7 +2265,8 @@ local function BuildStatus(ctx, builder, unit)
         end)
     RegisterStatusSearch(selector, "Status indicator selector", {
         "indicator dropdown", "select level", "choose level", "status icon dropdown", "level dropdown",
-    }, function() return StatusValues(unit) end, "Choose Level here, then adjust Enabled, Anchor, offsets, size, and layer.")
+        "raid group", "raid group name", "group number", "subgroup",
+    }, function() return StatusValues(unit) end, "Choose Level or Raid Group here, then adjust the available controls for the selected indicator.")
 
     local previewLabel = W.LabelAt(sec, "Status Preview", rightX, -42, rightW, "GameFontNormalSmall", T.colors.accent)
 
@@ -2258,7 +2282,7 @@ local function BuildStatus(ctx, builder, unit)
         "midnight style", "status style", "indicator style", "icon style",
     })
 
-    local enabled = W.ToggleAt(sec, "Enabled", leftX, -112, leftW)
+    local enabled = W.SwitchAt(sec, "Enabled", leftX, -112, leftW)
     M.BindToggle(ctx, enabled,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2298,6 +2322,19 @@ local function BuildStatus(ctx, builder, unit)
         local spec = CurrentStatusSpec(unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
     end)
+
+    local raidGroupStyle = W.Dropdown(sec, "Style", RAID_GROUP_NAME_STYLES, 180)
+    PlaceDropdown(raidGroupStyle, rightX, -184, 180)
+    M.BindDropdown(ctx, raidGroupStyle,
+        function() return ReadStatusString(unit, "raidGroupNameStyle", "PAREN") end,
+        function(value)
+            if value ~= "BRACKET" and value ~= "NONE" then value = "PAREN" end
+            SetString(unit, "raidGroupNameStyle", value, "MSUF2_RAID_GROUP_NAME_STYLE", { preview = true, text = true })
+            RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+        end)
+    RegisterStatusSearch(raidGroupStyle, "Raid group style", {
+        "raid group style", "parentheses", "brackets", "no brackets", "group number style",
+    }, RAID_GROUP_NAME_STYLES)
 
     local size = W.Slider(sec, "Size", 8, 64, 1, 300)
     PlaceSlider(size, leftX, -154, leftW)
@@ -2402,8 +2439,12 @@ local function BuildStatus(ctx, builder, unit)
         if not spec then return end
         local function ResetSelectedStatus()
             local conf = GetConf(unit)
-            conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.size], conf[spec.layer] = nil, nil, nil, nil, nil
-            if spec.symbol then conf[spec.symbol] = nil end
+            if spec.inlineName then
+                conf[spec.x], conf[spec.y], conf[spec.anchor], conf.raidGroupNameStyle = nil, nil, nil, nil
+            else
+                conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.size], conf[spec.layer] = nil, nil, nil, nil, nil
+                if spec.symbol then conf[spec.symbol] = nil end
+            end
             RefreshStatusRuntime(unit, spec)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end
@@ -2449,26 +2490,48 @@ local function BuildStatus(ctx, builder, unit)
 
     local function RefreshStatusSectionState()
         local spec = CurrentStatusSpec(unit)
+        local inlineName = spec and spec.inlineName == true
         local hasSymbol = spec and spec.symbol
         local showStateStyle = hasSymbol and true or false
         local showTestMode = spec and spec.statusRuntime and true or false
         if W.SetControlShown then
             W.SetControlShown(midnight, showStateStyle)
             W.SetControlShown(symbol, hasSymbol)
+            W.SetControlShown(raidGroupStyle, inlineName)
             W.SetControlShown(test, showTestMode)
+            W.SetControlShown(size, not inlineName)
+            W.SetControlShown(anchor, true)
+            W.SetControlShown(x, true)
+            W.SetControlShown(y, true)
+            W.SetControlShown(layer, not inlineName)
+            W.SetControlShown(reset, not inlineName)
+            W.SetControlShown(previewLabel, not inlineName)
+            W.SetControlShown(current, not inlineName)
+            W.SetControlShown(all, not inlineName)
         else
             if midnight then midnight:SetShown(showStateStyle) end
             if symbol then symbol:SetShown(hasSymbol and true or false) end
+            if raidGroupStyle then raidGroupStyle:SetShown(inlineName) end
             if test then test:SetShown(showTestMode) end
+            if size then size:SetShown(not inlineName) end
+            if anchor then anchor:SetShown(true) end
+            if x then x:SetShown(true) end
+            if y then y:SetShown(true) end
+            if layer then layer:SetShown(not inlineName) end
+            if reset then reset:SetShown(not inlineName) end
+            if previewLabel then previewLabel:SetShown(not inlineName) end
+            if current then current:SetShown(not inlineName) end
+            if all then all:SetShown(not inlineName) end
         end
         local isEnabled = spec and ReadStatusBool(unit, spec.show, spec.defaultShow)
         SetControlEnabled(symbol, hasSymbol and isEnabled)
-        SetControlEnabled(size, isEnabled)
+        SetControlEnabled(raidGroupStyle, inlineName and isEnabled)
+        SetControlEnabled(size, (not inlineName) and isEnabled)
         SetControlEnabled(anchor, isEnabled)
         SetControlEnabled(x, isEnabled)
         SetControlEnabled(y, isEnabled)
-        SetControlEnabled(layer, isEnabled)
-        SetControlEnabled(reset, spec ~= nil)
+        SetControlEnabled(layer, (not inlineName) and isEnabled)
+        SetControlEnabled(reset, spec ~= nil and not inlineName)
 
         SetSectionHeaderStatus(sec, nil)
     end

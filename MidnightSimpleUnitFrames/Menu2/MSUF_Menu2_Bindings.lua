@@ -37,8 +37,9 @@ local function WipeTable(t)
 end
 
 function M.EnsureDB()
-    if type(_G.EnsureDB) == "function" then
-        pcall(_G.EnsureDB)
+    local ensure = _G.MSUF_EnsureDB
+    if type(ensure) == "function" then
+        pcall(ensure)
     end
     _G.MSUF_DB = _G.MSUF_DB or {}
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
@@ -166,7 +167,7 @@ local function FlushApply()
                 CallGlobal("MSUF_ClassPower_Refresh")
             end
         end
-        if not CallGlobal("ApplySettingsForKey", unit) then
+        if not CallGlobal("MSUF_ApplySettingsForKey", unit) and not CallGlobal("ApplySettingsForKey", unit) then
             CallGlobal("MSUF_ApplySettingsForKey_Immediate", unit)
         end
     end
@@ -181,7 +182,7 @@ local function FlushApply()
             CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, opt.reason or "MSUF2_GENERAL")
         end
         if opt.applyAll ~= false then
-            if not CallGlobal("ApplyAllSettings") then
+            if not CallGlobal("MSUF_ApplyAllSettings") and not CallGlobal("ApplyAllSettings") then
                 CallGlobal("MSUF_ApplyAllSettings_Immediate")
             end
         end

@@ -22,6 +22,16 @@ local function RefreshUFPreview(reason)
     local fn = _G.MSUF_UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "EM2_LAYOUT") end
 end
+local function ApplySettingsForKeySafe(key)
+    local fn = _G.MSUF_ApplySettingsForKey
+    if type(fn) == "function" then fn(key); return true end
+    return false
+end
+local function ApplyAllSettingsSafe()
+    local fn = _G.MSUF_ApplyAllSettings
+    if type(fn) == "function" then fn(); return true end
+    return false
+end
 
 local function IsConfigCombatLocked()
     if type(_G.MSUF_IsConfigCombatLocked) == "function" then
@@ -908,10 +918,8 @@ local function NudgeTarget(dx, dy)
     end
     conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + ndx) + 0.5)
     conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + ndy) + 0.5)
-    if type(ApplySettingsForKey) == "function" then
-        ApplySettingsForKey(key)
-    elseif type(ApplyAllSettings) == "function" then
-        ApplyAllSettings()
+    if not ApplySettingsForKeySafe(key) then
+        ApplyAllSettingsSafe()
     end
     if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
@@ -1296,9 +1304,7 @@ function Ticker.EndDrag()
             end
         end
         -- Offsets already written by OnUpdate. Just finalize pipeline.
-        if type(ApplySettingsForKey) == "function" then
-            ApplySettingsForKey(d.key)
-        end
+        ApplySettingsForKeySafe(d.key)
         C_Timer.After(0.06, function()
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
         end)

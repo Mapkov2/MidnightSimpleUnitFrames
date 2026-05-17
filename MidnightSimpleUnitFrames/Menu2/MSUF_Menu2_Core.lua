@@ -2950,7 +2950,8 @@ local function BuildDashboardUX(ctx)
             pendingMsufScale = nil
             if type(_G.MSUF_ApplyMsufScale) == "function" then pcall(_G.MSUF_ApplyMsufScale, scaleValue) end
             if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false }) end
-            if type(_G.ApplyAllSettings) == "function" then pcall(_G.ApplyAllSettings) end
+            local applyAll = _G.MSUF_ApplyAllSettings
+            if type(applyAll) == "function" then pcall(applyAll) end
             RefreshMsufScale()
         end, "primary")
         msufRevert = Button(scaling, "Revert", msufX + 82, msufTop - 100, 72, 20, function()

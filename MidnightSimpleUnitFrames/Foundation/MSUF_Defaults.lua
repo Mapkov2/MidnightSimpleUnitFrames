@@ -1826,6 +1826,10 @@ local function fill(key, defaults)
         hpTextLayer = 5,
         powerTextLayer = 2,
         showRaidGroupInName = false,
+        raidGroupNameAnchor = "NAMERIGHT",
+        raidGroupNameOffsetX = 3,
+        raidGroupNameOffsetY = 0,
+        raidGroupNameStyle = "PAREN",
     }
     fill("player", {
         width     = 275,
@@ -2090,14 +2094,16 @@ local function fill(key, defaults)
     end
     MSUF_DB_LastHeavyRun = MSUF_DB
  end
-function EnsureDB()
+function _G.MSUF_EnsureDB()
     if MSUF_DB and MSUF_DB_LastHeavyRun == MSUF_DB then
          return
     end
     MSUF_EnsureDB_Heavy()
  end
+_G.EnsureDB = _G.EnsureDB or _G.MSUF_EnsureDB
 -- Optional exports for other modules
 ns.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile
 ns.MSUF_EnsureDB_Heavy = MSUF_EnsureDB_Heavy
-ns.EnsureDB = EnsureDB
+ns.MSUF_EnsureDB = _G.MSUF_EnsureDB
+ns.EnsureDB = ns.EnsureDB or _G.MSUF_EnsureDB
 _G.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile

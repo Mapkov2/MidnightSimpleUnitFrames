@@ -27,6 +27,13 @@ ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
 
 -- Cross-file references from MSUF_A2_Core.lua (exported to _G there).
+local A2_PREVIEW_BUFF_TEXTURES = _G.MSUF_A2_PREVIEW_BUFF_TEXTURES or {}
+local A2_PREVIEW_DEBUFF_TEXTURES = _G.MSUF_A2_PREVIEW_DEBUFF_TEXTURES or {}
+local A2_PREVIEW_BUFF_TEX_N = _G.MSUF_A2_PREVIEW_BUFF_TEX_N or 1
+local A2_PREVIEW_DEBUFF_TEX_N = _G.MSUF_A2_PREVIEW_DEBUFF_TEX_N or 1
+local A2_PREVIEW_CD_DURATIONS = _G.MSUF_A2_PREVIEW_CD_DURATIONS or { 12 }
+local A2_PREVIEW_CD_DUR_N = _G.MSUF_A2_PREVIEW_CD_DUR_N or 1
+
 local function _A2E_ApplyMouseState(icon, wantMS)
     local fn = _G.MSUF_A2_ApplyMouseState
     if fn then fn(icon, wantMS) end
@@ -1427,7 +1434,7 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
 
     local buffCount = 0
     local debuffCount = 0
-    local gen = _G._msufA2_configGen or 0
+    local gen = _G.MSUF_A2_ConfigGen or 0
     local showStacks = (shared and shared.showStackCount ~= false)
     local now = GetTime()
 
@@ -1440,16 +1447,16 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
         -- Varied texture
         if icon.tex then
             if kind == "buff" then
-                icon.tex:SetTexture(_PREVIEW_BUFF_TEXTURES[((idx - 1) % _PREVIEW_BUFF_TEX_N) + 1])
+                icon.tex:SetTexture(A2_PREVIEW_BUFF_TEXTURES[((idx - 1) % A2_PREVIEW_BUFF_TEX_N) + 1])
             else
-                icon.tex:SetTexture(_PREVIEW_DEBUFF_TEXTURES[((idx - 1) % _PREVIEW_DEBUFF_TEX_N) + 1])
+                icon.tex:SetTexture(A2_PREVIEW_DEBUFF_TEXTURES[((idx - 1) % A2_PREVIEW_DEBUFF_TEX_N) + 1])
             end
         end
 
         icon:Show()
 
         -- Click-through: apply same 3-state setting as live icons (diff-gated)
-        local wantMS = _G._msufA2_clickThrough and (_G._msufA2_showTooltip and 1 or 2) or 0
+        local wantMS = _G.MSUF_A2_ClickThrough and (_G.MSUF_A2_ShowTooltip and 1 or 2) or 0
         _A2E_ApplyMouseState(icon, wantMS)
 
         -- Invalidate + resolve text config
@@ -1484,7 +1491,7 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
             cd._msufA2_cdTextOffX = nil
             cd._msufA2_cdTextOffY = nil
 
-            local dur = _PREVIEW_CD_DURATIONS[((idx - 1) % _PREVIEW_CD_DUR_N) + 1]
+            local dur = A2_PREVIEW_CD_DURATIONS[((idx - 1) % A2_PREVIEW_CD_DUR_N) + 1]
             -- Stagger start times so icons show different remaining times
             local elapsed = (idx * 2.7) % dur
             local startTime = now - elapsed
@@ -1563,7 +1570,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
     end
     local anchorPt = anchorY .. anchorX
 
-    local gen = _G._msufA2_configGen or 0
+    local gen = _G.MSUF_A2_ConfigGen or 0
     local now = GetTime()
     local showStacks = (shared and shared.showStackCount ~= false)
     local privCount = 0
@@ -1612,7 +1619,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
             icon:Show()
 
             -- Click-through (3-state, diff-gated)
-            local wantMS = _G._msufA2_clickThrough and (_G._msufA2_showTooltip and 1 or 2) or 0
+            local wantMS = _G.MSUF_A2_ClickThrough and (_G.MSUF_A2_ShowTooltip and 1 or 2) or 0
             _A2E_ApplyMouseState(icon, wantMS)
 
             -- Position using growth direction
@@ -1649,7 +1656,7 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
                 cd._msufA2_cdTextOffX = nil
                 cd._msufA2_cdTextOffY = nil
 
-                local dur = _PREVIEW_CD_DURATIONS[((i - 1) % _PREVIEW_CD_DUR_N) + 1]
+                local dur = A2_PREVIEW_CD_DURATIONS[((i - 1) % A2_PREVIEW_CD_DUR_N) + 1]
                 local elapsed = (i * 3.1) % dur
 
                 if cd.SetHideCountdownNumbers then

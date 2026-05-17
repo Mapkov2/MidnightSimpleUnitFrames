@@ -73,6 +73,24 @@ local function PreviewRaidGroupNameAllowed(key)
     return key == "player" or key == "target" or key == "targettarget" or key == "focus"
 end
 
+local function PreviewRaidGroupNameText(conf)
+    local style = conf and conf.raidGroupNameStyle
+    if style == "BRACKET" then return "[2]" end
+    if style == "NONE" then return "2" end
+    return "(2)"
+end
+
+local function NormalizePreviewRaidGroupNameAnchor(anchor)
+    if anchor == "NAMELEFT" or anchor == "NAMERIGHT"
+        or anchor == "TOPLEFT" or anchor == "TOPRIGHT"
+        or anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT"
+        or anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM"
+        or anchor == "LEFT" or anchor == "RIGHT" then
+        return anchor
+    end
+    return "NAMERIGHT"
+end
+
 local TEXT_ANCHORS = {
     { key = "LEFT", label = "Left" },
     { key = "CENTER", label = "Center" },
@@ -176,10 +194,11 @@ local function CanonKey(key)
 end
 
 local function EnsureDB()
-    if type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
-    elseif ns and type(ns.EnsureDB) == "function" then
-        ns.EnsureDB()
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        ensureDB()
+    elseif ns and type(ns.MSUF_EnsureDB or ns.EnsureDB) == "function" then
+        (ns.MSUF_EnsureDB or ns.EnsureDB)()
     end
     _G.MSUF_DB = _G.MSUF_DB or {}
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
@@ -2137,14 +2156,29 @@ local function ApplyPreviewTransparency(box, conf)
     end
 end
 
+do
+    local deps = Preview.RefreshDeps or {}
+    Preview.RefreshDeps = deps
+    deps.CurrentPanelKey = CurrentPanelKey
+    deps.UnitDB = UnitDB
+    deps.UNIT_DATA = UNIT_DATA
+    deps.UNIT_LABELS = UNIT_LABELS
+    deps.ReadPowerBarEnabled = ReadPowerBarEnabled
+    deps.PreviewRaidGroupNameAllowed = PreviewRaidGroupNameAllowed
+    deps.PreviewRaidGroupNameText = PreviewRaidGroupNameText
+    deps.NormalizeRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor
+    deps.STATUS_PREVIEW = STATUS_PREVIEW
+end
+
 function Preview.Refresh(box, reason)
     box = box or Preview.active
     if not box or not box:IsShown() then return end
     if PreviewInCombat() then return end
+    local D = Preview.RefreshDeps
     local panel = box._msufPanel
-    local key = CurrentPanelKey(panel)
-    local conf, g = UnitDB(key)
-    local data = UNIT_DATA[key] or UNIT_DATA.player
+    local key = D.CurrentPanelKey(panel)
+    local conf, g = D.UnitDB(key)
+    local data = D.UNIT_DATA[key] or D.UNIT_DATA.player
     box.key = key
     local skipControlRefresh = (reason == "OPTIONS_APPLY_DB" or reason == "UNIT_MENU_ENTER" or reason == "UNIT_MENU_REENTER")
     if panel and panel._msufRefreshUnitTextControls and not skipControlRefresh and not box._refreshingControls then
@@ -2154,7 +2188,7 @@ function Preview.Refresh(box, reason)
         if panel._msufRefreshUnitPowerControls then panel._msufRefreshUnitPowerControls() end
         box._refreshingControls = nil
     end
-    if box.title then box.title:SetText(TR("Unit Frame Preview") .. " - " .. TR(UNIT_LABELS[key] or key)) end
+    if box.title then box.title:SetText(TR("Unit Frame Preview") .. " - " .. TR(D.UNIT_LABELS[key] or key)) end
 
     local canvas = box.canvas
     local cw = canvas:GetWidth() or 600
@@ -2181,7 +2215,7 @@ function Preview.Refresh(box, reason)
     local castDetached = castEnabled and CastbarDetached(key, g)
     local castPreviewVisible = castEnabled
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars or {}
-    local detachedPower = CanDetachPowerBarKey(key) and conf.powerBarDetached == true and ReadPowerBarEnabled(conf, key)
+    local detachedPower = CanDetachPowerBarKey(key) and conf.powerBarDetached == true and D.ReadPowerBarEnabled(conf, key)
     local classPowerOn = key == "player" and (bars.showClassPower == true or detachedPower)
     local powerFrac = tonumber(data.power) or 1
     if not detachedPower and key ~= "player" then powerFrac = 1 end
@@ -2292,7 +2326,7 @@ function Preview.Refresh(box, reason)
     mock:ClearAllPoints()
     mock:SetPoint("CENTER", canvas, "CENTER", mockOffsetX, mockOffsetY)
 
-    local powerOn = ReadPowerBarEnabled(conf, key) and not detachedPower
+    local powerOn = D.ReadPowerBarEnabled(conf, key) and not detachedPower
     local powerH = powerOn and S(ReadPowerBarHeight(conf)) or 0
     if powerOn and powerH < 2 then powerH = 2 end
     mock.hpBG:ClearAllPoints()
@@ -2418,7 +2452,7 @@ function Preview.Refresh(box, reason)
         mock.powerTextPct:SetTextColor(fr, fg, fb, 1)
     end
     mock.nameText:SetText(ShortenPreviewName(data.name, key, conf))
-    mock.raidGroupNameText:SetText("(2)")
+    mock.raidGroupNameText:SetText(D.PreviewRaidGroupNameText(conf))
     local hpMax, pMax = 1000000, 240000
     local hpCur, pCur = floor(hpMax * data.hp + 0.5), floor(pMax * powerFrac + 0.5)
     local hpSlots = TextScopeHasSlots(key, "textLeft", "textCenter", "textRight")
@@ -2459,7 +2493,7 @@ function Preview.Refresh(box, reason)
     mock.powerText:SetText(FormatMode(powerRightMode, pCur, pMax, powerPctValue, powerSepRaw, true))
     mock.powerTextPct:SetText("")
     mock.nameText:SetShown(conf.showName ~= false)
-    local showRaidGroupName = conf.showName ~= false and conf.showRaidGroupInName == true and PreviewRaidGroupNameAllowed(key)
+    local showRaidGroupName = conf.showRaidGroupInName == true and D.PreviewRaidGroupNameAllowed(key)
     mock.raidGroupNameText:SetShown(showRaidGroupName)
     mock.totInlineSep:Hide()
     mock.totInlineText:Hide()
@@ -2479,7 +2513,16 @@ function Preview.Refresh(box, reason)
     mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S(tonumber(conf.nameOffsetY) or -4))
     mock.nameText:SetJustifyH(njust)
     mock.raidGroupNameText:ClearAllPoints()
-    mock.raidGroupNameText:SetPoint("LEFT", mock.nameText, "RIGHT", S(3), 0)
+    local raidGroupAnchor = D.NormalizeRaidGroupNameAnchor(conf.raidGroupNameAnchor)
+    local raidGroupX = S(tonumber(conf.raidGroupNameOffsetX) or 3)
+    local raidGroupY = S(tonumber(conf.raidGroupNameOffsetY) or 0)
+    if raidGroupAnchor == "NAMERIGHT" then
+        mock.raidGroupNameText:SetPoint("LEFT", mock.nameText, "RIGHT", raidGroupX, raidGroupY)
+    elseif raidGroupAnchor == "NAMELEFT" then
+        mock.raidGroupNameText:SetPoint("RIGHT", mock.nameText, "LEFT", raidGroupX, raidGroupY)
+    else
+        mock.raidGroupNameText:SetPoint(raidGroupAnchor, mock.textFrame, raidGroupAnchor, raidGroupX, raidGroupY)
+    end
     mock.raidGroupNameText:SetJustifyH("LEFT")
     do
         local totConf = (_G.MSUF_DB and _G.MSUF_DB.targettarget) or {}
@@ -2489,7 +2532,7 @@ function Preview.Refresh(box, reason)
             local totData = UNIT_DATA.targettarget or { name = "Target" }
             mock.totInlineSep:SetText(sep ~= "" and sep or " ")
             mock.totInlineText:SetText(ShortenPreviewName(totData.name, "targettarget", conf))
-            local inlineAnchor = showRaidGroupName and mock.raidGroupNameText or mock.nameText
+            local inlineAnchor = (showRaidGroupName and raidGroupAnchor == "NAMERIGHT") and mock.raidGroupNameText or mock.nameText
             mock.totInlineSep:ClearAllPoints()
             mock.totInlineSep:SetPoint("LEFT", inlineAnchor, "RIGHT", S(4), 0)
             mock.totInlineText:ClearAllPoints()
@@ -2687,8 +2730,8 @@ function Preview.Refresh(box, reason)
     end
 
     local statusLayerAvailable = false
-    for i = 1, #STATUS_PREVIEW do
-        local spec = STATUS_PREVIEW[i]
+    for i = 1, #D.STATUS_PREVIEW do
+        local spec = D.STATUS_PREVIEW[i]
         local icon = mock.icons[spec.id]
         local handle = box.statusHandles[spec.id]
         local showVal = conf[spec.show]
@@ -2775,7 +2818,7 @@ function Preview.Refresh(box, reason)
         hpText = conf.showHP ~= false,
         powerText = conf.showPower ~= false,
         portrait = hasPortrait,
-        power = ReadPowerBarEnabled(conf, key),
+        power = D.ReadPowerBarEnabled(conf, key),
         classPower = classPowerOn,
         castbar = castEnabled,
         status = statusLayerAvailable,

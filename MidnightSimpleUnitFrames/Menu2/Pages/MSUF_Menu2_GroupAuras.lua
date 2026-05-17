@@ -294,17 +294,17 @@ local function BuildGFAuras(ctx)
 
     local AURA_GROUP_DEFAULTS = {
         buff = {
-            enabledLabel = "Enable buffs", maxLabel = "Max icons", maxMax = 20,
+            enabledLabel = "Buffs", maxLabel = "Max icons", maxMax = 20,
             anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5,
             filter = "RAID", height = 1130,
         },
         debuff = {
-            enabledLabel = "Enable debuffs", maxLabel = "Max icons", maxMax = 20,
+            enabledLabel = "Debuffs", maxLabel = "Max icons", maxMax = 20,
             anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, layer = 6,
             filter = "ALL", height = 1170, dispelBorder = true,
         },
         externals = {
-            enabledLabel = "Enable defensives", maxLabel = "Max defensives", maxMax = 12,
+            enabledLabel = "Defensives", maxLabel = "Max defensives", maxMax = 12,
             anchor = "CENTER", growth = "RIGHTDOWN", size = 28, perRow = 3, max = 2, spacing = 1, layer = 7,
             height = 1080,
         },
@@ -621,7 +621,7 @@ local function BuildGFAuras(ctx)
         local rightW = max(280, min(360, sectionW - rightX - 42))
         local controls, cooldownChildren, stackChildren = {}, {}, {}
 
-        local enable = BindNestedToggle(ctx, W.ToggleAt(section, def.enabledLabel, leftX, -44, 190), function() return AuraGroup(CurrentScope(), groupKey) end, "enabled", true, "visual")
+        local enable = BindNestedToggle(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), function() return AuraGroup(CurrentScope(), groupKey) end, "enabled", true, "visual")
 
         W.LabelAt(section, "Placement", leftX, -84, 180, "GameFontNormalSmall", T.colors.accent)
         local anchor = BindNestedDropdown(ctx, W.Dropdown(section, "Anchor", AURA_POSITION_ANCHORS, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "anchor", def.anchor, "geometry")
@@ -1015,7 +1015,6 @@ local function BuildGFAuras(ctx)
     end
 
     local priv = b:CollapsibleSection("priv", "Private Auras", 298, false)
-    local privEnable = BindNestedToggle(ctx, W.Toggle(priv, "Enable private auras"), function() return PrivateAuras(CurrentScope()) end, "enabled", true, "visual")
     local privMax = BindNestedSlider(ctx, W.Slider(priv, "Private aura max", 0, 12, 1, 300), function() return PrivateAuras(CurrentScope()) end, "max", 4, "visual")
     local privSize = BindNestedSlider(ctx, W.Slider(priv, "Private aura size", 8, 64, 1, 300), function() return PrivateAuras(CurrentScope()) end, "size", 20, "geometry")
     local privAnchor = BindNestedDropdown(ctx, W.Dropdown(priv, "Private aura anchor", AURA_ANCHORS, 220), function() return PrivateAuras(CurrentScope()) end, "anchor", "TOPRIGHT", "geometry")
@@ -1039,9 +1038,9 @@ local function BuildGFAuras(ctx)
     local privRightW = max(250, privW - privRightX - 32)
     local privControlW = max(260, min(320, privLeftW))
     local privRightControlW = max(260, min(320, privRightW))
+    local privEnable = BindNestedToggle(ctx, W.SwitchAt(priv, "Private Auras", privLeftX, -64, privControlW), function() return PrivateAuras(CurrentScope()) end, "enabled", true, "visual")
     W.LabelAt(priv, "Display", privLeftX, -38, privLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(priv, "Position", privRightX, -38, privRightW, "GameFontNormalSmall", T.colors.accent)
-    W.MoveWidget(privEnable, priv, privLeftX, -64)
     W.MoveWidget(privMax, priv, privLeftX, -98, privControlW)
     W.MoveWidget(privSize, priv, privLeftX, -150, privControlW)
     W.MoveWidget(privAnchor, priv, privRightX, -64, privRightControlW)

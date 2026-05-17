@@ -80,6 +80,7 @@ local PARTY_DEFAULTS = {
     -- Blizzard-style remaining-time swipe. Enabling the layout option flips
     -- them into the elapsed-time "darkens on loss" style.
     cooldownSwipeDarkenOnLoss = false,
+    powerBarEnabled   = true,
     powerHeight       = 6,
     -- Position (CENTER-native, same as EM2 movers)
     point             = "CENTER",
@@ -386,6 +387,7 @@ do
     RAID_DEFAULTS.growth         = "DOWN"
     RAID_DEFAULTS.showPlayer     = true
     RAID_DEFAULTS.showSolo       = false
+    RAID_DEFAULTS.powerBarEnabled = true
     RAID_DEFAULTS.powerHeight    = 4
     RAID_DEFAULTS.offsetX        = -500
     RAID_DEFAULTS.offsetY        = 0
@@ -530,6 +532,7 @@ end
 
 function GF.GetScaledPowerHeight(kind)
     local conf = GF.GetConf(kind)
+    if conf and conf.powerBarEnabled == false then return 0 end
     local raw = tonumber(conf and conf.powerHeight) or (IsRaidLikeKind(kind) and 4 or 6)
     if raw <= 0 then return 0 end
     if not conf then return raw end
@@ -552,6 +555,7 @@ end
 function GF.ShouldShowPowerBarForRole(kind, role, conf)
     conf = conf or GF.GetConf(kind)
     if not conf then return false end
+    if conf.powerBarEnabled == false then return false end
     local raw = tonumber(conf.powerHeight) or (IsRaidLikeKind(kind) and 4 or 6)
     if raw <= 0 then return false end
 

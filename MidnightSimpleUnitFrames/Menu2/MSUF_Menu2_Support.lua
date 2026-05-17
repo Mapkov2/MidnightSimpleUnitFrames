@@ -49,7 +49,8 @@ local function BlockConfigCombatLocked(silent)
 end
 
 local function EnsureGeneral()
-    if type(_G.EnsureDB) == "function" then pcall(_G.EnsureDB) end
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then pcall(ensureDB) end
     _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
     _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
     return _G.MSUF_DB.general
@@ -85,7 +86,6 @@ local function LeftJustifyButtonText(btn, leftPad)
 end
 
 _G.MSUF_LeftJustifyButtonText = _G.MSUF_LeftJustifyButtonText or LeftJustifyButtonText
-_G.LeftJustify = _G.LeftJustify or LeftJustifyButtonText
 
 local tips = {
     "Bigger steps: Hold SHIFT while adjusting sliders to change values faster.",

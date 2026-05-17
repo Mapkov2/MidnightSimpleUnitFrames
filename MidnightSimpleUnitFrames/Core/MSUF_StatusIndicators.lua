@@ -58,8 +58,9 @@ if type(_G.MSUF_GetStatusIndicatorDB) ~= "function" then
         return _MSUF_DEFAULT_STATUS_INDICATORS
     end
     function _G.MSUF_GetStatusIndicatorDB()
-        if _G.EnsureDB then
-            _G.EnsureDB()
+        local ensureDB = _G.MSUF_EnsureDB
+        if ensureDB then
+            ensureDB()
         end
         local db = _G.MSUF_DB
         local g = (db) and db.general or nil
@@ -782,8 +783,6 @@ local function _MSUF_UpdateStatusIcons(frame)
                     _G.MSUF_UpdateAllFonts_Immediate()
                 elseif _G.MSUF_UpdateAllFonts then
                     _G.MSUF_UpdateAllFonts()
-                elseif _G.UpdateAllFonts then
-                    _G.UpdateAllFonts()
                 end
             end
             _MSUF_AnchorCorner(classText, frame, sic.classCorner, sic.classX, sic.classY)
@@ -1018,13 +1017,14 @@ do
         if fr then
             if _G.MSUF_RequestUnitframeUpdate then
                 _G.MSUF_RequestUnitframeUpdate(fr, true, true, reason or "StatusIconsTestMode")
-            elseif _G.UpdateSimpleUnitFrame then
-                _G.UpdateSimpleUnitFrame(fr)
+            elseif _G.MSUF_UpdateSimpleUnitFrame then
+                (_G.MSUF_UpdateSimpleUnitFrame)(fr)
             end
         end
-     end
+    end
     function _G.MSUF_GetStatusIconsTestMode()
-        if _G.EnsureDB then _G.EnsureDB() end
+        local ensureDB = _G.MSUF_EnsureDB
+        if ensureDB then ensureDB() end
         local db = _G.MSUF_DB
         local g = (db) and db.general or nil
         return (g and g.stateIconsTestMode == true) or false
@@ -1033,7 +1033,8 @@ do
         if enabled and (_G.MSUF_InCombat == true or ((InCombatLockdown and InCombatLockdown()) and true or false)) then
             enabled = false
         end
-        if _G.EnsureDB then _G.EnsureDB() end
+        local ensureDB = _G.MSUF_EnsureDB
+        if ensureDB then ensureDB() end
         local db = _G.MSUF_DB
         if not db then  return end
         db.general = (type(db.general) == "table") and db.general or {}

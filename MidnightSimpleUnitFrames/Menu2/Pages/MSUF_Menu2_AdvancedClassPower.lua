@@ -37,6 +37,7 @@ local DividerAt = AP.DividerAt
 local BindValueToggle = AP.BindValueToggle
 local BindValueSlider = AP.BindValueSlider
 local ToggleAt = AP.ToggleAt
+local SwitchAt = AP.SwitchAt
 local ValueToggleAt = AP.ValueToggleAt
 local SliderAt = AP.SliderAt
 local ValueSliderAt = AP.ValueSliderAt
@@ -577,7 +578,7 @@ local function BuildClassPower(ctx)
     local dpbControls = {}
     local altManaControls = {}
 
-    local cpEnable = BindTableToggle(ctx, display, "Enable", Bars, "showClassPower", true, function()
+    local cpEnable = SwitchAt(ctx, display, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, function()
         ApplyClassPower()
         ShowClassPowerReloadPrompt()
     end)
@@ -606,7 +607,6 @@ local function BuildClassPower(ctx)
     local positionTopY = compactLayout and -266 or -64
     LabelAt(display, "Bar", layoutLeftX, -38, layoutLeftW, "GameFontNormalSmall", T.colors.accent)
     LabelAt(display, "Position", layoutRightX, compactLayout and -240 or -38, layoutRightW, "GameFontNormalSmall", T.colors.accent)
-    MoveWidget(cpEnable, display, layoutLeftX, -64)
     MoveWidget(cpHeight, display, layoutLeftX, -98, layoutControlW)
     MoveWidget(cpWidthMode, display, layoutLeftX, -150, layoutControlW)
     MoveWidget(cpWidth, display, layoutLeftX, -202, layoutControlW)

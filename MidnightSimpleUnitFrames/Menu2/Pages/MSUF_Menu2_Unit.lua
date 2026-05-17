@@ -74,6 +74,20 @@ local STATUS_LEVEL_ANCHORS = {
     { value = "BOTTOMRIGHT", text = "Bottom Right" },
 }
 
+local RAID_GROUP_NAME_ANCHORS = {
+    { value = "NAMERIGHT", text = "Right to name" },
+    { value = "NAMELEFT", text = "Left to name" },
+    { value = "TOPLEFT", text = "Top Left" },
+    { value = "TOPRIGHT", text = "Top Right" },
+    { value = "BOTTOMLEFT", text = "Bottom Left" },
+    { value = "BOTTOMRIGHT", text = "Bottom Right" },
+    { value = "CENTER", text = "Center" },
+    { value = "TOP", text = "Top" },
+    { value = "BOTTOM", text = "Bottom" },
+    { value = "LEFT", text = "Left" },
+    { value = "RIGHT", text = "Right" },
+}
+
 local COMBAT_SYMBOLS = {
     { value = "DEFAULT", text = "Default" },
     { value = "weapon_axes_crossed", text = "Axes" },
@@ -146,6 +160,18 @@ local STATUS_CONTROLS = {
         y = "levelIndicatorOffsetY", defaultY = 0,
         layer = "levelIndicatorLayer", defaultLayer = 7,
         refresh = "MSUF_RefreshLevelIndicatorFrames",
+    },
+    {
+        value = "raidgroupname", text = "Raid Group",
+        allowed = function(unit) return unit == "player" or unit == "target" or unit == "targettarget" or unit == "focus" end,
+        show = "showRaidGroupInName", defaultShow = false,
+        size = "nameFontSize", defaultSize = 14,
+        anchor = "raidGroupNameAnchor", defaultAnchor = "NAMERIGHT", anchors = RAID_GROUP_NAME_ANCHORS,
+        x = "raidGroupNameOffsetX", defaultX = 3,
+        y = "raidGroupNameOffsetY", defaultY = 0,
+        layer = "nameTextLayer", defaultLayer = 5,
+        inlineName = true,
+        refresh = "MSUF_RefreshRaidGroupNameFrames",
     },
     {
         value = "eliteicon", text = "Elite / Rare",
@@ -331,6 +357,7 @@ local COPY_PORTRAIT_FIELDS = {
 
 local COPY_TEXT_FIELDS = {
     "nameTextAnchor", "nameOffsetX", "nameOffsetY", "nameFontSize", "showRaidGroupInName",
+    "raidGroupNameAnchor", "raidGroupNameOffsetX", "raidGroupNameOffsetY", "raidGroupNameStyle",
     "hpOffsetX", "hpOffsetY", "hpFontSize",
     "hpTextMode", "textLeft", "textCenter", "textRight", "hpTextReverse", "hpTextSeparator",
     "powerOffsetX", "powerOffsetY", "powerFontSize",
@@ -341,6 +368,7 @@ local COPY_TEXT_FIELDS = {
 local COPY_INDICATOR_FIELDS = {
     "showLeaderIcon", "leaderIconOffsetX", "leaderIconOffsetY", "leaderIconAnchor", "leaderIconSize", "leaderIconLayer",
     "showRaidMarker", "raidMarkerOffsetX", "raidMarkerOffsetY", "raidMarkerAnchor", "raidMarkerSize", "raidMarkerLayer",
+    "showRaidGroupInName", "raidGroupNameAnchor", "raidGroupNameOffsetX", "raidGroupNameOffsetY", "raidGroupNameStyle",
     "showLevelIndicator", "levelIndicatorOffsetX", "levelIndicatorOffsetY", "levelIndicatorAnchor", "levelIndicatorSize", "levelIndicatorLayer",
     "showEliteIcon", "eliteIconSize", "eliteIconAnchor", "eliteIconOffsetX", "eliteIconOffsetY", "eliteIconLayer",
 }

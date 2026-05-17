@@ -1,4 +1,4 @@
-﻿-- MSUF_A2_Render.lua â€” Render + Masque + CooldownText (consolidated)
+-- MSUF_A2_Render.lua â€” Render + Masque + CooldownText (consolidated)
 
 -- MSUF_A2_Render.lua
 
@@ -168,7 +168,8 @@ API._Render.Clamp = function(v, def, lo, hi) v = tonumber(v); if not v then v = 
 local function EnsureDB()
     local gdb = _G.MSUF_DB
     if type(gdb) ~= "table" then _G.MSUF_DB = {}; gdb = _G.MSUF_DB end
-    if _G.EnsureDB then _G.EnsureDB() end
+    local ensureDB = _G.MSUF_EnsureDB
+    if ensureDB then ensureDB() end
     MSUF_DB = _G.MSUF_DB
     if not MSUF_DB then return nil end
 

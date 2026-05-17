@@ -1,5 +1,21 @@
 -- Extracted from MidnightSimpleUnitFrames.lua (profiles + active profile state)
 local addonName, ns = ...
+local function MSUF_ProfileIO_RunEnsureDB()
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        ensureDB()
+        return true
+    end
+    return false
+end
+local function MSUF_ProfileIO_RunApplyAllSettings()
+    local applyAllSettings = _G.MSUF_ApplyAllSettings
+    if type(applyAllSettings) == "function" then
+        applyAllSettings()
+        return true
+    end
+    return false
+end
 -- Compact codec (backward compatible)
 -- New export format (preferred):
 --   MSUF3: base64(CBOR(table)) using Blizzard C_EncodingUtil
@@ -334,7 +350,7 @@ function MSUF_InitProfiles()
     -- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
     -- when the profile was saved from an older version missing those keys,
     -- and UpdateSimpleUnitFrame defaults showPowerText=true since conf.showPower is nil.
-    if type(EnsureDB) == "function" then EnsureDB() end
+    MSUF_ProfileIO_RunEnsureDB()
  end
 function MSUF_CreateProfile(name)
     if not name or name == "" then  return end
@@ -367,14 +383,10 @@ function MSUF_SwitchProfile(name)
             core.InvalidateAllFrameConfigs()
         end
     end
-    if EnsureDB then
-        EnsureDB()
-    end
-    if ApplyAllSettings then
-        ApplyAllSettings()
-    end
-    if UpdateAllFonts then
-        UpdateAllFonts()
+    MSUF_ProfileIO_RunEnsureDB()
+    MSUF_ProfileIO_RunApplyAllSettings()
+    if _G.MSUF_UpdateAllFonts then
+        _G.MSUF_UpdateAllFonts()
     end
     print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
  end
@@ -388,14 +400,10 @@ function MSUF_ResetProfile(name)
         if _G.MSUF_UFCore_InvalidateSettingsCache then
             _G.MSUF_UFCore_InvalidateSettingsCache()
         end
-        if EnsureDB then
-            EnsureDB()
-        end
-        if ApplyAllSettings then
-            ApplyAllSettings()
-        end
-        if UpdateAllFonts then
-            UpdateAllFonts()
+        MSUF_ProfileIO_RunEnsureDB()
+        MSUF_ProfileIO_RunApplyAllSettings()
+        if _G.MSUF_UpdateAllFonts then
+            _G.MSUF_UpdateAllFonts()
         end
     end
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
@@ -855,7 +863,7 @@ local function MSUF_ProfileIO_EnsureGroupFramesDB()
     end
 end
 local function MSUF_ProfileIO_EnsureCompleteProfileDB()
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_EnsureGroupFramesDB()
     local auras = ns and ns.MSUF_Auras2
@@ -1118,7 +1126,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if type(kind) ~= "string" or type(payload) ~= "table" then
          return false, "invalid snapshot"
     end
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     -- Always keep the profile-table reference stable (important!).
     MSUF_DB = MSUF_DB or {}
     if kind == "unitframe" then
@@ -1216,7 +1224,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if MSUF_GlobalDB and MSUF_GlobalDB.profiles and MSUF_ActiveProfile then
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
@@ -1243,7 +1251,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
         print("|cffff0000MSUF:|r Legacy import failed: not a table.")
          return false
     end
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     -- Keep profile table reference stable; wipe + copy.
     MSUF_DB = MSUF_DB or {}
     MSUF_WipeTable(MSUF_DB)
@@ -1253,7 +1261,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     if MSUF_GlobalDB and MSUF_GlobalDB.profiles and MSUF_ActiveProfile then
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
@@ -1398,10 +1406,8 @@ local function MSUF_ProfileIO_GetProfileTable(profileKey)
     if type(profileKey) ~= "string" or profileKey == "" then
          return nil
     end
-    -- Ensure profile system is initialized (safe, used elsewhere via EnsureDB()).
-    if type(EnsureDB) == "function" then
-        EnsureDB()
-    elseif type(MSUF_InitProfiles) == "function" then
+    -- Ensure profile system is initialized.
+    if not MSUF_ProfileIO_RunEnsureDB() and type(MSUF_InitProfiles) == "function" then
         MSUF_InitProfiles()
     end
     MSUF_ProfileIO_EnsureProfilesTable()
@@ -1429,9 +1435,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
             target[k] = MSUF_DeepCopy(v)
         end
         MSUF_GlobalDB.profiles[profileKey] = target
-        if type(EnsureDB) == "function" then
-            EnsureDB()
-        end
+        MSUF_ProfileIO_RunEnsureDB()
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)

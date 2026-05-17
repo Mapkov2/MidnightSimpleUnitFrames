@@ -521,8 +521,9 @@ end
 -- Post-Drag hook
 ------------------------------------------------------------------------
 local function HookPostDrag()
-    if type(_G.ApplySettingsForKey) ~= "function" then return end
-    hooksecurefunc("ApplySettingsForKey", function(key)
+    local hookName = type(_G.MSUF_ApplySettingsForKey) == "function" and "MSUF_ApplySettingsForKey" or "ApplySettingsForKey"
+    if type(_G[hookName]) ~= "function" then return end
+    hooksecurefunc(hookName, function(key)
         local keyToKind = {
             gf_party = "party",
             gf_raid = "raid",

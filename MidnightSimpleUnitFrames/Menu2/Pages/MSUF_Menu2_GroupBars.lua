@@ -192,9 +192,44 @@ local function BuildGFBars(ctx)
     local powerLeftX = 32
     local powerRightX = min(max(470, floor(powerW * 0.54)), max(380, powerW - 340))
     local powerLeftW = max(280, min(360, powerRightX - powerLeftX - 70))
-    local powerHeight = BindScopeSlider(ctx, W.Slider(power, "Power height", 0, 30, 1, powerLeftW), "powerHeight", 6, "geometry")
+    local function DefaultPowerHeight(kind)
+        kind = kind or CurrentScope()
+        return (kind == "raid" or kind == "mythicraid") and 4 or 6
+    end
+    local function IsPowerBarEnabled(kind)
+        local conf = Conf(kind or CurrentScope())
+        if not conf then return false end
+        if conf.powerBarEnabled == false then return false end
+        local raw = tonumber(conf.powerHeight)
+        if raw ~= nil and raw <= 0 then return false end
+        return true
+    end
+    local function CurrentPowerHeight(kind)
+        kind = kind or CurrentScope()
+        local raw = tonumber(Conf(kind).powerHeight)
+        if raw and raw > 0 then return raw end
+        return DefaultPowerHeight(kind)
+    end
+    local powerEnabled = W.SwitchAt(power, "Show Power Bar", powerLeftX, -58, powerLeftW)
+    M.BindToggle(ctx, powerEnabled,
+        function() return IsPowerBarEnabled(CurrentScope()) end,
+        function(v)
+            local scope = CurrentScope()
+            Set(scope, "powerBarEnabled", v and true or false, "geometry")
+            if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then
+                Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry")
+            end
+            if M.Refresh then M.Refresh(ctx) end
+        end)
+    local powerHeight = W.Slider(power, "Power height", 1, 30, 1, powerLeftW)
+    M.BindSlider(ctx, powerHeight,
+        function() return CurrentPowerHeight(CurrentScope()) end,
+        function(v)
+            v = floor(max(1, min(30, tonumber(v) or CurrentPowerHeight(CurrentScope()))) + 0.5)
+            Set(CurrentScope(), "powerHeight", v, "geometry")
+        end)
     local smoothFill = BindScopeToggle(ctx, W.Toggle(power, "Smooth fill"), "powerSmoothFill", false, "visual")
-    local powerHint = W.Text(power, "Power text modes, delimiter and font size are in Text.", powerLeftX, -146, powerLeftW, { 0.60, 0.75, 1.00, 1 })
+    local powerHint = W.Text(power, "Power text modes, delimiter and font size are in Text.", powerLeftX, -194, powerLeftW, { 0.60, 0.75, 1.00, 1 })
     if powerHint.SetWordWrap then powerHint:SetWordWrap(true) end
     local roleLabel = T.Font(power, "GameFontNormalSmall", "Show Power for Roles", T.colors.accent)
     roleLabel:SetPoint("TOPLEFT", power, "TOPLEFT", powerRightX, -58)
@@ -203,20 +238,27 @@ local function BuildGFBars(ctx)
     local showTank = BindScopeToggle(ctx, W.Toggle(power, "Tank"), "powerShowTank", true, "visual")
     local showHealer = BindScopeToggle(ctx, W.Toggle(power, "Healer"), "powerShowHealer", true, "visual")
     local showDamager = BindScopeToggle(ctx, W.Toggle(power, "DPS"), "powerShowDamager", false, "visual")
-    W.MoveWidget(powerHeight, power, powerLeftX, -58, powerLeftW, "LEFT")
-    W.MoveWidget(smoothFill, power, powerLeftX, -112)
+    W.MoveWidget(powerHeight, power, powerLeftX, -106, powerLeftW, "LEFT")
+    W.MoveWidget(smoothFill, power, powerLeftX, -160)
     W.MoveWidget(showTank, power, powerRightX, -88)
     W.MoveWidget(showHealer, power, powerRightX, -122)
     W.MoveWidget(showDamager, power, powerRightX, -156)
-    local function RefreshPowerHeader()
+    local function RefreshPowerState()
+        local enabled = IsPowerBarEnabled(CurrentScope())
+        SetOptionEnabled(powerEnabled, true)
+        SetOptionsEnabled({ powerHeight, smoothFill, showTank, showHealer, showDamager }, enabled)
+        if roleLabel.SetTextColor then
+            local c = enabled and T.colors.accent or T.colors.dim
+            roleLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        end
         if type(SetSectionHeaderStatus) ~= "function" then return end
         SetSectionHeaderStatus(power, nil)
     end
-    M.AddRefresher(ctx, RefreshPowerHeader)
-    RefreshPowerHeader()
+    M.AddRefresher(ctx, RefreshPowerState)
+    RefreshPowerState()
     do
         local entry = power and power._msuf2CollapsibleEntry
-        if entry then entry._msuf2RefreshState = RefreshPowerHeader end
+        if entry then entry._msuf2RefreshState = RefreshPowerState end
     end
 
     local text = b:CollapsibleSection("text", "Text", 760, false)
@@ -399,8 +441,7 @@ local function BuildGFBars(ctx)
     SectionLabel(nameTab, "Name", textLeftX, -4)
     PreviewText(nameTab, "Mapko", textRightX, -4, textRightW)
 
-    local showName = BindScopeToggle(ctx, W.Toggle(nameTab, "Show Name"), "showName", true, "font")
-    W.MoveWidget(showName, nameTab, textLeftX, -34)
+    local showName = BindScopeToggle(ctx, W.SwitchAt(nameTab, "Show Name", textLeftX, -34, 180), "showName", true, "font")
 
     SectionLabel(nameTab, "Position", textLeftX, -82)
     local nameAnchor = BindScopeDropdown(ctx, W.Dropdown(nameTab, "Anchor", ANCHORS, textDropW), "nameAnchor", "LEFT", "geometry")
@@ -417,8 +458,7 @@ local function BuildGFBars(ctx)
     SectionLabel(hpTab, "HP Text", textLeftX, -4)
     local hpPreviewLabel = PreviewText(hpTab, "", textRightX, -4, textRightW)
 
-    local showHP = BindScopeToggle(ctx, W.Toggle(hpTab, "Show HP Text"), "showHPText", true, "font")
-    W.MoveWidget(showHP, hpTab, textLeftX, -34)
+    local showHP = BindScopeToggle(ctx, W.SwitchAt(hpTab, "Show HP Text", textLeftX, -34, 180), "showHPText", true, "font")
 
     SectionLabel(hpTab, "Content", textLeftX, -82)
     local healthLeft = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Left", TEXT_MODES, textDropW), "textLeft", "NONE", "visual")
@@ -489,14 +529,13 @@ local function BuildGFBars(ctx)
     SectionLabel(powerTab, "Power Text", textLeftX, -4)
     local powerPreviewLabel = PreviewText(powerTab, "", textRightX, -4, textRightW)
 
-    local powerText = W.Toggle(powerTab, "Show Power Text")
+    local powerText = W.SwitchAt(powerTab, "Show Power Text", textLeftX, -34, 190)
     M.BindToggle(ctx, powerText,
         IsPowerTextEnabled,
         function(v)
             SetPowerTextEnabled(v)
             if refreshTextControls then refreshTextControls() end
         end)
-    W.MoveWidget(powerText, powerTab, textLeftX, -34)
 
     SectionLabel(powerTab, "Content", textLeftX, -82)
     local powerLeft = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Left", TEXT_MODES, textDropW), "powerTextLeft", "NONE", "visual")
@@ -610,7 +649,7 @@ local function BuildGFBars(ctx)
     end
 
     local healpred = b:CollapsibleSection("healpred", "Heal Prediction", 120, false)
-    BindScopeToggle(ctx, W.Toggle(healpred, "Heal Prediction Overlay"), "healPredEnabled", false, "visual")
+    BindScopeToggle(ctx, W.SwitchAt(healpred, "Heal Prediction Overlay", 14, -38, 220), "healPredEnabled", false, "visual")
     W.Text(healpred, "Shows incoming heals as a lighter overlay on the health bar.", 14, -74, ctx.width - 28, T.colors.muted)
     local function RefreshHealPredHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
@@ -625,7 +664,7 @@ local function BuildGFBars(ctx)
     end
 
     local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", 284, false)
-    local dispelToggle = BindScopeToggle(ctx, W.Toggle(dispel, "Enable Dispel Overlay"), "dispelOverlayEnabled", true, "visual")
+    local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispel, "Dispel Overlay", 14, -38, 220), "dispelOverlayEnabled", true, "visual")
     W.Text(dispel, "Tints the health bar when a dispellable debuff is active.", 14, -74, ctx.width - 28, T.colors.muted)
     dispel._msuf2CursorY = -108
     local dispelStyle = BindScopeDropdown(ctx, W.Dropdown(dispel, "Overlay style", DISPEL_OVERLAY_STYLES, 220), "dispelOverlayStyle", "FULL", "visual")
@@ -644,7 +683,7 @@ local function BuildGFBars(ctx)
     end
 
     local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 276, false)
-    local stripeToggle = BindScopeToggle(ctx, W.Toggle(stripe, "Enable Debuff Stripe"), "debuffStripeEnabled", false, "visual")
+    local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripe, "Debuff Stripe", 14, -38, 220), "debuffStripeEnabled", false, "visual")
     W.Text(stripe, "Shows a thin colored stripe for debuffs matched by the debuff filter.", 14, -74, ctx.width - 28, T.colors.muted)
     stripe._msuf2CursorY = -108
     local stripeEdge = BindScopeDropdown(ctx, W.Dropdown(stripe, "Stripe edge", DEBUFF_STRIPE_EDGES, 220), "debuffStripeEdge", "BOTTOM", "visual")
@@ -663,7 +702,7 @@ local function BuildGFBars(ctx)
     end
 
     local range = b:CollapsibleSection("range", "Range Fade", 190, false)
-    local rangeToggle = BindScopeToggle(ctx, W.Toggle(range, "Enable Range Fade"), "rangeFadeEnabled", false, "visual")
+    local rangeToggle = BindScopeToggle(ctx, W.SwitchAt(range, "Range Fade", 14, -38, 220), "rangeFadeEnabled", false, "visual")
     local rangeSectionWidth = range._msuf2Width or b.width or 720
     local rangeLeftX = 30
     local rangeRightX = math.max(390, math.min(500, math.floor(rangeSectionWidth * 0.48)))

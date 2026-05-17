@@ -33,6 +33,22 @@ Debug.PrintGFHover = Debug.PrintGFHover or function(message, ...)
     end
     print(prefix .. tostring(message))
 end
+local function MSUF_Chat_RunEnsureDB()
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        ensureDB()
+        return true
+    end
+    return false
+end
+local function MSUF_Chat_RunApplyAllSettings()
+    local applyAll = _G.MSUF_ApplyAllSettings
+    if type(applyAll) == "function" then
+        applyAll()
+        return true
+    end
+    return false
+end
 
 local MSUF_RESET_DEFAULTS = {
     player = { width=275, height=40, offsetX=-260, offsetY=80, showName=true, showHP=true, showPower=true },
@@ -211,9 +227,7 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             print(Tr("|cffff0000MSUF:|r Cannot reset while in combat."))
              return
         end
-        if type(EnsureDB) == "function" then
-            EnsureDB()
-        end
+        MSUF_Chat_RunEnsureDB()
         if MSUF_DB then
             for unit, defaults in pairs(MSUF_RESET_DEFAULTS) do
                 MSUF_DB[unit] = MSUF_DB[unit] or {}
@@ -229,31 +243,28 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
         end
         if type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
             _G.MSUF_ApplyAllSettings_Immediate()
-        elseif type(ApplyAllSettings) == "function" then
-            ApplyAllSettings()
+        else
+            MSUF_Chat_RunApplyAllSettings()
         end
         if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
             _G.MSUF_ForceReanchorAllUnitFrames_Once()
         end
-        if type(UpdateAllFonts) == "function" then
-            UpdateAllFonts()
+        local updateFonts = _G.MSUF_UpdateAllFonts
+        if type(updateFonts) == "function" then
+            updateFonts()
         end
         print(Tr("|cff00ff00MSUF:|r Positions and visibility reset to defaults."))
          return
     end
     if cmd == "absorb" then
-        if type(EnsureDB) == "function" then
-            EnsureDB()
-        end
+        MSUF_Chat_RunEnsureDB()
         local g = (type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table") and MSUF_DB.general or nil
         if not g then
             print(Tr("|cffff0000MSUF:|r DB not initialized."))
              return
         end
         g.showTotalAbsorbAmount = not g.showTotalAbsorbAmount
-        if type(ApplyAllSettings) == "function" then
-            ApplyAllSettings()
-        end
+        MSUF_Chat_RunApplyAllSettings()
         if g.showTotalAbsorbAmount then
             print(Tr("|cff00ff00MSUF:|r Total absorb amount in HP text ENABLED."))
         else
@@ -353,7 +364,7 @@ local TOOLTIP_ANCHOR_FIXED = "FIXED"
 local TOOLTIP_ANCHOR_CURSOR = "CURSOR"
 
 local function MSUF_GetTooltipGeneral()
-    EnsureDB()
+    MSUF_Chat_RunEnsureDB()
     local db = (type(MSUF_DB) == "table") and MSUF_DB or nil
     db = db or {}
     db.general = db.general or {}
@@ -691,7 +702,7 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
         if InCombatLockdown and InCombatLockdown() then
              return
         end
-        if type(EnsureDB) == "function" then EnsureDB() end
+        MSUF_Chat_RunEnsureDB()
         if MSUF_DB and MSUF_DB.general and MSUF_DB.general.linkEditModes == false then
              return
         end
@@ -732,7 +743,7 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
      end
 end
 -- [8c6] Removed PLAYER_LOGIN Options relayout hook (Bars).
-ns.MSUF_UpdateAllFonts = ns.MSUF_UpdateAllFonts or UpdateAllFonts
+ns.MSUF_UpdateAllFonts = ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts
 
 -- ==========================================================================
 -- Edit Mode: Tooltip Position Drag Handle
@@ -747,7 +758,7 @@ do
     -- ---- persistence -------------------------------------------------------
     local function MSUF_Tooltip_SavePosition(frame)
         if not frame then return end
-        if type(EnsureDB) == "function" then EnsureDB() end
+        MSUF_Chat_RunEnsureDB()
         local g = MSUF_DB and MSUF_DB.general
         if not g then return end
         local left   = frame.GetLeft   and frame:GetLeft()
@@ -769,7 +780,7 @@ do
             Nudge = function(_, dx, dy)
                 local p = handle:GetParent()
                 if not p then return end
-                if type(EnsureDB) == "function" then EnsureDB() end
+                MSUF_Chat_RunEnsureDB()
                 local g = MSUF_DB and MSUF_DB.general
                 if not g then return end
                 local left = tonumber(g.tooltipPosX)
@@ -786,7 +797,7 @@ do
 
     -- ---- reset helper (called from Options / slash) ------------------------
     local function MSUF_Tooltip_ResetPosition()
-        if type(EnsureDB) == "function" then EnsureDB() end
+        MSUF_Chat_RunEnsureDB()
         local g = MSUF_DB and MSUF_DB.general
         if not g then return end
         g.tooltipPosX = nil

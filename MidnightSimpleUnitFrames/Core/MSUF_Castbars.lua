@@ -123,11 +123,11 @@ function MSUF_GetCastbarUnitFromFrame(frame)
 end
 function MSUF_ApplyUnitframeKeyAndSync(key, changedFonts)
     if not key then  return end
-    if not MSUF_DB then EnsureDB() end
-    if ApplySettingsForKey then
-        ApplySettingsForKey(key)
-    elseif ApplyAllSettings then
-        ApplyAllSettings()
+    if not MSUF_DB then MSUF_EnsureDB() end
+    if _G.MSUF_ApplySettingsForKey then
+        _G.MSUF_ApplySettingsForKey(key)
+    elseif _G.MSUF_ApplyAllSettings then
+        _G.MSUF_ApplyAllSettings()
     end
     if changedFonts then
         if _G.MSUF_UpdateAllFonts then
@@ -145,7 +145,7 @@ end
  end
 function MSUF_ApplyCastbarUnitAndSync(unitKey)
     if not unitKey then  return end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     if MSUF_IsBossCastbarUnit(unitKey) then
         if _G.MSUF_ApplyBossCastbarPositionSetting then
             _G.MSUF_ApplyBossCastbarPositionSetting()
@@ -180,7 +180,7 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
  end
 local MSUF_GetFontFlags
 local function MSUF_GetFontPath()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     MSUF_DB = MSUF_DB or {}
     local g = MSUF_DB.general or {}
     MSUF_DB.general = g
@@ -192,10 +192,10 @@ local function MSUF_GetFontPath()
     end
 
     local internalPath
-    if type(GetInternalFontPathByKey) == "function" then
-        internalPath = GetInternalFontPathByKey(key)
-        if internalPath then return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags()) end
+    if type(_G.MSUF_GetInternalFontPathByKey) == "function" then
+        internalPath = _G.MSUF_GetInternalFontPathByKey(key)
     end
+    if internalPath then return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags()) end
 
     local lsm = LSM or (ns and ns.LSM) or _G.MSUF_LSM
     if lsm and key and key ~= "" then
@@ -215,7 +215,7 @@ local function MSUF_GetFontPath()
     return ResolveFontPath(fallback, g.fontSize or 14, MSUF_GetFontFlags())
 end
 MSUF_GetFontFlags = function()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     MSUF_DB = MSUF_DB or {}
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
@@ -228,7 +228,7 @@ MSUF_GetFontFlags = function()
     end
  end
 function ns.MSUF_GetGlobalFontSettings()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = MSUF_DB.general or {}
     local path  = MSUF_GetFontPath()
     local flags = MSUF_GetFontFlags()
@@ -245,7 +245,7 @@ function MSUF_GetGlobalFontSettings()
 end
 function MSUF_GetCastbarTexture()
     if not MSUF_DB then
-        EnsureDB()
+        MSUF_EnsureDB()
     end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local castKey = g and g.castbarTexture or nil
@@ -300,7 +300,7 @@ _G.MSUF_GetCastbarTexture = MSUF_GetCastbarTexture
 _G.MSUF_GetCastbarTexture = MSUF_GetCastbarTexture
 function MSUF_GetCastbarBackgroundTexture()
     if not MSUF_DB then
-        EnsureDB()
+        MSUF_EnsureDB()
     end
     local g = MSUF_DB and MSUF_DB.general
     local bgKey = g and g.castbarBackgroundTexture or nil
@@ -344,7 +344,7 @@ local function MSUF_IsCastTimeEnabled(frame)
 end
 function MSUF_GetCastbarReverseFill(isChanneled)
     if not MSUF_DB then
-        EnsureDB()
+        MSUF_EnsureDB()
     end
     local g = MSUF_DB and MSUF_DB.general
     local dir = g and g.castbarFillDirection or "RTL"
@@ -398,7 +398,7 @@ function MSUF_GetGlobalCastbarStyleCache()
     cache = cache or {}
     cache.rev = rev
     if not MSUF_DB then
-        EnsureDB()
+        MSUF_EnsureDB()
     end
     local g = (MSUF_DB and MSUF_DB.general) or {}
     cache.unifiedDirection = (g.castbarUnifiedDirection == true)
@@ -475,7 +475,7 @@ MSUF_BumpCastbarStyleRevision()
             frame.MSUF_cachedCastbarTexture = tex
             frame.MSUF_cachedReverseFillNormal    = MSUF_GetCastbarReverseFill(false) and true or false
             frame.MSUF_cachedReverseFillChanneled = MSUF_GetCastbarReverseFill(true)  and true or false
-            if not MSUF_DB then EnsureDB() end; local _g = MSUF_DB and MSUF_DB.general; frame.MSUF_cachedUnifiedDirection = (_g and _g.castbarUnifiedDirection) == true
+            if not MSUF_DB then MSUF_EnsureDB() end; local _g = MSUF_DB and MSUF_DB.general; frame.MSUF_cachedUnifiedDirection = (_g and _g.castbarUnifiedDirection) == true
     end
         if frame and frame.backgroundBar then
             frame.backgroundBar:SetTexture(bgTex)
@@ -597,13 +597,13 @@ _G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {
     Parchment      = "Interface\\AchievementFrame\\UI-Achievement-StatsBackground",
 }
 function MSUF_GetBarTexture()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local key = g and g.barTexture
     return MSUF_ResolveStatusbarTextureKey(key)
 end
 function MSUF_GetBarBackgroundTexture()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local key = g and g.barBackgroundTexture
     if key == nil or key == "" then
@@ -612,7 +612,7 @@ function MSUF_GetBarBackgroundTexture()
     return MSUF_ResolveStatusbarTextureKey(key)
 end
 function MSUF_GetAbsorbBarTexture()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local key = g and g.absorbBarTexture
     if key == nil or key == "" then
@@ -621,7 +621,7 @@ function MSUF_GetAbsorbBarTexture()
     return MSUF_ResolveStatusbarTextureKey(key)
 end
 function MSUF_GetHealAbsorbBarTexture()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local key = g and g.healAbsorbBarTexture
     if key == nil or key == "" then
@@ -701,7 +701,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
         btn:SetPoint("TOPRIGHT", anchorParent, "TOPRIGHT", -175, -152)
     end
     local function UpdateButtonLabel()
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_EnsureDB() end
         local g       = MSUF_DB.general or {}
         local active  = g.castbarPlayerPreviewEnabled and true or false
         if active then
@@ -711,7 +711,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
     end
      end
     btn:SetScript("OnClick", function(self)
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_EnsureDB() end
         local g = MSUF_DB.general or {}
         local wasActive = g.castbarPlayerPreviewEnabled and true or false
         if wasActive then
@@ -776,7 +776,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
 -- ══════════════════════════════════════════════════════════════
 function MSUF_UpdateCastbarVisuals()
 MSUF_BumpCastbarStyleRevision()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = MSUF_DB.general or {}
     local showIcon    = ns.Util.Enabled(nil, g, "castbarShowIcon", true)
     local showName    = ns.Util.Enabled(nil, g, "castbarShowSpellName", true)

@@ -591,7 +591,7 @@ UFCore_EnsureDBOnce = function()
     end
 
     if not Core._dbEnsured then
-        local fn = _G.EnsureDB
+        local fn = _G.MSUF_EnsureDB
         if type(fn) == "function" then
             fn()
         end
@@ -700,7 +700,7 @@ local function UFCore_ResolveFastFns()
     FN_GetConfiguredFontColor = UFCore_ResolveFn(FN_GetConfiguredFontColor, "MSUF_GetConfiguredFontColor")
     FN_ApplyUnitAlpha = UFCore_ResolveFn(FN_ApplyUnitAlpha, "MSUF_ApplyUnitAlpha")
     FN_UpdateStatusIndicatorForFrame = UFCore_ResolveFn(FN_UpdateStatusIndicatorForFrame, "MSUF_UpdateStatusIndicatorForFrame")
-    FN_EnsureDB = UFCore_ResolveFn(FN_EnsureDB, "EnsureDB")
+    FN_EnsureDB = UFCore_ResolveFn(FN_EnsureDB, "MSUF_EnsureDB")
     FN_ClampNameWidth = UFCore_ResolveFn(FN_ClampNameWidth, "MSUF_ClampNameWidth")
     FN_ApplyLeaderIconLayout = UFCore_ResolveFn(FN_ApplyLeaderIconLayout, "MSUF_ApplyLeaderIconLayout")
     FN_ApplyRaidMarkerLayout = UFCore_ResolveFn(FN_ApplyRaidMarkerLayout, "MSUF_ApplyRaidMarkerLayout")

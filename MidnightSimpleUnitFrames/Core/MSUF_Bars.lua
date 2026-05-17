@@ -15,6 +15,12 @@ local UnitGetDetailedHealPrediction = UnitGetDetailedHealPrediction
 local UnitGetIncomingHeals = UnitGetIncomingHeals
 local CreateUnitHealPredictionCalculator = CreateUnitHealPredictionCalculator
 local InCombatLockdown = InCombatLockdown
+local function MSUF_Bars_EnsureDB()
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        ensureDB()
+    end
+end
 
 -- P0: Cache boss token resolver once (called per absorb display resolve)
 local _MSUF_GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
@@ -72,7 +78,7 @@ end
 -- Resolve absorb display flags (enableBar, showText) for a unit.
 -- Uses absorbTextMode from per-unit DB if overridden, else from general.
 local function _MSUF_ResolveAbsorbDisplay(unit)
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_Bars_EnsureDB() end
     -- Invalidate cache if DB reference changed (profile switch).
     if _absorbCacheDBRef ~= MSUF_DB then _MSUF_InvalidateAbsorbCache() end
 
@@ -106,7 +112,7 @@ end
 
 -- Resolve absorb anchor mode for a unit.
 local function _MSUF_ResolveAbsorbAnchor(unit)
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_Bars_EnsureDB() end
     if _absorbCacheDBRef ~= MSUF_DB then _MSUF_InvalidateAbsorbCache() end
 
     local nk = _MSUF_NormalizeUnitKey(unit)
@@ -135,7 +141,7 @@ ns.Bars._ResolveAbsorbDisplay = _MSUF_ResolveAbsorbDisplay
 ns.Bars._ResolveAbsorbAnchor  = _MSUF_ResolveAbsorbAnchor
 
 local function _MSUF_ResolveAbsorbOpacity(unit)
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_Bars_EnsureDB() end
     if _absorbCacheDBRef ~= MSUF_DB then _MSUF_InvalidateAbsorbCache() end
     local nk = _MSUF_NormalizeUnitKey(unit)
     local ck = (nk or "_g") .. "_op"
@@ -154,7 +160,7 @@ local function _MSUF_ResolveAbsorbOpacity(unit)
 end
 
 local function _MSUF_ResolveHealAbsorbOpacity(unit)
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_Bars_EnsureDB() end
     if _absorbCacheDBRef ~= MSUF_DB then _MSUF_InvalidateAbsorbCache() end
     local nk = _MSUF_NormalizeUnitKey(unit)
     local ck = (nk or "_g") .. "_hop"
@@ -567,7 +573,7 @@ end
 
 local function MSUF_ApplyBarGradient(frameOrTex, isPower)
     if not frameOrTex then  return end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_Bars_EnsureDB() end
     frameOrTex = _MSUF_GetGradientOwnerFrame(frameOrTex, isPower) or frameOrTex
     local g = _MSUF_GetGradientScopeDBForFrame(frameOrTex)
     local strength = tonumber(_MSUF_ResolveGradientValue(frameOrTex, "gradientStrength", 0.45)) or 0.45
@@ -792,7 +798,7 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
     if isHeal then
         MSUF_ApplyHealAbsorbOverlayColor(bar, unit)
     else
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_Bars_EnsureDB() end
         MSUF_ApplyAbsorbOverlayColor(bar, unit)
         local enableBar = _MSUF_ResolveAbsorbDisplay(unit)
         if not enableBar and not absorbTestMode then
