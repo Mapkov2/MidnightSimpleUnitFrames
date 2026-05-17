@@ -392,7 +392,7 @@ local function MSUF_NormalizeTooltipSettings(g)
         elseif g.unitInfoTooltipStyle == "modern" then
             anchor = TOOLTIP_ANCHOR_CURSOR
         elseif g.disableUnitInfoTooltips == true then
-            anchor = TOOLTIP_ANCHOR_FIXED
+            anchor = TOOLTIP_ANCHOR_EXTERNAL
         else
             anchor = TOOLTIP_ANCHOR_EXTERNAL
         end
@@ -868,6 +868,30 @@ do
     local function MSUF_Tooltip_ShowEditPreview()
         local f = MSUF_GetPlayerInfoFrame()
         if not f then return end
+
+        local g = MSUF_GetTooltipGeneral()
+        local provider, anchor = MSUF_NormalizeTooltipSettings(g)
+        local blizzardControlled = (provider == TOOLTIP_PROVIDER_GAME and anchor == TOOLTIP_ANCHOR_EXTERNAL)
+
+        if blizzardControlled then
+            if tooltipDragHandle then
+                tooltipDragHandle:Hide()
+            end
+            tooltipEditPreviewActive = false
+            f:SetMovable(false)
+
+            if f.name  then f.name:SetText(Tr("GameTooltip (addon-compatible)")) end
+            if f.line2 then f.line2:SetText(Tr("Addon / Blizzard controlled")) end
+            if f.line3 then f.line3:SetText(Tr("Player Name")) end
+            if f.line4 then f.line4:SetText(Tr("Level 80 Human Paladin")) end
+            if f.line5 then f.line5:SetText("") end
+
+            f:ClearAllPoints()
+            f:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -16, 16)
+            f:Show()
+            f._msufEditPreviewActive = true
+            return
+        end
 
         -- Fill with placeholder content so the user sees size/layout
         if f.name  then f.name:SetText(Tr("Player Name")) end

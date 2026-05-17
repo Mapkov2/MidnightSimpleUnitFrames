@@ -241,6 +241,12 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.UIScale = { Enabled = false, Scale = 1.0 }
         g.msufUiScale = 1.0
         g.fontKey = "FRIZQT"
+        g.unitTooltipProvider = "GAME"
+        g.unitTooltipAnchor = "EXTERNAL"
+        g.disableUnitInfoTooltips = true
+        g.unitInfoTooltipStyle = "classic"
+        g.tooltipPosX = nil
+        g.tooltipPosY = nil
     end
     MSUF_Defaults_NormalizePortraitRenderDB(db)
  end
@@ -792,7 +798,7 @@ end
         elseif g.unitInfoTooltipStyle == "modern" then
             g.unitTooltipAnchor = "CURSOR"
         elseif g.disableUnitInfoTooltips == true then
-            g.unitTooltipAnchor = "FIXED"
+            g.unitTooltipAnchor = "EXTERNAL"
         else
             g.unitTooltipAnchor = "EXTERNAL"
         end

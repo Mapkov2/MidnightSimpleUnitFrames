@@ -94,10 +94,13 @@ local function ReadTooltipAnchor()
     if ReadTooltipProvider() == "MSUF" then
         return (ReadG("unitInfoTooltipStyle", "classic") == "modern") and "CURSOR" or "FIXED"
     end
+    if type(ReadG("tooltipPosX", nil)) == "number" and type(ReadG("tooltipPosY", nil)) == "number" then
+        return "FIXED"
+    end
     if ReadG("unitInfoTooltipStyle", "classic") == "modern" then
         return "CURSOR"
     end
-    return "FIXED"
+    return "EXTERNAL"
 end
 
 local function WriteTooltipSettings(provider, anchor)
@@ -112,6 +115,13 @@ local function WriteTooltipSettings(provider, anchor)
     SetG("unitTooltipAnchor", anchor, "MSUF2_TOOLTIP_ANCHOR", { preview = false })
     SetGBool("disableUnitInfoTooltips", provider ~= "MSUF", "MSUF2_TOOLTIPS", { preview = false })
     SetG("unitInfoTooltipStyle", (anchor == "CURSOR") and "modern" or "classic", "MSUF2_TOOLTIP_STYLE", { preview = false })
+    local editActive = (_G.MSUF_UnitEditModeActive == true)
+    if not editActive and type(_G.MSUF_IsMSUFEditModeActive) == "function" then
+        editActive = _G.MSUF_IsMSUFEditModeActive() and true or false
+    end
+    if editActive and type(_G.MSUF_Tooltip_ShowEditPreview) == "function" then
+        _G.MSUF_Tooltip_ShowEditPreview()
+    end
 end
 local SetControlsEnabled = GP.SetControlsEnabled
 local ApplyFonts = GP.ApplyFonts
