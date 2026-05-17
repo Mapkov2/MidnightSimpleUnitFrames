@@ -395,7 +395,11 @@ function ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, f
         if fs then
             fs:SetFont(fontPath, size, flags); fs:SetJustifyH("CENTER"); if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
             fs:SetTextColor(fr, fg, fb, a); fs:ClearAllPoints(); fs:SetPoint("CENTER", f, "CENTER", 0, 0); fs:SetText(""); fs:Hide()
-    end
+            if ns.Icons and ns.Icons._layout and ns.Icons._layout.EnsureLayerFrame then
+                local layerParent = (key == "statusIndicatorOverlayText") and ov or (f.textFrame or f)
+                ns.Icons._layout.EnsureLayerFrame(f, fs, key, layerParent)
+            end
+        end
     end
     if _G.MSUF_ApplyStatusTextLayout then
         _G.MSUF_ApplyStatusTextLayout(f)

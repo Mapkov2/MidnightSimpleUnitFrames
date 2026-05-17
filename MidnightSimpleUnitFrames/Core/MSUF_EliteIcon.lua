@@ -40,9 +40,9 @@ local function ClampLayer(conf, g, key, def)
     if v > 10 then return 10 end
     return v
 end
-local function ApplyLayer(region, layer)
+local function ApplyLayer(region, layer, owner)
     local layout = ns.Icons and ns.Icons._layout
-    if layout and layout.ApplyLayer then return layout.ApplyLayer(region, layer) end
+    if layout and layout.ApplyLayer then return layout.ApplyLayer(region, layer, owner) end
     if region and region.SetDrawLayer then region:SetDrawLayer("OVERLAY", layer or 7) end
 end
 

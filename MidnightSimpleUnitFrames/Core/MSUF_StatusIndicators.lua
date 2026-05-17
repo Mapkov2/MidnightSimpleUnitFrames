@@ -414,8 +414,12 @@ function _G.MSUF_ApplyStatusTextLayout(frame)
     local owner = frame.hpBar or frame.health or frame
     local justify = _MSUF_JustifyForAnchor(anchor)
 
-    local function apply(fs)
+    local function apply(fs, layerKey, layerParent)
         if not fs then return end
+        local layout = ns.Icons and ns.Icons._layout
+        if layout and layout.EnsureLayerFrame and (not fs._msufLayerFrame) and not (InCombatLockdown and InCombatLockdown()) then
+            layout.EnsureLayerFrame(frame, fs, layerKey, layerParent or frame.textFrame or frame)
+        end
         if fs.GetFont and fs.SetFont then
             local fontPath, _, flags = fs:GetFont()
             if fontPath then
@@ -434,8 +438,8 @@ function _G.MSUF_ApplyStatusTextLayout(frame)
         _MSUF_ApplyIconLayer(fs, layer, frame)
     end
 
-    apply(frame.statusIndicatorText)
-    apply(frame.statusIndicatorOverlayText)
+    apply(frame.statusIndicatorText, "statusIndicatorText", frame.textFrame or frame)
+    apply(frame.statusIndicatorOverlayText, "statusIndicatorOverlayText", frame.statusIndicatorOverlayFrame or frame.textFrame or frame)
 end
 
 -- Status Icon Symbol Textures (Classic vs Midnight)

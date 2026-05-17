@@ -655,6 +655,13 @@ local function GFPreviewHandleText(handle)
     return handle._key or "Group preview"
 end
 
+local function GFPreviewClampLayer(value, fallback)
+    local v = floor((tonumber(value) or fallback or 0) + 0.5)
+    if v < 0 then return 0 end
+    if v > 30 then return 30 end
+    return v
+end
+
 local GF_STATUS_PREVIEW_FALLBACK_SPECS = {
     { value = "roleIcon", text = "Role Icon", enabled = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1 },
     { value = "leaderIcon", text = "Leader", enabled = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
@@ -2137,19 +2144,19 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
 
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
-        buffHandle:SetFrameLevel(baseLevel + (tonumber(buffCfg.layer) or 5))
-        debuffHandle:SetFrameLevel(baseLevel + (tonumber(debuffCfg.layer) or 6))
-        externHandle:SetFrameLevel(baseLevel + (tonumber(extCfg.layer) or 7))
-        blizzHandle:SetFrameLevel(baseLevel + 4)
+        buffHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(buffCfg.layer, 5))
+        debuffHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(debuffCfg.layer, 6))
+        externHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(extCfg.layer, 7))
+        blizzHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(auras.blizzardContainerFrameLevel, 1))
         for i = 1, #statusHandles do
             local handle = statusHandles[i]
             local spec = handle and handle._statusSpec
             if handle then
-                handle:SetFrameLevel(baseLevel + (tonumber(spec and conf[spec.layer]) or tonumber(spec and spec.defaultLayer) or 7))
+                handle:SetFrameLevel(baseLevel + GFPreviewClampLayer(spec and conf[spec.layer], spec and spec.defaultLayer or 7))
             end
         end
-        spellHandle:SetFrameLevel(baseLevel + 6)
-        privateHandle:SetFrameLevel(baseLevel + 6)
+        spellHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(conf.spellIndicators and conf.spellIndicators.layer, 9))
+        privateHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(pa.layer, 8))
         textHandles.name:SetFrameLevel(baseLevel + (tonumber(conf.nameTextLayer) or 6))
         textHandles.hpGroup:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
         textHandles.hpLeft:SetFrameLevel(baseLevel + (tonumber(conf.textLayer) or 6))
