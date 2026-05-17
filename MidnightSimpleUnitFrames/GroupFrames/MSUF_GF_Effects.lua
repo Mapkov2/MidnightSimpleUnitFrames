@@ -254,15 +254,6 @@ local function _BuildTextFn(mode, abbrFn, delim, pctFmt)
     return nil
 end
 
--- Reverse map (applied when hpTextReverse is true)
-local _FT_REVERSE = {
-    CURPERCENT="PERCENTCUR", PERCENTCUR="CURPERCENT",
-    CURMAX="MAXCUR", MAXCUR="CURMAX",
-    CURMAXPERCENT="PERCENTMAXCUR", PERCENTMAXCUR="CURMAXPERCENT",
-    MAXPERCENT="PERCENTMAX", PERCENTMAX="MAXPERCENT",
-    PERCENTCURMAX="CURMAXPERCENT",
-}
-
 -- Resolve abbreviator function (once per BuildFrameCache, not per text call)
 local function _ResolveAbbrFn()
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
@@ -287,16 +278,10 @@ local function _BuildSlotFns(c)
     local abbrFn = _ResolveAbbrFn()
     local pctFmt = _ResolvePctFmt()
     local delim  = c.delim or " / "
-    local rev    = c.rev
 
     local tl = c.tl or "NONE"
     local tc = c.tc or "NONE"
     local tr = c.tr or "NONE"
-    if rev then
-        tl = _FT_REVERSE[tl] or tl
-        tc = _FT_REVERSE[tc] or tc
-        tr = _FT_REVERSE[tr] or tr
-    end
 
     c.tlFn = c.tlOn and _BuildTextFn(tl, abbrFn, delim, pctFmt) or nil
     c.tcFn = c.tcOn and _BuildTextFn(tc, abbrFn, delim, pctFmt) or nil
@@ -1557,16 +1542,23 @@ function GF.BuildFrameCache(f)
     -- Health text slots. showHPText gates the whole HP text pipeline so
     -- disabled text builds no closures and does no event-time formatting.
     c.hpTextEnabled = conf.showHPText ~= false
-    c.tl    = c.hpTextEnabled and (conf.textLeft    or "NONE") or "NONE"
-    c.tc    = c.hpTextEnabled and (conf.textCenter  or "NONE") or "NONE"
-    c.tr    = c.hpTextEnabled and (conf.textRight   or "NONE") or "NONE"
+    local tl = c.hpTextEnabled and (conf.textLeft    or "NONE") or "NONE"
+    local tc = c.hpTextEnabled and (conf.textCenter  or "NONE") or "NONE"
+    local tr = c.hpTextEnabled and (conf.textRight   or "NONE") or "NONE"
+    if conf.hpTextReverse == true then
+        tl, tr = tr, tl
+    end
+    c.tl    = tl
+    c.tc    = tc
+    c.tr    = tr
     c.tlOn  = c.tl ~= "NONE"
     c.tcOn  = c.tc ~= "NONE"
     c.trOn  = c.tr ~= "NONE"
     -- PERF: Aggregate flag â€” skip all 3 text blocks when no text enabled
     c.anyText = c.tlOn or c.tcOn or c.trOn
     c.delim = conf.textDelimiter or " / "
-    c.rev   = conf.hpTextReverse
+    -- Reverse order is visual slot order. The mode text itself stays unchanged.
+    c.rev   = false
     -- Compile fast text functions (oUF-style: mode â†’ C-side closure)
     _BuildSlotFns(c)
 
