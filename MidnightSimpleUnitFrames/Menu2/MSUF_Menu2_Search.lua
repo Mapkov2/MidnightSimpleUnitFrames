@@ -270,6 +270,45 @@ local SEARCH_STOP_WORDS = {
     ["or"] = true,
     please = true,
     pls = true,
+    option = true,
+    options = true,
+    de = true,
+    del = true,
+    el = true,
+    la = true,
+    las = true,
+    los = true,
+    un = true,
+    una = true,
+    esta = true,
+    este = true,
+    donde = true,
+    como = true,
+    est = true,
+    le = true,
+    les = true,
+    des = true,
+    du = true,
+    une = true,
+    ou = true,
+    il = true,
+    lo = true,
+    gli = true,
+    di = true,
+    da = true,
+    dove = true,
+    per = true,
+    para = true,
+    o = true,
+    os = true,
+    as = true,
+    um = true,
+    uma = true,
+    onde = true,
+    ["найти"] = true,
+    ["где"] = true,
+    ["как"] = true,
+    ["опция"] = true,
     setting = true,
     settings = true,
     setup = true,
@@ -335,6 +374,7 @@ local SEARCH_STOP_WORDS = {
     mir = true,
     mit = true,
     nur = true,
+    optionen = true,
     noch = true,
     immer = true,
     aus = true,
@@ -343,6 +383,9 @@ local SEARCH_STOP_WORDS = {
     werden = true,
     und = true,
     oder = true,
+    zu = true,
+    zur = true,
+    zum = true,
 }
 
 local SEARCH_QUERY_ALIASES = {
@@ -458,6 +501,54 @@ local SEARCH_QUERY_ALIASES = {
     big = { "bigger", "size", "scale", "width", "height", "font size" },
     small = { "smaller", "size", "scale", "width", "height", "font size", "text size", "icon size" },
     scale = { "size", "frame scaling", "menu scale", "ui scale" },
+    smooth = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "soft fill", "fluid fill", "weiche fuellung" },
+    smoothfill = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "soft fill", "fluid fill", "weiche fuellung" },
+    softfill = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "weiche fuellung" },
+    fluidfill = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "weiche fuellung" },
+
+    -- Smooth Fill: localized user vocabulary across supported menu locales.
+    fuellung = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "weiche fuellung" },
+    fuellen = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "weiche fuellung" },
+    weich = { "smooth fill", "smooth health fill", "smooth power bar", "soft fill", "weiche fuellung" },
+    weiche = { "smooth fill", "smooth health fill", "smooth power bar", "soft fill", "weiche fuellung" },
+    weichen = { "smooth fill", "smooth health fill", "smooth power bar", "soft fill", "weiche fuellung" },
+    sanft = { "smooth fill", "smooth health fill", "smooth power bar", "soft fill", "weiche fuellung" },
+    sanfte = { "smooth fill", "smooth health fill", "smooth power bar", "soft fill", "weiche fuellung" },
+    fluessig = { "smooth fill", "smooth health fill", "smooth power bar", "fluid fill", "weiche fuellung" },
+    fluessige = { "smooth fill", "smooth health fill", "smooth power bar", "fluid fill", "weiche fuellung" },
+    relleno = { "smooth fill", "soft fill", "fluid fill", "bar animation" },
+    llenado = { "smooth fill", "soft fill", "fluid fill", "bar animation" },
+    suave = { "smooth fill", "soft fill", "fluid fill", "bar animation" },
+    fluido = { "smooth fill", "fluid fill", "bar animation" },
+    fluida = { "smooth fill", "fluid fill", "bar animation" },
+    animacion = { "bar animation", "smooth fill" },
+    remplissage = { "smooth fill", "soft fill", "fluid fill", "bar animation" },
+    doux = { "smooth fill", "soft fill", "bar animation" },
+    douce = { "smooth fill", "soft fill", "bar animation" },
+    fluide = { "smooth fill", "fluid fill", "bar animation" },
+    riempimento = { "smooth fill", "soft fill", "fluid fill", "bar animation" },
+    morbido = { "smooth fill", "soft fill", "bar animation" },
+    morbida = { "smooth fill", "soft fill", "bar animation" },
+    preenchimento = { "smooth fill", "soft fill", "fluid fill", "bar animation" },
+    animacao = { "bar animation", "smooth fill" },
+    ["плавное"] = { "smooth fill", "soft fill", "bar animation" },
+    ["плавная"] = { "smooth fill", "soft fill", "bar animation" },
+    ["заполнение"] = { "smooth fill", "bar animation" },
+    ["заливка"] = { "smooth fill", "bar animation" },
+    ["анимация"] = { "bar animation", "smooth fill" },
+    ["полосы"] = { "bar animation", "smooth fill" },
+    ["부드러운"] = { "smooth fill", "soft fill", "bar animation" },
+    ["채우기"] = { "smooth fill", "bar animation" },
+    ["막대"] = { "bar animation", "smooth fill" },
+    ["애니메이션"] = { "bar animation", "smooth fill" },
+    ["平滑填充"] = { "smooth fill", "bar animation" },
+    ["柔和填充"] = { "smooth fill", "soft fill", "bar animation" },
+    ["团队平滑填充"] = { "group smooth fill", "party smooth fill", "raid smooth fill" },
+    ["小队平滑填充"] = { "group smooth fill", "party smooth fill", "raid smooth fill" },
+    ["團隊平滑填充"] = { "group smooth fill", "party smooth fill", "raid smooth fill" },
+    ["隊伍平滑填充"] = { "group smooth fill", "party smooth fill", "raid smooth fill" },
+    ["条动画"] = { "bar animation", "smooth fill" },
+    ["條動畫"] = { "bar animation", "smooth fill" },
 
     hp = { "health", "health text", "health bar", "leben" },
     health = { "hp", "health text", "health bar", "life", "leben" },
@@ -846,6 +937,30 @@ local function SearchCanonicalWords(raw)
             i = i + 2
         elseif word == "power" and nextWord == "bar" then
             words[#words + 1] = "powerbar"
+            i = i + 2
+        elseif (word == "smooth" or word == "soft" or word == "fluid") and nextWord == "fill" then
+            words[#words + 1] = "smoothfill"
+            i = i + 2
+        elseif (word == "weiche" or word == "weichen" or word == "sanfte" or word == "fluessige") and nextWord == "fuellung" then
+            words[#words + 1] = "smoothfill"
+            i = i + 2
+        elseif (word == "relleno" or word == "llenado") and (nextWord == "suave" or nextWord == "fluido") then
+            words[#words + 1] = "smoothfill"
+            i = i + 2
+        elseif word == "remplissage" and (nextWord == "doux" or nextWord == "fluide") then
+            words[#words + 1] = "smoothfill"
+            i = i + 2
+        elseif word == "riempimento" and (nextWord == "fluido" or nextWord == "morbido") then
+            words[#words + 1] = "smoothfill"
+            i = i + 2
+        elseif word == "preenchimento" and (nextWord == "suave" or nextWord == "fluido") then
+            words[#words + 1] = "smoothfill"
+            i = i + 2
+        elseif (word == "плавное" or word == "плавная") and (nextWord == "заполнение" or nextWord == "заливка") then
+            words[#words + 1] = "smoothfill"
+            i = i + 2
+        elseif (word == "부드러운" and nextWord == "채우기") or (word == "막대" and nextWord == "애니메이션") then
+            words[#words + 1] = "smoothfill"
             i = i + 2
         elseif word == "class" and (nextWord == "resource" or nextWord == "resources" or nextWord == "power") then
             words[#words + 1] = "classpower"
@@ -1559,6 +1674,34 @@ local SEARCH_FAQ = {
         anchorText = "Textures & Gradient Frame Outline Highlight Borders texture gradient outline border",
         keywords = { "bar texture", "health texture", "power texture", "change texture", "gradient", "outline", "border", "bar border", "frame outline", "highlight border", "shared texture" },
         priority = 35,
+    },
+    {
+        label = "Where is Smooth fill for unit frames?",
+        answer = "Open the unit page, then use Frame Basics > Smooth fill for the health bar. For that unit's power bar animation, open Power Bar > Smooth fill.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Frame Basics > Smooth fill",
+        anchorText = "Frame Basics Smooth fill Power Bar Smooth fill health animation power animation soft fill weiche Fuellung",
+        keywords = {
+            "smooth fill", "smooth health fill", "smooth power bar", "soft fill", "fluid fill", "bar animation", "health bar animation", "power bar animation",
+            "where is smooth fill", "find smooth fill", "option der weichen fuellung finden", "weiche fuellung", "weichen fuellung", "sanfte fuellung", "fluessige fuellung", "balken animation", "lebensbalken animation", "powerbar animation",
+            "relleno suave", "llenado suave", "animacion de barra", "remplissage doux", "remplissage fluide", "animation de barre", "riempimento fluido", "riempimento morbido", "preenchimento suave", "animacao da barra",
+            "плавное заполнение", "плавная заливка", "анимация полосы", "부드러운 채우기", "막대 애니메이션", "平滑填充", "柔和填充", "条动画", "條動畫", "平滑填充", "柔和填充",
+        },
+        priority = 360,
+    },
+    {
+        label = "Where is Smooth fill for party or raid frames?",
+        answer = "Open Group Frames > Layout for Smooth health fill. For group-frame power bars, open Group Frames > Health & Text > Power Bar > Smooth fill.",
+        pageKey = "gf_layout",
+        target = "Opens: Group Frames > Layout > Smooth health fill",
+        anchorText = "Group Frames Layout Smooth health fill Health Text Power Bar Smooth fill party raid weiche Fuellung",
+        keywords = {
+            "group smooth fill", "party smooth fill", "raid smooth fill", "group frame smooth fill", "smooth health fill group frames", "smooth fill party raid", "party power smooth fill", "raid power smooth fill",
+            "gruppen weiche fuellung", "gruppenrahmen weiche fuellung", "party weiche fuellung", "raid weiche fuellung", "weiche fuellung gruppe", "sanfte fuellung gruppe",
+            "relleno suave grupo", "relleno suave banda", "remplissage fluide groupe", "remplissage fluide raid", "riempimento fluido gruppo", "preenchimento suave grupo",
+            "плавное заполнение группы", "плавное заполнение рейда", "그룹 부드러운 채우기", "레이드 부드러운 채우기", "团队 平滑填充", "小队 平滑填充", "团队平滑填充", "小队平滑填充", "團隊 平滑填充", "隊伍 平滑填充", "團隊平滑填充", "隊伍平滑填充",
+        },
+        priority = 330,
     },
     {
         label = "How do I change health, power, or class colors?",

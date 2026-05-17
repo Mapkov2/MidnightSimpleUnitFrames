@@ -117,6 +117,14 @@ local function BuildGFAuras(ctx)
     M.GroupPreview.Add(ctx, b)
 
     local renderer = b:CollapsibleSection("blizzrenderer", "Aura Display Mode", 590, false)
+    do
+        local rendererW = renderer._msuf2Width or ctx.width or 720
+        local rightCardW = max(330, min(390, rendererW - 364))
+        W.ControlCardBackdrop(renderer, 14, -38, 300, 254)
+        W.ControlCardBackdrop(renderer, 340, -64, rightCardW, 244)
+        W.ControlCardBackdrop(renderer, 14, -310, 300, 234)
+        W.ControlCardBackdrop(renderer, 340, -342, rightCardW, 184)
+    end
     W.Text(renderer, "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. Dispel Glow is unavailable only for Group Frame scopes where Blizzard controls the aura layer.", 14, -38, 620, T.colors.muted)
 
     local function PlaceDropdown(dropdown, x, y, width, hideTitle)
@@ -585,6 +593,7 @@ local function BuildGFAuras(ctx)
         local meta = af and af.DECLASSIFIED_META
         if not (type(meta) == "table" and #meta > 0) then return y end
 
+        W.ControlCardBackdrop(section, x1 - 14, y + 34, (x2 + width) - x1 + 28, ceil(#meta / 2) * 30 + 92)
         W.DividerAt(section, y + 20, x1, section._msuf2Width - x2 - width)
         W.LabelAt(section, "Hide Categories", x1, y, 180, "GameFontNormalSmall", T.colors.accent)
         W.Text(section, "Checked categories are hidden. Only applies to declassified spells.", x1, y - 20, (x2 + width) - x1, T.colors.muted)
@@ -620,42 +629,44 @@ local function BuildGFAuras(ctx)
         local leftW = max(270, min(340, rightX - leftX - 70))
         local rightW = max(280, min(360, sectionW - rightX - 42))
         local controls, cooldownChildren, stackChildren = {}, {}, {}
+        do
+            W.ControlCardBackdrop(section, leftX - 14, -38, leftW + 28, 42)
+            W.ControlCard(section, "Placement", nil, leftX - 14, -84, leftW + 28, 232)
+            W.ControlCard(section, "Icon Grid", nil, rightX - 14, -84, rightW + 28, 282)
+            W.ControlCard(section, "Behind Health Bar", nil, leftX - 14, -320, leftW + 28, 132)
+        end
 
         local enable = BindNestedToggle(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), function() return AuraGroup(CurrentScope(), groupKey) end, "enabled", true, "visual")
 
-        W.LabelAt(section, "Placement", leftX, -84, 180, "GameFontNormalSmall", T.colors.accent)
         local anchor = BindNestedDropdown(ctx, W.Dropdown(section, "Anchor", AURA_POSITION_ANCHORS, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "anchor", def.anchor, "geometry")
         local growth = BindNestedDropdown(ctx, W.Dropdown(section, "Growth", AURA_GROWTH_VALUES, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "growth", def.growth, "geometry")
         local offsetX = BindNestedSlider(ctx, W.Slider(section, "Offset X", -160, 160, 1, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "x", 0, "geometry")
         local offsetY = BindNestedSlider(ctx, W.Slider(section, "Offset Y", -160, 160, 1, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "y", 0, "geometry")
-        W.MoveWidget(anchor, section, leftX, -108, leftW, "LEFT")
-        W.MoveWidget(growth, section, leftX, -162, leftW, "LEFT")
-        W.MoveWidget(offsetX, section, leftX, -216, leftW, "CENTER")
-        W.MoveWidget(offsetY, section, leftX, -270, leftW, "CENTER")
+        W.MoveWidget(anchor, section, leftX, -118, leftW, "LEFT")
+        W.MoveWidget(growth, section, leftX, -172, leftW, "LEFT")
+        W.MoveWidget(offsetX, section, leftX, -226, leftW, "CENTER")
+        W.MoveWidget(offsetY, section, leftX, -280, leftW, "CENTER")
         controls[#controls + 1] = anchor
         controls[#controls + 1] = growth
         controls[#controls + 1] = offsetX
         controls[#controls + 1] = offsetY
 
-        W.DividerAt(section, -314, leftX, sectionW - (leftX + leftW))
-        W.LabelAt(section, "Behind Health Bar", leftX, -338, 180, "GameFontNormalSmall", T.colors.accent)
         local behind = BindNestedToggle(ctx, W.ToggleAt(section, "Show icons behind HP bar", leftX, -364, 230), function() return AuraGroup(CurrentScope(), groupKey) end, "behindBar", false, "geometry")
         local behindAlpha = BindNestedSlider(ctx, W.Slider(section, "Behind Bar Opacity", 30, 100, 5, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "behindBarAlpha", 85, "visual")
         W.MoveWidget(behindAlpha, section, leftX, -408, leftW, "CENTER")
         controls[#controls + 1] = behind
         controls[#controls + 1] = behindAlpha
 
-        W.LabelAt(section, "Icon Grid", rightX, -84, 180, "GameFontNormalSmall", T.colors.accent)
         local maxIcons = BindNestedSlider(ctx, W.Slider(section, def.maxLabel, 0, def.maxMax, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "max", def.max, "visual")
         local iconSize = BindNestedSlider(ctx, W.Slider(section, "Icon size", 8, 64, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "size", def.size, "geometry")
         local perRow = BindNestedSlider(ctx, W.Slider(section, "Per row", 1, 20, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "perRow", def.perRow, "geometry")
         local spacing = BindNestedSlider(ctx, W.Slider(section, "Spacing", 0, 12, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "spacing", def.spacing, "geometry")
         local layer = BindNestedSlider(ctx, W.Slider(section, "Layer (Z-Order)", 1, 15, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "layer", def.layer, "geometry")
-        W.MoveWidget(maxIcons, section, rightX, -108, rightW, "CENTER")
-        W.MoveWidget(iconSize, section, rightX, -162, rightW, "CENTER")
-        W.MoveWidget(perRow, section, rightX, -216, rightW, "CENTER")
-        W.MoveWidget(spacing, section, rightX, -270, rightW, "CENTER")
-        W.MoveWidget(layer, section, rightX, -324, rightW, "CENTER")
+        W.MoveWidget(maxIcons, section, rightX, -118, rightW, "CENTER")
+        W.MoveWidget(iconSize, section, rightX, -172, rightW, "CENTER")
+        W.MoveWidget(perRow, section, rightX, -226, rightW, "CENTER")
+        W.MoveWidget(spacing, section, rightX, -280, rightW, "CENTER")
+        W.MoveWidget(layer, section, rightX, -334, rightW, "CENTER")
         controls[#controls + 1] = maxIcons
         controls[#controls + 1] = iconSize
         controls[#controls + 1] = perRow
@@ -664,25 +675,23 @@ local function BuildGFAuras(ctx)
 
         local nextY = -456
         if groupKey == "buff" or groupKey == "debuff" then
-            W.DividerAt(section, -368, rightX, sectionW - (rightX + rightW))
-            W.LabelAt(section, "Filter", rightX, -392, 180, "GameFontNormalSmall", T.colors.accent)
+            W.ControlCard(section, "Filter", nil, rightX - 14, -374, rightW + 28, groupKey == "debuff" and 164 or 112)
             local filter = BindNestedDropdown(ctx, W.Dropdown(section, "Base Filter", AuraFilterValues(groupKey), rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "filterToken", def.filter, "visual")
             W.MoveWidget(filter, section, rightX, -416, rightW, "LEFT")
             controls[#controls + 1] = filter
             if groupKey == "debuff" then
                 local dispel = BindNestedToggle(ctx, W.ToggleAt(section, "Show Dispel Type Border", rightX, -470, rightW - 36), function() return AuraGroup(CurrentScope(), groupKey) end, "showDispelBorder", true, "visual")
                 controls[#controls + 1] = dispel
-                nextY = -526
+                nextY = -590
             else
-                nextY = -486
+                nextY = -536
             end
             nextY = BuildAuraBlacklist(section, groupKey, leftX, rightX, nextY, rightW, controls)
         end
 
         local textY = min(nextY, groupKey == "externals" and -456 or -646)
-        W.DividerAt(section, textY + 20, leftX, 12)
-        W.LabelAt(section, "Cooldown", leftX, textY, 180, "GameFontNormalSmall", T.colors.accent)
-        W.LabelAt(section, "Stack Count", rightX, textY, 180, "GameFontNormalSmall", T.colors.accent)
+        W.ControlCard(section, "Cooldown", nil, leftX - 14, textY + 26, leftW + 28, 386)
+        W.ControlCard(section, "Stack Count", nil, rightX - 14, textY + 26, rightW + 28, 386)
 
         local showSwipe = BindNestedToggle(ctx, W.ToggleAt(section, "Show Cooldown Swipe", leftX, textY - 30, 220), function() return AuraGroup(CurrentScope(), groupKey) end, "showCooldownSwipe", true, "visual")
         local showCooldown = BindNestedToggle(ctx, W.ToggleAt(section, "Show Cooldown Text", leftX, textY - 62, 220), function() return AuraGroup(CurrentScope(), groupKey) end, "showCooldown", true, "visual")
@@ -882,6 +891,8 @@ local function BuildGFAuras(ctx)
     local rightX = max(430, min(520, floor(textW * 0.50)))
     local leftW = max(280, min(340, rightX - leftX - 70))
     local rightW = max(300, min(360, textW - rightX - 42))
+    W.ControlCardBackdrop(textcolor, leftX - 14, -38, leftW + 28, 286)
+    W.ControlCardBackdrop(textcolor, rightX - 14, -100, rightW + 28, 260)
 
     W.LabelAt(textcolor, "Cooldown Timer Text", leftX, -42, 220, "GameFontNormalSmall", T.colors.accent)
     local info = W.Text(textcolor, "MSUF timer coloring only applies to custom aura icons. Blizzard-rendered cooldown text can be shown or hidden per group, but not recolored here.", leftX, -64, textW - 60, T.colors.muted)
@@ -1015,6 +1026,16 @@ local function BuildGFAuras(ctx)
     end
 
     local priv = b:CollapsibleSection("priv", "Private Auras", 298, false)
+    local privW = priv._msuf2Width or ctx.width or 900
+    local privLeftX = 32
+    local privRightX = min(max(430, floor(privW * 0.52)), max(360, privW - 360))
+    local privLeftW = max(250, privRightX - privLeftX - 42)
+    local privRightW = max(250, privW - privRightX - 32)
+    local privControlW = max(260, min(320, privLeftW))
+    local privRightControlW = max(260, min(320, privRightW))
+    W.ControlCardBackdrop(priv, privLeftX - 14, -38, privControlW + 28, 180)
+    W.ControlCardBackdrop(priv, privRightX - 14, -38, privRightControlW + 28, 180)
+    W.ControlCardBackdrop(priv, privLeftX - 14, -230, min(privW - 64, privControlW + privRightControlW + 58), 58)
     local privMax = BindNestedSlider(ctx, W.Slider(priv, "Private aura max", 0, 12, 1, 300), function() return PrivateAuras(CurrentScope()) end, "max", 4, "visual")
     local privSize = BindNestedSlider(ctx, W.Slider(priv, "Private aura size", 8, 64, 1, 300), function() return PrivateAuras(CurrentScope()) end, "size", 20, "geometry")
     local privAnchor = BindNestedDropdown(ctx, W.Dropdown(priv, "Private aura anchor", AURA_ANCHORS, 220), function() return PrivateAuras(CurrentScope()) end, "anchor", "TOPRIGHT", "geometry")
@@ -1031,13 +1052,6 @@ local function BuildGFAuras(ctx)
         privCountdown,
         privNumbers,
     }
-    local privW = priv._msuf2Width or ctx.width or 900
-    local privLeftX = 32
-    local privRightX = min(max(430, floor(privW * 0.52)), max(360, privW - 360))
-    local privLeftW = max(250, privRightX - privLeftX - 42)
-    local privRightW = max(250, privW - privRightX - 32)
-    local privControlW = max(260, min(320, privLeftW))
-    local privRightControlW = max(260, min(320, privRightW))
     local privEnable = BindNestedToggle(ctx, W.SwitchAt(priv, "Private Auras", privLeftX, -64, privControlW), function() return PrivateAuras(CurrentScope()) end, "enabled", true, "visual")
     W.LabelAt(priv, "Display", privLeftX, -38, privLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(priv, "Position", privRightX, -38, privRightW, "GameFontNormalSmall", T.colors.accent)
@@ -1063,6 +1077,7 @@ local function BuildGFAuras(ctx)
     end
 
     local style = b:CollapsibleSection("masque", "Cooldown Style", 166, false)
+    W.ControlCardBackdrop(style, 20, -38, min((style._msuf2Width or ctx.width or 720) - 40, 560), 104)
     BindScopeToggle(ctx, W.Toggle(style, "Cooldown darkens on loss"), "cooldownSwipeDarkenOnLoss", false, "visual")
     M.BindToggle(ctx, W.Toggle(style, "Masque skin"),
         function() return Bool(CurrentScope(), "masqueEnabled", false) end,
@@ -1092,6 +1107,7 @@ local function BuildGFAuras(ctx)
     end
 
     local utilities = b:CollapsibleSection("autil", "Aura Utilities", 180, false)
+    W.ControlCardBackdrop(utilities, 20, -38, min((utilities._msuf2Width or ctx.width or 720) - 40, 560), 104)
     BindNestedToggle(ctx, W.Toggle(utilities, "Show tooltip on auras"), function() return AurasRoot(CurrentScope()) end, "showTooltip", true, "visual")
     BindNestedToggle(ctx, W.Toggle(utilities, "Sort by duration"), function() return AurasRoot(CurrentScope()) end, "sortByDuration", false, "visual")
     BindNestedToggle(ctx, W.Toggle(utilities, "Prefer player auras"), function() return AurasRoot(CurrentScope()) end, "preferPlayer", true, "visual")

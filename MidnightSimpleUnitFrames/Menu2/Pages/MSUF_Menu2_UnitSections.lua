@@ -974,16 +974,18 @@ local function BuildLayout(ctx, builder, unit)
 end
 
 local function BuildText(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("text", "Text", 760, false)
+    local sec = builder:CollapsibleSection("text", "Text", 620, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 24
-    local rightX = math.max(430, floor(sectionW * 0.52))
-    local colW = math.max(260, rightX - leftX - 72)
-    local rightW = math.max(260, sectionW - rightX - 28)
+    local cardW = math.min(520, math.max(360, sectionW - 48))
+    local rightX = leftX + cardW + 28
+    local colW = cardW
+    local rightW = math.min(360, math.max(260, sectionW - rightX - 28))
     local sliderW = math.min(310, math.max(230, colW))
     local rightSliderW = math.min(310, math.max(230, rightW))
     local dropdownW = math.min(310, math.max(220, colW))
     local smallDropdownW = math.min(220, math.max(150, colW - 48))
+    local halfDropdownW = floor((cardW - 44) / 2)
     local RefreshTextControlState
 
     W.Text(sec, "Font style is shared in |cff38c7f0Global Style > Fonts|r. Position can be adjusted here or dragged in |cff38c7f0Edit Mode|r.", 14, -38, sectionW - 210, T.colors.muted)
@@ -1079,6 +1081,10 @@ local function BuildText(ctx, builder, unit)
         frame._msuf2Width = sectionW
         tabFrames[key] = frame
         return frame
+    end
+
+    local function TextCard(parent, title, subtitle, x, y, width, height)
+        return W.ControlCard(parent, title, subtitle, x, y, width, height)
     end
 
     local function PlaceDropdown(parent, control, x, y, width)
@@ -1215,10 +1221,10 @@ local function BuildText(ctx, builder, unit)
     local powerTab = MakeTabFrame("power")
     local advancedTab = MakeTabFrame("advanced")
 
-    SectionLabel(nameTab, "Name", leftX, -4)
-    local _, namePreviewValue = PreviewText(nameTab, NamePreviewText(), rightX, -4, rightW)
+    local nameContent = TextCard(nameTab, "Name text", "Controls whether the unit name is shown on this frame.", leftX, -4, cardW, 116)
+    local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
 
-    local showNameText = W.SwitchAt(nameTab, "Show Name", leftX, -34, colW - 60)
+    local showNameText = W.SwitchAt(nameContent, "Show Name", cardW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, showNameText,
         function() return ReadBool(unit, "showName", true) end,
         function(v)
@@ -1226,9 +1232,9 @@ local function BuildText(ctx, builder, unit)
             if RefreshTextControlState then RefreshTextControlState() end
         end)
 
-    SectionLabel(nameTab, "Position", leftX, -82)
-    local nameAnchor = W.Dropdown(nameTab, "Anchor", TEXT_ANCHORS, 210)
-    PlaceDropdown(nameTab, nameAnchor, leftX, -112, smallDropdownW)
+    local namePosition = TextCard(nameTab, "Position", nil, leftX, -136, cardW, 260)
+    local nameAnchor = W.Dropdown(namePosition, "Anchor", TEXT_ANCHORS, 210)
+    PlaceDropdown(namePosition, nameAnchor, 16, -48, cardW - 32)
     M.BindDropdown(ctx, nameAnchor,
         function() return ReadText(unit, "nameTextAnchor", "LEFT") end,
         function(v)
@@ -1236,8 +1242,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local nameX = W.Slider(nameTab, "X Offset", -300, 300, 1, 260)
-    PlaceSlider(nameTab, nameX, leftX, -166, sliderW)
+    local nameX = W.Slider(namePosition, "X Offset", -300, 300, 1, 260)
+    PlaceSlider(namePosition, nameX, 16, -112, cardW - 72)
     M.BindSlider(ctx, nameX,
         function() return ReadNumber(unit, "nameOffsetX", 4) end,
         function(v)
@@ -1245,8 +1251,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local nameY = W.Slider(nameTab, "Y Offset", -300, 300, 1, 260)
-    PlaceSlider(nameTab, nameY, leftX, -224, sliderW)
+    local nameY = W.Slider(namePosition, "Y Offset", -300, 300, 1, 260)
+    PlaceSlider(namePosition, nameY, 16, -174, cardW - 72)
     M.BindSlider(ctx, nameY,
         function() return ReadNumber(unit, "nameOffsetY", -4) end,
         function(v)
@@ -1254,17 +1260,17 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    SectionLabel(nameTab, "Appearance", rightX, -82)
-    local nameSize = W.Slider(nameTab, "Size", 6, 48, 1, 260)
-    PlaceSlider(nameTab, nameSize, rightX, -112, rightSliderW)
+    local nameAppearance = TextCard(nameTab, "Appearance", nil, rightX, -4, rightW, 150)
+    local nameSize = W.Slider(nameAppearance, "Size", 6, 48, 1, 260)
+    PlaceSlider(nameAppearance, nameSize, 16, -58, rightW - 58)
     M.BindSlider(ctx, nameSize,
         function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
         function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
 
-    SectionLabel(hpTab, "HP Text", leftX, -4)
-    PreviewText(hpTab, "630.0k - 63%", rightX, -4, rightW)
+    local hpContent = TextCard(hpTab, "What text appears", "Slots are explained before advanced position controls.", leftX, -4, cardW, 286)
+    PreviewText(hpContent, "630.0k - 63%", 16, -54, cardW - 32)
 
-    local showHPText = W.SwitchAt(hpTab, "Show HP Text", leftX, -34, colW - 60)
+    local showHPText = W.SwitchAt(hpContent, "Show HP Text", cardW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, showHPText,
         function() return ReadBool(unit, "showHP", true) end,
         function(v)
@@ -1272,9 +1278,8 @@ local function BuildText(ctx, builder, unit)
             if RefreshTextControlState then RefreshTextControlState() end
         end)
 
-    SectionLabel(hpTab, "Content", leftX, -82)
-    local hpLeft = W.Dropdown(hpTab, "Left", HP_MODES, 260)
-    PlaceDropdown(hpTab, hpLeft, leftX, -112, dropdownW)
+    local hpLeft = W.Dropdown(hpContent, "Left slot", HP_MODES, 260)
+    PlaceDropdown(hpContent, hpLeft, 16, -150, halfDropdownW)
     M.BindDropdown(ctx, hpLeft,
         function() return ReadSlot(unit, "textLeft", "hpTextMode", "NONE") end,
         function(v)
@@ -1282,8 +1287,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local hpCenter = W.Dropdown(hpTab, "Center", HP_MODES, 260)
-    PlaceDropdown(hpTab, hpCenter, leftX, -166, dropdownW)
+    local hpCenter = W.Dropdown(hpContent, "Center slot", HP_MODES, 260)
+    PlaceDropdown(hpContent, hpCenter, 28 + halfDropdownW, -150, halfDropdownW)
     M.BindDropdown(ctx, hpCenter,
         function() return ReadSlot(unit, "textCenter", "hpTextMode", "NONE") end,
         function(v)
@@ -1291,8 +1296,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local hpRight = W.Dropdown(hpTab, "Right", HP_MODES, 260)
-    PlaceDropdown(hpTab, hpRight, leftX, -220, dropdownW)
+    local hpRight = W.Dropdown(hpContent, "Right slot", HP_MODES, 260)
+    PlaceDropdown(hpContent, hpRight, 16, -96, cardW - 32)
     M.BindDropdown(ctx, hpRight,
         function() return ReadSlot(unit, "textRight", "hpTextMode", "CURPERCENT") end,
         function(v)
@@ -1300,20 +1305,20 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local hpSep = W.Dropdown(hpTab, "Delimiter", SEPARATORS, 160)
-    PlaceDropdown(hpTab, hpSep, leftX, -274, smallDropdownW)
+    local hpSep = W.Dropdown(hpContent, "Delimiter", SEPARATORS, 160)
+    PlaceDropdown(hpContent, hpSep, 16, -206, halfDropdownW)
     M.BindDropdown(ctx, hpSep,
         function() return ReadText(unit, "hpTextSeparator", "") end,
         function(v) SetText(unit, "hpTextSeparator", v or "", "MSUF2_HP_SEPARATOR") end)
 
-    local hpReverse = SwitchOrToggle(hpTab, "Reverse order", leftX, -328, colW - 60)
+    local hpReverse = SwitchOrToggle(hpContent, "Reverse order", 28 + halfDropdownW, -228, halfDropdownW)
     M.BindToggle(ctx, hpReverse,
         function() return ReadText(unit, "hpTextReverse", false) == true end,
         function(v) SetText(unit, "hpTextReverse", v and true or false, "MSUF2_HP_REVERSE") end)
 
-    SectionLabel(hpTab, "Position", rightX, -82)
-    local hpX = W.Slider(hpTab, "X Offset", -300, 300, 1, 260)
-    PlaceSlider(hpTab, hpX, rightX, -112, rightSliderW)
+    local hpPosition = TextCard(hpTab, "Position", "Move all HP text together or adjust a selected slot.", rightX, -4, rightW, 410)
+    local hpX = W.Slider(hpPosition, "X Offset", -300, 300, 1, 260)
+    PlaceSlider(hpPosition, hpX, 16, -64, rightW - 58)
     M.BindSlider(ctx, hpX,
         function() return ReadNumber(unit, "hpOffsetX", -4) end,
         function(v)
@@ -1321,8 +1326,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local hpY = W.Slider(hpTab, "Y Offset", -300, 300, 1, 260)
-    PlaceSlider(hpTab, hpY, rightX, -170, rightSliderW)
+    local hpY = W.Slider(hpPosition, "Y Offset", -300, 300, 1, 260)
+    PlaceSlider(hpPosition, hpY, 16, -122, rightW - 58)
     M.BindSlider(ctx, hpY,
         function() return ReadNumber(unit, "hpOffsetY", -4) end,
         function(v)
@@ -1330,8 +1335,7 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    SectionLabel(hpTab, "Selected Slot", rightX, -232)
-    local hpMoveTogether = SwitchOrToggle(hpTab, "Move text as one group", rightX, -262, rightSliderW)
+    local hpMoveTogether = SwitchOrToggle(hpPosition, "Move text as one group", 16, -176, rightW - 32)
     M.BindToggle(ctx, hpMoveTogether,
         function() return MoveTogether("hp") end,
         function(v)
@@ -1344,7 +1348,7 @@ local function BuildText(ctx, builder, unit)
         { value = "center", text = "Center" },
         { value = "right", text = "Right" },
     }, rightSliderW)
-    W.MoveWidget(hpSlot, hpTab, rightX, -304, rightSliderW, "LEFT")
+    W.MoveWidget(hpSlot, hpPosition, 16, -220, rightW - 32, "LEFT")
     M.BindSegment(ctx, hpSlot,
         function() return CurrentSlot("hp") end,
         function(v)
@@ -1352,8 +1356,8 @@ local function BuildText(ctx, builder, unit)
             M.Refresh(ctx)
         end)
 
-    local hpSlotX = W.Slider(hpTab, "Slot X", -300, 300, 1, 260)
-    PlaceSlider(hpTab, hpSlotX, rightX, -366, rightSliderW)
+    local hpSlotX = W.Slider(hpPosition, "Slot X", -300, 300, 1, 260)
+    PlaceSlider(hpPosition, hpSlotX, 16, -284, rightW - 58)
     M.BindSlider(ctx, hpSlotX,
         function()
             local xKey = SlotOffsetKeys("hp")
@@ -1364,8 +1368,8 @@ local function BuildText(ctx, builder, unit)
             SetNumber(unit, xKey, v, "MSUF2_HP_SLOT_X", { text = true, preview = true })
         end)
 
-    local hpSlotY = W.Slider(hpTab, "Slot Y", -300, 300, 1, 260)
-    PlaceSlider(hpTab, hpSlotY, rightX, -424, rightSliderW)
+    local hpSlotY = W.Slider(hpPosition, "Slot Y", -300, 300, 1, 260)
+    PlaceSlider(hpPosition, hpSlotY, 16, -342, rightW - 58)
     M.BindSlider(ctx, hpSlotY,
         function()
             local _, yKey = SlotOffsetKeys("hp")
@@ -1376,17 +1380,17 @@ local function BuildText(ctx, builder, unit)
             SetNumber(unit, yKey, v, "MSUF2_HP_SLOT_Y", { text = true, preview = true })
         end)
 
-    SectionLabel(hpTab, "Appearance", rightX, -506)
-    local hpSize = W.Slider(hpTab, "Size", 6, 48, 1, 260)
-    PlaceSlider(hpTab, hpSize, rightX, -536, rightSliderW)
+    local hpAppearance = TextCard(hpTab, "Appearance", nil, leftX, -310, cardW, 144)
+    local hpSize = W.Slider(hpAppearance, "Size", 6, 48, 1, 260)
+    PlaceSlider(hpAppearance, hpSize, 16, -58, cardW - 72)
     M.BindSlider(ctx, hpSize,
         function() return EffectiveTextSize("hpFontSize", "hpFontSize") end,
         function(v) SetNumber(unit, "hpFontSize", v, "MSUF2_HP_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
 
-    SectionLabel(powerTab, "Power Text", leftX, -4)
-    PreviewText(powerTab, "100 Energy", rightX, -4, rightW)
+    local powerContent = TextCard(powerTab, "What text appears", "Slots are explained before advanced position controls.", leftX, -4, cardW, 286)
+    PreviewText(powerContent, "100 Energy", 16, -54, cardW - 32)
 
-    local showPowerText = W.SwitchAt(powerTab, "Show Power Text", leftX, -34, colW - 60)
+    local showPowerText = W.SwitchAt(powerContent, "Show Power Text", cardW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, showPowerText,
         function() return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget") end,
         function(v)
@@ -1394,9 +1398,8 @@ local function BuildText(ctx, builder, unit)
             if RefreshTextControlState then RefreshTextControlState() end
         end)
 
-    SectionLabel(powerTab, "Content", leftX, -82)
-    local pLeft = W.Dropdown(powerTab, "Left", POWER_MODES, 260)
-    PlaceDropdown(powerTab, pLeft, leftX, -112, dropdownW)
+    local pLeft = W.Dropdown(powerContent, "Left slot", POWER_MODES, 260)
+    PlaceDropdown(powerContent, pLeft, 16, -150, halfDropdownW)
     M.BindDropdown(ctx, pLeft,
         function() return ReadSlot(unit, "powerTextLeft", "powerTextMode", "NONE") end,
         function(v)
@@ -1404,8 +1407,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local pCenter = W.Dropdown(powerTab, "Center", POWER_MODES, 260)
-    PlaceDropdown(powerTab, pCenter, leftX, -166, dropdownW)
+    local pCenter = W.Dropdown(powerContent, "Center slot", POWER_MODES, 260)
+    PlaceDropdown(powerContent, pCenter, 28 + halfDropdownW, -150, halfDropdownW)
     M.BindDropdown(ctx, pCenter,
         function() return ReadSlot(unit, "powerTextCenter", "powerTextMode", "NONE") end,
         function(v)
@@ -1413,8 +1416,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local pRight = W.Dropdown(powerTab, "Right", POWER_MODES, 260)
-    PlaceDropdown(powerTab, pRight, leftX, -220, dropdownW)
+    local pRight = W.Dropdown(powerContent, "Right slot", POWER_MODES, 260)
+    PlaceDropdown(powerContent, pRight, 16, -96, cardW - 32)
     M.BindDropdown(ctx, pRight,
         function() return ReadSlot(unit, "powerTextRight", "powerTextMode", "CURPERCENT") end,
         function(v)
@@ -1422,15 +1425,15 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local pSep = W.Dropdown(powerTab, "Delimiter", SEPARATORS, 160)
-    PlaceDropdown(powerTab, pSep, leftX, -274, smallDropdownW)
+    local pSep = W.Dropdown(powerContent, "Delimiter", SEPARATORS, 160)
+    PlaceDropdown(powerContent, pSep, 16, -206, halfDropdownW)
     M.BindDropdown(ctx, pSep,
         function() return ReadText(unit, "powerTextSeparator", ReadText(unit, "hpTextSeparator", "")) end,
         function(v) SetText(unit, "powerTextSeparator", v or "", "MSUF2_POWER_TEXT_SEPARATOR") end)
 
-    SectionLabel(powerTab, "Position", rightX, -82)
-    local pX = W.Slider(powerTab, "X Offset", -300, 300, 1, 260)
-    PlaceSlider(powerTab, pX, rightX, -112, rightSliderW)
+    local powerPosition = TextCard(powerTab, "Position", "Move all power text together or adjust a selected slot.", rightX, -4, rightW, 410)
+    local pX = W.Slider(powerPosition, "X Offset", -300, 300, 1, 260)
+    PlaceSlider(powerPosition, pX, 16, -64, rightW - 58)
     M.BindSlider(ctx, pX,
         function() return ReadNumber(unit, "powerOffsetX", -4) end,
         function(v)
@@ -1438,8 +1441,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local pY = W.Slider(powerTab, "Y Offset", -300, 300, 1, 260)
-    PlaceSlider(powerTab, pY, rightX, -170, rightSliderW)
+    local pY = W.Slider(powerPosition, "Y Offset", -300, 300, 1, 260)
+    PlaceSlider(powerPosition, pY, 16, -122, rightW - 58)
     M.BindSlider(ctx, pY,
         function() return ReadNumber(unit, "powerOffsetY", 4) end,
         function(v)
@@ -1447,8 +1450,7 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    SectionLabel(powerTab, "Selected Slot", rightX, -232)
-    local pMoveTogether = SwitchOrToggle(powerTab, "Move text as one group", rightX, -262, rightSliderW)
+    local pMoveTogether = SwitchOrToggle(powerPosition, "Move text as one group", 16, -176, rightW - 32)
     M.BindToggle(ctx, pMoveTogether,
         function() return MoveTogether("power") end,
         function(v)
@@ -1461,7 +1463,7 @@ local function BuildText(ctx, builder, unit)
         { value = "center", text = "Center" },
         { value = "right", text = "Right" },
     }, rightSliderW)
-    W.MoveWidget(pSlot, powerTab, rightX, -304, rightSliderW, "LEFT")
+    W.MoveWidget(pSlot, powerPosition, 16, -220, rightW - 32, "LEFT")
     M.BindSegment(ctx, pSlot,
         function() return CurrentSlot("power") end,
         function(v)
@@ -1469,8 +1471,8 @@ local function BuildText(ctx, builder, unit)
             M.Refresh(ctx)
         end)
 
-    local pSlotX = W.Slider(powerTab, "Slot X", -300, 300, 1, 260)
-    PlaceSlider(powerTab, pSlotX, rightX, -366, rightSliderW)
+    local pSlotX = W.Slider(powerPosition, "Slot X", -300, 300, 1, 260)
+    PlaceSlider(powerPosition, pSlotX, 16, -284, rightW - 58)
     M.BindSlider(ctx, pSlotX,
         function()
             local xKey = SlotOffsetKeys("power")
@@ -1481,8 +1483,8 @@ local function BuildText(ctx, builder, unit)
             SetNumber(unit, xKey, v, "MSUF2_POWER_SLOT_X", { text = true, preview = true })
         end)
 
-    local pSlotY = W.Slider(powerTab, "Slot Y", -300, 300, 1, 260)
-    PlaceSlider(powerTab, pSlotY, rightX, -424, rightSliderW)
+    local pSlotY = W.Slider(powerPosition, "Slot Y", -300, 300, 1, 260)
+    PlaceSlider(powerPosition, pSlotY, 16, -342, rightW - 58)
     M.BindSlider(ctx, pSlotY,
         function()
             local _, yKey = SlotOffsetKeys("power")
@@ -1493,19 +1495,17 @@ local function BuildText(ctx, builder, unit)
             SetNumber(unit, yKey, v, "MSUF2_POWER_SLOT_Y", { text = true, preview = true })
         end)
 
-    SectionLabel(powerTab, "Appearance", rightX, -506)
-    local pSize = W.Slider(powerTab, "Size", 6, 48, 1, 260)
-    PlaceSlider(powerTab, pSize, rightX, -536, rightSliderW)
+    local powerAppearance = TextCard(powerTab, "Appearance", nil, leftX, -310, cardW, 144)
+    local pSize = W.Slider(powerAppearance, "Size", 6, 48, 1, 260)
+    PlaceSlider(powerAppearance, pSize, 16, -58, cardW - 72)
     M.BindSlider(ctx, pSize,
         function() return EffectiveTextSize("powerFontSize", "powerFontSize") end,
         function(v) SetNumber(unit, "powerFontSize", v, "MSUF2_POWER_TEXT_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
 
-    SectionLabel(advancedTab, "Text Layers", leftX, -4)
-    local layerHint = W.Text(advancedTab, "Controls draw order when text overlaps bars, portraits, or status icons.", leftX, -28, colW, T.colors.dim)
-    if layerHint and layerHint.SetWordWrap then layerHint:SetWordWrap(true) end
+    local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls draw order when text overlaps bars, portraits, or status icons.", leftX, -4, cardW, 260)
 
-    local advNameLayer = W.Slider(advancedTab, "Name layer", 0, 30, 1, 260)
-    PlaceSlider(advancedTab, advNameLayer, leftX, -82, sliderW)
+    local advNameLayer = W.Slider(advancedLayers, "Name layer", 0, 30, 1, 260)
+    PlaceSlider(advancedLayers, advNameLayer, 16, -76, cardW - 72)
     M.BindSlider(ctx, advNameLayer,
         function() return ReadNumber(unit, "nameTextLayer", 5) end,
         function(v)
@@ -1514,8 +1514,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local advHpLayer = W.Slider(advancedTab, "HP layer", 0, 30, 1, 260)
-    PlaceSlider(advancedTab, advHpLayer, leftX, -140, sliderW)
+    local advHpLayer = W.Slider(advancedLayers, "HP layer", 0, 30, 1, 260)
+    PlaceSlider(advancedLayers, advHpLayer, 16, -136, cardW - 72)
     M.BindSlider(ctx, advHpLayer,
         function() return ReadNumber(unit, "hpTextLayer", 5) end,
         function(v)
@@ -1524,8 +1524,8 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local advPowerLayer = W.Slider(advancedTab, "Power layer", 0, 30, 1, 260)
-    PlaceSlider(advancedTab, advPowerLayer, leftX, -198, sliderW)
+    local advPowerLayer = W.Slider(advancedLayers, "Power layer", 0, 30, 1, 260)
+    PlaceSlider(advancedLayers, advPowerLayer, 16, -196, cardW - 72)
     M.BindSlider(ctx, advPowerLayer,
         function() return ReadNumber(unit, "powerTextLayer", 2) end,
         function(v)
@@ -1797,11 +1797,13 @@ end
 local function BuildPortrait(ctx, builder, unit)
     local sec = builder:CollapsibleSection("portrait", "Portrait", 456, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 14
-    local rightX = max(350, floor(sectionW * 0.50) + 8)
-    local leftW = max(220, min(280, rightX - leftX - 70))
-    local leftSliderW = max(240, min(300, rightX - leftX - 36))
-    local rightW = max(260, min(320, sectionW - rightX - 28))
+    local leftX = 16
+    local cardGap = 28
+    local leftW = floor((sectionW - 48 - cardGap) * 0.5)
+    leftW = max(310, min(430, leftW))
+    local rightX = leftX + leftW + cardGap
+    local rightW = max(310, min(430, sectionW - rightX - 16))
+    local leftSliderW = max(240, min(300, leftW - 58))
     local function PlaceDropdown(control, x, y, width)
         W.MoveWidget(control, sec, x, y, width or leftW)
     end
@@ -1811,7 +1813,12 @@ local function BuildPortrait(ctx, builder, unit)
     local RefreshPortraitControls
 
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
-    local portraitEnable = W.SwitchAt(sec, "Portrait", leftX, -42, leftW)
+    local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, -38, leftW, 168)
+    local geometryCard = W.ControlCard(sec, "Geometry", "Size and local offset.", rightX, -38, rightW, 224)
+    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 214)
+    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -284, rightW, 142)
+
+    local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, portraitEnable,
         function() return NormalizePortrait(unit) ~= "OFF" end,
         function(v)
@@ -1825,11 +1832,11 @@ local function BuildPortrait(ctx, builder, unit)
             if RefreshPortraitControls then RefreshPortraitControls() end
         end)
 
-    local portrait = W.Segment(sec, "Position", {
+    local portrait = W.Segment(mainCard, "Position", {
         { value = "LEFT", text = "Left" },
         { value = "RIGHT", text = "Right" },
     }, min(220, rightW))
-    W.MoveWidget(portrait, sec, rightX, -42, min(220, rightW))
+    W.MoveWidget(portrait, mainCard, 16, -62, min(220, leftW - 32))
     M.BindSegment(ctx, portrait,
         function()
             local mode = NormalizePortrait(unit)
@@ -1841,8 +1848,8 @@ local function BuildPortrait(ctx, builder, unit)
             if RefreshPortraitControls then RefreshPortraitControls() end
         end)
 
-    local render = W.Dropdown(sec, "Render", PORTRAIT_RENDER, 220)
-    PlaceDropdown(render, leftX, -112, leftW)
+    local render = W.Dropdown(mainCard, "Render", PORTRAIT_RENDER, 220)
+    W.MoveWidget(render, mainCard, 16, -116, min(220, leftW - 32))
     M.BindDropdown(ctx, render,
         function() return GetConf(unit).portraitRender or "2D" end,
         function(v)
@@ -1850,39 +1857,39 @@ local function BuildPortrait(ctx, builder, unit)
             if RefreshPortraitControls then RefreshPortraitControls() end
         end)
 
-    local shape = W.Dropdown(sec, "Shape", PORTRAIT_SHAPES, 220)
-    PlaceDropdown(shape, leftX, -184, leftW)
+    local shape = W.Dropdown(borderCard, "Shape", PORTRAIT_SHAPES, 220)
+    W.MoveWidget(shape, borderCard, 16, -58, min(220, leftW - 32))
     M.BindDropdown(ctx, shape,
         function() return GetConf(unit).portraitShape or "SQUARE" end,
         function(v) SetPortraitValue(unit, "portraitShape", v or "SQUARE", "MSUF2_PORTRAIT_SHAPE") end)
 
-    local size = W.Slider(sec, "Size override", 0, 128, 1, 280)
-    PlaceSlider(size, rightX, -112, rightW)
+    local size = W.Slider(geometryCard, "Size override", 0, 128, 1, 280)
+    W.MoveWidget(size, geometryCard, 16, -62, rightW - 58, "CENTER")
     M.BindSlider(ctx, size,
         function() return ReadNumber(unit, "portraitSizeOverride", 0) end,
         function(v) SetNumber(unit, "portraitSizeOverride", v, "MSUF2_PORTRAIT_SIZE", { preview = true }) end)
 
-    local x = W.Slider(sec, "Portrait X", -120, 120, 1, 280)
-    PlaceSlider(x, leftX, -256, leftSliderW)
+    local x = W.Slider(geometryCard, "Portrait X", -120, 120, 1, 280)
+    W.MoveWidget(x, geometryCard, 16, -116, rightW - 58, "CENTER")
     M.BindSlider(ctx, x,
         function() return ReadNumber(unit, "portraitOffsetX", 0) end,
         function(v) SetNumber(unit, "portraitOffsetX", v, "MSUF2_PORTRAIT_X", { preview = true }) end)
 
-    local y = W.Slider(sec, "Portrait Y", -120, 120, 1, 280)
-    PlaceSlider(y, rightX, -184, rightW)
+    local y = W.Slider(geometryCard, "Portrait Y", -120, 120, 1, 280)
+    W.MoveWidget(y, geometryCard, 16, -170, rightW - 58, "CENTER")
     M.BindSlider(ctx, y,
         function() return ReadNumber(unit, "portraitOffsetY", 0) end,
         function(v) SetNumber(unit, "portraitOffsetY", v, "MSUF2_PORTRAIT_Y", { preview = true }) end)
 
-    local classStyle = W.Dropdown(sec, "Class portrait style", PortraitClassStyleValues, 220)
+    local classStyle = W.Dropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 220)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
-    PlaceDropdown(classStyle, rightX, -328, rightW)
+    W.MoveWidget(classStyle, styleCard, 16, -58, min(220, rightW - 32))
     M.BindDropdown(ctx, classStyle,
         function() return NormalizePortraitClassStyle(GetConf(unit).portraitClassStyle or "BLIZZARD") end,
         function(v) SetPortraitValue(unit, "portraitClassStyle", NormalizePortraitClassStyle(v), "MSUF2_PORTRAIT_CLASS_STYLE") end)
 
-    local border = W.Dropdown(sec, "Border", PORTRAIT_BORDERS, 220)
-    PlaceDropdown(border, leftX, -328, leftW)
+    local border = W.Dropdown(borderCard, "Border", PORTRAIT_BORDERS, 220)
+    W.MoveWidget(border, borderCard, 16, -112, min(220, leftW - 32))
     M.BindDropdown(ctx, border,
         function() return GetConf(unit).portraitBorderStyle or "NONE" end,
         function(v)
@@ -1890,18 +1897,18 @@ local function BuildPortrait(ctx, builder, unit)
             if RefreshPortraitControls then RefreshPortraitControls() end
         end)
 
-    local borderSize = W.Slider(sec, "Border thickness", 1, 12, 1, 280)
-    PlaceSlider(borderSize, rightX, -256, rightW)
+    local borderSize = W.Slider(borderCard, "Border thickness", 1, 12, 1, 280)
+    W.MoveWidget(borderSize, borderCard, 16, -166, leftW - 58, "CENTER")
     M.BindSlider(ctx, borderSize,
         function() return ReadNumber(unit, "portraitBorderThickness", 2) end,
         function(v) SetNumber(unit, "portraitBorderThickness", v, "MSUF2_PORTRAIT_BORDER_SIZE", { preview = true }) end)
 
-    local fillBorder = W.ToggleAt(sec, "Fill border into frame gap", leftX, -394, leftW)
+    local fillBorder = W.ToggleAt(borderCard, "Fill border into frame gap", 16, -194, leftW - 32)
     M.BindToggle(ctx, fillBorder,
         function() return ReadBool(unit, "portraitFillBorder", false) end,
         function(v) SetPortraitValue(unit, "portraitFillBorder", v and true or false, "MSUF2_PORTRAIT_FILL_BORDER") end)
 
-    local portraitBg = W.ToggleAt(sec, "Portrait background", rightX, -394, rightW)
+    local portraitBg = W.ToggleAt(styleCard, "Portrait background", 16, -112, rightW - 32)
     M.BindToggle(ctx, portraitBg,
         function() return ReadBool(unit, "portraitBgEnabled", false) end,
         function(v) SetPortraitValue(unit, "portraitBgEnabled", v and true or false, "MSUF2_PORTRAIT_BG") end)
@@ -1935,15 +1942,25 @@ end
 
 local function BuildPower(ctx, builder, unit)
     if not POWER_UNITS[unit] then return end
-    local sec = builder:CollapsibleSection("power_bar", "Power Bar", unit == "player" and 500 or 440, false)
+    local sec = builder:CollapsibleSection("power_bar", "Power Bar", unit == "player" and 600 or 548, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 14
-    local rightX = max(350, floor(sectionW * 0.50) + 8)
-    local leftW = max(220, min(280, rightX - leftX - 70))
-    local rightW = max(260, min(320, sectionW - rightX - 28))
-    local leftSliderW = max(260, min(330, rightX - leftX - 36))
+    local leftX = 16
+    local cardGap = 28
+    local availableW = max(340, sectionW - (leftX * 2))
+    local cardW = max(260, min(460, floor((availableW - cardGap) * 0.5)))
+    local rightX = leftX + cardW + cardGap
+    local rightW = max(240, min(460, sectionW - rightX - leftX))
+    local fullW = max(300, min(sectionW - (leftX * 2), cardW + cardGap + rightW))
+    local detachedGap = 28
+    local detachedLeftW = max(190, min(320, floor((fullW - 32 - detachedGap) * 0.5)))
+    local detachedRightX = 16 + detachedLeftW + detachedGap
+    local detachedRightW = max(180, min(320, fullW - detachedRightX - 16))
+    local detachedSliderW = max(170, min(300, min(detachedLeftW, detachedRightW) - 42))
     local function PlaceSlider(control, x, y, width)
         W.MoveWidget(control, sec, x, y, width or rightW, "CENTER")
+    end
+    local function PowerCard(title, subtitle, x, y, width, height)
+        return W.ControlCard(sec, title, subtitle, x, y, width, height)
     end
     local RefreshPowerEnabled
     local powerControls = {}
@@ -1957,7 +1974,7 @@ local function BuildPower(ctx, builder, unit)
         return AddPowerControl(control)
     end
 
-    local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, -118, "Show Power", 104)
+    local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, unit == "player" and -560 or -508, "Show Power", 104)
     if powerNoticeButton then
         powerNoticeButton:SetScript("OnClick", function()
             SetBool(unit, "showPowerBar", true, "MSUF2_POWER_SHOW", { power = true, preview = true })
@@ -1965,7 +1982,11 @@ local function BuildPower(ctx, builder, unit)
         end)
     end
 
-    local show = W.SwitchAt(sec, "Show power bar", leftX, -42, leftW)
+    local mainCard = PowerCard("Power bar", "Main visibility and size for this unit.", leftX, -38, cardW, 190)
+    local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, 190)
+    local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, -254, fullW, unit == "player" and 294 or 242)
+
+    local show = W.SwitchAt(mainCard, "Show power bar", cardW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, show,
         function() return ReadBool(unit, "showPowerBar", true) end,
         function(v)
@@ -1973,7 +1994,7 @@ local function BuildPower(ctx, builder, unit)
             if RefreshPowerEnabled then RefreshPowerEnabled() end
         end)
 
-    local border = AddPowerControl(W.ToggleAt(sec, "Power bar border", rightX, -42, rightW))
+    local border = AddPowerControl(W.ToggleAt(borderCard, "Power bar border", 16, -62, rightW - 32))
     M.BindToggle(ctx, border,
         function()
             local conf = GetConf(unit)
@@ -1985,8 +2006,8 @@ local function BuildPower(ctx, builder, unit)
             if RefreshPowerEnabled then RefreshPowerEnabled() end
         end)
 
-    local height = AddPowerControl(W.Slider(sec, "Power bar height", 1, 20, 1, 300))
-    PlaceSlider(height, leftX, -84, leftSliderW)
+    local height = AddPowerControl(W.Slider(mainCard, "Power bar height", 1, 20, 1, 300))
+    W.MoveWidget(height, mainCard, 16, -76, cardW - 72, "CENTER")
     M.BindSlider(ctx, height,
         function()
             local conf = GetConf(unit)
@@ -1994,8 +2015,8 @@ local function BuildPower(ctx, builder, unit)
         end,
         function(v) SetNumber(unit, "powerBarHeight", v, "MSUF2_POWER_HEIGHT", { power = true, preview = true }) end)
 
-    local borderSize = AddPowerControl(W.Slider(sec, "Border thickness", 0, 6, 1, 300))
-    PlaceSlider(borderSize, rightX, -84, rightW)
+    local borderSize = AddPowerControl(W.Slider(borderCard, "Border thickness", 0, 6, 1, 300))
+    W.MoveWidget(borderSize, borderCard, 16, -108, rightW - 72, "CENTER")
     M.BindSlider(ctx, borderSize,
         function()
             local conf = GetConf(unit)
@@ -2003,7 +2024,7 @@ local function BuildPower(ctx, builder, unit)
         end,
         function(v) SetNumber(unit, "powerBarBorderThickness", v, "MSUF2_POWER_BORDER_SIZE", { power = true, preview = true }) end)
 
-    local embed = AddPowerControl(W.ToggleAt(sec, "Embed into health", leftX, -154, leftW))
+    local embed = AddPowerControl(W.ToggleAt(mainCard, "Embed into health", 16, -138, cardW - 32))
     M.BindToggle(ctx, embed,
         function()
             local conf = GetConf(unit)
@@ -2012,12 +2033,12 @@ local function BuildPower(ctx, builder, unit)
         end,
         function(v) SetBool(unit, "embedPowerBarIntoHealth", v, "MSUF2_POWER_EMBED", { power = true, preview = true }) end)
 
-    local smooth = AddPowerControl(W.ToggleAt(sec, "Smooth fill", rightX, -154, rightW))
+    local smooth = AddPowerControl(W.ToggleAt(borderCard, "Smooth fill", 16, -158, rightW - 32))
     M.BindToggle(ctx, smooth,
         function() return ReadBool(unit, "powerSmoothFill", true) end,
         function(v) SetBool(unit, "powerSmoothFill", v, "MSUF2_POWER_SMOOTH", { power = true, preview = true }) end)
 
-    local detached = AddPowerControl(W.ToggleAt(sec, "Detach from frame", leftX, -186, leftW))
+    local detached = AddPowerControl(W.ToggleAt(mainCard, "Detach from frame", 16, -166, cardW - 32))
     M.BindToggle(ctx, detached,
         function() return ReadBool(unit, "powerBarDetached", false) end,
         function(v)
@@ -2035,51 +2056,51 @@ local function BuildPower(ctx, builder, unit)
             if RefreshPowerEnabled then RefreshPowerEnabled() end
         end)
 
-    local textOnBar = AddDetachedControl(W.ToggleAt(sec, "Text on detached bar", rightX, -186, rightW))
+    local textOnBar = AddDetachedControl(W.ToggleAt(detachedCard, "Text on detached bar", 16, -62, detachedLeftW))
     M.BindToggle(ctx, textOnBar,
         function() return ReadBool(unit, "detachedPowerBarTextOnBar", false) end,
         function(v) SetBool(unit, "detachedPowerBarTextOnBar", v, "MSUF2_POWER_DETACHED_TEXT", { power = true, text = true, preview = true }) end)
 
-    local sliderTop = -230
+    local sliderTop = -116
     if unit == "player" then
-        sliderTop = -270
-        local sync = AddDetachedControl(W.ToggleAt(sec, "Sync width to Class Resource", leftX, -216, leftW))
+        sliderTop = -148
+        local sync = AddDetachedControl(W.ToggleAt(detachedCard, "Sync width to Class Resource", 16, -94, detachedLeftW))
         M.BindToggle(ctx, sync,
             function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end,
             function(v) SetBool(unit, "detachedPowerBarSyncClassPower", v, "MSUF2_POWER_DETACHED_SYNC", { power = true, preview = true }) end)
 
-        local anchor = AddDetachedControl(W.ToggleAt(sec, "Anchor to Class Resource", rightX, -216, rightW))
+        local anchor = AddDetachedControl(W.ToggleAt(detachedCard, "Anchor to Class Resource", detachedRightX, -94, detachedRightW))
         M.BindToggle(ctx, anchor,
             function() return ReadBool(unit, "detachedPowerBarAnchorToClassPower", false) end,
             function(v) SetBool(unit, "detachedPowerBarAnchorToClassPower", v, "MSUF2_POWER_DETACHED_ANCHOR", { power = true, preview = true }) end)
     end
 
-    local dx = AddDetachedControl(W.Slider(sec, "Detached X", -1000, 1000, 1, 300))
-    PlaceSlider(dx, leftX, sliderTop, leftSliderW)
+    local dx = AddDetachedControl(W.Slider(detachedCard, "Detached X", -1000, 1000, 1, 300))
+    W.MoveWidget(dx, detachedCard, 16, sliderTop, detachedSliderW, "CENTER")
     M.BindSlider(ctx, dx,
         function() return ReadNumber(unit, "detachedPowerBarOffsetX", 0) end,
         function(v) SetNumber(unit, "detachedPowerBarOffsetX", v, "MSUF2_POWER_DETACHED_X", { power = true, preview = true }) end)
 
-    local dy = AddDetachedControl(W.Slider(sec, "Detached Y", -1000, 1000, 1, 300))
-    PlaceSlider(dy, rightX, sliderTop, rightW)
+    local dy = AddDetachedControl(W.Slider(detachedCard, "Detached Y", -1000, 1000, 1, 300))
+    W.MoveWidget(dy, detachedCard, detachedRightX, sliderTop, detachedSliderW, "CENTER")
     M.BindSlider(ctx, dy,
         function() return ReadNumber(unit, "detachedPowerBarOffsetY", -4) end,
         function(v) SetNumber(unit, "detachedPowerBarOffsetY", v, "MSUF2_POWER_DETACHED_Y", { power = true, preview = true }) end)
 
-    local dw = AddDetachedControl(W.Slider(sec, "Detached width", 20, 800, 1, 300))
-    PlaceSlider(dw, leftX, sliderTop - 72, leftSliderW)
+    local dw = AddDetachedControl(W.Slider(detachedCard, "Detached width", 20, 800, 1, 300))
+    W.MoveWidget(dw, detachedCard, 16, sliderTop - 66, detachedSliderW, "CENTER")
     M.BindSlider(ctx, dw,
         function() return ReadNumber(unit, "detachedPowerBarWidth", ReadNumber(unit, "width", 250)) end,
         function(v) SetNumber(unit, "detachedPowerBarWidth", v, "MSUF2_POWER_DETACHED_W", { power = true, preview = true }) end)
 
-    local dh = AddDetachedControl(W.Slider(sec, "Detached height", 2, 80, 1, 300))
-    PlaceSlider(dh, rightX, sliderTop - 72, rightW)
+    local dh = AddDetachedControl(W.Slider(detachedCard, "Detached height", 2, 80, 1, 300))
+    W.MoveWidget(dh, detachedCard, detachedRightX, sliderTop - 66, detachedSliderW, "CENTER")
     M.BindSlider(ctx, dh,
         function() return ReadNumber(unit, "detachedPowerBarHeight", 6) end,
         function(v) SetNumber(unit, "detachedPowerBarHeight", v, "MSUF2_POWER_DETACHED_H", { power = true, preview = true }) end)
 
-    local layer = AddDetachedControl(W.Slider(sec, "Detached layer", 0, 20, 1, 300))
-    PlaceSlider(layer, leftX, sliderTop - 144, leftSliderW)
+    local layer = AddDetachedControl(W.Slider(detachedCard, "Detached layer", 0, 20, 1, 300))
+    W.MoveWidget(layer, detachedCard, 16, sliderTop - 132, detachedSliderW, "CENTER")
     M.BindSlider(ctx, layer,
         function() return ReadNumber(unit, "detachedPowerBarFrameLevelOffset", 6) end,
         function(v) SetNumber(unit, "detachedPowerBarFrameLevelOffset", v, "MSUF2_POWER_DETACHED_LAYER", { power = true, preview = true }) end)
@@ -2177,22 +2198,39 @@ local function BuildCastbar(ctx, builder, unit)
 end
 
 local function BuildStatus(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("status_icons", "Status icons", 430, false)
+    local sec = builder:CollapsibleSection("status_icons", "Status icons", 506, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
-    local rightX = max(350, floor(sectionW * 0.50) + 8)
-    local leftW = max(240, min(300, rightX - leftX - 48))
-    local rightW = max(260, min(320, sectionW - rightX - 28))
-    local function PlaceDropdown(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or leftW)
+    local topGap = 28
+    local topInnerW = max(320, sectionW - 28)
+    local leftW = max(220, min(300, floor((topInnerW - topGap) * 0.46)))
+    local rightX = leftX + leftW + topGap
+    local rightW = max(220, min(320, topInnerW - leftW - topGap))
+    local selectedCard = W.ControlCard(sec, "Selected Indicator", nil, leftX - 2, -38, leftW + 28, 142)
+    local previewCard = W.ControlCard(sec, "Status Preview", nil, rightX - 14, -38, rightW + 28, 142)
+    local placementCardX = leftX - 2
+    local placementCardW = max(320, sectionW - placementCardX - 28)
+    local placementCard = W.ControlCard(sec, "Placement", nil, placementCardX, -198, placementCardW, 268)
+    local placeLeftX = 16
+    local placeGap = 24
+    local placeAvailableW = max(280, placementCardW - 32)
+    local placeLeftW = max(180, min(320, floor((placeAvailableW - placeGap) * 0.5)))
+    local placeRightX = placeLeftX + placeLeftW + placeGap
+    local placeRightW = max(180, min(320, placementCardW - placeRightX - 16))
+    local selectedControlW = max(180, leftW - 4)
+    local previewControlW = max(190, rightW - 4)
+
+    local function PlaceDropdown(control, parent, x, y, width)
+        W.MoveWidget(control, parent, x, y, width or leftW)
     end
-    local function PlaceSlider(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or leftW, "CENTER")
+    local function PlaceSlider(control, parent, x, y, width)
+        W.MoveWidget(control, parent, x, y, width or leftW, "CENTER")
     end
-    local function PlaceButton(control, x, y, width)
+    local function PlaceButton(control, parent, x, y, width)
         if not control then return end
+        parent = parent or (control.GetParent and control:GetParent()) or sec
         control:ClearAllPoints()
-        control:SetPoint("TOPLEFT", sec, "TOPLEFT", x, y)
+        control:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         if width then control:SetSize(width, 22) end
         if control._msuf2Label then
             control._msuf2Label:ClearAllPoints()
@@ -2233,11 +2271,11 @@ local function BuildStatus(ctx, builder, unit)
         })
     end
 
-    local selector = W.Dropdown(sec, "Indicator", function() return StatusValues(unit) end, 260)
+    local selector = W.Dropdown(selectedCard, "Indicator", function() return StatusValues(unit) end, 260)
     if selector._msuf2Title and selector._msuf2Title.SetTextColor then
         selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
     end
-    PlaceDropdown(selector, leftX, -42, leftW)
+    PlaceDropdown(selector, selectedCard, 16, -54, selectedControlW)
     M.BindDropdown(ctx, selector,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2256,9 +2294,9 @@ local function BuildStatus(ctx, builder, unit)
         "raid group", "raid group name", "group number", "subgroup",
     }, function() return StatusValues(unit) end, "Choose Level or Raid Group here, then adjust the available controls for the selected indicator.")
 
-    local previewLabel = W.LabelAt(sec, "Status Preview", rightX, -42, rightW, "GameFontNormalSmall", T.colors.accent)
+    local previewLabel = previewCard and previewCard.title
 
-    local midnight = W.ToggleAt(sec, "Use Midnight style", rightX, -112, rightW)
+    local midnight = W.ToggleAt(previewCard, "Use Midnight style", 16, -92, previewControlW)
     M.BindToggle(ctx, midnight,
         function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
         function(value)
@@ -2270,7 +2308,7 @@ local function BuildStatus(ctx, builder, unit)
         "midnight style", "status style", "indicator style", "icon style",
     })
 
-    local enabled = W.SwitchAt(sec, "Enabled", leftX, -112, leftW)
+    local enabled = W.SwitchAt(selectedCard, "Enabled", 16, -106, selectedControlW)
     M.BindToggle(ctx, enabled,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2288,11 +2326,11 @@ local function BuildStatus(ctx, builder, unit)
         "enable level", "disable level", "turn level on", "turn level off",
     })
 
-    local symbol = W.Dropdown(sec, "Symbol", function()
+    local symbol = W.Dropdown(placementCard, "Symbol", function()
         local spec = CurrentStatusSpec(unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
     end, 260)
-    PlaceDropdown(symbol, rightX, -184, rightW)
+    PlaceDropdown(symbol, placementCard, placeRightX, -54, placeRightW)
     M.BindDropdown(ctx, symbol,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2311,8 +2349,8 @@ local function BuildStatus(ctx, builder, unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
     end)
 
-    local raidGroupStyle = W.Dropdown(sec, "Style", RAID_GROUP_NAME_STYLES, 180)
-    PlaceDropdown(raidGroupStyle, rightX, -184, 180)
+    local raidGroupStyle = W.Dropdown(placementCard, "Style", RAID_GROUP_NAME_STYLES, 180)
+    PlaceDropdown(raidGroupStyle, placementCard, placeRightX, -54, min(180, placeRightW))
     M.BindDropdown(ctx, raidGroupStyle,
         function() return ReadStatusString(unit, "raidGroupNameStyle", "PAREN") end,
         function(value)
@@ -2324,8 +2362,8 @@ local function BuildStatus(ctx, builder, unit)
         "raid group style", "parentheses", "brackets", "no brackets", "group number style",
     }, RAID_GROUP_NAME_STYLES)
 
-    local size = W.Slider(sec, "Size", 8, 64, 1, 300)
-    PlaceSlider(size, leftX, -154, leftW)
+    local size = W.Slider(placementCard, "Size", 8, 64, 1, 300)
+    PlaceSlider(size, placementCard, placeLeftX, -54, placeLeftW)
     M.BindSlider(ctx, size,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2344,11 +2382,11 @@ local function BuildStatus(ctx, builder, unit)
         "level size", "level text size", "indicator size", "icon size", "font size",
     })
 
-    local anchor = W.Dropdown(sec, "Anchor", function()
+    local anchor = W.Dropdown(placementCard, "Anchor", function()
         local spec = CurrentStatusSpec(unit)
         return (spec and spec.anchors) or STATUS_ANCHORS
     end, 220)
-    PlaceDropdown(anchor, leftX, -226, leftW)
+    PlaceDropdown(anchor, placementCard, placeLeftX, -116, placeLeftW)
     M.BindDropdown(ctx, anchor,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2368,8 +2406,8 @@ local function BuildStatus(ctx, builder, unit)
         return (spec and spec.anchors) or STATUS_ANCHORS
     end)
 
-    local x = W.Slider(sec, "X Offset", -500, 500, 1, 300)
-    PlaceSlider(x, leftX, -298, leftW)
+    local x = W.Slider(placementCard, "X Offset", -500, 500, 1, 300)
+    PlaceSlider(x, placementCard, placeLeftX, -178, placeLeftW)
     M.BindSlider(ctx, x,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2385,8 +2423,8 @@ local function BuildStatus(ctx, builder, unit)
         "x", "x offset", "horizontal offset", "level x", "level x offset", "move level left", "move level right",
     })
 
-    local y = W.Slider(sec, "Y Offset", -500, 500, 1, 300)
-    PlaceSlider(y, rightX, -298, rightW)
+    local y = W.Slider(placementCard, "Y Offset", -500, 500, 1, 300)
+    PlaceSlider(y, placementCard, placeRightX, -116, placeRightW)
     M.BindSlider(ctx, y,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2402,8 +2440,8 @@ local function BuildStatus(ctx, builder, unit)
         "y", "y offset", "vertical offset", "level y", "level y offset", "move level up", "move level down",
     })
 
-    local layer = W.Slider(sec, "Layer", 1, 10, 1, 300)
-    PlaceSlider(layer, leftX, -370, leftW)
+    local layer = W.Slider(placementCard, "Layer", 1, 10, 1, 300)
+    PlaceSlider(layer, placementCard, placeLeftX, -240, placeLeftW)
     M.BindSlider(ctx, layer,
         function()
             local spec = CurrentStatusSpec(unit)
@@ -2419,8 +2457,8 @@ local function BuildStatus(ctx, builder, unit)
         "level layer", "level draw order", "indicator layer", "draw order", "above text", "behind text",
     })
 
-    local reset = W.Button(sec, "Reset selected", 150)
-    PlaceButton(reset, rightX, -226, 150)
+    local reset = W.Button(placementCard, "Reset selected", 150)
+    PlaceButton(reset, placementCard, placeRightX, -178, 150)
     reset._msuf2SkipHistoryCheckpoint = true
     reset:SetScript("OnClick", function()
         local spec = CurrentStatusSpec(unit)
@@ -2446,7 +2484,7 @@ local function BuildStatus(ctx, builder, unit)
         "reset level", "reset level position", "reset level anchor", "reset indicator position",
     })
 
-    local test = W.ToggleAt(sec, "Test mode", rightX, -142, rightW)
+    local test = W.ToggleAt(previewCard, "Test mode", 16, -120, previewControlW)
     M.BindToggle(ctx, test,
         function() return ReadBool(unit, "stateIconsTestMode", ReadGeneralBool("stateIconsTestMode", false)) end,
         function(value)
@@ -2457,8 +2495,8 @@ local function BuildStatus(ctx, builder, unit)
         "test mode", "preview level", "test level", "status preview",
     })
 
-    local current = W.Button(sec, "Preview current", 142)
-    PlaceButton(current, rightX, -64, 142)
+    local current = W.Button(previewCard, "Preview current", 142)
+    PlaceButton(current, previewCard, 16, -54, min(142, previewControlW))
     current:SetScript("OnClick", function()
         Call("MSUF_UFPreview_SetStatusPreviewMode", "current")
         local spec = CurrentStatusSpec(unit)
@@ -2467,8 +2505,8 @@ local function BuildStatus(ctx, builder, unit)
     RegisterStatusSearch(current, "Preview current status indicator", {
         "preview current", "current indicator", "preview level",
     })
-    local all = W.Button(sec, "Show all", 112)
-    PlaceButton(all, rightX + 150, -64, 112)
+    local all = W.Button(previewCard, "Show all", 112)
+    PlaceButton(all, previewCard, min(166, previewControlW - 112), -54, min(112, previewControlW))
     all:SetScript("OnClick", function()
         Call("MSUF_UFPreview_SetStatusPreviewMode", "all")
     end)
@@ -2478,21 +2516,21 @@ local function BuildStatus(ctx, builder, unit)
 
     local function LayoutStatusControls(inlineName)
         if inlineName then
-            PlaceDropdown(raidGroupStyle, rightX, -42, rightW)
-            PlaceDropdown(anchor, leftX, -184, leftW)
-            PlaceSlider(x, leftX, -256, leftW)
-            PlaceSlider(y, rightX, -256, rightW)
-            PlaceButton(reset, rightX, -112, min(220, rightW))
+            PlaceDropdown(raidGroupStyle, placementCard, placeRightX, -54, min(180, placeRightW))
+            PlaceDropdown(anchor, placementCard, placeLeftX, -54, placeLeftW)
+            PlaceSlider(x, placementCard, placeLeftX, -116, placeLeftW)
+            PlaceSlider(y, placementCard, placeRightX, -116, placeRightW)
+            PlaceButton(reset, placementCard, placeRightX, -178, min(220, placeRightW))
             return
         end
-        PlaceDropdown(symbol, rightX, -184, rightW)
-        PlaceDropdown(raidGroupStyle, rightX, -184, 180)
-        PlaceSlider(size, leftX, -154, leftW)
-        PlaceDropdown(anchor, leftX, -226, leftW)
-        PlaceSlider(x, leftX, -298, leftW)
-        PlaceSlider(y, rightX, -298, rightW)
-        PlaceSlider(layer, leftX, -370, leftW)
-        PlaceButton(reset, rightX, -226, 150)
+        PlaceDropdown(symbol, placementCard, placeRightX, -54, placeRightW)
+        PlaceDropdown(raidGroupStyle, placementCard, placeRightX, -54, min(180, placeRightW))
+        PlaceSlider(size, placementCard, placeLeftX, -54, placeLeftW)
+        PlaceDropdown(anchor, placementCard, placeLeftX, -116, placeLeftW)
+        PlaceSlider(x, placementCard, placeLeftX, -178, placeLeftW)
+        PlaceSlider(y, placementCard, placeRightX, -116, placeRightW)
+        PlaceSlider(layer, placementCard, placeLeftX, -240, placeLeftW)
+        PlaceButton(reset, placementCard, placeRightX, -178, 150)
     end
 
     local function RefreshStatusSectionState()
@@ -2516,6 +2554,7 @@ local function BuildStatus(ctx, builder, unit)
             W.SetControlShown(previewLabel, not inlineName)
             W.SetControlShown(current, not inlineName)
             W.SetControlShown(all, not inlineName)
+            W.SetControlShown(previewCard, not inlineName)
         else
             if midnight then midnight:SetShown(showStateStyle) end
             if symbol then symbol:SetShown(hasSymbol and true or false) end
@@ -2530,6 +2569,7 @@ local function BuildStatus(ctx, builder, unit)
             if previewLabel then previewLabel:SetShown(not inlineName) end
             if current then current:SetShown(not inlineName) end
             if all then all:SetShown(not inlineName) end
+            if previewCard then previewCard:SetShown(not inlineName) end
         end
         local isEnabled = spec and ReadStatusBool(unit, spec.show, spec.defaultShow)
         SetControlEnabled(symbol, hasSymbol and isEnabled)

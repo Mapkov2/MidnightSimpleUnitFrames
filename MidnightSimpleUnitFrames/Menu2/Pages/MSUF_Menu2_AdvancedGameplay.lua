@@ -242,6 +242,9 @@ local function BuildGameplay(ctx)
 
     -- Old order: Combat Timer, Combat Enter/Leave, Class-specific toggles, Combat Crosshair.
     local timer = b:CollapsibleSection("gameplay_timer", "Combat Timer", 430, true)
+    local timerW = timer._msuf2Width or ctx.width or 900
+    W.ControlCardBackdrop(timer, 14, -38, min(timerW - 28, 680), 126)
+    W.ControlCardBackdrop(timer, 14, -178, min(timerW - 28, 680), 150)
     local timerEnable = SwitchAt(ctx, timer, "Combat Timer", 14, -40, 230, Gameplay, "enableCombatTimer", false, ApplyGameplayUI)
     local timerAnchor = DropdownAt(ctx, timer, "Anchor", 320, -40, anchorValues, 160, Gameplay, "combatTimerAnchor", "none", ApplyGameplayUI)
     Add(timerControls, timerAnchor)
@@ -254,6 +257,9 @@ local function BuildGameplay(ctx)
     LabelAt(timer, "Colors are configured in Colors > Gameplay.", 14, -312, 520, "GameFontDisableSmall", T.colors.muted)
 
     local state = b:CollapsibleSection("gameplay_state", "Combat Enter/Leave", 340, false)
+    local stateW = state._msuf2Width or ctx.width or 900
+    W.ControlCardBackdrop(state, 14, -38, min(stateW - 28, 680), 136)
+    W.ControlCardBackdrop(state, 14, -144, min(stateW - 28, 680), 154)
     local stateEnable = SwitchAt(ctx, state, "Combat Enter/Leave", 14, -40, 270, Gameplay, "enableCombatStateText", false, ApplyGameplayUI)
     Add(stateControls, ToggleAt(ctx, state, "Lock position", 360, -40, Gameplay, "lockCombatState", false, ApplyGameplayUI))
     local enterInput = MoveWidget(W.TextInput(state, "Enter text", 220), state, 14, -86)
@@ -278,6 +284,9 @@ local function BuildGameplay(ctx)
     Add(stateControls, SliderAt(ctx, state, "Y offset", 320, -238, -800, 800, 1, 250, Gameplay, "combatStateOffsetY", 80, ApplyGameplayUI))
 
     local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", 704, false)
+    local classW = classSec._msuf2Width or ctx.width or 900
+    W.ControlCardBackdrop(classSec, 14, -38, min(classW - 28, 700), 276)
+    W.ControlCardBackdrop(classSec, 14, -348, min(classW - 28, 700), 280)
     local classToken
     if UnitClass then
         local _, token = UnitClass("player")
@@ -330,6 +339,9 @@ local function BuildGameplay(ctx)
     Add(firstDanceControls, SliderAt(ctx, classSec, "Y offset", 14, -608, -800, 800, 1, 250, Gameplay, "firstDanceOffsetY", 80, ApplyGameplayUI))
 
     local cross = b:CollapsibleSection("gameplay_crosshair", "Combat Crosshair", 560, false)
+    local crossW = cross._msuf2Width or ctx.width or 900
+    W.ControlCardBackdrop(cross, 14, -38, min(crossW - 28, 700), 222)
+    W.ControlCardBackdrop(cross, 14, -292, min(crossW - 28, 700), 214)
     local crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", 14, -40, 390, Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI)
     local rangeToggle = ToggleAt(ctx, cross, "Crosshair: color by melee range to target (green=in range, red=out)", 14, -74, Gameplay, "enableCombatCrosshairMeleeRangeColor", false, ApplyGameplayUI)
     LabelAt(cross, "Uses the spell selected below.", 38, -104, 420, "GameFontDisableSmall", T.colors.muted)

@@ -577,10 +577,12 @@ local function BuildClassPower(ctx)
     local textControls = {}
     local dpbControls = {}
     local altManaControls = {}
+    local RefreshClassPowerControls
 
     local cpEnable = SwitchAt(ctx, display, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, function()
         ApplyClassPower()
         ShowClassPowerReloadPrompt()
+        if RefreshClassPowerControls then RefreshClassPowerControls() end
     end)
     local cpHeight = BindTableSlider(ctx, display, "Height", 1, 40, 1, 300, Bars, "classPowerHeight", 4, ApplyClassPower)
     local cpWidthMode = BindTableDropdown(ctx, display, "Width mode", {
@@ -605,8 +607,8 @@ local function BuildClassPower(ctx)
     local layoutRightW = compactLayout and layoutLeftW or max(250, layoutWidth - layoutRightX - 32)
     local layoutControlW = compactLayout and max(250, min(320, layoutWidth - layoutLeftX - 42)) or 300
     local positionTopY = compactLayout and -266 or -64
-    LabelAt(display, "Bar", layoutLeftX, -38, layoutLeftW, "GameFontNormalSmall", T.colors.accent)
-    LabelAt(display, "Position", layoutRightX, compactLayout and -240 or -38, layoutRightW, "GameFontNormalSmall", T.colors.accent)
+    W.ControlCard(display, "Bar", nil, layoutLeftX - 14, -38, layoutLeftW + 28, compactLayout and 196 or 210)
+    W.ControlCard(display, "Position", nil, layoutRightX - 14, compactLayout and -240 or -38, layoutRightW + 28, 190)
     MoveWidget(cpHeight, display, layoutLeftX, -98, layoutControlW)
     MoveWidget(cpWidthMode, display, layoutLeftX, -150, layoutControlW)
     MoveWidget(cpWidth, display, layoutLeftX, -202, layoutControlW)
@@ -628,6 +630,11 @@ local function BuildClassPower(ctx)
         cpControls[#cpControls + 1] = control
     end
     local behaviorRightX = min(max(380, floor((ctx.width or 900) * 0.45)), max(320, (ctx.width or 900) - 420))
+    local behaviorW = behavior._msuf2Width or ctx.width or 900
+    local behaviorLeftW = max(280, behaviorRightX - 42)
+    local behaviorRightW = max(280, behaviorW - behaviorRightX - 28)
+    W.ControlCardBackdrop(behavior, 14, -38, behaviorLeftW, 154)
+    W.ControlCardBackdrop(behavior, behaviorRightX - 14, -38, behaviorRightW + 14, 154)
     MoveWidget(cpAnchor, behavior, 14, -38)
     MoveWidget(cpCharged, behavior, 14, -70)
     MoveWidget(cpText, behavior, 14, -102)
@@ -672,12 +679,12 @@ local function BuildClassPower(ctx)
     local styleLeftControlW = max(260, min(322, styleMidX - styleLeftX - 20))
     local styleMidControlW = max(240, min(286, styleRightX - styleMidX - 24))
     local styleRightControlW = max(240, min(286, styleWidth - styleRightX - 36))
-    LabelAt(visual, "Resource", styleLeftX, -38, styleLeftW, "GameFontNormalSmall", T.colors.accent)
-    LabelAt(visual, "Text", styleMidX, -38, styleMidW, "GameFontNormalSmall", T.colors.accent)
-    LabelAt(visual, "Opacity", styleRightX, -38, styleRightW, "GameFontNormalSmall", T.colors.accent)
+    W.ControlCard(visual, "Resource & Textures", nil, styleLeftX - 14, -38, styleLeftW + 28, 238)
+    W.ControlCard(visual, "Text", nil, styleMidX - 14, -38, styleMidW + 28, 184)
+    W.ControlCard(visual, "Opacity", nil, styleRightX - 14, -38, styleRightW + 28, 176)
+    W.ControlCard(visual, "Pips & Border", nil, styleRightX - 14, -222, styleRightW + 28, 178)
     MoveWidget(cpColor, visual, styleLeftX, -64)
     MoveWidget(cpComboColor, visual, styleLeftX, -96, styleLeftControlW)
-    LabelAt(visual, "Textures", styleLeftX, -158, styleLeftW, "GameFontNormalSmall", T.colors.accent)
     MoveWidget(cpFgTex, visual, styleLeftX, -184, styleLeftControlW)
     MoveWidget(cpBgTex, visual, styleLeftX, -238, styleLeftControlW)
     MoveWidget(cpFont, visual, styleMidX, -64, styleMidControlW)
@@ -686,21 +693,21 @@ local function BuildClassPower(ctx)
     MoveWidget(cpBg, visual, styleRightX, -64, styleRightControlW)
     MoveWidget(cpFilled, visual, styleRightX, -116, styleRightControlW)
     MoveWidget(cpEmpty, visual, styleRightX, -168, styleRightControlW)
-    W.DividerAt(visual, -222, styleRightX, 32)
-    LabelAt(visual, "Pips & Border", styleRightX, -240, styleRightW, "GameFontNormalSmall", T.colors.accent)
     MoveWidget(cpSeparator, visual, styleRightX, -266, styleRightControlW)
     MoveWidget(cpOutline, visual, styleRightX, -318, styleRightControlW)
     MoveWidget(cpGap, visual, styleRightX, -370, styleRightControlW)
 
     local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 170, false)
+    W.ControlCard(visibility, "Auto-Hide Rules", nil, 14, -38, min(560, (visibility._msuf2Width or ctx.width or 900) - 28), 100)
+    visibility._msuf2CursorY = -66
     local hideOOC = BindTableToggle(ctx, visibility, "Hide out of combat", Bars, "classPowerHideOOC", false, ApplyClassPower)
     local hideFull = BindTableToggle(ctx, visibility, "Hide when full", Bars, "classPowerHideWhenFull", false, ApplyClassPower)
     local hideEmpty = BindTableToggle(ctx, visibility, "Hide when empty", Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
     for _, control in ipairs({ hideOOC, hideFull, hideEmpty }) do cpControls[#cpControls + 1] = control end
 
     local dpb = b:CollapsibleSection("classpower_detached_power", "Detached Power Bar", 352, false)
-    W.Text(dpb, "Only applies when power bar is detached.", 14, -38, ctx.width - 28, T.colors.muted)
-    dpb._msuf2CursorY = -72
+    W.ControlCard(dpb, "Detached Power Bar", "Only applies when power bar is detached.", 14, -38, min(620, (dpb._msuf2Width or ctx.width or 900) - 28), 254)
+    dpb._msuf2CursorY = -92
     local dpbMode = W.Dropdown(dpb, "Width mode", {
         { value = "manual", text = "Manual" },
         { value = "cooldown", text = "Essential Cooldowns" },
@@ -719,15 +726,15 @@ local function BuildClassPower(ctx)
     for _, control in ipairs({ dpbMode, dpbFg, dpbBg, dpbOutline }) do dpbControls[#dpbControls + 1] = control end
 
     local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana Bar", 238, false)
-    W.Text(altMana, "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, ctx.width - 28, T.colors.muted)
-    altMana._msuf2CursorY = -72
+    W.ControlCard(altMana, "Alternative Mana Bar", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, min(620, (altMana._msuf2Width or ctx.width or 900) - 28), 150)
+    altMana._msuf2CursorY = -92
     local altManaToggle = BindTableToggle(ctx, altMana, "Show mana bar (dual resource)", Bars, "showAltMana", false, ApplyClassPower)
     local altManaHeight = BindTableSlider(ctx, altMana, "Height", 2, 30, 1, 300, Bars, "altManaHeight", 4, ApplyClassPower)
     local altManaY = BindTableSlider(ctx, altMana, "Y offset", -50, 50, 1, 300, Bars, "altManaOffsetY", -2, ApplyClassPower)
     altManaControls[#altManaControls + 1] = altManaHeight
     altManaControls[#altManaControls + 1] = altManaY
 
-    M.AddRefresher(ctx, function()
+    RefreshClassPowerControls = function()
         local bars = Bars()
         local cpOn = BoolValue(bars, "showClassPower", true)
         local textOn = cpOn and BoolValue(bars, "classPowerShowText", false)
@@ -745,7 +752,9 @@ local function BuildClassPower(ctx)
         for i = 1, #altManaControls do SetControlEnabled(altManaControls[i], altOn) end
         SetControlEnabled(altManaToggle, true)
         SetControlEnabled(cpEnable, true)
-    end)
+    end
+    M.AddRefresher(ctx, RefreshClassPowerControls)
+    RefreshClassPowerControls()
     MaybeOfferQuickSetup()
 
     ctx:SetContentHeight(math.abs(b.y) + 42)

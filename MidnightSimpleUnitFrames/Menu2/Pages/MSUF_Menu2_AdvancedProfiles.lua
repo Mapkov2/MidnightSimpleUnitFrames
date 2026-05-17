@@ -239,6 +239,9 @@ local function BuildProfiles(ctx)
     end
 
     local current = b:CollapsibleSection("profiles_management", "Profile Management", 208, true)
+    local currentW = current._msuf2Width or contentW
+    W.ControlCardBackdrop(current, 14, -38, 320, 142)
+    W.ControlCardBackdrop(current, rightX - 14, -38, max(340, currentW - rightX - 28), 142)
     local profileDrop = W.Dropdown(current, "Active profile", {}, 260)
     local function RefreshProfileValues()
         profileDrop:SetValues(ProfileValues(false))
@@ -328,6 +331,7 @@ local function BuildProfiles(ctx)
     local specs = GetSpecMeta()
     local specRows = max(1, math.ceil((#specs > 0 and #specs or 1) / 2))
     local spec = b:CollapsibleSection("profiles_specs", "Spec Profiles", 120 + (specRows * 58), true)
+    W.ControlCardBackdrop(spec, 14, -38, max(320, contentW - 28), 44 + (specRows * 58))
     local auto = W.Toggle(spec, "Auto-switch profile by specialization")
     M.BindToggle(ctx, auto,
         function()
@@ -367,6 +371,9 @@ local function BuildProfiles(ctx)
     end
 
     local io = b:CollapsibleSection("profiles_io", "Export / Import", 356, false)
+    local ioActionX = min(max(380, floor(contentW * 0.46)), max(340, contentW - 460))
+    W.ControlCardBackdrop(io, 14, -38, max(320, min(620, ioActionX - 28)), 276)
+    W.ControlCardBackdrop(io, ioActionX - 14, -38, max(300, contentW - ioActionX - 28), 276)
     local exportKind = W.Dropdown(io, "Export kind", {
         { value = "all", text = "Full profile" },
         { value = "unitframe", text = "Unitframes" },
@@ -519,7 +526,6 @@ local function BuildProfiles(ctx)
             blob:HighlightText()
         end
     end)
-    local ioActionX = min(max(380, floor(contentW * 0.46)), max(340, contentW - 460))
     MoveWidget(exportKind, io, 14, -42, 260)
     MoveWidget(blob, io, 14, -104, max(320, min(620, ioActionX - 28)))
     export:SetPoint("TOPLEFT", io, "TOPLEFT", ioActionX, -64)

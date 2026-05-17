@@ -62,21 +62,7 @@ _DPB.CDM = _DPB.CDM or {
     tracked_buffs = "BuffIconCooldownViewer",
 }
 
-function _DPB.UseMSAEssentialBridge()
-    local g = _G.MSUF_DB and _G.MSUF_DB.general or nil
-    return not (g and g.disableMSAEssentialBridge == true)
-end
-
 function _G.MSUF_GetEffectiveCooldownFrame(frameName)
-    if frameName == "EssentialCooldownViewer" and _DPB.UseMSAEssentialBridge() then
-        local getter = _G.MSWA_GetEssentialBridgeFrame
-        if type(getter) == "function" then
-            local bridge = getter()
-            if bridge and bridge ~= _G.UIParent and bridge ~= _G.WorldFrame and (not bridge.IsForbidden or not bridge:IsForbidden()) then
-                return bridge
-            end
-        end
-    end
     return frameName and _G[frameName] or nil
 end
 

@@ -105,35 +105,36 @@ local function BuildGFIndicators(ctx)
 
     local indicators = b:CollapsibleSection("indicators", "Indicators", 650, true)
     local indicatorsW = indicators._msuf2Width or ctx.width or 720
-    local leftX = 30
-    local rightX = max(430, min(520, floor(indicatorsW * 0.50)))
-    local leftW = max(270, min(340, rightX - leftX - 70))
-    local rightW = max(280, min(360, indicatorsW - rightX - 42))
+    local cardGap = 16
+    local leftX = 20
+    local innerW = max(320, indicatorsW - 40)
+    local leftW = floor((innerW - cardGap) * 0.48)
+    local rightX = leftX + leftW + cardGap
+    local rightW = innerW - leftW - cardGap
 
     local function IsMouseoverHighlightEnabled()
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
         return not (gen and gen.highlightEnabled == false)
     end
 
-    W.LabelAt(indicators, "Aggro / Dispel / Target Highlight", leftX, -42, 280, "GameFontNormalSmall", T.colors.accent)
-    local hlHint = W.Text(indicators, "Controlled from: |cff38c7f0Global Style > Bars|r > |cff38c7f0Outline & Highlight Border|r\nEnable/disable, colors, size, offset, priority - all in one place.", leftX, -64, indicatorsW - 60, T.colors.muted)
+    local highlightCard = W.ControlCard(indicators, "Aggro / Dispel / Target Highlight", nil, leftX, -38, innerW, 92)
+    local hlHint = W.Text(highlightCard, "Controlled from: |cff38c7f0Global Style > Bars|r > |cff38c7f0Outline & Highlight Border|r\nEnable/disable, colors, size, offset, priority - all in one place.", 16, -42, innerW - 32, T.colors.muted)
     if hlHint.SetWordWrap then hlHint:SetWordWrap(true) end
-    W.DividerAt(indicators, -112, leftX, 30)
 
-    W.LabelAt(indicators, "Group Number", leftX, -140, 180, "GameFontNormalSmall", T.colors.accent)
-    local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(indicators, "Group Number", leftX, -170, leftW), "showGroupNumber", false, "visual")
-    local groupNumberSize = BindScopeSlider(ctx, W.Slider(indicators, "Size", 6, 24, 1, leftW), "groupNumberSize", 10, "font")
-    local groupNumberAnchor = BindScopeDropdown(ctx, W.Dropdown(indicators, "Anchor", AURA_ANCHORS, leftW), "groupNumberAnchor", "BOTTOMRIGHT", "geometry")
-    local groupNumberX = BindScopeSlider(ctx, W.Slider(indicators, "X Offset", -100, 100, 1, leftW), "groupNumberX", -2, "geometry")
-    local groupNumberY = BindScopeSlider(ctx, W.Slider(indicators, "Y Offset", -100, 100, 1, leftW), "groupNumberY", 2, "geometry")
-    W.MoveWidget(groupNumberSize, indicators, leftX, -214, leftW, "CENTER")
-    W.MoveWidget(groupNumberAnchor, indicators, leftX, -268, leftW, "LEFT")
-    W.MoveWidget(groupNumberX, indicators, leftX, -322, leftW, "CENTER")
-    W.MoveWidget(groupNumberY, indicators, leftX, -376, leftW, "CENTER")
+    local groupNumberCard = W.ControlCard(indicators, "Group Number", "Small group index label on each frame.", leftX, -148, leftW, 246)
+    local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"), "showGroupNumber", false, "visual")
+    local groupNumberSize = BindScopeSlider(ctx, W.Slider(groupNumberCard, "Size", 6, 24, 1, leftW), "groupNumberSize", 10, "font")
+    local groupNumberAnchor = BindScopeDropdown(ctx, W.Dropdown(groupNumberCard, "Anchor", AURA_ANCHORS, leftW), "groupNumberAnchor", "BOTTOMRIGHT", "geometry")
+    local groupNumberX = BindScopeSlider(ctx, W.Slider(groupNumberCard, "X Offset", -100, 100, 1, leftW), "groupNumberX", -2, "geometry")
+    local groupNumberY = BindScopeSlider(ctx, W.Slider(groupNumberCard, "Y Offset", -100, 100, 1, leftW), "groupNumberY", 2, "geometry")
+    W.MoveWidget(groupNumberSize, groupNumberCard, 16, -66, leftW - 58, "CENTER")
+    W.MoveWidget(groupNumberAnchor, groupNumberCard, 16, -116, leftW - 32, "LEFT")
+    W.MoveWidget(groupNumberX, groupNumberCard, 16, -166, leftW - 58, "CENTER")
+    W.MoveWidget(groupNumberY, groupNumberCard, 16, -216, leftW - 58, "CENTER")
 
-    W.LabelAt(indicators, "Hover Highlight", rightX, -140, 180, "GameFontNormalSmall", T.colors.accent)
-    local hoverHint = W.Text(indicators, "Enable + color: |cff38c7f0Global Style > Colors|r > Mouseover Highlight", rightX, -162, rightW, T.colors.muted)
-    local hoverSize = W.Slider(indicators, "Border Thickness", 1, 6, 1, rightW)
+    local hoverCard = W.ControlCard(indicators, "Hover Highlight", "Enable + color: |cff38c7f0Global Style > Colors|r > Mouseover Highlight", rightX, -148, rightW, 126)
+    local hoverHint = hoverCard and hoverCard.subtitle
+    local hoverSize = W.Slider(hoverCard, "Border Thickness", 1, 6, 1, rightW)
     M.BindSlider(ctx, hoverSize,
         function()
             local gf = GF and GF()
@@ -149,14 +150,14 @@ local function BuildGFIndicators(ctx)
             conf.hlOverride = true
             QueueGF(kind, "visual")
         end)
-    W.MoveWidget(hoverSize, indicators, rightX, -210, rightW, "CENTER")
+    W.MoveWidget(hoverSize, hoverCard, 16, -70, rightW - 58, "CENTER")
 
-    W.LabelAt(indicators, "Focus Highlight", rightX, -274, 180, "GameFontNormalSmall", T.colors.accent)
-    local focusToggle = BindScopeToggle(ctx, W.SwitchAt(indicators, "Focus Highlight", rightX, -304, rightW), "hlFocusEnabled", true, "visual")
-    local focusHint = W.Text(indicators, "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -332, rightW, T.colors.muted)
+    local focusCard = W.ControlCard(indicators, "Focus Highlight", "Shows a colored border around your Focus target. Priority: Dispel > Aggro > Target > Focus.", rightX, -294, rightW, 190)
+    local focusToggle = BindScopeToggle(ctx, W.SwitchAt(focusCard, "Focus Highlight", rightW - 62, -24, 0, "HIDDEN"), "hlFocusEnabled", true, "visual")
+    local focusHint = focusCard and focusCard.subtitle
     if focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
-    local focusSize = BindScopeSlider(ctx, W.Slider(indicators, "Border Thickness", 1, 6, 1, rightW), "hlFocusSize", 2, "visual")
-    local focusColor = W.Color(indicators, "Focus Glow Color")
+    local focusSize = BindScopeSlider(ctx, W.Slider(focusCard, "Border Thickness", 1, 6, 1, rightW), "hlFocusSize", 2, "visual")
+    local focusColor = W.Color(focusCard, "Focus Glow Color")
     M.BindColor(ctx, focusColor,
         function()
             return Num(CurrentScope(), "hlFocusColorR", 0.50),
@@ -170,14 +171,14 @@ local function BuildGFIndicators(ctx)
             conf.hlFocusColorB = bcol
             QueueGF(CurrentScope(), "visual")
         end)
-    W.MoveWidget(focusSize, indicators, rightX, -384, rightW, "CENTER")
-    W.MoveWidget(focusColor, indicators, rightX, -438, rightW)
+    W.MoveWidget(focusSize, focusCard, 16, -88, rightW - 58, "CENTER")
+    W.MoveWidget(focusColor, focusCard, 16, -142, rightW - 32)
 
-    W.LabelAt(indicators, "Group Border", leftX, -430, 180, "GameFontNormalSmall", T.colors.accent)
-    local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(indicators, "Group Border", leftX, -460, leftW), "groupBorderEnabled", false, "visual")
-    local groupBorderSize = BindScopeSlider(ctx, W.Slider(indicators, "Border Thickness", 1, 12, 1, leftW), "groupBorderSize", 1, "visual")
-    local groupBorderPadding = BindScopeSlider(ctx, W.Slider(indicators, "Padding", 0, 40, 1, leftW), "groupBorderPadding", 2, "visual")
-    local groupBorderColor = W.Color(indicators, "Group Border Color")
+    local groupBorderCard = W.ControlCard(indicators, "Group Border", "Optional border around the full group frame.", leftX, -412, leftW, 202)
+    local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(groupBorderCard, "Group Border", leftW - 62, -24, 0, "HIDDEN"), "groupBorderEnabled", false, "visual")
+    local groupBorderSize = BindScopeSlider(ctx, W.Slider(groupBorderCard, "Border Thickness", 1, 12, 1, leftW), "groupBorderSize", 1, "visual")
+    local groupBorderPadding = BindScopeSlider(ctx, W.Slider(groupBorderCard, "Padding", 0, 40, 1, leftW), "groupBorderPadding", 2, "visual")
+    local groupBorderColor = W.Color(groupBorderCard, "Group Border Color")
     M.BindColor(ctx, groupBorderColor,
         function()
             return Num(CurrentScope(), "groupBorderR", 0.38),
@@ -191,9 +192,9 @@ local function BuildGFIndicators(ctx)
             conf.groupBorderB = bcol
             QueueGF(CurrentScope(), "visual")
         end)
-    W.MoveWidget(groupBorderSize, indicators, leftX, -504, leftW, "CENTER")
-    W.MoveWidget(groupBorderPadding, indicators, leftX, -558, leftW, "CENTER")
-    W.MoveWidget(groupBorderColor, indicators, leftX, -614, leftW)
+    W.MoveWidget(groupBorderSize, groupBorderCard, 16, -66, leftW - 58, "CENTER")
+    W.MoveWidget(groupBorderPadding, groupBorderCard, 16, -116, leftW - 58, "CENTER")
+    W.MoveWidget(groupBorderColor, groupBorderCard, 16, -168, leftW - 32)
 
     local groupNumberControls = { groupNumberSize, groupNumberAnchor, groupNumberX, groupNumberY }
     local focusControls = { focusSize, focusColor }
@@ -226,20 +227,24 @@ local function BuildGFIndicators(ctx)
         if entry then entry._msuf2RefreshState = RefreshIndicatorsState end
     end
 
-    local sicons = b:CollapsibleSection("sicons", "Status Icons", 444, false)
+    local sicons = b:CollapsibleSection("sicons", "Status Icons", 488, false)
     local siconW = sicons._msuf2Width or ctx.width or 720
-    local siconLeftX = 30
-    local siconRightX = max(410, min(540, floor(siconW * 0.52)))
-    local siconLeftW = max(250, min(330, siconRightX - siconLeftX - 70))
-    local siconRightW = max(280, min(380, siconW - siconRightX - 34))
+    local siconGap = 16
+    local siconLeftX = 20
+    local siconInnerW = max(320, siconW - 40)
+    local siconLeftW = floor((siconInnerW - siconGap) * 0.46)
+    local siconRightX = siconLeftX + siconLeftW + siconGap
+    local siconRightW = siconInnerW - siconLeftW - siconGap
+    local styleCard = W.ControlCard(sicons, "Style", nil, siconLeftX, -38, siconLeftW, 132)
+    local selectedCard = W.ControlCard(sicons, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 214)
+    local previewCard = W.ControlCard(sicons, "Status Preview", nil, siconRightX, -38, siconRightW, 118)
+    local placementCard = W.ControlCard(sicons, "Placement", nil, siconRightX, -174, siconRightW, 286)
 
-    W.LabelAt(sicons, "Style", siconLeftX, -42, siconLeftW, "GameFontNormalSmall", T.colors.accent)
-    local iconStyle = BindScopeDropdown(ctx, W.Dropdown(sicons, "Icon style", IconStyleValues, siconLeftW), "iconStyle", "BLIZZARD", "visual")
-    W.MoveWidget(iconStyle, sicons, siconLeftX, -66, siconLeftW, "LEFT")
-    local midnightStyle = BindScopeToggle(ctx, W.ToggleAt(sicons, "Use Midnight Style", siconLeftX, -126, siconLeftW), "useMidnightIcons", false, "visual")
+    local iconStyle = BindScopeDropdown(ctx, W.Dropdown(styleCard, "Icon style", IconStyleValues, siconLeftW), "iconStyle", "BLIZZARD", "visual")
+    W.MoveWidget(iconStyle, styleCard, 16, -56, siconLeftW - 32, "LEFT")
+    local midnightStyle = BindScopeToggle(ctx, W.ToggleAt(styleCard, "Use Midnight Style", 16, -106, siconLeftW - 32), "useMidnightIcons", false, "visual")
 
-    W.LabelAt(sicons, "Selected Indicator", siconLeftX, -174, siconLeftW, "GameFontNormalSmall", T.colors.accent)
-    local statusSelector = W.Dropdown(sicons, "Indicator", GF_STATUS_ICON_VALUES, siconLeftW)
+    local statusSelector = W.Dropdown(selectedCard, "Indicator", GF_STATUS_ICON_VALUES, siconLeftW)
     M.BindDropdown(ctx, statusSelector,
         function() return CurrentGFStatusSpec().value end,
         function(value)
@@ -253,9 +258,9 @@ local function BuildGFIndicators(ctx)
                 end
             end
         end)
-    W.MoveWidget(statusSelector, sicons, siconLeftX, -198, siconLeftW, "LEFT")
+    W.MoveWidget(statusSelector, selectedCard, 16, -54, siconLeftW - 32, "LEFT")
 
-    local statusEnabled = W.SwitchAt(sicons, "Enabled", siconLeftX, -260, siconLeftW)
+    local statusEnabled = W.SwitchAt(selectedCard, "Enabled", siconLeftW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, statusEnabled,
         function()
             local spec = CurrentGFStatusSpec()
@@ -268,20 +273,20 @@ local function BuildGFIndicators(ctx)
         end)
 
     -- Role filter group: only visible when Role Icon indicator is selected
-    local roleFilterGroup = CreateFrame("Frame", nil, sicons)
-    roleFilterGroup:SetPoint("TOPLEFT", sicons, "TOPLEFT", 0, -294)
-    roleFilterGroup:SetSize((siconLeftW + siconLeftX + 10), 60)
+    local roleFilterGroup = CreateFrame("Frame", nil, selectedCard)
+    roleFilterGroup:SetPoint("TOPLEFT", selectedCard, "TOPLEFT", 0, -112)
+    local roleFilterW = max(180, siconLeftW - 32)
+    roleFilterGroup:SetSize(roleFilterW, 60)
 
-    W.LabelAt(roleFilterGroup, "Show for:", siconLeftX, -8, siconLeftW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(roleFilterGroup, "Show for:", 16, -8, siconLeftW - 32, "GameFontNormalSmall", T.colors.accent)
 
-    local rfColW   = floor(siconLeftW / 3)
-    local rfLabelW = rfColW - 30  -- subtract checkbox(24) + gap(6) so hit areas don't overlap the next column
-    local rfTank   = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "Tank",   siconLeftX,              -26, rfLabelW), "roleIconShowTank",   true, "visual")
-    local rfHealer = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "Healer", siconLeftX + rfColW,     -26, rfLabelW), "roleIconShowHealer", true, "visual")
-    local rfDPS    = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "DPS",    siconLeftX + rfColW * 2, -26, rfLabelW), "roleIconShowDPS",    true, "visual")
+    local rfColW   = floor(roleFilterW / 3)
+    local rfLabelW = max(34, rfColW - 30)  -- subtract checkbox(24) + gap(6) so hit areas don't overlap the next column
+    local rfTank   = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "Tank",   16,              -26, rfLabelW), "roleIconShowTank",   true, "visual")
+    local rfHealer = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "Healer", 16 + rfColW,     -26, rfLabelW), "roleIconShowHealer", true, "visual")
+    local rfDPS    = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "DPS",    16 + rfColW * 2, -26, rfLabelW), "roleIconShowDPS",    true, "visual")
 
-    W.LabelAt(sicons, "Status Preview", siconRightX, -42, siconRightW, "GameFontNormalSmall", T.colors.accent)
-    local previewCurrent = W.Button(sicons, "Preview current", 142)
+    local previewCurrent = W.Button(previewCard, "Preview current", 142)
     previewCurrent:SetScript("OnClick", function()
         local gf = GF()
         M.gfStatusPreviewMode = "current"
@@ -291,10 +296,10 @@ local function BuildGFIndicators(ctx)
         if RefreshGFPreview then RefreshGFPreview() end
     end)
     previewCurrent:ClearAllPoints()
-    previewCurrent:SetPoint("TOPLEFT", sicons, "TOPLEFT", siconRightX, -66)
+    previewCurrent:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -54)
     previewCurrent:SetSize(142, 24)
 
-    local previewAll = W.Button(sicons, "Show all", 112)
+    local previewAll = W.Button(previewCard, "Show all", 112)
     previewAll:SetScript("OnClick", function()
         local gf = GF()
         M.gfStatusPreviewMode = "all"
@@ -306,7 +311,7 @@ local function BuildGFIndicators(ctx)
     previewAll:SetPoint("LEFT", previewCurrent, "RIGHT", 10, 0)
     previewAll:SetSize(112, 24)
 
-    local statusReset = W.Button(sicons, "Reset selected", 160)
+    local statusReset = W.Button(previewCard, "Reset selected", 160)
     statusReset:SetScript("OnClick", function()
         local kind = CurrentScope()
         local spec = CurrentGFStatusSpec()
@@ -321,11 +326,10 @@ local function BuildGFIndicators(ctx)
         if M.SelectPage then M.SelectPage(ctx.key) end
     end)
     statusReset:ClearAllPoints()
-    statusReset:SetPoint("TOPLEFT", sicons, "TOPLEFT", siconRightX, -108)
+    statusReset:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -86)
     statusReset:SetSize(160, 24)
 
-    W.LabelAt(sicons, "Placement", siconRightX, -154, siconRightW, "GameFontNormalSmall", T.colors.accent)
-    local statusSize = W.Slider(sicons, "Size", 6, 40, 1, siconRightW)
+    local statusSize = W.Slider(placementCard, "Size", 6, 40, 1, siconRightW)
     M.BindSlider(ctx, statusSize,
         function()
             local spec = CurrentGFStatusSpec()
@@ -335,9 +339,9 @@ local function BuildGFIndicators(ctx)
             local spec = CurrentGFStatusSpec()
             Set(CurrentScope(), spec.size, floor((tonumber(value) or spec.defaultSize) + 0.5), "visual")
         end)
-    W.MoveWidget(statusSize, sicons, siconRightX, -178, siconRightW, "LEFT")
+    W.MoveWidget(statusSize, placementCard, 16, -58, siconRightW - 58, "LEFT")
 
-    local statusAnchor = W.Dropdown(sicons, "Anchor", STATUS_ICON_ANCHORS, siconRightW)
+    local statusAnchor = W.Dropdown(placementCard, "Anchor", STATUS_ICON_ANCHORS, siconRightW)
     M.BindDropdown(ctx, statusAnchor,
         function()
             local spec = CurrentGFStatusSpec()
@@ -347,9 +351,9 @@ local function BuildGFIndicators(ctx)
             local spec = CurrentGFStatusSpec()
             Set(CurrentScope(), spec.anchor, value or spec.defaultAnchor, "geometry")
         end)
-    W.MoveWidget(statusAnchor, sicons, siconRightX, -232, siconRightW, "LEFT")
+    W.MoveWidget(statusAnchor, placementCard, 16, -108, siconRightW - 32, "LEFT")
 
-    local statusX = W.Slider(sicons, "X Offset", -100, 100, 1, siconRightW)
+    local statusX = W.Slider(placementCard, "X Offset", -100, 100, 1, siconRightW)
     M.BindSlider(ctx, statusX,
         function()
             local spec = CurrentGFStatusSpec()
@@ -359,9 +363,9 @@ local function BuildGFIndicators(ctx)
             local spec = CurrentGFStatusSpec()
             Set(CurrentScope(), spec.x, floor((tonumber(value) or 0) + 0.5), "geometry")
         end)
-    W.MoveWidget(statusX, sicons, siconRightX, -286, siconRightW, "LEFT")
+    W.MoveWidget(statusX, placementCard, 16, -158, siconRightW - 58, "LEFT")
 
-    local statusY = W.Slider(sicons, "Y Offset", -100, 100, 1, siconRightW)
+    local statusY = W.Slider(placementCard, "Y Offset", -100, 100, 1, siconRightW)
     M.BindSlider(ctx, statusY,
         function()
             local spec = CurrentGFStatusSpec()
@@ -371,9 +375,9 @@ local function BuildGFIndicators(ctx)
             local spec = CurrentGFStatusSpec()
             Set(CurrentScope(), spec.y, floor((tonumber(value) or 0) + 0.5), "geometry")
         end)
-    W.MoveWidget(statusY, sicons, siconRightX, -340, siconRightW, "LEFT")
+    W.MoveWidget(statusY, placementCard, 16, -208, siconRightW - 58, "LEFT")
 
-    local statusLayer = W.Slider(sicons, "Layer", 0, 30, 1, siconRightW)
+    local statusLayer = W.Slider(placementCard, "Layer", 0, 30, 1, siconRightW)
     M.BindSlider(ctx, statusLayer,
         function()
             local spec = CurrentGFStatusSpec()
@@ -387,7 +391,7 @@ local function BuildGFIndicators(ctx)
             if value < 0 then value = 0 elseif value > 30 then value = 30 end
             Set(CurrentScope(), spec.layer, value, "visual")
         end)
-    W.MoveWidget(statusLayer, sicons, siconRightX, -394, siconRightW, "LEFT")
+    W.MoveWidget(statusLayer, placementCard, 16, -258, siconRightW - 58, "LEFT")
 
     local function RefreshStatusIconState()
         local spec = CurrentGFStatusSpec()
@@ -419,10 +423,19 @@ local function BuildGFIndicators(ctx)
 
     local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 824, false)
     local siW = spells._msuf2Width or ctx.width or 720
+    local siGap = 28
     local siLeftX = 30
-    local siRightX = max(430, min(560, floor(siW * 0.52)))
-    local siLeftW = max(300, min(370, siRightX - siLeftX - 60))
-    local siRightW = max(300, min(390, siW - siRightX - 34))
+    local siInnerW = max(320, siW - 60)
+    local siLeftW = max(240, min(370, floor((siInnerW - siGap) * 0.46)))
+    local siRightX = siLeftX + siLeftW + siGap
+    local siRightW = max(240, min(390, siInnerW - siLeftW - siGap))
+    do
+        W.ControlCard(spells, Tr("Spell Set"), nil, siLeftX - 14, -38, siLeftW + 28, 334)
+        W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 304)
+        W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -374, siLeftW + 28, 408)
+        W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -356, siRightW + 28, 286)
+        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -650, siRightW + 28, 154)
+    end
 
     local function SpellIndicatorRuntime()
         local gf = GF()
@@ -468,7 +481,7 @@ local function BuildGFIndicators(ctx)
         return (info and info.color) or { 1, 1, 1 }
     end
 
-    W.LabelAt(spells, Tr("Spell Set"), siLeftX, -42, siLeftW, "GameFontNormalSmall", T.colors.accent)
+    local RefreshSpellIndicatorState
     local siEnable = W.SwitchAt(spells, Tr("Spell Indicators"), siLeftX, -72, siLeftW)
     M.BindToggle(ctx, siEnable,
         function() return SpellIndicators(CurrentScope()).enabled == true end,
@@ -476,9 +489,10 @@ local function BuildGFIndicators(ctx)
             SpellIndicators(CurrentScope()).enabled = value and true or false
             EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
             QueueSpellIndicators(CurrentScope())
+            if RefreshSpellIndicatorState then RefreshSpellIndicatorState() end
         end)
     local siLayer = BindNestedSlider(ctx, W.Slider(spells, Tr("Layer"), 1, 15, 1, siRightW), function() return SpellIndicators(CurrentScope()) end, "layer", 9, "visual")
-    W.MoveWidget(siLayer, spells, siRightX, -48, siRightW, "LEFT")
+    W.MoveWidget(siLayer, spells, siRightX, -72, siRightW, "LEFT")
 
     local specDrop = W.Dropdown(spells, Tr("Spec"), SpellSpecValues, siLeftW)
     M.BindDropdown(ctx, specDrop,
@@ -503,9 +517,9 @@ local function BuildGFIndicators(ctx)
             EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
-    W.MoveWidget(multiSpecDrop, spells, siRightX, -108, siRightW, "LEFT")
+    W.MoveWidget(multiSpecDrop, spells, siRightX, -136, siRightW, "LEFT")
 
-    local multiSpecEnabled = W.ToggleAt(spells, Tr("Track selected multi spec"), siRightX, -168, siRightW)
+    local multiSpecEnabled = W.ToggleAt(spells, Tr("Track selected multi spec"), siRightX, -196, siRightW)
     M.BindToggle(ctx, multiSpecEnabled,
         function()
             local cfg = SpellIndicators(CurrentScope())
@@ -743,7 +757,6 @@ local function BuildGFIndicators(ctx)
         end
     end
 
-    W.LabelAt(spells, Tr("Selected Spell"), siRightX, -204, siRightW, "GameFontNormalSmall", T.colors.accent)
     local auraDrop = W.Dropdown(spells, Tr("Spell"), function() return SpellAuraValues(CurrentScope()) end, siRightW)
     M.BindDropdown(ctx, auraDrop,
         function() return CurrentSpellAura(CurrentScope()) end,
@@ -779,7 +792,6 @@ local function BuildGFIndicators(ctx)
             QueueSpellIndicators(CurrentScope())
         end)
 
-    W.LabelAt(spells, Tr("Placed Indicator"), siLeftX, -386, siLeftW, "GameFontNormalSmall", T.colors.accent)
     local placedType = W.Dropdown(spells, Tr("Indicator Type"), PLACED_INDICATOR_TYPES, siLeftW)
     M.BindDropdown(ctx, placedType,
         function()
@@ -880,7 +892,6 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(placedGrowth, spells, siLeftX, -734, siLeftW, "LEFT")
 
-    W.LabelAt(spells, Tr("Frame Effect"), siRightX, -366, siRightW, "GameFontNormalSmall", T.colors.accent)
     local frameType = W.Dropdown(spells, Tr("Frame Effect"), FRAME_EFFECT_TYPES, siRightW)
     M.BindDropdown(ctx, frameType,
         function()
@@ -967,7 +978,6 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(frameThickness, spells, siRightX, -608, siRightW, "LEFT")
 
-    W.LabelAt(spells, Tr("Utilities"), siRightX, -660, siRightW, "GameFontNormalSmall", T.colors.accent)
     local placedMissing = W.ToggleAt(spells, Tr("Show when missing"), siRightX, -690, siRightW)
     M.BindToggle(ctx, placedMissing,
         function()
@@ -1005,10 +1015,12 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(placedCooldownSize, spells, siRightX, -754, siRightW, "LEFT")
 
-    local function RefreshSpellIndicatorState()
+    RefreshSpellIndicatorState = function()
         EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
         RefreshSpellTiles()
-        local multi = SpellIndicators(CurrentScope()).spec == "multi"
+        local spellCfg = SpellIndicators(CurrentScope())
+        local indicatorsOn = spellCfg.enabled == true
+        local multi = spellCfg.spec == "multi"
         if W.SetControlShown then
             W.SetControlShown(multiSpecDrop, multi)
             W.SetControlShown(multiSpecEnabled, multi)
@@ -1017,13 +1029,18 @@ local function BuildGFIndicators(ctx)
             multiSpecEnabled:SetShown(multi)
         end
         local placed = PlacedConfig(CurrentScope(), false)
-        local placedEnabled = placed and placed.type and placed.type ~= "none"
-        local hasSpell = EffectiveSpellSpec(CurrentScope()) ~= nil and CurrentSpellAura(CurrentScope()) ~= ""
+        local hasSpell = indicatorsOn and EffectiveSpellSpec(CurrentScope()) ~= nil and CurrentSpellAura(CurrentScope()) ~= ""
+        local placedEnabled = hasSpell and placed and placed.type and placed.type ~= "none"
         local frame = FrameEffectConfig(CurrentScope(), false)
         local frameKind = frame and frame.type or "none"
         local hasFrame = hasSpell and frameKind ~= "none"
         local cdRelevant = placedEnabled and placed.type ~= "bar" and placed.type ~= "number"
         local barRelevant = placedEnabled and placed.type == "bar"
+        SetOptionEnabled(siEnable, true)
+        SetOptionEnabled(siLayer, indicatorsOn)
+        SetOptionEnabled(specDrop, indicatorsOn)
+        SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
+        SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and CurrentSpellMultiSpec(CurrentScope()) ~= "")
         SetOptionEnabled(spellEnabled, hasSpell)
         SetOptionEnabled(onlyMine, hasSpell)
         SetOptionEnabled(placedType, hasSpell)
@@ -1053,9 +1070,16 @@ local function BuildGFIndicators(ctx)
     local corners = b:CollapsibleSection("ci", "Corner Indicators", 620, false)
     local cornerW = corners._msuf2Width or ctx.width or 720
     local leftX = 30
-    local rightX = max(430, min(560, floor(cornerW * 0.52)))
-    local leftW = max(300, min(360, rightX - leftX - 56))
-    local rightW = max(330, min(440, cornerW - rightX - 42))
+    local cornerGap = 28
+    local cornerInnerW = max(320, cornerW - 60)
+    local leftW = max(240, min(360, floor((cornerInnerW - cornerGap) * 0.46)))
+    local rightX = leftX + leftW + cornerGap
+    local rightW = max(260, min(440, cornerInnerW - leftW - cornerGap))
+    do
+        W.ControlCardBackdrop(corners, leftX - 14, -38, leftW + 28, 170)
+        W.ControlCardBackdrop(corners, leftX - 14, -218, leftW + 28, 334)
+        W.ControlCardBackdrop(corners, rightX - 14, -38, rightW + 28, 526)
+    end
 
     W.LabelAt(corners, "Global", leftX, -42, leftW, "GameFontNormalSmall", T.colors.accent)
     local ciEnable = BindScopeToggle(ctx, W.SwitchAt(corners, "Corner Indicators", leftX, -72, leftW), "ciEnabled", true, "visual")

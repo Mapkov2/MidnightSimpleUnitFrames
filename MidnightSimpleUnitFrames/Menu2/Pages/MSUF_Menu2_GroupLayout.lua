@@ -176,24 +176,34 @@ local function BuildGFLayout(ctx)
         if entry then entry._msuf2RefreshState = RefreshHideOfflineState end
     end
 
-    local layout = b:CollapsibleSection("layout", "Layout", 450, false)
+    local layout = b:CollapsibleSection("layout", "Layout", 430, false)
     local layoutW = layout._msuf2Width or b.width or 720
-    local layoutLeftX = 32
-    local layoutRightX = min(max(500, floor(layoutW * 0.52)), max(420, layoutW - 300))
-    local layoutSliderW = max(340, min(480, layoutRightX - layoutLeftX - 56))
-    local widthSlider = BindScopeSlider(ctx, W.Slider(layout, "Width", 40, 300, 1, layoutSliderW), "width", 120, "rebuild")
-    local heightSlider = BindScopeSlider(ctx, W.Slider(layout, "Height", 16, 120, 1, layoutSliderW), "height", 40, "rebuild")
-    local spacingSlider = BindScopeSlider(ctx, W.Slider(layout, "Spacing", 0, 20, 1, layoutSliderW), "spacing", 1, "rebuild")
-    BuildGrowthDirectionTiles(ctx, layout, { x = layoutRightX, y = -38, advanceCursor = false })
-    local unitsSlider = BindScopeSlider(ctx, W.Slider(layout, "Units per column", 1, 40, 1, layoutSliderW), "unitsPerColumn", 5, "rebuild")
-    local maxColumnsSlider = BindScopeSlider(ctx, W.Slider(layout, "Max columns", 1, 8, 1, layoutSliderW), "maxColumns", 8, "rebuild")
-    local preserveRaidGroups = BindScopeToggle(ctx, W.Toggle(layout, "Preserve raid groups"), "preserveRaidGroups", false, "rebuild")
-    W.MoveWidget(widthSlider, layout, layoutLeftX, -58, layoutSliderW, "LEFT")
-    W.MoveWidget(heightSlider, layout, layoutLeftX, -112, layoutSliderW, "LEFT")
-    W.MoveWidget(spacingSlider, layout, layoutLeftX, -166, layoutSliderW, "LEFT")
-    W.MoveWidget(unitsSlider, layout, layoutLeftX, -252, layoutSliderW, "LEFT")
-    W.MoveWidget(maxColumnsSlider, layout, layoutLeftX, -306, layoutSliderW, "LEFT")
-    W.MoveWidget(preserveRaidGroups, layout, layoutLeftX, -360)
+    local layoutGap = 16
+    local layoutLeftX = 20
+    local layoutInnerW = max(320, layoutW - 40)
+    local layoutLeftW = floor((layoutInnerW - layoutGap) * 0.52)
+    local layoutRightX = layoutLeftX + layoutLeftW + layoutGap
+    local layoutRightW = layoutInnerW - layoutLeftW - layoutGap
+    local layoutSliderW = max(180, min(360, layoutLeftW - 64))
+
+    local sizeCard = W.ControlCard(layout, "Frame size", "Dimensions and spacing for each group member.", layoutLeftX, -38, layoutLeftW, 188)
+    local gridCard = W.ControlCard(layout, "Raid grid", "Column behavior for raid-like scopes.", layoutLeftX, -244, layoutLeftW, 158)
+    local growthCard = W.ControlCard(layout, "Growth Direction", "How new members fill the group frame.", layoutRightX, -38, layoutRightW, 188)
+
+    local widthSlider = BindScopeSlider(ctx, W.Slider(sizeCard, "Width", 40, 300, 1, layoutSliderW), "width", 120, "rebuild")
+    local heightSlider = BindScopeSlider(ctx, W.Slider(sizeCard, "Height", 16, 120, 1, layoutSliderW), "height", 40, "rebuild")
+    local spacingSlider = BindScopeSlider(ctx, W.Slider(sizeCard, "Spacing", 0, 20, 1, layoutSliderW), "spacing", 1, "rebuild")
+    W.MoveWidget(widthSlider, sizeCard, 16, -66, layoutSliderW, "LEFT")
+    W.MoveWidget(heightSlider, sizeCard, 16, -114, layoutSliderW, "LEFT")
+    W.MoveWidget(spacingSlider, sizeCard, 16, -162, layoutSliderW, "LEFT")
+
+    BuildGrowthDirectionTiles(ctx, growthCard, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
+
+    local unitsSlider = BindScopeSlider(ctx, W.Slider(gridCard, "Units per column", 1, 40, 1, layoutSliderW), "unitsPerColumn", 5, "rebuild")
+    local maxColumnsSlider = BindScopeSlider(ctx, W.Slider(gridCard, "Max columns", 1, 8, 1, layoutSliderW), "maxColumns", 8, "rebuild")
+    local preserveRaidGroups = BindScopeToggle(ctx, W.ToggleAt(gridCard, "Preserve raid groups", 16, -138, layoutLeftW - 32), "preserveRaidGroups", false, "rebuild")
+    W.MoveWidget(unitsSlider, gridCard, 16, -62, layoutSliderW, "LEFT")
+    W.MoveWidget(maxColumnsSlider, gridCard, 16, -108, layoutSliderW, "LEFT")
     local function RefreshRaidGroupLayoutState()
         SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(layout, nil) end
@@ -205,12 +215,18 @@ local function BuildGFLayout(ctx)
         if entry then entry._msuf2RefreshState = RefreshRaidGroupLayoutState end
     end
 
-    local sorting = b:CollapsibleSection("sorting", "Sorting", 300, false)
+    local sorting = b:CollapsibleSection("sorting", "Sorting", 236, false)
     local sortingW = sorting._msuf2Width or b.width or 720
-    local sortingLeftX = 32
-    local sortingRightX = min(max(470, floor(sortingW * 0.54)), max(380, sortingW - 310))
-    local sortMode = W.Dropdown(sorting, "Sort Mode", SORT_MODES, 260)
-    W.MoveWidget(sortMode, sorting, sortingLeftX, -54, 260, "LEFT")
+    local sortingGap = 16
+    local sortingLeftX = 20
+    local sortingInnerW = max(320, sortingW - 40)
+    local sortingLeftW = floor((sortingInnerW - sortingGap) * 0.52)
+    local sortingRightX = sortingLeftX + sortingLeftW + sortingGap
+    local sortingRightW = sortingInnerW - sortingLeftW - sortingGap
+    local sortCard = W.ControlCard(sorting, "Sort mode", "Controls how group members are ordered.", sortingLeftX, -38, sortingLeftW, 174)
+    local roleCard = W.ControlCard(sorting, "Role Priority", "Drag rows with mouse to reorder.", sortingRightX, -38, sortingRightW, 174)
+    local sortMode = W.Dropdown(sortCard, "Sort Mode", SORT_MODES, min(260, sortingLeftW - 32))
+    W.MoveWidget(sortMode, sortCard, 16, -62, min(260, sortingLeftW - 32), "LEFT")
     if sortMode._msuf2Title then
         sortMode._msuf2Title:ClearAllPoints()
         sortMode._msuf2Title:SetPoint("LEFT", sortMode, "RIGHT", 8, 0)
@@ -231,8 +247,7 @@ local function BuildGFLayout(ctx)
             QueueGF(CurrentScope(), "rebuild")
             if refreshSortingControls then refreshSortingControls() end
         end)
-    local roleSort = W.Toggle(sorting, "Sort by Role")
-    W.MoveWidget(roleSort, sorting, sortingLeftX, -94)
+    local roleSort = W.ToggleAt(sortCard, "Sort by Role", 16, -110, sortingLeftW - 32)
     M.BindToggle(ctx, roleSort,
         function()
             local conf = Conf(CurrentScope())
@@ -246,14 +261,11 @@ local function BuildGFLayout(ctx)
             QueueGF(CurrentScope(), "rebuild")
             if refreshSortingControls then refreshSortingControls() end
         end)
-    local playerFirst = BindScopeToggle(ctx, W.Toggle(sorting, "Player first in role"), "playerFirstInRole", false, "rebuild")
-    W.MoveWidget(playerFirst, sorting, sortingLeftX, -130)
-    local roleRows = BuildRoleOrderRows(ctx, sorting, {
-        x = sortingRightX,
-        y = -54,
-        width = 250,
-        title = "Role Priority",
-        hint = "Drag rows with mouse to reorder.",
+    local playerFirst = BindScopeToggle(ctx, W.ToggleAt(sortCard, "Player first in role", 16, -144, sortingLeftW - 32), "playerFirstInRole", false, "rebuild")
+    local roleRows = BuildRoleOrderRows(ctx, roleCard, {
+        x = 16,
+        y = -66,
+        width = min(250, sortingRightW - 32),
         advanceCursor = false,
     })
     refreshSortingControls = function()
@@ -278,13 +290,18 @@ local function BuildGFLayout(ctx)
 
     local scale = b:CollapsibleSection("scaling", "Frame Scaling", 380, false)
     local scaleW = scale._msuf2Width or b.width or 720
-    local scaleLeftX = 32
-    local scaleRightX = min(max(470, floor(scaleW * 0.54)), max(380, scaleW - 380))
-    local scaleLeftW = max(280, min(360, scaleRightX - scaleLeftX - 70))
-    local scaleRightW = max(280, min(360, scaleW - scaleRightX - 38))
+    local scaleGap = 16
+    local scaleLeftX = 20
+    local scaleInnerW = max(320, scaleW - 40)
+    local scaleLeftW = floor((scaleInnerW - scaleGap) * 0.48)
+    local scaleRightX = scaleLeftX + scaleLeftW + scaleGap
+    local scaleRightW = scaleInnerW - scaleLeftW - scaleGap
+    local scaleModeCard = W.ControlCard(scale, "Frame scaling", "Scales frame size, fonts, and icons proportionally.", scaleLeftX, -38, scaleLeftW, 128)
+    local manualCard = W.ControlCard(scale, "Manual Scale", "Buff/debuff positions stay relative to their anchors.", scaleLeftX, -184, scaleLeftW, 144)
+    local autoCard = W.ControlCard(scale, "Auto Breakpoints", "Automatically scale by group size.", scaleRightX, -38, scaleRightW, 290)
     local RefreshScalingState
     M._msuf2LastGroupScaleMode = M._msuf2LastGroupScaleMode or {}
-    local scaleEnabled = W.SwitchAt(scale, "Frame scaling", scaleLeftX, -54, 140)
+    local scaleEnabled = W.SwitchAt(scaleModeCard, "Frame scaling", scaleLeftW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, scaleEnabled,
         function() return Val(CurrentScope(), "frameScaleMode", "off") ~= "off" end,
         function(v)
@@ -299,11 +316,11 @@ local function BuildGFLayout(ctx)
             if RefreshScalingState then RefreshScalingState() end
         end)
 
-    local scaleMode = W.Segment(scale, "Scale Mode", {
+    local scaleMode = W.Segment(scaleModeCard, "Scale Mode", {
         { value = "manual", text = "Manual" },
         { value = "auto", text = "Auto" },
-    }, min(220, scaleLeftW))
-    W.MoveWidget(scaleMode, scale, scaleLeftX + 172, -54, min(220, scaleLeftW))
+    }, min(220, scaleLeftW - 32))
+    W.MoveWidget(scaleMode, scaleModeCard, 16, -72, min(220, scaleLeftW - 32))
     M.BindSegment(ctx, scaleMode,
         function()
             local mode = Val(CurrentScope(), "frameScaleMode", "off")
@@ -342,28 +359,26 @@ local function BuildGFLayout(ctx)
         return widget
     end
 
-    local manualScale = BindScaleSlider(W.Slider(scale, "", 50, 150, 5, scaleLeftW), "frameScaleManual", 100,
+    local manualScale = BindScaleSlider(W.Slider(manualCard, "", 50, 150, 5, scaleLeftW), "frameScaleManual", 100,
         function(v) return string.format("Manual Scale: %d%%", v) end)
-    PlaceScaleSlider(manualScale, scaleLeftX, -132, scaleLeftW)
+    W.MoveWidget(manualScale, manualCard, 16, -64, scaleLeftW - 58, "LEFT")
 
-    local autoLabel = T.Font(scale, "GameFontNormalSmall", "Auto Breakpoints", T.colors.accent)
-    autoLabel:SetPoint("TOPLEFT", scale, "TOPLEFT", scaleRightX, -54)
-    autoLabel:SetWidth(scaleRightW)
+    local autoLabel = autoCard and autoCard.title
 
-    local scaleAt10 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, scaleRightW), "scaleAt10", 100,
+    local scaleAt10 = BindScaleSlider(W.Slider(autoCard, "", 50, 100, 5, scaleRightW), "scaleAt10", 100,
         function(v) return string.format("1-10 players: %d%%", v) end)
-    PlaceScaleSlider(scaleAt10, scaleRightX, -88, scaleRightW)
-    local scaleAt20 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, scaleRightW), "scaleAt20", 85,
+    W.MoveWidget(scaleAt10, autoCard, 16, -66, scaleRightW - 58, "LEFT")
+    local scaleAt20 = BindScaleSlider(W.Slider(autoCard, "", 50, 100, 5, scaleRightW), "scaleAt20", 85,
         function(v) return string.format("11-20 players: %d%%", v) end)
-    PlaceScaleSlider(scaleAt20, scaleRightX, -142, scaleRightW)
-    local scaleAt25 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, scaleRightW), "scaleAt25", 80,
+    W.MoveWidget(scaleAt20, autoCard, 16, -120, scaleRightW - 58, "LEFT")
+    local scaleAt25 = BindScaleSlider(W.Slider(autoCard, "", 50, 100, 5, scaleRightW), "scaleAt25", 80,
         function(v) return string.format("21-25 players: %d%%", v) end)
-    PlaceScaleSlider(scaleAt25, scaleRightX, -196, scaleRightW)
-    local scaleOver25 = BindScaleSlider(W.Slider(scale, "", 50, 100, 5, scaleRightW), "scaleOver25", 70,
+    W.MoveWidget(scaleAt25, autoCard, 16, -174, scaleRightW - 58, "LEFT")
+    local scaleOver25 = BindScaleSlider(W.Slider(autoCard, "", 50, 100, 5, scaleRightW), "scaleOver25", 70,
         function(v) return string.format("26+ players: %d%%", v) end)
-    PlaceScaleSlider(scaleOver25, scaleRightX, -250, scaleRightW)
+    W.MoveWidget(scaleOver25, autoCard, 16, -228, scaleRightW - 58, "LEFT")
 
-    local scaleHint = W.Text(scale, "Scales frame size, fonts, and icons proportionally.\nBuff/debuff positions stay relative to their anchors.", scaleLeftX, -186, scaleLeftW, T.colors.dim)
+    local scaleHint = manualCard and manualCard.subtitle
     if scaleHint.SetWordWrap then scaleHint:SetWordWrap(true) end
 
     RefreshScalingState = function()
@@ -399,24 +414,31 @@ local function BuildGFLayout(ctx)
 
     local transparency = b:CollapsibleSection("border", "Transparency", 328, false)
     local transparencyW = transparency._msuf2Width or b.width or 720
-    local transLeftX = 32
-    local transRightX = min(max(470, floor(transparencyW * 0.54)), max(380, transparencyW - 380))
-    local transLeftW = max(280, min(360, transRightX - transLeftX - 70))
-    local transRightW = max(280, min(360, transparencyW - transRightX - 38))
+    local transGap = 16
+    local transLeftX = 20
+    local transInnerW = max(320, transparencyW - 40)
+    local transLeftW = floor((transInnerW - transGap) * 0.48)
+    local transRightX = transLeftX + transLeftW + transGap
+    local transRightW = transInnerW - transLeftW - transGap
     local tHint = W.Text(transparency, "Outline border thickness is configured in\nGlobal Style > Bars > Outline & Highlight Border.", transLeftX, -38, transLeftW, { 0.60, 0.75, 1.00, 1 })
     if tHint.SetWordWrap then tHint:SetWordWrap(true) end
+    if tHint.Hide then tHint:Hide() end
     local alphaGuide = W.Text(transparency, "Backdrop = frame  ·  HP Fill = health bar  ·  HP Track = empty bar area", transLeftX, -80, transparencyW - transLeftX - 32, T.colors.dim)
     if alphaGuide and alphaGuide.SetWordWrap then alphaGuide:SetWordWrap(false) end
+    if alphaGuide and alphaGuide.Hide then alphaGuide:Hide() end
 
-    local bgColor = W.Color(transparency, "Background Color")
+    local backdropCard = W.ControlCard(transparency, "Backdrop", "Frame background color and opacity.", transLeftX, -38, transLeftW, 250)
+    local healthCard = W.ControlCard(transparency, "Health bar opacity", "HP Fill is the health bar; HP Track is the empty bar area.", transRightX, -38, transRightW, 250)
+
+    local bgColor = W.Color(backdropCard, "Background Color")
     if bgColor._msuf2Title then
         bgColor._msuf2Title:ClearAllPoints()
-        bgColor._msuf2Title:SetPoint("TOPLEFT", transparency, "TOPLEFT", transLeftX, -118)
+        bgColor._msuf2Title:SetPoint("TOPLEFT", backdropCard, "TOPLEFT", 16, -56)
         bgColor._msuf2Title:SetWidth(120)
         bgColor._msuf2Title:SetJustifyH("LEFT")
     end
     bgColor:ClearAllPoints()
-    bgColor:SetPoint("TOPLEFT", transparency, "TOPLEFT", transLeftX + 138, -116)
+    bgColor:SetPoint("TOPLEFT", backdropCard, "TOPLEFT", 154, -54)
     bgColor:SetSize(34, 16)
     M.BindColor(ctx, bgColor,
         function()
@@ -458,15 +480,15 @@ local function BuildGFLayout(ctx)
         return widget
     end
 
-    local bgAlpha = BindTransparencySlider(W.Slider(transparency, "", 0, 1, 0.05, transLeftW), "bgA", 0.85,
+    local bgAlpha = BindTransparencySlider(W.Slider(backdropCard, "", 0, 1, 0.05, transLeftW), "bgA", 0.85,
         function(v) return string.format("Backdrop: %.0f%%", (tonumber(v) or 0) * 100) end)
-    PlaceTransparencySlider(bgAlpha, transLeftX, -148, transLeftW)
+    W.MoveWidget(bgAlpha, backdropCard, 16, -100, transLeftW - 58, "LEFT")
 
-    local hpFg = BindTransparencySlider(W.Slider(transparency, "", 0.3, 1, 0.05, transRightW), "hpBarAlpha", 1,
+    local hpFg = BindTransparencySlider(W.Slider(healthCard, "", 0.3, 1, 0.05, transRightW), "hpBarAlpha", 1,
         function(v) return string.format("HP Fill: %.0f%%", (tonumber(v) or 0) * 100) end)
-    PlaceTransparencySlider(hpFg, transRightX, -100, transRightW)
+    W.MoveWidget(hpFg, healthCard, 16, -62, transRightW - 58, "LEFT")
 
-    local preserveHP = W.ToggleAt(transparency, "Preserve HP color", transRightX, -146, transRightW)
+    local preserveHP = W.ToggleAt(healthCard, "Preserve HP color", 16, -108, transRightW - 32)
     M.BindToggle(ctx, preserveHP,
         function() return Bool(CurrentScope(), "alphaPreserveHPColor", false) end,
         function(v)
@@ -475,12 +497,12 @@ local function BuildGFLayout(ctx)
             if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
         end)
 
-    local textIgnore = W.ToggleAt(transparency, "Text ignores HP opacity", transLeftX, -202, transLeftW)
+    local textIgnore = W.ToggleAt(backdropCard, "Text ignores HP opacity", 16, -154, transLeftW - 32)
     M.BindToggle(ctx, textIgnore,
         function() return Bool(CurrentScope(), "hpTextIgnoreAlpha", true) end,
         function(v) Set(CurrentScope(), "hpTextIgnoreAlpha", v and true or false, "visual") end)
 
-    local hpBg = W.Slider(transparency, "", 0, 1, 0.05, transRightW)
+    local hpBg = W.Slider(healthCard, "", 0, 1, 0.05, transRightW)
     M.BindSlider(ctx, hpBg,
         function()
             local conf = Conf(CurrentScope())
@@ -504,7 +526,7 @@ local function BuildGFLayout(ctx)
     end)
     M.AddRefresher(ctx, RefreshHPBgLabel)
     RefreshHPBgLabel()
-    PlaceTransparencySlider(hpBg, transRightX, -194, transRightW)
+    W.MoveWidget(hpBg, healthCard, 16, -154, transRightW - 58, "LEFT")
 
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
 

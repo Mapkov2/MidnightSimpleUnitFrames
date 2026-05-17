@@ -212,13 +212,14 @@ function W.PageBuilder(ctx)
         local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
         hint:SetJustifyH("RIGHT")
 
+        local contentW = math.min(self.width, M.formContentMaxWidth or 980)
         local body = CreateFrame("Frame", nil, outer)
         SetSearchTitle(body, title)
         body:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -headerH)
-        body:SetSize(self.width, height or 120)
+        body:SetSize(contentW, height or 120)
         body._msuf2CursorY = -38
         body._msuf2ContentX = 14
-        body._msuf2Width = self.width
+        body._msuf2Width = contentW
 
         local entry = {
             outer = outer,
@@ -590,6 +591,58 @@ function W.Text(parent, text, x, y, width, color)
     fs:SetWidth(width or 300)
     fs:SetJustifyH("LEFT")
     return fs
+end
+
+function W.ControlCard(parent, title, subtitle, x, y, width, height)
+    if not parent then return nil end
+    width = width or 360
+    height = height or 120
+
+    local card = T.Panel(parent, nil, { 0.018, 0.026, 0.052, 0.86 }, T.colors.cardBorder or T.colors.borderSoft)
+    SetSearchTitle(card, title)
+    RegisterSearchObject(card, title, "section")
+    card:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
+    card:SetSize(width, height)
+    card._msuf2Width = width
+    card._msuf2ContentX = 16
+    card._msuf2CursorY = -52
+    if card.EnableMouse then card:EnableMouse(false) end
+
+    local heading = T.Font(card, "GameFontNormal", Tr(title or ""), T.colors.text)
+    SetSearchText(heading, title)
+    heading:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
+    heading:SetWidth(max(24, width - 32))
+    heading:SetJustifyH("LEFT")
+    card.title = heading
+
+    if subtitle and subtitle ~= "" then
+        local sub = T.Font(card, "GameFontDisableSmall", Tr(subtitle), T.colors.muted)
+        SetSearchText(sub, subtitle)
+        sub:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -40)
+        sub:SetWidth(max(24, width - 32))
+        sub:SetJustifyH("LEFT")
+        if sub.SetWordWrap then sub:SetWordWrap(true) end
+        card.subtitle = sub
+    end
+
+    return card
+end
+
+function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
+    if not parent then return nil end
+    width = max(24, floor((tonumber(width) or 360) + 0.5))
+    height = max(24, floor((tonumber(height) or 120) + 0.5))
+    x = floor((tonumber(x) or 0) + 0.5)
+    y = floor((tonumber(y) or 0) + 0.5)
+
+    local card = T.Panel(parent, nil, bg or { 0.018, 0.026, 0.052, 0.86 }, border or T.colors.cardBorder or T.colors.borderSoft)
+    card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    card:SetSize(width, height)
+    card._msuf2Width = width
+    card._msuf2DecorativeBackdrop = true
+    if card.EnableMouse then card:EnableMouse(false) end
+    if card.SetHitRectInsets then card:SetHitRectInsets(0, 0, 0, 0) end
+    return card
 end
 
 function W.Toggle(section, label)

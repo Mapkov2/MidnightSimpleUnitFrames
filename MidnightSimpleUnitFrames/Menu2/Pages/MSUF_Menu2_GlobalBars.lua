@@ -98,6 +98,10 @@ local function BuildBars(ctx)
         return scope == "shared" or ScopeHasOverride(scope, "hlOverride")
     end
 
+    local function HighlightControlsActive()
+        return CurrentBarsScope() ~= nil
+    end
+
     local function BorderTestScope()
         local scope = CurrentBarsScope()
         if scope == "gf_party" then return "party" end
@@ -702,12 +706,17 @@ local function BuildBars(ctx)
 
     local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 626, true)
     local hlW = highlights._msuf2Width or ctx.width or 720
+    local hlGap = 28
     local hlLeftX = 30
-    local hlRightX = max(430, min(560, floor(hlW * 0.52)))
-    local hlLeftW = max(300, min(380, hlRightX - hlLeftX - 58))
-    local hlRightW = max(300, min(420, hlW - hlRightX - 42))
+    local hlInnerW = max(320, hlW - 60)
+    local hlLeftW = max(220, min(380, floor((hlInnerW - hlGap) * 0.46)))
+    local hlRightX = hlLeftX + hlLeftW + hlGap
+    local hlRightW = max(220, min(420, hlInnerW - hlLeftW - hlGap))
 
-    W.LabelAt(highlights, "Border Modes", hlLeftX, -42, hlLeftW, "GameFontNormalSmall", T.colors.accent)
+    W.ControlCard(highlights, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 376)
+    W.ControlCard(highlights, "Preview", nil, hlRightX - 14, -38, hlRightW + 28, 248)
+    W.ControlCard(highlights, "Dispel Glow", nil, hlRightX - 14, -308, hlRightW + 28, 306)
+
     local highlight = W.Slider(highlights, "Highlight border thickness", 1, 30, 1, hlLeftW)
     M.BindSlider(ctx, highlight,
         function() return tonumber(BarScopeGet("highlightBorderThickness", BarScopeGet("hlAggroSize", 2))) or 2 end,
@@ -803,7 +812,6 @@ local function BuildBars(ctx)
         return (tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback) == 1
     end
 
-    W.LabelAt(highlights, "Preview", hlRightX, -42, hlRightW, "GameFontNormalSmall", T.colors.accent)
     local aggroTest = W.ToggleAt(highlights, "Test aggro border", hlRightX, -72, hlRightW)
     M.BindToggle(ctx, aggroTest,
         function() return _G.MSUF_AggroBorderTestMode and true or false end,
@@ -875,8 +883,6 @@ local function BuildBars(ctx)
         end
     end)
 
-    W.DividerAt(highlights, -288, hlRightX, 42)
-    W.LabelAt(highlights, "Dispel Glow", hlRightX, -314, hlRightW, "GameFontNormalSmall", T.colors.accent)
     local glowConflictHint = W.Text(highlights, "", hlRightX, -336, hlRightW, { 1.00, 0.72, 0.25, 1 })
     if glowConflictHint.SetWordWrap then glowConflictHint:SetWordWrap(true) end
     local enabled = W.ToggleAt(highlights, "Dispel glow effect", hlRightX, -382, hlRightW)
@@ -941,7 +947,7 @@ local function BuildBars(ctx)
     W.MoveWidget(thickness, highlights, hlRightX, -592, hlRightW, "LEFT")
 
     M.AddRefresher(ctx, function()
-        local scopedActive = ScopedBarsControlsActive()
+        local scopedActive = HighlightControlsActive()
         local sharedActive = SharedBarsControlsActive()
         local aggroOn = AggroBorderOn()
         local dispelOn = DispelBorderOn()
@@ -993,7 +999,9 @@ local function BuildBars(ctx)
     end)
 
     local priority = b:CollapsibleSection("bars_priority", "Highlight Priority", 280, false)
-    local prio = W.ToggleAt(priority, "Custom highlight priority", 14, -8, 240)
+    local priorityCardW = min(360, max(260, (priority._msuf2Width or ctx.width or 720) - 40))
+    local priorityCard = W.ControlCard(priority, "Priority Order", nil, 20, -38, priorityCardW, 220)
+    local prio = W.ToggleAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
     M.BindToggle(ctx, prio,
         function() return BarScopeGet("hlPrioEnabled", false) == true end,
         function(v)
@@ -1005,7 +1013,7 @@ local function BuildBars(ctx)
         end)
 
     local rowH, rowGap, rowMax = 22, 4, 8
-    local prioContainer = CreateFrame("Frame", nil, priority)
+    local prioContainer = CreateFrame("Frame", nil, priorityCard)
     prioContainer:SetPoint("TOPLEFT", prio, "BOTTOMLEFT", -2, -4)
     prioContainer:SetSize(200, rowMax * (rowH + rowGap))
 
@@ -1073,7 +1081,7 @@ local function BuildBars(ctx)
         num:SetPoint("RIGHT", rowFrame, "RIGHT", -8, 0)
         rowFrame._numText = num
         rowFrame:SetScript("OnDragStart", function(self)
-            if not (ScopedBarsControlsActive() and BarScopeGet("hlPrioEnabled", false) == true) then return end
+            if not (HighlightControlsActive() and BarScopeGet("hlPrioEnabled", false) == true) then return end
             if GameTooltip then GameTooltip:Hide() end
             self._msuf2OldStrata = self:GetFrameStrata()
             self:StartMoving()
@@ -1137,11 +1145,11 @@ local function BuildBars(ctx)
             row.frame._numText:SetText(tostring(i))
         end
         SnapPriorityRows()
-        SetPriorityRowsEnabled(ScopedBarsControlsActive() and BarScopeGet("hlPrioEnabled", false) == true)
+        SetPriorityRowsEnabled(HighlightControlsActive() and BarScopeGet("hlPrioEnabled", false) == true)
     end
     RefreshPriorityRows()
     M.AddRefresher(ctx, function()
-        SetControlEnabled(prio, ScopedBarsControlsActive())
+        SetControlEnabled(prio, HighlightControlsActive())
         RefreshPriorityRows()
     end)
 

@@ -1066,6 +1066,81 @@ local function CreateNavButton(parent, key, label, indent)
     return btn
 end
 
+local function AttachNavHoverGrow(btn)
+    if not (btn and btn.HookScript) or btn._msuf2NavHoverGrow then return end
+    btn._msuf2NavHoverGrow = true
+    local baseScale, hoverScale = 1, 1.018
+    if btn.SetScale then btn:SetScale(baseScale) end
+
+    local function LayoutPillParts(parts, inset, lift)
+        if not (parts and parts.L and parts.M and parts.R and btn.GetWidth and btn.GetHeight) then return end
+        local w = btn:GetWidth() or 120
+        local h = btn:GetHeight() or NAV_BUTTON_H
+        local innerW = max(1, w - inset * 2)
+        local innerH = max(1, h - inset * 2)
+        local capW = min(floor(innerH * 0.5 + 0.5), floor(innerW * 0.5))
+        local midW = max(1, innerW - capW * 2)
+        lift = tonumber(lift) or 0
+
+        parts.L:ClearAllPoints()
+        parts.M:ClearAllPoints()
+        parts.R:ClearAllPoints()
+        parts.L:SetPoint("TOPLEFT", btn, "TOPLEFT", inset, -inset + lift)
+        parts.L:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", inset, inset + lift)
+        parts.L:SetWidth(capW)
+        parts.R:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -inset, -inset + lift)
+        parts.R:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset + lift)
+        parts.R:SetWidth(capW)
+        parts.M:SetPoint("TOPLEFT", parts.L, "TOPRIGHT", 0, 0)
+        parts.M:SetPoint("BOTTOMRIGHT", parts.R, "BOTTOMLEFT", 0, 0)
+        parts.M:SetWidth(midW)
+    end
+
+    local function LayoutPillVisual(hovering)
+        if hovering then
+            LayoutPillParts(btn._msuf2Fill, 0, 1)
+            LayoutPillParts(btn._msuf2Edge, -1, 1)
+        else
+            LayoutPillParts(btn._msuf2Fill, 2, 0)
+            LayoutPillParts(btn._msuf2Edge, 1, 0)
+        end
+    end
+
+    local function OffsetRegion(region, lift)
+        if not (region and region.GetNumPoints and region.GetPoint and region.ClearAllPoints and region.SetPoint) then return end
+        if not region._msuf2NavBasePoints then
+            local points = {}
+            for i = 1, region:GetNumPoints() do
+                local point, relativeTo, relativePoint, xOfs, yOfs = region:GetPoint(i)
+                points[#points + 1] = { point, relativeTo, relativePoint, xOfs or 0, yOfs or 0 }
+            end
+            region._msuf2NavBasePoints = points
+        end
+        region:ClearAllPoints()
+        local points = region._msuf2NavBasePoints
+        for i = 1, #points do
+            local p = points[i]
+            region:SetPoint(p[1], p[2], p[3], p[4], p[5] + (lift or 0))
+        end
+    end
+
+    local function SetVisualScale(self, hovering)
+        if self.IsEnabled and not self:IsEnabled() then hovering = false end
+        local scale = hovering and hoverScale or baseScale
+        if self.SetScale then self:SetScale(baseScale) end
+        LayoutPillVisual(hovering)
+        if self._msuf2Label and self._msuf2Label.SetScale then self._msuf2Label:SetScale(scale) end
+        if self._msuf2NavIcon and self._msuf2NavIcon.SetScale then self._msuf2NavIcon:SetScale(scale) end
+        if self._msuf2NavArrow and self._msuf2NavArrow.SetScale then self._msuf2NavArrow:SetScale(scale) end
+        OffsetRegion(self._msuf2Label, hovering and 1 or 0)
+        OffsetRegion(self._msuf2NavIcon, hovering and 1 or 0)
+        OffsetRegion(self._msuf2NavArrow, hovering and 1 or 0)
+    end
+    btn:HookScript("OnEnter", function(self) SetVisualScale(self, true) end)
+    btn:HookScript("OnLeave", function(self) SetVisualScale(self, false) end)
+    btn:HookScript("OnHide", function(self) SetVisualScale(self, false) end)
+end
+
 local function AttachHistoryTooltip(btn, getTitle, getText)
     if not btn then return end
     btn:HookScript("OnEnter", function(self)
@@ -1334,11 +1409,13 @@ local function BuildNav(parent)
                 if parent._msuf2NavReflow then parent:_msuf2NavReflow() end
             end)
             btn._msuf2SkipHistoryCheckpoint = true
+            AttachNavHoverGrow(btn)
             M.navHeaders[id] = btn
             created[#created + 1] = { kind = "header", id = id, button = btn }
         elseif item.key then
             local indent = item.group and 12 or 0
             local btn = CreateNavButton(list, item.key, item.label, indent)
+            AttachNavHoverGrow(btn)
             if item.group then M.navGroupForKey[item.key] = item.group end
             created[#created + 1] = { kind = "page", group = item.group, button = btn }
             if item.key == "profiles" then

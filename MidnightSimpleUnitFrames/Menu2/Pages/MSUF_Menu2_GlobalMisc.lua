@@ -333,16 +333,20 @@ local function BuildMisc(ctx)
             if v then Call("MSUF_TargetSoundDriver_Ensure") end
         end)
 
-    local range = b:CollapsibleSection("misc_range_fade", "Range Fade", 310, false)
+    local range = b:CollapsibleSection("misc_range_fade", "Range Fade", 328, false)
     local rangeW = range._msuf2Width or ctx.width or 720
-    local rangeLeftX = 30
-    local rangeRightX = max(430, floor(rangeW * 0.50))
-    local rangeLeftW = max(260, min(340, rangeRightX - rangeLeftX - 70))
-    local rangeRightW = max(280, min(360, rangeW - rangeRightX - 42))
+    local rangeGap = 16
+    local rangeLeftX = 20
+    local rangeInnerW = max(620, rangeW - 40)
+    local rangeLeftW = floor((rangeInnerW - rangeGap) * 0.48)
+    local rangeRightX = rangeLeftX + rangeLeftW + rangeGap
+    local rangeRightW = rangeInnerW - rangeLeftW - rangeGap
+    local rangeUnitsCard = W.ControlCard(range, "Unit frames", "Enable range fading per unit-frame family.", rangeLeftX, -38, rangeLeftW, 268)
+    local rangeEffectCard = W.ControlCard(range, "Effect", "Controls what fades and how far it fades.", rangeRightX, -38, rangeRightW, 268)
     local rangeToggles = {}
     local bossExtras = {}
 
-    local rangeMaster = W.SwitchAt(range, "Enable Range Fade", rangeLeftX, -36, 220)
+    local rangeMaster = W.SwitchAt(rangeUnitsCard, "Enable Range Fade", rangeLeftW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, rangeMaster,
         function() return ReadGBool("rangeFadeEnabled", true) end,
         function(v)
@@ -351,9 +355,6 @@ local function BuildMisc(ctx)
             Call("MSUF_RefreshAllUnitAlphas")
         end)
 
-    W.LabelAt(range, "Unit frames", rangeLeftX, -74, rangeLeftW, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(range, "Effect", rangeRightX, -74, rangeRightW, "GameFontNormalSmall", T.colors.accent)
-
     for index, spec in ipairs({
         { unit = "target", key = "rangeFadeEnabled", label = "Target range fade" },
         { unit = "focus", key = "rangeFadeEnabled", label = "Focus range fade" },
@@ -361,9 +362,9 @@ local function BuildMisc(ctx)
         { unit = "boss", key = "rangeFadeCastbar", label = "Boss castbar range fade" },
         { unit = "boss", key = "rangeFadeAuras", label = "Boss auras range fade" },
     }) do
-        local toggle = W.Toggle(range, spec.label)
-        local y = (index <= 3) and (-102 - (index - 1) * 32) or (-222 - (index - 4) * 32)
-        W.MoveWidget(toggle, range, rangeLeftX, y)
+        local toggle = W.Toggle(rangeUnitsCard, spec.label)
+        local y = (index <= 3) and (-68 - (index - 1) * 34) or (-194 - (index - 4) * 34)
+        W.MoveWidget(toggle, rangeUnitsCard, 16, y)
         if index <= 3 then
             rangeToggles[#rangeToggles + 1] = toggle
         else
@@ -381,9 +382,9 @@ local function BuildMisc(ctx)
             end)
     end
 
-    W.LabelAt(range, "Boss children", rangeLeftX, -194, rangeLeftW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(rangeUnitsCard, "Boss children", 16, -166, rangeLeftW - 32, "GameFontNormalSmall", T.colors.accent)
 
-    local affects = W.Dropdown(range, "Range fade affects", {
+    local affects = W.Dropdown(rangeEffectCard, "Range fade affects", {
         { value = "frame", text = "Frame" },
         { value = "health", text = "HP Bar" },
     }, rangeRightW)
@@ -400,9 +401,9 @@ local function BuildMisc(ctx)
             RefreshRangeFadeRuntime()
             M.RequestGeneralApply("MSUF2_RANGE_FADE_LAYER", { alpha = true, preview = true, applyAll = false })
         end)
-    W.MoveWidget(affects, range, rangeRightX, -102, rangeRightW, "LEFT")
+    W.MoveWidget(affects, rangeEffectCard, 16, -68, rangeRightW - 32, "LEFT")
 
-    local alpha = W.Slider(range, "Out of range alpha", 0, 60, 5, rangeRightW)
+    local alpha = W.Slider(rangeEffectCard, "Out of range alpha", 0, 60, 5, rangeRightW)
     M.BindSlider(ctx, alpha,
         function()
             local value = tonumber(Unit("target").rangeFadeAlpha or Unit("focus").rangeFadeAlpha or Unit("boss").rangeFadeAlpha or 0.6) or 0.6
@@ -418,9 +419,9 @@ local function BuildMisc(ctx)
             RefreshRangeFadeRuntime()
             M.RequestGeneralApply("MSUF2_RANGE_FADE_ALPHA", { alpha = true, preview = true, applyAll = false })
         end)
-    W.MoveWidget(alpha, range, rangeRightX, -156, rangeRightW, "CENTER")
+    W.MoveWidget(alpha, rangeEffectCard, 16, -130, rangeRightW - 58, "CENTER")
 
-    local portrait = W.Toggle(range, "Fade portrait too")
+    local portrait = W.Toggle(rangeEffectCard, "Fade portrait too")
     M.BindToggle(ctx, portrait,
         function() return ReadGBool("rangeFadePortrait", false) end,
         function(v)
@@ -428,9 +429,9 @@ local function BuildMisc(ctx)
             RefreshRangeFadeRuntime()
             Call("MSUF_RefreshAllUnitAlphas")
         end)
-    W.MoveWidget(portrait, range, rangeRightX, -212)
+    W.MoveWidget(portrait, rangeEffectCard, 16, -188)
 
-    local rangeHint = W.Text(range, "HP Bar only fades the health layer; Frame fades the full unit frame.", rangeRightX, -246, rangeRightW, T.colors.muted)
+    local rangeHint = W.Text(rangeEffectCard, "HP Bar only fades the health layer; Frame fades the full unit frame.", 16, -224, rangeRightW - 32, T.colors.muted)
     if rangeHint.SetWordWrap then rangeHint:SetWordWrap(true) end
     M.AddRefresher(ctx, function()
         local masterEnabled = ReadGBool("rangeFadeEnabled", true)

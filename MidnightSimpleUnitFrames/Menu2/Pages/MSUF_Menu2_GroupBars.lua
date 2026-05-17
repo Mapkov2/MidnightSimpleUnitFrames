@@ -187,11 +187,15 @@ local function BuildGFBars(ctx)
     BindScopeDropdown(ctx, W.Dropdown(bars, "Background Texture", SIMPLE_TEXTURES, 280), "barBgTexture", "", "visual")
     BindScopeDropdown(ctx, W.Dropdown(bars, "Health color mode", HEALTH_MODES, 220), "healthColorMode", "CLASS", "visual")
 
-    local power = b:CollapsibleSection("power", "Power Bar", 260, false)
+    local power = b:CollapsibleSection("power", "Power Bar", 240, false)
     local powerW = power._msuf2Width or b.width or 720
-    local powerLeftX = 32
-    local powerRightX = min(max(470, floor(powerW * 0.54)), max(380, powerW - 340))
-    local powerLeftW = max(280, min(360, powerRightX - powerLeftX - 70))
+    local powerGap = 16
+    local powerLeftX = 20
+    local powerInnerW = max(320, powerW - 40)
+    local powerLeftW = floor((powerInnerW - powerGap) * 0.54)
+    local powerRightX = powerLeftX + powerLeftW + powerGap
+    local powerRightW = powerInnerW - powerLeftW - powerGap
+    local powerSliderW = max(180, min(360, powerLeftW - 64))
     local function DefaultPowerHeight(kind)
         kind = kind or CurrentScope()
         return (kind == "raid" or kind == "mythicraid") and 4 or 6
@@ -210,7 +214,10 @@ local function BuildGFBars(ctx)
         if raw and raw > 0 then return raw end
         return DefaultPowerHeight(kind)
     end
-    local powerEnabled = W.SwitchAt(power, "Show Power Bar", powerLeftX, -58, powerLeftW)
+    local powerMainCard = W.ControlCard(power, "Power bar", "Global visibility and size for this group scope.", powerLeftX, -38, powerLeftW, 178)
+    local powerRoleCard = W.ControlCard(power, "Roles", "Limit power display to selected group roles.", powerRightX, -38, powerRightW, 178)
+
+    local powerEnabled = W.SwitchAt(powerMainCard, "Show Power Bar", powerLeftW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, powerEnabled,
         function() return IsPowerBarEnabled(CurrentScope()) end,
         function(v)
@@ -221,28 +228,21 @@ local function BuildGFBars(ctx)
             end
             if M.Refresh then M.Refresh(ctx) end
         end)
-    local powerHeight = W.Slider(power, "Power height", 1, 30, 1, powerLeftW)
+    local powerHeight = W.Slider(powerMainCard, "Power height", 1, 30, 1, powerSliderW)
     M.BindSlider(ctx, powerHeight,
         function() return CurrentPowerHeight(CurrentScope()) end,
         function(v)
             v = floor(max(1, min(30, tonumber(v) or CurrentPowerHeight(CurrentScope()))) + 0.5)
             Set(CurrentScope(), "powerHeight", v, "geometry")
         end)
-    local smoothFill = BindScopeToggle(ctx, W.Toggle(power, "Smooth fill"), "powerSmoothFill", false, "visual")
-    local powerHint = W.Text(power, "Power text modes, delimiter and font size are in Text.", powerLeftX, -194, powerLeftW, { 0.60, 0.75, 1.00, 1 })
+    local smoothFill = BindScopeToggle(ctx, W.ToggleAt(powerMainCard, "Smooth fill", 16, -126, powerLeftW - 32), "powerSmoothFill", false, "visual")
+    local powerHint = W.Text(powerMainCard, "Power text modes, delimiter and font size are in Text.", 16, -152, powerLeftW - 32, { 0.60, 0.75, 1.00, 1 })
     if powerHint.SetWordWrap then powerHint:SetWordWrap(true) end
-    local roleLabel = T.Font(power, "GameFontNormalSmall", "Show Power for Roles", T.colors.accent)
-    roleLabel:SetPoint("TOPLEFT", power, "TOPLEFT", powerRightX, -58)
-    roleLabel:SetJustifyH("LEFT")
-    roleLabel:SetWidth(240)
-    local showTank = BindScopeToggle(ctx, W.Toggle(power, "Tank"), "powerShowTank", true, "visual")
-    local showHealer = BindScopeToggle(ctx, W.Toggle(power, "Healer"), "powerShowHealer", true, "visual")
-    local showDamager = BindScopeToggle(ctx, W.Toggle(power, "DPS"), "powerShowDamager", false, "visual")
-    W.MoveWidget(powerHeight, power, powerLeftX, -106, powerLeftW, "LEFT")
-    W.MoveWidget(smoothFill, power, powerLeftX, -160)
-    W.MoveWidget(showTank, power, powerRightX, -88)
-    W.MoveWidget(showHealer, power, powerRightX, -122)
-    W.MoveWidget(showDamager, power, powerRightX, -156)
+    local roleLabel = powerRoleCard and powerRoleCard.title
+    local showTank = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Tank", 16, -66, powerRightW - 32), "powerShowTank", true, "visual")
+    local showHealer = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "Healer", 16, -100, powerRightW - 32), "powerShowHealer", true, "visual")
+    local showDamager = BindScopeToggle(ctx, W.ToggleAt(powerRoleCard, "DPS", 16, -134, powerRightW - 32), "powerShowDamager", false, "visual")
+    W.MoveWidget(powerHeight, powerMainCard, 16, -76, powerSliderW, "LEFT")
     local function RefreshPowerState()
         local enabled = IsPowerBarEnabled(CurrentScope())
         SetOptionEnabled(powerEnabled, true)
@@ -261,15 +261,16 @@ local function BuildGFBars(ctx)
         if entry then entry._msuf2RefreshState = RefreshPowerState end
     end
 
-    local text = b:CollapsibleSection("text", "Text", 760, false)
+    local text = b:CollapsibleSection("text", "Text", 620, false)
     local textW = text._msuf2Width or b.width or 720
     local textLeftX = 24
-    local textRightX = max(430, floor(textW * 0.52))
-    local textLeftW = max(260, textRightX - textLeftX - 72)
-    local textRightW = max(260, textW - textRightX - 28)
-    local textSliderW = min(310, max(230, textLeftW))
+    local textCardW = min(520, max(360, textW - 48))
+    local textRightX = textLeftX + textCardW + 28
+    local textRightW = min(360, max(260, textW - textRightX - 28))
+    local textSliderW = min(310, max(230, textCardW))
     local hpSliderW = min(310, max(230, textRightW))
-    local textDropW = min(310, max(220, textLeftW))
+    local textDropW = min(310, max(220, textCardW))
+    local textHalfDropW = floor((textCardW - 44) / 2)
 
     local function TextModeExampleStr(mode, delim, isPower)
         local cur     = isPower and "100"  or "12,450"
@@ -398,6 +399,10 @@ local function BuildGFBars(ctx)
         return frame
     end
 
+    local function TextCard(parent, title, subtitle, x, y, width, height)
+        return W.ControlCard(parent, title, subtitle, x, y, width, height)
+    end
+
     local function PlaceDropdown(parent, control, x, y, width)
         W.MoveWidget(control, parent, x, y, width or textDropW, "LEFT")
     end
@@ -438,48 +443,45 @@ local function BuildGFBars(ctx)
     local powerTab = MakeTabFrame("power")
     local advancedTab = MakeTabFrame("advanced")
 
-    SectionLabel(nameTab, "Name", textLeftX, -4)
-    PreviewText(nameTab, "Mapko", textRightX, -4, textRightW)
+    local nameContent = TextCard(nameTab, "Name text", "Controls whether names are shown on group frames.", textLeftX, -4, textCardW, 116)
+    PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
 
-    local showName = BindScopeToggle(ctx, W.SwitchAt(nameTab, "Show Name", textLeftX, -34, 180), "showName", true, "font")
+    local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", textCardW - 62, -24, 0, "HIDDEN"), "showName", true, "font")
 
-    SectionLabel(nameTab, "Position", textLeftX, -82)
-    local nameAnchor = BindScopeDropdown(ctx, W.Dropdown(nameTab, "Anchor", ANCHORS, textDropW), "nameAnchor", "LEFT", "geometry")
-    local nameX = BindScopeSlider(ctx, W.Slider(nameTab, "X Offset", -100, 100, 1, textSliderW), "nameOffsetX", 0, "geometry")
-    local nameY = BindScopeSlider(ctx, W.Slider(nameTab, "Y Offset", -100, 100, 1, textSliderW), "nameOffsetY", 0, "geometry")
-    PlaceDropdown(nameTab, nameAnchor, textLeftX, -112, textDropW)
-    PlaceSlider(nameTab, nameX, textLeftX, -166, textSliderW)
-    PlaceSlider(nameTab, nameY, textLeftX, -224, textSliderW)
+    local namePosition = TextCard(nameTab, "Position", nil, textLeftX, -136, textCardW, 260)
+    local nameAnchor = BindScopeDropdown(ctx, W.Dropdown(namePosition, "Anchor", ANCHORS, textDropW), "nameAnchor", "LEFT", "geometry")
+    local nameX = BindScopeSlider(ctx, W.Slider(namePosition, "X Offset", -100, 100, 1, textSliderW), "nameOffsetX", 0, "geometry")
+    local nameY = BindScopeSlider(ctx, W.Slider(namePosition, "Y Offset", -100, 100, 1, textSliderW), "nameOffsetY", 0, "geometry")
+    PlaceDropdown(namePosition, nameAnchor, 16, -48, textCardW - 32)
+    PlaceSlider(namePosition, nameX, 16, -112, textCardW - 72)
+    PlaceSlider(namePosition, nameY, 16, -174, textCardW - 72)
 
-    SectionLabel(nameTab, "Appearance", textRightX, -82)
-    local nameSize = BindScopeSlider(ctx, W.Slider(nameTab, "Size", 6, 48, 1, hpSliderW), "nameFontSize", 12, "font")
-    PlaceSlider(nameTab, nameSize, textRightX, -112, hpSliderW)
+    local nameAppearance = TextCard(nameTab, "Appearance", nil, textRightX, -4, textRightW, 150)
+    local nameSize = BindScopeSlider(ctx, W.Slider(nameAppearance, "Size", 6, 48, 1, hpSliderW), "nameFontSize", 12, "font")
+    PlaceSlider(nameAppearance, nameSize, 16, -58, textRightW - 58)
 
-    SectionLabel(hpTab, "HP Text", textLeftX, -4)
-    local hpPreviewLabel = PreviewText(hpTab, "", textRightX, -4, textRightW)
+    local hpContent = TextCard(hpTab, "What text appears", "Slots are explained before advanced position controls.", textLeftX, -4, textCardW, 286)
+    local hpPreviewLabel = PreviewText(hpContent, "", 16, -54, textCardW - 32)
 
-    local showHP = BindScopeToggle(ctx, W.SwitchAt(hpTab, "Show HP Text", textLeftX, -34, 180), "showHPText", true, "font")
+    local showHP = BindScopeToggle(ctx, W.SwitchAt(hpContent, "Show HP Text", textCardW - 62, -24, 0, "HIDDEN"), "showHPText", true, "font")
 
-    SectionLabel(hpTab, "Content", textLeftX, -82)
-    local healthLeft = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Left", TEXT_MODES, textDropW), "textLeft", "NONE", "visual")
-    local healthCenter = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Center", TEXT_MODES, textDropW), "textCenter", "PERCENT", "visual")
-    local healthRight = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Right", TEXT_MODES, textDropW), "textRight", "NONE", "visual")
-    local healthDelimiter = BindScopeDropdown(ctx, W.Dropdown(hpTab, "Delimiter", DELIMITER_VALUES, textDropW), "textDelimiter", " / ", "visual")
-    local reverseHP = BindScopeToggle(ctx, W.Toggle(hpTab, "Reverse order"), "hpTextReverse", false, "visual")
-    PlaceDropdown(hpTab, healthLeft, textLeftX, -112, textDropW)
-    PlaceDropdown(hpTab, healthCenter, textLeftX, -166, textDropW)
-    PlaceDropdown(hpTab, healthRight, textLeftX, -220, textDropW)
-    PlaceDropdown(hpTab, healthDelimiter, textLeftX, -274, min(220, textDropW))
-    W.MoveWidget(reverseHP, hpTab, textLeftX, -330)
+    local healthLeft = BindScopeDropdown(ctx, W.Dropdown(hpContent, "Left slot", TEXT_MODES, textHalfDropW), "textLeft", "NONE", "visual")
+    local healthCenter = BindScopeDropdown(ctx, W.Dropdown(hpContent, "Center slot", TEXT_MODES, textHalfDropW), "textCenter", "PERCENT", "visual")
+    local healthRight = BindScopeDropdown(ctx, W.Dropdown(hpContent, "Right slot", TEXT_MODES, textCardW - 32), "textRight", "NONE", "visual")
+    local healthDelimiter = BindScopeDropdown(ctx, W.Dropdown(hpContent, "Delimiter", DELIMITER_VALUES, textHalfDropW), "textDelimiter", " / ", "visual")
+    local reverseHP = BindScopeToggle(ctx, W.ToggleAt(hpContent, "Reverse order", 28 + textHalfDropW, -228, textHalfDropW), "hpTextReverse", false, "visual")
+    PlaceDropdown(hpContent, healthRight, 16, -96, textCardW - 32)
+    PlaceDropdown(hpContent, healthLeft, 16, -150, textHalfDropW)
+    PlaceDropdown(hpContent, healthCenter, 28 + textHalfDropW, -150, textHalfDropW)
+    PlaceDropdown(hpContent, healthDelimiter, 16, -206, textHalfDropW)
 
-    SectionLabel(hpTab, "Position", textRightX, -82)
-    local healthX = BindScopeSlider(ctx, W.Slider(hpTab, "X Offset", -100, 100, 1, hpSliderW), "hpOffsetX", 0, "geometry")
-    local healthY = BindScopeSlider(ctx, W.Slider(hpTab, "Y Offset", -100, 100, 1, hpSliderW), "hpOffsetY", 0, "geometry")
-    PlaceSlider(hpTab, healthX, textRightX, -112, hpSliderW)
-    PlaceSlider(hpTab, healthY, textRightX, -170, hpSliderW)
+    local hpPosition = TextCard(hpTab, "Position", "Move all HP text together or adjust a selected slot.", textRightX, -4, textRightW, 410)
+    local healthX = BindScopeSlider(ctx, W.Slider(hpPosition, "X Offset", -100, 100, 1, hpSliderW), "hpOffsetX", 0, "geometry")
+    local healthY = BindScopeSlider(ctx, W.Slider(hpPosition, "Y Offset", -100, 100, 1, hpSliderW), "hpOffsetY", 0, "geometry")
+    PlaceSlider(hpPosition, healthX, 16, -64, textRightW - 58)
+    PlaceSlider(hpPosition, healthY, 16, -122, textRightW - 58)
 
-    SectionLabel(hpTab, "Selected Slot", textRightX, -232)
-    local hpMoveTogether = W.ToggleAt(hpTab, "Move text as one group", textRightX, -262, hpSliderW)
+    local hpMoveTogether = W.ToggleAt(hpPosition, "Move text as one group", 16, -176, textRightW - 32)
     M.BindToggle(ctx, hpMoveTogether,
         function() return MoveTogether("hp") end,
         function(v)
@@ -492,15 +494,15 @@ local function BuildGFBars(ctx)
         { value = "center", text = "Center" },
         { value = "right", text = "Right" },
     }, hpSliderW)
-    W.MoveWidget(hpSlot, hpTab, textRightX, -304, hpSliderW, "LEFT")
+    W.MoveWidget(hpSlot, hpPosition, 16, -220, textRightW - 32, "LEFT")
     M.BindSegment(ctx, hpSlot,
         function() return CurrentSlot("hp") end,
         function(v)
             SetCurrentSlot("hp", v)
             M.Refresh(ctx)
         end)
-    local hpSlotX = W.Slider(hpTab, "Slot X", -100, 100, 1, hpSliderW)
-    PlaceSlider(hpTab, hpSlotX, textRightX, -366, hpSliderW)
+    local hpSlotX = W.Slider(hpPosition, "Slot X", -100, 100, 1, hpSliderW)
+    PlaceSlider(hpPosition, hpSlotX, 16, -284, textRightW - 58)
     M.BindSlider(ctx, hpSlotX,
         function()
             local xKey = SlotOffsetKeys("hp")
@@ -510,8 +512,8 @@ local function BuildGFBars(ctx)
             local xKey = SlotOffsetKeys("hp")
             Set(CurrentScope(), xKey, v, "geometry")
         end)
-    local hpSlotY = W.Slider(hpTab, "Slot Y", -100, 100, 1, hpSliderW)
-    PlaceSlider(hpTab, hpSlotY, textRightX, -424, hpSliderW)
+    local hpSlotY = W.Slider(hpPosition, "Slot Y", -100, 100, 1, hpSliderW)
+    PlaceSlider(hpPosition, hpSlotY, 16, -342, textRightW - 58)
     M.BindSlider(ctx, hpSlotY,
         function()
             local _, yKey = SlotOffsetKeys("hp")
@@ -522,14 +524,14 @@ local function BuildGFBars(ctx)
             Set(CurrentScope(), yKey, v, "geometry")
         end)
 
-    SectionLabel(hpTab, "Appearance", textRightX, -506)
-    local healthSize = BindScopeSlider(ctx, W.Slider(hpTab, "Size", 6, 48, 1, hpSliderW), "hpFontSize", 10, "font")
-    PlaceSlider(hpTab, healthSize, textRightX, -536, hpSliderW)
+    local hpAppearance = TextCard(hpTab, "Appearance", nil, textLeftX, -310, textCardW, 144)
+    local healthSize = BindScopeSlider(ctx, W.Slider(hpAppearance, "Size", 6, 48, 1, textSliderW), "hpFontSize", 10, "font")
+    PlaceSlider(hpAppearance, healthSize, 16, -58, textCardW - 72)
 
-    SectionLabel(powerTab, "Power Text", textLeftX, -4)
-    local powerPreviewLabel = PreviewText(powerTab, "", textRightX, -4, textRightW)
+    local powerContent = TextCard(powerTab, "What text appears", "Slots are explained before advanced position controls.", textLeftX, -4, textCardW, 286)
+    local powerPreviewLabel = PreviewText(powerContent, "", 16, -54, textCardW - 32)
 
-    local powerText = W.SwitchAt(powerTab, "Show Power Text", textLeftX, -34, 190)
+    local powerText = W.SwitchAt(powerContent, "Show Power Text", textCardW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, powerText,
         IsPowerTextEnabled,
         function(v)
@@ -537,24 +539,22 @@ local function BuildGFBars(ctx)
             if refreshTextControls then refreshTextControls() end
         end)
 
-    SectionLabel(powerTab, "Content", textLeftX, -82)
-    local powerLeft = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Left", TEXT_MODES, textDropW), "powerTextLeft", "NONE", "visual")
-    local powerCenter = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Center", TEXT_MODES, textDropW), "powerTextCenter", "PERCENT", "visual")
-    local powerRight = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Right", TEXT_MODES, textDropW), "powerTextRight", "NONE", "visual")
-    local powerDelimiter = BindScopeDropdown(ctx, W.Dropdown(powerTab, "Delimiter", DELIMITER_VALUES, textDropW), "powerTextDelimiter", " / ", "visual")
-    PlaceDropdown(powerTab, powerLeft, textLeftX, -112, textDropW)
-    PlaceDropdown(powerTab, powerCenter, textLeftX, -166, textDropW)
-    PlaceDropdown(powerTab, powerRight, textLeftX, -220, textDropW)
-    PlaceDropdown(powerTab, powerDelimiter, textLeftX, -274, min(220, textDropW))
+    local powerLeft = BindScopeDropdown(ctx, W.Dropdown(powerContent, "Left slot", TEXT_MODES, textHalfDropW), "powerTextLeft", "NONE", "visual")
+    local powerCenter = BindScopeDropdown(ctx, W.Dropdown(powerContent, "Center slot", TEXT_MODES, textHalfDropW), "powerTextCenter", "PERCENT", "visual")
+    local powerRight = BindScopeDropdown(ctx, W.Dropdown(powerContent, "Right slot", TEXT_MODES, textCardW - 32), "powerTextRight", "NONE", "visual")
+    local powerDelimiter = BindScopeDropdown(ctx, W.Dropdown(powerContent, "Delimiter", DELIMITER_VALUES, textHalfDropW), "powerTextDelimiter", " / ", "visual")
+    PlaceDropdown(powerContent, powerRight, 16, -96, textCardW - 32)
+    PlaceDropdown(powerContent, powerLeft, 16, -150, textHalfDropW)
+    PlaceDropdown(powerContent, powerCenter, 28 + textHalfDropW, -150, textHalfDropW)
+    PlaceDropdown(powerContent, powerDelimiter, 16, -206, textHalfDropW)
 
-    SectionLabel(powerTab, "Position", textRightX, -82)
-    local powerX = BindScopeSlider(ctx, W.Slider(powerTab, "X Offset", -100, 100, 1, hpSliderW), "powerOffsetX", 0, "geometry")
-    local powerY = BindScopeSlider(ctx, W.Slider(powerTab, "Y Offset", -100, 100, 1, hpSliderW), "powerOffsetY", 0, "geometry")
-    PlaceSlider(powerTab, powerX, textRightX, -112, hpSliderW)
-    PlaceSlider(powerTab, powerY, textRightX, -170, hpSliderW)
+    local powerPosition = TextCard(powerTab, "Position", "Move all power text together or adjust a selected slot.", textRightX, -4, textRightW, 410)
+    local powerX = BindScopeSlider(ctx, W.Slider(powerPosition, "X Offset", -100, 100, 1, hpSliderW), "powerOffsetX", 0, "geometry")
+    local powerY = BindScopeSlider(ctx, W.Slider(powerPosition, "Y Offset", -100, 100, 1, hpSliderW), "powerOffsetY", 0, "geometry")
+    PlaceSlider(powerPosition, powerX, 16, -64, textRightW - 58)
+    PlaceSlider(powerPosition, powerY, 16, -122, textRightW - 58)
 
-    SectionLabel(powerTab, "Selected Slot", textRightX, -232)
-    local powerMoveTogether = W.ToggleAt(powerTab, "Move text as one group", textRightX, -262, hpSliderW)
+    local powerMoveTogether = W.ToggleAt(powerPosition, "Move text as one group", 16, -176, textRightW - 32)
     M.BindToggle(ctx, powerMoveTogether,
         function() return MoveTogether("power") end,
         function(v)
@@ -567,15 +567,15 @@ local function BuildGFBars(ctx)
         { value = "center", text = "Center" },
         { value = "right", text = "Right" },
     }, hpSliderW)
-    W.MoveWidget(powerSlot, powerTab, textRightX, -304, hpSliderW, "LEFT")
+    W.MoveWidget(powerSlot, powerPosition, 16, -220, textRightW - 32, "LEFT")
     M.BindSegment(ctx, powerSlot,
         function() return CurrentSlot("power") end,
         function(v)
             SetCurrentSlot("power", v)
             M.Refresh(ctx)
         end)
-    local powerSlotX = W.Slider(powerTab, "Slot X", -100, 100, 1, hpSliderW)
-    PlaceSlider(powerTab, powerSlotX, textRightX, -366, hpSliderW)
+    local powerSlotX = W.Slider(powerPosition, "Slot X", -100, 100, 1, hpSliderW)
+    PlaceSlider(powerPosition, powerSlotX, 16, -284, textRightW - 58)
     M.BindSlider(ctx, powerSlotX,
         function()
             local xKey = SlotOffsetKeys("power")
@@ -585,8 +585,8 @@ local function BuildGFBars(ctx)
             local xKey = SlotOffsetKeys("power")
             Set(CurrentScope(), xKey, v, "geometry")
         end)
-    local powerSlotY = W.Slider(powerTab, "Slot Y", -100, 100, 1, hpSliderW)
-    PlaceSlider(powerTab, powerSlotY, textRightX, -424, hpSliderW)
+    local powerSlotY = W.Slider(powerPosition, "Slot Y", -100, 100, 1, hpSliderW)
+    PlaceSlider(powerPosition, powerSlotY, 16, -342, textRightW - 58)
     M.BindSlider(ctx, powerSlotY,
         function()
             local _, yKey = SlotOffsetKeys("power")
@@ -597,19 +597,17 @@ local function BuildGFBars(ctx)
             Set(CurrentScope(), yKey, v, "geometry")
         end)
 
-    SectionLabel(powerTab, "Appearance", textRightX, -506)
-    local powerSize = BindScopeSlider(ctx, W.Slider(powerTab, "Size", 6, 48, 1, hpSliderW), "powerFontSize", 9, "font")
-    PlaceSlider(powerTab, powerSize, textRightX, -536, hpSliderW)
+    local powerAppearance = TextCard(powerTab, "Appearance", nil, textLeftX, -310, textCardW, 144)
+    local powerSize = BindScopeSlider(ctx, W.Slider(powerAppearance, "Size", 6, 48, 1, textSliderW), "powerFontSize", 9, "font")
+    PlaceSlider(powerAppearance, powerSize, 16, -58, textCardW - 72)
 
-    SectionLabel(advancedTab, "Text Layers", textLeftX, -4)
-    local layerHint = W.Text(advancedTab, "Controls draw order when text overlaps bars, icons, or indicators.", textLeftX, -28, textLeftW, T.colors.dim)
-    if layerHint.SetWordWrap then layerHint:SetWordWrap(true) end
-    local nameLayer = BindScopeSlider(ctx, W.Slider(advancedTab, "Name layer", 1, 15, 1, textSliderW), "nameTextLayer", 5, "geometry")
-    local hpLayer = BindScopeSlider(ctx, W.Slider(advancedTab, "HP layer", 1, 15, 1, textSliderW), "textLayer", 5, "geometry")
-    local powerLayer = BindScopeSlider(ctx, W.Slider(advancedTab, "Power layer", 1, 15, 1, textSliderW), "powerTextLayer", 2, "geometry")
-    PlaceSlider(advancedTab, nameLayer, textLeftX, -82, textSliderW)
-    PlaceSlider(advancedTab, hpLayer, textLeftX, -140, textSliderW)
-    PlaceSlider(advancedTab, powerLayer, textLeftX, -198, textSliderW)
+    local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls draw order when text overlaps bars, icons, or indicators.", textLeftX, -4, textCardW, 260)
+    local nameLayer = BindScopeSlider(ctx, W.Slider(advancedLayers, "Name layer", 1, 15, 1, textSliderW), "nameTextLayer", 5, "geometry")
+    local hpLayer = BindScopeSlider(ctx, W.Slider(advancedLayers, "HP layer", 1, 15, 1, textSliderW), "textLayer", 5, "geometry")
+    local powerLayer = BindScopeSlider(ctx, W.Slider(advancedLayers, "Power layer", 1, 15, 1, textSliderW), "powerTextLayer", 2, "geometry")
+    PlaceSlider(advancedLayers, nameLayer, 16, -76, textCardW - 72)
+    PlaceSlider(advancedLayers, hpLayer, 16, -136, textCardW - 72)
+    PlaceSlider(advancedLayers, powerLayer, 16, -196, textCardW - 72)
 
     refreshTextControls = function()
         local tab = CurrentTextTab()
@@ -663,13 +661,16 @@ local function BuildGFBars(ctx)
         if entry then entry._msuf2RefreshState = RefreshHealPredHeader end
     end
 
-    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", 284, false)
-    local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispel, "Dispel Overlay", 14, -38, 220), "dispelOverlayEnabled", true, "visual")
-    W.Text(dispel, "Tints the health bar when a dispellable debuff is active.", 14, -74, ctx.width - 28, T.colors.muted)
-    dispel._msuf2CursorY = -108
-    local dispelStyle = BindScopeDropdown(ctx, W.Dropdown(dispel, "Overlay style", DISPEL_OVERLAY_STYLES, 220), "dispelOverlayStyle", "FULL", "visual")
-    local dispelCurrent = BindScopeToggle(ctx, W.Toggle(dispel, "Show on current health only"), "dispelOverlayOnHealth", true, "visual")
-    local dispelAlpha = BindScopeSlider(ctx, W.Slider(dispel, "Overlay opacity", 0.05, 1, 0.05, 300), "dispelOverlayAlpha", 0.35, "visual")
+    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", 260, false)
+    local dispelW = dispel._msuf2Width or b.width or 720
+    local dispelCardW = min(560, dispelW - 40)
+    local dispelCard = W.ControlCard(dispel, "Dispel Overlay", "Tints the health bar when a dispellable debuff is active.", 20, -38, dispelCardW, 204)
+    local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", dispelCardW - 62, -24, 0, "HIDDEN"), "dispelOverlayEnabled", true, "visual")
+    local dispelStyle = BindScopeDropdown(ctx, W.Dropdown(dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 260), "dispelOverlayStyle", "FULL", "visual")
+    local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -122, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
+    local dispelAlpha = BindScopeSlider(ctx, W.Slider(dispelCard, "Overlay opacity", 0.05, 1, 0.05, 300), "dispelOverlayAlpha", 0.35, "visual")
+    W.MoveWidget(dispelStyle, dispelCard, 16, -74, min(260, dispelCardW - 32), "LEFT")
+    W.MoveWidget(dispelAlpha, dispelCard, 16, -166, min(360, dispelCardW - 72), "CENTER")
     local function RefreshDispelState()
         SetOptionsEnabled({ dispelStyle, dispelCurrent, dispelAlpha }, Bool(CurrentScope(), "dispelOverlayEnabled", true))
         SetOptionEnabled(dispelToggle, true)
@@ -682,13 +683,17 @@ local function BuildGFBars(ctx)
         if entry then entry._msuf2RefreshState = RefreshDispelState end
     end
 
-    local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 276, false)
-    local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripe, "Debuff Stripe", 14, -38, 220), "debuffStripeEnabled", false, "visual")
-    W.Text(stripe, "Shows a thin colored stripe for debuffs matched by the debuff filter.", 14, -74, ctx.width - 28, T.colors.muted)
-    stripe._msuf2CursorY = -108
-    local stripeEdge = BindScopeDropdown(ctx, W.Dropdown(stripe, "Stripe edge", DEBUFF_STRIPE_EDGES, 220), "debuffStripeEdge", "BOTTOM", "visual")
-    local stripeHeight = BindScopeSlider(ctx, W.Slider(stripe, "Stripe height", 1, 8, 1, 300), "debuffStripeHeight", 3, "visual")
-    local stripeAlpha = BindScopeSlider(ctx, W.Slider(stripe, "Stripe opacity", 0.10, 1, 0.05, 300), "debuffStripeAlpha", 0.60, "visual")
+    local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 312, false)
+    local stripeW = stripe._msuf2Width or b.width or 720
+    local stripeCardW = min(560, stripeW - 40)
+    local stripeCard = W.ControlCard(stripe, "Debuff Stripe", "Shows a thin colored stripe for debuffs matched by the debuff filter.", 20, -38, stripeCardW, 244)
+    local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripeCard, "Debuff Stripe", stripeCardW - 62, -24, 0, "HIDDEN"), "debuffStripeEnabled", false, "visual")
+    local stripeEdge = BindScopeDropdown(ctx, W.Dropdown(stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260), "debuffStripeEdge", "BOTTOM", "visual")
+    local stripeHeight = BindScopeSlider(ctx, W.Slider(stripeCard, "Stripe height", 1, 8, 1, 300), "debuffStripeHeight", 3, "visual")
+    local stripeAlpha = BindScopeSlider(ctx, W.Slider(stripeCard, "Stripe opacity", 0.10, 1, 0.05, 300), "debuffStripeAlpha", 0.60, "visual")
+    W.MoveWidget(stripeEdge, stripeCard, 16, -74, min(260, stripeCardW - 32), "LEFT")
+    W.MoveWidget(stripeHeight, stripeCard, 16, -126, min(360, stripeCardW - 72), "CENTER")
+    W.MoveWidget(stripeAlpha, stripeCard, 16, -174, min(360, stripeCardW - 72), "CENTER")
     local function RefreshStripeState()
         SetOptionsEnabled({ stripeEdge, stripeHeight, stripeAlpha }, Bool(CurrentScope(), "debuffStripeEnabled", false))
         SetOptionEnabled(stripeToggle, true)
@@ -701,31 +706,20 @@ local function BuildGFBars(ctx)
         if entry then entry._msuf2RefreshState = RefreshStripeState end
     end
 
-    local range = b:CollapsibleSection("range", "Range Fade", 190, false)
-    local rangeToggle = BindScopeToggle(ctx, W.SwitchAt(range, "Range Fade", 14, -38, 220), "rangeFadeEnabled", false, "visual")
-    local rangeSectionWidth = range._msuf2Width or b.width or 720
-    local rangeLeftX = 30
-    local rangeRightX = math.max(390, math.min(500, math.floor(rangeSectionWidth * 0.48)))
-    local rangeLeftWidth = math.max(220, math.min(300, rangeRightX - rangeLeftX - 60))
-    local rangeRightWidth = math.max(260, math.min(340, rangeSectionWidth - rangeRightX - 42))
+    local range = b:CollapsibleSection("range", "Range Fade", 220, false)
+    local rangeW = range._msuf2Width or b.width or 720
+    local rangeGap = 16
+    local rangeLeftX = 20
+    local rangeInnerW = max(320, rangeW - 40)
+    local rangeLeftWidth = floor((rangeInnerW - rangeGap) * 0.48)
+    local rangeRightX = rangeLeftX + rangeLeftWidth + rangeGap
+    local rangeRightWidth = rangeInnerW - rangeLeftWidth - rangeGap
+    local rangeEffectCard = W.ControlCard(range, "Range Fade", "Controls what fades when group members are not reachable.", rangeLeftX, -38, rangeLeftWidth, 160)
+    local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, -38, rangeRightWidth, 160)
+    local rangeToggle = BindScopeToggle(ctx, W.SwitchAt(rangeEffectCard, "Range Fade", rangeLeftWidth - 62, -24, 0, "HIDDEN"), "rangeFadeEnabled", false, "visual")
 
-    local function PlaceRangeDropdown(control, x, y, width)
-        if not control then return end
-        width = width or 180
-        if control._msuf2Title then
-            control._msuf2Title:ClearAllPoints()
-            control._msuf2Title:SetPoint("TOPLEFT", range, "TOPLEFT", x, y)
-            control._msuf2Title:SetWidth(width)
-            control._msuf2Title:SetJustifyH("LEFT")
-            control._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
-        end
-        control:ClearAllPoints()
-        control:SetPoint("TOPLEFT", range, "TOPLEFT", x, y - 22)
-        control:SetSize(width, 22)
-    end
-
-    local function PlaceRangeSlider(control, x, y, width)
-        W.MoveWidget(control, range, x, y, width or 270, "CENTER")
+    local function PlaceRangeSlider(control, parent, x, y, width)
+        W.MoveWidget(control, parent, x, y, width or 270, "CENTER")
     end
 
     local function BindRangeSlider(widget, key, default, labelFn)
@@ -751,20 +745,19 @@ local function BuildGFBars(ctx)
         return widget
     end
 
-    local rangeMode = BindScopeDropdown(ctx, W.Dropdown(range, "Range fade affects", {
+    local rangeMode = BindScopeDropdown(ctx, W.Dropdown(rangeEffectCard, "Range fade affects", {
         { value = "frame", text = "Frame" },
         { value = "health", text = "HP Bar" },
-    }, rangeLeftWidth), "rangeFadeLayerMode", "frame", "visual")
-    W.MoveWidget(rangeToggle, range, rangeLeftX, -54, 240, "LEFT")
-    PlaceRangeDropdown(rangeMode, rangeLeftX, -94, rangeLeftWidth)
+    }, rangeLeftWidth - 32), "rangeFadeLayerMode", "frame", "visual")
+    W.MoveWidget(rangeMode, rangeEffectCard, 16, -88, rangeLeftWidth - 32, "LEFT")
 
-    local rangeAlpha = BindRangeSlider(W.Slider(range, "", 0, 1, 0.05, rangeRightWidth), "rangeFadeAlpha", 0.4,
+    local rangeAlpha = BindRangeSlider(W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth), "rangeFadeAlpha", 0.4,
         function(v) return string.format("Out of Range Alpha: %.0f%%", (tonumber(v) or 0) * 100) end)
-    PlaceRangeSlider(rangeAlpha, rangeRightX, -54, rangeRightWidth)
+    PlaceRangeSlider(rangeAlpha, rangeAlphaCard, 16, -70, rangeRightWidth - 58)
 
-    local offlineAlpha = BindRangeSlider(W.Slider(range, "", 0, 1, 0.05, rangeRightWidth), "offlineAlpha", 0.5,
+    local offlineAlpha = BindRangeSlider(W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth), "offlineAlpha", 0.5,
         function(v) return string.format("Offline Alpha: %.0f%%", (tonumber(v) or 0) * 100) end)
-    PlaceRangeSlider(offlineAlpha, rangeRightX, -108, rangeRightWidth)
+    PlaceRangeSlider(offlineAlpha, rangeAlphaCard, 16, -124, rangeRightWidth - 58)
 
     local function RefreshRangeState()
         SetOptionsEnabled({ rangeMode, rangeAlpha, offlineAlpha }, Bool(CurrentScope(), "rangeFadeEnabled", false))
