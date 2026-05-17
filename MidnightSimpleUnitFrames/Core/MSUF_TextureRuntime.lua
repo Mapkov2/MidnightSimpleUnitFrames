@@ -112,6 +112,12 @@ local function UpdateAllBarTextures()
     _iterState.applyBg = _G.MSUF_ApplyBarBackgroundVisual
 
     ForEachUnitFrame(_Iter_ApplyAllBarTex)
+    if _G.MSUF_RoundedUF_Active == true then
+        local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
+        if type(applyRounded) == "function" then
+            applyRounded()
+        end
+    end
 
     if _G.MSUF_UpdateCastbarTextures_Immediate then
         _G.MSUF_UpdateCastbarTextures_Immediate()
@@ -137,6 +143,12 @@ local function UpdateAbsorbBarTextures()
     _iterState.texAbs = texAbs
     _iterState.texHeal = texHeal
     ForEachUnitFrame(_Iter_ApplyAbsorbTex)
+    if _G.MSUF_RoundedUF_Active == true then
+        local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
+        if type(applyRounded) == "function" then
+            applyRounded()
+        end
+    end
 end
 
 Export("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)

@@ -49,7 +49,7 @@ local SEARCH_KEYWORDS = {
     gf_bars = "group frames groupframes party raid health text power bar name hp text heal prediction absorb display range fade range check distance check out of range layout font size anchor offset opacity alpha smooth fill show power tank healer damage incoming heals shields debuff stripe dispel overlay",
     gf_auras = "group frames groupframes party raid buffs debuffs defensives externals text coloring private auras cooldown style aura utilities filter anchor icon size max buffs max debuffs custom buffs custom debuffs cooldown swipe masque pandemic dispel own buffs hots healer buffs raid debuffs boss debuffs",
     gf_indicators = "group frames groupframes party raid indicators status icons spell indicators corner indicators group number focus glow border dispel aggro threat role icon custom spells slots preview current show all marker raid marker ready check leader assist dead ghost offline afk dnd",
-    opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display highlight borders outline border aggro purge boss target glow bar colors background tint backdrop bg dark mode shared texture opacity alpha health texture power texture frame outline",
+    opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display highlight borders outline border aggro purge boss target glow rounded round corners rounded texture rounded frames rounded frame texture rounded unit frames rounded group frames rounded power bars rounded mouseover highlights mouseover bar colors background tint backdrop bg dark mode shared texture opacity alpha health texture power texture frame outline abgerundet abrundung runde kanten ecken abrunden einschalten ausschalten",
     opt_fonts = "global style fonts font family size outline shadow color text readability name hp power health spell cooldown bigger smaller text size name shortening realm names truncate font color",
     auras2 = "global style unit auras buffs debuffs icon size caps rows spacing sorting cooldown timer text tooltip private aura filter override dispel stealable only mine own buffs own debuffs pandemic reminders click through clickthrough aura position aura size",
     opt_castbar = "global style castbar textures outline shake fill direction empowered casts empower stages evoker augmentation devastation preservation hold release interrupt ready focus kick kick cooldown demon hunter demonhunter dh havoc vengeance devour consume magic disrupt counterspell pummel rebuke wind shear mind freeze skull bash muzzle spear hand strike counter shot quell silence name shortening latency spark channel ticks gcd global cooldown boss castbar target castbar focus castbar player castbar",
@@ -57,7 +57,7 @@ local SEARCH_KEYWORDS = {
     opt_misc = "global style miscellaneous misc language localization localisation locale translation range fade range check range checker distance check out of range unit frame range check ui behavior tooltip tooltips combat settings general blizzard frames default frames hide blizzard disable blizzard update intervals performance minimap minimap icon target sounds version check menu behavior snap edge snap",
     classpower = "class resources combo points holy power soul shards chi maelstrom eclipse essence evoker runes runic power stagger brewmaster resource prediction auto hide detached power bar alternative mana behavior style quick actions class power resource bar alternate mana monk druid rogue paladin warlock death knight",
     gameplay = "gameplay combat crosshair click cast click cast clickthrough click-through focus target modifier mouseover interaction targeting spells mouse buttons keybind modifier ctrl shift alt fadenkreuz melee range spell target sound target lost mouseover heal click casting",
-    modules = "modules style skins optional modules compatibility rounded unitframes portrait decoration minimap compartment addon compartment",
+    modules = "modules style skins optional modules compatibility portrait decoration minimap compartment addon compartment",
     profiles = "profiles profile management spec profiles specialization auto switch create copy delete reset import export legacy import wago active profile share string profile string backup restore",
 }
 
@@ -511,6 +511,28 @@ local SEARCH_QUERY_ALIASES = {
     softfill = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "weiche fuellung" },
     fluidfill = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "weiche fuellung" },
 
+    rounded = { "rounded texture", "rounded frame texture", "rounded frames", "round corners", "unit frames", "group frames", "power bars", "mouseover highlights", "bars" },
+    round = { "rounded", "rounded texture", "rounded frames", "round corners", "corners", "bars" },
+    corners = { "rounded", "rounded texture", "rounded frames", "round corners", "frame corners", "bars" },
+    corner = { "corners", "rounded", "round corners", "frame corners" },
+    roundedframes = { "rounded frames", "rounded frame texture", "rounded texture", "unit frames", "group frames", "bars" },
+    roundedtexture = { "rounded texture", "rounded frame texture", "rounded frames", "bars" },
+    rund = { "rounded", "rounded frames", "round corners", "rounded texture", "bars" },
+    runde = { "rounded", "rounded frames", "round corners", "rounded texture", "bars" },
+    kanten = { "corners", "rounded", "round corners", "rounded frames", "bars" },
+    ecken = { "corners", "rounded", "round corners", "rounded frames", "bars" },
+    abrunden = { "rounded", "rounded frames", "round corners", "rounded texture", "bars" },
+    abrundung = { "rounded", "rounded frames", "round corners", "rounded texture", "bars" },
+    abgerundet = { "rounded", "rounded frames", "round corners", "rounded texture", "bars" },
+    abgerundete = { "rounded", "rounded frames", "round corners", "rounded texture", "bars" },
+    abgerundeten = { "rounded", "rounded frames", "round corners", "rounded texture", "bars" },
+    einschalten = { "enable", "turn on", "on", "show" },
+    anschalten = { "enable", "turn on", "on", "show" },
+    aktivieren = { "enable", "turn on", "on", "show" },
+    ausschalten = { "disable", "turn off", "off", "hide" },
+    abschalten = { "disable", "turn off", "off", "hide" },
+    deaktivieren = { "disable", "turn off", "off", "hide" },
+
     -- Smooth Fill: localized user vocabulary across supported menu locales.
     fuellung = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "weiche fuellung" },
     fuellen = { "smooth fill", "smooth health fill", "smooth power bar", "bar animation", "weiche fuellung" },
@@ -843,9 +865,6 @@ local SEARCH_QUERY_ALIASES = {
     cpu = { "performance", "update intervals", "auras", "cooldown" },
     speicher = { "performance", "auras", "profiles" },
     optimieren = { "performance", "update intervals", "auras", "fps" },
-    rounded = { "rounded unitframes", "modules", "style" },
-    roundedunitframes = { "rounded unitframes", "modules", "style" },
-    rund = { "rounded", "rounded unitframes", "modules" },
     classpower = { "class resources", "power", "resource" },
     klassenressourcen = { "class resources", "classpower", "resource" },
     klassenressource = { "class resources", "classpower", "resource" },
@@ -1693,6 +1712,21 @@ local SEARCH_FAQ = {
         priority = 35,
     },
     {
+        label = "How do I enable or disable rounded frames?",
+        answer = "Open Global Style > Bars > Rounded Texture. Use the master toggle for all rounded frame textures, or the separate toggles for unit frames, group frames, power bars, and mouseover highlights.",
+        pageKey = "opt_bars",
+        target = "Opens: Global Style > Bars > Rounded Texture",
+        anchorText = "Rounded Texture Rounded frame texture Unit frames Group frames Power bars Mouseover highlights rounded frames round corners",
+        keywords = {
+            "rounded frames", "rounded frame texture", "rounded texture", "round frames", "round corners", "rounded corners", "frame corners",
+            "enable rounded frames", "disable rounded frames", "turn on rounded frames", "turn off rounded frames", "rounded frames on", "rounded frames off",
+            "rounded unit frames", "rounded unitframes", "rounded group frames", "rounded power bars", "rounded mouseover", "rounded mouseover highlights",
+            "abgerundete frames", "abgerundete unitframes", "runde kanten", "runde ecken", "abrundung", "abrunden", "rounded frames einschalten", "rounded frames ausschalten",
+            "abgerundete frames einschalten", "abgerundete frames ausschalten", "runde kanten einschalten", "runde kanten ausschalten", "mouseover abgerundet", "powerbar abgerundet",
+        },
+        priority = 620,
+    },
+    {
         label = "Where is Smooth fill for unit frames?",
         answer = "Open the unit page, then use Frame Basics > Smooth fill for the health bar. For that unit's power bar animation, open Power Bar > Smooth fill.",
         pageKey = "uf_player",
@@ -2271,11 +2305,11 @@ local SEARCH_FAQ = {
     },
     {
         label = "Where are optional modules or style modules?",
-        answer = "Open Modules > Style for optional style modules such as rounded unit frames and portrait decoration.",
+        answer = "Open Modules > Style for optional style modules such as portrait decoration and dropdown styling.",
         pageKey = "modules",
         target = "Opens: Modules > Style",
-        anchorText = "Modules Style rounded unitframes portrait decoration optional modules skins",
-        keywords = { "modules", "optional modules", "style modules", "rounded unitframes", "rounded frames", "portrait decoration", "portrait deco", "module style", "skins", "rounded", "rund" },
+        anchorText = "Modules Style portrait decoration dropdown style optional modules skins",
+        keywords = { "modules", "optional modules", "style modules", "portrait decoration", "portrait deco", "module style", "skins" },
         priority = 70,
     },
     {
@@ -3044,7 +3078,7 @@ local function BuildSearchPage(ctx)
         end
     end
 
-    local quick = b:Section("Support Search Examples", 150)
+    local quick = b:Section("Support Search Examples", 178)
     local shortcuts = {
         { "Move Frames", "where do I move my unitframe" },
         { "Background", "change my backgrond" },
@@ -3058,6 +3092,7 @@ local function BuildSearchPage(ctx)
         { "Level Text", "where is level text anchor" },
         { "Performance", "why is msuf lagging" },
         { "Minimap", "where is the minimap icon setting" },
+        { "Rounded", "rounded frames ausschalten" },
     }
     local buttonW = math.floor((width - 56) / 3)
     for i = 1, #shortcuts do

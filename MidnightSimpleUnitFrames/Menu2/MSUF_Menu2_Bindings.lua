@@ -664,7 +664,7 @@ local PAGE_RESET_INFO = {
     opt_bars = {
         label = "Bars",
         kind = "bars",
-        summary = "shared bar textures, gradients, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides",
+        summary = "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides",
     },
     opt_fonts = {
         label = "Fonts",
@@ -704,7 +704,7 @@ local PAGE_RESET_INFO = {
     modules = {
         label = "Modules",
         kind = "modules",
-        summary = "optional style/module settings such as MSUF Style, dropdown style and rounded unitframes",
+        summary = "optional style/module settings such as MSUF Style and dropdown style",
     },
     profiles = {
         label = "Profiles",
@@ -740,6 +740,11 @@ local BARS_GENERAL_KEYS = {
     bossTargetHighlightEnabled = true,
     highlightPrioEnabled = true,
     highlightPrioOrder = true,
+    roundedFramesEnabled = true,
+    roundedUnitFrames = true,
+    roundedGroupFrames = true,
+    roundedPowerBars = true,
+    roundedMouseover = true,
 }
 
 local BARS_SCOPE_KEYS = {
@@ -777,6 +782,11 @@ local BARS_TABLE_KEYS = {
     barOutlineThickness = true,
     smoothPowerBar = true,
     realtimePowerText = true,
+    roundedFramesEnabled = true,
+    roundedUnitFrames = true,
+    roundedGroupFrames = true,
+    roundedPowerBars = true,
+    roundedMouseover = true,
 }
 
 local FONT_GENERAL_KEYS = {
@@ -881,7 +891,6 @@ local CASTBAR_EXCLUDED_KEYS = {
 local MODULES_GENERAL_KEYS = {
     styleEnabled = true,
     dropdownStyleMode = true,
-    roundedUnitframes = true,
 }
 
 local COLOR_GENERAL_KEYS = {

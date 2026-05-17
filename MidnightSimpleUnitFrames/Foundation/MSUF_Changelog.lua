@@ -4,10 +4,39 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.3 Beta 1",
-    previousVersion = "5.2",
-    rangeLabel = "5.2 -> 5.3 Beta 1",
+    currentVersion = "5.3 Beta 2",
+    previousVersion = "5.3 Beta 1",
+    rangeLabel = "5.3 Beta 1 -> 5.3 Beta 2",
     entries = {
+        {
+            version = "5.3 Beta 2",
+            date = "2026-05-17",
+            sections = {
+                {
+                    title = "Performance",
+                    bullets = {
+                        "Defaulted rounded frame texture off so the feature has no active runtime callbacks while disabled.",
+                        "Reduced unnecessary group frame header rescans during rebuild and layout bursts.",
+                        "Reduced redundant castbar re-layout work when width-source geometry has not changed.",
+                    },
+                },
+                {
+                    title = "Bugfixes",
+                    bullets = {
+                        "Fixed rounded frame texture re-enable behavior after the module manager disables the feature.",
+                        "Fixed rounded frame integration for unit and group frame borders, power bars, mouseover highlights, dispel overlays, absorb bars, and indicators.",
+                        "Fixed group frame rounded visuals so mouseover and highlight state use the rounded edge instead of square overlays.",
+                    },
+                },
+                {
+                    title = "Changes / Improvements",
+                    bullets = {
+                        "Added Rounded Texture controls under Global Style > Bars with per-surface toggles, search coverage, localization, preview support, and a reload prompt.",
+                        "Added rounded mask media for the live unit/group frames and Menu2 preview.",
+                    },
+                },
+            },
+        },
         {
             version = "5.3 Beta 1",
             date = "2026-05-17",
@@ -53,12 +82,6 @@ local data = {
                         "Removed old local publish helper scripts and release helper docs.",
                     },
                 },
-            },
-        },
-        {
-            version = "5.2",
-            date = "2026-05-16",
-            sections = {
             },
         },
     },

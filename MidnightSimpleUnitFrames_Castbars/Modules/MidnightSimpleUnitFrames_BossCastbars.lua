@@ -58,6 +58,49 @@ local function SafeCall(fn, ...)
     return nil
 end
 
+local function BossAlmostEqual(a, b)
+    return math.abs((tonumber(a) or 0) - (tonumber(b) or 0)) <= 0.01
+end
+
+local function BossSetWidthIfChanged(frame, width)
+    if not (frame and frame.SetWidth and width and width > 0) then return false end
+    local current = frame.GetWidth and frame:GetWidth() or nil
+    if current and BossAlmostEqual(current, width) then return false end
+    frame:SetWidth(width)
+    return true
+end
+
+local function BossSetHeightIfChanged(frame, height)
+    if not (frame and frame.SetHeight and height and height > 0) then return false end
+    local current = frame.GetHeight and frame:GetHeight() or nil
+    if current and BossAlmostEqual(current, height) then return false end
+    frame:SetHeight(height)
+    return true
+end
+
+local function BossSetPointIfChanged(frame, point, relativeTo, relativePoint, xOfs, yOfs)
+    if not (frame and frame.SetPoint) then return false end
+    xOfs = math.floor((tonumber(xOfs) or 0) + 0.5)
+    yOfs = math.floor((tonumber(yOfs) or 0) + 0.5)
+
+    local currentPoint, currentRelativeTo, currentRelativePoint, currentX, currentY
+    if frame.GetPoint then
+        currentPoint, currentRelativeTo, currentRelativePoint, currentX, currentY = frame:GetPoint(1)
+    end
+    if currentPoint == point
+        and currentRelativeTo == relativeTo
+        and currentRelativePoint == relativePoint
+        and BossAlmostEqual(currentX, xOfs)
+        and BossAlmostEqual(currentY, yOfs)
+    then
+        return false
+    end
+
+    frame:ClearAllPoints()
+    frame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs)
+    return true
+end
+
 -- PERF: Resolve time source once at load.
 local _BossNow = _G.GetTimePreciseSec or _G.GetTime or function() return 0 end
 local function MSUF_Now()
@@ -609,11 +652,12 @@ end
 	end
 
     -- Anchor near its MSUF boss unitframe (if present)
-    function frame:UpdateAnchor()
+    function frame:UpdateAnchor(forceLayout)
         EnsureDBSafe()
         local g = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
         local ox = math.floor((tonumber(g.bossCastbarOffsetX) or 0) + 0.5)
         local oy = math.floor((tonumber(g.bossCastbarOffsetY) or 0) + 0.5)
+        local layoutDirty = false
         local forcedW, forcedH
         if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
             forcedW, forcedH = _G.MSUF_GetCastbarDesiredSize(unit, g, self, 240, 12)
@@ -626,7 +670,7 @@ end
 
         -- Height can always be overridden (even when width is auto-matched to the boss unitframe)
         if forcedH and forcedH > 4 then
-            self:SetHeight(forcedH)
+            layoutDirty = BossSetHeightIfChanged(self, forcedH) or layoutDirty
         end
 
         local detached = (g.bossCastbarDetached == true)
@@ -634,44 +678,44 @@ end
         if detached then
             -- Detached: anchor to UIParent CENTER, but keep per-boss vertical stacking.
             local i = tonumber(unit:match("boss(%d+)")) or 1
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", ox, oy - ((i - 1) * 34))
+            layoutDirty = BossSetPointIfChanged(self, "CENTER", UIParent, "CENTER", ox, oy - ((i - 1) * 34)) or layoutDirty
 
             if forcedW and forcedW > 10 then
-                self:SetWidth(forcedW)
+                layoutDirty = BossSetWidthIfChanged(self, forcedW) or layoutDirty
             else
                 local w = self:GetWidth()
                 if not w or w <= 10 then
-                    self:SetWidth(240)
+                    layoutDirty = BossSetWidthIfChanged(self, 240) or layoutDirty
                 end
             end
         else
             local uf = _G["MSUF_" .. unit] -- e.g. MSUF_boss1
             if uf and uf.GetWidth and uf.GetHeight then
-                self:ClearAllPoints()
-                self:SetPoint("BOTTOMLEFT", uf, "TOPLEFT", 0 + ox, 2 + oy)
+                layoutDirty = BossSetPointIfChanged(self, "BOTTOMLEFT", uf, "TOPLEFT", ox, 2 + oy) or layoutDirty
 
                 if forcedW and forcedW > 10 then
-                    self:SetWidth(forcedW)
+                    layoutDirty = BossSetWidthIfChanged(self, forcedW) or layoutDirty
                 else
                     local w = uf:GetWidth()
                     if w and w > 10 then
-                        self:SetWidth(w)
+                        layoutDirty = BossSetWidthIfChanged(self, w) or layoutDirty
                     end
                 end
             else
                 -- fallback: top right, stacked
                 local i = tonumber(unit:match("boss(%d+)")) or 1
-                self:ClearAllPoints()
-                self:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -420 + ox, (-220 + oy) - ((i - 1) * 34))
+                layoutDirty = BossSetPointIfChanged(self, "TOPRIGHT", UIParent, "TOPRIGHT", -420 + ox, (-220 + oy) - ((i - 1) * 34)) or layoutDirty
 
                 if forcedW and forcedW > 10 then
-                    self:SetWidth(forcedW)
+                    layoutDirty = BossSetWidthIfChanged(self, forcedW) or layoutDirty
                 end
             end
         end
 
-        self:ApplyLayout()
+        if (forceLayout or layoutDirty) and self.ApplyLayout then
+            self:ApplyLayout()
+        end
+        return layoutDirty
     end
 
     -- Cast() compatibility: MSUF event logic expects this method name in places
@@ -1501,17 +1545,17 @@ end
 
 -- -------------------------------------------------
 -- 
-local function ApplyBossCastbarPositionSetting()
+local function ApplyBossCastbarPositionSetting(forceLayout)
     EnsureDBSafe()
     local frames = _G.MSUF_BossCastbars
     if not frames then return end
+    if forceLayout == nil then forceLayout = true end
 
     for i = 1, #frames do
         local f = frames[i]
         if f and f.UpdateAnchor then
-            f:UpdateAnchor()
-        end
-        if f and f.ApplyLayout then
+            f:UpdateAnchor(forceLayout)
+        elseif f and f.ApplyLayout then
             f:ApplyLayout()
         end
     end
@@ -1967,8 +2011,8 @@ function _G.MSUF_ApplyBossCastbarTimeSetting()
     ApplyBossCastbarTimeSetting()
 end
 
-function _G.MSUF_ApplyBossCastbarPositionSetting()
-    ApplyBossCastbarPositionSetting()
+function _G.MSUF_ApplyBossCastbarPositionSetting(forceLayout)
+    ApplyBossCastbarPositionSetting(forceLayout)
 end
 
 

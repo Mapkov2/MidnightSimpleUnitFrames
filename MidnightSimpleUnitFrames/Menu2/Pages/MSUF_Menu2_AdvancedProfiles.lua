@@ -22,7 +22,6 @@ local BoolValue = AP.BoolValue
 local NumValue = AP.NumValue
 local SetValue = AP.SetValue
 local DeepCopyTable = AP.DeepCopyTable
-local BindTableToggle = AP.BindTableToggle
 local BindTableSlider = AP.BindTableSlider
 local BindTableDropdown = AP.BindTableDropdown
 local BindValueDropdown = AP.BindValueDropdown
@@ -556,7 +555,7 @@ local function BuildModules(ctx)
     if W.CreatePageResetButton then
         W.CreatePageResetButton(ctx, head, nil, { width = 88, y = -20 })
     end
-    local style = b:CollapsibleSection("modules_style", "Style", 230, true)
+    local style = b:CollapsibleSection("modules_style", "Style", 176, true)
     local enable = W.SwitchAt(style, "MSUF Style", 14, -38, 220)
     M.BindToggle(ctx, enable,
         function()
@@ -596,7 +595,6 @@ local function BuildModules(ctx)
                 G().dropdownStyleMode = v
             end
         end)
-    BindTableToggle(ctx, style, "Rounded unitframes", G, "roundedUnitframes", false, function() CallGlobal("MSUF_ApplyModules") end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 

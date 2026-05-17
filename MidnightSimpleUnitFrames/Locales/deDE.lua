@@ -64,6 +64,8 @@ L["HP Spacer on/off"] = "HP-Abstand ein/aus"
 L["Import"] = "Importieren"
 L["MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"] = "MSUF empfiehlt, die UI neu zu laden, damit alle Änderungen korrekt übernommen werden.\n\nAnwenden: %s\n\nJetzt neu laden?"
 L["Include"] = "Einschließen"
+L["Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"] = "Rounded Frame Texture wurde geaendert.\n\nEin UI-Reload ist erforderlich, weil dieser Stil Frame-Masken und geschuetzte Frame-Visuals neu aufbaut.\n\nJetzt neu laden?"
+L["|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload."] = "|cffffd700MSUF:|r Rounded Frame Texture geaendert. Lade die UI mit /reload neu."
 L["Indicator"] = "Indikator"
 L["Inline Text"] = "Inline-Text"
 L["Install \"SharedMedia\" (LibSharedMedia-3.0) to unlock more bar textures. Without it, you can still pick Blizzard built-in textures."] = "Installiere „SharedMedia“ (LibSharedMedia-3.0), um mehr Balkentexturen freizuschalten. Ohne das Addon kannst du weiterhin Blizzard-Texturen wählen."
@@ -1650,3 +1652,25 @@ L["Private Aura Layer Fix"] = "Private-Aura-Ebenenfix"
 L["Defensives"] = "Defensives"
 L["Enable defensives"] = "Defensives aktivieren"
 L["Max defensives"] = "Max. Defensives"
+
+-- MSUF2 rounded-frame search/menu coverage
+local MSUF2_ROUNDED_SEARCH_deDE = {
+    ["Controls the rounded frame texture style for unit frames, group frames, power bars, and mouseover highlights."] = "Steuert den abgerundeten Frame-Textur-Stil fuer Unitframes, Gruppenframes, Powerbars und Mouseover-Hervorhebungen.",
+    ["Enable or disable rounded mouseover highlight edges."] = "Aktiviert oder deaktiviert abgerundete Mouseover-Hervorhebungen.",
+    ["Enable or disable rounded textures on group frames."] = "Aktiviert oder deaktiviert abgerundete Texturen auf Gruppenframes.",
+    ["Enable or disable rounded textures on power bars."] = "Aktiviert oder deaktiviert abgerundete Texturen auf Powerbars.",
+    ["Enable or disable rounded textures on unit frames."] = "Aktiviert oder deaktiviert abgerundete Texturen auf Unitframes.",
+    ["Group frames"] = "Gruppenframes",
+    ["How do I enable or disable rounded frames?"] = "Wie schalte ich abgerundete Frames ein oder aus?",
+    ["Master switch for the rounded frame texture style."] = "Hauptschalter fuer den abgerundeten Frame-Textur-Stil.",
+    ["Mouseover highlights"] = "Mouseover-Hervorhebungen",
+    ["Open Global Style > Bars > Rounded Texture. Use the master toggle for all rounded frame textures, or the separate toggles for unit frames, group frames, power bars, and mouseover highlights."] = "Oeffne Globaler Stil > Bars > Abgerundete Textur. Nutze den Hauptschalter fuer alle abgerundeten Frame-Texturen oder die einzelnen Schalter fuer Unitframes, Gruppenframes, Powerbars und Mouseover-Hervorhebungen.",
+    ["Open this section to enable or disable rounded frame textures and its per-surface toggles."] = "Oeffne diesen Abschnitt, um abgerundete Frame-Texturen und die einzelnen Flaechen-Schalter ein- oder auszuschalten.",
+    ["Opens: Global Style > Bars > Rounded Texture"] = "Oeffnet: Globaler Stil > Bars > Abgerundete Textur",
+    ["Power bars"] = "Powerbars",
+    ["Rounded frame texture"] = "Abgerundete Frame-Textur",
+    ["Rounded Texture"] = "Abgerundete Textur",
+}
+for k, v in pairs(MSUF2_ROUNDED_SEARCH_deDE) do
+    L[k] = v
+end

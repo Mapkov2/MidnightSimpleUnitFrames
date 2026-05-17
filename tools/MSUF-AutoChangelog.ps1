@@ -281,8 +281,7 @@ function Get-PreviousStableTagForVersion {
     $targetParts = Get-VersionNumberParts $Version
     if ($null -eq $targetParts) { return "" }
 
-    $bestTag = ""
-    $bestParts = $null
+    $best = $null
     Push-Location $RepoRoot
     try {
         $tags = @(& git tag --list 2>$null)
@@ -292,16 +291,67 @@ function Get-PreviousStableTagForVersion {
             $parts = Get-VersionNumberParts $tag
             if ($null -eq $parts) { continue }
             if ((Compare-VersionNumberParts -Left $parts -Right $targetParts) -ge 0) { continue }
-            if ($bestTag -eq "" -or (Compare-VersionNumberParts -Left $parts -Right $bestParts) -gt 0) {
-                $bestTag = $tag
-                $bestParts = $parts
+
+            $commit = (& git rev-parse --verify --quiet "$tag^{commit}" 2>$null)
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) { continue }
+            $commit = "$commit".Trim()
+
+            $null = & git merge-base --is-ancestor $commit HEAD 2>$null
+            if ($LASTEXITCODE -ne 0) { continue }
+
+            $aheadText = (& git rev-list --count "$commit..HEAD" 2>$null)
+            $ahead = if ($LASTEXITCODE -eq 0 -and "$aheadText" -match '^\d+$') { [int]"$aheadText" } else { [int]::MaxValue }
+
+            $timeText = (& git log -1 --format=%ct $commit 2>$null)
+            $commitTime = if ($LASTEXITCODE -eq 0 -and "$timeText" -match '^\d+$') { [int64]"$timeText" } else { [int64]0 }
+
+            $name = ($tag -replace '^refs/tags/', '' -replace '^v(?=\d)', '')
+            $canonical = ($parts -join ".")
+            $nameScore = 0
+            if ($name -eq $canonical) {
+                $nameScore = 2
+            } elseif ($tag -eq ("v" + $canonical)) {
+                $nameScore = 1
+            }
+
+            $candidate = [pscustomobject]@{
+                Tag = $tag
+                Parts = [int[]]$parts
+                Ahead = $ahead
+                CommitTime = $commitTime
+                NameScore = $nameScore
+            }
+
+            $take = $false
+            if ($null -eq $best) {
+                $take = $true
+            } else {
+                $versionCompare = Compare-VersionNumberParts -Left ([int[]]$candidate.Parts) -Right ([int[]]$best.Parts)
+                if ($versionCompare -gt 0) {
+                    $take = $true
+                } elseif ($versionCompare -eq 0) {
+                    if ($candidate.Ahead -lt $best.Ahead) {
+                        $take = $true
+                    } elseif ($candidate.Ahead -eq $best.Ahead) {
+                        if ($candidate.NameScore -gt $best.NameScore) {
+                            $take = $true
+                        } elseif ($candidate.NameScore -eq $best.NameScore -and $candidate.CommitTime -gt $best.CommitTime) {
+                            $take = $true
+                        }
+                    }
+                }
+            }
+
+            if ($take) {
+                $best = $candidate
             }
         }
     } finally {
         Pop-Location
     }
 
-    return $bestTag
+    if ($null -eq $best) { return "" }
+    return $best.Tag
 }
 
 function Get-EffectiveSinceHours {
@@ -323,6 +373,20 @@ function Get-EffectiveBaseRef {
 
     $base = if ([string]::IsNullOrWhiteSpace($BaseRef)) { Get-DefaultBaseRef } else { $BaseRef.Trim() }
     if ([string]::IsNullOrWhiteSpace($base)) { return "" }
+
+    $targetKey = Normalize-VersionKey $DisplayVersion
+    if ($targetKey -ne "" -and (Normalize-VersionKey $base) -eq $targetKey) {
+        $fallback = Get-PreviousStableTagForVersion $DisplayVersion
+        if ([string]::IsNullOrWhiteSpace($fallback)) {
+            $fallback = Get-DefaultBaseRef
+        }
+        if (-not [string]::IsNullOrWhiteSpace($fallback) -and (Normalize-VersionKey $fallback) -ne $targetKey -and (Test-GitRefExists $fallback)) {
+            Write-AutoLog "Since ref '$base' is the target version. Using '$fallback' as commit range base for '$DisplayVersion'."
+            $script:BaseRef = $fallback
+            return $fallback
+        }
+    }
+
     if (Test-GitRefExists $base) { return $base }
 
     $resolvedTag = Resolve-GitTagLikeRef $base
@@ -332,7 +396,6 @@ function Get-EffectiveBaseRef {
         return $resolvedTag
     }
 
-    $targetKey = Normalize-VersionKey $DisplayVersion
     if ($targetKey -ne "" -and (Normalize-VersionKey $base) -eq $targetKey) {
         $fallback = Get-DefaultBaseRef
         if (-not [string]::IsNullOrWhiteSpace($fallback) -and (Test-GitRefExists $fallback)) {
@@ -351,7 +414,7 @@ function Test-IsAutoIgnoredPath {
     $p = Convert-PathForGit "$Path"
     if ([string]::IsNullOrWhiteSpace($p)) { return $true }
 
-    if ($p -match '^\.github/|^tools/|^docs/') { return $true }
+    if ((-not $IncludeTooling) -and ($p -match '^(?:\.github/|tools/|docs/)')) { return $true }
     if ($p -eq "CHANGELOG.md") { return $true }
     if ($p -eq "MidnightSimpleUnitFrames/Foundation/MSUF_Changelog.lua") { return $true }
     if ($p -match '\.pkgmeta$|MidnightSimpleUnitFrames\.toc$') { return $true }
@@ -371,6 +434,7 @@ function Get-ChangeArea {
     if ($p -match '/Auras2/') { return "Unit Auras" }
     if ($p -match '/GroupFrames/') { return "Group Frames" }
     if ($p -match '/Modules/MSUF_InterruptReady\.lua$') { return "Interrupt Ready" }
+    if ($p -match '/MidnightSimpleUnitFrames\.lua$') { return "Core Runtime" }
     if ($p -match '/Core/MSUF_Text\.lua$') { return "Unit Text" }
     if ($p -match '/Core/MSUF_Borders\.lua$') { return "Borders / Outlines" }
     if ($p -match '/Core/MSUF_Bars\.lua$') { return "Bars / Power Bars" }
@@ -392,14 +456,32 @@ function Get-ChangeCategory {
     $contextText = if ($null -eq $Context) { "" } else { $Context.ToLowerInvariant() }
     $haystack = "$subjectText $pathText $contextText"
 
+    if ($subjectText -match 'release|publish|package|workflow|changelog tool') {
+        return "Release / Tooling"
+    }
+    if ($subjectText -match 'doc|readme') {
+        return "Documentation"
+    }
+    if ($subjectText -match 'refine menu2 switches|better on off button|new cards design|more menu cards|refactor of search|main refactor|mainline core refactor|better local') {
+        return "Changes / Improvements"
+    }
+    if ($subjectText -match 'fix|fixed|bug|crash|taint|error|broken|wrong|misdetect') {
+        return "Bugfixes"
+    }
+    if ($subjectText -match 'perf|performance|optim|cache|hot path|fast|less work|coalesce|throttle|debounce|allocation') {
+        return "Performance"
+    }
     if ($haystack -match 'class.?color|classcolor|barbackground|bar background') {
         return "Changes / Improvements"
     }
-    if ($haystack -match 'perf|performance|optim|cache|hot path|fast|less work|skip|coalesce|throttle|debounce|allocation') {
-        return "Performance"
+    if ($pathText -match 'msuf_runtimeLocalization|msuf_menu2_search|msuf_swaprecolor|msuf_fontregistry|msuf_switch_|superellipse|msuf_menu2_widgets|msuf_rangefade') {
+        return "Changes / Improvements"
     }
     if ($haystack -match 'fix|fixed|bug|crash|taint|error|broken|guard|fallback|secret|nil|wrong|misdetect') {
         return "Bugfixes"
+    }
+    if ($haystack -match 'perf|performance|optim|cache|hot path|fast|less work|skip|coalesce|throttle|debounce|allocation') {
+        return "Performance"
     }
     return "Changes / Improvements"
 }
@@ -431,6 +513,26 @@ function Convert-CommitSubjectToText {
         $text = "Cleaned up menu test mode when leaving the menu"
     } elseif ($lower -match '^new rested logo') {
         $text = "Added the new rested logo"
+    } elseif ($lower -eq "better local") {
+        $text = "Updated runtime localization"
+    } elseif ($lower -eq "refactor of search") {
+        $text = "Added the Menu2 search module and indexing"
+    } elseif ($lower -eq "main refactor") {
+        $text = "Added core swap recolor runtime support"
+    } elseif ($lower -eq "mainline core refactor") {
+        $text = "Added centralized font registry and core runtime loading"
+    } elseif ($lower -eq "performance pass on stuff") {
+        $text = "Improved bar background, unit text, and Interrupt Ready performance"
+    } elseif ($lower -eq "new cards design") {
+        $text = "Redesigned Menu2 cards across settings pages"
+    } elseif ($lower -eq "more menu cards") {
+        $text = "Added more Menu2 cards to group and unit sections"
+    } elseif ($lower -eq "even better dymanic strata" -or $lower -eq "even better dynamic strata") {
+        $text = "Improved Menu2 dynamic strata handling"
+    } elseif ($lower -eq "better changelog tool for publishing") {
+        $text = "Improved release changelog tooling and dashboard changelog output"
+    } elseif ($lower -match '^better on off button') {
+        $text = "Improved on/off switches and added raid numbers next to unit names"
     } else {
         $text = $text -replace '(?i)\bmore clearer\b', 'clearer'
         $text = $text -replace '(?i)\bspeces\b', 'specs'
@@ -438,8 +540,11 @@ function Convert-CommitSubjectToText {
         $text = $text -replace '(?i)\bunitframe\b', 'unit frame'
         $text = $text -replace '(?i)\bgroupframe\b', 'group frame'
         $text = $text -replace '(?i)\bund\b', 'and'
+        $text = $text -replace '(?i)\bdymanic\b', 'dynamic'
     }
     if ($text.Length -gt 0) {
+        $text = $text -replace '(?i)^fix\s+', 'Fixed '
+        $text = $text -replace '(?i)^improve\s+', 'Improved '
         $text = $text.Substring(0, 1).ToUpperInvariant() + $text.Substring(1)
     }
     return $text
@@ -518,6 +623,53 @@ function Get-UserFacingChangeText {
     $cleanSubject = $cleanSubject -replace '\s*\([^)]*\)\s*$', ''
     $cleanSubject = $cleanSubject.Trim().TrimEnd(".")
     $genericSubject = Test-IsGenericChangeSubject $subjectText
+    $subjectLower = $subjectText.ToLowerInvariant()
+
+    if ($subjectLower -eq "better local") {
+        return "Updated runtime localization coverage."
+    }
+    if ($subjectLower -eq "refactor of search") {
+        return "Added and refined the Menu2 search module."
+    }
+    if ($subjectLower -eq "main refactor") {
+        return "Added core swap recolor runtime support."
+    }
+    if ($subjectLower -eq "mainline core refactor") {
+        return "Added centralized font registry support for the unit frame runtime."
+    }
+    if ($subjectLower -eq "performance pass on stuff") {
+        return "Improved bar background, unit text, and Interrupt Ready performance."
+    }
+    if ($subjectLower -eq "new cards design") {
+        return "Redesigned Menu2 cards across settings pages."
+    }
+    if ($subjectLower -eq "more menu cards") {
+        return "Added more Menu2 cards to group and unit sections."
+    }
+    if ($subjectLower -eq "even better dymanic strata" -or $subjectLower -eq "even better dynamic strata") {
+        return "Improved Menu2 dynamic strata handling."
+    }
+    if ($subjectLower -eq "better changelog tool for publishing") {
+        return "Improved release changelog tooling and dashboard changelog output."
+    }
+    if ($subjectLower -eq "harden msuf backend namespace compatibility") {
+        return "Hardened MSUF backend namespace compatibility across modules."
+    }
+    if ($subjectLower -eq "refine menu2 switches and range fade controls") {
+        return "Refined Menu2 switches and range fade controls."
+    }
+    if ($subjectLower -eq "fix menu2 card enable states") {
+        return "Fixed Menu2 card enable states."
+    }
+    if ($subjectLower -match '^better on off button') {
+        return "Improved on/off switch visuals and added raid group numbers beside unit names."
+    }
+    if ($subjectLower -match 'name shortening') {
+        return "Improved Menu2 search guidance for name shortening overrides."
+    }
+    if ($subjectLower -match 'aura buff override') {
+        return "Improved Menu2 search guidance for aura buff overrides."
+    }
 
     if ($haystack -match 'long.?raid.?buff|raid.?buff|ignorelong|longbuff') {
         return "Improved Group Frame aura filtering so long raid buffs are no longer tracked incorrectly."
@@ -530,6 +682,45 @@ function Get-UserFacingChangeText {
     }
     if ($haystack -match 'class.?color|classcolor|barbackground|bar background') {
         return "Added class-colored bar background support across unit and group frames."
+    }
+    if ($haystack -match 'msuf_switch_knob|msuf_switch_track|on/off|on off|switch') {
+        if ($haystack -match 'raid') {
+            return "Improved on/off switch visuals and added raid group numbers beside unit names."
+        }
+        return "Improved Menu2 switch controls and visual states."
+    }
+    if ($pathText -match '/Locales/MSUF_RuntimeLocalization\.lua') {
+        return "Updated runtime localization coverage."
+    }
+    if ($pathText -match '/Menu2/MSUF_Menu2_Search\.lua') {
+        if ($haystack -match 'aura|buff|override') {
+            return "Improved Menu2 search guidance for aura buff overrides."
+        }
+        if ($haystack -match 'name shortening|short name') {
+            return "Improved Menu2 search guidance for name shortening overrides."
+        }
+        return "Added and refined the Menu2 search module."
+    }
+    if ($pathText -match '/Core/MSUF_SwapRecolor\.lua') {
+        return "Added core swap recolor runtime support."
+    }
+    if ($pathText -match '/Core/MSUF_FontRegistry\.lua') {
+        return "Added centralized font registry support for the unit frame runtime."
+    }
+    if ($haystack -match 'dynamic strata|dymanic strata|\bstrata\b') {
+        return "Improved Menu2 dynamic strata handling."
+    }
+    if ($haystack -match 'card') {
+        return "Redesigned Menu2 cards and expanded card-based settings sections."
+    }
+    if ($pathText -match '/Core/MSUF_BarBackgroundRuntime\.lua' -and $pathText -match '/Core/MSUF_Text\.lua' -and $pathText -match '/Modules/MSUF_InterruptReady\.lua') {
+        return "Improved bar background, unit text, and Interrupt Ready performance."
+    }
+    if ($haystack -match 'range.?fade') {
+        return "Refined range fade controls and runtime behavior."
+    }
+    if ($subjectText -match '(?i)release|publish|changelog tool') {
+        return "Improved release changelog tooling and dashboard changelog output."
     }
 
     if (-not $genericSubject) {
@@ -553,6 +744,9 @@ function Get-UserFacingChangeText {
     }
     if ($pathText -match '/Core/MSUF_ChatAndTooltips\.lua') {
         return "Improved chat and tooltip integration."
+    }
+    if ($pathText -match '/MidnightSimpleUnitFrames\.lua') {
+        return "Improved addon bootstrap and module loading."
     }
 
     if ($haystack -match 'test.?mode') {
@@ -669,7 +863,8 @@ function Add-CommitChangesToGroups {
 
         $scannedCommits = 0
         $usedCommits = 0
-        $junkCommits = 0
+        $junkSubjectCommits = 0
+        $skippedCommits = 0
         $addedEntries = 0
         foreach ($line in $commitLines) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -679,15 +874,17 @@ function Add-CommitChangesToGroups {
             $hash = $parts[0]
             $short = $parts[1]
             $subject = $parts[2]
-            if (Test-IsIgnoredCommitSubject $subject) {
-                $junkCommits++
+            $hasJunkSubject = Test-IsIgnoredCommitSubject $subject
+            if ($hasJunkSubject) { $junkSubjectCommits++ }
+            $paths = [string[]]@(Get-CommitPaths $hash)
+            if ($paths.Count -eq 0) {
+                $skippedCommits++
                 continue
             }
-            $paths = [string[]]@(Get-CommitPaths $hash)
-            if ($paths.Count -eq 0) { continue }
             $usedCommits++
             $diff = Get-CommitDiffText $hash
-            if ((Test-IsGenericChangeSubject $subject) -and $paths.Count -gt 1) {
+            $scanSubject = if ($hasJunkSubject) { "" } else { $subject }
+            if ((Test-IsGenericChangeSubject $scanSubject) -and $paths.Count -gt 1) {
                 $areaBuckets = [ordered]@{}
                 foreach ($path in $paths) {
                     $area = Get-ChangeArea $path
@@ -698,21 +895,21 @@ function Add-CommitChangesToGroups {
                 }
                 foreach ($area in $areaBuckets.Keys) {
                     $areaPaths = [string[]]$areaBuckets[$area].ToArray()
-                    $category = Get-ChangeCategory -Subject $subject -Paths $areaPaths -Context $diff
-                    $bullet = Get-UserFacingChangeText -Subject $subject -Paths $areaPaths -DiffText $diff -Category $category
+                    $category = Get-ChangeCategory -Subject $scanSubject -Paths $areaPaths -Context $diff
+                    $bullet = Get-UserFacingChangeText -Subject $scanSubject -Paths $areaPaths -DiffText $diff -Category $category
                     if (Add-GroupedBullet -Groups $Groups -Seen $Seen -Category $category -Bullet $bullet) {
                         $addedEntries++
                     }
                 }
             } else {
-                $category = Get-ChangeCategory -Subject $subject -Paths $paths -Context $diff
-                $bullet = Get-UserFacingChangeText -Subject $subject -Paths $paths -DiffText $diff -Category $category
+                $category = Get-ChangeCategory -Subject $scanSubject -Paths $paths -Context $diff
+                $bullet = Get-UserFacingChangeText -Subject $scanSubject -Paths $paths -DiffText $diff -Category $category
                 if (Add-GroupedBullet -Groups $Groups -Seen $Seen -Category $category -Bullet $bullet) {
                     $addedEntries++
                 }
             }
         }
-        Write-AutoLog "Scanned $scannedCommits commits from $range; filtered $junkCommits junk commits, used $usedCommits addon commits, and added $addedEntries unique entries."
+        Write-AutoLog "Scanned $scannedCommits commits from $range; used $usedCommits addon commits, saw $junkSubjectCommits junk-subject commits, skipped $skippedCommits commits without included code, and added $addedEntries unique entries."
     } finally {
         Pop-Location
     }

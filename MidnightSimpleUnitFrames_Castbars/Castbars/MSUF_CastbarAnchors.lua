@@ -66,7 +66,7 @@ function MSUF_ReanchorTargetCastBar()
         MSUF_SetPointIfChanged(frame, "BOTTOMLEFT", msufTarget, "TOPLEFT", offsetX, offsetY)
     end
 
-    MSUF_UpdateCastbarWidthSourceSync(g, "target")
+    MSUF_UpdateCastbarWidthSourceSync(g, "target", true)
     local width, desiredHeight = MSUF_GetCastbarDesiredSize("target", g, frame, frame.GetWidth and frame:GetWidth() or 240, frame.GetHeight and frame:GetHeight() or 18)
     if width and width > 0 then
         local snap = _G.MSUF_Snap
@@ -151,7 +151,7 @@ function MSUF_ReanchorFocusCastBar()
         MSUF_SetPointIfChanged(frame, "BOTTOMLEFT", msufFocus, "TOPLEFT", offsetX, offsetY)
     end
 
-    MSUF_UpdateCastbarWidthSourceSync(g, "focus")
+    MSUF_UpdateCastbarWidthSourceSync(g, "focus", true)
     local width, desiredHeight = MSUF_GetCastbarDesiredSize("focus", g, frame, frame.GetWidth and frame:GetWidth() or 240, frame.GetHeight and frame:GetHeight() or 18)
     if width and width > 0 then
         local snap = _G.MSUF_Snap
@@ -355,6 +355,7 @@ end
 -- ============================================================
 local CASTBAR_WIDTH_RETRY_DELAYS = { 0.05, 0.15, 0.35, 0.75, 1.5, 3.0, 5.0, 7.0 }
 local CASTBAR_WIDTH_SOURCE_HOOKED = setmetatable({}, { __mode = "k" })
+local castbarWidthSourceSignatures = {}
 local castbarWidthSourceQueued = false
 local castbarWidthSourceRetryActive = false
 local castbarWidthSourceRetryIndex = 0
@@ -549,6 +550,73 @@ local function MSUF_GetPlayerCastbarWidthFromSource(matchSrc, targetFrame)
     return MSUF_GetCastbarWidthFromSource("player", matchSrc, targetFrame)
 end
 
+local function MSUF_GetCastbarWidthFrameSignature(frame)
+    if not frame then return "nil" end
+    local w = frame.GetWidth and frame:GetWidth() or 0
+    local h = frame.GetHeight and frame:GetHeight() or 0
+    local scale = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
+    local shown = (frame.IsShown and frame:IsShown()) and 1 or 0
+    w = floor((tonumber(w) or 0) * 100 + 0.5)
+    h = floor((tonumber(h) or 0) * 100 + 0.5)
+    scale = floor((tonumber(scale) or 1) * 1000 + 0.5)
+    return tostring(w) .. ":" .. tostring(h) .. ":" .. tostring(scale) .. ":" .. tostring(shown)
+end
+
+local function MSUF_GetCastbarWidthSourceSignature(g, unit)
+    unit = MSUF_NormalizeCastbarUnit(unit)
+    local enableKey = MSUF_GetCastbarEnableKey(unit)
+    if enableKey and g and g[enableKey] == false then return nil end
+
+    local matchSrc = MSUF_GetCastbarConfiguredWidthSource(g, unit)
+    if not matchSrc then return nil end
+
+    if matchSrc == "unitframe" then
+        local count = unit == "boss" and 5 or 1
+        local sig = matchSrc
+        for i = 1, count do
+            local sourceUnit = unit == "boss" and ("boss" .. i) or unit
+            sig = sig
+                .. "|" .. sourceUnit
+                .. "=" .. MSUF_GetCastbarWidthFrameSignature(MSUF_GetCastbarUnitframe(sourceUnit))
+                .. "/" .. MSUF_GetCastbarWidthFrameSignature(MSUF_GetCastbarUnitframeWidthSource(sourceUnit))
+        end
+        return sig
+    end
+
+    local containerKey, viewerKey = MSUF_GetCastbarWidthSourceNames(matchSrc)
+    local container = containerKey and _G[containerKey] or nil
+    local viewer = MSUF_GetEffectiveCooldownViewer(viewerKey)
+    local rawViewer = viewerKey and _G[viewerKey] or nil
+    return matchSrc
+        .. "|c=" .. MSUF_GetCastbarWidthFrameSignature(container)
+        .. "|v=" .. MSUF_GetCastbarWidthFrameSignature(viewer)
+        .. "|r=" .. MSUF_GetCastbarWidthFrameSignature(rawViewer)
+end
+
+local function MSUF_CastbarWidthSourceNeedsReanchor(g, unit)
+    unit = MSUF_NormalizeCastbarUnit(unit)
+    local sig = MSUF_GetCastbarWidthSourceSignature(g, unit)
+    if not sig then
+        castbarWidthSourceSignatures[unit] = nil
+        return false
+    end
+    if castbarWidthSourceSignatures[unit] == sig then
+        return false
+    end
+    castbarWidthSourceSignatures[unit] = sig
+    return true
+end
+
+local function MSUF_InvalidateCastbarWidthSourceSignature(unit)
+    if unit then
+        castbarWidthSourceSignatures[MSUF_NormalizeCastbarUnit(unit)] = nil
+        return
+    end
+    for _, unitKey in ipairs(CASTBAR_WIDTH_UNITS) do
+        castbarWidthSourceSignatures[unitKey] = nil
+    end
+end
+
 local MSUF_QueueCastbarWidthSourceSync
 
 local function MSUF_CastbarWidthSourceChanged()
@@ -583,7 +651,9 @@ local function MSUF_FlushCastbarWidthSourceSync()
     EnsureDB()
     local g = MSUF_DB and MSUF_DB.general or {}
     for _, unit in ipairs(CASTBAR_WIDTH_UNITS) do
-        MSUF_ReanchorCastbarWidthSourceUnit(unit, g)
+        if MSUF_CastbarWidthSourceNeedsReanchor(g, unit) then
+            MSUF_ReanchorCastbarWidthSourceUnit(unit, g)
+        end
     end
 end
 
@@ -708,7 +778,10 @@ MSUF_QueueCastbarWidthSourceSync = function()
     end
 end
 
-local function MSUF_UpdateCastbarWidthSourceSync(g, unit)
+local function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
+    if not keepSignature then
+        MSUF_InvalidateCastbarWidthSourceSignature(unit)
+    end
     if unit then
         if not MSUF_UnitHasActiveCastbarWidthSource(g, unit) then return end
         if not MSUF_EnsureCastbarWidthSourceHooks(g, unit) then
@@ -729,7 +802,7 @@ local function MSUF_UpdateCastbarWidthSourceSync(g, unit)
 end
 
 local function MSUF_UpdatePlayerCastbarWidthSourceSync(g)
-    MSUF_UpdateCastbarWidthSourceSync(g, "player")
+    MSUF_UpdateCastbarWidthSourceSync(g, "player", true)
 end
 
 do
@@ -959,7 +1032,7 @@ MSUF_PlayerCastbarManageHooked = true -- Blizzard fallback removed; nothing to m
 
 function MSUF_ReanchorBossCastBar()
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-        _G.MSUF_ApplyBossCastbarPositionSetting()
+        _G.MSUF_ApplyBossCastbarPositionSetting(false)
     end
     if not (_G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false))
         and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then

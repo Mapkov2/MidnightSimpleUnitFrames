@@ -223,6 +223,11 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     ForceFreshGroupAuraBlizzardRenderer(db.gf_mythicraid)
     db.bars = db.bars or {}
     db.bars.showAltMana = false
+    db.bars.roundedFramesEnabled = false
+    db.bars.roundedUnitFrames = true
+    db.bars.roundedGroupFrames = true
+    db.bars.roundedPowerBars = true
+    db.bars.roundedMouseover = true
     -- Fresh-install defaults: status indicators (AFK/DND) off by default
     local g = db.general
     if type(g) == 'table' then
@@ -1518,6 +1523,21 @@ if MSUF_DB.bars == nil then
     end
     if MSUF_DB.bars.realtimePowerText == nil then
         MSUF_DB.bars.realtimePowerText = true
+    end
+    if MSUF_DB.bars.roundedFramesEnabled == nil then
+        MSUF_DB.bars.roundedFramesEnabled = false
+    end
+    if MSUF_DB.bars.roundedUnitFrames == nil then
+        MSUF_DB.bars.roundedUnitFrames = true
+    end
+    if MSUF_DB.bars.roundedGroupFrames == nil then
+        MSUF_DB.bars.roundedGroupFrames = true
+    end
+    if MSUF_DB.bars.roundedPowerBars == nil then
+        MSUF_DB.bars.roundedPowerBars = true
+    end
+    if MSUF_DB.bars.roundedMouseover == nil then
+        MSUF_DB.bars.roundedMouseover = true
     end
     if MSUF_DB.bars.embedPowerBarIntoHealth == nil then
         -- Pixel-perfect default: keep the power bar *inside* the unitframe bounds.

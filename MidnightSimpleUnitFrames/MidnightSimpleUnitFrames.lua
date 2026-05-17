@@ -442,9 +442,26 @@ ns.UF.Unitframe_OnEnter = ns.UF.Unitframe_OnEnter or function(self)
             enabled = (g.enableHighlightOnHover == true)
         end
         if enabled then
-            if self.UpdateHighlightColor then self:UpdateHighlightColor() end
-            if _G.MSUF_FixHighlightForFrame then _G.MSUF_FixHighlightForFrame(self) end
-            hb:Show()
+            local roundedHandled = false
+            if _G.MSUF_RoundedUF_Active == true and self._msufRUF_SuppressMouseover == true then
+                local roundedEdge = self._msufRUF_HoverEdge
+                if roundedEdge then
+                    roundedEdge:Show()
+                    roundedHandled = true
+                else
+                    local roundedHover = _G.MSUF_RoundedUF_OnUnitMouseover
+                    if type(roundedHover) == "function" then
+                        roundedHandled = roundedHover(self, true) and true or false
+                    end
+                end
+            end
+            if roundedHandled then
+                hb:Hide()
+            else
+                if self.UpdateHighlightColor then self:UpdateHighlightColor() end
+                if _G.MSUF_FixHighlightForFrame then _G.MSUF_FixHighlightForFrame(self) end
+                hb:Show()
+            end
         else
             hb:Hide()
         end
@@ -463,6 +480,15 @@ ns.UF.Unitframe_OnEnter = ns.UF.Unitframe_OnEnter or function(self)
     end
 end
 ns.UF.Unitframe_OnLeave = ns.UF.Unitframe_OnLeave or function(self)
+    if _G.MSUF_RoundedUF_Active == true and self and self._msufRUF_SuppressMouseover == true then
+        local roundedEdge = self._msufRUF_HoverEdge
+        if roundedEdge then
+            roundedEdge:Hide()
+        else
+            local roundedHover = _G.MSUF_RoundedUF_OnUnitMouseover
+            if type(roundedHover) == "function" then roundedHover(self, false) end
+        end
+    end
     if self and self.highlightBorder then self.highlightBorder:Hide() end
     local tips = ns.Tooltips
     if tips and type(tips.HideUnit) == "function" then

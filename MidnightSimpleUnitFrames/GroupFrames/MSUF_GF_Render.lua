@@ -1564,6 +1564,12 @@ local function ApplyVisuals(f, bits)
     end
     -- Rebuild hot-path settings cache (eliminates GF.GetConf from combat events)
     if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+    if _G.MSUF_RoundedUF_Active == true then
+        local applyRounded = _G.MSUF_RoundedUF_OnGroupFrameApplied
+        if type(applyRounded) == "function" then
+            applyRounded(f, kind)
+        end
+    end
 end
 
 ------------------------------------------------------------------------

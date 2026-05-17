@@ -786,7 +786,7 @@ local function _GF_StartDispelGlow(f, r, g, b)
         end
         return
     end
-    local anchor = f._msufGFHighlightBorder or f
+    local anchor = f._msufRGF_GlowAnchor or f._msufGFHighlightBorder or f
     local style = HLVal(kind, "hlDispelGlowStyle") or "PIXEL"
     local oldAnchor = f._msufGFDispelGlowAnchor
     if oldAnchor and (oldAnchor ~= anchor or f._msufGFDispelGlowStyle ~= style) then
@@ -1488,7 +1488,9 @@ local function _applyHighlightBorderStyle(border, conf, edgeSz, ofs, texKey, lay
         border:SetBackdrop({ edgeFile = edgeFile, edgeSize = edgeSz, insets = _hlBdInsets })
         border:SetBackdropColor(0, 0, 0, 0)
     end
-    border:SetBackdropBorderColor(r or 1, g or 1, b or 1, a or 1)
+    r, g, b, a = r or 1, g or 1, b or 1, a or 1
+    border._msufHLR, border._msufHLG, border._msufHLB, border._msufHLA = r, g, b, a
+    border:SetBackdropBorderColor(r, g, b, a)
 
     -- Diff-gate anchor offset
     if border._msufHLOfs ~= ofs then
@@ -1508,6 +1510,12 @@ local function _applyHighlightBorderStyle(border, conf, edgeSz, ofs, texKey, lay
             border:SetFrameLevel(wantLvl)
         end
     end
+end
+
+local function _NotifyRoundedGFHighlight(border)
+    if _G.MSUF_RoundedUF_Active ~= true then return end
+    local fn = _G.MSUF_RoundedUF_OnGroupHighlightChanged
+    if type(fn) == "function" then fn(border) end
 end
 
 ------------------------------------------------------------------------
@@ -1918,9 +1926,11 @@ local function _GF_QuickBorderUpdate(f)
                 c.tgtLayer or "DEFAULT",
                 c.tgtR, c.tgtG, c.tgtB, 1)
         else
+            border._msufHLR, border._msufHLG, border._msufHLB, border._msufHLA = c.tgtR, c.tgtG, c.tgtB, 1
             border:SetBackdropBorderColor(c.tgtR, c.tgtG, c.tgtB, 1)
         end
         if not border:IsShown() then border:Show() end
+        _NotifyRoundedGFHighlight(border)
         return
     end
 
@@ -1935,14 +1945,17 @@ local function _GF_QuickBorderUpdate(f)
                 c.focLayer or "DEFAULT",
                 c.focR, c.focG, c.focB, 1)
         else
+            border._msufHLR, border._msufHLG, border._msufHLB, border._msufHLA = c.focR, c.focG, c.focB, 1
             border:SetBackdropBorderColor(c.focR, c.focG, c.focB, 1)
         end
         if not border:IsShown() then border:Show() end
+        _NotifyRoundedGFHighlight(border)
         return
     end
 
     -- Nothing active
     border._msufHLActivePrio = nil
+    _NotifyRoundedGFHighlight(border)
     if border:IsShown() then border:Hide() end
 end
 
@@ -2135,6 +2148,7 @@ _GF_RefreshBorder = function(f, unit)
                     if r then
                         _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay, r, g, b, 1)
                         border._msufHLActivePrio = 1; border:Show()
+                        _NotifyRoundedGFHighlight(border)
                         _GF_StartDispelGlow(f, r, g, b)
                         return
                     end
@@ -2144,6 +2158,7 @@ _GF_RefreshBorder = function(f, unit)
                     _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay,
                         c.aggroR or 1, c.aggroG or 0.55, c.aggroB or 0, 1)
                     border._msufHLActivePrio = 2; border:Show()
+                    _NotifyRoundedGFHighlight(border)
                     _GF_StopDispelGlow(f)
                     return
                 end
@@ -2156,6 +2171,7 @@ _GF_RefreshBorder = function(f, unit)
             if r then
                 _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay, r, g, b, 1)
                 border._msufHLActivePrio = 1; border:Show()
+                _NotifyRoundedGFHighlight(border)
                 _GF_StartDispelGlow(f, r, g, b)
                 return
             end
@@ -2164,6 +2180,7 @@ _GF_RefreshBorder = function(f, unit)
             _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay,
                 c.aggroR or 1, c.aggroG or 0.55, c.aggroB or 0, 1)
             border._msufHLActivePrio = 2; border:Show()
+            _NotifyRoundedGFHighlight(border)
             _GF_StopDispelGlow(f)
             return
         end
@@ -2180,6 +2197,7 @@ _GF_RefreshBorder = function(f, unit)
             c.tgtG or 1,
             c.tgtB or 1, 1)
         border._msufHLActivePrio = 3; border:Show()
+        _NotifyRoundedGFHighlight(border)
         _GF_StopDispelGlow(f)
         return
     end
@@ -2195,11 +2213,13 @@ _GF_RefreshBorder = function(f, unit)
             c.focG or 0.5,
             c.focB or 1.0, 1)
         border._msufHLActivePrio = 4; border:Show()
+        _NotifyRoundedGFHighlight(border)
         _GF_StopDispelGlow(f)
         return
     end
 
     border._msufHLActivePrio = nil
+    _NotifyRoundedGFHighlight(border)
     if border:IsShown() then border:Hide() end
     _GF_StopDispelGlow(f)
 end
@@ -5456,8 +5476,15 @@ end
 local function OnEnter(f)
     DebugHover("GF OnEnter frame=%s unit=%s kind=%s", tostring(f and f:GetName() or "<anon>"), tostring(f and f.unit or "nil"), tostring(f and f._msufGFKind or "party"))
     -- Mouseover highlight
-    local hb = EnsureMouseoverHighlight(f)
-    if hb then hb:Show() end
+    local roundedHandled = false
+    if _G.MSUF_RoundedUF_Active == true and f and f._msufRUF_SuppressGFHover == true then
+        local roundedHover = _G.MSUF_RoundedUF_OnGroupMouseover
+        if type(roundedHover) == "function" then roundedHandled = roundedHover(f, true) == true end
+    end
+    if not roundedHandled then
+        local hb = EnsureMouseoverHighlight(f)
+        if hb then hb:Show() end
+    end
     -- Cancel any pending tooltip for a different frame
     _tooltipPendingToken = _tooltipPendingToken + 1
     _tooltipTarget = f
@@ -5522,6 +5549,10 @@ local function OnLeave(f)
     _tooltipTarget = nil
     -- Hide highlight
     if f._msufGFHoverBorder then f._msufGFHoverBorder:Hide() end
+    if _G.MSUF_RoundedUF_Active == true and f and f._msufRUF_SuppressGFHover == true then
+        local roundedHover = _G.MSUF_RoundedUF_OnGroupMouseover
+        if type(roundedHover) == "function" then roundedHover(f, false) end
+    end
     -- Hide tooltip
     local tips = ns and ns.Tooltips
     if tips and type(tips.HideUnit) == "function" then

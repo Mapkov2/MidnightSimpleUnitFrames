@@ -154,6 +154,12 @@ if type(_G.MSUF_UnitFrames) ~= "table" then _G.MSUF_UnitFrames = {} end
 GF._eventFrame = GF._eventFrame or nil
 GF._previewActive = GF._previewActive or {}
 
+local _headerScanInputSerial = 0
+local _rebuildAllActive = false
+local function MarkHeaderScanInputsChanged()
+    _headerScanInputSerial = _headerScanInputSerial + 1
+end
+
 local function MarkPostCombatHeaderRecovery()
     GF._pendingRebuild = true
     GF._pendingVisibilityUpdate = true
@@ -1668,12 +1674,24 @@ local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
         if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime(kind, false) end
         return
     end
-    -- Throttle normal GROUP_ROSTER_UPDATE bursts, but never throttle the
-    -- explicit post-layout repair scans. The repair scans are what normalize
-    -- the first/player child after SecureGroupHeader finishes its own pass.
-    local now = GetTime()
-    if not force and header._msufGFLastScan and (now - header._msufGFLastScan) < 0.05 then return end
-    header._msufGFLastScan = now
+    -- Throttle normal GROUP_ROSTER_UPDATE bursts. Forced scans are still
+    -- allowed for the post-layout repair pass, but identical forced scans
+    -- inside the same short burst are skipped.
+    local now = (GetTime and GetTime()) or 0
+    if force then
+        local scanKey = tostring(kind) .. ":" .. tostring(_headerScanInputSerial)
+        if header._msufGFLastForceScanKey == scanKey
+            and header._msufGFLastForceScanAt
+            and (now - header._msufGFLastForceScanAt) < 0.04
+        then
+            return
+        end
+        header._msufGFLastForceScanKey = scanKey
+        header._msufGFLastForceScanAt = now
+    else
+        if header._msufGFLastScan and (now - header._msufGFLastScan) < 0.05 then return end
+        header._msufGFLastScan = now
+    end
 
     -- Protected frames: cannot call SetSize/SetPoint in combat
     local inCombat = InCombatLockdown()
@@ -2349,6 +2367,7 @@ local function SetupPartyHeader()
         GF._pendingPartyRefresh = true
         return
     end
+    if not _rebuildAllActive then MarkHeaderScanInputsChanged() end
 
     local conf = GF.GetConf("party")
     if not conf.enabled then return end
@@ -2669,6 +2688,7 @@ local function SetupRaidHeader()
         GF._pendingRaidRefresh = true
         return
     end
+    if not _rebuildAllActive then MarkHeaderScanInputsChanged() end
 
     local kind = GetLiveRaidKind()
     local conf = GF.GetConf(kind)
@@ -3621,6 +3641,7 @@ function GF.RebuildAll()
         MarkPostCombatHeaderRecovery()
         return
     end
+    MarkHeaderScanInputsChanged()
     GF.HideOrphanedPreviews()
     local partyConf = GF.GetConf("party")
     local raidKind = GetLiveRaidKind()
@@ -3630,6 +3651,7 @@ function GF.RebuildAll()
 
     local inRaid = IsInRaid and IsInRaid() or false
 
+    _rebuildAllActive = true
     -- Party: build once, show only outside raid
     if partyConf.enabled == true then
         SetupPartyHeader()
@@ -3649,6 +3671,7 @@ function GF.RebuildAll()
     else
         HideRaidHeaders()
     end
+    _rebuildAllActive = false
 
     GF.DisableBlizzardFrames()
     GF.RefreshPreviewLayout("party")
@@ -3668,6 +3691,7 @@ function GF.RebuildAll()
             MarkPostCombatHeaderRecovery()
             return
         end
+        MarkHeaderScanInputsChanged()
         -- Force event re-registration (picks up aura/dispel toggle changes)
         for _, kind in pairs({"party"}) do
             local hdr = GF.headers[kind]
@@ -3696,6 +3720,7 @@ function GF.RefreshOutlineGeometry()
         return
     end
     if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+    MarkHeaderScanInputsChanged()
 
     local partyHeader = GF.headers and GF.headers.party
     if partyHeader and GF.IsKindEnabled("party") then
@@ -3740,6 +3765,7 @@ function GF.UpdateGroupVisibility()
         if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(false) end
         return
     end
+    MarkHeaderScanInputsChanged()
     local inRaid = IsInRaid and IsInRaid() or false
     local partyConf = GF.GetConf("party")
     local raidKind = GetLiveRaidKind()
@@ -3816,6 +3842,7 @@ local function OnEvent(self, event, ...)
         GF_UpdateDifficultyCache()
 
     elseif event == "GROUP_ROSTER_UPDATE" then
+        MarkHeaderScanInputsChanged()
         GF.UpdateAnyEnabledFlag()
         if not GF._anyEnabled then
             if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(not (InCombatLockdown and InCombatLockdown())) end

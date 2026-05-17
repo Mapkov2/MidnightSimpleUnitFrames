@@ -1,5 +1,21 @@
 # Changelog
 
+## 5.3 Beta 2 - 2026-05-17
+
+### Performance
+- Defaulted rounded frame texture off so the feature has no active runtime callbacks while disabled.
+- Reduced unnecessary group frame header rescans during rebuild and layout bursts.
+- Reduced redundant castbar re-layout work when width-source geometry has not changed.
+
+### Bugfixes
+- Fixed rounded frame texture re-enable behavior after the module manager disables the feature.
+- Fixed rounded frame integration for unit and group frame borders, power bars, mouseover highlights, dispel overlays, absorb bars, and indicators.
+- Fixed group frame rounded visuals so mouseover and highlight state use the rounded edge instead of square overlays.
+
+### Changes / Improvements
+- Added Rounded Texture controls under Global Style > Bars with per-surface toggles, search coverage, localization, preview support, and a reload prompt.
+- Added rounded mask media for the live unit/group frames and Menu2 preview.
+
 ## 5.3 Beta 1 - 2026-05-17
 
 ### Performance

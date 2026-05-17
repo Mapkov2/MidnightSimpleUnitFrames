@@ -20,6 +20,9 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local SYMBOL_MEDIA = MEDIA .. "Symbols\\"
+local MASK_MEDIA = MEDIA .. "Masks\\"
+local PREVIEW_ROUNDED_MASK = MASK_MEDIA .. "rounded_bar_4x.tga"
+local PREVIEW_ROUNDED_EDGE = MASK_MEDIA .. "rounded_bar_edge_4x.tga"
 
 local Preview = ns.UFPreview or {}
 ns.UFPreview = Preview
@@ -1964,6 +1967,134 @@ local function SetShownSafe(region, shown)
     if region and region.SetShown then region:SetShown(shown and true or false) end
 end
 
+local function ReadPreviewBarsBool(key, default)
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local value = bars and bars[key]
+    if value == nil then return default and true or false end
+    return value and true or false
+end
+
+local function PreviewRoundedUnitFramesEnabled()
+    return ReadPreviewBarsBool("roundedFramesEnabled", false)
+        and ReadPreviewBarsBool("roundedUnitFrames", true)
+end
+
+local function PreviewRoundedPowerBarsEnabled()
+    return ReadPreviewBarsBool("roundedFramesEnabled", false)
+        and ReadPreviewBarsBool("roundedPowerBars", true)
+end
+
+local function PreviewSnapOff(region)
+    if region and region.SetSnapToPixelGrid then
+        region:SetSnapToPixelGrid(false)
+        if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
+    end
+end
+
+local function EnsurePreviewRoundedMask(mock, key, anchor)
+    if not (mock and mock.CreateMaskTexture and anchor) then return nil end
+    mock._msufPreviewRoundedMasks = mock._msufPreviewRoundedMasks or {}
+    local mask = mock._msufPreviewRoundedMasks[key]
+    if not mask then
+        mask = mock:CreateMaskTexture(nil, "ARTWORK")
+        PreviewSnapOff(mask)
+        mock._msufPreviewRoundedMasks[key] = mask
+    end
+    mask:ClearAllPoints()
+    mask:SetTexture(PREVIEW_ROUNDED_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:SetAllPoints(anchor)
+    return mask
+end
+
+local function PreviewSetMask(mock, tex, mask)
+    if not (mock and tex and tex.AddMaskTexture) then return end
+    mock._msufPreviewRoundedMasked = mock._msufPreviewRoundedMasked or {}
+    local old = mock._msufPreviewRoundedMasked[tex]
+    if old == mask then return end
+    if old and tex.RemoveMaskTexture then tex:RemoveMaskTexture(old) end
+    mock._msufPreviewRoundedMasked[tex] = nil
+    if mask then
+        tex:AddMaskTexture(mask)
+        mock._msufPreviewRoundedMasked[tex] = mask
+    end
+end
+
+local function ClearPreviewRoundedMasks(mock)
+    local masked = mock and mock._msufPreviewRoundedMasked
+    if masked then
+        for tex, mask in pairs(masked) do
+            if tex and tex.RemoveMaskTexture and mask then tex:RemoveMaskTexture(mask) end
+        end
+    end
+    if mock then mock._msufPreviewRoundedMasked = nil end
+end
+
+local function PreviewBaseEdgeColor()
+    local br, bg, bb, ba = 0.10, 0.22, 0.44, 0.83
+    local theme = _G.MSUF_THEME
+    if theme and theme.edgeR then
+        br, bg, bb, ba = theme.edgeR or br, theme.edgeG or bg, theme.edgeB or bb, theme.edgeA or ba
+        br = min(1, br * 1.20)
+        bg = min(1, bg * 1.20)
+        bb = min(1, bb * 1.15)
+        ba = min(1, ba + 0.05)
+    end
+    return br, bg, bb, ba
+end
+
+local function EnsurePreviewRoundedVisuals(mock)
+    if not (mock and mock.CreateTexture) then return false end
+    if not mock.roundedBg then
+        mock.roundedBg = mock:CreateTexture(nil, "BACKGROUND")
+        mock.roundedBg:SetTexture(TEX_W8)
+        PreviewSnapOff(mock.roundedBg)
+    end
+    if not mock.roundedEdge then
+        mock.roundedEdge = mock:CreateTexture(nil, "OVERLAY")
+        PreviewSnapOff(mock.roundedEdge)
+    end
+    mock.roundedEdge:SetTexture(PREVIEW_ROUNDED_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    return true
+end
+
+local function ApplyPreviewRounded(box, key, powerOn)
+    if not (box and box.mock) then return end
+    local mock = box.mock
+    local rounded = PreviewRoundedUnitFramesEnabled()
+    if not rounded or not EnsurePreviewRoundedVisuals(mock) then
+        mock._msufPreviewRoundedActive = nil
+        ClearPreviewRoundedMasks(mock)
+        SetShownSafe(mock.roundedBg, false)
+        SetShownSafe(mock.roundedEdge, false)
+        return
+    end
+    mock._msufPreviewRoundedActive = true
+
+    local bodyMask = EnsurePreviewRoundedMask(mock, "body", mock)
+    local hpMask = EnsurePreviewRoundedMask(mock, "health", mock.hpBG)
+    PreviewSetMask(mock, mock.roundedBg, bodyMask)
+    PreviewSetMask(mock, mock.hpBG, hpMask)
+    PreviewSetMask(mock, mock.hp, hpMask)
+
+    local powerMask = (powerOn and PreviewRoundedPowerBarsEnabled()) and EnsurePreviewRoundedMask(mock, "power", mock.powerBG) or nil
+    PreviewSetMask(mock, mock.powerBG, powerMask)
+    PreviewSetMask(mock, mock.power, powerMask)
+
+    mock.roundedBg:ClearAllPoints()
+    mock.roundedBg:SetAllPoints(mock)
+    mock.roundedBg:SetColorTexture(0, 0, 0, 0.92)
+    mock.roundedBg:Show()
+
+    mock.roundedEdge:ClearAllPoints()
+    mock.roundedEdge:SetPoint("TOPLEFT", mock, "TOPLEFT", -1, 1)
+    mock.roundedEdge:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", 1, -1)
+    mock.roundedEdge:SetVertexColor(PreviewBaseEdgeColor())
+    mock.roundedEdge:Show()
+
+    if mock.SetBackdropColor then mock:SetBackdropColor(0, 0, 0, 0) end
+    if mock.SetBackdropBorderColor then mock:SetBackdropBorderColor(0, 0, 0, 0) end
+end
+
 local function ApplyPreviewLayerVisibility(box)
     if not box or not box.mock then return end
     local v = box.layerVisibility or {}
@@ -1983,12 +2114,24 @@ local function ApplyPreviewLayerVisibility(box)
     local statusOn = LayerOn("status")
     local boundsOn = LayerOn("bounds")
 
+    local roundedActive = mock._msufPreviewRoundedActive == true
     if bodyOn then
-        mock:SetBackdropColor(0, 0, 0, 0.92)
-        mock:SetBackdropBorderColor(0, 0, 0, 1)
+        if roundedActive then
+            mock:SetBackdropColor(0, 0, 0, 0)
+            mock:SetBackdropBorderColor(0, 0, 0, 0)
+            SetShownSafe(mock.roundedBg, true)
+            SetShownSafe(mock.roundedEdge, true)
+        else
+            mock:SetBackdropColor(0, 0, 0, 0.92)
+            mock:SetBackdropBorderColor(0, 0, 0, 1)
+            SetShownSafe(mock.roundedBg, false)
+            SetShownSafe(mock.roundedEdge, false)
+        end
     else
         mock:SetBackdropColor(0, 0, 0, 0)
         mock:SetBackdropBorderColor(0, 0, 0, 0)
+        SetShownSafe(mock.roundedBg, false)
+        SetShownSafe(mock.roundedEdge, false)
     end
     SetShownSafe(mock.hpBG, bodyOn)
     SetShownSafe(mock.hp, bodyOn)
@@ -2137,9 +2280,17 @@ local function ApplyPreviewTransparency(box, conf)
 
     if mock.SetAlpha then mock:SetAlpha(1) end
     if bodyOn then
-        SetFrameBackdropAlpha(mock, 0.92 * (alpha.flat and alpha.frame or alpha.bg), alpha.flat and alpha.frame or alpha.fg)
+        if mock._msufPreviewRoundedActive == true then
+            SetFrameBackdropAlpha(mock, 0, 0)
+            SetRegionAlpha(mock.roundedBg, 0.92 * (alpha.flat and alpha.frame or alpha.bg))
+            SetRegionAlpha(mock.roundedEdge, alpha.flat and alpha.frame or alpha.fg)
+        else
+            SetFrameBackdropAlpha(mock, 0.92 * (alpha.flat and alpha.frame or alpha.bg), alpha.flat and alpha.frame or alpha.fg)
+        end
     else
         SetFrameBackdropAlpha(mock, 0, 0)
+        SetRegionAlpha(mock.roundedBg, 0)
+        SetRegionAlpha(mock.roundedEdge, 0)
     end
 
     if alpha.preserveHPColor then
@@ -2419,6 +2570,8 @@ function Preview.Refresh(box, reason)
         mock.detachedPower:Hide()
         box.handleDetachedPower:Hide()
     end
+
+    ApplyPreviewRounded(box, key, powerOn)
 
     local fr, fg, fb = FontColor()
     local baseTextSize = tonumber(g.fontSize) or 14

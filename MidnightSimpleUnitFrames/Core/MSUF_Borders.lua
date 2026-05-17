@@ -132,7 +132,7 @@ end
 
 local function _StartDispelGlow(frame, r, g, b, cfg)
     if not LCG then return end
-    local anchor = frame._msufHighlightOutline or frame
+    local anchor = frame._msufRoundedHighlightGlowAnchor or frame._msufHighlightOutline or frame
     local style = cfg.dispelGlowStyle or "PIXEL"
     local oldAnchor = frame._msufDispelGlowAnchor
     if oldAnchor and (oldAnchor ~= anchor or frame._msufDispelGlowStyle ~= style) then
@@ -675,8 +675,10 @@ MSUF_RefreshStaticUnitFrameOutlines = function(self)
         applyPowerBorder(pb)
     end
 
-    local fnR = _G.MSUF_RoundedUF_OnRareVisualsRefreshed
-    if fnR then fnR(self) end
+    if _G.MSUF_RoundedUF_Active == true then
+        local fnR = _G.MSUF_RoundedUF_OnRareVisualsRefreshed
+        if fnR then fnR(self) end
+    end
 end
 _G.MSUF_RefreshStaticUnitFrameOutlines = MSUF_RefreshStaticUnitFrameOutlines
 
@@ -688,6 +690,13 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
         _StopDispelGlow(self)
         if hlFrame then hlFrame:Hide() end
         self._msufHighlightColorKey = 0
+        self._msufHighlightActiveKey = 0
+        self._msufHighlightOutlineR, self._msufHighlightOutlineG, self._msufHighlightOutlineB = nil, nil, nil
+        self._msufRoundedHighlightGlowAnchor = nil
+        if _G.MSUF_RoundedUF_Active == true then
+            local rounded = _G.MSUF_RoundedUF_OnUnitHighlightChanged
+            if type(rounded) == "function" then rounded(self, 0, 0, 0, 0, cfg) end
+        end
         return
     end
 
@@ -729,6 +738,8 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
         hlFrame:SetBackdropBorderColor(hlR, hlG, hlB, 1)
         self._msufHighlightColorKey = hlKey
     end
+    self._msufHighlightActiveKey = hlKey
+    self._msufHighlightOutlineR, self._msufHighlightOutlineG, self._msufHighlightOutlineB = hlR, hlG, hlB
 
     if self._msufHighlightBottomIsPower ~= bottomIsPower then
         hlFrame:ClearAllPoints()
@@ -741,6 +752,14 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
         self._msufHighlightBottomIsPower = bottomIsPower
     end
 
+    local roundedHandled = false
+    if _G.MSUF_RoundedUF_Active == true then
+        local rounded = _G.MSUF_RoundedUF_OnUnitHighlightChanged
+        if type(rounded) == "function" then
+            roundedHandled = rounded(self, hlKey, hlR, hlG, hlB, cfg) and true or false
+        end
+    end
+
     -- Start only after the highlight frame exists, so Stop uses the same anchor.
     if hlKey == 2 and cfg.dispelGlowEnabled then
         _StartDispelGlow(self, hlR, hlG, hlB, cfg)
@@ -748,7 +767,12 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
         _StopDispelGlow(self)
     end
 
-    hlFrame:Show()
+    if roundedHandled then
+        hlFrame:Hide()
+    else
+        self._msufRoundedHighlightGlowAnchor = nil
+        hlFrame:Show()
+    end
 end
 
 MSUF_ApplyRareVisuals = function(self)
@@ -888,7 +912,9 @@ MSUF_ApplyRareVisuals = function(self)
 -- Export with RoundedUF notification (replaces former hooksecurefunc in RoundedUnitframes).
 _G.MSUF_RefreshRareBarVisuals = function(frame)
     MSUF_ApplyRareVisuals(frame)
-    local fnR = _G.MSUF_RoundedUF_OnRareVisualsRefreshed; if fnR then fnR(frame) end
+    if _G.MSUF_RoundedUF_Active == true then
+        local fnR = _G.MSUF_RoundedUF_OnRareVisualsRefreshed; if fnR then fnR(frame) end
+    end
 end
 
 -- Cold-path helpers for the Bars menu (no runtime cost during combat/raiding).

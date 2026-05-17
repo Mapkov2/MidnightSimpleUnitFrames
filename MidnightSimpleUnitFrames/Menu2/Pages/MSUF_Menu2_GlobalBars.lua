@@ -153,6 +153,8 @@ local function BuildBars(ctx)
             Call("MSUF_GF_RefreshOutlineGeometry")
             RefreshGroupFrameVisuals()
         end
+        Call("MSUF_ApplyRoundedUnitframes")
+        Call("MSUF_UFPreview_RequestRefresh", "MSUF2_BAR_OUTLINE")
     end
 
     local function ApplyAggroBorderRuntime()
@@ -185,6 +187,75 @@ local function BuildBars(ctx)
         ApplyAggroBorderRuntime()
         ApplyDispelPurgeBorderRuntime()
         ApplyBossTargetBorderRuntime()
+    end
+
+    local function ApplyRoundedRuntime()
+        Call("MSUF_ApplyRoundedUnitframes")
+        Call("MSUF_RefreshAllFrames")
+        RefreshGroupFrameVisuals()
+        Call("MSUF_UFPreview_RequestRefresh", "MSUF2_ROUNDED")
+        Call("MSUF_GF_RefreshPreviewLayout", "party")
+        Call("MSUF_GF_RefreshPreviewLayout", "raid")
+        Call("MSUF_GF_RefreshPreviewLayout", "mythicraid")
+        Call("MSUF_GF_RefreshPreviewBox")
+    end
+
+    local function ShowRoundedReloadRequiredPopup()
+        if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
+            if _G.print then
+                _G.print(M.Tr("|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload."))
+            end
+            return
+        end
+        if not _G.StaticPopupDialogs.MSUF2_ROUNDED_RELOAD_REQUIRED then
+            _G.StaticPopupDialogs.MSUF2_ROUNDED_RELOAD_REQUIRED = {
+                text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
+                button1 = _G.RELOAD or M.Tr("Reload"),
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = false,
+                preferredIndex = 3,
+                OnAccept = function()
+                    if _G.InCombatLockdown and _G.InCombatLockdown() then
+                        if _G.print then
+                            _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload."))
+                        end
+                        return
+                    end
+                    if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+                end,
+            }
+        end
+        _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
+    end
+
+    local function SetRoundedBool(key, value, requireReload)
+        SetB(key, value and true or false, "MSUF2_ROUNDED", { preview = true })
+        ApplyRoundedRuntime()
+        if requireReload then ShowRoundedReloadRequiredPopup() end
+    end
+
+    local function RegisterRoundedSearch(control, label, extraKeywords, help, kind)
+        if not (control and type(M.RegisterSearchWidget) == "function") then return end
+        local keywords = {
+            "rounded texture", "rounded frame texture", "rounded frames", "round corners", "rounded corners",
+            "bars rounded", "global style bars rounded", "enable rounded frames", "disable rounded frames",
+            "turn on rounded frames", "turn off rounded frames", "abgerundete frames", "runde kanten",
+            "runde ecken", "abrundung", "abrunden", "einschalten", "ausschalten",
+        }
+        if type(extraKeywords) == "table" then
+            for i = 1, #extraKeywords do keywords[#keywords + 1] = extraKeywords[i] end
+        elseif extraKeywords then
+            keywords[#keywords + 1] = extraKeywords
+        end
+        M.RegisterSearchWidget(control, {
+            label = label,
+            kind = kind or control._msuf2ControlKind or "toggle",
+            anchor = control._msuf2Title or control._msuf2Label or control,
+            values = { "On", "Off", "Enable", "Disable", "Einschalten", "Ausschalten" },
+            keywords = keywords,
+            help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, and mouseover highlights.",
+        })
     end
 
     local function CurrentGroupGlowBlocked()
@@ -704,6 +775,58 @@ local function BuildBars(ctx)
         SetControlEnabled(outlineSlider, ScopedBarsControlsActive())
     end)
 
+    local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 188, true)
+    local roundLeftX = 30
+    local roundRightX = 330
+    local roundW = 250
+    RegisterRoundedSearch(rounded, "Rounded Texture", {
+        "rounded section", "rounded menu", "rounded options", "where rounded frames", "wo rounded frames",
+    }, "Open this section to enable or disable rounded frame textures and its per-surface toggles.", "section")
+    local roundMaster = W.ToggleAt(rounded, "Rounded frame texture", roundLeftX, -52, roundW)
+    M.BindToggle(ctx, roundMaster,
+        function() return ReadB("roundedFramesEnabled", false) == true end,
+        function(v) SetRoundedBool("roundedFramesEnabled", v, true) end)
+    RegisterRoundedSearch(roundMaster, "Rounded frame texture", {
+        "master toggle", "all rounded frames", "rounded frames master", "rounded frames on", "rounded frames off",
+        "rounded frames einschalten", "rounded frames ausschalten", "alle abgerundeten frames",
+    }, "Master switch for the rounded frame texture style.")
+    local roundUnits = W.ToggleAt(rounded, "Unit frames", roundLeftX, -90, roundW)
+    M.BindToggle(ctx, roundUnits,
+        function() return ReadB("roundedUnitFrames", true) ~= false end,
+        function(v) SetRoundedBool("roundedUnitFrames", v) end)
+    RegisterRoundedSearch(roundUnits, "Unit frames", {
+        "rounded unit frames", "rounded unitframes", "unit frame corners", "unitframe corners",
+        "abgerundete unitframes", "unitframes abgerundet", "player target focus boss rounded",
+    }, "Enable or disable rounded textures on unit frames.")
+    local roundGroups = W.ToggleAt(rounded, "Group frames", roundLeftX, -128, roundW)
+    M.BindToggle(ctx, roundGroups,
+        function() return ReadB("roundedGroupFrames", true) ~= false end,
+        function(v) SetRoundedBool("roundedGroupFrames", v) end)
+    RegisterRoundedSearch(roundGroups, "Group frames", {
+        "rounded group frames", "rounded party frames", "rounded raid frames", "group frame corners",
+        "abgerundete gruppenframes", "party raid abgerundet",
+    }, "Enable or disable rounded textures on group frames.")
+    local roundPower = W.ToggleAt(rounded, "Power bars", roundRightX, -52, roundW)
+    M.BindToggle(ctx, roundPower,
+        function() return ReadB("roundedPowerBars", true) ~= false end,
+        function(v) SetRoundedBool("roundedPowerBars", v) end)
+    RegisterRoundedSearch(roundPower, "Power bars", {
+        "rounded power bars", "rounded powerbar", "power bar corners", "powerbar corners",
+        "powerbars abgerundet", "powerbar abrunden",
+    }, "Enable or disable rounded textures on power bars.")
+    local roundMouseover = W.ToggleAt(rounded, "Mouseover highlights", roundRightX, -90, roundW)
+    M.BindToggle(ctx, roundMouseover,
+        function() return ReadB("roundedMouseover", true) ~= false end,
+        function(v) SetRoundedBool("roundedMouseover", v) end)
+    RegisterRoundedSearch(roundMouseover, "Mouseover highlights", {
+        "rounded mouseover", "rounded hover", "rounded hover border", "mouseover rounded",
+        "mouseover highlight rounded", "mouseover abgerundet", "hover abgerundet",
+    }, "Enable or disable rounded mouseover highlight edges.")
+    M.AddRefresher(ctx, function()
+        local active = ReadB("roundedFramesEnabled", false) == true
+        SetControlsEnabled({ roundUnits, roundGroups, roundPower, roundMouseover }, active)
+    end)
+
     local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 626, true)
     local hlW = highlights._msuf2Width or ctx.width or 720
     local hlGap = 28
@@ -1170,4 +1293,4 @@ local function BuildBars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 8 })
+M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 9 })
