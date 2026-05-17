@@ -8,7 +8,7 @@ _G.MSUF_NS = ns
 ns.Bars = ns.Bars or {}
 
 local type, tonumber = type, tonumber
-local UnitClass, UnitExists, UnitIsPlayer = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer
+local UnitClass, UnitExists, UnitIsPlayer, UnitGUID = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer, _G.UnitGUID
 
 local function EnsureDBSafe()
     if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
@@ -141,11 +141,33 @@ end
 ns.Bars._ClassBackgroundColor = function(frame, defR, defG, defB)
     if not frame then return defR, defG, defB end
     local unit = frame.unit
-    if not unit or (UnitExists and not UnitExists(unit)) then return defR, defG, defB end
-    if UnitIsPlayer and not UnitIsPlayer(unit) then return defR, defG, defB end
+    if not unit or (UnitExists and not UnitExists(unit)) then
+        frame._msufBarBgClassGuid = nil
+        frame._msufBarBgClassToken = nil
+        return defR, defG, defB
+    end
 
-    local _, classToken
-    if UnitClass then _, classToken = UnitClass(unit) end
+    local guid = UnitGUID and UnitGUID(unit) or nil
+    local classToken
+    if guid and frame._msufBarBgClassGuid == guid then
+        classToken = frame._msufBarBgClassToken
+    else
+        if UnitIsPlayer and not UnitIsPlayer(unit) then
+            if guid then
+                frame._msufBarBgClassGuid = guid
+                frame._msufBarBgClassToken = nil
+            end
+            return defR, defG, defB
+        end
+        if UnitClass then
+            local _
+            _, classToken = UnitClass(unit)
+        end
+        if guid and classToken then
+            frame._msufBarBgClassGuid = guid
+            frame._msufBarBgClassToken = classToken
+        end
+    end
     if not classToken then return defR, defG, defB end
 
     local fastClass = _G.MSUF_UFCore_GetClassBarColorFast

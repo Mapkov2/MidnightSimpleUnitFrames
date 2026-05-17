@@ -28,11 +28,16 @@ function ns.Text.Set(fs, text, show)
     -- Secret-safe: do NOT compare secret strings.
     if not fs then  return end
     if not show then
+        if fs._msufTextHiddenEmpty then
+            if not fs.IsShown or not fs:IsShown() then return end
+        end
         if fs.Hide then fs:Hide() end
         if fs._msufLastSetT then fs._msufLastSetT = nil end
         if fs.SetText then fs:SetText("") end
+        fs._msufTextHiddenEmpty = true
          return
     end
+    fs._msufTextHiddenEmpty = nil
     if text == nil then text = "" end
     -- PERF: Skip SetText if text unchanged. Saves C-side string copy + layout
     -- invalidation + GC of the old internal string.
@@ -67,11 +72,16 @@ function ns.Text.SetFormatted(fs, show, fmt, ...)
     -- Secret-safe: do NOT compare results. Pass-through to FontString API.
     if not fs then  return end
     if not show then
+        if fs._msufTextHiddenEmpty then
+            if not fs.IsShown or not fs:IsShown() then return end
+        end
         if fs.Hide then fs:Hide() end
         if fs._msufLastSetT then fs._msufLastSetT = nil end
         if fs.SetText then fs:SetText("") end
+        fs._msufTextHiddenEmpty = true
          return
     end
+    fs._msufTextHiddenEmpty = nil
     -- Invalidate diff cache (SetFormattedText changes text through C side)
     fs._msufLastSetT = nil
     if fs.SetFormattedText then
@@ -85,9 +95,16 @@ function ns.Text.SetFormatted(fs, show, fmt, ...)
 function ns.Text.Clear(fs, hide)
     -- Secret-safe: do NOT compare strings.
     if not fs then  return end
+    if hide and fs._msufTextHiddenEmpty then
+        if not fs.IsShown or not fs:IsShown() then return end
+    end
+    fs._msufTextHiddenEmpty = nil
     if fs._msufLastSetT then fs._msufLastSetT = nil end
     if fs.SetText then fs:SetText("") end
-    if hide and fs.Hide then fs:Hide() end
+    if hide and fs.Hide then
+        fs:Hide()
+        fs._msufTextHiddenEmpty = true
+    end
  end
 function ns.Text.ClearField(self, field)
     if not self then  return end
@@ -332,6 +349,24 @@ local function _MSUF_PctToStr1D(pct)
     end
     return _string_format("%.1f%%", pct)
 end
+local function _MSUF_RenderHpSlot(self, fs, mode, fieldKey, absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr)
+    if not fs or mode == "NONE" then
+        if fs then ns.Text.Set(fs, "", false) end
+        return
+    end
+    local slotAbsorb = (absorbField == fieldKey) and absorbText or nil
+    if not hasPct and _MSUF_HpModeUsesPercent(mode) then
+        ns.Text.Set(fs, _MSUF_AppendAbsorb(h, slotAbsorb, absorbStyle), true)
+        return
+    end
+    if _MSUF_HpModeUsesPercent(mode) and spec.hpNeedsPct and not hpPctStr then
+        _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, slotAbsorb, absorbStyle, maxText)
+        return
+    end
+    local deficitText = (mode == "DEFICIT") and (_MSUF_HpMissingText(self) or hpDeficitStr) or nil
+    local text = _MSUF_FormatHpByMode(mode, h, maxText, deficitText, hpPctStr, sep)
+    ns.Text.Set(fs, _MSUF_AppendAbsorb(text or "", slotAbsorb, absorbStyle), true)
+end
 function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbText, absorbStyle, hpMaxStr, hpDeficitStr)
     if not self or not self.hpText then  return end
     if not show then
@@ -368,29 +403,9 @@ function ns.Text.RenderHpMode(self, show, hpStr, hpPct, hasPct, conf, g, absorbT
     self._msufLastH = nil
     self._msufLastPctS = hpPctStr
 
-    local function RenderSlot(fs, mode, fieldKey)
-        if not fs or mode == "NONE" then
-            if fs then ns.Text.Set(fs, "", false) end
-            return
-        end
-        local slotAbsorb = (absorbField == fieldKey) and absorbText or nil
-        if not hasPct and _MSUF_HpModeUsesPercent(mode) then
-            ns.Text.Set(fs, _MSUF_AppendAbsorb(h, slotAbsorb, absorbStyle), true)
-            return
-        end
-        if _MSUF_HpModeUsesPercent(mode) and spec.hpNeedsPct and not hpPctStr then
-            _MSUF_SetHpSecret(fs, mode, h, hpPct, sep, slotAbsorb, absorbStyle, maxText)
-            return
-        end
-        local text
-        local deficitText = (mode == "DEFICIT") and (_MSUF_HpMissingText(self) or hpDeficitStr) or nil
-        text = _MSUF_FormatHpByMode(mode, h, maxText, deficitText, hpPctStr, sep)
-        ns.Text.Set(fs, _MSUF_AppendAbsorb(text or "", slotAbsorb, absorbStyle), true)
-    end
-
-    RenderSlot(self.hpTextLeft, hpLeftMode, "left")
-    RenderSlot(self.hpTextCenter, hpCenterMode, "center")
-    RenderSlot(self.hpText, hpRightMode, "right")
+    _MSUF_RenderHpSlot(self, self.hpTextLeft, hpLeftMode, "left", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr)
+    _MSUF_RenderHpSlot(self, self.hpTextCenter, hpCenterMode, "center", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr)
+    _MSUF_RenderHpSlot(self, self.hpText, hpRightMode, "right", absorbField, absorbText, absorbStyle, hasPct, spec, hpPctStr, h, hpPct, sep, maxText, hpDeficitStr)
  end
 -- PERF: Cache function refs + constants at file scope (called 50-200x/sec in combat).
 local _MSUF_UnitPowerPercent = (type(UnitPowerPercent) == "function") and UnitPowerPercent or nil
@@ -654,6 +669,15 @@ local function _MSUF_FormatPowerByMode(mode, curText, maxText, pctText, joinPrim
     return curText or pctText or "", nil
 end
 
+local function _MSUF_RenderPowerSlot(fs, mode, curText, maxText, pctText, powerSep)
+    if not fs or mode == "NONE" then
+        if fs then ns.Text.Set(fs, "", false) end
+        return
+    end
+    local text = _MSUF_FormatPowerByMode(mode, curText, maxText, pctText, powerSep, powerSep, false)
+    ns.Text.Set(fs, text or "", true)
+end
+
 function ns.Text.RenderPowerText(self)
     if not self or not self.unit or not self.powerText then  return end
 
@@ -800,18 +824,9 @@ function ns.Text.RenderPowerText(self)
         self._msufLastPwrSep = nil
     end
 
-    local function RenderPowerSlot(fs, mode)
-        if not fs or mode == "NONE" then
-            if fs then ns.Text.Set(fs, "", false) end
-            return
-        end
-        local text = _MSUF_FormatPowerByMode(mode, curText, maxText, pctText, powerSep, powerSep, false)
-        ns.Text.Set(fs, text or "", true)
-    end
-
-    RenderPowerSlot(self.powerTextLeft, pLeftMode)
-    RenderPowerSlot(self.powerTextCenter, pCenterMode)
-    RenderPowerSlot(self.powerText, pRightMode)
+    _MSUF_RenderPowerSlot(self.powerTextLeft, pLeftMode, curText, maxText, pctText, powerSep)
+    _MSUF_RenderPowerSlot(self.powerTextCenter, pCenterMode, curText, maxText, pctText, powerSep)
+    _MSUF_RenderPowerSlot(self.powerText, pRightMode, curText, maxText, pctText, powerSep)
     if not self._msufPwrPctCleared then
         -- PERF: Gate ClearField — skip if already cleared (saves ~1.6ms/trace).
         ns.Text.ClearField(self, "powerTextPct")

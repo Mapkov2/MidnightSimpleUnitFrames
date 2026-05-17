@@ -44,6 +44,7 @@ local CreateFrame       = _G.CreateFrame
 local UnitClass         = _G.UnitClass
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
+local issecretvalue    = _G.issecretvalue
 
 -- =============================================================================
 -- Interrupt spell table (mirrors MidnightFocusInterrupt-3.14.2)
@@ -464,15 +465,24 @@ local function _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
 end
 
 -- Apply our color to the castbar's existing outline edges.
-local function _TintCastbarOutline(frame, r, g, b, a)
+local function _TintCastbarOutline(frame, r, g, b, a, force)
     local o = frame and frame._msufOutline
     if not o then return false end
+    if not force then
+        local secret = issecretvalue
+        if not (secret and (secret(r) or secret(g) or secret(b) or secret(a)))
+           and frame._kickReadyLastR == r and frame._kickReadyLastG == g
+           and frame._kickReadyLastB == b and frame._kickReadyLastA == a then
+            return true
+        end
+    end
     if o.top    and o.top.SetVertexColor    then o.top:SetVertexColor(r, g, b, a)    end
     if o.bottom and o.bottom.SetVertexColor then o.bottom:SetVertexColor(r, g, b, a) end
     if o.left   and o.left.SetVertexColor   then o.left:SetVertexColor(r, g, b, a)   end
     if o.right  and o.right.SetVertexColor  then o.right:SetVertexColor(r, g, b, a)  end
     -- Mark so the hook on MSUF_ApplyCastbarOutline knows to re-tint.
     frame._kickReadyBorderTinted = true
+    frame._kickReadyLastR, frame._kickReadyLastG, frame._kickReadyLastB, frame._kickReadyLastA = r, g, b, a
     return true
 end
 
@@ -481,6 +491,7 @@ local function _RestoreCastbarOutline(frame)
     if not frame then return end
     if not frame._kickReadyBorderTinted then return end
     frame._kickReadyBorderTinted = nil
+    frame._kickReadyLastR, frame._kickReadyLastG, frame._kickReadyLastB, frame._kickReadyLastA = nil, nil, nil, nil
     if type(_G.MSUF_ApplyCastbarOutline) == "function" then
         _G.MSUF_ApplyCastbarOutline(frame, true)
     end
@@ -517,7 +528,13 @@ end
 local function _HideIndicator(frame)
     if not frame then return end
     _MarkInactiveFrame(frame)
-    if frame.kickReadyBox then frame.kickReadyBox:Hide() end
+    local box = frame.kickReadyBox
+    if box then
+        if box._kickReadyShown or (box.IsShown and box:IsShown()) then
+            box:Hide()
+        end
+        box._kickReadyShown = nil
+    end
     _RestoreCastbarOutline(frame)
 end
 
@@ -602,8 +619,17 @@ local function _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, us
             -- (we compose visibility via alpha instead). Use the cheaper
             -- single-step pick.
             local r, g, b, a = _PickColor(readyMixin, cdMixin, readyBool)
-            box.fill:SetVertexColor(r, g, b, a)
-            box:Show()
+            local secret = issecretvalue
+            if (secret and (secret(r) or secret(g) or secret(b) or secret(a)))
+               or box._kickReadyFillR ~= r or box._kickReadyFillG ~= g
+               or box._kickReadyFillB ~= b or box._kickReadyFillA ~= a then
+                box.fill:SetVertexColor(r, g, b, a)
+                box._kickReadyFillR, box._kickReadyFillG, box._kickReadyFillB, box._kickReadyFillA = r, g, b, a
+            end
+            if not box._kickReadyShown then
+                box:Show()
+                box._kickReadyShown = true
+            end
 
             -- Secret-safe visibility gate: when rawNI is true (secret or
             -- plain), alpha goes to 0 â†’ invisible; when false, alpha 1
@@ -617,7 +643,12 @@ local function _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, us
         -- Make sure no leftover border tint from a previous style switch.
         _RestoreCastbarOutline(frame)
     else -- "border"
-        if frame.kickReadyBox then frame.kickReadyBox:Hide() end
+        if frame.kickReadyBox then
+            if frame.kickReadyBox._kickReadyShown or (frame.kickReadyBox.IsShown and frame.kickReadyBox:IsShown()) then
+                frame.kickReadyBox:Hide()
+            end
+            frame.kickReadyBox._kickReadyShown = nil
+        end
 
         -- For the border, we compose colour rather than alpha so the
         -- user's normal outline remains visible during non-interruptible
@@ -724,6 +755,8 @@ local function RefreshAll()
 end
 
 local function RefreshActiveCooldownFrames()
+    if _activeFrameCount <= 0 then return false end
+
     local cfg = _GetCfg()
     if not cfg or not _AnyShowEnabled(cfg) then return end
 
@@ -756,6 +789,7 @@ local function _CooldownRefreshFlush()
 end
 
 local function _QueueCooldownRefresh()
+    if _activeFrameCount <= 0 then return end
     if _cooldownRefreshQueued then return end
     _cooldownRefreshQueued = true
     if C_Timer and C_Timer.After then
@@ -805,7 +839,7 @@ local function _InstallOutlineHook()
         local readyMixin, cdMixin = _ResolveColorPair(cfg)
         local userMixin = _GetUserOutlineMixin()
         local r, g, b, a = _PickColor(readyMixin, cdMixin, _GetReadyBoolSecret(), userMixin, rawNI)
-        _TintCastbarOutline(frame, r, g, b, a)
+        _TintCastbarOutline(frame, r, g, b, a, true)
     end)
 end
 
