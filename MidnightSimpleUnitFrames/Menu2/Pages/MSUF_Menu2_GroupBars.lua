@@ -578,7 +578,7 @@ local function BuildGFBars(ctx)
             frame:SetShown(key == tab)
         end
         if tabs and tabs.SetValue then tabs:SetValue(tab) end
-        scopeLabel:SetText("Editing " .. ScopeDisplayName())
+        scopeLabel:SetText(M.Format(M.Tr("Editing %s"), ScopeDisplayName()))
         SetOptionsEnabled({ nameSize, nameAnchor, nameX, nameY, nameLayer }, Bool(CurrentScope(), "showName", true))
         SetOptionsEnabled({ healthLeft, healthCenter, healthRight, healthDelimiter, reverseHP, healthSize, healthX, healthY, hpMoveTogether, hpLayer }, Bool(CurrentScope(), "showHPText", true))
         SetOptionsEnabled({ hpSlot, hpSlotX, hpSlotY }, Bool(CurrentScope(), "showHPText", true) and not MoveTogether("hp"))

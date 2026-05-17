@@ -389,6 +389,7 @@ function ns.UF.EnsureStatusIndicatorOverlays(f, unit, fontPath, flags, fr, fg, f
 -- Keep behavior identical: same templates, justify, alpha, and hidden defaults.
 local MSUF_UF_TEXT_CREATE_DEFS = {
     { key = "nameText",      template = "GameFontHighlight",      justify = "LEFT",  a = 1 },
+    { key = "raidGroupNameText", template = "GameFontHighlightSmall", justify = "LEFT",  a = 1, hide = true },
     { key = "levelText",     template = "GameFontHighlightSmall", justify = "LEFT",  a = 1,   hide = true },
     { key = "hpTextLeft",    template = "GameFontHighlightSmall", justify = "LEFT",  a = 0.9, hide = true },
     { key = "hpTextCenter",  template = "GameFontHighlightSmall", justify = "CENTER", a = 0.9, hide = true },
@@ -1132,9 +1133,39 @@ local function MSUF_NormalizeUnitKeyForDB(key)
     end
      return key
 end
+local function MSUF_RaidGroupNameAllowedForKey(key)
+    key = MSUF_NormalizeUnitKeyForDB(key)
+    return key == "player" or key == "target" or key == "targettarget" or key == "focus"
+end
 local function MSUF_ResolveFrameDBKey(f)
     local key = f and (f.unitKey or f.unit or f.msufConfigKey)
     return MSUF_NormalizeUnitKeyForDB(key or "player") or "player"
+end
+local function MSUF_ApplyRaidGroupNameLayout_Internal(f, conf)
+    if not f or not f.raidGroupNameText or not f.nameText then return end
+    conf = conf or {}
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local layer = tonumber(conf.nameTextLayer)
+    if layer == nil then layer = tonumber(g.nameTextLayer) end
+    layer = math_floor((layer or 5) + 0.5)
+    if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
+    local anchorTo = f.nameText
+    if f._msufNameClipFrame and f._msufNameClipFrame.IsShown and f._msufNameClipFrame:IsShown() then
+        anchorTo = f._msufNameClipFrame
+    end
+    if not ns.Cache.StampChanged(f, "RaidGroupNameLayout", anchorTo, layer) then return end
+    f.raidGroupNameText:ClearAllPoints()
+    f.raidGroupNameText:SetPoint("LEFT", anchorTo, "RIGHT", 3, 0)
+    if f.raidGroupNameText.SetJustifyH then f.raidGroupNameText:SetJustifyH("LEFT") end
+    if f.raidGroupNameText.SetJustifyV then f.raidGroupNameText:SetJustifyV("MIDDLE") end
+end
+if not _G.MSUF_ApplyRaidGroupNameLayout then
+    function _G.MSUF_ApplyRaidGroupNameLayout(f)
+        if not f or not f.raidGroupNameText or not f.nameText then return end
+        local key = MSUF_ResolveFrameDBKey(f)
+        local conf = (MSUF_DB and MSUF_DB[key]) or {}
+        MSUF_ApplyRaidGroupNameLayout_Internal(f, conf)
+    end
 end
 local function MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
     if not f or not f.levelText or not f.nameText then return end
@@ -1147,8 +1178,9 @@ local function MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
     local anchor = (type(conf.levelIndicatorAnchor) == "string") and conf.levelIndicatorAnchor
         or ((type(g.levelIndicatorAnchor) == "string") and g.levelIndicatorAnchor or "NAMERIGHT")
     local layer = (ns.Icons and ns.Icons._layout and ns.Icons._layout.Layer and ns.Icons._layout.Layer(conf, g, "levelIndicatorLayer", 7)) or 7
+    local raidGroupShown = f.raidGroupNameText and f.raidGroupNameText.IsShown and f.raidGroupNameText:IsShown()
     f._msufLevelAnchor = anchor
-    if not ns.Cache.StampChanged(f, "LevelLayout", anchor, lx, ly, layer) then return end
+    if not ns.Cache.StampChanged(f, "LevelLayout", anchor, lx, ly, layer, raidGroupShown and 1 or 0) then return end
     if ns.Icons and ns.Icons._layout then
         if ns.Icons._layout.EnsureLayerFrame then ns.Icons._layout.EnsureLayerFrame(f, f.levelText, "levelText", f.textFrame or f) end
         if ns.Icons._layout.ApplyLayer then ns.Icons._layout.ApplyLayer(f.levelText, layer, f) end
@@ -1157,7 +1189,9 @@ local function MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
     if anchor == "NAMELEFT" then
         f.levelText:SetPoint("RIGHT", f.nameText, "LEFT", -6 + lx, ly)
     elseif anchor == "NAMERIGHT" then
-        f.levelText:SetPoint("LEFT", f.nameText, "RIGHT", 6 + lx, ly)
+        local rel = raidGroupShown and f.raidGroupNameText or f.nameText
+        local gap = raidGroupShown and 4 or 6
+        f.levelText:SetPoint("LEFT", rel, "RIGHT", gap + lx, ly)
     else
         local af = f.textFrame or f
         f.levelText:SetPoint(anchor, af, anchor, lx, ly)
@@ -1958,6 +1992,9 @@ local function MSUF_UpdateNameColor(frame)
     if frame._msufNameColorR == r and frame._msufNameColorG == gCol and frame._msufNameColorB == b then return end
     frame._msufNameColorR, frame._msufNameColorG, frame._msufNameColorB = r, gCol, b
     frame.nameText:SetTextColor(r, gCol, b, 1)
+    if frame.raidGroupNameText then
+        frame.raidGroupNameText:SetTextColor(r, gCol, b, 1)
+    end
     if frame.levelText then
         frame.levelText:SetTextColor(r, gCol, b, 1)
     end
@@ -3199,6 +3236,7 @@ local function MSUF_EnsureUnitTextLayers(f, tf, nameLayer, hpLayer, powerLayer)
     if f.nameText and nl and (not f._msufNameClipFrame or f.nameText:GetParent() ~= f._msufNameClipFrame) then
         MSUF_SetTextParentIfNeeded(f.nameText, nl)
     end
+    MSUF_SetTextParentIfNeeded(f.raidGroupNameText, nl)
     MSUF_SetTextParentIfNeeded(f.hpTextLeft, hl)
     MSUF_SetTextParentIfNeeded(f.hpTextCenter, hl)
     MSUF_SetTextParentIfNeeded(f.hpText, hl)
@@ -3385,6 +3423,7 @@ local function ApplyTextLayout(f, conf)
         f._msufNameAnchorMode, f._msufNameJustifyH = nameAnchor, nameJustify
         f._msufNameClipSideApplied, f._msufNameClipReservedRight, f._msufNameClipTextStamp, f._msufNameClipAnchorStamp, f._msufClampStamp = nil, nil, nil, nil, nil
     end
+    if f.raidGroupNameText and f.nameText then MSUF_ApplyRaidGroupNameLayout_Internal(f, conf) end
     if f.levelText and f.nameText then MSUF_ApplyLevelIndicatorLayout_Internal(f, conf) end
     MSUF_TextLayout_Place(f.hpTextLeft, tf, "TOPLEFT", "TOPLEFT", 4 + hX + hLeftX, hY + hLeftY, "LEFT")
     MSUF_TextLayout_Place(f.hpTextCenter, tf, "TOP", "TOP", hX + hCenterX, hY + hCenterY, "CENTER")
@@ -3611,6 +3650,11 @@ function MSUF_ClampNameWidth(f, conf)
     if baseWidth < 80 then baseWidth = 80 end
     -- Fixed reservations (secret-safe; never derived from unit names)
     local reservedRight = 0
+    local raidGroupShown = false
+    if f.raidGroupNameText and f.raidGroupNameText.IsShown and f.raidGroupNameText:IsShown() then
+        reservedRight = reservedRight + 24
+        raidGroupShown = true
+    end
     local lvlShown = false
     local lvlAnchor = f._msufLevelAnchor or "NAMERIGHT"
     if lvlAnchor == "NAMERIGHT" and f.levelText and f.levelText.IsShown and f.levelText:IsShown() then
@@ -3689,6 +3733,7 @@ function MSUF_ClampNameWidth(f, conf)
               + (_AP_HASH[arp] or 0) * 700003
               + math_floor((ax + 200) * 100) * 71
               + math_floor((ay + 200) * 100) * 7
+              + (raidGroupShown and 50021 or 0)
               + (mode == "LEFT" and 3 or 0)
               + maskPx * 17
               + (showDots and 1 or 0)
@@ -4031,6 +4076,7 @@ function _G.MSUF_UFCore_UpdatePowerBarFast(self)
 local function MSUF_ClearUnitFrameState(self, clearAbsorbs)
     ns.Bars.ResetHealthAndOverlays(self, clearAbsorbs)
     if self.nameText then self.nameText:SetText("") end
+    MSUF_ClearText(self.raidGroupNameText, true)
     MSUF_ClearText(self.levelText, true)
     MSUF_ClearText(self.hpTextLeft, true)
     MSUF_ClearText(self.hpTextCenter, true)
@@ -4134,6 +4180,24 @@ local function MSUF_ApplyUnitframeEditPreview(self, key, conf, g)
             self.nameText:SetText(upper)
         end
         if SetShown then SetShown(self.nameText, true) end
+    end
+    if self.raidGroupNameText and self.raidGroupNameText.SetText then
+        local showRG = (conf and conf.showRaidGroupInName == true) and MSUF_RaidGroupNameAllowedForKey(key or self.msufConfigKey or self.unit)
+        if showRG then
+            if type(MSUF_SetTextIfChanged) == "function" then
+                MSUF_SetTextIfChanged(self.raidGroupNameText, "(2)")
+            else
+                self.raidGroupNameText:SetText("(2)")
+            end
+        else
+            if type(MSUF_SetTextIfChanged) == "function" then
+                MSUF_SetTextIfChanged(self.raidGroupNameText, "")
+            else
+                self.raidGroupNameText:SetText("")
+            end
+        end
+        if SetShown then SetShown(self.raidGroupNameText, showRG) end
+        if _G.MSUF_ApplyRaidGroupNameLayout then _G.MSUF_ApplyRaidGroupNameLayout(self) end
     end
 
     if self.hpText and self.hpText.SetText then
@@ -4656,6 +4720,17 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
             MSUF_SetTextIfChanged(self.nameText, "")
         end
         ns.Util.SetShown(self.nameText, showN)
+    end
+    if self.raidGroupNameText then
+        local showRG = (conf and conf.showRaidGroupInName == true) and (self.showName ~= false)
+            and MSUF_RaidGroupNameAllowedForKey(self.msufConfigKey or unit or self.unit)
+        if showRG then
+            MSUF_SetTextIfChanged(self.raidGroupNameText, "(2)")
+        else
+            MSUF_SetTextIfChanged(self.raidGroupNameText, "")
+        end
+        ns.Util.SetShown(self.raidGroupNameText, showRG)
+        if _G.MSUF_ApplyRaidGroupNameLayout then _G.MSUF_ApplyRaidGroupNameLayout(self) end
     end
     MSUF_UpdateNameColor(self)
     -- Level text (showLevelIndicator is the actual config key)

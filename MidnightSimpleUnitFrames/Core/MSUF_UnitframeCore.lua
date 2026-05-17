@@ -726,6 +726,150 @@ local function _SetText(fs, txt)
     if fs.SetText then fs:SetText(txt or "") end
 end
 
+Core._raidGroupNameText = Core._raidGroupNameText or {
+    [1] = "(1)", [2] = "(2)", [3] = "(3)", [4] = "(4)",
+    [5] = "(5)", [6] = "(6)", [7] = "(7)", [8] = "(8)",
+}
+
+function Core.IsRaidGroupNameEnabled(conf)
+    if conf and conf.showRaidGroupInName ~= nil then
+        return conf.showRaidGroupInName == true
+    end
+    local db = _G.MSUF_DB
+    local g = db and db.general
+    return g and g.showRaidGroupInName == true
+end
+
+function Core.AnyRaidGroupNameEnabled()
+    local db = _G.MSUF_DB
+    if not db then return false end
+    local g = db.general
+    if g and g.showRaidGroupInName == true then return true end
+    local conf = db.player
+    if conf and conf.showRaidGroupInName == true then return true end
+    conf = db.target
+    if conf and conf.showRaidGroupInName == true then return true end
+    conf = db.focus
+    if conf and conf.showRaidGroupInName == true then return true end
+    conf = db.targettarget
+    if conf and conf.showRaidGroupInName == true then return true end
+    return false
+end
+_G.MSUF_UFCore_AnyRaidGroupNameEnabled = Core.AnyRaidGroupNameEnabled
+
+function Core.IsRaidGroupNameUnitAllowed(unit, frame)
+    local key = frame and (frame.msufConfigKey or frame.unitKey) or unit
+    key = key or unit
+    if key == "tot" then key = "targettarget" end
+    return key == "player" or key == "target" or key == "targettarget" or key == "focus"
+end
+_G.MSUF_UFCore_IsRaidGroupNameUnitAllowed = Core.IsRaidGroupNameUnitAllowed
+
+function Core.GetRaidSubgroupForUnit(unit)
+    local UnitInRaid = _G.UnitInRaid
+    local GetRaidRosterInfo = _G.GetRaidRosterInfo
+    local IsInRaid = _G.IsInRaid
+    if not unit or not UnitInRaid or not GetRaidRosterInfo or not IsInRaid then return nil end
+
+    local inRaid = IsInRaid()
+    if _UFCORE_issecret and _UFCORE_issecret(inRaid) then return nil end
+    if not inRaid then return nil end
+
+    local raidIndex = UnitInRaid(unit)
+    if _UFCORE_issecret and _UFCORE_issecret(raidIndex) then return nil end
+    raidIndex = tonumber(raidIndex)
+    if not raidIndex then return nil end
+
+    local _, _, subgroup = GetRaidRosterInfo(raidIndex)
+    if _UFCORE_issecret and _UFCORE_issecret(subgroup) then return nil end
+    subgroup = tonumber(subgroup)
+    if subgroup and subgroup >= 1 and subgroup <= 8 then
+        return subgroup
+    end
+    return nil
+end
+
+function Core.ResolveRaidSubgroupForUnit(unit)
+    if unit == "player" then
+        if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then
+            return Core._raidGroupNamePlayerSubgroup
+        end
+        Core._raidGroupNamePlayerSubgroup = Core.GetRaidSubgroupForUnit(unit)
+        return Core._raidGroupNamePlayerSubgroup
+    end
+    return Core.GetRaidSubgroupForUnit(unit)
+end
+
+function Core.RefreshRaidGroupNameLayout(frame, conf)
+    local layoutFn = _G.MSUF_ApplyRaidGroupNameLayout
+    if layoutFn then
+        layoutFn(frame)
+    end
+    local clamp = FN_ClampNameWidth or UFCore_ResolveFn(nil, "MSUF_ClampNameWidth")
+    if clamp then
+        FN_ClampNameWidth = clamp
+        clamp(frame, conf)
+    end
+    local levelLayout = _G.MSUF_ApplyLevelIndicatorLayout
+    if levelLayout then
+        levelLayout(frame)
+    end
+end
+
+function Core.UpdateRaidGroupNameForFrame(frame, unit, conf, showName, exists)
+    local fs = frame and frame.raidGroupNameText
+    if not fs then return false end
+
+    conf = conf or GetFrameConf(frame)
+    showName = (showName ~= false)
+    if exists == nil and unit then
+        exists = UnitExists and UnitExists(unit)
+    end
+
+    if not (showName and exists and Core.IsRaidGroupNameUnitAllowed(unit or frame.unit, frame) and Core.IsRaidGroupNameEnabled(conf)) then
+        local changed = frame._msufRaidGroupNameVisible == true
+        frame._msufRaidGroupNameVisible = false
+        frame._msufRaidGroupNameSubgroup = nil
+        if changed then
+            _SetText(fs, "")
+            _SetShown(fs, false)
+            Core.RefreshRaidGroupNameLayout(frame, conf)
+        elseif fs:IsShown() then
+            _SetShown(fs, false)
+        end
+        return changed
+    end
+
+    local subgroup = Core.ResolveRaidSubgroupForUnit(unit or frame.unit)
+    local text = subgroup and Core._raidGroupNameText[subgroup] or nil
+    if not text then
+        local changed = frame._msufRaidGroupNameVisible == true
+        frame._msufRaidGroupNameVisible = false
+        frame._msufRaidGroupNameSubgroup = nil
+        if changed then
+            _SetText(fs, "")
+            _SetShown(fs, false)
+            Core.RefreshRaidGroupNameLayout(frame, conf)
+        elseif fs:IsShown() then
+            _SetShown(fs, false)
+        end
+        return changed
+    end
+
+    local changed = frame._msufRaidGroupNameVisible ~= true or frame._msufRaidGroupNameSubgroup ~= subgroup
+    frame._msufRaidGroupNameVisible = true
+    frame._msufRaidGroupNameSubgroup = subgroup
+    if changed then
+        _SetText(fs, text)
+        _SetShown(fs, true)
+        Core.RefreshRaidGroupNameLayout(frame, conf)
+    elseif not fs:IsShown() then
+        _SetShown(fs, true)
+    end
+    return changed
+end
+_G.MSUF_UpdateRaidGroupNameForFrame = Core.UpdateRaidGroupNameForFrame
+
 local function UFCore_ReapplyLayeredAlpha(frame)
     if not frame or not (frame._msufAlphaBaseMode == "layered" or frame._msufAlphaLayeredMode) then return end
     local key = frame._msufAlphaBaseKey or frame.msufConfigKey
@@ -884,6 +1028,7 @@ local function _UpdateIdentityColors(frame)
 
     r, g, b = r or 1, g or 1, b or 1
     frame.nameText:SetTextColor(r, g, b, 1)
+    if frame.raidGroupNameText then frame.raidGroupNameText:SetTextColor(r, g, b, 1) end
     if frame.levelText then frame.levelText:SetTextColor(r, g, b, 1) end
 end
 
@@ -914,6 +1059,7 @@ local function UFCore_UpdateIdentityFast(frame, conf)
         end
         _SetShown(frame.nameText, showName and exists)
     end
+    Core.UpdateRaidGroupNameForFrame(frame, unit, conf, showName, exists)
 
     if frame.levelText then
         local showLevel = false
@@ -1256,8 +1402,12 @@ Elements.Power = {
             afterBottomIsPower = (f._msufPowerBarReserved == true) or (pb and pb.IsShown and pb:IsShown()) or false
             if beforeBottomIsPower ~= afterBottomIsPower then
                 local hl = f and f._msufHighlightOutline
-                local hasRuntimeBorder = f and (f._msufAggroOutlineOn or f._msufDispelOutlineOn or f._msufPurgeOutlineOn or f._msufBossTargetHLOn or _G.MSUF_BorderTestModesActive == true
-                    or (hl and hl.IsShown and hl:IsShown()))
+                local hasRuntimeBorder = f and (
+                    f._msufAggroOutlineOn or f._msufDispelOutlineOn
+                    or f._msufPurgeOutlineOn or f._msufBossTargetHLOn
+                    or _G.MSUF_BorderTestModesActive == true
+                    or (hl and hl.IsShown and hl:IsShown())
+                )
                 if hasRuntimeBorder and type(_G.MSUF_QueueUnitframeVisual) == "function" then
                     _G.MSUF_QueueUnitframeVisual(f)
                 end
@@ -3166,6 +3316,20 @@ local function QueueUnit(unit, urgent, mask, reason)
     MarkUnit(unit, mask or MASK_UNIT_SWAP, urgent, reason or "GLOBAL")
 end
 
+function Core.QueueRaidGroupNameRefresh(reason)
+    if not Core.AnyRaidGroupNameEnabled() then return end
+    if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then
+        Core._raidGroupNameRefreshDeferred = true
+        return
+    end
+    Core._raidGroupNamePlayerSubgroup = nil
+    for _, f in pairs(FramesByUnit) do
+        if f and f.raidGroupNameText then
+            Core.MarkDirty(f, DIRTY_IDENTITY, true, reason or "RAID_GROUP_NAME")
+        end
+    end
+end
+
 -- Coalesced boss engage refresh (INSTANCE_ENCOUNTER_ENGAGE_UNIT can burst on pull).
 local _bossEngageQueued = false
 local _bossEngageMask = bor(MASK_UNIT_SWAP, DIRTY_VISUAL)
@@ -3307,6 +3471,10 @@ Global:SetScript("OnEvent", function(_, event, arg1)
             end
         end
         MarkPlayerStatusIf("showCombatStateIndicator", true, event)
+        if Core._raidGroupNameRefreshDeferred then
+            Core._raidGroupNameRefreshDeferred = nil
+            Core.QueueRaidGroupNameRefresh("PLAYER_REGEN_ENABLED_RAID_GROUP_NAME")
+        end
         return
     end
 
@@ -3380,6 +3548,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                 UFCore_ReapplyLayeredAlpha(tf)
             end
             if tf.nameText then tf.nameText:SetText(UnitName(unit) or "") end
+            Core.UpdateRaidGroupNameForFrame(tf, unit, nil, tf.showName, UnitExists(unit))
             -- Queue non-portrait refresh for next frame; portrait render is budgeted below.
             Core.MarkDirty(tf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
         end
@@ -3417,7 +3586,9 @@ Global:SetScript("OnEvent", function(_, event, arg1)
                 end
                 UFCore_ReapplyLayeredAlpha(ttf)
             end
-            if ttf.nameText and UnitExists(unit2) then ttf.nameText:SetText(UnitName(unit2) or "") end
+            local unit2Exists = UnitExists(unit2)
+            if ttf.nameText and unit2Exists then ttf.nameText:SetText(UnitName(unit2) or "") end
+            Core.UpdateRaidGroupNameForFrame(ttf, unit2, nil, ttf.showName, unit2Exists)
             Core.MarkDirty(ttf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
         end
         -- Deferred: portrait, visual, absorb cache invalidation
@@ -3491,6 +3662,9 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         DirectIndicatorUnit("player")
         DirectIndicatorUnit("target")
         DirectIndicatorUnit("focus")
+        if event == "GROUP_ROSTER_UPDATE" then
+            Core.QueueRaidGroupNameRefresh(event)
+        end
         return
     end
 
@@ -3596,6 +3770,7 @@ do
                     UFCore_ReapplyLayeredAlpha(ff)
                 end
                 if ff.nameText then ff.nameText:SetText(UnitName(unit) or "") end
+                Core.UpdateRaidGroupNameForFrame(ff, unit, nil, ff.showName, UnitExists(unit))
                 Core.MarkDirty(ff, MASK_UNIT_SWAP_NO_PORTRAIT, false, "FOCUS_SWAP_DEFERRED")
             end
             DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", true, false)

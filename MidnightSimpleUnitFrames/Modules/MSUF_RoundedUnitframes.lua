@@ -273,8 +273,13 @@ local function ApplyToFrame(f)
     if not enabled then
         ClearAllMasks(f)
         -- Restore the original square outline behavior immediately (0 regression when disabled).
-        if SUPPRESS_NATIVE_OUTLINE and type(_G.MSUF_RefreshRareBarVisuals) == "function" then
-            _G.MSUF_RefreshRareBarVisuals(f)
+        if SUPPRESS_NATIVE_OUTLINE then
+            local fnStatic = _G.MSUF_RefreshStaticUnitFrameOutlines
+            if type(fnStatic) == "function" then
+                fnStatic(f)
+            elseif type(_G.MSUF_RefreshRareBarVisuals) == "function" then
+                _G.MSUF_RefreshRareBarVisuals(f)
+            end
         end
         return
     end

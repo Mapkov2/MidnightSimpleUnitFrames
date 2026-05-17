@@ -17,6 +17,8 @@ T.media = T.media or {
     dropdownChevron = ADDON_PATH .. "Media\\msuf_dropdown_chevron_down.tga",
     collapseArrow = "Interface\\ChatFrame\\ChatFrameExpandArrow",
     sliderThumb = ADDON_PATH .. "Media\\msuf_slider_thumb.tga",
+    switchTrack = ADDON_PATH .. "Media\\msuf_switch_track.tga",
+    switchKnob = ADDON_PATH .. "Media\\msuf_switch_knob.tga",
     bgSmooth = ADDON_PATH .. "Media\\Bars\\Smoothv2.tga",
     bgCharcoal = ADDON_PATH .. "Media\\Bars\\Charcoal.tga",
     logo = ADDON_PATH .. "Media\\MSUF_MinimapIcon.tga",
@@ -24,6 +26,10 @@ T.media = T.media or {
     historyUndo = ADDON_PATH .. "Media\\msuf_history_undo_red.png",
     historyRedo = ADDON_PATH .. "Media\\msuf_history_redo_green.png",
 }
+T.media.gradH = T.media.gradH or ADDON_PATH .. "Media\\MSUF_Grad_H.tga"
+T.media.gradHRev = T.media.gradHRev or ADDON_PATH .. "Media\\MSUF_Grad_H_Rev.tga"
+T.media.gradV = T.media.gradV or ADDON_PATH .. "Media\\MSUF_Grad_V.tga"
+T.media.gradVRev = T.media.gradVRev or ADDON_PATH .. "Media\\MSUF_Grad_V_Rev.tga"
 
 T.colors = {
     bg = { 0.080, 0.090, 0.160, 0.980 },
@@ -58,13 +64,13 @@ T.fontBump = T.fontBump or 1
 
 T.navIconGrid = {
     home = { 0, 0 },
-    uf_player = { 1, 0 }, uf_target = { 2, 0 }, uf_targettarget = { 3, 0 },
-    uf_focus = { 4, 0 }, uf_boss = { 5, 0 }, uf_pet = { 6, 0 },
-    opt_bars = { 7, 0 }, opt_fonts = { 0, 1 }, auras2 = { 1, 1 },
-    opt_castbar = { 2, 1 }, opt_misc = { 3, 1 }, opt_colors = { 4, 1 },
-    classpower = { 6, 1 }, gameplay = { 7, 1 },
-    groupframes = { 0, 2 }, gf_layout = { 0, 2 }, gf_bars = { 0, 2 }, gf_auras = { 0, 2 }, gf_indicators = { 0, 2 },
-    modules = { 1, 2 }, profiles = { 2, 2 },
+    uf_player = { 1, 0 }, uf_target = { 3, 0 }, uf_targettarget = { 2, 0 },
+    uf_focus = { 2, 0 }, uf_boss = { 6, 2 }, uf_pet = { 6, 0 },
+    opt_bars = { 7, 0 }, opt_fonts = { 0, 1 }, auras2 = { 3, 1 },
+    opt_castbar = { 2, 1 }, opt_misc = { 4, 2 }, opt_colors = { 4, 1 },
+    classpower = { 0, 2 }, gameplay = { 7, 1 },
+    groupframes = { 1, 2 }, gf_layout = { 2, 2 }, gf_bars = { 3, 2 }, gf_auras = { 3, 1 }, gf_indicators = { 6, 1 },
+    modules = { 4, 2 }, profiles = { 5, 2 },
 }
 
 T.navIconColors = {

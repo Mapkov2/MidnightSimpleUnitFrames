@@ -759,19 +759,19 @@ local function BuildAuras(ctx)
         local active = {}
         for i = 2, #AURA_SCOPES do
             local spec = AURA_SCOPES[i]
-            if AuraHasOverride(spec.value) then active[#active + 1] = spec.text end
+            if AuraHasOverride(spec.value) then active[#active + 1] = M.Tr(spec.text or "") end
         end
         local isShared = AuraScope() == "shared"
         if isShared and #active == 0 then
-            summary:SetText("|cff9aa0a6No unit overrides active.|r")
+            summary:SetText("|cff9aa0a6" .. M.Tr("No unit overrides active.") .. "|r")
         elseif isShared then
-            summary:SetText("|cffffffffOverrides active:|r " .. table.concat(active, ", "))
+            summary:SetText("|cffffffff" .. M.Tr("Overrides active:") .. "|r " .. table.concat(active, ", "))
         else
             local selected = AuraScope()
             if AuraHasOverride(selected) then
-                summary:SetText("|cffffffffThis unit uses custom aura settings.|r Shared changes will not affect overridden parts until Reset Overrides is used.")
+                summary:SetText("|cffffffff" .. M.Tr("This unit uses custom aura settings.") .. "|r " .. M.Tr("Shared changes will not affect overridden parts until Reset Overrides is used."))
             else
-                summary:SetText("|cff9aa0a6This unit follows Shared aura settings. Enable custom filters, caps, or layout only when this unit needs different auras.|r")
+                summary:SetText("|cff9aa0a6" .. M.Tr("This unit follows Shared aura settings. Enable custom filters, caps, or layout only when this unit needs different auras.") .. "|r")
             end
         end
         SetControlEnabled(overrideFilters, not isShared)
@@ -1024,11 +1024,11 @@ local function BuildAuras(ctx)
         local isShared = key == "shared"
         local isBoss = key == "boss1" or key == "boss2" or key == "boss3" or key == "boss4" or key == "boss5"
         if isBoss then
-            ignoreLabel:SetText("Editing: |cff38c7f0Shared (boss frames)|r")
+            ignoreLabel:SetText(M.Tr("Editing:") .. " |cff38c7f0" .. M.Tr("Shared (boss frames)") .. "|r")
         elseif isShared then
-            ignoreLabel:SetText("Editing: |cff38c7f0Shared (all units)|r")
+            ignoreLabel:SetText(M.Tr("Editing:") .. " |cff38c7f0" .. M.Tr("Shared (all units)") .. "|r")
         else
-            ignoreLabel:SetText("Editing: |cff38c7f0" .. tostring(key:gsub("^%l", string.upper)) .. "|r")
+            ignoreLabel:SetText(M.Tr("Editing:") .. " |cff38c7f0" .. M.Tr(tostring(key:gsub("^%l", string.upper))) .. "|r")
         end
         SetControlEnabled(ignoreOverride, not isShared and not isBoss)
         local canEdit = isShared or isBoss or AurasUnit(key).overrideIgnore == true

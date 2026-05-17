@@ -69,6 +69,10 @@ local UNIT_DATA = {
     pet = { name = "Companion", class = "HUNTER", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
 }
 
+local function PreviewRaidGroupNameAllowed(key)
+    return key == "player" or key == "target" or key == "targettarget" or key == "focus"
+end
+
 local TEXT_ANCHORS = {
     { key = "LEFT", label = "Left" },
     { key = "CENTER", label = "Center" },
@@ -1777,6 +1781,7 @@ local function BuildPreview(parent, panel, width, height)
     mock.powerLayer = CreateFrame("Frame", nil, mock.textFrame)
     mock.powerLayer:SetAllPoints(mock.textFrame)
     mock.nameText = MakeFS(mock.nameLayer, "OVERLAY", 12)
+    mock.raidGroupNameText = MakeFS(mock.nameLayer, "OVERLAY", 12)
     mock.totInlineSep = MakeFS(mock.nameLayer, "OVERLAY", 12)
     mock.totInlineText = MakeFS(mock.nameLayer, "OVERLAY", 12)
     mock.hpTextLeft = MakeFS(mock.hpLayer, "OVERLAY", 12)
@@ -1975,6 +1980,7 @@ local function ApplyPreviewLayerVisibility(box)
     end
     if not nameOn then
         SetShownSafe(mock.nameText, false)
+        SetShownSafe(mock.raidGroupNameText, false)
         SetShownSafe(mock.totInlineSep, false)
         SetShownSafe(mock.totInlineText, false)
         SetShownSafe(box.handleName, false)
@@ -2380,6 +2386,7 @@ function Preview.Refresh(box, reason)
     local hpSize = S(tonumber(conf.hpFontSize) or tonumber(g.hpFontSize) or baseTextSize); if hpSize < 7 then hpSize = 7 end
     local pwrSize = S(tonumber(conf.powerFontSize) or tonumber(g.powerFontSize) or baseTextSize); if pwrSize < 7 then pwrSize = 7 end
     mock.nameText:SetFont(FONT, nameSize, "OUTLINE")
+    mock.raidGroupNameText:SetFont(FONT, nameSize, "OUTLINE")
     mock.totInlineSep:SetFont(FONT, nameSize, "OUTLINE")
     mock.totInlineText:SetFont(FONT, nameSize, "OUTLINE")
     mock.hpTextLeft:SetFont(FONT, hpSize, "OUTLINE")
@@ -2391,6 +2398,7 @@ function Preview.Refresh(box, reason)
     mock.powerText:SetFont(FONT, pwrSize, "OUTLINE")
     mock.powerTextPct:SetFont(FONT, pwrSize, "OUTLINE")
     mock.nameText:SetTextColor(fr, fg, fb, 1)
+    mock.raidGroupNameText:SetTextColor(fr, fg, fb, 1)
     mock.totInlineSep:SetTextColor(0.72, 0.76, 0.84, 1)
     mock.totInlineText:SetTextColor(fr, fg, fb, 1)
     mock.hpTextLeft:SetTextColor(fr, fg, fb, 1)
@@ -2410,6 +2418,7 @@ function Preview.Refresh(box, reason)
         mock.powerTextPct:SetTextColor(fr, fg, fb, 1)
     end
     mock.nameText:SetText(ShortenPreviewName(data.name, key, conf))
+    mock.raidGroupNameText:SetText("(2)")
     local hpMax, pMax = 1000000, 240000
     local hpCur, pCur = floor(hpMax * data.hp + 0.5), floor(pMax * powerFrac + 0.5)
     local hpSlots = TextScopeHasSlots(key, "textLeft", "textCenter", "textRight")
@@ -2450,6 +2459,8 @@ function Preview.Refresh(box, reason)
     mock.powerText:SetText(FormatMode(powerRightMode, pCur, pMax, powerPctValue, powerSepRaw, true))
     mock.powerTextPct:SetText("")
     mock.nameText:SetShown(conf.showName ~= false)
+    local showRaidGroupName = conf.showName ~= false and conf.showRaidGroupInName == true and PreviewRaidGroupNameAllowed(key)
+    mock.raidGroupNameText:SetShown(showRaidGroupName)
     mock.totInlineSep:Hide()
     mock.totInlineText:Hide()
     local hpTextOn = conf.showHP ~= false
@@ -2467,6 +2478,9 @@ function Preview.Refresh(box, reason)
     local npt, nrel, nx, njust = ResolveNameAnchor(conf.nameTextAnchor or "LEFT", S(tonumber(conf.nameOffsetX) or 4))
     mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S(tonumber(conf.nameOffsetY) or -4))
     mock.nameText:SetJustifyH(njust)
+    mock.raidGroupNameText:ClearAllPoints()
+    mock.raidGroupNameText:SetPoint("LEFT", mock.nameText, "RIGHT", S(3), 0)
+    mock.raidGroupNameText:SetJustifyH("LEFT")
     do
         local totConf = (_G.MSUF_DB and _G.MSUF_DB.targettarget) or {}
         local showInline = key == "target" and conf.showName ~= false and totConf.showToTInTargetName == true
@@ -2475,8 +2489,9 @@ function Preview.Refresh(box, reason)
             local totData = UNIT_DATA.targettarget or { name = "Target" }
             mock.totInlineSep:SetText(sep ~= "" and sep or " ")
             mock.totInlineText:SetText(ShortenPreviewName(totData.name, "targettarget", conf))
+            local inlineAnchor = showRaidGroupName and mock.raidGroupNameText or mock.nameText
             mock.totInlineSep:ClearAllPoints()
-            mock.totInlineSep:SetPoint("LEFT", mock.nameText, "RIGHT", S(4), 0)
+            mock.totInlineSep:SetPoint("LEFT", inlineAnchor, "RIGHT", S(4), 0)
             mock.totInlineText:ClearAllPoints()
             mock.totInlineText:SetPoint("LEFT", mock.totInlineSep, "RIGHT", S(4), 0)
             mock.totInlineSep:Show()
@@ -2771,11 +2786,14 @@ function Preview.Refresh(box, reason)
     end
 
     local nameHandleW = mock.nameText:GetStringWidth() + 10
+    if mock.raidGroupNameText and mock.raidGroupNameText:IsShown() then
+        nameHandleW = nameHandleW + mock.raidGroupNameText:GetStringWidth() + S(4)
+    end
     if mock.totInlineSep and mock.totInlineSep:IsShown() then
         nameHandleW = nameHandleW + mock.totInlineSep:GetStringWidth() + mock.totInlineText:GetStringWidth() + S(8)
     end
     box.handleName:SetSize(max(46, nameHandleW), max(18, mock.nameText:GetStringHeight() + 6))
-    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, { mock.nameText, mock.totInlineSep, mock.totInlineText }, 3) then
+    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, { mock.nameText, mock.raidGroupNameText, mock.totInlineSep, mock.totInlineText }, 3) then
         PlaceHandle(box.handleName, mock.nameText)
     end
     local function PlaceTextSlotHandle(handle, region)

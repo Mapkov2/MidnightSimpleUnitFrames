@@ -536,7 +536,7 @@ local function BuildTopActions(ctx, builder, unit, label)
     local function RefreshCopyPopupTargets()
         if not copyPopup then return end
         local dest = NormalizeCopyDest(unit)
-        if copyPopup._title then copyPopup._title:SetText("Copy from " .. UnitTopLabel(unit)) end
+        if copyPopup._title then copyPopup._title:SetText(M.Format(M.Tr("Copy from %s"), UnitTopLabel(unit))) end
         local x = 16
         local order = copyPopup._targetOrder or {}
         local widths = copyPopup._targetWidths or {}
@@ -966,7 +966,7 @@ local function BuildLayout(ctx, builder, unit)
     local function RefreshLayoutState()
         local conf = GetConf(unit)
         local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
-        current:SetText("Current custom anchor: " .. (custom ~= "" and custom or "none"))
+        current:SetText(M.Format(M.Tr("Current custom anchor: %s"), custom ~= "" and custom or M.Tr("none")))
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
         SetSectionHeaderStatus(sec, nil)
     end
@@ -1010,6 +1010,16 @@ local function BuildText(ctx, builder, unit)
         boss = "Boss Preview",
         pet = "Companion",
     }
+    local function RaidGroupNameAllowed(unitKey)
+        return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focus"
+    end
+    local function NamePreviewText()
+        local text = sampleNames[unit] or UnitTopLabel(unit)
+        if RaidGroupNameAllowed(unit) and ReadBool(unit, "showRaidGroupInName", false) then
+            text = text .. " (2)"
+        end
+        return text
+    end
     M.unitTextTabSelection = M.unitTextTabSelection or {}
     local function CurrentTextTab()
         local key = M.unitTextTabSelection[unit] or "name"
@@ -1107,15 +1117,106 @@ local function BuildText(ctx, builder, unit)
         return label, value
     end
 
+    local function SwitchOrToggle(parent, label, x, y, labelWidth)
+        if W.SwitchAt then return W.SwitchAt(parent, label, x, y, labelWidth) end
+        return W.ToggleAt(parent, label, x, y, labelWidth)
+    end
+
+    local function OptionText(values, value)
+        value = value or ""
+        for i = 1, #(values or {}) do
+            local item = values[i]
+            if item and item.value == value then
+                return item.text or item.label or tostring(value)
+            end
+        end
+        return tostring(value)
+    end
+
+    local function BadgeValue(value)
+        return tostring(value or ""):gsub("%s*/%s*", " + ")
+    end
+
+    local function BadgeNumber(value)
+        value = tonumber(value) or 0
+        if value == floor(value) then return tostring(floor(value)) end
+        return string.format("%.1f", value)
+    end
+
+    local function RefreshTextHeader()
+        if RefreshTextControlState then RefreshTextControlState() end
+    end
+
+    local function TextSlotSummary(kind)
+        local values = kind == "power" and POWER_MODES or HP_MODES
+        local slots
+        if kind == "power" then
+            slots = {
+                { "right", "powerTextRight", "powerTextMode", "CURPERCENT" },
+                { "center", "powerTextCenter", "powerTextMode", "NONE" },
+                { "left", "powerTextLeft", "powerTextMode", "NONE" },
+            }
+        else
+            slots = {
+                { "right", "textRight", "hpTextMode", "CURPERCENT" },
+                { "center", "textCenter", "hpTextMode", "NONE" },
+                { "left", "textLeft", "hpTextMode", "NONE" },
+            }
+        end
+
+        for i = 1, #slots do
+            local slot = slots[i]
+            local value = ReadSlot(unit, slot[2], slot[3], slot[4])
+            if value and value ~= "NONE" then
+                local slotText = slot[1]:sub(1, 1):upper() .. slot[1]:sub(2)
+                return slotText .. ": " .. BadgeValue(OptionText(values, value))
+            end
+        end
+        return "No slot text"
+    end
+
+    local function UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
+        if not W.SetCollapsibleBadges then return end
+        if tab == "hp" then
+            W.SetCollapsibleBadges(sec, {
+                { text = hpOn and "Shown" or "Hidden", kind = hpOn and "ok" or "muted" },
+                { text = TextSlotSummary("hp"), kind = hpOn and "info" or "muted" },
+                { text = "X " .. BadgeNumber(ReadNumber(unit, "hpOffsetX", -4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "hpOffsetY", -4)), kind = hpOn and "accent" or "muted" },
+            })
+        elseif tab == "power" then
+            W.SetCollapsibleBadges(sec, {
+                { text = powerOn and "Shown" or "Hidden", kind = powerOn and "ok" or "muted" },
+                { text = TextSlotSummary("power"), kind = powerOn and "info" or "muted" },
+                { text = "X " .. BadgeNumber(ReadNumber(unit, "powerOffsetX", -4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "powerOffsetY", 4)), kind = powerOn and "accent" or "muted" },
+            })
+        elseif tab == "advanced" then
+            W.SetCollapsibleBadges(sec, {
+                { text = "Name " .. BadgeNumber(ReadNumber(unit, "nameTextLayer", 5)), kind = nameOn and "info" or "muted" },
+                { text = "HP " .. BadgeNumber(ReadNumber(unit, "hpTextLayer", 5)), kind = hpOn and "info" or "muted" },
+                { text = "Power " .. BadgeNumber(ReadNumber(unit, "powerTextLayer", 2)), kind = powerOn and "info" or "muted" },
+            })
+        else
+            local anchor = BadgeValue(OptionText(TEXT_ANCHORS, ReadText(unit, "nameTextAnchor", "LEFT")))
+            if RaidGroupNameAllowed(unit) and ReadBool(unit, "showRaidGroupInName", false) then
+                anchor = anchor .. " + Group"
+            end
+            W.SetCollapsibleBadges(sec, {
+                { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
+                { text = anchor, kind = nameOn and "info" or "muted" },
+                { text = "X " .. BadgeNumber(ReadNumber(unit, "nameOffsetX", 4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "nameOffsetY", -4)), kind = nameOn and "accent" or "muted" },
+            })
+        end
+    end
+
     local nameTab = MakeTabFrame("name")
     local hpTab = MakeTabFrame("hp")
     local powerTab = MakeTabFrame("power")
     local advancedTab = MakeTabFrame("advanced")
 
     SectionLabel(nameTab, "Name", leftX, -4)
-    PreviewText(nameTab, sampleNames[unit] or UnitTopLabel(unit), rightX, -4, rightW)
+    local _, namePreviewValue = PreviewText(nameTab, NamePreviewText(), rightX, -4, rightW)
 
-    local showNameText = W.ToggleAt(nameTab, "Show Name", leftX, -34, colW - 60)
+    local showNameText = SwitchOrToggle(nameTab, "Show Name", leftX, -34, colW - 60)
     M.BindToggle(ctx, showNameText,
         function() return ReadBool(unit, "showName", true) end,
         function(v)
@@ -1128,19 +1229,28 @@ local function BuildText(ctx, builder, unit)
     PlaceDropdown(nameTab, nameAnchor, leftX, -112, smallDropdownW)
     M.BindDropdown(ctx, nameAnchor,
         function() return ReadText(unit, "nameTextAnchor", "LEFT") end,
-        function(v) SetText(unit, "nameTextAnchor", v or "LEFT", "MSUF2_NAME_ANCHOR") end)
+        function(v)
+            SetText(unit, "nameTextAnchor", v or "LEFT", "MSUF2_NAME_ANCHOR")
+            RefreshTextHeader()
+        end)
 
     local nameX = W.Slider(nameTab, "X Offset", -300, 300, 1, 260)
     PlaceSlider(nameTab, nameX, leftX, -166, sliderW)
     M.BindSlider(ctx, nameX,
         function() return ReadNumber(unit, "nameOffsetX", 4) end,
-        function(v) SetNumber(unit, "nameOffsetX", v, "MSUF2_NAME_X", { text = true, preview = true }) end)
+        function(v)
+            SetNumber(unit, "nameOffsetX", v, "MSUF2_NAME_X", { text = true, preview = true })
+            RefreshTextHeader()
+        end)
 
     local nameY = W.Slider(nameTab, "Y Offset", -300, 300, 1, 260)
     PlaceSlider(nameTab, nameY, leftX, -224, sliderW)
     M.BindSlider(ctx, nameY,
         function() return ReadNumber(unit, "nameOffsetY", -4) end,
-        function(v) SetNumber(unit, "nameOffsetY", v, "MSUF2_NAME_Y", { text = true, preview = true }) end)
+        function(v)
+            SetNumber(unit, "nameOffsetY", v, "MSUF2_NAME_Y", { text = true, preview = true })
+            RefreshTextHeader()
+        end)
 
     SectionLabel(nameTab, "Appearance", rightX, -82)
     local nameSize = W.Slider(nameTab, "Size", 6, 48, 1, 260)
@@ -1149,10 +1259,21 @@ local function BuildText(ctx, builder, unit)
         function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
         function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
 
+    local showRaidGroupInName
+    if RaidGroupNameAllowed(unit) then
+        showRaidGroupInName = SwitchOrToggle(nameTab, "Raid group in name", rightX, -170, rightSliderW)
+        M.BindToggle(ctx, showRaidGroupInName,
+            function() return ReadBool(unit, "showRaidGroupInName", false) end,
+            function(v)
+                SetText(unit, "showRaidGroupInName", v and true or false, "MSUF2_RAID_GROUP_NAME")
+                if RefreshTextControlState then RefreshTextControlState() end
+            end)
+    end
+
     SectionLabel(hpTab, "HP Text", leftX, -4)
     PreviewText(hpTab, "630.0k - 63%", rightX, -4, rightW)
 
-    local showHPText = W.ToggleAt(hpTab, "Show HP Text", leftX, -34, colW - 60)
+    local showHPText = SwitchOrToggle(hpTab, "Show HP Text", leftX, -34, colW - 60)
     M.BindToggle(ctx, showHPText,
         function() return ReadBool(unit, "showHP", true) end,
         function(v)
@@ -1165,19 +1286,28 @@ local function BuildText(ctx, builder, unit)
     PlaceDropdown(hpTab, hpLeft, leftX, -112, dropdownW)
     M.BindDropdown(ctx, hpLeft,
         function() return ReadSlot(unit, "textLeft", "hpTextMode", "NONE") end,
-        function(v) SetText(unit, "textLeft", v or "NONE", "MSUF2_HP_LEFT") end)
+        function(v)
+            SetText(unit, "textLeft", v or "NONE", "MSUF2_HP_LEFT")
+            RefreshTextHeader()
+        end)
 
     local hpCenter = W.Dropdown(hpTab, "Center", HP_MODES, 260)
     PlaceDropdown(hpTab, hpCenter, leftX, -166, dropdownW)
     M.BindDropdown(ctx, hpCenter,
         function() return ReadSlot(unit, "textCenter", "hpTextMode", "NONE") end,
-        function(v) SetText(unit, "textCenter", v or "NONE", "MSUF2_HP_CENTER") end)
+        function(v)
+            SetText(unit, "textCenter", v or "NONE", "MSUF2_HP_CENTER")
+            RefreshTextHeader()
+        end)
 
     local hpRight = W.Dropdown(hpTab, "Right", HP_MODES, 260)
     PlaceDropdown(hpTab, hpRight, leftX, -220, dropdownW)
     M.BindDropdown(ctx, hpRight,
         function() return ReadSlot(unit, "textRight", "hpTextMode", "CURPERCENT") end,
-        function(v) SetText(unit, "textRight", v or "NONE", "MSUF2_HP_RIGHT") end)
+        function(v)
+            SetText(unit, "textRight", v or "NONE", "MSUF2_HP_RIGHT")
+            RefreshTextHeader()
+        end)
 
     local hpSep = W.Dropdown(hpTab, "Delimiter", SEPARATORS, 160)
     PlaceDropdown(hpTab, hpSep, leftX, -274, smallDropdownW)
@@ -1185,7 +1315,7 @@ local function BuildText(ctx, builder, unit)
         function() return ReadText(unit, "hpTextSeparator", "") end,
         function(v) SetText(unit, "hpTextSeparator", v or "", "MSUF2_HP_SEPARATOR") end)
 
-    local hpReverse = W.ToggleAt(hpTab, "Reverse order", leftX, -328, colW - 60)
+    local hpReverse = SwitchOrToggle(hpTab, "Reverse order", leftX, -328, colW - 60)
     M.BindToggle(ctx, hpReverse,
         function() return ReadText(unit, "hpTextReverse", false) == true end,
         function(v) SetText(unit, "hpTextReverse", v and true or false, "MSUF2_HP_REVERSE") end)
@@ -1195,16 +1325,22 @@ local function BuildText(ctx, builder, unit)
     PlaceSlider(hpTab, hpX, rightX, -112, rightSliderW)
     M.BindSlider(ctx, hpX,
         function() return ReadNumber(unit, "hpOffsetX", -4) end,
-        function(v) SetNumber(unit, "hpOffsetX", v, "MSUF2_HP_X", { text = true, preview = true }) end)
+        function(v)
+            SetNumber(unit, "hpOffsetX", v, "MSUF2_HP_X", { text = true, preview = true })
+            RefreshTextHeader()
+        end)
 
     local hpY = W.Slider(hpTab, "Y Offset", -300, 300, 1, 260)
     PlaceSlider(hpTab, hpY, rightX, -170, rightSliderW)
     M.BindSlider(ctx, hpY,
         function() return ReadNumber(unit, "hpOffsetY", -4) end,
-        function(v) SetNumber(unit, "hpOffsetY", v, "MSUF2_HP_Y", { text = true, preview = true }) end)
+        function(v)
+            SetNumber(unit, "hpOffsetY", v, "MSUF2_HP_Y", { text = true, preview = true })
+            RefreshTextHeader()
+        end)
 
     SectionLabel(hpTab, "Selected Slot", rightX, -232)
-    local hpMoveTogether = W.ToggleAt(hpTab, "Move text as one group", rightX, -262, rightSliderW)
+    local hpMoveTogether = SwitchOrToggle(hpTab, "Move text as one group", rightX, -262, rightSliderW)
     M.BindToggle(ctx, hpMoveTogether,
         function() return MoveTogether("hp") end,
         function(v)
@@ -1259,7 +1395,7 @@ local function BuildText(ctx, builder, unit)
     SectionLabel(powerTab, "Power Text", leftX, -4)
     PreviewText(powerTab, "100 Energy", rightX, -4, rightW)
 
-    local showPowerText = W.ToggleAt(powerTab, "Show Power Text", leftX, -34, colW - 60)
+    local showPowerText = SwitchOrToggle(powerTab, "Show Power Text", leftX, -34, colW - 60)
     M.BindToggle(ctx, showPowerText,
         function() return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget") end,
         function(v)
@@ -1272,19 +1408,28 @@ local function BuildText(ctx, builder, unit)
     PlaceDropdown(powerTab, pLeft, leftX, -112, dropdownW)
     M.BindDropdown(ctx, pLeft,
         function() return ReadSlot(unit, "powerTextLeft", "powerTextMode", "NONE") end,
-        function(v) SetText(unit, "powerTextLeft", v or "NONE", "MSUF2_POWER_TEXT_LEFT") end)
+        function(v)
+            SetText(unit, "powerTextLeft", v or "NONE", "MSUF2_POWER_TEXT_LEFT")
+            RefreshTextHeader()
+        end)
 
     local pCenter = W.Dropdown(powerTab, "Center", POWER_MODES, 260)
     PlaceDropdown(powerTab, pCenter, leftX, -166, dropdownW)
     M.BindDropdown(ctx, pCenter,
         function() return ReadSlot(unit, "powerTextCenter", "powerTextMode", "NONE") end,
-        function(v) SetText(unit, "powerTextCenter", v or "NONE", "MSUF2_POWER_TEXT_CENTER") end)
+        function(v)
+            SetText(unit, "powerTextCenter", v or "NONE", "MSUF2_POWER_TEXT_CENTER")
+            RefreshTextHeader()
+        end)
 
     local pRight = W.Dropdown(powerTab, "Right", POWER_MODES, 260)
     PlaceDropdown(powerTab, pRight, leftX, -220, dropdownW)
     M.BindDropdown(ctx, pRight,
         function() return ReadSlot(unit, "powerTextRight", "powerTextMode", "CURPERCENT") end,
-        function(v) SetText(unit, "powerTextRight", v or "NONE", "MSUF2_POWER_TEXT_RIGHT") end)
+        function(v)
+            SetText(unit, "powerTextRight", v or "NONE", "MSUF2_POWER_TEXT_RIGHT")
+            RefreshTextHeader()
+        end)
 
     local pSep = W.Dropdown(powerTab, "Delimiter", SEPARATORS, 160)
     PlaceDropdown(powerTab, pSep, leftX, -274, smallDropdownW)
@@ -1297,16 +1442,22 @@ local function BuildText(ctx, builder, unit)
     PlaceSlider(powerTab, pX, rightX, -112, rightSliderW)
     M.BindSlider(ctx, pX,
         function() return ReadNumber(unit, "powerOffsetX", -4) end,
-        function(v) SetNumber(unit, "powerOffsetX", v, "MSUF2_POWER_X", { text = true, preview = true }) end)
+        function(v)
+            SetNumber(unit, "powerOffsetX", v, "MSUF2_POWER_X", { text = true, preview = true })
+            RefreshTextHeader()
+        end)
 
     local pY = W.Slider(powerTab, "Y Offset", -300, 300, 1, 260)
     PlaceSlider(powerTab, pY, rightX, -170, rightSliderW)
     M.BindSlider(ctx, pY,
         function() return ReadNumber(unit, "powerOffsetY", 4) end,
-        function(v) SetNumber(unit, "powerOffsetY", v, "MSUF2_POWER_Y", { text = true, preview = true }) end)
+        function(v)
+            SetNumber(unit, "powerOffsetY", v, "MSUF2_POWER_Y", { text = true, preview = true })
+            RefreshTextHeader()
+        end)
 
     SectionLabel(powerTab, "Selected Slot", rightX, -232)
-    local pMoveTogether = W.ToggleAt(powerTab, "Move text as one group", rightX, -262, rightSliderW)
+    local pMoveTogether = SwitchOrToggle(powerTab, "Move text as one group", rightX, -262, rightSliderW)
     M.BindToggle(ctx, pMoveTogether,
         function() return MoveTogether("power") end,
         function(v)
@@ -1366,19 +1517,31 @@ local function BuildText(ctx, builder, unit)
     PlaceSlider(advancedTab, advNameLayer, leftX, -82, sliderW)
     M.BindSlider(ctx, advNameLayer,
         function() return ReadNumber(unit, "nameTextLayer", 5) end,
-        function(v) SetNumber(unit, "nameTextLayer", v, "MSUF2_NAME_TEXT_LAYER_ADV", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
+        function(v)
+            SetNumber(unit, "nameTextLayer", v, "MSUF2_NAME_TEXT_LAYER_ADV", { text = true, preview = true })
+            Call("MSUF_UpdateAllFonts_Immediate")
+            RefreshTextHeader()
+        end)
 
     local advHpLayer = W.Slider(advancedTab, "HP layer", 0, 30, 1, 260)
     PlaceSlider(advancedTab, advHpLayer, leftX, -140, sliderW)
     M.BindSlider(ctx, advHpLayer,
         function() return ReadNumber(unit, "hpTextLayer", 5) end,
-        function(v) SetNumber(unit, "hpTextLayer", v, "MSUF2_HP_TEXT_LAYER_ADV", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
+        function(v)
+            SetNumber(unit, "hpTextLayer", v, "MSUF2_HP_TEXT_LAYER_ADV", { text = true, preview = true })
+            Call("MSUF_UpdateAllFonts_Immediate")
+            RefreshTextHeader()
+        end)
 
     local advPowerLayer = W.Slider(advancedTab, "Power layer", 0, 30, 1, 260)
     PlaceSlider(advancedTab, advPowerLayer, leftX, -198, sliderW)
     M.BindSlider(ctx, advPowerLayer,
         function() return ReadNumber(unit, "powerTextLayer", 2) end,
-        function(v) SetNumber(unit, "powerTextLayer", v, "MSUF2_POWER_TEXT_LAYER_ADV", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
+        function(v)
+            SetNumber(unit, "powerTextLayer", v, "MSUF2_POWER_TEXT_LAYER_ADV", { text = true, preview = true })
+            Call("MSUF_UpdateAllFonts_Immediate")
+            RefreshTextHeader()
+        end)
 
     RefreshTextControlState = function()
         local tab = CurrentTextTab()
@@ -1390,11 +1553,14 @@ local function BuildText(ctx, builder, unit)
         local nameOn = ReadBool(unit, "showName", true)
         local hpOn = ReadBool(unit, "showHP", true)
         local powerOn = ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget")
+        if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
+        UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         SetControlEnabled(showNameText, true)
         SetControlEnabled(nameAnchor, nameOn)
         SetControlEnabled(nameSize, nameOn)
         SetControlEnabled(nameX, nameOn)
         SetControlEnabled(nameY, nameOn)
+        if showRaidGroupInName then SetControlEnabled(showRaidGroupInName, nameOn) end
         SetControlEnabled(advNameLayer, nameOn)
         SetControlEnabled(showHPText, true)
         SetControlEnabled(hpLeft, hpOn)
@@ -2024,6 +2190,38 @@ local function BuildStatus(ctx, builder, unit)
         end
     end
 
+    local unitLabel = UnitTopLabel(unit)
+    local unitLabelLower = string.lower(unitLabel or tostring(unit or "unit"))
+    local statusSearchBase = {
+        "status icons", "status icon", "status indicators", "status indicator", "indicator", "selected indicator",
+        "level", "levels", "level text", "level indicator", "show level", "enable level", "disable level",
+        "turn on level", "turn off level", "unit level", "player level", "target level", "focus level",
+        "boss level", "pet level", unitLabelLower .. " level", tostring(unit or "unit") .. " level",
+        "anchor level", "level anchor", "level anchoring", "position level", "level position",
+        "level positioning", "x offset", "y offset", "size", "layer",
+    }
+    local function StatusSearchKeywords(extra)
+        local out = {}
+        for i = 1, #statusSearchBase do out[#out + 1] = statusSearchBase[i] end
+        if type(extra) == "table" then
+            for i = 1, #extra do out[#out + 1] = extra[i] end
+        elseif extra then
+            out[#out + 1] = extra
+        end
+        return out
+    end
+    local function RegisterStatusSearch(control, label, extraKeywords, values, help)
+        if not (control and type(M.RegisterSearchWidget) == "function") then return end
+        M.RegisterSearchWidget(control, {
+            label = label,
+            kind = control._msuf2ControlKind or "control",
+            anchor = control._msuf2Title or control._msuf2Label or control,
+            values = values or control.values,
+            keywords = StatusSearchKeywords(extraKeywords),
+            help = help or "Status icon controls include the Level indicator, visibility, anchor, offsets, size, and layer.",
+        })
+    end
+
     local selector = W.Dropdown(sec, "Indicator", function() return StatusValues(unit) end, 260)
     if selector._msuf2Title and selector._msuf2Title.SetTextColor then
         selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
@@ -2042,6 +2240,9 @@ local function BuildStatus(ctx, builder, unit)
             Call("MSUF_UFPreview_SelectStatusIcon", spec.value)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
+    RegisterStatusSearch(selector, "Status indicator selector", {
+        "indicator dropdown", "select level", "choose level", "status icon dropdown", "level dropdown",
+    }, function() return StatusValues(unit) end, "Choose Level here, then adjust Enabled, Anchor, offsets, size, and layer.")
 
     local previewLabel = W.LabelAt(sec, "Status Preview", rightX, -42, rightW, "GameFontNormalSmall", T.colors.accent)
 
@@ -2053,6 +2254,9 @@ local function BuildStatus(ctx, builder, unit)
             Call("MSUF_SetStatusIconStyleUseMidnight", value and true or false)
             Call("MSUF_RequestStatusIconsRefreshForCurrent")
         end)
+    RegisterStatusSearch(midnight, "Status indicator style", {
+        "midnight style", "status style", "indicator style", "icon style",
+    })
 
     local enabled = W.ToggleAt(sec, "Enabled", leftX, -112, leftW)
     M.BindToggle(ctx, enabled,
@@ -2067,6 +2271,10 @@ local function BuildStatus(ctx, builder, unit)
             RefreshStatusRuntime(unit, spec)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
+    RegisterStatusSearch(enabled, "Status indicator enabled", {
+        "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
+        "enable level", "disable level", "turn level on", "turn level off",
+    })
 
     local symbol = W.Dropdown(sec, "Symbol", function()
         local spec = CurrentStatusSpec(unit)
@@ -2084,6 +2292,12 @@ local function BuildStatus(ctx, builder, unit)
             SetString(unit, spec.symbol, value or "DEFAULT", "MSUF2_STATUS_SYMBOL", { preview = true })
             RefreshStatusRuntime(unit, spec)
         end)
+    RegisterStatusSearch(symbol, "Status indicator symbol", {
+        "symbol", "icon", "status symbol", "indicator symbol", "combat symbol", "rested symbol", "incoming rez symbol",
+    }, function()
+        local spec = CurrentStatusSpec(unit)
+        return (spec and spec.symbols) or DEFAULT_SYMBOLS
+    end)
 
     local size = W.Slider(sec, "Size", 8, 64, 1, 300)
     PlaceSlider(size, leftX, -154, leftW)
@@ -2101,6 +2315,9 @@ local function BuildStatus(ctx, builder, unit)
             SetNumber(unit, spec.size, value, "MSUF2_STATUS_SIZE", { preview = true })
             RefreshStatusRuntime(unit, spec)
         end)
+    RegisterStatusSearch(size, "Status indicator size", {
+        "level size", "level text size", "indicator size", "icon size", "font size",
+    })
 
     local anchor = W.Dropdown(sec, "Anchor", function()
         local spec = CurrentStatusSpec(unit)
@@ -2118,6 +2335,13 @@ local function BuildStatus(ctx, builder, unit)
             SetString(unit, spec.anchor, value or spec.defaultAnchor or "TOPLEFT", "MSUF2_STATUS_ANCHOR", { preview = true })
             RefreshStatusRuntime(unit, spec)
         end)
+    RegisterStatusSearch(anchor, "Status indicator anchor", {
+        "level anchor", "level anchoring", "level text anchor", "level text anchoring",
+        "right to player name", "left to player name", "top left", "top right", "bottom left", "bottom right",
+    }, function()
+        local spec = CurrentStatusSpec(unit)
+        return (spec and spec.anchors) or STATUS_ANCHORS
+    end)
 
     local x = W.Slider(sec, "X Offset", -500, 500, 1, 300)
     PlaceSlider(x, leftX, -298, leftW)
@@ -2132,6 +2356,9 @@ local function BuildStatus(ctx, builder, unit)
             SetNumber(unit, spec.x, value, "MSUF2_STATUS_X", { preview = true })
             RefreshStatusRuntime(unit, spec)
         end)
+    RegisterStatusSearch(x, "Status indicator X offset", {
+        "x", "x offset", "horizontal offset", "level x", "level x offset", "move level left", "move level right",
+    })
 
     local y = W.Slider(sec, "Y Offset", -500, 500, 1, 300)
     PlaceSlider(y, rightX, -298, rightW)
@@ -2146,6 +2373,9 @@ local function BuildStatus(ctx, builder, unit)
             SetNumber(unit, spec.y, value, "MSUF2_STATUS_Y", { preview = true })
             RefreshStatusRuntime(unit, spec)
         end)
+    RegisterStatusSearch(y, "Status indicator Y offset", {
+        "y", "y offset", "vertical offset", "level y", "level y offset", "move level up", "move level down",
+    })
 
     local layer = W.Slider(sec, "Layer", 1, 10, 1, 300)
     PlaceSlider(layer, leftX, -370, leftW)
@@ -2160,6 +2390,9 @@ local function BuildStatus(ctx, builder, unit)
             SetNumber(unit, spec.layer, ClampStatusLayer(value, spec.defaultLayer), "MSUF2_STATUS_LAYER", { preview = true })
             RefreshStatusRuntime(unit, spec)
         end)
+    RegisterStatusSearch(layer, "Status indicator layer", {
+        "level layer", "level draw order", "indicator layer", "draw order", "above text", "behind text",
+    })
 
     local reset = W.Button(sec, "Reset selected", 150)
     PlaceButton(reset, rightX, -226, 150)
@@ -2180,6 +2413,9 @@ local function BuildStatus(ctx, builder, unit)
             ResetSelectedStatus()
         end
     end)
+    RegisterStatusSearch(reset, "Reset selected status indicator", {
+        "reset level", "reset level position", "reset level anchor", "reset indicator position",
+    })
 
     local test = W.ToggleAt(sec, "Test mode", rightX, -142, rightW)
     M.BindToggle(ctx, test,
@@ -2188,6 +2424,9 @@ local function BuildStatus(ctx, builder, unit)
             SetBool(unit, "stateIconsTestMode", value, "MSUF2_STATUS_TEST", { preview = true })
             Call("MSUF_RequestStatusIconsRefreshForCurrent")
         end)
+    RegisterStatusSearch(test, "Status indicator test mode", {
+        "test mode", "preview level", "test level", "status preview",
+    })
 
     local current = W.Button(sec, "Preview current", 142)
     PlaceButton(current, rightX, -64, 142)
@@ -2196,11 +2435,17 @@ local function BuildStatus(ctx, builder, unit)
         local spec = CurrentStatusSpec(unit)
         if spec then Call("MSUF_UFPreview_SelectStatusIcon", spec.value) end
     end)
+    RegisterStatusSearch(current, "Preview current status indicator", {
+        "preview current", "current indicator", "preview level",
+    })
     local all = W.Button(sec, "Show all", 112)
     PlaceButton(all, rightX + 150, -64, 112)
     all:SetScript("OnClick", function()
         Call("MSUF_UFPreview_SetStatusPreviewMode", "all")
     end)
+    RegisterStatusSearch(all, "Show all status indicators", {
+        "show all", "all indicators", "preview all", "all status icons",
+    })
 
     local function RefreshStatusSectionState()
         local spec = CurrentStatusSpec(unit)

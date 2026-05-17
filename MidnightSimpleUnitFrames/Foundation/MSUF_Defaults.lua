@@ -1825,6 +1825,7 @@ local function fill(key, defaults)
         nameTextLayer = 5,
         hpTextLayer = 5,
         powerTextLayer = 2,
+        showRaidGroupInName = false,
     }
     fill("player", {
         width     = 275,

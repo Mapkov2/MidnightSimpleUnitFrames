@@ -976,6 +976,10 @@ function ns.Text.ApplyName(frame, unit, overrideText)
         txt = ""
     end
     ns.Text.Set(frame.nameText, txt, show)
+    local raidGroupName = _G.MSUF_UpdateRaidGroupNameForFrame
+    if type(raidGroupName) == "function" then
+        raidGroupName(frame, unit, nil, show)
+    end
  end
 function ns.Text.ApplyLevel(frame, unit, conf, overrideText, forceShow)
     -- Secret-safe: do NOT compare strings for emptiness.

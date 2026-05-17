@@ -410,16 +410,18 @@ local function BuildBars(ctx)
         local active = {}
         for i = 1, #scopeValues do
             local item = scopeValues[i]
-            if item.value ~= "shared" and ScopeHasOverride(item.value, "hlOverride") then active[#active + 1] = item.text end
+            if item.value ~= "shared" and ScopeHasOverride(item.value, "hlOverride") then
+                active[#active + 1] = M.Tr(item.text or "")
+            end
         end
         local shared = current == "shared"
         W.SetControlShown(override, not shared)
         overrideInfo:SetShown(shared)
         reset:SetShown(shared and #active > 0)
         if #active > 0 then
-            overrideInfo:SetText("|cffffffffOverrides:|r " .. table.concat(active, ", "))
+            overrideInfo:SetText("|cffffffff" .. M.Tr("Overrides:") .. "|r " .. table.concat(active, ", "))
         else
-            overrideInfo:SetText("|cffffffffOverrides:|r None")
+            overrideInfo:SetText("|cffffffff" .. M.Tr("Overrides:") .. "|r " .. M.Tr("None"))
         end
         if shared then
             hint:SetText("Group Frames inherit Shared textures and gradients by default. Raid also applies to Mythic Raid.")
@@ -1130,7 +1132,7 @@ local function BuildBars(ctx)
             row.key = key
             row.slotIndex = i
             row.frame._stripe:SetColorTexture(r, g, bcol, 1)
-            row.frame._label:SetText(PRIORITY_LABELS[key] or key)
+            row.frame._label:SetText(M.Tr(PRIORITY_LABELS[key] or key))
             row.frame._numText:SetText(tostring(i))
         end
         SnapPriorityRows()

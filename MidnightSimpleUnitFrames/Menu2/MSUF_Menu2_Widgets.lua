@@ -238,6 +238,28 @@ function W.PageBuilder(ctx)
             local headerW = (header.GetWidth and header:GetWidth()) or self.width or 240
             local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
             if not entry._msuf2ManualHintLayout then
+                local badges = entry._msuf2Badges
+                if badges and #badges > 0 then
+                    local right = -12
+                    for i = #badges, 1, -1 do
+                        local badge = badges[i]
+                        if badge and badge.IsShown and badge:IsShown() then
+                            local bw = (badge.GetWidth and badge:GetWidth()) or 0
+                            badge:ClearAllPoints()
+                            badge:SetPoint("RIGHT", header, "RIGHT", right, 0)
+                            right = right - bw - 6
+                        end
+                    end
+                    if hint.Hide then hint:Hide() end
+
+                    label:ClearAllPoints()
+                    label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
+                    label:SetPoint("RIGHT", header, "RIGHT", right - 8, 0)
+                    label:SetJustifyH("LEFT")
+                    return
+                end
+
+                if hint.Show then hint:Show() end
                 hint:ClearAllPoints()
                 hint:SetPoint("TOPRIGHT", header, "TOPRIGHT", -12, -1)
                 hint:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -12, 1)
@@ -438,6 +460,85 @@ function W.SetCollapsibleToggleText(section, openText, closedText)
     return Refresh
 end
 
+local COLLAPSIBLE_BADGE_STYLES = {
+    ok = {
+        bg = { 0.018, 0.230, 0.145, 0.94 },
+        border = { 0.050, 0.690, 0.430, 0.88 },
+        text = { 0.640, 1.000, 0.820, 1 },
+    },
+    info = {
+        bg = { 0.060, 0.090, 0.210, 0.92 },
+        border = { 0.160, 0.260, 0.560, 0.78 },
+        text = { 0.760, 0.840, 1.000, 1 },
+    },
+    accent = {
+        bg = { 0.018, 0.170, 0.280, 0.94 },
+        border = { 0.100, 0.530, 0.780, 0.86 },
+        text = { 0.680, 0.920, 1.000, 1 },
+    },
+    muted = {
+        bg = { 0.045, 0.055, 0.090, 0.90 },
+        border = { 0.110, 0.140, 0.230, 0.72 },
+        text = { 0.680, 0.730, 0.860, 1 },
+    },
+}
+
+local function CollapsibleBadgeWidth(text)
+    text = tostring(Tr(text or ""))
+    return max(48, min(176, floor(22 + (#text * 6.2) + 0.5)))
+end
+
+function W.SetCollapsibleBadges(section, specs)
+    local entry = section and section._msuf2CollapsibleEntry
+    local header = entry and entry.header
+    if not header then return end
+
+    entry._msuf2Badges = entry._msuf2Badges or {}
+    specs = specs or {}
+
+    for i = 1, #specs do
+        local spec = specs[i] or {}
+        local badge = entry._msuf2Badges[i]
+        if not badge then
+            badge = CreateFrame("Frame", nil, header)
+            badge:SetSize(54, 20)
+            badge:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 2)
+            local fill, edge = T.CreateSuperellipseLayers(badge, "_msuf2HeaderBadge", 1, "ARTWORK", "OVERLAY")
+            badge._msuf2Fill = fill
+            badge._msuf2Edge = edge
+            badge.text = T.Font(badge, "GameFontDisableSmall", "", T.colors.text)
+            badge.text:SetPoint("CENTER", badge, "CENTER", 0, 0)
+            badge.text:SetJustifyH("CENTER")
+            entry._msuf2Badges[i] = badge
+        end
+
+        local text = Tr(spec.text or "")
+        local style = COLLAPSIBLE_BADGE_STYLES[spec.kind or spec.style or "info"] or COLLAPSIBLE_BADGE_STYLES.info
+        badge:SetSize(tonumber(spec.width) or CollapsibleBadgeWidth(text), tonumber(spec.height) or 20)
+        if badge.text then
+            badge.text:SetText(text)
+            local c = style.text
+            badge.text:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        end
+        if badge._msuf2Fill then
+            local c = style.bg
+            badge._msuf2Fill:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+        end
+        if badge._msuf2Edge then
+            local c = style.border
+            badge._msuf2Edge:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+        end
+        badge:SetShown(text ~= "")
+    end
+
+    for i = #specs + 1, #entry._msuf2Badges do
+        local badge = entry._msuf2Badges[i]
+        if badge then badge:SetShown(false) end
+    end
+
+    if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
+end
+
 local function NextRow(section, height)
     local y = section._msuf2CursorY or -38
     section._msuf2CursorY = y - (height or 28)
@@ -498,6 +599,108 @@ end
 
 function W.ToggleAt(section, label, x, y, labelWidth)
     return CreateToggle(section, label, x or 14, y or -38, labelWidth)
+end
+
+function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
+    local btn = CreateFrame("CheckButton", nil, section)
+    btn._msuf2ControlKind = "toggle"
+    btn:SetPoint("TOPLEFT", x or 14, y or -38)
+    btn:SetSize(48, 24)
+
+    local edge = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
+    edge:SetTexture((T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
+    edge:SetAllPoints(btn)
+    edge:SetTexCoord(0, 1, 0, 1)
+    if edge.SetSnapToPixelGrid then edge:SetSnapToPixelGrid(false) end
+    if edge.SetTexelSnappingBias then edge:SetTexelSnappingBias(0) end
+
+    local fill = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
+    fill:SetTexture((T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
+    fill:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+    fill:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+    fill:SetTexCoord(0, 1, 0, 1)
+    if fill.SetSnapToPixelGrid then fill:SetSnapToPixelGrid(false) end
+    if fill.SetTexelSnappingBias then fill:SetTexelSnappingBias(0) end
+    btn._msuf2SwitchFill = fill
+    btn._msuf2SwitchEdge = edge
+
+    local knob = btn:CreateTexture(nil, "OVERLAY")
+    knob:SetTexture((T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
+    knob:SetTexCoord(0, 1, 0, 1)
+    knob:SetSize(20, 20)
+    if knob.SetSnapToPixelGrid then knob:SetSnapToPixelGrid(false) end
+    if knob.SetTexelSnappingBias then knob:SetTexelSnappingBias(0) end
+    btn._msuf2SwitchKnob = knob
+
+    local side = labelSide or "RIGHT"
+    local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
+    SetSearchText(labelFS, label)
+    labelFS:SetJustifyH(side == "LEFT" and "RIGHT" or "LEFT")
+    if labelWidth then labelFS:SetWidth(max(20, labelWidth - (side == "RIGHT" and 22 or 0))) end
+    if side == "LEFT" then
+        labelFS:SetPoint("RIGHT", btn, "LEFT", -8, 0)
+    else
+        labelFS:SetPoint("LEFT", btn, "RIGHT", 8, 0)
+    end
+    if side == "HIDDEN" then labelFS:Hide() end
+    btn._msuf2Label = labelFS
+    btn.text = labelFS
+
+    local function Refresh(self, hover)
+        local checked = self.GetChecked and self:GetChecked()
+        local enabled = not self.IsEnabled or self:IsEnabled()
+        local bg = checked and { 0.020, 0.090, 0.135, 0.96 } or { 0.014, 0.022, 0.048, 0.96 }
+        local br = checked and { 0.160, 0.560, 0.760, 0.86 } or { 0.095, 0.145, 0.255, 0.82 }
+        local kb = checked and { 0.380, 0.760, 0.900, 1.00 } or { 0.680, 0.760, 0.940, 1.00 }
+        local mul = (hover and enabled) and 1.08 or 1
+        local alpha = enabled and 1 or 0.45
+        if self._msuf2SwitchFill then self._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), (bg[4] or 1) * alpha) end
+        if self._msuf2SwitchEdge then self._msuf2SwitchEdge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), (br[4] or 1) * alpha) end
+        if knob then
+            knob:ClearAllPoints()
+            knob:SetTexture((T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
+            knob:SetTexCoord(0, 1, 0, 1)
+            knob:SetPoint(checked and "RIGHT" or "LEFT", self, checked and "RIGHT" or "LEFT", checked and -2 or 2, 0)
+            knob:SetVertexColor(kb[1], kb[2], kb[3], (kb[4] or 1) * alpha)
+            if knob.SetAlpha then knob:SetAlpha(alpha) end
+        end
+    end
+    btn._msuf2RefreshSwitchVisual = Refresh
+
+    local rawSetChecked = btn.SetChecked
+    btn.SetChecked = function(self, value)
+        rawSetChecked(self, value and true or false)
+        Refresh(self)
+    end
+    btn:HookScript("OnEnter", function(self) Refresh(self, true) end)
+    btn:HookScript("OnLeave", function(self) Refresh(self) end)
+    btn:HookScript("OnClick", function(self) Refresh(self) end)
+    btn:HookScript("OnEnable", function(self) Refresh(self) end)
+    btn:HookScript("OnDisable", function(self) Refresh(self) end)
+
+    if side ~= "HIDDEN" then
+        local labelHit = CreateFrame("Button", nil, section)
+        labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
+        labelHit:SetPoint("TOPLEFT", labelFS, "TOPLEFT", -2, 2)
+        labelHit:SetPoint("BOTTOMRIGHT", labelFS, "BOTTOMRIGHT", 2, -2)
+        labelHit:SetScript("OnClick", function()
+            if btn.IsEnabled and not btn:IsEnabled() then return end
+            if btn.Click then btn:Click() end
+        end)
+        labelHit:SetScript("OnEnter", function()
+            Refresh(btn, true)
+            if btn.LockHighlight then btn:LockHighlight() end
+        end)
+        labelHit:SetScript("OnLeave", function()
+            Refresh(btn)
+            if btn.UnlockHighlight then btn:UnlockHighlight() end
+        end)
+        btn._msuf2LabelHit = labelHit
+    end
+
+    btn:SetChecked(false)
+    RegisterSearchObject(btn, label, "toggle", { anchor = side ~= "HIDDEN" and labelFS or btn })
+    return btn
 end
 
 local function ScopeButtonWidth(item)

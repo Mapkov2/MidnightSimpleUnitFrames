@@ -330,7 +330,7 @@ local COPY_PORTRAIT_FIELDS = {
 }
 
 local COPY_TEXT_FIELDS = {
-    "nameTextAnchor", "nameOffsetX", "nameOffsetY", "nameFontSize",
+    "nameTextAnchor", "nameOffsetX", "nameOffsetY", "nameFontSize", "showRaidGroupInName",
     "hpOffsetX", "hpOffsetY", "hpFontSize",
     "hpTextMode", "textLeft", "textCenter", "textRight", "hpTextReverse", "hpTextSeparator",
     "powerOffsetX", "powerOffsetY", "powerFontSize",

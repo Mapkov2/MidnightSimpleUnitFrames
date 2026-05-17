@@ -177,6 +177,7 @@ local function _MSUF_ApplyFontsToFrame(f)
     end
 
     if f.nameText then _MSUF_ApplyFontCached(f.nameText, nameSize, false, 0, 0, 0) end
+    if f.raidGroupNameText then _MSUF_ApplyFontCached(f.raidGroupNameText, nameSize, false, 0, 0, 0) end
     if f._msufToTInlineSep then _MSUF_ApplyFontCached(f._msufToTInlineSep, nameSize, false, 0, 0, 0) end
     if f._msufToTInlineText then _MSUF_ApplyFontCached(f._msufToTInlineText, nameSize, false, 0, 0, 0) end
     if f.levelText then _MSUF_ApplyFontCached(f.levelText, (conf and conf.levelIndicatorSize) or nameSize, false, 0, 0, 0) end

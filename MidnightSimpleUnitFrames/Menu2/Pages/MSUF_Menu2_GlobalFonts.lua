@@ -398,13 +398,15 @@ local function BuildFonts(ctx)
         local active = {}
         for i = 1, #scopeValues do
             local item = scopeValues[i]
-            if item.value ~= "shared" and ScopeHasOverride(item.value, "fontOverride") then active[#active + 1] = item.text end
+            if item.value ~= "shared" and ScopeHasOverride(item.value, "fontOverride") then
+                active[#active + 1] = M.Tr(item.text or "")
+            end
         end
         local shared = current == "shared"
         W.SetControlShown(override, not shared)
         overrideInfo:SetShown(shared)
         reset:SetShown(shared and #active > 0)
-        overrideInfo:SetText("|cffffffffOverrides:|r " .. (#active > 0 and table.concat(active, ", ") or "None"))
+        overrideInfo:SetText("|cffffffff" .. M.Tr("Overrides:") .. "|r " .. (#active > 0 and table.concat(active, ", ") or M.Tr("None")))
         if shared then
             hint:SetText("Shared font settings are the baseline for units and group frames.")
         elseif ScopeHasOverride(current, "fontOverride") then

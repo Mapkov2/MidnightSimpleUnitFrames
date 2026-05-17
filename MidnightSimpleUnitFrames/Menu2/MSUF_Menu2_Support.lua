@@ -21,6 +21,11 @@ local function Print(msg)
     end
 end
 
+local function Tr(text)
+    if type(ns.Translate) == "function" then return ns.Translate(text) end
+    return text
+end
+
 local function IsConfigCombatLocked()
     if type(_G.MSUF_IsConfigCombatLocked) == "function" then
         return _G.MSUF_IsConfigCombatLocked() and true or false
@@ -55,8 +60,8 @@ local function AddTooltip(widget, title, body)
     widget:SetScript("OnEnter", function(self)
         if not _G.GameTooltip then return end
         _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if title and title ~= "" then _G.GameTooltip:SetText(title, 1, 1, 1) end
-        if body and body ~= "" then _G.GameTooltip:AddLine(body, 0.80, 0.86, 1.00, true) end
+        if title and title ~= "" then _G.GameTooltip:SetText(Tr(title), 1, 1, 1) end
+        if body and body ~= "" then _G.GameTooltip:AddLine(Tr(body), 0.80, 0.86, 1.00, true) end
         _G.GameTooltip:Show()
     end)
     widget:SetScript("OnLeave", function()
@@ -183,12 +188,12 @@ local function EnsureCopyLinkPopup()
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOP", frame, "TOP", 0, -14)
-    title:SetText("Link")
+    title:SetText(Tr("Link"))
     frame._msufTitleFS = title
 
     local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     hint:SetPoint("TOP", title, "BOTTOM", 0, -6)
-    hint:SetText("Press Ctrl+C to copy:")
+    hint:SetText(Tr("Press Ctrl+C to copy:"))
     hint:SetTextColor(0.90, 0.90, 0.90, 1)
 
     local editBox = _G.CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
@@ -206,14 +211,14 @@ local function EnsureCopyLinkPopup()
     ok:Enable()
     ok:SetSize(120, 24)
     ok:SetPoint("BOTTOM", frame, "BOTTOM", 0, 12)
-    ok:SetText(_G.OKAY or "Okay")
+    ok:SetText(_G.OKAY or Tr("Okay"))
     ok:RegisterForClicks("LeftButtonUp")
     ok:SetScript("OnClick", function() frame:Hide() end)
     frame._msufOkButton = ok
     if type(_G.MSUF_SkinButton) == "function" then pcall(_G.MSUF_SkinButton, ok) end
 
     frame:SetScript("OnShow", function(self)
-        if self._msufTitleFS then self._msufTitleFS:SetText(self._msufTitle or "Link") end
+        if self._msufTitleFS then self._msufTitleFS:SetText(Tr(self._msufTitle or "Link")) end
         if self._msufEditBox then
             self._msufEditBox:SetText(self._msufUrl or "")
             self._msufEditBox:HighlightText()

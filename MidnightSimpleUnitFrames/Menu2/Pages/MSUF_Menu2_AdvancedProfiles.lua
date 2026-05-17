@@ -33,6 +33,10 @@ local BindSeparateRGB = AP.BindSeparateRGB
 local ApplyAuras = AP.ApplyAuras
 local MoveWidget = W.MoveWidget or AP.MoveWidget
 local LabelAt = AP.LabelAt
+
+local function Tr(text)
+    return (M.Tr and M.Tr(text)) or text
+end
 local DividerAt = AP.DividerAt
 local BindValueToggle = AP.BindValueToggle
 local BindValueSlider = AP.BindValueSlider
@@ -225,8 +229,8 @@ local function BuildProfiles(ctx)
         frame:HookScript("OnEnter", function(self)
             if not _G.GameTooltip then return end
             _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            _G.GameTooltip:AddLine(tostring(title or ""), 1, 1, 1)
-            if text and text ~= "" then _G.GameTooltip:AddLine(tostring(text), 0.85, 0.85, 0.85, true) end
+            _G.GameTooltip:AddLine(Tr(tostring(title or "")), 1, 1, 1)
+            if text and text ~= "" then _G.GameTooltip:AddLine(Tr(tostring(text)), 0.85, 0.85, 0.85, true) end
             _G.GameTooltip:Show()
         end)
         frame:HookScript("OnLeave", function()

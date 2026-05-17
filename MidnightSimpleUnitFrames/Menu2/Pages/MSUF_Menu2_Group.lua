@@ -865,7 +865,9 @@ local function ScopeSection(ctx, builder)
         end
 
         local src = CurrentScope()
-        if copyPopup._title then copyPopup._title:SetText("Copy from " .. ScopeLabel(src)) end
+        if copyPopup._title then
+            copyPopup._title:SetText(M.Format(M.Tr("Copy from %s"), ScopeLabel(src)))
+        end
         for i = 1, #GF_COPY_CATEGORIES do
             if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(M.gfCopyScopes[GF_COPY_CATEGORIES[i].key] == true) end
         end
@@ -1122,8 +1124,8 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             SetTileVisual(self, Val(CurrentScope(), "growth", "DOWN") == info.value, true)
             if GameTooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:AddLine("Growth: " .. info.text, 1, 1, 1)
-                GameTooltip:AddLine("Click to set group frame growth direction.", 0.72, 0.76, 0.86)
+                GameTooltip:AddLine(M.Format(M.Tr("Growth: %s"), M.Tr(info.text or "")), 1, 1, 1)
+                GameTooltip:AddLine(M.Tr("Click to set group frame growth direction."), 0.72, 0.76, 0.86)
                 GameTooltip:Show()
             end
         end)
@@ -1300,8 +1302,8 @@ local function BuildRoleOrderRows(ctx, section, opts)
             if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0.380, 0.550, 0.900, 0.95) end
             if GameTooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:AddLine(def.label, 1, 1, 1)
-                GameTooltip:AddLine("Drag to change role priority.", 0.72, 0.76, 0.86)
+                GameTooltip:AddLine(M.Tr(def.label or ""), 1, 1, 1)
+                GameTooltip:AddLine(M.Tr("Drag to change role priority."), 0.72, 0.76, 0.86)
                 GameTooltip:Show()
             end
         end)

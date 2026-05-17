@@ -667,11 +667,12 @@ local function GFPreviewUpdateHint(box, handle)
         return
     end
     local anchor, x, y = GFPreviewHandleOffsets(handle)
+    local nudgeHint = (M.Tr and M.Tr("arrows nudge, Shift=5, Ctrl=10")) or "arrows nudge, Shift=5, Ctrl=10"
     if anchor then
-        box._hint:SetText(string.format("%s   %s   x: %d   y: %d   arrows nudge, Shift=5, Ctrl=10",
-            GFPreviewHandleText(handle), tostring(anchor or "CENTER"), GFPreviewRound(x or 0), GFPreviewRound(y or 0)))
+        box._hint:SetText(string.format("%s   %s   x: %d   y: %d   %s",
+            GFPreviewHandleText(handle), tostring(anchor or "CENTER"), GFPreviewRound(x or 0), GFPreviewRound(y or 0), nudgeHint))
     else
-        box._hint:SetText(string.format("%s   arrows nudge, Shift=5, Ctrl=10", GFPreviewHandleText(handle)))
+        box._hint:SetText(string.format("%s   %s", GFPreviewHandleText(handle), nudgeHint))
     end
 end
 
@@ -726,7 +727,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     local title = T.Font(box, "GameFontNormal", "", T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
-    title:SetText("Group Frame Preview - " .. PreviewScopeLabel(CurrentScope()))
+    title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", PreviewScopeLabel(CurrentScope())))
     box._title = title
     local hint = T.Font(box, "GameFontDisableSmall", "click layers to hide - drag custom handles - arrows nudge selected", T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
@@ -780,12 +781,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         btn:SetPoint("TOPLEFT", layers, "TOPLEFT", 8, -28 - ((i - 1) * 18))
         btn:SetScript("OnEnter", function(self)
             if self._layerAvailable == false and box._hint then
-                box._hint:SetText((self._label and self._label:GetText() or "Layer") .. " is off in settings and cannot be shown in preview.")
+                box._hint:SetText(string.format((M.Tr and M.Tr("%s is off in settings and cannot be shown in preview.")) or "%s is off in settings and cannot be shown in preview.", self._label and self._label:GetText() or ((M.Tr and M.Tr("Layer")) or "Layer")))
             end
             if GameTooltip and self._layerAvailable == false then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText("Layer disabled", 1, 1, 1)
-                GameTooltip:AddLine("Turn this feature on in settings to make the preview layer available.", 0.82, 0.82, 0.82, true)
+                GameTooltip:SetText((M.Tr and M.Tr("Layer disabled")) or "Layer disabled", 1, 1, 1)
+                GameTooltip:AddLine((M.Tr and M.Tr("Turn this feature on in settings to make the preview layer available.")) or "Turn this feature on in settings to make the preview layer available.", 0.82, 0.82, 0.82, true)
                 GameTooltip:Show()
             end
         end)
@@ -1137,10 +1138,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(GFPreviewHandleText(self), 1, 1, 1)
                 if self._locked then
-                    GameTooltip:AddLine("This preview layer follows Blizzard/native placement and is locked.", 0.82, 0.82, 0.82, true)
+                    GameTooltip:AddLine((M.Tr and M.Tr("This preview layer follows Blizzard/native placement and is locked.")) or "This preview layer follows Blizzard/native placement and is locked.", 0.82, 0.82, 0.82, true)
                 else
-                    GameTooltip:AddLine("Drag this preview element to adjust the same placement offsets used by Group Frames.", 0.82, 0.82, 0.82, true)
-                    GameTooltip:AddLine("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.", 0.55, 0.62, 0.72, true)
+                    GameTooltip:AddLine((M.Tr and M.Tr("Drag this preview element to adjust the same placement offsets used by Group Frames.")) or "Drag this preview element to adjust the same placement offsets used by Group Frames.", 0.82, 0.82, 0.82, true)
+                    GameTooltip:AddLine((M.Tr and M.Tr("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.")) or "Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.", 0.55, 0.62, 0.72, true)
                 end
                 GameTooltip:Show()
             end
@@ -1315,7 +1316,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if layerAvailable[key] == false then return 0 end
             return (soloLayer and soloLayer ~= key) and 0.15 or 1
         end
-        self._title:SetText("Group Frame Preview - " .. label)
+        self._title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
 
         local stageW = self._stage:GetWidth() or (width - 98)
         local stageH = self._stage:GetHeight() or 218
