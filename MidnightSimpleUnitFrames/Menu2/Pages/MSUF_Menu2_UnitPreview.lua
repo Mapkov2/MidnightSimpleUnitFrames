@@ -2499,6 +2499,16 @@ end
 do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
+    deps.PreviewInCombat = PreviewInCombat
+    deps.TR = TR
+    deps.PortraitStyleGet = PortraitStyleGet
+    deps.max = max
+    deps.min = min
+    deps.abs = abs
+    deps.floor = floor
+    deps.format = format
+    deps.TEX_W8 = TEX_W8
+    deps.FONT = FONT
     deps.CurrentPanelKey = CurrentPanelKey
     deps.UnitDB = UnitDB
     deps.UNIT_DATA = UNIT_DATA
@@ -2508,13 +2518,48 @@ do
     deps.PreviewRaidGroupNameText = PreviewRaidGroupNameText
     deps.NormalizeRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor
     deps.STATUS_PREVIEW = STATUS_PREVIEW
+    deps.CastbarEnabled = CastbarEnabled
+    deps.ReadCastbarSize = ReadCastbarSize
+    deps.CastbarOffsetFields = CastbarOffsetFields
+    deps.CastbarDetached = CastbarDetached
+    deps.CanDetachPowerBarKey = CanDetachPowerBarKey
+    deps.ClampPreviewLayer = ClampPreviewLayer
+    deps.SetTex = SetTex
+    deps.ReadPowerBarHeight = ReadPowerBarHeight
+    deps.PlaceHandle = PlaceHandle
+    deps.UnitPreviewText = UnitPreviewText
+    deps.UnitPreviewTextMovesTogether = UnitPreviewTextMovesTogether
+    deps.SetShownSafe = SetShownSafe
+    deps.ApplyPreviewLayerVisibility = ApplyPreviewLayerVisibility
+    deps.ApplyPreviewTransparency = ApplyPreviewTransparency
+    deps.RefreshHandleSelectionVisuals = RefreshHandleSelectionVisuals
 end
 
 function Preview.Refresh(box, reason)
     box = box or Preview.active
     if not box or not box:IsShown() then return end
-    if PreviewInCombat() then return end
     local D = Preview.RefreshDeps
+    local PreviewInCombat = D.PreviewInCombat
+    if PreviewInCombat() then return end
+    local TR = D.TR
+    local PortraitStyleGet = D.PortraitStyleGet
+    local max, min, abs, floor = D.max, D.min, D.abs, D.floor
+    local format, TEX_W8, FONT = D.format, D.TEX_W8, D.FONT
+    local CastbarEnabled = D.CastbarEnabled
+    local ReadCastbarSize = D.ReadCastbarSize
+    local CastbarOffsetFields = D.CastbarOffsetFields
+    local CastbarDetached = D.CastbarDetached
+    local CanDetachPowerBarKey = D.CanDetachPowerBarKey
+    local ClampPreviewLayer = D.ClampPreviewLayer
+    local SetTex = D.SetTex
+    local ReadPowerBarHeight = D.ReadPowerBarHeight
+    local PlaceHandle = D.PlaceHandle
+    local UnitPreviewText = D.UnitPreviewText
+    local UnitPreviewTextMovesTogether = D.UnitPreviewTextMovesTogether
+    local SetShownSafe = D.SetShownSafe
+    local ApplyPreviewLayerVisibility = D.ApplyPreviewLayerVisibility
+    local ApplyPreviewTransparency = D.ApplyPreviewTransparency
+    local RefreshHandleSelectionVisuals = D.RefreshHandleSelectionVisuals
     local panel = box._msufPanel
     local key = D.CurrentPanelKey(panel)
     local conf, g = D.UnitDB(key)
