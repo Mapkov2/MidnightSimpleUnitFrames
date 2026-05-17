@@ -1695,11 +1695,11 @@ local SEARCH_FAQ = {
     },
     {
         label = "How do I make unit frames transparent?",
-        answer = "Open the unit page > Transparency for in-combat/out-of-combat alpha. Group frame transparency is in Group Frames > Layout > Transparency.",
+        answer = "Open the unit page > Transparency for in-combat/out-of-combat alpha. By default the sliders fade the whole frame; Keep text + portrait visible switches them to the selected layer: Bars, HP Bar, or Backdrop. Group frame transparency is in Group Frames > Layout > Transparency.",
         pageKey = "uf_player",
         target = "Opens: Player > Transparency",
-        anchorText = "Transparency alpha in combat out of combat opacity background preserve hp color",
-        keywords = { "transparent unitframe", "transparent unit frame", "alpha unitframe", "opacity unitframe", "fade frame", "frame alpha", "in combat alpha", "out of combat alpha", "transparent player frame", "transparent target frame" },
+        anchorText = "Transparency alpha in combat out of combat opacity whole frame layer fade bars hp bar backdrop preserve hp color keep text portrait visible",
+        keywords = { "transparent unitframe", "transparent unit frame", "alpha unitframe", "opacity unitframe", "fade frame", "frame alpha", "whole frame alpha", "in combat alpha", "out of combat alpha", "transparent player frame", "transparent target frame", "hp bar alpha", "health bar alpha", "bars alpha", "backdrop alpha", "keep text portrait visible" },
         priority = 40,
     },
     {

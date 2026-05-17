@@ -1678,7 +1678,7 @@ local function BuildInlineText(ctx, builder, unit)
 end
 
 local function BuildAlpha(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("transparency", "Transparency", 346, false)
+    local sec = builder:CollapsibleSection("transparency", "Transparency", 370, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 32
     local rightX = min(max(430, floor(sectionW * 0.52)), max(360, sectionW - 360))
@@ -1713,7 +1713,7 @@ local function BuildAlpha(ctx, builder, unit)
     end
 
     local inCombat = W.Slider(sec, "Alpha in combat", 0, 1, 0.05, 300)
-    PlaceSlider(inCombat, leftX, -276, sliderW)
+    PlaceSlider(inCombat, leftX, -298, sliderW)
     M.BindSlider(ctx, inCombat,
         function() return ReadAlphaValue(true) end,
         function(v)
@@ -1726,7 +1726,7 @@ local function BuildAlpha(ctx, builder, unit)
         end)
 
     local outCombat = W.Slider(sec, "Alpha out of combat", 0, 1, 0.05, 300)
-    PlaceSlider(outCombat, rightX, -276, sliderW)
+    PlaceSlider(outCombat, rightX, -298, sliderW)
     M.BindSlider(ctx, outCombat,
         function() return ReadAlphaValue(false) end,
         function(v)
@@ -1748,7 +1748,7 @@ local function BuildAlpha(ctx, builder, unit)
             M.Refresh(ctx)
         end)
 
-    W.LabelAt(sec, "Protected Elements", rightX, -38, rightW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(sec, "Layer Fade", rightX, -38, rightW, "GameFontNormalSmall", T.colors.accent)
     local exclude = W.ToggleAt(sec, "Keep text + portrait visible", rightX, -42, 250)
     W.MoveWidget(exclude, sec, rightX, -64)
     M.BindToggle(ctx, exclude,
@@ -1769,8 +1769,8 @@ local function BuildAlpha(ctx, builder, unit)
         end)
 
     W.DividerAt(sec, -126, leftX, 32)
-    local mode = W.Segment(sec, "Sliders affect", {
-        { value = "foreground", text = "Frame" },
+    local mode = W.Segment(sec, "Layer to fade", {
+        { value = "foreground", text = "Bars" },
         { value = "health", text = "HP Bar" },
         { value = "background", text = "Backdrop" },
     }, 420)
@@ -1794,16 +1794,40 @@ local function BuildAlpha(ctx, builder, unit)
             btn:SetSize(bw, 22)
         end
     end
-    local alphaLayerHint = W.Text(sec, "Frame: all bars & text  ·  HP Bar: health bar only  ·  Backdrop: frame background", leftX, -196, math.min(620, sectionW - leftX - 32), T.colors.dim)
+    local alphaLayerHint = W.Text(sec, "", leftX, -196, math.min(620, sectionW - leftX - 32), T.colors.dim)
     if alphaLayerHint and alphaLayerHint.SetWordWrap then alphaLayerHint:SetWordWrap(false) end
-    W.DividerAt(sec, -228, leftX, 32)
-    W.LabelAt(sec, "Alpha Values", leftX, -250, leftW, "GameFontNormalSmall", T.colors.accent)
+    local alphaLayerDetail = W.Text(sec, "", leftX, -214, math.min(620, sectionW - leftX - 32), T.colors.dim)
+    if alphaLayerDetail and alphaLayerDetail.SetWordWrap then alphaLayerDetail:SetWordWrap(false) end
+    W.DividerAt(sec, -250, leftX, 32)
+    W.LabelAt(sec, "Alpha Values", leftX, -272, leftW, "GameFontNormalSmall", T.colors.accent)
     M.BindSegment(ctx, mode,
         function() return NormalizeAlphaMode(GetConf(unit).alphaLayerMode) end,
         function(v)
             M.SetUnitValue(unit, "alphaLayerMode", AlphaModeValue(v), "MSUF2_ALPHA_LAYER", { alpha = true, preview = true })
             M.Refresh(ctx)
         end)
+    local function RefreshAlphaLayerHelp()
+        local layered = ReadBool(unit, "alphaExcludeTextPortrait", false) == true
+        SetControlEnabled(mode, true)
+        SetControlEnabled(preserve, layered)
+        if layered then
+            if alphaLayerHint and alphaLayerHint.SetText then
+                alphaLayerHint:SetText(M.Tr("Layer fade is active. Sliders fade the selected layer; text and portrait stay visible."))
+            end
+            if alphaLayerDetail and alphaLayerDetail.SetText then
+                alphaLayerDetail:SetText(M.Tr("Bars = health + power. HP Bar = health only. Backdrop = frame background."))
+            end
+        else
+            if alphaLayerHint and alphaLayerHint.SetText then
+                alphaLayerHint:SetText(M.Tr("Sliders currently fade the whole frame: bars, text, portrait, and backdrop."))
+            end
+            if alphaLayerDetail and alphaLayerDetail.SetText then
+                alphaLayerDetail:SetText(M.Tr("Turn on Keep text + portrait visible to fade only the selected layer."))
+            end
+        end
+    end
+    M.AddRefresher(ctx, RefreshAlphaLayerHelp)
+    RefreshAlphaLayerHelp()
 end
 
 local function BuildPortrait(ctx, builder, unit)
