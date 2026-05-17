@@ -50,6 +50,7 @@ M._msuf2LayoutVersion = M._msuf2LayoutVersion or 0
 local floor = math.floor
 local max = math.max
 local min = math.min
+local IsEditModeActive
 
 local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 900, 700
 local MIN_WINDOW_W, MIN_WINDOW_H = 620, 430
@@ -61,21 +62,67 @@ local CONTENT_H = WINDOW_H - 74
 local NAV_BUTTON_H = 20
 local NAV_BUTTON_STEP = 23
 local MENU_BASE_SCALE = 1.08
-local MENU_FRAME_STRATA = "FULLSCREEN_DIALOG"
-local MENU_FRAME_LEVEL = 40
-local MENU_POPUP_FRAME_LEVEL = 120
+local MENU_NORMAL_FRAME_STRATA = "DIALOG"
+local MENU_EDIT_FRAME_STRATA = "FULLSCREEN"
+local MENU_NORMAL_FRAME_LEVEL = 10
+local MENU_EDIT_FRAME_LEVEL = 900
+local MENU_NORMAL_POPUP_FRAME_LEVEL = 120
+local MENU_EDIT_POPUP_FRAME_LEVEL = 980
+
+local function IsMenuEditPriorityActive()
+    if type(IsEditModeActive) ~= "function" then return false end
+    local ok, active = pcall(IsEditModeActive)
+    return ok and active == true
+end
+
+local function GetMenuFramePriority(level)
+    if IsMenuEditPriorityActive() then
+        return MENU_EDIT_FRAME_STRATA, level or MENU_EDIT_FRAME_LEVEL
+    end
+    return MENU_NORMAL_FRAME_STRATA, level or MENU_NORMAL_FRAME_LEVEL
+end
 
 local function ApplyMenuFramePriority(frame, level)
     if not frame then return end
-    if frame.SetFrameStrata then frame:SetFrameStrata(MENU_FRAME_STRATA) end
-    if frame.SetFrameLevel then frame:SetFrameLevel(level or MENU_FRAME_LEVEL) end
-    if frame.SetToplevel then frame:SetToplevel(true) end
+    local strata, frameLevel = GetMenuFramePriority(level)
+    if frame.SetFrameStrata then frame:SetFrameStrata(strata) end
+    if frame.SetFrameLevel then frame:SetFrameLevel(frameLevel) end
+    if frame.SetToplevel then frame:SetToplevel(false) end
+end
+
+local function ApplyMenuPopupFramePriority(frame)
+    ApplyMenuFramePriority(frame, IsMenuEditPriorityActive() and MENU_EDIT_POPUP_FRAME_LEVEL or MENU_NORMAL_POPUP_FRAME_LEVEL)
+end
+
+local function ApplyMenuResizeProxyPriority(proxy, owner)
+    if not proxy then return end
+    local strata, fallbackLevel = GetMenuFramePriority()
+    local ownerLevel = owner and owner.GetFrameLevel and owner:GetFrameLevel()
+    if proxy.SetFrameStrata then proxy:SetFrameStrata(strata) end
+    if proxy.SetFrameLevel then proxy:SetFrameLevel((ownerLevel or fallbackLevel) + 80) end
+    if proxy.SetToplevel then proxy:SetToplevel(false) end
+end
+
+local function RefreshMenuFramePriority()
+    if M.frame then
+        ApplyMenuFramePriority(M.frame)
+        ApplyMenuResizeProxyPriority(M.frame._msuf2ResizeProxy, M.frame)
+    end
+    if M.minimizedBar then ApplyMenuFramePriority(M.minimizedBar) end
 end
 
 M.ApplyMenuFramePriority = ApplyMenuFramePriority
-M.MENU_FRAME_STRATA = MENU_FRAME_STRATA
-M.MENU_FRAME_LEVEL = MENU_FRAME_LEVEL
-M.MENU_POPUP_FRAME_LEVEL = MENU_POPUP_FRAME_LEVEL
+M.RefreshMenuFramePriority = RefreshMenuFramePriority
+M.MENU_NORMAL_FRAME_STRATA = MENU_NORMAL_FRAME_STRATA
+M.MENU_EDIT_FRAME_STRATA = MENU_EDIT_FRAME_STRATA
+M.MENU_FRAME_STRATA = MENU_EDIT_FRAME_STRATA
+M.MENU_NORMAL_FRAME_LEVEL = MENU_NORMAL_FRAME_LEVEL
+M.MENU_EDIT_FRAME_LEVEL = MENU_EDIT_FRAME_LEVEL
+M.MENU_FRAME_LEVEL = MENU_EDIT_FRAME_LEVEL
+M.MENU_NORMAL_POPUP_FRAME_LEVEL = MENU_NORMAL_POPUP_FRAME_LEVEL
+M.MENU_EDIT_POPUP_FRAME_LEVEL = MENU_EDIT_POPUP_FRAME_LEVEL
+M.MENU_POPUP_FRAME_LEVEL = MENU_NORMAL_POPUP_FRAME_LEVEL
+M.ApplyMenuPopupFramePriority = ApplyMenuPopupFramePriority
 
 local NAV = {
     { key = "home", label = "Dashboard" },
@@ -636,7 +683,6 @@ local function ApplyBossPagePreviewFallback(active, reason)
     end
 end
 
-local IsEditModeActive
 local lastBossPreviewActive
 local lastBossPreviewFn
 
@@ -891,6 +937,7 @@ local function EnsureEditModeUIHook()
     if type(register) ~= "function" then return end
 
     register(function()
+        RefreshMenuFramePriority()
         local frame = M.frame
         if frame and frame:IsShown() then
             if frame.RefreshStatus then frame:RefreshStatus() end
@@ -1744,9 +1791,7 @@ local function BuildWindow()
     local function EnsureResizeProxy()
         if f._msuf2ResizeProxy then return f._msuf2ResizeProxy end
         local proxy = CreateFrame("Frame", nil, UIParent)
-        proxy:SetFrameStrata(MENU_FRAME_STRATA)
-        proxy:SetFrameLevel(f:GetFrameLevel() + 80)
-        if proxy.SetToplevel then proxy:SetToplevel(true) end
+        ApplyMenuResizeProxyPriority(proxy, f)
         proxy:Hide()
 
         local fill = proxy:CreateTexture(nil, "BACKGROUND")
@@ -1783,6 +1828,7 @@ local function BuildWindow()
         local scale = layout.scale or WindowVisualScale(f)
         if scale <= 0 then scale = 1 end
         local proxy = EnsureResizeProxy()
+        ApplyMenuResizeProxyPriority(proxy, f)
         proxy:ClearAllPoints()
         proxy:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
         proxy:SetSize(layout.visualW or ((layout.w or WINDOW_W) * scale), layout.visualH or ((layout.h or WINDOW_H) * scale))
@@ -2493,6 +2539,8 @@ local function BuildDashboardUX(ctx)
         if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
             _G.MSUF_SetMSUFEditModeDirect(not active)
         end
+        RefreshMenuFramePriority()
+        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshMenuFramePriority) end
         RefreshDashboardEditModeButton()
         if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
     end

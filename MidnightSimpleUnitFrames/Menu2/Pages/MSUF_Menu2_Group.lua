@@ -767,7 +767,9 @@ local function ScopeSection(ctx, builder)
         if not copyPopup then
             copyPopup = CreateFrame("Frame", nil, UIParent, T.Template and T.Template() or nil)
             copyPopup:SetSize(430, 334)
-            if M.ApplyMenuFramePriority then
+            if M.ApplyMenuPopupFramePriority then
+                M.ApplyMenuPopupFramePriority(copyPopup)
+            elseif M.ApplyMenuFramePriority then
                 M.ApplyMenuFramePriority(copyPopup, M.MENU_POPUP_FRAME_LEVEL or 120)
             else
                 copyPopup:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -880,6 +882,11 @@ local function ScopeSection(ctx, builder)
                     nextX = nextX + btn:GetWidth() + 6
                 end
             end
+        end
+        if M.ApplyMenuPopupFramePriority then
+            M.ApplyMenuPopupFramePriority(copyPopup)
+        elseif M.ApplyMenuFramePriority then
+            M.ApplyMenuFramePriority(copyPopup, M.MENU_POPUP_FRAME_LEVEL or 120)
         end
         copyPopup:ClearAllPoints()
         copyPopup:SetPoint("TOPRIGHT", anchor or copy, "BOTTOMRIGHT", 0, -6)

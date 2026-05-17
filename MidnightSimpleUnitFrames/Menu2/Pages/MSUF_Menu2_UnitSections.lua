@@ -608,7 +608,9 @@ local function BuildTopActions(ctx, builder, unit, label)
         if not copyPopup then
             copyPopup = MakeCopyPanel(UIParent)
             copyPopup:SetSize(420, 276)
-            if M.ApplyMenuFramePriority then
+            if M.ApplyMenuPopupFramePriority then
+                M.ApplyMenuPopupFramePriority(copyPopup)
+            elseif M.ApplyMenuFramePriority then
                 M.ApplyMenuFramePriority(copyPopup, M.MENU_POPUP_FRAME_LEVEL or 120)
             else
                 copyPopup:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -704,6 +706,11 @@ local function BuildTopActions(ctx, builder, unit, label)
             end
         end
         RefreshCopyPopupTargets()
+        if M.ApplyMenuPopupFramePriority then
+            M.ApplyMenuPopupFramePriority(copyPopup)
+        elseif M.ApplyMenuFramePriority then
+            M.ApplyMenuFramePriority(copyPopup, M.MENU_POPUP_FRAME_LEVEL or 120)
+        end
         copyPopup:ClearAllPoints()
         copyPopup:SetPoint("TOPRIGHT", anchor or copy, "BOTTOMRIGHT", 0, -6)
         copyPopup:Show()
