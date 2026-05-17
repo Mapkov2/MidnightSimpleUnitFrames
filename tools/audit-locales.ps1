@@ -11,6 +11,7 @@ $locales = @(
 
 $menuRoot = Join-Path $AddonRoot "Menu2"
 $localeRoot = Join-Path $AddonRoot "Locales"
+$runtimeLocalePath = Join-Path $localeRoot "MSUF_RuntimeLocalization.lua"
 
 function Add-Key {
     param([System.Collections.Generic.HashSet[string]]$Set, [string]$Value)
@@ -18,6 +19,11 @@ function Add-Key {
     $Value = ConvertFrom-LuaStringLiteral $Value
     if ($Value -match '^MSUF2_') { return }
     if ($Value -match '^[\s0-9%.,:;+\-*/\\|<>=~_()]+$') { return }
+    if ($Value -match '^(?:%[0-9.]*[sdif]|%%|\s|[.,:;+\-*/\\|<>=~_()])+$') { return }
+    if ($Value -match '^\d+(?:p|K|k)?$') { return }
+    if ($Value -in @("AaBbCc", "BUFFS", "DEBUFFS", "SPELL", "TEXT")) { return }
+    if ($Value -match '^\|cff[0-9a-fA-F]{6}$') { return }
+    if ($Value -match '^v\d') { return }
     if ($Value -match '^[a-z]+(?:[A-Z][A-Za-z0-9]*)+$') { return }
     [void]$Set.Add($Value)
 }
@@ -49,6 +55,49 @@ function Read-LocalePairs {
     return $pairs
 }
 
+function Read-RuntimeLocalePairs {
+    param([string]$Path, [string]$Locale)
+    $pairs = @{}
+    if (-not (Test-Path -LiteralPath $Path)) { return $pairs }
+
+    $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+
+    foreach ($match in [regex]::Matches($text, ('AddMissing\("' + [regex]::Escape($Locale) + '"\s*,\s*\{(?<body>.*?)\r?\n\}\)'), 'Singleline')) {
+        $body = $match.Groups["body"].Value
+        $bodyPairs = Read-LocalePairsFromText $body
+        foreach ($key in $bodyPairs.Keys) { $pairs[$key] = $bodyPairs[$key] }
+    }
+
+    $tableBlocks = @{}
+    foreach ($tableMatch in [regex]::Matches($text, 'local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{(?<body>.*?)\r?\n\}', 'Singleline')) {
+        $tableBlocks[$tableMatch.Groups[1].Value] = $tableMatch.Groups["body"].Value
+    }
+    foreach ($aliasMatch in [regex]::Matches($text, ('AddMissing\("' + [regex]::Escape($Locale) + '"\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)'))) {
+        $name = $aliasMatch.Groups[1].Value
+        if ($tableBlocks.ContainsKey($name)) {
+            $bodyPairs = Read-LocalePairsFromText $tableBlocks[$name]
+            foreach ($key in $bodyPairs.Keys) { $pairs[$key] = $bodyPairs[$key] }
+        }
+    }
+
+    return $pairs
+}
+
+function Read-LocalePairsFromText {
+    param([string]$Text)
+    $pairs = @{}
+    $patterns = @(
+        'L\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"',
+        '\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"'
+    )
+    foreach ($pattern in $patterns) {
+        foreach ($match in [regex]::Matches($Text, $pattern)) {
+            $pairs[(ConvertFrom-LuaStringLiteral $match.Groups[1].Value)] = ConvertFrom-LuaStringLiteral $match.Groups[2].Value
+        }
+    }
+    return $pairs
+}
+
 $keys = [System.Collections.Generic.HashSet[string]]::new()
 $patterns = @(
     '\b(?:W\.)?(?:Toggle|Slider|Dropdown|Segment|Button|LabelAt|Text)\s*\([^\n]*?"((?:[^"\\]|\\.)*)"',
@@ -61,7 +110,8 @@ $patterns = @(
     '\{\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
     '\b(?:label|text|title)\s*=\s*"((?:[^"\\]|\\.)*)"',
     '\bM\.Tr\s*\(\s*"((?:[^"\\]|\\.)*)"',
-    '\bM\.Format\s*\(\s*"((?:[^"\\]|\\.)*)"'
+    '\bM\.Format\s*\(\s*"((?:[^"\\]|\\.)*)"',
+    '\b(?:SetText|AddLine|SetTextColor)\s*\(\s*"((?:[^"\\]|\\.)*)"'
 )
 
 Get-ChildItem -LiteralPath $menuRoot -Recurse -Filter "*.lua" | ForEach-Object {
@@ -69,6 +119,29 @@ Get-ChildItem -LiteralPath $menuRoot -Recurse -Filter "*.lua" | ForEach-Object {
     foreach ($pattern in $patterns) {
         foreach ($match in [regex]::Matches($text, $pattern)) {
             Add-Key $keys $match.Groups[1].Value
+        }
+    }
+}
+
+$translatedCallPatterns = @(
+    '\b(?:M\.Tr|Tr|TR|QuickTr|HelpText|ns\.Translate)\s*\(\s*"((?:[^"\\]|\\.)*)"',
+    '\bM\.Format\s*\(\s*M\.Tr\s*\(\s*"((?:[^"\\]|\\.)*)"'
+)
+
+$runtimeRoots = @(
+    "Core", "EditMode2", "Auras2", "GroupFrames", "Modules", "UI"
+) | ForEach-Object { Join-Path $AddonRoot $_ }
+$castbarsRoot = "MidnightSimpleUnitFrames_Castbars"
+if (Test-Path -LiteralPath $castbarsRoot) { $runtimeRoots += $castbarsRoot }
+
+foreach ($root in $runtimeRoots) {
+    if (-not (Test-Path -LiteralPath $root)) { continue }
+    Get-ChildItem -LiteralPath $root -Recurse -Filter "*.lua" | ForEach-Object {
+        $text = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+        foreach ($pattern in $translatedCallPatterns) {
+            foreach ($match in [regex]::Matches($text, $pattern)) {
+                Add-Key $keys $match.Groups[1].Value
+            }
         }
     }
 }
@@ -86,11 +159,13 @@ if (Test-Path -LiteralPath $corePath) {
 }
 
 $sortedKeys = @($keys) | Sort-Object
-Write-Host ("Menu2 visible string keys: {0}" -f $sortedKeys.Count)
+Write-Host ("Visible/localized string keys: {0}" -f $sortedKeys.Count)
 
 foreach ($locale in $locales) {
     $file = Join-Path $localeRoot ($locale + ".lua")
     $pairs = Read-LocalePairs $file
+    $runtimePairs = Read-RuntimeLocalePairs $runtimeLocalePath $locale
+    foreach ($key in $runtimePairs.Keys) { $pairs[$key] = $runtimePairs[$key] }
     $missing = @($sortedKeys | Where-Object { -not $pairs.ContainsKey($_) })
     $identical = @($sortedKeys | Where-Object { $pairs.ContainsKey($_) -and $pairs[$_] -eq $_ })
 

@@ -1,0 +1,2777 @@
+local addonName, ns = ...
+ns = ns or {}
+
+local M = ns.MSUF2 or {}
+ns.MSUF2 = M
+_G.MSUF2 = M
+
+local T = M.Theme
+local W = M.Widgets
+local Search = M.Search or {}
+M.Search = Search
+local NAV_ITEMS = M.navItems or {}
+
+local floor = math.floor
+local max = math.max
+local min = math.min
+
+local function ContentMetrics()
+    local w, h = 720, 520
+    if type(M.GetContentMetrics) == "function" then
+        local ok, cw, ch = pcall(M.GetContentMetrics)
+        if ok then
+            w = tonumber(cw) or w
+            h = tonumber(ch) or h
+        end
+    end
+    return w, h
+end
+
+local function ContentWidth()
+    local w = ContentMetrics()
+    return w
+end
+
+local function ContentHeight()
+    local _, h = ContentMetrics()
+    return h
+end
+
+local SEARCH_KEYWORDS = {
+    home = "dashboard start support links quick navigation edit mode move drag frames unitframe unit frames reset positions ui scale menu scale profiles wago discord patreon github curseforge paypal slash command addon options minimap help recover support search",
+    uf_player = "unit frame unitframe player frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level player level anchor level position level layer",
+    uf_target = "unit frame unitframe target frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level target level anchor level position level layer",
+    uf_targettarget = "unit frame unitframe target of target tot frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level target of target level anchor level position level layer",
+    uf_focus = "unit frame unitframe focus frame basics enable disable hide show width height scale size health power portrait text castbar focus kick interrupt auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level focus level anchor level position level layer",
+    uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade range check distance check out of range transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level boss level anchor level position level layer",
+    uf_pet = "unit frame unitframe pet frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level pet level anchor level position level layer",
+    gf_layout = "group frames groupframes party raid mythic raid layout growth direction sorting role order frame scaling scale transparency alpha opacity anchoring anchor position move drag tooltip range fade preview show hide player solo enable width height spacing columns rows sorting role group number visibility",
+    gf_bars = "group frames groupframes party raid health text power bar name hp text heal prediction absorb display range fade range check distance check out of range layout font size anchor offset opacity alpha smooth fill show power tank healer damage incoming heals shields debuff stripe dispel overlay",
+    gf_auras = "group frames groupframes party raid buffs debuffs defensives externals text coloring private auras cooldown style aura utilities filter anchor icon size max buffs max debuffs custom buffs custom debuffs cooldown swipe masque pandemic dispel own buffs hots healer buffs raid debuffs boss debuffs",
+    gf_indicators = "group frames groupframes party raid indicators status icons spell indicators corner indicators group number focus glow border dispel aggro threat role icon custom spells slots preview current show all marker raid marker ready check leader assist dead ghost offline afk dnd",
+    opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display highlight borders outline border aggro purge boss target glow bar colors background tint backdrop bg dark mode shared texture opacity alpha health texture power texture frame outline",
+    opt_fonts = "global style fonts font family size outline shadow color text readability name hp power health spell cooldown bigger smaller text size name shortening realm names truncate font color",
+    auras2 = "global style unit auras buffs debuffs icon size caps rows spacing sorting cooldown timer text tooltip private aura filter override dispel stealable only mine own buffs own debuffs pandemic reminders click through clickthrough aura position aura size",
+    opt_castbar = "global style castbar textures outline shake fill direction empowered casts empower stages evoker augmentation devastation preservation hold release interrupt ready focus kick kick cooldown demon hunter demonhunter dh havoc vengeance devour consume magic disrupt counterspell pummel rebuke wind shear mind freeze skull bash muzzle spear hand strike counter shot quell silence name shortening latency spark channel ticks gcd global cooldown boss castbar target castbar focus castbar player castbar",
+    opt_colors = "global style colors class bar colors background backgrond backround bg backdrop tint opacity alpha unitframe colors npc type colors bar colors dispel castbar mouseover highlight gameplay superellipse color swatches portrait colors power colors font color health color reaction color aura colors crosshair colors",
+    opt_misc = "global style miscellaneous misc language localization localisation locale translation range fade range check range checker distance check out of range unit frame range check ui behavior tooltip tooltips combat settings general blizzard frames default frames hide blizzard disable blizzard update intervals performance minimap minimap icon target sounds version check menu behavior snap edge snap",
+    classpower = "class resources combo points holy power soul shards chi maelstrom eclipse essence evoker runes runic power stagger brewmaster resource prediction auto hide detached power bar alternative mana behavior style quick actions class power resource bar alternate mana monk druid rogue paladin warlock death knight",
+    gameplay = "gameplay combat crosshair click cast click cast clickthrough click-through focus target modifier mouseover interaction targeting spells mouse buttons keybind modifier ctrl shift alt fadenkreuz melee range spell target sound target lost mouseover heal click casting",
+    modules = "modules style skins optional modules compatibility rounded unitframes portrait decoration minimap compartment addon compartment",
+    profiles = "profiles profile management spec profiles specialization auto switch create copy delete reset import export legacy import wago active profile share string profile string backup restore",
+}
+
+
+local function TrimText(text)
+    text = tostring(text or "")
+    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function ShortLabel(text, limit)
+    text = TrimText(text)
+    limit = tonumber(limit) or 22
+    if #text <= limit then return text end
+    return text:sub(1, math.max(1, limit - 3)) .. "..."
+end
+
+
+local function SearchPlaceholderText()
+    local text = M.Tr("Search")
+    if type(text) ~= "string" or text == "" then text = "Search" end
+    return text .. "..."
+end
+
+local function SearchBoxHasText(searchBox)
+    if not (searchBox and searchBox.GetText) then return false end
+    return (searchBox:GetText() or ""):match("%S") ~= nil
+end
+
+local function RefreshSearchPlaceholder(searchBox)
+    if not searchBox then return end
+    local text = SearchPlaceholderText()
+    if searchBox.Instructions and searchBox.Instructions.SetText then
+        searchBox.Instructions:SetText(text)
+    end
+    if searchBox._msuf2SearchPlaceholder and searchBox._msuf2SearchPlaceholder.SetText then
+        searchBox._msuf2SearchPlaceholder:SetText(text)
+    end
+end
+
+local function UpdateSearchPlaceholder(searchBox)
+    if not searchBox then return end
+    RefreshSearchPlaceholder(searchBox)
+    local placeholder = searchBox._msuf2SearchPlaceholder
+    if not placeholder then return end
+    local focused = (searchBox.HasFocus and searchBox:HasFocus()) and true or false
+    if focused or SearchBoxHasText(searchBox) then
+        placeholder:Hide()
+    else
+        placeholder:Show()
+    end
+end
+
+
+local function NormalizeSearchText(text)
+    text = tostring(text or "")
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    text = text:gsub("\195\132", "ae"):gsub("\195\164", "ae")
+    text = text:gsub("\195\150", "oe"):gsub("\195\182", "oe")
+    text = text:gsub("\195\156", "ue"):gsub("\195\188", "ue")
+    text = text:gsub("\195\159", "ss")
+    text = text:gsub("[/\\_%-%.:;,%(%)]", " ")
+    text = string.lower(text)
+    text = text:gsub("[^%w%s]+", " ")
+    text = text:gsub("%s+", " ")
+    return TrimText(text)
+end
+
+local function DisplaySearchText(text)
+    text = tostring(text or "")
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    text = text:gsub("%s+", " ")
+    return TrimText(text)
+end
+
+local function AddSearchText(parts, text)
+    if text == nil then return end
+    text = DisplaySearchText(text)
+    if text == "" then return end
+    parts[#parts + 1] = text
+    local translated = M.Tr(text)
+    if translated and translated ~= text then parts[#parts + 1] = translated end
+end
+
+local function AddRawSearchText(parts, text)
+    if text == nil then return end
+    text = tostring(text)
+    if text ~= "" then parts[#parts + 1] = text end
+end
+
+local MIN_SEARCH_QUERY_LEN = 2
+local SEARCH_TEXT_MAX_LEN = 170
+local SEARCH_BACKGROUND_STEP_SEC = 0.08
+local SEARCH_INPUT_DEBOUNCE_SEC = 0.10
+local SEARCH_MAX_RESULTS = 24
+local SEARCH_VISIBLE_RESULTS = 12
+local SEARCH_MIN_RESULT_SCORE = 40
+local SEARCH_MAX_RAW_WORDS = 12
+local SEARCH_MAX_QUERY_CLAUSES = 8
+local SEARCH_MAX_TERMS_PER_CLAUSE = 18
+local SEARCH_STATE = {
+    records = nil,
+    recordsDirty = true,
+    indexing = false,
+    indexQueue = nil,
+    inputSerial = 0,
+    registrySerial = 0,
+    aliasTypoKeys = nil,
+    aliasTypoCache = {},
+    queryClauseCacheNorm = nil,
+    queryClauseCacheClauses = nil,
+    registry = {},
+    registryByPage = {},
+}
+M.searchRegistry = SEARCH_STATE.registry
+
+local function MarkSearchIndexDirty()
+    SEARCH_STATE.recordsDirty = true
+end
+
+local function SearchCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function CancelSearchBackgroundIndex()
+    SEARCH_STATE.indexing = false
+    SEARCH_STATE.indexQueue = nil
+end
+
+local SEARCH_NOISE_TEXT = {
+    [""] = true,
+    ["x"] = true,
+    ["+"] = true,
+    ["-"] = true,
+    ["<"] = true,
+    [">"] = true,
+    ["|"] = true,
+}
+
+local SEARCH_STOP_WORDS = {
+    a = true,
+    an = true,
+    ["and"] = true,
+    are = true,
+    can = true,
+    cant = true,
+    change = true,
+    changed = true,
+    changing = true,
+    configure = true,
+    configured = true,
+    customize = true,
+    customise = true,
+    ["do"] = true,
+    does = true,
+    doesnt = true,
+    basically = true,
+    blind = true,
+    brain = true,
+    find = true,
+    fixed = true,
+    fix = true,
+    ["for"] = true,
+    get = true,
+    going = true,
+    help = true,
+    how = true,
+    i = true,
+    im = true,
+    ["in"] = true,
+    is = true,
+    it = true,
+    just = true,
+    m = true,
+    make = true,
+    maybe = true,
+    my = true,
+    need = true,
+    now = true,
+    ["not"] = true,
+    of = true,
+    on = true,
+    ["or"] = true,
+    please = true,
+    pls = true,
+    setting = true,
+    settings = true,
+    setup = true,
+    so = true,
+    thanks = true,
+    the = true,
+    thx = true,
+    to = true,
+    want = true,
+    where = true,
+    why = true,
+    with = true,
+    would = true,
+    t = true,
+    etc = true,
+    functioning = true,
+    n = true,
+    wtf = true,
+    dumb = true,
+    stupid = true,
+    plsfix = true,
+    wie = true,
+    kann = true,
+    ich = true,
+    ist = true,
+    sind = true,
+    das = true,
+    die = true,
+    der = true,
+    den = true,
+    dem = true,
+    ein = true,
+    eine = true,
+    einer = true,
+    mein = true,
+    meine = true,
+    nicht = true,
+    warum = true,
+    wo = true,
+    was = true,
+    aendern = true,
+    andern = true,
+    einstellen = true,
+    einstellungen = true,
+    finde = true,
+    finden = true,
+    bitte = true,
+    du = true,
+    fuer = true,
+    fur = true,
+    mal = true,
+    man = true,
+    mich = true,
+    mir = true,
+    mit = true,
+    nur = true,
+    und = true,
+    oder = true,
+}
+
+local SEARCH_QUERY_ALIASES = {
+    evoker = { "empowered", "empower", "empowered casts", "stage", "stages", "hold cast", "release cast", "quell", "essence", "augmentation", "devastation", "preservation" },
+    devastation = { "evoker", "empowered", "empower", "empowered casts", "essence" },
+    preservation = { "evoker", "empowered", "empower", "empowered casts", "essence" },
+    augmentation = { "evoker", "empowered", "empower", "empowered casts", "essence", "ebon might" },
+    empower = { "empowered", "empowered casts", "stage", "stages", "hold cast", "release cast" },
+    empowered = { "empower", "empowered casts", "stage", "stages", "hold cast", "release cast" },
+    stage = { "empowered", "empowered casts", "blink", "castbar" },
+    stages = { "empowered", "empowered casts", "blink", "castbar" },
+
+    demonhunter = { "demon hunter", "dh", "havoc", "vengeance", "disrupt", "consume magic", "devour", "interrupt", "kick", "interrupt ready" },
+    dh = { "demon hunter", "demonhunter", "havoc", "vengeance", "disrupt", "consume magic", "devour", "interrupt", "kick", "interrupt ready" },
+    havoc = { "demon hunter", "demonhunter", "dh", "disrupt", "consume magic", "interrupt", "kick" },
+    vengeance = { "demon hunter", "demonhunter", "dh", "disrupt", "consume magic", "interrupt", "kick" },
+    devour = { "consume", "consume magic", "purge", "dispel", "disrupt", "interrupt", "kick", "interrupt ready" },
+    consume = { "consume magic", "devour", "purge", "dispel", "interrupt", "kick" },
+    disrupt = { "demon hunter", "demonhunter", "dh", "interrupt", "kick", "focus kick", "interrupt ready" },
+
+    kick = { "interrupt", "interrupt ready", "focus kick", "counterspell", "disrupt", "pummel", "rebuke", "wind shear", "mind freeze", "muzzle", "skull bash", "spear hand strike", "counter shot", "quell", "silence" },
+    kicks = { "interrupt", "interrupt ready", "focus kick", "counterspell", "disrupt", "pummel", "rebuke", "wind shear", "mind freeze", "muzzle", "skull bash", "spear hand strike", "counter shot", "quell", "silence" },
+    interrupt = { "kick", "interrupt ready", "focus kick", "counterspell", "disrupt", "pummel", "rebuke", "wind shear", "mind freeze", "muzzle", "skull bash", "spear hand strike", "counter shot", "quell", "silence" },
+    interrupts = { "kick", "interrupt", "interrupt ready", "focus kick" },
+    counterspell = { "interrupt", "kick", "interrupt ready", "focus kick" },
+    pummel = { "interrupt", "kick", "interrupt ready" },
+    rebuke = { "interrupt", "kick", "interrupt ready" },
+    windshear = { "wind shear", "interrupt", "kick", "interrupt ready" },
+    silence = { "interrupt", "kick", "interrupt ready" },
+    quell = { "evoker", "interrupt", "kick", "interrupt ready" },
+
+    cast = { "castbar", "cast bar", "spell name", "channel", "gcd" },
+    casting = { "castbar", "cast bar", "spell name", "channel", "gcd" },
+    castbar = { "cast bar", "casts", "casting", "spell name", "channel", "gcd" },
+    castbars = { "castbar", "cast bar", "casts", "casting", "spell name", "channel", "gcd" },
+    zauberleiste = { "castbar", "cast bar", "casts", "casting" },
+
+    level = { "level indicator", "level text", "show level", "unit level", "player level", "target level", "status icons", "status indicator", "indicator", "anchor level", "level anchor", "position level", "level position", "x offset", "y offset" },
+    levels = { "level", "level indicator", "level text", "show level", "status icons", "status indicator" },
+    lvl = { "level", "level indicator", "level text", "show level" },
+    leveltext = { "level text", "level indicator", "show level", "status icons", "status indicator", "anchor", "position", "x offset", "y offset" },
+    levelindicator = { "level indicator", "level text", "show level", "status icons", "status indicator", "anchor", "position", "x offset", "y offset" },
+    statusindicator = { "status indicator", "status icons", "indicator", "level indicator", "level text", "enabled", "anchor", "size", "layer", "x offset", "y offset" },
+    statusindicators = { "status indicators", "status icons", "indicator", "level indicator", "level text", "enabled", "anchor", "size", "layer", "x offset", "y offset" },
+    indicator = { "indicators", "status icons", "status indicator", "selected indicator", "level indicator", "group indicators" },
+    indicators = { "indicator", "status icons", "status indicators", "selected indicator", "level indicator", "group indicators" },
+    turn = { "enable", "disable", "show", "hide", "enabled", "disabled", "visible", "hidden" },
+    off = { "disable", "hide", "disabled", "hidden" },
+    onoff = { "enable", "disable", "show", "hide", "enabled", "disabled" },
+    positioning = { "position", "positions", "move", "edit mode", "x offset", "y offset", "anchor", "anchoring" },
+
+    background = { "bar background tint", "background tint", "background opacity", "background alpha", "backdrop", "bg", "bar colors", "transparency", "alpha", "unitframe colors" },
+    backgrond = { "background", "bar background tint", "background tint", "bg" },
+    backgroud = { "background", "bar background tint", "background tint", "bg" },
+    backround = { "background", "bar background tint", "background tint", "bg" },
+    bakground = { "background", "bar background tint", "background tint", "bg" },
+    hintergrund = { "background", "bar background tint", "background tint", "bg" },
+    bg = { "background", "bar background tint", "background tint", "background opacity", "background alpha" },
+    backdrop = { "background", "bar background tint", "background tint", "bg" },
+    alpha = { "opacity", "transparency", "fade", "background alpha", "in combat", "out of combat" },
+    opacity = { "alpha", "transparency", "fade", "background opacity", "in combat", "out of combat" },
+    transparent = { "transparency", "alpha", "opacity", "fade" },
+    transparency = { "alpha", "opacity", "fade", "background" },
+    fade = { "alpha", "opacity", "transparency", "range fade", "out of range" },
+    fades = { "fade", "alpha", "opacity", "range fade", "out of range" },
+    faded = { "fade", "alpha", "opacity", "range fade", "out of range" },
+    range = { "range fade", "out of range", "range alpha", "range check", "distance", "distance check" },
+    rangecheck = { "range check", "range fade", "out of range", "distance check", "unit frame range check", "out of range alpha", "range fade affects" },
+    rangechecker = { "range check", "range fade", "out of range", "distance check", "unit frame range check" },
+    distance = { "range", "range fade", "out of range", "range check", "distance check", "alpha" },
+    distancecheck = { "range check", "range fade", "out of range", "distance check", "unit frame range check" },
+    outofrange = { "out of range", "range fade", "range alpha", "range check", "distance" },
+    check = { "range check", "range fade", "out of range", "distance check", "ready check", "version check" },
+    checker = { "check", "range check", "range fade", "out of range" },
+    checking = { "check", "range check", "range fade", "out of range" },
+    reichweite = { "range", "range fade", "out of range", "range check", "distance" },
+    reichweiten = { "range", "range fade", "out of range", "range check", "distance" },
+    reichweitencheck = { "range check", "range fade", "out of range", "distance check" },
+    entfernung = { "distance", "range", "range fade", "out of range", "range check" },
+    ausserhalb = { "out of range", "range fade", "range check" },
+    misc = { "miscellaneous", "global style", "tooltips", "blizzard frames", "update intervals", "language" },
+    miscellaneous = { "misc", "global style", "tooltips", "blizzard frames", "update intervals", "language" },
+    verschiedenes = { "misc", "miscellaneous", "global style", "tooltips", "blizzard frames", "update intervals", "language" },
+
+    move = { "edit mode", "position", "positions", "drag", "x offset", "y offset", "anchor", "anchoring" },
+    moving = { "edit mode", "position", "positions", "drag", "x offset", "y offset", "anchor", "anchoring" },
+    drag = { "edit mode", "move", "position", "x offset", "y offset" },
+    position = { "positions", "move", "edit mode", "x offset", "y offset", "anchor", "anchoring" },
+    positions = { "position", "move", "edit mode", "x offset", "y offset", "anchor", "anchoring", "reset positions" },
+    anchor = { "anchoring", "position", "move", "attach", "global anchor", "custom anchor" },
+    anchoring = { "anchor", "position", "move", "attach", "global anchor", "custom anchor" },
+    unitframe = { "unit frame", "unit frames", "player frame", "target frame", "focus frame", "boss frame", "frame basics", "anchoring", "edit mode" },
+    unitframes = { "unit frame", "unit frames", "player frame", "target frame", "focus frame", "boss frame", "frame basics", "anchoring", "edit mode" },
+    unitfram = { "unitframe", "unit frame", "unit frames", "frame basics", "anchoring", "edit mode" },
+    unitfrme = { "unitframe", "unit frame", "unit frames", "frame basics", "anchoring", "edit mode" },
+    player = { "player frame", "playerframe" },
+    target = { "target frame", "targetframe" },
+    focus = { "focus frame", "focusframe" },
+    pet = { "pet frame", "petframe" },
+    fram = { "frame", "unit frame", "frames", "frame basics" },
+    frame = { "unit frame", "frames", "unitframe", "frame basics" },
+    frames = { "unit frames", "unitframe", "frame basics", "edit mode" },
+    playerframe = { "player frame", "move player frame", "drag player frame", "player position", "unit frame", "frame basics", "anchoring", "edit mode" },
+    targetframe = { "target frame", "move target frame", "drag target frame", "target position", "unit frame", "frame basics", "anchoring", "edit mode" },
+    focusframe = { "focus frame", "move focus frame", "drag focus frame", "focus position", "unit frame", "frame basics", "anchoring", "edit mode", "focus kick" },
+    petframe = { "pet frame", "move pet frame", "drag pet frame", "pet position", "unit frame", "frame basics", "anchoring", "edit mode" },
+    bossframe = { "boss frame", "boss frames", "unit frame", "boss layout" },
+    bossframes = { "boss frame", "boss frames", "unit frame", "boss layout", "boss preview" },
+    size = { "width", "height", "scale", "frame basics", "frame scaling" },
+    resize = { "size", "width", "height", "scale", "frame basics", "frame scaling" },
+    bigger = { "size", "scale", "width", "height", "font size" },
+    smaller = { "size", "scale", "width", "height", "font size" },
+    big = { "bigger", "size", "scale", "width", "height", "font size" },
+    small = { "smaller", "size", "scale", "width", "height", "font size", "text size", "icon size" },
+    scale = { "size", "frame scaling", "menu scale", "ui scale" },
+
+    hp = { "health", "health text", "health bar", "leben" },
+    health = { "hp", "health text", "health bar", "life", "leben" },
+    leben = { "health", "hp", "health bar", "health text" },
+    name = { "name text", "text", "font", "name shortening" },
+    names = { "name text", "text", "font", "name shortening" },
+    text = { "font", "fonts", "name text", "health text", "power text", "spell name" },
+    font = { "fonts", "text", "font size", "outline", "shadow" },
+    fonts = { "font", "text", "font size", "outline", "shadow" },
+    mana = { "power", "power bar", "alternative mana", "alt mana" },
+    power = { "mana", "power bar", "class resources", "resource" },
+    resource = { "class resources", "classpower", "power", "combo points", "essence" },
+    resources = { "class resources", "classpower", "power", "combo points", "essence" },
+
+    profile = { "profiles", "import", "export", "copy profile", "spec profiles", "wago" },
+    profiles = { "profile", "import", "export", "copy profile", "spec profiles", "wago" },
+    import = { "profiles", "profile", "import string", "wago", "legacy import" },
+    export = { "profiles", "profile", "export string", "copy profile", "wago" },
+    wago = { "profiles", "import", "export", "profile string" },
+    reload = { "refresh", "apply", "not updating", "profile", "reset" },
+    reset = { "reset positions", "factory reset", "profile reset", "profiles" },
+    broken = { "not updating", "reset positions", "profile reset", "reload", "factory reset" },
+    broke = { "broken", "not updating", "reset positions", "profile reset", "reload" },
+    bugged = { "broken", "not updating", "reload", "reset positions" },
+    wrong = { "not updating", "colors", "profile", "reset" },
+    missing = { "not visible", "hidden", "invisible", "gone", "load conditions" },
+    gone = { "missing", "not visible", "hidden", "invisible" },
+    invisible = { "not visible", "hidden", "alpha", "transparency", "range fade" },
+    hidden = { "hide", "show", "enable", "disable", "not visible" },
+    show = { "enable", "visible", "not hidden" },
+    hide = { "disable", "hidden", "not visible" },
+    disabled = { "enable", "show", "frame basics" },
+    enabled = { "enable", "show", "frame basics" },
+    offscreen = { "reset positions", "move", "edit mode", "position" },
+    overlap = { "text layer", "position", "anchor", "offset", "frame level" },
+    overlapping = { "overlap", "text layer", "position", "anchor", "offset" },
+    lag = { "performance", "update intervals", "auras", "cooldown", "filters" },
+    fps = { "performance", "update intervals", "auras", "cooldown", "filters" },
+    bad = { "wrong", "broken", "performance", "lag", "fps" },
+    performance = { "update intervals", "auras", "cooldown", "filters", "range fade" },
+    combat = { "combat lockdown", "in combat", "out of combat", "alpha", "settings" },
+    lockdown = { "combat lockdown", "combat", "protected frames", "reload" },
+
+    raidframes = { "group frames", "groupframes", "raid frames", "raid frame", "raid", "party", "layout", "group layout", "anchoring", "move raid frames" },
+    partyframes = { "group frames", "groupframes", "party frames", "party frame", "party", "raid", "layout", "group layout", "anchoring", "move party frames" },
+    gruppenframes = { "group frames", "party", "raid", "layout" },
+    raid = { "group frames", "groupframes", "raid frames", "raid frame", "layout", "party", "anchoring", "move raid frames" },
+    party = { "group frames", "groupframes", "party frames", "party frame", "layout", "raid", "anchoring", "move party frames" },
+    group = { "group frames", "party", "raid", "layout" },
+    groupframes = { "group frames", "party", "raid", "layout" },
+    debuff = { "debuffs", "auras", "aura", "buffs" },
+    debuffs = { "debuff", "auras", "aura", "buffs" },
+    buff = { "buffs", "auras", "aura", "debuffs" },
+    buffs = { "buff", "auras", "aura", "debuffs" },
+    aura = { "auras", "buffs", "debuffs", "private auras", "cooldown", "aura filters" },
+    auras = { "aura", "buffs", "debuffs", "private auras", "cooldown", "aura filters" },
+    hot = { "hots", "healer buffs", "own buffs", "aura indicators", "group buffs" },
+    hots = { "hot", "healer buffs", "own buffs", "aura indicators", "group buffs" },
+    own = { "only mine", "own buffs", "own debuffs", "player only", "aura filters" },
+    personal = { "only mine", "own buffs", "own debuffs", "player only", "aura filters" },
+    spellid = { "spell id", "custom spells", "custom auras", "aura utilities" },
+    spellids = { "spell id", "custom spells", "custom auras", "aura utilities" },
+    bossdebuff = { "boss debuffs", "raid debuffs", "custom auras", "private auras" },
+    bossdebuffs = { "boss debuffs", "raid debuffs", "custom auras", "private auras" },
+    private = { "private auras", "auras", "raid mechanics" },
+    dispel = { "dispel overlay", "dispellable debuffs", "magic", "curse", "poison", "disease" },
+    stealable = { "auras", "buffs", "purge", "dispel", "spellsteal" },
+    purge = { "dispel", "stealable", "auras", "buffs" },
+    pandemic = { "auras", "cooldown text", "debuffs", "timer" },
+    timer = { "cooldown text", "aura timers", "cast time", "combat timer" },
+    cooldown = { "cooldown text", "cooldown swipe", "aura timers", "interrupt ready" },
+    cooldowns = { "cooldown", "cooldown text", "cooldown swipe", "aura timers", "interrupt ready" },
+    absorb = { "absorbs", "absorb display", "heal prediction", "health" },
+    absorbs = { "absorb", "absorb display", "heal prediction", "health" },
+    heal = { "heal prediction", "incoming heals", "health", "healer" },
+    aggro = { "threat", "aggro", "highlight borders", "indicators" },
+    threat = { "aggro", "highlight borders", "indicators" },
+
+    blizzard = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
+    default = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
+    unlock = { "edit mode", "move", "drag", "frames unlocked", "lock frames" },
+    locked = { "edit mode", "move", "drag", "frames locked", "lock frames" },
+    solo = { "show solo", "show player solo", "party frames solo", "group frames" },
+    self = { "player", "show player", "hide player", "party frames" },
+    tooltip = { "tooltips", "unitframe tooltips", "mouseover tooltip" },
+    tooltips = { "tooltip", "unitframe tooltips", "mouseover tooltip" },
+    language = { "locale", "localization", "translation", "sprache" },
+    sprache = { "language", "locale", "localization", "translation" },
+    click = { "click cast", "clickthrough", "click-through", "mouse", "mouseover", "target modifier" },
+    clickcast = { "click cast", "click casting", "mouse", "targeting" },
+    clickthrough = { "click-through", "click through", "mouse", "auras", "unitframe tooltips" },
+    mouseover = { "mouse", "mouseover highlight", "tooltip", "click cast", "targeting" },
+    menu = { "dashboard", "menu scale", "ui scale", "search", "support" },
+    window = { "menu", "dashboard", "reset positions", "ui scale" },
+    ui = { "ui scale", "menu scale", "dashboard" },
+
+    unit = { "unit frame", "unit frames", "unitframe", "frame basics" },
+    units = { "unit frame", "unit frames", "unitframe", "frame basics" },
+    einheit = { "unit", "unit frame", "unitframe" },
+    einheiten = { "unit", "unit frames", "unitframe" },
+    einheitenfenster = { "unit frame", "unitframe", "frames" },
+    spieler = { "player", "player frame", "playerframe" },
+    spielerframe = { "player frame", "playerframe", "unit frame" },
+    ziel = { "target", "target frame", "targetframe" },
+    zielframe = { "target frame", "targetframe", "unit frame" },
+    zielziel = { "target of target", "targettarget", "tot" },
+    tot = { "target of target", "targettarget", "target target" },
+    targettarget = { "target of target", "tot", "target target" },
+    fokus = { "focus", "focus frame", "focusframe", "focus kick" },
+    fokusframe = { "focus frame", "focusframe", "focus kick" },
+    begleiter = { "pet", "pet frame", "petframe" },
+    haustier = { "pet", "pet frame", "petframe" },
+
+    enable = { "show", "visible", "frame basics", "aktivieren" },
+    disable = { "hide", "hidden", "frame basics", "deaktivieren" },
+    visible = { "show", "enable", "sichtbar" },
+    aktivieren = { "enable", "show", "visible" },
+    deaktivieren = { "disable", "hide", "hidden" },
+    anzeigen = { "show", "visible", "enable" },
+    ausblenden = { "hide", "hidden", "disable" },
+    sichtbar = { "visible", "show", "enable" },
+    unsichtbar = { "invisible", "hidden", "alpha", "transparency" },
+    versteckt = { "hidden", "hide", "disable" },
+    verschieben = { "move", "drag", "position", "edit mode", "anchor" },
+    bewegen = { "move", "drag", "position", "edit mode" },
+    ziehen = { "drag", "move", "edit mode" },
+    verankern = { "anchor", "anchoring", "position" },
+    anker = { "anchor", "anchoring", "position" },
+    koordinaten = { "x offset", "y offset", "position", "anchor" },
+    editmode = { "edit mode", "move", "drag", "position" },
+    loadconditions = { "load conditions", "visibility", "show", "hide" },
+    breite = { "width", "size", "resize", "frame basics" },
+    hoehe = { "height", "size", "resize", "frame basics" },
+    groesse = { "size", "resize", "scale", "width", "height" },
+    skalierung = { "scale", "size", "frame scaling", "ui scale" },
+
+    layout = { "group frames", "frame basics", "growth", "sorting", "anchoring" },
+    sorting = { "sort", "role order", "group frames", "layout" },
+    sortierung = { "sorting", "role order", "group frames", "layout" },
+    growth = { "growth direction", "layout", "group frames" },
+    spalten = { "columns", "layout", "group frames" },
+    reihen = { "rows", "layout", "auras", "group frames" },
+    rolle = { "role", "role icon", "sorting", "tank", "healer", "dps" },
+    role = { "role icon", "sorting", "tank", "healer", "dps" },
+    groupnumber = { "group number", "indicators", "group frames" },
+    tank = { "role icon", "group indicators", "sorting" },
+    healer = { "role icon", "healer buffs", "group indicators" },
+    dps = { "role icon", "group indicators", "sorting" },
+
+    healthbar = { "health bar", "health", "hp", "bar colors" },
+    powerbar = { "power bar", "power", "mana", "class resources" },
+    lebensbalken = { "health bar", "health", "hp" },
+    energieleiste = { "power bar", "power", "mana" },
+    manabar = { "mana", "power bar", "power" },
+    color = { "colors", "bar colors", "unitframe colors", "class colors" },
+    colours = { "colors", "color", "bar colors" },
+    farbe = { "colors", "color", "bar colors", "class colors" },
+    farben = { "colors", "color", "bar colors", "class colors" },
+    klassfarbe = { "class color", "class colors", "health color" },
+    classcolor = { "class color", "class colors", "health color" },
+    reaction = { "reaction color", "npc type colors", "colors" },
+    npc = { "npc type colors", "reaction color", "colors" },
+    highlight = { "mouseover highlight", "highlight borders", "colors", "bars" },
+
+    fontsize = { "font size", "text size", "fonts", "text" },
+    textsize = { "text size", "font size", "fonts", "text" },
+    schrift = { "font", "fonts", "text", "font size" },
+    schriftart = { "font", "fonts", "font family" },
+    schriftgroesse = { "font size", "text size", "fonts" },
+    namen = { "names", "name text", "name shortening" },
+    realm = { "realm names", "name shortening", "short names" },
+    server = { "realm names", "name shortening", "short names" },
+    truncate = { "name shortening", "short names", "max name length" },
+    nameshortening = { "name shortening", "short names", "truncate names", "realm names" },
+    healthtext = { "health text", "hp text", "text", "fonts" },
+    powertext = { "power text", "mana text", "text", "fonts" },
+    nametext = { "name text", "text", "fonts", "name shortening" },
+    stufe = { "level", "level indicator", "level text", "show level", "status icons" },
+    stufen = { "level", "level indicator", "level text", "show level", "status icons" },
+    stufentext = { "level text", "level indicator", "show level", "status icons", "anchor", "position" },
+    levelanzeige = { "level indicator", "level text", "show level", "status icons", "anchor", "position" },
+    statusanzeige = { "status indicator", "status icons", "indicator", "level indicator" },
+
+    portrait = { "portraits", "portrait mode", "class icon", "2d portrait", "3d portrait" },
+    portraits = { "portrait", "portrait mode", "class icon" },
+    avatar = { "portrait", "portraits", "class icon" },
+    portraet = { "portrait", "portraits", "class icon" },
+    portraitdeko = { "portrait decoration", "modules", "style" },
+    castbalken = { "castbar", "cast bar", "casting" },
+    zauberbalken = { "castbar", "cast bar", "casting" },
+    spell = { "spell name", "castbar", "auras", "spell id" },
+    spellname = { "spell name", "castbar", "name shortening" },
+    globalcooldown = { "gcd", "global cooldown", "castbar" },
+    interruptready = { "interrupt ready", "focus kick", "kick", "castbar" },
+    kanal = { "channel", "channel ticks", "castbar" },
+    kanalisieren = { "channel", "channel ticks", "castbar" },
+    unterbrechen = { "interrupt", "kick", "focus kick", "interrupt ready" },
+    fokuskick = { "focus kick", "interrupt", "kick", "castbar" },
+
+    stack = { "stacks", "aura stack count", "auras" },
+    stacks = { "stack", "aura stack count", "auras" },
+    stapel = { "stacks", "stack", "auras" },
+    cooldowntext = { "cooldown text", "timer", "auras" },
+    swipe = { "cooldown swipe", "auras", "cooldown" },
+    staerkungszauber = { "buffs", "buff", "auras" },
+    schwaechungszauber = { "debuffs", "debuff", "auras" },
+    zauber = { "spell", "auras", "castbar", "spell id" },
+    defensives = { "defensives", "externals", "group buffs", "auras" },
+    externals = { "defensives", "external cooldowns", "group buffs", "auras" },
+
+    gruppe = { "group frames", "groupframes", "party", "raid", "layout" },
+    gruppen = { "group frames", "groupframes", "party", "raid", "layout" },
+    gruppenrahmen = { "group frames", "groupframes", "party", "raid", "layout" },
+    gruppenfenster = { "group frames", "groupframes", "party", "raid", "layout" },
+    raidframe = { "raid frames", "raidframes", "group frames", "layout" },
+    partyframe = { "party frames", "partyframes", "group frames", "layout" },
+    schlachtzug = { "raid", "raid frames", "group frames" },
+    mythic = { "mythic raid", "raid", "group frames" },
+    readycheck = { "ready check", "status icons", "group indicators" },
+    bereitschaft = { "ready check", "status icons", "group indicators" },
+    statusicon = { "status icons", "indicators", "dead", "offline", "ready check" },
+    statusicons = { "status icons", "indicators", "dead", "offline", "ready check" },
+    marker = { "raid marker", "markers", "indicators" },
+    raidmarker = { "raid marker", "marker", "indicators" },
+    leader = { "leader icon", "status icons", "indicators" },
+    assist = { "assist icon", "status icons", "indicators" },
+    offline = { "offline icon", "status icons", "indicators" },
+    afk = { "afk icon", "status icons", "indicators" },
+    dead = { "dead icon", "ghost", "status icons", "indicators" },
+
+    profil = { "profile", "profiles", "import", "export" },
+    importieren = { "import", "profiles", "wago", "profile string" },
+    exportieren = { "export", "profiles", "profile string" },
+    kopieren = { "copy profile", "profiles", "import", "export" },
+    teilen = { "share profile", "export", "wago" },
+    backup = { "profiles", "export", "copy profile" },
+    restore = { "profiles", "import", "reset" },
+
+    minimap = { "minimap icon", "minimap button", "miscellaneous" },
+    minimapicon = { "minimap icon", "minimap button", "miscellaneous" },
+    minimapbutton = { "minimap icon", "minimap button", "miscellaneous" },
+    minikarte = { "minimap", "minimap icon", "miscellaneous" },
+    sound = { "sounds", "target sound", "target lost", "miscellaneous" },
+    sounds = { "sound", "target sound", "target lost", "miscellaneous" },
+    targetsound = { "target sound", "target lost", "sounds", "miscellaneous" },
+    versioncheck = { "version check", "miscellaneous", "update intervals" },
+    menuscale = { "menu scale", "dashboard", "ui scale" },
+    uiscale = { "ui scale", "dashboard", "menu scale" },
+    unitauras = { "unit auras", "auras", "buffs", "debuffs" },
+    globalstyle = { "global style", "bars", "fonts", "colors", "castbar", "miscellaneous" },
+    blizzardframes = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
+    standardframes = { "default frames", "blizzard frames", "hide blizzard" },
+
+    crosshair = { "combat crosshair", "gameplay", "melee range spell", "range check" },
+    fadenkreuz = { "crosshair", "combat crosshair", "gameplay", "melee range spell" },
+    melee = { "melee range spell", "crosshair", "range check" },
+    maus = { "mouse", "mouseover", "click cast", "targeting" },
+    maustaste = { "mouse buttons", "click cast", "targeting" },
+    klick = { "click", "click cast", "clickthrough", "targeting" },
+    klicken = { "click", "click cast", "clickthrough", "targeting" },
+    heilung = { "heal", "healer", "click cast", "mouseover" },
+    mouseoverheal = { "mouseover heal", "click cast", "healing" },
+
+    ruckelt = { "lag", "fps", "performance", "update intervals" },
+    haengt = { "lag", "fps", "performance", "update intervals" },
+    langsam = { "slow", "performance", "lag", "fps" },
+    cpu = { "performance", "update intervals", "auras", "cooldown" },
+    speicher = { "performance", "auras", "profiles" },
+    optimieren = { "performance", "update intervals", "auras", "fps" },
+    rounded = { "rounded unitframes", "modules", "style" },
+    roundedunitframes = { "rounded unitframes", "modules", "style" },
+    rund = { "rounded", "rounded unitframes", "modules" },
+    classpower = { "class resources", "power", "resource" },
+    klassenressourcen = { "class resources", "classpower", "resource" },
+    klassenressource = { "class resources", "classpower", "resource" },
+    combopoints = { "combo points", "class resources", "rogue" },
+    soulshards = { "soul shards", "class resources", "warlock" },
+    runen = { "runes", "runic power", "class resources" },
+    eclipse = { "eclipse", "class resources", "druid" },
+    stagger = { "stagger", "class resources", "brewmaster" },
+}
+
+local CONTROL_KIND_LABEL = {
+    faq = "FAQ",
+    easteregg = "Easter Egg",
+    section = "Section",
+    button = "Button",
+    toggle = "Toggle",
+    slider = "Slider",
+    dropdown = "Dropdown",
+    segment = "Choice",
+    textinput = "Text Input",
+    color = "Color",
+}
+
+local function AddSearchTermUnique(list, seen, term)
+    if #list >= SEARCH_MAX_TERMS_PER_CLAUSE then return end
+    term = NormalizeSearchText(term)
+    if term == "" or SEARCH_STOP_WORDS[term] or seen[term] then return end
+    seen[term] = true
+    list[#list + 1] = term
+end
+
+local function SearchRawWords(normalized)
+    local raw = {}
+    for word in tostring(normalized or ""):gmatch("%S+") do
+        if not SEARCH_STOP_WORDS[word] then raw[#raw + 1] = word end
+        if #raw >= SEARCH_MAX_RAW_WORDS then break end
+    end
+    return raw
+end
+
+local SearchEditDistanceWithin
+
+local function SearchAliasTypoKeys()
+    if SEARCH_STATE.aliasTypoKeys then return SEARCH_STATE.aliasTypoKeys end
+    local keys = {}
+    for key in pairs(SEARCH_QUERY_ALIASES) do
+        if #key >= 5 then keys[#keys + 1] = key end
+    end
+    table.sort(keys, function(a, b)
+        if #a ~= #b then return #a < #b end
+        return a < b
+    end)
+    SEARCH_STATE.aliasTypoKeys = keys
+    return keys
+end
+
+local function SearchAliasKeyForTypo(word)
+    if not SearchEditDistanceWithin or #word < 5 then return nil end
+    if SEARCH_STATE.aliasTypoCache[word] ~= nil then return SEARCH_STATE.aliasTypoCache[word] or nil end
+    local maxDistance = (#word >= 8) and 2 or 1
+    local bestKey, bestDelta
+    local keys = SearchAliasTypoKeys()
+    for i = 1, #keys do
+        local key = keys[i]
+        if math.abs(#key - #word) <= maxDistance and SearchEditDistanceWithin(word, key, maxDistance) then
+            local delta = math.abs(#key - #word)
+            if not bestKey or delta < bestDelta or (delta == bestDelta and #key < #bestKey) then
+                bestKey = key
+                bestDelta = delta
+            end
+        end
+    end
+    SEARCH_STATE.aliasTypoCache[word] = bestKey or false
+    return bestKey
+end
+
+local function SearchCanonicalWords(raw)
+    local words = {}
+    local i = 1
+    while i <= #raw do
+        local word = raw[i]
+        local nextWord = raw[i + 1]
+        if word == "demon" and nextWord == "hunter" then
+            words[#words + 1] = "demonhunter"
+            i = i + 2
+        elseif word == "death" and nextWord == "knight" then
+            words[#words + 1] = "deathknight"
+            i = i + 2
+        elseif word == "wind" and nextWord == "shear" then
+            words[#words + 1] = "windshear"
+            i = i + 2
+        elseif word == "cast" and nextWord == "bar" then
+            words[#words + 1] = "castbar"
+            i = i + 2
+        elseif word == "health" and nextWord == "bar" then
+            words[#words + 1] = "healthbar"
+            i = i + 2
+        elseif word == "power" and nextWord == "bar" then
+            words[#words + 1] = "powerbar"
+            i = i + 2
+        elseif word == "class" and (nextWord == "resource" or nextWord == "resources" or nextWord == "power") then
+            words[#words + 1] = "classpower"
+            i = i + 2
+        elseif word == "click" and (nextWord == "cast" or nextWord == "casting") then
+            words[#words + 1] = "clickcast"
+            i = i + 2
+        elseif word == "click" and nextWord == "through" then
+            words[#words + 1] = "clickthrough"
+            i = i + 2
+        elseif word == "edit" and nextWord == "mode" then
+            words[#words + 1] = "editmode"
+            i = i + 2
+        elseif word == "load" and (nextWord == "condition" or nextWord == "conditions") then
+            words[#words + 1] = "loadconditions"
+            i = i + 2
+        elseif word == "ready" and nextWord == "check" then
+            words[#words + 1] = "readycheck"
+            i = i + 2
+        elseif word == "raid" and nextWord == "marker" then
+            words[#words + 1] = "raidmarker"
+            i = i + 2
+        elseif word == "group" and nextWord == "number" then
+            words[#words + 1] = "groupnumber"
+            i = i + 2
+        elseif word == "name" and nextWord == "shortening" then
+            words[#words + 1] = "nameshortening"
+            i = i + 2
+        elseif word == "global" and nextWord == "cooldown" then
+            words[#words + 1] = "globalcooldown"
+            i = i + 2
+        elseif word == "focus" and nextWord == "kick" then
+            words[#words + 1] = "fokuskick"
+            i = i + 2
+        elseif word == "interrupt" and nextWord == "ready" then
+            words[#words + 1] = "interruptready"
+            i = i + 2
+        elseif word == "level" and nextWord == "text" then
+            words[#words + 1] = "leveltext"
+            i = i + 2
+        elseif word == "level" and nextWord == "indicator" then
+            words[#words + 1] = "levelindicator"
+            i = i + 2
+        elseif word == "status" and (nextWord == "indicator" or nextWord == "indicators") then
+            words[#words + 1] = "statusindicators"
+            i = i + 2
+        elseif word == "status" and (nextWord == "icon" or nextWord == "icons") then
+            words[#words + 1] = "statusicons"
+            i = i + 2
+        elseif word == "turn" and nextWord == "off" then
+            words[#words + 1] = "onoff"
+            i = i + 2
+        elseif word == "minimap" and (nextWord == "icon" or nextWord == "button") then
+            words[#words + 1] = "minimapicon"
+            i = i + 2
+        elseif word == "menu" and nextWord == "scale" then
+            words[#words + 1] = "menuscale"
+            i = i + 2
+        elseif word == "ui" and nextWord == "scale" then
+            words[#words + 1] = "uiscale"
+            i = i + 2
+        elseif word == "target" and (nextWord == "sound" or nextWord == "sounds") then
+            words[#words + 1] = "targetsound"
+            i = i + 2
+        elseif word == "unit" and (nextWord == "aura" or nextWord == "auras") then
+            words[#words + 1] = "unitauras"
+            i = i + 2
+        elseif word == "global" and nextWord == "style" then
+            words[#words + 1] = "globalstyle"
+            i = i + 2
+        elseif word == "spell" and nextWord == "id" then
+            words[#words + 1] = "spellid"
+            i = i + 2
+        elseif word == "health" and nextWord == "text" then
+            words[#words + 1] = "healthtext"
+            i = i + 2
+        elseif word == "power" and nextWord == "text" then
+            words[#words + 1] = "powertext"
+            i = i + 2
+        elseif word == "name" and nextWord == "text" then
+            words[#words + 1] = "nametext"
+            i = i + 2
+        elseif word == "class" and nextWord == "color" then
+            words[#words + 1] = "classcolor"
+            i = i + 2
+        elseif word == "range" and (nextWord == "check" or nextWord == "checker" or nextWord == "checking") then
+            words[#words + 1] = "rangecheck"
+            i = i + 2
+        elseif word == "distance" and (nextWord == "check" or nextWord == "checker" or nextWord == "checking") then
+            words[#words + 1] = "distancecheck"
+            i = i + 2
+        elseif word == "out" and nextWord == "range" then
+            words[#words + 1] = "outofrange"
+            i = i + 2
+        elseif word == "unit" and (nextWord == "frame" or nextWord == "frames") then
+            words[#words + 1] = "unitframe"
+            i = i + 2
+        elseif word == "player" and nextWord == "frame" then
+            words[#words + 1] = "playerframe"
+            i = i + 2
+        elseif word == "target" and nextWord == "frame" then
+            words[#words + 1] = "targetframe"
+            i = i + 2
+        elseif word == "focus" and nextWord == "frame" then
+            words[#words + 1] = "focusframe"
+            i = i + 2
+        elseif word == "pet" and nextWord == "frame" then
+            words[#words + 1] = "petframe"
+            i = i + 2
+        elseif word == "boss" and (nextWord == "frame" or nextWord == "frames") then
+            words[#words + 1] = "bossframes"
+            i = i + 2
+        elseif word == "party" and (nextWord == "frame" or nextWord == "frames") then
+            words[#words + 1] = "partyframes"
+            i = i + 2
+        elseif word == "raid" and (nextWord == "frame" or nextWord == "frames") then
+            words[#words + 1] = "raidframes"
+            i = i + 2
+        else
+            words[#words + 1] = word
+            i = i + 1
+        end
+    end
+    return words
+end
+
+local function BuildSearchQueryClauses(query)
+    local normalized = NormalizeSearchText(query)
+    if normalized == SEARCH_STATE.queryClauseCacheNorm and SEARCH_STATE.queryClauseCacheClauses then
+        return normalized, SEARCH_STATE.queryClauseCacheClauses
+    end
+    local raw = SearchRawWords(normalized)
+    local words = SearchCanonicalWords(raw)
+    local clauses = {}
+    for i = 1, #words do
+        if #clauses >= SEARCH_MAX_QUERY_CLAUSES then break end
+        local word = words[i]
+        local terms, seen = {}, {}
+        AddSearchTermUnique(terms, seen, word)
+        local aliases = SEARCH_QUERY_ALIASES[word]
+        if not aliases then
+            local aliasKey = SearchAliasKeyForTypo(word)
+            if aliasKey then
+                AddSearchTermUnique(terms, seen, aliasKey)
+                aliases = SEARCH_QUERY_ALIASES[aliasKey]
+            end
+        end
+        if aliases then
+            for k = 1, #aliases do AddSearchTermUnique(terms, seen, aliases[k]) end
+        end
+        if #terms > 0 then
+            clauses[#clauses + 1] = { word = word, terms = terms }
+        end
+    end
+    SEARCH_STATE.queryClauseCacheNorm = normalized
+    SEARCH_STATE.queryClauseCacheClauses = clauses
+    return normalized, clauses
+end
+
+local function BuildSearchTokenList(normalized)
+    local tokens, seen = {}, {}
+    for token in tostring(normalized or ""):gmatch("%S+") do
+        if #token >= 2 and not SEARCH_STOP_WORDS[token] and not seen[token] then
+            seen[token] = true
+            tokens[#tokens + 1] = token
+            if #tokens >= 110 then break end
+        end
+    end
+    return tokens
+end
+
+SearchEditDistanceWithin = function(a, b, maxDistance)
+    if a == b then return true end
+    maxDistance = tonumber(maxDistance) or 1
+    local la, lb = #a, #b
+    if math.abs(la - lb) > maxDistance then return false end
+
+    if maxDistance <= 1 then
+        if la == lb then
+            local firstMismatch, mismatches = nil, 0
+            for i = 1, la do
+                if a:sub(i, i) ~= b:sub(i, i) then
+                    mismatches = mismatches + 1
+                    firstMismatch = firstMismatch or i
+                    if mismatches > 2 then return false end
+                end
+            end
+            if mismatches <= 1 then return true end
+            return mismatches == 2
+                and firstMismatch < la
+                and a:sub(firstMismatch, firstMismatch) == b:sub(firstMismatch + 1, firstMismatch + 1)
+                and a:sub(firstMismatch + 1, firstMismatch + 1) == b:sub(firstMismatch, firstMismatch)
+        end
+
+        local short, long = a, b
+        if la > lb then short, long = b, a end
+        local i, j, edits = 1, 1, 0
+        while i <= #short and j <= #long do
+            if short:sub(i, i) == long:sub(j, j) then
+                i = i + 1
+                j = j + 1
+            else
+                edits = edits + 1
+                if edits > 1 then return false end
+                j = j + 1
+            end
+        end
+        return true
+    end
+
+    local prev, curr = {}, {}
+    for j = 0, lb do prev[j] = j end
+    for i = 1, la do
+        curr[0] = i
+        local rowMin = curr[0]
+        local ca = a:sub(i, i)
+        for j = 1, lb do
+            local cost = (ca == b:sub(j, j)) and 0 or 1
+            local value = math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+            curr[j] = value
+            if value < rowMin then rowMin = value end
+        end
+        if rowMin > maxDistance then return false end
+        prev, curr = curr, prev
+    end
+    return prev[lb] <= maxDistance
+end
+
+local function SearchFuzzyTokenMatch(rec, term)
+    if not rec or not rec.tokens or #term < 5 or term:find(" ", 1, true) then return false end
+    local maxDistance = (#term >= 8) and 2 or 1
+    for i = 1, #rec.tokens do
+        local token = rec.tokens[i]
+        if math.abs(#token - #term) <= maxDistance and SearchEditDistanceWithin(token, term, maxDistance) then
+            return true
+        end
+    end
+    return false
+end
+
+local function SearchTermScore(rec, term, queryWord)
+    local haystack = rec.haystack or ""
+    local score = 0
+    if haystack:find(term, 1, true) then
+        if rec.labelNorm == term or rec.titleNorm == term then score = score + 180 end
+        if rec.labelNorm:sub(1, #term) == term or rec.titleNorm:sub(1, #term) == term then score = score + 90 end
+        if rec.labelNorm:find(term, 1, true) then score = score + 70 end
+        if rec.titleNorm:find(term, 1, true) then score = score + 55 end
+        if rec.hintNorm and rec.hintNorm:find(term, 1, true) then score = score + 45 end
+        if rec.groupNorm:find(term, 1, true) then score = score + 35 end
+        if term ~= queryWord then score = score + 35 end
+        return true, score + 10
+    end
+    if SearchFuzzyTokenMatch(rec, term) then
+        return true, (term == queryWord) and 28 or 20
+    end
+    return false, 0
+end
+
+local function SearchClauseScore(rec, clause)
+    local best = 0
+    for i = 1, #clause.terms do
+        local matched, score = SearchTermScore(rec, clause.terms[i], clause.word)
+        if matched and score > best then best = score end
+    end
+    return best > 0, best
+end
+
+local function SearchLooksLikeSupportQuestion(query)
+    local normalized = NormalizeSearchText(query)
+    if normalized == "" then return false end
+    if tostring(query or ""):find("?", 1, true) then return true end
+    if normalized:find("how ", 1, true) or normalized:find("where ", 1, true) or normalized:find("why ", 1, true) then return true end
+    if normalized:find("what ", 1, true) or normalized:find("help ", 1, true) then return true end
+    if normalized:find("do i", 1, true) or normalized:find("can i", 1, true) then return true end
+    for _, word in ipairs({ "missing", "gone", "invisible", "broken", "bugged", "wrong", "offscreen", "overlap", "overlapping", "lag", "fps", "lockdown" }) do
+        if normalized:find(word, 1, true) then return true end
+    end
+    if normalized:find("not showing", 1, true) or normalized:find("doesnt show", 1, true) or normalized:find("not working", 1, true) then return true end
+    if normalized:find("too big", 1, true) or normalized:find("too small", 1, true) or normalized:find("too many", 1, true) then return true end
+    for _, word in ipairs({ "move", "drag", "resize", "hide", "show", "enable", "disable", "change", "reset", "import", "export" }) do
+        if normalized == word or normalized:find("^" .. word .. " ", 1, false) or normalized:find(" " .. word .. " ", 1, false) then
+            return true
+        end
+    end
+    if normalized:find("my ", 1, true) and (
+        normalized:find("change", 1, true)
+        or normalized:find("move", 1, true)
+        or normalized:find("hide", 1, true)
+        or normalized:find("show", 1, true)
+        or normalized:find("not", 1, true)
+    ) then
+        return true
+    end
+    return false
+end
+
+local function SearchSupportQuestionBoost(rec, clauses)
+    if not rec or rec.kind ~= "faq" then return 0 end
+    local haystack = rec.haystack or ""
+    local direct = 0
+    for i = 1, #(clauses or {}) do
+        local word = clauses[i].word
+        if word and word ~= "" and haystack:find(word, 1, true) then
+            direct = direct + 1
+        end
+    end
+    if direct > 0 then return 160 + direct * 90 end
+    return -160
+end
+
+local function IsSearchableDisplayText(text)
+    text = DisplaySearchText(text)
+    if text == "" or #text > SEARCH_TEXT_MAX_LEN then return false end
+    local normalized = NormalizeSearchText(text)
+    if normalized == "" or SEARCH_NOISE_TEXT[normalized] then return false end
+    if #normalized < 2 then return false end
+    return true
+end
+
+local function FontStringText(region)
+    if not (region and region.GetObjectType and region:GetObjectType() == "FontString") then return nil end
+    local raw = region._msuf2SearchText
+    local text = raw
+    if text == nil and region.GetText then text = region:GetText() end
+    text = DisplaySearchText(text)
+    if text == "" then return nil end
+    return text
+end
+
+local function SearchValueText(item)
+    if type(item) == "table" then
+        return item.text or item.label or item.name or item.title or item.value or item.key
+    end
+    return item
+end
+
+local function AddValuesSearchText(parts, values)
+    if type(values) == "function" then
+        local ok, resolved = pcall(values)
+        if not ok then return end
+        values = resolved
+    end
+    if type(values) ~= "table" then return end
+    local limit = math.min(#values, 120)
+    for i = 1, limit do
+        local item = values[i]
+        AddSearchText(parts, SearchValueText(item))
+        if type(item) == "table" then
+            AddSearchText(parts, item.tooltip)
+            AddSearchText(parts, item.desc or item.description)
+        end
+    end
+    local extra = 0
+    for key, item in pairs(values) do
+        if type(key) ~= "number" or key < 1 or key > #values then
+            AddSearchText(parts, key)
+            AddSearchText(parts, SearchValueText(item))
+            if type(item) == "table" then
+                AddSearchText(parts, item.tooltip)
+                AddSearchText(parts, item.desc or item.description)
+            end
+            extra = extra + 1
+            if extra >= 40 then break end
+        end
+    end
+end
+
+local function SearchSectionTitle(frame)
+    if not frame then return nil end
+    local entry = frame._msuf2CollapsibleEntry
+    if entry and entry.label then
+        local text = FontStringText(entry.label)
+        if IsSearchableDisplayText(text) then return text end
+    end
+    if frame.title then
+        local text = FontStringText(frame.title)
+        if IsSearchableDisplayText(text) then return text end
+    end
+    if IsSearchableDisplayText(frame._msuf2SearchTitle) then return DisplaySearchText(frame._msuf2SearchTitle) end
+    return nil
+end
+
+local function SectionPathForAnchor(anchor, pageTitle)
+    local path, seen = {}, {}
+    local parent = anchor and anchor.GetParent and anchor:GetParent()
+    local pageNorm = NormalizeSearchText(pageTitle or "")
+    while parent do
+        local title = SearchSectionTitle(parent)
+        local norm = NormalizeSearchText(title or "")
+        if norm ~= "" and norm ~= pageNorm and not seen[norm] then
+            seen[norm] = true
+            table.insert(path, 1, title)
+        end
+        parent = parent.GetParent and parent:GetParent() or nil
+    end
+    return path
+end
+
+local function SearchHint(pageInfo, anchor)
+    local parts, seen = {}, {}
+    local function Add(text)
+        text = DisplaySearchText(text)
+        local norm = NormalizeSearchText(text)
+        if norm ~= "" and not seen[norm] then
+            seen[norm] = true
+            parts[#parts + 1] = text
+        end
+    end
+    Add(pageInfo.group)
+    Add(pageInfo.label or pageInfo.title)
+    local sections = SectionPathForAnchor(anchor, pageInfo.title or pageInfo.label)
+    for i = 1, #sections do Add(sections[i]) end
+    return table.concat(parts, " > ")
+end
+
+local function BuildSearchPageInfos()
+    local groupLabels, navInfo = {}, {}
+    for i = 1, #NAV_ITEMS do
+        local item = NAV_ITEMS[i]
+        if item.header then groupLabels[item.id or item.header] = item.header end
+    end
+
+    local infos, seen = {}, {}
+    local function AddPageInfo(key, label, group)
+        if not key or key == "search" or seen[key] then return end
+        seen[key] = true
+        local spec = M.pages[key]
+        local info = {
+            key = key,
+            label = M.Tr(label or (spec and spec.title) or key),
+            group = group and M.Tr(group) or "",
+            title = M.Tr((spec and spec.title) or label or key),
+        }
+        infos[#infos + 1] = info
+        navInfo[key] = info
+    end
+
+    for i = 1, #NAV_ITEMS do
+        local item = NAV_ITEMS[i]
+        if item.key then
+            AddPageInfo(item.key, item.label, item.group and groupLabels[item.group] or nil)
+        end
+    end
+    for i = 1, #(M.pageOrder or {}) do
+        local key = M.pageOrder[i]
+        local spec = M.pages[key]
+        AddPageInfo(key, spec and spec.title or key, nil)
+    end
+    return infos, navInfo
+end
+
+local function ClearSearchRegistryPage(pageKey)
+    if not pageKey then return end
+    local ids = SEARCH_STATE.registryByPage[pageKey]
+    if ids then
+        for i = 1, #ids do
+            SEARCH_STATE.registry[ids[i]] = nil
+        end
+        SEARCH_STATE.registryByPage[pageKey] = nil
+        MarkSearchIndexDirty()
+    end
+end
+
+local function CopyStaticSearchValues(values)
+    if type(values) == "function" then
+        local ok, resolved = pcall(values)
+        if not ok then return nil end
+        values = resolved
+    end
+    if type(values) ~= "table" then return nil end
+    local out, count = {}, 0
+    local limit = math.min(#values, 80)
+    for i = 1, limit do
+        local item = values[i]
+        local text = SearchValueText(item)
+        if text ~= nil then
+            count = count + 1
+            out[count] = text
+        end
+    end
+    local extra = 0
+    for key, item in pairs(values) do
+        if type(key) ~= "number" or key < 1 or key > #values then
+            count = count + 1
+            out[count] = key
+            local text = SearchValueText(item)
+            if text ~= nil then
+                count = count + 1
+                out[count] = text
+            end
+            extra = extra + 1
+            if extra >= 30 then break end
+        end
+    end
+    return count > 0 and out or nil
+end
+
+function M.RegisterSearchWidget(widget, meta)
+    if not widget or type(meta) ~= "table" then return end
+    local pageKey = meta.pageKey or M._msuf2SearchBuildKey or M.activeKey
+    if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
+
+    local label = DisplaySearchText(meta.label or meta.title or meta.text or widget._msuf2SearchText or widget._msuf2SearchTitle)
+    if not IsSearchableDisplayText(label) then return end
+
+    local id = widget._msuf2SearchRegistryId
+    if not id or widget._msuf2SearchRegistryPage ~= pageKey or not SEARCH_STATE.registry[id] then
+        SEARCH_STATE.registrySerial = SEARCH_STATE.registrySerial + 1
+        id = pageKey .. ":" .. tostring(SEARCH_STATE.registrySerial)
+        widget._msuf2SearchRegistryId = id
+        widget._msuf2SearchRegistryPage = pageKey
+        SEARCH_STATE.registryByPage[pageKey] = SEARCH_STATE.registryByPage[pageKey] or {}
+        SEARCH_STATE.registryByPage[pageKey][#SEARCH_STATE.registryByPage[pageKey] + 1] = id
+    end
+
+    SEARCH_STATE.registry[id] = {
+        id = id,
+        pageKey = pageKey,
+        label = label,
+        kind = meta.kind or widget._msuf2ControlKind or "control",
+        anchor = meta.anchor or widget._msuf2Title or widget._msuf2Label or widget,
+        values = CopyStaticSearchValues(meta.values or widget.values),
+        keywords = meta.keywords,
+        help = meta.help or meta.description,
+    }
+    MarkSearchIndexDirty()
+end
+
+local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, kind, extraParts)
+    label = DisplaySearchText(label)
+    if not IsSearchableDisplayText(label) then return end
+
+    kind = kind or "text"
+    local displayHint = SearchHint(pageInfo, anchor)
+    local hint = (kind == "faq") and "" or displayHint
+    local parts = {}
+    AddSearchText(parts, label)
+    if kind ~= "faq" then
+        AddSearchText(parts, hint)
+        AddSearchText(parts, pageInfo.label)
+        AddSearchText(parts, pageInfo.group)
+        AddSearchText(parts, pageInfo.title)
+    end
+    if kind == "page" then
+        AddRawSearchText(parts, SEARCH_KEYWORDS[pageInfo.key])
+    end
+    if extraParts then
+        for i = 1, #extraParts do AddSearchText(parts, extraParts[i]) end
+    end
+
+    local recordId = table.concat({
+        tostring(pageInfo.key or ""),
+        tostring(kind or ""),
+        tostring(anchor or ""),
+        NormalizeSearchText(label),
+        NormalizeSearchText(hint),
+    }, "\031")
+    if seenRecords[recordId] then return end
+    seenRecords[recordId] = true
+
+    displayHint = DisplaySearchText(displayHint)
+    local labelNorm = NormalizeSearchText(label)
+    local titleNorm = (kind == "faq") and "" or NormalizeSearchText(pageInfo.title or pageInfo.label or "")
+    local groupNorm = (kind == "faq") and "" or NormalizeSearchText(pageInfo.group or "")
+    local hintNorm = (kind == "faq") and "" or NormalizeSearchText(displayHint)
+    local haystackNorm = NormalizeSearchText(table.concat(parts, " "))
+    local record = {
+        key = pageInfo.key,
+        label = label,
+        group = pageInfo.group or "",
+        title = pageInfo.title or pageInfo.label or "",
+        hint = displayHint,
+        kind = kind,
+        anchor = anchor,
+        labelNorm = labelNorm,
+        groupNorm = groupNorm,
+        titleNorm = titleNorm,
+        hintNorm = hintNorm,
+        haystack = haystackNorm,
+        tokens = BuildSearchTokenList(haystackNorm),
+        order = #records + 1,
+    }
+    records[#records + 1] = record
+    return record
+end
+
+local SEARCH_FAQ = {
+    {
+        label = "Why are boss frames not visible?",
+        answer = "Boss frames normally appear only during boss encounters. Enable Boss Frames and use Edit Mode or Boss Preview to test them outside combat.",
+        pageKey = "uf_boss",
+        target = "Opens: Boss > Frame Basics / Boss Layout",
+        anchorText = "Enable boss castbars Boss Layout Boss Preview Frame Basics",
+        keywords = { "boss frames not visible", "boss frames hidden", "why boss not show", "warum sehe ich boss frames nicht", "bossframes weg", "boss preview", "boss frames anzeigen", "boss frames sichtbar", "boss frames show" },
+        priority = 20,
+    },
+    {
+        label = "How do I move frames?",
+        answer = "Open MSUF Edit Mode, select the frame, then drag it. Use the unit page > Anchoring only for exact anchor/X/Y fine-tuning.",
+        pageKey = "home",
+        target = "Opens: Dashboard > MSUF Edit Mode",
+        anchorText = "MSUF Edit Mode move frames drag position x offset y offset",
+        keywords = { "where do i move my unitframe", "how to move unitframe", "how to move a unitframe", "how do i move unitframe", "move unitframe", "move unit frame", "move frames", "drag frames", "position", "verschieben", "frames bewegen", "edit mode", "x offset", "y offset", "unitframe position", "move player unitframe", "move target unitframe", "move focus unitframe", "move pet unitframe", "move boss unitframe", "how do i move the player frame", "move player frame", "move target frame", "move focus frame", "move pet frame", "move boss frame", "drag player frame", "drag target frame", "player frame position" },
+        priority = 320,
+    },
+    {
+        label = "How do I move the player frame?",
+        answer = "Use MSUF Edit Mode to drag the player frame. For exact anchor or X/Y values, open Player > Anchoring after that.",
+        pageKey = "home",
+        target = "Opens: Dashboard > MSUF Edit Mode",
+        anchorText = "MSUF Edit Mode move player frame drag player frame position x offset y offset",
+        keywords = { "how do i move the player frame", "how to move player frame", "how to move player unitframe", "where do i move my player frame", "move my player frame", "move player frame", "move player unitframe", "drag player frame", "player frame position", "playerframe position", "player x y", "player anchor", "player anchoring", "spieler frame verschieben", "spieler verschieben" },
+        priority = 360,
+    },
+    {
+        label = "How do I move or anchor one unit frame?",
+        answer = "Use MSUF Edit Mode to drag a single unit frame. Use the unit page > Anchoring when you need exact anchor targets or X/Y values.",
+        pageKey = "home",
+        target = "Opens: Dashboard > MSUF Edit Mode",
+        anchorText = "MSUF Edit Mode Anchoring Anchor unit to Custom anchor target Global anchor move position",
+        keywords = { "unit frame anchor", "unitframe anchor", "anchor player frame", "custom anchor", "global anchor", "anchor target frame", "anchor focus frame", "unitframe position", "unit frame position", "player frame position", "move player frame", "move target frame", "move focus frame", "move unitframe", "player x y", "target x y" },
+        priority = 160,
+    },
+    {
+        label = "How do I move party or raid frames?",
+        answer = "Open Group Frames > Layout. Use Layout, Frame Scaling, and Anchoring for party/raid position, growth, spacing, size, and anchor behavior.",
+        pageKey = "gf_layout",
+        target = "Opens: Group Frames > Layout > Anchoring",
+        anchorText = "Anchoring Layout Frame Scaling growth direction spacing columns position move party raid",
+        keywords = { "move raid frames", "move party frames", "move group frames", "raidframes position", "partyframes position", "groupframes position", "group frame anchor", "raid frame anchor", "party frame anchor", "gruppe verschieben", "raid verschieben" },
+        priority = 55,
+    },
+    {
+        label = "How do I resize a unit frame?",
+        answer = "Open that unit page and use Frame Basics for width, height, and scale. Text size is in Global Style > Fonts or the unit Text section.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Frame Basics",
+        anchorText = "Frame Basics width height scale size player target focus boss pet",
+        keywords = { "resize unitframe", "resize unit frame", "make frame bigger", "make player frame bigger", "make target frame smaller", "width height scale", "unitframe size", "frame size", "frames too big", "frames too small" },
+        priority = 40,
+    },
+    {
+        label = "How do I resize party or raid frames?",
+        answer = "Open Group Frames > Layout. General/Layout controls frame width, height, spacing, columns, and growth; Frame Scaling controls scale behavior.",
+        pageKey = "gf_layout",
+        target = "Opens: Group Frames > Layout",
+        anchorText = "General Layout Frame Scaling width height spacing columns growth scale",
+        keywords = { "resize raid frames", "resize party frames", "resize group frames", "raid frame size", "party frame size", "group frame size", "raid frames too big", "party frames too small", "group scale" },
+        priority = 45,
+    },
+    {
+        label = "How do I change portraits?",
+        answer = "Open the unit page, then use the Portrait section for mode, render type, shape, size, offset, and border.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Portrait",
+        anchorText = "Portrait mode render type shape size offset class icon portrait background",
+        keywords = { "portrait", "portraits", "avatar", "face", "bild", "portraet", "portrait mode", "portrait shape", "class icon", "2d portrait", "3d portrait", "portrait background" },
+        priority = 15,
+    },
+    {
+        label = "How do I change castbars?",
+        answer = "Use the unit page for per-unit castbar toggles and Global Style > Castbar for shared textures, direction, GCD, text, and interrupt options.",
+        pageKey = "opt_castbar",
+        target = "Opens: Global Style > Castbar",
+        anchorText = "Castbar Textures & Outline GCD Bar Focus Kick Interrupt Ready Indicator",
+        keywords = { "castbar", "cast bar", "gcd", "interrupt", "focus kick", "channel ticks", "zauberleiste", "castbar texture", "castbar direction", "spell name" },
+        priority = 20,
+    },
+    {
+        label = "Where are Evoker empowered cast settings?",
+        answer = "Open Global Style > Castbar and use Empowered Casts for Evoker stage color, stage blink, and blink timing.",
+        pageKey = "opt_castbar",
+        target = "Opens: Global Style > Castbar > Empowered Casts",
+        anchorText = "Empowered Casts Evoker stage blink empower hold release",
+        keywords = { "evoker castbar", "evoker cast bar", "empowered casts", "empower", "empower stage", "stage blink", "hold cast", "release cast", "augmentation", "devastation", "preservation", "quell" },
+        priority = 180,
+    },
+    {
+        label = "Where are Demon Hunter interrupt and castbar settings?",
+        answer = "Open Global Style > Castbar for Focus Kick and Interrupt Ready Indicator. Per-unit castbar interrupt toggles are on each unit page.",
+        pageKey = "opt_castbar",
+        target = "Opens: Global Style > Castbar > Interrupt Ready Indicator",
+        anchorText = "Interrupt Ready Indicator Focus Kick Demon Hunter devour consume magic disrupt kick",
+        keywords = { "devour demonhunter castbar", "devour demon hunter castbar", "dh castbar", "demon hunter interrupt", "demonhunter interrupt", "havoc kick", "vengeance kick", "consume magic", "disrupt", "interrupt ready", "focus kick", "kick cooldown" },
+        priority = 180,
+    },
+    {
+        label = "How do I change my background?",
+        answer = "For bar backgrounds, open Global Style > Colors > Bar Background Tint. For whole-frame alpha, use the unit page > Transparency.",
+        pageKey = "opt_colors",
+        target = "Opens: Global Style > Colors > Bar Background Tint",
+        anchorText = "Bar Background Tint background backgrond backround bg backdrop opacity alpha",
+        keywords = { "how do i change my backgrond", "how do i change my background", "change background", "change backgrond", "backround", "backgroud", "background color", "bar background", "background tint", "bg color", "backdrop", "opacity", "alpha", "transparent background", "hintergrund" },
+        priority = 70,
+    },
+    {
+        label = "How do I make unit frames transparent?",
+        answer = "Open the unit page > Transparency for in-combat/out-of-combat alpha. Group frame transparency is in Group Frames > Layout > Transparency.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Transparency",
+        anchorText = "Transparency alpha in combat out of combat opacity background preserve hp color",
+        keywords = { "transparent unitframe", "transparent unit frame", "alpha unitframe", "opacity unitframe", "fade frame", "frame alpha", "in combat alpha", "out of combat alpha", "transparent player frame", "transparent target frame" },
+        priority = 40,
+    },
+    {
+        label = "How do I change bar textures, gradients, or outlines?",
+        answer = "Open Global Style > Bars. Textures & Gradient controls shared bar textures; Frame Outline and Highlight Borders control borders.",
+        pageKey = "opt_bars",
+        target = "Opens: Global Style > Bars > Textures & Gradient",
+        anchorText = "Textures & Gradient Frame Outline Highlight Borders texture gradient outline border",
+        keywords = { "bar texture", "health texture", "power texture", "change texture", "gradient", "outline", "border", "bar border", "frame outline", "highlight border", "shared texture" },
+        priority = 35,
+    },
+    {
+        label = "How do I change health, power, or class colors?",
+        answer = "Open Global Style > Colors. Bar Colors and Power Bar Colors control HP/power colors; Class Bar Colors controls class overrides.",
+        pageKey = "opt_colors",
+        target = "Opens: Global Style > Colors > Bar Colors",
+        anchorText = "Bar Colors Power Bar Colors Class Bar Colors health hp power class color",
+        keywords = { "health color", "hp color", "power color", "mana color", "class color", "bar color", "reaction color", "npc color", "color by class", "farbe", "farben" },
+        priority = 35,
+    },
+    {
+        label = "How do I change colors?",
+        answer = "Most shared colors are in Global Style > Colors. Bar texture and border style controls are in Global Style > Bars.",
+        pageKey = "opt_colors",
+        target = "Opens: Global Style > Colors",
+        anchorText = "Colors Bar Background Tint Bar Colors Unitframe Colors Class Bar Colors",
+        keywords = { "colors", "colours", "farbe", "farben", "class color", "reaction color", "bar color", "background color", "unitframe colors" },
+        priority = 10,
+    },
+    {
+        label = "How do I change fonts and text?",
+        answer = "Global Style > Fonts controls shared font settings. Unit pages contain per-unit name, health, and power text position and pattern settings.",
+        pageKey = "opt_fonts",
+        target = "Opens: Global Style > Fonts",
+        anchorText = "Global Font Text Style Name & Power Colors Name Shortening font size outline shadow",
+        keywords = { "font", "fonts", "text", "schrift", "name text", "hp text", "health text", "power text", "text size", "font size", "outline", "shadow", "name shortening", "make text bigger", "text too small" },
+        priority = 25,
+    },
+    {
+        label = "Where do I change HP, name, or power text position?",
+        answer = "Open the unit page and use Text for name/health/power text patterns, anchors, offsets, font sizes, and layering.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Text",
+        anchorText = "Text name health power text anchor offset font size layer hp pattern",
+        keywords = { "hp text position", "health text position", "name position", "power text position", "move text", "text anchor", "text offset", "name text", "health pattern", "power pattern", "percent hp" },
+        priority = 35,
+    },
+    {
+        label = "Where is the player, target, or unit level text?",
+        answer = "Open the unit page > Status icons. Select Level in Indicator, then use Enabled, Anchor, X/Y Offset, Size, and Layer.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Status icons > Indicator: Level",
+        anchorText = "Status icons Indicator Level Enabled Anchor X Offset Y Offset Size Layer level text level indicator show level player level target level",
+        keywords = { "level text", "level indicator", "player level", "target level", "unit level", "show level", "enable level", "disable level", "turn on level", "turn off level", "level anchor", "level position", "level positioning", "level x offset", "level y offset", "level size", "level layer", "status icons level", "status indicator level" },
+        priority = 520,
+    },
+    {
+        label = "How do I import, export, or switch profiles?",
+        answer = "Open Profiles for active profile, spec auto-switching, import/export strings, legacy imports, and reset options.",
+        pageKey = "profiles",
+        target = "Opens: Profiles > Export / Import",
+        anchorText = "Export / Import Profile Management Spec Profiles import export wago string",
+        keywords = { "profile", "profiles", "import", "export", "wago", "copy profile", "reset profile", "profil", "spec profile", "profile string", "import string", "export string", "share profile" },
+        priority = 35,
+    },
+    {
+        label = "How do I reset positions or recover a broken layout?",
+        answer = "Use Dashboard > Reset Positions for frame movers. Use Profiles only when you want to reset, copy, import, or replace profile data.",
+        pageKey = "home",
+        target = "Opens: Dashboard > Reset Positions",
+        anchorText = "Reset Positions Factory Reset Profiles Print Help recovery support",
+        keywords = { "reset positions", "reset movers", "frames off screen", "frame offscreen", "broken layout", "recover layout", "factory reset", "fullreset", "help reset", "position reset" },
+        priority = 45,
+    },
+    {
+        label = "How do I configure group frames?",
+        answer = "Use Group Frames pages: Layout for size/growth/sorting, Health & Text for bars/text, Buffs & Debuffs for auras, and Indicators for status icons.",
+        pageKey = "gf_layout",
+        target = "Opens: Group Frames > Layout",
+        anchorText = "Group Frames Layout Health & Text Buffs & Debuffs Indicators party raid growth sorting",
+        keywords = { "group frames", "groupframes", "party", "raid", "mythic raid", "gruppe", "raid frames", "layout", "growth", "sorting", "raidframes", "partyframes" },
+        priority = 20,
+    },
+    {
+        label = "How do I configure buffs and debuffs?",
+        answer = "Unit Auras controls unitframe auras. Group Buffs & Debuffs controls group-frame aura layout, filtering, cooldowns, and private auras.",
+        pageKey = "auras2",
+        target = "Opens: Global Style > Unit Auras",
+        anchorText = "Unit Auras Display Caps & Icons Aura Filters & Sorting Private Auras buffs debuffs",
+        keywords = { "buff", "buffs", "debuff", "debuffs", "auras", "aura", "private aura", "cooldown", "filter", "only my buffs", "only my debuffs", "hide buffs", "show debuffs", "aura size", "aura position" },
+        priority = 25,
+    },
+    {
+        label = "How do I configure group buffs, debuffs, or defensives?",
+        answer = "Open Group Frames > Buffs & Debuffs. It has sections for Buffs, Debuffs, Defensives, Private Auras, cooldown style, and aura utilities.",
+        pageKey = "gf_auras",
+        target = "Opens: Group Frames > Buffs & Debuffs",
+        anchorText = "Buffs Debuffs Defensives Private Auras Cooldown Style Aura Utilities group frames",
+        keywords = { "raid buffs", "raid debuffs", "party buffs", "party debuffs", "group auras", "group buffs", "group debuffs", "defensives", "externals", "private aura raid", "group cooldown swipe" },
+        priority = 40,
+    },
+    {
+        label = "How do I add or change status icons and indicators?",
+        answer = "Unit frame status icons are on each unit page. Group frame indicators are in Group Frames > Indicators.",
+        pageKey = "gf_indicators",
+        target = "Opens: Group Frames > Indicators",
+        anchorText = "Indicators Status Icons Spell Indicators Corner Indicators role icon dispel aggro raid marker",
+        keywords = { "status icons", "indicator", "indicators", "corner indicator", "spell indicator", "raid marker", "role icon", "leader icon", "ready check", "aggro icon", "threat icon", "focus glow" },
+        priority = 35,
+    },
+    {
+        label = "Why is something not updating immediately?",
+        answer = "Some layout changes rebuild frames, while visual changes apply instantly. If needed, close and reopen the menu or reload after large profile/import changes.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Update intervals",
+        anchorText = "Update intervals refresh reload apply not updating performance",
+        keywords = { "not updating", "does not update", "refresh", "reload", "apply", "changes not showing", "aktualisiert nicht", "settings not applying", "profile not applying", "need reload" },
+        priority = 20,
+    },
+    {
+        label = "How do I disable Blizzard unit frames?",
+        answer = "Open Global Style > Miscellaneous and use the Blizzard frame toggles.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Blizzard Frames",
+        anchorText = "Blizzard Frames disable blizzard hide blizzard default frames playerframe",
+        keywords = { "blizzard frames", "disable blizzard", "hide blizzard", "playerframe", "default frames", "standard frames", "hide default frames", "disable default unit frames", "blizzard player frame" },
+        priority = 35,
+    },
+    {
+        label = "Where is the minimap icon setting?",
+        answer = "Open Global Style > Miscellaneous > Blizzard Frames and use Show MSUF minimap icon.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Blizzard Frames",
+        anchorText = "Blizzard Frames Show MSUF minimap icon minimap button addon compartment",
+        keywords = { "minimap", "minimap icon", "minimap button", "hide minimap icon", "show minimap icon", "addon compartment", "minikarte", "minimap symbol" },
+        priority = 185,
+    },
+    {
+        label = "Where are target sound settings?",
+        answer = "Open Global Style > Miscellaneous > Blizzard Frames and use Play sound on Target/Target Lost.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Blizzard Frames",
+        anchorText = "Blizzard Frames Play sound on Target Target Lost target sounds",
+        keywords = { "target sound", "target sounds", "target lost sound", "play sound", "sound on target", "sound target lost", "ziel sound", "sounds" },
+        priority = 170,
+    },
+    {
+        label = "Where are menu snap or menu behavior settings?",
+        answer = "Open Global Style > Miscellaneous > Menu behavior for edge snap and related menu behavior.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Menu behavior",
+        anchorText = "Menu behavior edge snap windows snap menu resize ui scale menu scale",
+        keywords = { "menu snap", "edge snap", "window snap", "menu behavior", "menu resize", "menu scale", "ui scale", "menu too big", "menu too small", "fenster einrasten" },
+        priority = 65,
+    },
+    {
+        label = "Where is Miscellaneous?",
+        answer = "Open Global Style > Miscellaneous for language, menu behavior, update intervals, tooltips, Blizzard frames, minimap icon, sounds, and range fade.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous",
+        anchorText = "Miscellaneous misc global style language menu behavior update intervals tooltips blizzard frames minimap sounds range fade",
+        keywords = { "misc", "miscellaneous", "where is misc", "where is miscellaneous", "global style misc", "global style miscellaneous", "verschiedenes", "allgemein", "sonstiges" },
+        priority = 260,
+    },
+    {
+        label = "How do I change range fading?",
+        answer = "Open Global Style > Miscellaneous and use the Range Fade section for affected units, alpha, and portrait fading.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Range Fade",
+        anchorText = "Range Fade unit frame range check range checker distance check out of range range alpha distance fade portrait fading",
+        keywords = { "range fade", "range check", "range checker", "unit frame range check", "distance check", "out of range", "range alpha", "distance fade", "reichweite", "reichweitencheck", "entfernung", "fade portrait", "frame fades", "out of range opacity" },
+        priority = 45,
+    },
+    {
+        label = "Where is the unit frame range check?",
+        answer = "Open Global Style > Miscellaneous > Range Fade. It controls target, focus, and boss out-of-range fading; group range fade is in Group Frames > Health & Text.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Range Fade",
+        anchorText = "Range Fade unit frame range check range checker distance check out of range alpha target focus boss",
+        keywords = { "unit frame range check", "unitframe range check", "unit frames range check", "range check unitframe", "range check unit frame", "range checker", "distance check", "distance checker", "out of range unit frame", "out of range frames", "target out of range", "focus out of range", "boss out of range", "target range fade", "focus range fade", "boss range fade", "reichweitencheck", "reichweite check", "entfernung check" },
+        priority = 165,
+    },
+    {
+        label = "How do I change language or translations?",
+        answer = "Open Global Style > Miscellaneous > Language. Translation coverage can also be checked with the /msuf locale command.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Language",
+        anchorText = "Language locale localization translation deDE ruRU frFR esES",
+        keywords = { "language", "locale", "translation", "translations", "localization", "localisation", "sprache", "deutsch", "english", "russian", "french", "spanish" },
+        priority = 25,
+    },
+    {
+        label = "How do I change unitframe tooltips?",
+        answer = "Open Global Style > Miscellaneous > Unitframe tooltips to control mouseover tooltip behavior.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Unitframe tooltips",
+        anchorText = "Unitframe tooltips tooltip mouseover hide tooltip show tooltip",
+        keywords = { "tooltip", "tooltips", "unit tooltip", "mouseover tooltip", "hide tooltip", "show tooltip", "tooltip on mouseover" },
+        priority = 20,
+    },
+    {
+        label = "How do I change click, mouseover, or targeting behavior?",
+        answer = "Open Gameplay for crosshair, click-cast, focus/target modifier, mouseover, interaction, and targeting options.",
+        pageKey = "gameplay",
+        target = "Opens: Gameplay",
+        anchorText = "Gameplay click cast focus target modifier mouseover interaction targeting combat crosshair",
+        keywords = { "click cast", "clickcast", "click casting", "clickthrough", "click-through", "mouseover", "target modifier", "focus modifier", "mouse buttons", "targeting", "combat crosshair" },
+        priority = 30,
+    },
+    {
+        label = "How do I change class resources?",
+        answer = "Open Class Resources for combo points, holy power, soul shards, chi, maelstrom, essence, runes, stagger, detached power, and alternative mana.",
+        pageKey = "classpower",
+        target = "Opens: Class Resources",
+        anchorText = "Class Resources Layout Behavior Style Auto-Hide Detached Power Bar Alternative Mana",
+        keywords = { "class resource", "class resources", "combo points", "holy power", "soul shards", "chi", "maelstrom", "essence", "runes", "stagger", "alternative mana", "alt mana", "detached power" },
+        priority = 25,
+    },
+    {
+        label = "How do I hide or show a unit frame?",
+        answer = "Open that unit page and use Frame Basics > Enable. Boss frames also have Boss Layout options.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Frame Basics",
+        anchorText = "Frame Basics Enable hide show player target focus boss pet",
+        keywords = { "hide unitframe", "show unitframe", "disable unitframe", "enable unitframe", "hide player frame", "hide target frame", "hide focus frame", "hide pet frame", "show player frame", "enable target frame", "disable boss frame" },
+        priority = 30,
+    },
+    {
+        label = "Where are load conditions?",
+        answer = "Open the matching unit page and use Load Conditions to control when player, target, focus, boss, or pet frames are shown.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Load Conditions",
+        anchorText = "Load Conditions show hide visibility player target focus boss pet combat group instance",
+        keywords = { "load conditions", "visibility conditions", "show conditions", "hide conditions", "when to show frame", "when to hide frame", "frame visibility", "combat visibility", "instance visibility", "ladebedingungen", "sichtbarkeit" },
+        priority = 80,
+    },
+    {
+        label = "Why is my player, target, focus, or pet frame gone?",
+        answer = "Open the matching unit page and check Frame Basics > Enable, Load Conditions, alpha/transparency, and range fade.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Frame Basics",
+        anchorText = "Frame Basics Enable Load Conditions Transparency Range Fade player target focus pet gone missing invisible",
+        keywords = { "player frame gone", "target frame gone", "focus frame gone", "pet frame gone", "unitframe missing", "unitframe invisible", "frame not visible", "frame disappeared", "cannot see player frame", "target not showing", "focus not showing", "pet not showing", "unitframe hidden" },
+        priority = 55,
+    },
+    {
+        label = "Where is Target of Target?",
+        answer = "Open Target of Target. Use Frame Basics to enable it, Text for labels, and Anchoring/Edit Mode for placement.",
+        pageKey = "uf_targettarget",
+        target = "Opens: Target of Target > Frame Basics",
+        anchorText = "Frame Basics Target of Target ToT Enable Text Anchoring",
+        keywords = { "target of target", "tot", "targettarget", "target target", "where is tot", "tot missing", "show target of target", "enable tot", "target of target frame" },
+        priority = 45,
+    },
+    {
+        label = "Why is my castbar not showing?",
+        answer = "Open the unit page > Castbar to enable that unit's castbar. Shared castbar visuals are in Global Style > Castbar.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Castbar",
+        anchorText = "Castbar Enable player target focus boss pet show interrupt icon text",
+        keywords = { "castbar not showing", "castbar missing", "player castbar gone", "target castbar missing", "focus castbar missing", "boss castbar missing", "show castbar", "enable castbar", "my castbar disappeared", "no cast bar" },
+        priority = 55,
+    },
+    {
+        label = "Where is the GCD bar?",
+        answer = "Open Global Style > Castbar > GCD Bar. It controls instant-cast GCD display, time text, spell name, and icon.",
+        pageKey = "opt_castbar",
+        target = "Opens: Global Style > Castbar > GCD Bar",
+        anchorText = "GCD Bar instant casts show time text spell name icon",
+        keywords = { "gcd", "gcd bar", "global cooldown", "instant casts", "show gcd", "gcd timer", "gcd spell", "gcd icon" },
+        priority = 130,
+    },
+    {
+        label = "Where do I change castbar spell names or long cast text?",
+        answer = "Open Global Style > Castbar > Name Shortening for castbar spell name shortening, max length, and reserved space.",
+        pageKey = "opt_castbar",
+        target = "Opens: Global Style > Castbar > Name Shortening",
+        anchorText = "Name Shortening spell name max name length reserved space castbar",
+        keywords = { "cast name too long", "spell name too long", "castbar text too long", "shorten castbar name", "castbar spell name", "max name length", "reserved space", "cast text overlap" },
+        priority = 45,
+    },
+    {
+        label = "Why are class resources missing?",
+        answer = "Open Class Resources. Check Enable, Auto-Hide, class-specific behavior, detached power, and alternative mana settings.",
+        pageKey = "classpower",
+        target = "Opens: Class Resources > Layout / Auto-Hide",
+        anchorText = "Class Resources Enable Auto-Hide Behavior Detached Power Bar Alternative Mana",
+        keywords = { "class resources missing", "combo points missing", "holy power missing", "soul shards missing", "chi missing", "maelstrom missing", "essence missing", "runes missing", "stagger missing", "class power not showing", "resource bar missing" },
+        priority = 55,
+    },
+    {
+        label = "Where do I configure detached power or alternative mana?",
+        answer = "Open Class Resources for global class-resource bars. Per-unit detached power options are in the unit page > Power Bar.",
+        pageKey = "classpower",
+        target = "Opens: Class Resources > Detached Power Bar",
+        anchorText = "Detached Power Bar Alternative Mana Power Bar class resources sync width anchor",
+        keywords = { "detached power", "detached power bar", "alternative mana", "alt mana", "dual resource", "power bar detached", "anchor to class resource", "sync width to class resource" },
+        priority = 45,
+    },
+    {
+        label = "Why are my buffs or debuffs missing?",
+        answer = "Open Unit Auras. Check Display, Aura Filters & Sorting, Only Mine, boss aura filters, dispellable filters, and icon caps.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Aura Filters & Sorting",
+        anchorText = "Aura Filters & Sorting Display Only my buffs Only my debuffs Show Debuffs Include boss buffs dispellable",
+        keywords = { "buffs missing", "debuffs missing", "auras missing", "buff not showing", "debuff not showing", "hide buffs", "show debuffs", "only my buffs", "only my debuffs", "boss aura missing", "dispellable debuff missing", "aura filter" },
+        priority = 60,
+    },
+    {
+        label = "Why do I have too many buffs or debuffs?",
+        answer = "Open Unit Auras > Caps & Icons. Lower max buffs/debuffs, rows, icon size, and adjust filters.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Caps & Icons",
+        anchorText = "Caps & Icons Max Buffs Max Debuffs Icon size rows spacing filters",
+        keywords = { "too many buffs", "too many debuffs", "too many auras", "aura spam", "buff spam", "debuff spam", "max buffs", "max debuffs", "aura cap", "icon size", "aura rows" },
+        priority = 55,
+    },
+    {
+        label = "Where are private auras?",
+        answer = "Unit private aura controls are in Unit Auras > Private Auras. Group-frame private auras are in Group Frames > Buffs & Debuffs > Private Auras.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Private Auras",
+        anchorText = "Private Auras Unit Auras Group Buffs Debuffs raid mechanics",
+        keywords = { "private auras", "private aura", "raid private aura", "private aura missing", "show private aura", "private aura icon", "private auras group frames" },
+        priority = 45,
+    },
+    {
+        label = "Where do I change aura cooldown text?",
+        answer = "Open Unit Auras > Text Coloring for timer colors and text sizes. Group aura cooldown style is in Group Frames > Buffs & Debuffs > Cooldown Style.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Text Coloring",
+        anchorText = "Text Coloring Cooldown Timer Text cooldown text size safe warning urgent stack count",
+        keywords = { "aura cooldown text", "aura cooldown text too small", "aura timer too small", "buff timer", "debuff timer", "cooldown text size", "stack text size", "timer color", "aura timer color", "cooldown swipe", "pandemic color" },
+        priority = 150,
+    },
+    {
+        label = "Where do I change group health text or power bars?",
+        answer = "Open Group Frames > Health & Text. It controls health colors, bars, power bar, text, heal prediction, dispel overlay, debuff stripe, and range fade.",
+        pageKey = "gf_bars",
+        target = "Opens: Group Frames > Health & Text",
+        anchorText = "Health Colors Bars Power Bar Text Heal Prediction Dispel Overlay Debuff Stripe Range Fade group range check raid range check party range check",
+        keywords = { "group health text", "raid health text", "party health text", "group power bar", "raid power bar", "party power bar", "heal prediction", "incoming heals", "dispel overlay", "debuff stripe", "group range fade", "group range check", "raid range check", "party range check", "raid out of range", "party out of range", "range check raid frames" },
+        priority = 55,
+    },
+    {
+        label = "Where is party or raid range check?",
+        answer = "Open Group Frames > Health & Text > Range Fade. That controls party and raid out-of-range fading.",
+        pageKey = "gf_bars",
+        target = "Opens: Group Frames > Health & Text > Range Fade",
+        anchorText = "Range Fade group frame range check raid range check party range check out of range alpha",
+        keywords = { "group range check", "group frame range check", "group frames range check", "raid range check", "raid frame range check", "raid frames range check", "party range check", "party frame range check", "party frames range check", "raid out of range", "party out of range", "group out of range", "range check raid frames", "range check party frames" },
+        priority = 140,
+    },
+    {
+        label = "Where are absorb bars or heal prediction?",
+        answer = "Global absorb styling is in Global Style > Bars > Absorb Display. Group incoming heals are in Group Frames > Health & Text > Heal Prediction.",
+        pageKey = "opt_bars",
+        target = "Opens: Global Style > Bars > Absorb Display",
+        anchorText = "Absorb Display Heal Prediction incoming heals absorb health group frames",
+        keywords = { "absorb", "absorbs", "absorb bar", "absorb texture", "heal prediction", "incoming heals", "healing prediction", "shields", "shield bar", "health absorb" },
+        priority = 45,
+    },
+    {
+        label = "Where do I change aggro, threat, dispel, or raid markers?",
+        answer = "Use Global Style > Bars for highlight borders and Group Frames > Indicators for role, threat, dispel, spell, corner, and raid-marker indicators.",
+        pageKey = "gf_indicators",
+        target = "Opens: Group Frames > Indicators",
+        anchorText = "Indicators Status Icons Spell Indicators Corner Indicators aggro threat dispel role icon raid marker",
+        keywords = { "aggro", "threat", "aggro border", "threat border", "dispel indicator", "magic indicator", "curse indicator", "poison indicator", "disease indicator", "raid marker", "role icon", "ready check", "leader icon" },
+        priority = 50,
+    },
+    {
+        label = "Why is text overlapping or in the wrong place?",
+        answer = "Open the unit page > Text. Adjust anchors, offsets, font size, spacing, split spacing, and layer/draw order.",
+        pageKey = "uf_player",
+        target = "Opens: Player > Text",
+        anchorText = "Text anchor offset font size layer draw order spacing split spacing overlaps bars portraits status icons",
+        keywords = { "text overlap", "text overlapping", "text wrong place", "text on bar", "text on portrait", "name overlap", "hp text overlap", "power text overlap", "draw order", "text layer", "split spacing", "move text" },
+        priority = 55,
+    },
+    {
+        label = "Why is MSUF lagging or costing FPS?",
+        answer = "Open Global Style > Miscellaneous > Update intervals. Also reduce aura counts/timers if aura-heavy layouts are expensive.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous > Update intervals",
+        anchorText = "Update intervals performance lag fps auras cooldown timers filters",
+        keywords = { "lag", "fps", "performance", "stutter", "slow", "too much cpu", "heavy", "optimize", "update intervals", "aura performance", "cooldown text performance", "combat performance" },
+        priority = 55,
+    },
+    {
+        label = "Why can I not change something in combat?",
+        answer = "WoW blocks some protected frame changes in combat. Leave combat, then apply layout, anchoring, enable/disable, profile, or protected-frame changes.",
+        pageKey = "opt_misc",
+        target = "Opens: Global Style > Miscellaneous",
+        anchorText = "combat lockdown protected frames settings in combat out of combat",
+        keywords = { "combat lockdown", "cannot change in combat", "can't change in combat", "protected frame", "blocked in combat", "in combat settings", "combat error", "leave combat", "why can't i move in combat" },
+        priority = 50,
+    },
+    {
+        label = "Where did the menu window go?",
+        answer = "Open MSUF again with /msuf. If frame positions are broken, use Dashboard > Reset Positions or the profile/reset tools.",
+        pageKey = "home",
+        target = "Opens: Dashboard > Reset Positions",
+        anchorText = "Reset Positions menu window offscreen dashboard slash msuf recovery",
+        keywords = { "menu gone", "menu missing", "window offscreen", "menu offscreen", "can't open menu", "cannot open menu", "lost menu", "options window gone", "reset menu position", "where is menu" },
+        priority = 45,
+    },
+    {
+        label = "Why did my profile or import look wrong?",
+        answer = "Open Profiles. Check active profile, spec profiles, import/export, and legacy imports. Large imports may need a reload.",
+        pageKey = "profiles",
+        target = "Opens: Profiles > Profile Management / Export / Import",
+        anchorText = "Profile Management Spec Profiles Export Import legacy imports active profile reload",
+        keywords = { "profile wrong", "profile missing", "profile gone", "import failed", "import looks wrong", "wago import wrong", "profile not loading", "spec profile wrong", "active profile", "legacy import", "copy profile" },
+        priority = 55,
+    },
+    {
+        label = "Why are party or raid frames not showing?",
+        answer = "Open Group Frames > Layout. Check enable/show behavior, player/solo visibility, layout mode, frame scaling, and anchoring.",
+        pageKey = "gf_layout",
+        target = "Opens: Group Frames > Layout > General",
+        anchorText = "General Layout show hide player solo party raid enable frame scaling anchoring",
+        keywords = { "party frames not showing", "raid frames not showing", "group frames missing", "party frames gone", "raid frames gone", "hide player solo", "show party frames", "show raid frames", "group frames invisible", "party hidden", "raid hidden" },
+        priority = 60,
+    },
+    {
+        label = "Where do I make names shorter?",
+        answer = "Open Global Style > Fonts > Name Shortening for unit names. Castbar spell name shortening is in Global Style > Castbar > Name Shortening.",
+        pageKey = "opt_fonts",
+        target = "Opens: Global Style > Fonts > Name Shortening",
+        anchorText = "Name Shortening names too long max name length castbar spell name shortening",
+        keywords = { "name too long", "names too long", "shorten names", "name shortening", "long names", "cut names", "truncate names", "player name too long", "target name too long" },
+        priority = 45,
+    },
+    {
+        label = "Where do I make the menu bigger or smaller?",
+        answer = "Use the Dashboard scale controls for menu scale or UI scale. You can also resize the MSUF2 window from its corner.",
+        pageKey = "home",
+        target = "Opens: Dashboard > UI Scale / Menu Scale",
+        anchorText = "UI Scale Menu Scale resize window bigger smaller dashboard",
+        keywords = { "menu too big", "menu too small", "make menu bigger", "make menu smaller", "ui scale", "menu scale", "resize window", "options too big", "options too small" },
+        priority = 45,
+    },
+    {
+        label = "Where do I change click-through auras?",
+        answer = "Open Unit Auras > Display for click-through aura behavior. Gameplay contains click-cast and targeting behavior.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Display",
+        anchorText = "Display click-through auras click through click cast gameplay targeting",
+        keywords = { "clickthrough auras", "click-through auras", "click through auras", "auras block mouse", "can't click through buffs", "aura mouse", "click aura", "click cast not working", "mouse blocked by auras" },
+        priority = 45,
+    },
+    {
+        label = "Where are optional modules or style modules?",
+        answer = "Open Modules > Style for optional style modules such as rounded unit frames and portrait decoration.",
+        pageKey = "modules",
+        target = "Opens: Modules > Style",
+        anchorText = "Modules Style rounded unitframes portrait decoration optional modules skins",
+        keywords = { "modules", "optional modules", "style modules", "rounded unitframes", "rounded frames", "portrait decoration", "portrait deco", "module style", "skins", "rounded", "rund" },
+        priority = 70,
+    },
+    {
+        label = "How do I show party or raid frames while solo?",
+        answer = "Open Group Frames > Layout and check the solo/player visibility options. That is where MSUF controls whether party-style frames appear when you are alone.",
+        pageKey = "gf_layout",
+        target = "Opens: Group Frames > Layout > General",
+        anchorText = "General show solo show player party raid group frames visibility",
+        keywords = { "show party frames while solo", "show raid frames while solo", "solo raid frames", "solo party frames", "always show party frames", "always show raid frames", "show player solo", "show self in party", "party frames when alone", "raid frames when alone" },
+        priority = 90,
+    },
+    {
+        label = "How do I hide myself from party or raid frames?",
+        answer = "Open Group Frames > Layout. The General and Sorting sections control player/self visibility and how player units are ordered in group frames.",
+        pageKey = "gf_layout",
+        target = "Opens: Group Frames > Layout > General",
+        anchorText = "General Show player Player first in role Sorting party raid self visibility",
+        keywords = { "hide myself from party", "hide player in party", "hide self in party frames", "show player in party frames", "player in raid frames", "self in party frames", "show player", "player first in role", "party contains me" },
+        priority = 75,
+    },
+    {
+        label = "How do I show only my HoTs or buffs on party frames?",
+        answer = "Open Group Frames > Buffs & Debuffs. Use Buffs, custom buffs, and aura filters to prioritize your own HoTs, externals, and healer buffs.",
+        pageKey = "gf_auras",
+        target = "Opens: Group Frames > Buffs & Debuffs > Buffs",
+        anchorText = "Buffs custom buffs own buffs only mine HoTs healer buffs externals group frames",
+        keywords = { "show only my buffs party", "only my hots", "only my HoTs", "track my hots", "track my heals", "show my rejuv", "show my renew", "show my shields", "show externals", "own buffs party", "own buffs raid", "healer hots", "druid hots", "priest hots" },
+        priority = 120,
+    },
+    {
+        label = "How do I make my own buffs or debuffs bigger?",
+        answer = "Open Unit Auras for unit-frame aura icon sizing and filters. For group frames, use Group Frames > Buffs & Debuffs and custom buff/debuff controls.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Caps & Icons",
+        anchorText = "Caps & Icons icon size own buffs own debuffs custom buffs custom debuffs group buffs debuffs",
+        keywords = { "make my buffs bigger", "make own buffs bigger", "make my debuffs bigger", "bigger own buffs", "bigger own debuffs", "my buffs bigger", "my debuffs bigger", "own aura size", "personal debuff size", "personal buff size" },
+        priority = 95,
+    },
+    {
+        label = "How do I move buff or debuff icons near a unit frame?",
+        answer = "Open Unit Auras and use Display plus Caps & Icons for unit-frame aura placement. Buff/debuff icons are configured as aura layout, not moved through MSUF Edit Mode.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Display",
+        anchorText = "Display Caps & Icons buffs debuffs position anchor rows spacing unit frame auras",
+        keywords = { "move buffs", "move debuffs", "move buff icons", "move debuff icons", "buff icons next to unit frame", "debuff icons next to unit frame", "buffs under portrait", "debuffs under portrait", "unlock buffs debuffs", "buff debuff anchor", "anchor debuffs to buffs", "buffs on top", "debuffs on top" },
+        priority = 110,
+    },
+    {
+        label = "How do I add a specific boss debuff or custom aura?",
+        answer = "Open Group Frames > Buffs & Debuffs for raid/party aura handling and Aura Utilities. Unit-frame aura filters are in Unit Auras.",
+        pageKey = "gf_auras",
+        target = "Opens: Group Frames > Buffs & Debuffs > Aura Utilities",
+        anchorText = "Aura Utilities custom buffs custom debuffs boss debuffs spell id private auras raid debuffs",
+        keywords = { "custom aura", "custom debuff", "custom buff", "boss debuff missing", "boss debuffs not showing", "raid debuff missing", "add boss debuff", "add spell id", "spell id", "spellid", "debuff stack count", "raid mechanic debuff", "healer custom auras" },
+        priority = 125,
+    },
+    {
+        label = "How do I show only dispellable debuffs?",
+        answer = "Open Unit Auras for unit-frame debuff filtering. For party/raid dispels, use Group Frames > Indicators and Group Frames > Buffs & Debuffs.",
+        pageKey = "gf_indicators",
+        target = "Opens: Group Frames > Indicators > Dispel / Status Icons",
+        anchorText = "Indicators dispel magic curse poison disease debuffs debuff type border group frames",
+        keywords = { "only dispellable debuffs", "dispellable debuffs", "dispel debuffs", "magic debuff", "curse debuff", "poison debuff", "disease debuff", "debuff type border", "debuff color border", "show dispels", "healer dispels" },
+        priority = 110,
+    },
+    {
+        label = "How do I move or resize target, focus, or boss castbars?",
+        answer = "Use MSUF Edit Mode to drag supported castbars. Per-unit castbar enable/icon/text options are on each unit page; shared castbar style is in Global Style > Castbar.",
+        pageKey = "home",
+        target = "Opens: Dashboard > MSUF Edit Mode",
+        anchorText = "MSUF Edit Mode move castbars target castbar focus castbar boss castbar player castbar resize",
+        keywords = { "move target castbar", "move focus castbar", "move boss castbar", "move enemy castbar", "resize target castbar", "resize focus castbar", "target cast bar position", "focus cast bar position", "boss cast bar position", "castbar edit mode", "drag castbar" },
+        priority = 115,
+    },
+    {
+        label = "How do I stop castbars covering party or raid frames?",
+        answer = "MSUF group frames do not use per-player castbars over the health frame. For MSUF castbar positioning, use MSUF Edit Mode and Global Style > Castbar.",
+        pageKey = "opt_castbar",
+        target = "Opens: Global Style > Castbar",
+        anchorText = "Castbar position edit mode group frames party raid castbars over health",
+        keywords = { "party castbar covering health", "raid castbar over frame", "castbar covers party frame", "castbar covers raid frame", "group castbar position", "party frame castbar", "raid frame castbar", "cast bars on raid frames" },
+        priority = 70,
+    },
+    {
+        label = "Why can I not unlock or drag buffs and debuffs?",
+        answer = "MSUF Edit Mode moves frames and supported castbars. Aura icon placement is controlled from Unit Auras or Group Frames > Buffs & Debuffs.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Display",
+        anchorText = "Display aura position buffs debuffs edit mode drag unlock frames",
+        keywords = { "can't unlock buffs", "can't unlock debuffs", "cannot move buffs", "cannot move debuffs", "unlock buff frames", "unlock debuff frames", "drag buffs debuffs", "buffs not movable", "debuffs not movable", "lock frames buffs", "unlock frames buffs" },
+        priority = 130,
+    },
+    {
+        label = "How do I make raid frames cleaner for healing?",
+        answer = "Use Group Frames > Layout for size and spacing, Buffs & Debuffs for aura clutter, and Indicators for fixed-position status icons.",
+        pageKey = "gf_layout",
+        target = "Opens: Group Frames > Layout / Buffs & Debuffs / Indicators",
+        anchorText = "Layout Buffs & Debuffs Indicators healer clean raid frames HoTs custom auras fixed positions",
+        keywords = { "clean raid frames", "healer raid frames", "minimal raid frames", "declutter raid frames", "fixed hots positions", "fixed aura positions", "healer hots indicators", "raid frame indicators", "too much information raid frames", "healing frames setup" },
+        priority = 100,
+    },
+    {
+        label = "How do I change dead, offline, AFK, or ready-check indicators?",
+        answer = "Open Group Frames > Indicators for status icons, role/leader/assist, ready check, focus glow, and other group-frame state indicators.",
+        pageKey = "gf_indicators",
+        target = "Opens: Group Frames > Indicators > Status Icons",
+        anchorText = "Status Icons ready check dead ghost offline afk dnd leader assist role icon",
+        keywords = { "dead icon", "offline icon", "afk icon", "dnd icon", "ghost icon", "ready check icon", "leader icon", "assist icon", "status icons", "group status icon", "raid status icon" },
+        priority = 85,
+    },
+    {
+        label = "How do I hide realm names or shorten player names?",
+        answer = "Open Global Style > Fonts > Name Shortening. It controls name shortening globally; unit text placement is on each unit page > Text.",
+        pageKey = "opt_fonts",
+        target = "Opens: Global Style > Fonts > Name Shortening",
+        anchorText = "Name Shortening realm names short names player names font text",
+        keywords = { "hide realm names", "remove realm names", "short names", "shorten player names", "names too long", "realm name showing", "server name showing", "name realm", "truncate names" },
+        priority = 90,
+    },
+    {
+        label = "How do I get class-colored health bars or names?",
+        answer = "Open Global Style > Colors for class bar colors and unitframe colors. Group health colors are in Group Frames > Health & Text.",
+        pageKey = "opt_colors",
+        target = "Opens: Global Style > Colors > Class Bar Colors",
+        anchorText = "Class Bar Colors Unitframe Colors Group Health Colors class colored names health bars",
+        keywords = { "class colored health", "class colored names", "class color names", "class color health bars", "green health bars", "health bar class color", "target class color", "player class color", "raid class colors" },
+        priority = 105,
+    },
+    {
+        label = "How do I change click-casting so aura icons do not block heals?",
+        answer = "Open Unit Auras > Display for click-through aura behavior, then use Gameplay for click-cast, mouseover, and targeting behavior.",
+        pageKey = "auras2",
+        target = "Opens: Unit Auras > Display",
+        anchorText = "Display click-through auras Gameplay click cast mouseover healing party frames",
+        keywords = { "auras block heals", "buffs block click casting", "debuffs block click cast", "can't heal through buffs", "mouseover heal blocked", "click cast blocked by aura", "heal mouseover auras", "party frame click through buffs" },
+        priority = 115,
+    },
+    {
+        label = "How do I open the MSUF options?",
+        answer = "Use /msuf to open MSUF2. The Dashboard also contains reset, support, profile, and scale tools.",
+        pageKey = "home",
+        target = "Opens: Dashboard",
+        anchorText = "Dashboard slash command msuf options menu support profiles reset",
+        keywords = { "how to open msuf", "open msuf", "open options", "open addon options", "slash command", "/msuf", "msuf menu", "where is options", "addon options", "config menu", "configuration menu", "settings menu" },
+        priority = 700,
+    },
+}
+
+local SEARCH_EASTER_EGGS = {
+    { name = "don lumen", result = "requested this feature" },
+    { name = "Niuki", result = "Is the best Warlock in Retreat" },
+    { name = "R41z0r", result = "He makes you better" },
+    { name = "Unhalted", result = "South Africa ftw" },
+    { name = "Hayato", result = "forgot to bind his heal spells" },
+}
+
+local function BuildSearchRecords()
+    local pageInfos, pageInfoByKey = BuildSearchPageInfos()
+
+    local records, seenRecords = {}, {}
+    for i = 1, #pageInfos do
+        local info = pageInfos[i]
+        local pageParts = {}
+        AddSearchText(pageParts, info.group)
+        AddSearchText(pageParts, info.title)
+        AddRawSearchText(pageParts, SEARCH_KEYWORDS[info.key])
+        AddSearchRecord(records, seenRecords, info, info.label or info.title or info.key, nil, "page", pageParts)
+    end
+
+    for _, entry in pairs(SEARCH_STATE.registry) do
+        local info = pageInfoByKey[entry.pageKey] or {
+            key = entry.pageKey,
+            label = entry.pageKey,
+            title = entry.pageKey,
+            group = "",
+        }
+        local extra = {}
+        AddValuesSearchText(extra, entry.values)
+        if type(entry.keywords) == "string" then
+            AddSearchText(extra, entry.keywords)
+        elseif type(entry.keywords) == "table" then
+            for i = 1, #entry.keywords do AddSearchText(extra, entry.keywords[i]) end
+        end
+        AddSearchText(extra, entry.help)
+        local rec = AddSearchRecord(records, seenRecords, info, entry.label, entry.anchor, entry.kind or "control", extra)
+        if rec then
+            rec.answer = entry.help
+        end
+    end
+
+    for i = 1, #SEARCH_FAQ do
+        local faq = SEARCH_FAQ[i]
+        local pageKey = faq.pageKey or "home"
+        local info = pageInfoByKey[pageKey] or { key = pageKey, label = "FAQ", title = "FAQ", group = "" }
+        local extra = { faq.answer, faq.target, faq.anchorText }
+        for k = 1, #(faq.keywords or {}) do extra[#extra + 1] = faq.keywords[k] end
+        local rec = AddSearchRecord(records, seenRecords, info, faq.label, nil, "faq", extra)
+        if rec then
+            rec.answer = faq.answer
+            rec.target = faq.target
+            rec.anchorFallback = faq.anchorText or faq.label
+            rec.priority = tonumber(faq.priority) or 0
+            rec.faq = true
+        end
+    end
+
+    for i = 1, #SEARCH_EASTER_EGGS do
+        local egg = SEARCH_EASTER_EGGS[i]
+        local info = { key = "search", label = "", title = "", group = "" }
+        local rec = AddSearchRecord(records, seenRecords, info, egg.name, nil, "easteregg", { egg.result, egg.name })
+        if rec then
+            rec.answer = egg.result
+            rec.noOpen = true
+            rec.priority = 1200
+            rec.easterEgg = true
+        end
+    end
+
+    return records
+end
+
+local SearchPages
+
+local function RefreshSearchResultsPage()
+    if M.activeKey ~= "search" then return end
+    local query = TrimText(M.searchQuery or "")
+    if query == "" or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then return end
+    M.searchResults = nil
+    M.searchResultsQuery = nil
+    M.searchResults = SearchPages(query)
+    M.searchResultsQuery = query
+    if M.InvalidatePage then M.InvalidatePage("search") end
+    if M.SelectPage then M.SelectPage("search") end
+end
+
+local function FinishSearchBackgroundIndex()
+    SEARCH_STATE.indexing = false
+    SEARCH_STATE.indexQueue = nil
+    local query = TrimText(M.searchQuery or "")
+    local shouldRefresh = M.activeKey == "search" and query ~= "" and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    if shouldRefresh and SEARCH_STATE.recordsDirty then
+        SEARCH_STATE.records = BuildSearchRecords()
+        SEARCH_STATE.recordsDirty = false
+    end
+    if shouldRefresh then RefreshSearchResultsPage() end
+end
+
+local function StartSearchBackgroundIndex()
+    if SEARCH_STATE.indexing then return end
+    if SearchCombatLocked() then return end
+    if not (_G.C_Timer and _G.C_Timer.After) then return end
+    if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
+    if not M.scrollChild then return end
+
+    local pageInfos = BuildSearchPageInfos()
+    local queue = {}
+    for i = 1, #pageInfos do
+        local info = pageInfos[i]
+        local cached = M.cache and M.cache[info.key]
+        if info.key ~= "search" and not (cached and cached.wrapper) then
+            queue[#queue + 1] = info.key
+        end
+    end
+    if #queue == 0 then return end
+
+    SEARCH_STATE.indexing = true
+    SEARCH_STATE.indexQueue = queue
+
+    local function Step()
+        if not SEARCH_STATE.indexing then return end
+        if SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then
+            CancelSearchBackgroundIndex()
+            return
+        end
+
+        local key = table.remove(SEARCH_STATE.indexQueue, 1)
+        if key then
+            if M.BuildPageEntry then M.BuildPageEntry(key, true) end
+            MarkSearchIndexDirty()
+        end
+
+        if SEARCH_STATE.indexQueue and #SEARCH_STATE.indexQueue > 0 then
+            _G.C_Timer.After(SEARCH_BACKGROUND_STEP_SEC, Step)
+        else
+            FinishSearchBackgroundIndex()
+        end
+    end
+
+    _G.C_Timer.After(0, Step)
+end
+
+local function GetSearchRecords()
+    if SEARCH_STATE.indexing and SEARCH_STATE.records then
+        return SEARCH_STATE.records
+    end
+    if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
+        SEARCH_STATE.records = BuildSearchRecords()
+        SEARCH_STATE.recordsDirty = false
+    end
+    StartSearchBackgroundIndex()
+    return SEARCH_STATE.records
+end
+
+local function CurateSearchResults(results, supportQuestion)
+    local topScore = results[1] and (tonumber(results[1].score) or 0) or 0
+    local floorScore = SEARCH_MIN_RESULT_SCORE
+    if topScore >= 600 then
+        floorScore = math.max(floorScore, topScore * (supportQuestion and 0.70 or 0.42))
+    elseif topScore >= 300 then
+        floorScore = math.max(floorScore, topScore * 0.30)
+    end
+
+    local curated = {}
+    for i = 1, #results do
+        local rec = results[i]
+        if rec and (tonumber(rec.score) or 0) >= floorScore then
+            curated[#curated + 1] = rec
+            if #curated >= SEARCH_MAX_RESULTS then break end
+        end
+    end
+    return curated
+end
+
+function SearchPages(query)
+    query = TrimText(query)
+    if SearchCombatLocked() then
+        CancelSearchBackgroundIndex()
+        return {}
+    end
+    local normalized, clauses = BuildSearchQueryClauses(query)
+    if #clauses == 0 then return {} end
+    if #normalized < MIN_SEARCH_QUERY_LEN then return {} end
+
+    local supportQuestion = SearchLooksLikeSupportQuestion(query)
+    local requiredMatches = #clauses
+    if supportQuestion and #clauses > 3 then
+        requiredMatches = math.max(2, math.ceil(#clauses * 0.55))
+    end
+    local results = {}
+    local records = GetSearchRecords()
+    for i = 1, #records do
+        local rec = records[i]
+        local score = 0
+        local matched = true
+        local matchedClauses = 0
+        local missedClauses = 0
+        for c = 1, #clauses do
+            local ok, clauseScore = SearchClauseScore(rec, clauses[c])
+            if not ok then
+                missedClauses = missedClauses + 1
+                if requiredMatches == #clauses or (#clauses - missedClauses) < requiredMatches then
+                    matched = false
+                    break
+                end
+            else
+                matchedClauses = matchedClauses + 1
+                score = score + clauseScore
+            end
+        end
+        if matched and matchedClauses >= requiredMatches then
+            if rec.labelNorm == normalized or rec.titleNorm == normalized then score = score + 260 end
+            if rec.labelNorm:sub(1, #normalized) == normalized then score = score + 130 end
+            if rec.haystack and rec.haystack:find(normalized, 1, true) then score = score + 80 end
+            if rec.kind == "section" then score = score + 70 end
+            if rec.kind == "faq" then score = score + 55 end
+            if supportQuestion then score = score + SearchSupportQuestionBoost(rec, clauses) end
+            if missedClauses > 0 then score = score - (missedClauses * 60) end
+            if rec.kind ~= "page" then score = score + 45 end
+            if rec.kind == "slider" or rec.kind == "dropdown" or rec.kind == "toggle" then score = score + 25 end
+            if rec.priority then score = score + rec.priority end
+            rec.score = score
+            results[#results + 1] = rec
+        end
+    end
+    table.sort(results, function(a, b)
+        if a.score ~= b.score then return a.score > b.score end
+        if (a.hint or "") ~= (b.hint or "") then return tostring(a.hint or "") < tostring(b.hint or "") end
+        if (a.order or 0) ~= (b.order or 0) then return (a.order or 0) < (b.order or 0) end
+        return tostring(a.label) < tostring(b.label)
+    end)
+    return CurateSearchResults(results, supportQuestion)
+end
+
+local function SearchQueryReady(query)
+    return #NormalizeSearchText(query or "") >= MIN_SEARCH_QUERY_LEN
+end
+
+local function ShowSearchPageForQuery(query)
+    query = TrimText(query)
+    if query ~= "" and M.activeKey ~= "search" then
+        M.searchReturnKey = M.activeKey or M.searchReturnKey or "home"
+    end
+    M.InvalidatePage("search")
+    if query ~= "" then
+        M.SelectPage("search")
+    elseif M.activeKey == "search" then
+        M.SelectPage(M.searchReturnKey or "home")
+    end
+end
+
+local function RunSearchInputQuery(query, openPage)
+    query = TrimText(query)
+    M.searchQuery = query
+    M.searchResultsPending = nil
+
+    if query == "" then
+        M.searchResults = {}
+        M.searchResultsQuery = ""
+        if openPage then ShowSearchPageForQuery(query) end
+        return
+    end
+
+    if SearchCombatLocked() then
+        CancelSearchBackgroundIndex()
+        M.searchResults = {}
+        M.searchResultsQuery = query
+        if openPage and M.activeKey ~= "search" then ShowSearchPageForQuery(query) end
+        return
+    end
+
+    if not SearchQueryReady(query) then
+        M.searchResults = {}
+        M.searchResultsQuery = query
+        if openPage then ShowSearchPageForQuery(query) end
+        return
+    end
+
+    M.searchResults = SearchPages(query)
+    M.searchResultsQuery = query
+    if openPage then ShowSearchPageForQuery(query) end
+end
+
+local function ScheduleSearchInputQuery(searchBox, query)
+    query = TrimText(query)
+    SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
+    local serial = SEARCH_STATE.inputSerial
+
+    M.searchQuery = query
+
+    if query == "" or SearchCombatLocked() or not SearchQueryReady(query) then
+        RunSearchInputQuery(query, true)
+        return
+    end
+
+    M.searchResultsPending = true
+    M.searchResultsQuery = query
+    if M.activeKey ~= "search" then
+        M.searchResults = {}
+        ShowSearchPageForQuery(query)
+    end
+
+    local function RunLatest()
+        if serial ~= SEARCH_STATE.inputSerial then return end
+        if searchBox and searchBox.GetText then
+            local latest = TrimText(searchBox:GetText() or "")
+            if latest ~= query then return end
+        end
+        RunSearchInputQuery(query, true)
+    end
+
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, RunLatest)
+    else
+        RunLatest()
+    end
+end
+
+local function OpenSearchResults(query)
+    SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
+    RunSearchInputQuery(query, true)
+end
+
+local function ScoreAnchorText(text, query, fallback)
+    local normalized = NormalizeSearchText(text)
+    if normalized == "" then return 0 end
+    local queryNorm, clauses = BuildSearchQueryClauses(query)
+    if #clauses == 0 and fallback then queryNorm, clauses = BuildSearchQueryClauses(fallback) end
+    if #clauses == 0 then return 0 end
+
+    local score, matched = 0, 0
+    if queryNorm ~= "" then
+        if normalized == queryNorm then score = score + 900 end
+        if normalized:find(queryNorm, 1, true) then score = score + 260 end
+    end
+    local tokens = BuildSearchTokenList(normalized)
+    for i = 1, #clauses do
+        local clause = clauses[i]
+        local best = 0
+        for k = 1, #clause.terms do
+            local term = clause.terms[k]
+            if normalized == term then
+                best = math.max(best, 220)
+            elseif normalized:sub(1, #term) == term then
+                best = math.max(best, 130)
+            elseif normalized:find(term, 1, true) then
+                best = math.max(best, 70)
+            elseif #term >= 5 and not term:find(" ", 1, true) then
+                local maxDistance = (#term >= 8) and 2 or 1
+                for t = 1, #tokens do
+                    if math.abs(#tokens[t] - #term) <= maxDistance and SearchEditDistanceWithin(tokens[t], term, maxDistance) then
+                        best = math.max(best, 24)
+                        break
+                    end
+                end
+            end
+        end
+        if best > 0 then
+            score = score + best
+            matched = matched + 1
+        end
+    end
+    if matched == 0 then return 0 end
+    if matched == #clauses then score = score + 180 else score = score - ((#clauses - matched) * 35) end
+    if #normalized <= 42 then score = score + 30 end
+    if #normalized > 120 then score = score - 40 end
+    return score
+end
+
+local function CollectSearchAnchorCandidates(frame, out, depth)
+    if not frame or depth > 16 then return end
+    if frame.GetRegions then
+        local regions = { frame:GetRegions() }
+        for i = 1, #regions do
+            local region = regions[i]
+            if region and region.GetObjectType and region:GetObjectType() == "FontString" and region.GetText then
+                local text = region:GetText()
+                if text and text ~= "" then
+                    out[#out + 1] = { region = region, text = text }
+                end
+            end
+        end
+    end
+    if frame.GetChildren then
+        local children = { frame:GetChildren() }
+        for i = 1, #children do
+            CollectSearchAnchorCandidates(children[i], out, depth + 1)
+        end
+    end
+end
+
+local function FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
+    local entry = M.cache and M.cache[pageKey]
+    local wrapper = entry and entry.wrapper
+    if not wrapper then return nil end
+    if preferredAnchor and preferredAnchor.GetTop then return preferredAnchor end
+
+    local candidates = {}
+    CollectSearchAnchorCandidates(wrapper, candidates, 1)
+
+    local best, bestScore
+    for i = 1, #candidates do
+        local candidate = candidates[i]
+        local score = ScoreAnchorText(candidate.text, query, fallback)
+        if score > 0 and (not bestScore or score > bestScore) then
+            best, bestScore = candidate, score
+        end
+    end
+    return best and best.region or nil
+end
+
+local function OpenAnchorCollapsibles(region)
+    local entries, seen = {}, {}
+    local parent = region and region.GetParent and region:GetParent()
+    while parent do
+        local entry = parent._msuf2CollapsibleEntry
+        if entry and not seen[entry] then
+            seen[entry] = true
+            entries[#entries + 1] = entry
+        end
+        parent = parent.GetParent and parent:GetParent() or nil
+    end
+
+    local opened = false
+    for i = #entries, 1, -1 do
+        local entry = entries[i]
+        if entry and not entry.open and entry.header and entry.header.Click then
+            entry.header:Click()
+            opened = true
+        end
+    end
+    return opened
+end
+
+local function ClampScrollOffset(offset)
+    offset = math.max(0, tonumber(offset) or 0)
+    local childH = (M.scrollChild and M.scrollChild.GetHeight and M.scrollChild:GetHeight()) or ContentHeight()
+    local frameH = (M.scrollFrame and M.scrollFrame.GetHeight and M.scrollFrame:GetHeight()) or ContentHeight()
+    local maxScroll = math.max(0, childH - frameH)
+    if offset > maxScroll then offset = maxScroll end
+    return offset
+end
+
+local function SearchAnchorOffset(wrapper, region)
+    if not (wrapper and region and wrapper.GetTop and region.GetTop) then return nil end
+    local wrapperTop = wrapper:GetTop()
+    local regionTop = region:GetTop()
+    if not (wrapperTop and regionTop) then return nil end
+    return ClampScrollOffset((wrapperTop - regionTop) - 42)
+end
+
+local function HighlightSearchAnchor(wrapper, region)
+    if not (wrapper and region and wrapper.GetTop and region.GetTop) then return end
+    local wrapperTop = wrapper:GetTop()
+    local regionTop = region:GetTop()
+    if not (wrapperTop and regionTop) then return end
+
+    local offset = math.max(0, wrapperTop - regionTop)
+    local highlight = wrapper._msuf2SearchHighlight
+    if not highlight then
+        highlight = CreateFrame("Frame", nil, wrapper)
+        highlight:SetFrameLevel((wrapper.GetFrameLevel and wrapper:GetFrameLevel() or 1) + 40)
+        local fill = highlight:CreateTexture(nil, "BACKGROUND")
+        fill:SetAllPoints()
+        fill:SetColorTexture(0.20, 0.58, 1.00, 0.16)
+        local top = highlight:CreateTexture(nil, "ARTWORK")
+        top:SetHeight(1)
+        top:SetPoint("TOPLEFT")
+        top:SetPoint("TOPRIGHT")
+        top:SetColorTexture(0.38, 0.78, 1.00, 0.65)
+        local bottom = highlight:CreateTexture(nil, "ARTWORK")
+        bottom:SetHeight(1)
+        bottom:SetPoint("BOTTOMLEFT")
+        bottom:SetPoint("BOTTOMRIGHT")
+        bottom:SetColorTexture(0.38, 0.78, 1.00, 0.45)
+        highlight._msuf2Anim = highlight:CreateAnimationGroup()
+        local fade = highlight._msuf2Anim:CreateAnimation("Alpha")
+        fade:SetFromAlpha(1)
+        fade:SetToAlpha(0)
+        fade:SetStartDelay(0.75)
+        fade:SetDuration(0.75)
+        highlight._msuf2Anim:SetScript("OnFinished", function()
+            if highlight then highlight:Hide() end
+        end)
+        wrapper._msuf2SearchHighlight = highlight
+    end
+    if highlight._msuf2Anim and highlight._msuf2Anim.Stop then highlight._msuf2Anim:Stop() end
+    highlight:ClearAllPoints()
+    highlight:SetPoint("TOPLEFT", wrapper, "TOPLEFT", 8, -math.max(0, offset - 9))
+    highlight:SetSize(math.max(220, (wrapper.GetWidth and wrapper:GetWidth() or ContentWidth()) - 28), 32)
+    highlight:SetAlpha(1)
+    highlight:Show()
+    if highlight._msuf2Anim and highlight._msuf2Anim.Play then highlight._msuf2Anim:Play() end
+end
+
+local function RunSoon(fn)
+    if SearchCombatLocked() then
+        fn()
+        return
+    end
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, fn)
+    else
+        fn()
+    end
+end
+
+local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor)
+    if M.activeKey ~= pageKey then return end
+    local entry = M.cache and M.cache[pageKey]
+    local wrapper = entry and entry.wrapper
+    if not wrapper then return end
+
+    local region = FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
+    if not region then return end
+    local opened = OpenAnchorCollapsibles(region)
+    local function finish()
+        local offset = SearchAnchorOffset(wrapper, region)
+        if offset and M.scrollFrame and M.scrollFrame.SetVerticalScroll then
+            M.scrollFrame:SetVerticalScroll(offset)
+        end
+        HighlightSearchAnchor(wrapper, region)
+    end
+    if opened then RunSoon(finish) else finish() end
+end
+
+local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor)
+    if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
+    M.SelectPage(pageKey)
+    RunSoon(function() ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor) end)
+end
+
+local function BuildSearchPage(ctx)
+    local root = ctx.wrapper
+    local width = ctx.width
+    local query = TrimText(M.searchQuery or "")
+    local combatLocked = SearchCombatLocked() and true or false
+    local queryReady = not combatLocked and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    local results = M.searchResults or {}
+    if M.searchResultsQuery ~= query and not M.searchResultsPending then
+        results = combatLocked and {} or SearchPages(query)
+        M.searchResults = results
+        M.searchResultsQuery = query
+    end
+
+    local b = W.PageBuilder(ctx)
+    b:Header("Search", query ~= "" and M.Format("Results for \"%s\"", query) or "Type in the search box on the left.", 78)
+
+    local maxVisible = SEARCH_VISIBLE_RESULTS
+    local visible = math.min(#results, maxVisible)
+    local hasExpandedResult = false
+    for i = 1, visible do
+        if results[i] and (results[i].kind == "faq" or results[i].kind == "easteregg") then
+            hasExpandedResult = true
+            break
+        end
+    end
+    local columns = (hasExpandedResult and 1) or (width >= 760 and 2 or 1)
+    local gap = 12
+    local colW = math.floor((width - 24 - gap * (columns - 1)) / columns)
+    local rowH = hasExpandedResult and 62 or 30
+    local resultTopY = SEARCH_STATE.indexing and -88 or -70
+    local rows = math.max(3, math.ceil(math.max(visible, 1) / columns))
+    local sectionH = math.max(160, 74 + rows * rowH + (SEARCH_STATE.indexing and 18 or 0))
+    local sec = b:Section("Search Results", sectionH)
+
+    if combatLocked then
+        W.Text(sec, "Search is paused in combat.", 14, -44, width - 28, T.colors.muted)
+        W.Text(sec, "MSUF2 does not build or refresh the search index during combat.", 14, -70, width - 28, T.colors.dim)
+    elseif query == "" then
+        W.Text(sec, "Start typing to search every MSUF2 menu page.", 14, -44, width - 28, T.colors.muted)
+    elseif not queryReady then
+        W.Text(sec, M.Format("Type at least %d characters to search.", MIN_SEARCH_QUERY_LEN), 14, -44, width - 28, T.colors.muted)
+    elseif M.searchResultsPending then
+        W.Text(sec, M.Format("Searching for \"%s\"...", query), 14, -44, width - 28, T.colors.muted)
+        W.Text(sec, "Results update after you stop typing for a moment.", 14, -70, width - 28, T.colors.dim)
+    elseif #results == 0 then
+        W.Text(sec, M.Format("No results for \"%s\".", query), 14, -44, width - 28, T.colors.muted)
+        W.Text(sec, SEARCH_STATE.indexing and "Still indexing menu pages..." or "Try a page name like bars, profiles, auras, castbar, colors, group, or target.", 14, -70, width - 28, T.colors.dim)
+    else
+        W.Text(sec, M.Format("Best %d match(es). Press Enter to open the first match.", visible), 14, -44, width - 28, T.colors.muted)
+        if SEARCH_STATE.indexing then
+            W.Text(sec, "Indexing more menu pages in the background.", 14, -62, width - 28, T.colors.dim)
+        end
+        for i = 1, visible do
+            local rec = results[i]
+            local col = (i - 1) % columns
+            local row = math.floor((i - 1) / columns)
+            local x = 14 + col * (colW + gap)
+            local y = resultTopY - row * rowH
+            local kind = CONTROL_KIND_LABEL[rec.kind or ""] or (rec.kind == "page" and "Page") or nil
+            local prefix = rec.hint ~= "" and rec.hint or rec.group
+            local text = prefix ~= "" and (ShortLabel(prefix, 42) .. " > " .. ShortLabel(rec.label, 38)) or rec.label
+            if kind and rec.kind ~= "text" then text = text .. " [" .. kind .. "]" end
+            local btn = T.Button(sec, text, colW, 22)
+            btn:SetPoint("TOPLEFT", sec, "TOPLEFT", x, y)
+            local pageKey = rec.key
+            local fallback = rec.anchorFallback or rec.label or rec.title
+            local anchor = rec.anchor
+            local noOpen = rec.noOpen
+            btn:SetScript("OnClick", function()
+                if noOpen then
+                    if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
+                    return
+                end
+                OpenSearchTarget(pageKey, query, fallback, anchor)
+            end)
+            if (rec.kind == "faq" or rec.kind == "easteregg") and rec.answer then
+                W.Text(sec, ShortLabel(rec.answer, 132), x + 8, y - 24, colW - 16, T.colors.dim)
+                if rec.target and rec.target ~= "" then
+                    W.Text(sec, ShortLabel(rec.target, 112), x + 8, y - 42, colW - 16, T.colors.muted)
+                end
+            end
+        end
+        if #results > maxVisible then
+            W.Text(sec, M.Format("Showing the best %d matches. Add one more word to narrow it further.", maxVisible), 14, resultTopY - rows * rowH, width - 28, T.colors.dim)
+        end
+    end
+
+    local quick = b:Section("Support Search Examples", 150)
+    local shortcuts = {
+        { "Move Frames", "where do I move my unitframe" },
+        { "Background", "change my backgrond" },
+        { "Raid Frames", "move raid frames" },
+        { "Text Size", "make text bigger" },
+        { "Profiles", "import profile wago" },
+        { "Castbar", "evoker castbar" },
+        { "Buffs", "show only my buffs" },
+        { "Blizzard", "hide blizzard frames" },
+        { "Range Check", "unit frame range check" },
+        { "Level Text", "where is level text anchor" },
+        { "Performance", "why is msuf lagging" },
+        { "Minimap", "where is the minimap icon setting" },
+    }
+    local buttonW = math.floor((width - 56) / 3)
+    for i = 1, #shortcuts do
+        local col = (i - 1) % 3
+        local row = math.floor((i - 1) / 3)
+        local searchQuery = shortcuts[i][2]
+        local btn = T.Button(quick, shortcuts[i][1], buttonW, 22)
+        btn:SetPoint("TOPLEFT", quick, "TOPLEFT", 14 + col * (buttonW + 14), -38 - row * 28)
+        btn:SetScript("OnClick", function()
+            if M.nav and M.nav.searchBox then
+                M.nav.searchBox._msuf2SearchInternal = true
+                M.nav.searchBox:SetText(searchQuery)
+                M.nav.searchBox._msuf2SearchInternal = nil
+                M.nav.searchBox:ClearFocus()
+            end
+            OpenSearchResults(searchQuery)
+        end)
+    end
+
+    ctx:SetContentHeight(math.max(ContentHeight(), math.abs(b.y) + 42))
+end
+
+
+Search.SearchPlaceholderText = SearchPlaceholderText
+Search.SearchBoxHasText = SearchBoxHasText
+Search.RefreshSearchPlaceholder = RefreshSearchPlaceholder
+Search.UpdateSearchPlaceholder = UpdateSearchPlaceholder
+Search.MarkIndexDirty = MarkSearchIndexDirty
+Search.CancelBackgroundIndex = CancelSearchBackgroundIndex
+Search.ClearRegistryPage = ClearSearchRegistryPage
+Search.BumpInputSerial = function()
+    SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
+end
+Search.RefreshResultsPage = RefreshSearchResultsPage
+Search.ScheduleInputQuery = ScheduleSearchInputQuery
+Search.RunInputQuery = RunSearchInputQuery
+Search.OpenResults = OpenSearchResults
+Search.OpenTarget = OpenSearchTarget
+Search.SearchPages = SearchPages
+Search.TrimText = TrimText
+Search.ShortLabel = ShortLabel
+
+M.RegisterPage("search", { title = "Search", build = BuildSearchPage, version = 1 })
+
