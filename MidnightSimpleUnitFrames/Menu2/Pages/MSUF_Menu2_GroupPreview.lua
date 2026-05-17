@@ -233,6 +233,9 @@ local function PreviewHealthColor(conf, pct, classToken)
 end
 
 local WHITE8X8 = "Interface\\Buttons\\WHITE8X8"
+local GF_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
+local GF_PREVIEW_ROUNDED_MASK = GF_PREVIEW_MASK_ROOT .. "rounded_bar_4x.tga"
+local GF_PREVIEW_ROUNDED_EDGE = GF_PREVIEW_MASK_ROOT .. "rounded_bar_edge_4x.tga"
 local GF_PREVIEW_MIN_W = 380
 local GF_PREVIEW_MIN_H = 130
 local GF_PREVIEW_ROLE = "HEALER"
@@ -371,6 +374,207 @@ local function GFPreviewScaleValue(value, scale, minValue)
     local v = GFPreviewRound((tonumber(value) or 0) * (tonumber(scale) or 1))
     if minValue ~= nil and v < minValue then v = minValue end
     return v
+end
+
+local function GFPreviewReadBarsBool(key, default)
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local value = bars and bars[key]
+    if value == nil then return default and true or false end
+    return value and true or false
+end
+
+local function GFPreviewRoundedEnabled()
+    return GFPreviewReadBarsBool("roundedFramesEnabled", false)
+        and GFPreviewReadBarsBool("roundedGroupFrames", true)
+end
+
+local function GFPreviewRoundedPowerEnabled()
+    return GFPreviewReadBarsBool("roundedFramesEnabled", false)
+        and GFPreviewReadBarsBool("roundedPowerBars", true)
+end
+
+local function GFPreviewSnapOff(region)
+    if region and region.SetSnapToPixelGrid then
+        region:SetSnapToPixelGrid(false)
+        if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
+    end
+end
+
+local function GFPreviewMaskOwner(mock, tex, anchor)
+    local owner = tex and tex.GetParent and tex:GetParent() or nil
+    if owner and owner.CreateMaskTexture then return owner end
+    if anchor and anchor.CreateMaskTexture then return anchor end
+    return mock
+end
+
+local function GFPreviewEnsureRoundedMask(mock, key, anchor, tex)
+    if not (mock and anchor) then return nil end
+    local owner = GFPreviewMaskOwner(mock, tex, anchor)
+    if not (owner and owner.CreateMaskTexture) then return nil end
+    mock._msufGFRoundedPreviewMasks = mock._msufGFRoundedPreviewMasks or {}
+    local bucket = mock._msufGFRoundedPreviewMasks[key]
+    if type(bucket) ~= "table" or bucket.SetTexture then
+        bucket = {}
+        mock._msufGFRoundedPreviewMasks[key] = bucket
+    end
+    local ownerKey = tex or owner
+    local mask = bucket[ownerKey]
+    if not mask then
+        mask = owner:CreateMaskTexture(nil, "ARTWORK")
+        GFPreviewSnapOff(mask)
+        bucket[ownerKey] = mask
+    end
+    mask:ClearAllPoints()
+    mask:SetTexture(GF_PREVIEW_ROUNDED_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:SetAllPoints(anchor)
+    return mask
+end
+
+local function GFPreviewSetMask(mock, tex, mask)
+    if not (mock and tex and tex.AddMaskTexture) then return end
+    mock._msufGFRoundedPreviewMasked = mock._msufGFRoundedPreviewMasked or {}
+    local old = mock._msufGFRoundedPreviewMasked[tex]
+    if old == mask then return end
+    if old and tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, old) end
+    mock._msufGFRoundedPreviewMasked[tex] = nil
+    if mask then
+        local ok = pcall(tex.AddMaskTexture, tex, mask)
+        if ok then mock._msufGFRoundedPreviewMasked[tex] = mask end
+    end
+end
+
+local function GFPreviewClearRoundedMasks(mock)
+    local masked = mock and mock._msufGFRoundedPreviewMasked
+    if masked then
+        for tex, mask in pairs(masked) do
+            if tex and tex.RemoveMaskTexture and mask then pcall(tex.RemoveMaskTexture, tex, mask) end
+        end
+    end
+    if mock then mock._msufGFRoundedPreviewMasked = nil end
+end
+
+local function GFPreviewStatusBarTexture(bar)
+    return bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+end
+
+local function GFPreviewBaseEdgeColor()
+    return 0, 0, 0, 1
+end
+
+local function GFPreviewEnsureRoundedVisuals(mock)
+    if not (mock and mock.CreateTexture) then return false end
+    if not mock._roundedBg then
+        mock._roundedBg = mock:CreateTexture(nil, "BACKGROUND", nil, -7)
+        mock._roundedBg:SetTexture(WHITE8X8)
+        GFPreviewSnapOff(mock._roundedBg)
+    end
+    if not mock._roundedEdge then
+        mock._roundedEdge = mock:CreateTexture(nil, "OVERLAY", nil, 6)
+        GFPreviewSnapOff(mock._roundedEdge)
+    end
+    mock._roundedEdge:SetTexture(GF_PREVIEW_ROUNDED_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    return true
+end
+
+local function GFPreviewSetRoundedEdgeStackShown(mock, shown)
+    local count = shown and GFPreviewRound(mock and mock._msufGFRoundedPreviewEdgeCount or 1) or 0
+    if count < 0 then count = 0 elseif count > 8 then count = 8 end
+    if mock and mock._roundedEdge then
+        if count >= 1 then mock._roundedEdge:Show() else mock._roundedEdge:Hide() end
+    end
+    local stack = mock and mock._msufGFRoundedPreviewEdgeStack
+    if type(stack) ~= "table" then return end
+    for i = 2, #stack do
+        local edge = stack[i]
+        if edge then
+            if i <= count then edge:Show() else edge:Hide() end
+        end
+    end
+end
+
+local function GFPreviewApplyRoundedEdgeStack(mock, edgeSize)
+    local count = GFPreviewRound(edgeSize)
+    if count < 0 then count = 0 elseif count > 8 then count = 8 end
+    mock._msufGFRoundedPreviewEdgeCount = count
+    if count <= 0 then
+        GFPreviewSetRoundedEdgeStackShown(mock, false)
+        return false
+    end
+
+    mock._msufGFRoundedPreviewEdgeStack = mock._msufGFRoundedPreviewEdgeStack or {}
+    mock._msufGFRoundedPreviewEdgeStack[1] = mock._roundedEdge
+    local r, g, b, a = GFPreviewBaseEdgeColor()
+    for i = 1, count do
+        local edge = (i == 1) and mock._roundedEdge or mock._msufGFRoundedPreviewEdgeStack[i]
+        if not edge then
+            edge = mock:CreateTexture(nil, "OVERLAY", nil, 6)
+            GFPreviewSnapOff(edge)
+            mock._msufGFRoundedPreviewEdgeStack[i] = edge
+        end
+        edge:SetTexture(GF_PREVIEW_ROUNDED_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        edge:ClearAllPoints()
+        edge:SetPoint("TOPLEFT", mock, "TOPLEFT", -i, i)
+        edge:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", i, -i)
+        edge:SetVertexColor(r, g, b, a)
+        edge:Show()
+    end
+    GFPreviewSetRoundedEdgeStackShown(mock, true)
+    return true
+end
+
+local function GFPreviewApplyRounded(mock, conf, powerOn, edgeSize)
+    if not mock then return false end
+    if not GFPreviewRoundedEnabled() or not GFPreviewEnsureRoundedVisuals(mock) then
+        mock._msufGFRoundedPreviewActive = nil
+        GFPreviewClearRoundedMasks(mock)
+        if mock._roundedBg then mock._roundedBg:Hide() end
+        GFPreviewSetRoundedEdgeStackShown(mock, false)
+        return false
+    end
+
+    mock._msufGFRoundedPreviewActive = true
+    local healthTex = GFPreviewStatusBarTexture(mock._health)
+    local healPredTex = GFPreviewStatusBarTexture(mock._healPred)
+    local absorbTex = GFPreviewStatusBarTexture(mock._absorb)
+    local powerTex = GFPreviewStatusBarTexture(mock._power)
+    local bodyMask = GFPreviewEnsureRoundedMask(mock, "body", mock, mock._roundedBg)
+    local healthBgMask = GFPreviewEnsureRoundedMask(mock, "health", mock._health, mock._healthBg)
+    local healthTexMask = GFPreviewEnsureRoundedMask(mock, "health", mock._health, healthTex)
+    local healPredMask = GFPreviewEnsureRoundedMask(mock, "healPred", mock._healPred, healPredTex)
+    local absorbMask = GFPreviewEnsureRoundedMask(mock, "absorb", mock._absorb, absorbTex)
+    local powerBgMask = (powerOn and GFPreviewRoundedPowerEnabled()) and GFPreviewEnsureRoundedMask(mock, "power", mock._power, mock._powerBg) or nil
+    local powerTexMask = (powerOn and GFPreviewRoundedPowerEnabled()) and GFPreviewEnsureRoundedMask(mock, "power", mock._power, powerTex) or nil
+    if not (bodyMask and healthBgMask and healthTexMask) then
+        mock._msufGFRoundedPreviewActive = nil
+        GFPreviewClearRoundedMasks(mock)
+        if mock._roundedBg then mock._roundedBg:Hide() end
+        GFPreviewSetRoundedEdgeStackShown(mock, false)
+        return false
+    end
+
+    GFPreviewSetMask(mock, mock._roundedBg, bodyMask)
+    GFPreviewSetMask(mock, mock._healthBg, healthBgMask)
+    GFPreviewSetMask(mock, healthTex, healthTexMask)
+    GFPreviewSetMask(mock, healPredTex, healPredMask)
+    GFPreviewSetMask(mock, absorbTex, absorbMask)
+    GFPreviewSetMask(mock, mock._powerBg, powerBgMask)
+    GFPreviewSetMask(mock, powerTex, powerTexMask)
+
+    mock._roundedBg:ClearAllPoints()
+    mock._roundedBg:SetAllPoints(mock)
+    mock._roundedBg:SetColorTexture(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, conf.bgA or 0.88)
+    mock._roundedBg:Show()
+
+    edgeSize = GFPreviewRound(edgeSize)
+    if edgeSize > 0 then
+        GFPreviewApplyRoundedEdgeStack(mock, edgeSize)
+    else
+        GFPreviewSetRoundedEdgeStackShown(mock, false)
+    end
+
+    if mock.SetBackdropColor then mock:SetBackdropColor(0, 0, 0, 0) end
+    if mock.SetBackdropBorderColor then mock:SetBackdropBorderColor(0, 0, 0, 0) end
+    return true
 end
 
 local function GFPreviewConfigToOffset(value, scale)
@@ -1390,6 +1594,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         else
             mock._power:Hide()
         end
+
+        GFPreviewApplyRounded(mock, conf, powerH > 0, inset)
 
         local textBaseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or 1
         if mock._nameTextLayer then

@@ -52,294 +52,6 @@ local max = math.max
 local min = math.min
 local IsEditModeActive
 
-local DASH_WHITE8 = "Interface\\Buttons\\WHITE8X8"
-local DASH_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-local DASH_ROUNDED_MASK = DASH_MASK_ROOT .. "rounded_bar_4x.tga"
-local DASH_ROUNDED_EDGE = DASH_MASK_ROOT .. "rounded_bar_edge_4x.tga"
-
-local function DashClamp01(v, fallback)
-    v = tonumber(v)
-    if v == nil then return fallback or 0 end
-    if v < 0 then return 0 end
-    if v > 1 then return 1 end
-    return v
-end
-
-local function DashBarsBool(key, default)
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-    local value = bars and bars[key]
-    if value == nil then return default and true or false end
-    return value and true or false
-end
-
-local function DashRoundedUnitPreviewEnabled()
-    return DashBarsBool("roundedFramesEnabled", false)
-        and DashBarsBool("roundedUnitFrames", true)
-end
-
-local function DashRoundedPowerPreviewEnabled()
-    return DashBarsBool("roundedFramesEnabled", false)
-        and DashBarsBool("roundedPowerBars", true)
-end
-
-local function DashSettingsCache()
-    return type(_G.MSUF_UFCore_GetSettingsCache) == "function" and _G.MSUF_UFCore_GetSettingsCache() or nil
-end
-
-local function DashClassColor(classToken)
-    if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
-        local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(classToken)
-        if r then return r, g, b end
-    end
-    local c = classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
-    if c then return c.r, c.g, c.b end
-    return 0.12, 0.62, 0.95
-end
-
-local function DashGradientColor(pct)
-    pct = DashClamp01(pct, 1)
-    if pct < 0.5 then return 1, pct * 2, 0 end
-    local t = (pct - 0.5) * 2
-    return 1 - t, 1, 0
-end
-
-local function DashHealthColor(classToken, pct)
-    local db = _G.MSUF_DB
-    local general = db and db.general or {}
-    local cache = DashSettingsCache()
-    local mode = (cache and cache.barMode) or general.barMode or "dark"
-    if mode == "gradient" then
-        local enabled = cache and cache.healthGradientEnabled
-        if enabled == nil then enabled = general.enableHealthGradient ~= false end
-        if not enabled then mode = "class" end
-    end
-    if mode == "class" then return DashClassColor(classToken) end
-    if mode == "gradient" then return DashGradientColor(pct) end
-    if mode == "unified" then
-        return (cache and cache.unifiedBarR) or general.unifiedBarR or 0.10,
-            (cache and cache.unifiedBarG) or general.unifiedBarG or 0.60,
-            (cache and cache.unifiedBarB) or general.unifiedBarB or 0.90
-    end
-    return (cache and cache.darkBarR) or general.darkBarR or general.darkBarGray or 0.07,
-        (cache and cache.darkBarG) or general.darkBarG or general.darkBarGray or 0.07,
-        (cache and cache.darkBarB) or general.darkBarB or general.darkBarGray or 0.07
-end
-
-local function DashHealthBackgroundColor(hr, hg, hb, classToken)
-    local cache = DashSettingsCache()
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    local r, g, b, a
-    if cache then
-        r, g, b, a = cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA
-    elseif type(_G.MSUF_GetBarBackgroundTintRGBA) == "function" then
-        r, g, b, a = _G.MSUF_GetBarBackgroundTintRGBA()
-    end
-    r, g, b, a = DashClamp01(r, 0), DashClamp01(g, 0), DashClamp01(b, 0), DashClamp01(a, 0.90)
-    if (cache and cache.barBgClassColor) or ((not cache) and general and general.barBgClassColor) then
-        r, g, b = DashClassColor(classToken)
-    elseif (cache and cache.barBgMatchHPColor) or ((not cache) and general and general.barBgMatchHPColor) then
-        local br = DashClamp01((cache and cache.darkBgBrightness) or (general and general.darkBgBrightness), 1)
-        r, g, b = DashClamp01(hr * br, 0), DashClamp01(hg * br, 0), DashClamp01(hb * br, 0)
-    end
-    a = a * DashClamp01(cache and cache.barBackgroundAlpha, 0.90)
-    return r, g, b, a
-end
-
-local function DashPowerColor(powerType, powerToken)
-    if type(_G.MSUF_GetResolvedPowerColor) == "function" then
-        local r, g, b = _G.MSUF_GetResolvedPowerColor(powerType or 0, powerToken or "MANA")
-        if r then return r, g, b end
-    end
-    if type(_G.MSUF_GetPowerBarColor) == "function" then
-        local r, g, b = _G.MSUF_GetPowerBarColor(powerType, powerToken)
-        if r then return r, g, b end
-    end
-    local pbc = _G.PowerBarColor and (_G.PowerBarColor[powerToken] or _G.PowerBarColor[powerType])
-    if pbc then return pbc.r or pbc[1] or 0.10, pbc.g or pbc[2] or 0.35, pbc.b or pbc[3] or 0.95 end
-    return 0.10, 0.35, 0.95
-end
-
-local function DashPowerBackgroundColor(pr, pg, pb, hr, hg, hb)
-    local cache = DashSettingsCache()
-    local r, g, b, a
-    if cache then
-        r, g, b, a = cache.powerBgTintR, cache.powerBgTintG, cache.powerBgTintB, cache.powerBgTintA
-    elseif type(_G.MSUF_GetPowerBarBackgroundTintRGBA) == "function" then
-        r, g, b, a = _G.MSUF_GetPowerBarBackgroundTintRGBA()
-    end
-    r, g, b, a = DashClamp01(r, pr * 0.16), DashClamp01(g, pg * 0.16), DashClamp01(b, pb * 0.16), DashClamp01(a, 0.90)
-    if cache and cache.powerBarBgMatchHPColor then
-        local br = DashClamp01(cache.darkBgBrightness, 1)
-        r, g, b = DashClamp01(hr * br, 0), DashClamp01(hg * br, 0), DashClamp01(hb * br, 0)
-    end
-    a = a * DashClamp01(cache and cache.barBackgroundAlpha, 0.90)
-    return r, g, b, a
-end
-
-local function DashSnapOff(region)
-    if region and region.SetSnapToPixelGrid then
-        region:SetSnapToPixelGrid(false)
-        if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
-    end
-end
-
-local function DashMaskOwner(frame, tex, anchor)
-    local owner = tex and tex.GetParent and tex:GetParent() or nil
-    if owner and owner.CreateMaskTexture then return owner end
-    if anchor and anchor.CreateMaskTexture then return anchor end
-    return frame
-end
-
-local function DashEnsureRoundedMask(frame, key, anchor, tex)
-    if not (frame and anchor) then return nil end
-    local owner = DashMaskOwner(frame, tex, anchor)
-    if not (owner and owner.CreateMaskTexture) then return nil end
-    frame._msufDashRoundedMasks = frame._msufDashRoundedMasks or {}
-    local bucket = frame._msufDashRoundedMasks[key]
-    if type(bucket) ~= "table" or bucket.SetTexture then
-        bucket = {}
-        frame._msufDashRoundedMasks[key] = bucket
-    end
-    local ownerKey = tex or owner
-    local mask = bucket[ownerKey]
-    if not mask then
-        mask = owner:CreateMaskTexture(nil, "ARTWORK")
-        DashSnapOff(mask)
-        bucket[ownerKey] = mask
-    end
-    mask:ClearAllPoints()
-    mask:SetTexture(DASH_ROUNDED_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    mask:SetAllPoints(anchor)
-    return mask
-end
-
-local function DashSetMask(frame, tex, mask)
-    if not (frame and tex and tex.AddMaskTexture) then return end
-    frame._msufDashRoundedMasked = frame._msufDashRoundedMasked or {}
-    local old = frame._msufDashRoundedMasked[tex]
-    if old == mask then return end
-    if old and tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, old) end
-    frame._msufDashRoundedMasked[tex] = nil
-    if mask then
-        local ok = pcall(tex.AddMaskTexture, tex, mask)
-        if ok then frame._msufDashRoundedMasked[tex] = mask end
-    end
-end
-
-local function DashClearRoundedMasks(frame)
-    local masked = frame and frame._msufDashRoundedMasked
-    if masked then
-        for tex, mask in pairs(masked) do
-            if tex and tex.RemoveMaskTexture and mask then pcall(tex.RemoveMaskTexture, tex, mask) end
-        end
-    end
-    if frame then frame._msufDashRoundedMasked = nil end
-end
-
-local function DashStatusTexture(bar)
-    return bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
-end
-
-local function DashSetRoundedEdgeStackShown(sample, shown)
-    local count = shown and floor((tonumber(sample and sample._msufDashRoundedEdgeCount) or 1) + 0.5) or 0
-    if count < 0 then count = 0 elseif count > 8 then count = 8 end
-    if sample and sample._roundedEdge then
-        if count >= 1 then sample._roundedEdge:Show() else sample._roundedEdge:Hide() end
-    end
-    local stack = sample and sample._msufDashRoundedEdgeStack
-    if type(stack) ~= "table" then return end
-    for i = 2, #stack do
-        local edge = stack[i]
-        if edge then
-            if i <= count then edge:Show() else edge:Hide() end
-        end
-    end
-end
-
-local function DashApplyRoundedEdgeStack(sample, edgeSize)
-    local count = floor((tonumber(edgeSize) or 0) + 0.5)
-    if count < 0 then count = 0 elseif count > 8 then count = 8 end
-    sample._msufDashRoundedEdgeCount = count
-    if count <= 0 then
-        DashSetRoundedEdgeStackShown(sample, false)
-        return false
-    end
-
-    sample._msufDashRoundedEdgeStack = sample._msufDashRoundedEdgeStack or {}
-    sample._msufDashRoundedEdgeStack[1] = sample._roundedEdge
-    for i = 1, count do
-        local edge = (i == 1) and sample._roundedEdge or sample._msufDashRoundedEdgeStack[i]
-        if not edge then
-            edge = sample:CreateTexture(nil, "OVERLAY", nil, 6)
-            DashSnapOff(edge)
-            sample._msufDashRoundedEdgeStack[i] = edge
-        end
-        edge:SetTexture(DASH_ROUNDED_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        edge:ClearAllPoints()
-        edge:SetPoint("TOPLEFT", sample, "TOPLEFT", -i, i)
-        edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", i, -i)
-        edge:SetVertexColor(0, 0, 0, 1)
-        edge:Show()
-    end
-    DashSetRoundedEdgeStackShown(sample, true)
-    return true
-end
-
-local function DashApplyRoundedSample(sample, bgR, bgG, bgB, bgA, powerOn, edgeSize)
-    if not sample then return false end
-    if not DashRoundedUnitPreviewEnabled() then
-        sample._msufDashRoundedActive = nil
-        DashClearRoundedMasks(sample)
-        if sample._roundedBg then sample._roundedBg:Hide() end
-        DashSetRoundedEdgeStackShown(sample, false)
-        return false
-    end
-    if not sample._roundedBg then
-        sample._roundedBg = sample:CreateTexture(nil, "BACKGROUND", nil, -7)
-        sample._roundedBg:SetTexture(DASH_WHITE8)
-        DashSnapOff(sample._roundedBg)
-    end
-    if not sample._roundedEdge then
-        sample._roundedEdge = sample:CreateTexture(nil, "OVERLAY", nil, 6)
-        sample._roundedEdge:SetTexture(DASH_ROUNDED_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        DashSnapOff(sample._roundedEdge)
-    end
-
-    local healthTex = DashStatusTexture(sample._health)
-    local powerTex = DashStatusTexture(sample._power)
-    local bodyMask = DashEnsureRoundedMask(sample, "body", sample, sample._roundedBg)
-    local healthBgMask = DashEnsureRoundedMask(sample, "health", sample._health, sample._healthBg)
-    local healthTexMask = DashEnsureRoundedMask(sample, "health", sample._health, healthTex)
-    local powerBgMask = (powerOn and DashRoundedPowerPreviewEnabled()) and DashEnsureRoundedMask(sample, "power", sample._power, sample._powerBg) or nil
-    local powerTexMask = (powerOn and DashRoundedPowerPreviewEnabled()) and DashEnsureRoundedMask(sample, "power", sample._power, powerTex) or nil
-    if not (bodyMask and healthBgMask and healthTexMask) then
-        DashClearRoundedMasks(sample)
-        sample._roundedBg:Hide()
-        DashSetRoundedEdgeStackShown(sample, false)
-        return false
-    end
-
-    sample._msufDashRoundedActive = true
-    DashSetMask(sample, sample._roundedBg, bodyMask)
-    DashSetMask(sample, sample._healthBg, healthBgMask)
-    DashSetMask(sample, healthTex, healthTexMask)
-    DashSetMask(sample, sample._powerBg, powerBgMask)
-    DashSetMask(sample, powerTex, powerTexMask)
-
-    sample._roundedBg:ClearAllPoints()
-    sample._roundedBg:SetAllPoints(sample)
-    sample._roundedBg:SetColorTexture(bgR or 0, bgG or 0, bgB or 0, bgA or 0.96)
-    sample._roundedBg:Show()
-
-    edgeSize = floor((tonumber(edgeSize) or 0) + 0.5)
-    if edgeSize > 0 then
-        DashApplyRoundedEdgeStack(sample, edgeSize)
-    else
-        DashSetRoundedEdgeStackShown(sample, false)
-    end
-    return true
-end
-
 local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 900, 700
 local MIN_WINDOW_W, MIN_WINDOW_H = 620, 430
 local MAX_WINDOW_W, MAX_WINDOW_H = 1600, 1100
@@ -2941,7 +2653,6 @@ local function BuildDashboardUX(ctx)
             target = { 320, -180 },
             focus = { -260, -300 },
             targettarget = { 220, -300 },
-            focustarget = { 260, 180 },
             pet = { -275, -250 },
             boss = { 360, 230 },
             gf_party = { -400, 0 },
@@ -3083,162 +2794,67 @@ local function BuildDashboardUX(ctx)
     local stage = T.Panel(preview, nil, { 0.015, 0.020, 0.038, 0.96 }, { 0.075, 0.105, 0.190, 0.75 })
     stage:SetPoint("TOPLEFT", preview, "TOPLEFT", 0, -48)
     stage:SetPoint("BOTTOMRIGHT", preview, "BOTTOMRIGHT", 0, 0)
+    local sample = CreateFrame("Frame", nil, stage, T.Template and T.Template() or nil)
     local db = M.EnsureDB and M.EnsureDB() or _G.MSUF_DB or {}
     local playerConf = (type(db.player) == "table") and db.player or {}
     local bars = (type(db.bars) == "table") and db.bars or {}
-    local general = (type(db.general) == "table") and db.general or {}
     local rawW = Clamp(tonumber(playerConf.width) or 220, 90, 420)
     local rawH = Clamp(tonumber(playerConf.height) or 44, 20, 110)
-    local outlineRaw
-    if playerConf.hlOverride and playerConf.barOutlineThickness ~= nil then
-        outlineRaw = playerConf.barOutlineThickness
-    else
-        outlineRaw = bars.barOutlineThickness
-    end
-    local outline = Clamp(tonumber(outlineRaw) or 1, 0, 8)
-    local showPower = playerConf.showPowerBar ~= false
-    local powerHRaw = showPower and Clamp(tonumber(playerConf.powerBarHeight) or tonumber(bars.powerBarHeight) or 3, 1, 18) or 0
     local classPowerH = (bars.showClassPower == true) and Clamp(tonumber(bars.classPowerHeight) or 4, 2, 18) or 0
-    local classPowerGap = classPowerH > 0 and Clamp(tonumber(bars.classPowerGap) or 0, 0, 8) or 0
-    local stackRawH = rawH + (classPowerH > 0 and (classPowerH + classPowerGap + 4) or 0)
-    local frameScale = min(1.35, (sideW - 72) / rawW, 82 / stackRawH)
+    local frameScale = min(1.35, (sideW - 88) / rawW, 72 / (rawH + classPowerH + 8))
     if frameScale < 0.7 then frameScale = 0.7 end
     local function S(v) return math.floor((tonumber(v) or 0) * frameScale + 0.5) end
     local sampleW, sampleH = S(rawW), S(rawH)
-    local cpH = classPowerH > 0 and max(2, S(classPowerH)) or 0
-    local cpGap = classPowerH > 0 and max(0, S(classPowerGap + 4)) or 0
-    local stack = CreateFrame("Frame", nil, stage)
-    stack:SetSize(sampleW, sampleH + cpH + cpGap)
-    stack:SetPoint("CENTER", stage, "CENTER", 0, 0)
-    if stack.SetFrameLevel and stage.GetFrameLevel then
-        stack:SetFrameLevel((stage:GetFrameLevel() or 0) + 1)
-    end
-    local sample = CreateFrame("Frame", nil, stack, T.Template and T.Template() or nil)
     sample:SetSize(sampleW, sampleH)
-    sample:SetPoint("BOTTOM", stack, "BOTTOM", 0, 0)
-    if sample.SetFrameLevel and stack.GetFrameLevel then
-        sample:SetFrameLevel((stack:GetFrameLevel() or 0) + 1)
-    end
-    local inset = max(0, S(outline))
+    sample:SetPoint("CENTER", stage, "CENTER", 0, 0)
     if sample.SetBackdrop then
-        if inset > 0 then
-            sample:SetBackdrop({ bgFile = DASH_WHITE8, edgeFile = DASH_WHITE8, edgeSize = max(1, inset) })
-        else
-            sample:SetBackdrop({ bgFile = DASH_WHITE8 })
-        end
+        sample:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
         sample:SetBackdropColor(0.02, 0.02, 0.025, 0.96)
         sample:SetBackdropBorderColor(0, 0, 0, 1)
     end
-    local _, classToken = UnitClass and UnitClass("player")
-    classToken = classToken or "WARRIOR"
-    local hpMax = (UnitHealthMax and UnitHealthMax("player")) or 100
-    hpMax = tonumber(hpMax) or 100
-    if hpMax <= 0 then hpMax = 100 end
-    local hpCur = (UnitHealth and UnitHealth("player")) or hpMax
-    hpCur = Clamp(tonumber(hpCur) or hpMax, 0, hpMax)
-    local hpPct = hpMax > 0 and (hpCur / hpMax) or 1
-    local powerType, powerToken
-    if UnitPowerType then powerType, powerToken = UnitPowerType("player") end
-    powerToken = powerToken or "MANA"
-    local pr, pg, pb = DashPowerColor(powerType, powerToken)
-    local hr, hg, hb = DashHealthColor(classToken, hpPct)
-    local hbr, hbg, hbb, hba = DashHealthBackgroundColor(hr, hg, hb, classToken)
-    local pbr, pbg, pbb, pba = DashPowerBackgroundColor(pr, pg, pb, hr, hg, hb)
-    local barTex = type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or DASH_WHITE8
-    local bgTex = type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture() or DASH_WHITE8
-    local powerPx = powerHRaw > 0 and max(1, S(powerHRaw)) or 0
-
-    local hp = CreateFrame("StatusBar", nil, sample)
-    if hp.SetFrameLevel and sample.GetFrameLevel then
-        hp:SetFrameLevel((sample:GetFrameLevel() or 0) + 1)
-    end
-    hp:SetStatusBarTexture(barTex)
-    hp:SetMinMaxValues(0, 1)
-    hp:SetValue(hpPct)
-    hp:SetStatusBarColor(hr, hg, hb, tonumber(playerConf.hpBarAlpha) or 1)
-    hp:SetPoint("TOPLEFT", sample, "TOPLEFT", inset, -inset)
-    hp:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", -inset, powerPx > 0 and (powerPx + inset) or inset)
-    sample._health = hp
-    local hpBg = hp:CreateTexture(nil, "BACKGROUND")
-    hpBg:SetAllPoints(hp)
-    hpBg:SetTexture(bgTex)
-    hpBg:SetVertexColor(hbr, hbg, hbb, hba)
-    sample._healthBg = hpBg
-
-    local power = CreateFrame("StatusBar", nil, sample)
-    if power.SetFrameLevel and sample.GetFrameLevel then
-        power:SetFrameLevel((sample:GetFrameLevel() or 0) + 1)
-    end
-    power:SetStatusBarTexture(barTex)
-    power:SetMinMaxValues(0, 1)
-    power:SetValue(0.82)
-    power:SetStatusBarColor(pr, pg, pb, 1)
-    sample._power = power
-    local powerBg = power:CreateTexture(nil, "BACKGROUND")
-    powerBg:SetAllPoints(power)
-    powerBg:SetTexture(bgTex)
-    powerBg:SetVertexColor(pbr, pbg, pbb, pba)
-    sample._powerBg = powerBg
-    if powerPx > 0 then
-        power:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", inset, inset)
-        power:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", -inset, inset)
-        power:SetHeight(powerPx)
-        power:Show()
-    else
-        power:SetHeight(0.001)
-        power:Hide()
-    end
-
-    local roundedActive = DashApplyRoundedSample(sample, 0.02, 0.02, 0.025, 0.96, powerPx > 0, inset)
-    if roundedActive and sample.SetBackdropColor then
-        sample:SetBackdropColor(0, 0, 0, 0)
-        sample:SetBackdropBorderColor(0, 0, 0, 0)
-    end
-
+    local hpBg = sample:CreateTexture(nil, "BORDER")
+    hpBg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    hpBg:SetPoint("TOPLEFT", sample, "TOPLEFT", S(2), -S(2))
+    hpBg:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", -S(2), S(6))
+    hpBg:SetVertexColor(0.08, 0.08, 0.085, 1)
+    local hp = sample:CreateTexture(nil, "ARTWORK")
+    hp:SetTexture(type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or "Interface\\Buttons\\WHITE8X8")
+    hp:SetPoint("TOPLEFT", hpBg, "TOPLEFT", 0, 0)
+    hp:SetPoint("BOTTOMLEFT", hpBg, "BOTTOMLEFT", 0, 0)
+    hp:SetWidth(max(1, (sampleW - S(4)) * 0.72))
+    hp:SetVertexColor(0.12, 0.12, 0.13, 1)
+    local powerH = Clamp(tonumber(playerConf.powerBarHeight) or tonumber(bars.powerBarHeight) or 3, 2, 12)
+    local powerBg = sample:CreateTexture(nil, "BORDER")
+    powerBg:SetTexture("Interface\\Buttons\\WHITE8X8")
+    powerBg:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", S(2), S(2))
+    powerBg:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", -S(2), S(2))
+    powerBg:SetHeight(max(2, S(powerH)))
+    powerBg:SetVertexColor(0.06, 0.02, 0.08, 1)
+    local power = sample:CreateTexture(nil, "ARTWORK")
+    power:SetTexture(type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or "Interface\\Buttons\\WHITE8X8")
+    power:SetPoint("TOPLEFT", powerBg, "TOPLEFT", 0, 0)
+    power:SetPoint("BOTTOMLEFT", powerBg, "BOTTOMLEFT", 0, 0)
+    power:SetWidth(max(1, (sampleW - S(4)) * 0.82))
+    power:SetVertexColor(0.55, 0.17, 0.78, 1)
     if classPowerH > 0 then
-        local cp = CreateFrame("Frame", nil, stack)
-        cp:SetSize(sampleW, cpH)
-        cp:SetPoint("BOTTOM", sample, "TOP", 0, cpGap)
+        local cp = CreateFrame("Frame", nil, stage)
+        cp:SetSize(sampleW, max(2, S(classPowerH)))
+        cp:SetPoint("BOTTOM", sample, "TOP", 0, S(4))
         local gapPx = max(0, S(tonumber(bars.classPowerGap) or 0))
         local segW = math.floor((sampleW - (4 * gapPx)) / 5)
         for i = 1, 5 do
             local seg = cp:CreateTexture(nil, "ARTWORK")
-            seg:SetTexture(barTex)
+            seg:SetTexture("Interface\\Buttons\\WHITE8X8")
             seg:SetPoint("TOPLEFT", cp, "TOPLEFT", (i - 1) * (segW + gapPx), 0)
             seg:SetPoint("BOTTOMLEFT", cp, "BOTTOMLEFT", (i - 1) * (segW + gapPx), 0)
             seg:SetWidth(i == 5 and (sampleW - ((i - 1) * (segW + gapPx))) or segW)
-            seg:SetVertexColor(pr, pg, pb, i <= 3 and 0.96 or 0.28)
+            seg:SetVertexColor(0.55, 0.17, 0.78, i <= 3 and 0.96 or 0.28)
         end
     end
-    local textLayer = CreateFrame("Frame", nil, sample)
-    textLayer:SetAllPoints(sample)
-    textLayer:SetFrameLevel((sample.GetFrameLevel and sample:GetFrameLevel() or 1) + 6)
-    local fr, fg, fb = 1, 1, 1
-    if type(_G.MSUF_GetConfiguredFontColor) == "function" then
-        local okR, okG, okB = _G.MSUF_GetConfiguredFontColor()
-        if okR then fr, fg, fb = okR, okG, okB end
-    elseif general.fontR then
-        fr, fg, fb = general.fontR or 1, general.fontG or 1, general.fontB or 1
-    end
-    local sampleName = T.Font(textLayer, "GameFontNormal", tostring(_G.UnitName and _G.UnitName("player") or M.Tr("Player")), { fr, fg, fb, 1 })
-    sampleName:SetPoint("LEFT", hp, "LEFT", S(8), 0)
-    sampleName:SetPoint("RIGHT", hp, "CENTER", -S(6), 0)
-    sampleName:SetJustifyH("LEFT")
-    local function DashShortNumber(value)
-        local abbr = _G.AbbreviateNumbers or _G.ShortenNumber or _G.AbbreviateLargeNumbers
-        if type(abbr) == "function" then
-            local ok, text = pcall(abbr, value)
-            if ok and text then return tostring(text):upper() end
-        end
-        value = tonumber(value) or 0
-        if value >= 1000000 then return string.format("%.1fM", value / 1000000) end
-        if value >= 1000 then return string.format("%.0fK", value / 1000) end
-        return tostring(floor(value + 0.5))
-    end
-    local sampleHp = T.Font(textLayer, "GameFontNormal", DashShortNumber(hpCur) .. " - " .. string.format("%.1f%%", hpPct * 100), { fr, fg, fb, 1 })
-    sampleHp:SetPoint("LEFT", hp, "CENTER", S(6), 0)
-    sampleHp:SetPoint("RIGHT", hp, "RIGHT", -S(8), 0)
-    sampleHp:SetJustifyH("RIGHT")
+    local sampleName = T.Font(sample, "GameFontNormal", tostring(_G.UnitName and _G.UnitName("player") or M.Tr("Player")), { 1, 1, 1, 1 })
+    sampleName:SetPoint("LEFT", sample, "LEFT", S(10), 0)
+    local sampleHp = T.Font(sample, "GameFontNormal", "439K - 100.0%", { 1, 1, 1, 1 })
+    sampleHp:SetPoint("RIGHT", sample, "RIGHT", -S(8), 0)
 
     local recoveryTop = sideBySide and (featureBlockBottom - 16) or (previewTop - 166)
     local recoveryW = sideBySide and mainW or layoutW
