@@ -13,6 +13,8 @@ $AutoChangelogScript = Join-Path $RepoRoot "tools/MSUF-AutoChangelog.ps1"
 $PackageScript = Join-Path $RepoRoot "tools/package-release.ps1"
 $script:LogBox = $null
 $script:AppTitle = "MSUF Publish"
+$script:ExpectedReleaseRepository = "Mapkov2/MidnightSimpleUnitFrames"
+$script:ReleaseKeyEnvVar = "MSUF_RELEASE_KEY"
 
 function Write-ReleaseLog {
     param([AllowNull()][string]$Message)
@@ -164,6 +166,130 @@ function Invoke-PowerShellScript {
     $exe = (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source
     if ([string]::IsNullOrWhiteSpace($exe)) { $exe = "powershell" }
     Invoke-External $exe (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ScriptPath) + $Arguments)
+}
+
+function Normalize-GitHubRepositorySlug {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return "" }
+    return (($Value.Trim() -replace '\\', '/' -replace '\.git$', '').Trim('/'))
+}
+
+function Convert-GitRemoteUrlToRepositorySlug {
+    param([AllowNull()][string]$RemoteUrl)
+
+    if ([string]::IsNullOrWhiteSpace($RemoteUrl)) { return "" }
+    $url = $RemoteUrl.Trim()
+    if ($url -match '^(?:https?|ssh)://(?:.+@)?github\.com[:/](?<repo>[^/]+/[^/]+?)(?:\.git)?/?$') {
+        return Normalize-GitHubRepositorySlug $Matches["repo"]
+    }
+    if ($url -match '^(?:.+@)?github\.com:(?<repo>[^/]+/[^/]+?)(?:\.git)?$') {
+        return Normalize-GitHubRepositorySlug $Matches["repo"]
+    }
+    return ""
+}
+
+function Get-GitOriginRepositorySlug {
+    Push-Location $RepoRoot
+    try {
+        $remote = (& git remote get-url origin 2>$null)
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($remote)) {
+            throw "Could not read git remote 'origin'."
+        }
+        $slug = Convert-GitRemoteUrlToRepositorySlug $remote
+        if ([string]::IsNullOrWhiteSpace($slug)) {
+            throw "Origin remote is not a supported GitHub URL: $remote"
+        }
+        return $slug
+    } finally {
+        Pop-Location
+    }
+}
+
+function Assert-CanonicalReleaseRepository {
+    $expected = Normalize-GitHubRepositorySlug $script:ExpectedReleaseRepository
+    $origin = Normalize-GitHubRepositorySlug (Get-GitOriginRepositorySlug)
+    if ($origin -ne $expected) {
+        throw "Publishing is only allowed from '$expected'. Current origin points to '$origin'."
+    }
+}
+
+function Read-ReleaseKeyFromEnvironment {
+    $name = $script:ReleaseKeyEnvVar
+    foreach ($scope in @("Process", "User", "Machine")) {
+        $value = [Environment]::GetEnvironmentVariable($name, $scope)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value
+        }
+    }
+    return ""
+}
+
+function Get-RequiredReleaseKey {
+    $key = Read-ReleaseKeyFromEnvironment
+    if ([string]::IsNullOrWhiteSpace($key)) {
+        throw "Publishing requires a local secret outside the repo. Set environment variable '$($script:ReleaseKeyEnvVar)' on your machine and restart MSUF Publish."
+    }
+    return $key
+}
+
+function Get-ReleaseAuthorizationPayload {
+    param([Parameter(Mandatory = $true)][string]$ReleaseTag)
+
+    return ((Normalize-GitHubRepositorySlug $script:ExpectedReleaseRepository) + "|" + (Normalize-ReleaseVersion $ReleaseTag))
+}
+
+function Get-ReleaseAuthorizationToken {
+    param(
+        [Parameter(Mandatory = $true)][string]$ReleaseTag,
+        [Parameter(Mandatory = $true)][string]$ReleaseKey
+    )
+
+    $hmac = [System.Security.Cryptography.HMACSHA256]::new()
+    try {
+        $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($ReleaseKey)
+        $payload = Get-ReleaseAuthorizationPayload -ReleaseTag $ReleaseTag
+        $hash = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))
+        return ([System.BitConverter]::ToString($hash)).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $hmac.Dispose()
+    }
+}
+
+function Get-LocalReleaseTagToken {
+    param([Parameter(Mandatory = $true)][string]$ReleaseTag)
+
+    Push-Location $RepoRoot
+    try {
+        $contents = (& git for-each-ref "refs/tags/$ReleaseTag" "--format=%(contents)" 2>$null)
+        if ($LASTEXITCODE -ne 0 -or -not $contents) {
+            return ""
+        }
+        $text = ($contents -join [Environment]::NewLine)
+        $match = [regex]::Match($text, '(?im)^MSUF-Release-Token:\s*(?<token>[0-9a-f]+)\s*$')
+        if ($match.Success) {
+            return $match.Groups["token"].Value.Trim().ToLowerInvariant()
+        }
+        return ""
+    } finally {
+        Pop-Location
+    }
+}
+
+function Assert-LocalReleaseTagAuthorization {
+    param(
+        [Parameter(Mandatory = $true)][string]$ReleaseTag,
+        [Parameter(Mandatory = $true)][string]$ReleaseKey
+    )
+
+    $expected = Get-ReleaseAuthorizationToken -ReleaseTag $ReleaseTag -ReleaseKey $ReleaseKey
+    $actual = Get-LocalReleaseTagToken -ReleaseTag $ReleaseTag
+    if ([string]::IsNullOrWhiteSpace($actual)) {
+        throw "Local tag '$ReleaseTag' is missing the MSUF release authorization token. Recreate it with MSUF Publish."
+    }
+    if ($actual -ne $expected) {
+        throw "Local tag '$ReleaseTag' is not authorized with the current MSUF release key."
+    }
 }
 
 function Convert-BoxTextToSection {
@@ -734,24 +860,31 @@ function Commit-AllChanges {
 function Create-ReleaseTag {
     param(
         [Parameter(Mandatory = $true)][string]$ReleaseTag,
-        [Parameter(Mandatory = $true)][string]$ReleaseName
+        [Parameter(Mandatory = $true)][string]$ReleaseName,
+        [Parameter(Mandatory = $true)][string]$ReleaseKey
     )
 
     & git rev-parse -q --verify "refs/tags/$ReleaseTag" *> $null
     if ($LASTEXITCODE -eq 0) {
-        Write-ReleaseLog "Git tag already exists locally: $ReleaseTag"
+        Assert-LocalReleaseTagAuthorization -ReleaseTag $ReleaseTag -ReleaseKey $ReleaseKey
+        Write-ReleaseLog "Git tag already exists locally and is authorized: $ReleaseTag"
         return
     }
-    Invoke-External "git" @("tag", "-a", $ReleaseTag, "-m", $ReleaseName)
+
+    $token = Get-ReleaseAuthorizationToken -ReleaseTag $ReleaseTag -ReleaseKey $ReleaseKey
+    Invoke-External "git" @("tag", "-a", $ReleaseTag, "-m", $ReleaseName, "-m", ("MSUF-Release-Token: " + $token))
 }
 
 function Push-ReleaseTag {
     param(
         [Parameter(Mandatory = $true)][string]$ReleaseTag,
-        [Parameter(Mandatory = $true)][string]$ReleaseBranch
+        [Parameter(Mandatory = $true)][string]$ReleaseBranch,
+        [Parameter(Mandatory = $true)][string]$ReleaseKey
     )
 
+    Assert-CanonicalReleaseRepository
     Assert-ReleaseBranch -ReleaseBranch $ReleaseBranch
+    Assert-LocalReleaseTagAuthorization -ReleaseTag $ReleaseTag -ReleaseKey $ReleaseKey
     Invoke-External "git" @("push", "origin", ("HEAD:refs/heads/" + $ReleaseBranch))
     Invoke-External "git" @("push", "origin", $ReleaseTag)
 }
@@ -760,10 +893,13 @@ function Start-GitHubWorkflow {
     param(
         [Parameter(Mandatory = $true)][string]$ReleaseTag,
         [Parameter(Mandatory = $true)][bool]$Prerelease,
+        [Parameter(Mandatory = $true)][string]$ReleaseKey,
         [AllowNull()][string]$ReleaseBranch,
         [AllowNull()][string]$ReleaseName
     )
 
+    Assert-CanonicalReleaseRepository
+    Assert-LocalReleaseTagAuthorization -ReleaseTag $ReleaseTag -ReleaseKey $ReleaseKey
     $gh = Get-Command gh -ErrorAction SilentlyContinue
     if (-not $gh) {
         Write-ReleaseLog "GitHub CLI (gh) is not installed or not in PATH; manual workflow dispatch skipped."
@@ -1454,13 +1590,19 @@ $publishButton.Size = New-Object System.Drawing.Size(135, 32)
 $publishButton.Add_Click({
     try {
         $meta = Read-UiReleaseMetadata
+        $needsReleaseAuthorization = ($tagCreateBox.Checked -or $pushBox.Checked -or $workflowBox.Checked)
+        $releaseKey = ""
+        if ($needsReleaseAuthorization) {
+            Assert-CanonicalReleaseRepository
+            $releaseKey = Get-RequiredReleaseKey
+        }
         Assert-ReleaseBranch -ReleaseBranch $meta.Branch
         $releaseKind = if ($meta.Prerelease) { "Beta / prerelease" } else { "Full release" }
         $steps = @("update changelog files")
         if ($autoSourceBox.Checked) { $steps = @("refresh Auto Changelog from repo") + $steps }
         if ($buildBox.Checked) { $steps += "build local ZIP" }
         if ($commitBox.Checked) { $steps += "commit all changes" }
-        if ($tagCreateBox.Checked) { $steps += "create annotated tag" }
+        if ($tagCreateBox.Checked) { $steps += ("create signed annotated tag using " + $script:ReleaseKeyEnvVar) }
         if ($pushBox.Checked) { $steps += ("push HEAD to origin/" + $meta.Branch + " and push tag") }
         if ($workflowBox.Checked) { $steps += "publish through GitHub Actions" }
         $confirm = [System.Windows.Forms.MessageBox]::Show(
@@ -1477,13 +1619,13 @@ $publishButton.Add_Click({
         $r = Read-UiRelease
         Start-LocalPreparation -ReleaseTag $r.Tag -DisplayVersion $r.Display -ReleaseDate $r.Date -BodyLines $r.Body -OutputDir $r.OutputDir -BuildZip $buildBox.Checked
         if ($commitBox.Checked) { Commit-AllChanges -ReleaseTag $r.Tag }
-        if ($tagCreateBox.Checked) { Create-ReleaseTag -ReleaseTag $r.Tag -ReleaseName $r.ReleaseName }
-        if ($pushBox.Checked) { Push-ReleaseTag -ReleaseTag $r.Tag -ReleaseBranch $r.Branch }
+        if ($tagCreateBox.Checked) { Create-ReleaseTag -ReleaseTag $r.Tag -ReleaseName $r.ReleaseName -ReleaseKey $releaseKey }
+        if ($pushBox.Checked) { Push-ReleaseTag -ReleaseTag $r.Tag -ReleaseBranch $r.Branch -ReleaseKey $releaseKey }
         if ($workflowBox.Checked) {
             if ($pushBox.Checked) {
                 Write-ReleaseLog "GitHub Actions release workflow will start from the pushed release tag."
             } else {
-                Start-GitHubWorkflow -ReleaseTag $r.Tag -Prerelease $r.Prerelease -ReleaseBranch $r.Branch -ReleaseName $r.ReleaseName
+                Start-GitHubWorkflow -ReleaseTag $r.Tag -Prerelease $r.Prerelease -ReleaseKey $releaseKey -ReleaseBranch $r.Branch -ReleaseName $r.ReleaseName
             }
         }
         Write-ReleaseLog "GitHub release step complete."

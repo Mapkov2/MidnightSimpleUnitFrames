@@ -25,6 +25,12 @@ numbered buttons:
 5. **Publish** commits, tags, pushes, and lets GitHub Actions publish.
 6. **Git Status** shows the current worktree changes.
 
+`Publish` only works from the canonical GitHub repository checkout and requires
+a local environment variable `MSUF_RELEASE_KEY`. The tool uses that key to sign
+the annotated Git tag. GitHub Actions checks the same key from the repository
+secret `MSUF_RELEASE_KEY` before publishing, so forks or copied scripts cannot
+publish without the real key.
+
 By default, **Auto-scan before Build/Publish** is off. That keeps your edited
 Markdown stable after button 1. Turn it on only when you intentionally want
 **Build ZIP** or **Publish** to rescan the repository right before running.
@@ -103,5 +109,6 @@ editor.
 
 The workflow requires the repository secrets:
 
+- `MSUF_RELEASE_KEY`
 - `WAGO_API_TOKEN`
 - `CF_API_KEY` or `CURSEFORGE`
