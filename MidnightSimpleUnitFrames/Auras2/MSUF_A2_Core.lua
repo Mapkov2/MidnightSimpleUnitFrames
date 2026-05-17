@@ -72,6 +72,7 @@ local function _AuraCopyFields(dst, src)
     dst.expirationTime         = src.expirationTime
     dst.applications           = src.applications
     dst.dispelName             = src.dispelName
+    dst.isHelpful              = src.isHelpful
     dst.isHarmful              = src.isHarmful
     dst.isRaid                 = src.isRaid
     dst.isBossAura             = src.isBossAura
@@ -363,13 +364,48 @@ local function ClassifyPlayer(unit, aid, isHelpful)
     return (r == false)
 end
 
--- Helpful/harmful classification (secret-safe)
--- data.isHarmful is SECRET in 12.0 — use filter membership
-local function ClassifyHelpful(unit, aid)
-    if not _isFiltered then return true end
-    local r = _isFiltered(unit, aid, HELPFUL)
-    if issecretvalue and issecretvalue(r) then return true end
-    return (r == false)
+local function ReadAccessibleBool(v)
+    if v == nil then return nil end
+    if _hasCanaccessvalue then
+        if canaccessvalue(v) ~= true then return nil end
+    elseif issecretvalue and issecretvalue(v) == true then
+        return nil
+    end
+    if v == true then return true end
+    if v == false then return false end
+    return nil
+end
+
+-- Helpful/harmful classification (secret-safe).
+-- Prefer explicit AuraData polarity when the client exposes it. Some player
+-- auras can give ambiguous filter answers during UNIT_AURA deltas, which made
+-- harmless self auras land in the debuff lane.
+local function ClassifyHelpful(unit, aid, data, fallbackHelpful)
+    local v = ReadAccessibleBool(data and data.isHelpful)
+    if v ~= nil then return v, "data" end
+
+    v = ReadAccessibleBool(data and data.isHarmful)
+    if v ~= nil then return not v, "data" end
+
+    if _isFiltered then
+        local helpfulFiltered = ReadAccessibleBool(_isFiltered(unit, aid, HELPFUL))
+        local harmfulFiltered = ReadAccessibleBool(_isFiltered(unit, aid, HARMFUL))
+        local helpfulVisible
+        local harmfulVisible
+        if helpfulFiltered ~= nil then helpfulVisible = (helpfulFiltered == false) end
+        if harmfulFiltered ~= nil then harmfulVisible = (harmfulFiltered == false) end
+
+        if helpfulVisible ~= nil and harmfulVisible ~= nil then
+            if helpfulVisible ~= harmfulVisible then return helpfulVisible, "filter" end
+        elseif helpfulVisible ~= nil then
+            return helpfulVisible, "filter"
+        elseif harmfulVisible ~= nil then
+            return not harmfulVisible, "filter"
+        end
+    end
+
+    if fallbackHelpful ~= nil then return fallbackHelpful == true, "fallback" end
+    return true, "fallback"
 end
 
 -- Boss flag (secret-safe, cached on data table)
@@ -450,7 +486,7 @@ function Cache.FullScan(unit)
     for i = 2, slotsN do
         local data = _getBySlot(unit, _slotBuf[i])
         if data and data.auraInstanceID then
-            EnrichAura(unit, data, true)
+            EnrichAura(unit, data, ClassifyHelpful(unit, data.auraInstanceID, data, true))
             s.all[data.auraInstanceID] = data
         end
     end
@@ -459,8 +495,13 @@ function Cache.FullScan(unit)
     for i = 2, slotsN do
         local data = _getBySlot(unit, _slotBuf[i])
         if data and data.auraInstanceID then
-            EnrichAura(unit, data, false)
-            s.all[data.auraInstanceID] = data
+            local aid = data.auraInstanceID
+            local isHelpful, source = ClassifyHelpful(unit, aid, data, false)
+            local existing = s.all[aid]
+            if not (existing and existing._msufIsHelpful == true and isHelpful == false and source == "fallback") then
+                EnrichAura(unit, data, isHelpful)
+                s.all[aid] = data
+            end
         end
     end
 end
@@ -504,7 +545,7 @@ function Cache.OnUnitAura(unit, updateInfo)
                 -- Enables release-on-remove instead of abandoning to GC.
                 local entry = _AuraAcquire()
                 _AuraCopyFields(entry, data)
-                local isHelpful = ClassifyHelpful(unit, aid)
+                local isHelpful = ClassifyHelpful(unit, aid, entry, nil)
                 EnrichAura(unit, entry, isHelpful)
                 s.all[aid] = entry
                 any = true
@@ -534,7 +575,7 @@ function Cache.OnUnitAura(unit, updateInfo)
                     -- the saving (~0.1µs/call) is far less than the risk of
                     -- onlyBoss/merge filter failure from stale cache.
                     entry._msufA2_bossFlag = nil
-                    local newHelpful = ClassifyHelpful(unit, aid)
+                    local newHelpful = ClassifyHelpful(unit, aid, fresh, entry._msufIsHelpful)
                     local newOwn = ClassifyPlayer(unit, aid, newHelpful)
                     entry._msufIsHelpful = newHelpful
                     entry._msufIsPlayerAura = newOwn
@@ -931,21 +972,24 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                     if aid then
                         -- Reuse cache enrichment if available
                         local cached = allCache[aid]
+                        local actualHelpful = ClassifyHelpful(unit, aid, data, true)
                         if cached then
-                            data._msufIsHelpful    = true
-                            data._msufIsPlayerAura = cached._msufIsPlayerAura
+                            data._msufIsHelpful    = actualHelpful
+                            data._msufIsPlayerAura = (cached._msufIsHelpful == actualHelpful) and cached._msufIsPlayerAura or ClassifyPlayer(unit, aid, actualHelpful)
+                            cached._msufIsHelpful = actualHelpful
+                            cached._msufIsPlayerAura = data._msufIsPlayerAura
                             data._msufA2_bossFlag  = cached._msufA2_bossFlag
                             data._msufA2_sid       = cached._msufA2_sid
                             data._msufA2_isSated   = cached._msufA2_isSated
                             data._msufA2_isHealerHot = cached._msufA2_isHealerHot
                         else
-                            EnrichAura(unit, data, true)
+                            EnrichAura(unit, data, actualHelpful)
                             allCache[aid] = data
                         end
 
                         local isOwn = data._msufIsPlayerAura
-                        if noFilters or FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
-                                      lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
+                        if actualHelpful and (noFilters or FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
+                                      lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue)) then
                             if useMergeBuffs then
                                 nB, nD, nBossB, nBossD = EmitAura(data, true, isOwn, cfg,
                                     buffOut, debuffOut, bossBufScratch, bossDebScratch,
@@ -971,21 +1015,24 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                     local aid = data.auraInstanceID
                     if aid then
                         local cached = allCache[aid]
+                        local actualHelpful = ClassifyHelpful(unit, aid, data, false)
                         if cached then
-                            data._msufIsHelpful    = false
-                            data._msufIsPlayerAura = cached._msufIsPlayerAura
+                            data._msufIsHelpful    = actualHelpful
+                            data._msufIsPlayerAura = (cached._msufIsHelpful == actualHelpful) and cached._msufIsPlayerAura or ClassifyPlayer(unit, aid, actualHelpful)
+                            cached._msufIsHelpful = actualHelpful
+                            cached._msufIsPlayerAura = data._msufIsPlayerAura
                             data._msufA2_bossFlag  = cached._msufA2_bossFlag
                             data._msufA2_sid       = cached._msufA2_sid
                             data._msufA2_isSated   = cached._msufA2_isSated
                             data._msufA2_isHealerHot = cached._msufA2_isHealerHot
                         else
-                            EnrichAura(unit, data, false)
+                            EnrichAura(unit, data, actualHelpful)
                             allCache[aid] = data
                         end
 
                         local isOwn = data._msufIsPlayerAura
-                        if noFilters or FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
-                                      lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
+                        if (not actualHelpful) and (noFilters or FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
+                                      lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue)) then
                             if useMergeDebuffs then
                                 nB, nD, nBossB, nBossD = EmitAura(data, false, isOwn, cfg,
                                     buffOut, debuffOut, bossBufScratch, bossDebScratch,
