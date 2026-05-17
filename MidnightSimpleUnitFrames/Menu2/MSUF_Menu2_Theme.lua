@@ -681,19 +681,77 @@ function T.SkinEditBox(editBox)
             if tex and tex.SetAlpha then tex:SetAlpha(0) end
         end
     end
+    local fontString = editBox.GetFontString and editBox:GetFontString() or nil
+    if editBox.GetRegions then
+        local regions = { editBox:GetRegions() }
+        for i = 1, #regions do
+            local region = regions[i]
+            local isTexture = false
+            if region and region.IsObjectType then isTexture = region:IsObjectType("Texture") and true or false end
+            if (not isTexture) and region and region.GetObjectType then isTexture = region:GetObjectType() == "Texture" end
+            if isTexture and region ~= fontString then
+                if region.SetAlpha then region:SetAlpha(0) end
+                if region.Hide then region:Hide() end
+            end
+        end
+    end
     T.ApplyBackdrop(editBox, { 0.020, 0.024, 0.046, 0.96 }, T.colors.borderSoft)
-    local fs = editBox.GetFontString and editBox:GetFontString() or nil
+    if editBox.CreateTexture then
+        local bg = editBox:CreateTexture(nil, "BACKGROUND", nil, -6)
+        bg:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
+        bg:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
+        editBox._msuf2EditBg = bg
+
+        local top = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
+        top:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
+        top:SetPoint("TOPRIGHT", editBox, "TOPRIGHT", 0, 0)
+        top:SetHeight(1)
+        local bottom = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
+        bottom:SetPoint("BOTTOMLEFT", editBox, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(1)
+        local left = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
+        left:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
+        left:SetPoint("BOTTOMLEFT", editBox, "BOTTOMLEFT", 0, 0)
+        left:SetWidth(1)
+        local right = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
+        right:SetPoint("TOPRIGHT", editBox, "TOPRIGHT", 0, 0)
+        right:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
+        right:SetWidth(1)
+        editBox._msuf2EditEdges = { top, bottom, left, right }
+    end
+    local function PaintEditBox(self, focused)
+        local enabled = not (self.IsEnabled and not self:IsEnabled())
+        local alpha = enabled and 1 or 0.45
+        if self._msuf2EditBg then self._msuf2EditBg:SetColorTexture(0.018, 0.024, 0.050, 0.98 * alpha) end
+        local c = focused and T.colors.accent or T.colors.borderSoft
+        local a = focused and 0.95 or 0.78
+        local edges = self._msuf2EditEdges
+        if edges then
+            for i = 1, #edges do
+                edges[i]:SetColorTexture(c[1], c[2], c[3], a * alpha)
+            end
+        end
+    end
+    editBox._msuf2PaintEditBox = PaintEditBox
+    local fs = fontString
     T.StyleFontString(fs, T.colors.text, 1)
     editBox:HookScript("OnEditFocusGained", function(self)
+        PaintEditBox(self, true)
         if self.SetBackdropBorderColor then
             self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
     end)
     editBox:HookScript("OnEditFocusLost", function(self)
+        PaintEditBox(self, false)
         if self.SetBackdropBorderColor then
             self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1)
         end
     end)
+    pcall(editBox.HookScript, editBox, "OnEnable", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
+    pcall(editBox.HookScript, editBox, "OnDisable", function(self) PaintEditBox(self, false) end)
+    editBox:HookScript("OnShow", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
+    PaintEditBox(editBox, false)
     return editBox
 end
 

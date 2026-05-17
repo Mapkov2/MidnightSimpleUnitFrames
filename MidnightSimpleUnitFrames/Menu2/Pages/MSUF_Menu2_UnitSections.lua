@@ -1845,7 +1845,7 @@ local function BuildAlpha(ctx, builder, unit)
 end
 
 local function BuildPortrait(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("portrait", "Portrait", 456, false)
+    local sec = builder:CollapsibleSection("portrait", "Portrait", 504, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 16
     local cardGap = 28
@@ -1865,8 +1865,8 @@ local function BuildPortrait(ctx, builder, unit)
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
     local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, -38, leftW, 168)
     local geometryCard = W.ControlCard(sec, "Geometry", "Size and local offset.", rightX, -38, rightW, 224)
-    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 214)
-    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -284, rightW, 142)
+    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 258)
+    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -284, rightW, 166)
 
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, portraitEnable,
@@ -2248,7 +2248,7 @@ local function BuildCastbar(ctx, builder, unit)
 end
 
 local function BuildStatus(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("status_icons", "Status icons", 506, false)
+    local sec = builder:CollapsibleSection("status_icons", "Status icons", 552, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local topGap = 28
@@ -2260,7 +2260,7 @@ local function BuildStatus(ctx, builder, unit)
     local previewCard = W.ControlCard(sec, "Status Preview", nil, rightX - 14, -38, rightW + 28, 142)
     local placementCardX = leftX - 2
     local placementCardW = max(320, sectionW - placementCardX - 28)
-    local placementCard = W.ControlCard(sec, "Placement", nil, placementCardX, -198, placementCardW, 268)
+    local placementCard = W.ControlCard(sec, "Placement", nil, placementCardX, -198, placementCardW, 312)
     local placeLeftX = 16
     local placeGap = 24
     local placeAvailableW = max(280, placementCardW - 32)

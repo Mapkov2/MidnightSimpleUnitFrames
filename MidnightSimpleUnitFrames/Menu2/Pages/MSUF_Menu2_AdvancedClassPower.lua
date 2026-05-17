@@ -725,8 +725,8 @@ local function BuildClassPower(ctx)
     local dpbOutline = BindTableSlider(ctx, dpb, "Power bar outline", 0, 6, 1, 300, Bars, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline)
     for _, control in ipairs({ dpbMode, dpbFg, dpbBg, dpbOutline }) do dpbControls[#dpbControls + 1] = control end
 
-    local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana Bar", 238, false)
-    W.ControlCard(altMana, "Alternative Mana Bar", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, min(620, (altMana._msuf2Width or ctx.width or 900) - 28), 150)
+    local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana Bar", 276, false)
+    W.ControlCard(altMana, "Alternative Mana Bar", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, min(620, (altMana._msuf2Width or ctx.width or 900) - 28), 204)
     altMana._msuf2CursorY = -92
     local altManaToggle = BindTableToggle(ctx, altMana, "Show mana bar (dual resource)", Bars, "showAltMana", false, ApplyClassPower)
     local altManaHeight = BindTableSlider(ctx, altMana, "Height", 2, 30, 1, 300, Bars, "altManaHeight", 4, ApplyClassPower)

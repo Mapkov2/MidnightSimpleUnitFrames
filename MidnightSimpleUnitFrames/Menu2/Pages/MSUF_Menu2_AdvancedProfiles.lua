@@ -109,6 +109,28 @@ local function BlockCombatAction()
     return false
 end
 
+local function StyleProfileInput(editBox, width, height, multiline)
+    if not editBox then return editBox end
+    local w = tonumber(width) or (editBox.GetWidth and editBox:GetWidth()) or 260
+    local h = tonumber(height) or (editBox.GetHeight and editBox:GetHeight()) or 22
+    editBox:SetSize(w, h)
+    if editBox.SetMultiLine then editBox:SetMultiLine(multiline and true or false) end
+    if editBox.SetJustifyV then editBox:SetJustifyV(multiline and "TOP" or "MIDDLE") end
+    if editBox.SetTextInsets then
+        if multiline then
+            editBox:SetTextInsets(8, 8, 8, 8)
+        else
+            editBox:SetTextInsets(8, 8, 1, 1)
+        end
+    end
+    if editBox._msuf2Title then
+        editBox._msuf2Title:SetWidth(w)
+        editBox._msuf2Title:SetTextColor(T.colors.text[1], T.colors.text[2], T.colors.text[3], 1)
+    end
+    if editBox._msuf2PaintEditBox then editBox:_msuf2PaintEditBox(false) end
+    return editBox
+end
+
 local function EnsureProfilePopups()
     if not _G.StaticPopupDialogs then return end
 
@@ -237,10 +259,10 @@ local function BuildProfiles(ctx)
         end)
     end
 
-    local current = b:CollapsibleSection("profiles_management", "Profile Management", 208, true)
+    local current = b:CollapsibleSection("profiles_management", "Profile Management", 238, true)
     local currentW = current._msuf2Width or contentW
-    W.ControlCardBackdrop(current, 14, -38, 320, 142)
-    W.ControlCardBackdrop(current, rightX - 14, -38, max(340, currentW - rightX - 28), 142)
+    W.ControlCardBackdrop(current, 14, -38, 320, 174)
+    W.ControlCardBackdrop(current, rightX - 14, -38, max(340, currentW - rightX - 28), 174)
     local profileDrop = W.Dropdown(current, "Active profile", {}, 260)
     local function RefreshProfileValues()
         profileDrop:SetValues(ProfileValues(false))
@@ -318,6 +340,7 @@ local function BuildProfiles(ctx)
     end)
     MoveWidget(profileDrop, current, 14, -42, 300)
     MoveWidget(nameInput, current, 14, -104, 300)
+    StyleProfileInput(nameInput, 300, 24, false)
     create:SetPoint("TOPLEFT", current, "TOPLEFT", rightX, -58)
     copy:SetPoint("LEFT", create, "RIGHT", 10, 0)
     reset:SetPoint("TOPLEFT", current, "TOPLEFT", rightX, -98)
@@ -369,10 +392,11 @@ local function BuildProfiles(ctx)
         end
     end
 
-    local io = b:CollapsibleSection("profiles_io", "Export / Import", 356, false)
+    local io = b:CollapsibleSection("profiles_io", "Export / Import", 424, false)
     local ioActionX = min(max(380, floor(contentW * 0.46)), max(340, contentW - 460))
-    W.ControlCardBackdrop(io, 14, -38, max(320, min(620, ioActionX - 28)), 276)
-    W.ControlCardBackdrop(io, ioActionX - 14, -38, max(300, contentW - ioActionX - 28), 276)
+    local ioLeftW = max(320, min(620, ioActionX - 28))
+    W.ControlCardBackdrop(io, 14, -38, ioLeftW, 344)
+    W.ControlCardBackdrop(io, ioActionX - 14, -38, max(300, contentW - ioActionX - 28), 344)
     local exportKind = W.Dropdown(io, "Export kind", {
         { value = "all", text = "Full profile" },
         { value = "unitframe", text = "Unitframes" },
@@ -526,14 +550,16 @@ local function BuildProfiles(ctx)
         end
     end)
     MoveWidget(exportKind, io, 14, -42, 260)
-    MoveWidget(blob, io, 14, -104, max(320, min(620, ioActionX - 28)))
+    MoveWidget(blob, io, 14, -104, ioLeftW)
+    StyleProfileInput(blob, ioLeftW, 168, true)
     export:SetPoint("TOPLEFT", io, "TOPLEFT", ioActionX, -64)
     import:SetPoint("LEFT", export, "RIGHT", 10, 0)
     legacy:SetPoint("LEFT", import, "RIGHT", 10, 0)
     wago:SetPoint("TOPLEFT", io, "TOPLEFT", ioActionX, -104)
     MoveWidget(importCreateNew, io, ioActionX, -144)
     MoveWidget(importProfileName, io, ioActionX, -178, 260)
-    W.Text(io, "Importing to the current profile changes the active profile. To test safely, enable new-profile import or copy/export your profile first.", ioActionX, -218, max(260, contentW - ioActionX - 28), T.colors.muted)
+    StyleProfileInput(importProfileName, 260, 24, false)
+    W.Text(io, "Importing to the current profile changes the active profile. To test safely, enable new-profile import or copy/export your profile first.", ioActionX, -238, max(260, contentW - ioActionX - 28), T.colors.muted)
     M.AddRefresher(ctx, function()
         local createNew = M.profileImportCreateNew == true
         importCreateNew:SetChecked(createNew)

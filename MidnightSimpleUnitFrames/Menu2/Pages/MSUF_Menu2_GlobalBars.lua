@@ -958,7 +958,7 @@ local function BuildBars(ctx)
         if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end
     end)
 
-    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 626, true)
+    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 672, true)
     local hlW = highlights._msuf2Width or ctx.width or 720
     local hlGap = 28
     local hlLeftX = 30
@@ -969,7 +969,7 @@ local function BuildBars(ctx)
 
     W.ControlCard(highlights, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 376)
     W.ControlCard(highlights, "Preview", nil, hlRightX - 14, -38, hlRightW + 28, 248)
-    W.ControlCard(highlights, "Dispel Glow", nil, hlRightX - 14, -308, hlRightW + 28, 306)
+    W.ControlCard(highlights, "Dispel Glow", nil, hlRightX - 14, -308, hlRightW + 28, 352)
 
     local highlight = W.Slider(highlights, "Highlight border thickness", 1, 30, 1, hlLeftW)
     M.BindSlider(ctx, highlight,
@@ -1252,9 +1252,9 @@ local function BuildBars(ctx)
         bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)
 
-    local priority = b:CollapsibleSection("bars_priority", "Highlight Priority", 280, false)
+    local priority = b:CollapsibleSection("bars_priority", "Highlight Priority", 326, false)
     local priorityCardW = min(360, max(260, (priority._msuf2Width or ctx.width or 720) - 40))
-    local priorityCard = W.ControlCard(priority, "Priority Order", nil, 20, -38, priorityCardW, 220)
+    local priorityCard = W.ControlCard(priority, "Priority Order", nil, 20, -38, priorityCardW, 274)
     local prio = W.ToggleAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
     M.BindToggle(ctx, prio,
         function() return BarScopeGet("hlPrioEnabled", false) == true end,

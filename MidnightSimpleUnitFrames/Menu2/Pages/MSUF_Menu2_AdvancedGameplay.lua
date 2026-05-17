@@ -283,10 +283,10 @@ local function BuildGameplay(ctx)
     Add(stateControls, SliderAt(ctx, state, "X offset", 14, -238, -800, 800, 1, 250, Gameplay, "combatStateOffsetX", 0, ApplyGameplayUI))
     Add(stateControls, SliderAt(ctx, state, "Y offset", 320, -238, -800, 800, 1, 250, Gameplay, "combatStateOffsetY", 80, ApplyGameplayUI))
 
-    local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", 704, false)
+    local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", 736, false)
     local classW = classSec._msuf2Width or ctx.width or 900
     W.ControlCardBackdrop(classSec, 14, -38, min(classW - 28, 700), 276)
-    W.ControlCardBackdrop(classSec, 14, -348, min(classW - 28, 700), 280)
+    W.ControlCardBackdrop(classSec, 14, -348, min(classW - 28, 700), 318)
     local classToken
     if UnitClass then
         local _, token = UnitClass("player")
@@ -338,15 +338,43 @@ local function BuildGameplay(ctx)
     Add(firstDanceControls, SliderAt(ctx, classSec, "X offset", 300, -524, -800, 800, 1, 250, Gameplay, "firstDanceOffsetX", 0, ApplyGameplayUI))
     Add(firstDanceControls, SliderAt(ctx, classSec, "Y offset", 14, -608, -800, 800, 1, 250, Gameplay, "firstDanceOffsetY", 80, ApplyGameplayUI))
 
-    local cross = b:CollapsibleSection("gameplay_crosshair", "Combat Crosshair", 560, false)
+    local cross = b:CollapsibleSection("gameplay_crosshair", "Combat Crosshair", 588, false)
     local crossW = cross._msuf2Width or ctx.width or 900
-    W.ControlCardBackdrop(cross, 14, -38, min(crossW - 28, 700), 222)
-    W.ControlCardBackdrop(cross, 14, -292, min(crossW - 28, 700), 214)
+    W.ControlCardBackdrop(cross, 14, -38, min(crossW - 28, 700), 242)
+    W.ControlCardBackdrop(cross, 14, -312, min(crossW - 28, 700), 214)
     local crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", 14, -40, 390, Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI)
     local rangeToggle = ToggleAt(ctx, cross, "Crosshair: color by melee range to target (green=in range, red=out)", 14, -74, Gameplay, "enableCombatCrosshairMeleeRangeColor", false, ApplyGameplayUI)
     LabelAt(cross, "Uses the spell selected below.", 38, -104, 420, "GameFontDisableSmall", T.colors.muted)
     noSpellWarn = LabelAt(cross, "No melee range spell selected - Crosshair will not work.", 38, -126, 520, "GameFontNormalSmall", { 1, 0.55, 0.1, 1 })
-    local spellInput = MoveWidget(W.TextInput(cross, "Choose spell (type spell ID or name)", 220), cross, 14, -170)
+    local spellInput = MoveWidget(W.TextInput(cross, "Choose spell ID or name", 260), cross, 14, -170)
+    if spellInput then
+        spellInput:SetSize(260, 24)
+        if spellInput._msuf2Title then
+            spellInput._msuf2Title:SetTextColor(T.colors.text[1], T.colors.text[2], T.colors.text[3], 1)
+            spellInput._msuf2Title:SetWidth(260)
+        end
+        if T.CreateSuperellipseLayers then
+            local fill, edge = T.CreateSuperellipseLayers(spellInput, "_msuf2SpellInput", 1, "BACKGROUND", "OVERLAY")
+            spellInput._msuf2SpellInputFill = fill
+            spellInput._msuf2SpellInputEdge = edge
+            if fill then fill:SetVertexColor(0.025, 0.034, 0.070, 0.98) end
+            if edge then edge:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
+        end
+        if spellInput.SetBackdropColor then spellInput:SetBackdropColor(0.025, 0.034, 0.070, 0.98) end
+        if spellInput.SetBackdropBorderColor then spellInput:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
+        spellInput:HookScript("OnEditFocusGained", function(self)
+            if self._msuf2SpellInputEdge then self._msuf2SpellInputEdge:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95) end
+        end)
+        spellInput:HookScript("OnEditFocusLost", function(self)
+            if self._msuf2SpellInputEdge then self._msuf2SpellInputEdge:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
+            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
+        end)
+        spellInput:HookScript("OnShow", function(self)
+            if self._msuf2SpellInputFill then self._msuf2SpellInputFill:SetVertexColor(0.025, 0.034, 0.070, 0.98) end
+            if self._msuf2SpellInputEdge then self._msuf2SpellInputEdge:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
+            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
+        end)
+    end
     M.BindTextInput(ctx, spellInput,
         function()
             local id = CurrentMeleeSpellID()
@@ -356,13 +384,13 @@ local function BuildGameplay(ctx)
             SetMeleeSpellID(v)
             ApplyGameplayUI()
         end, true)
-    selectedSpellText = LabelAt(cross, "", 260, -192, 360, "GameFontDisableSmall", T.colors.muted)
-    LabelAt(cross, "Used by: Crosshair melee-range color.", 260, -214, 360, "GameFontDisableSmall", T.colors.muted)
-    local classSpellToggle = ToggleAt(ctx, cross, "Store per class", 260, -244, Gameplay, "meleeSpellPerClass", false, function()
+    selectedSpellText = LabelAt(cross, "", 320, -192, 360, "GameFontDisableSmall", T.colors.muted)
+    LabelAt(cross, "Used by: Crosshair melee-range color.", 320, -214, 360, "GameFontDisableSmall", T.colors.muted)
+    local classSpellToggle = ToggleAt(ctx, cross, "Store per class", 320, -244, Gameplay, "meleeSpellPerClass", false, function()
         if Gameplay().meleeSpellPerClass then SeedMeleeClass() end
         ApplyGameplayUI()
     end)
-    local specSpellToggle = ToggleAt(ctx, cross, "Store per spec", 430, -244, Gameplay, "meleeSpellPerSpec", false, function()
+    local specSpellToggle = ToggleAt(ctx, cross, "Store per spec", 500, -244, Gameplay, "meleeSpellPerSpec", false, function()
         if Gameplay().meleeSpellPerSpec then SeedMeleeSpec() end
         ApplyGameplayUI()
     end)
@@ -375,16 +403,16 @@ local function BuildGameplay(ctx)
     Add(meleeControls, specSpellToggle)
 
     local preview = T.Panel(cross, nil, { 0, 0, 0, 0.92 }, T.colors.borderSoft)
-    preview:SetPoint("TOPLEFT", cross, "TOPLEFT", 14, -292)
+    preview:SetPoint("TOPLEFT", cross, "TOPLEFT", 14, -312)
     preview:SetSize(260, 120)
     local bars = {}
     for i = 1, 4 do
         bars[i] = preview:CreateTexture(nil, "ARTWORK")
         bars[i]:SetColorTexture(1, 0, 0, 1)
     end
-    Add(crossControls, SliderAt(ctx, cross, "Crosshair thickness", 300, -314, 1, 12, 1, 260, Gameplay, "crosshairThickness", 3, ApplyGameplayUI))
-    Add(crossControls, SliderAt(ctx, cross, "Crosshair size", 300, -398, 20, 120, 2, 260, Gameplay, "crosshairSize", 40, ApplyGameplayUI))
-    LabelAt(cross, "Colors are configured in Colors > Gameplay.", 300, -494, 360, "GameFontDisableSmall", T.colors.muted)
+    Add(crossControls, SliderAt(ctx, cross, "Crosshair thickness", 300, -334, 1, 12, 1, 260, Gameplay, "crosshairThickness", 3, ApplyGameplayUI))
+    Add(crossControls, SliderAt(ctx, cross, "Crosshair size", 300, -418, 20, 120, 2, 260, Gameplay, "crosshairSize", 40, ApplyGameplayUI))
+    LabelAt(cross, "Colors are configured in Colors > Gameplay.", 300, -514, 360, "GameFontDisableSmall", T.colors.muted)
 
     previewRefresh = function()
         local g = Gameplay()
