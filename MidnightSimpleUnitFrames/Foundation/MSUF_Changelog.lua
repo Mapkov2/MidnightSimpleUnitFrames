@@ -4,10 +4,24 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.3",
-    previousVersion = "5.2",
-    rangeLabel = "5.2 -> 5.3",
+    currentVersion = "5.31",
+    previousVersion = "5.3",
+    rangeLabel = "5.3 -> 5.31",
     entries = {
+        {
+            version = "5.31",
+            date = "2026-05-18",
+            sections = {
+                {
+                    title = "Patch Release",
+                    bullets = {
+                        "Fixed a critical group-frame Preserve HP color crash in Midnight when background frame colors are returned as secret numbers.",
+                        "Reverted the delayed range-fade alpha repair performance optimization so layered range alpha is repaired immediately again while range state is unchanged.",
+                        "Bundled the full 5.3 release notes with this patch release so the in-game changelog still includes the complete 5.3 release.",
+                    },
+                },
+            },
+        },
         {
             version = "5.3",
             date = "2026-05-18",

@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.31 - 2026-05-18
+
+### Patch Release
+
+- Fixed a critical group-frame Preserve HP color crash in Midnight when background frame colors are returned as secret numbers.
+- Reverted the delayed range-fade alpha repair performance optimization so layered range alpha is repaired immediately again while range state is unchanged.
+- Bundled the full 5.3 release notes with this patch release so the in-game changelog still includes the complete 5.3 release.
+
 ## 5.3 - 2026-05-18
 
 ### Highlights
