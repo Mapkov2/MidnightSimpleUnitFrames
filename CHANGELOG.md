@@ -1,147 +1,64 @@
 # Changelog
 
-## 5.3 Beta 6 - 2026-05-18
-
-### Bugfixes
-
-- Fixed aura icons growing on tooltip hover by suppressing inherited button-state visuals and restoring the configured icon geometry.
-- Fixed a taint error in class-colored Bar Background runtime caused by comparing secret unit GUID values.
-- Fixed group-frame debuff filtering on pure DPS classes so the Dispellable base filter no longer collapses to an empty aura set when the player has no defensive dispel.
-- Fixed Unit Auras debuff filters so Include dispellable debuffs and the Magic, Curse, Poison, and Disease filter toggles are applied by the runtime.
-- Resolved the Group Frame effects merge conflict while keeping the scope-aware highlight-priority cache path.
-
-### Changes / Improvements
-
-- Added scope-aware dispel border and glow behavior for group frames.
-- Expanded status icon anchor options.
-- Included the fixes and polish commits from the 2026-05-18 07:00+ beta window in this validation build.
-
-### Release / Tooling
-
-- Prepared 5.3 Beta 6 as the next beta validation build for today's aura, dispel, and secret-value fixes.
-
-## 5.3 Beta 5 - 2026-05-18
-
-### Bugfixes
-
-- Fixed Bar Background Tint in Dark Mode so a white custom tint stays applied after switching Bar mode away and back.
-- Fixed Preserve HP color missing-health rendering so it uses the resolved HP background track color instead of falling back to the old dark preserve color.
-- Fixed live color refresh so preserve missing-health layers resync immediately after color and Bar mode changes.
-
-### Changes / Improvements
-
-- Added a global Preserve HP color sync toggle under Global Style > Colors > Bar Background Tint for unit frames.
-- Clarified the Colors page, unit transparency hint, search FAQ, and warning text for white missing-health backgrounds in Dark Mode.
-- Kept the preview and group-frame preserve backgrounds aligned with the same HP track color pipeline.
-
-### Release / Tooling
-
-- Prepared 5.3 Beta 5 as the next beta validation build for the Dark Mode background tint fix.
-
-## 5.3 Beta 4 - 2026-05-17
+## 5.3 - 2026-05-18
 
 ### Highlights
 
-- Added Focus Target frame support across unit settings, edit mode, menu previews, copy targets, text options, icons, and runtime refreshes.
-- Further cleaned up Menu2 with refined cards, navigation, search, switch states, dashboard behavior, and input readability.
-- Added Rounded Frames with per-surface controls for unit frames, group frames, bars, highlights, overlays, absorbs, and indicators.
-- Prepared 5.3 Beta 4 as the release-ready beta validation build. This is not the stable 5.3 release.
+- Added Focus Target as a new unit frame with its own settings, Edit Mode mover, Menu2 preview, copy targets, text options, status icons, and secure runtime refresh.
+- Added Rounded Frames through Global Style > Bars > Rounded Texture, with separate controls for unit frames, group frames, power bars, and mouseover highlights.
+- Reworked Dispel Border / Glow so it can be useful for every class, including classes without a defensive dispel.
+- Continued the Menu2 redesign with cleaner cards, better navigation, stronger search coverage, and clearer profile/menu workflows.
 
-### Performance
+### Focus Target
 
-<!-- MSUF-AUTO-CHANGELOG:Performance:START -->
-- Optimized range fade alpha repair.
-- Reduced redundant HP text rendering when fast-path inputs have not changed.
-- Reduced repeated group-frame health color and alpha work when the visual state is unchanged.
-<!-- MSUF-AUTO-CHANGELOG:Performance:END -->
+- Added a dedicated Focus Target frame that appears when Focus is enabled and your focus has a target.
+- Integrated Focus Target into unit-frame defaults, secure show/hide state, live refreshes, Edit Mode, preview rendering, copy/apply actions, import/export handling, alpha controls, text settings, portraits, and indicators.
+- Kept Focus Target lightweight by default: it has health/name support like other unit frames, while power is off by default and castbars/auras remain out of scope for this frame.
+- Added Focus Target help/search text and menu safeguards so the frame clearly explains when Focus must be enabled first.
 
-### Bugfixes
+### Rounded Frames
 
-<!-- MSUF-AUTO-CHANGELOG:Bugfixes:START -->
-- Fixed unit preview refresh upvalues.
-- Fixed dashboard support clipping.
-- Fixed menu clipping and improved input readability.
-- Fixed collapsed Menu2 text badge visibility.
-- Fixed group HP reverse order runtime behavior.
-<!-- MSUF-AUTO-CHANGELOG:Bugfixes:END -->
+- Added rounded mask media and runtime support for unit frames, group frames, health bars, power bars, detached power bars, absorbs, overlays, highlights, and preview samples.
+- Added a master Rounded Texture switch plus per-surface toggles for Unit frames, Group frames, Power bars, and Mouseover highlights.
+- Integrated rounded edges with active borders, mouseover highlights, dispel highlights, aggro/target/focus highlights, group-frame overlays, and layer ordering so rounded frames no longer fall back to square highlight visuals.
+- Added preview, search coverage, localization, reload guidance, and safe rebuild behavior for rounded frame texture changes.
+- Rounded Frames stay disabled by default and avoid their runtime path while disabled.
 
-### Changes / Improvements
+### Dispel Border / Glow
 
-<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:START -->
+- Added Dispel Border detection modes: Dispellable by me, Any dispel-type debuff, and Any debuff.
+- Dispel Border / Glow can now support all classes: healers can keep class-aware dispel detection, while non-dispel classes can still highlight debuff types or any debuff without losing the debuff list.
+- Added MSUF Dispel Border / Glow for Blizzard aura mode, so Blizzard can keep rendering aura icons while MSUF still draws the configured dispel border and glow.
+- Added scope-aware group-frame behavior for dispel colors, glow options, scan state, and highlight priority, so party/raid scopes can keep the correct visual rules.
+- Improved dispel color resolution, secret-safe aura scanning, debuff filtering, and highlight cache behavior for Magic, Curse, Poison, Disease, and generic debuff states.
+
+### Menu2
+
+- Expanded the card-based layout across unit frames, group frames, auras, indicators, bars, colors, gameplay, profiles, class power, and advanced pages.
+- Improved the dashboard preview, collapsed text badges, clipping behavior, input readability, submenu colors, scroll behavior, dynamic strata handling, and card enable states.
+- Added a larger search module with better guidance for auras, name shortening, rounded frames, Focus Target, Unit Auras, Blizzard aura modes, and profile workflows.
+- Refined switches, range fade controls, profile UX, FAQ text, and warnings around Blizzard-managed buffs/debuffs.
+
+### Other Improvements
+
 - Added heal prediction anchor modes.
-- Polished Menu2 navigation submenu colors.
-- Completed runtime locale coverage for the 5.3 beta line.
-<!-- MSUF-AUTO-CHANGELOG:Changes-Improvements:END -->
-
-### Release / Tooling
-
-<!-- MSUF-AUTO-CHANGELOG:Release-Tooling:START -->
-- Kept 5.3 on the beta channel for Beta 4 release-ready validation.
-- Updated Perfy workflow notes for current repo-based instrumentation.
-<!-- MSUF-AUTO-CHANGELOG:Release-Tooling:END -->
-
-## 5.3 Beta 3 - 2026-05-17
-
-### Highlights
-
-- Added Focus Target frame support across unit settings, edit mode, menu previews, copy targets, text options, icons, and runtime refreshes.
-- Restored the Menu2 dashboard preview and scroll behavior to the stable 5.3 Beta 2 layout.
-
-### Bugfixes
-
-- Fixed Menu2 text badges so they hide while cards are collapsed.
-- Restored the Menu2 dashboard preview and scroll behavior to the 5.3 Beta 2 layout.
-
-### Changes / Improvements
-
-- Clarified unit frame alpha controls and matched them to the group frame layout.
-- Bundled all 5.3 Beta changelog entries in the dashboard changelog.
-
-## 5.3 Beta 2 - 2026-05-17
-
-### Performance
-- Defaulted rounded frame texture off so the feature has no active runtime callbacks while disabled.
-- Reduced unnecessary group frame header rescans during rebuild and layout bursts.
-- Reduced redundant castbar re-layout work when width-source geometry has not changed.
-
-### Bugfixes
-- Fixed rounded frame texture re-enable behavior after the module manager disables the feature.
-- Fixed rounded frame integration for unit and group frame borders, power bars, mouseover highlights, dispel overlays, absorb bars, and indicators.
-- Fixed group frame rounded visuals so mouseover and highlight state use the rounded edge instead of square overlays.
-
-### Changes / Improvements
-- Added Rounded Texture controls under Global Style > Bars with per-surface toggles, search coverage, localization, preview support, and a reload prompt.
-- Added rounded mask media for the live unit/group frames and Menu2 preview.
-
-## 5.3 Beta 1 - 2026-05-17
-
-### Performance
-- Improved performance for bar background rendering, text updates, and interrupt-ready handling.
-- Added backend compatibility hardening across MSUF modules.
-- Refactored core systems including font registration and recolor handling.
-
-### Bugfixes
-- Fixed detached unit frame outline border not working correctly.
-- Fixed player aura helpful classification.
-- Fixed Menu2 card enable states.
-- Improved dynamic strata handling in Menu2.
-- Defaulted tooltips back to Blizzard-controlled behavior for better compatibility.
-- Fixed and refined raid group menu behavior.
-
-### Changes / Improvements
-- Added redesigned Menu2 card layout across unit, group, aura, indicator, bar, and advanced pages.
-- Added more Menu2 cards and refined menu structure.
-- Added new Menu2 search module and improved search/guidance text.
-- Improved guidance for aura buff overrides.
-- Improved guidance for name shortening overrides.
-- Refined Menu2 switches and range fade controls.
-- Added improved on/off switch visuals.
+- Added more status icon anchor options.
+- Added player aggro border support.
+- Added a global Preserve HP color sync option for unit-frame Bar Background Tint and improved Dark Mode missing-health background handling.
 - Added raid group number display next to unit names.
-- Updated localization/runtime locale handling.
-- Added new UI/media assets for switches and rounded/superellipse visuals.
+- Improved Unit Auras debuff filters, including Include dispellable debuffs and the Magic, Curse, Poison, and Disease toggles.
+- Defaulted tooltips back to Blizzard-controlled behavior for better compatibility.
 
-### Internal / Release
-- Restricted the release workflow and privatized the release launcher.
-- Removed old local publish helper scripts and release helper docs.
+### Performance and Stability
+
+- Improved bar background rendering, text update paths, interrupt-ready handling, range fade alpha repair, and castbar width-source layout checks.
+- Reduced unnecessary group-frame header rescans and repeated group health color/alpha work.
+- Hardened backend namespace compatibility and imported media handling.
+- Fixed detached unit-frame outline borders, player aura helpful classification, group HP reverse order, aura tooltip hover sizing, menu preview refreshes, dashboard support clipping, and layer ordering consistency.
+
+### Localization
+
+- Completed direct locale coverage for enUS, enGB, deDE, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, zhCN, and zhTW.
+- Moved locale coverage into real locale files and updated runtime localization coverage for the 5.3 feature set.
 
 ## 5.2 - 2026-05-16
