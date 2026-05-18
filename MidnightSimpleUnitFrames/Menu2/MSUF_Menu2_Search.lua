@@ -175,6 +175,34 @@ local function AddRawSearchText(parts, text)
     if text ~= "" then parts[#parts + 1] = text end
 end
 
+local TOGGLE_SEARCH_ACTIONS = {
+    "how do i turn on %s",
+    "how do i turn off %s",
+    "how to turn on %s",
+    "how to turn off %s",
+    "where do i turn on %s",
+    "where do i turn off %s",
+    "turn on %s",
+    "turn off %s",
+    "enable %s",
+    "disable %s",
+    "show %s",
+    "hide %s",
+    "switch on %s",
+    "switch off %s",
+    "%s on",
+    "%s off",
+}
+
+local function AddToggleQuestionSearchText(parts, label)
+    label = DisplaySearchText(label)
+    if label == "" then return end
+    AddSearchText(parts, "toggle " .. label)
+    for i = 1, #TOGGLE_SEARCH_ACTIONS do
+        AddSearchText(parts, string.format(TOGGLE_SEARCH_ACTIONS[i], label))
+    end
+end
+
 local MIN_SEARCH_QUERY_LEN = 2
 local SEARCH_TEXT_MAX_LEN = 170
 local SEARCH_BACKGROUND_STEP_SEC = 0.08
@@ -1558,6 +1586,9 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
     end
     if kind == "page" then
         AddRawSearchText(parts, SEARCH_KEYWORDS[pageInfo.key])
+    end
+    if kind == "toggle" then
+        AddToggleQuestionSearchText(parts, label)
     end
     if extraParts then
         for i = 1, #extraParts do AddSearchText(parts, extraParts[i]) end
