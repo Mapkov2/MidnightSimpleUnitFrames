@@ -90,6 +90,9 @@ local function _AuraCopyFieldsUpdate(dst, src)
     dst.duration               = src.duration
     dst.expirationTime         = src.expirationTime
     dst.applications           = src.applications
+    dst.dispelName             = src.dispelName
+    dst.isHelpful              = src.isHelpful
+    dst.isHarmful              = src.isHarmful
     dst.isRaid                 = src.isRaid
     dst.isBossAura             = src.isBossAura
     dst._msufA2_updateRev      = (dst._msufA2_updateRev or 0) + 1
@@ -379,27 +382,59 @@ end
 
 local function ReadAccessibleDispelName(aura)
     local v = aura and aura.dispelName
-    if v == nil then return nil end
+    if v == nil then return nil, true end
     if _hasCanaccessvalue then
-        if canaccessvalue(v) ~= true then return nil end
+        if canaccessvalue(v) ~= true then return nil, false end
     elseif issecretvalue and issecretvalue(v) == true then
-        return nil
+        return nil, false
     end
-    if type(v) ~= "string" or v == "" or v == "None" then return nil end
-    return v
+    if type(v) ~= "string" or v == "" or v == "None" then return nil, true end
+    return v, true
+end
+
+local function CacheDispelInfo(aura)
+    if not aura then return 0 end
+    local dispelName, known = ReadAccessibleDispelName(aura)
+    if known == false then
+        -- Private/secret aura data cannot match a selected dispel type here.
+        -- Cache the non-match so FilterAura does not retry every render; the
+        -- include-dispellable path still uses Blizzard's filtered fallback.
+        aura._msufA2_dispelCode = 0
+        aura._msufA2_hasDispelName = 0
+        return 0
+    end
+    local code = 0
+    if dispelName == "Magic" then
+        code = 1
+    elseif dispelName == "Curse" then
+        code = 2
+    elseif dispelName == "Poison" then
+        code = 3
+    elseif dispelName == "Disease" then
+        code = 4
+    end
+    aura._msufA2_dispelCode = code
+    aura._msufA2_hasDispelName = (dispelName ~= nil) and 1 or 0
+    return code
 end
 
 local function DebuffMatchesSelectedDispelType(aura, cfg)
-    local dispelName = ReadAccessibleDispelName(aura)
-    if dispelName == "Magic" then return cfg._debuffDispelMagic == true end
-    if dispelName == "Curse" then return cfg._debuffDispelCurse == true end
-    if dispelName == "Poison" then return cfg._debuffDispelPoison == true end
-    if dispelName == "Disease" then return cfg._debuffDispelDisease == true end
+    local code = aura and aura._msufA2_dispelCode
+    if code == nil then code = CacheDispelInfo(aura) end
+    if code == 1 then return cfg._debuffDispelMagic == true end
+    if code == 2 then return cfg._debuffDispelCurse == true end
+    if code == 3 then return cfg._debuffDispelPoison == true end
+    if code == 4 then return cfg._debuffDispelDisease == true end
     return false
 end
 
 local function DebuffIsDispellable(unit, aid, aura, lIsFiltered)
-    if ReadAccessibleDispelName(aura) then return true end
+    local hasDispelName = aura and aura._msufA2_hasDispelName
+    if hasDispelName == nil then
+        CacheDispelInfo(aura)
+        hasDispelName = (aura and aura._msufA2_hasDispelName) or 0
+    end
+    if hasDispelName == 1 then return true end
     if lIsFiltered then
         return ReadAccessibleBool(lIsFiltered(unit, aid, HARMFUL_DISPELLABLE)) == false
     end
@@ -473,6 +508,12 @@ local function EnrichAura(unit, data, isHelpful)
     data._msufA2_sid       = sid
     data._msufA2_isSated   = (sid ~= 0 and _SATED_SPELLS[sid] == true) and 1 or 0
     data._msufA2_isHealerHot = (sid ~= 0 and _HEALER_HOT_SPELLS[sid] == true) and 1 or 0
+    if isHelpful == false then
+        CacheDispelInfo(data)
+    else
+        data._msufA2_dispelCode = 0
+        data._msufA2_hasDispelName = 0
+    end
     -- _msufA2_isIgnored is set per-frame in FilterAura (depends on per-unit cfg)
     return data
 end
@@ -503,13 +544,14 @@ function Cache.FullScan(unit)
     if not _getSlots or not _getBySlot then return end
     -- PERF: Inlined EnsureUnit
     local s = _units[unit]
-    if not s then s = { all = {}, epoch = 0, changed = true }; _units[unit] = s end
+    if not s then s = { all = {}, epoch = 0, changed = true, structureEpoch = 0 }; _units[unit] = s end
     -- P7: release all cached aura tables back to pool before wiping.
     for _, entry in next, s.all do _AuraRelease(entry) end
     wipe(s.all)
     s.changed = true
     s.epoch = s.epoch + 1
     s.structureChanged = true
+    s.structureEpoch = (s.structureEpoch or 0) + 1
     s.updatedIDs = nil
     local _st = API.Store; if _st and _st._epochs then _st._epochs[unit] = s.epoch end
     local slotsN = _PackSlots(_getSlots(unit, HELPFUL, 40))
@@ -555,7 +597,7 @@ function Cache.OnUnitAura(unit, updateInfo)
 
     -- PERF: Inlined EnsureUnit (after warmup, always hits cache)
     local s = _units[unit]
-    if not s then s = { all = {}, epoch = 0, changed = true }; _units[unit] = s end
+    if not s then s = { all = {}, epoch = 0, changed = true, structureEpoch = 0 }; _units[unit] = s end
 
     local any = false
     -- PERF: track structure change inline instead of re-scanning the arrays
@@ -609,6 +651,17 @@ function Cache.OnUnitAura(unit, updateInfo)
                     local newOwn = ClassifyPlayer(unit, aid, newHelpful)
                     entry._msufIsHelpful = newHelpful
                     entry._msufIsPlayerAura = newOwn
+                    if newHelpful == false then
+                        if oldHelpful ~= false
+                           or entry._msufA2_dispelCode == nil
+                           or entry._msufA2_hasDispelName == nil
+                        then
+                            CacheDispelInfo(entry)
+                        end
+                    else
+                        entry._msufA2_dispelCode = 0
+                        entry._msufA2_hasDispelName = 0
+                    end
                     -- Blizzard can report filter/classification changes as an
                     -- update-only delta. If membership changed, force a normal
                     -- filter pass instead of reusing the previous visible list.
@@ -657,6 +710,7 @@ function Cache.OnUnitAura(unit, updateInfo)
         -- update-only → FilterAndSort can skip full rescan and reuse previous output.
         if hasAdd or hasRem then
             s.structureChanged = true
+            s.structureEpoch = (s.structureEpoch or 0) + 1
             -- A structural delta can keep the visible count unchanged
             -- (remove one aura, add another). Do not leave an empty
             -- updatedIDs table behind, or RenderUnit may treat the pass as
@@ -675,8 +729,10 @@ function Cache.Invalidate(unit)
         s.changed = true
         s.epoch = s.epoch + 1
         s.structureChanged = true
+        s.structureEpoch = (s.structureEpoch or 0) + 1
         s.updatedIDs = nil
         s._lastFilterGen = nil
+        s._lastFilterStructureEpoch = nil
         s._lastNB = nil
         s._lastND = nil
     end
@@ -687,11 +743,13 @@ function Cache.InvalidateAll()
         s.changed = true
         s.epoch = s.epoch + 1
         s.structureChanged = true
+        s.structureEpoch = (s.structureEpoch or 0) + 1
         s.updatedIDs = nil
         -- Clear fast-path filter cache: options changes (Important, OnlyMine,
         -- Caps, IgnoreList, etc.) must force a full re-filter on next
         -- FilterAndSort, even when no aura add/remove occurred.
         s._lastFilterGen = nil
+        s._lastFilterStructureEpoch = nil
         s._lastNB = nil
         s._lastND = nil
     end
@@ -914,8 +972,9 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     -- the filtered list is structurally identical. Skip full iteration + filter.
     -- Saves ~52µs per update-only event (the most common case in sustained combat).
     local cfgGen = cfg._gen or -1
-    if not s.structureChanged and s._lastFilterGen == cfgGen
-       and s._lastNB and s._lastND then
+    local structureEpoch = s.structureEpoch or 0
+    if s._lastFilterGen == cfgGen and s._lastFilterStructureEpoch == structureEpoch
+       and s._lastNB ~= nil and s._lastND ~= nil then
         s.changed = false
         return buffOut, s._lastNB, debuffOut, s._lastND
     end
@@ -1030,6 +1089,11 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             data._msufA2_sid       = cached._msufA2_sid
                             data._msufA2_isSated   = cached._msufA2_isSated
                             data._msufA2_isHealerHot = cached._msufA2_isHealerHot
+                            data._msufA2_dispelCode = cached._msufA2_dispelCode
+                            data._msufA2_hasDispelName = cached._msufA2_hasDispelName
+                            if actualHelpful == false and data._msufA2_dispelCode == nil then
+                                CacheDispelInfo(data)
+                            end
                         else
                             EnrichAura(unit, data, actualHelpful)
                             allCache[aid] = data
@@ -1073,6 +1137,11 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             data._msufA2_sid       = cached._msufA2_sid
                             data._msufA2_isSated   = cached._msufA2_isSated
                             data._msufA2_isHealerHot = cached._msufA2_isHealerHot
+                            data._msufA2_dispelCode = cached._msufA2_dispelCode
+                            data._msufA2_hasDispelName = cached._msufA2_hasDispelName
+                            if actualHelpful == false and data._msufA2_dispelCode == nil then
+                                CacheDispelInfo(data)
+                            end
                         else
                             EnrichAura(unit, data, actualHelpful)
                             allCache[aid] = data
@@ -1131,6 +1200,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     s._lastNB = nB
     s._lastND = nD
     s._lastFilterGen = cfgGen
+    s._lastFilterStructureEpoch = structureEpoch
 
     return buffOut, nB, debuffOut, nD
 end

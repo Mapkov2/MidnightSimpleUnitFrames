@@ -195,16 +195,10 @@ function DB.AnyUnitEnabledCached()
     if c.enabled ~= true then return false end
     local ue = c.unitEnabled
     if not ue then return false end
-    return (ue.player == true)
-        or (ue.target == true)
-        or (ue.focus == true)
-        or (ue.boss1 == true)
-        or (ue.boss2 == true)
-        or (ue.boss3 == true)
-        or (ue.boss4 == true)
-        or (ue.boss5 == true)
-        or (ue.party1 == true)
-        or (ue.raid1 == true)
+    for _, enabled in pairs(ue) do
+        if enabled == true then return true end
+    end
+    return false
 end
 
 -- MSUF_A2_Colors.lua

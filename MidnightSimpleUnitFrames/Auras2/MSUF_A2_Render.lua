@@ -264,12 +264,44 @@ local function InvalidateDB()
     -- v4: Invalidate delta cache (config change affects filter results)
     local CM = API.Cache
     if CM and CM.InvalidateAll then CM.InvalidateAll() end
+
+    -- Rebuild the cheap DB snapshot immediately so event registrations follow
+    -- the current enabled state. Without this, old UNIT_AURA helper frames can
+    -- keep firing after the master Auras2 toggle was disabled.
+    local a2 = GetAuras2DB()
+    local DB = API.DB
+    local anyEnabled = false
+    if type(a2) == "table" and a2.enabled == true and DB then
+        if DB.AnyUnitEnabledCached then
+            anyEnabled = (DB.AnyUnitEnabledCached() == true)
+        else
+            local c = DB.cache
+            local ue = c and c.unitEnabled
+            if ue then
+                for _, enabled in pairs(ue) do
+                    if enabled == true then
+                        anyEnabled = true
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    local applyEvents = API.ApplyEventRegistration
+    if type(applyEvents) == "function" then applyEvents() end
+
     -- Wipe per-entry layout caches so UpdateAnchor re-positions containers
     local aby = A2_STATE.aurasByUnit
     if aby then
         for _, entry in pairs(aby) do
             if entry then entry._msufLayoutCache = nil end
         end
+    end
+    if not anyEnabled then
+        local hardDisable = API.HardDisableAll
+        if type(hardDisable) == "function" then hardDisable() end
+        return
     end
     -- Schedule refresh
     if API.MarkAllDirty then API.MarkAllDirty(0) end
@@ -647,8 +679,28 @@ local function _FlushPendingRemoveIDs()
     end
 end
 
+API._Render.HasPrivateAuraState = function(entry, checkSlots)
+    if not entry then return false end
+    if entry._msufA2PrivateStateActive == true then return true end
+    if type(entry._privateAnchorIDs) == "table" then return true end
+    if entry._privUnit or entry._privToken or entry._privSize or entry._privMax then return true end
+    if entry._privNormalizeQueued then return true end
+    if entry.private and entry.private.IsShown and entry.private:IsShown() then return true end
+    if checkSlots then
+        local slots = entry._privateSlots
+        if type(slots) == "table" then
+            for i = 1, #slots do
+                local slot = slots[i]
+                if slot and slot.IsShown and slot:IsShown() then return true end
+            end
+        end
+    end
+    return false
+end
+
 local function PrivateClear(entry)
     if not entry then return end
+    if not API._Render.HasPrivateAuraState(entry, true) then return end
     local ids = entry._privateAnchorIDs
     if type(ids) == "table" and C_UnitAuras then
         local removeFn = C_UnitAuras.RemovePrivateAuraAnchor
@@ -674,6 +726,7 @@ local function PrivateClear(entry)
     entry._privGrowth = nil
     entry._privBorderScale = nil
     entry._privNormalizeQueued = nil
+    entry._msufA2PrivateStateActive = nil
     local slots = entry._privateSlots
     if type(slots) == "table" then
         for i = 1, #slots do if slots[i] then slots[i]:Hide() end end
@@ -803,7 +856,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
     if not API._Render.PrivateAurasShownForUnit(shared, unit)
        or not PrivateAurasSupported()
     then
-        PrivateClear(entry)
+        if API._Render.HasPrivateAuraState(entry, false) then PrivateClear(entry) end
         return
     end
 
@@ -832,6 +885,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
        and entry._privBorderScale == borderScale
        and type(entry._privateAnchorIDs) == "table"
     then
+        entry._msufA2PrivateStateActive = true
         if entry.private then entry.private:Show() end
         NormalizePrivateSlots(entry, privateIconSize)
         return
@@ -856,6 +910,7 @@ local function PrivateRebuild(entry, shared, privateIconSize, spacing, privateGr
 
     entry.private:Show()
     entry._privateAnchorIDs = {}
+    entry._msufA2PrivateStateActive = true
 
     -- Container sizing: horizontal = wide row, vertical = tall column
     if vertical then
@@ -1257,14 +1312,17 @@ local function RenderUnit(entry)
     -- Unit disabled via options toggle: hide all icons + anchor and bail out.
     -- Edit mode preview bypasses this so movers remain visible for positioning.
     if not UnitEnabled(a2, unit) and not isEditActive then
+        if entry._msufA2DisabledClean == true then return end
         Icons.HideUnused(entry.buffs, 1)
         Icons.HideUnused(entry.debuffs, 1)
         if entry.mixed then Icons.HideUnused(entry.mixed, 1) end
-        PrivateClear(entry)
+        if API._Render.HasPrivateAuraState(entry, false) then PrivateClear(entry) end
         API._Render.ClearNativeAuras(entry)
         if entry.anchor then entry.anchor:Hide() end
+        entry._msufA2DisabledClean = true
         return
     end
+    entry._msufA2DisabledClean = nil
 
     -- Cache resolved config per configGen (eliminates ~40 table reads per aura event)
     local cfg = entry._cfg
@@ -1333,6 +1391,24 @@ local function RenderUnit(entry)
         -- Display flags
         cfg.showBuffs = (shared.showBuffs == true)
         cfg.showDebuffs = (shared.showDebuffs == true)
+        cfg.privateAurasShown = (unit == "player")
+            and (shared.privateAurasEnabled == true)
+            and (shared.showPrivateAurasPlayer == true)
+
+        -- Migration/edge guard: old builds may have left private anchor state
+        -- on an entry before this hot-path gate existed. Detect it only when
+        -- config changes, never on every aura render.
+        if cfg.privateAurasShown ~= true and entry._msufA2PrivateStateActive ~= true then
+            if entry._privateAnchorIDs ~= nil
+               or entry._privUnit ~= nil
+               or entry._privToken ~= nil
+               or entry._privSize ~= nil
+               or entry._privMax ~= nil
+               or entry._privNormalizeQueued == true
+            then
+                entry._msufA2PrivateStateActive = true
+            end
+        end
     end
 
     -- Local aliases for hot-path values
@@ -1396,8 +1472,22 @@ local function RenderUnit(entry)
 
     -- Private auras keep the dedicated AddPrivateAuraAnchor slot stack. That
     -- path is separate from the Blizzard native buff/debuff container renderer.
-    PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
-    entry._lastPrivateGen = gen
+    -- Only player can use this path; once anchors are built they are engine
+    -- managed, so normal combat aura renders should not re-enter the rebuild.
+    local privateActive = entry._msufA2PrivateStateActive == true
+    if cfg.privateAurasShown == true then
+        if entry._lastPrivateGen ~= gen or not privateActive then
+            if not _inCombat then
+                PrivateRebuild(entry, shared, privateIconSize, spacing, privateGrowth)
+                entry._lastPrivateGen = gen
+            end
+        end
+    elseif privateActive then
+        if not _inCombat then
+            PrivateClear(entry)
+            entry._lastPrivateGen = nil
+        end
+    end
 
     -- Edit Mode: show/hide movers (skip entirely in combat)
     if not _inCombat and _G.MSUF_InCombat ~= true then
@@ -1731,23 +1821,8 @@ API._OnCombatLeave = function()
     local Store = API.Store
     local CM = API.Cache
     local needsCacheAll = false
-    local function hasPrivateAuraState(entry)
-        if not entry then return false end
-        if type(entry._privateAnchorIDs) == "table" then return true end
-        if entry._privUnit or entry._privToken or entry._privSize or entry._privMax then return true end
-        if entry.private and entry.private.IsShown and entry.private:IsShown() then return true end
-        local slots = entry._privateSlots
-        if type(slots) == "table" then
-            for i = 1, #slots do
-                local slot = slots[i]
-                if slot and slot.IsShown and slot:IsShown() then return true end
-            end
-        end
-        return false
-    end
-
     for unit, entry in pairs(AurasByUnit) do
-        if hasPrivateAuraState(entry) then
+        if API._Render.HasPrivateAuraState(entry, true) then
             PrivateClear(entry)
             entry._lastPrivateGen = nil
             if Store and Store.InvalidateUnit then Store.InvalidateUnit(unit) end
@@ -1804,13 +1879,14 @@ local function HardDisableAll()
     for _, entry in pairs(AurasByUnit) do
         if entry then
             if entry.anchor then entry.anchor:Hide() end
-            PrivateClear(entry)
+            if API._Render.HasPrivateAuraState(entry, false) then PrivateClear(entry) end
             Icons = API.Icons or API.Apply
             if Icons then
                 Icons.HideUnused(entry.buffs, 1)
                 Icons.HideUnused(entry.debuffs, 1)
                 Icons.HideUnused(entry.mixed, 1)
             end
+            entry._msufA2DisabledClean = true
         end
     end
 end
