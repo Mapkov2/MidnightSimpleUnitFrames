@@ -136,9 +136,9 @@ local function EnsureProfilePopups()
 
     if not _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT then
         _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT = {
-            text = "Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?",
-            button1 = _G.RELOAD or "Reload",
-            button2 = _G.CANCEL or "Not now",
+            text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
+            button1 = _G.RELOAD or M.Tr("Reload"),
+            button2 = _G.CANCEL or M.Tr("Not now"),
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,
@@ -151,9 +151,9 @@ local function EnsureProfilePopups()
 
     if not _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
         _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE = {
-            text = "Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected.",
-            button1 = YES or "Yes",
-            button2 = NO or "No",
+            text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
+            button1 = YES or M.Tr("Yes"),
+            button2 = NO or M.Tr("No"),
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,
@@ -174,9 +174,9 @@ local function EnsureProfilePopups()
 
     if not _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE then
         _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE = {
-            text = "Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first.",
-            button1 = DELETE or "Delete",
-            button2 = CANCEL or "Cancel",
+            text = M.Tr("Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first."),
+            button1 = DELETE or M.Tr("Delete"),
+            button2 = CANCEL or M.Tr("Cancel"),
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,

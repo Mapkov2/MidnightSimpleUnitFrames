@@ -159,9 +159,9 @@ local function BuildMisc(ctx)
 
     if _G.StaticPopupDialogs and not _G.StaticPopupDialogs["MSUF_RELOAD_PLAYERFRAME_HIDE_MODE"] then
         _G.StaticPopupDialogs["MSUF_RELOAD_PLAYERFRAME_HIDE_MODE"] = {
-            text = "This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required.",
-            button1 = RELOADUI,
-            button2 = CANCEL,
+            text = M.Tr("This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required."),
+            button1 = RELOADUI or M.Tr("Reload"),
+            button2 = CANCEL or M.Tr("Cancel"),
             OnAccept = function() if ReloadUI then ReloadUI() end end,
             timeout = 0,
             whileDead = true,

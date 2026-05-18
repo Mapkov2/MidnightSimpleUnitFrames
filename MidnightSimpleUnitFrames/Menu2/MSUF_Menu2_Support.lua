@@ -129,12 +129,13 @@ function _G.MSUF_ShowReloadRecommendedPopup(label)
 
     pendingReloadRecommendedLabel = tostring(label or "")
     if pendingReloadRecommendedLabel == "" then pendingReloadRecommendedLabel = "these changes" end
+    pendingReloadRecommendedLabel = Tr(pendingReloadRecommendedLabel)
 
     if not _G.StaticPopupDialogs.MSUF_RELOAD_RECOMMENDED then
         _G.StaticPopupDialogs.MSUF_RELOAD_RECOMMENDED = {
-            text = "MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?",
-            button1 = _G.RELOAD or "Reload",
-            button2 = _G.CANCEL or "Not now",
+            text = Tr("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
+            button1 = _G.RELOAD or Tr("Reload"),
+            button2 = _G.CANCEL or Tr("Not now"),
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,
@@ -265,9 +266,9 @@ do
     local isAlpha = type(version) == "string" and version:lower():find("alpha", 1, true) ~= nil
     if isAlpha and _G.StaticPopupDialogs and not _G.StaticPopupDialogs.MSUF_ALPHA_DISCORD then
         _G.StaticPopupDialogs.MSUF_ALPHA_DISCORD = {
-            text = "|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
-            button1 = "Copy Discord Link",
-            button2 = _G.CLOSE or "Close",
+            text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"),
+            button1 = Tr("Copy Discord Link"),
+            button2 = _G.CLOSE or Tr("Close"),
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,

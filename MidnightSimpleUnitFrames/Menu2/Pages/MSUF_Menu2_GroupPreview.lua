@@ -945,7 +945,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", PreviewScopeLabel(CurrentScope())))
     box._title = title
-    local hint = T.Font(box, "GameFontDisableSmall", "click layers to hide - drag custom handles - arrows nudge selected", T.colors.muted)
+    local hint = T.Font(box, "GameFontDisableSmall", M.Tr("click layers to hide - drag custom handles - arrows nudge selected"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
 
@@ -1473,7 +1473,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         powerRight = powerRightTextHandle,
     }
 
-    local footer = T.Font(box, "GameFontDisableSmall", "Click a handle to select - drag custom layers - arrow keys nudge selected; Blizzard is locked", T.colors.muted)
+    local footer = T.Font(box, "GameFontDisableSmall", M.Tr("Click a handle to select - drag custom layers - arrow keys nudge selected; Blizzard is locked"), T.colors.muted)
     footer:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
 
     function box:Refresh()

@@ -66,10 +66,10 @@ function M.ShowPreserveHPColorWarning()
     local g = M.GetGeneralDB()
     if g.hidePreserveHPColorWarning == true then return false end
 
-    local message = "Preserve HP color keeps the HP fill color while layer fade is active and draws missing health separately with the same HP track color from Colors.\n\nThis can help when HP Bar fade makes the empty HP area disappear or look black. Some custom textures may still look flat, dark, or different while this option is enabled."
+    local message = M.Tr("Preserve HP color keeps the HP fill color while layer fade is active and draws missing health separately with the same HP track color from Colors.\n\nThis can help when HP Bar fade makes the empty HP area disappear or look black. Some custom textures may still look flat, dark, or different while this option is enabled.")
     if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
         if print then
-            print("|cffffd700MSUF:|r Preserve HP color uses the same HP track color from Colors, but some bar textures may look different.")
+            print(M.Tr("|cffffd700MSUF:|r Preserve HP color uses the same HP track color from Colors, but some bar textures may look different."))
         end
         return false
     end
@@ -78,7 +78,7 @@ function M.ShowPreserveHPColorWarning()
         _G.StaticPopupDialogs.MSUF2_PRESERVE_HP_COLOR_WARNING = {
             text = "%s",
             button1 = _G.OKAY or "OK",
-            button2 = "Don't show again",
+            button2 = M.Tr("Don't show again"),
             timeout = 0,
             whileDead = true,
             hideOnEscape = false,
@@ -1323,15 +1323,15 @@ function M.BuildPageResetWarning(pageKey)
     if info.kind == "profile" then
         local profileName = _G.MSUF_ActiveProfile or "Default"
         return string.format(
-            "Reset %s to defaults?\n\nThis resets the entire active profile '%s' to the current MSUF factory defaults. Every menu in that profile will be affected.",
+            M.Tr("Reset %s to defaults?\n\nThis resets the entire active profile '%s' to the current MSUF factory defaults. Every menu in that profile will be affected."),
             tostring(title),
             tostring(profileName)
         )
     end
     return string.format(
-        "Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically.",
+        M.Tr("Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
         tostring(title),
-        tostring(info.summary or title)
+        tostring((M.Tr and M.Tr(info.summary or title)) or info.summary or title)
     )
 end
 

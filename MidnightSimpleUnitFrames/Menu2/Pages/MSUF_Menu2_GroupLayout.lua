@@ -558,7 +558,7 @@ local function BuildGFLayout(ctx)
     PlaceAnchorDropdown(anchorPoint, 254, -38, 160)
     BindScopeDropdown(ctx, anchorPoint, "anchorPoint", "CENTER", "rebuild")
 
-    local customLabel = T.Font(anchor, "GameFontHighlightSmall", "Custom Anchor Frame", { 0.62, 0.74, 0.96, 1 })
+    local customLabel = T.Font(anchor, "GameFontHighlightSmall", M.Tr("Custom Anchor Frame"), { 0.62, 0.74, 0.96, 1 })
     customLabel:SetPoint("TOPLEFT", anchor, "TOPLEFT", 14, -104)
     customLabel:SetJustifyH("LEFT")
 

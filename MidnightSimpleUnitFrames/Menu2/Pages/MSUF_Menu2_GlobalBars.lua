@@ -686,7 +686,7 @@ local function BuildBars(ctx)
             RefreshGroupFrameVisuals()
         end)
 
-    local gradLabel = T.Font(textures, "GameFontHighlightSmall", "Gradient", T.colors.muted)
+    local gradLabel = T.Font(textures, "GameFontHighlightSmall", M.Tr("Gradient"), T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
     local RefreshGradientControls
     local function SyncGradientControls()

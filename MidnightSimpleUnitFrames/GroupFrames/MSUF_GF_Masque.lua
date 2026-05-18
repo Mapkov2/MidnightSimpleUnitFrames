@@ -51,6 +51,7 @@ local function ReskinNow()
     if g.ReSkin then pcall(g.ReSkin, g)
     elseif g.Reskin then pcall(g.Reskin, g)
     elseif g.ReSkinAllButtons then pcall(g.ReSkinAllButtons, g) end
+    GF.Masque.SuppressRegisteredButtonStates()
 end
 
 local function RequestReskin()
@@ -106,6 +107,61 @@ end
 
 ------------------------------------------------------------------------
 GF.Masque = {}
+GF.Masque._buttons = GF.Masque._buttons or setmetatable({}, { __mode = "k" })
+
+function GF.Masque.SuppressButtonState(icon)
+    if not icon then return end
+    local function HideRegion(region)
+        if not region then return end
+        if region.SetAlpha then region:SetAlpha(0) end
+        if region.Hide then region:Hide() end
+    end
+
+    if icon.SetButtonState then pcall(icon.SetButtonState, icon, "NORMAL", false) end
+    if icon.UnlockHighlight then pcall(icon.UnlockHighlight, icon) end
+
+    local tex
+    if icon.GetHighlightTexture then
+        tex = icon:GetHighlightTexture()
+        HideRegion(tex)
+    end
+    if icon.SetHighlightTexture then pcall(icon.SetHighlightTexture, icon, nil) end
+
+    if icon.GetPushedTexture then
+        tex = icon:GetPushedTexture()
+        HideRegion(tex)
+    end
+    if icon.SetPushedTexture then pcall(icon.SetPushedTexture, icon, nil) end
+
+    if icon.GetCheckedTexture then
+        tex = icon:GetCheckedTexture()
+        HideRegion(tex)
+    end
+    if icon.SetCheckedTexture then pcall(icon.SetCheckedTexture, icon, nil) end
+
+    HideRegion(icon.Highlight)
+    HideRegion(icon.Pushed)
+    HideRegion(icon.Checked)
+    HideRegion(icon.Flash)
+    HideRegion(icon.__MSQ_Highlight)
+    HideRegion(icon.__MSQ_Pushed)
+    HideRegion(icon.__MSQ_Checked)
+    HideRegion(icon.__MSQ_Flash)
+
+    local regions = icon._msufGFMsqRgn
+    if regions then
+        HideRegion(regions.Highlight)
+        HideRegion(regions.Pushed)
+        HideRegion(regions.Checked)
+        HideRegion(regions.Flash)
+    end
+end
+
+function GF.Masque.SuppressRegisteredButtonStates()
+    for icon in pairs(GF.Masque._buttons or {}) do
+        GF.Masque.SuppressButtonState(icon)
+    end
+end
 
 function GF.Masque.IsEnabled(kind)
     if kind then return IsKindEnabled(kind) end
@@ -132,17 +188,24 @@ function GF.Masque.AddButton(icon, kind)
     r.Icon     = icon.texture or icon._tex
     r.Cooldown = icon.cooldown
     r.Count    = nil
+    r.Highlight = nil
+    r.Pushed    = nil
+    r.Checked   = nil
+    r.Flash     = nil
 
     if icon._msufGFMsqAdded then
         SyncOverlayLevels(icon)
+        GF.Masque.SuppressButtonState(icon)
         return true
     end
 
     local ok = pcall(g.AddButton, g, icon, r)
     if ok then
         icon._msufGFMsqAdded = true
+        GF.Masque._buttons[icon] = true
         _btnCount = _btnCount + 1
         SyncOverlayLevels(icon)
+        GF.Masque.SuppressButtonState(icon)
         RequestReskin()
         return true
     end
@@ -156,9 +219,11 @@ function GF.Masque.RemoveButton(icon)
         if g.RemoveButton then pcall(g.RemoveButton, g, icon) end
         _btnCount = _btnCount > 0 and (_btnCount - 1) or 0
         _forceReskin = true
+        GF.Masque._buttons[icon] = nil
         RequestReskin()
     end
     icon._msufGFMsqAdded = nil
+    GF.Masque._buttons[icon] = nil
     icon._msufGFMsqSize = nil
 end
 

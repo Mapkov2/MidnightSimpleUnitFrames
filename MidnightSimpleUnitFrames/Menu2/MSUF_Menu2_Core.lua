@@ -2592,6 +2592,72 @@ local function BuildDashboardUX(ctx)
         Select("profiles")
     end
 
+    local function DashboardGlobalState()
+        _G.MSUF_GlobalDB = _G.MSUF_GlobalDB or {}
+        local gdb = _G.MSUF_GlobalDB
+        gdb.global = (type(gdb.global) == "table") and gdb.global or {}
+        gdb.global.dashboard = (type(gdb.global.dashboard) == "table") and gdb.global.dashboard or {}
+        return gdb.global.dashboard
+    end
+
+    local function ActiveProfileKey()
+        local key = tostring(_G.MSUF_ActiveProfile or "Default")
+        if key == "" then key = "Default" end
+        return key
+    end
+
+    local function WagoBackupConfirmed()
+        local dash = DashboardGlobalState()
+        local byProfile = dash.wagoProfileBackupConfirmed
+        return type(byProfile) == "table" and byProfile[ActiveProfileKey()] == true
+    end
+
+    local function SetWagoBackupConfirmed(confirmed)
+        local dash = DashboardGlobalState()
+        dash.wagoProfileBackupConfirmed = (type(dash.wagoProfileBackupConfirmed) == "table") and dash.wagoProfileBackupConfirmed or {}
+        local byProfile = dash.wagoProfileBackupConfirmed
+        if confirmed == true then
+            byProfile[ActiveProfileKey()] = true
+        else
+            byProfile[ActiveProfileKey()] = nil
+        end
+    end
+
+    local function RefreshDashboard()
+        if M.InvalidatePage then M.InvalidatePage("home") end
+        if M.SelectPage then M.SelectPage("home") end
+    end
+
+    local function ConfirmWagoBackup()
+        if WagoBackupConfirmed() then return end
+
+        local function accept()
+            SetWagoBackupConfirmed(true)
+            RefreshDashboard()
+        end
+
+        if _G.StaticPopupDialogs and _G.StaticPopup_Show then
+            local popup = _G.StaticPopupDialogs.MSUF2_WAGO_PROFILE_BACKUP_CONFIRM or {
+                text = "%s",
+                button1 = _G.YES or "Yes",
+                button2 = _G.NO or "No",
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                preferredIndex = 3,
+                OnAccept = accept,
+            }
+            popup.button1 = _G.YES or "Yes"
+            popup.button2 = _G.NO or "No"
+            popup.OnAccept = accept
+            _G.StaticPopupDialogs.MSUF2_WAGO_PROFILE_BACKUP_CONFIRM = popup
+            _G.StaticPopup_Show("MSUF2_WAGO_PROFILE_BACKUP_CONFIRM", M.Tr("Have you backed up this MSUF profile before using the Wago MSUF page?"))
+            return
+        end
+
+        accept()
+    end
+
     local function Percent(value, fallback)
         return math.floor(((tonumber(value) or fallback or 1) * 100) + 0.5)
     end
@@ -2795,7 +2861,8 @@ local function BuildDashboardUX(ctx)
     AddTooltip(wago, "Wago profile imports", "The Wago button opens a copyable search link. Importing stays on the Profiles page so backup and new-profile import are visible.")
 
     local checklistTop = wagoTop - 180
-    local checklist = Card(root, "Setup checklist", sideX, checklistTop, sideW, 236)
+    local checklistH = 292
+    local checklist = Card(root, "Setup checklist", sideX, checklistTop, sideW, checklistH)
     W.Text(checklist, "Useful for first-run orientation.", 16, -38, sideW - 32, T.colors.muted)
     local function Row(i, title, body, state, color, onClick, iconText)
         local row = Card(checklist, "", 16, -68 - ((i - 1) * 56), sideW - 32, 48, { 0.080, 0.095, 0.170, 0.72 }, T.colors.borderSoft)
@@ -2810,8 +2877,10 @@ local function BuildDashboardUX(ctx)
     Row(1, "Profile ready", "Active profile is loaded.", "done", T.colors.ok, function() Select("profiles") end)
     Row(2, "Preview available", "Use pages to tune frames.", "done", T.colors.ok, function() Select("uf_player") end)
     Row(3, "Move frames", "Recommended before detail tuning.", movedFrames and "done" or "start", movedFrames and T.colors.ok or T.colors.accent2, ToggleEditMode, movedFrames and "OK" or "!")
+    local wagoBackupConfirmed = WagoBackupConfirmed()
+    Row(4, "Wago backup", "Confirm backup before using the Wago MSUF page.", wagoBackupConfirmed and "done" or "start", wagoBackupConfirmed and T.colors.ok or T.colors.accent2, ConfirmWagoBackup, wagoBackupConfirmed and "OK" or "!")
 
-    local previewTop = checklistTop - 252
+    local previewTop = checklistTop - checklistH - 16
     local preview = Card(root, "", sideX, previewTop, sideW, 150)
     Kicker(preview, "Live preview", 16, -18)
     local stage = T.Panel(preview, nil, { 0.015, 0.020, 0.038, 0.96 }, { 0.075, 0.105, 0.190, 0.75 })

@@ -59,9 +59,9 @@ end
 local function ShowClassPowerReloadPrompt()
     if _G.StaticPopupDialogs and not _G.StaticPopupDialogs["MSUF_CLASSPOWER_ENABLE_RELOAD"] then
         _G.StaticPopupDialogs["MSUF_CLASSPOWER_ENABLE_RELOAD"] = {
-            text = "Class Resources were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?",
-            button1 = RELOADUI,
-            button2 = CANCEL,
+            text = QuickTr("Class Resources were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"),
+            button1 = RELOADUI or QuickTr("Reload"),
+            button2 = CANCEL or QuickTr("Cancel"),
             OnAccept = function() if ReloadUI then ReloadUI() end end,
             timeout = 0,
             whileDead = true,

@@ -505,7 +505,7 @@ local function BuildTopActions(ctx, builder, unit, label)
         return btn
     end
 
-    local editing = T.Font(sec, "GameFontNormalSmall", "Editing:", { 0.72, 0.82, 1.00, 1 })
+    local editing = T.Font(sec, "GameFontNormalSmall", M.Tr("Editing:"), { 0.72, 0.82, 1.00, 1 })
     editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, compactTop and -15 or -6)
 
     local unitPill = MakeTopButton(sec, UnitTopLabel(unit), UnitTopPillWidth(unit), true, {
@@ -522,10 +522,10 @@ local function BuildTopActions(ctx, builder, unit, label)
     unitPill:EnableMouse(false)
 
     local actionY = compactTop and -42 or -2
-    local copy = MakeTopButton(sec, "Copy To", compactTop and 82 or 86, false, TOP_ACTION_STYLE)
+    local copy = MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86, false, TOP_ACTION_STYLE)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
 
-    local edit = MakeTopButton(sec, "MSUF Edit Mode", compactTop and 118 or 128, false, TOP_ACTION_STYLE)
+    local edit = MakeTopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128, false, TOP_ACTION_STYLE)
     edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
     if W.CreatePageResetButton then
         W.CreatePageResetButton(ctx, sec, edit, { width = compactTop and 84 or 88 })
@@ -658,7 +658,7 @@ local function BuildTopActions(ctx, builder, unit, label)
             close:SetPoint("TOPRIGHT", copyPopup, "TOPRIGHT", -12, -9)
             close:SetScript("OnClick", function() copyPopup:Hide() end)
 
-            local destLabel = T.Font(copyPopup, "GameFontDisableSmall", "Destination", T.colors.dim)
+            local destLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Destination"), T.colors.dim)
             destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
 
             copyPopup._targetBtns = {}
@@ -666,7 +666,7 @@ local function BuildTopActions(ctx, builder, unit, label)
             local widths = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, all = 38 }
             copyPopup._targetOrder = order
             copyPopup._targetWidths = widths
-            local shortLabel = { targettarget = "ToT", focustarget = "FT", boss = "Boss", all = "All" }
+            local shortLabel = { targettarget = "ToT", focustarget = "FT", boss = M.Tr("Boss"), all = M.Tr("All") }
             local x = 16
             for i = 1, #order do
                 local key = order[i]
@@ -683,7 +683,7 @@ local function BuildTopActions(ctx, builder, unit, label)
                 x = x + widths[key] + 6
             end
 
-            local catLabel = T.Font(copyPopup, "GameFontDisableSmall", "Copy categories", T.colors.dim)
+            local catLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Copy categories"), T.colors.dim)
             catLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -90)
 
             copyPopup._checks = {}
@@ -698,7 +698,7 @@ local function BuildTopActions(ctx, builder, unit, label)
                 copyPopup._checks[i] = cb
             end
 
-            local allBtn = MakePopupButton(copyPopup, "All", 48, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
+            local allBtn = MakePopupButton(copyPopup, M.Tr("All"), 48, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
             allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function()
                 for i, cat in ipairs(UF_COPY_CATEGORIES) do
@@ -707,7 +707,7 @@ local function BuildTopActions(ctx, builder, unit, label)
                 end
             end)
 
-            local noneBtn = MakePopupButton(copyPopup, "None", 58, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
+            local noneBtn = MakePopupButton(copyPopup, M.Tr("None"), 58, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
             noneBtn:SetScript("OnClick", function()
                 for i, cat in ipairs(UF_COPY_CATEGORIES) do
@@ -716,7 +716,7 @@ local function BuildTopActions(ctx, builder, unit, label)
                 end
             end)
 
-            local runBtn = MakePopupButton(copyPopup, "Copy Selected", 128, { 0.050, 0.125, 0.270, 0.98 }, { 0.170, 0.350, 0.610, 0.86 }, { 0.88, 0.96, 1, 1 }, { 0.060, 0.150, 0.320, 0.98 }, { 0.210, 0.420, 0.720, 0.90 })
+            local runBtn = MakePopupButton(copyPopup, M.Tr("Copy Selected"), 128, { 0.050, 0.125, 0.270, 0.98 }, { 0.170, 0.350, 0.610, 0.86 }, { 0.88, 0.96, 1, 1 }, { 0.060, 0.150, 0.320, 0.98 }, { 0.210, 0.420, 0.720, 0.90 })
             runBtn:SetPoint("BOTTOMRIGHT", copyPopup, "BOTTOMRIGHT", -14, 11)
             runBtn:SetScript("OnClick", function()
                 local function RunCopy()
@@ -797,7 +797,7 @@ local function BuildBasics(ctx, builder, unit, label)
         badge = CreateFrame("Frame", nil, sectionEntry.header)
         badge:SetSize(116, 18)
         badgeFill, badgeEdge = T.CreateSuperellipseLayers(badge, "_msuf2DisabledBadge", 1, "ARTWORK", "ARTWORK")
-        badgeLabel = T.Font(badge, "GameFontDisableSmall", "Frame disabled", { 1.00, 0.86, 0.74, 1 })
+        badgeLabel = T.Font(badge, "GameFontDisableSmall", M.Tr("Frame disabled"), { 1.00, 0.86, 0.74, 1 })
         badgeLabel:SetPoint("CENTER", badge, "CENTER", 0, 0)
         badgeLabel:SetWidth(104)
         badgeLabel:SetJustifyH("CENTER")
@@ -975,7 +975,7 @@ local function BuildLayout(ctx, builder, unit)
             ApplyAnchorChange()
         end)
 
-    local customLabel = T.Font(sec, "GameFontNormalSmall", "Custom anchor target (mouse picker)", T.colors.text)
+    local customLabel = T.Font(sec, "GameFontNormalSmall", M.Tr("Custom anchor target (mouse picker)"), T.colors.text)
     customLabel:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -62)
 
     local pick = T.Button(sec, "Pick frame (CTRL+Click)", 170, 22)
@@ -1047,7 +1047,7 @@ local function BuildText(ctx, builder, unit)
     local RefreshTextControlState
 
     W.Text(sec, "Font style is shared in |cff38c7f0Global Style > Fonts|r. Position can be adjusted here or dragged in |cff38c7f0Edit Mode|r.", 14, -38, sectionW - 210, T.colors.muted)
-    local scope = T.Font(sec, "GameFontDisableSmall", "Editing " .. UnitTopLabel(unit), T.colors.dim)
+    local scope = T.Font(sec, "GameFontDisableSmall", M.Format(M.Tr("Editing %s"), UnitTopLabel(unit)), T.colors.dim)
     scope:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -38)
     scope:SetJustifyH("RIGHT")
     scope:SetWidth(170)

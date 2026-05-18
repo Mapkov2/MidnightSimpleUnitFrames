@@ -354,13 +354,13 @@ local function CurrentScope()
 end
 
 local function ScopeLabel(kind)
-    if kind == "mythicraid" then return "Mythic Raid" end
-    if kind == "raid" then return "Raid" end
-    return "Party"
+    if kind == "mythicraid" then return M.Tr("Mythic Raid") end
+    if kind == "raid" then return M.Tr("Raid") end
+    return M.Tr("Party")
 end
 
 local function ScopeShortLabel(kind)
-    if kind == "mythicraid" then return "Mythic" end
+    if kind == "mythicraid" then return M.Tr("Mythic") end
     return ScopeLabel(kind)
 end
 
@@ -654,7 +654,7 @@ local function ScopeSection(ctx, builder)
         RefreshContext(ctx)
     end
 
-    local editing = T.Font(sec, "GameFontNormalSmall", "Editing:", { 0.72, 0.82, 1.00, 1 })
+    local editing = T.Font(sec, "GameFontNormalSmall", M.Tr("Editing:"), { 0.72, 0.82, 1.00, 1 })
     editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -15)
 
     local scopeBtns = {}
@@ -680,11 +680,11 @@ local function ScopeSection(ctx, builder)
     end
 
     local actionY = compactTop and -42 or -10
-    local copy = MakeTopButton(sec, "Copy To", compactTop and 82 or 86)
+    local copy = MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
-    local edit = MakeTopButton(sec, "MSUF Edit Mode", compactTop and 118 or 128)
+    local edit = MakeTopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128)
     edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
-    local reset = MakeTopButton(sec, "Reset Scopes", compactTop and 94 or 104, {
+    local reset = MakeTopButton(sec, M.Tr("Reset Scopes"), compactTop and 94 or 104, {
         bg = { 0.070, 0.026, 0.034, 0.94 },
         border = { 0.340, 0.090, 0.110, 0.82 },
         textColor = { 1.00, 0.82, 0.82, 1 },
@@ -709,9 +709,9 @@ local function ScopeSection(ctx, builder)
 
     if not StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] then
         StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] = {
-            text = "Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically.",
-            button1 = YES or "Yes",
-            button2 = NO or "No",
+            text = M.Tr("Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
+            button1 = YES or M.Tr("Yes"),
+            button2 = NO or M.Tr("No"),
             timeout = 0,
             whileDead = true,
             hideOnEscape = true,
@@ -724,7 +724,7 @@ local function ScopeSection(ctx, builder)
             if gf and type(gf.ResetAllToDefaults) == "function" and gf.ResetAllToDefaults() then
                 RefreshGFPreview()
                 RefreshContext(ctx)
-                print("|cffffd700MSUF:|r Group Frames reset to defaults.")
+                print(M.Tr("|cffffd700MSUF:|r Group Frames reset to defaults."))
             end
         end
         if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
@@ -787,7 +787,7 @@ local function ScopeSection(ctx, builder)
             title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
             copyPopup._title = title
 
-            local destLabel = T.Font(copyPopup, "GameFontDisableSmall", "Destination", T.colors.dim)
+            local destLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Destination"), T.colors.dim)
             destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
 
             local close = MakeTopButton(copyPopup, "x", 20, {
@@ -830,7 +830,7 @@ local function ScopeSection(ctx, builder)
                 tx = tx + width + 6
             end
 
-            local catLabel = T.Font(copyPopup, "GameFontDisableSmall", "Copy categories", T.colors.dim)
+            local catLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Copy categories"), T.colors.dim)
             catLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -90)
             copyPopup._checks = {}
             for i = 1, #GF_COPY_CATEGORIES do
@@ -843,7 +843,7 @@ local function ScopeSection(ctx, builder)
                 copyPopup._checks[i] = cb
             end
 
-            local allBtn = MakeTopButton(copyPopup, "All", 48)
+            local allBtn = MakeTopButton(copyPopup, M.Tr("All"), 48)
             allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function()
                 for i = 1, #GF_COPY_CATEGORIES do
@@ -852,7 +852,7 @@ local function ScopeSection(ctx, builder)
                     if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(true) end
                 end
             end)
-            local noneBtn = MakeTopButton(copyPopup, "None", 58)
+            local noneBtn = MakeTopButton(copyPopup, M.Tr("None"), 58)
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
             noneBtn:SetScript("OnClick", function()
                 for i = 1, #GF_COPY_CATEGORIES do
@@ -955,7 +955,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         section._msuf2CursorY = y - tileH - 40
     end
 
-    local label = T.Font(section, "GameFontNormalSmall", "Growth Direction", T.colors.accent)
+    local label = T.Font(section, "GameFontNormalSmall", M.Tr("Growth Direction"), T.colors.accent)
     label:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
 
     local holder = CreateFrame("Frame", nil, section)

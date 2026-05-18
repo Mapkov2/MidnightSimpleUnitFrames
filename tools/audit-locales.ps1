@@ -26,7 +26,8 @@ function Add-Key {
     if ($Value -match '^[\s0-9%.,:;+\-*/\\|<>=~_()]+$') { return }
     if ($Value -match '^(?:%[0-9.]*[sdif]|%%|\s|[.,:;+\-*/\\|<>=~_()])+$') { return }
     if ($Value -match '^\d+(?:p|K|k)?$') { return }
-    if ($Value -in @("AaBbCc", "BUFFS", "DEBUFFS", "SPELL", "TEXT")) { return }
+    if ($Value -match '^\d+(?:[KkMm])?\s*-\s*\d+(?:\.\d+)?%$') { return }
+    if ($Value -in @("AaBbCc", "BUFFS", "DEBUFFS", "SPELL", "TEXT", "x")) { return }
     if ($Value -match '^\|cff[0-9a-fA-F]{6}$') { return }
     if ($Value -match '^v\d') { return }
     if ($Value -match '^[a-z]+(?:[A-Z][A-Za-z0-9]*)+$') { return }
@@ -108,12 +109,14 @@ $patterns = @(
     '\b(?:W\.)?(?:Toggle|Slider|Dropdown|Segment|Button|LabelAt|Text)\s*\([^\n]*?"((?:[^"\\]|\\.)*)"',
     '\bW\.(?:ToggleAt|SliderAt|DropdownAt)\s*\(\s*[^,\r\n]+,\s*"((?:[^"\\]|\\.)*)"',
     '\b(?:BindTableToggle|BindTableSlider|BindTableDropdown|BindValueToggle|BindValueSlider|BindValueDropdown|BindNestedToggle|BindNestedSlider|BindNestedDropdown|BindScopeToggle|BindScopeSlider|BindScopeDropdown|ToggleAt|ValueToggleAt|ScopedToggleAt|SliderAt|ValueSliderAt|ScopedSliderAt|DropdownAt|ValueDropdownAt|ScopedDropdownAt)\s*\(\s*[^,\r\n]+,\s*[^,\r\n]+,\s*"((?:[^"\\]|\\.)*)"',
+    '\b(?:MakeTopButton|MakePopupButton)\s*\(\s*[^,\r\n]+,\s*"((?:[^"\\]|\\.)*)"',
+    '\bT\.Font\s*\(\s*[^,\r\n]+,\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
     'CollapsibleSection\s*\([^\n]*?,\s*"((?:[^"\\]|\\.)*)"',
     '\b(?:\w+:)?Header\s*\(\s*"((?:[^"\\]|\\.)*)"',
     '\b(?:\w+:)?Header\s*\(\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
     'RegisterPage\s*\([^\n]*?title\s*=\s*"((?:[^"\\]|\\.)*)"',
     '\{\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
-    '\b(?:label|text|title|answer|tooltip|hint|summary|help|subtitle|caption)\s*=\s*"((?:[^"\\]|\\.)*)"',
+    '\b(?:label|text|title|answer|tooltip|hint|summary|help|subtitle|caption|button[123])\s*=\s*"((?:[^"\\]|\\.)*)"',
     '\bM\.Tr\s*\(\s*"((?:[^"\\]|\\.)*)"',
     '\bM\.Format\s*\(\s*"((?:[^"\\]|\\.)*)"',
     '\b(?:SetText|AddLine|SetTextColor)\s*\(\s*"((?:[^"\\]|\\.)*)"'

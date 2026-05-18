@@ -456,7 +456,7 @@ local function DefaultCopyTarget(unit)
 end
 
 local function UnitTopLabel(unit)
-    return ({
+    local label = ({
         player = "Player",
         target = "Target",
         targettarget = "Target of Target",
@@ -465,6 +465,7 @@ local function UnitTopLabel(unit)
         boss = "Boss Frames",
         pet = "Pet",
     })[unit] or tostring(unit or "")
+    return (M.Tr and M.Tr(label)) or label
 end
 
 local function UnitTopPillWidth(unit)
