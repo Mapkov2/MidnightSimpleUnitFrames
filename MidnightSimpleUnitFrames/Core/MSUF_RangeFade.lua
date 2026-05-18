@@ -132,6 +132,8 @@ do
     -- Shared: State cache + apply helpers
     -- ══════════════════════════════════════════════════════════════
     local _state = {}
+    local _repairTicks = {}
+    local _REPAIR_EVERY_STABLE_TICKS = 6
     local _bossUnits = { "boss1", "boss2", "boss3", "boss4", "boss5" }
     local _mulT = _G.MSUF_RangeFadeMul
     local _fastApply
@@ -202,6 +204,19 @@ do
         return false
     end
 
+    local function ShouldRepairStableLayeredAlpha(f, unit)
+        if not f or not (f._msufAlphaBaseMode == "layered" or f._msufAlphaLayeredMode) then
+            return false
+        end
+        local n = (_repairTicks[unit] or 0) + 1
+        if n < _REPAIR_EVERY_STABLE_TICKS then
+            _repairTicks[unit] = n
+            return false
+        end
+        _repairTicks[unit] = 0
+        return true
+    end
+
     local function ResolveFadeAlpha(conf)
         local a = (conf and tonumber(conf.rangeFadeAlpha)) or 0.6
         -- Misc exposes this as remaining out-of-range alpha: 0% = hidden,
@@ -213,15 +228,30 @@ do
     local function ApplyMul(f, unit, confKey, conf, inRange)
         local prev = _state[unit]
         if inRange == prev then
-            -- StatusBar:SetStatusBarColor can reset the bar texture alpha while
-            -- range state is unchanged. Repair only layered frames; flat alpha
-            -- is unaffected and stays on the cheap no-op path.
-            if f and (f._msufAlphaBaseMode == "layered" or f._msufAlphaLayeredMode) then
+            -- Unknown range should behave like "not faded". Some unit-state
+            -- events intentionally invalidate _state without touching _mulT, so
+            -- clear stale fade here if the next check is still indeterminate.
+            if inRange == nil then
+                if _mulT[unit] ~= nil and _mulT[unit] ~= 1 then
+                    _repairTicks[unit] = nil
+                    _mulT[unit] = 1
+                    PropagateBossChildren(unit, 1)
+                    ReapplyCurrentAlpha(f, unit, confKey)
+                    return true
+                end
+                return false
+            end
+            -- StatusBar:SetStatusBarColor can reset bar texture alpha while
+            -- range state is unchanged. UFCore now repairs immediately after
+            -- health-color changes, so the ticker only needs a sparse safety
+            -- repair for layered frames instead of reapplying every poll.
+            if ShouldRepairStableLayeredAlpha(f, unit) then
                 ReapplyCurrentAlpha(f, unit, confKey)
             end
             return false
         end
         _state[unit] = inRange
+        _repairTicks[unit] = nil
         local a = 1
         if inRange == false then
             a = ResolveFadeAlpha(conf)
@@ -237,6 +267,7 @@ do
         local hadMul = (_mulT[unit] ~= nil and _mulT[unit] ~= 1)
         if not hadState and not hadMul then return false end
         _state[unit] = nil
+        _repairTicks[unit] = nil
         _mulT[unit] = 1
         PropagateBossChildren(unit, 1)
         local f = GetFrame(unit)
@@ -881,7 +912,7 @@ do
             -- GetFrame(unit) hash lookup per poll tick. During burst (20/s × up
             -- to 6 units = 120 lookups/s) this is meaningful.
             local f = _pollFrames[i]
-            if conf and f and (not f.IsShown or f:IsShown()) and UnitExists(unit) then
+            if conf and f and (not f.IsShown or f:IsShown()) then
                 if ApplyMul(f, unit, confKey, conf, CheckEnemy(unit)) then
                     changedAny = true
                 end
