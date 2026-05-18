@@ -1,2 +1,12 @@
 .idea/
+.vscode/
 dist/
+*.zip
+*.log
+*.tmp
+*.bak
+.env
+.env.*
+!.env.example
+Thumbs.db
+.DS_Store

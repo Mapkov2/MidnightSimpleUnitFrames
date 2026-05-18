@@ -7,12 +7,13 @@ performance changes.
 
 ## Rules
 
-- Build Perfy packages as zips in `C:\Users\Marco\Downloads`.
+- Build Perfy packages as zips outside the repository, for example in
+  `%USERPROFILE%\Downloads`.
 - Do not add permanent Perfy packaging scripts to the repo.
 - Do not use repo `.ps1` files for Perfy packaging.
 - Use the current repo checkout as the source and instrumentation reference.
 - Use the last known broad Perfy zip only as the hook-file reference:
-  `C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_5.1_zero_menu_overhead.zip`
+  `%USERPROFILE%\Downloads\MSUF_Perfy_Instrumented_5.1_zero_menu_overhead.zip`
 - Keep the addon shape identical to a real install: include
   `MidnightSimpleUnitFrames` and `MidnightSimpleUnitFrames_Castbars`.
 - Overlay direction is always one-way: repo/source files go into the extracted
@@ -22,7 +23,7 @@ performance changes.
   or direct Perfy dependencies. Only the generated Downloads zip may contain
   those trace hooks.
 - Validate every generated Perfy zip by extracting it and running `luac -p`
-  over all Lua files before giving it to Marco.
+  over all Lua files before sharing it.
 - Never ship a zip with unbalanced Perfy enter/leave instrumentation.
 
 ## Current Known Good Broad Workflow
@@ -31,7 +32,7 @@ The current broad source reference is the checked-out repo. The old broad zip is
 used only to copy the Perfy hook:
 
 ```text
-C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_5.1_zero_menu_overhead.zip
+%USERPROFILE%\Downloads\MSUF_Perfy_Instrumented_5.1_zero_menu_overhead.zip
 ```
 
 Use it as a reference for `MSUF_PerfyHook.lua` only. Do not copy its addon
@@ -50,8 +51,8 @@ The expected broad shape is:
 Current output names:
 
 ```text
-C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_5.2_broad_current.zip
-C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_latest.zip
+%USERPROFILE%\Downloads\MSUF_Perfy_Instrumented_5.2_broad_current.zip
+%USERPROFILE%\Downloads\MSUF_Perfy_Instrumented_latest.zip
 ```
 
 Known important instrumentation exclusions:
@@ -251,7 +252,7 @@ error.
 Copy the repo's current addon folders to a temporary Downloads build folder:
 
 ```text
-C:\Users\Marco\Downloads\MSUF_PerfyBuild_YYYYMMDD_HHMMSS
+%USERPROFILE%\Downloads\MSUF_PerfyBuild_YYYYMMDD_HHMMSS
 ```
 
 The repo is always the source:
@@ -324,8 +325,8 @@ MidnightSimpleUnitFrames_Castbars
 Current output names:
 
 ```text
-C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_5.2_broad_current.zip
-C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_latest.zip
+%USERPROFILE%\Downloads\MSUF_Perfy_Instrumented_5.2_broad_current.zip
+%USERPROFILE%\Downloads\MSUF_Perfy_Instrumented_latest.zip
 ```
 
 7. Verify the finished zip contains these entries:
@@ -413,11 +414,11 @@ end
 
 ## Capture A Trace
 
-Marco installs the generated zip in WoW and captures the trace with Perfy.
+Install the generated zip in WoW and capture the trace with Perfy.
 The SavedVariables file is usually here:
 
 ```text
-e:\World of Warcraft\_retail_\WTF\Account\1108323981#1\SavedVariables\!!!Perfy.lua
+<WoW install>\_retail_\WTF\Account\<account-id>\SavedVariables\!!!Perfy.lua
 ```
 
 For performance comparisons, use a similar scenario and duration when possible.
@@ -498,7 +499,7 @@ Castbars/MSUF_Castbars.lua ManagerOnUpdate
 The first zip after the Dispel/GroupFrames cache fixes was:
 
 ```text
-C:\Users\Marco\Downloads\MSUF_Perfy_Instrumented_perf_fix1.zip
+%USERPROFILE%\Downloads\MSUF_Perfy_Instrumented_perf_fix1.zip
 ```
 
 It was validated with:

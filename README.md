@@ -31,8 +31,8 @@ Lightweight, minimal **unitframes + castbars + auras** for World of Warcraft, wi
 
 ## Packaging
 
-The checked-in TOC files intentionally use `## Version: Developer Build`.
-Release packages patch the copied TOC files only, so GitHub checkouts stay marked as developer builds.
+The checked-in TOC files intentionally keep the packager token `## Version: @project-version@`.
+Release packages patch the copied TOC files only, so local packaging and CurseForge/Wago releases get the concrete release version without changing the working tree.
 
 Create a local release ZIP with:
 

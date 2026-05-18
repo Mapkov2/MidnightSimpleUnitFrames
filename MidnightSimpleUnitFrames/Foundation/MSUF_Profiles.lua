@@ -1,5 +1,43 @@
 -- Extracted from MidnightSimpleUnitFrames.lua (profiles + active profile state)
 local addonName, ns = ...
+local function MSUF_ProfileIO_NormalizeLegacyTableChunk(str)
+    if type(str) ~= "string" then
+        return nil
+    end
+    local trimmed = str:match("^%s*(.-)%s*$")
+    if not trimmed or trimmed == "" then
+        return nil
+    end
+    local payload = trimmed
+    local returned = trimmed:match("^return%s*(.+)$")
+    if returned then
+        payload = returned:match("^%s*(.-)%s*$")
+    end
+    if payload and payload:sub(1, 1) == "{" and payload:sub(-1) == "}" then
+        return "return " .. payload
+    end
+    return nil
+end
+local function MSUF_ProfileIO_SandboxLoadstring(fn)
+    if type(fn) == "function" and type(setfenv) == "function" then
+        pcall(setfenv, fn, {})
+    end
+    return fn
+end
+local function MSUF_ProfileIO_LoadLegacyChunk(str)
+    if type(loadstring) ~= "function" then
+        return nil, "loadstring unavailable"
+    end
+    local chunk = MSUF_ProfileIO_NormalizeLegacyTableChunk(str)
+    if not chunk then
+        return nil, "legacy import must be a table literal"
+    end
+    local func, err = loadstring(chunk)
+    if func then
+        MSUF_ProfileIO_SandboxLoadstring(func)
+    end
+    return func, err
+end
 local function MSUF_ProfileIO_RunEnsureDB()
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then
@@ -175,7 +213,7 @@ do
         --    Only attempt if it looks like a table (avoid executing arbitrary code).
         local trimmed = payload:match("^%s*(.-)%s*$")
         if trimmed and trimmed:sub(1,1) == "{" and trimmed:sub(-1) == "}" then
-            local fn = loadstring and loadstring("return " .. trimmed)
+            local fn = MSUF_ProfileIO_LoadLegacyChunk(trimmed)
             if fn then
                 local ok3, t = pcall(fn)
                 if ok3 and type(t) == "table" then
@@ -1303,10 +1341,7 @@ function MSUF_ImportFromString(str)
          return false
     end
     -- OLD PATH (Lua table string)
-    local func, err = loadstring(str)
-    if not func then
-        func, err = loadstring("return " .. str)
-    end
+    local func, err = MSUF_ProfileIO_LoadLegacyChunk(str)
     if not func then
         print("|cffff0000MSUF:|r Import failed: " .. tostring(err))
          return false
@@ -1369,10 +1404,7 @@ function MSUF_ImportLegacyFromString(str)
         print("|cffff0000MSUF:|r Legacy import failed: could not decode compact profile string (" .. prefix .. ").")
          return false
     end
-    local func, err = loadstring(str)
-    if not func then
-        func, err = loadstring("return " .. str)
-    end
+    local func, err = MSUF_ProfileIO_LoadLegacyChunk(str)
     if not func then
         print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(err))
          return false
@@ -1513,10 +1545,7 @@ function MSUF_ImportExternal(profileString, profileKey)
         return false, "could not decode compact profile string (" .. tostring(prefix) .. ")"
     end
     -- Optional legacy table-string support (last resort).
-    local func = loadstring(profileString)
-    if not func then
-        func = loadstring("return " .. profileString)
-    end
+    local func = MSUF_ProfileIO_LoadLegacyChunk(profileString)
     if not func then
          return false, "invalid lua table string"
     end
