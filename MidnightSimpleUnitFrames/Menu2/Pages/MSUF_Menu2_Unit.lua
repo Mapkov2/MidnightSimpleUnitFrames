@@ -64,6 +64,10 @@ local STATUS_CORNER_ANCHORS = {
     { value = "BOTTOMLEFT", text = "Bottom Left" },
     { value = "BOTTOMRIGHT", text = "Bottom Right" },
     { value = "CENTER", text = "Center" },
+    { value = "TOP", text = "Top" },
+    { value = "BOTTOM", text = "Bottom" },
+    { value = "LEFT", text = "Left" },
+    { value = "RIGHT", text = "Right" },
 }
 
 local STATUS_LEVEL_ANCHORS = {
@@ -73,6 +77,11 @@ local STATUS_LEVEL_ANCHORS = {
     { value = "TOPRIGHT", text = "Top Right" },
     { value = "BOTTOMLEFT", text = "Bottom Left" },
     { value = "BOTTOMRIGHT", text = "Bottom Right" },
+    { value = "CENTER", text = "Center" },
+    { value = "TOP", text = "Top" },
+    { value = "BOTTOM", text = "Bottom" },
+    { value = "LEFT", text = "Left" },
+    { value = "RIGHT", text = "Right" },
 }
 
 local RAID_GROUP_NAME_ANCHORS = {

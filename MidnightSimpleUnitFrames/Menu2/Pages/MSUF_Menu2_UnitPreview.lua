@@ -1030,10 +1030,13 @@ local function PositionLevelPreview(frame, anchor, x, y, mock, gap)
     x = tonumber(x) or 0
     y = tonumber(y) or 0
     gap = tonumber(gap) or 6
-    if anchor == "NAMELEFT" and mock.nameText then
+    local nameVisible = mock.nameText and (not mock.nameText.IsShown or mock.nameText:IsShown())
+    if anchor == "NAMELEFT" and nameVisible then
         frame:SetPoint("RIGHT", mock.nameText, "LEFT", -gap + x, y)
-    elseif anchor == "NAMERIGHT" and mock.nameText then
+    elseif anchor == "NAMERIGHT" and nameVisible then
         frame:SetPoint("LEFT", mock.nameText, "RIGHT", gap + x, y)
+    elseif anchor == "NAMELEFT" or anchor == "NAMERIGHT" then
+        PositionSameAnchorPreview(frame, "CENTER", x, y, mock.textFrame or mock)
     else
         PositionSameAnchorPreview(frame, anchor, x, y, mock.textFrame or mock)
     end
@@ -2915,9 +2918,10 @@ function Preview.Refresh(box, reason)
     mock.powerTextPct:SetText("")
     mock.nameText:SetShown(conf.showName ~= false)
     local raidGroupAnchor = D.NormalizeRaidGroupNameAnchor(conf.raidGroupNameAnchor)
-    local raidGroupNeedsName = raidGroupAnchor == "NAMERIGHT" or raidGroupAnchor == "NAMELEFT"
+    if conf.showName == false and (raidGroupAnchor == "NAMERIGHT" or raidGroupAnchor == "NAMELEFT") then
+        raidGroupAnchor = "CENTER"
+    end
     local showRaidGroupName = conf.showRaidGroupInName == true and D.PreviewRaidGroupNameAllowed(key)
-        and ((conf.showName ~= false) or not raidGroupNeedsName)
     mock.raidGroupNameText:SetShown(showRaidGroupName)
     mock.totInlineSep:Hide()
     mock.totInlineText:Hide()

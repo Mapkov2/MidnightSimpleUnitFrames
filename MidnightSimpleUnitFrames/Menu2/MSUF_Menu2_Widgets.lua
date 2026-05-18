@@ -1864,6 +1864,16 @@ local function DropdownItemSwatch(item)
     return DropdownColorTuple(item.swatchColor or item.color or item.colorPreview or item.swatch)
 end
 
+local function DropdownItemDisabled(item)
+    if type(item) ~= "table" then return false end
+    local disabled = item.disabled
+    if type(disabled) == "function" then disabled = disabled(item) end
+    if disabled ~= nil then return disabled and true or false end
+    local enabled = item.enabled
+    if type(enabled) == "function" then enabled = enabled(item) end
+    return enabled == false
+end
+
 local function StoreDropdownDefaultFont(fs)
     if not (fs and fs.GetFont) then return end
     local ok, font, size, flags = pcall(fs.GetFont, fs)
@@ -1979,6 +1989,7 @@ local function DropdownRow(index)
     row._msuf2FontPreview = fontPreview
 
     row:SetScript("OnClick", function(self)
+        if self._msuf2DropdownDisabled then return end
         if M.BlockCombatAction and M.BlockCombatAction() then
             CloseDropdown()
             return
@@ -2050,10 +2061,13 @@ local function OpenDropdown(owner, valuesTable)
         local value = DropdownItemValue(item)
         local icon = DropdownItemIcon(item)
         local selectedValue = owner._msuf2DropdownListValue
+        local disabled = DropdownItemDisabled(item)
         if selectedValue == nil then selectedValue = owner.value end
         row._msuf2Owner = owner
         row._msuf2Value = value
         row._msuf2Item = item
+        row._msuf2DropdownDisabled = disabled
+        if row.SetAlpha then row:SetAlpha(disabled and 0.45 or 1) end
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", dropdownChild, "TOPLEFT", 0, -((i - 1) * DROPDOWN_ROW_H))
         row:SetWidth(rowWidth)
@@ -2061,6 +2075,10 @@ local function OpenDropdown(owner, valuesTable)
         if value == selectedValue then selectedIndex = i end
         RestoreDropdownDefaultFont(row._msuf2Text)
         row._msuf2Text:SetText(DropdownItemText(item))
+        if row._msuf2Text.SetTextColor then
+            local c = disabled and (T.colors.dim or T.colors.muted) or T.colors.text
+            row._msuf2Text:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        end
         local showFontPreview = DropdownItemHasFontPreview(item)
         row._msuf2FontPreview:SetShown(showFontPreview)
         if showFontPreview then

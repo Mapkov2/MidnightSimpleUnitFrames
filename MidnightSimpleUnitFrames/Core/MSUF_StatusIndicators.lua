@@ -582,6 +582,18 @@ local function _MSUF_AnchorCorner(tex, frame, corner, xOff, yOff)
     if corner == "CENTER" then
         tex:SetPoint("CENTER", frame, "CENTER", 0 + xOff, 0 + yOff)
          return
+    elseif corner == "TOP" then
+        tex:SetPoint("TOP", frame, "TOP", xOff, -2 + yOff)
+         return
+    elseif corner == "BOTTOM" then
+        tex:SetPoint("BOTTOM", frame, "BOTTOM", xOff, 2 + yOff)
+         return
+    elseif corner == "LEFT" then
+        tex:SetPoint("LEFT", frame, "LEFT", 2 + xOff, yOff)
+         return
+    elseif corner == "RIGHT" then
+        tex:SetPoint("RIGHT", frame, "RIGHT", -2 + xOff, yOff)
+         return
     end
     if corner == "TOPRIGHT" then
         tex:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2 + xOff, -2 + yOff)
@@ -792,12 +804,7 @@ local function _MSUF_UpdateStatusIcons(frame)
             _MSUF_AnchorCorner(classText, frame, sic.classCorner, sic.classX, sic.classY)
             classText:SetAlpha(iconAlpha)
             if classText.SetJustifyH then
-                local j = "LEFT"
-                if sic.classCorner == "CENTER" then
-                    j = "CENTER"
-                elseif sic.classCorner == "TOPRIGHT" or sic.classCorner == "BOTTOMRIGHT" then
-                    j = "RIGHT"
-                end
+                local j = _MSUF_JustifyForAnchor(sic.classCorner)
                 if classText._msufJustifyStamp ~= j then
                     classText:SetJustifyH(j)
                     classText._msufJustifyStamp = j

@@ -54,6 +54,35 @@ local RAID_GROUP_NAME_STYLES = {
     { value = "BRACKET", text = "[2]" },
     { value = "NONE", text = "2" },
 }
+
+local function IsNameRelativeAnchor(value)
+    return value == "NAMERIGHT" or value == "NAMELEFT"
+end
+
+local DISABLED_NAME_ANCHOR_VALUE_CACHE = setmetatable({}, { __mode = "k" })
+
+local function DisabledNameAnchorValues(values)
+    if type(values) ~= "table" then return {} end
+    local cached = DISABLED_NAME_ANCHOR_VALUE_CACHE[values]
+    if cached then return cached end
+
+    local out = {}
+    for i = 1, #(values or {}) do
+        local item = values[i]
+        if type(item) == "table" then
+            local value = item.value or item.key or item[2] or item[1]
+            local copy = {}
+            for k, v in pairs(item) do copy[k] = v end
+            copy.disabled = IsNameRelativeAnchor(value)
+            out[#out + 1] = copy
+        else
+            out[#out + 1] = item
+        end
+    end
+    DISABLED_NAME_ANCHOR_VALUE_CACHE[values] = out
+    return out
+end
+
 for i = 1, #SEPARATORS do
     local item = SEPARATORS[i]
     local value = item and item.value
@@ -2447,7 +2476,11 @@ local function BuildStatus(ctx, builder, unit)
 
     local anchor = W.Dropdown(placementCard, "Anchor", function()
         local spec = CurrentStatusSpec(unit)
-        return (spec and spec.anchors) or STATUS_ANCHORS
+        local values = (spec and spec.anchors) or STATUS_ANCHORS
+        if spec and ReadBool(unit, "showName", true) == false then
+            return DisabledNameAnchorValues(values)
+        end
+        return values
     end, 220)
     PlaceDropdown(anchor, placementCard, placeLeftX, -116, placeLeftW)
     M.BindDropdown(ctx, anchor,
@@ -2466,7 +2499,11 @@ local function BuildStatus(ctx, builder, unit)
         "right to player name", "left to player name", "top left", "top right", "bottom left", "bottom right",
     }, function()
         local spec = CurrentStatusSpec(unit)
-        return (spec and spec.anchors) or STATUS_ANCHORS
+        local values = (spec and spec.anchors) or STATUS_ANCHORS
+        if spec and ReadBool(unit, "showName", true) == false then
+            return DisabledNameAnchorValues(values)
+        end
+        return values
     end)
 
     local x = W.Slider(placementCard, "X Offset", -500, 500, 1, 300)

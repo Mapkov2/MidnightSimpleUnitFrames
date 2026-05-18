@@ -42,7 +42,11 @@ function ns.Icons._layout.GetConf(f)
 end
 
 function ns.Icons._layout.Resolve(anchor, allowCenter)
-    if allowCenter and anchor == "CENTER" then return "CENTER", "CENTER"
+    if anchor == "CENTER" then return "CENTER", "CENTER"
+    elseif anchor == "TOP" then return "TOP", "TOP"
+    elseif anchor == "BOTTOM" then return "BOTTOM", "BOTTOM"
+    elseif anchor == "LEFT" then return "LEFT", "LEFT"
+    elseif anchor == "RIGHT" then return "RIGHT", "RIGHT"
     elseif anchor == "TOPRIGHT" then return "RIGHT", "TOPRIGHT"
     elseif anchor == "BOTTOMLEFT" then return "LEFT", "BOTTOMLEFT"
     elseif anchor == "BOTTOMRIGHT" then return "RIGHT", "BOTTOMRIGHT" end

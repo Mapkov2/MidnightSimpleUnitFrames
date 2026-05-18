@@ -1217,6 +1217,9 @@ local function MSUF_ApplyRaidGroupNameLayout_Internal(f, conf)
     layer = math_floor((layer or 5) + 0.5)
     if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
     local anchor = MSUF_NormalizeRaidGroupNameAnchor(conf.raidGroupNameAnchor or g.raidGroupNameAnchor)
+    if conf.showName == false and (anchor == "NAMERIGHT" or anchor == "NAMELEFT") then
+        anchor = "CENTER"
+    end
     local x = (type(conf.raidGroupNameOffsetX) == "number") and conf.raidGroupNameOffsetX
         or ((type(g.raidGroupNameOffsetX) == "number") and g.raidGroupNameOffsetX or 3)
     local y = (type(conf.raidGroupNameOffsetY) == "number") and conf.raidGroupNameOffsetY
@@ -1257,6 +1260,9 @@ local function MSUF_ApplyLevelIndicatorLayout_Internal(f, conf)
         or ((type(g.levelIndicatorOffsetY) == "number") and g.levelIndicatorOffsetY or 0)
     local anchor = (type(conf.levelIndicatorAnchor) == "string") and conf.levelIndicatorAnchor
         or ((type(g.levelIndicatorAnchor) == "string") and g.levelIndicatorAnchor or "NAMERIGHT")
+    if conf.showName == false and (anchor == "NAMERIGHT" or anchor == "NAMELEFT") then
+        anchor = "CENTER"
+    end
     local layer = (ns.Icons and ns.Icons._layout and ns.Icons._layout.Layer and ns.Icons._layout.Layer(conf, g, "levelIndicatorLayer", 7)) or 7
     local raidGroupShown = f.raidGroupNameText and f.raidGroupNameText.IsShown and f.raidGroupNameText:IsShown()
         and f._msufRaidGroupNameAnchor == "NAMERIGHT"
