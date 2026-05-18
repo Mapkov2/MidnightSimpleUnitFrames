@@ -511,6 +511,7 @@ function ns.UF.HideLeaderAndRaidMarker(self)
     ns.Util.SetShown(self.leaderIcon, false)
     ns.Util.SetShown(self.raidMarkerIcon, false)
  end
+local MSUF_QueueVisibilityDriverRefresh
 function ns.UF.HandleDisabledFrame(self, conf)
     if not ns.UF.IsDisabled(conf) then return false end
 
@@ -547,6 +548,10 @@ function ns.UF.HandleDisabledFrame(self, conf)
 end
 function ns.UF.ForceVisibilityHidden(frame)
     if not frame then return end
+    if _msuf_inCombat or (InCombatLockdown and InCombatLockdown()) then
+        MSUF_QueueVisibilityDriverRefresh(false)
+        return
+    end
     local rsd = _G.RegisterStateDriver
     local usd = _G.UnregisterStateDriver
     if type(rsd) == "function" and type(usd) == "function" then
@@ -659,6 +664,30 @@ local function MSUF_Export2(key, fn, aliasKey, forceAlias)
     end
     end
      return fn
+end
+local _msufVisibilityDriverRefreshPending = false
+local _msufVisibilityDriverRefreshForceShow = false
+local _msufVisibilityDriverRegenFrame = (_G.CreateFrame and _G.CreateFrame("Frame")) or nil
+function MSUF_QueueVisibilityDriverRefresh(forceShow)
+    _msufVisibilityDriverRefreshPending = true
+    _msufVisibilityDriverRefreshForceShow = forceShow and true or false
+    if _msufVisibilityDriverRegenFrame then
+        _msufVisibilityDriverRegenFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+end
+if _msufVisibilityDriverRegenFrame then
+    _msufVisibilityDriverRegenFrame:SetScript("OnEvent", function(self)
+        if InCombatLockdown and InCombatLockdown() then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        if not _msufVisibilityDriverRefreshPending then return end
+        local forceShow = _msufVisibilityDriverRefreshForceShow
+        _msufVisibilityDriverRefreshPending = false
+        _msufVisibilityDriverRefreshForceShow = false
+        _msuf_inCombat = false
+        _G.MSUF_InCombat = false
+        local fn = _G.MSUF_RefreshAllUnitVisibilityDrivers
+        if type(fn) == "function" then fn(forceShow) end
+    end)
 end
 local function MSUF_EnsureUnitFlags(f)
     if not f or f._msufUnitFlagsInited then return end
@@ -1447,6 +1476,10 @@ end
     end
     if frame._msufVisibilityForced == forced and frame._msufVisibilityAppliedDriver == driverToApply then
           return
+    end
+    if _msuf_inCombat or (InCombatLockdown and InCombatLockdown()) then
+        MSUF_QueueVisibilityDriverRefresh(forced)
+        return
     end
     frame._msufVisibilityForced = forced
     frame._msufVisibilityAppliedDriver = driverToApply

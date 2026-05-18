@@ -985,6 +985,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
     if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
     if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
     if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+    if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
     MSUF_ProfileIO_NormalizeBlizzardAuraPosition(auras)
 
     MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "buff", "RAID")

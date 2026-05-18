@@ -174,7 +174,7 @@ local function BuildBars(ctx)
         Call("MSUF_DispelOutline_ApplyEventRegistration")
         Call("MSUF_RefreshDispelOutlineStates", true)
         RefreshUnitBorders({ "player", "target", "focus", "targettarget" })
-        RefreshGroupFrameBorders()
+        RefreshGroupFrameVisuals()
         if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
             _G.MSUF_SetDispelBorderTestMode(true, BorderTestScope())
         end
@@ -401,6 +401,19 @@ local function BuildBars(ctx)
         if type(StopGroupDispelGlowForBlizzardConflict) == "function" then
             StopGroupDispelGlowForBlizzardConflict(CurrentBarsScope())
         end
+    end
+
+    local dispelTriggers = {
+        { value = "BY_ME", text = "Dispellable by me" },
+        { value = "DISPEL_TYPE", text = "Any dispel-type debuff" },
+        { value = "ANY_DEBUFF", text = "Any debuff" },
+    }
+    local function NormalizeDispelTrigger(v)
+        local fn = _G.MSUF_NormalizeDispelBorderTrigger
+        if type(fn) == "function" then return fn(v) end
+        if v == "DISPEL_TYPE" or v == "TYPE" or v == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
+        if v == "ANY_DEBUFF" or v == "ANY" or v == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
+        return "BY_ME"
     end
 
     local function GradientKeyActive(entry, key)
@@ -985,7 +998,7 @@ local function BuildBars(ctx)
     local hlRightX = hlLeftX + hlLeftW + hlGap
     local hlRightW = max(220, min(420, hlInnerW - hlLeftW - hlGap))
 
-    W.ControlCard(highlights, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 376)
+    W.ControlCard(highlights, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 438)
     W.ControlCard(highlights, "Preview", nil, hlRightX - 14, -38, hlRightW + 28, 248)
     W.ControlCard(highlights, "Dispel Glow", nil, hlRightX - 14, -308, hlRightW + 28, 352)
 
@@ -1032,6 +1045,15 @@ local function BuildBars(ctx)
         end)
     W.MoveWidget(dispelBorder, highlights, hlLeftX, -190, hlLeftW, "LEFT")
 
+    local dispelTrigger = W.Dropdown(highlights, "Dispel border detects", dispelTriggers, hlLeftW)
+    M.BindDropdown(ctx, dispelTrigger,
+        function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "BY_ME")) end,
+        function(v)
+            BarScopeSet("dispelBorderTrigger", NormalizeDispelTrigger(v), "MSUF2_DISPEL_TRIGGER")
+            ApplyDispelPurgeBorderRuntime()
+        end)
+    W.MoveWidget(dispelTrigger, highlights, hlLeftX, -244, hlLeftW, "LEFT")
+
     local purge = W.Dropdown(highlights, "Purge border", borderModes, hlLeftW)
     M.BindDropdown(ctx, purge,
         function() return tonumber(BarScopeGet("purgeOutlineMode", 0)) or 0 end,
@@ -1044,7 +1066,7 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_PURGE_BORDER")
             ApplyDispelPurgeBorderRuntime()
         end)
-    W.MoveWidget(purge, highlights, hlLeftX, -244, hlLeftW, "LEFT")
+    W.MoveWidget(purge, highlights, hlLeftX, -298, hlLeftW, "LEFT")
 
     local bossTarget = W.Dropdown(highlights, "Boss target border", borderModes, hlLeftW)
     M.BindDropdown(ctx, bossTarget,
@@ -1062,9 +1084,9 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_BOSS_TARGET_BORDER")
             ApplyBossTargetBorderRuntime()
         end)
-    W.MoveWidget(bossTarget, highlights, hlLeftX, -298, hlLeftW, "LEFT")
+    W.MoveWidget(bossTarget, highlights, hlLeftX, -352, hlLeftW, "LEFT")
 
-    local bossSharedHint = W.Text(highlights, "Boss target border is a shared boss-frame setting.", hlLeftX, -360, hlLeftW, T.colors.dim)
+    local bossSharedHint = W.Text(highlights, "Boss target border is a shared boss-frame setting.", hlLeftX, -414, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
 
     local function AggroBorderOn()
@@ -1254,6 +1276,7 @@ local function BuildBars(ctx)
         SetControlEnabled(highlight, scopedActive)
         SetControlEnabled(aggro, scopedActive)
         SetControlEnabled(dispelBorder, scopedActive)
+        SetControlEnabled(dispelTrigger, scopedActive and dispelOn)
         SetControlEnabled(purge, scopedActive)
         SetControlEnabled(bossTarget, sharedActive)
         SetControlEnabled(aggroTest, scopedActive and aggroOn)

@@ -538,6 +538,53 @@ local function HLValCached(conf, gen, key)
     return nil
 end
 
+local function HLPrioEnabledCached(conf, gen)
+    local value
+    if conf and conf.hlOverride then
+        value = conf.hlPrioEnabled
+        if value == nil then value = conf.highlightPrioEnabled end
+    end
+    if value == nil and gen then
+        value = gen.hlPrioEnabled
+        if value == nil then value = gen.highlightPrioEnabled end
+    end
+    return value == true or value == 1
+end
+
+local function HLPrioOrderCached(conf, gen)
+    if conf and conf.hlOverride then
+        if type(conf.hlPrioOrder) == "table" then return conf.hlPrioOrder end
+        if type(conf.highlightPrioOrder) == "table" then return conf.highlightPrioOrder end
+    end
+    if gen then
+        if type(gen.hlPrioOrder) == "table" then return gen.hlPrioOrder end
+        if type(gen.highlightPrioOrder) == "table" then return gen.highlightPrioOrder end
+    end
+    return nil
+end
+
+GF.NormalizeDispelBorderTrigger = GF.NormalizeDispelBorderTrigger or function(value)
+    local fn = _G.MSUF_NormalizeDispelBorderTrigger
+    if type(fn) == "function" then return fn(value) end
+    if value == "DISPEL_TYPE" or value == "TYPE" or value == "TYPED" or value == "ANY_DISPEL_TYPE" then
+        return "DISPEL_TYPE"
+    end
+    if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL" or value == "ALL_DEBUFFS" then
+        return "ANY_DEBUFF"
+    end
+    return "BY_ME"
+end
+
+GF.DispelBorderTriggerNeedsPlayerDispel = GF.DispelBorderTriggerNeedsPlayerDispel or function(value)
+    local fn = _G.MSUF_DispelBorderTriggerNeedsPlayerDispel
+    if type(fn) == "function" then return fn(value) end
+    return GF.NormalizeDispelBorderTrigger(value) == "BY_ME"
+end
+
+GF.DispelScanActive = GF.DispelScanActive or function(c)
+    return c and c.dispelScanActive == true
+end
+
 ------------------------------------------------------------------------
 -- Range fade uses the same UnitInRange-only path as EQoL group frames.
 ------------------------------------------------------------------------
@@ -614,6 +661,20 @@ local function ExtractColorRGBA(colorObj)
     return nil
 end
 
+local function GFDispelColorScopeValue(kind, key, legacyKey, fallback)
+    local conf = kind and GF.GetConf and GF.GetConf(kind)
+    if conf and conf.hlOverride then
+        if conf[key] ~= nil then return conf[key] end
+        if legacyKey and conf[legacyKey] ~= nil then return conf[legacyKey] end
+    end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen then
+        if gen[key] ~= nil then return gen[key] end
+        if legacyKey and gen[legacyKey] ~= nil then return gen[legacyKey] end
+    end
+    return fallback
+end
+
 ------------------------------------------------------------------------
 -- Secret-safe dispel color resolution.
 --
@@ -632,18 +693,15 @@ end
 --   colorObj == nil  â†’ SINGLE/fallback. Use (r, g, b) directly.
 ------------------------------------------------------------------------
 local function ResolveDispelColorObj(f, dispelName)
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    local mode = gen and gen.hlDispelColorMode or "SINGLE"
+    local kind = (f and f._msufGFKind) or "party"
+    local mode = GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE")
     local fallbackType = GetReadableDispelTypeName(dispelName)
 
     if mode ~= "TYPE" then
-        local r, g, b
-        if gen then
-            r = gen.hlDispelColorR or gen.dispelBorderColorR
-            g = gen.hlDispelColorG or gen.dispelBorderColorG
-            b = gen.hlDispelColorB or gen.dispelBorderColorB
-        end
-        return nil, r or 0.25, g or 0.75, b or 1.00
+        return nil,
+            GFDispelColorScopeValue(kind, "hlDispelColorR", "dispelBorderColorR", 0.25),
+            GFDispelColorScopeValue(kind, "hlDispelColorG", "dispelBorderColorG", 0.75),
+            GFDispelColorScopeValue(kind, "hlDispelColorB", "dispelBorderColorB", 1.00)
     end
 
     -- TYPE mode: resolve Color object via shared dispel color curve.
@@ -741,12 +799,17 @@ local _gfGlowColor = { 0, 0, 0, 1 }
 
 local function _GF_StartDispelGlow(f, r, g, b)
     local kind = f._msufGFKind or "party"
-    local blizzardOwnsThisScope = false
-    local blocksGlow = _G.MSUF_GroupBlizzardAuraRenderingBlocksDispelGlow
-    if type(blocksGlow) == "function" then
-        blizzardOwnsThisScope = blocksGlow(kind) == true
+    local blizzardBlocksGlow = false
+    local c = f and f._c
+    if c and c.nativeBlizzardDispelsSuppressCustom ~= nil then
+        blizzardBlocksGlow = c.nativeBlizzardDispelsSuppressCustom == true
+    else
+        local blocksGlow = _G.MSUF_GroupBlizzardAuraRenderingBlocksDispelGlow
+        if type(blocksGlow) == "function" then
+            blizzardBlocksGlow = blocksGlow(kind) == true
+        end
     end
-    if not LCG or blizzardOwnsThisScope or not HLVal(kind, "hlDispelGlowEnabled") then
+    if not LCG or blizzardBlocksGlow or not HLVal(kind, "hlDispelGlowEnabled") then
         f._msufGFDispelGlowActive = nil
         local offAnchor = f._msufGFDispelGlowAnchor
         f._msufGFDispelGlowAnchor = nil
@@ -947,9 +1010,11 @@ end
 
 function GF.FinishAuraVisuals(f, unit, c, updateInfo)
     if not (f and c) then return end
-    if c.nativeBlizzardDispels then
+    if c.nativeBlizzardDispelsSuppressCustom then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
-    else
+    elseif GF.DispelScanActive(c) or f._msufGFDispelType or f._msufGFMergedDispel
+        or f._msufGFDispelAuraID or f._msufGFPrevDispelAuraID
+    then
         local mergedDispel = f._msufGFMergedDispel
         local prevDispel = f._msufGFDispelType
         local dispelAid = f._msufGFDispelAuraID
@@ -1007,7 +1072,7 @@ local function dispatchAura(f, unit, updateInfo)
 
     if not aurasOn then
         local dispelChanged, dispelRelevant
-        if c.dispelScan and GF._playerCanDispel then
+        if GF.DispelScanActive(c) then
             -- EQoL dirty-flag: only rescan when dispel state may have changed
             local needDispelScan = false
             if not updateInfo or updateInfo.isFullUpdate then
@@ -1046,7 +1111,7 @@ local function dispatchAura(f, unit, updateInfo)
             GF.UpdateSpellIndicators(f, unit)
         end
         if GF.UpdateCornerIndicators and ((c.ciCustom and ciRelevant)
-            or (c.ciDispel and ((not c.dispelScan and ciRelevant) or dispelChanged or dispelRelevant)))
+            or (c.ciDispel and ((not GF.DispelScanActive(c) and ciRelevant) or dispelChanged or dispelRelevant)))
         then
             GF.UpdateCornerIndicators(f, unit)
         end
@@ -1676,6 +1741,8 @@ function GF.BuildFrameCache(f)
             and GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras") == true
             and pa and pa.enabled ~= false
     end
+    c.blizzardDispelBorder = c.nativeBlizzardDispels and auras and auras.blizzardDispelBorder == true
+    c.nativeBlizzardDispelsSuppressCustom = c.nativeBlizzardDispels and not c.blizzardDispelBorder
 
     -- Dispel overlay (color wash on health bar)
     c.doEn    = auraMasterOn and conf.dispelOverlayEnabled == true and not c.nativeBlizzardDispels
@@ -1698,7 +1765,10 @@ function GF.BuildFrameCache(f)
     -- Highlight border (pre-resolve HLVal)
     c.aggroEn   = HLValCached(conf, gen, "hlAggroEnabled") ~= false
     c.aggroMode = HLValCached(conf, gen, "hlAggroMode") or "ALL"
-    c.dispelEn  = auraMasterOn and HLValCached(conf, gen, "hlDispelEnabled") ~= false and not c.nativeBlizzardDispels
+    c.dispelEn  = auraMasterOn and HLValCached(conf, gen, "hlDispelEnabled") ~= false and not c.nativeBlizzardDispelsSuppressCustom
+    c.dispelBorderTrigger = GF.NormalizeDispelBorderTrigger(HLValCached(conf, gen, "dispelBorderTrigger"))
+    c.hlPrioEnabled = HLPrioEnabledCached(conf, gen)
+    c.hlPrioOrder = c.hlPrioEnabled and HLPrioOrderCached(conf, gen) or nil
     c.targetEn  = HLValCached(conf, gen, "hlTargetEnabled") ~= false
     c.focusEn   = conf.hlFocusEnabled ~= false
     c.aggroSize = HLValCached(conf, gen, "hlAggroSize") or 2
@@ -1728,7 +1798,7 @@ function GF.BuildFrameCache(f)
     c.focB = conf.hlFocusColorB or 1.0
 
     -- Aura dispatch
-    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and not c.nativeBlizzardDispels
+    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and not c.nativeBlizzardDispelsSuppressCustom
     local siRuntimeActive = false
     if auraMasterOn and conf.spellIndicators and conf.spellIndicators.enabled == true then
         local siActiveFn = GF.SpellIndicatorsRuntimeActive
@@ -1740,15 +1810,6 @@ function GF.BuildFrameCache(f)
     local customBuffs = auraMasterOn and auras.buff and auras.buff.enabled ~= false and not c.nativeBlizzardBuffs
     local customDebuffs = auraMasterOn and auras.debuff and auras.debuff.enabled ~= false and not c.nativeBlizzardDebuffs
     local customExt = auraMasterOn and auras.externals and auras.externals.enabled ~= false and not c.nativeBlizzardExt
-    local customDispels = auraMasterOn and c.dispelScan and GF._playerCanDispel
-
-    c.nativeBlizzardAuras = c.aurasOn and (
-                   c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs
-                   or c.nativeBlizzardExt or c.nativeBlizzardDispels
-                   or c.nativeBlizzardPrivate)
-    c.customAuraGrp = customBuffs or customDebuffs or customExt or customDispels
-    c.anyAuraGrp = c.nativeBlizzardAuras or c.customAuraGrp
-    c.nativeBlizzardAuraOnly = c.nativeBlizzardAuras and not c.customAuraGrp
     c.auraCacheSig = nil
     -- PERF (4.22 Beta hotfix): clear cached resolved filter/max so next
     -- UpdateFrameAuras call re-reads from auras.X (settings may have changed).
@@ -1775,10 +1836,24 @@ function GF.BuildFrameCache(f)
     c.ciCustom = c.ciEn and auraMasterOn and (
         c.ciSlotTL == "custom" or c.ciSlotTR == "custom" or c.ciSlotBL == "custom"
         or c.ciSlotBR == "custom" or c.ciSlotC == "custom")
-    c.ciAura = c.ciCustom or (c.ciDispel and not c.nativeBlizzardDispels)
+    local ciDispelActive = c.ciDispel and not c.nativeBlizzardDispels
+    c.ciAura = c.ciCustom or ciDispelActive
     c.ciThreat = c.ciEn and (
         c.ciSlotTL == "aggro" or c.ciSlotTR == "aggro" or c.ciSlotBL == "aggro"
         or c.ciSlotBR == "aggro" or c.ciSlotC == "aggro")
+
+    c.dispelScanActive = c.dispelScan
+        and (c.dispelEn or c.doEn or ciDispelActive)
+        and (not GF.DispelBorderTriggerNeedsPlayerDispel(c.dispelBorderTrigger) or GF._playerCanDispel)
+    local customDispels = auraMasterOn and c.dispelScanActive
+
+    c.nativeBlizzardAuras = c.aurasOn and (
+                   c.nativeBlizzardBuffs or c.nativeBlizzardDebuffs
+                   or c.nativeBlizzardExt or c.nativeBlizzardDispels
+                   or c.nativeBlizzardPrivate)
+    c.customAuraGrp = customBuffs or customDebuffs or customExt or customDispels
+    c.anyAuraGrp = c.nativeBlizzardAuras or c.customAuraGrp
+    c.nativeBlizzardAuraOnly = c.nativeBlizzardAuras and not c.customAuraGrp
 
     -- Private auras
     c.paEn = auraMasterOn and pa and pa.enabled ~= false and not c.nativeBlizzardPrivate
@@ -1860,7 +1935,7 @@ function GF.BuildFrameCache(f)
 
     -- Composite: does anything need UNIT_AURA?
     c.needAura = c.customAuraGrp or c.ciAura
-                 or (c.dispelScan and GF._playerCanDispel)
+                 or c.dispelScanActive
                  or c.dsEn
                  or c.siEn
 
@@ -2134,12 +2209,10 @@ _GF_RefreshBorder = function(f, unit)
         ofs = GF.ScaleValue(ofs, fScale)
     end
 
-    -- Configurable priority: read hlPrioOrder from Bars menu (general DB).
+    -- Configurable priority: read the resolved Bars scope for this GF kind.
     -- Maps "dispel"/"magic"/"curse"/etc â†’ dispel, "aggro" â†’ aggro.
     -- Purge/bossTarget are UF-only, skip for GF.
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    local prioEnabled = gen and gen.highlightPrioEnabled
-    local prioOrder   = prioEnabled and gen.highlightPrioOrder
+    local prioOrder = c.hlPrioEnabled and c.hlPrioOrder
 
     if type(prioOrder) == "table" then
         for _, pk in ipairs(prioOrder) do
@@ -2405,22 +2478,84 @@ local function _DispelScanSlots(cont, ...)
     return nil, nil
 end
 
--- Legacy fallback (pre-C_UnitAuras clients)
-local _scanTopDispel
-local function _DispelScanCallback(auraData)
-    if not auraData then return true end
-    local dispelName = auraData.dispelName
-    if issecretvalue and issecretvalue(dispelName) then return false end
-    if dispelName and dispelName ~= "" then
-        _scanTopDispel = dispelName
-        return true
+GF.ReadDispelBorderAura = GF.ReadDispelBorderAura or function(aura, triggerMode)
+    if not (aura and aura.auraInstanceID) then return nil, nil end
+    triggerMode = GF.NormalizeDispelBorderTrigger(triggerMode)
+    if triggerMode ~= "BY_ME" then
+        local harmful = aura.isHarmful
+        if issecretvalue and issecretvalue(harmful) then
+            -- Continue through the dispelName path for secret-tagged aura data.
+        elseif harmful == false then
+            return nil, nil
+        end
     end
-    return false
+
+    local dn = aura.dispelName
+    local secret = issecretvalue and issecretvalue(dn)
+    if secret then
+        if triggerMode == "DISPEL_TYPE" then
+            return "DISPELLABLE", aura.auraInstanceID
+        end
+    elseif type(dn) == "string" and dn ~= "" and dn ~= "None" then
+        if dn == "DISPELLABLE" then
+            return "DISPELLABLE", aura.auraInstanceID
+        end
+        return dn, aura.auraInstanceID
+    elseif triggerMode == "DISPEL_TYPE" then
+        return nil, nil
+    end
+
+    if triggerMode == "ANY_DEBUFF" then
+        return "DISPELLABLE", aura.auraInstanceID
+    end
+    return nil, nil
+end
+
+GF.FindDispelBorderAura = GF.FindDispelBorderAura or function(unit, triggerMode)
+    triggerMode = GF.NormalizeDispelBorderTrigger(triggerMode)
+    local filter = (triggerMode == "BY_ME") and _DISPEL_SCAN_FILTER or "HARMFUL"
+
+    if C_UnitAuras_GetAuraDataByIndex then
+        local index = 1
+        while true do
+            local aura = C_UnitAuras_GetAuraDataByIndex(unit, index, filter)
+            if not aura then break end
+            local dispel, aid = GF.ReadDispelBorderAura(aura, triggerMode)
+            if triggerMode == "BY_ME" and aura.auraInstanceID then
+                return dispel or "DISPELLABLE", aura.auraInstanceID
+            end
+            if dispel then return dispel, aid end
+            if triggerMode == "BY_ME" then break end
+            index = index + 1
+        end
+        return nil, nil
+    end
+
+    if triggerMode == "BY_ME" and C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
+        _dispelScanUnit = unit
+        local dispel, aid = _DispelScanSlots(C_UnitAuras_GetAuraSlots(unit, _DISPEL_SCAN_FILTER))
+        _dispelScanUnit = nil
+        return dispel, aid
+    end
+
+    if AuraUtil and AuraUtil.ForEachAura then
+        local foundDispel, foundAid
+        AuraUtil.ForEachAura(unit, filter == "HARMFUL" and "HARMFUL" or "HARMFUL|RAID", nil, function(auraData)
+            foundDispel, foundAid = GF.ReadDispelBorderAura(auraData, triggerMode)
+            return foundDispel ~= nil
+        end, true)
+        return foundDispel, foundAid
+    end
+
+    return nil, nil
 end
 
 function GF._UpdateDispel(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf and GF.GetConf(kind)
+    local c = f._c
+    if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
+    local triggerMode = GF.NormalizeDispelBorderTrigger(c and c.dispelBorderTrigger or HLVal(kind, "dispelBorderTrigger"))
 
     local testMode = (_G.MSUF_BorderTestModesActive == true) and _G.MSUF_DispelBorderTestMode
     -- Scope filtering: if test scope doesn't match this frame's kind, ignore test mode
@@ -2451,13 +2586,16 @@ function GF._UpdateDispel(f, unit)
         return
     end
 
-    if not testMode and _GF_IsBlizzardDispelRendererActive(conf) then
+    if not testMode and ((c and c.nativeBlizzardDispelsSuppressCustom) or (not c and _GF_IsBlizzardDispelRendererActive(conf))) then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
         f._msufGFDispelKnown = true
         return
     end
 
-    if (HLVal(kind, "hlDispelEnabled") == false or not unit) and not testMode then
+    if ((not GF.DispelScanActive(c)) or not unit
+        or (GF.DispelBorderTriggerNeedsPlayerDispel(triggerMode) and not GF._playerCanDispel))
+        and not testMode
+    then
         f._msufGFDispelKnown = true
         if f._msufGFDispelType then
             f._msufGFDispelType = nil
@@ -2487,35 +2625,11 @@ function GF._UpdateDispel(f, unit)
             end
             return
         end
-        -- C-side: query dispellable debuffs directly (secret-safe)
-        if C_UnitAuras_GetAuraDataByIndex then
-            local aura = C_UnitAuras_GetAuraDataByIndex(unit, 1, _DISPEL_SCAN_FILTER)
-            if aura and aura.auraInstanceID then
-                local dn = aura.dispelName
-                if not (issecretvalue and issecretvalue(dn)) and type(dn) == "string" and dn ~= "" and dn ~= "None" then
-                    topDispel = dn
-                else
-                    topDispel = "DISPELLABLE"
-                end
-                topAid = aura.auraInstanceID
-                if C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor and GF and GF._sharedDispelColorCurve then
-                    f._msufGFDispelColorObj = C_UnitAuras.GetAuraDispelTypeColor(unit, topAid, GF._sharedDispelColorCurve)
-                    f._msufGFDispelColorRev = _G.MSUF_ColorStyleRevision or 0
-                else
-                    f._msufGFDispelColorObj = nil
-                    f._msufGFDispelColorRev = nil
-                end
-            end
-        elseif C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
-            _dispelScanUnit = unit
-            topDispel, topAid = _DispelScanSlots(C_UnitAuras_GetAuraSlots(unit, _DISPEL_SCAN_FILTER))
-            _dispelScanUnit = nil
-            f._msufGFDispelColorObj = nil
-            f._msufGFDispelColorRev = nil
-        elseif AuraUtil and AuraUtil.ForEachAura then
-            _scanTopDispel = nil
-            AuraUtil.ForEachAura(unit, "HARMFUL|RAID", nil, _DispelScanCallback, true)
-            topDispel = _scanTopDispel
+        topDispel, topAid = GF.FindDispelBorderAura(unit, triggerMode)
+        if topAid and C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor and GF and GF._sharedDispelColorCurve then
+            f._msufGFDispelColorObj = C_UnitAuras.GetAuraDispelTypeColor(unit, topAid, GF._sharedDispelColorCurve)
+            f._msufGFDispelColorRev = _G.MSUF_ColorStyleRevision or 0
+        else
             f._msufGFDispelColorObj = nil
             f._msufGFDispelColorRev = nil
         end
@@ -2562,6 +2676,9 @@ function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
         return finishFull()
     end
 
+    local c = f._c
+    local triggerMode = GF.NormalizeDispelBorderTrigger(c and c.dispelBorderTrigger or HLVal(f._msufGFKind or "party", "dispelBorderTrigger"))
+
     local trackedAid = f._msufGFDispelAuraID
     local removed = updateInfo.removedAuraInstanceIDs
     if removed and trackedAid then
@@ -2573,10 +2690,12 @@ function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
     end
 
     local updated = updateInfo.updatedAuraInstanceIDs
-    if updated and trackedAid and C_UnitAuras_IsAuraFilteredOut then
+    if updated and trackedAid then
         for i = 1, #updated do
             if updated[i] == trackedAid then
-                if C_UnitAuras_IsAuraFilteredOut(unit, trackedAid, _DISPEL_SCAN_FILTER) ~= false then
+                if triggerMode ~= "BY_ME" or not C_UnitAuras_IsAuraFilteredOut
+                    or C_UnitAuras_IsAuraFilteredOut(unit, trackedAid, _DISPEL_SCAN_FILTER) ~= false
+                then
                     return finishFull()
                 end
                 return false, true
@@ -2597,17 +2716,18 @@ function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
         local aura = added[i]
         local aid = aura and aura.auraInstanceID
         if aid then
-            local dispellable
-            if C_UnitAuras_IsAuraFilteredOut then
+            local dispellable, triggerDispel
+            if triggerMode == "BY_ME" and C_UnitAuras_IsAuraFilteredOut then
                 dispellable = C_UnitAuras_IsAuraFilteredOut(unit, aid, _DISPEL_SCAN_FILTER) == false
             else
-                local dn = aura.dispelName
-                dispellable = not (issecretvalue and issecretvalue(dn))
-                    and type(dn) == "string" and dn ~= "" and dn ~= "None"
+                triggerDispel = GF.ReadDispelBorderAura(aura, triggerMode)
+                dispellable = triggerDispel ~= nil
             end
             if dispellable then
                 local dn = aura.dispelName
-                if not (issecretvalue and issecretvalue(dn)) and type(dn) == "string" and dn ~= "" and dn ~= "None" then
+                if triggerDispel then
+                    f._msufGFDispelType = triggerDispel
+                elseif not (issecretvalue and issecretvalue(dn)) and type(dn) == "string" and dn ~= "" and dn ~= "None" then
                     f._msufGFDispelType = dn
                 else
                     f._msufGFDispelType = "DISPELLABLE"
@@ -3470,9 +3590,11 @@ local function UpdateAll(f, unit)
 
     if c.anyAuraGrp and GF.UpdateFrameAuras then
         GF.UpdateFrameAuras(f, unit)
-        if c.nativeBlizzardDispels then
+        if c.nativeBlizzardDispelsSuppressCustom then
             if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
-        else
+        elseif GF.DispelScanActive(c) or f._msufGFDispelType or f._msufGFMergedDispel
+            or f._msufGFDispelAuraID or f._msufGFPrevDispelAuraID
+        then
             local mergedDispel = f._msufGFMergedDispel
             local prevDispel = f._msufGFDispelType
             local dispelAid = f._msufGFDispelAuraID
@@ -3496,9 +3618,9 @@ local function UpdateAll(f, unit)
             ) then
                 _GF_ClearNativeSuppressedDispel(f, unit)
             end
-        elseif c.nativeBlizzardDispels then
+        elseif c.nativeBlizzardDispelsSuppressCustom then
             if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
-        elseif c.dispelScan and GF._playerCanDispel then GF._UpdateDispel(f, unit) end
+        elseif GF.DispelScanActive(c) then GF._UpdateDispel(f, unit) end
     end
     -- Debuff stripe (UpdateAll always does full refresh)
     if c.dsEn then
@@ -5765,9 +5887,9 @@ local function UpdateHighlight(f, unit)
     local c = f._c
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
     local dispelTest = _G.MSUF_BorderTestModesActive == true and _G.MSUF_DispelBorderTestMode == true
-    if c and c.nativeBlizzardDispels and not dispelTest then
+    if c and c.nativeBlizzardDispelsSuppressCustom and not dispelTest then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
-    elseif dispelTest or (c and c.dispelScan and GF._playerCanDispel) then
+    elseif dispelTest or GF.DispelScanActive(c) then
         GF._UpdateDispel(f, unit)
     elseif _GF_ClearNativeSuppressedDispel then
         _GF_ClearNativeSuppressedDispel(f, unit)
@@ -5819,9 +5941,9 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
             ) then
                 _GF_ClearNativeSuppressedDispel(f, unit)
             end
-        elseif c and c.nativeBlizzardDispels then
+        elseif c and c.nativeBlizzardDispelsSuppressCustom then
             if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
-        elseif c and c.dispelScan and GF._playerCanDispel then GF._UpdateDispel(f, unit) end
+        elseif GF.DispelScanActive(c) then GF._UpdateDispel(f, unit) end
         UpdateTargetIndicator(f, unit)
     end
 

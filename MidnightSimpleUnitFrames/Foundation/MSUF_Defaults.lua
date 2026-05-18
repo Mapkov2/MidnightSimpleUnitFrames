@@ -194,6 +194,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
         if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
         if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+        if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
         auras.blizzardContainerAnchor = "FRAME"
         auras.blizzardContainerX = 0
         auras.blizzardContainerY = 0
