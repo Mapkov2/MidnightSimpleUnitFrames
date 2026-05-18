@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.4 Beta - 2026-05-18
+
+### Beta Release
+
+- Added persistent Menu2 memory so accordion/card open states, pinned previews, dashboard panels, page selectors, scopes, color selectors, and profile import/export choices survive menu rebuilds and reopening.
+- Improved Auras2 performance by caching dispel metadata, tracking structural aura changes with epochs, and avoiding repeated filter/sort work when aura structure and configuration are unchanged.
+- Reduced Auras2 event/render overhead when the feature or all unit aura modules are disabled, including harder cleanup of inactive containers and private aura state.
+- Improved range-fade stability and cost by repairing unchanged layered alpha less often while still clearing stale fade state when range becomes unknown.
+- Expanded Menu2 search coverage for toggle-style questions such as enable, disable, show, hide, turn on, and turn off.
+
 ## 5.32 - 2026-05-18
 
 ### Patch Release

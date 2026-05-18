@@ -4,10 +4,26 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.32",
-    previousVersion = "5.3",
-    rangeLabel = "5.3 -> 5.32",
+    currentVersion = "5.4 Beta",
+    previousVersion = "5.32",
+    rangeLabel = "5.32 -> 5.4 Beta",
     entries = {
+        {
+            version = "5.4 Beta",
+            date = "2026-05-18",
+            sections = {
+                {
+                    title = "Beta Release",
+                    bullets = {
+                        "Added persistent Menu2 memory so accordion/card open states, pinned previews, dashboard panels, page selectors, scopes, color selectors, and profile import/export choices survive menu rebuilds and reopening.",
+                        "Improved Auras2 performance by caching dispel metadata, tracking structural aura changes with epochs, and avoiding repeated filter/sort work when aura structure and configuration are unchanged.",
+                        "Reduced Auras2 event/render overhead when the feature or all unit aura modules are disabled, including harder cleanup of inactive containers and private aura state.",
+                        "Improved range-fade stability and cost by repairing unchanged layered alpha less often while still clearing stale fade state when range becomes unknown.",
+                        "Expanded Menu2 search coverage for toggle-style questions such as enable, disable, show, hide, turn on, and turn off.",
+                    },
+                },
+            },
+        },
         {
             version = "5.32",
             date = "2026-05-18",

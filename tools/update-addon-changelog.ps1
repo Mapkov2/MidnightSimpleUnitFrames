@@ -197,8 +197,11 @@ for ($i = $startIndex; $i -lt $releases.Count -and $selected.Count -lt $ReleaseC
 }
 
 $currentVersion = $selected[0].version
+$currentVersionIsPrerelease = $currentVersion -match '(?i)(alpha|beta|rc|pre)'
 $previousVersion = if (-not [string]::IsNullOrWhiteSpace($PreviousVersion)) {
     Convert-ToAsciiText $PreviousVersion
+} elseif ($currentVersionIsPrerelease -and $selected.Count -gt 1) {
+    $selected[1].version
 } elseif ($selected.Count -gt 1) {
     $selected[$selected.Count - 1].version
 } else {
