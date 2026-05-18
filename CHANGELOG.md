@@ -1,5 +1,25 @@
 # Changelog
 
+## 5.3 Beta 6 - 2026-05-18
+
+### Bugfixes
+
+- Fixed aura icons growing on tooltip hover by suppressing inherited button-state visuals and restoring the configured icon geometry.
+- Fixed a taint error in class-colored Bar Background runtime caused by comparing secret unit GUID values.
+- Fixed group-frame debuff filtering on pure DPS classes so the Dispellable base filter no longer collapses to an empty aura set when the player has no defensive dispel.
+- Fixed Unit Auras debuff filters so Include dispellable debuffs and the Magic, Curse, Poison, and Disease filter toggles are applied by the runtime.
+- Resolved the Group Frame effects merge conflict while keeping the scope-aware highlight-priority cache path.
+
+### Changes / Improvements
+
+- Added scope-aware dispel border and glow behavior for group frames.
+- Expanded status icon anchor options.
+- Included the fixes and polish commits from the 2026-05-18 07:00+ beta window in this validation build.
+
+### Release / Tooling
+
+- Prepared 5.3 Beta 6 as the next beta validation build for today's aura, dispel, and secret-value fixes.
+
 ## 5.3 Beta 5 - 2026-05-18
 
 ### Bugfixes

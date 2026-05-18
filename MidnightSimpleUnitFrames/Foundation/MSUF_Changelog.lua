@@ -4,10 +4,40 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.3 Beta 5",
-    previousVersion = "5.3 Beta 2",
-    rangeLabel = "5.3 Beta 2 -> 5.3 Beta 5",
+    currentVersion = "5.3 Beta 6",
+    previousVersion = "5.3 Beta 3",
+    rangeLabel = "5.3 Beta 3 -> 5.3 Beta 6",
     entries = {
+        {
+            version = "5.3 Beta 6",
+            date = "2026-05-18",
+            sections = {
+                {
+                    title = "Bugfixes",
+                    bullets = {
+                        "Fixed aura icons growing on tooltip hover by suppressing inherited button-state visuals and restoring the configured icon geometry.",
+                        "Fixed a taint error in class-colored Bar Background runtime caused by comparing secret unit GUID values.",
+                        "Fixed group-frame debuff filtering on pure DPS classes so the Dispellable base filter no longer collapses to an empty aura set when the player has no defensive dispel.",
+                        "Fixed Unit Auras debuff filters so Include dispellable debuffs and the Magic, Curse, Poison, and Disease filter toggles are applied by the runtime.",
+                        "Resolved the Group Frame effects merge conflict while keeping the scope-aware highlight-priority cache path.",
+                    },
+                },
+                {
+                    title = "Changes / Improvements",
+                    bullets = {
+                        "Added scope-aware dispel border and glow behavior for group frames.",
+                        "Expanded status icon anchor options.",
+                        "Included the fixes and polish commits from the 2026-05-18 07:00+ beta window in this validation build.",
+                    },
+                },
+                {
+                    title = "Release / Tooling",
+                    bullets = {
+                        "Prepared 5.3 Beta 6 as the next beta validation build for today's aura, dispel, and secret-value fixes.",
+                    },
+                },
+            },
+        },
         {
             version = "5.3 Beta 5",
             date = "2026-05-18",
@@ -107,35 +137,6 @@ local data = {
                     bullets = {
                         "Clarified unit frame alpha controls and matched them to the group frame layout.",
                         "Bundled all 5.3 Beta changelog entries in the dashboard changelog.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.3 Beta 2",
-            date = "2026-05-17",
-            sections = {
-                {
-                    title = "Performance",
-                    bullets = {
-                        "Defaulted rounded frame texture off so the feature has no active runtime callbacks while disabled.",
-                        "Reduced unnecessary group frame header rescans during rebuild and layout bursts.",
-                        "Reduced redundant castbar re-layout work when width-source geometry has not changed.",
-                    },
-                },
-                {
-                    title = "Bugfixes",
-                    bullets = {
-                        "Fixed rounded frame texture re-enable behavior after the module manager disables the feature.",
-                        "Fixed rounded frame integration for unit and group frame borders, power bars, mouseover highlights, dispel overlays, absorb bars, and indicators.",
-                        "Fixed group frame rounded visuals so mouseover and highlight state use the rounded edge instead of square overlays.",
-                    },
-                },
-                {
-                    title = "Changes / Improvements",
-                    bullets = {
-                        "Added Rounded Texture controls under Global Style > Bars with per-surface toggles, search coverage, localization, preview support, and a reload prompt.",
-                        "Added rounded mask media for the live unit/group frames and Menu2 preview.",
                     },
                 },
             },
