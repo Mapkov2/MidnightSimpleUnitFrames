@@ -6,12 +6,18 @@ param(
 $ErrorActionPreference = "Stop"
 
 $locales = @(
-    "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW"
+    "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW"
 )
+
+$englishLocales = @{
+    enUS = $true
+    enGB = $true
+}
 
 $menuRoot = Join-Path $AddonRoot "Menu2"
 $localeRoot = Join-Path $AddonRoot "Locales"
 $runtimeLocalePath = Join-Path $localeRoot "MSUF_RuntimeLocalization.lua"
+$auditLocalePath = Join-Path $localeRoot "MSUF_AuditLocalization.lua"
 
 function Add-Key {
     param([System.Collections.Generic.HashSet[string]]$Set, [string]$Value)
@@ -62,7 +68,7 @@ function Read-RuntimeLocalePairs {
 
     $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
 
-    foreach ($match in [regex]::Matches($text, ('(?:AddMissing|SetLocale)\("' + [regex]::Escape($Locale) + '"\s*,\s*\{(?<body>.*?)\r?\n\}\)'), 'Singleline')) {
+    foreach ($match in [regex]::Matches($text, ('(?:AddMissing|SetLocale|SetAudit)\("' + [regex]::Escape($Locale) + '"\s*,\s*\{(?<body>.*?)\r?\n\}\)'), 'Singleline')) {
         $body = $match.Groups["body"].Value
         $bodyPairs = Read-LocalePairsFromText $body
         foreach ($key in $bodyPairs.Keys) { $pairs[$key] = $bodyPairs[$key] }
@@ -72,7 +78,7 @@ function Read-RuntimeLocalePairs {
     foreach ($tableMatch in [regex]::Matches($text, 'local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{(?<body>.*?)\r?\n\}', 'Singleline')) {
         $tableBlocks[$tableMatch.Groups[1].Value] = $tableMatch.Groups["body"].Value
     }
-    foreach ($aliasMatch in [regex]::Matches($text, ('(?:AddMissing|SetLocale)\("' + [regex]::Escape($Locale) + '"\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)'))) {
+    foreach ($aliasMatch in [regex]::Matches($text, ('(?:AddMissing|SetLocale|SetAudit)\("' + [regex]::Escape($Locale) + '"\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)'))) {
         $name = $aliasMatch.Groups[1].Value
         if ($tableBlocks.ContainsKey($name)) {
             $bodyPairs = Read-LocalePairsFromText $tableBlocks[$name]
@@ -108,7 +114,7 @@ $patterns = @(
     '\b(?:\w+:)?Header\s*\(\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
     'RegisterPage\s*\([^\n]*?title\s*=\s*"((?:[^"\\]|\\.)*)"',
     '\{\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
-    '\b(?:label|text|title)\s*=\s*"((?:[^"\\]|\\.)*)"',
+    '\b(?:label|text|title|answer|tooltip|hint|summary|help|subtitle|caption)\s*=\s*"((?:[^"\\]|\\.)*)"',
     '\bM\.Tr\s*\(\s*"((?:[^"\\]|\\.)*)"',
     '\bM\.Format\s*\(\s*"((?:[^"\\]|\\.)*)"',
     '\b(?:SetText|AddLine|SetTextColor)\s*\(\s*"((?:[^"\\]|\\.)*)"'
@@ -123,13 +129,22 @@ Get-ChildItem -LiteralPath $menuRoot -Recurse -Filter "*.lua" | ForEach-Object {
     }
 }
 
+$searchPath = Join-Path $menuRoot "MSUF_Menu2_Search.lua"
+if (Test-Path -LiteralPath $searchPath) {
+    $searchText = Get-Content -LiteralPath $searchPath -Raw -Encoding UTF8
+    foreach ($match in [regex]::Matches($searchText, '\btarget\s*=\s*"((?:[^"\\]|\\.)*)"')) {
+        Add-Key $keys $match.Groups[1].Value
+    }
+}
+
 $translatedCallPatterns = @(
-    '\b(?:M\.Tr|Tr|TR|QuickTr|HelpText|ns\.Translate)\s*\(\s*"((?:[^"\\]|\\.)*)"',
-    '\bM\.Format\s*\(\s*M\.Tr\s*\(\s*"((?:[^"\\]|\\.)*)"'
+    '\b(?:M\.Tr|Tr|TR|QuickTr|HelpText|ns\.Translate|ns\.TR)\s*\(\s*"((?:[^"\\]|\\.)*)"',
+    '\b(?:M\.Tr|Tr|TR|QuickTr|HelpText|ns\.Translate|ns\.TR)\s*\([^\r\n)]*\bor\s*"((?:[^"\\]|\\.)*)"',
+    '\bM\.Format\s*\(\s*(?:M\.Tr\s*\(\s*)?"((?:[^"\\]|\\.)*)"'
 )
 
 $runtimeRoots = @(
-    "Core", "EditMode2", "Auras2", "GroupFrames", "Modules", "UI"
+    "Core", "EditMode2", "Auras2", "GroupFrames", "Modules", "UI", "Features", "ClassPower"
 ) | ForEach-Object { Join-Path $AddonRoot $_ }
 $castbarsRoot = "MidnightSimpleUnitFrames_Castbars"
 if (Test-Path -LiteralPath $castbarsRoot) { $runtimeRoots += $castbarsRoot }
@@ -166,6 +181,13 @@ foreach ($locale in $locales) {
     $pairs = Read-LocalePairs $file
     $runtimePairs = Read-RuntimeLocalePairs $runtimeLocalePath $locale
     foreach ($key in $runtimePairs.Keys) { $pairs[$key] = $runtimePairs[$key] }
+    $auditPairs = Read-RuntimeLocalePairs $auditLocalePath $locale
+    foreach ($key in $auditPairs.Keys) { $pairs[$key] = $auditPairs[$key] }
+    if ($englishLocales.ContainsKey($locale)) {
+        foreach ($key in $sortedKeys) {
+            if (-not $pairs.ContainsKey($key)) { $pairs[$key] = $key }
+        }
+    }
     $missing = @($sortedKeys | Where-Object { -not $pairs.ContainsKey($_) })
     $identical = @($sortedKeys | Where-Object { $pairs.ContainsKey($_) -and $pairs[$_] -ceq $_ })
 
