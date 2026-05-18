@@ -1,6 +1,59 @@
 local addonName, ns = ...
 ns = ns or {}
 
+local _MSUF_KnownFileAssetCache = {}
+
+local function MSUF_NormalizeFileAssetPath(asset)
+    if type(asset) ~= "string" or asset == "" then return nil end
+    return asset:gsub("/", "\\")
+end
+
+local function MSUF_IsKnownFileAsset(asset)
+    asset = MSUF_NormalizeFileAssetPath(asset)
+    if not asset then return false end
+
+    local cacheKey = asset:lower()
+    local cached = _MSUF_KnownFileAssetCache[cacheKey]
+    if cached ~= nil then return cached end
+
+    local api = _G.C_UIFileAsset
+    if type(api) ~= "table" then
+        return nil
+    end
+
+    local knownResult
+    if type(api.IsKnownFile) == "function" then
+        local ok, known = pcall(api.IsKnownFile, asset)
+        if ok and known ~= nil then
+            knownResult = known == true
+            if knownResult then
+                _MSUF_KnownFileAssetCache[cacheKey] = true
+                return true
+            end
+        end
+    end
+
+    if type(api.GetFileID) == "function" then
+        local ok, fileID = pcall(api.GetFileID, asset)
+        if ok then
+            local known = type(fileID) == "number"
+            if known then _MSUF_KnownFileAssetCache[cacheKey] = true end
+            return known
+        end
+    end
+
+    if knownResult ~= nil then
+        if knownResult then _MSUF_KnownFileAssetCache[cacheKey] = true end
+        return knownResult
+    end
+
+    return nil
+end
+
+_G.MSUF_IsKnownFileAsset = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+ns.Util = ns.Util or {}
+ns.Util.IsKnownFileAsset = ns.Util.IsKnownFileAsset or MSUF_IsKnownFileAsset
+
 -- Legacy font resolver disabled. The authoritative registry-based pipeline below
 -- owns all global font resolution and guarded SetFont behavior.
 if false then
@@ -1019,6 +1072,11 @@ end
 do
     local ADDON_FONT_BASE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\"
     local FALLBACK_FONT = "Fonts\\FRIZQT___CYR.TTF"
+    local FALLBACK_FONT_ALTERNATES = {
+        "Fonts\\FRIZQT___CYR.TTF",
+        "Fonts\\FRIZQT__.TTF",
+        "Fonts\\ARIALN.TTF",
+    }
 
     local ALIAS_TO_PATH = {
         FRIZQT = "Fonts\\FRIZQT___CYR.TTF",
@@ -1056,6 +1114,22 @@ do
         return path
     end
 
+    local function FontAssetAllowed(path)
+        path = NormalizeFontPath(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+        if type(isKnown) == "function" and isKnown(path) == false then return nil end
+        return path
+    end
+
+    local function ResolveFallbackFontPath()
+        for i = 1, #FALLBACK_FONT_ALTERNATES do
+            local path = FontAssetAllowed(FALLBACK_FONT_ALTERNATES[i])
+            if path then return path end
+        end
+        return NormalizeFontPath(FALLBACK_FONT)
+    end
+
     local function IsPath(value)
         if type(value) ~= "string" or value == "" then return false end
         local lower = value:lower()
@@ -1088,32 +1162,36 @@ do
         if type(LSM.HashTable) == "function" then
             local fonts = LSM:HashTable("font")
             local path = fonts and fonts[key]
-            if type(path) == "string" and path ~= "" then return NormalizeFontPath(path) end
+            path = FontAssetAllowed(path)
+            if path then return path end
         end
         if type(LSM.Fetch) == "function" then
             local ok, path = pcall(LSM.Fetch, LSM, "font", key, true)
-            if ok and type(path) == "string" and path ~= "" then return NormalizeFontPath(path) end
+            path = ok and FontAssetAllowed(path) or nil
+            if path then return path end
         end
         return nil
     end
 
     local function ResolveFontKeyPath(value)
-        if IsPath(value) then return NormalizeFontPath(value) end
-        if type(value) ~= "string" or value == "" then return NormalizeFontPath(ALIAS_TO_PATH.FRIZQT) end
+        if IsPath(value) then return FontAssetAllowed(value) end
+        if type(value) ~= "string" or value == "" then return FontAssetAllowed(ALIAS_TO_PATH.FRIZQT) or ResolveFallbackFontPath() end
         local normalized = type(_G.MSUF_NormalizeFontKey) == "function" and _G.MSUF_NormalizeFontKey(value) or value
-        if IsPath(normalized) then return NormalizeFontPath(normalized) end
-        return NormalizeFontPath(ALIAS_TO_PATH[normalized])
-            or NormalizeFontPath(ALIAS_TO_PATH[value])
+        if IsPath(normalized) then return FontAssetAllowed(normalized) end
+        return FontAssetAllowed(ALIAS_TO_PATH[normalized])
+            or FontAssetAllowed(ALIAS_TO_PATH[value])
             or FetchLSMFontPath(normalized)
             or FetchLSMFontPath(value)
     end
 
     local function ResolveFontPath(path, _, _, fontKey)
-        return NormalizeFontPath(path) or ResolveFontKeyPath(fontKey) or NormalizeFontPath(FALLBACK_FONT)
+        return FontAssetAllowed(path) or ResolveFontKeyPath(fontKey) or ResolveFallbackFontPath()
     end
 
     local function ApplyOne(fs, path, size, flags)
         if not (fs and type(fs.SetFont) == "function" and type(path) == "string" and path ~= "") then return false end
+        local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+        if type(isKnown) == "function" and isKnown(path) == false then return false end
         if fs._msufSafeFontPath == path
             and fs._msufSafeFontSize == size
             and fs._msufSafeFontFlags == flags
@@ -1151,7 +1229,7 @@ do
             end
             return true, requested, "requested"
         end
-        local fallback = NormalizeFontPath(FALLBACK_FONT)
+        local fallback = ResolveFallbackFontPath()
         if fallback ~= requested and (ApplyOne(fs, fallback, size, flags) or (flags ~= "" and ApplyOne(fs, fallback, size, ""))) then
             if fs then
                 fs._msufSafeFontRequestPath = requested
@@ -1210,7 +1288,7 @@ do
     end
 
     function _G.MSUF_GetInternalFontPathCandidates(key, path)
-        return { ResolveFontPath(path, 14, "", key), NormalizeFontPath(FALLBACK_FONT) }
+        return { ResolveFontPath(path, 14, "", key), ResolveFallbackFontPath() }
     end
 
     function _G.MSUF_DebugFontProbe(key)
@@ -1425,21 +1503,30 @@ local function GetStatusbarLSM()
     return LSM
 end
 
+local function StatusbarAssetAllowed(texture)
+    if type(texture) ~= "string" or texture == "" then return nil end
+    local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+    if type(isKnown) == "function" and isKnown(texture) == false then return nil end
+    return texture
+end
+
 local function FetchStatusbarTexture(lsm, key)
     if type(key) ~= "string" or key == "" then return nil end
     local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
     if type(builtins) == "table" then
         local texture = builtins[key]
-        if type(texture) == "string" and texture ~= "" then return texture end
+        texture = StatusbarAssetAllowed(texture)
+        if texture then return texture end
     end
     for i = 1, #FALLBACK_STATUSBAR_TEXTURES do
         local item = FALLBACK_STATUSBAR_TEXTURES[i]
-        if item.key == key then return item.path end
+        if item.key == key then return StatusbarAssetAllowed(item.path) end
     end
-    if key:find("\\", 1, true) or key:find("/", 1, true) then return key end
+    if key:find("\\", 1, true) or key:find("/", 1, true) then return StatusbarAssetAllowed(key) end
     if lsm and type(lsm.Fetch) == "function" then
         local ok, texture = pcall(lsm.Fetch, lsm, "statusbar", key, true)
-        if ok and type(texture) == "string" and texture ~= "" then return texture end
+        texture = ok and StatusbarAssetAllowed(texture) or nil
+        if texture then return texture end
     end
     return nil
 end

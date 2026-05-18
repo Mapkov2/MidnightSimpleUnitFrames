@@ -14,6 +14,13 @@ local function CurrentLSM()
     return lsm
 end
 
+local function IsStatusbarTextureUsable(texture)
+    if type(texture) ~= "string" or texture == "" then return false end
+    local isKnown = _G.MSUF_IsKnownFileAsset
+    if type(isKnown) == "function" and isKnown(texture) == false then return false end
+    return true
+end
+
 local function Tr(text)
     if type(text) ~= "string" then return text end
     if type(ns) == "table" and type(ns.Translate) == "function" then
@@ -268,17 +275,26 @@ function MSUF_GetCastbarTexture()
         if type(builtins) == "table" then
             local t = builtins[key]
             if type(t) == "string" and t ~= "" then
-                 return t, true
+                if IsStatusbarTextureUsable(t) then
+                    return t, true
+                end
+                return nil, false
             end
         end
         if key:find("\\") or key:find("/") then
-             return key, true
+            if IsStatusbarTextureUsable(key) then
+                return key, true
+            end
+            return nil, false
         end
         local lsm = CurrentLSM()
         if lsm and lsm.Fetch then
             local tex = lsm:Fetch("statusbar", key, true)
-            if tex and tex ~= "" then
-                 return tex, true
+            if type(tex) == "string" and tex ~= "" then
+                if IsStatusbarTextureUsable(tex) then
+                    return tex, true
+                end
+                return nil, false
             end
         end
          return nil, false
@@ -559,21 +575,27 @@ function MSUF_ResolveStatusbarTextureKey(key)
     if type(builtins) == "table" then
         local t = builtins[key]
         if type(t) == "string" and t ~= "" then
-            result = t
-            cacheable = true
+            if IsStatusbarTextureUsable(t) then
+                result = t
+                cacheable = true
+            end
         end
     end
     if not result then
         if key:find("\\") or key:find("/") then
-            result = key
-            cacheable = true
+            if IsStatusbarTextureUsable(key) then
+                result = key
+                cacheable = true
+            end
         else
             local lsm = CurrentLSM()
             if lsm and type(lsm.Fetch) == "function" then
                 local tex = lsm:Fetch("statusbar", key, true)
-                if tex then
-                    result = tex
-                    cacheable = true
+                if type(tex) == "string" and tex ~= "" then
+                    if IsStatusbarTextureUsable(tex) then
+                        result = tex
+                        cacheable = true
+                    end
                 end
             end
         end
@@ -582,7 +604,9 @@ function MSUF_ResolveStatusbarTextureKey(key)
         if cacheable then _resolveTexCache[key] = result end
         return result
     end
-    return "Interface\\TargetingFrame\\UI-StatusBar"
+    local fallback = "Interface\\TargetingFrame\\UI-StatusBar"
+    if cacheable then _resolveTexCache[key] = fallback end
+    return fallback
 end
 _G.MSUF_ResolveStatusbarTextureKey = MSUF_ResolveStatusbarTextureKey
 _G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {
