@@ -986,7 +986,11 @@ local function BuildColors(ctx)
     ValueDropdownAt(ctx, power, "Power type", 12, -10, COLOR_DATA.POWER_TOKENS, 260,
         function() return M.colorsPowerToken or "MANA" end,
         function(v)
-            M.colorsPowerToken = v or "MANA"
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue("colorsPowerToken", v or "MANA")
+            else
+                M.colorsPowerToken = v or "MANA"
+            end
             if powerColor then powerColor:SetRGB(GetPowerOverrideRGB(M.colorsPowerToken)) end
         end)
     powerColor = ColorValueAt(ctx, power, "Color", 360, -10,
@@ -1003,7 +1007,11 @@ local function BuildColors(ctx)
     ValueDropdownAt(ctx, classPower, "Resource type", 12, -10, COLOR_DATA.CP_TOKENS, 310,
         function() return M.colorsCPToken or "COMBO_POINTS" end,
         function(v)
-            M.colorsCPToken = v or "COMBO_POINTS"
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue("colorsCPToken", v or "COMBO_POINTS")
+            else
+                M.colorsCPToken = v or "COMBO_POINTS"
+            end
             if cpColor then cpColor:SetRGB(GetClassPowerRGB(M.colorsCPToken)) end
             if cpBg then cpBg:SetRGB(GetClassPowerBgRGB(M.colorsCPToken)) end
         end)

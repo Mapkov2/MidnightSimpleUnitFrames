@@ -253,7 +253,11 @@ local function BuildGFIndicators(ctx)
         function(value)
             for i = 1, #GF_STATUS_ICON_SPECS do
                 if GF_STATUS_ICON_SPECS[i].value == value then
-                    M.gfStatusIconSelection = value
+                    if type(M.PersistMenuStateValue) == "function" then
+                        M.PersistMenuStateValue("gfStatusIconSelection", value)
+                    else
+                        M.gfStatusIconSelection = value
+                    end
                     local gf = GF()
                     if gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(value) end
                     if M.SelectPage then M.SelectPage(ctx.key) end
@@ -293,7 +297,11 @@ local function BuildGFIndicators(ctx)
     local previewCurrent = W.Button(previewCard, "Preview current", 142)
     previewCurrent:SetScript("OnClick", function()
         local gf = GF()
-        M.gfStatusPreviewMode = "current"
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("gfStatusPreviewMode", "current")
+        else
+            M.gfStatusPreviewMode = "current"
+        end
         if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
         if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode("current") end
         if gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(CurrentGFStatusSpec().value) end
@@ -306,7 +314,11 @@ local function BuildGFIndicators(ctx)
     local previewAll = W.Button(previewCard, "Show all", 112)
     previewAll:SetScript("OnClick", function()
         local gf = GF()
-        M.gfStatusPreviewMode = "all"
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("gfStatusPreviewMode", "all")
+        else
+            M.gfStatusPreviewMode = "all"
+        end
         if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
         if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode("all") end
         if RefreshGFPreview then RefreshGFPreview() end
@@ -1139,7 +1151,11 @@ local function BuildGFIndicators(ctx)
                 return Val(CurrentScope(), "ciSlot" .. slotKey, CI_SLOT_DEFAULTS[slotKey] or "none")
             end,
             function(value)
-                M.gfCornerSlotSelection = slotKey
+                if type(M.PersistMenuStateValue) == "function" then
+                    M.PersistMenuStateValue("gfCornerSlotSelection", slotKey)
+                else
+                    M.gfCornerSlotSelection = slotKey
+                end
                 Set(CurrentScope(), "ciSlot" .. slotKey, value or "none", "visual")
                 if M.SelectPage then M.SelectPage(ctx.key) end
             end)
@@ -1154,7 +1170,11 @@ local function BuildGFIndicators(ctx)
     M.BindDropdown(ctx, slotDrop,
         function() return CurrentCISlot() end,
         function(value)
-            M.gfCornerSlotSelection = value or "TL"
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue("gfCornerSlotSelection", value or "TL")
+            else
+                M.gfCornerSlotSelection = value or "TL"
+            end
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
     W.MoveWidget(slotDrop, corners, rightX, -122, rightW, "LEFT")

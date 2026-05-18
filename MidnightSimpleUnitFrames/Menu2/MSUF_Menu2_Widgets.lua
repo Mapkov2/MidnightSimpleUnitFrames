@@ -135,6 +135,7 @@ local function HideSliderTemplateParts(slider)
 end
 
 function W.PageBuilder(ctx)
+    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     local b = {
         ctx = ctx,
         parent = ctx.wrapper,
@@ -183,7 +184,11 @@ function W.PageBuilder(ctx)
     end
 
     function b:CollapsibleSection(id, title, height, defaultOpen)
-        M.accordionState = M.accordionState or {}
+        if type(M.GetPersistentMenuStateTable) == "function" then
+            M.accordionState = M.GetPersistentMenuStateTable("accordionState")
+        else
+            M.accordionState = M.accordionState or {}
+        end
         local stateKey = tostring(ctx.key or "page") .. ":" .. tostring(id or title or "section")
         local saved = M.accordionState[stateKey]
         local open = (saved == nil) and (defaultOpen and true or false) or (saved and true or false)
@@ -1210,7 +1215,11 @@ function W.AttachPinnedPreview(body, box, opts)
     local scroll = M.scrollFrame
     if not scroll then return nil end
 
-    M.previewPinState = M.previewPinState or {}
+    if type(M.GetPersistentMenuStateTable) == "function" then
+        M.previewPinState = M.GetPersistentMenuStateTable("previewPinState")
+    else
+        M.previewPinState = M.previewPinState or {}
+    end
     local stateKey = tostring(opts.stateKey or box._msuf2PinStateKey or "preview")
     local originalParent = box:GetParent()
     local point, relTo, relPoint, xOfs, yOfs = box:GetPoint(1)

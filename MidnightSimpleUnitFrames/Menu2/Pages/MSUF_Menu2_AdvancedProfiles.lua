@@ -403,7 +403,13 @@ local function BuildProfiles(ctx)
     }, 240)
     M.BindDropdown(ctx, exportKind,
         function() return M.profileExportKind or "all" end,
-        function(v) M.profileExportKind = v or "all" end)
+        function(v)
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue("profileExportKind", v or "all")
+            else
+                M.profileExportKind = v or "all"
+            end
+        end)
     local blob = W.TextInput(io, "Profile string", 640)
     blob._msuf2CommitOnBlur = false
     local export = T.Button(io, "Export", buttonW, buttonH)
@@ -521,7 +527,11 @@ local function BuildProfiles(ctx)
             self:SetChecked(M.profileImportCreateNew == true)
             return
         end
-        M.profileImportCreateNew = not (M.profileImportCreateNew == true)
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
+        else
+            M.profileImportCreateNew = not (M.profileImportCreateNew == true)
+        end
         self:SetChecked(M.profileImportCreateNew == true)
         if M.Refresh then M.Refresh(ctx) end
     end)

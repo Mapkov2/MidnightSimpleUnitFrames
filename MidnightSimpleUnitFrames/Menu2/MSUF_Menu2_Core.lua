@@ -218,6 +218,128 @@ local ALIASES = {
     search = "search",
 }
 
+local MENU_STATE_VERSION = 1
+local MENU_STATE_TABLE_FIELDS = {
+    "accordionState",
+    "previewPinState",
+    "navHeaderState",
+    "unitTextTabSelection",
+    "unitTextSlotSelection",
+    "unitStatusSelection",
+    "gfTextTabSelection",
+    "gfTextSlotSelection",
+    "gfSpellMultiSpecSelection",
+    "gfSpellIndicatorSelection",
+}
+local MENU_STATE_SCALAR_DEFAULTS = {
+    lastPage = "home",
+    gfScope = "party",
+    auraScope = "shared",
+    gfStatusIconSelection = "roleIcon",
+    gfCornerSlotSelection = "TL",
+    gfStatusPreviewMode = "current",
+    colorsPowerToken = "MANA",
+    colorsCPToken = "COMBO_POINTS",
+    profileExportKind = "all",
+    profileImportCreateNew = false,
+    dashboardChangelogOpen = false,
+    dashboardRecoveryOpen = false,
+    dashboardScalingOpen = false,
+    lastPandemicMode = "PULSE",
+}
+
+local function MenuCharKey()
+    local fn = rawget(_G, "MSUF_GetCharKey")
+    if type(fn) == "function" then
+        local ok, key = pcall(fn)
+        if ok and type(key) == "string" and key ~= "" then return key end
+    end
+
+    local name = (_G.UnitName and _G.UnitName("player")) or "Unknown"
+    local realm = (_G.GetRealmName and _G.GetRealmName()) or "Realm"
+    return tostring(name) .. "-" .. tostring(realm)
+end
+
+local function CopyMissingStateValues(dst, src)
+    if type(dst) ~= "table" or type(src) ~= "table" then return end
+    for k, v in pairs(src) do
+        if dst[k] == nil then dst[k] = v end
+    end
+end
+
+local function EnsurePersistentMenuState()
+    _G.MSUF_GlobalDB = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {}
+    local gdb = _G.MSUF_GlobalDB
+    gdb.char = type(gdb.char) == "table" and gdb.char or {}
+
+    local charKey = MenuCharKey()
+    local charDB = type(gdb.char[charKey]) == "table" and gdb.char[charKey] or {}
+    gdb.char[charKey] = charDB
+
+    local state = type(charDB.menu2State) == "table" and charDB.menu2State or {}
+    charDB.menu2State = state
+    state.version = MENU_STATE_VERSION
+    local firstLoad = M._persistentMenuState ~= state or M._persistentMenuStateLoaded ~= true
+
+    for i = 1, #MENU_STATE_TABLE_FIELDS do
+        local field = MENU_STATE_TABLE_FIELDS[i]
+        local saved = state[field]
+        if type(saved) ~= "table" then
+            saved = {}
+            state[field] = saved
+        end
+        if type(M[field]) == "table" and M[field] ~= saved then
+            CopyMissingStateValues(saved, M[field])
+        end
+        M[field] = saved
+    end
+
+    for field, defaultValue in pairs(MENU_STATE_SCALAR_DEFAULTS) do
+        if firstLoad and state[field] ~= nil then
+            M[field] = state[field]
+        elseif M[field] ~= nil then
+            state[field] = M[field]
+        else
+            M[field] = defaultValue
+            state[field] = defaultValue
+        end
+    end
+
+    M._persistentMenuState = state
+    M._persistentMenuStateLoaded = true
+    return state
+end
+
+local function SavePersistentMenuState()
+    local state = EnsurePersistentMenuState()
+    for field in pairs(MENU_STATE_SCALAR_DEFAULTS) do
+        state[field] = M[field]
+    end
+    return state
+end
+
+function M.EnsurePersistentMenuState()
+    return EnsurePersistentMenuState()
+end
+
+function M.GetPersistentMenuStateTable(field)
+    local state = EnsurePersistentMenuState()
+    if type(state[field]) ~= "table" then state[field] = {} end
+    M[field] = state[field]
+    return state[field]
+end
+
+function M.PersistMenuStateValue(field, value)
+    local state = EnsurePersistentMenuState()
+    M[field] = value
+    state[field] = value
+    return value
+end
+
+function M.SavePersistentMenuState()
+    return SavePersistentMenuState()
+end
+
 local function ClampNumber(value, minValue, maxValue, fallback)
     value = tonumber(value) or fallback or minValue
     if value < minValue then value = minValue elseif value > maxValue then value = maxValue end
@@ -1062,6 +1184,7 @@ end
 
 function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
+    EnsurePersistentMenuState()
     key = ALIASES[key or ""] or key or "home"
     local spec = M.pages[key]
     local cached = M.cache[key]
@@ -1091,6 +1214,7 @@ function M.SelectPage(key)
     entry.hiddenBuild = false
 
     M.activeKey = key
+    if key ~= "search" then M.PersistMenuStateValue("lastPage", key) end
     if M.frame then M.frame._msufCurrentKey = key end
     if M.scrollFrame and M.scrollFrame.SetVerticalScroll then
         M.scrollFrame:SetVerticalScroll(0)
@@ -1362,6 +1486,7 @@ local function CreateHistoryControls(parent)
 end
 
 local function BuildNav(parent)
+    EnsurePersistentMenuState()
     M.navButtons = {}
     M.navHeaders = {}
     M.navGroupForKey = {}
@@ -1738,6 +1863,7 @@ end
 local function BuildWindow()
     if M.frame then return M.frame end
 
+    EnsurePersistentMenuState()
     SetWindowMetrics(ReadSavedWindowSize())
     local f = T.Panel(UIParent, "MSUF2_Window", T.colors.bg, T.colors.border)
     _G.MSUF_StandaloneOptionsWindow = f
@@ -2138,7 +2264,7 @@ local function BuildWindow()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
         if M.EndHistorySession then M.EndHistorySession() end
         ResetStatusIndicatorTestModeOnMenuExit()
-        M.dashboardChangelogOpen = false
+        SavePersistentMenuState()
         lastBossPreviewActive = nil
         SyncBossPagePreviewForKey(nil)
         SyncGroupPagePreviewForKey(nil)
@@ -2368,6 +2494,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     end
     local function RefreshOpenState()
         M.dashboardChangelogOpen = open
+        M.PersistMenuStateValue("dashboardChangelogOpen", open)
         scroll:SetShown(open)
         summary:SetShown((not open) and not opts.hideSummaryWhenClosed)
         PaintHeader(open)
@@ -2973,7 +3100,7 @@ local function BuildDashboardUX(ctx)
         Pill(head, "Factory reset hidden", recoveryW - 124, -11, 110, T.colors.accent2)
     end
     head:SetScript("OnClick", function()
-        M.dashboardRecoveryOpen = not recoveryOpen
+        M.PersistMenuStateValue("dashboardRecoveryOpen", not recoveryOpen)
         M.InvalidatePage("home")
         M.SelectPage("home")
     end)
@@ -3029,7 +3156,7 @@ local function BuildDashboardUX(ctx)
         Pill(scaleHead, M.Format("Frames %d%%", Percent(g.msufUiScale, 1)), recoveryW - 98, -11, 84)
     end
     scaleHead:SetScript("OnClick", function()
-        M.dashboardScalingOpen = not scalingOpen
+        M.PersistMenuStateValue("dashboardScalingOpen", not scalingOpen)
         M.InvalidatePage("home")
         M.SelectPage("home")
     end)
@@ -3370,6 +3497,7 @@ M.ApplyMenuFrameScale = ApplyMenuFrameScale
 
 function M.Open(pageKey)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
+    EnsurePersistentMenuState()
     if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
     local f = BuildWindow()
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
@@ -3377,7 +3505,7 @@ function M.Open(pageKey)
     ApplyMenuFrameScale(f)
     ApplyMenuFramePriority(f)
     f:Show()
-    M.SelectPage(pageKey or M.activeKey or "home")
+    M.SelectPage(pageKey or "home")
     return true
 end
 

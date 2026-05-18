@@ -1095,7 +1095,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         box._selectedHandle = handle
         if box.SetFocus then box:SetFocus() end
         if handle and handle._cfgStatus and handle._statusSpec then
-            M.gfStatusIconSelection = handle._statusSpec.value
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue("gfStatusIconSelection", handle._statusSpec.value)
+            else
+                M.gfStatusIconSelection = handle._statusSpec.value
+            end
         end
         if handle and handle._cfgTextKind then
             M.gfTextTabSelection = M.gfTextTabSelection or {}

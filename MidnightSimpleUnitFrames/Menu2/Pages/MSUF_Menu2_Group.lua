@@ -642,7 +642,11 @@ local function ScopeSection(ctx, builder)
     end
 
     local function SelectScope(kind)
-        M.gfScope = kind or "party"
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("gfScope", kind or "party")
+        else
+            M.gfScope = kind or "party"
+        end
         local gf = GF()
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
         if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
@@ -1420,12 +1424,22 @@ local function IconStyleValues()
 end
 
 local function CurrentGFStatusSpec()
-    M.gfStatusIconSelection = M.gfStatusIconSelection or "roleIcon"
+    if not M.gfStatusIconSelection then
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("gfStatusIconSelection", "roleIcon")
+        else
+            M.gfStatusIconSelection = "roleIcon"
+        end
+    end
     for i = 1, #GF_STATUS_ICON_SPECS do
         local spec = GF_STATUS_ICON_SPECS[i]
         if spec.value == M.gfStatusIconSelection then return spec end
     end
-    M.gfStatusIconSelection = GF_STATUS_ICON_SPECS[1].value
+    if type(M.PersistMenuStateValue) == "function" then
+        M.PersistMenuStateValue("gfStatusIconSelection", GF_STATUS_ICON_SPECS[1].value)
+    else
+        M.gfStatusIconSelection = GF_STATUS_ICON_SPECS[1].value
+    end
     return GF_STATUS_ICON_SPECS[1]
 end
 
@@ -1591,11 +1605,21 @@ local function CIModeValues()
 end
 
 local function CurrentCISlot()
-    M.gfCornerSlotSelection = M.gfCornerSlotSelection or "TL"
+    if not M.gfCornerSlotSelection then
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("gfCornerSlotSelection", "TL")
+        else
+            M.gfCornerSlotSelection = "TL"
+        end
+    end
     for i = 1, #CI_SLOT_VALUES do
         if CI_SLOT_VALUES[i].value == M.gfCornerSlotSelection then return M.gfCornerSlotSelection end
     end
-    M.gfCornerSlotSelection = "TL"
+    if type(M.PersistMenuStateValue) == "function" then
+        M.PersistMenuStateValue("gfCornerSlotSelection", "TL")
+    else
+        M.gfCornerSlotSelection = "TL"
+    end
     return "TL"
 end
 

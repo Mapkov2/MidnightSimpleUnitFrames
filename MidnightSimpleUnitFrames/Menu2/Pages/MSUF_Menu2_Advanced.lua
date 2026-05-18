@@ -619,7 +619,13 @@ end
 local function SetPandemicMode(value)
     local shared = AuraShared()
     value = NormalizePandemicMode(value)
-    if value ~= "OFF" then M.lastPandemicMode = value end
+    if value ~= "OFF" then
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("lastPandemicMode", value)
+        else
+            M.lastPandemicMode = value
+        end
+    end
     shared.pandemicMode = value
     shared.showPandemic = nil
     ApplyAuras()
@@ -754,7 +760,11 @@ local function BuildAuras(ctx)
         width = contentW,
         getValue = AuraScope,
         setValue = function(value)
-            M.auraScope = value or "shared"
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue("auraScope", value or "shared")
+            else
+                M.auraScope = value or "shared"
+            end
             RefreshAurasPage(ctx)
         end,
         hasOverride = AuraHasOverride,
@@ -1046,7 +1056,13 @@ local function BuildAuras(ctx)
                 SetPandemicMode(M.lastPandemicMode or "PULSE")
             else
                 local mode = GetPandemicMode()
-                if mode ~= "OFF" then M.lastPandemicMode = mode end
+                if mode ~= "OFF" then
+                    if type(M.PersistMenuStateValue) == "function" then
+                        M.PersistMenuStateValue("lastPandemicMode", mode)
+                    else
+                        M.lastPandemicMode = mode
+                    end
+                end
                 SetPandemicMode("OFF")
             end
         end))
