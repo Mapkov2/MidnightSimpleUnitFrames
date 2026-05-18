@@ -934,7 +934,8 @@ local function ResolvePreserveMissingHPColor(f, kind)
     if source and source.GetVertexColor then
         local r, g, b = source:GetVertexColor()
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return r, g, b, 1
+            local iss = issecretvalue
+            return r, g, b, 1, iss and (iss(r) or iss(g) or iss(b)) or false
         end
     end
 
@@ -950,8 +951,13 @@ end
 
 local function ApplyPreserveMissingHPColor(f, bg, kind)
     if not bg or not bg.SetStatusBarColor then return end
-    local r, g, b, a = ResolvePreserveMissingHPColor(f, kind)
+    local r, g, b, a, secretColor = ResolvePreserveMissingHPColor(f, kind)
     if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    if secretColor then
+        bg:SetStatusBarColor(r, g, b, a)
+        bg._msufGFMissingR, bg._msufGFMissingG, bg._msufGFMissingB, bg._msufGFMissingA = nil, nil, nil, nil
+        return
+    end
     if bg._msufGFMissingR ~= r or bg._msufGFMissingG ~= g or bg._msufGFMissingB ~= b or bg._msufGFMissingA ~= a then
         bg:SetStatusBarColor(r, g, b, a)
         bg._msufGFMissingR, bg._msufGFMissingG, bg._msufGFMissingB, bg._msufGFMissingA = r, g, b, a

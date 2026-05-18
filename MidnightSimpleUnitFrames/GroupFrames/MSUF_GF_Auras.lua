@@ -263,6 +263,98 @@ do
 end
 local _DISPEL_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
 
+GF.NormalizeDispelBorderTrigger = GF.NormalizeDispelBorderTrigger or function(value)
+    if type(_G.MSUF_NormalizeDispelBorderTrigger) == "function" then
+        return _G.MSUF_NormalizeDispelBorderTrigger(value)
+    end
+    if value == "DISPEL_TYPE" or value == "TYPE" or value == "TYPED" or value == "ANY_DISPEL_TYPE" then
+        return "DISPEL_TYPE"
+    end
+    if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL" or value == "ALL_DEBUFFS" then
+        return "ANY_DEBUFF"
+    end
+    return "BY_ME"
+end
+
+GF.DispelBorderTriggerNeedsPlayerDispel = GF.DispelBorderTriggerNeedsPlayerDispel or function(value)
+    if type(_G.MSUF_DispelBorderTriggerNeedsPlayerDispel) == "function" then
+        return _G.MSUF_DispelBorderTriggerNeedsPlayerDispel(value)
+    end
+    return GF.NormalizeDispelBorderTrigger(value) == "BY_ME"
+end
+
+GF.ReadDispelBorderAura = GF.ReadDispelBorderAura or function(aura, triggerMode)
+    if not (aura and aura.auraInstanceID) then return nil, nil end
+    triggerMode = GF.NormalizeDispelBorderTrigger(triggerMode)
+    if triggerMode ~= "BY_ME" then
+        local harmful = aura.isHarmful
+        if issecretvalue and issecretvalue(harmful) then
+            -- Fall through to dispelName checks for secret-tagged aura data.
+        elseif harmful == false then
+            return nil, nil
+        end
+    end
+
+    local dn = _GetReadableDispelName(aura.dispelName)
+    if dn then return dn, aura.auraInstanceID end
+    if triggerMode == "DISPEL_TYPE" then
+        if issecretvalue and issecretvalue(aura.dispelName) then
+            return "DISPELLABLE", aura.auraInstanceID
+        end
+        return nil, nil
+    end
+    if triggerMode == "ANY_DEBUFF" then
+        return "DISPELLABLE", aura.auraInstanceID
+    end
+    return nil, nil
+end
+
+GF.DispelScanForFrame = GF.DispelScanForFrame or function(f, conf, nativeDispels)
+    local c = f and f._c
+    local triggerValue = c and c.dispelBorderTrigger
+    if triggerValue == nil and conf then
+        if conf.hlOverride and conf.dispelBorderTrigger ~= nil then
+            triggerValue = conf.dispelBorderTrigger
+        end
+        if triggerValue == nil then
+            local gen = _G.MSUF_DB and _G.MSUF_DB.general
+            triggerValue = gen and gen.dispelBorderTrigger
+        end
+        if triggerValue == nil then
+            triggerValue = conf.dispelBorderTrigger
+        end
+    end
+    local triggerMode = GF.NormalizeDispelBorderTrigger(triggerValue)
+    if c and c.dispelScanActive ~= nil then
+        return c.dispelScanActive == true, triggerMode
+    end
+    local auras = conf and conf.auras
+    local allowNativeBorder = nativeDispels and auras and auras.blizzardDispelBorder == true
+    local active = conf and conf.dispelEnabled ~= false and (not nativeDispels or allowNativeBorder)
+        and (not GF.DispelBorderTriggerNeedsPlayerDispel(triggerMode) or _playerCanDispel)
+    return active and true or false, triggerMode
+end
+
+GF.FindDispelBorderAura = GF.FindDispelBorderAura or function(unit, triggerMode)
+    triggerMode = GF.NormalizeDispelBorderTrigger(triggerMode)
+    local filter = (triggerMode == "BY_ME") and _DISPEL_FILTER or "HARMFUL"
+    if _getByIndex then
+        local index = 1
+        while true do
+            local aura = _getByIndex(unit, index, filter)
+            if not aura then break end
+            local dn, aid = GF.ReadDispelBorderAura(aura, triggerMode)
+            if triggerMode == "BY_ME" and aura.auraInstanceID then
+                return dn or "DISPELLABLE", aura.auraInstanceID
+            end
+            if dn then return dn, aid end
+            if triggerMode == "BY_ME" then break end
+            index = index + 1
+        end
+    end
+    return nil, nil
+end
+
 -- Export shared ColorCurve + rebuild entry for Options live-apply.
 GF._sharedDispelColorCurve = _dispelColorCurve
 GF.RebuildDispelColorCurve = function()
@@ -1753,13 +1845,14 @@ local function AuraQueryLimit(maxIcons)
     return n + 1
 end
 
-local function BuildAuraCacheSig(buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel)
+local function BuildAuraCacheSig(buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel, dispelTrigger)
     return tostring(buffFilter) .. "\001" .. tostring(debuffFilter) .. "\001" .. tostring(externalFilter) .. "\001"
         .. tostring(buffMax) .. "\001" .. tostring(debuffMax) .. "\001" .. tostring(externalMax) .. "\001"
-        .. tostring(wantBuff) .. "\001" .. tostring(wantDebuff) .. "\001" .. tostring(wantExternals) .. "\001" .. tostring(wantDispel)
+        .. tostring(wantBuff) .. "\001" .. tostring(wantDebuff) .. "\001" .. tostring(wantExternals) .. "\001"
+        .. tostring(wantDispel) .. "\001" .. tostring(dispelTrigger)
 end
 
-local function GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel)
+local function GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel, dispelTrigger)
     if not (unit and aura and aura.auraInstanceID) then return nil end
     local flags
     if wantBuff and AuraMatchesFilter(unit, aura, buffFilter) then
@@ -1771,8 +1864,14 @@ local function GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFi
     if wantExternals and AuraMatchesFilter(unit, aura, externalFilter) then
         flags = AddAuraKind(flags, AURA_KIND_EXTERNAL)
     end
-    if wantDispel and AuraMatchesFilter(unit, aura, _DISPEL_FILTER) then
-        flags = AddAuraKind(flags, AURA_KIND_DISPEL)
+    if wantDispel then
+        if GF.NormalizeDispelBorderTrigger(dispelTrigger) == "BY_ME" then
+            if AuraMatchesFilter(unit, aura, _DISPEL_FILTER) then
+                flags = AddAuraKind(flags, AURA_KIND_DISPEL)
+            end
+        elseif GF.ReadDispelBorderAura(aura, dispelTrigger) then
+            flags = AddAuraKind(flags, AURA_KIND_DISPEL)
+        end
     end
     return flags
 end
@@ -1825,7 +1924,7 @@ local function MergeTouches(a, b, c, d, aa, bb, cc, dd)
     return a or aa, b or bb, c or cc, d or dd
 end
 
-local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel)
+local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel, dispelTrigger)
     local st = EnsureFrameAuraCache(f)
     ResetAuraCache(st.buff)
     ResetAuraCache(st.debuff)
@@ -1844,9 +1943,8 @@ local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, ex
     end
     for k in pairs(_fullScanSeen) do _fullScanSeen[k] = nil end
 
-    if wantDispel and _getByIndex then
-        local aura = _getByIndex(unit, 1, _DISPEL_FILTER)
-        local aid = aura and aura.auraInstanceID
+    if wantDispel then
+        local _, aid = GF.FindDispelBorderAura(unit, dispelTrigger)
         if aid then
             st.flagsById[aid] = AddAuraKind(st.flagsById[aid], AURA_KIND_DISPEL)
         end
@@ -1860,8 +1958,14 @@ local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, ex
         if wantDebuff then
             flags = AddAuraKind(flags, AURA_KIND_HARMFUL)
         end
-        if wantDispel and AuraMatchesFilter(unit, aura, _DISPEL_FILTER) then
-            flags = AddAuraKind(flags, AURA_KIND_DISPEL)
+        if wantDispel then
+            if GF.NormalizeDispelBorderTrigger(dispelTrigger) == "BY_ME" then
+                if AuraMatchesFilter(unit, aura, _DISPEL_FILTER) then
+                    flags = AddAuraKind(flags, AURA_KIND_DISPEL)
+                end
+            elseif GF.ReadDispelBorderAura(aura, dispelTrigger) then
+                flags = AddAuraKind(flags, AURA_KIND_DISPEL)
+            end
         end
         st.flagsById[aid] = flags ~= 0 and flags or nil
     end
@@ -1875,7 +1979,7 @@ local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, ex
     return st
 end
 
-local function UpdateFrameAuraCacheDelta(f, unit, updateInfo, buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel)
+local function UpdateFrameAuraCacheDelta(f, unit, updateInfo, buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantDispel, dispelTrigger)
     local st = f and f._msufGFAuraCache
     if not (st and st.ready and updateInfo) then return nil end
     if not _apisBound then BindAPIs() end
@@ -1905,7 +2009,7 @@ local function UpdateFrameAuraCacheDelta(f, unit, updateInfo, buffFilter, debuff
             local aura = added[i]
             local aid = aura and aura.auraInstanceID
             if aid then
-                local flags = GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel)
+                local flags = GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel, dispelTrigger)
                 CacheAuraWithFlags(st, aura, flags)
                 local tb, td, te, tp = TouchFromFlags(st, aid, flags, buffMax, debuffMax, externalMax, false)
                 touchBuff, touchDebuff, touchExt, touchDispel = MergeTouches(touchBuff, touchDebuff, touchExt, touchDispel, tb, td, te, tp)
@@ -1925,7 +2029,7 @@ local function UpdateFrameAuraCacheDelta(f, unit, updateInfo, buffFilter, debuff
 
                     local aura = _getByAuraInstanceID(unit, aid)
                     if aura then
-                        local flags = GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel)
+                        local flags = GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFilter, wantBuff, wantDebuff, wantExternals, wantDispel, dispelTrigger)
                         CacheAuraWithFlags(st, aura, flags)
                         tb, td, te, tp = TouchFromFlags(st, aid, flags, buffMax, debuffMax, externalMax, false)
                         touchBuff, touchDebuff, touchExt, touchDispel = MergeTouches(touchBuff, touchDebuff, touchExt, touchDispel, tb, td, te, tp)
@@ -2576,6 +2680,13 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
     local step = iconSize + spacing
     local topDispel = nil
     local topDispelColor = nil
+    local detectDispel = false
+    local dispelTrigger = "BY_ME"
+    do
+        local c = f and f._c
+        detectDispel = isHarmful and c and c.dispelScanActive == true
+        dispelTrigger = GF.NormalizeDispelBorderTrigger(c and c.dispelBorderTrigger)
+    end
 
     -- Pre-resolve Tier 2 blacklist hash (zero-alloc cached)
     local af = AF()
@@ -2613,26 +2724,21 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                 -- skip (claimed by externals or SpellIndicators)
             else
                 -- Merged dispel: C-side check (secret-safe, BEFORE spell filter)
-                if isHarmful and not topDispel and aid then
-                    local dn = _GetReadableDispelName(aura.dispelName)
-                    if _isFilteredOut then
+                if detectDispel and not topDispel and aid then
+                    local dn
+                    if dispelTrigger == "BY_ME" and _isFilteredOut then
                         local filtered = _isFilteredOut(unit, aid, _DISPEL_FILTER)
                         if filtered == false then
-                            -- Prefer the real dispel school when the aura exposes it.
-                            topDispel = dn or "DISPELLABLE"
-                            f._msufGFDispelAuraID = aid
-                            if _getDispelColor and _dispelColorCurve then
-                                topDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
-                            end
+                            dn = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
                         end
                     else
-                        -- Legacy fallback: plain dispelName
-                        if dn then
-                            topDispel = dn
-                            f._msufGFDispelAuraID = aid
-                            if _getDispelColor and _dispelColorCurve then
-                                topDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
-                            end
+                        dn = GF.ReadDispelBorderAura(aura, dispelTrigger)
+                    end
+                    if dn then
+                        topDispel = dn
+                        f._msufGFDispelAuraID = aid
+                        if _getDispelColor and _dispelColorCurve then
+                            topDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
                         end
                     end
                 end
@@ -2978,18 +3084,28 @@ local function UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
     f._msufGFDispelColorObj = nil
     f._msufGFDispelColorRev = nil
     local debOn = debCfg and debCfg.enabled ~= false and not nativeDebuffs
-    local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false and not nativeDispels
+    local dispelNeeded, dispelTrigger = GF.DispelScanForFrame(f, conf, nativeDispels)
 
     if nativeDebuffs then
         if not f._msufGFDebHidden then
             f._msufGFDebHidden = true
             HidePool(f[POOL_KEYS.debuff], 1)
         end
+        if dispelNeeded then
+            local dispel, aid = GF.FindDispelBorderAura(unit, dispelTrigger)
+            if dispel and aid then
+                mergedDispel = dispel
+                f._msufGFDispelAuraID = aid
+                if _getDispelColor and _dispelColorCurve then
+                    mergedDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
+                end
+            end
+        end
     elseif debOn then
         local afr = AF()
         local debFilter = afr and afr.ResolveDebuffFilter(debCfg.filterToken) or "HARMFUL"
         local n, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, frameScale)
-        if not nativeDispels then
+        if dispelNeeded then
             mergedDispel = md
             mergedDispelColor = mdColor
         end
@@ -3000,45 +3116,15 @@ local function UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
             f._msufGFDebHidden = true
             HidePool(f[POOL_KEYS.debuff], 1)
         end
-        -- Lightweight dispel scan ONLY when class can dispel AND dispel enabled
-        -- Uses C-side RAID_PLAYER_DISPELLABLE filter (secret-safe)
+        -- Lightweight dispel scan only when a dispel consumer is active.
+        -- Default BY_ME mode uses the C-side RAID_PLAYER_DISPELLABLE filter.
         if dispelNeeded then
-            if _getByIndex then
-                local aura = _getByIndex(unit, 1, _DISPEL_FILTER)
-                if aura and aura.auraInstanceID then
-                    mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
-                    f._msufGFDispelAuraID = aura.auraInstanceID
-                    if _getDispelColor and _dispelColorCurve then
-                        mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
-                    end
-                end
-            elseif _isFilteredOut then
-                local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
-                if sc >= 2 then
-                    local aura = _getBySlot(unit, slots[2])
-                    if aura and aura.auraInstanceID then
-                        mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
-                        f._msufGFDispelAuraID = aura.auraInstanceID
-                        if _getDispelColor and _dispelColorCurve then
-                            mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
-                        end
-                    end
-                end
-            else
-                local slots, sc = QuerySlots(unit, "HARMFUL", 12)
-                for i = 2, sc do
-                    local aura = _getBySlot(unit, slots[i])
-                    if aura then
-                        local dn = _GetReadableDispelName(aura.dispelName)
-                        if dn then
-                            mergedDispel = dn
-                            f._msufGFDispelAuraID = aura.auraInstanceID
-                            if _getDispelColor and _dispelColorCurve then
-                                mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
-                            end
-                            break
-                        end
-                    end
+            local dispel, aid = GF.FindDispelBorderAura(unit, dispelTrigger)
+            if dispel and aid then
+                mergedDispel = dispel
+                f._msufGFDispelAuraID = aid
+                if _getDispelColor and _dispelColorCurve then
+                    mergedDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
                 end
             end
         end
@@ -3186,7 +3272,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local extOn = extCfg and extCfg.enabled ~= false and not nativeExt
     local debOn = debCfg and debCfg.enabled ~= false and not nativeDebuffs
     local buffOn = buffCfg and buffCfg.enabled ~= false and not nativeBuffs
-    local dispelNeeded = _playerCanDispel and conf.dispelEnabled ~= false and not nativeDispels
+    local dispelNeeded, dispelTrigger = GF.DispelScanForFrame(f, conf, nativeDispels)
     local sortByDuration = auras.sortByDuration == true
     local preferPlayer = auras.preferPlayer ~= false
     local orderedAuras = sortByDuration or preferPlayer
@@ -3228,7 +3314,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
 
     local sig = c and c.auraCacheSig
     if not sig then
-        sig = BuildAuraCacheSig(buffFilter, debFilter, extFilter, buffScanMax, debScanMax, extScanMax, buffOn, debOn, extOn, dispelNeeded)
+        sig = BuildAuraCacheSig(buffFilter, debFilter, extFilter, buffScanMax, debScanMax, extScanMax, buffOn, debOn, extOn, dispelNeeded, dispelTrigger)
         if c then c.auraCacheSig = sig end
     end
 
@@ -3242,7 +3328,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
             f, unit, updateInfo,
             buffFilter, debFilter, extFilter,
             buffScanMax, debScanMax, extScanMax,
-            buffOn, debOn, extOn, dispelNeeded
+            buffOn, debOn, extOn, dispelNeeded, dispelTrigger
         )
         if orderedAuras then
             touchBuff = buffOn
@@ -3255,7 +3341,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
             f, unit, sig,
             buffFilter, debFilter, extFilter,
             buffScanMax, debScanMax, extScanMax,
-            buffOn, debOn, extOn, dispelNeeded
+            buffOn, debOn, extOn, dispelNeeded, dispelTrigger
         )
         touchBuff = buffOn
         touchDebuff = debOn
@@ -3289,40 +3375,53 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
             f._msufGFDebHidden = true
             HidePool(f[POOL_KEYS.debuff], 1)
         end
+        if dispelNeeded and (not useDelta or touchDispel) then
+            local mergedDispel, mergedDispelColor
+            f._msufGFDispelAuraID = nil
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
+            local dispel, aid = GF.FindDispelBorderAura(unit, dispelTrigger)
+            if dispel and aid then
+                mergedDispel = dispel
+                f._msufGFDispelAuraID = aid
+                if _getDispelColor and _dispelColorCurve then
+                    mergedDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
+                end
+            end
+            f._msufGFMergedDispel = mergedDispel
+            f._msufGFDispelColorObj = mergedDispelColor
+            f._msufGFDispelColorRev = mergedDispelColor and (_G.MSUF_ColorStyleRevision or 0) or nil
+        elseif not dispelNeeded then
+            f._msufGFMergedDispel = nil
+            f._msufGFDispelAuraID = nil
+            f._msufGFDispelColorObj = nil
+            f._msufGFDispelColorRev = nil
+        end
     elseif debOn then
         if touchDebuff or touchDispel then
             f._msufGFDispelAuraID = nil
             f._msufGFDispelColorObj = nil
             f._msufGFDispelColorRev = nil
             local _, md, mdColor = RenderGroup(f, unit, "debuff", debCfg, debFilter, true, parent, nil, scale, frameScale, st and st.debuff, sortByDuration, preferPlayer)
-            if not nativeDispels then
+            if dispelNeeded then
                 if touchDispel and dispelNeeded and not md then
-                    if _getByIndex then
-                        local aura = _getByIndex(unit, 1, _DISPEL_FILTER)
-                        if aura and aura.auraInstanceID then
-                            md = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
-                            f._msufGFDispelAuraID = aura.auraInstanceID
-                            if _getDispelColor and _dispelColorCurve then
-                                mdColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
-                            end
-                        end
-                    elseif _isFilteredOut then
-                        local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
-                        if sc >= 2 then
-                            local aura = _getBySlot(unit, slots[2])
-                            if aura and aura.auraInstanceID then
-                                md = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
-                                f._msufGFDispelAuraID = aura.auraInstanceID
-                                if _getDispelColor and _dispelColorCurve then
-                                    mdColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
-                                end
-                            end
+                    local dispel, aid = GF.FindDispelBorderAura(unit, dispelTrigger)
+                    if dispel and aid then
+                        md = dispel
+                        f._msufGFDispelAuraID = aid
+                        if _getDispelColor and _dispelColorCurve then
+                            mdColor = _getDispelColor(unit, aid, _dispelColorCurve)
                         end
                     end
                 end
                 f._msufGFMergedDispel = md
                 f._msufGFDispelColorObj = mdColor
                 f._msufGFDispelColorRev = mdColor and (_G.MSUF_ColorStyleRevision or 0) or nil
+            else
+                f._msufGFMergedDispel = nil
+                f._msufGFDispelAuraID = nil
+                f._msufGFDispelColorObj = nil
+                f._msufGFDispelColorRev = nil
             end
         end
         f._msufGFDebHidden = nil
@@ -3336,26 +3435,12 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
             f._msufGFDispelAuraID = nil
             f._msufGFDispelColorObj = nil
             f._msufGFDispelColorRev = nil
-            if _getByIndex then
-                local aura = _getByIndex(unit, 1, _DISPEL_FILTER)
-                if aura and aura.auraInstanceID then
-                    mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
-                    f._msufGFDispelAuraID = aura.auraInstanceID
-                    if _getDispelColor and _dispelColorCurve then
-                        mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
-                    end
-                end
-            elseif _isFilteredOut then
-                local slots, sc = QuerySlots(unit, _DISPEL_FILTER, 4)
-                if sc >= 2 then
-                    local aura = _getBySlot(unit, slots[2])
-                    if aura and aura.auraInstanceID then
-                        mergedDispel = _GetReadableDispelName(aura.dispelName) or "DISPELLABLE"
-                        f._msufGFDispelAuraID = aura.auraInstanceID
-                        if _getDispelColor and _dispelColorCurve then
-                            mergedDispelColor = _getDispelColor(unit, aura.auraInstanceID, _dispelColorCurve)
-                        end
-                    end
+            local dispel, aid = GF.FindDispelBorderAura(unit, dispelTrigger)
+            if dispel and aid then
+                mergedDispel = dispel
+                f._msufGFDispelAuraID = aid
+                if _getDispelColor and _dispelColorCurve then
+                    mergedDispelColor = _getDispelColor(unit, aid, _dispelColorCurve)
                 end
             end
             f._msufGFMergedDispel = mergedDispel

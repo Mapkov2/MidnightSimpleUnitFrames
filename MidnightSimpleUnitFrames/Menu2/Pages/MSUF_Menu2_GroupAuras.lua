@@ -125,7 +125,7 @@ local function BuildGFAuras(ctx)
         W.ControlCardBackdrop(renderer, 14, -310, 300, 234)
         W.ControlCardBackdrop(renderer, 340, -342, rightCardW, 184)
     end
-    W.Text(renderer, "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. Dispel Glow is unavailable only for Group Frame scopes where Blizzard controls the aura layer.", 14, -38, 620, T.colors.muted)
+    W.Text(renderer, "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. MSUF Dispel Border / Glow keeps Blizzard icons while allowing MSUF's dispel highlight visuals.", 14, -38, 620, T.colors.muted)
 
     local function PlaceDropdown(dropdown, x, y, width, hideTitle)
         if dropdown._msuf2Title then
@@ -230,6 +230,8 @@ local function BuildGFAuras(ctx)
     local extChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Defensives", 520, -112, 150), function() return AurasRoot(CurrentScope()).blizzardTypes end, "externals", true, "rebuild")
     local cdTextChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Blizzard Cooldown Text", 520, -172, 150), function() return AurasRoot(CurrentScope()) end, "blizzardShowCooldownText", true, "visual")
     local privateChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Private Auras", 520, -232, 190), function() return AurasRoot(CurrentScope()).blizzardTypes end, "privateAuras", true, "rebuild")
+    local blizzDispelBorderChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "MSUF Dispel Border / Glow", 350, -262, 240), function() return AurasRoot(CurrentScope()) end, "blizzardDispelBorder", false, "rebuild")
+    AddAuraTooltip(blizzDispelBorderChk, "MSUF Dispel Border / Glow", "Keeps Blizzard aura icons active, but lets MSUF scan and draw the Dispel Border and Dispel Glow. Runtime work only applies while Dispel Border is enabled.")
 
     local orgLabel = W.Text(renderer, "Organization", 350, -292, 240, T.colors.text)
     local orgMode = BindNestedDropdown(ctx, W.Dropdown(renderer, "", GF_AURA_ORG, 260), function() return AurasRoot(CurrentScope()) end, "blizzardOrganizationType", "default", "geometry")
@@ -274,7 +276,10 @@ local function BuildGFAuras(ctx)
 
     local function RefreshRendererState()
         local native = (AurasRoot(CurrentScope()).renderer or "BLIZZARD") ~= "CUSTOM"
+        local blizzTypes = AurasRoot(CurrentScope()).blizzardTypes
+        local nativeDispels = native and (type(blizzTypes) ~= "table" or blizzTypes.dispels ~= false)
         SetOptionsEnabled({ buffChk, debuffChk, dispelChk, extChk, cdTextChk, privateChk, iconSize, buffMax, debuffMax, orgMode, strataMode, containerLevel, privateLayerFix }, native)
+        SetOptionEnabled(blizzDispelBorderChk, nativeDispels)
         SetOptionEnabled(rendererMode, true)
         local c = native and T.colors.text or T.colors.dim
         routingLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
