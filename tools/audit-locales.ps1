@@ -17,7 +17,6 @@ $englishLocales = @{
 $menuRoot = Join-Path $AddonRoot "Menu2"
 $localeRoot = Join-Path $AddonRoot "Locales"
 $runtimeLocalePath = Join-Path $localeRoot "MSUF_RuntimeLocalization.lua"
-$auditLocalePath = Join-Path $localeRoot "MSUF_AuditLocalization.lua"
 
 function Add-Key {
     param([System.Collections.Generic.HashSet[string]]$Set, [string]$Value)
@@ -181,8 +180,6 @@ foreach ($locale in $locales) {
     $pairs = Read-LocalePairs $file
     $runtimePairs = Read-RuntimeLocalePairs $runtimeLocalePath $locale
     foreach ($key in $runtimePairs.Keys) { $pairs[$key] = $runtimePairs[$key] }
-    $auditPairs = Read-RuntimeLocalePairs $auditLocalePath $locale
-    foreach ($key in $auditPairs.Keys) { $pairs[$key] = $auditPairs[$key] }
     if ($englishLocales.ContainsKey($locale)) {
         foreach ($key in $sortedKeys) {
             if (-not $pairs.ContainsKey($key)) { $pairs[$key] = $key }

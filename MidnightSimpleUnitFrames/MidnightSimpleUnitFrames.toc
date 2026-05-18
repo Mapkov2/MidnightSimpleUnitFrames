@@ -43,7 +43,6 @@ Locales\koKR.lua
 Locales\ptBR.lua
 Locales\ruRU.lua
 Locales\MSUF_RuntimeLocalization.lua
-Locales\MSUF_AuditLocalization.lua
 
 # ═══════════════════════════════════════════════════════════════
 # FOUNDATION
