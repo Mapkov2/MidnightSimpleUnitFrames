@@ -8,7 +8,8 @@ _G.MSUF_NS = ns
 ns.Bars = ns.Bars or {}
 
 local type, tonumber = type, tonumber
-local UnitClass, UnitExists, UnitIsPlayer, UnitGUID = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer, _G.UnitGUID
+local UnitClass, UnitExists, UnitIsPlayer = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer
+local issecretvalue = _G.issecretvalue
 
 local function EnsureDBSafe()
     if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
@@ -22,6 +23,15 @@ local function MSUF_Clamp01(v)
     if v < 0 then return 0 end
     if v > 1 then return 1 end
     return v
+end
+
+local function MSUF_IsSecretValue(value)
+    local fn = issecretvalue
+    if type(fn) ~= "function" then
+        fn = _G.issecretvalue
+        if type(fn) == "function" then issecretvalue = fn end
+    end
+    return type(fn) == "function" and fn(value) == true
 end
 
 ns.Bars._DarkTint = function(g, r, gg, b)
@@ -147,27 +157,26 @@ ns.Bars._ClassBackgroundColor = function(frame, defR, defG, defB)
         return defR, defG, defB
     end
 
-    local guid = UnitGUID and UnitGUID(unit) or nil
     local classToken
-    if guid and frame._msufBarBgClassGuid == guid then
-        classToken = frame._msufBarBgClassToken
-    else
-        if UnitIsPlayer and not UnitIsPlayer(unit) then
-            if guid then
-                frame._msufBarBgClassGuid = guid
-                frame._msufBarBgClassToken = nil
-            end
+
+    -- Midnight/Beta: UnitGUID can be a secret string. Do not cache or compare it
+    -- in Lua; resolve the class directly instead.
+    frame._msufBarBgClassGuid = nil
+    if UnitIsPlayer then
+        local isPlayer = UnitIsPlayer(unit)
+        if MSUF_IsSecretValue(isPlayer) or not isPlayer then
+            frame._msufBarBgClassToken = nil
             return defR, defG, defB
         end
-        if UnitClass then
-            local _
-            _, classToken = UnitClass(unit)
-        end
-        if guid and classToken then
-            frame._msufBarBgClassGuid = guid
-            frame._msufBarBgClassToken = classToken
-        end
     end
+    if UnitClass then
+        local _
+        _, classToken = UnitClass(unit)
+    end
+    if MSUF_IsSecretValue(classToken) then
+        classToken = nil
+    end
+    frame._msufBarBgClassToken = classToken
     if not classToken then return defR, defG, defB end
 
     local fastClass = _G.MSUF_UFCore_GetClassBarColorFast

@@ -1289,6 +1289,8 @@ local function RenderUnit(entry)
             cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
             cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss,
             cfg.hidePermanentBuffs,
+            cfg.debuffsIncludeDispellable,
+            cfg.debuffDispelMagic, cfg.debuffDispelCurse, cfg.debuffDispelPoison, cfg.debuffDispelDisease,
             cfg.sortOrder =
                 Filters.ResolveRuntimeFlags(a2, shared, unit)
         else
@@ -1302,6 +1304,11 @@ local function RenderUnit(entry)
             cfg.buffsIncludeBoss = false
             cfg.debuffsIncludeBoss = false
             cfg.hidePermanentBuffs = false
+            cfg.debuffsIncludeDispellable = false
+            cfg.debuffDispelMagic = false
+            cfg.debuffDispelCurse = false
+            cfg.debuffDispelPoison = false
+            cfg.debuffDispelDisease = false
             cfg.sortOrder = 0
         end
         -- Sated/Exhaustion filter (reads from shared, independent of master filter toggle)

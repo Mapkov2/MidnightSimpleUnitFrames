@@ -348,7 +348,12 @@ function Filters.NormalizeFilters(f, sharedSettings, migrateFlagKey)
     Default(b, "onlyImportant", false)
     Default(d, "onlyMine", false)
     Default(d, "includeBoss", false)
+    Default(d, "includeDispellable", false)
     Default(d, "onlyImportant", false)
+    Default(d, "dispelMagic", false)
+    Default(d, "dispelCurse", false)
+    Default(d, "dispelPoison", false)
+    Default(d, "dispelDisease", false)
     Default(f, "onlyBossAuras", false)
     Default(f, "onlyImportantAuras", false)
     Default(f, "onlyRaidInCombatAuras", false)
@@ -428,7 +433,10 @@ end
 --   onlyImportantBuffs, onlyImportantDebuffs,
 --   buffsOnlyMine, debuffsOnlyMine,
 --   buffsIncludeBoss, debuffsIncludeBoss,
---   hidePermanentBuffs
+--   hidePermanentBuffs,
+--   debuffsIncludeDispellable,
+--   debuffDispelMagic, debuffDispelCurse, debuffDispelPoison, debuffDispelDisease,
+--   sortOrder
 function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
     local tf = Filters.GetEffectiveFilterTable(a2, shared, unitKey)
 
@@ -443,6 +451,9 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
     local buffsOnlyMine, debuffsOnlyMine = false, false
     local buffsIncludeBoss, debuffsIncludeBoss = false, false
     local hidePermanentBuffs = false
+    local debuffsIncludeDispellable = false
+    local debuffDispelMagic, debuffDispelCurse, debuffDispelPoison, debuffDispelDisease = false, false, false, false
+    local sortOrder = 0
 
     if masterOn and tf then
         local b = tf.buffs
@@ -474,12 +485,18 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
 
         buffsIncludeBoss = (b and b.includeBoss == true) or false
         debuffsIncludeBoss = (d and d.includeBoss == true) or false
+        debuffsIncludeDispellable = (d and d.includeDispellable == true) or false
+        debuffDispelMagic = (d and d.dispelMagic == true) or false
+        debuffDispelCurse = (d and d.dispelCurse == true) or false
+        debuffDispelPoison = (d and d.dispelPoison == true) or false
+        debuffDispelDisease = (d and d.dispelDisease == true) or false
 
         if tf.hidePermanent ~= nil then
             hidePermanentBuffs = (tf.hidePermanent == true)
         else
             hidePermanentBuffs = (shared and shared.hidePermanent == true) or false
         end
+        sortOrder = (type(tf.sortOrder) == "number") and tf.sortOrder or 0
 
     else
         buffsOnlyMine = (shared and shared.onlyMyBuffs == true) or false
@@ -487,9 +504,16 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
         hidePermanentBuffs = (shared and shared.hidePermanent == true) or false
         onlyImportantBuffs = false
         onlyImportantDebuffs = false
+        sortOrder = (shared and type(shared.sortOrder) == "number") and shared.sortOrder or 0
     end
 
-    return tf, masterOn, onlyBossAuras, onlyImportantBuffs, onlyImportantDebuffs, buffsOnlyMine, debuffsOnlyMine, buffsIncludeBoss, debuffsIncludeBoss, hidePermanentBuffs
+    return tf, masterOn, onlyBossAuras, onlyImportantBuffs, onlyImportantDebuffs,
+        buffsOnlyMine, debuffsOnlyMine,
+        buffsIncludeBoss, debuffsIncludeBoss,
+        hidePermanentBuffs,
+        debuffsIncludeDispellable,
+        debuffDispelMagic, debuffDispelCurse, debuffDispelPoison, debuffDispelDisease,
+        sortOrder
 end
 
 -- MSUF_A2_Public.lua

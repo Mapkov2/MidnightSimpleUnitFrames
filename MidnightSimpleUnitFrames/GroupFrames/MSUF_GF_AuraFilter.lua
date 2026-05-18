@@ -23,6 +23,7 @@ local tonumber = tonumber
 local wipe   = wipe or function(t) for k in pairs(t) do t[k] = nil end end
 local C_Spell = _G.C_Spell
 local GetSpellInfo = _G.GetSpellInfo
+local UnitClass = _G.UnitClass
 
 -- Forward: secret-safe check helper
 local _hasCanaccessvalue = (type(canaccessvalue) == "function")
@@ -53,6 +54,17 @@ local DEBUFF_TOKENS = {
 
 -- Externals always use BIG_DEFENSIVE (unchanged)
 local EXTERNALS_TOKEN = "HELPFUL|BIG_DEFENSIVE"
+local DISPEL_CLASSES = {
+    PRIEST = true, PALADIN = true, SHAMAN = true, MONK = true,
+    DRUID = true, MAGE = true, EVOKER = true,
+}
+
+local function PlayerCanUseRaidPlayerDispellable()
+    if GF._playerCanDispel ~= nil then return GF._playerCanDispel == true end
+    local _, class
+    if UnitClass then _, class = UnitClass("player") end
+    return class and DISPEL_CLASSES[class] == true
+end
 
 -- Resolve buff filter string from DB key
 local function ResolveBuffFilter(filterToken)
@@ -61,6 +73,14 @@ end
 
 -- Resolve debuff filter string from DB key
 local function ResolveDebuffFilter(filterToken)
+    -- RAID_PLAYER_DISPELLABLE is empty on classes with no defensive dispel.
+    -- Fall back to plain HARMFUL so DPS-only classes can still use the
+    -- debuff group instead of seeing an empty icon set.
+    if (filterToken == "DISPELLABLE" or filterToken == DEBUFF_TOKENS.DISPELLABLE)
+       and not PlayerCanUseRaidPlayerDispellable()
+    then
+        return DEBUFF_TOKENS.ALL
+    end
     return DEBUFF_TOKENS[filterToken] or DEBUFF_TOKENS.ALL
 end
 

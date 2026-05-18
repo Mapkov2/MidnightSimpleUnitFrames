@@ -122,6 +122,7 @@ local HELPFUL_PLAYER  = "HELPFUL|PLAYER"
 local HARMFUL_PLAYER  = "HARMFUL|PLAYER"
 local HELPFUL_IMPORTANT = "HELPFUL|IMPORTANT"
 local HARMFUL_IMPORTANT = "HARMFUL|IMPORTANT"
+local HARMFUL_DISPELLABLE = "HARMFUL|RAID_PLAYER_DISPELLABLE"
 
 -- Sated/Exhaustion spellID hashtable (O(1) lookup, built once at load)
 -- Zero steady-state cost: spellId check happens only on ADD.
@@ -374,6 +375,35 @@ local function ReadAccessibleBool(v)
     if v == true then return true end
     if v == false then return false end
     return nil
+end
+
+local function ReadAccessibleDispelName(aura)
+    local v = aura and aura.dispelName
+    if v == nil then return nil end
+    if _hasCanaccessvalue then
+        if canaccessvalue(v) ~= true then return nil end
+    elseif issecretvalue and issecretvalue(v) == true then
+        return nil
+    end
+    if type(v) ~= "string" or v == "" or v == "None" then return nil end
+    return v
+end
+
+local function DebuffMatchesSelectedDispelType(aura, cfg)
+    local dispelName = ReadAccessibleDispelName(aura)
+    if dispelName == "Magic" then return cfg._debuffDispelMagic == true end
+    if dispelName == "Curse" then return cfg._debuffDispelCurse == true end
+    if dispelName == "Poison" then return cfg._debuffDispelPoison == true end
+    if dispelName == "Disease" then return cfg._debuffDispelDisease == true end
+    return false
+end
+
+local function DebuffIsDispellable(unit, aid, aura, lIsFiltered)
+    if ReadAccessibleDispelName(aura) then return true end
+    if lIsFiltered then
+        return ReadAccessibleBool(lIsFiltered(unit, aid, HARMFUL_DISPELLABLE)) == false
+    end
+    return false
 end
 
 -- Helpful/harmful classification (secret-safe).
@@ -771,14 +801,23 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
         if cfg._onlyBoss and ReadBossFlag(data) == 0 then return false end
 
         if cfg._onlyImpBuffs and lIsFiltered then
-            if lIsFiltered(unit, aid, HELPFUL_IMPORTANT) then return false end
+            if ReadAccessibleBool(lIsFiltered(unit, aid, HELPFUL_IMPORTANT)) == true then return false end
         end
     else
-        if cfg._debuffsOnlyMine and not cfg._useMergeDebuffs and not isOwn then return false end
+        if cfg._debuffTypeFilter and not DebuffMatchesSelectedDispelType(data, cfg) then return false end
+        if cfg._debuffsOnlyMine and not cfg._useMergeDebuffs and not isOwn then
+            if not (cfg._includeDispellableDebuffs and DebuffIsDispellable(unit, aid, data, lIsFiltered)) then
+                return false
+            end
+        end
         if cfg._onlyBoss and ReadBossFlag(data) == 0 then return false end
 
         if cfg._onlyImpDebuffs and lIsFiltered then
-            if lIsFiltered(unit, aid, HARMFUL_IMPORTANT) then return false end
+            if ReadAccessibleBool(lIsFiltered(unit, aid, HARMFUL_IMPORTANT)) == true then
+                if not (cfg._includeDispellableDebuffs and DebuffIsDispellable(unit, aid, data, lIsFiltered)) then
+                    return false
+                end
+            end
         end
     end
 
@@ -835,6 +874,14 @@ local function PrepareFilterConfig(cfg, cfgGen)
     cfg._onlyImpDebuffs   = cfg.onlyImportantDebuffs
     cfg._useMergeBuffs    = cfg.buffsOnlyMine and cfg.buffsIncludeBoss
     cfg._useMergeDebuffs  = cfg.debuffsOnlyMine and cfg.debuffsIncludeBoss
+    cfg._includeDispellableDebuffs = (cfg.debuffsIncludeDispellable == true)
+        and (cfg._debuffsOnlyMine or cfg._onlyImpDebuffs)
+    cfg._debuffDispelMagic = (cfg.debuffDispelMagic == true)
+    cfg._debuffDispelCurse = (cfg.debuffDispelCurse == true)
+    cfg._debuffDispelPoison = (cfg.debuffDispelPoison == true)
+    cfg._debuffDispelDisease = (cfg.debuffDispelDisease == true)
+    cfg._debuffTypeFilter = cfg._debuffDispelMagic or cfg._debuffDispelCurse
+        or cfg._debuffDispelPoison or cfg._debuffDispelDisease
     cfg._hideOtherBossHealAuras = (cfg.bossHealHideOthers == true)
     cfg._showSated = (cfg.showSated ~= false)
     local satedThr = cfg.satedShowAtSeconds
@@ -847,6 +894,7 @@ local function PrepareFilterConfig(cfg, cfgGen)
         and not cfg._buffsOnlyMine and not cfg._debuffsOnlyMine
         and not cfg._hidePermanent and not cfg._onlyImpBuffs and not cfg._onlyImpDebuffs
         and not cfg._useMergeBuffs and not cfg._useMergeDebuffs
+        and not cfg._includeDispellableDebuffs and not cfg._debuffTypeFilter
         and not cfg._hideOtherBossHealAuras
     cfg._sortOrder = cfg.sortOrder or cfg.capsSortOrder or 0
 end
@@ -1303,6 +1351,7 @@ local Apply = API.Apply
 local GameTooltip = GameTooltip
 local floor = math.floor
 local max = math_max
+local C_Timer = C_Timer
 
 -- Secret value detector (Midnight/Beta)
 local issecretvalue = _G.issecretvalue
@@ -1672,6 +1721,57 @@ end
 -- Icons are stored on container._msufIcons[index]
 -- Each icon is a Button with: .tex, .cooldown, .count, .border, .overlay
 
+local function HideButtonStateTexture(texture)
+    if not texture then return end
+    if texture.SetAlpha then texture:SetAlpha(0) end
+    if texture.Hide then texture:Hide() end
+end
+
+local function SuppressAuraButtonState(icon)
+    if not icon then return end
+    if icon.SetButtonState then icon:SetButtonState("NORMAL", false) end
+    if icon.UnlockHighlight then icon:UnlockHighlight() end
+    HideButtonStateTexture(icon.GetHighlightTexture and icon:GetHighlightTexture())
+    HideButtonStateTexture(icon.GetPushedTexture and icon:GetPushedTexture())
+    HideButtonStateTexture(icon.GetCheckedTexture and icon:GetCheckedTexture())
+end
+
+local function RestoreAuraButtonGeometry(icon, expectedSize, expectedScale)
+    if not icon then return end
+
+    expectedSize = tonumber(expectedSize) or tonumber(icon._msufA2_lastSize)
+    if expectedSize and expectedSize > 0 and icon.SetSize then
+        local w = icon.GetWidth and icon:GetWidth()
+        local h = icon.GetHeight and icon:GetHeight()
+        if w ~= expectedSize or h ~= expectedSize then
+            icon._msufA2_restoringGeometry = true
+            icon:SetSize(expectedSize, expectedSize)
+            icon._msufA2_restoringGeometry = nil
+        end
+    end
+
+    expectedScale = tonumber(expectedScale) or tonumber(icon._msufA2_baseScale)
+    if expectedScale and expectedScale > 0 and icon.SetScale and icon.GetScale then
+        local scale = icon:GetScale()
+        if scale ~= expectedScale then
+            icon:SetScale(expectedScale)
+        end
+    end
+
+    SuppressAuraButtonState(icon)
+end
+
+local function RestoreAuraButtonGeometrySoon(icon, expectedSize, expectedScale)
+    RestoreAuraButtonGeometry(icon, expectedSize, expectedScale)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if icon and icon._msufA2_hovering then
+                RestoreAuraButtonGeometry(icon, expectedSize, expectedScale)
+            end
+        end)
+    end
+end
+
 -- Mouse interaction state helper (safe on 12.0+)
 -- 0 = normal (hover + clicks)
 -- 1 = tooltip only (hover on, clicks off)
@@ -1711,13 +1811,16 @@ _G.MSUF_A2_ResolveTextConfig = ResolveTextConfig
 local function CreateIcon(container, index)
     local icon = CreateFrame("Button", nil, container)
     icon:SetSize(26, 26)
--- Stack count overlay frame (keeps stacks above Masque/borders)
-local countFrame = CreateFrame("Frame", nil, icon)
-countFrame:SetAllPoints(icon)
-countFrame:SetFrameLevel(icon:GetFrameLevel() + 10)
-icon.countFrame = countFrame
+    icon._msufA2_baseScale = (icon.GetScale and icon:GetScale()) or 1
+
+    -- Stack count overlay frame (keeps stacks above Masque/borders)
+    local countFrame = CreateFrame("Frame", nil, icon)
+    countFrame:SetAllPoints(icon)
+    countFrame:SetFrameLevel(icon:GetFrameLevel() + 10)
+    icon.countFrame = countFrame
 
     ApplyMouseState(icon, 0)
+    SuppressAuraButtonState(icon)
     icon._msufA2_container = container
 
     -- Texture
@@ -1825,11 +1928,20 @@ icon.countFrame = countFrame
 
     -- Tooltip support
     icon:SetScript("OnEnter", function(self)
+        self._msufA2_hovering = true
+        local expectedSize = self._msufA2_lastSize or (self.GetWidth and self:GetWidth()) or 26
+        local expectedScale = (self.GetScale and self:GetScale()) or self._msufA2_baseScale or 1
         local _, shared = GetAuras2DB()
-        if shared and shared.showTooltip ~= true then return end
+        if shared and shared.showTooltip ~= true then
+            RestoreAuraButtonGeometrySoon(self, expectedSize, expectedScale)
+            return
+        end
         local unit = self._msufUnit
         local aid = self._msufAuraInstanceID
-        if not unit or not aid then return end
+        if not unit or not aid then
+            RestoreAuraButtonGeometrySoon(self, expectedSize, expectedScale)
+            return
+        end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
         -- Secret-safe: SetUnitAuraByAuraInstanceID handles secrets internally
         if self._msufFilter == "HARMFUL" and GameTooltip.SetUnitDebuffByAuraInstanceID then
@@ -1840,11 +1952,21 @@ icon.countFrame = countFrame
             GameTooltip:SetUnitAuraByAuraInstanceID(unit, aid, self._msufFilter or "HELPFUL")
         end
         GameTooltip:Show()
+        RestoreAuraButtonGeometrySoon(self, expectedSize, expectedScale)
     end)
 
-    icon:SetScript("OnLeave", function()
-        if GameTooltip:IsOwned(icon) then
+    icon:SetScript("OnLeave", function(self)
+        self._msufA2_hovering = nil
+        if GameTooltip:IsOwned(self) then
             GameTooltip:Hide()
+        end
+        RestoreAuraButtonGeometry(self)
+    end)
+    icon:HookScript("OnSizeChanged", function(self, width, height)
+        if self._msufA2_restoringGeometry or self._msufA2_hovering ~= true then return end
+        local expectedSize = tonumber(self._msufA2_lastSize)
+        if expectedSize and expectedSize > 0 and (width ~= expectedSize or height ~= expectedSize) then
+            RestoreAuraButtonGeometrySoon(self, expectedSize, self._msufA2_baseScale)
         end
     end)
 
@@ -1856,6 +1978,7 @@ icon.countFrame = countFrame
             icon.MSUF_MasqueAdded = true
         end
     end
+    RestoreAuraButtonGeometry(icon, icon._msufA2_lastSize or icon:GetWidth(), icon._msufA2_baseScale)
 
     return icon
 end
