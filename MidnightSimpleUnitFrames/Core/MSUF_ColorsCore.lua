@@ -65,6 +65,7 @@ local function _RefreshAllBarBackgroundVisuals()
     local forEach = _G.MSUF_ForEachUnitFrame
     local applyBg = _G.MSUF_ApplyBarBackgroundVisual
     local refreshHP = _G.MSUF_UFCore_RefreshHealthBarColor
+    local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
     if type(forEach) ~= "function" or type(applyBg) ~= "function" then return end
 
     forEach(function(frame)
@@ -73,6 +74,9 @@ local function _RefreshAllBarBackgroundVisuals()
                 refreshHP(frame)
             end
             applyBg(frame)
+            if type(syncMissing) == "function" then
+                syncMissing(frame)
+            end
         end
     end)
 end

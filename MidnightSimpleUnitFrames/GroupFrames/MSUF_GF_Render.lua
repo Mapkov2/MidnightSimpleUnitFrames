@@ -929,6 +929,35 @@ local function HidePreserveMissingHP(f)
     if f and f._msufGFMissingHPBg then f._msufGFMissingHPBg:Hide() end
 end
 
+local function ResolvePreserveMissingHPColor(f, kind)
+    local source = f and (f._msufBehindBarBg or f.healthBg)
+    if source and source.GetVertexColor then
+        local r, g, b = source:GetVertexColor()
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b, 1
+        end
+    end
+
+    local conf = GF.GetConf(kind)
+    if conf then
+        return conf.bgR or 0.1,
+            conf.bgG or 0.1,
+            conf.bgB or 0.1,
+            1
+    end
+    return UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1
+end
+
+local function ApplyPreserveMissingHPColor(f, bg, kind)
+    if not bg or not bg.SetStatusBarColor then return end
+    local r, g, b, a = ResolvePreserveMissingHPColor(f, kind)
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    if bg._msufGFMissingR ~= r or bg._msufGFMissingG ~= g or bg._msufGFMissingB ~= b or bg._msufGFMissingA ~= a then
+        bg:SetStatusBarColor(r, g, b, a)
+        bg._msufGFMissingR, bg._msufGFMissingG, bg._msufGFMissingB, bg._msufGFMissingA = r, g, b, a
+    end
+end
+
 local function EnsurePreserveMissingHP(f, kind)
     local h = f and f.health
     if not h then return nil end
@@ -940,7 +969,6 @@ local function EnsurePreserveMissingHP(f, kind)
         bg = CreateFrame("StatusBar", nil, f.barGroup or f)
         bg:SetMinMaxValues(0, 1)
         bg:SetValue(0)
-        bg:SetStatusBarColor(UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1)
         bg:Hide()
         f._msufGFMissingHPBg = bg
     end
@@ -963,10 +991,7 @@ local function EnsurePreserveMissingHP(f, kind)
         bg:SetStatusBarTexture(tex)
         bg._msufGFMissingBgTex = tex
     end
-    if bg._msufGFMissingColorSet ~= true then
-        bg:SetStatusBarColor(UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1)
-        bg._msufGFMissingColorSet = true
-    end
+    ApplyPreserveMissingHPColor(f, bg, kind)
     if bg.SetReverseFill and h.GetReverseFill then
         local rev = not h:GetReverseFill()
         if bg._msufGFMissingReverse ~= rev then
@@ -1007,6 +1032,7 @@ local function SyncPreserveMissingHP(f, kind, hp, hpMax)
 
     local bg = EnsurePreserveMissingHP(f, kind)
     if not bg then return end
+    ApplyPreserveMissingHPColor(f, bg, kind)
     local unit = f.unit
     if hpMax == nil and unit and UnitHealthMax then hpMax = UnitHealthMax(unit) end
     if hpMax == nil and f.health.GetMinMaxValues then

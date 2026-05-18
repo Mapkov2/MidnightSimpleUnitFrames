@@ -196,6 +196,49 @@ local function _MSUF_ResolveGetCache()
     return nil
 end
 
+local function _MSUF_BarBackgroundAlphaMul(cache, bars)
+    local alphaMul = cache and cache.barBackgroundAlpha
+    if type(alphaMul) ~= "number" then
+        local alphaPct = 90
+        if bars and type(bars.barBackgroundAlpha) == "number" then
+            alphaPct = bars.barBackgroundAlpha
+        end
+        if alphaPct < 0 then alphaPct = 0 elseif alphaPct > 100 then alphaPct = 100 end
+        alphaMul = alphaPct / 100
+    end
+    return alphaMul
+end
+
+local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
+    local r, gg, b, a
+    if cache then
+        r, gg, b, a = cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA
+    else
+        r, gg, b, a = MSUF_GetBarBackgroundTintRGBA()
+    end
+
+    if (cache and cache.barBgClassColor) or (gen and gen.barBgClassColor) then
+        r, gg, b = ns.Bars._ClassBackgroundColor(frame, r, gg, b)
+    elseif frame and (cache and cache.barBgMatchHPColor or (gen and gen.barBgMatchHPColor)) and frame.hpBar and frame.hpBar.GetStatusBarColor then
+        r, gg, b = ns.Bars._MatchHPColor(frame, gen, cache, r, gg, b)
+    end
+
+    if type(a) == "number" then
+        a = a * _MSUF_BarBackgroundAlphaMul(cache, bars)
+    end
+    return r, gg, b, a
+end
+
+local function MSUF_GetEffectiveHealthBarBackgroundTintRGBA(frame)
+    EnsureDBSafe()
+    local getCache = _MSUF_ResolveGetCache()
+    local cache = getCache and getCache() or nil
+    local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
+    local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
+    return _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
+end
+_G.MSUF_GetEffectiveHealthBarBackgroundTintRGBA = MSUF_GetEffectiveHealthBarBackgroundTintRGBA
+
 local function MSUF_ApplyBarBackgroundVisual(frame)
     if not frame then return end
     local getBgTexture = _G.MSUF_GetBarBackgroundTexture
@@ -208,29 +251,8 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
     local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
     local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
 
-    local r, gg, b, a
-    if cache then
-        r, gg, b, a = cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA
-    else
-        r, gg, b, a = MSUF_GetBarBackgroundTintRGBA()
-    end
-
-    if (cache and cache.barBgClassColor) or (gen and gen.barBgClassColor) then
-        r, gg, b = ns.Bars._ClassBackgroundColor(frame, r, gg, b)
-    elseif (cache and cache.barBgMatchHPColor or (gen and gen.barBgMatchHPColor)) and frame.hpBar and frame.hpBar.GetStatusBarColor then
-        r, gg, b = ns.Bars._MatchHPColor(frame, gen, cache, r, gg, b)
-    end
-
-    local alphaMul = (cache and cache.barBackgroundAlpha)
-    if type(alphaMul) ~= "number" then
-        local alphaPct = 90
-        if bars and type(bars.barBackgroundAlpha) == "number" then
-            alphaPct = bars.barBackgroundAlpha
-        end
-        if alphaPct < 0 then alphaPct = 0 elseif alphaPct > 100 then alphaPct = 100 end
-        alphaMul = alphaPct / 100
-    end
-    if type(a) == "number" then a = a * alphaMul end
+    local r, gg, b, a = _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
+    local alphaMul = _MSUF_BarBackgroundAlphaMul(cache, bars)
 
     _MSUF_ApplyBgToTexture(frame, tex, frame.hpBarBG, "HP", r, gg, b, a)
 

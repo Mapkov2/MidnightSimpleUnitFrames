@@ -50,6 +50,29 @@ local ScopedSliderAt = AP.ScopedSliderAt
 local ScopedDropdownAt = AP.ScopedDropdownAt
 local TogglePillAt = AP.TogglePillAt
 local SetControlEnabled = AP.SetControlEnabled
+
+local PRESERVE_HP_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
+
+local function AllUnitframesPreserveHPColor()
+    local db = DB()
+    for i = 1, #PRESERVE_HP_UNIT_KEYS do
+        local key = PRESERVE_HP_UNIT_KEYS[i]
+        local conf = db[key]
+        if not (conf and conf.alphaPreserveHPColor == true) then
+            return false
+        end
+    end
+    return true
+end
+
+local function SetAllUnitframesPreserveHPColor(enabled)
+    enabled = enabled and true or false
+    for i = 1, #PRESERVE_HP_UNIT_KEYS do
+        M.SetUnitValue(PRESERVE_HP_UNIT_KEYS[i], "alphaPreserveHPColor", enabled, "MSUF2_PRESERVE_HP_COLOR_ALL", { alpha = true, preview = true })
+    end
+    if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(enabled) end
+end
+
 local function ApplyColors()
     local api = ns and ns._colorsAPI
     if api and type(api.PushVisualUpdates) == "function" then
@@ -517,7 +540,7 @@ local function BuildColors(ctx)
         ApplyColors()
     end)
 
-    local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 224, false)
+    local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 292, false)
     LabelAt(background, "Tint applied to the bar background in *all* bar modes. Dark Mode uses this tint too.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
     ColorValueAt(ctx, background, "Bar background tint", 12, -46,
         function() return ApiRGB("GetClassBarBgColor", 0, 0, 0) end,
@@ -560,7 +583,12 @@ local function BuildColors(ctx)
     ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -142,
         function() return G().darkBgCustomColor == true end,
         function(v) G().darkBgCustomColor = v and true or false; ApplyColors() end)
-    ButtonAt(background, "Reset to black", 12, -182, 140, function()
+    ValueToggleAt(ctx, background, "Preserve HP color on all unit frames", 12, -170,
+        AllUnitframesPreserveHPColor,
+        SetAllUnitframesPreserveHPColor)
+    local preserveAllHint = LabelAt(background, "Same setting as each unit page > Transparency. It uses this same HP track color; off here means at least one unit frame is off.", 40, -196, 650, "GameFontHighlightSmall", T.colors.dim)
+    if preserveAllHint and preserveAllHint.SetWordWrap then preserveAllHint:SetWordWrap(true) end
+    ButtonAt(background, "Reset to black", 12, -250, 140, function()
         local fn = ColorAPI().ResetClassBarBgColor
         if type(fn) == "function" then pcall(fn) else G().classBarBgR, G().classBarBgG, G().classBarBgB = nil, nil, nil end
         ApplyColors()

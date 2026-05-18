@@ -66,10 +66,10 @@ function M.ShowPreserveHPColorWarning()
     local g = M.GetGeneralDB()
     if g.hidePreserveHPColorWarning == true then return false end
 
-    local message = "Preserve HP color can replace the selected health bar texture with an internal preserve texture.\n\nSome colored or pre-gradient bar textures may look flat, dark, or different while this option is enabled."
+    local message = "Preserve HP color keeps the HP fill color while layer fade is active and draws missing health separately with the same HP track color from Colors.\n\nThis can help when HP Bar fade makes the empty HP area disappear or look black. Some custom textures may still look flat, dark, or different while this option is enabled."
     if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
         if print then
-            print("|cffffd700MSUF:|r Preserve HP color may not work correctly with some bar textures.")
+            print("|cffffd700MSUF:|r Preserve HP color uses the same HP track color from Colors, but some bar textures may look different.")
         end
         return false
     end

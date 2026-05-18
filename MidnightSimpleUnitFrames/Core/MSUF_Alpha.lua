@@ -260,6 +260,36 @@ local function _AlphaHideMissingHPBackground(frame)
     if bg then bg:Hide() end
 end
 
+local function _AlphaResolveMissingHPBackgroundColor(frame)
+    local source = frame and frame.hpBarBG
+    if source and source.GetVertexColor then
+        local r, g, b = source:GetVertexColor()
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b, 1
+        end
+    end
+
+    local fn = _G.MSUF_GetEffectiveHealthBarBackgroundTintRGBA
+    if type(fn) == "function" then
+        local ok, r, g, b = pcall(fn, frame)
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b, 1
+        end
+    end
+
+    return MSUF_UNHALTED_BG_R, MSUF_UNHALTED_BG_G, MSUF_UNHALTED_BG_B, 1
+end
+
+local function _AlphaApplyMissingHPBackgroundColor(frame, bg)
+    if not bg or not bg.SetStatusBarColor then return end
+    local r, g, b, a = _AlphaResolveMissingHPBackgroundColor(frame)
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    if bg._msufMissingBgR ~= r or bg._msufMissingBgG ~= g or bg._msufMissingBgB ~= b or bg._msufMissingBgA ~= a then
+        bg:SetStatusBarColor(r, g, b, a)
+        bg._msufMissingBgR, bg._msufMissingBgG, bg._msufMissingBgB, bg._msufMissingBgA = r, g, b, a
+    end
+end
+
 local function _AlphaEnsureMissingHPBackground(frame)
     if not frame or not frame.hpBar then return nil end
     local bg = frame._msufAlphaMissingHPBg
@@ -270,7 +300,6 @@ local function _AlphaEnsureMissingHPBackground(frame)
         bg = CreateFrame("StatusBar", nil, frame)
         bg:SetMinMaxValues(0, 1)
         bg:SetValue(0)
-        bg:SetStatusBarColor(MSUF_UNHALTED_BG_R, MSUF_UNHALTED_BG_G, MSUF_UNHALTED_BG_B, 1)
         bg:Hide()
         frame._msufAlphaMissingHPBg = bg
     end
@@ -289,7 +318,7 @@ local function _AlphaEnsureMissingHPBackground(frame)
         bg:SetStatusBarTexture(tex)
         bg._msufMissingBgTex = tex
     end
-    bg:SetStatusBarColor(MSUF_UNHALTED_BG_R, MSUF_UNHALTED_BG_G, MSUF_UNHALTED_BG_B, 1)
+    _AlphaApplyMissingHPBackgroundColor(frame, bg)
     if bg.SetReverseFill and frame.hpBar.GetReverseFill then
         bg:SetReverseFill(not frame.hpBar:GetReverseFill())
     end
@@ -334,7 +363,7 @@ local function _AlphaSyncMissingHPBackground(frame, maxHP, hp, alpha)
     bg:SetMinMaxValues(0, maxHP or 1)
     bg:SetValue(missing or 0)
     if bg.SetAlpha then bg:SetAlpha(alpha) end
-    bg:SetStatusBarColor(MSUF_UNHALTED_BG_R, MSUF_UNHALTED_BG_G, MSUF_UNHALTED_BG_B, 1)
+    _AlphaApplyMissingHPBackgroundColor(frame, bg)
     bg:Show()
 end
 _G.MSUF_Alpha_UpdatePreserveMissingHP = _AlphaSyncMissingHPBackground
@@ -660,8 +689,8 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     _SetTexAlpha(frame.powerBarBG, bg)
     _SetTexAlpha(frame.bg, bg)
     if preserveHPColor then
-        -- Match Unhalted: transparent HP fill over the world, with only missing
-        -- health rendered as a dark reverse-fill background.
+        -- Preserve mode owns missing health separately, but it still uses the
+        -- same resolved HP track color as the normal bar background pipeline.
         frame._msufAlphaMissingHPAlpha = fg
         _SetBarColorAlpha(frame.hpBar, fg, true)
         _SetBarTexAlpha(frame.hpBar, fg)

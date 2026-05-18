@@ -1,5 +1,23 @@
 # Changelog
 
+## 5.3 Beta 5 - 2026-05-18
+
+### Bugfixes
+
+- Fixed Bar Background Tint in Dark Mode so a white custom tint stays applied after switching Bar mode away and back.
+- Fixed Preserve HP color missing-health rendering so it uses the resolved HP background track color instead of falling back to the old dark preserve color.
+- Fixed live color refresh so preserve missing-health layers resync immediately after color and Bar mode changes.
+
+### Changes / Improvements
+
+- Added a global Preserve HP color sync toggle under Global Style > Colors > Bar Background Tint for unit frames.
+- Clarified the Colors page, unit transparency hint, search FAQ, and warning text for white missing-health backgrounds in Dark Mode.
+- Kept the preview and group-frame preserve backgrounds aligned with the same HP track color pipeline.
+
+### Release / Tooling
+
+- Prepared 5.3 Beta 5 as the next beta validation build for the Dark Mode background tint fix.
+
 ## 5.3 Beta 4 - 2026-05-17
 
 ### Highlights

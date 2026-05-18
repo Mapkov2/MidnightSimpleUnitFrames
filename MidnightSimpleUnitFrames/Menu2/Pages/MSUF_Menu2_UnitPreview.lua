@@ -2475,7 +2475,6 @@ local function ApplyPreviewTransparency(box, conf)
     end
 
     if alpha.preserveHPColor then
-        mock.hpBG:SetVertexColor(34 / 255, 34 / 255, 34 / 255, 1)
         SetRegionAlpha(mock.hpBG, alpha.hp)
     else
         SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or alpha.bg)

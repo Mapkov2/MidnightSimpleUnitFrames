@@ -1822,7 +1822,10 @@ local function BuildAlpha(ctx, builder, unit)
             if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
         end)
 
-    local alphaLayerHint = W.Text(layerCard, "", 16, -210, transRightW - 32, T.colors.dim)
+    local preserveHint = W.Text(layerCard, "Use this if HP Bar fade makes the empty health area disappear or look black. It keeps the same HP track color from Colors.", 46, -194, transRightW - 62, T.colors.dim)
+    if preserveHint and preserveHint.SetWordWrap then preserveHint:SetWordWrap(true) end
+
+    local alphaLayerHint = W.Text(layerCard, "", 16, -228, transRightW - 32, T.colors.dim)
     if alphaLayerHint and alphaLayerHint.SetWordWrap then alphaLayerHint:SetWordWrap(true) end
     M.BindSegment(ctx, mode,
         function() return NormalizeAlphaMode(GetConf(unit).alphaLayerMode) end,
@@ -1834,6 +1837,7 @@ local function BuildAlpha(ctx, builder, unit)
         local layered = ReadBool(unit, "alphaExcludeTextPortrait", false) == true
         SetControlEnabled(mode, true)
         SetControlEnabled(preserve, layered)
+        if preserveHint and preserveHint.SetShown then preserveHint:SetShown(layered) end
         if layered then
             if alphaLayerHint and alphaLayerHint.SetText then
                 alphaLayerHint:SetText(M.Tr("Bars = health + power. HP Bar = health only. Backdrop = frame background."))
@@ -1996,7 +2000,12 @@ end
 
 local function BuildPower(ctx, builder, unit)
     if not POWER_UNITS[unit] then return end
-    local sec = builder:CollapsibleSection("power_bar", "Power Bar", unit == "player" and 600 or 548, false)
+    local isPlayer = unit == "player"
+    local detachedCardY = -254
+    local detachedCardHeight = isPlayer and 336 or 304
+    local powerSectionHeight = math.abs(detachedCardY) + detachedCardHeight + 52
+    local powerNoticeY = detachedCardY - detachedCardHeight - 12
+    local sec = builder:CollapsibleSection("power_bar", "Power Bar", powerSectionHeight, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 16
     local cardGap = 28
@@ -2028,7 +2037,7 @@ local function BuildPower(ctx, builder, unit)
         return AddPowerControl(control)
     end
 
-    local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, unit == "player" and -560 or -508, "Show Power", 104)
+    local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 104)
     if powerNoticeButton then
         powerNoticeButton:SetScript("OnClick", function()
             SetBool(unit, "showPowerBar", true, "MSUF2_POWER_SHOW", { power = true, preview = true })
@@ -2038,7 +2047,7 @@ local function BuildPower(ctx, builder, unit)
 
     local mainCard = PowerCard("Power bar", "Main visibility and size for this unit.", leftX, -38, cardW, 190)
     local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, 190)
-    local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, -254, fullW, unit == "player" and 294 or 242)
+    local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
 
     local show = W.SwitchAt(mainCard, "Show power bar", cardW - 62, -24, 0, "HIDDEN")
     M.BindToggle(ctx, show,
@@ -2104,7 +2113,7 @@ local function BuildPower(ctx, builder, unit)
                 conf.detachedPowerBarWidth = tonumber(conf.detachedPowerBarWidth) or tonumber(conf.width) or (unit == "focus" and 180 or 275)
                 conf.detachedPowerBarHeight = tonumber(conf.detachedPowerBarHeight) or 6
                 conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
-                if unit == "player" and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
+                if isPlayer and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
             end
             M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", { power = true, preview = true })
             if RefreshPowerEnabled then RefreshPowerEnabled() end
@@ -2116,7 +2125,7 @@ local function BuildPower(ctx, builder, unit)
         function(v) SetBool(unit, "detachedPowerBarTextOnBar", v, "MSUF2_POWER_DETACHED_TEXT", { power = true, text = true, preview = true }) end)
 
     local sliderTop = -116
-    if unit == "player" then
+    if isPlayer then
         sliderTop = -148
         local sync = AddDetachedControl(W.ToggleAt(detachedCard, "Sync width to Class Resource", 16, -94, detachedLeftW))
         M.BindToggle(ctx, sync,
