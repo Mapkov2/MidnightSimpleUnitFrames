@@ -4,10 +4,23 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.31",
+    currentVersion = "5.32",
     previousVersion = "5.3",
-    rangeLabel = "5.3 -> 5.31",
+    rangeLabel = "5.3 -> 5.32",
     entries = {
+        {
+            version = "5.32",
+            date = "2026-05-18",
+            sections = {
+                {
+                    title = "Patch Release",
+                    bullets = {
+                        "Fixed a group-frame Spell Indicators crash when linked aura rules, such as Restoration Druid Symbiotic Relationship, checked the scan ownership cache before it was in local scope.",
+                        "Bundled the 5.31 and 5.3 release notes with this hotfix so the in-game changelog keeps the full recent release context.",
+                    },
+                },
+            },
+        },
         {
             version = "5.31",
             date = "2026-05-18",

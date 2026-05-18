@@ -68,6 +68,8 @@ local _siConfigRev = 1
 local _specConfigListCache = setmetatable({}, { __mode = "k" })
 local _multiSpecListCache = setmetatable({}, { __mode = "k" })
 local _siCachedKind, _siCachedRev, _siCachedConf, _siCachedCfg
+local _scanResults = {}
+local _scanOnlyOwnByAura = {}
 
 local function InvalidateRuntimeCaches()
     _siConfigRev = _siConfigRev + 1
@@ -788,9 +790,6 @@ local function MatchSelfOnlyAura(unit, aura, specKey, siCfg)
     end
     return matched and UnitIsPlayerUnit(unit) and matched or nil
 end
-
-local _scanResults = {}
-local _scanOnlyOwnByAura = {}
 
 local function MarkScanAuraConfig(auraName, auraCfg)
     if not auraCfg or auraCfg.enabled == false then return false end

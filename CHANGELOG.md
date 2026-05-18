@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.32 - 2026-05-18
+
+### Patch Release
+
+- Fixed a group-frame Spell Indicators crash when linked aura rules, such as Restoration Druid Symbiotic Relationship, checked the scan ownership cache before it was in local scope.
+- Bundled the 5.31 and 5.3 release notes with this hotfix so the in-game changelog keeps the full recent release context.
+
 ## 5.31 - 2026-05-18
 
 ### Patch Release
