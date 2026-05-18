@@ -1815,6 +1815,8 @@ local MSUF2_HELPER_frFR = {
     ["update intervals"] = "intervalles de mise à jour",
     ["Urgent"] = "Urgent",
     ["Use Blizzard: Buffs"] = "Utilisez Blizzard : buffs",
+    ["Off = MSUF Custom Buffs run too; duplicates can appear."] = "Desactive = les buffs personnalises MSUF tournent aussi ; des doublons peuvent apparaitre.",
+    ["Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice."] = "Desactiver Use Blizzard: Buffs lance les buffs personnalises MSUF pendant que le rendu Blizzard reste actif. Les buffs correspondants peuvent apparaitre deux fois.",
     ["Use Blizzard: Debuffs"] = "Utilisez Blizzard : débuffs",
     ["Use Blizzard: Defensives"] = "Utilisez Blizzard : défensives",
     ["Use Blizzard: Dispels"] = "Utilisez Blizzard : dissipe",

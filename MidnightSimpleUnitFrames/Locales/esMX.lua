@@ -1566,6 +1566,8 @@ local MSUF2_HELPER_esMX = {
     ["Urgent"] = "Urgente",
     ["Use Blizzard timer text (max performance)"] = "Utilice el texto del temporizador Blizzard (rendimiento máximo)",
     ["Use Blizzard: Buffs"] = "Utilice Blizzard: Mejoras",
+    ["Off = MSUF Custom Buffs run too; duplicates can appear."] = "Apagado = los beneficios personalizados de MSUF tambien se ejecutan; pueden aparecer duplicados.",
+    ["Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice."] = "Desactivar Use Blizzard: Buffs hace que los beneficios personalizados de MSUF se ejecuten mientras el renderizado de Blizzard sigue activo. Los beneficios coincidentes pueden aparecer dos veces.",
     ["Use Blizzard: Debuffs"] = "Utilice Blizzard: Desventajas",
     ["Use Blizzard: Defensives"] = "Utilice Blizzard: Defensivas",
     ["Use Blizzard: Dispels"] = "Utilice Blizzard: disipa",

@@ -1649,6 +1649,7 @@ L["Blizzard renders these icons on MSUF's container. If icons appear behind fram
 L["Icon size: %d"] = "Symbolgröße: %d"
 L["Buff max: %d"] = "Max. Buffs: %d"
 L["Debuff max: %d"] = "Max. Debuffs: %d"
+L["Off = MSUF Custom Buffs run too; duplicates can appear."] = "Aus = MSUF Custom Buffs laufen mit; Duplikate moeglich."
 L["Layering"] = "Ebenen"
 L["Container Strata"] = "Container-Strata"
 L["Container level: +%d"] = "Container-Level: +%d"
@@ -1661,6 +1662,9 @@ L["When enabled, WoW owns debuff icons. MSUF hide categories and custom debuff p
 L["When enabled, WoW owns defensive icons. MSUF custom positioning and styling apply only when this is off or the renderer is MSUF Custom."] = "Wenn aktiv, gehoeren Defensiv-Icons WoW. Eigene MSUF-Positionierung und -Darstellung greifen nur, wenn dies aus ist oder der Renderer auf MSUF Custom steht."
 L["Checked categories hide MSUF custom buff icons only. Blizzard-rendered buffs bypass this list, so Skyfury or Earth Shield can still appear while Use Blizzard: Buffs is enabled."] = "Markierte Kategorien verbergen nur eigene MSUF-Buff-Icons. Von Blizzard gerenderte Buffs umgehen diese Liste; Skyfury oder Earth Shield koennen weiter erscheinen, solange Use Blizzard: Buffs aktiv ist."
 L["Checked categories hide MSUF custom debuff icons only. Blizzard-rendered debuffs bypass this list while Use Blizzard: Debuffs is enabled."] = "Markierte Kategorien verbergen nur eigene MSUF-Debuff-Icons. Von Blizzard gerenderte Debuffs umgehen diese Liste, solange Use Blizzard: Debuffs aktiv ist."
+L["Blizzard renderer is still active, but this group is MSUF Custom because its Use Blizzard toggle is off. Other active Blizzard aura types can still show matching spells, so duplicates can appear."] = "Blizzard-Rendering ist weiter aktiv, aber diese Gruppe nutzt MSUF Custom, weil ihr Use-Blizzard-Schalter aus ist. Andere aktive Blizzard-Auratypen koennen weiterhin passende Zauber anzeigen, daher koennen Duplikate entstehen."
+L["Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice."] = "Wenn Use Blizzard: Buffs aus ist, laufen MSUF Custom Buffs mit, waehrend Blizzard-Rendering aktiv bleibt. Passende Buffs koennen doppelt erscheinen."
+L["MSUF Custom + Blizzard active"] = "MSUF Custom + Blizzard aktiv"
 
 -- MSUF2 rounded-frame search/menu coverage
 local MSUF2_ROUNDED_SEARCH_deDE = {

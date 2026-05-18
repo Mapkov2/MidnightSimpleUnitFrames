@@ -1467,6 +1467,8 @@ local MSUF2_HELPER_ruRU = {
     ["Urgent"] = "Срочно",
     ["Use Blizzard timer text (max performance)"] = "Использовать текст таймера Blizzard (максимальная производительность)",
     ["Use Blizzard: Buffs"] = "Используйте Blizzard: усиления.",
+    ["Off = MSUF Custom Buffs run too; duplicates can appear."] = "Выкл. = пользовательские баффы MSUF тоже работают; возможны дубликаты.",
+    ["Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice."] = "Если выключить Use Blizzard: Buffs, пользовательские баффы MSUF будут работать, пока рендеринг Blizzard остается активным. Совпадающие баффы могут появляться дважды.",
     ["Use Blizzard: Debuffs"] = "Используйте Blizzard: ослабления.",
     ["Use Blizzard: Defensives"] = "Используйте Blizzard: защита.",
     ["Use Blizzard: Dispels"] = "Используйте Blizzard: рассеивает",

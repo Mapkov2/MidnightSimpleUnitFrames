@@ -2115,6 +2115,8 @@ local MSUF2_HELPER_zhCN = {
     ["Urgent"] = "紧急",
     ["Use Blizzard timer text (max performance)"] = "使用 Blizzard 计时器文本（最大性能）",
     ["Use Blizzard: Buffs"] = "使用Blizzard：增益",
+    ["Off = MSUF Custom Buffs run too; duplicates can appear."] = "关闭 = MSUF自定义增益也会运行；可能出现重复。",
+    ["Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice."] = "关闭Use Blizzard: Buffs后，MSUF自定义增益会在Blizzard渲染仍启用时运行。匹配的增益可能显示两次。",
     ["Use Blizzard: Debuffs"] = "使用 Blizzard：减益效果",
     ["Use Blizzard: Defensives"] = "使用 Blizzard：防御",
     ["Use Blizzard: Dispels"] = "使用 Blizzard：驱散",

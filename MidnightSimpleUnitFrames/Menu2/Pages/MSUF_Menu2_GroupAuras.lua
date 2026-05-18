@@ -223,14 +223,25 @@ local function BuildGFAuras(ctx)
         function(v) return string.format(Tr("Debuff max: %d"), v) end)
     PlaceSlider(debuffMax, 14, -260, 260)
 
+    local function BlizzardTypes()
+        local root = AurasRoot(CurrentScope())
+        root.blizzardTypes = root.blizzardTypes or {}
+        return root.blizzardTypes
+    end
+
     local routingLabel = W.Text(renderer, "Aura types handled by Blizzard", 350, -82, 330, T.colors.text)
-    local buffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Buffs", 350, -112, 140), function() return AurasRoot(CurrentScope()).blizzardTypes end, "buffs", true, "rebuild")
-    local debuffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Debuffs", 350, -172, 140), function() return AurasRoot(CurrentScope()).blizzardTypes end, "debuffs", true, "rebuild")
-    local dispelChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Dispels", 350, -232, 140), function() return AurasRoot(CurrentScope()).blizzardTypes end, "dispels", true, "rebuild")
-    local extChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Defensives", 520, -112, 150), function() return AurasRoot(CurrentScope()).blizzardTypes end, "externals", true, "rebuild")
+    local buffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Buffs", 350, -112, 170), BlizzardTypes, "buffs", true, "rebuild")
+    local buffMixedHint = W.Text(renderer, "Off = MSUF Custom Buffs run too; duplicates can appear.", 350, -140, 330, T.colors.danger or { 0.88, 0.28, 0.28, 1 })
+    if buffMixedHint and buffMixedHint.SetWordWrap then buffMixedHint:SetWordWrap(false) end
+    local debuffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Debuffs", 350, -172, 140), BlizzardTypes, "debuffs", true, "rebuild")
+    local dispelChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Dispels", 350, -232, 140), BlizzardTypes, "dispels", true, "rebuild")
+    local extChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Defensives", 520, -112, 150), BlizzardTypes, "externals", true, "rebuild")
     local cdTextChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Blizzard Cooldown Text", 520, -172, 150), function() return AurasRoot(CurrentScope()) end, "blizzardShowCooldownText", true, "visual")
-    local privateChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Private Auras", 520, -232, 190), function() return AurasRoot(CurrentScope()).blizzardTypes end, "privateAuras", true, "rebuild")
+    local privateChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Private Auras", 520, -232, 190), BlizzardTypes, "privateAuras", true, "rebuild")
     local blizzDispelBorderChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "MSUF Dispel Border / Glow", 350, -262, 240), function() return AurasRoot(CurrentScope()) end, "blizzardDispelBorder", false, "rebuild")
+    AddAuraTooltip(buffChk, "Use Blizzard: Buffs", "Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice.")
+    AddAuraTooltip(debuffChk, "Use Blizzard: Debuffs", "When enabled, WoW owns debuff icons. MSUF hide categories and custom debuff positioning do not filter Blizzard-rendered debuffs.")
+    AddAuraTooltip(extChk, "Use Blizzard: Defensives", "When enabled, WoW owns defensive icons. MSUF custom positioning and styling apply only when this is off or the renderer is MSUF Custom.")
     AddAuraTooltip(blizzDispelBorderChk, "MSUF Dispel Border / Glow", "Keeps Blizzard aura icons active, but lets MSUF scan and draw the Dispel Border and Dispel Glow. Runtime work only applies while Dispel Border is enabled.")
 
     local orgLabel = W.Text(renderer, "Organization", 350, -292, 240, T.colors.text)
@@ -276,13 +287,20 @@ local function BuildGFAuras(ctx)
 
     local function RefreshRendererState()
         local native = (AurasRoot(CurrentScope()).renderer or "BLIZZARD") ~= "CUSTOM"
-        local blizzTypes = AurasRoot(CurrentScope()).blizzardTypes
+        local blizzTypes = BlizzardTypes()
+        local customBuffs = native and blizzTypes.buffs == false
         local nativeDispels = native and (type(blizzTypes) ~= "table" or blizzTypes.dispels ~= false)
         SetOptionsEnabled({ buffChk, debuffChk, dispelChk, extChk, cdTextChk, privateChk, iconSize, buffMax, debuffMax, orgMode, strataMode, containerLevel, privateLayerFix }, native)
         SetOptionEnabled(blizzDispelBorderChk, nativeDispels)
         SetOptionEnabled(rendererMode, true)
         local c = native and T.colors.text or T.colors.dim
+        local warning = T.colors.danger or { 0.88, 0.28, 0.28, 1 }
         routingLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        if buffMixedHint and buffMixedHint.SetShown then buffMixedHint:SetShown(customBuffs) end
+        if buffChk._msuf2Label and buffChk._msuf2Label.SetTextColor then
+            local bc = customBuffs and warning or c
+            buffChk._msuf2Label:SetTextColor(bc[1], bc[2], bc[3], bc[4] or 1)
+        end
         orgLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         layerLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         posLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
@@ -419,7 +437,7 @@ local function BuildGFAuras(ctx)
             stripe:SetColorTexture(0.42, 0.74, 1.00, 0.95)
         end
 
-        local label = T.Font(preview, "GameFontDisableSmall", "Preview", T.colors.muted)
+        local label = T.Font(preview, "GameFontDisableSmall", Tr("Preview"), T.colors.muted)
         label:SetPoint("TOPLEFT", preview, "TOPLEFT", 10, -8)
         label:SetJustifyH("LEFT")
 
@@ -593,17 +611,47 @@ local function BuildGFAuras(ctx)
         return widget
     end
 
+    local function BlizzardTypeKeyForGroup(groupKey)
+        if groupKey == "buff" then return "buffs" end
+        if groupKey == "debuff" then return "debuffs" end
+        if groupKey == "externals" then return "externals" end
+        return nil
+    end
+
+    local function IsGroupRenderedByBlizzard(groupKey)
+        local nativeKey = BlizzardTypeKeyForGroup(groupKey)
+        if not nativeKey then return false end
+        local gf = GF and GF()
+        if gf and type(gf.IsBlizzardAuraTypeEnabled) == "function" then
+            return gf.IsBlizzardAuraTypeEnabled(Conf(CurrentScope()), nativeKey) == true
+        end
+        local root = AurasRoot(CurrentScope())
+        if (root.renderer or "BLIZZARD") == "CUSTOM" then return false end
+        local types = root.blizzardTypes
+        return type(types) ~= "table" or types[nativeKey] ~= false
+    end
+
+    local function IsBlizzardRendererMode()
+        local root = AurasRoot(CurrentScope())
+        return (root.renderer or "BLIZZARD") ~= "CUSTOM"
+    end
+
     local function BuildAuraBlacklist(section, groupKey, x1, x2, y, width, controls)
         local af = AuraFilter()
         local meta = af and af.DECLASSIFIED_META
-        if not (type(meta) == "table" and #meta > 0) then return y end
+        if not (type(meta) == "table" and #meta > 0) then return y, nil end
 
-        W.ControlCardBackdrop(section, x1 - 14, y + 34, (x2 + width) - x1 + 28, ceil(#meta / 2) * 30 + 92)
+        W.ControlCardBackdrop(section, x1 - 14, y + 34, (x2 + width) - x1 + 28, ceil(#meta / 2) * 30 + 108)
         W.DividerAt(section, y + 20, x1, section._msuf2Width - x2 - width)
         W.LabelAt(section, "Hide Categories", x1, y, 180, "GameFontNormalSmall", T.colors.accent)
-        W.Text(section, "Checked categories are hidden. Only applies to declassified spells.", x1, y - 20, (x2 + width) - x1, T.colors.muted)
+        local hint = groupKey == "buff"
+            and "Checked categories hide MSUF custom buff icons only. Blizzard-rendered buffs bypass this list, so Skyfury or Earth Shield can still appear while Use Blizzard: Buffs is enabled."
+            or "Checked categories hide MSUF custom debuff icons only. Blizzard-rendered debuffs bypass this list while Use Blizzard: Debuffs is enabled."
+        local blacklistHint = W.Text(section, hint, x1, y - 20, (x2 + width) - x1, T.colors.muted)
+        if blacklistHint and blacklistHint.SetWordWrap then blacklistHint:SetWordWrap(true) end
+        blacklistHint._msuf2CustomHint = hint
 
-        local startY = y - 52
+        local startY = y - 66
         for i = 1, #meta do
             local cat = meta[i]
             local col = (i <= ceil(#meta / 2)) and 0 or 1
@@ -622,7 +670,7 @@ local function BuildGFAuras(ctx)
             end
         end
 
-        return startY - ceil(#meta / 2) * 30 - 18
+        return startY - ceil(#meta / 2) * 30 - 18, blacklistHint
     end
 
     local function BuildAuraGroupSection(groupKey, title)
@@ -634,6 +682,7 @@ local function BuildGFAuras(ctx)
         local leftW = max(270, min(340, rightX - leftX - 70))
         local rightW = max(280, min(360, sectionW - rightX - 42))
         local controls, cooldownChildren, stackChildren = {}, {}, {}
+        local blacklistHint
         do
             W.ControlCardBackdrop(section, leftX - 14, -38, leftW + 28, 42)
             W.ControlCard(section, "Placement", nil, leftX - 14, -84, leftW + 28, 232)
@@ -692,7 +741,7 @@ local function BuildGFAuras(ctx)
             else
                 nextY = -536
             end
-            nextY = BuildAuraBlacklist(section, groupKey, leftX, rightX, nextY, rightW, controls)
+            nextY, blacklistHint = BuildAuraBlacklist(section, groupKey, leftX, rightX, nextY, rightW, controls)
         end
 
         local textY = min(nextY, groupKey == "externals" and -456 or -646)
@@ -754,13 +803,47 @@ local function BuildGFAuras(ctx)
         local function RefreshAuraGroupState()
             local cfg = AuraGroup(CurrentScope(), groupKey)
             local groupEnabled = cfg.enabled ~= false
+            local nativeGroup = IsGroupRenderedByBlizzard(groupKey)
+            local mixedGroup = groupEnabled and IsBlizzardRendererMode() and not nativeGroup
+            local warningColor = T.colors.danger or { 0.88, 0.28, 0.28, 1 }
             SetOptionsEnabled(controls, groupEnabled)
             SetOptionsEnabled(cooldownChildren, groupEnabled and cfg.showCooldown ~= false)
             SetOptionsEnabled(stackChildren, groupEnabled and cfg.showStacks ~= false)
             SetOptionEnabled(enable, true)
             SetOptionEnabled(showCooldown, groupEnabled)
             SetOptionEnabled(showStacks, groupEnabled)
-            if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(section, nil) end
+            if blacklistHint then
+                if blacklistHint.SetText then
+                    if mixedGroup and groupKey == "buff" then
+                        blacklistHint:SetText(Tr("Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice."))
+                    elseif mixedGroup then
+                        blacklistHint:SetText(Tr("Blizzard renderer is still active, but this group is MSUF Custom because its Use Blizzard toggle is off. Other active Blizzard aura types can still show matching spells, so duplicates can appear."))
+                    elseif blacklistHint._msuf2CustomHint then
+                        blacklistHint:SetText(Tr(blacklistHint._msuf2CustomHint))
+                    end
+                end
+                local c = (nativeGroup or mixedGroup) and warningColor or T.colors.muted
+                blacklistHint:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+            end
+            if type(SetSectionHeaderStatus) == "function" then
+                if nativeGroup then
+                    SetSectionHeaderStatus(section, {
+                        hint = Tr("Rendered by Blizzard"),
+                        hintColor = warningColor,
+                        bg = { 0.120, 0.035, 0.040, 0.55 },
+                        arrowColor = warningColor,
+                    })
+                elseif mixedGroup then
+                    SetSectionHeaderStatus(section, {
+                        hint = Tr("MSUF Custom + Blizzard active"),
+                        hintColor = warningColor,
+                        bg = { 0.120, 0.035, 0.040, 0.55 },
+                        arrowColor = warningColor,
+                    })
+                else
+                    SetSectionHeaderStatus(section, nil)
+                end
+            end
         end
         M.AddRefresher(ctx, RefreshAuraGroupState)
         RefreshAuraGroupState()

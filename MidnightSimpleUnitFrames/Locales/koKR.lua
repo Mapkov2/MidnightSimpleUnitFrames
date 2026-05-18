@@ -1420,6 +1420,8 @@ local MSUF2_HELPER_koKR = {
     ["Urgent"] = "긴급",
     ["Use Blizzard timer text (max performance)"] = "Blizzard 타이머 텍스트 사용(최대 성능)",
     ["Use Blizzard: Buffs"] = "Blizzard 사용: 버프",
+    ["Off = MSUF Custom Buffs run too; duplicates can appear."] = "꺼짐 = MSUF 사용자 버프도 실행되어 중복될 수 있습니다.",
+    ["Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice."] = "Use Blizzard: Buffs를 끄면 Blizzard 렌더링이 활성 상태로 남아 있는 동안 MSUF 사용자 버프도 실행됩니다. 일치하는 버프가 두 번 표시될 수 있습니다.",
     ["Use Blizzard: Debuffs"] = "Blizzard 사용: 디버프",
     ["Use Blizzard: Defensives"] = "Blizzard 사용: 방어",
     ["Use Blizzard: Dispels"] = "Blizzard 사용: 해제",
