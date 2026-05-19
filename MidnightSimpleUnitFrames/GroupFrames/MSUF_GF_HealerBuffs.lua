@@ -27,6 +27,8 @@ local tonumber = tonumber
 local tostring = tostring
 local math_floor = math.floor
 local AuraFilter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 
 local HB = {}
 GF.HealerBuffs = HB
@@ -127,11 +129,18 @@ local function GetSpellTexture(spellId)
     if cached then return cached end
     if C_Spell and C_Spell.GetSpellTexture then
         local tex = C_Spell.GetSpellTexture(spellId)
-        if tex then _spellTexCache[spellId] = tex; return tex end
+        if tex then
+            tex = (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(tex)) or tex
+            _spellTexCache[spellId] = tex
+            return tex
+        end
     end
     -- Fallback
     local _, _, icon = GetSpellInfo(spellId)
-    if icon then _spellTexCache[spellId] = icon end
+    if icon then
+        icon = (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(icon)) or icon
+        _spellTexCache[spellId] = icon
+    end
     return icon
 end
 
@@ -518,7 +527,11 @@ function HB.UpdateFrame(f, unit)
         if ic then
             -- Set texture (spell icon)
             if slot.texture then
-                ic.texture:SetTexture(slot.texture)
+                if type(MSUF_SetIconTexture) == "function" then
+                    MSUF_SetIconTexture(ic.texture, slot.texture, "")
+                else
+                    ic.texture:SetTexture(slot.texture)
+                end
             end
 
             local famActive = active[slot.familyId]

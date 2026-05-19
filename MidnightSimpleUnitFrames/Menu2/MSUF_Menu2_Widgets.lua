@@ -13,6 +13,7 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local sliderSerial = 0
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 
 local function Tr(text)
     if type(text) ~= "string" then return text end
@@ -2099,7 +2100,11 @@ local function OpenDropdown(owner, valuesTable)
         local rightInset = showFontPreview and -88 or -6
         local sr, sg, sb, sa = DropdownItemSwatch(item)
         if icon then
-            row._msuf2Icon:SetTexture(icon)
+            if type(MSUF_SetIconTexture) == "function" then
+                MSUF_SetIconTexture(row._msuf2Icon, icon, "")
+            else
+                row._msuf2Icon:SetTexture(icon)
+            end
             row._msuf2Icon:SetTexCoord(0, 1, 0, 1)
             row._msuf2Icon:SetVertexColor(1, 1, 1, 1)
             row._msuf2Icon:Show()
@@ -2227,7 +2232,11 @@ function W.Dropdown(section, label, values, width)
         local icon = DropdownItemIcon(selectedItem)
         local sr, sg, sb, sa = DropdownItemSwatch(selectedItem)
         if icon then
-            self._msuf2Icon:SetTexture(icon)
+            if type(MSUF_SetIconTexture) == "function" then
+                MSUF_SetIconTexture(self._msuf2Icon, icon, "")
+            else
+                self._msuf2Icon:SetTexture(icon)
+            end
             self._msuf2Icon:SetTexCoord(0, 1, 0, 1)
             self._msuf2Icon:SetVertexColor(1, 1, 1, 1)
             self._msuf2Icon:Show()

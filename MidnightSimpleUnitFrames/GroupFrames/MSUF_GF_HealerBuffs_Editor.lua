@@ -18,6 +18,8 @@ local pairs = pairs
 local ipairs = ipairs
 local type = type
 local tostring = tostring
+local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 
 local FAMILY_DATA = HB.FAMILY_DATA
 local FAMILY_BY_ID = HB.FAMILY_BY_ID
@@ -44,10 +46,12 @@ local _editorFrame
 local function GetSpellTexture(spellId)
     if C_Spell and C_Spell.GetSpellTexture then
         local tex = C_Spell.GetSpellTexture(spellId)
-        if tex then return tex end
+        if tex then
+            return (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(tex)) or tex
+        end
     end
     local _, _, icon = GetSpellInfo(spellId)
-    return icon
+    return (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(icon)) or icon
 end
 
 local function BuildFamilyDropdownList()
@@ -121,7 +125,13 @@ local function RefreshEditor()
                             row._icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
                         end
                         local tex = fam.spellIds[1] and GetSpellTexture(fam.spellIds[1])
-                        if tex then row._icon:SetTexture(tex) end
+                        if tex then
+                            if type(MSUF_SetIconTexture) == "function" then
+                                MSUF_SetIconTexture(row._icon, tex, "")
+                            else
+                                row._icon:SetTexture(tex)
+                            end
+                        end
 
                         if not row._label then
                             row._label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -164,7 +174,13 @@ local function RefreshEditor()
                         row._icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
                     end
                     local tex = fam.spellIds[1] and GetSpellTexture(fam.spellIds[1])
-                    if tex then row._icon:SetTexture(tex) end
+                    if tex then
+                        if type(MSUF_SetIconTexture) == "function" then
+                            MSUF_SetIconTexture(row._icon, tex, "")
+                        else
+                            row._icon:SetTexture(tex)
+                        end
+                    end
 
                     if not row._label then
                         row._label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")

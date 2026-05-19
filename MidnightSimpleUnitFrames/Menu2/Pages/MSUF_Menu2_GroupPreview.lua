@@ -13,6 +13,7 @@ local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
 local floor = math.floor
 local max = math.max
 local min = math.min
+local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 
 local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
@@ -302,11 +303,19 @@ local function GFMockSpellTexture(spellId)
     if cached then return cached end
     if C_Spell and C_Spell.GetSpellTexture then
         local tex = C_Spell.GetSpellTexture(spellId)
-        if tex then gfMockSpellTextureCache[spellId] = tex; return tex end
+        if tex then
+            tex = (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(tex)) or tex
+            gfMockSpellTextureCache[spellId] = tex
+            return tex
+        end
     end
     if GetSpellInfo then
         local _, _, icon = GetSpellInfo(spellId)
-        if icon then gfMockSpellTextureCache[spellId] = icon; return icon end
+        if icon then
+            icon = (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(icon)) or icon
+            gfMockSpellTextureCache[spellId] = icon
+            return icon
+        end
     end
     return "Interface\\Icons\\INV_Misc_QuestionMark"
 end

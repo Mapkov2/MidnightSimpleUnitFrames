@@ -23,6 +23,7 @@ local floor = math.floor
 local ceil = math.ceil
 local max = math.max
 local min = math.min
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 
 local SCOPE_VALUES = GP.SCOPE_VALUES or {}
 local GROWTH_VALUES = GP.GROWTH_VALUES or {}
@@ -113,6 +114,11 @@ local function IconPackValues()
     end
     return values
 end
+
+local STATUS_ICON_TAB_VALUES = {
+    { value = "basic", text = "Basic" },
+    { value = "advanced", text = "Advanced" },
+}
 
 local function HeaderHintColor()
     return { 0.45, 0.52, 0.65, 1 }
@@ -249,7 +255,7 @@ local function BuildGFIndicators(ctx)
         if entry then entry._msuf2RefreshState = RefreshIndicatorsState end
     end
 
-    local sicons = b:CollapsibleSection("sicons", "Status Icons", 532, false)
+    local sicons = b:CollapsibleSection("sicons", "Status Icons", 624, false)
     local siconW = sicons._msuf2Width or ctx.width or 720
     local siconGap = 16
     local siconLeftX = 20
@@ -257,10 +263,38 @@ local function BuildGFIndicators(ctx)
     local siconLeftW = floor((siconInnerW - siconGap) * 0.46)
     local siconRightX = siconLeftX + siconLeftW + siconGap
     local siconRightW = siconInnerW - siconLeftW - siconGap
-    local styleCard = W.ControlCard(sicons, "Style", nil, siconLeftX, -38, siconLeftW, 132)
-    local selectedCard = W.ControlCard(sicons, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 258)
-    local previewCard = W.ControlCard(sicons, "Status Preview", nil, siconRightX, -38, siconRightW, 118)
-    local placementCard = W.ControlCard(sicons, "Placement", nil, siconRightX, -174, siconRightW, 286)
+    local siconTabW = min(420, siconInnerW)
+    local siconTabs = W.Segment(sicons, "Status icon controls", STATUS_ICON_TAB_VALUES, siconTabW)
+    W.MoveWidget(siconTabs, sicons, siconLeftX, -50, siconTabW, "LEFT")
+
+    M.gfStatusIconTabSelection = M.gfStatusIconTabSelection or {}
+    local function CurrentStatusIconTab()
+        local key = M.gfStatusIconTabSelection[CurrentScope()] or "basic"
+        if key ~= "basic" and key ~= "advanced" then key = "basic" end
+        return key
+    end
+    local RefreshStatusIconTabs
+    M.BindSegment(ctx, siconTabs,
+        CurrentStatusIconTab,
+        function(value)
+            M.gfStatusIconTabSelection[CurrentScope()] = value or "basic"
+            if RefreshStatusIconTabs then RefreshStatusIconTabs() end
+        end)
+
+    local siconBasicTab = CreateFrame("Frame", nil, sicons)
+    siconBasicTab:SetPoint("TOPLEFT", sicons, "TOPLEFT", 0, -104)
+    siconBasicTab:SetPoint("BOTTOMRIGHT", sicons, "BOTTOMRIGHT", 0, 12)
+    siconBasicTab._msuf2Width = siconW
+
+    local siconAdvancedTab = CreateFrame("Frame", nil, sicons)
+    siconAdvancedTab:SetPoint("TOPLEFT", sicons, "TOPLEFT", 0, -104)
+    siconAdvancedTab:SetPoint("BOTTOMRIGHT", sicons, "BOTTOMRIGHT", 0, 12)
+    siconAdvancedTab._msuf2Width = siconW
+
+    local styleCard = W.ControlCard(siconBasicTab, "Style", nil, siconLeftX, -38, siconLeftW, 132)
+    local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 258)
+    local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 118)
+    local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -174, siconRightW, 322)
 
     local iconStyle = BindScopeDropdown(ctx, W.Dropdown(styleCard, "Icon style", IconStyleValues, siconLeftW), "iconStyle", "BLIZZARD", "visual")
     W.MoveWidget(iconStyle, styleCard, 16, -56, siconLeftW - 32, "LEFT")
@@ -442,6 +476,80 @@ local function BuildGFIndicators(ctx)
         end)
     W.MoveWidget(statusLayer, placementCard, 16, -258, siconRightW - 58, "LEFT")
 
+    local advanced = {}
+    advanced.card = W.ControlCard(siconAdvancedTab, "Advanced Placement", nil, siconLeftX, -38, siconInnerW, 316)
+    advanced.x = W.Slider(advanced.card, "X Offset (extended)", -500, 500, 1, siconLeftW)
+    M.BindSlider(ctx, advanced.x,
+        function()
+            local spec = CurrentGFStatusSpec()
+            return Num(CurrentScope(), spec.x, 0)
+        end,
+        function(value)
+            local spec = CurrentGFStatusSpec()
+            Set(CurrentScope(), spec.x, floor((tonumber(value) or 0) + 0.5), "geometry")
+        end)
+    W.MoveWidget(advanced.x, advanced.card, 16, -58, siconLeftW - 58, "LEFT")
+
+    advanced.y = W.Slider(advanced.card, "Y Offset (extended)", -500, 500, 1, siconRightW)
+    M.BindSlider(ctx, advanced.y,
+        function()
+            local spec = CurrentGFStatusSpec()
+            return Num(CurrentScope(), spec.y, 0)
+        end,
+        function(value)
+            local spec = CurrentGFStatusSpec()
+            Set(CurrentScope(), spec.y, floor((tonumber(value) or 0) + 0.5), "geometry")
+        end)
+    W.MoveWidget(advanced.y, advanced.card, siconRightX - siconLeftX, -58, siconRightW - 58, "LEFT")
+
+    advanced.layer = W.Slider(advanced.card, "Layer", 0, 30, 1, siconLeftW)
+    M.BindSlider(ctx, advanced.layer,
+        function()
+            local spec = CurrentGFStatusSpec()
+            local value = Num(CurrentScope(), spec.layer, spec.defaultLayer)
+            if value < 0 then value = 0 elseif value > 30 then value = 30 end
+            return value
+        end,
+        function(value)
+            local spec = CurrentGFStatusSpec()
+            value = floor((tonumber(value) or spec.defaultLayer) + 0.5)
+            if value < 0 then value = 0 elseif value > 30 then value = 30 end
+            Set(CurrentScope(), spec.layer, value, "visual")
+        end)
+    W.MoveWidget(advanced.layer, advanced.card, 16, -128, siconLeftW - 58, "LEFT")
+
+    advanced.reset = W.Button(advanced.card, "Reset selected", 160)
+    advanced.reset._msuf2SkipHistoryCheckpoint = true
+    advanced.reset:SetScript("OnClick", function()
+        if statusReset and statusReset.Click then statusReset:Click() end
+    end)
+    advanced.reset:ClearAllPoints()
+    advanced.reset:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", siconRightX - siconLeftX, -150)
+    advanced.reset:SetSize(160, 24)
+
+    advanced.previewCurrent = W.Button(advanced.card, "Preview current", 142)
+    advanced.previewCurrent:SetScript("OnClick", function()
+        if previewCurrent and previewCurrent.Click then previewCurrent:Click() end
+    end)
+    advanced.previewCurrent:ClearAllPoints()
+    advanced.previewCurrent:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", 16, -234)
+    advanced.previewCurrent:SetSize(142, 24)
+
+    advanced.previewAll = W.Button(advanced.card, "Show all", 112)
+    advanced.previewAll:SetScript("OnClick", function()
+        if previewAll and previewAll.Click then previewAll:Click() end
+    end)
+    advanced.previewAll:ClearAllPoints()
+    advanced.previewAll:SetPoint("LEFT", advanced.previewCurrent, "RIGHT", 10, 0)
+    advanced.previewAll:SetSize(112, 24)
+
+    RefreshStatusIconTabs = function()
+        local tab = CurrentStatusIconTab()
+        siconBasicTab:SetShown(tab ~= "advanced")
+        siconAdvancedTab:SetShown(tab == "advanced")
+    end
+    M.AddRefresher(ctx, RefreshStatusIconTabs)
+
     local function RefreshStatusIconState()
         local spec = CurrentGFStatusSpec()
         local enabled = Bool(CurrentScope(), spec.enabled, true)
@@ -450,6 +558,12 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(statusX, enabled)
         SetOptionEnabled(statusY, enabled)
         SetOptionEnabled(statusLayer, enabled)
+        SetOptionEnabled(advanced.x, enabled)
+        SetOptionEnabled(advanced.y, enabled)
+        SetOptionEnabled(advanced.layer, enabled)
+        SetOptionEnabled(advanced.reset, spec ~= nil)
+        SetOptionEnabled(advanced.previewCurrent, spec ~= nil)
+        SetOptionEnabled(advanced.previewAll, true)
         SetOptionEnabled(statusReset, spec ~= nil)
         SetOptionEnabled(previewCurrent, spec ~= nil)
         SetOptionEnabled(previewAll, true)
@@ -474,6 +588,7 @@ local function BuildGFIndicators(ctx)
     end
     M.AddRefresher(ctx, RefreshStatusIconState)
     RefreshStatusIconState()
+    RefreshStatusIconTabs()
     do
         local entry = sicons and sicons._msuf2CollapsibleEntry
         if entry then entry._msuf2RefreshState = RefreshStatusIconState end
@@ -731,7 +846,11 @@ local function BuildGFIndicators(ctx)
             local c = info.color or { 0.55, 0.65, 0.85 }
 
             if si and type(si.GetAuraIcon) == "function" then
-                tile.icon:SetTexture(si.GetAuraIcon(specKey, info.name))
+                if type(MSUF_SetIconTexture) == "function" then
+                    MSUF_SetIconTexture(tile.icon, si.GetAuraIcon(specKey, info.name), "")
+                else
+                    tile.icon:SetTexture(si.GetAuraIcon(specKey, info.name))
+                end
             else
                 tile.icon:SetTexture(136243)
             end
@@ -1333,4 +1452,4 @@ local function BuildGFIndicators(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 11 })
+M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 12 })

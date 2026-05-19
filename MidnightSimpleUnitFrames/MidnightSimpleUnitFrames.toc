@@ -10,6 +10,10 @@
 ## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
 ## X-Website: https://discord.gg/JQnhZXnTAK
+## X-MSUF-StatusIconPack: 1
+## X-MSUF-IconPack-Name: UX Pro
+## X-MSUF-IconFolder: Icons\UXPro
+## X-MSUF-HasMidnightSuffix: 1
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
 ## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick
 ## AddonCompartmentFuncOnEnter: MSUF_AddonCompartment_OnEnter

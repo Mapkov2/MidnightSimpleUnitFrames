@@ -17,6 +17,7 @@ local tonumber = tonumber
 local tostring = tostring
 local type = type
 local pairs = pairs
+local ipairs = ipairs
 local ResolveFontPathSafe = _G.MSUF_ResolveFontPath or function(path) return path end
 
 ------------------------------------------------------------------------
@@ -1966,6 +1967,181 @@ local CUSTOM_STYLES_NO_MIDNIGHT_SUFFIX = {
 }
 
 local ROLE_MAP = { TANK = "tank", HEALER = "healer", DAMAGER = "dps" }
+local ADDON_ICON_STYLE_PREFIX = "ADDON:"
+local REGISTERED_ICON_STYLE_PREFIX = "REGISTERED:"
+local STATUS_ICON_FILES = { "tank", "healer", "dps", "leader", "assist" }
+local _externalIconPacks
+local _externalIconPackOrder
+local _registeredIconPacks = {}
+local _textureProbeHost
+local _textureProbe
+local _textureProbeReliable
+local _texturePathExistsCache = {}
+
+local function NormalizeIconFolderPath(path)
+    if type(path) ~= "string" or path == "" then return nil end
+    path = path:gsub("/", "\\"):gsub("\\+$", "")
+    return path ~= "" and path or nil
+end
+
+local function TextureProbeRaw(path)
+    if type(path) ~= "string" or path == "" or type(CreateFrame) ~= "function" then return false end
+    if not _textureProbe then
+        _textureProbeHost = CreateFrame("Frame")
+        if _textureProbeHost.Hide then _textureProbeHost:Hide() end
+        _textureProbe = _textureProbeHost:CreateTexture(nil, "ARTWORK")
+    end
+    if not (_textureProbe and _textureProbe.SetTexture) then return false end
+    _textureProbe:SetTexture(nil)
+    local ok, applied = pcall(_textureProbe.SetTexture, _textureProbe, path)
+    if not ok or applied == false then
+        _textureProbe:SetTexture(nil)
+        return false
+    end
+    if _textureProbe.GetTexture then
+        local tex = _textureProbe:GetTexture()
+        _textureProbe:SetTexture(nil)
+        return tex ~= nil and tex ~= ""
+    end
+    _textureProbe:SetTexture(nil)
+    return applied == true
+end
+
+local function TextureProbeReliable()
+    if _textureProbeReliable ~= nil then return _textureProbeReliable end
+    _textureProbeReliable = TextureProbeRaw("Interface\\AddOns\\MidnightSimpleUnitFrames\\__msuf_missing_texture_probe__") == false
+    return _textureProbeReliable
+end
+
+local function TexturePathExists(path)
+    path = NormalizeIconFolderPath(path)
+    if not path then return false end
+    if _texturePathExistsCache[path] ~= nil then return _texturePathExistsCache[path] end
+    local exists = TextureProbeReliable() and (TextureProbeRaw(path) or TextureProbeRaw(path .. ".tga") or TextureProbeRaw(path .. ".blp"))
+    _texturePathExistsCache[path] = exists and true or false
+    return _texturePathExistsCache[path]
+end
+
+local function IconFolderLooksComplete(folder)
+    folder = NormalizeIconFolderPath(folder)
+    if not folder then return false end
+    for _, file in ipairs(STATUS_ICON_FILES) do
+        if not TexturePathExists(folder .. "\\" .. file) then return false end
+    end
+    return true
+end
+
+local function AddExternalIconPack(key, label, folder, noMidnightSuffix, hasMidnightSuffix)
+    folder = NormalizeIconFolderPath(folder)
+    if type(key) ~= "string" or key == "" or not folder then return end
+    if _externalIconPacks[key] then return end
+    local pack = {
+        key = key,
+        label = (type(label) == "string" and label ~= "" and label) or key,
+        folder = folder,
+        noMidnightSuffix = noMidnightSuffix == true,
+        hasMidnightSuffix = hasMidnightSuffix == true,
+    }
+    _externalIconPacks[key] = pack
+    _externalIconPackOrder[#_externalIconPackOrder + 1] = pack
+end
+
+local function GetAddonInfoName(index)
+    local c = _G.C_AddOns
+    if c and type(c.GetAddOnInfo) == "function" then
+        local name, title = c.GetAddOnInfo(index)
+        return name, title
+    end
+    if type(_G.GetAddOnInfo) == "function" then
+        local name, title = _G.GetAddOnInfo(index)
+        return name, title
+    end
+end
+
+local function GetAddonCount()
+    local c = _G.C_AddOns
+    if c and type(c.GetNumAddOns) == "function" then return tonumber(c.GetNumAddOns()) or 0 end
+    if type(_G.GetNumAddOns) == "function" then return tonumber(_G.GetNumAddOns()) or 0 end
+    return 0
+end
+
+local function GetAddonMetadata(addonName, field)
+    local c = _G.C_AddOns
+    if c and type(c.GetAddOnMetadata) == "function" then
+        return c.GetAddOnMetadata(addonName, field)
+    end
+    if type(_G.GetAddOnMetadata) == "function" then return _G.GetAddOnMetadata(addonName, field) end
+end
+
+local function IsTruthyMetadata(value)
+    if value == true then return true end
+    if type(value) ~= "string" then return false end
+    value = value:lower()
+    return value == "1" or value == "true" or value == "yes" or value == "y"
+end
+
+local function ExternalIconPackByKey(style)
+    if type(style) ~= "string" or style == "" then return nil end
+    GF.RefreshExternalStatusIconPacks()
+    return _externalIconPacks and _externalIconPacks[style]
+end
+
+function GF.RefreshExternalStatusIconPacks(force)
+    if _externalIconPacks and not force then return _externalIconPacks end
+    _externalIconPacks = {}
+    _externalIconPackOrder = {}
+
+    for key, pack in pairs(_registeredIconPacks) do
+        AddExternalIconPack(key, pack.label, pack.folder, pack.noMidnightSuffix, pack.hasMidnightSuffix)
+    end
+
+    local count = GetAddonCount()
+    for i = 1, count do
+        local addonName, title = GetAddonInfoName(i)
+        if type(addonName) == "string" and addonName ~= "" then
+            local marked = IsTruthyMetadata(GetAddonMetadata(addonName, "X-MSUF-StatusIconPack"))
+                or IsTruthyMetadata(GetAddonMetadata(addonName, "X-MSUF-IconPack"))
+            local iconFolder = NormalizeIconFolderPath(GetAddonMetadata(addonName, "X-MSUF-IconFolder") or "Icons") or "Icons"
+            local label = GetAddonMetadata(addonName, "X-MSUF-IconPack-Name") or title or addonName
+            local noMidnight = IsTruthyMetadata(GetAddonMetadata(addonName, "X-MSUF-NoMidnightSuffix"))
+            local hasMidnight = IsTruthyMetadata(GetAddonMetadata(addonName, "X-MSUF-HasMidnightSuffix"))
+            local folder = "Interface\\AddOns\\" .. addonName .. "\\" .. iconFolder
+            if marked or IconFolderLooksComplete(folder) then
+                AddExternalIconPack(ADDON_ICON_STYLE_PREFIX .. addonName, label, folder, noMidnight, hasMidnight)
+            end
+        end
+    end
+
+    return _externalIconPacks
+end
+
+function GF.RegisterStatusIconPack(key, label, folder, opts)
+    key = (type(key) == "string" and key ~= "" and key) or nil
+    folder = NormalizeIconFolderPath(folder)
+    if not (key and folder) then return nil end
+    if key:sub(1, #ADDON_ICON_STYLE_PREFIX) ~= ADDON_ICON_STYLE_PREFIX
+        and key:sub(1, #REGISTERED_ICON_STYLE_PREFIX) ~= REGISTERED_ICON_STYLE_PREFIX
+    then
+        key = REGISTERED_ICON_STYLE_PREFIX .. key
+    end
+    _registeredIconPacks[key] = {
+        label = label,
+        folder = folder,
+        noMidnightSuffix = type(opts) == "table" and opts.noMidnightSuffix == true,
+        hasMidnightSuffix = type(opts) == "table" and opts.hasMidnightSuffix == true,
+    }
+    _externalIconPacks = nil
+    _externalIconPackOrder = nil
+    return key
+end
+
+_G.MSUF_RegisterStatusIconPack = function(key, label, folder, opts)
+    return GF.RegisterStatusIconPack(key, label, folder, opts)
+end
+_G.MSUF_RefreshStatusIconPacks = function()
+    _texturePathExistsCache = {}
+    return GF.RefreshExternalStatusIconPacks(true)
+end
 
 local INDICATOR_STYLE_KEYS = {
     roleIcon   = "roleIconStyle",
@@ -1978,6 +2154,7 @@ local function NormalizeIconStyle(style, fallback)
         style = fallback or "BLIZZARD"
     end
     if style == "BLIZZARD" or CUSTOM_STYLES[style] then return style end
+    if ExternalIconPackByKey(style) then return style end
     return "BLIZZARD"
 end
 
@@ -2013,6 +2190,23 @@ function GF.GetStatusIconTexture(style, iconType, role, useMidnight)
             file = "leader"
         end
         return CustomIconPath(style, file, useMidnight == true), 0, 1, 0, 1
+    end
+    local external = ExternalIconPackByKey(style)
+    if external then
+        local file
+        if iconType == "role" then
+            file = ROLE_MAP[role] or "dps"
+        elseif iconType == "assist" then
+            file = "assist"
+        else
+            file = "leader"
+        end
+        local path = external.folder .. "\\" .. file
+        if useMidnight == true and not external.noMidnightSuffix then
+            local midnightPath = external.folder .. "\\" .. file .. "_midnight"
+            if external.hasMidnightSuffix or TexturePathExists(midnightPath) then path = midnightPath end
+        end
+        return path, 0, 1, 0, 1
     end
     if iconType == "leader" then return BLIZZARD_LEADER_TEX, 0, 1, 0, 1 end
     if iconType == "assist" then return BLIZZARD_ASSIST_TEX, 0, 1, 0, 1 end
@@ -2069,6 +2263,11 @@ function GF.GetIconStyleItems(includeDefault)
             value = item.value or item.key,
             text = item.text or item.label or item.value or item.key,
         }
+    end
+    GF.RefreshExternalStatusIconPacks()
+    for i = 1, #(_externalIconPackOrder or {}) do
+        local pack = _externalIconPackOrder[i]
+        out[#out + 1] = { value = pack.key, text = pack.label }
     end
     return out
 end

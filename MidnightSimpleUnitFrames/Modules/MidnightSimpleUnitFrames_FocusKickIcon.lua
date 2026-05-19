@@ -20,6 +20,7 @@ local UIParent       = UIParent
 local hooksecurefunc = hooksecurefunc
 local C_Timer_After  = C_Timer and C_Timer.After
 local C_Timer_NewTicker = C_Timer and C_Timer.NewTicker
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 
 ------------------------------------------------------
 -- Module state
@@ -582,7 +583,11 @@ local function FocusKick_UpdateFromUnit()
         if tex then texture = tex end
     end
     if texture and FocusKickFrame.icon then
-        FocusKickFrame.icon:SetTexture(texture)
+        if type(MSUF_SetIconTexture) == "function" then
+            MSUF_SetIconTexture(FocusKickFrame.icon, texture, "")
+        else
+            FocusKickFrame.icon:SetTexture(texture)
+        end
     end
 
     -- Kick ready coloring: tint the 4-edge border (NOT the icon vertex color),
@@ -1150,7 +1155,11 @@ function _G.MSUF_FocusKick_ApplyCastState(state)
     end
 
     if FocusKickFrame.icon and state.icon then
-        FocusKickFrame.icon:SetTexture(state.icon)
+        if type(MSUF_SetIconTexture) == "function" then
+            MSUF_SetIconTexture(FocusKickFrame.icon, state.icon, "")
+        else
+            FocusKickFrame.icon:SetTexture(state.icon)
+        end
     end
 
     -- Kick ready coloring: tint the 4-edge border (NOT the icon vertex color),

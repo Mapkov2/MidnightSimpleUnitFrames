@@ -22,6 +22,7 @@ local math_max = math.max
 local CreateFrame, GetTime = CreateFrame, GetTime
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 
 ns.MSUF_Auras2 = (type(ns.MSUF_Auras2) == "table") and ns.MSUF_Auras2 or {}
 local API = ns.MSUF_Auras2
@@ -1454,9 +1455,17 @@ function Icons.RenderPreviewIcons(entry, unit, shared, useSingleRow, buffCap, de
         -- Varied texture
         if icon.tex then
             if kind == "buff" then
-                icon.tex:SetTexture(A2_PREVIEW_BUFF_TEXTURES[((idx - 1) % A2_PREVIEW_BUFF_TEX_N) + 1])
+                if type(MSUF_SetIconTexture) == "function" then
+                    MSUF_SetIconTexture(icon.tex, A2_PREVIEW_BUFF_TEXTURES[((idx - 1) % A2_PREVIEW_BUFF_TEX_N) + 1], "")
+                else
+                    icon.tex:SetTexture(A2_PREVIEW_BUFF_TEXTURES[((idx - 1) % A2_PREVIEW_BUFF_TEX_N) + 1])
+                end
             else
-                icon.tex:SetTexture(A2_PREVIEW_DEBUFF_TEXTURES[((idx - 1) % A2_PREVIEW_DEBUFF_TEX_N) + 1])
+                if type(MSUF_SetIconTexture) == "function" then
+                    MSUF_SetIconTexture(icon.tex, A2_PREVIEW_DEBUFF_TEXTURES[((idx - 1) % A2_PREVIEW_DEBUFF_TEX_N) + 1], "")
+                else
+                    icon.tex:SetTexture(A2_PREVIEW_DEBUFF_TEXTURES[((idx - 1) % A2_PREVIEW_DEBUFF_TEX_N) + 1])
+                end
             end
         end
 
@@ -1596,7 +1605,11 @@ function Icons.RenderPreviewPrivateIcons(entry, unit, shared, privIconSize, spac
 
             -- Aura texture (varied)
             if icon.tex then
-                icon.tex:SetTexture(privTex[((i - 1) % privTexN) + 1])
+                if type(MSUF_SetIconTexture) == "function" then
+                    MSUF_SetIconTexture(icon.tex, privTex[((i - 1) % privTexN) + 1], "")
+                else
+                    icon.tex:SetTexture(privTex[((i - 1) % privTexN) + 1])
+                end
             end
             icon:SetSize(privIconSize, privIconSize)
 

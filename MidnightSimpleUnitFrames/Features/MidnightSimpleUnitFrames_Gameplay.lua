@@ -32,6 +32,8 @@ local GetSpecialization    = GetSpecialization
 local GetSpecializationInfo = GetSpecializationInfo
 local tonumber            = tonumber
 local math_floor          = math.floor
+local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 
 local function Tr(text)
     if type(text) ~= "string" then return text end
@@ -1080,7 +1082,11 @@ local function EnsureFirstDanceFrame()
     -- Icon mode elements
     local iconSz = g.firstDanceIconSize or 40
     firstDanceIcon = firstDanceFrame:CreateTexture(nil, "ARTWORK")
-    firstDanceIcon:SetTexture(_FIRST_DANCE_ICON_ID)
+    if type(MSUF_SetIconTexture) == "function" then
+        MSUF_SetIconTexture(firstDanceIcon, _FIRST_DANCE_ICON_ID, "")
+    else
+        firstDanceIcon:SetTexture(_FIRST_DANCE_ICON_ID)
+    end
     firstDanceIcon:SetSize(iconSz, iconSz)
     firstDanceIcon:SetPoint("CENTER")
 
@@ -2788,6 +2794,9 @@ do
         if spellID and C_Spell and C_Spell.GetSpellTexture then
             local icon = C_Spell.GetSpellTexture(spellID)
             if icon then
+                if type(MSUF_ResolveIconTexturePath) == "function" then
+                    icon = MSUF_ResolveIconTexturePath(icon)
+                end
                 return icon
             end
         end

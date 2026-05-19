@@ -5,6 +5,7 @@
 ### Beta Release
 
 - Added per-indicator icon pack selection for Unit Frame and Group Frame status indicators.
+- Added support for external `Interface\Icons` replacement packs by resolving accessible spell and aura FileDataIDs back to icon paths before rendering.
 - Added Group Frame options to hide name text while units are dead or offline.
 - Moved heal prediction controls into the Bars pages so Unit Frame and Group Frame bar configuration is grouped consistently.
 - Added a global Bar Outline Color for Unit Frames and Group Frames while keeping aggro, purge, dispel, and other indicator colors independent.

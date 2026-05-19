@@ -226,8 +226,10 @@ local MENU_STATE_TABLE_FIELDS = {
     "unitTextTabSelection",
     "unitTextSlotSelection",
     "unitStatusSelection",
+    "unitStatusTabSelection",
     "gfTextTabSelection",
     "gfTextSlotSelection",
+    "gfStatusIconTabSelection",
     "gfSpellMultiSpecSelection",
     "gfSpellIndicatorSelection",
 }

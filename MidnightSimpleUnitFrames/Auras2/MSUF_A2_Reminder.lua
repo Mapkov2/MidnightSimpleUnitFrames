@@ -29,6 +29,8 @@ local floor, format, max, min = math.floor, string.format, math.max, math.min
 local C_UnitAuras = C_UnitAuras
 local C_Spell_GetSpellTexture = C_Spell and C_Spell.GetSpellTexture
 local GetSpellTexture_fn = GetSpellTexture
+local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local tonumber = tonumber
 local canaccessvalue = _G.canaccessvalue
 local issecretvalue = _G.issecretvalue
@@ -50,11 +52,15 @@ end
 local function _GetIcon(spellId)
     if C_Spell_GetSpellTexture then
         local ok, tex = pcall(C_Spell_GetSpellTexture, spellId)
-        if ok and tex then return tex end
+        if ok and tex then
+            return (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(tex)) or tex
+        end
     end
     if GetSpellTexture_fn then
         local ok, tex = pcall(GetSpellTexture_fn, spellId)
-        if ok and tex then return tex end
+        if ok and tex then
+            return (type(MSUF_ResolveIconTexturePath) == "function" and MSUF_ResolveIconTexturePath(tex)) or tex
+        end
     end
     return 134400
 end
@@ -974,7 +980,11 @@ function Reminder.Render(entry, unit, shared, iconSize, spacing, growth, isEditM
         end
 
         if not p._cachedIcon then p._cachedIcon = _GetIcon(p.iconSpell) end
-        ghost._tex:SetTexture(p._cachedIcon)
+        if type(MSUF_SetIconTexture) == "function" then
+            MSUF_SetIconTexture(ghost._tex, p._cachedIcon, "")
+        else
+            ghost._tex:SetTexture(p._cachedIcon)
+        end
         ghost._tex:SetDesaturated(true)
 
         if isEditMode then

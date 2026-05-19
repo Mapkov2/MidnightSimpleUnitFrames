@@ -37,6 +37,7 @@ local math_max      = math.max
 local table_sort    = table.sort
 local table_concat  = table.concat
 local setmetatable  = setmetatable
+local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 
 local function _UnsecretBool(value)
     if issecretvalue and issecretvalue(value) then return nil end
@@ -1242,6 +1243,9 @@ end
 
 local function SetTextureIfChanged(texRegion, texture)
     if not texRegion then return end
+    if type(MSUF_ResolveIconTexturePath) == "function" then
+        texture = MSUF_ResolveIconTexturePath(texture)
+    end
     if texRegion._msufSITexture == texture then return end
     texRegion._msufSITexture = texture
     texRegion:SetTexture(texture)

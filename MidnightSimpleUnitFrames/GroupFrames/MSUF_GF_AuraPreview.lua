@@ -1634,16 +1634,26 @@ local AURA_GRP_ICON_IDS = {
 
 -- Shared spell-texture cache. One lookup per unique spell ID per session.
 local _mockSpellTexCache = {}
+local _MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+local _MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local function GetMockSpellTexture(spellId)
     local cached = _mockSpellTexCache[spellId]
     if cached then return cached end
     if C_Spell and C_Spell.GetSpellTexture then
         local tex = C_Spell.GetSpellTexture(spellId)
-        if tex then _mockSpellTexCache[spellId] = tex; return tex end
+        if tex then
+            tex = (type(_MSUF_ResolveIconTexturePath) == "function" and _MSUF_ResolveIconTexturePath(tex)) or tex
+            _mockSpellTexCache[spellId] = tex
+            return tex
+        end
     end
     if GetSpellInfo then
         local _, _, icon = GetSpellInfo(spellId)
-        if icon then _mockSpellTexCache[spellId] = icon; return icon end
+        if icon then
+            icon = (type(_MSUF_ResolveIconTexturePath) == "function" and _MSUF_ResolveIconTexturePath(icon)) or icon
+            _mockSpellTexCache[spellId] = icon
+            return icon
+        end
     end
     -- Fallback: generic question-mark icon so "never black" is guaranteed
     return "Interface\\Icons\\INV_Misc_QuestionMark"
@@ -1961,7 +1971,11 @@ function GF.RebuildSIHandles()
                 if h._siValue then h._siValue:Hide() end
                 h._siTex:SetSize(sz, sz)
                 if itype == "icon" and SI.GetAuraIcon then
-                    h._siTex:SetTexture(SI.GetAuraIcon(specKey, spellName))
+                    if type(_MSUF_SetIconTexture) == "function" then
+                        _MSUF_SetIconTexture(h._siTex, SI.GetAuraIcon(specKey, spellName), "")
+                    else
+                        h._siTex:SetTexture(SI.GetAuraIcon(specKey, spellName))
+                    end
                     h._siTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
                 elseif itype == "square" or itype == "bar" then
                     local clr = (defCfg.placed and defCfg.placed.color)

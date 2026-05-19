@@ -14,6 +14,7 @@ local ceil = math.ceil
 local max = math.max
 local min = math.min
 local unpack = unpack or table.unpack
+local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 
 local WHITE8X8 = "Interface\\Buttons\\WHITE8X8"
 
@@ -366,6 +367,9 @@ local function BuildGFAuras(ctx)
             tex = icon
         end
         tex = tex or "Interface\\Icons\\INV_Misc_QuestionMark"
+        if type(MSUF_ResolveIconTexturePath) == "function" then
+            tex = MSUF_ResolveIconTexturePath(tex)
+        end
         auraTextPreviewTexCache[spellId] = tex
         return tex
     end

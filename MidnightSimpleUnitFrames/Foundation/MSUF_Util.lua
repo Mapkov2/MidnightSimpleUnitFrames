@@ -7,7 +7,7 @@ ns = ns or {}
 local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
 local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
+local string_format, string_match, string_sub, string_gsub, string_lower = string.format, string.match, string.sub, string.gsub, string.lower
 local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
@@ -180,6 +180,97 @@ if type(_G._MSUF_SetAtlasOrFallback) ~= "function" then
 
         return false
     end
+end
+
+-- External icon-pack support:
+-- In Midnight, spell/aura APIs commonly return FileDataIDs. Passing those IDs
+-- directly to SetTexture bypasses loose files in Interface\Icons. For accessible
+-- icon IDs, resolve the original filename and set the extensionless path instead
+-- so files like Interface\Icons\inv_belt_39a.tga can override the default icon.
+do
+    local _fileDataIconPathCache = {}
+    local _GetFilenameFromFileDataID
+
+    local function MSUF_CanReadTextureValue(value)
+        local canaccessvalue = _G.canaccessvalue
+        if type(canaccessvalue) == "function" then
+            return canaccessvalue(value) == true
+        end
+        local issecretvalue = _G.issecretvalue
+        if type(issecretvalue) == "function" and issecretvalue(value) == true then
+            return false
+        end
+        return true
+    end
+
+    local function MSUF_GetFilenameResolver()
+        if _GetFilenameFromFileDataID then return _GetFilenameFromFileDataID end
+        local C_Texture = _G.C_Texture
+        _GetFilenameFromFileDataID = C_Texture and C_Texture.GetFilenameFromFileDataID
+        return _GetFilenameFromFileDataID
+    end
+
+    local function MSUF_NormalizeInterfaceIconPath(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        path = string_gsub(path, "/", "\\")
+        local lower = string_lower(path)
+        if string_sub(lower, 1, 16) ~= "interface\\icons\\" then
+            return nil
+        end
+        path = string_gsub(path, "%.[Bb][Ll][Pp]$", "")
+        path = string_gsub(path, "%.[Tt][Gg][Aa]$", "")
+        path = string_gsub(path, "%.[Pp][Nn][Gg]$", "")
+        return path
+    end
+
+    if type(_G.MSUF_ResolveIconTexturePath) ~= "function" then
+        function _G.MSUF_ResolveIconTexturePath(texture)
+            if not MSUF_CanReadTextureValue(texture) then
+                return texture
+            end
+
+            local vt = type(texture)
+            if vt == "string" then
+                return MSUF_NormalizeInterfaceIconPath(texture) or texture
+            end
+            if vt ~= "number" or texture <= 0 then
+                return texture
+            end
+
+            local cached = _fileDataIconPathCache[texture]
+            if cached ~= nil then
+                return cached or texture
+            end
+
+            local resolver = MSUF_GetFilenameResolver()
+            if type(resolver) == "function" then
+                local ok, filename = pcall(resolver, texture)
+                local path = ok and MSUF_NormalizeInterfaceIconPath(filename) or nil
+                if path then
+                    _fileDataIconPathCache[texture] = path
+                    return path
+                end
+            end
+
+            _fileDataIconPathCache[texture] = false
+            return texture
+        end
+    end
+
+    if type(_G.MSUF_SetIconTexture) ~= "function" then
+        function _G.MSUF_SetIconTexture(textureRegion, texture, fallback)
+            if not (textureRegion and textureRegion.SetTexture) then return end
+            local resolver = _G.MSUF_ResolveIconTexturePath
+            local value = (type(resolver) == "function") and resolver(texture) or texture
+            if MSUF_CanReadTextureValue(value) and (value == nil or value == "") then
+                value = fallback or ""
+            end
+            textureRegion:SetTexture(value)
+        end
+    end
+
+    U.ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+    U.SetIconTexture = _G.MSUF_SetIconTexture
 end
 
 function MSUF_DeepCopy(value, seen)

@@ -33,6 +33,14 @@ local CreateColor   = _G.CreateColor
 local _hasCanaccessvalue = (type(canaccessvalue) == "function")
 local _QUESTION_MARK_ICON = 136243
 local _PADLOCK_ICON = 134400
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
+if type(MSUF_SetIconTexture) ~= "function" then
+    MSUF_SetIconTexture = function(textureRegion, texture, fallback)
+        if textureRegion and textureRegion.SetTexture then
+            textureRegion:SetTexture(texture)
+        end
+    end
+end
 local _GF_RegisterCooldownTextIcon
 local _GF_UnregisterCooldownTextIcon
 local _GF_TouchCooldownTextIcon
@@ -2799,7 +2807,7 @@ local function RenderGroup(f, unit, groupKey, gcfg, filter, isHarmful, parent, d
                             ic._msufFilter = filter
                             ic._msufBorderBlack = nil
 
-                            ic.texture:SetTexture(aura.icon or "")
+                            MSUF_SetIconTexture(ic.texture, aura.icon, "")
                             if not ic.texture:IsShown() then ic.texture:Show() end
 
                             ApplyCooldown(ic, unit, aid, showCdVisual, showCdText)

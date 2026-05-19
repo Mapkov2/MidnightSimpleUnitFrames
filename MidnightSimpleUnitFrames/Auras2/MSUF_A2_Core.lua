@@ -2382,11 +2382,16 @@ function Icons.CommitIcon(icon, unit, aura, shared, isHelpful, hidePermanent, ma
 
     -- 1. Texture (update when aid changed)
     -- SECRET-SAFE: aura.icon CAN be a secret value in WoW 12.0.
-    -- Never compare, store, or nil-check it. SetTexture handles secrets internally.
+    -- Never compare, store, or nil-check it. MSUF_SetIconTexture resolves
+    -- accessible FileDataIDs to Interface\Icons paths and passes secrets through.
     if icon._msufA2_lastTexAid ~= aid then
         icon._msufA2_lastTexAid = aid
         if icon.tex then
-            icon.tex:SetTexture(aura.icon)
+            if type(_G.MSUF_SetIconTexture) == "function" then
+                _G.MSUF_SetIconTexture(icon.tex, aura.icon, "")
+            else
+                icon.tex:SetTexture(aura.icon)
+            end
         end
     end
 
