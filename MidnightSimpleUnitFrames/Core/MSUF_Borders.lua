@@ -6,9 +6,114 @@ local addonName, ns = ...
 local F = ns.Cache and ns.Cache.F or {}
 F.CreateFrame = F.CreateFrame or CreateFrame
 local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
+local math_floor, math_ceil = math.floor, math.ceil
 local MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local issecretvalue = _G.issecretvalue
 local InCombatLockdown = _G.InCombatLockdown
+
+local function _MSUF_BorderEffectiveScale(region)
+    if region and region.GetEffectiveScale then
+        local scale = region:GetEffectiveScale()
+        if scale and scale > 0 then return scale end
+    end
+    local parent = _G.UIParent
+    if parent and parent.GetEffectiveScale then
+        local scale = parent:GetEffectiveScale()
+        if scale and scale > 0 then return scale end
+    end
+    return 1
+end
+
+local function _MSUF_BorderPixelToUIUnitFactor()
+    local getSize = _G.GetPhysicalScreenSize
+    if type(getSize) == "function" then
+        local _, physicalHeight = getSize()
+        physicalHeight = tonumber(physicalHeight) or 0
+        if physicalHeight > 0 then
+            return 768 / physicalHeight
+        end
+    end
+    return 1
+end
+
+local function _MSUF_BorderPixelSize(region, value, minPixels)
+    value = tonumber(value) or 0
+    if value == 0 then return 0 end
+
+    local scale = _MSUF_BorderEffectiveScale(region)
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.GetNearestPixelSize) == "function" then
+        local size = pixelUtil.GetNearestPixelSize(value, scale, minPixels)
+        if size and size ~= 0 then
+            return size
+        end
+    end
+
+    local factor = _MSUF_BorderPixelToUIUnitFactor()
+    if factor <= 0 or scale <= 0 then
+        return value
+    end
+
+    local pixels = value * scale / factor
+    if pixels >= 0 then
+        pixels = math_floor(pixels + 0.5)
+    else
+        pixels = math_ceil(pixels - 0.5)
+    end
+
+    minPixels = tonumber(minPixels) or 0
+    if minPixels > 0 then
+        if pixels == 0 then
+            pixels = (value < 0) and -minPixels or minPixels
+        elseif pixels > 0 and pixels < minPixels then
+            pixels = minPixels
+        elseif pixels < 0 and pixels > -minPixels then
+            pixels = -minPixels
+        end
+    end
+
+    return pixels * factor / scale
+end
+
+local function _MSUF_BorderDisableSnap(region)
+    if not region then return end
+    if region.SetSnapToPixelGrid then
+        region:SetSnapToPixelGrid(false)
+    end
+    if region.SetTexelSnappingBias then
+        region:SetTexelSnappingBias(0)
+    end
+end
+
+local function _MSUF_BorderSetPoint(region, ...)
+    if not region then return end
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.SetPoint) == "function" then
+        pixelUtil.SetPoint(region, ...)
+    elseif region.SetPoint then
+        region:SetPoint(...)
+    end
+end
+
+local function _MSUF_BorderSetHeight(region, height)
+    if not region then return end
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.SetHeight) == "function" then
+        pixelUtil.SetHeight(region, height)
+    elseif region.SetHeight then
+        region:SetHeight(height)
+    end
+end
+
+local function _MSUF_BorderSetWidth(region, width)
+    if not region then return end
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.SetWidth) == "function" then
+        pixelUtil.SetWidth(region, width)
+    elseif region.SetWidth then
+        region:SetWidth(width)
+    end
+end
 
 local function _MSUF_TestModeCombatLocked()
     return _G.MSUF_InCombat == true or ((InCombatLockdown and InCombatLockdown()) and true or false)
@@ -512,14 +617,86 @@ local function _GetUFDispelColor(dispelName, unit, auraID, cfg)
            _ReadColorValue(g, "hlDispelColorB", "dispelBorderColorB", 1.00)
 end
 
+local _BAR_OUTLINE_LINE_KEYS = { "top", "bottom", "left", "right" }
+
+local function _EnsureBarOutlineLine(o, owner, key)
+    if not (o and owner and owner.CreateTexture) then return nil end
+
+    local line = o[key]
+    if not (line and line.ClearAllPoints and line.SetPoint and line.SetVertexColor) then
+        line = owner:CreateTexture(nil, "OVERLAY")
+        o[key] = line
+    elseif line.GetParent and line.SetParent and line:GetParent() ~= owner then
+        line:SetParent(owner)
+    end
+
+    if line.SetDrawLayer then line:SetDrawLayer("OVERLAY", 0) end
+    if line.SetTexture then line:SetTexture(MSUF_TEX_WHITE8) end
+    _MSUF_BorderDisableSnap(line)
+    return line
+end
+
+local function _SetBarOutlineLineColor(o, r, g, b, a)
+    if not o then return false end
+    local colored = false
+    for i = 1, #_BAR_OUTLINE_LINE_KEYS do
+        local line = o[_BAR_OUTLINE_LINE_KEYS[i]]
+        if line and line.SetVertexColor then
+            line:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
+            colored = true
+        end
+    end
+    return colored
+end
+
+local function _LayoutBarOutlineLines(o, owner, edge)
+    if not (o and owner) then return end
+
+    local top = _EnsureBarOutlineLine(o, owner, "top")
+    local bottom = _EnsureBarOutlineLine(o, owner, "bottom")
+    local left = _EnsureBarOutlineLine(o, owner, "left")
+    local right = _EnsureBarOutlineLine(o, owner, "right")
+
+    if top then
+        top:ClearAllPoints()
+        _MSUF_BorderSetPoint(top, "TOPLEFT", owner, "TOPLEFT", 0, 0)
+        _MSUF_BorderSetPoint(top, "TOPRIGHT", owner, "TOPRIGHT", 0, 0)
+        _MSUF_BorderSetHeight(top, edge)
+        top:Show()
+    end
+    if bottom then
+        bottom:ClearAllPoints()
+        _MSUF_BorderSetPoint(bottom, "BOTTOMLEFT", owner, "BOTTOMLEFT", 0, 0)
+        _MSUF_BorderSetPoint(bottom, "BOTTOMRIGHT", owner, "BOTTOMRIGHT", 0, 0)
+        _MSUF_BorderSetHeight(bottom, edge)
+        bottom:Show()
+    end
+    if left then
+        left:ClearAllPoints()
+        _MSUF_BorderSetPoint(left, "TOPLEFT", owner, "TOPLEFT", 0, 0)
+        _MSUF_BorderSetPoint(left, "BOTTOMLEFT", owner, "BOTTOMLEFT", 0, 0)
+        _MSUF_BorderSetWidth(left, edge)
+        left:Show()
+    end
+    if right then
+        right:ClearAllPoints()
+        _MSUF_BorderSetPoint(right, "TOPRIGHT", owner, "TOPRIGHT", 0, 0)
+        _MSUF_BorderSetPoint(right, "BOTTOMRIGHT", owner, "BOTTOMRIGHT", 0, 0)
+        _MSUF_BorderSetWidth(right, edge)
+        right:Show()
+    end
+end
+
 local function _ApplyUFBarBorderTint(self, showTint, r, g, b)
     local o = self and self._msufBarOutline
     local f = o and o.frame
     if not f then return end
+    local cr, cg, cb = 0, 0, 0
     if showTint then
-        f:SetBackdropBorderColor(r or 0, g or 0, b or 0, 1)
-    else
-        f:SetBackdropBorderColor(0, 0, 0, 1)
+        cr, cg, cb = r or 0, g or 0, b or 0
+    end
+    if not _SetBarOutlineLineColor(o, cr, cg, cb, 1) and f.SetBackdropBorderColor then
+        f:SetBackdropBorderColor(cr, cg, cb, 1)
     end
 end
 
@@ -597,11 +774,16 @@ local function MSUF_ApplyDetachedPowerBarOutline(self)
         outline._msufLastFrameLevel = frameLevel
     end
 
-    local snap = _G.MSUF_Snap
-    local edge = (type(snap) == "function") and snap(outline, thickness) or thickness
+    if outline.SetClipsChildren then outline:SetClipsChildren(false) end
+    _MSUF_BorderDisableSnap(outline)
+    if outline.SetBackdrop and outline._msufLineOutlineBackdropCleared ~= true then
+        outline:SetBackdrop(nil)
+        outline._msufLineOutlineBackdropCleared = true
+    end
+
+    local edge = _MSUF_BorderPixelSize(outline, thickness, 1)
+    if edge <= 0 then edge = thickness end
     if outline._msufLastEdgeSize ~= edge then
-        outline:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
-        outline:SetBackdropBorderColor(0, 0, 0, 1)
         outline._msufLastEdgeSize = edge
         outline._msufDetachedPBStamp = nil
     end
@@ -609,10 +791,12 @@ local function MSUF_ApplyDetachedPowerBarOutline(self)
     local stamp = tostring(edge) .. ":" .. tostring(frameLevel)
     if outline._msufDetachedPBStamp ~= stamp then
         outline:ClearAllPoints()
-        outline:SetPoint("TOPLEFT", pb, "TOPLEFT", -edge, edge)
-        outline:SetPoint("BOTTOMRIGHT", pb, "BOTTOMRIGHT", edge, -edge)
+        _MSUF_BorderSetPoint(outline, "TOPLEFT", pb, "TOPLEFT", -edge, edge)
+        _MSUF_BorderSetPoint(outline, "BOTTOMRIGHT", pb, "BOTTOMRIGHT", edge, -edge)
         outline._msufDetachedPBStamp = stamp
     end
+    _LayoutBarOutlineLines(outline, outline, edge)
+    _SetBarOutlineLineColor(outline, 0, 0, 0, 1)
     outline:Show()
 end
 _G.MSUF_ApplyDetachedPowerBarOutline = MSUF_ApplyDetachedPowerBarOutline
@@ -647,6 +831,7 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
         f:SetFrameLevel(baseLevel)
         o.frame = f
         o._msufLastEdgeSize = -1
+        o._msufLastFrameLevel = -1
     end
     local hb = self.hpBar
     local pb = self.targetPowerBar
@@ -655,33 +840,52 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
     local bottomBar = pbWanted and pb or hb
     local bottomIsPower = pbWanted and true or false
     local f = o.frame
-    local snap = _G.MSUF_Snap
-    local edge = (type(snap) == "function") and snap(f, thickness) or thickness
+    if not (hb and bottomBar and f) then
+        if f and f.Hide then f:Hide() end
+        MSUF_ApplyDetachedPowerBarOutline(self)
+        return
+    end
+
+    if f.SetFrameStrata and self.GetFrameStrata then
+        f:SetFrameStrata(self:GetFrameStrata())
+    end
+    local frameLevel = self:GetFrameLevel() + 2
+    if hb.GetFrameLevel then
+        frameLevel = hb:GetFrameLevel() + 2
+    end
+    if o._msufLastFrameLevel ~= frameLevel and f.SetFrameLevel then
+        f:SetFrameLevel(frameLevel)
+        o._msufLastFrameLevel = frameLevel
+    end
+    if f.SetClipsChildren then f:SetClipsChildren(false) end
+    _MSUF_BorderDisableSnap(f)
+    if f.SetBackdrop and o._msufLineOutlineBackdropCleared ~= true then
+        f:SetBackdrop(nil)
+        o._msufLineOutlineBackdropCleared = true
+    end
+
+    local edge = _MSUF_BorderPixelSize(f, thickness, 1)
+    if edge <= 0 then edge = thickness end
 
     if o._msufLastEdgeSize ~= edge then
-        f:SetBackdrop({ edgeFile = MSUF_TEX_WHITE8, edgeSize = edge })
-        f:SetBackdropBorderColor(0, 0, 0, 1)
         o._msufLastEdgeSize = edge
         self._msufBarOutlineEdgeSize = -1
     end
 
     if (self._msufBarOutlineThickness ~= thickness) or (self._msufBarOutlineEdgeSize ~= edge) or (self._msufBarOutlineBottomIsPower ~= (bottomIsPower and true or false)) then
         f:ClearAllPoints()
-        if hb then
-            f:SetPoint("TOPLEFT", hb, "TOPLEFT", -edge, edge)
-        end
-        if bottomBar then
-            f:SetPoint("BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge)
-        end
+        _MSUF_BorderSetPoint(f, "TOPLEFT", hb, "TOPLEFT", -edge, edge)
+        _MSUF_BorderSetPoint(f, "BOTTOMRIGHT", bottomBar, "BOTTOMRIGHT", edge, -edge)
         self._msufBarOutlineThickness = thickness
         self._msufBarOutlineEdgeSize = edge
         self._msufBarOutlineBottomIsPower = bottomIsPower and true or false
     end
+    _LayoutBarOutlineLines(o, f, edge)
     f:Show()
     if self._msufBarBorderTintActive then
-        f:SetBackdropBorderColor(self._msufBarBorderTintR or 0, self._msufBarBorderTintG or 0, self._msufBarBorderTintB or 0, 1)
+        _SetBarOutlineLineColor(o, self._msufBarBorderTintR or 0, self._msufBarBorderTintG or 0, self._msufBarBorderTintB or 0, 1)
     else
-        f:SetBackdropBorderColor(0, 0, 0, 1)
+        _SetBarOutlineLineColor(o, 0, 0, 0, 1)
     end
 
     MSUF_ApplyDetachedPowerBarOutline(self)
