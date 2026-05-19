@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.4 Beta 2 - 2026-05-19
+
+### Beta Release
+
+- Added per-indicator icon pack selection for Unit Frame and Group Frame status indicators.
+- Added Group Frame options to hide name text while units are dead or offline.
+- Moved heal prediction controls into the Bars pages so Unit Frame and Group Frame bar configuration is grouped consistently.
+- Added a global Bar Outline Color for Unit Frames and Group Frames while keeping aggro, purge, dispel, and other indicator colors independent.
+- Improved Group Frame bar outline rendering so preview and live frames use the same outside-outline behavior as Unit Frames.
+
 ## 5.4 Beta - 2026-05-18
 
 ### Beta Release
