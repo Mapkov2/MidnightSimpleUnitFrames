@@ -1591,7 +1591,22 @@ local function SetPreviewIconTexture(icon, spec, conf, g, key, data)
             if SetRaidTargetIconTexture then SetRaidTargetIconTexture(tex, 8) end
         end
     elseif spec.id == "leader" then
-        if tex then tex:SetTexture(key == "target" and "Interface\\GroupFrame\\UI-Group-AssistantIcon" or "Interface\\GroupFrame\\UI-Group-LeaderIcon") end
+        if tex then
+            local isAssist = key == "target"
+            local path = isAssist and "Interface\\GroupFrame\\UI-Group-AssistantIcon" or "Interface\\GroupFrame\\UI-Group-LeaderIcon"
+            local style = (conf and conf.leaderIconStyle) or (g and g.leaderIconStyle) or "BLIZZARD"
+            if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
+                local resolver = isAssist and _G.MSUF_GetAssistStatusIconTexture or _G.MSUF_GetLeaderStatusIconTexture
+                if type(resolver) == "function" then
+                    local customPath, l, r, t, b = resolver(style, false)
+                    if type(customPath) == "string" and customPath ~= "" then
+                        path = customPath
+                        if tex.SetTexCoord then tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1) end
+                    end
+                end
+            end
+            tex:SetTexture(path)
+        end
     elseif spec.id == "elite" then
         if tex and tex.SetAtlas then
             tex:SetAtlas((key == "boss") and "nameplates-icon-elite-gold" or "nameplates-icon-elite-silver")

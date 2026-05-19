@@ -1348,6 +1348,9 @@ end
     if g.showLeaderIcon == nil then
         g.showLeaderIcon = true
     end
+    if g.leaderIconStyle == nil then
+        g.leaderIconStyle = "BLIZZARD"
+    end
     if g.leaderIconOffsetX == nil then
         g.leaderIconOffsetX = 0
     end

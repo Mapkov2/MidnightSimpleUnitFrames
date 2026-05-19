@@ -1586,10 +1586,36 @@ Elements.Indicators = {
                 local isAssist = (not isLeader) and UnitIsGroupAssistant and UnitIsGroupAssistant(unit) and true or false
 
                 if isLeader then
-                    f.leaderIcon:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
+                    local tex, l, r, t, b = "Interface\\GroupFrame\\UI-Group-LeaderIcon", 0, 1, 0, 1
+                    local style = conf and conf.leaderIconStyle
+                    if type(style) ~= "string" or style == "" then style = cache.generalRef and cache.generalRef.leaderIconStyle end
+                    if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
+                        local resolver = _G.MSUF_GetLeaderStatusIconTexture
+                        if type(resolver) == "function" then
+                            local path, cl, cr, ct, cb = resolver(style, false)
+                            if type(path) == "string" and path ~= "" then
+                                tex, l, r, t, b = path, cl or 0, cr or 1, ct or 0, cb or 1
+                            end
+                        end
+                    end
+                    f.leaderIcon:SetTexture(tex)
+                    if f.leaderIcon.SetTexCoord then f.leaderIcon:SetTexCoord(l, r, t, b) end
                     f.leaderIcon:Show()
                 elseif isAssist then
-                    f.leaderIcon:SetTexture("Interface\\GroupFrame\\UI-Group-AssistantIcon")
+                    local tex, l, r, t, b = "Interface\\GroupFrame\\UI-Group-AssistantIcon", 0, 1, 0, 1
+                    local style = conf and conf.leaderIconStyle
+                    if type(style) ~= "string" or style == "" then style = cache.generalRef and cache.generalRef.leaderIconStyle end
+                    if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
+                        local resolver = _G.MSUF_GetAssistStatusIconTexture
+                        if type(resolver) == "function" then
+                            local path, cl, cr, ct, cb = resolver(style, false)
+                            if type(path) == "string" and path ~= "" then
+                                tex, l, r, t, b = path, cl or 0, cr or 1, ct or 0, cb or 1
+                            end
+                        end
+                    end
+                    f.leaderIcon:SetTexture(tex)
+                    if f.leaderIcon.SetTexCoord then f.leaderIcon:SetTexCoord(l, r, t, b) end
                     f.leaderIcon:Show()
                 else
                     f.leaderIcon:Hide()

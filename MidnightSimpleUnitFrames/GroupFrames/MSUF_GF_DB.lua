@@ -173,6 +173,7 @@ local PARTY_DEFAULTS = {
     iconStyle         = "BLIZZARD",  -- BLIZZARD / GLOSSY_ORBS / DARK_EMBOSS / etc.
     useMidnightIcons  = false,
     roleIcon          = true,
+    roleIconStyle     = "DEFAULT",
     roleIconShowTank   = true,
     roleIconShowHealer = true,
     roleIconShowDPS    = true,
@@ -186,11 +187,13 @@ local PARTY_DEFAULTS = {
     raidMarkerX       = 0,
     raidMarkerY       = 0,
     leaderIcon        = true,
+    leaderIconStyle   = "DEFAULT",
     leaderIconSize    = 12,
     leaderIconAnchor  = "TOPRIGHT",
     leaderIconX       = 0,
     leaderIconY       = 0,
     assistIcon        = true,
+    assistIconStyle   = "DEFAULT",
     assistIconSize    = 12,
     assistIconAnchor  = "TOPRIGHT",
     assistIconX       = 14,
@@ -1918,6 +1921,8 @@ local BLIZZARD_LEADER_TEX = "Interface\\GroupFrame\\UI-Group-LeaderIcon"
 local BLIZZARD_ASSIST_TEX = "Interface\\GroupFrame\\UI-Group-AssistantIcon"
 
 local CUSTOM_STYLES = {
+    CLASSIC       = "Classic",
+    MIDNIGHT      = "Midnight",
     GLOSSY_ORBS   = "GlossyOrbs",
     NEON_OUTLINE  = "NeonOutline",
     RING_SYMBOLS  = "RingSymbols",
@@ -1929,47 +1934,93 @@ local CUSTOM_STYLES = {
     SQUARES       = "Squares",
 }
 
+local CUSTOM_STYLES_NO_MIDNIGHT_SUFFIX = {
+    CLASSIC  = true,
+    MIDNIGHT = true,
+}
+
 local ROLE_MAP = { TANK = "tank", HEALER = "healer", DAMAGER = "dps" }
 
-function GF.GetRoleTexture(kind, role)
-    local conf = GF.GetConf(kind)
-    local style = conf.iconStyle or "BLIZZARD"
+local INDICATOR_STYLE_KEYS = {
+    roleIcon   = "roleIconStyle",
+    leaderIcon = "leaderIconStyle",
+    assistIcon = "assistIconStyle",
+}
+
+local function NormalizeIconStyle(style, fallback)
+    if type(style) ~= "string" or style == "" or style == "DEFAULT" then
+        style = fallback or "BLIZZARD"
+    end
+    if style == "BLIZZARD" or CUSTOM_STYLES[style] then return style end
+    return "BLIZZARD"
+end
+
+local function IndicatorIconStyle(conf, indicatorKey)
+    conf = (type(conf) == "table") and conf or {}
+    local styleKey = INDICATOR_STYLE_KEYS[indicatorKey]
+    local style = styleKey and conf[styleKey] or nil
+    if type(style) ~= "string" or style == "" or style == "DEFAULT" then
+        style = conf.iconStyle or "BLIZZARD"
+    end
+    return NormalizeIconStyle(style, "BLIZZARD")
+end
+
+local function CustomIconPath(style, file, useMidnight)
+    local folder = CUSTOM_STYLES[style]
+    if not folder then return nil end
+    if useMidnight and not CUSTOM_STYLES_NO_MIDNIGHT_SUFFIX[style] then
+        file = file .. "_midnight"
+    end
+    return MEDIA_PREFIX .. folder .. "\\" .. file
+end
+
+function GF.GetStatusIconTexture(style, iconType, role, useMidnight)
+    style = NormalizeIconStyle(style, "BLIZZARD")
     local folder = CUSTOM_STYLES[style]
     if folder then
-        local file = ROLE_MAP[role] or "dps"
-        if conf.useMidnightIcons then file = file .. "_midnight" end
-        return MEDIA_PREFIX .. folder .. "\\" .. file, 0, 1, 0, 1
+        local file
+        if iconType == "role" then
+            file = ROLE_MAP[role] or "dps"
+        elseif iconType == "assist" then
+            file = "assist"
+        else
+            file = "leader"
+        end
+        return CustomIconPath(style, file, useMidnight == true), 0, 1, 0, 1
     end
+    if iconType == "leader" then return BLIZZARD_LEADER_TEX, 0, 1, 0, 1 end
+    if iconType == "assist" then return BLIZZARD_ASSIST_TEX, 0, 1, 0, 1 end
     local c = BLIZZARD_ROLE_COORDS[role] or BLIZZARD_ROLE_COORDS.DAMAGER
     return BLIZZARD_ROLE_TEX, c[1], c[2], c[3], c[4]
 end
 
-function GF.GetLeaderTexture(kind)
+function GF.GetIndicatorIconStyle(kind, indicatorKey)
     local conf = GF.GetConf(kind)
-    local style = conf.iconStyle or "BLIZZARD"
-    local folder = CUSTOM_STYLES[style]
-    if folder then
-        local file = "leader"
-        if conf.useMidnightIcons then file = file .. "_midnight" end
-        return MEDIA_PREFIX .. folder .. "\\" .. file, 0, 1, 0, 1
-    end
-    return BLIZZARD_LEADER_TEX, 0, 1, 0, 1
+    return IndicatorIconStyle(conf, indicatorKey)
 end
 
-function GF.GetAssistTexture(kind)
+function GF.GetRoleTexture(kind, role, styleOverride)
     local conf = GF.GetConf(kind)
-    local style = conf.iconStyle or "BLIZZARD"
-    local folder = CUSTOM_STYLES[style]
-    if folder then
-        local file = "assist"
-        if conf.useMidnightIcons then file = file .. "_midnight" end
-        return MEDIA_PREFIX .. folder .. "\\" .. file, 0, 1, 0, 1
-    end
-    return BLIZZARD_ASSIST_TEX, 0, 1, 0, 1
+    local style = NormalizeIconStyle(styleOverride, IndicatorIconStyle(conf, "roleIcon"))
+    return GF.GetStatusIconTexture(style, "role", role, conf and conf.useMidnightIcons == true)
+end
+
+function GF.GetLeaderTexture(kind, styleOverride)
+    local conf = GF.GetConf(kind)
+    local style = NormalizeIconStyle(styleOverride, IndicatorIconStyle(conf, "leaderIcon"))
+    return GF.GetStatusIconTexture(style, "leader", nil, conf and conf.useMidnightIcons == true)
+end
+
+function GF.GetAssistTexture(kind, styleOverride)
+    local conf = GF.GetConf(kind)
+    local style = NormalizeIconStyle(styleOverride, IndicatorIconStyle(conf, "assistIcon"))
+    return GF.GetStatusIconTexture(style, "assist", nil, conf and conf.useMidnightIcons == true)
 end
 
 GF.ICON_STYLE_ITEMS = {
     { key = "BLIZZARD",      label = "Blizzard (Default)" },
+    { key = "CLASSIC",       label = "Classic"            },
+    { key = "MIDNIGHT",      label = "Midnight"           },
     { key = "GLOSSY_ORBS",   label = "Glossy Orbs"        },
     { key = "DARK_EMBOSS",   label = "Dark Emboss"        },
     { key = "GLASS_PANELS",  label = "Glass Panels"       },
@@ -1980,6 +2031,37 @@ GF.ICON_STYLE_ITEMS = {
     { key = "DIAMONDS",      label = "Diamonds"           },
     { key = "SQUARES",       label = "Squares"            },
 }
+
+function GF.GetIconStyleItems(includeDefault)
+    local out = {}
+    if includeDefault then
+        out[#out + 1] = { value = "DEFAULT", text = "Follow global style" }
+    end
+    for i = 1, #GF.ICON_STYLE_ITEMS do
+        local item = GF.ICON_STYLE_ITEMS[i]
+        out[#out + 1] = {
+            value = item.value or item.key,
+            text = item.text or item.label or item.value or item.key,
+        }
+    end
+    return out
+end
+
+_G.MSUF_GetStatusIconPackValues = function(includeDefault)
+    return GF.GetIconStyleItems(includeDefault == true)
+end
+
+_G.MSUF_GetRoleStatusIconTexture = function(style, role, useMidnight)
+    return GF.GetStatusIconTexture(style, "role", role, useMidnight == true)
+end
+
+_G.MSUF_GetLeaderStatusIconTexture = function(style, useMidnight)
+    return GF.GetStatusIconTexture(style, "leader", nil, useMidnight == true)
+end
+
+_G.MSUF_GetAssistStatusIconTexture = function(style, useMidnight)
+    return GF.GetStatusIconTexture(style, "assist", nil, useMidnight == true)
+end
 
 ------------------------------------------------------------------------
 -- Expose for other modules

@@ -139,11 +139,31 @@ local DEFAULT_SYMBOLS = {
     { value = "DEFAULT", text = "Default" },
 }
 
+local function StatusIconPackValues()
+    local fn = _G.MSUF_GetStatusIconPackValues
+    if type(fn) == "function" then return fn(false) end
+    return {
+        { value = "BLIZZARD", text = "Blizzard (Default)" },
+        { value = "CLASSIC", text = "Classic" },
+        { value = "MIDNIGHT", text = "Midnight" },
+        { value = "GLOSSY_ORBS", text = "Glossy Orbs" },
+        { value = "DARK_EMBOSS", text = "Dark Emboss" },
+        { value = "GLASS_PANELS", text = "Glass Panels" },
+        { value = "NEON_OUTLINE", text = "Neon Outline" },
+        { value = "RING_SYMBOLS", text = "Ring Symbols" },
+        { value = "DOTS", text = "Dots" },
+        { value = "SHAPES", text = "Shapes" },
+        { value = "DIAMONDS", text = "Diamonds" },
+        { value = "SQUARES", text = "Squares" },
+    }
+end
+
 local STATUS_CONTROLS = {
     {
         value = "leader", text = "Leader / Assist",
         allowed = function(unit) return unit == "player" or unit == "target" end,
         show = "showLeaderIcon", defaultShow = true,
+        iconStyle = "leaderIconStyle", defaultIconStyle = "BLIZZARD",
         size = "leaderIconSize", defaultSize = 14,
         anchor = "leaderIconAnchor", defaultAnchor = "TOPLEFT", anchors = STATUS_CORNER_ANCHORS,
         x = "leaderIconOffsetX", defaultX = 0,
@@ -376,7 +396,7 @@ local COPY_TEXT_FIELDS = {
 }
 
 local COPY_INDICATOR_FIELDS = {
-    "showLeaderIcon", "leaderIconOffsetX", "leaderIconOffsetY", "leaderIconAnchor", "leaderIconSize", "leaderIconLayer",
+    "showLeaderIcon", "leaderIconStyle", "leaderIconOffsetX", "leaderIconOffsetY", "leaderIconAnchor", "leaderIconSize", "leaderIconLayer",
     "showRaidMarker", "raidMarkerOffsetX", "raidMarkerOffsetY", "raidMarkerAnchor", "raidMarkerSize", "raidMarkerLayer",
     "showRaidGroupInName", "raidGroupNameAnchor", "raidGroupNameOffsetX", "raidGroupNameOffsetY", "raidGroupNameStyle",
     "showLevelIndicator", "levelIndicatorOffsetX", "levelIndicatorOffsetY", "levelIndicatorAnchor", "levelIndicatorSize", "levelIndicatorLayer",
@@ -1026,6 +1046,7 @@ UnitPage.COMBAT_SYMBOLS = COMBAT_SYMBOLS
 UnitPage.RESTED_SYMBOLS = RESTED_SYMBOLS
 UnitPage.RESS_SYMBOLS = RESS_SYMBOLS
 UnitPage.DEFAULT_SYMBOLS = DEFAULT_SYMBOLS
+UnitPage.StatusIconPackValues = StatusIconPackValues
 UnitPage.STATUS_CONTROLS = STATUS_CONTROLS
 UnitPage.TEXT_ANCHORS = TEXT_ANCHORS
 UnitPage.HP_MODES = HP_MODES

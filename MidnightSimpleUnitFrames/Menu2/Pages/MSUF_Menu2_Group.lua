@@ -170,9 +170,9 @@ local STATUS_ICON_ANCHORS = {
 }
 
 local GF_STATUS_ICON_SPECS = {
-    { value = "roleIcon", text = "Role Icon", enabled = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1 },
-    { value = "leaderIcon", text = "Leader", enabled = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
-    { value = "assistIcon", text = "Assist", enabled = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
+    { value = "roleIcon", text = "Role Icon", enabled = "roleIcon", iconStyle = "roleIconStyle", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1 },
+    { value = "leaderIcon", text = "Leader", enabled = "leaderIcon", iconStyle = "leaderIconStyle", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
+    { value = "assistIcon", text = "Assist", enabled = "assistIcon", iconStyle = "assistIconStyle", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
     { value = "raidMarker", text = "Raid Marker", enabled = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 3 },
     { value = "readyCheckIcon", text = "Ready Check", enabled = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
     { value = "summonIcon", text = "Summon", enabled = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
@@ -379,7 +379,7 @@ local GF_COPY_CATEGORIES = {
     { key = "font", label = "Font Override", keys = { "fontOverride", "fontOutline", "useGlobalFontColor", "fontR", "fontG", "fontB" } },
     { key = "border", label = "Background & Opacity", keys = { "bgR", "bgG", "bgB", "bgA", "hpBarAlpha", "hpBgAlpha", "hpTextIgnoreAlpha", "alphaPreserveHPColor" } },
     { key = "range", label = "Range Fade", keys = { "rangeFadeEnabled", "rangeFadeAlpha", "rangeFadeLayerMode", "offlineAlpha", "alphaPreserveHPColor" } },
-    { key = "indicators", label = "Indicators & Status Icons", keys = { "showGroupNumber", "groupNumberSize", "groupNumberAnchor", "groupNumberX", "groupNumberY", "groupBorderEnabled", "groupBorderSize", "groupBorderPadding", "groupBorderR", "groupBorderG", "groupBorderB", "groupBorderA", "iconStyle", "useMidnightIcons", "statusText", "statusTextSize", "statusTextAnchor", "statusOffsetX", "statusOffsetY", "statusTextLayer", "statusGhostText", "statusGhostTextSize", "statusGhostTextAnchor", "statusGhostOffsetX", "statusGhostOffsetY", "statusGhostTextLayer", "statusAFKText", "statusAFKTextSize", "statusAFKTextAnchor", "statusAFKOffsetX", "statusAFKOffsetY", "statusAFKTextLayer" }, prefix = { "si_", "statusIcon", "indicator" } },
+    { key = "indicators", label = "Indicators & Status Icons", keys = { "showGroupNumber", "groupNumberSize", "groupNumberAnchor", "groupNumberX", "groupNumberY", "groupBorderEnabled", "groupBorderSize", "groupBorderPadding", "groupBorderR", "groupBorderG", "groupBorderB", "groupBorderA", "iconStyle", "useMidnightIcons", "roleIconStyle", "leaderIconStyle", "assistIconStyle", "statusText", "statusTextSize", "statusTextAnchor", "statusOffsetX", "statusOffsetY", "statusTextLayer", "statusGhostText", "statusGhostTextSize", "statusGhostTextAnchor", "statusGhostOffsetX", "statusGhostOffsetY", "statusGhostTextLayer", "statusAFKText", "statusAFKTextSize", "statusAFKTextAnchor", "statusAFKOffsetX", "statusAFKOffsetY", "statusAFKTextLayer" }, prefix = { "si_", "statusIcon", "indicator" } },
     { key = "auras", label = "Auras", tables = { "auras" } },
     { key = "highlight", label = "Highlight & Aggro", prefix = { "hl", "dispel" } },
     { key = "dstripe", label = "Debuff Stripe", prefix = { "debuffStripe" } },
@@ -1411,6 +1411,8 @@ local function IconStyleValues()
     if gf and type(gf.ICON_STYLE_ITEMS) == "table" then return gf.ICON_STYLE_ITEMS end
     return {
         { value = "BLIZZARD", text = "Blizzard (Default)" },
+        { value = "CLASSIC", text = "Classic" },
+        { value = "MIDNIGHT", text = "Midnight" },
         { value = "GLOSSY_ORBS", text = "Glossy Orbs" },
         { value = "DARK_EMBOSS", text = "Dark Emboss" },
         { value = "GLASS_PANELS", text = "Glass Panels" },

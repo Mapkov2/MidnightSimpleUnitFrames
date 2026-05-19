@@ -65,6 +65,34 @@ local CreateFrame, GetTime = CreateFrame, GetTime
 local _MSUF_issecretvalue = _G.issecretvalue
 local _msuf_inCombat = false        -- P0: cached combat state (no C-call in hot paths)
 
+local MSUF_LEADER_ICON_TEX = "Interface\\GroupFrame\\UI-Group-LeaderIcon"
+local MSUF_ASSIST_ICON_TEX = "Interface\\GroupFrame\\UI-Group-AssistantIcon"
+
+local function MSUF_GetLeaderAssistTexture(conf, g, isAssist)
+    local fallback = isAssist and MSUF_ASSIST_ICON_TEX or MSUF_LEADER_ICON_TEX
+    local style = conf and conf.leaderIconStyle
+    if type(style) ~= "string" or style == "" then style = g and g.leaderIconStyle end
+    if type(style) ~= "string" or style == "" or style == "DEFAULT" or style == "BLIZZARD" then
+        return fallback, 0, 1, 0, 1
+    end
+
+    local resolver = isAssist and _G.MSUF_GetAssistStatusIconTexture or _G.MSUF_GetLeaderStatusIconTexture
+    if type(resolver) == "function" then
+        local tex, l, r, t, b = resolver(style, false)
+        if type(tex) == "string" and tex ~= "" then
+            return tex, l or 0, r or 1, t or 0, b or 1
+        end
+    end
+    return fallback, 0, 1, 0, 1
+end
+
+local function MSUF_SetLeaderAssistTexture(texture, conf, g, isAssist)
+    if not (texture and texture.SetTexture) then return end
+    local tex, l, r, t, b = MSUF_GetLeaderAssistTexture(conf, g, isAssist)
+    texture:SetTexture(tex)
+    if texture.SetTexCoord then texture:SetTexCoord(l or 0, r or 1, t or 0, b or 1) end
+end
+
 local function MSUF_OptionsApplyCombatLocked()
     return _msuf_inCombat == true
         or _G.MSUF_InCombat == true
@@ -4183,10 +4211,14 @@ local function MSUF_UFStep_NameLevelLeaderRaid(self, unit, conf, g)
         if not ns.Util.Enabled(conf, g, "showLeaderIcon", true) then
             ns.Util.SetShown(self.leaderIcon, false)
         else
-            -- NOTE: use escaped backslashes in lua strings (otherwise the path becomes invalid).
-            local tex = (UnitIsGroupLeader and UnitIsGroupLeader(unit) and "Interface\\GroupFrame\\UI-Group-LeaderIcon")
-                or (UnitIsGroupAssistant and UnitIsGroupAssistant(unit) and "Interface\\GroupFrame\\UI-Group-AssistantIcon")
-            if tex and self.leaderIcon.SetTexture then self.leaderIcon:SetTexture(tex); ns.Util.SetShown(self.leaderIcon, true) else ns.Util.SetShown(self.leaderIcon, false) end
+            local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit) and true or false
+            local isAssist = (not isLeader) and UnitIsGroupAssistant and UnitIsGroupAssistant(unit) and true or false
+            if isLeader or isAssist then
+                MSUF_SetLeaderAssistTexture(self.leaderIcon, conf, g, isAssist)
+                ns.Util.SetShown(self.leaderIcon, true)
+            else
+                ns.Util.SetShown(self.leaderIcon, false)
+            end
         end
     end
     if self.leaderIcon and _UF.LeaderIcon then _UF.LeaderIcon(self) end
@@ -4586,7 +4618,7 @@ if not self.isBoss and not self._msufIsPlayer and _G.MSUF_PreviewTestMode and no
         if _UF.LeaderIcon then _UF.LeaderIcon(self) end
         -- Set texture + visibility AFTER layout (layout only does position/size)
         if showLeader then
-            self.leaderIcon:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
+            MSUF_SetLeaderAssistTexture(self.leaderIcon, conf, g, false)
             self.leaderIcon:Show()
         else
             self.leaderIcon:Hide()

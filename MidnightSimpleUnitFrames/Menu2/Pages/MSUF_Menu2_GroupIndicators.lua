@@ -95,6 +95,25 @@ local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
 
+local function IconPackValues()
+    local gf = GF()
+    if gf and type(gf.GetIconStyleItems) == "function" then
+        return gf.GetIconStyleItems(true)
+    end
+    local values = { { value = "DEFAULT", text = "Follow global style" } }
+    local src = type(IconStyleValues) == "function" and IconStyleValues() or {}
+    for i = 1, #src do
+        local item = src[i]
+        if type(item) == "table" then
+            values[#values + 1] = {
+                value = item.value or item.key,
+                text = item.text or item.label or item.value or item.key,
+            }
+        end
+    end
+    return values
+end
+
 local function HeaderHintColor()
     return { 0.45, 0.52, 0.65, 1 }
 end
@@ -230,7 +249,7 @@ local function BuildGFIndicators(ctx)
         if entry then entry._msuf2RefreshState = RefreshIndicatorsState end
     end
 
-    local sicons = b:CollapsibleSection("sicons", "Status Icons", 488, false)
+    local sicons = b:CollapsibleSection("sicons", "Status Icons", 532, false)
     local siconW = sicons._msuf2Width or ctx.width or 720
     local siconGap = 16
     local siconLeftX = 20
@@ -239,7 +258,7 @@ local function BuildGFIndicators(ctx)
     local siconRightX = siconLeftX + siconLeftW + siconGap
     local siconRightW = siconInnerW - siconLeftW - siconGap
     local styleCard = W.ControlCard(sicons, "Style", nil, siconLeftX, -38, siconLeftW, 132)
-    local selectedCard = W.ControlCard(sicons, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 214)
+    local selectedCard = W.ControlCard(sicons, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 258)
     local previewCard = W.ControlCard(sicons, "Status Preview", nil, siconRightX, -38, siconRightW, 118)
     local placementCard = W.ControlCard(sicons, "Placement", nil, siconRightX, -174, siconRightW, 286)
 
@@ -280,9 +299,23 @@ local function BuildGFIndicators(ctx)
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
 
+    local iconPack = W.Dropdown(selectedCard, "Icon pack", IconPackValues, siconLeftW)
+    M.BindDropdown(ctx, iconPack,
+        function()
+            local spec = CurrentGFStatusSpec()
+            return spec and spec.iconStyle and Val(CurrentScope(), spec.iconStyle, "DEFAULT") or "DEFAULT"
+        end,
+        function(value)
+            local spec = CurrentGFStatusSpec()
+            if not (spec and spec.iconStyle) then return end
+            Set(CurrentScope(), spec.iconStyle, value or "DEFAULT", "visual")
+            if RefreshGFPreview then RefreshGFPreview() end
+        end)
+    W.MoveWidget(iconPack, selectedCard, 16, -106, siconLeftW - 32, "LEFT")
+
     -- Role filter group: only visible when Role Icon indicator is selected
     local roleFilterGroup = CreateFrame("Frame", nil, selectedCard)
-    roleFilterGroup:SetPoint("TOPLEFT", selectedCard, "TOPLEFT", 0, -112)
+    roleFilterGroup:SetPoint("TOPLEFT", selectedCard, "TOPLEFT", 0, -164)
     local roleFilterW = max(180, siconLeftW - 32)
     roleFilterGroup:SetSize(roleFilterW, 60)
 
@@ -333,7 +366,7 @@ local function BuildGFIndicators(ctx)
         local spec = CurrentGFStatusSpec()
         local conf = Conf(kind)
         local gf = GF()
-        for _, key in ipairs({ spec.size, spec.anchor, spec.x, spec.y, spec.layer }) do
+        for _, key in ipairs({ spec.size, spec.anchor, spec.x, spec.y, spec.layer, spec.iconStyle }) do
             if key then
                 conf[key] = gf and gf.GetDefault and gf.GetDefault(kind, key) or nil
             end
@@ -422,6 +455,14 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(previewAll, true)
         SetOptionEnabled(midnightStyle, true)
         SetOptionEnabled(statusEnabled, true)
+        local hasIconPack = spec and spec.iconStyle
+        if W.SetControlShown then
+            W.SetControlShown(iconPack, hasIconPack and true or false)
+        else
+            iconPack:SetShown(hasIconPack and true or false)
+            if iconPack._msuf2Title then iconPack._msuf2Title:SetShown(hasIconPack and true or false) end
+        end
+        SetOptionEnabled(iconPack, hasIconPack and enabled)
         local isRoleIcon = spec.value == "roleIcon"
         roleFilterGroup:SetShown(isRoleIcon)
         if isRoleIcon then

@@ -24,6 +24,7 @@ local COMBAT_SYMBOLS = UP.COMBAT_SYMBOLS or {}
 local RESTED_SYMBOLS = UP.RESTED_SYMBOLS or {}
 local RESS_SYMBOLS = UP.RESS_SYMBOLS or {}
 local DEFAULT_SYMBOLS = UP.DEFAULT_SYMBOLS or {}
+local StatusIconPackValues = UP.StatusIconPackValues or function() return {} end
 local STATUS_CONTROLS = UP.STATUS_CONTROLS or {}
 local TEXT_ANCHORS = UP.TEXT_ANCHORS or {}
 local HP_MODES = UP.HP_MODES or {}
@@ -2441,6 +2442,23 @@ local function BuildStatus(ctx, builder, unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
     end)
 
+    local iconPack = W.Dropdown(placementCard, "Icon pack", StatusIconPackValues, 260)
+    PlaceDropdown(iconPack, placementCard, placeRightX, -54, placeRightW)
+    M.BindDropdown(ctx, iconPack,
+        function()
+            local spec = CurrentStatusSpec(unit)
+            return spec and spec.iconStyle and ReadStatusString(unit, spec.iconStyle, spec.defaultIconStyle or "BLIZZARD") or "BLIZZARD"
+        end,
+        function(value)
+            local spec = CurrentStatusSpec(unit)
+            if not (spec and spec.iconStyle) then return end
+            SetString(unit, spec.iconStyle, value or spec.defaultIconStyle or "BLIZZARD", "MSUF2_STATUS_ICON_PACK", { preview = true })
+            RefreshStatusRuntime(unit, spec)
+        end)
+    RegisterStatusSearch(iconPack, "Status indicator icon pack", {
+        "icon pack", "leader icon pack", "assist icon pack", "role icon pack", "status icon pack",
+    }, StatusIconPackValues)
+
     local raidGroupStyle = W.Dropdown(placementCard, "Style", RAID_GROUP_NAME_STYLES, 180)
     PlaceDropdown(raidGroupStyle, placementCard, placeRightX, -54, min(180, placeRightW))
     M.BindDropdown(ctx, raidGroupStyle,
@@ -2570,6 +2588,7 @@ local function BuildStatus(ctx, builder, unit)
             else
                 conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.size], conf[spec.layer] = nil, nil, nil, nil, nil
                 if spec.symbol then conf[spec.symbol] = nil end
+                if spec.iconStyle then conf[spec.iconStyle] = nil end
             end
             RefreshStatusRuntime(unit, spec)
             if M.SelectPage then M.SelectPage(ctx.key) end
@@ -2624,6 +2643,7 @@ local function BuildStatus(ctx, builder, unit)
             return
         end
         PlaceDropdown(symbol, placementCard, placeRightX, -54, placeRightW)
+        PlaceDropdown(iconPack, placementCard, placeRightX, -54, placeRightW)
         PlaceDropdown(raidGroupStyle, placementCard, placeRightX, -54, min(180, placeRightW))
         PlaceSlider(size, placementCard, placeLeftX, -54, placeLeftW)
         PlaceDropdown(anchor, placementCard, placeLeftX, -116, placeLeftW)
@@ -2637,12 +2657,14 @@ local function BuildStatus(ctx, builder, unit)
         local spec = CurrentStatusSpec(unit)
         local inlineName = spec and spec.inlineName == true
         local hasSymbol = spec and spec.symbol
+        local hasIconPack = spec and spec.iconStyle
         local showStateStyle = hasSymbol and true or false
         local showTestMode = spec and spec.statusRuntime and true or false
         LayoutStatusControls(inlineName)
         if W.SetControlShown then
             W.SetControlShown(midnight, showStateStyle)
             W.SetControlShown(symbol, hasSymbol)
+            W.SetControlShown(iconPack, hasIconPack)
             W.SetControlShown(raidGroupStyle, inlineName)
             W.SetControlShown(test, showTestMode)
             W.SetControlShown(size, not inlineName)
@@ -2658,6 +2680,8 @@ local function BuildStatus(ctx, builder, unit)
         else
             if midnight then midnight:SetShown(showStateStyle) end
             if symbol then symbol:SetShown(hasSymbol and true or false) end
+            if iconPack then iconPack:SetShown(hasIconPack and true or false) end
+            if iconPack and iconPack._msuf2Title then iconPack._msuf2Title:SetShown(hasIconPack and true or false) end
             if raidGroupStyle then raidGroupStyle:SetShown(inlineName) end
             if test then test:SetShown(showTestMode) end
             if size then size:SetShown(not inlineName) end
@@ -2673,6 +2697,7 @@ local function BuildStatus(ctx, builder, unit)
         end
         local isEnabled = spec and ReadStatusBool(unit, spec.show, spec.defaultShow)
         SetControlEnabled(symbol, hasSymbol and isEnabled)
+        SetControlEnabled(iconPack, hasIconPack and isEnabled)
         SetControlEnabled(raidGroupStyle, inlineName and isEnabled)
         SetControlEnabled(size, (not inlineName) and isEnabled)
         SetControlEnabled(anchor, isEnabled)
