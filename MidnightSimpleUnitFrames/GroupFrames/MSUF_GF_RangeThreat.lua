@@ -24,15 +24,8 @@ local function _RuntimeEnabledForFrame(f)
     return f ~= nil
 end
 
-local function _GF_RefreshBorder(f, unit)
-    local fn = GF.RefreshBorder or _G.MSUF_GF_RefreshBorder
-    if type(fn) == "function" then return fn(f, unit) end
-end
-
-local function UpdateStatusText(f, unit, forceAway)
-    local fn = GF.UpdateStatusText or _G.MSUF_GF_UpdateStatus
-    if type(fn) == "function" then return fn(f, unit, forceAway) end
-end
+local _GF_RefreshBorder = GF.RefreshBorder or _G.MSUF_GF_RefreshBorder or function() end
+local UpdateStatusText = GF.UpdateStatusText or _G.MSUF_GF_UpdateStatus or function() end
 
 -- Range fade (1:1 EQoL pattern)
 -- Secret-safe: NEVER compare/type()/conditional on inRange.

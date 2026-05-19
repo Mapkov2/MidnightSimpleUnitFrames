@@ -243,61 +243,37 @@ local DISPEL_COLORS = {
 }
 
 ------------------------------------------------------------------------
--- Aura-effects bridge
--- Real UNIT_AURA dispatch, dispel scan, overlay/glow, and debuff stripe
--- live in GroupFrames\\MSUF_GF_AuraEffects.lua. These local wrappers keep
--- existing hot-path call sites stable while the implementation is split.
+-- Aura-effects runtime loads before Effects so UNIT_AURA and border paths bind
+-- direct function upvalues instead of per-event compatibility lookups.
 ------------------------------------------------------------------------
-local function _GF_RefreshBorder(f, unit)
-    local fn = GF.RefreshBorder or _G.MSUF_GF_RefreshBorder
-    if type(fn) == "function" then return fn(f, unit) end
+local _GF_RefreshBorder = GF.RefreshBorder or _G.MSUF_GF_RefreshBorder or function() end
+local _GF_StopDispelGlow = GF.StopDispelGlow or _G.MSUF_GF_StopDispelGlow or function() end
+local _GF_ApplyDispelOverlay = GF.ApplyDispelOverlay or _G.MSUF_GF_ApplyDispelOverlay or function() end
+local _GF_ApplyDebuffStripe = GF.ApplyDebuffStripe or _G.MSUF_GF_ApplyDebuffStripe or function() end
+local _GF_ClearNativeSuppressedDispel = GF.ClearNativeSuppressedDispel or function() end
+local _FrameHasStripeDebuff = GF.FrameHasStripeDebuff or function() return false end
+local dispatchAura = GF.DispatchAura or _G.MSUF_GF_DispatchAura or function() end
+
+if type(GF.FinishAuraVisuals) ~= "function" then
+    function GF.FinishAuraVisuals(f, unit, c, updateInfo)
+        local fn = GF.FinishAuraVisualsImpl
+        if type(fn) == "function" then return fn(f, unit, c, updateInfo) end
+    end
 end
 
-local function _GF_StopDispelGlow(f)
-    local fn = GF.StopDispelGlow or _G.MSUF_GF_StopDispelGlow
-    if type(fn) == "function" then return fn(f) end
+if type(GF._UpdateDispel) ~= "function" then
+    function GF._UpdateDispel(f, unit)
+        local fn = GF.UpdateDispel
+        if type(fn) == "function" then return fn(f, unit) end
+    end
 end
 
-local function _GF_ApplyDispelOverlay(f)
-    local fn = GF.ApplyDispelOverlay or _G.MSUF_GF_ApplyDispelOverlay
-    if type(fn) == "function" then return fn(f) end
-end
-
-local function _GF_ApplyDebuffStripe(f)
-    local fn = GF.ApplyDebuffStripe or _G.MSUF_GF_ApplyDebuffStripe
-    if type(fn) == "function" then return fn(f) end
-end
-
-local function _GF_ClearNativeSuppressedDispel(f, unit)
-    local fn = GF.ClearNativeSuppressedDispel
-    if type(fn) == "function" then return fn(f, unit) end
-end
-
-local function _FrameHasStripeDebuff(f, unit)
-    local fn = GF.FrameHasStripeDebuff
-    if type(fn) == "function" then return fn(f, unit) end
-    return false
-end
-
-local function dispatchAura(f, unit, updateInfo)
-    local fn = GF.DispatchAura
-    if type(fn) == "function" then return fn(f, unit, updateInfo) end
-end
-
-function GF.FinishAuraVisuals(f, unit, c, updateInfo)
-    local fn = GF.FinishAuraVisualsImpl
-    if type(fn) == "function" then return fn(f, unit, c, updateInfo) end
-end
-
-function GF._UpdateDispel(f, unit)
-    local fn = GF.UpdateDispel
-    if type(fn) == "function" then return fn(f, unit) end
-end
-
-function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
-    local fn = GF.UpdateDispelFromAuraDelta
-    if type(fn) == "function" then return fn(f, unit, updateInfo) end
-    return false, false
+if type(GF._UpdateDispelFromAuraDelta) ~= "function" then
+    function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
+        local fn = GF.UpdateDispelFromAuraDelta
+        if type(fn) == "function" then return fn(f, unit, updateInfo) end
+        return false, false
+    end
 end
 
 local function GetDispelColor(dispelName)
@@ -313,23 +289,16 @@ local function ResolveDispelColor(dispelName, f)
 end
 
 ------------------------------------------------------------------------
--- Range/threat bridge
--- Real range fade and threat state live in GroupFrames\\MSUF_GF_RangeThreat.lua.
+-- Range/threat runtime loads before Effects for direct hot-path bindings.
 ------------------------------------------------------------------------
-local function ApplyRangeFade(f, unit, inRange)
-    local fn = GF.ApplyRangeFade
-    if type(fn) == "function" then return fn(f, unit, inRange) end
-end
+local ApplyRangeFade = GF.ApplyRangeFade or function() end
+local _GF_ShouldApplyRangeOrFrameAlpha = GF.ShouldApplyRangeOrFrameAlpha or function() return false end
 
-function GF.RefreshGroupAlphas()
-    local fn = GF.RefreshGroupAlphasImpl
-    if type(fn) == "function" then return fn() end
-end
-
-local function _GF_ShouldApplyRangeOrFrameAlpha(f, c, kind)
-    local fn = GF.ShouldApplyRangeOrFrameAlpha
-    if type(fn) == "function" then return fn(f, c, kind) end
-    return false
+if type(GF.RefreshGroupAlphas) ~= "function" then
+    function GF.RefreshGroupAlphas()
+        local fn = GF.RefreshGroupAlphasImpl
+        if type(fn) == "function" then return fn() end
+    end
 end
 
 local function _NormalizeRangeFadeLayerMode(mode)
@@ -339,45 +308,27 @@ local function _NormalizeRangeFadeLayerMode(mode)
     return "frame"
 end
 
--- Highlight border styling lives in GroupFrames\MSUF_GF_Highlight.lua.
-local function _applyHighlightBorderStyle(...)
-    local fn = GF.ApplyHighlightBorderStyle or _G.MSUF_GF_ApplyHLBorderStyle
-    if type(fn) == "function" and fn ~= _applyHighlightBorderStyle then return fn(...) end
-end-- Per-frame settings cache lives in GroupFrames\MSUF_GF_FrameCache.lua.
+-- Highlight and status modules load before Effects so hot paths bind direct
+-- function upvalues instead of per-event compatibility lookups.
+local _applyHighlightBorderStyle = GF.ApplyHighlightBorderStyle or _G.MSUF_GF_ApplyHLBorderStyle or function() end
+local _GF_QuickBorderUpdate = GF.QuickBorderUpdate or _G.MSUF_GF_QuickBorderUpdate or function() end
+local UpdateTargetIndicator = GF.UpdateTargetIndicator or _G.MSUF_GF_UpdateTarget or function() end
+local UpdateStatusText = GF.UpdateStatusText or _G.MSUF_GF_UpdateStatus or function() end
+local UpdateAggro = GF.UpdateAggro or GF._UpdateAggro or _G.MSUF_GF_UpdateAggro or function() end
+
+-- Per-frame settings cache lives in GroupFrames\MSUF_GF_FrameCache.lua.
 local function _GF_BuildFrameCachePending(f)
     local fn = GF.BuildFrameCacheImpl
     if type(fn) == "function" then return fn(f) end
 end
 GF.BuildFrameCache = GF.BuildFrameCache or _GF_BuildFrameCachePending
 
--- Lightweight highlight updates live in GroupFrames\MSUF_GF_Highlight.lua.
-local function _GF_QuickBorderUpdate(f)
-    local fn = GF.QuickBorderUpdate or _G.MSUF_GF_QuickBorderUpdate
-    if type(fn) == "function" and fn ~= _GF_QuickBorderUpdate then return fn(f) end
-end------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- Dispel overlay, debuff stripe, native-dispel cleanup, and full border refresh live in GroupFrames\\MSUF_GF_AuraEffects.lua.
 
 ------------------------------------------------------------------------
--- Threat bridge. Implementation lives in GroupFrames\\MSUF_GF_RangeThreat.lua.
-------------------------------------------------------------------------
-local function UpdateAggro(f, unit)
-    local fn = GF.UpdateAggro or GF._UpdateAggro
-    if type(fn) == "function" and fn ~= UpdateAggro then return fn(f, unit) end
-end
-GF._UpdateAggro = UpdateAggro
-
 -- Dispel scan lives in GroupFrames\\MSUF_GF_AuraEffects.lua.
 
--- Target indicator border lives in GroupFrames\MSUF_GF_Highlight.lua.
-local function UpdateTargetIndicator(f, unit)
-    local fn = GF.UpdateTargetIndicator or _G.MSUF_GF_UpdateTarget
-    if type(fn) == "function" and fn ~= UpdateTargetIndicator then return fn(f, unit) end
-end
--- Status text and offline-hide lifecycle live in GroupFrames\MSUF_GF_StatusOffline.lua.
-local function UpdateStatusText(f, unit, forceAway)
-    local fn = GF.UpdateStatusText or _G.MSUF_GF_UpdateStatus
-    if type(fn) == "function" then return fn(f, unit, forceAway) end
-end
 ------------------------------------------------------------------------
 -- Health color (GF-independent barMode, then global fallback)
 -- Optional hp / hpMax parameters: when the caller (e.g. dispatchHealthFull)

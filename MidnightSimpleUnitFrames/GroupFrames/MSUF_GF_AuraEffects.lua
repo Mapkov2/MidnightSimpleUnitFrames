@@ -48,16 +48,10 @@ local function _GF_IsBlizzardDispelRendererActive(conf)
     return false
 end
 
-local function _applyHighlightBorderStyle(border, conf, edgeSz, ofs, texKey, layer, r, g, b, a)
-    local fn = GF.ApplyHighlightBorderStyle or _G.MSUF_GF_ApplyHLBorderStyle
-    if type(fn) == "function" then return fn(border, conf, edgeSz, ofs, texKey, layer, r, g, b, a) end
-end
-
-local function _NotifyRoundedGFHighlight(border)
-    local fn = GF.NotifyRoundedHighlight
-    if type(fn) == "function" then return fn(border) end
+local _applyHighlightBorderStyle = GF.ApplyHighlightBorderStyle or _G.MSUF_GF_ApplyHLBorderStyle or function() end
+local _NotifyRoundedGFHighlight = GF.NotifyRoundedHighlight or function(border)
     if _G.MSUF_RoundedUF_Active ~= true then return end
-    fn = _G.MSUF_RoundedUF_OnGroupHighlightChanged
+    local fn = _G.MSUF_RoundedUF_OnGroupHighlightChanged
     if type(fn) == "function" then fn(border) end
 end
 

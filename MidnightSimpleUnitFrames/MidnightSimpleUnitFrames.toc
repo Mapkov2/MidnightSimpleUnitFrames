@@ -153,12 +153,12 @@ GroupFrames\MSUF_GF_DB.lua
 GroupFrames\MSUF_GF_Core.lua
 GroupFrames\MSUF_GF_StatusIcons.lua
 GroupFrames\MSUF_GF_Text.lua
-GroupFrames\MSUF_GF_Effects.lua
 GroupFrames\MSUF_GF_Highlight.lua
 GroupFrames\MSUF_GF_StatusOffline.lua
-GroupFrames\MSUF_GF_FrameCache.lua
 GroupFrames\MSUF_GF_AuraEffects.lua
 GroupFrames\MSUF_GF_RangeThreat.lua
+GroupFrames\MSUF_GF_Effects.lua
+GroupFrames\MSUF_GF_FrameCache.lua
 GroupFrames\MSUF_GF_TooltipMouseover.lua
 GroupFrames\MSUF_GF_Cleanup.lua
 GroupFrames\MSUF_GF_Events.lua

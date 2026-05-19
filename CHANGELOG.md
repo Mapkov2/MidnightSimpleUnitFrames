@@ -1,5 +1,39 @@
 # Changelog
 
+## 5.4 Beta 5 - 2026-05-19
+
+### Beta Release
+
+- Refactored the Group Frame effects runtime into clear internal modules instead of keeping text, aura effects, range/threat, events, cleanup, highlights, status/offline handling, frame cache, and tooltip/mouseover behavior in one large file.
+- Refactored Auras2 into clearer cache, collection, icon, layout, Masque, cooldown-text, render, reminder, event, and edit-mode responsibilities instead of concentrating aura state, icon reuse, filtering, layout, and rendering in the core/render files.
+- Added `Auras2/MSUF_A2_Cache.lua` for aura cache ownership, full scans, delta updates, invalidation, and aura table pooling.
+- Added `Auras2/MSUF_A2_Collect.lua` for zero-allocation helpful/harmful aura collection paths and sorted/unsorted list preparation.
+- Added `Auras2/MSUF_A2_Icons.lua` for icon pool ownership, acquire/release behavior, stack/timer/pandemic application, and icon cleanup.
+- Added `Auras2/MSUF_A2_Layout.lua` for aura icon positioning, row/column layout, and hide-unused behavior.
+- Kept `Auras2/MSUF_A2_Masque.lua` and `Auras2/MSUF_A2_CooldownText.lua` as dedicated render subsystems so Masque skinning and cooldown text updates stay out of the main aura render orchestration.
+- Refactored `Auras2/MSUF_A2_Render.lua` around render orchestration, shared buff/debuff commit handling, icon commit/layout boundaries, and preview/runtime separation.
+- Refactored `Core/MSUF_UnitframeCore.lua` by moving Target-of-Target inline widget logic into `Core/MSUF_UFCore_ToTInline.lua`, while keeping public runtime behavior and wrappers compatible.
+- Refactored the main frame backbone by moving preview/test-mode frame behavior into `Core/MSUF_FramePreview.lua`, keeping `MidnightSimpleUnitFrames.lua` focused more on public orchestration and real runtime frame setup.
+- Refactored Gameplay support by moving Blizzard Totem Preview handling into `Features/MSUF_Gameplay_TotemPreview.lua`, while keeping one public `ns.MSUF_RequestGameplayApply` path and apply coalescing.
+- Refactored ClassPower specialty logic by moving alternate mana handling into `ClassPower/MSUF_CP_AltMana.lua` and Balance Druid prediction into `ClassPower/MSUF_CP_BalanceDruid.lua`, leaving the controller closer to orchestration.
+- Refactored Boss Castbar preview handling into `MidnightSimpleUnitFrames_Castbars/Modules/BossCastbars_Preview.lua`, separating edit-mode/fake-cast preview behavior from runtime boss cast handling.
+- Reduced `GroupFrames/MSUF_GF_Effects.lua` to the Health, Power, overlay, and visual-dispatch orchestration path, making the remaining hot-path code easier to review and safer to profile.
+- Added `GroupFrames/MSUF_GF_Text.lua` for compiled text-slot handling, text dirty queues, and text retire cleanup.
+- Added `GroupFrames/MSUF_GF_AuraEffects.lua` for `UNIT_AURA` dispatch, dispel scanning, dispel overlay/glow, debuff stripe handling, and aura-effect refresh state.
+- Added `GroupFrames/MSUF_GF_RangeThreat.lua` for range fade, layered alpha handling, threat state, and the related lightweight event dispatch.
+- Added `GroupFrames/MSUF_GF_Events.lua` for unit-event masks, global event registration, event lifecycle, and roster/target/focus event routing.
+- Added `GroupFrames/MSUF_GF_Highlight.lua` for highlight configuration resolution, border styling, quick border updates, and target indicator rendering.
+- Added `GroupFrames/MSUF_GF_StatusOffline.lua` for AFK, DND, Dead, Ghost, and delayed offline-hide state handling.
+- Added `GroupFrames/MSUF_GF_FrameCache.lua` for cold-path per-frame configuration caching, event-bit calculation, and cache invalidation triggers.
+- Added `GroupFrames/MSUF_GF_TooltipMouseover.lua` for mouseover highlight styling, tooltip throttling, and Group Frame init hooks.
+- Added `GroupFrames/MSUF_GF_Cleanup.lua` so retired or hidden Group Frames release tooltip, text, aura, range, and offline-hide state through one cleanup entry point.
+- Preserved existing Group Frame public APIs and diagnostic wrappers, including update, aura, highlight, status, target, overlay, and frame-cache entry points.
+- Fixed a Group Frame target indicator risk by moving its secret-safe `UnitIsUnit` boolean normalization into the new highlight module instead of relying on a missing local helper.
+- Kept the Group Frame aura hot path conservative: no extra aura scans, no extra `UnitAura` or `C_UnitAuras` calls, no broader unit-event registration, and no new timer or `OnUpdate` loop.
+- Kept the frame-cache split on the cold apply/refresh path so cache construction is easier to maintain without adding work to frequent Health, Power, Aura, or Range events.
+- Updated the TOC load order so highlight, status, aura-effect, and range/threat helpers bind before the hot-path effects orchestrator, while the cold frame cache still loads after the shared effects exports it needs.
+- Verified the refactor with `luac -p` across project-owned Lua files and `git diff --check`.
+
 ## 5.4 Beta 3 - 2026-05-19
 
 ### Beta Release
