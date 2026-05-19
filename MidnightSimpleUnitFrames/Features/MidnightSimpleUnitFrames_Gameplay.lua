@@ -254,6 +254,7 @@ end
 local C_Timer      = C_Timer
 local C_Timer_After = C_Timer and C_Timer.After
 local C_Timer_NewTicker = C_Timer and C_Timer.NewTicker
+local MSUF_Gameplay_ApplyNow
 
 ------------------------------------------------------
 -- Apply queue: coalesce multiple option changes into a single Apply per frame
@@ -267,8 +268,8 @@ do
     -- Options slider drag. Pending flag now cleared at END for the same
     -- defense-in-depth reason as _gfRosterFlush.
     local function _DoGameplayApply()
-        if ns and ns.MSUF_ApplyGameplayVisuals then
-            ns.MSUF_ApplyGameplayVisuals()
+        if MSUF_Gameplay_ApplyNow then
+            MSUF_Gameplay_ApplyNow()
         end
         _applyPending = false
     end
@@ -2487,6 +2488,10 @@ MSUF_RequestCrosshairRangeRefresh = function()
     end
 end
 
+local function MSUF_Crosshair_OnPlayerTargetChanged()
+    MSUF_RequestCrosshairRangeRefresh()
+end
+
 -- Update combat crosshair color based on melee range to current target.
 -- Uses the shared melee spell ID.
 MSUF_UpdateCombatCrosshairRangeColor = function()
@@ -2674,9 +2679,7 @@ local function MSUF_Gameplay_ApplyCombatCrosshair(g)
             combatCrosshairEventFrame:RegisterEvent("PLAYER_LOGIN")
             -- Phase 1: PLAYER_TARGET_CHANGED via EventBus
             if type(MSUF_EventBus_Register) == "function" then
-                MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_CROSSHAIR", function()
-                    MSUF_RequestCrosshairRangeRefresh()
-                end)
+                MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_CROSSHAIR", MSUF_Crosshair_OnPlayerTargetChanged)
             end
             -- Only listen for range-check updates when range-color is enabled.
             if combatCrosshairFrame and combatCrosshairFrame._msufUseRangeColor then
@@ -3248,7 +3251,7 @@ local function Gameplay_ApplyAllFeatures(g)
     end
 end
 
-function ns.MSUF_RequestGameplayApply()
+MSUF_Gameplay_ApplyNow = function()
     local g = EnsureGameplayDefaults()
 
     Gameplay_ApplyAllFeatures(g)
@@ -3327,9 +3330,8 @@ end
 -- Backwards-compatible entrypoint used by other modules (e.g. Colors)
 -- Apply all Gameplay visuals immediately (frames + fonts + colors).
 function ns.MSUF_ApplyGameplayVisuals()
-    -- This file also uses MSUF_RequestGameplayApply as the canonical apply path.
-    if ns and ns.MSUF_RequestGameplayApply then
-        ns.MSUF_RequestGameplayApply()
+    if MSUF_Gameplay_ApplyNow then
+        MSUF_Gameplay_ApplyNow()
     end
 end
 

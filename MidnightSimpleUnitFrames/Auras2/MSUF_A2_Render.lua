@@ -1275,6 +1275,48 @@ end
 -- Module binding flag (set once, reset only on hard reload)
 local _modulesBound = false
 
+API._RenderCommitAuraList = function(container, list, count, unit, shared, isHelpful, masterOn, bossHealHighlightOwn, stackCountAnchor, gen, updatedAuraIDs, commitUpdatedOnly, acquireIcon, commitIcon)
+    if count <= 0 then return commitUpdatedOnly end
+
+    local pool = container._msufIcons
+    if not pool then
+        pool = {}
+        container._msufIcons = pool
+    end
+    if count > (container._msufA2_activeN or 0) then
+        container._msufA2_activeN = count
+    end
+
+    for i = 1, count do
+        local aura = list[i]
+        if aura then
+            if isHelpful then
+                aura._msufA2_forceBossHealHighlight =
+                    (bossHealHighlightOwn and aura._msufA2_isHealerHot == 1 and aura._msufIsPlayerAura == true) or nil
+            end
+
+            local icon = pool[i]
+            if icon then
+                if not icon:IsShown() then icon:Show() end
+            else
+                icon = acquireIcon(container, i)
+                commitUpdatedOnly = false
+            end
+
+            local doCommit = not commitUpdatedOnly
+            if not doCommit then
+                local aid = aura._msufAuraInstanceID or aura.auraInstanceID
+                doCommit = updatedAuraIDs[aid] == true or not icon._msufA2_lastCommit
+            end
+            if doCommit then
+                commitIcon(icon, unit, aura, shared, isHelpful, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
+            end
+        end
+    end
+
+    return commitUpdatedOnly
+end
+
 -- RenderUnit  the core render loop (single pass, clean)
 
 local function RenderUnit(entry)
@@ -1592,66 +1634,14 @@ local function RenderUnit(entry)
     local countsChanged = (buffCount ~= lastBuffCount) or (debuffCount ~= lastDebuffCount)
     local commitUpdatedOnly = updatedAuraIDs and entry._lastA2CommitGen == gen and not countsChanged and not isEditActive and not showTest
 
-    -- CommitIcon: debuffs
-    -- PERF: Inlined AcquireIcon fast path â€” pool[i] hit skips function call.
-    -- Full AcquireIcon only for pool miss (icon creation, rare after warmup).
+    -- CommitIcon: debuffs, then buffs. Helper keeps the pool fast path shared.
+    -- PERF: pool[i] hit still skips the full AcquireIcon path.
     if debuffCount > 0 then
-        local list = entry._debuffList
-        local container = entry.debuffs
-        local pool = container._msufIcons
-        if not pool then pool = {}; container._msufIcons = pool end
-        if debuffCount > (container._msufA2_activeN or 0) then container._msufA2_activeN = debuffCount end
-        for i = 1, debuffCount do
-            local aura = list[i]
-            if aura then
-                local icon = pool[i]
-                if icon then
-                    if not icon:IsShown() then icon:Show() end
-                else
-                    icon = _AcquireIcon(container, i)
-                    commitUpdatedOnly = false
-                end
-                local doCommit = not commitUpdatedOnly
-                if not doCommit then
-                    local aid = aura._msufAuraInstanceID or aura.auraInstanceID
-                    doCommit = updatedAuraIDs[aid] == true or not icon._msufA2_lastCommit
-                end
-                if doCommit then
-                    _CommitIcon(icon, unit, aura, shared, false, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
-                end
-            end
-        end
+        commitUpdatedOnly = API._RenderCommitAuraList(entry.debuffs, entry._debuffList, debuffCount, unit, shared, false, masterOn, false, stackCountAnchor, gen, updatedAuraIDs, commitUpdatedOnly, _AcquireIcon, _CommitIcon)
     end
 
-    -- CommitIcon: buffs
     if buffCount > 0 then
-        local list = entry._buffList
-        local container = entry.buffs
-        local pool = container._msufIcons
-        if not pool then pool = {}; container._msufIcons = pool end
-        if buffCount > (container._msufA2_activeN or 0) then container._msufA2_activeN = buffCount end
-        for i = 1, buffCount do
-            local aura = list[i]
-            if aura then
-                aura._msufA2_forceBossHealHighlight =
-                    (bossHealHighlightOwn and aura._msufA2_isHealerHot == 1 and aura._msufIsPlayerAura == true) or nil
-                local icon = pool[i]
-                if icon then
-                    if not icon:IsShown() then icon:Show() end
-                else
-                    icon = _AcquireIcon(container, i)
-                    commitUpdatedOnly = false
-                end
-                local doCommit = not commitUpdatedOnly
-                if not doCommit then
-                    local aid = aura._msufAuraInstanceID or aura.auraInstanceID
-                    doCommit = updatedAuraIDs[aid] == true or not icon._msufA2_lastCommit
-                end
-                if doCommit then
-                    _CommitIcon(icon, unit, aura, shared, true, false, masterOn, aura._msufIsPlayerAura, stackCountAnchor, gen)
-                end
-            end
-        end
+        commitUpdatedOnly = API._RenderCommitAuraList(entry.buffs, entry._buffList, buffCount, unit, shared, true, masterOn, bossHealHighlightOwn, stackCountAnchor, gen, updatedAuraIDs, commitUpdatedOnly, _AcquireIcon, _CommitIcon)
     end
 
     -- Layout

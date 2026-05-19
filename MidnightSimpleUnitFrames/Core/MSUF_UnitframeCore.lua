@@ -3362,6 +3362,55 @@ end
 
 -- Global driver (one frame; avoid duplicating global events per unitframe)
 
+function Core._ApplyImmediateHealthVisual(f, unit, bar)
+    bar:SetMinMaxValues(0, UnitHealthMax(unit))
+    UFCore_SetHealthBarValue(f, bar, UnitHealth(unit))
+
+    local mode = _ufcBarMode
+    if mode == "dark" then
+        bar:SetStatusBarColor(_ufcDarkR, _ufcDarkG, _ufcDarkB, 1)
+    elseif mode == "unified" then
+        bar:SetStatusBarColor(_ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB, 1)
+    elseif mode == "gradient" then
+        local calc = f._msufHealthCalc
+        if calc and _ufcGradientCurve then
+            UnitGetDetailedHealPrediction(unit, "player", calc)
+            local color = calc:EvaluateCurrentHealthPercent(_ufcGradientCurve)
+            if color then
+                local cr, cg, cb = color:GetRGB()
+                bar:SetStatusBarColor(cr, cg, cb, 1)
+            else
+                bar:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+            end
+        else
+            bar:SetStatusBarColor(0.2, 0.8, 0.2, 1)
+        end
+    else
+        local _, classToken = UnitClass(unit)
+        local r, g, b = UFCore_GetClassBarColorFast(classToken)
+        bar:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
+    end
+
+    UFCore_ReapplyLayeredAlpha(f)
+end
+
+function Core._ApplyImmediateUnitSwapVisual(f, fallbackUnit, requireUnitExistsForBar, updateNameOnlyIfExists)
+    local unit = f.unit or fallbackUnit
+    local unitExists = UnitExists(unit)
+    local bar = f.hpBar
+
+    if bar and ((not requireUnitExistsForBar) or unitExists) then
+        Core._ApplyImmediateHealthVisual(f, unit, bar)
+    end
+    if f.nameText and ((not updateNameOnlyIfExists) or unitExists) then
+        f.nameText:SetText(UnitName(unit) or "")
+    end
+    Core.UpdateRaidGroupNameForFrame(f, unit, nil, f.showName, unitExists)
+    Core.MarkDirty(f, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
+
+    return unitExists
+end
+
 local Global = CreateFrame("Frame")
 Core._globalDriver = Global
 _G.MSUF_UFCore_HasToTInlineDriver = true
@@ -3600,82 +3649,12 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         -- 1. UFCore: naked C-calls for immediate visual feedback
         local tf = FramesByUnit["target"]
         if tf and tf:IsVisible() then
-            local unit = tf.unit or "target"
-            local bar = tf.hpBar
-            if bar then
-                bar:SetMinMaxValues(0, UnitHealthMax(unit))
-                UFCore_SetHealthBarValue(tf, bar, UnitHealth(unit))
-                -- Resolve bar color from cached mode (zero table alloc)
-                local mode = _ufcBarMode
-                if mode == "dark" then
-                    bar:SetStatusBarColor(_ufcDarkR, _ufcDarkG, _ufcDarkB, 1)
-                elseif mode == "unified" then
-                    bar:SetStatusBarColor(_ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB, 1)
-                elseif mode == "gradient" then
-                    -- C-side ColorCurve, secret-safe; calc may be reused from prior unit.
-                    local calc = tf._msufHealthCalc
-                    if calc and _ufcGradientCurve then
-                        UnitGetDetailedHealPrediction(unit, "player", calc)
-                        local color = calc:EvaluateCurrentHealthPercent(_ufcGradientCurve)
-                        if color then
-                            local cr, cg, cb = color:GetRGB()
-                            bar:SetStatusBarColor(cr, cg, cb, 1)
-                        else
-                            bar:SetStatusBarColor(0.2, 0.8, 0.2, 1)
-                        end
-                    else
-                        bar:SetStatusBarColor(0.2, 0.8, 0.2, 1)
-                    end
-                else
-                    local _, ct = UnitClass(unit)
-                    local r, g, b = UFCore_GetClassBarColorFast(ct)
-                    bar:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
-                end
-                UFCore_ReapplyLayeredAlpha(tf)
-            end
-            if tf.nameText then tf.nameText:SetText(UnitName(unit) or "") end
-            Core.UpdateRaidGroupNameForFrame(tf, unit, nil, tf.showName, UnitExists(unit))
-            -- Queue non-portrait refresh for next frame; portrait render is budgeted below.
-            Core.MarkDirty(tf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
+            Core._ApplyImmediateUnitSwapVisual(tf, "target", false, false)
         end
         -- ToT: same naked path
         local ttf = FramesByUnit["targettarget"]
         if ttf and (ttf:IsVisible() or ttf.MSUF_AllowHiddenEvents) then
-            local unit2 = ttf.unit or "targettarget"
-            local bar2 = ttf.hpBar
-            if bar2 and UnitExists(unit2) then
-                bar2:SetMinMaxValues(0, UnitHealthMax(unit2))
-                UFCore_SetHealthBarValue(ttf, bar2, UnitHealth(unit2))
-                local mode = _ufcBarMode
-                if mode == "dark" then
-                    bar2:SetStatusBarColor(_ufcDarkR, _ufcDarkG, _ufcDarkB, 1)
-                elseif mode == "unified" then
-                    bar2:SetStatusBarColor(_ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB, 1)
-                elseif mode == "gradient" then
-                    local calc2 = ttf._msufHealthCalc
-                    if calc2 and _ufcGradientCurve then
-                        UnitGetDetailedHealPrediction(unit2, "player", calc2)
-                        local color = calc2:EvaluateCurrentHealthPercent(_ufcGradientCurve)
-                        if color then
-                            local cr, cg, cb = color:GetRGB()
-                            bar2:SetStatusBarColor(cr, cg, cb, 1)
-                        else
-                            bar2:SetStatusBarColor(0.2, 0.8, 0.2, 1)
-                        end
-                    else
-                        bar2:SetStatusBarColor(0.2, 0.8, 0.2, 1)
-                    end
-                else
-                    local _, ct2 = UnitClass(unit2)
-                    local r, g, b = UFCore_GetClassBarColorFast(ct2)
-                    bar2:SetStatusBarColor(r or 0, g or 1, b or 0, 1)
-                end
-                UFCore_ReapplyLayeredAlpha(ttf)
-            end
-            local unit2Exists = UnitExists(unit2)
-            if ttf.nameText and unit2Exists then ttf.nameText:SetText(UnitName(unit2) or "") end
-            Core.UpdateRaidGroupNameForFrame(ttf, unit2, nil, ttf.showName, unit2Exists)
-            Core.MarkDirty(ttf, MASK_UNIT_SWAP_NO_PORTRAIT, false, "TARGET_SWAP_DEFERRED")
+            Core._ApplyImmediateUnitSwapVisual(ttf, "targettarget", true, true)
         end
         -- Deferred: portrait, visual, absorb cache invalidation
         DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)

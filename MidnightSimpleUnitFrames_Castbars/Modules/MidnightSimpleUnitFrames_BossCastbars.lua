@@ -1460,6 +1460,29 @@ end
 -- -------------------------------------------------
 -- Module init
 -- -------------------------------------------------
+local BOSS_CASTBAR_UNIT_EVENTS = {
+    "UNIT_SPELLCAST_START",
+    "UNIT_SPELLCAST_STOP",
+    "UNIT_SPELLCAST_CHANNEL_START",
+    "UNIT_SPELLCAST_CHANNEL_STOP",
+    "UNIT_SPELLCAST_CHANNEL_UPDATE",
+    "UNIT_SPELLCAST_DELAYED",
+    "UNIT_SPELLCAST_EMPOWER_START",
+    "UNIT_SPELLCAST_EMPOWER_UPDATE",
+    "UNIT_SPELLCAST_EMPOWER_STOP",
+    "UNIT_SPELLCAST_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_FAILED",
+    "UNIT_SPELLCAST_SUCCEEDED",
+    "UNIT_SPELLCAST_INTERRUPTED",
+    "UNIT_HEALTH",
+}
+
+local BOSS_CASTBAR_GLOBAL_EVENTS = {
+    "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+    "PLAYER_ENTERING_WORLD",
+}
+
 local function InitBossCastbars()
     if _G.MSUF_BossCastbars then return end
     _G.MSUF_BossCastbars = {}
@@ -1469,32 +1492,12 @@ local function InitBossCastbars()
         local f = CreateBossCastbarFrame(unit)
         _G.MSUF_BossCastbars[i] = f
 
-        -- events
-        f:RegisterUnitEvent("UNIT_SPELLCAST_START", unit)
-        f:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit)
-
-        f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", unit)
-        f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", unit)
-        f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", unit)
-        f:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", unit)
-
-	    -- Empower (rare for bosses, but supported)
-	    f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", unit)
-	    f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", unit)
-	    f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
-
-        f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
-        f:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
-
-        f:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
-        f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
-        f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
-
-        -- Death/despawn detection (secret-safe: UnitIsDeadOrGhost returns plain boolean)
-        f:RegisterUnitEvent("UNIT_HEALTH", unit)
-        f:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-
-        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+        for j = 1, #BOSS_CASTBAR_UNIT_EVENTS do
+            f:RegisterUnitEvent(BOSS_CASTBAR_UNIT_EVENTS[j], unit)
+        end
+        for j = 1, #BOSS_CASTBAR_GLOBAL_EVENTS do
+            f:RegisterEvent(BOSS_CASTBAR_GLOBAL_EVENTS[j])
+        end
         f:SetScript("OnEvent", BossCastbar_OnEvent)
 
         -- Pre-created callback: deferred death recheck (avoids closure per UNIT_HEALTH event)
