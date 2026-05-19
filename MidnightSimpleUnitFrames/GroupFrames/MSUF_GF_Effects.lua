@@ -2415,6 +2415,10 @@ local C_UnitAuras_GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataBy
 local C_UnitAuras_IsAuraFilteredOut = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
 local _DISPEL_SCAN_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
 local _debuffStripeScanUnit
+GF._DispelFallbackCallback = GF._DispelFallbackCallback or function(auraData)
+    GF._dispelFallbackFoundDispel, GF._dispelFallbackFoundAid = GF.ReadDispelBorderAura(auraData, GF._dispelFallbackTriggerMode)
+    return GF._dispelFallbackFoundDispel ~= nil
+end
 
 local function _DebuffStripeScanSlots(_, ...)
     local scanUnit = _debuffStripeScanUnit
@@ -2543,11 +2547,14 @@ GF.FindDispelBorderAura = GF.FindDispelBorderAura or function(unit, triggerMode)
     end
 
     if AuraUtil and AuraUtil.ForEachAura then
-        local foundDispel, foundAid
-        AuraUtil.ForEachAura(unit, filter == "HARMFUL" and "HARMFUL" or "HARMFUL|RAID", nil, function(auraData)
-            foundDispel, foundAid = GF.ReadDispelBorderAura(auraData, triggerMode)
-            return foundDispel ~= nil
-        end, true)
+        GF._dispelFallbackTriggerMode = triggerMode
+        GF._dispelFallbackFoundDispel = nil
+        GF._dispelFallbackFoundAid = nil
+        AuraUtil.ForEachAura(unit, filter == "HARMFUL" and "HARMFUL" or "HARMFUL|RAID", nil, GF._DispelFallbackCallback, true)
+        local foundDispel, foundAid = GF._dispelFallbackFoundDispel, GF._dispelFallbackFoundAid
+        GF._dispelFallbackTriggerMode = nil
+        GF._dispelFallbackFoundDispel = nil
+        GF._dispelFallbackFoundAid = nil
         return foundDispel, foundAid
     end
 
@@ -5047,6 +5054,37 @@ end
 ------------------------------------------------------------------------
 -- RegisterUnitEvents / UnregisterUnitEvents (replaces Phase 1 stubs)
 ------------------------------------------------------------------------
+GF._unitEventGroups = GF._unitEventGroups or {
+    base = { "UNIT_HEALTH", "UNIT_MAXHEALTH" },
+    power = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" },
+    range = { "UNIT_IN_RANGE_UPDATE", "UNIT_CTR_OPTIONS", "UNIT_OTHER_PARTY_CHANGED" },
+    threat = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" },
+}
+
+function GF._RegisterTrackedUnitEvent(f, unit, regTbl, event)
+    f:RegisterUnitEvent(event, unit)
+    regTbl[event] = true
+end
+
+function GF._RegisterTrackedUnitEventList(f, unit, regTbl, list)
+    for i = 1, #list do
+        local event = list[i]
+        f:RegisterUnitEvent(event, unit)
+        regTbl[event] = true
+    end
+end
+
+function GF._UnregisterTrackedUnitEvents(f)
+    local regTbl = f and f._msufGFRegEv
+    if not regTbl then return end
+    if f.UnregisterEvent then
+        for event in pairs(regTbl) do
+            f:UnregisterEvent(event)
+        end
+    end
+    f._msufGFRegEv = nil
+end
+
 function GF._ShouldRegisterPowerEvents(f, unit, c)
     if not (f and unit and c and c.hasPowerElement) then return false end
     if c.anyPowerText then return true end
@@ -5093,63 +5131,53 @@ function GF.RegisterUnitEvents(f, unit)
         gmap[guid] = f
     end
 
-    if f._msufGFRegEv then
-        for ev in pairs(f._msufGFRegEv) do
-            if f.UnregisterEvent then f:UnregisterEvent(ev) end
-        end
-    end
+    GF._UnregisterTrackedUnitEvents(f)
     local regTbl = {}
     f._msufGFRegEv = regTbl
 
-    f:RegisterUnitEvent("UNIT_HEALTH", unit);        regTbl["UNIT_HEALTH"] = true
-    f:RegisterUnitEvent("UNIT_MAXHEALTH", unit);     regTbl["UNIT_MAXHEALTH"] = true
+    GF._RegisterTrackedUnitEventList(f, unit, regTbl, GF._unitEventGroups.base)
     if c.connectionEn then
-        f:RegisterUnitEvent("UNIT_CONNECTION", unit); regTbl["UNIT_CONNECTION"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_CONNECTION")
     end
     if c.flagsEn then
-        f:RegisterUnitEvent("UNIT_FLAGS", unit); regTbl["UNIT_FLAGS"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_FLAGS")
     end
 
     if c.nameEn then
-        f:RegisterUnitEvent("UNIT_NAME_UPDATE", unit); regTbl["UNIT_NAME_UPDATE"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_NAME_UPDATE")
     end
     if powerEvents then
-        f:RegisterUnitEvent("UNIT_POWER_UPDATE", unit);  regTbl["UNIT_POWER_UPDATE"] = true
+        GF._RegisterTrackedUnitEventList(f, unit, regTbl, GF._unitEventGroups.power)
         if c.powFrequent and UnitIsUnit and _UnsecretBool(UnitIsUnit(unit, "player")) == true then
-            f:RegisterUnitEvent("UNIT_POWER_FREQUENT", unit); regTbl["UNIT_POWER_FREQUENT"] = true
+            GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_POWER_FREQUENT")
         end
-        f:RegisterUnitEvent("UNIT_MAXPOWER", unit);      regTbl["UNIT_MAXPOWER"] = true
-        f:RegisterUnitEvent("UNIT_DISPLAYPOWER", unit);  regTbl["UNIT_DISPLAYPOWER"] = true
     end
     if c.rfEn then
-        f:RegisterUnitEvent("UNIT_IN_RANGE_UPDATE", unit); regTbl["UNIT_IN_RANGE_UPDATE"] = true
-        f:RegisterUnitEvent("UNIT_CTR_OPTIONS", unit); regTbl["UNIT_CTR_OPTIONS"] = true
-        f:RegisterUnitEvent("UNIT_OTHER_PARTY_CHANGED", unit); regTbl["UNIT_OTHER_PARTY_CHANGED"] = true
+        GF._RegisterTrackedUnitEventList(f, unit, regTbl, GF._unitEventGroups.range)
     end
     if c.needAura then
-        f:RegisterUnitEvent("UNIT_AURA", unit); regTbl["UNIT_AURA"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_AURA")
     end
     if c.needThreat then
-        f:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", unit); regTbl["UNIT_THREAT_SITUATION_UPDATE"] = true
-        f:RegisterUnitEvent("UNIT_THREAT_LIST_UPDATE", unit);      regTbl["UNIT_THREAT_LIST_UPDATE"] = true
+        GF._RegisterTrackedUnitEventList(f, unit, regTbl, GF._unitEventGroups.threat)
     end
     if c.summonEn then
-        f:RegisterUnitEvent("INCOMING_SUMMON_CHANGED", unit); regTbl["INCOMING_SUMMON_CHANGED"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "INCOMING_SUMMON_CHANGED")
     end
     if c.resEn then
-        f:RegisterUnitEvent("INCOMING_RESURRECT_CHANGED", unit); regTbl["INCOMING_RESURRECT_CHANGED"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "INCOMING_RESURRECT_CHANGED")
     end
     if c.phaseEn or c.rfEn then
-        f:RegisterUnitEvent("UNIT_PHASE", unit); regTbl["UNIT_PHASE"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_PHASE")
     end
     if c.healPredEventEn then
-        f:RegisterUnitEvent("UNIT_HEAL_PREDICTION", unit); regTbl["UNIT_HEAL_PREDICTION"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_HEAL_PREDICTION")
     end
     if c.absorbEventEn then
-        f:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_ABSORB_AMOUNT_CHANGED"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_ABSORB_AMOUNT_CHANGED")
     end
     if c.healAbsorbEventEn then
-        f:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", unit); regTbl["UNIT_HEAL_ABSORB_AMOUNT_CHANGED"] = true
+        GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_HEAL_ABSORB_AMOUNT_CHANGED")
     end
 
     f:SetScript("OnEvent", GF_OnEvent)
@@ -5158,12 +5186,7 @@ end
 
 function GF.UnregisterUnitEvents(f)
     if not f then return end
-    if f._msufGFRegEv then
-        for ev in pairs(f._msufGFRegEv) do
-            if f.UnregisterEvent then f:UnregisterEvent(ev) end
-        end
-        f._msufGFRegEv = nil
-    end
+    GF._UnregisterTrackedUnitEvents(f)
     f:SetScript("OnEvent", nil)
     f._msufGFEventActive = nil
     f._msufGFDispelKnown = nil
