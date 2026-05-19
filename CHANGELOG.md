@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.4 Beta 6 - 2026-05-20
+
+### Beta Release
+
+- Reworked Unit Frame and Group Frame dispel priority resolution so Magic, Curse, Disease, Poison, Bleed, generic dispel, aggro, purge, and boss-target lanes stay independent instead of collapsing to the first matching type.
+- Kept Dispel Border and Dispel Overlay as separate visual lanes with their own trigger, priority, color, and refresh state so live option changes no longer reuse a stale border winner for the overlay.
+- Added settings-serial, aura-version, priority-signature, color-revision, and unit-guid cache guards around dispel scans so repeated refreshes are cheaper without keeping stale aura colors or stale priority winners.
+- Improved Any Debuff and Any Dispel Type handling so typed color mode and typed priority order can still select the correct highest-priority debuff, including Bleed.
+- Added Bleed support to the group-frame dispel color curve for the currently observed Bleed ids.
+- Improved Dispel Overlay behavior when Blizzard/native aura rendering is enabled: Blizzard can still own the aura icon/border path while MSUF keeps the health-bar overlay active.
+- Reduced redundant glow, overlay, color, reverse-fill, and status-bar updates for Unit Frame and Group Frame dispel visuals while keeping secret-value handling safe.
+- Improved aura delta handling for added, updated, and removed debuffs so priority-based dispel visuals rescan only when the tracked winner or priority-relevant data can change.
+- Added Perfy workflow documentation for temporary instrumented test zips, including the rule that `MSUF_PerfyHook.lua` stays out of normal beta releases.
+- Note: the Dispel system is still work in progress and will continue to be tuned in upcoming beta builds.
+
 ## 5.4 Beta 5 - 2026-05-19
 
 ### Beta Release

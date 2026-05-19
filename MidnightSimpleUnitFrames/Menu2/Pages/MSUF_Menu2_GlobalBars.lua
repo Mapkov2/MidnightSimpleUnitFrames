@@ -133,7 +133,12 @@ local function BuildBars(ctx)
         if refreshBorder and GF.frames then
             for frame in pairs(GF.frames) do
                 if GF.BuildFrameCache then GF.BuildFrameCache(frame) end
-                refreshBorder(frame, frame.unit)
+                local c = frame and frame._c
+                if frame and frame.unit and c and GF.DispelScanActive and GF.DispelScanActive(c) and GF._UpdateDispel then
+                    GF._UpdateDispel(frame, frame.unit)
+                else
+                    refreshBorder(frame, frame and frame.unit)
+                end
             end
         elseif GF.RefreshVisuals then
             GF.RefreshVisuals()

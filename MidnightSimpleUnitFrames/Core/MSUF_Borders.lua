@@ -229,6 +229,7 @@ local LCG = LibStub and LibStub("LibCustomGlow-1.0", true)
 -- Dispel glow helpers (UF) — zero-alloc color table reuse
 ------------------------------------------------------------------------
 local _glowColorTbl = { 0, 0, 0, 1 }
+local _procGlowOptions = { color = _glowColorTbl, key = "msufDispel" }
 
 local function _StopDispelGlowOn(anchor)
     if not (LCG and anchor) then return end
@@ -241,6 +242,23 @@ local function _StartDispelGlow(frame, r, g, b, cfg)
     if not LCG then return end
     local anchor = frame._msufRoundedHighlightGlowAnchor or frame._msufHighlightOutline or frame
     local style = cfg.dispelGlowStyle or "PIXEL"
+    local lines = cfg.dispelGlowLines
+    local freq = cfg.dispelGlowFreq
+    local thick = cfg.dispelGlowThick
+    local secretColor = issecretvalue and (issecretvalue(r) or issecretvalue(g) or issecretvalue(b))
+    if not secretColor
+        and frame._msufDispelGlowActive == true
+        and frame._msufDispelGlowAnchor == anchor
+        and frame._msufDispelGlowStyle == style
+        and frame._msufDispelGlowR == r
+        and frame._msufDispelGlowG == g
+        and frame._msufDispelGlowB == b
+        and frame._msufDispelGlowLines == lines
+        and frame._msufDispelGlowFreq == freq
+        and frame._msufDispelGlowThick == thick
+    then
+        return
+    end
     local oldAnchor = frame._msufDispelGlowAnchor
     if oldAnchor and (oldAnchor ~= anchor or frame._msufDispelGlowStyle ~= style) then
         _StopDispelGlowOn(oldAnchor)
@@ -250,23 +268,47 @@ local function _StartDispelGlow(frame, r, g, b, cfg)
     end
     _glowColorTbl[1], _glowColorTbl[2], _glowColorTbl[3] = r, g, b
     if style == "AUTOCAST" then
-        LCG.AutoCastGlow_Start(anchor, _glowColorTbl, cfg.dispelGlowLines, cfg.dispelGlowFreq, nil, nil, nil, "msufDispel")
+        LCG.AutoCastGlow_Start(anchor, _glowColorTbl, lines, freq, nil, nil, nil, "msufDispel")
     elseif style == "PROC" then
-        LCG.ProcGlow_Start(anchor, { color = _glowColorTbl, key = "msufDispel" })
+        LCG.ProcGlow_Start(anchor, _procGlowOptions)
     else -- PIXEL default
-        LCG.PixelGlow_Start(anchor, _glowColorTbl, cfg.dispelGlowLines, cfg.dispelGlowFreq, nil, cfg.dispelGlowThick, nil, nil, nil, "msufDispel")
+        LCG.PixelGlow_Start(anchor, _glowColorTbl, lines, freq, nil, thick, nil, nil, nil, "msufDispel")
     end
     frame._msufDispelGlowActive = true
     frame._msufDispelGlowAnchor = anchor
     frame._msufDispelGlowStyle = style
+    if not secretColor then
+        frame._msufDispelGlowR = r
+        frame._msufDispelGlowG = g
+        frame._msufDispelGlowB = b
+    else
+        frame._msufDispelGlowR = nil
+        frame._msufDispelGlowG = nil
+        frame._msufDispelGlowB = nil
+    end
+    frame._msufDispelGlowLines = lines
+    frame._msufDispelGlowFreq = freq
+    frame._msufDispelGlowThick = thick
 end
 
 local function _StopDispelGlow(frame)
     if not frame then return end
+    if not frame._msufDispelGlowActive
+        and not frame._msufDispelGlowAnchor
+        and not frame._msufDispelGlowStyle
+    then
+        return
+    end
     frame._msufDispelGlowActive = nil
     local anchor = frame._msufDispelGlowAnchor
     frame._msufDispelGlowAnchor = nil
     frame._msufDispelGlowStyle = nil
+    frame._msufDispelGlowR = nil
+    frame._msufDispelGlowG = nil
+    frame._msufDispelGlowB = nil
+    frame._msufDispelGlowLines = nil
+    frame._msufDispelGlowFreq = nil
+    frame._msufDispelGlowThick = nil
     _StopDispelGlowOn(anchor)
 
     local outline = frame._msufHighlightOutline
@@ -490,7 +532,20 @@ local function _RefreshBorderSettingsForFrame(frame)
     local db = _GetUnitBorderScopeDB(frame and frame.unit)
     if not db then return base end
 
-    local cfg = _CopyBorderCfg(_scopedBorderCfg, base)
+    local serial = base and base.serial or 0
+    if frame then
+        local cached = frame._msufScopedBorderCfg
+        if cached
+            and frame._msufScopedBorderCfgSerial == serial
+            and frame._msufScopedBorderCfgUnit == frame.unit
+        then
+            return cached
+        end
+    end
+
+    local cfg = frame and (frame._msufScopedBorderCfg or {}) or _scopedBorderCfg
+    _CopyBorderCfg(cfg, base)
+    cfg.serial = serial
     cfg.aggroOutlineMode = _ReadOutlineMode(db, "aggroOutlineMode", "hlAggroEnabled", base.aggroOutlineMode)
     cfg.dispelOutlineMode = _ReadOutlineMode(db, "dispelOutlineMode", "hlDispelEnabled", base.dispelOutlineMode)
     cfg.purgeOutlineMode = _ReadOutlineMode(db, "purgeOutlineMode", nil, base.purgeOutlineMode)
@@ -546,6 +601,11 @@ local function _RefreshBorderSettingsForFrame(frame)
     cfg.dispelGlowLines = tonumber(db.hlDispelGlowLines) or cfg.dispelGlowLines
     cfg.dispelGlowFreq = tonumber(db.hlDispelGlowFrequency) or cfg.dispelGlowFreq
     cfg.dispelGlowThick = tonumber(db.hlDispelGlowThickness) or cfg.dispelGlowThick
+    if frame then
+        frame._msufScopedBorderCfg = cfg
+        frame._msufScopedBorderCfgSerial = serial
+        frame._msufScopedBorderCfgUnit = frame.unit
+    end
     return cfg
 end
 
@@ -820,12 +880,15 @@ local function _UFHighlightPriorityMatchesDispel(kind, dispel, dispelType)
     if not wanted then return false end
 
     if issecretvalue and issecretvalue(dispelType) then
-        return true
+        return false
     end
     if type(dispelType) ~= "string" or dispelType == "" or dispelType == "DISPELLABLE" then
-        return true
+        return false
     end
-    return dispelType == wanted
+    -- dispelType may be the raw capitalized dispelName ("Bleed") or the lowercase
+    -- priority key ("bleed") returned by _ResolveUFAuraDispelType. wanted is always
+    -- capitalized, so also accept a match against the lowercase kind directly.
+    return dispelType == wanted or dispelType == kind
 end
 
 local function _UFHighlightPriorityKindActive(kind, dispel, dispelType, threat, purge, bossTarget)
@@ -844,9 +907,25 @@ local function _UFHighlightPriorityRawHasAllowedKey(prioOrder, allowed, key)
     return false
 end
 
+local function _UFHighlightPriorityOrderHasTypeKey(prioOrder)
+    if type(prioOrder) ~= "table" then return false end
+    for i = 1, #prioOrder do
+        local key = prioOrder[i]
+        if key ~= "dispel" and _UF_PRIORITY_TYPE_ALLOWED[key] then return true end
+    end
+    return false
+end
+
+local function _UFOverlayUsesOwnPriority(cfg)
+    if not cfg then return false end
+    return cfg.unitDispelOverlayUseHighlightPriority == false
+        or _BoolEnabled(cfg.unitDispelOverlayPrioEnabled)
+end
+
 local function _ResolveUFHighlightPriorityKeyFromOrder(cfg, prioEnabled, prioOrder, dispel, dispelType, threat, purge, bossTarget)
     if prioEnabled then
-        local typeMode = cfg and cfg.dispelColorMode == "TYPE"
+        local typeMode = (cfg and cfg.dispelColorMode == "TYPE")
+            or _UFHighlightPriorityOrderHasTypeKey(prioOrder)
         local allowed = typeMode and _UF_PRIORITY_TYPE_ALLOWED or _UF_PRIORITY_SINGLE_ALLOWED
         local defaults = typeMode and _UF_PRIORITY_TYPE_DEFAULTS or _UF_PRIORITY_SINGLE_DEFAULTS
         if type(prioOrder) == "table" then
@@ -864,17 +943,29 @@ local function _ResolveUFHighlightPriorityKeyFromOrder(cfg, prioEnabled, prioOrd
                 if hlKey ~= 0 then return hlKey end
             end
         end
-        return 0
+        -- A real dispel with an unknown/secret school must stay visible as a
+        -- generic dispel, but it must not be claimed by the first typed entry
+        -- in the priority list. That is what made Magic/Bleed lanes collapse.
+        return dispel and 2 or 0
     end
     return (dispel and 2) or (threat and 1) or (purge and 3) or (bossTarget and 4) or 0
 end
 
 local function _UFDispelScanPriorityConfig(cfg, useOverlayPriority)
-    if not (cfg and cfg.dispelColorMode == "TYPE") then return false, nil end
-    if useOverlayPriority and cfg.unitDispelOverlayUseHighlightPriority == false then
-        return _BoolEnabled(cfg.unitDispelOverlayPrioEnabled), cfg.unitDispelOverlayPrioOrder
+    if not cfg then return false, nil end
+    local enabled, order
+    if useOverlayPriority and _UFOverlayUsesOwnPriority(cfg) then
+        enabled, order = cfg.unitDispelOverlayPrioEnabled, cfg.unitDispelOverlayPrioOrder
+    else
+        enabled, order = cfg.highlightPrioEnabled, cfg.highlightPrioOrder
     end
-    return _BoolEnabled(cfg.highlightPrioEnabled), cfg.highlightPrioOrder
+    local customEnabled = _BoolEnabled(enabled)
+    local typeColorMode = cfg.dispelColorMode == "TYPE"
+    local customTypeOrder = customEnabled and _UFHighlightPriorityOrderHasTypeKey(order)
+    if not typeColorMode and not customTypeOrder then
+        return false, order
+    end
+    return true, customEnabled and order or nil
 end
 
 local function _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
@@ -882,11 +973,20 @@ local function _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
     return enabled == true
 end
 
-local function _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+local function _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType, forceDefaultOrder)
     local enabled, prioOrder = _UFDispelScanPriorityConfig(cfg, useOverlayPriority)
-    if not enabled then return nil end
+    if not enabled then
+        if not forceDefaultOrder then return nil end
+        prioOrder = nil
+    end
     if issecretvalue and issecretvalue(dispelType) then return 999 end
+    -- dispelType may arrive as a capitalised dispelName ("Bleed") or as a
+    -- lowercase priority key ("bleed") from _ResolveUFAuraDispelType.
+    -- _UF_PRIORITY_KEY_BY_DISPEL_TYPE maps capitalised → lowercase, so a
+    -- lowercase input will miss. Fall back to checking PRIORITY_TYPE_ALLOWED
+    -- directly, which uses the same lowercase keys as the priority order.
     local wanted = _UF_PRIORITY_KEY_BY_DISPEL_TYPE[dispelType]
+        or (_UF_PRIORITY_TYPE_ALLOWED[dispelType] and dispelType)
     if not wanted then return 999 end
 
     local rank = 1
@@ -908,11 +1008,41 @@ local function _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
     return 999
 end
 
-local function _UFOverlayCanReuseBorderDispelScan(cfg)
-    if not _UFDispelScanPriorityEnabled(cfg, false) and not _UFDispelScanPriorityEnabled(cfg, true) then
-        return true
+local _UF_PRIORITY_SIGNATURE = {
+    magic = 1,
+    curse = 2,
+    disease = 3,
+    poison = 4,
+    bleed = 5,
+    dispel = 6,
+    aggro = 7,
+    purge = 8,
+    bossTarget = 9,
+}
+
+local function _UFDispelScanPrioritySignature(cfg, useOverlayPriority)
+    local enabled, order = _UFDispelScanPriorityConfig(cfg, useOverlayPriority)
+    local sig = enabled and 1 or 0
+    if useOverlayPriority and _UFOverlayUsesOwnPriority(cfg) then
+        sig = sig + 10
     end
-    return cfg and cfg.unitDispelOverlayUseHighlightPriority ~= false
+    if cfg and cfg.dispelColorMode == "TYPE" then
+        sig = sig + 20
+    end
+    if type(order) == "table" then
+        for i = 1, #order do
+            sig = sig * 11 + (_UF_PRIORITY_SIGNATURE[order[i]] or 0)
+        end
+    end
+    return sig
+end
+
+local function _UFOverlayCanReuseBorderDispelScan(cfg)
+    -- Correctness over the tiny duplicate-scan win: border and overlay are two
+    -- independent visual lanes. Reusing the border winner is too easy to get
+    -- wrong when options are changed live or when a scoped override inherits
+    -- only part of the priority setup.
+    return false
 end
 
 local function _ResolveUFHighlightPriorityKey(cfg, dispel, dispelType, threat, purge, bossTarget)
@@ -929,7 +1059,7 @@ local function _ResolveUFHighlightPriorityKey(cfg, dispel, dispelType, threat, p
 end
 
 local function _ResolveUFOverlayPriorityKey(cfg, dispel, dispelType, threat, purge, bossTarget)
-    if cfg and cfg.unitDispelOverlayUseHighlightPriority == false then
+    if _UFOverlayUsesOwnPriority(cfg) then
         return _ResolveUFHighlightPriorityKeyFromOrder(
             cfg,
             cfg.unitDispelOverlayPrioEnabled,
@@ -1132,11 +1262,12 @@ local function _ApplyUFDispelOverlay(frame, cfg)
     cfg = cfg or _RefreshBorderSettingsForFrame(frame)
 
     local active = cfg and cfg.unitDispelOverlayEnabled == true
-    local test = _UFDispelTestApplies(frame)
-    local dispelOn = test or frame._msufUFDispelOverlayOn == true
-    local dispelType = test and (_G.MSUF_DispelBorderTestType or "Magic") or frame._msufUFDispelOverlayType
-    local auraID = test and nil or frame._msufUFDispelOverlayAuraID
-    local usePriority = cfg and (cfg.unitDispelOverlayUseHighlightPriority ~= false or cfg.unitDispelOverlayPrioEnabled == true)
+    -- Dispel border test mode is border-only. Overlay has its own detected
+    -- state/priority lane and must not inherit the border test type.
+    local dispelOn = frame._msufUFDispelOverlayOn == true
+    local dispelType = frame._msufUFDispelOverlayType
+    local auraID = frame._msufUFDispelOverlayAuraID
+    local usePriority = cfg and (cfg.unitDispelOverlayUseHighlightPriority ~= false or _BoolEnabled(cfg.unitDispelOverlayPrioEnabled))
     local threat, purge, bossTarget = false, false, false
     if usePriority then
         local aggroTest = _UFAggroTestApplies(frame)
@@ -1181,15 +1312,23 @@ local function _ApplyUFDispelOverlay(frame, cfg)
     local currentOnly = cfg and cfg.unitDispelOverlayOnHealth ~= false
     if currentOnly then
         frame._msufUFDispelOverlayNeedsHPSync = true
+        overlay._msufUFDOFullValue = nil
         _SyncUFDispelOverlayHealth(frame)
     else
         frame._msufUFDispelOverlayNeedsHPSync = nil
-        overlay:SetMinMaxValues(0, 1)
-        overlay:SetValue(1)
+        if overlay._msufUFDOFullValue ~= true then
+            overlay:SetMinMaxValues(0, 1)
+            overlay:SetValue(1)
+            overlay._msufUFDOFullValue = true
+        end
     end
 
     if overlay.SetReverseFill and frame.hpBar.GetReverseFill then
-        overlay:SetReverseFill(frame.hpBar:GetReverseFill() and true or false)
+        local reverse = frame.hpBar:GetReverseFill() and true or false
+        if overlay._msufUFDOReverse ~= reverse then
+            overlay:SetReverseFill(reverse)
+            overlay._msufUFDOReverse = reverse
+        end
     end
 
     local r, g, b = nil, nil, nil
@@ -1200,10 +1339,34 @@ local function _ApplyUFDispelOverlay(frame, cfg)
         r, g, b = _GetUFDispelColor(dispelType, frame.unit, auraID, cfg)
     end
     local tex = overlay.GetStatusBarTexture and overlay:GetStatusBarTexture()
+    local rr, gg, bb = r or 0.25, g or 0.75, b or 1.00
+    local secretColor = issecretvalue and (issecretvalue(rr) or issecretvalue(gg) or issecretvalue(bb))
     if tex and tex.SetVertexColor then
-        tex:SetVertexColor(r or 0.25, g or 0.75, b or 1.00, 1)
+        if secretColor
+            or overlay._msufUFDOColorR ~= rr
+            or overlay._msufUFDOColorG ~= gg
+            or overlay._msufUFDOColorB ~= bb
+        then
+            tex:SetVertexColor(rr, gg, bb, 1)
+            if not secretColor then
+                overlay._msufUFDOColorR, overlay._msufUFDOColorG, overlay._msufUFDOColorB = rr, gg, bb
+            else
+                overlay._msufUFDOColorR, overlay._msufUFDOColorG, overlay._msufUFDOColorB = nil, nil, nil
+            end
+        end
     else
-        overlay:SetStatusBarColor(r or 0.25, g or 0.75, b or 1.00, 1)
+        if secretColor
+            or overlay._msufUFDOColorR ~= rr
+            or overlay._msufUFDOColorG ~= gg
+            or overlay._msufUFDOColorB ~= bb
+        then
+            overlay:SetStatusBarColor(rr, gg, bb, 1)
+            if not secretColor then
+                overlay._msufUFDOColorR, overlay._msufUFDOColorG, overlay._msufUFDOColorB = rr, gg, bb
+            else
+                overlay._msufUFDOColorR, overlay._msufUFDOColorG, overlay._msufUFDOColorB = nil, nil, nil
+            end
+        end
     end
 
     local alpha = (cfg and cfg.unitDispelOverlayAlpha) or 0.35
@@ -2171,6 +2334,17 @@ do
     local f = F.CreateFrame("Frame")
     local _DISPEL_SCAN_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
     local _dispelScanSlots = {}
+    local _dispelScanCache = {}
+
+    local function ClearDispelScanCache(unit)
+        if unit then
+            _dispelScanCache[unit] = nil
+            return
+        end
+        for k in pairs(_dispelScanCache) do
+            _dispelScanCache[k] = nil
+        end
+    end
 
     local function ReadDispelAuraInfo(aura, unit, resolveType)
         if not aura then return false end
@@ -2204,7 +2378,7 @@ do
         return true, aid, dispelType
     end
 
-    local function ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority)
+    local function ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority, forceTypeRank)
         if unit ~= "player" then return false end
         local api = ns and ns.MSUF_Auras2
         local cache = api and api.Cache
@@ -2215,7 +2389,7 @@ do
             all = type(cache.GetAll) == "function" and cache.GetAll(unit) or nil
         end
         if type(all) ~= "table" then return false end
-        local ranked = _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
+        local ranked = _UFDispelScanPriorityEnabled(cfg, useOverlayPriority) or forceTypeRank == true
         local resolveType = requireDispelType or ranked or (cfg and cfg.dispelColorMode == "TYPE")
         local bestHas, bestAid, bestType, bestRank = false, nil, nil, 1000
         for _, aura in pairs(all) do
@@ -2232,7 +2406,7 @@ do
                 local has, aid, dispelType = ReadAnyDebuffAuraInfo(aura, requireDispelType, unit, resolveType)
                 if has then
                     if not ranked then return has, aid, dispelType end
-                    local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                    local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType, forceTypeRank == true)
                     if rank < bestRank then
                         bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
                         if rank <= 1 then return true, bestAid, bestType end
@@ -2244,8 +2418,8 @@ do
         return false
     end
 
-    local function ScanHarmfulDebuff(unit, requireDispelType, cfg, useOverlayPriority)
-        local ranked = _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
+    local function ScanHarmfulDebuff(unit, requireDispelType, cfg, useOverlayPriority, forceTypeRank)
+        local ranked = _UFDispelScanPriorityEnabled(cfg, useOverlayPriority) or forceTypeRank == true
         local resolveType = requireDispelType or ranked or (cfg and cfg.dispelColorMode == "TYPE")
         local bestHas, bestAid, bestType, bestRank = false, nil, nil, 1000
         local CUA = C_UnitAuras
@@ -2270,7 +2444,7 @@ do
                     local has, aid, dispelType = ReadAnyDebuffAuraInfo(getBySlot(unit, slot), requireDispelType, unit, resolveType)
                     if has then
                         if not ranked then return has, aid, dispelType end
-                        local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                        local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType, forceTypeRank == true)
                         if rank < bestRank then
                             bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
                             if rank <= 1 then return true, bestAid, bestType end
@@ -2279,7 +2453,7 @@ do
                 end
             until not cont
             if bestHas then return true, bestAid, bestType end
-            return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority)
+            return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority, forceTypeRank)
         end
 
         local getByIndex = CUA and CUA.GetAuraDataByIndex
@@ -2291,7 +2465,7 @@ do
                 local has, aid, dispelType = ReadAnyDebuffAuraInfo(aura, requireDispelType, unit, resolveType)
                 if has then
                     if not ranked then return has, aid, dispelType end
-                    local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                    local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType, forceTypeRank == true)
                     if rank < bestRank then
                         bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
                         if rank <= 1 then return true, bestAid, bestType end
@@ -2300,7 +2474,7 @@ do
                 index = index + 1
             end
             if bestHas then return true, bestAid, bestType end
-            return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority)
+            return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority, forceTypeRank)
         end
 
         if AuraUtil and AuraUtil.ForEachAura then
@@ -2309,7 +2483,7 @@ do
                 has, aid, dispelType = ReadAnyDebuffAuraInfo(auraData, requireDispelType, unit, resolveType)
                 if not has then return false end
                 if not ranked then return true end
-                local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType, forceTypeRank == true)
                 if rank < bestRank then
                     bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
                     if rank <= 1 then return true end
@@ -2320,15 +2494,15 @@ do
             if has then return has, aid, dispelType end
         end
 
-        return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority)
+        return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority, forceTypeRank)
     end
 
-    local function HasDispellableDebuff(unit, triggerMode, cfg, useOverlayPriority)
+    local function HasDispellableDebuffUncached(unit, triggerMode, cfg, useOverlayPriority)
         triggerMode = _NormalizeDispelBorderTrigger(triggerMode)
         if triggerMode == DISPEL_TRIGGER_ANY then
-            return ScanHarmfulDebuff(unit, false, cfg, useOverlayPriority)
+            return ScanHarmfulDebuff(unit, false, cfg, useOverlayPriority, true)
         elseif triggerMode == DISPEL_TRIGGER_TYPE then
-            return ScanHarmfulDebuff(unit, true, cfg, useOverlayPriority)
+            return ScanHarmfulDebuff(unit, true, cfg, useOverlayPriority, true)
         end
 
         local ranked = _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
@@ -2410,6 +2584,54 @@ do
         end
 
         return false
+    end
+
+    local function HasDispellableDebuff(unit, triggerMode, cfg, useOverlayPriority)
+        triggerMode = _NormalizeDispelBorderTrigger(triggerMode)
+        local guid = UnitGUID and UnitGUID(unit) or unit
+        local serial = (cfg and cfg.serial) or (_borderCfg and _borderCfg.serial) or 0
+        local overlayPriority = useOverlayPriority == true
+        local prioSig = _UFDispelScanPrioritySignature(cfg, overlayPriority)
+        local cache = _dispelScanCache[unit]
+        if cache
+            and cache.guid == guid
+            and cache.serial == serial
+        then
+            if overlayPriority then
+                if cache.oTriggerMode == triggerMode and cache.oPrioSig == prioSig then
+                    return cache.oHas, cache.oAid, cache.oDispelType
+                end
+            elseif cache.bTriggerMode == triggerMode and cache.bPrioSig == prioSig then
+                return cache.bHas, cache.bAid, cache.bDispelType
+            end
+        end
+
+        local has, aid, dispelType = HasDispellableDebuffUncached(unit, triggerMode, cfg, useOverlayPriority)
+        if not cache then
+            cache = {}
+            _dispelScanCache[unit] = cache
+        end
+        if cache.guid ~= guid or cache.serial ~= serial then
+            cache.bTriggerMode, cache.bHas, cache.bAid, cache.bDispelType = nil, nil, nil, nil
+            cache.oTriggerMode, cache.oHas, cache.oAid, cache.oDispelType = nil, nil, nil, nil
+            cache.bPrioSig, cache.oPrioSig = nil, nil
+            cache.guid = guid
+            cache.serial = serial
+        end
+        if overlayPriority then
+            cache.oTriggerMode = triggerMode
+            cache.oPrioSig = prioSig
+            cache.oHas = has
+            cache.oAid = aid
+            cache.oDispelType = dispelType
+        else
+            cache.bTriggerMode = triggerMode
+            cache.bPrioSig = prioSig
+            cache.bHas = has
+            cache.bAid = aid
+            cache.bDispelType = dispelType
+        end
+        return has, aid, dispelType
     end
 
     -- Purge/Spellsteal detection (combat-safe for 12.0).
@@ -2625,6 +2847,7 @@ do
     end
 
     _G.MSUF_RefreshDispelOutlineStates = function(forceRefresh)
+        if forceRefresh then ClearDispelScanCache() end
         UpdateUnit("player", forceRefresh)
         UpdateUnit("target", true)
         UpdateUnit("focus", true)
@@ -2683,6 +2906,22 @@ do
     end
 
     local function UnitWantsFriendlyDispelVisual(unit)
+        local uf = _ResolveUnitFrame(unit)
+        if uf then
+            local cfg = _RefreshBorderSettingsForFrame(uf)
+            local borderMode = (cfg and cfg.dispelBorderTrigger) or DISPEL_TRIGGER_BY_ME
+            local overlayMode = cfg and _ResolveUnitDispelOverlayTrigger(cfg) or DISPEL_TRIGGER_BY_ME
+            local borderWants = cfg and cfg.dispelOutlineMode == 1
+            local overlayWants = cfg and cfg.unitDispelOverlayEnabled == true
+            if borderWants and _DispelBorderTriggerNeedsPlayerDispel(borderMode) and not PlayerMayFriendlyDispel() then
+                borderWants = false
+            end
+            if overlayWants and _DispelBorderTriggerNeedsPlayerDispel(overlayMode) and not PlayerMayFriendlyDispel() then
+                overlayWants = false
+            end
+            return (borderWants or overlayWants), borderWants and borderMode or nil, overlayWants and overlayMode or nil
+        end
+
         local borderWants, borderMode = UnitWantsFriendlyDispelBorder(unit)
         local overlayWants, overlayMode = UnitWantsFriendlyDispelOverlay(unit)
         return (borderWants or overlayWants), borderWants and borderMode or nil, overlayWants and overlayMode or nil
@@ -2719,6 +2958,7 @@ do
     end
     local function QueueDispelAuraUnit(unit)
         if _dispelAuraQueued[unit] then return end
+        ClearDispelScanCache(unit)
         _dispelAuraQueued[unit] = true
         _dispelAuraUnitsN = _dispelAuraUnitsN + 1
         _dispelAuraUnits[_dispelAuraUnitsN] = unit
@@ -2844,6 +3084,7 @@ do
 
         -- Init / safety clear so state is correct without requiring Edit Mode / manual refresh.
         if event == "PLAYER_ENTERING_WORLD" then
+            ClearDispelScanCache()
             ClearFriendlyDispelCapabilityCache()
             ApplyDispelOutlineEventRegistration()
             _G.MSUF_RefreshDispelOutlineStates(true)
@@ -2875,12 +3116,15 @@ do
                 end
                 local function _flushDTgt()
                     _qDTgt = nil
+                    ClearDispelScanCache("target")
+                    ClearDispelScanCache("targettarget")
                     local force = ForceVisualTest()
                     UpdateUnit("target", force)
                     UpdateUnit("targettarget", force)
                 end
                 local function _flushDFoc()
                     _qDFoc = nil
+                    ClearDispelScanCache("focus")
                     UpdateUnit("focus", ForceVisualTest())
                 end
                 MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_DISPEL_OUTLINE", function()

@@ -4,10 +4,31 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.4 Beta 5",
-    previousVersion = "5.4 Beta 3",
-    rangeLabel = "5.4 Beta 3 -> 5.4 Beta 5",
+    currentVersion = "5.4 Beta 6",
+    previousVersion = "5.4 Beta 5",
+    rangeLabel = "5.4 Beta 5 -> 5.4 Beta 6",
     entries = {
+        {
+            version = "5.4 Beta 6",
+            date = "2026-05-20",
+            sections = {
+                {
+                    title = "Beta Release",
+                    bullets = {
+                        "Reworked Unit Frame and Group Frame dispel priority resolution so Magic, Curse, Disease, Poison, Bleed, generic dispel, aggro, purge, and boss-target lanes stay independent instead of collapsing to the first matching type.",
+                        "Kept Dispel Border and Dispel Overlay as separate visual lanes with their own trigger, priority, color, and refresh state so live option changes no longer reuse a stale border winner for the overlay.",
+                        "Added settings-serial, aura-version, priority-signature, color-revision, and unit-guid cache guards around dispel scans so repeated refreshes are cheaper without keeping stale aura colors or stale priority winners.",
+                        "Improved Any Debuff and Any Dispel Type handling so typed color mode and typed priority order can still select the correct highest-priority debuff, including Bleed.",
+                        "Added Bleed support to the group-frame dispel color curve for the currently observed Bleed ids.",
+                        "Improved Dispel Overlay behavior when Blizzard/native aura rendering is enabled: Blizzard can still own the aura icon/border path while MSUF keeps the health-bar overlay active.",
+                        "Reduced redundant glow, overlay, color, reverse-fill, and status-bar updates for Unit Frame and Group Frame dispel visuals while keeping secret-value handling safe.",
+                        "Improved aura delta handling for added, updated, and removed debuffs so priority-based dispel visuals rescan only when the tracked winner or priority-relevant data can change.",
+                        "Added Perfy workflow documentation for temporary instrumented test zips, including the rule that MSUF_PerfyHook.lua stays out of normal beta releases.",
+                        "Note: the Dispel system is still work in progress and will continue to be tuned in upcoming beta builds.",
+                    },
+                },
+            },
+        },
         {
             version = "5.4 Beta 5",
             date = "2026-05-19",
@@ -82,22 +103,6 @@ local data = {
                         "Fixed Unit Frame range alpha background bleed when layered alpha state changes.",
                         "Fixed Sated aura threshold filters so aura rule changes stay fresh.",
                         "Fixed a Group Frame preview upvalue warning.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.4 Beta",
-            date = "2026-05-18",
-            sections = {
-                {
-                    title = "Beta Release",
-                    bullets = {
-                        "Added persistent Menu2 memory so accordion/card open states, pinned previews, dashboard panels, page selectors, scopes, color selectors, and profile import/export choices survive menu rebuilds and reopening.",
-                        "Improved Auras2 performance by caching dispel metadata, tracking structural aura changes with epochs, and avoiding repeated filter/sort work when aura structure and configuration are unchanged.",
-                        "Reduced Auras2 event/render overhead when the feature or all unit aura modules are disabled, including harder cleanup of inactive containers and private aura state.",
-                        "Improved range-fade stability and cost by repairing unchanged layered alpha less often while still clearing stale fade state when range becomes unknown.",
-                        "Expanded Menu2 search coverage for toggle-style questions such as enable, disable, show, hide, turn on, and turn off.",
                     },
                 },
             },

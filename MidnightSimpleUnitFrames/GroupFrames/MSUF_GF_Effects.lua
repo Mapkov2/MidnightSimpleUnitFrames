@@ -560,7 +560,7 @@ local function UpdateAll(f, unit)
             ) then
                 _GF_ClearNativeSuppressedDispel(f, unit)
             end
-        elseif c.nativeBlizzardDispelsSuppressCustom then
+        elseif c.nativeBlizzardDispelsSuppressCustom and c.dispelOverlayScanActive ~= true then
             if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
         elseif GF.DispelScanActive(c) then GF._UpdateDispel(f, unit) end
     end
@@ -1818,7 +1818,7 @@ local function UpdateHighlight(f, unit)
     local c = f._c
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
     local dispelTest = _G.MSUF_BorderTestModesActive == true and _G.MSUF_DispelBorderTestMode == true
-    if c and c.nativeBlizzardDispelsSuppressCustom and not dispelTest then
+    if c and c.nativeBlizzardDispelsSuppressCustom and c.dispelOverlayScanActive ~= true and not dispelTest then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
     elseif dispelTest or GF.DispelScanActive(c) then
         GF._UpdateDispel(f, unit)
@@ -1872,7 +1872,7 @@ _G.MSUF_GF_UpdateVisualDirty = function(f, unit, bits)
             ) then
                 _GF_ClearNativeSuppressedDispel(f, unit)
             end
-        elseif c and c.nativeBlizzardDispelsSuppressCustom then
+        elseif c and c.nativeBlizzardDispelsSuppressCustom and c.dispelOverlayScanActive ~= true then
             if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
         elseif GF.DispelScanActive(c) then GF._UpdateDispel(f, unit) end
         UpdateTargetIndicator(f, unit)
@@ -1944,7 +1944,12 @@ _G.MSUF_GF_RefreshDispelOverlay = function()
     if not GF.frames then return end
     _GF_ForEachLiveGroupFrame(function(f)
         GF.BuildFrameCache(f)
-        _GF_ApplyDispelOverlay(f)
+        local c = f and f._c
+        if f and f.unit and c and GF.DispelScanActive and GF.DispelScanActive(c) and GF._UpdateDispel then
+            GF._UpdateDispel(f, f.unit)
+        else
+            _GF_ApplyDispelOverlay(f)
+        end
     end)
 end
 -- Single-frame overlay apply (for Borders.lua test-mode cleanup)

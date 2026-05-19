@@ -8,5 +8,6 @@ dist/
 .env
 .env.*
 !.env.example
+MidnightSimpleUnitFrames/MSUF_PerfyHook.lua
 Thumbs.db
 .DS_Store

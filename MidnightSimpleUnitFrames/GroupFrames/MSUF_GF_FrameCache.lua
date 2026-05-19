@@ -119,6 +119,8 @@ function GF.BuildFrameCache(f)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local c = f._c
     if not c then c = {}; f._c = c end
+    c._cacheSerial = (c._cacheSerial or 0) + 1
+    f._msufGFDispelFindCache = nil
     f._msufGFStatusLayoutState = nil
     local fScale = conf._resolvedFrameScale or 1
     c.frameScale = fScale
@@ -266,10 +268,12 @@ function GF.BuildFrameCache(f)
     end
     c.blizzardDispelBorder = c.nativeBlizzardDispels and auras and auras.blizzardDispelBorder == true
     c.nativeBlizzardDispelsSuppressCustom = c.nativeBlizzardDispels and not c.blizzardDispelBorder
+    -- Blizzard/native dispel rendering can own the aura icon/border path, but
+    -- the MSUF health overlay is a separate visual lane and must remain usable.
     local customDispelAllowed = not c.nativeBlizzardDispelsSuppressCustom
 
     -- Dispel overlay (color wash on health bar)
-    c.doEn    = auraMasterOn and conf.dispelOverlayEnabled == true and customDispelAllowed
+    c.doEn    = auraMasterOn and conf.dispelOverlayEnabled == true
     c.doStyle = conf.dispelOverlayStyle or "FULL"
     c.doOnHP  = conf.dispelOverlayOnHealth ~= false
     c.doAlpha = conf.dispelOverlayAlpha or 0.35
@@ -326,7 +330,7 @@ function GF.BuildFrameCache(f)
     c.focB = conf.hlFocusColorB or 1.0
 
     -- Aura dispatch
-    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and customDispelAllowed
+    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and (customDispelAllowed or c.doEn)
     local siRuntimeActive = false
     if auraMasterOn and conf.spellIndicators and conf.spellIndicators.enabled == true then
         local siActiveFn = GF.SpellIndicatorsRuntimeActive
