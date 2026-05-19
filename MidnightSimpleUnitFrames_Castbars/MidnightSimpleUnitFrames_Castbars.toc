@@ -28,6 +28,7 @@ Castbars\MSUF_CastbarEngine.lua
 Castbars\MSUF_CastbarDriver.lua
 Castbars\MSUF_FocusKick_StateDriver.lua
 Modules\MidnightSimpleUnitFrames_BossCastbars.lua
+Modules\BossCastbars_Preview.lua
 Castbars\MSUF_CastbarGCD.lua
 
 MSUF_Castbars.lua

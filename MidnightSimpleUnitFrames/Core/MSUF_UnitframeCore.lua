@@ -31,7 +31,7 @@ local Core = {}
 -- 12.0 Secret-safe: issecretvalue guard kept ONLY for UnitThreatSituation
 -- (threat returns secrets that we must NOT compare in Lua).
 -- Health/Power values go directly to C-side SetValue/SetMinMaxValues which
--- handle secrets natively — no Lua-side diff-gating or issecretvalue guards.
+-- handle secrets natively â€” no Lua-side diff-gating or issecretvalue guards.
 local _UFCORE_issecret = _G.issecretvalue or nil
 
 -- Hotpath locals: _G ref + unpack (kept for unpack compat, all others already localized above)
@@ -56,7 +56,7 @@ local DEFAULT_NPC_COLORS = {
     neutral  = { 1, 1, 0 },
     enemy    = { 0.85, 0.10, 0.10 },
     dead     = { 0.4, 0.4, 0.4 },
-    -- NPC Type Colors (npcColorMode == "type") — Platynator defaults
+    -- NPC Type Colors (npcColorMode == "type") â€” Platynator defaults
     npcBoss      = { 0.74, 0.11, 0.00 },   -- #bc1c00 dark red
     npcMiniboss  = { 0.56, 0.00, 0.74 },   -- #9000bc purple
     npcCaster    = { 0.00, 0.45, 0.74 },   -- #0074bc blue
@@ -84,14 +84,14 @@ local UFCore_GetSettingsCache
 local _ufcoreDebugDirty = false
 -- PERF: File-scope cached flush budget values (set in RefreshSettingsCache).
 -- Eliminates UFCore_GetSettingsCache() from Flush and FlushTask hot paths.
-local _ufcoreFlushBudgetMs = 0.35  -- PERF: Hard-cap per-flush spike. Target: combined MSUF < 800μs/frame.
+local _ufcoreFlushBudgetMs = 0.35  -- PERF: Hard-cap per-flush spike. Target: combined MSUF < 800Î¼s/frame.
 local _ufcoreUrgentMax = 10
 
 -- NPC Type Colors: only active in 5-man instances (party).
 -- Updated on PLAYER_ENTERING_WORLD / ZONE_CHANGED_NEW_AREA.
 local _npcTypeInstanceActive = false
 
--- ── Smooth power bar + real-time text (MidnightRogueBars-style) ──
+-- â”€â”€ Smooth power bar + real-time text (MidnightRogueBars-style) â”€â”€
 -- _smoothPowerBar:    ExponentialEaseOut on StatusBar (fluid animation).
 -- _realtimePowerText: Text updated every event (no budget gating).
 -- Both ON  = MidnightRogueBars hyper-accurate mode.
@@ -112,9 +112,9 @@ local _ufcDarkR, _ufcDarkG, _ufcDarkB       = 0, 0, 0
 local _ufcUnifiedR, _ufcUnifiedG, _ufcUnifiedB = 0.10, 0.60, 0.90
 local _ufcNpcTypeColorBar = false
 
--- ── Health Gradient color curve (red → yellow → green) ──────────────────
+-- â”€â”€ Health Gradient color curve (red â†’ yellow â†’ green) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 -- C-side ColorCurve: evaluated via `calc:EvaluateCurrentHealthPercent(curve)`
--- in MSUF_Bars.HealthCalcUpdate. Fully secret-safe — zero Lua arithmetic on
+-- in MSUF_Bars.HealthCalcUpdate. Fully secret-safe â€” zero Lua arithmetic on
 -- HP values. Identical mechanic to GF gradient mode (MSUF_GF_Effects.lua).
 local _ufcGradientCurve
 do
@@ -213,7 +213,7 @@ local function UFCore_RefreshSettingsCache(reason)
     if Core._PowerSwapHandler then Core._PowerSwapHandler() end
 
     -- When the "either toggle ON" state changes, re-register events on all frames.
-    -- This adds/removes UNIT_POWER_FREQUENT → true zero overhead when both off.
+    -- This adds/removes UNIT_POWER_FREQUENT â†’ true zero overhead when both off.
     if (prevEither ~= nowEither) and Core.RefreshAllUnitEvents then
         Core.RefreshAllUnitEvents(true)
     end
@@ -228,7 +228,7 @@ local function UFCore_RefreshSettingsCache(reason)
     cache.healthGradientEnabled = healthGradientEnabled
 
     -- NPC Color Mode: "reaction" (default) or "type" (classification-based)
-    -- Force "reaction" outside 5-man instances → zero overhead in raids/solo.
+    -- Force "reaction" outside 5-man instances â†’ zero overhead in raids/solo.
     local npcCM = g and g.npcColorMode or nil
     if npcCM ~= "type" then npcCM = "reaction" end
     if not _npcTypeInstanceActive then npcCM = "reaction" end
@@ -390,7 +390,7 @@ UFCore_GetSettingsCache = function()
     local cache = Core._settingsCache
     if cache and cache.valid then
         -- PERF: Per-flush-cycle fast path. If we already validated this cycle,
-        -- skip the 4 table-reference comparisons (saves ~1μs per call, 3-5 calls/cycle).
+        -- skip the 4 table-reference comparisons (saves ~1Î¼s per call, 3-5 calls/cycle).
         local fSerial = Core._flushSettingsCacheSerial
         if fSerial and cache._flushSerial == fSerial then
             return cache
@@ -413,7 +413,7 @@ addon.MSUF_UnitframeCore = Core
 -- Deferred layout application (combat safety)
 Core._layoutDeferredSet = Core._layoutDeferredSet or {}
 
--- Locals (perf + clarity; behavior-preserving) — additional APIs
+-- Locals (perf + clarity; behavior-preserving) â€” additional APIs
 -- (core builtins already localized at file top)
 local debugprofilestop = debugprofilestop
 local UnitName = UnitName
@@ -452,7 +452,7 @@ local DIRTY_THREAT   = 0x00000200
 local DIRTY_INIT     = 0x00000400  -- init-level: show flags, bar bg, reverse fill, event sync
 
 -- MASK_ALL: replaces legacy DIRTY_FULL (0xFFFFFFFF). All known bits, no overflow.
--- RunUpdate dispatches each bit individually — never falls through to a monster function.
+-- RunUpdate dispatches each bit individually â€” never falls through to a monster function.
 local MASK_ALL = bor(DIRTY_HEALTH, DIRTY_POWER, DIRTY_IDENTITY, DIRTY_PORTRAIT,
     DIRTY_STATUS, DIRTY_INDICATOR, DIRTY_TOTINLINE, DIRTY_LAYOUT, DIRTY_VISUAL,
     DIRTY_THREAT, DIRTY_INIT)
@@ -494,11 +494,11 @@ local function UFCore_RefreshFrameInvariantFlags(f, cache)
 
     local staticHealthColor = false
     if mode == "dark" or mode == "unified" then
-        -- Pure constant color — never changes from any event.
+        -- Pure constant color â€” never changes from any event.
         staticHealthColor = true
     elseif mode == "gradient" then
         -- Gradient color is HP-derived and updated inside MSUF_Bars.HealthCalcUpdate
-        -- on every UNIT_HEALTH/UNIT_MAXHEALTH/etc. → not static.
+        -- on every UNIT_HEALTH/UNIT_MAXHEALTH/etc. â†’ not static.
         staticHealthColor = false
     elseif f._msufIsPlayer then
         staticHealthColor = true
@@ -664,7 +664,12 @@ local EL_INDICATOR = 0x00000040
 --  - Identity/Status currently fall back to the legacy full update for correctness.
 
 local Elements = {}
-local UFCore_GetTargetToTInlineConf -- forward decl (used by ToTInline before its definition)
+-- Forward declarations: Elements.ToTInline is built before the split-module
+-- wrappers below. Lua 5.1 closures need these locals in scope here.
+local UFCore_GetTargetToTInlineConf
+local UFCore_IsToTInlineEnabled
+local UFCore_UpdateToTInline
+local UFCore_EnsureToTInlineWidgets
 Core.Elements = Elements
 
 -- Fast function refs (resolved once; avoids _G lookups in element hot paths).
@@ -963,7 +968,7 @@ local function _RefreshUnitIdentityCache(frame)
 
         -- NPC Type override: replace "enemy" with classification-based key.
         -- Gated by cache.npcColorMode which is forced to "reaction" outside 5-man.
-        -- All APIs return plain values — secret-safe in 12.0 Midnight.
+        -- All APIs return plain values â€” secret-safe in 12.0 Midnight.
         local kind = frame._msufCachedReactionKind
         if kind == "enemy" or (kind == nil) then
             local cache = UFCore_GetSettingsCache()
@@ -981,7 +986,7 @@ local function _RefreshUnitIdentityCache(frame)
                     frame._msufCachedReactionKind = "npcBoss"
                 elseif cls == "elite" or cls == "rareelite" then
                     -- Dungeon bosses return "elite" but have skull level (-1).
-                    -- UnitEffectiveLevel returns a plain number — safe in 12.0.
+                    -- UnitEffectiveLevel returns a plain number â€” safe in 12.0.
                     local level = UnitEffectiveLevel and UnitEffectiveLevel(unit) or 0
                     if level == -1 then
                         frame._msufCachedReactionKind = "npcBoss"
@@ -1235,7 +1240,7 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
     -- Only dynamic "class" frames need identity invalidation here.
     -- Dark/unified modes and static class-colored frames (player, pet override) never
     -- change color from UNIT_FACTION / UNIT_FLAGS during combat.
-    -- Exception: pet/NPC alive↔dead transitions fire UNIT_FLAGS and must always
+    -- Exception: pet/NPC aliveâ†”dead transitions fire UNIT_FLAGS and must always
     -- refresh the reaction cache so the bar stops showing "dead" grey.
     if frame._msufHealthColorDirty and not frame._msufCachedIsPlayer then
         frame._msufCachedReactionKind = nil
@@ -1269,7 +1274,7 @@ local function UFCore_RefreshHealthBarColorFast(frame, conf)
             local color = calc:EvaluateCurrentHealthPercent(_ufcGradientCurve)
             if color then
                 local cr, cg, cb = color:GetRGB()
-                -- Curve return values may carry secret data — feed them straight
+                -- Curve return values may carry secret data â€” feed them straight
                 -- into the C-side setter, never compare or quantize in Lua.
                 frame._msufLastHPBarR, frame._msufLastHPBarG, frame._msufLastHPBarB = nil, nil, nil
                 frame._msufLastHPBarMode = mode
@@ -1484,7 +1489,7 @@ Elements.Portrait = {
     Disable = function(f) end,
     Update = function(f, conf)
         local fn = _G.MSUF_MaybeUpdatePortrait or _G.MSUF_UpdatePortraitIfNeeded
-        -- PERF: NEVER return false. Returning false triggers legacyFallback → full
+        -- PERF: NEVER return false. Returning false triggers legacyFallback â†’ full
         -- UpdateSimpleUnitFrame (0.3-0.5ms). If fn/conf unavailable, skip silently;
         -- portrait will update on next config change or unit swap.
         if type(fn) ~= "function" then return true end
@@ -1754,248 +1759,24 @@ local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
     desired[ev] = true
 end
 
-local UFCORE_TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
-local UFCORE_TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
-local UFCORE_TOT_INLINE_PRESET_SEPARATOR = {
-    [" "] = true,
-    ["-"] = true,
-    ["/"] = true,
-    ["\\"] = true,
-    ["|"] = true,
-    ["<"] = true,
-    [">"] = true,
-    ["~"] = true,
-    [":"] = true,
-}
-
-local function UFCore_TruncateUtf8Chars(value, maxChars)
-    value = tostring(value or "")
-    maxChars = tonumber(maxChars) or 0
-    if maxChars <= 0 or value == "" then return "" end
-
-    local bytePos = 1
-    local valueLen = #value
-    local chars = 0
-    while bytePos <= valueLen and chars < maxChars do
-        local b = string_byte(value, bytePos)
-        if not b then break end
-        if b < 128 then
-            bytePos = bytePos + 1
-        elseif b < 224 then
-            bytePos = bytePos + 2
-        elseif b < 240 then
-            bytePos = bytePos + 3
-        else
-            bytePos = bytePos + 4
-        end
-        chars = chars + 1
-    end
-    return string_sub(value, 1, bytePos - 1)
+-- ToTInline config, DB migration, separator resolution, and text rendering live
+-- in Core\MSUF_UFCore_ToTInline.lua. Keep local wrappers so existing UFCore
+-- dirty-mask and event code keeps its original call sites.
+UFCore_GetTargetToTInlineConf = function()
+    local fn = _G.MSUF_UFCore_GetTargetToTInlineConf
+    if type(fn) == "function" then return fn() end
+    return nil
 end
 
-local function UFCore_CleanToTInlineCustomSeparator(value)
-    value = string_gsub(tostring(value or ""), "[%c]", " ")
-    return UFCore_TruncateUtf8Chars(value, UFCORE_TOT_INLINE_CUSTOM_SEPARATOR_MAX)
+UFCore_IsToTInlineEnabled = function()
+    local fn = _G.MSUF_UFCore_IsToTInlineEnabled
+    return (type(fn) == "function" and fn() == true) and true or false
 end
 
-local function UFCore_ResolveToTInlineSeparator(conf)
-    local token = conf and conf.totInlineSeparator
-    if token == UFCORE_TOT_INLINE_CUSTOM_SEPARATOR then
-        token = conf and conf.totInlineCustomSeparator
-        if type(token) ~= "string" or token == "" then token = " " end
-    elseif type(token) ~= "string" or token == "" then
-        token = "|"
-    end
-    return token
+UFCore_UpdateToTInline = function(f)
+    local fn = _G.MSUF_UFCore_UpdateToTInline
+    if type(fn) == "function" then return fn(f) end
 end
-
--- Ensure the targettarget DB node exists even when the ToT unitframe is disabled.
--- This is required so "ToT inline in target name" works immediately without ever enabling the ToT frame.
-function UFCore_GetTargetToTInlineConf()
-    local db = UFCore_EnsureDBOnce()
-    if type(db) ~= "table" then
-        return nil
-    end
-
-    -- DB can be swapped on profile import; refresh cache if so.
-    if Core._totInlineConfDB ~= db then
-        Core._totInlineConfDB = db
-        Core._totInlineConfRef = nil
-        Core._totInlineConfMigrated = nil
-    end
-
-    local tt = Core._totInlineConfRef
-    if type(tt) ~= "table" then
-        tt = db.targettarget
-        if type(tt) ~= "table" then
-            tt = {}
-            db.targettarget = tt
-        end
-        Core._totInlineConfRef = tt
-    end
-
-    -- One-time migration/defaults (no per-target-switch work).
-    if not Core._totInlineConfMigrated then
-        -- Migration / alias: older builds may have stored the flag under MSUF_DB.target.
-        if tt.showToTInTargetName == nil then
-            local t = db.target
-            if type(t) == "table" then
-                local v = t.showToTInTargetName
-                if v == 1 or v == "1" then v = true end
-                if v == 0 or v == "0" then v = false end
-                if v ~= nil then
-                    tt.showToTInTargetName = (v == true)
-                end
-            end
-        end
-
-        -- Migration / alias: older builds may have stored the separator under MSUF_DB.target.
-        if tt.totInlineSeparator == nil then
-            local t = db.target
-            if type(t) == "table" and type(t.totInlineSeparator) == "string" then
-                tt.totInlineSeparator = t.totInlineSeparator
-            end
-        end
-        if type(tt.totInlineSeparator) ~= "string" or tt.totInlineSeparator == "" then
-            tt.totInlineSeparator = "|"
-        end
-        if tt.totInlineCustomSeparator == nil then
-            local t = db.target
-            if type(t) == "table" and type(t.totInlineCustomSeparator) == "string" then
-                tt.totInlineCustomSeparator = t.totInlineCustomSeparator
-            end
-        end
-        tt.totInlineCustomSeparator = UFCore_CleanToTInlineCustomSeparator(tt.totInlineCustomSeparator)
-        if tt.totInlineSeparator ~= UFCORE_TOT_INLINE_CUSTOM_SEPARATOR and not UFCORE_TOT_INLINE_PRESET_SEPARATOR[tt.totInlineSeparator] then
-            tt.totInlineCustomSeparator = UFCore_CleanToTInlineCustomSeparator(tt.totInlineSeparator)
-            tt.totInlineSeparator = UFCORE_TOT_INLINE_CUSTOM_SEPARATOR
-        end
-
-        if tt.showToTInTargetName == nil then
-            tt.showToTInTargetName = false
-        end
-
-        Core._totInlineConfMigrated = true
-    end
-
-    return tt
-end
-
--- ToT inline is CORE-owned and must never depend on the ToT unitframe being enabled/built.
-local function UFCore_IsToTInlineEnabled()
-    local conf = UFCore_GetTargetToTInlineConf()
-    return (conf and conf.showToTInTargetName == true) and true or false
-end
-
-function UFCore_UpdateToTInline(f)
-    if not f or not f._msufIsTarget then return end
-
-    if not UFCore_IsToTInlineEnabled() then
-        if f._msufToTInlineSep and f._msufToTInlineSep.Hide then f._msufToTInlineSep:Hide() end
-        if f._msufToTInlineText and f._msufToTInlineText.Hide then f._msufToTInlineText:Hide() end
-        return
-    end
-
-    -- Widgets are created/anchored in the layout path (Step 3 policy).
-    if (not f._msufToTInlineSep) or (not f._msufToTInlineText) then
-        Core.RequestLayout(f, "ToTInlineWidgetsMissing", true)
-        return
-    end
-
-    local show = false
-
-    local inEdit = false
-    if addon and addon.EditModeLib and addon.EditModeLib.IsInEditMode then
-        inEdit = addon.EditModeLib:IsInEditMode() and true or false
-    end
-
-    if inEdit then
-        show = true
-        _SetText(f._msufToTInlineText, "ToT")
-    else
-        if UnitExists and UnitExists("targettarget") then
-            show = true
-            local nm
-            if UnitName then
-                nm = UnitName("targettarget")
-            end
-
-            -- Secret-safe: do NOT compare/test nm (can be a secret value).
-            -- Just set text (nil-safe via `or ""`), no pcall in hot paths.
-            _SetText(f._msufToTInlineText, nm or "")
-        end
-    end
-
-    -- Separator token (stored in DB; render with spaces around it, legacy-style).
-    do
-        local conf = UFCore_GetTargetToTInlineConf()
-        local token = UFCore_ResolveToTInlineSeparator(conf)
-        _SetText(f._msufToTInlineSep, " " .. token .. " ")
-    end
-
-    if show then
-        -- Width clamp: cap ToT inline text to ~32% of frame width (secret-safe, no string math).
-        local txt = f._msufToTInlineText
-        local frameWidth = (f.GetWidth and f:GetWidth()) or 0
-        local maxW = 120
-        if frameWidth > 0 then
-            maxW = math.floor(frameWidth * 0.32)
-            if maxW < 80 then maxW = 80 end
-            if maxW > 180 then maxW = 180 end
-        end
-        txt:SetWidth(maxW)
-
-        -- Coloring: class color for players, reaction color for NPCs (secret-safe, no string compares).
-        local r, g, b = 1, 1, 1
-        if not inEdit then
-            if UnitIsPlayer and UnitIsPlayer("targettarget") then
-                local gen = MSUF_DB and MSUF_DB.general
-                local wantClass = gen and gen.nameClassColor
-                local tkey = f.msufConfigKey
-                if tkey then
-                    local uconf = MSUF_DB and MSUF_DB[tkey]
-                    if uconf and uconf.fontOverride then
-                        local ov = uconf.nameClassColor
-                        if ov ~= nil then wantClass = ov end
-                    end
-                end
-                if wantClass then
-                    local _, classToken = UnitClass("targettarget")
-                    r, g, b = UFCore_GetClassBarColorFast(classToken)
-                end
-            else
-                if UnitIsDeadOrGhost and UnitIsDeadOrGhost("targettarget") then
-                    r, g, b = UFCore_GetNPCReactionColorFast("dead")
-                else
-                    local reaction = tonumber(UnitReaction and UnitReaction("player", "targettarget"))
-                    if reaction then
-                        if reaction >= 5 then
-                            r, g, b = UFCore_GetNPCReactionColorFast("friendly")
-                        elseif reaction == 4 then
-                            r, g, b = UFCore_GetNPCReactionColorFast("neutral")
-                        else
-                            r, g, b = UFCore_GetNPCReactionColorFast("enemy")
-                        end
-                    else
-                        r, g, b = UFCore_GetNPCReactionColorFast("enemy")
-                    end
-                end
-            end
-        end
-        f._msufToTInlineSep:SetTextColor(0.7, 0.7, 0.7)
-        txt:SetTextColor(r, g, b)
-
-        _SetShown(f._msufToTInlineSep, true)
-        _SetShown(txt, true)
-    else
-        if f._msufToTInlineSep and f._msufToTInlineSep.Hide then f._msufToTInlineSep:Hide() end
-        if f._msufToTInlineText and f._msufToTInlineText.Hide then f._msufToTInlineText:Hide() end
-    end
-end
--- Forward declaration: ComputeElementMask may need to ensure ToT-inline widgets
--- before the local function is defined later in this file (Lua scoping).
-local UFCore_EnsureToTInlineWidgets
-
 local function ComputeElementMask(f)
     if not f or not f.unit then
         return 0, nil
@@ -2210,15 +1991,15 @@ end
 end
 
 
--- ═══════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- Engine: Direct dispatch + single deferred queue
 -- 12.0 Architecture:
---   Hot events (Health/Power) → direct C-side widget calls, no queue.
---   Cold events (Identity/Status/Portrait) → single queue, budget-gated flush.
---   Layout → deferred, combat-safe.
--- ═══════════════════════════════════════════════════════════════════════
+--   Hot events (Health/Power) â†’ direct C-side widget calls, no queue.
+--   Cold events (Identity/Status/Portrait) â†’ single queue, budget-gated flush.
+--   Layout â†’ deferred, combat-safe.
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
--- ── Single linked-list queue ──
+-- â”€â”€ Single linked-list queue â”€â”€
 -- Frames are linked via _msufQueueNext. _msufQueuedUFCore is the membership flag.
 local _queueHead, _queueTail = nil, nil
 local _queueSize = 0
@@ -2269,7 +2050,7 @@ local function _DeactivateFlushIfIdle()
     if _flushDriverFrame then _flushDriverFrame:Hide() end
 end
 
--- ── MarkDirty: public API ──
+-- â”€â”€ MarkDirty: public API â”€â”€
 function Core.MarkDirty(f, mask, urgent, reason)
     if not f then return end
     mask = mask or MASK_UNIT_SWAP
@@ -2284,7 +2065,7 @@ function Core.MarkDirty(f, mask, urgent, reason)
     _ActivateFlush()
 end
 
--- ── Layout (combat-safe deferral) ──
+-- â”€â”€ Layout (combat-safe deferral) â”€â”€
 Core._layoutDeferredSet = Core._layoutDeferredSet or {}
 
 local function UFCore_ApplyLayout(frame, conf, why)
@@ -2344,91 +2125,14 @@ function _G.MSUF_QueueUnitframeVisual(f)
     Core.MarkDirty(f, DIRTY_VISUAL, false, "QueueVisual")
 end
 
--- ── ToTInline widgets + layout (kept from original) ──
+-- â”€â”€ ToTInline widgets + layout (kept from original) â”€â”€
 
-function UFCore_EnsureToTInlineWidgets(f, conf)
-    if not conf or not conf.showToTInTargetName then return end
-
-    local name = f.nameText
-    if not name then return end
-
-    local overlay = f._msufToTInlineOverlay
-    if not overlay then
-        overlay = CreateFrame("Frame", nil, f)
-        f._msufToTInlineOverlay = overlay
-        overlay:SetAllPoints(f)
-        overlay:SetFrameLevel((f:GetFrameLevel() or 0) + 80)
-    else
-        if overlay:GetParent() ~= f then
-            overlay:SetParent(f)
-            overlay:SetAllPoints(f)
-        end
-        local desiredLevel = (f:GetFrameLevel() or 0) + 80
-        if overlay:GetFrameLevel() < desiredLevel then
-            overlay:SetFrameLevel(desiredLevel)
-        end
-    end
-
-    local created = false
-
-    local sep = f._msufToTInlineSep
-    if not sep then
-        sep = overlay:CreateFontString(nil, "OVERLAY")
-        f._msufToTInlineSep = sep
-        sep:SetFontObject(GameFontNormalSmall)
-        sep:SetJustifyH("LEFT")
-        sep:SetJustifyV("MIDDLE")
-        created = true
-    else
-        if sep:GetParent() ~= overlay then sep:SetParent(overlay) end
-    end
-
-    local tt = f._msufToTInlineText
-    if not tt then
-        tt = overlay:CreateFontString(nil, "OVERLAY")
-        f._msufToTInlineText = tt
-        tt:SetFontObject(GameFontNormalSmall)
-        tt:SetJustifyH("LEFT")
-        tt:SetJustifyV("MIDDLE")
-        created = true
-    else
-        if tt:GetParent() ~= overlay then tt:SetParent(overlay) end
-    end
-
-    sep:SetDrawLayer("OVERLAY", 7)
-    tt:SetDrawLayer("OVERLAY", 7)
-
-    sep:ClearAllPoints()
-    local inlineAnchor = name
-    if f.raidGroupNameText and f.raidGroupNameText.IsShown and f.raidGroupNameText:IsShown()
-        and f._msufRaidGroupNameAnchor == "NAMERIGHT" then
-        inlineAnchor = f.raidGroupNameText
-    end
-    sep:SetPoint("LEFT", inlineAnchor, "RIGHT", 0, 0)
-
-    tt:ClearAllPoints()
-    tt:SetPoint("LEFT", sep, "RIGHT", 0, 0)
-
-    if created and name.GetFont then
-        local font, size, flags = name:GetFont()
-        if font then
-            sep:SetFont(font, size, flags)
-            tt:SetFont(font, size, flags)
-            sep._msufFontRev = nil
-            tt._msufFontRev = nil
-        end
-    end
+UFCore_EnsureToTInlineWidgets = function(f, conf)
+    local fn = _G.MSUF_UFCore_EnsureToTInlineWidgets
+    if type(fn) == "function" then return fn(f, conf) end
 end
 
--- ── Swap defer coalescing (unit swap visual refresh) ──
-function _G.MSUF_UFCore_ReanchorTargetToTInline(f)
-    if not (f and f._msufIsTarget and f._msufToTInlineSep and f._msufToTInlineText) then return end
-    local conf = UFCore_GetTargetToTInlineConf()
-    if conf and conf.showToTInTargetName then
-        UFCore_EnsureToTInlineWidgets(f, conf)
-    end
-end
-
+-- Swap defer coalescing (unit swap visual refresh)
 Core.RunNextFrame = Core.RunNextFrame or _G.MSUF_RunNextFrame or function(fn)
     if type(fn) ~= "function" then return end
     if _G.C_Timer and _G.C_Timer.After then
@@ -2516,18 +2220,18 @@ local function DeferSwapWork(unit, why, wantPortrait, wantVisual)
     end
 end
 
--- ═══════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- Direct dispatch: Health + Power (inline, no queue)
--- ═══════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
--- UNIT_HEALTH → value-only (most frequent: 10-50/sec per unit).
+-- UNIT_HEALTH â†’ value-only (most frequent: 10-50/sec per unit).
 -- Secret-safe: SetValue handles secrets C-side natively.
 --
 -- SHOWSTOPPER fix: the previous impl throttled text via Core._frameNowSerial.
 -- That counter is only incremented by UFCore_FlushTask, and FlushTask calls
 -- _DeactivateFlushIfIdle() the moment the queue is empty. UNIT_HEALTH runs on
--- the DIRECT_APPLY path which never enqueues → queue stays empty → FlushTask
--- idles → _frameNowSerial FREEZES. After the first event the serial never
+-- the DIRECT_APPLY path which never enqueues â†’ queue stays empty â†’ FlushTask
+-- idles â†’ _frameNowSerial FREEZES. After the first event the serial never
 -- changes again, so f._msufHpTxtSerial == serial forever and hpText stops
 -- updating entirely. This is the exact failure-mode documented in MSUF's
 -- "key learnings" ("Core._frameNow freezes when FlushTask OnUpdate idles").
@@ -2544,9 +2248,9 @@ local function _HealthValueFast(f)
     UFCore_SetHealthBarValue(f, bar, hp)       -- C-side, secret-safe
 
     -- Gradient mode: refresh bar color on every HP tick so the colour tracks
-    -- live HP%. C-side path: UnitGetDetailedHealPrediction → calc →
-    -- EvaluateCurrentHealthPercent(curve) → SetStatusBarColor. All values
-    -- flow C → C, zero Lua arithmetic on HP. Cost: ~3μs per call.
+    -- live HP%. C-side path: UnitGetDetailedHealPrediction â†’ calc â†’
+    -- EvaluateCurrentHealthPercent(curve) â†’ SetStatusBarColor. All values
+    -- flow C â†’ C, zero Lua arithmetic on HP. Cost: ~3Î¼s per call.
     -- Mirrors GF dispatchHealthLean gradient handling. Calc is created in
     -- MSUF_Bars.HealthCalcUpdate on UNIT_MAXHEALTH; nil-guard skips silently
     -- on rare cold-start race (next MAXHEALTH event creates it).
@@ -2566,7 +2270,7 @@ local function _HealthValueFast(f)
     local fnTxt = FN_UpdateHpTextFast
     if not fnTxt then return end
 
-    -- PERF: Lazy HP text. When HP text is disabled, fnTxt → RenderHpMode still
+    -- PERF: Lazy HP text. When HP text is disabled, fnTxt â†’ RenderHpMode still
     -- runs every UNIT_HEALTH event, clearing an already-empty FontString.
     -- Track cleared state: clear once on disable, then skip until re-enabled.
     if f.showHPText == false then
@@ -2590,14 +2294,14 @@ local function _HealthValueFast(f)
     fnTxt(f, hp)
 end
 
--- UNIT_MAXHEALTH / absorb / heal-prediction → full health chain via Elements.Health.Update
+-- UNIT_MAXHEALTH / absorb / heal-prediction â†’ full health chain via Elements.Health.Update
 local _HealthFullFast = Elements.Health and Elements.Health.Update
 
 ------------------------------------------------------------------------
 -- PHASE 3: oUF-style lean sub-paths for overlay events.
 -- Each event updates ONLY the bar that changed, not the full chain.
 -- Calculator must be refreshed (1 C-call) but only the relevant getter
--- is read + SetValue'd. Saves ~15μs vs full chain per event.
+-- is read + SetValue'd. Saves ~15Î¼s vs full chain per event.
 ------------------------------------------------------------------------
 
 local function _CalcDamageAbsorbs(calc, unit)
@@ -2808,7 +2512,7 @@ do
     -- value stops changing. The downstream ns.Text.Set FontString diff cache
     -- is secret-safe and makes redundant passes ~free, so the budget gate is
     -- both unnecessary and incorrect. Cost on a no-change event is 1
-    -- UnitPowerPercent C-API call + SetText-skipped-by-diff ≈ ~2μs.
+    -- UnitPowerPercent C-API call + SetText-skipped-by-diff â‰ˆ ~2Î¼s.
     local function _MaybeUpdatePowerText(f, unit, pType)
         local fnTxt = FN_UpdatePowerTextFast
         if not fnTxt then return end
@@ -2885,7 +2589,7 @@ do
     _PowerSwapHandler()
     Core._PowerSwapHandler = _PowerSwapHandler
 
-    -- Power vis events → full element update (handles bar show/hide)
+    -- Power vis events â†’ full element update (handles bar show/hide)
     local _PowerElementUpdate = Elements.Power and Elements.Power.Update
     local function _PowerVisEvent(f)
         f._msufPowerVisCheckNeeded = true
@@ -2945,22 +2649,22 @@ local function _RunFactionDirect(f)
     end
 end
 
--- ═══════════════════════════════════════════════════════════════════════
--- FrameOnEvent — single dispatch point, zero table indirection
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- FrameOnEvent â€” single dispatch point, zero table indirection
 -- Events are dispatched by string identity (Lua interns event strings,
 -- so == is a pointer compare, not a string compare).
--- ═══════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 local BYTE_U = string.byte("U")
 
--- ═══════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- PERF: Event dispatch table (oUF-style).
 -- Replaces the if-elseif chain in FrameOnEvent with O(1) hash lookup.
 -- Each handler preserves the exact same side-effects as the original
 -- inline branch (dirty-flag sets, function calls, MarkDirty event strings).
 -- Built AFTER all local handlers are defined; references to Core.* are
 -- late-bound inside closures (same as original).
--- ═══════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 local _UF_DISPATCH = {
     -- Hot path (10-50/sec)
     UNIT_HEALTH          = function(self) _HealthValueFast(self) end,
@@ -3049,9 +2753,9 @@ local function FrameOnEvent(self, event, arg1, ...)
 end
 _G._MSUF_UFCore_FrameOnEvent = FrameOnEvent
 
--- ═══════════════════════════════════════════════════════════════════════
--- RunUpdate + Flush — single queue, direct element dispatch
--- ═══════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- RunUpdate + Flush â€” single queue, direct element dispatch
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 local function RunUpdate(f)
     if not f then return end
@@ -3061,7 +2765,7 @@ local function RunUpdate(f)
 
     if mask == 0 then return end
 
-    -- ── Layout (combat-deferred) ──
+    -- â”€â”€ Layout (combat-deferred) â”€â”€
     if band(mask, DIRTY_LAYOUT) ~= 0 then
         if _G.MSUF_InCombat then
             Core._layoutDeferredSet[f] = true
@@ -3077,7 +2781,7 @@ local function RunUpdate(f)
         end
     end
 
-    -- ── DIRTY_INIT: first in dispatch (sets flags for subsequent elements) ──
+    -- â”€â”€ DIRTY_INIT: first in dispatch (sets flags for subsequent elements) â”€â”€
     if band(mask, DIRTY_INIT) ~= 0 then
         conf = conf or GetFrameConf(f)
         -- NOTE: showName/showHP/showPower are NOT set here.
@@ -3097,7 +2801,7 @@ local function RunUpdate(f)
         if mask == 0 then return end
     end
 
-    -- ── Visual (rare bar visuals) ──
+    -- â”€â”€ Visual (rare bar visuals) â”€â”€
     if band(mask, DIRTY_VISUAL) ~= 0 then
         local fn = _G.MSUF_RefreshRareBarVisuals or _G.MSUF_ApplyRareVisuals
         if fn then fn(f) end
@@ -3105,7 +2809,7 @@ local function RunUpdate(f)
         if mask == 0 then return end
     end
 
-    -- ── Direct element dispatch ──
+    -- â”€â”€ Direct element dispatch â”€â”€
     if band(mask, DIRTY_HEALTH) ~= 0 then
         if _HealthFullFast then _HealthFullFast(f) end
         if f._msufHealthColorDirty then
@@ -3196,7 +2900,7 @@ local function UFCore_FlushTask()
         RunUpdate(_DequeueFrame())
         processed = processed + 1
         if processed >= _ufcoreUrgentMax then break end
-        -- PERF: Check time budget every 4th frame only (saves ~0.75μs/call × 3/4 iterations)
+        -- PERF: Check time budget every 4th frame only (saves ~0.75Î¼s/call Ã— 3/4 iterations)
         if endAt and processed % 4 == 0 and debugprofilestop() > endAt then break end
     end
 
@@ -3285,7 +2989,7 @@ function Core.AttachFrame(f)
     -- Apply initial layout stamps once.
     Core.RequestLayout(f, "AttachFrame")
 
-    -- First draw is queued (coalesced) — includes DIRTY_INIT for config flags + event sync.
+    -- First draw is queued (coalesced) â€” includes DIRTY_INIT for config flags + event sync.
     _G.MSUF_QueueUnitframeInit(f, true)
 end
 
@@ -3640,11 +3344,11 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         return
     end
 
-    -- ═══════════════════════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     -- CONSOLIDATED PLAYER_TARGET_CHANGED: oUF-style naked click path.
-    -- Synchron: 4 C-calls (bar value + color + name). ~30μs total.
-    -- Deferred: EVERYTHING else via After(0) → element dispatch.
-    -- ═══════════════════════════════════════════════════════════════════
+    -- Synchron: 4 C-calls (bar value + color + name). ~30Î¼s total.
+    -- Deferred: EVERYTHING else via After(0) â†’ element dispatch.
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     if event == "PLAYER_TARGET_CHANGED" then
         -- 1. UFCore: naked C-calls for immediate visual feedback
         local tf = FramesByUnit["target"]
@@ -3659,7 +3363,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         -- Deferred: portrait, visual, absorb cache invalidation
         DeferSwapWork("target", "PLAYER_TARGET_CHANGED", true, false)
         if ttf then DeferSwapWork("targettarget", "PLAYER_TARGET_CHANGED", true, false) end
-        -- Boss target highlight (deferred — not visible on click frame)
+        -- Boss target highlight (deferred â€” not visible on click frame)
         if FramesByUnit["boss1"] then
             local bthFn = _G.MSUF_UpdateBossTargetHighlight
             if bthFn then Core.RunNextFrame(bthFn) end
@@ -3797,7 +3501,7 @@ end
 -- Export for Options/profile refresh
 _G.MSUF_UpdateBossTargetHighlight = UFCore_UpdateBossTargetHighlight
 
--- PLAYER_TARGET_CHANGED: consolidated in Global OnEvent above (ONE C→Lua entry).
+-- PLAYER_TARGET_CHANGED: consolidated in Global OnEvent above (ONE Câ†’Lua entry).
 -- PLAYER_FOCUS_CHANGED: still via EventBus (less critical path).
 do
     local busReg = _G.MSUF_EventBus_Register
@@ -3876,7 +3580,7 @@ end
 _G.MSUF_UFCore_GetNPCReactionColorFast = UFCore_GetNPCReactionColorFast
 _G.MSUF_UFCore_GetClassBarColorFast    = UFCore_GetClassBarColorFast
 
--- NPC Type instance gate (plain global boolean — zero-cost read from main file)
+-- NPC Type instance gate (plain global boolean â€” zero-cost read from main file)
 _G.MSUF_NpcTypeInstanceActive = false
 
 -- Exported for the heavy-visual path in MidnightSimpleUnitFrames.lua
