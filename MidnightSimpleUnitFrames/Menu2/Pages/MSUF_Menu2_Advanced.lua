@@ -73,6 +73,22 @@ local function DeepCopyTable(src)
     return dst
 end
 
+local function IsEmptyAuraFilterTable(filters)
+    if type(filters) ~= "table" then return true end
+    for key, value in pairs(filters) do
+        if key == "buffs" or key == "debuffs" then
+            if type(value) == "table" then
+                for _ in pairs(value) do return false end
+            elseif value ~= nil then
+                return false
+            end
+        elseif value ~= nil then
+            return false
+        end
+    end
+    return true
+end
+
 local function BindTableToggle(ctx, section, label, getTable, key, default, apply)
     local toggle = W.Toggle(section, label)
     M.BindToggle(ctx, toggle,
@@ -329,8 +345,9 @@ local function ForceAuraFilterOverride()
     if scope == "shared" then return end
     local shared = AuraShared()
     local u = AurasUnit(scope)
+    local hadOverride = (u.overrideFilters == true)
     u.overrideFilters = true
-    if type(u.filters) ~= "table" or u.filters == shared.filters then
+    if type(u.filters) ~= "table" or u.filters == shared.filters or (not hadOverride and IsEmptyAuraFilterTable(u.filters)) then
         u.filters = DeepCopyTable(shared.filters or {})
     end
     u.filters.buffs = u.filters.buffs or {}

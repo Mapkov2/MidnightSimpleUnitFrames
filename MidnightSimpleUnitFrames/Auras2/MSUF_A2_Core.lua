@@ -973,7 +973,10 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     -- Saves ~52µs per update-only event (the most common case in sustained combat).
     local cfgGen = cfg._gen or -1
     local structureEpoch = s.structureEpoch or 0
-    if s._lastFilterGen == cfgGen and s._lastFilterStructureEpoch == structureEpoch
+    local satedThresholdActive = (cfg.showSated ~= false)
+        and (type(cfg.satedShowAtSeconds) == "number" and cfg.satedShowAtSeconds > 0)
+    if not satedThresholdActive
+       and s._lastFilterGen == cfgGen and s._lastFilterStructureEpoch == structureEpoch
        and s._lastNB ~= nil and s._lastND ~= nil then
         s.changed = false
         return buffOut, s._lastNB, debuffOut, s._lastND
