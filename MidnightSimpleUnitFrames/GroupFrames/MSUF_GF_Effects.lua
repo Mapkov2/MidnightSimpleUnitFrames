@@ -4223,6 +4223,11 @@ local function dispatchOverlaysOnly(f, unit)
         return
     end
 
+    if absorbTestMode then
+        _GF_DispatchOverlaysFromCalc(f, unit, nil)
+        return
+    end
+
     -- PERF: Same-frame dedup. UNIT_HEAL_PREDICTION + UNIT_ABSORB_AMOUNT_CHANGED
     -- + UNIT_HEAL_ABSORB_AMOUNT_CHANGED frequently fire in the same WoW frame
     -- (e.g. heal lands with absorb bubble). This function reads calc and
@@ -4243,8 +4248,6 @@ local function dispatchOverlaysOnly(f, unit)
 
     UnitGetDetailedHealPrediction(unit, "player", calc)
     local hpMax = f._msufGFCachedHpMax or calc:GetMaximumHealth()
-
-    if absorbTestMode then return end
 
     if ihEnabled then
         if _GF_ApplyHealPredAnchor then _GF_ApplyHealPredAnchor(f) end

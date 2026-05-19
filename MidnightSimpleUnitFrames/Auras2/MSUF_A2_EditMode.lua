@@ -1,4 +1,3 @@
--- MSUF_A2_EditMode.lua — EditMode + Preview (consolidated)
 
 -- MSUF_A2_EditMode.lua
 
