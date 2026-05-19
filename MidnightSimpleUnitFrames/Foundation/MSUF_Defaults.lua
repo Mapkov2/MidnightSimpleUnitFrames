@@ -756,6 +756,14 @@ end
     if g.bossTargetOutlineMode == nil then
         g.bossTargetOutlineMode = g.bossTargetHighlightEnabled and 1 or 0
     end
+    -- UnitFrame dispel overlay (health-bar tint driven by the Dispel Border aura scanner)
+    if g.unitDispelOverlayEnabled == nil then g.unitDispelOverlayEnabled = false end
+    if g.unitDispelOverlayStyle == nil then g.unitDispelOverlayStyle = "FULL" end
+    if g.unitDispelOverlayOnHealth == nil then g.unitDispelOverlayOnHealth = true end
+    if g.unitDispelOverlayAlpha == nil then g.unitDispelOverlayAlpha = 0.35 end
+    if g.unitDispelOverlayTrigger == nil then g.unitDispelOverlayTrigger = "BORDER" end
+    if g.unitDispelOverlayUseHighlightPriority == nil then g.unitDispelOverlayUseHighlightPriority = true end
+    if g.unitDispelOverlayPrioEnabled == nil then g.unitDispelOverlayPrioEnabled = false end
     local si = g.statusIndicators
     if si.showAFK == nil then si.showAFK = false end
     if si.showDND == nil then si.showDND = false end

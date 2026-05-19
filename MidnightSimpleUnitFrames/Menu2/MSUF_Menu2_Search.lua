@@ -2203,13 +2203,13 @@ local SEARCH_FAQ = {
         priority = 780,
     },
     {
-        label = "MSUF Dispel Border / Glow",
-        answer = "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. MSUF Dispel Border / Glow keeps Blizzard icons while allowing MSUF's dispel highlight visuals.",
+        label = "MSUF Dispel Highlights",
+        answer = "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. MSUF Dispel Highlights keep Blizzard icons while allowing MSUF's dispel border, glow, and overlay visuals.",
         pageKey = "gf_auras",
-        anchorText = "Aura Display Mode Use Blizzard Dispels MSUF Dispel Border Glow Blizzard renderer native dispel icons",
+        anchorText = "Aura Display Mode Use Blizzard Dispels MSUF Dispel Highlights Border Glow Overlay Blizzard renderer native dispel icons",
         keywords = SearchKeywordList(SEARCH_BLIZZARD_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS, {
             [0] = false,
-            "why does blizzard mode hide dispel glow", "keep blizzard debuffs but show dispel glow", "blizzard dispel icons and msuf border",
+            "why does blizzard mode hide dispel glow", "keep blizzard debuffs but show dispel glow", "keep blizzard debuffs but show dispel overlay", "blizzard dispel icons and msuf border",
         }),
         priority = 760,
     },

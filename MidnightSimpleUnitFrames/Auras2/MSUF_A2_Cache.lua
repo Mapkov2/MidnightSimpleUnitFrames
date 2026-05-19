@@ -309,9 +309,15 @@ local _units = {}
 
 local function EnsureUnit(unit)
     local s = _units[unit]
-    if s then return s end
+    if s then
+        if not s.helpful then s.helpful = {} end
+        if not s.harmful then s.harmful = {} end
+        return s
+    end
     s = {
         all     = {},
+        helpful = {},
+        harmful = {},
         epoch   = 0,
         changed = true,
     }
@@ -320,6 +326,53 @@ local function EnsureUnit(unit)
 end
 
 Cache._units = _units
+
+local function StoreAuraInUnit(s, aid, data, isHelpful)
+    if not (s and aid and data) then return end
+    local helpful = s.helpful
+    if not helpful then helpful = {}; s.helpful = helpful end
+    local harmful = s.harmful
+    if not harmful then harmful = {}; s.harmful = harmful end
+
+    s.all[aid] = data
+    if isHelpful == true then
+        helpful[aid] = data
+        harmful[aid] = nil
+    else
+        harmful[aid] = data
+        helpful[aid] = nil
+    end
+end
+
+local function RemoveAuraFromUnit(s, aid)
+    if not (s and aid) then return nil end
+    local entry = s.all and s.all[aid] or nil
+    if entry then
+        s.all[aid] = nil
+        if s.helpful then s.helpful[aid] = nil end
+        if s.harmful then s.harmful[aid] = nil end
+    end
+    return entry
+end
+
+local function MarkFullScanPending(unit)
+    if not unit then return end
+
+    local s = EnsureUnit(unit)
+    s.changed = true
+    s.epoch = (s.epoch or 0) + 1
+    s.structureChanged = true
+    s.structureEpoch = (s.structureEpoch or 0) + 1
+    s.updatedIDs = nil
+    s._fullScanPending = true
+    s._lastFilterGen = nil
+    s._lastFilterStructureEpoch = nil
+    s._lastNB = nil
+    s._lastND = nil
+
+    local _st = API.Store
+    if _st and _st._epochs then _st._epochs[unit] = s.epoch end
+end
 
 -- Check if a unit has any aura whose decoded spellId is in the given set.
 -- Used by Buff Reminder to detect missing buffs.  O(N) where N = active auras.
@@ -543,23 +596,27 @@ function Cache.FullScan(unit)
     if not _apisBound then BindAPIs() end
     if not _getSlots or not _getBySlot then return end
     -- PERF: Inlined EnsureUnit
-    local s = _units[unit]
-    if not s then s = { all = {}, epoch = 0, changed = true, structureEpoch = 0 }; _units[unit] = s end
+    local s = EnsureUnit(unit)
     -- P7: release all cached aura tables back to pool before wiping.
     for _, entry in next, s.all do _AuraRelease(entry) end
     wipe(s.all)
+    wipe(s.helpful)
+    wipe(s.harmful)
     s.changed = true
     s.epoch = s.epoch + 1
     s.structureChanged = true
     s.structureEpoch = (s.structureEpoch or 0) + 1
     s.updatedIDs = nil
+    s._fullScanPending = nil
     local _st = API.Store; if _st and _st._epochs then _st._epochs[unit] = s.epoch end
     local slotsN = _PackSlots(_getSlots(unit, HELPFUL, 40))
     for i = 2, slotsN do
         local data = _getBySlot(unit, _slotBuf[i])
         if data and data.auraInstanceID then
-            EnrichAura(unit, data, ClassifyHelpful(unit, data.auraInstanceID, data, true))
-            s.all[data.auraInstanceID] = data
+            local aid = data.auraInstanceID
+            local isHelpful = ClassifyHelpful(unit, aid, data, true)
+            EnrichAura(unit, data, isHelpful)
+            StoreAuraInUnit(s, aid, data, isHelpful)
         end
     end
 
@@ -572,7 +629,7 @@ function Cache.FullScan(unit)
             local existing = s.all[aid]
             if not (existing and existing._msufIsHelpful == true and isHelpful == false and source == "fallback") then
                 EnrichAura(unit, data, isHelpful)
-                s.all[aid] = data
+                StoreAuraInUnit(s, aid, data, isHelpful)
             end
         end
     end
@@ -584,20 +641,20 @@ function Cache.OnUnitAura(unit, updateInfo)
     if not _apisBound then BindAPIs() end
 
     if not updateInfo or updateInfo.isFullUpdate then
-        -- PERF: If _units[unit] is nil (wiped by Store.InvalidateUnit on target/focus swap),
-        -- skip immediate FullScan. FilterAndSort will rebuild on demand in the render pipeline.
-        -- Saves 60-322µs from the target-click hot path.
-        -- For party/raid units, _units[unit] is always non-nil → FullScan runs normally.
-        -- Player can be the only live consumer when only reminders are enabled.
-        if unit == "player" or _units[unit] then
-            Cache.FullScan(unit)
-        end
+        -- FullUpdate has no granular aura list. Mark the unit stale and let
+        -- FilterAndSort perform the expensive FullScan only if that unit/lane
+        -- is actually rendered. Player reminders see the epoch bump and fall
+        -- back to their direct provider scan while the cache is pending.
+        MarkFullScanPending(unit)
         return
     end
 
     -- PERF: Inlined EnsureUnit (after warmup, always hits cache)
-    local s = _units[unit]
-    if not s then s = { all = {}, epoch = 0, changed = true, structureEpoch = 0 }; _units[unit] = s end
+    local s = EnsureUnit(unit)
+    if s._fullScanPending then
+        MarkFullScanPending(unit)
+        return
+    end
 
     local any = false
     -- PERF: track structure change inline instead of re-scanning the arrays
@@ -619,7 +676,7 @@ function Cache.OnUnitAura(unit, updateInfo)
                 _AuraCopyFields(entry, data)
                 local isHelpful = ClassifyHelpful(unit, aid, entry, nil)
                 EnrichAura(unit, entry, isHelpful)
-                s.all[aid] = entry
+                StoreAuraInUnit(s, aid, entry, isHelpful)
                 any = true
                 hasAdd = true
             end
@@ -651,6 +708,7 @@ function Cache.OnUnitAura(unit, updateInfo)
                     local newOwn = ClassifyPlayer(unit, aid, newHelpful)
                     entry._msufIsHelpful = newHelpful
                     entry._msufIsPlayerAura = newOwn
+                    StoreAuraInUnit(s, aid, entry, newHelpful)
                     if newHelpful == false then
                         if oldHelpful ~= false
                            or entry._msufA2_dispelCode == nil
@@ -678,7 +736,7 @@ function Cache.OnUnitAura(unit, updateInfo)
                     -- Blizzard can report an aura as "updated" after it has
                     -- already expired. Treat a nil fresh lookup exactly like a
                     -- remove so stale icons cannot survive the next render.
-                    s.all[aid] = nil
+                    RemoveAuraFromUnit(s, aid)
                     _AuraRelease(entry)
                     if updatedIDs then updatedIDs[aid] = nil end
                     any = true
@@ -692,9 +750,8 @@ function Cache.OnUnitAura(unit, updateInfo)
     if removed then
         for i = 1, #removed do
             local aid = removed[i]
-            local entry = s.all[aid]
+            local entry = RemoveAuraFromUnit(s, aid)
             if entry then
-                s.all[aid] = nil
                 -- P7: return pooled table for reuse instead of abandoning to GC.
                 _AuraRelease(entry)
                 any = true
@@ -1011,6 +1068,11 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
         s = _units[unit]
         if not s then return buffOut, 0, debuffOut, 0 end
         structureEpoch = s.structureEpoch or 0
+    elseif s._fullScanPending then
+        Cache.FullScan(unit)
+        s = _units[unit]
+        if not s then return buffOut, 0, debuffOut, 0 end
+        structureEpoch = s.structureEpoch or 0
     end
 
     -- PERF: Update-only fast path — when only duration/stacks changed (no add/remove),
@@ -1068,14 +1130,16 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
 
     if sortOrder == 0 then
         -- FAST PATH: unsorted — pure cache iteration, ZERO C API calls
-        for aid, data in next, s.all do
-            if (not wantBuffs or (nB + nBossB) >= maxBuffs)
-               and (not wantDebuffs or (nD + nBossD) >= maxDebuffs) then break end
+        local helpful = s.helpful
+        if not helpful then helpful = {}; s.helpful = helpful end
+        local harmful = s.harmful
+        if not harmful then harmful = {}; s.harmful = harmful end
 
-            local isHelpful = data._msufIsHelpful
-            local isOwn     = data._msufIsPlayerAura
+        if wantBuffs then
+            for aid, data in next, helpful do
+                if (nB + nBossB) >= maxBuffs then break end
 
-            if wantBuffs and isHelpful and (nB + nBossB) < maxBuffs then
+                local isOwn = data._msufIsPlayerAura
                 if noFilters or FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
                               lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
                     if useMergeBuffs then
@@ -1087,7 +1151,14 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                         buffOut[nB] = data
                     end
                 end
-            elseif wantDebuffs and not isHelpful and (nD + nBossD) < maxDebuffs then
+            end
+        end
+
+        if wantDebuffs then
+            for aid, data in next, harmful do
+                if (nD + nBossD) >= maxDebuffs then break end
+
+                local isOwn = data._msufIsPlayerAura
                 if noFilters or FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
                               lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
                     if useMergeDebuffs then
@@ -1138,9 +1209,10 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             if actualHelpful == false and data._msufA2_dispelCode == nil then
                                 CacheDispelInfo(data)
                             end
+                            StoreAuraInUnit(s, aid, cached, actualHelpful)
                         else
                             EnrichAura(unit, data, actualHelpful)
-                            allCache[aid] = data
+                            StoreAuraInUnit(s, aid, data, actualHelpful)
                         end
 
                         local isOwn = data._msufIsPlayerAura
@@ -1186,9 +1258,10 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                             if actualHelpful == false and data._msufA2_dispelCode == nil then
                                 CacheDispelInfo(data)
                             end
+                            StoreAuraInUnit(s, aid, cached, actualHelpful)
                         else
                             EnrichAura(unit, data, actualHelpful)
-                            allCache[aid] = data
+                            StoreAuraInUnit(s, aid, data, actualHelpful)
                         end
 
                         local isOwn = data._msufIsPlayerAura
@@ -1264,6 +1337,7 @@ Store.InvalidateUnit = function(unit)
     -- WoW fires UNIT_AURA (isFullUpdate=true) immediately after target/focus change.
     -- That triggers Cache.OnUnitAura → FullScan. Pre-scanning here is redundant
     -- and costs 200-400µs per target click (was the #1 spike cause).
+    -- Current FullUpdate handling is lazy; this wipe is for hard unit identity invalidation.
     _units[unit] = nil
     Store._epochs[unit] = nil
 end

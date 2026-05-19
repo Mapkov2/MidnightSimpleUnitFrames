@@ -550,25 +550,7 @@ local function UpdateAll(f, unit)
 
     if c.anyAuraGrp and GF.UpdateFrameAuras then
         GF.UpdateFrameAuras(f, unit)
-        if c.nativeBlizzardDispelsSuppressCustom then
-            if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
-        elseif GF.DispelScanActive(c) or f._msufGFDispelType or f._msufGFMergedDispel
-            or f._msufGFDispelAuraID or f._msufGFPrevDispelAuraID
-        then
-            local mergedDispel = f._msufGFMergedDispel
-            local prevDispel = f._msufGFDispelType
-            local dispelAid = f._msufGFDispelAuraID
-            local prevAid = f._msufGFPrevDispelAuraID
-            local colorRev = _G.MSUF_ColorStyleRevision or 0
-            local prevColorRev = f._msufGFColorStyleRevision or 0
-            if mergedDispel ~= prevDispel or dispelAid ~= prevAid or colorRev ~= prevColorRev then
-                f._msufGFDispelType = mergedDispel
-                f._msufGFPrevDispelAuraID = dispelAid
-                f._msufGFColorStyleRevision = colorRev
-                _GF_RefreshBorder(f, unit)
-                _GF_ApplyDispelOverlay(f)
-            end
-        end
+        GF.FinishAuraVisuals(f, unit, c)
     else
         if GF.UpdateFrameAuras and not f._msufGFAurasHidden then GF.UpdateFrameAuras(f, unit) end
         if not c.aurasOn then

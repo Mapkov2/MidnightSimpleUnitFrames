@@ -132,11 +132,23 @@ local function FeedUnitAuraDelta(unit, updateInfo)
     if not unit then return true end
     if not _refsBound then BindCachedRefs() end
 
-    local forceRescan = (_unitAuraRescanQueued[unit] == true) or UnitAuraDeltaNeedsRescan(updateInfo)
-    if forceRescan then
+    if _unitAuraRescanQueued[unit] == true then
+        return true
+    end
+
+    if UnitAuraDeltaNeedsRescan(updateInfo) then
+        _unitAuraRescanQueued[unit] = true
+
+        if updateInfo == nil or (type(updateInfo) == "table" and updateInfo.isFullUpdate == true) then
+            local onAura = _cachedOnUnitAura
+            if onAura then
+                onAura(unit, updateInfo)
+                return true
+            end
+        end
+
         local invalid = _cachedInvalidUnit
-        if invalid and not _unitAuraRescanQueued[unit] then
-            _unitAuraRescanQueued[unit] = true
+        if invalid then
             invalid(unit)
         end
         return true

@@ -549,6 +549,10 @@ local function UFCore_SetHealthBarValue(f, bar, hp)
     else
         bar:SetValue(hp)
     end
+    if f and f._msufUFDispelOverlayNeedsHPSync then
+        local syncOverlay = _G.MSUF_UFDispelOverlay_SyncHealthValue
+        if type(syncOverlay) == "function" then syncOverlay(f, hp) end
+    end
     local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
     if type(syncMissing) == "function" then
         syncMissing(f, nil, hp)

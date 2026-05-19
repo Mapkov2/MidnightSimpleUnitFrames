@@ -549,9 +549,9 @@ local function PriorityColor(key)
     local fallback = PRIORITY_COLORS[key] or { 1, 1, 1 }
     local r, g, b = fallback[1], fallback[2], fallback[3]
     if key == "aggro" then
-        r = BarScopeGet("hlAggroColorR", ReadG("aggroBorderColorR", r))
-        g = BarScopeGet("hlAggroColorG", ReadG("aggroBorderColorG", g))
-        b = BarScopeGet("hlAggroColorB", ReadG("aggroBorderColorB", b))
+        r = BarScopeGet("hlAggroColorR", ReadG("aggroBorderColorR", ReadG("aggroBorderR", r)))
+        g = BarScopeGet("hlAggroColorG", ReadG("aggroBorderColorG", ReadG("aggroBorderG", g)))
+        b = BarScopeGet("hlAggroColorB", ReadG("aggroBorderColorB", ReadG("aggroBorderB", b)))
     elseif key == "purge" then
         r = BarScopeGet("hlPurgeColorR", ReadG("purgeBorderColorR", r))
         g = BarScopeGet("hlPurgeColorG", ReadG("purgeBorderColorG", g))
@@ -671,9 +671,9 @@ local function GroupBlizzardRendererConflictText(scope)
     local labels = GroupBlizzardRendererConflictLabels(scope)
     if #labels == 0 then return nil end
     if scope == "gf_party" or scope == "gf_raid" then
-        return "Dispel Glow is unavailable for this Group Frame scope while Blizzard owns dispel icons (" .. table.concat(labels, ", ") .. "). Enable Group Frames > Auras > MSUF Dispel Border / Glow or switch the renderer to Custom."
+        return "Dispel Glow is unavailable for this Group Frame scope while Blizzard owns dispel icons (" .. table.concat(labels, ", ") .. "). Enable Group Frames > Auras > MSUF Dispel Highlights or switch the renderer to Custom."
     end
-    return "Unit Frames and Custom Group Frames can still use Dispel Glow. Group Frames where Blizzard owns dispel icons (" .. table.concat(labels, ", ") .. ") need Group Frames > Auras > MSUF Dispel Border / Glow enabled, or a Custom renderer."
+    return "Unit Frames and Custom Group Frames can still use Dispel Glow. Group Frames where Blizzard owns dispel icons (" .. table.concat(labels, ", ") .. ") need Group Frames > Auras > MSUF Dispel Highlights enabled, or a Custom renderer."
 end
 
 local function NotifyDispelGlowBlizzardConflict(scope)

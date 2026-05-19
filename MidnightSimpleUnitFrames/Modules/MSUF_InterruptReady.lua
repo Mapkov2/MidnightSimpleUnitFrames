@@ -93,6 +93,8 @@ local _state = {
 local _registeredFrames = {}
 local _activeFrames = {}
 local _activeFrameCount = 0
+local _eventFrame
+local _UpdateCooldownEventRegistration
 
 -- =============================================================================
 -- Helpers
@@ -513,6 +515,9 @@ local function _MarkActiveFrame(frame)
     if not frame or _activeFrames[frame] then return end
     _activeFrames[frame] = true
     _activeFrameCount = _activeFrameCount + 1
+    if _UpdateCooldownEventRegistration then
+        _UpdateCooldownEventRegistration()
+    end
 end
 
 local function _MarkInactiveFrame(frame)
@@ -520,6 +525,9 @@ local function _MarkInactiveFrame(frame)
     _activeFrames[frame] = nil
     _activeFrameCount = _activeFrameCount - 1
     if _activeFrameCount < 0 then _activeFrameCount = 0 end
+    if _UpdateCooldownEventRegistration then
+        _UpdateCooldownEventRegistration()
+    end
 end
 
 -- Public: create / reposition the indicator on `frame`. Called from
@@ -540,7 +548,18 @@ local function _HideIndicator(frame)
 end
 
 local function _CastAllowsKickIndicator(frame)
-    return not (frame and frame.MSUF_kickInterruptibleConfirmed == false)
+    return not (frame and (frame.isNotInterruptible == true or frame.MSUF_kickInterruptibleConfirmed == false))
+end
+
+local function _EnsureBox(frame, cfg)
+    if not frame or not frame.statusBar then return nil end
+    if not frame.kickReadyBox then
+        frame.kickReadyBox = _CreateBox(frame)
+    end
+    if frame.kickReadyBox then
+        _PositionBox(frame.kickReadyBox, frame, cfg)
+    end
+    return frame.kickReadyBox
 end
 
 local function ApplyLayout(frame)
@@ -558,16 +577,14 @@ local function ApplyLayout(frame)
         return
     end
 
-    -- Style switching: ensure the box exists for "box" style; in "border"
-    -- style we don't need the box, but creating it once is cheap and lets
-    -- the user switch styles without a /reload.
-    if not frame.kickReadyBox then
-        frame.kickReadyBox = _CreateBox(frame)
-    end
-    if frame.kickReadyBox then
-        _PositionBox(frame.kickReadyBox, frame, cfg)
+    if frame.MSUF_castActive ~= true or not _CastAllowsKickIndicator(frame) then
+        _HideIndicator(frame)
+        return
     end
 
+    if _GetStyle(cfg) == "box" then
+        _EnsureBox(frame, cfg)
+    end
     _RegisterFrame(frame)
 
     -- After (re)layout, repaint to reflect current cast & cooldown state.
@@ -625,14 +642,26 @@ local function _GetCooldownPollDelay()
     if remaining > 0.05 then
         return remaining + 0.05
     end
-    return 0.75
+    return nil
 end
 
 local function _ArmRefreshTicker(delay, replace)
     if not C_Timer then return end
+    if delay == nil then
+        if replace then
+            _refreshTickerToken = _refreshTickerToken + 1
+            _refreshTickerArmed = false
+        end
+        if replace and _refreshTimer and _refreshTimer.Cancel then
+            _refreshTimer:Cancel()
+            _refreshTimer = nil
+        end
+        return
+    end
     if _refreshTickerArmed and not replace then return end
 
-    delay = _PlainNumberOrNil(delay) or 0.25
+    delay = _PlainNumberOrNil(delay)
+    if delay == nil then return end
     if delay < 0.03 then delay = 0.03 end
 
     if _refreshTimer and _refreshTimer.Cancel then
@@ -775,12 +804,16 @@ local function RefreshFrame(frame, state, cfg, readyBool, style, readyMixin, cdM
     if not _state.spellID then Resolve() end
 
     if readyBool == nil then readyBool = _GetReadyBoolSecret() end
+    style = style or _GetStyle(cfg)
+    if style == "box" then
+        _EnsureBox(frame, cfg)
+    end
+    _RegisterFrame(frame)
     _MarkActiveFrame(frame)
     _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
 
-    -- Make sure the global ticker is running so the indicator repaints when
-    -- the interrupt cooldown ends (SPELL_UPDATE_COOLDOWN does not always
-    -- fire on the trailing edge in 12.0.5).
+    -- Arm a one-shot wakeup only while the interrupt is actually cooling down.
+    -- Ready-state changes rely on SPELL_UPDATE_COOLDOWN and cast events.
     _ArmRefreshTicker(_GetCooldownPollDelay(), false)
 end
 
@@ -859,6 +892,8 @@ local function _CooldownRefreshFlush()
     _cooldownRefreshQueued = false
     if RefreshActiveCooldownFrames() then
         _ArmRefreshTicker(_GetCooldownPollDelay(), true)
+    elseif _UpdateCooldownEventRegistration then
+        _UpdateCooldownEventRegistration()
     end
 end
 
@@ -921,7 +956,7 @@ end
 -- Event driver
 -- =============================================================================
 
-local _eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
+_eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
 
 local function _HandleEvent(_, event)
     if event == "PLAYER_LOGIN"
@@ -950,12 +985,12 @@ _eventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 _eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 _eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 
--- SPELL_UPDATE_COOLDOWN is hot. Only register it while at least one
--- castbar consumer is enabled. We re-evaluate on each Init() / config apply.
-local function _ApplyEventGating()
+-- SPELL_UPDATE_COOLDOWN is hot. Only register it while a supported castbar is
+-- actively showing an interrupt indicator. FocusKick owns its own watcher, so
+-- this module stays completely cold when no MSUF castbar needs cooldown flips.
+_UpdateCooldownEventRegistration = function()
     local cfg = _GetCfg()
-    local want = _AnyShowEnabled(cfg) or (_G.MSUF_DB and _G.MSUF_DB.general
-                  and _G.MSUF_DB.general.enableFocusKickIcon == true)
+    local want = _activeFrameCount > 0 and _AnyShowEnabled(cfg)
     if want and not _state.eventsOn then
         _eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
         _state.eventsOn = true
@@ -963,6 +998,10 @@ local function _ApplyEventGating()
         _eventFrame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
         _state.eventsOn = false
     end
+end
+
+local function _ApplyEventGating()
+    _UpdateCooldownEventRegistration()
 end
 
 -- =============================================================================

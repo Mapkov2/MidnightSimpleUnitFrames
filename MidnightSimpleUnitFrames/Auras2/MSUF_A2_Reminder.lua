@@ -283,6 +283,7 @@ local function _ScanPlayerAurasCached(threshold, wanted)
     local Cache = API.Cache
     local s = Cache._units and Cache._units.player
     if not s or not s.all then return false end
+    if s._fullScanPending then return false end
     local thr = threshold
     local lookup = _spellToProvider
     for _, data in next, s.all do

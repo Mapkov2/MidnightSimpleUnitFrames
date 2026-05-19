@@ -1114,6 +1114,7 @@ local function ApplyToUnitFrame(f)
         local t = f.healAbsorbBar:GetStatusBarTexture()
         if t then MaskTexture(f, t, f.healAbsorbBar or f.hpBar) end
     end
+    MaskStatusBarFill(f, f._msufUFDispelOverlay)
     MaskStatusBarFill(f, f.incomingHealBar or f.selfHealPredBar)
     if f.selfHealPredBar ~= f.incomingHealBar then
         MaskStatusBarFill(f, f.selfHealPredBar)
@@ -1293,6 +1294,13 @@ local function HookOnce()
     end
     _G.MSUF_RoundedUF_OnUnitHighlightChanged = function(frame, hlKey, r, g, b, cfg)
         return HandleUnitHighlightChanged(frame, hlKey, r, g, b, cfg)
+    end
+    _G.MSUF_RoundedUF_OnUnitDispelOverlayChanged = function(frame)
+        if not frame then return end
+        if IsCombatLocked() then DeferApply(); return end
+        if RoundedUnitFramesEnabled() then
+            ApplyToUnitFrame(frame)
+        end
     end
     _G.MSUF_RoundedUF_OnGroupFrameApplied = function(frame, kind)
         if IsCombatLocked() then DeferApply(); return end

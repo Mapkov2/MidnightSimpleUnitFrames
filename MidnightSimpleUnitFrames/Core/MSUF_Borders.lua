@@ -10,6 +10,8 @@ local math_floor, math_ceil = math.floor, math.ceil
 local MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local issecretvalue = _G.issecretvalue
 local InCombatLockdown = _G.InCombatLockdown
+local UnitHealth = _G.UnitHealth
+local UnitHealthMax = _G.UnitHealthMax
 
 local function _MSUF_BorderEffectiveScale(region)
     if region and region.GetEffectiveScale then
@@ -302,14 +304,26 @@ end
 local function _ReadColorValue(db, key, legacyKey, fallback)
     local value = db and db[key]
     if type(value) ~= "number" and legacyKey then
-        value = db and db[legacyKey]
+        if type(legacyKey) == "table" then
+            for i = 1, #legacyKey do
+                value = db and db[legacyKey[i]]
+                if type(value) == "number" then break end
+            end
+        else
+            value = db and db[legacyKey]
+        end
     end
     return _Clamp01(value, fallback)
+end
+
+local function _BoolEnabled(value)
+    return value == true or value == 1
 end
 
 local DISPEL_TRIGGER_BY_ME = "BY_ME"
 local DISPEL_TRIGGER_TYPE = "DISPEL_TYPE"
 local DISPEL_TRIGGER_ANY = "ANY_DEBUFF"
+local DISPEL_TRIGGER_BORDER = "BORDER"
 
 local function _NormalizeDispelBorderTrigger(value)
     if value == DISPEL_TRIGGER_TYPE or value == "TYPE" or value == "TYPED" or value == "ANY_DISPEL_TYPE" then
@@ -321,12 +335,46 @@ local function _NormalizeDispelBorderTrigger(value)
     return DISPEL_TRIGGER_BY_ME
 end
 
+local function _NormalizeUnitDispelOverlayTrigger(value)
+    if value == DISPEL_TRIGGER_BORDER or value == "INHERIT" or value == "SAME" or value == "BORDER_DETECTS" then
+        return DISPEL_TRIGGER_BORDER
+    end
+    return _NormalizeDispelBorderTrigger(value)
+end
+
+local function _ResolveUnitDispelOverlayTrigger(cfg)
+    local trigger = _NormalizeUnitDispelOverlayTrigger(cfg and cfg.unitDispelOverlayTrigger)
+    if trigger == DISPEL_TRIGGER_BORDER then
+        return _NormalizeDispelBorderTrigger(cfg and cfg.dispelBorderTrigger)
+    end
+    return trigger
+end
+
 local function _DispelBorderTriggerNeedsPlayerDispel(value)
     return _NormalizeDispelBorderTrigger(value) == DISPEL_TRIGGER_BY_ME
 end
 
+local function _UnitCanReceiveFriendlyDispelVisual(unit)
+    if unit == "player" then return true end
+    return UnitCanAssist and UnitCanAssist("player", unit)
+end
+
+local function _ResolveUnitFrame(unit)
+    if type(unit) ~= "string" or unit == "" then return nil end
+    local frames = _G.MSUF_UnitFrames
+    local frame = type(frames) == "table" and frames[unit] or nil
+    if frame then return frame end
+    return _G["MSUF_" .. unit]
+end
+
+local function _FrameMatchesUnit(frame, unit)
+    if not frame or type(unit) ~= "string" then return false end
+    return frame.unit == unit or frame == _G["MSUF_" .. unit]
+end
+
 _G.MSUF_NormalizeDispelBorderTrigger = _G.MSUF_NormalizeDispelBorderTrigger or _NormalizeDispelBorderTrigger
 _G.MSUF_DispelBorderTriggerNeedsPlayerDispel = _G.MSUF_DispelBorderTriggerNeedsPlayerDispel or _DispelBorderTriggerNeedsPlayerDispel
+_G.MSUF_NormalizeUnitDispelOverlayTrigger = _G.MSUF_NormalizeUnitDispelOverlayTrigger or _NormalizeUnitDispelOverlayTrigger
 
 local function _NormalizeBorderScope(unit)
     if type(unit) ~= "string" or unit == "" then return "shared" end
@@ -357,16 +405,29 @@ local function _RefreshBorderSettingsCache()
     _borderCfg.highlightBorderThickness = tonumber(g and g.highlightBorderThickness) or 2
     if _borderCfg.highlightBorderThickness < 1 then _borderCfg.highlightBorderThickness = 1 end
     _borderCfg.dispelBorderTrigger = _NormalizeDispelBorderTrigger(g and g.dispelBorderTrigger)
+    _borderCfg.unitDispelOverlayEnabled = g and g.unitDispelOverlayEnabled == true
+    _borderCfg.unitDispelOverlayStyle = (g and g.unitDispelOverlayStyle) or "FULL"
+    _borderCfg.unitDispelOverlayOnHealth = not (g and g.unitDispelOverlayOnHealth == false)
+    _borderCfg.unitDispelOverlayAlpha = tonumber(g and g.unitDispelOverlayAlpha) or 0.35
+    if _borderCfg.unitDispelOverlayAlpha < 0 then
+        _borderCfg.unitDispelOverlayAlpha = 0
+    elseif _borderCfg.unitDispelOverlayAlpha > 1 then
+        _borderCfg.unitDispelOverlayAlpha = 1
+    end
+    _borderCfg.unitDispelOverlayTrigger = _NormalizeUnitDispelOverlayTrigger(g and g.unitDispelOverlayTrigger)
+    _borderCfg.unitDispelOverlayUseHighlightPriority = not (g and g.unitDispelOverlayUseHighlightPriority == false)
+    _borderCfg.unitDispelOverlayPrioEnabled = _BoolEnabled(g and g.unitDispelOverlayPrioEnabled)
+    _borderCfg.unitDispelOverlayPrioOrder = g and type(g.unitDispelOverlayPrioOrder) == "table" and g.unitDispelOverlayPrioOrder or nil
     _borderCfg.dispelColorMode = (g and g.hlDispelColorMode) or "SINGLE"
     local prioEnabled = g and g.hlPrioEnabled
     if prioEnabled == nil then prioEnabled = g and (g.highlightPrioEnabled == 1) end
-    _borderCfg.highlightPrioEnabled = (prioEnabled == true)
+    _borderCfg.highlightPrioEnabled = _BoolEnabled(prioEnabled)
     _borderCfg.highlightPrioOrder = (g and type(g.hlPrioOrder) == "table" and g.hlPrioOrder)
         or (g and type(g.highlightPrioOrder) == "table" and g.highlightPrioOrder)
         or nil
-    _borderCfg.aggroR  = _ReadColorValue(g, "hlAggroColorR",  "aggroBorderColorR",  1.00)
-    _borderCfg.aggroG  = _ReadColorValue(g, "hlAggroColorG",  "aggroBorderColorG",  0.50)
-    _borderCfg.aggroB  = _ReadColorValue(g, "hlAggroColorB",  "aggroBorderColorB",  0.00)
+    _borderCfg.aggroR  = _ReadColorValue(g, "hlAggroColorR",  { "aggroBorderColorR", "aggroBorderR" },  1.00)
+    _borderCfg.aggroG  = _ReadColorValue(g, "hlAggroColorG",  { "aggroBorderColorG", "aggroBorderG" },  0.50)
+    _borderCfg.aggroB  = _ReadColorValue(g, "hlAggroColorB",  { "aggroBorderColorB", "aggroBorderB" },  0.00)
     _borderCfg.dispelR = _ReadColorValue(g, "hlDispelColorR", "dispelBorderColorR", 0.25)
     _borderCfg.dispelG = _ReadColorValue(g, "hlDispelColorG", "dispelBorderColorG", 0.75)
     _borderCfg.dispelB = _ReadColorValue(g, "hlDispelColorB", "dispelBorderColorB", 1.00)
@@ -394,6 +455,14 @@ local _BORDER_CFG_FIELDS = {
     "bossTargetOutlineMode",
     "highlightBorderThickness",
     "dispelBorderTrigger",
+    "unitDispelOverlayEnabled",
+    "unitDispelOverlayStyle",
+    "unitDispelOverlayOnHealth",
+    "unitDispelOverlayAlpha",
+    "unitDispelOverlayTrigger",
+    "unitDispelOverlayUseHighlightPriority",
+    "unitDispelOverlayPrioEnabled",
+    "unitDispelOverlayPrioOrder",
     "dispelColorMode",
     "highlightPrioEnabled",
     "highlightPrioOrder",
@@ -430,10 +499,29 @@ local function _RefreshBorderSettingsForFrame(frame)
     cfg.highlightBorderThickness = tonumber(db.highlightBorderThickness or db.hlAggroSize) or base.highlightBorderThickness
     if cfg.highlightBorderThickness < 1 then cfg.highlightBorderThickness = 1 end
     cfg.dispelBorderTrigger = _NormalizeDispelBorderTrigger(db.dispelBorderTrigger or base.dispelBorderTrigger)
+    if db.unitDispelOverlayEnabled ~= nil then cfg.unitDispelOverlayEnabled = db.unitDispelOverlayEnabled == true end
+    cfg.unitDispelOverlayStyle = db.unitDispelOverlayStyle or cfg.unitDispelOverlayStyle
+    if db.unitDispelOverlayOnHealth ~= nil then cfg.unitDispelOverlayOnHealth = db.unitDispelOverlayOnHealth ~= false end
+    cfg.unitDispelOverlayAlpha = tonumber(db.unitDispelOverlayAlpha) or cfg.unitDispelOverlayAlpha
+    if cfg.unitDispelOverlayAlpha < 0 then
+        cfg.unitDispelOverlayAlpha = 0
+    elseif cfg.unitDispelOverlayAlpha > 1 then
+        cfg.unitDispelOverlayAlpha = 1
+    end
+    cfg.unitDispelOverlayTrigger = _NormalizeUnitDispelOverlayTrigger(db.unitDispelOverlayTrigger or cfg.unitDispelOverlayTrigger)
+    if db.unitDispelOverlayUseHighlightPriority ~= nil then
+        cfg.unitDispelOverlayUseHighlightPriority = db.unitDispelOverlayUseHighlightPriority ~= false
+    end
+    if db.unitDispelOverlayPrioEnabled ~= nil then
+        cfg.unitDispelOverlayPrioEnabled = _BoolEnabled(db.unitDispelOverlayPrioEnabled)
+    end
+    if type(db.unitDispelOverlayPrioOrder) == "table" then
+        cfg.unitDispelOverlayPrioOrder = db.unitDispelOverlayPrioOrder
+    end
     cfg.dispelColorMode = db.hlDispelColorMode or base.dispelColorMode
 
     if db.hlPrioEnabled ~= nil then
-        cfg.highlightPrioEnabled = (db.hlPrioEnabled == true)
+        cfg.highlightPrioEnabled = _BoolEnabled(db.hlPrioEnabled)
     elseif db.highlightPrioEnabled ~= nil then
         cfg.highlightPrioEnabled = (db.highlightPrioEnabled == 1 or db.highlightPrioEnabled == true)
     end
@@ -443,9 +531,9 @@ local function _RefreshBorderSettingsForFrame(frame)
         cfg.highlightPrioOrder = db.highlightPrioOrder
     end
 
-    cfg.aggroR  = _ReadColorValue(db, "hlAggroColorR",  "aggroBorderColorR",  base.aggroR)
-    cfg.aggroG  = _ReadColorValue(db, "hlAggroColorG",  "aggroBorderColorG",  base.aggroG)
-    cfg.aggroB  = _ReadColorValue(db, "hlAggroColorB",  "aggroBorderColorB",  base.aggroB)
+    cfg.aggroR  = _ReadColorValue(db, "hlAggroColorR",  { "aggroBorderColorR", "aggroBorderR" },  base.aggroR)
+    cfg.aggroG  = _ReadColorValue(db, "hlAggroColorG",  { "aggroBorderColorG", "aggroBorderG" },  base.aggroG)
+    cfg.aggroB  = _ReadColorValue(db, "hlAggroColorB",  { "aggroBorderColorB", "aggroBorderB" },  base.aggroB)
     cfg.dispelR = _ReadColorValue(db, "hlDispelColorR", "dispelBorderColorR", base.dispelR)
     cfg.dispelG = _ReadColorValue(db, "hlDispelColorG", "dispelBorderColorG", base.dispelG)
     cfg.dispelB = _ReadColorValue(db, "hlDispelColorB", "dispelBorderColorB", base.dispelB)
@@ -524,6 +612,8 @@ end
 local function MSUF_GetAggroThreatSituation(unit)
     if not UnitThreatSituation then return nil end
     if unit == "player" then
+        local raw = UnitThreatSituation("player", "target")
+        if raw ~= nil then return raw end
         return UnitThreatSituation("player")
     end
     return UnitThreatSituation("player", unit)
@@ -615,6 +705,544 @@ local function _GetUFDispelColor(dispelName, unit, auraID, cfg)
     return _ReadColorValue(g, "hlDispelColorR", "dispelBorderColorR", 0.25),
            _ReadColorValue(g, "hlDispelColorG", "dispelBorderColorG", 0.75),
            _ReadColorValue(g, "hlDispelColorB", "dispelBorderColorB", 1.00)
+end
+
+local _UF_PRIORITY_DISPEL_TYPE_BY_KEY = {
+    magic = "Magic",
+    curse = "Curse",
+    disease = "Disease",
+    poison = "Poison",
+    bleed = "Bleed",
+}
+local _UF_PRIORITY_KEY_BY_DISPEL_TYPE = {
+    Magic = "magic",
+    Curse = "curse",
+    Disease = "disease",
+    Poison = "poison",
+    Bleed = "bleed",
+}
+local _UF_DISPEL_TYPE_ID_COLORS = {
+    Magic   = { 1, 0, 0 },
+    Curse   = { 0, 1, 0 },
+    Disease = { 0, 0, 1 },
+    Poison  = { 1, 1, 0 },
+    Bleed   = { 1, 0, 1 },
+}
+local _UF_DISPEL_TYPE_ID_CURVE
+local function _BuildUFDispelTypeIDCurve()
+    local CUA = _G.C_UnitAuras
+    local CCU = _G.C_CurveUtil
+    local C = _G.CreateColor
+    if not (CUA and type(CUA.GetAuraDispelTypeColor) == "function"
+        and CCU and type(CCU.CreateColorCurve) == "function"
+        and type(C) == "function") then
+        return nil
+    end
+    local curve = CCU.CreateColorCurve()
+    if curve.SetType then
+        curve:SetType(_G.Enum and _G.Enum.LuaCurveType and _G.Enum.LuaCurveType.Step or 0)
+    end
+    if not curve.AddPoint then return curve end
+    curve:AddPoint(0, C(0, 0, 0, 1))
+    curve:AddPoint(1, C(1, 0, 0, 1))
+    curve:AddPoint(2, C(0, 1, 0, 1))
+    curve:AddPoint(3, C(0, 0, 1, 1))
+    curve:AddPoint(4, C(1, 1, 0, 1))
+    curve:AddPoint(5, C(1, 0, 1, 1))
+    curve:AddPoint(9, C(1, 0, 1, 1))
+    curve:AddPoint(11, C(1, 0, 1, 1))
+    return curve
+end
+
+local function _UFColorObjRGB(color)
+    if not color then return nil end
+    if color.GetRGBA then
+        local r, g, b = color:GetRGBA()
+        if r ~= nil then return r, g, b end
+    end
+    if color.GetRGB then
+        local r, g, b = color:GetRGB()
+        if r ~= nil then return r, g, b end
+    end
+    if color.r ~= nil then return color.r, color.g, color.b end
+    return nil
+end
+
+local function _UFDispelTypeFromIDColor(r, g, b)
+    if type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number" then return nil end
+    if r > 0.75 and g < 0.25 and b < 0.25 then return "Magic" end
+    if r < 0.25 and g > 0.75 and b < 0.25 then return "Curse" end
+    if r < 0.25 and g < 0.25 and b > 0.75 then return "Disease" end
+    if r > 0.75 and g > 0.75 and b < 0.25 then return "Poison" end
+    if r > 0.75 and g < 0.25 and b > 0.75 then return "Bleed" end
+    return nil
+end
+
+local function _ResolveUFAuraDispelType(unit, aura)
+    if not aura then return nil end
+    local dn = aura.dispelName
+    if not (issecretvalue and issecretvalue(dn)) and _UF_PRIORITY_KEY_BY_DISPEL_TYPE[dn] then
+        return dn
+    end
+    local aid = aura.auraInstanceID
+    local CUA = _G.C_UnitAuras
+    if not (unit and aid and CUA and type(CUA.GetAuraDispelTypeColor) == "function") then return nil end
+    if not _UF_DISPEL_TYPE_ID_CURVE then
+        _UF_DISPEL_TYPE_ID_CURVE = _BuildUFDispelTypeIDCurve()
+    end
+    if not _UF_DISPEL_TYPE_ID_CURVE then return nil end
+    local color = CUA.GetAuraDispelTypeColor(unit, aid, _UF_DISPEL_TYPE_ID_CURVE)
+    local r, g, b = _UFColorObjRGB(color)
+    if issecretvalue and (issecretvalue(r) or issecretvalue(g) or issecretvalue(b)) then return nil end
+    return _UFDispelTypeFromIDColor(r, g, b)
+end
+
+_G.MSUF_ResolveAuraDispelPriorityType = _G.MSUF_ResolveAuraDispelPriorityType or _ResolveUFAuraDispelType
+local _UF_PRIORITY_SINGLE_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget" }
+local _UF_PRIORITY_TYPE_DEFAULTS = { "magic", "curse", "disease", "poison", "bleed", "aggro", "purge", "bossTarget" }
+local _UF_PRIORITY_SINGLE_ALLOWED = { dispel = true, aggro = true, purge = true, bossTarget = true }
+local _UF_PRIORITY_TYPE_ALLOWED = {
+    magic = true,
+    curse = true,
+    disease = true,
+    poison = true,
+    bleed = true,
+    aggro = true,
+    purge = true,
+    bossTarget = true,
+}
+
+local function _UFHighlightPriorityMatchesDispel(kind, dispel, dispelType)
+    if not dispel then return false end
+    if kind == "dispel" then return true end
+
+    local wanted = _UF_PRIORITY_DISPEL_TYPE_BY_KEY[kind]
+    if not wanted then return false end
+
+    if issecretvalue and issecretvalue(dispelType) then
+        return true
+    end
+    if type(dispelType) ~= "string" or dispelType == "" or dispelType == "DISPELLABLE" then
+        return true
+    end
+    return dispelType == wanted
+end
+
+local function _UFHighlightPriorityKindActive(kind, dispel, dispelType, threat, purge, bossTarget)
+    if _UFHighlightPriorityMatchesDispel(kind, dispel, dispelType) then return 2 end
+    if kind == "aggro" and threat then return 1 end
+    if kind == "purge" and purge then return 3 end
+    if kind == "bossTarget" and bossTarget then return 4 end
+    return 0
+end
+
+local function _UFHighlightPriorityRawHasAllowedKey(prioOrder, allowed, key)
+    if type(prioOrder) ~= "table" or not allowed[key] then return false end
+    for i = 1, #prioOrder do
+        if prioOrder[i] == key then return true end
+    end
+    return false
+end
+
+local function _ResolveUFHighlightPriorityKeyFromOrder(cfg, prioEnabled, prioOrder, dispel, dispelType, threat, purge, bossTarget)
+    if prioEnabled then
+        local typeMode = cfg and cfg.dispelColorMode == "TYPE"
+        local allowed = typeMode and _UF_PRIORITY_TYPE_ALLOWED or _UF_PRIORITY_SINGLE_ALLOWED
+        local defaults = typeMode and _UF_PRIORITY_TYPE_DEFAULTS or _UF_PRIORITY_SINGLE_DEFAULTS
+        if type(prioOrder) == "table" then
+            for _, kind in ipairs(prioOrder) do
+                if allowed[kind] then
+                    local hlKey = _UFHighlightPriorityKindActive(kind, dispel, dispelType, threat, purge, bossTarget)
+                    if hlKey ~= 0 then return hlKey end
+                end
+            end
+        end
+        for i = 1, #defaults do
+            local kind = defaults[i]
+            if not _UFHighlightPriorityRawHasAllowedKey(prioOrder, allowed, kind) then
+                local hlKey = _UFHighlightPriorityKindActive(kind, dispel, dispelType, threat, purge, bossTarget)
+                if hlKey ~= 0 then return hlKey end
+            end
+        end
+        return 0
+    end
+    return (dispel and 2) or (threat and 1) or (purge and 3) or (bossTarget and 4) or 0
+end
+
+local function _UFDispelScanPriorityConfig(cfg, useOverlayPriority)
+    if not (cfg and cfg.dispelColorMode == "TYPE") then return false, nil end
+    if useOverlayPriority and cfg.unitDispelOverlayUseHighlightPriority == false then
+        return _BoolEnabled(cfg.unitDispelOverlayPrioEnabled), cfg.unitDispelOverlayPrioOrder
+    end
+    return _BoolEnabled(cfg.highlightPrioEnabled), cfg.highlightPrioOrder
+end
+
+local function _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
+    local enabled = _UFDispelScanPriorityConfig(cfg, useOverlayPriority)
+    return enabled == true
+end
+
+local function _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+    local enabled, prioOrder = _UFDispelScanPriorityConfig(cfg, useOverlayPriority)
+    if not enabled then return nil end
+    if issecretvalue and issecretvalue(dispelType) then return 999 end
+    local wanted = _UF_PRIORITY_KEY_BY_DISPEL_TYPE[dispelType]
+    if not wanted then return 999 end
+
+    local rank = 1
+    if type(prioOrder) == "table" then
+        for _, kind in ipairs(prioOrder) do
+            if _UF_PRIORITY_TYPE_ALLOWED[kind] then
+                if kind == wanted then return rank end
+                rank = rank + 1
+            end
+        end
+    end
+    for i = 1, #_UF_PRIORITY_TYPE_DEFAULTS do
+        local kind = _UF_PRIORITY_TYPE_DEFAULTS[i]
+        if not _UFHighlightPriorityRawHasAllowedKey(prioOrder, _UF_PRIORITY_TYPE_ALLOWED, kind) then
+            if kind == wanted then return rank end
+            rank = rank + 1
+        end
+    end
+    return 999
+end
+
+local function _UFOverlayCanReuseBorderDispelScan(cfg)
+    if not _UFDispelScanPriorityEnabled(cfg, false) and not _UFDispelScanPriorityEnabled(cfg, true) then
+        return true
+    end
+    return cfg and cfg.unitDispelOverlayUseHighlightPriority ~= false
+end
+
+local function _ResolveUFHighlightPriorityKey(cfg, dispel, dispelType, threat, purge, bossTarget)
+    return _ResolveUFHighlightPriorityKeyFromOrder(
+        cfg,
+        cfg and cfg.highlightPrioEnabled,
+        cfg and cfg.highlightPrioOrder,
+        dispel,
+        dispelType,
+        threat,
+        purge,
+        bossTarget
+    )
+end
+
+local function _ResolveUFOverlayPriorityKey(cfg, dispel, dispelType, threat, purge, bossTarget)
+    if cfg and cfg.unitDispelOverlayUseHighlightPriority == false then
+        return _ResolveUFHighlightPriorityKeyFromOrder(
+            cfg,
+            cfg.unitDispelOverlayPrioEnabled,
+            cfg.unitDispelOverlayPrioOrder,
+            dispel,
+            dispelType,
+            threat,
+            purge,
+            bossTarget
+        )
+    end
+    return _ResolveUFHighlightPriorityKey(cfg, dispel, dispelType, threat, purge, bossTarget)
+end
+
+local function _ResolveUFHighlightPriorityColor(hlKey, cfg, dispelType, unit, auraID)
+    if hlKey == 1 then
+        return cfg.aggroR or 1.00, cfg.aggroG or 0.50, cfg.aggroB or 0.00
+    elseif hlKey == 2 then
+        return _GetUFDispelColor(dispelType, unit, auraID, cfg)
+    elseif hlKey == 3 then
+        return cfg.purgeR or 1.00, cfg.purgeG or 0.85, cfg.purgeB or 0.00
+    elseif hlKey == 4 then
+        return cfg.bossTargetR or 1.00, cfg.bossTargetG or 0.82, cfg.bossTargetB or 0.00
+    end
+    return 0, 0, 0
+end
+
+------------------------------------------------------------------------
+-- UnitFrame dispel overlay (health-bar tint, event-driven via the existing
+-- dispel aura driver). Overlay and border keep separate detected states so
+-- users can e.g. show the border only for "dispellable by me" while tinting
+-- the player frame for "any debuff".
+------------------------------------------------------------------------
+local _UF_DISPEL_OVERLAY_TEXTURE_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
+local _UF_DISPEL_OVERLAY_TEXTURES = {
+    FULL   = MSUF_TEX_WHITE8,
+    TOP    = _UF_DISPEL_OVERLAY_TEXTURE_ROOT .. "MSUF_Grad_V",
+    BOTTOM = _UF_DISPEL_OVERLAY_TEXTURE_ROOT .. "MSUF_Grad_V_Rev",
+    LEFT   = _UF_DISPEL_OVERLAY_TEXTURE_ROOT .. "MSUF_Grad_H",
+    RIGHT  = _UF_DISPEL_OVERLAY_TEXTURE_ROOT .. "MSUF_Grad_H_Rev",
+}
+
+local function _UFDispelTestApplies(frame)
+    if not (frame and _G.MSUF_BorderTestModesActive == true and _G.MSUF_DispelBorderTestMode == true) then
+        return false
+    end
+    local scope = _G.MSUF_DispelBorderTestScope or "shared"
+    if scope == "shared" then return true end
+    if scope == "party" or scope == "raid" or scope == "mythicraid"
+        or scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid" then
+        return false
+    end
+    local unit = frame.unit
+    if scope == "boss" then
+        return type(unit) == "string" and unit:sub(1, 4) == "boss"
+    end
+    return unit == scope
+end
+
+local function _UFTestScopeApplies(frame, scope)
+    if not frame then return false end
+    scope = scope or "shared"
+    if scope == "shared" then return true end
+    if scope == "party" or scope == "raid" or scope == "mythicraid"
+        or scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid" then
+        return false
+    end
+    local unit = frame.unit
+    if scope == "boss" then
+        return type(unit) == "string" and unit:sub(1, 4) == "boss"
+    end
+    return unit == scope
+end
+
+local function _UFAggroTestApplies(frame)
+    return frame and MSUF_IsAggroOutlineUnit(frame.unit)
+        and _G.MSUF_BorderTestModesActive == true
+        and _G.MSUF_AggroBorderTestMode == true
+        and _UFTestScopeApplies(frame, _G.MSUF_AggroBorderTestScope or "shared")
+end
+
+local function _UFPurgeTestApplies(frame)
+    if not frame then return false end
+    local unit = frame.unit
+    if unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return false end
+    return _G.MSUF_BorderTestModesActive == true
+        and _G.MSUF_PurgeBorderTestMode == true
+        and _UFTestScopeApplies(frame, _G.MSUF_PurgeBorderTestScope or "shared")
+end
+
+local function _UFBossTargetTestApplies(frame)
+    if not (frame and _G.MSUF_BorderTestModesActive == true and _G.MSUF_BossTargetBorderTestMode == true) then
+        return false
+    end
+    local unit = frame.unit
+    if type(unit) ~= "string" or unit:sub(1, 4) ~= "boss" then return false end
+    local idx = tonumber(unit:sub(5))
+    return idx ~= nil and idx >= 1 and idx <= 5
+end
+
+local function _UFDispelOverlayBottomBar(frame)
+    if not frame then return nil end
+    local hpBar = frame.hpBar
+    local power = frame.targetPowerBar or frame.powerBar
+    if power and not frame._msufPowerBarDetached and (frame._msufPowerBarReserved or (power.IsShown and power:IsShown())) then
+        return power
+    end
+    return hpBar
+end
+
+local function _EnsureUFDispelOverlay(frame)
+    if not (frame and frame.hpBar and F.CreateFrame) then return nil end
+    local overlay = frame._msufUFDispelOverlay
+    if overlay then return overlay end
+
+    overlay = F.CreateFrame("StatusBar", nil, frame)
+    overlay:EnableMouse(false)
+    overlay:SetStatusBarTexture(MSUF_TEX_WHITE8)
+    overlay:SetMinMaxValues(0, 1)
+    overlay:SetValue(1)
+    overlay:SetStatusBarColor(1, 1, 1, 1)
+    overlay:SetAlpha(0.35)
+    if overlay.SetFrameStrata and frame.GetFrameStrata then
+        overlay:SetFrameStrata(frame:GetFrameStrata())
+    end
+    if overlay.SetFrameLevel and frame.hpBar.GetFrameLevel then
+        overlay:SetFrameLevel(frame.hpBar:GetFrameLevel() + 2)
+    end
+    overlay:Hide()
+    frame._msufUFDispelOverlay = overlay
+
+    local rounded = _G.MSUF_RoundedUF_OnUnitDispelOverlayChanged
+    if type(rounded) == "function" then rounded(frame) end
+    return overlay
+end
+
+local function _HideUFDispelOverlay(frame)
+    local overlay = frame and frame._msufUFDispelOverlay
+    if overlay and overlay.IsShown and overlay:IsShown() then
+        overlay:Hide()
+    elseif overlay and overlay.Hide then
+        overlay:Hide()
+    end
+    if frame then frame._msufUFDispelOverlayNeedsHPSync = nil end
+end
+
+local function _LayoutUFDispelOverlay(frame, overlay, cfg)
+    local hpBar = frame and frame.hpBar
+    if not (hpBar and overlay) then return end
+
+    local style = (cfg and cfg.unitDispelOverlayStyle) or "FULL"
+    if not _UF_DISPEL_OVERLAY_TEXTURES[style] then style = "FULL" end
+    local currentOnly = cfg and cfg.unitDispelOverlayOnHealth ~= false
+
+    local anchorTop = hpBar
+    local anchorBottom = hpBar
+    if style == "FULL" and not currentOnly then
+        anchorBottom = _UFDispelOverlayBottomBar(frame) or hpBar
+    end
+
+    if overlay._msufUFDOStyle ~= style then
+        overlay:SetStatusBarTexture(_UF_DISPEL_OVERLAY_TEXTURES[style] or MSUF_TEX_WHITE8)
+        overlay._msufUFDOStyle = style
+        local rounded = _G.MSUF_RoundedUF_OnUnitDispelOverlayChanged
+        if type(rounded) == "function" then rounded(frame) end
+    end
+
+    local bottomChanged = overlay._msufUFDOAnchorBottom ~= anchorBottom
+        or overlay._msufUFDOAnchorTop ~= anchorTop
+    if bottomChanged then
+        overlay:ClearAllPoints()
+        overlay:SetPoint("TOPLEFT", anchorTop, "TOPLEFT", 0, 0)
+        overlay:SetPoint("TOPRIGHT", anchorTop, "TOPRIGHT", 0, 0)
+        overlay:SetPoint("BOTTOMLEFT", anchorBottom, "BOTTOMLEFT", 0, 0)
+        overlay:SetPoint("BOTTOMRIGHT", anchorBottom, "BOTTOMRIGHT", 0, 0)
+        overlay._msufUFDOAnchorTop = anchorTop
+        overlay._msufUFDOAnchorBottom = anchorBottom
+    end
+end
+
+local function _SyncUFDispelOverlayHealth(frame, hp)
+    local overlay = frame and frame._msufUFDispelOverlay
+    if not (overlay and frame._msufUFDispelOverlayNeedsHPSync) then return end
+    local hpBar = frame.hpBar
+    local minV, maxV
+    if hpBar and hpBar.GetMinMaxValues then
+        minV, maxV = hpBar:GetMinMaxValues()
+    end
+    if minV == nil then minV = 0 end
+    if maxV == nil and frame.unit and UnitHealthMax then maxV = UnitHealthMax(frame.unit) end
+    if maxV == nil then maxV = 1 end
+    overlay:SetMinMaxValues(minV, maxV)
+    if hp == nil and frame.unit and UnitHealth then hp = UnitHealth(frame.unit) end
+    overlay:SetValue(hp or 0)
+end
+_G.MSUF_UFDispelOverlay_SyncHealthValue = _G.MSUF_UFDispelOverlay_SyncHealthValue or _SyncUFDispelOverlayHealth
+
+local function _ApplyUFDispelOverlay(frame, cfg)
+    if not (frame and frame.unit and frame.hpBar) then return end
+    cfg = cfg or _RefreshBorderSettingsForFrame(frame)
+
+    local active = cfg and cfg.unitDispelOverlayEnabled == true
+    local test = _UFDispelTestApplies(frame)
+    local dispelOn = test or frame._msufUFDispelOverlayOn == true
+    local dispelType = test and (_G.MSUF_DispelBorderTestType or "Magic") or frame._msufUFDispelOverlayType
+    local auraID = test and nil or frame._msufUFDispelOverlayAuraID
+    local usePriority = cfg and (cfg.unitDispelOverlayUseHighlightPriority ~= false or cfg.unitDispelOverlayPrioEnabled == true)
+    local threat, purge, bossTarget = false, false, false
+    if usePriority then
+        local aggroTest = _UFAggroTestApplies(frame)
+        local wantAggro = MSUF_IsAggroOutlineUnit(frame.unit) and ((cfg.aggroOutlineMode == 1) or aggroTest)
+        threat = wantAggro and ((frame._msufAggroOutlineOn == true) or aggroTest) or false
+
+        local purgeTest = _UFPurgeTestApplies(frame)
+        local u = frame.unit
+        local wantPurge = (cfg.purgeOutlineMode == 1) or purgeTest
+        if wantPurge and (u == "target" or u == "focus" or u == "targettarget") then
+            purge = purgeTest or (frame._msufPurgeOutlineOn == true)
+        end
+
+        if type(u) == "string" and u:sub(1, 4) == "boss" then
+            local idx = tonumber(u:sub(5))
+            if idx and idx >= 1 and idx <= 5 then
+                local bossTest = _UFBossTargetTestApplies(frame)
+                local wantBossTarget = (cfg.bossTargetOutlineMode == 1) or bossTest
+                if wantBossTarget then
+                    bossTarget = bossTest or (frame._msufBossTargetHLOn == true)
+                end
+            end
+        end
+    end
+    local hlKey = usePriority and _ResolveUFOverlayPriorityKey(cfg, dispelOn, dispelType, threat, purge, bossTarget) or (dispelOn and 2 or 0)
+    local overlayOn = active and hlKey ~= 0
+    if active and not overlayOn and not frame._msufUFDispelOverlay and not _MSUF_TestModeCombatLocked() then
+        local prepared = _EnsureUFDispelOverlay(frame)
+        if prepared then
+            _LayoutUFDispelOverlay(frame, prepared, cfg)
+        end
+    end
+    if not overlayOn then
+        _HideUFDispelOverlay(frame)
+        return
+    end
+
+    local overlay = _EnsureUFDispelOverlay(frame)
+    if not overlay then return end
+    _LayoutUFDispelOverlay(frame, overlay, cfg)
+
+    local currentOnly = cfg and cfg.unitDispelOverlayOnHealth ~= false
+    if currentOnly then
+        frame._msufUFDispelOverlayNeedsHPSync = true
+        _SyncUFDispelOverlayHealth(frame)
+    else
+        frame._msufUFDispelOverlayNeedsHPSync = nil
+        overlay:SetMinMaxValues(0, 1)
+        overlay:SetValue(1)
+    end
+
+    if overlay.SetReverseFill and frame.hpBar.GetReverseFill then
+        overlay:SetReverseFill(frame.hpBar:GetReverseFill() and true or false)
+    end
+
+    local r, g, b = nil, nil, nil
+    if hlKey ~= 0 then
+        r, g, b = _ResolveUFHighlightPriorityColor(hlKey, cfg, dispelType, frame.unit, auraID)
+    end
+    if r == nil then
+        r, g, b = _GetUFDispelColor(dispelType, frame.unit, auraID, cfg)
+    end
+    local tex = overlay.GetStatusBarTexture and overlay:GetStatusBarTexture()
+    if tex and tex.SetVertexColor then
+        tex:SetVertexColor(r or 0.25, g or 0.75, b or 1.00, 1)
+    else
+        overlay:SetStatusBarColor(r or 0.25, g or 0.75, b or 1.00, 1)
+    end
+
+    local alpha = (cfg and cfg.unitDispelOverlayAlpha) or 0.35
+    if overlay._msufUFDOAlpha ~= alpha then
+        overlay:SetAlpha(alpha)
+        overlay._msufUFDOAlpha = alpha
+    end
+    if overlay.SetFrameLevel and frame.hpBar.GetFrameLevel then
+        local level = frame.hpBar:GetFrameLevel() + 2
+        if overlay._msufUFDOFrameLevel ~= level then
+            overlay:SetFrameLevel(level)
+            overlay._msufUFDOFrameLevel = level
+        end
+    end
+    if not (overlay.IsShown and overlay:IsShown()) then overlay:Show() end
+end
+
+_G.MSUF_ApplyUnitDispelOverlay = _G.MSUF_ApplyUnitDispelOverlay or function(frame)
+    _ApplyUFDispelOverlay(frame)
+end
+
+_G.MSUF_RefreshUnitDispelOverlays = _G.MSUF_RefreshUnitDispelOverlays or function()
+    local frames = _G.MSUF_UnitFrames
+    local seen = {}
+    local function apply(frame)
+        if frame and frame.unit and not seen[frame] then
+            seen[frame] = true
+            _ApplyUFDispelOverlay(frame)
+        end
+    end
+    if type(frames) == "table" then
+        for _, frame in pairs(frames) do
+            apply(frame)
+        end
+    end
+    apply(_G.MSUF_player)
+    apply(_G.MSUF_target)
+    apply(_G.MSUF_focus)
+    apply(_G.MSUF_targettarget)
 end
 
 local _BAR_OUTLINE_LINE_KEYS = { "top", "bottom", "left", "right" }
@@ -939,10 +1567,36 @@ end
 _G.MSUF_RefreshStaticUnitFrameOutlines = MSUF_RefreshStaticUnitFrameOutlines
 
 -- Sub-function: create/update highlight overlay frame for aggro/dispel/purge.
+local function MSUF_EnsureHighlightOverlayFrame(self)
+    if not self then return nil end
+    local hlFrame = self._msufHighlightOutline
+    if hlFrame then return hlFrame end
+    if _MSUF_TestModeCombatLocked() then return nil end
+
+    local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
+    hlFrame = F.CreateFrame("Frame", nil, self, template)
+    hlFrame:EnableMouse(false)
+    hlFrame:SetFrameStrata(self:GetFrameStrata())
+    local baseLevel = self:GetFrameLevel() + 3
+    if self.hpBar and self.hpBar.GetFrameLevel then
+        baseLevel = self.hpBar:GetFrameLevel() + 3
+    end
+    hlFrame:SetFrameLevel(baseLevel)
+    self._msufHighlightOutline = hlFrame
+    self._msufHighlightEdgeSize = -1
+    self._msufHighlightColorKey = -1
+    self._msufHighlightBottomIsPower = nil
+    hlFrame:Hide()
+    return hlFrame
+end
+
 local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
     local hlFrame = self._msufHighlightOutline
 
     if hlKey == 0 then
+        if not hlFrame then
+            hlFrame = MSUF_EnsureHighlightOverlayFrame(self)
+        end
         _StopDispelGlow(self)
         if hlFrame then hlFrame:Hide() end
         self._msufHighlightColorKey = 0
@@ -959,19 +1613,8 @@ local function MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
     local hlThickness = (cfg and cfg.highlightBorderThickness) or 2
 
     if not hlFrame then
-        local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
-        hlFrame = F.CreateFrame("Frame", nil, self, template)
-        hlFrame:EnableMouse(false)
-        hlFrame:SetFrameStrata(self:GetFrameStrata())
-        local baseLevel = self:GetFrameLevel() + 3
-        if self.hpBar and self.hpBar.GetFrameLevel then
-            baseLevel = self.hpBar:GetFrameLevel() + 3
-        end
-        hlFrame:SetFrameLevel(baseLevel)
-        self._msufHighlightOutline = hlFrame
-        self._msufHighlightEdgeSize = -1
-        self._msufHighlightColorKey = -1
-        self._msufHighlightBottomIsPower = nil
+        hlFrame = MSUF_EnsureHighlightOverlayFrame(self)
+        if not hlFrame then return end
     end
 
     local hb = self.hpBar
@@ -1049,17 +1692,7 @@ MSUF_ApplyRareVisuals = function(self)
     local cfg = _RefreshBorderSettingsForFrame(self)
 
     -- Aggro state detection.
-    local borderTestsActive = _G.MSUF_BorderTestModesActive == true
-    local aggroTest = borderTestsActive and _G.MSUF_AggroBorderTestMode and true or false
-    if aggroTest then
-        local testScope = _G.MSUF_AggroBorderTestScope or "shared"
-        local u = self.unit
-        if testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid" then
-            aggroTest = false
-        elseif testScope ~= "shared" and not (testScope == "boss" and type(u) == "string" and u:sub(1, 4) == "boss") and u ~= testScope then
-            aggroTest = false
-        end
-    end
+    local aggroTest = _UFAggroTestApplies(self)
     local wantAggro = MSUF_IsAggroOutlineUnit(self.unit) and ((cfg.aggroOutlineMode == 1) or aggroTest)
     local threat = false
     if wantAggro then
@@ -1082,19 +1715,7 @@ MSUF_ApplyRareVisuals = function(self)
     local dispel = false
     local dispelColorType = self._msufDispelType
     do
-        local test = borderTestsActive and (_G.MSUF_DispelBorderTestMode and true or false) or false
-        -- Scope filtering for test mode
-        if test then
-            local testScope = _G.MSUF_DispelBorderTestScope or "shared"
-            if testScope ~= "shared" then
-                local u = self.unit
-                if testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid" then
-                    test = false  -- GF scope: don't show on UF
-                elseif u ~= testScope then
-                    test = false  -- Different UF: don't show
-                end
-            end
-        end
+        local test = _UFDispelTestApplies(self)
         local wantDispel = (cfg.dispelOutlineMode == 1) or test
         if wantDispel then
             local u = self.unit
@@ -1109,24 +1730,10 @@ MSUF_ApplyRareVisuals = function(self)
         end
     end
 
-    local aggroR, aggroG, aggroB = cfg.aggroR, cfg.aggroG, cfg.aggroB
-    local dispelR, dispelG, dispelB = _GetUFDispelColor(dispelColorType, self.unit, self._msufDispelAuraID, cfg)
-    local purgeR, purgeG, purgeB = cfg.purgeR, cfg.purgeG, cfg.purgeB
-    local bossTargetR, bossTargetG, bossTargetB = cfg.bossTargetR, cfg.bossTargetG, cfg.bossTargetB
-
     -- Purge state detection.
     local purge = false
     do
-        local test = borderTestsActive and (_G.MSUF_PurgeBorderTestMode and true or false) or false
-        if test then
-            local testScope = _G.MSUF_PurgeBorderTestScope or "shared"
-            local u = self.unit
-            if testScope == "party" or testScope == "raid" or testScope == "mythicraid" or testScope == "gf_party" or testScope == "gf_raid" or testScope == "gf_mythicraid" then
-                test = false
-            elseif testScope ~= "shared" and u ~= testScope then
-                test = false
-            end
-        end
+        local test = _UFPurgeTestApplies(self)
         local wantPurge = (cfg.purgeOutlineMode == 1) or test
         if wantPurge then
             local u = self.unit
@@ -1143,7 +1750,7 @@ MSUF_ApplyRareVisuals = function(self)
         if type(u) == "string" and u:sub(1, 4) == "boss" then
             local idx = tonumber(u:sub(5))
             if idx and idx >= 1 and idx <= 5 then
-                local test = borderTestsActive and (_G.MSUF_BossTargetBorderTestMode and true or false) or false
+                local test = _UFBossTargetTestApplies(self)
                 local wantBossTarget = (cfg.bossTargetOutlineMode == 1) or test
                 if wantBossTarget then
                     bossTarget = test or (self._msufBossTargetHLOn == true)
@@ -1152,27 +1759,8 @@ MSUF_ApplyRareVisuals = function(self)
         end
     end
 
-    -- Resolve highlight priority: Dispel > Aggro > Purge > Boss Target (default), or custom order.
-    local hlKey = 0
-    if cfg.highlightPrioEnabled and type(cfg.highlightPrioOrder) == "table" then
-        for _, kind in ipairs(cfg.highlightPrioOrder) do
-            if kind == "dispel" and dispel then hlKey = 2; break
-            elseif kind == "aggro" and threat then hlKey = 1; break
-            elseif kind == "purge" and purge then hlKey = 3; break
-            elseif kind == "bossTarget" and bossTarget then hlKey = 4; break
-            end
-        end
-    else
-        hlKey = (dispel and 2) or (threat and 1) or (purge and 3) or (bossTarget and 4) or 0
-    end
-
-    -- Resolve color for the active highlight key.
-    local hlR, hlG, hlB = 0, 0, 0
-    if hlKey == 1 then hlR, hlG, hlB = aggroR, aggroG, aggroB
-    elseif hlKey == 2 then hlR, hlG, hlB = dispelR, dispelG, dispelB
-    elseif hlKey == 3 then hlR, hlG, hlB = purgeR, purgeG, purgeB
-    elseif hlKey == 4 then hlR, hlG, hlB = bossTargetR, bossTargetG, bossTargetB
-    end
+    local hlKey = _ResolveUFHighlightPriorityKey(cfg, dispel, dispelColorType, threat, purge, bossTarget)
+    local hlR, hlG, hlB = _ResolveUFHighlightPriorityColor(hlKey, cfg, dispelColorType, self.unit, self._msufDispelAuraID)
 
     -- Apply (or hide) the highlight overlay.
     MSUF_ApplyHighlightOverlay(self, hlKey, hlR, hlG, hlB, cfg)
@@ -1183,13 +1771,48 @@ MSUF_ApplyRareVisuals = function(self)
     self._msufBarBorderTintG = tintBarBorder and hlG or nil
     self._msufBarBorderTintB = tintBarBorder and hlB or nil
     _ApplyUFBarBorderTint(self, tintBarBorder, hlR, hlG, hlB)
- end
+    if cfg.unitDispelOverlayEnabled == true then
+        _ApplyUFDispelOverlay(self, cfg)
+    end
+end
 -- Export with RoundedUF notification (replaces former hooksecurefunc in RoundedUnitframes).
 _G.MSUF_RefreshRareBarVisuals = function(frame)
     MSUF_ApplyRareVisuals(frame)
     if _G.MSUF_RoundedUF_Active == true then
         local fnR = _G.MSUF_RoundedUF_OnRareVisualsRefreshed; if fnR then fnR(frame) end
     end
+end
+
+local function _PrimeUnitHighlightFrames()
+    if _MSUF_TestModeCombatLocked() then return end
+    local iter = _G.MSUF_ForEachUnitFrame
+    if type(iter) == "function" then
+        iter(function(frame)
+            if frame and frame.unit then
+                MSUF_ApplyRareVisuals(frame)
+            end
+        end)
+        return
+    end
+    local frames = _G.MSUF_UnitFrames
+    if type(frames) == "table" then
+        for _, frame in pairs(frames) do
+            if frame and frame.unit then MSUF_ApplyRareVisuals(frame) end
+        end
+    end
+end
+
+do
+    local prime = F.CreateFrame("Frame")
+    prime:RegisterEvent("PLAYER_LOGIN")
+    prime:SetScript("OnEvent", function(self)
+        if self.UnregisterEvent then self:UnregisterEvent("PLAYER_LOGIN") end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, _PrimeUnitHighlightFrames)
+        else
+            _PrimeUnitHighlightFrames()
+        end
+    end)
 end
 
 -- Cold-path helpers for the Bars menu (no runtime cost during combat/raiding).
@@ -1222,16 +1845,16 @@ _G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(acti
 
     local fn = _G.MSUF_RefreshRareBarVisuals
     local frames = _G.MSUF_UnitFrames
-    if type(fn) == "function" and frames then
+    if type(fn) == "function" then
         if isShared then
-            local p = frames.player; if p and p.unit == "player" then fn(p) end
-            local t = frames.target; if t and t.unit == "target" then fn(t) end
-            local f = frames.focus; if f and f.unit == "focus" then fn(f) end
-            for i = 1, 5 do local b = frames["boss" .. i]; if b and b.unit == ("boss" .. i) then fn(b) end end
+            local p = _ResolveUnitFrame("player"); if _FrameMatchesUnit(p, "player") then fn(p) end
+            local t = _ResolveUnitFrame("target"); if _FrameMatchesUnit(t, "target") then fn(t) end
+            local f = _ResolveUnitFrame("focus"); if _FrameMatchesUnit(f, "focus") then fn(f) end
+            for i = 1, 5 do local u = "boss" .. i; local b = _ResolveUnitFrame(u); if _FrameMatchesUnit(b, u) then fn(b) end end
         elseif testScope == "boss" then
-            for i = 1, 5 do local b = frames["boss" .. i]; if b and b.unit == ("boss" .. i) then fn(b) end end
+            for i = 1, 5 do local u = "boss" .. i; local b = _ResolveUnitFrame(u); if _FrameMatchesUnit(b, u) then fn(b) end end
         elseif not isGF then
-            local uf = frames[testScope]; if uf and uf.unit == testScope then fn(uf) end
+            local uf = _ResolveUnitFrame(testScope); if _FrameMatchesUnit(uf, testScope) then fn(uf) end
         end
     end
     -- Also refresh Group Frames
@@ -1265,17 +1888,32 @@ _G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(ac
     -- UF frames: only refresh if shared or matching UF scope
     local fn = _G.MSUF_RefreshRareBarVisuals
     local frames = _G.MSUF_UnitFrames
-    if type(fn) == "function" and frames then
+    if type(fn) == "function" then
         local ufUnits = isShared and { "player", "target", "focus", "targettarget" } or (not isGF and { testScope } or {})
         for _, u in ipairs(ufUnits) do
-            local uf = frames[u]; if uf and uf.unit == u then fn(uf) end
+            local uf = _ResolveUnitFrame(u)
+            if _FrameMatchesUnit(uf, u) then
+                fn(uf)
+                _ApplyUFDispelOverlay(uf)
+            end
         end
     end
     -- Also force-clear UF glow when turning off
-    if not active and frames then
-        for _, uf in pairs(frames) do
-            if uf then _StopDispelGlow(uf) end
+    if not active then
+        local seen = {}
+        local function clearUF(uf)
+            if not uf or seen[uf] then return end
+            seen[uf] = true
+            _StopDispelGlow(uf)
+            _ApplyUFDispelOverlay(uf)
         end
+        if type(frames) == "table" then
+            for _, uf in pairs(frames) do clearUF(uf) end
+        end
+        clearUF(_G.MSUF_player)
+        clearUF(_G.MSUF_target)
+        clearUF(_G.MSUF_focus)
+        clearUF(_G.MSUF_targettarget)
     end
 
     -- GF frames: only refresh if shared or matching GF scope
@@ -1431,9 +2069,8 @@ do
 
     local function RefreshAggroForUnit(u)
         if not u or not MSUF_IsAggroOutlineUnit(u) then return end
-        local frames = _G.MSUF_UnitFrames
-        local uf = frames and frames[u]
-        if not uf or uf.unit ~= u then return end
+        local uf = _ResolveUnitFrame(u)
+        if not _FrameMatchesUnit(uf, u) then return end
         local cfg = _RefreshBorderSettingsForFrame(uf)
         local aggroTestActive = _G.MSUF_BorderTestModesActive == true and _G.MSUF_AggroBorderTestMode == true
         if not (aggroTestActive or (cfg and cfg.aggroOutlineMode == 1)) then
@@ -1533,114 +2170,242 @@ end
 do
     local f = F.CreateFrame("Frame")
     local _DISPEL_SCAN_FILTER = "HARMFUL|RAID_PLAYER_DISPELLABLE"
+    local _dispelScanSlots = {}
 
-    local function ReadDispelAuraInfo(aura)
+    local function ReadDispelAuraInfo(aura, unit, resolveType)
         if not aura then return false end
 
         local aid = aura.auraInstanceID
-        local dispelType
+        local dispelType = resolveType and _ResolveUFAuraDispelType(unit, aura) or nil
         local dn = aura.dispelName
         local dnIsSecret = issecretvalue and issecretvalue(dn)
-        if not dnIsSecret and type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
+        if not dispelType and not dnIsSecret and type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
             dispelType = dn
         end
 
         return true, aid, dispelType
     end
 
-    local function ReadAnyDebuffAuraInfo(aura, requireDispelType)
+    local function ReadAnyDebuffAuraInfo(aura, requireDispelType, unit, resolveType)
         if not aura then return false end
 
         local aid = aura.auraInstanceID
-        local dispelType
+        local dispelType = resolveType and _ResolveUFAuraDispelType(unit, aura) or nil
         local dn = aura.dispelName
         local dnIsSecret = issecretvalue and issecretvalue(dn)
         if dnIsSecret then
-            if requireDispelType then return true, aid, nil end
-        elseif type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
+            if requireDispelType and not dispelType then return true, aid, nil end
+        elseif not dispelType and type(dn) == "string" and dn ~= "" and dn ~= "None" and dn ~= "DISPELLABLE" then
             dispelType = dn
-        elseif requireDispelType then
+        elseif requireDispelType and not dispelType then
             return false
         end
 
         return true, aid, dispelType
     end
 
-    local function ScanHarmfulDebuff(unit, requireDispelType)
+    local function ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority)
+        if unit ~= "player" then return false end
+        local api = ns and ns.MSUF_Auras2
+        local cache = api and api.Cache
+        if type(cache) ~= "table" then return false end
+        local all = type(cache.GetAll) == "function" and cache.GetAll(unit) or nil
+        if all == nil and type(cache.FullScan) == "function" then
+            pcall(cache.FullScan, unit)
+            all = type(cache.GetAll) == "function" and cache.GetAll(unit) or nil
+        end
+        if type(all) ~= "table" then return false end
+        local ranked = _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
+        local resolveType = requireDispelType or ranked or (cfg and cfg.dispelColorMode == "TYPE")
+        local bestHas, bestAid, bestType, bestRank = false, nil, nil, 1000
+        for _, aura in pairs(all) do
+            local harmful = aura and (aura._msufIsHelpful == false)
+            if not harmful and aura then
+                local isHarmful = aura.isHarmful
+                if issecretvalue and issecretvalue(isHarmful) then
+                    harmful = true
+                else
+                    harmful = isHarmful == true
+                end
+            end
+            if harmful then
+                local has, aid, dispelType = ReadAnyDebuffAuraInfo(aura, requireDispelType, unit, resolveType)
+                if has then
+                    if not ranked then return has, aid, dispelType end
+                    local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                    if rank < bestRank then
+                        bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
+                        if rank <= 1 then return true, bestAid, bestType end
+                    end
+                end
+            end
+        end
+        if bestHas then return true, bestAid, bestType end
+        return false
+    end
+
+    local function ScanHarmfulDebuff(unit, requireDispelType, cfg, useOverlayPriority)
+        local ranked = _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
+        local resolveType = requireDispelType or ranked or (cfg and cfg.dispelColorMode == "TYPE")
+        local bestHas, bestAid, bestType, bestRank = false, nil, nil, 1000
         local CUA = C_UnitAuras
+        local getSlots = CUA and CUA.GetAuraSlots
+        local getBySlot = CUA and CUA.GetAuraDataBySlot
+        if type(getSlots) == "function" and type(getBySlot) == "function" then
+            local cont = nil
+            repeat
+                _dispelScanSlots[1], _dispelScanSlots[2], _dispelScanSlots[3], _dispelScanSlots[4], _dispelScanSlots[5],
+                _dispelScanSlots[6], _dispelScanSlots[7], _dispelScanSlots[8], _dispelScanSlots[9], _dispelScanSlots[10],
+                _dispelScanSlots[11], _dispelScanSlots[12], _dispelScanSlots[13], _dispelScanSlots[14], _dispelScanSlots[15],
+                _dispelScanSlots[16], _dispelScanSlots[17], _dispelScanSlots[18], _dispelScanSlots[19], _dispelScanSlots[20],
+                _dispelScanSlots[21], _dispelScanSlots[22], _dispelScanSlots[23], _dispelScanSlots[24], _dispelScanSlots[25],
+                _dispelScanSlots[26], _dispelScanSlots[27], _dispelScanSlots[28], _dispelScanSlots[29], _dispelScanSlots[30],
+                _dispelScanSlots[31], _dispelScanSlots[32], _dispelScanSlots[33], _dispelScanSlots[34], _dispelScanSlots[35],
+                _dispelScanSlots[36], _dispelScanSlots[37], _dispelScanSlots[38], _dispelScanSlots[39], _dispelScanSlots[40],
+                _dispelScanSlots[41] = getSlots(unit, "HARMFUL", 40, cont)
+                cont = _dispelScanSlots[1]
+                for i = 2, 41 do
+                    local slot = _dispelScanSlots[i]
+                    if not slot then break end
+                    local has, aid, dispelType = ReadAnyDebuffAuraInfo(getBySlot(unit, slot), requireDispelType, unit, resolveType)
+                    if has then
+                        if not ranked then return has, aid, dispelType end
+                        local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                        if rank < bestRank then
+                            bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
+                            if rank <= 1 then return true, bestAid, bestType end
+                        end
+                    end
+                end
+            until not cont
+            if bestHas then return true, bestAid, bestType end
+            return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority)
+        end
+
         local getByIndex = CUA and CUA.GetAuraDataByIndex
         if type(getByIndex) == "function" then
             local index = 1
             while true do
                 local aura = getByIndex(unit, index, "HARMFUL")
                 if not aura then break end
-                local has, aid, dispelType = ReadAnyDebuffAuraInfo(aura, requireDispelType)
-                if has then return has, aid, dispelType end
+                local has, aid, dispelType = ReadAnyDebuffAuraInfo(aura, requireDispelType, unit, resolveType)
+                if has then
+                    if not ranked then return has, aid, dispelType end
+                    local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                    if rank < bestRank then
+                        bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
+                        if rank <= 1 then return true, bestAid, bestType end
+                    end
+                end
                 index = index + 1
             end
-            return false
+            if bestHas then return true, bestAid, bestType end
+            return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority)
         end
 
         if AuraUtil and AuraUtil.ForEachAura then
             local has, aid, dispelType = false, nil, nil
             AuraUtil.ForEachAura(unit, "HARMFUL", nil, function(auraData)
-                has, aid, dispelType = ReadAnyDebuffAuraInfo(auraData, requireDispelType)
-                return has == true
+                has, aid, dispelType = ReadAnyDebuffAuraInfo(auraData, requireDispelType, unit, resolveType)
+                if not has then return false end
+                if not ranked then return true end
+                local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                if rank < bestRank then
+                    bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
+                    if rank <= 1 then return true end
+                end
+                return false
             end, true)
-            return has, aid, dispelType
+            if ranked and bestHas then return true, bestAid, bestType end
+            if has then return has, aid, dispelType end
         end
 
-        return false
+        return ScanAuras2PlayerDebuffCache(unit, requireDispelType, cfg, useOverlayPriority)
     end
 
-    local function HasDispellableDebuff(unit, triggerMode)
+    local function HasDispellableDebuff(unit, triggerMode, cfg, useOverlayPriority)
         triggerMode = _NormalizeDispelBorderTrigger(triggerMode)
         if triggerMode == DISPEL_TRIGGER_ANY then
-            return ScanHarmfulDebuff(unit, false)
+            return ScanHarmfulDebuff(unit, false, cfg, useOverlayPriority)
         elseif triggerMode == DISPEL_TRIGGER_TYPE then
-            return ScanHarmfulDebuff(unit, true)
+            return ScanHarmfulDebuff(unit, true, cfg, useOverlayPriority)
         end
 
+        local ranked = _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
+        local resolveType = ranked or (cfg and cfg.dispelColorMode == "TYPE")
+        local bestHas, bestAid, bestType, bestRank = false, nil, nil, 1000
         local CUA = C_UnitAuras
         local getSlots = CUA and CUA.GetAuraSlots
         local getBySlot = CUA and CUA.GetAuraDataBySlot
         local getByIndex = CUA and CUA.GetAuraDataByIndex
 
         if type(getByIndex) == "function" then
-            local aura = getByIndex(unit, 1, _DISPEL_SCAN_FILTER)
-            if aura then
-                return ReadDispelAuraInfo(aura)
+            local index = 1
+            while true do
+                local aura = getByIndex(unit, index, _DISPEL_SCAN_FILTER)
+                if not aura then break end
+                local has, aid, dispelType = ReadDispelAuraInfo(aura, unit, resolveType)
+                if has then
+                    if not ranked then return has, aid, dispelType end
+                    local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                    if rank < bestRank then
+                        bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
+                        if rank <= 1 then return true, bestAid, bestType end
+                    end
+                end
+                index = index + 1
             end
+            if bestHas then return true, bestAid, bestType end
         end
 
         if type(getSlots) == "function" then
-            local _, slot = getSlots(unit, _DISPEL_SCAN_FILTER, 1, nil)
-            if slot ~= nil then
-                if type(getBySlot) == "function" then
-                    return ReadDispelAuraInfo(getBySlot(unit, slot))
+            local cont = nil
+            repeat
+                _dispelScanSlots[1], _dispelScanSlots[2], _dispelScanSlots[3], _dispelScanSlots[4], _dispelScanSlots[5],
+                _dispelScanSlots[6], _dispelScanSlots[7], _dispelScanSlots[8], _dispelScanSlots[9], _dispelScanSlots[10],
+                _dispelScanSlots[11], _dispelScanSlots[12], _dispelScanSlots[13], _dispelScanSlots[14], _dispelScanSlots[15],
+                _dispelScanSlots[16], _dispelScanSlots[17], _dispelScanSlots[18], _dispelScanSlots[19], _dispelScanSlots[20],
+                _dispelScanSlots[21] = getSlots(unit, _DISPEL_SCAN_FILTER, 20, cont)
+                cont = _dispelScanSlots[1]
+                for i = 2, 21 do
+                    local slot = _dispelScanSlots[i]
+                    if not slot then break end
+                    if type(getBySlot) == "function" then
+                        local has, aid, dispelType = ReadDispelAuraInfo(getBySlot(unit, slot), unit, resolveType)
+                        if has then
+                            if not ranked then return has, aid, dispelType end
+                            local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                            if rank < bestRank then
+                                bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
+                                if rank <= 1 then return true, bestAid, bestType end
+                            end
+                        end
+                    else
+                        return true
+                    end
                 end
-                return true
-            end
+            until not cont
+            if bestHas then return true, bestAid, bestType end
         end
 
         if AuraUtil and AuraUtil.ForEachAura then
             local has, aid, dispelType = false, nil, nil
             AuraUtil.ForEachAura(unit, "HARMFUL|RAID", nil, function(auraData)
                 if not auraData then return true end
-                local dn = auraData.dispelName
-                if issecretvalue and issecretvalue(dn) then
-                    has, aid = true, auraData.auraInstanceID
-                    return true
-                end
-                if type(dn) == "string" and dn ~= "" and dn ~= "None" then
-                    has, aid = true, auraData.auraInstanceID
-                    if dn ~= "DISPELLABLE" then
-                        dispelType = dn
+                local found, foundAid, foundType = ReadDispelAuraInfo(auraData, unit, resolveType)
+                if found then
+                    has, aid, dispelType = true, foundAid, foundType
+                    if not ranked then return true end
+                    local rank = _UFDispelTypePriorityRank(cfg, useOverlayPriority, dispelType)
+                    if rank < bestRank then
+                        bestHas, bestAid, bestType, bestRank = true, aid, dispelType, rank
+                        if rank <= 1 then return true end
                     end
-                    return true
+                    return false
                 end
                 return false
             end, true)
+            if ranked and bestHas then return true, bestAid, bestType end
             return has, aid, dispelType
         end
 
@@ -1723,6 +2488,7 @@ do
         local snap = _G.MSUF_Snap
 
         local sentIdx = 0
+        local purgeOn = false
         local cont = nil
         repeat
             local t = _purgeScratch
@@ -1740,6 +2506,9 @@ do
                 local data = _getBySlot(unit, slot)
                 if data then
                     local stealable = data.isStealable
+                    if not (issecretvalue and issecretvalue(stealable)) and stealable == true then
+                        purgeOn = true
+                    end
                     if _evalBool and _colorTrue then
                         local color = _evalBool(stealable, _colorTrue, _colorFalse)
                         if color then
@@ -1762,46 +2531,68 @@ do
                 pool[idx]:SetAlpha(0)
             end
         end
-        return true
+        local changed = (uf._msufPurgeOutlineOn == true) ~= (purgeOn == true)
+        uf._msufPurgeOutlineOn = purgeOn and true or nil
+        return changed
     end
 
     local function HideAllPurgeSentinels(uf)
         local pool = uf._msufPurgeSentinels
-        if not pool then return end
-        for i = 1, #pool do
-            pool[i]:SetAlpha(0)
+        if pool then
+            for i = 1, #pool do
+                pool[i]:SetAlpha(0)
+            end
         end
+        local changed = uf and uf._msufPurgeOutlineOn == true
+        if uf then uf._msufPurgeOutlineOn = nil end
+        return changed
     end
 
     local function UpdateUnit(unit, forceRefresh)
-        local uf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit]
-        if not uf or uf.unit ~= unit then return end
+        local uf = _ResolveUnitFrame(unit)
+        if not _FrameMatchesUnit(uf, unit) then return end
 
         local cfg = _RefreshBorderSettingsForFrame(uf)
         local dispelEnabled = (cfg.dispelOutlineMode == 1)
+        local overlayEnabled = (cfg.unitDispelOverlayEnabled == true)
         local purgeEnabled  = (cfg.purgeOutlineMode  == 1)
         local dispelTrigger = cfg.dispelBorderTrigger or DISPEL_TRIGGER_BY_ME
+        local overlayTrigger = _ResolveUnitDispelOverlayTrigger(cfg)
 
         local dispelOn = false
+        local overlayOn = false
         -- Dispel = remove debuffs from allies; Purge = steal/remove buffs from enemies.
         -- UnitCanAssist/UnitCanAttack handle duels and PvP correctly (UnitIsFriend
         -- returns true for same-faction duel opponents, which breaks purge detection).
-        local canAssist = UnitCanAssist and UnitCanAssist("player", unit)
+        -- UnitCanAssist is not reliable for the player unit on every client, so self
+        -- is accepted explicitly for friendly debuff visuals.
+        local canAssist = _UnitCanReceiveFriendlyDispelVisual(unit)
         local canAttack = UnitCanAttack and UnitCanAttack("player", unit)
         local dispelAid, dispelType
-        if dispelEnabled and canAssist
+        local overlayAid, overlayType
+        local borderNeedsScan = dispelEnabled and canAssist
             and (not _DispelBorderTriggerNeedsPlayerDispel(dispelTrigger) or PlayerMayFriendlyDispel())
-        then
-            dispelOn, dispelAid, dispelType = HasDispellableDebuff(unit, dispelTrigger)
+        local overlayNeedsScan = overlayEnabled and canAssist
+            and (not _DispelBorderTriggerNeedsPlayerDispel(overlayTrigger) or PlayerMayFriendlyDispel())
+        if borderNeedsScan then
+            dispelOn, dispelAid, dispelType = HasDispellableDebuff(unit, dispelTrigger, cfg, false)
+        end
+        if overlayNeedsScan then
+            if borderNeedsScan and overlayTrigger == dispelTrigger and _UFOverlayCanReuseBorderDispelScan(cfg) then
+                overlayOn, overlayAid, overlayType = dispelOn, dispelAid, dispelType
+            else
+                overlayOn, overlayAid, overlayType = HasDispellableDebuff(unit, overlayTrigger, cfg, true)
+            end
         end
 
         -- Purge: sentinel frames handle rendering via SetAlpha with secret values.
         -- Secret constraints prevent boolean tracking ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â sentinels ARE the border.
         -- Purge participates in highlight priority only via test mode.
+        local purgeChanged = false
         if purgeEnabled and canAttack and unit ~= "player" and PlayerMayPurge() then
-            UpdatePurgeSentinels(uf, unit, cfg)
+            purgeChanged = UpdatePurgeSentinels(uf, unit, cfg) == true
         else
-            HideAllPurgeSentinels(uf)
+            purgeChanged = HideAllPurgeSentinels(uf) == true
         end
 
         local changed = false
@@ -1812,10 +2603,24 @@ do
             changed = true
         end
 
-        if changed then
+        local overlayChanged = false
+        if forceRefresh
+            or uf._msufUFDispelOverlayOn ~= overlayOn
+            or uf._msufUFDispelOverlayAuraID ~= overlayAid
+            or uf._msufUFDispelOverlayType ~= overlayType then
+            uf._msufUFDispelOverlayOn = overlayOn
+            uf._msufUFDispelOverlayAuraID = overlayAid
+            uf._msufUFDispelOverlayType = overlayType
+            overlayChanged = true
+        end
+
+        if changed or purgeChanged then
             if _G.MSUF_RefreshRareBarVisuals then
                 _G.MSUF_RefreshRareBarVisuals(uf)
             end
+        end
+        if overlayChanged then
+            _ApplyUFDispelOverlay(uf, cfg)
         end
     end
 
@@ -1838,8 +2643,7 @@ do
             return false, DISPEL_TRIGGER_BY_ME
         end
 
-        local frames = _G.MSUF_UnitFrames
-        local uf = frames and frames[unit]
+        local uf = _ResolveUnitFrame(unit)
         local cfg = uf and _RefreshBorderSettingsForFrame(uf)
         local mode = (cfg and cfg.dispelBorderTrigger) or _RefreshBorderSettingsCache().dispelBorderTrigger or DISPEL_TRIGGER_BY_ME
         mode = _NormalizeDispelBorderTrigger(mode)
@@ -1849,12 +2653,47 @@ do
         return true, mode
     end
 
+    local function UnitWantsFriendlyDispelOverlay(unit)
+        local uf = _ResolveUnitFrame(unit)
+        local cfg = uf and _RefreshBorderSettingsForFrame(uf)
+        local enabled, mode
+        if cfg then
+            enabled = cfg.unitDispelOverlayEnabled == true
+            mode = _ResolveUnitDispelOverlayTrigger(cfg)
+        else
+            local base = _RefreshBorderSettingsCache()
+            local db = _GetUnitBorderScopeDB(unit)
+            if db and db.unitDispelOverlayEnabled ~= nil then
+                enabled = db.unitDispelOverlayEnabled == true
+            else
+                enabled = base and base.unitDispelOverlayEnabled == true
+            end
+            mode = _NormalizeUnitDispelOverlayTrigger((db and db.unitDispelOverlayTrigger) or (base and base.unitDispelOverlayTrigger))
+            if mode == DISPEL_TRIGGER_BORDER then
+                mode = _NormalizeDispelBorderTrigger((db and db.dispelBorderTrigger) or (base and base.dispelBorderTrigger))
+            end
+        end
+        if not enabled then
+            return false, DISPEL_TRIGGER_BY_ME
+        end
+        if _DispelBorderTriggerNeedsPlayerDispel(mode) and not PlayerMayFriendlyDispel() then
+            return false, mode
+        end
+        return true, mode
+    end
+
+    local function UnitWantsFriendlyDispelVisual(unit)
+        local borderWants, borderMode = UnitWantsFriendlyDispelBorder(unit)
+        local overlayWants, overlayMode = UnitWantsFriendlyDispelOverlay(unit)
+        return (borderWants or overlayWants), borderWants and borderMode or nil, overlayWants and overlayMode or nil
+    end
+
     local function ResolveDispelAuraEventWants()
         local friendlyDispel = false
-        friendlyDispel = UnitWantsFriendlyDispelBorder("player")
-            or UnitWantsFriendlyDispelBorder("target")
-            or UnitWantsFriendlyDispelBorder("focus")
-            or UnitWantsFriendlyDispelBorder("targettarget")
+        friendlyDispel = UnitWantsFriendlyDispelVisual("player")
+            or UnitWantsFriendlyDispelVisual("target")
+            or UnitWantsFriendlyDispelVisual("focus")
+            or UnitWantsFriendlyDispelVisual("targettarget")
         local purge = false
         if PlayerMayPurge() then
             purge = _OutlineModeEnabledForUnit("target", "purgeOutlineMode")
@@ -1886,7 +2725,7 @@ do
         if not _dispelAuraFlushQueued then
             _dispelAuraFlushQueued = true
             if C_Timer and C_Timer.After then
-                C_Timer.After(0.05, FlushDispelAuraUnits)
+                C_Timer.After(0, FlushDispelAuraUnits)
             else
                 FlushDispelAuraUnits()
             end
@@ -1913,7 +2752,7 @@ do
         if triggerMode == DISPEL_TRIGGER_TYPE then
             local harmfulTyped = aura.isHarmful
             if issecretvalue and issecretvalue(harmfulTyped) then return true end
-            return false
+            return harmfulTyped ~= false
         end
 
         local harmful = aura.isHarmful
@@ -1926,13 +2765,15 @@ do
 
     local function UpdateInfoMayAffectFriendlyDispel(unit, updateInfo)
         if type(updateInfo) ~= "table" or updateInfo.isFullUpdate then return true end
-        local unitWants, triggerMode = UnitWantsFriendlyDispelBorder(unit)
+        local unitWants, borderTriggerMode, overlayTriggerMode = UnitWantsFriendlyDispelVisual(unit)
         if not unitWants then return false end
 
         local added = updateInfo.addedAuras
         if added then
             for i = 1, #added do
-                if AuraDataMayAffectFriendlyDispel(added[i], triggerMode) then return true end
+                local aura = added[i]
+                if borderTriggerMode and AuraDataMayAffectFriendlyDispel(aura, borderTriggerMode) then return true end
+                if overlayTriggerMode and overlayTriggerMode ~= borderTriggerMode and AuraDataMayAffectFriendlyDispel(aura, overlayTriggerMode) then return true end
             end
         end
 
@@ -1941,8 +2782,11 @@ do
 
         local removed = updateInfo.removedAuraInstanceIDs
         if removed and #removed > 0 then
-            local uf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit]
-            return uf and (uf._msufDispelOutlineOn or uf._msufDispelAuraID ~= nil) or false
+            local uf = _ResolveUnitFrame(unit)
+            return uf and (
+                uf._msufDispelOutlineOn or uf._msufDispelAuraID ~= nil
+                or uf._msufUFDispelOverlayOn or uf._msufUFDispelOverlayAuraID ~= nil
+            ) or false
         end
 
         return false
@@ -1987,7 +2831,7 @@ do
             if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
             if not _dispelAuraWant or _dispelAuraQueued[unit] then return end
             local shouldQueue = false
-            if _friendlyDispelAuraWant and UnitCanAssist and UnitCanAssist("player", unit) and UnitWantsFriendlyDispelBorder(unit) then
+            if _friendlyDispelAuraWant and _UnitCanReceiveFriendlyDispelVisual(unit) and UnitWantsFriendlyDispelVisual(unit) then
                 shouldQueue = UpdateInfoMayAffectFriendlyDispel(unit, updateInfo)
             end
             if not shouldQueue and _purgeAuraWant and unit ~= "player" and UnitCanAttack and UnitCanAttack("player", unit) then

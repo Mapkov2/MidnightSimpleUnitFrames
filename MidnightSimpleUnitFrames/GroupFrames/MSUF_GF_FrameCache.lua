@@ -56,8 +56,26 @@ local function HLPrioOrderCached(conf, gen)
     return nil
 end
 
-local function HLColorCached(gen, key, fallback)
+local function HLColorCached(conf, gen, key, legacyKey, fallback)
+    if conf and conf.hlOverride and conf[key] ~= nil then return conf[key] end
     if gen and gen[key] ~= nil then return gen[key] end
+    if legacyKey then
+        if type(legacyKey) == "table" then
+            if conf and conf.hlOverride then
+                for i = 1, #legacyKey do
+                    if conf[legacyKey[i]] ~= nil then return conf[legacyKey[i]] end
+                end
+            end
+            if gen then
+                for i = 1, #legacyKey do
+                    if gen[legacyKey[i]] ~= nil then return gen[legacyKey[i]] end
+                end
+            end
+        else
+            if conf and conf.hlOverride and conf[legacyKey] ~= nil then return conf[legacyKey] end
+            if gen and gen[legacyKey] ~= nil then return gen[legacyKey] end
+        end
+    end
     return fallback
 end
 
@@ -248,12 +266,17 @@ function GF.BuildFrameCache(f)
     end
     c.blizzardDispelBorder = c.nativeBlizzardDispels and auras and auras.blizzardDispelBorder == true
     c.nativeBlizzardDispelsSuppressCustom = c.nativeBlizzardDispels and not c.blizzardDispelBorder
+    local customDispelAllowed = not c.nativeBlizzardDispelsSuppressCustom
 
     -- Dispel overlay (color wash on health bar)
-    c.doEn    = auraMasterOn and conf.dispelOverlayEnabled == true and not c.nativeBlizzardDispels
+    c.doEn    = auraMasterOn and conf.dispelOverlayEnabled == true and customDispelAllowed
     c.doStyle = conf.dispelOverlayStyle or "FULL"
     c.doOnHP  = conf.dispelOverlayOnHealth ~= false
     c.doAlpha = conf.dispelOverlayAlpha or 0.35
+    c.doTrigger = (GF.NormalizeDispelOverlayTrigger and GF.NormalizeDispelOverlayTrigger(conf.dispelOverlayTrigger)) or "BORDER"
+    c.doUseHighlightPriority = conf.dispelOverlayUseHighlightPriority ~= false
+    c.doPrioEnabled = conf.dispelOverlayPrioEnabled == true or conf.dispelOverlayPrioEnabled == 1
+    c.doPrioOrder = type(conf.dispelOverlayPrioOrder) == "table" and conf.dispelOverlayPrioOrder or nil
 
     -- Debuff stripe (thin edge for any debuff). This is a custom aura-derived
     -- visual, so it must not keep UNIT_AURA/custom scans alive when Blizzard
@@ -270,7 +293,7 @@ function GF.BuildFrameCache(f)
     -- Highlight border (pre-resolve HLVal)
     c.aggroEn   = HLValCached(conf, gen, "hlAggroEnabled") ~= false
     c.aggroMode = HLValCached(conf, gen, "hlAggroMode") or "ALL"
-    c.dispelEn  = auraMasterOn and HLValCached(conf, gen, "hlDispelEnabled") ~= false and not c.nativeBlizzardDispelsSuppressCustom
+    c.dispelEn  = auraMasterOn and HLValCached(conf, gen, "hlDispelEnabled") ~= false and customDispelAllowed
     c.dispelBorderTrigger = GF.NormalizeDispelBorderTrigger(HLValCached(conf, gen, "dispelBorderTrigger"))
     c.hlPrioEnabled = HLPrioEnabledCached(conf, gen)
     c.hlPrioOrder = c.hlPrioEnabled and HLPrioOrderCached(conf, gen) or nil
@@ -280,18 +303,18 @@ function GF.BuildFrameCache(f)
     c.aggroOfs = HLValCached(conf, gen, "hlAggroOffset") or 0
     c.aggroTex = HLValCached(conf, gen, "hlAggroTexture")
     c.aggroLayer = HLValCached(conf, gen, "hlAggroLayer") or "DEFAULT"
-    c.aggroR = HLColorCached(gen, "hlAggroColorR", 1)
-    c.aggroG = HLColorCached(gen, "hlAggroColorG", 0.55)
-    c.aggroB = HLColorCached(gen, "hlAggroColorB", 0)
+    c.aggroR = HLColorCached(conf, gen, "hlAggroColorR", { "aggroBorderColorR", "aggroBorderR", "aggroR" }, 1)
+    c.aggroG = HLColorCached(conf, gen, "hlAggroColorG", { "aggroBorderColorG", "aggroBorderG", "aggroG" }, 0.55)
+    c.aggroB = HLColorCached(conf, gen, "hlAggroColorB", { "aggroBorderColorB", "aggroBorderB", "aggroB" }, 0)
 
     -- Target color (pre-resolve HLColor)
     c.tgtSize = HLValCached(conf, gen, "hlTargetSize") or 2
     c.tgtOfs = HLValCached(conf, gen, "hlTargetOffset") or 0
     c.tgtTex = HLValCached(conf, gen, "hlTargetTexture")
     c.tgtLayer = HLValCached(conf, gen, "hlTargetLayer") or "DEFAULT"
-    c.tgtR = HLColorCached(gen, "hlTargetColorR", 1)
-    c.tgtG = HLColorCached(gen, "hlTargetColorG", 1)
-    c.tgtB = HLColorCached(gen, "hlTargetColorB", 1)
+    c.tgtR = HLColorCached(conf, gen, "hlTargetColorR", "targetR", 1)
+    c.tgtG = HLColorCached(conf, gen, "hlTargetColorG", "targetG", 1)
+    c.tgtB = HLColorCached(conf, gen, "hlTargetColorB", "targetB", 1)
 
     -- Focus color
     c.focSize = conf.hlFocusSize or 2
@@ -303,7 +326,7 @@ function GF.BuildFrameCache(f)
     c.focB = conf.hlFocusColorB or 1.0
 
     -- Aura dispatch
-    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and not c.nativeBlizzardDispelsSuppressCustom
+    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and customDispelAllowed
     local siRuntimeActive = false
     if auraMasterOn and conf.spellIndicators and conf.spellIndicators.enabled == true then
         local siActiveFn = GF.SpellIndicatorsRuntimeActive
@@ -347,9 +370,17 @@ function GF.BuildFrameCache(f)
         c.ciSlotTL == "aggro" or c.ciSlotTR == "aggro" or c.ciSlotBL == "aggro"
         or c.ciSlotBR == "aggro" or c.ciSlotC == "aggro")
 
-    c.dispelScanActive = c.dispelScan
-        and (c.dispelEn or c.doEn or ciDispelActive)
-        and (not GF.DispelBorderTriggerNeedsPlayerDispel(c.dispelBorderTrigger) or GF._playerCanDispel)
+    local overlayTrigger = (GF.ResolveDispelOverlayTrigger and GF.ResolveDispelOverlayTrigger(c)) or c.dispelBorderTrigger
+    c.dispelOverlayTrigger = overlayTrigger
+    local borderTriggerAllowed = not GF.DispelBorderTriggerNeedsPlayerDispel(c.dispelBorderTrigger) or GF._playerCanDispel
+    local overlayTriggerAllowed = not GF.DispelBorderTriggerNeedsPlayerDispel(overlayTrigger) or GF._playerCanDispel
+    c.dispelBorderScanActive = c.dispelScan
+        and (c.dispelEn or ciDispelActive)
+        and borderTriggerAllowed
+    c.dispelOverlayScanActive = c.dispelScan
+        and c.doEn
+        and overlayTriggerAllowed
+    c.dispelScanActive = c.dispelBorderScanActive or c.dispelOverlayScanActive
     local customDispels = auraMasterOn and c.dispelScanActive
 
     c.nativeBlizzardAuras = c.aurasOn and (

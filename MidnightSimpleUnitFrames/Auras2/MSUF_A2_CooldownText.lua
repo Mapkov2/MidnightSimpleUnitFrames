@@ -494,6 +494,7 @@ local function EnsureMgr()
 
         -- If we recently saw a warning/urgent/expire bucket, keep fast ticking briefly.
         local wantFast = (now < (mgr.fastUntil or 0))
+        local nextWakeAt = nil
 
         -- Step 6 perf: lazy-resolve secret-check function once per Tick.
         -- issecretvalue may have been nil at module load due to load-order; re-check _G.
@@ -548,10 +549,13 @@ local function EnsureMgr()
                     -- every tick because their color is constant until the next threshold.
                     local skipUntil = icon._msufA2_cdSkipUntil
                     if skipUntil and now < skipUntil then
-                        -- Bucket hasn't changed since last eval  nothing to do.
+                        -- Bucket hasn't changed since last eval; nothing to do.
                         -- (fs and color were already set on the last real evaluation.)
+                        if not nextWakeAt or skipUntil < nextWakeAt then
+                            nextWakeAt = skipUntil
+                        end
                     else
-                                                -- Full evaluation path (same bucket result as before, just less frequent).
+                        -- Full evaluation path (same bucket result as before, just less frequent).
                         local r, g, b, a = safeR, safeG, safeB, safeA
                         local bucket = 3 -- safe (default)
                         local iconSecret = false
@@ -628,6 +632,10 @@ local function EnsureMgr()
                         else
                             icon._msufA2_cdSkipUntil = nil -- warn/urgent/expire: evaluate every tick
                         end
+                        skipUntil = icon._msufA2_cdSkipUntil
+                        if skipUntil and (not nextWakeAt or skipUntil < nextWakeAt) then
+                            nextWakeAt = skipUntil
+                        end
 
                         -- SetTextColor diff: use actual RGBA values, not integer bucket.
                         -- CreateColor/GetRGBA round-trip may not produce exact matches
@@ -650,7 +658,14 @@ local function EnsureMgr()
                 mgr.interval = mgr.fastInterval or 0.10
             end
         else
-            mgr.interval = mgr.slowInterval or 0.50
+            local interval = mgr.slowInterval or 0.50
+            if nextWakeAt and nextWakeAt > now then
+                local untilWake = nextWakeAt - now
+                if untilWake > interval then
+                    interval = untilWake
+                end
+            end
+            mgr.interval = interval
         end
 
         StopIfIdle()

@@ -637,8 +637,23 @@ local function GetPowerBarBackgroundMatchHP() return (_general() or {}).powerBar
 local function SetPowerBarBackgroundMatchHP(v) local g = _general(); if g then g.powerBarBgMatchBarColor = v and true or false; PushVisualUpdates() end end
 
 -- ── Aggro Border ──
-local function GetAggroBorderColor() return _getRGB("aggroBorderR", "aggroBorderG", "aggroBorderB", 1.0, 0.5, 0.0) end
-local function SetAggroBorderColor(r, g, b) _setRGB("aggroBorderR", "aggroBorderG", "aggroBorderB", r, g, b, 1.0, 0.5, 0.0) end
+local function GetAggroBorderColor()
+    local g = _general()
+    if not g then return 1.0, 0.5, 0.0 end
+    return tonumber(g.hlAggroColorR) or tonumber(g.aggroBorderColorR) or tonumber(g.aggroBorderR) or 1.0,
+           tonumber(g.hlAggroColorG) or tonumber(g.aggroBorderColorG) or tonumber(g.aggroBorderG) or 0.5,
+           tonumber(g.hlAggroColorB) or tonumber(g.aggroBorderColorB) or tonumber(g.aggroBorderB) or 0.0
+end
+local function SetAggroBorderColor(r, g, b)
+    local gen = _general()
+    if not gen then return end
+    gen.hlAggroColorR = r or 1.0
+    gen.hlAggroColorG = g or 0.5
+    gen.hlAggroColorB = b or 0.0
+    gen.aggroBorderColorR, gen.aggroBorderColorG, gen.aggroBorderColorB = gen.hlAggroColorR, gen.hlAggroColorG, gen.hlAggroColorB
+    gen.aggroBorderR, gen.aggroBorderG, gen.aggroBorderB = gen.hlAggroColorR, gen.hlAggroColorG, gen.hlAggroColorB
+    PushVisualUpdates()
+end
 
 local function GetBarOutlineColor() return _getRGB("barOutlineColorR", "barOutlineColorG", "barOutlineColorB", 0, 0, 0) end
 local function SetBarOutlineColor(r, g, b) _setRGB("barOutlineColorR", "barOutlineColorG", "barOutlineColorB", r, g, b, 0, 0, 0) end
