@@ -1065,7 +1065,25 @@ local function GFPreviewRefreshHandleSelection(box)
     GFPreviewUpdateHint(box, selected)
 end
 
+local GFPreviewHelpers = {}
+GFPreviewHelpers.CurrentScope = CurrentScope
+GFPreviewHelpers.Conf = Conf
+GFPreviewHelpers.PreviewScopeLabel = PreviewScopeLabel
+GFPreviewHelpers.SetTextMoveTogether = GFPreviewSetTextMoveTogether
+GFPreviewHelpers.CurrentTextKind = GFPreviewCurrentTextKind
+GFPreviewHelpers.TextOffsetKeys = GFPreviewTextOffsetKeys
+GFPreviewHelpers.NudgeStep = GFPreviewNudgeStep
+GFPreviewHelpers.StatusSpecs = GFPreviewStatusSpecs
+GFPreviewHelpers.TextLabel = GFPreviewTextLabel
+GFPreviewHelpers.PreviewFocusForPage = PreviewFocusForPage
+GFPreviewHelpers.MockPowerHeight = GFPreviewMockPowerHeight
+GFPreviewHelpers.HealPredAnchorMode = GFPreviewHealPredAnchorMode
+GFPreviewHelpers.HealPredictionEnabled = GFPreviewHealPredictionEnabled
+GFPreviewHelpers.SetOutlineShown = GFPreviewSetOutlineShown
+GFPreviewHelpers.LayoutOutline = GFPreviewLayoutOutline
+
 local function CreateNativeGFPreview(parent, ctx, onOpen)
+    local H = GFPreviewHelpers
     local width = (ctx.width or 720) - 28
     local box = T.Panel(parent, nil, T.colors.panel2, T.colors.border)
     box:SetSize(width, 300)
@@ -1075,7 +1093,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     local title = T.Font(box, "GameFontNormal", "", T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
-    title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", PreviewScopeLabel(CurrentScope())))
+    title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
     box._title = title
     local hint = T.Font(box, "GameFontDisableSmall", M.Tr("click layers to hide - drag custom handles - arrows nudge selected"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
@@ -1234,14 +1252,14 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
         if handle and handle._cfgTextKind then
             M.gfTextTabSelection = M.gfTextTabSelection or {}
-            M.gfTextTabSelection[CurrentScope()] = handle._cfgTextKind
+            M.gfTextTabSelection[H.CurrentScope()] = handle._cfgTextKind
             if handle._cfgTextSlot then
-                GFPreviewSetTextMoveTogether(CurrentScope(), handle._cfgTextKind, false)
+                H.SetTextMoveTogether(H.CurrentScope(), handle._cfgTextKind, false)
                 M.gfTextSlotSelection = M.gfTextSlotSelection or {}
-                M.gfTextSlotSelection[CurrentScope()] = M.gfTextSlotSelection[CurrentScope()] or {}
-                M.gfTextSlotSelection[CurrentScope()][handle._cfgTextKind] = handle._cfgTextSlot
+                M.gfTextSlotSelection[H.CurrentScope()] = M.gfTextSlotSelection[H.CurrentScope()] or {}
+                M.gfTextSlotSelection[H.CurrentScope()][handle._cfgTextKind] = handle._cfgTextSlot
             elseif handle._cfgTextKind == "hp" or handle._cfgTextKind == "power" then
-                GFPreviewSetTextMoveTogether(CurrentScope(), handle._cfgTextKind, true)
+                H.SetTextMoveTogether(H.CurrentScope(), handle._cfgTextKind, true)
             end
         end
         GFPreviewRefreshHandleSelection(box)
@@ -1256,7 +1274,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         if not (M and type(M.CheckpointHistory) == "function") then return end
         M.CheckpointHistory(
             HandleHistoryLabel(handle, action),
-            "groupPreview:" .. tostring(CurrentScope()) .. ":" .. tostring(handle and handle._key or "handle") .. ":" .. tostring(action or "move")
+            "groupPreview:" .. tostring(H.CurrentScope()) .. ":" .. tostring(handle and handle._key or "handle") .. ":" .. tostring(action or "move")
         )
     end
 
@@ -1273,10 +1291,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     local function WriteTextHandleOffsets(handle, x, y, action, checkpoint)
         if not handle then return false end
-        local conf = Conf(CurrentScope())
+        local conf = H.Conf(H.CurrentScope())
         if not conf then return false end
-        local kind = handle._cfgTextKind or GFPreviewCurrentTextKind()
-        local xKey, yKey = GFPreviewTextOffsetKeys(kind, handle._cfgTextSlot)
+        local kind = handle._cfgTextKind or H.CurrentTextKind()
+        local xKey, yKey = H.TextOffsetKeys(kind, handle._cfgTextSlot)
         conf[xKey] = GFPreviewRound(x or 0)
         conf[yKey] = GFPreviewRound(y or 0)
         RefreshGroupPreviewAfterMove()
@@ -1307,7 +1325,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
         local scale = handle._previewScale or m._previewScale or 1
         local cfgX, cfgY = GFPreviewOffsetToConfig(offX, scale), GFPreviewOffsetToConfig(offY, scale)
-        local conf = Conf(CurrentScope())
+        local conf = H.Conf(H.CurrentScope())
 
         if handle._cfgGroup then
             conf.auras = conf.auras or {}
@@ -1328,8 +1346,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             conf.privateAuras.x = cfgX
             conf.privateAuras.y = cfgY
         elseif handle._cfgSpell then
-            local placed = GFPreviewCurrentSpellPlaced(CurrentScope())
-            local spellCfg = GFPreviewCurrentSpellConfig(CurrentScope())
+            local placed = GFPreviewCurrentSpellPlaced(H.CurrentScope())
+            local spellCfg = GFPreviewCurrentSpellConfig(H.CurrentScope())
             if not placed and spellCfg then
                 spellCfg.placed = { type = "icon", size = 18 }
                 placed = spellCfg.placed
@@ -1541,7 +1559,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     AddIconPool(blizzHandle, 10)
 
     local statusHandles = {}
-    local statusSpecs = GFPreviewStatusSpecs()
+    local statusSpecs = H.StatusSpecs()
     for i = 1, #statusSpecs do
         local spec = statusSpecs[i]
         local statusHandle = CreatePreviewHandle("status_" .. tostring(spec.value or i), "sicons", { 0.80, 0.67, 0.20 }, GFPreviewStatusLabel(spec), 78, 28, false)
@@ -1569,7 +1587,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         handle._cfgText = true
         handle._cfgTextKind = kind
         handle._cfgTextSlot = slot
-        handle._previewText = GFPreviewTextLabel(kind, slot)
+        handle._previewText = H.TextLabel(kind, slot)
         if handle.SetBackdropColor then handle:SetBackdropColor(0, 0, 0, 0) end
         if handle.SetBackdropBorderColor then
             local color = handle._color or { 0.55, 0.78, 0.95 }
@@ -1613,11 +1631,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     function box:Refresh()
         local textHandles = self._textHandles or {}
-        local kind = CurrentScope()
-        local label = PreviewScopeLabel(kind)
-        local conf = Conf(kind)
+        local kind = H.CurrentScope()
+        local label = H.PreviewScopeLabel(kind)
+        local conf = H.Conf(kind)
         local gf = ns and ns.GF
-        local focus = PreviewFocusForPage(ctx.key)
+        local focus = H.PreviewFocusForPage(ctx.key)
         local layerVisible = M.gfPreviewLayerVisible or {}
         local soloLayer = M.gfPreviewSoloLayer
         local auras = conf.auras or {}
@@ -1685,7 +1703,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local previewScale = zoom * (frameScale or 1)
         local mockW = max(48, GFPreviewRound(liveW * zoom))
         local mockH = max(20, GFPreviewRound(liveH * zoom))
-        local powerH = GFPreviewMockPowerHeight(kind, conf, zoom, frameScale)
+        local powerH = H.MockPowerHeight(kind, conf, zoom, frameScale)
         local outline = 1
         if gf and gf.GetBarOutlineThickness then outline = tonumber(gf.GetBarOutlineThickness(kind)) or outline end
         local outlineEdge = max(0, GFPreviewRound(outline * previewScale))
@@ -1721,8 +1739,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         mock._healthBg:SetVertexColor(hbr, hbg, hbb, conf.hpBgAlpha or conf.bgA or 0.85)
 
         local hpTex = mock._health.GetStatusBarTexture and mock._health:GetStatusBarTexture()
-        local healPredMode = GFPreviewHealPredAnchorMode(conf)
-        local healPredShown = GFPreviewHealPredictionEnabled(kind, conf)
+        local healPredMode = H.HealPredAnchorMode(conf)
+        local healPredShown = H.HealPredictionEnabled(kind, conf)
         mock._healPred:ClearAllPoints()
         if (healPredMode == 3 or healPredMode == 4) and hpTex then
             if hpReverse then
@@ -1796,9 +1814,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
 
         if GFPreviewApplyRounded(mock, conf, powerH > 0, outlineEdge) then
-            GFPreviewSetOutlineShown(mock, false)
+            H.SetOutlineShown(mock, false)
         else
-            GFPreviewLayoutOutline(mock, outlineEdge)
+            H.LayoutOutline(mock, outlineEdge)
         end
 
         local textBaseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or 1
@@ -2379,13 +2397,13 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
         if handle._cfgText then
             local _, x, y = GFPreviewHandleOffsets(handle)
-            local step = GFPreviewNudgeStep()
+            local step = H.NudgeStep()
             WriteTextHandleOffsets(handle, (tonumber(x) or 0) + (dx * step), (tonumber(y) or 0) + (dy * step), "Nudge", true)
             return
         end
         local point, relativeTo, relativePoint, xOfs, yOfs = handle:GetPoint(1)
         if not point then return end
-        local step = GFPreviewNudgeStep()
+        local step = H.NudgeStep()
         handle:ClearAllPoints()
         handle:SetPoint(point, relativeTo, relativePoint, (xOfs or 0) + (dx * step), (yOfs or 0) + (dy * step))
         SaveHandlePosition(handle, "Nudge")
