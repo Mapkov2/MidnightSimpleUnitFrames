@@ -456,10 +456,12 @@ local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor, p
     if not frame then return false end
     mode = _AlphaNormalizeLayerMode(mode)
     preserveHPColor = (preserveHPColor == true)
+    local suppressBG = (frame._msufAlphaSuppressBG == true)
     portraitAlpha = tonumber(portraitAlpha) or 1
     local hpTexAlpha = fg
     local hpColorAlpha = 1
-    local hpBgAlpha = preserveHPColor and 0 or bg
+    local hpBgAlpha = (suppressBG or preserveHPColor) and 0 or bg
+    local bgAlpha = suppressBG and 0 or bg
     local powerAlpha = (mode == "health") and 1 or fg
 
     local hpTex = _GetBarTexture(frame.hpBar)
@@ -479,13 +481,13 @@ local function _AlphaLayeredStateMatches(frame, fg, bg, mode, preserveHPColor, p
         and _AlphaBarColorMatches(frame.hpBar, hpColorAlpha)
         and ((not preserveHPColor) or _AlphaPreservedBarColorMatches(frame.hpBar, fg))
         and ((not preserveHPColor) or _AlphaPreserveTextureMatches(frame.hpBar))
-        and ((not preserveHPColor) or _AlphaMissingHPBackgroundMatches(frame, fg))
+        and (suppressBG or (not preserveHPColor) or _AlphaMissingHPBackgroundMatches(frame, fg))
         and _AlphaObjectMatches(powerTex, powerAlpha)
         and _AlphaObjectMatches(absorbTex, fg)
         and _AlphaObjectMatches(healAbsorbTex, fg)
         and _AlphaObjectMatches(frame.hpBarBG, hpBgAlpha)
-        and _AlphaObjectMatches(frame.powerBarBG, bg)
-        and _AlphaObjectMatches(frame.bg, bg)
+        and _AlphaObjectMatches(frame.powerBarBG, bgAlpha)
+        and _AlphaObjectMatches(frame.bg, bgAlpha)
         and _AlphaGradSetMatches(frame.hpGradients, fg)
         and _AlphaGradSetMatches(frame.powerGradients, powerAlpha)
         and _AlphaPortraitMatches(frame, portraitAlpha)
@@ -588,6 +590,7 @@ local function MSUF_Alpha_ClearBaseCache(frame)
     frame._msufAlphaLayeredFastValid = nil
     frame._msufAlphaLayeredFastHits = nil
     frame._msufAlphaTrivialReady = nil
+    frame._msufAlphaSuppressBG = nil
 end
 
 local function MSUF_Alpha_ResetLayered(frame)
@@ -602,6 +605,7 @@ local function MSUF_Alpha_ResetLayered(frame)
     frame._msufAlphaLastFG = nil
     frame._msufAlphaLastBG = nil
     frame._msufAlphaLastPortrait = nil
+    frame._msufAlphaSuppressBG = nil
     frame._msufAlphaLayeredFastValid = nil
     frame._msufAlphaLayeredFastHits = nil
     frame._msufAlphaMissingHPAlpha = nil
@@ -623,10 +627,11 @@ local function MSUF_Alpha_ResetLayered(frame)
     MSUF_Alpha_SetTextAlpha(frame, 1)
 end
 
-local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHPColor, portraitAlpha)
+local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHPColor, portraitAlpha, suppressBG)
     if not frame then return end
     mode = _AlphaNormalizeLayerMode(mode)
     preserveHPColor = (preserveHPColor == true)
+    suppressBG = (suppressBG == true)
     portraitAlpha = tonumber(portraitAlpha) or 1
 
     local fg = type(alphaFG) == "number" and alphaFG or 1
@@ -635,7 +640,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     if bg < 0 then bg = 0 elseif bg > 1 then bg = 1 end
     if portraitAlpha < 0 then portraitAlpha = 0 elseif portraitAlpha > 1 then portraitAlpha = 1 end
 
-    if frame._msufAlphaLayeredMode and frame._msufAlphaLayerMode == mode and frame._msufAlphaPreserveHPColor == preserveHPColor then
+    if frame._msufAlphaLayeredMode and frame._msufAlphaLayerMode == mode and frame._msufAlphaPreserveHPColor == preserveHPColor and frame._msufAlphaSuppressBG == suppressBG then
         local lastFG = frame._msufAlphaLastFG or 1
         local lastBG = frame._msufAlphaLastBG or 1
         local lastPortrait = frame._msufAlphaLastPortrait or 1
@@ -664,6 +669,7 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
     frame._msufAlphaLayeredMode = true
     frame._msufAlphaLayerMode = mode
     frame._msufAlphaPreserveHPColor = preserveHPColor
+    frame._msufAlphaSuppressBG = suppressBG
     frame._msufAlphaLastFG = fg
     frame._msufAlphaLastBG = bg
     frame._msufAlphaLastPortrait = portraitAlpha
@@ -685,16 +691,21 @@ local function MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, mode, preserveHP
         end
     end
 
-    _SetTexAlpha(frame.hpBarBG, preserveHPColor and 0 or bg)
-    _SetTexAlpha(frame.powerBarBG, bg)
-    _SetTexAlpha(frame.bg, bg)
+    local bgAlpha = suppressBG and 0 or bg
+    _SetTexAlpha(frame.hpBarBG, (suppressBG or preserveHPColor) and 0 or bg)
+    _SetTexAlpha(frame.powerBarBG, bgAlpha)
+    _SetTexAlpha(frame.bg, bgAlpha)
     if preserveHPColor then
         -- Preserve mode owns missing health separately, but it still uses the
         -- same resolved HP track color as the normal bar background pipeline.
-        frame._msufAlphaMissingHPAlpha = fg
+        frame._msufAlphaMissingHPAlpha = suppressBG and 0 or fg
         _SetBarColorAlpha(frame.hpBar, fg, true)
         _SetBarTexAlpha(frame.hpBar, fg)
-        _AlphaSyncMissingHPBackground(frame, nil, nil, fg)
+        if suppressBG then
+            _AlphaHideMissingHPBackground(frame)
+        else
+            _AlphaSyncMissingHPBackground(frame, nil, nil, fg)
+        end
     else
         frame._msufAlphaMissingHPAlpha = nil
         _SetBarColorAlpha(frame.hpBar, 1, false)
@@ -897,7 +908,16 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
                     return
                 else
                     alphaFG = alphaFG * m
-                    alphaBG = alphaBG * m
+                    MSUF_Alpha_ApplyLayered(frame, alphaFG, alphaBG, layerMode, preserveHPColor,
+                        _AlphaShouldRangeFadePortrait() and m or 1, true)
+                    MSUF_Alpha_SetTextAlpha(frame, m)
+                    if isEditMode then
+                        local curA = frame:GetAlpha()
+                        if not (issecretvalue and issecretvalue(curA)) and (curA or 0) < 0.35 then
+                            frame:SetAlpha(0.35)
+                        end
+                    end
+                    return
                 end
             end
         end
@@ -942,6 +962,20 @@ function _G.MSUF_ApplyUnitAlpha(frame, key)
 
     if rangeMul < 1 and _AlphaRangeFadeUsesHealth(conf) and frame._msufAlphaSupportsLayered then
         MSUF_Alpha_ApplyLayered(frame, a * rangeMul, a, "health", false, 1)
+        MSUF_Alpha_SetTextAlpha(frame, 1)
+        if isEditMode then
+            local curA = frame:GetAlpha()
+            if not (issecretvalue and issecretvalue(curA)) and (curA or 0) < 0.35 then
+                frame:SetAlpha(0.35)
+            end
+        end
+        return
+    end
+
+    if rangeMul < 1 and frame._msufAlphaSupportsLayered then
+        local rangeA = a * rangeMul
+        MSUF_Alpha_ApplyLayered(frame, rangeA, a, "foreground", false, rangeA, true)
+        MSUF_Alpha_SetTextAlpha(frame, rangeA)
         if isEditMode then
             local curA = frame:GetAlpha()
             if not (issecretvalue and issecretvalue(curA)) and (curA or 0) < 0.35 then
@@ -1012,9 +1046,14 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
             MSUF_Alpha_SetTextAlpha(frame, 1)
             return true
         end
-        MSUF_Alpha_ApplyLayered(frame, fg * m, bg * m, mode, preserveHPColor,
-            _AlphaShouldRangeFadePortrait() and m or 1)
-        MSUF_Alpha_SetTextAlpha(frame, m)
+        if m < 1 then
+            MSUF_Alpha_ApplyLayered(frame, fg * m, bg, mode, preserveHPColor,
+                _AlphaShouldRangeFadePortrait() and m or 1, true)
+            MSUF_Alpha_SetTextAlpha(frame, m)
+            return true
+        end
+        MSUF_Alpha_ApplyLayered(frame, fg, bg, mode, preserveHPColor, 1)
+        MSUF_Alpha_SetTextAlpha(frame, 1)
         return true
     end
 
@@ -1023,6 +1062,13 @@ function _G.MSUF_ApplyRangeFadeAlphaFast(frame, key, mul)
         if type(a) ~= "number" then return false end
         if rangeHealthMode and m < 1 and frame._msufAlphaSupportsLayered then
             MSUF_Alpha_ApplyLayered(frame, a * m, a, "health", false, 1)
+            MSUF_Alpha_SetTextAlpha(frame, 1)
+            return true
+        end
+        if m < 1 and frame._msufAlphaSupportsLayered then
+            local rangeA = a * m
+            MSUF_Alpha_ApplyLayered(frame, rangeA, a, "foreground", false, rangeA, true)
+            MSUF_Alpha_SetTextAlpha(frame, rangeA)
             return true
         end
         a = a * m

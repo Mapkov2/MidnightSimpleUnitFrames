@@ -4687,8 +4687,8 @@ end
         self._msufHeavyVisualSettingsSerial = _MSUF_GetUFCoreSettingsSerial()
         self._msufHeavyVisualApplied = true
     end
-    -- IMPORTANT: layered alpha uses per-texture alpha, which visual steps reset.
-    if conf and conf.alphaExcludeTextPortrait == true then
+    -- IMPORTANT: layered/range alpha uses per-texture alpha, which visual steps reset.
+    if conf and (conf.alphaExcludeTextPortrait == true or self._msufAlphaLayeredMode) then
         local applyAlpha = _UF.Alpha or _G.MSUF_ApplyUnitAlpha
         self._msufAlphaLayeredFastValid = nil
         self._msufAlphaLayeredFastHits = nil
