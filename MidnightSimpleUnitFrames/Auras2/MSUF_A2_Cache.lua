@@ -916,14 +916,22 @@ end
 --   0 or nil: Pure cache iteration (ZERO C API calls) — fastest path
 --   1-6:      C++ sorted via GetAuraSlots, cache provides enrichment
 local function PrepareFilterConfig(cfg, cfgGen)
+    local maxBuffs = (type(cfg._maxBuffs) == "number" and cfg._maxBuffs) or tonumber(cfg.maxBuffs) or 12
+    local maxDebuffs = (type(cfg._maxDebuffs) == "number" and cfg._maxDebuffs) or tonumber(cfg.maxDebuffs) or 12
+    if maxBuffs < 0 then maxBuffs = 0 end
+    if maxDebuffs < 0 then maxDebuffs = 0 end
+
+    cfg._maxBuffs  = maxBuffs
+    cfg._maxDebuffs = maxDebuffs
+    cfg._wantBuffs = (cfg._wantBuffs == true) and maxBuffs > 0
+    cfg._wantDebuffs = (cfg._wantDebuffs == true) and maxDebuffs > 0
+
     if cfg._msufA2FilterPrepGen == cfgGen and cfg._msufA2FilterPrepIgnoreCats == cfg.ignoreCats then
         return
     end
     cfg._msufA2FilterPrepGen = cfgGen
     cfg._msufA2FilterPrepIgnoreCats = cfg.ignoreCats
 
-    cfg._maxBuffs  = cfg.maxBuffs or 12
-    cfg._maxDebuffs = cfg.maxDebuffs or 12
     cfg._buffsOnlyMine    = cfg.buffsOnlyMine
     cfg._debuffsOnlyMine  = cfg.debuffsOnlyMine
     cfg._hidePermanent    = cfg.hidePermanentBuffs
@@ -957,36 +965,68 @@ local function PrepareFilterConfig(cfg, cfgGen)
     cfg._sortOrder = cfg.sortOrder or cfg.capsSortOrder or 0
 end
 
+local function ClearFilterOutput(out)
+    local prevN = out._msufA2_n or 0
+    if prevN > 0 then
+        for i = 1, prevN do out[i] = nil end
+    end
+    out._msufA2_n = 0
+end
+
 function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     if not _apisBound then BindAPIs() end
     BindDoesExpire()
 
+    local cfgGen = cfg._gen or -1
+
+    -- Pre-compute config flags before all fast paths so cap/filter lane
+    -- changes cannot return stale counts.
+    PrepareFilterConfig(cfg, cfgGen)
+    local maxBuffs  = cfg._maxBuffs
+    local maxDebuffs = cfg._maxDebuffs
+    local wantBuffs = cfg._wantBuffs
+    local wantDebuffs = cfg._wantDebuffs
+
     local s = _units[unit]
+    local structureEpoch = s and (s.structureEpoch or 0) or 0
+
+    if not wantBuffs and not wantDebuffs then
+        ClearFilterOutput(buffOut)
+        ClearFilterOutput(debuffOut)
+        if s then
+            s.changed = false
+            s.structureChanged = false
+            s._lastNB = 0
+            s._lastND = 0
+            s._lastFilterGen = cfgGen
+            s._lastFilterStructureEpoch = structureEpoch
+            s._lastFilterWantBuffs = wantBuffs
+            s._lastFilterWantDebuffs = wantDebuffs
+        end
+        return buffOut, 0, debuffOut, 0
+    end
+
     if not s then
         Cache.FullScan(unit)
         s = _units[unit]
         if not s then return buffOut, 0, debuffOut, 0 end
+        structureEpoch = s.structureEpoch or 0
     end
 
     -- PERF: Update-only fast path — when only duration/stacks changed (no add/remove),
     -- the filtered list is structurally identical. Skip full iteration + filter.
     -- Saves ~52µs per update-only event (the most common case in sustained combat).
-    local cfgGen = cfg._gen or -1
-    local structureEpoch = s.structureEpoch or 0
     local satedThresholdActive = (cfg.showSated ~= false)
         and (type(cfg.satedShowAtSeconds) == "number" and cfg.satedShowAtSeconds > 0)
     if not satedThresholdActive
        and s._lastFilterGen == cfgGen and s._lastFilterStructureEpoch == structureEpoch
+       and s._lastFilterWantBuffs == wantBuffs and s._lastFilterWantDebuffs == wantDebuffs
        and s._lastNB ~= nil and s._lastND ~= nil then
         s.changed = false
         return buffOut, s._lastNB, debuffOut, s._lastND
     end
     s.structureChanged = false
 
-    -- Pre-compute config flags (avoid repeated table lookups in inner loop)
-    PrepareFilterConfig(cfg, cfgGen)
-    local maxBuffs  = cfg._maxBuffs
-    local maxDebuffs = cfg._maxDebuffs
     -- Sated/Exhaustion runtime flags (from shared, not filters)
     -- PERF: _checkSated = false means sated code is COMPLETELY skipped in FilterAura.
     -- Only active when sated is hidden OR threshold is set (actual filtering work to do).
@@ -1007,8 +1047,8 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
 
     local nB, nD = 0, 0
     local nBossB, nBossD = 0, 0
-    local bossBufScratch = cfg._useMergeBuffs and _mergedBossBuffScratch or nil
-    local bossDebScratch = cfg._useMergeDebuffs and _mergedBossDebuffScratch or nil
+    local bossBufScratch = (wantBuffs and cfg._useMergeBuffs) and _mergedBossBuffScratch or nil
+    local bossDebScratch = (wantDebuffs and cfg._useMergeDebuffs) and _mergedBossDebuffScratch or nil
 
     local sortOrder = cfg._sortOrder
 
@@ -1023,18 +1063,19 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     -- one 12-arg function call + 4-return per emitted aura (~90% of users
     -- don't have boss-merge enabled). EmitAura's non-merge branch is just
     -- `nB = nB + 1; buffOut[nB] = data` — easy to inline.
-    local useMergeBuffs = cfg._useMergeBuffs
-    local useMergeDebuffs = cfg._useMergeDebuffs
+    local useMergeBuffs = wantBuffs and cfg._useMergeBuffs
+    local useMergeDebuffs = wantDebuffs and cfg._useMergeDebuffs
 
     if sortOrder == 0 then
         -- FAST PATH: unsorted — pure cache iteration, ZERO C API calls
         for aid, data in next, s.all do
-            if (nB + nBossB) >= maxBuffs and (nD + nBossD) >= maxDebuffs then break end
+            if (not wantBuffs or (nB + nBossB) >= maxBuffs)
+               and (not wantDebuffs or (nD + nBossD) >= maxDebuffs) then break end
 
             local isHelpful = data._msufIsHelpful
             local isOwn     = data._msufIsPlayerAura
 
-            if isHelpful and (nB + nBossB) < maxBuffs then
+            if wantBuffs and isHelpful and (nB + nBossB) < maxBuffs then
                 if noFilters or FilterAura(data, aid, unit, true, isOwn, cfg, secretsNow, now,
                               lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
                     if useMergeBuffs then
@@ -1046,7 +1087,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
                         buffOut[nB] = data
                     end
                 end
-            elseif not isHelpful and (nD + nBossD) < maxDebuffs then
+            elseif wantDebuffs and not isHelpful and (nD + nBossD) < maxDebuffs then
                 if noFilters or FilterAura(data, aid, unit, false, isOwn, cfg, secretsNow, now,
                               lIsFiltered, lDoesExpire, lIssecretvalue, lCanaccessvalue, lHasCanaccessvalue) then
                     if useMergeDebuffs then
@@ -1071,7 +1112,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
         local allCache = s.all
 
         -- Process HELPFUL (preserves C++ sort order)
-        if (nB + nBossB) < maxBuffs then
+        if wantBuffs and (nB + nBossB) < maxBuffs then
             -- P1: Reuse _slotBuf instead of allocating { _getSlots(...) } table
             local slotsN = _PackSlots(_getSlots(unit, HELPFUL, 40, sortOrder))
             for i = 2, slotsN do
@@ -1120,7 +1161,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
         end
 
         -- Process HARMFUL (preserves C++ sort order)
-        if (nD + nBossD) < maxDebuffs then
+        if wantDebuffs and (nD + nBossD) < maxDebuffs then
             -- P1: Reuse _slotBuf instead of allocating { _getSlots(...) } table
             local slotsN = _PackSlots(_getSlots(unit, HARMFUL, 40, sortOrder))
             for i = 2, slotsN do
@@ -1169,7 +1210,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     end
 
     -- Merged: append boss auras after player auras
-    if cfg._useMergeBuffs and nBossB > 0 then
+    if wantBuffs and cfg._useMergeBuffs and nBossB > 0 then
         for i = 1, nBossB do
             if nB >= maxBuffs then break end
             nB = nB + 1
@@ -1177,7 +1218,7 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
         end
         for i = nBossB, 1, -1 do bossBufScratch[i] = nil end
     end
-    if cfg._useMergeDebuffs and nBossD > 0 then
+    if wantDebuffs and cfg._useMergeDebuffs and nBossD > 0 then
         for i = 1, nBossD do
             if nD >= maxDebuffs then break end
             nD = nD + 1
@@ -1204,6 +1245,8 @@ function Cache.FilterAndSort(unit, cfg, buffOut, debuffOut)
     s._lastND = nD
     s._lastFilterGen = cfgGen
     s._lastFilterStructureEpoch = structureEpoch
+    s._lastFilterWantBuffs = wantBuffs
+    s._lastFilterWantDebuffs = wantDebuffs
 
     return buffOut, nB, debuffOut, nD
 end

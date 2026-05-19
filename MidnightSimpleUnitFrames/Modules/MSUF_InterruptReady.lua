@@ -45,6 +45,7 @@ local UnitClass         = _G.UnitClass
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 local issecretvalue    = _G.issecretvalue
+local canaccessvalue   = _G.canaccessvalue
 
 -- =============================================================================
 -- Interrupt spell table (mirrors MidnightFocusInterrupt-3.14.2)
@@ -580,7 +581,81 @@ end
 -- =============================================================================
 
 local _refreshTickerArmed = false
+local _refreshTimer = nil
+local _refreshTickerToken = 0
 local _TickerStep -- forward decl
+
+local function _PlainNumberOrNil(v)
+    local cav = canaccessvalue
+    if type(cav) == "function" and cav(v) ~= true then return nil end
+
+    local secret = issecretvalue
+    if type(secret) == "function" and secret(v) == true then return nil end
+
+    return (type(v) == "number") and v or nil
+end
+
+local function _ReadCooldownRemainingPlain()
+    local id = _state.spellID
+    if not id or not (C_Spell and C_Spell.GetSpellCooldownDuration) then return nil end
+
+    local dur = C_Spell.GetSpellCooldownDuration(id)
+    if not dur then return nil end
+
+    if dur.GetRemainingDuration then
+        local remaining = dur:GetRemainingDuration()
+        remaining = _PlainNumberOrNil(remaining)
+        if remaining ~= nil then return remaining end
+    end
+
+    if dur.GetRemaining then
+        local remaining = dur:GetRemaining()
+        remaining = _PlainNumberOrNil(remaining)
+        if remaining ~= nil then return remaining end
+    end
+
+    return nil
+end
+
+local function _GetCooldownPollDelay()
+    local remaining = _ReadCooldownRemainingPlain()
+    if remaining == nil then
+        return 0.25
+    end
+    if remaining > 0.05 then
+        return remaining + 0.05
+    end
+    return 0.75
+end
+
+local function _ArmRefreshTicker(delay, replace)
+    if not C_Timer then return end
+    if _refreshTickerArmed and not replace then return end
+
+    delay = _PlainNumberOrNil(delay) or 0.25
+    if delay < 0.03 then delay = 0.03 end
+
+    if _refreshTimer and _refreshTimer.Cancel then
+        _refreshTimer:Cancel()
+        _refreshTimer = nil
+    end
+
+    _refreshTickerArmed = true
+    _refreshTickerToken = _refreshTickerToken + 1
+    local token = _refreshTickerToken
+    local function run()
+        if token ~= _refreshTickerToken then return end
+        if _TickerStep then _TickerStep() end
+    end
+
+    if C_Timer.NewTimer then
+        _refreshTimer = C_Timer.NewTimer(delay, run)
+    elseif C_Timer.After then
+        C_Timer.After(delay, run)
+    else
+        _refreshTickerArmed = false
+    end
+end
 
 -- Single repaint entry point. Style-aware.
 local function _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
@@ -706,15 +781,13 @@ local function RefreshFrame(frame, state, cfg, readyBool, style, readyMixin, cdM
     -- Make sure the global ticker is running so the indicator repaints when
     -- the interrupt cooldown ends (SPELL_UPDATE_COOLDOWN does not always
     -- fire on the trailing edge in 12.0.5).
-    if not _refreshTickerArmed and C_Timer and C_Timer.After then
-        _refreshTickerArmed = true
-        C_Timer.After(0.25, _TickerStep)
-    end
+    _ArmRefreshTicker(_GetCooldownPollDelay(), false)
 end
 
 -- Global low-rate repaint while at least one tracked cast is active.
 function _TickerStep()
     _refreshTickerArmed = false
+    _refreshTimer = nil
 
     local cfg = _GetCfg()
     if not cfg or not _AnyShowEnabled(cfg) then return end
@@ -742,9 +815,8 @@ function _TickerStep()
         frame = nextFrame
     end
 
-    if anyActive and C_Timer and C_Timer.After then
-        _refreshTickerArmed = true
-        C_Timer.After(0.25, _TickerStep)
+    if anyActive then
+        _ArmRefreshTicker(_GetCooldownPollDelay(), false)
     end
 end
 
@@ -785,7 +857,9 @@ end
 local _cooldownRefreshQueued = false
 local function _CooldownRefreshFlush()
     _cooldownRefreshQueued = false
-    RefreshActiveCooldownFrames()
+    if RefreshActiveCooldownFrames() then
+        _ArmRefreshTicker(_GetCooldownPollDelay(), true)
+    end
 end
 
 local function _QueueCooldownRefresh()

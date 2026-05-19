@@ -1620,15 +1620,22 @@ local function RenderUnit(entry)
 
     -- Pass sortOrder to cache (0 = unsorted fast-path, 1-6 = C++ sorted)
     cfg.sortOrder = cfg.capsSortOrder or cfg.sortOrder or 0
+    local maxBuffsNum = tonumber(maxBuffs) or 12
+    local maxDebuffsNum = tonumber(maxDebuffs) or 12
+    if maxBuffsNum < 0 then maxBuffsNum = 0 end
+    if maxDebuffsNum < 0 then maxDebuffsNum = 0 end
+    cfg._maxBuffs = maxBuffsNum
+    cfg._maxDebuffs = maxDebuffsNum
+    local customBuffs = (showBuffs == true) and maxBuffsNum > 0
+    local customDebuffs = (showDebuffs == true) and not skipDebuffs and maxDebuffsNum > 0
+    cfg._wantBuffs = customBuffs
+    cfg._wantDebuffs = customDebuffs
 
     local _, nB, _, nD = CacheModule.FilterAndSort(unit, cfg, entry._buffList, entry._debuffList)
     local updatedAuraIDs = CacheModule.GetUpdatedAuraIDs and CacheModule.GetUpdatedAuraIDs(unit)
 
-    local customBuffs = showBuffs
-    local customDebuffs = showDebuffs
-
     buffCount  = customBuffs and nB or 0
-    debuffCount = (customDebuffs and not skipDebuffs) and nD or 0
+    debuffCount = customDebuffs and nD or 0
 
     local lastBuffCount = entry._lastBuffCount or 0
     local lastDebuffCount = entry._lastDebuffCount or 0

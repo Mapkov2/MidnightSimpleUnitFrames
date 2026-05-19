@@ -684,6 +684,24 @@ do
         if not frame or not frame.statusBar then return end
         if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
 
+        local hasRuntimeState = frame.MSUF_castActive == true
+            or frame.MSUF_gcdActive == true
+            or frame.isEmpower == true
+            or frame.MSUF_timerDriven == true
+            or frame._msufPlainEndTime ~= nil
+            or frame._msufPlainTotal ~= nil
+            or frame.MSUF_durationObj ~= nil
+            or frame.MSUF_castDuration ~= nil
+            or frame.MSUF_channelDuration ~= nil
+            or frame.castDuration ~= nil
+            or frame.channelDuration ~= nil
+        if not hasRuntimeState then
+            if MSUF_CastbarManager.active[frame] == true and MSUF_UnregisterCastbar then
+                MSUF_UnregisterCastbar(frame)
+            end
+            return
+        end
+
         -- Empower bars drive SetValue() directly (not C-side animated), so they need ~33Hz for smooth fill.
         -- Always re-evaluate when empower state changes (a frame may switch between normal and empower).
         if frame.isEmpower then
