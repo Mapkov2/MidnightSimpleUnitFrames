@@ -27,6 +27,7 @@ local PREVIEW_ROUNDED_EDGE = MASK_MEDIA .. "rounded_bar_edge_4x.tga"
 local Preview = ns.UFPreview or {}
 ns.UFPreview = Preview
 _G.MSUF_UFPreview = Preview
+local PreviewBaseEdgeColor
 
 local function MenuTheme()
     local m = ns and ns.MSUF2
@@ -1836,7 +1837,10 @@ local function BuildPreview(parent, panel, width, height)
     local mock = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
     mock:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock:SetBackdropColor(0, 0, 0, 0.92)
-    mock:SetBackdropBorderColor(0, 0, 0, 1)
+    do
+        local r, g, b = PreviewBaseEdgeColor()
+        mock:SetBackdropBorderColor(r, g, b, 1)
+    end
     box.mock = mock
 
     mock.bounds = CreateFrame("Frame", nil, mock, "BackdropTemplate")
@@ -2168,7 +2172,21 @@ local function ClearPreviewRoundedMasks(mock)
     if mock then mock._msufPreviewRoundedMasked = nil end
 end
 
-local function PreviewBaseEdgeColor()
+function PreviewBaseEdgeColor()
+    local fn = _G.MSUF_GetBarOutlineColor
+    if type(fn) == "function" then
+        local ok, r, g, b = pcall(fn)
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b, 1
+        end
+    end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen then
+        return tonumber(gen.barOutlineColorR) or 0,
+               tonumber(gen.barOutlineColorG) or 0,
+               tonumber(gen.barOutlineColorB) or 0,
+               1
+    end
     return 0, 0, 0, 1
 end
 
@@ -2317,8 +2335,9 @@ local function ApplyPreviewLayerVisibility(box)
             SetShownSafe(mock.roundedBg, true)
             PreviewSetRoundedEdgeStackShown(mock, mock._msufPreviewRoundedEdgeEnabled ~= false)
         else
+            local r, g, b = PreviewBaseEdgeColor()
             mock:SetBackdropColor(0, 0, 0, 0.92)
-            mock:SetBackdropBorderColor(0, 0, 0, 1)
+            mock:SetBackdropBorderColor(r, g, b, 1)
             SetShownSafe(mock.roundedBg, false)
             PreviewSetRoundedEdgeStackShown(mock, false)
         end

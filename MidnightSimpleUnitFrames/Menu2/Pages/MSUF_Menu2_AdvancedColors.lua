@@ -742,7 +742,7 @@ local function BuildColors(ctx)
         for i = 1, #npcControls do SetControlEnabled(npcControls[i], enabled) end
     end)
 
-    local barColors = b:CollapsibleSection("colors_bar_colors", "Bar Colors", 204, false)
+    local barColors = b:CollapsibleSection("colors_bar_colors", "Bar Colors", 240, false)
     local barLeftX = 30
     local barRightX = max(430, floor((barColors._msuf2Width or ctx.width or 720) * 0.50))
     LabelAt(barColors, "Bar overlays", barLeftX, -8, 180, "GameFontNormalSmall", T.colors.text)
@@ -762,7 +762,10 @@ local function BuildColors(ctx)
     ColorValueAt(ctx, barColors, "Purge Border Color", barRightX, -74,
         function() return GeneralRGB("purgeBorderColor", 1.00, 0.85, 0.00) end,
         function(r, g, c) SetGeneralRGB("purgeBorderColor", r, g, c) end)
-    local powerBgMatch = ValueToggleAt(ctx, barColors, "Power background matches HP", barRightX, -112,
+    ColorValueAt(ctx, barColors, "Bar Outline Color", barRightX, -110,
+        function() return ApiRGB("GetBarOutlineColor", 0, 0, 0) end,
+        function(r, g, c) ApiSetRGB("SetBarOutlineColor", r, g, c) end)
+    local powerBgMatch = ValueToggleAt(ctx, barColors, "Power background matches HP", barRightX, -148,
         function()
             local fn = ColorAPI().GetPowerBarBackgroundMatchHP
             if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
@@ -773,9 +776,9 @@ local function BuildColors(ctx)
             if type(fn) == "function" then pcall(fn, v) else G().powerBarBgMatchBarColor = v and true or false end
             ApplyColors()
         end)
-    ButtonAt(barColors, "Reset Bar Colors", barLeftX, -158, 160, function()
+    ButtonAt(barColors, "Reset Bar Colors", barLeftX, -194, 160, function()
         local g = G()
-        for _, prefix in ipairs({ "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor" }) do
+        for _, prefix in ipairs({ "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor", "barOutlineColor" }) do
             g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"], g[prefix .. "A"] = nil, nil, nil, nil
         end
         g.powerBarBgMatchBarColor = nil

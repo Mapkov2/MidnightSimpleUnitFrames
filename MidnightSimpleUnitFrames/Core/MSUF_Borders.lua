@@ -649,6 +649,23 @@ local function _SetBarOutlineLineColor(o, r, g, b, a)
     return colored
 end
 
+local function _ReadBarOutlineColor()
+    local fn = _G.MSUF_GetBarOutlineColor
+    if type(fn) == "function" then
+        local ok, r, g, b = pcall(fn)
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen then
+        return tonumber(gen.barOutlineColorR) or 0,
+               tonumber(gen.barOutlineColorG) or 0,
+               tonumber(gen.barOutlineColorB) or 0
+    end
+    return 0, 0, 0
+end
+
 local function _LayoutBarOutlineLines(o, owner, edge)
     if not (o and owner) then return end
 
@@ -691,7 +708,7 @@ local function _ApplyUFBarBorderTint(self, showTint, r, g, b)
     local o = self and self._msufBarOutline
     local f = o and o.frame
     if not f then return end
-    local cr, cg, cb = 0, 0, 0
+    local cr, cg, cb = _ReadBarOutlineColor()
     if showTint then
         cr, cg, cb = r or 0, g or 0, b or 0
     end
@@ -796,7 +813,8 @@ local function MSUF_ApplyDetachedPowerBarOutline(self)
         outline._msufDetachedPBStamp = stamp
     end
     _LayoutBarOutlineLines(outline, outline, edge)
-    _SetBarOutlineLineColor(outline, 0, 0, 0, 1)
+    local r, g, b = _ReadBarOutlineColor()
+    _SetBarOutlineLineColor(outline, r, g, b, 1)
     outline:Show()
 end
 _G.MSUF_ApplyDetachedPowerBarOutline = MSUF_ApplyDetachedPowerBarOutline
@@ -885,7 +903,8 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
     if self._msufBarBorderTintActive then
         _SetBarOutlineLineColor(o, self._msufBarBorderTintR or 0, self._msufBarBorderTintG or 0, self._msufBarBorderTintB or 0, 1)
     else
-        _SetBarOutlineLineColor(o, 0, 0, 0, 1)
+        local r, g, b = _ReadBarOutlineColor()
+        _SetBarOutlineLineColor(o, r, g, b, 1)
     end
 
     MSUF_ApplyDetachedPowerBarOutline(self)

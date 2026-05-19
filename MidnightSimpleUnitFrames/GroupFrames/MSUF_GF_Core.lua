@@ -693,17 +693,9 @@ function GF.SetFrameLayerLevel(frame, owner, layer, fallback)
 end
 
 local function GetFrameOutlineInset(kind, conf)
-    local raw
-    if GF.GetBarOutlineThickness then
-        raw = GF.GetBarOutlineThickness(kind)
-    elseif conf and conf.borderEnabled == true then
-        raw = conf.borderSize or 1
-    else
-        raw = 0
-    end
-    local inset = math_max(0, tonumber(raw) or 0)
-    if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 0) end
-    return inset
+    -- Unit frames draw the bar outline outside the bars. Keep group-frame
+    -- health/power geometry unshrunk so the same thickness behaves identically.
+    return 0
 end
 
 ------------------------------------------------------------------------
@@ -745,15 +737,8 @@ local function BuildFrameHierarchy(f, kind)
     borderFrame:SetFrameLevel(barGroup:GetFrameLevel() + 1)
     borderFrame:EnableMouse(false)
     f._msufGFBorderFrame = borderFrame
-    if inset > 0 then
-        local edgeSz = inset
-        borderFrame:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edgeSz })
-        borderFrame:SetBackdropColor(0, 0, 0, 0)
-        borderFrame:SetBackdropBorderColor(0, 0, 0, 1)
-    else
-        borderFrame:SetBackdrop(nil)
-        borderFrame:Hide()
-    end
+    if borderFrame.SetBackdrop then borderFrame:SetBackdrop(nil) end
+    borderFrame:Hide()
 
     -- Health StatusBar
     local health = CreateFrame("StatusBar", nil, barGroup)

@@ -61,7 +61,6 @@ local SECTION_PAGE = {
     bars = "gf_bars",
     power = "gf_bars",
     text = "gf_bars",
-    healpred = "gf_bars",
     dispel = "gf_bars",
     dstripe = "gf_bars",
     range = "gf_bars",
@@ -383,6 +382,39 @@ local function GFPreviewReadBarsBool(key, default)
     return value and true or false
 end
 
+local function GFPreviewNormalizeAnchorMode(value, fallback)
+    local mode = tonumber(value) or fallback or 3
+    if mode < 1 or mode > 5 then mode = fallback or 3 end
+    return mode
+end
+
+local function GFPreviewSharedHealPredictionEnabled()
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if type(gen) ~= "table" then return false end
+    if gen.showSelfHealPrediction ~= nil then return gen.showSelfHealPrediction == true end
+    if gen.enableHealPrediction ~= nil then return gen.enableHealPrediction ~= false end
+    return false
+end
+
+local function GFPreviewHealPredictionEnabled(kind, conf)
+    local gf = ns and ns.GF
+    if gf and type(gf.IsHealPredictionEnabled) == "function" then
+        return gf.IsHealPredictionEnabled(kind, conf) == true
+    end
+    if conf and conf.hlOverride == true and conf.healPredEnabled ~= nil then
+        return conf.healPredEnabled == true
+    end
+    return GFPreviewSharedHealPredictionEnabled()
+end
+
+local function GFPreviewHealPredAnchorMode(conf)
+    if conf and conf.hlOverride == true and conf.healPredAnchorMode ~= nil then
+        return GFPreviewNormalizeAnchorMode(conf.healPredAnchorMode, 3)
+    end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    return GFPreviewNormalizeAnchorMode(gen and gen.healPredAnchorMode, 3)
+end
+
 local function GFPreviewRoundedEnabled()
     return GFPreviewReadBarsBool("roundedFramesEnabled", false)
         and GFPreviewReadBarsBool("roundedGroupFrames", true)
@@ -398,6 +430,93 @@ local function GFPreviewSnapOff(region)
         region:SetSnapToPixelGrid(false)
         if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
     end
+end
+
+local GFPreviewBaseEdgeColor
+local GF_PREVIEW_OUTLINE_KEYS = { "top", "bottom", "left", "right" }
+
+local function GFPreviewSetOutlineShown(mock, shown)
+    local frame = mock and mock._outlineFrame
+    if frame then
+        if shown then frame:Show() else frame:Hide() end
+    end
+    local lines = frame and frame._lines
+    if type(lines) ~= "table" then return end
+    for i = 1, #GF_PREVIEW_OUTLINE_KEYS do
+        local line = lines[GF_PREVIEW_OUTLINE_KEYS[i]]
+        if line then
+            if shown then line:Show() else line:Hide() end
+        end
+    end
+end
+
+local function GFPreviewEnsureOutlineLine(frame, key)
+    if not (frame and frame.CreateTexture) then return nil end
+    frame._lines = frame._lines or {}
+    local line = frame._lines[key]
+    if not line then
+        line = frame:CreateTexture(nil, "OVERLAY")
+        line:SetTexture(WHITE8X8)
+        line:SetVertexColor(0, 0, 0, 1)
+        GFPreviewSnapOff(line)
+        frame._lines[key] = line
+    end
+    return line
+end
+
+local function GFPreviewLayoutOutline(mock, edge)
+    edge = GFPreviewRound(edge)
+    if not mock or edge <= 0 then
+        GFPreviewSetOutlineShown(mock, false)
+        return
+    end
+
+    local frame = mock._outlineFrame
+    if not frame then
+        frame = CreateFrame("Frame", nil, mock)
+        frame:EnableMouse(false)
+        mock._outlineFrame = frame
+    end
+    if frame.SetFrameLevel and mock.GetFrameLevel then frame:SetFrameLevel(mock:GetFrameLevel() + 4) end
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", mock, "TOPLEFT", -edge, edge)
+    frame:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", edge, -edge)
+
+    local top = GFPreviewEnsureOutlineLine(frame, "top")
+    local bottom = GFPreviewEnsureOutlineLine(frame, "bottom")
+    local left = GFPreviewEnsureOutlineLine(frame, "left")
+    local right = GFPreviewEnsureOutlineLine(frame, "right")
+    local r, g, b = GFPreviewBaseEdgeColor()
+
+    if top then
+        top:SetVertexColor(r, g, b, 1)
+        top:ClearAllPoints()
+        top:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+        top:SetHeight(edge)
+    end
+    if bottom then
+        bottom:SetVertexColor(r, g, b, 1)
+        bottom:ClearAllPoints()
+        bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(edge)
+    end
+    if left then
+        left:SetVertexColor(r, g, b, 1)
+        left:ClearAllPoints()
+        left:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+        left:SetWidth(edge)
+    end
+    if right then
+        right:SetVertexColor(r, g, b, 1)
+        right:ClearAllPoints()
+        right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+        right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+        right:SetWidth(edge)
+    end
+    GFPreviewSetOutlineShown(mock, true)
 end
 
 local function GFPreviewMaskOwner(mock, tex, anchor)
@@ -457,7 +576,21 @@ local function GFPreviewStatusBarTexture(bar)
     return bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
 end
 
-local function GFPreviewBaseEdgeColor()
+function GFPreviewBaseEdgeColor()
+    local fn = _G.MSUF_GetBarOutlineColor
+    if type(fn) == "function" then
+        local ok, r, g, b = pcall(fn)
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b, 1
+        end
+    end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen then
+        return tonumber(gen.barOutlineColorR) or 0,
+               tonumber(gen.barOutlineColorG) or 0,
+               tonumber(gen.barOutlineColorB) or 0,
+               1
+    end
     return 0, 0, 0, 1
 end
 
@@ -542,8 +675,7 @@ local function GFPreviewApplyRounded(mock, conf, powerOn, edgeSize)
     local healthTexMask = GFPreviewEnsureRoundedMask(mock, "health", mock._health, healthTex)
     local healPredMask = GFPreviewEnsureRoundedMask(mock, "healPred", mock._healPred, healPredTex)
     local absorbMask = GFPreviewEnsureRoundedMask(mock, "absorb", mock._absorb, absorbTex)
-    local healPredMode = tonumber(conf and conf.healPredAnchorMode) or 3
-    if healPredMode < 1 or healPredMode > 5 then healPredMode = 3 end
+    local healPredMode = GFPreviewHealPredAnchorMode(conf)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local absorbMode = tonumber((conf and conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
     if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
@@ -1032,10 +1164,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end
 
     local mock = CreateFrame("Frame", nil, stage, T.Template())
-    mock:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    mock:SetBackdrop({ bgFile = WHITE8X8 })
     mock:SetBackdropColor(0.08, 0.08, 0.09, 0.92)
-    mock:SetBackdropBorderColor(0.0, 0.0, 0.0, 1)
+    mock:SetBackdropBorderColor(0.0, 0.0, 0.0, 0)
     mock:EnableMouse(true)
     box._mock = mock
 
@@ -1557,7 +1688,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local powerH = GFPreviewMockPowerHeight(kind, conf, zoom, frameScale)
         local outline = 1
         if gf and gf.GetBarOutlineThickness then outline = tonumber(gf.GetBarOutlineThickness(kind)) or outline end
-        local inset = max(0, GFPreviewRound(outline * previewScale))
+        local outlineEdge = max(0, GFPreviewRound(outline * previewScale))
+        local inset = 0
         local startX = GFPreviewRound((stageW - mockW) * 0.5)
         local startY = -GFPreviewRound((stageH - mockH) * 0.5)
         local mock = self._mock
@@ -1565,10 +1697,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         mock:ClearAllPoints()
         mock:SetPoint("TOPLEFT", self._stage, "TOPLEFT", startX, startY)
         mock:SetSize(mockW, mockH)
-        mock:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = max(1, inset),
-            insets = { left = inset, right = inset, top = inset, bottom = inset } })
+        mock:SetBackdrop({ bgFile = WHITE8X8 })
         mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, conf.bgA or 0.88)
-        mock:SetBackdropBorderColor(conf.borderR or 0, conf.borderG or 0, conf.borderB or 0, conf.borderA or 1)
+        mock:SetBackdropBorderColor(0, 0, 0, 0)
 
         local barTex = (gf and gf.ResolveBarTexture and gf.ResolveBarTexture(kind)) or ResolvePreviewStatusbarTexture(conf, "barTexture")
         local bgTex = (gf and gf.ResolveBarBgTexture and gf.ResolveBarBgTexture(kind)) or WHITE8X8
@@ -1590,9 +1721,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         mock._healthBg:SetVertexColor(hbr, hbg, hbb, conf.hpBgAlpha or conf.bgA or 0.85)
 
         local hpTex = mock._health.GetStatusBarTexture and mock._health:GetStatusBarTexture()
-        local healPredMode = tonumber(conf.healPredAnchorMode) or 3
-        if healPredMode < 1 or healPredMode > 5 then healPredMode = 3 end
-        local healPredShown = (conf.healPredEnabled == true) or (conf.healPrediction == true)
+        local healPredMode = GFPreviewHealPredAnchorMode(conf)
+        local healPredShown = GFPreviewHealPredictionEnabled(kind, conf)
         mock._healPred:ClearAllPoints()
         if (healPredMode == 3 or healPredMode == 4) and hpTex then
             if hpReverse then
@@ -1665,7 +1795,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             mock._power:Hide()
         end
 
-        GFPreviewApplyRounded(mock, conf, powerH > 0, inset)
+        if GFPreviewApplyRounded(mock, conf, powerH > 0, outlineEdge) then
+            GFPreviewSetOutlineShown(mock, false)
+        else
+            GFPreviewLayoutOutline(mock, outlineEdge)
+        end
 
         local textBaseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or 1
         if mock._nameTextLayer then

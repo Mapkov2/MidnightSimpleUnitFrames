@@ -43,6 +43,20 @@ local function IsCombatLocked()
 end
 
 local function ResolveBaseEdgeColor()
+    local fn = _G.MSUF_GetBarOutlineColor
+    if type(fn) == "function" then
+        local ok, r, g, b = pcall(fn)
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b, BASE_BORDER_A
+        end
+    end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen then
+        return tonumber(gen.barOutlineColorR) or BASE_BORDER_R,
+               tonumber(gen.barOutlineColorG) or BASE_BORDER_G,
+               tonumber(gen.barOutlineColorB) or BASE_BORDER_B,
+               BASE_BORDER_A
+    end
     return BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A
 end
 
@@ -341,7 +355,7 @@ local function SE_ApplyGroupFrameShellVisuals(f, enabled)
         borderHost._msufGFBorderSize = nil
     end
 
-    local br, bgc, bb, ba = BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A
+    local br, bgc, bb, ba = ResolveBaseEdgeColor()
     local active = f._msufGFHighlightBorder
     if active and active._msufHLActivePrio then
         br = active._msufHLR or br
@@ -956,6 +970,12 @@ local function SuppressGroupSquareBorders(f)
     if borderHost and borderHost.SetBackdrop then
         borderHost:SetBackdrop(nil)
         borderHost._msufGFBorderSize = nil
+    end
+    local lines = borderHost and borderHost._msufGFOutlineLines
+    if type(lines) == "table" then
+        for _, line in pairs(lines) do
+            if line and line.Hide then line:Hide() end
+        end
     end
 
     local border = f and f._msufGFHighlightBorder
