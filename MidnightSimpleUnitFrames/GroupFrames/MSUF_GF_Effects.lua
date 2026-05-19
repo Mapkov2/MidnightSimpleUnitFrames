@@ -1860,7 +1860,7 @@ function GF.BuildFrameCache(f)
 
     -- Raid debuffs
 
-    -- Heal prediction (Group Frame menu -> default off)
+    -- Heal prediction (Global Style > Bars; group scopes can override Shared)
     c.healPredEn = (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf)) or false
     c.healPredAnchorMode = c.healPredEn and _GF_ResolveHealPredAnchorMode(kind, conf) or nil
     if not c.healPredEn then
@@ -4269,7 +4269,8 @@ end
 -- Colors read from global MSUF_DB.general (same keys as main UF overlays).
 --
 -- Absorb enable: read from MSUF_DB.general (tied to Bars menu).
--- Heal prediction enable: read from GF conf (tied to GF Options menu).
+-- Heal prediction enable: read from GF config resolver; local values are
+-- honored only when the Bars scope override is active.
 ------------------------------------------------------------------------
 ------------------------------------------------------------------------
 -- Absorb settings resolver: reads from gf_party/gf_raid (if hlOverride),
@@ -4304,7 +4305,7 @@ local function _GF_NormalizeAnchorMode(value, fallback)
 end
 
 _GF_ResolveHealPredAnchorMode = function(kind, conf)
-    if conf and conf.healPredAnchorMode ~= nil then
+    if conf and conf.hlOverride == true and conf.healPredAnchorMode ~= nil then
         return _GF_NormalizeAnchorMode(conf.healPredAnchorMode, 3)
     end
     return _GF_NormalizeAnchorMode(_GF_GetAbsorbSetting(kind, "healPredAnchorMode"), 3)

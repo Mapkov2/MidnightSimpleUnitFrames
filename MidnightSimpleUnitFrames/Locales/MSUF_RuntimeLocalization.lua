@@ -31,6 +31,24 @@ local function SetLocale(locale, dict)
     end
 end
 
+local MSUF_HEALPRED_BARS_MOVE_FALLBACK = {
+    ["Absorb styling and heal prediction are in Global Style > Bars > Absorb Display. Use the Party or Raid scope there for group incoming heals."] = "Absorb styling and heal prediction are in Global Style > Bars > Absorb Display. Use the Party or Raid scope there for group incoming heals.",
+    ["Open Group Frames > Health & Text. It controls health colors, bars, power bar, text, dispel overlay, debuff stripe, and range fade. Heal prediction is in Global Style > Bars > Absorb Display."] = "Open Group Frames > Health & Text. It controls health colors, bars, power bar, text, dispel overlay, debuff stripe, and range fade. Heal prediction is in Global Style > Bars > Absorb Display.",
+}
+
+AddMissing("enUS", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("enGB", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("deDE", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("esES", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("esMX", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("frFR", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("itIT", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("koKR", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("ptBR", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("ruRU", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("zhCN", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+AddMissing("zhTW", MSUF_HEALPRED_BARS_MOVE_FALLBACK)
+
 AddMissing("enUS", {
     ["A calmer setup command center: start with movement, frames, group frames, or a safe profile import."] = "A calmer setup command center: start with movement, frames, group frames, or a safe profile import.",
     ["Active profile"] = "Active profile",

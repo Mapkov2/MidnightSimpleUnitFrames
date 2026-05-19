@@ -817,20 +817,26 @@ local function BuildBars(ctx)
         end)
     W.MoveWidget(absorbAnchor, absorb, absorbLeftX, -124, absorbLeftW, "LEFT")
 
-    local selfHeal = W.ToggleAt(absorb, "UnitFrame heal prediction", absorbLeftX, -186, absorbLeftW)
-    M.BindToggle(ctx, selfHeal,
+    local healPredToggle = W.ToggleAt(absorb, "Heal Prediction Overlay", absorbLeftX, -186, absorbLeftW)
+    M.BindToggle(ctx, healPredToggle,
         function()
-            if CurrentBarsScopeIsGroupFrame() then return false end
-            return ReadGBool("showSelfHealPrediction", true)
+            if CurrentBarsScopeIsGroupFrame() then
+                return BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true
+            end
+            return ReadGBool("showSelfHealPrediction", false)
         end,
         function(v)
-            if CurrentBarsScopeIsGroupFrame() then return end
+            if CurrentBarsScopeIsGroupFrame() then
+                BarScopeSet("healPredEnabled", v and true or false, "MSUF2_GF_HEALPRED")
+                Call("MSUF_InvalidateAbsorbCache")
+                ApplyBars("MSUF2_GF_HEALPRED")
+                RefreshGroupFrameVisuals()
+                return
+            end
             SetGBool("showSelfHealPrediction", v, "MSUF2_SELF_HEAL", { preview = true })
             Call("MSUF_RefreshSelfHealPredUnitEvent")
             ApplyBars("MSUF2_SELF_HEAL")
         end)
-    local selfHealGroupHint = W.Text(absorb, "Group Frame heal prediction is controlled in Group Frames > Health & Bars.", absorbLeftX + 30, -212, absorbLeftW + 80, T.colors.muted)
-    selfHealGroupHint:Hide()
 
     local healPredAnchor = W.Dropdown(absorb, "Heal prediction anchoring", {
         { value = 1, text = "Anchor to left side" },
@@ -913,9 +919,14 @@ local function BuildBars(ctx)
         SetControlEnabled(absorbTest, showBar)
         SetControlEnabled(absorbOpacity, scopedActive and showBar)
         SetControlEnabled(healAbsorbOpacity, scopedActive and showBar)
-        SetControlEnabled(selfHeal, (not groupScope) and sharedActive and mode ~= 1)
-        SetControlEnabled(healPredAnchor, (not groupScope) and scopedActive and mode ~= 1 and ReadGBool("showSelfHealPrediction", true))
-        if groupScope then selfHealGroupHint:Show() else selfHealGroupHint:Hide() end
+        local healPredOn
+        if groupScope then
+            healPredOn = BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true
+        else
+            healPredOn = ReadGBool("showSelfHealPrediction", false)
+        end
+        SetControlEnabled(healPredToggle, groupScope and scopedActive or (sharedActive and mode ~= 1))
+        SetControlEnabled(healPredAnchor, groupScope and scopedActive and healPredOn or ((not groupScope) and scopedActive and mode ~= 1 and healPredOn))
     end)
 
     local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 126, false)
@@ -1465,4 +1476,4 @@ local function BuildBars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 9 })
+M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 10 })

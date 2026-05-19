@@ -281,9 +281,9 @@ local PARTY_DEFAULTS = {
     alphaHPInCombat      = 1,
     alphaHPOutOfCombat   = 1,
     alphaPreserveHPColor = false,
-    -- Group Frame heal prediction is owned by Group Frames > Health & Bars.
-    -- Older profiles with no GF-specific value are seeded from the legacy
-    -- global UnitFrame heal prediction toggle in GF.EnsureDB().
+    -- Group Frame heal prediction is edited in Global Style > Bars using the
+    -- Party/Raid bar scopes. hlOverride gates local values; otherwise the
+    -- shared UnitFrame heal-prediction toggle is the fallback.
     healPredEnabled      = false,
     healPredAnchorMode   = 3,
     -- (absorbEnabled, healAbsorbEnabled are resolved at runtime)
@@ -828,11 +828,37 @@ local function ResolveLegacyHealPredictionEnabled()
     return false
 end
 
+local function NormalizeHealPredictionAnchorMode(value, fallback)
+    local mode = tonumber(value) or fallback or 3
+    if mode < 1 or mode > 5 then mode = fallback or 3 end
+    return mode
+end
+
+local function ResolveSharedHealPredictionAnchorMode()
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    return NormalizeHealPredictionAnchorMode(gen and gen.healPredAnchorMode, 3)
+end
+
 local function MigrateHealPredictionOwnership(conf)
     if type(conf) ~= "table" then return end
+    if conf.healPredEnabled == nil and conf.healPrediction ~= nil then
+        conf.healPredEnabled = conf.healPrediction == true
+    end
     if conf.healPredEnabled == nil then
         conf.healPredEnabled = ResolveLegacyHealPredictionEnabled()
     end
+    conf.healPredAnchorMode = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, 3)
+    if conf._healPredBarsScopeMigrated ~= true then
+        local sharedEnabled = ResolveLegacyHealPredictionEnabled()
+        local localEnabled = conf.healPredEnabled == true
+        local sharedAnchor = ResolveSharedHealPredictionAnchorMode()
+        local localAnchor = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, 3)
+        if localEnabled ~= sharedEnabled or (localEnabled and localAnchor ~= sharedAnchor) then
+            conf.hlOverride = true
+        end
+        conf._healPredBarsScopeMigrated = true
+    end
+    conf.healPrediction = nil
 end
 
 ------------------------------------------------------------------------
@@ -1210,7 +1236,7 @@ end
 
 function GF.IsHealPredictionEnabled(kind, conf)
     conf = conf or GF.GetConf(kind)
-    if conf and conf.healPredEnabled ~= nil then
+    if conf and conf.hlOverride == true and conf.healPredEnabled ~= nil then
         return conf.healPredEnabled == true
     end
     return ResolveLegacyHealPredictionEnabled()

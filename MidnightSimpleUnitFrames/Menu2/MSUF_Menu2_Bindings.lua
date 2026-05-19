@@ -758,6 +758,7 @@ local BARS_SCOPE_KEYS = {
     hpPowerTextOverride = true,
     absorbTextMode = true,
     absorbAnchorMode = true,
+    healPredEnabled = true,
     healPredAnchorMode = true,
     absorbBarOpacity = true,
     healAbsorbBarOpacity = true,

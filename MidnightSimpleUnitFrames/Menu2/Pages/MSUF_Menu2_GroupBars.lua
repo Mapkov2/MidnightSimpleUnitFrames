@@ -41,14 +41,6 @@ local CI_SLOT_VALUES = GP.CI_SLOT_VALUES or {}
 local CI_SLOT_DEFAULTS = GP.CI_SLOT_DEFAULTS or {}
 local DISPEL_OVERLAY_STYLES = GP.DISPEL_OVERLAY_STYLES or {}
 local DEBUFF_STRIPE_EDGES = GP.DEBUFF_STRIPE_EDGES or {}
-local HEAL_PRED_ANCHOR_VALUES = {
-    { value = 1, text = "Anchor to left side" },
-    { value = 2, text = "Anchor to right side" },
-    { value = 3, text = "Follow HP bar" },
-    { value = 4, text = "Follow HP bar (overflow)" },
-    { value = 5, text = "Reverse from max" },
-}
-
 local GF = GP.GF
 local RefreshGFPreview = GP.RefreshGFPreview
 local Conf = GP.Conf
@@ -738,24 +730,6 @@ local function BuildGFBars(ctx)
         if entry then entry._msuf2RefreshState = refreshTextControls end
     end
 
-    local healpred = b:CollapsibleSection("healpred", "Heal Prediction", 174, false)
-    local healPredToggle = BindScopeToggle(ctx, W.SwitchAt(healpred, "Heal Prediction Overlay", 14, -38, 220), "healPredEnabled", false, "visual")
-    local healPredAnchor = BindScopeDropdown(ctx, W.Dropdown(healpred, "Heal prediction anchoring", HEAL_PRED_ANCHOR_VALUES, 280), "healPredAnchorMode", 3, "visual")
-    W.MoveWidget(healPredAnchor, healpred, 14, -86, 280, "LEFT")
-    W.Text(healpred, "Shows incoming heals as a lighter overlay on the health bar.", 14, -138, ctx.width - 28, T.colors.muted)
-    local function RefreshHealPredHeader()
-        local enabled = Bool(CurrentScope(), "healPredEnabled", false)
-        SetOptionsEnabled({ healPredAnchor }, enabled)
-        SetOptionEnabled(healPredToggle, true)
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(healpred, nil) end
-    end
-    M.AddRefresher(ctx, RefreshHealPredHeader)
-    RefreshHealPredHeader()
-    do
-        local entry = healpred and healpred._msuf2CollapsibleEntry
-        if entry then entry._msuf2RefreshState = RefreshHealPredHeader end
-    end
-
     local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", 260, false)
     local dispelW = dispel._msuf2Width or b.width or 720
     local dispelCardW = min(560, dispelW - 40)
@@ -876,4 +850,4 @@ local function BuildGFBars(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 11 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 12 })
