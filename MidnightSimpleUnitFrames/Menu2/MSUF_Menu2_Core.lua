@@ -3471,6 +3471,15 @@ local function BuildDashboardUX(ctx)
             end
         end)
         AddTooltip(btn, data.title, data.tooltip)
+        if type(M.RegisterSearchWidget) == "function" then
+            M.RegisterSearchWidget(btn, {
+                label = data.title,
+                kind = "button",
+                anchor = supportTitle,
+                keywords = { data.tooltip, "Support MSUF Development", "support links", data.url },
+                help = data.tooltip,
+            })
+        end
         if previous then
             btn:SetPoint("LEFT", previous, "RIGHT", 10, 0)
         else

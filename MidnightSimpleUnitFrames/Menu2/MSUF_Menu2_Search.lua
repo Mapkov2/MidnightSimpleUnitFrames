@@ -38,7 +38,7 @@ local function ContentHeight()
 end
 
 local SEARCH_KEYWORDS = {
-    home = "dashboard start support links quick navigation edit mode move drag frames unitframe unit frames reset positions ui scale menu scale profiles wago discord patreon github curseforge paypal slash command addon options minimap help recover support search",
+    home = "dashboard start support links quick navigation edit mode move drag frames unitframe unit frames reset positions ui scale menu scale msuf frame scale profiles wago discord discord link patreon github curseforge paypal ko-fi slash command addon options minimap help recover recovery display recovery factory reset print help support search changelog release notes scaling",
     uf_player = "unit frame unitframe player frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level player level anchor level position level layer",
     uf_target = "unit frame unitframe target frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level target level anchor level position level layer",
     uf_targettarget = "unit frame unitframe target of target tot frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level target of target level anchor level position level layer",
@@ -47,14 +47,14 @@ local SEARCH_KEYWORDS = {
     uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade range check distance check out of range transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level boss level anchor level position level layer",
     uf_pet = "unit frame unitframe pet frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power status icons status indicators indicator selected indicator level level indicator level text show level pet level anchor level position level layer",
     gf_layout = "group frames groupframes party raid mythic raid layout growth direction sorting role order frame scaling scale transparency alpha opacity anchoring anchor position move drag tooltip range fade preview show hide player solo enable width height spacing columns rows sorting role group number visibility",
-    gf_bars = "group frames groupframes party raid health text power bar name hp text heal prediction absorb display range fade range check distance check out of range layout font size anchor offset opacity alpha smooth fill show power tank healer damage incoming heals shields debuff stripe dispel overlay",
+    gf_bars = "group frames groupframes party raid health text power bar name hp text heal prediction absorb display range fade range check distance check out of range layout font size anchor offset opacity alpha smooth fill show power tank healer damage incoming heals shields debuff stripe dispel overlay priority order border priority any debuff dispel type",
     gf_auras = "group frames groupframes party raid buffs debuffs defensives externals text coloring private auras cooldown style aura utilities filter anchor icon size max buffs max debuffs custom buffs custom debuffs cooldown swipe masque pandemic dispel dispel border dispel glow blizzard rendering own buffs hots healer buffs raid debuffs boss debuffs",
     gf_indicators = "group frames groupframes party raid indicators status icons spell indicators corner indicators group number focus glow border dispel aggro threat role icon custom spells slots preview current show all marker raid marker ready check leader assist dead ghost offline afk dnd",
-    opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display heal prediction incoming heals highlight borders outline border aggro purge boss target glow rounded round corners rounded texture rounded frames rounded frame texture rounded unit frames rounded group frames rounded power bars rounded mouseover highlights mouseover bar colors background tint backdrop bg dark mode shared texture opacity alpha health texture power texture frame outline abgerundet abrundung runde kanten ecken abrunden einschalten ausschalten",
+    opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display heal prediction incoming heals highlight priority prio display overlay highlight borders outline border aggro purge boss target glow dispel overlay unitframe unit frame debuff tint any debuff dispellable rounded round corners rounded texture rounded frames rounded frame texture rounded unit frames rounded group frames rounded power bars rounded mouseover highlights mouseover bar colors background tint backdrop bg dark mode shared texture opacity alpha health texture power texture frame outline abgerundet abrundung runde kanten ecken abrunden einschalten ausschalten",
     opt_fonts = "global style fonts font family size outline shadow color text readability name hp power health spell cooldown bigger smaller text size name shortening realm names truncate font color",
     auras2 = "global style unit auras buffs debuffs icon size caps rows spacing sorting cooldown timer text tooltip private aura filter override dispel stealable only mine own buffs own debuffs pandemic reminders click through clickthrough aura position aura size",
     opt_castbar = "global style castbar textures outline shake fill direction empowered casts empower stages evoker augmentation devastation preservation hold release interrupt ready focus kick kick cooldown demon hunter demonhunter dh havoc vengeance devour consume magic disrupt counterspell pummel rebuke wind shear mind freeze skull bash muzzle spear hand strike counter shot quell silence name shortening latency spark channel ticks gcd global cooldown boss castbar target castbar focus castbar player castbar",
-    opt_colors = "global style colors class bar colors background backgrond backround bg backdrop tint opacity alpha unitframe colors npc type colors bar colors bar outline border color unit frame border group frame border dispel castbar mouseover highlight gameplay superellipse color swatches portrait colors power colors font color health color reaction color aura colors crosshair colors dark mode custom color missing health white background bar background tint preserve hp color hp track black",
+    opt_colors = "global style colors class bar colors background backgrond backround bg backdrop tint opacity alpha unitframe colors npc type colors bar colors bar outline border color unit frame border group frame border dispel castbar mouseover highlight gameplay superellipse color swatches portrait colors power colors font color health color reaction color aura colors crosshair colors dark mode custom color missing health white background bar background tint preserve hp color hp track black mana rage energy focus runic power insanity fury pain essence astral power lunar power maelstrom combo points holy power soul shards chi arcane charges runes stagger class power",
     opt_misc = "global style miscellaneous misc language localization localisation locale translation range fade range check range checker distance check out of range unit frame range check ui behavior tooltip tooltips combat settings general blizzard frames default frames hide blizzard disable blizzard update intervals performance minimap minimap icon target sounds version check menu behavior snap edge snap",
     classpower = "class resources combo points holy power soul shards chi maelstrom eclipse essence evoker runes runic power stagger brewmaster resource prediction auto hide detached power bar alternative mana behavior style quick actions class power resource bar alternate mana monk druid rogue paladin warlock death knight",
     gameplay = "gameplay combat crosshair click cast click cast clickthrough click-through focus target modifier mouseover interaction targeting spells mouse buttons keybind modifier ctrl shift alt fadenkreuz melee range spell target sound target lost mouseover heal click casting",
@@ -160,13 +160,90 @@ local function DisplaySearchText(text)
     return TrimText(text)
 end
 
+local SEARCH_LOCALE_KEY_PREFIX = "MSUF2_SEARCH_"
+local SEARCH_DEFAULT_LOCALE = "enUS"
+local SEARCH_LOCALE_TEXT_CACHE = {}
+
+local function IsSearchLocaleKey(text)
+    return type(text) == "string" and text:sub(1, #SEARCH_LOCALE_KEY_PREFIX) == SEARCH_LOCALE_KEY_PREFIX
+end
+
+local function SearchEffectiveLocale()
+    if type(ns.GetEffectiveLocale) == "function" then
+        local ok, locale = pcall(ns.GetEffectiveLocale)
+        if ok and type(locale) == "string" and locale ~= "" then return locale end
+    end
+    if type(ns.LOCALE) == "string" and ns.LOCALE ~= "" then return ns.LOCALE end
+    if type(_G.GetLocale) == "function" then
+        local ok, locale = pcall(_G.GetLocale)
+        if ok and type(locale) == "string" and locale ~= "" then return locale end
+    end
+    return SEARCH_DEFAULT_LOCALE
+end
+
+local function SearchLocaleCacheKey(text)
+    return SearchEffectiveLocale() .. "\031" .. tostring(text or "")
+end
+
+local function AddUniqueSearchPart(parts, seen, text)
+    text = DisplaySearchText(text)
+    if text == "" or seen[text] then return end
+    seen[text] = true
+    parts[#parts + 1] = text
+end
+
+local function SearchLocaleTranslations(text)
+    local cacheKey = SearchLocaleCacheKey(text)
+    local cached = SEARCH_LOCALE_TEXT_CACHE[cacheKey]
+    if cached then return cached end
+
+    local out, seen = {}, {}
+    local function add(value)
+        value = DisplaySearchText(value)
+        if value == "" or seen[value] then return end
+        seen[value] = true
+        out[#out + 1] = value
+    end
+
+    if type(M.Tr) == "function" then
+        local translated = M.Tr(text)
+        if translated and translated ~= text then add(translated) end
+    end
+
+    if type(ns.RegisterLocale) == "function" then
+        local L = ns.RegisterLocale(SearchEffectiveLocale())
+        local translated = L and L[text]
+        if translated and translated ~= text then add(translated) end
+    end
+
+    SEARCH_LOCALE_TEXT_CACHE[cacheKey] = out
+    return out
+end
+
 local function AddSearchText(parts, text)
     if text == nil then return end
     text = DisplaySearchText(text)
     if text == "" then return end
-    parts[#parts + 1] = text
-    local translated = M.Tr(text)
-    if translated and translated ~= text then parts[#parts + 1] = translated end
+    local seen = {}
+    local translations = SearchLocaleTranslations(text)
+    if #translations > 0 then
+        for i = 1, #translations do
+            AddUniqueSearchPart(parts, seen, translations[i])
+        end
+    elseif not IsSearchLocaleKey(text) then
+        AddUniqueSearchPart(parts, seen, text)
+    end
+end
+
+local function AddSearchTextVariants(out, seen, text)
+    local translations = SearchLocaleTranslations(text)
+    if #translations > 0 then
+        for i = 1, #translations do
+            AddUniqueSearchPart(out, seen, translations[i])
+        end
+    elseif not IsSearchLocaleKey(text) then
+        AddUniqueSearchPart(out, seen, text)
+    end
 end
 
 local function AddRawSearchText(parts, text)
@@ -175,37 +252,125 @@ local function AddRawSearchText(parts, text)
     if text ~= "" then parts[#parts + 1] = text end
 end
 
-local TOGGLE_SEARCH_ACTIONS = {
-    "how do i turn on %s",
-    "how do i turn off %s",
-    "how to turn on %s",
-    "how to turn off %s",
-    "where do i turn on %s",
-    "where do i turn off %s",
-    "turn on %s",
-    "turn off %s",
-    "enable %s",
-    "disable %s",
-    "show %s",
-    "hide %s",
-    "switch on %s",
-    "switch off %s",
-    "%s on",
-    "%s off",
+local function SearchTextVariants(text)
+    local out, seen = {}, {}
+    AddSearchTextVariants(out, seen, text)
+    return out
+end
+
+local SEARCH_CONTROL_ACTION_KEYWORDS = "MSUF2_SEARCH_CONTROL_ACTION_KEYWORDS"
+local SEARCH_CONTROL_PATTERNS = "MSUF2_SEARCH_CONTROL_PATTERNS"
+local SEARCH_TOGGLE_ACTION_KEYWORDS = "MSUF2_SEARCH_TOGGLE_ACTION_KEYWORDS"
+local SEARCH_TOGGLE_PATTERNS = "MSUF2_SEARCH_TOGGLE_PATTERNS"
+local SEARCH_DROPDOWN_ACTION_KEYWORDS = "MSUF2_SEARCH_DROPDOWN_ACTION_KEYWORDS"
+local SEARCH_DROPDOWN_PATTERNS = "MSUF2_SEARCH_DROPDOWN_PATTERNS"
+local SEARCH_SEGMENT_ACTION_KEYWORDS = "MSUF2_SEARCH_SEGMENT_ACTION_KEYWORDS"
+local SEARCH_SEGMENT_PATTERNS = "MSUF2_SEARCH_SEGMENT_PATTERNS"
+local SEARCH_SLIDER_ACTION_KEYWORDS = "MSUF2_SEARCH_SLIDER_ACTION_KEYWORDS"
+local SEARCH_SLIDER_PATTERNS = "MSUF2_SEARCH_SLIDER_PATTERNS"
+local SEARCH_COLOR_ACTION_KEYWORDS = "MSUF2_SEARCH_COLOR_ACTION_KEYWORDS"
+local SEARCH_COLOR_PATTERNS = "MSUF2_SEARCH_COLOR_PATTERNS"
+local SEARCH_BUTTON_ACTION_KEYWORDS = "MSUF2_SEARCH_BUTTON_ACTION_KEYWORDS"
+local SEARCH_BUTTON_PATTERNS = "MSUF2_SEARCH_BUTTON_PATTERNS"
+local SEARCH_TEXTINPUT_ACTION_KEYWORDS = "MSUF2_SEARCH_TEXTINPUT_ACTION_KEYWORDS"
+local SEARCH_TEXTINPUT_PATTERNS = "MSUF2_SEARCH_TEXTINPUT_PATTERNS"
+local SEARCH_VALUE_PATTERNS = "MSUF2_SEARCH_VALUE_PATTERNS"
+
+local SEARCH_KIND_ACTION_KEYWORDS = {
+    toggle = SEARCH_TOGGLE_ACTION_KEYWORDS,
+    dropdown = SEARCH_DROPDOWN_ACTION_KEYWORDS,
+    segment = SEARCH_SEGMENT_ACTION_KEYWORDS,
+    slider = SEARCH_SLIDER_ACTION_KEYWORDS,
+    color = SEARCH_COLOR_ACTION_KEYWORDS,
+    button = SEARCH_BUTTON_ACTION_KEYWORDS,
+    textinput = SEARCH_TEXTINPUT_ACTION_KEYWORDS,
 }
+
+local SEARCH_KIND_PATTERNS = {
+    toggle = SEARCH_TOGGLE_PATTERNS,
+    dropdown = SEARCH_DROPDOWN_PATTERNS,
+    segment = SEARCH_SEGMENT_PATTERNS,
+    slider = SEARCH_SLIDER_PATTERNS,
+    color = SEARCH_COLOR_PATTERNS,
+    button = SEARCH_BUTTON_PATTERNS,
+    textinput = SEARCH_TEXTINPUT_PATTERNS,
+}
+
+local function ForEachLocaleSearchPattern(key, callback)
+    if type(key) ~= "string" or type(callback) ~= "function" then return end
+    local translations = SearchLocaleTranslations(key)
+    for i = 1, #translations do
+        local text = translations[i]
+        for pattern in tostring(text):gmatch("[^|]+") do
+            pattern = TrimText(pattern)
+            if pattern ~= "" then callback(pattern) end
+        end
+    end
+end
+
+local function AddSearchPatternText(parts, key, label)
+    label = DisplaySearchText(label)
+    if label == "" then return end
+    local labels = SearchTextVariants(label)
+    ForEachLocaleSearchPattern(key, function(pattern)
+        for i = 1, #labels do
+            local ok, formatted = pcall(string.format, pattern, labels[i])
+            if ok then AddRawSearchText(parts, formatted) end
+        end
+    end)
+end
+
+local function AddSearchValuePatternText(parts, label, value)
+    label = DisplaySearchText(label)
+    value = DisplaySearchText(value)
+    if label == "" or value == "" then return end
+    local labels = SearchTextVariants(label)
+    local values = SearchTextVariants(value)
+    for i = 1, #labels do
+        AddRawSearchText(parts, labels[i] .. " " .. value)
+        AddRawSearchText(parts, value .. " " .. labels[i])
+    end
+    for i = 1, #values do
+        AddRawSearchText(parts, label .. " " .. values[i])
+        AddRawSearchText(parts, values[i] .. " " .. label)
+    end
+    ForEachLocaleSearchPattern(SEARCH_VALUE_PATTERNS, function(pattern)
+        for i = 1, #labels do
+            local ok, formatted = pcall(string.format, pattern, labels[i], value)
+            if ok then AddRawSearchText(parts, formatted) end
+        end
+        for i = 1, #values do
+            local ok, formatted = pcall(string.format, pattern, label, values[i])
+            if ok then AddRawSearchText(parts, formatted) end
+        end
+    end)
+end
 
 local function AddToggleQuestionSearchText(parts, label)
     label = DisplaySearchText(label)
     if label == "" then return end
-    AddSearchText(parts, "toggle " .. label)
-    for i = 1, #TOGGLE_SEARCH_ACTIONS do
-        AddSearchText(parts, string.format(TOGGLE_SEARCH_ACTIONS[i], label))
+    AddRawSearchText(parts, "toggle " .. label)
+end
+
+local function AddControlQuestionSearchText(parts, label, kind, values)
+    label = DisplaySearchText(label)
+    if label == "" then return end
+
+    kind = kind or "control"
+    AddRawSearchText(parts, kind .. " " .. label)
+
+    if type(values) ~= "table" then return end
+    local limit = math.min(#values, 12)
+    for i = 1, limit do
+        local value = values[i]
+        if type(value) == "table" then value = value.text or value.label or value.name or value.title or value.value or value.key end
+        if value ~= nil then AddRawSearchText(parts, label .. " " .. tostring(value)) end
     end
 end
 
 local MIN_SEARCH_QUERY_LEN = 2
 local SEARCH_TEXT_MAX_LEN = 170
-local SEARCH_BACKGROUND_STEP_SEC = 0.08
+local SEARCH_BACKGROUND_STEP_SEC = 0.22
 local SEARCH_INPUT_DEBOUNCE_SEC = 0.10
 local SEARCH_MAX_RESULTS = 24
 local SEARCH_VISIBLE_RESULTS = 12
@@ -213,6 +378,9 @@ local SEARCH_MIN_RESULT_SCORE = 40
 local SEARCH_MAX_RAW_WORDS = 12
 local SEARCH_MAX_QUERY_CLAUSES = 8
 local SEARCH_MAX_TERMS_PER_CLAUSE = 18
+local SEARCH_MAX_RECORD_TOKENS = 90
+local SEARCH_CONTROL_MAX_TOKENS = 36
+local SEARCH_CONTROL_HAYSTACK_MAX_LEN = 1200
 local SEARCH_STATE = {
     records = nil,
     recordsDirty = true,
@@ -226,11 +394,28 @@ local SEARCH_STATE = {
     queryClauseCacheClauses = nil,
     registry = {},
     registryByPage = {},
+    registryRecords = {},
+    localeKey = nil,
 }
 M.searchRegistry = SEARCH_STATE.registry
 
 local function MarkSearchIndexDirty()
     SEARCH_STATE.recordsDirty = true
+end
+
+local function ClearSearchLocaleCaches()
+    SEARCH_LOCALE_TEXT_CACHE = {}
+    SEARCH_STATE.queryClauseCacheNorm = nil
+    SEARCH_STATE.queryClauseCacheClauses = nil
+    SEARCH_STATE.registryRecords = {}
+end
+
+local function EnsureSearchLocaleFresh()
+    local localeKey = SearchEffectiveLocale()
+    if SEARCH_STATE.localeKey == localeKey then return end
+    SEARCH_STATE.localeKey = localeKey
+    ClearSearchLocaleCaches()
+    MarkSearchIndexDirty()
 end
 
 local function SearchCombatLocked()
@@ -416,6 +601,69 @@ local SEARCH_STOP_WORDS = {
     zur = true,
     zum = true,
 }
+
+local SEARCH_QUERY_SOFT_STOP_WORDS = {
+    activate = true,
+    activated = true,
+    adjust = true,
+    button = true,
+    checkbox = true,
+    choose = true,
+    chosen = true,
+    decrease = true,
+    disable = true,
+    disabled = true,
+    dropdown = true,
+    enable = true,
+    enabled = true,
+    hide = true,
+    hidden = true,
+    increase = true,
+    input = true,
+    off = true,
+    open = true,
+    select = true,
+    selected = true,
+    slider = true,
+    switch = true,
+    toggle = true,
+    turn = true,
+    value = true,
+    visible = true,
+    aktivieren = true,
+    aktiviere = true,
+    aktiviert = true,
+    anpassen = true,
+    anzeigen = true,
+    ausblenden = true,
+    ausschalten = true,
+    auswahl = true,
+    auswaehlen = true,
+    deaktivieren = true,
+    deaktiviere = true,
+    deaktiviert = true,
+    einschalten = true,
+    menu = true,
+    menue = true,
+    regler = true,
+    schalter = true,
+    umschalter = true,
+    choisir = true,
+    activer = true,
+    desactiver = true,
+    seleccionar = true,
+    activar = true,
+    desactivar = true,
+    selezionare = true,
+    attivare = true,
+    disattivare = true,
+    ativar = true,
+    desativar = true,
+}
+
+local function SearchIgnoreQueryWord(word)
+    return SEARCH_STOP_WORDS[word] or SEARCH_QUERY_SOFT_STOP_WORDS[word]
+end
 
 local SEARCH_QUERY_ALIASES = {
     evoker = { "empowered", "empower", "empowered casts", "stage", "stages", "hold cast", "release cast", "quell", "essence", "augmentation", "devastation", "preservation" },
@@ -667,8 +915,8 @@ local SEARCH_QUERY_ALIASES = {
     party = { "group frames", "groupframes", "party frames", "party frame", "layout", "raid", "anchoring", "move party frames" },
     group = { "group frames", "party", "raid", "layout" },
     groupframes = { "group frames", "party", "raid", "layout" },
-    debuff = { "debuffs", "auras", "aura", "buffs" },
-    debuffs = { "debuff", "auras", "aura", "buffs" },
+    debuff = { [0] = false, "debuffs", "auras", "aura", "buffs", "dispellable debuffs", "dispel border", "dispel glow", "dispel overlay", "debuff stripe", "magic", "curse", "poison", "disease", "any debuff" },
+    debuffs = { [0] = false, "debuff", "auras", "aura", "buffs", "dispellable debuffs", "dispel border", "dispel glow", "dispel overlay", "debuff stripe", "magic", "curse", "poison", "disease", "any debuff" },
     buff = { "buffs", "auras", "aura", "debuffs" },
     buffs = { "buff", "auras", "aura", "debuffs" },
     aura = { "auras", "buffs", "debuffs", "private auras", "cooldown", "aura filters" },
@@ -682,9 +930,23 @@ local SEARCH_QUERY_ALIASES = {
     bossdebuff = { "boss debuffs", "raid debuffs", "custom auras", "private auras" },
     bossdebuffs = { "boss debuffs", "raid debuffs", "custom auras", "private auras" },
     private = { "private auras", "auras", "raid mechanics" },
-    dispel = { "dispel overlay", "dispellable debuffs", "magic", "curse", "poison", "disease" },
-    stealable = { "auras", "buffs", "purge", "dispel", "spellsteal" },
-    purge = { "dispel", "stealable", "auras", "buffs" },
+    dispel = { [0] = false, "dispel border", "dispel glow", "dispel overlay", "dispellable debuffs", "dispel border detects", "any dispel-type debuff", "any debuff", "magic", "curse", "poison", "disease", "cleanse", "decurse", "group indicators", "highlight borders" },
+    dispels = { [0] = false, "dispel", "dispel border", "dispel glow", "dispellable debuffs", "magic", "curse", "poison", "disease" },
+    dispell = { [0] = false, "dispel", "dispel border", "dispel glow", "dispellable debuffs", "cleanse", "decurse" },
+    dispellable = { [0] = false, "dispellable debuffs", "dispel border detects", "dispellable by me", "any dispel-type debuff", "magic", "curse", "poison", "disease" },
+    dispelable = { [0] = false, "dispellable", "dispellable debuffs", "dispel border detects" },
+    cleansing = { [0] = false, "cleanse", "dispel", "dispellable debuffs", "magic", "curse", "poison", "disease" },
+    cleanse = { [0] = false, "dispel", "dispellable debuffs", "magic", "curse", "poison", "disease" },
+    decurse = { [0] = false, "curse", "dispel", "dispellable debuffs" },
+    cure = { [0] = false, "cleanse", "dispel", "poison", "disease", "dispellable debuffs" },
+    magic = { [0] = false, "dispel", "dispellable debuffs", "dispel border detects", "dispel test type" },
+    curse = { [0] = false, "dispel", "decurse", "dispellable debuffs", "dispel border detects", "dispel test type" },
+    poison = { [0] = false, "dispel", "cleanse", "dispellable debuffs", "dispel border detects", "dispel test type" },
+    disease = { [0] = false, "dispel", "cleanse", "dispellable debuffs", "dispel border detects", "dispel test type" },
+    bleed = { [0] = false, "debuff", "any debuff", "dispel test type" },
+    stealable = { [0] = false, "auras", "buffs", "purge", "dispel", "spellsteal", "purge border", "offensive dispel" },
+    purge = { [0] = false, "dispel", "stealable", "auras", "buffs", "purge border", "spellsteal", "offensive dispel" },
+    spellsteal = { [0] = false, "stealable", "purge", "purge border", "offensive dispel", "buffs" },
     pandemic = { "auras", "cooldown text", "debuffs", "timer" },
     timer = { "cooldown text", "aura timers", "cast time", "combat timer" },
     cooldown = { "cooldown text", "cooldown swipe", "aura timers", "interrupt ready" },
@@ -692,8 +954,8 @@ local SEARCH_QUERY_ALIASES = {
     absorb = { "absorbs", "absorb display", "heal prediction", "health" },
     absorbs = { "absorb", "absorb display", "heal prediction", "health" },
     heal = { "heal prediction", "incoming heals", "health", "healer" },
-    aggro = { "threat", "aggro", "highlight borders", "indicators" },
-    threat = { "aggro", "highlight borders", "indicators" },
+    aggro = { [0] = false, "threat", "aggro", "aggro border", "highlight borders", "indicators", "highlight priority" },
+    threat = { [0] = false, "aggro", "threat border", "highlight borders", "indicators", "highlight priority" },
 
     blizzard = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
     default = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" },
@@ -785,7 +1047,14 @@ local SEARCH_QUERY_ALIASES = {
     classcolor = { "class color", "class colors", "health color" },
     reaction = { "reaction color", "npc type colors", "colors" },
     npc = { "npc type colors", "reaction color", "colors" },
-    highlight = { "mouseover highlight", "highlight borders", "colors", "bars" },
+    highlight = { [0] = false, "highlights", "mouseover highlight", "highlight borders", "dispel highlight", "aggro border", "target border", "focus highlight", "highlight priority", "colors", "bars" },
+    highlights = { [0] = false, "highlight", "highlight borders", "dispel highlight", "aggro border", "target border", "focus highlight", "highlight priority", "mouseover highlight" },
+    border = { [0] = false, "borders", "highlight borders", "frame outline", "dispel border", "aggro border", "purge border", "target border", "focus highlight", "group border" },
+    borders = { [0] = false, "border", "highlight borders", "frame outline", "dispel border", "aggro border", "purge border", "target border", "focus highlight", "group border" },
+    glow = { [0] = false, "dispel glow", "glow style", "glow lines", "glow speed", "glow thickness", "focus glow", "highlight borders" },
+    overlay = { [0] = false, "dispel overlay", "unitframe dispel overlay", "overlay style", "overlay opacity", "health bar tint" },
+    stripe = { [0] = false, "debuff stripe", "stripe edge", "stripe height", "stripe opacity", "debuff filter" },
+    priority = { [0] = false, "highlight priority", "dispel priority", "aggro priority", "target priority", "focus priority" },
 
     fontsize = { "font size", "text size", "fonts", "text" },
     textsize = { "text size", "font size", "fonts", "text" },
@@ -835,7 +1104,6 @@ local SEARCH_QUERY_ALIASES = {
     cooldowntext = { "cooldown text", "timer", "auras" },
     swipe = { "cooldown swipe", "auras", "cooldown" },
     staerkungszauber = { "buffs", "buff", "auras" },
-    schwaechungszauber = { "debuffs", "debuff", "auras" },
     zauber = { "spell", "auras", "castbar", "spell id" },
     defensives = { "defensives", "externals", "group buffs", "auras" },
     externals = { "defensives", "external cooldowns", "group buffs", "auras" },
@@ -909,6 +1177,114 @@ local SEARCH_QUERY_ALIASES = {
     stagger = { "stagger", "class resources", "brewmaster" },
 }
 
+local SEARCH_DISPEL_DEBUFF_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DISPEL_DEBUFF_KEYWORDS",
+}
+
+local SEARCH_HIGHLIGHT_BORDER_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_HIGHLIGHT_BORDER_KEYWORDS",
+}
+
+local SEARCH_DISPEL_OVERLAY_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DISPEL_OVERLAY_KEYWORDS",
+}
+
+local SEARCH_DEBUFF_STRIPE_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DEBUFF_STRIPE_KEYWORDS",
+}
+
+local SEARCH_BLIZZARD_DISPEL_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_BLIZZARD_DISPEL_KEYWORDS",
+}
+
+local SEARCH_UNIT_AURA_DISPEL_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_UNIT_AURA_DISPEL_KEYWORDS",
+}
+
+local SEARCH_DASHBOARD_RECOVERY_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DASHBOARD_RECOVERY_KEYWORDS",
+}
+
+local SEARCH_DASHBOARD_DISCORD_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DASHBOARD_DISCORD_KEYWORDS",
+}
+
+local SEARCH_DASHBOARD_SUPPORT_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DASHBOARD_SUPPORT_KEYWORDS",
+}
+
+local SEARCH_DASHBOARD_WAGO_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DASHBOARD_WAGO_KEYWORDS",
+}
+
+local SEARCH_DASHBOARD_SCALING_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DASHBOARD_SCALING_KEYWORDS",
+}
+
+local SEARCH_DASHBOARD_CHANGELOG_KEYWORDS = {
+    [0] = false,
+    "MSUF2_SEARCH_DASHBOARD_CHANGELOG_KEYWORDS",
+}
+
+local function SearchKeywordList(...)
+    local out = {}
+    for i = 1, select("#", ...) do
+        local list = select(i, ...)
+        if type(list) == "table" then
+            for k = 1, #list do out[#out + 1] = list[k] end
+        elseif list then
+            out[#out + 1] = list
+        end
+    end
+    return out
+end
+
+local SEARCH_PAGE_LOCALIZED_KEYWORDS = {}
+
+local function AppendSearchKeywords(pageKey, list)
+    if not (pageKey and type(list) == "table" and #list > 0) then return end
+    local pageList = SEARCH_PAGE_LOCALIZED_KEYWORDS[pageKey]
+    if not pageList then
+        pageList = {}
+        SEARCH_PAGE_LOCALIZED_KEYWORDS[pageKey] = pageList
+    end
+    for i = 1, #list do pageList[#pageList + 1] = list[i] end
+end
+
+local function AddPageLocalizedSearchKeywords(parts, pageKey)
+    local list = SEARCH_PAGE_LOCALIZED_KEYWORDS[pageKey]
+    if type(list) ~= "table" then return end
+    for i = 1, #list do AddSearchText(parts, list[i]) end
+end
+
+AppendSearchKeywords("gf_bars", SEARCH_DISPEL_OVERLAY_KEYWORDS)
+AppendSearchKeywords("gf_bars", SEARCH_DEBUFF_STRIPE_KEYWORDS)
+AppendSearchKeywords("gf_auras", SEARCH_DISPEL_DEBUFF_KEYWORDS)
+AppendSearchKeywords("gf_auras", SEARCH_BLIZZARD_DISPEL_KEYWORDS)
+AppendSearchKeywords("gf_indicators", SEARCH_DISPEL_DEBUFF_KEYWORDS)
+AppendSearchKeywords("gf_indicators", SEARCH_HIGHLIGHT_BORDER_KEYWORDS)
+AppendSearchKeywords("opt_bars", SEARCH_HIGHLIGHT_BORDER_KEYWORDS)
+AppendSearchKeywords("opt_bars", SEARCH_DISPEL_DEBUFF_KEYWORDS)
+AppendSearchKeywords("opt_bars", SEARCH_DISPEL_OVERLAY_KEYWORDS)
+AppendSearchKeywords("auras2", SEARCH_UNIT_AURA_DISPEL_KEYWORDS)
+AppendSearchKeywords("auras2", SEARCH_DISPEL_DEBUFF_KEYWORDS)
+AppendSearchKeywords("home", SEARCH_DASHBOARD_RECOVERY_KEYWORDS)
+AppendSearchKeywords("home", SEARCH_DASHBOARD_SUPPORT_KEYWORDS)
+AppendSearchKeywords("home", SEARCH_DASHBOARD_WAGO_KEYWORDS)
+AppendSearchKeywords("home", SEARCH_DASHBOARD_SCALING_KEYWORDS)
+AppendSearchKeywords("home", SEARCH_DASHBOARD_CHANGELOG_KEYWORDS)
+
 local CONTROL_KIND_LABEL = {
     faq = "FAQ",
     easteregg = "Easter Egg",
@@ -922,10 +1298,14 @@ local CONTROL_KIND_LABEL = {
     color = "Color",
 }
 
+local DASHBOARD_ROUTE_RECOVERY = { state = { dashboardRecoveryOpen = true } }
+local DASHBOARD_ROUTE_SCALING = { state = { dashboardScalingOpen = true } }
+local DASHBOARD_ROUTE_CHANGELOG = { state = { dashboardChangelogOpen = true } }
+
 local function AddSearchTermUnique(list, seen, term)
     if #list >= SEARCH_MAX_TERMS_PER_CLAUSE then return end
     term = NormalizeSearchText(term)
-    if term == "" or SEARCH_STOP_WORDS[term] or seen[term] then return end
+    if term == "" or SearchIgnoreQueryWord(term) or seen[term] then return end
     seen[term] = true
     list[#list + 1] = term
 end
@@ -933,7 +1313,7 @@ end
 local function SearchRawWords(normalized)
     local raw = {}
     for word in tostring(normalized or ""):gmatch("%S+") do
-        if not SEARCH_STOP_WORDS[word] then raw[#raw + 1] = word end
+        if not SearchIgnoreQueryWord(word) then raw[#raw + 1] = word end
         if #raw >= SEARCH_MAX_RAW_WORDS then break end
     end
     return raw
@@ -1086,6 +1466,9 @@ local function SearchCanonicalWords(raw)
         elseif word == "minimap" and (nextWord == "icon" or nextWord == "button") then
             words[#words + 1] = "minimapicon"
             i = i + 2
+        elseif word == "ko" and nextWord == "fi" then
+            words[#words + 1] = "kofi"
+            i = i + 2
         elseif word == "menu" and nextWord == "scale" then
             words[#words + 1] = "menuscale"
             i = i + 2
@@ -1199,13 +1582,14 @@ local function BuildSearchQueryClauses(query)
     return normalized, clauses
 end
 
-local function BuildSearchTokenList(normalized)
+local function BuildSearchTokenList(normalized, limit)
+    limit = tonumber(limit) or SEARCH_MAX_RECORD_TOKENS
     local tokens, seen = {}, {}
     for token in tostring(normalized or ""):gmatch("%S+") do
         if #token >= 2 and not SEARCH_STOP_WORDS[token] and not seen[token] then
             seen[token] = true
             tokens[#tokens + 1] = token
-            if #tokens >= 110 then break end
+            if #tokens >= limit then break end
         end
     end
     return tokens
@@ -1269,7 +1653,11 @@ SearchEditDistanceWithin = function(a, b, maxDistance)
 end
 
 local function SearchFuzzyTokenMatch(rec, term)
-    if not rec or not rec.tokens or #term < 5 or term:find(" ", 1, true) then return false end
+    if not rec or #term < 5 or term:find(" ", 1, true) then return false end
+    if not rec.tokens then
+        rec.tokens = BuildSearchTokenList(rec.haystack or "", rec.tokenLimit)
+    end
+    if not rec.tokens then return false end
     local maxDistance = (#term >= 8) and 2 or 1
     for i = 1, #rec.tokens do
         local token = rec.tokens[i]
@@ -1293,7 +1681,7 @@ local function SearchTermScore(rec, term, queryWord)
         if term ~= queryWord then score = score + 35 end
         return true, score + 10
     end
-    if SearchFuzzyTokenMatch(rec, term) then
+    if term == queryWord and SearchFuzzyTokenMatch(rec, term) then
         return true, (term == queryWord) and 28 or 20
     end
     return false, 0
@@ -1337,6 +1725,19 @@ local function SearchLooksLikeSupportQuestion(query)
     return false
 end
 
+local SEARCH_CONTROL_QUERY_TERMS = "toggle checkbox switch enable disable enabled disabled show hide dropdown select choose slider adjust increase decrease color colour swatch input field textfield editbox aktivier deaktivier einschalt ausschalt anzeigen ausblenden auswahl auswaehlen dropdown regler schieberegler aument reducir ajustar seleccionar choisir activer desactiver selezionare attivare disattivare ativar desativar выбрать включить отключить 설정 선택 사용 비활성 활성 下拉 选择 啟用 停用 選擇"
+
+local function SearchLooksLikeControlQuestion(query)
+    local normalized = NormalizeSearchText(query)
+    if normalized == "" then return false end
+    if normalized:find("turn on", 1, true) or normalized:find("turn off", 1, true) then return true end
+    for term in SEARCH_CONTROL_QUERY_TERMS:gmatch("%S+") do
+        term = NormalizeSearchText(term)
+        if term ~= "" and normalized:find(term, 1, true) then return true end
+    end
+    return false
+end
+
 local function SearchSupportQuestionBoost(rec, clauses)
     if not rec or rec.kind ~= "faq" then return 0 end
     local haystack = rec.haystack or ""
@@ -1349,6 +1750,49 @@ local function SearchSupportQuestionBoost(rec, clauses)
     end
     if direct > 0 then return 160 + direct * 90 end
     return -160
+end
+
+local function SearchResultSpecificityBoost(rec, clauses)
+    if not rec then return 0 end
+    local clauseCount = #(clauses or {})
+    if clauseCount == 0 then return 0 end
+
+    local label = rec.labelNorm or ""
+    local title = rec.titleNorm or ""
+    local direct = 0
+    for i = 1, clauseCount do
+        local clause = clauses[i]
+        local terms = clause and clause.terms
+        local matched = false
+        if type(terms) == "table" then
+            for k = 1, #terms do
+                local term = terms[k]
+                if term and term ~= "" and (label:find(term, 1, true) or title:find(term, 1, true)) then
+                    matched = true
+                    break
+                end
+            end
+        end
+        if matched then direct = direct + 1 end
+    end
+
+    if direct == 0 then
+        if rec.kind == "faq" and clauseCount >= 2 then return -90 end
+        if rec.kind == "page" and clauseCount >= 3 then return -40 end
+        return 0
+    end
+
+    local boost = direct * 45
+    if direct == clauseCount and clauseCount >= 2 then
+        if rec.kind == "page" then
+            boost = boost + 90
+        elseif rec.kind == "faq" then
+            boost = boost + 100
+        else
+            boost = boost + 260
+        end
+    end
+    return boost
 end
 
 local function IsSearchableDisplayText(text)
@@ -1384,7 +1828,7 @@ local function AddValuesSearchText(parts, values)
         values = resolved
     end
     if type(values) ~= "table" then return end
-    local limit = math.min(#values, 120)
+    local limit = math.min(#values, 32)
     for i = 1, limit do
         local item = values[i]
         AddSearchText(parts, SearchValueText(item))
@@ -1403,7 +1847,7 @@ local function AddValuesSearchText(parts, values)
                 AddSearchText(parts, item.desc or item.description)
             end
             extra = extra + 1
-            if extra >= 40 then break end
+            if extra >= 12 then break end
         end
     end
 end
@@ -1492,12 +1936,24 @@ local function BuildSearchPageInfos()
     return infos, navInfo
 end
 
+local function BuildSearchPageInfoForKey(pageKey)
+    local spec = M.pages and M.pages[pageKey]
+    local title = (spec and spec.title) or pageKey or ""
+    return {
+        key = pageKey,
+        label = M.Tr(title),
+        group = "",
+        title = M.Tr(title),
+    }
+end
+
 local function ClearSearchRegistryPage(pageKey)
     if not pageKey then return end
     local ids = SEARCH_STATE.registryByPage[pageKey]
     if ids then
         for i = 1, #ids do
             SEARCH_STATE.registry[ids[i]] = nil
+            SEARCH_STATE.registryRecords[ids[i]] = nil
         end
         SEARCH_STATE.registryByPage[pageKey] = nil
         MarkSearchIndexDirty()
@@ -1512,7 +1968,7 @@ local function CopyStaticSearchValues(values)
     end
     if type(values) ~= "table" then return nil end
     local out, count = {}, 0
-    local limit = math.min(#values, 80)
+    local limit = math.min(#values, 32)
     for i = 1, limit do
         local item = values[i]
         local text = SearchValueText(item)
@@ -1532,14 +1988,17 @@ local function CopyStaticSearchValues(values)
                 out[count] = text
             end
             extra = extra + 1
-            if extra >= 30 then break end
+            if extra >= 12 then break end
         end
     end
     return count > 0 and out or nil
 end
 
+local BuildRegistrySearchRecord
+
 function M.RegisterSearchWidget(widget, meta)
     if not widget or type(meta) ~= "table" then return end
+    EnsureSearchLocaleFresh()
     local pageKey = meta.pageKey or M._msuf2SearchBuildKey or M.activeKey
     if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
 
@@ -1556,7 +2015,7 @@ function M.RegisterSearchWidget(widget, meta)
         SEARCH_STATE.registryByPage[pageKey][#SEARCH_STATE.registryByPage[pageKey] + 1] = id
     end
 
-    SEARCH_STATE.registry[id] = {
+    local entry = {
         id = id,
         pageKey = pageKey,
         label = label,
@@ -1566,6 +2025,10 @@ function M.RegisterSearchWidget(widget, meta)
         keywords = meta.keywords,
         help = meta.help or meta.description,
     }
+    SEARCH_STATE.registry[id] = entry
+    if BuildRegistrySearchRecord then
+        SEARCH_STATE.registryRecords[id] = BuildRegistrySearchRecord(entry)
+    end
     MarkSearchIndexDirty()
 end
 
@@ -1609,7 +2072,11 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
     local titleNorm = (kind == "faq") and "" or NormalizeSearchText(pageInfo.title or pageInfo.label or "")
     local groupNorm = (kind == "faq") and "" or NormalizeSearchText(pageInfo.group or "")
     local hintNorm = (kind == "faq") and "" or NormalizeSearchText(displayHint)
-    local haystackNorm = NormalizeSearchText(table.concat(parts, " "))
+    local haystackText = table.concat(parts, " ")
+    if kind ~= "faq" and kind ~= "page" and #haystackText > SEARCH_CONTROL_HAYSTACK_MAX_LEN then
+        haystackText = haystackText:sub(1, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
+    end
+    local haystackNorm = NormalizeSearchText(haystackText)
     local record = {
         key = pageInfo.key,
         label = label,
@@ -1623,14 +2090,151 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
         titleNorm = titleNorm,
         hintNorm = hintNorm,
         haystack = haystackNorm,
-        tokens = BuildSearchTokenList(haystackNorm),
+        tokenLimit = (kind ~= "faq" and kind ~= "page")
+            and SEARCH_CONTROL_MAX_TOKENS
+            or SEARCH_MAX_RECORD_TOKENS,
         order = #records + 1,
     }
     records[#records + 1] = record
     return record
 end
 
+BuildRegistrySearchRecord = function(entry)
+    if type(entry) ~= "table" then return nil end
+    local info = BuildSearchPageInfoForKey(entry.pageKey)
+    local extra = {}
+    AddValuesSearchText(extra, entry.values)
+    if type(entry.keywords) == "string" then
+        AddSearchText(extra, entry.keywords)
+    elseif type(entry.keywords) == "table" then
+        for i = 1, #entry.keywords do AddSearchText(extra, entry.keywords[i]) end
+    end
+    AddControlQuestionSearchText(extra, entry.label, entry.kind, entry.values)
+    AddSearchText(extra, entry.help)
+    local tempRecords, seenRecords = {}, {}
+    local rec = AddSearchRecord(tempRecords, seenRecords, info, entry.label, entry.anchor, entry.kind or "control", extra)
+    if rec then
+        rec.answer = entry.help
+    end
+    return rec
+end
+
 local SEARCH_FAQ = {
+    {
+        label = "Discord",
+        pageKey = "home",
+        target = "MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY_DISCORD",
+        anchorText = "Display & recovery Discord Copy Discord Link support help feedback bug report",
+        keywords = SearchKeywordList(SEARCH_DASHBOARD_DISCORD_KEYWORDS, {
+            [0] = false,
+            "discord", "discord link", "copy discord link", "where is discord", "open discord", "support discord", "feedback discord", "report bugs discord",
+        }),
+        route = DASHBOARD_ROUTE_RECOVERY,
+        priority = 760,
+    },
+    {
+        label = "Display & recovery",
+        pageKey = "home",
+        target = "MSUF2_SEARCH_TARGET_DASHBOARD_RECOVERY",
+        anchorText = "Display & recovery Print Help Discord Factory Reset All recovery tools reset support",
+        keywords = SearchKeywordList(SEARCH_DASHBOARD_RECOVERY_KEYWORDS, {
+            [0] = false,
+            "display recovery", "recovery tools", "print help", "factory reset", "fullreset", "reset all", "recover menu", "dashboard recovery",
+        }),
+        route = DASHBOARD_ROUTE_RECOVERY,
+        priority = 760,
+    },
+    {
+        label = "Wago profile hub",
+        pageKey = "home",
+        target = "MSUF2_SEARCH_TARGET_DASHBOARD_WAGO",
+        anchorText = "Wago profile hub Browse Wago profiles Backup current profile",
+        keywords = SearchKeywordList(SEARCH_DASHBOARD_WAGO_KEYWORDS, {
+            [0] = false,
+            "wago profiles", "browse wago profiles", "wago profile hub", "wago link", "wago backup",
+        }),
+        priority = 320,
+    },
+    {
+        label = "Support MSUF Development",
+        pageKey = "home",
+        target = "MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT",
+        anchorText = "Support MSUF Development Patreon PayPal Ko-fi GitHub support links donate repository",
+        keywords = SearchKeywordList(SEARCH_DASHBOARD_SUPPORT_KEYWORDS, {
+            [0] = false,
+            "support links", "donate", "donation", "support development", "support msuf", "patreon", "paypal", "ko-fi", "kofi", "github", "repository",
+        }),
+        priority = 660,
+    },
+    {
+        label = "Scaling",
+        pageKey = "home",
+        target = "MSUF2_SEARCH_TARGET_DASHBOARD_SCALING",
+        anchorText = "Scaling UI Scale MSUF Frame Scale MSUF Menu Scale Apply Revert resize window bigger smaller",
+        keywords = SearchKeywordList(SEARCH_DASHBOARD_SCALING_KEYWORDS, {
+            [0] = false,
+            "scaling", "ui scale", "menu scale", "msuf frame scale", "msuf menu scale", "make menu bigger", "make menu smaller", "resize window", "options too big", "options too small",
+        }),
+        route = DASHBOARD_ROUTE_SCALING,
+        priority = 760,
+    },
+    {
+        label = "Changelog",
+        pageKey = "home",
+        target = "MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG",
+        anchorText = "Changelog release notes patch notes version changes beta notes",
+        keywords = SearchKeywordList(SEARCH_DASHBOARD_CHANGELOG_KEYWORDS, {
+            [0] = false,
+            "changelog", "change log", "release notes", "patch notes", "version notes", "what changed", "latest changes", "beta notes",
+        }),
+        route = DASHBOARD_ROUTE_CHANGELOG,
+        priority = 760,
+    },
+    {
+        label = "Highlight Borders",
+        answer = "Open Global Style > Bars. Textures & Gradient controls shared bar textures; Frame Outline and Highlight Borders control borders.",
+        pageKey = "opt_bars",
+        anchorText = "Highlight Borders Border Modes Dispel border Dispel border detects Dispel glow effect Glow style Highlight Priority Aggro border Purge border Boss target border",
+        keywords = SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, {
+            [0] = false,
+            "where are highlight borders", "where is dispel border", "where is dispel glow", "change dispel highlight", "change aggro highlight",
+            "highlight border settings", "border glow settings", "priority dispel aggro target focus",
+        }),
+        priority = 780,
+    },
+    {
+        label = "MSUF Dispel Border / Glow",
+        answer = "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. MSUF Dispel Border / Glow keeps Blizzard icons while allowing MSUF's dispel highlight visuals.",
+        pageKey = "gf_auras",
+        anchorText = "Aura Display Mode Use Blizzard Dispels MSUF Dispel Border Glow Blizzard renderer native dispel icons",
+        keywords = SearchKeywordList(SEARCH_BLIZZARD_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS, {
+            [0] = false,
+            "why does blizzard mode hide dispel glow", "keep blizzard debuffs but show dispel glow", "blizzard dispel icons and msuf border",
+        }),
+        priority = 760,
+    },
+    {
+        label = "Dispel Overlay",
+        answer = "Tints the health bar when a configured debuff condition is active.",
+        pageKey = "gf_bars",
+        anchorText = "Dispel Overlay Overlay detects Overlay style Show on current health only Use border priority Custom overlay priority Overlay Priority Order Overlay opacity health bar tint dispellable debuff any debuff",
+        keywords = SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, {
+            [0] = false,
+            "where is dispel overlay", "health bar changes color for dispel", "raid frame tint dispel", "party frame tint dispel", "group overlay priority", "raid overlay priority", "party overlay any debuff",
+        }),
+        priority = 740,
+    },
+    {
+        label = "Debuff Stripe",
+        answer = "Shows a thin colored stripe for debuffs matched by the debuff filter.",
+        pageKey = "gf_bars",
+        anchorText = "Debuff Stripe Stripe edge Stripe height Stripe opacity debuff filter colored stripe",
+        keywords = SearchKeywordList(SEARCH_DEBUFF_STRIPE_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, {
+            [0] = false,
+            "where is debuff stripe", "thin debuff indicator", "colored line for debuffs", "raid debuff line",
+        }),
+        priority = 730,
+    },
     {
         label = "Why are boss frames not visible?",
         answer = "Boss frames normally appear only during boss encounters. Enable Boss Frames and use Edit Mode or Boss Preview to test them outside combat.",
@@ -1784,7 +2388,7 @@ local SEARCH_FAQ = {
         target = "Opens: Global Style > Bars > Textures & Gradient",
         anchorText = "Textures & Gradient Frame Outline Highlight Borders texture gradient outline border",
         keywords = { "bar texture", "health texture", "power texture", "change texture", "gradient", "outline", "border", "bar border", "frame outline", "highlight border", "shared texture" },
-        priority = 35,
+        priority = 560,
     },
     {
         label = "How do I enable or disable rounded frames?",
@@ -1907,8 +2511,11 @@ local SEARCH_FAQ = {
         pageKey = "auras2",
         target = "Opens: Global Style > Unit Auras",
         anchorText = "Unit Auras Display Caps & Icons Aura Filters & Sorting Private Auras buffs debuffs",
-        keywords = { "buff", "buffs", "debuff", "debuffs", "auras", "aura", "private aura", "cooldown", "filter", "only my buffs", "only my debuffs", "hide buffs", "show debuffs", "aura size", "aura position" },
-        priority = 25,
+        keywords = SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, {
+            [0] = false,
+            "buff", "buffs", "debuff", "debuffs", "auras", "aura", "private aura", "cooldown", "filter", "only my buffs", "only my debuffs", "hide buffs", "show debuffs", "aura size", "aura position",
+        }),
+        priority = 120,
     },
     {
         label = "How do I configure group buffs, debuffs, or defensives?",
@@ -1916,8 +2523,11 @@ local SEARCH_FAQ = {
         pageKey = "gf_auras",
         target = "Opens: Group Frames > Buffs & Debuffs",
         anchorText = "Buffs Debuffs Defensives Private Auras Cooldown Style Aura Utilities group frames",
-        keywords = { "raid buffs", "raid debuffs", "party buffs", "party debuffs", "group auras", "group buffs", "group debuffs", "defensives", "externals", "private aura raid", "group cooldown swipe" },
-        priority = 40,
+        keywords = SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, {
+            [0] = false,
+            "raid buffs", "raid debuffs", "party buffs", "party debuffs", "group auras", "group buffs", "group debuffs", "defensives", "externals", "private aura raid", "group cooldown swipe",
+        }),
+        priority = 210,
     },
     {
         label = "How do I add or change status icons and indicators?",
@@ -1925,8 +2535,11 @@ local SEARCH_FAQ = {
         pageKey = "gf_indicators",
         target = "Opens: Group Frames > Indicators",
         anchorText = "Indicators Status Icons Spell Indicators Corner Indicators role icon dispel aggro raid marker",
-        keywords = { "status icons", "indicator", "indicators", "corner indicator", "spell indicator", "raid marker", "role icon", "leader icon", "ready check", "aggro icon", "threat icon", "focus glow" },
-        priority = 35,
+        keywords = SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS, {
+            [0] = false,
+            "status icons", "indicator", "indicators", "corner indicator", "spell indicator", "raid marker", "role icon", "leader icon", "ready check", "aggro icon", "threat icon", "focus glow",
+        }),
+        priority = 190,
     },
     {
         label = "Why is something not updating immediately?",
@@ -2132,8 +2745,11 @@ local SEARCH_FAQ = {
         pageKey = "auras2",
         target = "Opens: Unit Auras > Aura Filters & Sorting",
         anchorText = "Aura Filters & Sorting Display Only my buffs Only my debuffs Show Debuffs Include boss buffs dispellable",
-        keywords = { "buffs missing", "debuffs missing", "auras missing", "buff not showing", "debuff not showing", "hide buffs", "show debuffs", "only my buffs", "only my debuffs", "boss aura missing", "dispellable debuff missing", "aura filter" },
-        priority = 60,
+        keywords = SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, {
+            [0] = false,
+            "buffs missing", "debuffs missing", "auras missing", "buff not showing", "debuff not showing", "hide buffs", "show debuffs", "only my buffs", "only my debuffs", "boss aura missing", "dispellable debuff missing", "aura filter",
+        }),
+        priority = 180,
     },
     {
         label = "Why do I have too many buffs or debuffs?",
@@ -2225,8 +2841,11 @@ local SEARCH_FAQ = {
         pageKey = "gf_bars",
         target = "Opens: Group Frames > Health & Text",
         anchorText = "Health Colors Bars Power Bar Text Dispel Overlay Debuff Stripe Range Fade group range check raid range check party range check",
-        keywords = { "group health text", "raid health text", "party health text", "group power bar", "raid power bar", "party power bar", "heal prediction", "incoming heals", "dispel overlay", "debuff stripe", "group range fade", "group range check", "raid range check", "party range check", "raid out of range", "party out of range", "range check raid frames" },
-        priority = 55,
+        keywords = SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, {
+            [0] = false,
+            "group health text", "raid health text", "party health text", "group power bar", "raid power bar", "party power bar", "heal prediction", "incoming heals", "dispel overlay", "debuff stripe", "group range fade", "group range check", "raid range check", "party range check", "raid out of range", "party out of range", "range check raid frames",
+        }),
+        priority = 180,
     },
     {
         label = "Where is party or raid range check?",
@@ -2252,8 +2871,11 @@ local SEARCH_FAQ = {
         pageKey = "gf_indicators",
         target = "Opens: Group Frames > Indicators",
         anchorText = "Indicators Status Icons Spell Indicators Corner Indicators aggro threat dispel role icon raid marker",
-        keywords = { "aggro", "threat", "aggro border", "threat border", "dispel indicator", "magic indicator", "curse indicator", "poison indicator", "disease indicator", "raid marker", "role icon", "ready check", "leader icon" },
-        priority = 50,
+        keywords = SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, {
+            [0] = false,
+            "aggro", "threat", "aggro border", "threat border", "dispel indicator", "magic indicator", "curse indicator", "poison indicator", "disease indicator", "raid marker", "role icon", "ready check", "leader icon",
+        }),
+        priority = 220,
     },
     {
         label = "Why is text overlapping or in the wrong place?",
@@ -2456,8 +3078,11 @@ local SEARCH_FAQ = {
         pageKey = "gf_indicators",
         target = "Opens: Group Frames > Indicators > Dispel / Status Icons",
         anchorText = "Indicators dispel magic curse poison disease debuffs debuff type border group frames",
-        keywords = { "only dispellable debuffs", "dispellable debuffs", "dispel debuffs", "magic debuff", "curse debuff", "poison debuff", "disease debuff", "debuff type border", "debuff color border", "show dispels", "healer dispels" },
-        priority = 110,
+        keywords = SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_UNIT_AURA_DISPEL_KEYWORDS, {
+            [0] = false,
+            "only dispellable debuffs", "dispellable debuffs", "dispel debuffs", "magic debuff", "curse debuff", "poison debuff", "disease debuff", "debuff type border", "debuff color border", "show dispels", "healer dispels",
+        }),
+        priority = 260,
     },
     {
         label = "How do I move or resize target, focus, or boss castbars?",
@@ -2560,27 +3185,19 @@ local function BuildSearchRecords()
         AddSearchText(pageParts, info.group)
         AddSearchText(pageParts, info.title)
         AddRawSearchText(pageParts, SEARCH_KEYWORDS[info.key])
+        AddPageLocalizedSearchKeywords(pageParts, info.key)
         AddSearchRecord(records, seenRecords, info, info.label or info.title or info.key, nil, "page", pageParts)
     end
 
     for _, entry in pairs(SEARCH_STATE.registry) do
-        local info = pageInfoByKey[entry.pageKey] or {
-            key = entry.pageKey,
-            label = entry.pageKey,
-            title = entry.pageKey,
-            group = "",
-        }
-        local extra = {}
-        AddValuesSearchText(extra, entry.values)
-        if type(entry.keywords) == "string" then
-            AddSearchText(extra, entry.keywords)
-        elseif type(entry.keywords) == "table" then
-            for i = 1, #entry.keywords do AddSearchText(extra, entry.keywords[i]) end
+        local rec = SEARCH_STATE.registryRecords[entry.id]
+        if not rec and BuildRegistrySearchRecord then
+            rec = BuildRegistrySearchRecord(entry)
+            SEARCH_STATE.registryRecords[entry.id] = rec
         end
-        AddSearchText(extra, entry.help)
-        local rec = AddSearchRecord(records, seenRecords, info, entry.label, entry.anchor, entry.kind or "control", extra)
         if rec then
-            rec.answer = entry.help
+            rec.order = #records + 1
+            records[#records + 1] = rec
         end
     end
 
@@ -2595,6 +3212,7 @@ local function BuildSearchRecords()
             rec.answer = faq.answer
             rec.target = faq.target
             rec.anchorFallback = faq.anchorText or faq.label
+            rec.route = faq.route
             rec.priority = tonumber(faq.priority) or 0
             rec.faq = true
         end
@@ -2686,7 +3304,8 @@ local function StartSearchBackgroundIndex()
 end
 
 local function GetSearchRecords()
-    if SEARCH_STATE.indexing and SEARCH_STATE.records then
+    EnsureSearchLocaleFresh()
+    if SEARCH_STATE.indexing and SEARCH_STATE.records and not SEARCH_STATE.recordsDirty then
         return SEARCH_STATE.records
     end
     if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
@@ -2706,10 +3325,17 @@ local function CurateSearchResults(results, supportQuestion)
         floorScore = math.max(floorScore, topScore * 0.30)
     end
 
+    local function SpecificControlMatch(rec)
+        local clauseCount = tonumber(rec and rec.queryClauseCount) or 0
+        if clauseCount < 2 then return false end
+        if rec.kind == "page" or rec.kind == "faq" or rec.kind == "easteregg" then return false end
+        return (tonumber(rec.missedClauses) or 0) == 0 and (tonumber(rec.matchedClauses) or 0) == clauseCount
+    end
+
     local curated = {}
     for i = 1, #results do
         local rec = results[i]
-        if rec and (tonumber(rec.score) or 0) >= floorScore then
+        if rec and ((tonumber(rec.score) or 0) >= floorScore or SpecificControlMatch(rec)) then
             curated[#curated + 1] = rec
             if #curated >= SEARCH_MAX_RESULTS then break end
         end
@@ -2728,6 +3354,15 @@ function SearchPages(query)
     if #normalized < MIN_SEARCH_QUERY_LEN then return {} end
 
     local supportQuestion = SearchLooksLikeSupportQuestion(query)
+    local controlQuestion = SearchLooksLikeControlQuestion(query)
+    local profileTransferQuestion = normalized:find("import", 1, true)
+        or normalized:find("export", 1, true)
+        or normalized:find("profile string", 1, true)
+        or normalized:find("legacy import", 1, true)
+    local wagoBrowseQuestion = (normalized:find("wago", 1, true) and normalized:find("profile", 1, true))
+        or normalized:find("browse wago", 1, true)
+        or normalized:find("wago hub", 1, true)
+    if profileTransferQuestion then wagoBrowseQuestion = false end
     local requiredMatches = #clauses
     if supportQuestion and #clauses > 3 then
         requiredMatches = math.max(2, math.ceil(#clauses * 0.55))
@@ -2760,11 +3395,28 @@ function SearchPages(query)
             if rec.kind == "section" then score = score + 70 end
             if rec.kind == "faq" then score = score + 55 end
             if supportQuestion then score = score + SearchSupportQuestionBoost(rec, clauses) end
+            score = score + SearchResultSpecificityBoost(rec, clauses)
             if missedClauses > 0 then score = score - (missedClauses * 60) end
             if rec.kind ~= "page" then score = score + 45 end
             if rec.kind == "slider" or rec.kind == "dropdown" or rec.kind == "toggle" then score = score + 25 end
+            if controlQuestion
+                and (rec.kind == "toggle" or rec.kind == "dropdown" or rec.kind == "slider" or rec.kind == "segment"
+                    or rec.kind == "textinput" or rec.kind == "color")
+                and #clauses >= 2 and missedClauses == 0 and matchedClauses == #clauses then
+                score = score + 1300
+            end
             if rec.priority then score = score + rec.priority end
+            if profileTransferQuestion then
+                if rec.key == "profiles" then score = score + 520 end
+                if rec.key == "home" and rec.labelNorm == "wago profile hub" then score = score - 520 end
+            elseif wagoBrowseQuestion then
+                if rec.key == "home" and rec.labelNorm == "wago profile hub" then score = score + 720 end
+                if rec.key == "profiles" and rec.kind == "page" then score = score - 180 end
+            end
             rec.score = score
+            rec.matchedClauses = matchedClauses
+            rec.missedClauses = missedClauses
+            rec.queryClauseCount = #clauses
             results[#results + 1] = rec
         end
     end
@@ -2866,13 +3518,8 @@ local function OpenSearchResults(query)
     RunSearchInputQuery(query, true)
 end
 
-local function ScoreAnchorText(text, query, fallback)
-    local normalized = NormalizeSearchText(text)
-    if normalized == "" then return 0 end
-    local queryNorm, clauses = BuildSearchQueryClauses(query)
-    if #clauses == 0 and fallback then queryNorm, clauses = BuildSearchQueryClauses(fallback) end
-    if #clauses == 0 then return 0 end
-
+local function ScoreAnchorTextClauses(normalized, queryNorm, clauses)
+    if normalized == "" or type(clauses) ~= "table" or #clauses == 0 then return 0 end
     local score, matched = 0, 0
     if queryNorm ~= "" then
         if normalized == queryNorm then score = score + 900 end
@@ -2910,6 +3557,24 @@ local function ScoreAnchorText(text, query, fallback)
     if #normalized <= 42 then score = score + 30 end
     if #normalized > 120 then score = score - 40 end
     return score
+end
+
+local function ScoreAnchorText(text, query, fallback)
+    local normalized = NormalizeSearchText(text)
+    if normalized == "" then return 0 end
+    local queryNorm, clauses = BuildSearchQueryClauses(query)
+    local queryScore = ScoreAnchorTextClauses(normalized, queryNorm, clauses)
+
+    local fallbackScore = 0
+    if fallback and fallback ~= query then
+        local fallbackNorm, fallbackClauses = BuildSearchQueryClauses(fallback)
+        fallbackScore = ScoreAnchorTextClauses(normalized, fallbackNorm, fallbackClauses)
+    end
+
+    if queryScore > 0 and fallbackScore > 0 then
+        return queryScore + math.floor(fallbackScore * 0.25)
+    end
+    return math.max(queryScore, math.floor(fallbackScore * 0.75))
 end
 
 local function CollectSearchAnchorCandidates(frame, out, depth)
@@ -3050,6 +3715,617 @@ local function RunSoon(fn)
     end
 end
 
+local function SearchRouteHasAny(normalized, terms)
+    if normalized == "" or type(terms) ~= "table" then return false end
+    for i = 1, #terms do
+        local term = NormalizeSearchText(terms[i])
+        if term ~= "" and normalized:find(term, 1, true) then return true end
+    end
+    return false
+end
+
+local function SearchNewRoute()
+    return { state = {}, accordion = {}, tables = {}, nestedTables = {}, general = {} }
+end
+
+local function SearchRouteIsEmpty(route)
+    if type(route) ~= "table" then return true end
+    for _ in pairs(route.state or {}) do return false end
+    for _ in pairs(route.accordion or {}) do return false end
+    for _ in pairs(route.general or {}) do return false end
+    for _, values in pairs(route.tables or {}) do
+        if type(values) == "table" then
+            for _ in pairs(values) do return false end
+        end
+    end
+    for _, firstLevel in pairs(route.nestedTables or {}) do
+        if type(firstLevel) == "table" then
+            for _, secondLevel in pairs(firstLevel) do
+                if type(secondLevel) == "table" then
+                    for _ in pairs(secondLevel) do return false end
+                end
+            end
+        end
+    end
+    return true
+end
+
+local function SearchRouteOpenAccordion(route, pageKey, id)
+    if not (route and pageKey and id) then return end
+    route.accordion = route.accordion or {}
+    route.accordion[tostring(pageKey) .. ":" .. tostring(id)] = true
+end
+
+local function SearchRouteSetState(route, field, value)
+    if not (route and field) then return end
+    route.state = route.state or {}
+    route.state[field] = value
+end
+
+local function SearchRouteSetTable(route, tableName, key, value)
+    if not (route and tableName and key ~= nil) then return end
+    route.tables = route.tables or {}
+    route.tables[tableName] = route.tables[tableName] or {}
+    route.tables[tableName][key] = value
+end
+
+local function SearchRouteSetNestedTable(route, tableName, key1, key2, value)
+    if not (route and tableName and key1 ~= nil and key2 ~= nil) then return end
+    route.nestedTables = route.nestedTables or {}
+    route.nestedTables[tableName] = route.nestedTables[tableName] or {}
+    route.nestedTables[tableName][key1] = route.nestedTables[tableName][key1] or {}
+    route.nestedTables[tableName][key1][key2] = value
+end
+
+local function SearchRouteSetGeneral(route, key, value)
+    if not (route and key) then return end
+    route.general = route.general or {}
+    route.general[key] = value
+end
+
+local function SearchRouteApplySectionSpecs(route, pageKey, normalized, specs)
+    if not (route and pageKey and type(specs) == "table") then return end
+    for i = 1, #specs do
+        local spec = specs[i]
+        if spec and spec.id and SearchRouteHasAny(normalized, spec.terms) then
+            SearchRouteOpenAccordion(route, pageKey, spec.id)
+        end
+    end
+end
+
+local function SearchGroupScopeForText(normalized)
+    if SearchRouteHasAny(normalized, { "mythic raid", "mythicraid", "mythic" }) then return "mythicraid" end
+    if SearchRouteHasAny(normalized, { "raid", "raids" }) then return "raid" end
+    if SearchRouteHasAny(normalized, { "party", "group", "groups" }) then return "party" end
+    return nil
+end
+
+local function SearchGlobalScopeForText(normalized)
+    if SearchRouteHasAny(normalized, { "shared scope", "shared style", "global scope", "global style", "baseline" }) then return "shared" end
+    if SearchRouteHasAny(normalized, { "raid frame", "raid frames", "raid unit", "raid units", "raid font", "raid fonts", "raid texture", "raid textures", "raid health", "raid text", "raid power", "raid bar", "raid bars" }) then return "gf_raid" end
+    if SearchRouteHasAny(normalized, { "party frame", "party frames", "party unit", "party units", "party font", "party fonts", "party texture", "party textures", "party health", "party text", "party power", "party bar", "party bars", "group frame", "group frames", "group font", "group text" }) then return "gf_party" end
+    if SearchRouteHasAny(normalized, { "target of target", "targettarget", "target target", "tot frame", "tot font", "tot text", "tot bar" }) then return "targettarget" end
+    if SearchRouteHasAny(normalized, { "focus target", "focustarget", "focus target frame", "focus target font", "focus target text", "focus target bar" }) then return "focustarget" end
+    if SearchRouteHasAny(normalized, { "player frame", "player unit", "player font", "player text", "player health", "player power", "player bar", "player bars" }) then return "player" end
+    if SearchRouteHasAny(normalized, { "target frame", "target unit", "target font", "target text", "target health", "target power", "target bar", "target bars" }) then return "target" end
+    if SearchRouteHasAny(normalized, { "focus frame", "focus unit", "focus font", "focus text", "focus health", "focus power", "focus bar", "focus bars" }) then return "focus" end
+    if SearchRouteHasAny(normalized, { "pet frame", "pet unit", "pet font", "pet text", "pet health", "pet power", "pet bar", "pet bars" }) then return "pet" end
+    if SearchRouteHasAny(normalized, { "boss frame", "boss frames", "boss unit", "boss units", "boss font", "boss text", "boss health", "boss power", "boss bar", "boss bars" }) then return "boss" end
+    return nil
+end
+
+local function SearchTextKindForText(normalized)
+    if SearchRouteHasAny(normalized, { "hp text", "health text", "hp slot", "health slot", "show hp", "percent hp", "hp percent", "left hp", "center hp", "right hp", "hp left", "hp center", "hp right", "left health", "center health", "right health", "health left", "health center", "health right" }) then
+        return "hp"
+    end
+    if SearchRouteHasAny(normalized, { "power text", "power slot", "mana text", "energy text", "rage text", "show power", "left power", "center power", "right power", "power left", "power center", "power right" }) then
+        return "power"
+    end
+    if SearchRouteHasAny(normalized, { "text layer", "draw order", "advanced text", "name layer", "hp layer", "power layer" }) then
+        return "advanced"
+    end
+    if SearchRouteHasAny(normalized, { "name text", "show name", "name position", "name anchor", "raid group name", "left name", "center name", "right name" }) then
+        return "name"
+    end
+    return nil
+end
+
+local function SearchTextSlotForText(normalized)
+    if SearchRouteHasAny(normalized, { "left slot", "slot left", "left hp", "left health", "left power", "hp left", "health left", "power left" }) then return "left" end
+    if SearchRouteHasAny(normalized, { "right slot", "slot right", "right hp", "right health", "right power", "hp right", "health right", "power right" }) then return "right" end
+    if SearchRouteHasAny(normalized, { "center slot", "middle slot", "slot center", "slot middle", "center hp", "middle hp", "center health", "center power", "middle power", "hp center", "power center" }) then return "center" end
+    return nil
+end
+
+local function SearchRouteTextState(route, tabTable, slotTable, scopeKey, normalized)
+    local textKind = SearchTextKindForText(normalized)
+    if not textKind then return end
+    SearchRouteSetTable(route, tabTable, scopeKey, textKind)
+    if textKind == "hp" or textKind == "power" then
+        local slot = SearchTextSlotForText(normalized)
+        if slot then SearchRouteSetNestedTable(route, slotTable, scopeKey, textKind, slot) end
+    end
+end
+
+local function SearchRouteUnitStatusSelection(route, unit, normalized)
+    if SearchRouteHasAny(normalized, { "incoming rez", "incoming res", "incoming resurrect", "incoming resurrection", "ress", "resurrect" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "statusIncomingRes")
+    elseif SearchRouteHasAny(normalized, { "rested", "resting", "rest icon" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "statusResting")
+    elseif SearchRouteHasAny(normalized, { "combat icon", "combat state", "in combat icon" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "statusCombat")
+    elseif SearchRouteHasAny(normalized, { "dead text", "dead status", "offline text", "status text" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "statusText")
+    elseif SearchRouteHasAny(normalized, { "elite", "rare", "elite icon", "rare icon" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "eliteicon")
+    elseif SearchRouteHasAny(normalized, { "raid group", "group number", "subgroup" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "raidgroupname")
+    elseif SearchRouteHasAny(normalized, { "level", "level text", "level indicator" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "level")
+    elseif SearchRouteHasAny(normalized, { "raid marker", "marker" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "raidmarker")
+    elseif SearchRouteHasAny(normalized, { "leader", "assist", "leader assist", "leader / assist" }) then
+        SearchRouteSetTable(route, "unitStatusSelection", unit, "leader")
+    end
+end
+
+local function SearchRouteGroupStatusSelection(route, normalized)
+    if SearchRouteHasAny(normalized, { "ready check" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "readyCheckIcon")
+    elseif SearchRouteHasAny(normalized, { "summon", "summoning" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "summonIcon")
+    elseif SearchRouteHasAny(normalized, { "resurrect", "resurrection", "rez", "ress" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "resurrectIcon")
+    elseif SearchRouteHasAny(normalized, { "phase", "phased" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "phaseIcon")
+    elseif SearchRouteHasAny(normalized, { "ghost" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "statusGhostText")
+    elseif SearchRouteHasAny(normalized, { "leader" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "leaderIcon")
+    elseif SearchRouteHasAny(normalized, { "assist" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "assistIcon")
+    elseif SearchRouteHasAny(normalized, { "raid marker", "marker" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "raidMarker")
+    elseif SearchRouteHasAny(normalized, { "dead", "offline" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "statusText")
+    elseif SearchRouteHasAny(normalized, { "afk", "dnd" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "statusAFKText")
+    elseif SearchRouteHasAny(normalized, { "role icon", "tank", "healer", "dps" }) then
+        SearchRouteSetState(route, "gfStatusIconSelection", "roleIcon")
+    end
+end
+
+local function SearchPowerColorTokenForText(normalized)
+    if SearchRouteHasAny(normalized, { "rage" }) then return "RAGE" end
+    if SearchRouteHasAny(normalized, { "energy" }) then return "ENERGY" end
+    if SearchRouteHasAny(normalized, { "focus power", "hunter focus" }) then return "FOCUS" end
+    if SearchRouteHasAny(normalized, { "runic power" }) then return "RUNIC_POWER" end
+    if SearchRouteHasAny(normalized, { "insanity" }) then return "INSANITY" end
+    if SearchRouteHasAny(normalized, { "fury" }) then return "FURY" end
+    if SearchRouteHasAny(normalized, { "pain" }) then return "PAIN" end
+    if SearchRouteHasAny(normalized, { "essence" }) then return "ESSENCE" end
+    if SearchRouteHasAny(normalized, { "astral power", "lunar power" }) then return "LUNAR_POWER" end
+    if SearchRouteHasAny(normalized, { "maelstrom" }) then return "MAELSTROM" end
+    if SearchRouteHasAny(normalized, { "mana" }) then return "MANA" end
+    return nil
+end
+
+local function SearchClassPowerTokenForText(normalized)
+    if SearchRouteHasAny(normalized, { "holy power" }) then return "HOLY_POWER" end
+    if SearchRouteHasAny(normalized, { "soul shards", "soul shard" }) then return "SOUL_SHARDS" end
+    if SearchRouteHasAny(normalized, { "chi" }) then return "CHI" end
+    if SearchRouteHasAny(normalized, { "arcane charges", "arcane charge" }) then return "ARCANE_CHARGES" end
+    if SearchRouteHasAny(normalized, { "runes" }) then return "RUNES" end
+    if SearchRouteHasAny(normalized, { "empowered", "charged" }) then return "CHARGED" end
+    if SearchRouteHasAny(normalized, { "soul fragments vengeance", "vengeance fragments" }) then return "SOUL_FRAGMENTS_VENG" end
+    if SearchRouteHasAny(normalized, { "soul fragments void", "void meta" }) then return "SOUL_FRAGMENTS_META" end
+    if SearchRouteHasAny(normalized, { "soul fragments", "soul fragment" }) then return "SOUL_FRAGMENTS" end
+    if SearchRouteHasAny(normalized, { "maelstrom weapon 5" }) then return "MAELSTROM_ABOVE_5" end
+    if SearchRouteHasAny(normalized, { "maelstrom weapon" }) then return "MAELSTROM" end
+    if SearchRouteHasAny(normalized, { "astral prediction" }) then return "AP_PREDICTION" end
+    if SearchRouteHasAny(normalized, { "astral power" }) then return "ASTRAL_POWER" end
+    if SearchRouteHasAny(normalized, { "solar eclipse", "eclipse solar" }) then return "ECLIPSE_SOLAR" end
+    if SearchRouteHasAny(normalized, { "lunar eclipse", "eclipse lunar" }) then return "ECLIPSE_LUNAR" end
+    if SearchRouteHasAny(normalized, { "celestial alignment" }) then return "ECLIPSE_CA" end
+    if SearchRouteHasAny(normalized, { "stagger light", "green stagger" }) then return "STAGGER_GREEN" end
+    if SearchRouteHasAny(normalized, { "stagger moderate", "yellow stagger" }) then return "STAGGER_YELLOW" end
+    if SearchRouteHasAny(normalized, { "stagger heavy", "red stagger" }) then return "STAGGER_RED" end
+    if SearchRouteHasAny(normalized, { "insanity" }) then return "INSANITY" end
+    if SearchRouteHasAny(normalized, { "maelstrom power" }) then return "MAELSTROM_POWER" end
+    if SearchRouteHasAny(normalized, { "whirlwind" }) then return "WHIRLWIND" end
+    if SearchRouteHasAny(normalized, { "tip of the spear" }) then return "TIP_OF_THE_SPEAR" end
+    if SearchRouteHasAny(normalized, { "icicles" }) then return "ICICLES" end
+    if SearchRouteHasAny(normalized, { "ebon might" }) then return "EBON_MIGHT" end
+    if SearchRouteHasAny(normalized, { "resource text" }) then return "RESOURCE_TEXT" end
+    if SearchRouteHasAny(normalized, { "essence" }) then return "ESSENCE" end
+    if SearchRouteHasAny(normalized, { "combo points", "combo point" }) then return "COMBO_POINTS" end
+    return nil
+end
+
+local SEARCH_UNIT_BY_PAGE = {
+    uf_player = "player",
+    uf_target = "target",
+    uf_targettarget = "targettarget",
+    uf_focustarget = "focustarget",
+    uf_focus = "focus",
+    uf_pet = "pet",
+    uf_boss = "boss",
+}
+
+local function SearchRouteUnitPage(route, pageKey, normalized)
+    local unit = SEARCH_UNIT_BY_PAGE[pageKey]
+    if not unit then return end
+
+    SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+        { id = "preview", terms = { "preview", "hide preview" } },
+        { id = "frame_basics", terms = { "frame basics", "enable", "disable", "width", "height", "scale", "frame size", "smooth fill", "health animation" } },
+        { id = "anchoring", terms = { "anchoring", "anchor", "position", "x offset", "y offset", "custom anchor", "global anchor" } },
+        { id = "text", terms = { "text", "name text", "hp text", "health text", "power text", "font size", "text anchor", "text position", "draw order", "text layer" } },
+        { id = "inline_text", terms = { "inline text", "target of target text", "tot text" } },
+        { id = "transparency", terms = { "transparency", "transparent", "alpha", "opacity", "fade", "in combat alpha", "out of combat alpha" } },
+        { id = "portrait", terms = { "portrait", "class icon", "2d portrait", "3d portrait", "avatar", "face" } },
+        { id = "power_bar", terms = { "power bar", "mana bar", "energy bar", "rage bar", "power height", "power smooth fill" } },
+        { id = "castbar", terms = { "castbar", "cast bar", "spell name", "cast icon", "cast time" } },
+        { id = "status_icons", terms = { "status icons", "status icon", "indicator", "level", "level text", "raid group", "group number", "raid marker", "leader", "assist", "elite", "rare", "dead", "offline", "combat icon", "rested", "incoming rez", "advanced status", "advanced x offset", "advanced y offset", "extended x offset", "extended y offset" } },
+        { id = "load_conditions", terms = { "load conditions", "visibility conditions", "show conditions", "hide conditions", "when to show", "when to hide" } },
+        { id = "boss_layout", terms = { "boss layout", "boss preview", "boss frames" } },
+    })
+
+    if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
+    SearchRouteTextState(route, "unitTextTabSelection", "unitTextSlotSelection", unit, normalized)
+
+    if SearchRouteHasAny(normalized, { "advanced status", "status icon advanced", "advanced x offset", "advanced y offset", "extended x offset", "extended y offset", "wide x offset", "wide y offset" }) then
+        SearchRouteSetTable(route, "unitStatusTabSelection", unit, "advanced")
+    elseif SearchRouteHasAny(normalized, { "status icons", "status icon", "indicator", "level", "raid group", "group number", "raid marker", "leader", "assist", "elite", "rare", "dead", "offline", "combat icon", "rested", "incoming rez" }) then
+        SearchRouteSetTable(route, "unitStatusTabSelection", unit, "basic")
+    end
+    SearchRouteUnitStatusSelection(route, unit, normalized)
+end
+
+local function SearchRouteGroupPage(route, pageKey, normalized)
+    local scope = SearchGroupScopeForText(normalized)
+    if scope then SearchRouteSetState(route, "gfScope", scope) end
+
+    if pageKey == "gf_layout" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "general", terms = { "general", "enable", "show player", "show solo", "solo", "visibility", "party frames not showing", "raid frames not showing" } },
+            { id = "layout", terms = { "layout", "growth", "direction", "spacing", "columns", "rows", "width", "height" } },
+            { id = "sorting", terms = { "sorting", "sort", "role order", "player first", "groups first" } },
+            { id = "scaling", terms = { "frame scaling", "scale", "smooth health fill", "smooth fill", "party smooth fill", "raid smooth fill" } },
+            { id = "border", terms = { "transparency", "alpha", "opacity", "fade" } },
+            { id = "anchor", terms = { "anchoring", "anchor", "position", "move party", "move raid", "x offset", "y offset" } },
+            { id = "tooltip", terms = { "tooltip", "tooltips", "mouseover tooltip" } },
+        })
+    elseif pageKey == "gf_bars" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "hcolor", terms = { "health colors", "health color", "class color", "hp color" } },
+            { id = "bars", terms = { "bars custom", "health bar", "bar texture", "bar height" } },
+            { id = "power", terms = { "power bar", "mana bar", "power text", "smooth fill" } },
+            { id = "text", terms = { "text", "name text", "health text", "hp text", "power text", "font size" } },
+            { id = "dispel", terms = { "dispel overlay", "overlay style", "overlay detects", "overlay priority", "health bar tint" } },
+            { id = "dstripe", terms = { "debuff stripe", "stripe edge", "stripe height", "stripe opacity" } },
+            { id = "range", terms = { "range fade", "range check", "distance check", "out of range" } },
+        })
+        if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
+        SearchRouteTextState(route, "gfTextTabSelection", "gfTextSlotSelection", scope or M.gfScope or "party", normalized)
+    elseif pageKey == "gf_auras" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "blizzrenderer", terms = { "aura display mode", "blizzard dispels", "blizzard mode", "msuf dispel border glow", "native dispel icons" } },
+            { id = "buffs", terms = { "buffs", "buff", "hots", "own buffs", "healer buffs" } },
+            { id = "debuffs", terms = { "debuffs", "debuff", "boss debuff", "raid debuff", "magic", "curse", "poison", "disease" } },
+            { id = "ext", terms = { "externals", "defensives", "external cooldowns" } },
+            { id = "textcolor", terms = { "text coloring", "timer color", "cooldown text", "stack text", "pandemic" } },
+            { id = "priv", terms = { "private auras", "private aura" } },
+            { id = "masque", terms = { "cooldown style", "masque", "cooldown swipe" } },
+            { id = "autil", terms = { "aura utilities", "custom aura", "custom buff", "custom debuff", "spell id" } },
+        })
+    elseif pageKey == "gf_indicators" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "indicators", terms = { "indicators", "spell indicators", "placed indicators", "focus glow", "frame effects" } },
+            { id = "sicons", terms = { "status icons", "status icon", "dead icon", "ghost text", "offline icon", "afk", "dnd", "ready check", "summon", "resurrect", "phase", "leader icon", "assist icon", "role icon", "raid marker", "advanced status", "advanced x offset", "advanced y offset", "advanced placement", "extended x offset", "extended y offset" } },
+            { id = "si", terms = { "spell indicators", "custom spell", "spell id", "indicator spell", "healer hots indicators" } },
+            { id = "ci", terms = { "corner indicators", "corner dots", "corner indicator", "custom spell editor", "slot assignments" } },
+        })
+        local tabScope = scope or M.gfScope or "party"
+        if SearchRouteHasAny(normalized, { "advanced status", "status icon advanced", "advanced x offset", "advanced y offset", "advanced placement", "extended x offset", "extended y offset", "draw order" }) then
+            SearchRouteSetTable(route, "gfStatusIconTabSelection", tabScope, "advanced")
+        elseif SearchRouteHasAny(normalized, { "status icons", "status icon", "ready check", "summon", "resurrect", "phase", "dead", "ghost", "offline", "afk", "dnd", "leader icon", "assist icon", "role icon", "raid marker" }) then
+            SearchRouteSetTable(route, "gfStatusIconTabSelection", tabScope, "basic")
+        end
+        SearchRouteGroupStatusSelection(route, normalized)
+        if SearchRouteHasAny(normalized, { "top left", "tl" }) then
+            SearchRouteSetState(route, "gfCornerSlotSelection", "TL")
+        elseif SearchRouteHasAny(normalized, { "top right", "tr" }) then
+            SearchRouteSetState(route, "gfCornerSlotSelection", "TR")
+        elseif SearchRouteHasAny(normalized, { "bottom left", "bl" }) then
+            SearchRouteSetState(route, "gfCornerSlotSelection", "BL")
+        elseif SearchRouteHasAny(normalized, { "bottom right", "br" }) then
+            SearchRouteSetState(route, "gfCornerSlotSelection", "BR")
+        elseif SearchRouteHasAny(normalized, { "center", "middle" }) then
+            SearchRouteSetState(route, "gfCornerSlotSelection", "C")
+        end
+    end
+end
+
+local function SearchRouteGlobalPage(route, pageKey, normalized)
+    if pageKey == "profiles" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "profiles_management", terms = { "profile management", "active profile", "rename", "copy profile", "reset profile" } },
+            { id = "profiles_specs", terms = { "spec profiles", "specialization", "auto switch" } },
+            { id = "profiles_io", terms = { "export", "import", "wago", "legacy import", "profile string", "backup", "share profile" } },
+        })
+        if SearchRouteHasAny(normalized, { "export unitframe", "export unitframes", "unitframe export", "unitframes export" }) then
+            SearchRouteSetState(route, "profileExportKind", "unitframe")
+        elseif SearchRouteHasAny(normalized, { "export castbar", "export castbars", "castbar export", "castbars export" }) then
+            SearchRouteSetState(route, "profileExportKind", "castbar")
+        elseif SearchRouteHasAny(normalized, { "export colors", "export colours", "colors export", "colours export" }) then
+            SearchRouteSetState(route, "profileExportKind", "colors")
+        elseif SearchRouteHasAny(normalized, { "export gameplay", "gameplay export" }) then
+            SearchRouteSetState(route, "profileExportKind", "gameplay")
+        elseif SearchRouteHasAny(normalized, { "export group", "export group frames", "group frames export", "groupframe export" }) then
+            SearchRouteSetState(route, "profileExportKind", "groupframe")
+        elseif SearchRouteHasAny(normalized, { "full profile", "export full", "full export", "complete profile" }) then
+            SearchRouteSetState(route, "profileExportKind", "all")
+        end
+        if SearchRouteHasAny(normalized, { "import create new", "import new profile", "create new profile", "import and create new profile" }) then
+            SearchRouteSetState(route, "profileImportCreateNew", true)
+        elseif SearchRouteHasAny(normalized, { "import current profile", "import to current", "current profile import" }) then
+            SearchRouteSetState(route, "profileImportCreateNew", false)
+        end
+    elseif pageKey == "modules" then
+        SearchRouteOpenAccordion(route, pageKey, "modules_style")
+    elseif pageKey == "opt_bars" then
+        local scope = SearchGlobalScopeForText(normalized)
+        if scope then SearchRouteSetGeneral(route, "hpPowerTextSelectedKey", scope) end
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "bars_textures", terms = { "textures", "texture", "gradient", "bar texture", "background texture" } },
+            { id = "bars_absorb", terms = { "absorb", "heal prediction", "incoming heals", "shield" } },
+            { id = "bars_outline", terms = { "frame outline", "outline", "bar outline", "border thickness" } },
+            { id = "bars_rounded", terms = { "rounded", "round corners", "rounded texture", "rounded frames" } },
+            { id = "bars_highlight", terms = { "highlight borders", "highlight border", "dispel border", "dispel glow", "aggro border", "purge border", "boss target border", "priority order" } },
+            { id = "bars_unit_dispel_overlay", terms = { "unitframe dispel overlay", "unit frame dispel overlay", "overlay detects", "overlay priority", "unit dispel overlay" } },
+            { id = "bars_power", terms = { "bar animation", "text accuracy", "smooth fill", "power animation" } },
+        })
+    elseif pageKey == "opt_fonts" then
+        local scope = SearchGlobalScopeForText(normalized)
+        if scope then SearchRouteSetGeneral(route, "_fontScopeKey", scope) end
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "fonts_global_font", terms = { "global font", "font family", "font" } },
+            { id = "fonts_text_style", terms = { "text style", "outline", "shadow", "font size" } },
+            { id = "fonts_name_power_colors", terms = { "name colors", "power colors", "name color", "power color" } },
+            { id = "fonts_name_shortening", terms = { "name shortening", "short names", "realm names", "truncate", "names too long" } },
+        })
+    elseif pageKey == "opt_castbar" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "castbar_behavior", terms = { "shake", "fill direction", "castbar direction", "castbar behavior" } },
+            { id = "castbar_gcd", terms = { "gcd", "global cooldown", "gcd bar", "instant casts" } },
+            { id = "castbar_textures", terms = { "textures", "texture", "outline", "castbar texture" } },
+            { id = "castbar_empowered", terms = { "empowered casts", "evoker", "empower", "stage blink", "hold cast", "release cast" } },
+            { id = "castbar_name_shortening", terms = { "name shortening", "spell name", "cast name", "max name length" } },
+            { id = "castbar_focus_kick", terms = { "focus kick", "target kick", "interrupt focus", "kick cooldown" } },
+            { id = "castbar_interrupt_ready", terms = { "interrupt ready", "demon hunter", "devour", "consume magic", "disrupt", "kick ready" } },
+        })
+    elseif pageKey == "opt_misc" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "misc_language", terms = { "language", "locale", "translation", "localization", "localisation" } },
+            { id = "misc_menu_behavior", terms = { "menu behavior", "menu snap", "edge snap", "window snap", "menu resize" } },
+            { id = "misc_updates", terms = { "update intervals", "performance", "lag", "fps", "cooldown text performance" } },
+            { id = "misc_tooltips", terms = { "tooltips", "tooltip", "unitframe tooltips", "mouseover tooltip" } },
+            { id = "misc_blizzard_frames", terms = { "blizzard frames", "default frames", "hide blizzard", "disable blizzard" } },
+            { id = "misc_range_fade", terms = { "range fade", "range check", "distance check", "out of range" } },
+        })
+    elseif pageKey == "classpower" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "classpower_display", terms = { "layout", "display", "combo points", "holy power", "soul shards", "chi", "essence", "runes" } },
+            { id = "classpower_behavior", terms = { "behavior", "prediction", "quick actions" } },
+            { id = "classpower_visuals", terms = { "style", "visual", "texture", "spacing", "colors" } },
+            { id = "classpower_visibility", terms = { "auto hide", "visibility", "hide empty" } },
+            { id = "classpower_detached_power", terms = { "detached power", "detached power bar", "alternate power", "dual resource" } },
+            { id = "classpower_alt_mana", terms = { "alternative mana", "alt mana", "mana bar" } },
+        })
+    elseif pageKey == "auras2" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "a2_display", terms = { "display", "click through", "click-through", "buffs", "debuffs", "show buffs", "show debuffs" } },
+            { id = "a2_layout", terms = { "caps", "icons", "max buffs", "max debuffs", "icon size", "rows", "spacing", "anchor" } },
+            { id = "a2_text_coloring", terms = { "text coloring", "cooldown text", "timer color", "stack text", "pandemic" } },
+            { id = "a2_private", terms = { "private auras", "private aura" } },
+            { id = "a2_filters", terms = { "aura filters", "filter", "sorting", "dispellable", "only mine", "own buffs", "own debuffs" } },
+            { id = "a2_ignore", terms = { "ignore list", "global ignore", "blacklist" } },
+            { id = "a2_reminders", terms = { "buff reminders", "reminders", "missing buff" } },
+        })
+        if SearchRouteHasAny(normalized, { "player" }) then
+            SearchRouteSetState(route, "auraScope", "player")
+        elseif SearchRouteHasAny(normalized, { "target" }) then
+            SearchRouteSetState(route, "auraScope", "target")
+        elseif SearchRouteHasAny(normalized, { "focus" }) then
+            SearchRouteSetState(route, "auraScope", "focus")
+        elseif SearchRouteHasAny(normalized, { "boss" }) then
+            SearchRouteSetState(route, "auraScope", "boss")
+        elseif SearchRouteHasAny(normalized, { "shared", "global" }) then
+            SearchRouteSetState(route, "auraScope", "shared")
+        end
+    elseif pageKey == "opt_colors" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "colors_font", terms = { "global font color", "font color" } },
+            { id = "colors_classes", terms = { "class bar colors", "class color", "class colored" } },
+            { id = "colors_background", terms = { "bar background tint", "background color", "backdrop", "missing health", "dark mode", "preserve hp color" } },
+            { id = "colors_appearance", terms = { "unitframe global coloring", "appearance", "dark mode" } },
+            { id = "colors_unit", terms = { "unitframe colors", "unit frame colors", "reaction color" } },
+            { id = "colors_npc_type", terms = { "npc type colors", "npc color" } },
+            { id = "colors_bar_colors", terms = { "bar colors", "health color", "hp color" } },
+            { id = "colors_dispel", terms = { "dispel", "magic color", "curse color", "poison color", "disease color" } },
+            { id = "colors_castbar", terms = { "castbar colors", "castbar color", "spell color" } },
+            { id = "colors_highlight", terms = { "mouseover highlight", "hover highlight" } },
+            { id = "colors_gameplay", terms = { "gameplay", "crosshair", "target sound" } },
+            { id = "colors_power", terms = { "power bar colors", "power bar color", "mana color", "rage color", "energy color", "focus power", "runic power", "insanity color", "fury color", "pain color", "essence color", "astral power", "lunar power", "maelstrom color" } },
+            { id = "colors_class_power", terms = { "class power colors", "combo point color", "holy power color", "soul shard", "chi color", "arcane charges", "runes color", "essence color", "soul fragments", "maelstrom weapon", "astral power", "eclipse", "stagger", "icicles", "ebon might" } },
+            { id = "colors_auras", terms = { "auras", "buff color", "debuff color" } },
+            { id = "colors_portrait", terms = { "portrait colors", "portrait color" } },
+        })
+        local powerToken = SearchPowerColorTokenForText(normalized)
+        if powerToken then SearchRouteSetState(route, "colorsPowerToken", powerToken) end
+        local classPowerToken = SearchClassPowerTokenForText(normalized)
+        if classPowerToken then SearchRouteSetState(route, "colorsCPToken", classPowerToken) end
+        if powerToken or (SearchRouteHasAny(normalized, { "power color", "power colors" }) and not classPowerToken) then
+            SearchRouteOpenAccordion(route, pageKey, "colors_power")
+        end
+        if classPowerToken then SearchRouteOpenAccordion(route, pageKey, "colors_class_power") end
+    elseif pageKey == "gameplay" then
+        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+            { id = "gameplay_timer", terms = { "combat timer", "timer" } },
+            { id = "gameplay_state", terms = { "combat enter", "combat leave", "enter combat", "leave combat" } },
+            { id = "gameplay_class_specific", terms = { "class-specific", "class specific", "demon hunter", "interrupt", "devour" } },
+            { id = "gameplay_crosshair", terms = { "combat crosshair", "crosshair", "targeting", "mouse" } },
+        })
+    end
+end
+
+local function SearchRouteForTarget(pageKey, query, fallback)
+    local normalized = NormalizeSearchText((query or "") .. " " .. (fallback or ""))
+    if normalized == "" then return nil end
+
+    if pageKey == "home" then
+        if SearchRouteHasAny(normalized, {
+            "discord", "factory reset", "fullreset", "print help", "display recovery", "recovery tools",
+            "recover menu", "reset all", "help reset", "copy discord", "support discord",
+        }) then
+            return DASHBOARD_ROUTE_RECOVERY
+        end
+        if SearchRouteHasAny(normalized, {
+            "scaling", "ui scale", "menu scale", "msuf frame scale", "msuf menu scale",
+            "make menu bigger", "make menu smaller", "options too big", "options too small",
+            "resize window", "groesser", "kleiner", "skalierung",
+        }) then
+            return DASHBOARD_ROUTE_SCALING
+        end
+        if SearchRouteHasAny(normalized, {
+            "changelog", "change log", "release notes", "patch notes", "version notes",
+            "what changed", "latest changes", "aenderungen", "anderungen",
+        }) then
+            return DASHBOARD_ROUTE_CHANGELOG
+        end
+        return nil
+    end
+
+    local route = SearchNewRoute()
+    SearchRouteUnitPage(route, pageKey, normalized)
+    SearchRouteGroupPage(route, pageKey, normalized)
+    SearchRouteGlobalPage(route, pageKey, normalized)
+    return SearchRouteIsEmpty(route) and nil or route
+end
+
+local function ApplySearchRoute(pageKey, route)
+    if type(route) ~= "table" then return false end
+
+    local changed = false
+    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+    local state = route.state
+    if type(state) == "table" then
+        for field, value in pairs(state) do
+            if M[field] ~= value then
+                if type(M.PersistMenuStateValue) == "function" then
+                    M.PersistMenuStateValue(field, value)
+                else
+                    M[field] = value
+                end
+                changed = true
+            end
+        end
+    end
+    local accordion = route.accordion
+    if type(accordion) == "table" then
+        local target
+        if type(M.GetPersistentMenuStateTable) == "function" then
+            target = M.GetPersistentMenuStateTable("accordionState")
+        end
+        if type(target) ~= "table" then
+            M.accordionState = M.accordionState or {}
+            target = M.accordionState
+        end
+        for key, value in pairs(accordion) do
+            local open = value and true or false
+            if target[key] ~= open then
+                target[key] = open
+                changed = true
+            end
+        end
+    end
+    local tables = route.tables
+    if type(tables) == "table" then
+        for tableName, values in pairs(tables) do
+            if type(tableName) == "string" and type(values) == "table" then
+                local target = M[tableName]
+                if type(target) ~= "table" then
+                    target = {}
+                    M[tableName] = target
+                end
+                for key, value in pairs(values) do
+                    if target[key] ~= value then
+                        target[key] = value
+                        changed = true
+                    end
+                end
+            end
+        end
+    end
+    local nestedTables = route.nestedTables
+    if type(nestedTables) == "table" then
+        for tableName, firstLevel in pairs(nestedTables) do
+            if type(tableName) == "string" and type(firstLevel) == "table" then
+                local target = M[tableName]
+                if type(target) ~= "table" then
+                    target = {}
+                    M[tableName] = target
+                end
+                for key1, secondLevel in pairs(firstLevel) do
+                    if type(secondLevel) == "table" then
+                        local nested = target[key1]
+                        if type(nested) ~= "table" then
+                            nested = {}
+                            target[key1] = nested
+                            changed = true
+                        end
+                        for key2, value in pairs(secondLevel) do
+                            if nested[key2] ~= value then
+                                nested[key2] = value
+                                changed = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    local general = route.general
+    if type(general) == "table" then
+        local db
+        if type(M.GetGeneralDB) == "function" then
+            db = M.GetGeneralDB()
+        elseif type(M.EnsureDB) == "function" then
+            local root = M.EnsureDB()
+            if type(root) == "table" then
+                root.general = type(root.general) == "table" and root.general or {}
+                db = root.general
+            end
+        end
+        if type(db) ~= "table" then
+            _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+            _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
+            db = _G.MSUF_DB.general
+        end
+        for key, value in pairs(general) do
+            if db[key] ~= value then
+                db[key] = value
+                changed = true
+            end
+        end
+    end
+    if changed and pageKey and type(M.InvalidatePage) == "function" then
+        M.InvalidatePage(pageKey)
+    end
+    return changed
+end
+
 local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor)
     if M.activeKey ~= pageKey then return end
     local entry = M.cache and M.cache[pageKey]
@@ -3069,10 +4345,19 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor)
     if opened then RunSoon(finish) else finish() end
 end
 
-local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor)
+local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route)
     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
+    route = route or SearchRouteForTarget(pageKey, query, fallback)
+    local routeChanged = ApplySearchRoute(pageKey, route)
+    if routeChanged then preferredAnchor = nil end
     M.SelectPage(pageKey)
     RunSoon(function() ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor) end)
+end
+
+local function SearchResultHasDetail(rec)
+    if not rec then return false end
+    if rec.kind == "faq" or rec.kind == "easteregg" then return rec.answer ~= nil and rec.answer ~= "" end
+    return rec.answer ~= nil and rec.answer ~= ""
 end
 
 local function BuildSearchPage(ctx)
@@ -3095,7 +4380,7 @@ local function BuildSearchPage(ctx)
     local visible = math.min(#results, maxVisible)
     local hasExpandedResult = false
     for i = 1, visible do
-        if results[i] and (results[i].kind == "faq" or results[i].kind == "easteregg") then
+        if SearchResultHasDetail(results[i]) then
             hasExpandedResult = true
             break
         end
@@ -3142,18 +4427,21 @@ local function BuildSearchPage(ctx)
             local pageKey = rec.key
             local fallback = rec.anchorFallback or rec.label or rec.title
             local anchor = rec.anchor
+            local route = rec.route
             local noOpen = rec.noOpen
             btn:SetScript("OnClick", function()
                 if noOpen then
                     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
                     return
                 end
-                OpenSearchTarget(pageKey, query, fallback, anchor)
+                OpenSearchTarget(pageKey, query, fallback, anchor, route)
             end)
-            if (rec.kind == "faq" or rec.kind == "easteregg") and rec.answer then
-                W.Text(sec, ShortLabel(rec.answer, 132), x + 8, y - 24, colW - 16, T.colors.dim)
+            if SearchResultHasDetail(rec) then
+                local answer = (type(M.Tr) == "function" and M.Tr(rec.answer)) or rec.answer
+                W.Text(sec, ShortLabel(answer, 132), x + 8, y - 24, colW - 16, T.colors.dim)
                 if rec.target and rec.target ~= "" then
-                    W.Text(sec, ShortLabel(rec.target, 112), x + 8, y - 42, colW - 16, T.colors.muted)
+                    local target = (type(M.Tr) == "function" and M.Tr(rec.target)) or rec.target
+                    W.Text(sec, ShortLabel(target, 112), x + 8, y - 42, colW - 16, T.colors.muted)
                 end
             end
         end
@@ -3162,7 +4450,10 @@ local function BuildSearchPage(ctx)
         end
     end
 
-    local quick = b:Section("Support Search Examples", 178)
+    local quick = b:Section("Support Search Examples", 206)
+    local shortcutDispel = "dispel border glow any debuff"
+    local shortcutStripe = "where is debuff stripe"
+    local shortcutHighlights = "highlight priority dispel aggro target"
     local shortcuts = {
         { "Move Frames", "where do I move my unitframe" },
         { "Background", "change my backgrond" },
@@ -3177,6 +4468,9 @@ local function BuildSearchPage(ctx)
         { "Performance", "why is msuf lagging" },
         { "Minimap", "where is the minimap icon setting" },
         { "Rounded", "rounded frames ausschalten" },
+        { "Dispel", shortcutDispel },
+        { "Stripe", shortcutStripe },
+        { "Highlights", shortcutHighlights },
     }
     local buttonW = math.floor((width - 56) / 3)
     for i = 1, #shortcuts do
@@ -3218,6 +4512,16 @@ Search.OpenTarget = OpenSearchTarget
 Search.SearchPages = SearchPages
 Search.TrimText = TrimText
 Search.ShortLabel = ShortLabel
+
+if type(ns.RegisterLocaleCallback) == "function" then
+    ns.RegisterLocaleCallback("MSUF2_Menu2_Search", function()
+        SEARCH_STATE.localeKey = nil
+        ClearSearchLocaleCaches()
+        CancelSearchBackgroundIndex()
+        MarkSearchIndexDirty()
+        if M.activeKey == "search" then RefreshSearchResultsPage() end
+    end)
+end
 
 M.RegisterPage("search", { title = "Search", build = BuildSearchPage, version = 1 })
 

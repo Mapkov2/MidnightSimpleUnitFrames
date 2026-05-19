@@ -105,6 +105,7 @@ function Read-LocalePairsFromText {
 }
 
 $keys = [System.Collections.Generic.HashSet[string]]::new()
+$tablePairPattern = '\{\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"'
 $patterns = @(
     '\b(?:W\.)?(?:Toggle|Slider|Dropdown|Segment|Button|LabelAt|Text)\s*\([^\n]*?"((?:[^"\\]|\\.)*)"',
     '\bW\.(?:ToggleAt|SliderAt|DropdownAt)\s*\(\s*[^,\r\n]+,\s*"((?:[^"\\]|\\.)*)"',
@@ -115,7 +116,7 @@ $patterns = @(
     '\b(?:\w+:)?Header\s*\(\s*"((?:[^"\\]|\\.)*)"',
     '\b(?:\w+:)?Header\s*\(\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
     'RegisterPage\s*\([^\n]*?title\s*=\s*"((?:[^"\\]|\\.)*)"',
-    '\{\s*"(?:(?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
+    $tablePairPattern,
     '\b(?:label|text|title|answer|tooltip|hint|summary|help|subtitle|caption|button[123])\s*=\s*"((?:[^"\\]|\\.)*)"',
     '\bM\.Tr\s*\(\s*"((?:[^"\\]|\\.)*)"',
     '\bM\.Format\s*\(\s*"((?:[^"\\]|\\.)*)"',
@@ -124,7 +125,11 @@ $patterns = @(
 
 Get-ChildItem -LiteralPath $menuRoot -Recurse -Filter "*.lua" | ForEach-Object {
     $text = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
-    foreach ($pattern in $patterns) {
+    $filePatterns = $patterns
+    if ($_.Name -eq "MSUF_Menu2_Search.lua") {
+        $filePatterns = @($patterns | Where-Object { $_ -ne $tablePairPattern })
+    }
+    foreach ($pattern in $filePatterns) {
         foreach ($match in [regex]::Matches($text, $pattern)) {
             Add-Key $keys $match.Groups[1].Value
         }
