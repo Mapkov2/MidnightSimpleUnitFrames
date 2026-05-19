@@ -141,6 +141,7 @@ local PARTY_DEFAULTS = {
     -- Name truncation
     nameMaxChars      = 0,     -- 0 = unlimited
     nameNoEllipsis    = false,
+    hideNameOnDeadOffline = false,
     -- Font style/color (font family is global)
     fontOutline       = nil,
     useGlobalFontColor = true,
@@ -421,6 +422,10 @@ end
 GF.PARTY_DEFAULTS = PARTY_DEFAULTS
 GF.RAID_DEFAULTS  = RAID_DEFAULTS
 GF.MYTHIC_RAID_DEFAULTS = MYTHIC_RAID_DEFAULTS
+
+function GF.ShouldShowNameText(frame, conf)
+    return conf and conf.showName ~= false and not (frame and frame._msufGFNameHiddenForStatus == true)
+end
 
 ------------------------------------------------------------------------
 -- Grid metrics (stored position = GRID CENTER)

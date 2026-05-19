@@ -284,6 +284,7 @@ local function _GFInstallAttrHook(child)
             self._msufGFNameText           = nil
             self._msufGFNameClass          = nil
             self._msufGFNameColorKey       = nil
+            self._msufGFNameHiddenForStatus = nil
             self._msufGFStatusState        = nil
             self._msufGFStatusDirty        = nil
             if GF.ResetStatusIconCaches then GF.ResetStatusIconCaches(self) end
@@ -1118,7 +1119,7 @@ local function LayoutText(f, kind)
             f.nameText:SetJustifyH("LEFT")
         end
         f.nameText:SetWordWrap(false)
-        if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
+        if GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then f.nameText:Show() else f.nameText:Hide() end
     end
     -- 3-slot health text
     local hpTextOn = conf.showHPText ~= false
@@ -1437,7 +1438,7 @@ function GF.UpdateButton(f, unit)
     end
 
     -- Name (with color mode + truncation)
-    if f.nameText and conf.showName ~= false then
+    if f.nameText and GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then
         local name = UnitName(unit) or ""
         local maxC, noEllipsis, clipSide = GF.ResolveNameTruncation(kind)
         if maxC > 0 then
@@ -2961,10 +2962,11 @@ function GF.ApplyPreviewData(f, index, kind)
     local name = PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
     local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
     f._msufGFPreviewRole = role
+    f._msufGFNameHiddenForStatus = nil
     local hpPct = 0.3 + (index * 0.15) % 0.7
 
     -- Name (with color + truncation)
-    if f.nameText and conf.showName ~= false then
+    if f.nameText and GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then
         local displayName = name
         local maxC, noEllipsis, clipSide = GF.ResolveNameTruncation(kind or "party")
         if maxC > 0 then

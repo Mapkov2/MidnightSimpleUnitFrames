@@ -1309,7 +1309,7 @@ local function ApplyTextLayout(f, kind)
             f.nameText:SetJustifyH("LEFT")
         end
         f.nameText:SetWordWrap(false)
-        if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
+        if GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then f.nameText:Show() else f.nameText:Hide() end
     end
 
     -- 3-slot health text

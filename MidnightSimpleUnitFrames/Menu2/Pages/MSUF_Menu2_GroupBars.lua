@@ -530,12 +530,13 @@ local function BuildGFBars(ctx)
     local powerTab = MakeTabFrame("power")
     local advancedTab = MakeTabFrame("advanced")
 
-    local nameContent = TextCard(nameTab, "Name text", "Controls whether names are shown on group frames.", textLeftX, -4, textCardW, 116)
+    local nameContent = TextCard(nameTab, "Name text", "Controls whether names are shown on group frames.", textLeftX, -4, textCardW, 158)
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
 
     local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", textCardW - 62, -24, 0, "HIDDEN"), "showName", true, "font")
+    local hideNameOnStatus = BindScopeToggle(ctx, W.ToggleAt(nameContent, "Hide name on dead/offline", 16, -104, textCardW - 32), "hideNameOnDeadOffline", false, "visual")
 
-    local namePosition = TextCard(nameTab, "Position", nil, textLeftX, -136, textCardW, 260)
+    local namePosition = TextCard(nameTab, "Position", nil, textLeftX, -178, textCardW, 260)
     local nameAnchor = BindScopeDropdown(ctx, W.Dropdown(namePosition, "Anchor", ANCHORS, textDropW), "nameAnchor", "LEFT", "geometry")
     local nameX = BindScopeSlider(ctx, W.Slider(namePosition, "X Offset", -100, 100, 1, textSliderW), "nameOffsetX", 0, "geometry")
     local nameY = BindScopeSlider(ctx, W.Slider(namePosition, "Y Offset", -100, 100, 1, textSliderW), "nameOffsetY", 0, "geometry")
@@ -706,7 +707,7 @@ local function BuildGFBars(ctx)
         end
         if tabs and tabs.SetValue then tabs:SetValue(tab) end
         scopeLabel:SetText(M.Format(M.Tr("Editing %s"), ScopeDisplayName()))
-        SetOptionsEnabled({ nameSize, nameAnchor, nameX, nameY, nameLayer }, nameOn)
+        SetOptionsEnabled({ hideNameOnStatus, nameSize, nameAnchor, nameX, nameY, nameLayer }, nameOn)
         SetOptionsEnabled({ healthLeft, healthCenter, healthRight, healthDelimiter, reverseHP, healthSize, healthX, healthY, hpMoveTogether, hpLayer }, hpOn)
         SetOptionsEnabled({ hpSlot, hpSlotX, hpSlotY }, hpOn and not MoveTogether("hp"))
         SetOptionsEnabled({ powerLeft, powerCenter, powerRight, powerDelimiter, powerSize, powerX, powerY, powerMoveTogether, powerLayer }, powerOn)

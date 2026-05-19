@@ -1882,6 +1882,10 @@ function GF.BuildFrameCache(f)
 
     -- Name display
     c.nameEn = conf.showName ~= false
+    c.hideNameOnDeadOffline = conf.hideNameOnDeadOffline == true
+    if not c.hideNameOnDeadOffline then
+        f._msufGFNameHiddenForStatus = nil
+    end
     c.nameMaxChars, c.nameNoEllipsis, c.nameClipSide = GF.ResolveNameTruncation(kind)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     c.nameStyleKey = tostring(c.nameEn) .. "\001"
@@ -2947,6 +2951,24 @@ local function ApplyStatusTextStateLayout(f, conf, state)
 end
 GF.ApplyStatusTextStateLayout = ApplyStatusTextStateLayout
 
+function GF.ShouldHideNameForStatusState(f, conf, state)
+    if state ~= 1 and state ~= 2 and state ~= 3 then return false end
+    local c = f and f._c
+    if c then return c.hideNameOnDeadOffline == true end
+    return conf and conf.hideNameOnDeadOffline == true
+end
+
+function GF.ApplyNameStatusVisibility(f, conf, state)
+    if not (f and f.nameText) then return end
+    local hideName = GF.ShouldHideNameForStatusState(f, conf, state)
+    f._msufGFNameHiddenForStatus = hideName or nil
+    if GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then
+        f.nameText:Show()
+    else
+        f.nameText:Hide()
+    end
+end
+
 local function UpdateStatusText(f, unit, forceAway)
     local st = f._msufGFStatusText or f.statusIndicatorText
     if not st then return end
@@ -2961,7 +2983,7 @@ local function UpdateStatusText(f, unit, forceAway)
             st:SetText("")
             st:Hide()
             _GF_RestoreHealthText(f, conf)
-            if f.nameText then f.nameText:Show() end
+            GF.ApplyNameStatusVisibility(f, conf, 0)
         end
         return
     end
@@ -2987,7 +3009,7 @@ local function UpdateStatusText(f, unit, forceAway)
             st:SetText("")
             st:Hide()
             _GF_RestoreHealthText(f, conf)
-            if f.nameText then f.nameText:Show() end
+            GF.ApplyNameStatusVisibility(f, conf, 0)
         end
         return
     end
@@ -3085,7 +3107,10 @@ local function UpdateStatusText(f, unit, forceAway)
     end
 
     -- Diff-gate: only update text/colors when state actually changes
-    if newState == f._msufGFStatusState then return end
+    if newState == f._msufGFStatusState then
+        GF.ApplyNameStatusVisibility(f, conf, newState)
+        return
+    end
     f._msufGFStatusState = newState
 
     if newState == 0 then
@@ -3125,6 +3150,7 @@ local function UpdateStatusText(f, unit, forceAway)
         st:Show()
         _GF_HideHealthText(f)
     end
+    GF.ApplyNameStatusVisibility(f, conf, newState)
 end
 
 ------------------------------------------------------------------------
