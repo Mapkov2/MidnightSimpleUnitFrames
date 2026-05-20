@@ -4,10 +4,31 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.4 Beta 6",
-    previousVersion = "5.4 Beta 5",
-    rangeLabel = "5.4 Beta 5 -> 5.4 Beta 6",
+    currentVersion = "5.4 Beta 7",
+    previousVersion = "5.4 Beta 6",
+    rangeLabel = "5.4 Beta 6 -> 5.4 Beta 7",
     entries = {
+        {
+            version = "5.4 Beta 7",
+            date = "2026-05-20",
+            sections = {
+                {
+                    title = "Beta Release",
+                    bullets = {
+                        "Rebuilt Unit Frame and Group Frame dispel visual priority around one visible Highlight Priority order, keeping Dispel, Aggro, Purge, Boss Target, Target, and Focus as the user-facing priority lanes.",
+                        "Collapsed legacy Magic, Curse, Disease, Poison, and Bleed custom sorting into the single Dispel visual lane so older profiles no longer keep hidden debuff-type priority state.",
+                        "Force-migrated old Unit Frame and Group Frame overlay/debuff priority settings across saved profiles, including stale overlay priority toggles and ordering tables.",
+                        "Kept Dispel Border and Dispel Overlay independently enabled and configured while sharing the same resolved debuff winner, so border-only, overlay-only, and combined setups use one consistent priority result.",
+                        "Fixed renderer-independent Group Frame dispel highlights so MSUF can still scan and draw priority visuals when Blizzard owns aura icons, while custom aura rendering uses the same priority path.",
+                        "Added shared strata/frame-level helpers and separate effect layers for highlight borders, dispel overlays, and debuff stripes so active visual lanes stack predictably.",
+                        "Improved live combat refresh for dispel visuals by tracking priority-relevant aura changes, aura cache versions, Bleed enum/fallback resolution, and coalesced refresh queues.",
+                        "Reduced redundant Unit Frame and Group Frame border/overlay work by avoiding duplicate scans when trigger, priority, and cache signatures match.",
+                        "Simplified the UnitFrame and GroupFrame Dispel Overlay menus by removing separate overlay priority controls while keeping trigger, style, health-only, opacity, and independent enable toggles.",
+                        "Updated the Group Frames > Health & Text navigation tooltip so it points users to health colors, bars, power bar, text, Dispel Overlay, Debuff Stripe, and Range Fade.",
+                    },
+                },
+            },
+        },
         {
             version = "5.4 Beta 6",
             date = "2026-05-20",
@@ -83,26 +104,6 @@ local data = {
                         "Improved status icon texture handling across aura previews, aura rendering, healer buffs, spell indicators, focus kick icons, and dropdown previews so replacement packs are used consistently.",
                         "Improved Group Frame heal prediction and absorb test mode so Bars test rendering updates overlay bars without unnecessary live prediction reads while out of combat.",
                         "Refactored low-risk runtime paths for aura commits, target-swap visuals, gameplay apply scheduling, crosshair target callbacks, and boss castbar event registration.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.4 Beta 2",
-            date = "2026-05-19",
-            sections = {
-                {
-                    title = "Beta Release",
-                    bullets = {
-                        "Added per-indicator icon pack selection for Unit Frame and Group Frame status indicators.",
-                        "Added Group Frame options to hide name text while units are dead or offline.",
-                        "Moved heal prediction controls into the Bars pages so Unit Frame and Group Frame bar configuration is grouped consistently.",
-                        "Added a global Bar Outline Color for Unit Frames and Group Frames while keeping aggro, purge, dispel, and other indicator colors independent.",
-                        "Improved Unit Frame bar outlines so detached, active, and pixel-snapped outline borders render consistently.",
-                        "Improved Group Frame bar outline rendering so preview and live frames use the same outside-outline behavior as Unit Frames.",
-                        "Fixed Unit Frame range alpha background bleed when layered alpha state changes.",
-                        "Fixed Sated aura threshold filters so aura rule changes stay fresh.",
-                        "Fixed a Group Frame preview upvalue warning.",
                     },
                 },
             },
