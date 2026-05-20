@@ -4083,7 +4083,7 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         { id = "frame_basics", terms = { "frame basics", "enable", "disable", "width", "height", "scale", "frame size", "smooth fill", "health animation" } },
         { id = "anchoring", terms = { "anchoring", "anchor", "position", "x offset", "y offset", "custom anchor", "global anchor" } },
         { id = "text", terms = { "text", "name text", "hp text", "health text", "power text", "font size", "text anchor", "text position", "draw order", "text layer" } },
-        { id = "inline_text", terms = { "inline text", "target of target text", "tot text" } },
+        { id = "inline_text", terms = { "inline text", "inline color", "target of target text", "tot text", "tot color", "npc color", "npc type color" } },
         { id = "transparency", terms = { "transparency", "transparent", "alpha", "opacity", "fade", "in combat alpha", "out of combat alpha" } },
         { id = "portrait", terms = { "portrait", "class icon", "2d portrait", "3d portrait", "avatar", "face" } },
         { id = "power_bar", terms = { "power bar", "mana bar", "energy bar", "rage bar", "power height", "power smooth fill" } },
