@@ -974,28 +974,30 @@ end
         if maxW > 180 then maxW = 180 end
     end
     txt:SetWidth(maxW)
-    local r, gCol, b = 1, 1, 1
-    if F.UnitIsPlayer and F.UnitIsPlayer("targettarget") then
-        local useClass = false
-        local g = MSUF_DB and MSUF_DB.general
-        if g and g.nameClassColor then useClass = true end
-        -- Per-unit font override (e.g. Target tab "Override shared settings")
-        local tkey = targetFrame and targetFrame.msufConfigKey
-        if tkey then
-            local uconf = MSUF_DB and MSUF_DB[tkey]
-            if uconf and uconf.fontOverride then
-                local ov = uconf.nameClassColor
-                if ov ~= nil then useClass = ov end
-            end
-        end
-        if useClass then
-            local _, classToken = F.UnitClass("targettarget")
-            r, gCol, b = MSUF_GetClassBarColor(classToken)
-        else
-            r, gCol, b = 1, 1, 1
+    local r, gCol, b
+    local resolveInlineColor = _G.MSUF_UFCore_ResolveToTInlineTextColor
+    if type(resolveInlineColor) == "function" then
+        r, gCol, b = resolveInlineColor(targetFrame, totConf, false)
     end
-    else
-        if F.UnitIsDeadOrGhost and F.UnitIsDeadOrGhost("targettarget") then
+    if r == nil then
+        r, gCol, b = 1, 1, 1
+        if F.UnitIsPlayer and F.UnitIsPlayer("targettarget") then
+            local useClass = false
+            local g = MSUF_DB and MSUF_DB.general
+            if g and g.nameClassColor then useClass = true end
+            local tkey = targetFrame and targetFrame.msufConfigKey
+            if tkey then
+                local uconf = MSUF_DB and MSUF_DB[tkey]
+                if uconf and uconf.fontOverride then
+                    local ov = uconf.nameClassColor
+                    if ov ~= nil then useClass = ov end
+                end
+            end
+            if useClass then
+                local _, classToken = F.UnitClass("targettarget")
+                r, gCol, b = MSUF_GetClassBarColor(classToken)
+            end
+        elseif F.UnitIsDeadOrGhost and F.UnitIsDeadOrGhost("targettarget") then
             r, gCol, b = _ToTInlineNPCColor("dead")
         else
             local reaction = F.UnitReaction and F.UnitReaction("player", "targettarget")
@@ -1010,7 +1012,7 @@ end
             else
                 r, gCol, b = _ToTInlineNPCColor("enemy")
             end
-    end
+        end
     end
     sep:SetTextColor(0.7, 0.7, 0.7)
     txt:SetTextColor(r, gCol, b)

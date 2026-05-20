@@ -39,6 +39,18 @@ local UF_COPY_CATEGORIES = UP.UF_COPY_CATEGORIES or {}
 
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
 local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
+local TOT_INLINE_COLOR_AUTO = "AUTO"
+local TOT_INLINE_COLOR_TOT_NAME = "TOT_NAME"
+local TOT_INLINE_COLOR_TARGET_NAME = "TARGET_NAME"
+local TOT_INLINE_COLOR_NPC = "NPC"
+local TOT_INLINE_COLOR_DEFAULT = "DEFAULT"
+local TOT_INLINE_COLOR_VALUES = {
+    [TOT_INLINE_COLOR_AUTO] = true,
+    [TOT_INLINE_COLOR_TOT_NAME] = true,
+    [TOT_INLINE_COLOR_TARGET_NAME] = true,
+    [TOT_INLINE_COLOR_NPC] = true,
+    [TOT_INLINE_COLOR_DEFAULT] = true,
+}
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_BG = { 0.105, 0.082, 0.052, 0.44 }
 local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
@@ -137,6 +149,16 @@ local function ToTInlineSeparatorDropdownValue(conf)
     return "|"
 end
 
+local function NormalizeToTInlineColorMode(value)
+    value = tostring(value or "")
+    if TOT_INLINE_COLOR_VALUES[value] then return value end
+    return TOT_INLINE_COLOR_AUTO
+end
+
+local function ToTInlineColorDropdownValue(conf)
+    return NormalizeToTInlineColorMode(conf and conf.totInlineColorMode)
+end
+
 local function PortraitClassStyleValues()
     local PM = ns and ns.PortraitMedia
     local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {
@@ -200,6 +222,36 @@ local NormalizeAlphaMode = UP.NormalizeAlphaMode
 local AlphaModeValue = UP.AlphaModeValue
 local NormalizeBossLayoutMode = UP.NormalizeBossLayoutMode
 local UpdateLoadActive = UP.UpdateLoadActive
+
+local function ToTInlineNPCColorAvailable()
+    local fn = _G.MSUF_UFCore_IsToTInlineNPCColorModeAvailable
+    if type(fn) == "function" then return fn() == true end
+
+    local db = _G.MSUF_DB
+    local gen = db and db.general
+    local wantNpc = gen and gen.npcNameRed
+    local conf = GetConf("targettarget")
+    if conf and conf.fontOverride and conf.npcNameRed ~= nil then
+        wantNpc = conf.npcNameRed
+    end
+    if wantNpc ~= true then return false end
+    if not gen then return false end
+    if gen.npcColorMode ~= "type" then return false end
+    if gen.npcTypeColorText == false then return false end
+    if gen.npcTypeToT == false then return false end
+    return true
+end
+
+local function ToTInlineColorOptions()
+    local npcAvailable = ToTInlineNPCColorAvailable()
+    return {
+        { value = TOT_INLINE_COLOR_AUTO, text = "Auto" },
+        { value = TOT_INLINE_COLOR_TOT_NAME, text = "ToT Name Color" },
+        { value = TOT_INLINE_COLOR_TARGET_NAME, text = "Target Name Color" },
+        { value = TOT_INLINE_COLOR_NPC, text = "NPC / Type Color", disabled = not npcAvailable },
+        { value = TOT_INLINE_COLOR_DEFAULT, text = "Default (Font Color)" },
+    }
+end
 
 local function ForEachPageControl(parent, callback)
     if not (parent and parent.GetChildren and type(callback) == "function") then return end
@@ -1655,7 +1707,7 @@ end
 local function BuildInlineText(ctx, builder, unit)
     if unit ~= "target" then return end
 
-    local sec = builder:CollapsibleSection("inline_text", "Inline Text", 164, false)
+    local sec = builder:CollapsibleSection("inline_text", "Inline Text", 214, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local rightX = math.max(260, floor(sectionW * 0.52))
     local rightW = math.min(220, math.max(140, sectionW - rightX - 28))
@@ -1677,7 +1729,23 @@ local function BuildInlineText(ctx, builder, unit)
             if RefreshInlineControlState then RefreshInlineControlState() end
         end)
 
+    local color = W.Dropdown(sec, "Inline color", ToTInlineColorOptions, rightW)
+    W.MoveWidget(color, sec, rightX, -72, rightW)
+    M.BindDropdown(ctx, color,
+        function() return ToTInlineColorDropdownValue(GetConf("targettarget")) end,
+        function(v)
+            local conf = GetConf("targettarget")
+            conf.totInlineColorMode = NormalizeToTInlineColorMode(v)
+            M.RequestUnitApply("target", "MSUF2_TOT_INLINE_COLOR", { text = true, preview = true })
+            M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_COLOR", { text = true, preview = true })
+            Call("MSUF_ToTInline_RequestRefresh", "MSUF2_TOT_INLINE_COLOR")
+            Call("MSUF_UpdateTargetToTInlineNow")
+            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_COLOR")
+            if RefreshInlineControlState then RefreshInlineControlState() end
+        end)
+
     local sep = W.Dropdown(sec, "Inline separator", TOT_INLINE_SEPARATOR_OPTIONS, 170)
+    W.MoveWidget(sep, sec, 14, -124, 170)
     M.BindDropdown(ctx, sep,
         function() return ToTInlineSeparatorDropdownValue(GetConf("targettarget")) end,
         function(v)
@@ -1697,7 +1765,7 @@ local function BuildInlineText(ctx, builder, unit)
         end)
 
     local customSep = W.TextInput(sec, "Custom separator", rightW)
-    W.MoveWidget(customSep, sec, rightX, -102, rightW)
+    W.MoveWidget(customSep, sec, rightX, -124, rightW)
     if customSep.SetMaxLetters then customSep:SetMaxLetters(TOT_INLINE_CUSTOM_SEPARATOR_MAX) end
     M.BindTextInput(ctx, customSep,
         function()
@@ -1726,8 +1794,23 @@ local function BuildInlineText(ctx, builder, unit)
         true)
 
     RefreshInlineControlState = function()
-        local isCustom = ToTInlineSeparatorDropdownValue(GetConf("targettarget")) == TOT_INLINE_CUSTOM_SEPARATOR
-        SetControlEnabled(customSep, isCustom)
+        local conf = GetConf("targettarget")
+        local enabled = GetConf("targettarget").showToTInTargetName == true
+        local npcAvailable = ToTInlineNPCColorAvailable()
+        if conf.totInlineColorMode == TOT_INLINE_COLOR_NPC and not npcAvailable then
+            conf.totInlineColorMode = TOT_INLINE_COLOR_AUTO
+            M.RequestUnitApply("target", "MSUF2_TOT_INLINE_COLOR_AUTO", { text = true, preview = true })
+            M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_COLOR_AUTO", { text = true, preview = true })
+            Call("MSUF_ToTInline_RequestRefresh", "MSUF2_TOT_INLINE_COLOR_AUTO")
+            Call("MSUF_UpdateTargetToTInlineNow")
+            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_COLOR_AUTO")
+        end
+        local isCustom = ToTInlineSeparatorDropdownValue(conf) == TOT_INLINE_CUSTOM_SEPARATOR
+        SetControlEnabled(color, enabled)
+        SetControlEnabled(sep, enabled)
+        SetControlEnabled(customSep, enabled and isCustom)
+        if color.SetValues then color:SetValues(ToTInlineColorOptions()) end
+        if color.SetValue then color:SetValue(ToTInlineColorDropdownValue(conf)) end
     end
     M.AddRefresher(ctx, RefreshInlineControlState)
     RefreshInlineControlState()

@@ -2108,6 +2108,7 @@ local function fill(key, defaults)
     -- Keep the default as the legacy behavior (" | ") by storing the token "|".
     if MSUF_DB.targettarget.totInlineSeparator == nil then MSUF_DB.targettarget.totInlineSeparator = "|" end
     if MSUF_DB.targettarget.totInlineCustomSeparator == nil then MSUF_DB.targettarget.totInlineCustomSeparator = "" end
+    if MSUF_DB.targettarget.totInlineColorMode == nil then MSUF_DB.targettarget.totInlineColorMode = "AUTO" end
     for k, v in pairs(textDefaults) do
         if MSUF_DB.targettarget[k] == nil then MSUF_DB.targettarget[k] = v end
     end
