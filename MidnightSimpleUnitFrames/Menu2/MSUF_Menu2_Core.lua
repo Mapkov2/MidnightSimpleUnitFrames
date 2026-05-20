@@ -867,8 +867,16 @@ local GF_PAGE_KEYS = {
     gf_indicators = true,
 }
 
+local GF_BAR_MENU_PREVIEW_KEYS = {
+    opt_bars = true,
+}
+
 local function IsGroupPageKey(key)
     return GF_PAGE_KEYS[key or ""] == true
+end
+
+local function IsGFBarMenuPreviewKey(key)
+    return GF_BAR_MENU_PREVIEW_KEYS[key or ""] == true
 end
 
 local function ResetStatusIndicatorTestModeOnMenuExit()
@@ -932,6 +940,17 @@ local function GFPreviewCount(kind)
     return 5
 end
 
+local function ShowGFBarMenuPreviews(gf)
+    if not gf then return end
+    gf.ShowPreview("party", GFPreviewCount("party"))
+    gf.ShowPreview("raid", GFPreviewCount("raid"))
+    gf.HidePreview("mythicraid")
+    if type(gf.RefreshPreviewLayout) == "function" then
+        gf.RefreshPreviewLayout("party")
+        gf.RefreshPreviewLayout("raid")
+    end
+end
+
 local function SetGFPagePreviewFlag(active, kind)
     _G.MSUF2_GFPagePreviewActive = active and true or nil
     _G.MSUF2_GFPagePreviewKind = active and kind or nil
@@ -965,9 +984,10 @@ local function SyncGroupPagePreviewForKey(key, force)
     end
 
     local frameVisible = M.frame and M.frame.IsShown and M.frame:IsShown()
-    local active = frameVisible and IsGroupPageKey(key)
+    local barMenuPreviews = IsGFBarMenuPreviewKey(key)
+    local active = frameVisible and (IsGroupPageKey(key) or barMenuPreviews)
     local gf = ns and ns.GF
-    local kind = CurrentGFMenuScope()
+    local kind = barMenuPreviews and "bars" or CurrentGFMenuScope()
     local editMode = IsEditModeActive() and true or false
     local hasRuntime = gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function"
     if not force
@@ -984,7 +1004,7 @@ local function SyncGroupPagePreviewForKey(key, force)
     lastGFPreviewRuntime = hasRuntime
 
     if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then
-        _G.MSUF_GF_EM2_SetActivePreviewKind(active and kind or nil)
+        _G.MSUF_GF_EM2_SetActivePreviewKind((active and not barMenuPreviews) and kind or nil)
     end
 
     if editMode then
@@ -1019,6 +1039,10 @@ local function SyncGroupPagePreviewForKey(key, force)
         gf.SetPreviewAnchor("party", nil)
         gf.SetPreviewAnchor("raid", nil)
         gf.SetPreviewAnchor("mythicraid", nil)
+    end
+    if barMenuPreviews then
+        ShowGFBarMenuPreviews(gf)
+        return
     end
     if kind ~= "party" then gf.HidePreview("party") end
     if kind ~= "raid" then gf.HidePreview("raid") end
@@ -1516,15 +1540,22 @@ local function BuildNav(parent)
     M.navGroupForKey = {}
     M.navHeaderState = M.navHeaderState or {}
     local search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    search:SetPoint("TOPLEFT", parent, "TOPLEFT", 8, -8)
-    search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -8, -8)
-    search:SetHeight(20)
+    search:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -8)
+    search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -10, -8)
+    search:SetHeight(18)
     search:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 1) + 20)
     search:EnableMouse(true)
     search:SetAutoFocus(false)
     search:SetMaxLetters(60)
     search:SetTextInsets(6, 22, 0, 0)
     T.SkinEditBox(search)
+    if T.CreateSuperellipseLayers then
+        local fill, edge = T.CreateSuperellipseLayers(search, "_msuf2SearchEdit", 2, "BACKGROUND", "BORDER")
+        search._msuf2RoundedEditFill = fill
+        search._msuf2RoundedEditEdge = edge
+        search._msuf2RoundedEditColor = { 0.020, 0.024, 0.046, 0.96 }
+        if search._msuf2PaintEditBox then search:_msuf2PaintEditBox(false) end
+    end
     local placeholder = search.Instructions
     if not (placeholder and placeholder.SetText and placeholder.SetPoint) then
         placeholder = search:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -1561,8 +1592,8 @@ local function BuildNav(parent)
         if intro then return intro end
 
         intro = T.Panel(parent, nil, { 0.030, 0.042, 0.085, 0.980 }, T.colors.accent)
-        intro:SetPoint("TOPLEFT", search, "BOTTOMLEFT", 0, -6)
-        intro:SetPoint("TOPRIGHT", search, "BOTTOMRIGHT", 0, -6)
+        intro:SetPoint("TOPLEFT", search, "BOTTOMLEFT", -2, -6)
+        intro:SetPoint("TOPRIGHT", search, "BOTTOMRIGHT", 2, -6)
         intro:SetHeight(96)
         intro:SetFrameLevel(search:GetFrameLevel() + 6)
         intro:EnableMouse(true)

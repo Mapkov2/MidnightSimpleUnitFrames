@@ -736,6 +736,25 @@ function T.SkinEditBox(editBox)
     local function PaintEditBox(self, focused)
         local enabled = not (self.IsEnabled and not self:IsEnabled())
         local alpha = enabled and 1 or 0.45
+        local roundedFill = self._msuf2RoundedEditFill
+        local roundedEdge = self._msuf2RoundedEditEdge
+        if roundedFill and roundedEdge then
+            local bg = self._msuf2RoundedEditColor or { 0.018, 0.024, 0.050, 0.98 }
+            roundedFill:SetVertexColor(bg[1] or 0.018, bg[2] or 0.024, bg[3] or 0.050, (bg[4] or 0.98) * alpha)
+            local c = focused and T.colors.accent or T.colors.borderSoft
+            local a = focused and 0.95 or 0.78
+            roundedEdge:SetVertexColor(c[1], c[2], c[3], a * alpha)
+            if self.SetBackdropColor then self:SetBackdropColor(0, 0, 0, 0) end
+            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0, 0, 0, 0) end
+            if self._msuf2EditBg and self._msuf2EditBg.Hide then self._msuf2EditBg:Hide() end
+            local edges = self._msuf2EditEdges
+            if edges then
+                for i = 1, #edges do
+                    if edges[i].Hide then edges[i]:Hide() end
+                end
+            end
+            return
+        end
         if self._msuf2EditBg then self._msuf2EditBg:SetColorTexture(0.018, 0.024, 0.050, 0.98 * alpha) end
         local c = focused and T.colors.accent or T.colors.borderSoft
         local a = focused and 0.95 or 0.78
@@ -751,13 +770,13 @@ function T.SkinEditBox(editBox)
     T.StyleFontString(fs, T.colors.text, 1)
     editBox:HookScript("OnEditFocusGained", function(self)
         PaintEditBox(self, true)
-        if self.SetBackdropBorderColor then
+        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then
             self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
     end)
     editBox:HookScript("OnEditFocusLost", function(self)
         PaintEditBox(self, false)
-        if self.SetBackdropBorderColor then
+        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then
             self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1)
         end
     end)

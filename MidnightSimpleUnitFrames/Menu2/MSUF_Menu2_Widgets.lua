@@ -582,6 +582,9 @@ local function CreateToggle(section, label, x, y, labelWidth)
     SetSearchText(btn._msuf2Label, label)
     btn._msuf2Label:SetPoint("LEFT", btn, "RIGHT", 6, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
+    if not labelWidth and section and section._msuf2Width then
+        labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - 44)
+    end
     if labelWidth then btn._msuf2Label:SetWidth(labelWidth) end
     btn.text = btn._msuf2Label
     if T.StyleCheckmark then T.StyleCheckmark(btn) end
@@ -721,6 +724,9 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(labelFS, label)
     labelFS:SetJustifyH(side == "LEFT" and "RIGHT" or "LEFT")
+    if not labelWidth and section and section._msuf2Width then
+        labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - switchW - 30)
+    end
     if labelWidth then labelFS:SetWidth(max(20, labelWidth - (side == "RIGHT" and 22 or 0))) end
     if side == "LEFT" then
         labelFS:SetPoint("RIGHT", btn, "LEFT", -8, 0)
@@ -952,6 +958,9 @@ function W.SetControlShown(control, shown)
             control._msuf2StepButtons[i]:SetShown(shown)
         end
     end
+    if shown and control._msuf2SetLayoutWidth then
+        control:_msuf2SetLayoutWidth(control._msuf2RowWidth or control._msuf2RequestedWidth)
+    end
 end
 
 local function SetEnabledState(frame, enabled)
@@ -1097,8 +1106,8 @@ local function ClampPlacedControlWidth(widget, parent, x)
 
     if kind == "slider" and widget._msuf2SetLayoutWidth then
         local requested = widget._msuf2RequestedWidth or widget._msuf2RowWidth or 280
-        local minWidth = widget._msuf2MinRowWidth or 160
-        widget:_msuf2SetLayoutWidth(min(requested, max(minWidth, available)))
+        local minWidth = widget._msuf2MinRowWidth or 48
+        widget:_msuf2SetLayoutWidth(max(minWidth, min(requested, available)))
         return
     end
 
@@ -1373,12 +1382,14 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     local stepButtonW = 18
     local editW = 52
     local minTrackW = 96
+    local compactMinTrackW = 48
+    local sliderH = 22
     local valueClusterW = valueGap + stepButtonW + buttonGap + editW + buttonGap + stepButtonW
+    local compactValueClusterW = valueGap + editW
     width = width or 280
     if section and section._msuf2Width then
         local available = section._msuf2Width - x - 14
-        local maxSliderW = max(minTrackW + valueClusterW, available)
-        if width > maxSliderW then width = maxSliderW end
+        if available > 0 and width > available then width = max(72, available) end
     end
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(title, label)
@@ -1392,7 +1403,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider._msuf2ControlKind = "slider"
     RegisterSearchObject(slider, label, "slider", { anchor = title })
     slider:SetPoint("TOPLEFT", x, y - 22)
-    slider:SetSize(max(minTrackW, width - valueClusterW), 16)
+    slider:SetSize(max(compactMinTrackW, width - valueClusterW), sliderH)
     if slider.EnableMouse then slider:EnableMouse(true) end
     slider:SetMinMaxValues(minVal or 0, maxVal or 1)
     slider:SetValueStep(step or 1)
@@ -1400,7 +1411,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     if slider.SetStepsPerPage then slider:SetStepsPerPage(1) end
     slider._msuf2Step = step or 1
     slider._msuf2RequestedWidth = width
-    slider._msuf2MinRowWidth = minTrackW + valueClusterW
+    slider._msuf2MinRowWidth = compactMinTrackW
     HideSliderTemplateParts(slider)
     if T.StyleSlider then T.StyleSlider(slider) end
 
@@ -1442,18 +1453,37 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     function slider:_msuf2SetLayoutWidth(totalWidth)
         totalWidth = tonumber(totalWidth) or width or 280
         self._msuf2RowWidth = totalWidth
-        local trackW = max(minTrackW, floor(totalWidth - valueClusterW + 0.5))
+        local tiny = totalWidth < (compactMinTrackW + compactValueClusterW)
+        local compact = tiny or totalWidth < (minTrackW + valueClusterW)
+        local clusterW = tiny and 0 or (compact and compactValueClusterW or valueClusterW)
+        local trackMin = compact and compactMinTrackW or minTrackW
+        local trackW = max(trackMin, floor(totalWidth - clusterW + 0.5))
         if title then
-            title:SetWidth(trackW)
+            title:SetWidth(max(trackW, floor(totalWidth + 0.5)))
             if title.SetJustifyH then title:SetJustifyH(self._msuf2TitleJustify or "LEFT") end
         end
-        self:SetSize(trackW, 16)
+        self:SetSize(trackW, sliderH)
         minus:ClearAllPoints()
-        minus:SetPoint("LEFT", self, "RIGHT", valueGap, 0)
+        if compact then
+            minus:Hide()
+        else
+            minus:Show()
+            minus:SetPoint("LEFT", self, "RIGHT", valueGap, 0)
+        end
         edit:ClearAllPoints()
-        edit:SetPoint("LEFT", minus, "RIGHT", buttonGap, 0)
+        if tiny then
+            edit:Hide()
+        else
+            edit:Show()
+            edit:SetPoint("LEFT", compact and self or minus, "RIGHT", compact and valueGap or buttonGap, 0)
+        end
         plus:ClearAllPoints()
-        plus:SetPoint("LEFT", edit, "RIGHT", buttonGap, 0)
+        if compact then
+            plus:Hide()
+        else
+            plus:Show()
+            plus:SetPoint("LEFT", edit, "RIGHT", buttonGap, 0)
+        end
         UpdateFill()
     end
     slider:_msuf2SetLayoutWidth(width)
