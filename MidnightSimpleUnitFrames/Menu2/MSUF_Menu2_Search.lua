@@ -2026,9 +2026,7 @@ function M.RegisterSearchWidget(widget, meta)
         help = meta.help or meta.description,
     }
     SEARCH_STATE.registry[id] = entry
-    if BuildRegistrySearchRecord then
-        SEARCH_STATE.registryRecords[id] = BuildRegistrySearchRecord(entry)
-    end
+    SEARCH_STATE.registryRecords[id] = nil
     MarkSearchIndexDirty()
 end
 

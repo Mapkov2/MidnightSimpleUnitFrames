@@ -692,8 +692,14 @@ local function SetTitle(key)
     if not frame then return end
     local spec = M.pages[key]
     local title = (spec and spec.title) or "MSUF"
-    frame.title:SetText(M.Tr(title))
-    if frame.subtitle then frame.subtitle:SetText("") end
+    if frame._msuf2TitleKey ~= title then
+        frame._msuf2TitleKey = title
+        frame.title:SetText(M.Tr(title))
+    end
+    if frame.subtitle and frame._msuf2SubtitleText ~= "" then
+        frame._msuf2SubtitleText = ""
+        frame.subtitle:SetText("")
+    end
     if frame.RefreshStatus then frame:RefreshStatus() end
 end
 
@@ -768,12 +774,21 @@ local function UpdateNav(key)
     local localeKey = CurrentMenuLocaleKey()
     local labelsDirty = M._msuf2NavLocaleKey ~= localeKey
     M._msuf2NavLocaleKey = localeKey
-    for pageKey, btn in pairs(M.navButtons) do
-        if labelsDirty and btn._msuf2RawLabel and btn.SetText then
-            btn:SetText(M.Tr(btn._msuf2RawLabel))
+    local previousKey = M._msuf2NavActiveKey
+    if labelsDirty then
+        for pageKey, btn in pairs(M.navButtons) do
+            if btn._msuf2RawLabel and btn.SetText then
+                btn:SetText(M.Tr(btn._msuf2RawLabel))
+            end
+            if btn.SetActive then btn:SetActive(pageKey == key) end
         end
-        if btn.SetActive then btn:SetActive(pageKey == key) end
+    elseif previousKey ~= key then
+        local previous = previousKey and M.navButtons[previousKey]
+        if previous and previous.SetActive then previous:SetActive(false) end
+        local current = key and M.navButtons[key]
+        if current and current.SetActive then current:SetActive(true) end
     end
+    M._msuf2NavActiveKey = key
     if labelsDirty and M.navHeaders then
         for _, btn in pairs(M.navHeaders) do
             if btn._msuf2RawLabel and btn.SetText then
@@ -1224,14 +1239,15 @@ function M.SelectPage(key)
     M.activeKey = key
     if key ~= "search" then M.PersistMenuStateValue("lastPage", key) end
     if M.frame then M.frame._msufCurrentKey = key end
-    if M.scrollFrame and M.scrollFrame.SetVerticalScroll then
-        M.scrollFrame:SetVerticalScroll(0)
-    end
     if M.scrollChild then
         M.scrollChild:SetHeight(entry.height or CONTENT_H)
     end
-    if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then
-        M.scrollFrame:_msuf2RefreshScrollBar()
+    if M.scrollFrame then
+        if M.scrollFrame.SetVerticalScroll then
+            M.scrollFrame:SetVerticalScroll(0)
+        elseif M.scrollFrame._msuf2RefreshScrollBar then
+            M.scrollFrame:_msuf2RefreshScrollBar()
+        end
     end
     entry.wrapper:Show()
     RunRefreshers(entry)
@@ -2266,22 +2282,41 @@ local function BuildWindow()
     function f:RefreshStatus()
         local profile = tostring(_G.MSUF_ActiveProfile or "Default")
         local edit = IsEditModeActive() and "On" or "Off"
-        sbProfile:SetText("|cff4a90d9" .. L_PROFILE .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r")
-        if edit == "On" then
-            sbEdit:SetText("|cff4ade80" .. L_EDIT_ON .. "|r  |cff3a4a66\194\183|r")
-        else
-            sbEdit:SetText("|cff5a6a88" .. L_EDIT_OFF .. "|r  |cff3a4a66\194\183|r")
+        local profileText = "|cff4a90d9" .. L_PROFILE .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r"
+        if status._msuf2ProfileText ~= profileText then
+            status._msuf2ProfileText = profileText
+            sbProfile:SetText(profileText)
         end
-        if _G.InCombatLockdown and _G.InCombatLockdown() then
-            sbCombat:SetText("|cffef4444" .. L_IN_COMBAT .. "|r")
+        local editText
+        if edit == "On" then
+            editText = "|cff4ade80" .. L_EDIT_ON .. "|r  |cff3a4a66\194\183|r"
         else
-            sbCombat:SetText("|cff22c55e" .. L_OUT_OF_COMBAT .. "|r")
+            editText = "|cff5a6a88" .. L_EDIT_OFF .. "|r  |cff3a4a66\194\183|r"
+        end
+        if status._msuf2EditText ~= editText then
+            status._msuf2EditText = editText
+            sbEdit:SetText(editText)
+        end
+        local combatText
+        if _G.InCombatLockdown and _G.InCombatLockdown() then
+            combatText = "|cffef4444" .. L_IN_COMBAT .. "|r"
+        else
+            combatText = "|cff22c55e" .. L_OUT_OF_COMBAT .. "|r"
+        end
+        if status._msuf2CombatText ~= combatText then
+            status._msuf2CombatText = combatText
+            sbCombat:SetText(combatText)
         end
         local ver = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
+        local versionText
         if type(ver) == "string" and ver ~= "" then
-            sbVersion:SetText(ver:match("^%d") and ("v" .. ver) or ver)
+            versionText = ver:match("^%d") and ("v" .. ver) or ver
         else
-            sbVersion:SetText("v5.0 Beta 1")
+            versionText = "v5.0 Beta 1"
+        end
+        if status._msuf2VersionText ~= versionText then
+            status._msuf2VersionText = versionText
+            sbVersion:SetText(versionText)
         end
         RefreshDashboardEditModeButton()
     end
