@@ -77,8 +77,8 @@ end
 
 
 local function SearchPlaceholderText()
-    local text = M.Tr("Search")
-    if type(text) ~= "string" or text == "" then text = "Search" end
+    local text = M.Tr("Search or ask")
+    if type(text) ~= "string" or text == "" then text = "Search or ask" end
     return text .. "..."
 end
 
@@ -3282,7 +3282,7 @@ local function StartSearchBackgroundIndex()
 
     local function Step()
         if not SEARCH_STATE.indexing then return end
-        if SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then
+        if M.activeKey ~= "search" or SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then
             CancelSearchBackgroundIndex()
             return
         end

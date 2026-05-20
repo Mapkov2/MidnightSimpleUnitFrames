@@ -244,6 +244,7 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     colorsCPToken = "COMBO_POINTS",
     profileExportKind = "all",
     profileImportCreateNew = false,
+    searchIntroSeen = false,
     dashboardChangelogOpen = false,
     dashboardRecoveryOpen = false,
     dashboardScalingOpen = false,
@@ -1188,6 +1189,11 @@ function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
     key = ALIASES[key or ""] or key or "home"
+    if key ~= "search" then
+        BumpSearchInputSerial()
+        CancelSearchBackgroundIndex()
+        M.searchResultsPending = nil
+    end
     local spec = M.pages[key]
     local cached = M.cache[key]
     local specVersion = spec and spec.version
@@ -1520,12 +1526,80 @@ local function BuildNav(parent)
     search._msuf2SearchPlaceholder = placeholder
     UpdateSearchPlaceholder(search)
     parent.searchBox = search
+
+    local function HideSearchIntro()
+        local intro = parent._msuf2SearchIntro
+        if intro and intro.Hide then intro:Hide() end
+    end
+
+    local function MarkSearchIntroSeen()
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("searchIntroSeen", true)
+        else
+            M.searchIntroSeen = true
+        end
+    end
+
+    local function EnsureSearchIntro()
+        local intro = parent._msuf2SearchIntro
+        if intro then return intro end
+
+        intro = T.Panel(parent, nil, { 0.030, 0.042, 0.085, 0.980 }, T.colors.accent)
+        intro:SetPoint("TOPLEFT", search, "BOTTOMLEFT", 0, -6)
+        intro:SetPoint("TOPRIGHT", search, "BOTTOMRIGHT", 0, -6)
+        intro:SetHeight(96)
+        intro:SetFrameLevel(search:GetFrameLevel() + 6)
+        intro:EnableMouse(true)
+        intro:Hide()
+
+        local title = T.Font(intro, "GameFontNormalSmall", "Ask questions here too", T.colors.text)
+        title:SetPoint("TOPLEFT", intro, "TOPLEFT", 10, -10)
+        title:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -26, -10)
+        title:SetJustifyH("LEFT")
+
+        local body = T.Font(intro, "GameFontDisableSmall", "Try: \"where do I move raid frames\" or \"make text bigger\".", T.colors.muted)
+        body:SetPoint("TOPLEFT", intro, "TOPLEFT", 10, -32)
+        body:SetWidth(NAV_W - 36)
+        body:SetWordWrap(true)
+        body:SetJustifyH("LEFT")
+
+        local foot = T.Font(intro, "GameFontDisableSmall", "Press Enter to open the best match.", T.colors.dim)
+        foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 10, 10)
+        foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -10, 10)
+        foot:SetJustifyH("LEFT")
+
+        local close = CreateFrame("Button", nil, intro)
+        close:SetSize(18, 18)
+        close:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -4, -4)
+        local closeText = T.Font(close, "GameFontDisableSmall", "x", T.colors.dim)
+        closeText:SetPoint("CENTER", close, "CENTER", 0, 0)
+        close:SetScript("OnEnter", function() closeText:SetTextColor(1, 1, 1, 0.95) end)
+        close:SetScript("OnLeave", function() T.StyleFontString(closeText, T.colors.dim, 0) end)
+        close:SetScript("OnClick", HideSearchIntro)
+
+        parent._msuf2SearchIntro = intro
+        return intro
+    end
+
+    local function ShowSearchIntro()
+        if M.searchIntroSeen == true then return end
+        local intro = EnsureSearchIntro()
+        intro:Show()
+        MarkSearchIntroSeen()
+        if _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(10, function()
+                if intro and intro.Hide then intro:Hide() end
+            end)
+        end
+    end
+
     search:SetScript("OnMouseDown", function(self, button)
         if button == "LeftButton" then self:SetFocus() end
     end)
     search:HookScript("OnEditFocusGained", function(self)
         if self.HighlightText then self:HighlightText() end
         UpdateSearchPlaceholder(self)
+        if TrimText(self:GetText() or "") == "" then ShowSearchIntro() end
     end)
     search:HookScript("OnEditFocusLost", function(self)
         if self.HighlightText then self:HighlightText(0, 0) end
@@ -1535,9 +1609,11 @@ local function BuildNav(parent)
         UpdateSearchPlaceholder(self)
         if self._msuf2SearchInternal then return end
         local query = TrimText(self:GetText() or "")
+        if query ~= "" then HideSearchIntro() end
         ScheduleSearchInputQuery(self, query)
     end)
     search:SetScript("OnEnterPressed", function(self)
+        HideSearchIntro()
         local query = TrimText(self:GetText() or "")
         if query == "" then
             self:ClearFocus()
@@ -1557,6 +1633,7 @@ local function BuildNav(parent)
         end
     end)
     search:SetScript("OnEscapePressed", function(self)
+        HideSearchIntro()
         self._msuf2SearchInternal = true
         self:SetText("")
         self._msuf2SearchInternal = nil
@@ -1573,6 +1650,7 @@ local function BuildNav(parent)
     clearText:SetPoint("CENTER", clear, "CENTER", 0, 0)
     clear:Hide()
     clear:SetScript("OnClick", function()
+        HideSearchIntro()
         search._msuf2SearchInternal = true
         search:SetText("")
         search._msuf2SearchInternal = nil
