@@ -2445,12 +2445,32 @@ function M.RefreshGFNativePreviews()
     end
 end
 
+local GF_PREVIEW_NOTE = "Preview updates live here. Enter MSUF Edit Mode to drag the group container. Blizzard-controlled aura blocks can be previewed but not dragged."
+
+local function GFPreviewIntroMetrics(width)
+    local maxContentW = tonumber(M.formContentMaxWidth) or 980
+    local contentW = min(maxContentW, max(320, tonumber(width) or 720))
+    local translated = (M.Tr and M.Tr(GF_PREVIEW_NOTE)) or GF_PREVIEW_NOTE
+    local noteW = max(220, contentW - 28)
+    local charsPerLine = max(42, floor(noteW / 5.6))
+    local lines = max(1, floor(((#tostring(translated or "") + charsPerLine - 1) / charsPerLine)))
+    lines = min(lines, 4)
+
+    local noteTop = 38
+    local noteLineH = 14
+    local noteGap = 10
+    local boxY = -(noteTop + (lines * noteLineH) + noteGap)
+    local contentH = max(362, -boxY + 300 + 14)
+    return contentH, boxY
+end
+
 local function AddGFPreview(ctx, builder)
-    local body = builder:CollapsibleSection("gf_preview_native", "Hide Preview", 362, true)
+    local sectionH, boxY = GFPreviewIntroMetrics(builder and builder.width or ctx and ctx.width)
+    local body = builder:CollapsibleSection("gf_preview_native", "Hide Preview", sectionH, true)
     if W and W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(body, "Hide Preview", "Show Preview") end
-    W.Text(body, "Preview updates live here. Enter MSUF Edit Mode to drag the group container. Blizzard-controlled aura blocks can be previewed but not dragged.", 14, -38, (body._msuf2Width or 720) - 28, T.colors.muted)
+    W.Text(body, GF_PREVIEW_NOTE, 14, -38, (body._msuf2Width or 720) - 28, T.colors.muted)
     local box = CreateNativeGFPreview(body, ctx, OpenGFSection)
-    box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, -48)
+    box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, boxY)
     box:Show()
     local function RefreshThisPreview()
         if type(SetSectionHeaderStatus) == "function" then
