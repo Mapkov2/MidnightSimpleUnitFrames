@@ -77,9 +77,9 @@ end
 
 
 local function SearchPlaceholderText()
-    local text = M.Tr("Search or ask")
-    if type(text) ~= "string" or text == "" then text = "Search or ask" end
-    return text .. "..."
+    local text = M.Tr("Search")
+    if type(text) ~= "string" or text == "" then text = "Search" end
+    return text .. " / Ask..."
 end
 
 local function SearchBoxHasText(searchBox)

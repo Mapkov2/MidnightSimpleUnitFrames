@@ -1189,7 +1189,7 @@ function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
     key = ALIASES[key or ""] or key or "home"
-    if key ~= "search" then
+    if key ~= "search" and M.activeKey == "search" then
         BumpSearchInputSerial()
         CancelSearchBackgroundIndex()
         M.searchResultsPending = nil
