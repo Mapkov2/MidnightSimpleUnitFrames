@@ -174,11 +174,11 @@ local GFHighlightUsesTypeLane, GFDispelOverlayUsesTypeLane
 
 local function ResolveDispelColorObj(f, dispelName, useOverlay)
     local kind = (f and f._msufGFKind) or "party"
-    local mode = GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE")
+    local c = f and f._c
+    local mode = (c and c.hlDispelColorMode) or GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE")
     local fallbackType = GetReadableDispelTypeName(dispelName)
     local typedPriorityLane = false
     if fallbackType and fallbackType ~= "DISPELLABLE" then
-        local c = f and f._c
         if useOverlay then
             typedPriorityLane = type(GFDispelOverlayUsesTypeLane) == "function"
                 and GFDispelOverlayUsesTypeLane(kind, c) == true
@@ -202,9 +202,9 @@ local function ResolveDispelColorObj(f, dispelName, useOverlay)
             if tr then return nil, tr, tg, tb end
         end
         return nil,
-            GFDispelColorScopeValue(kind, "hlDispelColorR", "dispelBorderColorR", 0.25),
-            GFDispelColorScopeValue(kind, "hlDispelColorG", "dispelBorderColorG", 0.75),
-            GFDispelColorScopeValue(kind, "hlDispelColorB", "dispelBorderColorB", 1.00)
+            (c and c.dispelR) or GFDispelColorScopeValue(kind, "hlDispelColorR", "dispelBorderColorR", 0.25),
+            (c and c.dispelG) or GFDispelColorScopeValue(kind, "hlDispelColorG", "dispelBorderColorG", 0.75),
+            (c and c.dispelB) or GFDispelColorScopeValue(kind, "hlDispelColorB", "dispelBorderColorB", 1.00)
     end
 
     -- TYPE mode: resolve Color object via shared dispel color curve.
@@ -525,6 +525,9 @@ end
 
 local function GFOverlayPriorityState(kind, c)
     if not c then return false, nil end
+    if c.dispelOverlayCustomTypePriority ~= nil then
+        return c.dispelOverlayCustomTypePriority == true, c.dispelOverlayPrioOrder
+    end
     local enabled = c.hlPrioEnabled
     if enabled == nil then enabled = HLVal(kind, "hlPrioEnabled") end
     local order = c.hlPrioOrder
@@ -535,6 +538,9 @@ end
 local function GFDispelTypePriorityState(kind, c, useOverlayPriority)
     if useOverlayPriority then
         return GFOverlayPriorityState(kind, c)
+    end
+    if c and c.dispelBorderCustomTypePriority ~= nil then
+        return c.dispelBorderCustomTypePriority == true, c.dispelBorderPrioOrder
     end
     local enabled = c and c.hlPrioEnabled
     if enabled == nil then enabled = HLVal(kind, "hlPrioEnabled") end
@@ -547,8 +553,14 @@ local function GFDispelTypePriorityState(kind, c, useOverlayPriority)
 end
 
 local function GFDispelScanPriorityConfig(kind, c, useOverlayPriority)
+    if c then
+        local enabled = useOverlayPriority and c.dispelOverlayPriorityScan or c.dispelBorderPriorityScan
+        if enabled ~= nil then
+            return enabled == true, useOverlayPriority and c.dispelOverlayPrioOrder or c.dispelBorderPrioOrder
+        end
+    end
     local customEnabled, order = GFDispelTypePriorityState(kind, c, useOverlayPriority)
-    local typeColorMode = GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE") == "TYPE"
+    local typeColorMode = ((c and c.hlDispelColorMode) or GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE")) == "TYPE"
     local customTypeOrder = customEnabled and GFPrioOrderHasDispelTypeKey(order)
     if not typeColorMode and not customTypeOrder then
         return false, order
@@ -557,6 +569,10 @@ local function GFDispelScanPriorityConfig(kind, c, useOverlayPriority)
 end
 
 local function GFDispelScanCustomTypePriorityEnabled(kind, c, useOverlayPriority)
+    if c then
+        local enabled = useOverlayPriority and c.dispelOverlayCustomTypePriority or c.dispelBorderCustomTypePriority
+        if enabled ~= nil then return enabled == true end
+    end
     local enabled, order = GFDispelTypePriorityState(kind, c, useOverlayPriority)
     return enabled and GFPrioOrderHasDispelTypeKey(order)
 end
@@ -568,9 +584,18 @@ end
 
 local function GFDispelScanResolveType(kind, c, triggerMode, useOverlayPriority)
     triggerMode = GF.NormalizeDispelBorderTrigger(triggerMode)
+    if c then
+        if useOverlayPriority then
+            if c.dispelOverlayTrigger == triggerMode and c.dispelOverlayResolveType ~= nil then
+                return c.dispelOverlayResolveType == true
+            end
+        elseif c.dispelBorderTrigger == triggerMode and c.dispelBorderResolveType ~= nil then
+            return c.dispelBorderResolveType == true
+        end
+    end
     return GFDispelScanPriorityEnabled(kind, c, useOverlayPriority)
         or triggerMode == "DISPEL_TYPE"
-        or GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE") == "TYPE"
+        or ((c and c.hlDispelColorMode) or GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE")) == "TYPE"
 end
 
 local function GFDispelTypePriorityRank(kind, c, dispelType, useOverlayPriority, forceDefaultOrder)
@@ -626,12 +651,16 @@ local _GF_PRIORITY_SIGNATURE = {
 }
 
 local function GFDispelScanPrioritySignature(kind, c, useOverlayPriority)
+    if c then
+        local sig = useOverlayPriority and c.dispelOverlayPrioritySig or c.dispelBorderPrioritySig
+        if sig ~= nil then return sig end
+    end
     local enabled, order = GFDispelScanPriorityConfig(kind, c, useOverlayPriority)
     local sig = enabled and 1 or 0
     if useOverlayPriority and GFOverlayUsesOwnPriority(c) then
         sig = sig + 10
     end
-    if GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE") == "TYPE" then
+    if ((c and c.hlDispelColorMode) or GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE")) == "TYPE" then
         sig = sig + 20
     end
     if type(order) == "table" then
@@ -640,6 +669,28 @@ local function GFDispelScanPrioritySignature(kind, c, useOverlayPriority)
         end
     end
     return sig
+end
+
+local function GFDispelCachedPriorityEnabled(kind, c, useOverlayPriority)
+    if c then
+        local enabled = useOverlayPriority and c.dispelOverlayPriorityScan or c.dispelBorderPriorityScan
+        if enabled ~= nil then return enabled == true end
+    end
+    return GFDispelScanPriorityEnabled(kind, c, useOverlayPriority)
+end
+
+local function GFDispelCachedResolveType(kind, c, triggerMode, useOverlayPriority)
+    if c then
+        triggerMode = GF.NormalizeDispelBorderTrigger(triggerMode)
+        if useOverlayPriority then
+            if c.dispelOverlayTrigger == triggerMode and c.dispelOverlayResolveType ~= nil then
+                return c.dispelOverlayResolveType == true
+            end
+        elseif c.dispelBorderTrigger == triggerMode and c.dispelBorderResolveType ~= nil then
+            return c.dispelBorderResolveType == true
+        end
+    end
+    return GFDispelScanResolveType(kind, c, triggerMode, useOverlayPriority)
 end
 
 local _GF_LAYER_SINGLE_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget", "target", "focus" }
@@ -675,7 +726,7 @@ end
 GFHighlightUsesTypeLane = function(kind, c)
     local enabled = c and (c.hlPrioEnabled == true or c.hlPrioEnabled == 1)
     local order = enabled and c and c.hlPrioOrder or nil
-    return GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE") == "TYPE"
+    return ((c and c.hlDispelColorMode) or GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE")) == "TYPE"
         or (enabled and GFPrioOrderHasTypeKey(order))
 end
 
@@ -686,7 +737,7 @@ end
 local function GFHighlightLayerOffset(kind, c, layerKind, dispelType)
     local enabled = c and (c.hlPrioEnabled == true or c.hlPrioEnabled == 1)
     local order = enabled and c and c.hlPrioOrder or nil
-    local typeMode = GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE") == "TYPE"
+    local typeMode = ((c and c.hlDispelColorMode) or GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE")) == "TYPE"
         or (enabled and GFPrioOrderHasTypeKey(order))
     local allowed = typeMode and _GF_LAYER_TYPE_ALLOWED or _GF_LAYER_SINGLE_ALLOWED
     local defaults = typeMode and _GF_LAYER_TYPE_DEFAULTS or _GF_LAYER_SINGLE_DEFAULTS
@@ -1136,8 +1187,10 @@ local function dispatchAura(f, unit, updateInfo)
     -- PERF: use pre-cached flags from BuildFrameCache (was GF.GetConf per event)
     local aurasOn = c.anyAuraGrp
     local priorityWinnerScan = GF.DispelScanActive(c)
-        and (GFDispelScanPriorityEnabled(kind, c, false)
-            or GFDispelScanCustomTypePriorityEnabled(kind, c, false))
+        and (GFDispelCachedPriorityEnabled(kind, c, false)
+            or GFDispelScanCustomTypePriorityEnabled(kind, c, false)
+            or GFDispelCachedPriorityEnabled(kind, c, true)
+            or GFDispelScanCustomTypePriorityEnabled(kind, c, true))
     local winnerDelta = priorityWinnerScan and updateInfo and not updateInfo.isFullUpdate
         and ((updateInfo.addedAuras and #updateInfo.addedAuras > 0)
             or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0))
@@ -1975,8 +2028,8 @@ GF.FindDispelBorderAura = function(unit, triggerMode, kind, c, useOverlayPriorit
     end
     local filter = (triggerMode == "ANY_DEBUFF" or triggerMode == "DISPEL_TYPE") and "HARMFUL" or _DISPEL_SCAN_FILTER
     local forceTypeRank = triggerMode == "DISPEL_TYPE" or triggerMode == "ANY_DEBUFF"
-    local ranked = GFDispelScanPriorityEnabled(kind, c, useOverlayPriority) or forceTypeRank
-    local resolveType = GFDispelScanResolveType(kind, c, triggerMode, useOverlayPriority)
+    local ranked = GFDispelCachedPriorityEnabled(kind, c, useOverlayPriority) or forceTypeRank
+    local resolveType = GFDispelCachedResolveType(kind, c, triggerMode, useOverlayPriority)
     local bestDispel, bestAid, bestRank = nil, nil, 1000
 
     if C_UnitAuras_GetAuraSlots and C_UnitAuras_GetAuraDataBySlot then
@@ -2148,25 +2201,50 @@ function GF._UpdateDispel(f, unit)
             borderNeedsScan = c.dispelBorderScanActive == true
         end
         local overlayNeedsScan = c and c.dispelOverlayScanActive == true
-        local sharedNeedsScan = borderNeedsScan or overlayNeedsScan
-        if sharedNeedsScan then
-            local sharedTrigger = borderNeedsScan and triggerMode or overlayTrigger
+        local canShareScan = borderNeedsScan and overlayNeedsScan
+            and triggerMode == overlayTrigger
+            and GFDispelScanPrioritySignature(kind, c, false) == GFDispelScanPrioritySignature(kind, c, true)
+            and GFDispelCachedResolveType(kind, c, triggerMode, false) == GFDispelCachedResolveType(kind, c, overlayTrigger, true)
+        if canShareScan then
             local sharedDispel, sharedAid, color
             if GF._FindFrameDispelAuraWithColor then
-                sharedDispel, sharedAid, color = GF._FindFrameDispelAuraWithColor(f, unit, sharedTrigger, false)
+                sharedDispel, sharedAid, color = GF._FindFrameDispelAuraWithColor(f, unit, triggerMode, false)
             else
-                sharedDispel, sharedAid = GF.FindDispelBorderAura(unit, sharedTrigger, kind, c, false)
+                sharedDispel, sharedAid = GF.FindDispelBorderAura(unit, triggerMode, kind, c, false)
                 if sharedAid and C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor and GF and GF._sharedDispelColorCurve then
                     color = C_UnitAuras.GetAuraDispelTypeColor(unit, sharedAid, GF._sharedDispelColorCurve)
                 end
             end
+            topDispel, topAid = sharedDispel, sharedAid
+            overlayDispel, overlayAid = sharedDispel, sharedAid
+            f._msufGFDispelColorObj = color
+            f._msufGFDispelColorRev = color and (_G.MSUF_ColorStyleRevision or 0) or nil
+            f._msufGFDispelOverlayColorObj = color
+            f._msufGFDispelOverlayColorRev = color and (_G.MSUF_ColorStyleRevision or 0) or nil
+        else
             if borderNeedsScan then
-                topDispel, topAid = sharedDispel, sharedAid
+                local color
+                if GF._FindFrameDispelAuraWithColor then
+                    topDispel, topAid, color = GF._FindFrameDispelAuraWithColor(f, unit, triggerMode, false)
+                else
+                    topDispel, topAid = GF.FindDispelBorderAura(unit, triggerMode, kind, c, false)
+                    if topAid and C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor and GF and GF._sharedDispelColorCurve then
+                        color = C_UnitAuras.GetAuraDispelTypeColor(unit, topAid, GF._sharedDispelColorCurve)
+                    end
+                end
                 f._msufGFDispelColorObj = color
                 f._msufGFDispelColorRev = color and (_G.MSUF_ColorStyleRevision or 0) or nil
             end
             if overlayNeedsScan then
-                overlayDispel, overlayAid = sharedDispel, sharedAid
+                local color
+                if GF._FindFrameDispelAuraWithColor then
+                    overlayDispel, overlayAid, color = GF._FindFrameDispelAuraWithColor(f, unit, overlayTrigger, true)
+                else
+                    overlayDispel, overlayAid = GF.FindDispelBorderAura(unit, overlayTrigger, kind, c, true)
+                    if overlayAid and C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor and GF and GF._sharedDispelColorCurve then
+                        color = C_UnitAuras.GetAuraDispelTypeColor(unit, overlayAid, GF._sharedDispelColorCurve)
+                    end
+                end
                 f._msufGFDispelOverlayColorObj = color
                 f._msufGFDispelOverlayColorRev = color and (_G.MSUF_ColorStyleRevision or 0) or nil
             end
@@ -2241,18 +2319,13 @@ function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
     local overlayScanActive = c and c.dispelOverlayScanActive == true
     local overlayTrigger = overlayScanActive and GF.ResolveDispelOverlayTrigger and GF.ResolveDispelOverlayTrigger(c) or triggerMode
     local borderPriorityScan = GFDispelScanPriorityEnabled(kind, c, false)
-    local overlayPriorityScan = GFDispelScanPriorityEnabled(kind, c, false)
+    local overlayPriorityScan = GFDispelScanPriorityEnabled(kind, c, true)
     local borderCustomTypePriority = triggerMode == "BY_ME" and GFDispelScanCustomTypePriorityEnabled(kind, c, false)
-    local overlayCustomTypePriority = overlayTrigger == "BY_ME" and GFDispelScanCustomTypePriorityEnabled(kind, c, false)
+    local overlayCustomTypePriority = overlayTrigger == "BY_ME" and GFDispelScanCustomTypePriorityEnabled(kind, c, true)
     local resolveType = GFDispelScanResolveType(kind, c, triggerMode, false)
-    local overlayResolveType = GFDispelScanResolveType(kind, c, overlayTrigger, false)
+    local overlayResolveType = GFDispelScanResolveType(kind, c, overlayTrigger, true)
     local borderWinnerScan = borderPriorityScan or borderCustomTypePriority
     local overlayWinnerScan = overlayPriorityScan or overlayCustomTypePriority
-    if (borderScanActive or overlayScanActive)
-        and updateInfo.addedAuras and #updateInfo.addedAuras > 0
-    then
-        return finishFull()
-    end
 
     local function addedAuraMatchesTrigger(aura, trigger, resolve, customTypePriority)
         local aid = aura and aura.auraInstanceID

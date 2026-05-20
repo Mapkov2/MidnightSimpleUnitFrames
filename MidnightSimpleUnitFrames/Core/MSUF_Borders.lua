@@ -1025,19 +1025,62 @@ end
 
 local function _UFDispelScanPriorityConfig(cfg, useOverlayPriority)
     if not cfg then return false, nil end
+    local serial = cfg.serial or 0
+    if useOverlayPriority then
+        if cfg._msufOverlayDispelPrioSerial == serial then
+            return cfg._msufOverlayDispelPrioEnabled == true, cfg._msufOverlayDispelPrioOrder
+        end
+    elseif cfg._msufBorderDispelPrioSerial == serial then
+        return cfg._msufBorderDispelPrioEnabled == true, cfg._msufBorderDispelPrioOrder
+    end
     local customEnabled, order = _G.MSUF_UFDispelTypePriorityState(cfg, useOverlayPriority)
     local typeColorMode = cfg.dispelColorMode == "TYPE"
     local customTypeOrder = customEnabled and _UFHighlightPriorityOrderHasDispelTypeKey(order)
     if not typeColorMode and not customTypeOrder then
+        if useOverlayPriority then
+            cfg._msufOverlayDispelPrioSerial = serial
+            cfg._msufOverlayDispelPrioEnabled = false
+            cfg._msufOverlayDispelPrioOrder = order
+        else
+            cfg._msufBorderDispelPrioSerial = serial
+            cfg._msufBorderDispelPrioEnabled = false
+            cfg._msufBorderDispelPrioOrder = order
+        end
         return false, order
     end
-    return true, customEnabled and order or nil
+    order = customEnabled and order or nil
+    if useOverlayPriority then
+        cfg._msufOverlayDispelPrioSerial = serial
+        cfg._msufOverlayDispelPrioEnabled = true
+        cfg._msufOverlayDispelPrioOrder = order
+    else
+        cfg._msufBorderDispelPrioSerial = serial
+        cfg._msufBorderDispelPrioEnabled = true
+        cfg._msufBorderDispelPrioOrder = order
+    end
+    return true, order
 end
 
 _UFDispelScanCustomTypePriorityEnabled = function(cfg, useOverlayPriority)
     if not cfg then return false end
+    local serial = cfg.serial or 0
+    if useOverlayPriority then
+        if cfg._msufOverlayDispelCustomSerial == serial then
+            return cfg._msufOverlayDispelCustomEnabled == true
+        end
+    elseif cfg._msufBorderDispelCustomSerial == serial then
+        return cfg._msufBorderDispelCustomEnabled == true
+    end
     local enabled, order = _G.MSUF_UFDispelTypePriorityState(cfg, useOverlayPriority)
-    return enabled and _UFHighlightPriorityOrderHasDispelTypeKey(order)
+    local customEnabled = enabled and _UFHighlightPriorityOrderHasDispelTypeKey(order) or false
+    if useOverlayPriority then
+        cfg._msufOverlayDispelCustomSerial = serial
+        cfg._msufOverlayDispelCustomEnabled = customEnabled
+    else
+        cfg._msufBorderDispelCustomSerial = serial
+        cfg._msufBorderDispelCustomEnabled = customEnabled
+    end
+    return customEnabled
 end
 
 local function _UFDispelScanPriorityEnabled(cfg, useOverlayPriority)
@@ -1103,6 +1146,16 @@ local _UF_PRIORITY_SIGNATURE = {
 }
 
 local function _UFDispelScanPrioritySignature(cfg, useOverlayPriority)
+    if cfg then
+        local serial = cfg.serial or 0
+        if useOverlayPriority then
+            if cfg._msufOverlayDispelPrioSigSerial == serial and cfg._msufOverlayDispelPrioSig ~= nil then
+                return cfg._msufOverlayDispelPrioSig
+            end
+        elseif cfg._msufBorderDispelPrioSigSerial == serial and cfg._msufBorderDispelPrioSig ~= nil then
+            return cfg._msufBorderDispelPrioSig
+        end
+    end
     local enabled, order = _UFDispelScanPriorityConfig(cfg, useOverlayPriority)
     local sig = enabled and 1 or 0
     if useOverlayPriority and _UFOverlayUsesOwnPriority(cfg) then
@@ -1114,6 +1167,16 @@ local function _UFDispelScanPrioritySignature(cfg, useOverlayPriority)
     if type(order) == "table" then
         for i = 1, #order do
             sig = sig * 11 + (_UF_PRIORITY_SIGNATURE[_UFNormalizePriorityKey(order[i])] or 0)
+        end
+    end
+    if cfg then
+        local serial = cfg.serial or 0
+        if useOverlayPriority then
+            cfg._msufOverlayDispelPrioSigSerial = serial
+            cfg._msufOverlayDispelPrioSig = sig
+        else
+            cfg._msufBorderDispelPrioSigSerial = serial
+            cfg._msufBorderDispelPrioSig = sig
         end
     end
     return sig
@@ -3107,16 +3170,21 @@ do
         local dispelAid, dispelType
         local overlayAid, overlayType
         local borderNeedsScan = dispelEnabled and _UnitCanScanDispelTriggerVisual(unit, dispelTrigger, cfg, false)
-        local overlayNeedsScan = overlayEnabled and _UnitCanScanDispelTriggerVisual(unit, overlayTrigger, cfg, false)
-        local sharedNeedsScan = borderNeedsScan or overlayNeedsScan
-        if sharedNeedsScan then
-            local sharedTrigger = borderNeedsScan and dispelTrigger or overlayTrigger
-            local sharedOn, sharedAid, sharedType = HasDispellableDebuff(unit, sharedTrigger, cfg, false)
+        local overlayNeedsScan = overlayEnabled and _UnitCanScanDispelTriggerVisual(unit, overlayTrigger, cfg, true)
+        local canShareScan = borderNeedsScan and overlayNeedsScan
+            and dispelTrigger == overlayTrigger
+            and _UFDispelScanPrioritySignature(cfg, false) == _UFDispelScanPrioritySignature(cfg, true)
+            and _UFDispelScanResolveType(cfg, false, dispelTrigger) == _UFDispelScanResolveType(cfg, true, overlayTrigger)
+        if canShareScan then
+            local sharedOn, sharedAid, sharedType = HasDispellableDebuff(unit, dispelTrigger, cfg, false)
+            dispelOn, dispelAid, dispelType = sharedOn, sharedAid, sharedType
+            overlayOn, overlayAid, overlayType = sharedOn, sharedAid, sharedType
+        else
             if borderNeedsScan then
-                dispelOn, dispelAid, dispelType = sharedOn, sharedAid, sharedType
+                dispelOn, dispelAid, dispelType = HasDispellableDebuff(unit, dispelTrigger, cfg, false)
             end
             if overlayNeedsScan then
-                overlayOn, overlayAid, overlayType = sharedOn, sharedAid, sharedType
+                overlayOn, overlayAid, overlayType = HasDispellableDebuff(unit, overlayTrigger, cfg, true)
             end
         end
 
@@ -3217,7 +3285,7 @@ do
         end
         if _DispelBorderTriggerNeedsPlayerDispel(mode)
             and not PlayerMayFriendlyDispel()
-            and not _UFDispelScanCustomTypePriorityEnabled(cfg, false)
+            and not _UFDispelScanCustomTypePriorityEnabled(cfg, true)
         then
             return false, mode
         end
@@ -3240,11 +3308,11 @@ do
             end
             if overlayWants and _DispelBorderTriggerNeedsPlayerDispel(overlayMode)
                 and not PlayerMayFriendlyDispel()
-                and not _UFDispelScanCustomTypePriorityEnabled(cfg, false)
+                and not _UFDispelScanCustomTypePriorityEnabled(cfg, true)
             then
                 overlayWants = false
             end
-            return (borderWants or overlayWants), borderWants and borderMode or nil, overlayWants and overlayMode or nil
+            return (borderWants or overlayWants), borderWants and borderMode or nil, overlayWants and overlayMode or nil, uf, cfg
         end
 
         local borderWants, borderMode = UnitWantsFriendlyDispelBorder(unit)
@@ -3331,17 +3399,19 @@ do
         return true
     end
 
-    local function UpdateInfoMayAffectFriendlyDispel(unit, updateInfo)
+    local function UpdateInfoMayAffectFriendlyDispel(unit, updateInfo, unitWants, borderTriggerMode, overlayTriggerMode, uf, cfg)
         if type(updateInfo) ~= "table" or updateInfo.isFullUpdate then return true end
-        local unitWants, borderTriggerMode, overlayTriggerMode = UnitWantsFriendlyDispelVisual(unit)
+        if unitWants == nil then
+            unitWants, borderTriggerMode, overlayTriggerMode, uf, cfg = UnitWantsFriendlyDispelVisual(unit)
+        end
         if not unitWants then return false end
-        local uf = _ResolveUnitFrame(unit)
-        local cfg = uf and _RefreshBorderSettingsForFrame(uf)
+        uf = uf or _ResolveUnitFrame(unit)
+        cfg = cfg or (uf and _RefreshBorderSettingsForFrame(uf))
         local priorityScan = cfg and (
             (borderTriggerMode and _UFDispelScanPriorityEnabled(cfg, false))
-            or (overlayTriggerMode and _UFDispelScanPriorityEnabled(cfg, false))
+            or (overlayTriggerMode and _UFDispelScanPriorityEnabled(cfg, true))
             or (borderTriggerMode and _UFDispelScanCustomTypePriorityEnabled(cfg, false))
-            or (overlayTriggerMode and _UFDispelScanCustomTypePriorityEnabled(cfg, false))
+            or (overlayTriggerMode and _UFDispelScanCustomTypePriorityEnabled(cfg, true))
         )
         if priorityScan then
             return true
@@ -3422,14 +3492,12 @@ do
             if not _dispelAuraWant or _dispelAuraQueued[unit] then return end
             local shouldQueue = false
             if _friendlyDispelAuraWant then
-                local unitWants, borderMode, overlayMode = UnitWantsFriendlyDispelVisual(unit)
-                local uf = unitWants and _ResolveUnitFrame(unit) or nil
-                local cfg = uf and _RefreshBorderSettingsForFrame(uf)
+                local unitWants, borderMode, overlayMode, uf, cfg = UnitWantsFriendlyDispelVisual(unit)
                 if unitWants
                     and ((borderMode and _UnitCanScanDispelTriggerVisual(unit, borderMode, cfg, false))
-                        or (overlayMode and _UnitCanScanDispelTriggerVisual(unit, overlayMode, cfg, false)))
+                        or (overlayMode and _UnitCanScanDispelTriggerVisual(unit, overlayMode, cfg, true)))
                 then
-                    shouldQueue = UpdateInfoMayAffectFriendlyDispel(unit, updateInfo)
+                    shouldQueue = UpdateInfoMayAffectFriendlyDispel(unit, updateInfo, unitWants, borderMode, overlayMode, uf, cfg)
                 end
             end
             if not shouldQueue and _purgeAuraWant and unit ~= "player" and UnitCanAttack and UnitCanAttack("player", unit) then

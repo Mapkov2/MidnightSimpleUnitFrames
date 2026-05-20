@@ -307,6 +307,10 @@ function GF.BuildFrameCache(f)
     c.dispelBorderTrigger = GF.NormalizeDispelBorderTrigger(HLValCached(conf, gen, "dispelBorderTrigger"))
     c.hlPrioEnabled = HLPrioEnabledCached(conf, gen)
     c.hlPrioOrder = c.hlPrioEnabled and HLPrioOrderCached(conf, gen) or nil
+    c.hlDispelColorMode = HLColorCached(conf, gen, "hlDispelColorMode", nil, "SINGLE")
+    c.dispelR = HLColorCached(conf, gen, "hlDispelColorR", "dispelBorderColorR", 0.25)
+    c.dispelG = HLColorCached(conf, gen, "hlDispelColorG", "dispelBorderColorG", 0.75)
+    c.dispelB = HLColorCached(conf, gen, "hlDispelColorB", "dispelBorderColorB", 1.00)
     c.targetEn  = HLValCached(conf, gen, "hlTargetEnabled") ~= false
     c.focusEn   = conf.hlFocusEnabled ~= false
     c.aggroSize = HLValCached(conf, gen, "hlAggroSize") or 2
@@ -382,10 +386,36 @@ function GF.BuildFrameCache(f)
 
     local overlayTrigger = (GF.ResolveDispelOverlayTrigger and GF.ResolveDispelOverlayTrigger(c)) or c.dispelBorderTrigger
     c.dispelOverlayTrigger = overlayTrigger
-    local borderCustomTypePriority = GF.DispelScanCustomTypePriorityEnabled
+    c.dispelBorderCustomTypePriority = GF.DispelScanCustomTypePriorityEnabled
         and GF.DispelScanCustomTypePriorityEnabled(kind, c, false) == true
-    local overlayCustomTypePriority = GF.DispelScanCustomTypePriorityEnabled
+        or false
+    c.dispelOverlayCustomTypePriority = GF.DispelScanCustomTypePriorityEnabled
         and GF.DispelScanCustomTypePriorityEnabled(kind, c, true) == true
+        or false
+    c.dispelBorderPrioOrder = c.dispelBorderCustomTypePriority and c.hlPrioOrder or nil
+    c.dispelOverlayPrioOrder = c.dispelOverlayCustomTypePriority and c.hlPrioOrder or nil
+    c.dispelBorderPriorityScan = GF.DispelScanPriorityEnabled
+        and GF.DispelScanPriorityEnabled(kind, c, false) == true
+        or false
+    c.dispelOverlayPriorityScan = GF.DispelScanPriorityEnabled
+        and GF.DispelScanPriorityEnabled(kind, c, true) == true
+        or false
+    c.dispelBorderPrioritySig = GF.DispelScanPrioritySignature
+        and GF.DispelScanPrioritySignature(kind, c, false)
+        or 0
+    c.dispelOverlayPrioritySig = GF.DispelScanPrioritySignature
+        and GF.DispelScanPrioritySignature(kind, c, true)
+        or 0
+    c.dispelBorderResolveType = GF.DispelScanResolveType
+        and GF.DispelScanResolveType(kind, c, c.dispelBorderTrigger, false) == true
+        or false
+    c.dispelOverlayResolveType = GF.DispelScanResolveType
+        and GF.DispelScanResolveType(kind, c, overlayTrigger, true) == true
+        or false
+    local borderCustomTypePriority = GF.DispelScanCustomTypePriorityEnabled
+        and c.dispelBorderCustomTypePriority == true
+    local overlayCustomTypePriority = GF.DispelScanCustomTypePriorityEnabled
+        and c.dispelOverlayCustomTypePriority == true
     local borderTriggerAllowed = not GF.DispelBorderTriggerNeedsPlayerDispel(c.dispelBorderTrigger)
         or GF._playerCanDispel
         or borderCustomTypePriority

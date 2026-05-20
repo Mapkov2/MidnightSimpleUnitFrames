@@ -455,9 +455,18 @@ function GF._ResolveFrameOverlayDispelTrigger(f)
 end
 
 function GF._OverlayCanReuseBorderDispelScan(f, overlayTrigger, borderTrigger)
-    -- Runtime now has one shared debuff winner. The caller may reuse the border
-    -- result when both consumers are active; independent on/off toggles remain.
-    return true
+    if not f then return false end
+    overlayTrigger = GF.NormalizeDispelBorderTrigger(overlayTrigger)
+    borderTrigger = GF.NormalizeDispelBorderTrigger(borderTrigger)
+    if overlayTrigger ~= borderTrigger then return false end
+    local kind = f._msufGFKind or "party"
+    local c = f._c
+    local borderSig = GF.DispelScanPrioritySignature and GF.DispelScanPrioritySignature(kind, c, false) or 0
+    local overlaySig = GF.DispelScanPrioritySignature and GF.DispelScanPrioritySignature(kind, c, true) or 0
+    if borderSig ~= overlaySig then return false end
+    local borderResolve = GF.DispelScanResolveType and GF.DispelScanResolveType(kind, c, borderTrigger, false) == true
+    local overlayResolve = GF.DispelScanResolveType and GF.DispelScanResolveType(kind, c, overlayTrigger, true) == true
+    return borderResolve == overlayResolve
 end
 
 -- Export shared ColorCurve + rebuild entry for Options live-apply.
@@ -1987,7 +1996,7 @@ local function GetAuraKindFlags(unit, aura, buffFilter, debuffFilter, externalFi
         end
     end
     if wantOverlayDispel then
-        if wantBorderDispel then
+        if wantBorderDispel and borderTrigger == overlayTrigger and borderResolveType == overlayResolveType then
             if borderDispelMatch then
                 flags = AddAuraKind(flags, 16)
             end
@@ -2051,7 +2060,7 @@ local function MergeTouches(a, b, c, d, aa, bb, cc, dd)
     return a or aa, b or bb, c or cc, d or dd
 end
 
-local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantBorderDispel, borderTrigger, borderResolveType, wantOverlayDispel, overlayTrigger, overlayResolveType)
+local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, externalFilter, buffMax, debuffMax, externalMax, wantBuff, wantDebuff, wantExternals, wantBorderDispel, borderTrigger, borderResolveType, wantOverlayDispel, overlayTrigger, overlayResolveType, sharedDispelLane)
     local st = EnsureFrameAuraCache(f)
     ResetAuraCache(st.buff)
     ResetAuraCache(st.debuff)
@@ -2080,9 +2089,9 @@ local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, ex
     end
     if wantOverlayDispel then
         local aid = sharedDispelAid
-        if not wantBorderDispel then
+        if not (wantBorderDispel and sharedDispelLane) then
             local _
-            _, aid = GF._FindFrameDispelAura(f, unit, overlayTrigger, false)
+            _, aid = GF._FindFrameDispelAura(f, unit, overlayTrigger, true)
         end
         if aid then
             st.flagsById[aid] = AddAuraKind(st.flagsById[aid], 16)
@@ -2110,7 +2119,7 @@ local function FullScanFrameAuraCache(f, unit, sig, buffFilter, debuffFilter, ex
             end
         end
         if wantOverlayDispel then
-            if wantBorderDispel then
+            if wantBorderDispel and sharedDispelLane then
                 if borderDispelMatch then
                     flags = AddAuraKind(flags, 16)
                 end
@@ -3282,6 +3291,9 @@ local function UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
     end
     local overlayNeeded = c and c.dispelOverlayScanActive == true
     local overlayTrigger = GF._ResolveFrameOverlayDispelTrigger(f)
+    local sharedDispelLane = borderNeeded and overlayNeeded
+        and GF._OverlayCanReuseBorderDispelScan
+        and GF._OverlayCanReuseBorderDispelScan(f, overlayTrigger, dispelTrigger) == true
 
     if nativeDebuffs then
         if not f._msufGFDebHidden then
@@ -3330,12 +3342,12 @@ local function UpdateFrameAuras_SlotScanLegacy(f, unit, updateInfo)
         end
     end
     if overlayNeeded then
-        if borderNeeded then
+        if sharedDispelLane then
             mergedOverlay = mergedDispel
             mergedOverlayColor = mergedDispelColor
             f._msufGFDispelOverlayAuraID = f._msufGFDispelAuraID
         else
-            local dispel, aid, color = GF._FindFrameDispelAuraWithColor(f, unit, overlayTrigger, false)
+            local dispel, aid, color = GF._FindFrameDispelAuraWithColor(f, unit, overlayTrigger, true)
             if dispel and aid then
                 mergedOverlay = dispel
                 mergedOverlayColor = color
@@ -3504,14 +3516,14 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
     local overlayNeeded = c and c.dispelOverlayScanActive == true
     local overlayTrigger = GF._ResolveFrameOverlayDispelTrigger(f)
     local borderPrioSig = (GF.DispelScanPrioritySignature and GF.DispelScanPrioritySignature(kind, c, false)) or 0
-    local overlayPrioSig = (GF.DispelScanPrioritySignature and GF.DispelScanPrioritySignature(kind, c, false)) or 0
+    local overlayPrioSig = (GF.DispelScanPrioritySignature and GF.DispelScanPrioritySignature(kind, c, true)) or 0
     local priorityWinnerScan =
         (type(GF.DispelScanPriorityEnabled) == "function"
             and ((borderNeeded and GF.DispelScanPriorityEnabled(kind, c, false) == true)
-                or (overlayNeeded and GF.DispelScanPriorityEnabled(kind, c, false) == true)))
+                or (overlayNeeded and GF.DispelScanPriorityEnabled(kind, c, true) == true)))
         or (type(GF.DispelScanCustomTypePriorityEnabled) == "function"
             and ((borderNeeded and GF.DispelScanCustomTypePriorityEnabled(kind, c, false) == true)
-                or (overlayNeeded and GF.DispelScanCustomTypePriorityEnabled(kind, c, false) == true)))
+                or (overlayNeeded and GF.DispelScanCustomTypePriorityEnabled(kind, c, true) == true)))
     local winnerDelta = priorityWinnerScan and updateInfo and not updateInfo.isFullUpdate
         and ((updateInfo.addedAuras and #updateInfo.addedAuras > 0)
             or (updateInfo.removedAuraInstanceIDs and #updateInfo.removedAuraInstanceIDs > 0))
@@ -3523,11 +3535,15 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
             (GF.DispelScanPriorityEnabled and GF.DispelScanPriorityEnabled(kind, c, false) == true)
             or dispelTrigger == "DISPEL_TYPE"
         ))
-    local overlayResolveType = (GF.DispelScanResolveType and GF.DispelScanResolveType(kind, c, overlayTrigger, false) == true)
+    local overlayResolveType = (GF.DispelScanResolveType and GF.DispelScanResolveType(kind, c, overlayTrigger, true) == true)
         or ((not GF.DispelScanResolveType) and (
-            (GF.DispelScanPriorityEnabled and GF.DispelScanPriorityEnabled(kind, c, false) == true)
+            (GF.DispelScanPriorityEnabled and GF.DispelScanPriorityEnabled(kind, c, true) == true)
             or overlayTrigger == "DISPEL_TYPE"
         ))
+    local sharedDispelLane = borderNeeded and overlayNeeded
+        and dispelTrigger == overlayTrigger
+        and borderResolveType == overlayResolveType
+        and borderPrioSig == overlayPrioSig
     local sortByDuration = auras.sortByDuration == true
     local preferPlayer = auras.preferPlayer ~= false
     local orderedAuras = sortByDuration or preferPlayer
@@ -3603,7 +3619,7 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
             f, unit, sig,
             buffFilter, debFilter, extFilter,
             buffScanMax, debScanMax, extScanMax,
-            buffOn, debOn, extOn, borderNeeded, dispelTrigger, borderResolveType, overlayNeeded, overlayTrigger, overlayResolveType
+            buffOn, debOn, extOn, borderNeeded, dispelTrigger, borderResolveType, overlayNeeded, overlayTrigger, overlayResolveType, sharedDispelLane
         )
         touchBuff = buffOn
         touchDebuff = debOn
@@ -3720,12 +3736,12 @@ function GF.UpdateFrameAuras(f, unit, updateInfo)
         f._msufGFDispelOverlayAuraID = nil
         f._msufGFDispelOverlayColorObj = nil
         f._msufGFDispelOverlayColorRev = nil
-        if borderNeeded then
+        if borderNeeded and sharedDispelLane then
             mergedOverlay = f._msufGFMergedDispel
             mergedOverlayColor = f._msufGFDispelColorObj
             f._msufGFDispelOverlayAuraID = f._msufGFDispelAuraID
         else
-            local dispel, aid, color = GF._FindFrameDispelAuraWithColor(f, unit, overlayTrigger, false)
+            local dispel, aid, color = GF._FindFrameDispelAuraWithColor(f, unit, overlayTrigger, true)
             if dispel and aid then
                 mergedOverlay = dispel
                 mergedOverlayColor = color
