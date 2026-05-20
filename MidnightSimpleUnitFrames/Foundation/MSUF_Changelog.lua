@@ -4,10 +4,33 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.4 Beta 7",
-    previousVersion = "5.4 Beta 6",
-    rangeLabel = "5.4 Beta 6 -> 5.4 Beta 7",
+    currentVersion = "5.4 Beta 8",
+    previousVersion = "5.4 Beta 7",
+    rangeLabel = "5.4 Beta 7 -> 5.4 Beta 8",
     entries = {
+        {
+            version = "5.4 Beta 8",
+            date = "2026-05-20",
+            sections = {
+                {
+                    title = "Beta Release",
+                    bullets = {
+                        "Improved Menu2 search so the search box also works as an \"ask\" field for location-style questions such as where to move frames, change fonts, or adjust inline text colors.",
+                        "Added generic English and German question handling for menu search, with better ranking for direct controls and sections instead of sending broad \"where/how\" queries to FAQ-style results.",
+                        "Reduced menu search idle work by cancelling background indexing when leaving the Search page and rebuilding registry search records only when needed.",
+                        "Improved Menu2 performance by avoiding redundant title, subtitle, navigation, status-bar, and search-result refresh work when the visible values did not change.",
+                        "Added the first-use Search / Ask intro popover and updated the search placeholder to make natural-language menu search discoverable.",
+                        "Fixed Advanced Gameplay menu clipping at smaller widths and scaled UI layouts by stacking Combat Timer, Combat Enter/Leave, Class-specific, and Combat Crosshair controls when space is tight.",
+                        "Improved compact widget layout for sliders, switches, toggles, and edit boxes so controls clamp cleanly instead of overlapping or spilling outside their sections.",
+                        "Fixed Group Frame preview note clipping by sizing the preview intro area dynamically for translated and wrapped text.",
+                        "Added live party and raid previews while editing Group Frame bar settings, without taking over the normal Edit Mode group preview state.",
+                        "Added configurable Target-of-Target inline text color modes: Auto, ToT Name Color, Target Name Color, NPC / Type Color, and Default Font Color.",
+                        "Updated Target preview rendering and runtime inline text color resolution so the new ToT inline color modes match class, target-name, NPC reaction, NPC type, and default font color behavior.",
+                        "Added German menu labels for the new inline color options.",
+                    },
+                },
+            },
+        },
         {
             version = "5.4 Beta 7",
             date = "2026-05-20",
@@ -86,24 +109,6 @@ local data = {
                         "Kept the frame-cache split on the cold apply/refresh path so cache construction is easier to maintain without adding work to frequent Health, Power, Aura, or Range events.",
                         "Updated the TOC load order so highlight, status, aura-effect, and range/threat helpers bind before the hot-path effects orchestrator, while the cold frame cache still loads after the shared effects exports it needs.",
                         "Verified the refactor with luac -p across project-owned Lua files and git diff --check.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.4 Beta 3",
-            date = "2026-05-19",
-            sections = {
-                {
-                    title = "Beta Release",
-                    bullets = {
-                        "Added status icon Advanced tabs for Unit Frame and Group Frame status indicators, including extended offsets, layer controls, reset, test mode, and preview actions.",
-                        "Added status icon pack discovery from addon Icons folders and bundled the UX Pro status icon pack under MidnightSimpleUnitFrames\\Icons\\UXPro.",
-                        "Added support for external Interface\\Icons replacement packs by resolving accessible spell and aura FileDataIDs back to icon paths before rendering.",
-                        "Fixed Group Frame status icon menu clipping around the Placement layer controls.",
-                        "Improved status icon texture handling across aura previews, aura rendering, healer buffs, spell indicators, focus kick icons, and dropdown previews so replacement packs are used consistently.",
-                        "Improved Group Frame heal prediction and absorb test mode so Bars test rendering updates overlay bars without unnecessary live prediction reads while out of combat.",
-                        "Refactored low-risk runtime paths for aura commits, target-swap visuals, gameplay apply scheduling, crosshair target callbacks, and boss castbar event registration.",
                     },
                 },
             },

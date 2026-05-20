@@ -1,5 +1,22 @@
 # Changelog
 
+## 5.4 Beta 8 - 2026-05-20
+
+### Beta Release
+
+- Improved Menu2 search so the search box also works as an "ask" field for location-style questions such as where to move frames, change fonts, or adjust inline text colors.
+- Added generic English and German question handling for menu search, with better ranking for direct controls and sections instead of sending broad "where/how" queries to FAQ-style results.
+- Reduced menu search idle work by cancelling background indexing when leaving the Search page and rebuilding registry search records only when needed.
+- Improved Menu2 performance by avoiding redundant title, subtitle, navigation, status-bar, and search-result refresh work when the visible values did not change.
+- Added the first-use Search / Ask intro popover and updated the search placeholder to make natural-language menu search discoverable.
+- Fixed Advanced Gameplay menu clipping at smaller widths and scaled UI layouts by stacking Combat Timer, Combat Enter/Leave, Class-specific, and Combat Crosshair controls when space is tight.
+- Improved compact widget layout for sliders, switches, toggles, and edit boxes so controls clamp cleanly instead of overlapping or spilling outside their sections.
+- Fixed Group Frame preview note clipping by sizing the preview intro area dynamically for translated and wrapped text.
+- Added live party and raid previews while editing Group Frame bar settings, without taking over the normal Edit Mode group preview state.
+- Added configurable Target-of-Target inline text color modes: Auto, ToT Name Color, Target Name Color, NPC / Type Color, and Default Font Color.
+- Updated Target preview rendering and runtime inline text color resolution so the new ToT inline color modes match class, target-name, NPC reaction, NPC type, and default font color behavior.
+- Added German menu labels for the new inline color options.
+
 ## 5.4 Beta 7 - 2026-05-20
 
 ### Beta Release
