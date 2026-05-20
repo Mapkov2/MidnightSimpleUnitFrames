@@ -1738,6 +1738,127 @@ local function SearchLooksLikeControlQuestion(query)
     return false
 end
 
+local SEARCH_GENERIC_LOCATION_QUESTION_TERMS = {
+    "where", "where is", "where are", "where do", "where can", "where to",
+    "how do", "how to", "how can", "wo", "wo ist", "wo sind", "wo kann", "wo finde",
+    "wie", "wie kann",
+}
+
+local SEARCH_GENERIC_LOCATION_ACTION_TERMS = {
+    "change", "changed", "changing", "configure", "customize", "customise", "edit",
+    "find", "set", "select", "choose", "adjust", "move", "resize", "enable",
+    "disable", "show", "hide", "turn on", "turn off", "aendern", "aendere", "andern",
+    "einstellen", "finden", "auswaehlen", "verschieben",
+    "aktivieren", "deaktivieren", "anzeigen", "ausblenden",
+}
+
+local SEARCH_CONTROL_KINDS = {
+    toggle = true,
+    dropdown = true,
+    segment = true,
+    slider = true,
+    color = true,
+    button = true,
+    textinput = true,
+}
+
+local function SearchContainsTerm(normalized, term)
+    normalized = tostring(normalized or "")
+    term = NormalizeSearchText(term)
+    if normalized == "" or term == "" then return false end
+    if term:find(" ", 1, true) then return normalized:find(term, 1, true) ~= nil end
+    return (" " .. normalized .. " "):find(" " .. term .. " ", 1, true) ~= nil
+end
+
+local function SearchContainsAnyTerm(normalized, terms)
+    if type(terms) ~= "table" then return false end
+    for i = 1, #terms do
+        if SearchContainsTerm(normalized, terms[i]) then return true end
+    end
+    return false
+end
+
+local function SearchLooksLikeGenericLocationQuestion(query)
+    local normalized = NormalizeSearchText(query)
+    if normalized == "" then return false end
+    local hasQuestion = SearchContainsAnyTerm(normalized, SEARCH_GENERIC_LOCATION_QUESTION_TERMS)
+    if not hasQuestion then return false end
+    if normalized:find("where is", 1, true) or normalized:find("where are", 1, true) then return true end
+    if normalized:find("wo ist", 1, true) or normalized:find("wo sind", 1, true) then return true end
+    return SearchContainsAnyTerm(normalized, SEARCH_GENERIC_LOCATION_ACTION_TERMS)
+end
+
+local function SearchGenericLocationSubjectClauses(query)
+    if not SearchLooksLikeGenericLocationQuestion(query) then return nil, nil end
+    local raw = SearchRawWords(NormalizeSearchText(query))
+    if #raw == 0 then return nil, nil end
+    local words = SearchCanonicalWords(raw)
+    local subject = table.concat(words, " ")
+    if subject == "" then return nil, nil end
+    local subjectNorm, subjectClauses = BuildSearchQueryClauses(subject)
+    if type(subjectClauses) ~= "table" or #subjectClauses == 0 then return nil, nil end
+    return subjectNorm, subjectClauses
+end
+
+local function SearchDirectSubjectMatches(rec, clauses)
+    if not rec or type(clauses) ~= "table" then return 0, 0, 0 end
+    local labelText = tostring(rec.labelNorm or "") .. " " .. tostring(rec.titleNorm or "")
+    local contextText = labelText .. " " .. tostring(rec.hintNorm or "") .. " " .. tostring(rec.groupNorm or "")
+    local haystack = tostring(rec.haystack or "")
+    local labelMatches, contextMatches, haystackMatches = 0, 0, 0
+    for i = 1, #clauses do
+        local terms = clauses[i] and clauses[i].terms
+        local inLabel, inContext, inHaystack = false, false, false
+        if type(terms) == "table" then
+            for k = 1, #terms do
+                local term = terms[k]
+                if term and term ~= "" then
+                    if labelText:find(term, 1, true) then inLabel = true end
+                    if contextText:find(term, 1, true) then inContext = true end
+                    if haystack:find(term, 1, true) then inHaystack = true end
+                end
+                if inLabel and inContext and inHaystack then break end
+            end
+        end
+        if inLabel then labelMatches = labelMatches + 1 end
+        if inContext then contextMatches = contextMatches + 1 end
+        if inHaystack then haystackMatches = haystackMatches + 1 end
+    end
+    return labelMatches, contextMatches, haystackMatches
+end
+
+local function SearchGenericLocationBoost(rec, clauses, matchedClauses, missedClauses)
+    if not rec or type(clauses) ~= "table" or #clauses == 0 then return 0 end
+    local labelMatches, contextMatches, haystackMatches = SearchDirectSubjectMatches(rec, clauses)
+    local direct = math.max(labelMatches, contextMatches)
+    local allMatched = (tonumber(missedClauses) or 0) == 0 and (tonumber(matchedClauses) or 0) >= #clauses
+
+    if SEARCH_CONTROL_KINDS[rec.kind or ""] then
+        if labelMatches > 0 then return 860 + labelMatches * 160 end
+        if contextMatches > 0 then return 640 + contextMatches * 120 end
+        if allMatched then return 420 end
+        return -120
+    end
+    if rec.kind == "section" then
+        if labelMatches > 0 then return 560 + labelMatches * 120 end
+        if contextMatches > 0 then return 360 + contextMatches * 80 end
+        if allMatched then return 180 end
+        return -80
+    end
+    if rec.kind == "page" then
+        if direct > 0 then return 110 + direct * 45 end
+        if haystackMatches > 0 then return 40 end
+        return -80
+    end
+    if rec.kind == "faq" then
+        if labelMatches >= #clauses and #clauses >= 2 then return 100 end
+        if direct > 0 then return -120 end
+        return -260
+    end
+    if direct > 0 then return 180 + direct * 60 end
+    return allMatched and 80 or 0
+end
+
 local function SearchSupportQuestionBoost(rec, clauses)
     if not rec or rec.kind ~= "faq" then return 0 end
     local haystack = rec.haystack or ""
@@ -3352,7 +3473,9 @@ function SearchPages(query)
     if #normalized < MIN_SEARCH_QUERY_LEN then return {} end
 
     local supportQuestion = SearchLooksLikeSupportQuestion(query)
-    local controlQuestion = SearchLooksLikeControlQuestion(query)
+    local genericLocationSubject, genericLocationClauses = SearchGenericLocationSubjectClauses(query)
+    local genericLocationQuestion = genericLocationSubject ~= nil and genericLocationClauses ~= nil
+    local controlQuestion = SearchLooksLikeControlQuestion(query) or genericLocationQuestion
     local profileTransferQuestion = normalized:find("import", 1, true)
         or normalized:find("export", 1, true)
         or normalized:find("profile string", 1, true)
@@ -3392,7 +3515,8 @@ function SearchPages(query)
             if rec.haystack and rec.haystack:find(normalized, 1, true) then score = score + 80 end
             if rec.kind == "section" then score = score + 70 end
             if rec.kind == "faq" then score = score + 55 end
-            if supportQuestion then score = score + SearchSupportQuestionBoost(rec, clauses) end
+            if supportQuestion and not genericLocationQuestion then score = score + SearchSupportQuestionBoost(rec, clauses) end
+            if genericLocationQuestion then score = score + SearchGenericLocationBoost(rec, genericLocationClauses, matchedClauses, missedClauses) end
             score = score + SearchResultSpecificityBoost(rec, clauses)
             if missedClauses > 0 then score = score - (missedClauses * 60) end
             if rec.kind ~= "page" then score = score + 45 end
@@ -3424,7 +3548,7 @@ function SearchPages(query)
         if (a.order or 0) ~= (b.order or 0) then return (a.order or 0) < (b.order or 0) end
         return tostring(a.label) < tostring(b.label)
     end)
-    return CurateSearchResults(results, supportQuestion)
+    return CurateSearchResults(results, supportQuestion and not genericLocationQuestion)
 end
 
 local function SearchQueryReady(query)
@@ -4087,8 +4211,15 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
     elseif pageKey == "opt_fonts" then
         local scope = SearchGlobalScopeForText(normalized)
         if scope then SearchRouteSetGeneral(route, "_fontScopeKey", scope) end
+        if not scope and SearchRouteHasAny(normalized, {
+            "font", "fonts", "global font", "font family", "font dropdown", "sharedmedia",
+            "change font", "change fonts", "where to change font", "where change font",
+            "schriftart", "schriftart aendern", "schrift aendern",
+        }) then
+            SearchRouteSetGeneral(route, "_fontScopeKey", "shared")
+        end
         SearchRouteApplySectionSpecs(route, pageKey, normalized, {
-            { id = "fonts_global_font", terms = { "global font", "font family", "font" } },
+            { id = "fonts_global_font", terms = { "global font", "font family", "font", "font dropdown", "sharedmedia", "change font", "change fonts", "where to change font", "where change font" } },
             { id = "fonts_text_style", terms = { "text style", "outline", "shadow", "font size" } },
             { id = "fonts_name_power_colors", terms = { "name colors", "power colors", "name color", "power color" } },
             { id = "fonts_name_shortening", terms = { "name shortening", "short names", "realm names", "truncate", "names too long" } },
