@@ -434,7 +434,13 @@ local function _GF_SetOfflineHidden(f, hidden)
         GF._offlineHideRuntimeActive = true
         if f.barGroup then f.barGroup:Hide() end
         if f._msufGFHoverBorder then f._msufGFHoverBorder:Hide() end
-        if f._msufGFHighlightBorder then f._msufGFHighlightBorder:Hide() end
+        if f._msufGFHighlightBorders then
+            for _, border in pairs(f._msufGFHighlightBorders) do
+                if border then border:Hide() end
+            end
+        elseif f._msufGFHighlightBorder then
+            f._msufGFHighlightBorder:Hide()
+        end
         if f._msufGFDispelOverlay then f._msufGFDispelOverlay:Hide() end
         if f._msufGFDebuffStripe then f._msufGFDebuffStripe:Hide() end
         if GF.HideFrameAuras then GF.HideFrameAuras(f) end

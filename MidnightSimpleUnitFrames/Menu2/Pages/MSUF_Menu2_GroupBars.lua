@@ -116,6 +116,31 @@ local GF_PRIORITY_COLORS = {
     poison = { 0.00, 0.60, 0.00 },
     bleed = { 0.80, 0.10, 0.10 },
 }
+local GF_PRIORITY_KEY_ALIAS = {
+    Dispel = "dispel",
+    DISPEL = "dispel",
+    Magic = "magic",
+    MAGIC = "magic",
+    Curse = "curse",
+    CURSE = "curse",
+    Disease = "disease",
+    DISEASE = "disease",
+    Poison = "poison",
+    POISON = "poison",
+    Bleed = "bleed",
+    BLEED = "bleed",
+    Aggro = "aggro",
+    AGGRO = "aggro",
+}
+
+local function NormalizeGFPriorityKey(key)
+    if type(key) ~= "string" then return nil end
+    local gp = M.GlobalPage
+    if gp and type(gp.NormalizePriorityKey) == "function" then
+        return gp.NormalizePriorityKey(key)
+    end
+    return GF_PRIORITY_KEY_ALIAS[key] or key
+end
 
 local function NormalizeGFDispelOverlayTrigger(value)
     local gf = GF and GF()
@@ -176,7 +201,7 @@ local function GFBorderPriorityOrder()
     local order = {}
     if type(raw) == "table" then
         for i = 1, #raw do
-            local value = raw[i]
+            local value = NormalizeGFPriorityKey(raw[i])
             if allowed[value] then order[#order + 1] = value end
         end
     end
@@ -197,7 +222,7 @@ local function GFOverlayPriorityOrder()
     local order = {}
     if type(raw) == "table" then
         for i = 1, #raw do
-            local value = raw[i]
+            local value = NormalizeGFPriorityKey(raw[i])
             if allowed[value] then order[#order + 1] = value end
         end
     end

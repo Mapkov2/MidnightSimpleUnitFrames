@@ -155,6 +155,66 @@ ns.MSUF_Util = ns.MSUF_Util or {}
 local U = ns.MSUF_Util
 _G.MSUF_Util = U
 
+-- Shared frame layering for visual effects (highlight borders, overlays, stripes).
+-- Keep this in Foundation so UnitFrames and GroupFrames use identical strata/level
+-- behavior without duplicating hot-path helpers.
+if type(_G.MSUF_FRAME_STRATA_RANK) ~= "table" then
+    _G.MSUF_FRAME_STRATA_RANK = {
+        BACKGROUND = 1,
+        LOW = 2,
+        MEDIUM = 3,
+        HIGH = 4,
+        DIALOG = 5,
+        FULLSCREEN = 6,
+        FULLSCREEN_DIALOG = 7,
+        TOOLTIP = 8,
+    }
+end
+
+if type(_G.MSUF_EFFECT_FRAME_STRATA) ~= "string" or _G.MSUF_EFFECT_FRAME_STRATA == "" then
+    _G.MSUF_EFFECT_FRAME_STRATA = "HIGH"
+end
+
+if type(_G.MSUF_ClampFrameLevel) ~= "function" then
+    function _G.MSUF_ClampFrameLevel(level)
+        level = tonumber(level) or 0
+        if level < 0 then return 0 end
+        if level > 10000 then return 10000 end
+        return level
+    end
+end
+
+if type(_G.MSUF_MaxFrameStrata) ~= "function" then
+    function _G.MSUF_MaxFrameStrata(a, b)
+        if not a or a == "" then return b end
+        if not b or b == "" then return a end
+        local rank = _G.MSUF_FRAME_STRATA_RANK
+        return ((rank[a] or 0) >= (rank[b] or 0)) and a or b
+    end
+end
+
+if type(_G.MSUF_SyncFrameLayerAbove) ~= "function" then
+    function _G.MSUF_SyncFrameLayerAbove(child, parent, offset, strata)
+        if not (child and parent) then return nil end
+
+        local parentStrata = parent.GetFrameStrata and parent:GetFrameStrata() or nil
+        local wantStrata = _G.MSUF_MaxFrameStrata(parentStrata, strata or _G.MSUF_EFFECT_FRAME_STRATA)
+        if wantStrata and child.SetFrameStrata and (not child.GetFrameStrata or child:GetFrameStrata() ~= wantStrata) then
+            child:SetFrameStrata(wantStrata)
+        end
+
+        if child.SetFrameLevel and parent.GetFrameLevel then
+            local level = _G.MSUF_ClampFrameLevel((parent:GetFrameLevel() or 0) + (tonumber(offset) or 1))
+            if not child.GetFrameLevel or child:GetFrameLevel() ~= level then
+                child:SetFrameLevel(level)
+            end
+            return level
+        end
+
+        return nil
+    end
+end
+
 -- Atlas helper used by status/state indicator icons.
 -- Some call-sites use a global helper name; provide it here as a safe fallback
 -- so indicator modules can remain self-contained without load-order fragility.

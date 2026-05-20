@@ -120,7 +120,11 @@ local function RetireHeader(header)
             if ch.health then ch.health:Hide() end
             if ch.power then ch.power:Hide() end
             if ch._msufGFBorderFrame then ch._msufGFBorderFrame:Hide() end
-            if ch._msufGFHighlightBorder then ch._msufGFHighlightBorder:Hide() end
+            if ch._msufGFHighlightBorders then
+                for _, border in pairs(ch._msufGFHighlightBorders) do
+                    if border then border:Hide() end
+                end
+            elseif ch._msufGFHighlightBorder then ch._msufGFHighlightBorder:Hide() end
             if ch._msufGFNameText then ch._msufGFNameText:Hide() end
             if ch._msufGFStatusText then ch._msufGFStatusText:Hide() end
             -- Minimize + hide + reparent to hidden frame
@@ -274,7 +278,17 @@ local function _GFInstallAttrHook(child)
             local hlBorder = self._msufGFHighlightBorder
             if hlBorder then
                 hlBorder._msufHLActivePrio = nil
-                if hlBorder:IsShown() then hlBorder:Hide() end
+            end
+            local hlBorders = self._msufGFHighlightBorders
+            if hlBorders then
+                for _, border in pairs(hlBorders) do
+                    if border then
+                        border._msufHLActivePrio = nil
+                        if border:IsShown() then border:Hide() end
+                    end
+                end
+            elseif hlBorder and hlBorder:IsShown() then
+                hlBorder:Hide()
             end
             self._msufGFLastFullAura       = nil
             self._msufGFAggroLevel         = nil
@@ -687,10 +701,23 @@ function GF.GetFrameLayerLevel(f, layer, fallback)
     return baseLvl + lvl, lvl
 end
 
+GF.STRATA_EFFECT = GF.STRATA_EFFECT or _G.MSUF_EFFECT_FRAME_STRATA or "HIGH"
+GF.STRATA_RANK = GF.STRATA_RANK or _G.MSUF_FRAME_STRATA_RANK
+GF.ClampFrameLevel = _G.MSUF_ClampFrameLevel
+GF.MaxFrameStrata = _G.MSUF_MaxFrameStrata
+
+function GF.SyncFrameLayerAbove(child, parent, offset, strata)
+    return _G.MSUF_SyncFrameLayerAbove(child, parent, offset, strata or GF.STRATA_EFFECT)
+end
+
 function GF.SetFrameLayerLevel(frame, owner, layer, fallback)
     if not (frame and frame.SetFrameLevel) then return end
     frame:SetFrameLevel(GF.GetFrameLayerLevel(owner, layer, fallback))
 end
+
+GF.LAYER_DISPEL_OVERLAY = GF.LAYER_DISPEL_OVERLAY or 6
+GF.LAYER_DEBUFF_STRIPE = GF.LAYER_DEBUFF_STRIPE or 7
+GF.LAYER_HIGHLIGHT_BORDER = GF.LAYER_HIGHLIGHT_BORDER or 10
 
 local function GetFrameOutlineInset(kind, conf)
     -- Unit frames draw the bar outline outside the bars. Keep group-frame
@@ -792,7 +819,7 @@ local function BuildFrameHierarchy(f, kind)
     dispelOv:SetMinMaxValues(0, 1)
     dispelOv:SetValue(1)
     dispelOv:SetAllPoints(health)
-    dispelOv:SetFrameLevel(hLvl + 4)
+    GF.SyncFrameLayerAbove(dispelOv, health, GF.LAYER_DISPEL_OVERLAY)
     dispelOv:SetStatusBarColor(0, 0, 0, 0)
     dispelOv:Hide()
     f._msufGFDispelOverlay = dispelOv
@@ -805,7 +832,7 @@ local function BuildFrameHierarchy(f, kind)
     debuffStripe:SetPoint("BOTTOMLEFT", health, "BOTTOMLEFT", 0, 0)
     debuffStripe:SetPoint("BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
     debuffStripe:SetHeight(3)
-    debuffStripe:SetFrameLevel(hLvl + 5)
+    GF.SyncFrameLayerAbove(debuffStripe, health, GF.LAYER_DEBUFF_STRIPE)
     debuffStripe:SetStatusBarColor(0.8, 0.2, 0.2, 0.6)
     debuffStripe:Hide()
     f._msufGFDebuffStripe = debuffStripe
@@ -979,10 +1006,28 @@ local function BuildFrameHierarchy(f, kind)
     local hlBorder = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
     hlBorder:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, 0)
     hlBorder:SetPoint("BOTTOMRIGHT", barGroup, "BOTTOMRIGHT", 0, 0)
-    hlBorder:SetFrameLevel(barGroup:GetFrameLevel() + 3)
+    GF.SyncFrameLayerAbove(hlBorder, health, GF.LAYER_HIGHLIGHT_BORDER)
     hlBorder:EnableMouse(false)
     hlBorder:Hide()
     f._msufGFHighlightBorder = hlBorder
+    f._msufGFHighlightBorders = { dispel = hlBorder }
+    hlBorder._msufGFHLKey = "dispel"
+
+    local function CreateHighlightBorderLayer(key)
+        local border = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
+        border:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, 0)
+        border:SetPoint("BOTTOMRIGHT", barGroup, "BOTTOMRIGHT", 0, 0)
+        GF.SyncFrameLayerAbove(border, health, GF.LAYER_HIGHLIGHT_BORDER)
+        border:EnableMouse(false)
+        border._msufGFHLKey = key
+        border:Hide()
+        f._msufGFHighlightBorders[key] = border
+        return border
+    end
+    f._msufGFDispelHighlightBorder = hlBorder
+    CreateHighlightBorderLayer("aggro")
+    CreateHighlightBorderLayer("target")
+    CreateHighlightBorderLayer("focus")
 
     -- ClickCast integration; effects refresh this after OnEnter/OnLeave are set.
     if not f._msufGFIsPreviewFrame then GF.RegisterClickCastFrame(f, false) end
@@ -1738,9 +1783,24 @@ local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
                 end
 
                 -- highlightBorder
-                if child._msufGFHighlightBorder then
+                if child._msufGFHighlightBorders then
+                    for _, border in pairs(child._msufGFHighlightBorders) do
+                        if border then
+                            local hofs = border._msufHLOfs or 0
+                            _AnchorTwoPointIfChanged(border, child.barGroup or child, "highlight", -hofs, hofs, hofs, -hofs, force)
+                            GF.SyncFrameLayerAbove(border, child.health or child.barGroup or child, border._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
+                        end
+                    end
+                elseif child._msufGFHighlightBorder then
                     local hofs = child._msufGFHighlightBorder._msufHLOfs or 0
                     _AnchorTwoPointIfChanged(child._msufGFHighlightBorder, child.barGroup or child, "highlight", -hofs, hofs, hofs, -hofs, force)
+                    GF.SyncFrameLayerAbove(child._msufGFHighlightBorder, child.health or child.barGroup or child, child._msufGFHighlightBorder._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
+                end
+                if child._msufGFDispelOverlay then
+                    GF.SyncFrameLayerAbove(child._msufGFDispelOverlay, child.health or child.barGroup or child, GF.LAYER_DISPEL_OVERLAY)
+                end
+                if child._msufGFDebuffStripe then
+                    GF.SyncFrameLayerAbove(child._msufGFDebuffStripe, child.health or child.barGroup or child, GF.LAYER_DEBUFF_STRIPE)
                 end
 
                 -- health bar
@@ -2139,7 +2199,11 @@ local function ClearKindFrameRuntime(f, visual)
         if f.summonIcon then f.summonIcon:Hide() end
         if f.resurrectIcon then f.resurrectIcon:Hide() end
         if f.phaseIcon then f.phaseIcon:Hide() end
-        if f._msufGFHighlightBorder then f._msufGFHighlightBorder:Hide() end
+        if f._msufGFHighlightBorders then
+            for _, border in pairs(f._msufGFHighlightBorders) do
+                if border then border:Hide() end
+            end
+        elseif f._msufGFHighlightBorder then f._msufGFHighlightBorder:Hide() end
         if f._msufGFTargetBorder then f._msufGFTargetBorder:Hide() end
         if f._msufGFDebuffStripe then f._msufGFDebuffStripe:Hide() end
         if f.barGroup then f.barGroup:Hide() end

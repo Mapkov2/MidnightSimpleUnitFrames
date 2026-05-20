@@ -337,10 +337,11 @@ GF.DispelScanForFrame = GF.DispelScanForFrame or function(f, conf, nativeDispels
     if c and c.dispelScanActive ~= nil then
         return c.dispelScanActive == true, triggerMode
     end
-    local auras = conf and conf.auras
-    local allowNativeBorder = nativeDispels and auras and auras.blizzardDispelBorder == true
-    local active = conf and conf.dispelEnabled ~= false and (not nativeDispels or allowNativeBorder)
-        and (not GF.DispelBorderTriggerNeedsPlayerDispel(triggerMode) or _playerCanDispel)
+    local kind = (f and f._msufGFKind) or "party"
+    local customTypePriority = GF.DispelScanCustomTypePriorityEnabled
+        and GF.DispelScanCustomTypePriorityEnabled(kind, c, false) == true
+    local active = conf and conf.dispelEnabled ~= false
+        and (not GF.DispelBorderTriggerNeedsPlayerDispel(triggerMode) or _playerCanDispel or customTypePriority)
     return active and true or false, triggerMode
 end
 
@@ -367,18 +368,7 @@ end
 function GF._PriorityDispelScanActive(f, useOverlayPriority)
     local fn = GF.DispelScanPriorityEnabled
     local kind = (f and f._msufGFKind) or "party"
-    if type(fn) == "function" and fn(kind, f and f._c, useOverlayPriority == true) == true then
-        return true
-    end
-    local c = f and f._c
-    local trigger
-    if useOverlayPriority == true and GF._ResolveFrameOverlayDispelTrigger then
-        trigger = GF._ResolveFrameOverlayDispelTrigger(f)
-    else
-        trigger = c and c.dispelBorderTrigger
-    end
-    trigger = GF.NormalizeDispelBorderTrigger(trigger)
-    return trigger == "DISPEL_TYPE" or trigger == "ANY_DEBUFF"
+    return type(fn) == "function" and fn(kind, f and f._c, useOverlayPriority == true) == true
 end
 
 function GF._FindFrameDispelAura(f, unit, triggerMode, useOverlayPriority)

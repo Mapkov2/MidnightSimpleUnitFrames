@@ -139,16 +139,25 @@ local function HLPrioEnabledCached(conf, gen)
     return value == true or value == 1
 end
 
-local function HLPrioOrderCached(conf, gen)
-    if conf and conf.hlOverride then
-        if type(conf.hlPrioOrder) == "table" then return conf.hlPrioOrder end
-        if type(conf.highlightPrioOrder) == "table" then return conf.highlightPrioOrder end
-    end
-    if gen then
-        if type(gen.hlPrioOrder) == "table" then return gen.hlPrioOrder end
-        if type(gen.highlightPrioOrder) == "table" then return gen.highlightPrioOrder end
-    end
+local function HLPrioLocalValue(conf)
+    if not (conf and conf.hlOverride) then return nil end
+    local value = conf.hlPrioEnabled
+    if value == nil then value = conf.highlightPrioEnabled end
+    return value
+end
+
+local function HLPrioOrderFrom(scope)
+    if type(scope) ~= "table" then return nil end
+    if type(scope.hlPrioOrder) == "table" then return scope.hlPrioOrder end
+    if type(scope.highlightPrioOrder) == "table" then return scope.highlightPrioOrder end
     return nil
+end
+
+local function HLPrioOrderCached(conf, gen)
+    if HLPrioLocalValue(conf) ~= nil then
+        return HLPrioOrderFrom(conf) or HLPrioOrderFrom(gen)
+    end
+    return HLPrioOrderFrom(gen) or HLPrioOrderFrom(conf)
 end
 
 GF.NormalizeDispelBorderTrigger = GF.NormalizeDispelBorderTrigger or function(value)
@@ -204,14 +213,18 @@ local function _applyHighlightBorderStyle(border, conf, edgeSz, ofs, texKey, lay
         border:SetPoint("BOTTOMRIGHT", ofs, -ofs)
     end
 
-    -- Layer: ABOVE_BORDER = higher FrameLevel
+    -- Layer: visual priority is fixed by frame level; the option only keeps
+    -- compatibility with older saved values.
     local anchor = border:GetParent()
     if anchor then
-        local baseLvl = anchor:GetFrameLevel()
-        local wantLvl = (layer == "ABOVE_BORDER") and (baseLvl + 8) or (baseLvl + 3)
+        local owner = anchor:GetParent() or anchor
+        local base = owner and owner.health or anchor
+        local offset = border._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER or ((layer == "ABOVE_BORDER") and 8 or 3)
+        local wantLvl = GF.SyncFrameLayerAbove and GF.SyncFrameLayerAbove(border, base, offset)
+            or ((base.GetFrameLevel and base:GetFrameLevel() or anchor:GetFrameLevel()) + offset)
         if border._msufHLLvl ~= wantLvl then
             border._msufHLLvl = wantLvl
-            border:SetFrameLevel(wantLvl)
+            if not GF.SyncFrameLayerAbove then border:SetFrameLevel(wantLvl) end
         end
     end
 end
@@ -245,11 +258,15 @@ end
 
  ------------------------------------------------------------------------
 -- Lightweight border activation (NO SetBackdrop â€” color + show/hide only)
--- Called from PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED
--- Full _GF_RefreshBorder is only needed when dispel/aggro state changes
--- or on config refresh (RefreshVisuals)
+-- PLAYER_TARGET_CHANGED / PLAYER_FOCUS_CHANGED entrypoint.
+-- Runtime delegates to AuraEffects multi-layer refresh when available;
+-- the single-border path below remains as an early-load fallback.
 ------------------------------------------------------------------------
 local function _GF_QuickBorderUpdate(f)
+    if not f then return end
+    local refresh = GF.RefreshBorder or _G.MSUF_GF_RefreshBorder
+    if type(refresh) == "function" then return refresh(f, f.unit) end
+
     local border = f._msufGFHighlightBorder
     if not border then return end
     local c = f._c

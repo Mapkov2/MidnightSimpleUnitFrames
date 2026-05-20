@@ -44,16 +44,25 @@ local function HLPrioEnabledCached(conf, gen)
     return value == true or value == 1
 end
 
-local function HLPrioOrderCached(conf, gen)
-    if conf and conf.hlOverride then
-        if type(conf.hlPrioOrder) == "table" then return conf.hlPrioOrder end
-        if type(conf.highlightPrioOrder) == "table" then return conf.highlightPrioOrder end
-    end
-    if gen then
-        if type(gen.hlPrioOrder) == "table" then return gen.hlPrioOrder end
-        if type(gen.highlightPrioOrder) == "table" then return gen.highlightPrioOrder end
-    end
+local function HLPrioLocalValue(conf)
+    if not (conf and conf.hlOverride) then return nil end
+    local value = conf.hlPrioEnabled
+    if value == nil then value = conf.highlightPrioEnabled end
+    return value
+end
+
+local function HLPrioOrderFrom(scope)
+    if type(scope) ~= "table" then return nil end
+    if type(scope.hlPrioOrder) == "table" then return scope.hlPrioOrder end
+    if type(scope.highlightPrioOrder) == "table" then return scope.highlightPrioOrder end
     return nil
+end
+
+local function HLPrioOrderCached(conf, gen)
+    if HLPrioLocalValue(conf) ~= nil then
+        return HLPrioOrderFrom(conf) or HLPrioOrderFrom(gen)
+    end
+    return HLPrioOrderFrom(gen) or HLPrioOrderFrom(conf)
 end
 
 local function HLColorCached(conf, gen, key, legacyKey, fallback)
@@ -268,9 +277,6 @@ function GF.BuildFrameCache(f)
     end
     c.blizzardDispelBorder = c.nativeBlizzardDispels and auras and auras.blizzardDispelBorder == true
     c.nativeBlizzardDispelsSuppressCustom = c.nativeBlizzardDispels and not c.blizzardDispelBorder
-    -- Blizzard/native dispel rendering can own the aura icon/border path, but
-    -- the MSUF health overlay is a separate visual lane and must remain usable.
-    local customDispelAllowed = not c.nativeBlizzardDispelsSuppressCustom
 
     -- Dispel overlay (color wash on health bar)
     c.doEn    = auraMasterOn and conf.dispelOverlayEnabled == true
@@ -297,7 +303,7 @@ function GF.BuildFrameCache(f)
     -- Highlight border (pre-resolve HLVal)
     c.aggroEn   = HLValCached(conf, gen, "hlAggroEnabled") ~= false
     c.aggroMode = HLValCached(conf, gen, "hlAggroMode") or "ALL"
-    c.dispelEn  = auraMasterOn and HLValCached(conf, gen, "hlDispelEnabled") ~= false and customDispelAllowed
+    c.dispelEn  = auraMasterOn and HLValCached(conf, gen, "hlDispelEnabled") ~= false
     c.dispelBorderTrigger = GF.NormalizeDispelBorderTrigger(HLValCached(conf, gen, "dispelBorderTrigger"))
     c.hlPrioEnabled = HLPrioEnabledCached(conf, gen)
     c.hlPrioOrder = c.hlPrioEnabled and HLPrioOrderCached(conf, gen) or nil
@@ -330,7 +336,7 @@ function GF.BuildFrameCache(f)
     c.focB = conf.hlFocusColorB or 1.0
 
     -- Aura dispatch
-    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and (customDispelAllowed or c.doEn)
+    c.dispelScan = auraMasterOn and conf.dispelEnabled ~= false and (c.dispelEn or c.doEn)
     local siRuntimeActive = false
     if auraMasterOn and conf.spellIndicators and conf.spellIndicators.enabled == true then
         local siActiveFn = GF.SpellIndicatorsRuntimeActive
@@ -376,8 +382,16 @@ function GF.BuildFrameCache(f)
 
     local overlayTrigger = (GF.ResolveDispelOverlayTrigger and GF.ResolveDispelOverlayTrigger(c)) or c.dispelBorderTrigger
     c.dispelOverlayTrigger = overlayTrigger
-    local borderTriggerAllowed = not GF.DispelBorderTriggerNeedsPlayerDispel(c.dispelBorderTrigger) or GF._playerCanDispel
-    local overlayTriggerAllowed = not GF.DispelBorderTriggerNeedsPlayerDispel(overlayTrigger) or GF._playerCanDispel
+    local borderCustomTypePriority = GF.DispelScanCustomTypePriorityEnabled
+        and GF.DispelScanCustomTypePriorityEnabled(kind, c, false) == true
+    local overlayCustomTypePriority = GF.DispelScanCustomTypePriorityEnabled
+        and GF.DispelScanCustomTypePriorityEnabled(kind, c, true) == true
+    local borderTriggerAllowed = not GF.DispelBorderTriggerNeedsPlayerDispel(c.dispelBorderTrigger)
+        or GF._playerCanDispel
+        or borderCustomTypePriority
+    local overlayTriggerAllowed = not GF.DispelBorderTriggerNeedsPlayerDispel(overlayTrigger)
+        or GF._playerCanDispel
+        or overlayCustomTypePriority
     c.dispelBorderScanActive = c.dispelScan
         and (c.dispelEn or ciDispelActive)
         and borderTriggerAllowed

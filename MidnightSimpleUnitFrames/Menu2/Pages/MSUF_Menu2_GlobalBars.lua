@@ -71,6 +71,7 @@ local PriorityAllowed = GP.PriorityAllowed
 local PriorityOrder = GP.PriorityOrder
 local PriorityColor = GP.PriorityColor
 local SetPriorityOrder = GP.SetPriorityOrder
+local NormalizePriorityKey = GP.NormalizePriorityKey or function(key) return key end
 local HasGroupBlizzardRendererConflict = GP.HasGroupBlizzardRendererConflict
 local GroupBlizzardRendererConflictText = GP.GroupBlizzardRendererConflictText
 local NotifyDispelGlowBlizzardConflict = GP.NotifyDispelGlowBlizzardConflict
@@ -451,7 +452,7 @@ local function BuildBars(ctx)
         local order = {}
         if type(raw) == "table" then
             for i = 1, #raw do
-                local value = raw[i]
+                local value = NormalizePriorityKey(raw[i])
                 if allowed[value] then
                     order[#order + 1] = value
                 end

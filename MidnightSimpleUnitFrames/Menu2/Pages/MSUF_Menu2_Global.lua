@@ -508,6 +508,36 @@ local PRIORITY_COLORS = {
     poison = { 0.00, 0.60, 0.00 },
     bleed = { 0.80, 0.10, 0.10 },
 }
+local PRIORITY_KEY_ALIAS = {
+    Dispel = "dispel",
+    DISPEL = "dispel",
+    Magic = "magic",
+    MAGIC = "magic",
+    Curse = "curse",
+    CURSE = "curse",
+    Disease = "disease",
+    DISEASE = "disease",
+    Poison = "poison",
+    POISON = "poison",
+    Bleed = "bleed",
+    BLEED = "bleed",
+    Aggro = "aggro",
+    AGGRO = "aggro",
+    Purge = "purge",
+    PURGE = "purge",
+    BossTarget = "bossTarget",
+    Boss_Target = "bossTarget",
+    ["Boss Target"] = "bossTarget",
+    ["boss target"] = "bossTarget",
+    boss_target = "bossTarget",
+    bosstarget = "bossTarget",
+    BOSS_TARGET = "bossTarget",
+}
+
+local function NormalizePriorityKey(key)
+    if type(key) ~= "string" then return nil end
+    return PRIORITY_KEY_ALIAS[key] or key
+end
 
 local function PriorityDefaults()
     return tostring(BarScopeGet("hlDispelColorMode", "SINGLE")) == "TYPE" and PRIORITY_TYPE or PRIORITY_SINGLE
@@ -529,7 +559,7 @@ local function PriorityOrder()
     local order = {}
     if type(raw) == "table" then
         for i = 1, #raw do
-            local value = raw[i]
+            local value = NormalizePriorityKey(raw[i])
             if allowed[value] then
                 order[#order + 1] = value
             end
@@ -810,6 +840,7 @@ GlobalPage.PRIORITY_SINGLE = PRIORITY_SINGLE
 GlobalPage.PRIORITY_TYPE = PRIORITY_TYPE
 GlobalPage.PRIORITY_LABELS = PRIORITY_LABELS
 GlobalPage.PRIORITY_COLORS = PRIORITY_COLORS
+GlobalPage.NormalizePriorityKey = NormalizePriorityKey
 GlobalPage.Call = Call
 GlobalPage.DB = DB
 GlobalPage.G = G

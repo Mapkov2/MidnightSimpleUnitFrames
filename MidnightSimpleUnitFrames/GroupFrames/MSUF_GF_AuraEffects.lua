@@ -312,7 +312,42 @@ local _GF_PRIORITY_KEY_BY_DISPEL_TYPE = {
     Poison = "poison",
     Bleed = "bleed",
 }
+local _GF_PRIORITY_KEY_ALIAS = {
+    Dispel = "dispel",
+    DISPEL = "dispel",
+    dispellable = "dispel",
+    Magic = "magic",
+    MAGIC = "magic",
+    Curse = "curse",
+    CURSE = "curse",
+    Disease = "disease",
+    DISEASE = "disease",
+    Poison = "poison",
+    POISON = "poison",
+    Bleed = "bleed",
+    BLEED = "bleed",
+    Aggro = "aggro",
+    AGGRO = "aggro",
+    Purge = "purge",
+    PURGE = "purge",
+    BossTarget = "bossTarget",
+    Boss_Target = "bossTarget",
+    ["Boss Target"] = "bossTarget",
+    ["boss target"] = "bossTarget",
+    boss_target = "bossTarget",
+    bosstarget = "bossTarget",
+    BOSS_TARGET = "bossTarget",
+    Target = "target",
+    TARGET = "target",
+    Focus = "focus",
+    FOCUS = "focus",
+}
 local _GF_DISPEL_TYPE_ID_CURVE
+local function GFNormalizePriorityKey(key)
+    if type(key) ~= "string" then return nil end
+    return _GF_PRIORITY_KEY_ALIAS[key] or key
+end
+
 local function GFBuildDispelTypeIDCurve()
     local CUA = _G.C_UnitAuras
     local CCU = _G.C_CurveUtil
@@ -383,29 +418,10 @@ local _GF_PRIORITY_TYPE_ALLOWED = {
     aggro = true,
 }
 
-local function GFPrioDispelMatches(kind, hasDispel, dispelType)
-    if not hasDispel then return false end
-    if kind == "dispel" then return true end
-    local wanted = _GF_PRIORITY_DISPEL_TYPE_BY_KEY[kind]
-    if not wanted then return false end
-    if issecretvalue and issecretvalue(dispelType) then return false end
-    if type(dispelType) ~= "string" or dispelType == "" or dispelType == "DISPELLABLE" then return false end
-    -- dispelType may be the raw capitalized dispelName ("Bleed") or the lowercase
-    -- priority key ("bleed") returned by GFResolveAuraDispelPriorityType. wanted is
-    -- always capitalized, so also accept a match against the lowercase kind directly.
-    return dispelType == wanted or dispelType == kind
-end
-
-local function GFPrioKindActive(kind, hasDispel, dispelType, hasAggro)
-    if GFPrioDispelMatches(kind, hasDispel, dispelType) then return "dispel" end
-    if kind == "aggro" and hasAggro then return "aggro" end
-    return nil
-end
-
 local function GFPrioRawHasAllowedKey(prioOrder, allowed, key)
     if type(prioOrder) ~= "table" or not allowed[key] then return false end
     for i = 1, #prioOrder do
-        if prioOrder[i] == key then return true end
+        if GFNormalizePriorityKey(prioOrder[i]) == key then return true end
     end
     return false
 end
@@ -413,8 +429,24 @@ end
 local function GFPrioOrderHasTypeKey(prioOrder)
     if type(prioOrder) ~= "table" then return false end
     for i = 1, #prioOrder do
-        local key = prioOrder[i]
+        local key = GFNormalizePriorityKey(prioOrder[i])
         if key ~= "dispel" and _GF_PRIORITY_TYPE_ALLOWED[key] then return true end
+    end
+    return false
+end
+
+local _GF_DISPEL_TYPE_ORDER_KEYS = {
+    magic = true,
+    curse = true,
+    disease = true,
+    poison = true,
+    bleed = true,
+}
+
+local function GFPrioOrderHasDispelTypeKey(prioOrder)
+    if type(prioOrder) ~= "table" then return false end
+    for i = 1, #prioOrder do
+        if _GF_DISPEL_TYPE_ORDER_KEYS[GFNormalizePriorityKey(prioOrder[i])] then return true end
     end
     return false
 end
@@ -424,37 +456,6 @@ local function GFOverlayUsesOwnPriority(c)
     return c.doUseHighlightPriority == false
         or c.doPrioEnabled == true
         or c.doPrioEnabled == 1
-end
-
-local function GFResolveHighlightPriority(kind, prioEnabled, prioOrder, hasDispel, dispelType, hasAggro)
-    if not prioEnabled then
-        return hasDispel and "dispel" or (hasAggro and "aggro" or nil)
-    end
-
-    local typeMode = GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE") == "TYPE"
-        or GFPrioOrderHasTypeKey(prioOrder)
-    local allowed = typeMode and _GF_PRIORITY_TYPE_ALLOWED or _GF_PRIORITY_SINGLE_ALLOWED
-    local defaults = typeMode and _GF_PRIORITY_TYPE_DEFAULTS or _GF_PRIORITY_SINGLE_DEFAULTS
-    if type(prioOrder) == "table" then
-        for _, pk in ipairs(prioOrder) do
-            if allowed[pk] then
-                local active = GFPrioKindActive(pk, hasDispel, dispelType, hasAggro)
-                if active then return active end
-            end
-        end
-    end
-    for i = 1, #defaults do
-        local pk = defaults[i]
-        if not GFPrioRawHasAllowedKey(prioOrder, allowed, pk) then
-            local active = GFPrioKindActive(pk, hasDispel, dispelType, hasAggro)
-            if active then return active end
-        end
-    end
-    -- If a dispel exists but its concrete type is unavailable, keep the
-    -- generic dispel visual instead of letting the first typed priority
-    -- (usually Magic) claim it. This preserves visibility without collapsing
-    -- independent type-priority lanes.
-    return hasDispel and "dispel" or nil
 end
 
 local function GFDispelScanPriorityConfig(kind, c, useOverlayPriority)
@@ -469,11 +470,24 @@ local function GFDispelScanPriorityConfig(kind, c, useOverlayPriority)
     end
     local customEnabled = enabled == true or enabled == 1
     local typeColorMode = GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE") == "TYPE"
-    local customTypeOrder = customEnabled and GFPrioOrderHasTypeKey(order)
+    local customTypeOrder = customEnabled and GFPrioOrderHasDispelTypeKey(order)
     if not typeColorMode and not customTypeOrder then
         return false, order
     end
     return true, customEnabled and order or nil
+end
+
+local function GFDispelScanCustomTypePriorityEnabled(kind, c, useOverlayPriority)
+    local enabled, order
+    if useOverlayPriority and GFOverlayUsesOwnPriority(c) then
+        enabled, order = c and c.doPrioEnabled, c and c.doPrioOrder
+    else
+        enabled = c and c.hlPrioEnabled
+        if enabled == nil then enabled = HLVal(kind, "hlPrioEnabled") end
+        order = c and c.hlPrioOrder
+        if type(order) ~= "table" then order = HLVal(kind, "hlPrioOrder") end
+    end
+    return (enabled == true or enabled == 1) and GFPrioOrderHasDispelTypeKey(order)
 end
 
 local function GFDispelScanPriorityEnabled(kind, c, useOverlayPriority)
@@ -507,6 +521,7 @@ local function GFDispelTypePriorityRank(kind, c, dispelType, useOverlayPriority,
     local rank = 1
     if type(prioOrder) == "table" then
         for _, pk in ipairs(prioOrder) do
+            pk = GFNormalizePriorityKey(pk)
             if _GF_PRIORITY_TYPE_ALLOWED[pk] then
                 if pk == wanted then return rank end
                 rank = rank + 1
@@ -531,6 +546,10 @@ local _GF_PRIORITY_SIGNATURE = {
     bleed = 5,
     dispel = 6,
     aggro = 7,
+    purge = 8,
+    bossTarget = 9,
+    target = 10,
+    focus = 11,
 }
 
 local function GFDispelScanPrioritySignature(kind, c, useOverlayPriority)
@@ -544,10 +563,104 @@ local function GFDispelScanPrioritySignature(kind, c, useOverlayPriority)
     end
     if type(order) == "table" then
         for i = 1, #order do
-            sig = sig * 11 + (_GF_PRIORITY_SIGNATURE[order[i]] or 0)
+            sig = sig * 13 + (_GF_PRIORITY_SIGNATURE[GFNormalizePriorityKey(order[i])] or 0)
         end
     end
     return sig
+end
+
+local _GF_LAYER_SINGLE_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget", "target", "focus" }
+local _GF_LAYER_TYPE_DEFAULTS = { "magic", "curse", "disease", "poison", "bleed", "aggro", "purge", "bossTarget", "target", "focus" }
+local _GF_LAYER_SINGLE_ALLOWED = { dispel = true, aggro = true, purge = true, bossTarget = true, target = true, focus = true }
+local _GF_LAYER_TYPE_ALLOWED = {
+    magic = true,
+    curse = true,
+    disease = true,
+    poison = true,
+    bleed = true,
+    dispel = true,
+    aggro = true,
+    purge = true,
+    bossTarget = true,
+    target = true,
+    focus = true,
+}
+
+local function GFHighlightLayerKeyMatches(layerKind, orderKey, dispelType)
+    if layerKind == "dispel" then
+        if orderKey == "dispel" then return true end
+        local wanted = _GF_PRIORITY_KEY_BY_DISPEL_TYPE[dispelType]
+            or (_GF_PRIORITY_TYPE_ALLOWED[dispelType] and dispelType)
+        return wanted ~= nil and orderKey == wanted
+    end
+    return orderKey == layerKind
+end
+
+local function GFHighlightLayerOffset(kind, c, layerKind, dispelType)
+    local enabled = c and (c.hlPrioEnabled == true or c.hlPrioEnabled == 1)
+    local order = enabled and c and c.hlPrioOrder or nil
+    local typeMode = GFDispelColorScopeValue(kind, "hlDispelColorMode", nil, "SINGLE") == "TYPE"
+        or (enabled and GFPrioOrderHasTypeKey(order))
+    local allowed = typeMode and _GF_LAYER_TYPE_ALLOWED or _GF_LAYER_SINGLE_ALLOWED
+    local defaults = typeMode and _GF_LAYER_TYPE_DEFAULTS or _GF_LAYER_SINGLE_DEFAULTS
+    local pos, count = nil, 0
+
+    local function consider(orderKey)
+        orderKey = GFNormalizePriorityKey(orderKey)
+        if not allowed[orderKey] then return end
+        count = count + 1
+        if not pos and GFHighlightLayerKeyMatches(layerKind, orderKey, dispelType) then
+            pos = count
+        end
+    end
+
+    if enabled and type(order) == "table" then
+        for i = 1, #order do
+            consider(order[i])
+        end
+    end
+    for i = 1, #defaults do
+        local orderKey = defaults[i]
+        if not (enabled and GFPrioRawHasAllowedKey(order, allowed, orderKey)) then
+            consider(orderKey)
+        end
+    end
+
+    if not pos and layerKind == "dispel" then pos = 1 end
+    if not pos then pos = count end
+    if count < 1 then count, pos = 1, 1 end
+    return (GF.LAYER_HIGHLIGHT_BORDER or 10) + (count - pos)
+end
+
+local function GFEnsureHighlightBorder(f, layerKind)
+    if not f then return nil end
+    local borders = f._msufGFHighlightBorders
+    if not borders then
+        borders = {}
+        f._msufGFHighlightBorders = borders
+        if f._msufGFHighlightBorder then
+            borders.dispel = f._msufGFHighlightBorder
+            f._msufGFHighlightBorder._msufGFHLKey = "dispel"
+            f._msufGFDispelHighlightBorder = f._msufGFHighlightBorder
+        end
+    end
+    local border = borders[layerKind]
+    if border then return border end
+
+    local parent = f.barGroup or f
+    local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
+    border = _G.CreateFrame("Frame", nil, parent, template)
+    border:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+    border:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
+    border:EnableMouse(false)
+    border._msufGFHLKey = layerKind
+    if GF.SyncFrameLayerAbove then
+        GF.SyncFrameLayerAbove(border, f.health or parent, GF.LAYER_HIGHLIGHT_BORDER or 10)
+    end
+    border:Hide()
+    borders[layerKind] = border
+    if layerKind == "dispel" then f._msufGFDispelHighlightBorder = border end
+    return border
 end
 
 -- Dispel glow helpers (GF).
@@ -603,13 +716,24 @@ local function _GF_StartDispelGlow(f, r, g, b)
                 LCG.AutoCastGlow_Stop(offAnchor, "msufDispel")
                 LCG.ProcGlow_Stop(offAnchor, "msufDispel")
             end
-            local offBorder = f._msufGFHighlightBorder
-            if offBorder and offBorder ~= offAnchor then
-                LCG.PixelGlow_Stop(offBorder, "msufDispel")
-                LCG.AutoCastGlow_Stop(offBorder, "msufDispel")
-                LCG.ProcGlow_Stop(offBorder, "msufDispel")
+            local borders = f._msufGFHighlightBorders
+            if borders then
+                for _, offBorder in pairs(borders) do
+                    if offBorder and offBorder ~= offAnchor then
+                        LCG.PixelGlow_Stop(offBorder, "msufDispel")
+                        LCG.AutoCastGlow_Stop(offBorder, "msufDispel")
+                        LCG.ProcGlow_Stop(offBorder, "msufDispel")
+                    end
+                end
+            else
+                local offBorder = f._msufGFHighlightBorder
+                if offBorder and offBorder ~= offAnchor then
+                    LCG.PixelGlow_Stop(offBorder, "msufDispel")
+                    LCG.AutoCastGlow_Stop(offBorder, "msufDispel")
+                    LCG.ProcGlow_Stop(offBorder, "msufDispel")
+                end
             end
-            if f ~= offAnchor and f ~= offBorder then
+            if f ~= offAnchor then
                 LCG.PixelGlow_Stop(f, "msufDispel")
                 LCG.AutoCastGlow_Stop(f, "msufDispel")
                 LCG.ProcGlow_Stop(f, "msufDispel")
@@ -617,7 +741,7 @@ local function _GF_StartDispelGlow(f, r, g, b)
         end
         return
     end
-    local anchor = f._msufRGF_GlowAnchor or f._msufGFHighlightBorder or f
+    local anchor = f._msufRGF_GlowAnchor or f._msufGFDispelHighlightBorder or f._msufGFHighlightBorder or f
     local style = HLVal(kind, "hlDispelGlowStyle") or "PIXEL"
     local lines = tonumber(HLVal(kind, "hlDispelGlowLines")) or 8
     local freq  = tonumber(HLVal(kind, "hlDispelGlowFrequency")) or 0.25
@@ -697,13 +821,24 @@ local function _GF_StopDispelGlow(f)
         LCG.ProcGlow_Stop(anchor, "msufDispel")
     end
 
-    local border = f._msufGFHighlightBorder
-    if border and border ~= anchor then
-        LCG.PixelGlow_Stop(border, "msufDispel")
-        LCG.AutoCastGlow_Stop(border, "msufDispel")
-        LCG.ProcGlow_Stop(border, "msufDispel")
+    local borders = f._msufGFHighlightBorders
+    if borders then
+        for _, border in pairs(borders) do
+            if border and border ~= anchor then
+                LCG.PixelGlow_Stop(border, "msufDispel")
+                LCG.AutoCastGlow_Stop(border, "msufDispel")
+                LCG.ProcGlow_Stop(border, "msufDispel")
+            end
+        end
+    else
+        local border = f._msufGFHighlightBorder
+        if border and border ~= anchor then
+            LCG.PixelGlow_Stop(border, "msufDispel")
+            LCG.AutoCastGlow_Stop(border, "msufDispel")
+            LCG.ProcGlow_Stop(border, "msufDispel")
+        end
     end
-    if f ~= anchor and f ~= border then
+    if f ~= anchor then
         LCG.PixelGlow_Stop(f, "msufDispel")
         LCG.AutoCastGlow_Stop(f, "msufDispel")
         LCG.ProcGlow_Stop(f, "msufDispel")
@@ -831,7 +966,7 @@ end
 
 function GF.FinishAuraVisuals(f, unit, c, updateInfo)
     if not (f and c) then return end
-    if c.nativeBlizzardDispelsSuppressCustom and c.dispelOverlayScanActive ~= true then
+    if c.nativeBlizzardDispelsSuppressCustom and not GF.DispelScanActive(c) then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
     elseif GF.DispelScanActive(c) or f._msufGFDispelType or f._msufGFMergedDispel
         or f._msufGFDispelAuraID or f._msufGFPrevDispelAuraID
@@ -918,20 +1053,15 @@ local function dispatchAura(f, unit, updateInfo)
                 if not needDispelScan then
                     local updated = updateInfo.updatedAuraInstanceIDs
                     if updated and #updated > 0 then
-                        local triggerMode = GF.NormalizeDispelBorderTrigger(c.dispelBorderTrigger)
-                        local overlayTrigger = c.dispelOverlayScanActive == true and GF.ResolveDispelOverlayTrigger and GF.ResolveDispelOverlayTrigger(c) or triggerMode
-                        if c.dispelBorderScanActive == true and (
-                            GFDispelScanPriorityEnabled(kind, c, false)
-                            or GFDispelScanResolveType(kind, c, triggerMode, false)
-                            or triggerMode == "ANY_DEBUFF"
-                        ) then
-                            needDispelScan = true
-                        elseif c.dispelOverlayScanActive == true and (
-                            GFDispelScanPriorityEnabled(kind, c, true)
-                            or GFDispelScanResolveType(kind, c, overlayTrigger, true)
-                            or overlayTrigger == "ANY_DEBUFF"
-                        ) then
-                            needDispelScan = true
+                        local trackedAid = f._msufGFDispelAuraID
+                        local overlayTrackedAid = f._msufGFDispelOverlayAuraID
+                        if trackedAid or overlayTrackedAid then
+                            for ui = 1, #updated do
+                                local aid = updated[ui]
+                                if aid == trackedAid or aid == overlayTrackedAid then
+                                    needDispelScan = true; break
+                                end
+                            end
                         end
                     end
                 end
@@ -1204,22 +1334,8 @@ _GF_ApplyDispelOverlay = function(f)
     if not c then return end
 
     local dispelType = f._msufGFDispelOverlayType
-    local usePriority = c.doUseHighlightPriority ~= false or c.doPrioEnabled == true or c.doPrioEnabled == 1
-    local activePriority
-    if usePriority then
-        local hasDispel = dispelType ~= nil
-        local aggroLevel = f._msufGFAggroLevel
-        local hasAggro = aggroLevel and aggroLevel >= 1 and c.aggroEn
-        if GFOverlayUsesOwnPriority(c) then
-            activePriority = GFResolveHighlightPriority(f._msufGFKind or "party", c.doPrioEnabled == true or c.doPrioEnabled == 1, c.doPrioOrder, hasDispel, dispelType, hasAggro)
-        else
-            activePriority = GFResolveHighlightPriority(f._msufGFKind or "party", c.hlPrioEnabled == true or c.hlPrioEnabled == 1, c.hlPrioOrder, hasDispel, dispelType, hasAggro)
-        end
-    else
-        activePriority = dispelType and "dispel" or nil
-    end
 
-    if not c.doEn or not activePriority then
+    if not c.doEn or not dispelType then
         if dov:IsShown() then dov:Hide() end
         dov._msufDOSyncHP = nil
         return
@@ -1235,6 +1351,11 @@ _GF_ApplyDispelOverlay = function(f)
             dov:ClearAllPoints()
             dov:SetAllPoints(anchorTo)
             dov._msufDOAnchorTo = anchorTo
+        end
+        if GF.SyncFrameLayerAbove then
+            GF.SyncFrameLayerAbove(dov, f.health, GF.LAYER_DISPEL_OVERLAY or 6)
+        elseif dov.SetFrameLevel and f.health.GetFrameLevel then
+            dov:SetFrameLevel(f.health:GetFrameLevel() + 6)
         end
     end
 
@@ -1266,12 +1387,7 @@ _GF_ApplyDispelOverlay = function(f)
     end
 
     -- Resolve and apply tint (secret-safe path).
-    local colorObj, r, g, b
-    if activePriority == "aggro" then
-        r, g, b = c.aggroR or 1, c.aggroG or 0.55, c.aggroB or 0
-    else
-        colorObj, r, g, b = ResolveDispelColorObj(f, dispelType, true)
-    end
+    local colorObj, r, g, b = ResolveDispelColorObj(f, dispelType, true)
     if tex then
         local rr, gg, bb, aa = ExtractColorRGBA(colorObj)
         rr, gg, bb, aa = rr or r or 0.25, gg or g or 0.75, bb or b or 1.00, aa or 1
@@ -1342,6 +1458,11 @@ _GF_ApplyDebuffStripe = function(f)
             stripe:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
         end
     end
+    if GF.SyncFrameLayerAbove and f.health then
+        GF.SyncFrameLayerAbove(stripe, f.health, GF.LAYER_DEBUFF_STRIPE or 7)
+    elseif stripe.SetFrameLevel and f.health and f.health.GetFrameLevel then
+        stripe:SetFrameLevel(f.health:GetFrameLevel() + 7)
+    end
 
     -- Color + alpha (diff-gated)
     local r, g, b, a = c.dsR, c.dsG, c.dsB, c.dsAlpha
@@ -1362,18 +1483,20 @@ _GF_RefreshBorder = function(f, unit)
     -- Overlay lives in _GF_ApplyDispelOverlay and is called separately
     -- from dispel-change sites only Ã¢â‚¬â€ never from aggro/target/test paths.
 
-    local border = f._msufGFHighlightBorder
-    if not border then return end
+    if not GFEnsureHighlightBorder(f, "dispel") then return end
     local c = f._c
     if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
     if not c then return end
 
     -- Resolve active states
+    local kind = f._msufGFKind or "party"
     local dispelType = f._msufGFDispelType
-    local testMode = _GF_DispelBorderTestApplies(f, f._msufGFKind or "party")
+    local testMode = _GF_DispelBorderTestApplies(f, kind)
     local hasDispel  = dispelType and (c.dispelEn or testMode)
     local aggroLevel = f._msufGFAggroLevel
     local hasAggro   = aggroLevel and aggroLevel >= 1 and c.aggroEn
+    local hasTarget  = f._msufGFIsTarget and c.targetEn
+    local hasFocus   = f._msufGFIsFocus and c.focusEn
 
     -- Shared geometry for dispel/aggro/purge (all use Aggro size keys)
     local sz  = c.aggroSize or 2
@@ -1386,66 +1509,83 @@ _GF_RefreshBorder = function(f, unit)
         ofs = GF.ScaleValue(ofs, fScale)
     end
 
-    -- Configurable priority: read the resolved Bars scope for this GF kind.
+    -- Custom priority maps to strata/frame level; all active highlight lanes
+    -- render on their own frames and compositing decides which one is on top.
     -- Maps "dispel"/"magic"/"curse"/etc Ã¢â€ â€™ dispel, "aggro" Ã¢â€ â€™ aggro.
-    -- Purge/bossTarget are UF-only, skip for GF.
-    local prioEnabled = c.hlPrioEnabled == true or c.hlPrioEnabled == 1
-    local prioOrder = prioEnabled and c.hlPrioOrder or nil
-    local activePriority = GFResolveHighlightPriority(f._msufGFKind or "party", prioEnabled, prioOrder, hasDispel, dispelType, hasAggro)
-    if activePriority == "dispel" then
-        local r, g, b = ResolveDispelColor(dispelType, f)
-        if r then
-            _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay, r, g, b, 1)
-            border._msufHLActivePrio = 1; border:Show()
-            _NotifyRoundedGFHighlight(border)
-            _GF_StartDispelGlow(f, r, g, b)
-            return
+    local active = {}
+    local topBorder, topOffset, topPrio
+
+    local function applyLayer(layerKind, prio, size, offset, texture, layer, r, g, b)
+        local border = GFEnsureHighlightBorder(f, layerKind)
+        if not border then return end
+        local layerOffset = GFHighlightLayerOffset(kind, c, layerKind, dispelType)
+        border._msufHLLayerOffset = layerOffset
+        _applyHighlightBorderStyle(border, nil, size, offset, texture, layer, r, g, b, 1)
+        border._msufHLActivePrio = prio
+        if not border:IsShown() then border:Show() end
+        active[layerKind] = true
+        if not topBorder or layerOffset > topOffset or (layerOffset == topOffset and prio < topPrio) then
+            topBorder, topOffset, topPrio = border, layerOffset, prio
         end
-    elseif activePriority == "aggro" then
-        _applyHighlightBorderStyle(border, nil, sz, ofs, tex, lay,
-            c.aggroR or 1, c.aggroG or 0.55, c.aggroB or 0, 1)
-        border._msufHLActivePrio = 2; border:Show()
-        _NotifyRoundedGFHighlight(border)
-        _GF_StopDispelGlow(f)
-        return
     end
 
-    -- After configurable prio: Target (GF-specific, always after dispel/aggro)
-    if f._msufGFIsTarget and c.targetEn then
-        _applyHighlightBorderStyle(border, nil,
+    local dispelR, dispelG, dispelB
+    if hasDispel then
+        dispelR, dispelG, dispelB = ResolveDispelColor(dispelType, f)
+        if dispelR then
+            applyLayer("dispel", 1, sz, ofs, tex, lay, dispelR, dispelG, dispelB)
+        end
+    end
+    if hasAggro then
+        applyLayer("aggro", 2, sz, ofs, tex, lay,
+            c.aggroR or 1, c.aggroG or 0.55, c.aggroB or 0)
+    end
+    if hasTarget then
+        applyLayer("target", 3,
             c.tgtSize or 2,
             c.tgtOfs or 0,
             c.tgtTex,
             c.tgtLayer or "DEFAULT",
             c.tgtR or 1,
             c.tgtG or 1,
-            c.tgtB or 1, 1)
-        border._msufHLActivePrio = 3; border:Show()
-        _NotifyRoundedGFHighlight(border)
-        _GF_StopDispelGlow(f)
-        return
+            c.tgtB or 1)
     end
-
-    -- Focus (GF-specific, lowest priority)
-    if f._msufGFIsFocus and c.focusEn then
-        _applyHighlightBorderStyle(border, nil,
+    if hasFocus then
+        applyLayer("focus", 4,
             c.focSize or 2,
             c.focOfs or 0,
             c.focTex,
             c.focLayer or "DEFAULT",
             c.focR or 0.5,
             c.focG or 0.5,
-            c.focB or 1.0, 1)
-        border._msufHLActivePrio = 4; border:Show()
-        _NotifyRoundedGFHighlight(border)
-        _GF_StopDispelGlow(f)
-        return
+            c.focB or 1.0)
     end
 
-    border._msufHLActivePrio = nil
-    _NotifyRoundedGFHighlight(border)
-    if border:IsShown() then border:Hide() end
-    _GF_StopDispelGlow(f)
+    local borders = f._msufGFHighlightBorders
+    if borders then
+        for layerKind, border in pairs(borders) do
+            if border and not active[layerKind] then
+                border._msufHLActivePrio = nil
+                if border:IsShown() then border:Hide() end
+            end
+        end
+    end
+
+    local fallbackBorder = (borders and borders.dispel) or f._msufGFDispelHighlightBorder or f._msufGFHighlightBorder
+    f._msufGFHighlightBorder = topBorder or fallbackBorder
+    _NotifyRoundedGFHighlight(f._msufGFHighlightBorder)
+
+    if _G.MSUF_RoundedUF_Active == true and borders then
+        for _, border in pairs(borders) do
+            if border and border:IsShown() then border:Hide() end
+        end
+    end
+
+    if dispelR then
+        _GF_StartDispelGlow(f, dispelR, dispelG, dispelB)
+    else
+        _GF_StopDispelGlow(f)
+    end
 end
 
 _GF_ClearNativeSuppressedDispel = function(f, unit)
@@ -1454,7 +1594,7 @@ _GF_ClearNativeSuppressedDispel = function(f, unit)
     local hadDispel = f._msufGFDispelType or f._msufGFMergedDispel or f._msufGFDispelAuraID
         or f._msufGFPrevDispelAuraID or f._msufGFDispelGlowActive
         or f._msufGFDispelOverlayType or f._msufGFMergedDispelOverlay or f._msufGFDispelOverlayAuraID
-    local border = f._msufGFHighlightBorder
+    local border = f._msufGFDispelHighlightBorder or (f._msufGFHighlightBorders and f._msufGFHighlightBorders.dispel) or f._msufGFHighlightBorder
     if border and border._msufHLActivePrio == 1 then hadDispel = true end
 
     f._msufGFMergedDispel = nil
@@ -1619,8 +1759,12 @@ GF.FindDispelBorderAura = function(unit, triggerMode, kind, c, useOverlayPriorit
         return _GF_FindDispelBorderAuraFallback(unit, triggerMode)
     end
     triggerMode = GF.NormalizeDispelBorderTrigger(triggerMode)
-    local filter = (triggerMode == "BY_ME") and _DISPEL_SCAN_FILTER or "HARMFUL"
     kind = kind or "party"
+    if triggerMode == "BY_ME" and GFDispelScanCustomTypePriorityEnabled(kind, c, useOverlayPriority) then
+        local typedDispel, typedAid = GF.FindDispelBorderAura(unit, "DISPEL_TYPE", kind, c, useOverlayPriority)
+        if typedDispel then return typedDispel, typedAid end
+    end
+    local filter = (triggerMode == "ANY_DEBUFF" or triggerMode == "DISPEL_TYPE") and "HARMFUL" or _DISPEL_SCAN_FILTER
     local forceTypeRank = triggerMode == "DISPEL_TYPE" or triggerMode == "ANY_DEBUFF"
     local ranked = GFDispelScanPriorityEnabled(kind, c, useOverlayPriority) or forceTypeRank
     local resolveType = GFDispelScanResolveType(kind, c, triggerMode, useOverlayPriority)
@@ -1749,13 +1893,15 @@ function GF._UpdateDispel(f, unit)
         local confAuras = conf and conf.auras
         suppressBlizzardCustom = nativeDispels and not (confAuras and confAuras.blizzardDispelBorder == true)
     end
-    if not testMode and suppressBlizzardCustom and not (c and c.dispelOverlayScanActive == true) then
+    if not testMode and suppressBlizzardCustom and not (c and GF.DispelScanActive(c)) then
         if _GF_ClearNativeSuppressedDispel then _GF_ClearNativeSuppressedDispel(f, unit) end
         f._msufGFDispelKnown = true
         return
     end
 
-    local triggerBlocked = GF.DispelBorderTriggerNeedsPlayerDispel(triggerMode) and not GF._playerCanDispel
+    local triggerBlocked = GF.DispelBorderTriggerNeedsPlayerDispel(triggerMode)
+        and not GF._playerCanDispel
+        and not GFDispelScanCustomTypePriorityEnabled(kind, c, false)
     local scanConsumerActive
     if c then
         scanConsumerActive = c.dispelBorderScanActive == true or c.dispelOverlayScanActive == true
@@ -1924,10 +2070,28 @@ function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
     local overlayTrigger = overlayScanActive and GF.ResolveDispelOverlayTrigger and GF.ResolveDispelOverlayTrigger(c) or triggerMode
     local borderPriorityScan = GFDispelScanPriorityEnabled(kind, c)
     local overlayPriorityScan = GFDispelScanPriorityEnabled(kind, c, true)
+    local borderCustomTypePriority = triggerMode == "BY_ME" and GFDispelScanCustomTypePriorityEnabled(kind, c, false)
+    local overlayCustomTypePriority = overlayTrigger == "BY_ME" and GFDispelScanCustomTypePriorityEnabled(kind, c, true)
     local resolveType = GFDispelScanResolveType(kind, c, triggerMode, false)
     local overlayResolveType = GFDispelScanResolveType(kind, c, overlayTrigger, true)
-    local borderWinnerScan = borderPriorityScan or resolveType or triggerMode == "ANY_DEBUFF"
-    local overlayWinnerScan = overlayPriorityScan or overlayResolveType or overlayTrigger == "ANY_DEBUFF"
+    local borderWinnerScan = borderPriorityScan
+    local overlayWinnerScan = overlayPriorityScan
+
+    local function addedAuraMatchesTrigger(aura, trigger, resolve, customTypePriority)
+        local aid = aura and aura.auraInstanceID
+        if not aid then return false, nil end
+        if customTypePriority then
+            local typedDispel = GF.ReadDispelBorderAura(aura, "DISPEL_TYPE", unit, true)
+            if typedDispel then return true, typedDispel end
+            if trigger == "BY_ME" and C_UnitAuras_IsAuraFilteredOut then
+                return C_UnitAuras_IsAuraFilteredOut(unit, aid, _DISPEL_SCAN_FILTER) == false, nil
+            end
+        elseif trigger == "BY_ME" and C_UnitAuras_IsAuraFilteredOut then
+            return C_UnitAuras_IsAuraFilteredOut(unit, aid, _DISPEL_SCAN_FILTER) == false, nil
+        end
+        local triggerDispel = GF.ReadDispelBorderAura(aura, trigger, unit, resolve)
+        return triggerDispel ~= nil, triggerDispel
+    end
 
     local trackedAid = f._msufGFDispelAuraID
     local overlayTrackedAid = f._msufGFDispelOverlayAuraID
@@ -1980,16 +2144,8 @@ function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
     if overlayScanActive and added and (not overlayTrackedAid or overlayWinnerScan) then
         for i = 1, #added do
             local aura = added[i]
-            local aid = aura and aura.auraInstanceID
-            if aid then
-                local dispellable = false
-                if overlayTrigger == "BY_ME" and C_UnitAuras_IsAuraFilteredOut then
-                    dispellable = C_UnitAuras_IsAuraFilteredOut(unit, aid, _DISPEL_SCAN_FILTER) == false
-                else
-                    dispellable = GF.ReadDispelBorderAura(aura, overlayTrigger, unit, overlayResolveType) ~= nil
-                end
-                if dispellable then return finishFull() end
-            end
+            local dispellable = addedAuraMatchesTrigger(aura, overlayTrigger, overlayResolveType, overlayCustomTypePriority)
+            if dispellable then return finishFull() end
         end
     end
 
@@ -2000,16 +2156,8 @@ function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
     if trackedAid and added and borderWinnerScan then
         for i = 1, #added do
             local aura = added[i]
-            local aid = aura and aura.auraInstanceID
-            if aid then
-                local dispellable = false
-                if triggerMode == "BY_ME" and C_UnitAuras_IsAuraFilteredOut then
-                    dispellable = C_UnitAuras_IsAuraFilteredOut(unit, aid, _DISPEL_SCAN_FILTER) == false
-                else
-                    dispellable = GF.ReadDispelBorderAura(aura, triggerMode, unit, resolveType) ~= nil
-                end
-                if dispellable then return finishFull() end
-            end
+            local dispellable = addedAuraMatchesTrigger(aura, triggerMode, resolveType, borderCustomTypePriority)
+            if dispellable then return finishFull() end
         end
     end
 
@@ -2025,13 +2173,7 @@ function GF._UpdateDispelFromAuraDelta(f, unit, updateInfo)
         local aura = added[i]
         local aid = aura and aura.auraInstanceID
         if aid then
-            local dispellable, triggerDispel
-            if triggerMode == "BY_ME" and C_UnitAuras_IsAuraFilteredOut then
-                dispellable = C_UnitAuras_IsAuraFilteredOut(unit, aid, _DISPEL_SCAN_FILTER) == false
-            else
-                triggerDispel = GF.ReadDispelBorderAura(aura, triggerMode, unit, resolveType)
-                dispellable = triggerDispel ~= nil
-            end
+            local dispellable, triggerDispel = addedAuraMatchesTrigger(aura, triggerMode, resolveType, borderCustomTypePriority)
             if dispellable then
                 if borderWinnerScan then
                     return finishFull()
@@ -2071,6 +2213,7 @@ end
 GF.GetDispelColor = GetDispelColor
 GF.ResolveDispelColor = ResolveDispelColor
 GF.DispelScanPriorityEnabled = GFDispelScanPriorityEnabled
+GF.DispelScanCustomTypePriorityEnabled = GFDispelScanCustomTypePriorityEnabled
 GF.DispelScanResolveType = GFDispelScanResolveType
 GF.DispelScanPrioritySignature = GFDispelScanPrioritySignature
 GF.StartDispelGlow = _GF_StartDispelGlow
