@@ -284,9 +284,9 @@ function GF.BuildFrameCache(f)
     c.doOnHP  = conf.dispelOverlayOnHealth ~= false
     c.doAlpha = conf.dispelOverlayAlpha or 0.35
     c.doTrigger = (GF.NormalizeDispelOverlayTrigger and GF.NormalizeDispelOverlayTrigger(conf.dispelOverlayTrigger)) or "BORDER"
-    c.doUseHighlightPriority = conf.dispelOverlayUseHighlightPriority ~= false
-    c.doPrioEnabled = conf.dispelOverlayPrioEnabled == true or conf.dispelOverlayPrioEnabled == 1
-    c.doPrioOrder = type(conf.dispelOverlayPrioOrder) == "table" and conf.dispelOverlayPrioOrder or nil
+    c.doUseHighlightPriority = true
+    c.doPrioEnabled = false
+    c.doPrioOrder = nil
 
     -- Debuff stripe (thin edge for any debuff). This is a custom aura-derived
     -- visual, so it must not keep UNIT_AURA/custom scans alive when Blizzard

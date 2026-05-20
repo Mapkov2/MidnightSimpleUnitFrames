@@ -485,7 +485,8 @@ local function ToggleGradientDirection(direction)
 end
 
 local PRIORITY_SINGLE = { "dispel", "aggro", "purge", "bossTarget" }
-local PRIORITY_TYPE = { "magic", "curse", "disease", "poison", "bleed", "aggro", "purge", "bossTarget" }
+local PRIORITY_TYPE = { "dispel", "aggro", "purge", "bossTarget" }
+local DISPEL_TYPE_PRIORITY_ALLOWED = { magic = true, curse = true, disease = true, poison = true, bleed = true }
 local PRIORITY_LABELS = {
     dispel = "Dispel",
     aggro = "Aggro",
@@ -540,7 +541,7 @@ local function NormalizePriorityKey(key)
 end
 
 local function PriorityDefaults()
-    return tostring(BarScopeGet("hlDispelColorMode", "SINGLE")) == "TYPE" and PRIORITY_TYPE or PRIORITY_SINGLE
+    return PRIORITY_SINGLE
 end
 
 local function PriorityAllowed(defaults)
@@ -558,10 +559,13 @@ local function PriorityOrder()
     end
     local order = {}
     if type(raw) == "table" then
+        local rawUsed = {}
         for i = 1, #raw do
             local value = NormalizePriorityKey(raw[i])
-            if allowed[value] then
+            if DISPEL_TYPE_PRIORITY_ALLOWED[value] then value = "dispel" end
+            if allowed[value] and not rawUsed[value] then
                 order[#order + 1] = value
+                rawUsed[value] = true
             end
         end
     end

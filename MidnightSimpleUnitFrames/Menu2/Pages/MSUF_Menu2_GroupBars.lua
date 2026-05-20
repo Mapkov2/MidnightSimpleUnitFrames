@@ -96,52 +96,6 @@ local GF_DISPEL_OVERLAY_TRIGGERS = {
     { value = "ANY_DEBUFF", text = "Any debuff" },
 }
 
-local GF_PRIORITY_SINGLE = { "dispel", "aggro" }
-local GF_PRIORITY_TYPE = { "magic", "curse", "disease", "poison", "bleed", "aggro" }
-local GF_PRIORITY_LABELS = {
-    dispel = "Dispel",
-    aggro = "Aggro",
-    magic = "Magic",
-    curse = "Curse",
-    disease = "Disease",
-    poison = "Poison",
-    bleed = "Bleed",
-}
-local GF_PRIORITY_COLORS = {
-    dispel = { 0.25, 0.75, 1.00 },
-    aggro = { 1.00, 0.50, 0.00 },
-    magic = { 0.20, 0.60, 1.00 },
-    curse = { 0.60, 0.00, 1.00 },
-    disease = { 0.60, 0.40, 0.00 },
-    poison = { 0.00, 0.60, 0.00 },
-    bleed = { 0.80, 0.10, 0.10 },
-}
-local GF_PRIORITY_KEY_ALIAS = {
-    Dispel = "dispel",
-    DISPEL = "dispel",
-    Magic = "magic",
-    MAGIC = "magic",
-    Curse = "curse",
-    CURSE = "curse",
-    Disease = "disease",
-    DISEASE = "disease",
-    Poison = "poison",
-    POISON = "poison",
-    Bleed = "bleed",
-    BLEED = "bleed",
-    Aggro = "aggro",
-    AGGRO = "aggro",
-}
-
-local function NormalizeGFPriorityKey(key)
-    if type(key) ~= "string" then return nil end
-    local gp = M.GlobalPage
-    if gp and type(gp.NormalizePriorityKey) == "function" then
-        return gp.NormalizePriorityKey(key)
-    end
-    return GF_PRIORITY_KEY_ALIAS[key] or key
-end
-
 local function NormalizeGFDispelOverlayTrigger(value)
     local gf = GF and GF()
     if gf and type(gf.NormalizeDispelOverlayTrigger) == "function" then
@@ -155,119 +109,16 @@ local function NormalizeGFDispelOverlayTrigger(value)
     return "BY_ME"
 end
 
-local function GFHighlightValue(kind, key, legacyKey, fallback)
-    local conf = Conf(kind)
-    local function ReadLegacy(tbl)
-        if not (tbl and legacyKey) then return nil end
-        if type(legacyKey) == "table" then
-            for i = 1, #legacyKey do
-                if tbl[legacyKey[i]] ~= nil then return tbl[legacyKey[i]] end
-            end
-            return nil
-        end
-        return tbl[legacyKey]
-    end
-    if conf and conf.hlOverride == true then
-        if conf[key] ~= nil then return conf[key] end
-        local legacy = ReadLegacy(conf)
-        if legacy ~= nil then return legacy end
-    end
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if gen then
-        if gen[key] ~= nil then return gen[key] end
-        local legacy = ReadLegacy(gen)
-        if legacy ~= nil then return legacy end
-    end
-    local legacy = ReadLegacy(conf)
-    if legacy ~= nil then return legacy end
-    return fallback
-end
-
-local function GFPriorityDefaults()
-    return tostring(GFHighlightValue(CurrentScope(), "hlDispelColorMode", nil, "SINGLE")) == "TYPE"
-        and GF_PRIORITY_TYPE or GF_PRIORITY_SINGLE
-end
-
-local function GFPriorityAllowed(defaults)
-    local allowed = {}
-    for i = 1, #defaults do allowed[defaults[i]] = true end
-    return allowed
-end
-
-local function GFBorderPriorityOrder()
-    local defaults = GFPriorityDefaults()
-    local allowed = GFPriorityAllowed(defaults)
-    local raw = GFHighlightValue(CurrentScope(), "hlPrioOrder", "highlightPrioOrder", nil)
-    local order = {}
-    if type(raw) == "table" then
-        for i = 1, #raw do
-            local value = NormalizeGFPriorityKey(raw[i])
-            if allowed[value] then order[#order + 1] = value end
-        end
-    end
-    local used = {}
-    for i = 1, #order do used[order[i]] = true end
-    for i = 1, #defaults do
-        local value = defaults[i]
-        if not used[value] then order[#order + 1] = value end
-    end
-    while #order > #defaults do order[#order] = nil end
-    return order
-end
-
-local function GFOverlayPriorityOrder()
-    local defaults = GFPriorityDefaults()
-    local allowed = GFPriorityAllowed(defaults)
-    local raw = Val(CurrentScope(), "dispelOverlayPrioOrder", nil)
-    local order = {}
-    if type(raw) == "table" then
-        for i = 1, #raw do
-            local value = NormalizeGFPriorityKey(raw[i])
-            if allowed[value] then order[#order + 1] = value end
-        end
-    end
-    local used = {}
-    for i = 1, #order do used[order[i]] = true end
-    for i = 1, #defaults do
-        local value = defaults[i]
-        if not used[value] then order[#order + 1] = value end
-    end
-    while #order > #defaults do order[#order] = nil end
-    return order
-end
-
-local function SetGFOverlayPriorityOrder(order)
-    Set(CurrentScope(), "dispelOverlayPrioOrder", order, "visual")
-end
-
-local function GFOverlayPriorityColor(key)
-    local fallback = GF_PRIORITY_COLORS[key] or { 1, 1, 1 }
-    local r, g, b = fallback[1], fallback[2], fallback[3]
-    if key == "aggro" then
-        r = GFHighlightValue(CurrentScope(), "hlAggroColorR", { "aggroBorderColorR", "aggroBorderR", "aggroR" }, r)
-        g = GFHighlightValue(CurrentScope(), "hlAggroColorG", { "aggroBorderColorG", "aggroBorderG", "aggroG" }, g)
-        b = GFHighlightValue(CurrentScope(), "hlAggroColorB", { "aggroBorderColorB", "aggroBorderB", "aggroB" }, b)
-    elseif key == "dispel" then
-        r = GFHighlightValue(CurrentScope(), "hlDispelColorR", "dispelBorderColorR", r)
-        g = GFHighlightValue(CurrentScope(), "hlDispelColorG", "dispelBorderColorG", g)
-        b = GFHighlightValue(CurrentScope(), "hlDispelColorB", "dispelBorderColorB", b)
-    end
-    return tonumber(r) or fallback[1], tonumber(g) or fallback[2], tonumber(b) or fallback[3]
-end
-
 local function BuildDispelOverlaySection(ctx, b)
     local sectionW = ctx.width or b.width or 720
     local probeW = min(900, max(320, sectionW - 40))
     local wide = probeW >= 760
-    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", wide and 420 or 650, false)
+    local dispel = b:CollapsibleSection("dispel", "Dispel Overlay", wide and 360 or 470, false)
     local dispelW = dispel._msuf2Width or b.width or 720
     local dispelCardW = min(900, max(320, dispelW - 40))
     wide = dispelCardW >= 760
-    local dispelCardH = wide and 356 or 586
+    local dispelCardH = wide and 296 or 406
     local dispelCard = W.ControlCard(dispel, "Dispel Overlay", "Tints the health bar when a configured debuff condition is active.", 20, -38, dispelCardW, dispelCardH)
-    local prioX = wide and 430 or 16
-    local prioY = wide and -74 or -318
-    local prioW = wide and min(360, dispelCardW - prioX - 16) or min(360, dispelCardW - 32)
 
     local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", dispelCardW - 62, -24, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
     local dispelTrigger = W.Dropdown(dispelCard, "Overlay detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
@@ -284,196 +135,16 @@ local function BuildDispelOverlaySection(ctx, b)
 
     local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -174, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
 
-    local useBorderPriority = W.ToggleAt(dispelCard, "Use border priority", 16, -204, dispelCardW - 32)
-    M.BindToggle(ctx, useBorderPriority,
-        function() return Val(CurrentScope(), "dispelOverlayUseHighlightPriority", true) ~= false end,
-        function(value)
-            local useBorder = value and true or false
-            if not useBorder and type(Val(CurrentScope(), "dispelOverlayPrioOrder", nil)) ~= "table" then
-                SetGFOverlayPriorityOrder(GFBorderPriorityOrder())
-            end
-            Set(CurrentScope(), "dispelOverlayUseHighlightPriority", useBorder, "visual")
-            if useBorder then
-                Set(CurrentScope(), "dispelOverlayPrioEnabled", false, "visual")
-            end
-            if M.Refresh then M.Refresh(ctx) end
-        end)
-
     local dispelAlpha = W.Slider(dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340)
     M.BindSlider(ctx, dispelAlpha,
         function() return Num(CurrentScope(), "dispelOverlayAlpha", 0.35) end,
         function(value) Set(CurrentScope(), "dispelOverlayAlpha", tonumber(value) or 0.35, "visual") end)
-    W.MoveWidget(dispelAlpha, dispelCard, 16, -252, min(360, dispelCardW - 72), "CENTER")
-
-    local prioTitle = W.Text(dispelCard, "Overlay Priority Order", prioX, prioY, prioW, T.colors.text)
-    local customPriority = W.SwitchAt(dispelCard, "Custom overlay priority", prioX, prioY - 38, prioW)
-    M.BindToggle(ctx, customPriority,
-        function()
-            local value = Val(CurrentScope(), "dispelOverlayPrioEnabled", false)
-            return value == true or value == 1
-        end,
-        function(value)
-            local enabled = value and true or false
-            if enabled then
-                if type(Val(CurrentScope(), "dispelOverlayPrioOrder", nil)) ~= "table" then
-                    SetGFOverlayPriorityOrder(GFBorderPriorityOrder())
-                end
-                Set(CurrentScope(), "dispelOverlayUseHighlightPriority", false, "visual")
-            end
-            Set(CurrentScope(), "dispelOverlayPrioEnabled", enabled, "visual")
-            if M.Refresh then M.Refresh(ctx) end
-        end)
-
-    local rowH, rowGap, rowMax = 22, 4, 6
-    local container = CreateFrame("Frame", nil, dispelCard)
-    container:SetPoint("TOPLEFT", customPriority, "BOTTOMLEFT", -2, -4)
-    container:SetSize(240, rowMax * (rowH + rowGap))
-
-    local rows, rowCount = {}, 0
-    local function SlotY(slot)
-        return -((slot - 1) * (rowH + rowGap))
-    end
-    local function SnapRows()
-        for i = 1, rowCount do
-            local row = rows[i]
-            row.frame:ClearAllPoints()
-            row.frame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, SlotY(row.slotIndex))
-            row.frame:Show()
-        end
-        for i = rowCount + 1, rowMax do
-            if rows[i] then rows[i].frame:Hide() end
-        end
-        container:SetHeight(rowCount * (rowH + rowGap))
-    end
-    local function SaveRows()
-        local function WriteRows()
-            local sorted = {}
-            for i = 1, rowCount do sorted[i] = rows[i] end
-            table.sort(sorted, function(a, b) return a.slotIndex < b.slotIndex end)
-            local order = {}
-            for i = 1, rowCount do order[i] = sorted[i].key end
-            SetGFOverlayPriorityOrder(order)
-        end
-        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory("Group Overlay Priority Order", "group:" .. tostring(CurrentScope()) .. ":dispelOverlayPriorityOrder", WriteRows)
-        else
-            WriteRows()
-        end
-    end
-    local function SetRowsEnabled(enabled)
-        enabled = enabled and true or false
-        for i = 1, rowCount do
-            local frame = rows[i].frame
-            frame:SetAlpha(enabled and 1 or 0.4)
-            frame:EnableMouse(enabled)
-        end
-        if prioTitle and prioTitle.SetTextColor then
-            local color = enabled and T.colors.text or T.colors.muted
-            prioTitle:SetTextColor(color[1], color[2], color[3], color[4] or 1)
-        end
-    end
-
-    for i = 1, rowMax do
-        local rowFrame = CreateFrame("Frame", nil, container, T.Template and T.Template() or nil)
-        rowFrame:SetSize(240, rowH)
-        rowFrame:SetMovable(true)
-        rowFrame:EnableMouse(true)
-        rowFrame:RegisterForDrag("LeftButton")
-        if rowFrame.SetBackdrop then
-            rowFrame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-            rowFrame:SetBackdropColor(0.12, 0.12, 0.12, 0.85)
-            rowFrame:SetBackdropBorderColor(0.30, 0.30, 0.30, 0.60)
-        end
-        local stripe = rowFrame:CreateTexture(nil, "ARTWORK")
-        stripe:SetSize(4, rowH - 2)
-        stripe:SetPoint("LEFT", rowFrame, "LEFT", 2, 0)
-        rowFrame._stripe = stripe
-        local label = T.Font(rowFrame, "GameFontHighlightSmall", "", T.colors.text)
-        label:SetPoint("LEFT", stripe, "RIGHT", 6, 0)
-        rowFrame._label = label
-        local num = T.Font(rowFrame, "GameFontNormalSmall", "", T.colors.dim)
-        num:SetPoint("RIGHT", rowFrame, "RIGHT", -8, 0)
-        rowFrame._numText = num
-        rowFrame:SetScript("OnDragStart", function(self)
-            local overlayOn = Bool(CurrentScope(), "dispelOverlayEnabled", false)
-            local inherit = Val(CurrentScope(), "dispelOverlayUseHighlightPriority", true) ~= false
-            local custom = Val(CurrentScope(), "dispelOverlayPrioEnabled", false)
-            custom = custom == true or custom == 1
-            if not (overlayOn and not inherit and custom) then return end
-            if GameTooltip then GameTooltip:Hide() end
-            self._msuf2OldStrata = self:GetFrameStrata()
-            self:StartMoving()
-            self:SetFrameStrata("TOOLTIP")
-        end)
-        rowFrame:SetScript("OnDragStop", function(self)
-            self:StopMovingOrSizing()
-            self:SetFrameStrata(self._msuf2OldStrata or container:GetFrameStrata() or "MEDIUM")
-            local _, selfY = self:GetCenter()
-            local contTop = container:GetTop()
-            if not (selfY and contTop) then
-                SnapRows()
-                return
-            end
-            local bestSlot, bestDist = 1, math.huge
-            for slot = 1, rowCount do
-                local slotY = contTop + SlotY(slot) - (rowH / 2)
-                local dist = math.abs(selfY - slotY)
-                if dist < bestDist then
-                    bestDist = dist
-                    bestSlot = slot
-                end
-            end
-            local thisRow
-            for idx = 1, rowCount do
-                if rows[idx].frame == self then
-                    thisRow = rows[idx]
-                    break
-                end
-            end
-            if thisRow and thisRow.slotIndex ~= bestSlot then
-                for idx = 1, rowCount do
-                    if rows[idx].slotIndex == bestSlot then
-                        rows[idx].slotIndex = thisRow.slotIndex
-                        break
-                    end
-                end
-                thisRow.slotIndex = bestSlot
-            end
-            for idx = 1, rowCount do
-                rows[idx].frame._numText:SetText(tostring(rows[idx].slotIndex))
-            end
-            SnapRows()
-            SaveRows()
-        end)
-        rowFrame:Hide()
-        rows[i] = { frame = rowFrame, key = "", slotIndex = i }
-    end
-
-    local function RefreshRows()
-        local order = GFOverlayPriorityOrder()
-        rowCount = math.min(#order, rowMax)
-        for i = 1, rowCount do
-            local key = order[i]
-            local r, g, bcol = GFOverlayPriorityColor(key)
-            local row = rows[i]
-            row.key = key
-            row.slotIndex = i
-            row.frame._stripe:SetColorTexture(r, g, bcol, 1)
-            row.frame._label:SetText(M.Tr(GF_PRIORITY_LABELS[key] or key))
-            row.frame._numText:SetText(tostring(i))
-        end
-        SnapRows()
-    end
+    W.MoveWidget(dispelAlpha, dispelCard, 16, -218, min(360, dispelCardW - 72), "CENTER")
 
     local function RefreshDispelState()
         local overlayOn = Bool(CurrentScope(), "dispelOverlayEnabled", false)
-        local inherit = Val(CurrentScope(), "dispelOverlayUseHighlightPriority", true) ~= false
-        local custom = Val(CurrentScope(), "dispelOverlayPrioEnabled", false)
-        custom = custom == true or custom == 1
-        SetOptionsEnabled({ dispelTrigger, dispelStyle, dispelCurrent, useBorderPriority, customPriority, dispelAlpha }, overlayOn)
+        SetOptionsEnabled({ dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha }, overlayOn)
         SetOptionEnabled(dispelToggle, true)
-        RefreshRows()
-        SetRowsEnabled(overlayOn and not inherit and custom)
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(dispel, nil) end
     end
     M.AddRefresher(ctx, RefreshDispelState)

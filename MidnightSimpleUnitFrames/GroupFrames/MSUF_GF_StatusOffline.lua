@@ -441,7 +441,13 @@ local function _GF_SetOfflineHidden(f, hidden)
         elseif f._msufGFHighlightBorder then
             f._msufGFHighlightBorder:Hide()
         end
-        if f._msufGFDispelOverlay then f._msufGFDispelOverlay:Hide() end
+        if f._msufGFDispelOverlays then
+            for _, overlay in pairs(f._msufGFDispelOverlays) do
+                if overlay then overlay:Hide() end
+            end
+        elseif f._msufGFDispelOverlay then
+            f._msufGFDispelOverlay:Hide()
+        end
         if f._msufGFDebuffStripe then f._msufGFDebuffStripe:Hide() end
         if GF.HideFrameAuras then GF.HideFrameAuras(f) end
         if GF.HideSpellIndicators then GF.HideSpellIndicators(f) end

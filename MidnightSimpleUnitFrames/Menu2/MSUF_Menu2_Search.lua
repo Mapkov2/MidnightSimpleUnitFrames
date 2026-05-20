@@ -2217,10 +2217,10 @@ local SEARCH_FAQ = {
         label = "Dispel Overlay",
         answer = "Tints the health bar when a configured debuff condition is active.",
         pageKey = "gf_bars",
-        anchorText = "Dispel Overlay Overlay detects Overlay style Show on current health only Use border priority Custom overlay priority Overlay Priority Order Overlay opacity health bar tint dispellable debuff any debuff",
+        anchorText = "Dispel Overlay Overlay detects Overlay style Show on current health only Overlay opacity health bar tint dispellable debuff any debuff",
         keywords = SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, {
             [0] = false,
-            "where is dispel overlay", "health bar changes color for dispel", "raid frame tint dispel", "party frame tint dispel", "group overlay priority", "raid overlay priority", "party overlay any debuff",
+            "where is dispel overlay", "health bar changes color for dispel", "raid frame tint dispel", "party frame tint dispel", "party overlay any debuff",
         }),
         priority = 740,
     },

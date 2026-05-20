@@ -1114,7 +1114,13 @@ local function ApplyToUnitFrame(f)
         local t = f.healAbsorbBar:GetStatusBarTexture()
         if t then MaskTexture(f, t, f.healAbsorbBar or f.hpBar) end
     end
-    MaskStatusBarFill(f, f._msufUFDispelOverlay)
+    if type(f._msufUFDispelOverlays) == "table" then
+        for _, overlay in pairs(f._msufUFDispelOverlays) do
+            MaskStatusBarFill(f, overlay)
+        end
+    else
+        MaskStatusBarFill(f, f._msufUFDispelOverlay)
+    end
     MaskStatusBarFill(f, f.incomingHealBar or f.selfHealPredBar)
     if f.selfHealPredBar ~= f.incomingHealBar then
         MaskStatusBarFill(f, f.selfHealPredBar)
@@ -1204,7 +1210,13 @@ ApplyToGroupFrame = function(f, kind)
     MaskStatusBarFill(f, f.incomingHealBar, true)
     MaskStatusBarFill(f, f.absorbBar, true)
     MaskStatusBarFill(f, f.healAbsorbBar, true)
-    MaskStatusBarFill(f, f._msufGFDispelOverlay, true)
+    if type(f._msufGFDispelOverlays) == "table" then
+        for _, overlay in pairs(f._msufGFDispelOverlays) do
+            MaskStatusBarFill(f, overlay, true)
+        end
+    else
+        MaskStatusBarFill(f, f._msufGFDispelOverlay, true)
+    end
     MaskStatusBarFill(f, f._msufGFDebuffStripe, true)
 
     MaskGFGradientTable(f, f.health)

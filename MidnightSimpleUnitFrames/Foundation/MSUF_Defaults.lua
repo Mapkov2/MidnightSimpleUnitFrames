@@ -324,6 +324,136 @@ local function MSUF_Defaults_NormalizeFontField(tbl)
     end
 end
 
+local MSUF_DISPEL_PRIORITY_MIGRATION = 3
+local MSUF_DISPEL_TYPE_PRIORITY_KEYS = {
+    magic = true,
+    curse = true,
+    disease = true,
+    poison = true,
+    bleed = true,
+}
+local MSUF_PRIORITY_KEY_ALIAS = {
+    Dispel = "dispel",
+    DISPEL = "dispel",
+    Magic = "magic",
+    MAGIC = "magic",
+    Curse = "curse",
+    CURSE = "curse",
+    Disease = "disease",
+    DISEASE = "disease",
+    Poison = "poison",
+    POISON = "poison",
+    Bleed = "bleed",
+    BLEED = "bleed",
+    Aggro = "aggro",
+    AGGRO = "aggro",
+    Purge = "purge",
+    PURGE = "purge",
+    BossTarget = "bossTarget",
+    Boss_Target = "bossTarget",
+    ["Boss Target"] = "bossTarget",
+    ["boss target"] = "bossTarget",
+    boss_target = "bossTarget",
+    bosstarget = "bossTarget",
+    BOSS_TARGET = "bossTarget",
+    Target = "target",
+    TARGET = "target",
+    Focus = "focus",
+    FOCUS = "focus",
+}
+
+local function MSUF_Defaults_NormalizePriorityKey(key)
+    if type(key) ~= "string" then return nil end
+    return MSUF_PRIORITY_KEY_ALIAS[key] or key
+end
+
+local function MSUF_Defaults_VisualPriorityDefaults(includeTargetFocus)
+    if includeTargetFocus then
+        return { "dispel", "aggro", "purge", "bossTarget", "target", "focus" }
+    end
+    return { "dispel", "aggro", "purge", "bossTarget" }
+end
+
+local function MSUF_Defaults_CollapseDispelPriorityOrder(raw, includeTargetFocus)
+    local defaults = MSUF_Defaults_VisualPriorityDefaults(includeTargetFocus)
+    local allowed = {}
+    for i = 1, #defaults do allowed[defaults[i]] = true end
+    local out, used = {}, {}
+    if type(raw) == "table" then
+        for i = 1, #raw do
+            local key = MSUF_Defaults_NormalizePriorityKey(raw[i])
+            if MSUF_DISPEL_TYPE_PRIORITY_KEYS[key] then key = "dispel" end
+            if allowed[key] and not used[key] then
+                out[#out + 1] = key
+                used[key] = true
+            end
+        end
+    end
+    for i = 1, #defaults do
+        local key = defaults[i]
+        if not used[key] then
+            out[#out + 1] = key
+            used[key] = true
+        end
+    end
+    return out
+end
+
+local function MSUF_Defaults_MigratePriorityScope(scope, includeTargetFocus)
+    if type(scope) ~= "table" then return end
+    local raw = type(scope.hlPrioOrder) == "table" and scope.hlPrioOrder
+        or (type(scope.highlightPrioOrder) == "table" and scope.highlightPrioOrder)
+        or nil
+    if raw then
+        local visual = MSUF_Defaults_CollapseDispelPriorityOrder(raw, includeTargetFocus)
+        scope.hlPrioOrder = visual
+        if type(scope.highlightPrioOrder) == "table" then
+            scope.highlightPrioOrder = visual
+        end
+    end
+
+    -- Debuff-type custom sorting was removed from the visible model. Old
+    -- profiles are force-collapsed into the single Dispel layer and all old
+    -- overlay/type priority switches are disabled so no hidden state survives.
+    scope.hlDispelTypePrioEnabled = nil
+    scope.hlDispelTypePrioOrder = nil
+    scope.unitDispelOverlayPrioEnabled = nil
+    scope.unitDispelOverlayPrioOrder = nil
+    scope.unitDispelOverlayUseHighlightPriority = nil
+    scope.dispelOverlayPrioEnabled = nil
+    scope.dispelOverlayPrioOrder = nil
+    scope.dispelOverlayUseHighlightPriority = nil
+end
+
+local function MSUF_Defaults_MigrateDispelPriorityProfile(db)
+    if type(db) ~= "table" then return false end
+    MSUF_Defaults_MigratePriorityScope(db.general, true)
+    for _, key in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }) do
+        MSUF_Defaults_MigratePriorityScope(db[key], false)
+    end
+    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
+        MSUF_Defaults_MigratePriorityScope(db[key], true)
+    end
+    db._msufDispelPriorityMigration = MSUF_DISPEL_PRIORITY_MIGRATION
+    return true
+end
+
+local function MSUF_Defaults_MigrateDispelPriorityProfiles()
+    local changed = false
+    if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" then
+        for _, profile in pairs(MSUF_GlobalDB.profiles) do
+            changed = MSUF_Defaults_MigrateDispelPriorityProfile(profile) or changed
+        end
+    end
+    if type(MSUF_DB) == "table" then
+        changed = MSUF_Defaults_MigrateDispelPriorityProfile(MSUF_DB) or changed
+    end
+    return changed
+end
+
+_G.MSUF_MigrateDispelPriorityProfile = MSUF_Defaults_MigrateDispelPriorityProfile
+_G.MSUF_MigrateDispelPriorityProfiles = MSUF_Defaults_MigrateDispelPriorityProfiles
+
 local function MSUF_Defaults_HasScopedFontOverrideValue(scope)
     if type(scope) ~= "table" then return false end
     if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
@@ -367,6 +497,7 @@ function MSUF_EnsureDB_Heavy()
     MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
+    MSUF_Defaults_MigrateDispelPriorityProfiles()
     MSUF_Defaults_NormalizePortraitRenderDB(MSUF_DB)
     local legacyPortraitOverrideState = false
     for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }) do
@@ -762,8 +893,6 @@ end
     if g.unitDispelOverlayOnHealth == nil then g.unitDispelOverlayOnHealth = true end
     if g.unitDispelOverlayAlpha == nil then g.unitDispelOverlayAlpha = 0.35 end
     if g.unitDispelOverlayTrigger == nil then g.unitDispelOverlayTrigger = "BORDER" end
-    if g.unitDispelOverlayUseHighlightPriority == nil then g.unitDispelOverlayUseHighlightPriority = true end
-    if g.unitDispelOverlayPrioEnabled == nil then g.unitDispelOverlayPrioEnabled = false end
     local si = g.statusIndicators
     if si.showAFK == nil then si.showAFK = false end
     if si.showDND == nil then si.showDND = false end

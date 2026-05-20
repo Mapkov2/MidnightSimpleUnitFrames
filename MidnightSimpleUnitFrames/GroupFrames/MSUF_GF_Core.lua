@@ -718,6 +718,7 @@ end
 GF.LAYER_DISPEL_OVERLAY = GF.LAYER_DISPEL_OVERLAY or 6
 GF.LAYER_DEBUFF_STRIPE = GF.LAYER_DEBUFF_STRIPE or 7
 GF.LAYER_HIGHLIGHT_BORDER = GF.LAYER_HIGHLIGHT_BORDER or 10
+local GF_DISPEL_TYPE_LAYER_KEYS = { "magic", "curse", "disease", "poison", "bleed" }
 
 local function GetFrameOutlineInset(kind, conf)
     -- Unit frames draw the bar outline outside the bars. Keep group-frame
@@ -823,6 +824,25 @@ local function BuildFrameHierarchy(f, kind)
     dispelOv:SetStatusBarColor(0, 0, 0, 0)
     dispelOv:Hide()
     f._msufGFDispelOverlay = dispelOv
+    f._msufGFDispelOverlays = { default = dispelOv }
+    dispelOv._msufGFDOKey = "default"
+
+    local function CreateDispelOverlayLayer(key)
+        local overlay = CreateFrame("StatusBar", nil, barGroup)
+        overlay:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+        overlay:SetMinMaxValues(0, 1)
+        overlay:SetValue(1)
+        overlay:SetAllPoints(health)
+        GF.SyncFrameLayerAbove(overlay, health, GF.LAYER_DISPEL_OVERLAY)
+        overlay:SetStatusBarColor(0, 0, 0, 0)
+        overlay._msufGFDOKey = key
+        overlay:Hide()
+        f._msufGFDispelOverlays[key] = overlay
+        return overlay
+    end
+    for i = 1, #GF_DISPEL_TYPE_LAYER_KEYS do
+        CreateDispelOverlayLayer("dispel:" .. GF_DISPEL_TYPE_LAYER_KEYS[i])
+    end
 
     -- Debuff stripe (thin edge indicator for any debuff — above dispel overlay, below text)
     local debuffStripe = CreateFrame("StatusBar", nil, barGroup)
@@ -1025,6 +1045,9 @@ local function BuildFrameHierarchy(f, kind)
         return border
     end
     f._msufGFDispelHighlightBorder = hlBorder
+    for i = 1, #GF_DISPEL_TYPE_LAYER_KEYS do
+        CreateHighlightBorderLayer("dispel:" .. GF_DISPEL_TYPE_LAYER_KEYS[i])
+    end
     CreateHighlightBorderLayer("aggro")
     CreateHighlightBorderLayer("target")
     CreateHighlightBorderLayer("focus")
@@ -1796,8 +1819,14 @@ local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
                     _AnchorTwoPointIfChanged(child._msufGFHighlightBorder, child.barGroup or child, "highlight", -hofs, hofs, hofs, -hofs, force)
                     GF.SyncFrameLayerAbove(child._msufGFHighlightBorder, child.health or child.barGroup or child, child._msufGFHighlightBorder._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
                 end
-                if child._msufGFDispelOverlay then
-                    GF.SyncFrameLayerAbove(child._msufGFDispelOverlay, child.health or child.barGroup or child, GF.LAYER_DISPEL_OVERLAY)
+                if child._msufGFDispelOverlays then
+                    for _, overlay in pairs(child._msufGFDispelOverlays) do
+                        if overlay then
+                            GF.SyncFrameLayerAbove(overlay, child.health or child.barGroup or child, overlay._msufDOLayerOffset or GF.LAYER_DISPEL_OVERLAY)
+                        end
+                    end
+                elseif child._msufGFDispelOverlay then
+                    GF.SyncFrameLayerAbove(child._msufGFDispelOverlay, child.health or child.barGroup or child, child._msufGFDispelOverlay._msufDOLayerOffset or GF.LAYER_DISPEL_OVERLAY)
                 end
                 if child._msufGFDebuffStripe then
                     GF.SyncFrameLayerAbove(child._msufGFDebuffStripe, child.health or child.barGroup or child, GF.LAYER_DEBUFF_STRIPE)
