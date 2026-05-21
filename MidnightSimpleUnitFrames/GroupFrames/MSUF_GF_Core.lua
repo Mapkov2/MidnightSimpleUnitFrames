@@ -1176,11 +1176,13 @@ local function LayoutText(f, kind)
     end
     -- 3-slot health text
     local hpTextOn = conf.showHPText ~= false
-    local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
-    local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
-    local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
-    if conf.hpTextReverse == true then
-        tl, tr = tr, tl
+    local tl, tc, tr
+    if GF.ResolveHealthTextSlots then
+        tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+    else
+        tl = hpTextOn and (conf.textLeft or "NONE") or "NONE"
+        tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+        tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
     end
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
@@ -1527,11 +1529,13 @@ function GF.UpdateButton(f, unit)
         local hpMax = UnitHealthMax(unit)
         local delim = conf.textDelimiter or " / "
         local hpTextOn = conf.showHPText ~= false
-        local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
-        local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
-        local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
-        if conf.hpTextReverse == true then
-            tl, tr = tr, tl
+        local tl, tc, tr
+        if GF.ResolveHealthTextSlots then
+            tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+        else
+            tl = hpTextOn and (conf.textLeft or "NONE") or "NONE"
+            tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+            tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
         end
         if f.textLeftFS then
             local txt = GF.FormatHealthText(tl, hp, hpMax, delim, false, unit)
@@ -3111,11 +3115,13 @@ function GF.ApplyPreviewData(f, index, kind)
         local fakeMax = 100
         local delim = conf.textDelimiter or " / "
         local hpTextOn = conf.showHPText ~= false
-        local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
-        local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
-        local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
-        if conf.hpTextReverse == true then
-            tl, tr = tr, tl
+        local tl, tc, tr
+        if GF.ResolveHealthTextSlots then
+            tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+        else
+            tl = hpTextOn and (conf.textLeft or "NONE") or "NONE"
+            tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+            tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
         end
         if f.textLeftFS then
             f.textLeftFS:SetText(GF.FormatHealthText(tl, fakeHP, fakeMax, delim, false))

@@ -1534,9 +1534,14 @@ local function ApplyTextLayout(f, kind)
     local hrx = ScaleValue(conf.hpTextRightOffsetX or 0, fScale)
     local hry = ScaleValue(conf.hpTextRightOffsetY or 0, fScale)
     local hpTextOn = conf.showHPText ~= false
-    local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
-    local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
-    local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+    local tl, tc, tr
+    if GF.ResolveHealthTextSlots then
+        tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+    else
+        tl = hpTextOn and (conf.textLeft or "NONE") or "NONE"
+        tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+        tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+    end
 
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()

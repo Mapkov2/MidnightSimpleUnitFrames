@@ -141,11 +141,13 @@ function GF.BuildFrameCache(f)
     -- Health text slots. showHPText gates the whole HP text pipeline so
     -- disabled text builds no closures and does no event-time formatting.
     c.hpTextEnabled = conf.showHPText ~= false
-    local tl = c.hpTextEnabled and (conf.textLeft    or "NONE") or "NONE"
-    local tc = c.hpTextEnabled and (conf.textCenter  or "NONE") or "NONE"
-    local tr = c.hpTextEnabled and (conf.textRight   or "NONE") or "NONE"
-    if conf.hpTextReverse == true then
-        tl, tr = tr, tl
+    local tl, tc, tr
+    if GF.ResolveHealthTextSlots then
+        tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+    else
+        tl = c.hpTextEnabled and (conf.textLeft or "NONE") or "NONE"
+        tc = c.hpTextEnabled and (conf.textCenter or "NONE") or "NONE"
+        tr = c.hpTextEnabled and (conf.textRight or "NONE") or "NONE"
     end
     c.tl    = tl
     c.tc    = tc
@@ -156,7 +158,7 @@ function GF.BuildFrameCache(f)
     -- PERF: Aggregate flag Ã¢â‚¬â€ skip all 3 text blocks when no text enabled
     c.anyText = c.tlOn or c.tcOn or c.trOn
     c.delim = conf.textDelimiter or " / "
-    -- Reverse order is visual slot order. The mode text itself stays unchanged.
+    -- Reverse order is resolved into slot modes once at cache-build time.
     c.rev   = false
     -- Compile fast text functions (oUF-style: mode Ã¢â€ â€™ C-side closure)
     GF.BuildTextSlotFns(c)

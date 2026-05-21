@@ -1356,11 +1356,13 @@ function GF.RefreshPreviewBox()
                 m._hpRightFS:SetParent(hpParent)
             end
             m._hpFS = m._hpCenterFS
-            local tl = conf.textLeft or "NONE"
-            local tc = conf.textCenter or "NONE"
-            local tr = conf.textRight or "NONE"
+            local tl, tc, tr
+            if GF.ResolveHealthTextSlots then
+                tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+            else
+                tl, tc, tr = conf.textLeft or "NONE", conf.textCenter or "NONE", conf.textRight or "NONE"
+            end
             local hDelim = conf.textDelimiter or " / "
-            local hRev = conf.hpTextReverse
             local hSize = PreviewTextFontSize(conf.hpFontSize or 10)
             local hox = PreviewTextValue(conf.hpOffsetX or 0)
             local hoy = PreviewTextValue(conf.hpOffsetY or 0)
@@ -1371,7 +1373,7 @@ function GF.RefreshPreviewBox()
                 fs:SetFont(fp, hSize, ff)
                 fs:SetTextColor(fr, fg, fb, 0.9)
                 fs:SetShadowColor(0, 0, 0, 1); fs:SetShadowOffset(1, -1)
-                fs:SetText((GF.FormatHealthText and GF.FormatHealthText(mode, 70, 100, hDelim, hRev)) or (HP_SAMPLES[mode] or ""))
+                fs:SetText((GF.FormatHealthText and GF.FormatHealthText(mode, 70, 100, hDelim, false)) or (HP_SAMPLES[mode] or ""))
                 fs:ClearAllPoints()
                 fs:SetPoint(point, m._health, relPoint, x, hoy)
                 fs:SetJustifyH(justify)

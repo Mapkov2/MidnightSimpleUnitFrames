@@ -348,18 +348,36 @@ local function BuildGFBars(ctx)
         elseif mode == "MAX"        then return max_
         elseif mode == "DEFICIT"    then return deficit
         elseif mode == "CURMAX"     then return cur  .. delim .. max_
+        elseif mode == "MAXCUR"     then return max_ .. delim .. cur
         elseif mode == "CURPERCENT" then return cur  .. delim .. pct
         elseif mode == "CURMAXPERCENT"  then return cur  .. delim .. max_ .. delim .. pct
         elseif mode == "MAXPERCENT"     then return max_ .. delim .. pct
         elseif mode == "PERCENTCUR"     then return pct  .. delim .. cur
         elseif mode == "PERCENTMAX"     then return pct  .. delim .. max_
         elseif mode == "PERCENTCURMAX"  then return pct  .. delim .. cur  .. delim .. max_
+        elseif mode == "PERCENTMAXCUR"  then return pct  .. delim .. max_ .. delim .. cur
         end
         return nil
     end
 
+    local function ReverseHpPreviewMode(mode)
+        local gf = ns and ns.GF
+        if gf and gf.ReverseHealthTextMode then return gf.ReverseHealthTextMode(mode) end
+        local rev = {
+            CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
+            CURMAX = "MAXCUR", MAXCUR = "CURMAX",
+            CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
+            MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
+            PERCENTCURMAX = "CURMAXPERCENT",
+        }
+        return rev[mode] or mode
+    end
+
     local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower)
-        local slots = reverse and { rightMode, centerMode, leftMode } or { leftMode, centerMode, rightMode }
+        if reverse and not isPower then
+            leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode)
+        end
+        local slots = { leftMode, centerMode, rightMode }
         local parts = {}
         for _, mode in ipairs(slots) do
             local ex = TextModeExampleStr(mode, delim, isPower)

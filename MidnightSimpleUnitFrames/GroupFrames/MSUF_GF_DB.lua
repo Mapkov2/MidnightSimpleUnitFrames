@@ -1638,6 +1638,24 @@ local REVERSE_HP_MAP = {
     PERCENTCURMAX  = "CURMAXPERCENT",
 }
 
+function GF.ReverseHealthTextMode(mode)
+    return REVERSE_HP_MAP[mode] or mode
+end
+
+function GF.ResolveHealthTextSlots(conf)
+    local hpTextOn = not conf or conf.showHPText ~= false
+    local tl = hpTextOn and (conf and conf.textLeft or "NONE") or "NONE"
+    local tc = hpTextOn and (conf and conf.textCenter or "NONE") or "NONE"
+    local tr = hpTextOn and (conf and conf.textRight or "NONE") or "NONE"
+    if conf and conf.hpTextReverse == true then
+        tl, tr = tr, tl
+        tl = GF.ReverseHealthTextMode(tl)
+        tc = GF.ReverseHealthTextMode(tc)
+        tr = GF.ReverseHealthTextMode(tr)
+    end
+    return tl, tc, tr
+end
+
 ------------------------------------------------------------------------
 -- Global text-formatting inheritance
 ------------------------------------------------------------------------

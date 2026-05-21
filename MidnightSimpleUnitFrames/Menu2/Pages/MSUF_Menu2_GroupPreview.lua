@@ -1900,10 +1900,16 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local hox = GFPreviewConfigToOffset(conf.hpOffsetX or 0, previewScale)
         local hoy = GFPreviewConfigToOffset(conf.hpOffsetY or 0, previewScale)
         local hpTextOn = showText and conf.showHPText ~= false
+        local hpLeftMode, hpCenterMode, hpRightMode
+        if gf and gf.ResolveHealthTextSlots then
+            hpLeftMode, hpCenterMode, hpRightMode = gf.ResolveHealthTextSlots(conf)
+        else
+            hpLeftMode, hpCenterMode, hpRightMode = conf.textLeft or "NONE", conf.textCenter or "NONE", conf.textRight or "NONE"
+        end
         local hpModes = {
-            { fs = mock._hpLeftFS, mode = conf.textLeft or "NONE", point = "LEFT", rel = "LEFT", x = pad3 + hox + GFPreviewConfigToOffset(conf.hpTextLeftOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextLeftOffsetY or 0, previewScale), justify = "LEFT" },
-            { fs = mock._hpCenterFS, mode = conf.textCenter or "NONE", point = "CENTER", rel = "CENTER", x = hox + GFPreviewConfigToOffset(conf.hpTextCenterOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextCenterOffsetY or 0, previewScale), justify = "CENTER" },
-            { fs = mock._hpRightFS, mode = conf.textRight or "NONE", point = "RIGHT", rel = "RIGHT", x = -pad3 + hox + GFPreviewConfigToOffset(conf.hpTextRightOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextRightOffsetY or 0, previewScale), justify = "RIGHT" },
+            { fs = mock._hpLeftFS, mode = hpLeftMode, point = "LEFT", rel = "LEFT", x = pad3 + hox + GFPreviewConfigToOffset(conf.hpTextLeftOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextLeftOffsetY or 0, previewScale), justify = "LEFT" },
+            { fs = mock._hpCenterFS, mode = hpCenterMode, point = "CENTER", rel = "CENTER", x = hox + GFPreviewConfigToOffset(conf.hpTextCenterOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextCenterOffsetY or 0, previewScale), justify = "CENTER" },
+            { fs = mock._hpRightFS, mode = hpRightMode, point = "RIGHT", rel = "RIGHT", x = -pad3 + hox + GFPreviewConfigToOffset(conf.hpTextRightOffsetX or 0, previewScale), y = hoy + GFPreviewConfigToOffset(conf.hpTextRightOffsetY or 0, previewScale), justify = "RIGHT" },
         }
         local fakeHP, fakeMax = 720000, 1000000
         for i = 1, #hpModes do
@@ -1916,7 +1922,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             fs:SetJustifyH(spec.justify)
             fs._msufPreviewJustifyH = spec.justify
             if gf and gf.FormatHealthText then
-                fs:SetText(gf.FormatHealthText(spec.mode, fakeHP, fakeMax, conf.textDelimiter or " - ", conf.hpTextReverse == true))
+                fs:SetText(gf.FormatHealthText(spec.mode, fakeHP, fakeMax, conf.textDelimiter or " - ", false))
             else
                 fs:SetText(spec.mode == "PERCENT" and "72%" or "720k")
             end
