@@ -1189,7 +1189,9 @@ local function LayoutText(f, kind)
     end
     if f.textCenterFS then
         f.textCenterFS:ClearAllPoints()
-        f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", 0, 0)
+        f.textCenterFS:SetPoint("LEFT", f.health, "LEFT", 3, 0)
+        f.textCenterFS:SetPoint("RIGHT", f.health, "RIGHT", -3, 0)
+        f.textCenterFS:SetJustifyH("CENTER")
         if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
     end
     if f.textRightFS then

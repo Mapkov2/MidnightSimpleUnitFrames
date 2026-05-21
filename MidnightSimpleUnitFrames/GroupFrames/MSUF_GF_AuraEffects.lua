@@ -2483,7 +2483,15 @@ end
 
 function GF.RetireAuraEffectsState(f)
     if not f then return end
-    _GF_StopDispelGlow(f)
+    if _GF_ClearNativeSuppressedDispel then
+        _GF_ClearNativeSuppressedDispel(f, f.unit)
+    else
+        _GF_StopDispelGlow(f)
+    end
+    f._msufGFHasAnyDebuff = nil
+    if f._msufGFDebuffStripe and f._msufGFDebuffStripe.Hide then
+        f._msufGFDebuffStripe:Hide()
+    end
     f._msufGFDispelFindCache = nil
     _gfAuraDirtyQueued[f] = nil
     f._msufGFAuraDirty = nil

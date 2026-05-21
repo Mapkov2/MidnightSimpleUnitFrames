@@ -950,12 +950,14 @@ local function ApplyFonts(f, kind)
     local safeSetFont = _G.MSUF_SetFontSafe
     local function set(fs, size, r, g, b, a)
         if not fs then return end
-        local curP, curS = fs:GetFont()
-        if curP ~= fontPath or curS ~= size then
+        local curP, curS, curF = fs:GetFont()
+        curF = curF or ""
+        local wantF = fontFlags or ""
+        if curP ~= fontPath or curS ~= size or curF ~= wantF then
             if type(safeSetFont) == "function" then
-                safeSetFont(fs, fontPath, size, fontFlags, fontKey)
+                safeSetFont(fs, fontPath, size, wantF, fontKey)
             else
-                fs:SetFont(fontPath, size, fontFlags)
+                fs:SetFont(fontPath, size, wantF)
             end
         end
         if r and colorChanged then fs:SetTextColor(r, g, b, a or 1) end
@@ -1544,7 +1546,8 @@ local function ApplyTextLayout(f, kind)
     end
     if f.textCenterFS then
         f.textCenterFS:ClearAllPoints()
-        f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", hox + hcx, hoy + hcy)
+        f.textCenterFS:SetPoint("LEFT", f.health, "LEFT", pad3 + hox + hcx, hoy + hcy)
+        f.textCenterFS:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + hox + hcx, hoy + hcy)
         f.textCenterFS:SetJustifyH("CENTER")
         if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
     end
