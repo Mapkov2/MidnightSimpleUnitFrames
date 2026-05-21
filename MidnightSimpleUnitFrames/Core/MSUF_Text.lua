@@ -148,7 +148,7 @@ local function _MSUF_ClearPowerSlots(self)
     self._msufLastPwrC, self._msufLastPwrM, self._msufLastPwrP = nil, nil, nil
     self._msufLastPwrMode, self._msufLastPwrSep = nil, nil
 end
--- Patch O: central text renderers (HP/Power/Pct/ToT inline) - secret-safe (no string compares)
+-- Central text renderers (HP/Power/Pct/ToT inline), secret-safe with no string compares.
 function ns.Text._SepToken(raw, fallback)
     -- Accept legacy/malformed values (e.g. false) safely.
     local sep = raw

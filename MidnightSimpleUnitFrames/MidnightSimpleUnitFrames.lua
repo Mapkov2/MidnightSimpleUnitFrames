@@ -223,7 +223,7 @@ ns.AddLocale = ns.AddLocale or function(locale, dict)
     end
 end
 
--- Patch M: table-driven hide helpers (safe, no string compares)
+-- Table-driven hide helpers (safe, no string compares).
 ns.Bars._outlineParts = ns.Bars._outlineParts or { "top", "bottom", "left", "right", "tl", "tr", "bl", "br" }
 ns.Util.HideKeys = ns.Util.HideKeys or function(t, keys, extraKey)
     if not t or not keys then  return end
@@ -236,7 +236,7 @@ ns.Util.HideKeys = ns.Util.HideKeys or function(t, keys, extraKey)
         if obj and obj.Hide then obj:Hide() end
     end
  end
--- Patch N: DB helpers (SavedVariables only; not F.UnitName/etc)
+-- SavedVariables access helpers (not live unit API values).
 ns.Util.Val = ns.Util.Val or function(conf, g, key, default)
     local v = conf and conf[key]; if v == nil and g then v = g[key] end; if v == nil then v = default end;  return v
 end
@@ -269,7 +269,7 @@ if not F._msufInit then
     F._msufInit = true
     local G = _G; F.UnitHealth, F.UnitHealthMax, F.UnitPower, F.UnitPowerMax = G.UnitHealth, G.UnitHealthMax, G.UnitPower, G.UnitPowerMax; F.UnitExists, F.UnitIsConnected, F.UnitIsDeadOrGhost = G.UnitExists, G.UnitIsConnected, G.UnitIsDeadOrGhost; F.UnitName, F.UnitClass, F.UnitReaction, F.UnitIsPlayer = G.UnitName, G.UnitClass, G.UnitReaction, G.UnitIsPlayer; F.CreateFrame, F.InCombatLockdown, F.GetTime = G.CreateFrame, G.InCombatLockdown, G.GetTime
 end
--- Patch T: unified stamp cache (layout/indicator/portrait) to avoid per-call string stamps
+-- Unified stamp cache (layout/indicator/portrait) to avoid per-call string stamps.
 ns.Cache.StampChanged = ns.Cache.StampChanged or function(o, k, ...)
     if not o then  return true end
     local c = o._msufStampCache; if not c then c = {}; o._msufStampCache = c end
@@ -280,7 +280,7 @@ ns.Cache.StampChanged = ns.Cache.StampChanged or function(o, k, ...)
      return false
 end
 ns.Cache.ClearStamp = ns.Cache.ClearStamp or function(o, k)  local c = o and o._msufStampCache; if c then c[k] = nil end  end
--- Patch Y: Unitframe element factories (build-time scaffolding; no runtime behavior change)
+-- Unitframe element factories (build-time scaffolding; no runtime behavior change).
 -- Goal: remove copy/paste in unitframe creation by providing tiny, reusable constructors.
 -- NOTE: Keep secret-safe: only operate on addon-owned keys/names; no comparisons on unit API strings.
 ns.UF._ResolveParent = ns.UF._ResolveParent or function(self, parentKey)
@@ -660,7 +660,7 @@ do
     end
 end
 local UnitFramesList = {}
--- Patch AA2: move shared helpers earlier (used by early functions) + keep deterministic iteration
+-- Shared helpers used by early setup; keep deterministic iteration.
 local UnitFrames = _G.MSUF_UnitFrames
 if type(UnitFrames) ~= "table" then
     UnitFrames = {}
@@ -861,7 +861,7 @@ function ns.Bars.SetOverlayBarTexture(bar, texGetter)
         MSUF_ApplyOverlayTextureAlpha(bar)
     end
  end
--- Patch Q2: Bars spec-driven Apply (Health/Power/Absorb/HealAbsorb + Reset/Hide)
+-- Spec-driven bar apply (Health/Power/Absorb/HealAbsorb plus reset/hide).
 -- 12.0: ApplySpec dispatcher eliminated. Callers use ns.Bars.Spec.* directly.
 ns.Bars.Spec = ns.Bars.Spec or {}
 ns.Bars.Spec.health = ns.Bars.Spec.health or function(frame, unit)
