@@ -28,6 +28,7 @@ local Preview = ns.UFPreview or {}
 ns.UFPreview = Preview
 _G.MSUF_UFPreview = Preview
 local PreviewBaseEdgeColor
+local PreviewHelpers = (ns.MSUF2 and ns.MSUF2.PreviewHelpers) or {}
 
 local function MenuTheme()
     local m = ns and ns.MSUF2
@@ -2187,80 +2188,24 @@ local function PreviewRoundedPowerBarsEnabled()
 end
 
 local function PreviewSnapOff(region)
-    if region and region.SetSnapToPixelGrid then
-        region:SetSnapToPixelGrid(false)
-        if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
-    end
-end
-
-local function PreviewMaskOwner(mock, tex, anchor)
-    local owner = tex and tex.GetParent and tex:GetParent() or nil
-    if owner and owner.CreateMaskTexture then return owner end
-    if anchor and anchor.CreateMaskTexture then return anchor end
-    return mock
+    if PreviewHelpers.SnapOff then PreviewHelpers.SnapOff(region) end
 end
 
 local function EnsurePreviewRoundedMask(mock, key, anchor, tex)
-    if not (mock and anchor) then return nil end
-    local owner = PreviewMaskOwner(mock, tex, anchor)
-    if not (owner and owner.CreateMaskTexture) then return nil end
-    mock._msufPreviewRoundedMasks = mock._msufPreviewRoundedMasks or {}
-    local bucket = mock._msufPreviewRoundedMasks[key]
-    if type(bucket) ~= "table" or bucket.SetTexture then
-        bucket = {}
-        mock._msufPreviewRoundedMasks[key] = bucket
-    end
-    local ownerKey = tex or owner
-    local mask = bucket[ownerKey]
-    if not mask then
-        mask = owner:CreateMaskTexture(nil, "ARTWORK")
-        PreviewSnapOff(mask)
-        bucket[ownerKey] = mask
-    end
-    mask:ClearAllPoints()
-    mask:SetTexture(PREVIEW_ROUNDED_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    mask:SetAllPoints(anchor)
-    return mask
+    if not PreviewHelpers.EnsureRoundedMask then return nil end
+    return PreviewHelpers.EnsureRoundedMask(mock, key, anchor, tex, "_msufPreviewRoundedMasks", PREVIEW_ROUNDED_MASK, PreviewSnapOff)
 end
 
 local function PreviewSetMask(mock, tex, mask)
-    if not (mock and tex and tex.AddMaskTexture) then return end
-    mock._msufPreviewRoundedMasked = mock._msufPreviewRoundedMasked or {}
-    local old = mock._msufPreviewRoundedMasked[tex]
-    if old == mask then return end
-    if old and tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, old) end
-    mock._msufPreviewRoundedMasked[tex] = nil
-    if mask then
-        local ok = pcall(tex.AddMaskTexture, tex, mask)
-        if ok then mock._msufPreviewRoundedMasked[tex] = mask end
-    end
+    if PreviewHelpers.SetMask then PreviewHelpers.SetMask(mock, tex, mask, "_msufPreviewRoundedMasked") end
 end
 
 local function ClearPreviewRoundedMasks(mock)
-    local masked = mock and mock._msufPreviewRoundedMasked
-    if masked then
-        for tex, mask in pairs(masked) do
-            if tex and tex.RemoveMaskTexture and mask then pcall(tex.RemoveMaskTexture, tex, mask) end
-        end
-    end
-    if mock then mock._msufPreviewRoundedMasked = nil end
+    if PreviewHelpers.ClearMasks then PreviewHelpers.ClearMasks(mock, "_msufPreviewRoundedMasked") end
 end
 
 function PreviewBaseEdgeColor()
-    local fn = _G.MSUF_GetBarOutlineColor
-    if type(fn) == "function" then
-        local ok, r, g, b = pcall(fn)
-        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return r, g, b, 1
-        end
-    end
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if gen then
-        return tonumber(gen.barOutlineColorR) or 0,
-               tonumber(gen.barOutlineColorG) or 0,
-               tonumber(gen.barOutlineColorB) or 0,
-               1
-    end
+    if PreviewHelpers.BaseEdgeColor then return PreviewHelpers.BaseEdgeColor() end
     return 0, 0, 0, 1
 end
 

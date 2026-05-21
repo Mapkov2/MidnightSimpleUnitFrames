@@ -183,6 +183,8 @@ GroupFrames\MSUF_GF_Masque.lua
 Menu2\MSUF_Menu2_Support.lua
 Menu2\MSUF_Menu2_Theme.lua
 Menu2\MSUF_Menu2_Widgets.lua
+Menu2\MSUF_Menu2_PreviewHelpers.lua
+Menu2\MSUF_Menu2_Dropdowns.lua
 Menu2\MSUF_Menu2_Bindings.lua
 Menu2\MSUF_Menu2_Core.lua
 Menu2\MSUF_Menu2_SearchData.lua

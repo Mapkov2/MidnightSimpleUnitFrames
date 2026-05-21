@@ -9,6 +9,7 @@ local T = M.Theme
 local W = M.Widgets
 local GP = M.GroupPage or {}
 local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+local PreviewHelpers = M.PreviewHelpers or {}
 
 local floor = math.floor
 local max = math.max
@@ -435,10 +436,7 @@ local function GFPreviewRoundedPowerEnabled()
 end
 
 local function GFPreviewSnapOff(region)
-    if region and region.SetSnapToPixelGrid then
-        region:SetSnapToPixelGrid(false)
-        if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
-    end
+    if PreviewHelpers.SnapOff then PreviewHelpers.SnapOff(region) end
 end
 
 local GFPreviewBaseEdgeColor
@@ -528,57 +526,17 @@ local function GFPreviewLayoutOutline(mock, edge)
     GFPreviewSetOutlineShown(mock, true)
 end
 
-local function GFPreviewMaskOwner(mock, tex, anchor)
-    local owner = tex and tex.GetParent and tex:GetParent() or nil
-    if owner and owner.CreateMaskTexture then return owner end
-    if anchor and anchor.CreateMaskTexture then return anchor end
-    return mock
-end
-
 local function GFPreviewEnsureRoundedMask(mock, key, anchor, tex)
-    if not (mock and anchor) then return nil end
-    local owner = GFPreviewMaskOwner(mock, tex, anchor)
-    if not (owner and owner.CreateMaskTexture) then return nil end
-    mock._msufGFRoundedPreviewMasks = mock._msufGFRoundedPreviewMasks or {}
-    local bucket = mock._msufGFRoundedPreviewMasks[key]
-    if type(bucket) ~= "table" or bucket.SetTexture then
-        bucket = {}
-        mock._msufGFRoundedPreviewMasks[key] = bucket
-    end
-    local ownerKey = tex or owner
-    local mask = bucket[ownerKey]
-    if not mask then
-        mask = owner:CreateMaskTexture(nil, "ARTWORK")
-        GFPreviewSnapOff(mask)
-        bucket[ownerKey] = mask
-    end
-    mask:ClearAllPoints()
-    mask:SetTexture(GF_PREVIEW_ROUNDED_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    mask:SetAllPoints(anchor)
-    return mask
+    if not PreviewHelpers.EnsureRoundedMask then return nil end
+    return PreviewHelpers.EnsureRoundedMask(mock, key, anchor, tex, "_msufGFRoundedPreviewMasks", GF_PREVIEW_ROUNDED_MASK, GFPreviewSnapOff)
 end
 
 local function GFPreviewSetMask(mock, tex, mask)
-    if not (mock and tex and tex.AddMaskTexture) then return end
-    mock._msufGFRoundedPreviewMasked = mock._msufGFRoundedPreviewMasked or {}
-    local old = mock._msufGFRoundedPreviewMasked[tex]
-    if old == mask then return end
-    if old and tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, old) end
-    mock._msufGFRoundedPreviewMasked[tex] = nil
-    if mask then
-        local ok = pcall(tex.AddMaskTexture, tex, mask)
-        if ok then mock._msufGFRoundedPreviewMasked[tex] = mask end
-    end
+    if PreviewHelpers.SetMask then PreviewHelpers.SetMask(mock, tex, mask, "_msufGFRoundedPreviewMasked") end
 end
 
 local function GFPreviewClearRoundedMasks(mock)
-    local masked = mock and mock._msufGFRoundedPreviewMasked
-    if masked then
-        for tex, mask in pairs(masked) do
-            if tex and tex.RemoveMaskTexture and mask then pcall(tex.RemoveMaskTexture, tex, mask) end
-        end
-    end
-    if mock then mock._msufGFRoundedPreviewMasked = nil end
+    if PreviewHelpers.ClearMasks then PreviewHelpers.ClearMasks(mock, "_msufGFRoundedPreviewMasked") end
 end
 
 local function GFPreviewStatusBarTexture(bar)
@@ -586,20 +544,7 @@ local function GFPreviewStatusBarTexture(bar)
 end
 
 function GFPreviewBaseEdgeColor()
-    local fn = _G.MSUF_GetBarOutlineColor
-    if type(fn) == "function" then
-        local ok, r, g, b = pcall(fn)
-        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return r, g, b, 1
-        end
-    end
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    if gen then
-        return tonumber(gen.barOutlineColorR) or 0,
-               tonumber(gen.barOutlineColorG) or 0,
-               tonumber(gen.barOutlineColorB) or 0,
-               1
-    end
+    if PreviewHelpers.BaseEdgeColor then return PreviewHelpers.BaseEdgeColor() end
     return 0, 0, 0, 1
 end
 
