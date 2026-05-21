@@ -79,7 +79,9 @@ end
 local function SearchPlaceholderText()
     local text = M.Tr("Search")
     if type(text) ~= "string" or text == "" then text = "Search" end
-    return text .. " / Ask..."
+    local ask = M.Tr("Ask...")
+    if type(ask) ~= "string" or ask == "" then ask = "Ask..." end
+    return text .. " / " .. ask
 end
 
 local function SearchBoxHasText(searchBox)
@@ -220,6 +222,15 @@ local function SearchLocaleTranslations(text)
     return out
 end
 
+local function SearchDisplayText(text)
+    text = DisplaySearchText(text)
+    if text == "" then return "" end
+    local translations = SearchLocaleTranslations(text)
+    if #translations > 0 then return translations[1] end
+    if IsSearchLocaleKey(text) then return "" end
+    return text
+end
+
 local function AddSearchText(parts, text)
     if text == nil then return end
     text = DisplaySearchText(text)
@@ -229,6 +240,9 @@ local function AddSearchText(parts, text)
     if #translations > 0 then
         for i = 1, #translations do
             AddUniqueSearchPart(parts, seen, translations[i])
+        end
+        if not IsSearchLocaleKey(text) then
+            AddUniqueSearchPart(parts, seen, text)
         end
     elseif not IsSearchLocaleKey(text) then
         AddUniqueSearchPart(parts, seen, text)
@@ -240,6 +254,9 @@ local function AddSearchTextVariants(out, seen, text)
     if #translations > 0 then
         for i = 1, #translations do
             AddUniqueSearchPart(out, seen, translations[i])
+        end
+        if not IsSearchLocaleKey(text) then
+            AddUniqueSearchPart(out, seen, text)
         end
     elseif not IsSearchLocaleKey(text) then
         AddUniqueSearchPart(out, seen, text)
@@ -2015,7 +2032,7 @@ end
 local function SearchHint(pageInfo, anchor)
     local parts, seen = {}, {}
     local function Add(text)
-        text = DisplaySearchText(text)
+        text = SearchDisplayText(text)
         local norm = NormalizeSearchText(text)
         if norm ~= "" and not seen[norm] then
             seen[norm] = true
@@ -2164,6 +2181,8 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
     if not IsSearchableDisplayText(label) then return end
 
     kind = kind or "text"
+    local displayLabel = SearchDisplayText(label)
+    if displayLabel == "" then displayLabel = label end
     local displayHint = SearchHint(pageInfo, anchor)
     local hint = (kind == "faq") and "" or displayHint
     local parts = {}
@@ -2195,9 +2214,11 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
     seenRecords[recordId] = true
 
     displayHint = DisplaySearchText(displayHint)
-    local labelNorm = NormalizeSearchText(label)
-    local titleNorm = (kind == "faq") and "" or NormalizeSearchText(pageInfo.title or pageInfo.label or "")
-    local groupNorm = (kind == "faq") and "" or NormalizeSearchText(pageInfo.group or "")
+    local displayGroup = (kind == "faq") and "" or SearchDisplayText(pageInfo.group or "")
+    local displayTitle = (kind == "faq") and "" or SearchDisplayText(pageInfo.title or pageInfo.label or "")
+    local labelNorm = NormalizeSearchText(displayLabel)
+    local titleNorm = (kind == "faq") and "" or NormalizeSearchText(displayTitle)
+    local groupNorm = (kind == "faq") and "" or NormalizeSearchText(displayGroup)
     local hintNorm = (kind == "faq") and "" or NormalizeSearchText(displayHint)
     local haystackText = table.concat(parts, " ")
     if kind ~= "faq" and kind ~= "page" and #haystackText > SEARCH_CONTROL_HAYSTACK_MAX_LEN then
@@ -2206,9 +2227,9 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
     local haystackNorm = NormalizeSearchText(haystackText)
     local record = {
         key = pageInfo.key,
-        label = label,
-        group = pageInfo.group or "",
-        title = pageInfo.title or pageInfo.label or "",
+        label = displayLabel,
+        group = displayGroup,
+        title = displayTitle,
         hint = displayHint,
         kind = kind,
         anchor = anchor,
@@ -4605,6 +4626,7 @@ local function BuildSearchPage(ctx)
             local x = 14 + col * (colW + gap)
             local y = resultTopY - row * rowH
             local kind = CONTROL_KIND_LABEL[rec.kind or ""] or (rec.kind == "page" and "Page") or nil
+            if kind and type(M.Tr) == "function" then kind = M.Tr(kind) end
             local prefix = rec.hint ~= "" and rec.hint or rec.group
             local text = prefix ~= "" and (ShortLabel(prefix, 42) .. " > " .. ShortLabel(rec.label, 38)) or rec.label
             if kind and rec.kind ~= "text" then text = text .. " [" .. kind .. "]" end
