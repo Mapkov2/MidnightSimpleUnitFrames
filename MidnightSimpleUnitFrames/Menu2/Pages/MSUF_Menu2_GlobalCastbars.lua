@@ -162,13 +162,21 @@ local function BuildCastbars(ctx)
             return nil
         end
 
+        local function CastbarReferenceFrame(unit)
+            if unit == "player" then return _G.MSUF_PlayerCastbarPreview or _G.MSUF_PlayerCastbar end
+            if unit == "target" then return _G.MSUF_TargetCastbarPreview or _G.MSUF_TargetCastbar end
+            if unit == "focus" then return _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar end
+            if unit == "boss" then return _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1 or _G.MSUF_BossCastbar1 end
+            return nil
+        end
+
         local function ReadPreviewCastbarSize(unit, g)
             local fallbackW, fallbackH = 271, 18
             if unit == "target" then fallbackW = 272
             elseif unit == "focus" then fallbackW = 175
             elseif unit == "boss" then fallbackW, fallbackH = 176, 12 end
             if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-                local desiredW, desiredH = _G.MSUF_GetCastbarDesiredSize(unit, g or {}, nil, fallbackW, fallbackH)
+                local desiredW, desiredH = _G.MSUF_GetCastbarDesiredSize(unit == "boss" and "boss1" or unit, g or {}, CastbarReferenceFrame(unit), fallbackW, fallbackH)
                 if desiredW and desiredW > 0 and desiredH and desiredH > 0 then
                     return min(900, max(40, desiredW)), min(80, max(6, desiredH))
                 end
@@ -364,17 +372,23 @@ local function BuildCastbars(ctx)
         end
         preview.textLayer = textLayer
 
+        local statusAnchor = CreateFrame("Frame", nil, textLayer)
+        statusAnchor:EnableMouse(false)
+        preview.statusBar = statusAnchor
+
         local spell = T.Font(textLayer, "GameFontHighlightSmall", "", T.colors.text)
         spell:SetPoint("LEFT", textLayer, "LEFT", 2, 0)
         spell:SetWidth(max(120, barW - 138))
         spell:SetJustifyH("LEFT")
         preview.spell = spell
+        preview.castText = spell
 
         local time = T.Font(textLayer, "GameFontHighlightSmall", "", T.colors.text)
         time:SetPoint("RIGHT", textLayer, "RIGHT", -2, 0)
         time:SetWidth(82)
         time:SetJustifyH("RIGHT")
         preview.time = time
+        preview.timeText = time
 
         local barBg = castbar:CreateTexture(nil, "BACKGROUND")
         barBg:SetTexture(WHITE8)
@@ -501,14 +515,7 @@ local function BuildCastbars(ctx)
         }
 
         local function SpellText(kind)
-            local text = previewSpellNames[kind or "normal"] or previewSpellNames.normal
-            if (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) == 1 then
-                local maxLen = floor((tonumber(ReadG("castbarSpellNameMaxLen", 30)) or 30) + 0.5)
-                local reserved = floor((tonumber(ReadG("castbarSpellNameReservedSpace", 8)) or 8) / 4)
-                maxLen = max(4, min(30, maxLen - reserved))
-                if #text > maxLen then text = string.sub(text, 1, maxLen - 3) .. "..." end
-            end
-            return text
+            return previewSpellNames[kind or "normal"] or previewSpellNames.normal
         end
 
         local function CastDuration(kind)
@@ -547,7 +554,7 @@ local function BuildCastbars(ctx)
             return max(0.05, min(1.00, value))
         end
 
-        local function ResolvePreviewReverse(frame, unit, kind)
+        local function ResolvePreviewReverse(frame, unit, kind, g)
             local isChanneled = kind == "channel" or kind == "empowered"
             frame.unit = unit
             frame.MSUF_unit = unit
@@ -555,25 +562,17 @@ local function BuildCastbars(ctx)
             frame.MSUF_isChanneled = isChanneled and true or nil
             frame.isEmpower = (kind == "empowered") and true or nil
 
-            if type(_G.MSUF_GetReverseFillSafe) == "function" then
-                local ok, reverse = pcall(_G.MSUF_GetReverseFillSafe, frame, isChanneled)
-                if ok then return reverse and true or false end
-            end
-            if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-                local ok, reverse = pcall(_G.MSUF_GetCastbarReverseFillForFrame, frame, isChanneled)
-                if ok then return reverse and true or false end
-            end
-
-            local direction = ReadG("castbarFillDirection", "RTL")
+            local direction = (g and g.castbarFillDirection) or ReadG("castbarFillDirection", "RTL")
             if direction == "LEFT" then direction = "RTL" end
             if direction == "RIGHT" then direction = "LTR" end
             local reverse = direction ~= "LTR"
-            if unit == "target" and ReadGBool("castbarOpositeDirectionTarget", false) then
+            if unit == "target" and ((g and g.castbarOpositeDirectionTarget == true) or ReadGBool("castbarOpositeDirectionTarget", false)) then
                 reverse = not reverse
             end
-            if isChanneled and not ReadGBool("castbarUnifiedDirection", false) then
+            if isChanneled and not ((g and g.castbarUnifiedDirection == true) or ReadGBool("castbarUnifiedDirection", false)) then
                 reverse = not reverse
             end
+
             return reverse
         end
 
@@ -665,13 +664,11 @@ local function BuildCastbars(ctx)
             local iconSize = ReadCastbarNum(g, unit, "IconSize", "bossCastIconSize", realH)
             iconSize = min(128, max(6, iconSize or realH))
             local rowW = max(1, self.castRow:GetWidth())
-            local rowH = max(1, self.castRow:GetHeight())
             local needW = realW
-            local needH = max(realH, showIcon and (iconSize + (math.abs(iconY or 0) * 2)) or realH)
             if showIcon then
                 needW = needW + max(0, -(iconX or 0)) + max(0, (iconX or 0) + iconSize - realW)
             end
-            local scale = min(1, (rowW - 8) / max(1, needW), (rowH - 6) / max(1, needH))
+            local scale = min(1, (rowW - 8) / max(1, needW))
             if scale <= 0 then scale = 1 end
             local function S(v) return floor(((tonumber(v) or 0) * scale) + 0.5) end
             local scw, sch = max(20, S(realW)), max(6, S(realH))
@@ -691,12 +688,18 @@ local function BuildCastbars(ctx)
             local barWLocal = max(1, scw - statusX)
             local barHLocal = max(1, sch - S(2))
             self.statusX, self.statusW, self.statusH, self.statusScale = statusX, barWLocal, barHLocal, scale
+            if self.statusBar then
+                self.statusBar:ClearAllPoints()
+                self.statusBar:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -1)
+                self.statusBar:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -1 - barHLocal)
+                self.statusBar:SetSize(barWLocal, barHLocal)
+            end
             local texture = (_G.MSUF_GetCastbarTexture and _G.MSUF_GetCastbarTexture()) or WHITE8
             local bgTexture = (_G.MSUF_GetCastbarBackgroundTexture and _G.MSUF_GetCastbarBackgroundTexture()) or WHITE8
             local duration = CastDuration(kind)
             local progress = self.progress or 0
-            local reverse = ResolvePreviewReverse(self, unit, kind)
-            local visual = (kind == "empowered") and progress or (reverse and (1 - progress) or progress)
+            local reverse = ResolvePreviewReverse(self, unit, kind, g)
+            local visual = (kind == "channel") and (1 - progress) or progress
             visual = max(0.01, min(1, visual))
             local fillW = max(1, floor(barWLocal * visual + 0.5))
 
@@ -729,9 +732,8 @@ local function BuildCastbars(ctx)
             end
             LayoutOutline(self, scale)
 
-            self.spell:SetText(SpellText(kind))
             local remaining = max(0, (1 - progress) * duration)
-            self.time:SetText(FormatPreviewTime(unit, g, remaining, duration))
+            local previewTimeText = FormatPreviewTime(unit, g, remaining, duration)
             local fontPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
             local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
             local tr, tg, tb = 1, 1, 1
@@ -739,16 +741,34 @@ local function BuildCastbars(ctx)
                 tr, tg, tb = _G.MSUF_GetCastbarTextColor()
             end
             local showTime = CastbarShowTime(unit, g)
+            local timeW = 0
             self.time:SetShown(showTime)
             if showTime then
                 local timeSize = ReadCastbarNum(g, unit, "TimeFontSize", "bossCastTimeFontSize", ReadG("castbarTimeFontSize", ReadG("fontSize", 14)))
-                if fontPath and self.time.SetFont then self.time:SetFont(fontPath, max(7, S(timeSize)), fontFlags) end
+                if not timeSize or timeSize <= 0 then timeSize = ReadG("fontSize", 14) end
+                local timeSizePx = max(7, S(timeSize))
+                if fontPath and self.time.SetFont then self.time:SetFont(fontPath, timeSizePx, fontFlags) end
+                self.time:SetText(previewTimeText)
                 self.time:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
+                local measured = self.time.GetStringWidth and self.time:GetStringWidth() or nil
+                timeW = measured and measured > 0 and floor(measured + S(8) + 0.5) or floor(((#previewTimeText) * (timeSizePx * 0.58)) + S(8) + 0.5)
+                local minTimeW = max(16, S(24))
+                local maxTimeW = max(minTimeW, S(180))
+                timeW = max(minTimeW, min(maxTimeW, timeW))
+                self.time:SetWidth(timeW)
                 self.time:ClearAllPoints()
-                self.time:SetPoint("RIGHT", self.bar, "LEFT", statusX + barWLocal + S(ReadCastbarNum(g, unit, "TimeOffsetX", "bossCastTimeOffsetX", -2)), S(ReadCastbarNum(g, unit, "TimeOffsetY", "bossCastTimeOffsetY", 0)))
-                self.time:SetWidth(max(36, S(82)))
+                local timeX = ReadCastbarNum(g, unit, "TimeOffsetX", "bossCastTimeOffsetX", -2)
+                local timeY = ReadCastbarNum(g, unit, "TimeOffsetY", "bossCastTimeOffsetY", 0)
+                if unit == "boss" then
+                    timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
+                    timeY = tonumber(g.bossCastTimeOffsetY) or 0
+                end
+                self.time:SetPoint("RIGHT", self.statusBar or self.bar, "RIGHT", S(timeX), S(timeY))
+                if self.time.SetJustifyH then self.time:SetJustifyH("RIGHT") end
+            else
+                self.time:SetText("")
             end
-            local showText = true
+            local showText = CastbarShowText(unit, g)
             self.spell:SetShown(showText)
             if showText then
                 local textSize = ReadCastbarNum(g, unit, "SpellNameFontSize", "bossCastSpellNameFontSize", ReadG("castbarSpellNameFontSize", ReadG("fontSize", 14)))
@@ -756,24 +776,51 @@ local function BuildCastbars(ctx)
                 local textSizePx = max(7, S(textSize))
                 if fontPath and self.spell.SetFont then self.spell:SetFont(fontPath, textSizePx, fontFlags) end
                 self.spell:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
+                self.spell:SetText(SpellText(kind))
                 self.spell:ClearAllPoints()
-                self.spell:SetPoint("LEFT", self.bar, "LEFT", statusX + S(4 + ReadCastbarNum(g, unit, "TextOffsetX", "bossCastTextOffsetX", 0)), S(ReadCastbarNum(g, unit, "TextOffsetY", "bossCastTextOffsetY", 0)))
                 if self.spell.SetMaxLines then self.spell:SetMaxLines(1) end
                 if self.spell.SetWordWrap then self.spell:SetWordWrap(false) end
-                if (tonumber(ReadG("castbarSpellNameShortening", 0)) or 0) > 0 then
-                    local maxLen = tonumber(ReadG("castbarSpellNameMaxLen", 30)) or 30
-                    local reservedSpace = tonumber(ReadG("castbarSpellNameReservedSpace", 8)) or 8
-                    local timeW = showTime and max(36, S(82)) or 0
-                    local avail = barWLocal - timeW - S(reservedSpace) - S(8)
+                local textX = ReadCastbarNum(g, unit, "TextOffsetX", "bossCastTextOffsetX", 0)
+                local textY = ReadCastbarNum(g, unit, "TextOffsetY", "bossCastTextOffsetY", 0)
+                local leftPad = (unit == "boss") and 2 or 4
+                local gap = (unit == "boss") and 6 or 4
+                local shorteningMode = tonumber(ReadG("castbarSpellNameShortening", 0)) or 0
+                if unit == "boss" and g.bossCastSpellNameShortening ~= nil then
+                    shorteningMode = tonumber(g.bossCastSpellNameShortening) or shorteningMode
+                end
+
+                if shorteningMode > 0 then
+                    local maxLen = tonumber(g.castbarSpellNameMaxLen) or tonumber(ReadG("castbarSpellNameMaxLen", 30)) or 30
+                    local reservedSpace = tonumber(g.castbarSpellNameReservedSpace) or tonumber(ReadG("castbarSpellNameReservedSpace", 8)) or 8
+                    if unit == "boss" then
+                        local bossMaxLen = tonumber(g.bossCastSpellNameMaxLen or g.bossCastSpellNameMaxChars or g.bossSpellNameMaxLen)
+                        local bossReserved = tonumber(g.bossCastSpellNameReservedSpace or g.bossCastSpellNameReserved or g.bossSpellNameReservedSpace)
+                        if bossMaxLen and bossMaxLen > 0 then maxLen = bossMaxLen end
+                        if bossReserved and bossReserved > 0 then reservedSpace = bossReserved end
+                    end
+                    if maxLen <= 0 then maxLen = 12 end
+                    if reservedSpace < 0 then reservedSpace = 0 end
+                    local avail = barWLocal - (showTime and timeW or 0) - S(reservedSpace) - S(leftPad + 4)
                     if avail < S(20) then avail = S(20) end
                     local estimated = floor((maxLen * (textSizePx * 0.60)) + S(6) + 0.5)
                     if estimated < S(40) then estimated = S(40) end
+                    if estimated > S(800) then estimated = S(800) end
+                    self.spell:SetPoint("LEFT", self.statusBar or self.bar, "LEFT", S(leftPad + textX), S(textY))
                     self.spell:SetWidth(max(S(20), min(estimated, avail)))
+                    if self.spell.SetJustifyH then self.spell:SetJustifyH("LEFT") end
                 elseif showTime then
-                    self.spell:SetPoint("RIGHT", self.time, "LEFT", -S(4), 0)
+                    self.spell:SetWidth(max(S(20), barWLocal - timeW - S(leftPad + gap + 4)))
+                    self.spell:SetPoint("LEFT", self.statusBar or self.bar, "LEFT", S(leftPad + textX), S(textY))
+                    self.spell:SetPoint("RIGHT", self.time, "LEFT", -S(gap), 0)
+                    if self.spell.SetJustifyH then self.spell:SetJustifyH("LEFT") end
                 else
-                    self.spell:SetPoint("RIGHT", self.bar, "LEFT", statusX + barWLocal - S(4), 0)
+                    self.spell:SetWidth(max(S(20), barWLocal - S(leftPad + 4)))
+                    self.spell:SetPoint("LEFT", self.statusBar or self.bar, "LEFT", S(leftPad + textX), S(textY))
+                    self.spell:SetPoint("RIGHT", self.statusBar or self.bar, "RIGHT", -S(4), 0)
+                    if self.spell.SetJustifyH then self.spell:SetJustifyH("LEFT") end
                 end
+            else
+                self.spell:SetText("")
             end
             self.latency:ClearAllPoints()
             if reverse then
