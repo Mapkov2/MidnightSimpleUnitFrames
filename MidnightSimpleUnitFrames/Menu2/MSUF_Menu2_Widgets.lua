@@ -366,6 +366,17 @@ local TOP_DANGER_BUTTON_STYLE = {
     activeTextColor = { 1.00, 0.82, 0.82, 1 },
 }
 
+local TOP_SUCCESS_BUTTON_STYLE = {
+    bg = { 0.018, 0.145, 0.090, 0.94 },
+    border = { 0.055, 0.440, 0.270, 0.82 },
+    textColor = { 0.780, 1.000, 0.875, 1 },
+    hoverBg = { 0.026, 0.185, 0.115, 0.96 },
+    hoverBorder = { 0.075, 0.560, 0.345, 0.90 },
+    activeBg = { 0.018, 0.145, 0.090, 0.94 },
+    activeBorder = { 0.055, 0.440, 0.270, 0.82 },
+    activeTextColor = { 0.780, 1.000, 0.875, 1 },
+}
+
 local function ApplyTopActionButtonVisual(btn, hover)
     local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
     local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
@@ -423,6 +434,11 @@ local function StyleTopDangerButton(btn)
     return StyleTopButton(btn, TOP_DANGER_BUTTON_STYLE)
 end
 W.StyleTopDangerButton = StyleTopDangerButton
+
+local function StyleTopSuccessButton(btn)
+    return StyleTopButton(btn, TOP_SUCCESS_BUTTON_STYLE)
+end
+W.StyleTopSuccessButton = StyleTopSuccessButton
 
 function W.CreatePageResetButton(ctx, parent, anchor, opts)
     opts = opts or {}

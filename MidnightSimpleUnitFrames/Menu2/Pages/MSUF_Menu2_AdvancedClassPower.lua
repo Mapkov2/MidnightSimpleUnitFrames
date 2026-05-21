@@ -519,7 +519,11 @@ local function BuildClassPower(ctx)
     edit:SetPoint("RIGHT", colors, "LEFT", -10, 0)
 
     local quickSetup = T.Button(head, "Quick Setup: Class Bar", 158, 24)
-    if W.StyleTopActionButton then W.StyleTopActionButton(quickSetup) end
+    if W.StyleTopSuccessButton then
+        W.StyleTopSuccessButton(quickSetup)
+    elseif W.StyleTopActionButton then
+        W.StyleTopActionButton(quickSetup)
+    end
     quickSetup:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -54)
     quickSetup:SetScript("OnClick", ExecuteQuickSetup)
     quickSetup:SetScript("OnEnter", function(self)
