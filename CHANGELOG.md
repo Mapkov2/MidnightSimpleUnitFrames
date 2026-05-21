@@ -1,129 +1,83 @@
 # Changelog
 
-## 5.4 Beta 9 - 2026-05-21
+## 5.4 - 2026-05-21
 
-### Beta Release
+### Highlights
 
-- Fixed Group Frame center HP text drifting when the displayed health value changes by anchoring the centered text to a stable full-width text area.
-- Fixed Group Frame font outline changes not applying when the font face and size stayed the same.
-- Fixed stale Group Frame dispel/debuff visuals after frame retire or reuse so old disease/debuff state no longer hides shields until ReloadUI.
+- Reworked the Castbar Menu with a dedicated live preview for Player, Target, Focus, and Boss castbars, including normal casts, channels, empowered casts, and interrupt preview states.
+- Added persistent Menu2 memory so the menu remembers what you last opened or selected across rebuilds and reopening.
+- Fully reworked Dispel / Debuff Overlay and border highlights for Unit Frames and Group Frames around one visible Highlight Priority model.
 
-## 5.4 Beta 8 - 2026-05-20
+### Castbars
 
-### Beta Release
+- Rebuilt the Global Castbars page around a more accurate preview surface that follows runtime sizing, per-unit match-width behavior, fill direction, channel ticks, empower stages, latency, spark, glow, icon visibility, spell text, cast time, and interrupt shake.
+- Added per-castbar time format controls for Player, Target, Focus, and Boss castbars.
+- Improved castbar preview fidelity for Player, Target, Focus, and Boss so menu previews line up with runtime width, height, text placement, icon placement, and cast-time rendering more closely.
+- Split Boss Castbar preview/edit-mode behavior away from runtime boss cast handling.
+- Reduced idle work in the castbar and interrupt-ready paths through tighter event gating, cached checks, and safer apply scheduling.
 
-- Improved Menu2 search so the search box also works as an "ask" field for location-style questions such as where to move frames, change fonts, or adjust inline text colors.
-- Added generic English and German question handling for menu search, with better ranking for direct controls and sections instead of sending broad "where/how" queries to FAQ-style results.
-- Reduced menu search idle work by cancelling background indexing when leaving the Search page and rebuilding registry search records only when needed.
-- Improved Menu2 performance by avoiding redundant title, subtitle, navigation, status-bar, and search-result refresh work when the visible values did not change.
-- Added the first-use Search / Ask intro popover and updated the search placeholder to make natural-language menu search discoverable.
-- Fixed Advanced Gameplay menu clipping at smaller widths and scaled UI layouts by stacking Combat Timer, Combat Enter/Leave, Class-specific, and Combat Crosshair controls when space is tight.
-- Improved compact widget layout for sliders, switches, toggles, and edit boxes so controls clamp cleanly instead of overlapping or spilling outside their sections.
-- Fixed Group Frame preview note clipping by sizing the preview intro area dynamically for translated and wrapped text.
-- Added live party and raid previews while editing Group Frame bar settings, without taking over the normal Edit Mode group preview state.
-- Added configurable Target-of-Target inline text color modes: Auto, ToT Name Color, Target Name Color, NPC / Type Color, and Default Font Color.
-- Updated Target preview rendering and runtime inline text color resolution so the new ToT inline color modes match class, target-name, NPC reaction, NPC type, and default font color behavior.
-- Added German menu labels for the new inline color options.
+### Menu2 and UX
 
-## 5.4 Beta 7 - 2026-05-20
+- Menu2 now persists accordion/card open states, pinned previews, dashboard panels, page selectors, tabs, selected scopes, color pickers, profile import/export choices, and other last-clicked menu state.
+- Improved Menu2 search so the search field also works as an "ask" field for location-style questions such as where to move frames, change fonts, or adjust inline text colors.
+- Added broader English and German question handling, better direct-control ranking, a first-use Search / Ask intro popover, and localized search coverage improvements.
+- Reduced menu search and navigation overhead by cancelling unused background indexing, rebuilding search records only when needed, and skipping redundant title, subtitle, status-bar, navigation, and result refreshes.
+- Improved compact menu layouts for scaled or narrow UI setups so sliders, switches, edit boxes, gameplay controls, group previews, and layout toggles clamp cleanly instead of overlapping.
+- Added live party and raid previews while editing Group Frame bar settings without taking over the normal Edit Mode group preview state.
+- Made MSUF keybinds account-wide and cleaned up quick setup styling for Class Bar actions.
 
-### Beta Release
+### Dispel, Debuff Overlay, and Highlights
 
-- Rebuilt Unit Frame and Group Frame dispel visual priority around one visible Highlight Priority order, keeping Dispel, Aggro, Purge, Boss Target, Target, and Focus as the user-facing priority lanes.
-- Collapsed legacy Magic, Curse, Disease, Poison, and Bleed custom sorting into the single Dispel visual lane so older profiles no longer keep hidden debuff-type priority state.
-- Force-migrated old Unit Frame and Group Frame overlay/debuff priority settings across saved profiles, including stale overlay priority toggles and ordering tables.
-- Kept Dispel Border and Dispel Overlay independently enabled and configured while sharing the same resolved debuff winner, so border-only, overlay-only, and combined setups use one consistent priority result.
-- Fixed renderer-independent Group Frame dispel highlights so MSUF can still scan and draw priority visuals when Blizzard owns aura icons, while custom aura rendering uses the same priority path.
-- Added shared strata/frame-level helpers and separate effect layers for highlight borders, dispel overlays, and debuff stripes so active visual lanes stack predictably.
-- Improved live combat refresh for dispel visuals by tracking priority-relevant aura changes, aura cache versions, Bleed enum/fallback resolution, and coalesced refresh queues.
-- Reduced redundant Unit Frame and Group Frame border/overlay work by avoiding duplicate scans when trigger, priority, and cache signatures match.
-- Simplified the UnitFrame and GroupFrame Dispel Overlay menus by removing separate overlay priority controls while keeping trigger, style, health-only, opacity, and independent enable toggles.
-- Updated the Group Frames > Health & Text navigation tooltip so it points users to health colors, bars, power bar, text, Dispel Overlay, Debuff Stripe, and Range Fade.
+- Rebuilt Unit Frame and Group Frame dispel priority around one visible Highlight Priority order: Dispel, Aggro, Purge, Boss Target, Target, and Focus.
+- Collapsed legacy Magic, Curse, Disease, Poison, and Bleed custom sorting into the single Dispel visual lane and migrated old overlay/debuff priority settings across saved profiles.
+- Kept Dispel Border and Dispel Overlay independently enabled and configured while sharing the same resolved debuff winner, so border-only, overlay-only, and combined setups behave consistently.
+- Improved Any Debuff, Any Dispel Type, typed color mode, typed priority order, and Bleed handling so the highest-priority debuff is selected consistently.
+- Added renderer-independent Group Frame dispel highlights so MSUF can still draw priority visuals when Blizzard owns aura icons, while custom aura rendering uses the same priority path.
+- Added separate effect layers for highlight borders, dispel overlays, and debuff stripes so active visual lanes stack predictably.
+- Reduced redundant border, glow, overlay, color, reverse-fill, and status-bar updates with settings, aura-version, priority-signature, color-revision, and unit-guid cache guards.
+- Improved cleanup for retired or reused Group Frames so stale dispel/debuff visuals cannot leak into newly assigned units.
 
-## 5.4 Beta 6 - 2026-05-20
-
-### Beta Release
-
-- Reworked Unit Frame and Group Frame dispel priority resolution so Magic, Curse, Disease, Poison, Bleed, generic dispel, aggro, purge, and boss-target lanes stay independent instead of collapsing to the first matching type.
-- Kept Dispel Border and Dispel Overlay as separate visual lanes with their own trigger, priority, color, and refresh state so live option changes no longer reuse a stale border winner for the overlay.
-- Added settings-serial, aura-version, priority-signature, color-revision, and unit-guid cache guards around dispel scans so repeated refreshes are cheaper without keeping stale aura colors or stale priority winners.
-- Improved Any Debuff and Any Dispel Type handling so typed color mode and typed priority order can still select the correct highest-priority debuff, including Bleed.
-- Added Bleed support to the group-frame dispel color curve for the currently observed Bleed ids.
-- Improved Dispel Overlay behavior when Blizzard/native aura rendering is enabled: Blizzard can still own the aura icon/border path while MSUF keeps the health-bar overlay active.
-- Reduced redundant glow, overlay, color, reverse-fill, and status-bar updates for Unit Frame and Group Frame dispel visuals while keeping secret-value handling safe.
-- Improved aura delta handling for added, updated, and removed debuffs so priority-based dispel visuals rescan only when the tracked winner or priority-relevant data can change.
-- Added Perfy workflow documentation for temporary instrumented test zips, including the rule that `MSUF_PerfyHook.lua` stays out of normal beta releases.
-- Note: the Dispel system is still work in progress and will continue to be tuned in upcoming beta builds.
-
-## 5.4 Beta 5 - 2026-05-19
-
-### Beta Release
-
-- Refactored the Group Frame effects runtime into clear internal modules instead of keeping text, aura effects, range/threat, events, cleanup, highlights, status/offline handling, frame cache, and tooltip/mouseover behavior in one large file.
-- Refactored Auras2 into clearer cache, collection, icon, layout, Masque, cooldown-text, render, reminder, event, and edit-mode responsibilities instead of concentrating aura state, icon reuse, filtering, layout, and rendering in the core/render files.
-- Added `Auras2/MSUF_A2_Cache.lua` for aura cache ownership, full scans, delta updates, invalidation, and aura table pooling.
-- Added `Auras2/MSUF_A2_Collect.lua` for zero-allocation helpful/harmful aura collection paths and sorted/unsorted list preparation.
-- Added `Auras2/MSUF_A2_Icons.lua` for icon pool ownership, acquire/release behavior, stack/timer/pandemic application, and icon cleanup.
-- Added `Auras2/MSUF_A2_Layout.lua` for aura icon positioning, row/column layout, and hide-unused behavior.
-- Kept `Auras2/MSUF_A2_Masque.lua` and `Auras2/MSUF_A2_CooldownText.lua` as dedicated render subsystems so Masque skinning and cooldown text updates stay out of the main aura render orchestration.
-- Refactored `Auras2/MSUF_A2_Render.lua` around render orchestration, shared buff/debuff commit handling, icon commit/layout boundaries, and preview/runtime separation.
-- Refactored `Core/MSUF_UnitframeCore.lua` by moving Target-of-Target inline widget logic into `Core/MSUF_UFCore_ToTInline.lua`, while keeping public runtime behavior and wrappers compatible.
-- Refactored the main frame backbone by moving preview/test-mode frame behavior into `Core/MSUF_FramePreview.lua`, keeping `MidnightSimpleUnitFrames.lua` focused more on public orchestration and real runtime frame setup.
-- Refactored Gameplay support by moving Blizzard Totem Preview handling into `Features/MSUF_Gameplay_TotemPreview.lua`, while keeping one public `ns.MSUF_RequestGameplayApply` path and apply coalescing.
-- Refactored ClassPower specialty logic by moving alternate mana handling into `ClassPower/MSUF_CP_AltMana.lua` and Balance Druid prediction into `ClassPower/MSUF_CP_BalanceDruid.lua`, leaving the controller closer to orchestration.
-- Refactored Boss Castbar preview handling into `MidnightSimpleUnitFrames_Castbars/Modules/BossCastbars_Preview.lua`, separating edit-mode/fake-cast preview behavior from runtime boss cast handling.
-- Reduced `GroupFrames/MSUF_GF_Effects.lua` to the Health, Power, overlay, and visual-dispatch orchestration path, making the remaining hot-path code easier to review and safer to profile.
-- Added `GroupFrames/MSUF_GF_Text.lua` for compiled text-slot handling, text dirty queues, and text retire cleanup.
-- Added `GroupFrames/MSUF_GF_AuraEffects.lua` for `UNIT_AURA` dispatch, dispel scanning, dispel overlay/glow, debuff stripe handling, and aura-effect refresh state.
-- Added `GroupFrames/MSUF_GF_RangeThreat.lua` for range fade, layered alpha handling, threat state, and the related lightweight event dispatch.
-- Added `GroupFrames/MSUF_GF_Events.lua` for unit-event masks, global event registration, event lifecycle, and roster/target/focus event routing.
-- Added `GroupFrames/MSUF_GF_Highlight.lua` for highlight configuration resolution, border styling, quick border updates, and target indicator rendering.
-- Added `GroupFrames/MSUF_GF_StatusOffline.lua` for AFK, DND, Dead, Ghost, and delayed offline-hide state handling.
-- Added `GroupFrames/MSUF_GF_FrameCache.lua` for cold-path per-frame configuration caching, event-bit calculation, and cache invalidation triggers.
-- Added `GroupFrames/MSUF_GF_TooltipMouseover.lua` for mouseover highlight styling, tooltip throttling, and Group Frame init hooks.
-- Added `GroupFrames/MSUF_GF_Cleanup.lua` so retired or hidden Group Frames release tooltip, text, aura, range, and offline-hide state through one cleanup entry point.
-- Preserved existing Group Frame public APIs and diagnostic wrappers, including update, aura, highlight, status, target, overlay, and frame-cache entry points.
-- Fixed a Group Frame target indicator risk by moving its secret-safe `UnitIsUnit` boolean normalization into the new highlight module instead of relying on a missing local helper.
-- Kept the Group Frame aura hot path conservative: no extra aura scans, no extra `UnitAura` or `C_UnitAuras` calls, no broader unit-event registration, and no new timer or `OnUpdate` loop.
-- Kept the frame-cache split on the cold apply/refresh path so cache construction is easier to maintain without adding work to frequent Health, Power, Aura, or Range events.
-- Updated the TOC load order so highlight, status, aura-effect, and range/threat helpers bind before the hot-path effects orchestrator, while the cold frame cache still loads after the shared effects exports it needs.
-- Verified the refactor with `luac -p` across project-owned Lua files and `git diff --check`.
-
-## 5.4 Beta 3 - 2026-05-19
-
-### Beta Release
-
-- Added status icon Advanced tabs for Unit Frame and Group Frame status indicators, including extended offsets, layer controls, reset, test mode, and preview actions.
-- Added status icon pack discovery from addon `Icons` folders and bundled the `UX Pro` status icon pack under `MidnightSimpleUnitFrames\Icons\UXPro`.
-- Added support for external `Interface\Icons` replacement packs by resolving accessible spell and aura FileDataIDs back to icon paths before rendering.
-- Fixed Group Frame status icon menu clipping around the Placement layer controls.
-- Improved status icon texture handling across aura previews, aura rendering, healer buffs, spell indicators, focus kick icons, and dropdown previews so replacement packs are used consistently.
-- Improved Group Frame heal prediction and absorb test mode so Bars test rendering updates overlay bars without unnecessary live prediction reads while out of combat.
-- Refactored low-risk runtime paths for aura commits, target-swap visuals, gameplay apply scheduling, crosshair target callbacks, and boss castbar event registration.
-
-## 5.4 Beta 2 - 2026-05-19
-
-### Beta Release
+### Unit Frames and Group Frames
 
 - Added per-indicator icon pack selection for Unit Frame and Group Frame status indicators.
+- Added status icon Advanced tabs with extended offsets, layer controls, reset actions, test mode, and preview actions.
+- Added bundled UX Pro status icons and support for external `Interface\Icons` replacement packs.
+- Improved status icon texture resolution across aura previews, aura rendering, healer buffs, spell indicators, focus kick icons, and dropdown previews.
+- Added a separate Show Cooldown Swipe control for icon-style Group Frame Spell Indicators.
 - Added Group Frame options to hide name text while units are dead or offline.
-- Moved heal prediction controls into the Bars pages so Unit Frame and Group Frame bar configuration is grouped consistently.
+- Moved heal prediction controls into the Bars pages and improved Group Frame heal prediction / absorb test rendering.
 - Added a global Bar Outline Color for Unit Frames and Group Frames while keeping aggro, purge, dispel, and other indicator colors independent.
-- Improved Unit Frame bar outlines so detached, active, and pixel-snapped outline borders render consistently.
-- Improved Group Frame bar outline rendering so preview and live frames use the same outside-outline behavior as Unit Frames.
-- Fixed Unit Frame range alpha background bleed when layered alpha state changes.
-- Fixed Sated aura threshold filters so aura rule changes stay fresh.
-- Fixed a Group Frame preview upvalue warning.
+- Improved Unit Frame and Group Frame outline rendering so detached, active, preview, live, and pixel-snapped borders use consistent outside-outline behavior.
+- Added configurable Target-of-Target inline text color modes: Auto, ToT Name Color, Target Name Color, NPC / Type Color, and Default Font Color.
+- Improved Target preview rendering and runtime Target-of-Target inline color resolution for class colors, target-name colors, NPC reaction colors, NPC type colors, and default font colors.
+- Added Group Frame Blizzard fallback mode for layouts that should let Blizzard own the secure group frame path.
+- Improved Group Frame HP text handling, including reverse-order HP text, stable centered HP text, and font outline updates when face and size stay unchanged.
+- Fixed Unit Frame range alpha background bleed and kept Sated aura threshold filters fresh after aura rule changes.
 
-## 5.4 Beta - 2026-05-18
+### Auras and Performance
 
-### Beta Release
-
-- Added persistent Menu2 memory so accordion/card open states, pinned previews, dashboard panels, page selectors, scopes, color selectors, and profile import/export choices survive menu rebuilds and reopening.
 - Improved Auras2 performance by caching dispel metadata, tracking structural aura changes with epochs, and avoiding repeated filter/sort work when aura structure and configuration are unchanged.
-- Reduced Auras2 event/render overhead when the feature or all unit aura modules are disabled, including harder cleanup of inactive containers and private aura state.
+- Reduced Auras2 event and render overhead when the feature or all unit aura modules are disabled, including harder cleanup of inactive containers and private aura state.
+- Improved aura delta handling for added, updated, and removed debuffs so priority-based dispel visuals rescan only when relevant aura data can change.
 - Improved range-fade stability and cost by repairing unchanged layered alpha less often while still clearing stale fade state when range becomes unknown.
-- Expanded Menu2 search coverage for toggle-style questions such as enable, disable, show, hide, turn on, and turn off.
+- Refined low-risk runtime paths for aura commits, target-swap visuals, gameplay apply scheduling, crosshair target callbacks, and boss castbar event registration.
+
+### Localization
+
+- Added German labels for the new Target-of-Target inline color options.
+- Expanded runtime localization coverage for the new Menu2 search, Castbar, Group Frame, and changelog strings.
+
+### Under the Hood
+
+- Refactored the Group Frame effects runtime into focused modules for text, aura effects, range/threat, events, cleanup, highlights, status/offline handling, frame cache, and tooltip/mouseover behavior.
+- Refactored Auras2 into clearer cache, collection, icon, layout, Masque, cooldown-text, render, reminder, event, and edit-mode responsibilities.
+- Split Target-of-Target inline widget logic into `Core/MSUF_UFCore_ToTInline.lua`.
+- Split preview/test-mode frame behavior into `Core/MSUF_FramePreview.lua`.
+- Split Blizzard Totem Preview handling into `Features/MSUF_Gameplay_TotemPreview.lua`.
+- Split ClassPower alternate mana and Balance Druid prediction into dedicated modules.
+- Split Boss Castbar preview handling into `MidnightSimpleUnitFrames_Castbars/Modules/BossCastbars_Preview.lua`.
+- Preserved public Group Frame APIs and diagnostic wrappers while moving hot-path work behind smaller internal modules.
+- Updated release tooling and Perfy documentation so temporary instrumented builds stay separate from normal release packages.
 
 ## 5.32 - 2026-05-18
 
