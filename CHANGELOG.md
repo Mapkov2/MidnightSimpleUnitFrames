@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.4 Beta 9 - 2026-05-21
+
+### Beta Release
+
+- Fixed Group Frame center HP text drifting when the displayed health value changes by anchoring the centered text to a stable full-width text area.
+- Fixed Group Frame font outline changes not applying when the font face and size stayed the same.
+- Fixed stale Group Frame dispel/debuff visuals after frame retire or reuse so old disease/debuff state no longer hides shields until ReloadUI.
+
 ## 5.4 Beta 8 - 2026-05-20
 
 ### Beta Release
