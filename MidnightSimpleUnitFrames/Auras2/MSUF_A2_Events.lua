@@ -886,6 +886,7 @@ end
             busUnreg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS")
             busUnreg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS")
         end
+        _G.MSUF_A2_OnTargetChanged = nil
 
         local list = ef._msufA2_unitAuraFrames
         if type(list) == "table" then

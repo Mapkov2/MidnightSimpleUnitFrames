@@ -604,8 +604,6 @@ do
         -- Coalescing to next-frame eliminates burst spikes in the Blizzard profiler.
         if not _gfRosterPending then
             _gfRosterPending = true
-            _gfTargetFrame = nil
-            _gfFocusFrame  = nil
             _MSUF_ScheduleOnce("GF_ROSTER_FLUSH", _gfRosterFlush)
         end
     end

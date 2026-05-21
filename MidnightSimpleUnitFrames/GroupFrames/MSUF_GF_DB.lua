@@ -1836,6 +1836,7 @@ end
 function GF.TruncateName(name, maxChars, noEllipsis, clipSide)
     maxChars = math_floor((tonumber(maxChars) or 0) + 0.5)
     if not name or maxChars <= 0 then return name end
+    if _GF_issecretvalue and _GF_issecretvalue(name) then return name end
     clipSide = (clipSide == "LEFT") and "LEFT" or "RIGHT"
 
     local function NextByte(pos)
