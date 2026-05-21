@@ -1451,8 +1451,11 @@ local function FullRefresh()
         if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
         if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         CP_StopCentralTick()
-        CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
+        local maintainedAnchor = CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
         if CP.container then
+            if not maintainedAnchor then
+                CP.container._msufAnchorOnly = nil
+            end
             CP.container:Hide()
         end
         CP.visible = false

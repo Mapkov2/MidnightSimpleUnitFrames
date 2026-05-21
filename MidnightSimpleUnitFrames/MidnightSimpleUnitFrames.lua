@@ -5415,6 +5415,8 @@ local MSUF_UNIT_TIP_FUNCS = {
 }
 local function MSUF_IsClassPowerAnchorUsable(cpContainer)
     if not cpContainer then return false end
+    local bars = MSUF_DB and MSUF_DB.bars
+    if bars and bars.showClassPower == false then return false end
     if cpContainer.IsShown and cpContainer:IsShown() then return true end
     if cpContainer._msufLayoutInitialized ~= true then return false end
     if cpContainer.GetNumPoints and cpContainer:GetNumPoints() <= 0 then return false end
@@ -5534,7 +5536,9 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
             end
         end
     end
-    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (enabled and 1 or 0), (embed and 1 or 0), (reserve and 1 or 0), h, (activeDetached and 1 or 0), dW, dH, dX, dY, dLevel, (anchorToCP and 1 or 0), dpbWMode) then
+    local cpContainer = anchorToCP and _G["MSUF_ClassPowerContainer"] or nil
+    local cpAnchorUsable = anchorToCP and MSUF_IsClassPowerAnchorUsable(cpContainer) or false
+    if not ns.Cache.StampChanged(f, "PBEmbedLayout", (enabled and 1 or 0), (embed and 1 or 0), (reserve and 1 or 0), h, (activeDetached and 1 or 0), dW, dH, dX, dY, dLevel, (anchorToCP and 1 or 0), (cpAnchorUsable and 1 or 0), dpbWMode) then
         if not enabled then _MSUF_Bars_HidePower(pb, true) end
         if _G.MSUF_ApplyPowerBarBorder then
             _G.MSUF_ApplyPowerBarBorder(pb)
@@ -5574,8 +5578,7 @@ local function MSUF_ApplyPowerBarEmbedLayout(f)
         end
         -- Anchor to class power container (MRB energyâ†’combo pattern) or to unit frame
         if anchorToCP then
-            local cpContainer = _G["MSUF_ClassPowerContainer"]
-            if MSUF_IsClassPowerAnchorUsable(cpContainer) then
+            if cpAnchorUsable and cpContainer then
                 pb:SetPoint('TOP', cpContainer, 'BOTTOM', dX, dY)
             else
                 -- Fallback: anchor to unit frame when CP not visible

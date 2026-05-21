@@ -54,6 +54,74 @@ local function MSUF_ProfileIO_RunApplyAllSettings()
     end
     return false
 end
+local function MSUF_ProfileIO_CallGlobal(name, ...)
+    local fn = _G[name]
+    if type(fn) ~= "function" then
+        return false
+    end
+    local ok = pcall(fn, ...)
+    return ok == true
+end
+local MSUF_ProfileIO_PostProfileRuntimeApply
+local function MSUF_ProfileIO_InCombatLockdown()
+    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+end
+local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
+    if not MSUF_ProfileIO_InCombatLockdown() then
+        return false
+    end
+    _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply = {
+        reason = reason or "PROFILE_APPLY",
+        applyAll = applyAll == true,
+    }
+    local f = _G.MSUF_ProfileIO_PostProfileDeferFrame
+    if not f and type(_G.CreateFrame) == "function" then
+        f = _G.CreateFrame("Frame")
+        _G.MSUF_ProfileIO_PostProfileDeferFrame = f
+        f:SetScript("OnEvent", function(self, event)
+            if event ~= "PLAYER_REGEN_ENABLED" then return end
+            if MSUF_ProfileIO_InCombatLockdown() then return end
+            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            local pending = _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply
+            _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply = nil
+            if pending and MSUF_ProfileIO_PostProfileRuntimeApply then
+                MSUF_ProfileIO_PostProfileRuntimeApply(pending.reason or "PROFILE_APPLY_AFTER_COMBAT", pending.applyAll == true)
+            end
+        end)
+    end
+    if f and f.RegisterEvent then
+        f:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    if applyAll == true then
+        MSUF_ProfileIO_RunApplyAllSettings()
+    end
+    return true
+end
+MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
+    reason = reason or "PROFILE_APPLY"
+    if MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll) then
+        return
+    end
+    if applyAll == true then
+        if not MSUF_ProfileIO_CallGlobal("MSUF_ApplyAllSettings_Immediate") then
+            MSUF_ProfileIO_RunApplyAllSettings()
+        end
+    end
+
+    local nsGlobal = _G.MSUF_NS
+    local core = nsGlobal and nsGlobal.MSUF_UnitframeCore
+    if core and type(core.InvalidateAllFrameConfigs) == "function" then
+        pcall(core.InvalidateAllFrameConfigs)
+    end
+    MSUF_ProfileIO_CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
+    MSUF_ProfileIO_CallGlobal("MSUF_ApplyModules")
+    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Refresh")
+    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshTextures")
+    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
+    MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
+    MSUF_ProfileIO_CallGlobal("MSUF_Portraits_ForceRefresh")
+    MSUF_ProfileIO_CallGlobal("MSUF_PortraitDecoration_RefreshAll")
+end
 -- Compact codec (backward compatible)
 -- New export format (preferred):
 --   MSUF3: base64(CBOR(table)) using Blizzard C_EncodingUtil
@@ -423,6 +491,7 @@ function MSUF_SwitchProfile(name)
     end
     MSUF_ProfileIO_RunEnsureDB()
     MSUF_ProfileIO_RunApplyAllSettings()
+    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_SWITCH", false)
     if _G.MSUF_UpdateAllFonts then
         _G.MSUF_UpdateAllFonts()
     end
@@ -440,6 +509,7 @@ function MSUF_ResetProfile(name)
         end
         MSUF_ProfileIO_RunEnsureDB()
         MSUF_ProfileIO_RunApplyAllSettings()
+        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_RESET", false)
         if _G.MSUF_UpdateAllFonts then
             _G.MSUF_UpdateAllFonts()
         end
@@ -1268,6 +1338,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
+    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
      return true
 end
 function MSUF_ExportSelectionToString(kind)
@@ -1305,6 +1376,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
+    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_LEGACY_IMPORT", true)
     print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
      return true
 end
@@ -1476,6 +1548,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
+        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_EXTERNAL_IMPORT", true)
          return true
     end
     if type(existing) == "table" then

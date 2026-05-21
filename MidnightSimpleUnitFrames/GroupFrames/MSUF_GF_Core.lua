@@ -155,6 +155,7 @@ GF.frameList   = GF.frameList or {}   -- compact live-frame iteration order
 
 -- Cross-system frame registry (A2, EM2, etc. resolve unit→frame via this table)
 if type(_G.MSUF_UnitFrames) ~= "table" then _G.MSUF_UnitFrames = {} end
+local GFUnitFrames = _G.MSUF_UnitFrames
 GF._eventFrame = GF._eventFrame or nil
 GF._previewActive = GF._previewActive or {}
 
@@ -232,131 +233,130 @@ GF.RegisterClickCastFrame = _GF_RegisterClickCastFrame
 --   "raid7" → "raid3" : clear raid7 entry, register raid3
 --   "raid7" → nil  : clear raid7 entry (member left group)
 ------------------------------------------------------------------------
+local function _GFResetUnitSlotState(self)
+    self._msufGFHasAnyDebuff       = false
+    self._msufGFDispelType         = nil
+    self._msufGFDispelAuraID       = nil
+    self._msufGFPrevDispelAuraID   = nil
+    self._msufGFMergedDispel       = nil
+    self._msufGFDispelColorObj     = nil
+    self._msufGFDispelColorRev     = nil
+    self._msufGFColorStyleRevision = nil
+
+    local stopGlow = _G.MSUF_GF_StopDispelGlow
+    if type(stopGlow) == "function" then
+        stopGlow(self)
+    else
+        self._msufGFDispelGlowActive = nil
+        self._msufGFDispelGlowAnchor = nil
+        self._msufGFDispelGlowStyle = nil
+    end
+
+    local hlBorder = self._msufGFHighlightBorder
+    if hlBorder then
+        hlBorder._msufHLActivePrio = nil
+    end
+    local hlBorders = self._msufGFHighlightBorders
+    if hlBorders then
+        for _, border in pairs(hlBorders) do
+            if border then
+                border._msufHLActivePrio = nil
+                if border:IsShown() then border:Hide() end
+            end
+        end
+    elseif hlBorder and hlBorder:IsShown() then
+        hlBorder:Hide()
+    end
+
+    self._msufGFLastFullAura       = nil
+    self._msufGFAggroLevel         = nil
+    self._msufGFLastName           = nil
+    self._msufGFNameCacheKey       = nil
+    self._msufGFNameStyleKey       = nil
+    self._msufGFNameText           = nil
+    self._msufGFNameClass          = nil
+    self._msufGFNameColorKey       = nil
+    self._msufGFNameHiddenForStatus = nil
+    self._msufGFStatusState        = nil
+    self._msufGFStatusDirty        = nil
+
+    if GF.ResetStatusIconCaches then GF.ResetStatusIconCaches(self) end
+    if GF.ResetOfflineHiddenFrame then GF.ResetOfflineHiddenFrame(self) end
+
+    local stripe = self._msufGFDebuffStripe
+    if stripe and stripe:IsShown() then stripe:Hide() end
+
+    local statusText = self._msufGFStatusText or self.statusIndicatorText
+    if statusText then
+        statusText:SetText("")
+        statusText:Hide()
+    end
+
+    local disp = self._msufDisplayedAuraIDs
+    if disp then
+        for k in pairs(disp) do disp[k] = nil end
+    end
+end
+
+local function _GFOnUnitAttributeChanged(self, name, value)
+    if name ~= "unit" then return end
+
+    local prev = self._msufGFRegisteredUnit
+    if prev == value and self.unit == value then
+        if value == nil or value == "" then return end
+        local uf = GFUnitFrames
+        if uf and uf[value] == self then return end
+    end
+
+    local uf = GFUnitFrames or _G.MSUF_UnitFrames
+    if not uf then return end
+    GFUnitFrames = uf
+
+    local unitChanged = (prev and prev ~= value)
+    if unitChanged then
+        if uf[prev] == self then uf[prev] = nil end
+        self._msufGFRegisteredUnit = nil
+    end
+
+    if unitChanged or (prev and not value) then
+        _GFResetUnitSlotState(self)
+    end
+
+    if type(value) == "string" and value ~= "" then
+        self.unit = value
+        local p5 = value:sub(1, 5)
+        if p5 == "party" or value:sub(1, 4) == "raid" then
+            uf[value] = self
+        end
+
+        if not self._msufGFBuilt then
+            if InCombatLockdown and InCombatLockdown() then
+                MarkPostCombatHeaderRecovery()
+            end
+            return
+        end
+
+        if self._msufGFRegisteredUnit ~= value then
+            if GF.IsFrameRuntimeEnabled and not GF.IsFrameRuntimeEnabled(self, self._msufGFKind) then
+                if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(self) end
+                self._msufGFRegisteredUnit = nil
+                return
+            end
+            self._msufGFRegisteredUnit = value
+            if not (InCombatLockdown and InCombatLockdown()) and GF.ApplyVisuals then
+                GF.ApplyVisuals(self, GF.DIRTY_ALL or 0x3F)
+            end
+            if GF.UpdateButton then GF.UpdateButton(self, value) end
+            if GF.RegisterUnitEvents then GF.RegisterUnitEvents(self, value) end
+        end
+    end
+end
+
 local function _GFInstallAttrHook(child)
     if not child or child._msufGFAttrHooked then return end
     if not child.HookScript then return end
     child._msufGFAttrHooked = true
-    child:HookScript("OnAttributeChanged", function(self, name, value)
-        if name ~= "unit" then return end
-        local uf = _G.MSUF_UnitFrames
-        if not uf then return end
-
-        -- Clear stale entry if unit changed or was cleared
-        local prev = self._msufGFRegisteredUnit
-        if prev == value and self.unit == value and type(value) == "string" and uf[value] == self then
-            return
-        end
-        local unitChanged = (prev and prev ~= value)
-        if unitChanged then
-            if uf[prev] == self then uf[prev] = nil end
-            self._msufGFRegisteredUnit = nil
-        end
-
-        -- Reset volatile per-frame state when the unit token changes or
-        -- is being cleared. Without this, raid roster reshuffles (player
-        -- leaves group, replacement takes the same SecureGroupHeader slot,
-        -- or phasing-driven re-anchoring) inherit stale visuals from the
-        -- previous occupant — most visibly the debuff stripe and dispel
-        -- border, which are diff-gated on cached presence flags.
-        if unitChanged or (prev and not value) then
-            self._msufGFHasAnyDebuff       = false
-            self._msufGFDispelType         = nil
-            self._msufGFDispelAuraID       = nil
-            self._msufGFPrevDispelAuraID   = nil
-            self._msufGFMergedDispel       = nil
-            self._msufGFDispelColorObj     = nil
-            self._msufGFDispelColorRev     = nil
-            self._msufGFColorStyleRevision = nil
-            local stopGlow = _G.MSUF_GF_StopDispelGlow
-            if type(stopGlow) == "function" then
-                stopGlow(self)
-            else
-                self._msufGFDispelGlowActive = nil
-                self._msufGFDispelGlowAnchor = nil
-                self._msufGFDispelGlowStyle = nil
-            end
-            local hlBorder = self._msufGFHighlightBorder
-            if hlBorder then
-                hlBorder._msufHLActivePrio = nil
-            end
-            local hlBorders = self._msufGFHighlightBorders
-            if hlBorders then
-                for _, border in pairs(hlBorders) do
-                    if border then
-                        border._msufHLActivePrio = nil
-                        if border:IsShown() then border:Hide() end
-                    end
-                end
-            elseif hlBorder and hlBorder:IsShown() then
-                hlBorder:Hide()
-            end
-            self._msufGFLastFullAura       = nil
-            self._msufGFAggroLevel         = nil
-            self._msufGFLastName           = nil
-            self._msufGFNameCacheKey       = nil
-            self._msufGFNameStyleKey       = nil
-            self._msufGFNameText           = nil
-            self._msufGFNameClass          = nil
-            self._msufGFNameColorKey       = nil
-            self._msufGFNameHiddenForStatus = nil
-            self._msufGFStatusState        = nil
-            self._msufGFStatusDirty        = nil
-            if GF.ResetStatusIconCaches then GF.ResetStatusIconCaches(self) end
-            if GF.ResetOfflineHiddenFrame then GF.ResetOfflineHiddenFrame(self) end
-            -- Hide any visible stripe immediately so it doesn't bleed
-            -- into the new occupant's frame for one render cycle.
-            local stripe = self._msufGFDebuffStripe
-            if stripe and stripe:IsShown() then stripe:Hide() end
-            local statusText = self._msufGFStatusText or self.statusIndicatorText
-            if statusText then
-                statusText:SetText("")
-                statusText:Hide()
-            end
-            -- Wipe displayed-aura hash; UpdateFrameAuras will repopulate.
-            local disp = self._msufDisplayedAuraIDs
-            if disp then for k in pairs(disp) do disp[k] = nil end end
-        end
-
-        -- Register new unit. Only party*/raid* belong in this registry —
-        -- "player" and other base unit tokens live in the standalone UF
-        -- system (MidnightSimpleUnitFrames.lua's CreateSimpleUnitFrame).
-        if type(value) == "string" and value ~= "" then
-            self.unit = value
-            local p5 = value:sub(1, 5)
-            if p5 == "party" or value:sub(1, 4) == "raid" then
-                uf[value] = self
-            end
-            -- Trigger MSUF visual + event registration when the slot
-            -- transitions from inactive → active. Only valid once the
-            -- frame has been built by GF_InitButton (otherwise the
-            -- visual subsystems are nil-bound).
-            if not self._msufGFBuilt then
-                if InCombatLockdown and InCombatLockdown() then
-                    MarkPostCombatHeaderRecovery()
-                end
-                return
-            end
-            if self._msufGFRegisteredUnit ~= value then
-                if GF.IsFrameRuntimeEnabled and not GF.IsFrameRuntimeEnabled(self, self._msufGFKind) then
-                    if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(self) end
-                    self._msufGFRegisteredUnit = nil
-                    return
-                end
-                self._msufGFRegisteredUnit = value
-                -- Fresh SecureGroupHeader children can receive their unit token
-                -- after the initial button build pass. Re-apply layout/font here
-                -- so name anchors and offsets are correct immediately when a
-                -- party member joins, instead of only after /reload or a full
-                -- options refresh. Guarded for lockdown: no protected layout
-                -- mutations in combat, normal unit events still update values.
-                if not (InCombatLockdown and InCombatLockdown()) and GF.ApplyVisuals then
-                    GF.ApplyVisuals(self, GF.DIRTY_ALL or 0x3F)
-                end
-                if GF.UpdateButton then GF.UpdateButton(self, value) end
-                if GF.RegisterUnitEvents then GF.RegisterUnitEvents(self, value) end
-            end
-        end
-    end)
+    child:HookScript("OnAttributeChanged", _GFOnUnitAttributeChanged)
 end
 GF._InstallAttrHook = _GFInstallAttrHook
 

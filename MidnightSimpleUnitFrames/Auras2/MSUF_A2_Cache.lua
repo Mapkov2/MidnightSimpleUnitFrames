@@ -76,6 +76,7 @@ local function _AuraCopyFields(dst, src)
     dst.isHarmful              = src.isHarmful
     dst.isRaid                 = src.isRaid
     dst.isBossAura             = src.isBossAura
+    dst.isStealable            = src.isStealable
     dst.isFromPlayerOrPlayerPet = src.isFromPlayerOrPlayerPet
     dst.sourceUnit             = src.sourceUnit
     dst.name                   = src.name
@@ -95,6 +96,7 @@ local function _AuraCopyFieldsUpdate(dst, src)
     dst.isHarmful              = src.isHarmful
     dst.isRaid                 = src.isRaid
     dst.isBossAura             = src.isBossAura
+    dst.isStealable            = src.isStealable
     dst._msufA2_updateRev      = (dst._msufA2_updateRev or 0) + 1
 end
 local C_Secrets = C_Secrets
@@ -433,6 +435,10 @@ local function ReadAccessibleBool(v)
     return nil
 end
 
+local function BuffIsStealable(aura)
+    return ReadAccessibleBool(aura and aura.isStealable) == true
+end
+
 local function ReadAccessibleDispelName(aura)
     local v = aura and aura.dispelName
     if v == nil then return nil, true end
@@ -694,6 +700,7 @@ function Cache.OnUnitAura(unit, updateInfo)
                     local oldHelpful = entry._msufIsHelpful
                     local oldOwn = entry._msufIsPlayerAura
                     local oldBossFlag = ReadBossFlag(entry)
+                    local oldStealable = BuffIsStealable(entry)
                     -- PERF: Lightweight update — only mutable fields (duration/stacks/raid).
                     -- Saves 8 field writes vs full _AuraCopyFields on the hottest path.
                     _AuraCopyFieldsUpdate(entry, fresh)
@@ -723,7 +730,9 @@ function Cache.OnUnitAura(unit, updateInfo)
                     -- Blizzard can report filter/classification changes as an
                     -- update-only delta. If membership changed, force a normal
                     -- filter pass instead of reusing the previous visible list.
-                    if oldHelpful ~= newHelpful or oldOwn ~= newOwn or oldBossFlag ~= ReadBossFlag(entry) then
+                    if oldHelpful ~= newHelpful or oldOwn ~= newOwn
+                        or oldBossFlag ~= ReadBossFlag(entry)
+                        or oldStealable ~= BuffIsStealable(entry) then
                         hasAdd = true
                     end
                     if not updatedIDs then
@@ -898,7 +907,9 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
 
     if isHelpful then
         if cfg._hideOtherBossHealAuras and data._msufA2_isHealerHot == 1 and not isOwn then return false end
-        if cfg._buffsOnlyMine and not cfg._useMergeBuffs and not isOwn then return false end
+        if cfg._buffsOnlyMine and not cfg._useMergeBuffs and not isOwn then
+            if not (cfg._includeStealableBuffs and BuffIsStealable(data)) then return false end
+        end
 
         if cfg._hidePermanent and not secretsNow and lDoesExpire then
             local v = lDoesExpire(unit, aid)
@@ -916,7 +927,9 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
         if cfg._onlyBoss and ReadBossFlag(data) == 0 then return false end
 
         if cfg._onlyImpBuffs and lIsFiltered then
-            if ReadAccessibleBool(lIsFiltered(unit, aid, HELPFUL_IMPORTANT)) == true then return false end
+            if ReadAccessibleBool(lIsFiltered(unit, aid, HELPFUL_IMPORTANT)) == true then
+                if not (cfg._includeStealableBuffs and BuffIsStealable(data)) then return false end
+            end
         end
     else
         if cfg._debuffTypeFilter and not DebuffMatchesSelectedDispelType(data, cfg) then return false end
@@ -948,7 +961,8 @@ local function EmitAura(data, isHelpful, isOwn, cfg,
         if cfg._useMergeBuffs then
             if isOwn then
                 nB = nB + 1; buffOut[nB] = data
-            elseif ReadBossFlag(data) == 1 then
+            elseif (cfg.buffsIncludeBoss == true and ReadBossFlag(data) == 1)
+                or (cfg._includeStealableBuffs == true and BuffIsStealable(data)) then
                 nBossB = nBossB + 1; bossBufScratch[nBossB] = data
             end
         else
@@ -995,7 +1009,9 @@ local function PrepareFilterConfig(cfg, cfgGen)
     cfg._onlyBoss         = cfg.onlyBossAuras
     cfg._onlyImpBuffs     = cfg.onlyImportantBuffs
     cfg._onlyImpDebuffs   = cfg.onlyImportantDebuffs
-    cfg._useMergeBuffs    = cfg.buffsOnlyMine and cfg.buffsIncludeBoss
+    cfg._includeStealableBuffs = (cfg.buffsIncludeStealable == true)
+        and (cfg._buffsOnlyMine or cfg._onlyImpBuffs)
+    cfg._useMergeBuffs    = cfg.buffsOnlyMine and (cfg.buffsIncludeBoss or cfg._includeStealableBuffs)
     cfg._useMergeDebuffs  = cfg.debuffsOnlyMine and cfg.debuffsIncludeBoss
     cfg._includeDispellableDebuffs = (cfg.debuffsIncludeDispellable == true)
         and (cfg._debuffsOnlyMine or cfg._onlyImpDebuffs)
@@ -1017,6 +1033,7 @@ local function PrepareFilterConfig(cfg, cfgGen)
         and not cfg._buffsOnlyMine and not cfg._debuffsOnlyMine
         and not cfg._hidePermanent and not cfg._onlyImpBuffs and not cfg._onlyImpDebuffs
         and not cfg._useMergeBuffs and not cfg._useMergeDebuffs
+        and not cfg._includeStealableBuffs
         and not cfg._includeDispellableDebuffs and not cfg._debuffTypeFilter
         and not cfg._hideOtherBossHealAuras
     cfg._sortOrder = cfg.sortOrder or cfg.capsSortOrder or 0

@@ -339,6 +339,7 @@ function Filters.NormalizeFilters(f, sharedSettings, migrateFlagKey)
     Default(f, "hidePermanent", false)
     Default(b, "onlyMine", false)
     Default(b, "includeBoss", false)
+    Default(b, "includeStealable", false)
     Default(b, "onlyImportant", false)
     Default(d, "onlyMine", false)
     Default(d, "includeBoss", false)
@@ -430,7 +431,8 @@ end
 --   hidePermanentBuffs,
 --   debuffsIncludeDispellable,
 --   debuffDispelMagic, debuffDispelCurse, debuffDispelPoison, debuffDispelDisease,
---   sortOrder
+--   sortOrder,
+--   buffsIncludeStealable
 function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
     local tf = Filters.GetEffectiveFilterTable(a2, shared, unitKey)
 
@@ -443,7 +445,7 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
     local onlyImportantBuffs, onlyImportantDebuffs = false, false
 
     local buffsOnlyMine, debuffsOnlyMine = false, false
-    local buffsIncludeBoss, debuffsIncludeBoss = false, false
+    local buffsIncludeBoss, buffsIncludeStealable, debuffsIncludeBoss = false, false, false
     local hidePermanentBuffs = false
     local debuffsIncludeDispellable = false
     local debuffDispelMagic, debuffDispelCurse, debuffDispelPoison, debuffDispelDisease = false, false, false, false
@@ -478,6 +480,7 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
         end
 
         buffsIncludeBoss = (b and b.includeBoss == true) or false
+        buffsIncludeStealable = (b and b.includeStealable == true) or false
         debuffsIncludeBoss = (d and d.includeBoss == true) or false
         debuffsIncludeDispellable = (d and d.includeDispellable == true) or false
         debuffDispelMagic = (d and d.dispelMagic == true) or false
@@ -507,7 +510,8 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
         hidePermanentBuffs,
         debuffsIncludeDispellable,
         debuffDispelMagic, debuffDispelCurse, debuffDispelPoison, debuffDispelDisease,
-        sortOrder
+        sortOrder,
+        buffsIncludeStealable
 end
 
 -- MSUF_A2_Public.lua

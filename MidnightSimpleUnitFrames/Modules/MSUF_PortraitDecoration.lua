@@ -98,6 +98,23 @@ local function EnsureDecor(f)
     return d
 end
 
+local function PortraitUsesContainerPoints(portrait, container)
+    if not (portrait and container and portrait.GetNumPoints and portrait.GetPoint) then
+        return false
+    end
+    local n = portrait:GetNumPoints()
+    if not n or n <= 0 then
+        return false
+    end
+    for i = 1, n do
+        local _, relTo = portrait:GetPoint(i)
+        if relTo ~= container then
+            return false
+        end
+    end
+    return true
+end
+
 -- ────────────────────────────────────────────────────────────
 -- LAYOUT: position, size, container reparent, strata.
 -- Runs every hook call but stamp-gated internally.
@@ -111,8 +128,10 @@ local function ComputeAndApplyLayout(f, conf, portrait)
 
     -- Layout stamp: skip if nothing layout-relevant changed AND portrait is in container
     local lStamp = LayoutStamp(conf)
-    local inContainer = d and d.portraitContainer and portrait.GetParent and portrait:GetParent() == d.portraitContainer
-    if inContainer and f._msufLayoutStamp == lStamp then return end
+    local pc = d and d.portraitContainer
+    local inContainer = pc and portrait.GetParent and portrait:GetParent() == pc
+    local containerShown = pc and pc.IsShown and pc:IsShown()
+    if inContainer and containerShown and PortraitUsesContainerPoints(portrait, pc) and f._msufLayoutStamp == lStamp then return end
     f._msufLayoutStamp = lStamp
 
     local anchor = f.hpBar or f
@@ -136,7 +155,7 @@ local function ComputeAndApplyLayout(f, conf, portrait)
 
     -- Reparent portrait into elevated container
     if d and d.portraitContainer then
-        local pc = d.portraitContainer
+        pc = d.portraitContainer
         if portrait.GetParent and portrait:GetParent() ~= pc then
             portrait:SetParent(pc)
         end
@@ -276,6 +295,10 @@ end
 -- Hide all decoration
 -- ────────────────────────────────────────────────────────────
 local function HideAllDecor(f)
+    f._msufDecoStamp = nil
+    f._msufDecoUnitStamp = nil
+    f._msufLayoutStamp = nil
+
     local d = f._msufPortraitDecor
     if not d then return end
     d:Hide(); d.bg:Hide(); d.shapedBorder:Hide(); d.borderFrame:Hide()

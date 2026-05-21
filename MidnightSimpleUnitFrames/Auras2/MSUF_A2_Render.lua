@@ -1392,7 +1392,8 @@ local function RenderUnit(entry)
             cfg.hidePermanentBuffs,
             cfg.debuffsIncludeDispellable,
             cfg.debuffDispelMagic, cfg.debuffDispelCurse, cfg.debuffDispelPoison, cfg.debuffDispelDisease,
-            cfg.sortOrder =
+            cfg.sortOrder,
+            cfg.buffsIncludeStealable =
                 Filters.ResolveRuntimeFlags(a2, shared, unit)
         else
             cfg.tf = nil
@@ -1403,6 +1404,7 @@ local function RenderUnit(entry)
             cfg.buffsOnlyMine = false
             cfg.debuffsOnlyMine = false
             cfg.buffsIncludeBoss = false
+            cfg.buffsIncludeStealable = false
             cfg.debuffsIncludeBoss = false
             cfg.hidePermanentBuffs = false
             cfg.debuffsIncludeDispellable = false
