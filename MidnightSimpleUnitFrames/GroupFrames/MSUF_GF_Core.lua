@@ -2977,13 +2977,67 @@ local function HideFrameLocked(frame)
     end
 end
 
-local function RestoreFrameLocked(frame)
-    if not frame or not frame._msufGFHidden then return end
+local function RestoreFrameLocked(frame, showAfter)
+    if not frame then return end
+    local wasHidden = frame._msufGFHidden == true
+    if not wasHidden and not showAfter then return end
     frame._msufGFHidden = nil
     local parent = frame._msufGFOriginalParent or UIParent
     if not InCombatLockdown() then
-        if frame.SetParent then frame:SetParent(parent) end
-        if frame.Show then frame:Show() end
+        if wasHidden and frame.SetParent then frame:SetParent(parent) end
+        if showAfter and frame.Show then frame:Show() end
+    end
+end
+
+local function NormalizeBlizzardFallbackMode(mode)
+    if type(mode) == "string" then mode = mode:upper() end
+    if mode == "SHOW" or mode == "BLIZZARD" or mode == true then return "SHOW" end
+    if mode == "NONE" or mode == "HIDE" or mode == false then return "NONE" end
+    return "AUTO"
+end
+
+local function BlizzardRaidManagerWantsShown()
+    local getSetting = _G.CompactRaidFrameManager_GetSetting
+    if type(getSetting) ~= "function" then return nil end
+    local value = getSetting("IsShown")
+    if value == nil then return nil end
+    if value == "0" or value == 0 or value == false then return false end
+    return value == "1" or value == 1 or value == true
+end
+
+local function ApplyDisabledPartyFallback(mode)
+    mode = NormalizeBlizzardFallbackMode(mode)
+    if mode == "NONE" then
+        HideFrameLocked(_G.PartyFrame)
+        HideFrameLocked(_G.CompactPartyFrame)
+        HideFrameLocked(_G.CompactPartyFrameTitle)
+        return
+    end
+    RestoreFrameLocked(_G.PartyFrame, true)
+    RestoreFrameLocked(_G.CompactPartyFrame, true)
+    RestoreFrameLocked(_G.CompactPartyFrameTitle, true)
+end
+
+local function ApplyDisabledRaidFallback(mode)
+    mode = NormalizeBlizzardFallbackMode(mode)
+    if mode == "NONE" then
+        HideFrameLocked(_G.CompactRaidFrameContainer)
+        if _G.CompactRaidFrameManager_SetSetting then
+            _G.CompactRaidFrameManager_SetSetting("IsShown", "0")
+        end
+        return
+    end
+    if mode == "SHOW" then
+        if _G.CompactRaidFrameManager_SetSetting then
+            _G.CompactRaidFrameManager_SetSetting("IsShown", "1")
+        end
+        RestoreFrameLocked(_G.CompactRaidFrameContainer, true)
+        return
+    end
+    local wantsShown = BlizzardRaidManagerWantsShown()
+    RestoreFrameLocked(_G.CompactRaidFrameContainer, wantsShown == true)
+    if wantsShown == false and _G.CompactRaidFrameContainer and _G.CompactRaidFrameContainer.Hide then
+        _G.CompactRaidFrameContainer:Hide()
     end
 end
 
@@ -2999,24 +3053,12 @@ function GF.DisableBlizzardFrames()
         HideFrameLocked(_G.CompactPartyFrame)
         HideFrameLocked(_G.CompactPartyFrameTitle)
     else
-        RestoreFrameLocked(_G.PartyFrame)
-        RestoreFrameLocked(_G.CompactPartyFrame)
-        RestoreFrameLocked(_G.CompactPartyFrameTitle)
+        ApplyDisabledPartyFallback(partyConf.blizzardFallbackMode)
     end
     if raidConf.enabled == true then
         HideFrameLocked(_G.CompactRaidFrameContainer)
-        if _G.CompactRaidFrameManager_SetSetting then
-            -- Keep Blizzard's saved raid visibility enabled. MSUF hides the
-            -- container at runtime, but an in-combat reload needs Blizzard
-            -- frames as the only legal fallback until custom secure headers
-            -- can be rebuilt.
-            _G.CompactRaidFrameManager_SetSetting("IsShown", "1")
-        end
     else
-        RestoreFrameLocked(_G.CompactRaidFrameContainer)
-        if _G.CompactRaidFrameManager_SetSetting then
-            _G.CompactRaidFrameManager_SetSetting("IsShown", "1")
-        end
+        ApplyDisabledRaidFallback(raidConf.blizzardFallbackMode)
     end
 end
 

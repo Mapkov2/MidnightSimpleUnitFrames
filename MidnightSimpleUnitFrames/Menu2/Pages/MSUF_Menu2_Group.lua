@@ -32,6 +32,12 @@ local GROWTH_VALUES = {
     { value = "LEFT", text = "Left" },
 }
 
+local BLIZZARD_FALLBACK_VALUES = {
+    { value = "AUTO", text = "Blizzard setting" },
+    { value = "SHOW", text = "Show Blizzard" },
+    { value = "NONE", text = "Show none" },
+}
+
 local HEALTH_MODES = {
     { value = "CLASS", text = "Class" },
     { value = "GRADIENT", text = "Gradient" },
@@ -373,7 +379,7 @@ local GF_COPY_EXCLUDE = {
 }
 
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "General", keys = { "enabled", "showPlayer", "showSolo", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "preserveRaidGroups", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineEnabled", "hideOfflineInCombat", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
+    { key = "general", label = "General", keys = { "enabled", "blizzardFallbackMode", "showPlayer", "showSolo", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "preserveRaidGroups", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineEnabled", "hideOfflineInCombat", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
     { key = "health", label = "Health & Bars", keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB", "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB", "barTexture", "barBgTexture", "powerBarEnabled", "powerHeight", "showPower", "showPowerText", "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter", "powerFontSize", "powerOffsetX", "powerOffsetY", "powerTextLayer", "powerSmoothFill", "powerShowTank", "powerShowHealer", "powerShowDamager", "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha", "dispelOverlayTrigger" } },
     { key = "text", label = "Text & Name", keys = { "showName", "hideNameOnDeadOffline", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY", "nameTextLayer", "nameColorMode", "nameColorR", "nameColorG", "nameColorB", "nameShortenEnabled", "nameClipSide", "nameMaxChars", "nameNoEllipsis", "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter", "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer" } },
     { key = "font", label = "Font Override", keys = { "fontOverride", "fontOutline", "useGlobalFontColor", "fontR", "fontG", "fontB" } },
@@ -1728,6 +1734,7 @@ end
 
 GroupPage.SCOPE_VALUES = SCOPE_VALUES
 GroupPage.GROWTH_VALUES = GROWTH_VALUES
+GroupPage.BLIZZARD_FALLBACK_VALUES = BLIZZARD_FALLBACK_VALUES
 GroupPage.HEALTH_MODES = HEALTH_MODES
 GroupPage.TEXT_MODES = TEXT_MODES
 GroupPage.DELIMITER_VALUES = DELIMITER_VALUES

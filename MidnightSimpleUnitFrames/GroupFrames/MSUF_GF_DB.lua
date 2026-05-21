@@ -69,6 +69,7 @@ GF.DELIMITER_OPTIONS = {
 ------------------------------------------------------------------------
 local PARTY_DEFAULTS = {
     enabled           = false,
+    blizzardFallbackMode = "AUTO", -- AUTO / SHOW / NONE when this MSUF scope is disabled
     width             = 120,
     height            = 40,
     spacing           = 1,
