@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.41 - 2026-05-21
+
+### Patch Release
+
+- Restored the 5.32 MSUF keybind synchronization behavior and removed the new account-wide `SaveBindings` / `LoadBindings` path to avoid a reload-only keyboard input edge case where movement could become unresponsive until the game client was restarted.
+- Added `/msuf inputdebug` to print movement bindings, keyboard focus, MSUF edit state, and visible keyboard-enabled frames when diagnosing rare input-capture issues.
+- Reset keyboard input propagation when MSUF edit-mode popups, HUD panels, and picker overlays hide, so ESC-handled overlays cannot leave stale keyboard capture state behind.
+- Improved Auras2 handling for stealable buffs when mine-only, important-buff, and merged buff filters are active.
+- Refreshed runtime systems after profile switch, reset, import, and external profile overwrite so unit frames, auras, class power, powerbar embeds, and portrait decorations update without stale state.
+- Hardened Group Frame unit-slot cleanup during roster changes so stale debuff, dispel, status, highlight, and displayed-aura state cannot bleed into the next unit assigned to the same secure button.
+- Improved Class Power hidden-anchor handling and powerbar embed anchoring when class power is disabled or hidden.
+- Improved portrait decoration layout recovery when portrait containers are rebuilt or their anchor points change.
+
 ## 5.4 - 2026-05-21
 
 ### Highlights
