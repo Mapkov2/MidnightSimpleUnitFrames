@@ -802,30 +802,14 @@ local MSUF_BINDING_COMMANDS = {
     "MSUF_TOGGLE_OPTIONS",
     "MSUF_TOGGLE_EDITMODE",
 }
-local MSUF_ACCOUNT_BINDINGS = _G.ACCOUNT_BINDINGS or 1
-local MSUF_CHARACTER_BINDINGS = _G.CHARACTER_BINDINGS or 2
 
-local function MSUF_EnsureGlobalBindingRoot()
+local function MSUF_EnsureGlobalBindingState()
     _G.MSUF_GlobalDB = _G.MSUF_GlobalDB or {}
     local gdb = _G.MSUF_GlobalDB
     gdb.global = gdb.global or {}
     gdb.global.bindings = gdb.global.bindings or {}
     gdb.global.bindings.commands = gdb.global.bindings.commands or {}
-    return gdb.global.bindings
-end
-
-local function MSUF_EnsureGlobalBindingState()
-    return MSUF_EnsureGlobalBindingRoot().commands
-end
-
-local function MSUF_EnsureAccountBindingMirror()
-    local root = MSUF_EnsureGlobalBindingRoot()
-    root.accountCommands = root.accountCommands or {}
-    return root.accountCommands
-end
-
-local function MSUF_MarkGlobalBindingsInitialized()
-    MSUF_EnsureGlobalBindingRoot().initialized = true
+    return gdb.global.bindings.commands
 end
 
 local function MSUF_GetBindingKeysForCommand(command)
@@ -884,160 +868,10 @@ local function MSUF_SetStoredBindingKeys(command, keys)
     if type(command) ~= "string" or command == "" then return end
     local commands = MSUF_EnsureGlobalBindingState()
     commands[command] = MSUF_CopyBindingKeys(keys)
-    MSUF_MarkGlobalBindingsInitialized()
-end
-
-local function MSUF_GetMirroredAccountBindingKeys(command)
-    local commands = MSUF_EnsureAccountBindingMirror()
-    return MSUF_CopyBindingKeys(commands[command])
-end
-
-local function MSUF_SetMirroredAccountBindingKeys(command, keys)
-    if type(command) ~= "string" or command == "" then return end
-    local commands = MSUF_EnsureAccountBindingMirror()
-    commands[command] = MSUF_CopyBindingKeys(keys)
-end
-
-local function MSUF_StoredBindingsMatchAccountMirror()
-    for i = 1, #MSUF_BINDING_COMMANDS do
-        local command = MSUF_BINDING_COMMANDS[i]
-        if not MSUF_BindingListsEqual(MSUF_GetStoredBindingKeys(command), MSUF_GetMirroredAccountBindingKeys(command)) then
-            return false
-        end
-    end
-    return true
-end
-
-local function MSUF_MarkAccountBindingsMirrored()
-    for i = 1, #MSUF_BINDING_COMMANDS do
-        local command = MSUF_BINDING_COMMANDS[i]
-        MSUF_SetMirroredAccountBindingKeys(command, MSUF_GetStoredBindingKeys(command))
-    end
 end
 
 local _msufBindingSyncInFlight = false
 local _msufBindingApplyPending = false
-local _msufBindingAccountSavePending = false
-local _msufBindingPendingPreviousAccountKeys = nil
-
-local function MSUF_GetAccountBindingMode()
-    if type(_G.GetCurrentBindingSet) == "function"
-        and _G.GetCurrentBindingSet() == MSUF_CHARACTER_BINDINGS
-    then
-        return 2
-    end
-    return 1
-end
-
-local function MSUF_QueueAccountBindingSave(previousKeys)
-    _msufBindingAccountSavePending = true
-    if type(previousKeys) ~= "table" then return end
-    _msufBindingPendingPreviousAccountKeys = _msufBindingPendingPreviousAccountKeys or {}
-    for command, keys in pairs(previousKeys) do
-        if _msufBindingPendingPreviousAccountKeys[command] == nil then
-            _msufBindingPendingPreviousAccountKeys[command] = MSUF_CopyBindingKeys(keys)
-        end
-    end
-end
-
-local function MSUF_SetCommandBindingKeys(command, keys, previousKeys, mode)
-    if type(_G.SetBinding) ~= "function" then return false end
-    if type(command) ~= "string" or command == "" then return false end
-
-    local changed = false
-    local desired = {}
-    keys = MSUF_CopyBindingKeys(keys)
-    previousKeys = MSUF_CopyBindingKeys(previousKeys)
-
-    for i = 1, #keys do
-        desired[keys[i]] = true
-    end
-
-    for i = 1, #previousKeys do
-        local key = previousKeys[i]
-        if not desired[key] and _G.SetBinding(key, nil, mode) then
-            changed = true
-        end
-    end
-
-    for i = 1, #keys do
-        if _G.SetBinding(keys[i], command, mode) then
-            changed = true
-        end
-    end
-
-    return changed
-end
-
-local function MSUF_ApplyStoredBindingsToCurrentSetUnlocked()
-    local changed = false
-    for i = 1, #MSUF_BINDING_COMMANDS do
-        local command = MSUF_BINDING_COMMANDS[i]
-        if MSUF_SetCommandBindingKeys(command, MSUF_GetStoredBindingKeys(command), MSUF_GetBindingKeysForCommand(command), 1) then
-            changed = true
-        end
-    end
-    return changed
-end
-
-local function MSUF_SaveStoredBindingsToAccountSet(previousKeys)
-    if _msufBindingSyncInFlight then return false end
-    if type(_G.SetBinding) ~= "function" then return false end
-    if type(_G.SaveBindings) ~= "function" then return false end
-    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
-        MSUF_QueueAccountBindingSave(previousKeys)
-        return false
-    end
-
-    if type(_msufBindingPendingPreviousAccountKeys) == "table" then
-        if type(previousKeys) == "table" then
-            for command, keys in pairs(_msufBindingPendingPreviousAccountKeys) do
-                if previousKeys[command] == nil then
-                    previousKeys[command] = MSUF_CopyBindingKeys(keys)
-                end
-            end
-        else
-            previousKeys = _msufBindingPendingPreviousAccountKeys
-        end
-        _msufBindingPendingPreviousAccountKeys = nil
-    end
-    _msufBindingAccountSavePending = false
-
-    if type(previousKeys) ~= "table" and MSUF_StoredBindingsMatchAccountMirror() then
-        return false
-    end
-
-    local mode = MSUF_GetAccountBindingMode()
-    local currentSet = type(_G.GetCurrentBindingSet) == "function" and _G.GetCurrentBindingSet() or nil
-    local changed = false
-    _msufBindingSyncInFlight = true
-
-    for i = 1, #MSUF_BINDING_COMMANDS do
-        local command = MSUF_BINDING_COMMANDS[i]
-        local oldKeys = previousKeys and previousKeys[command] or MSUF_GetMirroredAccountBindingKeys(command)
-        if MSUF_SetCommandBindingKeys(command, MSUF_GetStoredBindingKeys(command), oldKeys, mode) then
-            changed = true
-        end
-    end
-
-    if changed then
-        local ok = pcall(_G.SaveBindings, MSUF_ACCOUNT_BINDINGS)
-        if ok then
-            MSUF_MarkAccountBindingsMirrored()
-            if currentSet == MSUF_CHARACTER_BINDINGS
-                and type(_G.GetCurrentBindingSet) == "function"
-                and _G.GetCurrentBindingSet() ~= currentSet
-                and type(_G.LoadBindings) == "function"
-            then
-                pcall(_G.LoadBindings, currentSet)
-                MSUF_ApplyStoredBindingsToCurrentSetUnlocked()
-            end
-        end
-    end
-
-    _msufBindingSyncInFlight = false
-    return changed
-end
 
 local function MSUF_ApplyStoredBindingsToCurrentSet()
     if _msufBindingSyncInFlight then return end
@@ -1050,27 +884,31 @@ local function MSUF_ApplyStoredBindingsToCurrentSet()
     _msufBindingApplyPending = false
     _msufBindingSyncInFlight = true
 
-    MSUF_ApplyStoredBindingsToCurrentSetUnlocked()
+    for i = 1, #MSUF_BINDING_COMMANDS do
+        local command = MSUF_BINDING_COMMANDS[i]
+        local liveKeys = MSUF_GetBindingKeysForCommand(command)
+        for j = 1, #liveKeys do
+            _G.SetBinding(liveKeys[j])
+        end
+
+        local storedKeys = MSUF_GetStoredBindingKeys(command)
+        for j = 1, #storedKeys do
+            _G.SetBinding(storedKeys[j], command)
+        end
+    end
 
     _msufBindingSyncInFlight = false
 end
 
 local function MSUF_SyncCurrentBindingsIntoGlobalStore()
-    if _msufBindingSyncInFlight then return false end
-    local changed = false
-    local previousKeys = nil
+    if _msufBindingSyncInFlight then return end
     for i = 1, #MSUF_BINDING_COMMANDS do
         local command = MSUF_BINDING_COMMANDS[i]
         local liveKeys = MSUF_GetBindingKeysForCommand(command)
-        local storedKeys = MSUF_GetStoredBindingKeys(command)
-        if not MSUF_BindingListsEqual(liveKeys, storedKeys) then
-            previousKeys = previousKeys or {}
-            previousKeys[command] = storedKeys
+        if not MSUF_BindingListsEqual(liveKeys, MSUF_GetStoredBindingKeys(command)) then
             MSUF_SetStoredBindingKeys(command, liveKeys)
-            changed = true
         end
     end
-    return changed, previousKeys
 end
 
 local function MSUF_HasAnyStoredGlobalBindings()
@@ -1080,10 +918,6 @@ local function MSUF_HasAnyStoredGlobalBindings()
         end
     end
     return false
-end
-
-local function MSUF_HasInitializedGlobalBindings()
-    return MSUF_EnsureGlobalBindingRoot().initialized == true or MSUF_HasAnyStoredGlobalBindings()
 end
 
 function MSUF_Keybind_ToggleOptions()
@@ -1144,28 +978,20 @@ do
     f:RegisterEvent("PLAYER_REGEN_ENABLED")
     f:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_LOGIN" then
-            if not MSUF_HasInitializedGlobalBindings() then
+            if not MSUF_HasAnyStoredGlobalBindings() then
                 MSUF_SyncCurrentBindingsIntoGlobalStore()
-                MSUF_MarkGlobalBindingsInitialized()
             end
             MSUF_ApplyStoredBindingsToCurrentSet()
-            MSUF_SaveStoredBindingsToAccountSet()
             return
         end
 
         if event == "UPDATE_BINDINGS" then
-            local changed, previousKeys = MSUF_SyncCurrentBindingsIntoGlobalStore()
-            if changed then
-                MSUF_SaveStoredBindingsToAccountSet(previousKeys)
-            end
+            MSUF_SyncCurrentBindingsIntoGlobalStore()
             return
         end
 
         if event == "PLAYER_REGEN_ENABLED" and _msufBindingApplyPending then
             MSUF_ApplyStoredBindingsToCurrentSet()
-        end
-        if event == "PLAYER_REGEN_ENABLED" and _msufBindingAccountSavePending then
-            MSUF_SaveStoredBindingsToAccountSet()
         end
     end)
 end
