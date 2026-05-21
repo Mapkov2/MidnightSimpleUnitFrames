@@ -373,12 +373,21 @@ do
     -- Avoids string.format + SetText when the displayed decimal (0.1s resolution) hasn't changed.
     -- The per-frame field `_msufLastTimeDecimal` stores floor(rem * 10) from the last update.
     local _floor = math.floor
-    local function MSUF_SetCastTimeText_Dedup(frame, rem)
+    local function MSUF_SetCastTimeText_Dedup(frame, rem, total)
         if not frame or not frame.timeText then return end
         local dec = _floor((rem or 0) * 10)
-        if dec == frame._msufLastTimeDecimal then return end
+        local totalDec = total and _floor((total or 0) * 10) or -1
+        local format = frame._msufCastTimeFormat or "CURRENT"
+        if dec == frame._msufLastTimeDecimal
+            and totalDec == frame._msufLastTimeTotalDecimal
+            and format == frame._msufLastTimeFormat
+        then
+            return
+        end
         frame._msufLastTimeDecimal = dec
-        MSUF_SetCastTimeText(frame, rem)
+        frame._msufLastTimeTotalDecimal = totalDec
+        frame._msufLastTimeFormat = format
+        MSUF_SetCastTimeText(frame, rem, total)
     end
 
 
@@ -453,6 +462,13 @@ do
         _castTimeRevLocal = _G.MSUF__castTimeGlobalRev
     end
 
+    local function CastTimeFormatUnit(frame, unit)
+        unit = tostring(unit or ""):lower()
+        if frame and frame._msufIsBossCastbar then return "boss" end
+        if unit:match("^boss%d+$") then return "boss" end
+        return unit
+    end
+
     local function RefreshCastTimeCache(frame)
         if not frame or not frame.unit then
             return true
@@ -472,6 +488,23 @@ do
             enabled = (g.showTargetCastTime ~= false)
         elseif u == "focus" then
             enabled = (g.showFocusCastTime ~= false)
+        elseif frame._msufIsBossCastbar or tostring(u or ""):match("^boss%d+$") then
+            enabled = (g.showBossCastTime ~= false)
+        end
+
+        local oldFormat = frame._msufCastTimeFormat
+        local format = "CURRENT"
+        if not frame.MSUF_gcdActive then
+            local readFormat = _G.MSUF_GetCastbarTimeFormat
+            if type(readFormat) == "function" then
+                format = readFormat(CastTimeFormatUnit(frame, u), g)
+            end
+        end
+        frame._msufCastTimeFormat = format or "CURRENT"
+        if oldFormat ~= frame._msufCastTimeFormat then
+            frame._msufLastTimeDecimal = nil
+            frame._msufLastTimeTotalDecimal = nil
+            frame._msufLastTimeFormat = nil
         end
 
         frame._msufCastTimeEnabled = enabled and true or false
@@ -605,9 +638,17 @@ do
                     -- OnHide hook will unregister; skip to next bar.
                 else
                     local dec = _floor(rem * 10)
-                    if dec ~= frame._msufLastTimeDecimal then
-                        frame._msufLastTimeDecimal = dec
-                        frame.timeText:SetFormattedText("%.1f", rem)
+                    local format = frame._msufCastTimeFormat or "CURRENT"
+                    if format == "CURRENT" then
+                        if dec ~= frame._msufLastTimeDecimal then
+                            frame._msufLastTimeDecimal = dec
+                            frame._msufLastTimeTotalDecimal = -1
+                            frame._msufLastTimeFormat = format
+                            frame.timeText._msufLastText = nil
+                            frame.timeText:SetFormattedText("%.1f", rem)
+                        end
+                    else
+                        MSUF_SetCastTimeText_Dedup(frame, rem, frame._msufPlainTotal)
                     end
 
                     -- Heavy path: only needed for CHANNELS (hard-stop safety + haste markers).
@@ -784,6 +825,8 @@ do
         frame._msufHardStopNext = nil
         frame._msufZeroCount = nil
         frame._msufLastTimeDecimal = nil
+        frame._msufLastTimeTotalDecimal = nil
+        frame._msufLastTimeFormat = nil
         frame._msufFastText = nil
         frame._msufRemaining = nil
         frame._msufGlowIn = nil
@@ -927,9 +970,11 @@ do
 
             if frame.timeText then
                 if castTimeEnabled and showTime then
-                    MSUF_SetCastTimeText_Dedup(frame, rem)
+                    MSUF_SetCastTimeText_Dedup(frame, rem, dur)
                 else
                     frame._msufLastTimeDecimal = nil
+                    frame._msufLastTimeTotalDecimal = nil
+                    frame._msufLastTimeFormat = nil
                     MSUF_SetTextIfChanged(frame.timeText, "")
                 end
             end
@@ -992,7 +1037,7 @@ do
             if frame.timeText and castTimeEnabled then
                 local rem = base - elapsed
                 if rem < 0 then rem = 0 end
-                MSUF_SetCastTimeText_Dedup(frame, rem)
+                MSUF_SetCastTimeText_Dedup(frame, rem, base)
             end
 
             if frame.MSUF_empowerLayoutPending and MSUF_LayoutEmpowerTicks then
@@ -1255,7 +1300,7 @@ do
             end
 
             if frame.timeText and castTimeEnabled then
-                MSUF_SetCastTimeText_Dedup(frame, remNum)
+                MSUF_SetCastTimeText_Dedup(frame, remNum, totalNum)
             end
 
             -- "Glow effect": fade towards white as the cast approaches completion.

@@ -249,7 +249,11 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
         timeText:SetFont(fontPath, fontSize, flags)
         timeText:SetJustifyH("RIGHT")
         timeText:SetPoint("RIGHT", textOverlay, "RIGHT", -2, 0)
-        timeText:SetText(opts.timeLabel or "3.2")
+        local timeLabel = opts.timeLabel
+        if not timeLabel and type(_G.MSUF_GetCastbarTimeFormat) == "function" and type(_G.MSUF_FormatCastbarTimeText) == "function" then
+            timeLabel = _G.MSUF_FormatCastbarTimeText(_G.MSUF_GetCastbarTimeFormat(kind), 3.2, 4.0)
+        end
+        timeText:SetText(timeLabel or "3.2")
         f.timeText = timeText
     end
 

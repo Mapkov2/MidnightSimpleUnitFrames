@@ -28,10 +28,10 @@ local POWER_UNITS = {
 }
 
 local CASTBAR_FIELDS = {
-    player = { enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName" },
-    target = { enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName" },
-    focus = { enable = "enableFocusCastbar", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName" },
-    boss = { enable = "enableBossCastbar", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName" },
+    player = { enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
+    target = { enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
+    focus = { enable = "enableFocusCastbar", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat" },
+    boss = { enable = "enableBossCastbar", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat" },
 }
 
 local LOAD_CONDITIONS = {
@@ -604,10 +604,10 @@ local function CopyPowerBarFields(dst, src, srcKey)
 end
 
 local CASTBAR_KEY_MAP = {
-    player = { enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName" },
-    target = { enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName" },
-    focus  = { enable = "enableFocusCastbar",  time = "showFocusCastTime",  icon = "castbarFocusShowIcon",  name = "castbarFocusShowSpellName" },
-    boss   = { enable = "enableBossCastbar",   time = "showBossCastTime",   icon = "showBossCastIcon",      name = "showBossCastName" },
+    player = { enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
+    target = { enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
+    focus  = { enable = "enableFocusCastbar",  time = "showFocusCastTime",  icon = "castbarFocusShowIcon",  name = "castbarFocusShowSpellName",  timeFormat = "castbarFocusTimeFormat" },
+    boss   = { enable = "enableBossCastbar",   time = "showBossCastTime",   icon = "showBossCastIcon",      name = "showBossCastName",          timeFormat = "bossCastTimeFormat" },
 }
 
 local function CopyCastbar(g, src, dst)
@@ -618,6 +618,7 @@ local function CopyCastbar(g, src, dst)
     g[d.time] = g[s.time]
     g[d.icon] = g[s.icon]
     g[d.name] = g[s.name]
+    g[d.timeFormat] = g[s.timeFormat]
 end
 
 local function EnsureCopyDialog()

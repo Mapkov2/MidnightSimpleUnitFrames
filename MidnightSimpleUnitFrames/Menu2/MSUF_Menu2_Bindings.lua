@@ -639,9 +639,10 @@ local UNIT_PAGE_RESETS = {
 }
 
 local UNIT_CASTBAR_GENERAL_KEYS = {
-    player = { "enablePlayerCastbar", "showPlayerCastTime", "castbarPlayerShowIcon", "castbarPlayerShowSpellName" },
-    target = { "enableTargetCastbar", "showTargetCastTime", "castbarTargetShowIcon", "castbarTargetShowSpellName" },
-    focus = { "enableFocusCastbar", "showFocusCastTime", "castbarFocusShowIcon", "castbarFocusShowSpellName" },
+    player = { "enablePlayerCastbar", "showPlayerCastTime", "castbarPlayerShowIcon", "castbarPlayerShowSpellName", "castbarPlayerTimeFormat" },
+    target = { "enableTargetCastbar", "showTargetCastTime", "castbarTargetShowIcon", "castbarTargetShowSpellName", "castbarTargetTimeFormat" },
+    focus = { "enableFocusCastbar", "showFocusCastTime", "castbarFocusShowIcon", "castbarFocusShowSpellName", "castbarFocusTimeFormat" },
+    boss = { "enableBossCastbar", "showBossCastTime", "showBossCastIcon", "showBossCastName", "bossCastTimeFormat" },
 }
 
 local PAGE_RESET_INFO = {

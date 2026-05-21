@@ -1265,6 +1265,17 @@ local function ReadCastbarNum(g, key, suffix, bossKey, fallback)
     return (v ~= nil) and v or fallback
 end
 
+local function FormatCastbarPreviewTime(g, key, current, total)
+    local mode = "CURRENT"
+    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
+        mode = _G.MSUF_GetCastbarTimeFormat(key, g)
+    end
+    if type(_G.MSUF_FormatCastbarTimeText) == "function" then
+        return _G.MSUF_FormatCastbarTimeText(mode, current, total) or ""
+    end
+    return format("%.1f", tonumber(current) or 0)
+end
+
 local function ClampPreviewLayer(v, fallback)
     v = floor((tonumber(v) or fallback or 0) + 0.5)
     if v < 0 then return 0 end
@@ -3239,7 +3250,7 @@ function Preview.Refresh(box, reason)
             or (key == "focus" and g.showFocusCastTime ~= false)
             or (key == "player" and g.showPlayerCastTime ~= false)
         mock.cast.time:SetShown(showTime)
-        mock.cast.time:SetText("1.4")
+        mock.cast.time:SetText(FormatCastbarPreviewTime(g, key, 1.4, 2.0))
         if showTime then
             local timeX = ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", g.castbarPlayerTimeOffsetX or -2)
             local timeY = ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", g.castbarPlayerTimeOffsetY or 0)

@@ -922,6 +922,33 @@ end
 -- (e.g. "remaining > 0") because duration values can be secret in Midnight.
 local _floor = math.floor
 
+local function Boss_UpdateTimeText(frame, remaining, total)
+    if not (frame and frame.timeText) then return end
+    local format = "CURRENT"
+    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
+        format = _G.MSUF_GetCastbarTimeFormat("boss")
+    end
+    frame._msufCastTimeFormat = format or "CURRENT"
+    local dec = _floor((remaining or 0) * 10)
+    local totalDec = total and _floor((total or 0) * 10) or -1
+    if dec == frame._msufLastTimeDecimal
+        and totalDec == frame._msufLastTimeTotalDecimal
+        and frame._msufLastTimeFormat == frame._msufCastTimeFormat
+    then
+        return
+    end
+    frame._msufLastTimeDecimal = dec
+    frame._msufLastTimeTotalDecimal = totalDec
+    frame._msufLastTimeFormat = frame._msufCastTimeFormat
+    if type(_G.MSUF_SetCastTimeText) == "function" then
+        _G.MSUF_SetCastTimeText(frame, remaining, total)
+    elseif frame.timeText.SetFormattedText then
+        frame.timeText:SetFormattedText("%.1f", remaining or 0)
+    else
+        frame.timeText:SetText(string.format("%.1f", remaining or 0))
+    end
+end
+
 local function Boss_HasCentralManager()
     local m = _G.MSUF_CastbarManager
     return (m and m.active and type(_G.MSUF_RegisterCastbar) == "function") and true or false
@@ -974,14 +1001,7 @@ BossCastbar_OnUpdate = function(self, elapsed)
         local remaining = endT - now
         if remaining < 0 then remaining = 0 end
         local dec = _floor(remaining * 10)
-        if dec ~= self._msufLastTimeDecimal then
-            self._msufLastTimeDecimal = dec
-            if self.timeText.SetFormattedText then
-                self.timeText:SetFormattedText("%.1f", remaining)
-            else
-                self.timeText:SetText(string.format("%.1f", remaining))
-            end
-        end
+        Boss_UpdateTimeText(self, remaining, self._msufPlainTotal)
         -- Cast finished: remaining hit 0 for 2 consecutive ticks â†’ stop.
         if dec == 0 then
             self._msufZeroCount = (self._msufZeroCount or 0) + 1
@@ -1018,14 +1038,7 @@ BossCastbar_OnUpdate = function(self, elapsed)
         self._msufPlainEndTime = now + remNum
         if self.timeText then
             local dec = _floor(remNum * 10)
-            if dec ~= self._msufLastTimeDecimal then
-                self._msufLastTimeDecimal = dec
-                if self.timeText.SetFormattedText then
-                    self.timeText:SetFormattedText("%.1f", remNum)
-                else
-                    self.timeText:SetText(string.format("%.1f", remNum))
-                end
-            end
+            Boss_UpdateTimeText(self, remNum, self._msufPlainTotal)
             -- Cast finished: remaining hit 0 for 2 consecutive ticks â†’ stop.
             if dec == 0 then
                 self._msufZeroCount = (self._msufZeroCount or 0) + 1

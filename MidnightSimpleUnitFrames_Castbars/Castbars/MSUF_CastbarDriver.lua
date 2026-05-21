@@ -249,7 +249,18 @@ function _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
 
     local rem = MSUF__GetRemainingFromStatusBar(frame)
     if type(rem) == "number" then
-        MSUF_SetCastTimeText(frame, rem)
+        local total
+        if frame._msufPlainTotal then
+            total = frame._msufPlainTotal
+        elseif frame.statusBar and frame.statusBar.GetMinMaxValues then
+            local ok, minV, maxV = pcall(frame.statusBar.GetMinMaxValues, frame.statusBar)
+            if ok then
+                minV = MSUF__ToNumber_SecretSafe(minV) or 0
+                maxV = MSUF__ToNumber_SecretSafe(maxV)
+                if maxV and maxV > minV then total = maxV - minV end
+            end
+        end
+        MSUF_SetCastTimeText(frame, rem, total)
     else
         MSUF_SetTextIfChanged(frame.timeText, "")
     end

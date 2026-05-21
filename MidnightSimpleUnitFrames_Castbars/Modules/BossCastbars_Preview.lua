@@ -202,7 +202,11 @@ local function MSUF_CreateBossCastbarPreview(index)
 
 	local timeText = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     timeText:SetJustifyH("RIGHT")
-    timeText:SetText("3.2")
+    if type(_G.MSUF_GetCastbarTimeFormat) == "function" and type(_G.MSUF_FormatCastbarTimeText) == "function" then
+        timeText:SetText(_G.MSUF_FormatCastbarTimeText(_G.MSUF_GetCastbarTimeFormat("boss"), 3.2, 4.0) or "3.2")
+    else
+        timeText:SetText("3.2")
+    end
     f.timeText = timeText
 
     if _G.MSUF_ApplyCastbarOutline then _G.MSUF_ApplyCastbarOutline(f, true) end

@@ -50,6 +50,19 @@ local function MSUF_CastbarTestCombatLocked()
     return _G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
 end
 
+local function MSUF_FormatPreviewCastTime(frame, current, total)
+    local mode = "CURRENT"
+    local unit = frame and frame.unit
+    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
+        mode = _G.MSUF_GetCastbarTimeFormat(unit)
+    end
+    if frame then frame._msufCastTimeFormat = mode end
+    if type(_G.MSUF_FormatCastbarTimeText) == "function" then
+        return _G.MSUF_FormatCastbarTimeText(mode, current, total)
+    end
+    return string.format("%.1f", tonumber(current) or 0)
+end
+
 local function MSUF_HideBlizzardPlayerCastbar()
     EnsureDB()
     local frames = {}
@@ -307,7 +320,7 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
             local remain = d - p
             if remain < 0 then remain = 0 end
             if showTime then
-                MSUF_SetTextIfChanged(self.timeText, string.format("%.1f", remain))
+                MSUF_SetTextIfChanged(self.timeText, MSUF_FormatPreviewCastTime(self, remain, d))
             else
                 MSUF_SetTextIfChanged(self.timeText, "")
             end
@@ -360,7 +373,7 @@ local function _MSUF_SimplePreview_OnUpdate(self)
     if self.timeText and self.timeText.SetText then
         local showTime = self._msufTestShowTime
         if showTime then
-            self.timeText:SetText(string.format("%.1f", remaining))
+            self.timeText:SetText(MSUF_FormatPreviewCastTime(self, remaining, dur))
             self.timeText:SetAlpha(1)
         else
             self.timeText:SetText("")
@@ -534,7 +547,7 @@ local function _MSUF_BossPreview_OnUpdate(self)
 
     if self.timeText and self.timeText.SetText then
         if self._msufTestShowTime then
-            self.timeText:SetText(string.format("%.1f", remaining))
+            self.timeText:SetText(MSUF_FormatPreviewCastTime(self, remaining, dur))
             self.timeText:SetAlpha(1)
         else
             self.timeText:SetText("")

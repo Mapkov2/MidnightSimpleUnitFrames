@@ -411,7 +411,79 @@ function MSUF_SetTextIfChanged(fs, text)
     fs:SetText(v)
 end
 
-function MSUF_SetCastTimeText(frame, seconds)
+local MSUF_CASTBAR_TIME_FORMAT_CURRENT = "CURRENT"
+local MSUF_CASTBAR_TIME_FORMATS = {
+    CURRENT = true,
+    CURRENT_MAX = true,
+    MAX_CURRENT = true,
+    ELAPSED_MAX = true,
+    MAX_ELAPSED = true,
+}
+
+function MSUF_NormalizeCastbarTimeFormat(value)
+    if type(value) ~= "string" then return MSUF_CASTBAR_TIME_FORMAT_CURRENT end
+    value = value:upper()
+    value = value:gsub("%s+", "")
+    value = value:gsub("/", "_")
+    value = value:gsub("-", "_")
+    if value == "CURRENTONLY" or value == "CURRENT_ONLY" or value == "REMAINING" or value == "REMAINING_ONLY" then
+        return "CURRENT"
+    end
+    if value == "REMAINING_MAX" then return "CURRENT_MAX" end
+    if value == "MAX_REMAINING" then return "MAX_CURRENT" end
+    if MSUF_CASTBAR_TIME_FORMATS[value] then return value end
+    return MSUF_CASTBAR_TIME_FORMAT_CURRENT
+end
+
+function MSUF_GetCastbarTimeFormatDBKey(unit)
+    unit = tostring(unit or ""):lower()
+    if unit == "player" then return "castbarPlayerTimeFormat" end
+    if unit == "target" then return "castbarTargetTimeFormat" end
+    if unit == "focus" then return "castbarFocusTimeFormat" end
+    if unit == "boss" or unit:match("^boss%d+$") then return "bossCastTimeFormat" end
+    return nil
+end
+
+function MSUF_GetCastbarTimeFormat(unit, g)
+    local key = MSUF_GetCastbarTimeFormatDBKey(unit)
+    if not key then return MSUF_CASTBAR_TIME_FORMAT_CURRENT end
+    if not g then
+        local db = _G.MSUF_DB
+        g = db and db.general
+    end
+    return MSUF_NormalizeCastbarTimeFormat(g and g[key])
+end
+
+function MSUF_FormatCastbarTimeText(mode, current, total)
+    local cur = tonumber(current)
+    if type(cur) ~= "number" then return nil end
+    if cur < 0 then cur = 0 end
+
+    mode = MSUF_NormalizeCastbarTimeFormat(mode)
+    local maxTime = tonumber(total)
+    if not maxTime or maxTime <= 0 then
+        return string.format("%.1f", cur)
+    end
+    if cur > maxTime then cur = maxTime end
+
+    if mode == "CURRENT_MAX" then
+        return string.format("%.1f / %.1f", cur, maxTime)
+    elseif mode == "MAX_CURRENT" then
+        return string.format("%.1f / %.1f", maxTime, cur)
+    elseif mode == "ELAPSED_MAX" then
+        local elapsed = maxTime - cur
+        if elapsed < 0 then elapsed = 0 end
+        return string.format("%.1f / %.1f", elapsed, maxTime)
+    elseif mode == "MAX_ELAPSED" then
+        local elapsed = maxTime - cur
+        if elapsed < 0 then elapsed = 0 end
+        return string.format("%.1f / %.1f", maxTime, elapsed)
+    end
+
+    return string.format("%.1f", cur)
+end
+
+function MSUF_SetCastTimeText(frame, seconds, totalSeconds)
     local fs = frame and frame.timeText
     if not fs then return end
 
@@ -428,10 +500,18 @@ function MSUF_SetCastTimeText(frame, seconds)
         return
     end
 
-    if fs.SetFormattedText then
+    local mode = frame._msufCastTimeFormat
+    if not mode and frame.unit then
+        mode = MSUF_GetCastbarTimeFormat(frame.unit)
+    end
+    mode = MSUF_NormalizeCastbarTimeFormat(mode)
+
+    if mode == "CURRENT" and fs.SetFormattedText then
+        fs._msufLastText = nil
         fs:SetFormattedText("%.1f", n)
     else
-        MSUF_SetTextIfChanged(fs, string.format("%.1f", n))
+        local text = MSUF_FormatCastbarTimeText(mode, n, totalSeconds or frame._msufPlainTotal)
+        MSUF_SetTextIfChanged(fs, text or "")
     end
 end
 
@@ -509,6 +589,10 @@ U.RestoreKeys = MSUF_RestoreKeys
 U.Clamp = MSUF_Clamp
 U.GetNumber = MSUF_GetNumber
 U.SetTextIfChanged = MSUF_SetTextIfChanged
+U.NormalizeCastbarTimeFormat = MSUF_NormalizeCastbarTimeFormat
+U.GetCastbarTimeFormatDBKey = MSUF_GetCastbarTimeFormatDBKey
+U.GetCastbarTimeFormat = MSUF_GetCastbarTimeFormat
+U.FormatCastbarTimeText = MSUF_FormatCastbarTimeText
 U.SetCastTimeText = MSUF_SetCastTimeText
 U.SetAlphaIfChanged = MSUF_SetAlphaIfChanged
 U.SetWidthIfChanged = MSUF_SetWidthIfChanged

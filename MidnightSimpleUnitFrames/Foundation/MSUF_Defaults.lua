@@ -1039,6 +1039,18 @@ end
 if g.showBossCastTime == nil then
     g.showBossCastTime = true
 end
+if g.castbarPlayerTimeFormat == nil then
+    g.castbarPlayerTimeFormat = "CURRENT"
+end
+if g.castbarTargetTimeFormat == nil then
+    g.castbarTargetTimeFormat = "CURRENT"
+end
+if g.castbarFocusTimeFormat == nil then
+    g.castbarFocusTimeFormat = "CURRENT"
+end
+if g.bossCastTimeFormat == nil then
+    g.bossCastTimeFormat = "CURRENT"
+end
 if g.bossCastbarOffsetX == nil then
     g.bossCastbarOffsetX = 2
 end
