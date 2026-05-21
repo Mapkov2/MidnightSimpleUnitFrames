@@ -1076,10 +1076,12 @@ local function Build()
                 if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
                 RefreshUFPreview("EM2_UNIT_POPUP_CANCEL", pf.MSUF_prev.key)
             end
-        end; pf:Hide()
+        end
+        pf:Hide()
     end)
     pf:EnableKeyboard(true)
     pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
+    pf:HookScript("OnHide", function(s) if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end end)
     pf:UpdateScrollHeight(600)
     return pf
 end
@@ -1557,6 +1559,7 @@ local function Build()
     end)
     pf:EnableKeyboard(true)
     pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
+    pf:HookScript("OnHide", function(s) if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end end)
     pf:UpdateScrollHeight(500)
     return pf
 end
@@ -1773,6 +1776,7 @@ local function Build()
     end)
     pf:EnableKeyboard(true)
     pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
+    pf:HookScript("OnHide", function(s) if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end end)
     pf:UpdateScrollHeight(700)
     return pf
 end

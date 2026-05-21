@@ -111,10 +111,73 @@ local function MSUF_PrintHelp()
     print(Tr("  /msuf absorb    - Toggle showing total absorb amount in HP text."))
     print(Tr("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry."))
     print(Tr("  /msuf gfhoverdebug on|off|status - Debug group-frame hover + tooltip paths."))
+    print(Tr("  /msuf inputdebug - Print keyboard-capture frames for movement-lock diagnosis."))
     print(Tr("  /rl             - Reload the UI."))
     print(Tr("  /msufdbgpos     - Toggle position drift debugger (overlay + chat log)."))
     print(Tr("  !msuf help      - Print this help via chat (from your own character)."))
  end
+
+local function MSUF_FrameDebugName(frame)
+    if not frame then return "nil" end
+    local name = frame.GetName and frame:GetName()
+    if type(name) == "string" and name ~= "" then return name end
+    return tostring(frame)
+end
+
+local function MSUF_SafeGetKeyboardPropagation(frame)
+    if not (frame and frame.GetPropagateKeyboardInput) then return nil end
+    local ok, value = pcall(frame.GetPropagateKeyboardInput, frame)
+    if not ok then return nil end
+    return value
+end
+
+local function MSUF_PrintInputDebug()
+    print("|cff7aa2f7MSUF INPUT|r keyboard diagnostics")
+    print("Bindings: W=" .. tostring(GetBindingAction and GetBindingAction("W") or "?")
+        .. " SPACE=" .. tostring(GetBindingAction and GetBindingAction("SPACE") or "?"))
+
+    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    print("Keyboard focus: " .. MSUF_FrameDebugName(focus))
+
+    local st = _G.MSUF_EditState
+    print("MSUF edit: active=" .. tostring(st and st.active)
+        .. " popupOpen=" .. tostring(st and st.popupOpen)
+        .. " unit=" .. tostring(st and st.unitKey))
+
+    if type(EnumerateFrames) ~= "function" then
+        print("EnumerateFrames unavailable.")
+        return
+    end
+
+    local found, scanned = 0, 0
+    local frame = EnumerateFrames()
+    while frame and scanned < 12000 do
+        scanned = scanned + 1
+        local keyboard = frame.IsKeyboardEnabled and frame:IsKeyboardEnabled()
+        if keyboard then
+            local shown = (not frame.IsShown) or frame:IsShown()
+            local propagate = MSUF_SafeGetKeyboardPropagation(frame)
+            if shown or propagate == false then
+                found = found + 1
+                if found <= 20 then
+                    print(string.format("%02d %s shown=%s propagate=%s strata=%s level=%s",
+                        found,
+                        MSUF_FrameDebugName(frame),
+                        tostring(shown),
+                        tostring(propagate),
+                        tostring(frame.GetFrameStrata and frame:GetFrameStrata() or "?"),
+                        tostring(frame.GetFrameLevel and frame:GetFrameLevel() or "?")))
+                end
+            end
+        end
+        frame = EnumerateFrames(frame)
+    end
+    if found == 0 then
+        print("No shown keyboard-enabled frames found.")
+    elseif found > 20 then
+        print("... " .. tostring(found - 20) .. " more keyboard-enabled frames hidden.")
+    end
+end
 -- Optional chat trigger: "!msuf help" (only from yourself)
 -- Midnight/Beta secret-safe: chat event args can become "secret" in combat.
 -- Never boolean-test/compare them directly and never call string methods via ':'.
@@ -297,6 +360,10 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             return
         end
         print(string.format("|cff7aa2f7MSUF|r: Group-frame hover debug is %s.", Debug.gfHover == true and "|cff73dacaON|r" or "|cfff7768eOFF|r"))
+        return
+    end
+    if cmd == "inputdebug" then
+        MSUF_PrintInputDebug()
         return
     end
     -- Unknown

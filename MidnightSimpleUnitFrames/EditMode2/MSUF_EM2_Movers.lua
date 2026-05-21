@@ -978,6 +978,7 @@ do
             if self.UnregisterEvent then self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end
             if self.UnregisterEvent then self:UnregisterEvent("PLAYER_REGEN_DISABLED") end
             self._pickedFrame = nil; self._pickedName = nil; self._highlight:Hide()
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
         end)
         ov:SetScript("OnUpdate", function(self, elapsed)
             self._elapsed = (self._elapsed or 0) + elapsed; if self._elapsed < 0.03 then return end; self._elapsed = 0

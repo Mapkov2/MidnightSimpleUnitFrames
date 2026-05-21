@@ -214,6 +214,9 @@ local function EnsureTutorialPanel()
             self:SetPropagateKeyboardInput(true)
         end
     end)
+    p:HookScript("OnHide", function(self)
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
 
     local hdr = MakeFS(p, 13, 0.75, 0.88, 1.00, 1)
     hdr:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, -12)
@@ -384,6 +387,9 @@ local function EnsureTourFrames()
         else
             self:SetPropagateKeyboardInput(true)
         end
+    end)
+    ts.card:HookScript("OnHide", function(self)
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
 
     ts.stepFS = MakeFS(ts.card, 10, TH.mutedR, TH.mutedG, TH.mutedB, 0.70)
@@ -665,6 +671,9 @@ local function EnsureHUD()
         cf:SetScript("OnKeyDown", function(s, k)
             if k == "ESCAPE" then s:SetPropagateKeyboardInput(false); cf:Hide()
             else s:SetPropagateKeyboardInput(true) end
+        end)
+        cf:HookScript("OnHide", function(s)
+            if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end
         end)
         cf:Show()
     end)
