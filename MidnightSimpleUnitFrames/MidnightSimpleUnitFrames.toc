@@ -187,6 +187,7 @@ Menu2\MSUF_Menu2_PreviewHelpers.lua
 Menu2\MSUF_Menu2_Dropdowns.lua
 Menu2\MSUF_Menu2_Bindings.lua
 Menu2\MSUF_Menu2_Core.lua
+Menu2\MSUF_Menu2_Dashboard.lua
 Menu2\MSUF_Menu2_SearchData.lua
 Menu2\MSUF_Menu2_Search.lua
 Menu2\Pages\MSUF_Menu2_Unit.lua
