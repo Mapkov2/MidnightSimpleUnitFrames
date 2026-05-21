@@ -594,7 +594,7 @@ local function BuildGFIndicators(ctx)
         if entry then entry._msuf2RefreshState = RefreshStatusIconState end
     end
 
-    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 824, false)
+    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 864, false)
     local siW = spells._msuf2Width or ctx.width or 720
     local siGap = 28
     local siLeftX = 30
@@ -607,7 +607,7 @@ local function BuildGFIndicators(ctx)
         W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 304)
         W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -374, siLeftW + 28, 408)
         W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -356, siRightW + 28, 286)
-        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -650, siRightW + 28, 154)
+        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -650, siRightW + 28, 194)
     end
 
     local function SpellIndicatorRuntime()
@@ -1003,6 +1003,7 @@ local function BuildGFIndicators(ctx)
                 cfg.placed.type = value or "icon"
                 cfg.placed.anchor = cfg.placed.anchor or "TOPLEFT"
                 cfg.placed.size = tonumber(cfg.placed.size) or 18
+                if cfg.placed.showCooldownSwipe == nil then cfg.placed.showCooldownSwipe = true end
             end
             QueueSpellIndicators(CurrentScope())
             if M.SelectPage then M.SelectPage(ctx.key) end
@@ -1185,7 +1186,19 @@ local function BuildGFIndicators(ctx)
             QueueSpellIndicators(CurrentScope())
         end)
 
-    local placedCooldown = W.ToggleAt(spells, Tr("Show Cooldown Text"), siRightX, -722, siRightW)
+    local placedCooldownSwipe = W.ToggleAt(spells, Tr("Show Cooldown Swipe"), siRightX, -722, siRightW)
+    M.BindToggle(ctx, placedCooldownSwipe,
+        function()
+            local placed = PlacedConfig(CurrentScope(), false)
+            return placed and placed.showCooldownSwipe ~= false or false
+        end,
+        function(value)
+            local placed = PlacedConfig(CurrentScope(), true)
+            if placed then placed.showCooldownSwipe = value and true or false end
+            QueueSpellIndicators(CurrentScope())
+        end)
+
+    local placedCooldown = W.ToggleAt(spells, Tr("Show Cooldown Text"), siRightX, -754, siRightW)
     M.BindToggle(ctx, placedCooldown,
         function()
             local placed = PlacedConfig(CurrentScope(), false)
@@ -1208,7 +1221,7 @@ local function BuildGFIndicators(ctx)
             if placed then placed.cooldownSize = floor((tonumber(value) or 8) + 0.5) end
             QueueSpellIndicators(CurrentScope())
         end)
-    W.MoveWidget(placedCooldownSize, spells, siRightX, -754, siRightW, "LEFT")
+    W.MoveWidget(placedCooldownSize, spells, siRightX, -786, siRightW, "LEFT")
 
     RefreshSpellIndicatorState = function()
         EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
@@ -1229,7 +1242,7 @@ local function BuildGFIndicators(ctx)
         local frame = FrameEffectConfig(CurrentScope(), false)
         local frameKind = frame and frame.type or "none"
         local hasFrame = hasSpell and frameKind ~= "none"
-        local cdRelevant = placedEnabled and placed.type ~= "bar" and placed.type ~= "number"
+        local cdRelevant = placedEnabled and placed.type == "icon"
         local barRelevant = placedEnabled and placed.type == "bar"
         SetOptionEnabled(siEnable, true)
         SetOptionEnabled(siLayer, indicatorsOn)
@@ -1247,6 +1260,7 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(placedBarWidth, barRelevant)
         SetOptionEnabled(placedGrowth, placedEnabled)
         SetOptionEnabled(placedMissing, placedEnabled)
+        SetOptionEnabled(placedCooldownSwipe, cdRelevant)
         SetOptionEnabled(placedCooldown, cdRelevant)
         SetOptionEnabled(placedCooldownSize, cdRelevant and placed and placed.showCooldown ~= false)
         SetOptionEnabled(frameColor, hasFrame)

@@ -1100,7 +1100,7 @@ local function ResolveCooldownBaseColor()
     return 1, 1, 1, 1
 end
 
-local function ApplyPlacedCooldownStyle(cd, ownerFrame, numberOnly)
+local function ApplyPlacedCooldownStyle(cd, ownerFrame, numberOnly, cfg)
     if not cd then return end
     local kind = (ownerFrame and ownerFrame._msufGFKind) or "party"
     local conf = GF.GetConf and GF.GetConf(kind)
@@ -1114,7 +1114,7 @@ local function ApplyPlacedCooldownStyle(cd, ownerFrame, numberOnly)
         cd._msufGFSIDrawBling = false
         cd:SetDrawBling(false)
     end
-    local wantSwipe = not numberOnly
+    local wantSwipe = (not numberOnly) and (not cfg or cfg.showCooldownSwipe ~= false)
     if cd._msufGFSIDrawSwipe ~= wantSwipe then
         cd._msufGFSIDrawSwipe = wantSwipe
         cd:SetDrawSwipe(wantSwipe)
@@ -1522,7 +1522,7 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
             if ind.cooldown then
                 local aid = auraData.auraInstanceID
                 local showCdText = isNumber or cfg.showCooldown ~= false
-                ApplyPlacedCooldownStyle(ind.cooldown, f, isNumber)
+                ApplyPlacedCooldownStyle(ind.cooldown, f, isNumber, cfg)
                 SetCooldownNumbersHidden(ind.cooldown, not showCdText)
                 if aid and unit and C_UnitAuras and C_UnitAuras.GetAuraDuration then
                     local obj = C_UnitAuras.GetAuraDuration(unit, aid)
@@ -1582,7 +1582,7 @@ local function ApplyPlaced(f, unit, auraName, cfg, auraData, parent, specKey, is
             ClearPlacedText(ind.previewText)
         elseif itype == "number" then
             if ind.cooldown then
-                ApplyPlacedCooldownStyle(ind.cooldown, f, true)
+                ApplyPlacedCooldownStyle(ind.cooldown, f, true, cfg)
                 ClearPlacedCooldown(ind)
                 SetCooldownNumbersHidden(ind.cooldown, false)
             end

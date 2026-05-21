@@ -1570,7 +1570,9 @@ end
 local function PlacedConfig(kind, create)
     local cfg = CurrentSpellConfig(kind, create)
     if not cfg then return nil end
-    if create and type(cfg.placed) ~= "table" then cfg.placed = { type = "icon", anchor = "TOPLEFT", x = 0, y = 0, size = 18 } end
+    if create and type(cfg.placed) ~= "table" then
+        cfg.placed = { type = "icon", anchor = "TOPLEFT", x = 0, y = 0, size = 18, showCooldownSwipe = true }
+    end
     return cfg.placed
 end
 
