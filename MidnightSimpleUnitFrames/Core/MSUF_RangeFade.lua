@@ -155,6 +155,16 @@ do
         return not (general and general.rangeFadeEnabled == false)
     end
 
+    local function InProtectedCombat()
+        return (_G.MSUF_InCombat == true) or (InCombatLockdown and InCombatLockdown())
+    end
+
+    local function CanUseInteractDistance(allowInteractDistance)
+        if not CheckInteractDistance then return false end
+        if allowInteractDistance ~= nil then return allowInteractDistance == true end
+        return not InProtectedCombat()
+    end
+
     -- Frame resolver: one canonical lookup per unit token.
     -- Target lives at _G.MSUF_target. Focus/Boss live in MSUF_UnitFrames.
     local function GetFrame(unit)
@@ -286,7 +296,7 @@ do
     -- Shared: Inline range check (enemy/dead)
     -- IsSpellInRange: NOT secret (Unhalted). Direct boolean test.
     -- ══════════════════════════════════════════════════════════════
-    local function CheckEnemy(unit)
+    local function CheckEnemy(unit, allowInteractDistance)
         if not UnitExists(unit) then return nil end
         if UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) then
             if _pRes and IsSpellInRange then
@@ -299,8 +309,9 @@ do
             local r = IsSpellInRange(_pEnemy, unit)
             if r ~= nil then return r and true or false end
         end
-        -- CheckInteractDistance: works on any unit, may return secret in combat
-        if CheckInteractDistance then
+        -- CheckInteractDistance is a protected fallback on some clients/units.
+        -- Keep it out of combat; unknown range is handled as "not faded".
+        if CanUseInteractDistance(allowInteractDistance) then
             local ci = CheckInteractDistance(unit, 4)
             if ci ~= nil then
                 if issecretvalue and issecretvalue(ci) then return nil end
@@ -336,9 +347,9 @@ do
         end
 
         -- Fallback: CheckInteractDistance (works on ANY unit including NPCs)
-        -- In combat may return secret values → secret guard handles this
+        -- In combat this can be protected, so keep it as an OOC fallback.
         -- Index 4 = 28 yards (Follow distance)
-        if CheckInteractDistance then
+        if CanUseInteractDistance() then
             local ci = CheckInteractDistance(unit, 4)
             if ci ~= nil then
                 if issecretvalue and issecretvalue(ci) then return true end
@@ -373,19 +384,17 @@ do
         end
 
         local function TargetUnitInFriendlySpellsRange(unit)
-            -- PERF (Stage 2): Compute once at function entry; both CheckInteractDistance
-            -- fallback paths shared the same InCombatLockdown() call previously duplicated.
-            -- `InCombatLockdown and ICL()` preserves nil-safety for the rare env without it.
-            local inCombat = InCombatLockdown and InCombatLockdown()
+            -- PERF: compute the protected-call guard once for both fallbacks.
+            local allowInteractDistance = CanUseInteractDistance()
             if not next(_targetFriendlyActive) then
-                if CheckInteractDistance and not inCombat then
+                if allowInteractDistance then
                     return CheckInteractDistance(unit, 4)
                 end
                 return nil
             end
 
             local spellRange = TargetUnitSpellRange(unit, _targetFriendlyActive)
-            if (not spellRange or spellRange == 1) and CheckInteractDistance and not inCombat then
+            if (not spellRange or spellRange == 1) and allowInteractDistance then
                 local interactDistance = CheckInteractDistance(unit, 4)
                 if NotSecret(interactDistance) then
                     return interactDistance
@@ -903,6 +912,7 @@ do
         local focusConf = db and db.focus
         local bossConf = db and db.boss
         local changedAny = false
+        local allowInteractDistance = CanUseInteractDistance()
 
         for i = 1, _pollCount do
             local unit = _pollUnits[i]
@@ -913,7 +923,7 @@ do
             -- to 6 units = 120 lookups/s) this is meaningful.
             local f = _pollFrames[i]
             if conf and f and (not f.IsShown or f:IsShown()) then
-                if ApplyMul(f, unit, confKey, conf, CheckEnemy(unit)) then
+                if ApplyMul(f, unit, confKey, conf, CheckEnemy(unit, allowInteractDistance)) then
                     changedAny = true
                 end
             else

@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.5 Beta 3 - 2026-05-22
+
+### Beta 3
+
+- Fixed a Range Fade protected-call warning by keeping the `CheckInteractDistance` fallback out of combat while preserving spell-based range checks and out-of-combat fallback behavior.
+
 ## 5.5 Beta 2 - 2026-05-22
 
 ### Beta 2
