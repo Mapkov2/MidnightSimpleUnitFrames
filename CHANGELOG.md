@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.51 - 2026-05-22
+
+### Critical Fixes
+
+- Fixed a critical edge case where selected debuff dispel-type filters could hide unrelated debuffs globally instead of only narrowing the dispellable-debuff exception.
+- Fixed Aura Filters menu checkbox hitboxes and labels so the dispel and include toggles are easier to click and only active when they affect the current filter setup.
+
 ## 5.5 - 2026-05-22
 
 ### Highlights
