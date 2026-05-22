@@ -4,10 +4,27 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.41",
-    previousVersion = "5.4",
-    rangeLabel = "5.4 -> 5.41",
+    currentVersion = "5.5 Beta 1",
+    previousVersion = "5.41",
+    rangeLabel = "5.41 -> 5.5 Beta 1",
     entries = {
+        {
+            version = "5.5 Beta 1",
+            date = "2026-05-22",
+            sections = {
+                {
+                    title = "Beta 1",
+                    bullets = {
+                        "Reworked the Unit Auras setup page around a clearer first-pass workflow with Essentials, Scope, Preset & View cards, visible-unit toggles, quick presets, Basic / All settings modes, reset actions, and a live aura preview.",
+                        "Fixed Group Frame disabled fallback ownership so Blizzard default behaves like the old off-state: Blizzard only takes over when all MSUF group-frame scopes are off, while any active MSUF party, raid, or mythic raid scope keeps Blizzard group frames hidden.",
+                        "Improved Group Frame disable/search wording so questions about turning off party or raid frames point directly to the Use MSUF group frames switch and the If this switch is off fallback dropdown.",
+                        "Fixed the Group Frames Buffs & Debuffs text-option layout so cooldown and stack text controls can expand the section height instead of being clipped.",
+                        "Continued splitting Menu2 internals into focused modules for search data, dropdown helpers, preview helpers, widgets, and the dashboard, keeping the runtime page builders smaller and easier to maintain.",
+                        "Removed obsolete font resolver blocks from the old library/bootstrap path.",
+                    },
+                },
+            },
+        },
         {
             version = "5.41",
             date = "2026-05-21",
@@ -135,20 +152,6 @@ local data = {
                     bullets = {
                         "Fixed a group-frame Spell Indicators crash when linked aura rules, such as Restoration Druid Symbiotic Relationship, checked the scan ownership cache before it was in local scope.",
                         "Bundled the 5.31 and 5.3 release notes with this hotfix so the in-game changelog keeps the full recent release context.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.31",
-            date = "2026-05-18",
-            sections = {
-                {
-                    title = "Patch Release",
-                    bullets = {
-                        "Fixed a critical group-frame Preserve HP color crash in Midnight when background frame colors are returned as secret numbers.",
-                        "Reverted the delayed range-fade alpha repair performance optimization so layered range alpha is repaired immediately again while range state is unchanged.",
-                        "Bundled the full 5.3 release notes with this patch release so the in-game changelog still includes the complete 5.3 release.",
                     },
                 },
             },

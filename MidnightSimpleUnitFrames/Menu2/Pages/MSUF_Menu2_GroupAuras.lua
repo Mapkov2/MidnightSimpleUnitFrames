@@ -324,6 +324,16 @@ local function BuildGFAuras(ctx)
         { value = "LEFTUP", text = "Left then Up" },
     }
 
+    local function EnsureAuraGroupSectionHeight(section, neededHeight)
+        local entry = section and section._msuf2CollapsibleEntry
+        neededHeight = floor((tonumber(neededHeight) or 0) + 0.5)
+        if not entry or neededHeight <= (tonumber(entry.contentHeight) or 0) then return end
+
+        entry.contentHeight = neededHeight
+        if section.SetHeight then section:SetHeight(neededHeight) end
+        if b and b.RelayoutCollapsibles then b:RelayoutCollapsibles() end
+    end
+
     local AURA_GROUP_DEFAULTS = {
         buff = {
             enabledLabel = "Buffs", maxLabel = "Max icons", maxMax = 20,
@@ -785,6 +795,7 @@ local function BuildGFAuras(ctx)
         W.MoveWidget(stackAnchor, section, rightX, textY - 230, rightW, "LEFT")
         W.MoveWidget(stackX, section, rightX, textY - 284, rightW, "CENTER")
         W.MoveWidget(stackY, section, rightX, textY - 338, rightW, "CENTER")
+        EnsureAuraGroupSectionHeight(section, (-textY) + 406)
         HookPreviewSlider(cooldownSize, cooldownPreview, stackPreview)
         HookPreviewDropdown(cooldownAnchor, cooldownPreview, stackPreview)
         HookPreviewSlider(cooldownX, cooldownPreview, stackPreview)
@@ -1231,4 +1242,4 @@ local function BuildGFAuras(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_auras", { title = "MSUF Group Buffs & Debuffs", build = BuildGFAuras, version = 12 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Buffs & Debuffs", build = BuildGFAuras, version = 13 })
