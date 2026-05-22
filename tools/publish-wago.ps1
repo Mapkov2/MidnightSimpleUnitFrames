@@ -4,6 +4,7 @@ param(
     [string]$ZipPath,
 
     [string]$Version,
+    [string]$ReleaseName,
     [string]$TocPath = "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc",
     [string]$ChangelogPath = "CHANGELOG.md",
     [string]$ProjectId,
@@ -125,6 +126,11 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 }
 
 $releaseVersion = Normalize-Version -RawVersion $Version
+if ([string]::IsNullOrWhiteSpace($ReleaseName)) {
+    $ReleaseName = $releaseVersion
+} else {
+    $ReleaseName = ($ReleaseName -replace "`r?`n", " ").Trim()
+}
 $zipFullPath = Resolve-InRepoPath -Path $ZipPath
 $tocFullPath = Resolve-InRepoPath -Path $TocPath
 $changelogFullPath = Resolve-InRepoPath -Path $ChangelogPath
@@ -179,14 +185,14 @@ if ($Stability -notin @("stable", "beta", "alpha")) {
 
 $changelog = Get-Content -LiteralPath $changelogFullPath -Raw
 $metadata = [ordered]@{
-    label = $releaseVersion
+    label = $ReleaseName
     stability = $Stability
     changelog = $changelog
     supported_retail_patch = $RetailPatch
 } | ConvertTo-Json -Depth 5 -Compress
 
 if ($DryRun) {
-    Write-Host "Prepared Wago upload for project $ProjectId as $releaseVersion ($Stability, retail $RetailPatch)."
+    Write-Host "Prepared Wago upload for project $ProjectId as $ReleaseName / $releaseVersion ($Stability, retail $RetailPatch)."
     return
 }
 
@@ -206,4 +212,4 @@ $form = @{
 }
 
 Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Form $form | Out-Null
-Write-Host "Uploaded $zipFullPath to Wago project $ProjectId as $releaseVersion ($Stability, retail $RetailPatch)."
+Write-Host "Uploaded $zipFullPath to Wago project $ProjectId as $ReleaseName / $releaseVersion ($Stability, retail $RetailPatch)."
