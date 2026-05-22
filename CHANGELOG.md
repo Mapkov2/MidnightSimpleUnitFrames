@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.52 - 2026-05-23
+
+### Critical Fixes
+
+- Fixed the Dashboard `Edit frames` button so it no longer calls private Menu2 core helpers that are not visible from the dashboard module.
+- Restored the dashboard Edit Mode toggle path while keeping the existing combat-lock handling and menu frame priority refresh.
+
 ## 5.51 - 2026-05-22
 
 ### Critical Fixes
